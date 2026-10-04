@@ -72,7 +72,7 @@ button { cursor: pointer; }
 .capture-history-avatar { width: 16px; height: 16px; border-radius: 50%; display: grid; place-items: center; font-size: calc(9px * var(--ui-scale, 1)); font-weight: 600; flex-shrink: 0; color: #fff; background: var(--recipient-color); }
 .capture-history-bubble { max-width: 82%; min-width: 0; background: var(--chip); border-radius: 14px 14px 4px 14px; padding: 9px 12px; font-size: calc(13.5px * var(--ui-scale, 1)); line-height: 1.45; overflow-wrap: anywhere; display: grid; gap: 8px; }
 .capture-history-item[aria-current=true] .capture-history-bubble { box-shadow: 0 0 0 2px var(--accent); }
-.capture-history-note { margin: 0; white-space: pre-wrap; }
+.capture-history-text { margin: 0; white-space: pre-wrap; }
 .capture-history-files { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; min-width: 0; }
 .capture-history-file { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px 3px 4px; border-radius: 6px; background: var(--surface); font-size: calc(11.5px * var(--ui-scale, 1)); color: var(--muted); max-width: 100%; }
 .capture-history-file-type { min-width: 20px; height: 24px; border-radius: 3px; background: var(--chip); box-shadow: inset 0 0 0 1px var(--line); display: grid; place-items: end center; font-family: 'SF Mono', ui-monospace, Menlo, monospace; font-size: calc(7px * var(--ui-scale, 1)); font-weight: 600; color: var(--accent); padding: 0 2px 3px; flex-shrink: 0; }

@@ -48,8 +48,8 @@ export function QuickCaptureHistory({ regionRef, client, history, hasDraft, subm
     }
   }}>
     <div className="capture-history-heading" data-tauri-drag-region>
-      <h1 data-tauri-drag-region>Recent</h1><span className="capture-history-count">{ordered.length} {ordered.length === 1 ? 'note' : 'notes'}</span>
-      <button className="capture-history-back" onClick={onBack}>Back to note <kbd>esc</kbd></button>
+      <h1 data-tauri-drag-region>Recent</h1><span className="capture-history-count">{ordered.length} {ordered.length === 1 ? 'message' : 'messages'}</span>
+      <button className="capture-history-back" onClick={onBack}>Back to draft <kbd>esc</kbd></button>
     </div>
     {hasDraft && <div className="capture-history-draft"><span>Current draft</span><button disabled={submitting} onClick={onDiscard}>Discard draft</button></div>}
     <div ref={timeline} className="capture-history-list">
@@ -60,7 +60,7 @@ export function QuickCaptureHistory({ regionRef, client, history, hasDraft, subm
         <article ref={node => { if (node) rows.current.set(item.id, node); else rows.current.delete(item.id); }} role="listitem" aria-current={item.id === selected ? 'true' : undefined} data-message-id={item.id} className="capture-history-item" onClick={() => setSelected(item.id)}>
           <header className="capture-history-recipient"><span className="capture-history-avatar" aria-hidden="true" style={{ '--recipient-color': recipientColor(item.recipient) } as CSSProperties}>{label(item.recipient).slice(0, 1).toUpperCase()}</span><span>to {label(item.recipient)}</span></header>
           <div className="capture-history-bubble">
-            {item.text && <p className="capture-history-note">{item.text}</p>}
+            {item.text && <p className="capture-history-text">{item.text}</p>}
             {item.files.length > 0 && <div className="capture-history-files">{item.files.map(file => file.mediaType?.startsWith('image/')
               ? <UserMessageHistoryImage key={file.id} client={client} messageId={item.id} image={file} />
               : <div key={file.id} className="capture-history-file" title={file.name}><span className="capture-history-file-type">{fileType(file.name, file.mediaType)}</span><span className="capture-history-file-label"><span>{file.name}</span><small>{fileSize(file.bytes)}</small></span></div>)}</div>}
@@ -72,7 +72,7 @@ export function QuickCaptureHistory({ regionRef, client, history, hasDraft, subm
         </article>
       </Fragment>)}</div>
     </div>
-    <footer className="capture-history-keys"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>esc</kbd> back to note</span></footer>
+    <footer className="capture-history-keys"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>esc</kbd> back to draft</span></footer>
   </section>;
 }
 

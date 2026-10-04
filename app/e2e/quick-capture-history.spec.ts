@@ -31,7 +31,7 @@ test('Recent loads newest visible previews serially across close/reopen and rele
   });
   await page.goto('/test-harness/?component=QuickCaptureHistory');
   await firstRequest;
-  await page.getByRole('button', { name: /Back to note/ }).click();
+  await page.getByRole('button', { name: /Back to draft/ }).click();
   await page.getByRole('button', { name: 'Open Recent' }).click();
   await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   expect(requests).toEqual(['image-3-0']);
@@ -46,7 +46,7 @@ test('Recent loads newest visible previews serially across close/reopen and rele
   await expect(page.getByRole('img', { name: 'Preview 0-0' })).toBeVisible();
   await expect(page.getByRole('img', { name: 'Preview 3-0' })).toHaveCount(0);
   await expect(page.getByRole('img', { name: 'Preview 3-1' })).toHaveCount(0);
-  await page.getByRole('button', { name: /Back to note/ }).click();
+  await page.getByRole('button', { name: /Back to draft/ }).click();
   await expect(page.getByRole('img')).toHaveCount(0);
 });
 
@@ -83,7 +83,7 @@ test('Recent preserves selected notes and scroll across older pages and read upd
   await region.press('ArrowUp');
   await expect(selected).toHaveAttribute('data-message-id', 'message-4');
   await expect(page.getByText(notes[4].content, { exact: true })).toBeVisible();
-  await expect(page.locator('.capture-history-note').nth(2)).toHaveText(notes[4].content);
+  await expect(page.locator('.capture-history-text').nth(2)).toHaveText(notes[4].content);
   await region.press('ArrowDown');
   await expect(selected).toHaveAttribute('data-message-id', 'message-5');
   const older = page.getByRole('button', { name: 'Show older messages' });
@@ -100,7 +100,7 @@ test('Recent preserves selected notes and scroll across older pages and read upd
   releaseOlder();
   await expect(rows).toHaveCount(6);
   await expect(selected).toHaveAttribute('data-message-id', 'message-2');
-  await expect(page.getByText('6 notes')).toBeVisible();
+  await expect(page.getByText('6 messages')).toBeVisible();
   expect(await offset()).toBeCloseTo(before, 0);
   await expect(page.getByText('Today', { exact: true })).toBeAttached();
   await expect(page.getByText('Yesterday', { exact: true })).toBeAttached();

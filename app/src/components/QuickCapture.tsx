@@ -371,7 +371,7 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
     }}>{roster.map((item, index) => <div id={`recipient-${index}`} role="option" aria-selected={index === pick} key={item.id} className={item.id === recipient ? 'chosen' : ''} onPointerMove={() => setPick(index)} onClick={() => { setRecipient(item.id); setPicker(false); }}>
       {item.name} <span>{item.detail}</span>{index < 4 && <kbd>⌘{index + 1}</kbd>}
     </div>)}</div>}
-    {dragging && <div className="capture-drop" onAnimationStart={() => { if (automationEnabled) motion.current.push({ kind: 'drop', phase: 'start', at: Date.now() }); }} onAnimationEnd={() => { if (automationEnabled) motion.current.push({ kind: 'drop', phase: 'end', at: Date.now() }); }}>Drop to attach to this note</div>}
+    {dragging && <div className="capture-drop" onAnimationStart={() => { if (automationEnabled) motion.current.push({ kind: 'drop', phase: 'start', at: Date.now() }); }} onAnimationEnd={() => { if (automationEnabled) motion.current.push({ kind: 'drop', phase: 'end', at: Date.now() }); }}>Drop to attach to this message</div>}
   </main>;
 }
 

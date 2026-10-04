@@ -252,7 +252,7 @@ describe('Quick Capture app wire behavior', () => {
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Recent messages' })));
     expect(within(screen.getByRole('region', { name: 'Recent messages' })).getByText('Keep the launch note')).toBeInTheDocument();
     expect(screen.queryByText('Saved for Chief')).not.toBeInTheDocument();
-    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /Back to note/ })));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /Back to draft/ })));
     expect(screen.getByText('Saved for Chief')).toBeInTheDocument();
   });
 
@@ -621,7 +621,7 @@ describe('Quick Capture app wire behavior', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Local draft storage unavailable');
     expect(daemon.sentOf('user_message_attachment_discard')).toEqual([]);
     expect(native.draft).toMatchObject({ id: messageId, text: 'Keep this note' });
-    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /Back to note/ })));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /Back to draft/ })));
     expect(editor()).toHaveValue('Keep this note');
     expect(screen.getByRole('img', { name: 'kept.png' })).toBeInTheDocument();
   });

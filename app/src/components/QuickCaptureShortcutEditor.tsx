@@ -24,7 +24,7 @@ export function QuickCaptureShortcutEditor() {
   }
   return <section className="shortcut-editor-category" aria-label="Global Quick Capture shortcut">
     <h3 className="shortcut-editor-category-title">Quick Capture · system-wide</h3>
-    <p>Open a note over the current app. Escape keeps your draft.</p>
+    <p>Open Quick Capture over the current app. Escape keeps your draft.</p>
     <div className="shortcut-editor-row">
       <span>{controller.state.binding || 'Off'}</span>
       <button ref={recorder} disabled={saving} className="shortcut-editor-btn" onClick={() => setRecording(!recording)} onKeyDown={event => {
