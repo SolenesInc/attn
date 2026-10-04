@@ -1607,6 +1607,7 @@ export enum AutomationApplyResultMessageEvent {
 export interface AutomationCleanupMessage {
     cmd:                AutomationCleanupMessageCmd;
     definition_id:      number;
+    profile_id?:        string;
     request_id?:        string;
     source_session_id?: string;
     [property: string]: any;
@@ -1634,6 +1635,7 @@ export enum AutomationCleanupResultMessageEvent {
 export interface AutomationDefinitionGetMessage {
     cmd:                AutomationDefinitionGetMessageCmd;
     definition_id:      number;
+    profile_id?:        string;
     request_id?:        string;
     source_session_id?: string;
     [property: string]: any;
@@ -1676,6 +1678,7 @@ export interface AutomationDefinitionSummary {
 
 export interface AutomationDefinitionsGetMessage {
     cmd:                AutomationDefinitionsGetMessageCmd;
+    profile_id?:        string;
     request_id?:        string;
     source_session_id?: string;
     [property: string]: any;
@@ -1701,6 +1704,7 @@ export enum AutomationDefinitionsResultMessageEvent {
 export interface AutomationDeleteMessage {
     cmd:                AutomationDeleteMessageCmd;
     definition_id:      number;
+    profile_id?:        string;
     request_id?:        string;
     source_session_id?: string;
     [property: string]: any;
@@ -1736,6 +1740,7 @@ export interface AutomationRunMessage {
     definition_id:      number;
     input_json?:        string;
     pr_url?:            string;
+    profile_id?:        string;
     request_id:         string;
     source_session_id?: string;
     [property: string]: any;
@@ -1777,6 +1782,7 @@ export interface AutomationRunSummary {
 export interface AutomationRunsGetMessage {
     cmd:                AutomationRunsGetMessageCmd;
     definition_id:      number;
+    profile_id?:        string;
     request_id?:        string;
     source_session_id?: string;
     [property: string]: any;
@@ -1805,6 +1811,7 @@ export interface AutomationSetEnabledMessage {
     cmd:                AutomationSetEnabledMessageCmd;
     definition_id:      number;
     enabled:            boolean;
+    profile_id?:        string;
     request_id?:        string;
     source_session_id?: string;
     [property: string]: any;
@@ -5752,13 +5759,15 @@ export interface Item {
 }
 
 export interface LaunchDesktopSetMessage {
-    cmd:           LaunchDesktopSetMessageCmd;
-    desktop_name?: string;
-    desktop_ref?:  string;
-    item_id:       string;
-    kind:          LaunchDesktopKind;
-    request_id:    string;
-    setting?:      LaunchDesktopSettingObject;
+    cmd:                LaunchDesktopSetMessageCmd;
+    desktop_name?:      string;
+    desktop_ref?:       string;
+    item_id:            string;
+    kind:               LaunchDesktopKind;
+    profile_id?:        string;
+    request_id:         string;
+    setting?:           LaunchDesktopSettingObject;
+    source_session_id?: string;
     [property: string]: any;
 }
 
@@ -16749,6 +16758,7 @@ const typeMap: any = {
     "AutomationCleanupMessage": o([
         { json: "cmd", js: "cmd", typ: r("AutomationCleanupMessageCmd") },
         { json: "definition_id", js: "definition_id", typ: 0 },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
@@ -16764,6 +16774,7 @@ const typeMap: any = {
     "AutomationDefinitionGetMessage": o([
         { json: "cmd", js: "cmd", typ: r("AutomationDefinitionGetMessageCmd") },
         { json: "definition_id", js: "definition_id", typ: 0 },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
@@ -16792,6 +16803,7 @@ const typeMap: any = {
     ], "any"),
     "AutomationDefinitionsGetMessage": o([
         { json: "cmd", js: "cmd", typ: r("AutomationDefinitionsGetMessageCmd") },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
@@ -16805,6 +16817,7 @@ const typeMap: any = {
     "AutomationDeleteMessage": o([
         { json: "cmd", js: "cmd", typ: r("AutomationDeleteMessageCmd") },
         { json: "definition_id", js: "definition_id", typ: 0 },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
@@ -16826,6 +16839,7 @@ const typeMap: any = {
         { json: "definition_id", js: "definition_id", typ: 0 },
         { json: "input_json", js: "input_json", typ: u(undefined, "") },
         { json: "pr_url", js: "pr_url", typ: u(undefined, "") },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
@@ -16853,6 +16867,7 @@ const typeMap: any = {
     "AutomationRunsGetMessage": o([
         { json: "cmd", js: "cmd", typ: r("AutomationRunsGetMessageCmd") },
         { json: "definition_id", js: "definition_id", typ: 0 },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
@@ -16869,6 +16884,7 @@ const typeMap: any = {
         { json: "cmd", js: "cmd", typ: r("AutomationSetEnabledMessageCmd") },
         { json: "definition_id", js: "definition_id", typ: 0 },
         { json: "enabled", js: "enabled", typ: true },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
@@ -19329,8 +19345,10 @@ const typeMap: any = {
         { json: "desktop_ref", js: "desktop_ref", typ: u(undefined, "") },
         { json: "item_id", js: "item_id", typ: "" },
         { json: "kind", js: "kind", typ: r("LaunchDesktopKind") },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "setting", js: "setting", typ: u(undefined, r("LaunchDesktopSettingObject")) },
+        { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
     "LaunchDesktopSetting": o([
         { json: "desktop_id", js: "desktop_id", typ: u(undefined, "") },

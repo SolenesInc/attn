@@ -33,7 +33,7 @@ type automationResult struct {
 }
 
 func (c *Client) sendAutomation(msg any, out any) error {
-	if c.gardenSession != "" {
+	if c.gardenProfile != "" || c.gardenSession != "" {
 		raw, err := json.Marshal(msg)
 		if err != nil {
 			return err
@@ -44,6 +44,9 @@ func (c *Client) sendAutomation(msg any, out any) error {
 		}
 		if fields["source_session_id"] == nil {
 			fields["source_session_id"] = c.gardenSession
+		}
+		if fields["profile_id"] == nil {
+			fields["profile_id"] = c.gardenProfile
 		}
 		msg = fields
 	}
