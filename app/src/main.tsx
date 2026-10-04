@@ -19,7 +19,7 @@ async function boot() {
   if (new URLSearchParams(window.location.search).get("window") === "capture") {
     const { QuickCapture } = await import("./components/QuickCapture");
     const automation = (window as { __ATTN_AUTOMATION_ENABLED?: boolean }).__ATTN_AUTOMATION_ENABLED === true;
-    const workQueue = automation ? new (await import('./quickCapture/workQueueAutomation')).CaptureAutomationWorkQueue() : undefined;
+    const workQueue = automation ? new (await import('./quickCapture/workQueueAutomation')).QuickCaptureAutomationWorkQueue() : undefined;
     root.render(<QuickCapture workQueue={workQueue} />);
     return;
   }

@@ -38,7 +38,6 @@ button { cursor: pointer; }
   .capture { --surface: #fff; --line: #dcdce0; --text: #18181b; --muted: #55555d; --quiet: #8e8e96; --chip: #f1f1f3; --accent: #e8581f; --accent-ink: #fff; --error: #c2371b; }
 }
 
-/* The thumbnail remains reserved while its temporary preview travels into place. */
 .capture-files figure.arriving { background: linear-gradient(135deg, var(--chip), var(--surface)); box-shadow: inset 0 0 0 1px var(--line); }
 .capture-files figure.arriving img { opacity: 0; }
 .capture-files figure.arriving button { opacity: 0; }

@@ -19,7 +19,6 @@ export const scenarioCatalog = [
     label: 'Quick Capture: native shortcut, focus, file delivery and measured batches',
     command: ['node', 'scripts/real-app-harness/scenario-quick-capture.mjs'],
     skipOn: { linux: 'Quick Capture uses a macOS nonactivating panel' },
-    // Hosted files/recordings took 173s; two fresh-process batches took 60s before the 240s fence.
     timeoutMs: 600_000,
   },
   {

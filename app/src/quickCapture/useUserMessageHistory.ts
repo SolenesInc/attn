@@ -1,8 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { CaptureClient, CaptureItem } from './client';
+import type { UserMessageClient, UserMessageItem } from './client';
 
-export function useCaptureHistory(client: CaptureClient | undefined, open: boolean, connected: boolean, revision = 0) {
-  const [history, setHistory] = useState<CaptureItem[]>([]);
+export function useUserMessageHistory(client: UserMessageClient | undefined, open: boolean, connected: boolean, revision = 0) {
+  const [history, setHistory] = useState<UserMessageItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -26,7 +26,6 @@ export function useCaptureHistory(client: CaptureClient | undefined, open: boole
       try {
         let page = await api.recent(cursor);
         const items = [...page.items];
-        // Refresh the loaded range so read receipts on older pages stay current.
         while (epoch === generation.current && !cursor && oldest && !items.some(item => item.id === oldest) && page.nextCursor) {
           page = await api.recent(page.nextCursor);
           items.push(...page.items);

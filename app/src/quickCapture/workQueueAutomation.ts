@@ -1,6 +1,6 @@
-import { CaptureWorkQueue } from './workQueue';
+import { QuickCaptureWorkQueue } from './workQueue';
 
-export class CaptureAutomationWorkQueue extends CaptureWorkQueue {
+export class QuickCaptureAutomationWorkQueue extends QuickCaptureWorkQueue {
   private peak = 0;
   private idle: (() => void)[] = [];
   setCapacity(capacity: number) {
