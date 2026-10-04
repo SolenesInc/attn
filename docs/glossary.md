@@ -1,185 +1,222 @@
 # Glossary
 
-## Sessions
+The glossary is attn's domain model, in the sense of domain-driven design.
 
-- Session: an agent and its terminals, with history that survives restarts.
-- Terminal: a PTY runtime that a pane places, named by the id its process carries as `ATTN_SESSION_ID`. It shows one session at a time.
-- Kept conversation: attn's copy of a local conversation whose harness deletes transcripts, kept forever when pinned, or while an open seed points at its session and for 14 days after the last reference ends. Resume fills missing main and auxiliary files without replacing harness files; refreshing a copy retains auxiliary files the harness has pruned. Retention changes refresh the Garden snapshot without changing a seed's revision, so readers must refresh continuation details on each snapshot.
-- Forget (conversation): delete attn's copy now and remove its keep pin, leaving the harness's own files untouched. Open seeds must release the conversation first. A user deletion is recorded on the tombstone.
-- Agent conversation: the provider's chat history. One conversation is one session: a new conversation opens a new session in the same terminal (Claude `/clear`, Codex `/clear` and `/new`), and switching to one another session holds (`/resume`) shows that session there, unless it is live in another terminal. Other harnesses still start a new conversation within the session.
-- Successor: the session a terminal shows after its agent conversation changed: a new one, or the one that holds the conversation switched to, which comes back as on Reopen. It takes only the terminal; its predecessor closes with everything attached to it. A crew restart's successor is instead the member's next day.
-- Run: one prompt and response.
-- Parked run: a finished response whose background work is still running.
-- Quiet window: time after the user's last keystroke when automated input must wait.
-- Harness link: a channel that delivers input to a harness without typing into its terminal, and can report the agent's state, which then outranks hooks and the screen. Sessions without one use the PTY. pi's plugin is the first.
-- Turn event: a harness link's report of where the agent's turn stands (running, waiting on an approval or a question, ended). It is the agent's turn, not the attention Turn below; an epoch is one launch of the harness, ordering its reports.
-- Voice: whose words an input carries, the user's (annotations, conversation) or attn's (rings, heartbeats, nudges). A harness link declares the voices it delivers.
-- Custody: the answer, at delivery, that the harness took an input: a harness link's reply, or on the PTY the paste and its Enter written. It is a delivery's only result; attn never confirms an input afterwards.
-- Inbox: the items waiting for an address; agents read theirs with `attn agent inbox`.
-- Item: anything an agent reads from its inbox: peer message, seed update, user message, PR watch update, notice.
-- Address: who an item is for, a role (crew member, Chief or seed tender) or a session. A seed address follows its current or next tender. Unread role items reach whichever session holds the role next.
-- Send: save an item for an address; attn delivers it.
-- Ring: one prompt telling the session at an address it has unread items; it covers every unread item.
-- Attempt: one ring, preceded by a wake when the addressed member is asleep.
-- Delivered: read from the inbox.
-- Withdraw: a sender removes its unread item because it no longer applies.
-- Peer message: a message from one agent to another.
-- Turn: attention owed to an agent. Viewing the agent does not settle it.
-- Auto-settle: closes a turn after the user's response and a period of uninterrupted agent work.
-- Standing dismissal: suppresses the next auto-settle during the agent's current stretch of work.
-- Queue: agents ordered by attention owed.
-- Queue sidebar: the sidebar in queue mode. Chief and crew on top, then as many oldest turns as fit (at least three when available), a list of the remaining waiting, working and snoozed agents (Cmd+Shift+A), the automations and a strip of desktop chips.
-- Queue bar: the queue sidebar collapsed into a strip across the top of the window (Cmd+B on macOS, Ctrl+Alt+B on Linux). A waiting pill with the three oldest turns, a runs chip, and the desktop chips; hovering the pill or the chip peeks their lists.
-- Automation run: an agent an automation started. Runs live on their automation's launch desktop and stay out of the queue; the runs owing a turn form a batch the user walks with Cmd+Shift+J.
-- Snooze: settles an agent's turn and defers attention until a chosen wake time.
-- Wake: ends a snooze early; a stopped agent returns to the attention queue.
-- Satellite: a shell pane attached to an agent.
-- Orphan: a satellite without a live parent.
-- Sliver: a pane or tile folded into a thin strip to make room.
-- Pinned sliver: a pane or tile the user folded. It stays folded until the user expands it.
-- Activity: a generated summary of what an agent is doing.
-- Session usage: token counts and cost for a conversation and its native subagents. Delegated agents have separate sessions and usage.
-- Recoverable session: a stopped session whose conversation can be restored.
-- Reaped session: an unrestorable session removed from attn.
-- Closed session: a session the user or an agent ended, or whose terminal moved on to another conversation. Its history remains in the ledger.
-- Final cost: a closed session's token totals and cost.
-- Reopen: brings a closed session back under its original identity.
-- Resume: copies a conversation into a new session.
-- Reload: restores a recoverable session's own conversation.
-- Session ledger: a daemon's record of its live and closed sessions.
-- Ledger panel: the app's searchable lists of sessions, worktrees and kept conversations.
-- Session repository: the repository where a session ran.
-- Launch prompt: the opening message sent to a new agent.
-- Session pull request: a PR an agent opened during a session.
-- [PR watch](../README.md#watching-pull-requests): a durable, mode-configured subscription delivering PR readiness and feedback updates to an inbox address; a role watch follows its next holder.
-  A reset on a reused GitHub connection gets one retry on a fresh connection
-  before the watch reports that monitoring is delayed.
-- PR inbox: pull requests waiting on the user.
-- Provenance line: shows where a session came from and what it produced.
+```text
+profile                 a separate world for the user's work; like a tenant
+├─ desktop (1..n)
+├─ flow (1)
+├─ ledger (1)
+├─ crew member (0..n)   at most 1 is the chief
+├─ automation (0..n)
+└─ garden (1)
+```
 
-- Profile: the user's named grouping of agents, crew, automation definitions, Garden and the desktops that arrange them. It belongs to the daemon. Every agent, crew member, automation and seed belongs to its original profile for life. Nothing moves across profiles. Renaming keeps its identity.
-- Profile deletion: refuses while live agents, crew files, active automation definitions, tiles, open seeds pending delegations or running Garden reviews remain. Users or their agents clean up those contents first. Deletion never transfers or cascades work, on production or named instances.
-- Desktop: one arrangement of panes and tiles inside a profile. A profile always has at least one, and up to nine hold a shortcut slot. A numbered desktop's id is `<profile id>/desktop_N` and its number never changes: the user numbers contents by moving them to ⌘N, and ⌘N on a slot with no desktop creates one there. The daemon removes an unnamed desktop once it has held no pane or tile and been not current for 30 seconds; named desktops and desktops a crew member or automation starts on stay. Reopen recreates a removed numbered desktop under its id; any other launch aimed at a removed desktop lands on the current one without taking focus.
-- Desktop ref: how the CLI names a desktop of the caller's profile: its shortcut digit (1-9), its label as shown (the name, or "Desktop N" when unnamed; case-insensitive), or its id. `attn delegate --desktop` and `attn session move` take one.
-- Pane: an agent's place on a desktop. An agent has at most one pane.
-- Launch desktop: the settings field that says which desktop of its profile a crew member or automation starts on. Choosing "a new desktop called X" creates that desktop at once, empty and named (on ⌘N when the user picks an empty slot 5-9); items that pick the same desktop share it. A new crew member or automation starts on a new desktop named after it. Background launches land beside the desktop's active leaf without changing focus. A user wake shows the member, including an already-awake member. The setting lives in SQLite, separate from charters and automation files.
-- Launch review: the step of the workspace migration that asks where each crew member and automation starts. Picking an existing desktop is saved at once; new desktops, including the suggested one named after each item, are created on Finish. Until then an item starts on the current desktop.
-- Current desktop: the desktop a profile shows. Every client on that profile shares it.
-- Empty desktop launcher: the New Session picker shown inline on a current desktop with no leaves. Launches land there; New Session (Cmd+N) focuses it instead of opening the dialog, and Escape never dismisses it.
-- Active leaf (active pane on the wire): the agent pane or tile a desktop has selected. The daemon owns it and every client on the profile shares it. The app stores no current agent: the shown agent is the active leaf of the current desktop when it is an agent pane. With a tile active, agent-only actions are unavailable; opens and placements land beside that tile.
-- Show: one request that selects an agent (`desktop_show_session`) or a leaf (`desktop_show_leaf`). The daemon switches the requesting client's profile if needed, places an agent beside the active leaf if it has no pane, sets the active leaf and makes its desktop current, in one transaction with one broadcast.
-- Own answer: the arrangement the daemon sends a client for that client's own request, marked with its request id (a launch's session id), before the result and before any broadcast that includes the change. The daemon never sends a client an arrangement older than, or identical to, the one it already has.
-- Intent: a window's latest gesture that changes what is shown (a show, a desktop or profile switch, an open, a dock, a launch, a history step, or any other command that can change it, until its own answer). There is at most one, and while it is live the queue does not move the user. An arrival that shows its target confirms it: the view becomes the session, history records it and the keyboard moves there. Another client's change supersedes it; an own answer never does, so a superseded request of the same window is not read as moving on.
-- View: Home or the session surface. It is local to each app window; Home leaves the daemon's active leaf untouched.
-- Leaf history: the active leaves a window has shown, per profile, agents and tiles alike. ⌘[ and ⌘] walk it with a show; it follows a leaf the daemon moves and skips one that is gone. It lives only in that window.
-- Workspace migration: the one-time screen after the upgrade to profiles. Each old workspace arrives as an imported group already on a desktop; the user keeps it there, keeps it as an extra desktop, or merges it into another desktop before the app loads. The draft is daemon state shared by every client, and either client can finish it.
-- Focus mode: one pane or tile occupies the shell until the user returns to the split.
+```text
+desktop                 one arrangement of tiles; like a macOS Space or a
+                        virtual desktop
+└─ tile (0..n)          one rectangle on a desktop; like a tile in a tiling
+                        window manager
+   ├─ terminal tile     shows 1 terminal
+   └─ browser, markdown, seed or editor tile
+```
 
-## Cost estimates
+```text
+terminal                one PTY process in a terminal tile
+└─ runs 1 harness or 1 shell
+harness                 the agent CLI: Claude Code, Codex, pi, Copilot
+agent                   a harness that runs in a terminal; the user talks to
+                        them; like a coding agent
+├─ session (1 at a time)
+└─ state (1)            what the agent is doing now; like a presence status
+   ├─ launching         starting up
+   ├─ working           busy
+   ├─ waiting           done; waits for the user's input
+   ├─ needs approval    asks the user to allow a tool call
+   ├─ scheduled         will continue by itself at a set time
+   ├─ idle              nothing to do
+   ├─ recoverable       stopped; attn can bring it back
+   └─ unknown           attn cannot tell; may be an error
+session                 attn's record of one conversation; like one chat in a
+                        chat app's history
+├─ conversation (1)     the harness's chat history
+└─ worktree (at most 1) the git worktree the agent works in; several
+                        sessions can share one
+```
 
-Codex costs use the configured service tier from
-`thread_settings_applied.thread_settings.service_tier`. `priority` and `fast`
-select fast rates. Usage recorded before a tier setting uses standard rates.
-Model price overrides specify standard rates; published fast multipliers apply.
+```text
+ledger (1 per profile)  every session, live and closed; like a history
+├─ session (0..n)
+│  ├─ live              its agent runs in a terminal
+│  └─ closed            ended; the history stays
+└─ kept conversation (0..n)  attn's own copy of a conversation that its
+                             harness would delete; like an archive
+resume                  brings a closed session back as itself, in a tile;
+                        like /resume in the harness
+forget                  deletes attn's copy of a conversation
+```
 
-Codex does not record backend fallbacks, per-turn tier overrides, or changes to
-the root tier inherited by native subagents beside their usage. These costs
-remain estimates. A settings change between turn context and the first token
-count is attributed to that turn; the transcript cannot tell whether the user
-intended it for the next turn.
+```text
+address                 who an item is for: a session or a mailbox
+├─ mailbox              crew member, chief or seed tender; like a shared
+│                       mailbox (support@) that whoever holds the job reads
+└─ inbox (1)
+   └─ item (0..n)       peer message, seed update, user message,
+                        PR watch update or notice
+ring                    one prompt that tells an agent that they have unread
+                        items; like a push notification
+```
 
-## Garden and crew
+```text
+flow (1 per profile)      how the user works with attn and their agents:
+                          what asks for attention and how they move to it
+├─ queue flow             attn brings the next turn to the user; like working
+│                         an inbox to zero
+└─ desktop flow           the user goes to their agents on their desktops;
+                          like spatial work across macOS Spaces
+queue                     agents in order of the attention they are owed
+└─ turn (at most 1 per agent)  attention that an agent is owed
+snooze                    puts off a turn until a set time
+unsnooze                  ends a snooze early
+```
 
-- Garden: a profile's work tracker on the home daemon. Seeds, plots, relationships and claims stay inside that profile.
-- Seed: a work item with an ID, title, body and state, belonging to its planting profile for life. Closed seeds of a deleted profile stay readable by ID, outside live Gardens, and cannot be replanted or resumed elsewhere.
-- Slug: a readable name derived from a seed's title. Slugs need not be unique.
-- Plot: a seed with child seeds. Its body holds their shared plan.
-- Packet: a reusable plot template.
-- Plant: create a seed.
-- Tend: claim a seed.
-- Park: pause work and release the claim.
-- Harvest: mark work complete.
-- Wither: abandon work.
-- Replant: reopen completed or abandoned work.
-- Seed states: planted means open, growing means claimed, dormant means paused, harvested means done, and withered means abandoned.
-- Seed outcome: the result and verification required before harvesting.
-- Harvest condition: an instruction to harvest a seed when its PR merges. A PR closed without merging clears it instead of closing the seed.
-- Tender: the agent or person claiming a seed. A seed has one tender at a time.
-- Member claim: a tender recorded as a crew member with no session. It belongs to the permanent member and stays held while the member is asleep.
-- Named claim: an unregistered tender name passed with `--member`. The claim stays in its seed's profile; later crew registration elsewhere cannot receive its updates or prevent editing its existing claim.
-- Session claim: a tender recorded as a session. It counts as a crew member's work only while that session is the member's current day.
-- Execution: the saved conversation and working location for a seed.
-- Garden resume: reopens the seed's saved conversation in its saved directory.
-- Handover: starts a new agent on the same seed and transfers the claim.
-- Edge: a relationship between seeds. `blocks` orders work, `part-of` groups it, and `discovered-from` records its origin.
-- Ready seed: open work an agent can claim now.
-- Stale seed: work without recent activity. Age alone does not close it.
-- Review Garden: a user-started review of growing seeds without an active agent.
-- Garden advisor: a model that recommends actions during Review Garden. It cannot change a seed's state.
-- Keep growing: dismisses a review item while leaving the seed open.
-- Artifact: a file owned by a seed.
-- Linked artifact: a reference to a file, Notebook document or URL.
-- Note: an entry in a seed's log.
-- Handoff: a note for the next tender.
-- Watch: a subscription to updates about a seed and its descendants.
-- Delegation preferences: saved roles and model choices for delegating work. They do not authorize delegation.
-- Session delegation role: optional role identity captured at launch. Later settings changes do not relabel the agent.
-- Delegation chain: an agent's dispatchers and delegates.
-- Dispatched session: an agent with a saved reporting seed in its dispatch record. It stays in that profile even after its work closes; moving work to another profile requires closing the agent and delegating afresh there.
-- Ticket: an archived work item from before the Garden.
-- Crew member: an agent with a permanent charter.
-- `attn`: the reserved member name the daemon uses when it moves a seed by itself. No crew home may claim it.
-- Registry: the index of crew member files.
-- Binding: a crew member's active session. Daemon-managed days use terminal liveness; bare CLI days remain live while registered, until their wrapper unregisters. The daemon tracks external registrations during its lifetime; recovered managed days never become external merely by registering again.
-- Launch settings: a member's harness, model, effort and launch desktop choices. Blank harness, model and effort pins resolve through daemon and harness defaults.
-- Charter token: the receipt for the exact charter bytes read. A replacement needs it and advances it, so a stale write cannot overwrite a newer one.
-- Chief of staff: the agent coordinating the work of one profile. Each profile has at most one; all chiefs share the Notebook.
-- Day: a crew member's current session.
-- Member home: the directory holding a crew member's charter and handoff.
-- Wake: starts a crew member's day.
-- Sleep request: asks a crew member to file a handoff and stop.
-- Restart request: asks the current day to file its handoff and nap. It completes when the successor starts; an asleep member wakes directly.
-- Wake limit: the cap on a crew member's delivery wakes. Every delivery wake counts; manual wakes remain uncharged.
-- Sleep: a crew member has no active day.
-- Nap: replaces the current day using its handoff.
-- Heartbeat: refreshes a crew member's working context.
+```text
+garden                  a profile's issue tracker
+└─ seed (0..n)          a ticket
+   ├─ state (1)         planted, growing, parked, harvested or withered
+   ├─ seed (0..n)       a subtask
+   ├─ tender (at most 1)  the assignee: the session or crew member
+   ├─ note (0..n)       a comment in the ticket's log
+   └─ edge (0..n)       blocks or discovered-from
+tend                    claim a seed; like assigning a ticket to yourself
+plot                    an epic: a seed with child seeds
+packet                  an epic template
+```
 
-## Knowledge
+```text
+crew member             an agent with a permanent identity and memory
+├─ charter (1)          who the member is and what they live for
+├─ member home (1)      the folder that holds the charter and the letters
+├─ launch desktop (1)   the desktop where their sessions start
+├─ letter (0..n)        what one of the member's sessions leaves for their
+│                       next sessions; like a shift handoff
+└─ session (at most 1)  the member's current session
+chief                   the crew member that coordinates one profile
+asleep                  the member has no session, until something wakes them
+awake                   the member has a session
+wake                    starts a session for the member
+nap                     ends the member's session and starts a new one from
+                        their letters
+```
 
-- Notebook: an instance's collection of Markdown documents.
-- Journal: a dated record of work.
-- Knowledge base: knowledge worth keeping across sessions.
+```text
+automation              a prompt that attn starts on its own
+├─ trigger (1)          a schedule or an event, like a PR review request
+├─ launch desktop (1)   the desktop where its sessions start
+├─ continuity (1)       which session takes the next occurrence:
+│                       a new one each time, one per subject, or one only
+└─ occurrence (0..n)    one time the trigger fires
+   └─ run (at most 1)   the work that attn starts for one occurrence
+      └─ session (at most 1)
+```
 
-## Plugins and tiles
+```text
+delegation              one agent starts another agent to work on a seed
+├─ seed (1)             the work
+├─ role (at most 1)     a way of working for one type of work:
+│                       instructions, harness, model and effort
+├─ dispatcher (1)       the session that started the delegation
+└─ delegate (1)         the session that does the work
+handover                a new session takes over a seed and its claim
+```
 
-- Plugin: an installed integration that adds capabilities to attn.
-- Tile: a docked browser, Markdown, seed, or editor surface in a workspace.
+```text
+home                    the daemon that keeps the profiles, gardens and crew;
+                        like a main server
+└─ outpost (0..n)       a daemon on another machine that runs sessions for
+                        the home; like a remote worker or build agent
+instance                a daemon, an app and a data folder under one name;
+                        like a separate install. Production has no instance
+                        name.
+```
 
-## Daemons and permissions
+```text
+window (1..n)           one macOS app window
+├─ home screen          the dashboard: what asks for attention, across agents
+├─ sidebar (1)          its shape follows the profile's flow
+│  ├─ queue sidebar     queue flow: crew, the oldest turns, the rest of the
+│  │                    agents, automations, desktop chips
+│  │  └─ queue bar      the queue sidebar collapsed into a strip across the top
+│  └─ desktop sidebar   desktop flow: each desktop and its tiles
+│     └─ collapsed      a thin column of desktop chips
+├─ drawer (0..n)        a panel that slides in from the right: attention,
+│                       automations or garden; like a side drawer
+├─ popover (0..1)       a floating panel anchored to a button: notifications
+├─ menu (0..1)          a short list of choices: snooze options
+├─ palette (0..1)       search and run commands, agents and tiles; like the
+│                       VS Code command palette (⌘K, ⌘P)
+└─ dialog (0..1)        a modal window that waits for an answer: settings,
+                        confirmations
+current desktop         the desktop a profile shows; every window shares it
+active tile             the tile a desktop has selected; every window shares it
+tile history            the tiles a window has shown; ⌘[ and ⌘] walk it
+```
 
-- Instance: a daemon, app bundle and data directory installed together under one name. Production is the unnamed instance.
-- Home: the daemon that owns the Garden and crew.
-- Outpost: an enrolled daemon that runs sessions on another machine.
-- Enrollment: an outpost's relationship with its home.
-- Endpoint: a remote connection target.
-- Parked endpoint: a connection waiting for compatible app and daemon versions.
-- Headless task: a model call without an interactive session or terminal.
-- Auto mode: lets the Guardian answer pi approval requests.
-- Reviewer: the user or model deciding whether an operation may proceed.
-- Guardian: the model reviewer for auto mode.
-- Approval policy: determines which operations require approval.
-- Sandbox mode: determines which resources an operation can access.
-- Prefix rule: a permission rule matching the start of a command.
-- Repository rules: permission rules saved with a repository.
-- Host approval: permission to contact a network host.
+## Profile
 
-## Worktrees
+Profiles separate everything in attn for the user. For the user and their
+agents, things in one profile do not exist in another, and attn does not leak
+them across profiles.
 
-- Worktree registry: attn's inventory of worktrees.
-- Worktree sweep: automatic cleanup of inactive worktrees whose work has merged.
-- Integration branch: the branch a repository merges work into.
-- Kept reason: why the sweep left a worktree alone.
-- Keep pin: the user's instruction to preserve a worktree.
-- Sweep log: a record of worktree removals and their reasons.
+## Seed
 
-- Automation ID: an automatically assigned number, unique across profiles and never reused. Each ID-less apply creates a new automation, including when repeated; edits include an existing ID and keep its original profile. A deleted automation cannot be restored by applying its old definition.
+- planted: open (todo). Plant creates a seed, and replant opens a closed one
+  again.
+- growing: in progress. A tender claims it. Tend claims it.
+- parked: on hold, with no claim. Park puts it down.
+- harvested: done. Harvest closes it.
+- withered: won't do. Wither closes it.
+
+## Tech debt
+
+### Legacy names
+
+Temporary debt. Read the old name as the new term. Never write the old name.
+
+- pane, leaf → tile
+- notebook (as a tile kind) → editor tile
+- satellite, satellite shell → terminal tile
+- workspace → desktop
+- session (of a shell) → terminal
+- runtime (runtime_id) → terminal
+- thread (Codex) → conversation
+- role (as an address), seat → mailbox
+- nudge (inbox) → ring
+- queue mode → queue flow
+- wake (a snooze) → unsnooze
+- hold (a seed) → claim
+- handoff (crew) → letter
+- day (crew) → session
+- continuity thread → continuity
+- dormant → parked
+- dock panel → drawer
+- active leaf, active pane → active tile
+- leaf history → tile history
+- waiting_input → waiting
+- pending_approval → needs approval
+- reopen → resume
+
+### Changes to make
+
+- Flow is one daemon-wide setting (`queue_mode_enabled`). Make it 1 per profile.
+- Named claims let any name tend a seed. Remove them, or define who can use
+  them.
+- The chief is not a crew member. Make it one.
+- Prompts say hold, held and holder for a claimed seed
+  (internal/prompts/content/garden.md, the delegation reference). Say claim and
+  tender.
+- The ledger may list every profile when a request has no profile. Check, and
+  fix.
+- The Ledger button and action say Reopen. Rename them to Resume.
+- Remove the workflow engine: internal/workflow, internal/workflowresult,
+  `attn workflow` and the workflow run drawer.

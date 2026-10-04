@@ -34,6 +34,7 @@ dist/app-runtime/
 # file whose parent directory is excluded.
 .claude/*
 !.claude/settings.json
+!.claude/skills/
 
 # Generated per-instance Tauri config overlays (see scripts/build-app-instance.sh)
 app/src-tauri/*.gen.conf.json
