@@ -160,6 +160,10 @@ window (1..n)           one macOS app window
 current desktop         the desktop a profile shows; every window shares it
 active tile             the tile a desktop has selected; every window shares it
 tile history            the tiles a window has shown; ⌘[ and ⌘] walk it
+quick capture           a panel that floats above every app, outside attn's
+                        windows; a global shortcut opens it from anywhere on
+                        the computer. It sends a user message to a mailbox;
+                        like macOS Quick Note
 ```
 
 ## Profile
