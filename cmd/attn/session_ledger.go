@@ -402,6 +402,9 @@ func fprintSessionShow(w io.Writer, result protocol.SessionShowResult) {
 	}
 	fmt.Fprintf(w, "profile    %s\n", sessionLedgerProfile(entry))
 	fmt.Fprintf(w, "last seen  %s\n", shortStamp(entry.LastSeen))
+	if entry.Usage != nil {
+		fmt.Fprintf(w, "usage      %s\n", sessionUsageText(*entry.Usage))
+	}
 	if closedAt := protocol.Deref(entry.ClosedAt); closedAt != "" {
 		fmt.Fprintf(w, "closed     %s by %s\n", shortStamp(closedAt), orDash(protocol.Deref(entry.ClosedBy)))
 		if reason := strings.TrimSpace(protocol.Deref(entry.CloseReason)); reason != "" {
@@ -409,6 +412,22 @@ func fprintSessionShow(w io.Writer, result protocol.SessionShowResult) {
 		}
 	}
 	fprintSessionReopenVerdict(w, entry.ID, result.Reopen)
+}
+
+func sessionUsageText(usage protocol.SessionUsage) string {
+	text := fmt.Sprintf("%d tokens", usage.TotalTokens)
+	if cost := usage.CostUsd; cost != nil && *cost > 0 && *cost < 0.01 {
+		text += ", <$0.01"
+	} else if cost != nil {
+		text += fmt.Sprintf(", $%.2f", *cost)
+	}
+	if usage.HasUnpricedUsage {
+		text += ", some usage has no price"
+	}
+	if protocol.Deref(usage.MeasurementIncomplete) {
+		text += ", measurement incomplete"
+	}
+	return text
 }
 
 func sessionLedgerProfile(entry protocol.SessionLedgerEntry) string {

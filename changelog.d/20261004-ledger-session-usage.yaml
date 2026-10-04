@@ -1,0 +1,3 @@
+kind: added
+area: sessions
+change: The sessions ledger inspector and `attn session show` report each session's tokens and cost, and a closed session keeps its usage there.

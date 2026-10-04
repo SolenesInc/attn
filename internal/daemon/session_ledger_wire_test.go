@@ -177,3 +177,30 @@ func ledgerIDs(page *protocol.SessionListResult) []string {
 	}
 	return ids
 }
+
+func TestAClosedSessionsLedgerRowKeepsItsUsage(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	run := w.Launched(session)
+	app.TypeLine(session, "price the cart")
+	run.Prompted()
+	reply := "Priced. <!-- attn:state=idle -->"
+	run.Reply(reply)
+	spent := awaitUsageTokens(app, session, claudeTokens(reply)).TotalTokens
+
+	closeSession(t, w.Client(), session, "priced")
+	if closed := awaitClosed(app, session); closed.Usage == nil || closed.Usage.TotalTokens != spent {
+		t.Errorf("the close announced usage %+v, want %d tokens", closed.Usage, spent)
+	}
+
+	w.restart()
+	cli := w.Client()
+	if shown := showSession(t, cli, session); shown.Usage == nil || shown.Usage.TotalTokens != spent {
+		t.Errorf("session show after a restart reports usage %+v, want %d tokens", shown.Usage, spent)
+	}
+	page := ledger(t, cli, client.SessionListOptions{Closed: true})
+	if len(page.Entries) != 1 || page.Entries[0].Usage == nil || page.Entries[0].Usage.TotalTokens != spent {
+		t.Errorf("closed ledger after a restart = %+v, want the row with its %d tokens", page.Entries, spent)
+	}
+}

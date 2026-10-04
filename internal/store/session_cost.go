@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"maps"
 	"reflect"
 	"slices"
 	"strings"
@@ -184,6 +185,59 @@ func (s *Store) SessionCost(sessionID string) (SessionCostState, error) {
 		return SessionCostState{}, err
 	}
 	return costView(entry.state), nil
+}
+
+type SessionCostUsage struct {
+	UsageUnavailable      bool               `json:"usage_unavailable,omitempty"`
+	MeasurementIncomplete bool               `json:"measurement_incomplete,omitempty"`
+	Ledger                sessioncost.Ledger `json:"ledger,omitempty"`
+}
+
+func (s *Store) SessionCostUsages(sessionIDs []string) (map[string]SessionCostUsage, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	usages := make(map[string]SessionCostUsage, len(sessionIDs))
+	var stored []string
+	s.costMu.Lock()
+	for _, id := range sessionIDs {
+		state, cached := s.sessionCosts[id], s.db == nil
+		if entry := s.liveCosts[id]; entry != nil {
+			state, cached = entry.state, true
+		}
+		if cached {
+			usages[id] = SessionCostUsage{state.UsageUnavailable, state.MeasurementIncomplete, maps.Clone(state.Ledger)}
+		} else {
+			stored = append(stored, id)
+		}
+	}
+	s.costMu.Unlock()
+	if len(stored) == 0 {
+		return usages, nil
+	}
+	ids, err := json.Marshal(stored)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.Query("SELECT id, session_cost_json FROM sessions WHERE id IN (SELECT value FROM json_each(?))", string(ids))
+	if err != nil {
+		return nil, fmt.Errorf("read session costs: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, raw string
+		if err := rows.Scan(&id, &raw); err != nil {
+			return nil, fmt.Errorf("read session costs: %w", err)
+		}
+		var usage SessionCostUsage
+		if strings.TrimSpace(raw) != "" {
+			if err := json.Unmarshal([]byte(raw), &usage); err != nil {
+				log.Printf("[store] session cost: decoding %s: %v", id, err)
+				continue
+			}
+		}
+		usages[id] = usage
+	}
+	return usages, rows.Err()
 }
 
 func (s *Store) SetSessionCostCursor(sessionID, cursor string) error {

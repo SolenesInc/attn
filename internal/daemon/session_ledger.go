@@ -80,6 +80,7 @@ func (d *Daemon) sessionLedgerPage(msg *protocol.SessionListMessage, wantFacets 
 		return nil, errors.New("session ledger unavailable")
 	}
 
+	d.decorateLedgerEntriesWithUsage(page.Entries)
 	result := &protocol.SessionListResult{Entries: page.Entries, Omitted: page.Omitted, Facets: page.Facets}
 	if result.Entries == nil {
 		result.Entries = []protocol.SessionLedgerEntry{}
@@ -143,6 +144,7 @@ func (d *Daemon) handleSessionShow(conn net.Conn, msg *protocol.SessionShowMessa
 		return
 	}
 	result := &protocol.SessionShowResult{Entry: *entry}
+	d.decorateLedgerEntryWithUsage(&result.Entry)
 	verdict, err := d.resolveReopen(context.Background(), *entry, d.scheduledReopenGit())
 	if err != nil {
 		d.logf("session show: resolve reopen eligibility for session %s: %v", entry.ID, err)
@@ -195,6 +197,7 @@ func (d *Daemon) sendSessionShowWSResult(client *wsClient, msg *protocol.Session
 		RequestID: protocol.Deref(msg.RequestID),
 	}
 	if entry := d.store.SessionLedgerEntry(strings.TrimSpace(msg.SessionID)); entry != nil {
+		d.decorateLedgerEntryWithUsage(entry)
 		reply.Success = true
 		reply.Entry = entry
 	} else {

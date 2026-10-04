@@ -33,6 +33,9 @@ export function AppLibrarySurfaces() {
     ...profiles.map((profile) => `${profile.id}:${profile.name}`),
     ...daemonSessions.map((session) => `${session.id}@${session.profile_id}`),
   ].sort().join('\n'), [profiles, daemonSessions]);
+  const liveSessionUsage = useMemo(() => new Map(daemonSessions.flatMap(
+    (session) => (session.usage ? [[session.id, session.usage] as const] : []),
+  )), [daemonSessions]);
   const {
     sessionsOpen,
     ledgerTab,
@@ -114,6 +117,7 @@ export function AppLibrarySurfaces() {
           profileNames,
           profileMembership,
           liveSessionIds: liveGardenSessions,
+          liveSessionUsage,
           seedForSession,
           onFocusSession: handleSelectSession,
           onOpenSeed: handleOpenSeedTile,

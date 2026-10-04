@@ -9797,6 +9797,9 @@ type SessionLedgerEntry struct {
 
 	// State corresponds to the JSON schema field "state".
 	State SessionState `json:"state"`
+
+	// Usage corresponds to the JSON schema field "usage".
+	Usage *SessionUsage `json:"usage,omitempty,omitzero"`
 }
 
 type SessionLedgerFacet struct {

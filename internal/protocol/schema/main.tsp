@@ -6402,6 +6402,8 @@ model SessionLedgerEntry {
   closed_by?: string;
   // Only agent closes carry one; the user never types a reason.
   close_reason?: string;
+  // Absent when the agent reported none. Priced at the current settings, as Session.usage is.
+  usage?: SessionUsage;
 }
 
 // Counted over the scope and date window alone, so choosing a repository never

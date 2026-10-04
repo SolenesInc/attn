@@ -1985,6 +1985,7 @@ func (d *Daemon) recordSessionClose(sessionID string, commit func() (bool, error
 		d.queueConversationKeep()
 		d.invalidateGardenSeedParties("session close")
 		entry := d.store.SessionLedgerEntry(sessionID)
+		d.decorateLedgerEntryWithUsage(entry)
 		d.publishFact(FactSessionClosed, sessionID, entry)
 	}
 	d.clearChiefOfStaffIfSession(sessionID)
