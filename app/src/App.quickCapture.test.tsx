@@ -353,7 +353,7 @@ describe('Quick Capture app wire behavior', () => {
     expect(native.draft).toMatchObject({ files: [] });
   });
 
-  it('retains a sendable attachment after removal cannot be saved and the panel relaunches', async () => {
+  it('retains a sendable attachment after removal cannot be saved, editing resumes and the panel relaunches', async () => {
     const captureId = crypto.randomUUID(), fileId = crypto.randomUUID();
     native.draft = { id: captureId, text: 'Retain this file', mailbox: 'chief', uncertain: false,
       files: [{ id: fileId, name: 'retained.png', url: 'data:image/png;base64,aGVsbG8=' }] };
@@ -376,6 +376,9 @@ describe('Quick Capture app wire behavior', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Draft disk write failed');
     expect(daemon.sentOf('quick_capture_attachment_discard')).toHaveLength(0);
     failRemoval = false;
+    await gesture(daemon, () => fireEvent.change(editor(), { target: { value: 'Edited after storage recovered' } }));
+    expect(screen.getByRole('img', { name: 'retained.png' })).toBeInTheDocument();
+    expect(native.draft).toMatchObject({ text: 'Edited after storage recovered', files: [{ id: fileId }] });
     capture.unmount();
     render(<QuickCapture />);
     await act(async () => {
