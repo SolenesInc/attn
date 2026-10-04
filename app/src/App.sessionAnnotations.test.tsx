@@ -349,6 +349,57 @@ describe('App session annotations', () => {
     expect(panel().getByLabelText('Note sent with these annotations')).toHaveValue('For the new conversation.');
   });
 
+  it('keeps a note rewritten while a send was in flight when /clear moves the tile on, and spends only what was sent', async () => {
+    const drafts: Record<string, { annotations: StoredAnnotation[]; note: string; generation: number }> = {
+      s1: { annotations: [PARSER], note: '', generation: 7 },
+      s2: { annotations: [], note: '', generation: 0 },
+    };
+    const s1 = daemonSession('s1', { state: 'idle' });
+    const { daemon } = await renderApp({
+      initialState: { sessions: [s1], desktops: [emptyDesktop(DEFAULT_DESKTOP_ID), soloDesktop('s1')] },
+      script: (scripted) => {
+        scripted.on('session_annotations_get', ({ session_id }) => ({
+          event: 'session_annotations_get_result',
+          session_id,
+          success: true,
+          ...drafts[session_id],
+        }));
+        scripted.on('session_annotations_save', ({ session_id, annotations, note, generation }) => {
+          drafts[session_id] = { annotations, note: note ?? '', generation };
+          return { event: 'session_annotations_save_result', session_id, success: true, generation };
+        });
+        scripted.on('session_annotations_clear', ({ session_id, generation }) => {
+          drafts[session_id] = { annotations: [], note: '', generation };
+          return { event: 'session_annotations_clear_result', session_id, success: true, generation };
+        });
+        scripted.on('session_annotations_submit', () => undefined);
+      },
+    });
+    await openSession(daemon, 's1');
+    const note = () => panel().getByLabelText('Note sent with these annotations');
+    fireEvent.change(note(), { target: { value: 'Split this.' } });
+    fireEvent.click(panel().getByRole('button', { name: /Send all/ }));
+    await daemon.idle();
+    const [submit] = daemon.sentOf('session_annotations_submit');
+    fireEvent.change(note(), { target: { value: 'Split this, smallest first.' } });
+    await act(() => vi.advanceTimersByTimeAsync(400));
+
+    const shown = soloDesktop('s1');
+    daemon.emit({ event: 'session_registered', session: daemonSession('s2', { state: 'idle', succeeds: 's1' }) });
+    daemon.emit({
+      event: 'profile_arrangement_changed',
+      profile: defaultProfile('desktop-s1'),
+      desktops: [emptyDesktop(DEFAULT_DESKTOP_ID), { ...shown, revision: 2, panes: shown.panes.map((pane) => ({ ...pane, session_id: 's2' })) }],
+    });
+    daemon.emit({ event: 'session_unregistered', session: s1 });
+    await daemon.idle();
+    deliver(daemon, submit);
+    await daemon.idle();
+
+    expect(drafts.s1).toMatchObject({ annotations: [], note: 'Split this, smallest first.' });
+    expect(drafts.s2).toMatchObject({ annotations: [], note: '' });
+  });
+
   it('reads a session’s message window again only when the daemon says that session’s window changed', async () => {
     const { daemon } = await openAnnotatedSession({ annotations: [], generation: 0 });
     const windowReads = () => daemon.sentOf('session_messages_get').map((command) => command.session_id);

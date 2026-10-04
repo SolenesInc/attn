@@ -99,6 +99,14 @@ interface Composer {
   writing: boolean;
 }
 
+function deliveredUnchanged(current: readonly TerminalAnnotation[], sent: readonly TerminalAnnotation[]): Set<string> {
+  const sentById = new Map(sent.map((entry) => [entry.id, entry]));
+  return new Set(current.filter((entry) => {
+    const was = sentById.get(entry.id);
+    return was !== undefined && was.quickLabelId === entry.quickLabelId && was.comment === entry.comment;
+  }).map((entry) => entry.id));
+}
+
 export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerminalProps>(
   function AnnotatedTerminal(
     { desktopId, sessionId, annotationApi, paneActive = false, ...terminalProps },
@@ -564,17 +572,22 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
               : { kind: 'error', message: 'The session did not take the feedback. Nothing was sent.' };
           }
           if (heldSessionRef.current !== target) {
-            void annotationApi.clearAnnotations(target, 0).catch(() => {
-            });
+            void annotationApi.fetchAnnotations(target)
+              .then((stored) => {
+                const delivered = deliveredUnchanged(stored.annotations, sending);
+                const kept = stored.annotations.filter((entry) => !delivered.has(entry.id));
+                const keptNote = sendingNote && stored.note.trim() === sendingNote ? '' : stored.note;
+                const generation = stored.generation + 1;
+                const write = kept.length > 0 || keptNote.trim()
+                  ? annotationApi.saveAnnotations(target, kept, keptNote, generation)
+                  : annotationApi.clearAnnotations(target, generation);
+                return write.then(() => undefined);
+              })
+              .catch(() => {
+              });
             return { kind: 'sent', count: sending.length, kept: 0 };
           }
-          const current = new Map(store.list().map((entry) => [entry.id, entry]));
-          sending.forEach((entry) => {
-            const now = current.get(entry.id);
-            if (!now) return;
-            if (now.quickLabelId !== entry.quickLabelId || now.comment !== entry.comment) return;
-            store.remove(entry.id);
-          });
+          deliveredUnchanged(store.list(), sending).forEach((id) => store.remove(id));
           if (sendingNote && noteRef.current.trim() === sendingNote) writeNote('');
           const kept = store.list().length;
           bump();
