@@ -610,6 +610,34 @@ describe('Quick Capture app wire behavior', () => {
 
   });
 
+  it('refreshes only the newest history page after sending from a closed Recent view', async () => {
+    const firstId = crypto.randomUUID(), olderId = crypto.randomUUID();
+    let sent: WireRecord | undefined;
+    const { daemon, hidden } = await captureApp(daemon => {
+      daemon.on('quick_capture_list', command => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: true,
+        result: { list: command.cursor
+          ? { items: [record({ capture_id: olderId, content: 'Older message' })], draft_assets: [] }
+          : { items: [...(sent ? [sent] : []), record({ capture_id: firstId, content: 'Previous message' })], draft_assets: [], next_cursor: firstId } } }));
+      daemon.on('quick_capture_send', command => {
+        sent = record(command);
+        return { event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { record: sent } };
+      });
+    });
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Recent messages' })));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Show older messages' })));
+    expect(screen.getByText('Older message')).toBeInTheDocument();
+    await gesture(daemon, () => fireEvent.keyDown(screen.getByRole('region', { name: 'Recent messages' }), { key: 'Escape' }));
+    await gesture(daemon, () => fireEvent.change(editor(), { target: { value: 'New message' } }));
+    const beforeSend = daemon.sentOf('quick_capture_list').length;
+    await gesture(daemon, () => fireEvent.keyDown(editor(), { key: 'Enter' }));
+    await hidden;
+    await daemon.idle();
+    expect(daemon.sentOf('quick_capture_list').slice(beforeSend)).toEqual([expect.objectContaining({ cmd: 'quick_capture_list' })]);
+    expect(daemon.sentOf('quick_capture_list')[beforeSend].cursor).toBeUndefined();
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Recent messages' })));
+    expect(screen.getByText('New message')).toBeInTheDocument();
+  });
+
   it('keeps read receipts while initial and older history pages are in flight', async () => {
     const firstId = crypto.randomUUID(), olderId = crypto.randomUUID();
     const { daemon } = await captureApp(daemon => daemon.on('quick_capture_list', () => undefined));
