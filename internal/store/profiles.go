@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -984,7 +985,7 @@ func refuseSecondTile(tx *sql.Tx, desktop profiles.Desktop, pane profiles.Pane) 
 	return nil
 }
 
-func checkPaneMembership(tx *sql.Tx, desktop profiles.Desktop, arriving []string) error {
+func checkPaneMembership(tx *sql.Tx, desktop profiles.Desktop, arriving map[string]string) error {
 	for _, pane := range desktop.Panes {
 		persisted, err := panePersisted(tx, desktop.ID, pane)
 		if err != nil {
@@ -1000,7 +1001,7 @@ func checkPaneMembership(tx *sql.Tx, desktop profiles.Desktop, arriving []string
 		if err := checkTileID(tx, desktop, pane); err != nil {
 			return err
 		}
-		if persisted || slices.Contains(arriving, pane.PaneID) {
+		if _, carried := arriving[pane.PaneID]; persisted || carried {
 			continue
 		}
 		if err := refuseSecondTile(tx, desktop, pane); err != nil {
@@ -1054,7 +1055,12 @@ func settleForWrite(desktop profiles.Desktop) profiles.Desktop {
 	return desktop
 }
 
-func writeDesktopArrangement(tx *sql.Tx, now string, desktop *profiles.Desktop, arriving ...string) error {
+func writeDesktopArrangement(tx *sql.Tx, now string, desktop *profiles.Desktop) error {
+	return writeArrivingArrangement(tx, now, desktop, nil)
+}
+
+// writeArrivingArrangement keeps each arriving tile's created_at, keyed by its id on this desktop.
+func writeArrivingArrangement(tx *sql.Tx, now string, desktop *profiles.Desktop, arriving map[string]string) error {
 	if err := layouttree.Validate(desktop.Tree); err != nil {
 		return profiles.Errorf(profiles.CodeInvalid, "desktop %s: %v", desktop.ID, err)
 	}
@@ -1069,6 +1075,7 @@ func writeDesktopArrangement(tx *sql.Tx, now string, desktop *profiles.Desktop, 
 	if err != nil {
 		return err
 	}
+	maps.Copy(createdAt, arriving)
 	if _, err := tx.Exec(`DELETE FROM desktop_panes WHERE desktop_id = ?`, desktop.ID); err != nil {
 		return err
 	}
@@ -1314,6 +1321,10 @@ func moveLeafBetweenDesktops(tx *sql.Tx, now string, source, target profiles.Des
 	if !ok {
 		return LeafMove{}, profiles.Errorf(profiles.CodeInvalid, "leaf %q could not move from desktop %s beside %q on desktop %s", request.LeafID, source.ID, request.AnchorID, target.ID)
 	}
+	var createdAt string
+	if _, err := rowFound(tx.QueryRow(`SELECT created_at FROM desktop_panes WHERE pane_id = ?`, request.LeafID), &createdAt); err != nil {
+		return LeafMove{}, err
+	}
 	source.Tree, target.Tree = moved.SourceLayout, moved.TargetLayout
 	handOverPane(&source, &target, request.LeafID, moved.FinalLeafID)
 	if request.Activate {
@@ -1322,7 +1333,7 @@ func moveLeafBetweenDesktops(tx *sql.Tx, now string, source, target profiles.Des
 	if err := writeDesktopArrangement(tx, now, &source); err != nil {
 		return LeafMove{}, err
 	}
-	if err := writeDesktopArrangement(tx, now, &target, moved.FinalLeafID); err != nil {
+	if err := writeArrivingArrangement(tx, now, &target, map[string]string{moved.FinalLeafID: createdAt}); err != nil {
 		return LeafMove{}, err
 	}
 	return LeafMove{Source: source, Target: target, FinalLeafID: moved.FinalLeafID}, nil
