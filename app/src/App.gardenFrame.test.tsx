@@ -24,6 +24,48 @@ const toggleFrame = (daemon: ScriptedDaemon) => gesture(daemon, () => pressShort
 const escape = (daemon: ScriptedDaemon) => gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
 
 describe('App garden frame', () => {
+  it.each([
+    ['attention', 'list'],
+    ['attention', 'board'],
+    ['garden', 'list'],
+    ['garden', 'board'],
+  ])('preserves opening order after restoring the garden (%s first, %s fullscreen)', async (first, view) => {
+    const { daemon } = await renderGarden(seeds);
+    const attention = () => gesture(daemon, () => pressShortcut('dock.attention'));
+    if (first === 'attention') {
+      await attention();
+      await click(daemon, 'Show the garden');
+    } else {
+      await click(daemon, 'Show the garden');
+      await attention();
+    }
+    await click(daemon, 'Expand the garden');
+    if (view === 'board') await click(daemon, 'board');
+    if (view === 'board') await toggleFrame(daemon);
+    else await click(daemon, 'Return the garden to the dock');
+
+    await escape(daemon);
+
+    expect(shown()).toBe(first === 'attention' ? 'closed' : 'dock');
+    expect(screen.getByRole('button', { name: first === 'attention' ? 'Hide PRs Drawer' : 'Show PRs Drawer' })).toBeInTheDocument();
+    await escape(daemon);
+    expect(shown()).toBe('closed');
+    expect(screen.getByRole('button', { name: 'Show PRs Drawer' })).toBeInTheDocument();
+  });
+
+  it('dismisses an expanded garden before a dock panel opened after its list', async () => {
+    const { daemon } = await openGarden(seeds);
+    await gesture(daemon, () => pressShortcut('dock.attention'));
+    await click(daemon, 'Expand the garden');
+
+    await escape(daemon);
+
+    expect(shown()).toBe('closed');
+    expect(screen.getByText('Needs Attention')).toBeVisible();
+    await escape(daemon);
+    expect(screen.queryByRole('button', { name: 'Hide PRs Drawer' })).toBeNull();
+  });
+
   it('holds the window as a modal only once expanded, and offers the board only there', async () => {
     const { daemon } = await openGarden(seeds);
     expect(shown()).toBe('dock');

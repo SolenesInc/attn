@@ -2,6 +2,12 @@ const REMOTE_ENDPOINTS_OFF = 'remote endpoints are off in this release, so the a
 
 export const scenarioCatalog = [
   {
+    id: 'home-dock',
+    runnerId: 'HOME-DOCK',
+    label: 'Dock panels over home: native pointer, keyboard focus and Escape',
+    command: ['node', 'scripts/real-app-harness/scenario-home-dock.mjs'],
+  },
+  {
     id: 'launch-desktops',
     runnerId: 'LAUNCH-DESKTOPS',
     label: 'Launch desktops: mandatory review, named pending sharing, settings and actionable arrivals',

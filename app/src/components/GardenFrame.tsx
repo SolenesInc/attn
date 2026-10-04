@@ -62,7 +62,7 @@ export interface GardenFrameProps {
   mode: GardenMode;
   dockRect: FrameRect | null;
   onToggleFrame: () => void;
-  onEscapeFloor: () => void;
+  onEscapeFloor?: () => void;
   onClose: () => void;
   seeds: Seed[];
   seedsTotal: number;

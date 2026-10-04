@@ -91,6 +91,7 @@ intended it for the next turn.
 ## Garden and crew
 
 - Garden: a profile's work tracker on the home daemon. Seeds, plots, relationships and claims stay inside that profile.
+- Right dock: panels over the home screen or session view. Escape dismisses inner menus and composers before fullscreen Garden or the most recently opened dock panel. Expanding and restoring Garden preserves that opening order.
 - Seed: a work item with an ID, title, body and state, belonging to its planting profile for life. Closed seeds of a deleted profile stay readable by ID, outside live Gardens, and cannot be replanted or resumed elsewhere.
 - Slug: a readable name derived from a seed's title. Slugs need not be unique.
 - Plot: a seed with child seeds. Its body holds their shared plan.
