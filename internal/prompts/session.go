@@ -40,7 +40,7 @@ var session = Recipient{
 					agentGuidance),
 				When(Enabled(gardenAvailable), gardenGuidance),
 				When(Enabled(selfReportPullRequests), pullRequestGuidance),
-				When(Present(crewPriming), Compose(Input(crewPriming), quickCaptureGuidance)),
+				When(Present(crewPriming), Compose(Input(crewPriming), Choose(Present(notebookRoot), Compose(), quickCaptureGuidance))),
 			)),
 		On("agent-guidance", "message_fragment", "Non-chief trust and delegation guidance.", agentGuidance),
 		On("garden-guidance", "message_fragment", "Garden instructions.", gardenGuidance),
