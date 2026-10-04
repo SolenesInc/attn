@@ -71,6 +71,8 @@ function legacyWorkspacesSql(fixtureDir) {
     // It also predates successions (169), which add sessions.succeeds.
     'DROP INDEX idx_sessions_succeeds;',
     'ALTER TABLE sessions DROP COLUMN succeeds;',
+    'DROP TABLE user_message_attachments;',
+    'DROP TABLE user_messages;',
     `DELETE FROM sessions WHERE id IN (${LEGACY_WORKSPACES.flatMap((_, offset) => agentsOf(offset + 1)).map(sql).join(', ')});`,
   ];
   LEGACY_WORKSPACES.forEach((title, offset) => {
