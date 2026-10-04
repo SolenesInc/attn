@@ -817,6 +817,7 @@ export function useDaemonSocket({
     for (const listener of sessionLedgerListenersRef.current) listener(stamped);
   }, []);
   const [hasReceivedInitialState, setHasReceivedInitialState] = useState(false);
+  const [isReady, setIsReady] = useState(false);
   const [rateLimit, setRateLimit] = useState<RateLimitState | null>(null);
   const [warnings, setWarnings] = useState<DaemonWarning[]>([]);
   const [gitOperations, setGitOperations] = useState<Record<string, DaemonGitOperation>>({});
@@ -1292,6 +1293,7 @@ export function useDaemonSocket({
               ws.send(JSON.stringify({ cmd: 'clear_warnings' }));
             }
             hasReceivedInitialStateRef.current = true;
+            setIsReady(true);
             setHasReceivedInitialState(true);
             useAutomationsStore.getState().bumpChanged();
             flushQueuedCommands(ws);
@@ -2613,8 +2615,8 @@ export function useDaemonSocket({
       wsRef.current = null;
       emitSessionLedger({ type: 'connection', connected: false });
       hasReceivedInitialStateRef.current = false;
-      setHasReceivedInitialState(false);
-      const userMessageFailure = event.reason || 'Disconnected. Capture acceptance is unconfirmed.';
+      setIsReady(false);
+      const userMessageFailure = event.reason || 'Disconnected. User message acceptance is unconfirmed.';
       rejectPendingByPredicate(key => key.startsWith('user_message_'), new Error(userMessageFailure));
       if (event.reason && !circuitOpenRef.current) setConnectionError(event.reason);
       canceledAttachIdsRef.current.clear();
@@ -4902,6 +4904,7 @@ export function useDaemonSocket({
 
   return {
     isConnected: wsRef.current?.readyState === WebSocket.OPEN,
+    isReady,
     connectionError,
     migrationFailure,
     sendProfileSelect,
