@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { emitTo, listen } from '@tauri-apps/api/event';
 import type { DaemonApi } from '../contexts/DaemonApiContext';
+import { useProfilesStore } from '../store/profiles';
 import { useDaemonStore } from '../store/daemonSessions';
 import { captureDaemonClient } from '../quickCapture/daemonClient';
 import { crewDisplayName } from '../utils/crewName';
@@ -15,18 +16,19 @@ import {
 interface NativeStatus { binding: string | null; active: string | null; error?: string }
 
 export function useQuickCaptureHost(daemon: DaemonApi, settings: Record<string, string>, captureRevision = 0) {
-  const delivery = useMemo(() => captureDaemonClient(daemon), [daemon.sendCaptureRequest]);
+  const profileId = useProfilesStore(store => store.selectedProfileId) ?? '';
+  const delivery = useMemo(() => captureDaemonClient(daemon, profileId), [daemon.sendCaptureRequest, profileId]);
   const supported = isMacLikePlatform() && isTauri();
   const crew = useDaemonStore(store => store.crew);
   const [native, setNative] = useState<NativeStatus>({ binding: null, active: null });
   const [nativeReady, setNativeReady] = useState(false);
   const [instance, setInstance] = useState<string | null>(null);
   const queue = useRef(Promise.resolve());
-  const current = useRef({ daemon, settings, delivery });
-  useLayoutEffect(() => { current.current = { daemon, settings, delivery }; }, [daemon, settings, delivery]);
+  const current = useRef({ daemon, settings, delivery, profileId });
+  useLayoutEffect(() => { current.current = { daemon, settings, delivery, profileId }; }, [daemon, settings, delivery, profileId]);
   const state: CaptureHostState = {
-    connected: daemon.isConnected && daemon.hasReceivedInitialState,
-    recipients: [EMPTY_HOST_STATE.recipients[0], ...crew.map(member => ({
+    profileId, connected: !!profileId && daemon.isConnected && daemon.hasReceivedInitialState,
+    recipients: [EMPTY_HOST_STATE.recipients[0], ...crew.filter(member => member.profile_id === profileId).map(member => ({
       id: member.id, name: crewDisplayName(member.id), detail: member.binding_session ? 'Awake' : 'Asleep',
     }))],
     captureRevision, connectionError: daemon.connectionError ?? undefined,
@@ -78,6 +80,7 @@ export function useQuickCaptureHost(daemon: DaemonApi, settings: Record<string, 
         }
         else {
           if (!api) throw new Error('Capture delivery is not connected yet. Your draft is retained.');
+          if (payload.profileId !== current.current.profileId) throw new Error('The selected profile changed. Your draft is retained in its original profile.');
           switch (payload.action) {
             case 'stage': await api.stage(payload.draft); break;
             case 'submit': value = await api.submit(payload.submission); break;
@@ -109,6 +112,6 @@ export function useQuickCaptureHost(daemon: DaemonApi, settings: Record<string, 
   }, [settings[CAPTURE_SHORTCUT_SETTING], nativeReady, state.connected, instance]);
   useEffect(() => {
     if (supported) void emitTo('capture', CAPTURE_STATE, state);
-  }, [state.connected, state.connectionError, crew, native, captureRevision, state.fontScale, state.keybindings]);
+  }, [profileId, state.connected, state.connectionError, crew, native, captureRevision, state.fontScale, state.keybindings]);
   return { state, setBinding };
 }

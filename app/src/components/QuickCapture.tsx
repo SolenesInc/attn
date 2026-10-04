@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
@@ -20,11 +20,25 @@ type Attachment = CaptureAttachment;
 type CaptureExpectation = { frame?: boolean; visible?: boolean; settled?: boolean; imageCount?: number; attachmentCount?: number; view?: 'compose' | 'recent'; recentText?: string; selectedText?: string; composing?: boolean; recipient?: string; fontScale?: number };
 
 
-export function QuickCapture({ client: suppliedClient, hostState, workQueue: suppliedQueue }: { client?: CaptureClient; hostState?: CaptureHostState; workQueue?: CaptureWorkQueue } = {}) {
+type QuickCaptureProps = { client?: CaptureClient; hostState?: CaptureHostState; workQueue?: CaptureWorkQueue };
+export function QuickCapture({ client: suppliedClient, hostState, workQueue }: QuickCaptureProps = {}) {
   const [host, setHost] = useState(hostState ?? EMPTY_HOST_STATE);
-  const bridge = useRef<ReturnType<typeof createCaptureBridge> | null>(null);
+  const [bridge, setBridge] = useState<ReturnType<typeof createCaptureBridge>>();
+  useEffect(() => {
+    if (suppliedClient) return;
+    const connection = createCaptureBridge(setHost);
+    setBridge(connection);
+    return () => connection.dispose();
+  }, [suppliedClient]);
+  useEffect(() => { if (hostState) setHost(hostState); }, [hostState]);
+  const client = useMemo(() => suppliedClient ?? bridge?.forProfile(host.profileId), [suppliedClient, bridge, host.profileId]);
+  if (!client || !host.profileId) return <main className="capture" aria-busy="true">Connecting Quick Capture…</main>;
+  return <QuickCaptureForProfile key={host.profileId} client={client} hostState={host} workQueue={workQueue} refresh={bridge?.refresh} />;
+}
+
+function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQueue: suppliedQueue, refresh }: Required<Pick<QuickCaptureProps, 'client' | 'hostState'>> & Pick<QuickCaptureProps, 'workQueue'> & { refresh?: () => Promise<void> }) {
   const client = useRef(suppliedClient);
-  const [draftCache] = useState(captureDraftCache);
+  const [draftCache] = useState(() => captureDraftCache(host.profileId));
   const [workQueue] = useState(() => suppliedQueue ?? new CaptureWorkQueue());
   const cache = useRef(draftCache);
   const [initialDraft] = useState(newCaptureDraft);
@@ -57,6 +71,7 @@ export function QuickCapture({ client: suppliedClient, hostState, workQueue: sup
   const recipientMenu = useRef<HTMLDivElement>(null);
   const ingestion = useRef<{ startedAt: number; readyAt?: number; count: number }[]>([]);
   const motion = useRef<(AttachmentMotion | { kind: 'drop'; phase: 'start' | 'end'; at: number })[]>([]);
+  const mounted = useRef(true);
   const visible = useRef(false);
   const viewRecent = useRef(recent);
   useLayoutEffect(() => { viewRecent.current = recent; }, [recent]);
@@ -136,9 +151,9 @@ export function QuickCapture({ client: suppliedClient, hostState, workQueue: sup
     const fresh = staged.files.filter(file => !stagedFiles.current.has(file.id));
     for (const file of fresh) {
       const pending = workQueue.run(async () => {
-        if (identity.current.id !== staged.id || !ownedFiles.current.has(file.id)) return;
+        if (!mounted.current || identity.current.id !== staged.id || !ownedFiles.current.has(file.id)) return;
         await cache.current.save(draft());
-        if (identity.current.id !== staged.id || !ownedFiles.current.has(file.id)) return;
+        if (!mounted.current || identity.current.id !== staged.id || !ownedFiles.current.has(file.id)) return;
         await client.current!.stage({ ...staged, files: [file] });
       });
       stagedFiles.current.set(file.id, pending);
@@ -155,14 +170,18 @@ export function QuickCapture({ client: suppliedClient, hostState, workQueue: sup
       let accepted: CaptureItem | null = null;
       if (uncertain) {
         accepted = await client.current!.resolve(identity.current.id);
+        if (!mounted.current) return;
         if (!accepted) setUncertain(false);
       }
       if (!accepted) {
         const outgoing = draft(false);
         await cache.current.save(outgoing);
+        if (!mounted.current) return;
         if (outgoing.files.length) await stageDraft(outgoing);
+        if (!mounted.current) return;
         const pending = { ...outgoing, uncertain: true };
         await cache.current.save(pending);
+        if (!mounted.current) return;
         setUncertain(true);
         accepted = await client.current!.submit({ id: pending.id, text: pending.text, recipient: pending.recipient, fileIds: pending.files.map(file => file.id) });
       }
@@ -171,17 +190,19 @@ export function QuickCapture({ client: suppliedClient, hostState, workQueue: sup
     finally { sending.current = false; setSubmitting(false); }
   }
   async function accept(accepted: CaptureItem, hide: boolean) {
+    if (!mounted.current) return;
     const next = newCaptureDraft(); await cache.current.save(next); identity.current = next;
     draftGeneration.current++; ownedFiles.current.clear(); stagedFiles.current.clear();
     setSaved([accepted]);
     setText(''); setFiles([]); setRecipient('chief'); setUncertain(false); setError('');
-    if (hide) await invoke('capture_hide');
+    if (hide && mounted.current) await invoke('capture_hide');
   }
   async function resolveSubmission() {
     if (sending.current || !state.current.uncertain) return;
     sending.current = true; setResolving(true);
     try {
       const accepted = await client.current!.resolve(identity.current.id);
+      if (!mounted.current) return;
       if (accepted) await accept(accepted, false);
       else { await cache.current.save(draft(false)); setUncertain(false); setError('Not yet saved. You can edit or send this draft again.'); }
     } catch (error) { setError(String(error)); }
@@ -195,7 +216,9 @@ export function QuickCapture({ client: suppliedClient, hostState, workQueue: sup
       const previousId = identity.current.id;
       const retained = { ...draft(), id: crypto.randomUUID() };
       await cache.current.save(retained); identity.current = retained; stagedFiles.current.clear();
+      if (!mounted.current) return;
       await client.current!.discard(previousId, files.map(file => file.id));
+      if (!mounted.current) return;
       const next = newCaptureDraft(); await cache.current.save(next); identity.current = next;
       draftGeneration.current++; ownedFiles.current.clear(); stagedFiles.current.clear(); setFiles([]); setText(''); setRecipient('chief');
     } catch (error) { stagedFiles.current.clear(); setError(String(error)); }
@@ -203,8 +226,6 @@ export function QuickCapture({ client: suppliedClient, hostState, workQueue: sup
   }
 
   useEffect(() => {
-    if (suppliedClient) client.current = suppliedClient;
-    else { bridge.current = createCaptureBridge(setHost); client.current = bridge.current.client; }
     let disposed = false;
     void cache.current.read().then(stored => {
       if (disposed) return;
@@ -215,24 +236,29 @@ export function QuickCapture({ client: suppliedClient, hostState, workQueue: sup
       }
       setRestored(true);
     }, error => { if (!disposed) setError(`Cannot restore draft: ${error}`); });
-    return () => { disposed = true; bridge.current?.dispose(); };
+    return () => { disposed = true; };
   }, [suppliedClient]);
   useEffect(() => { if (restored && uncertain && !submitting && host.connected) void resolveSubmission(); }, [restored, uncertain, submitting, host.connected]);
   useEffect(() => {
     if (!restored || !host.connected || uncertain || submitting || !files.length || files.some(file => !file.ready)) return;
     void stageDraft(draft()).catch(error => setError(`File upload: ${error}`));
   }, [files, restored, host.connected, uncertain, submitting]);
-  useEffect(() => { if (hostState) setHost(hostState); }, [hostState]);
   useEffect(() => {
     if (!restored || sending.current) return;
     void cache.current.save(draft()).catch(error => setError(`Draft could not be saved: ${error}`));
   }, [text, recipient, files, uncertain, restored]);
 
   useEffect(() => {
+    mounted.current = true;
     hideBootSplash();
     document.querySelector<HTMLElement>(".capture")!.dataset.captureVisible = "false";
+    void getCurrentWebviewWindow().isVisible().then(isVisible => {
+      if (!mounted.current) return;
+      visible.current = isVisible;
+      document.querySelector<HTMLElement>(".capture")!.dataset.captureVisible = String(isVisible);
+    });
     editor.current?.focus();
-    const open = listen<number>('capture-open', ({ payload }) => { visible.current = true; document.querySelector<HTMLElement>(".capture")!.dataset.captureVisible = "true"; setRecent(false); setPicker(false); void bridge.current?.refresh(); void resolveSubmission(); editor.current?.focus(); if (automationEnabled) latency.current.push({ openedAt: payload, focusedAt: Date.now(), nativeShowToFocusMs: Date.now() - payload }); });
+    const open = listen<number>('capture-open', ({ payload }) => { visible.current = true; document.querySelector<HTMLElement>(".capture")!.dataset.captureVisible = "true"; setRecent(false); setPicker(false); void refresh?.(); void resolveSubmission(); editor.current?.focus(); if (automationEnabled) latency.current.push({ openedAt: payload, focusedAt: Date.now(), nativeShowToFocusMs: Date.now() - payload }); });
     const hidden = listen("capture-hidden", () => { visible.current = false; setRecent(false); settleEntrances(); document.querySelector<HTMLElement>(".capture")!.dataset.captureVisible = "false"; });
     const drop = getCurrentWebviewWindow().onDragDropEvent(async event => {
       setDragging(event.payload.type === 'enter' || event.payload.type === 'over');
@@ -272,7 +298,7 @@ export function QuickCapture({ client: suppliedClient, hostState, workQueue: sup
       } catch (e) { error = String(e); }
       await emit('attn://ui-automation/response', { request_id: payload.request_id, ok: !error, result, error });
     }) : Promise.resolve(() => {});
-    return () => { ['keydown', 'beforeinput', 'input'].forEach(type => document.removeEventListener(type, traceInput, true)); draftGeneration.current++; ownedFiles.current.clear(); stagedFiles.current.clear(); state.current.files.forEach(file => { if (file.url.startsWith('blob:')) URL.revokeObjectURL(file.url); }); void open.then(f => f()); void hidden.then(f => f()); void drop.then(f => f()); void automation.then(f => f()); };
+    return () => { mounted.current = false; ['keydown', 'beforeinput', 'input'].forEach(type => document.removeEventListener(type, traceInput, true)); draftGeneration.current++; ownedFiles.current.clear(); stagedFiles.current.clear(); state.current.files.forEach(file => { if (file.url.startsWith('blob:')) URL.revokeObjectURL(file.url); }); void open.then(f => f()); void hidden.then(f => f()); void drop.then(f => f()); void automation.then(f => f()); };
   }, []);
 
   useEffect(() => {

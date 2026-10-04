@@ -33,8 +33,8 @@ function attachmentBytes(url: string) {
   } };
 }
 
-export function captureDaemonClient(daemon: Pick<DaemonApi, 'sendCaptureRequest'>): CaptureClient {
-  const request = daemon.sendCaptureRequest;
+export function captureDaemonClient(daemon: Pick<DaemonApi, 'sendCaptureRequest'>, profileId: string): CaptureClient {
+  const request: DaemonApi['sendCaptureRequest'] = command => daemon.sendCaptureRequest({ ...command, profile_id: profileId });
   const uploading = new Map<string, Promise<void>>();
   const ready = new Set<string>();
   const key = (captureId: string, fileId: string) => `${captureId}:${fileId}`;
