@@ -9,43 +9,46 @@ export const QUICK_CAPTURE_SHORTCUT_SETTING = 'capture.shortcut';
 export const DEFAULT_QUICK_CAPTURE_SHORTCUT = 'Control+Alt+Space';
 
 export interface DraftAttachment { id: string; name: string; url: string }
-export interface UserMessageDraft { id: string; text: string; recipient: string; files: DraftAttachment[]; uncertain: boolean }
-export interface UserMessageSubmission { id: string; text: string; recipient: string; fileIds: string[] }
-export interface UserMessageRecipient { id: string; name: string; detail: string }
-export interface UserMessageItem {
-  id: string; text: string; recipient: string; createdAt: string; readAt?: string;
+export interface QuickCaptureDraft { id: string; text: string; mailbox: string; files: DraftAttachment[]; uncertain: boolean }
+export interface QuickCaptureSubmission { id: string; text: string; mailbox: string; fileIds: string[] }
+export interface QuickCaptureMailbox { id: string; name: string; detail: string }
+export interface QuickCaptureItem {
+  id: string; text: string; mailbox: string; createdAt: string; readAt?: string;
   files: { id: string; name: string; mediaType?: string; bytes: number }[];
 }
 export interface QuickCaptureHostState {
-  profileId: string; connected: boolean; recipients: UserMessageRecipient[]; binding: string | null;
-  activeBinding: string | null; shortcutError?: string; connectionError?: string; messageRevision?: number;
+  profileId: string; connected: boolean; mailboxes: QuickCaptureMailbox[]; binding: string | null;
+  activeBinding: string | null; shortcutError?: string; connectionError?: string; readReceipt?: QuickCaptureReadReceipt;
   fontScale?: number; keybindings?: string;
 }
-export interface UserMessageDraftAsset { messageId: string; id: string; name: string; state: string }
-export interface UserMessageHistory { nextCursor?: string; items: UserMessageItem[]; assets: UserMessageDraftAsset[] }
-export interface UserMessageClient {
-  stage(draft: UserMessageDraft): Promise<void>;
-  submit(submission: UserMessageSubmission): Promise<UserMessageItem>;
-  resolve(id: string): Promise<UserMessageItem | null>;
-  recent(cursor?: string): Promise<UserMessageHistory>;
-  file(messageId: string, attachmentId: string, mediaType?: string): Promise<string>;
+export interface QuickCaptureDraftAsset { captureId: string; id: string; name: string; state: string }
+export interface QuickCaptureHistory { nextCursor?: string; items: QuickCaptureItem[]; assets: QuickCaptureDraftAsset[] }
+export interface QuickCaptureReadReceipt { captureId: string; readAt: string }
+export interface QuickCaptureDeliveryClient {
+  stage(draft: QuickCaptureDraft): Promise<void>;
+  submit(submission: QuickCaptureSubmission): Promise<QuickCaptureItem>;
+  resolve(id: string): Promise<QuickCaptureItem | null>;
+  recent(cursor?: string): Promise<QuickCaptureHistory>;
+  file(captureId: string, attachmentId: string, mediaType?: string): Promise<string>;
   discard(id: string, fileIds: string[]): Promise<void>;
+}
+export interface QuickCaptureClient extends QuickCaptureDeliveryClient {
   setBinding(binding: string | null): Promise<void>;
   resizeText(action: 'increase' | 'decrease' | 'reset'): Promise<void>;
 }
 export type QuickCaptureRequest = { profileId: string } & (
-  | { id: string; action: 'submit'; submission: UserMessageSubmission }
-  | { id: string; action: 'stage'; draft: UserMessageDraft }
-  | { id: string; action: 'resolve'; messageId: string }
+  | { id: string; action: 'submit'; submission: QuickCaptureSubmission }
+  | { id: string; action: 'stage'; draft: QuickCaptureDraft }
+  | { id: string; action: 'resolve'; captureId: string }
   | { id: string; action: 'recent'; cursor?: string }
-  | { id: string; action: 'file'; messageId: string; attachmentId: string; mediaType?: string }
-  | { id: string; action: 'discard'; messageId: string; fileIds: string[] }
+  | { id: string; action: 'file'; captureId: string; attachmentId: string; mediaType?: string }
+  | { id: string; action: 'discard'; captureId: string; fileIds: string[] }
   | { id: string; action: 'binding'; binding: string | null }
   | { id: string; action: 'font'; change: 'increase' | 'decrease' | 'reset' });
 export interface QuickCaptureResult { id: string; value?: unknown; error?: string }
 
 export const EMPTY_HOST_STATE: QuickCaptureHostState = {
-  profileId: '', connected: false, recipients: [{ id: 'chief', name: 'Chief', detail: 'Chief of staff' }],
+  profileId: '', connected: false, mailboxes: [{ id: 'chief', name: 'Chief', detail: 'Chief of staff' }],
   binding: null, activeBinding: null,
 };
 
@@ -85,15 +88,15 @@ export function createQuickCaptureBridge(onState: (state: QuickCaptureHostState)
       });
     });
   }
-  function forProfile(profileId: string): UserMessageClient {
+  function forProfile(profileId: string): QuickCaptureClient {
     const call = <T>(body: QuickCaptureRequestBody) => request<T>(profileId, body);
     return {
       stage: draft => call({ action: 'stage', draft }),
       submit: submission => call({ action: 'submit', submission }),
-      resolve: messageId => call({ action: 'resolve', messageId }),
+      resolve: captureId => call({ action: 'resolve', captureId }),
       recent: cursor => call({ action: 'recent', cursor }),
-      file: (messageId, attachmentId, mediaType) => call({ action: 'file', messageId, attachmentId, mediaType }),
-      discard: (messageId, fileIds) => call({ action: 'discard', messageId, fileIds }),
+      file: (captureId, attachmentId, mediaType) => call({ action: 'file', captureId, attachmentId, mediaType }),
+      discard: (captureId, fileIds) => call({ action: 'discard', captureId, fileIds }),
       setBinding: binding => call({ action: 'binding', binding }),
       resizeText: change => call({ action: 'font', change }),
     };

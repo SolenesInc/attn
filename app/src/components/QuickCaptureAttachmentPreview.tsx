@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 
 export type AttachmentOrigin = { kind: 'drop'; x: number; y: number } | { kind: 'paste' };
-export type UserMessageAttachment = { id: string; name: string; url: string; ready: boolean; imagePreview?: boolean; arriving: boolean; origin: AttachmentOrigin };
+export type QuickCaptureAttachment = { id: string; name: string; url: string; ready: boolean; imagePreview?: boolean; arriving: boolean; origin: AttachmentOrigin };
 export type AttachmentMotion = {
   kind: 'file'; phase: 'start' | 'end'; at: number; id: string;
   source?: { kind: 'drop' | 'paste'; x: number; y: number };
@@ -10,14 +10,14 @@ export type AttachmentMotion = {
 };
 
 type Props = {
-  file: UserMessageAttachment;
+  file: QuickCaptureAttachment;
   onSettled: (id: string) => void;
   onMotion: (receipt: AttachmentMotion) => void;
   onRemove: (id: string) => void;
   disabled?: boolean;
 };
 
-export function UserMessageAttachmentPreview({ file, onSettled, onMotion, onRemove, disabled }: Props) {
+export function QuickCaptureAttachmentPreview({ file, onSettled, onMotion, onRemove, disabled }: Props) {
   const slot = useRef<HTMLElement>(null);
   const [failed, setFailed] = useState(false);
   const isImage = !failed && (file.imagePreview ?? file.url.startsWith('data:image/'));

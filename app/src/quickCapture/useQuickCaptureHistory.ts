@@ -1,8 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { UserMessageClient, UserMessageItem } from './client';
+import type { QuickCaptureDeliveryClient, QuickCaptureItem, QuickCaptureReadReceipt } from './client';
 
-export function useUserMessageHistory(client: UserMessageClient | undefined, open: boolean, connected: boolean, revision = 0) {
-  const [history, setHistory] = useState<UserMessageItem[]>([]);
+export function useQuickCaptureHistory(client: QuickCaptureDeliveryClient | undefined, open: boolean, connected: boolean, readReceipt?: QuickCaptureReadReceipt) {
+  const [history, setHistory] = useState<QuickCaptureItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -59,7 +59,13 @@ export function useUserMessageHistory(client: UserMessageClient | undefined, ope
       setHistory([]); setNextCursor(undefined); setError('');
     }
     if (client && connected) void refresh();
-  }, [client, open, connected, revision]);
+  }, [client, open, connected]);
+  useEffect(() => {
+    if (!readReceipt) return;
+    const updated = current.current.history.map(item => item.id === readReceipt.captureId ? { ...item, readAt: readReceipt.readAt } : item);
+    current.current.history = updated;
+    setHistory(updated);
+  }, [readReceipt]);
   useEffect(() => () => { generation.current++; }, []);
   return { history, nextCursor, loading, error, refresh };
 }

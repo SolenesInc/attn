@@ -1,6 +1,6 @@
 import { handleLaunchDesktopEvent } from './daemonLaunchDesktopEvents';
-import { handleUserMessageDaemonEvent } from './daemonUserMessageEvents';
-import type { UserMessageAttachmentDiscardMessage, UserMessageAttachmentGetMessage, UserMessageAttachmentPutMessage, UserMessageGetMessage, UserMessageListMessage, UserMessageSendMessage, UserMessageResultObject } from '../types/generated';
+import { handleQuickCaptureDaemonEvent } from './daemonQuickCaptureEvents';
+import type { QuickCaptureAttachmentDiscardMessage, QuickCaptureAttachmentGetMessage, QuickCaptureAttachmentPutMessage, QuickCaptureGetMessage, QuickCaptureListMessage, QuickCaptureSendMessage, QuickCaptureResultObject } from '../types/generated';
 import { handleDelegationDaemonEvent, type DelegationSettingsState, type DelegationModelCatalog } from './daemonDelegationEvents';
 import {
   handleCrewDaemonEvent,
@@ -575,7 +575,7 @@ interface UseDaemonSocketOptions {
   onReposUpdate: (repos: RepoState[]) => void;
   onAuthorsUpdate: (authors: AuthorState[]) => void;
   onWorktreesUpdate?: (worktrees: DaemonWorktree[]) => void;
-  onUserMessageChanged?: () => void;
+  onQuickCaptureRead?: (receipt: { captureId: string; readAt: string }) => void;
   onSettingsUpdate?: (settings: DaemonSettings) => void;
   onSettingError?: (message: string) => void;
   onGitStatusUpdate?: (status: GitStatusUpdate) => void;
@@ -716,7 +716,7 @@ export function useDaemonSocket({
   onReposUpdate,
   onAuthorsUpdate,
   onWorktreesUpdate,
-  onUserMessageChanged,
+  onQuickCaptureRead,
   onSettingsUpdate,
   onSettingError,
   onGitStatusUpdate,
@@ -749,7 +749,7 @@ export function useDaemonSocket({
     onReposUpdate,
     onAuthorsUpdate,
     onWorktreesUpdate,
-    onUserMessageChanged,
+    onQuickCaptureRead,
     onSettingsUpdate,
     onSettingError,
     onGitStatusUpdate,
@@ -772,7 +772,7 @@ export function useDaemonSocket({
     onReposUpdate,
     onAuthorsUpdate,
     onWorktreesUpdate,
-    onUserMessageChanged,
+    onQuickCaptureRead,
     onSettingsUpdate,
     onSettingError,
     onGitStatusUpdate,
@@ -2580,7 +2580,7 @@ export function useDaemonSocket({
 
           default: {
             const pending = pendingActionsRef.current;
-            if (handleUserMessageDaemonEvent(data, pending, () => { if (data.profile_id === useProfilesStore.getState().selectedProfileId) callbacksRef.current.onUserMessageChanged?.(); })) break;
+            if (handleQuickCaptureDaemonEvent(data, pending, receipt => { if (data.profile_id === useProfilesStore.getState().selectedProfileId) callbacksRef.current.onQuickCaptureRead?.(receipt); })) break;
             if (handleSeedArtifactDaemonEvent(data, pending)) break;
             if (handleSessionLedgerDaemonEvent(data, { pending, onUpdate: emitSessionLedger })) break;
             if (handleFsDaemonEvent(data, { pending, onFsChanged: callbacksRef.current.onFsChanged })) break;
@@ -2616,8 +2616,8 @@ export function useDaemonSocket({
       emitSessionLedger({ type: 'connection', connected: false });
       hasReceivedInitialStateRef.current = false;
       setIsReady(false);
-      const userMessageFailure = event.reason || 'Disconnected. User message acceptance is unconfirmed.';
-      rejectPendingByPredicate(key => key.startsWith('user_message_'), new Error(userMessageFailure));
+      const quickCaptureFailure = event.reason || 'Disconnected. Quick capture acceptance is unconfirmed.';
+      rejectPendingByPredicate(key => key.startsWith('quick_capture_'), new Error(quickCaptureFailure));
       if (event.reason && !circuitOpenRef.current) setConnectionError(event.reason);
       canceledAttachIdsRef.current.clear();
       docSubscriptions.markDisconnected();
@@ -3713,8 +3713,8 @@ export function useDaemonSocket({
     await sendRequest<boolean>('set_setting', { key, value }, 'Saving the setting timed out');
   }, [sendRequest]);
 
-  const sendUserMessageRequest = useCallback((command: UserMessageCommand): Promise<UserMessageResultObject> => {
-    return sendRequest(command.cmd, command, 'User message request timed out. Your draft is retained.');
+  const sendQuickCaptureRequest = useCallback((command: QuickCaptureCommand): Promise<QuickCaptureResultObject> => {
+    return sendRequest(command.cmd, command, 'Quick capture request timed out. Your draft is retained.');
   }, [sendRequest]);
 
   const sendGetSettings = useCallback(() => {
@@ -4961,7 +4961,7 @@ export function useDaemonSocket({
     sendCreateWorktree,
     sendDeleteWorktree,
     sendSetSetting,
-    sendUserMessageRequest,
+    sendQuickCaptureRequest,
     sendSaveSetting,
     sendGetSettings,
     sendListPlugins,
@@ -5085,5 +5085,5 @@ export function useDaemonSocket({
   };
 }
 
-type UserMessageWireCommand = UserMessageAttachmentDiscardMessage | UserMessageAttachmentGetMessage | UserMessageAttachmentPutMessage | UserMessageGetMessage | UserMessageListMessage | UserMessageSendMessage;
-export type UserMessageCommand = UserMessageWireCommand extends infer Command ? Command extends { cmd: string } ? Omit<Command, 'request_id'> : never : never;
+type QuickCaptureWireCommand = QuickCaptureAttachmentDiscardMessage | QuickCaptureAttachmentGetMessage | QuickCaptureAttachmentPutMessage | QuickCaptureGetMessage | QuickCaptureListMessage | QuickCaptureSendMessage;
+export type QuickCaptureCommand = QuickCaptureWireCommand extends infer Command ? Command extends { cmd: string } ? Omit<Command, 'request_id'> : never : never;
