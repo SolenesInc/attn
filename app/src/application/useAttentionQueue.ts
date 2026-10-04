@@ -9,6 +9,7 @@ import { useAgentOnScreen, currentActiveLeaf } from '../hooks/useDesktopSelectio
 import { isAttentionSessionState, type UISessionState } from '../types/sessionState';
 import {
   buildQueueBands,
+  headOfQueue,
   isCrewQueueEnabled,
   isQueueModeEnabled,
   QUEUE_CREW_SETTING,
@@ -37,6 +38,7 @@ export function useAttentionQueue({
   shownAgentId,
 }: Options) {
   const { sendSetSetting, sendSettleTurn, sendWakeTurn } = useDaemonApi();
+  const { selectAgent, goHomeAwaitingNextTurn } = useSessionStore();
   const handleToggleQueueMode = useCallback(() => {
     sendSetSetting(QUEUE_MODE_SETTING, isQueueModeEnabled(settings) ? 'false' : 'true');
   }, [sendSetSetting, settings]);
@@ -163,10 +165,17 @@ export function useAttentionQueue({
       queueModeEnabled || handleSettleActiveTurn
         ? () => {
             const target = shortcutTarget();
-            if (target?.actions.settle) sendSettleTurn(target.session.id);
+            if (!target) return;
+            if (target.actions.settle) {
+              sendSettleTurn(target.session.id);
+            } else if (queueBands?.settled.some((row) => row.session.id === target.session.id)) {
+              const next = headOfQueue(queueBands);
+              if (next) selectAgent(next.session.id);
+              else goHomeAwaitingNextTurn();
+            }
           }
         : undefined,
-    [queueModeEnabled, handleSettleActiveTurn, shortcutTarget, sendSettleTurn],
+    [queueModeEnabled, handleSettleActiveTurn, shortcutTarget, sendSettleTurn, queueBands, selectAgent, goHomeAwaitingNextTurn],
   );
 
   const handleSnoozeShortcut = useMemo(

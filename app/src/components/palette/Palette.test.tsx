@@ -44,6 +44,28 @@ const options = () => screen.getAllByRole('option');
 const input = () => screen.getByRole('combobox');
 
 describe('Palette', () => {
+  it('keeps default and keyboard selection under a stationary pointer, then selects on movement', () => {
+    render(<Harness rows={['a.md', 'b.md', 'c.md']} />);
+    const rows = options();
+    fireEvent.mouseEnter(rows[2], { clientX: 80, clientY: 120 });
+    expect(rows[0]).toHaveAttribute('aria-selected', 'true');
+    fireEvent.mouseMove(rows[2], { clientX: 80, clientY: 120 });
+    expect(rows[0]).toHaveAttribute('aria-selected', 'true');
+
+    fireEvent.keyDown(input(), { key: 'ArrowDown' });
+    fireEvent.mouseEnter(rows[2], { clientX: 80, clientY: 120 });
+    fireEvent.mouseMove(rows[2], { clientX: 80, clientY: 120 });
+    expect(rows[1]).toHaveAttribute('aria-selected', 'true');
+
+    fireEvent.mouseMove(rows[2], { clientX: 81, clientY: 120 });
+    expect(rows[2]).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(input(), { key: 'ArrowUp' });
+    fireEvent.mouseMove(rows[2], { clientX: 81, clientY: 120 });
+    expect(rows[1]).toHaveAttribute('aria-selected', 'true');
+    fireEvent.mouseMove(rows[2], { clientX: 81, clientY: 121 });
+    expect(rows[2]).toHaveAttribute('aria-selected', 'true');
+  });
+
   it('focuses the input on mount so typing lands in the palette', () => {
     render(<Harness rows={['a.md']} />);
     expect(input()).toHaveFocus();
