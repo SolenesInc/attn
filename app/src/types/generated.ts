@@ -2342,6 +2342,7 @@ export interface CaptureAttachmentDiscardMessage {
     attachment_id: string;
     capture_id:    string;
     cmd:           CaptureAttachmentDiscardMessageCmd;
+    profile_id?:   string;
     request_id?:   string;
     [property: string]: any;
 }
@@ -2351,11 +2352,13 @@ export enum CaptureAttachmentDiscardMessageCmd {
 }
 
 export interface CaptureAttachmentGetMessage {
-    attachment_id: string;
-    capture_id:    string;
-    cmd:           CaptureAttachmentGetMessageCmd;
-    offset:        number;
-    request_id?:   string;
+    attachment_id:      string;
+    capture_id:         string;
+    cmd:                CaptureAttachmentGetMessageCmd;
+    offset:             number;
+    profile_id?:        string;
+    request_id?:        string;
+    source_session_id?: string;
     [property: string]: any;
 }
 
@@ -2378,6 +2381,7 @@ export interface CaptureAttachmentPutMessage {
     final:         boolean;
     name:          string;
     offset:        number;
+    profile_id?:   string;
     request_id?:   string;
     [property: string]: any;
 }
@@ -2395,6 +2399,7 @@ export interface CaptureAttachmentPutResult {
 export interface CaptureChangedMessage {
     capture_id: string;
     event:      CaptureChangedMessageEvent;
+    profile_id: string;
     [property: string]: any;
 }
 
@@ -2419,6 +2424,7 @@ export enum CaptureDraftState {
 export interface CaptureGetMessage {
     capture_id:  string;
     cmd:         CaptureGetMessageCmd;
+    profile_id?: string;
     request_id?: string;
     [property: string]: any;
 }
@@ -2431,6 +2437,7 @@ export interface CaptureListMessage {
     cmd:         CaptureListMessageCmd;
     cursor?:     string;
     limit:       number;
+    profile_id?: string;
     request_id?: string;
     [property: string]: any;
 }
@@ -2519,6 +2526,7 @@ export interface CaptureResultMessage {
     error?:      string;
     error_code?: string;
     event:       CaptureResultMessageEvent;
+    profile_id:  string;
     request_id:  string;
     result?:     CaptureResultObject;
     success:     boolean;
@@ -2543,6 +2551,7 @@ export interface CaptureSendMessage {
     capture_id:     string;
     cmd:            CaptureSendMessageCmd;
     content:        string;
+    profile_id?:    string;
     request_id?:    string;
     target:         Target;
     [property: string]: any;
@@ -17617,6 +17626,7 @@ const typeMap: any = {
         { json: "attachment_id", js: "attachment_id", typ: "" },
         { json: "capture_id", js: "capture_id", typ: "" },
         { json: "cmd", js: "cmd", typ: r("CaptureAttachmentDiscardMessageCmd") },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
     ], "any"),
     "CaptureAttachmentGetMessage": o([
@@ -17624,7 +17634,9 @@ const typeMap: any = {
         { json: "capture_id", js: "capture_id", typ: "" },
         { json: "cmd", js: "cmd", typ: r("CaptureAttachmentGetMessageCmd") },
         { json: "offset", js: "offset", typ: 0 },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
+        { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
     "CaptureAttachmentGetResult": o([
         { json: "data_base64", js: "data_base64", typ: "" },
@@ -17639,6 +17651,7 @@ const typeMap: any = {
         { json: "final", js: "final", typ: true },
         { json: "name", js: "name", typ: "" },
         { json: "offset", js: "offset", typ: 0 },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
     ], "any"),
     "CaptureAttachmentPutResult": o([
@@ -17648,6 +17661,7 @@ const typeMap: any = {
     "CaptureChangedMessage": o([
         { json: "capture_id", js: "capture_id", typ: "" },
         { json: "event", js: "event", typ: r("CaptureChangedMessageEvent") },
+        { json: "profile_id", js: "profile_id", typ: "" },
     ], "any"),
     "CaptureDraftAsset": o([
         { json: "attachment_id", js: "attachment_id", typ: "" },
@@ -17659,12 +17673,14 @@ const typeMap: any = {
     "CaptureGetMessage": o([
         { json: "capture_id", js: "capture_id", typ: "" },
         { json: "cmd", js: "cmd", typ: r("CaptureGetMessageCmd") },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
     ], "any"),
     "CaptureListMessage": o([
         { json: "cmd", js: "cmd", typ: r("CaptureListMessageCmd") },
         { json: "cursor", js: "cursor", typ: u(undefined, "") },
         { json: "limit", js: "limit", typ: 0 },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
     ], "any"),
     "CaptureListResult": o([
@@ -17724,6 +17740,7 @@ const typeMap: any = {
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "error_code", js: "error_code", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("CaptureResultMessageEvent") },
+        { json: "profile_id", js: "profile_id", typ: "" },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "result", js: "result", typ: u(undefined, r("CaptureResultObject")) },
         { json: "success", js: "success", typ: true },
@@ -17740,6 +17757,7 @@ const typeMap: any = {
         { json: "capture_id", js: "capture_id", typ: "" },
         { json: "cmd", js: "cmd", typ: r("CaptureSendMessageCmd") },
         { json: "content", js: "content", typ: "" },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "target", js: "target", typ: r("Target") },
     ], "any"),

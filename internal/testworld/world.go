@@ -236,8 +236,12 @@ func (w *World) LogDaemonTail() {
 	w.T.Logf("daemon.log tail:\n%s", boundedDiagnostic(string(bytes.Join(lines, []byte("\n")))))
 }
 
-func (w *World) InjectSession(id, label, dir string, agent protocol.SessionAgent) error {
-	return w.inject(protocol.Session{ID: id, Label: label, Directory: dir, Agent: agent, State: protocol.SessionStateLaunching})
+func (w *World) InjectSession(id, label, dir string, agent protocol.SessionAgent, profileID ...string) error {
+	session := protocol.Session{ID: id, Label: label, Directory: dir, Agent: agent, State: protocol.SessionStateLaunching}
+	if len(profileID) != 0 {
+		session.ProfileID = profileID[0]
+	}
+	return w.inject(session)
 }
 
 func (w *World) InjectCrewSession(id, label, dir, member string) error {

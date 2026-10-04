@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/protocol"
@@ -67,11 +68,12 @@ func runAgentAttachment(args []string) {
 	fs := flag.NewFlagSet("agent attachment", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	out := fs.String("out", "", "local output path")
+	profile := fs.String("profile", "", "profile name or id when outside a session")
 	if err := fs.Parse(args[2:]); err != nil || *out == "" || fs.NArg() != 0 {
 		fmt.Fprintln(os.Stderr, "agent attachment: --out <path> is required")
 		os.Exit(2)
 	}
-	if err := retrieveAgentAttachment(client.New(""), args[0], args[1], *out); err != nil {
+	if err := retrieveAgentAttachment(client.New("").WithGardenProfile(strings.TrimSpace(*profile), strings.TrimSpace(os.Getenv("ATTN_SESSION_ID"))), args[0], args[1], *out); err != nil {
 		fmt.Fprintf(os.Stderr, "agent attachment: %v\n", err)
 		os.Exit(1)
 	}

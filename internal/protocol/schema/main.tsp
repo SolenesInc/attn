@@ -832,6 +832,7 @@ model CaptureListResult {
   next_cursor?: string;
 }
 model CaptureSendMessage {
+  profile_id?: string;
   cmd: "capture_send";
   request_id?: string;
   capture_id: string;
@@ -840,17 +841,20 @@ model CaptureSendMessage {
   attachment_ids: string[];
 }
 model CaptureGetMessage {
+  profile_id?: string;
   cmd: "capture_get";
   request_id?: string;
   capture_id: string;
 }
 model CaptureListMessage {
+  profile_id?: string;
   cmd: "capture_list";
   request_id?: string;
   limit: safeint;
   cursor?: string;
 }
 model CaptureAttachmentPutMessage {
+  profile_id?: string;
   cmd: "capture_attachment_put";
   request_id?: string;
   capture_id: string;
@@ -861,6 +865,8 @@ model CaptureAttachmentPutMessage {
   final: boolean;
 }
 model CaptureAttachmentGetMessage {
+  source_session_id?: string;
+  profile_id?: string;
   cmd: "capture_attachment_get";
   request_id?: string;
   capture_id: string;
@@ -868,6 +874,7 @@ model CaptureAttachmentGetMessage {
   offset: safeint;
 }
 model CaptureAttachmentDiscardMessage {
+  profile_id?: string;
   cmd: "capture_attachment_discard";
   request_id?: string;
   capture_id: string;
@@ -890,6 +897,7 @@ model CaptureResult {
   discarded?: boolean;
 }
 model CaptureResultMessage {
+  profile_id: string;
   event: "capture_result";
   request_id: string;
   success: boolean;
@@ -898,6 +906,7 @@ model CaptureResultMessage {
   result?: CaptureResult;
 }
 model CaptureChangedMessage {
+  profile_id: string;
   event: "capture_changed";
   capture_id: string;
 }
