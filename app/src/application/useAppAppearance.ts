@@ -11,7 +11,7 @@ import {
 } from '../utils/sidebarHarnessLogos';
 import { getTerminalAnsiPaletteColors, getTerminalTheme } from '../utils/terminalSizing';
 import { AppContentProps } from './appSupport';
-import { CAPTURE_FONT } from '../quickCapture/client';
+import { QUICK_CAPTURE_FONT } from '../quickCapture/client';
 
 interface Options {
   settings: AppContentProps['settings'];
@@ -25,8 +25,8 @@ export function useAppAppearance({ settings }: Options) {
       const change = (event as CustomEvent<'increase' | 'decrease' | 'reset'>).detail;
       ({ increase: increaseScale, decrease: decreaseScale, reset: resetScale })[change]();
     };
-    window.addEventListener(CAPTURE_FONT, resize);
-    return () => window.removeEventListener(CAPTURE_FONT, resize);
+    window.addEventListener(QUICK_CAPTURE_FONT, resize);
+    return () => window.removeEventListener(QUICK_CAPTURE_FONT, resize);
   }, [increaseScale, decreaseScale, resetScale]);
   const terminalFontSize = Math.round(14 * scale);
 

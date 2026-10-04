@@ -5,8 +5,8 @@ export { PROTOCOL_VERSION } from '../types/protocolVersion';
 import { handleCommandUsageEvent } from './daemonCommandUsageEvents';
 import { handleLaunchDesktopEvent } from './daemonLaunchDesktopEvents';
 import { handleDelegationDaemonEvent, type DelegationSettingsState, type HarnessModelCatalog } from './daemonDelegationEvents';
-import { handleCaptureDaemonEvent } from './daemonCaptureEvents';
-import type { CaptureAttachmentDiscardMessage, CaptureAttachmentGetMessage, CaptureAttachmentPutMessage, CaptureGetMessage, CaptureListMessage, CaptureSendMessage, CaptureResultObject } from '../types/generated';
+import { handleUserMessageDaemonEvent } from './daemonUserMessageEvents';
+import type { UserMessageAttachmentDiscardMessage, UserMessageAttachmentGetMessage, UserMessageAttachmentPutMessage, UserMessageGetMessage, UserMessageListMessage, UserMessageSendMessage, UserMessageResultObject } from '../types/generated';
 import {
   handleCrewDaemonEvent,
   type CrewCharterGetOutcome,
@@ -505,7 +505,7 @@ interface UseDaemonSocketOptions {
   onReposUpdate: (repos: RepoState[]) => void;
   onAuthorsUpdate: (authors: AuthorState[]) => void;
   onWorktreesUpdate?: (worktrees: DaemonWorktree[]) => void;
-  onCaptureChanged?: () => void;
+  onUserMessageChanged?: () => void;
   onSettingsUpdate?: (settings: DaemonSettings) => void;
   onSettingError?: (message: string) => void;
   endpoint?: DaemonEndpointInstance;
@@ -634,7 +634,7 @@ export function useDaemonSocket({
   onReposUpdate,
   onAuthorsUpdate,
   onWorktreesUpdate,
-  onCaptureChanged,
+  onUserMessageChanged,
   onSettingsUpdate,
   onSettingError,
   endpoint,
@@ -662,7 +662,7 @@ export function useDaemonSocket({
     onReposUpdate,
     onAuthorsUpdate,
     onWorktreesUpdate,
-    onCaptureChanged,
+    onUserMessageChanged,
     onSettingsUpdate,
     onSettingError,
   });
@@ -680,7 +680,7 @@ export function useDaemonSocket({
     onReposUpdate,
     onAuthorsUpdate,
     onWorktreesUpdate,
-    onCaptureChanged,
+    onUserMessageChanged,
     onSettingsUpdate,
     onSettingError,
   };
@@ -2272,7 +2272,7 @@ export function useDaemonSocket({
 
           default: {
             const pending = pendingActionsRef.current;
-            if (handleCaptureDaemonEvent(data, pending, () => { if (data.profile_id === useProfilesStore.getState().selectedProfileId) callbacksRef.current.onCaptureChanged?.(); })) break;
+            if (handleUserMessageDaemonEvent(data, pending, () => { if (data.profile_id === useProfilesStore.getState().selectedProfileId) callbacksRef.current.onUserMessageChanged?.(); })) break;
             if (handleSeedArtifactDaemonEvent(data, pending)) break;
             if (handleSessionLedgerDaemonEvent(data, { pending, onUpdate: emitSessionLedger })) break;
             if (handleFsDaemonEvent(data, { pending, onFsChanged: callbacksRef.current.onFsChanged })) break;
@@ -2310,8 +2310,8 @@ export function useDaemonSocket({
       emitSessionLedger({ type: 'connection', connected: false });
       hasReceivedInitialStateRef.current = false;
       setHasReceivedInitialState(false);
-      const captureFailure = event.reason || 'Disconnected. Capture acceptance is unconfirmed.';
-      rejectPendingByPredicate(key => key.startsWith('capture_'), new Error(captureFailure));
+      const userMessageFailure = event.reason || 'Disconnected. Capture acceptance is unconfirmed.';
+      rejectPendingByPredicate(key => key.startsWith('user_message_'), new Error(userMessageFailure));
       if (event.reason && !circuitOpenRef.current) setConnectionError(event.reason);
       canceledAttachIdsRef.current.clear();
       docSubscriptions.markDisconnected();
@@ -3402,8 +3402,8 @@ export function useDaemonSocket({
     await sendRequest<boolean>('set_setting', { key, value }, 'Saving the setting timed out');
   }, [sendRequest]);
 
-  const sendCaptureRequest = useCallback((command: CaptureCommand): Promise<CaptureResultObject> => {
-    return sendRequest(command.cmd, command, 'Capture request timed out. Your draft is retained.');
+  const sendUserMessageRequest = useCallback((command: UserMessageCommand): Promise<UserMessageResultObject> => {
+    return sendRequest(command.cmd, command, 'User message request timed out. Your draft is retained.');
   }, [sendRequest]);
 
   const sendGetSettings = useCallback(() => {
@@ -4496,7 +4496,7 @@ export function useDaemonSocket({
     sendCreateWorktree,
     sendDeleteWorktree,
     sendSetSetting,
-    sendCaptureRequest,
+    sendUserMessageRequest,
     sendSaveSetting,
     sendGetSettings,
     sendListPlugins,
@@ -4610,5 +4610,5 @@ export function useDaemonSocket({
   };
 }
 
-type CaptureWireCommand = CaptureAttachmentDiscardMessage | CaptureAttachmentGetMessage | CaptureAttachmentPutMessage | CaptureGetMessage | CaptureListMessage | CaptureSendMessage;
-export type CaptureCommand = CaptureWireCommand extends infer Command ? Command extends { cmd: string } ? Omit<Command, 'request_id'> : never : never;
+type UserMessageWireCommand = UserMessageAttachmentDiscardMessage | UserMessageAttachmentGetMessage | UserMessageAttachmentPutMessage | UserMessageGetMessage | UserMessageListMessage | UserMessageSendMessage;
+export type UserMessageCommand = UserMessageWireCommand extends infer Command ? Command extends { cmd: string } ? Omit<Command, 'request_id'> : never : never;

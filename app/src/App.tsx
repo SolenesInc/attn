@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useCallback, useEffect, useState } from 'react';
 import './App.css';
 import { useQuickCaptureHost } from './application/useQuickCaptureHost';
-import { CaptureShortcutProvider } from './quickCapture/ShortcutContext';
+import { QuickCaptureShortcutProvider } from './quickCapture/ShortcutContext';
 import { AppContent } from './application/AppContent';
 import { setMarkdownAnnotationsTransport } from './components/MarkdownReader/annotations/transport';
 import { MigrationFailureScreen } from './components/MigrationFailureScreen';
@@ -25,7 +25,7 @@ import { hideBootSplash } from './utils/bootSplash';
 import { bumpFsChangeSignal } from './utils/fsChangeSignals';
 
 function App() {
-  const [captureRevision, setCaptureRevision] = useState(0);
+  const [messageRevision, setMessageRevision] = useState(0);
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [settingError, setSettingError] = useState<string | null>(null);
   const [daemonPlugins, setDaemonPlugins] = useState<DaemonPlugin[]>([]);
@@ -93,7 +93,7 @@ function App() {
   }, []);
 
   const daemon = useDaemonSocket({
-    onCaptureChanged: () => setCaptureRevision(revision => revision + 1),
+    onUserMessageChanged: () => setMessageRevision(revision => revision + 1),
     onSessionsUpdate: (sessions) => {
       useSessionStore.getState().syncFromDaemonSessions(sessions);
       setDaemonSessions(sessions);
@@ -124,7 +124,7 @@ function App() {
     onWorktreesUpdate: setWorktrees,
   });
 
-  const captureHost = useQuickCaptureHost(daemon, settings, captureRevision);
+  const captureHost = useQuickCaptureHost(daemon, settings, messageRevision);
 
   const {
     getMarkdownAnnotations,
@@ -178,7 +178,7 @@ function App() {
     <SettingsProvider settings={settings} setSetting={sendSetSetting}>
       <KeybindingsProvider>
         <DaemonApiProvider api={daemon}>
-          <CaptureShortcutProvider value={captureHost}>
+          <QuickCaptureShortcutProvider value={captureHost}>
           <MigrationGate>
             <AppContent
               daemonSessions={daemonSessions}
@@ -201,7 +201,7 @@ function App() {
             />
           </MigrationGate>
           <Toast />
-          </CaptureShortcutProvider>
+          </QuickCaptureShortcutProvider>
         </DaemonApiProvider>
       </KeybindingsProvider>
     </SettingsProvider>

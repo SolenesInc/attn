@@ -37,7 +37,6 @@ appPlatform.launchApp = async args => {
   } finally { fs.closeSync(fd); }
 };
 const client = new UiAutomationClient({ appPath: options.appPath });
-// Quit only this named bundle; never escalate through the generic path-matched PID finder.
 client.quitApp = async () => {
   const child = client.launch?.child;
   const exit = child && child.exitCode === null && child.signalCode === null
@@ -80,7 +79,6 @@ function saveNativeTrace(name) {
   if (fs.existsSync(log)) fs.copyFileSync(log, path.join(runner.runDir, name));
 }
 
-// Large-file receipt waits use the native automation server's existing 120s deadline.
 const state = (payload = {}) => client.request('capture_state', payload, payload.staged ? { timeoutMs: 120_000 } : {});
 const hidden = () => state({ visible: false });
 const key = (key, modifiers = []) => driver.runInputDriver(['global_key', '--key', key, ...(modifiers.length ? ['--modifiers', modifiers.join(',')] : [])]);
@@ -114,7 +112,7 @@ for (const item of batch.items) {
     const out = path.join(process.cwd(), attachment.id + path.extname(attachment.name));
     execFileSync(attn, ['agent', 'attachment', item.source_id, attachment.id, '--out', out]);
     const dimensions = attachment.media_type.startsWith('image/') ? execFileSync('sips', ['-g', 'pixelWidth', '-g', 'pixelHeight', out], { encoding: 'utf8' }) : undefined;
-    receipts.push({ captureId: item.source_id, attachmentId: attachment.id, name: attachment.name, mediaType: attachment.media_type, bytes: fs.statSync(out).size,
+    receipts.push({ messageId: item.source_id, attachmentId: attachment.id, name: attachment.name, mediaType: attachment.media_type, bytes: fs.statSync(out).size,
       sha256: crypto.createHash('sha256').update(fs.readFileSync(out)).digest('hex'), dimensions });
   }
 }
@@ -137,7 +135,6 @@ async function recordHostedStep(name, action) {
   const windowId = await driver.mainWindowId({ windowTitle: 'Quick Capture' });
   assert.ok(windowId);
   const output = path.join(runner.runDir, `${name}.mp4`);
-  // These visible-window clips use the same 20s duration as scripts/pr-evidence.sh.
   const child = spawn('/usr/sbin/screencapture', ['-x', '-v', '-V', '20', '-l', String(windowId), output], { stdio: ['ignore', 'ignore', 'pipe'] });
   let stderr = '';
   child.stderr.on('data', chunk => { stderr += chunk; });
@@ -211,7 +208,6 @@ async function memorySampler() {
       samples.push({ at: Date.now(), appKiB: byPid[appPid], webKitKiB: services.reduce((sum, { pid }) => sum + (byPid[pid] ?? 0), 0), byPid });
     }).finally(() => { pending = undefined; });
   await sample();
-  // RSS samples are lower bounds on transient peaks; completion is awaited through upload receipts.
   const interval = setInterval(sample, 50);
   return { stop: async () => {
     clearInterval(interval); await pending; await sample();
@@ -227,7 +223,6 @@ let recording;
 runner.registerCleanup('fixture', async () => { if (fixtureLaunch?.pid) await appPlatform.requestQuit({ bundleId: fixtureId }); });
 runner.registerCleanup('other-fixture', async () => { if (otherFixtureLaunch?.pid) await appPlatform.requestQuit({ bundleId: otherFixtureId }); });
 runner.registerCleanup('observer', () => observer.close());
-// Leave this named instance available for the experience check.
 try {
   await runner.step('launch_packaged_capture', async () => {
     assert.equal(fs.existsSync(home), false, 'Each run owns a fresh crew fixture home');
@@ -242,10 +237,10 @@ try {
       assert.equal(JSON.parse(runAttn(['crew', 'list', '--json'])).some(member => member.id === recipient), false);
     });
     fs.mkdirSync(home, { recursive: true });
-    fs.writeFileSync(path.join(home, 'CHARTER.md'), '# Capture Fixture Builder\n\nInspect synthetic captures and their copied attachments.\n');
+    fs.writeFileSync(path.join(home, 'CHARTER.md'), '# Capture Fixture Builder\n\nInspect synthetic messages and their copied attachments.\n');
     await client.quitApp();
     runAttn(['daemon', 'stop']);
-    const previousDraft = path.join(dataDirForInstance(instance), 'capture-draft.json');
+    const previousDraft = path.join(dataDirForInstance(instance), 'user-message-draft.json');
     if (fs.existsSync(previousDraft)) {
       const files = path.join(dataDirForInstance(instance), 'capture-draft-files');
       const backup = path.join(runner.runDir, 'previous-draft-files');
@@ -310,7 +305,6 @@ try {
       .map(([, pid, name]) => ({ pid: Number(pid), name })).filter(service => service.pid > 0);
     assert.ok(services.length, 'The app bootstrap domain must identify its WebKit processes');
     runner.writeJson('fresh-first-open-ownership.json', { appPid, originator, services });
-    // The failing occluded panel had lost its backing by 35 seconds; observe beyond that receipt.
     const idleSeconds = 40;
     const idle = execFileSync('top', ['-l', '2', '-s', String(idleSeconds), '-stats', 'pid,command,cpu,mem',
       ...[appPid, ...services.map(service => service.pid)].flatMap(pid => ['-pid', String(pid)])], { encoding: 'utf8' });
@@ -371,7 +365,6 @@ try {
     await driver.runInputDriver(['wait_frontmost']);
     const main = (await driver.windowList()).find(window => window.name === mainTitle);
     assert.ok(main);
-    // Keep the click in the exposed half of this instance's right-hand strip.
     await driver.parkWindow(Math.ceil(main.width * 0.2), { windowTitle: mainTitle });
     runner.registerCleanup('main-position', () => execFileSync('osascript', ['-e',
       `tell application "System Events" to tell (first application process whose bundle identifier is "${client.bundleId}") to set position of first window to {${main.x}, ${main.y}}`]));
@@ -407,7 +400,7 @@ try {
     const recent = (await state()).controls.recent;
     await driver.clickWindow(recent.x, recent.y, { windowTitle: 'Quick Capture' });
     assert.equal((await state({ view: 'recent' })).nativeFocused, true, 'Clicking Recent keeps the panel key');
-    await screenshot('recent-captures.png');
+    await screenshot('recent-messages.png');
     await key('escape'); await state({ view: 'compose' });
     await driver.runInputDriver(['global_text', '--text', ' after Recent']);
     const priorText = before.text + ' after editor click';
@@ -483,7 +476,6 @@ try {
     if (!actual.reducedMotion) {
       const flight = actual.motion.find(event => event.kind === 'file' && event.phase === 'start' && event.source?.kind === 'drop');
       const window = (await driver.windowList()).find(window => window.name.includes('Quick Capture'));
-      // Wry truncates AppKit coordinates; the native capture height is 391 points.
       assert.equal(flight.source.x, Math.trunc(window.width / 2), 'Native drop flight starts at the known release point in CSS pixels');
       assert.equal(flight.source.y, Math.trunc(window.height / 2), 'Retina conversion does not displace the release point');
       assert.ok(flight.source.x !== flight.target.x || flight.source.y !== flight.target.y);

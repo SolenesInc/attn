@@ -136,7 +136,6 @@ const darwinPlatform = {
     await new MacOSDriver({ bundleId }).runInputDriver(['quit_wait']);
   },
 
-  // Only an unexited child handle authorizes signal escalation on macOS.
   ownedPids({ manifestPid = null, launch = null }) {
     const pid = spawnedOwnedPid(launch);
     return { pids: pid ? [pid] : [], staleManifest: Boolean(manifestPid && manifestPid !== pid) };

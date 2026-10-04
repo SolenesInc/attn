@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 
 export type AttachmentOrigin = { kind: 'drop'; x: number; y: number } | { kind: 'paste' };
-export type CaptureAttachment = { id: string; name: string; url: string; ready: boolean; imagePreview?: boolean; arriving: boolean; origin: AttachmentOrigin };
+export type UserMessageAttachment = { id: string; name: string; url: string; ready: boolean; imagePreview?: boolean; arriving: boolean; origin: AttachmentOrigin };
 export type AttachmentMotion = {
   kind: 'file'; phase: 'start' | 'end'; at: number; id: string;
   source?: { kind: 'drop' | 'paste'; x: number; y: number };
@@ -10,14 +10,14 @@ export type AttachmentMotion = {
 };
 
 type Props = {
-  file: CaptureAttachment;
+  file: UserMessageAttachment;
   onSettled: (id: string) => void;
   onMotion: (receipt: AttachmentMotion) => void;
   onRemove: (id: string) => void;
   disabled?: boolean;
 };
 
-export function CaptureAttachmentPreview({ file, onSettled, onMotion, onRemove, disabled }: Props) {
+export function UserMessageAttachmentPreview({ file, onSettled, onMotion, onRemove, disabled }: Props) {
   const slot = useRef<HTMLElement>(null);
   const [failed, setFailed] = useState(false);
   const isImage = !failed && (file.imagePreview ?? file.url.startsWith('data:image/'));
@@ -50,7 +50,6 @@ export function CaptureAttachmentPreview({ file, onSettled, onMotion, onRemove, 
     ghost.append(preview);
     document.body.append(ghost);
     const paste = source.kind === 'paste';
-    // A finite lift/flight places the file in its reserved slot.
     const duration = paste ? 560 : 460;
     const flight = ghost.animate([
       { transform: transform(dx, dy, paste ? scale * .82 : scale, paste ? -5 : -2), opacity: paste ? 0 : 1, offset: 0, easing: 'cubic-bezier(.2,.7,.3,1)' },
