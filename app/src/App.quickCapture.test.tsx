@@ -353,6 +353,40 @@ describe('Quick Capture app wire behavior', () => {
     expect(native.draft).toMatchObject({ files: [] });
   });
 
+  it('retains a sendable attachment after removal cannot be saved and the panel relaunches', async () => {
+    const captureId = crypto.randomUUID(), fileId = crypto.randomUUID();
+    native.draft = { id: captureId, text: 'Retain this file', mailbox: 'chief', uncertain: false,
+      files: [{ id: fileId, name: 'retained.png', url: 'data:image/png;base64,aGVsbG8=' }] };
+    let discarded = false, failRemoval = false;
+    const nativeInvoke = vi.mocked(invoke).getMockImplementation()!;
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      if (failRemoval && command === 'quick_capture_draft_write') throw new Error('Draft disk write failed');
+      return nativeInvoke(command, args);
+    });
+    const { daemon, capture } = await captureApp(daemon => {
+      daemon.on('quick_capture_list', () => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: true,
+        result: { list: { items: [], draft_assets: discarded ? [] : [{ capture_id: captureId, attachment_id: fileId, name: 'retained.png',
+          state: 'ready', next_offset: 5 }] } } }));
+      daemon.on('quick_capture_attachment_discard', () => { discarded = true; return { event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { discarded: true } }; });
+      daemon.on('quick_capture_attachment_put', () => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: false, error: 'Attachment was discarded' }));
+      daemon.on('quick_capture_send', command => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { record: record(command) } }));
+    });
+    failRemoval = true;
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Remove retained.png' })));
+    expect(screen.getByRole('alert')).toHaveTextContent('Draft disk write failed');
+    expect(daemon.sentOf('quick_capture_attachment_discard')).toHaveLength(0);
+    failRemoval = false;
+    capture.unmount();
+    render(<QuickCapture />);
+    await act(async () => {
+      for (const listener of native.listeners.get(QUICK_CAPTURE_READY) ?? []) await listener({ payload: undefined });
+    });
+    await daemon.idle();
+    expect(screen.getByRole('img', { name: 'retained.png' })).toBeInTheDocument();
+    await gesture(daemon, () => fireEvent.keyDown(editor(), { key: 'Enter' }));
+    expect(daemon.sentOf('quick_capture_send')).toEqual([expect.objectContaining({ capture_id: captureId, attachment_ids: [fileId] })]);
+  });
+
   it('IME Enter keeps composing, while Shift+Enter does not send', async () => {
     const { daemon } = await captureApp();
     await gesture(daemon, () => {
