@@ -1059,8 +1059,7 @@ func writeDesktopArrangement(tx *sql.Tx, now string, desktop *profiles.Desktop) 
 	return writeArrivingArrangement(tx, now, desktop, nil)
 }
 
-// writeArrivingArrangement keeps each arriving tile's created_at, keyed by its id on this desktop.
-func writeArrivingArrangement(tx *sql.Tx, now string, desktop *profiles.Desktop, arriving map[string]string) error {
+func writeArrivingArrangement(tx *sql.Tx, now string, desktop *profiles.Desktop, arrivingCreatedAt map[string]string) error {
 	if err := layouttree.Validate(desktop.Tree); err != nil {
 		return profiles.Errorf(profiles.CodeInvalid, "desktop %s: %v", desktop.ID, err)
 	}
@@ -1068,14 +1067,14 @@ func writeArrivingArrangement(tx *sql.Tx, now string, desktop *profiles.Desktop,
 	if err := profiles.CheckDesktop(*desktop); err != nil {
 		return err
 	}
-	if err := checkPaneMembership(tx, *desktop, arriving); err != nil {
+	if err := checkPaneMembership(tx, *desktop, arrivingCreatedAt); err != nil {
 		return err
 	}
 	createdAt, err := paneCreationTimes(tx, desktop.ID)
 	if err != nil {
 		return err
 	}
-	maps.Copy(createdAt, arriving)
+	maps.Copy(createdAt, arrivingCreatedAt)
 	if _, err := tx.Exec(`DELETE FROM desktop_panes WHERE desktop_id = ?`, desktop.ID); err != nil {
 		return err
 	}

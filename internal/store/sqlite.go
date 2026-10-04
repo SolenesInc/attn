@@ -1377,6 +1377,10 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
  CREATE TRIGGER remember_session_desktop AFTER INSERT ON desktop_panes WHEN NEW.session_id != ''
  BEGIN UPDATE sessions SET last_desktop_id = (SELECT desktop_id FROM desktop_panes WHERE session_id = NEW.session_id
  ORDER BY created_at DESC, pane_id DESC LIMIT 1) WHERE id = NEW.session_id; END;
+ CREATE TRIGGER remember_remaining_session_desktop AFTER DELETE ON desktop_panes
+ WHEN OLD.session_id != '' AND EXISTS (SELECT 1 FROM desktop_panes WHERE session_id = OLD.session_id)
+ BEGIN UPDATE sessions SET last_desktop_id = (SELECT desktop_id FROM desktop_panes WHERE session_id = OLD.session_id
+ ORDER BY created_at DESC, pane_id DESC LIMIT 1) WHERE id = OLD.session_id; END;
 `},
 }
 
