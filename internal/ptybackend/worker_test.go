@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/procreap"
 	"github.com/victorarias/attn/internal/ptyworker"
 )
 
@@ -117,11 +119,17 @@ func TestWorkerBackend_Recover_ReclaimsStaleOwnershipMismatch(t *testing.T) {
 	)
 	defer stopServer()
 
+	oldWorker := exec.Command("sleep", "0.3")
+	if err := oldWorker.Start(); err != nil {
+		t.Fatalf("start old worker: %v", err)
+	}
+	go func() { _ = oldWorker.Wait() }()
+
 	registryPath := filepath.Join(backend.registryDir(), sessionID+".json")
 	entry := ptyworker.NewRegistryEntry(
 		"d-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		sessionID,
-		os.Getpid(),
+		oldWorker.Process.Pid,
 		os.Getpid(),
 		socketPath,
 		"shell",
@@ -138,6 +146,9 @@ func TestWorkerBackend_Recover_ReclaimsStaleOwnershipMismatch(t *testing.T) {
 	report, err := backend.Recover(context.Background())
 	if err != nil {
 		t.Fatalf("Recover() error: %v", err)
+	}
+	if procreap.ProcessAlive(oldWorker.Process.Pid) {
+		t.Fatal("reclaim returned while the old worker was still running")
 	}
 	if report.Pruned != 1 {
 		t.Fatalf("pruned = %d, want 1", report.Pruned)

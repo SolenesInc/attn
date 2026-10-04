@@ -28,6 +28,7 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/pausepoint"
+	"github.com/victorarias/attn/internal/procreap"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptyhost"
 	"github.com/victorarias/attn/internal/ptyworker"
@@ -1584,27 +1585,6 @@ func (b *WorkerBackend) callSimple(ctx context.Context, session *workerSession, 
 	return b.callSimplePersistent(ctx, session, method, params)
 }
 
-func (b *WorkerBackend) sendWithIdentity(
-	ctx context.Context,
-	session *workerSession,
-	daemonInstanceID string,
-	controlToken string,
-	method string,
-	params any,
-) error {
-	rpcCtx, cancel := withDefaultRPCTimeout(ctx)
-	defer cancel()
-	conn, enc, _, err := b.connectWithIdentity(rpcCtx, session, daemonInstanceID, controlToken)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-	if err := applyConnDeadline(conn, rpcCtx); err != nil {
-		return err
-	}
-	return writeRequest(enc, b.nextReqID(method), method, params)
-}
-
 func (b *WorkerBackend) callSimpleWithIdentity(
 	ctx context.Context,
 	session *workerSession,
@@ -2076,7 +2056,12 @@ func (b *WorkerBackend) reclaimOwnershipMismatch(ctx context.Context, registryPa
 		RegistryPath: registryPath,
 		ControlToken: entry.ControlToken,
 	}
-	err := b.sendWithIdentity(
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, killRPCTimeout)
+		defer cancel()
+	}
+	err := b.callSimpleWithIdentity(
 		ctx,
 		session,
 		entry.DaemonInstanceID,
@@ -2096,6 +2081,9 @@ func (b *WorkerBackend) reclaimOwnershipMismatch(ctx context.Context, registryPa
 			return true, nil
 		}
 		return false, fmt.Errorf("stale-owner reclaim remove rpc failed: %w", err)
+	}
+	if err := waitForProcessExit(ctx, entry.WorkerPID); err != nil {
+		return false, fmt.Errorf("stale-owner reclaim: worker %d still running after remove: %w", entry.WorkerPID, err)
 	}
 
 	b.pruneSessionFiles(entry.SessionID, registryPath, expectedSocketPath)
@@ -2711,6 +2699,19 @@ func signalName(sig syscall.Signal) string {
 	default:
 		return "SIGTERM"
 	}
+}
+
+func waitForProcessExit(ctx context.Context, pid int) error {
+	ticker := time.NewTicker(20 * time.Millisecond)
+	defer ticker.Stop()
+	for procreap.ProcessAlive(pid) {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
+	return nil
 }
 
 func pidAlive(pid int) bool {
