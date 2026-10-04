@@ -37,22 +37,37 @@ func ReapDataDir(dataDir string) []ReapResult {
 	if err != nil {
 		return nil
 	}
+	quarantined, err := filepath.Glob(filepath.Join(dataDir, "workers", "*", "quarantine", "*.json.*"))
+	if err != nil {
+		return nil
+	}
+	paths = append(paths, quarantined...)
 	sort.Strings(paths)
 
 	var results []ReapResult
 	for _, path := range paths {
+		registryPath := startedRegistryPath(path)
 		entry, err := ReadRegistry(path)
 		if err != nil {
-			results = append(results, ReapResult{SessionID: strings.TrimSuffix(filepath.Base(path), ".json"), Outcome: ReapFailed, Err: fmt.Errorf("unreadable registry %s: %w", path, err)})
+			results = append(results, ReapResult{SessionID: strings.TrimSuffix(filepath.Base(registryPath), ".json"), Outcome: ReapFailed, Err: fmt.Errorf("unreadable registry %s: %w", path, err)})
 			continue
 		}
-		res := reapEntry(entry, path)
+		res := reapEntry(entry, registryPath)
 		if res.Outcome == ReapRemoved || res.Outcome == ReapAlreadyGone {
-			RemoveHandoff(path, entry.SessionID)
+			RemoveHandoff(registryPath, entry.SessionID)
 		}
 		results = append(results, res)
 	}
 	return results
+}
+
+func startedRegistryPath(path string) string {
+	dir, name := filepath.Split(path)
+	if filepath.Base(dir) != "quarantine" {
+		return path
+	}
+	name, _, _ = strings.Cut(name, ".json.")
+	return filepath.Join(filepath.Dir(filepath.Dir(dir)), "registry", name+".json")
 }
 
 const workerExitGrace = 500 * time.Millisecond
