@@ -441,6 +441,22 @@ func TestQuickCapturesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.
 			t.Fatalf("read receipt: %+v", receipt)
 		}
 
+		for range 2 {
+			if _, _, err := cli.AgentInboxEntry(quickCapture, "chief-a"); err != nil {
+				t.Fatal(err)
+			}
+		}
+		synctest.Wait()
+		readEvents := 0
+		for _, event := range a.Received() {
+			if event.Event == protocol.EventQuickCaptureRead {
+				readEvents++
+			}
+		}
+		if readEvents != 1 {
+			t.Fatalf("re-reading emitted %d read events, want 1", readEvents)
+		}
+
 		if len(itemsA) != 1 || itemsA[0].Content != "A request" {
 			t.Fatalf("A inbox: %+v", itemsA)
 		}

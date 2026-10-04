@@ -38,7 +38,7 @@ func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage
 		return
 	}
 	if found && storedItem.Kind == inbox.QuickCapture {
-		item, err := d.store.ReadInboxItem(messageID, recipient.ID, addresses, time.Now())
+		item, readNow, err := d.store.ReadInboxItem(messageID, recipient.ID, addresses, time.Now())
 		if err != nil {
 			d.replyAgentMsgError(conn, "message_not_found", err.Error())
 			return
@@ -50,8 +50,10 @@ func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage
 		}
 		result := &protocol.AgentInboxItem{Address: item.To.String(), ItemID: item.Source, Kind: string(item.Kind), SourceID: protocol.Ptr(item.Source), Content: item.Text, CreatedAt: item.CreatedAt, NotifiedAt: item.NotifiedAt, ReadAt: item.ReadAt, Attachments: quickCapture.Attachments}
 		_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AgentInboxItemResult: result})
-		d.publishQuickCaptureRead(recipient.ProfileID, quickCapture.ID, item.ReadAt)
-		d.kickInboxAfterCommit(item.To)
+		if readNow {
+			d.publishQuickCaptureRead(recipient.ProfileID, quickCapture.ID, item.ReadAt)
+			d.kickInboxAfterCommit(item.To)
+		}
 		return
 	}
 	stored, err := d.store.PeerMessageRecord(messageID)

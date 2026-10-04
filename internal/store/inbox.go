@@ -445,17 +445,17 @@ func (s *Store) PendingSeedInboxAddresses() ([]inbox.Address, error) {
 	return addresses, rows.Err()
 }
 
-func (s *Store) ReadInboxItem(id, readBy string, addresses []inbox.Address, at time.Time) (InboxItem, error) {
+func (s *Store) ReadInboxItem(id, readBy string, addresses []inbox.Address, at time.Time) (InboxItem, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, err := s.db.Begin()
 	if err != nil {
-		return InboxItem{}, err
+		return InboxItem{}, false, err
 	}
 	defer tx.Rollback()
 	item, found, err := inboxItemByID(tx, id)
 	if err != nil {
-		return InboxItem{}, err
+		return InboxItem{}, false, err
 	}
 	allowed := false
 	for _, address := range addresses {
@@ -464,21 +464,22 @@ func (s *Store) ReadInboxItem(id, readBy string, addresses []inbox.Address, at t
 		}
 	}
 	if !found || !allowed {
-		return InboxItem{}, fmt.Errorf("item %s does not belong to this inbox", id)
+		return InboxItem{}, false, fmt.Errorf("item %s does not belong to this inbox", id)
 	}
-	if item.ReadAt == "" {
+	readNow := item.ReadAt == ""
+	if readNow {
 		stamp := at.UTC().Format(sortableTimeFormat)
 		_, err := tx.Exec(`UPDATE inbox_items SET notified_at=CASE WHEN notified_at='' THEN ? ELSE notified_at END,read_at=?,read_by=? WHERE id=?`, stamp, stamp, readBy, id)
 		if err != nil {
-			return InboxItem{}, err
+			return InboxItem{}, false, err
 		}
 		if item.NotifiedAt == "" {
 			item.NotifiedAt = stamp
 		}
 		item.ReadAt, item.ReadBy = stamp, readBy
 		if err := acknowledgeInbox(tx, item.To); err != nil {
-			return InboxItem{}, err
+			return InboxItem{}, false, err
 		}
 	}
-	return item, tx.Commit()
+	return item, readNow, tx.Commit()
 }
