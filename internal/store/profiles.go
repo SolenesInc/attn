@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"strings"
 	"time"
 
@@ -883,15 +884,15 @@ func (s *Store) ShowSession(sessionID string) (profiles.Profile, profiles.Deskto
 		if profile, err = loadLiveProfile(tx, profileID); err != nil {
 			return err
 		}
-		var desktopID string
-		placed, err := rowFound(tx.QueryRow(`SELECT desktop_id, pane_id FROM desktop_panes WHERE session_id = ?`, sessionID), &desktopID, &leafID)
+		tiles, err := sessionTiles(tx, sessionID)
 		if err != nil {
 			return err
 		}
-		if placed {
-			if desktop, err = loadDesktop(tx, desktopID); err != nil {
+		if len(tiles) > 0 {
+			if desktop, err = loadDesktop(tx, tiles[0].desktopID); err != nil {
 				return err
 			}
+			leafID = tiles[0].tileID
 			return showDesktopLeaf(tx, now, &profile, &desktop, leafID)
 		}
 		if desktop, leafID, err = placeShownSession(tx, now, profile, sessionID); err != nil {
@@ -954,15 +955,7 @@ func checkPaneSession(tx *sql.Tx, desktop profiles.Desktop, pane profiles.Pane, 
 	return true, nil
 }
 
-func checkPaneHolders(tx *sql.Tx, desktop profiles.Desktop, pane profiles.Pane) error {
-	var holderDesktop, holderPane string
-	held, err := rowFound(tx.QueryRow(`SELECT desktop_id, pane_id FROM desktop_panes WHERE session_id = ? AND pane_id != ?`, pane.SessionID, pane.PaneID), &holderDesktop, &holderPane)
-	if err != nil {
-		return err
-	}
-	if held && holderDesktop != desktop.ID {
-		return profiles.Errorf(profiles.CodeAlreadyPlaced, "session %s is already placed in pane %s of desktop %s", pane.SessionID, holderPane, holderDesktop)
-	}
+func checkTileID(tx *sql.Tx, desktop profiles.Desktop, pane profiles.Pane) error {
 	var paneHolder string
 	used, err := rowFound(tx.QueryRow(`SELECT desktop_id FROM desktop_panes WHERE pane_id = ?`, pane.PaneID), &paneHolder)
 	if err != nil {
@@ -974,7 +967,24 @@ func checkPaneHolders(tx *sql.Tx, desktop profiles.Desktop, pane profiles.Pane) 
 	return nil
 }
 
-func checkPaneMembership(tx *sql.Tx, desktop profiles.Desktop) error {
+func refuseSecondTile(tx *sql.Tx, desktop profiles.Desktop, pane profiles.Pane) error {
+	for _, other := range desktop.Panes {
+		if other.PaneID != pane.PaneID && other.SessionID == pane.SessionID {
+			return profiles.Errorf(profiles.CodeAlreadyPlaced, "desktop %s: session %s is placed in tiles %s and %s", desktop.ID, pane.SessionID, other.PaneID, pane.PaneID)
+		}
+	}
+	var holderDesktop, holderTile string
+	held, err := rowFound(tx.QueryRow(`SELECT desktop_id, pane_id FROM desktop_panes WHERE session_id = ? AND desktop_id != ? LIMIT 1`, pane.SessionID, desktop.ID), &holderDesktop, &holderTile)
+	if err != nil {
+		return err
+	}
+	if held {
+		return profiles.Errorf(profiles.CodeAlreadyPlaced, "session %s is already placed in tile %s of desktop %s", pane.SessionID, holderTile, holderDesktop)
+	}
+	return nil
+}
+
+func checkPaneMembership(tx *sql.Tx, desktop profiles.Desktop, arriving []string) error {
 	for _, pane := range desktop.Panes {
 		persisted, err := panePersisted(tx, desktop.ID, pane)
 		if err != nil {
@@ -987,7 +997,13 @@ func checkPaneMembership(tx *sql.Tx, desktop profiles.Desktop) error {
 		if !sessionKnown {
 			continue
 		}
-		if err := checkPaneHolders(tx, desktop, pane); err != nil {
+		if err := checkTileID(tx, desktop, pane); err != nil {
+			return err
+		}
+		if persisted || slices.Contains(arriving, pane.PaneID) {
+			continue
+		}
+		if err := refuseSecondTile(tx, desktop, pane); err != nil {
 			return err
 		}
 	}
@@ -1038,7 +1054,7 @@ func settleForWrite(desktop profiles.Desktop) profiles.Desktop {
 	return desktop
 }
 
-func writeDesktopArrangement(tx *sql.Tx, now string, desktop *profiles.Desktop) error {
+func writeDesktopArrangement(tx *sql.Tx, now string, desktop *profiles.Desktop, arriving ...string) error {
 	if err := layouttree.Validate(desktop.Tree); err != nil {
 		return profiles.Errorf(profiles.CodeInvalid, "desktop %s: %v", desktop.ID, err)
 	}
@@ -1046,7 +1062,7 @@ func writeDesktopArrangement(tx *sql.Tx, now string, desktop *profiles.Desktop) 
 	if err := profiles.CheckDesktop(*desktop); err != nil {
 		return err
 	}
-	if err := checkPaneMembership(tx, *desktop); err != nil {
+	if err := checkPaneMembership(tx, *desktop, arriving); err != nil {
 		return err
 	}
 	createdAt, err := paneCreationTimes(tx, desktop.ID)
@@ -1306,22 +1322,27 @@ func moveLeafBetweenDesktops(tx *sql.Tx, now string, source, target profiles.Des
 	if err := writeDesktopArrangement(tx, now, &source); err != nil {
 		return LeafMove{}, err
 	}
-	if err := writeDesktopArrangement(tx, now, &target); err != nil {
+	if err := writeDesktopArrangement(tx, now, &target, moved.FinalLeafID); err != nil {
 		return LeafMove{}, err
 	}
 	return LeafMove{Source: source, Target: target, FinalLeafID: moved.FinalLeafID}, nil
 }
 
-// SessionDesktopMove is what MoveSessionToDesktop did: Placed for an unplaced
-// session, Move.Source empty when the session already was on the desktop.
+// SessionDesktopMove is what MoveSessionToDesktop did: Placed for an unplaced session, no Moves when
+// every tile of the session already was on Target. TileID is the session's newest tile, now on Target.
 type SessionDesktopMove struct {
-	Move       LeafMove
-	FromLeafID string
-	Placed     bool
+	Target profiles.Desktop
+	TileID string
+	Moves  []SessionTileMove
+	Placed bool
 }
 
-// MoveSessionToDesktop puts a session's pane beside another desktop's active leaf;
-// only a moved active pane, onto a desktop not on screen, takes that leaf.
+type SessionTileMove struct {
+	FromDesktopID, FromTileID, ToTileID string
+}
+
+// MoveSessionToDesktop puts each of a session's tiles beside another desktop's active tile;
+// only a moved active tile, onto a desktop not on screen, becomes that desktop's active tile.
 func (s *Store) MoveSessionToDesktop(sessionID, targetDesktopID, title string) (SessionDesktopMove, error) {
 	var result SessionDesktopMove
 	err := s.profilesTx(func(tx *sql.Tx, now string) error {
@@ -1340,13 +1361,12 @@ func (s *Store) MoveSessionToDesktop(sessionID, targetDesktopID, title string) (
 		if err != nil {
 			return err
 		}
-		var sourceID, paneID string
-		placed, err := rowFound(tx.QueryRow(`SELECT desktop_id, pane_id FROM desktop_panes WHERE session_id = ?`, sessionID), &sourceID, &paneID)
+		tiles, err := sessionTiles(tx, sessionID)
 		if err != nil {
 			return err
 		}
-		if !placed {
-			paneID = newProfileEntityID("pane")
+		if len(tiles) == 0 {
+			paneID := newProfileEntityID("pane")
 			desktop, err := placeSessionInTree(target, SessionPlacementRequest{SessionID: sessionID, Direction: layouttree.DirectionVertical, Title: title, Status: profiles.PaneStatusReady}, paneID)
 			if err != nil {
 				return err
@@ -1354,23 +1374,33 @@ func (s *Store) MoveSessionToDesktop(sessionID, targetDesktopID, title string) (
 			if err := writeDesktopArrangement(tx, now, &desktop); err != nil {
 				return err
 			}
-			result = SessionDesktopMove{Move: LeafMove{Target: desktop, FinalLeafID: paneID}, Placed: true}
+			result = SessionDesktopMove{Target: desktop, TileID: paneID, Placed: true}
 			return nil
 		}
-		if sourceID == target.ID {
-			result = SessionDesktopMove{Move: LeafMove{Target: target, FinalLeafID: paneID}}
-			return nil
+		result = SessionDesktopMove{Target: target}
+		for _, tile := range tiles {
+			if tile.desktopID == target.ID {
+				continue
+			}
+			source, err := loadDesktop(tx, tile.desktopID)
+			if err != nil {
+				return err
+			}
+			move, err := moveLeafBetweenDesktops(tx, now, source, result.Target, LeafMoveRequest{
+				LeafID: tile.tileID, AnchorID: result.Target.ActivePaneID, Direction: layouttree.DirectionVertical,
+				Activate: source.ActivePaneID == tile.tileID && target.ID != profile.CurrentDesktopID,
+			})
+			if err != nil {
+				return err
+			}
+			result.Target = move.Target
+			result.Moves = append(result.Moves, SessionTileMove{FromDesktopID: source.ID, FromTileID: tile.tileID, ToTileID: move.FinalLeafID})
 		}
-		source, err := loadDesktop(tx, sourceID)
-		if err != nil {
+		if tiles, err = sessionTiles(tx, sessionID); err != nil {
 			return err
 		}
-		move, err := moveLeafBetweenDesktops(tx, now, source, target, LeafMoveRequest{
-			LeafID: paneID, AnchorID: target.ActivePaneID, Direction: layouttree.DirectionVertical,
-			Activate: source.ActivePaneID == paneID && target.ID != profile.CurrentDesktopID,
-		})
-		result = SessionDesktopMove{Move: move, FromLeafID: paneID}
-		return err
+		result.TileID = tiles[0].tileID
+		return nil
 	})
 	return result, err
 }
@@ -1410,35 +1440,57 @@ func (s *Store) SessionPlacement(sessionID string) (profiles.Placement, bool, er
 		found, err = rowFound(tx.QueryRow(`
 			SELECT d.profile_id, p.desktop_id, p.pane_id
 			FROM desktop_panes p JOIN desktops d ON d.id = p.desktop_id
-			WHERE p.session_id = ?`, sessionID), &placement.ProfileID, &placement.DesktopID, &placement.PaneID)
+			WHERE p.session_id = ? ORDER BY p.created_at DESC, p.pane_id DESC LIMIT 1`, sessionID), &placement.ProfileID, &placement.DesktopID, &placement.PaneID)
 		return err
 	})
 	return placement, found, err
 }
 
-func removeSessionPlacement(tx *sql.Tx, now, sessionID string) (*profiles.Desktop, error) {
-	var desktopID, paneID string
-	placed, err := rowFound(tx.QueryRow(`SELECT desktop_id, pane_id FROM desktop_panes WHERE session_id = ?`, sessionID), &desktopID, &paneID)
+type sessionTile struct {
+	desktopID, tileID string
+}
+
+func sessionTiles(tx *sql.Tx, sessionID string) ([]sessionTile, error) {
+	rows, err := tx.Query(`SELECT desktop_id, pane_id FROM desktop_panes WHERE session_id = ? ORDER BY created_at DESC, pane_id DESC`, sessionID)
 	if err != nil {
 		return nil, err
 	}
-	if !placed {
-		return nil, nil
+	defer rows.Close()
+	var tiles []sessionTile
+	for rows.Next() {
+		var tile sessionTile
+		if err := rows.Scan(&tile.desktopID, &tile.tileID); err != nil {
+			return nil, err
+		}
+		tiles = append(tiles, tile)
 	}
-	desktop, err := loadDesktop(tx, desktopID)
+	return tiles, rows.Err()
+}
+
+func removeSessionPlacement(tx *sql.Tx, now, sessionID string) ([]profiles.Desktop, error) {
+	tiles, err := sessionTiles(tx, sessionID)
 	if err != nil {
 		return nil, err
 	}
-	next, ok := layouttree.Remove(desktop.Tree, paneID)
-	if !ok {
-		return nil, profiles.Errorf(profiles.CodeInvalid, "pane %s has a row on desktop %s but no leaf in its tree", paneID, desktopID)
+	var changed []profiles.Desktop
+	for _, tile := range tiles {
+		desktop, err := loadDesktop(tx, tile.desktopID)
+		if err != nil {
+			return nil, err
+		}
+		next, ok := layouttree.Remove(desktop.Tree, tile.tileID)
+		if !ok {
+			return nil, profiles.Errorf(profiles.CodeInvalid, "pane %s has a row on desktop %s but no leaf in its tree", tile.tileID, tile.desktopID)
+		}
+		desktop.Tree = next
+		desktop.Panes = withoutPane(desktop.Panes, tile.tileID)
+		if err := writeDesktopArrangement(tx, now, &desktop); err != nil {
+			return nil, err
+		}
+		changed = slices.DeleteFunc(changed, func(d profiles.Desktop) bool { return d.ID == desktop.ID })
+		changed = append(changed, desktop)
 	}
-	desktop.Tree = next
-	desktop.Panes = withoutPane(desktop.Panes, paneID)
-	if err := writeDesktopArrangement(tx, now, &desktop); err != nil {
-		return nil, err
-	}
-	return &desktop, nil
+	return changed, nil
 }
 
 func (s *Store) unplaceSessionLocked(at time.Time, sessionID string) error {
@@ -1466,7 +1518,7 @@ func (s *Store) unplaceSessionLocked(at time.Time, sessionID string) error {
 }
 
 func (s *Store) unplaceSessionsLocked(reason, where string, args ...any) {
-	sessionIDs, err := queryColumn[string](s.db, `SELECT session_id FROM desktop_panes WHERE `+where, args...)
+	sessionIDs, err := queryColumn[string](s.db, `SELECT DISTINCT session_id FROM desktop_panes WHERE `+where, args...)
 	if err != nil {
 		log.Printf("[store] %s: listing placed sessions: %v", reason, err)
 		return
@@ -1479,12 +1531,12 @@ func (s *Store) unplaceSessionsLocked(reason, where string, args ...any) {
 	}
 }
 
-func (s *Store) RemoveSessionPlacement(sessionID string) (*profiles.Desktop, error) {
-	var desktop *profiles.Desktop
+func (s *Store) RemoveSessionPlacement(sessionID string) ([]profiles.Desktop, error) {
+	var desktops []profiles.Desktop
 	err := s.profilesTx(func(tx *sql.Tx, now string) error {
 		var err error
-		desktop, err = removeSessionPlacement(tx, now, sessionID)
+		desktops, err = removeSessionPlacement(tx, now, sessionID)
 		return err
 	})
-	return desktop, err
+	return desktops, err
 }

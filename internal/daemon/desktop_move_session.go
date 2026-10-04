@@ -47,18 +47,20 @@ func (d *Daemon) moveSessionToDesktop(callerID, sessionID, ref string) (*protoco
 	if err != nil {
 		return nil, err
 	}
-	result := &protocol.DesktopMoveSessionResult{SessionID: sessionID, DesktopID: moved.Move.Target.ID, PaneID: moved.Move.FinalLeafID}
+	result := &protocol.DesktopMoveSessionResult{SessionID: sessionID, DesktopID: moved.Target.ID, PaneID: moved.TileID}
 	switch {
 	case moved.Placed:
 		d.publishArrangementChanged(profile.ID)
-	case moved.Move.Source.ID == "":
+	case len(moved.Moves) == 0:
 		result.Unchanged = protocol.Ptr(true)
 	default:
-		result.FromDesktopID = protocol.Ptr(moved.Move.Source.ID)
-		d.publishArrangement(profile.ID, &protocol.LeafMoved{
-			FromDesktopID: moved.Move.Source.ID, FromLeafID: moved.FromLeafID,
-			ToDesktopID: moved.Move.Target.ID, ToLeafID: moved.Move.FinalLeafID,
-		})
+		result.FromDesktopID = protocol.Ptr(moved.Moves[0].FromDesktopID)
+		for _, move := range moved.Moves {
+			d.publishArrangement(profile.ID, &protocol.LeafMoved{
+				FromDesktopID: move.FromDesktopID, FromLeafID: move.FromTileID,
+				ToDesktopID: moved.Target.ID, ToLeafID: move.ToTileID,
+			})
+		}
 	}
 	return result, nil
 }

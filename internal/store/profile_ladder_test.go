@@ -131,13 +131,13 @@ func TestTheSolMigrationRunsAfterTheProfileLadder(t *testing.T) {
 		schema int
 		wants  []int
 	}{
-		{"an install at 153", 153, []int{154, 155, 156, 157, 158, ProfileConversionSchemaVersion, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169}},
-		{"a desktops install at 162", 162, []int{163, 164, 165, 166, 167, 168, 169}},
-		{"a production desktops install at 163", 163, []int{164, 165, 166, 167, 168, 169}},
-		{"an install at 164", 164, []int{165, 166, 167, 168, 169}},
-		{"an install at 165", 165, []int{166, 167, 168, 169}},
-		{"a desktops install at 167", 167, []int{168, 169}},
-		{"a desktops install at 168", 168, []int{169}},
+		{"an install at 153", 153, []int{154, 155, 156, 157, 158, ProfileConversionSchemaVersion, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170}},
+		{"a desktops install at 162", 162, []int{163, 164, 165, 166, 167, 168, 169, 170}},
+		{"a production desktops install at 163", 163, []int{164, 165, 166, 167, 168, 169, 170}},
+		{"an install at 164", 164, []int{165, 166, 167, 168, 169, 170}},
+		{"an install at 165", 165, []int{166, 167, 168, 169, 170}},
+		{"a desktops install at 167", 167, []int{168, 169, 170}},
+		{"a desktops install at 168", 168, []int{169, 170}},
 	} {
 		t.Run(start.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "attn.db")
@@ -166,8 +166,8 @@ func TestTheSolMigrationRunsAfterTheProfileLadder(t *testing.T) {
 				t.Fatalf("upgrade from %d: %v", start.schema, err)
 			}
 			t.Cleanup(func() { s.Close() })
-			if upgrade.From != start.schema || upgrade.To != 169 {
-				t.Fatalf("upgrade = %+v, want %d -> 169", upgrade, start.schema)
+			if upgrade.From != start.schema || upgrade.To != 170 {
+				t.Fatalf("upgrade = %+v, want %d -> 170", upgrade, start.schema)
 			}
 			var applied []int
 			for _, version := range recordedVersions(t, s.db) {

@@ -54,10 +54,14 @@ func (s *Store) CommitSuccession(sc Succession, terminal string) ([]profiles.Des
 		if err := tx.QueryRow(`SELECT desktop_id FROM desktop_panes WHERE runtime_id = ?`, terminal).Scan(&desktopID); err != nil {
 			return fmt.Errorf("no pane holds terminal %s: %w", terminal, err)
 		}
-		if dead, err := removeSessionPlacement(tx, now, sc.To); err != nil {
+		dead, err := removeSessionPlacement(tx, now, sc.To)
+		if err != nil {
 			return fmt.Errorf("close the dead panes of %s: %w", sc.To, err)
-		} else if dead != nil && dead.ID != desktopID {
-			changed = append(changed, *dead)
+		}
+		for _, desktop := range dead {
+			if desktop.ID != desktopID {
+				changed = append(changed, desktop)
+			}
 		}
 		desktop, err := loadDesktop(tx, desktopID)
 		if err != nil {

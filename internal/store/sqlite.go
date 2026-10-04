@@ -1362,6 +1362,22 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
  ALTER TABLE sessions ADD COLUMN succeeds TEXT NOT NULL DEFAULT '';
  CREATE INDEX idx_sessions_succeeds ON sessions(succeeds) WHERE succeeds != '';
 `},
+	{170, "let several terminal tiles show one session", `
+ CREATE TABLE desktop_panes_several (
+ pane_id TEXT PRIMARY KEY, desktop_id TEXT NOT NULL, kind TEXT NOT NULL, session_id TEXT NOT NULL,
+ title TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'ready', error TEXT NOT NULL DEFAULT '',
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL, runtime_id TEXT NOT NULL DEFAULT ''
+ );
+ INSERT INTO desktop_panes_several (pane_id, desktop_id, kind, session_id, title, status, error, created_at, updated_at, runtime_id)
+ SELECT pane_id, desktop_id, kind, session_id, title, status, error, created_at, updated_at, runtime_id FROM desktop_panes;
+ DROP TABLE desktop_panes;
+ ALTER TABLE desktop_panes_several RENAME TO desktop_panes;
+ CREATE INDEX idx_desktop_panes_desktop ON desktop_panes(desktop_id);
+ CREATE INDEX idx_desktop_panes_session ON desktop_panes(session_id, created_at);
+ CREATE TRIGGER remember_session_desktop AFTER INSERT ON desktop_panes WHEN NEW.session_id != ''
+ BEGIN UPDATE sessions SET last_desktop_id = (SELECT desktop_id FROM desktop_panes WHERE session_id = NEW.session_id
+ ORDER BY created_at DESC, pane_id DESC LIMIT 1) WHERE id = NEW.session_id; END;
+`},
 }
 
 const migration99SQL = `
