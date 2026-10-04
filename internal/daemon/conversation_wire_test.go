@@ -421,6 +421,39 @@ func TestCodexResumeReopensTheClosedSessionOnTheNextPrompt(t *testing.T) {
 	testworld.AwaitSession(app, first, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 }
 
+func TestCodexResumeFromATerminalWithNoConversationYetReopensTheClosedSession(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	cwd := w.Path("shop")
+	first := w.Spawn(app, fakeagent.Codex, cwd)
+	codex := w.Launched(first)
+	app.TypeLine(first, "find the flaky test")
+	codex.Prompted()
+	codex.Reply("It races the tax lookup. <!-- attn:state=idle -->")
+	flaky := codex.ConversationID
+	testworld.AwaitSession(app, first, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	closeSession(t, cli, first, "done for now")
+	awaitClosed(app, first)
+
+	fresh := w.Spawn(app, fakeagent.Codex, cwd)
+	terminal := app.Terminal(fresh)
+	resumed := w.Launched(fresh)
+	app.TypeLine(fresh, "/resume "+flaky)
+	resumed.Prompted()
+	app.TypeLine(fresh, "now fix it")
+	if got := resumed.Prompted(); got != "now fix it" || resumed.ConversationID != flaky {
+		t.Fatalf("codex took %q in conversation %s, want it in %s", got, resumed.ConversationID, flaky)
+	}
+	if back := awaitSuccessor(app, fresh); back.ID != first {
+		t.Fatalf("/resume %s before any prompt showed session %s, want %s, the closed session that holds it", flaky, back.ID, first)
+	}
+	if got := app.Terminal(first); got != terminal {
+		t.Errorf("%s came back in terminal %s, want %s, the one /resume ran in", first, got, terminal)
+	}
+	awaitClosed(app, fresh)
+	testworld.AwaitSession(app, first, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+}
+
 func TestASessionLaunchedToResumeAConversationKeepsResumingIt(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()

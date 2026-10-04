@@ -50,7 +50,9 @@ func TestAClosedSessionWhoseConversationIsGoneOffersOnlyAFreshStart(t *testing.T
 	boot()
 
 	vanished := w.Spawn(app, fakeagent.Codex, w.Path("vanished"))
-	conversation := w.Launched(vanished).ConversationID
+	vanishedRun := w.Launched(vanished)
+	takeTurn(app, vanishedRun, vanished)
+	conversation := vanishedRun.ConversationID
 	closeSession(t, cli, vanished, "done")
 	awaitClosed(app, vanished)
 	removeReopenRollout(t, w, conversation)
@@ -168,10 +170,11 @@ func TestEachReopenActionPutsTheWorkBackAsOffered(t *testing.T) {
 	}
 	closedIn := func(dir string) closed {
 		session := w.Spawn(app, fakeagent.Codex, dir)
-		conversation := w.Launched(session).ConversationID
+		run := w.Launched(session)
+		takeTurn(app, run, session)
 		closeSession(t, cli, session, "done for now")
 		awaitClosed(app, session)
-		return closed{session, dir, conversation}
+		return closed{session, dir, run.ConversationID}
 	}
 	fetched := closedIn(reopenWorktree(t, repo, "feat/fetched"))
 	runGit(t, fetched.dir, "push", "-q", "-u", "origin", "feat/fetched")
@@ -240,12 +243,12 @@ func TestAReopenComesBackPlacedInItsOwnProfile(t *testing.T) {
 	app, cli := w.App(), w.Client()
 	profile := app.SelectedProfile()
 	kept := w.Spawn(app, fakeagent.Codex, w.Path("shared"))
-	w.Launched(kept)
+	takeTurn(app, w.Launched(kept), kept)
 	closeSession(t, cli, kept, "done for now")
 	awaitClosed(app, kept)
 
 	lone, _, _ := w.RequestSpawn(app, fakeagent.Codex, w.Path("alone"))
-	w.Launched(lone.ID)
+	takeTurn(app, w.Launched(lone.ID), lone.ID)
 	closePane(app, sessionPane{session: lone.ID})
 	awaitClosed(app, lone.ID)
 
@@ -282,7 +285,9 @@ func TestEveryReopenReplaysTheSessionsLaunchContract(t *testing.T) {
 		m.Effort = protocol.Ptr("high")
 	})
 	w.Launched(w.Spawn(app, fakeagent.Codex, w.Path("api")))
-	conversation := w.Launched(session).ConversationID
+	first := w.Launched(session)
+	takeTurn(app, first, session)
+	conversation := first.ConversationID
 
 	for _, closing := range []string{"first close", "second close"} {
 		closeSession(t, cli, session, closing)
@@ -397,10 +402,19 @@ func TestReopenTellsAGitFailureFromARefusal(t *testing.T) {
 func closedReopenCodex(t *testing.T, w *world, app *testworld.Peer, cli *client.Client, dir string) string {
 	t.Helper()
 	session := w.Spawn(app, fakeagent.Codex, dir)
-	w.Launched(session)
+	takeTurn(app, w.Launched(session), session)
 	closeSession(t, cli, session, "done for now")
 	awaitClosed(app, session)
 	return session
+}
+
+func takeTurn(app *testworld.Peer, run *fakeagent.Run, session string) {
+	app.T.Helper()
+	app.TypeLine(session, "pick up where we left off")
+	run.Prompted()
+	working := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	run.Reply("Done for now. <!-- attn:state=idle -->")
+	testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 }
 
 func reopenVerdict(t *testing.T, cli *client.Client, session string) protocol.SessionReopen {

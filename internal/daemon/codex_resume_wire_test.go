@@ -15,6 +15,9 @@ func TestCodexRespawnResumesTheConversationItsSessionStartHookReported(t *testin
 
 	session := w.Spawn(app, fakeagent.Codex, cwd)
 	first := w.Launched(session)
+	app.TypeLine(session, "find the flaky test")
+	first.Prompted()
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 
 	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: session})
 	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == session })
