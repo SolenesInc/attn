@@ -99,6 +99,8 @@ describe('Quick Capture app wire behavior', () => {
     await act(async () => registerReady());
     await daemon.idle();
     expect(editor()).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send to' })).toHaveTextContent('To: Chief');
+    expect(screen.queryByText('To', { exact: true })).toBeNull();
   });
 
   it('keeps edits made after returning to a profile when an older resolve finishes', async () => {

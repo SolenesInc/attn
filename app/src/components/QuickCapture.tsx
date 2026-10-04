@@ -315,7 +315,6 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
     if (picker && !(event.target as Element).closest('.capture-menu, .capture-mailbox')) setPicker(false);
   }}>
     {!recent && <header className="capture-top" data-tauri-drag-region>
-      <span>To</span>
       <button aria-label="Recent messages" className="capture-recent-toggle" aria-pressed={recent} onClick={() => {
         if (!recent && editor.current) messageSelection.current = { start: editor.current.selectionStart, end: editor.current.selectionEnd, direction: editor.current.selectionDirection };
         settleEntrances(); setRecent(!recent); setPicker(false);
