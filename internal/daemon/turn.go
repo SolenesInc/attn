@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -61,4 +62,13 @@ func (d *Daemon) attentionInputFor(session *protocol.Session) attention.Input {
 		ChiefOfStaff: protocol.Deref(session.ChiefOfStaff),
 	}
 	return in
+}
+
+func (d *Daemon) setSessionPriority(msg *protocol.SetSessionPriorityMessage) error {
+	sessionID := strings.TrimSpace(msg.SessionID)
+	if !d.store.SetSessionPriority(sessionID, msg.Priority) {
+		return fmt.Errorf("cannot set priority for session %s: no open session updated", sessionID)
+	}
+	d.broadcastSessionStateChanged(sessionID)
+	return nil
 }

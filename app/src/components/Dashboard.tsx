@@ -1,3 +1,4 @@
+import { SessionPriority } from './SessionPriority';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { DaemonEndpoint, DaemonPR, RateLimitState } from '../hooks/useDaemonSocket';
 import { usePRsNeedingAttention } from '../hooks/usePRsNeedingAttention';
@@ -28,6 +29,7 @@ type DashboardSession = {
   chiefOfStaff?: boolean;
   // Read, never derived from state: an agent can sit in waiting_input with its
   // turn already settled.
+  priority?: boolean;
   turnOwed?: boolean;
   turnOpenedAt?: string;
   turnSnoozedUntil?: string;
@@ -218,7 +220,7 @@ export function Dashboard({
     >
       <StateIndicator state={s.state} size="sm" seed={s.id} />
       <div className="session-row-main">
-        <span className="session-name">{s.label}</span>
+        <span className="session-name"><SessionPriority priority={s.priority} />{s.label}</span>
         <SessionProvenance automation={s.automation} interactive />
         {renderActivityLine(s)}
       </div>
@@ -562,7 +564,7 @@ export function Dashboard({
                   onClick={() => onSelectSession(chiefSession.id)}
                 >
                   <StateIndicator state={chiefSession.state} size="sm" seed={chiefSession.id} />
-                  <span className="chief-session-name">{chiefSession.label}</span>
+                  <span className="chief-session-name"><SessionPriority priority={chiefSession.priority} />{chiefSession.label}</span>
                   <ChiefOfStaffBadge compact />
                   <span className="chief-session-state">
                     Session: {chiefSession.state.replace('_', ' ')}

@@ -42,6 +42,7 @@ export function autoSettleSeconds(
 
 export interface QueueBandSession extends DesktopViewSession {
   chiefOfStaff?: boolean;
+  priority?: boolean;
   turnOwed?: boolean;
   turnOpenedAt?: string;
   turnSnoozedUntil?: string;
@@ -102,9 +103,9 @@ export function formatTurnAge(openedAt: string | undefined, now: number): string
   return `${Math.round(hours / 24)}d`;
 }
 
-/** Queue order: turn owed longest first, tie-broken by id so the order is total. Home
- * lists the same turns and must use the same order. */
+
 export function compareTurnOrder(a: QueueBandSession, b: QueueBandSession): number {
+  if (Boolean(a.priority) !== Boolean(b.priority)) return a.priority ? -1 : 1;
   const openedA = a.turnOpenedAt ?? '';
   const openedB = b.turnOpenedAt ?? '';
   if (openedA !== openedB) {
@@ -302,6 +303,8 @@ export function advanceAfterTurnClosed<TSession extends QueueBandSession>(
     bands.settled.some((row) => row.session.id === sessionId) ||
     bands.snoozed.some((row) => row.session.id === sessionId);
   if (!owedBefore || !closedNow) return null;
+  const head = headOfQueue(bands);
+  if (head?.session.priority) return { to: 'session', row: head };
   const stillOwed = new Set(bands.turns.map((row) => row.session.id));
   const next = nextOwedAfter(previousTurns, sessionId, stillOwed) ?? headOfQueue(bands);
   return next ? { to: 'session', row: next } : { to: 'dashboard' };

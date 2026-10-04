@@ -1172,3 +1172,8 @@ func (c *Client) SetAutomationLaunchDesktop(id int, desktop string, name *string
 	}
 	return &result, nil
 }
+
+func (c *Client) SetSessionPriority(sessionID string, priority bool) error {
+	_, err := c.send(protocol.SetSessionPriorityMessage{Cmd: protocol.CmdSetSessionPriority, SessionID: strings.TrimSpace(sessionID), Priority: priority})
+	return err
+}

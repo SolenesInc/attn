@@ -292,3 +292,26 @@ func applyTurnStamps(session *protocol.Session, stamps TurnStamps) {
 		session.TurnSnoozedUntil = protocol.Ptr(stamps.SnoozedUntil.UTC().Format(time.RFC3339Nano))
 	}
 }
+
+func (s *Store) SetSessionPriority(id string, priority bool) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		session := s.sessions[id]
+		if session == nil {
+			return false
+		}
+		session.Priority = nil
+		if priority {
+			session.Priority = protocol.Ptr(true)
+		}
+		return true
+	}
+	result, err := s.db.Exec(`UPDATE sessions SET priority = ? WHERE id = ? AND closed_at = ''`, boolToInt(priority), id)
+	if err != nil {
+		log.Printf("[store] SetSessionPriority: failed for session %s: %v", id, err)
+		return false
+	}
+	updated, err := result.RowsAffected()
+	return err == nil && updated == 1
+}

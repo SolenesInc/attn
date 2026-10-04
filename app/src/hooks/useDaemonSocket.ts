@@ -4266,6 +4266,12 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'settle_turn', session_id: sessionId }));
   }, []);
 
+  const sendSetSessionPriority = useCallback((sessionId: string, priority: boolean) => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ cmd: 'set_session_priority', session_id: sessionId, priority }));
+  }, []);
+
   const sendSnoozeTurn = useCallback((sessionId: string, until: Date) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -4984,6 +4990,7 @@ export function useDaemonSocket({
     sendAutoModeEnvNotes,
     sendBusSetConsumerEnabled,
     sendSettleTurn,
+    sendSetSessionPriority,
     sendSnoozeTurn,
     sendWakeTurn,
     sendCancelCountdown,

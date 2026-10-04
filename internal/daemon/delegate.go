@@ -439,7 +439,13 @@ func (d *Daemon) spawnDelegatedRuntimeProtected(protection foregroundCleanupProt
 		Rows:          24,
 		Label:         protocol.Ptr(name),
 		YoloMode:      msg.YoloMode,
+		Priority:      msg.Priority,
 		InitialPrompt: protocol.Ptr(initialPrompt),
+	}
+	if msg.Handover != nil {
+		if predecessor := d.store.SessionLedgerEntry(msg.PreviousTenderSession); predecessor != nil && protocol.Deref(predecessor.Priority) {
+			spawnMsg.Priority = protocol.Ptr(true)
+		}
 	}
 	if model != "" {
 		spawnMsg.Model = protocol.Ptr(model)

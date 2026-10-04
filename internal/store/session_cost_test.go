@@ -55,7 +55,9 @@ func TestMigration152FilesStoredLongContextObservationsUnderTheirTier(t *testing
 		t.Fatal(err)
 	}
 	defer s.Close()
-	s.Add(&protocol.Session{ID: "sol", Label: "sol"})
+	if _, err := s.db.Exec(`INSERT INTO sessions (id, label, directory, state, state_since, state_updated_at, last_seen) VALUES ('sol', 'sol', '', 'idle', '', '', '')`); err != nil {
+		t.Fatal(err)
+	}
 	legacy := `{"initialized":true,
 		"ledger":{"agent|gpt-6-sol":{"input_tokens":144001,"output_tokens":20000,"cache_read_input_tokens":400000}},
 		"observations":{
@@ -101,7 +103,9 @@ func TestMigration163FilesGPT61SolObservationsUnderTheirTier(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	s.Add(&protocol.Session{ID: "sol", Label: "sol"})
+	if _, err := s.db.Exec(`INSERT INTO sessions (id, label, directory, state, state_since, state_updated_at, last_seen) VALUES ('sol', 'sol', '', 'idle', '', '', '')`); err != nil {
+		t.Fatal(err)
+	}
 	legacy := `{"initialized":true,
 		"ledger":{"agent|gpt-6.1-sol":{"input_tokens":144001,"output_tokens":20000,"cache_read_input_tokens":400000}},
 		"observations":{

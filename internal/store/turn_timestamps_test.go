@@ -33,7 +33,9 @@ func TestASnoozeWrittenInTheOldEncodingIsStillWakeable(t *testing.T) {
 		t.Fatalf("NewWithDB: %v", err)
 	}
 	defer s.Close()
-	addTurnSession(t, s, "s1", "working")
+	if _, err := s.db.Exec(`INSERT INTO sessions (id, label, directory, state, state_since, state_updated_at, last_seen) VALUES ('s1', 's1', '/tmp/s1', 'working', '', '', '')`); err != nil {
+		t.Fatal(err)
+	}
 
 	until := turnBase().Add(time.Hour)
 	if _, err := s.db.Exec(`UPDATE sessions SET turn_snoozed_until = ? WHERE id = 's1'`,
@@ -68,7 +70,9 @@ func TestMigration95RewritesTurnCursorAndListingStampsThatDoNotSort(t *testing.T
 	}
 	defer s.Close()
 
-	addTurnSession(t, s, "s1", "working")
+	if _, err := s.db.Exec(`INSERT INTO sessions (id, label, directory, state, state_since, state_updated_at, last_seen) VALUES ('s1', 's1', '/tmp/s1', 'working', '', '', '')`); err != nil {
+		t.Fatal(err)
+	}
 	for _, r := range raggedOffsets {
 		if _, _, err := s.ClaimDelegationOperation(
 			r.id, "op-"+r.id, "sess-"+r.id, "chief", "", `{}`, turnBase().Add(r.offset)); err != nil {

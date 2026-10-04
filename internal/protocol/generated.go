@@ -2660,6 +2660,9 @@ type DelegateMessage struct {
 	// Model corresponds to the JSON schema field "model".
 	Model *string `json:"model,omitempty,omitzero"`
 
+	// Priority corresponds to the JSON schema field "priority".
+	Priority *bool `json:"priority,omitempty,omitzero"`
+
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
@@ -9496,6 +9499,9 @@ type Session struct {
 	// ParentSessionID corresponds to the JSON schema field "parent_session_id".
 	ParentSessionID *string `json:"parent_session_id,omitempty,omitzero"`
 
+	// Priority corresponds to the JSON schema field "priority".
+	Priority *bool `json:"priority,omitempty,omitzero"`
+
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID string `json:"profile_id"`
 
@@ -9852,6 +9858,9 @@ type SessionLedgerEntry struct {
 
 	// MainRepo corresponds to the JSON schema field "main_repo".
 	MainRepo *string `json:"main_repo,omitempty,omitzero"`
+
+	// Priority corresponds to the JSON schema field "priority".
+	Priority *bool `json:"priority,omitempty,omitzero"`
 
 	// ProfileDeleted corresponds to the JSON schema field "profile_deleted".
 	ProfileDeleted *bool `json:"profile_deleted,omitempty,omitzero"`
@@ -10451,6 +10460,17 @@ type SetSessionContextWindowCapMessage struct {
 	SessionID string `json:"session_id"`
 }
 
+type SetSessionPriorityMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Priority corresponds to the JSON schema field "priority".
+	Priority bool `json:"priority"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID string `json:"session_id"`
+}
+
 type SetSessionResumeIDMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -10609,6 +10629,9 @@ type SpawnSessionMessage struct {
 
 	// Placement corresponds to the JSON schema field "placement".
 	Placement *SessionPlacement `json:"placement,omitempty,omitzero"`
+
+	// Priority corresponds to the JSON schema field "priority".
+	Priority *bool `json:"priority,omitempty,omitzero"`
 
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID string `json:"profile_id"`

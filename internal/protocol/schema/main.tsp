@@ -198,6 +198,7 @@ model Session {
   delegation_role?: SessionDelegationRole;
   turn_owed?: boolean;          // True when the user owes this session a turn. Derived at broadcast from the turn stamps plus the queue's exclusions (shell, chief); never stored, and never recomputed by a client.
   turn_opened_at?: string;      // ISO timestamp the outstanding turn opened; the queue's sort key. Absent when nothing is owed.
+  priority?: boolean;
   turn_snoozed_until?: string;  // ISO timestamp a live snooze runs to. Present only while the deferral holds; its presence is what puts the row in the sidebar's snoozed section, and while it is set no state can open a turn for this session except one that breaks through.
   auto_settle_fires_at?: string; // ISO timestamp the auto-settle countdown will close this session's turn. Present only while the countdown is running, which is the whole contract: it is what the terminal tile animates against, and its absence is what says nothing is pending. Absent during the arm delay, when auto-settle is off, and after a cancel.
   auto_settle_held?: boolean;   // True while the auto-settle countdown is frozen because the user is typing or moving the pointer in this session. Mutually exclusive with auto_settle_fires_at by construction: a frozen countdown has no deadline to animate against, so the tile draws a full paused bar and waits. It clears on its own five quiet seconds after the last interaction, when a fresh deadline replaces it.
@@ -1104,6 +1105,7 @@ model DelegateMessage {
   checkout?: DelegateCheckout;
   agent?: string;
   label?: string;
+  priority?: boolean;
   yolo_mode?: boolean;
   `model`?: string; // Pin the delegated agent's model (alias or full id); empty = agent default
   effort?: string; // Pin the delegated agent's reasoning effort; empty = agent default
@@ -1405,6 +1407,12 @@ model HeartbeatMessage {
 model SettleTurnMessage {
   cmd: "settle_turn";
   session_id: string;
+}
+
+model SetSessionPriorityMessage {
+  cmd: "set_session_priority";
+  session_id: string;
+  priority: boolean;
 }
 
 // SnoozeTurnMessage defers a session until an instant: it closes any open turn
@@ -1924,6 +1932,7 @@ model SpawnSessionMessage {
   label?: string;
   resume_session_id?: string;
   resume_picker?: boolean;
+  priority?: boolean;
   yolo_mode?: boolean;
   // Per-session auto mode, for an agent whose driver advertises `auto_mode`.
   // Tri-state on purpose: absent follows the promoted config's
@@ -6397,6 +6406,7 @@ model SessionTranscriptResult {
 // A session as the ledger holds it. Distinct from Session, which is the live
 // broadcast shape: this one outlives the runtime and carries how it ended.
 model SessionLedgerEntry {
+  priority?: boolean;
   id: string;
   conversation_pinned_at?: string;
   label: string;

@@ -27,6 +27,7 @@ export interface LocalSession {
   autoSettleFiresAt?: string;
   autoSettleHeld?: boolean;
   state_reason?: string;
+  priority?: boolean;
   turnOwed?: boolean;
   turnOpenedAt?: string;
   turnSnoozedUntil?: string;
@@ -88,6 +89,7 @@ export interface SidebarProps {
   onScreenSessionIds?: ReadonlySet<string>;
   onRenameSession?: (sessionId: string, label: string) => Promise<void>;
   onRenameDesktop?: (desktopId: string, title: string) => Promise<void>;
+  onTogglePriority?: (session: LocalSession) => void;
   onChangeChiefOfStaff?: (sessionId: string, enabled: boolean) => void;
   crewQueueEnabled?: boolean;
   harnessLogosEnabled?: boolean;

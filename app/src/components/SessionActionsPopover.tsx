@@ -4,6 +4,8 @@ import './SessionActionsPopover.css';
 
 interface SessionActionsPopoverProps {
   sessionLabel: string;
+  priority?: boolean;
+  onTogglePriority?: () => void;
   chiefOfStaff: boolean;
   anchor: { top: number; left: number };
   canRename: boolean;
@@ -19,6 +21,8 @@ const VIEWPORT_MARGIN = 8;
 
 export function SessionActionsPopover({
   sessionLabel,
+  priority,
+  onTogglePriority,
   chiefOfStaff,
   anchor,
   canRename,
@@ -83,6 +87,12 @@ export function SessionActionsPopover({
         </button>
       )}
       {onMemberDetails && <div className="session-actions-divider" />}
+      {onTogglePriority && (
+        <button type="button" role="menuitem" data-testid="session-priority-action" onClick={() => run(onTogglePriority)}>
+          <span aria-hidden="true">⚑</span>
+          {priority ? 'Unmark priority' : 'Mark priority'}
+        </button>
+      )}
       {canRename && (
         <button type="button" role="menuitem" onClick={() => run(onRename)}>
           <span aria-hidden="true">✎</span>

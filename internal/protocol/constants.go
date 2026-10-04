@@ -139,6 +139,7 @@ const (
 	CmdPullRequestUnwatch            = "pull_request_unwatch"
 	CmdQuery                         = "query"
 	CmdHeartbeat                     = "heartbeat"
+	CmdSetSessionPriority            = "set_session_priority"
 	CmdSettleTurn                    = "settle_turn"
 	CmdSnoozeTurn                    = "snooze_turn"
 	CmdWakeTurn                      = "wake_turn"

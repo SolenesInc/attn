@@ -136,6 +136,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdPullRequestUnwatch:            decodeInto[PullRequestUnwatchMessage],
 	CmdQuery:                         decodeInto[QueryMessage],
 	CmdHeartbeat:                     decodeInto[HeartbeatMessage],
+	CmdSetSessionPriority:            decodeInto[SetSessionPriorityMessage],
 	CmdSettleTurn:                    decodeInto[SettleTurnMessage],
 	CmdSnoozeTurn:                    decodeInto[SnoozeTurnMessage],
 	CmdWakeTurn:                      decodeInto[WakeTurnMessage],

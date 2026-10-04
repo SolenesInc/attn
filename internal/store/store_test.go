@@ -3,8 +3,6 @@ package store
 import (
 	"path/filepath"
 	"testing"
-
-	"github.com/victorarias/attn/internal/protocol"
 )
 
 func TestMigration130CarriesLegacyIntentionalCloseMark(t *testing.T) {
@@ -13,7 +11,9 @@ func TestMigration130CarriesLegacyIntentionalCloseMark(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	s.Add(&protocol.Session{ID: "legacy-close", Label: "legacy-close"})
+	if _, err := s.db.Exec(`INSERT INTO sessions (id, label, directory, state_since, state_updated_at, last_seen) VALUES ('legacy-close', 'legacy-close', '/tmp/legacy-close', '', '', '')`); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := s.db.Exec(`UPDATE sessions SET closed_intentionally_at = '2026-09-01T12:00:00Z' WHERE id = 'legacy-close';
 		DROP TABLE session_teardown_tombstones;

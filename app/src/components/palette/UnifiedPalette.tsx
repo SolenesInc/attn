@@ -40,6 +40,7 @@ interface UnifiedPaletteProps<S extends PaletteSession> {
   onWakeMember: (member: string) => void;
   onOpenTile: (desktopId: string, tileId: string) => void;
   onSettle: (session: S) => void;
+  onPriority?: (session: S) => void;
   onSnooze: (session: S, until: Date) => void;
 }
 
@@ -180,6 +181,7 @@ export function UnifiedPalette<S extends PaletteSession>({
   onWakeMember,
   onOpenTile,
   onSettle,
+  onPriority,
   onSnooze,
 }: UnifiedPaletteProps<S>) {
   const [agentKeyAfterSnooze, setAgentKeyAfterSnooze] = useState<string | null>(null);
@@ -230,6 +232,11 @@ export function UnifiedPalette<S extends PaletteSession>({
     if (pressed(event, 'session.settle')) {
       event.preventDefault();
       if (agent?.turnOwed) onSettle(agent);
+      return true;
+    }
+    if (pressed(event, 'session.priority')) {
+      event.preventDefault();
+      if (agent) onPriority?.(agent);
       return true;
     }
     if (pressed(event, 'session.snooze')) {

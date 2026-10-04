@@ -136,6 +136,16 @@ upgrade the database and refuse to open one the daemon has not upgraded yet.
 agent (or a plain shell), pick a directory, go.
 3. Watch the sidebar. Colors tell you who needs you.
 4. Too many concurrent agents? Enable queue mode!
+
+Priority sessions put their owed turns ahead of other turns. Mark or unmark one
+from its ••• menu or with Cmd+Shift+I (Ctrl+Alt+I on Linux). The flag stays until
+you clear it, including across restarts, /clear, seed handovers and crew naps.
+Snoozed sessions stay snoozed, and marking an agent never interrupts the one
+on screen. Settling a turn advances to an owed priority turn first.
+
+Agents can use `attn session priority on|off [--session <id>]`, defaulting to
+their own session. `attn delegate --priority` starts a marked delegate.
+
 5. Press **Cmd+/** any time for the full shortcuts list.
 6. Optional: add an SSH endpoint in Settings and run remote or VM sessions from
    the same picker.
@@ -167,6 +177,7 @@ agent (or a plain shell), pick a directory, go.
 | Cmd+F | Find in terminal |
 | Cmd+K | Agent palette (crew, agents, tiles, runs) |
 | Cmd+Shift+K | Command palette (or type `>` in the agent palette) |
+| Cmd+Shift+I | Mark or unmark the focused agent as priority |
 | Cmd+Shift+A | All agents: the list in the queue sidebar, the agent palette elsewhere |
 | Cmd+Shift+P | Attention drawer (who needs me?) |
 | Cmd+\` | Utility terminal |

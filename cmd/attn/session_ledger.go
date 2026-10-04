@@ -189,7 +189,11 @@ func fprintSessionList(w io.Writer, result *protocol.SessionListResult, args ses
 		if args.reopen {
 			fmt.Fprintf(table, "%s\t", sessionReopenColumn(verdicts[entry.ID]))
 		}
-		fmt.Fprintf(table, "%s\n", entry.Label)
+		label := entry.Label
+		if protocol.Deref(entry.Priority) {
+			label = "⚑ " + label
+		}
+		fmt.Fprintf(table, "%s\n", label)
 	}
 	table.Flush()
 
@@ -390,6 +394,9 @@ func fprintSessionShow(w io.Writer, result protocol.SessionShowResult) {
 	fmt.Fprintf(w, "%s  %s\n", entry.ID, entry.Label)
 	fmt.Fprintf(w, "agent      %s\n", entry.Agent)
 	fmt.Fprintf(w, "state      %s\n", sessionLedgerState(entry))
+	if protocol.Deref(entry.Priority) {
+		fmt.Fprintln(w, "priority   on")
+	}
 	fmt.Fprintf(w, "directory  %s\n", entry.Directory)
 	if branch := protocol.Deref(entry.Branch); branch != "" {
 		fmt.Fprintf(w, "branch     %s\n", branch)

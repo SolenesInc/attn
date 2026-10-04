@@ -194,6 +194,8 @@ export function SidebarPopovers() {
     crew,
     onRenameSession,
     onRenameDesktop,
+    onTogglePriority,
+    desktops,
     onChangeChiefOfStaff,
     onCloseSession,
     onReloadSession,
@@ -205,6 +207,9 @@ export function SidebarPopovers() {
     setCrewActionsTarget,
     onOpenCrewMemberDetails,
   } = useSidebarContext();
+  const actionsSession = sessionActionsTarget
+    ? desktops.flatMap((desktop) => desktop.sessions).find((session) => session.id === sessionActionsTarget.id)
+    : undefined;
   return (
     <>
       {renameTarget && (
@@ -227,6 +232,8 @@ export function SidebarPopovers() {
       {sessionActionsTarget && (
         <SessionActionsPopover
           sessionLabel={sessionActionsTarget.label}
+          priority={actionsSession?.priority}
+          onTogglePriority={onTogglePriority && actionsSession ? () => onTogglePriority(actionsSession) : undefined}
           chiefOfStaff={sessionActionsTarget.chiefOfStaff}
           anchor={sessionActionsTarget.anchor}
           canRename={Boolean(onRenameSession)}

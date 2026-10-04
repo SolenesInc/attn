@@ -35,7 +35,7 @@ func TestMigration155MovesLastSeenStampsToUTC(t *testing.T) {
 		t.Fatalf("close pre-155 database: %v", err)
 	}
 
-	migrated, err := newStoreAtVersion(dbPath, 167)
+	migrated, err := NewWithDB(dbPath)
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
