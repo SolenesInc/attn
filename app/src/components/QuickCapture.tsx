@@ -125,6 +125,7 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
   }
   const removeFile = useCallback((id: string) => {
     if (sending.current || state.current.uncertain) return;
+    sending.current = true; setSubmitting(true);
     const retained = draft();
     void cache.current.save({ ...retained, files: retained.files.filter(file => file.id !== id) })
       .then(() => {
@@ -136,7 +137,8 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
         }
         return client.current!.discard(retained.id, [id]);
       })
-      .catch(error => setError(`Cannot remove file: ${error}`));
+      .catch(error => setError(`Cannot remove file: ${error}`))
+      .finally(() => { sending.current = false; setSubmitting(false); });
     editor.current?.focus();
   }, []);
   function pasteNativeImage() {
