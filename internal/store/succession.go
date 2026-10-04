@@ -13,17 +13,19 @@ import (
 
 // Succession puts To in the terminal From showed: To takes From's place, process, driver run and
 // Conversation; everything else stays with From. A new To gets Label and Launch; an existing one keeps its own.
+// KeepFrom leaves From open, for the other terminals that still run it.
 type Succession struct {
 	From, To     string
 	Label        string
 	Conversation SessionConversation
 	Launch       LaunchIntent
 	Close        SessionClose
+	KeepFrom     bool
 }
 
 // CommitSuccession opens sc.To, or reopens it when it exists, in the pane that holds terminal; the pane now
 // shows it and To's other panes, whose terminals are dead, close. sc.From closes into the ledger in the same
-// transaction. It returns the desktops it changed, terminal's first.
+// transaction unless KeepFrom. It returns the desktops it changed, terminal's first.
 func (s *Store) CommitSuccession(sc Succession, terminal string) ([]profiles.Desktop, error) {
 	var changed []profiles.Desktop
 	err := s.profilesTx(func(tx *sql.Tx, now string) error {
@@ -76,6 +78,9 @@ func (s *Store) CommitSuccession(sc Succession, terminal string) ([]profiles.Des
 			return fmt.Errorf("show successor %s: %w", sc.To, err)
 		}
 		changed = append([]profiles.Desktop{desktop}, changed...)
+		if sc.KeepFrom {
+			return nil
+		}
 		if _, _, err = s.closeSessionTx(tx, sc.From, sc.Close, at); err == nil {
 			_, err = tx.Exec(`UPDATE sessions SET agent_driver_plugin_name = '', agent_driver_run_id = '', agent_driver_report_seq = 0,
 				agent_driver_transcript_path = '' WHERE id = ?`, sc.From)
@@ -87,6 +92,9 @@ func (s *Store) CommitSuccession(sc Succession, terminal string) ([]profiles.Des
 	})
 	if err != nil {
 		return nil, err
+	}
+	if sc.KeepFrom {
+		return changed, nil
 	}
 	s.forgetSessionCost(sc.From)
 	s.mu.Lock()

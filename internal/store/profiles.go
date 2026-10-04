@@ -1470,23 +1470,43 @@ func removeSessionPlacement(tx *sql.Tx, now, sessionID string) ([]profiles.Deskt
 	}
 	var changed []profiles.Desktop
 	for _, tile := range tiles {
-		desktop, err := loadDesktop(tx, tile.desktopID)
+		desktop, err := removeTile(tx, now, tile)
 		if err != nil {
-			return nil, err
-		}
-		next, ok := layouttree.Remove(desktop.Tree, tile.tileID)
-		if !ok {
-			return nil, profiles.Errorf(profiles.CodeInvalid, "pane %s has a row on desktop %s but no leaf in its tree", tile.tileID, tile.desktopID)
-		}
-		desktop.Tree = next
-		desktop.Panes = withoutPane(desktop.Panes, tile.tileID)
-		if err := writeDesktopArrangement(tx, now, &desktop); err != nil {
 			return nil, err
 		}
 		changed = slices.DeleteFunc(changed, func(d profiles.Desktop) bool { return d.ID == desktop.ID })
 		changed = append(changed, desktop)
 	}
 	return changed, nil
+}
+
+func removeTile(tx *sql.Tx, now string, tile sessionTile) (profiles.Desktop, error) {
+	desktop, err := loadDesktop(tx, tile.desktopID)
+	if err != nil {
+		return desktop, err
+	}
+	next, ok := layouttree.Remove(desktop.Tree, tile.tileID)
+	if !ok {
+		return desktop, profiles.Errorf(profiles.CodeInvalid, "pane %s has a row on desktop %s but no leaf in its tree", tile.tileID, tile.desktopID)
+	}
+	desktop.Tree = next
+	desktop.Panes = withoutPane(desktop.Panes, tile.tileID)
+	return desktop, writeDesktopArrangement(tx, now, &desktop)
+}
+
+// RemoveTerminalTile removes the tile that shows terminal; removed is false when none does.
+func (s *Store) RemoveTerminalTile(terminal string) (desktop profiles.Desktop, removed bool, err error) {
+	err = s.profilesTx(func(tx *sql.Tx, now string) error {
+		var tile sessionTile
+		found, err := rowFound(tx.QueryRow(`SELECT desktop_id, pane_id FROM desktop_panes WHERE runtime_id = ?`, terminal), &tile.desktopID, &tile.tileID)
+		if err != nil || !found {
+			return err
+		}
+		desktop, err = removeTile(tx, now, tile)
+		removed = err == nil
+		return err
+	})
+	return desktop, removed, err
 }
 
 func (s *Store) unplaceSessionLocked(at time.Time, sessionID string) error {

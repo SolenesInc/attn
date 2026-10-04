@@ -49,50 +49,60 @@ func (d *Daemon) clearReloading(id harness.TerminalID) {
 	delete(d.reloadingTerminals, id)
 }
 
-type sessionLifecycleLockEntry struct {
+// sessionLocks holds one mutex per session id, kept only while a lease on it is out.
+type sessionLocks struct {
+	mu    sync.Mutex
+	locks map[string]*sessionLockEntry
+}
+
+type sessionLockEntry struct {
 	lock sync.Mutex
 	refs int
 }
 
-type sessionLifecycleLockLease struct {
-	d         *Daemon
+type sessionLockLease struct {
+	table     *sessionLocks
 	sessionID string
-	entry     *sessionLifecycleLockEntry
+	entry     *sessionLockEntry
 }
 
-func (l *sessionLifecycleLockLease) Lock() {
+func (l *sessionLockLease) Lock() {
 	l.entry.lock.Lock()
 }
 
-func (l *sessionLifecycleLockLease) Unlock() {
+func (l *sessionLockLease) Unlock() {
 	l.entry.lock.Unlock()
-	l.d.sessionLifecycleLocksMu.Lock()
-	defer l.d.sessionLifecycleLocksMu.Unlock()
+	l.table.mu.Lock()
+	defer l.table.mu.Unlock()
 	l.entry.refs--
-	if l.entry.refs == 0 && l.d.sessionLifecycleLocks[l.sessionID] == l.entry {
-		delete(l.d.sessionLifecycleLocks, l.sessionID)
+	if l.entry.refs == 0 && l.table.locks[l.sessionID] == l.entry {
+		delete(l.table.locks, l.sessionID)
 	}
 }
 
-func (d *Daemon) sessionLifecycleLockFor(sessionID string) *sessionLifecycleLockLease {
-	d.sessionLifecycleLocksMu.Lock()
-	defer d.sessionLifecycleLocksMu.Unlock()
-	if d.sessionLifecycleLocks == nil {
-		d.sessionLifecycleLocks = make(map[string]*sessionLifecycleLockEntry)
+func (t *sessionLocks) lease(sessionID string) *sessionLockLease {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.locks == nil {
+		t.locks = make(map[string]*sessionLockEntry)
 	}
-	entry := d.sessionLifecycleLocks[sessionID]
+	entry := t.locks[sessionID]
 	if entry == nil {
-		entry = &sessionLifecycleLockEntry{}
-		d.sessionLifecycleLocks[sessionID] = entry
+		entry = &sessionLockEntry{}
+		t.locks[sessionID] = entry
 	}
 	entry.refs++
-	return &sessionLifecycleLockLease{d: d, sessionID: sessionID, entry: entry}
+	return &sessionLockLease{table: t, sessionID: sessionID, entry: entry}
+}
+
+func (d *Daemon) sessionLifecycleLockFor(sessionID string) *sessionLockLease {
+	return d.sessionLifecycleLocks.lease(sessionID)
 }
 
 // lockSessionLifecycles takes the sessions' lifecycle locks in id order, so two handovers never wait on each other.
 func (d *Daemon) lockSessionLifecycles(ids ...string) (unlock func()) {
 	ids = slices.Compact(slices.Sorted(slices.Values(ids)))
-	leases := make([]*sessionLifecycleLockLease, 0, len(ids))
+	leases := make([]*sessionLockLease, 0, len(ids))
 	for _, id := range ids {
 		if id == "" {
 			continue
@@ -262,6 +272,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID string, opts ptybackend.
 	terminal := opts.ID
 	d.markReloading(terminal)
 	d.sessionInputs().fenceSession(sessionID)
+	unlockEnds := d.lockTerminalEnds(sessionID)
 
 	if killErr := d.ptyBackend.Kill(ctx, terminal, syscall.SIGTERM); killErr != nil {
 		d.logf("reload: kill returned error for %s (continuing): %v", sessionID, killErr)
@@ -273,6 +284,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID string, opts ptybackend.
 	d.persistReloadedConversation(sessionID, opts)
 	opts.DaemonEnv = d.spawnRoutingEnv()
 	if spawnErr := d.ptyBackend.Spawn(ctx, opts); spawnErr != nil {
+		unlockEnds()
 		d.logf("reload: respawn failed for %s: %v; finalizing as exited", sessionID, spawnErr)
 		d.clearReloading(terminal)
 		d.handlePTYExit(ptybackend.ExitInfo{ID: terminal, ExitCode: 1})
@@ -283,12 +295,14 @@ func (d *Daemon) executePreparedSessionReload(sessionID string, opts ptybackend.
 			d.logf("reload: activate plugin run failed for %s: %v; finalizing as exited", sessionID, commitErr)
 			_ = d.ptyBackend.Kill(ctx, terminal, syscall.SIGTERM)
 			_ = d.ptyBackend.Remove(ctx, terminal)
+			unlockEnds()
 			d.clearReloading(terminal)
 			d.closePluginDriverSession(sessionID, "reload_failed", nil, "")
 			d.handlePTYExit(ptybackend.ExitInfo{ID: terminal, ExitCode: 1})
 			return fmt.Errorf("activate plugin run failed for %s: %w", sessionID, commitErr)
 		}
 	}
+	unlockEnds()
 	d.sessionInputs().forgetSession(sessionID)
 	d.recordPlacedInputOwed(sessionID, false)
 
@@ -557,7 +571,7 @@ type preparedPluginRoleReload struct {
 	sessionID string
 	opts      ptybackend.SpawnOptions
 	plugin    *preparedPluginReload
-	lock      *sessionLifecycleLockLease
+	lock      *sessionLockLease
 	completed bool
 }
 
