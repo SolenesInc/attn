@@ -21,7 +21,7 @@ export function useQuickCaptureHistory(client: QuickCaptureDeliveryClient | unde
     }
     const api = current.current.client!;
     const epoch = generation.current;
-    const oldest = cursor ? undefined : current.current.history[current.current.history.length - 1]?.id;
+    const oldest = cursor || !current.current.open ? undefined : current.current.history[current.current.history.length - 1]?.id;
     setLoading(true);
     const operation = (async () => {
       try {
