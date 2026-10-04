@@ -147,7 +147,7 @@ func (d *Daemon) actionAutomationApply(ctx context.Context, msg *protocol.Automa
 		Event:     protocol.EventAutomationApplyResult,
 		RequestID: msg.RequestID,
 	}
-	if scope != "" && protocol.Deref(msg.ProfileID) == "" {
+	if scope != "" {
 		msg.ProfileID = protocol.Ptr(scope)
 	}
 	definition, err := d.automationApplyWithGuards(ctx, msg.DefinitionYaml, protocol.Deref(msg.ProfileID), scope, msg.ExpectedID, msg.ExpectedRevision, &launchDesktopWrite{ref: msg.LaunchDesktop, name: msg.LaunchDesktopName, setting: msg.LaunchDesktopSetting})
@@ -344,21 +344,19 @@ func automationNotFound(id int) string {
 	return fmt.Sprintf("automation %d not found", id)
 }
 
-// automationSocketScope is the profile of the agent a socket request names, or no scope for the user's own terminal.
-func (d *Daemon) automationSocketScope(msg any) string {
+// automationSocketScope uses the same profile selection as Garden socket requests.
+func (d *Daemon) automationSocketScope(msg any) (string, error) {
 	raw, err := json.Marshal(msg)
 	if err != nil {
-		return ""
+		return "", err
 	}
 	var caller struct {
 		SourceSessionID string `json:"source_session_id"`
+		ProfileID       string `json:"profile_id"`
 	}
-	if json.Unmarshal(raw, &caller) != nil || strings.TrimSpace(caller.SourceSessionID) == "" {
-		return ""
+	if err := json.Unmarshal(raw, &caller); err != nil {
+		return "", err
 	}
-	profileID, err := d.sessionProfileID(caller.SourceSessionID)
-	if err != nil {
-		return ""
-	}
-	return profileID
+	profile, err := d.resolveGardenProfile(caller.SourceSessionID, caller.ProfileID, "")
+	return profile.ID, err
 }

@@ -1,0 +1,3 @@
+kind: fixed
+area: automations
+change: Automation commands in a plain terminal select the sole profile or require --profile when several exist, and cannot act on another profile's automations.

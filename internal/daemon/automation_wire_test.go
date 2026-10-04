@@ -577,9 +577,10 @@ func TestAutomationIDsAreAssignedAcrossProfilesAndNeverReused(t *testing.T) {
 	if _, err := cli.AutomationApply(automationEditSpec(999, manualAutomation(w, "Caller chosen ID."))); err == nil {
 		t.Fatal("caller chose a new identity")
 	}
-	if _, err := cli.WithGardenProfile(side.ID, "").AutomationApply(automationEditSpec(first.ID, manualAutomation(w, "Edited from Side."))); err != nil {
-		t.Fatal(err)
+	if _, err := cli.WithGardenProfile(side.ID, "").AutomationApply(automationEditSpec(first.ID, manualAutomation(w, "Edited from Side."))); err == nil {
+		t.Fatal("Side edited Default's automation")
 	}
+	cli = cli.WithGardenProfile(side.ID, "")
 	if err := cli.AutomationDelete(second.ID); err != nil {
 		t.Fatal(err)
 	}

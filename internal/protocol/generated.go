@@ -1019,6 +1019,9 @@ type AutomationCleanupMessage struct {
 	// DefinitionID corresponds to the JSON schema field "definition_id".
 	DefinitionID int `json:"definition_id"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 
@@ -1055,6 +1058,9 @@ type AutomationDefinitionGetMessage struct {
 
 	// DefinitionID corresponds to the JSON schema field "definition_id".
 	DefinitionID int `json:"definition_id"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
@@ -1128,6 +1134,9 @@ type AutomationDefinitionsGetMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 
@@ -1158,6 +1167,9 @@ type AutomationDeleteMessage struct {
 
 	// DefinitionID corresponds to the JSON schema field "definition_id".
 	DefinitionID int `json:"definition_id"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
@@ -1209,6 +1221,9 @@ type AutomationRunMessage struct {
 
 	// PRURL corresponds to the JSON schema field "pr_url".
 	PRURL *string `json:"pr_url,omitempty,omitzero"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
@@ -1279,6 +1294,9 @@ type AutomationRunsGetMessage struct {
 	// DefinitionID corresponds to the JSON schema field "definition_id".
 	DefinitionID int `json:"definition_id"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 
@@ -1318,6 +1336,9 @@ type AutomationSetEnabledMessage struct {
 
 	// Enabled corresponds to the JSON schema field "enabled".
 	Enabled bool `json:"enabled"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
@@ -5586,11 +5607,17 @@ type LaunchDesktopSetMessage struct {
 	// Kind corresponds to the JSON schema field "kind".
 	Kind LaunchDesktopKind `json:"kind"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
 
 	// Setting corresponds to the JSON schema field "setting".
 	Setting *LaunchDesktopSetting `json:"setting,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
 }
 
 type LaunchDesktopSetting struct {
