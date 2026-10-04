@@ -51,8 +51,8 @@ async function main() {
   const sessions = [];
   const captureId = randomUUID(), attachmentId = randomUUID();
   const pdfId = randomUUID();
-  const imageOut = path.join(runner.sessionDir, 'recipient-quick_capture.png');
-  const pdfOut = path.join(runner.sessionDir, 'recipient-quick_capture.pdf');
+  const imageOut = path.join(runner.sessionDir, 'agent-quick-capture.png');
+  const pdfOut = path.join(runner.sessionDir, 'agent-quick-capture.pdf');
   const crewName = `promptprobe-${randomUUID().slice(0, 8)}`;
   const crewLabel = `Promptprobe${crewName.slice('promptprobe'.length)}`;
   const crewHome = path.join(resources.dataDir, 'crew', crewName);
@@ -82,7 +82,7 @@ async function main() {
             { type: 'attn', args: ['agent', 'inbox'] },
             ...(chief ? [{ type: 'attn', args: ['agent', 'attachment', captureId, attachmentId, '--out', imageOut] }] : []),
             ...(chief ? [{ type: 'attn', args: ['agent', 'attachment', captureId, pdfId, '--out', pdfOut] }] : []),
-            { type: 'reply', text: chief ? 'USER_MESSAGE_READ' : 'PEER_READ', state: 'idle' },
+            { type: 'reply', text: chief ? 'QUICK_CAPTURE_READ' : 'PEER_READ', state: 'idle' },
           ],
         }] });
         const result = await client.request('create_session', { cwd, label: name, agent, chief_of_staff: chief });

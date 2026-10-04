@@ -108,7 +108,7 @@ func TestQuickCaptureRestartAndCLIFileRetrieval(t *testing.T) {
 		t.Fatalf("downloaded bytes differ: %v", err)
 	}
 	if _, format, err := image.Decode(bytes.NewReader(saved)); err != nil || format != "png" {
-		t.Fatalf("recipient image decode %s %v", format, err)
+		t.Fatalf("agent image decode %s %v", format, err)
 	}
 	again := s.Attn("agent", "attachment", quickCapture, id, "--out", output)
 	if again.Code == 0 {
