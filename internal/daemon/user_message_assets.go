@@ -82,7 +82,7 @@ func (d *Daemon) userMessagePut(profileID string, msg *protocol.UserMessageAttac
 			return nil, fmt.Errorf("next_offset=0, asked for %d", msg.Offset)
 		}
 		if _, err := d.store.UserMessage(profileID, msg.MessageID); err == nil {
-			return nil, fmt.Errorf("userMessage %s is already saved", msg.MessageID)
+			return nil, fmt.Errorf("user message %s is already saved", msg.MessageID)
 		}
 		a = &store.UserMessageAsset{ProfileID: profileID, MessageID: msg.MessageID, Attachment: protocol.UserMessageAttachment{ID: msg.AttachmentID, Name: msg.Name}, State: "staged"}
 		if err := d.store.SaveUserMessageAsset(*a); err != nil {

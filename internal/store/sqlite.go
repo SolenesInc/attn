@@ -1382,7 +1382,7 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
  BEGIN UPDATE sessions SET last_desktop_id = (SELECT desktop_id FROM desktop_panes WHERE session_id = OLD.session_id
  ORDER BY created_at DESC, pane_id DESC LIMIT 1) WHERE id = OLD.session_id; END;
 `},
-	{171, "durable user user messages and file manifests", `
+	{171, "durable user messages and file manifests", `
  CREATE TABLE user_messages (
  profile_id TEXT NOT NULL, id TEXT NOT NULL, inbox_item_id TEXT NOT NULL UNIQUE, submission TEXT NOT NULL, target_kind TEXT NOT NULL,
  target_member_id TEXT NOT NULL DEFAULT '', body TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(profile_id,id)

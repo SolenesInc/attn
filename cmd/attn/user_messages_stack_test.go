@@ -203,5 +203,5 @@ func TestDamagedUserMessageDraftDoesNotBlockDaemonRestart(t *testing.T) {
 	if len(list.List.DraftAssets) != 0 {
 		t.Fatalf("discard retained the damaged draft: %+v", list.List)
 	}
-	userMessageCall(t, app, protocol.UserMessageSendMessage{Cmd: protocol.CmdUserMessageSend, MessageID: uuid.NewString(), Target: protocol.UserMessageTarget{Kind: protocol.UserMessageTargetKindChief}, Content: "A damaged draft must not block other userMessages."})
+	userMessageCall(t, app, protocol.UserMessageSendMessage{Cmd: protocol.CmdUserMessageSend, MessageID: uuid.NewString(), Target: protocol.UserMessageTarget{Kind: protocol.UserMessageTargetKindChief}, Content: "A damaged draft must not block other user messages."})
 }
