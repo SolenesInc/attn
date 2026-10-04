@@ -1,5 +1,8 @@
 # attn
 
+Always read [docs/glossary.md](docs/glossary.md) to understand and change attn
+internals. It is attn's domain model.
+
 attn stands for Attention: an interface friendly to both human and agent
 brains, built as a harness augmenter. What it does today, and what each part
 asks of you as a maintainer:
@@ -213,8 +216,6 @@ covering changed behavior, latency, and keyboard flow.
 - Read [testing.md](docs/testing.md) before writing, changing, or deleting tests.
 - Read [harnesses.md](docs/harnesses.md) before relying on how a harness behaves;
   check new claims in its source or with a probe and record them there.
-- Read [glossary.md](docs/glossary.md) before naming domain concepts; update
-  definitions and implementation together.
 - Read [working-with-next.md](docs/working-with-next.md) before creating
   branches, opening or merging PRs, or waiting on reviews.
 - Read [making-a-release.md](docs/making-a-release.md) before adding changelog
