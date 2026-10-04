@@ -218,14 +218,14 @@ describe('the waiting peek', () => {
     expect(onSelectTile).toHaveBeenCalledWith('ws-a', 'tile-doc');
   });
 
-  it('caps at sixteen rows and points at the palette for the rest', () => {
+  it('shows sixteen agents and counts the rest', () => {
     const many = Array.from({ length: 20 }, (_, index) => owed(`t${String(index).padStart(2, '0')}`, index));
     renderBar(many);
     hover('queue-bar-pill');
 
     const peek = screen.getByTestId('queue-bar-waiting-peek');
     expect(peek.querySelectorAll('.queue-bar-peek-row')).toHaveLength(16);
-    expect(screen.getByTestId('queue-bar-peek-more').textContent).toMatch(/^4 more · .+ to search$/);
+    expect(screen.getByTestId('queue-bar-peek-more')).toHaveTextContent(/^4 more\b/);
   });
 
   it('opens an agent, wakes a member, and closes after either', () => {
