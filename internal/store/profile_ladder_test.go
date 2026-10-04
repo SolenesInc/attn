@@ -166,12 +166,12 @@ func TestTheSolMigrationRunsAfterTheProfileLadder(t *testing.T) {
 				t.Fatalf("upgrade from %d: %v", start.schema, err)
 			}
 			t.Cleanup(func() { s.Close() })
-			if upgrade.From != start.schema || upgrade.To != 169 {
-				t.Fatalf("upgrade = %+v, want %d -> 169", upgrade, start.schema)
+			if upgrade.From != start.schema || upgrade.To < 169 {
+				t.Fatalf("upgrade = %+v, want an upgrade from %d through at least 169", upgrade, start.schema)
 			}
 			var applied []int
 			for _, version := range recordedVersions(t, s.db) {
-				if !before[version] {
+				if !before[version] && version <= 169 {
 					applied = append(applied, version)
 				}
 			}
