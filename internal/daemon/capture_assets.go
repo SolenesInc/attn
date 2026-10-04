@@ -22,8 +22,8 @@ func captureID(id string) error {
 	}
 	return nil
 }
-func (d *Daemon) captureAssetPaths(capture, id string) (string, string) {
-	root := filepath.Join(d.dataRoot, "captures")
+func (d *Daemon) captureAssetPaths(profileID, capture, id string) (string, string) {
+	root := filepath.Join(d.dataRoot, "captures", profileID)
 	return filepath.Join(root, ".staging", capture, id+".part"), filepath.Join(root, capture, id)
 }
 func syncCaptureDir(path string) error {
@@ -57,7 +57,7 @@ func captureFile(path, name string) (string, int, error) {
 	}
 	return media, int(stat.Size()), nil
 }
-func (d *Daemon) capturePut(msg *protocol.CaptureAttachmentPutMessage) (*protocol.CaptureAttachmentPutResult, error) {
+func (d *Daemon) capturePut(profileID string, msg *protocol.CaptureAttachmentPutMessage) (*protocol.CaptureAttachmentPutResult, error) {
 	if err := captureID(msg.CaptureID); err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func (d *Daemon) capturePut(msg *protocol.CaptureAttachmentPutMessage) (*protoco
 	}
 	d.captureAssetMu.Lock()
 	defer d.captureAssetMu.Unlock()
-	a, err := d.store.CaptureAsset(msg.CaptureID, msg.AttachmentID)
+	a, err := d.store.CaptureAsset(profileID, msg.CaptureID, msg.AttachmentID)
 	if err != nil {
 		return nil, err
 	}
@@ -81,10 +81,10 @@ func (d *Daemon) capturePut(msg *protocol.CaptureAttachmentPutMessage) (*protoco
 		if msg.Offset != 0 {
 			return nil, fmt.Errorf("next_offset=0, asked for %d", msg.Offset)
 		}
-		if _, err := d.store.Capture(msg.CaptureID); err == nil {
+		if _, err := d.store.Capture(profileID, msg.CaptureID); err == nil {
 			return nil, fmt.Errorf("capture %s is already saved", msg.CaptureID)
 		}
-		a = &store.CaptureAsset{CaptureID: msg.CaptureID, Attachment: protocol.CaptureAttachment{ID: msg.AttachmentID, Name: msg.Name}, State: "staged"}
+		a = &store.CaptureAsset{ProfileID: profileID, CaptureID: msg.CaptureID, Attachment: protocol.CaptureAttachment{ID: msg.AttachmentID, Name: msg.Name}, State: "staged"}
 		if err := d.store.SaveCaptureAsset(*a); err != nil {
 			return nil, err
 		}
@@ -95,7 +95,7 @@ func (d *Daemon) capturePut(msg *protocol.CaptureAttachmentPutMessage) (*protoco
 	if a.State == "discarded" {
 		return nil, fmt.Errorf("attachment %s was discarded; upload with a new identity", msg.AttachmentID)
 	}
-	stage, final := d.captureAssetPaths(msg.CaptureID, msg.AttachmentID)
+	stage, final := d.captureAssetPaths(profileID, msg.CaptureID, msg.AttachmentID)
 	if a.State == "staged" {
 		if _, err := os.Stat(final); err == nil {
 			media, size, err := captureFile(final, a.Attachment.Name)
@@ -175,7 +175,7 @@ func (d *Daemon) capturePut(msg *protocol.CaptureAttachmentPutMessage) (*protoco
 	if err := f.Sync(); err != nil {
 		return nil, err
 	}
-	for _, dir := range []string{filepath.Dir(stage), filepath.Dir(filepath.Dir(stage)), filepath.Dir(filepath.Dir(filepath.Dir(stage))), d.dataRoot} {
+	for _, dir := range []string{filepath.Dir(stage), filepath.Dir(filepath.Dir(stage)), filepath.Dir(filepath.Dir(filepath.Dir(stage))), filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(stage)))), d.dataRoot} {
 		if err := syncCaptureDir(dir); err != nil {
 			return nil, err
 		}
@@ -208,7 +208,7 @@ func (d *Daemon) capturePut(msg *protocol.CaptureAttachmentPutMessage) (*protoco
 	}
 	return &protocol.CaptureAttachmentPutResult{NextOffset: size, Attachment: &a.Attachment}, nil
 }
-func (d *Daemon) captureDownload(msg *protocol.CaptureAttachmentGetMessage, chunkBytes int) (*protocol.CaptureAttachmentGetResult, error) {
+func (d *Daemon) captureDownload(profileID string, msg *protocol.CaptureAttachmentGetMessage, chunkBytes int) (*protocol.CaptureAttachmentGetResult, error) {
 	if err := captureID(msg.CaptureID); err != nil {
 		return nil, err
 	}
@@ -217,7 +217,7 @@ func (d *Daemon) captureDownload(msg *protocol.CaptureAttachmentGetMessage, chun
 	}
 	d.captureAssetMu.Lock()
 	defer d.captureAssetMu.Unlock()
-	a, err := d.store.CaptureAsset(msg.CaptureID, msg.AttachmentID)
+	a, err := d.store.CaptureAsset(profileID, msg.CaptureID, msg.AttachmentID)
 	if err != nil {
 		return nil, err
 	}
@@ -227,7 +227,7 @@ func (d *Daemon) captureDownload(msg *protocol.CaptureAttachmentGetMessage, chun
 	if msg.Offset < 0 || msg.Offset > a.Attachment.Bytes {
 		return nil, fmt.Errorf("attachment bytes=%d, asked for offset %d", a.Attachment.Bytes, msg.Offset)
 	}
-	_, path := d.captureAssetPaths(msg.CaptureID, msg.AttachmentID)
+	_, path := d.captureAssetPaths(profileID, msg.CaptureID, msg.AttachmentID)
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -241,7 +241,7 @@ func (d *Daemon) captureDownload(msg *protocol.CaptureAttachmentGetMessage, chun
 	next := msg.Offset + size
 	return &protocol.CaptureAttachmentGetResult{DataBase64: base64.StdEncoding.EncodeToString(data), NextOffset: next, Eof: next == a.Attachment.Bytes}, nil
 }
-func (d *Daemon) captureDiscard(msg *protocol.CaptureAttachmentDiscardMessage) error {
+func (d *Daemon) captureDiscard(profileID string, msg *protocol.CaptureAttachmentDiscardMessage) error {
 	if err := captureID(msg.CaptureID); err != nil {
 		return err
 	}
@@ -250,7 +250,7 @@ func (d *Daemon) captureDiscard(msg *protocol.CaptureAttachmentDiscardMessage) e
 	}
 	d.captureAssetMu.Lock()
 	defer d.captureAssetMu.Unlock()
-	a, err := d.store.CaptureAsset(msg.CaptureID, msg.AttachmentID)
+	a, err := d.store.CaptureAsset(profileID, msg.CaptureID, msg.AttachmentID)
 	if err != nil {
 		return err
 	}
@@ -264,7 +264,7 @@ func (d *Daemon) captureDiscard(msg *protocol.CaptureAttachmentDiscardMessage) e
 	if err := d.store.SaveCaptureAsset(*a); err != nil {
 		return err
 	}
-	stage, final := d.captureAssetPaths(msg.CaptureID, msg.AttachmentID)
+	stage, final := d.captureAssetPaths(profileID, msg.CaptureID, msg.AttachmentID)
 	for _, path := range []string{stage, final} {
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 			return err
@@ -275,19 +275,31 @@ func (d *Daemon) captureDiscard(msg *protocol.CaptureAttachmentDiscardMessage) e
 func (d *Daemon) recoverCaptureAssets() error {
 	d.captureAssetMu.Lock()
 	defer d.captureAssetMu.Unlock()
-	discarded, err := d.store.CaptureDiscardedAssets()
+	profiles, err := d.store.ListProfiles(true)
+	if err != nil {
+		return err
+	}
+	for _, profile := range profiles {
+		if err := d.recoverCaptureProfileAssets(profile.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+func (d *Daemon) recoverCaptureProfileAssets(profileID string) error {
+	discarded, err := d.store.CaptureDiscardedAssets(profileID)
 	if err != nil {
 		return err
 	}
 	for _, a := range discarded {
-		stage, final := d.captureAssetPaths(a.CaptureID, a.AttachmentID)
+		stage, final := d.captureAssetPaths(profileID, a.CaptureID, a.AttachmentID)
 		for _, path := range []string{stage, final} {
 			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 				return err
 			}
 		}
 	}
-	assets, err := d.store.CaptureDraftAssets()
+	assets, err := d.store.CaptureDraftAssets(profileID)
 	if err != nil {
 		return err
 	}
@@ -295,16 +307,16 @@ func (d *Daemon) recoverCaptureAssets() error {
 		if draft.State != "staged" {
 			continue
 		}
-		_, final := d.captureAssetPaths(draft.CaptureID, draft.AttachmentID)
+		_, final := d.captureAssetPaths(profileID, draft.CaptureID, draft.AttachmentID)
 		media, size, err := captureFile(final, draft.Name)
 		if os.IsNotExist(err) {
-			stage, _ := d.captureAssetPaths(draft.CaptureID, draft.AttachmentID)
+			stage, _ := d.captureAssetPaths(profileID, draft.CaptureID, draft.AttachmentID)
 			if info, err := os.Stat(stage); err == nil {
-				if err := d.store.SaveCaptureAsset(store.CaptureAsset{CaptureID: draft.CaptureID, Attachment: protocol.CaptureAttachment{ID: draft.AttachmentID, Name: draft.Name, Bytes: int(info.Size())}, State: "staged"}); err != nil {
+				if err := d.store.SaveCaptureAsset(store.CaptureAsset{ProfileID: profileID, CaptureID: draft.CaptureID, Attachment: protocol.CaptureAttachment{ID: draft.AttachmentID, Name: draft.Name, Bytes: int(info.Size())}, State: "staged"}); err != nil {
 					return err
 				}
 			} else if os.IsNotExist(err) {
-				if err := d.store.SaveCaptureAsset(store.CaptureAsset{CaptureID: draft.CaptureID, Attachment: protocol.CaptureAttachment{ID: draft.AttachmentID, Name: draft.Name}, State: "staged"}); err != nil {
+				if err := d.store.SaveCaptureAsset(store.CaptureAsset{ProfileID: profileID, CaptureID: draft.CaptureID, Attachment: protocol.CaptureAttachment{ID: draft.AttachmentID, Name: draft.Name}, State: "staged"}); err != nil {
 					return err
 				}
 			} else {
@@ -323,7 +335,7 @@ func (d *Daemon) recoverCaptureAssets() error {
 			d.logf("capture recovery left attachment %s staged: sync directory: %v", draft.AttachmentID, err)
 			continue
 		}
-		if err := d.store.SaveCaptureAsset(store.CaptureAsset{CaptureID: draft.CaptureID, Attachment: protocol.CaptureAttachment{ID: draft.AttachmentID, Name: draft.Name, MediaType: media, Bytes: size}, State: "ready"}); err != nil {
+		if err := d.store.SaveCaptureAsset(store.CaptureAsset{ProfileID: profileID, CaptureID: draft.CaptureID, Attachment: protocol.CaptureAttachment{ID: draft.AttachmentID, Name: draft.Name, MediaType: media, Bytes: size}, State: "ready"}); err != nil {
 			return err
 		}
 	}

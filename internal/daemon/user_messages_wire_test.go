@@ -245,7 +245,7 @@ func TestCaptureAuthoringRequiresTheTrustedAppIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	hello := protocol.ClientHelloMessage{Cmd: protocol.CmdClientHello, ClientKind: "tauri-app", Version: "protocol-" + protocol.ProtocolVersion, ClientToken: protocol.Ptr(config.ClientToken()), Capabilities: []string{protocol.CapabilityWorkspaceSessions}}
+	hello := protocol.ClientHelloMessage{Cmd: protocol.CmdClientHello, ClientKind: "tauri-app", Version: "protocol-" + protocol.ProtocolVersion, ClientToken: protocol.Ptr(config.ClientToken()), Capabilities: []string{}}
 	peers := []*testworld.Peer{w.App()}
 	p := w.Connect(hello, http.Header{"Origin": {"tauri://localhost"}})
 	testworld.Await[protocol.InitialStateMessage](p, protocol.EventInitialState, nil)
@@ -297,7 +297,7 @@ func TestUserCaptureWaitsForTheNextChief(t *testing.T) {
 		t.Fatal("inspection marked capture read")
 	}
 	items := readInbox(t, cli, "chief", 0).Items
-	if len(items) != 1 || items[0].Kind != "user_message" || items[0].Content != msg.Content || items[0].SenderSessionID != nil || items[0].Address != "role:chief" {
+	if len(items) != 1 || items[0].Kind != "user_message" || items[0].Content != msg.Content || items[0].SenderSessionID != nil || items[0].Address != "chief:"+app.SelectedProfile() {
 		t.Fatalf("user attribution: %+v", items)
 	}
 	if r := captureRecord(t, app, msg.CaptureID); r.ReadAt == nil || *r.ReadAt != items[0].ReadAt {
@@ -352,6 +352,109 @@ func TestUserCaptureDeliveryWakeIsChargedOnce(t *testing.T) {
 		}
 		if r := captureRecord(t, app, third.CaptureID); r.ReadAt != nil || r.Content != third.Content {
 			t.Fatalf("wake limit lost capture: %+v", r)
+		}
+	})
+}
+
+func TestCapturesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		a := w.TrustedApp()
+		profileA := a.SelectedProfile()
+		profileB := createProfile(w.App(), "Other captures").ID
+		b := w.TrustedApp(profileB)
+		cli := w.Client()
+		for _, chief := range []struct {
+			id, profile string
+			app         *testworld.Peer
+		}{{"chief-a", profileA, a}, {"chief-b", profileB, b}} {
+			if err := w.InjectSession(chief.id, chief.id, w.Path(chief.id), protocol.SessionAgentClaude, chief.profile); err != nil {
+				t.Fatal(err)
+			}
+			if r := setChiefOfStaff(chief.app, chief.id, true); !r.Success {
+				t.Fatal(r)
+			}
+		}
+		capture, file, draft := uuid.NewString(), uuid.NewString(), uuid.NewString()
+		bytesA, bytesB := []byte("profile A file"), []byte("profile B file")
+		uploadCapture(t, a, capture, file, bytesA, true)
+		uploadCapture(t, a, draft, file, bytesA, true)
+		msg := protocol.CaptureSendMessage{Cmd: protocol.CmdCaptureSend, CaptureID: capture, Target: protocol.CaptureTarget{Kind: protocol.CaptureTargetKindChief}, Content: "A request", AttachmentIds: []string{file}}
+		if _, err := a.Capture(msg); err != nil {
+			t.Fatal(err)
+		}
+		testworld.Await[protocol.CaptureChangedMessage](a, protocol.EventCaptureChanged, func(e protocol.CaptureChangedMessage) bool { return e.CaptureID == capture && e.ProfileID == profileA })
+		if _, err := b.Capture(protocol.CaptureGetMessage{Cmd: protocol.CmdCaptureGet, CaptureID: capture}); client.ErrorCode(err) != protocol.ErrorCodeCaptureNotFound {
+			t.Fatalf("other-profile get: %v", err)
+		}
+		if _, err := b.Capture(protocol.CaptureAttachmentGetMessage{Cmd: protocol.CmdCaptureAttachmentGet, CaptureID: capture, AttachmentID: file}); err == nil {
+			t.Fatal("other profile downloaded file")
+		}
+		if _, err := cli.WithGardenProfile(profileB, "chief-b").Capture(protocol.CaptureAttachmentGetMessage{Cmd: protocol.CmdCaptureAttachmentGet, CaptureID: capture, AttachmentID: file}); err == nil {
+			t.Fatal("other-profile CLI downloaded file")
+		}
+		if _, _, err := cli.AgentInboxEntry(capture, "chief-b"); err == nil {
+			t.Fatal("other Chief read A capture")
+		}
+		if got := readInbox(t, cli, "chief-b", 0); len(got.Items) != 0 {
+			t.Fatalf("other Chief received A capture: %+v", got)
+		}
+		list, err := b.Capture(protocol.CaptureListMessage{Cmd: protocol.CmdCaptureList, Limit: 1})
+		if err != nil || len(list.List.Items) != 0 || len(list.List.DraftAssets) != 0 {
+			t.Fatalf("other-profile history: %+v %v", list, err)
+		}
+		if _, err := b.Capture(protocol.CaptureListMessage{Cmd: protocol.CmdCaptureList, Limit: 1, Cursor: &capture}); err == nil {
+			t.Fatal("other profile used A cursor")
+		}
+		if _, err := b.Capture(protocol.CaptureAttachmentDiscardMessage{Cmd: protocol.CmdCaptureAttachmentDiscard, CaptureID: draft, AttachmentID: file}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := a.Capture(protocol.CaptureAttachmentGetMessage{Cmd: protocol.CmdCaptureAttachmentGet, CaptureID: draft, AttachmentID: file}); err != nil {
+			t.Fatalf("other-profile discard deleted A file: %v", err)
+		}
+		synctest.Wait()
+		for _, event := range b.Received() {
+			if event.Event == protocol.EventCaptureChanged {
+				t.Fatalf("other profile got capture event: %+v", event)
+			}
+		}
+		// Identical public identities remain independent, including inbox receipts and bytes.
+		uploadCapture(t, b, capture, file, bytesB, true)
+		msg.Content = "B request"
+		if _, err := b.Capture(msg); err != nil {
+			t.Fatal(err)
+		}
+		itemsB := readInbox(t, cli, "chief-b", 0).Items
+		if len(itemsB) != 1 || itemsB[0].Content != "B request" {
+			t.Fatalf("B inbox: %+v", itemsB)
+		}
+		if r := captureRecord(t, a, capture); r.ReadAt != nil {
+			t.Fatal("B read A receipt")
+		}
+		itemsA := readInbox(t, cli, "chief-a", 0).Items
+		if len(itemsA) != 1 || itemsA[0].Content != "A request" {
+			t.Fatalf("A inbox: %+v", itemsA)
+		}
+		w.restart()
+		for _, owner := range []struct {
+			profile string
+			bytes   []byte
+		}{{profileA, bytesA}, {profileB, bytesB}} {
+			app := w.TrustedApp(owner.profile)
+			r, err := app.Capture(protocol.CaptureAttachmentGetMessage{Cmd: protocol.CmdCaptureAttachmentGet, CaptureID: capture, AttachmentID: file})
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := base64.StdEncoding.DecodeString(r.Download.DataBase64)
+			if err != nil || !bytes.Equal(got, owner.bytes) {
+				t.Fatalf("profile %s bytes=%q, %v", owner.profile, got, err)
+			}
+			if captureRecord(t, app, capture).ReadAt == nil {
+				t.Fatal("read receipt lost on restart")
+			}
+		}
+		b = w.TrustedApp(profileB)
+		if _, err := b.Capture(protocol.CaptureSendMessage{Cmd: protocol.CmdCaptureSend, ProfileID: &profileA, CaptureID: uuid.NewString(), Target: msg.Target, Content: "queued A request", AttachmentIds: []string{}}); err == nil {
+			t.Fatal("profile switch redirected queued capture")
 		}
 	})
 }

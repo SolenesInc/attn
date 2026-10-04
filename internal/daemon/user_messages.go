@@ -15,7 +15,7 @@ import (
 
 const FactCaptureChanged = "capture.changed"
 
-func (d *Daemon) validateCaptureTarget(target protocol.CaptureTarget) (inbox.Address, error) {
+func (d *Daemon) validateCaptureTarget(profileID string, target protocol.CaptureTarget) (inbox.Address, error) {
 	switch target.Kind {
 	case protocol.CaptureTargetKindChief:
 		if target.MemberID != nil {
@@ -29,6 +29,9 @@ func (d *Daemon) validateCaptureTarget(target protocol.CaptureTarget) (inbox.Add
 		if err != nil {
 			return inbox.Address{}, err
 		}
+		if d.crewProfileID(member.ID) != profileID {
+			return inbox.Address{}, fmt.Errorf("crew member %q not found in this profile", *target.MemberID)
+		}
 		if member.ID != *target.MemberID {
 			return inbox.Address{}, fmt.Errorf("member_id must be the stable roster identity %q", member.ID)
 		}
@@ -36,7 +39,7 @@ func (d *Daemon) validateCaptureTarget(target protocol.CaptureTarget) (inbox.Add
 		return inbox.Address{}, fmt.Errorf("unknown capture target kind %q", target.Kind)
 	}
 	if target.Kind == protocol.CaptureTargetKindChief {
-		return inbox.ToChief(), nil
+		return inbox.ToChief(profileID), nil
 	}
 	return inbox.ToMember(*target.MemberID), nil
 }
@@ -57,7 +60,7 @@ func captureRequestID(msg any) string {
 	}
 	return ""
 }
-func (d *Daemon) captureRequest(msg any, transportBytes int) (*protocol.CaptureResult, error) {
+func (d *Daemon) captureRequest(profileID string, msg any, transportBytes int) (*protocol.CaptureResult, error) {
 	if err := d.requireHome("Quick Capture"); err != nil {
 		return nil, err
 	}
@@ -69,12 +72,12 @@ func (d *Daemon) captureRequest(msg any, transportBytes int) (*protocol.CaptureR
 		if m.AttachmentIds == nil {
 			m.AttachmentIds = []string{}
 		}
-		replay, err := d.store.CaptureReplay(*m)
+		replay, err := d.store.CaptureReplay(profileID, *m)
 		if err != nil {
 			return nil, err
 		}
 		if !replay {
-			to, err := d.validateCaptureTarget(m.Target)
+			to, err := d.validateCaptureTarget(profileID, m.Target)
 			if err != nil {
 				return nil, err
 			}
@@ -92,41 +95,45 @@ func (d *Daemon) captureRequest(msg any, transportBytes int) (*protocol.CaptureR
 				seen[id] = true
 			}
 			d.captureAssetMu.Lock()
-			err = d.store.SaveCapture(*m, to, time.Now())
+			err = d.store.SaveCapture(profileID, *m, to, time.Now())
 			d.captureAssetMu.Unlock()
 			if err != nil {
 				return nil, err
 			}
 			crashAt("capture-saved")
-			d.publishFact(FactCaptureChanged, m.CaptureID, nil)
+			d.publishCaptureChanged(profileID, m.CaptureID)
 			d.kickInboxAfterCommit(to)
 		}
-		r, err := d.store.Capture(m.CaptureID)
+		r, err := d.store.Capture(profileID, m.CaptureID)
 		return &protocol.CaptureResult{Record: r}, err
 	case *protocol.CaptureGetMessage:
-		r, err := d.store.Capture(m.CaptureID)
+		r, err := d.store.Capture(profileID, m.CaptureID)
 		return &protocol.CaptureResult{Record: r}, err
 	case *protocol.CaptureListMessage:
-		items, next, err := d.store.Captures(m.Limit, protocol.Deref(m.Cursor))
+		items, next, err := d.store.Captures(profileID, m.Limit, protocol.Deref(m.Cursor))
 		if err != nil {
 			return nil, err
 		}
-		drafts, err := d.store.CaptureDraftAssets()
+		drafts, err := d.store.CaptureDraftAssets(profileID)
 		return &protocol.CaptureResult{List: &protocol.CaptureListResult{Items: items, DraftAssets: drafts, NextCursor: next}}, err
 	case *protocol.CaptureAttachmentPutMessage:
-		upload, err := d.capturePut(m)
+		upload, err := d.capturePut(profileID, m)
 		return &protocol.CaptureResult{Upload: upload}, err
 	case *protocol.CaptureAttachmentGetMessage:
-		download, err := d.captureDownload(m, transportBytes/2)
+		download, err := d.captureDownload(profileID, m, transportBytes/2)
 		return &protocol.CaptureResult{Download: download}, err
 	case *protocol.CaptureAttachmentDiscardMessage:
-		err := d.captureDiscard(m)
+		err := d.captureDiscard(profileID, m)
 		return &protocol.CaptureResult{Discarded: protocol.Ptr(err == nil)}, err
 	}
 	return nil, fmt.Errorf("unknown capture operation")
 }
 func (d *Daemon) handleCapture(conn net.Conn, msg any) {
-	result, err := d.captureRequest(msg, maxInitialSocketFrameBytes)
+	profileID, err := d.captureProfile(msg, "")
+	var result *protocol.CaptureResult
+	if err == nil {
+		result, err = d.captureRequest(profileID, msg, maxInitialSocketFrameBytes)
+	}
 	response := protocol.Response{Ok: err == nil, CaptureResult: result}
 	if err != nil {
 		response.Error = protocol.Ptr(err.Error())
@@ -136,13 +143,17 @@ func (d *Daemon) handleCapture(conn net.Conn, msg any) {
 	}
 	_ = json.NewEncoder(conn).Encode(response)
 }
-func (d *Daemon) handleCaptureWS(client *wsClient, msg any) {
+func (d *Daemon) handleCaptureWS(client *wsClient, selected string, msg any) {
 	if _, download := msg.(*protocol.CaptureAttachmentGetMessage); !download && !client.isTrustedAppClient() {
-		d.sendToClient(client, protocol.CaptureResultMessage{Event: protocol.EventCaptureResult, RequestID: captureRequestID(msg), Success: false, Error: protocol.Ptr("capture authoring and history require the authenticated attn app"), ErrorCode: protocol.Ptr(protocol.ErrorCodeUnauthorizedClient)})
+		d.sendToClient(client, protocol.CaptureResultMessage{ProfileID: selected, Event: protocol.EventCaptureResult, RequestID: captureRequestID(msg), Success: false, Error: protocol.Ptr("capture authoring and history require the authenticated attn app"), ErrorCode: protocol.Ptr(protocol.ErrorCodeUnauthorizedClient)})
 		return
 	}
-	result, err := d.captureRequest(msg, int(websocketReadLimit(client)))
-	response := protocol.CaptureResultMessage{Event: protocol.EventCaptureResult, RequestID: captureRequestID(msg), Success: err == nil, Result: result}
+	profileID, err := d.captureProfile(msg, selected)
+	var result *protocol.CaptureResult
+	if err == nil {
+		result, err = d.captureRequest(profileID, msg, int(websocketReadLimit(client)))
+	}
+	response := protocol.CaptureResultMessage{ProfileID: selected, Event: protocol.EventCaptureResult, RequestID: captureRequestID(msg), Success: err == nil, Result: result}
 	if err != nil {
 		response.Error = protocol.Ptr(err.Error())
 		if errors.Is(err, store.ErrCaptureNotFound) {
@@ -150,4 +161,32 @@ func (d *Daemon) handleCaptureWS(client *wsClient, msg any) {
 		}
 	}
 	d.sendToClient(client, response)
+}
+
+func (d *Daemon) captureProfile(msg any, selected string) (string, error) {
+	raw, err := json.Marshal(msg)
+	if err != nil {
+		return "", err
+	}
+	var scope struct {
+		ProfileID       string `json:"profile_id"`
+		SourceSessionID string `json:"source_session_id"`
+	}
+	if err := json.Unmarshal(raw, &scope); err != nil {
+		return "", err
+	}
+	if selected != "" && scope.ProfileID != "" && scope.ProfileID != selected {
+		return "", fmt.Errorf("capture belongs to profile %s; app selected profile %s", scope.ProfileID, selected)
+	}
+	profile, err := d.resolveGardenProfile(scope.SourceSessionID, scope.ProfileID, selected)
+	if err != nil {
+		return "", err
+	}
+	if selected != "" && profile.ID != selected {
+		return "", fmt.Errorf("capture source session belongs to another profile")
+	}
+	return profile.ID, nil
+}
+func (d *Daemon) publishCaptureChanged(profileID, captureID string) {
+	d.publishFact(FactCaptureChanged, captureID, map[string]string{"profile_id": profileID})
 }

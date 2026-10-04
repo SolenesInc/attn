@@ -1785,6 +1785,9 @@ type CaptureAttachmentDiscardMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 }
@@ -1802,8 +1805,14 @@ type CaptureAttachmentGetMessage struct {
 	// Offset corresponds to the JSON schema field "offset".
 	Offset int `json:"offset"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
 }
 
 type CaptureAttachmentGetResult struct {
@@ -1839,6 +1848,9 @@ type CaptureAttachmentPutMessage struct {
 	// Offset corresponds to the JSON schema field "offset".
 	Offset int `json:"offset"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 }
@@ -1857,6 +1869,9 @@ type CaptureChangedMessage struct {
 
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
 }
 
 type CaptureDraftAsset struct {
@@ -1888,6 +1903,9 @@ type CaptureGetMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 }
@@ -1901,6 +1919,9 @@ type CaptureListMessage struct {
 
 	// Limit corresponds to the JSON schema field "limit".
 	Limit int `json:"limit"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
@@ -1964,6 +1985,9 @@ type CaptureResultMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
 
@@ -1986,6 +2010,9 @@ type CaptureSendMessage struct {
 
 	// Content corresponds to the JSON schema field "content".
 	Content string `json:"content"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`

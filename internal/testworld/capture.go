@@ -74,7 +74,7 @@ func (p *Peer) Capture(msg any) (*protocol.CaptureResult, error) {
 }
 
 // TrustedApp represents the main Tauri webview, including its private host credential.
-func (w *World) TrustedApp() *Peer {
+func (w *World) TrustedApp(profileID ...string) *Peer {
 	w.T.Helper()
 	path := filepath.Join(w.Dir, "browser-host-token")
 	token, err := os.ReadFile(path)
@@ -89,7 +89,11 @@ func (w *World) TrustedApp() *Peer {
 	if err != nil {
 		w.T.Fatalf("read daemon credential: %v", err)
 	}
-	p := w.Connect(protocol.ClientHelloMessage{Cmd: protocol.CmdClientHello, ClientKind: "tauri-app", Version: "protocol-" + protocol.ProtocolVersion, Capabilities: []string{protocol.CapabilityWorkspaceSessions, protocol.CapabilityBinaryPtyOutput, protocol.CapabilityKittyImages}, ClientToken: protocol.Ptr(strings.TrimSpace(string(clientToken))), BrowserHostToken: protocol.Ptr(strings.TrimSpace(string(token)))}, http.Header{"Origin": {"tauri://localhost"}})
+	hello := protocol.ClientHelloMessage{Cmd: protocol.CmdClientHello, ClientKind: "tauri-app", Version: "protocol-" + protocol.ProtocolVersion, Capabilities: []string{protocol.CapabilityBinaryPtyOutput, protocol.CapabilityKittyImages}, ClientToken: protocol.Ptr(strings.TrimSpace(string(clientToken))), BrowserHostToken: protocol.Ptr(strings.TrimSpace(string(token)))}
+	if len(profileID) != 0 {
+		hello.ProfileID = protocol.Ptr(profileID[0])
+	}
+	p := w.Connect(hello, http.Header{"Origin": {"tauri://localhost"}})
 	p.Initial = Await[protocol.InitialStateMessage](p, protocol.EventInitialState, nil)
 	return p
 }
