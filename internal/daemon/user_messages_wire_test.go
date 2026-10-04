@@ -159,7 +159,7 @@ func TestAppUserMessageRequestsAreCorrelatedAndEmptyOrMalformedTargetsRefused(t 
 	for _, target := range []protocol.UserMessageTarget{{Kind: protocol.UserMessageTargetKindChief}, {Kind: protocol.UserMessageTargetKindChief, MemberID: protocol.Ptr("alder")}, {Kind: protocol.UserMessageTargetKindCrew}, {Kind: protocol.UserMessageTargetKind("invalid")}} {
 		r := testworld.Request(app, protocol.UserMessageSendMessage{Cmd: protocol.CmdUserMessageSend, RequestID: protocol.Ptr("refuse"), MessageID: uuid.NewString(), Target: target, AttachmentIds: []string{}}, protocol.EventUserMessageResult, func(r protocol.UserMessageResultMessage) bool { return r.RequestID == "refuse" })
 		if r.Success || protocol.Deref(r.Error) == "" {
-			t.Fatalf("invalid userMessage accepted %+v", r)
+			t.Fatalf("invalid user message accepted %+v", r)
 		}
 	}
 }
@@ -232,7 +232,7 @@ func TestUserMessageAuthoringAndHistoryRefuseTheAgentSocket(t *testing.T) {
 		t.Fatalf("agent retrieval refused: %v", err)
 	}
 	if r := userMessageRecord(t, app, userMessage); r.ReadAt != nil {
-		t.Fatalf("agent mutated userMessage: %+v", r)
+		t.Fatalf("agent mutated user message: %+v", r)
 	}
 }
 
@@ -278,7 +278,7 @@ func TestUserMessageAuthoringRequiresTheTrustedAppIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	if r := userMessageRecord(t, trusted, userMessage); r.ReadAt != nil {
-		t.Fatalf("untrusted userMessage mutation: %+v", r)
+		t.Fatalf("untrusted user message mutation: %+v", r)
 	}
 }
 
@@ -287,14 +287,14 @@ func TestUserMessageWaitsForTheNextChief(t *testing.T) {
 	cli, app := w.Client(), w.TrustedApp()
 	msg := sendUserMessage(t, app, protocol.UserMessageTarget{Kind: protocol.UserMessageTargetKindChief}, "Please investigate this")
 	if r := userMessageRecord(t, app, msg.MessageID); r.ReadAt != nil {
-		t.Fatalf("absent Chief userMessage is read: %+v", r)
+		t.Fatalf("absent Chief user message is read: %+v", r)
 	}
 	registerSessions(t, w, cli, "chief")
 	if r := setChiefOfStaff(app, "chief", true); !r.Success {
 		t.Fatal(r)
 	}
 	if r := userMessageRecord(t, app, msg.MessageID); r.ReadAt != nil {
-		t.Fatal("inspection marked userMessage read")
+		t.Fatal("inspection marked user message read")
 	}
 	items := readInbox(t, cli, "chief", 0).Items
 	if len(items) != 1 || items[0].Kind != "user_message" || items[0].Content != msg.Content || items[0].SenderSessionID != nil || items[0].Address != "chief:"+app.SelectedProfile() {
@@ -330,7 +330,7 @@ func TestUserMessageDeliveryWakeIsChargedOnce(t *testing.T) {
 		synctest.Wait()
 		dayID := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession)
 		if dayID == "" {
-			t.Fatal("userMessage did not wake the member")
+			t.Fatal("user message did not wake the member")
 		}
 		second := sendUserMessage(t, app, target, "second user request")
 		day := w.bootBubbleClaude(t, dayID)
@@ -340,7 +340,7 @@ func TestUserMessageDeliveryWakeIsChargedOnce(t *testing.T) {
 		}
 		items := readInbox(t, cli, dayID, 0).Items
 		if len(items) != 2 || !((items[0].ItemID == first.MessageID && items[1].ItemID == second.MessageID) || (items[0].ItemID == second.MessageID && items[1].ItemID == first.MessageID)) {
-			t.Fatalf("userMessage inbox: %+v", items)
+			t.Fatalf("user message inbox: %+v", items)
 		}
 		if _, err := cli.CrewHandoff(dayID, "finished the user messages", false, protocol.CrewDayCloseSleep); err != nil {
 			t.Fatal(err)
@@ -348,10 +348,10 @@ func TestUserMessageDeliveryWakeIsChargedOnce(t *testing.T) {
 		third := sendUserMessage(t, app, target, "wait for the next manual wake")
 		w.advance(15 * time.Minute)
 		if binding := crewRosterMember(t, cli, "trellis").BindingSession; binding != nil {
-			t.Fatalf("userMessage bypassed charged wake_limit=1: %s", *binding)
+			t.Fatalf("user message bypassed charged wake_limit=1: %s", *binding)
 		}
 		if r := userMessageRecord(t, app, third.MessageID); r.ReadAt != nil || r.Content != third.Content {
-			t.Fatalf("wake limit lost userMessage: %+v", r)
+			t.Fatalf("wake limit lost user message: %+v", r)
 		}
 	})
 }
@@ -395,10 +395,10 @@ func TestUserMessagesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.T
 			t.Fatal("other-profile CLI downloaded file")
 		}
 		if _, _, err := cli.AgentInboxEntry(userMessage, "chief-b"); err == nil {
-			t.Fatal("other Chief read A userMessage")
+			t.Fatal("other Chief read A user message")
 		}
 		if got := readInbox(t, cli, "chief-b", 0); len(got.Items) != 0 {
-			t.Fatalf("other Chief received A userMessage: %+v", got)
+			t.Fatalf("other Chief received A user message: %+v", got)
 		}
 		list, err := b.UserMessage(protocol.UserMessageListMessage{Cmd: protocol.CmdUserMessageList, Limit: 1})
 		if err != nil || len(list.List.Items) != 0 || len(list.List.DraftAssets) != 0 {
@@ -416,7 +416,7 @@ func TestUserMessagesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.T
 		synctest.Wait()
 		for _, event := range b.Received() {
 			if event.Event == protocol.EventUserMessageChanged {
-				t.Fatalf("other profile got userMessage event: %+v", event)
+				t.Fatalf("other profile got user message event: %+v", event)
 			}
 		}
 		uploadUserMessage(t, b, userMessage, file, bytesB, true)
@@ -455,7 +455,7 @@ func TestUserMessagesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.T
 		}
 		b = w.TrustedApp(profileB)
 		if _, err := b.UserMessage(protocol.UserMessageSendMessage{Cmd: protocol.CmdUserMessageSend, ProfileID: &profileA, MessageID: uuid.NewString(), Target: msg.Target, Content: "queued A request", AttachmentIds: []string{}}); err == nil {
-			t.Fatal("profile switch redirected queued userMessage")
+			t.Fatal("profile switch redirected queued user message")
 		}
 	})
 }

@@ -122,7 +122,7 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID protoco
 			item.ItemID = delivery.Item.Source
 			record, err := d.store.UserMessage(d.store.Get(recipientSessionID).ProfileID, delivery.Item.Source)
 			if err != nil {
-				d.logf("inbox userMessage assets: %v", err)
+				d.logf("inbox user message assets: %v", err)
 			} else {
 				item.Attachments = record.Attachments
 			}
