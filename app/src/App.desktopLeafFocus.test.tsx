@@ -33,6 +33,25 @@ const closed = (daemon: ScriptedDaemon) => daemon.sent.flatMap((command) => {
 });
 
 describe('App desktop leaf focus', () => {
+  it('closes a background tile without selecting it or taking the keyboard', async () => {
+    const { daemon, perform, tile } = await openPaneBesideNotes();
+    await perform(() => fireEvent.mouseDown(agentPaneEl()!));
+    const selections = daemon.sentOf('desktop_show_leaf');
+    const closeButton = tile().querySelector<HTMLButtonElement>('[aria-label="Close tile"]')!;
+
+    await perform(() => {
+      fireEvent.pointerDown(closeButton);
+      expect(fireEvent.mouseDown(closeButton)).toBe(false);
+      fireEvent.mouseUp(closeButton);
+      fireEvent.click(closeButton);
+    });
+
+    expect(closed(daemon)).toEqual(['tile-a']);
+    expect(daemon.sentOf('desktop_show_leaf')).toEqual(selections);
+    expect(surface()).toHaveAttribute('data-active-leaf-id', 'pane-s1');
+    expect(screen.getByRole('textbox', { name: 'Terminal input' })).toHaveFocus();
+  });
+
   it('makes a clicked leaf the active one and gives it the keyboard', async () => {
     const { perform, tile } = await openPaneBesideNotes();
 

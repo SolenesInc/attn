@@ -519,6 +519,10 @@ function DesktopTileActions({
         title="Close tile"
         aria-label="Close tile"
         onPointerDown={(event) => event.stopPropagation()}
+        onMouseDown={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        }}
         onClick={onClose}
       >
         ×
