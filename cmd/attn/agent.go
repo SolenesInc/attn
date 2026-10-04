@@ -740,7 +740,7 @@ commands:
         read up to 20 unread notifications in FIFO order, or one notified user or peer
         message by id. Each returned item gets its durable read receipt. The batch
         limit can be 1 through 50. The session defaults to ATTN_SESSION_ID.
-  attachment <capture-id> <attachment-id> --out <path> [--profile <name|id>]
+  attachment <user-message-id> <attachment-id> --out <path> [--profile <name|id>]
     Download a saved user file from this session’s profile, then inspect it.
     Outside a session, choose --profile when more than one profile exists.
 

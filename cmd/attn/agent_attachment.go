@@ -13,7 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func retrieveAgentAttachment(cli *client.Client, capture, id, path string) error {
+func retrieveAgentAttachment(cli *client.Client, userMessage, id, path string) error {
 	temp, err := os.CreateTemp(filepath.Dir(path), ".attn-attachment-*")
 	if err != nil {
 		return err
@@ -21,7 +21,7 @@ func retrieveAgentAttachment(cli *client.Client, capture, id, path string) error
 	defer func() { temp.Close(); os.Remove(temp.Name()) }()
 	var offset int
 	for {
-		result, err := cli.Capture(protocol.CaptureAttachmentGetMessage{Cmd: protocol.CmdCaptureAttachmentGet, CaptureID: capture, AttachmentID: id, Offset: offset})
+		result, err := cli.UserMessage(protocol.UserMessageAttachmentGetMessage{Cmd: protocol.CmdUserMessageAttachmentGet, MessageID: userMessage, AttachmentID: id, Offset: offset})
 		if err != nil {
 			return err
 		}
@@ -50,7 +50,6 @@ func retrieveAgentAttachment(cli *client.Client, capture, id, path string) error
 	if err := temp.Close(); err != nil {
 		return err
 	}
-	// Link publishes without overwriting an existing user file; the temporary file is on the same filesystem.
 	if err := os.Link(temp.Name(), path); err != nil {
 		return err
 	}
@@ -62,7 +61,7 @@ func runAgentAttachment(args []string) {
 		return
 	}
 	if len(args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: attn agent attachment <capture-id> <attachment-id> --out <path>")
+		fmt.Fprintln(os.Stderr, "usage: attn agent attachment <user-message-id> <attachment-id> --out <path>")
 		os.Exit(2)
 	}
 	fs := flag.NewFlagSet("agent attachment", flag.ContinueOnError)

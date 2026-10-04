@@ -13,15 +13,15 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-const FactCaptureChanged = "capture.changed"
+const FactUserMessageChanged = "user_message.changed"
 
-func (d *Daemon) validateCaptureTarget(profileID string, target protocol.CaptureTarget) (inbox.Address, error) {
+func (d *Daemon) validateUserMessageTarget(profileID string, target protocol.UserMessageTarget) (inbox.Address, error) {
 	switch target.Kind {
-	case protocol.CaptureTargetKindChief:
+	case protocol.UserMessageTargetKindChief:
 		if target.MemberID != nil {
 			return inbox.Address{}, fmt.Errorf("chief target cannot include member_id")
 		}
-	case protocol.CaptureTargetKindCrew:
+	case protocol.UserMessageTargetKindCrew:
 		if strings.TrimSpace(protocol.Deref(target.MemberID)) == "" {
 			return inbox.Address{}, fmt.Errorf("crew target requires member_id")
 		}
@@ -36,57 +36,57 @@ func (d *Daemon) validateCaptureTarget(profileID string, target protocol.Capture
 			return inbox.Address{}, fmt.Errorf("member_id must be the stable roster identity %q", member.ID)
 		}
 	default:
-		return inbox.Address{}, fmt.Errorf("unknown capture target kind %q", target.Kind)
+		return inbox.Address{}, fmt.Errorf("unknown user message target kind %q", target.Kind)
 	}
-	if target.Kind == protocol.CaptureTargetKindChief {
+	if target.Kind == protocol.UserMessageTargetKindChief {
 		return inbox.ToChief(profileID), nil
 	}
 	return inbox.ToMember(*target.MemberID), nil
 }
-func captureRequestID(msg any) string {
+func userMessageRequestID(msg any) string {
 	switch m := msg.(type) {
-	case *protocol.CaptureSendMessage:
+	case *protocol.UserMessageSendMessage:
 		return protocol.Deref(m.RequestID)
-	case *protocol.CaptureGetMessage:
+	case *protocol.UserMessageGetMessage:
 		return protocol.Deref(m.RequestID)
-	case *protocol.CaptureListMessage:
+	case *protocol.UserMessageListMessage:
 		return protocol.Deref(m.RequestID)
-	case *protocol.CaptureAttachmentPutMessage:
+	case *protocol.UserMessageAttachmentPutMessage:
 		return protocol.Deref(m.RequestID)
-	case *protocol.CaptureAttachmentGetMessage:
+	case *protocol.UserMessageAttachmentGetMessage:
 		return protocol.Deref(m.RequestID)
-	case *protocol.CaptureAttachmentDiscardMessage:
+	case *protocol.UserMessageAttachmentDiscardMessage:
 		return protocol.Deref(m.RequestID)
 	}
 	return ""
 }
-func (d *Daemon) captureRequest(profileID string, msg any, transportBytes int) (*protocol.CaptureResult, error) {
-	if err := d.requireHome("Quick Capture"); err != nil {
+func (d *Daemon) userMessageRequest(profileID string, msg any, transportBytes int) (*protocol.UserMessageResult, error) {
+	if err := d.requireHome("User messages"); err != nil {
 		return nil, err
 	}
 	switch m := msg.(type) {
-	case *protocol.CaptureSendMessage:
-		if err := captureID(m.CaptureID); err != nil {
+	case *protocol.UserMessageSendMessage:
+		if err := messageID(m.MessageID); err != nil {
 			return nil, err
 		}
 		if m.AttachmentIds == nil {
 			m.AttachmentIds = []string{}
 		}
-		replay, err := d.store.CaptureReplay(profileID, *m)
+		replay, err := d.store.UserMessageReplay(profileID, *m)
 		if err != nil {
 			return nil, err
 		}
 		if !replay {
-			to, err := d.validateCaptureTarget(profileID, m.Target)
+			to, err := d.validateUserMessageTarget(profileID, m.Target)
 			if err != nil {
 				return nil, err
 			}
 			if strings.TrimSpace(m.Content) == "" && len(m.AttachmentIds) == 0 {
-				return nil, fmt.Errorf("capture needs text or at least one file")
+				return nil, fmt.Errorf("user message needs text or at least one file")
 			}
 			seen := map[string]bool{}
 			for _, id := range m.AttachmentIds {
-				if err := captureID(id); err != nil {
+				if err := messageID(id); err != nil {
 					return nil, err
 				}
 				if seen[id] {
@@ -94,76 +94,76 @@ func (d *Daemon) captureRequest(profileID string, msg any, transportBytes int) (
 				}
 				seen[id] = true
 			}
-			d.captureAssetMu.Lock()
-			err = d.store.SaveCapture(profileID, *m, to, time.Now())
-			d.captureAssetMu.Unlock()
+			d.userMessageAssetMu.Lock()
+			err = d.store.SaveUserMessage(profileID, *m, to, time.Now())
+			d.userMessageAssetMu.Unlock()
 			if err != nil {
 				return nil, err
 			}
-			crashAt("capture-saved")
-			d.publishCaptureChanged(profileID, m.CaptureID)
+			crashAt("user-message-saved")
+			d.publishUserMessageChanged(profileID, m.MessageID)
 			d.kickInboxAfterCommit(to)
 		}
-		r, err := d.store.Capture(profileID, m.CaptureID)
-		return &protocol.CaptureResult{Record: r}, err
-	case *protocol.CaptureGetMessage:
-		r, err := d.store.Capture(profileID, m.CaptureID)
-		return &protocol.CaptureResult{Record: r}, err
-	case *protocol.CaptureListMessage:
-		items, next, err := d.store.Captures(profileID, m.Limit, protocol.Deref(m.Cursor))
+		r, err := d.store.UserMessage(profileID, m.MessageID)
+		return &protocol.UserMessageResult{Record: r}, err
+	case *protocol.UserMessageGetMessage:
+		r, err := d.store.UserMessage(profileID, m.MessageID)
+		return &protocol.UserMessageResult{Record: r}, err
+	case *protocol.UserMessageListMessage:
+		items, next, err := d.store.UserMessages(profileID, m.Limit, protocol.Deref(m.Cursor))
 		if err != nil {
 			return nil, err
 		}
-		drafts, err := d.store.CaptureDraftAssets(profileID)
-		return &protocol.CaptureResult{List: &protocol.CaptureListResult{Items: items, DraftAssets: drafts, NextCursor: next}}, err
-	case *protocol.CaptureAttachmentPutMessage:
-		upload, err := d.capturePut(profileID, m)
-		return &protocol.CaptureResult{Upload: upload}, err
-	case *protocol.CaptureAttachmentGetMessage:
-		download, err := d.captureDownload(profileID, m, transportBytes/2)
-		return &protocol.CaptureResult{Download: download}, err
-	case *protocol.CaptureAttachmentDiscardMessage:
-		err := d.captureDiscard(profileID, m)
-		return &protocol.CaptureResult{Discarded: protocol.Ptr(err == nil)}, err
+		drafts, err := d.store.UserMessageDraftAssets(profileID)
+		return &protocol.UserMessageResult{List: &protocol.UserMessageListResult{Items: items, DraftAssets: drafts, NextCursor: next}}, err
+	case *protocol.UserMessageAttachmentPutMessage:
+		upload, err := d.userMessagePut(profileID, m)
+		return &protocol.UserMessageResult{Upload: upload}, err
+	case *protocol.UserMessageAttachmentGetMessage:
+		download, err := d.userMessageDownload(profileID, m, transportBytes/2)
+		return &protocol.UserMessageResult{Download: download}, err
+	case *protocol.UserMessageAttachmentDiscardMessage:
+		err := d.userMessageDiscard(profileID, m)
+		return &protocol.UserMessageResult{Discarded: protocol.Ptr(err == nil)}, err
 	}
-	return nil, fmt.Errorf("unknown capture operation")
+	return nil, fmt.Errorf("unknown user message operation")
 }
-func (d *Daemon) handleCapture(conn net.Conn, msg any) {
-	profileID, err := d.captureProfile(msg, "")
-	var result *protocol.CaptureResult
+func (d *Daemon) handleUserMessage(conn net.Conn, msg any) {
+	profileID, err := d.userMessageProfile(msg, "")
+	var result *protocol.UserMessageResult
 	if err == nil {
-		result, err = d.captureRequest(profileID, msg, maxInitialSocketFrameBytes)
+		result, err = d.userMessageRequest(profileID, msg, maxInitialSocketFrameBytes)
 	}
-	response := protocol.Response{Ok: err == nil, CaptureResult: result}
+	response := protocol.Response{Ok: err == nil, UserMessageResult: result}
 	if err != nil {
 		response.Error = protocol.Ptr(err.Error())
-		if errors.Is(err, store.ErrCaptureNotFound) {
-			response.ErrorCode = protocol.Ptr(protocol.ErrorCodeCaptureNotFound)
+		if errors.Is(err, store.ErrUserMessageNotFound) {
+			response.ErrorCode = protocol.Ptr(protocol.ErrorCodeUserMessageNotFound)
 		}
 	}
 	_ = json.NewEncoder(conn).Encode(response)
 }
-func (d *Daemon) handleCaptureWS(client *wsClient, selected string, msg any) {
-	if _, download := msg.(*protocol.CaptureAttachmentGetMessage); !download && !client.isTrustedAppClient() {
-		d.sendToClient(client, protocol.CaptureResultMessage{ProfileID: selected, Event: protocol.EventCaptureResult, RequestID: captureRequestID(msg), Success: false, Error: protocol.Ptr("capture authoring and history require the authenticated attn app"), ErrorCode: protocol.Ptr(protocol.ErrorCodeUnauthorizedClient)})
+func (d *Daemon) handleUserMessageWS(client *wsClient, selected string, msg any) {
+	if _, download := msg.(*protocol.UserMessageAttachmentGetMessage); !download && !client.isTrustedAppClient() {
+		d.sendToClient(client, protocol.UserMessageResultMessage{ProfileID: selected, Event: protocol.EventUserMessageResult, RequestID: userMessageRequestID(msg), Success: false, Error: protocol.Ptr("user message authoring and history require the authenticated attn app"), ErrorCode: protocol.Ptr(protocol.ErrorCodeUnauthorizedClient)})
 		return
 	}
-	profileID, err := d.captureProfile(msg, selected)
-	var result *protocol.CaptureResult
+	profileID, err := d.userMessageProfile(msg, selected)
+	var result *protocol.UserMessageResult
 	if err == nil {
-		result, err = d.captureRequest(profileID, msg, int(websocketReadLimit(client)))
+		result, err = d.userMessageRequest(profileID, msg, int(websocketReadLimit(client)))
 	}
-	response := protocol.CaptureResultMessage{ProfileID: selected, Event: protocol.EventCaptureResult, RequestID: captureRequestID(msg), Success: err == nil, Result: result}
+	response := protocol.UserMessageResultMessage{ProfileID: selected, Event: protocol.EventUserMessageResult, RequestID: userMessageRequestID(msg), Success: err == nil, Result: result}
 	if err != nil {
 		response.Error = protocol.Ptr(err.Error())
-		if errors.Is(err, store.ErrCaptureNotFound) {
-			response.ErrorCode = protocol.Ptr(protocol.ErrorCodeCaptureNotFound)
+		if errors.Is(err, store.ErrUserMessageNotFound) {
+			response.ErrorCode = protocol.Ptr(protocol.ErrorCodeUserMessageNotFound)
 		}
 	}
 	d.sendToClient(client, response)
 }
 
-func (d *Daemon) captureProfile(msg any, selected string) (string, error) {
+func (d *Daemon) userMessageProfile(msg any, selected string) (string, error) {
 	raw, err := json.Marshal(msg)
 	if err != nil {
 		return "", err
@@ -176,17 +176,17 @@ func (d *Daemon) captureProfile(msg any, selected string) (string, error) {
 		return "", err
 	}
 	if selected != "" && scope.ProfileID != "" && scope.ProfileID != selected {
-		return "", fmt.Errorf("capture belongs to profile %s; app selected profile %s", scope.ProfileID, selected)
+		return "", fmt.Errorf("user message belongs to profile %s; app selected profile %s", scope.ProfileID, selected)
 	}
 	profile, err := d.resolveGardenProfile(scope.SourceSessionID, scope.ProfileID, selected)
 	if err != nil {
 		return "", err
 	}
 	if selected != "" && profile.ID != selected {
-		return "", fmt.Errorf("capture source session belongs to another profile")
+		return "", fmt.Errorf("user message source session belongs to another profile")
 	}
 	return profile.ID, nil
 }
-func (d *Daemon) publishCaptureChanged(profileID, captureID string) {
-	d.publishFact(FactCaptureChanged, captureID, map[string]string{"profile_id": profileID})
+func (d *Daemon) publishUserMessageChanged(profileID, messageID string) {
+	d.publishFact(FactUserMessageChanged, messageID, map[string]string{"profile_id": profileID})
 }

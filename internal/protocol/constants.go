@@ -5,7 +5,7 @@ import "time"
 const ProtocolVersion = "350"
 
 const (
-	ErrorCodeCaptureNotFound      = "capture_not_found"
+	ErrorCodeUserMessageNotFound  = "user_message_not_found"
 	ErrorCodeConflict             = "conflict"
 	ErrorCodeUndeclaredCollection = "undeclared_collection"
 	ErrorCodeInvalidQuery         = "invalid_query"
@@ -37,12 +37,12 @@ const (
 )
 
 const (
-	CmdCaptureAttachmentDiscard      = "capture_attachment_discard"
-	CmdCaptureAttachmentGet          = "capture_attachment_get"
-	CmdCaptureAttachmentPut          = "capture_attachment_put"
-	CmdCaptureList                   = "capture_list"
-	CmdCaptureGet                    = "capture_get"
-	CmdCaptureSend                   = "capture_send"
+	CmdUserMessageAttachmentDiscard  = "user_message_attachment_discard"
+	CmdUserMessageAttachmentGet      = "user_message_attachment_get"
+	CmdUserMessageAttachmentPut      = "user_message_attachment_put"
+	CmdUserMessageList               = "user_message_list"
+	CmdUserMessageGet                = "user_message_get"
+	CmdUserMessageSend               = "user_message_send"
 	CmdClientHello                   = "client_hello"
 	CmdDelegate                      = "delegate"
 	CmdDelegationPreferencesGet      = "delegation_preferences_get"
@@ -338,8 +338,8 @@ const (
 const EventAutomationsChanged = "automations_changed"
 
 const (
-	EventCaptureResult                   = "capture_result"
-	EventCaptureChanged                  = "capture_changed"
+	EventUserMessageResult               = "user_message_result"
+	EventUserMessageChanged              = "user_message_changed"
 	EventSessionRegistered               = "session_registered"
 	EventSessionUnregistered             = "session_unregistered"
 	EventSessionCloseResult              = "session_close_result"
