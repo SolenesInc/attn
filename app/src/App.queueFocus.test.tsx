@@ -50,6 +50,32 @@ async function hoverWaitingPill(daemon: ScriptedDaemon) {
 }
 
 describe('acting on the queue sidebar row that holds focus', () => {
+  it.each(['terminal', 'sidebar'])('advances from a settled agent focused in the %s without settling again', async (focus) => {
+    const { daemon } = await launch({ owed: ['s1'] });
+    await openS2(daemon);
+    if (focus === 'sidebar') screen.getByTestId('queue-select-s2').focus();
+    else (document.activeElement as HTMLElement | null)?.blur();
+    const sent = daemon.sent.length;
+
+    await settle(daemon);
+
+    expect(daemon.sentOf('settle_turn')).toEqual([]);
+    expect(daemon.sent.slice(sent).filter((command) => command.cmd === 'desktop_show_session')).toEqual([expect.objectContaining({ cmd: 'desktop_show_session', session_id: 's1' })]);
+    expect(document.querySelector('[data-session-visible="1"]')).toHaveAttribute('data-desktop-id', 'desktop-s1');
+  });
+
+  it('returns home from a settled agent when no turns remain', async () => {
+    const { daemon } = await launch();
+    await openS2(daemon);
+    (document.activeElement as HTMLElement | null)?.blur();
+
+    await settle(daemon);
+
+    expect(daemon.sentOf('settle_turn')).toEqual([]);
+    expect(document.querySelector('[data-session-visible="1"]')).toBeNull();
+    expect(screen.getByTestId('all-settled')).toBeInTheDocument();
+  });
+
   it('settles the focused row rather than the active agent', async () => {
     const { daemon } = await launch({ owed: ['s1', 's2'] });
     await openS2(daemon);
