@@ -1,0 +1,3 @@
+kind: fixed
+area: app
+change: Settling an already-settled agent moves to the next queued turn, the command palette can reload the current agent, and stationary pointers no longer change palette selection.

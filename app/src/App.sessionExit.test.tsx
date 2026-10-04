@@ -1,6 +1,6 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { gesture, renderApp } from './test/renderApp';
+import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import { daemonSession, terminalDesktop } from './test/daemonFixtures';
 
 async function renderSessions() {
@@ -15,6 +15,18 @@ async function renderSessions() {
 }
 
 describe('App session exit', () => {
+  it('reloads the current agent from the command palette through the existing reload path', async () => {
+    const daemon = await renderSessions();
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Open s2' })));
+    await gesture(daemon, () => pressShortcut('ui.commandPalette'));
+    const input = screen.getByRole('combobox');
+    await gesture(daemon, () => fireEvent.change(input, { target: { value: '>Reload this agent' } }));
+    await gesture(daemon, () => fireEvent.keyDown(input, { key: 'Enter' }));
+
+    expect(daemon.sentOf('reload_session')).toEqual([expect.objectContaining({ cmd: 'reload_session', id: 's2' })]);
+    expect(screen.queryByRole('combobox')).toBeNull();
+  });
+
   it('closes the session whose terminal exited cleanly', async () => {
     const daemon = await renderSessions();
 
