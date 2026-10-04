@@ -408,8 +408,6 @@ func closedReopenCodex(t *testing.T, w *world, app *testworld.Peer, cli *client.
 	return session
 }
 
-// takeTurn has the user prompt the session and the agent answer; a fresh Codex reports its
-// conversation only at its first turn.
 func takeTurn(app *testworld.Peer, run *fakeagent.Run, session string) {
 	app.T.Helper()
 	app.TypeLine(session, "pick up where we left off")

@@ -210,8 +210,6 @@ func (c *codex) hookInput(event string, extra map[string]any) map[string]any {
 	return input
 }
 
-// Like real Codex, a fresh launch, /new and /clear start a thread on the next turn, which reports it
-// through SessionStart before UserPromptSubmit. /resume <id> switches threads the same way.
 func (c *codex) submit(prompt string) error {
 	command := strings.TrimSpace(prompt)
 	switch {
