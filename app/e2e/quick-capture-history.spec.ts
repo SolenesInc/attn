@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jR1sAAAAASUVORK5CYII=';
 const records = Array.from({ length: 6 }, (_, index) => ({
-  id: `message-${index}`, content: `Saved note ${index}`, mailbox: { kind: 'chief' },
+  id: `message-${index}`, content: `Saved message ${index}`, mailbox: { kind: 'chief' },
   created_at: `2026-10-0${1 + Math.floor(index / 2)}T1${index % 2}:00:00Z`,
   attachments: [0, 1].map(file => ({ id: `image-${index}-${file}`, name: `Preview ${index}-${file}`, media_type: 'image/png', bytes: 68 })),
 }));
@@ -50,12 +50,12 @@ test('Recent loads newest visible previews serially across close/reopen and rele
   await expect(page.getByRole('img')).toHaveCount(0);
 });
 
-test('Recent preserves selected notes and scroll across older pages and read updates', async ({ page }, testInfo) => {
+test('Recent preserves selected messages and scroll across older pages and read updates', async ({ page }, testInfo) => {
   await page.clock.setFixedTime(new Date('2026-10-03T12:00:00Z'));
   await page.setViewportSize({ width: 560, height: 440 });
-  const notes = records.map((record, index) => ({ ...record, attachments: index === 5
+  const messages = records.map((record, index) => ({ ...record, attachments: index === 5
     ? [{ id: 'pdf', name: 'launch-notes.pdf', media_type: 'application/pdf', bytes: 2202009 }]
-    : [], ...(index === 4 && { content: 'Full note\n' + 'Keep the whole launch checklist. '.repeat(12) }) }));
+    : [], ...(index === 4 && { content: 'Full message\n' + 'Keep the whole launch checklist. '.repeat(12) }) }));
   const pages: (string | undefined)[] = [];
   let olderRead = false;
   let releaseOlder!: () => void;
@@ -67,7 +67,7 @@ test('Recent preserves selected notes and scroll across older pages and read upd
     expect(command.cmd).toBe('quick_capture_list');
     pages.push(command.cursor);
     if (command.cursor && !olderRead) { olderSeen(); await olderReply; }
-    const items = command.cursor ? notes.slice(0, 2) : notes.slice(2);
+    const items = command.cursor ? messages.slice(0, 2) : messages.slice(2);
     await route.fulfill({ json: { list: { items: items.map(item => olderRead && item.id === 'message-0'
       ? { ...item, read_at: '2026-10-03T12:00:00Z' } : item).reverse(), draft_assets: [], ...(!command.cursor && { next_cursor: 'older' }) } } });
   });
@@ -82,8 +82,8 @@ test('Recent preserves selected notes and scroll across older pages and read upd
   const region = page.getByRole('region', { name: 'Recent messages' });
   await region.press('ArrowUp');
   await expect(selected).toHaveAttribute('data-capture-id', 'message-4');
-  await expect(page.getByText(notes[4].content, { exact: true })).toBeVisible();
-  await expect(page.locator('.capture-history-text').nth(2)).toHaveText(notes[4].content);
+  await expect(page.getByText(messages[4].content, { exact: true })).toBeVisible();
+  await expect(page.locator('.capture-history-text').nth(2)).toHaveText(messages[4].content);
   await region.press('ArrowDown');
   await expect(selected).toHaveAttribute('data-capture-id', 'message-5');
   const older = page.getByRole('button', { name: 'Show older messages' });
