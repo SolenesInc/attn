@@ -16,7 +16,7 @@ export const scenarioCatalog = [
   {
     id: 'quick-capture',
     runnerId: 'QUICK-CAPTURE',
-    label: 'Quick Capture: native shortcut, focus, file delivery and measured batches',
+    label: 'Quick Capture: native shortcut, focus, file delivery and history',
     command: ['node', 'scripts/real-app-harness/scenario-quick-capture.mjs'],
     skipOn: { linux: 'Quick Capture uses a macOS nonactivating panel' },
     timeoutMs: 600_000,
