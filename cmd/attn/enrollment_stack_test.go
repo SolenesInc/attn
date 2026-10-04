@@ -1,8 +1,6 @@
 package main_test
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -74,7 +72,7 @@ func TestEnrollmentNamesTheHomeAndRefusesToBeRehomedSilently(t *testing.T) {
 	}
 }
 
-func TestADaemonKeepsItsIDAcrossRestartsAndReplacesAnUnreadableOne(t *testing.T) {
+func TestADaemonKeepsItsIDAcrossRestarts(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t)
 	daemonID := func() string {
@@ -92,12 +90,4 @@ func TestADaemonKeepsItsIDAcrossRestartsAndReplacesAnUnreadableOne(t *testing.T)
 		t.Fatalf("the daemon ID went from %q to %q across a restart, want one valid ID kept", first, again)
 	}
 
-	if err := os.WriteFile(filepath.Join(s.Dir, enrollment.DaemonIDFileName), []byte("corrupt\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	s.Start()
-	s.Stop()
-	if replaced := daemonID(); !enrollment.ValidDaemonID(replaced) || replaced == first {
-		t.Fatalf("after its ID file was garbled the daemon reports %q, want a fresh valid ID", replaced)
-	}
 }

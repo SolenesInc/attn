@@ -144,6 +144,8 @@ Follow [Testing](docs/testing.md). In short:
   Handler and Git deadlines still apply; shutdown itself does not fence or cancel their results.
 - Garden/crew handlers call `Daemon.requireHome` (`internal/enrollment`).
   Outposts own sessions; Garden/crew belong to their home.
+- Everything belongs to one profile for life, and anything in another profile is treated as
+  if it doesn't exist (e.g. /resume of its conversation opens a new session here).
 - Crew files are authoritative; the registry records paths. One active session
   binding per member (`internal/daemon/crew.go`).
 - `internal/docstore` compiles SQL; `internal/store/documents.go` executes it.

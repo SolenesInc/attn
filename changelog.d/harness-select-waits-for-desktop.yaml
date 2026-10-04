@@ -1,0 +1,3 @@
+kind: internal
+area: app
+change: The automation bridge's select_session, focus_pane and click_pane answer only once the daemon has made the selected session's desktop current, so scenarios no longer read the previous desktop.

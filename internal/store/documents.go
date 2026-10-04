@@ -153,6 +153,9 @@ func (s *Store) PutDocument(schema docstore.CollectionSchema, id string, body []
 }
 
 func putDocumentWith(q rowQuerier, schema docstore.CollectionSchema, table, id string, body []byte, now time.Time, expected *int64) (int64, error) {
+	if err := checkSeedProfileWrite(q, schema, table, id, body); err != nil {
+		return 0, err
+	}
 	ts := now.UTC().Format(docstore.TimeFormat)
 
 	var (

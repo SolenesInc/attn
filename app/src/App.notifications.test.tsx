@@ -1,6 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { agentWorkspace, daemonSession } from './test/daemonFixtures';
+import { soloDesktop, daemonSession } from './test/daemonFixtures';
 import type { EventMessage } from './test/protocol';
 import { gesture, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
@@ -29,7 +29,7 @@ function notification(overrides: Partial<Notification>): Notification {
 
 async function openNotifications(notifications: Notification[]) {
   const { daemon } = await renderApp({
-    initialState: { sessions: [daemonSession('s1'), daemonSession('session-1')], workspaces: [agentWorkspace('s1'), agentWorkspace('session-1')] },
+    initialState: { sessions: [daemonSession('s1'), daemonSession('session-1')], desktops: [soloDesktop('s1'), soloDesktop('session-1')] },
   });
   daemon.on('notification_list', () => ({
     event: 'notification_list_result',
@@ -99,7 +99,7 @@ describe('App notifications', () => {
 
     await click(daemon, 'Open session');
     expect(screen.queryByRole('dialog', { name: 'Notifications' })).toBeNull();
-    expect(daemon.sentOf('session_selected').pop()).toEqual({ cmd: 'session_selected', id: 'session-1' });
+    expect(daemon.sentOf('desktop_show_session').pop()).toMatchObject({ session_id: 'session-1' });
   });
 
   it('offers no Retry the daemon did not supply, even for a task’s notification', async () => {

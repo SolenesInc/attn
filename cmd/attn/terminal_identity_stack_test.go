@@ -31,6 +31,11 @@ func TestACommandCarryingItsTerminalsIDSpeaksAsTheSessionTheTerminalShows(t *tes
 		t.Fatalf("rename exited %d: %s", got.Code, got.Stderr)
 	}
 	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.Label == "checkout" })
+	var moved protocol.DesktopMoveSessionResult
+	fromTheAgent("session", "move", "1", "--json").JSON(t, &moved)
+	if moved.SessionID != session {
+		t.Errorf("session move from the agent moved %+v, want its own session %s", moved, session)
+	}
 	if listed := fromTheAgent("pr", "ls"); listed.Code != 0 || listed.Stdout != "session "+session+" has opened no pull requests\n" {
 		t.Errorf("pr ls exited %d and printed %q, want the session's own empty list", listed.Code, listed.Stdout)
 	}

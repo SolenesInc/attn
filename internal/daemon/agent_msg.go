@@ -65,6 +65,10 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 	targetRef := msg.TargetSessionID
 	var address inbox.Address
 	if seedID := strings.TrimSpace(protocol.Deref(msg.TargetSeedID)); seedID != "" {
+		if err := d.requireSeedInProfile(seedID, sender.ProfileID, false); err != nil {
+			d.replyAgentMsgError(conn, "cross_profile", err.Error())
+			return
+		}
 		if strings.TrimSpace(targetRef) != "" {
 			d.replyAgentMsgError(conn, "ambiguous_target", "a message goes to one place; name a session or a seed, not both")
 			return
@@ -80,8 +84,16 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 		}
 		address = inbox.ToSeed(seed.ID)
 	} else {
+		// A target in another profile is answered exactly like an unknown one.
+		notFound := func() {
+			d.replyAgentMsgError(conn, "session_or_crew_member_not_found", fmt.Sprintf("no session or crew member matches %q; `attn agent list` names sessions and `attn crew list` names members", strings.TrimSpace(targetRef)))
+		}
 		member, found, memberErr := d.resolveCrewMember(targetRef)
 		if found {
+			if d.crewProfileID(member.ID) != sender.ProfileID {
+				notFound()
+				return
+			}
 			address = inbox.ToMember(member.ID)
 		} else {
 			target, code := d.resolveSessionByIDOrPrefix(targetRef)
@@ -91,10 +103,14 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 					return
 				}
 				if code == "session_not_found" {
-					d.replyAgentMsgError(conn, "session_or_crew_member_not_found", fmt.Sprintf("no session or crew member matches %q; `attn agent list` names sessions and `attn crew list` names members", strings.TrimSpace(targetRef)))
+					notFound()
 				} else {
 					d.sendError(conn, code)
 				}
+				return
+			}
+			if target.ProfileID != sender.ProfileID {
+				notFound()
 				return
 			}
 			address = d.inboxAddressOf(target.ID)
@@ -176,13 +192,6 @@ func agentMessageQueuedDetail(err error) string {
 		return "queued (attn cannot see a safe prompt on the target yet; lands on its next state change)"
 	}
 	return "queued (target is not taking input right now — lands when it is running again; don't wait for a reply)"
-}
-
-func (d *Daemon) sessionOriginName(session *protocol.Session) string {
-	if workspace := d.store.GetWorkspace(session.WorkspaceID); workspace != nil && strings.TrimSpace(workspace.Title) != "" {
-		return workspace.Title
-	}
-	return sessionDisplayName(session)
 }
 
 func sessionDisplayName(session *protocol.Session) string {

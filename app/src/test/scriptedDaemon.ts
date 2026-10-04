@@ -2,6 +2,8 @@ import { act } from '@testing-library/react';
 import { onTestFinished, vi } from 'vitest';
 import { PROTOCOL_VERSION } from '../hooks/useDaemonSocket';
 import type { CommandMessage, CommandName, EventMessage } from './protocol';
+import { Arrangement, serveArrangement } from './arrangement';
+import { DEFAULT_DESKTOP_ID, DEFAULT_PROFILE_ID, defaultProfile, emptyDesktop, type DaemonDesktop } from './daemonFixtures';
 
 type CorrelatedReply<T> = T extends unknown
   ? { [K in keyof T as K extends 'request_id' ? never : K]: T[K] } & { request_id?: string }
@@ -16,20 +18,24 @@ export type ReplyHandler<C extends CommandName> = (
 type InitialState = EventMessage<'initial_state'>;
 
 export function initialState(overrides: Partial<InitialState> = {}): InitialState {
+  const given = overrides.desktops ?? [];
+  const desktops = overrides.profiles || given.some((desktop) => desktop.id === DEFAULT_DESKTOP_ID)
+    ? given
+    : [...given, emptyDesktop(DEFAULT_DESKTOP_ID, { order_key: '~' })];
   return {
     event: 'initial_state',
     protocol_version: PROTOCOL_VERSION,
     sessions: [],
-    workspaces: [],
+    profiles: [defaultProfile(DEFAULT_DESKTOP_ID)],
+    selected_profile_id: DEFAULT_PROFILE_ID,
     prs: [],
     repos: [],
     authors: [],
     settings: {},
     ...overrides,
+    desktops,
   };
 }
-
-const WORKSPACE_SESSIONS_CAPABILITY = 'workspace_sessions';
 
 class DaemonConnection {
   static readonly CONNECTING = 0;
@@ -86,6 +92,7 @@ class DaemonConnection {
 
 export interface ScriptedDaemonOptions {
   initialState?: Partial<InitialState> | false;
+  script?: (daemon: ScriptedDaemon) => void;
 }
 
 type AnyHandler = (command: CommandMessage, connection: DaemonConnection) => Reply | Reply[] | void;
@@ -97,9 +104,6 @@ interface Waiter {
 
 function handshakeRefusal(command: CommandMessage): string | null {
   if (command.cmd !== 'client_hello') return `${command.cmd} arrived before client_hello`;
-  if (!command.capabilities?.includes(WORKSPACE_SESSIONS_CAPABILITY)) {
-    return `client_hello lacks the ${WORKSPACE_SESSIONS_CAPABILITY} capability`;
-  }
   return null;
 }
 
@@ -114,9 +118,24 @@ export class ScriptedDaemon {
   private readonly settled = new WeakSet<DaemonConnection>();
   private heldReplies: Array<() => void> | null = null;
 
+  readonly arrangement: Arrangement;
+
   constructor(options: ScriptedDaemonOptions = {}) {
     const handshake = options.initialState;
-    this.on('client_hello', () => (handshake === false ? undefined : initialState(handshake)));
+    const initial = initialState(handshake || {});
+    this.arrangement = new Arrangement(initial.profiles ?? [], initial.desktops ?? [], initial.selected_profile_id ?? DEFAULT_PROFILE_ID);
+    serveArrangement(this, this.arrangement);
+    this.on('client_hello', () => (handshake === false ? undefined : {
+      ...initialState(handshake),
+      profiles: this.arrangement.profiles,
+      desktops: this.arrangement.desktops,
+      selected_profile_id: this.arrangement.selectedProfileId,
+    }));
+  }
+
+  arrange(change: (desktops: DaemonDesktop[]) => DaemonDesktop[]) {
+    this.arrangement.desktops = change(this.arrangement.desktops);
+    this.emit(this.arrangement.changed());
   }
 
   get connection(): DaemonConnection {
@@ -290,6 +309,7 @@ export function answerInTurn<C extends CommandName>(
 
 export function installScriptedDaemon(options: ScriptedDaemonOptions = {}): ScriptedDaemon {
   const daemon = new ScriptedDaemon(options);
+  options.script?.(daemon);
   vi.useFakeTimers();
   vi.stubEnv('VITE_FORCE_REAL_PTY', '1');
   vi.stubGlobal('fetch', () => Promise.reject(new TypeError('app wire tests reach no network')));

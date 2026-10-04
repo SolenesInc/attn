@@ -1,7 +1,7 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { openPath } from '@tauri-apps/plugin-opener';
 import { describe, expect, it, vi } from 'vitest';
-import { agentPane, daemonSession, daemonWorkspace, dockTiles, type DaemonSession } from './test/daemonFixtures';
+import { agentPane, daemonSession, daemonDesktop, dockTiles, type DaemonSession } from './test/daemonFixtures';
 import { pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
@@ -11,11 +11,11 @@ const RECENTS = [
   { path: '/other/journal.md', last_at: '2026-07-23T10:00:00Z', count: 1, source: 'open' },
 ];
 
-function workspaceFor(session: DaemonSession, tiles: Array<{ tile_id: string; tile_kind: string; tile_params: string }> = []) {
-  return daemonWorkspace(
+function desktopFor(session: DaemonSession, tiles: Array<{ tile_id: string; tile_kind: string; tile_params: string }> = []) {
+  return daemonDesktop(
     'ws',
     { root: dockTiles({ type: 'pane', pane_id: `pane-${session.id}` }, tiles), panes: [agentPane(session.id, 'ws')] },
-    { title: 'ws', directory: session.directory, ...(session.endpoint_id ? { endpoint_id: session.endpoint_id } : {}) },
+    { name: 'ws' },
   );
 }
 
@@ -35,7 +35,7 @@ function serveOpener(daemon: ScriptedDaemon, index: { files: string[]; truncated
       { name: 'ideas.md', path: '/home/victor/notes/ideas.md', is_dir: false },
     ],
   }));
-  daemon.on('open_markdown', ({ path }) => ({ event: 'open_markdown_result', success: true, path, workspace_id: 'ws', tile_id: 'tile-opened' }));
+  daemon.on('open_markdown', ({ path }) => ({ event: 'open_markdown_result', success: true, path, tile_id: 'tile-opened' }));
 }
 
 interface OpenerOptions {
@@ -44,12 +44,12 @@ interface OpenerOptions {
   index?: Parameters<typeof serveOpener>[1];
 }
 
-async function openOpener({ session = daemonSession('s1', { workspace_id: 'ws', directory: '/repo' }), notebookRoot = NOTEBOOK_ROOT, index }: OpenerOptions = {}) {
+async function openOpener({ session = daemonSession('s1', { directory: '/repo' }), notebookRoot = NOTEBOOK_ROOT, index }: OpenerOptions = {}) {
   const view = await renderApp({
     initialState: {
       settings: notebookRoot ? { 'notebook.root.effective': notebookRoot } : {},
       sessions: session ? [session] : [],
-      workspaces: session ? [workspaceFor(session)] : [],
+      desktops: session ? [desktopFor(session)] : [],
       ...(session?.endpoint_id ? { endpoints: [{ id: session.endpoint_id, name: 'gpu-box', ssh_target: 'user@gpu-box', status: 'connected', enabled: true }] } : {}),
     },
   });
@@ -169,17 +169,17 @@ describe('App markdown opener', () => {
   });
 
   it('closes on Escape without dismissing what is open beneath it, which the next Escape closes', async () => {
-    const session = daemonSession('s1', { workspace_id: 'ws', directory: '/repo' });
+    const session = daemonSession('s1', { directory: '/repo' });
     const view = await renderApp({
       initialState: {
         sessions: [session],
-        workspaces: [workspaceFor(session, [{ tile_id: 'tile-doc', tile_kind: 'markdown', tile_params: '/repo/doc.md' }])],
+        desktops: [desktopFor(session, [{ tile_id: 'tile-doc', tile_kind: 'markdown', tile_params: '/repo/doc.md' }])],
       },
     });
     serveOpener(view.daemon);
     fireEvent.click(screen.getByRole('button', { name: 'Open s1' }));
     await view.daemon.idle();
-    view.daemon.emit({ event: 'workspace_tile_content', workspace_id: 'ws', tile_id: 'tile-doc', tile_kind: 'markdown', path: '/repo/doc.md', content: '![chart](chart.png)' });
+    view.daemon.emit({ event: 'desktop_tile_content', desktop_id: 'ws', tile_id: 'tile-doc', tile_kind: 'markdown', path: '/repo/doc.md', content: '![chart](chart.png)' });
     await view.daemon.idle();
     fireEvent.click(screen.getByRole('img', { name: 'chart' }));
     pressShortcut('file.open');
@@ -216,7 +216,7 @@ describe('App markdown opener target', () => {
   });
 
   it('indexes the notebook for a local session without a folder, still opening in that session', async () => {
-    const { daemon } = await openOpener({ session: daemonSession('s1', { workspace_id: 'ws', directory: '' }) });
+    const { daemon } = await openOpener({ session: daemonSession('s1', { directory: '' }) });
     await press(daemon, 'Enter');
 
     expect(daemon.sentOf('fs_index')).toEqual([expect.objectContaining({ root: NOTEBOOK_ROOT })]);
@@ -228,7 +228,7 @@ describe('App markdown opener target', () => {
     { notebook: 'no notebook', notebookRoot: '', indexed: [] },
   ])('never indexes or opens into a remote session’s folder, falling back to $notebook', async ({ notebookRoot, indexed }) => {
     const { daemon } = await openOpener({
-      session: daemonSession('s1', { workspace_id: 'ws', directory: '/repo', endpoint_id: 'ep-1' }),
+      session: daemonSession('s1', { directory: '/repo', endpoint_id: 'ep-1' }),
       notebookRoot,
     });
     expect(daemon.sentOf('fs_index').map((index) => index.root)).toEqual(indexed);
@@ -238,6 +238,64 @@ describe('App markdown opener target', () => {
 
     expect(daemon.sentOf('open_markdown')).toEqual([]);
     expect(openPath).toHaveBeenCalledWith('/repo/docs/plan.md');
+  });
+
+  it('roots a notebook opened from a shown document tile in the folder of the agent the tile was opened for', async () => {
+    const view = await renderApp({
+      initialState: {
+        settings: { 'notebook.root.effective': NOTEBOOK_ROOT },
+        sessions: [daemonSession('s1', { directory: '/repo' }), daemonSession('s2', { directory: '/elsewhere' })],
+        desktops: [
+          daemonDesktop('ws', {
+            root: dockTiles({ type: 'pane', pane_id: 'pane-s2' }, [
+              { tile_id: 'tile-plan', tile_kind: 'markdown', tile_params: '/repo/docs/plan.md', tile_session_id: 's1' },
+            ]),
+            panes: [agentPane('s2', 'ws')],
+          }, { name: 'ws', active_pane_id: 'tile-plan' }),
+        ],
+      },
+    });
+    await view.daemon.idle();
+    fireEvent.click(screen.getByRole('button', { name: 'Open ws' }));
+    await view.daemon.idle();
+
+    pressShortcut('notebook.openTile');
+    await view.daemon.idle();
+
+    expect(view.daemon.sentOf('desktop_dock_tile')).toEqual([expect.objectContaining({ tile_kind: 'notebook', tile_params: '{"root":"/repo"}' })]);
+  });
+
+  it('indexes the folder of the agent a shown document tile was opened for, never a borrowed agent', async () => {
+    const view = await renderApp({
+      initialState: {
+        settings: { 'notebook.root.effective': NOTEBOOK_ROOT },
+        sessions: [daemonSession('s1', { directory: '/repo' }), daemonSession('s2', { directory: '/elsewhere' })],
+        desktops: [
+          daemonDesktop('ws', {
+            root: dockTiles({ type: 'pane', pane_id: 'pane-s2' }, [
+              { tile_id: 'tile-plan', tile_kind: 'markdown', tile_params: '/repo/docs/plan.md', tile_session_id: 's1' },
+              { tile_id: 'tile-loose', tile_kind: 'markdown', tile_params: '/tmp/loose.md' },
+            ]),
+            panes: [agentPane('s2', 'ws')],
+          }, { name: 'ws', active_pane_id: 'tile-plan' }),
+        ],
+      },
+    });
+    serveOpener(view.daemon);
+    await view.daemon.idle();
+    fireEvent.click(screen.getByRole('button', { name: 'Open ws' }));
+    await view.daemon.idle();
+
+    pressShortcut('file.open');
+    await view.daemon.idle();
+    expect(view.daemon.sentOf('fs_index').map((index) => index.root)).toEqual(['/repo']);
+    await press(view.daemon, 'Escape');
+
+    fireEvent.mouseDown(document.querySelector('[data-pane-id="tile-loose"]')!);
+    await view.daemon.idle();
+    pressShortcut('file.open');
+    await view.daemon.idle();
+    expect(view.daemon.sentOf('fs_index').map((index) => index.root)).toEqual(['/repo', NOTEBOOK_ROOT]);
   });
 
   it('skips the index when there is no folder at all', async () => {

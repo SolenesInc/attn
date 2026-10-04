@@ -17,38 +17,33 @@ func delegateFrom(source, cwd, text string, agent fakeagent.Harness) protocol.De
 	return request
 }
 
-func workspaceOfDelegate(t *testing.T, w *world, workspaceID string) protocol.Workspace {
+func desktopOfDelegate(t *testing.T, w *world, desktopID string) protocol.Desktop {
 	t.Helper()
-	for _, workspace := range w.App().Initial.Workspaces {
-		if workspace.ID == workspaceID {
-			return workspace
+	for _, desktop := range w.App().Initial.Desktops {
+		if desktop.ID == desktopID {
+			return desktop
 		}
 	}
-	t.Fatalf("the app sees no workspace %s", workspaceID)
-	return protocol.Workspace{}
+	t.Fatalf("the app sees no desktop %s", desktopID)
+	return protocol.Desktop{}
 }
 
-func delegatePaneSessions(workspace protocol.Workspace) []string {
+func delegatePaneSessions(desktop protocol.Desktop) []string {
 	var sessions []string
-	if workspace.Layout != nil {
-		for _, pane := range workspace.Layout.Panes {
-			sessions = append(sessions, protocol.Deref(pane.SessionID))
-		}
+	for _, pane := range desktop.Panes {
+		sessions = append(sessions, pane.SessionID)
 	}
 	return sessions
 }
 
-func TestADelegateStartsOnASeedPointerInItsCallersWorkspace(t *testing.T) {
+func TestADelegateStartsOnASeedPointerBesideItsCaller(t *testing.T) {
 	for _, agent := range []fakeagent.Harness{fakeagent.Codex, fakeagent.Copilot} {
 		t.Run(string(agent), func(t *testing.T) {
 			w := newWorld(t, fakeagent.Codex, agent)
 			app, cli := w.App(), w.Client()
 			cwd := w.Path("api")
-			source := w.Spawn(app, fakeagent.Codex, cwd)
-			sourceWorkspace := "workspace-api"
-			if err := cli.ToggleWorkspaceMute(sourceWorkspace); err != nil {
-				t.Fatal(err)
-			}
+			sourceResult, sourceDesktop, _ := w.RequestSpawn(app, fakeagent.Codex, cwd)
+			source := sourceResult.ID
 			request := delegateFrom(source, cwd, "Migrate the store to the new schema", agent)
 			request.RequestID = "migrate"
 			request.Label = protocol.Ptr("Store migration")
@@ -82,15 +77,11 @@ func TestADelegateStartsOnASeedPointerInItsCallersWorkspace(t *testing.T) {
 				t.Errorf("the delegation planted %+v; want the brief, growing, planted by %s and tended by %s", seed, source, result.SessionID)
 			}
 
-			if protocol.Deref(result.WorkspaceID) != sourceWorkspace || result.Directory != cwd {
-				t.Errorf("the delegate runs in workspace %q at %s; want the caller's %s at %s", protocol.Deref(result.WorkspaceID), result.Directory, sourceWorkspace, cwd)
+			if protocol.Deref(result.DesktopID) != sourceDesktop || result.Directory != cwd {
+				t.Errorf("the delegate runs on desktop %q at %s; want the caller's %s at %s", protocol.Deref(result.DesktopID), result.Directory, sourceDesktop, cwd)
 			}
-			workspace := workspaceOfDelegate(t, w, sourceWorkspace)
-			if panes := delegatePaneSessions(workspace); len(panes) != 2 || panes[1] != result.SessionID {
-				t.Errorf("the caller's workspace holds panes for %v; want the caller and then the delegate", panes)
-			}
-			if !workspace.Muted {
-				t.Errorf("an ordinary delegation unmuted the caller's workspace %s", sourceWorkspace)
+			if panes := delegatePaneSessions(desktopOfDelegate(t, w, sourceDesktop)); len(panes) != 2 || panes[1] != result.SessionID {
+				t.Errorf("the caller's desktop holds panes for %v; want the caller and then the delegate", panes)
 			}
 			delegate := testworld.AwaitSession(app, result.SessionID, func(s protocol.Session) bool { return protocol.Deref(s.SeedID) != "" })
 			if protocol.Deref(delegate.SeedID) != result.SeedID || string(delegate.Agent) != string(agent) || protocol.Deref(delegate.DelegatedFromChief) {
@@ -184,7 +175,7 @@ func sessionOfDelegate(t *testing.T, w *world, sessionID string) protocol.Sessio
 	return protocol.Session{}
 }
 
-func TestADelegationFromTheChiefIsMarkedAndMadeVisible(t *testing.T) {
+func TestADelegationFromTheChiefIsMarkedAndLandsBesideTheChief(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
 	registerSessions(t, w, cli, "chief")
@@ -194,9 +185,6 @@ func TestADelegationFromTheChiefIsMarkedAndMadeVisible(t *testing.T) {
 	}
 	if result := setChiefOfStaff(app, "chief", true); !result.Success {
 		t.Fatalf("making chief the chief: %s", protocol.Deref(result.Error))
-	}
-	if err := cli.ToggleWorkspaceMute("workspace-chief"); err != nil {
-		t.Fatal(err)
 	}
 
 	request := delegateFrom("chief", cwd, "Audit the backlog", fakeagent.Codex)
@@ -218,12 +206,13 @@ func TestADelegationFromTheChiefIsMarkedAndMadeVisible(t *testing.T) {
 	if chief := sessionOfDelegate(t, w, "chief"); !protocol.Deref(chief.ChiefOfStaff) || protocol.Deref(chief.DelegatedFromChief) {
 		t.Errorf("the chief reads as %+v; want chief_of_staff and not delegated_from_chief", chief)
 	}
-	if workspace := workspaceOfDelegate(t, w, protocol.Deref(result.WorkspaceID)); workspace.ID != "workspace-chief" || workspace.Muted {
-		t.Errorf("the chief's delegate landed in %+v; want the chief's own workspace, unmuted", workspace)
+	chiefDesktop, _ := placedPane(t, w, "chief")
+	if protocol.Deref(result.DesktopID) != chiefDesktop.ID {
+		t.Errorf("the chief's delegate landed on desktop %q; want the chief's own %s", protocol.Deref(result.DesktopID), chiefDesktop.ID)
 	}
 }
 
-func TestADelegationNamesItsWorkspaceSessionAndPane(t *testing.T) {
+func TestADelegationNamesItsSession(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	cli := w.Client()
 	longDirectory := strings.Repeat("invoice-", 7)
@@ -249,10 +238,8 @@ func TestADelegationNamesItsWorkspaceSessionAndPane(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", row.name, err)
 		}
-		workspace := workspaceOfDelegate(t, w, protocol.Deref(result.WorkspaceID))
-		if workspace.Title != row.want || workspace.Directory != cwd || workspace.Layout == nil || len(workspace.Layout.Panes) != 1 ||
-			workspace.Layout.Panes[0].Title != row.want || protocol.Deref(workspace.Layout.Panes[0].SessionID) != result.SessionID {
-			t.Errorf("%s: the new workspace is %+v; want %q at %s holding one pane titled %q for %s", row.name, workspace, row.want, cwd, row.want, result.SessionID)
+		if result.Directory != cwd || protocol.Deref(result.DesktopID) == "" {
+			t.Errorf("%s: a delegation without a caller runs at %s on desktop %q; want %s, placed", row.name, result.Directory, protocol.Deref(result.DesktopID), cwd)
 		}
 		if label := sessionOfDelegate(t, w, result.SessionID).Label; label != row.want {
 			t.Errorf("%s: the delegate is labelled %q; want %q", row.name, label, row.want)
@@ -266,27 +253,18 @@ func TestADelegationThatCannotBePlacedIsRefusedBeforeAnythingLaunches(t *testing
 	for _, name := range []string{"reviewer", "writer"} {
 		w.Spawn(app, fakeagent.Codex, w.Path("docs"), func(m *protocol.SpawnSessionMessage) { m.ID, m.Label = name, protocol.Ptr(name) })
 	}
-	testworld.Request(app, protocol.RegisterWorkspaceMessage{
-		Cmd: protocol.CmdRegisterWorkspace, ID: "workspace-payments", Title: "Payments API", Directory: w.Path("docs"),
-	}, protocol.EventWorkspaceRegistered, func(protocol.WebSocketEvent) bool { return true })
-	takenDirectory := w.Path("elsewhere", "payments api")
-	for _, dir := range []string{w.Path("svc"), takenDirectory} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
+	if err := os.MkdirAll(w.Path("svc"), 0o755); err != nil {
+		t.Fatal(err)
 	}
-	before := len(w.App().Initial.Workspaces)
 
 	for _, row := range []struct {
 		name, source, cwd, label, refusal string
 	}{
 		{name: "a name past 48 characters", cwd: w.Path("svc"), label: strings.Repeat("n", 49), refusal: "is too long (max 48 characters)"},
 		{name: "a name that names nothing", cwd: w.Path("svc"), label: ".", refusal: `"." is not a usable name`},
-		{name: "another workspace's name", cwd: w.Path("svc"), label: "payments api", refusal: `workspace name "payments api" is already in use`},
-		{name: "a directory named like another workspace", cwd: takenDirectory, refusal: `workspace name "payments api" is already in use`},
-		{name: "the caller's own name", source: "reviewer", cwd: w.Path("docs"), label: "Reviewer", refusal: `session name "Reviewer" is already used in this workspace`},
-		{name: "a neighbour's name", source: "reviewer", cwd: w.Path("docs"), label: "WRITER", refusal: `session name "WRITER" is already used in this workspace`},
-		{name: "a caller attn does not know", source: "missing-source", cwd: w.Path("svc"), refusal: "source session missing-source was not found"},
+		{name: "the caller's own name", source: "reviewer", cwd: w.Path("docs"), label: "Reviewer", refusal: `session name "Reviewer" is already used on this desktop`},
+		{name: "a neighbour's name", source: "reviewer", cwd: w.Path("docs"), label: "WRITER", refusal: `session name "WRITER" is already used on this desktop`},
+		{name: "a caller attn does not know", source: "missing-source", cwd: w.Path("svc"), refusal: "session missing-source"},
 	} {
 		request := brief(row.cwd, "Reconcile the ledgers")
 		request.Agent = protocol.Ptr("codex")
@@ -301,7 +279,7 @@ func TestADelegationThatCannotBePlacedIsRefusedBeforeAnythingLaunches(t *testing
 		}
 	}
 
-	if after := w.App().Initial; len(after.Workspaces) != before || len(after.Sessions) != 2 {
-		t.Errorf("after only refused delegations the app sees %d workspaces (was %d) and sessions %+v", len(after.Workspaces), before, after.Sessions)
+	if after := w.App().Initial; len(after.Sessions) != 2 {
+		t.Errorf("after only refused delegations the app sees sessions %+v, want only the two it started", after.Sessions)
 	}
 }

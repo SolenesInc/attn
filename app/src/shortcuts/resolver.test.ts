@@ -1,5 +1,15 @@
-import { describe, expect, it } from 'vitest';
-import { DEFAULT_DOCK, parseKeybindingsConfig, serializeKeybindingsConfig, type KeybindingsConfig } from './resolver';
+import { afterEach, describe, expect, it } from 'vitest';
+import { SHORTCUTS } from './registry';
+import {
+  DEFAULT_DOCK,
+  findConflict,
+  isCustomized,
+  parseKeybindingsConfig,
+  resolveBinding,
+  serializeKeybindingsConfig,
+  setShortcutOverrides,
+  type KeybindingsConfig,
+} from './resolver';
 
 const CHORD = { leader: { key: 'k', meta: true }, then: { key: 'd' } };
 
@@ -25,6 +35,23 @@ describe('parseKeybindingsConfig', () => {
       { dock: { collapsed: true, items: ['dock.attention', 'session.new'] } },
     ],
     ['a dock collapsed flag that is not a boolean', JSON.stringify({ dock: { collapsed: 'yes', items: [] } }), { dock: { collapsed: false, items: [] } }],
+    [
+      'workspace.select overrides and dock entries saved before desktops',
+      JSON.stringify({
+        version: 1,
+        overrides: { 'workspace.select2': { key: '2', code: 'Digit2', ctrl: true }, 'workspace.select3': null },
+        dock: { collapsed: false, items: ['workspace.select1', 'dock.attention'] },
+      }),
+      {
+        overrides: { 'desktop.select2': { key: '2', code: 'Digit2', ctrl: true }, 'desktop.select3': null },
+        dock: { collapsed: false, items: ['desktop.select1', 'dock.attention'] },
+      },
+    ],
+    [
+      'a desktop.select override beside the legacy one it replaces',
+      JSON.stringify({ overrides: { 'desktop.select4': { key: '4', code: 'Digit4', alt: true }, 'workspace.select4': { key: '4', code: 'Digit4', ctrl: true } } }),
+      { overrides: { 'desktop.select4': { key: '4', code: 'Digit4', alt: true } } },
+    ],
   ])('reads %s', (_, raw, expected) => {
     const config = parseKeybindingsConfig(raw);
     for (const [field, value] of Object.entries(expected)) {
@@ -40,5 +67,24 @@ describe('parseKeybindingsConfig', () => {
     };
 
     expect(parseKeybindingsConfig(serializeKeybindingsConfig(config))).toEqual(config);
+  });
+});
+
+describe('a default the user already took', () => {
+  afterEach(() => setShortcutOverrides({}));
+
+  it('leaves a default unbound when the user already bound its combo to another action', () => {
+    setShortcutOverrides({ 'session.new': SHORTCUTS['ui.commandPalette'] });
+
+    expect(resolveBinding('ui.commandPalette')).toBeNull();
+    expect(isCustomized('ui.commandPalette')).toBe(false);
+    expect(resolveBinding('session.new')).toEqual(SHORTCUTS['ui.commandPalette']);
+    expect(findConflict(SHORTCUTS['ui.commandPalette'], 'session.new')).toBeNull();
+  });
+
+  it('leaves a default unbound when a user chord leads with its combo', () => {
+    setShortcutOverrides({ 'session.new': { leader: SHORTCUTS['ui.commandPalette'], then: { key: 'n' } } });
+
+    expect(resolveBinding('ui.commandPalette')).toBeNull();
   });
 });

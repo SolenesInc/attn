@@ -2,7 +2,6 @@ package daemon_test
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"slices"
 	"testing"
 
@@ -167,16 +166,10 @@ func TestAReconnectingDriverIsHandedItsOwnRunsAndTheAutoModeConfigItRuns(t *test
 	}
 }
 
-func closeSessionPane(app *testworld.Peer, w *world, session string) {
+func closeSessionPane(app *testworld.Peer, session string) {
 	app.T.Helper()
-	workspace := "workspace-" + filepath.Base(listedState(app.T.(*testing.T), w, session).Directory)
-	closed := testworld.Request(app, protocol.WorkspaceLayoutClosePaneMessage{
-		Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: workspace, PaneID: "pane-" + session,
-	}, protocol.EventWorkspaceLayoutActionResult, func(r protocol.WorkspaceLayoutActionResultMessage) bool {
-		return r.Action == protocol.CmdWorkspaceLayoutClosePane && protocol.Deref(r.PaneID) == "pane-"+session
-	})
-	if !closed.Success {
-		app.T.Fatalf("closing the pane of %s: %s", session, protocol.Deref(closed.Error))
+	if closed := closeFromApp(app, session); !closed.Accepted {
+		app.T.Fatalf("closing %s: %s", session, protocol.Deref(closed.Error))
 	}
 }
 
@@ -198,7 +191,7 @@ func TestTheOwningDriverIsToldWhenEachOfItsRunsEnds(t *testing.T) {
 		{name: "killed", run: killedRun, reasons: []string{"killed", "exited"},
 			end: func() { app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: killed}) }},
 		{name: "pane closed", run: paneClosedRun, reasons: []string{"killed", "exited"},
-			end: func() { closeSessionPane(app, w, paneClosed) }},
+			end: func() { closeSessionPane(app, paneClosed) }},
 		{name: "exited on its own", run: finishedRun, reasons: []string{"exited"},
 			end: func() {
 				app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: app.Terminal(finished), Data: "\x04"})

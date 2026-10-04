@@ -42,7 +42,7 @@ For a completed design, recommend an Orchestrator when the plan requires coordin
 
 ## Choose the folder and checkout
 
-Every delegation, including handover, requires `--cwd`. Attn does not infer it from a workspace or source session. Outside Git, the folder is enough. Inside Git, explicitly choose one mode and its branch arguments:
+Every delegation, including handover, requires `--cwd`. Attn does not infer it from the source session. Outside Git, the folder is enough. Inside Git, explicitly choose one mode and its branch arguments:
 
 ```sh
 # Reuse a checkout on its current branch.
@@ -66,6 +66,16 @@ Two conflicts have different recoveries:
 
 - Git already has the branch checked out elsewhere: use the reported folder with explicit reuse, or choose another branch. Attn will not turn a create request into reuse.
 - An active Attn agent uses the selected checkout: add `--allow-worktree-reuse` only when sharing is intended. Same-checkout handover exempts the predecessor; any other occupants still require the flag. No further sharing approval step follows it.
+
+## Choose the desktop
+
+The new agent opens beside you on your desktop without changing what the user sees. When the user asks for it elsewhere, pass `--desktop` with the desktop's shortcut digit, its name as shown (case-insensitive) or its id; it opens beside that desktop's active pane. Only desktops of your profile are accepted; a refusal lists them.
+
+```sh
+attn delegate --seed s-example --role builder --cwd /notes --desktop ops
+```
+
+To move a pane later, run `attn session move <desktop>` for yourself, or add `--session <id>` for a delegate you dispatched. The user's view stays put unless the moved pane was the one shown on its desktop.
 
 ## Choose the role and model
 

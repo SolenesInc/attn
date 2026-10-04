@@ -1,0 +1,3 @@
+kind: changed
+area: navigation
+change: Picking a pane flashes a thin inset outline once, with a quieter fade.

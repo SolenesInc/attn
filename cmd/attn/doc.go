@@ -52,7 +52,7 @@ func writeDocHelp(w io.Writer) {
 	fmt.Fprintf(w, `usage: attn doc <command>
 
 Documents are JSON objects addressed by <namespace> <collection> <id>. A
-namespace is owner/name (for example core/garden).
+namespace is owner/name (for example example/tasks).
 
 A collection declares which fields may be filtered and sorted on; created_at and
 updated_at are always available and are never declared. Everything else in a

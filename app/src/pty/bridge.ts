@@ -1,3 +1,4 @@
+import type { SessionPlacement } from '../types/generated';
 import { isTauri } from '@tauri-apps/api/core';
 import { recordPtyListenerError } from '../utils/ptyPerf';
 import type { SeededBlock } from '../utils/terminalBlocks';
@@ -6,7 +7,6 @@ import type { PlacementElement } from '../types/generated';
 export interface PtySpawnArgs {
   id: string;
   cwd: string;
-  workspace_id: string;
   endpoint_id?: string;
   intent?: 'create';
   cols: number;
@@ -27,6 +27,7 @@ export interface PtySpawnArgs {
   claude_executable?: string;
   codex_executable?: string;
   copilot_executable?: string;
+  placement?: SessionPlacement;
 }
 
 export interface PtyAttachArgs extends PtyPixelGeometry {
@@ -144,7 +145,7 @@ export async function listenPtyEvents(handler: PtyEventHandler) {
   };
 }
 
-export async function ptySpawn(request: { args: PtySpawnArgs }) {
+export async function ptySpawn(request: { args: PtySpawnArgs }): Promise<void> {
   if (mockEnabled()) {
     const id = request.args.id;
     mockSessions.add(id);
@@ -157,7 +158,7 @@ export async function ptySpawn(request: { args: PtySpawnArgs }) {
   if (!backend) {
     throw new Error('PTY backend is not configured');
   }
-  await backend.spawn(request.args);
+  return backend.spawn(request.args);
 }
 
 export async function ptyWrite(request: { id: string; data: string; source?: string; traceId?: string }) {

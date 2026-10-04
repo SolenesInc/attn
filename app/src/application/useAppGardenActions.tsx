@@ -1,17 +1,16 @@
 import { useCallback } from 'react';
-import { useErrorToast } from '../components/ErrorToast';
+import { useToast } from '../components/Toast';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { type SeedPlacement, type SeedReviewActionContext } from '../hooks/useDaemonSocket';
 import { useDockPanels } from '../hooks/useDockPanels';
-import { useSessionWorkspaceController } from '../hooks/useSessionWorkspaceController';
 import { useDaemonStore } from '../store/daemonSessions';
 import { gardenPathToSeed, useGardenWalk } from '../store/gardenWalk';
-import { useSessionStore } from '../store/sessions';
 import { crewDisplayName } from '../utils/crewName';
+import { openThenShow } from './openThenShow';
 interface Options {
   sendOpenSeed: ReturnType<typeof useDaemonApi>['sendOpenSeed'];
-  activeSessionId: ReturnType<typeof useSessionStore.getState>['activeSessionId'];
-  showError: ReturnType<typeof useErrorToast>['showError'];
+  contextSessionId: string | null;
+  showError: ReturnType<typeof useToast>['showError'];
   seeds: ReturnType<typeof useDaemonStore.getState>['seeds'];
   openDockPanel: ReturnType<typeof useDockPanels>['openDockPanel'];
   sendFsExists: ReturnType<typeof useDaemonApi>['sendFsExists'];
@@ -22,14 +21,12 @@ interface Options {
   sendSeedToChief: ReturnType<typeof useDaemonApi>['sendSeedToChief'];
   sendCrewWake: ReturnType<typeof useDaemonApi>['sendCrewWake'];
   sendCrewSleep: ReturnType<typeof useDaemonApi>['sendCrewSleep'];
-  handleSelectTile: (workspaceId: string, tileId: string) => void;
-  focusWorkspaceLeaf: ReturnType<typeof useSessionWorkspaceController>['focusWorkspaceLeaf'];
-  setCrewSeedTile: (tile: { workspaceId: string; tileId: string } | null) => void;
+  setCrewSeedTile: (tile: { desktopId: string; tileId: string } | null) => void;
   closeCrewPanel: () => void;
 }
 export function useAppGardenActions({
   sendOpenSeed,
-  activeSessionId,
+  contextSessionId,
   showError,
   seeds,
   openDockPanel,
@@ -41,8 +38,6 @@ export function useAppGardenActions({
   sendSeedToChief,
   sendCrewWake,
   sendCrewSleep,
-  handleSelectTile,
-  focusWorkspaceLeaf,
   setCrewSeedTile,
   closeCrewPanel,
 }: Options) {
@@ -50,27 +45,26 @@ export function useAppGardenActions({
     async (
       seedId: string,
       placement: SeedPlacement,
-      beforeFocus?: (opened: { workspaceId: string; tileId: string }) => void,
+      beforeFocus?: (opened: { desktopId: string; tileId: string }) => void,
     ) => {
-      const opened = await sendOpenSeed(seedId, placement);
-      if (!opened.workspaceId || !opened.tileId) {
-        throw new Error(`The daemon opened ${seedId} without a workspace tile`);
+      const opened = await openThenShow(() => sendOpenSeed(seedId, placement), ({ desktopId, tileId }) => {
+        if (desktopId && tileId) beforeFocus?.({ desktopId, tileId });
+      });
+      if (!opened.desktopId || !opened.tileId) {
+        throw new Error(`The daemon opened ${seedId} without a desktop tile`);
       }
-      const { workspaceId, tileId } = opened;
-      beforeFocus?.({ workspaceId, tileId });
-      handleSelectTile(workspaceId, tileId);
       return opened;
     },
-    [sendOpenSeed, handleSelectTile],
+    [sendOpenSeed],
   );
 
   const handleOpenSeedTile = useCallback(
     (seedId: string) => {
-      void openSeedTile(seedId, { sessionId: activeSessionId || '' }).catch((error) => {
+      void openSeedTile(seedId, { sessionId: contextSessionId || '' }).catch((error) => {
         showError(error instanceof Error ? error.message : 'Could not open the seed');
       });
     },
-    [activeSessionId, openSeedTile, showError],
+    [contextSessionId, openSeedTile, showError],
   );
 
   const handleOpenSeedFromCrew = useCallback(
@@ -115,15 +109,12 @@ export function useAppGardenActions({
 
   const handleOpenMarkdownArtifact = useCallback(
     (path: string) => {
-      void sendOpenMarkdown(path, '')
-        .then(({ workspaceId, tileId }) => {
-          if (workspaceId && tileId) focusWorkspaceLeaf(workspaceId, tileId);
-        })
+      void openThenShow(() => sendOpenMarkdown(path, ''))
         .catch((error) => {
           showError(error instanceof Error ? error.message : 'Could not open the document');
         });
     },
-    [focusWorkspaceLeaf, sendOpenMarkdown, showError],
+    [sendOpenMarkdown, showError],
   );
 
   const handleResumeSeed = useCallback(
@@ -142,19 +133,19 @@ export function useAppGardenActions({
 
   const handleHandoverSeed = useCallback(
     (options: Parameters<typeof sendSeedHandover>[0]) =>
-      sendSeedHandover({ ...options, sourceSessionId: activeSessionId || undefined }).then(
+      sendSeedHandover({ ...options, sourceSessionId: contextSessionId || undefined }).then(
         (result) => {
           handleSelectSession(result.session_id);
           return result;
         },
       ),
-    [activeSessionId, handleSelectSession, sendSeedHandover],
+    [contextSessionId, handleSelectSession, sendSeedHandover],
   );
 
   const handleSendSeedToChief = useCallback(
     (options: Parameters<typeof sendSeedToChief>[0]) =>
-      sendSeedToChief({ ...options, sourceSessionId: activeSessionId || undefined }),
-    [activeSessionId, sendSeedToChief],
+      sendSeedToChief({ ...options, sourceSessionId: contextSessionId || undefined }),
+    [contextSessionId, sendSeedToChief],
   );
 
   const handleWakeCrewMember = useCallback(

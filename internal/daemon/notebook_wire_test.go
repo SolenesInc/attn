@@ -341,7 +341,7 @@ func TestSendToChiefWithoutAChiefStillLandsAndRefusesBadSelections(t *testing.T)
 		t.Fatalf("next Chief inbox=%+v", mail)
 	}
 	for _, item := range mail {
-		if item.Address != "role:chief" {
+		if item.Address != "chief:"+app.SelectedProfile() {
 			t.Fatalf("Chief item address=%s", item.Address)
 		}
 	}

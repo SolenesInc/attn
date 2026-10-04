@@ -10,28 +10,61 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-const instanceRoleChiefOfStaff = "chief_of_staff"
-
-func (d *Daemon) chiefOfStaffSessionID() string {
+func (d *Daemon) profileChiefs() map[string]string {
 	if d.store == nil {
+		return map[string]string{}
+	}
+	byProfile, err := d.store.ProfileChiefs()
+	if err != nil {
+		d.logf("read profile chiefs: %v", err)
+	}
+	return byProfile
+}
+
+func (d *Daemon) chiefOfProfile(profileID string) string {
+	if profileID == "" {
 		return ""
 	}
-	return strings.TrimSpace(d.store.GetInstanceRole(instanceRoleChiefOfStaff))
+	return d.profileChiefs()[profileID]
 }
 
 func (d *Daemon) isChiefOfStaffSession(sessionID string) bool {
 	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
+	if sessionID == "" || d.store == nil {
 		return false
 	}
-	return d.chiefOfStaffSessionID() == sessionID
+	profileID, err := d.store.SessionProfileID(sessionID)
+	return err == nil && d.chiefOfProfile(profileID) == sessionID
 }
 
-func (d *Daemon) decorateChiefOfStaffWithSessionID(session *protocol.Session, chiefOfStaffSessionID string) {
+func (d *Daemon) chiefForCaller(callerSessionID string) string {
+	profile, err := d.callerProfile(callerSessionID)
+	if err != nil {
+		return ""
+	}
+	return d.chiefOfProfile(profile.ID)
+}
+
+func (d *Daemon) chiefForClient(client *wsClient) string {
+	return d.chiefOfProfile(d.profileForClient(client))
+}
+
+func (d *Daemon) profileForClient(client *wsClient) string {
+	if profileID := client.selectedProfile(); profileID != "" {
+		return profileID
+	}
+	profile, err := d.callerProfile("")
+	if err != nil {
+		return ""
+	}
+	return profile.ID
+}
+
+func (d *Daemon) decorateChiefOfStaff(session *protocol.Session, chiefByProfile map[string]string) {
 	if session == nil {
 		return
 	}
-	if session.ID == chiefOfStaffSessionID {
+	if session.ProfileID != "" && chiefByProfile[session.ProfileID] == session.ID {
 		session.ChiefOfStaff = protocol.Ptr(true)
 		return
 	}
@@ -74,20 +107,20 @@ func (d *Daemon) clearChiefOfStaffIfSession(sessionID string) {
 	if d.store == nil || strings.TrimSpace(sessionID) == "" {
 		return
 	}
-	if err := d.store.ClearInstanceRole(instanceRoleChiefOfStaff, sessionID); err != nil {
+	if _, err := d.store.ClearProfileChief(sessionID); err != nil {
 		d.logf("clear chief of staff role failed for session %s: %v", sessionID, err)
 	}
 }
 
-func (d *Daemon) nudgeChiefOfStaff(attemptKey, prompt string) bool {
-	if d.store == nil {
+func (d *Daemon) nudgeChiefOfStaff(profileID, attemptKey, prompt string) bool {
+	if d.store == nil || profileID == "" {
 		return false
 	}
 	itemID := "chief-inbox/" + strings.TrimSpace(attemptKey)
 	if strings.TrimSpace(attemptKey) == "" {
 		itemID = "chief-inbox/" + uuid.NewString()
 	}
-	receipt, err := d.sendToInbox(inbox.Item{ID: itemID, To: inbox.ToChief(), Kind: inbox.Notice, Source: "notebook-inbox", Text: prompt})
+	receipt, err := d.sendToInbox(inbox.Item{ID: itemID, To: inbox.ToChief(profileID), Kind: inbox.Notice, Source: "notebook-inbox", Text: prompt})
 	if err != nil {
 		d.logf("chief inbox: queue failed: %v", err)
 		return false
@@ -95,7 +128,7 @@ func (d *Daemon) nudgeChiefOfStaff(attemptKey, prompt string) bool {
 	return receipt.Rang || receipt.Outstanding
 }
 
-func (d *Daemon) maybeAssignChiefOnSpawn(sessionID, agent string, requested bool, existingSession *protocol.Session) bool {
+func (d *Daemon) maybeAssignChiefOnSpawn(sessionID, agent, profileID string, requested bool, existingSession *protocol.Session) bool {
 	if !requested || existingSession != nil || d.store == nil {
 		return false
 	}
@@ -103,15 +136,16 @@ func (d *Daemon) maybeAssignChiefOnSpawn(sessionID, agent string, requested bool
 		d.logf("create-as-chief: agent %q for session %s has no chief-guidance launch path; ignoring", agent, sessionID)
 		return false
 	}
-	if current := d.chiefOfStaffSessionID(); current != "" {
-		d.logf("create-as-chief: a chief (%s) already exists; ignoring request for session %s", current, sessionID)
+	claimed, err := d.store.ClaimProfileChief(profileID, sessionID)
+	if err != nil {
+		d.logf("create-as-chief: claiming the chief of profile %s for session %s failed: %v", profileID, sessionID, err)
 		return false
 	}
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, sessionID); err != nil {
-		d.logf("create-as-chief: set chief role failed for session %s: %v", sessionID, err)
+	if !claimed {
+		d.logf("create-as-chief: profile %s already has a chief (%s); ignoring request for session %s", profileID, d.chiefOfProfile(profileID), sessionID)
 		return false
 	}
-	d.logf("create-as-chief: session %s assigned chief role at launch", sessionID)
+	d.logf("create-as-chief: session %s is the chief of profile %s", sessionID, profileID)
 	return true
 }
 
@@ -122,7 +156,12 @@ func (d *Daemon) handleSetChiefOfStaff(client *wsClient, msg *protocol.SetChiefO
 		return
 	}
 
-	previousSessionID := d.chiefOfStaffSessionID()
+	profileID, err := d.store.SessionProfileID(sessionID)
+	if err != nil || profileID == "" {
+		d.sendChiefOfStaffResult(client, sessionID, msg.ChiefOfStaff, "", fmt.Errorf("session %s is not an agent of any profile, so it cannot hold a profile's chief role", sessionID))
+		return
+	}
+	previousSessionID := d.chiefOfProfile(profileID)
 	roleChanged := previousSessionID != sessionID
 	if !msg.ChiefOfStaff {
 		roleChanged = previousSessionID == sessionID
@@ -192,11 +231,11 @@ func (d *Daemon) handleSetChiefOfStaff(client *wsClient, msg *protocol.SetChiefO
 	}()
 
 	if msg.ChiefOfStaff {
-		if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, sessionID); err != nil {
+		if _, _, err := d.store.SetProfileChief(sessionID); err != nil {
 			d.sendChiefOfStaffResult(client, sessionID, true, previousSessionID, err)
 			return
 		}
-	} else if err := d.store.ClearInstanceRole(instanceRoleChiefOfStaff, sessionID); err != nil {
+	} else if _, err := d.store.ClearProfileChief(sessionID); err != nil {
 		d.sendChiefOfStaffResult(client, sessionID, false, previousSessionID, err)
 		return
 	}

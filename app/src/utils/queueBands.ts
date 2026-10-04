@@ -1,4 +1,4 @@
-import type { WorkspaceWithSessions, WorkspaceViewSession } from './workspaceViewModels';
+import type { DesktopWithSessions, DesktopViewSession } from './desktopViewModels';
 import { isSnoozed } from './snoozeDurations';
 
 /** Daemon-owned setting selecting the sidebar arrangement. Always read through
@@ -40,18 +40,17 @@ export function autoSettleSeconds(
     : DEFAULT_AUTO_SETTLE_COUNTDOWN_SECONDS;
 }
 
-export interface QueueBandSession extends WorkspaceViewSession {
+export interface QueueBandSession extends DesktopViewSession {
   chiefOfStaff?: boolean;
   turnOwed?: boolean;
   turnOpenedAt?: string;
   turnSnoozedUntil?: string;
-  pinnedAt?: string;
   /** Set on a shell: the agent session it was split from. */
   parentSessionId?: string;
   crewMember?: string;
   dispatcher_session_id?: string;
   dispatcher_member?: string;
-  automation?: { definition_id: string };
+  automation?: { definition_id: number };
 }
 
 export interface QueueBandOptions {
@@ -59,7 +58,7 @@ export interface QueueBandOptions {
   now?: number;
 }
 
-/** Automation sessions have their own sidebar groups. Crew days only join the
+/** Automation runs are browsed separately from the queue. Crew days only join the
  * queue when the user opts them in. */
 export function sessionParticipatesInQueue(
   session: Pick<QueueBandSession, 'automation' | 'crewMember'>,
@@ -68,10 +67,24 @@ export function sessionParticipatesInQueue(
   return !session.automation && (!session.crewMember || crewInQueue);
 }
 
+export interface QueueActions {
+  settle: boolean;
+  snooze: boolean;
+}
+
+export function queueActions(
+  session: Pick<QueueBandSession, 'automation' | 'crewMember' | 'chiefOfStaff' | 'turnOwed' | 'turnSnoozedUntil'>,
+  { queueMode, crewInQueue, now }: { queueMode: boolean; crewInQueue: boolean; now: number },
+): QueueActions {
+  if (session.chiefOfStaff || isSnoozed(session.turnSnoozedUntil, now)) return { settle: false, snooze: false };
+  const inQueue = queueMode && sessionParticipatesInQueue(session, crewInQueue);
+  return { settle: Boolean(session.turnOwed) && (inQueue || Boolean(session.automation)), snooze: inQueue };
+}
+
 export interface QueueRow<TSession extends QueueBandSession> {
   session: TSession;
-  workspaceId: string;
-  workspaceTitle: string;
+  desktopId: string;
+  desktopTitle: string;
 }
 
 /** How long a turn has been outstanding, in the coarsest unit that still reads as an
@@ -121,20 +134,17 @@ export interface QueueBands<TSession extends QueueBandSession> {
   chief: QueueRow<TSession> | null;
   turns: QueueRow<TSession>[];
   settled: QueueRow<TSession>[];
-  /** Sessions pinned out of the queue, in pin order — not state order, so a row never
-     * moves because the agent in it started working. */
-  pinned: QueueRow<TSession>[];
   /** The days crew members are living right now, member id order. A member's row is
-     * permanent, so it renders in the pinned region awake or asleep. */
+     * permanent, so it renders in the crew region awake or asleep. */
   crew: QueueRow<TSession>[];
   /** Agents the user deferred, soonest wake first. */
   snoozed: QueueRow<TSession>[];
 }
 
 /** Derive the sidebar's standing order. Every queue participant lands in one
- * band; automation sessions and pinned or muted workspaces land in none. */
+ * band; automation sessions land in none. */
 export function buildQueueBands<TSession extends QueueBandSession>(
-  workspaces: WorkspaceWithSessions<TSession>[],
+  desktops: DesktopWithSessions<TSession>[],
   optionsOrNow: QueueBandOptions | number = {},
 ): QueueBands<TSession> {
   const options = typeof optionsOrNow === 'number' ? { now: optionsOrNow } : optionsOrNow;
@@ -142,17 +152,16 @@ export function buildQueueBands<TSession extends QueueBandSession>(
   let chief: QueueRow<TSession> | null = null;
   const turns: QueueRow<TSession>[] = [];
   const settled: QueueRow<TSession>[] = [];
-  const pinned: QueueRow<TSession>[] = [];
   const snoozed: QueueRow<TSession>[] = [];
   const crew: QueueRow<TSession>[] = [];
-  const attachedParents = liveParentIds(workspaces);
+  const attachedParents = liveParentIds(desktops);
 
-  for (const workspace of workspaces) {
-    for (const session of workspace.sessions) {
+  for (const desktop of desktops) {
+    for (const session of desktop.sessions) {
       const row: QueueRow<TSession> = {
         session,
-        workspaceId: workspace.id,
-        workspaceTitle: workspace.title,
+        desktopId: desktop.id,
+        desktopTitle: desktop.title,
       };
       if (session.chiefOfStaff) {
         if (!chief) {
@@ -163,21 +172,13 @@ export function buildQueueBands<TSession extends QueueBandSession>(
       if (session.automation) {
         continue;
       }
-      // Before the workspace's own pin or mute: a member's row is permanent and does not depend on where its day happens to be living.
       if (session.crewMember) {
         crew.push(row);
         if (!options.crewInQueue) {
           continue;
         }
       }
-      if (workspace.pinned || workspace.muted) {
-        continue;
-      }
-      if (session.pinnedAt) {
-        pinned.push(row);
-        continue;
-      }
-      if (isAttachedSatellite(session, workspace.id, attachedParents)) {
+      if (isAttachedSatellite(session, desktop.id, attachedParents)) {
         continue;
       }
       // Before the turn check, so the row's home does not depend on the daemon's settle-as-it-snoozes invariant holding in a mid-broadcast snapshot.
@@ -192,35 +193,34 @@ export function buildQueueBands<TSession extends QueueBandSession>(
   }
 
   turns.sort((a, b) => compareTurnOrder(a.session, b.session));
-  pinned.sort((a, b) => comparePinOrder(a.session, b.session));
   snoozed.sort((a, b) => compareWakeOrder(a.session, b.session));
   crew.sort((a, b) => compareCrewOrder(a.session, b.session));
 
-  return { chief, turns, settled, pinned, snoozed, crew };
+  return { chief, turns, settled, snoozed, crew };
 }
 
-/** Index every session by its workspace, so a satellite's parent is confirmed present
+/** Index every session by its desktop, so a satellite's parent is confirmed present
  * *and* co-located in one lookup. */
-function liveParentIds(workspaces: WorkspaceWithSessions<QueueBandSession>[]): Map<string, string> {
+function liveParentIds(desktops: DesktopWithSessions<QueueBandSession>[]): Map<string, string> {
   const byId = new Map<string, string>();
-  for (const workspace of workspaces) {
-    for (const session of workspace.sessions) {
-      byId.set(session.id, workspace.id);
+  for (const desktop of desktops) {
+    for (const session of desktop.sessions) {
+      byId.set(session.id, desktop.id);
     }
   }
   return byId;
 }
 
-/** Whether this is a shell whose parent agent is present in the same workspace — the one
+/** Whether this is a shell whose parent agent is present in the same desktop — the one
  * case that earns no row. An orphan keeps its settled row: the queue reorders, never hides. */
 function isAttachedSatellite(
   session: QueueBandSession,
-  workspaceId: string,
+  desktopId: string,
   parents: Map<string, string>,
 ): boolean {
   const parentId = session.parentSessionId;
   if (!parentId) return false;
-  return parents.get(parentId) === workspaceId;
+  return parents.get(parentId) === desktopId;
 }
 
 /** Member order: by name, so a member's row is where it was yesterday. */
@@ -229,16 +229,6 @@ function compareCrewOrder(a: QueueBandSession, b: QueueBandSession): number {
   const memberB = b.crewMember ?? '';
   if (memberA !== memberB) {
     return memberA < memberB ? -1 : 1;
-  }
-  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-}
-
-/** Pin order: earliest pin first, tie-broken by id so the order is total. */
-function comparePinOrder(a: QueueBandSession, b: QueueBandSession): number {
-  const pinnedA = a.pinnedAt ?? '';
-  const pinnedB = b.pinnedAt ?? '';
-  if (pinnedA !== pinnedB) {
-    return pinnedA < pinnedB ? -1 : 1;
   }
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
@@ -280,6 +270,20 @@ export function headOfQueue<TSession extends QueueBandSession>(
   return bands?.turns[0] ?? null;
 }
 
+/** The agent `step` rows away from `fromId` in the order the sidebar lists the queue:
+ * waiting, working, snoozed. An agent off the queue steps onto its first or last row. */
+export function stepQueue<TSession extends QueueBandSession>(
+  bands: QueueBands<TSession>,
+  fromId: string | null,
+  step: 1 | -1,
+): TSession | null {
+  const order = [...bands.turns, ...bands.settled, ...bands.snoozed];
+  if (order.length === 0) return null;
+  const index = order.findIndex((row) => row.session.id === fromId);
+  const next = index < 0 ? (step === 1 ? 0 : order.length - 1) : (index + step + order.length) % order.length;
+  return order[next].session;
+}
+
 /** Where selection goes when a turn closes: the next agent, or home. */
 export type QueueAdvance<TSession extends QueueBandSession> =
   | { to: 'session'; row: QueueRow<TSession> }
@@ -301,4 +305,21 @@ export function advanceAfterTurnClosed<TSession extends QueueBandSession>(
   const stillOwed = new Set(bands.turns.map((row) => row.session.id));
   const next = nextOwedAfter(previousTurns, sessionId, stillOwed) ?? headOfQueue(bands);
   return next ? { to: 'session', row: next } : { to: 'dashboard' };
+}
+
+export function crewRows<TSession extends QueueBandSession>(
+  crew: readonly { id: string }[] | undefined,
+  bands: Pick<QueueBands<TSession>, 'chief' | 'crew'>,
+): { member: string; row?: QueueRow<TSession> }[] {
+  const byMember = new Map<string, QueueRow<TSession>>();
+  for (const row of bands.crew) {
+    const member = row.session.crewMember;
+    if (member && !byMember.has(member)) byMember.set(member, row);
+  }
+  const members = new Set<string>([...(crew ?? []).map((entry) => entry.id), ...byMember.keys()]);
+  const chiefMember = bands.chief?.session.crewMember;
+  if (chiefMember) members.delete(chiefMember);
+  return [...members]
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+    .map((member) => ({ member, row: byMember.get(member) }));
 }

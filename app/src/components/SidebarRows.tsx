@@ -1,19 +1,23 @@
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import type { SessionPullRequest } from '../types/generated';
-import { type TileContentState, type TileLeaf } from '../types/workspace';
+import { parseNotebookTileParams, type TileContentState, type TileLeaf } from '../types/desktop';
 import { describeSessionPullRequest, pickSessionPullRequest } from '../utils/sessionPullRequest';
-import { deriveTileTitle } from '../utils/tilePresentation';
+import { deriveTileTitle, tileKindLabel } from '../utils/tilePresentation';
+import { useDaemonStore } from '../store/daemonSessions';
 import { ChiefOfStaffBadge } from './ChiefOfStaffBadge';
+import { useSidebarContext } from './SidebarContext';
 import { DelegatedFromChiefBadge } from './DelegatedFromChiefBadge';
 import { DelegationChainTrigger } from './DelegationChain';
-import { HarnessIcon } from './HarnessIcon';
+import { SessionLead } from './SessionLead';
 import { SessionLabel } from './SessionLabel';
 import { SessionProvenance } from './SessionProvenance';
 import { SidebarSettlingBar } from './SettlingIndicator';
+import { harnessLabel } from './harnessLabel';
+import { describeUnknownReason } from './stateReason';
 import './Sidebar.css';
+import './SidebarRow.css';
 import type { LocalSession } from './sidebarTypes';
-import { StateIndicator } from './StateIndicator';
 
 export function SidebarSessionPullRequest({
   pullRequests,
@@ -49,7 +53,6 @@ export function SidebarSessionIdentity({
   return (
     <span className="sidebar-session-identity">
       <span className="sidebar-session-headline">
-        <HarnessIcon agent={session.agent} />
         <SessionLabel label={session.label} session={session} hasDelegates={hasDelegates} />
         <SidebarSessionPullRequest pullRequests={session.pullRequests} />
       </span>
@@ -59,30 +62,38 @@ export function SidebarSessionIdentity({
 }
 
 export function TileSidebarRow({
-  workspaceId,
+  desktopId,
   tile,
   content,
   selected,
-  muted = false,
   onSelect,
   onClose,
   onReload,
 }: {
-  workspaceId: string;
+  desktopId: string;
   tile: TileLeaf;
   content?: TileContentState;
   selected: boolean;
-  muted?: boolean;
   onSelect: () => void;
   onClose: () => void;
   onReload: () => void;
 }) {
-  const title = deriveTileTitle(tile, content);
+  const seeds = useDaemonStore((state) => state.seeds);
+  const { desktops } = useSidebarContext();
+  const boundSession = tile.tileSessionId
+    ? desktops.flatMap((desktop) => desktop.sessions).find((session) => session.id === tile.tileSessionId)
+    : undefined;
+  const title = deriveTileTitle(tile, content, (id) => seeds.find((seed) => seed.id === id)?.title);
+  const kind = tileKindLabel(tile.tileKind);
+  const tileIdentifier = tile.tileKind === 'notebook'
+    ? parseNotebookTileParams(tile.tileParams).path
+    : tile.tileParams;
   return (
     <div
-      className={`session-item workspace-tile-item grouped ${selected ? 'selected' : ''} ${muted ? 'muted-session' : ''}`.trim()}
-      data-testid={`sidebar-tile-${workspaceId}-${tile.tileId}`}
+      className={`session-item sidebar-leaf-row desktop-tile-item ${selected ? 'selected' : ''}`.trim()}
+      data-testid={`sidebar-tile-${desktopId}-${tile.tileId}`}
       data-tile-kind={tile.tileKind}
+      title={tileIdentifier || tile.tileId}
     >
       <button
         type="button"
@@ -90,39 +101,46 @@ export function TileSidebarRow({
         aria-label={`Open ${title}`}
         onClick={onSelect}
       />
-      <span
-        className={`workspace-tile-indicator workspace-tile-indicator--${tile.tileKind}`}
-        aria-hidden="true"
-      />
+      <span className="desktop-tile-icon" aria-hidden="true">{kind.icon}</span>
       <span className="session-label">{title}</span>
-      {!muted && (
-        <div className="session-actions">
-          {tile.tileKind === 'browser' && (
-            <button
-              className="session-action-btn reload-session-btn"
-              onClick={(event) => {
-                event.stopPropagation();
-                onReload();
-              }}
-              title="Reload browser"
-              aria-label={`Reload ${title}`}
-            >
-              ↻
-            </button>
-          )}
+      <span className="session-trailing">
+        <span className="desktop-tile-kind">{kind.word}</span>
+        {boundSession?.endpointName && (
+          <span className={`session-endpoint-badge status-${boundSession.endpointStatus || 'connected'}`}>
+            {boundSession.endpointName}
+          </span>
+        )}
+      </span>
+      <div className="session-actions">
+        {tile.tileKind === 'browser' && (
           <button
-            className="session-action-btn close-session-btn"
+            type="button"
+            className="session-action-btn reload-session-btn"
+            data-testid={`reload-tile-${desktopId}-${tile.tileId}`}
             onClick={(event) => {
               event.stopPropagation();
-              onClose();
+              onReload();
             }}
-            title="Close tile"
-            aria-label={`Close ${title}`}
+            title="Reload browser"
+            aria-label={`Reload ${title}`}
           >
-            ×
+            ↻
           </button>
-        </div>
-      )}
+        )}
+        <button
+          type="button"
+          className="session-action-btn close-session-btn"
+          data-testid={`close-tile-${desktopId}-${tile.tileId}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onClose();
+          }}
+          title="Close tile"
+          aria-label={`Close ${title}`}
+        >
+          ×
+        </button>
+      </div>
     </div>
   );
 }
@@ -136,9 +154,8 @@ export function SidebarSessionBadges({ session }: { session: LocalSession }) {
         </span>
       )}
       {session.state === 'recoverable' && <span className="session-recoverable">recoverable</span>}
-      {session.chiefOfStaff && <ChiefOfStaffBadge />}
+      {session.chiefOfStaff && <ChiefOfStaffBadge compact />}
       {session.delegatedFromChief && <DelegatedFromChiefBadge />}
-      {session.isWorktree && <span className="worktree-indicator">⎇</span>}
     </>
   );
 }
@@ -169,8 +186,10 @@ export function SidebarSessionRow({
   onClickCapture,
   onPointerDown,
   onOpenActions,
+  onSettle,
   showSettling,
   delegates,
+  grouped = false,
 }: {
   session: LocalSession;
   selected: boolean;
@@ -180,15 +199,23 @@ export function SidebarSessionRow({
   onClickCapture?: (event: ReactMouseEvent) => void;
   onPointerDown?: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   onOpenActions: (event: ReactMouseEvent) => void;
+  onSettle?: () => void;
   showSettling: boolean;
   delegates: readonly LocalSession[];
+  grouped?: boolean;
 }) {
+  const harnessTitle = harnessLabel(session.agent);
+  const stateTitle = session.state === 'recoverable'
+    ? 'Session will be recovered when opened'
+    : session.state === 'unknown' ? describeUnknownReason(session.state_reason) : undefined;
+  const hoverTitle = stateTitle ? `${harnessTitle} · ${stateTitle}` : harnessTitle;
   return (
     <div
-      className={`session-item grouped ${selected ? 'selected' : ''} ${session.state === 'recoverable' ? 'recoverable' : ''} ${draggable ? 'session-item--draggable' : ''} ${dragging ? 'session-item--dragging' : ''}`
+      className={`session-item sidebar-leaf-row ${grouped ? 'grouped' : ''} ${selected ? 'selected' : ''} ${session.state === 'recoverable' ? 'recoverable' : ''} ${draggable ? 'session-item--draggable' : ''} ${dragging ? 'session-item--dragging' : ''}`
         .trim()
         .replace(/\s+/g, ' ')}
       data-testid={`sidebar-session-${session.id}`}
+      data-session-id={session.id}
       data-state={session.state}
       title={session.state === 'recoverable' ? 'Session will be recovered when opened' : undefined}
     >
@@ -196,21 +223,40 @@ export function SidebarSessionRow({
         type="button"
         className="sidebar-row-select"
         aria-label={`Open ${session.label}`}
+        title={hoverTitle}
         onClick={onSelect}
         onClickCapture={onClickCapture}
         onPointerDown={onPointerDown}
       />
-      <StateIndicator
+      <SessionLead
+        agent={session.agent}
         state={session.state}
-        size="md"
         seed={session.id}
         reason={session.state_reason}
       />
       <SidebarSessionIdentity session={session} hasDelegates={delegates.length > 0} />
-      <DelegationChainTrigger session={session} hasDelegates={delegates.length > 0} />
-      <SidebarSessionBadges session={session} />
+      <span className="session-trailing">
+        <DelegationChainTrigger session={session} hasDelegates={delegates.length > 0} />
+        <SidebarSessionBadges session={session} />
+      </span>
       <div className="session-actions">
+        {onSettle && (
+          <button
+            type="button"
+            className="session-action-btn session-settle-btn"
+            data-testid={`session-settle-${session.id}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onSettle();
+            }}
+            title={`Settle this run (${formatShortcut('session.settle')})`}
+            aria-label={`Settle ${session.label}`}
+          >
+            ✓
+          </button>
+        )}
         <button
+          type="button"
           className="session-action-btn session-more-btn"
           data-testid={`session-actions-${session.id}`}
           onClick={onOpenActions}

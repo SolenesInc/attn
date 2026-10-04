@@ -16,7 +16,10 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-func (d *Daemon) automationRun(ctx context.Context, definitionID, requestID, input string) (*store.AutomationRun, error) {
+func (d *Daemon) automationRun(ctx context.Context, definitionID int, requestID, input string) (*store.AutomationRun, error) {
+	if err := d.requireHome(automation.Surface); err != nil {
+		return nil, err
+	}
 	if strings.TrimSpace(requestID) == "" {
 		return nil, fmt.Errorf("request_id is required")
 	}
@@ -34,7 +37,7 @@ func (d *Daemon) automationRun(ctx context.Context, definitionID, requestID, inp
 	def, err := d.store.GetAutomationDefinition(definitionID)
 	if err != nil || def == nil {
 		if err == nil {
-			err = fmt.Errorf("automation %q not found", definitionID)
+			err = fmt.Errorf("automation %d not found", definitionID)
 		}
 		return nil, err
 	}
@@ -43,7 +46,7 @@ func (d *Daemon) automationRun(ctx context.Context, definitionID, requestID, inp
 		return nil, err
 	}
 	if spec.Trigger.Type != "manual" {
-		return nil, fmt.Errorf("automation %q is provider-driven and cannot be run manually yet", definitionID)
+		return nil, fmt.Errorf("automation %d is provider-driven and cannot be run manually yet", definitionID)
 	}
 	snapshot, err := automation.Effective(spec, def.Revision)
 	if err != nil {
@@ -64,7 +67,7 @@ func (d *Daemon) automationRun(ctx context.Context, definitionID, requestID, inp
 		subjectKey = pr.SubjectKey()
 	}
 	snapshotJSON, _ := json.Marshal(snapshot)
-	ids, err := d.newAutomationRunReservation()
+	ids, err := d.newAutomationRunReservation(def)
 	if err != nil {
 		return nil, err
 	}
@@ -87,13 +90,13 @@ func (d *Daemon) automationRun(ctx context.Context, definitionID, requestID, inp
 	}
 	return d.store.GetAutomationRun(run.ID)
 }
-func (d *Daemon) newAutomationRunReservation() (store.AutomationRunReservation, error) {
+func (d *Daemon) newAutomationRunReservation(definition *store.AutomationDefinition) (store.AutomationRunReservation, error) {
 	runID := uuid.NewString()
 	seedID, err := d.mintAutomationSeedID()
 	if err != nil {
 		return store.AutomationRunReservation{}, err
 	}
-	return store.AutomationRunReservation{RunID: runID, OccurrenceID: uuid.NewString(), SeedID: seedID, SessionID: uuid.NewString(), WorkspaceID: "workspace-" + uuid.NewString(), PaneID: "pane-" + uuid.NewString()}, nil
+	return store.AutomationRunReservation{RunID: runID, OccurrenceID: uuid.NewString(), SeedID: seedID, SessionID: uuid.NewString()}, nil
 }
 
 func (d *Daemon) mintAutomationSeedID() (string, error) {
@@ -106,8 +109,8 @@ func (d *Daemon) mintAutomationSeedID() (string, error) {
 	}
 	return d.mintSeedID()
 }
-func (d *Daemon) automationObservationLock(definitionID, subjectKey string, cycle int) *sync.Mutex {
-	key := fmt.Sprintf("%s\x00%s\x00%d", definitionID, subjectKey, cycle)
+func (d *Daemon) automationObservationLock(definitionID int, subjectKey string, cycle int) *sync.Mutex {
+	key := fmt.Sprintf("%d\x00%s\x00%d", definitionID, subjectKey, cycle)
 	d.automationObservationMu.Lock()
 	defer d.automationObservationMu.Unlock()
 	if d.automationObservationLocks == nil {
@@ -123,26 +126,27 @@ func (d *Daemon) automationObservationLock(definitionID, subjectKey string, cycl
 
 func (d *Daemon) handleAutomationCommand(conn net.Conn, cmd string, msg any) {
 	ctx := context.Background()
+	scope := d.automationSocketScope(msg)
 	var result any
 	switch cmd {
 	case protocol.CmdAutomationApply:
-		result = d.actionAutomationApply(ctx, msg.(*protocol.AutomationApplyMessage))
+		result = d.actionAutomationApply(ctx, msg.(*protocol.AutomationApplyMessage), scope)
 	case protocol.CmdAutomationValidate:
 		result = d.actionAutomationValidate(msg.(*protocol.AutomationValidateMessage))
 	case protocol.CmdAutomationDefinitionsGet:
-		result = d.actionAutomationDefinitionsGet(msg.(*protocol.AutomationDefinitionsGetMessage))
+		result = d.actionAutomationDefinitionsGet(msg.(*protocol.AutomationDefinitionsGetMessage), scope)
 	case protocol.CmdAutomationDefinitionGet:
-		result = d.actionAutomationDefinitionGet(msg.(*protocol.AutomationDefinitionGetMessage))
+		result = d.actionAutomationDefinitionGet(msg.(*protocol.AutomationDefinitionGetMessage), scope)
 	case protocol.CmdAutomationRun:
-		result = d.actionAutomationRun(ctx, msg.(*protocol.AutomationRunMessage))
+		result = d.actionAutomationRun(ctx, msg.(*protocol.AutomationRunMessage), scope)
 	case protocol.CmdAutomationRunsGet:
-		result = d.actionAutomationRunsGet(msg.(*protocol.AutomationRunsGetMessage))
+		result = d.actionAutomationRunsGet(msg.(*protocol.AutomationRunsGetMessage), scope)
 	case protocol.CmdAutomationSetEnabled:
-		result = d.actionAutomationSetEnabled(ctx, msg.(*protocol.AutomationSetEnabledMessage))
+		result = d.actionAutomationSetEnabled(ctx, msg.(*protocol.AutomationSetEnabledMessage), scope)
 	case protocol.CmdAutomationDelete:
-		result = d.actionAutomationDelete(ctx, msg.(*protocol.AutomationDeleteMessage))
+		result = d.actionAutomationDelete(ctx, msg.(*protocol.AutomationDeleteMessage), scope)
 	case protocol.CmdAutomationCleanup:
-		result = d.actionAutomationCleanup(ctx, msg.(*protocol.AutomationCleanupMessage))
+		result = d.actionAutomationCleanup(ctx, msg.(*protocol.AutomationCleanupMessage), scope)
 	}
 	_ = json.NewEncoder(conn).Encode(result)
 }

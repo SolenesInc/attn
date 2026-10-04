@@ -73,6 +73,12 @@ func runSession() {
 			return
 		}
 		runSessionRename(os.Args[3:])
+	case "move":
+		if hasHelpFlag(os.Args[3:]) {
+			writeSessionHelp(os.Stdout)
+			return
+		}
+		runSessionMove(os.Args[3:])
 	default:
 		fmt.Fprintf(os.Stderr, "session: unknown command %q\n", os.Args[2])
 		writeSessionHelp(os.Stderr)
@@ -296,9 +302,9 @@ commands:
         read provider-neutral, timestamped, redacted conversation and tool
         events. --after resumes strictly after a prior cursor; --follow polls
         until interrupted; --json emits one event per line.
-  list [--closed | --all] [--limit <n>] [--before <id>] [--workspace <id>]
+  list [--closed | --all] [--limit <n>] [--before <id>]
        [--repository <path>] [--last <preset> | --since <when> [--until <when>]]
-       [--reopen] [--json]
+       [--profile <id>] [--reopen] [--json]
         read the session ledger, newest first: live sessions by default,
         --closed for the ones that ended, --all for both. When rows are
         omitted the notice names the id to pass to --before for the next page.
@@ -316,11 +322,20 @@ commands:
         a few plain words about the work, up to 48 characters. Defaults to the
         session running this command. Rename when the main work drifts from
         the name it started with.
+  move <desktop> [--session <id>] [--json]
+        move a session's pane to another desktop of its profile, beside that
+        desktop's active pane (its first pane when empty). <desktop> is the
+        shortcut digit (1-9), the name as shown (case-insensitive) or the id.
+        Defaults to the session running this command; a session may also move
+        the sessions it dispatched, and the chief any. What the user sees
+        stays put unless the moved pane was the one shown on its desktop.
   reopen <id> [--action <name>] [--cwd <path>] [--json]
-        bring a closed session back under its own id. Without --action it
-        performs the plain reopen and refuses, naming what is offered, when the
-        verdict does not allow one. Actions that recreate a worktree or fetch a
-        branch write to the repository and only ever run when named here.
+        bring a closed session back under its own id, on its last or
+        current desktop in its profile. Without --action it performs the plain reopen and refuses,
+        naming what is offered, when the verdict does not allow one. Actions
+        that recreate a worktree or fetch a branch write to the repository and
+        only ever run when named here.
         --cwd is where start_fresh_elsewhere starts.
+        Sessions whose profile was deleted cannot reopen.
 `)
 }

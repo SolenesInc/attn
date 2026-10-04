@@ -13,7 +13,7 @@ import (
 func TestATurnOpensAtAWaitSurvivesTheWorkAndOnlySettleClosesIt(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app, watcher, cli := w.App(), w.App(), w.Client()
-		if err := cli.Register("s1", "s1", w.Path("s1")); err != nil {
+		if err := w.InjectSession("s1", "s1", w.Path("s1"), protocol.SessionAgentClaude); err != nil {
 			t.Fatalf("register: %v", err)
 		}
 		w.advance(0)
@@ -109,24 +109,12 @@ func TestSessionsTheQueueSkipsNeverOweATurn(t *testing.T) {
 	}
 	w.Launched(chief)
 	madeChief := len(sessionUpdatesOf(app, chief))
-	pinned := w.Spawn(app, fakeagent.Claude, w.Path("pinned"))
-	w.Launched(pinned)
-	muted := w.Spawn(app, fakeagent.Claude, w.Path("muted"))
-	w.Launched(muted)
-	app.Send(protocol.PinWorkspaceMessage{Cmd: protocol.CmdPinWorkspace, WorkspaceID: "workspace-pinned", Pinned: true})
-	app.Send(protocol.MuteWorkspaceMessage{Cmd: protocol.CmdMuteWorkspace, WorkspaceID: "workspace-muted"})
-	testworld.Await(app, protocol.EventWorkspaceStateChanged, func(e protocol.WorkspaceStateChangedMessage) bool {
-		return e.Workspace.ID == "workspace-pinned" && e.Workspace.Pinned
-	})
-	testworld.Await(app, protocol.EventWorkspaceStateChanged, func(e protocol.WorkspaceStateChangedMessage) bool {
-		return e.Workspace.ID == "workspace-muted" && e.Workspace.Muted
-	})
-	for _, id := range []string{pinned, muted, chief} {
+	for _, id := range []string{chief} {
 		testworld.AwaitSession(app, id, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	}
 	testworld.AwaitSession(app, shell, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 
-	for id, name := range map[string]string{shell: "shell", chief: "chief of staff", pinned: "session in a pinned workspace", muted: "session in a muted workspace"} {
+	for id, name := range map[string]string{shell: "shell", chief: "chief of staff"} {
 		got := queriedSession(t, cli, id)
 		if got.State != protocol.SessionStateIdle || got.TurnOwed != nil {
 			t.Errorf("the %s is %s with turn owed %v, want idle at its prompt owing nothing", name, got.State, protocol.Deref(got.TurnOwed))

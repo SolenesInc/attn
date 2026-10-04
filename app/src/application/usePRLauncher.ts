@@ -10,14 +10,13 @@ import {
   resolvePreferredAgent,
 } from '../utils/agentAvailability';
 import { AppContentProps, OpenPRLauncherJob } from './appSupport';
-import { useWorkspaceCreation } from './useWorkspaceCreation';
+import type { useSessionLaunch } from './useSessionLaunch';
 
 interface Options {
   settings: AppContentProps['settings'];
-  createWorkspaceSession: ReturnType<typeof useWorkspaceCreation>['createWorkspaceSession'];
-  selectCreatedSession: (id: string) => boolean;
+  launchAgent: ReturnType<typeof useSessionLaunch>['launchAgent'];
 }
-export function usePRLauncher({ settings, createWorkspaceSession, selectCreatedSession }: Options) {
+export function usePRLauncher({ settings, launchAgent }: Options) {
   const { sendRefreshPRs, sendFetchPRDetails, sendEnsureRepo, sendCreateWorktreeFromBranch } =
     useDaemonApi();
   const agentAvailability = useMemo(() => getAgentAvailability(settings), [settings]);
@@ -29,7 +28,7 @@ export function usePRLauncher({ settings, createWorkspaceSession, selectCreatedS
     sendFetchPRDetails,
     sendEnsureRepo,
     sendCreateWorktreeFromBranch,
-    createSession: createWorkspaceSession,
+    createSession: launchAgent,
   });
 
   const handleOpenPR = useCallback(
@@ -71,7 +70,6 @@ export function usePRLauncher({ settings, createWorkspaceSession, selectCreatedS
         return;
       }
       if (result.success) {
-        selectCreatedSession(result.sessionId);
         console.log(`[App] Worktree created at ${result.worktreePath}`);
         return;
       }
@@ -114,7 +112,6 @@ export function usePRLauncher({ settings, createWorkspaceSession, selectCreatedS
       agentAvailability,
       hasAvailableAgents,
       openPR,
-      selectCreatedSession,
       settings.new_session_agent,
     ],
   );
@@ -137,5 +134,5 @@ export function usePRLauncher({ settings, createWorkspaceSession, selectCreatedS
     }
   }, [sendRefreshPRs]);
 
-  return { openPRLauncherJob, handleOpenPR, isRefreshingPRs, refreshError, handleRefreshPRs };
+  return { openPRLauncherJob, setOpenPRLauncherJob, handleOpenPR, isRefreshingPRs, refreshError, handleRefreshPRs };
 }

@@ -32,10 +32,14 @@ func (d *Daemon) resolveReopen(
 		Live:      protocol.Deref(entry.ClosedAt) == "",
 	}
 	verdict.DirectoryState = inspectContinuationDirectory(verdict.Execution)
-	d.planReopenPlacement(&verdict)
+	d.planReopenProfile(&verdict)
 
 	if verdict.Live {
 		verdict.Reason = fmt.Sprintf("session %s is running; focus it instead of reopening it", entry.ID)
+		return verdict, nil
+	}
+	if verdict.ProfileDeleted {
+		verdict.Reason = fmt.Sprintf("profile %s was deleted; this session cannot reopen in another profile", verdict.ProfileID)
 		return verdict, nil
 	}
 	if !decideReopenHost(&verdict, d.endpointInfos()) {

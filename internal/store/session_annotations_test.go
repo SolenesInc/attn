@@ -9,7 +9,7 @@ const testAnnotations = `[{"id":"a1","message_key":"turn-1","start":4,"end":10,"
 
 func TestMigration93KeepsDraftsWrittenBeforeTheNoteExisted(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "pre-93.db")
-	db, err := openDBAtVersion(dbPath, 161)
+	db, err := openDBAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("OpenDB setup: %v", err)
 	}
@@ -27,7 +27,7 @@ func TestMigration93KeepsDraftsWrittenBeforeTheNoteExisted(t *testing.T) {
 		t.Fatalf("close pre-93 database: %v", err)
 	}
 
-	migrated, err := newStoreAtVersion(dbPath, 161)
+	migrated, err := newStoreAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}

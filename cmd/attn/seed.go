@@ -105,7 +105,7 @@ commands:
         reaper.
 
   search <words> [--limit <n>] [--json]
-        find seeds by keyword across the whole garden, harvested and withered
+        find seeds by keyword across your profile's garden, harvested and withered
         included: titles, bodies and every log entry. A seed matches when one
         of those carries every word, and the line that did is printed under it.
         Title matches come first. Search before you plant, so a duplicate is
@@ -114,7 +114,7 @@ commands:
   ready [--plot <plot> | --all] [--json]
         what you can tend right now, oldest first: nothing open blocks it,
         nobody is holding it, and it is not a plot — a plot's work is its
-        children. With no flags the scope is the whole garden — unless this
+        children. With no flags the scope is your profile's garden — unless this
         session was dispatched at a plot, and then that plot; --all steps back
         out to the garden.
 
@@ -239,6 +239,7 @@ flags:
                      records it (tend, park, harvest, wither, replant)
   --member <name>    the crew member asking, recorded as planter, tender or
                      note author
+  --profile <name|id> required outside attn when several profiles exist
   --session <id>     the session asking (defaults to ATTN_SESSION_ID)
   --limit <n>        how many log entries to read (notes), or how many hits to
                      answer with (search; default %d, at most %d)
@@ -246,8 +247,8 @@ flags:
 `, formatWindow(garden.DefaultStaleWindow), garden.DefaultSearchResults, garden.MaxSearchResults)
 }
 
-func seedClient() *client.Client {
-	return client.New(config.SocketPath())
+func (f *seedFlags) client() *client.Client {
+	return client.New(config.SocketPath()).WithGardenProfile(strings.TrimSpace(*f.profile), f.sessionID())
 }
 
 var seedPrimeText = hooks.GardenGuidance
@@ -288,7 +289,7 @@ func runSeedPrime(args []string) {
 	if positionals := f.parse("prime", args); len(positionals) != 0 {
 		seedFail("prime", fmt.Errorf("takes no arguments, got %q", positionals[0]))
 	}
-	ready, err := seedClient().SeedReady(f.sessionID(), "", false)
+	ready, err := f.client().SeedReady(f.sessionID(), "", false)
 	if err != nil {
 		seedFail("prime", err)
 	}
@@ -302,6 +303,7 @@ func seedFail(verb string, err error) {
 
 type seedFlags struct {
 	fs             *flag.FlagSet
+	profile        *string
 	session        *string
 	member         *string
 	json           *bool
@@ -336,6 +338,7 @@ func newSeedFlags(verb string) *seedFlags {
 	fs.SetOutput(io.Discard)
 	return &seedFlags{
 		fs:             fs,
+		profile:        fs.String("profile", "", "profile name or id outside an attn session"),
 		session:        fs.String("session", "", "session id (defaults to ATTN_SESSION_ID)"),
 		member:         fs.String("member", "", "crew member planting this seed"),
 		json:           fs.Bool("json", false, "print the result as JSON"),
@@ -457,7 +460,7 @@ func runSeedPlant(args []string) {
 	if len(positionals) != 1 {
 		seedFail("plant", fmt.Errorf(`needs exactly one title, got %d: attn seed plant "what this is" [-m "the detail"]`, len(positionals)))
 	}
-	result, err := seedClient().SeedPlant(
+	result, err := f.client().SeedPlant(
 		f.sessionID(), positionals[0], f.text("plant"), strings.TrimSpace(*f.partOf), strings.TrimSpace(*f.discoveredFrom), strings.TrimSpace(*f.member),
 	)
 	if err != nil {
@@ -487,7 +490,7 @@ func runSeedSearch(args []string) {
 	if strings.TrimSpace(query) == "" {
 		seedFail("search", fmt.Errorf("needs something to look for: `attn seed search <words>`"))
 	}
-	result, err := seedClient().SeedSearch(f.sessionID(), query, *f.limit)
+	result, err := f.client().SeedSearch(f.sessionID(), query, *f.limit)
 	if err != nil {
 		seedFail("search", err)
 	}
@@ -534,7 +537,7 @@ func runSeedList(args []string) {
 	if !*f.stale && flagWasSet(f.fs, "window") {
 		seedFail("ls", fmt.Errorf("--window is the stale window; it only means something with --stale"))
 	}
-	result, err := seedClient().SeedList(f.sessionID(), *f.stale, f.staleWindowSeconds())
+	result, err := f.client().SeedList(f.sessionID(), *f.stale, f.staleWindowSeconds())
 	if err != nil {
 		seedFail("ls", err)
 	}
@@ -573,7 +576,8 @@ func runSeedReview(args []string) {
 		seedFail("review", fmt.Errorf("needs start, show, cancel, retry, or keep"))
 	}
 	verb := args[0]
-	positionals, jsonOutput, err := parseSeedReviewArgs(args[1:])
+	f := newSeedFlags("review " + verb)
+	positionals, jsonOutput, err := parseSeedReviewArgs(args[1:], f)
 	if err != nil {
 		seedFail("review "+verb, err)
 	}
@@ -584,7 +588,7 @@ func runSeedReview(args []string) {
 		if len(positionals) != 0 {
 			seedFail("review start", fmt.Errorf("takes no arguments"))
 		}
-		result, err = seedClient().SeedReviewStart()
+		result, err = f.client().SeedReviewStart()
 	case "show":
 		if len(positionals) > 1 {
 			seedFail("review show", fmt.Errorf("takes at most one review id"))
@@ -593,22 +597,22 @@ func runSeedReview(args []string) {
 		if len(positionals) == 1 {
 			reviewID = positionals[0]
 		}
-		result, err = seedClient().SeedReviewShow(reviewID)
+		result, err = f.client().SeedReviewShow(reviewID)
 	case "cancel":
 		if len(positionals) != 1 {
 			seedFail("review cancel", fmt.Errorf("needs exactly one review id"))
 		}
-		result, err = seedClient().SeedReviewCancel(positionals[0])
+		result, err = f.client().SeedReviewCancel(positionals[0])
 	case "retry":
 		if len(positionals) != 2 {
 			seedFail("review retry", fmt.Errorf("needs a review id and seed id"))
 		}
-		result, err = seedClient().SeedReviewRetry(positionals[0], positionals[1])
+		result, err = f.client().SeedReviewRetry(positionals[0], positionals[1])
 	case "keep":
 		if len(positionals) != 2 {
 			seedFail("review keep", fmt.Errorf("needs a review id and seed id"))
 		}
-		shown, showErr := seedClient().SeedReviewShow(positionals[0])
+		shown, showErr := f.client().SeedReviewShow(positionals[0])
 		if showErr != nil {
 			seedFail("review keep", showErr)
 		}
@@ -624,7 +628,7 @@ func runSeedReview(args []string) {
 		if receipt == nil {
 			seedFail("review keep", fmt.Errorf("seed %s is not part of Garden review %s", positionals[1], positionals[0]))
 		}
-		result, err = seedClient().SeedReviewKeep(positionals[1], protocol.SeedReviewActionContext{
+		result, err = f.client().SeedReviewKeep(positionals[1], protocol.SeedReviewActionContext{
 			ReviewID: positionals[0], EvidenceVersion: receipt.EvidenceVersion,
 		})
 	default:
@@ -644,13 +648,24 @@ func runSeedReview(args []string) {
 	fprintSeedReview(os.Stdout, *result.Review, verb == "show")
 }
 
-func parseSeedReviewArgs(args []string) ([]string, bool, error) {
+func parseSeedReviewArgs(args []string, scope ...*seedFlags) ([]string, bool, error) {
 	positionals := make([]string, 0, len(args))
 	jsonOutput := false
-	for _, arg := range args {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
 		switch {
 		case arg == "--json":
 			jsonOutput = true
+		case len(scope) > 0 && (arg == "--profile" || arg == "--session"):
+			if i+1 >= len(args) {
+				return nil, false, fmt.Errorf("%s needs a value", arg)
+			}
+			i++
+			if arg == "--profile" {
+				*scope[0].profile = args[i]
+			} else {
+				*scope[0].session = args[i]
+			}
 		case strings.HasPrefix(arg, "-"):
 			return nil, false, fmt.Errorf("unknown flag %q", arg)
 		default:
@@ -763,7 +778,7 @@ func runSeedPlot(args []string) {
 		}
 		msg.Children = append(msg.Children, wire)
 	}
-	result, err := seedClient().SeedPlot(f.sessionID(), strings.TrimSpace(*f.member), msg)
+	result, err := f.client().SeedPlot(f.sessionID(), strings.TrimSpace(*f.member), msg)
 	if err != nil {
 		seedFail("plot", err)
 	}
@@ -833,7 +848,7 @@ func runSeedShow(args []string) {
 	if len(positionals) != 1 {
 		seedFail("show", fmt.Errorf("needs exactly one seed id, got %d: attn seed show s-7k3f9m", len(positionals)))
 	}
-	result, err := seedClient().SeedShow(f.sessionID(), positionals[0])
+	result, err := f.client().SeedShow(f.sessionID(), positionals[0])
 	if err != nil {
 		seedFail("show", err)
 	}
@@ -853,7 +868,7 @@ func runSeedEdit(args []string) {
 	if !f.wasSet("m") {
 		seedFail("edit", fmt.Errorf("needs -m <body>; use -m - to read markdown from stdin, or -m '' to clear it"))
 	}
-	result, err := seedClient().SeedEdit(positionals[0], f.text("edit"))
+	result, err := f.client().SeedEdit(positionals[0], f.text("edit"))
 	if err != nil {
 		seedFail("edit", err)
 	}
@@ -876,7 +891,7 @@ func runSeedSendToChief(args []string) {
 			"needs exactly one seed id, got %d: attn seed send-to-chief s-7k3f9m", len(positionals)))
 	}
 	seedID := strings.TrimSpace(positionals[0])
-	c := seedClient()
+	c := f.client()
 	document, err := c.SeedShow(f.sessionID(), seedID)
 	if err != nil {
 		seedFail("send-to-chief", err)
@@ -1002,7 +1017,7 @@ func runSeedLink(unlink bool, args []string) {
 		seedFail(verb, fmt.Errorf("reads as a sentence: `attn seed %s s-7k3f9m %s s-2p4qxv`, where the kind is %s",
 			verb, garden.EdgeBlocks, strings.Join(garden.LinkableKinds, " or ")))
 	}
-	result, err := seedClient().SeedLink(positionals[0], positionals[1], positionals[2], unlink)
+	result, err := f.client().SeedLink(positionals[0], positionals[1], positionals[2], unlink)
 	if err != nil {
 		seedFail(verb, err)
 	}
@@ -1025,7 +1040,7 @@ func runSeedReady(args []string) {
 	if positionals := f.parse("ready", args); len(positionals) != 0 {
 		seedFail("ready", fmt.Errorf("takes no arguments, got %q; scope it with --plot <plot> or --all", positionals[0]))
 	}
-	result, err := seedClient().SeedReady(f.sessionID(), strings.TrimSpace(*f.plot), *f.all)
+	result, err := f.client().SeedReady(f.sessionID(), strings.TrimSpace(*f.plot), *f.all)
 	if err != nil {
 		seedFail("ready", err)
 	}
@@ -1152,7 +1167,7 @@ func runSeedTransition(verb string, args []string) {
 	if err != nil {
 		seedFail(verb, err)
 	}
-	result, err := seedClient().SeedTransition(
+	result, err := f.client().SeedTransition(
 		f.sessionID(), seedID, verb, f.text(verb), strings.TrimSpace(*f.member), *f.force, opts)
 	if err != nil {
 		seedFail(verb, err)
@@ -1272,7 +1287,7 @@ func runSeedNote(args []string) {
 	if len(positionals) != 1 {
 		seedFail("note", fmt.Errorf(`needs exactly one seed id, got %d: attn seed note s-7k3f9m -m "what happened"`, len(positionals)))
 	}
-	result, err := seedClient().SeedNote(
+	result, err := f.client().SeedNote(
 		f.sessionID(), positionals[0], f.text("note"), strings.TrimSpace(*f.member), f.noteKind(), *f.ring, nil)
 	if err != nil {
 		seedFail("note", err)
@@ -1294,7 +1309,7 @@ func runSeedWatch(verb string, args []string) {
 	if len(positionals) != 1 {
 		seedFail(verb, fmt.Errorf("needs exactly one seed id, got %d: attn seed %s s-7k3f9m", len(positionals), verb))
 	}
-	result, err := seedClient().SeedWatch(f.sessionID(), positionals[0], verb == "unwatch")
+	result, err := f.client().SeedWatch(f.sessionID(), positionals[0], verb == "unwatch")
 	if err != nil {
 		seedFail(verb, err)
 	}
@@ -1344,7 +1359,7 @@ func runSeedArtifact(verb string, args []string) {
 		seedFail(verb, err)
 	}
 	if handled {
-		result, err := seedClient().SeedArtifactTransfer(
+		result, err := f.client().SeedArtifactTransfer(
 			f.sessionID(), seedID, plan.operation, plan.source, plan.filename, plan.destination, nil,
 		)
 		if err != nil {
@@ -1377,7 +1392,7 @@ func runSeedArtifact(verb string, args []string) {
 	if verb == "detach" {
 		kind = garden.NoteKindDetach
 	}
-	result, err := seedClient().SeedNote(
+	result, err := f.client().SeedNote(
 		f.sessionID(), seedID, f.text(verb), strings.TrimSpace(*f.member), kind, false, artifact)
 	if err != nil {
 		seedFail(verb, err)
@@ -1500,7 +1515,7 @@ func runSeedNotes(args []string) {
 	if len(positionals) != 1 {
 		seedFail("notes", fmt.Errorf("needs exactly one seed id, got %d: attn seed notes s-7k3f9m", len(positionals)))
 	}
-	result, err := seedClient().SeedNotes(f.sessionID(), positionals[0], *f.limit)
+	result, err := f.client().SeedNotes(f.sessionID(), positionals[0], *f.limit)
 	if err != nil {
 		seedFail("notes", err)
 	}
@@ -1542,7 +1557,7 @@ func runSeedExport(args []string) {
 	if len(positionals) != 1 {
 		seedFail("export", fmt.Errorf("needs exactly one seed id, got %d: attn seed export s-7k3f9m", len(positionals)))
 	}
-	result, err := seedClient().SeedShow(f.sessionID(), positionals[0])
+	result, err := f.client().SeedShow(f.sessionID(), positionals[0])
 	if err != nil {
 		seedFail("export", err)
 	}

@@ -45,11 +45,11 @@ async function pollFor(fn, description, timeoutMs = 60_000, intervalMs = 250) {
   throw new Error(`Timed out waiting for: ${description}. Last value: ${JSON.stringify(last)}`);
 }
 
-function readRegistryEntry(dataDir, sessionId) {
+function readRegistryEntry(dataDir, terminalId) {
   const workersDir = path.join(dataDir, 'workers');
   if (!fs.existsSync(workersDir)) return null;
   for (const daemonInstance of fs.readdirSync(workersDir)) {
-    const file = path.join(workersDir, daemonInstance, 'registry', `${sessionId}.json`);
+    const file = path.join(workersDir, daemonInstance, 'registry', `${terminalId}.json`);
     if (!fs.existsSync(file)) continue;
     try {
       return JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -141,8 +141,8 @@ async function main() {
         agent: 'shell',
         waitForInitialPaneVisible: false,
       });
-      const workspace = await client.request('get_workspace', { sessionId });
-      const pane = workspace.panes[0];
+      const desktop = await client.request('get_desktop', { sessionId });
+      const pane = desktop.panes[0];
       await client.request('select_session', { sessionId });
       await waitForPaneVisible(client, sessionId, pane.paneId, 20_000);
       await waitForPaneAttached(client, sessionId, pane.paneId, 20_000);
@@ -153,11 +153,11 @@ async function main() {
         `pre-upgrade marker ${marker} on the pane`,
         20_000,
       );
-      return { sessionId, paneId: pane.paneId };
+      return { sessionId, paneId: pane.paneId, terminalId: observer.terminalOf(sessionId) };
     });
 
     const before = await runner.step('read_worker_pids', async () => {
-      const entry = readRegistryEntry(dataDir, session.sessionId);
+      const entry = readRegistryEntry(dataDir, session.terminalId);
       runner.assert(entry?.worker_pid > 0 && entry?.child_pid > 0, 'worker registry has no pids', entry);
       runner.log(`[RealAppHarness] before: worker_pid=${entry.worker_pid} child_pid=${entry.child_pid}`);
       return entry;
@@ -182,7 +182,7 @@ async function main() {
     await runner.step('same_process_same_child', async () => {
       const entry = await pollFor(
         async () => {
-          const current = readRegistryEntry(dataDir, session.sessionId);
+          const current = readRegistryEntry(dataDir, session.terminalId);
           return current?.worker_pid > 0 ? current : null;
         },
         'the worker registry after the upgrade',

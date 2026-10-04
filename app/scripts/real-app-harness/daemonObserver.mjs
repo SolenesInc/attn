@@ -6,25 +6,12 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function workspacePaneIds(workspace) {
-  return (workspace?.panes || []).map((pane) => pane.pane_id);
-}
-
 function sendClientHello(ws) {
   ws.send(
     JSON.stringify({
       ...harnessClientHello('harness-observer'),
     }),
   );
-}
-
-function pruneWorkspacesBySessions(sessionsById, workspacesBySessionId) {
-  for (const sessionId of Array.from(workspacesBySessionId.keys())) {
-    if (sessionsById.has(sessionId)) {
-      continue;
-    }
-    workspacesBySessionId.delete(sessionId);
-  }
 }
 
 export class DaemonObserver {
@@ -37,12 +24,15 @@ export class DaemonObserver {
     this.connectTimeoutMs = connectTimeoutMs;
     this.ws = null;
     this.sessionsById = new Map();
-    this.workspacesBySessionId = new Map();
-    this.layoutsByWorkspaceId = new Map();
     this.endpointsById = new Map();
     this.settings = new Map();
     this.connected = false;
     this.initialStateReceived = false;
+    this.profileId = null;
+    this.profile = null;
+    this.desktops = [];
+    this.nextProfileRequest = 0;
+    this.pendingProfileActions = new Map();
   }
 
   getSetting(key) {
@@ -165,6 +155,57 @@ export class DaemonObserver {
     this.ws.send(JSON.stringify(message));
   }
 
+  profileCommand(cmd, fields) {
+    const requestId = `harness-${cmd}-${(this.nextProfileRequest += 1)}`;
+    const settled = new Promise((resolve, reject) => {
+      this.pendingProfileActions.set(requestId, { resolve, reject });
+    });
+    this.send({ cmd, request_id: requestId, ...fields });
+    return settled;
+  }
+
+  desktop(desktopId) {
+    return this.desktops.find((entry) => entry.id === desktopId) ?? null;
+  }
+
+  desktopOf(sessionId) {
+    return this.desktops.find((desktop) => desktop.panes.some((pane) => pane.session_id === sessionId)) ?? null;
+  }
+
+  currentDesktopId() {
+    return this.profile?.current_desktop_id ?? null;
+  }
+
+  // Unnamed, so the daemon removes it once it is empty and not current.
+  async createDesktop() {
+    const result = await this.profileCommand('desktop_create', { profile_id: this.profileId });
+    const created = result.desktops?.[0];
+    if (!created) throw new Error(`desktop_create returned no desktop: ${JSON.stringify(result)}`);
+    return this.waitFor(() => this.desktop(created.id), `arrangement with desktop ${created.id}`);
+  }
+
+  setCurrentDesktop(desktopId) {
+    return this.profileCommand('desktop_set_current', { profile_id: this.profileId, desktop_id: desktopId });
+  }
+
+  describeArrangement() {
+    return JSON.stringify(
+      {
+        profileId: this.profileId,
+        currentDesktopId: this.currentDesktopId(),
+        desktops: this.desktops.map((desktop) => ({
+          id: desktop.id,
+          name: desktop.name,
+          slot: desktop.shortcut_slot ?? null,
+          activePaneId: desktop.active_pane_id,
+          panes: desktop.panes.map((pane) => `${pane.pane_id}:${pane.session_id}`),
+        })),
+      },
+      null,
+      2,
+    );
+  }
+
   addEndpoint(name, sshTarget) {
     this.send({ cmd: 'add_endpoint', name, ssh_target: sshTarget });
   }
@@ -200,9 +241,6 @@ export class DaemonObserver {
     return matches;
   }
 
-  getWorkspace(sessionId) {
-    return this.#workspaceForSession(sessionId);
-  }
 
   getSession(sessionId) {
     return this.sessionsById.get(sessionId) || null;
@@ -210,8 +248,8 @@ export class DaemonObserver {
 
   // The PTY runtime a session's pane places; a session no pane places runs under its own id.
   terminalOf(sessionId) {
-    for (const layout of this.layoutsByWorkspaceId.values()) {
-      const pane = (layout.panes || []).find((entry) => entry.session_id === sessionId && entry.runtime_id);
+    for (const desktop of this.desktops) {
+      const pane = desktop.panes.find((entry) => entry.session_id === sessionId && entry.runtime_id);
       if (pane) return pane.runtime_id;
     }
     return sessionId;
@@ -269,26 +307,22 @@ export class DaemonObserver {
     );
   }
 
-  async waitForWorkspace(sessionId, predicate, description, timeoutMs = 20_000) {
+  async waitForDesktopOf(sessionId, predicate, description, timeoutMs = 20_000) {
     return this.waitFor(() => {
-      const workspace = this.#workspaceForSession(sessionId);
-      if (!workspace) {
-        return null;
-      }
-      return predicate(workspace) ? workspace : null;
-    }, description || `workspace for session ${sessionId}`, timeoutMs);
+      const desktop = this.desktopOf(sessionId);
+      return desktop && predicate(desktop) ? desktop : null;
+    }, description || `desktop holding session ${sessionId}`, timeoutMs);
   }
 
   async waitForUtilityPane(sessionId, timeoutMs = 20_000, excludePaneIds = new Set()) {
-    const isNewRuntimePane = (pane) =>
-      !excludePaneIds.has(pane.pane_id) && typeof pane.runtime_id === 'string' && pane.runtime_id.length > 0;
-    const workspace = await this.waitForWorkspace(
+    const isNewSessionPane = (pane) => !excludePaneIds.has(pane.pane_id) && Boolean(pane.session_id);
+    const desktop = await this.waitForDesktopOf(
       sessionId,
-      (entry) => (entry.panes || []).some(isNewRuntimePane),
-      `utility pane for session ${sessionId}`,
+      (entry) => entry.panes.some(isNewSessionPane),
+      `utility pane beside session ${sessionId}`,
       timeoutMs
     );
-    return workspace.panes.find(isNewRuntimePane) || null;
+    return desktop.panes.find(isNewSessionPane) || null;
   }
 
   async attachOnce(runtimeId, timeoutMs = 5_000) {
@@ -333,11 +367,6 @@ export class DaemonObserver {
       state: session.state,
       agent: session.agent,
     }));
-    const workspaces = [...this.workspacesBySessionId.entries()].map(([sessionId, workspace]) => ({
-      sessionId,
-      activePaneId: workspace.active_pane_id,
-      paneIds: workspacePaneIds(workspace),
-    }));
     const endpoints = [...this.endpointsById.values()].map((endpoint) => ({
       id: endpoint.id,
       name: endpoint.name,
@@ -345,7 +374,7 @@ export class DaemonObserver {
       status: endpoint.status,
       sessionCount: endpoint.session_count,
     }));
-    return JSON.stringify({ sessions, workspaces, endpoints }, null, 2);
+    return JSON.stringify({ sessions, endpoints, arrangement: JSON.parse(this.describeArrangement()) }, null, 2);
   }
 
   #connectOnce() {
@@ -424,23 +453,30 @@ export class DaemonObserver {
         for (const session of data.sessions || []) {
           this.sessionsById.set(session.id, session);
         }
-        this.workspacesBySessionId.clear();
-        this.layoutsByWorkspaceId.clear();
-        for (const workspace of data.workspaces || []) {
-          const layout = workspace.layout;
-          if (layout?.workspace_id) this.layoutsByWorkspaceId.set(layout.workspace_id, layout);
-          for (const pane of layout?.panes || []) {
-            if (pane.kind === 'agent' && pane.session_id) {
-              this.workspacesBySessionId.set(pane.session_id, layout);
-            }
-          }
-        }
         this.endpointsById.clear();
         for (const endpoint of data.endpoints || []) {
           this.endpointsById.set(endpoint.id, endpoint);
         }
         this.#applySettings(data.settings);
+        this.profileId = data.selected_profile_id ?? null;
+        this.profile = (data.profiles || []).find((profile) => profile.id === this.profileId) ?? null;
+        this.desktops = data.desktops || [];
         break;
+      case 'profile_arrangement_changed':
+        if (data.profile?.id === this.profileId) {
+          this.profile = data.profile;
+          this.desktops = data.desktops || [];
+        }
+        break;
+      case 'profile_action_result': {
+        const waiter = this.pendingProfileActions.get(data.request_id);
+        if (waiter) {
+          this.pendingProfileActions.delete(data.request_id);
+          if (data.success) waiter.resolve(data);
+          else waiter.reject(new Error(`${data.action} failed: ${data.error_code ?? ''} ${data.error ?? ''}`));
+        }
+        break;
+      }
       case 'settings_updated':
         this.#applySettings(data.settings);
         break;
@@ -449,7 +485,6 @@ export class DaemonObserver {
         for (const session of data.sessions || []) {
           this.sessionsById.set(session.id, session);
         }
-        pruneWorkspacesBySessions(this.sessionsById, this.workspacesBySessionId);
         break;
       case 'endpoint_status_changed':
         if (data.endpoint?.id) {
@@ -471,30 +506,6 @@ export class DaemonObserver {
       case 'session_unregistered':
         if (data.session?.id) {
           this.sessionsById.delete(data.session.id);
-          this.workspacesBySessionId.delete(data.session.id);
-        }
-        break;
-      case 'workspace_layout':
-      case 'workspace_layout_updated':
-        if (data.workspace_layout?.workspace_id) {
-          // Tracked unconditionally: a remote session's layout event can arrive
-          // before the session shows up in the hub's session list.
-          this.layoutsByWorkspaceId.set(data.workspace_layout.workspace_id, data.workspace_layout);
-          for (const pane of data.workspace_layout.panes || []) {
-            if (pane.kind === 'agent' && pane.session_id && this.sessionsById.has(pane.session_id)) {
-              this.workspacesBySessionId.set(pane.session_id, data.workspace_layout);
-            }
-          }
-        }
-        break;
-      case 'workspace_unregistered':
-        if (data.workspace?.id) {
-          for (const [sessionId, layout] of this.workspacesBySessionId.entries()) {
-            if (layout.workspace_id === data.workspace.id) {
-              this.workspacesBySessionId.delete(sessionId);
-            }
-          }
-          this.layoutsByWorkspaceId.delete(data.workspace.id);
         }
         break;
       default:
@@ -502,16 +513,6 @@ export class DaemonObserver {
     }
   }
 
-  #workspaceForSession(sessionId) {
-    const direct = this.workspacesBySessionId.get(sessionId);
-    if (direct) return direct;
-    for (const layout of this.layoutsByWorkspaceId.values()) {
-      if ((layout.panes || []).some((pane) => pane.kind === 'agent' && pane.session_id === sessionId)) {
-        return layout;
-      }
-    }
-    return null;
-  }
 }
 
 export async function attachOnce(wsUrl, runtimeId, timeoutMs = 5_000) {

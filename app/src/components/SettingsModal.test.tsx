@@ -6,9 +6,7 @@ import type { ScriptedDaemon } from '../test/scriptedDaemon';
 import { openSection, renderSettings, savedSettings } from '../test/settings';
 import { getSettingsAutomationHandle } from './settingsAutomation';
 
-type InitialState = EventMessage<'initial_state'>;
 type Plugin = EventMessage<'plugins_updated'>['plugins'][number];
-type Endpoint = NonNullable<InitialState['endpoints']>[number];
 
 function servePlugins(daemon: ScriptedDaemon, plugins: Plugin[]) {
   daemon.on('list_plugins', () => ({ event: 'plugins_updated', plugins, issues: [] }));
@@ -19,11 +17,6 @@ function servePlugins(daemon: ScriptedDaemon, plugins: Plugin[]) {
   daemon.on('set_plugin_priority', succeed('set_priority'));
 }
 
-function serveEndpoints(daemon: ScriptedDaemon) {
-  daemon.on('add_endpoint', () => ({ event: 'endpoint_action_result', action: 'add', endpoint_id: 'ep-new', success: true }));
-  daemon.on('update_endpoint', ({ endpoint_id }) => ({ event: 'endpoint_action_result', action: 'update', endpoint_id, success: true }));
-  daemon.on('set_endpoint_remote_web', ({ endpoint_id }) => ({ event: 'endpoint_action_result', action: 'remote_web', endpoint_id, success: true }));
-}
 
 const installedPlugin = (overrides: Partial<Plugin> = {}): Plugin => ({
   name: 'services-pilot-worktrees',
@@ -88,16 +81,6 @@ describe('SettingsModal', () => {
       github_polling_off_reason: 'GitHub polling is off for instance dev.',
     });
     expect(within(settingsModal()!).getByTestId('github-polling-off')).toHaveTextContent('GitHub polling is off for instance dev.');
-  });
-
-  it('submits a new endpoint through the modal', async () => {
-    const { daemon } = await renderSettings({}, serveEndpoints);
-
-    fireEvent.change(screen.getByLabelText('Endpoint name'), { target: { value: 'gpu-box' } });
-    fireEvent.change(screen.getByLabelText('SSH target'), { target: { value: 'user@gpu-box' } });
-    await gesture(daemon, () => fireEvent.click(screen.getByText('Add Endpoint')));
-
-    expect(daemon.sentOf('add_endpoint')).toEqual([{ cmd: 'add_endpoint', name: 'gpu-box', ssh_target: 'user@gpu-box' }]);
   });
 
   it('installs a plugin from a source entered in settings and refreshes the list', async () => {
@@ -210,7 +193,7 @@ describe('SettingsModal', () => {
   });
 
   it('does not carry an agent-queue toggle', async () => {
-    const daemon = await openSection('workspace', { settings: { queue_mode_enabled: 'false' } });
+    const daemon = await openSection('desktop', { settings: { queue_mode_enabled: 'false' } });
 
     expect(screen.queryByTestId('settings-queue-toggle')).toBeNull();
     expect(screen.queryByText('Agent queue')).toBeNull();
@@ -229,43 +212,20 @@ describe('SettingsModal', () => {
     expect(savedSettings(daemon)).toEqual([['workflows_enabled', 'true'], ['workflows_enabled', 'false']]);
   });
 
-  it('toggles remote web access for a connected endpoint', async () => {
-    const endpoint: Endpoint = {
-      id: 'ep-1',
-      name: 'gpu-box',
-      ssh_target: 'user@gpu-box',
-      status: 'connected',
-      enabled: true,
-      capabilities: {
-        protocol_version: '49',
-        agents_available: ['codex'],
-        tailscale_enabled: false,
-        tailscale_status: 'disabled',
-        tailscale_domain: 'gpu-box.tail1bfe77.ts.net',
-        tailscale_auth_url: 'https://login.tailscale.example/auth',
-      },
-    };
-    const { daemon } = await renderSettings({ endpoints: [endpoint] }, serveEndpoints);
-
-    await gesture(daemon, () => fireEvent.click(screen.getByText('Enable Web')));
-
-    expect(daemon.sentOf('set_endpoint_remote_web')).toEqual([
-      expect.objectContaining({ endpoint_id: 'ep-1', enabled: true }),
-    ]);
-    expect(screen.getByText(/sign this host into tailscale/i)).toBeInTheDocument();
-  });
-
-  it('re-bootstraps an enabled endpoint by disabling and re-enabling it', async () => {
+  it('lists saved endpoints as off for this release and offers only removal', async () => {
+    const reason = 'Remote endpoints are off in this release.';
     const { daemon } = await renderSettings({
-      endpoints: [{ id: 'ep-1', name: 'gpu-box', ssh_target: 'user@gpu-box', status: 'error', enabled: true }],
-    }, serveEndpoints);
+      endpoints: [{ id: 'ep-1', name: 'gpu-box', ssh_target: 'user@gpu-box', status: 'unsupported', status_message: reason, enabled: true }],
+    }, (scripted) => scripted.on('remove_endpoint', ({ endpoint_id }) => ({ event: 'endpoint_action_result', action: 'remove', endpoint_id, success: true })));
 
-    await gesture(daemon, () => fireEvent.click(screen.getByText('Re-bootstrap')));
+    expect(screen.getByText('gpu-box')).toBeInTheDocument();
+    expect(screen.getByText(reason)).toBeInTheDocument();
+    for (const offered of ['Add Endpoint', 'Edit', 'Re-bootstrap', 'Enable Web', 'Disable']) {
+      expect(screen.queryByText(offered)).not.toBeInTheDocument();
+    }
 
-    expect(daemon.sentOf('update_endpoint').map(({ endpoint_id, enabled }) => ({ endpoint_id, enabled }))).toEqual([
-      { endpoint_id: 'ep-1', enabled: false },
-      { endpoint_id: 'ep-1', enabled: true },
-    ]);
+    await gesture(daemon, () => fireEvent.click(screen.getByText('Remove')));
+    expect(daemon.sentOf('remove_endpoint')).toEqual([expect.objectContaining({ endpoint_id: 'ep-1' })]);
   });
 
   it('shows plugin agents without offering attn-owned executable overrides', async () => {
@@ -330,14 +290,14 @@ describe('SettingsModal model data capture', () => {
 
 describe('SettingsModal notebook folder', () => {
   it('shows the override value and the daemon-resolved effective folder', async () => {
-    await openSection('workspace', { settings: { 'notebook.root': '~/my-notes', 'notebook.root.effective': '/Users/me/my-notes' } });
+    await openSection('desktop', { settings: { 'notebook.root': '~/my-notes', 'notebook.root.effective': '/Users/me/my-notes' } });
 
     expect(screen.getByTestId('settings-notebook-root-input')).toHaveValue('~/my-notes');
     expect(screen.getByTestId('settings-notebook-root-effective')).toHaveTextContent('Currently: /Users/me/my-notes');
   });
 
   it('falls back to the effective default as placeholder when no override is set', async () => {
-    await openSection('workspace', { settings: { 'notebook.root.effective': '/Users/me/attn-notebook' } });
+    await openSection('desktop', { settings: { 'notebook.root.effective': '/Users/me/attn-notebook' } });
 
     const input = screen.getByTestId('settings-notebook-root-input');
     expect(input).toHaveValue('');
@@ -345,7 +305,7 @@ describe('SettingsModal notebook folder', () => {
   });
 
   it('persists a new folder on blur and an empty value to restore the default', async () => {
-    const daemon = await openSection('workspace', { settings: { 'notebook.root': '~/my-notes', 'notebook.root.effective': '/Users/me/my-notes' } });
+    const daemon = await openSection('desktop', { settings: { 'notebook.root': '~/my-notes', 'notebook.root.effective': '/Users/me/my-notes' } });
     const input = screen.getByTestId('settings-notebook-root-input');
 
     fireEvent.change(input, { target: { value: '/Users/me/elsewhere' } });
@@ -675,7 +635,7 @@ describe('SettingsModal automation handle', () => {
 
 describe('SettingsModal sent files', () => {
   it('reads as on by default and toggles off', async () => {
-    const daemon = await openSection('workspace');
+    const daemon = await openSection('desktop');
 
     expect(screen.getByTestId('settings-open-sent-files-toggle')).toHaveTextContent('Disable');
     await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-open-sent-files-toggle')));
@@ -683,7 +643,7 @@ describe('SettingsModal sent files', () => {
   });
 
   it('re-enables when off', async () => {
-    const daemon = await openSection('workspace', { settings: { open_sent_files_enabled: 'false' } });
+    const daemon = await openSection('desktop', { settings: { open_sent_files_enabled: 'false' } });
 
     expect(screen.getByTestId('settings-open-sent-files-toggle')).toHaveTextContent('Enable');
     await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-open-sent-files-toggle')));

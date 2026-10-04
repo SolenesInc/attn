@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import FocusTrap from 'focus-trap-react';
+import FocusTrap from './AppFocusTrap';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { SNOOZE_CHOICES, snoozeInstant, type SnoozeChoiceId } from '../utils/snoozeDurations';
 import './SnoozeMenu.css';
@@ -98,6 +98,7 @@ export function SnoozeMenu({ sessionLabel, placement, onSnooze, onClose, onResto
         aria-label={`Snooze ${sessionLabel}`}
         data-testid="snooze-menu"
         onKeyDown={(event) => {
+          if (event.metaKey || event.ctrlKey || event.altKey) return;
           if (event.key === 'ArrowDown') {
             event.preventDefault();
             focusChoice((selectedIndex + 1) % SNOOZE_CHOICES.length);

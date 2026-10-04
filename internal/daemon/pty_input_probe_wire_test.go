@@ -10,7 +10,7 @@ import (
 func TestOnlyProbedPtyInputIsAcknowledged(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
-	session := w.Spawn(app, workspaceShell, w.Path("shop"))
+	session := w.Spawn(app, shellHarness, w.Path("shop"))
 	terminal := app.Terminal(session)
 	testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal},
 		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })

@@ -51,7 +51,7 @@ func TestRecoveryKeepsEveryConversationThatCanResumeWithItsPaneAndReapsTheRest(t
 	sessionRecoveryDeleteTranscript(t, lostRun.ConversationID)
 	untouched := w.Spawn(app, fakeagent.Claude, cwd)
 	w.Launched(untouched)
-	hooked := sessionRecoveryRegisterHookedConversation(t, cli, cwd)
+	hooked := sessionRecoveryRegisterHookedConversation(t, w, cli, cwd)
 
 	w.restart()
 	sessionRecoveryExpect(t, w.App().Initial,
@@ -72,12 +72,9 @@ func sessionRecoveryExpect(t *testing.T, initial protocol.InitialStateMessage, r
 		sessions[s.ID] = s
 	}
 	panes := map[string]bool{}
-	for _, workspace := range initial.Workspaces {
-		if workspace.Layout == nil {
-			continue
-		}
-		for _, pane := range workspace.Layout.Panes {
-			panes[protocol.Deref(pane.SessionID)] = true
+	for _, desktop := range initial.Desktops {
+		for _, pane := range desktop.Panes {
+			panes[pane.SessionID] = true
 		}
 	}
 	for _, id := range recoverable {
@@ -97,7 +94,7 @@ func sessionRecoveryExpect(t *testing.T, initial protocol.InitialStateMessage, r
 	}
 }
 
-func sessionRecoveryRegisterHookedConversation(t *testing.T, cli *client.Client, cwd string) string {
+func sessionRecoveryRegisterHookedConversation(t *testing.T, w *world, cli *client.Client, cwd string) string {
 	t.Helper()
 	const id, nativeID = "hooked", "hooked-native-conversation"
 	projects := filepath.Join(os.Getenv("ATTN_TOOL_HOME"), ".claude", "projects", "hooked")
@@ -108,7 +105,7 @@ func sessionRecoveryRegisterHookedConversation(t *testing.T, cli *client.Client,
 	if err := os.WriteFile(transcriptPath, []byte(`{"type":"user","message":{"role":"user","content":"add a discount field to checkout"}}`+"\n"), 0o644); err != nil {
 		t.Fatalf("write transcript: %v", err)
 	}
-	if err := cli.RegisterWithAgent(id, id, cwd, string(protocol.SessionAgentClaude)); err != nil {
+	if err := w.InjectUnplacedSession(id, id, cwd, protocol.SessionAgentClaude); err != nil {
 		t.Fatalf("register: %v", err)
 	}
 	if err := cli.ObserveAgentConversation(id, nativeID, transcriptPath); err != nil {

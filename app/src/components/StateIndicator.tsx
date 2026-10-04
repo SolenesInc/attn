@@ -1,6 +1,7 @@
 import './StateIndicator.css';
 import { pickSessionEmoji } from '../utils/sessionEmoji';
 import type { UISessionState } from '../types/sessionState';
+import { describeUnknownReason } from './stateReason';
 
 type StateIndicatorState = UISessionState;
 type StateIndicatorSize = 'sm' | 'md' | 'lg';
@@ -45,16 +46,4 @@ export function StateIndicator({
       {launchingEmoji}
     </span>
   );
-}
-
-// Only the reasons that can actually reach `unknown` are named; anything else falls back.
-function describeUnknownReason(reason: string | undefined): string | undefined {
-  switch (reason) {
-    case 'stuck':
-      return 'Stuck — the agent has stopped reporting anything at all';
-    case 'no_evidence':
-      return 'No signal from this agent yet';
-    default:
-      return undefined;
-  }
 }

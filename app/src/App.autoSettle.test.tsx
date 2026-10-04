@@ -1,14 +1,14 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { agentPane, agentWorkspace, daemonSession, daemonWorkspace, type DaemonSession } from './test/daemonFixtures';
+import { agentPane, soloDesktop, daemonSession, daemonDesktop, type DaemonSession } from './test/daemonFixtures';
 import { gesture, renderApp } from './test/renderApp';
 
-const WORKSPACE = 'workspace-main';
+const WORKSPACE = 'desktop-main';
 const FIRES_AT = '2999-01-01T00:00:00.000Z';
 
 const owed = { turn_owed: true, turn_opened_at: '2026-08-03T09:00:00Z' };
 
-const splitWorkspace = daemonWorkspace(WORKSPACE, {
+const splitDesktop = daemonDesktop(WORKSPACE, {
   root: {
     type: 'split',
     split_id: 'split-1',
@@ -26,12 +26,14 @@ async function showTargetBesideOther(target: Partial<DaemonSession>) {
   const { daemon } = await renderApp({
     initialState: {
       sessions: [
-        daemonSession('target', { workspace_id: WORKSPACE, state: 'waiting_input', ...owed, ...target }),
-        daemonSession('other', { workspace_id: WORKSPACE, state: 'idle' }),
+        daemonSession('target', { state: 'waiting_input', ...owed, ...target }),
+        daemonSession('other', { state: 'idle' }),
       ],
-      workspaces: [splitWorkspace],
+      desktops: [splitDesktop],
     },
   });
+  const agentList = screen.queryByRole('button', { name: /more agents?/i });
+  if (agentList) await gesture(daemon, () => fireEvent.click(agentList));
   await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Open other' })));
   return daemon;
 }
@@ -44,9 +46,11 @@ async function queueTargetOffScreen(target: Partial<DaemonSession>) {
         daemonSession('target', { state: 'waiting_input', ...owed, ...target }),
         daemonSession('other', { state: 'idle' }),
       ],
-      workspaces: [agentWorkspace('target'), agentWorkspace('other')],
+      desktops: [soloDesktop('target'), soloDesktop('other')],
     },
   });
+  const agentList = screen.queryByRole('button', { name: /more agents?/i });
+  if (agentList) await gesture(daemon, () => fireEvent.click(agentList));
   await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Open other' })));
   return daemon;
 }

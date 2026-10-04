@@ -16,7 +16,7 @@ func TestAHookReportedStateReachesTheAppOnTheEdge(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app := w.App()
 		cli := w.Client()
-		if err := cli.Register("s1", "s1", w.Path("s1")); err != nil {
+		if err := w.InjectSession("s1", "s1", w.Path("s1"), protocol.SessionAgentClaude); err != nil {
 			t.Fatalf("register: %v", err)
 		}
 		for _, step := range []struct {
@@ -52,7 +52,7 @@ func TestAnOpenTurnThatStopsMovingGoesStuckOnTime(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			inBubble(t, func(t *testing.T, w *world) {
 				app := w.App()
-				if err := w.Client().Register("s1", "s1", w.Path("s1")); err != nil {
+				if err := w.InjectSession("s1", "s1", w.Path("s1"), protocol.SessionAgentClaude); err != nil {
 					t.Fatalf("register: %v", err)
 				}
 				reported := time.Now()
@@ -160,7 +160,7 @@ func TestAHookThatStrongerEvidenceOutranksDoesNotMoveTheSession(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app := w.App()
 		cli := w.Client()
-		if err := cli.Register("s1", "s1", w.Path("s1")); err != nil {
+		if err := w.InjectSession("s1", "s1", w.Path("s1"), protocol.SessionAgentClaude); err != nil {
 			t.Fatalf("register: %v", err)
 		}
 		if err := cli.RecordNotification("s1", "permission_prompt", "Allow edit?"); err != nil {
@@ -235,7 +235,7 @@ func stateChangesOf(p *testworld.Peer, id string) int {
 
 func guardedClaudeAtWork(t *testing.T, app *testworld.Peer, cli *client.Client, w *world) {
 	t.Helper()
-	if err := cli.RegisterWithAgent("s1", "s1", w.Path("s1"), string(protocol.SessionAgentClaude)); err != nil {
+	if err := w.InjectSession("s1", "s1", w.Path("s1"), protocol.SessionAgentClaude); err != nil {
 		t.Fatalf("register: %v", err)
 	}
 	if err := cli.UpdateStateFromHook("s1", protocol.StateWorking, "auto"); err != nil {

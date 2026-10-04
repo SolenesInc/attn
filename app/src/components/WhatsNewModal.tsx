@@ -1,8 +1,9 @@
-
-import FocusTrap from 'focus-trap-react';
+import { useRef, useState, type KeyboardEvent } from 'react';
+import FocusTrap from './AppFocusTrap';
+import { useKeybindings } from '../contexts/KeybindingsContext';
 import { useEscapeStack } from '../hooks/useEscapeStack';
-import { formatShortcut, modifierTokens, shortcutTokens } from '../shortcuts/formatShortcut';
 import { KeyCombos } from './Keycap';
+import { whatsNewSteps } from './whatsNewSteps';
 import './WhatsNewModal.css';
 
 interface WhatsNewModalProps {
@@ -11,48 +12,44 @@ interface WhatsNewModalProps {
   onViewShortcuts: () => void;
 }
 
-interface Highlight {
-  title: string;
-  body: string;
-  combos: string[][];
-  flagged?: boolean;
-}
-
-function highlights(): Highlight[] {
-  return [
-  {
-    flagged: true,
-    title: `${formatShortcut('session.new')} opens a session inside this workspace`,
-    body: `This is the big change. ${formatShortcut('session.new')} used to open a separate session with its own row in the sidebar. Now it adds a session to the workspace you’re already in. Want a new sidebar row instead? Press ${formatShortcut('session.newWorkspace')} to start a new workspace.`,
-    combos: [shortcutTokens('session.new'), shortcutTokens('session.newWorkspace')],
-  },
-  {
-    title: 'The sidebar lists workspaces',
-    body: 'Each row in the sidebar is now a workspace — a group of related sessions and terminals — instead of a single session.',
-    combos: [],
-  },
-  {
-    title: 'Several sessions in one workspace',
-    body: 'A workspace can hold more than one session or terminal at once. Add another next to the current one, or split it sideways.',
-    combos: [shortcutTokens('session.newHorizontal')],
-  },
-  {
-    title: 'Shells live here too',
-    body: 'Open a plain terminal the same way you open an agent — pick it from the new-session dialog and it sits in the workspace like anything else.',
-    combos: [shortcutTokens('session.new')],
-  },
-  {
-    title: 'Move between panes',
-    body: 'Use the arrow keys to move focus around the panes. Keep going past an edge and you land in the next workspace.',
-    combos: [[...modifierTokens('terminal.focusLeft'), '←↑→↓']],
-  },
-  ];
-}
-
 export function WhatsNewModal({ isOpen, onClose, onViewShortcuts }: WhatsNewModalProps) {
   useEscapeStack(onClose, isOpen);
-
   if (!isOpen) return null;
+  return <WhatsNewTour onClose={onClose} onViewShortcuts={onViewShortcuts} />;
+}
+
+function WhatsNewTour({ onClose, onViewShortcuts }: Omit<WhatsNewModalProps, 'isOpen'>) {
+  const { resolve } = useKeybindings();
+  const steps = whatsNewSteps(resolve);
+  const [index, setIndex] = useState(0);
+  const primaryRef = useRef<HTMLButtonElement>(null);
+  const step = steps[index];
+  const last = index === steps.length - 1;
+
+  const goTo = (next: number) => {
+    const clamped = Math.min(steps.length - 1, Math.max(0, next));
+    // Back disappears on the first step; keep the keyboard on the dialog.
+    if (clamped === 0) primaryRef.current?.focus();
+    setIndex(clamped);
+  };
+
+  const advance = () => (last ? onClose() : goTo(index + 1));
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+      event.preventDefault();
+      event.stopPropagation();
+      goTo(index + (event.key === 'ArrowRight' ? 1 : -1));
+      return;
+    }
+    // Enter advances from the primary button or the dialog itself (a click on the scene
+    // focuses it); on Back, a dot or the shortcuts link it keeps the button's own action.
+    if (event.key === 'Enter' && (event.target === event.currentTarget || event.target === primaryRef.current)) {
+      event.preventDefault();
+      advance();
+    }
+  };
 
   return (
     <div className="whats-new-overlay" onClick={onClose}>
@@ -60,65 +57,80 @@ export function WhatsNewModal({ isOpen, onClose, onViewShortcuts }: WhatsNewModa
         focusTrapOptions={{
           allowOutsideClick: true,
           escapeDeactivates: false,
+          delayInitialFocus: false,
+          initialFocus: () => primaryRef.current ?? false,
         }}
       >
         <div
           className="whats-new-modal"
           onClick={(e) => e.stopPropagation()}
+          onKeyDown={handleKeyDown}
+          tabIndex={-1}
           role="dialog"
           aria-modal="true"
-          aria-labelledby="whats-new-title"
+          aria-label="What's new"
         >
           <div className="whats-new-header">
-            <div className="whats-new-eyebrow">What's new</div>
-            <h2 id="whats-new-title">attn is organized around workspaces</h2>
-            <button
-              className="whats-new-close"
-              onClick={onClose}
-              aria-label="Close what's new"
-              type="button"
-            >
+            <span className="whats-new-eyebrow">What's new</span>
+            <span className="whats-new-count">{index + 1} of {steps.length}</span>
+            <button className="whats-new-close" onClick={onClose} aria-label="Close what's new" type="button">
               ×
             </button>
           </div>
 
-          <div className="whats-new-body">
-            {highlights().map((highlight) => (
-              <section
-                className={`whats-new-item${highlight.flagged ? ' whats-new-item--key' : ''}`}
-                key={highlight.title}
-              >
-                <div className="whats-new-item-head">
-                  <h3>
-                    {highlight.flagged && <span className="whats-new-tag">Changed</span>}
-                    {highlight.title}
-                  </h3>
-                  {highlight.combos.length > 0 && (
-                    <span className="whats-new-keys">
-                      <KeyCombos combos={highlight.combos} />
-                    </span>
-                  )}
-                </div>
-                <p>{highlight.body}</p>
-              </section>
-            ))}
+          <div className="whats-new-live" aria-live="polite">
+            <section className="whats-new-step" key={step.id} data-testid={`whats-new-step-${step.id}`}>
+              {step.scene}
+              <h2>{step.title}</h2>
+              <p>{step.body}</p>
+              {step.keys.length > 0 && (
+                <ul className="whats-new-keys">
+                  {step.keys.map((entry) => (
+                    <li key={entry.label}>
+                      <KeyCombos combos={entry.combos} />
+                      <span className="whats-new-key-label">{entry.label}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
           </div>
 
           <div className="whats-new-footer">
-            <button
-              className="whats-new-link"
-              onClick={onViewShortcuts}
-              type="button"
-            >
+            <button className="whats-new-link" onClick={onViewShortcuts} type="button">
               View all shortcuts →
             </button>
-            <button
-              className="whats-new-primary"
-              onClick={onClose}
-              type="button"
-            >
-              Got it
-            </button>
+            <div className="whats-new-dots">
+              {steps.map((entry, i) => (
+                <button
+                  key={entry.id}
+                  type="button"
+                  tabIndex={-1}
+                  className={`whats-new-dot${i === index ? ' is-current' : ''}`}
+                  aria-label={`Step ${i + 1}: ${entry.title}`}
+                  aria-current={i === index ? 'step' : undefined}
+                  onClick={() => {
+                    goTo(i);
+                    primaryRef.current?.focus();
+                  }}
+                />
+              ))}
+            </div>
+            <div className="whats-new-nav">
+              {index > 0 && (
+                <button className="whats-new-back" onClick={() => goTo(index - 1)} type="button">
+                  Back
+                </button>
+              )}
+              <button
+                ref={primaryRef}
+                className="whats-new-primary"
+                onClick={advance}
+                type="button"
+              >
+                {last ? 'Got it' : 'Next'}
+              </button>
+            </div>
           </div>
         </div>
       </FocusTrap>

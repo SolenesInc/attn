@@ -8,28 +8,25 @@ declare global {
 
 async function openTerminalSession(
   page: import('@playwright/test').Page,
-  daemon: { start: () => Promise<void>; injectSession: (session: { id: string; label: string; state: string; directory?: string; workspace_id?: string }) => Promise<void> },
+  daemon: { start: () => Promise<void>; injectSession: (session: { id: string; label: string; state: string; directory?: string }) => Promise<void> },
   sessionId: string,
 ) {
   await daemon.start();
   await page.goto('/');
   await page.waitForSelector('.dashboard');
-  const workspaceId = `workspace-${sessionId}`;
-  await page.evaluate(({ id, workspace }) => {
+  await page.evaluate(({ id }) => {
     window.__TEST_INJECT_SESSION?.({
       id,
       label: 'Terminal Find',
       state: 'working',
       cwd: '/tmp/test/terminal-find',
-      workspaceId: workspace,
     });
-  }, { id: sessionId, workspace: workspaceId });
+  }, { id: sessionId });
   await daemon.injectSession({
     id: sessionId,
     label: 'Terminal Find',
     state: 'working',
     directory: '/tmp/test/terminal-find',
-    workspace_id: workspaceId,
   });
   await page.locator(`[data-testid="session-${sessionId}"]`).click();
   const terminal = page.locator(`[data-pane-session-id="${sessionId}"][data-pane-kind="agent"] .terminal-container`);

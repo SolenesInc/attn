@@ -1,11 +1,11 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { agentWorkspace, daemonSession } from './test/daemonFixtures';
+import { soloDesktop, daemonSession } from './test/daemonFixtures';
 import { gesture, renderApp } from './test/renderApp';
 
 function renderWithAnAgent() {
   return renderApp({
-    initialState: { sessions: [daemonSession('s1')], workspaces: [agentWorkspace('s1')] },
+    initialState: { sessions: [daemonSession('s1')], desktops: [soloDesktop('s1')] },
   });
 }
 

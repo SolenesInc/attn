@@ -199,31 +199,17 @@ func autoModeRuleLines(rules []automode.Rule) []string {
 
 func refuseSpawnLikeTheApp(w *world, app *testworld.Peer, agent fakeagent.Harness, cwd string, opts ...func(*protocol.SpawnSessionMessage)) protocol.SpawnResultMessage {
 	app.T.Helper()
-	refused, workspaceID, paneID := w.RequestSpawn(app, agent, cwd, opts...)
+	refused, _, _ := w.RequestSpawn(app, agent, cwd, opts...)
 	if refused.Success {
 		app.T.Fatalf("spawning %s in %s was accepted", agent, cwd)
 	}
-	closed := testworld.Request(app, protocol.WorkspaceLayoutClosePaneMessage{
-		Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: workspaceID, PaneID: paneID,
-	}, protocol.EventWorkspaceLayoutActionResult, func(r protocol.WorkspaceLayoutActionResultMessage) bool {
-		return r.Action == protocol.CmdWorkspaceLayoutClosePane && protocol.Deref(r.PaneID) == paneID
-	})
-	if !closed.Success {
-		app.T.Fatalf("closing the pane of the refused spawn: %s", protocol.Deref(closed.Error))
-	}
-	testworld.Await(app, protocol.EventWorkspaceUnregistered, func(e protocol.WorkspaceUnregisteredMessage) bool {
-		return e.Workspace.ID == workspaceID
-	})
 	view := w.App().Initial
 	if slices.ContainsFunc(view.Sessions, func(s protocol.Session) bool { return s.ID == refused.ID }) {
 		app.T.Errorf("the refused spawn %s left a session behind", refused.ID)
 	}
-	for _, workspace := range view.Workspaces {
-		if workspace.Layout == nil {
-			continue
-		}
-		if slices.ContainsFunc(workspace.Layout.Panes, func(p protocol.WorkspaceLayoutPane) bool { return protocol.Deref(p.SessionID) == refused.ID }) {
-			app.T.Errorf("the refused spawn %s left a pane in workspace %s", refused.ID, workspace.ID)
+	for _, desktop := range view.Desktops {
+		if slices.ContainsFunc(desktop.Panes, func(p protocol.DesktopPane) bool { return p.SessionID == refused.ID }) {
+			app.T.Errorf("the refused spawn %s left a pane on desktop %s", refused.ID, desktop.ID)
 		}
 	}
 	return refused

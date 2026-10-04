@@ -12,7 +12,7 @@ import (
 
 func TestPtyOutputArrivesInTheFormatEachClientAskedFor(t *testing.T) {
 	w := newWorld(t)
-	terminal := w.Terminal(w.Spawn(w.App(), workspaceShell, w.Path("shop")))
+	terminal := w.Terminal(w.Spawn(w.App(), shellHarness, w.Path("shop")))
 	framed := transportConnectRaw(t, w, protocol.CapabilityBinaryPtyOutput)
 	plain := transportConnectRaw(t, w)
 	for _, p := range []*transportRawPeer{framed, plain} {

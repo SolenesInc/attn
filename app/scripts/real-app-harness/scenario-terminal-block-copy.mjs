@@ -98,8 +98,8 @@ async function main() {
   runner.registerCleanup('quit_app', () => client.quitApp());
   runner.registerCleanup('close_session_panes', async () => {
     if (!sessionId) return;
-    const workspace = await client.request('get_workspace', { sessionId }).catch(() => null);
-    for (const pane of workspace?.panes || []) {
+    const desktop = await client.request('get_desktop', { sessionId }).catch(() => null);
+    for (const pane of desktop?.panes || []) {
       await client.request('close_pane', { sessionId, paneId: pane.paneId }).catch(() => {});
     }
   });
@@ -122,9 +122,9 @@ async function main() {
         sessionWaitMs: 30_000,
       });
       await client.request('select_session', { sessionId });
-      const workspace = await client.request('get_workspace', { sessionId });
-      pane = workspace?.panes?.[0];
-      runner.assert(Boolean(pane), `No pane in workspace: ${JSON.stringify(workspace)}`);
+      const desktop = await client.request('get_desktop', { sessionId });
+      pane = desktop?.panes?.[0];
+      runner.assert(Boolean(pane), `No pane in desktop: ${JSON.stringify(desktop)}`);
       await waitForPaneVisible(client, sessionId, pane.paneId, 20_000);
       await waitForPaneAttached(client, sessionId, pane.paneId, 20_000);
       await waitForPaneShellReady(client, sessionId, pane.paneId, {
@@ -192,8 +192,8 @@ async function main() {
   } finally {
     writeClipboard(savedClipboard);
     if (sessionId) {
-      const workspace = await client.request('get_workspace', { sessionId }).catch(() => null);
-      for (const pane of workspace?.panes || []) {
+      const desktop = await client.request('get_desktop', { sessionId }).catch(() => null);
+      for (const pane of desktop?.panes || []) {
         await client.request('close_pane', { sessionId, paneId: pane.paneId }).catch(() => {});
       }
     }

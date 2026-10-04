@@ -20,7 +20,7 @@ func TestShellPanesRecordEachCommandAsABlockUnlessTheUserOptsOut(t *testing.T) {
 			}
 			w.start()
 			app := w.App()
-			shell := w.Spawn(app, workspaceShell, w.Path("shop"))
+			shell := w.Spawn(app, shellHarness, w.Path("shop"))
 			for _, line := range []string{"/bin/echo attn-integration-probe", "false", "echo probed-$((6*7))"} {
 				app.TypeLine(shell, line)
 			}
@@ -47,7 +47,7 @@ func TestShellPanesRecordEachCommandAsABlockUnlessTheUserOptsOut(t *testing.T) {
 			if optOut && len(exits) != 0 {
 				t.Errorf("a pane that opted out recorded blocks %v, want none", exits)
 			}
-			exitWorkspaceShells(app, shell)
+			exitShells(app, shell)
 		})
 	}
 }

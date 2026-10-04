@@ -157,10 +157,10 @@ function pendingCapture(): PendingDiagnosticCapture {
       window: { width: 800, height: 600, devicePixelRatio: 2 },
     },
     panes: [
-      { paneId: 'pane-1', runtimeId: 'runtime-1', sessionId: 'session-1', title: 'First', sessionLabel: 'First', workspaceId: 'workspace-1', workspaceLabel: 'Workspace', available: true },
-      { paneId: 'pane-2', runtimeId: 'runtime-2', sessionId: 'session-2', title: 'Second', sessionLabel: 'Second', workspaceId: 'workspace-1', workspaceLabel: 'Workspace', available: true },
+      { paneId: 'pane-1', runtimeId: 'runtime-1', sessionId: 'session-1', title: 'First', sessionLabel: 'First', desktopId: 'workspace-1', desktopLabel: 'Workspace', available: true },
+      { paneId: 'pane-2', runtimeId: 'runtime-2', sessionId: 'session-2', title: 'Second', sessionLabel: 'Second', desktopId: 'workspace-1', desktopLabel: 'Workspace', available: true },
     ],
-    sessions: [], workspaces: [], settings: {}, frontendInput: frontend([]),
+    sessions: [], desktops: [], settings: {}, frontendInput: frontend([]),
     terminalGeometry: {},
     terminalDiagnostics: { capacity: 3_000, total: 0, capturedAtUnixMs: 1, events: [] },
     uiDiagnostics: { capacity: 300, total: 0, capturedAtUnixMs: 1, events: [] },
@@ -193,8 +193,8 @@ describe('diagnostic report size bounds', () => {
     capture.context.activePaneId = 'pane-0';
     capture.panes = Array.from({ length: 270 }, (_, index) => ({
       paneId: `pane-${index}`, runtimeId: `runtime-${index}`, sessionId: `session-${index}`,
-      title: `Pane ${index}`, sessionLabel: `Session ${index}`, workspaceId: 'workspace-1',
-      workspaceLabel: 'Workspace', available: true,
+      title: `Pane ${index}`, sessionLabel: `Session ${index}`, desktopId: 'workspace-1',
+      desktopLabel: 'Workspace', available: true,
     }));
     const selected = capture.panes.map((pane) => pane.paneId);
     const report = await createDiagnosticReport(capture, selected, () => ({ text: 'x'.repeat(32 * 1024), available: true }));

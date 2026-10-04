@@ -28,7 +28,7 @@ func chronologicalRaggedIDs() []string {
 
 func TestASnoozeWrittenInTheOldEncodingIsStillWakeable(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := newStoreAtVersion(dbPath, 161)
+	s, err := newStoreAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("NewWithDB: %v", err)
 	}
@@ -49,7 +49,7 @@ func TestASnoozeWrittenInTheOldEncodingIsStillWakeable(t *testing.T) {
 		t.Fatalf("the planted stamp already matches; this test would pass without the migration")
 	}
 
-	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 167); err != nil {
 		t.Fatalf("migrateDB: %v", err)
 	}
 	if got := s.SnoozedSessions()["s1"]; !got.Equal(until) {
@@ -62,7 +62,7 @@ func TestASnoozeWrittenInTheOldEncodingIsStillWakeable(t *testing.T) {
 
 func TestMigration95RewritesTurnCursorAndListingStampsThatDoNotSort(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := newStoreAtVersion(dbPath, 161)
+	s, err := newStoreAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("NewWithDB: %v", err)
 	}
@@ -102,7 +102,7 @@ func TestMigration95RewritesTurnCursorAndListingStampsThatDoNotSort(t *testing.T
 		t.Fatalf("the planted turn stamps already reopen correctly; this test would pass without the migration")
 	}
 
-	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 167); err != nil {
 		t.Fatalf("migrateDB: %v", err)
 	}
 	assertMigration95Applied(t, s)
@@ -112,7 +112,7 @@ func TestMigration95RewritesTurnCursorAndListingStampsThatDoNotSort(t *testing.T
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 95`); err != nil {
 		t.Fatalf("unrecord migration 95 again: %v", err)
 	}
-	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 167); err != nil {
 		t.Fatalf("re-run migrateDB: %v", err)
 	}
 	if after := stampDigest(t, s); after != before {

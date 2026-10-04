@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys } from './common.mjs';
+import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys, shownAgentId } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
@@ -143,12 +143,12 @@ try {
     await driver.pressKey('Escape');
     await waitForSelector(`${header}:focus`, 'Escape restores the header trigger');
   });
-  await runner.step('native_action_menu_arrows_enter_and_escape', async () => {
+  await runner.step('native_command_palette_arrows_enter_and_escape', async () => {
     await driver.activateApp();
-    await pressShortcutKeys(client, driver, 'ui.actionMenu');
-    await waitForSelector('.action-menu input:focus', 'native action menu shortcut');
+    await pressShortcutKeys(client, driver, 'ui.commandPalette');
+    await waitForSelector('.unified-palette-input:focus', 'native command palette shortcut');
     await driver.typeText('delegation chain');
-    await waitForSelector('.action-menu-results', 'chain command', { textIncludes: 'Show delegation chain' });
+    await waitForSelector('.unified-palette-list', 'chain command', { textIncludes: 'Show delegation chain' });
     await driver.pressKey('Enter');
     await waitForChainFocus(builder, 'command transfers focus into the chain');
     await screenshot('keyboard-chain');
@@ -160,10 +160,10 @@ try {
     await waitForChainFocus(child, 'Down selects the roleless descendant');
     await driver.pressKey('Enter');
     await waitForSelector(popup, 'selection dismisses the chain', { absent: true });
-    runner.assert((await client.request('get_state')).activeSessionId === child, 'Enter opens the selected agent');
+    runner.assert(shownAgentId(await client.request('get_state')) === child, 'Enter opens the selected agent');
     runner.assert(!await exists(popup), 'selection closes the popup');
-    await pressShortcutKeys(client, driver, 'ui.actionMenu');
-    await waitForSelector('.action-menu input:focus', 'action menu reopens');
+    await pressShortcutKeys(client, driver, 'ui.commandPalette');
+    await waitForSelector('.unified-palette-input:focus', 'command palette reopens');
     await driver.typeText('delegation chain');
     await driver.pressKey('Enter');
     await waitForChainFocus(child, 'roleless session opens its chain');

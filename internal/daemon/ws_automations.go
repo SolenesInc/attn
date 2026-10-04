@@ -7,12 +7,12 @@ import (
 )
 
 func (d *Daemon) handleAutomationDefinitionsGetWS(client *wsClient, msg *protocol.AutomationDefinitionsGetMessage) {
-	result := d.actionAutomationDefinitionsGet(msg)
+	result := d.actionAutomationDefinitionsGet(msg, client.selectedProfile())
 	d.sendToClient(client, result)
 }
 
 func (d *Daemon) handleAutomationRunsGetWS(client *wsClient, msg *protocol.AutomationRunsGetMessage) {
-	result := d.actionAutomationRunsGet(msg)
+	result := d.actionAutomationRunsGet(msg, client.selectedProfile())
 	d.sendToClient(client, result)
 }
 
@@ -20,7 +20,7 @@ func (d *Daemon) handleAutomationSetEnabledWS(client *wsClient, msg *protocol.Au
 	d.life.Go("handleAutomationSetEnabledWS", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), wsAutomationMutationTimeout)
 		defer cancel()
-		result := d.actionAutomationSetEnabled(ctx, msg)
+		result := d.actionAutomationSetEnabled(ctx, msg, client.selectedProfile())
 		d.sendToClient(client, result)
 	})
 }
@@ -29,7 +29,7 @@ func (d *Daemon) handleAutomationDeleteWS(client *wsClient, msg *protocol.Automa
 	d.life.Go("handleAutomationDeleteWS", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), wsAutomationMutationTimeout)
 		defer cancel()
-		result := d.actionAutomationDelete(ctx, msg)
+		result := d.actionAutomationDelete(ctx, msg, client.selectedProfile())
 		d.sendToClient(client, result)
 	})
 }
@@ -38,14 +38,14 @@ func (d *Daemon) handleAutomationCleanupWS(client *wsClient, msg *protocol.Autom
 	d.life.Go("handleAutomationCleanupWS", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), wsAutomationMutationTimeout)
 		defer cancel()
-		result := d.actionAutomationCleanup(ctx, msg)
+		result := d.actionAutomationCleanup(ctx, msg, client.selectedProfile())
 		d.sendToClient(client, result)
 	})
 }
 
 func (d *Daemon) handleAutomationRunWS(client *wsClient, msg *protocol.AutomationRunMessage) {
 	d.life.Go("handleAutomationRunWS", func() {
-		result := d.actionAutomationRun(context.Background(), msg)
+		result := d.actionAutomationRun(context.Background(), msg, client.selectedProfile())
 		d.sendToClient(client, result)
 	})
 }
@@ -54,7 +54,7 @@ func (d *Daemon) handleAutomationApplyWS(client *wsClient, msg *protocol.Automat
 	d.life.Go("handleAutomationApplyWS", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), wsAutomationMutationTimeout)
 		defer cancel()
-		result := d.actionAutomationApply(ctx, msg)
+		result := d.actionAutomationApply(ctx, msg, client.selectedProfile())
 		d.sendToClient(client, result)
 	})
 }
@@ -67,6 +67,6 @@ func (d *Daemon) handleAutomationValidateWS(client *wsClient, msg *protocol.Auto
 }
 
 func (d *Daemon) handleAutomationDefinitionGetWS(client *wsClient, msg *protocol.AutomationDefinitionGetMessage) {
-	result := d.actionAutomationDefinitionGet(msg)
+	result := d.actionAutomationDefinitionGet(msg, client.selectedProfile())
 	d.sendToClient(client, result)
 }

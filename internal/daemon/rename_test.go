@@ -14,13 +14,12 @@ import (
 func TestRenameSessionOverTheUnixSocketTravelsToTheSessionOwner(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	dir := t.TempDir()
-	addTestWorkspace(d, "workspace-s1", dir)
-	d.store.Add(&protocol.Session{ID: "s1", Label: "local", Agent: protocol.SessionAgentClaude, Directory: dir, WorkspaceID: "workspace-s1"})
-	d.hubManager = hub.NewManager(d.store, nil, nil, nil, nil, nil)
-	endpoint, err := d.hubManager.AddEndpoint("remote", "remote.example.test", "")
+	d.store.Add(&protocol.Session{ID: "s1", Label: "local", Agent: protocol.SessionAgentClaude, Directory: dir, ProfileID: defaultProfileID(t, d.store)})
+	endpoint, err := d.store.AddEndpoint("remote", "remote.example.test", "")
 	if err != nil {
 		t.Fatalf("add endpoint: %v", err)
 	}
+	d.hubManager = hub.NewManager(d.store, nil, nil, nil, nil, nil)
 	d.hubManager.ReservePendingSessionRoute(endpoint.ID, "s-remote")
 
 	serverConn, clientConn := net.Pipe()

@@ -21,7 +21,8 @@ func TestArmedSeedsAreReadPastTheSnapshotPage(t *testing.T) {
 			pr = "github.com:victorarias/attn#276"
 		}
 		seed := garden.Seed{
-			ID: id, Title: id, StepSlug: id, Status: garden.StatusPlanted,
+			ProfileID: defaultProfileID(t, d.store),
+			ID:        id, Title: id, StepSlug: id, Status: garden.StatusPlanted,
 			StateChangedAt: "2026-09-12T00:00:00Z", Edges: []garden.Edge{}, Vars: []garden.Var{},
 			HarvestWhen: &garden.HarvestCondition{PullRequest: pr},
 		}

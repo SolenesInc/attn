@@ -52,15 +52,8 @@ const STATE_GROUPS: { state: UISessionState; label: string; testId: string }[] =
   { state: 'unknown', label: 'Unknown / error', testId: 'session-group-unknown' },
 ];
 
-type DashboardWorkspace = {
-  id: string;
-  title: string;
-  sessions: DashboardSession[];
-};
-
 interface DashboardProps {
   sessions: DashboardSession[];
-  mutedWorkspaces?: DashboardWorkspace[];
   prs: DaemonPR[];
   isLoading: boolean;
   isRefreshing?: boolean;
@@ -74,7 +67,7 @@ interface DashboardProps {
   onRefreshPRs?: () => void;
   onOpenPR?: (pr: DaemonPR) => void;
   onOpenSettings: () => void;
-  onMutedGroupClick?: () => void;
+  introBanner?: { onReplay: () => void; onDismiss: () => void };
   queueModeEnabled?: boolean;
   crewQueueEnabled?: boolean;
   followNextTurn?: boolean;
@@ -82,9 +75,30 @@ interface DashboardProps {
   activityStaleMs?: number;
 }
 
+function IntroBanner({ banner }: { banner?: DashboardProps['introBanner'] }) {
+  if (!banner) return null;
+  return (
+    <div className="intro-banner" data-testid="intro-banner">
+      <span className="intro-banner-text">
+        <strong>New in attn:</strong> profiles, desktops, the agent queue and two palettes.
+      </span>
+      <button type="button" className="intro-banner-replay" onClick={banner.onReplay}>
+        Replay the intro
+      </button>
+      <button
+        type="button"
+        className="intro-banner-dismiss"
+        aria-label="Dismiss the intro banner"
+        onClick={banner.onDismiss}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
 export function Dashboard({
   sessions,
-  mutedWorkspaces = [],
   prs,
   isLoading,
   isRefreshing,
@@ -98,7 +112,7 @@ export function Dashboard({
   onRefreshPRs,
   onOpenPR,
   onOpenSettings,
-  onMutedGroupClick,
+  introBanner,
   queueModeEnabled = false,
   crewQueueEnabled = false,
   followNextTurn = false,
@@ -401,6 +415,8 @@ export function Dashboard({
         </button>
       </header>
 
+      <IntroBanner banner={introBanner} />
+
       {/* Only in queue mode: only there does an agent stop wanting you without
           its state changing. */}
       {allSettled && (
@@ -474,7 +490,7 @@ export function Dashboard({
             </button>
           </div>
           <div className="card-body">
-            {sessions.length === 0 && mutedWorkspaces.length === 0 ? (
+            {sessions.length === 0 ? (
               <div className="card-empty">No active sessions</div>
             ) : (
               <>
@@ -523,15 +539,6 @@ export function Dashboard({
                     {snoozedExpanded && snoozedSessions.map((s) => (
                       renderSessionRow(s, { wake: formatWakeTime(s.turnSnoozedUntil, now) })
                     ))}
-                  </div>
-                )}
-                {mutedWorkspaces.length > 0 && (
-                  <div
-                    className="session-group muted-summary clickable"
-                    data-testid="session-group-muted"
-                    onClick={onMutedGroupClick}
-                  >
-                    <div className="group-label dim">Muted Workspaces ({mutedWorkspaces.length})</div>
                   </div>
                 )}
               </>

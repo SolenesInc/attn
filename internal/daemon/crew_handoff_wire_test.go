@@ -193,7 +193,7 @@ func TestHandoffRefusalsLeaveTheDayRunning(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
 
-	if err := cli.Register("errand", "errand", w.Path("errand")); err != nil {
+	if err := w.InjectSession("errand", "errand", w.Path("errand"), protocol.SessionAgentClaude); err != nil {
 		t.Fatal(err)
 	}
 	_, err := cli.CrewHandoff("errand", "I did some work today.", false, "")

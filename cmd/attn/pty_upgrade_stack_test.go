@@ -230,7 +230,7 @@ done
 	identities["fallback-agent"] = current.identity("fallback-agent", false)
 	assertAll(current, "fallback-new-agent")
 	for _, id := range slices.Sorted(maps.Keys(identities)) {
-		current.command(map[string]any{"cmd": "workspace_layout_close_pane", "workspace_id": "upgrade", "pane_id": "pane-" + id}, "workspace_layout_action_result", "")
+		current.command(map[string]any{"cmd": "unregister", "id": id}, "session_unregistered", "")
 	}
 	current.stop()
 }
@@ -252,6 +252,7 @@ type upgradeDaemon struct {
 	workers    map[int]bool
 	agentPIDs  map[string]int
 	terminals  map[string]string
+	profileID  string
 	stopped    bool
 }
 
@@ -378,6 +379,7 @@ func (d *upgradeDaemon) connect() {
 	if d.instanceID == "" {
 		d.t.Fatal("initial_state has no daemon instance identity")
 	}
+	d.profileID, _ = initial["selected_profile_id"].(string)
 }
 
 func (d *upgradeDaemon) notificationCount(kind string) int {
@@ -535,9 +537,21 @@ func (d *upgradeDaemon) setSharedSetting(enabled bool) {
 
 func (d *upgradeDaemon) spawn(id, agent, executable string) {
 	d.t.Helper()
-	d.command(map[string]any{"cmd": "workspace_layout_add_session_pane", "workspace_id": "upgrade", "session_id": id, "pane_id": "pane-" + id}, "workspace_layout_action_result", "")
-	d.command(map[string]any{"cmd": "spawn_session", "id": id, "workspace_id": "upgrade", "cwd": d.root, "agent": agent, "codex_executable": executable, "cols": 80, "rows": 24}, "spawn_result", id)
-	d.terminals[id] = d.paneTerminal(id)
+	spawn := map[string]any{"cmd": "spawn_session", "id": id, "cwd": d.root, "agent": agent, "codex_executable": executable, "cols": 80, "rows": 24}
+	if d.profileID == "" {
+		d.command(map[string]any{"cmd": "workspace_layout_add_session_pane", "workspace_id": "upgrade", "session_id": id, "pane_id": "pane-" + id}, "workspace_layout_action_result", "")
+		spawn["workspace_id"] = "upgrade"
+	} else {
+		spawn["profile_id"] = d.profileID
+		spawn["placement"] = map[string]any{}
+	}
+	if d.profileID == "" {
+		d.command(spawn, "spawn_result", id)
+		d.terminals[id] = d.paneTerminal(id)
+	} else {
+		d.write(spawn)
+		d.terminals[id] = d.placedTerminal(id)
+	}
 	for _, shared := range []bool{false, true} {
 		path := filepath.Join(d.root, "workers", d.instanceID, "registry", d.terminals[id]+".json")
 		if shared {
@@ -547,6 +561,43 @@ func (d *upgradeDaemon) spawn(id, agent, executable string) {
 			d.workers[entry.WorkerPID] = true
 		}
 	}
+}
+
+// placedTerminal waits for a profile spawn's result and the arrangement whose pane holds its terminal.
+func (d *upgradeDaemon) placedTerminal(id string) string {
+	d.t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	var terminal string
+	spawned := false
+	for !spawned || terminal == "" {
+		event, _, _ := d.read(ctx)
+		switch event["event"] {
+		case "spawn_result":
+			if event["id"] == id {
+				if success, _ := event["success"].(bool); !success {
+					d.t.Fatalf("spawn_result failed: %v", event)
+				}
+				spawned = true
+			}
+		case "profile_arrangement_changed":
+			var arrangement struct {
+				Desktops []protocol.Desktop `json:"desktops"`
+			}
+			data, _ := json.Marshal(event)
+			_ = json.Unmarshal(data, &arrangement)
+			for _, desktop := range arrangement.Desktops {
+				for _, pane := range desktop.Panes {
+					if pane.SessionID == id && pane.RuntimeID != "" {
+						terminal = pane.RuntimeID
+					}
+				}
+			}
+		case "error":
+			d.t.Fatalf("daemon command failed: %v", event)
+		}
+	}
+	return terminal
 }
 
 // paneTerminal reads the terminal the session's pane places: its id before the upgrade, a new one after.

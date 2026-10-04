@@ -2,11 +2,13 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { describe, expect, it } from 'vitest';
 import {
+  defaultProfile,
+  emptyDesktop,
   agentPane,
-  agentWorkspace,
+  soloDesktop,
   daemonSeed,
   daemonSession,
-  daemonWorkspace,
+  daemonDesktop,
   dockTiles,
   seedDocument,
   type DaemonSeed,
@@ -16,24 +18,23 @@ import { openGarden } from './test/garden';
 import { gesture, renderApp } from './test/renderApp';
 import { initialState } from './test/scriptedDaemon';
 
-const layout = { sessions: [daemonSession('s1')], workspaces: [agentWorkspace('s1')] };
+const layout = { sessions: [daemonSession('s1')], desktops: [soloDesktop('s1')] };
 
 const PLAN = daemonSeed('s-plan11', { title: 'The plan', body: '## Rendered plan\n\nRead **this**.', tender_member: 'trellis' });
 
-function tiledWorkspace(tiles: Parameters<typeof dockTiles>[1]) {
-  return daemonWorkspace('ws', { root: dockTiles({ type: 'pane', pane_id: 'pane-s1' }, tiles), panes: [agentPane('s1', 'ws')] }, { title: 'ws' });
+function tiledDesktop(tiles: Parameters<typeof dockTiles>[1]) {
+  return daemonDesktop('ws', { root: dockTiles({ type: 'pane', pane_id: 'pane-s1' }, tiles), panes: [agentPane('s1', 'ws')] }, { name: 'ws' });
 }
 
 async function openSeedTile(seed: DaemonSeed, document: Partial<DaemonSeedDocument> = {}) {
   const view = await renderApp({
-    initialState: { sessions: [daemonSession('s1', { workspace_id: 'ws' })], workspaces: [tiledWorkspace([])], seeds: [seed] },
+    initialState: { sessions: [daemonSession('s1')], desktops: [tiledDesktop([])], seeds: [seed] },
   });
   view.daemon.on('seed_document_get', () => ({ event: 'seed_document_get_result', success: true, document: seedDocument(seed, document) }));
   await gesture(view.daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Open s1' })));
-  await gesture(view.daemon, () => view.daemon.emit({
-    event: 'workspace_layout_updated',
-    workspace_layout: tiledWorkspace([{ tile_id: 'tile-seed', tile_kind: 'seed', tile_params: seed.id }]).layout!,
-  }));
+  await gesture(view.daemon, () => view.daemon.arrange((desktops) => desktops.map((desktop) => (
+    desktop.id === 'ws' ? { ...tiledDesktop([{ tile_id: 'tile-seed', tile_kind: 'seed', tile_params: seed.id }]), revision: desktop.revision + 1 } : desktop
+  ))));
   return view.daemon;
 }
 
@@ -55,13 +56,35 @@ describe('App garden seeds', () => {
     const { daemon } = await openGarden([daemonSeed('s-aaa111', { title: 'already planted' })]);
 
     daemon.emit({
-      event: 'garden_seeds_updated',
+      event: 'garden_seeds_updated', profile_id: 'profile-default',
       seeds: [daemonSeed('s-bbb222', { title: 'just planted' }), daemonSeed('s-aaa111', { title: 'already planted' })],
       total: 2,
     });
 
     expect(screen.getByText('just planted')).toBeInTheDocument();
     expect(screen.getByText('already planted')).toBeInTheDocument();
+  });
+
+  it('replaces the garden on profile switches and ignores late snapshots from the old profile', async () => {
+    const alpha = daemonSeed('s-alpha1', { title: 'Default work' });
+    const beta = daemonSeed('s-beta11', { title: 'Side work', profile_id: 'profile-side' });
+    const { daemon } = await openGarden([alpha]);
+    expect(screen.getByText('Default work')).toBeInTheDocument();
+
+    await gesture(daemon, () => daemon.emit({
+      event: 'profile_arrangement_changed',
+      profile: defaultProfile('side-desktop', { id: 'profile-side', name: 'Side' }),
+      desktops: [emptyDesktop('side-desktop', { profile_id: 'profile-side' })],
+    }));
+    expect(screen.queryByText('Default work')).toBeNull();
+    daemon.emit({ event: 'garden_seeds_updated', profile_id: 'profile-side', seeds: [beta], total: 1 });
+    expect(screen.getByText('Side work')).toBeInTheDocument();
+    daemon.emit({ event: 'garden_seeds_updated', profile_id: 'profile-default', seeds: [alpha], total: 1 });
+    expect(screen.queryByText('Default work')).toBeNull();
+    expect(screen.getByText('Side work')).toBeInTheDocument();
+
+    daemon.emit({ event: 'garden_seeds_updated', profile_id: 'profile-side', seeds: [], total: 0 });
+    expect(screen.queryByText('Side work')).toBeNull();
   });
 
   it('reads a garden-less daemon as an empty garden', async () => {
@@ -77,11 +100,11 @@ describe('App garden seeds', () => {
   it('carries how many seeds the garden holds, not just the ones it sent', async () => {
     const { daemon } = await openGarden([]);
 
-    daemon.emit({ event: 'garden_seeds_updated', seeds: [daemonSeed('s-bbb222', { title: 'the newest one' })], total: 1421 });
+    daemon.emit({ event: 'garden_seeds_updated', profile_id: 'profile-default', seeds: [daemonSeed('s-bbb222', { title: 'the newest one' })], total: 1421 });
 
     expect(screen.getByText('The garden holds 1421 seeds; this panel has the newest 1.')).toBeInTheDocument();
 
-    daemon.emit({ event: 'garden_seeds_updated', seeds: [daemonSeed('s-bbb222', { title: 'the newest one' })], total: 1 });
+    daemon.emit({ event: 'garden_seeds_updated', profile_id: 'profile-default', seeds: [daemonSeed('s-bbb222', { title: 'the newest one' })], total: 1 });
 
     expect(screen.queryByText(/The garden holds/)).toBeNull();
   });
@@ -108,13 +131,13 @@ describe('App garden seeds', () => {
     daemon.on('seed_document_get', () => undefined);
     await gesture(daemon, () => daemon.emit({ event: 'kept_conversations_changed' }));
     expect(daemon.sentOf('seed_document_get')).toHaveLength(1);
-    await gesture(daemon, () => daemon.emit({ event: 'garden_seeds_updated', seeds: [PLAN], total: 1 }));
+    await gesture(daemon, () => daemon.emit({ event: 'garden_seeds_updated', profile_id: PLAN.profile_id, seeds: [PLAN], total: 1 }));
     const older = daemon.sentOf('seed_document_get')[1];
     daemon.on('seed_document_get', () => ({ event: 'seed_document_get_result', success: true,
       document: seedDocument(PLAN, { notes: [note('n-after', { body: 'After the keep pass' })], notes_total: 1 }) }));
     await gesture(daemon, () => daemon.emit({ event: 'kept_conversations_changed' }));
     expect(daemon.sentOf('seed_document_get')).toHaveLength(2);
-    await gesture(daemon, () => daemon.emit({ event: 'garden_seeds_updated', seeds: [PLAN], total: 1 }));
+    await gesture(daemon, () => daemon.emit({ event: 'garden_seeds_updated', profile_id: PLAN.profile_id, seeds: [PLAN], total: 1 }));
     await gesture(daemon, () => daemon.replyTo(older, { event: 'seed_document_get_result', success: true,
       request_id: older.request_id,
       document: seedDocument(PLAN, { notes: [note('n-old', { body: 'Superseded detail' })], notes_total: 1 }) }));

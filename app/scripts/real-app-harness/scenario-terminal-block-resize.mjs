@@ -181,7 +181,7 @@ async function main() {
   runner.registerCleanup('quit_app', () => client.quitApp());
   runner.registerCleanup('close_session_panes', async () => {
     if (!sessionId) return;
-    const ws = await client.request('get_workspace', { sessionId }).catch(() => null);
+    const ws = await client.request('get_desktop', { sessionId }).catch(() => null);
     for (const p of ws?.panes || []) {
       await client.request('close_pane', { sessionId, paneId: p.paneId }).catch(() => {});
     }
@@ -201,9 +201,9 @@ async function main() {
         agent: 'shell', waitForInitialPaneVisible: false, sessionWaitMs: 30_000,
       });
       await client.request('select_session', { sessionId });
-      const workspace = await client.request('get_workspace', { sessionId });
-      const pane = workspace?.panes?.[0];
-      runner.assert(Boolean(pane), `No pane for ${SHELL}: ${JSON.stringify(workspace)}`);
+      const desktop = await client.request('get_desktop', { sessionId });
+      const pane = desktop?.panes?.[0];
+      runner.assert(Boolean(pane), `No pane for ${SHELL}: ${JSON.stringify(desktop)}`);
       paneId = pane.paneId;
       await waitForPaneVisible(client, sessionId, paneId, 20_000);
       await waitForPaneAttached(client, sessionId, paneId, 20_000);
@@ -274,7 +274,7 @@ async function main() {
       await runCommandAndWait(client, sessionId, paneId, 'echo postsplit', 'postsplit');
       await clickAndExpectSelected(client, sessionId, paneId, 'postsplit', 'echo postsplit', `${SHELL} post-split`);
 
-      const ws2 = await client.request('get_workspace', { sessionId });
+      const ws2 = await client.request('get_desktop', { sessionId });
       const newPane = (ws2?.panes || []).find((p) => p.paneId !== paneId);
       if (newPane) {
         await client.request('close_pane', { sessionId, paneId: newPane.paneId });
@@ -306,7 +306,7 @@ async function main() {
     process.exitCode = 1;
   } finally {
     if (sessionId) {
-      const ws = await client.request('get_workspace', { sessionId }).catch(() => null);
+      const ws = await client.request('get_desktop', { sessionId }).catch(() => null);
       for (const p of ws?.panes || []) {
         await client.request('close_pane', { sessionId, paneId: p.paneId }).catch(() => {});
       }

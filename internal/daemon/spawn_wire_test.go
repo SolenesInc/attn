@@ -1,7 +1,6 @@
 package daemon_test
 
 import (
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -32,65 +31,43 @@ func TestASpawnTheDaemonRefusesRegistersNothing(t *testing.T) {
 	}
 
 	for _, c := range []struct {
-		name, workspace, refusal string
+		name, profile, desktop, refusal string
 	}{
-		{"no workspace", "", "missing workspace_id"},
-		{"an unknown workspace", "workspace-missing", "unknown workspace"},
+		{"an unknown profile", "profile-missing", "", `profile "profile-missing" does not exist`},
 	} {
 		id := uuid.NewString()
-		app.Send(protocol.SpawnSessionMessage{
+		refused := testworld.Request(app, protocol.SpawnSessionMessage{
 			Cmd: protocol.CmdSpawnSession, ID: id, Agent: protocol.AgentShellValue, Cwd: w.Path("shell"),
-			WorkspaceID: c.workspace, Cols: 100, Rows: 30,
-		})
-		if refused := testworld.Refused(app); protocol.Deref(refused.Cmd) != protocol.CmdSpawnSession || !strings.Contains(protocol.Deref(refused.Error), c.refusal) {
-			t.Errorf("a spawn into %s was refused with %s %q, want %q", c.name, protocol.Deref(refused.Cmd), protocol.Deref(refused.Error), c.refusal)
+			ProfileID: c.profile, Placement: &protocol.SessionPlacement{DesktopID: protocol.Ptr(c.desktop)}, Cols: 100, Rows: 30,
+		}, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return r.ID == id })
+		if refused.Success || !strings.Contains(protocol.Deref(refused.Error), c.refusal) {
+			t.Errorf("a spawn into %s = %+v, want it refused with %q", c.name, refused, c.refusal)
 		}
 	}
 
-	paneID := "pane-requested"
-	added := testworld.Request(app, protocol.WorkspaceLayoutAddSessionPaneMessage{
-		Cmd: protocol.CmdWorkspaceLayoutAddSessionPane, WorkspaceID: "workspace-missing", SessionID: uuid.NewString(), PaneID: protocol.Ptr(paneID),
-	}, protocol.EventWorkspaceLayoutActionResult, func(r protocol.WorkspaceLayoutActionResultMessage) bool { return protocol.Deref(r.PaneID) == paneID })
-	if added.Success || added.WorkspaceID != "workspace-missing" {
-		t.Errorf("adding a pane to a missing workspace = %+v, want a refusal carrying the workspace and pane", added)
-	}
 	if sessions := w.App().Initial.Sessions; len(sessions) != 0 {
 		t.Errorf("the refused spawns left sessions %+v", sessions)
 	}
 }
 
-func TestASpawnWithoutALabelIsNamedAfterItsDirectoryInItsWorkspace(t *testing.T) {
+func TestASpawnWithoutALabelIsNamedAfterItsDirectoryOnItsDesktop(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
-	root := w.Path("projects")
-	cwd := filepath.Join(root, "myproj")
-	session := uuid.NewString()
-	testworld.Request(app, protocol.RegisterWorkspaceMessage{
-		Cmd: protocol.CmdRegisterWorkspace, ID: "workspace-projects", Title: "projects", Directory: root,
-	}, protocol.EventWorkspaceRegistered, func(e protocol.WorkspaceRegisteredMessage) bool { return e.Workspace.ID == "workspace-projects" })
+	cwd := filepath.Join(w.Path("projects"), "myproj")
 	if paths := locationPaths(recentLocations(app, 50)); slices.Contains(paths, cwd) {
 		t.Fatalf("recent locations %v list %s before anything ran there", paths, cwd)
 	}
-	testworld.Request(app, protocol.WorkspaceLayoutAddSessionPaneMessage{
-		Cmd: protocol.CmdWorkspaceLayoutAddSessionPane, WorkspaceID: "workspace-projects", SessionID: session, PaneID: protocol.Ptr("pane-" + session),
-	}, protocol.EventWorkspaceLayoutActionResult, func(r protocol.WorkspaceLayoutActionResultMessage) bool { return r.Success })
-	if err := os.MkdirAll(cwd, 0o755); err != nil {
-		t.Fatal(err)
+	spawned, desktop, pane := w.RequestSpawn(app, fakeagent.Claude, cwd)
+	if !spawned.Success || desktop == "" || pane == "" {
+		t.Fatalf("spawn = %+v, want it placed on the current desktop", spawned)
 	}
-	spawned := testworld.Request(app, protocol.SpawnSessionMessage{
-		Cmd: protocol.CmdSpawnSession, ID: session, Agent: string(fakeagent.Claude), Cwd: cwd,
-		WorkspaceID: "workspace-projects", Cols: 100, Rows: 30,
-	}, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return r.ID == session })
-	if !spawned.Success {
-		t.Fatalf("spawn: %s", protocol.Deref(spawned.Error))
-	}
-	w.Launched(session)
+	w.Launched(spawned.ID)
 
 	registered := testworld.Await(app, protocol.EventSessionRegistered, func(e protocol.WebSocketEvent) bool {
-		return e.Session != nil && e.Session.ID == session
+		return e.Session != nil && e.Session.ID == spawned.ID
 	})
-	if registered.Session.Label != "myproj" || registered.Session.WorkspaceID != "workspace-projects" {
-		t.Errorf("registered %q in %q, want myproj in workspace-projects", registered.Session.Label, registered.Session.WorkspaceID)
+	if registered.Session.Label != "myproj" || registered.Session.ProfileID != app.SelectedProfile() {
+		t.Errorf("registered %q in profile %q, want myproj in %s", registered.Session.Label, registered.Session.ProfileID, app.SelectedProfile())
 	}
 	if paths := locationPaths(recentLocations(app, 50)); !slices.Contains(paths, cwd) {
 		t.Errorf("recent locations %v do not list %s", paths, cwd)
@@ -104,12 +81,12 @@ func TestTwoSpawnsOfOneSessionStartOneAgent(t *testing.T) {
 	for _, agent := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Pi} {
 		cwd := w.Path(string(agent))
 		boot := w.HoldNextBoot()
-		first, workspace, _ := w.RequestSpawn(app, agent, cwd)
+		first, _, _ := w.RequestSpawn(app, agent, cwd)
 		if !first.Success {
 			t.Fatalf("spawn %s: %s", agent, protocol.Deref(first.Error))
 		}
 		again := testworld.Request(app, protocol.SpawnSessionMessage{
-			Cmd: protocol.CmdSpawnSession, ID: first.ID, Agent: string(agent), Cwd: cwd, WorkspaceID: workspace, Cols: 100, Rows: 30,
+			Cmd: protocol.CmdSpawnSession, ID: first.ID, Agent: string(agent), Cwd: cwd, ProfileID: app.SelectedProfile(), Cols: 100, Rows: 30,
 		}, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return r.ID == first.ID })
 		if !again.Success {
 			t.Errorf("spawning the live %s session again: %s", agent, protocol.Deref(again.Error))

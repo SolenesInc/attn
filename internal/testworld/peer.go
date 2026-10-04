@@ -45,7 +45,7 @@ type Peer struct {
 	watermark map[string]uint32
 	empties   map[string]int
 	attached  map[string]bool
-	panes     map[string][]protocol.WorkspaceLayoutPane
+	panes     map[string]protocol.Desktop
 	closeErr  error
 	closing   bool
 }
@@ -60,7 +60,7 @@ func newPeer(t testing.TB, conn *websocket.Conn) *Peer {
 		watermark: map[string]uint32{},
 		empties:   map[string]int{},
 		attached:  map[string]bool{},
-		panes:     map[string][]protocol.WorkspaceLayoutPane{},
+		panes:     map[string]protocol.Desktop{},
 	}
 	go p.read()
 	return p
@@ -127,62 +127,54 @@ func (p *Peer) recordEvent(data []byte) {
 		p.recordSnapshot(data)
 	case protocol.EventGetScreenSnapshotResult:
 		p.recordScreenSnapshot(data)
-	case protocol.EventInitialState, protocol.EventWorkspaceLayout, protocol.EventWorkspaceLayoutUpdated, protocol.EventWorkspaceUnregistered:
+	case protocol.EventInitialState, protocol.EventProfileArrangementChanged:
 		p.recordPanes(envelope.Event, data)
 	}
 }
 
+// recordPanes keeps the desktops this peer received; an arrangement names every desktop of its profile.
 func (p *Peer) recordPanes(event string, data []byte) {
 	var carrier struct {
-		Workspaces      []protocol.Workspace      `json:"workspaces"`
-		Workspace       *protocol.Workspace       `json:"workspace"`
-		WorkspaceLayout *protocol.WorkspaceLayout `json:"workspace_layout"`
+		Desktops []protocol.Desktop `json:"desktops"`
+		Profile  *protocol.Profile  `json:"profile"`
 	}
 	if err := json.Unmarshal(data, &carrier); err != nil {
 		return
 	}
-	switch {
-	case event == protocol.EventInitialState:
-		for _, workspace := range carrier.Workspaces {
-			if workspace.Layout != nil {
-				p.panes[workspace.ID] = workspace.Layout.Panes
+	if event == protocol.EventProfileArrangementChanged && carrier.Profile != nil {
+		for id, desktop := range p.panes {
+			if desktop.ProfileID == carrier.Profile.ID {
+				delete(p.panes, id)
 			}
 		}
-	case event == protocol.EventWorkspaceUnregistered && carrier.Workspace != nil:
-		delete(p.panes, carrier.Workspace.ID)
-	case carrier.WorkspaceLayout != nil:
-		p.panes[carrier.WorkspaceLayout.WorkspaceID] = carrier.WorkspaceLayout.Panes
+	}
+	for _, desktop := range carrier.Desktops {
+		p.panes[desktop.ID] = desktop
 	}
 }
 
-// Terminal names the terminal a session's pane places, as the layouts this peer received show it.
-// It waits for a layout that places the session.
+// Terminal names the terminal a session's pane holds, as the desktops this peer received show it.
+// It waits for a desktop that places the session.
 func (p *Peer) Terminal(sessionID string) string {
 	p.T.Helper()
-	var pane protocol.WorkspaceLayoutPane
+	var pane protocol.DesktopPane
 	p.until(func() string { return "a pane that shows session " + sessionID }, func() (bool, error) {
 		var ok bool
 		pane, ok = p.paneShowingLocked(sessionID)
 		return ok, nil
 	})
-	return protocol.Deref(pane.RuntimeID)
+	return pane.RuntimeID
 }
 
-func (p *Peer) paneShowing(sessionID string) (protocol.WorkspaceLayoutPane, bool) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.paneShowingLocked(sessionID)
-}
-
-func (p *Peer) paneShowingLocked(sessionID string) (protocol.WorkspaceLayoutPane, bool) {
-	for _, panes := range p.panes {
-		for _, pane := range panes {
-			if protocol.Deref(pane.SessionID) == sessionID && protocol.Deref(pane.RuntimeID) != "" {
+func (p *Peer) paneShowingLocked(sessionID string) (protocol.DesktopPane, bool) {
+	for _, desktop := range p.panes {
+		for _, pane := range desktop.Panes {
+			if pane.SessionID == sessionID && pane.RuntimeID != "" {
 				return pane, true
 			}
 		}
 	}
-	return protocol.WorkspaceLayoutPane{}, false
+	return protocol.DesktopPane{}, false
 }
 
 func (p *Peer) recordSnapshot(data []byte) {
@@ -267,6 +259,17 @@ func (p *Peer) Received() []protocol.WebSocketEvent {
 		events = append(events, e)
 	}
 	return events
+}
+
+// Log is every event the peer received so far, in arrival order, still encoded.
+func (p *Peer) Log() []json.RawMessage {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	log := make([]json.RawMessage, 0, len(p.frames))
+	for _, f := range p.frames {
+		log = append(log, f.raw)
+	}
+	return log
 }
 
 func (p *Peer) Close() {
@@ -494,4 +497,21 @@ func (p *Peer) take(awaiting string, accept func(frame) (bool, error)) {
 		}
 		return false, nil
 	})
+}
+
+func (p *Peer) SelectedProfile() string {
+	if selected := protocol.Deref(p.Initial.SelectedProfileID); selected != "" {
+		return selected
+	}
+	if len(p.Initial.Profiles) > 0 {
+		return p.Initial.Profiles[0].ID
+	}
+	return ""
+}
+
+func (p *Peer) Placed(sessionID string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	_, placed := p.paneShowingLocked(sessionID)
+	return placed
 }

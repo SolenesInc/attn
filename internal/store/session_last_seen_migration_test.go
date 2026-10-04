@@ -17,7 +17,7 @@ func TestMigration155MovesLastSeenStampsToUTC(t *testing.T) {
 	}
 
 	dbPath := filepath.Join(t.TempDir(), "migration-155.db")
-	db, err := openDBAtVersion(dbPath, 161)
+	db, err := openDBAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("OpenDB setup: %v", err)
 	}
@@ -35,7 +35,7 @@ func TestMigration155MovesLastSeenStampsToUTC(t *testing.T) {
 		t.Fatalf("close pre-155 database: %v", err)
 	}
 
-	migrated, err := newStoreAtVersion(dbPath, 161)
+	migrated, err := newStoreAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}

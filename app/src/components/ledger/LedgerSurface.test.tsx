@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fireEvent, screen, within } from '@testing-library/react';
 import { openSessionsLedger, page, pages, rows } from './testSupport';
-import { agentWorkspace, daemonSession } from '../../test/daemonFixtures';
+import { soloDesktop, daemonSession } from '../../test/daemonFixtures';
 import { closedEntry, liveEntry } from '../../test/sessionLedgerFixtures';
 
 const WORKTREE = '/projects/attn--feat-one';
@@ -15,7 +15,7 @@ async function openLedger() {
           daemonSession('live', { label: 'run live', directory: liveEntry('live').directory }),
           daemonSession('builder', { label: 'run builder', directory: WORKTREE }),
         ],
-        workspaces: [agentWorkspace('live'), agentWorkspace('builder')],
+        desktops: [soloDesktop('live'), soloDesktop('builder')],
       },
     },
   );

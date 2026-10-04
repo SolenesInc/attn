@@ -3,18 +3,17 @@ import { describe, expect, it } from 'vitest';
 import {
   agentPane,
   daemonSession,
-  daemonWorkspace,
+  daemonDesktop,
   type DaemonSession,
 } from './test/daemonFixtures';
 import { pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
-const WORKSPACE = 'workspace-main';
+const WORKSPACE = 'desktop-main';
 const COUNTING_DOWN = '2999-01-01T00:00:00.000Z';
 
 function agent(id: string, overrides: Partial<DaemonSession> = {}): DaemonSession {
   return daemonSession(id, {
-    workspace_id: WORKSPACE,
     directory: '/tmp/main',
     turn_owed: true,
     turn_opened_at: '2026-08-03T09:00:00Z',
@@ -22,7 +21,7 @@ function agent(id: string, overrides: Partial<DaemonSession> = {}): DaemonSessio
   });
 }
 
-const splitWorkspace = daemonWorkspace(WORKSPACE, {
+const splitDesktop = daemonDesktop(WORKSPACE, {
   root: {
     type: 'split',
     split_id: 'split-1',
@@ -40,7 +39,7 @@ async function focusFirstPane() {
   const rendered = await renderApp({
     initialState: {
       sessions: [agent('s1'), agent('s2')],
-      workspaces: [splitWorkspace],
+      desktops: [splitDesktop],
       settings: { queue_mode_enabled: 'true' },
     },
   });

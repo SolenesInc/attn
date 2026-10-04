@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo } from 'react';
-import type { CrewMember } from '../types/generated';
+import type { CrewMember, LaunchDesktopSetting } from '../types/generated';
 import type { CrewMutationOutcome } from './daemonCrewEvents';
 import { useAutosave, type AutosaveSpec, type AutosaveState } from './useAutosave';
+import { desktopIdSlot } from '../utils/desktops';
 
 export interface CrewLaunchSelection {
   agent: string;
   model: string;
   effort: string;
+  launchDesktop?: LaunchDesktopSetting;
 }
 
 export type CrewLaunchSaveState = 'saved' | 'saving' | 'error';
@@ -24,21 +26,33 @@ export interface CrewLaunchWrite {
   agent: string;
   model: string;
   effort: string;
+  launchDesktop?: LaunchDesktopSetting;
 }
 
 const selectionFromMember = (member: CrewMember): CrewLaunchSelection => ({
   agent: member.agent ?? '',
   model: member.model ?? '',
   effort: member.effort ?? '',
+  launchDesktop: member.launch_desktop,
 });
 
-const merge = (pending: Partial<CrewLaunchSelection>, member: CrewMember): CrewLaunchSelection => ({
-  ...selectionFromMember(member),
-  ...pending,
-});
+// A new desktop choice is saved once the member starts on a desktop of that name and number.
+const savedLabel = (wanted: LaunchDesktopSetting) => {
+  const slot = desktopIdSlot(wanted.desktop_id);
+  return slot ? `${slot} · ${wanted.desktop_name}` : `${wanted.desktop_name} (no ⌘ number)`;
+};
+
+const merge = (pending: Partial<CrewLaunchSelection>, member: CrewMember): CrewLaunchSelection => {
+  const wanted = pending.launchDesktop;
+  const saved = member.launch_desktop;
+  const sameDesktop = wanted && saved?.desktop_id && (
+    wanted.desktop_name ? saved.label === savedLabel(wanted) : wanted.desktop_id === saved.desktop_id
+  );
+  return { ...selectionFromMember(member), ...pending, ...(sameDesktop ? { launchDesktop: saved } : {}) };
+};
 
 const sameSelection = (a: CrewLaunchSelection, b: CrewLaunchSelection) => (
-  a.agent === b.agent && a.model === b.model && a.effort === b.effort
+  a.agent === b.agent && a.model === b.model && a.effort === b.effort && JSON.stringify(a.launchDesktop) === JSON.stringify(b.launchDesktop)
 );
 
 const launchState = (state: AutosaveState): CrewLaunchSaveState => (

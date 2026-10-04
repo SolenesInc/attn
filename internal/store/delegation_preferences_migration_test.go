@@ -11,7 +11,7 @@ import (
 
 func TestDelegationPreferencesMigrationCarriesTheSavedTableIntoHistory(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "attn.db")
-	s, err := newStoreAtVersion(path, 161)
+	s, err := newStoreAtVersion(path, 167)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +35,7 @@ func TestDelegationPreferencesMigrationCarriesTheSavedTableIntoHistory(t *testin
 		t.Fatal(err)
 	}
 
-	migrated, err := newStoreAtVersion(path, 161)
+	migrated, err := newStoreAtVersion(path, 167)
 	if err != nil {
 		t.Fatal(err)
 	}

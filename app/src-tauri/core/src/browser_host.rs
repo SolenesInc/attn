@@ -879,7 +879,7 @@ async fn screenshot(
             .map_err(|error| format!("decode browser screenshot: {error}"))?;
         if image.width() <= 1 || image.height() <= 1 {
             return Err(
-                "browser screenshot is unavailable while the browser panel is hidden; select its workspace and retry"
+                "browser screenshot is unavailable while the browser panel is hidden; select its desktop and retry"
                     .to_string(),
             );
         }
@@ -1517,17 +1517,17 @@ mod tests {
         browser_host_clear_focus(TrustedMainWebview);
         browser_host_claim_focus(
             TrustedMainWebview,
-            "browser-workspace-one-tile-browser".to_string(),
+            "browser-desktop-one-tile-browser".to_string(),
         )
         .expect("claim browser focus");
 
-        clear_browser_focus_for("browser-workspace-two-tile-browser");
+        clear_browser_focus_for("browser-desktop-two-tile-browser");
         assert_eq!(
             focused_browser_label().as_deref(),
-            Some("browser-workspace-one-tile-browser")
+            Some("browser-desktop-one-tile-browser")
         );
 
-        clear_browser_focus_for("browser-workspace-one-tile-browser");
+        clear_browser_focus_for("browser-desktop-one-tile-browser");
         assert_eq!(focused_browser_label(), None);
     }
 
@@ -1543,7 +1543,7 @@ mod tests {
     #[test]
     fn browser_commands_reject_child_webview_callers() {
         assert!(validate_browser_command_caller("main").is_ok());
-        assert!(validate_browser_command_caller("browser-workspace-one-tile-browser").is_err());
+        assert!(validate_browser_command_caller("browser-desktop-one-tile-browser").is_err());
     }
 
     #[test]

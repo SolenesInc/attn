@@ -1,0 +1,3 @@
+kind: changed
+area: shortcuts
+change: Toggle the sidebar with Command+B on macOS. Linux keeps Control+Alt+B, and saved shortcut overrides still apply.

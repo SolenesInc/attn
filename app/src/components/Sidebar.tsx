@@ -1,62 +1,47 @@
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import { CriticalNotificationStrip } from './CriticalNotificationStrip';
-import { QueueBands, QueueSnoozedSection } from './QueueBands';
+import { QueueBar } from './QueueBar';
+import { QueueSidebar } from './QueueSidebar';
 import './Sidebar.css';
-import { SidebarCollapsed, SidebarFooter, SidebarHeader, SidebarPopovers } from './SidebarChrome';
+import { SidebarCollapsed, SidebarCrewManage, SidebarFooter, SidebarHeader, SidebarPopovers } from './SidebarChrome';
 import { SidebarContext, useSidebarContext } from './SidebarContext';
 import { HomeIcon } from './SidebarIcons';
 import type { SidebarProps } from './sidebarTypes';
 import {
-  SidebarAutomationGroups,
-  SidebarMutedWorkspaces,
-  SidebarWorkspaceList,
-} from './SidebarWorkspaces';
+  SidebarDesktopList,
+  SidebarDesktopOverview,
+} from './SidebarDesktops';
 import { useSidebarState } from './useSidebarState';
 export type { DockItem, SidebarHeaderAction } from './sidebarTypes';
 
 export function Sidebar(props: SidebarProps) {
   const state = useSidebarState(props);
+  const QueueChrome = props.collapsed ? QueueBar : QueueSidebar;
+  const TreeChrome = props.collapsed ? SidebarCollapsed : SidebarExpanded;
   return (
     <SidebarContext.Provider value={state}>
-      {props.collapsed ? <SidebarCollapsed /> : <SidebarExpanded />}
+      {props.queue ? <QueueChrome /> : <TreeChrome />}
     </SidebarContext.Provider>
   );
 }
 
 function SidebarExpanded() {
   const {
-    selectedId,
     criticalNotifications,
     onOpenNotifications,
-    queue,
-    crew,
-    onWakeCrewMember,
-    onSleepCrewMember,
-    openCrewMemberActions,
-    onSettleTurn,
-    onOpenSnooze,
-    onWakeTurn,
-    onScreenSessionIds,
-    onPinSession,
     harnessLogosEnabled,
     leafDrag,
-    onNewWorkspaceDrop,
-    onSelectSession,
+    onNewDesktopDrop,
     onGoToDashboard,
     homeActive,
-    snoozedExpanded,
-    setSnoozedExpanded,
-    displayMode,
-    openSessionActions,
-    allSessions,
-    newWorkspaceDropActive,
-    setNewWorkspaceDropActive,
+    newDesktopDropActive,
+    setNewDesktopDropActive,
     reorderDrag,
     sessionDragGhost,
   } = useSidebarContext();
   return (
     <div
-      className={`sidebar sidebar--display-${displayMode} ${harnessLogosEnabled ? '' : 'sidebar--hide-harness-logos'}`.trim()}
+      className={`sidebar ${harnessLogosEnabled ? '' : 'sidebar--hide-harness-logos'}`.trim()}
     >
       <SidebarHeader />
       {/* Above Home, because it outranks it: this only exists when something is owed. */}
@@ -82,41 +67,23 @@ function SidebarExpanded() {
       </button>
 
       <SidebarCrewManage />
-
-      {queue && (
-        <QueueBands
-          bands={queue}
-          crew={crew}
-          onWakeCrewMember={onWakeCrewMember}
-          onSleepCrewMember={onSleepCrewMember}
-          onOpenCrewMemberActions={openCrewMemberActions}
-          selectedId={selectedId}
-          onSelectSession={onSelectSession}
-          onSettleTurn={(id) => onSettleTurn?.(id)}
-          onScreenSessionIds={onScreenSessionIds}
-          onPinSession={onPinSession}
-          onOpenActions={openSessionActions}
-          onOpenSnooze={onOpenSnooze}
-          allSessions={allSessions}
-        />
-      )}
+      <SidebarDesktopOverview />
 
       <div className={`session-list ${reorderDrag ? 'session-list--reordering' : ''}`.trim()}>
-        <SidebarWorkspaceList />
-        <SidebarAutomationGroups />
+        <SidebarDesktopList />
         {leafDrag && (
           <div
-            className={`new-workspace-dropzone${newWorkspaceDropActive ? ' new-workspace-dropzone--active' : ''}`}
-            data-testid="new-workspace-dropzone"
-            onPointerEnter={() => setNewWorkspaceDropActive(true)}
-            onPointerLeave={() => setNewWorkspaceDropActive(false)}
+            className={`new-desktop-dropzone${newDesktopDropActive ? ' new-desktop-dropzone--active' : ''}`}
+            data-testid="new-desktop-dropzone"
+            onPointerEnter={() => setNewDesktopDropActive(true)}
+            onPointerLeave={() => setNewDesktopDropActive(false)}
             onPointerUp={() => {
-              setNewWorkspaceDropActive(false);
-              onNewWorkspaceDrop?.();
+              setNewDesktopDropActive(false);
+              onNewDesktopDrop?.();
             }}
           >
-            <span className="new-workspace-dropzone-plus">＋</span>
-            <span className="new-workspace-dropzone-label">New workspace</span>
+            <span className="new-desktop-dropzone-plus">＋</span>
+            <span className="new-desktop-dropzone-label">New desktop</span>
           </div>
         )}
         {sessionDragGhost && (
@@ -130,34 +97,9 @@ function SidebarExpanded() {
         )}
       </div>
 
-      {/* Above muted: *not yet* is nearer to your attention than *not ever*. */}
-      {queue && onWakeTurn && (
-        <QueueSnoozedSection
-          rows={queue.snoozed}
-          selectedId={selectedId}
-          expanded={snoozedExpanded}
-          onToggleExpanded={() => setSnoozedExpanded(!snoozedExpanded)}
-          onSelectSession={onSelectSession}
-          onWakeTurn={onWakeTurn}
-          allSessions={allSessions}
-        />
-      )}
-
-      <SidebarMutedWorkspaces />
       <SidebarFooter />
       <SidebarPopovers />
     </div>
-  );
-}
-
-function SidebarCrewManage() {
-  const { crew, onManageCrew } = useSidebarContext();
-  if (!crew?.length || !onManageCrew) return null;
-  return (
-    <button type="button" className="sidebar-crew-manage" data-testid="manage-crew" onClick={onManageCrew}>
-      <span>Manage crew</span>
-      <span className="sidebar-crew-count">{crew.length}</span>
-    </button>
   );
 }
 

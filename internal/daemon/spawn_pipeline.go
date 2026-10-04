@@ -16,17 +16,22 @@ import (
 	"github.com/victorarias/attn/internal/automode"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/launchcontract"
+	"github.com/victorarias/attn/internal/layouttree"
+	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/sessionstate"
 	"github.com/victorarias/attn/internal/store"
-	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
 type internalSpawnPolicy struct {
+	launchPlacement       *launchPlacement
 	unattendedLaunch      launchcontract.UnattendedLaunchSpec
 	approvalRoute         launchcontract.ApprovalRoute
 	preserveApprovalRoute bool
+	userStarted           bool
+	// The client that asked; it gets the placement as its own answer before any broadcast of it.
+	requester *wsClient
 }
 
 type spawnRequest struct {
@@ -37,7 +42,9 @@ type spawnRequest struct {
 	hasPluginDriver bool
 	isShell         bool
 	initialPrompt   string
-	workspaceID     string
+	profile         profiles.Profile
+	placement       *launchPlacement
+	placed          placementOutcome
 	existingSession *protocol.Session
 	cwd             string
 	label           string
@@ -59,7 +66,6 @@ type spawnPlan struct {
 	chiefAssignmentCommitted     bool
 	priorIntent                  store.LaunchIntent
 	hadPriorIntent               bool
-	addedPane                    bool
 	launchedConversation         string
 	priorConversation            store.SessionConversation
 	conversationPersisted        bool
@@ -95,9 +101,8 @@ func (plan *spawnPlan) rollback(d *Daemon, sessionID string) {
 	if plan.chiefAssigned && !plan.chiefAssignmentCommitted {
 		d.clearChiefOfStaffIfSession(sessionID)
 	}
-	if plan.addedPane {
-		plan.addedPane = false
-		d.removeWorkspaceLayoutPaneForSession(sessionID)
+	if plan.spawnOpts.ID != "" {
+		d.terminals().unexpect(plan.spawnOpts.ID)
 	}
 }
 
@@ -152,15 +157,51 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 				"agent %q does not support a per-session approval policy or sandbox mode", agent)}
 		}
 	}
-	workspaceID := strings.TrimSpace(msg.WorkspaceID)
-	if workspaceID == "" {
-		return nil, &spawnRejection{commandError: "missing workspace_id"}
+	profile, err := d.liveLaunchProfile(msg.ProfileID)
+	if err != nil {
+		return nil, &spawnRejection{err: err}
 	}
-	if d.store.GetWorkspace(workspaceID) == nil {
-		d.setWorkspacePaneStatusForSession(msg.ID, workspacelayout.PaneStatusFailed, "unknown workspace")
-		return nil, &spawnRejection{commandError: "unknown workspace"}
+	placement := requestedLaunchPlacement(msg.Placement)
+	if policy.launchPlacement != nil || placement == nil {
+		_, placed, err := d.store.SessionPlacement(msg.ID)
+		if err != nil {
+			return nil, &spawnRejection{err: err}
+		}
+		if !placed {
+			placement = policy.launchPlacement
+			if placement == nil {
+				placement = &launchPlacement{direction: layouttree.DirectionVertical}
+			}
+		}
 	}
-	return &spawnRequest{msg: msg, policy: policy, agent: agent, pluginDriver: pluginDriver, hasPluginDriver: hasPluginDriver, isShell: isShell, initialPrompt: initialPrompt, workspaceID: workspaceID, autoModeDriver: autoModeDriver}, nil
+	if placement != nil {
+		placement.focus = policy.userStarted
+	}
+	if err := d.checkLaunchPlacement(profile, placement); err != nil {
+		return nil, &spawnRejection{err: err}
+	}
+	return &spawnRequest{msg: msg, policy: policy, agent: agent, pluginDriver: pluginDriver, hasPluginDriver: hasPluginDriver, isShell: isShell, initialPrompt: initialPrompt, profile: profile, placement: placement, autoModeDriver: autoModeDriver}, nil
+}
+
+func (d *Daemon) checkExistingSessionMembership(req *spawnRequest) *spawnRejection {
+	existing := req.existingSession
+	if existing == nil {
+		return nil
+	}
+	if existing.ProfileID != "" && existing.ProfileID != req.profile.ID {
+		return &spawnRejection{err: fmt.Errorf("session %s belongs to profile %s, not %s; profile ownership cannot change", existing.ID, existing.ProfileID, req.profile.ID)}
+	}
+	if req.placement == nil {
+		return nil
+	}
+	placement, placed, err := d.store.SessionPlacement(existing.ID)
+	if err != nil {
+		return &spawnRejection{err: fmt.Errorf("read the placement of session %s: %w", existing.ID, err)}
+	}
+	if placed {
+		return &spawnRejection{err: fmt.Errorf("session %s is already placed in pane %s of desktop %s", existing.ID, placement.PaneID, placement.DesktopID)}
+	}
+	return nil
 }
 
 func (d *Daemon) normalizeSpawnRequest(req *spawnRequest) *spawnRejection {
@@ -179,7 +220,10 @@ func (d *Daemon) normalizeSpawnRequest(req *spawnRequest) *spawnRejection {
 	}
 	req.resumeSessionID = protocol.Deref(req.msg.ResumeSessionID)
 	req.driver = agentdriver.Get(req.agent)
-	req.parentSessionID = d.resolveSpawnParent(protocol.Deref(req.msg.SpawnedFrom), req.workspaceID, req.isShell)
+	if rejection := d.checkExistingSessionMembership(req); rejection != nil {
+		return rejection
+	}
+	req.parentSessionID = d.resolveSpawnParent(protocol.Deref(req.msg.SpawnedFrom), req.profile, req.placement, req.isShell)
 	if req.parentSessionID == "" && req.existingSession != nil {
 		req.parentSessionID = strings.TrimSpace(protocol.Deref(req.existingSession.ParentSessionID))
 	}
@@ -232,8 +276,8 @@ func (d *Daemon) resolveSpawnIntent(req *spawnRequest) (*spawnPlan, *spawnReject
 		plan.rollback(d, msg.ID)
 		return nil, &spawnRejection{err: fmt.Errorf("agent %q cannot be chief of staff without resume capability", req.agent)}
 	}
-	plan.chiefAssigned = d.maybeAssignChiefOnSpawn(msg.ID, req.agent, requestedChief, req.existingSession)
-	plan.isChief = d.isChiefOfStaffSession(msg.ID)
+	plan.chiefAssigned = d.maybeAssignChiefOnSpawn(msg.ID, req.agent, req.profile.ID, requestedChief, req.existingSession)
+	plan.isChief = d.chiefOfProfile(req.profile.ID) == msg.ID
 	plan.spawnOpts.Model = d.resolveLaunchModel(req.agent, plan.isChief, plan.spawnOpts.Model)
 	plan.spawnOpts.Effort = d.resolveLaunchEffort(req.agent, plan.isChief, plan.spawnOpts.Effort)
 	if launch := req.policy.unattendedLaunch; !launch.IsZero() {
@@ -275,16 +319,11 @@ func (d *Daemon) resolveSpawnIntent(req *spawnRequest) (*spawnPlan, *spawnReject
 func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 	msg := req.msg
 	if req.existingSession != nil && d.sessionLive(context.Background(), msg.ID) {
-		d.clearExternalProcess(msg.ID)
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{alreadyLive: true}
 	}
-	terminal, added, err := d.placeSpawnTerminal(req)
-	if err != nil {
-		plan.rollback(d, msg.ID)
-		return &spawnOutcome{err: err}
-	}
-	plan.spawnOpts.ID, plan.addedPane = terminal, added
+	terminal := d.spawnTerminal(req)
+	plan.spawnOpts.ID = terminal
 	if req.hasPluginDriver {
 		plan.pluginRunID = uuid.NewString()
 		plan.spawnOpts.LifecycleID = plan.pluginRunID
@@ -305,7 +344,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 			params.Metadata = json.RawMessage(metadata)
 		}
 		if req.pluginDriver.Capabilities["launch_instructions"] {
-			instructions, err := d.preparePluginLaunchInstructions(msg.ID, req.workspaceID, plan.isChief,
+			instructions, err := d.preparePluginLaunchInstructions(msg.ID, req.profile.ID, plan.isChief,
 				!req.pluginDriver.Capabilities["pull_request_reporting"])
 			if err != nil {
 				d.finishPluginSessionLaunch(msg.ID, false)
@@ -362,7 +401,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	}
 
 	branchInfo, _ := d.readBranchInfo(context.Background(), gitTask{Kind: gitTaskSessionIdentity, Lane: gitInteractive}, req.cwd)
-	plan.launchSession = buildSpawnSessionRecord(msg, req.agent, req.cwd, req.label, req.existingSession, req.isShell, req.hasPluginDriver && !req.pluginDriver.Capabilities["state_reporting"], req.parentSessionID, branchInfo)
+	plan.launchSession = buildSpawnSessionRecord(msg, req.agent, req.cwd, req.label, req.profile.ID, req.existingSession, req.isShell, req.hasPluginDriver && !req.pluginDriver.Capabilities["state_reporting"], req.parentSessionID, branchInfo)
 	session := plan.launchSession
 	if err := d.store.AddCheckedUnlessTeardown(session); err != nil {
 		if req.hasPluginDriver {
@@ -429,27 +468,25 @@ func (d *Daemon) spawnSessionRuntime(sessionID string, opts ptybackend.SpawnOpti
 	opts.DaemonEnv = d.spawnRoutingEnv()
 	err := d.ptyBackend.Spawn(context.Background(), opts)
 	if err == nil {
-		d.clearExternalProcess(sessionID)
 		d.sessionInputs().forgetSession(sessionID)
 	}
 	return err
 }
 
-// placeSpawnTerminal picks the terminal a launch runs in before its worker starts: the one a pane
-// already places for the session, else a new pane's. It reports whether it added that pane.
-func (d *Daemon) placeSpawnTerminal(req *spawnRequest) (harness.TerminalID, bool, error) {
+// spawnTerminal picks the terminal a launch runs in before its worker starts: the one a pane already
+// holds for the session, else a new one its pane will record, else the session's own id when unplaced.
+func (d *Daemon) spawnTerminal(req *spawnRequest) harness.TerminalID {
 	session := harness.SessionID(req.msg.ID)
 	if terminal, ok := d.terminals().Primary(session); ok {
-		return terminal, false, nil
+		return terminal
 	}
-	if _, err := d.ensureWorkspaceSessionPane(req.workspaceID, req.msg.ID, req.label); err != nil {
-		return "", false, fmt.Errorf("place a terminal for session %s: %w", req.msg.ID, err)
+	if req.placement == nil {
+		return harness.TerminalID(req.msg.ID)
 	}
-	terminal, ok := d.terminals().Primary(session)
-	if !ok {
-		return "", false, fmt.Errorf("place a terminal for session %s: workspace %s holds no pane for it", req.msg.ID, req.workspaceID)
-	}
-	return terminal, true, nil
+	terminal := harness.TerminalID(uuid.NewString())
+	req.placement.terminal = terminal
+	d.terminals().expect(terminal, session)
+	return terminal
 }
 
 // launchedHere reports whether a resume id names the conversation a launch of this session
@@ -540,6 +577,26 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{err: persistErr}
 	}
+	fact := FactSessionRegistered
+	if req.existingSession != nil {
+		fact = FactSessionReregistered
+	}
+	req.placed = d.placeAnsweringRequester(session, req.placement, req.policy.requester)
+	if req.placed.err != nil {
+		if req.hasPluginDriver {
+			d.abortPluginSessionLaunch(msg.ID, "launch_failed")
+		}
+		cleanupErr := errors.Join(d.killSessionRuntime(plan.spawnOpts.ID), d.removeSessionRuntime(plan.spawnOpts.ID))
+		if req.existingSession == nil {
+			d.store.Remove(session.ID)
+			d.forgetSessionTrace(session.ID)
+		} else {
+			cleanupErr = errors.Join(cleanupErr, d.store.AddCheckedUnlessTeardown(req.existingSession))
+			plan.restoreLaunchIntent(d, msg.ID)
+		}
+		plan.rollback(d, msg.ID)
+		return &spawnOutcome{err: errors.Join(req.placed.err, cleanupErr)}
+	}
 	if !req.isShell && req.existingSession == nil && req.resumeSessionID == "" {
 		if err := d.store.InitializeSessionCostTracking(session.ID); err != nil {
 			d.logf("initialize session cost tracking for %s: %v", session.ID, err)
@@ -556,7 +613,14 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 			d.store.Remove(session.ID)
 			d.forgetSessionTrace(session.ID)
 		} else {
+			if req.placed.paneID != "" {
+				_, _ = d.store.RemoveSessionPlacement(session.ID)
+			}
+			_ = d.store.AddCheckedUnlessTeardown(req.existingSession)
 			plan.restoreLaunchIntent(d, msg.ID)
+		}
+		if req.placed.paneID != "" {
+			d.publishArrangementChanged(session.ProfileID)
 		}
 		cursorErr := fmt.Errorf("initialize plugin driver run cursor")
 		if killErr != nil {
@@ -580,14 +644,7 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		d.observeAgentConversation(pending)
 	}
 	d.store.UpsertRecentLocation(req.cwd)
-	d.associateSessionWithWorkspace(session.ID, req.workspaceID)
-	d.setWorkspacePaneStatusForSession(session.ID, workspacelayout.PaneStatusReady, "")
-	fact := FactSessionRegistered
-	if req.existingSession != nil {
-		fact = FactSessionReregistered
-	}
 	d.publishFact(fact, session.ID, nil)
-	d.recomputeAndBroadcastWorkspaceForSession(session.ID)
 	if req.hasPluginDriver {
 		if exit := d.finishPluginSessionLaunch(msg.ID, true); exit != nil {
 			d.handlePTYExit(*exit)
@@ -598,37 +655,43 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 }
 
 func (d *Daemon) runSpawnPipeline(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) *spawnRejection {
-	var result *spawnRejection
-	_ = d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
-		result = d.runSpawnPipelineProtected(protection, msg, policy)
-		return nil
-	})
-	return result
+	_, rejection := d.runSpawnPipelineReporting(msg, policy)
+	return rejection
 }
 
-func (d *Daemon) runSpawnPipelineProtected(_ foregroundCleanupProtection, msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) *spawnRejection {
+func (d *Daemon) runSpawnPipelineReporting(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) (placementOutcome, *spawnRejection) {
+	var placed placementOutcome
+	var rejection *spawnRejection
+	_ = d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
+		placed, rejection = d.runSpawnPipelineProtected(protection, msg, policy)
+		return nil
+	})
+	return placed, rejection
+}
+
+func (d *Daemon) runSpawnPipelineProtected(_ foregroundCleanupProtection, msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) (placementOutcome, *spawnRejection) {
 	req, rejection := d.validateSpawnPrelock(msg, policy)
 	if rejection != nil {
-		return rejection
+		return placementOutcome{}, rejection
 	}
 	releaseSpawnLock := d.acquireSpawnLock(msg.ID)
 	defer releaseSpawnLock()
 
 	if rejection := d.normalizeSpawnRequest(req); rejection != nil {
-		return rejection
+		return placementOutcome{}, rejection
 	}
 	plan, rejection := d.resolveSpawnIntent(req)
 	if rejection != nil {
-		return rejection
+		return placementOutcome{}, rejection
 	}
 	if outcome := d.executeSpawn(req, plan); outcome.err != nil {
-		return &spawnRejection{err: outcome.err}
+		return placementOutcome{}, &spawnRejection{err: outcome.err}
 	} else if outcome.alreadyLive {
-		return nil
+		return placementOutcome{}, nil
 	}
 	if outcome := d.commitSpawn(req, plan); outcome.err != nil {
 		d.forgetSessionTitleInitialPrompt(msg.ID)
-		return &spawnRejection{err: outcome.err}
+		return placementOutcome{}, &spawnRejection{err: outcome.err}
 	}
-	return nil
+	return req.placed, nil
 }

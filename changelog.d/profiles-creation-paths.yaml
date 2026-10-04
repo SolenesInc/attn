@@ -1,0 +1,3 @@
+kind: changed
+area: daemon
+change: Every new agent belongs to a profile. A delegated agent opens beside the agent that started it; crew wakes, automation runs and reopened sessions start without a pane in their original profile. Nothing new can join a deleted profile.

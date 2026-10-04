@@ -1,7 +1,7 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { openAttachedTerminals } from './test/appFixtures';
-import { agentWorkspace, daemonSession } from './test/daemonFixtures';
+import { soloDesktop, daemonSession } from './test/daemonFixtures';
 import { stubNavigatorPlatform } from './test/platformStub';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
@@ -26,7 +26,7 @@ async function openTerminal({ platform, output = '', settings = {} }: Launch = {
   if (platform) onTestFinished(stubNavigatorPlatform(platform));
   const view = await openAttachedTerminals({
     sessions: SESSIONS.map((id) => daemonSession(id, { state: 'idle' })),
-    workspaces: SESSIONS.map(agentWorkspace),
+    desktops: SESSIONS.map((id, index) => soloDesktop(id, { shortcut_slot: index + 1 })),
     initialState: { settings },
     output: output ? { s1: output } : {},
   });
@@ -115,17 +115,17 @@ describe('App terminal input', () => {
     const { typed } = await openTerminal({ output: '\x1b[>31u' });
 
     expect(await typed(press({ key: 'k', code: 'KeyK', metaKey: true }), release({ key: 'k', code: 'KeyK' }))).toEqual([]);
-    expect(screen.getByRole('dialog', { name: 'Action menu' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Agents' })).toBeInTheDocument();
   });
 
   it.each([
-    ['⌘T opens the new workspace picker', { key: 't', metaKey: true }, () => expect(pickerTitle()).toBe('New Workspace Location')],
+    ['⌘N opens the new session picker', { key: 'n', metaKey: true }, () => expect(pickerTitle()).toBe('New Session Location')],
     ['⌘⇧N opens the new session picker', { key: 'N', metaKey: true, shiftKey: true }, () => expect(pickerTitle()).toBe('New Session Location')],
     ['⌘/ opens the shortcut cheatsheet', { key: '/', metaKey: true }, () => expect(screen.getByRole('dialog')).toHaveTextContent('Keyboard Shortcuts')],
     ['⌘Q quits', { key: 'q', metaKey: true }, () => expect(window.close).toHaveBeenCalledOnce()],
-    ['⌘2 jumps to the second workspace by its key code', { key: '™', code: 'Digit2', metaKey: true }, (daemon: ScriptedDaemon) => expect(daemon.sentOf('workspace_selected').slice(-1)[0]).toEqual({ cmd: 'workspace_selected', workspace_id: 'workspace-s2' })],
-    ['⌘3 jumps to the third workspace by its key', { key: '3', metaKey: true }, (daemon: ScriptedDaemon) => expect(daemon.sentOf('workspace_selected').slice(-1)[0]).toEqual({ cmd: 'workspace_selected', workspace_id: 'workspace-s3' })],
-    ['⌘W closes a lone session', { key: 'w', metaKey: true }, (daemon: ScriptedDaemon) => expect(daemon.sentOf('workspace_layout_close_pane')).toEqual([{ cmd: 'workspace_layout_close_pane', workspace_id: 'workspace-s1', pane_id: 'pane-s1' }])],
+    ['⌘2 switches to the second desktop by its key code', { key: '™', code: 'Digit2', metaKey: true }, (daemon: ScriptedDaemon) => expect(daemon.sentOf('desktop_set_current').slice(-1)[0]).toMatchObject({ desktop_id: 'desktop-s2' })],
+    ['⌘3 switches to the third desktop by its key', { key: '3', metaKey: true }, (daemon: ScriptedDaemon) => expect(daemon.sentOf('desktop_set_current').slice(-1)[0]).toMatchObject({ desktop_id: 'desktop-s3' })],
+    ['⌘W closes a lone session', { key: 'w', metaKey: true }, (daemon: ScriptedDaemon) => expect(daemon.sentOf('unregister')).toEqual([{ cmd: 'unregister', id: 's1' }])],
   ])('%s from the terminal without typing it into the program', async (_, init, effect) => {
     vi.spyOn(window, 'close').mockImplementation(() => {});
     const { daemon, typed } = await openTerminal();
@@ -146,10 +146,10 @@ describe('App terminal input', () => {
     });
 
     expect(await typed(press({ key: 'e', metaKey: true }), press({ key: 'x' }))).toEqual([]);
-    expect(screen.queryByRole('dialog', { name: 'Action menu' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Agents' })).toBeNull();
 
     expect(await typed(press({ key: 'e', metaKey: true }), press({ key: 'a' }))).toEqual([]);
-    expect(screen.getByRole('dialog', { name: 'Action menu' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Agents' })).toBeInTheDocument();
   });
 
   it('sends dead-key composition once, as the composed character', async () => {

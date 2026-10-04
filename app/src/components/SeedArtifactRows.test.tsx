@@ -2,7 +2,7 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
-import { agentWorkspace, daemonSeed, daemonSession, seedDocument, type DaemonSeedDocument } from '../test/daemonFixtures';
+import { soloDesktop, daemonSeed, daemonSession, seedDocument, type DaemonSeedDocument } from '../test/daemonFixtures';
 import { gesture, pressShortcut, renderApp } from '../test/renderApp';
 import type { ScriptedDaemon } from '../test/scriptedDaemon';
 
@@ -19,7 +19,7 @@ interface Contents {
 
 async function openSeedArtifacts({ artifacts = [], references = [], missingPaths = [], transferRefusal = '' }: Contents) {
   const { daemon } = await renderApp({
-    initialState: { sessions: [daemonSession('s1')], workspaces: [agentWorkspace('s1')], seeds: [SEED] },
+    initialState: { sessions: [daemonSession('s1')], desktops: [soloDesktop('s1')], seeds: [SEED] },
   });
   daemon.on('seed_document_get', () => ({
     event: 'seed_document_get_result',

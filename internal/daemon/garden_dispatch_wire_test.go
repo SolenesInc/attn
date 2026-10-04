@@ -49,14 +49,16 @@ func TestADelegateShowsItsDispatcherAcrossTheDispatchersLife(t *testing.T) {
 	w.Launched(secondDay)
 	shows("once alder woke into a new day", fromAlder, secondDay, "alder")
 
-	closePane(app, sessionPane{session: plain.ID, workspace: workspace, pane: pane})
+	closePane(app, sessionPane{session: plain.ID, desktop: workspace, pane: pane})
 	awaitClosed(app, plain.ID)
 	shows("once its plain dispatcher closed", fromPlain, "", "")
 }
 
 func gardenDispatchDelegate(t *testing.T, w *world, cli *client.Client, dispatcher, cwd, brief string) string {
 	t.Helper()
-	delegated, err := cli.Delegate(delegateFrom(dispatcher, cwd, brief, fakeagent.Codex))
+	request := delegateFrom(dispatcher, cwd, brief, fakeagent.Codex)
+	request.Label = protocol.Ptr(brief)
+	delegated, err := cli.Delegate(request)
 	if err != nil {
 		t.Fatalf("%s delegates %q: %v", dispatcher, brief, err)
 	}

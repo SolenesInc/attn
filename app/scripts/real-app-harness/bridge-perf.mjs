@@ -343,15 +343,15 @@ function formatCheckpointSummary(checkpoint) {
 }
 
 async function createUtilityPanes(client, observer, sessionId, count) {
-  let workspace = await client.request('get_workspace', { sessionId });
+  let desktop = await client.request('get_desktop', { sessionId });
   const excludedPaneIds = new Set(
-    (observer.getWorkspace(sessionId)?.panes || []).map((pane) => pane.pane_id),
+    (observer.desktopOf(sessionId)?.panes || []).map((pane) => pane.pane_id),
   );
   const utilityPanes = [];
   for (let index = 0; index < count; index += 1) {
-    const targetPaneId = workspace.activePaneId || workspace.panes?.[0]?.paneId;
+    const targetPaneId = desktop.activePaneId || desktop.panes?.[0]?.paneId;
     if (!targetPaneId) {
-      throw new Error(`No pane available to split in workspace ${sessionId}`);
+      throw new Error(`No pane available to split in desktop ${sessionId}`);
     }
     await client.request('split_pane', {
       sessionId,
@@ -368,7 +368,7 @@ async function createUtilityPanes(client, observer, sessionId, count) {
     }
     excludedPaneIds.add(utilityPane.pane_id);
     utilityPanes.push(utilityPane);
-    workspace = await client.request('get_workspace', { sessionId });
+    desktop = await client.request('get_desktop', { sessionId });
   }
   return utilityPanes;
 }

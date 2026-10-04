@@ -12,7 +12,8 @@ export function entry(overrides: Partial<SessionLedgerEntry> & { id: string }): 
     label: `run ${overrides.id}`,
     last_seen: '2026-09-05T10:00:00Z',
     state: SessionState.Idle,
-    workspace_id: 'ws-1',
+    profile_id: 'profile-default',
+    profile_name: 'Default',
     ...overrides,
   };
 }
@@ -37,9 +38,8 @@ export function verdict(overrides: Partial<SessionReopen> = {}): SessionReopen {
     reopenable: true,
     actions: [SessionReopenAction.Reopen],
     directory_state: 'present',
-    workspace_id: 'ws-1',
-    workspace_plan: 'reuse',
-    pane_plan: 'add',
+    profile_id: 'profile-default',
+    profile_deleted: false,
     ...overrides,
   };
 }

@@ -3,7 +3,7 @@ import {
   AutomationFormValues,
   automationFormSchema,
   formValuesToSpec,
-  slugFromName,
+  repositoryEntry,
   specToFormValues,
 } from './automationFormModel';
 import { effortOptionsFor } from './launchCatalog';
@@ -11,8 +11,7 @@ import { effortOptionsFor } from './launchCatalog';
 function baseValues(overrides: Partial<AutomationFormValues> = {}): AutomationFormValues {
   return {
     name: 'PR reviewer',
-    id: 'pr-reviewer',
-    idCustomized: false,
+    id: 1,
     trigger: 'manual',
     scheduleCron: '',
     continuity: 'fresh',
@@ -34,7 +33,7 @@ const manualFixture = baseValues();
 
 const scheduledFixture = baseValues({
   name: 'Nightly cleanup',
-  id: 'nightly-cleanup',
+  id: 1,
   trigger: 'scheduled',
   scheduleCron: '0 3 * * *',
   continuity: 'singleton',
@@ -47,18 +46,16 @@ const scheduledFixture = baseValues({
 
 const githubFixture = baseValues({
   name: 'PR pre-review',
-  id: 'pr-pre-review',
+  id: 1,
   trigger: 'github_review_requested',
   directoryPath: '',
-  repositoriesInclude: ['GitHub.com/VictorArias/Attn', 'github.com/victorarias/attn-web'],
-  repositoriesExclude: ['github.com/victorarias/attn-private'],
+  repositoriesInclude: ['GitHub.com/VictorArias/Attn', 'github.com/victorarias/attn-web'].map(repositoryEntry),
+  repositoriesExclude: ['github.com/victorarias/attn-private'].map(repositoryEntry),
   agent: 'codex',
   model: 'gpt-5.4-codex',
   effort: 'high',
   executable: '/usr/local/bin/codex',
-  repositoryOverrides: [
-    { repository: 'GitHub.com/VictorArias/Attn', path: '/Users/victor/projects/victor/attn' },
-  ],
+  repositoryOverrides: [{ repository: 'GitHub.com/VictorArias/Attn', path: '/Users/victor/projects/victor/attn' }],
   prompt: 'Review the pull request.',
 });
 
@@ -130,10 +127,6 @@ describe('validation matrix', () => {
     expect(issuePaths(baseValues({ name: '   ' }))).toContain('name');
   });
 
-  it('rejects a bad id slug', () => {
-    expect(issuePaths(baseValues({ id: 'Not A Slug' }))).toContain('id');
-  });
-
   it('rejects scheduled trigger with catchUp unset', () => {
     expect(
       issuePaths(baseValues({ trigger: 'scheduled', scheduleCron: '0 3 * * *', catchUp: '', continuity: 'fresh' })),
@@ -152,7 +145,11 @@ describe('validation matrix', () => {
 
   it('rejects a malformed github repository entry', () => {
     const paths = issuePaths(
-      baseValues({ trigger: 'github_review_requested', directoryPath: '', repositoriesInclude: ['not-a-repo'] }),
+      baseValues({
+        trigger: 'github_review_requested',
+        directoryPath: '',
+        repositoriesInclude: ['not-a-repo'].map(repositoryEntry),
+      }),
     );
     expect(paths).toContain('repositoriesInclude.0');
   });
@@ -162,7 +159,7 @@ describe('validation matrix', () => {
       baseValues({
         trigger: 'github_review_requested',
         directoryPath: '',
-        repositoriesInclude: ['github.com/victorarias/attn', 'github.com/victorarias/attn'],
+        repositoriesInclude: ['github.com/victorarias/attn', 'github.com/victorarias/attn'].map(repositoryEntry),
       }),
     );
     expect(result.success).toBe(false);
@@ -176,8 +173,8 @@ describe('validation matrix', () => {
       baseValues({
         trigger: 'github_review_requested',
         directoryPath: '',
-        repositoriesInclude: ['github.com/victorarias/attn'],
-        repositoriesExclude: ['github.com/victorarias/attn'],
+        repositoriesInclude: ['github.com/victorarias/attn'].map(repositoryEntry),
+        repositoriesExclude: ['github.com/victorarias/attn'].map(repositoryEntry),
       }),
     );
     expect(paths).toContain('repositoriesExclude.0');
@@ -225,25 +222,11 @@ describe('validation matrix', () => {
   });
 });
 
-describe('slugFromName', () => {
-  it('lowercases and collapses non-alphanumeric runs into single dashes', () => {
-    expect(slugFromName('Clean merged worktrees')).toBe('clean-merged-worktrees');
-  });
-
-  it('trims leading and trailing dashes produced by punctuation', () => {
-    expect(slugFromName(' PR pre-review! ')).toBe('pr-pre-review');
-  });
-
-  it('reduces an all-punctuation name to an empty string', () => {
-    expect(slugFromName('---')).toBe('');
-  });
-});
-
 describe('specToFormValues', () => {
   it('defaults continuity to fresh when the scheduled trigger omits the continuity key', () => {
     const specJson = JSON.stringify({
       api_version: 'attn.dev/automations/v1alpha1',
-      id: 'nightly-cleanup',
+      id: 1,
       name: 'Nightly cleanup',
       trigger: { type: 'scheduled', schedule: { cron: '0 3 * * *' }, catch_up: 'latest' },
       prompt: 'Run nightly cleanup.',
@@ -256,7 +239,7 @@ describe('specToFormValues', () => {
   it('throws with a use-the-CLI message for a manual trigger whose location is not directory', () => {
     const specJson = JSON.stringify({
       api_version: 'attn.dev/automations/v1alpha1',
-      id: 'legacy-manual',
+      id: 1,
       name: 'Legacy manual',
       trigger: { type: 'manual' },
       prompt: 'Do the thing.',
@@ -269,7 +252,7 @@ describe('specToFormValues', () => {
   it('throws with a use-the-CLI message when the spec uses an unsupported driver', () => {
     const specJson = JSON.stringify({
       api_version: 'attn.dev/automations/v1alpha1',
-      id: 'legacy',
+      id: 1,
       name: 'Legacy',
       trigger: { type: 'manual' },
       prompt: 'Do the thing.',
@@ -279,28 +262,7 @@ describe('specToFormValues', () => {
     expect(() => specToFormValues(specJson)).toThrow(/use the cli/i);
   });
 
-  it('infers idCustomized from whether id matches slugFromName(name)', () => {
-    const matching = JSON.stringify({
-      api_version: 'attn.dev/automations/v1alpha1',
-      id: 'pr-reviewer',
-      name: 'PR reviewer',
-      trigger: { type: 'manual' },
-      prompt: 'Review it.',
-      launch: { driver: 'codex' },
-      location: { type: 'directory', path: '/repo' },
-    });
-    const customized = JSON.stringify({
-      api_version: 'attn.dev/automations/v1alpha1',
-      id: 'my-custom-id',
-      name: 'PR reviewer',
-      trigger: { type: 'manual' },
-      prompt: 'Review it.',
-      launch: { driver: 'codex' },
-      location: { type: 'directory', path: '/repo' },
-    });
-    expect(specToFormValues(matching).idCustomized).toBe(false);
-    expect(specToFormValues(customized).idCustomized).toBe(true);
-  });
+
 });
 
 describe('effortOptionsFor', () => {

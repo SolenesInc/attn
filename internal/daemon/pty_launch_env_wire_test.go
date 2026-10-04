@@ -31,7 +31,7 @@ func TestAgentsAndShellPanesGetAttnFirstOnPathAndGhosttysTerminalIdentity(t *tes
 	app := w.App()
 
 	agent := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
-	shell := w.Spawn(app, workspaceShell, w.Path("shop"))
+	shell := w.Spawn(app, shellHarness, w.Path("shop"))
 	envFile := filepath.Join(w.Dir, "shell.env")
 	app.TypeLine(shell, "env > "+envFile+"; echo dumped-$((1+1))")
 	app.AwaitScreen(shell, "dumped-2")
@@ -68,5 +68,5 @@ func TestAgentsAndShellPanesGetAttnFirstOnPathAndGhosttysTerminalIdentity(t *tes
 			t.Errorf("the %s started with PATH %q, want the active attn directory %s first and once", name, env["PATH"], active)
 		}
 	}
-	exitWorkspaceShells(app, shell)
+	exitShells(app, shell)
 }

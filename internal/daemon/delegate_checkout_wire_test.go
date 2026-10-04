@@ -43,7 +43,8 @@ func TestADelegatedWorktreeStartsFromTheExactBaseWhereItWasAsked(t *testing.T) {
 	runGit(t, root, "clone", "-q", origin, upstream)
 	commitFile(t, upstream, "later.txt", "later\n")
 	runGit(t, upstream, "push", "-q", "origin", "main")
-	source := w.Spawn(app, fakeagent.Codex, repo)
+	sourceResult, sourceDesktop, _ := w.RequestSpawn(app, fakeagent.Codex, repo)
+	source := sourceResult.ID
 	outsideGit := w.Path("notes")
 	if err := os.MkdirAll(outsideGit, 0o755); err != nil {
 		t.Fatal(err)
@@ -53,11 +54,11 @@ func TestADelegatedWorktreeStartsFromTheExactBaseWhereItWasAsked(t *testing.T) {
 		name, source, cwd   string
 		checkout            *protocol.DelegateCheckout
 		wantDirectory, head string
-		wantWorkspace       string
+		wantDesktop         string
 		wantLabel           string
 	}{
 		{name: "from the caller's checkout", source: source, cwd: repo, checkout: delegateNewWorktree("feature/a", "base"),
-			wantDirectory: filepath.Join(root, "shop--feature-a"), head: base, wantWorkspace: "workspace-shop"},
+			wantDirectory: filepath.Join(root, "shop--feature-a"), head: base, wantDesktop: sourceDesktop},
 		{name: "from a subdirectory, on a stale remote ref", cwd: filepath.Join(repo, "web"), checkout: delegateNewWorktree("feature/b", "origin/main"),
 			wantDirectory: filepath.Join(root, "shop--feature-b", "web"), head: local, wantLabel: "web"},
 		{name: "on a branch name longer than a session name", cwd: repo, checkout: delegateNewWorktree("feat/delegated-with-a-branch-name-past-the-cap", "main"),
@@ -90,8 +91,8 @@ func TestADelegatedWorktreeStartsFromTheExactBaseWhereItWasAsked(t *testing.T) {
 		if head := strings.TrimSpace(runGit(t, result.Directory, "rev-parse", "HEAD")); head != row.head {
 			t.Errorf("%s: the worktree starts at %s; want %s from %s", row.name, head, row.head, protocol.Deref(row.checkout.From))
 		}
-		if row.wantWorkspace != "" && protocol.Deref(result.WorkspaceID) != row.wantWorkspace {
-			t.Errorf("%s: the delegate landed in workspace %s; want the caller's %s", row.name, protocol.Deref(result.WorkspaceID), row.wantWorkspace)
+		if row.wantDesktop != "" && protocol.Deref(result.DesktopID) != row.wantDesktop {
+			t.Errorf("%s: the delegate landed on desktop %s; want the caller's %s", row.name, protocol.Deref(result.DesktopID), row.wantDesktop)
 		}
 		if row.wantLabel != "" {
 			if label := sessionOfDelegate(t, w, result.SessionID).Label; label != row.wantLabel {
@@ -237,14 +238,7 @@ func TestADelegateStillBootingHoldsItsCheckoutAgainstAnother(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	testworld.Await(app, protocol.EventWorkspaceLayoutUpdated, func(m protocol.WorkspaceLayoutUpdatedMessage) bool {
-		for _, pane := range m.WorkspaceLayout.Panes {
-			if protocol.Deref(pane.SessionID) == accepted.SessionID && pane.Status == protocol.WorkspaceLayoutPaneStatusReady {
-				return true
-			}
-		}
-		return false
-	})
+	testworld.AwaitSession(app, accepted.SessionID, func(protocol.Session) bool { return true })
 
 	second := delegateCheckoutAt(repo, reuseMain)
 	second.Label = protocol.Ptr("second")

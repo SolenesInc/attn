@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { vi } from 'vitest';
-import { agentPane, daemonSession, daemonWorkspace } from './daemonFixtures';
+import { daemonSession } from './daemonFixtures';
 import type { EventMessage } from './protocol';
 import { gesture, pressShortcut, renderApp } from './renderApp';
 import type { ScriptedDaemon } from './scriptedDaemon';
@@ -95,24 +95,15 @@ export function serveMachine(daemon: ScriptedDaemon, { recent = [], directories 
 }
 
 export function serveLaunches(daemon: ScriptedDaemon) {
-  daemon.on('register_workspace', ({ id, title, directory }) => ({
-    event: 'workspace_registered',
-    workspace: daemonWorkspace(id, { root: null }, { title, directory }),
-  }));
-  daemon.on('workspace_layout_add_session_pane', ({ workspace_id, pane_id, session_id }) => [
-    { event: 'workspace_layout_action_result', action: 'workspace_layout_add_session_pane', workspace_id, pane_id, success: true },
-    {
-      event: 'workspace_layout_updated',
-      workspace_layout: daemonWorkspace(workspace_id, {
-        root: { type: 'pane', pane_id },
-        panes: [{ ...agentPane(session_id!, workspace_id), pane_id: pane_id! }],
-      }).layout!,
-    },
-  ]);
-  daemon.on('spawn_session', ({ id, workspace_id, cwd }) => [
-    { event: 'spawn_result', id, success: true },
-    { event: 'session_registered', session: daemonSession(id, { workspace_id, directory: cwd, state: 'launching' }) },
-  ]);
+  daemon.on('spawn_session', ({ id, cwd, agent, placement }) => {
+    const desktopId = placement?.desktop_id || daemon.arrangement.profile.current_desktop_id;
+    daemon.arrangement.place(id, `pane-${id}`, desktopId);
+    return [
+      { event: 'session_registered', session: daemonSession(id, { directory: cwd, agent, state: 'launching' }) },
+      daemon.arrangement.answer({ request_id: id }),
+      { event: 'spawn_result', id, success: true, desktop_id: desktopId, pane_id: `pane-${id}` },
+    ];
+  });
 }
 
 export function pathInput() {
@@ -124,7 +115,7 @@ export async function openPicker(machine: Machine = {}, initialState: Partial<Ev
   serveMachine(view.daemon, machine);
   serveLaunches(view.daemon);
   serveSettings(view.daemon, initialState.settings ?? {});
-  await gesture(view.daemon, () => pressShortcut('session.newWorkspace'));
+  await gesture(view.daemon, () => pressShortcut('session.new'));
   return view;
 }
 

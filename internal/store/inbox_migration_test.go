@@ -5,9 +5,9 @@ import (
 	"testing"
 )
 
-func TestMigration162PreservesInboxHistoryAndWatchAddresses(t *testing.T) {
+func TestMigration168PreservesInboxHistoryAndWatchAddresses(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "inbox-upgrade.db")
-	db, err := openDBAtVersion(path, 161)
+	db, err := openDBAtVersion(path, 167)
 	if err != nil {
 		t.Fatal(err)
 	}

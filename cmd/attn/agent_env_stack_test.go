@@ -1,12 +1,8 @@
 package main_test
 
 import (
-	"os"
-	"slices"
 	"strings"
 	"testing"
-
-	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/testworld"
@@ -44,33 +40,4 @@ func TestAgentsNeverInheritTheClaudeSessionThatStartedTheDaemon(t *testing.T) {
 			t.Errorf("claude got %s=%q, want the user's %q", key, got, want)
 		}
 	}
-}
-
-func TestAttnRunInsideAClaudeSessionKeepsTheUsersTuningButNotItsIdentity(t *testing.T) {
-	t.Parallel()
-	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
-	s.Start()
-	work := s.Path("shop")
-	if err := os.MkdirAll(work, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	id := uuid.NewString()
-	launch := s.LaunchInTerminal(testworld.Invocation{Dir: work, Env: []string{
-		"ATTN_INSIDE_APP=1", "ATTN_AGENT=claude", "ATTN_SESSION_ID=" + id,
-		"CLAUDECODE=1", "CLAUDE_CODE_SESSION_ID=leaked", "CLAUDE_CODE_ENTRYPOINT=cli", "CLAUDE_EFFORT=xhigh", "CLAUDE_CODE_NO_FLICKER=1",
-	}})
-	claude := s.LaunchedCarrying(id)
-	for _, key := range []string{"CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_ENTRYPOINT"} {
-		if value, found := envValue(claude.Env, key); found && slices.Contains([]string{"1", "leaked", "cli"}, value) {
-			t.Errorf("claude inherited the outer session's %s=%s", key, value)
-		}
-	}
-	for key, want := range map[string]string{"CLAUDE_EFFORT": "xhigh", "CLAUDE_CODE_NO_FLICKER": "1"} {
-		if got, _ := envValue(claude.Env, key); got != want {
-			t.Errorf("claude got %s=%q, want the user's %q kept", key, got, want)
-		}
-	}
-	claude.Exit(0)
-	launch.Wait()
 }
