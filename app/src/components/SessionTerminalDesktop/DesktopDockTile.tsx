@@ -43,6 +43,7 @@ function bodyKindModifier(tileKind: string): string {
 export interface DesktopTileSessionOption {
   sessionId: string;
   label: string;
+  priority?: boolean;
   state?: string;
 }
 

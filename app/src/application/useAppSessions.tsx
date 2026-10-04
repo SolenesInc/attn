@@ -108,6 +108,7 @@ export function useAppSessions({
       daemonSessions.map((session) => ({
         id: session.id,
         label: session.label,
+        priority: session.priority,
         directory: session.directory,
       })),
     [daemonSessions],
