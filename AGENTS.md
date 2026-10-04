@@ -73,6 +73,7 @@ the full requested behavior.
 During design and review, ask: what could we remove from this design and still
 satisfy the full requirement?
 
+- The daemon owns application state; the app owns rendering.
 - Make protocol bumps and DB migrations as needed by the changes.
 - Diagnose before fixing. If the cause is unknown, propose instrumentation.
 - Do not commit spikes.
