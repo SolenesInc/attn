@@ -35,9 +35,8 @@ import (
 
 const (
 	defaultRPCTimeout       = 5 * time.Second
-	killRPCTimeout          = 15 * time.Second
+	killRPCTimeout          = ptyworker.TeardownRPCTimeout
 	livenessRPCTimeout      = 2 * time.Second
-	reclaimRPCTimeout       = 3 * time.Second
 	pollerInterval          = 5 * time.Second
 	monitorRetryInterval    = 1 * time.Second
 	watchResponseTimeout    = 5 * time.Second
@@ -986,6 +985,11 @@ func (b *WorkerBackend) Remove(ctx context.Context, id harness.TerminalID) error
 	if err != nil {
 		return err
 	}
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, killRPCTimeout)
+		defer cancel()
+	}
 	workerPID := b.workerPIDForSession(session)
 	callErr := b.callSimple(ctx, session, ptyworker.MethodRemove, map[string]any{})
 	if callErr != nil {
@@ -1580,6 +1584,27 @@ func (b *WorkerBackend) callSimple(ctx context.Context, session *workerSession, 
 	return b.callSimplePersistent(ctx, session, method, params)
 }
 
+func (b *WorkerBackend) sendWithIdentity(
+	ctx context.Context,
+	session *workerSession,
+	daemonInstanceID string,
+	controlToken string,
+	method string,
+	params any,
+) error {
+	rpcCtx, cancel := withDefaultRPCTimeout(ctx)
+	defer cancel()
+	conn, enc, _, err := b.connectWithIdentity(rpcCtx, session, daemonInstanceID, controlToken)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if err := applyConnDeadline(conn, rpcCtx); err != nil {
+		return err
+	}
+	return writeRequest(enc, b.nextReqID(method), method, params)
+}
+
 func (b *WorkerBackend) callSimpleWithIdentity(
 	ctx context.Context,
 	session *workerSession,
@@ -2051,20 +2076,8 @@ func (b *WorkerBackend) reclaimOwnershipMismatch(ctx context.Context, registryPa
 		RegistryPath: registryPath,
 		ControlToken: entry.ControlToken,
 	}
-	removeCtx := ctx
-	var cancel context.CancelFunc
-	if removeCtx == nil {
-		removeCtx = context.Background()
-	}
-	if _, hasDeadline := removeCtx.Deadline(); !hasDeadline {
-		removeCtx, cancel = context.WithTimeout(removeCtx, reclaimRPCTimeout)
-	} else {
-		removeCtx, cancel = context.WithCancel(removeCtx)
-	}
-	defer cancel()
-
-	err := b.callSimpleWithIdentity(
-		removeCtx,
+	err := b.sendWithIdentity(
+		ctx,
 		session,
 		entry.DaemonInstanceID,
 		entry.ControlToken,

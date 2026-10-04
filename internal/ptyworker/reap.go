@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/victorarias/attn/internal/procreap"
@@ -22,7 +21,7 @@ type ReapOutcome string
 const (
 	ReapRemoved      ReapOutcome = "removed"
 	ReapAlreadyGone  ReapOutcome = "already gone"
-	ReapSignalled    ReapOutcome = "signalled"
+	ReapFailed       ReapOutcome = "failed"
 	ReapUnidentified ReapOutcome = "unidentified"
 )
 
@@ -47,7 +46,7 @@ func ReapDataDir(dataDir string) []ReapResult {
 			continue
 		}
 		res := reapEntry(entry, path)
-		if res.Outcome == ReapRemoved || res.Outcome == ReapAlreadyGone || res.Outcome == ReapSignalled {
+		if res.Outcome == ReapRemoved || res.Outcome == ReapAlreadyGone {
 			RemoveHandoff(path, entry.SessionID)
 		}
 		results = append(results, res)
@@ -66,7 +65,7 @@ func reapEntry(entry RegistryEntry, registryPath string) ReapResult {
 	}
 
 	if err := requestWorkerRemove(entry); err == nil {
-		if waitForExit(entry.WorkerPID, 5*time.Second) {
+		if waitForExit(entry.WorkerPID, TeardownRPCTimeout) {
 			res.Outcome = ReapRemoved
 			return res
 		}
@@ -84,9 +83,7 @@ func reapEntry(entry RegistryEntry, registryPath string) ReapResult {
 		res.Outcome = ReapUnidentified
 		return res
 	}
-	_ = syscall.Kill(entry.WorkerPID, syscall.SIGTERM)
-	waitForExit(entry.WorkerPID, 5*time.Second)
-	res.Outcome = ReapSignalled
+	res.Outcome = ReapFailed
 	return res
 }
 
@@ -118,10 +115,16 @@ func requestWorkerRemove(entry RegistryEntry) error {
 	if err := awaitOK(dec, "reap-hello"); err != nil {
 		return err
 	}
+	if err := conn.SetDeadline(time.Now().Add(TeardownRPCTimeout)); err != nil {
+		return err
+	}
 	if err := writeReapRequest(enc, "reap-remove", MethodRemove, map[string]any{}); err != nil {
 		return err
 	}
-	return awaitOK(dec, "reap-remove")
+	if err := awaitOK(dec, "reap-remove"); err != nil {
+		return fmt.Errorf("worker removal response (timeout %s): %w", TeardownRPCTimeout, err)
+	}
+	return nil
 }
 
 func writeReapRequest(enc *json.Encoder, id, method string, params any) error {

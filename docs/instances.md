@@ -62,7 +62,12 @@ Before running scenarios, read the [harness guide](../app/scripts/real-app-harne
 
 When you move on, run `attn instance clean <name>` for instances you created.
 Never delete a data directory by hand; cleanup needs its worker registry.
-If clean reports a live app or PID, quit it and rerun.
+If clean reports a live app, quit it and rerun. If it reports an unconfirmed
+PID, check it with `ps -p <pid>`, kill it only if it is a stale attn worker,
+then rerun.
+Worker removal waits for the worker's child to exit. When a worker cannot be
+removed, clean exits non-zero and keeps the instance data and worker registry
+for diagnosis.
 
 ## UI automation
 
