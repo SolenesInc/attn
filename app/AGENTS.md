@@ -1,19 +1,12 @@
 # Frontend (Tauri + React)
 
-Daemon connection paths are relative to `app/src`.
-
 ## Daemon connection
 
-- Only `App` calls `hooks/useDaemonSocket.ts`; components use `useDaemonApi()`
-  from `contexts/DaemonApiContext.tsx`.
-- Correlate commands/results through `hooks/daemonPendingRequests.ts`:
-  `sendRequest` for fresh ids, `sendKeyedRequest` for last-writer-wins,
-  `settlePendingRequest` for typed results.
-- Add domain handlers in `hooks/daemon<Domain>Events.ts` and the socket switch's
-  `default` chain.
-- Markdown annotations use `<op>:<documentUri>` keys and `request_id` checks.
-  The daemon validates typed file/seed source fields; URIs confer no authority.
-- `store/daemonSessions.ts` holds session/PR state; `pty/` owns PTY transport.
+Paths are relative to `app/src`.
+
+- Only `App` calls `hooks/useDaemonSocket.ts`; components use `useDaemonApi()`.
+- Correlate requests through `hooks/daemonPendingRequests.ts`.
+- Domain event handlers live in `hooks/daemon<Domain>Events.ts`.
 
 ## Tests
 
@@ -29,39 +22,21 @@ Daemon connection paths are relative to `app/src`.
 ## Terminal and GPU
 
 - Resize order: model, renderer, paint, `onResize`, PTY SIGWINCH.
-- Limit `will-change` and similar layer hints to visible components.
 - Avoid continuous paint/layout animations in persistent UI, especially
   `box-shadow` and `width`/`height` countdown transitions. Keep decoration static;
   animate `opacity` or `transform` (countdown fills use `scaleX` with the correct
   origin). Verify the whole effect in a fully visible running app and measure
   idle/active CPU; transform alone does not prove it is cheap.
-- Disable unused WebGL depth/stencil attachments.
-- Hidden canvases retain buffers. Release inactive panes via
-  `setSurfaceReleased(true)`; restore in a layout effect before reveal.
-- Reuse WebGL contexts when changing font metrics; recreation exhausts WKWebView's pool.
-- Measure `scenario-perf-baseline`'s `APP FOOTPRINT` and `paneSizedSurfaces`;
-  `ps` RSS excludes graphics memory.
-
-## Small traps
-
+- Release hidden panes with `setSurfaceReleased(true)`. Reuse the WebGL context
+  when font metrics change; recreating it exhausts WKWebView's pool.
 - PTY attachment deadlines belong to one pending waiter. Clear them when it settles;
   a stale timer deleting a newer waiter blocks every later attachment for that session.
-- `sendCreateWorktreeFromBranch` and local `sendCreateWorktree` share `_local`
-  pending-action keys; do not run both concurrently.
-- Reconnect's circuit breaker stays open until the user clicks retry.
+- Measure memory with `scenario-perf-baseline`; `ps` RSS misses graphics memory.
 
-## macOS shortcuts
+## Shortcuts
 
-- Native menu accelerators can consume keys before DOM keydown.
-- Handle Cmd+C through `GhosttyTerminal`'s DOM `copy` event; verify with
-  `real-app:scenario-terminal-block-copy`.
-- Check `Menu::default`; remove conflicting predefined items in
-  `src-tauri/core/src/lib.rs` so WebView rebindings work.
-- Use `dispatch_native_shortcut` only for required visible native menu items;
-  it hardcodes the action.
-
-## Diagnostics
-
-Use prefixed console logs/DevTools. For intermittent bugs, write
-`$APPLOCALDATA/debug/<name>.jsonl` following `terminalDiagnosticsLog.ts` or
-`terminalLinkHitTestLog.ts`; remove temporary instrumentation after the fix.
+- macOS menu accelerators can swallow keys before the DOM sees them; remove
+  conflicting predefined items in `src-tauri/core/src/lib.rs`. Handle Cmd+C through
+  `GhosttyTerminal`'s `copy` event.
+- On Linux, plain Ctrl+letter belongs to the shell. App actions use Ctrl+Shift,
+  or Ctrl+Alt when the macOS binding already has Shift.
