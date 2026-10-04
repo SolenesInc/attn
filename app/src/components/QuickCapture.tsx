@@ -125,11 +125,14 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
   }
   const removeFile = useCallback((id: string) => {
     if (sending.current || state.current.uncertain) return;
+    const retained = draft();
     ownedFiles.current.delete(id); stagedFiles.current.delete(id);
     const file = state.current.files.find(item => item.id === id);
     setFiles(previous => previous.filter(item => item.id !== id));
     if (file?.url.startsWith('blob:')) URL.revokeObjectURL(file.url);
-    void client.current!.discard(identity.current.id, [id]).catch(error => setError(String(error)));
+    void cache.current.save({ ...retained, files: retained.files.filter(file => file.id !== id) })
+      .then(() => client.current!.discard(retained.id, [id]))
+      .catch(error => setError(`Cannot remove file: ${error}`));
     editor.current?.focus();
   }, []);
   function pasteNativeImage() {
