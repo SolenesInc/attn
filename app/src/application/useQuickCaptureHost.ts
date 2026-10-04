@@ -95,6 +95,7 @@ export function useQuickCaptureHost(daemon: DaemonApi, settings: Record<string, 
     });
     const errorListener = listen<string>('capture-error', ({ payload }) => setNative(previous => ({ ...previous, error: payload })));
     const readyListener = listen(QUICK_CAPTURE_READY, () => emitTo('capture', QUICK_CAPTURE_STATE, stateRef.current));
+    void readyListener.then(() => { if (!disposed) return emitTo('capture', QUICK_CAPTURE_STATE, stateRef.current); });
     return () => { disposed = true; void requestListener.then(unlisten => unlisten()); void readyListener.then(unlisten => unlisten()); void errorListener.then(unlisten => unlisten()); };
   }, []);
 

@@ -19,6 +19,7 @@ const native = vi.hoisted(() => {
   drafts: new Map<string, unknown>(),
   files: new Map<string, string>(),
   visible: false,
+  readyGate: undefined as Promise<void> | undefined,
   binding: null as string | null,
   active: null as string | null,
   onHide: null as (() => void) | null,
@@ -33,6 +34,7 @@ vi.mock('@tauri-apps/api/event', () => {
   return {
     emit: (event: string, payload?: unknown) => emitTo('', event, payload), emitTo,
     listen: async (event: string, listener: (event: { payload: unknown }) => unknown) => {
+      if (event === 'attn://capture/ready' && native.readyGate) await native.readyGate;
       const listeners = native.listeners.get(event) ?? new Set();
       native.listeners.set(event, listeners); listeners.add(listener);
       return () => listeners.delete(listener);
@@ -47,7 +49,7 @@ vi.mock('@tauri-apps/api/webviewWindow', () => ({
 }));
 
 beforeEach(() => {
-  native.listeners.clear(); native.visible = false; native.draft = null; native.drafts.clear(); native.files.clear(); native.binding = null; native.active = null;
+  native.listeners.clear(); native.readyGate = undefined; native.visible = false; native.draft = null; native.drafts.clear(); native.files.clear(); native.binding = null; native.active = null;
   vi.mocked(isTauri).mockReturnValue(true);
   vi.mocked(invoke).mockImplementation(async (command, args) => {
     const values = args as Record<string, any> | undefined;
@@ -89,6 +91,16 @@ function record(command: { capture_id: string; content?: string; mailbox?: WireR
 function quickCaptureTraffic(daemon: ScriptedDaemon) { return daemon.sent.filter(command => command.cmd.startsWith('quick_capture_')); }
 
 describe('Quick Capture app wire behavior', () => {
+  it('connects when the capture starts before the main ready listener is registered', async () => {
+    let registerReady!: () => void;
+    native.readyGate = new Promise<void>(resolve => { registerReady = resolve; });
+    const { daemon } = await captureApp();
+    expect(screen.getByText('Connecting Quick Capture…')).toBeInTheDocument();
+    await act(async () => registerReady());
+    await daemon.idle();
+    expect(editor()).toBeInTheDocument();
+  });
+
   it('keeps edits made after returning to a profile when an older resolve finishes', async () => {
     const a = defaultProfile('desktop-1');
     const b = defaultProfile('desktop-work', { id: 'profile-work', name: 'Work' });
@@ -482,15 +494,15 @@ describe('Quick Capture app wire behavior', () => {
     const firstId = crypto.randomUUID();
     const { daemon } = await captureApp(daemon => {
       daemon.on('quick_capture_list', () => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { list: { items: [
-        record({ capture_id: firstId, content: 'Sent note' }),
-        { ...record({ capture_id: crypto.randomUUID(), content: 'Read note' }), read_at: '2026-10-01T12:01:00Z',
+        record({ capture_id: firstId, content: 'Sent message' }),
+        { ...record({ capture_id: crypto.randomUUID(), content: 'Read message' }), read_at: '2026-10-01T12:01:00Z',
           attachments: [{ id: crypto.randomUUID(), name: 'notes.pdf', media_type: 'application/pdf', bytes: 51 }] },
       ], draft_assets: [] } } }));
     });
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Recent messages' })));
     const recent = screen.getByRole('region', { name: 'Recent messages' });
-    expect(within(recent).getByText('Sent note')).toBeInTheDocument();
-    expect(within(recent).getByText('Read note')).toBeInTheDocument();
+    expect(within(recent).getByText('Sent message')).toBeInTheDocument();
+    expect(within(recent).getByText('Read message')).toBeInTheDocument();
     expect(within(recent).getByText('notes.pdf')).toBeInTheDocument();
     expect(within(recent).getByText('PDF', { exact: true })).toBeInTheDocument();
     expect(within(recent).getByText('51 B')).toBeInTheDocument();
@@ -508,11 +520,25 @@ describe('Quick Capture app wire behavior', () => {
     await daemon.idle();
     expect(daemon.sentOf('quick_capture_list')).toHaveLength(1);
     expect(within(recent).getAllByText(/^Read$/)).toHaveLength(2);
+    daemon.on('quick_capture_list', () => undefined);
+    await daemon.reconnect();
+    const refresh = daemon.sentOf('quick_capture_list').at(-1)!;
+    expect(daemon.sentOf('quick_capture_list')).toHaveLength(2);
+    await act(async () => {
+      daemon.emit({ event: 'quick_capture_read', profile_id: DEFAULT_PROFILE_ID, capture_id: firstId, read_at: '2026-10-01T12:03:00Z' });
+      daemon.replyTo(refresh, { event: 'quick_capture_result', request_id: refresh.request_id, profile_id: DEFAULT_PROFILE_ID, success: true, result: { list: {
+        items: [record({ capture_id: firstId, content: 'Sent message' })], draft_assets: [],
+      } } });
+    });
+    await daemon.idle();
+    expect(within(recent).getByText(/^Read$/)).toBeInTheDocument();
+    expect(within(recent).queryByText(/^Sent$/)).toBeNull();
+
   });
 
   it('resends retained image bytes after a failed draft discard', async () => {
     const captureId = crypto.randomUUID(), imageId = crypto.randomUUID(), secondId = crypto.randomUUID();
-    native.draft = { id: captureId, text: 'Keep this note', mailbox: 'chief', uncertain: false,
+    native.draft = { id: captureId, text: 'Keep this message', mailbox: 'chief', uncertain: false,
       files: [imageId, secondId].map(id => ({ id, name: 'kept.png', url: 'data:image/png;base64,iVBORw0KGgo=' })) };
     let discarded = false;
     const { daemon, capture } = await captureApp(daemon => {
@@ -522,7 +548,7 @@ describe('Quick Capture app wire behavior', () => {
       });
       daemon.on('quick_capture_list', () => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { list: { items: [], draft_assets: discarded ? [] : [imageId, secondId].map(id => ({ capture_id: captureId, attachment_id: id, name: 'kept.png', state: 'ready', next_offset: 8 })) } } }));
       daemon.on('quick_capture_attachment_discard', command => {
-        expect(native.draft).toMatchObject({ text: 'Keep this note' });
+        expect(native.draft).toMatchObject({ text: 'Keep this message' });
         expect((native.draft as { id: string }).id).not.toBe(captureId);
         discarded = true; return command.attachment_id === imageId
         ? { event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { discarded: true } }
@@ -540,10 +566,10 @@ describe('Quick Capture app wire behavior', () => {
       for (const listener of native.listeners.get(QUICK_CAPTURE_READY) ?? []) await listener({ payload: undefined });
     });
     await daemon.idle();
-    expect(editor()).toHaveValue('Keep this note');
+    expect(editor()).toHaveValue('Keep this message');
     await gesture(daemon, () => fireEvent.keyDown(editor(), { key: 'Enter' }));
     const sent = await daemon.received('quick_capture_send');
-    expect(sent).toMatchObject({ content: 'Keep this note', attachment_ids: [imageId, secondId] });
+    expect(sent).toMatchObject({ content: 'Keep this message', attachment_ids: [imageId, secondId] });
     expect(sent.capture_id).not.toBe(captureId);
     expect(daemon.sentOf('quick_capture_attachment_put')).toMatchObject([imageId, secondId].map(id => ({ capture_id: sent.capture_id, attachment_id: id, data_base64: 'iVBORw0KGgo=' })));
     expect(native.draft).toMatchObject({ id: expect.any(String) });
@@ -551,7 +577,7 @@ describe('Quick Capture app wire behavior', () => {
 
   it('keeps the draft without remote deletion when its replacement identity cannot be saved', async () => {
     const captureId = crypto.randomUUID(), imageId = crypto.randomUUID();
-    native.draft = { id: captureId, text: 'Keep this note', mailbox: 'chief', uncertain: false,
+    native.draft = { id: captureId, text: 'Keep this message', mailbox: 'chief', uncertain: false,
       files: [{ id: imageId, name: 'kept.png', url: 'data:image/png;base64,iVBORw0KGgo=' }] };
     const originalInvoke = vi.mocked(invoke).getMockImplementation()!;
     vi.mocked(invoke).mockImplementation(async (command, args) => {
@@ -568,15 +594,15 @@ describe('Quick Capture app wire behavior', () => {
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Discard draft' })));
     expect(screen.getByRole('alert')).toHaveTextContent('Local draft storage unavailable');
     expect(daemon.sentOf('quick_capture_attachment_discard')).toEqual([]);
-    expect(native.draft).toMatchObject({ id: captureId, text: 'Keep this note' });
+    expect(native.draft).toMatchObject({ id: captureId, text: 'Keep this message' });
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /Back to draft/ })));
-    expect(editor()).toHaveValue('Keep this note');
+    expect(editor()).toHaveValue('Keep this message');
     expect(screen.getByRole('img', { name: 'kept.png' })).toBeInTheDocument();
   });
 
   it.each(['paste', 'drop'])('blocks %s files until the retained draft is restored', async source => {
     const captureId = crypto.randomUUID(), imageId = crypto.randomUUID();
-    const stored: CachedQuickCaptureDraft = { id: captureId, text: 'Retained note', mailbox: 'chief', uncertain: false,
+    const stored: CachedQuickCaptureDraft = { id: captureId, text: 'Retained message', mailbox: 'chief', uncertain: false,
       files: [{ id: imageId, name: 'saved.png', url: 'data:image/png;base64,iVBORw0KGgo=' }] };
     const originalInvoke = vi.mocked(invoke).getMockImplementation()!;
     let finishRead!: (draft: CachedQuickCaptureDraft) => void;
@@ -600,7 +626,7 @@ describe('Quick Capture app wire behavior', () => {
     expect(vi.mocked(invoke).mock.calls.filter(([command]) => command === 'quick_capture_file_read')).toHaveLength(0);
     expect(daemon.sentOf('quick_capture_attachment_put')).toEqual([]);
     await act(async () => finishRead(stored)); await daemon.idle();
-    expect(editor()).toHaveValue('Retained note'); expect(editor()).not.toHaveAttribute('readonly');
+    expect(editor()).toHaveValue('Retained message'); expect(editor()).not.toHaveAttribute('readonly');
     expect(screen.getByRole('img', { name: 'saved.png' })).toBeInTheDocument();
     if (source === 'drop') {
       await gesture(daemon, () => native.onDrop!({ payload: { type: 'drop', paths: ['/synthetic/new.png'], position: { x: 0, y: 0 } } }));
