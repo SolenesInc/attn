@@ -58,7 +58,10 @@ glows. Green = working. Yellow = "hey, I need you." Gray = done.
 say one for work and one for personal projects. Inside it, desktops hold your
 panes and tiles; Cmd+1–9 switches between them and Cmd+Option+1–9 sends the
 focused pane over. Every window on the same profile shows the same desktop and
-the same focused pane.
+the same focused pane. Closing the focused tile returns to the most recently
+focused tile still on that desktop. Closing a background tile keeps focus where
+it is. Each desktop remembers this order across restarts; if no earlier focused
+tile remains, focus passes to the tile on the left, then another remaining tile.
 
 **Panes, splits, and first-class shells.** A desktop can hold several sessions
 side by side. Split a pane, open a plain shell as its own session from the same

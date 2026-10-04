@@ -383,6 +383,16 @@ func HasLeaf(node Node, leafID string) bool {
 	return HasPane(node, leafID) || HasTile(node, leafID)
 }
 
+func LeafIDs(node Node) []string {
+	var ids []string
+	walk(node, func(visited Node) {
+		if isLeaf(visited) {
+			ids = append(ids, leafIDOf(visited))
+		}
+	})
+	return ids
+}
+
 func LayoutEmpty(node Node) bool {
 	return len(PaneIDs(node)) == 0 && len(TileIDs(node)) == 0
 }

@@ -45,6 +45,7 @@ type Desktop struct {
 	OrderKey     string
 	Tree         layouttree.Node
 	ActivePaneID string
+	FocusHistory []string
 	Panes        []Pane
 	Revision     int64
 }
@@ -205,13 +206,46 @@ func CheckDesktop(desktop Desktop) error {
 }
 
 func Settle(desktop Desktop) Desktop {
+	return SettleAfter(desktop, layouttree.Node{})
+}
+
+func SettleAfter(desktop Desktop, previousTree layouttree.Node) Desktop {
 	desktop.Tree = layouttree.Rebalance(desktop.Tree)
-	if layouttree.HasLeaf(desktop.Tree, desktop.ActivePaneID) {
-		return desktop
+	leaves := layouttree.LeafIDs(desktop.Tree)
+	live := make(map[string]bool, len(leaves))
+	for _, id := range leaves {
+		live[id] = true
 	}
-	desktop.ActivePaneID = ""
-	if leaves := append(layouttree.PaneIDs(desktop.Tree), layouttree.TileIDs(desktop.Tree)...); len(leaves) > 0 {
-		desktop.ActivePaneID = leaves[0]
+	history := make([]string, 0, len(desktop.FocusHistory)+1)
+	for _, id := range desktop.FocusHistory {
+		if live[id] {
+			history = append(history, id)
+		}
 	}
+	if !live[desktop.ActivePaneID] {
+		if len(history) > 0 {
+			desktop.ActivePaneID = history[0]
+		} else {
+			desktop.ActivePaneID = layouttree.LeftNeighbour(previousTree, desktop.ActivePaneID, live)
+			if desktop.ActivePaneID == "" && len(leaves) > 0 {
+				desktop.ActivePaneID = leaves[0]
+			}
+		}
+	}
+	desktop.FocusHistory = history
+	return Focus(desktop, desktop.ActivePaneID)
+}
+
+func Focus(desktop Desktop, leafID string) Desktop {
+	history := make([]string, 0, len(desktop.FocusHistory)+1)
+	if leafID != "" {
+		history = append(history, leafID)
+	}
+	for _, id := range desktop.FocusHistory {
+		if id != leafID {
+			history = append(history, id)
+		}
+	}
+	desktop.ActivePaneID, desktop.FocusHistory = leafID, history
 	return desktop
 }
