@@ -16,9 +16,10 @@ func TestRestartKeepsConversationsThatCanResumeAndPrunesTheRest(t *testing.T) {
 	app := w.App()
 
 	codexKept := w.Spawn(app, fakeagent.Codex, w.Path("api"))
-	w.Launched(codexKept)
+	takeTurn(app, w.Launched(codexKept), codexKept)
 	codexGone := w.Spawn(app, fakeagent.Codex, w.Path("web"))
 	goneRun := w.Launched(codexGone)
+	takeTurn(app, goneRun, codexGone)
 	rollouts, err := filepath.Glob(filepath.Join(w.Dir, "toolhome", ".codex", "sessions", "*", "*", "*", "rollout-*-"+goneRun.ConversationID+".jsonl"))
 	if err != nil || len(rollouts) != 1 {
 		t.Fatalf("rollout of %s = %v (%v), want exactly one", goneRun.ConversationID, rollouts, err)

@@ -17,14 +17,15 @@ func TestTheMessageWindowShowsEachSessionsOwnAnswersOldestFirstUnderStableKeys(t
 	cwd := w.Path("shop")
 	first := w.Spawn(app, fakeagent.Codex, cwd)
 	firstRun := w.Launched(first)
+	app.TypeLine(first, "plan the discount field")
+	firstRun.Prompted()
+	testworld.AwaitSession(app, first, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	if window := messageWindow(app, first); !window.Success || window.Status != protocol.SessionMessageWindowStatusReady || len(window.Messages) != 0 {
-		t.Fatalf("a fresh session's window = %+v, want a ready, empty window", window)
+		t.Fatalf("the window of a session yet to answer = %+v, want a ready, empty window", window)
 	}
 	second := w.Spawn(app, fakeagent.Codex, cwd)
 	secondRun := w.Launched(second)
 
-	app.TypeLine(first, "plan the discount field")
-	firstRun.Prompted()
 	firstRun.Reply("An earlier answer. <!-- attn:state=idle -->")
 	app.TypeLine(second, "rename the checkout module")
 	secondRun.Prompted()
