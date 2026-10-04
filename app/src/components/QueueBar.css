@@ -272,7 +272,7 @@
 }
 
 .queue-bar-peek-panel {
-  width: min(420px, calc(100vw - 24px));
+  width: min(600px, calc(100vw - 24px));
   max-height: calc(100vh - 80px);
   padding: 8px 6px;
   overflow-y: auto;

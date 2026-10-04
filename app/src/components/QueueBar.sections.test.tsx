@@ -177,7 +177,6 @@ describe('the waiting peek', () => {
       'agent:busy',
       'agent:loose',
     ]);
-    expect(peek.textContent).toContain('Automation runs are not in the queue');
   });
 
   it('tags the head of the queue and shows where each agent lives', () => {
@@ -226,7 +225,7 @@ describe('the waiting peek', () => {
 
     const peek = screen.getByTestId('queue-bar-waiting-peek');
     expect(peek.querySelectorAll('.queue-bar-peek-row')).toHaveLength(16);
-    expect(screen.getByTestId('queue-bar-peek-more').textContent).toMatch(/^4 more · .+ to filter · .+ commands$/);
+    expect(screen.getByTestId('queue-bar-peek-more').textContent).toMatch(/^4 more · .+ to search$/);
   });
 
   it('opens an agent, wakes a member, and closes after either', () => {

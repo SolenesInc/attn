@@ -1,4 +1,3 @@
-import { useDaemonStore } from '../../store/daemonSessions';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
 import type { ShortcutId } from '../../shortcuts/registry';
 import { crewDisplayName } from '../../utils/crewName';
@@ -68,7 +67,6 @@ export function AgentSessionRow({
       <span className={`unified-palette-dot is-${status}`} />
       <span className="unified-palette-name">
         {session.label}
-        {session.crewMember && !session.chiefOfStaff && <span className="unified-palette-muted"> · crew</span>}
       </span>
       <kbd className="unified-palette-slot">{slot}</kbd>
       <span className={`unified-palette-pill is-${status}`}>{status}</span>
@@ -79,10 +77,9 @@ export function AgentSessionRow({
 }
 
 function SleepingMember({ member }: { member: string }) {
-  const label = useDaemonStore((state) => state.crew.find((entry) => entry.id === member)?.launch_desktop?.label);
   return <div className="unified-palette-row">
     <span className="unified-palette-dot is-asleep" />
-    <span className="unified-palette-name">{crewDisplayName(member)} <span className="unified-palette-muted">· crew{label ? ` · ${label}` : ''}</span></span>
+    <span className="unified-palette-name">{crewDisplayName(member)}</span>
     <kbd className="unified-palette-slot" />
     <span className="unified-palette-pill">asleep</span>
     <span className="unified-palette-age">wake</span>
