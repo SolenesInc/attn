@@ -135,7 +135,7 @@ for (const rail of [false, true]) {
     await page.waitForFunction(() => window.__HARNESS__?.ready === true);
     const list = page.locator(rail ? '.rail-desktops' : '.session-list');
     await page.getByRole('button', { name: 'Jump to last', exact: true }).click();
-    await page.getByRole('button', { name: 'Home', exact: true }).click();
+    await (rail ? page.getByRole('button', { name: 'Home', exact: true }) : page.getByTestId('sidebar-home')).click();
     await list.evaluate((element) => { element.scrollTop = 0; });
     const before = await list.evaluate((element) => element.scrollTop);
     await list.getByRole('button', { name: rail ? 'Desktop 1 (⌘1)' : 'Open Desktop 1', exact: true }).click();
