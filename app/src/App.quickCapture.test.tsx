@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { QuickCapture } from './components/QuickCapture';
 import { CAPTURE_READY, CAPTURE_REQUEST } from './quickCapture/client';
+import { DEFAULT_PROFILE_ID, defaultProfile, emptyDesktop } from './test/daemonFixtures';
 import type { CachedCaptureDraft } from './quickCapture/draft';
 import { CaptureAutomationWorkQueue } from './quickCapture/workQueueAutomation';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
@@ -16,7 +17,9 @@ const native = vi.hoisted(() => {
   return ({
   listeners: new Map<string, Set<(event: { payload: unknown }) => unknown>>(),
   draft: null as unknown,
+  drafts: new Map<string, unknown>(),
   images: new Map<string, string>(),
+  visible: false,
   binding: null as string | null,
   active: null as string | null,
   onHide: null as (() => void) | null,
@@ -24,6 +27,8 @@ const native = vi.hoisted(() => {
 }); });
 vi.mock('@tauri-apps/api/event', () => {
   async function emitTo(_label: string, event: string, payload?: unknown) {
+    if (event === 'capture-open') native.visible = true;
+    if (event === 'capture-hidden') native.visible = false;
     for (const listener of native.listeners.get(event) ?? []) await listener({ payload });
   }
   return {
@@ -37,13 +42,13 @@ vi.mock('@tauri-apps/api/event', () => {
 });
 vi.mock('@tauri-apps/api/webviewWindow', () => ({
   getCurrentWebviewWindow: () => ({
-    onDragDropEvent: async (callback: typeof native.onDrop) => { native.onDrop = callback; return () => { native.onDrop = undefined; }; }, isVisible: async () => true,
+    onDragDropEvent: async (callback: typeof native.onDrop) => { native.onDrop = callback; return () => { native.onDrop = undefined; }; }, isVisible: async () => native.visible,
     show: async () => {}, setFocus: async () => {}, isFocused: async () => true,
   }),
 }));
 
 beforeEach(() => {
-  native.listeners.clear(); native.draft = null; native.images.clear(); native.binding = null; native.active = null;
+  native.listeners.clear(); native.visible = false; native.draft = null; native.drafts.clear(); native.images.clear(); native.binding = null; native.active = null;
   vi.mocked(isTauri).mockReturnValue(true);
   vi.mocked(invoke).mockImplementation(async (command, args) => {
     const values = args as Record<string, any> | undefined;
@@ -54,12 +59,12 @@ beforeEach(() => {
     if (command === 'capture_bind') { native.active = values!.binding; return; }
     if (command === 'capture_cache') { native.binding = values!.binding; return; }
     if (command === 'capture_draft_read') {
-      const draft = native.draft as CachedCaptureDraft | null;
-      for (const image of draft?.images ?? []) if (image.url) native.images.set(image.id, image.url);
-      return draft && { ...draft, images: draft.images.map(image => ({ ...image, url: image.url || native.images.get(image.id)! })) };
+      const draft = (native.drafts.get(values!.profileId) ?? (native.drafts.size === 0 ? native.draft : null)) as CachedCaptureDraft | null;
+      for (const image of draft?.images ?? []) if (image.url) native.images.set(`${values!.profileId}:${image.id}`, image.url);
+      return draft && { ...draft, images: draft.images.map(image => ({ ...image, url: image.url || native.images.get(`${values!.profileId}:${image.id}`)! })) };
     }
-    if (command === 'capture_draft_write') { native.draft = values!.draft; return; }
-    if (command === 'capture_draft_image_write') { native.images.set(values!.id, values!.url); return; }
+    if (command === 'capture_draft_write') { native.draft = values!.draft; native.drafts.set(values!.profileId, values!.draft); return; }
+    if (command === 'capture_draft_image_write') { native.images.set(`${values!.profileId}:${values!.id}`, values!.url); return; }
     return undefined;
   });
 });
@@ -86,6 +91,102 @@ function captureTraffic(daemon: ScriptedDaemon) { return daemon.sent.filter(comm
 
 // These enter through the real main App/socket and secondary-window bridge; native focus is a packaged scenario.
 describe('Quick Capture app wire behavior', () => {
+  it('keeps edits made after returning to a profile when an older resolve finishes', async () => {
+    const a = defaultProfile('desktop-1');
+    const b = defaultProfile('desktop-work', { id: 'profile-work', name: 'Work' });
+    const desktops = [emptyDesktop('desktop-1'), emptyDesktop('desktop-work', { profile_id: b.id })];
+    native.draft = { id: crypto.randomUUID(), text: 'Retained A', recipient: 'chief', images: [], uncertain: true };
+    let resolutions = 0;
+    const { daemon } = await captureApp(daemon => {
+      daemon.on('capture_get', command => {
+        resolutions++;
+        if (resolutions === 2) return;
+        return { event: 'capture_result', profile_id: command.profile_id!, success: false,
+          error: resolutions === 1 ? 'Storage is temporarily unavailable' : 'Capture absent',
+          ...(resolutions === 1 ? {} : { error_code: 'capture_not_found' }) };
+      });
+    }, { initialState: { profiles: [a, b], desktops, selected_profile_id: a.id } });
+    await daemon.idle();
+    expect(resolutions).toBe(1);
+    await gesture(daemon, () => fireEvent.keyDown(editor(), { key: 'Enter' }));
+    expect(resolutions).toBe(2);
+    const held = daemon.sentOf('capture_get')[1];
+    await act(async () => daemon.emit({ event: 'profile_arrangement_changed', profile: b, desktops: [desktops[1]] }));
+    await daemon.idle();
+    await act(async () => daemon.emit({ event: 'profile_arrangement_changed', profile: a, desktops: [desktops[0]] }));
+    await daemon.idle();
+    expect(resolutions).toBe(3);
+    await gesture(daemon, () => fireEvent.change(editor(), { target: { value: 'Edited after returning to A' } }));
+    await act(async () => daemon.replyTo(held, { event: 'capture_result', profile_id: a.id, request_id: held.request_id, success: false, error: 'Capture absent', error_code: 'capture_not_found' }));
+    await daemon.idle();
+    expect(editor()).toHaveValue('Edited after returning to A');
+    expect(native.drafts.get(a.id)).toMatchObject({ text: 'Edited after returning to A', uncertain: false });
+    expect(daemon.sentOf('capture_send')).toEqual([]);
+  });
+
+  it('reconciles a late acceptance in its owning profile without hiding another profile', async () => {
+    const a = defaultProfile('desktop-1');
+    const b = defaultProfile('desktop-work', { id: 'profile-work', name: 'Work' });
+    const desktops = [emptyDesktop('desktop-1'), emptyDesktop('desktop-work', { profile_id: b.id })];
+    const { daemon } = await captureApp(undefined, { initialState: { profiles: [a, b], desktops, selected_profile_id: a.id } });
+    let hides = 0;
+    native.onHide = () => { hides++; };
+    await gesture(daemon, () => fireEvent.change(editor(), { target: { value: 'A request' } }));
+    await gesture(daemon, () => fireEvent.keyDown(editor(), { key: 'Enter' }));
+    const submission = await daemon.received('capture_send');
+    await act(async () => daemon.emit({ event: 'profile_arrangement_changed', profile: b, desktops: [desktops[1]] }));
+    await daemon.idle();
+    await gesture(daemon, () => fireEvent.change(editor(), { target: { value: 'B draft' } }));
+    await act(async () => daemon.replyTo(submission, { event: 'capture_result', profile_id: a.id, request_id: submission.request_id, success: true, result: { record: record(submission) } }));
+    await daemon.idle();
+    expect(hides).toBe(0);
+    expect(editor()).toHaveValue('B draft');
+    expect(native.drafts.get(a.id)).toMatchObject({ text: 'A request', uncertain: true });
+    daemon.on('capture_get', command => ({ event: 'capture_result', profile_id: command.profile_id!, success: true, result: { record: record(submission) } }));
+    await act(async () => daemon.emit({ event: 'profile_arrangement_changed', profile: a, desktops: [desktops[0]] }));
+    const reconciliation = await daemon.received('capture_get');
+    expect(reconciliation).toMatchObject({ profile_id: a.id, capture_id: submission.capture_id });
+    await daemon.idle();
+    expect(editor()).toHaveValue('');
+    expect(native.drafts.get(b.id)).toMatchObject({ text: 'B draft' });
+    expect(hides).toBe(0);
+  });
+
+  it('retains separate profile drafts and keeps a resumed upload in its starting profile', async () => {
+    const other = 'profile-work';
+    const a = defaultProfile('desktop-1');
+    const b = defaultProfile('desktop-work', { id: other, name: 'Work' });
+    const desktops = [emptyDesktop('desktop-1'), emptyDesktop('desktop-work', { profile_id: other })];
+    const nativeInvoke = vi.mocked(invoke).getMockImplementation()!;
+    const url = `data:application/pdf;base64,${btoa('A'.repeat(524288 + 1))}`;
+    vi.mocked(invoke).mockImplementation(async (command, args) => command === 'capture_image_read' ? url : nativeInvoke(command, args));
+    const { daemon } = await captureApp(daemon => {
+      daemon.on('capture_list', command => ({ event: 'capture_result', profile_id: command.profile_id!, success: true, result: { list: { items: [], draft_assets: [] } } }));
+      daemon.on('capture_attachment_put', command => command.offset === 0 ? undefined : ({ event: 'capture_result', profile_id: other, success: false, error: 'The selected profile changed' }));
+    }, { initialState: { profiles: [a, b], desktops, selected_profile_id: a.id } });
+    await gesture(daemon, () => fireEvent.change(editor(), { target: { value: 'A retained draft' } }));
+    await act(async () => { await native.onDrop!({ payload: { type: 'drop', paths: ['/a.pdf'], position: { x: 100, y: 100 } } }); });
+    const first = await daemon.received('capture_attachment_put');
+    expect(first).toMatchObject({ profile_id: a.id, offset: 0, final: false });
+    await act(async () => daemon.emit({ event: 'profile_arrangement_changed', profile: b, desktops: [desktops[1]] }));
+    await daemon.idle();
+    expect(editor()).toHaveValue('');
+    expect(screen.queryByRole('img', { name: 'a.pdf' })).not.toBeInTheDocument();
+    await gesture(daemon, () => fireEvent.change(editor(), { target: { value: 'B retained draft' } }));
+    await act(async () => daemon.replyTo(first, { event: 'capture_result', profile_id: a.id, request_id: first.request_id, success: true, result: { upload: { next_offset: 524288 } } }));
+    await daemon.idle();
+    expect(daemon.sentOf('capture_attachment_put')).toHaveLength(2);
+    expect(daemon.sentOf('capture_attachment_put')[1]).toMatchObject({ profile_id: a.id, offset: 524288, final: true });
+    expect(daemon.sentOf('capture_send')).toEqual([]);
+    expect(editor()).toHaveValue('B retained draft');
+    expect(native.drafts.get(a.id)).toMatchObject({ text: 'A retained draft', images: [{ name: 'a.pdf' }] });
+    expect(native.drafts.get(b.id)).toMatchObject({ text: 'B retained draft', images: [] });
+    await act(async () => daemon.emit({ event: 'profile_arrangement_changed', profile: a, desktops: [desktops[0]] }));
+    await daemon.idle();
+    expect(editor()).toHaveValue('A retained draft');
+    expect(screen.getByText('a.pdf')).toBeInTheDocument();
+  });
+
   it('shares the main app text size through the secondary-window bridge', async () => {
     const { daemon } = await captureApp();
     const resize = async (change: 'increase' | 'decrease' | 'reset') => {
@@ -139,14 +240,14 @@ describe('Quick Capture app wire behavior', () => {
     expect(editor()).toHaveValue('Keep the launch note');
     expect(screen.getByRole('button', { name: /Send|Retry/ })).toBeDisabled();
     expect(native.draft).toMatchObject({ id: request.capture_id, uncertain: true });
-    await act(async () => { daemon.replyTo(request, { event: 'capture_result', request_id: request.request_id, success: true, result: { record: record(request) } }); await hidden; });
+    await act(async () => { daemon.replyTo(request, { event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, request_id: request.request_id, success: true, result: { record: record(request) } }); await hidden; });
     await daemon.idle();
     expect(editor()).toHaveValue('');
     expect(native.draft).toMatchObject({ text: '', recipient: 'chief', uncertain: false });
     expect(daemon.sentOf('capture_send')).toHaveLength(1);
     expect(captureTraffic(daemon).map(command => command.cmd)).toEqual(['capture_send']);
     expect(screen.getByText('Saved for Chief')).toBeInTheDocument();
-    daemon.on('capture_list', () => ({ event: 'capture_result', success: true, result: { list: {
+    daemon.on('capture_list', () => ({ event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { list: {
       items: [record(request)], draft_assets: [],
     } } }));
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Recent captures' })));
@@ -161,7 +262,7 @@ describe('Quick Capture app wire behavior', () => {
     await gesture(daemon, () => fireEvent.change(editor(), { target: { value: 'Uncertain note' } }));
     await gesture(daemon, () => fireEvent.keyDown(editor(), { key: 'Enter' }));
     const request = await daemon.received('capture_send');
-    daemon.on('capture_get', command => ({ event: 'capture_result', success: true, result: { record: record({ ...request, capture_id: command.capture_id }) } }));
+    daemon.on('capture_get', command => ({ event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { record: record({ ...request, capture_id: command.capture_id }) } }));
     await act(async () => daemon.disconnect(1009, 'WebSocket max_message_bytes=1048576, received at least 1048577'));
     await daemon.idle();
     expect(editor()).toHaveValue('Uncertain note');
@@ -183,9 +284,9 @@ describe('Quick Capture app wire behavior', () => {
       if (String(input).startsWith('data:')) return localFetch(input, init);
       throw new Error('app wire tests reach no network');
     });
-    daemon.on('capture_list', () => ({ event: 'capture_result', success: true, result: { list: { items: [], draft_assets: [] } } }));
-    daemon.on('capture_attachment_put', () => ({ event: 'capture_result', success: false, error: 'Upload storage unavailable' }));
-    daemon.on('capture_get', () => ({ event: 'capture_result', success: false, error: 'Capture absent', error_code: 'capture_not_found' }));
+    daemon.on('capture_list', () => ({ event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { list: { items: [], draft_assets: [] } } }));
+    daemon.on('capture_attachment_put', () => ({ event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: false, error: 'Upload storage unavailable' }));
+    daemon.on('capture_get', () => ({ event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: false, error: 'Capture absent', error_code: 'capture_not_found' }));
     });
     await gesture(daemon, () => fireEvent.keyDown(editor(), { key: 'Enter' }));
     const upload = await daemon.received('capture_attachment_put');
@@ -202,14 +303,14 @@ describe('Quick Capture app wire behavior', () => {
     native.draft = { id: captureId, text: '', recipient: 'chief', uncertain: false,
       images: [{ id: imageId, name: 'kept.png', url: 'data:image/png;base64,iVBORw0KGgo=' }] };
     const { daemon, hidden } = await captureApp(daemon => {
-      daemon.on('capture_list', () => ({ event: 'capture_result', success: true, result: { list: { items: [],
+      daemon.on('capture_list', () => ({ event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { list: { items: [],
         draft_assets: [{ capture_id: captureId, attachment_id: imageId, name: 'kept.png', state: 'ready', next_offset: 8 }] } } }));
     });
     await gesture(daemon, () => fireEvent.keyDown(editor(), { key: 'Enter' }));
     const request = await daemon.received('capture_send');
     expect(request).toMatchObject({ capture_id: captureId, content: '', attachment_ids: [imageId] });
     expect(daemon.sentOf('capture_attachment_put')).toEqual([]);
-    await act(async () => { daemon.replyTo(request, { event: 'capture_result', request_id: request.request_id,
+    await act(async () => { daemon.replyTo(request, { event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, request_id: request.request_id,
       success: true, result: { record: record(request) } }); await hidden; });
     expect(screen.queryByRole('img', { name: 'kept.png' })).toBeNull();
   });
@@ -223,14 +324,14 @@ describe('Quick Capture app wire behavior', () => {
         if (String(input).startsWith('data:')) return localFetch(input, init);
         throw new Error('app wire tests reach no network');
       });
-      daemon.on('capture_list', () => ({ event: 'capture_result', success: true,
+      daemon.on('capture_list', () => ({ event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: true,
         result: { list: { items: [], draft_assets: [] } } }));
-      daemon.on('capture_attachment_discard', () => ({ event: 'capture_result', success: true, result: { discarded: true } }));
+      daemon.on('capture_attachment_discard', () => ({ event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { discarded: true } }));
     });
     const upload = await daemon.received('capture_attachment_put');
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Remove remove.png' })));
     expect(daemon.sentOf('capture_attachment_discard')).toEqual([]);
-    await act(async () => { daemon.replyTo(upload, { event: 'capture_result', request_id: upload.request_id,
+    await act(async () => { daemon.replyTo(upload, { event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, request_id: upload.request_id,
       success: true, result: { upload: { next_offset: 8 } } }); });
     const discarded = await daemon.received('capture_attachment_discard');
     await daemon.idle();
@@ -261,10 +362,10 @@ describe('Quick Capture app wire behavior', () => {
         if (String(input).startsWith('data:')) return localFetch(input, init);
         throw new Error('app wire tests reach no network');
       });
-      daemon.on('capture_list', () => ({ event: 'capture_result', success: true, result: { list: { items: [], draft_assets: [] } } }));
-      daemon.on('capture_attachment_put', command => ({ event: 'capture_result', success: true,
+      daemon.on('capture_list', () => ({ event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { list: { items: [], draft_assets: [] } } }));
+      daemon.on('capture_attachment_put', command => ({ event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: true,
         result: { upload: { next_offset: command.offset + atob(command.data_base64).length } } }));
-      daemon.on('capture_send', command => ({ event: 'capture_result', success: true, result: { record: record(command) } }));
+      daemon.on('capture_send', command => ({ event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { record: record(command) } }));
     });
     await act(async () => {
       if (mode === 'paste') fireEvent.paste(editor(), { clipboardData: { files: [new File([pdf], 'notes.pdf', { type: 'application/pdf' })] } });
@@ -298,11 +399,11 @@ describe('Quick Capture app wire behavior', () => {
         if (String(input).startsWith('data:')) return localFetch(input, init);
         throw new Error('app wire tests reach no network');
       });
-      daemon.on('capture_list', () => ({ event: 'capture_result', success: true, result: { list: { items: [], draft_assets: [] } } }));
-      daemon.on('capture_attachment_put', command => uploadsHeld ? undefined : ({ event: 'capture_result', success: true,
+      daemon.on('capture_list', () => ({ event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { list: { items: [], draft_assets: [] } } }));
+      daemon.on('capture_attachment_put', command => uploadsHeld ? undefined : ({ event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: true,
         result: { upload: { next_offset: command.offset + atob(command.data_base64).length } } }));
-      daemon.on('capture_send', command => ({ event: 'capture_result', success: true, result: { record: record(command) } }));
-      daemon.on('capture_attachment_discard', () => ({ event: 'capture_result', success: true, result: { discarded: true } }));
+      daemon.on('capture_send', command => ({ event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { record: record(command) } }));
+      daemon.on('capture_attachment_discard', () => ({ event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { discarded: true } }));
     });
     await act(async () => {
       for (const listener of native.listeners.get('attn://capture/automation') ?? []) await listener({ payload: {
@@ -318,7 +419,7 @@ describe('Quick Capture app wire behavior', () => {
     await daemon.idle();
     expect(reads).toEqual(['/first.pdf']);
     uploadsHeld = false;
-    await act(async () => { daemon.replyTo(upload, { event: 'capture_result', request_id: upload.request_id, success: false, error: 'Upload interrupted' }); });
+    await act(async () => { daemon.replyTo(upload, { event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, request_id: upload.request_id, success: false, error: 'Upload interrupted' }); });
     await daemon.received('capture_attachment_put', command => command.name === 'later.pdf');
     expect(reads).toEqual(['/first.pdf', '/later.pdf']);
     await daemon.idle();
@@ -341,10 +442,10 @@ describe('Quick Capture app wire behavior', () => {
         if (String(input).startsWith('data:')) return localFetch(input, init);
         throw new Error('app wire tests reach no network');
       });
-      daemon.on('capture_list', () => ({ event: 'capture_result', success: true, result: { list: { items: [], draft_assets: [] } } }));
-      daemon.on('capture_attachment_put', command => uploadsHeld ? undefined : ({ event: 'capture_result', success: true,
+      daemon.on('capture_list', () => ({ event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { list: { items: [], draft_assets: [] } } }));
+      daemon.on('capture_attachment_put', command => uploadsHeld ? undefined : ({ event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: true,
         result: { upload: { next_offset: command.offset + atob(command.data_base64).length } } }));
-      daemon.on('capture_attachment_discard', () => ({ event: 'capture_result', success: true, result: { discarded: true } }));
+      daemon.on('capture_attachment_discard', () => ({ event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { discarded: true } }));
     });
     await act(async () => {
       for (const listener of native.listeners.get('attn://capture/automation') ?? []) await listener({ payload: {
@@ -357,7 +458,7 @@ describe('Quick Capture app wire behavior', () => {
     await gesture(daemon, () => fireEvent.change(editor(), { target: { value: 'Edited while uploading' } }));
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Remove first.pdf' })));
     uploadsHeld = false;
-    await act(async () => { daemon.replyTo(upload, { event: 'capture_result', request_id: upload.request_id, success: true,
+    await act(async () => { daemon.replyTo(upload, { event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, request_id: upload.request_id, success: true,
       result: { upload: { next_offset: atob(upload.data_base64).length } } }); });
     await daemon.received('capture_attachment_put', command => command.name === 'second.pdf');
     await act(async () => {
@@ -380,8 +481,8 @@ describe('Quick Capture app wire behavior', () => {
     });
     let held = true;
     const { daemon } = await captureApp(daemon => {
-      daemon.on('capture_list', () => ({ event: 'capture_result', success: true, result: { list: { items: [], draft_assets: [] } } }));
-      daemon.on('capture_attachment_put', command => held ? undefined : ({ event: 'capture_result', success: true,
+      daemon.on('capture_list', () => ({ event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { list: { items: [], draft_assets: [] } } }));
+      daemon.on('capture_attachment_put', command => held ? undefined : ({ event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: true,
         result: { upload: { next_offset: command.offset + atob(command.data_base64).length } } }));
     });
     await act(async () => {
@@ -421,11 +522,11 @@ describe('Quick Capture app wire behavior', () => {
         images: [{ id: attachmentId, name: 'retained.bin', url: `data:application/octet-stream;base64,${btoa(binary)}` }] };
       const { daemon } = await captureApp(daemon => {
         vi.stubGlobal('fetch', () => { throw new Error('retained files upload directly from their base64 bytes'); });
-        daemon.on('capture_list', () => ({ event: 'capture_result', success: true, result: { list: { items: [],
+        daemon.on('capture_list', () => ({ event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { list: { items: [],
           draft_assets: offset ? [{ capture_id: captureId, attachment_id: attachmentId, name: 'retained.bin', state: 'staged', next_offset: offset }] : [] } } }));
-        daemon.on('capture_attachment_put', command => ({ event: 'capture_result', success: true,
+        daemon.on('capture_attachment_put', command => ({ event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: true,
           result: { upload: { next_offset: command.offset + atob(command.data_base64).length } } }));
-        daemon.on('capture_send', command => ({ event: 'capture_result', success: true, result: { record: record(command) } }));
+        daemon.on('capture_send', command => ({ event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { record: record(command) } }));
       });
       await gesture(daemon, () => fireEvent.keyDown(editor(), { key: 'Enter' }));
       const uploads = daemon.sentOf('capture_attachment_put');
@@ -437,7 +538,7 @@ describe('Quick Capture app wire behavior', () => {
 
   it('Recent shows sent/read history and files without delivery actions or inbox reads', async () => {
     const { daemon } = await captureApp(daemon => {
-      daemon.on('capture_list', () => ({ event: 'capture_result', success: true, result: { list: { items: [
+      daemon.on('capture_list', () => ({ event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { list: { items: [
         record({ capture_id: crypto.randomUUID(), content: 'Sent note' }),
         { ...record({ capture_id: crypto.randomUUID(), content: 'Read note' }), read_at: '2026-10-01T12:01:00Z',
           attachments: [{ id: crypto.randomUUID(), name: 'notes.pdf', media_type: 'application/pdf', bytes: 51 }] },
@@ -456,7 +557,7 @@ describe('Quick Capture app wire behavior', () => {
     expect(within(recent).queryByRole('combobox')).toBeNull();
     expect(daemon.sentOf('agent_inbox')).toEqual([]);
     expect(captureTraffic(daemon).map(command => command.cmd)).toEqual(['capture_list']);
-    await act(async () => daemon.emit({ event: 'capture_changed', capture_id: crypto.randomUUID() }));
+    await act(async () => daemon.emit({ event: 'capture_changed', profile_id: DEFAULT_PROFILE_ID, capture_id: crypto.randomUUID() }));
     await daemon.idle();
     expect(daemon.sentOf('capture_list')).toHaveLength(2);
     expect(within(recent).getByText('Read note')).toBeInTheDocument();
@@ -472,16 +573,16 @@ describe('Quick Capture app wire behavior', () => {
         if (String(input).startsWith('data:')) return localFetch(input, init);
         throw new Error('app wire tests reach no network');
       });
-      daemon.on('capture_list', () => ({ event: 'capture_result', success: true, result: { list: { items: [], draft_assets: discarded ? [] : [imageId, secondId].map(id => ({ capture_id: captureId, attachment_id: id, name: 'kept.png', state: 'ready', next_offset: 8 })) } } }));
+      daemon.on('capture_list', () => ({ event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { list: { items: [], draft_assets: discarded ? [] : [imageId, secondId].map(id => ({ capture_id: captureId, attachment_id: id, name: 'kept.png', state: 'ready', next_offset: 8 })) } } }));
       daemon.on('capture_attachment_discard', command => {
         expect(native.draft).toMatchObject({ text: 'Keep this note' });
         expect((native.draft as { id: string }).id).not.toBe(captureId);
         discarded = true; return command.attachment_id === imageId
-        ? { event: 'capture_result', success: true, result: { discarded: true } }
-        : { event: 'capture_result', success: false, error: 'Discard acknowledgment lost' }; });
+        ? { event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { discarded: true } }
+        : { event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: false, error: 'Discard acknowledgment lost' }; });
       daemon.on('capture_attachment_put', command => command.capture_id === captureId
-        ? { event: 'capture_result', success: false, error: 'Attachment was discarded; upload with a new identity' }
-        : { event: 'capture_result', success: true, result: { upload: { next_offset: 8 } } });
+        ? { event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: false, error: 'Attachment was discarded; upload with a new identity' }
+        : { event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { upload: { next_offset: 8 } } });
     });
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Recent captures' })));
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Discard draft' })));
@@ -513,7 +614,7 @@ describe('Quick Capture app wire behavior', () => {
       return originalInvoke(command, args);
     });
     const { daemon } = await captureApp(daemon => {
-      daemon.on('capture_list', () => ({ event: 'capture_result', success: true, result: { list: { items: [],
+      daemon.on('capture_list', () => ({ event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { list: { items: [],
         draft_assets: [{ capture_id: captureId, attachment_id: imageId, name: 'kept.png', state: 'ready', next_offset: 8 }] } } }));
     });
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Recent captures' })));
@@ -539,7 +640,7 @@ describe('Quick Capture app wire behavior', () => {
       return originalInvoke(command, args);
     });
     const { daemon } = await captureApp(daemon => {
-      daemon.on('capture_list', () => ({ event: 'capture_result', success: true, result: { list: { items: [],
+      daemon.on('capture_list', () => ({ event: 'capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { list: { items: [],
         draft_assets: [{ capture_id: captureId, attachment_id: imageId, name: 'saved.png', state: 'ready', next_offset: 8 }] } } }));
     });
     expect(editor()).toHaveAttribute('readonly');

@@ -487,8 +487,19 @@ fn write_cache(path: &std::path::Path, bytes: &[u8]) -> Result<(), String> {
         .map_err(|error| error.to_string())
 }
 
-fn read_draft() -> Result<Option<serde_json::Value>, String> {
-    let dir = crate::instance::data_dir()?;
+fn draft_dir(profile_id: &str) -> Result<std::path::PathBuf, String> {
+    draft_image_name(
+        profile_id
+            .strip_prefix("profile-")
+            .ok_or("Capture draft needs a profile identity")?,
+    )?;
+    Ok(crate::instance::data_dir()?
+        .join("capture-drafts")
+        .join(profile_id))
+}
+
+fn read_draft(profile_id: String) -> Result<Option<serde_json::Value>, String> {
+    let dir = draft_dir(&profile_id)?;
     let bytes = match std::fs::read(dir.join("capture-draft.json")) {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -509,15 +520,15 @@ fn read_draft() -> Result<Option<serde_json::Value>, String> {
     Ok(Some(draft))
 }
 
-fn write_draft_image(id: String, url: String) -> Result<(), String> {
-    let path = crate::instance::data_dir()?
+fn write_draft_image(profile_id: String, id: String, url: String) -> Result<(), String> {
+    let path = draft_dir(&profile_id)?
         .join("capture-draft-images")
         .join(draft_image_name(&id)?);
     write_cache(&path, url.as_bytes())
 }
 
-fn write_draft(draft: serde_json::Value) -> Result<(), String> {
-    let dir = crate::instance::data_dir()?;
+fn write_draft(profile_id: String, draft: serde_json::Value) -> Result<(), String> {
+    let dir = draft_dir(&profile_id)?;
     let images = draft["images"]
         .as_array()
         .ok_or("Draft images are missing")?;
@@ -541,22 +552,29 @@ fn write_draft(draft: serde_json::Value) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn capture_draft_read() -> Result<Option<serde_json::Value>, String> {
-    tauri::async_runtime::spawn_blocking(read_draft)
+pub async fn capture_draft_read(profile_id: String) -> Result<Option<serde_json::Value>, String> {
+    tauri::async_runtime::spawn_blocking(move || read_draft(profile_id))
         .await
         .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
-pub async fn capture_draft_image_write(id: String, url: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || write_draft_image(id, url))
+pub async fn capture_draft_image_write(
+    profile_id: String,
+    id: String,
+    url: String,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || write_draft_image(profile_id, id, url))
         .await
         .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
-pub async fn capture_draft_write(draft: serde_json::Value) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || write_draft(draft))
+pub async fn capture_draft_write(
+    profile_id: String,
+    draft: serde_json::Value,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || write_draft(profile_id, draft))
         .await
         .map_err(|error| error.to_string())?
 }

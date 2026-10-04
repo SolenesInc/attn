@@ -2578,7 +2578,7 @@ export function useDaemonSocket({
 
           default: {
             const pending = pendingActionsRef.current;
-            if (handleCaptureDaemonEvent(data, pending, () => callbacksRef.current.onCaptureChanged?.())) break;
+            if (handleCaptureDaemonEvent(data, pending, () => { if (data.profile_id === useProfilesStore.getState().selectedProfileId) callbacksRef.current.onCaptureChanged?.(); })) break;
             if (handleSeedArtifactDaemonEvent(data, pending)) break;
             if (handleSessionLedgerDaemonEvent(data, { pending, onUpdate: emitSessionLedger })) break;
             if (handleFsDaemonEvent(data, { pending, onFsChanged: callbacksRef.current.onFsChanged })) break;
