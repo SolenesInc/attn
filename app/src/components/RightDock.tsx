@@ -6,7 +6,6 @@ export type DockPanelTone = 'default' | 'idle' | 'running' | 'awaiting_user' | '
 export interface DockPanelDefinition {
   id: string;
   isOpen: boolean;
-  onClose?: () => void;
   width: string;
   tone?: DockPanelTone;
   className?: string;
@@ -63,7 +62,6 @@ export function RightDock({ panels, panelOrder }: RightDockProps) {
           <SidePanel
             key={panel.id}
             isOpen={panel.isOpen}
-            onClose={panel.onClose}
             position="absolute"
             tone={panel.tone ?? 'default'}
             width={panel.width}

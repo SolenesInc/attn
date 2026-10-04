@@ -159,7 +159,6 @@ export function AppLibrarySurfaces() {
         mode={gardenMode}
         dockRect={gardenDockRect}
         onToggleFrame={toggleGardenFrame}
-        onEscapeFloor={closeGarden}
         onClose={closeGarden}
         seeds={seeds}
         seedsTotal={seedsTotal}

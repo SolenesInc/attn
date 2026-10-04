@@ -94,6 +94,22 @@ try {
     runner.assert((await client.request('home_get_state')).onScreen, 'home remains usable after closing the dock');
   });
 
+  await runner.step('garden_keeps_its_dismissal_order_after_fullscreen', async () => {
+    await pressShortcutKeys(client, driver, 'dock.attention');
+    await click('[aria-label="Show the garden"]');
+    await waitDom('.garden-frame.is-dock');
+    await click('[aria-label="Expand the garden"]');
+    await waitDom('.garden-frame.is-full');
+    await click('[aria-label="Return the garden to the dock"]');
+    await waitDom('.garden-frame.is-dock');
+    await driver.pressKey('Escape');
+    await waitDom('[aria-label="Show the garden"]');
+    await waitDom('[aria-label="Hide PRs Drawer"]');
+    await screenshot('garden-closed-before-attention');
+    await driver.pressKey('Escape');
+    await waitDom('[aria-label="Show PRs Drawer"]');
+  });
+
   console.log(JSON.stringify(await runner.finishSuccess(), null, 2));
 } catch (error) {
   console.error(JSON.stringify(await runner.finishFailure(error), null, 2));

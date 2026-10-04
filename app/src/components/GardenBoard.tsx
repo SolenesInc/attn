@@ -34,7 +34,7 @@ export interface GardenBoardProps {
   onNote: (seedId: string, body: string) => Promise<unknown>;
   viewToggle?: ReactNode;
   onClose: () => void;
-  onEscapeFloor: () => void;
+  onEscapeFloor?: () => void;
 }
 
 function carryTransform(point: { x: number; y: number }): string {
@@ -187,7 +187,7 @@ export function GardenBoard({
     if (compose) composeInput.current?.focus();
   }, [compose]);
 
-  useEscapeStack(onEscapeFloor, true);
+  useEscapeStack(onEscapeFloor ?? (() => {}), !!onEscapeFloor);
   useEscapeStack(() => setMenuFor(null), menuFor !== null);
   useEscapeStack(() => {
     setCompose(null);

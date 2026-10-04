@@ -6,6 +6,14 @@
     "matrixSeconds": 826.7,
     "note": "Seconds each scenario took in a green Linux serial matrix. Remeasure from matrix-digest.txt when a scenario changes shape; the shard planner balances on these.",
     "updates": {
+      "home-dock": {
+        "run": "home-dock-2026-10-04T10-13-29-942Z",
+        "job": "Local packaged scenario, dock-home isolated instance",
+        "recordedAt": "2026-10-04",
+        "seconds": 15.337,
+        "runnerClass": "local macOS",
+        "note": "Green ATTN_VERDICT durationMs=15337, including cleanup and recording. Covers home dock input, Crew layering and Garden fullscreen restore dismissal. Remeasure on Linux CI."
+      },
       "conversations-surface": {
         "run": "conversations-surface-2026-10-01T20-03-13-079Z",
         "job": "Local packaged scenario, conv-tab isolated instance",
@@ -195,6 +203,7 @@
     "garden-seed-reopen": 8.1,
     "garden-seed-tile-navigation": 7.8,
     "ghostty-scroll": 6.2,
+    "home-dock": 15.337,
     "markdown-opener": 20.3,
     "notebook-editor-undo": 32.8,
     "present-submit-closes-window": 10.7,

@@ -43,7 +43,7 @@ export interface GardenReviewPanelProps {
   onExit: () => void;
   onClose: () => void;
   onToggleFrame?: () => void;
-  onEscapeFloor: () => void;
+  onEscapeFloor?: () => void;
   fetchSeedDocument: (seedId: string) => Promise<SeedDocument>;
   onMoveSeed: (
     seedId: string,
@@ -648,7 +648,7 @@ export function GardenReviewPanel({
     setComposer((current) => (current?.itemId === selectedId ? current : null));
   }, [selectedId]);
 
-  useEscapeStack(onEscapeFloor, true);
+  useEscapeStack(onEscapeFloor ?? (() => {}), !!onEscapeFloor);
   useEscapeStack(onExit, true);
   useEscapeStack(() => setComposer(null), composer !== null);
 
