@@ -1,0 +1,4 @@
+kind: fixed
+area: app
+change: Terminal annotations and their note stay with the session they were made for when `/clear` or `/resume` moves a pane to another session; a note still being saved, a refreshed draft and a send in flight all land on that session.
+symptom: A note typed just before `/clear` was lost and the new session's own draft was overwritten, and a send that finished after the switch could save the new session's marks under the old one.

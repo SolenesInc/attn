@@ -99,6 +99,14 @@ interface Composer {
   writing: boolean;
 }
 
+function deliveredUnchanged(current: readonly TerminalAnnotation[], sent: readonly TerminalAnnotation[]): Set<string> {
+  const sentById = new Map(sent.map((entry) => [entry.id, entry]));
+  return new Set(current.filter((entry) => {
+    const was = sentById.get(entry.id);
+    return was !== undefined && was.quickLabelId === entry.quickLabelId && was.comment === entry.comment;
+  }).map((entry) => entry.id));
+}
+
 export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerminalProps>(
   function AnnotatedTerminal(
     { desktopId, sessionId, annotationApi, paneActive = false, ...terminalProps },
@@ -145,6 +153,7 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
     const [panelDragging, setPanelDragging] = useState(false);
     const panelGrabRef = useRef<{ dx: number; dy: number } | null>(null);
     const generationRef = useRef(0);
+    const heldSessionRef = useRef(sessionId);
     const enabled = Boolean(annotationApi);
 
     const terminalRef = useRef<GhosttyTerminalHandle | null>(null);
@@ -158,13 +167,15 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
 
     const persist = useCallback(() => {
       if (!annotationApi) return;
+      const target = heldSessionRef.current;
       generationRef.current += 1;
       const generation = generationRef.current;
       const annotations = store.list().map((entry) => ({ ...entry }));
-      void annotationApi.saveAnnotations(sessionId, annotations, noteRef.current, generation)
+      void annotationApi.saveAnnotations(target, annotations, noteRef.current, generation)
         .then((result) => {
           if (!result.stale) return;
-          return annotationApi.fetchAnnotations(sessionId).then((stored) => {
+          return annotationApi.fetchAnnotations(target).then((stored) => {
+            if (heldSessionRef.current !== target) return;
             store.hydrate(stored.annotations);
             writeNote(stored.note);
             generationRef.current = stored.generation;
@@ -173,7 +184,7 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
         })
         .catch(() => {
         });
-    }, [annotationApi, bump, sessionId, store, writeNote]);
+    }, [annotationApi, bump, store, writeNote]);
 
     const persistRef = useRef(persist);
     useLayoutEffect(() => {
@@ -200,6 +211,14 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
 
     useEffect(() => {
       if (!enabled || !sessionId) return;
+      if (heldSessionRef.current !== sessionId) {
+        flushNoteSave();
+        heldSessionRef.current = sessionId;
+        store.hydrate([]);
+        writeNote('');
+        generationRef.current = 0;
+        bump();
+      }
       let cancelled = false;
       void annotationApi!.fetchAnnotations(sessionId)
         .then((stored) => {
@@ -214,7 +233,7 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
       return () => {
         cancelled = true;
       };
-    }, [annotationApi, bump, enabled, sessionId, store]);
+    }, [annotationApi, bump, enabled, flushNoteSave, sessionId, store, writeNote]);
 
     useEffect(() => {
       if (!enabled || !sessionId) return;
@@ -544,20 +563,27 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
         comment: entry.comment,
         start: entry.start,
       })), sendingNote);
-      return annotationApi.submitAnnotations(sessionId, payload)
+      const target = heldSessionRef.current;
+      return annotationApi.submitAnnotations(target, payload)
         .then((result) => {
           if (result.status !== 'delivered') {
             return result.status === 'skipped_pending_approval'
               ? { kind: 'skipped' }
               : { kind: 'error', message: 'The session did not take the feedback. Nothing was sent.' };
           }
-          const current = new Map(store.list().map((entry) => [entry.id, entry]));
-          sending.forEach((entry) => {
-            const now = current.get(entry.id);
-            if (!now) return;
-            if (now.quickLabelId !== entry.quickLabelId || now.comment !== entry.comment) return;
-            store.remove(entry.id);
-          });
+          if (heldSessionRef.current !== target) {
+            void annotationApi.fetchAnnotations(target)
+              .then((stored) => {
+                const delivered = deliveredUnchanged(stored.annotations, sending);
+                const kept = stored.annotations.filter((entry) => !delivered.has(entry.id));
+                const keptNote = sendingNote && stored.note.trim() === sendingNote ? '' : stored.note;
+                return annotationApi.saveAnnotations(target, kept, keptNote, stored.generation + 1);
+              })
+              .catch(() => {
+              });
+            return { kind: 'sent', count: sending.length, kept: 0 };
+          }
+          deliveredUnchanged(store.list(), sending).forEach((id) => store.remove(id));
           if (sendingNote && noteRef.current.trim() === sendingNote) writeNote('');
           const kept = store.list().length;
           bump();
@@ -566,7 +592,7 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
             return { kind: 'sent', count: sending.length, kept };
           }
           generationRef.current += 1;
-          void annotationApi.clearAnnotations(sessionId, generationRef.current)
+          void annotationApi.clearAnnotations(target, generationRef.current)
             .then((cleared) => {
               generationRef.current = Math.max(generationRef.current, cleared.generation);
             })

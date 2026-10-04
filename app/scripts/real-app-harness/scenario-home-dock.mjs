@@ -5,6 +5,7 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { assertFreshWorldTargetSafe } from './freshWorld.mjs';
 import { currentHarnessInstance } from './harnessInstance.mjs';
 import { createWindowDriver } from './platform.mjs';
+import { sleep } from './scenarioAssertions.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
@@ -54,14 +55,19 @@ try {
 
   await runner.step('star_opens_a_clickable_panel_over_home', async () => {
     await click('[aria-label="Show Automations"]');
-    await waitDom('[data-testid="automations-panel"]');
+    await waitDom('.side-panel-shell.is-open [data-testid="automations-panel"]');
+    const { innerWidth } = await client.request('get_terminal_context_menu_state');
+    const fits = (rect) => rect.width > 0 && rect.x >= 0 && rect.x + rect.width <= innerWidth;
+    const settleBy = Date.now() + 5_000;
+    let { bounds } = await client.request('dom_bounds', { selector: '[data-testid="automations-panel"]' });
+    while (!fits(bounds) && Date.now() < settleBy) {
+      await sleep(50);
+      ({ bounds } = await client.request('dom_bounds', { selector: '[data-testid="automations-panel"]' }));
+    }
+    runner.assert(fits(bounds), 'the panel slides in to fit inside the window', { bounds, innerWidth });
     await screenshot('automations-over-home');
     const home = await client.request('home_get_state');
     runner.assert(home.onScreen, 'opening the dock keeps home on screen', { home });
-    const { bounds } = await client.request('dom_bounds', { selector: '[data-testid="automations-panel"]' });
-    const { innerWidth } = await client.request('get_terminal_context_menu_state');
-    runner.assert(bounds.width > 0 && bounds.x >= 0 && bounds.x + bounds.width <= innerWidth,
-      'the panel fits inside the window', { bounds, innerWidth });
     await pressShortcutKeys(client, driver, 'ui.commandPalette');
     await waitDom('[role="combobox"][aria-label="Commands"]', { focused: true });
     await driver.typeText('Manage crew');
