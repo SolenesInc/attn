@@ -8,29 +8,33 @@ export function newCaptureDraft(): CaptureDraft {
 }
 
 // The native cache keeps its existing images field and commands so retained drafts survive upgrades.
-export function captureDraftCache() {
-  let writes = Promise.resolve();
+const writesByProfile = new Map<string, Promise<void>>();
+
+export function captureDraftCache(profileId: string) {
   const savedFiles = new Map<string, string>();
   return {
     async read(): Promise<CaptureDraft | null> {
-      const stored = await invoke<CachedCaptureDraft | null>('capture_draft_read');
+      await writesByProfile.get(profileId);
+      const stored = await invoke<CachedCaptureDraft | null>('capture_draft_read', { profileId });
       if (!stored) return null;
       const { images: files, ...draft } = stored;
       for (const file of files) savedFiles.set(file.id, file.url);
       return { ...draft, files };
     },
     save(draft: CaptureDraft): Promise<void> {
-      const next = writes.catch(() => {}).then(async () => {
+      const next = (writesByProfile.get(profileId) ?? Promise.resolve()).catch(() => {}).then(async () => {
         for (const file of draft.files) {
           if (savedFiles.get(file.id) === file.url) continue;
-          await invoke('capture_draft_image_write', { id: file.id, url: file.url });
+          await invoke('capture_draft_image_write', { profileId, id: file.id, url: file.url });
           savedFiles.set(file.id, file.url);
         }
         const { files, ...metadata } = draft;
-        await invoke('capture_draft_write', { draft: { ...metadata, images: files.map(({ id, name }) => ({ id, name })) } });
+        await invoke('capture_draft_write', { profileId, draft: { ...metadata, images: files.map(({ id, name }) => ({ id, name })) } });
         for (const id of savedFiles.keys()) if (!files.some(file => file.id === id)) savedFiles.delete(id);
       });
-      writes = next;
+      writesByProfile.set(profileId, next);
+      const finished = () => { if (writesByProfile.get(profileId) === next) writesByProfile.delete(profileId); };
+      void next.then(finished, finished);
       return next;
     },
   };

@@ -12,7 +12,7 @@ export function QuickCaptureHistoryHarness({ onReady }: HarnessProps) {
     const response = await fetch('/capture-history-wire', { method: 'POST', body: JSON.stringify(command) });
     if (!response.ok) throw new Error(await response.text());
     return response.json();
-  } }), []);
+  } }, 'profile-history-fixture'), []);
   const { history, nextCursor, loading, error, refresh } = useCaptureHistory(client, open, true, revision);
   useEffect(() => onReady(), [onReady]);
   return <>

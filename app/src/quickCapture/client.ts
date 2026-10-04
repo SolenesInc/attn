@@ -17,7 +17,7 @@ export interface CaptureItem {
   files: { id: string; name: string; mediaType?: string; bytes: number }[];
 }
 export interface CaptureHostState {
-  connected: boolean; recipients: CaptureRecipient[]; binding: string | null;
+  profileId: string; connected: boolean; recipients: CaptureRecipient[]; binding: string | null;
   activeBinding: string | null; shortcutError?: string; connectionError?: string; captureRevision?: number;
   fontScale?: number; keybindings?: string;
 }
@@ -33,7 +33,7 @@ export interface CaptureClient {
   setBinding(binding: string | null): Promise<void>;
   resizeText(action: 'increase' | 'decrease' | 'reset'): Promise<void>;
 }
-export type CaptureRequest =
+export type CaptureRequest = { profileId: string } & (
   | { id: string; action: 'submit'; submission: CaptureSubmission }
   | { id: string; action: 'stage'; draft: CaptureDraft }
   | { id: string; action: 'resolve'; captureId: string }
@@ -41,11 +41,11 @@ export type CaptureRequest =
   | { id: string; action: 'file'; captureId: string; attachmentId: string; mediaType?: string }
   | { id: string; action: 'discard'; captureId: string; fileIds: string[] }
   | { id: string; action: 'binding'; binding: string | null }
-  | { id: string; action: 'font'; change: 'increase' | 'decrease' | 'reset' }
+  | { id: string; action: 'font'; change: 'increase' | 'decrease' | 'reset' });
 export interface CaptureResult { id: string; value?: unknown; error?: string }
 
 export const EMPTY_HOST_STATE: CaptureHostState = {
-  connected: false, recipients: [{ id: 'chief', name: 'Chief', detail: 'Chief of staff' }],
+  profileId: '', connected: false, recipients: [{ id: 'chief', name: 'Chief', detail: 'Chief of staff' }],
   binding: null, activeBinding: null,
 };
 
@@ -74,30 +74,32 @@ export function createCaptureBridge(onState: (state: CaptureHostState) => void) 
   const ready = Promise.all([resultListener, stateListener]).then(() => {
     if (!disposed) return emitTo('main', CAPTURE_READY);
   });
-  async function request<T>(body: CaptureRequestBody): Promise<T> {
+  async function request<T>(profileId: string, body: CaptureRequestBody): Promise<T> {
     await ready;
     if (!connected || disposed) throw new Error('Capture is connecting. Your draft is retained.');
     const id = crypto.randomUUID();
     return new Promise<T>((resolve, reject) => {
       pending.set(id, { resolve: value => resolve(value as T), reject, stage: body.action === 'stage' });
-      void emitTo('main', CAPTURE_REQUEST, { ...body, id }).catch(error => {
+      void emitTo('main', CAPTURE_REQUEST, { ...body, id, profileId }).catch(error => {
         pending.delete(id); reject(error);
       });
     });
   }
   // Distributive Omit preserves the fields of each request variant.
-  const call = <T>(body: CaptureRequestBody) => request<T>(body);
-  const client: CaptureClient = {
-    stage: draft => call({ action: 'stage', draft }),
-    submit: submission => call({ action: 'submit', submission }),
-    resolve: captureId => call({ action: 'resolve', captureId }),
-    recent: cursor => call({ action: 'recent', cursor }),
-    file: (captureId, attachmentId, mediaType) => call({ action: 'file', captureId, attachmentId, mediaType }),
-    discard: (captureId, fileIds) => call({ action: 'discard', captureId, fileIds }),
-    setBinding: binding => call({ action: 'binding', binding }),
-    resizeText: change => call({ action: 'font', change }),
-  };
-  return { client, ready, refresh: () => emitTo('main', CAPTURE_READY), dispose() {
+  function forProfile(profileId: string): CaptureClient {
+    const call = <T>(body: CaptureRequestBody) => request<T>(profileId, body);
+    return {
+      stage: draft => call({ action: 'stage', draft }),
+      submit: submission => call({ action: 'submit', submission }),
+      resolve: captureId => call({ action: 'resolve', captureId }),
+      recent: cursor => call({ action: 'recent', cursor }),
+      file: (captureId, attachmentId, mediaType) => call({ action: 'file', captureId, attachmentId, mediaType }),
+      discard: (captureId, fileIds) => call({ action: 'discard', captureId, fileIds }),
+      setBinding: binding => call({ action: 'binding', binding }),
+      resizeText: change => call({ action: 'font', change }),
+    };
+  }
+  return { forProfile, ready, refresh: () => emitTo('main', CAPTURE_READY), dispose() {
     disposed = true;
     for (const request of pending.values()) request.reject(new Error('Capture closed. Your draft is retained.'));
     pending.clear();
@@ -105,4 +107,4 @@ export function createCaptureBridge(onState: (state: CaptureHostState) => void) 
     void stateListener.then(unlisten => unlisten());
   } };
 }
-type CaptureRequestBody = CaptureRequest extends infer R ? R extends { id: string } ? Omit<R, 'id'> : never : never;
+type CaptureRequestBody = CaptureRequest extends infer R ? R extends { id: string } ? Omit<R, 'id' | 'profileId'> : never : never;
