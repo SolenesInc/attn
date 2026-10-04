@@ -2596,7 +2596,11 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 	case protocol.CmdDesktopMoveSession:
 		d.handleDesktopMoveSession(conn, msg.(*protocol.DesktopMoveSessionMessage))
 	case protocol.CmdSetSessionPriority:
-		if err := d.setSessionPriority(msg.(*protocol.SetSessionPriorityMessage)); err != nil {
+		priority := msg.(*protocol.SetSessionPriorityMessage)
+		if d.forwardedToSessionOwner(conn, strings.TrimSpace(priority.SessionID), priority) {
+			return
+		}
+		if err := d.setSessionPriority(priority); err != nil {
 			d.sendError(conn, err.Error())
 		} else {
 			d.sendOK(conn)
