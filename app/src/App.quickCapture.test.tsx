@@ -353,6 +353,40 @@ describe('Quick Capture app wire behavior', () => {
     expect(native.draft).toMatchObject({ files: [] });
   });
 
+  it('blocks sending until attachment removal is saved and remote discard settles', async () => {
+    const captureId = crypto.randomUUID(), fileId = crypto.randomUUID();
+    native.draft = { id: captureId, text: 'Send without this file', mailbox: 'chief', uncertain: false,
+      files: [{ id: fileId, name: 'removed.png', url: 'data:image/png;base64,aGVsbG8=' }] };
+    let saveStarted!: () => void, finishSave!: () => void;
+    const started = new Promise<void>(resolve => { saveStarted = resolve; });
+    const saved = new Promise<void>(resolve => { finishSave = resolve; });
+    const nativeInvoke = vi.mocked(invoke).getMockImplementation()!;
+    let holdRemoval = true;
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      if (holdRemoval && command === 'quick_capture_draft_write' && !(args as { draft: CachedQuickCaptureDraft }).draft.files.length) {
+        holdRemoval = false; saveStarted(); await saved;
+      }
+      return nativeInvoke(command, args);
+    });
+    const { daemon } = await captureApp(daemon => {
+      daemon.on('quick_capture_list', () => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: true,
+        result: { list: { items: [], draft_assets: [{ capture_id: captureId, attachment_id: fileId, name: 'removed.png', state: 'ready', next_offset: 5 }] } } }));
+      daemon.on('quick_capture_send', command => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { record: record(command) } }));
+    });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Remove removed.png' })); await started; });
+    await gesture(daemon, () => fireEvent.keyDown(editor(), { key: 'Enter' }));
+    expect(daemon.sentOf('quick_capture_send')).toHaveLength(0);
+    await act(async () => finishSave());
+    const discard = await daemon.received('quick_capture_attachment_discard');
+    await gesture(daemon, () => fireEvent.keyDown(editor(), { key: 'Enter' }));
+    expect(daemon.sentOf('quick_capture_send')).toHaveLength(0);
+    await act(async () => daemon.replyTo(discard, { event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID,
+      request_id: discard.request_id, success: true, result: { discarded: true } }));
+    await daemon.idle();
+    await gesture(daemon, () => fireEvent.keyDown(editor(), { key: 'Enter' }));
+    expect(daemon.sentOf('quick_capture_send')).toEqual([expect.objectContaining({ capture_id: captureId, attachment_ids: [] })]);
+  });
+
   it('retains a sendable attachment after removal cannot be saved, editing resumes and the panel relaunches', async () => {
     const captureId = crypto.randomUUID(), fileId = crypto.randomUUID();
     native.draft = { id: captureId, text: 'Retain this file', mailbox: 'chief', uncertain: false,
