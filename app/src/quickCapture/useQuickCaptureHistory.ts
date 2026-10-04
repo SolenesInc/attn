@@ -11,6 +11,7 @@ export function useQuickCaptureHistory(client: QuickCaptureDeliveryClient | unde
   const opened = useRef(false);
   const generation = useRef(0);
   const pending = useRef<Promise<void> | null>(null);
+  const pendingReads = useRef(new Map<string, string>());
   const refreshWanted = useRef(false);
 
   function refresh(cursor?: string): Promise<void> {
@@ -33,7 +34,7 @@ export function useQuickCaptureHistory(client: QuickCaptureDeliveryClient | unde
         if (epoch !== generation.current) return;
         const previous = current.current.history;
         items = items.map(item => {
-          const readAt = item.readAt ?? previous.find(saved => saved.id === item.id)?.readAt;
+          const readAt = pendingReads.current.get(item.id) ?? item.readAt ?? previous.find(saved => saved.id === item.id)?.readAt;
           return readAt ? { ...item, readAt } : item;
         });
         const updated = cursor ? [...previous, ...items.filter(item => !previous.some(saved => saved.id === item.id))] : items;
@@ -44,7 +45,10 @@ export function useQuickCaptureHistory(client: QuickCaptureDeliveryClient | unde
     })();
     pending.current = operation;
     return operation.finally(() => {
-      if (pending.current === operation) pending.current = null;
+      if (pending.current === operation) {
+        pending.current = null;
+        pendingReads.current.clear();
+      }
       if (refreshWanted.current && current.current.open && current.current.connected) {
         refreshWanted.current = false;
         return refresh();
@@ -65,6 +69,7 @@ export function useQuickCaptureHistory(client: QuickCaptureDeliveryClient | unde
     if (client && connected) void refresh();
   }, [client, open, connected]);
   function markRead(receipt: QuickCaptureReadReceipt) {
+    if (pending.current) pendingReads.current.set(receipt.captureId, receipt.readAt);
     const updated = current.current.history.map(item => item.id === receipt.captureId ? { ...item, readAt: receipt.readAt } : item);
     current.current.history = updated;
     setHistory(updated);
