@@ -176,6 +176,14 @@
         "seconds": 50.8,
         "runnerClass": "local macOS",
         "note": "Green native run, ATTN_VERDICT durationMs=50847 including copied-data migration, sharing, settings, wake, preflight and cleanup. Private receipt attached to seed s-836tat. Remeasure on Linux CI."
+      },
+      "desktop-close-one-session-keeps-selection": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/37238531607",
+        "job": "App acceptance shard 1/4",
+        "recordedAt": "2026-10-04",
+        "seconds": 68.7,
+        "runnerClass": "github-hosted ubuntu-24.04",
+        "note": "Green matrix-digest.txt reports 68.7s (last-matrix.json durationMs=68706) on 1183db93b. Covers native close shortcuts, both focus-history sequences, background close and repeated closes with keyboard focus."
       }
     }
   },
@@ -221,7 +229,7 @@
     "tr201-local-claude": 8.7,
     "tr301-local-claude": 6.9,
     "tr401-local-claude": 14.2,
-    "desktop-close-one-session-keeps-selection": 27.4,
+    "desktop-close-one-session-keeps-selection": 68.7,
     "session-creation-shortcuts": 22.6,
     "desktop-switching": 27.0,
     "desktop-splits": 45.7,
