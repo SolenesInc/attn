@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/victorarias/attn/internal/protocol"
 	"io"
 	"net"
 	"sort"
@@ -313,7 +312,7 @@ func readSocketFrame(reader *bufio.Reader) ([]byte, error) {
 	}
 }
 
-const maxInitialSocketFrameBytes = protocol.CommandFrameMaxBytes
+const maxInitialSocketFrameBytes = 64 * 1024
 
 func readInitialSocketFrame(reader *bufio.Reader, maxBytes int) ([]byte, error) {
 	if maxBytes <= 0 {
@@ -372,7 +371,7 @@ func readInitialSocketFrame(reader *bufio.Reader, maxBytes int) ([]byte, error) 
 		}
 	}
 
-	return nil, fmt.Errorf("initial socket frame limit=%d bytes, asked for more than %d bytes", maxBytes, maxBytes)
+	return nil, fmt.Errorf("initial socket frame exceeds %d bytes", maxBytes)
 }
 
 func isJSONWhitespace(b byte) bool {

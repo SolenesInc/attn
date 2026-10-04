@@ -5,10 +5,10 @@ import "github.com/victorarias/attn/internal/protocol"
 type Kind string
 
 const (
-	SeedUpdate  Kind = "garden_seed"
-	PeerMessage Kind = "peer_message"
-	UserMessage Kind = "user_message"
-	Notice      Kind = "maintenance_prompt"
+	SeedUpdate   Kind = "garden_seed"
+	PeerMessage  Kind = "peer_message"
+	QuickCapture Kind = "quick_capture"
+	Notice       Kind = "maintenance_prompt"
 )
 
 const (

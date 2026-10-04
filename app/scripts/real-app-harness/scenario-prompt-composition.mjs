@@ -51,8 +51,8 @@ async function main() {
   const sessions = [];
   const messageId = randomUUID(), attachmentId = randomUUID();
   const pdfId = randomUUID();
-  const imageOut = path.join(runner.sessionDir, 'recipient-user_message.png');
-  const pdfOut = path.join(runner.sessionDir, 'recipient-user_message.pdf');
+  const imageOut = path.join(runner.sessionDir, 'recipient-quick_capture.png');
+  const pdfOut = path.join(runner.sessionDir, 'recipient-quick_capture.pdf');
   const crewName = `promptprobe-${randomUUID().slice(0, 8)}`;
   const crewLabel = `Promptprobe${crewName.slice('promptprobe'.length)}`;
   const crewHome = path.join(resources.dataDir, 'crew', crewName);
@@ -111,40 +111,40 @@ async function main() {
       runner.assert(text.includes("This message is from another agent, not from your user.") && text.includes('PROMPT_PEER_MESSAGE'), 'inbox read delivers the body and trust boundary');
       runner.writeText('peer-message.jsonl', text);
     });
-    await runner.step('user_message_files_are_attributed_and_retrievable', async () => {
+    await runner.step('quick_capture_files_are_attributed_and_retrievable', async () => {
       const shot = await client.request('capture_screenshot_data', { selector: '.app' });
       const original = Buffer.from(shot.pngBase64, 'base64');
-      const source = path.join(runner.sessionDir, 'user-message-source.png');
+      const source = path.join(runner.sessionDir, 'quick-capture-source.png');
       fs.writeFileSync(source, original);
       for (let offset = 0; offset < original.length;) {
         const end = Math.min(original.length, offset + 524288);
-        const uploaded = await observer.requestResult({ cmd: 'user_message_attachment_put', message_id: messageId,
+        const uploaded = await observer.requestResult({ cmd: 'quick_capture_attachment_put', message_id: messageId,
           attachment_id: attachmentId, name: 'screenshot.png', offset,
-          data_base64: original.subarray(offset, end).toString('base64'), final: end === original.length }, 'user_message_result');
+          data_base64: original.subarray(offset, end).toString('base64'), final: end === original.length }, 'quick_capture_result');
         runner.assert(uploaded.result.upload.next_offset === end, 'image offset receipt matches uploaded bytes');
         offset = end;
       }
       fs.unlinkSync(source);
       const pdf = Buffer.from('%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF\n');
-      const uploadedPDF = await observer.requestResult({ cmd: 'user_message_attachment_put', message_id: messageId,
+      const uploadedPDF = await observer.requestResult({ cmd: 'quick_capture_attachment_put', message_id: messageId,
         attachment_id: pdfId, name: 'notes.pdf', offset: 0,
-        data_base64: pdf.toString('base64'), final: true }, 'user_message_result');
+        data_base64: pdf.toString('base64'), final: true }, 'quick_capture_result');
       runner.assert(uploadedPDF.result.upload.attachment.media_type === 'application/pdf', 'PDF finalizes without image validation');
       const recipient = launches[2];
       const completed = observer.waitForMessage(data => data.event === 'session_state_changed' &&
-        data.session?.id === recipient.id && data.session?.state === 'idle' ? data : null, 'user message recipient finishes inbox read');
-      const saved = await observer.requestResult({ cmd: 'user_message_send', message_id: messageId,
-        target: { kind: 'chief' }, content: 'PROMPT_USER_MESSAGE', attachment_ids: [attachmentId, pdfId] }, 'user_message_result');
+        data.session?.id === recipient.id && data.session?.state === 'idle' ? data : null, 'quick capture recipient finishes inbox read');
+      const saved = await observer.requestResult({ cmd: 'quick_capture_send', message_id: messageId,
+        target: { kind: 'chief' }, content: 'PROMPT_USER_MESSAGE', attachment_ids: [attachmentId, pdfId] }, 'quick_capture_result');
       runner.assert(saved.result.record.id === messageId, 'save returns the requested durable identity');
       await completed;
-      const receipt = await observer.requestResult({ cmd: 'user_message_get', message_id: messageId }, 'user_message_result');
+      const receipt = await observer.requestResult({ cmd: 'quick_capture_get', message_id: messageId }, 'quick_capture_result');
       runner.assert(Boolean(receipt.result.record.read_at), 'recipient inbox fetch commits a read receipt');
       const text = transcripts(recipient.cwd)[0]?.text || '';
       const spoken = transcriptTurns(text).map(turn => turn.text).join('\n');
-      runner.writeText('user-message.txt', spoken);
+      runner.writeText('quick-capture.txt', spoken);
       runner.assert(text.includes('Message from the user, sent through Quick Capture:') && text.includes('PROMPT_USER_MESSAGE'),
-        'inbox output attributes user message content to the user');
-      runner.assert(!text.includes('This message is from another agent'), 'user message omits the peer disclaimer');
+        'inbox output attributes quick capture content to the user');
+      runner.assert(!text.includes('This message is from another agent'), 'quick capture omits the peer disclaimer');
       runner.assert(spoken.includes('File "notes.pdf" (application/pdf') && spoken.includes('Inspect the saved file with your tools.'),
         'non-image attachment carries file inspection instructions');
       runner.assert(fs.readFileSync(pdfOut).equals(pdf), 'recipient host retrieves byte-exact PDF content');

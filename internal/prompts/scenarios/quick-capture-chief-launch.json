@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "id": "quick-capture-chief-launch",
+  "description": "Quick Capture guidance for a Chief launch.",
+  "recipient": "session",
+  "event": "launch",
+  "values": {
+    "notebook_root": "/workspace/notebook"
+  },
+  "inputs": {}
+}

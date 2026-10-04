@@ -10,10 +10,11 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func retrieveAgentAttachment(cli *client.Client, userMessage, id, path string) error {
+func retrieveAgentAttachment(cli *client.Client, quickCapture, id, path string) error {
 	temp, err := os.CreateTemp(filepath.Dir(path), ".attn-attachment-*")
 	if err != nil {
 		return err
@@ -21,7 +22,7 @@ func retrieveAgentAttachment(cli *client.Client, userMessage, id, path string) e
 	defer func() { temp.Close(); os.Remove(temp.Name()) }()
 	var offset int
 	for {
-		result, err := cli.UserMessage(protocol.UserMessageAttachmentGetMessage{Cmd: protocol.CmdUserMessageAttachmentGet, MessageID: userMessage, AttachmentID: id, Offset: offset})
+		result, err := cli.QuickCapture(protocol.QuickCaptureAttachmentGetMessage{Cmd: protocol.CmdQuickCaptureAttachmentGet, CaptureID: quickCapture, AttachmentID: id, Offset: offset})
 		if err != nil {
 			return err
 		}
@@ -61,7 +62,7 @@ func runAgentAttachment(args []string) {
 		return
 	}
 	if len(args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: attn agent attachment <user-message-id> <attachment-id> --out <path>")
+		fmt.Fprintln(os.Stderr, "usage: attn agent attachment <capture-id> <attachment-id> --out <path>")
 		os.Exit(2)
 	}
 	fs := flag.NewFlagSet("agent attachment", flag.ContinueOnError)
@@ -76,5 +77,5 @@ func runAgentAttachment(args []string) {
 		fmt.Fprintf(os.Stderr, "agent attachment: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Fprintf(os.Stdout, "Saved file to %s. Inspect it with your tools.\n", *out)
+	fmt.Fprintln(os.Stdout, prompts.RenderText("session", "quick-capture-file-saved", prompts.Values{"path": *out}))
 }
