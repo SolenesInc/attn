@@ -1,3 +1,4 @@
+import { useDaemonStore } from '../../store/daemonSessions';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
 import type { ShortcutId } from '../../shortcuts/registry';
 import { crewDisplayName } from '../../utils/crewName';
@@ -13,16 +14,18 @@ export function AgentRowView<S extends PaletteSession>({
   row,
   now,
   slotOf,
+  showCrewDetails = true,
 }: {
   row: AgentPaletteRow<S>;
   now: number;
   slotOf: SlotOf;
+  showCrewDetails?: boolean;
 }) {
   switch (row.kind) {
     case 'divider':
       return <hr className="unified-palette-divider" />;
     case 'member':
-      return <SleepingMember member={row.member} />;
+      return <SleepingMember member={row.member} showCrewDetails={showCrewDetails} />;
     case 'tile':
       return <TileRow row={row} slot={slotOf(row.desktopId)} />;
     case 'agent':
@@ -32,6 +35,7 @@ export function AgentRowView<S extends PaletteSession>({
           tag={row.queueHead ? 'session.jumpToWaiting' : null}
           now={now}
           slot={slotOf(undefined, row.session.id)}
+          showCrewDetails={showCrewDetails}
         />
       );
   }
@@ -54,11 +58,13 @@ export function AgentSessionRow({
   tag,
   now,
   slot,
+  showCrewDetails = true,
 }: {
   session: PaletteSession;
   tag: ShortcutId | null;
   now: number;
   slot: string;
+  showCrewDetails?: boolean;
 }) {
   const status = agentStatus(session, now);
   const owedAge = session.turnOwed && !isSnoozed(session.turnSnoozedUntil, now);
@@ -67,6 +73,7 @@ export function AgentSessionRow({
       <span className={`unified-palette-dot is-${status}`} />
       <span className="unified-palette-name">
         {session.label}
+        {showCrewDetails && session.crewMember && !session.chiefOfStaff && <span className="unified-palette-muted"> · crew</span>}
       </span>
       <kbd className="unified-palette-slot">{slot}</kbd>
       <span className={`unified-palette-pill is-${status}`}>{status}</span>
@@ -76,10 +83,11 @@ export function AgentSessionRow({
   );
 }
 
-function SleepingMember({ member }: { member: string }) {
+function SleepingMember({ member, showCrewDetails }: { member: string; showCrewDetails: boolean }) {
+  const label = useDaemonStore((state) => showCrewDetails ? state.crew.find((entry) => entry.id === member)?.launch_desktop?.label : undefined);
   return <div className="unified-palette-row">
     <span className="unified-palette-dot is-asleep" />
-    <span className="unified-palette-name">{crewDisplayName(member)}</span>
+    <span className="unified-palette-name">{crewDisplayName(member)}{showCrewDetails && <span className="unified-palette-muted"> · crew{label ? ` · ${label}` : ''}</span>}</span>
     <kbd className="unified-palette-slot" />
     <span className="unified-palette-pill">asleep</span>
     <span className="unified-palette-age">wake</span>

@@ -27,6 +27,11 @@ describe('App queue rows', () => {
     expect(peek).not.toHaveTextContent('no ⌘ number');
     expect(peek).not.toHaveTextContent('Automation runs are not in the queue');
     expect(daemon.sentOf('crew_wake')).toEqual([]);
+
+    fireEvent.click(pill);
+    await daemon.idle();
+    expect(screen.getByText('· crew · alder (no ⌘ number)')).toBeInTheDocument();
+    expect(within(screen.getByTestId('palette-agent-keel-session')).getByText('· crew')).toBeInTheDocument();
   });
 
   it('calls a labeled chief Chief in the crew block and restores its name when demoted', async () => {

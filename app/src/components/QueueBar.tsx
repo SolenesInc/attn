@@ -156,7 +156,7 @@ function WaitingPeek() {
     <QueueBarPeek testId="queue-bar-waiting-peek">
       {shown.map((row) =>
         row.kind === 'divider' ? (
-          <AgentRowView key={row.key} row={row} now={now} slotOf={slotOf} />
+          <AgentRowView key={row.key} row={row} now={now} slotOf={slotOf} showCrewDetails={false} />
         ) : (
           <button
             key={row.key}
@@ -166,7 +166,7 @@ function WaitingPeek() {
             data-testid={`queue-bar-peek-${row.key}`}
             onClick={() => pick(row)}
           >
-            <AgentRowView row={row} now={now} slotOf={slotOf} />
+            <AgentRowView row={row} now={now} slotOf={slotOf} showCrewDetails={false} />
           </button>
         ),
       )}
