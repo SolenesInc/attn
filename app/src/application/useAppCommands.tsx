@@ -27,6 +27,7 @@ import {
   useDesktopTilesContext,
   useNavigationContext,
   useSessionLaunchContext,
+  useSessionLifecycleContext,
 } from './AppContexts';
 import {
   AttentionActionIcon,
@@ -38,7 +39,7 @@ import {
   NotificationsBellIcon,
 } from './AppIcons';
 import { useOpenInEditor } from './useOpenInEditor';
-import { useSessionBehindScreen } from '../hooks/useDesktopSelectionBridge';
+import { useAgentOnScreen, useSessionBehindScreen } from '../hooks/useDesktopSelectionBridge';
 
 export function useAppCommands(): PaletteCommand[] {
   const seeds = useDaemonStore((state) => state.seeds);
@@ -69,6 +70,8 @@ export function useAppCommands(): PaletteCommand[] {
   const { sendSetSetting } = useDaemonApi();
   const { handleCreateDiagnosticReport } = useAppDiagnosticsContext();
   const contextSessionId = useSessionBehindScreen();
+  const agentOnScreenId = useAgentOnScreen();
+  const { handleReloadSession } = useSessionLifecycleContext();
   const desktops = useProfilesStore((state) => state.desktops);
   const profiles = useProfilesStore((state) => state.profiles);
   const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
@@ -129,6 +132,16 @@ export function useAppCommands(): PaletteCommand[] {
             icon: <AttentionActionIcon />,
             shortcut: keys('session.settle'),
             run: handleSettleActiveTurn,
+          }]
+        : []),
+      ...(agentOnScreenId
+        ? [{
+            id: 'reload-active-session',
+            title: 'Reload this agent',
+            description: 'Restart the agent in its current pane',
+            keywords: ['session', 'reload', 'restart', 'relaunch'],
+            icon: <ContextActionIcon />,
+            run: () => handleReloadSession(agentOnScreenId),
           }]
         : []),
       {
@@ -258,6 +271,7 @@ export function useAppCommands(): PaletteCommand[] {
     ];
     return commands;
   }, [
+    agentOnScreenId,
     contextSessionId,
     automationsPanelOpen,
     desktopNavigation,
@@ -267,6 +281,7 @@ export function useAppCommands(): PaletteCommand[] {
     handleJumpToWaiting,
     handleNextRun,
     handleNewSession,
+    handleReloadSession,
     handleSelectDesktop,
     handleSettleActiveTurn,
     notificationsPanelOpen,

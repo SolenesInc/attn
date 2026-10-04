@@ -142,17 +142,20 @@ describe('what the active leaf offers', () => {
     const onAgent = await commandTitles(daemon);
     expect(onAgent.some((text) => text.includes('Show workflow runs'))).toBe(true);
     expect(onAgent.some((text) => text.includes('Open in editor'))).toBe(true);
+    expect(onAgent.some((text) => text.includes('Reload this agent'))).toBe(true);
 
     await gesture(daemon, () => fireEvent.mouseDown(tileEl()));
     expect(shownLeaf()).toBe('tile-readme');
     const onTile = await commandTitles(daemon);
     expect(onTile.some((text) => text.includes('workflow runs'))).toBe(false);
     expect(onTile.some((text) => text.includes('Open in editor'))).toBe(false);
+    expect(onTile.some((text) => text.includes('Reload this agent'))).toBe(false);
 
     await gesture(daemon, () => pressShortcut('session.goToDashboard'));
     const atHome = await commandTitles(daemon);
     expect(atHome.some((text) => text.includes('workflow runs'))).toBe(false);
     expect(atHome.some((text) => text.includes('Open in editor'))).toBe(false);
+    expect(atHome.some((text) => text.includes('Reload this agent'))).toBe(false);
   });
 
   it('opens the remote folder of the agent a shown tile is bound to in the editor', async () => {
