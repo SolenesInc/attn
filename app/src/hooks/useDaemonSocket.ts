@@ -575,7 +575,7 @@ interface UseDaemonSocketOptions {
   onReposUpdate: (repos: RepoState[]) => void;
   onAuthorsUpdate: (authors: AuthorState[]) => void;
   onWorktreesUpdate?: (worktrees: DaemonWorktree[]) => void;
-  onQuickCaptureRead?: (receipt: { captureId: string; readAt: string }) => void;
+  onQuickCaptureRead?: (receipt: { profileId: string; captureId: string; readAt: string }) => void;
   onSettingsUpdate?: (settings: DaemonSettings) => void;
   onSettingError?: (message: string) => void;
   onGitStatusUpdate?: (status: GitStatusUpdate) => void;

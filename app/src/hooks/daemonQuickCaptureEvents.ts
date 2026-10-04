@@ -11,9 +11,9 @@ export const QUICK_CAPTURE_COMMANDS = [
 ] as const;
 
 export function handleQuickCaptureDaemonEvent(
-  event: { event?: string; request_id?: unknown; success?: boolean; error?: string; error_code?: string; result?: QuickCaptureResultMessage['result']; capture_id?: string; read_at?: string }, pending: PendingRequests, onRead: (receipt: { captureId: string; readAt: string }) => void,
+  event: { event?: string; request_id?: unknown; success?: boolean; error?: string; error_code?: string; result?: QuickCaptureResultMessage['result']; profile_id?: string; capture_id?: string; read_at?: string }, pending: PendingRequests, onRead: (receipt: { profileId: string; captureId: string; readAt: string }) => void,
 ): boolean {
-  if (event.event === 'quick_capture_read') { onRead({ captureId: event.capture_id!, readAt: event.read_at! }); return true; }
+  if (event.event === 'quick_capture_read') { onRead({ profileId: event.profile_id!, captureId: event.capture_id!, readAt: event.read_at! }); return true; }
   if (event.event !== 'quick_capture_result') return false;
   for (const command of QUICK_CAPTURE_COMMANDS) {
     if (settlePendingRequest(pending, command, event, message => message.result, 'Quick capture request failed', new QuickCaptureRequestError(event.error || 'Quick capture request failed', event.error_code))) break;

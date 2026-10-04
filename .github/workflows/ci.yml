@@ -1003,23 +1003,23 @@ jobs:
         id: build-idle-next
         uses: ./.github/actions/build-app-acceptance
         env:
-          ATTN_INSTANCE: capture-idle-next
+          ATTN_INSTANCE: capture-next
         with:
-          instance: capture-idle-next
+          instance: capture-next
 
       - name: Install next for idle comparison
         uses: ./.github/actions/install-app-acceptance
         env:
-          ATTN_INSTANCE: capture-idle-next
+          ATTN_INSTANCE: capture-next
         with:
-          instance: capture-idle-next
+          instance: capture-next
           archive: ${{ steps.build-idle-next.outputs.archive }}
 
       - name: Measure resident idle app on next
         env:
-          ATTN_INSTANCE: capture-idle-next
-          ATTN_HARNESS_INSTANCE: capture-idle-next
-          ATTN_REAL_APP_ARTIFACTS_DIR: ${{ runner.temp }}/attn-real-app-harness/capture-idle-next
+          ATTN_INSTANCE: capture-next
+          ATTN_HARNESS_INSTANCE: capture-next
+          ATTN_REAL_APP_ARTIFACTS_DIR: ${{ runner.temp }}/attn-real-app-harness/capture-next
         run: |
           pnpm --dir app run real-app:scenario-perf-baseline -- --sessions 0 --stream 0 --no-restart-daemon
           node "$RUNNER_TEMP/capture-idle-measure.mjs"
