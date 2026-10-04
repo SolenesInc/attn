@@ -160,7 +160,7 @@ type Daemon struct {
 	watchersMu                        sync.Mutex
 	transcriptWatch                   map[string]*transcriptWatcher
 	pluginUsageWatch                  map[string]*pluginUsageWatcher
-	finalUsage                        []func()
+	finalUsage                        map[string][]func()
 	transcriptWatcherSessionLookup    func(string) *protocol.Session
 	transcriptResumeLookup            func(protocol.SessionAgent, string) string
 	classifiedMu                      sync.Mutex

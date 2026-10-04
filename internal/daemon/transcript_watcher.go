@@ -407,17 +407,32 @@ func (d *Daemon) stopAllTranscriptWatchers() {
 	finalUsage := d.finalUsage
 	d.finalUsage = nil
 	d.watchersMu.Unlock()
-	for _, reconcile := range finalUsage {
-		reconcile()
+	for _, reconciles := range finalUsage {
+		for _, reconcile := range reconciles {
+			reconcile()
+		}
 	}
 }
 
 // deferFinalUsage hands a watcher's last reconcile to stopAllTranscriptWatchers, which runs it after PTYs and
 // plugins shut down and agents flush usage, even for a watcher already removed from its map.
-func (d *Daemon) deferFinalUsage(reconcile func()) {
+func (d *Daemon) deferFinalUsage(sessionID string, reconcile func()) {
 	d.watchersMu.Lock()
-	d.finalUsage = append(d.finalUsage, reconcile)
+	if d.finalUsage == nil {
+		d.finalUsage = make(map[string][]func())
+	}
+	d.finalUsage[sessionID] = append(d.finalUsage[sessionID], reconcile)
 	d.watchersMu.Unlock()
+}
+
+func (d *Daemon) reconcileDeferredUsage(sessionID string) {
+	d.watchersMu.Lock()
+	reconciles := d.finalUsage[sessionID]
+	delete(d.finalUsage, sessionID)
+	d.watchersMu.Unlock()
+	for _, reconcile := range reconciles {
+		reconcile()
+	}
 }
 
 func (d *Daemon) assistantWindow(sessionID string, agent protocol.SessionAgent) (assistantWindowSnapshot, bool) {
@@ -479,7 +494,7 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 			return
 		case <-d.life.Done():
 			if usageTracker != nil {
-				d.deferFinalUsage(usageTracker.Reconcile)
+				d.deferFinalUsage(w.sessionID, usageTracker.Reconcile)
 				usageTracker = nil
 			}
 			return

@@ -78,7 +78,7 @@ func (d *Daemon) runPluginUsageWatcher(w *pluginUsageWatcher, tracker *sessionUs
 			return
 		case <-d.life.Done():
 			seen := read != nil
-			d.deferFinalUsage(func() { d.reconcilePluginUsageOnStop(w.path, seen, tracker) })
+			d.deferFinalUsage(w.sessionID, func() { d.reconcilePluginUsageOnStop(w.path, seen, tracker) })
 			return
 		case <-ticker.C:
 		}

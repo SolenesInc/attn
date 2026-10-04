@@ -77,4 +77,5 @@ func (d *Daemon) drainTranscriptWatcher(sessionID string) {
 	if pluginWatcher != nil {
 		<-pluginWatcher.doneCh
 	}
+	d.reconcileDeferredUsage(sessionID)
 }
