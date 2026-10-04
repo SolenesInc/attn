@@ -126,7 +126,15 @@ func (d *Daemon) automationObservationLock(definitionID int, subjectKey string, 
 
 func (d *Daemon) handleAutomationCommand(conn net.Conn, cmd string, msg any) {
 	ctx := context.Background()
-	scope := d.automationSocketScope(msg)
+	scope := ""
+	if cmd != protocol.CmdAutomationValidate {
+		var err error
+		scope, err = d.automationSocketScope(msg)
+		if err != nil {
+			_ = json.NewEncoder(conn).Encode(automationResultError(err))
+			return
+		}
+	}
 	var result any
 	switch cmd {
 	case protocol.CmdAutomationApply:
@@ -149,4 +157,8 @@ func (d *Daemon) handleAutomationCommand(conn net.Conn, cmd string, msg any) {
 		result = d.actionAutomationCleanup(ctx, msg.(*protocol.AutomationCleanupMessage), scope)
 	}
 	_ = json.NewEncoder(conn).Encode(result)
+}
+
+func automationResultError(err error) map[string]any {
+	return map[string]any{"success": false, "error": err.Error()}
 }

@@ -1805,9 +1805,8 @@ model AutomationApplyMessage {
   cmd: "automation_apply";
   definition_yaml: string;
   request_id?: string;
-  // The profile a new definition belongs to. Absent means the connection's
-  // selected profile over WebSocket and the most recently used profile over
-  // the socket. An existing definition keeps its profile.
+  // Socket requests use the caller session, an explicit profile, or the sole
+  // live profile. WebSocket requests use the selected profile.
   profile_id?: string;
   expected_id?: safeint;
   expected_revision?: int32;
@@ -1815,7 +1814,7 @@ model AutomationApplyMessage {
   launch_desktop_setting?: LaunchDesktopSetting;
   source_session_id?: string; // The calling agent; scopes the request to its profile.
 }
-model AutomationRunMessage { cmd: "automation_run"; definition_id: safeint; request_id: string; input_json?: string; pr_url?: string; source_session_id?: string; }
+model AutomationRunMessage { cmd: "automation_run"; definition_id: safeint; request_id: string; input_json?: string; pr_url?: string; profile_id?: string; source_session_id?: string; }
 
 // Dual-surface (unix-socket `attn automation validate` + WS "Validate"
 // button): runs exactly the checks automation_apply runs before persisting
@@ -1837,6 +1836,7 @@ model AutomationDeleteMessage {
   cmd: "automation_delete";
   definition_id: safeint;
   request_id?: string;
+  profile_id?: string;
   source_session_id?: string; // The calling agent; scopes the request to its profile.
 }
 
@@ -1847,17 +1847,19 @@ model AutomationCleanupMessage {
   cmd: "automation_cleanup";
   definition_id: safeint;
   request_id?: string;
+  profile_id?: string;
   source_session_id?: string; // The calling agent; scopes the request to its profile.
 }
 
 // Every automations command sees only one profile's definitions: the connection's
-// selected profile over WebSocket, the calling agent's over the socket.
+// selected profile over WebSocket; socket callers choose as Garden callers do.
 // WS-only automations surface: list definitions, list one definition's runs, and
 // toggle enabled. automation_run (above) is reused for WS run-now; it already
 // carries request_id for correlation.
 model AutomationDefinitionsGetMessage {
   cmd: "automation_definitions_get";
   request_id?: string;
+  profile_id?: string;
   source_session_id?: string; // The calling agent; scopes the request to its profile.
 }
 
@@ -1871,12 +1873,14 @@ model AutomationDefinitionGetMessage {
   cmd: "automation_definition_get";
   definition_id: safeint;
   request_id?: string;
+  profile_id?: string;
   source_session_id?: string; // The calling agent; scopes the request to its profile.
 }
 model AutomationRunsGetMessage {
   cmd: "automation_runs_get";
   definition_id: safeint;
   request_id?: string;
+  profile_id?: string;
   source_session_id?: string; // The calling agent; scopes the request to its profile.
 }
 model AutomationSetEnabledMessage {
@@ -1884,6 +1888,7 @@ model AutomationSetEnabledMessage {
   definition_id: safeint;
   enabled: boolean;
   request_id?: string;
+  profile_id?: string;
   source_session_id?: string; // The calling agent; scopes the request to its profile.
 }
 
@@ -2993,6 +2998,8 @@ model LaunchDesktopGetMessage {
   item_id: string;
 }
 model LaunchDesktopSetMessage {
+  profile_id?: string;
+  source_session_id?: string;
   desktop_ref?: string;
   cmd: "launch_desktop_set";
   request_id: string;

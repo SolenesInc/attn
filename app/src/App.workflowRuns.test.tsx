@@ -53,6 +53,10 @@ describe('App workflow runs', () => {
     expect(view().getByText('review.js')).toBeInTheDocument();
     expect(view().getByText('Running')).toBeInTheDocument();
     expect(view().getByTestId('workflow-call-1')).toHaveTextContent('design step');
+
+    await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
+    expect(view().queryByRole('button', { name: 'Hide' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Workflow Runs' })).not.toHaveClass('active');
   });
 
   it('shows the latest run of the open session, never another session’s', async () => {

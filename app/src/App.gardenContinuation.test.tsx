@@ -89,6 +89,23 @@ function selectedSessions(daemon: ScriptedDaemon) {
 }
 
 describe('App garden continuation', () => {
+  it('dismisses a composer before the dock after returning from fullscreen', async () => {
+    const { daemon } = await openSeedInGarden();
+    await gesture(daemon, () => pressShortcut('dock.attention'));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Expand the garden' })));
+    await composeHandover(daemon);
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Return the garden to the dock' })));
+
+    await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
+
+    expect(screen.queryByLabelText(/What should the new agent know\?/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Hide PRs Drawer' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Hide the garden' })).toBeInTheDocument();
+    await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
+    expect(screen.getByRole('button', { name: 'Show PRs Drawer' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Hide the garden' })).toBeInTheDocument();
+  });
+
   it('shows a resumed agent the app has not heard of yet, with one request the daemon validates', async () => {
     const { daemon } = await openSeedInGarden();
     daemon.on('seed_resume', () => ({ event: 'seed_resume_result', success: true, session_id: 'reopened-late' }));

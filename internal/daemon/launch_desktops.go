@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strconv"
 
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
@@ -168,6 +169,20 @@ func (d *Daemon) handleLaunchDesktopCommand(conn net.Conn, cmd string, message a
 		result = d.launchDesktopResult(msg.Cmd, msg.RequestID, string(msg.Kind), msg.ItemID, nil, nil, nil)
 	case protocol.CmdLaunchDesktopSet:
 		msg := message.(*protocol.LaunchDesktopSetMessage)
+		if msg.Kind == protocol.LaunchDesktopKindAutomation {
+			scope, err := d.automationSocketScope(msg)
+			if err == nil {
+				id, parseErr := strconv.Atoi(msg.ItemID)
+				err = parseErr
+				if err == nil && d.automationOutOfScope(id, scope) {
+					err = fmt.Errorf("automation %q does not exist", msg.ItemID)
+				}
+			}
+			if err != nil {
+				_ = json.NewEncoder(conn).Encode(automationResultError(err))
+				return
+			}
+		}
 		result = d.launchDesktopResult(msg.Cmd, msg.RequestID, string(msg.Kind), msg.ItemID, msg.Setting, msg.DesktopRef, msg.DesktopName)
 	}
 	_ = json.NewEncoder(conn).Encode(result)

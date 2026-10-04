@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +18,7 @@ func TestProfileDeletionRefusesAnAutomationUntilItIsDeleted(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		side := createProfile(app, "Side")
+		cli = cli.WithGardenProfile(side.ID, "")
 		selectProfile(app, side.ID)
 		folder := w.Path("sweep")
 		if err := os.MkdirAll(folder, 0o755); err != nil {
@@ -68,6 +70,7 @@ func TestProfileDeletionLeavesPendingAutomationRunsUntouched(t *testing.T) {
 	t.Setenv("GIT_SSH_COMMAND", "false")
 	r := newAutomationReviewWorld(t)
 	side := createProfile(r.app, "Side")
+	r.cli = r.cli.WithGardenProfile(side.ID, "")
 	selectProfile(r.app, side.ID)
 	id := uuid.NewString()
 	applied := testworld.Request(r.app, protocol.AutomationApplyMessage{
@@ -138,8 +141,44 @@ func TestAnotherProfilesAutomationIsUnknownToAProfile(t *testing.T) {
 		if definitions, err := fromAgent.AutomationDefinitions(); err != nil || slices.ContainsFunc(definitions.Definitions, func(d protocol.AutomationDefinitionSummary) bool { return d.ID == sweep }) {
 			t.Errorf("a Default agent's automation list = %+v, %v; want Side's %d absent", definitions, err, sweep)
 		}
-		if _, err := cli.AutomationDefinition(sweep); err != nil {
-			t.Errorf("the user's own terminal no longer sees Side's automation: %v", err)
+		if _, err := cli.AutomationDefinition(sweep); err == nil || !strings.Contains(err.Error(), "choose --profile") {
+			t.Errorf("a plain terminal must choose its profile: %v", err)
+		}
+		plain := cli.WithGardenProfile(home, "")
+		if definitions, err := plain.AutomationDefinitions(); err != nil || len(definitions.Definitions) != 0 {
+			t.Fatalf("plain terminal list: %+v, %v", definitions, err)
+		}
+		checks := map[string]func(int) error{
+			"show":    func(id int) error { _, err := plain.AutomationDefinition(id); return err },
+			"run":     func(id int) error { _, err := plain.AutomationRun(id, "plain-run", "{}"); return err },
+			"delete":  plain.AutomationDelete,
+			"enable":  func(id int) error { _, err := plain.AutomationSetEnabled(id, true); return err },
+			"cleanup": func(id int) error { _, err := plain.AutomationCleanup(id); return err },
+			"set":     func(id int) error { _, err := plain.SetAutomationLaunchDesktop(id, "own", nil); return err },
+		}
+		for name, check := range checks {
+			foreign, unknown := check(sweep), check(sweep+1)
+			if foreign == nil || unknown == nil || foreign.Error() != strings.ReplaceAll(unknown.Error(), strconv.Itoa(sweep+1), strconv.Itoa(sweep)) {
+				t.Errorf("%s foreign=%v, unknown=%v", name, foreign, unknown)
+			}
+		}
+		if runs, err := plain.AutomationRuns(sweep); err != nil || len(runs.Runs) != 0 {
+			t.Errorf("foreign runs: %+v, %v", runs, err)
+		}
+		if _, err := plain.AutomationApply(automationEditSpec(sweep, automationSingletonSpec(w, "Edited", "latest", "sweep"))); err == nil || !strings.Contains(err.Error(), "does not exist") {
+			t.Errorf("foreign edit: %v", err)
+		}
+		for _, profile := range []string{side.ID, "side"} {
+			chosen := cli.WithGardenProfile(profile, "")
+			if definitions, err := chosen.AutomationDefinitions(); err != nil || len(definitions.Definitions) != 1 || definitions.Definitions[0].ID != sweep {
+				t.Errorf("chosen profile %s: %+v, %v", profile, definitions, err)
+			}
+		}
+		if _, err := cli.WithGardenProfile(side.ID, "home-agent").AutomationDefinition(sweep); err == nil || !strings.Contains(err.Error(), "not found") {
+			t.Errorf("explicit profile overrode source session: %v", err)
+		}
+		if _, err := cli.WithGardenProfile(side.ID, "missing-session").AutomationDefinition(sweep); err == nil {
+			t.Error("unknown source session exposed an automation")
 		}
 	})
 }
