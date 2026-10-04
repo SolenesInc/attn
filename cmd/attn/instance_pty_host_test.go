@@ -257,3 +257,21 @@ func TestInstanceCleanPreservesDataWhileADeadWorkersChildRuns(t *testing.T) {
 		t.Fatalf("cleanup destroyed the orphan's registry: %v", err)
 	}
 }
+
+func TestInstanceCleanPreservesDataWhenAWorkerRegistryIsUnreadable(t *testing.T) {
+	r := stoppedInstance(t)
+	path := filepath.Join(r.DataDir, "workers", "d-unknown", "registry", "garbled.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := cleanInstance(&out, r); err == nil {
+		t.Fatalf("cleanup accepted a worker registry it could not read: %s", out.String())
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("cleanup destroyed the unreadable registry: %v", err)
+	}
+}

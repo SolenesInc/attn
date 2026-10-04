@@ -43,6 +43,7 @@ func ReapDataDir(dataDir string) []ReapResult {
 	for _, path := range paths {
 		entry, err := ReadRegistry(path)
 		if err != nil {
+			results = append(results, ReapResult{SessionID: strings.TrimSuffix(filepath.Base(path), ".json"), Outcome: ReapFailed, Err: fmt.Errorf("unreadable registry %s: %w", path, err)})
 			continue
 		}
 		res := reapEntry(entry, path)

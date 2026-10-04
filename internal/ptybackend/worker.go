@@ -2056,11 +2056,8 @@ func (b *WorkerBackend) reclaimOwnershipMismatch(ctx context.Context, registryPa
 		RegistryPath: registryPath,
 		ControlToken: entry.ControlToken,
 	}
-	if _, ok := ctx.Deadline(); !ok {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, killRPCTimeout)
-		defer cancel()
-	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), killRPCTimeout)
+	defer cancel()
 	err := b.callSimpleWithIdentity(
 		ctx,
 		session,
