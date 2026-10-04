@@ -29,30 +29,28 @@ func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage
 		return
 	}
 	messageID := strings.TrimSpace(protocol.Deref(msg.MessageID))
-	storedItem, found, err := d.store.InboxItem(store.UserMessageInboxID(recipient.ProfileID, messageID))
+	storedItem, found, err := d.store.InboxItem(store.QuickCaptureInboxID(recipient.ProfileID, messageID))
 	if found {
 		messageID = storedItem.ID
-	} else if err == nil {
-		storedItem, found, err = d.store.InboxItem(messageID)
 	}
 	if err != nil {
 		d.replyPeerMessageError(conn, err)
 		return
 	}
-	if found && storedItem.Kind == inbox.UserMessage {
+	if found && storedItem.Kind == inbox.QuickCapture {
 		item, err := d.store.ReadInboxItem(messageID, recipient.ID, addresses, time.Now())
 		if err != nil {
 			d.replyAgentMsgError(conn, "message_not_found", err.Error())
 			return
 		}
-		userMessage, err := d.store.UserMessage(recipient.ProfileID, item.Source)
+		quickCapture, err := d.store.QuickCapture(recipient.ProfileID, item.Source)
 		if err != nil {
 			d.replyPeerMessageError(conn, err)
 			return
 		}
-		result := &protocol.AgentInboxItem{Address: item.To.String(), ItemID: item.Source, Kind: string(item.Kind), SourceID: protocol.Ptr(item.Source), Content: item.Text, CreatedAt: item.CreatedAt, NotifiedAt: item.NotifiedAt, ReadAt: item.ReadAt, Attachments: userMessage.Attachments}
+		result := &protocol.AgentInboxItem{Address: item.To.String(), ItemID: item.Source, Kind: string(item.Kind), SourceID: protocol.Ptr(item.Source), Content: item.Text, CreatedAt: item.CreatedAt, NotifiedAt: item.NotifiedAt, ReadAt: item.ReadAt, Attachments: quickCapture.Attachments}
 		_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AgentInboxItemResult: result})
-		d.publishUserMessageChanged(recipient.ProfileID, userMessage.ID)
+		d.publishQuickCaptureRead(recipient.ProfileID, quickCapture.ID, item.ReadAt)
 		d.kickInboxAfterCommit(item.To)
 		return
 	}
@@ -105,6 +103,7 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID string,
 		d.replyAgentMsgError(conn, "internal_error", "the agent inbox could not be read")
 		return
 	}
+	profileID := d.store.Get(recipientSessionID).ProfileID
 	items := make([]protocol.AgentInboxItem, 0, len(deliveries))
 	d.noteCrewRestartMailboxRead(deliveries)
 	for _, delivery := range deliveries {
@@ -119,15 +118,15 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID string,
 		if delivery.Item.Hint != "" {
 			item.Hint = protocol.Ptr(delivery.Item.Hint)
 		}
-		if delivery.Item.Kind == inbox.UserMessage {
+		if delivery.Item.Kind == inbox.QuickCapture {
 			item.ItemID = delivery.Item.Source
-			record, err := d.store.UserMessage(d.store.Get(recipientSessionID).ProfileID, delivery.Item.Source)
+			record, err := d.store.QuickCapture(profileID, delivery.Item.Source)
 			if err != nil {
-				d.logf("inbox user message assets: %v", err)
+				d.logf("inbox quick capture assets: %v", err)
 			} else {
 				item.Attachments = record.Attachments
 			}
-			d.publishUserMessageChanged(d.store.Get(recipientSessionID).ProfileID, delivery.Item.Source)
+			d.publishQuickCaptureRead(profileID, delivery.Item.Source, delivery.Item.ReadAt)
 		}
 		if delivery.Peer != nil {
 			item.SenderSessionID = protocol.Ptr(delivery.Peer.SenderSessionID)

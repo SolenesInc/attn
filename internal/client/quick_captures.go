@@ -1,28 +1,20 @@
 package client
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (c *Client) UserMessage(msg any) (*protocol.UserMessageResult, error) {
-	data, err := json.Marshal(msg)
-	if err != nil {
-		return nil, err
-	}
-	if len(data) > protocol.CommandFrameMaxBytes {
-		return nil, fmt.Errorf("user message transport limit=%d bytes, asked for %d bytes", protocol.CommandFrameMaxBytes, len(data))
-	}
+func (c *Client) QuickCapture(msg any) (*protocol.QuickCaptureResult, error) {
 	response, err := c.send(msg)
 	if err != nil {
 		return nil, err
 	}
-	if response.UserMessageResult == nil {
-		return nil, fmt.Errorf("daemon returned no user message receipt")
+	if response.QuickCaptureResult == nil {
+		return nil, fmt.Errorf("daemon returned no quick capture receipt")
 	}
-	return response.UserMessageResult, nil
+	return response.QuickCaptureResult, nil
 }
 
 func (c *Client) AgentInboxEntry(id, recipient string) (*protocol.AgentPeerMessage, *protocol.AgentInboxItem, error) {

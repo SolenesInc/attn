@@ -26,12 +26,12 @@ func commandMetadata(scope CommandScope, blocksDuringRecovery bool, log bool) Co
 }
 
 var CommandMeta = map[string]CommandMetadata{
-	protocol.CmdUserMessageSend:               commandMetadata(ScopeHubLocal, false, false),
-	protocol.CmdUserMessageGet:                commandMetadata(ScopeHubLocal, false, false),
-	protocol.CmdUserMessageList:               commandMetadata(ScopeHubLocal, false, false),
-	protocol.CmdUserMessageAttachmentPut:      commandMetadata(ScopeHubLocal, false, false),
-	protocol.CmdUserMessageAttachmentGet:      commandMetadata(ScopeHubLocal, false, false),
-	protocol.CmdUserMessageAttachmentDiscard:  commandMetadata(ScopeHubLocal, false, false),
+	protocol.CmdQuickCaptureSend:              commandMetadata(ScopeHubLocal, false, false),
+	protocol.CmdQuickCaptureGet:               commandMetadata(ScopeHubLocal, false, false),
+	protocol.CmdQuickCaptureList:              commandMetadata(ScopeHubLocal, false, false),
+	protocol.CmdQuickCaptureAttachmentPut:     commandMetadata(ScopeHubLocal, false, false),
+	protocol.CmdQuickCaptureAttachmentGet:     commandMetadata(ScopeHubLocal, false, false),
+	protocol.CmdQuickCaptureAttachmentDiscard: commandMetadata(ScopeHubLocal, false, false),
 	protocol.CmdDelegationPreferencesGet:      commandMetadata(ScopeHubLocal, false, false),
 	protocol.CmdDelegationPreferencesSave:     commandMetadata(ScopeHubLocal, false, false),
 	protocol.CmdDelegationModels:              commandMetadata(ScopeHubLocal, false, false),

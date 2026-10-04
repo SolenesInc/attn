@@ -12,7 +12,7 @@ function sendClientHello(ws, trustedApp = false) {
   ws.send(
     JSON.stringify({
       ...harnessClientHello(trustedApp ? 'tauri-app' : 'harness-observer'),
-...(trustedApp ? { browser_host_token: fs.readFileSync(path.join(dataDirForInstance(), 'browser-host-token'), 'utf8').trim() } : {}),
+      ...(trustedApp ? { browser_host_token: fs.readFileSync(path.join(dataDirForInstance(), 'browser-host-token'), 'utf8').trim() } : {}),
     }),
   );
 }
@@ -21,11 +21,11 @@ export class DaemonObserver {
   constructor({
     wsUrl = defaultWSURLForInstance(),
     connectTimeoutMs = 45_000,
-trustedApp = false,
+    trustedApp = false,
   } = {}) {
     assertProductionRunAllowed({ wsUrl });
     this.wsUrl = wsUrl;
-this.trustedApp = trustedApp;
+    this.trustedApp = trustedApp;
     this.connectTimeoutMs = connectTimeoutMs;
     this.ws = null;
     this.sessionsById = new Map();

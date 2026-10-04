@@ -17,7 +17,7 @@ import (
 	"nhooyr.io/websocket"
 )
 
-func (p *Peer) UserMessage(msg any) (*protocol.UserMessageResult, error) {
+func (p *Peer) QuickCapture(msg any) (*protocol.QuickCaptureResult, error) {
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return nil, err
@@ -41,10 +41,10 @@ func (p *Peer) UserMessage(msg any) (*protocol.UserMessageResult, error) {
 		p.mu.Lock()
 		for i := range p.frames {
 			frame := &p.frames[i]
-			if frame.consumed || frame.event != protocol.EventUserMessageResult {
+			if frame.consumed || frame.event != protocol.EventQuickCaptureResult {
 				continue
 			}
-			var response protocol.UserMessageResultMessage
+			var response protocol.QuickCaptureResultMessage
 			if err := json.Unmarshal(frame.raw, &response); err != nil {
 				p.mu.Unlock()
 				return nil, err
@@ -67,7 +67,7 @@ func (p *Peer) UserMessage(msg any) (*protocol.UserMessageResult, error) {
 		select {
 		case <-grew:
 		case <-ctx.Done():
-			return nil, fmt.Errorf("await user message %s: %w", id, ctx.Err())
+			return nil, fmt.Errorf("await quick capture %s: %w", id, ctx.Err())
 		}
 	}
 }

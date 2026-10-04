@@ -799,116 +799,117 @@ model AgentCloseResult {
   seed_ids: string[];           // the seeds the closed session tended, each of which got the note
 }
 
-enum UserMessageTargetKind { chief, crew }
-model UserMessageTarget {
-  kind: UserMessageTargetKind;
+enum QuickCaptureMailboxKind { chief, crew_member }
+model QuickCaptureMailbox {
+  kind: QuickCaptureMailboxKind;
   member_id?: string;
 }
-model UserMessageAttachment {
+model QuickCaptureAttachment {
   id: string;
   name: string;
   media_type: string;
   bytes: safeint;
 }
-model UserMessageRecord {
+model QuickCaptureRecord {
   id: string;
-  target: UserMessageTarget;
+  mailbox: QuickCaptureMailbox;
   content: string;
   created_at: string;
-  attachments: UserMessageAttachment[];
+  attachments: QuickCaptureAttachment[];
   read_at?: string;
 }
-enum UserMessageDraftState { staged, ready }
-model UserMessageDraftAsset {
-  message_id: string;
+enum QuickCaptureDraftState { staged, ready }
+model QuickCaptureDraftAsset {
+  capture_id: string;
   attachment_id: string;
   name: string;
-  state: UserMessageDraftState;
+  state: QuickCaptureDraftState;
   next_offset: safeint;
 }
-model UserMessageListResult {
-  items: UserMessageRecord[];
-  draft_assets: UserMessageDraftAsset[];
+model QuickCaptureListResult {
+  items: QuickCaptureRecord[];
+  draft_assets: QuickCaptureDraftAsset[];
   next_cursor?: string;
 }
-model UserMessageSendMessage {
+model QuickCaptureSendMessage {
   profile_id?: string;
-  cmd: "user_message_send";
+  cmd: "quick_capture_send";
   request_id?: string;
-  message_id: string;
-  target: UserMessageTarget;
+  capture_id: string;
+  mailbox: QuickCaptureMailbox;
   content: string;
   attachment_ids: string[];
 }
-model UserMessageGetMessage {
+model QuickCaptureGetMessage {
   profile_id?: string;
-  cmd: "user_message_get";
+  cmd: "quick_capture_get";
   request_id?: string;
-  message_id: string;
+  capture_id: string;
 }
-model UserMessageListMessage {
+model QuickCaptureListMessage {
   profile_id?: string;
-  cmd: "user_message_list";
+  cmd: "quick_capture_list";
   request_id?: string;
   limit: safeint;
   cursor?: string;
 }
-model UserMessageAttachmentPutMessage {
+model QuickCaptureAttachmentPutMessage {
   profile_id?: string;
-  cmd: "user_message_attachment_put";
+  cmd: "quick_capture_attachment_put";
   request_id?: string;
-  message_id: string;
+  capture_id: string;
   attachment_id: string;
   name: string;
   offset: safeint;
   data_base64: string;
   final: boolean;
 }
-model UserMessageAttachmentGetMessage {
+model QuickCaptureAttachmentGetMessage {
   source_session_id?: string;
   profile_id?: string;
-  cmd: "user_message_attachment_get";
+  cmd: "quick_capture_attachment_get";
   request_id?: string;
-  message_id: string;
+  capture_id: string;
   attachment_id: string;
   offset: safeint;
 }
-model UserMessageAttachmentDiscardMessage {
+model QuickCaptureAttachmentDiscardMessage {
   profile_id?: string;
-  cmd: "user_message_attachment_discard";
+  cmd: "quick_capture_attachment_discard";
   request_id?: string;
-  message_id: string;
+  capture_id: string;
   attachment_id: string;
 }
-model UserMessageAttachmentPutResult {
+model QuickCaptureAttachmentPutResult {
   next_offset: safeint;
-  attachment?: UserMessageAttachment;
+  attachment?: QuickCaptureAttachment;
 }
-model UserMessageAttachmentGetResult {
+model QuickCaptureAttachmentGetResult {
   data_base64: string;
   next_offset: safeint;
   eof: boolean;
 }
-model UserMessageResult {
-  record?: UserMessageRecord;
-  list?: UserMessageListResult;
-  upload?: UserMessageAttachmentPutResult;
-  download?: UserMessageAttachmentGetResult;
+model QuickCaptureResult {
+  record?: QuickCaptureRecord;
+  list?: QuickCaptureListResult;
+  upload?: QuickCaptureAttachmentPutResult;
+  download?: QuickCaptureAttachmentGetResult;
   discarded?: boolean;
 }
-model UserMessageResultMessage {
+model QuickCaptureResultMessage {
   profile_id: string;
-  event: "user_message_result";
+  event: "quick_capture_result";
   request_id: string;
   success: boolean;
   error?: string;
   error_code?: string;
-  result?: UserMessageResult;
+  result?: QuickCaptureResult;
 }
-model UserMessageChangedMessage {
+model QuickCaptureReadMessage {
   profile_id: string;
-  event: "user_message_changed";
-  message_id: string;
+  event: "quick_capture_read";
+  capture_id: string;
+  read_at: string;
 }
 
 model AgentInboxMessage {
@@ -5896,7 +5897,7 @@ model Response {
   agent_peek_result?: AgentPeekResult;
   agent_msg_result?: AgentMsgResult;
   agent_close_result?: AgentCloseResult;
-  user_message_result?: UserMessageResult;
+  quick_capture_result?: QuickCaptureResult;
   agent_inbox_result?: AgentPeerMessage;
   agent_inbox_item_result?: AgentInboxItem;
   agent_inbox_batch_result?: AgentInboxBatchResult;
@@ -6431,7 +6432,7 @@ model AgentPeerMessage {
 // peer body or the daemon-authored action text for another mailbox kind.
 model AgentInboxItem {
   address: string;
-  attachments?: UserMessageAttachment[];
+  attachments?: QuickCaptureAttachment[];
   item_id: string;
   kind: string;
   source_id?: string;

@@ -61,10 +61,14 @@ address                 who an item is for: a session or a mailbox
 ├─ mailbox              crew member, chief or seed tender; like a shared
 │                       mailbox (support@) that whoever holds the job reads
 └─ inbox (1)
-   └─ item (0..n)       peer message, seed update, user message,
+   └─ item (0..n)       peer message, seed update, quick capture,
                         PR watch update or notice
 ring                    one prompt that tells an agent that they have unread
                         items; like a push notification
+quick capture           a message with files that the user sends to a mailbox
+                        from a panel that floats above every app; a global
+                        shortcut opens it from anywhere on the computer;
+                        like macOS Quick Note
 ```
 
 ```text
@@ -160,10 +164,6 @@ window (1..n)           one macOS app window
 current desktop         the desktop a profile shows; every window shares it
 active tile             the tile a desktop has selected; every window shares it
 tile history            the tiles a window has shown; ⌘[ and ⌘] walk it
-quick capture           a panel that floats above every app, outside attn's
-                        windows; a global shortcut opens it from anywhere on
-                        the computer. It sends a user message to a mailbox;
-                        like macOS Quick Note
 ```
 
 ## Profile

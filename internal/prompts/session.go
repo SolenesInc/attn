@@ -24,9 +24,10 @@ var (
 		Bind("delegation_boundary", delegationBoundary))
 	agentGuidance = Use("session.agent", "content/agent.md",
 		Bind("delegation_boundary", delegationBoundary))
-	workflowGuidance    = Use("session.workflow", "content/workflow.md")
-	gardenGuidance      = Use("session.garden", "content/garden.md")
-	pullRequestGuidance = Use("session.pull-request-guidance", "content/session/pull-request-guidance.md")
+	quickCaptureGuidance = Use("session.quick-capture-guidance", "content/session/quick-capture.md")
+	workflowGuidance     = Use("session.workflow", "content/workflow.md")
+	gardenGuidance       = Use("session.garden", "content/garden.md")
+	pullRequestGuidance  = Use("session.pull-request-guidance", "content/session/pull-request-guidance.md")
 )
 
 var session = Recipient{
@@ -37,14 +38,14 @@ var session = Recipient{
 			"hooks.Launch.Instructions: Claude appends system instructions; Codex sets developer instructions; capable plugins receive launch instructions. Triggering and delivery remain with the existing adapters.",
 			Compose(
 				Choose(Present(notebookRoot),
-					chiefGuidance,
+					Compose(chiefGuidance, quickCaptureGuidance),
 					Compose(
 						agentGuidance,
 						When(Enabled(workflowEnabled), workflowGuidance),
 					)),
 				When(Enabled(gardenAvailable), gardenGuidance),
 				When(Enabled(selfReportPullRequests), pullRequestGuidance),
-				When(Present(crewPriming), Input(crewPriming)),
+				When(Present(crewPriming), Compose(Input(crewPriming), quickCaptureGuidance)),
 			)),
 		On("agent-guidance", "message_fragment", "Non-chief trust and delegation guidance.", agentGuidance),
 		On("garden-guidance", "message_fragment", "Garden instructions when a home is available.", gardenGuidance),

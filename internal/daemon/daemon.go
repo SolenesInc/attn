@@ -197,7 +197,7 @@ type Daemon struct {
 	sessionInputState                 *sessionInputModule
 	terminalsOnce                     sync.Once
 	terminalState                     *terminalRegistry
-	userMessageAssetMu                sync.Mutex
+	quickCaptureAssetMu               sync.Mutex
 	inboxMu                           sync.Mutex
 	inboxStates                       map[inbox.Address]*inboxDeliveryState
 	inboxUnsubscribe                  func()
@@ -681,8 +681,8 @@ func (d *Daemon) Start() error {
 	if err := d.ensureEnrollment(); err != nil {
 		return fmt.Errorf("ensure enrollment record: %w", err)
 	}
-	if err := d.recoverUserMessageAssets(); err != nil {
-		d.logf("user message asset recovery incomplete: %v", err)
+	if err := d.recoverQuickCaptureAssets(); err != nil {
+		d.logf("quick capture asset recovery incomplete: %v", err)
 	}
 	d.ensureGardenCollections()
 	d.ensureCrewCollections()
@@ -2605,10 +2605,10 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleAgentMsg(conn, msg.(*protocol.AgentMsgMessage))
 	case protocol.CmdAgentClose:
 		d.handleAgentClose(conn, msg.(*protocol.AgentCloseMessage))
-	case protocol.CmdUserMessageAttachmentGet:
-		d.handleUserMessage(conn, msg)
-	case protocol.CmdUserMessageSend, protocol.CmdUserMessageGet, protocol.CmdUserMessageList, protocol.CmdUserMessageAttachmentPut, protocol.CmdUserMessageAttachmentDiscard:
-		d.sendError(conn, "user message authoring and history are app-only; use the authenticated app WebSocket channel")
+	case protocol.CmdQuickCaptureAttachmentGet:
+		d.handleQuickCapture(conn, msg)
+	case protocol.CmdQuickCaptureSend, protocol.CmdQuickCaptureGet, protocol.CmdQuickCaptureList, protocol.CmdQuickCaptureAttachmentPut, protocol.CmdQuickCaptureAttachmentDiscard:
+		d.sendError(conn, "quick capture authoring and history are app-only; use the authenticated app WebSocket channel")
 	case protocol.CmdAgentInbox:
 		d.handleAgentInbox(conn, msg.(*protocol.AgentInboxMessage))
 	case protocol.CmdAgentMsgStatus:

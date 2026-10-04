@@ -25,29 +25,39 @@
                 },
                 "children": [
                   {
-                    "kind": "text",
-                    "id": "session.chief",
-                    "source": "content/chief.md",
-                    "bindings": [
+                    "kind": "compose",
+                    "children": [
                       {
-                        "name": "notebook_root",
-                        "node": {
-                          "kind": "input",
-                          "field": {
+                        "kind": "text",
+                        "id": "session.chief",
+                        "source": "content/chief.md",
+                        "bindings": [
+                          {
                             "name": "notebook_root",
-                            "kind": "text",
-                            "description": "Notebook directory; a nonempty value selects chief guidance.",
-                            "trim_space": true
+                            "node": {
+                              "kind": "input",
+                              "field": {
+                                "name": "notebook_root",
+                                "kind": "text",
+                                "description": "Notebook directory; a nonempty value selects chief guidance.",
+                                "trim_space": true
+                              }
+                            }
+                          },
+                          {
+                            "name": "delegation_boundary",
+                            "node": {
+                              "kind": "text",
+                              "id": "delegation.boundary",
+                              "source": "content/delegation-boundary.md"
+                            }
                           }
-                        }
+                        ]
                       },
                       {
-                        "name": "delegation_boundary",
-                        "node": {
-                          "kind": "text",
-                          "id": "delegation.boundary",
-                          "source": "content/delegation-boundary.md"
-                        }
+                        "kind": "text",
+                        "id": "session.quick-capture-guidance",
+                        "source": "content/session/quick-capture.md"
                       }
                     ]
                   },
@@ -141,14 +151,24 @@
                 },
                 "children": [
                   {
-                    "kind": "input",
-                    "field": {
-                      "name": "crew_priming",
-                      "kind": "text",
-                      "description": "Rendered crew identity and predecessor letter, supplied by internal/crew.",
-                      "trim_space": true,
-                      "from": "crew/priming"
-                    }
+                    "kind": "compose",
+                    "children": [
+                      {
+                        "kind": "input",
+                        "field": {
+                          "name": "crew_priming",
+                          "kind": "text",
+                          "description": "Rendered crew identity and predecessor letter, supplied by internal/crew.",
+                          "trim_space": true,
+                          "from": "crew/priming"
+                        }
+                      },
+                      {
+                        "kind": "text",
+                        "id": "session.quick-capture-guidance",
+                        "source": "content/session/quick-capture.md"
+                      }
+                    ]
                   }
                 ]
               }
@@ -512,13 +532,103 @@
           }
         },
         {
-          "id": "user-message",
+          "id": "quick-capture-file",
+          "delivery": "cli_output",
+          "description": "Retrieve one Quick Capture attachment.",
+          "body": {
+            "kind": "text",
+            "id": "session.quick-capture-file",
+            "source": "content/session/quick-capture-file.md",
+            "bindings": [
+              {
+                "name": "name",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "name",
+                    "kind": "text",
+                    "description": "Quoted file name"
+                  }
+                }
+              },
+              {
+                "name": "media_type",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "media_type",
+                    "kind": "text",
+                    "description": "Media type"
+                  }
+                }
+              },
+              {
+                "name": "bytes",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "bytes",
+                    "kind": "text",
+                    "description": "Byte count"
+                  }
+                }
+              },
+              {
+                "name": "capture_id",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "capture_id",
+                    "kind": "text",
+                    "description": "Capture ID"
+                  }
+                }
+              },
+              {
+                "name": "attachment_id",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "attachment_id",
+                    "kind": "text",
+                    "description": "Attachment ID"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "quick-capture-file-saved",
+          "delivery": "cli_output",
+          "description": "Inspect a downloaded Quick Capture attachment.",
+          "body": {
+            "kind": "text",
+            "id": "session.quick-capture-file-saved",
+            "source": "content/session/quick-capture-file-saved.md",
+            "bindings": [
+              {
+                "name": "path",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "path",
+                    "kind": "text",
+                    "description": "Saved file path"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "quick-capture",
           "delivery": "cli_output",
           "description": "User-authored Quick Capture inbox content.",
           "body": {
             "kind": "text",
-            "id": "session.user-message",
-            "source": "content/session/user-message.md",
+            "id": "session.quick-capture",
+            "source": "content/session/quick-capture-item.md",
             "bindings": [
               {
                 "name": "message",
@@ -4875,5 +4985,5 @@
       ]
     }
   ],
-  "definitions_hash": "c969cbf93ef043b88a309e6f48bc10419299a83b64852d7d12296ddff2f8ace7"
+  "definitions_hash": "a13a1cfd37496f26844d70f1a9e87228b436cc310fdabfb842c9f49bbe6be5f4"
 }

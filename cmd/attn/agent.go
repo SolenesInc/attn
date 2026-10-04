@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -663,12 +664,12 @@ func printAgentInboxBatch(w io.Writer, result *protocol.AgentInboxBatchResult) {
 				content += " " + sourceID
 			}
 		}
-		if item.Kind == string(inbox.UserMessage) {
+		if item.Kind == string(inbox.QuickCapture) {
 			var files strings.Builder
 			for _, a := range item.Attachments {
-				fmt.Fprintf(&files, "File %q (%s, %d bytes):\n  attn agent attachment %s %s --out <path>\n  Inspect the saved file with your tools.\n", a.Name, a.MediaType, a.Bytes, protocol.Deref(item.SourceID), a.ID)
+				fmt.Fprintln(&files, prompts.RenderText("session", "quick-capture-file", prompts.Values{"name": strconv.Quote(a.Name), "media_type": a.MediaType, "bytes": strconv.Itoa(a.Bytes), "capture_id": protocol.Deref(item.SourceID), "attachment_id": a.ID}))
 			}
-			fmt.Fprintln(w, prompts.RenderText("session", "user-message", prompts.Values{"message": item.Content, "files": files.String()}))
+			fmt.Fprintln(w, prompts.RenderText("session", "quick-capture", prompts.Values{"message": item.Content, "files": files.String()}))
 			continue
 		}
 		if item.Kind != string(inbox.PeerMessage) {
@@ -740,9 +741,9 @@ commands:
         read up to 20 unread notifications in FIFO order, or one notified user or peer
         message by id. Each returned item gets its durable read receipt. The batch
         limit can be 1 through 50. The session defaults to ATTN_SESSION_ID.
-  attachment <user-message-id> <attachment-id> --out <path> [--profile <name|id>]
-    Download a saved user file from this session’s profile, then inspect it.
-    Outside a session, choose --profile when more than one profile exists.
+  attachment <capture-id> <attachment-id> --out <path> [--profile <name|id>]
+        Download a saved user file from this session's profile, then inspect it.
+        Outside a session, choose --profile when more than one profile exists.
 
   msg-status <message-id> [--session <id>] [--json]
         inspect your sent message as queued, notified, or read. The sender

@@ -5,7 +5,7 @@ import "time"
 const ProtocolVersion = "350"
 
 const (
-	ErrorCodeUserMessageNotFound  = "user_message_not_found"
+	ErrorCodeQuickCaptureNotFound = "quick_capture_not_found"
 	ErrorCodeConflict             = "conflict"
 	ErrorCodeUndeclaredCollection = "undeclared_collection"
 	ErrorCodeInvalidQuery         = "invalid_query"
@@ -18,8 +18,6 @@ const (
 const DocSubscriptionsPerClient = 64
 
 const AgentMessageMaxChars = 32 * 1024
-
-const CommandFrameMaxBytes = 64 * 1024
 
 const CapabilityBrowserHost = "browser_host"
 
@@ -37,12 +35,12 @@ const (
 )
 
 const (
-	CmdUserMessageAttachmentDiscard  = "user_message_attachment_discard"
-	CmdUserMessageAttachmentGet      = "user_message_attachment_get"
-	CmdUserMessageAttachmentPut      = "user_message_attachment_put"
-	CmdUserMessageList               = "user_message_list"
-	CmdUserMessageGet                = "user_message_get"
-	CmdUserMessageSend               = "user_message_send"
+	CmdQuickCaptureAttachmentDiscard = "quick_capture_attachment_discard"
+	CmdQuickCaptureAttachmentGet     = "quick_capture_attachment_get"
+	CmdQuickCaptureAttachmentPut     = "quick_capture_attachment_put"
+	CmdQuickCaptureList              = "quick_capture_list"
+	CmdQuickCaptureGet               = "quick_capture_get"
+	CmdQuickCaptureSend              = "quick_capture_send"
 	CmdClientHello                   = "client_hello"
 	CmdDelegate                      = "delegate"
 	CmdDelegationPreferencesGet      = "delegation_preferences_get"
@@ -338,8 +336,8 @@ const (
 const EventAutomationsChanged = "automations_changed"
 
 const (
-	EventUserMessageResult               = "user_message_result"
-	EventUserMessageChanged              = "user_message_changed"
+	EventQuickCaptureResult              = "quick_capture_result"
+	EventQuickCaptureRead                = "quick_capture_read"
 	EventSessionRegistered               = "session_registered"
 	EventSessionUnregistered             = "session_unregistered"
 	EventSessionCloseResult              = "session_close_result"

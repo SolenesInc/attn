@@ -5,7 +5,9 @@ func feedbackEvents() []Event {
 	fields := []Field{TextField("round", "Review round number."), TextField("title", "Quoted presentation title."), TextField("presentation_id", "Presentation ID.")}
 	notice := Choose(Enabled(approved), template("session.present-approved", "content/session/present-approved.md", fields...), template("session.present-submitted", "content/session/present-submitted.md", fields...))
 	return []Event{
-		On("user-message", "cli_output", "User-authored Quick Capture inbox content.", template("session.user-message", "content/session/user-message.md", TextField("message", "User message"), TextField("files", "File retrieval instructions"))),
+		On("quick-capture-file", "cli_output", "Retrieve one Quick Capture attachment.", template("session.quick-capture-file", "content/session/quick-capture-file.md", TextField("name", "Quoted file name"), TextField("media_type", "Media type"), TextField("bytes", "Byte count"), TextField("capture_id", "Capture ID"), TextField("attachment_id", "Attachment ID"))),
+		On("quick-capture-file-saved", "cli_output", "Inspect a downloaded Quick Capture attachment.", template("session.quick-capture-file-saved", "content/session/quick-capture-file-saved.md", TextField("path", "Saved file path"))),
+		On("quick-capture", "cli_output", "User-authored Quick Capture inbox content.", template("session.quick-capture", "content/session/quick-capture-item.md", TextField("message", "User message"), TextField("files", "File retrieval instructions"))),
 		On("inbox-notification", "user_message", "Generic notification directing the recipient to the durable inbox.", Use("session.inbox-notification", "content/session/inbox-notification.md")),
 		On("inbox-empty", "cli_output", "No unread items remain.", Use("session.inbox-empty", "content/session/inbox-empty.md")),
 		On("inbox-more", "cli_output", "Read the next batch of unread items.", template("session.inbox-more", "content/session/inbox-more.md", TextField("remaining", "Unread items remaining."))),

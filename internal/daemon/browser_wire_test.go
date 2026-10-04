@@ -106,8 +106,7 @@ func TestBrowserControlIsBrokeredToTheHostThatWasAsked(t *testing.T) {
 
 	ordinary := w.App()
 	ordinary.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: ordinary.Terminal(shop.ID), Data: strings.Repeat("x", 1<<20)})
-	status := ordinary.Closed()
-	if status.Code != websocket.StatusMessageTooBig {
+	if status := ordinary.Closed(); status.Code != websocket.StatusMessageTooBig {
 		t.Errorf("an app peer sending a message past the command-sized limit was closed with %d, want %d", status.Code, websocket.StatusMessageTooBig)
 	}
 	exitShells(app, shop.ID, docs.ID)
