@@ -53,7 +53,7 @@ const screenshot = async name => {
 const waitForChainFocus = (id, description) => waitForSelector(`${popup} [data-chain-session="${id}"]:focus`, description);
 const nativeTarget = async selector => {
   const [{ bounds }, { logicalBounds }, { innerWidth, innerHeight }] = await Promise.all([
-    client.request('dom_hover', { selector, leave: true }),
+    client.request('dom_scroll_into_view', { selector }),
     client.request('get_window_bounds'),
     client.request('get_terminal_context_menu_state'),
   ]);
