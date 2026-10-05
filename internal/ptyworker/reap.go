@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/victorarias/attn/internal/procreap"
@@ -22,7 +21,7 @@ type ReapOutcome string
 const (
 	ReapRemoved      ReapOutcome = "removed"
 	ReapAlreadyGone  ReapOutcome = "already gone"
-	ReapSignalled    ReapOutcome = "signalled"
+	ReapFailed       ReapOutcome = "failed"
 	ReapUnidentified ReapOutcome = "unidentified"
 )
 
@@ -38,21 +37,40 @@ func ReapDataDir(dataDir string) []ReapResult {
 	if err != nil {
 		return nil
 	}
+	quarantined, err := filepath.Glob(filepath.Join(dataDir, "workers", "*", "quarantine", "*.json.*"))
+	if err != nil {
+		return nil
+	}
+	paths = append(paths, quarantined...)
 	sort.Strings(paths)
 
 	var results []ReapResult
 	for _, path := range paths {
+		registryPath := startedRegistryPath(path)
 		entry, err := ReadRegistry(path)
-		if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
-		res := reapEntry(entry, path)
-		if res.Outcome == ReapRemoved || res.Outcome == ReapAlreadyGone || res.Outcome == ReapSignalled {
-			RemoveHandoff(path, entry.SessionID)
+		if err != nil {
+			results = append(results, ReapResult{SessionID: strings.TrimSuffix(filepath.Base(registryPath), ".json"), Outcome: ReapFailed, Err: fmt.Errorf("unreadable registry %s: %w", path, err)})
+			continue
+		}
+		res := reapEntry(entry, registryPath)
+		if res.Outcome == ReapRemoved || res.Outcome == ReapAlreadyGone {
+			RemoveHandoff(registryPath, entry.SessionID)
 		}
 		results = append(results, res)
 	}
 	return results
+}
+
+func startedRegistryPath(path string) string {
+	dir, name := filepath.Split(path)
+	if filepath.Base(dir) != "quarantine" {
+		return path
+	}
+	name, _, _ = strings.Cut(name, ".json.")
+	return filepath.Join(filepath.Dir(filepath.Dir(dir)), "registry", name+".json")
 }
 
 const workerExitGrace = 500 * time.Millisecond
@@ -61,14 +79,12 @@ func reapEntry(entry RegistryEntry, registryPath string) ReapResult {
 	res := ReapResult{SessionID: entry.SessionID, WorkerPID: entry.WorkerPID}
 
 	if entry.WorkerPID <= 0 || !procreap.ProcessAlive(entry.WorkerPID) {
-		res.Outcome = ReapAlreadyGone
-		return res
+		return workerGone(res, entry, ReapAlreadyGone)
 	}
 
 	if err := requestWorkerRemove(entry); err == nil {
-		if waitForExit(entry.WorkerPID, 5*time.Second) {
-			res.Outcome = ReapRemoved
-			return res
+		if waitForExit(entry.WorkerPID, TeardownRPCTimeout) {
+			return workerGone(res, entry, ReapRemoved)
 		}
 		res.Err = errors.New("worker accepted remove but did not exit")
 	} else {
@@ -76,17 +92,24 @@ func reapEntry(entry RegistryEntry, registryPath string) ReapResult {
 	}
 
 	if waitForExit(entry.WorkerPID, workerExitGrace) {
-		res.Outcome = ReapAlreadyGone
 		res.Err = nil
-		return res
+		return workerGone(res, entry, ReapAlreadyGone)
 	}
 	if !processHasArg(entry.WorkerPID, registryPath) {
 		res.Outcome = ReapUnidentified
 		return res
 	}
-	_ = syscall.Kill(entry.WorkerPID, syscall.SIGTERM)
-	waitForExit(entry.WorkerPID, 5*time.Second)
-	res.Outcome = ReapSignalled
+	res.Outcome = ReapFailed
+	return res
+}
+
+func workerGone(res ReapResult, entry RegistryEntry, gone ReapOutcome) ReapResult {
+	if entry.ChildPID > 0 && procreap.ProcessAlive(entry.ChildPID) {
+		res.Outcome = ReapFailed
+		res.Err = fmt.Errorf("worker exited but its child pid %d is still running", entry.ChildPID)
+		return res
+	}
+	res.Outcome = gone
 	return res
 }
 
@@ -118,10 +141,16 @@ func requestWorkerRemove(entry RegistryEntry) error {
 	if err := awaitOK(dec, "reap-hello"); err != nil {
 		return err
 	}
+	if err := conn.SetDeadline(time.Now().Add(TeardownRPCTimeout)); err != nil {
+		return err
+	}
 	if err := writeReapRequest(enc, "reap-remove", MethodRemove, map[string]any{}); err != nil {
 		return err
 	}
-	return awaitOK(dec, "reap-remove")
+	if err := awaitOK(dec, "reap-remove"); err != nil {
+		return fmt.Errorf("worker removal response (timeout %s): %w", TeardownRPCTimeout, err)
+	}
+	return nil
 }
 
 func writeReapRequest(enc *json.Encoder, id, method string, params any) error {

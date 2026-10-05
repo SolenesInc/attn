@@ -217,11 +217,11 @@ func TestActivePaneMustBelongToTheDesktop(t *testing.T) {
 	wantCode(t, err, profiles.CodeNotFound)
 
 	removed, err := s.RemoveSessionPlacement("agent-a")
-	if err != nil || removed == nil {
+	if err != nil || len(removed) != 1 {
 		t.Fatalf("RemoveSessionPlacement = %+v, %v", removed, err)
 	}
-	if removed.ActivePaneID != "" || !layouttree.LayoutEmpty(removed.Tree) {
-		t.Fatalf("emptied desktop = %+v, want no tree and no active pane", removed)
+	if removed[0].ActivePaneID != "" || !layouttree.LayoutEmpty(removed[0].Tree) {
+		t.Fatalf("emptied desktop = %+v, want no tree and no active pane", removed[0])
 	}
 	if session := s.Get("agent-a"); session == nil {
 		t.Fatal("removing a placement closed the agent")

@@ -143,7 +143,6 @@ func DesktopSlot(id string) int {
 }
 
 func checkPaneRows(desktop Desktop, inTree map[string]struct{}) (map[string]struct{}, error) {
-	sessions := make(map[string]string, len(desktop.Panes))
 	rows := make(map[string]struct{}, len(desktop.Panes))
 	for _, pane := range desktop.Panes {
 		if _, ok := inTree[pane.PaneID]; !ok {
@@ -159,10 +158,6 @@ func checkPaneRows(desktop Desktop, inTree map[string]struct{}) (map[string]stru
 		if strings.TrimSpace(pane.SessionID) == "" {
 			return nil, Errorf(CodeInvalid, "desktop %s: pane %s names no session", desktop.ID, pane.PaneID)
 		}
-		if other, dup := sessions[pane.SessionID]; dup {
-			return nil, Errorf(CodeAlreadyPlaced, "desktop %s: session %s is placed in panes %s and %s", desktop.ID, pane.SessionID, other, pane.PaneID)
-		}
-		sessions[pane.SessionID] = pane.PaneID
 		switch pane.Status {
 		case PaneStatusSpawning, PaneStatusReady, PaneStatusFailed:
 		default:

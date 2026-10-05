@@ -464,7 +464,7 @@ func (s *Store) announcePaneTerminalsLocked() {
 	if s.paneTerminals == nil || s.db == nil {
 		return
 	}
-	rows, err := s.db.Query(`SELECT runtime_id, session_id FROM desktop_panes`)
+	rows, err := s.db.Query(`SELECT runtime_id, session_id FROM desktop_panes ORDER BY created_at, pane_id`)
 	if err != nil {
 		log.Printf("[store] listing pane terminals: %v", err)
 		return

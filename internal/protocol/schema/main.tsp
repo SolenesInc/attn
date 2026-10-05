@@ -516,7 +516,7 @@ model Profile {
   revision: safeint;
 }
 
-// One agent's placement. An agent has at most one pane across the daemon.
+// One terminal tile on a desktop. Several tiles may show one session.
 model DesktopPane {
   pane_id: string;
   desktop_id: string;
