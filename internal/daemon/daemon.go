@@ -1978,7 +1978,7 @@ func (d *Daemon) recordSessionClose(sessionID string, commit func() (bool, error
 			d.logf("garden: preserving execution %s before closing it: %v", sessionID, err)
 		}
 	}
-	d.drainTranscriptWatcher(sessionID)
+	defer d.drainTranscriptWatcher(sessionID)()
 	d.forgetSessionRuntime(sessionID)
 	recorded, err := commit()
 	if err != nil {

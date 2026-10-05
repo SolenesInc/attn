@@ -100,6 +100,7 @@ export function SessionsTab({
   });
 
   useReloadWhenChanged(profileMembership, reload);
+  useReloadWhenChanged(sessionCostPricing(settings), reload);
 
   const visible = useMemo(() => entries.filter((entry) => {
     if (!matchesDir(entry.directory, parsed.dir)) return false;
@@ -340,6 +341,10 @@ function useLedgerQueryText({ restoredFilters, profileNames, facets, repository,
   }
 
   return { text, setText, parsed };
+}
+
+function sessionCostPricing(settings: Record<string, string>): string {
+  return JSON.stringify(Object.entries(settings).filter(([key]) => key.startsWith('session_cost.')).sort());
 }
 
 function useReloadWhenChanged(value: string, reload: () => void) {
