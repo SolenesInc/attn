@@ -43,6 +43,22 @@ describe('grouped error toast', () => {
     expect(screen.queryByRole('button', { name: 'Dismiss notifications' })).not.toBeInTheDocument();
   });
 
+  it('pauses while focused and fades away after focus leaves', () => {
+    vi.useFakeTimers();
+    render(<Notifications />);
+    fireEvent.click(screen.getByText('Fail'));
+    const toast = screen.getByRole('alert');
+    act(() => { toast.focus(); });
+    expect(toast).toHaveFocus();
+    act(() => { vi.advanceTimersByTime(12000); });
+    expect(toast).toHaveClass('visible');
+    expect(toast).not.toHaveTextContent('paused');
+    act(() => { screen.getByText('Fail').focus(); });
+    act(() => { vi.advanceTimersByTime(6000); });
+    act(() => { vi.advanceTimersByTime(150); });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('pauses while hovered and fades away after leaving without showing pause text', () => {
     vi.useFakeTimers();
     render(<Notifications />);

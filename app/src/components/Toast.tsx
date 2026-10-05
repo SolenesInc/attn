@@ -56,6 +56,7 @@ function ToastContent() {
       popover="manual"
       className={`toast toast--error ${fading ? '' : 'visible'}`}
       role="alert"
+      tabIndex={0}
       aria-live="assertive"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
