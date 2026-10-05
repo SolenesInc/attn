@@ -247,8 +247,11 @@ func (r *codexShared) observeStatus(s *codexServer, m codexshared.Message) {
 			return
 		}
 		turn, _ := p.Status.turn()
-		pending := session.State == protocol.SessionStatePendingApproval
-		if (turn == harness.TurnApproval && !pending) || (turn == harness.TurnRunning && pending) {
+		blocked := session.State == protocol.SessionStatePendingApproval || session.State == protocol.SessionStateWaitingInput
+		switch {
+		case turn == harness.TurnApproval && session.State != protocol.SessionStatePendingApproval,
+			turn == harness.TurnQuestion && session.State != protocol.SessionStateWaitingInput,
+			turn == harness.TurnRunning && blocked:
 			r.report(s, sessionID, turn, false)
 		}
 	})
@@ -284,12 +287,12 @@ func (r *codexShared) archive(sessionID string) {
 	if conversation == "" || session == nil {
 		return
 	}
+	defer r.d.drainTranscriptWatcher(sessionID)()
+	defer r.settleUsage(sessionID)
 	if other := r.d.store.OtherOpenSessionHolding(conversation, sessionID); other != "" {
 		r.d.logf("shared Codex: conversation %s of closed session %s stays unarchived: session %s still holds it", conversation, sessionID, other)
 		return
 	}
-	defer r.d.drainTranscriptWatcher(sessionID)()
-	defer r.settleUsage(sessionID)
 	ctx, cancel := context.WithTimeout(context.Background(), codexServerStartLimit)
 	defer cancel()
 	_, client, err := r.control(ctx, session.ProfileID)

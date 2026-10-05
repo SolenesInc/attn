@@ -265,6 +265,55 @@ func TestAConversationResumedInAnotherProfileIsThatProfilesOwnSharedCodexSession
 	}
 }
 
+func TestAHiddenSharedCodexSessionThatAsksAQuestionWaitsForTheUser(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	checkout := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
+	codex := w.Launched(checkout)
+	terminal := app.Terminal(checkout)
+	app.TypeLine(checkout, "find the flaky checkout test")
+	codex.Prompted()
+	codex.Reply("Found it. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	conversation := codex.ConversationID
+	moveOn(t, app, codex, terminal, "/new", "add a discount field")
+	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return protocol.Deref(s.Hidden) })
+
+	if got := submitSessionAnnotationFeedback(app, checkout, sessionAnnotationFeedback); !got.success {
+		t.Fatalf("feedback to the hidden session = %+v", got)
+	}
+	server := w.CodexServer()
+	server.Prompted(conversation)
+	server.AskQuestion(conversation)
+	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool {
+		return protocol.Deref(s.Hidden) && s.State == protocol.SessionStateWaitingInput
+	})
+}
+
+func TestNewInASharedCodexChiefTerminalStartsAPlainConversation(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	chief := w.Spawn(app, fakeagent.Codex, w.Path("chief"), func(m *protocol.SpawnSessionMessage) {
+		m.ChiefOfStaff = protocol.Ptr(true)
+	})
+	codex := w.Launched(chief)
+	terminal := app.Terminal(chief)
+	app.TypeLine(chief, "plan the week")
+	codex.Prompted()
+	codex.Reply("Planned. <!-- attn:state=idle -->")
+	server := w.CodexServer()
+	if got := server.Instructions(codex.ConversationID); !strings.Contains(got, "You are the chief of staff") {
+		t.Fatalf("the chief's conversation started with:\n%s\nwant the chief guidance", got)
+	}
+
+	moveOn(t, app, codex, terminal, "/new", "fix the build")
+	if got := server.Instructions(codex.ConversationID); strings.Contains(got, "You are the chief of staff") || !strings.Contains(got, agentGuidanceLead) {
+		t.Errorf("the conversation /new started in the chief's terminal began with:\n%s\nwant only the agent guidance", got)
+	}
+}
+
 func TestAHiddenSharedCodexTurnEndsWhenItsAppServerExits(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()

@@ -30,6 +30,8 @@ const (
 	methodFakeCrash      = "attn-fake/crash"
 	methodFakeTerminal   = "attn-fake/terminal"
 	methodThreadName     = "thread_name"
+	methodAskQuestion    = "ask_question"
+	methodInstructions   = "instructions"
 	codexApprovalRequest = "item/commandExecution/requestApproval"
 )
 
@@ -63,6 +65,8 @@ type codexServerThread struct {
 	subscribers    map[*codexServerConn]bool
 	approval       json.RawMessage
 	approvalID     string
+	question       bool
+	instructions   string
 }
 
 func runCodexAppServer(cfg config) int {
@@ -362,6 +366,7 @@ func (s *codexAppServer) start(conn *codexServerConn, p codexServerParams) (any,
 	if p.Ephemeral {
 		return map[string]any{"thread": map[string]any{"id": id.String(), "ephemeral": true}}, nil, nil
 	}
+	t.instructions = p.DevInstruction
 	s.mu.Lock()
 	s.threads[t.c.conversation] = t
 	s.mu.Unlock()
@@ -450,6 +455,9 @@ func (s *codexAppServer) metadata(t *codexServerThread) map[string]any {
 		if t.approval != nil {
 			flags = append(flags, "waitingOnApproval")
 		}
+		if t.question {
+			flags = append(flags, "waitingOnUserInput")
+		}
 		status = map[string]any{"type": "active", "activeFlags": flags}
 	}
 	return map[string]any{"id": t.c.conversation, "cwd": t.c.cwd, "path": t.c.transcript, "ephemeral": false, "source": "cli", "status": status}
@@ -521,7 +529,7 @@ func (s *codexAppServer) endTurn(method string, p codexServerParams) (any, func(
 		return nil, nil, err
 	}
 	s.mu.Lock()
-	t.active, t.approval, t.approvalID = false, nil, ""
+	t.active, t.approval, t.approvalID, t.question = false, nil, "", false
 	s.mu.Unlock()
 	turn := map[string]any{"id": t.c.turnID, "status": "completed"}
 	return map[string]any{}, func() {
@@ -731,6 +739,24 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 			after()
 		}
 		return struct{}{}, err
+	case methodAskQuestion:
+		t, err := s.loaded(p.ThreadID)
+		if err != nil {
+			return nil, err
+		}
+		s.mu.Lock()
+		t.question = true
+		s.mu.Unlock()
+		s.status(t)
+		return struct{}{}, nil
+	case methodInstructions:
+		s.mu.Lock()
+		t := s.threads[p.ThreadID]
+		s.mu.Unlock()
+		if t == nil {
+			return nil, fmt.Errorf("conversation %s was not started here", p.ThreadID)
+		}
+		return promptedResult{Text: t.instructions, ConversationID: p.ThreadID}, nil
 	}
 	return nil, fmt.Errorf("unknown method %q", method)
 }

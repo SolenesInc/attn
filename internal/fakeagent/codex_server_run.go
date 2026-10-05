@@ -32,6 +32,18 @@ func (s *CodexServer) AskApproval(conversation string) {
 	s.call(methodAskApproval, serverThreadParams{ThreadID: conversation}, nil)
 }
 
+func (s *CodexServer) AskQuestion(conversation string) {
+	s.t.Helper()
+	s.call(methodAskQuestion, serverThreadParams{ThreadID: conversation}, nil)
+}
+
+func (s *CodexServer) Instructions(conversation string) string {
+	s.t.Helper()
+	var started promptedResult
+	s.call(methodInstructions, serverThreadParams{ThreadID: conversation}, &started)
+	return started.Text
+}
+
 func (s *CodexServer) call(method string, params, result any) {
 	s.t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), HangGuard)

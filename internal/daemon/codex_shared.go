@@ -511,12 +511,17 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 		config["shell_environment_policy.set."+key] = value
 	}
 	config["features.hooks"] = true
-	if limit := r.d.launchContextWindowCap(sessionID, string(protocol.SessionAgentCodex), r.d.isChiefOfStaffSession(sessionID)); limit > 0 {
+	// A new conversation in a terminal that shows one becomes a plain successor: no chief or crew role.
+	launchAs, chief := sessionID, r.d.isChiefOfStaffSession(sessionID)
+	if method != "thread/resume" && r.conversation(sessionID) != "" {
+		launchAs, chief = "", false
+	}
+	if limit := r.d.launchContextWindowCap(launchAs, string(protocol.SessionAgentCodex), chief); limit > 0 {
 		config["model_auto_compact_token_limit"] = limit
 	}
 	// Codex ignores developerInstructions on thread/resume: a conversation keeps the ones it started with.
 	if method != "thread/resume" {
-		if instructions := r.instructions(sessionID); instructions != "" {
+		if instructions := r.instructions(launchAs, v.profile, chief); instructions != "" {
 			prior, _ := params["developerInstructions"].(string)
 			params["developerInstructions"] = strings.TrimSpace(prior + "\n\n" + instructions)
 		}
@@ -553,12 +558,8 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 	}, nil
 }
 
-func (r *codexShared) instructions(sessionID string) string {
-	session := r.d.store.Get(sessionID)
-	if session == nil {
-		return ""
-	}
-	launch, err := r.d.preparePluginLaunchInstructions(sessionID, session.ProfileID, r.d.isChiefOfStaffSession(sessionID), false)
+func (r *codexShared) instructions(sessionID, profile string, chief bool) string {
+	launch, err := r.d.preparePluginLaunchInstructions(sessionID, profile, chief, false)
 	if err != nil {
 		r.d.logf("shared Codex: no attn instructions for session %s: %v", sessionID, err)
 		return ""
