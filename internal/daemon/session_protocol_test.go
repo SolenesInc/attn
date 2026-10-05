@@ -3,16 +3,12 @@ package daemon
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"path/filepath"
 	"slices"
-	"syscall"
 	"testing"
 	"time"
 
-	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
@@ -58,30 +54,3 @@ func expectSpawnResult(t *testing.T, client *wsClient, sessionID string, success
 		}
 	}
 }
-
-type failingSpawnBackend struct {
-	err error
-}
-
-func (b *failingSpawnBackend) Spawn(context.Context, ptybackend.SpawnOptions) error {
-	return b.err
-}
-func (b *failingSpawnBackend) Attach(context.Context, harness.TerminalID, string, ...ptybackend.AttachOptions) (ptybackend.AttachInfo, ptybackend.Stream, error) {
-	return ptybackend.AttachInfo{}, nil, errors.New("attach unsupported")
-}
-func (b *failingSpawnBackend) Input(context.Context, harness.TerminalID, []byte) error { return nil }
-func (b *failingSpawnBackend) Resize(context.Context, harness.TerminalID, uint16, uint16, uint16, uint16) (ptybackend.ResizeResult, error) {
-	return ptybackend.ResizeResult{Changed: true}, nil
-}
-func (b *failingSpawnBackend) SetTheme(context.Context, harness.TerminalID, pty.TerminalTheme) error {
-	return nil
-}
-func (b *failingSpawnBackend) Kill(context.Context, harness.TerminalID, syscall.Signal) error {
-	return nil
-}
-func (b *failingSpawnBackend) Remove(context.Context, harness.TerminalID) error { return nil }
-func (b *failingSpawnBackend) TerminalIDs(context.Context) []harness.TerminalID { return nil }
-func (b *failingSpawnBackend) Recover(context.Context) (ptybackend.RecoveryReport, error) {
-	return ptybackend.RecoveryReport{}, nil
-}
-func (b *failingSpawnBackend) Shutdown(context.Context) error { return nil }

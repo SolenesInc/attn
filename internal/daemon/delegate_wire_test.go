@@ -283,3 +283,24 @@ func TestADelegationThatCannotBePlacedIsRefusedBeforeAnythingLaunches(t *testing
 		t.Errorf("after only refused delegations the app sees sessions %+v, want only the two it started", after.Sessions)
 	}
 }
+
+func TestADelegateAtACustomDirectoryStaysBesideItsCaller(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	source, desktop, _ := w.RequestSpawn(app, fakeagent.Codex, w.Path("source"))
+	target := w.Path("target")
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	request := delegateFrom(source.ID, target, "Work in the target directory", fakeagent.Codex)
+	result, err := cli.Delegate(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Directory != target || protocol.Deref(result.DesktopID) != desktop {
+		t.Fatalf("delegation = %+v; want %s beside the source on %s", result, target, desktop)
+	}
+	if session := sessionOfDelegate(t, w, result.SessionID); session.Directory != target {
+		t.Errorf("session directory = %s; want %s", session.Directory, target)
+	}
+}

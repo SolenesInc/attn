@@ -3,13 +3,10 @@ package daemon
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/victorarias/attn/internal/enrollment"
-	"github.com/victorarias/attn/internal/git"
 )
 
 func decidedReopenVerdict(t *testing.T, d *Daemon, sessionID string) *sessionReopenVerdict {
@@ -41,17 +38,6 @@ func drainClientPayloads(t *testing.T, client *wsClient) [][]byte {
 	}
 }
 
-func gitRevParseDaemon(t *testing.T, dir, rev string) string {
-	t.Helper()
-	cmd := exec.Command("git", "rev-parse", rev)
-	cmd.Dir = dir
-	out, err := cmd.Output()
-	if err != nil {
-		t.Fatalf("git rev-parse %s in %s failed: %v", rev, dir, err)
-	}
-	return strings.TrimSpace(string(out))
-}
-
 func homeDaemon(t *testing.T, d *Daemon) *Daemon {
 	t.Helper()
 	if d.dataRoot == "" {
@@ -66,17 +52,6 @@ func homeDaemon(t *testing.T, d *Daemon) *Daemon {
 		t.Fatalf("ensureEnrollment: %v", err)
 	}
 	return d
-}
-
-func initDelegationRepo(t *testing.T, root, name string) string {
-	t.Helper()
-	repo := filepath.Join(root, name)
-	if err := os.MkdirAll(repo, 0o755); err != nil {
-		t.Fatalf("mkdir %s: %v", name, err)
-	}
-	runGitDaemon(t, repo, "init")
-	runGitDaemon(t, repo, "commit", "--allow-empty", "-m", "init")
-	return git.CanonicalizePath(repo)
 }
 
 func spawnCount(backend *fakeSpawnBackend) int {
