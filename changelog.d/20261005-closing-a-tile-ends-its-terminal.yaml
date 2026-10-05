@@ -1,0 +1,3 @@
+kind: internal
+area: desktops
+change: The daemon decides what closing a terminal tile means. Closing one while another terminal still runs its session ends only that terminal and its tile; closing the last one closes the session as before. A session that takes over a terminal keeps its tiles whose terminals still run. attn still gives a session one terminal, so nothing changes yet.

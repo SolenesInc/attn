@@ -2,7 +2,7 @@ import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { openSession } from './test/appFixtures';
 import { daemonSession } from './test/daemonFixtures';
-import { pane, relayOut, renderDesktop, split } from './test/desktopLayouts';
+import { closeTileAnswer, pane, relayOut, renderDesktop, split } from './test/desktopLayouts';
 import { pressShortcut } from './test/renderApp';
 
 describe('desktop close focus', () => {
@@ -14,12 +14,14 @@ describe('desktop close focus', () => {
         ['a', 'b', 'c'],
       );
       for (const id of ['a', 'b', 'c']) await openSession(daemon, id);
+      const remaining = split('ab', 'vertical', [pane('a'), pane('b')]);
       daemon.on('unregister', ({ id }) => {
-        relayOut(daemon, split('ab', 'vertical', [pane('a'), pane('b')]), ['a', 'b'], { active: 'pane-b' });
+        relayOut(daemon, remaining, ['a', 'b'], { active: 'pane-b' });
         return { event: 'session_unregistered', session: daemonSession(id) };
       });
+      daemon.on('desktop_close_tile', (command) => closeTileAnswer(daemon, command, 'c', remaining, ['a', 'b'], { active: 'pane-b' }));
 
-      if (entry === 'pane shortcut') pressShortcut('terminal.close');
+      if (entry === 'pane shortcut') pressShortcut('terminal.close', document.querySelector('[data-pane-id="pane-c"] .terminal-container')!);
       if (entry === 'session shortcut') pressShortcut('session.close');
       if (entry === 'sidebar action') {
         fireEvent.click(screen.getByRole('button', { name: 'Actions for c' }));
@@ -30,7 +32,11 @@ describe('desktop close focus', () => {
       }
       await daemon.idle();
 
-      expect(daemon.sentOf('unregister')).toEqual([{ cmd: 'unregister', id: 'c' }]);
+      expect(daemon.sent.filter(({ cmd }) => cmd === 'unregister' || cmd === 'desktop_close_tile')).toEqual([
+        entry === 'pane shortcut'
+          ? { cmd: 'desktop_close_tile', request_id: expect.any(String), desktop_id: 'ws', tile_id: 'pane-c' }
+          : { cmd: 'unregister', id: 'c' },
+      ]);
       expect(document.querySelector('[data-session-terminal-desktop="ws"]')).toHaveAttribute('data-active-leaf-id', 'pane-b');
       expect(document.activeElement?.closest('[data-pane-id]')).toHaveAttribute('data-pane-id', 'pane-b');
       expect(daemon.sentOf('desktop_show_leaf')).toEqual([]);

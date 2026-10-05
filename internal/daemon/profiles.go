@@ -6,10 +6,12 @@ import (
 	"errors"
 	"github.com/victorarias/attn/internal/crew"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/enrollment"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
@@ -582,6 +584,31 @@ func (d *Daemon) handleDesktopRemoveLeaf(client *wsClient, msg *protocol.Desktop
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
 		desktop, err := d.store.RemoveLeaf(msg.DesktopID, msg.LeafID, int64(msg.ExpectedRevision))
 		return d.desktopChanged(desktop), err
+	})
+}
+
+func (d *Daemon) handleDesktopCloseTile(client *wsClient, msg *protocol.DesktopCloseTileMessage) {
+	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
+		desktop, err := d.store.GetDesktop(msg.DesktopID)
+		if err != nil {
+			return profileActionOutcome{}, err
+		}
+		i := slices.IndexFunc(desktop.Panes, func(pane profiles.Pane) bool { return pane.PaneID == msg.TileID })
+		if i < 0 {
+			return profileActionOutcome{}, profiles.Errorf(profiles.CodeNotFound, "desktop %s has no terminal tile %s", msg.DesktopID, msg.TileID)
+		}
+		tile := desktop.Panes[i]
+		if d.closeTerminal(tile.SessionID, harness.TerminalID(tile.RuntimeID)) {
+			closing, err := d.beginUserSessionClose(tile.SessionID, store.SessionClose{By: store.SessionClosedByUser}, client)
+			if err != nil {
+				return profileActionOutcome{}, err
+			}
+			d.finishSessionClose(tile.SessionID, closing)
+		} else {
+			d.detachSession(client, tile.RuntimeID)
+		}
+		desktop, err = d.store.GetDesktop(msg.DesktopID)
+		return profileActionOutcome{desktops: []profiles.Desktop{desktop}, arranges: true}, err
 	})
 }
 

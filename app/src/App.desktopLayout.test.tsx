@@ -6,7 +6,7 @@ import { emptyDesktop, soloDesktop, daemonSession } from './test/daemonFixtures'
 import { fakeRects } from './test/layout';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { Reply, ScriptedDaemon } from './test/scriptedDaemon';
-import { pane, relayOut, renderDesktop, split } from './test/desktopLayouts';
+import { closeTileAnswer, pane, relayOut, renderDesktop, split } from './test/desktopLayouts';
 import { serveLaunches } from './test/locations';
 
 const PANES_WIDTH = 4000;
@@ -512,16 +512,15 @@ describe('App desktop layout', () => {
       const { daemon } = await openDesktop(split('split-a', 'vertical', [pane('s1'), split('split-b', 'vertical', [pane('s2'), pane('s3')])]), ids);
       for (const id of used) await choose(daemon, id);
       const closing = used[used.length - 1];
-      daemon.on('unregister', ({ id }) => {
-        const remaining = ids.filter((other) => other !== id);
-        relayOut(daemon, split('split-a', 'vertical', remaining.map((other) => pane(other))), remaining, { active: `pane-${daemonActive}` });
-        return { event: 'session_unregistered', session: daemonSession(id) };
+      daemon.on('desktop_close_tile', (command) => {
+        const remaining = ids.filter((other) => `pane-${other}` !== command.tile_id);
+        return closeTileAnswer(daemon, command, closing, split('split-a', 'vertical', remaining.map((other) => pane(other))), remaining, { active: `pane-${daemonActive}` });
       });
 
       pressShortcut('terminal.close', document.querySelector(`[data-pane-id="pane-${closing}"] .terminal-container`)!);
       await daemon.idle();
 
-      expect(daemon.sentOf('unregister').map(({ id }) => id)).toEqual([closing]);
+      expect(daemon.sentOf('desktop_close_tile').map(({ tile_id }) => tile_id)).toEqual([`pane-${closing}`]);
       expect(activePane()).toBe(`pane-${daemonActive}`);
     });
   });

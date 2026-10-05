@@ -2857,6 +2857,15 @@ model DesktopRemoveLeafMessage {
   expected_revision: safeint;
 }
 
+// Closes a terminal tile. While another terminal runs its session, only this
+// terminal ends; otherwise the session closes as unregister closes it.
+model DesktopCloseTileMessage {
+  cmd: "desktop_close_tile";
+  request_id: string;
+  desktop_id: string;
+  tile_id: string;
+}
+
 model DesktopSetSplitRatioMessage {
   cmd: "desktop_set_split_ratio";
   request_id: string;

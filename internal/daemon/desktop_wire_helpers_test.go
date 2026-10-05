@@ -42,6 +42,12 @@ func closeFromApp(app *testworld.Peer, sessionID string) protocol.SessionCloseRe
 		protocol.EventSessionCloseResult, func(r protocol.SessionCloseResultMessage) bool { return r.SessionID == sessionID })
 }
 
+func closeTileFromApp(app *testworld.Peer, desktopID, tileID string) protocol.ProfileActionResultMessage {
+	app.T.Helper()
+	requestID := "close-" + tileID
+	return profileRequest(app, protocol.DesktopCloseTileMessage{Cmd: protocol.CmdDesktopCloseTile, RequestID: requestID, DesktopID: desktopID, TileID: tileID}, requestID)
+}
+
 func placedPane(t *testing.T, w *world, sessionID string) (protocol.Desktop, string) {
 	t.Helper()
 	for _, desktop := range w.App().Initial.Desktops {

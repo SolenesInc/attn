@@ -37,13 +37,19 @@ func TestTheChiefAndCrewMembersCannotBeClosedButTheirNeighboursCan(t *testing.T)
 		if refused := testworld.Refused(app); protocol.Deref(refused.Cmd) != protocol.CmdUnregister || !strings.Contains(protocol.Deref(refused.Error), p.refusal) {
 			t.Errorf("unregister %s refused with %s: %q, want %q", p.pane.session, protocol.Deref(refused.Cmd), protocol.Deref(refused.Error), p.refusal)
 		}
+		desktop, tile := placedPane(t, w, p.pane.session)
+		if refused := closeTileFromApp(app, desktop.ID, tile); refused.Success || !strings.Contains(protocol.Deref(refused.Error), p.refusal) {
+			t.Errorf("closing the tile of %s answered success=%v %q, want the refusal %q", p.pane.session, refused.Success, protocol.Deref(refused.Error), p.refusal)
+		}
 	}
 
 	app.Send(protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: unregistered.session})
 	testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool {
 		return e.Session != nil && e.Session.ID == unregistered.session
 	})
-	closePane(app, worker)
+	if closed := closeTileFromApp(app, worker.desktop, worker.pane); !closed.Success {
+		t.Fatalf("close the tile of %s: %s", worker.session, protocol.Deref(closed.Error))
+	}
 	testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool {
 		return e.Session != nil && e.Session.ID == worker.session
 	})
@@ -71,5 +77,10 @@ func TestTheChiefAndCrewMembersCannotBeClosedButTheirNeighboursCan(t *testing.T)
 		return desktop.ID == chief.desktop && slices.ContainsFunc(desktop.Panes, func(pane protocol.DesktopPane) bool { return pane.PaneID == chief.pane })
 	}) {
 		t.Errorf("the refused close removed pane %s of %s from its desktop", chief.pane, chief.session)
+	}
+	if slices.ContainsFunc(view.Desktops, func(desktop protocol.Desktop) bool {
+		return slices.ContainsFunc(desktop.Panes, func(pane protocol.DesktopPane) bool { return pane.PaneID == worker.pane })
+	}) {
+		t.Errorf("closing the tile of %s left it on its desktop", worker.session)
 	}
 }

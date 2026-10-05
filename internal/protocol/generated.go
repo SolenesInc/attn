@@ -3220,6 +3220,20 @@ type Desktop struct {
 	TreeJson string `json:"tree_json"`
 }
 
+type DesktopCloseTileMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID string `json:"desktop_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// TileID corresponds to the JSON schema field "tile_id".
+	TileID string `json:"tile_id"`
+}
+
 type DesktopCreateMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`

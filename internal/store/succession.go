@@ -20,11 +20,12 @@ type Succession struct {
 	Launch       LaunchIntent
 	Close        SessionClose
 	KeepFrom     bool
+	Live         map[string]bool
 }
 
 // CommitSuccession opens sc.To, or reopens it when it exists, in the pane that holds terminal; the pane now
-// shows it and To's other panes, whose terminals are dead, close. sc.From closes into the ledger in the same
-// transaction unless KeepFrom. It returns the desktops it changed, terminal's first.
+// shows it and To's other panes close unless their terminals are Live. sc.From closes into the ledger in the
+// same transaction unless KeepFrom. It returns the desktops it changed, terminal's first.
 func (s *Store) CommitSuccession(sc Succession, terminal string) ([]profiles.Desktop, error) {
 	var changed []profiles.Desktop
 	err := s.profilesTx(func(tx *sql.Tx, now string) error {
@@ -55,7 +56,7 @@ func (s *Store) CommitSuccession(sc Succession, terminal string) ([]profiles.Des
 		if err := tx.QueryRow(`SELECT desktop_id FROM desktop_panes WHERE runtime_id = ?`, terminal).Scan(&desktopID); err != nil {
 			return fmt.Errorf("no pane holds terminal %s: %w", terminal, err)
 		}
-		dead, err := removeSessionPlacement(tx, now, sc.To)
+		dead, err := removeSessionTiles(tx, now, sc.To, sc.Live)
 		if err != nil {
 			return fmt.Errorf("close the dead panes of %s: %w", sc.To, err)
 		}

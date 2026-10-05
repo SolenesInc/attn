@@ -24,15 +24,17 @@ func unregisterSessionClose(msg *protocol.UnregisterMessage) store.SessionClose 
 	return closed
 }
 
-func (d *Daemon) handleUnregisterWS(client *wsClient, msg *protocol.UnregisterMessage) {
-	if closeErr := d.sessionCloseError(msg.ID); closeErr != nil {
-		d.logf("refusing to unregister protected session %s: %v", msg.ID, closeErr)
-		d.sendCommandError(client, protocol.CmdUnregister, closeErr.Error())
-		d.answerSessionClose(client, msg.ID, closeErr)
-		return
+func (d *Daemon) beginUserSessionClose(sessionID string, closed store.SessionClose, client *wsClient) (sessionCloseInFlight, error) {
+	if err := d.sessionCloseError(sessionID); err != nil {
+		d.logf("refusing to close protected session %s: %v", sessionID, err)
+		return sessionCloseInFlight{}, err
 	}
-	d.logf("Unregistering session %s via WebSocket", msg.ID)
-	closing, err := d.beginSessionClose(msg.ID, unregisterSessionClose(msg), client)
+	d.logf("closing session %s for a client", sessionID)
+	return d.beginSessionClose(sessionID, closed, client)
+}
+
+func (d *Daemon) handleUnregisterWS(client *wsClient, msg *protocol.UnregisterMessage) {
+	closing, err := d.beginUserSessionClose(msg.ID, unregisterSessionClose(msg), client)
 	if err != nil {
 		d.sendCommandError(client, protocol.CmdUnregister, err.Error())
 		d.answerSessionClose(client, msg.ID, err)

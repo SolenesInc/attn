@@ -34,10 +34,10 @@ export function useSessionLifecycle({
   chooseReopenDirectory,
   onReopened,
 }: Options) {
-  const { sendUnregisterSession, sendSessionReopen } = useDaemonApi();
+  const { sendUnregisterSession, sendDesktopCloseTile, sendSessionReopen } = useDaemonApi();
   const { closeSession, reloadSession } = useSessionStore();
-  const handleCloseSession = useCallback(
-    async (id: string) => {
+  const closeWith = useCallback(
+    async (id: string, close: () => Promise<unknown>) => {
       const closeProtection = sessionCloseProtectionHint(daemonSessions, id);
       if (closeProtection) {
         showError(closeProtection);
@@ -47,12 +47,24 @@ export function useSessionLifecycle({
 
       const localDaemonSession = daemonSessions.find((ds) => ds.id === session?.id);
       if (localDaemonSession && session) {
-        await sendUnregisterSession(session.id);
+        await close();
       } else {
         closeSession(id);
       }
     },
-    [closeSession, daemonSessions, enrichedLocalSessions, sendUnregisterSession, showError],
+    [closeSession, daemonSessions, enrichedLocalSessions, showError],
+  );
+  const handleCloseSession = useCallback(
+    (id: string) => closeWith(id, () => sendUnregisterSession(id)),
+    [closeWith, sendUnregisterSession],
+  );
+  const handleCloseTerminalTile = useCallback(
+    (desktopId: string, tileId: string, sessionId: string) => {
+      void closeWith(sessionId, () => sendDesktopCloseTile(desktopId, tileId)).catch((error) => {
+        showError(`Could not close that tile: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    },
+    [closeWith, sendDesktopCloseTile, showError],
   );
 
   const handleRequestCloseSession = useCallback(
@@ -134,6 +146,7 @@ export function useSessionLifecycle({
   return {
     handleCloseCurrentSessionShortcut,
     handleCloseSession,
+    handleCloseTerminalTile,
     handleRequestCloseSession,
     handleReloadSession,
     handleReopenSession,

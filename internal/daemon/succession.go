@@ -1,6 +1,8 @@
 package daemon
 
 import (
+	"context"
+
 	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/harness"
@@ -34,7 +36,12 @@ func (d *Daemon) shows(t harness.TerminalID, from *protocol.Session, owner strin
 
 func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.Succession, observation agentConversationObservation) error {
 	unlockEnds := d.lockTerminalEnds(from.ID)
-	sc.KeepFrom = d.othersRun(from.ID, t)
+	live := d.liveTerminals(context.Background())
+	sc.KeepFrom = d.othersRun(live, from.ID, t)
+	sc.Live = make(map[string]bool, len(live))
+	for id := range live {
+		sc.Live[string(id)] = true
+	}
 	release := func() {}
 	if !sc.KeepFrom {
 		release = d.drainTranscriptWatcher(from.ID)
