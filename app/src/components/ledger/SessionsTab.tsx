@@ -384,6 +384,8 @@ function verdictId(verbId: string): string {
   return verbId.startsWith('act:') ? verbId.slice(4) : verbId;
 }
 
+const HIDDEN_HINT = 'Live in a shared Codex, but no tile shows it. Focus opens it in a tile.';
+
 interface RowContext {
   nameText: (text: string) => string;
   verdict: ReopenVerdictView | undefined;
@@ -419,6 +421,7 @@ function sessionRow(entry: SessionLedgerEntry, context: RowContext): RowModel {
     profileText(entry) || null,
     <span className="is-mono is-path" title={entry.directory} key="dir">{shortPath(entry.directory)}</span>,
     entry.branch ? <span className="is-mono" key="branch">{entry.branch}</span> : null,
+    context.live && entry.hidden ? <span key="hidden" title={HIDDEN_HINT}>hidden</span> : null,
   ];
   if (closed) {
     meta.push(`closed by ${closedBySomeone(entry, context.sessionLabel)}${entry.close_reason ? `: ${context.nameText(entry.close_reason)}` : ''}`);
@@ -441,6 +444,7 @@ function sessionRow(entry: SessionLedgerEntry, context: RowContext): RowModel {
     yank: entry.directory,
     attrs: {
       state: closed ? 'closed' : entry.state,
+      hidden: context.live && entry.hidden ? 'true' : 'false',
       verbs: JSON.stringify(verbs.map((verb) => verb.label)),
       profile: entry.profile_id,
       'profile-label': profileText(entry),
@@ -530,6 +534,7 @@ function SessionKicker({ entry, live }: { entry: SessionLedgerEntry; live: boole
     <>
       <span className={`ledger-glyph is-${sessionGlyph(entry, live)}`} aria-hidden="true" />
       <span>{isClosed(entry) ? 'closed' : entry.state}</span>
+      {live && entry.hidden && <span title={HIDDEN_HINT}>· hidden</span>}
       <span>·</span>
       <span>{entry.agent}</span>
     </>

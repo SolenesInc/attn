@@ -243,6 +243,9 @@ func sessionLedgerState(entry protocol.SessionLedgerEntry) string {
 	if protocol.Deref(entry.ClosedAt) != "" {
 		return "closed"
 	}
+	if protocol.Deref(entry.Hidden) {
+		return string(entry.State) + " (hidden)"
+	}
 	return string(entry.State)
 }
 

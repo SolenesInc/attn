@@ -120,10 +120,15 @@ export function useAppSessions({
     () => desktopViews.flatMap((group) => group.sessions),
     [desktopViews],
   );
+  const hiddenSessions = useMemo(() => {
+    const shown = new Set(profileSessions.map((session) => session.id));
+    return visibleEnrichedSessions.filter((session) => session.hidden && !shown.has(session.id));
+  }, [profileSessions, visibleEnrichedSessions]);
 
   return {
     desktopViews,
     profileSessions,
+    hiddenSessions,
     liveGardenSessions,
     gardenSessionLabels,
     worktreePanelSessions,

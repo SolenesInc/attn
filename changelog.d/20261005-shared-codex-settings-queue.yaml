@@ -1,0 +1,12 @@
+kind: added
+area: settings
+change: >
+  Settings has an Experimental section with a Shared Codex switch (off by
+  default; applies to new Codex terminals) and the Shared PTY host switch,
+  which moved there from Terminal; the Terminal section and its Runtime mode
+  display are gone. With Shared Codex on, a conversation a terminal moved away from
+  stays live as a hidden session: it queues like any other, without a desktop
+  chip, and choosing it opens it in a tile on the current desktop. "Show hidden
+  sessions in the queue" (on by default) turns those rows off. The Sessions
+  ledger marks live hidden sessions, and `attn session list` and `show` say
+  "(hidden)".

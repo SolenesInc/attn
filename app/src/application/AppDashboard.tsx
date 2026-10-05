@@ -4,7 +4,6 @@ import { activityStaleMs } from '../utils/activitySettings';
 import {
   useAppErrorsContext,
   useAppInputs,
-  useAppSessionsContext,
   useAppPanelsContext,
   useAttentionQueueContext,
   useNavigationContext,
@@ -13,7 +12,6 @@ import {
 } from './AppContexts';
 
 export function AppDashboard() {
-  const { profileSessions } = useAppSessionsContext();
   const { view, followNextTurn, setFollowNextTurn, handleSelectSession } = useNavigationContext();
   const { prs, daemonEndpoints, settings } = useAppInputs();
   const { hasReceivedInitialState, rateLimit, sendWakeTurn } = useDaemonApi();
@@ -21,14 +19,14 @@ export function AppDashboard() {
   const { isRefreshingPRs, refreshError, handleRefreshPRs } = usePRLauncherContext();
   const { handleRebootstrapEndpoint } = useAppErrorsContext();
   const { setSettingsOpen, whatsNew } = useAppPanelsContext();
-  const { queueModeEnabled, crewQueueEnabled } = useAttentionQueueContext();
+  const { queueModeEnabled, crewQueueEnabled, queueSessions } = useAttentionQueueContext();
   const { handleNewSession } = useSessionLaunchContext();
   const { handleOpenPR } = usePRLauncherContext();
   return (
     <>
       <div className={`view-container ${view === 'dashboard' ? 'visible' : 'hidden'}`}>
         <Dashboard
-          sessions={profileSessions}
+          sessions={queueSessions}
           prs={prs}
           isLoading={!hasReceivedInitialState}
           isRefreshing={isRefreshingPRs}
