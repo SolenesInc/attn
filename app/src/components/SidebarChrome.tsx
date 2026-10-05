@@ -169,10 +169,9 @@ export function SidebarFooter() {
 }
 
 export function SidebarSleepingCrew() {
-  const { crew, desktops, onManageCrew, onWakeCrewMember, openCrewMemberActions } = useSidebarContext();
+  const { crew, onManageCrew, onWakeCrewMember, openCrewMemberActions } = useSidebarContext();
   if (!crew?.length) return null;
-  const awakeMembers = new Set(desktops.flatMap((desktop) => desktop.sessions.map((session) => session.crewMember)));
-  const sleeping = crew.filter((member) => !awakeMembers.has(member.id));
+  const sleeping = crew.filter((member) => !member.binding_session);
   return (
     <div className="sidebar-sleeping-crew">
       <div className="queue-section-rule queue-crew-rule">

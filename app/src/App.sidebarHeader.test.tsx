@@ -48,4 +48,11 @@ describe('shared sidebar header', () => {
     await gesture(daemon, () => fireEvent.click(wake));
     expect(daemon.sentOf('crew_wake')).toEqual([expect.objectContaining({ member: 'asleep' })]);
   });
+
+  it('keeps bound crew awake before their session and desktop arrive', async () => {
+    await renderApp({ initialState: {
+      crew: [crewMember('awake', { binding_session: 'pending-session' })],
+    } });
+    expect(screen.queryByTestId('queue-crew-awake')).toBeNull();
+  });
 });

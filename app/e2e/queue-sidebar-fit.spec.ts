@@ -36,3 +36,22 @@ for (const flow of ['queue', 'desktop']) {
     await expect(page.getByRole('menu', { name: 'Actions for Birch' })).toBeVisible();
   });
 }
+
+test('scrolls sleeping crew and desktops together in a short desktop window', async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 500 });
+  await page.goto('/test-harness/?component=QueueSidebarFit&desktop&largeCrew');
+  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  const commands = page.getByRole('button', { name: 'Commands', exact: true });
+  await expect(commands).toBeInViewport({ ratio: 1 });
+  const header = await commands.boundingBox();
+  const lastCrew = page.getByTestId('queue-crew-wake-sleeping-snoozed-2');
+  await lastCrew.scrollIntoViewIfNeeded();
+  await expect(lastCrew).toBeInViewport({ ratio: 1 });
+  await lastCrew.click();
+  await lastCrew.click();
+  expect(await page.evaluate(() => window.__HARNESS__.getCalls('wake'))).toEqual([['sleeping-snoozed-2']]);
+  const session = page.getByTestId('sidebar-session-snoozed-2');
+  await session.scrollIntoViewIfNeeded();
+  await expect(session).toBeInViewport({ ratio: 1 });
+  expect(await commands.boundingBox()).toEqual(header);
+});

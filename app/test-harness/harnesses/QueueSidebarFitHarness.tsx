@@ -43,6 +43,12 @@ const desktop: Desktop = {
 const desktops = buildDesktopViewModels([desktop], sessions);
 
 export function QueueSidebarFitHarness({ onReady, setTriggerRerender }: HarnessProps) {
+  const params = new URLSearchParams(window.location.search);
+  const desktopFlow = params.has('desktop');
+  const crew = [{ id: 'alder', binding_session: 'crew-awake' }, { id: 'birch' }, { id: 'cedar' }];
+  if (params.has('largeCrew')) {
+    crew.push(...sessions.map((session) => ({ id: `sleeping-${session.id}` })));
+  }
   useEffect(() => {
     onReady();
     setTriggerRerender(() => noop);
@@ -52,14 +58,14 @@ export function QueueSidebarFitHarness({ onReady, setTriggerRerender }: HarnessP
       <div className="app-frame">
         <Sidebar
           collapsed={false}
-          surface={new URLSearchParams(window.location.search).has('desktop') ? 'tree-open' : 'queue-open'}
+          surface={desktopFlow ? 'tree-open' : 'queue-open'}
           selectedId={null}
           selectedDesktopId="desk-1"
           headerActions={[]}
           desktops={desktops}
           visualIndexByDesktopId={new Map([['desk-1', 0]])}
-          queue={buildQueueBands(desktops)}
-          crew={[{ id: 'alder', binding_session: 'crew-awake' }, { id: 'birch' }, { id: 'cedar' }]}
+          queue={desktopFlow ? null : buildQueueBands(desktops)}
+          crew={crew}
           profileName="Harness"
           onSelectSession={noop}
           onWakeCrewMember={(member) => window.__HARNESS__.recordCall('wake', [member])}

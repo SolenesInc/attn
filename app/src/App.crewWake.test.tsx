@@ -164,7 +164,10 @@ describe('App crew in the queue', () => {
   });
 
   it('shows sleeping crew above desktops while the queue is off', async () => {
-    await renderRoster({ days: [keelDay()], settings: {} });
+    await renderApp({ initialState: {
+      crew: [crewMember('alder'), crewMember('keel', { binding_session: 'sess-keel' })],
+      sessions: [keelDay()], desktops: [soloDesktop('sess-keel')],
+    } });
 
     expect(crewRow('alder')).toHaveAttribute('data-crew-state', 'asleep');
     expect(screen.queryByTestId('queue-crew-keel')).toBeNull();

@@ -66,10 +66,9 @@ function SidebarExpanded() {
         <span className="sidebar-home-shortcut">{formatShortcut('session.goToDashboard')}</span>
       </button>
 
-      <SidebarSleepingCrew />
-      <SidebarDesktopOverview />
-
       <div className={`session-list ${reorderDrag ? 'session-list--reordering' : ''}`.trim()}>
+        <SidebarSleepingCrew />
+        <SidebarDesktopOverview />
         <SidebarDesktopList />
         {leafDrag && (
           <div
