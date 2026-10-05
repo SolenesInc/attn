@@ -70,8 +70,9 @@ Probed on 0.160.0 with a mock model. Shared Codex relies on these.
   even while the server holds it in memory. A `--remote` TUI that loses its
   socket reconnects and resumes the conversation it shows, so one never
   written cannot come back.
-- `thread/resume` of a conversation on disk accepts `config` and
-  `developerInstructions` while another connection holds it.
+- `thread/resume` ignores `developerInstructions`: a conversation keeps the
+  ones it started with. Its `config` (such as `model_auto_compact_token_limit`)
+  applies when the resume loads the conversation.
 - Every connection hears `thread/status/changed` (`idle`, `notLoaded`, or
   `active` with `waitingOnApproval`), `thread/name/updated` and `thread/closed`
   for every conversation; only subscribers hear turns, items and approvals.

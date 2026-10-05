@@ -480,6 +480,11 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 		return nil, nil
 	}
 	sessionID := r.d.callerID(string(v.terminal))
+	if conversation, _ := params["threadId"].(string); method == "thread/resume" && conversation != "" {
+		if holder := r.holder(v.profile, conversation); holder != "" {
+			sessionID = holder
+		}
+	}
 	config, _ := params["config"].(map[string]any)
 	if config == nil {
 		config = make(map[string]any)
@@ -492,11 +497,12 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 	} {
 		config["shell_environment_policy.set."+key] = value
 	}
+	config["features.hooks"] = true
+	if limit := r.d.launchContextWindowCap(sessionID, string(protocol.SessionAgentCodex), r.d.isChiefOfStaffSession(sessionID)); limit > 0 {
+		config["model_auto_compact_token_limit"] = limit
+	}
+	// Codex ignores developerInstructions on thread/resume: a conversation keeps the ones it started with.
 	if method != "thread/resume" {
-		config["features.hooks"] = true
-		if limit := r.d.launchContextWindowCap(sessionID, string(protocol.SessionAgentCodex), r.d.isChiefOfStaffSession(sessionID)); limit > 0 {
-			config["model_auto_compact_token_limit"] = limit
-		}
 		if instructions := r.instructions(sessionID); instructions != "" {
 			prior, _ := params["developerInstructions"].(string)
 			params["developerInstructions"] = strings.TrimSpace(prior + "\n\n" + instructions)
@@ -522,10 +528,15 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 		if len(reply.Error) > 0 || json.Unmarshal(reply.Result, &result) != nil || result.Thread.ID == "" {
 			return
 		}
-		r.show(v, result.Thread.ID)
 		if method != "thread/resume" {
-			r.materialize(v.profile, result.Thread.ID)
+			if err := r.materialize(v.profile, result.Thread.ID); err != nil {
+				r.d.logf("shared Codex: refused conversation %s, which could not be written: %v", result.Thread.ID, err)
+				reply.Result = nil
+				reply.Error, _ = json.Marshal(map[string]any{"code": -32603, "message": "attn could not write the new conversation to disk: " + err.Error()})
+				return
+			}
 		}
+		r.show(v, result.Thread.ID)
 	}, nil
 }
 
@@ -543,7 +554,7 @@ func (r *codexShared) instructions(sessionID string) string {
 }
 
 // Codex resumes only conversations on disk, and a terminal reconnecting after a restart resumes its own.
-func (r *codexShared) materialize(profile, conversation string) {
+func (r *codexShared) materialize(profile, conversation string) error {
 	r.mu.Lock()
 	s := r.servers[profile]
 	r.mu.Unlock()
@@ -552,21 +563,19 @@ func (r *codexShared) materialize(profile, conversation string) {
 		client = s.client()
 	}
 	if client == nil {
-		r.d.logf("shared Codex: conversation %s stays unwritten: no connection to its app-server", conversation)
-		return
+		return errors.New("no connection to its app-server")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), codexServerCallLimit)
 	defer cancel()
 	note := prompts.RenderText("session", "codex-opened", nil)
-	if _, err := client.Call(ctx, "thread/inject_items", map[string]any{
+	_, err := client.Call(ctx, "thread/inject_items", map[string]any{
 		"threadId": conversation,
 		"items": []any{map[string]any{
 			"type": "message", "role": "developer",
 			"content": []any{map[string]any{"type": "input_text", "text": note}},
 		}},
-	}); err != nil {
-		r.d.logf("shared Codex: conversation %s stays unwritten: %v", conversation, err)
-	}
+	})
+	return err
 }
 
 func (r *codexShared) show(v *codexView, conversation string) {
