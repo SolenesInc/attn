@@ -145,6 +145,7 @@ export function useAppCommands(): PaletteCommand[] {
       ...(agentOnScreenId
         ? [{
             id: 'reload-active-session',
+            pinned: true,
             title: 'Reload this agent',
             description: 'Restart the agent in its current pane',
             keywords: ['session', 'reload', 'restart', 'relaunch'],

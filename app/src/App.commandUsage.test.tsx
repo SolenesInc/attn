@@ -86,6 +86,8 @@ describe('command palette history', () => {
     await openActionMenu(daemon);
     const all = titles();
     expect(all).toContain("Cap s1's context window");
+    expect(all).toContain('Reload this agent');
+    expect(all.indexOf('Reload this agent')).toBeLessThan(all.indexOf('Settings'));
     expect(all.indexOf("Cap s1's context window")).toBeLessThan(all.indexOf('Settings'));
     expect(all.indexOf('Settings')).toBeLessThan(all.indexOf('New agent'));
     await query(daemon, '>agent');
