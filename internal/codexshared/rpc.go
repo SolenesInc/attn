@@ -1,4 +1,3 @@
-// Package codexshared speaks Codex's app-server protocol: JSON-RPC over a WebSocket on a Unix socket.
 package codexshared
 
 import (
@@ -16,7 +15,7 @@ import (
 	"nhooyr.io/websocket"
 )
 
-// Message is one app-server frame; the server sends no "jsonrpc" field and ignores one.
+// The server sends no "jsonrpc" field and ignores one.
 type Message struct {
 	ID     json.RawMessage `json:"id,omitempty"`
 	Method string          `json:"method,omitempty"`
@@ -32,7 +31,6 @@ type RPCError struct {
 
 func (e *RPCError) Error() string { return fmt.Sprintf("codex %s: %s", e.Method, e.Reply) }
 
-// Dial opens the app-server WebSocket at a Unix socket path.
 func Dial(ctx context.Context, path string) (*websocket.Conn, error) {
 	// The server links long socket paths into /tmp; connecting by the link's own path overflows sun_path.
 	if resolved, err := filepath.EvalSymlinks(path); err == nil {
@@ -50,7 +48,6 @@ func Dial(ctx context.Context, path string) (*websocket.Conn, error) {
 	return conn, nil
 }
 
-// Client is one initialized connection that sends requests and hands every other frame to observe.
 type Client struct {
 	conn    *websocket.Conn
 	mu      sync.Mutex
@@ -60,7 +57,6 @@ type Client struct {
 	err     error
 }
 
-// Connect dials and initializes a client named name; observe runs on the reader goroutine.
 func Connect(ctx context.Context, path, name string, observe func(Message)) (*Client, error) {
 	conn, err := Dial(ctx, path)
 	if err != nil {
@@ -111,7 +107,6 @@ func (c *Client) read(observe func(Message)) {
 	}
 }
 
-// Call sends a request and waits for its reply, the context, or the connection's end.
 func (c *Client) Call(ctx context.Context, method string, params any) (json.RawMessage, error) {
 	id := strconv.FormatUint(c.next.Add(1), 10)
 	raw, err := json.Marshal(params)
@@ -145,7 +140,6 @@ func (c *Client) Call(ctx context.Context, method string, params any) (json.RawM
 	}
 }
 
-// Respond answers a request the server sent, such as an approval.
 func (c *Client) Respond(ctx context.Context, id json.RawMessage, result any) error {
 	raw, err := json.Marshal(result)
 	if err != nil {
@@ -175,8 +169,6 @@ func (c *Client) Connected() bool {
 	}
 }
 
-// Proxy relays frames between a client (down) and the server (up) until either side closes; request
-// ids stay the client's own, so approvals keep their routing. prepare may rewrite a request and its reply.
 func Proxy(ctx context.Context, down, up *websocket.Conn, prepare func(*Message) (func(*Message), error), observe func(Message)) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()

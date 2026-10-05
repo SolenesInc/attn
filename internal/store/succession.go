@@ -20,9 +20,8 @@ type Succession struct {
 	Launch       LaunchIntent
 	Close        SessionClose
 	KeepFrom     bool
-	// KeepTo leaves an open To as it is; only the pane moves to it.
-	KeepTo bool
-	Live   map[string]bool
+	KeepTo       bool
+	Live         map[string]bool
 }
 
 // CommitSuccession opens sc.To, or reopens it when it exists, in the pane that holds terminal; the pane now

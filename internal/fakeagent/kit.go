@@ -137,7 +137,6 @@ func (k *Kit) Launched(sessionID string) *Run {
 	}
 }
 
-// CodexServers lists the pid of every Codex app-server launched so far, in launch order.
 func (k *Kit) CodexServers() []int {
 	k.mu.Lock()
 	defer k.mu.Unlock()
@@ -148,7 +147,6 @@ func (k *Kit) CodexServers() []int {
 	return pids
 }
 
-// CodexServer is the Codex app-server launched last, which plays the model behind every conversation.
 func (k *Kit) CodexServer() *CodexServer {
 	k.t.Helper()
 	k.mu.Lock()

@@ -33,8 +33,8 @@ const (
 	codexApprovalRequest = "item/commandExecution/requestApproval"
 )
 
-// codexAppServer plays stock 0.160.0's app-server: thread/start writes nothing until a turn or an injected
-// item, hooks name the conversation, and an idle unsubscribed conversation unloads at once (stock: ~60s).
+// Stock 0.160.0: thread/start writes nothing until a turn or an injected item; an idle unsubscribed
+// conversation unloads after ~60s (here at once).
 type codexAppServer struct {
 	cfg     config
 	hooks   hookSet
@@ -430,7 +430,6 @@ func (s *codexAppServer) findRollout(id string) (path, cwd string) {
 	return path, meta.Payload.CWD
 }
 
-// write puts lines in the conversation's rollout, writing the rollout first when it is not on disk.
 func (s *codexAppServer) write(t *codexServerThread, lines ...any) error {
 	s.mu.Lock()
 	first := !t.written
@@ -561,7 +560,6 @@ func (s *codexAppServer) askApproval(p codexServerParams) (any, func(), error) {
 	}, nil
 }
 
-// answered settles a pending approval: whichever connection answers, every subscriber hears it resolved.
 func (s *codexAppServer) answered(m codexshared.Message) {
 	var id string
 	if json.Unmarshal(m.ID, &id) != nil {
@@ -620,7 +618,6 @@ func (s *codexAppServer) promptsOf(conversation string) chan string {
 	return prompts
 }
 
-// prompted keeps what attn sent; a terminal's fake reports what was typed into it.
 func (s *codexAppServer) prompted(conn *codexServerConn, conversation, text string) {
 	s.mu.Lock()
 	typed := conn.terminal
@@ -634,8 +631,6 @@ func (s *codexAppServer) prompted(conn *codexServerConn, conversation, text stri
 	}
 }
 
-// archive writes the conversation if it is not on disk yet, unloads it, and moves its rollout to
-// archived_sessions, as stock does.
 func (s *codexAppServer) archive(id string) (any, func(), error) {
 	s.mu.Lock()
 	t := s.threads[id]
@@ -665,7 +660,6 @@ func (s *codexAppServer) archive(id string) (any, func(), error) {
 	}, nil
 }
 
-// unarchive moves an archived rollout back under its dated sessions directory.
 func (s *codexAppServer) unarchive(id string) (any, func(), error) {
 	archived := filepath.Join(s.cfg.CodexHome, "archived_sessions")
 	entries, _ := os.ReadDir(archived)
@@ -697,7 +691,6 @@ type serverThreadParams struct {
 	Text     string `json:"text"`
 }
 
-// handleKit lets a test play the model behind conversations no terminal shows.
 func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessage) (any, error) {
 	var p serverThreadParams
 	if err := json.Unmarshal(raw, &p); err != nil {

@@ -19,25 +19,21 @@ import (
 	"github.com/victorarias/attn/internal/transcript"
 )
 
-// codexLinkEpochPrefix marks the turn reports of a shared Codex server's control connection, which
-// arrive in order on one connection and so need no driver run to fence them.
+// Control-connection turn reports arrive in order, so no driver run fences them.
 const codexLinkEpochPrefix = "codex-app-server:"
 
-// launched reports whether the session runs its Codex terminals against its profile's shared server.
-func (r *codexShared) launched(sessionID string) bool {
+func (r *codexShared) launchedShared(sessionID string) bool {
 	intent, ok := r.d.store.LaunchIntent(sessionID)
 	return ok && intent.CodexShared
 }
 
-// conversation names the conversation a shared session holds, or "".
 func (r *codexShared) conversation(sessionID string) string {
-	if !r.launched(sessionID) {
+	if !r.launchedShared(sessionID) {
 		return ""
 	}
 	return r.d.store.GetSessionConversation(sessionID).NativeID
 }
 
-// hidden reports an open shared session that holds a conversation and that no terminal tile shows.
 func (r *codexShared) hidden(sessionID string) bool {
 	if len(r.d.terminals().Of(harness.SessionID(sessionID))) > 0 {
 		return false
@@ -45,15 +41,13 @@ func (r *codexShared) hidden(sessionID string) bool {
 	return r.d.store.Get(sessionID) != nil && r.conversation(sessionID) != ""
 }
 
-// keepsWhenLeft reports a shared session that stays open, hidden, when its terminal moves on.
 func (r *codexShared) keepsWhenLeft(sessionID string) bool {
 	return r.conversation(sessionID) != ""
 }
 
-// holder names the open shared session that holds a conversation, or "".
 func (r *codexShared) holder(conversation string) string {
 	sessionID := r.d.store.OpenSessionHolding(conversation)
-	if sessionID == "" || !r.launched(sessionID) {
+	if sessionID == "" || !r.launchedShared(sessionID) {
 		return ""
 	}
 	return sessionID
@@ -78,7 +72,6 @@ func (d *Daemon) decorateLedgerEntryHidden(entry *protocol.SessionLedgerEntry) {
 	}
 }
 
-// shownThread names the conversation a terminal of the session shows, for a session not yet bound to one.
 func (r *codexShared) shownThread(sessionID string) string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -102,8 +95,6 @@ func (r *codexShared) control(ctx context.Context, profile string) (*codexServer
 	return s, client, nil
 }
 
-// codexLink delivers input to a shared Codex session through its server, so no terminal's composer
-// is touched and a session that no terminal shows still takes it.
 type codexLink struct{ r *codexShared }
 
 func (codexLink) Voices() []harness.Voice {
@@ -197,7 +188,7 @@ func (st codexThreadStatus) turn() (harness.Turn, bool) {
 	return harness.TurnUnknown, false
 }
 
-// codexEvents runs a server's notifications in arrival order, off the connection's reader.
+// Notifications run in arrival order, off the connection's reader.
 type codexEvents struct {
 	mu      sync.Mutex
 	queue   []func()
@@ -241,7 +232,6 @@ func (r *codexShared) report(s *codexServer, sessionID string, turn harness.Turn
 	r.d.linkEvents().Turn(harness.SessionID(sessionID), time.Now(), harness.TurnEvent{Turn: turn, Epoch: epoch, Seq: s.seq.Add(1), Restated: restated})
 }
 
-// observeStatus takes what hooks cannot tell from the server's status: an approval asked or answered.
 func (r *codexShared) observeStatus(s *codexServer, m codexshared.Message) {
 	var p struct {
 		ThreadID string            `json:"threadId"`
@@ -264,8 +254,7 @@ func (r *codexShared) observeStatus(s *codexServer, m codexshared.Message) {
 	})
 }
 
-// restate repeats each hidden session's state after the control connection (re)connects.
-func (r *codexShared) restate(s *codexServer, client *codexshared.Client, epoch string) {
+func (r *codexShared) restateHiddenStates(s *codexServer, client *codexshared.Client, epoch string) {
 	for _, session := range r.d.store.List("") {
 		if session.ProfileID != s.profile || session.State != protocol.SessionStateUnknown || !r.hidden(session.ID) {
 			continue
@@ -288,8 +277,7 @@ func (r *codexShared) restate(s *codexServer, client *codexshared.Client, epoch 
 	}
 }
 
-// archive puts a closing session's conversation away in Codex, then reads its usage to the end: the
-// rollout moves to archived_sessions, where usage and reopening still find it.
+// The rollout moves to archived_sessions; read its usage to the end after archiving.
 func (r *codexShared) archive(sessionID string) {
 	conversation := r.conversation(sessionID)
 	session := r.d.store.Get(sessionID)
@@ -311,7 +299,7 @@ func (r *codexShared) archive(sessionID string) {
 	}
 }
 
-// settleUsage reads the session's rollout once more: a close can come before the watcher's first read.
+// A close can come before the watcher's first read.
 func (r *codexShared) settleUsage(sessionID string) {
 	path := r.d.store.GetSessionConversation(sessionID).TranscriptPath
 	if path == "" {
@@ -323,9 +311,8 @@ func (r *codexShared) settleUsage(sessionID string) {
 	}
 }
 
-// archived reports a shared session's conversation that attn archived when the session closed.
-func (r *codexShared) archived(sessionID, conversation string) bool {
-	return conversation != "" && r.launched(sessionID) && transcript.FindArchivedCodexTranscript(conversation) != ""
+func (r *codexShared) archivedByClose(sessionID, conversation string) bool {
+	return conversation != "" && r.launchedShared(sessionID) && transcript.FindArchivedCodexTranscript(conversation) != ""
 }
 
 func (r *codexShared) unarchive(profile, conversation string) error {
@@ -346,8 +333,6 @@ func (r *codexShared) unarchive(profile, conversation string) error {
 	return nil
 }
 
-// show gives a hidden session a terminal tile on its profile's current desktop; its Codex resumes the
-// conversation, and the server replays an approval it waits on.
 func (r *codexShared) showSession(sessionID string) error {
 	session := r.d.store.Get(sessionID)
 	intent, ok := r.d.store.LaunchIntent(sessionID)
@@ -367,8 +352,6 @@ func (r *codexShared) showSession(sessionID string) error {
 	return nil
 }
 
-// movedOn reports a terminal whose Codex shows another conversation than the session it still shows
-// in attn, which learns of the move only at the next turn.
 func (r *codexShared) movedOn(sessionID string, t harness.TerminalID) bool {
 	r.mu.Lock()
 	v := r.views[t]
@@ -384,7 +367,6 @@ func (r *codexShared) movedOn(sessionID string, t harness.TerminalID) bool {
 	return conversation != "" && conversation != thread
 }
 
-// hide ends terminal t, whose Codex moved on from the session before it reported a turn.
 func (d *Daemon) hide(sessionID string, t harness.TerminalID) {
 	lifecycle := d.sessionLifecycleLockFor(sessionID)
 	lifecycle.Lock()
@@ -398,8 +380,6 @@ func (d *Daemon) hide(sessionID string, t harness.TerminalID) {
 	d.publishFact(FactSessionReregistered, sessionID, nil)
 }
 
-// observeName takes a Codex rename of a conversation, such as the title Codex gave it, as the
-// session's label.
 func (r *codexShared) observeName(s *codexServer, m codexshared.Message) {
 	var p struct {
 		ThreadID   string  `json:"threadId"`
@@ -420,7 +400,7 @@ func (r *codexShared) observeName(s *codexServer, m codexshared.Message) {
 	})
 }
 
-// mirrorName gives the session's conversation attn's label; attn's label is the one that counts.
+// attn's label is the one that counts.
 func (r *codexShared) mirrorName(sessionID, label string) {
 	conversation := r.conversation(sessionID)
 	session := r.d.store.Get(sessionID)
@@ -446,8 +426,7 @@ func (r *codexShared) mirrorName(sessionID, label string) {
 	})
 }
 
-// idle stops a profile's server once no open shared session and no shared terminal needs it.
-func (r *codexShared) idle(profile string) {
+func (r *codexShared) stopServerIfUnused(profile string) {
 	r.mu.Lock()
 	s := r.servers[profile]
 	r.mu.Unlock()
@@ -483,7 +462,7 @@ func (r *codexShared) needed(profile string) bool {
 	}
 	r.mu.Unlock()
 	for _, session := range r.d.store.List("") {
-		if session.ProfileID == profile && session.Agent == protocol.SessionAgentCodex && r.launched(session.ID) {
+		if session.ProfileID == profile && session.Agent == protocol.SessionAgentCodex && r.launchedShared(session.ID) {
 			return true
 		}
 	}
@@ -494,5 +473,5 @@ func (r *codexShared) idleSoon(profile string) {
 	if profile == "" {
 		return
 	}
-	r.d.life.Go("codexServerIdle", func() { r.idle(profile) })
+	r.d.life.Go("codexServerIdle", func() { r.stopServerIfUnused(profile) })
 }

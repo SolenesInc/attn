@@ -2426,8 +2426,6 @@ func runProbeTUI() {
 	}
 }
 
-// hookCaller names who a hook reports for: a shared Codex app-server's hook runs for every terminal's
-// conversation, so it names the conversation and the daemon finds the session that holds it.
 func hookCaller(id string, input hookInput) string {
 	if os.Getenv(hooks.CodexThreadHooksEnv) != "1" {
 		return id

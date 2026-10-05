@@ -222,12 +222,10 @@ func (w *World) HeadlessTask() *fakeagent.HeadlessTask {
 	return w.kit.HeadlessTask()
 }
 
-// CodexServers lists the pid of every shared Codex app-server the daemon launched, in launch order.
 func (w *World) CodexServers() []int {
 	return w.kit.CodexServers()
 }
 
-// CodexServer plays the model behind the shared Codex app-server the daemon launched last.
 func (w *World) CodexServer() *fakeagent.CodexServer {
 	w.T.Helper()
 	return w.kit.CodexServer()

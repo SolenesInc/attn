@@ -48,7 +48,7 @@ func (d *Daemon) finishSessionClose(sessionID string, closing sessionCloseInFlig
 		if session := closing.teardown.session; session != nil && session.Agent == protocol.SessionAgentCodex {
 			d.life.Go("codexServerIdleAfterClose", func() {
 				<-done
-				d.codexShared().idle(session.ProfileID)
+				d.codexShared().stopServerIfUnused(session.ProfileID)
 			})
 		}
 	}

@@ -5,7 +5,6 @@ import (
 	"time"
 )
 
-// CodexTerminal is a terminal whose Codex reaches its profile's shared app-server through attn.
 type CodexTerminal struct {
 	TerminalID string
 	ProfileID  string
@@ -59,7 +58,6 @@ func (s *Store) CodexTerminals() ([]CodexTerminal, error) {
 	return terminals, rows.Err()
 }
 
-// OpenSessionHolding names the open session whose conversation is nativeID, or "".
 func (s *Store) OpenSessionHolding(nativeID string) string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

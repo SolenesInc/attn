@@ -32,13 +32,11 @@ const (
 	codexServerAgent          = "codex-app-server"
 	// The first client to initialize names the server's originator for every conversation; match the TUI's.
 	codexClientName = "codex-tui"
-	// Stock 0.160.0 answered on its socket within a second of launch; the first start may fetch plugins.
+	// Stock 0.160.0 answered within a second of launch; the first start may fetch plugins.
 	codexServerStartLimit = 30 * time.Second
 	codexServerCallLimit  = 5 * time.Second
 )
 
-// codexShared runs one Codex app-server per profile as a service terminal, and a proxy per Codex
-// terminal through which attn sees which conversation that terminal shows.
 type codexShared struct {
 	d       *Daemon
 	mu      sync.Mutex
@@ -126,7 +124,7 @@ func (s *codexServer) client() *codexshared.Client {
 	return nil
 }
 
-// launchesSharedCodex decides once per launch: a session keeps the mode it launched with.
+// A session keeps the mode it launched with.
 func (d *Daemon) launchesSharedCodex(req *spawnRequest) bool {
 	if req.agent != string(protocol.SessionAgentCodex) || req.hasPluginDriver || req.isShell || !req.policy.unattendedLaunch.IsZero() {
 		return false
@@ -137,8 +135,6 @@ func (d *Daemon) launchesSharedCodex(req *spawnRequest) bool {
 	return parseBooleanSetting(d.store.GetSetting(SettingCodexSharedEnabled))
 }
 
-// prepareLaunch starts the profile's server if needed and opens the terminal's proxy; the returned
-// address is what its Codex connects to.
 func (r *codexShared) prepareLaunch(t harness.TerminalID, profile, executable string) (string, error) {
 	remote, err := r.openView(t, profile)
 	if err != nil {
@@ -248,7 +244,7 @@ func (r *codexShared) connect(ctx context.Context, s *codexServer) error {
 				client.Close()
 				return errDaemonStopping
 			}
-			s.events.run(r.d, func() { r.restate(s, client, epoch) })
+			s.events.run(r.d, func() { r.restateHiddenStates(s, client, epoch) })
 			return nil
 		}
 		if ctx.Err() != nil {
@@ -280,7 +276,6 @@ func (r *codexShared) watchControl(s *codexServer, client *codexshared.Client) {
 	s.mu.Unlock()
 }
 
-// observeServer keeps which conversations the server holds in memory; every connection hears these.
 func (r *codexShared) observeServer(s *codexServer, m codexshared.Message) {
 	var p struct {
 		ThreadID string `json:"threadId"`
@@ -337,8 +332,6 @@ func (r *codexShared) observeServer(s *codexServer, m codexshared.Message) {
 	}
 }
 
-// unloaded settles a session that outlived its terminal only in the server, once the server lets its
-// conversation go: like one whose terminal did not survive a restart, it is recoverable.
 func (r *codexShared) unloaded(conversation string) {
 	sessionID := r.d.store.OpenSessionHolding(conversation)
 	session := r.d.store.Get(sessionID)
@@ -357,8 +350,7 @@ func (r *codexShared) unloaded(conversation string) {
 	})
 }
 
-// holds reports whether the profile's server has the session's conversation in memory.
-func (r *codexShared) holds(session *protocol.Session) bool {
+func (r *codexShared) serverHolds(session *protocol.Session) bool {
 	if session == nil {
 		return false
 	}
@@ -409,7 +401,6 @@ func (r *codexShared) openView(t harness.TerminalID, profile string) (string, er
 	return "unix://" + v.socket, nil
 }
 
-// closeView forgets a terminal that exited; its proxy goes with it.
 func (r *codexShared) closeView(t harness.TerminalID) {
 	r.mu.Lock()
 	v := r.views[t]
@@ -473,8 +464,7 @@ func (r *codexShared) serveView(v *codexView, w http.ResponseWriter, req *http.R
 	codexshared.Proxy(ctx, down, up, func(m *codexshared.Message) (func(*codexshared.Message), error) { return r.prepare(v, m) }, nil)
 }
 
-// prepare gives a terminal's conversations what Codex's remote mode does not forward, and notes which
-// conversation the terminal shows from the server's replies.
+// Codex's remote mode forwards neither instructions nor environment; attn adds them here.
 func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codexshared.Message), error) {
 	method := m.Method
 	switch method {
@@ -552,8 +542,7 @@ func (r *codexShared) instructions(sessionID string) string {
 	return launch.Content
 }
 
-// materialize writes a new conversation to disk at once: Codex resumes only conversations on disk,
-// and a terminal reconnecting after a restart resumes the one it shows.
+// Codex resumes only conversations on disk, and a terminal reconnecting after a restart resumes its own.
 func (r *codexShared) materialize(profile, conversation string) {
 	r.mu.Lock()
 	s := r.servers[profile]
@@ -587,7 +576,6 @@ func (r *codexShared) show(v *codexView, conversation string) {
 	v.thread, v.shownSeq = conversation, r.seq
 }
 
-// terminalShowing names the terminal that last showed a conversation.
 func (r *codexShared) terminalShowing(conversation string) (harness.TerminalID, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -612,8 +600,7 @@ func (r *codexShared) remoteEnv(t harness.TerminalID) []string {
 	return nil
 }
 
-// terminalExited releases what a terminal held. An app-server that exits starts again at the next
-// connection; its runtime goes unless a new one already runs under the same terminal id.
+// An app-server that exits starts again at the next connection; keep a runtime already restarted under the same id.
 func (r *codexShared) terminalExited(t harness.TerminalID) {
 	if !isCodexServerTerminal(t) {
 		r.mu.Lock()
@@ -657,8 +644,7 @@ func (r *codexShared) terminalExited(t harness.TerminalID) {
 	}
 }
 
-// recoverServers reconnects to servers that outlived the previous daemon, before startup decides
-// which sessions are still live.
+// Runs before startup decides which sessions are still live.
 func (r *codexShared) recoverServers(ctx context.Context) {
 	live := r.d.liveTerminals(ctx)
 	profiles, err := r.d.store.ListProfiles(false)
@@ -678,8 +664,7 @@ func (r *codexShared) recoverServers(ctx context.Context) {
 	}
 }
 
-// recoverViews reopens the proxies of terminals that outlived the previous daemon, once recovery
-// knows which did, and forgets the rest.
+// Runs once recovery knows which terminals survived.
 func (r *codexShared) recoverViews(ctx context.Context) {
 	live := r.d.liveTerminals(ctx)
 	terminals, err := r.d.store.CodexTerminals()
@@ -710,7 +695,6 @@ func (r *codexShared) recoverViews(ctx context.Context) {
 	}
 }
 
-// parent names the conversation that spawned a subagent's, as the server announced it.
 func (r *codexShared) parent(conversation string) string {
 	r.mu.Lock()
 	servers := make([]*codexServer, 0, len(r.servers))
@@ -729,8 +713,7 @@ func (r *codexShared) parent(conversation string) string {
 	return ""
 }
 
-// codexThreadCaller resolves a shared Codex hook's caller: the session in the terminal that shows the
-// conversation, else the open session that holds it; a subagent's hooks belong to its root's session.
+// A subagent's hooks belong to its root's session.
 func (d *Daemon) codexThreadCaller(conversation string) string {
 	r, asked := d.codexShared(), conversation
 	for range 8 {

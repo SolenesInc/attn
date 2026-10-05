@@ -971,7 +971,7 @@ func (d *Daemon) pruneSessionsWithoutPTY(previousRunSessions map[string]struct{}
 		if _, fromPreviousRun := previousRunSessions[session.ID]; !fromPreviousRun {
 			continue
 		}
-		if _, ok := liveIDs[session.ID]; ok || d.codexShared().holds(session) || d.codexShared().hidden(session.ID) {
+		if _, ok := liveIDs[session.ID]; ok || d.codexShared().serverHolds(session) || d.codexShared().hidden(session.ID) {
 			continue
 		}
 		if sessionUpdatedAfter(session, recoveryStartedAt) {
@@ -1382,7 +1382,7 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 		if _, fromPreviousRun := previousRunSessions[session.ID]; !fromPreviousRun {
 			continue
 		}
-		if _, ok := liveIDs[session.ID]; ok || d.codexShared().holds(session) || d.codexShared().hidden(session.ID) {
+		if _, ok := liveIDs[session.ID]; ok || d.codexShared().serverHolds(session) || d.codexShared().hidden(session.ID) {
 			continue
 		}
 		if sessionUpdatedAfter(session, recoveryStartedAt) {

@@ -239,7 +239,6 @@ func sharedCodexWaiting(t *testing.T, w *world, app *testworld.Peer) (string, *f
 	return session, codex, terminal
 }
 
-// moveOn switches a terminal's Codex to another conversation, which attn learns from the next prompt.
 func moveOn(t *testing.T, app *testworld.Peer, codex *fakeagent.Run, terminal, command, prompt string) {
 	t.Helper()
 	typeInto(app, terminal, command+"\r")

@@ -31,7 +31,7 @@ func (d *Daemon) shows(t harness.TerminalID, from *protocol.Session, owner strin
 	return d.succeed(t, from, store.Succession{
 		To:     owner,
 		Close:  store.SessionClose{Reason: "resumed; its terminal moved on to " + owner},
-		KeepTo: d.store.Get(owner) != nil && d.codexShared().launched(owner),
+		KeepTo: d.store.Get(owner) != nil && d.codexShared().launchedShared(owner),
 	}, observation)
 }
 

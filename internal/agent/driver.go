@@ -189,7 +189,6 @@ type SpawnOpts struct {
 
 	InstructionsDir string
 
-	// CodexRemote is the app-server address a shared Codex terminal connects to; empty runs Codex alone.
 	CodexRemote string
 }
 

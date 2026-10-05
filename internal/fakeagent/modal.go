@@ -33,7 +33,6 @@ type approvalAsker interface {
 	approvalAnswered()
 }
 
-// serverApprovals asks through the harness's server, which sends the approval back to every terminal showing it.
 type serverApprovals interface {
 	askApproval() error
 }

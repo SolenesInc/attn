@@ -480,7 +480,6 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	return &spawnOutcome{}
 }
 
-// prepareSharedCodexLaunch points a shared launch's Codex at its terminal's proxy to the profile's server.
 func (d *Daemon) prepareSharedCodexLaunch(req *spawnRequest, plan *spawnPlan) error {
 	if !req.codexShared {
 		return nil

@@ -35,8 +35,7 @@ func (d *Daemon) endTerminal(sessionID string, t harness.TerminalID) (last bool)
 	return false
 }
 
-// closeTerminal stops terminal t while another terminal runs its session; the last one stays for the
-// caller to close with the session.
+// The last terminal stays for the caller to close with the session.
 func (d *Daemon) closeTerminal(sessionID string, t harness.TerminalID) (last bool) {
 	lifecycle := d.sessionLifecycleLockFor(sessionID)
 	lifecycle.Lock()

@@ -9,11 +9,8 @@ import (
 	"strings"
 )
 
-// CodexThreadHooksEnv marks a hook run by a shared Codex app-server: the hook names its session by
-// the conversation in its input, since the server runs every terminal's conversations.
 const CodexThreadHooksEnv = "ATTN_CODEX_THREAD_HOOKS"
 
-// CodexThreadCallerPrefix starts the id a shared Codex hook reports for itself; the conversation id follows.
 const CodexThreadCallerPrefix = "codex:"
 
 func CodexThreadCaller(conversation string) string { return CodexThreadCallerPrefix + conversation }
@@ -36,8 +33,6 @@ func GenerateCodexConfigOverrides(sessionID, socketPath, wrapperPath string, lau
 	return overrides
 }
 
-// GenerateCodexServerConfigOverrides configures a shared Codex app-server's hooks, trusted, to report
-// to attn by conversation.
 func GenerateCodexServerConfigOverrides(wrapperPath string) []string {
 	return codexHookOverrides(codexHookCommand(hookWrapper(wrapperPath), "env "+CodexThreadHooksEnv+"=1 "))
 }

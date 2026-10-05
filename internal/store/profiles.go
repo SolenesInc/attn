@@ -984,7 +984,6 @@ func checkTileID(tx *sql.Tx, desktop profiles.Desktop, pane profiles.Pane) error
 	return nil
 }
 
-// refuseSecondTile keeps a session to one tile, except that each terminal showing it has its own.
 func refuseSecondTile(tx *sql.Tx, desktop profiles.Desktop, pane profiles.Pane) error {
 	for _, other := range desktop.Panes {
 		if other.PaneID != pane.PaneID && other.SessionID == pane.SessionID && (pane.RuntimeID == "" || other.RuntimeID == "" || other.RuntimeID == pane.RuntimeID) {

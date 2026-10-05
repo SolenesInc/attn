@@ -73,7 +73,6 @@ func NewCodexUsageSourceResolver(rootPath string) UsageSourceResolver {
 	}
 }
 
-// ResolveCodexRolloutPath follows native archive moves without changing source identity.
 func ResolveCodexRolloutPath(path string) string {
 	path = codexUsageSourceIdentity(filepath.Clean(path))
 	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
@@ -358,8 +357,7 @@ func codexSessionsRoot(path string) string {
 	return ""
 }
 
-// Native archive flattens the dated rollout path; unarchive restores its date.
-// Keep the live path as source identity so either location resumes the same cursor.
+// Native archive flattens the dated rollout path and unarchive restores it; the live path stays the source identity.
 func codexUsageSourceIdentity(path string) string {
 	if filepath.Base(filepath.Dir(path)) != "archived_sessions" {
 		return path

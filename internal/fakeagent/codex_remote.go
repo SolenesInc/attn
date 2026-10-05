@@ -12,8 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/codexshared"
 )
 
-// codexRemote plays `codex --remote unix://PATH`: the TUI starts its conversation at launch, sends
-// turns to the server, and on losing the socket reconnects with backoff and resumes what it shows.
 type codexRemote struct {
 	cfg          config
 	term         *terminal
@@ -82,7 +80,6 @@ func (c *codexRemote) begin(term *terminal) error {
 	return nil
 }
 
-// showPending shows an approval the server replayed before the terminal knew it showed its conversation.
 func (c *codexRemote) showPending() {
 	c.mu.Lock()
 	id, pending := c.approvals[c.conversation]
@@ -148,7 +145,6 @@ func (c *codexRemote) stayConnected(client *codexshared.Client) {
 	}
 }
 
-// request sends on the current connection, again on the next one when the socket drops meanwhile.
 func (c *codexRemote) request(method string, params, result any) error {
 	for {
 		client, err := c.live()
@@ -255,8 +251,6 @@ func (c *codexRemote) showApproval(id json.RawMessage) {
 	})
 }
 
-// answer sends the user's decision once connected; the server replays the request to a reconnected
-// terminal, which leaves an answer already given alone.
 func (c *codexRemote) answer(id json.RawMessage) {
 	if client, err := c.live(); err == nil {
 		_ = client.Respond(context.Background(), id, map[string]any{"decision": "accept"})
