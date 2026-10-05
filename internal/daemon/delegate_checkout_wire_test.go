@@ -55,14 +55,13 @@ func TestADelegatedWorktreeStartsFromTheExactBaseWhereItWasAsked(t *testing.T) {
 		checkout            *protocol.DelegateCheckout
 		wantDirectory, head string
 		wantDesktop         string
-		wantLabel           string
 	}{
 		{name: "from the caller's checkout", source: source, cwd: repo, checkout: delegateNewWorktree("feature/a", "base"),
 			wantDirectory: filepath.Join(root, "shop--feature-a"), head: base, wantDesktop: sourceDesktop},
 		{name: "from a subdirectory, on a stale remote ref", cwd: filepath.Join(repo, "web"), checkout: delegateNewWorktree("feature/b", "origin/main"),
-			wantDirectory: filepath.Join(root, "shop--feature-b", "web"), head: local, wantLabel: "web"},
+			wantDirectory: filepath.Join(root, "shop--feature-b", "web"), head: local},
 		{name: "on a branch name longer than a session name", cwd: repo, checkout: delegateNewWorktree("feat/delegated-with-a-branch-name-past-the-cap", "main"),
-			wantDirectory: filepath.Join(root, "shop--feat-delegated-with-a-branch-name-past-the-cap"), head: local, wantLabel: "shop--feat-delegated-with-a-branch-name-past-the"},
+			wantDirectory: filepath.Join(root, "shop--feat-delegated-with-a-branch-name-past-the-cap"), head: local},
 		{name: "outside Git", cwd: outsideGit, wantDirectory: outsideGit},
 	} {
 		request := delegateCheckoutAt(row.cwd, row.checkout)
@@ -94,11 +93,7 @@ func TestADelegatedWorktreeStartsFromTheExactBaseWhereItWasAsked(t *testing.T) {
 		if row.wantDesktop != "" && protocol.Deref(result.DesktopID) != row.wantDesktop {
 			t.Errorf("%s: the delegate landed on desktop %s; want the caller's %s", row.name, protocol.Deref(result.DesktopID), row.wantDesktop)
 		}
-		if row.wantLabel != "" {
-			if label := sessionOfDelegate(t, w, result.SessionID).Label; label != row.wantLabel {
-				t.Errorf("%s: the delegate is named %q; want %q", row.name, label, row.wantLabel)
-			}
-		}
+
 	}
 	if fetched := strings.TrimSpace(runGit(t, repo, "rev-parse", "origin/main")); fetched != local {
 		t.Errorf("the repository's origin/main moved to %s; a delegation must not fetch", fetched)

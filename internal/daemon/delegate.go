@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -67,20 +68,54 @@ func (d *Daemon) validateDelegationName(name string, placement *launchPlacement)
 	if len([]rune(name)) > maxSessionNameRunes {
 		return fmt.Errorf("name %q is too long (max %d characters); pass a shorter --name", name, maxSessionNameRunes)
 	}
+
+	taken, err := d.desktopLabelTaken(name, placement)
+	if err != nil {
+		return err
+	}
+	if taken {
+		return fmt.Errorf("session name %q is already used on this desktop; pass a unique --name", name)
+	}
+	return nil
+}
+
+func (d *Daemon) desktopLabelTaken(name string, placement *launchPlacement) (bool, error) {
 	if placement == nil {
-		return nil
+		return false, nil
 	}
 	desktop, err := d.store.GetDesktop(placement.desktopID)
 	if err != nil {
-		return fmt.Errorf("read desktop %s to check the name %q: %w", placement.desktopID, name, err)
+		return false, fmt.Errorf("read desktop %s to check the name %q: %w", placement.desktopID, name, err)
 	}
 	for _, pane := range desktop.Panes {
 		existing := d.store.Get(pane.SessionID)
 		if existing != nil && strings.EqualFold(strings.TrimSpace(existing.Label), name) {
-			return fmt.Errorf("session name %q is already used on this desktop; pass a unique --name", name)
+			return true, nil
 		}
 	}
-	return nil
+	return false, nil
+}
+
+func (d *Daemon) derivedDelegationName(seedTitle, directory string, placement *launchPlacement) (string, error) {
+	base := cmp.Or(seedTitle, filepath.Base(directory))
+	name := truncateDelegationName(base)
+	for n := 2; ; n++ {
+		taken, err := d.desktopLabelTaken(name, placement)
+		if err != nil {
+			return "", err
+		}
+		if !taken {
+			return name, d.validateDelegationName(name, placement)
+		}
+		suffix := fmt.Sprintf(" (%d)", n)
+		runes := []rune(base)
+		limit := maxSessionNameRunes - len(suffix)
+		name = base
+		if len(runes) > limit {
+			name = strings.TrimRight(string(runes[:limit]), "-_. \t")
+		}
+		name += suffix
+	}
 }
 
 func truncateDelegationName(name string) string {
@@ -389,8 +424,8 @@ func (d *Daemon) createDelegationWorktree(protection foregroundCleanupProtection
 	return worktreePath, true, nil
 }
 
-func (d *Daemon) spawnDelegatedRuntimeProtected(protection foregroundCleanupProtection, msg *resolvedDelegationLaunch, sessionID, profileID string, placement *launchPlacement, directory, name, agent, model, effort, seedID string, guidance string) (internalActionResult, error) {
-	initialPrompt := delegatedSeedPrompt(seedID)
+func (d *Daemon) spawnDelegatedRuntimeProtected(protection foregroundCleanupProtection, msg *resolvedDelegationLaunch, sessionID, profileID string, placement *launchPlacement, directory, name, agent, model, effort, seedID, seedTitle string, guidance string) (internalActionResult, error) {
+	initialPrompt := delegatedSeedPrompt(seedID, seedTitle)
 	if guidance != "" {
 		initialPrompt = prompts.DelegationOpeningWithGuidance(initialPrompt, guidance)
 	}
@@ -534,7 +569,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 			seedID = bound
 		} else {
 			observed := d.observeGardenDispatchExecution(sessionID, existing.Directory, agent)
-			seedID, err = d.bindDelegationAssignmentProtected(protection, operationID, sessionID, sourceSessionID, msg.ParentSeedID, brief, existing.Label, seedID, observed, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew, existing.ProfileID)
+			seedID, err = d.bindDelegationAssignmentProtected(protection, operationID, sessionID, sourceSessionID, msg.ParentSeedID, brief, cmp.Or(msg.SeedTitle, existing.Label), seedID, observed, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew, existing.ProfileID)
 			if err != nil {
 				return nil, err
 			}
@@ -547,7 +582,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 					"recovering delegated runtime", existing.ProfileID, "", existing.Directory, nil, nil, time.Now())
 			}
 			watch = d.watchLaunch(sessionID)
-			if _, err := d.spawnDelegatedRuntimeProtected(protection, msg, sessionID, existing.ProfileID, nil, existing.Directory, existing.Label, agent, model, effort, seedID, guidance); err != nil {
+			if _, err := d.spawnDelegatedRuntimeProtected(protection, msg, sessionID, existing.ProfileID, nil, existing.Directory, existing.Label, agent, model, effort, seedID, cmp.Or(msg.SeedTitle, existing.Label), guidance); err != nil {
 				d.forgetLaunchWatch(sessionID, watch)
 				return nil, fmt.Errorf("recover delegated session runtime: %w", err)
 			}
@@ -674,11 +709,12 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 	}
 
 	if name == "" {
-		name = truncateDelegationName(filepath.Base(directory))
-		if err := d.validateDelegationName(name, placement); err != nil {
+		name, err = d.derivedDelegationName(msg.SeedTitle, directory, placement)
+		if err != nil {
 			return nil, rollback.fail(protection, err)
 		}
 	}
+	seedTitle := cmp.Or(msg.SeedTitle, name)
 	seedID := strings.TrimSpace(protocol.Deref(msg.Plot))
 	if handover != nil {
 		seedID = strings.TrimSpace(msg.Handover.SeedID)
@@ -690,7 +726,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 		}
 	} else {
 		observed := d.observeGardenDispatchExecution(sessionID, directory, agent)
-		seedID, err = d.bindDelegationAssignmentProtected(protection, operationID, sessionID, sourceSessionID, msg.ParentSeedID, brief, name, seedID, observed, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew, profile.ID)
+		seedID, err = d.bindDelegationAssignmentProtected(protection, operationID, sessionID, sourceSessionID, msg.ParentSeedID, brief, seedTitle, seedID, observed, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew, profile.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -704,7 +740,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 	}
 
 	watch := d.watchLaunch(sessionID)
-	spawned, err := d.spawnDelegatedRuntimeProtected(protection, msg, sessionID, profile.ID, placement, directory, name, agent, model, effort, seedID, guidance)
+	spawned, err := d.spawnDelegatedRuntimeProtected(protection, msg, sessionID, profile.ID, placement, directory, name, agent, model, effort, seedID, seedTitle, guidance)
 	if err != nil {
 		d.forgetLaunchWatch(sessionID, watch)
 		return nil, rollback.fail(protection, fmt.Errorf("spawn delegated session: %w", err))
@@ -772,6 +808,13 @@ func (d *Daemon) delegationDestination(source *protocol.Session, desktopRef stri
 		beside = d.placementBeside(source.ID)
 	}
 	if strings.TrimSpace(desktopRef) == "" {
+		if beside == nil {
+			desktop, err := d.store.LaunchDesktop(profile.ID, "")
+			if err != nil {
+				return profiles.Profile{}, nil, err
+			}
+			beside = &launchPlacement{desktopID: desktop.ID, direction: layouttree.DirectionVertical}
+		}
 		return profile, beside, nil
 	}
 	desktop, err := d.resolveDesktopRef(profile, desktopRef)
@@ -823,8 +866,8 @@ func (d *Daemon) completedDelegationResult(session *protocol.Session, worktreeCr
 	return result
 }
 
-func delegatedSeedPrompt(seedID string) string {
-	return prompts.RenderText("delegation", "brief", prompts.Values{"seed_id": seedID})
+func delegatedSeedPrompt(seedID, seedTitle string) string {
+	return prompts.RenderText("delegation", "brief", prompts.Values{"seed_id": seedID, "seed_title": seedTitle})
 }
 
 func (d *Daemon) handleDelegate(conn net.Conn, msg *protocol.DelegateMessage) {

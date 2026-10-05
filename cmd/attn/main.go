@@ -798,7 +798,7 @@ session options:
                              medium, high, xhigh, max; codex: minimal, low,
                              medium, high, xhigh); defaults to medium for agents
                              that support reasoning effort
-  --name <text>              session name (max 16 chars; defaults from cwd)
+  --name <text>              session name (max 48 chars; defaults from brief or seed title)
   --desktop <ref>            desktop of your profile for the new agent: its
                              shortcut digit (1-9), its name as shown
                              (case-insensitive) or its id; the agent opens
@@ -1280,7 +1280,7 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	provider := fs.String("provider", "", "plugin model provider")
 	model := fs.String("model", "", "pin the delegated agent's model (alias or full id)")
 	effort := fs.String("effort", "", "pin the delegated agent's reasoning effort")
-	name := fs.String("name", "", "name for the agent")
+	name := fs.String("name", "", "session name; defaults from the brief or seed title")
 	desktop := fs.String("desktop", "", "desktop of the caller's profile: shortcut digit, name or id")
 	sourceSessionID := fs.String("source-session", "", "source session id (defaults to ATTN_SESSION_ID)")
 	yolo := fs.Bool("yolo", false, "launch the target agent in yolo mode")

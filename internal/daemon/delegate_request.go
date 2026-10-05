@@ -40,6 +40,7 @@ type resolvedDelegationLaunch struct {
 	Handover              *protocol.SeedHandoverRequest
 	Confirm               *bool
 	PreferencesRevision   *int
+	SeedTitle             string
 	ParentSeedID          string
 	PreviousTenderSession string
 }
@@ -164,6 +165,10 @@ func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 			}
 		}
 		runtime.Brief = protocol.Ptr(strings.TrimSpace(protocol.Deref(msg.Assignment.Brief)))
+		runtime.SeedTitle = strings.TrimSpace(protocol.Deref(msg.Label))
+		if runtime.SeedTitle == "" {
+			runtime.SeedTitle = garden.TitleFromBrief(protocol.Deref(runtime.Brief))
+		}
 		runtime.Plot = protocol.Ptr(seedID)
 	} else {
 		seedID := strings.TrimSpace(protocol.Deref(msg.Assignment.SeedID))
@@ -175,6 +180,7 @@ func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 			return nil, fmt.Errorf("seed %s is %s; replant it before delegating", seedID, seed.Status)
 		}
 		runtime.Brief = protocol.Ptr(seed.Body)
+		runtime.SeedTitle = seed.Title
 		runtime.Plot = protocol.Ptr(seedID)
 		if msg.Assignment.Handover != nil {
 			previousTenderSession := seed.TenderSession
@@ -204,9 +210,6 @@ func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 					}
 				}
 				runtime.Handover.NoteID = protocol.Ptr(noteID)
-			}
-			if runtime.Label == nil {
-				runtime.Label = protocol.Ptr(handoverSessionName(seed.Title, sessionID))
 			}
 		}
 	}

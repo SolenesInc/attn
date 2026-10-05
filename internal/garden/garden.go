@@ -304,3 +304,38 @@ func Export(seed Seed) string {
 	}
 	return b.String()
 }
+
+func TitleFromBrief(brief string) string {
+	var title string
+	for _, line := range strings.Split(brief, "\n") {
+		if title == "" {
+			title = strings.TrimSpace(line)
+		}
+		hashes := len(line) - len(strings.TrimLeft(line, "#"))
+		if hashes < 1 || hashes > 6 || hashes == len(line) {
+			continue
+		}
+		rest := line[hashes:]
+		if rest[0] != ' ' && rest[0] != '\t' {
+			continue
+		}
+		if strings.TrimSpace(rest) == "" {
+			continue
+		}
+		title = strings.TrimSpace(strings.TrimRight(strings.TrimSpace(rest), "#"))
+		break
+	}
+	title = strings.Join(strings.Fields(title), " ")
+	runes := []rune(title)
+	if len(runes) <= 80 {
+		return title
+	}
+	cut := 80
+	for i := 80; i > 0; i-- {
+		if runes[i] == ' ' {
+			cut = i
+			break
+		}
+	}
+	return string(runes[:cut])
+}

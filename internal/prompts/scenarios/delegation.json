@@ -5,6 +5,7 @@
   "recipient": "delegation",
   "event": "opening",
   "values": {
-    "seed_id": "s-example"
+    "seed_id": "s-example",
+    "seed_title": "Review the queue change"
   }
 }

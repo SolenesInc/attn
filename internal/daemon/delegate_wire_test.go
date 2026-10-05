@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -212,38 +213,143 @@ func TestADelegationFromTheChiefIsMarkedAndLandsBesideTheChief(t *testing.T) {
 	}
 }
 
-func TestADelegationNamesItsSession(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	cli := w.Client()
-	longDirectory := strings.Repeat("invoice-", 7)
-	for _, row := range []struct {
-		name, directory, label, want string
-	}{
-		{name: "an explicit name", directory: "svc", label: "Payments API", want: "Payments API"},
-		{name: "the directory's name", directory: "ledger", want: "ledger"},
-		{name: "a long directory name cut to fit", directory: longDirectory, want: strings.TrimSuffix(strings.Repeat("invoice-", 6), "-")},
-		{name: "a long directory name cut before trailing punctuation", directory: strings.Repeat("b", 44) + "   . more", want: strings.Repeat("b", 44)},
-		{name: "a long directory name cut by characters, not bytes", directory: strings.Repeat("é", 60), want: strings.Repeat("é", 48)},
+func TestADelegationNamesItsSeedAndSessionFromItsBrief(t *testing.T) {
+	longTitle := strings.Repeat("invoice ", 10) + "reconciliation more detail"
+	for i, row := range []struct{ name, brief, label, title, want string }{
+		{name: "heading", brief: "# Fix the queue jump\n\nInvestigate queue movement.", title: "Fix the queue jump", want: "Fix the queue jump"},
+		{name: "later heading", brief: "Context first\n\n### Reconcile  the\tledgers ###\nBody", title: "Reconcile the ledgers", want: "Reconcile the ledgers"},
+		{name: "first non-empty line", brief: "\n\t Reconcile  the ledgers \nDetails", title: "Reconcile the ledgers", want: "Reconcile the ledgers"},
+		{name: "long first line", brief: longTitle, title: strings.TrimSpace(strings.Repeat("invoice ", 10)), want: "invoice invoice invoice invoice invoice invoice"},
+		{name: "unicode", brief: "###### " + strings.Repeat("é", 90), title: strings.Repeat("é", 80), want: strings.Repeat("é", 48)},
+		{name: "explicit name", brief: "# Reconcile the ledgers", label: "Payments API", title: "Payments API", want: "Payments API"},
 	} {
-		cwd := w.Path(row.directory)
-		if err := os.MkdirAll(cwd, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		request := brief(cwd, "Reconcile the ledgers")
-		request.Agent = protocol.Ptr("codex")
-		if row.label != "" {
-			request.Label = protocol.Ptr(row.label)
-		}
-		result, err := cli.Delegate(request)
-		if err != nil {
-			t.Fatalf("%s: %v", row.name, err)
-		}
-		if result.Directory != cwd || protocol.Deref(result.DesktopID) == "" {
-			t.Errorf("%s: a delegation without a caller runs at %s on desktop %q; want %s, placed", row.name, result.Directory, protocol.Deref(result.DesktopID), cwd)
-		}
-		if label := sessionOfDelegate(t, w, result.SessionID).Label; label != row.want {
-			t.Errorf("%s: the delegate is labelled %q; want %q", row.name, label, row.want)
-		}
+		t.Run(row.name, func(t *testing.T) {
+			w := newWorld(t, fakeagent.Codex)
+			cli := w.Client()
+			cwd := w.Path(string(rune('a' + i)))
+			if err := os.MkdirAll(cwd, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			request := brief(cwd, row.brief)
+			request.Agent = protocol.Ptr("codex")
+			if row.label != "" {
+				request.Label = protocol.Ptr(row.label)
+			}
+			result, err := cli.Delegate(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			shown, err := cli.SeedShow("", result.SeedID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if shown.Seed.Title != row.title || shown.Seed.Body != strings.TrimSpace(row.brief) {
+				t.Errorf("seed = %+v; want title %q and original brief", shown.Seed, row.title)
+			}
+			session := sessionOfDelegate(t, w, result.SessionID)
+			if session.Label != row.want {
+				t.Errorf("label = %q; want %q", session.Label, row.want)
+			}
+			if prompt := w.Launched(result.SessionID).Prompted(); !strings.Contains(prompt, row.title) {
+				t.Errorf("opening = %q; want seed title %q", prompt, row.title)
+			}
+		})
+	}
+}
+
+func TestDerivedDelegationNamesUseTheFirstFreeDesktopSuffix(t *testing.T) {
+	for _, mode := range []string{"beside a caller", "standalone", "unplaced caller"} {
+		t.Run(mode, func(t *testing.T) {
+			w := newWorld(t, fakeagent.Codex)
+			app, cli := w.App(), w.Client()
+			var sourceID, desktop string
+			if mode == "beside a caller" {
+				source, sourceDesktop, _ := w.RequestSpawn(app, fakeagent.Codex, w.Path("source"))
+				sourceID, desktop = source.ID, sourceDesktop
+			} else if mode == "unplaced caller" {
+				sourceID = "caller"
+				registerSessions(t, w, cli, sourceID)
+			}
+			cwd := w.Path("task")
+			if err := os.MkdirAll(cwd, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			for _, title := range []string{"Fix the queue jump", "Reconcile v1.2.", strings.Repeat("é", 70)} {
+				for n := 1; n <= 3; n++ {
+					request := brief(cwd, "# "+title+"\n\nDo the task.")
+					request.Agent = protocol.Ptr("codex")
+					if sourceID != "" {
+						request.SourceSessionID = protocol.Ptr(sourceID)
+					}
+					result, err := cli.Delegate(request)
+					if err != nil {
+						t.Fatal(err)
+					}
+					want := title
+					if n == 1 {
+						want = string([]rune(title)[:min(48, len([]rune(title)))])
+					} else {
+						want = string([]rune(title)[:min(44, len([]rune(title)))]) + fmt.Sprintf(" (%d)", n)
+					}
+					if session := sessionOfDelegate(t, w, result.SessionID); session.Label != want {
+						t.Errorf("label = %q; want %q", session.Label, want)
+					}
+					if desktop == "" {
+						desktop = protocol.Deref(result.DesktopID)
+					}
+					if protocol.Deref(result.DesktopID) != desktop {
+						t.Errorf("desktop = %s; want %s", protocol.Deref(result.DesktopID), desktop)
+					}
+					if shown, err := cli.SeedShow("", result.SeedID); err != nil || shown.Seed.Title != title {
+						t.Errorf("seed = %+v, %v; want title %q", shown, err, title)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestAnExistingSeedNamesItsDelegateAndHandover(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	source := w.Spawn(app, fakeagent.Codex, w.Path("source"))
+	title := "Fix the queue jump"
+	seed := plantDelegationSeed(t, cli, source, title)
+	cwd := w.Path("task")
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	first, err := cli.Delegate(delegateAtSeed(source, cwd, seed))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if label := sessionOfDelegate(t, w, first.SessionID).Label; label != title {
+		t.Errorf("seed delegate label = %q; want %q", label, title)
+	}
+	request := delegateAtSeed(source, cwd, seed)
+	request.Assignment.Handover = &protocol.DelegateHandover{}
+	second, err := cli.Delegate(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if label := sessionOfDelegate(t, w, second.SessionID).Label; label != title+" (2)" {
+		t.Errorf("handover label = %q; want suffix (2)", label)
+	}
+	if prompt := w.Launched(second.SessionID).Prompted(); !strings.Contains(prompt, title) {
+		t.Errorf("handover opening = %q; want title", prompt)
+	}
+	request = delegateAtSeed(source, cwd, seed)
+	request.Assignment.Handover = &protocol.DelegateHandover{}
+	request.Label = protocol.Ptr("Queue reviewer")
+	third, err := cli.Delegate(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if label := sessionOfDelegate(t, w, third.SessionID).Label; label != "Queue reviewer" {
+		t.Errorf("explicit handover label = %q", label)
+	}
+	if shown, err := cli.SeedShow("", seed); err != nil || shown.Seed.Title != title {
+		t.Errorf("seed = %+v, %v; want title unchanged", shown, err)
 	}
 }
 

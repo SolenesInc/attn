@@ -2,12 +2,13 @@ package prompts
 
 var (
 	brief            = TextField("brief", "Configured task or delegation brief.")
+	seedTitle        = TextField("seed_title", "Title of the reporting seed.")
 	seedID           = TextField("seed_id", "Reporting seed, if one is bound to the session.")
 	localReview      = FlagField("local_review", "The automation permits only a local review.")
 	hasTarget        = FlagField("has_target", "A local review has structured pull request identity.")
 	inputPath        = TextField("input_path", "Path to untrusted occurrence data.")
 	leafIdentity     = Use("delegation.identity", "content/delegation/identity.md")
-	seedContract     = Use("delegation.seed", "content/delegation/seed.md", Bind("seed_id", Input(seedID)))
+	seedContract     = Use("delegation.seed", "content/delegation/seed.md", Bind("seed_id", Input(seedID)), Bind("seed_title", Input(seedTitle)))
 	automationTarget = template("automation.target", "content/automation/target.md",
 		TextField("definition", "Quoted automation name."),
 		TextField("repository", "Repository identity."), TextField("number", "Pull request number."),

@@ -1,0 +1,3 @@
+kind: changed
+area: delegation
+change: Delegated sessions and new seeds take their names from the brief or seed title instead of the checkout folder. The opening prompt names the task.
