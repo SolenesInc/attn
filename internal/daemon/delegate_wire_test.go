@@ -217,6 +217,8 @@ func TestADelegationNamesItsSeedAndSessionFromItsBrief(t *testing.T) {
 	longTitle := strings.Repeat("invoice ", 10) + "reconciliation more detail"
 	for i, row := range []struct{ name, brief, label, title, want string }{
 		{name: "heading", brief: "# Fix the queue jump\n\nInvestigate queue movement.", title: "Fix the queue jump", want: "Fix the queue jump"},
+		{name: "hash in the heading text", brief: "# Document C#", title: "Document C#", want: "Document C#"},
+		{name: "closing hashes after a text hash", brief: "# Document C# ###", title: "Document C#", want: "Document C#"},
 		{name: "later heading", brief: "Context first\n\n### Reconcile  the\tledgers ###\nBody", title: "Reconcile the ledgers", want: "Reconcile the ledgers"},
 		{name: "first non-empty line", brief: "\n\t Reconcile  the ledgers \nDetails", title: "Reconcile the ledgers", want: "Reconcile the ledgers"},
 		{name: "long first line", brief: longTitle, title: strings.TrimSpace(strings.Repeat("invoice ", 10)), want: "invoice invoice invoice invoice invoice invoice"},

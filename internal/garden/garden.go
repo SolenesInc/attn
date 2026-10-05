@@ -322,7 +322,15 @@ func TitleFromBrief(brief string) string {
 		if strings.TrimSpace(rest) == "" {
 			continue
 		}
-		title = strings.TrimSpace(strings.TrimRight(strings.TrimSpace(rest), "#"))
+		rest = strings.TrimRight(rest, " \t\r")
+		withoutHashes := strings.TrimRight(rest, "#")
+		if len(withoutHashes) < len(rest) && len(withoutHashes) > 0 {
+			last := withoutHashes[len(withoutHashes)-1]
+			if last == ' ' || last == '\t' {
+				rest = withoutHashes
+			}
+		}
+		title = strings.TrimSpace(rest)
 		break
 	}
 	title = strings.Join(strings.Fields(title), " ")
