@@ -40,10 +40,11 @@ export function SidebarRailHarness({ onReady, setTriggerRerender }: HarnessProps
       <Sidebar
         collapsed surface="tree-collapsed" selectedId={null} selectedDesktopId={selected}
         desktops={arrangement} visualIndexByDesktopId={new Map(arrangement.map((desktop, index) => [desktop.id, index]))}
-        headerActions={Array.from({ length: 9 }, (_, index) => ({
-          id: `tool-${index}`, title: `Tool ${index + 1}`, icon: <HomeIcon />,
-          badge: index === 2 ? 12 : undefined, onClick: noop,
+        headerActions={['Garden', 'Notebook', 'Ledger', 'Automations', 'Notifications'].map((title) => ({
+          id: title.toLowerCase(), title, icon: <HomeIcon />,
+          unread: title === 'Notifications', onClick: noop,
         }))}
+        onOpenCommands={() => window.__HARNESS__.recordCall('commands', [])}
         onSelectDesktop={(id) => { setSelected(id); window.__HARNESS__.recordCall('desktop', [id]); }}
         onSelectSession={noop} onNewSession={noop} onCloseSession={noop} onReloadSession={noop}
         onGoToDashboard={noop} onToggleCollapse={noop}

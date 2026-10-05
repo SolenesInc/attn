@@ -52,7 +52,7 @@ export function QueueSidebarFitHarness({ onReady, setTriggerRerender }: HarnessP
       <div className="app-frame">
         <Sidebar
           collapsed={false}
-          surface="queue-open"
+          surface={new URLSearchParams(window.location.search).has('desktop') ? 'tree-open' : 'queue-open'}
           selectedId={null}
           selectedDesktopId="desk-1"
           headerActions={[]}
@@ -62,7 +62,7 @@ export function QueueSidebarFitHarness({ onReady, setTriggerRerender }: HarnessP
           crew={[{ id: 'alder', binding_session: 'crew-awake' }, { id: 'birch' }, { id: 'cedar' }]}
           profileName="Harness"
           onSelectSession={noop}
-          onWakeCrewMember={noop}
+          onWakeCrewMember={(member) => window.__HARNESS__.recordCall('wake', [member])}
           onSelectDesktop={noop}
           onNewSession={noop}
           onCloseSession={noop}

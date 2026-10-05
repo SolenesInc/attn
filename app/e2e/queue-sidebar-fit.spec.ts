@@ -18,3 +18,21 @@ test('fits waiting rows to the available sidebar height and counts only hidden a
   await expect(toggle).toBeInViewport();
   await expect(counts).toHaveText('2 waiting1 working2 snoozed');
 });
+
+for (const flow of ['queue', 'desktop']) {
+  test(`sleeping crew wake remains clickable beside hover actions in ${flow} flow`, async ({ page }) => {
+    await page.goto(`/test-harness/?component=QueueSidebarFit${flow === 'desktop' ? '&desktop' : ''}`);
+    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    const row = page.getByTestId('queue-crew-birch');
+    const sun = page.getByTestId('queue-crew-wake-birch');
+    await row.hover();
+    await sun.click();
+    await expect(row).toHaveAttribute('data-crew-wake', 'armed');
+    expect(await page.evaluate(() => window.__HARNESS__.getCalls('wake'))).toEqual([]);
+    await sun.click();
+    expect(await page.evaluate(() => window.__HARNESS__.getCalls('wake'))).toEqual([['birch']]);
+    await expect(page.getByRole('menu', { name: 'Actions for Birch' })).toHaveCount(0);
+    await row.getByRole('button', { name: 'Actions for Birch' }).click();
+    await expect(page.getByRole('menu', { name: 'Actions for Birch' })).toBeVisible();
+  });
+}

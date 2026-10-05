@@ -225,7 +225,7 @@ test.describe('Desktop Sessions', () => {
     await expect(desktop.locator(paneOf('focus-peer'))).toBeVisible();
   });
 
-  test('sidebar selection, row actions, and settings have independent keyboard targets', async ({ page, daemon }) => {
+  test('sidebar selection, row actions, and Commands have independent keyboard targets', async ({ page, daemon }) => {
     await daemon.start();
     await page.goto('/');
     await page.waitForSelector('.dashboard');
@@ -263,18 +263,13 @@ test.describe('Desktop Sessions', () => {
     await page.keyboard.press('Enter');
     await expect(page.getByRole('menu', { name: 'Actions for keyboard-one' })).toBeVisible();
     await page.keyboard.press('Escape');
-    const settings = page.getByRole('button', { name: 'Sidebar settings', exact: true });
-    await settings.focus();
+    const commands = page.getByRole('button', { name: 'Commands', exact: true });
+    await commands.focus();
     await page.keyboard.press('Enter');
-    const dialog = page.getByRole('dialog', { name: 'Sidebar settings' });
-    await expect(dialog.getByRole('switch', { name: 'Agent queue', exact: true })).toBeFocused();
-    const sidebar = await page.locator('.sidebar').boundingBox();
-    const popup = await dialog.boundingBox();
-    expect(popup!.x).toBeGreaterThanOrEqual(sidebar!.x);
-    expect(popup!.x + popup!.width).toBeLessThanOrEqual(sidebar!.x + sidebar!.width);
+    const paletteInput = page.getByPlaceholder('Jump to an agent or tile · type > for commands');
+    await expect(paletteInput).toBeFocused();
     await page.keyboard.press('Escape');
-    await expect(dialog).toHaveCount(0);
-    await expect(settings).toBeFocused();
+    await expect(paletteInput).toHaveCount(0);
     await expect(page.locator('.sidebar button button')).toHaveCount(0);
   });
 

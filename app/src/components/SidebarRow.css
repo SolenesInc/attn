@@ -73,3 +73,7 @@
   opacity: 1;
   pointer-events: auto;
 }
+
+.sidebar-leaf-row[data-crew-state='asleep'] > .session-actions {
+  right: calc(8px + 20px + 6px);
+}
