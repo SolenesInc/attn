@@ -132,6 +132,7 @@ try {
     await capture('05-launch-settings.png');
   });
   await runner.step('a_user_wake_goes_there_and_background_wake_stays_quiet', async () => {
+    const memberHeading = await client.request('dom_text', { selector: '.crew-member-heading h2' });
     const userLaunched = observer.waitForMessage((message) => message.event === 'crew_updated' && message.members?.find((member) => member.id === members[0].item_id && member.binding_session), 'app crew wake');
     await click('[data-testid="crew-restart"]');
     await click('[data-testid="crew-confirm-restart"]');
@@ -144,7 +145,7 @@ try {
     await driver.pressKey('w', { command: true, shift: process.platform === 'linux' });
     await wait('.toast', { textIncludes: 'is protected' });
     const error = await client.request('dom_text', { selector: '.toast' });
-    runner.assert(error.text.includes(members[0].name), 'Closing a crew session still explains its protection', error);
+    runner.assert(error.text.includes(memberHeading.text), 'Closing a crew session still explains its protection', error);
     runner.assert(!error.text.includes('Dismiss') && !error.text.includes('fades'), 'The error has no dismissal button or timer explanation', error);
     await wait('.toast-source', { absent: true });
     await client.request('dom_hover', { selector: '.toast' });
