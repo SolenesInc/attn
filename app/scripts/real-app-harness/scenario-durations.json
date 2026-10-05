@@ -176,6 +176,14 @@
         "seconds": 50.8,
         "runnerClass": "local macOS",
         "note": "Green native run, ATTN_VERDICT durationMs=50847 including copied-data migration, sharing, settings, wake, preflight and cleanup. Private receipt attached to seed s-836tat. Remeasure on Linux CI."
+      },
+      "prompt-composition": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/37237377153",
+        "job": "App acceptance shard 3/4",
+        "recordedAt": "2026-10-04",
+        "seconds": 29.596,
+        "runnerClass": "hosted Linux",
+        "note": "Green native scenario durationMs=29596, including uploads, agent inbox delivery, byte-exact image/PDF retrieval and cleanup. Receipt: app-acceptance-evidence-1-shard-3/last-matrix.json and matrix-digest.txt."
       }
     }
   },
@@ -207,7 +215,7 @@
     "markdown-opener": 20.3,
     "notebook-editor-undo": 32.8,
     "present-submit-closes-window": 10.7,
-    "prompt-composition": 19,
+    "prompt-composition": 29.596,
     "pty-host-setting": 8.3,
     "session-close-ledger": 9.9,
     "session-reopen": 6.2,

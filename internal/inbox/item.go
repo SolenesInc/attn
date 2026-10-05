@@ -3,9 +3,10 @@ package inbox
 type Kind string
 
 const (
-	SeedUpdate  Kind = "garden_seed"
-	PeerMessage Kind = "peer_message"
-	Notice      Kind = "maintenance_prompt"
+	SeedUpdate   Kind = "garden_seed"
+	PeerMessage  Kind = "peer_message"
+	QuickCapture Kind = "quick_capture"
+	Notice       Kind = "maintenance_prompt"
 )
 
 const (

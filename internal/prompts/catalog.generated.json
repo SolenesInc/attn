@@ -25,29 +25,39 @@
                 },
                 "children": [
                   {
-                    "kind": "text",
-                    "id": "session.chief",
-                    "source": "content/chief.md",
-                    "bindings": [
+                    "kind": "compose",
+                    "children": [
                       {
-                        "name": "notebook_root",
-                        "node": {
-                          "kind": "input",
-                          "field": {
+                        "kind": "text",
+                        "id": "session.chief",
+                        "source": "content/chief.md",
+                        "bindings": [
+                          {
                             "name": "notebook_root",
-                            "kind": "text",
-                            "description": "Notebook directory; a nonempty value selects chief guidance.",
-                            "trim_space": true
+                            "node": {
+                              "kind": "input",
+                              "field": {
+                                "name": "notebook_root",
+                                "kind": "text",
+                                "description": "Notebook directory; a nonempty value selects chief guidance.",
+                                "trim_space": true
+                              }
+                            }
+                          },
+                          {
+                            "name": "delegation_boundary",
+                            "node": {
+                              "kind": "text",
+                              "id": "delegation.boundary",
+                              "source": "content/delegation-boundary.md"
+                            }
                           }
-                        }
+                        ]
                       },
                       {
-                        "name": "delegation_boundary",
-                        "node": {
-                          "kind": "text",
-                          "id": "delegation.boundary",
-                          "source": "content/delegation-boundary.md"
-                        }
+                        "kind": "text",
+                        "id": "session.quick-capture-guidance",
+                        "source": "content/session/quick-capture.md"
                       }
                     ]
                   },
@@ -141,14 +151,41 @@
                 },
                 "children": [
                   {
-                    "kind": "input",
-                    "field": {
-                      "name": "crew_priming",
-                      "kind": "text",
-                      "description": "Rendered crew identity and predecessor letter, supplied by internal/crew.",
-                      "trim_space": true,
-                      "from": "crew/priming"
-                    }
+                    "kind": "compose",
+                    "children": [
+                      {
+                        "kind": "input",
+                        "field": {
+                          "name": "crew_priming",
+                          "kind": "text",
+                          "description": "Rendered crew identity and predecessor letter, supplied by internal/crew.",
+                          "trim_space": true,
+                          "from": "crew/priming"
+                        }
+                      },
+                      {
+                        "kind": "choose",
+                        "condition": {
+                          "field": {
+                            "name": "notebook_root",
+                            "kind": "text",
+                            "description": "Notebook directory; a nonempty value selects chief guidance.",
+                            "trim_space": true
+                          },
+                          "test": "present"
+                        },
+                        "children": [
+                          {
+                            "kind": "compose"
+                          },
+                          {
+                            "kind": "text",
+                            "id": "session.quick-capture-guidance",
+                            "source": "content/session/quick-capture.md"
+                          }
+                        ]
+                      }
+                    ]
                   }
                 ]
               }
@@ -506,6 +543,130 @@
                       ]
                     }
                   ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "quick-capture-file",
+          "delivery": "cli_output",
+          "description": "Retrieve one Quick Capture attachment.",
+          "body": {
+            "kind": "text",
+            "id": "session.quick-capture-file",
+            "source": "content/session/quick-capture-file.md",
+            "bindings": [
+              {
+                "name": "name",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "name",
+                    "kind": "text",
+                    "description": "Quoted file name"
+                  }
+                }
+              },
+              {
+                "name": "media_type",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "media_type",
+                    "kind": "text",
+                    "description": "Media type"
+                  }
+                }
+              },
+              {
+                "name": "bytes",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "bytes",
+                    "kind": "text",
+                    "description": "Byte count"
+                  }
+                }
+              },
+              {
+                "name": "capture_id",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "capture_id",
+                    "kind": "text",
+                    "description": "Capture ID"
+                  }
+                }
+              },
+              {
+                "name": "attachment_id",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "attachment_id",
+                    "kind": "text",
+                    "description": "Attachment ID"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "quick-capture-file-saved",
+          "delivery": "cli_output",
+          "description": "Inspect a downloaded Quick Capture attachment.",
+          "body": {
+            "kind": "text",
+            "id": "session.quick-capture-file-saved",
+            "source": "content/session/quick-capture-file-saved.md",
+            "bindings": [
+              {
+                "name": "path",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "path",
+                    "kind": "text",
+                    "description": "Saved file path"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "quick-capture",
+          "delivery": "cli_output",
+          "description": "User-authored Quick Capture inbox content.",
+          "body": {
+            "kind": "text",
+            "id": "session.quick-capture",
+            "source": "content/session/quick-capture-item.md",
+            "bindings": [
+              {
+                "name": "message",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "message",
+                    "kind": "text",
+                    "description": "User message"
+                  }
+                }
+              },
+              {
+                "name": "files",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "files",
+                    "kind": "text",
+                    "description": "File retrieval instructions"
+                  }
                 }
               }
             ]
@@ -4841,5 +5002,5 @@
       ]
     }
   ],
-  "definitions_hash": "dacd4da058a7ece025dd645bf32579926fa76aff0fc441e36fa16005821b028a"
+  "definitions_hash": "801fe67c2dfccf3270a56405d256bc0c74b07de6326428587f4d6821d50bd948"
 }

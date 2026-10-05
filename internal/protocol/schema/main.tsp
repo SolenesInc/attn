@@ -799,8 +799,119 @@ model AgentCloseResult {
   seed_ids: string[];           // the seeds the closed session tended, each of which got the note
 }
 
-// With a message id, the recipient reads one notified peer message through the
-// legacy adapter. Without one, it reads a bounded FIFO batch from its inbox.
+enum QuickCaptureMailboxKind { chief, crew_member }
+model QuickCaptureMailbox {
+  kind: QuickCaptureMailboxKind;
+  member_id?: string;
+}
+model QuickCaptureAttachment {
+  id: string;
+  name: string;
+  media_type: string;
+  bytes: safeint;
+}
+model QuickCaptureRecord {
+  id: string;
+  mailbox: QuickCaptureMailbox;
+  content: string;
+  created_at: string;
+  attachments: QuickCaptureAttachment[];
+  read_at?: string;
+}
+enum QuickCaptureDraftState { staged, ready }
+model QuickCaptureDraftAsset {
+  capture_id: string;
+  attachment_id: string;
+  name: string;
+  state: QuickCaptureDraftState;
+  next_offset: safeint;
+}
+model QuickCaptureListResult {
+  items: QuickCaptureRecord[];
+  draft_assets: QuickCaptureDraftAsset[];
+  next_cursor?: string;
+}
+model QuickCaptureSendMessage {
+  profile_id?: string;
+  cmd: "quick_capture_send";
+  request_id?: string;
+  capture_id: string;
+  mailbox: QuickCaptureMailbox;
+  content: string;
+  attachment_ids: string[];
+}
+model QuickCaptureGetMessage {
+  profile_id?: string;
+  cmd: "quick_capture_get";
+  request_id?: string;
+  capture_id: string;
+}
+model QuickCaptureListMessage {
+  profile_id?: string;
+  cmd: "quick_capture_list";
+  request_id?: string;
+  limit: safeint;
+  cursor?: string;
+}
+model QuickCaptureAttachmentPutMessage {
+  profile_id?: string;
+  cmd: "quick_capture_attachment_put";
+  request_id?: string;
+  capture_id: string;
+  attachment_id: string;
+  name: string;
+  offset: safeint;
+  data_base64: string;
+  final: boolean;
+}
+model QuickCaptureAttachmentGetMessage {
+  source_session_id?: string;
+  profile_id?: string;
+  cmd: "quick_capture_attachment_get";
+  request_id?: string;
+  capture_id: string;
+  attachment_id: string;
+  offset: safeint;
+}
+model QuickCaptureAttachmentDiscardMessage {
+  profile_id?: string;
+  cmd: "quick_capture_attachment_discard";
+  request_id?: string;
+  capture_id: string;
+  attachment_id: string;
+}
+model QuickCaptureAttachmentPutResult {
+  next_offset: safeint;
+  attachment?: QuickCaptureAttachment;
+}
+model QuickCaptureAttachmentGetResult {
+  data_base64: string;
+  next_offset: safeint;
+  eof: boolean;
+}
+model QuickCaptureResult {
+  record?: QuickCaptureRecord;
+  list?: QuickCaptureListResult;
+  upload?: QuickCaptureAttachmentPutResult;
+  download?: QuickCaptureAttachmentGetResult;
+  discarded?: boolean;
+}
+model QuickCaptureResultMessage {
+  profile_id: string;
+  event: "quick_capture_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  error_code?: string;
+  result?: QuickCaptureResult;
+}
+model QuickCaptureReadMessage {
+  profile_id: string;
+  event: "quick_capture_read";
+  capture_id: string;
+  read_at: string;
+}
+
 model AgentInboxMessage {
   cmd: "agent_inbox";
   message_id?: string;
@@ -5786,7 +5897,9 @@ model Response {
   agent_peek_result?: AgentPeekResult;
   agent_msg_result?: AgentMsgResult;
   agent_close_result?: AgentCloseResult;
+  quick_capture_result?: QuickCaptureResult;
   agent_inbox_result?: AgentPeerMessage;
+  agent_inbox_item_result?: AgentInboxItem;
   agent_inbox_batch_result?: AgentInboxBatchResult;
   agent_msg_status_result?: AgentPeerMessage;
   crew_list_result?: CrewListResult;
@@ -6319,6 +6432,7 @@ model AgentPeerMessage {
 // peer body or the daemon-authored action text for another mailbox kind.
 model AgentInboxItem {
   address: string;
+  attachments?: QuickCaptureAttachment[];
   item_id: string;
   kind: string;
   source_id?: string;
