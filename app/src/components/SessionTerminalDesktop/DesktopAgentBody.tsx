@@ -17,7 +17,6 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle }: DesktopA
     terminalsLive,
     onTerminalPointerActivity,
     onOpenMarkdown,
-    onTerminalModelRecovered,
     staleBuildDismissed,
     setStaleBuildDismissed,
     paneIds,
@@ -76,7 +75,6 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle }: DesktopA
           onOpenSeed={onOpenSeed}
           onReady={handleGhosttyTerminalReady(agentPane.id)}
           onResize={runtime.handleTerminalResize(agentPane.id)}
-          onTerminalModelRecovered={onTerminalModelRecovered}
         />
       )}
     </div>

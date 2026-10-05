@@ -188,7 +188,6 @@ export interface GhosttyTerminalProps {
   onOpenSeed?: (seedId: string) => void;
   onReady: (terminal: GhosttyTerminalHandle) => void;
   onResize: (cols: number, rows: number, options?: { reason?: string; xpixel?: number; ypixel?: number }) => void;
-  onTerminalModelRecovered?: () => void;
   annotations?: TerminalAnnotationStore;
   annotationsVersion?: number;
   onAnnotationAnchor?: (
@@ -517,7 +516,7 @@ function cellText(
 }
 
 export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminalProps>(
-  function GhosttyTerminal({ fontSize, resolvedTheme = 'dark', debugName, cwd, runtimeLogMeta, onInput, onPointerActivity, onOpenMarkdown, gardenSeeds = EMPTY_GARDEN_SEEDS, onOpenSeed, onReady, onResize, onTerminalModelRecovered, annotations, annotationsVersion = 0, onAnnotationAnchor, onAnnotationMiss, onAnnotationActivate }, ref) {
+  function GhosttyTerminal({ fontSize, resolvedTheme = 'dark', debugName, cwd, runtimeLogMeta, onInput, onPointerActivity, onOpenMarkdown, gardenSeeds = EMPTY_GARDEN_SEEDS, onOpenSeed, onReady, onResize, annotations, annotationsVersion = 0, onAnnotationAnchor, onAnnotationMiss, onAnnotationActivate }, ref) {
     const containerRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const terminalRef = useRef<GhosttyModel | null>(null);
@@ -616,7 +615,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     const onOpenMarkdownRef = useRef(onOpenMarkdown);
     const onReadyRef = useRef(onReady);
     const onResizeRef = useRef(onResize);
-    const onTerminalModelRecoveredRef = useRef(onTerminalModelRecovered);
     const annotationsRef = useRef(annotations);
     const onAnnotationAnchorRef = useRef(onAnnotationAnchor);
     const onAnnotationMissRef = useRef(onAnnotationMiss);
@@ -657,7 +655,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     onOpenMarkdownRef.current = onOpenMarkdown;
     onReadyRef.current = onReady;
     onResizeRef.current = onResize;
-    onTerminalModelRecoveredRef.current = onTerminalModelRecovered;
     annotationsRef.current = annotations;
     onAnnotationAnchorRef.current = onAnnotationAnchor;
     onAnnotationMissRef.current = onAnnotationMiss;
@@ -2264,7 +2261,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         });
         if (recoveredModelFault) {
           modelRecoveryPendingRef.current = false;
-          onTerminalModelRecoveredRef.current?.();
         }
       }).catch((reason) => {
         if (!active) return;

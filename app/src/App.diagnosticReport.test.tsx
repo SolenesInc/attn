@@ -121,7 +121,7 @@ describe('App diagnostic report', () => {
     ]);
   });
 
-  it('saves only metadata once the user clears the output, and says it saved', async () => {
+  it('saves only metadata once the user clears the output without a success toast', async () => {
     const { daemon } = await openTerminals();
     await createReport(daemon);
 
@@ -131,7 +131,7 @@ describe('App diagnostic report', () => {
     expect(savedReport().paneContent).toEqual([]);
     expect(savedText()).not.toContain(FIRST_OUTPUT);
     expect(savedText()).not.toContain(SECOND_OUTPUT);
-    expect(screen.getByText('Diagnostic report saved')).toBeInTheDocument();
+    expect(screen.queryByText('Diagnostic report saved')).not.toBeInTheDocument();
   });
 
   it('marks a ticked pane that left the screen before saving as unavailable', async () => {
@@ -211,14 +211,15 @@ describe('App diagnostic report file', () => {
     expect(save).not.toHaveBeenCalled();
   });
 
-  it('says the report is saved without waiting for the desktop to reveal it', async () => {
+  it('saves the report without waiting for the desktop to reveal it', async () => {
     const { daemon } = await openTerminals();
     await createReport(daemon);
     vi.mocked(revealItemInDir).mockReturnValueOnce(new Promise(() => {}));
 
     await saveReport(daemon);
 
-    expect(screen.getByText('Diagnostic report saved')).toBeInTheDocument();
+    expect(savedReport().paneContent).toBeDefined();
+    expect(screen.queryByText('Diagnostic report saved')).not.toBeInTheDocument();
   });
 });
 

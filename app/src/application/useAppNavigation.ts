@@ -8,9 +8,8 @@ import { useProfilesStore, useSelectedTile } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { dispatcherOf } from '../utils/delegationLinks';
 import { orderedDesktops } from '../utils/desktops';
-import { automationRunGroups, nextRunNeedingYou, runCount } from '../utils/automationRuns';
+import { automationRunGroups, nextRunNeedingYou } from '../utils/automationRuns';
 import { oldestWantedTurn, stepQueue } from '../utils/queueBands';
-import { formatShortcut } from '../shortcuts/formatShortcut';
 import { probeUiAfterSwitch } from '../utils/uiDiagnosticsLog';
 import {
   persistDesktopSelectionStyle,
@@ -28,7 +27,6 @@ interface Options {
   profileSessions: ReturnType<typeof useAppSessions>['profileSessions'];
   attentionQueue: ReturnType<typeof useAttentionQueue>;
   showError: (message: string) => void;
-  showNotice: (message: string) => void;
 }
 export function useAppNavigation({
   shownAgentId,
@@ -37,7 +35,6 @@ export function useAppNavigation({
   profileSessions,
   attentionQueue,
   showError,
-  showNotice,
 }: Options) {
   const {
     view,
@@ -83,22 +80,8 @@ export function useAppNavigation({
   const handleNextRun = useCallback(() => {
     const groups = automationRunGroups(desktopViews, Date.now());
     const step = nextRunNeedingYou(groups, agentOnScreenId);
-    if (!step) {
-      const total = runCount(groups);
-      const { profiles, selectedProfileId } = useProfilesStore.getState();
-      const profileName = profiles.find((profile) => profile.id === selectedProfileId)?.name ?? 'this profile';
-      showNotice(
-        total === 0
-          ? `No automation runs in ${profileName}`
-          : `No run needs you · ${total} ${total === 1 ? 'run' : 'runs'} on file`,
-      );
-      return;
-    }
-    handleSelectSession(step.run.id);
-    showNotice(
-      `${step.group.name} · run ${step.position} of ${step.total} needing you · ${formatShortcut('session.settle')} settles, ${formatShortcut('session.nextRun')} moves on`,
-    );
-  }, [desktopViews, agentOnScreenId, handleSelectSession, showNotice]);
+    if (step) handleSelectSession(step.run.id);
+  }, [desktopViews, agentOnScreenId, handleSelectSession]);
 
   const [desktopSelectionStyle, setDesktopSelectionStyle] = useState<DesktopSelectionStyle>(
     readDesktopSelectionStyle,

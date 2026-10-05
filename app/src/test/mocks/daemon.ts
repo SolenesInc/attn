@@ -175,7 +175,6 @@ export function createMockDaemonApi(methods: Partial<DaemonApi>): DaemonApi {
   const api: Partial<DaemonApi> = {
     isConnected: false,
     connectionError: null,
-    disconnectExplanation: null,
     connectionGeneration: 0,
     hasReceivedInitialState: false,
     settings: {},

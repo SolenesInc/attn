@@ -48,12 +48,12 @@ function renderNavigation() {
     sendDesktopReorder: vi.fn().mockResolvedValue(ok),
     sendProfileSelect: vi.fn().mockResolvedValue(ok),
   };
-  const showNotice = vi.fn();
+  const showError = vi.fn();
   const wrapper = ({ children }: { children: ReactNode }) => (
     <DaemonApiProvider api={createMockDaemonApi(api)}>{children}</DaemonApiProvider>
   );
-  const { result } = renderHook(() => useDesktopNavigation(showNotice), { wrapper });
-  return { api, showNotice, result };
+  const { result } = renderHook(() => useDesktopNavigation(showError), { wrapper });
+  return { api, showError, result };
 }
 
 function staleRevision() {
@@ -97,12 +97,12 @@ describe('useDesktopNavigation', () => {
 
   it('shows the current slot again when there is nowhere to bounce, so its leaf takes the keyboard', () => {
     seedStore([desktop('d1', { shortcut_slot: 1 })]);
-    const { api, showNotice, result } = renderNavigation();
+    const { api, showError, result } = renderNavigation();
 
     act(() => result.current.switchToSlot(1));
 
     expect(vi.mocked(api.sendDesktopSetCurrent).mock.calls.map((call) => call[1])).toEqual(['d1']);
-    expect(showNotice).not.toHaveBeenCalled();
+    expect(showError).not.toHaveBeenCalled();
   });
 
   it('moves the active leaf beside the target active leaf and stays on the source desktop', async () => {
@@ -181,7 +181,7 @@ describe('useDesktopNavigation', () => {
         desktop('d1', { shortcut_slot: 1, tree_json: TREE_WITH_PANE('p1'), active_pane_id: 'p1', revision: 4 }),
         desktop('d2', { shortcut_slot: 2, revision: 7 }),
       ]);
-      const { api, showNotice, result } = renderNavigation();
+      const { api, showError, result } = renderNavigation();
       api.sendDesktopMoveLeaf.mockRejectedValueOnce(staleRevision());
 
       act(() => result.current.moveActiveLeafToDesktop('d2', false));
@@ -192,26 +192,26 @@ describe('useDesktopNavigation', () => {
       await settle();
 
       expect(api.sendDesktopMoveLeaf).toHaveBeenCalledTimes(1);
-      expect(showNotice).toHaveBeenCalledWith(expect.stringContaining('did not arrive within 5s'));
+      expect(showError).toHaveBeenCalledWith(expect.stringContaining('did not arrive within 5s'));
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('says so when nothing is active to move', () => {
+  it('does nothing quietly when nothing is active to move', () => {
     seedStore([desktop('d1', { shortcut_slot: 1 }), desktop('d2', { shortcut_slot: 2 })]);
-    const { api, showNotice, result } = renderNavigation();
+    const { api, showError, result } = renderNavigation();
 
     act(() => result.current.moveActiveLeafToSlot(2, false));
 
     expect(api.sendDesktopMoveLeaf).not.toHaveBeenCalled();
-    expect(showNotice).toHaveBeenCalledWith('Nothing is active to move.');
+    expect(showError).not.toHaveBeenCalled();
   });
 
 
   it('renames a desktop at its current revision and hands a refusal back to the rename form', async () => {
     seedStore([desktop('d1', { shortcut_slot: 1, revision: 6 })]);
-    const { api, showNotice, result } = renderNavigation();
+    const { api, showError, result } = renderNavigation();
 
     await act(() => result.current.renameDesktop('d1', 'Reviews'));
     api.sendDesktopRename.mockRejectedValueOnce(new Error('desktop d1 not found'));
@@ -219,29 +219,29 @@ describe('useDesktopNavigation', () => {
 
     await expect(refused).rejects.toThrow('desktop d1 not found');
     expect(api.sendDesktopRename.mock.calls).toEqual([['d1', 'Reviews', 6], ['d1', '', 6]]);
-    expect(showNotice).not.toHaveBeenCalled();
+    expect(showError).not.toHaveBeenCalled();
   });
 
   it('reorders a desktop between its new neighbours and shows a refusal', async () => {
     seedStore([desktop('d1', { shortcut_slot: 1 }), desktop('d2', { revision: 3 }), desktop('d3')]);
-    const { api, showNotice, result } = renderNavigation();
+    const { api, showError, result } = renderNavigation();
     api.sendDesktopReorder.mockRejectedValueOnce(new Error('desktop d3 belongs to another profile'));
 
     act(() => result.current.reorderDesktop({ desktopId: 'd2', nextDesktopId: 'd1' }));
     await settle();
 
     expect(api.sendDesktopReorder.mock.calls).toEqual([[{ desktopId: 'd2', nextDesktopId: 'd1', expectedRevision: 3 }]]);
-    expect(showNotice).toHaveBeenCalledWith('desktop d3 belongs to another profile');
+    expect(showError).toHaveBeenCalledWith('desktop d3 belongs to another profile');
   });
 
   it('shows a refused command to the user', async () => {
     seedStore([desktop('d1', { shortcut_slot: 1 }), desktop('d2', { shortcut_slot: 2 })]);
-    const { api, showNotice, result } = renderNavigation();
+    const { api, showError, result } = renderNavigation();
     api.sendDesktopSetCurrent.mockRejectedValueOnce(new Error('desktop d2 not found'));
 
     act(() => result.current.switchToSlot(2));
     await settle();
 
-    expect(showNotice).toHaveBeenCalledWith('desktop d2 not found');
+    expect(showError).toHaveBeenCalledWith('desktop d2 not found');
   });
 });

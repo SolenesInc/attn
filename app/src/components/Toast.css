@@ -23,8 +23,6 @@
 .toast.visible { opacity: 1; transform: translateY(0); }
 .toast:hover, .toast:focus-within { border-color: var(--color-text-muted); }
 .toast-glyph { flex: none; width: 22px; height: 22px; border-radius: 5px; display: grid; place-items: center; font: 600 11px monospace; border: 1px solid var(--color-border); }
-.toast-glyph.crew { border-color: color-mix(in srgb, var(--color-accent) 40%, transparent); background: color-mix(in srgb, var(--color-accent) 10%, transparent); color: var(--color-accent); }
-.toast-glyph.automation { border-color: #5b8cff59; background: #5b8cff1a; color: #9db6ff; }
 .toast-glyph.error { color: var(--color-error); }
 .toast-content { flex: 1; min-width: 0; }
 .toast-title { font-size: 12.5px; }
@@ -46,6 +44,4 @@
 .toast-row--new { animation: toast-row-arrival 1.6s ease-out; }
 @keyframes toast-row-arrival { from { background: color-mix(in srgb, var(--color-accent) 16%, transparent); } }
 .toast-footer { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: 11px; color: var(--color-text-muted); }
-.toast-footer > span:first-child { white-space: nowrap; }
-.toast-close { margin-left: auto; padding: 0; border: 0; background: transparent; color: var(--color-text-secondary); font: inherit; cursor: pointer; }
 .crew-desktop-label { color: var(--color-text-muted); padding: 6px 12px; font-size: 11px; }
