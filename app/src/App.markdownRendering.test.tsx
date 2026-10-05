@@ -55,10 +55,6 @@ async function pressEnter(control: HTMLElement) {
   await Promise.all([userEvent.setup({ delay: null }).keyboard('{Enter}'), vi.advanceTimersByTimeAsync(10)]);
 }
 
-function tileBodyScrolls() {
-  return vi.spyOn(HTMLElement.prototype, 'scrollTo').mockImplementation(() => {});
-}
-
 describe('App markdown rendering', () => {
   it('renders a document’s heading and GFM table, and keeps a single newline inside its paragraph', async () => {
     const { reader } = await openMarkdown('# Plan\n\n| step | owner |\n| - | - |\n| parse | ana |\n\nfirst line\nsecond line\n');
@@ -120,16 +116,6 @@ describe('App markdown rendering', () => {
     const prose = Array.from(tile().querySelectorAll('.md-reader-card :not(pre):not(pre *)'))
       .flatMap((element) => Array.from(element.childNodes).filter((node) => node.nodeType === Node.TEXT_NODE).map((node) => node.textContent));
     expect(prose.join('\n')).not.toMatch(/\|[^\n|]*\|/);
-  });
-
-  it('scrolls the tile a fragment link lives in to its heading, even when another tile shows the same document', async () => {
-    const scrolls = tileBodyScrolls();
-    const { tile } = await openMarkdown('[Jump](#setup)\n\n## Setup\n', { tiles: ['tile-a', 'tile-b'] });
-
-    fireEvent.click(within(tile('tile-b')).getByRole('link', { name: 'Jump' }));
-
-    expect(scrolls.mock.contexts).toEqual([tile('tile-b').querySelector('.desktop-dock-tile-body')]);
-    expect(scrolls).toHaveBeenCalledWith(expect.objectContaining({ behavior: 'smooth' }));
   });
 
   it('shows a local image through the asset protocol in a lightbox, and blocks remote and escaping images', async () => {

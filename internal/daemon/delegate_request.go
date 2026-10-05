@@ -55,17 +55,6 @@ func resolveLaunchInput(msg *protocol.DelegateMessage) resolvedDelegationLaunch 
 	}
 }
 
-func (msg *resolvedDelegationLaunch) preferenceRequest() *protocol.DelegateMessage {
-	return &protocol.DelegateMessage{
-		Cmd: protocol.CmdDelegate, RequestID: msg.RequestID,
-		ProfileID: msg.ProfileID, SourceSessionID: msg.SourceSessionID, Assignment: msg.Assignment,
-		Cwd: msg.Cwd, Checkout: msg.Checkout, Agent: msg.Agent, Label: msg.Label,
-		YoloMode: msg.YoloMode, Model: msg.Model, Effort: msg.Effort,
-		AllowWorktreeReuse: msg.AllowWorktreeReuse, Role: msg.Role, Choice: msg.Choice,
-		Fallback: msg.Fallback, Provider: msg.Provider, Review: msg.Review, Desktop: msg.Desktop,
-	}
-}
-
 func validateDelegateRequestShape(msg *protocol.DelegateMessage) error {
 	if msg.Assignment.Kind == "" {
 		return errLegacyDelegationRequest

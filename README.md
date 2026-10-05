@@ -176,6 +176,11 @@ agent (or a plain shell), pick a directory, go.
 Every binding is customizable. Press **Cmd+/** in the app for the full,
 always-current list, and "Edit shortcuts" there to remap any of them.
 
+In desktop flow, keyboard jumps, palette selections, and clicks on panes smoothly
+center the selection in the expanded sidebar or collapsed desktop rail. Clicking
+inside either list keeps its scroll position. Reduced motion makes these jumps
+instant; going Home clears the list selection.
+
 ### Selecting text in agent terminals
 
 Agents like Claude Code enable terminal mouse tracking, which means a normal

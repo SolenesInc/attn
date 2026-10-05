@@ -389,29 +389,6 @@ func (d *Daemon) createDelegationWorktree(protection foregroundCleanupProtection
 	return worktreePath, true, nil
 }
 
-func (d *Daemon) delegateResolved(msg *resolvedDelegationLaunch) (*protocol.DelegateResult, error) {
-	var result *protocol.DelegateResult
-	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
-		var delegateErr error
-		result, delegateErr = d.delegateResolvedProtected(protection, msg)
-		return delegateErr
-	})
-	return result, err
-}
-
-func (d *Daemon) delegateResolvedProtected(protection foregroundCleanupProtection, msg *resolvedDelegationLaunch) (*protocol.DelegateResult, error) {
-	resolved, err := d.resolveDelegationPreferences(msg.preferenceRequest())
-	if err != nil {
-		return nil, err
-	}
-	sessionID := uuid.NewString()
-	operationID := ""
-	if msg.Handover != nil {
-		operationID = "legacy-" + sessionID
-	}
-	return d.delegateOperationProtected(protection, msg, operationID, sessionID, "", false, "", "", resolved)
-}
-
 func (d *Daemon) spawnDelegatedRuntimeProtected(protection foregroundCleanupProtection, msg *resolvedDelegationLaunch, sessionID, profileID string, placement *launchPlacement, directory, name, agent, model, effort, seedID string, guidance string) (internalActionResult, error) {
 	initialPrompt := delegatedSeedPrompt(seedID)
 	if guidance != "" {
@@ -556,13 +533,8 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 		} else if bound, ok := d.gardenDispatchCrown(sessionID); ok {
 			seedID = bound
 		} else {
-			if msg.Assignment.Kind == "" {
-				observed := d.observeGardenDispatchExecution(sessionID, existing.Directory, agent)
-				seedID, err = d.bindDelegationSeedProtected(protection, sessionID, sourceSessionID, brief, existing.Label, seedID, observed, delegatedByChief, existing.ProfileID)
-			} else {
-				observed := d.observeGardenDispatchExecution(sessionID, existing.Directory, agent)
-				seedID, err = d.bindDelegationAssignmentProtected(protection, operationID, sessionID, sourceSessionID, msg.ParentSeedID, brief, existing.Label, seedID, observed, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew, existing.ProfileID)
-			}
+			observed := d.observeGardenDispatchExecution(sessionID, existing.Directory, agent)
+			seedID, err = d.bindDelegationAssignmentProtected(protection, operationID, sessionID, sourceSessionID, msg.ParentSeedID, brief, existing.Label, seedID, observed, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew, existing.ProfileID)
 			if err != nil {
 				return nil, err
 			}
@@ -717,13 +689,8 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 			}
 		}
 	} else {
-		if msg.Assignment.Kind == "" {
-			observed := d.observeGardenDispatchExecution(sessionID, directory, agent)
-			seedID, err = d.bindDelegationSeedProtected(protection, sessionID, sourceSessionID, brief, name, seedID, observed, delegatedByChief, profile.ID)
-		} else {
-			observed := d.observeGardenDispatchExecution(sessionID, directory, agent)
-			seedID, err = d.bindDelegationAssignmentProtected(protection, operationID, sessionID, sourceSessionID, msg.ParentSeedID, brief, name, seedID, observed, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew, profile.ID)
-		}
+		observed := d.observeGardenDispatchExecution(sessionID, directory, agent)
+		seedID, err = d.bindDelegationAssignmentProtected(protection, operationID, sessionID, sourceSessionID, msg.ParentSeedID, brief, name, seedID, observed, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew, profile.ID)
 		if err != nil {
 			return nil, err
 		}

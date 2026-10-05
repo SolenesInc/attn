@@ -6,7 +6,7 @@ import './Sidebar.css';
 import { useSidebarContext } from './SidebarContext';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import { runCount, runsNeedingYouCount, runNeedsYou } from '../utils/automationRuns';
-import { hasNoLeaves, desktopShortcut } from './sidebarModel';
+import { hasNoLeaves, desktopShortcut, treeSelectionKey } from './sidebarModel';
 import { SidebarSessionRow, TileSidebarRow } from './SidebarRows';
 
 export function DesktopChip({ number, current, empty, title, children }: {
@@ -47,9 +47,12 @@ export function SidebarDesktopOverview({ compact = false }: { compact?: boolean 
 }
 
 export function SidebarDesktopList() {
+  const context = useSidebarContext();
+  const selectionKey = treeSelectionKey(context);
   const {
     onRenameDesktop,
     selectedDesktopId,
+    homeActive,
     onSessionDragStart,
     onSelectDesktop,
     openDesktopRename,
@@ -65,7 +68,7 @@ export function SidebarDesktopList() {
     handleHeaderClickCapture,
     handleSessionPointerDown,
     handleSessionClickCapture,
-  } = useSidebarContext();
+  } = context;
   return (
     <>
       {visibleDesktops.map((desktopView) => {
@@ -83,11 +86,12 @@ export function SidebarDesktopList() {
           <div className="desktop-row" key={desktopView.id}>
             {seamIndex !== undefined && renderReorderSeam(seamIndex)}
             <DesktopDropGroup desktopView={desktopView} reorderSource={isReorderSource}>
-              <div className={`desktop-rule${desktopView.id === selectedDesktopId ? ' current' : ''}${hasNoLeaves(desktopView) ? ' empty' : ''}${shortcut ? '' : ' no-shortcut'}`}>
+              <div aria-current={selectionKey === `${desktopView.id}/` ? 'true' : undefined} className={`desktop-rule${!homeActive && desktopView.id === selectedDesktopId ? ' current' : ''}${hasNoLeaves(desktopView) ? ' empty' : ''}${shortcut ? '' : ' no-shortcut'}`}>
                 <button
                   type="button"
                   className="sidebar-row-select"
                   aria-label={`Open ${desktopView.title}`}
+                  data-select-key={`${desktopView.id}/`}
                   title={emptyTitle}
                   onPointerDown={desktop ? (event) => handleHeaderPointerDown(desktopView, event) : undefined}
                   onClickCapture={handleHeaderClickCapture}
@@ -96,7 +100,7 @@ export function SidebarDesktopList() {
                 {desktop ? (
                   <DesktopChip
                     number={desktop.number ?? desktopIndex + 1}
-                    current={desktopView.id === selectedDesktopId}
+                    current={!homeActive && desktopView.id === selectedDesktopId}
                     empty={hasNoLeaves(desktopView)}
                     title={emptyTitle}
                   />
@@ -124,7 +128,8 @@ export function SidebarDesktopList() {
               {desktopView.children.map((child) => {
                 if (child.kind === 'tile') {
                   return (
-                    <DesktopTileRow key={child.id} desktopId={desktopView.id} tile={child.tile} />
+                    <DesktopTileRow key={child.id} desktopId={desktopView.id} tile={child.tile}
+                      aria-current={selectionKey === `${desktopView.id}/tile:${child.tile.tileId}` ? 'true' : undefined} />
                   );
                 }
                 const session = child.session;
@@ -134,6 +139,8 @@ export function SidebarDesktopList() {
                   <DesktopSessionRow
                     key={session.id}
                     session={session}
+                    data-select-key={`${desktopView.id}/session:${session.id}`}
+                    aria-current={selectionKey === `${desktopView.id}/session:${session.id}` ? 'true' : undefined}
                     draggable={draggable}
                     dragging={draggingSessionId === session.id}
                     onClickCapture={draggable ? handleSessionClickCapture : undefined}
@@ -251,6 +258,7 @@ function DesktopDropGroup({
 }) {
   const {
     selectedDesktopId,
+    homeActive,
     desktopDragClass,
     canAcceptLeafDrag,
     onDesktopDragEnter,
@@ -259,7 +267,7 @@ function DesktopDropGroup({
   } = useSidebarContext();
   return (
     <div
-      className={`desktop-group ${selectedDesktopId === desktopView.id ? 'selected' : ''}${reorderSource ? ' desktop-group--reorder-source' : ''}${desktopDragClass(desktopView)}`}
+      className={`desktop-group ${!homeActive && selectedDesktopId === desktopView.id ? 'selected' : ''}${reorderSource ? ' desktop-group--reorder-source' : ''}${desktopDragClass(desktopView)}`}
       data-testid={`sidebar-desktop-${desktopView.id}`}
       onPointerEnter={() => {
         if (canAcceptLeafDrag(desktopView)) onDesktopDragEnter?.(desktopView);
@@ -279,14 +287,18 @@ function DesktopDropGroup({
 function DesktopTileRow({
   desktopId,
   tile,
+  ...revealProps
 }: {
   desktopId: string;
   tile: TileLeaf;
+  'aria-current'?: 'true';
 }) {
   const { tileContents, selectedTile, onSelectTile, onCloseTile, onReloadTile } =
     useSidebarContext();
   return (
     <TileSidebarRow
+      {...revealProps}
+      data-select-key={`${desktopId}/tile:${tile.tileId}`}
       desktopId={desktopId}
       tile={tile}
       content={tileContents[tileContentKey(desktopId, tile.tileId)]}

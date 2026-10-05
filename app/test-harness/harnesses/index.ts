@@ -1,3 +1,4 @@
+import { SidebarTreeHarness } from './SidebarTreeHarness';
 import type { HarnessProps } from '../types';
 import { BrokenLinksHarness } from './BrokenLinksHarness';
 import { DiffViewHarness } from './DiffViewHarness';
@@ -39,4 +40,5 @@ export const harnesses: Record<string, React.ComponentType<HarnessProps>> = {
   QueueBar: QueueBarHarness,
   QueueSidebarFit: QueueSidebarFitHarness,
   SidebarRail: SidebarRailHarness,
+  SidebarTree: SidebarTreeHarness,
 };

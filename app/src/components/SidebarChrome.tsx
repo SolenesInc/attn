@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useRevealSelection } from './useRevealSelection';
+import { useRef } from 'react';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import { RenamePopover } from './RenamePopover';
 import { SessionActionsPopover } from './SessionActionsPopover';
@@ -64,6 +65,7 @@ export function SidebarCollapsed() {
 function RailDesktops() {
   const {
     selectedDesktopId,
+    homeActive,
     onSelectDesktop,
     sessionWantsAttention,
     visibleVisualOrder,
@@ -71,23 +73,15 @@ function RailDesktops() {
   } = useSidebarContext();
   const desktopListRef = useRef<HTMLDivElement>(null);
   const desktopOrder = JSON.stringify(visibleVisualOrder.map((desktop) => desktop.id));
-  useEffect(() => {
-    const list = desktopListRef.current;
-    if (!list) return;
-    const revealCurrent = () => {
-      list.querySelector('[aria-current="true"]')?.scrollIntoView({ block: 'nearest' });
-    };
-    revealCurrent();
-    const observer = new ResizeObserver(revealCurrent);
-    observer.observe(list);
-    return () => observer.disconnect();
-  }, [selectedDesktopId, desktopOrder]);
+  const { onClick } = useRevealSelection(
+    desktopListRef, homeActive || !selectedDesktopId ? null : `${selectedDesktopId}/`, desktopOrder,
+  );
   return (
-    <div className="rail-desktops" ref={desktopListRef}>
+    <div className="rail-desktops" ref={desktopListRef} onClick={onClick}>
       {visibleVisualOrder.map((desktopView) => {
         const shortcut = desktopShortcut(visualIndexOfDesktop(desktopView.id));
         const label = shortcut ? `${desktopView.title} (${shortcut})` : desktopView.title;
-        const current = selectedDesktopId === desktopView.id;
+        const current = !homeActive && selectedDesktopId === desktopView.id;
         return (
           <button
             key={desktopView.id}
@@ -96,6 +90,7 @@ function RailDesktops() {
             title={label}
             aria-label={label}
             aria-current={current ? 'true' : undefined}
+            data-select-key={`${desktopView.id}/`}
           >
             <DesktopChip
               number={desktopView.desktop?.number}
