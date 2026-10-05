@@ -664,6 +664,68 @@ describe('Quick Capture app wire behavior', () => {
     expect(within(recent).queryByText(/^Sent$/)).toBeNull();
   });
 
+  it.each(['save', 'remote', 'rejected remote'])('settles the original profile discard after switching during %s cleanup', async phase => {
+    const a = defaultProfile('desktop-1');
+    const b = defaultProfile('desktop-work', { id: 'profile-work', name: 'Work' });
+    const desktops = [emptyDesktop('desktop-1'), emptyDesktop('desktop-work', { profile_id: b.id })];
+    const captureId = crypto.randomUUID(), fileId = crypto.randomUUID();
+    native.drafts.set(a.id, { id: captureId, text: 'Discard this message', mailbox: 'chief', uncertain: false,
+      files: [{ id: fileId, name: 'discard.pdf', url: 'data:application/pdf;base64,JVBERi0=' }] });
+    let finishSave!: () => void;
+    let saveStarted!: () => void;
+    const saveGate = new Promise<void>(resolve => { finishSave = resolve; });
+    const saving = new Promise<void>(resolve => { saveStarted = resolve; });
+    const nativeInvoke = vi.mocked(invoke).getMockImplementation()!;
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      if (phase === 'save' && command === 'quick_capture_draft_write'
+        && (args as { draft: CachedQuickCaptureDraft }).draft.id !== captureId) {
+        saveStarted(); await saveGate;
+      }
+      return nativeInvoke(command, args);
+    });
+    const { daemon } = await captureApp(daemon => {
+      daemon.on('quick_capture_list', command => ({ event: 'quick_capture_result', profile_id: command.profile_id!, success: true,
+        result: { list: { items: [], draft_assets: command.profile_id === a.id
+          ? [{ capture_id: captureId, attachment_id: fileId, name: 'discard.pdf', state: 'ready', next_offset: 5 }] : [] } } }));
+      daemon.on('quick_capture_attachment_discard', command => phase !== 'save' ? undefined
+        : { event: 'quick_capture_result', profile_id: command.profile_id!, success: true, result: { discarded: true } });
+    }, { initialState: { profiles: [a, b], desktops, selected_profile_id: a.id } });
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Recent messages' })));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Discard draft' })));
+    if (phase === 'save') await saving;
+    else await daemon.received('quick_capture_attachment_discard');
+    await act(async () => daemon.emit({ event: 'profile_arrangement_changed', profile: b, desktops: [desktops[1]] }));
+    await daemon.idle();
+    await gesture(daemon, () => fireEvent.change(editor(), { target: { value: 'Keep profile B' } }));
+    await act(async () => daemon.emit({ event: 'profile_arrangement_changed', profile: a, desktops: [desktops[0]] }));
+    await daemon.idle();
+    expect(editor()).toHaveAttribute('readonly');
+    await act(async () => {
+      if (phase === 'save') finishSave();
+      else {
+        const request = daemon.sentOf('quick_capture_attachment_discard')[0];
+        daemon.replyTo(request, phase === 'rejected remote'
+          ? { event: 'quick_capture_result', profile_id: a.id, request_id: request.request_id, success: false, error: 'Discard unavailable' }
+          : { event: 'quick_capture_result', profile_id: a.id, request_id: request.request_id, success: true, result: { discarded: true } });
+      }
+    });
+    await daemon.idle();
+    expect(daemon.sentOf('quick_capture_attachment_discard')).toMatchObject([{ profile_id: a.id, capture_id: captureId, attachment_id: fileId }]);
+    expect(editor()).not.toHaveAttribute('readonly');
+    if (phase === 'rejected remote') {
+      expect(editor()).toHaveValue('Discard this message');
+      expect(screen.getByRole('button', { name: 'Remove discard.pdf' })).toBeInTheDocument();
+      expect(native.drafts.get(a.id)).toMatchObject({ id: expect.not.stringMatching(captureId), text: 'Discard this message' });
+      await gesture(daemon, () => fireEvent.change(editor(), { target: { value: 'Edit after failed discard' } }));
+      expect(native.drafts.get(a.id)).toMatchObject({ id: expect.not.stringMatching(captureId), text: 'Edit after failed discard' });
+    } else {
+      expect(editor()).toHaveValue('');
+      expect(screen.queryByRole('button', { name: 'Remove discard.pdf' })).toBeNull();
+      expect(native.drafts.get(a.id)).toMatchObject({ text: '', files: [] });
+    }
+    expect(native.drafts.get(b.id)).toMatchObject({ text: 'Keep profile B' });
+  });
+
   it('resends retained image bytes after a failed draft discard', async () => {
     const captureId = crypto.randomUUID(), imageId = crypto.randomUUID(), secondId = crypto.randomUUID();
     native.draft = { id: captureId, text: 'Keep this message', mailbox: 'chief', uncertain: false,
