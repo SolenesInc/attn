@@ -6,16 +6,14 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 )
 
-// lockTerminalEnds is held by whatever changes which of a session's terminals run it, so that exactly
-// one leaving terminal finds itself the last. Take it after the session's lifecycle lock.
+// Take after the session's lifecycle lock.
 func (d *Daemon) lockTerminalEnds(sessionID string) (unlock func()) {
 	lease := d.terminalEndLocks.lease(sessionID)
 	lease.Lock()
 	return lease.Unlock
 }
 
-// othersRun reports whether a terminal other than t runs the session. A terminal counts until its
-// runtime is removed, so an exit not yet handled still counts. Hold lockTerminalEnds.
+// Hold lockTerminalEnds.
 func (d *Daemon) othersRun(sessionID string, t harness.TerminalID) bool {
 	live := d.liveTerminals(context.Background())
 	for _, id := range d.terminals().Of(harness.SessionID(sessionID)) {
@@ -26,8 +24,6 @@ func (d *Daemon) othersRun(sessionID string, t harness.TerminalID) bool {
 	return false
 }
 
-// endTerminal is the rule for a terminal leaving its session: while another terminal runs the session, t
-// ends alone with its tile. The last one changes nothing here and returns true; its caller ends the session.
 func (d *Daemon) endTerminal(sessionID string, t harness.TerminalID) (last bool) {
 	defer d.lockTerminalEnds(sessionID)()
 	if !d.othersRun(sessionID, t) {

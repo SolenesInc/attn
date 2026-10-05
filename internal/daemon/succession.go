@@ -32,7 +32,6 @@ func (d *Daemon) shows(t harness.TerminalID, from *protocol.Session, owner strin
 	}, observation)
 }
 
-// succeed moves t on from from to sc.To; from closes only when t was the last terminal running it.
 func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.Succession, observation agentConversationObservation) error {
 	unlockEnds := d.lockTerminalEnds(from.ID)
 	sc.KeepFrom = d.othersRun(from.ID, t)

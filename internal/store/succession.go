@@ -13,7 +13,6 @@ import (
 
 // Succession puts To in the terminal From showed: To takes From's place, process, driver run and
 // Conversation; everything else stays with From. A new To gets Label and Launch; an existing one keeps its own.
-// KeepFrom leaves From open, for the other terminals that still run it.
 type Succession struct {
 	From, To     string
 	Label        string

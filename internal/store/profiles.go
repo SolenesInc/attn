@@ -1494,7 +1494,6 @@ func removeTile(tx *sql.Tx, now string, tile sessionTile) (profiles.Desktop, err
 	return desktop, writeDesktopArrangement(tx, now, &desktop)
 }
 
-// RemoveTerminalTile removes the tile that shows terminal; removed is false when none does.
 func (s *Store) RemoveTerminalTile(terminal string) (desktop profiles.Desktop, removed bool, err error) {
 	err = s.profilesTx(func(tx *sql.Tx, now string) error {
 		var tile sessionTile

@@ -49,7 +49,6 @@ func (d *Daemon) clearReloading(id harness.TerminalID) {
 	delete(d.reloadingTerminals, id)
 }
 
-// sessionLocks holds one mutex per session id, kept only while a lease on it is out.
 type sessionLocks struct {
 	mu    sync.Mutex
 	locks map[string]*sessionLockEntry
