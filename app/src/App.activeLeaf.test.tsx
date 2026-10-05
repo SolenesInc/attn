@@ -234,7 +234,7 @@ describe('what the active leaf offers', () => {
 
     await gesture(daemon, () => pressShortcut('session.nextRun'));
     expect(shows(daemon).slice(-1)).toEqual(['session:r1']);
-    expect(screen.getByText(/nightly docs · run 1 of 2 needing you/)).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 
     (document.activeElement as HTMLElement | null)?.blur();
     await gesture(daemon, () => pressShortcut('session.settle'));
