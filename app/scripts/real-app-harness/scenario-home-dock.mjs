@@ -110,10 +110,10 @@ try {
     await waitDom('.garden-frame.is-dock');
     await driver.pressKey('Escape');
     await waitDom('[aria-label="Show the garden"]');
-    await waitDom('[aria-label="Hide PRs Drawer"]');
+    await waitDom('.side-panel-shell.is-open .attention-drawer-panel');
     await screenshot('garden-closed-before-attention');
     await driver.pressKey('Escape');
-    await waitDom('[aria-label="Show PRs Drawer"]');
+    await waitDom('.side-panel-shell.is-open .attention-drawer-panel', { absent: true });
   });
 
   console.log(JSON.stringify(await runner.finishSuccess(), null, 2));
