@@ -281,6 +281,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID string, opts ptybackend.
 	}
 
 	d.persistReloadedConversation(sessionID, opts)
+	opts.ExternalEnv = append(opts.ExternalEnv, d.codexShared().remoteEnv(terminal)...)
 	opts.DaemonEnv = d.spawnRoutingEnv()
 	if spawnErr := d.ptyBackend.Spawn(ctx, opts); spawnErr != nil {
 		unlockEnds()
@@ -310,6 +311,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID string, opts ptybackend.
 	if prior, ok := d.store.LaunchIntent(sessionID); ok {
 		intent.AutoMode = prior.AutoMode
 		intent.ApprovalPolicy, intent.SandboxMode = prior.ApprovalPolicy, prior.SandboxMode
+		intent.CodexShared = prior.CodexShared
 	}
 	d.store.SetLaunchIntent(sessionID, intent)
 	d.recordReviewerEvidence(sessionID, opts.ApprovalRoute.ReviewerInLoop())

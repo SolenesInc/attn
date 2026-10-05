@@ -87,6 +87,12 @@ func (r *Run) Exit(code int) {
 	}
 }
 
+// CrashAppServer makes the Codex app-server this terminal is connected to exit at once.
+func (r *Run) CrashAppServer() {
+	r.t.Helper()
+	r.call(methodCrashSrv, struct{}{}, nil)
+}
+
 func (r *Run) StopReadingTerminal() {
 	r.t.Helper()
 	r.call(methodStopRead, struct{}{}, nil)

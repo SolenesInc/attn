@@ -200,6 +200,8 @@ type Daemon struct {
 	sessionInputState                 *sessionInputModule
 	terminalsOnce                     sync.Once
 	terminalState                     *terminalRegistry
+	codexSharedOnce                   sync.Once
+	codexSharedState                  *codexShared
 	inboxMu                           sync.Mutex
 	inboxStates                       map[inbox.Address]*inboxDeliveryState
 	inboxUnsubscribe                  func()
@@ -969,7 +971,7 @@ func (d *Daemon) pruneSessionsWithoutPTY(previousRunSessions map[string]struct{}
 		if _, fromPreviousRun := previousRunSessions[session.ID]; !fromPreviousRun {
 			continue
 		}
-		if _, ok := liveIDs[session.ID]; ok {
+		if _, ok := liveIDs[session.ID]; ok || d.codexShared().holds(session) {
 			continue
 		}
 		if sessionUpdatedAfter(session, recoveryStartedAt) {
@@ -1054,8 +1056,10 @@ func (d *Daemon) performStartupPTYRecovery(previousRunSessions map[string]struct
 		}
 	}
 
+	d.codexShared().recoverServers(context.Background())
 	if _, ok := d.ptyBackend.(ptybackend.RecoverableRuntime); ok {
 		d.reconcileStartupWorkerSessions(recoveryReport, recoverErr, previousRunSessions, recoveryStartedAt)
+		d.codexShared().recoverViews(context.Background())
 		d.restoreTranscriptWatchers()
 		d.pruneRuntimesWithoutSession(context.Background())
 		return
@@ -1069,6 +1073,7 @@ func (d *Daemon) performStartupPTYRecovery(previousRunSessions map[string]struct
 			fmt.Sprintf("Removed %d stale sessions from a previous daemon run because no live PTY was found.", removedSessions),
 		)
 	}
+	d.codexShared().recoverViews(context.Background())
 	d.pruneRuntimesWithoutSession(context.Background())
 	d.restoreTranscriptWatchers()
 }
@@ -1078,7 +1083,7 @@ func (d *Daemon) pruneRuntimesWithoutSession(ctx context.Context) {
 		return
 	}
 	for terminal := range d.liveTerminals(ctx) {
-		if _, shown := d.shownIn(terminal); shown {
+		if _, shown := d.shownIn(terminal); shown || isCodexServerTerminal(terminal) {
 			continue
 		}
 		if err := d.removePTYSession(terminal); err != nil {
@@ -1221,6 +1226,9 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 	livenessProber, _ := d.ptyBackend.(ptybackend.SessionLivenessProber)
 
 	for sessionID, terminalID := range shownBy {
+		if isCodexServerTerminal(terminalID) {
+			continue
+		}
 		existing := d.store.Get(sessionID)
 		intentionalClose, intentErr := d.store.SessionCloseIntentionalChecked(sessionID)
 		if intentErr != nil {
@@ -1374,7 +1382,7 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 		if _, fromPreviousRun := previousRunSessions[session.ID]; !fromPreviousRun {
 			continue
 		}
-		if _, ok := liveIDs[session.ID]; ok {
+		if _, ok := liveIDs[session.ID]; ok || d.codexShared().holds(session) {
 			continue
 		}
 		if sessionUpdatedAfter(session, recoveryStartedAt) {
@@ -1623,6 +1631,10 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 	defer release()
 	if d.consumeReloading(info.ID) {
 		d.logf("suppressing exit for reloading terminal %s (runtime replaced in place)", info.ID)
+		return false
+	}
+	d.codexShared().terminalExited(info.ID)
+	if isCodexServerTerminal(info.ID) {
 		return false
 	}
 	sessionID, shown := d.shownIn(info.ID)

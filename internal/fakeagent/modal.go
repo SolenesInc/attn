@@ -33,6 +33,11 @@ type approvalAsker interface {
 	approvalAnswered()
 }
 
+// serverApprovals asks through the harness's server, which sends the approval back to every terminal showing it.
+type serverApprovals interface {
+	askApproval() error
+}
+
 type modalResult struct {
 	Typed string `json:"typed"`
 }
@@ -71,6 +76,9 @@ func (a *agent) handleModal(method string) (any, error) {
 	case methodShowSelector:
 		return struct{}{}, a.term.openModal(&modal{lines: selectorLines, resting: func() {}})
 	case methodAskApproval:
+		if remote, ok := a.conv.(serverApprovals); ok {
+			return struct{}{}, remote.askApproval()
+		}
 		asker, ok := a.conv.(approvalAsker)
 		if !ok {
 			return nil, fmt.Errorf("%T does not script an approval prompt", a.conv)

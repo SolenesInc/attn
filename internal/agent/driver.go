@@ -188,6 +188,9 @@ type SpawnOpts struct {
 	SelfReportPullRequests bool
 
 	InstructionsDir string
+
+	// CodexRemote is the app-server address a shared Codex terminal connects to; empty runs Codex alone.
+	CodexRemote string
 }
 
 func (o SpawnOpts) addDirArgs() []string {

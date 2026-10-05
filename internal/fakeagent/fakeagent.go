@@ -49,6 +49,7 @@ const (
 	methodDeny       = "deny"
 	methodExit       = "exit"
 	methodStopRead   = "stop_reading_terminal"
+	methodCrashSrv   = "crash_app_server"
 	signalExitBase   = 128
 )
 
@@ -321,6 +322,12 @@ func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, 
 		return a.handleModal(method)
 	case methodStopRead:
 		return struct{}{}, a.term.stopReading()
+	case methodCrashSrv:
+		remote, ok := a.conv.(*codexRemote)
+		if !ok {
+			return nil, fmt.Errorf("%T has no app-server to crash", a.conv)
+		}
+		return struct{}{}, remote.crashServer()
 	case methodExit:
 		var p exitParams
 		if err := json.Unmarshal(params, &p); err != nil {

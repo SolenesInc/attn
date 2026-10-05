@@ -8,6 +8,7 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -36,6 +37,15 @@ func (d *Daemon) handleObserveAgentConversation(conn net.Conn, msg *protocol.Set
 		d.logf("agent conversation: ignored pathless observation terminal=%s native=%s", terminal, observation.NativeID)
 		d.sendOK(conn)
 		return
+	}
+	if conversation, ok := strings.CutPrefix(string(terminal), hooks.CodexThreadCallerPrefix); ok {
+		shown, showing := d.codexShared().terminalShowing(conversation)
+		if !showing {
+			d.logf("agent conversation: no terminal shows shared Codex conversation %s", conversation)
+			d.sendOK(conn)
+			return
+		}
+		terminal = shown
 	}
 	d.conversationIn(terminal, observation)
 	d.sendOK(conn)

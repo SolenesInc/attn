@@ -35,6 +35,7 @@ type Kit struct {
 	nextBoot chan struct{}
 	bootAsk  chan struct{}
 	fakes    []*fake
+	servers  []int
 	failures []string
 	headless chan *HeadlessTask
 	nextExit *bootingResult
@@ -136,6 +137,13 @@ func (k *Kit) Launched(sessionID string) *Run {
 	}
 }
 
+// CodexServers lists the pid of every Codex app-server launched so far, in launch order.
+func (k *Kit) CodexServers() []int {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	return slices.Clone(k.servers)
+}
+
 func (k *Kit) HoldNextBoot() (boot func()) {
 	cue := make(chan struct{})
 	k.mu.Lock()
@@ -203,6 +211,11 @@ func (k *Kit) handle(f *fake, method string, params json.RawMessage) error {
 		k.mu.Unlock()
 		if f.Error != "" {
 			k.fail(fmt.Sprintf("fake %s for session %q failed to launch: %s (argv %q)", f.Harness, f.AttnSessionID, f.Error, f.Argv))
+		}
+		if f.Role == roleCodexServer {
+			k.mu.Lock()
+			k.servers = append(k.servers, f.Pid)
+			k.mu.Unlock()
 		}
 		if f.Role == roleAgent {
 			k.launchesFor(f.AttnSessionID) <- &Run{

@@ -53,6 +53,7 @@ type spawnRequest struct {
 	resumeSessionID string
 	parentSessionID string
 	autoModeDriver  bool
+	codexShared     bool
 }
 
 type spawnPlan struct {
@@ -312,6 +313,7 @@ func (d *Daemon) resolveSpawnIntent(req *spawnRequest) (*spawnPlan, *spawnReject
 		plan.spawnOpts.ApprovalRoute = launchcontract.ResolveApprovalRoute(plan.spawnOpts.YoloMode, plan.spawnOpts.AutoApprove, plan.spawnOpts.UnattendedLaunch)
 	}
 	plan.spawnOpts.ContextWindowCap = d.launchContextWindowCap(msg.ID, req.agent, plan.isChief)
+	req.codexShared = d.launchesSharedCodex(req)
 
 	return plan, nil
 }
@@ -415,6 +417,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	}
 	plan.priorIntent, plan.hadPriorIntent = d.store.LaunchIntent(session.ID)
 	intent := launchIntentFromSpawnOptions(plan.spawnOpts, plan.isChief)
+	intent.CodexShared = req.codexShared
 	intent.AutoMode = msg.AutoMode
 	if req.autoModeDriver {
 		intent.ApprovalPolicy, intent.SandboxMode = effectiveSpawnPolicyPair(msg)
@@ -432,7 +435,14 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		InitialPromptOwed: hasInitialPrompt && reportsTurnStarts(req.agent),
 		ReviewerInLoop:    plan.spawnOpts.ApprovalRoute.ReviewerInLoop(),
 	})
-	if err := d.spawnSessionRuntime(msg.ID, plan.spawnOpts); err != nil {
+	err := d.prepareSharedCodexLaunch(req, plan)
+	if err == nil {
+		err = d.spawnSessionRuntime(msg.ID, plan.spawnOpts)
+	}
+	if err != nil {
+		if req.codexShared {
+			d.codexShared().closeView(plan.spawnOpts.ID)
+		}
 		d.forgetSessionTitleInitialPrompt(msg.ID)
 		d.restoreExitScreen(msg.ID, priorExit)
 		if req.existingSession == nil {
@@ -462,6 +472,23 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		d.life.AfterFunc("cleanupInitialPrompt", initialPromptCleanupAfter, plan.cleanupInitialPrompt)
 	}
 	return &spawnOutcome{}
+}
+
+// prepareSharedCodexLaunch points a shared launch's Codex at its terminal's proxy to the profile's server.
+func (d *Daemon) prepareSharedCodexLaunch(req *spawnRequest, plan *spawnPlan) error {
+	if !req.codexShared {
+		return nil
+	}
+	executable := plan.spawnOpts.Executable
+	if executable == "" {
+		executable = plan.spawnOpts.CodexExecutable
+	}
+	remote, err := d.codexShared().prepareLaunch(plan.spawnOpts.ID, req.profile.ID, executable)
+	if err != nil {
+		return err
+	}
+	plan.spawnOpts.ExternalEnv = append(plan.spawnOpts.ExternalEnv, "ATTN_CODEX_REMOTE="+remote)
+	return nil
 }
 
 func (d *Daemon) spawnSessionRuntime(sessionID string, opts ptybackend.SpawnOptions) error {

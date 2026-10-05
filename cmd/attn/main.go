@@ -2056,6 +2056,7 @@ func runAgentDirectly(requestedAgent string) {
 		Executable:      driver.ResolveExecutable(""),
 		SocketPath:      config.SocketPath(),
 		WrapperPath:     resolveWrapperPath(),
+		CodexRemote:     consumeOneShotEnv("ATTN_CODEX_REMOTE"),
 	}
 
 	if preparer, ok := driver.(agentdriver.LaunchPreparer); ok {
@@ -2228,16 +2229,15 @@ func openAppWithDeepLink() {
 }
 
 func runHookStop() {
-	sessionID := hookSessionIDFromArgOrEnv(2)
-	if sessionID == "" {
-		fmt.Fprintf(os.Stderr, "usage: attn _hook-stop [session_id]\n")
-		os.Exit(1)
-	}
-
 	var input hookInput
 	transcriptPath := ""
 	if err := json.NewDecoder(os.Stdin).Decode(&input); err == nil {
 		transcriptPath = input.TranscriptPath
+	}
+	sessionID := hookCaller(hookSessionIDFromArgOrEnv(2), input)
+	if sessionID == "" {
+		fmt.Fprintf(os.Stderr, "usage: attn _hook-stop [session_id]\n")
+		os.Exit(1)
 	}
 
 	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
@@ -2260,28 +2260,27 @@ func stopFacts(input hookInput) client.StopFacts {
 }
 
 func runHookSessionStart() {
-	sessionID := hookSessionIDFromArgOrEnv(2)
+	var input hookInput
+	_ = json.NewDecoder(os.Stdin).Decode(&input)
+	sessionID := hookCaller(hookSessionIDFromArgOrEnv(2), input)
 	if sessionID == "" {
 		fmt.Fprintf(os.Stderr, "usage: attn _hook-session-start [session_id]\n")
 		os.Exit(1)
 	}
-
-	var input hookInput
-	_ = json.NewDecoder(os.Stdin).Decode(&input)
 
 	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
 	observeAgentConversation(c, sessionID, input.SessionID, input.TranscriptPath)
 }
 
 func runHookState() {
+	var input hookInput
+	_ = json.NewDecoder(os.Stdin).Decode(&input)
 	sessionID, state, hookEvent := parseHookStateArgs()
+	sessionID = hookCaller(sessionID, input)
 	if sessionID == "" || state == "" {
 		fmt.Fprintf(os.Stderr, "usage: attn _hook-state [session_id] <state>\n")
 		os.Exit(1)
 	}
-
-	var input hookInput
-	_ = json.NewDecoder(os.Stdin).Decode(&input)
 
 	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
 	observePromptConversation(c, sessionID, hookEvent, input)
@@ -2351,14 +2350,13 @@ func runHookCompact() {
 }
 
 func runHookToolUse() {
-	sessionID := hookSessionIDFromArgOrEnv(2)
+	var input hookInput
+	_ = json.NewDecoder(os.Stdin).Decode(&input)
+	sessionID := hookCaller(hookSessionIDFromArgOrEnv(2), input)
 	if sessionID == "" {
 		fmt.Fprintf(os.Stderr, "usage: attn _hook-tool-use [session_id]\n")
 		os.Exit(1)
 	}
-
-	var input hookInput
-	_ = json.NewDecoder(os.Stdin).Decode(&input)
 
 	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
 	if strings.TrimSpace(input.AgentID) == "" {
@@ -2426,6 +2424,18 @@ func runProbeTUI() {
 		fmt.Fprintf(os.Stderr, "attn _probe-tui: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+// hookCaller names who a hook reports for: a shared Codex app-server's hook runs for every terminal's
+// conversation, so it names the conversation and the daemon finds the session that holds it.
+func hookCaller(id string, input hookInput) string {
+	if os.Getenv(hooks.CodexThreadHooksEnv) != "1" {
+		return id
+	}
+	if conversation := strings.TrimSpace(input.SessionID); conversation != "" {
+		return hooks.CodexThreadCaller(conversation)
+	}
+	return ""
 }
 
 func hookSessionIDFromArgOrEnv(index int) string {

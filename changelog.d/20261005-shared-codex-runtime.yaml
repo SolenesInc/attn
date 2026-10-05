@@ -1,0 +1,12 @@
+kind: internal
+area: sessions
+change: >
+  Experimental shared Codex, behind the `codex_shared_enabled` setting (off by
+  default; Settings gets its control later): a new Codex terminal runs
+  `codex --remote` against one Codex app-server per profile, which attn hosts
+  as a terminal of its own, so it outlives daemon restarts. attn proxies each
+  terminal's connection, gives its conversations attn's instructions, writes
+  each new conversation to disk at once so the terminal resumes it after a
+  restart, and routes the server's hooks by conversation. One conversation is
+  one session. The daemon also keeps a `queue_show_hidden_sessions` setting,
+  on by default, for the hidden sessions to come.

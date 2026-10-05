@@ -50,3 +50,25 @@ Read in the source at openai/codex 60947e2341.
 - Hooks run in the process that runs the turn: the terminal's own Codex
   process for a PTY launch, so `ATTN_SESSION_ID` names the terminal; the
   app-server for a `--remote` TUI, so a hook there cannot name the terminal.
+
+### Codex app-server and `--remote`
+
+Probed on 0.160.0 with a mock model. Shared Codex relies on these.
+
+- `codex app-server --listen unix://PATH` speaks WebSocket (`GET /rpc`) on a
+  socket that `PATH` links to under `/tmp/codex-daemon-<uid>/`; a client must
+  resolve the link before connecting when `PATH` is long.
+- Hooks given to the server with `-c` are session-flag hooks; a
+  `hooks.state."/<session-flags>/config.toml:<event>:0:0".trusted_hash` given
+  the same way trusts them. They run in the server's environment and working
+  directory set to the conversation's; stdin carries `session_id` (the
+  conversation), `transcript_path` and `cwd`.
+- `thread/start` writes nothing to disk. `thread/inject_items` with a
+  developer message writes the conversation at once; its first turn still
+  fires SessionStart `startup`, then UserPromptSubmit.
+- `thread/resume` of a conversation not on disk fails with `no rollout found`,
+  even while the server holds it in memory. A `--remote` TUI that loses its
+  socket reconnects and resumes the conversation it shows, so one never
+  written cannot come back.
+- `thread/resume` of a conversation on disk accepts `config` and
+  `developerInstructions` while another connection holds it.

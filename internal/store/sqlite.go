@@ -1383,6 +1383,11 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
  ORDER BY created_at DESC, pane_id DESC LIMIT 1) WHERE id = OLD.session_id; END;
 `},
 	{171, "remember the focus order of each desktop", ""},
+	{172, "remember which terminals run Codex against a profile's shared app-server", `
+ CREATE TABLE IF NOT EXISTS codex_terminals (
+ terminal_id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, created_at TEXT NOT NULL
+ );
+`},
 }
 
 const migration99SQL = `

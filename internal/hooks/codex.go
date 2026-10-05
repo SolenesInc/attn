@@ -9,20 +9,57 @@ import (
 	"strings"
 )
 
-func GenerateCodexConfigOverrides(sessionID, socketPath, wrapperPath string, launch Launch) []string {
-	wrapper := strings.TrimSpace(wrapperPath)
-	if wrapper == "" {
-		wrapper = "attn"
-	}
+// CodexThreadHooksEnv marks a hook run by a shared Codex app-server: the hook names its session by
+// the conversation in its input, since the server runs every terminal's conversations.
+const CodexThreadHooksEnv = "ATTN_CODEX_THREAD_HOOKS"
 
-	command := func(args ...string) string {
+// CodexThreadCallerPrefix starts the id a shared Codex hook reports for itself; the conversation id follows.
+const CodexThreadCallerPrefix = "codex:"
+
+func CodexThreadCaller(conversation string) string { return CodexThreadCallerPrefix + conversation }
+
+func GenerateCodexConfigOverrides(sessionID, socketPath, wrapperPath string, launch Launch) []string {
+	wrapper := hookWrapper(wrapperPath)
+	overrides := []string{
+		"shell_environment_policy.set.ATTN_SESSION_ID=" + strconv.Quote(strings.TrimSpace(sessionID)),
+		"shell_environment_policy.set.ATTN_WRAPPER_PATH=" + strconv.Quote(wrapper),
+	}
+	overrides = append(overrides, codexHookOverrides(codexHookCommand(wrapper, ""))...)
+	if socket := strings.TrimSpace(socketPath); socket != "" {
+		overrides = append(overrides,
+			"shell_environment_policy.set.ATTN_SOCKET_PATH="+strconv.Quote(socket),
+		)
+	}
+	if instructions := launch.Instructions(); instructions != "" {
+		overrides = append(overrides, "developer_instructions="+strconv.Quote(instructions))
+	}
+	return overrides
+}
+
+// GenerateCodexServerConfigOverrides configures a shared Codex app-server's hooks, trusted, to report
+// to attn by conversation.
+func GenerateCodexServerConfigOverrides(wrapperPath string) []string {
+	return codexHookOverrides(codexHookCommand(hookWrapper(wrapperPath), "env "+CodexThreadHooksEnv+"=1 "))
+}
+
+func hookWrapper(wrapperPath string) string {
+	if wrapper := strings.TrimSpace(wrapperPath); wrapper != "" {
+		return wrapper
+	}
+	return "attn"
+}
+
+func codexHookCommand(wrapper, prefix string) func(args ...string) string {
+	return func(args ...string) string {
 		parts := []string{shellQuote(wrapper)}
 		for _, arg := range args {
 			parts = append(parts, shellQuote(arg))
 		}
-		return strings.Join(parts, " ")
+		return prefix + strings.Join(parts, " ")
 	}
+}
 
+func codexHookOverrides(command func(args ...string) string) []string {
 	hook := func(command string) string {
 		return fmt.Sprintf(`{ type = "command", command = %s, timeout = 5 }`, strconv.Quote(command))
 	}
@@ -40,9 +77,7 @@ func GenerateCodexConfigOverrides(sessionID, socketPath, wrapperPath string, lau
 	postToolUse := command("_hook-tool-use")
 	stop := command("_hook-stop")
 
-	overrides := []string{
-		"shell_environment_policy.set.ATTN_SESSION_ID=" + strconv.Quote(strings.TrimSpace(sessionID)),
-		"shell_environment_policy.set.ATTN_WRAPPER_PATH=" + strconv.Quote(wrapper),
+	return []string{
 		"features.hooks=true",
 		"features.terminal_resize_reflow=true",
 		trustedHashOverrides([]codexHookTrustEntry{
@@ -60,15 +95,6 @@ func GenerateCodexConfigOverrides(sessionID, socketPath, wrapperPath string, lau
 		"hooks.PostToolUse=" + group("*", postToolUse),
 		"hooks.Stop=" + group("", stop),
 	}
-	if socket := strings.TrimSpace(socketPath); socket != "" {
-		overrides = append(overrides,
-			"shell_environment_policy.set.ATTN_SOCKET_PATH="+strconv.Quote(socket),
-		)
-	}
-	if instructions := launch.Instructions(); instructions != "" {
-		overrides = append(overrides, "developer_instructions="+strconv.Quote(instructions))
-	}
-	return overrides
 }
 
 type codexHookTrustEntry struct {
