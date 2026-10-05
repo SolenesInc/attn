@@ -362,6 +362,7 @@ The full dev-loop, instance, and harness targets live in
 | | |
 |---|---|
 | [Instances](docs/instances.md) | Run multiple isolated attn worlds side by side |
+| [Shared Codex](docs/using-shared-codex.md) | Experimental: Codex terminals sharing one app-server, with hidden sessions |
 | [Release](docs/making-a-release.md) | Maintainer runbook |
 
 ## Status
