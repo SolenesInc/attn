@@ -79,13 +79,12 @@ func reapEntry(entry RegistryEntry, registryPath string) ReapResult {
 	res := ReapResult{SessionID: entry.SessionID, WorkerPID: entry.WorkerPID}
 
 	if entry.WorkerPID <= 0 || !procreap.ProcessAlive(entry.WorkerPID) {
-		return workerGone(res, entry)
+		return workerGone(res, entry, ReapAlreadyGone)
 	}
 
 	if err := requestWorkerRemove(entry); err == nil {
 		if waitForExit(entry.WorkerPID, TeardownRPCTimeout) {
-			res.Outcome = ReapRemoved
-			return res
+			return workerGone(res, entry, ReapRemoved)
 		}
 		res.Err = errors.New("worker accepted remove but did not exit")
 	} else {
@@ -94,7 +93,7 @@ func reapEntry(entry RegistryEntry, registryPath string) ReapResult {
 
 	if waitForExit(entry.WorkerPID, workerExitGrace) {
 		res.Err = nil
-		return workerGone(res, entry)
+		return workerGone(res, entry, ReapAlreadyGone)
 	}
 	if !processHasArg(entry.WorkerPID, registryPath) {
 		res.Outcome = ReapUnidentified
@@ -104,13 +103,13 @@ func reapEntry(entry RegistryEntry, registryPath string) ReapResult {
 	return res
 }
 
-func workerGone(res ReapResult, entry RegistryEntry) ReapResult {
+func workerGone(res ReapResult, entry RegistryEntry, gone ReapOutcome) ReapResult {
 	if entry.ChildPID > 0 && procreap.ProcessAlive(entry.ChildPID) {
 		res.Outcome = ReapFailed
 		res.Err = fmt.Errorf("worker exited but its child pid %d is still running", entry.ChildPID)
 		return res
 	}
-	res.Outcome = ReapAlreadyGone
+	res.Outcome = gone
 	return res
 }
 
