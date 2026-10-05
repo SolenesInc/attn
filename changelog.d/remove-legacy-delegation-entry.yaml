@@ -1,0 +1,3 @@
+kind: internal
+area: delegation
+change: Remove the retired implicit delegation launch path.

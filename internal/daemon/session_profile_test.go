@@ -252,3 +252,15 @@ func TestSpawnBesideAFocusedTileDocksTheAgentBesideIt(t *testing.T) {
 		t.Fatalf("desktop tree %+v, want the notebook then the new agent's pane", tree)
 	}
 }
+
+func desktopOf(t testing.TB, d *Daemon, sessionID string) string {
+	t.Helper()
+	placement, placed, err := d.store.SessionPlacement(sessionID)
+	if err != nil {
+		t.Fatalf("read the placement of %s: %v", sessionID, err)
+	}
+	if !placed {
+		return ""
+	}
+	return placement.DesktopID
+}
