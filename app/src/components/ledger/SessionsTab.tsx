@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
-import type { SessionLedgerEntry, SessionLedgerFacets } from '../../types/generated';
+import type { SessionLedgerEntry, SessionLedgerFacets, SessionUsage } from '../../types/generated';
 import { useSessionLedger } from '../../hooks/useSessionLedger';
 import type { SessionLedgerConnection, SessionLedgerFilters, SessionLedgerView } from '../../hooks/useSessionLedger';
 import { SessionReopenRefusal } from '../../hooks/daemonSessionLedgerEvents';
@@ -26,6 +26,7 @@ import { formatQuery, matchesDir, matchesWords, parseQuery, profileChoices, remo
 import type { ParsedQuery, ProfileChoice } from './ledgerQuery';
 import { Field, Inspector, LedgerList, QueryBar, Segmented, useCopied } from './LedgerPrimitives';
 import type { Chip, LedgerMenu, ListItem, RowGlyph, RowModel, RowNote, RowVerb } from './LedgerPrimitives';
+import { HeaderSessionUsage } from '../SessionTerminalDesktop/SessionUsage';
 
 export interface SessionSeedLink {
   id: string;
@@ -37,6 +38,7 @@ export interface SessionsTabProps {
   profileNames: Record<string, string>;
   profileMembership: string;
   liveSessionIds?: Set<string>;
+  liveSessionUsage?: ReadonlyMap<string, SessionUsage>;
   seedForSession?: (sessionId: string) => SessionSeedLink | null;
   onFocusSession?: (sessionId: string) => void;
   onOpenSeed?: (seedId: string) => void;
@@ -64,6 +66,7 @@ export function SessionsTab({
   profileNames,
   profileMembership,
   liveSessionIds,
+  liveSessionUsage,
   seedForSession,
   onFocusSession,
   onOpenSeed,
@@ -97,6 +100,7 @@ export function SessionsTab({
   });
 
   useReloadWhenChanged(profileMembership, reload);
+  useReloadWhenChanged(sessionCostPricing(settings), reload);
 
   const visible = useMemo(() => entries.filter((entry) => {
     if (!matchesDir(entry.directory, parsed.dir)) return false;
@@ -257,6 +261,7 @@ export function SessionsTab({
               verdict={attemptFor(selected)?.verdict}
               note={rowNote(keepNotices, selected.id, attemptFor(selected))}
               live={isLive(selected)}
+              usage={(!isClosed(selected) && liveSessionUsage?.get(selected.id)) || selected.usage}
               seed={seedForSession?.(selected.id) ?? null}
               sessionLabel={sessionLabel}
               nameText={nameText}
@@ -336,6 +341,10 @@ function useLedgerQueryText({ restoredFilters, profileNames, facets, repository,
   }
 
   return { text, setText, parsed };
+}
+
+function sessionCostPricing(settings: Record<string, string>): string {
+  return JSON.stringify(Object.entries(settings).filter(([key]) => key.startsWith('session_cost.')).sort());
 }
 
 function useReloadWhenChanged(value: string, reload: () => void) {
@@ -504,6 +513,7 @@ interface SessionInspectorProps {
   verdict: ReopenVerdictView | undefined;
   note: RowNote | undefined;
   live: boolean;
+  usage: SessionUsage | undefined;
   seed: SessionSeedLink | null;
   sessionLabel: (id: string) => string;
   nameText: (text: string) => string;
@@ -567,7 +577,7 @@ function InstantField({ entry, now, sessionLabel, nameText }: {
 }
 
 function SessionInspector({
-  entry, verdict, note, live, seed, sessionLabel, nameText, now, copied, onCopy, onVerb, actionsAvailable, canKeepConversation,
+  entry, verdict, note, live, usage, seed, sessionLabel, nameText, now, copied, onCopy, onVerb, actionsAvailable, canKeepConversation,
 }: SessionInspectorProps) {
   return (
     <Inspector title={entry.label || 'untitled session'} kicker={<SessionKicker entry={entry} live={live} />}>
@@ -575,6 +585,7 @@ function SessionInspector({
       <DirectoryField entry={entry} verdict={verdict} copied={copied} onCopy={onCopy} />
       <BranchField entry={entry} verdict={verdict} />
       <InstantField entry={entry} now={now} sessionLabel={sessionLabel} nameText={nameText} />
+      <UsageField usage={usage} sessionId={entry.id} />
       {seed && (
         <Field label="Seed">
           <button type="button" className="ledger-link" onClick={() => onVerb('seed')}>{seed.title}</button>
@@ -593,6 +604,23 @@ function SessionInspector({
       )}
     </Inspector>
   );
+}
+
+const keepPopoverUnpinned = () => {};
+
+function UsageField({ usage, sessionId }: { usage: SessionUsage | undefined; sessionId: string }) {
+  if (!usage) return null;
+  const tokens = `${usage.total_tokens.toLocaleString('en-US')} tokens`;
+  if (usage.measurement_incomplete) {
+    return <Field label="Usage">
+      {tokens}
+      <div className="ledger-muted">Measurement incomplete; some usage may be missing.</div>
+    </Field>;
+  }
+  return <Field label="Usage">
+    <HeaderSessionUsage usage={usage} sessionId={sessionId} pinned={false} onPopoverClosed={keepPopoverUnpinned} popoverClassName="ledger-usage-popover" />
+    {usage.cost_usd !== undefined && <span className="ledger-muted"> · {tokens}</span>}
+  </Field>;
 }
 
 function conversationVerb(entry: SessionLedgerEntry): RowVerb {

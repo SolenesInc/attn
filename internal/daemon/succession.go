@@ -35,8 +35,9 @@ func (d *Daemon) shows(t harness.TerminalID, from *protocol.Session, owner strin
 func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.Succession, observation agentConversationObservation) error {
 	unlockEnds := d.lockTerminalEnds(from.ID)
 	sc.KeepFrom = d.othersRun(from.ID, t)
+	release := func() {}
 	if !sc.KeepFrom {
-		d.drainTranscriptWatcher(from.ID)
+		release = d.drainTranscriptWatcher(from.ID)
 		if _, err := d.captureGardenSessionSnapshot(from); err != nil {
 			d.logf("garden: preserving execution %s before its terminal moved on: %v", from.ID, err)
 		}
@@ -45,7 +46,9 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 	sc.Conversation = store.SessionConversation{NativeID: observation.NativeID, TranscriptPath: observation.TranscriptPath}
 	changed, err := d.store.CommitSuccession(sc, string(t))
 	unlockEnds()
+	defer release()
 	if err != nil {
+		release()
 		if !sc.KeepFrom {
 			d.ensureTranscriptWatcherAtPath(from.ID, d.store.GetSessionConversation(from.ID).TranscriptPath)
 		}
@@ -73,13 +76,33 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 	return nil
 }
 
-// drainTranscriptWatcher stops a session's watcher and waits for its last usage reconcile.
-func (d *Daemon) drainTranscriptWatcher(sessionID string) {
+// drainTranscriptWatcher stops a session's usage watchers, waits for their last reconcile, and refuses
+// new ones until release.
+func (d *Daemon) drainTranscriptWatcher(sessionID string) (release func()) {
 	d.watchersMu.Lock()
+	if d.usageDraining == nil {
+		d.usageDraining = make(map[string]bool)
+	}
+	d.usageDraining[sessionID] = true
 	watcher := d.transcriptWatch[sessionID]
+	pluginWatcher := d.pluginUsageWatch[sessionID]
+	delete(d.transcriptWatch, sessionID)
+	delete(d.pluginUsageWatch, sessionID)
+	idle := d.usageIdle[sessionID]
 	d.watchersMu.Unlock()
-	d.stopTranscriptWatcher(sessionID)
+	if pluginWatcher != nil {
+		close(pluginWatcher.stopCh)
+	}
 	if watcher != nil {
-		<-watcher.doneCh
+		close(watcher.stopCh)
+	}
+	if idle != nil {
+		<-idle
+	}
+	d.reconcileDeferredUsage(sessionID)
+	return func() {
+		d.watchersMu.Lock()
+		delete(d.usageDraining, sessionID)
+		d.watchersMu.Unlock()
 	}
 }

@@ -8089,6 +8089,7 @@ export interface Entry {
     profile_name:            string;
     repository?:             string;
     state:                   SessionState;
+    usage?:                  Usage;
     [property: string]: any;
 }
 
@@ -9310,6 +9311,7 @@ export interface SessionLedgerEntry {
     profile_name:            string;
     repository?:             string;
     state:                   SessionState;
+    usage?:                  Usage;
     [property: string]: any;
 }
 
@@ -20831,6 +20833,7 @@ const typeMap: any = {
         { json: "profile_name", js: "profile_name", typ: "" },
         { json: "repository", js: "repository", typ: u(undefined, "") },
         { json: "state", js: "state", typ: r("SessionState") },
+        { json: "usage", js: "usage", typ: u(undefined, r("Usage")) },
     ], "any"),
     "Facets": o([
         { json: "profiles", js: "profiles", typ: a(r("ProfileObject")) },
@@ -21647,6 +21650,7 @@ const typeMap: any = {
         { json: "profile_name", js: "profile_name", typ: "" },
         { json: "repository", js: "repository", typ: u(undefined, "") },
         { json: "state", js: "state", typ: r("SessionState") },
+        { json: "usage", js: "usage", typ: u(undefined, r("Usage")) },
     ], "any"),
     "SessionLedgerFacet": o([
         { json: "count", js: "count", typ: 0 },

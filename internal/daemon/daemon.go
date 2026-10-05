@@ -160,7 +160,10 @@ type Daemon struct {
 	watchersMu                        sync.Mutex
 	transcriptWatch                   map[string]*transcriptWatcher
 	pluginUsageWatch                  map[string]*pluginUsageWatcher
-	finalUsage                        []func()
+	finalUsage                        map[string][]func()
+	usageRuns                         map[string]int
+	usageIdle                         map[string]chan struct{}
+	usageDraining                     map[string]bool
 	transcriptWatcherSessionLookup    func(string) *protocol.Session
 	transcriptResumeLookup            func(protocol.SessionAgent, string) string
 	classifiedMu                      sync.Mutex
@@ -1979,6 +1982,7 @@ func (d *Daemon) recordSessionClose(sessionID string, commit func() (bool, error
 			d.logf("garden: preserving execution %s before closing it: %v", sessionID, err)
 		}
 	}
+	defer d.drainTranscriptWatcher(sessionID)()
 	d.forgetSessionRuntime(sessionID)
 	recorded, err := commit()
 	if err != nil {
@@ -1989,6 +1993,7 @@ func (d *Daemon) recordSessionClose(sessionID string, commit func() (bool, error
 		d.queueConversationKeep()
 		d.invalidateGardenSeedParties("session close")
 		entry := d.store.SessionLedgerEntry(sessionID)
+		d.decorateLedgerEntryWithUsage(entry)
 		d.publishFact(FactSessionClosed, sessionID, entry)
 	}
 	d.clearChiefOfStaffIfSession(sessionID)

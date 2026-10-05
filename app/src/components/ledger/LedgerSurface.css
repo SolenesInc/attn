@@ -491,6 +491,8 @@
 .ledger-field-value { overflow-wrap: anywhere; }
 .ledger-field-value .ledger-muted { font-size: 12px; }
 
+.session-usage-popover.ledger-usage-popover { z-index: 401; }
+
 .ledger-copy,
 .ledger-link {
   padding: 0;
