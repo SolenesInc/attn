@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke, isTauri } from '@tauri-apps/api/core';
+import { readImage } from '@tauri-apps/plugin-clipboard-manager';
 import { QuickCapture } from './components/QuickCapture';
 import { QUICK_CAPTURE_READY, QUICK_CAPTURE_REQUEST } from './quickCapture/client';
 import { DEFAULT_PROFILE_ID, defaultProfile, emptyDesktop } from './test/daemonFixtures';
@@ -11,6 +12,10 @@ import type { EventMessage } from './test/protocol';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
 const localFetch = globalThis.fetch;
+vi.mock('@tauri-apps/plugin-clipboard-manager', async importOriginal => ({
+  ...await importOriginal<typeof import('@tauri-apps/plugin-clipboard-manager')>(),
+  readImage: vi.fn(),
+}));
 const native = vi.hoisted(() => {
   (window as { __ATTN_AUTOMATION_ENABLED?: boolean }).__ATTN_AUTOMATION_ENABLED = true;
   return ({
@@ -49,6 +54,7 @@ vi.mock('@tauri-apps/api/webviewWindow', () => ({
 }));
 
 beforeEach(() => {
+  vi.mocked(readImage).mockClear().mockRejectedValue(new Error('Clipboard has no image'));
   native.listeners.clear(); native.readyGate = undefined; native.visible = false; native.draft = null; native.drafts.clear(); native.files.clear(); native.binding = null; native.active = null;
   vi.mocked(isTauri).mockReturnValue(true);
   vi.mocked(invoke).mockImplementation(async (command, args) => {
@@ -239,6 +245,21 @@ describe('Quick Capture app wire behavior', () => {
     expect(daemon.sentOf('set_setting').slice(-1)[0]).toMatchObject({ key: 'capture.shortcut', value: '' });
     expect(native.active).toBeNull();
     expect(mapping.getByText('Active: Off')).toBeInTheDocument();
+  });
+
+  it.each(['text/plain', 'text/html'])('leaves %s paste to the editor without attaching a native image', async format => {
+    const { daemon } = await captureApp();
+    await gesture(daemon, () => fireEvent.change(editor(), { target: { value: 'Existing message' } }));
+    expect(editor()).not.toHaveAttribute('readonly');
+    let allowed = false;
+    await gesture(daemon, () => {
+      allowed = fireEvent.paste(editor(), { clipboardData: { files: [], types: [format],
+        getData: (type: string) => type === format ? 'Pasted message' : '' } });
+    });
+    expect(allowed).toBe(true);
+    expect(readImage).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Remove Pasted screenshot' })).toBeNull();
+    expect(daemon.sentOf('quick_capture_attachment_put')).toEqual([]);
   });
 
   it('sends once with stable identity and clears only after a durable receipt', async () => {

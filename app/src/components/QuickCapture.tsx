@@ -341,7 +341,7 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
         if (uncertain || sending.current) { event.preventDefault(); return; }
         const files = [...event.clipboardData.files];
         if (files.length) { event.preventDefault(); addFiles(files); }
-        else void pasteNativeImage();
+        else if (!event.clipboardData.getData('text/plain') && !event.clipboardData.getData('text/html')) void pasteNativeImage();
       }} />
       {files.length > 0 && <div className="capture-files">{files.map(file => <QuickCaptureAttachmentPreview key={file.id} file={file} onSettled={onSettled} onMotion={onMotion} onRemove={removeFile} disabled={uncertain || submitting} />)}</div>}
     </>}
