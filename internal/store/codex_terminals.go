@@ -58,14 +58,14 @@ func (s *Store) CodexTerminals() ([]CodexTerminal, error) {
 	return terminals, rows.Err()
 }
 
-func (s *Store) OpenSessionHolding(nativeID string) string {
+func (s *Store) OpenSessionHolding(profileID, nativeID string) string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil || nativeID == "" {
 		return ""
 	}
 	var id string
-	if err := s.db.QueryRow(`SELECT id FROM sessions WHERE resume_session_id = ? AND closed_at = '' LIMIT 1`, nativeID).Scan(&id); err != nil {
+	if err := s.db.QueryRow(`SELECT id FROM sessions WHERE profile_id = ? AND resume_session_id = ? AND closed_at = '' LIMIT 1`, profileID, nativeID).Scan(&id); err != nil {
 		return ""
 	}
 	return id

@@ -38,8 +38,8 @@ func (d *Daemon) handleObserveAgentConversation(conn net.Conn, msg *protocol.Set
 		d.sendOK(conn)
 		return
 	}
-	if conversation, ok := strings.CutPrefix(string(terminal), hooks.CodexThreadCallerPrefix); ok {
-		shown, showing := d.codexShared().terminalShowing(conversation)
+	if profile, conversation, ok := hooks.ParseCodexThreadCaller(string(terminal)); ok {
+		shown, showing := d.codexShared().terminalShowing(profile, conversation)
 		if !showing {
 			d.logf("agent conversation: no terminal shows shared Codex conversation %s", conversation)
 			d.sendOK(conn)

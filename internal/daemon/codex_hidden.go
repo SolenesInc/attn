@@ -45,8 +45,8 @@ func (r *codexShared) keepsWhenLeft(sessionID string) bool {
 	return r.conversation(sessionID) != ""
 }
 
-func (r *codexShared) holder(conversation string) string {
-	sessionID := r.d.store.OpenSessionHolding(conversation)
+func (r *codexShared) holder(profile, conversation string) string {
+	sessionID := r.d.store.OpenSessionHolding(profile, conversation)
 	if sessionID == "" || !r.launchedShared(sessionID) {
 		return ""
 	}
@@ -241,7 +241,7 @@ func (r *codexShared) observeStatus(s *codexServer, m codexshared.Message) {
 		return
 	}
 	s.events.run(r.d, func() {
-		sessionID := r.holder(p.ThreadID)
+		sessionID := r.holder(s.profile, p.ThreadID)
 		session := r.d.store.Get(sessionID)
 		if session == nil {
 			return
@@ -390,7 +390,7 @@ func (r *codexShared) observeName(s *codexServer, m codexshared.Message) {
 	}
 	name := strings.TrimSpace(*p.ThreadName)
 	s.events.run(r.d, func() {
-		sessionID := r.holder(p.ThreadID)
+		sessionID := r.holder(s.profile, p.ThreadID)
 		session := r.d.store.Get(sessionID)
 		if session == nil || name == "" || session.Label == name {
 			return

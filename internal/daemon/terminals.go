@@ -59,8 +59,8 @@ func (d *Daemon) shownIn(t harness.TerminalID) (string, bool) {
 // callerID resolves the id a hook or CLI call carries: the session a terminal shows, else the id
 // unchanged, so an open session's id and an unknown id reach their handler as before.
 func (d *Daemon) callerID(id string) string {
-	if conversation, ok := strings.CutPrefix(strings.TrimSpace(id), hooks.CodexThreadCallerPrefix); ok {
-		return d.codexThreadCaller(conversation)
+	if profile, conversation, ok := hooks.ParseCodexThreadCaller(id); ok {
+		return d.codexThreadCaller(profile, conversation)
 	}
 	if s, ok := d.terminals().Showing(harness.TerminalID(strings.TrimSpace(id))); ok {
 		return string(s)

@@ -193,7 +193,7 @@ func (r *codexShared) startServer(ctx context.Context, s *codexServer, executabl
 		return err
 	}
 	command := []string{r.codexExecutable(executable), "app-server"}
-	for _, override := range hooks.GenerateCodexServerConfigOverrides(r.d.wrapperPath()) {
+	for _, override := range hooks.GenerateCodexServerConfigOverrides(r.d.wrapperPath(), s.profile) {
 		command = append(command, "-c", override)
 	}
 	command = append(command, "--listen", "unix://"+s.socket)
@@ -328,12 +328,12 @@ func (r *codexShared) observeServer(s *codexServer, m codexshared.Message) {
 	}
 	s.mu.Unlock()
 	if unloaded != "" {
-		r.d.life.Go("codexConversationUnloaded", func() { r.unloaded(unloaded) })
+		r.d.life.Go("codexConversationUnloaded", func() { r.unloaded(s.profile, unloaded) })
 	}
 }
 
-func (r *codexShared) unloaded(conversation string) {
-	sessionID := r.d.store.OpenSessionHolding(conversation)
+func (r *codexShared) unloaded(profile, conversation string) {
+	sessionID := r.d.store.OpenSessionHolding(profile, conversation)
 	session := r.d.store.Get(sessionID)
 	if session == nil || session.State == protocol.SessionStateRecoverable || session.State == protocol.SessionStateIdle ||
 		r.d.sessionLive(context.Background(), sessionID) || r.hidden(sessionID) {
@@ -576,12 +576,12 @@ func (r *codexShared) show(v *codexView, conversation string) {
 	v.thread, v.shownSeq = conversation, r.seq
 }
 
-func (r *codexShared) terminalShowing(conversation string) (harness.TerminalID, bool) {
+func (r *codexShared) terminalShowing(profile, conversation string) (harness.TerminalID, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var found *codexView
 	for _, v := range r.views {
-		if v.thread == conversation && (found == nil || v.shownSeq > found.shownSeq) {
+		if v.profile == profile && v.thread == conversation && (found == nil || v.shownSeq > found.shownSeq) {
 			found = v
 		}
 	}
@@ -634,7 +634,7 @@ func (r *codexShared) terminalExited(t harness.TerminalID) {
 		}
 		r.d.logf("shared Codex: the app-server of profile %s exited; the next connection starts it again", exited.profile)
 		for _, conversation := range held {
-			r.d.life.Go("codexConversationUnloaded", func() { r.unloaded(conversation) })
+			r.d.life.Go("codexConversationUnloaded", func() { r.unloaded(exited.profile, conversation) })
 		}
 	}
 	if !r.serverRunning(context.Background(), t) {
@@ -695,41 +695,35 @@ func (r *codexShared) recoverViews(ctx context.Context) {
 	}
 }
 
-func (r *codexShared) parent(conversation string) string {
+func (r *codexShared) parent(profile, conversation string) string {
 	r.mu.Lock()
-	servers := make([]*codexServer, 0, len(r.servers))
-	for _, s := range r.servers {
-		servers = append(servers, s)
-	}
+	s := r.servers[profile]
 	r.mu.Unlock()
-	for _, s := range servers {
-		s.mu.Lock()
-		parent := s.parents[conversation]
-		s.mu.Unlock()
-		if parent != "" {
-			return parent
-		}
+	if s == nil {
+		return ""
 	}
-	return ""
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.parents[conversation]
 }
 
 // A subagent's hooks belong to its root's session.
-func (d *Daemon) codexThreadCaller(conversation string) string {
+func (d *Daemon) codexThreadCaller(profile, conversation string) string {
 	r, asked := d.codexShared(), conversation
 	for range 8 {
-		if t, ok := r.terminalShowing(conversation); ok {
+		if t, ok := r.terminalShowing(profile, conversation); ok {
 			if s, ok := d.terminals().Showing(t); ok {
 				return string(s)
 			}
 		}
-		if s := d.store.OpenSessionHolding(conversation); s != "" {
+		if s := d.store.OpenSessionHolding(profile, conversation); s != "" {
 			return s
 		}
-		if conversation = r.parent(conversation); conversation == "" {
+		if conversation = r.parent(profile, conversation); conversation == "" {
 			break
 		}
 	}
-	return hooks.CodexThreadCaller(asked)
+	return hooks.CodexThreadCaller(profile, asked)
 }
 
 func (d *Daemon) wrapperPath() string {

@@ -749,8 +749,7 @@ export function ExperimentalSettings({
           <div>
             <p className="settings-row-title">Show hidden sessions in the queue</p>
             <p className="settings-row-copy" id="queue-hidden-sessions-description">
-              On by default. Hidden sessions queue like any other; choosing one opens it in a terminal. Needs Shared
-              Codex.
+              On by default. Hidden sessions queue like any other; choosing one opens it in a terminal.
             </p>
           </div>
           <button
@@ -761,7 +760,6 @@ export function ExperimentalSettings({
             aria-describedby="queue-hidden-sessions-description"
             className="settings-action"
             data-testid="settings-queue-hidden-sessions-toggle"
-            disabled={!codexSharedEnabled}
             onClick={() => onSetSetting('queue_show_hidden_sessions', queueShowHiddenSessions ? 'false' : 'true')}
           >
             {queueShowHiddenSessions ? 'Disable' : 'Enable'}

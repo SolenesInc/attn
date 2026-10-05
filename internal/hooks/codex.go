@@ -13,7 +13,21 @@ const CodexThreadHooksEnv = "ATTN_CODEX_THREAD_HOOKS"
 
 const CodexThreadCallerPrefix = "codex:"
 
-func CodexThreadCaller(conversation string) string { return CodexThreadCallerPrefix + conversation }
+func CodexThreadCaller(profile, conversation string) string {
+	return CodexThreadCallerPrefix + profile + ":" + conversation
+}
+
+func ParseCodexThreadCaller(id string) (profile, conversation string, ok bool) {
+	rest, ok := strings.CutPrefix(strings.TrimSpace(id), CodexThreadCallerPrefix)
+	if !ok {
+		return "", "", false
+	}
+	i := strings.LastIndex(rest, ":")
+	if i < 0 || rest[i+1:] == "" {
+		return "", "", false
+	}
+	return rest[:i], rest[i+1:], true
+}
 
 func GenerateCodexConfigOverrides(sessionID, socketPath, wrapperPath string, launch Launch) []string {
 	wrapper := hookWrapper(wrapperPath)
@@ -33,8 +47,8 @@ func GenerateCodexConfigOverrides(sessionID, socketPath, wrapperPath string, lau
 	return overrides
 }
 
-func GenerateCodexServerConfigOverrides(wrapperPath string) []string {
-	return codexHookOverrides(codexHookCommand(hookWrapper(wrapperPath), "env "+CodexThreadHooksEnv+"=1 "))
+func GenerateCodexServerConfigOverrides(wrapperPath, profile string) []string {
+	return codexHookOverrides(codexHookCommand(hookWrapper(wrapperPath), "env "+shellQuote(CodexThreadHooksEnv+"="+profile)+" "))
 }
 
 func hookWrapper(wrapperPath string) string {

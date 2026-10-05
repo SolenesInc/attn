@@ -2427,11 +2427,12 @@ func runProbeTUI() {
 }
 
 func hookCaller(id string, input hookInput) string {
-	if os.Getenv(hooks.CodexThreadHooksEnv) != "1" {
+	profile, server := os.LookupEnv(hooks.CodexThreadHooksEnv)
+	if !server {
 		return id
 	}
 	if conversation := strings.TrimSpace(input.SessionID); conversation != "" {
-		return hooks.CodexThreadCaller(conversation)
+		return hooks.CodexThreadCaller(profile, conversation)
 	}
 	return ""
 }

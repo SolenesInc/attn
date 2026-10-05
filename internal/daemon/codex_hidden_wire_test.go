@@ -227,6 +227,37 @@ func TestAPlainCodexCannotResumeAConversationASharedSessionHolds(t *testing.T) {
 	}
 }
 
+func TestAConversationResumedInAnotherProfileIsThatProfilesOwnSharedCodexSession(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	side := createProfile(app, "Side")
+	sideApp := w.AppOn(side.ID)
+	elsewhere := w.Spawn(sideApp, fakeagent.Codex, w.Path("shop"))
+	sideCodex := w.Launched(elsewhere)
+	sideApp.TypeLine(elsewhere, "plan the release")
+	sideCodex.Prompted()
+	sideCodex.Reply("Planned. <!-- attn:state=idle -->")
+	testworld.AwaitSession(sideApp, elsewhere, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	conversation := sideCodex.ConversationID
+
+	here := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
+	codex := w.Launched(here)
+	terminal := app.Terminal(here)
+	moveOn(t, app, codex, terminal, "/resume "+conversation, "ship it")
+	resumed := sessionShownIn(t, w, app, terminal)
+	if resumed == elsewhere {
+		t.Fatalf("/resume %s here showed %s from profile %s, want a session in this profile", conversation, elsewhere, side.ID)
+	}
+
+	typeInto(app, terminal, "/rename Release train\r")
+	codex.Prompted()
+	testworld.AwaitSession(app, resumed, func(s protocol.Session) bool { return s.Label == "Release train" })
+	if other := queriedSession(t, w.Client(), elsewhere); other.Label == "Release train" {
+		t.Errorf("renaming the conversation here renamed %s in profile %s", elsewhere, side.ID)
+	}
+}
+
 func sharedCodexWaiting(t *testing.T, w *world, app *testworld.Peer) (string, *fakeagent.Run, string) {
 	t.Helper()
 	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))

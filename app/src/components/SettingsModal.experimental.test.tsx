@@ -16,17 +16,12 @@ describe('Experimental settings for shared Codex', () => {
     expect(savedSettings(daemon)).toEqual([['codex_shared_enabled', 'true'], ['codex_shared_enabled', 'false']]);
   });
 
-  it('keeps hidden sessions in the queue by default, and only lets that be changed while Shared Codex is on', async () => {
+  it('keeps hidden sessions in the queue by default, and lets that change while Shared Codex is off', async () => {
     const daemon = await openSection('experimental');
+    expect(sharedCodex()).toHaveAttribute('aria-checked', 'false');
     expect(hiddenInQueue()).toHaveAttribute('aria-checked', 'true');
-    expect(hiddenInQueue()).toBeDisabled();
-    await gesture(daemon, () => fireEvent.click(hiddenInQueue()));
-    expect(savedSettings(daemon)).toEqual([]);
-
-    await gesture(daemon, () => fireEvent.click(sharedCodex()));
-    expect(hiddenInQueue()).toBeEnabled();
     await gesture(daemon, () => fireEvent.click(hiddenInQueue()));
     expect(hiddenInQueue()).toHaveAttribute('aria-checked', 'false');
-    expect(savedSettings(daemon)).toEqual([['codex_shared_enabled', 'true'], ['queue_show_hidden_sessions', 'false']]);
+    expect(savedSettings(daemon)).toEqual([['queue_show_hidden_sessions', 'false']]);
   });
 });
