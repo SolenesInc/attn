@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"syscall"
 	"testing"
@@ -14,6 +16,8 @@ import (
 	"github.com/victorarias/attn/internal/procreap"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/ptyhost"
+	"github.com/victorarias/attn/internal/ptyworker"
+	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestInstanceCleanStopsSharedHostGenerationsAndChildren(t *testing.T) {
@@ -153,4 +157,136 @@ func writeHostRegistry(path string, entry ptyhost.HostRegistry) error {
 		return err
 	}
 	return os.WriteFile(path, data, 0o600)
+}
+
+func TestInstanceCleanPreservesUnreachableWorkerRegistry(t *testing.T) {
+	r := stoppedInstance(t)
+	path := filepath.Join(r.DataDir, "workers", "d-unknown", "registry", "unreachable.json")
+	if err := ptyworker.WriteRegistryAtomic(path, ptyworker.RegistryEntry{Version: 1, SessionID: "unreachable", WorkerPID: os.Getpid(), SocketPath: filepath.Join(r.DataDir, "absent.sock")}); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := cleanInstance(&out, r); err == nil {
+		t.Fatalf("cleanup accepted an unreachable live worker: %s", out.String())
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("cleanup destroyed the unreaped registry: %v", err)
+	}
+}
+
+func TestInstanceCleanWaitsForWorkerChildResistingTermination(t *testing.T) {
+	root, err := os.MkdirTemp("/tmp", "pty-clean-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(root)
+	r := instanceResolved{Label: "test", DataDir: filepath.Join(root, "data"), AppPath: filepath.Join(root, "absent-app"), AppLocalData: filepath.Join(root, "app-data"), AppLock: filepath.Join(root, "app.lock")}
+	if err := os.MkdirAll(r.AppLocalData, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	backend, err := ptybackend.NewWorker(ptybackend.WorkerBackendConfig{DataRoot: r.DataDir, DaemonInstanceID: "d-clean", BinaryPath: testworld.AttnBinary(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = backend.Shutdown(context.Background()) })
+	readyPath := filepath.Join(root, "ready")
+	if err := syscall.Mkfifo(readyPath, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ready := make(chan error, 1)
+	go func() {
+		f, err := os.Open(readyPath)
+		if err != nil {
+			ready <- err
+			return
+		}
+		defer f.Close()
+		line, err := bufio.NewReader(f).ReadString('\n')
+		if err == nil && line != "ready\n" {
+			err = fmt.Errorf("unexpected readiness %q", line)
+		}
+		ready <- err
+	}()
+	const id = "resistant-child"
+	if err := backend.Spawn(context.Background(), ptybackend.SpawnOptions{
+		ID: id, CWD: r.AppLocalData, Agent: "cleanup-probe", Cols: 80, Rows: 24,
+		ExternalCommand: []string{"/bin/sh", "-c", `trap '' TERM HUP; exec 3>"$1"; printf 'ready\n' >&3; while :; do read hold || true; done`, "cleanup-probe", readyPath},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	workerPID := backend.WorkerPIDs(context.Background())[id]
+	info, err := backend.SessionInfo(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if procreap.ProcessAlive(info.PID) {
+			_ = syscall.Kill(-info.PID, syscall.SIGKILL)
+		}
+		if procreap.ProcessAlive(workerPID) {
+			_ = syscall.Kill(workerPID, syscall.SIGKILL)
+		}
+	})
+	if err := <-ready; err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := cleanInstance(&out, r); err != nil {
+		t.Fatalf("clean instance: %v\n%s", err, out.String())
+	}
+	if procreap.ProcessAlive(info.PID) {
+		t.Fatalf("child %d survived instance cleanup", info.PID)
+	}
+}
+
+func TestInstanceCleanPreservesDataWhileADeadWorkersChildRuns(t *testing.T) {
+	r := stoppedInstance(t)
+	exited := exec.Command("true")
+	if err := exited.Run(); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(r.DataDir, "workers", "d-crashed", "registry", "orphan.json")
+	if err := ptyworker.WriteRegistryAtomic(path, ptyworker.RegistryEntry{Version: 1, SessionID: "orphan", WorkerPID: exited.Process.Pid, ChildPID: os.Getpid(), SocketPath: filepath.Join(r.DataDir, "absent.sock")}); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := cleanInstance(&out, r); err == nil {
+		t.Fatalf("cleanup accepted a crashed worker whose child still runs: %s", out.String())
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("cleanup destroyed the orphan's registry: %v", err)
+	}
+}
+
+func TestInstanceCleanPreservesDataWhenAWorkerRegistryIsUnreadable(t *testing.T) {
+	r := stoppedInstance(t)
+	path := filepath.Join(r.DataDir, "workers", "d-unknown", "registry", "garbled.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := cleanInstance(&out, r); err == nil {
+		t.Fatalf("cleanup accepted a worker registry it could not read: %s", out.String())
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("cleanup destroyed the unreadable registry: %v", err)
+	}
+}
+
+func TestInstanceCleanPreservesDataWhileAQuarantinedWorkerRuns(t *testing.T) {
+	r := stoppedInstance(t)
+	path := filepath.Join(r.DataDir, "workers", "d-unknown", "quarantine", "held.json.ownership_mismatch.1")
+	if err := ptyworker.WriteRegistryAtomic(path, ptyworker.RegistryEntry{Version: 1, SessionID: "held", WorkerPID: os.Getpid(), SocketPath: filepath.Join(r.DataDir, "absent.sock")}); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := cleanInstance(&out, r); err == nil {
+		t.Fatalf("cleanup accepted a quarantined live worker: %s", out.String())
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("cleanup destroyed the quarantined registry: %v", err)
+	}
 }

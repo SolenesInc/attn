@@ -28,6 +28,7 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/pausepoint"
+	"github.com/victorarias/attn/internal/procreap"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptyhost"
 	"github.com/victorarias/attn/internal/ptyworker"
@@ -35,9 +36,8 @@ import (
 
 const (
 	defaultRPCTimeout       = 5 * time.Second
-	killRPCTimeout          = 15 * time.Second
+	killRPCTimeout          = ptyworker.TeardownRPCTimeout
 	livenessRPCTimeout      = 2 * time.Second
-	reclaimRPCTimeout       = 3 * time.Second
 	pollerInterval          = 5 * time.Second
 	monitorRetryInterval    = 1 * time.Second
 	watchResponseTimeout    = 5 * time.Second
@@ -985,6 +985,11 @@ func (b *WorkerBackend) Remove(ctx context.Context, id harness.TerminalID) error
 	session, err := b.getSession(sessionID)
 	if err != nil {
 		return err
+	}
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, killRPCTimeout)
+		defer cancel()
 	}
 	workerPID := b.workerPIDForSession(session)
 	callErr := b.callSimple(ctx, session, ptyworker.MethodRemove, map[string]any{})
@@ -2051,20 +2056,10 @@ func (b *WorkerBackend) reclaimOwnershipMismatch(ctx context.Context, registryPa
 		RegistryPath: registryPath,
 		ControlToken: entry.ControlToken,
 	}
-	removeCtx := ctx
-	var cancel context.CancelFunc
-	if removeCtx == nil {
-		removeCtx = context.Background()
-	}
-	if _, hasDeadline := removeCtx.Deadline(); !hasDeadline {
-		removeCtx, cancel = context.WithTimeout(removeCtx, reclaimRPCTimeout)
-	} else {
-		removeCtx, cancel = context.WithCancel(removeCtx)
-	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), killRPCTimeout)
 	defer cancel()
-
 	err := b.callSimpleWithIdentity(
-		removeCtx,
+		ctx,
 		session,
 		entry.DaemonInstanceID,
 		entry.ControlToken,
@@ -2083,6 +2078,9 @@ func (b *WorkerBackend) reclaimOwnershipMismatch(ctx context.Context, registryPa
 			return true, nil
 		}
 		return false, fmt.Errorf("stale-owner reclaim remove rpc failed: %w", err)
+	}
+	if err := waitForProcessExit(ctx, entry.WorkerPID); err != nil {
+		return false, fmt.Errorf("stale-owner reclaim: worker %d still running after remove: %w", entry.WorkerPID, err)
 	}
 
 	b.pruneSessionFiles(entry.SessionID, registryPath, expectedSocketPath)
@@ -2698,6 +2696,19 @@ func signalName(sig syscall.Signal) string {
 	default:
 		return "SIGTERM"
 	}
+}
+
+func waitForProcessExit(ctx context.Context, pid int) error {
+	ticker := time.NewTicker(20 * time.Millisecond)
+	defer ticker.Stop()
+	for procreap.ProcessAlive(pid) {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
+	return nil
 }
 
 func pidAlive(pid int) bool {

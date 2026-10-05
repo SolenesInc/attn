@@ -377,7 +377,13 @@ func cleanInstance(w io.Writer, r instanceResolved) error {
 		fmt.Fprintf(w, "  daemon   stopped\n")
 	}
 
-	reportWorkerReap(w, ptyworker.ReapDataDir(r.DataDir))
+	workers := ptyworker.ReapDataDir(r.DataDir)
+	reportWorkerReap(w, workers)
+	for _, result := range workers {
+		if result.Outcome != ptyworker.ReapRemoved && result.Outcome != ptyworker.ReapAlreadyGone {
+			return fmt.Errorf("PTY worker for session %s (pid %d) was not stopped (%s): %v; instance data was preserved", result.SessionID, result.WorkerPID, result.Outcome, result.Err)
+		}
+	}
 	sharedHosts := ptyhost.ReapDataDir(r.DataDir)
 	reportProcReap(w, "pty hosts", "generation", sharedHosts)
 	for _, result := range sharedHosts {
@@ -480,6 +486,10 @@ func reportWorkerReap(w io.Writer, results []ptyworker.ReapResult) {
 	}
 	fmt.Fprintf(w, "  workers  %d registered (%s)\n", len(results), summarizeReap(byOutcome))
 	for _, res := range results {
+		if res.Outcome == ptyworker.ReapFailed {
+			fmt.Fprintf(w, "           ! session %s: worker pid %d removal failed (%v); left running\n", res.SessionID, res.WorkerPID, res.Err)
+			continue
+		}
 		if res.Outcome != ptyworker.ReapUnidentified {
 			continue
 		}
@@ -530,7 +540,7 @@ func reportProcReap(w io.Writer, label, noun string, results []procreap.ReapResu
 func summarizeReap(byOutcome map[ptyworker.ReapOutcome]int) string {
 	order := []ptyworker.ReapOutcome{
 		ptyworker.ReapRemoved,
-		ptyworker.ReapSignalled,
+		ptyworker.ReapFailed,
 		ptyworker.ReapAlreadyGone,
 		ptyworker.ReapUnidentified,
 	}

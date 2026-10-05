@@ -1,0 +1,4 @@
+kind: fixed
+area: terminals
+change: Removing a PTY worker waits for its child to exit, and `attn instance clean` exits non-zero and keeps the instance's data and worker registry when a worker cannot be removed.
+symptom: "`attn instance clean` could delete an instance's data while a PTY worker or its child was still running."
