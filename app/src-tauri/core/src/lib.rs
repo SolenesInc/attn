@@ -4,6 +4,7 @@ mod instance;
 mod migration_failure;
 mod native_input;
 mod native_input_diagnostics;
+mod quick_capture;
 mod ui_automation;
 mod wake;
 
@@ -655,6 +656,16 @@ fn app_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wr
             }
         }
 
+        if is_file_menu {
+            submenu.append(&MenuItem::with_id(
+                app,
+                "quick-capture",
+                "Quick Capture",
+                true,
+                None::<&str>,
+            )?)?;
+        }
+
         if is_file_menu && !inserted_close_active_pane {
             submenu.append(&close_active_pane)?;
             inserted_close_active_pane = true;
@@ -1288,12 +1299,25 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
         .on_menu_event(|app, event| {
             use tauri::Manager;
 
+            #[cfg(target_os = "macos")]
+            if event.id() == "quick-capture" {
+                let _ = quick_capture::show(app);
+                return;
+            }
+
             if event.id() == CANCEL_COUNTDOWN_MENU_ID {
                 dispatch_native_shortcut(app, "session.cancelCountdown");
                 return;
             }
 
             if event.id() == CLOSE_ACTIVE_PANE_MENU_ID {
+                #[cfg(target_os = "macos")]
+                if let Some(capture) = app.get_webview_window("capture") {
+                    if capture.is_focused().unwrap_or(false) {
+                        let _ = quick_capture::capture_hide(app.clone());
+                        return;
+                    }
+                }
                 if let Some(present) = app.get_webview_window(PRESENT_WINDOW_LABEL) {
                     if present.is_focused().unwrap_or(false) {
                         let _ = present.hide();
@@ -1327,6 +1351,14 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             get_browser_host_token,
             get_client_token,
             open_presentation_window,
+            quick_capture::capture_hide,
+            quick_capture::capture_bind,
+            quick_capture::capture_status,
+            quick_capture::capture_cache,
+            quick_capture::quick_capture_file_read,
+            quick_capture::quick_capture_draft_read,
+            quick_capture::quick_capture_draft_write,
+            quick_capture::quick_capture_draft_file_write,
             browser_host::browser_host_mount,
             browser_host::browser_host_update,
             browser_host::browser_host_unmount,
@@ -1344,6 +1376,8 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             instance::hold_app_lock()?;
             instance::write_app_pid_file();
             native_input_diagnostics::install();
+            #[cfg(target_os = "macos")]
+            quick_capture::install(app)?;
             #[cfg(target_os = "macos")]
             wake::install(&app.handle().clone());
             ui_automation::maybe_start(&app.handle().clone());
@@ -1393,6 +1427,9 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
                     }
                 }
             }
+            if webview.label() == "capture" {
+                return;
+            }
             let _ = webview.window().show();
             // Must take focus: an unfocused, hidden-at-creation WKWebView can leave
             // requestAnimationFrame parked (blank diff pane).
@@ -1407,6 +1444,8 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
         })
         .run(|_handle, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                #[cfg(target_os = "macos")]
+                quick_capture::shutdown(_handle);
                 instance::remove_app_pid_file();
             }
         });

@@ -11,6 +11,7 @@ import {
 } from '../utils/sidebarHarnessLogos';
 import { getTerminalAnsiPaletteColors, getTerminalTheme } from '../utils/terminalSizing';
 import { AppContentProps } from './appSupport';
+import { QUICK_CAPTURE_FONT } from '../quickCapture/client';
 
 interface Options {
   settings: AppContentProps['settings'];
@@ -19,6 +20,14 @@ export function useAppAppearance({ settings }: Options) {
   const { hasReceivedInitialState, sendSetTerminalTheme, sendSetSetting } = useDaemonApi();
   const { repoStates, authorStates } = useDaemonStore();
   const { scale, increaseScale, decreaseScale, resetScale } = useUIScale();
+  useEffect(() => {
+    const resize = (event: Event) => {
+      const change = (event as CustomEvent<'increase' | 'decrease' | 'reset'>).detail;
+      ({ increase: increaseScale, decrease: decreaseScale, reset: resetScale })[change]();
+    };
+    window.addEventListener(QUICK_CAPTURE_FONT, resize);
+    return () => window.removeEventListener(QUICK_CAPTURE_FONT, resize);
+  }, [increaseScale, decreaseScale, resetScale]);
   const terminalFontSize = Math.round(14 * scale);
 
   const gardenScale = useGardenScale(scale);

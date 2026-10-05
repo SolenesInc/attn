@@ -69,11 +69,13 @@ class DaemonConnection {
     this.daemon.receive(command, this);
   }
 
-  close(code = 1000) {
+  close(code = 1000, reason = '') {
     if (this.readyState === DaemonConnection.CLOSED) return;
     this.readyState = DaemonConnection.CLOSED;
     queueMicrotask(() => {
-      act(() => this.onclose?.(new CloseEvent('close', { code })));
+      const event = new CloseEvent('close');
+      Object.defineProperties(event, { code: { value: code }, reason: { value: reason } });
+      act(() => this.onclose?.(event));
     });
   }
 
@@ -167,8 +169,8 @@ export class ScriptedDaemon {
     origin.emit(reply);
   }
 
-  disconnect(code = 1006) {
-    this.connection.close(code);
+  disconnect(code = 1006, reason = '') {
+    this.connection.close(code, reason);
   }
 
   async reconnect(): Promise<DaemonConnection> {
