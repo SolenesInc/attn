@@ -495,6 +495,11 @@ func (d *Daemon) leafShown(client *wsClient, profile profiles.Profile, desktop p
 
 func (d *Daemon) handleDesktopShowSession(client *wsClient, msg *protocol.DesktopShowSessionMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
+		if d.codexShared().hidden(msg.SessionID) {
+			if err := d.codexShared().showSession(msg.SessionID); err != nil {
+				return profileActionOutcome{}, err
+			}
+		}
 		profile, desktop, leafID, err := d.store.ShowSession(msg.SessionID)
 		if err != nil {
 			return profileActionOutcome{}, err
@@ -598,7 +603,10 @@ func (d *Daemon) handleDesktopCloseTile(client *wsClient, msg *protocol.DesktopC
 			return profileActionOutcome{}, profiles.Errorf(profiles.CodeNotFound, "desktop %s has no terminal tile %s", msg.DesktopID, msg.TileID)
 		}
 		tile := desktop.Panes[i]
-		if d.closeTerminal(tile.SessionID, harness.TerminalID(tile.RuntimeID)) {
+		if d.codexShared().movedOn(tile.SessionID, harness.TerminalID(tile.RuntimeID)) {
+			d.hide(tile.SessionID, harness.TerminalID(tile.RuntimeID))
+			d.detachSession(client, tile.RuntimeID)
+		} else if d.closeTerminal(tile.SessionID, harness.TerminalID(tile.RuntimeID)) {
 			closing, err := d.beginUserSessionClose(tile.SessionID, store.SessionClose{By: store.SessionClosedByUser}, client)
 			if err != nil {
 				return profileActionOutcome{}, err

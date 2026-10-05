@@ -28,6 +28,8 @@ const (
 	methodFakeHalt       = "attn-fake/halt"
 	methodFakeApproval   = "attn-fake/ask-approval"
 	methodFakeCrash      = "attn-fake/crash"
+	methodFakeTerminal   = "attn-fake/terminal"
+	methodThreadName     = "thread_name"
 	codexApprovalRequest = "item/commandExecution/requestApproval"
 )
 
@@ -40,11 +42,15 @@ type codexAppServer struct {
 	threads map[string]*codexServerThread
 	conns   map[*codexServerConn]bool
 	nextID  int
+	prompts map[string]chan string
+	names   map[string]string
+	named   chan struct{}
 }
 
 type codexServerConn struct {
-	ws      *websocket.Conn
-	writeMu sync.Mutex
+	ws       *websocket.Conn
+	writeMu  sync.Mutex
+	terminal bool
 }
 
 type codexServerThread struct {
@@ -72,13 +78,16 @@ func runCodexAppServer(cfg config) int {
 		hooks:   hookSet{groups: configured.groups, env: os.Environ()},
 		threads: map[string]*codexServerThread{},
 		conns:   map[*codexServerConn]bool{},
+		prompts: map[string]chan string{},
+		names:   map[string]string{},
+		named:   make(chan struct{}),
 	}
 	listener, err := net.Listen("unix", path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: app-server control socket is already in use at %s: %v\n", path, err)
 		return 1
 	}
-	control, err := dialControl(cfg, nil)
+	control, err := dialControl(cfg, s.handleKit)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "fake codex app-server: %v\n", err)
 		return 1
@@ -209,6 +218,8 @@ func (s *codexAppServer) unload(id string) {
 
 type codexServerParams struct {
 	ThreadID       string            `json:"threadId"`
+	Name           string            `json:"name"`
+	ExpectedTurnID string            `json:"expectedTurnId"`
 	CWD            string            `json:"cwd"`
 	Model          string            `json:"model"`
 	Ephemeral      bool              `json:"ephemeral"`
@@ -256,11 +267,49 @@ func (s *codexAppServer) handle(conn *codexServerConn, m codexshared.Message) (a
 		}
 		return map[string]any{}, nil, s.write(t, lines...)
 	case "thread/read":
+		if t, err := s.loaded(p.ThreadID); err == nil {
+			return map[string]any{"thread": s.metadata(t)}, nil, nil
+		}
+		if path, _ := s.findRollout(p.ThreadID); path == "" {
+			return nil, nil, fmt.Errorf("thread not loaded: %s", p.ThreadID)
+		}
+		return map[string]any{"thread": map[string]any{"id": p.ThreadID, "status": map[string]any{"type": "notLoaded"}}}, nil, nil
+	case "thread/name/set":
+		if path, _ := s.findRollout(p.ThreadID); path == "" {
+			if _, err := s.loaded(p.ThreadID); err != nil {
+				return nil, nil, err
+			}
+		}
+		s.mu.Lock()
+		s.names[p.ThreadID] = p.Name
+		close(s.named)
+		s.named = make(chan struct{})
+		s.mu.Unlock()
+		return map[string]any{}, func() {
+			s.broadcast("thread/name/updated", map[string]any{"threadId": p.ThreadID, "threadName": p.Name})
+		}, nil
+	case "thread/archive":
+		return s.archive(p.ThreadID)
+	case "thread/unarchive":
+		return s.unarchive(p.ThreadID)
+	case "thread/turns/list":
 		t, err := s.loaded(p.ThreadID)
 		if err != nil {
 			return nil, nil, err
 		}
-		return map[string]any{"thread": s.metadata(t)}, nil, nil
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		turns := []any{}
+		if t.c.turnID != "" {
+			status := "completed"
+			if t.active {
+				status = "inProgress"
+			}
+			turns = append(turns, map[string]any{"id": t.c.turnID, "status": status, "items": []any{}})
+		}
+		return map[string]any{"data": turns, "nextCursor": nil, "backwardsCursor": nil}, nil, nil
+	case "turn/steer":
+		return s.steer(conn, p)
 	case "thread/loaded/list":
 		s.mu.Lock()
 		ids := make([]string, 0, len(s.threads))
@@ -270,7 +319,12 @@ func (s *codexAppServer) handle(conn *codexServerConn, m codexshared.Message) (a
 		s.mu.Unlock()
 		return map[string]any{"data": ids}, nil, nil
 	case "turn/start":
-		return s.turn(p)
+		return s.turn(conn, p)
+	case methodFakeTerminal:
+		s.mu.Lock()
+		conn.terminal = true
+		s.mu.Unlock()
+		return map[string]any{}, nil, nil
 	case methodFakeReply, methodFakeHalt:
 		return s.endTurn(m.Method, p)
 	case methodFakeApproval:
@@ -406,7 +460,7 @@ func (s *codexAppServer) status(t *codexServerThread) {
 	s.broadcast("thread/status/changed", map[string]any{"threadId": t.c.conversation, "status": s.metadata(t)["status"]})
 }
 
-func (s *codexAppServer) turn(p codexServerParams) (any, func(), error) {
+func (s *codexAppServer) turn(conn *codexServerConn, p codexServerParams) (any, func(), error) {
 	t, err := s.loaded(p.ThreadID)
 	if err != nil {
 		return nil, nil, err
@@ -440,6 +494,7 @@ func (s *codexAppServer) turn(p codexServerParams) (any, func(), error) {
 	if err := s.write(t, codexEvent("user_message", text)); err != nil {
 		return nil, nil, err
 	}
+	s.prompted(conn, p.ThreadID, text)
 	turn := map[string]any{"id": t.c.turnID, "status": "inProgress"}
 	return map[string]any{"turn": turn}, func() {
 		s.tell(t, notification("turn/started", map[string]any{"threadId": t.c.conversation, "turn": turn}))
@@ -526,4 +581,163 @@ func (s *codexAppServer) answered(m codexshared.Message) {
 	}
 	s.tell(settled, notification("serverRequest/resolved", map[string]any{"threadId": settled.c.conversation, "requestId": id}))
 	s.status(settled)
+}
+
+func (s *codexAppServer) steer(conn *codexServerConn, p codexServerParams) (any, func(), error) {
+	t, err := s.loaded(p.ThreadID)
+	if err != nil {
+		return nil, nil, err
+	}
+	s.mu.Lock()
+	active, turnID := t.active, t.c.turnID
+	s.mu.Unlock()
+	if !active {
+		return nil, nil, fmt.Errorf("no active turn to steer")
+	}
+	if p.ExpectedTurnID != turnID {
+		return nil, nil, fmt.Errorf("expected turn %s, but turn %s is active", p.ExpectedTurnID, turnID)
+	}
+	texts := make([]string, 0, len(p.Input))
+	for _, input := range p.Input {
+		texts = append(texts, input.Text)
+	}
+	text := strings.Join(texts, "\n")
+	if err := s.write(t, codexEvent("user_message", text)); err != nil {
+		return nil, nil, err
+	}
+	s.prompted(conn, p.ThreadID, text)
+	return map[string]any{"turnId": turnID}, nil, nil
+}
+
+func (s *codexAppServer) promptsOf(conversation string) chan string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	prompts := s.prompts[conversation]
+	if prompts == nil {
+		prompts = make(chan string, 16)
+		s.prompts[conversation] = prompts
+	}
+	return prompts
+}
+
+// prompted keeps what attn sent; a terminal's fake reports what was typed into it.
+func (s *codexAppServer) prompted(conn *codexServerConn, conversation, text string) {
+	s.mu.Lock()
+	typed := conn.terminal
+	s.mu.Unlock()
+	if typed {
+		return
+	}
+	select {
+	case s.promptsOf(conversation) <- text:
+	default:
+	}
+}
+
+// archive writes the conversation if it is not on disk yet, unloads it, and moves its rollout to
+// archived_sessions, as stock does.
+func (s *codexAppServer) archive(id string) (any, func(), error) {
+	s.mu.Lock()
+	t := s.threads[id]
+	s.mu.Unlock()
+	if t != nil {
+		if err := s.write(t); err != nil {
+			return nil, nil, err
+		}
+	}
+	path, _ := s.findRollout(id)
+	if path == "" {
+		return nil, nil, fmt.Errorf("no rollout found for thread id %s", id)
+	}
+	archived := filepath.Join(s.cfg.CodexHome, "archived_sessions")
+	if err := os.MkdirAll(archived, 0o755); err != nil {
+		return nil, nil, err
+	}
+	if err := os.Rename(path, filepath.Join(archived, filepath.Base(path))); err != nil {
+		return nil, nil, err
+	}
+	s.mu.Lock()
+	delete(s.threads, id)
+	s.mu.Unlock()
+	return map[string]any{}, func() {
+		s.broadcast("thread/status/changed", map[string]any{"threadId": id, "status": map[string]any{"type": "notLoaded"}})
+		s.broadcast("thread/archived", map[string]any{"threadId": id})
+	}, nil
+}
+
+// unarchive moves an archived rollout back under its dated sessions directory.
+func (s *codexAppServer) unarchive(id string) (any, func(), error) {
+	archived := filepath.Join(s.cfg.CodexHome, "archived_sessions")
+	entries, _ := os.ReadDir(archived)
+	for _, entry := range entries {
+		if !strings.HasSuffix(entry.Name(), "-"+id+".jsonl") {
+			continue
+		}
+		stamp, _, _ := strings.Cut(strings.TrimPrefix(entry.Name(), "rollout-"), "T")
+		date, err := time.Parse("2006-01-02", stamp)
+		if err != nil {
+			return nil, nil, err
+		}
+		dir := filepath.Join(s.cfg.CodexHome, "sessions", date.Format("2006/01/02"))
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, nil, err
+		}
+		if err := os.Rename(filepath.Join(archived, entry.Name()), filepath.Join(dir, entry.Name())); err != nil {
+			return nil, nil, err
+		}
+		return map[string]any{"thread": map[string]any{"id": id, "status": map[string]any{"type": "notLoaded"}}}, func() {
+			s.broadcast("thread/unarchived", map[string]any{"threadId": id})
+		}, nil
+	}
+	return nil, nil, fmt.Errorf("no archived rollout found for thread id %s", id)
+}
+
+type serverThreadParams struct {
+	ThreadID string `json:"threadId"`
+	Text     string `json:"text"`
+}
+
+// handleKit lets a test play the model behind conversations no terminal shows.
+func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessage) (any, error) {
+	var p serverThreadParams
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return nil, err
+	}
+	switch method {
+	case methodPrompted:
+		select {
+		case text := <-s.promptsOf(p.ThreadID):
+			return promptedResult{Text: text, ConversationID: p.ThreadID}, nil
+		case <-time.After(HangGuard):
+			return nil, fmt.Errorf("conversation %s took no prompt within %s", p.ThreadID, HangGuard)
+		}
+	case methodReply:
+		_, after, err := s.endTurn(methodFakeReply, codexServerParams{ThreadID: p.ThreadID, Text: p.Text})
+		if err == nil && after != nil {
+			after()
+		}
+		return struct{}{}, err
+	case methodThreadName:
+		deadline := time.After(HangGuard)
+		for {
+			s.mu.Lock()
+			name, named := s.names[p.ThreadID], s.named
+			s.mu.Unlock()
+			if name == p.Text {
+				return struct{}{}, nil
+			}
+			select {
+			case <-named:
+			case <-deadline:
+				return nil, fmt.Errorf("conversation %s is named %q, not %q, after %s", p.ThreadID, name, p.Text, HangGuard)
+			}
+		}
+	case methodAskApproval:
+		_, after, err := s.askApproval(codexServerParams{ThreadID: p.ThreadID})
+		if err == nil && after != nil {
+			after()
+		}
+		return struct{}{}, err
+	}
+	return nil, fmt.Errorf("unknown method %q", method)
 }

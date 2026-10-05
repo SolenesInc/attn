@@ -35,7 +35,7 @@ type Kit struct {
 	nextBoot chan struct{}
 	bootAsk  chan struct{}
 	fakes    []*fake
-	servers  []int
+	servers  []*fake
 	failures []string
 	headless chan *HeadlessTask
 	nextExit *bootingResult
@@ -141,7 +141,22 @@ func (k *Kit) Launched(sessionID string) *Run {
 func (k *Kit) CodexServers() []int {
 	k.mu.Lock()
 	defer k.mu.Unlock()
-	return slices.Clone(k.servers)
+	pids := make([]int, 0, len(k.servers))
+	for _, f := range k.servers {
+		pids = append(pids, f.Pid)
+	}
+	return pids
+}
+
+// CodexServer is the Codex app-server launched last, which plays the model behind every conversation.
+func (k *Kit) CodexServer() *CodexServer {
+	k.t.Helper()
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if len(k.servers) == 0 {
+		k.t.Fatal("no Codex app-server was launched")
+	}
+	return &CodexServer{t: k.t, fake: k.servers[len(k.servers)-1]}
 }
 
 func (k *Kit) HoldNextBoot() (boot func()) {
@@ -214,7 +229,7 @@ func (k *Kit) handle(f *fake, method string, params json.RawMessage) error {
 		}
 		if f.Role == roleCodexServer {
 			k.mu.Lock()
-			k.servers = append(k.servers, f.Pid)
+			k.servers = append(k.servers, f)
 			k.mu.Unlock()
 		}
 		if f.Role == roleAgent {

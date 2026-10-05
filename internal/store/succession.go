@@ -20,7 +20,9 @@ type Succession struct {
 	Launch       LaunchIntent
 	Close        SessionClose
 	KeepFrom     bool
-	Live         map[string]bool
+	// KeepTo leaves an open To as it is; only the pane moves to it.
+	KeepTo bool
+	Live   map[string]bool
 }
 
 // CommitSuccession opens sc.To, or reopens it when it exists, in the pane that holds terminal; the pane now
@@ -46,7 +48,7 @@ func (s *Store) CommitSuccession(sc Succession, terminal string) ([]profiles.Des
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
 			err = openSuccessorTx(tx, sc, at)
-		case err == nil:
+		case err == nil && !sc.KeepTo:
 			err = takeOverTx(tx, sc, at)
 		}
 		if err != nil {

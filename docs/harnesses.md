@@ -72,3 +72,16 @@ Probed on 0.160.0 with a mock model. Shared Codex relies on these.
   written cannot come back.
 - `thread/resume` of a conversation on disk accepts `config` and
   `developerInstructions` while another connection holds it.
+- Every connection hears `thread/status/changed` (`idle`, `notLoaded`, or
+  `active` with `waitingOnApproval`), `thread/name/updated` and `thread/closed`
+  for every conversation; only subscribers hear turns, items and approvals.
+  A conversation with no subscriber unloads about 60 s after it goes idle.
+- `turn/start` runs a turn with no terminal attached; `turn/steer` adds input
+  to the running turn and needs its id as `expectedTurnId`.
+- A connection that resumes a conversation gets its pending approval again,
+  with the same request id; any subscriber's answer settles it for all.
+- After the first prompt the TUI names the conversation with an ephemeral
+  `thread_title` conversation, then `thread/name/set` on the real one;
+  `thread/name/set` from any connection renames it in every TUI.
+- `thread/archive` moves the rollout to `archived_sessions/` (flat, no dated
+  directories) and refuses later resumes; `thread/unarchive` moves it back.

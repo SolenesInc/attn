@@ -125,6 +125,16 @@ func FindCodexTranscriptForResume(resumeID string) string {
 	return findCodexTranscriptForResumeIn(sessionsDir, resumeID, readFirstJSONLLine)
 }
 
+// FindArchivedCodexTranscript finds a conversation Codex archived, which it resumes only once unarchived.
+func FindArchivedCodexTranscript(resumeID string) string {
+	resumeID = strings.TrimSpace(resumeID)
+	sessionsDir := codexSessionsDir()
+	if resumeID == "" || sessionsDir == "" {
+		return ""
+	}
+	return findCodexTranscriptForResumeIn(filepath.Join(filepath.Dir(sessionsDir), "archived_sessions"), resumeID, readFirstJSONLLine)
+}
+
 func findCodexTranscriptForResumeIn(sessionsDir, resumeID string, readLine func(string) ([]byte, error)) string {
 	var found string
 	_ = filepath.WalkDir(sessionsDir, func(path string, d os.DirEntry, err error) error {

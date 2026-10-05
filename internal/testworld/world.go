@@ -227,6 +227,12 @@ func (w *World) CodexServers() []int {
 	return w.kit.CodexServers()
 }
 
+// CodexServer plays the model behind the shared Codex app-server the daemon launched last.
+func (w *World) CodexServer() *fakeagent.CodexServer {
+	w.T.Helper()
+	return w.kit.CodexServer()
+}
+
 func (w *World) HoldNextBoot() (boot func()) {
 	return w.kit.HoldNextBoot()
 }

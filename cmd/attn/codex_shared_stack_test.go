@@ -81,3 +81,56 @@ func shareCodex(t *testing.T, app *testworld.Peer) {
 		t.Fatalf("share Codex: %s", protocol.Deref(set.Error))
 	}
 }
+
+func TestAHiddenSharedCodexSessionSurvivesADaemonRestartAndTakesInput(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	s.Start()
+	app := s.App()
+	shareCodex(t, app)
+	session := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
+	codex := s.Launched(session)
+	terminal := app.Terminal(session)
+	app.TypeLine(session, "find the flaky checkout test")
+	codex.Prompted()
+	codex.Reply("It races the tax lookup. Lock it? <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWaitingInput })
+	conversation := codex.ConversationID
+	for _, line := range []string{"/new", "add a discount field"} {
+		typeLineInto(app, terminal, line)
+		codex.Prompted()
+	}
+	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return protocol.Deref(x.Hidden) })
+
+	s.Stop()
+	s.Start()
+	app = s.App()
+	i := slices.IndexFunc(app.Initial.Sessions, func(x protocol.Session) bool { return x.ID == session })
+	if i < 0 {
+		t.Fatalf("session %s is gone after the restart", session)
+	}
+	if hidden := app.Initial.Sessions[i]; !protocol.Deref(hidden.Hidden) || hidden.State != protocol.SessionStateWaitingInput {
+		t.Fatalf("after the restart the session is %s (hidden=%v), want it hidden and still waiting", hidden.State, protocol.Deref(hidden.Hidden))
+	}
+	requestID := uuid.NewString()
+	feedback := "Lock the tax table before the lookup."
+	delivered := testworld.Request(app, protocol.SessionAnnotationsSubmitMessage{
+		Cmd: protocol.CmdSessionAnnotationsSubmit, RequestID: requestID, SessionID: session, Text: feedback,
+	}, protocol.EventSessionAnnotationsSubmitResult, func(r protocol.SessionAnnotationsSubmitResultMessage) bool { return r.RequestID == requestID })
+	if !delivered.Success {
+		t.Fatalf("feedback to the hidden session: %s", protocol.Deref(delivered.Error))
+	}
+	server := s.CodexServer()
+	if got := server.Prompted(conversation); got != feedback {
+		t.Fatalf("the hidden conversation took %q, want the feedback", got)
+	}
+	server.Reply(conversation, "Locked. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
+}
+
+func typeLineInto(app *testworld.Peer, terminal, text string) {
+	app.T.Helper()
+	probe := uuid.NewString()
+	testworld.Request(app, protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: text + "\r", ProbeID: protocol.Ptr(probe)},
+		protocol.EventPtyInputProbeResult, func(r protocol.PtyInputProbeResultMessage) bool { return r.ProbeID == probe })
+}

@@ -35,10 +35,13 @@ func (l pluginLink) Deliver(_ context.Context, in harness.Input) harness.Custody
 }
 
 func (d *Daemon) sessionLink(session *protocol.Session, voice harness.Voice) harness.Link {
-	if !d.sessionUsesPluginMessageDelivery(session) {
+	var link harness.Link = pluginLink{daemon: d}
+	switch {
+	case session.Agent == protocol.SessionAgentCodex && d.codexShared().launched(session.ID):
+		link = codexLink{r: d.codexShared()}
+	case !d.sessionUsesPluginMessageDelivery(session):
 		return nil
 	}
-	link := pluginLink{daemon: d}
 	if !slices.Contains(link.Voices(), voice) {
 		return nil
 	}

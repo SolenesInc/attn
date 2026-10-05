@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"strings"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -153,6 +154,9 @@ func (d *Daemon) commitSessionState(change sessionStateChange, opening store.Tur
 	case liveSignal, startupRecovery, resolverObservation, hostExitRecovery, pluginDriverSilent:
 		return d.store.UpdateStateOpeningTurn(change.sessionID, change.state, opening)
 	case linkTurn:
+		if strings.HasPrefix(cause.run, codexLinkEpochPrefix) {
+			return d.store.UpdateStateOpeningTurn(change.sessionID, change.state, opening)
+		}
 		return d.store.ApplyAgentDriverStateOpeningTurn(
 			change.sessionID,
 			cause.run,

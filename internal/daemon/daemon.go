@@ -971,7 +971,7 @@ func (d *Daemon) pruneSessionsWithoutPTY(previousRunSessions map[string]struct{}
 		if _, fromPreviousRun := previousRunSessions[session.ID]; !fromPreviousRun {
 			continue
 		}
-		if _, ok := liveIDs[session.ID]; ok || d.codexShared().holds(session) {
+		if _, ok := liveIDs[session.ID]; ok || d.codexShared().holds(session) || d.codexShared().hidden(session.ID) {
 			continue
 		}
 		if sessionUpdatedAfter(session, recoveryStartedAt) {
@@ -1382,7 +1382,7 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 		if _, fromPreviousRun := previousRunSessions[session.ID]; !fromPreviousRun {
 			continue
 		}
-		if _, ok := liveIDs[session.ID]; ok || d.codexShared().holds(session) {
+		if _, ok := liveIDs[session.ID]; ok || d.codexShared().holds(session) || d.codexShared().hidden(session.ID) {
 			continue
 		}
 		if sessionUpdatedAfter(session, recoveryStartedAt) {
@@ -2056,7 +2056,7 @@ func (d *Daemon) forgetSessionTrace(sessionID string) {
 
 func (d *Daemon) handlePTYState(terminal harness.TerminalID, obs pty.Observation) {
 	sessionID, shown := d.shownIn(terminal)
-	if !shown {
+	if !shown || d.codexShared().movedOn(sessionID, terminal) {
 		return
 	}
 	state := obs.Claim
@@ -3120,6 +3120,7 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 	d.decorateSessionWithCost(clone)
 	d.decorateSessionWithTerminalBuild(clone)
 	d.decorateSessionWithTurn(clone)
+	d.decorateSessionHidden(clone)
 	return clone
 }
 

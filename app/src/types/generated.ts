@@ -1935,6 +1935,7 @@ export interface SessionObject {
     dispatcher_member?:         string;
     dispatcher_session_id?:     string;
     endpoint_id?:               string;
+    hidden?:                    boolean;
     id:                         string;
     is_worktree?:               boolean;
     label:                      string;
@@ -8092,6 +8093,7 @@ export interface Entry {
     closed_by?:              string;
     conversation_pinned_at?: string;
     directory:               string;
+    hidden?:                 boolean;
     id:                      string;
     is_worktree?:            boolean;
     label:                   string;
@@ -9073,6 +9075,7 @@ export interface Session {
     dispatcher_member?:         string;
     dispatcher_session_id?:     string;
     endpoint_id?:               string;
+    hidden?:                    boolean;
     id:                         string;
     is_worktree?:               boolean;
     label:                      string;
@@ -9314,6 +9317,7 @@ export interface SessionLedgerEntry {
     closed_by?:              string;
     conversation_pinned_at?: string;
     directory:               string;
+    hidden?:                 boolean;
     id:                      string;
     is_worktree?:            boolean;
     label:                   string;
@@ -16975,6 +16979,7 @@ const typeMap: any = {
         { json: "dispatcher_member", js: "dispatcher_member", typ: u(undefined, "") },
         { json: "dispatcher_session_id", js: "dispatcher_session_id", typ: u(undefined, "") },
         { json: "endpoint_id", js: "endpoint_id", typ: u(undefined, "") },
+        { json: "hidden", js: "hidden", typ: u(undefined, true) },
         { json: "id", js: "id", typ: "" },
         { json: "is_worktree", js: "is_worktree", typ: u(undefined, true) },
         { json: "label", js: "label", typ: "" },
@@ -20850,6 +20855,7 @@ const typeMap: any = {
         { json: "closed_by", js: "closed_by", typ: u(undefined, "") },
         { json: "conversation_pinned_at", js: "conversation_pinned_at", typ: u(undefined, "") },
         { json: "directory", js: "directory", typ: "" },
+        { json: "hidden", js: "hidden", typ: u(undefined, true) },
         { json: "id", js: "id", typ: "" },
         { json: "is_worktree", js: "is_worktree", typ: u(undefined, true) },
         { json: "label", js: "label", typ: "" },
@@ -21514,6 +21520,7 @@ const typeMap: any = {
         { json: "dispatcher_member", js: "dispatcher_member", typ: u(undefined, "") },
         { json: "dispatcher_session_id", js: "dispatcher_session_id", typ: u(undefined, "") },
         { json: "endpoint_id", js: "endpoint_id", typ: u(undefined, "") },
+        { json: "hidden", js: "hidden", typ: u(undefined, true) },
         { json: "id", js: "id", typ: "" },
         { json: "is_worktree", js: "is_worktree", typ: u(undefined, true) },
         { json: "label", js: "label", typ: "" },
@@ -21667,6 +21674,7 @@ const typeMap: any = {
         { json: "closed_by", js: "closed_by", typ: u(undefined, "") },
         { json: "conversation_pinned_at", js: "conversation_pinned_at", typ: u(undefined, "") },
         { json: "directory", js: "directory", typ: "" },
+        { json: "hidden", js: "hidden", typ: u(undefined, true) },
         { json: "id", js: "id", typ: "" },
         { json: "is_worktree", js: "is_worktree", typ: u(undefined, true) },
         { json: "label", js: "label", typ: "" },

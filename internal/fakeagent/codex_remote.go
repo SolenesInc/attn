@@ -29,6 +29,7 @@ type codexRemote struct {
 	unavailable  bool
 	approvals    map[string]json.RawMessage
 	answering    map[string]bool
+	displayed    string
 }
 
 type codexRemoteThread struct {
@@ -56,7 +57,7 @@ func (c *codexRemote) begin(term *terminal) error {
 	}
 	c.model = args.value("--model", "-m")
 	c.prompt = strings.Join(args.afterDashes, " ")
-	client, err := codexshared.Connect(context.Background(), c.path, "codex-tui", c.observe)
+	client, err := c.connect()
 	if err != nil {
 		return err
 	}
@@ -71,11 +72,37 @@ func (c *codexRemote) begin(term *terminal) error {
 		client.Close()
 		return err
 	}
+	c.mu.Lock()
 	c.conversation = shown.Thread.ID
+	c.mu.Unlock()
 	c.attach(client)
 	term.title(c.restingTitle())
+	c.showPending()
 	go c.stayConnected(client)
 	return nil
+}
+
+// showPending shows an approval the server replayed before the terminal knew it showed its conversation.
+func (c *codexRemote) showPending() {
+	c.mu.Lock()
+	id, pending := c.approvals[c.conversation]
+	answering := c.answering[string(id)]
+	c.mu.Unlock()
+	if pending && !answering {
+		c.showApproval(id)
+	}
+}
+
+func (c *codexRemote) connect() (*codexshared.Client, error) {
+	client, err := codexshared.Connect(context.Background(), c.path, "codex-tui", c.observe)
+	if err != nil {
+		return nil, err
+	}
+	if err := call(client, methodFakeTerminal, map[string]any{}, nil); err != nil {
+		client.Close()
+		return nil, err
+	}
+	return client, nil
 }
 
 func call(client *codexshared.Client, method string, params, result any) error {
@@ -101,7 +128,7 @@ func (c *codexRemote) stayConnected(client *codexshared.Client) {
 		c.lost(client)
 		for attempt := 0; ; attempt++ {
 			time.Sleep(codexReconnectBackoff[min(attempt, len(codexReconnectBackoff)-1)])
-			next, err := codexshared.Connect(context.Background(), c.path, "codex-tui", c.observe)
+			next, err := c.connect()
 			if err != nil {
 				continue
 			}
@@ -201,6 +228,13 @@ func (c *codexRemote) observe(m codexshared.Message) {
 }
 
 func (c *codexRemote) showApproval(id json.RawMessage) {
+	c.mu.Lock()
+	again := c.displayed == string(id)
+	c.displayed = string(id)
+	c.mu.Unlock()
+	if again {
+		return
+	}
 	_ = c.term.openModal(&modal{
 		title:     c.approvalTitle(),
 		lines:     []string{"Allow the command to run?", "› 1. Yes, proceed", "  2. No, and tell Codex what to do differently", "Press enter to confirm or esc to cancel"},
@@ -278,6 +312,8 @@ func (c *codexRemote) submit(prompt string) error {
 			return err
 		}
 		return c.switchTo(target)
+	case strings.HasPrefix(command, "/rename "):
+		return c.request("thread/name/set", map[string]any{"threadId": c.current(), "name": strings.TrimSpace(strings.TrimPrefix(command, "/rename "))}, nil)
 	}
 	c.term.title(codexBusyGlyph + c.restingTitle())
 	return c.request("turn/start", map[string]any{"threadId": c.current(), "input": []any{map[string]any{"type": "text", "text": prompt, "text_elements": []any{}}}}, nil)
@@ -288,6 +324,7 @@ func (c *codexRemote) switchTo(conversation string) error {
 	previous := c.conversation
 	c.conversation = conversation
 	c.mu.Unlock()
+	c.showPending()
 	return c.request("thread/unsubscribe", map[string]any{"threadId": previous}, nil)
 }
 

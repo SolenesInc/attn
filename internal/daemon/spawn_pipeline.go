@@ -314,6 +314,12 @@ func (d *Daemon) resolveSpawnIntent(req *spawnRequest) (*spawnPlan, *spawnReject
 	}
 	plan.spawnOpts.ContextWindowCap = d.launchContextWindowCap(msg.ID, req.agent, plan.isChief)
 	req.codexShared = d.launchesSharedCodex(req)
+	if !req.codexShared && req.agent == string(protocol.SessionAgentCodex) {
+		if holder := d.codexShared().holder(req.resumeSessionID); holder != "" && holder != msg.ID {
+			plan.rollback(d, msg.ID)
+			return nil, &spawnRejection{err: fmt.Errorf("conversation %s is open in shared Codex session %s, and two Codex processes must not write one conversation; show that session instead", req.resumeSessionID, holder)}
+		}
+	}
 
 	return plan, nil
 }

@@ -29,15 +29,16 @@ func (d *Daemon) opened(t harness.TerminalID, from *protocol.Session, observatio
 // owner reopens in place, an open one leaves its dead panes. The caller holds both lifecycle locks.
 func (d *Daemon) shows(t harness.TerminalID, from *protocol.Session, owner string, observation agentConversationObservation) error {
 	return d.succeed(t, from, store.Succession{
-		To:    owner,
-		Close: store.SessionClose{Reason: "resumed; its terminal moved on to " + owner},
+		To:     owner,
+		Close:  store.SessionClose{Reason: "resumed; its terminal moved on to " + owner},
+		KeepTo: d.store.Get(owner) != nil && d.codexShared().launched(owner),
 	}, observation)
 }
 
 func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.Succession, observation agentConversationObservation) error {
 	unlockEnds := d.lockTerminalEnds(from.ID)
 	live := d.liveTerminals(context.Background())
-	sc.KeepFrom = d.othersRun(live, from.ID, t)
+	sc.KeepFrom = d.othersRun(live, from.ID, t) || d.codexShared().keepsWhenLeft(from.ID)
 	sc.Live = make(map[string]bool, len(live))
 	for id := range live {
 		sc.Live[string(id)] = true
@@ -63,21 +64,30 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 	}
 
 	d.sessionInputs().handOverSubmit(from.ID, sc.To)
-	terminal, _ := d.evidenceTable().snapshot(from.ID)
-	d.startEvidence(sc.To, sessionstate.Evidence{
-		Heartbeat:      terminal.Heartbeat,
-		Process:        terminal.Process,
-		ReviewerInLoop: terminal.ReviewerInLoop,
-		LastBusyAt:     terminal.LastBusyAt,
-		LastMovement:   terminal.LastMovement,
-	})
-	d.startTranscriptWatcherAtPath(sc.To, from.Agent, from.Directory, d.sessionStartedAt(sc.To), observation.TranscriptPath)
+	if sc.KeepTo {
+		d.ensureTranscriptWatcherAtPath(sc.To, observation.TranscriptPath)
+	} else {
+		terminal, _ := d.evidenceTable().snapshot(from.ID)
+		d.startEvidence(sc.To, sessionstate.Evidence{
+			Heartbeat:      terminal.Heartbeat,
+			Process:        terminal.Process,
+			ReviewerInLoop: terminal.ReviewerInLoop,
+			LastBusyAt:     terminal.LastBusyAt,
+			LastMovement:   terminal.LastMovement,
+		})
+		d.startTranscriptWatcherAtPath(sc.To, from.Agent, from.Directory, d.sessionStartedAt(sc.To), observation.TranscriptPath)
+	}
 	d.publishFact(FactSessionRegistered, sc.To, nil)
 	d.publishArrangementChanged(changed[0].ProfileID)
 
 	if !sc.KeepFrom {
 		d.recordSessionClose(from.ID, func() (bool, error) { return true, nil })
 		d.publishSessionUnregistered(from)
+	} else {
+		if d.codexShared().hidden(from.ID) {
+			d.updateEvidence(from.ID, nil, func(e *sessionstate.Evidence) { e.Heartbeat = nil })
+		}
+		d.publishFact(FactSessionReregistered, from.ID, nil)
 	}
 	d.logf("terminal %s moved on from session %s to %s for conversation %s", t, from.ID, sc.To, observation.NativeID)
 	return nil

@@ -152,6 +152,9 @@ func (d *Daemon) decideReopenPlace(
 	gitView reopenGit,
 ) error {
 	conversation, conversationReason := d.reopenConversation(verdict.Execution, verdict.DirectoryState == directoryMissing)
+	if !conversation && d.codexShared().archived(verdict.SessionID, strings.TrimSpace(verdict.Execution.Resume)) {
+		conversation, conversationReason = true, ""
+	}
 	if !hasLaunchIntent {
 		conversation = false
 		conversationReason = fmt.Sprintf("session %s has no saved launch contract, so its exact agent configuration cannot be restored", verdict.SessionID)
@@ -733,6 +736,11 @@ func (d *Daemon) reopenSessionRuntimeProtected(
 	}
 	if resumeID := strings.TrimSpace(d.store.GetResumeSessionID(plan.SessionID)); !plan.FreshConversation && resumeID != "" {
 		spawn.ResumeSessionID = protocol.Ptr(resumeID)
+		if intent.CodexShared {
+			if err := d.codexShared().unarchive(profileID, resumeID); err != nil {
+				return fail(err)
+			}
+		}
 	}
 	policy.launchPlacement = &launchPlacement{reopen: true}
 	spawnClient := newInternalWSClient()

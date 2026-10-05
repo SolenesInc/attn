@@ -54,6 +54,7 @@ func (d *Daemon) renameSession(msg *protocol.RenameSessionMessage) error {
 	d.store.UpdateSessionLabel(sessionID, label)
 	session.Label = label
 	d.publishFact(FactSessionRenamed, sessionID, nil)
+	d.codexShared().mirrorName(sessionID, label)
 	return nil
 }
 

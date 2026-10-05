@@ -1,9 +1,9 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { openSession } from './test/appFixtures';
-import { daemonSession } from './test/daemonFixtures';
-import { closeTileAnswer, pane, relayOut, renderDesktop, split } from './test/desktopLayouts';
-import { pressShortcut } from './test/renderApp';
+import { agentPane, daemonDesktop, daemonSession, soloDesktop } from './test/daemonFixtures';
+import { closeTileAnswer, laidOutDesktop, pane, relayOut, renderDesktop, split } from './test/desktopLayouts';
+import { pressShortcut, renderApp } from './test/renderApp';
 
 describe('desktop close focus', () => {
   it.each(['pane shortcut', 'session shortcut', 'sidebar action', 'clean exit'] as const)(
@@ -43,4 +43,30 @@ describe('desktop close focus', () => {
       expect(daemon.sentOf('desktop_show_session').map((command) => command.session_id)).toEqual(['a', 'b', 'c']);
     },
   );
+});
+
+describe('closing a session that two tiles show', () => {
+  it('closes only the tile the session shortcut stands on', async () => {
+    const { daemon } = await renderApp({
+      initialState: {
+        sessions: [daemonSession('a', { state: 'idle' }), daemonSession('b', { state: 'idle' })],
+        desktops: [
+          laidOutDesktop(pane('a'), ['a']),
+          daemonDesktop('other', { root: { type: 'pane', pane_id: 'pane-a2' }, panes: [{ ...agentPane('a', 'other', 'term-2'), pane_id: 'pane-a2' }] }, { order_key: 'b' }),
+          soloDesktop('b'),
+        ],
+      },
+      script: (d) => {
+        d.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true, last_seq: 0 }));
+      },
+    });
+    await openSession(daemon, 'a');
+
+    pressShortcut('session.close');
+    await daemon.idle();
+
+    expect(daemon.sent.filter(({ cmd }) => cmd === 'unregister' || cmd === 'desktop_close_tile')).toEqual([
+      { cmd: 'desktop_close_tile', request_id: expect.any(String), desktop_id: 'ws', tile_id: 'pane-a' },
+    ]);
+  });
 });

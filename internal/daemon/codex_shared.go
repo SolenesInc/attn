@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"nhooyr.io/websocket"
@@ -55,6 +56,9 @@ type codexServer struct {
 	control  *codexshared.Client
 	loaded   map[string]bool
 	parents  map[string]string
+	epoch    string
+	seq      atomic.Uint64
+	events   codexEvents
 }
 
 type codexView struct {
@@ -136,10 +140,14 @@ func (d *Daemon) launchesSharedCodex(req *spawnRequest) bool {
 // prepareLaunch starts the profile's server if needed and opens the terminal's proxy; the returned
 // address is what its Codex connects to.
 func (r *codexShared) prepareLaunch(t harness.TerminalID, profile, executable string) (string, error) {
+	remote, err := r.openView(t, profile)
+	if err != nil {
+		return "", err
+	}
 	if _, err := r.ensureServer(r.d.life.Context(), profile, executable); err != nil {
 		return "", err
 	}
-	return r.openView(t, profile)
+	return remote, nil
 }
 
 func (r *codexShared) codexExecutable(configured string) string {
@@ -226,8 +234,12 @@ func (r *codexShared) connect(ctx context.Context, s *codexServer) error {
 				Data []string `json:"data"`
 			}
 			_ = json.Unmarshal(loaded, &list)
+			r.mu.Lock()
+			r.seq++
+			epoch := fmt.Sprintf("%s%s:%d", codexLinkEpochPrefix, s.profile, r.seq)
+			r.mu.Unlock()
 			s.mu.Lock()
-			s.control, s.loaded = client, make(map[string]bool, len(list.Data))
+			s.control, s.loaded, s.epoch = client, make(map[string]bool, len(list.Data)), epoch
 			for _, id := range list.Data {
 				s.loaded[id] = true
 			}
@@ -236,6 +248,7 @@ func (r *codexShared) connect(ctx context.Context, s *codexServer) error {
 				client.Close()
 				return errDaemonStopping
 			}
+			s.events.run(r.d, func() { r.restate(s, client, epoch) })
 			return nil
 		}
 		if ctx.Err() != nil {
@@ -282,11 +295,17 @@ func (r *codexShared) observeServer(s *codexServer, m codexshared.Message) {
 	}
 	switch m.Method {
 	case "thread/started", "thread/status/changed", "thread/closed":
+	case "thread/name/updated":
+		r.observeName(s, m)
+		return
 	default:
 		return
 	}
 	if json.Unmarshal(m.Params, &p) != nil {
 		return
+	}
+	if m.Method == "thread/status/changed" {
+		r.observeStatus(s, m)
 	}
 	s.mu.Lock()
 	if s.loaded == nil {
@@ -324,7 +343,7 @@ func (r *codexShared) unloaded(conversation string) {
 	sessionID := r.d.store.OpenSessionHolding(conversation)
 	session := r.d.store.Get(sessionID)
 	if session == nil || session.State == protocol.SessionStateRecoverable || session.State == protocol.SessionStateIdle ||
-		r.d.sessionLive(context.Background(), sessionID) {
+		r.d.sessionLive(context.Background(), sessionID) || r.hidden(sessionID) {
 		return
 	}
 	if !r.d.canReviveSession(session) {
@@ -598,10 +617,11 @@ func (r *codexShared) remoteEnv(t harness.TerminalID) []string {
 func (r *codexShared) terminalExited(t harness.TerminalID) {
 	if !isCodexServerTerminal(t) {
 		r.mu.Lock()
-		_, known := r.views[t]
+		v := r.views[t]
 		r.mu.Unlock()
-		if known {
+		if v != nil {
 			r.closeView(t)
+			r.idleSoon(v.profile)
 		}
 		return
 	}
@@ -678,6 +698,15 @@ func (r *codexShared) recoverViews(ctx context.Context) {
 		if _, err := r.openView(id, t.ProfileID); err != nil {
 			r.d.logf("shared Codex: %v", err)
 		}
+	}
+	r.mu.Lock()
+	profiles := make([]string, 0, len(r.servers))
+	for profile := range r.servers {
+		profiles = append(profiles, profile)
+	}
+	r.mu.Unlock()
+	for _, profile := range profiles {
+		r.idleSoon(profile)
 	}
 }
 

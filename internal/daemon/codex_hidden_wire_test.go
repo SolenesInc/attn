@@ -1,0 +1,290 @@
+package daemon_test
+
+import (
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/google/uuid"
+
+	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/testworld"
+)
+
+func TestNewInASharedCodexTerminalLeavesTheSessionItLeftOpenAndHidden(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
+
+	moveOn(t, app, codex, terminal, "/new", "add a discount field")
+	hidden := testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return protocol.Deref(s.Hidden) })
+	if hidden.State != protocol.SessionStateWaitingInput {
+		t.Errorf("the hidden session is %s, want it still waiting on the user", hidden.State)
+	}
+	discount := sessionShownIn(t, w, app, terminal)
+	if discount == checkout {
+		t.Fatalf("terminal %s still shows %s after /new and a prompt", terminal, checkout)
+	}
+	codex.Reply("Added. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, discount, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+
+	entry := ledgerShowOverTheWebSocket(app, checkout).Entry
+	if entry == nil || protocol.Deref(entry.ClosedAt) != "" || !protocol.Deref(entry.Hidden) {
+		t.Errorf("the ledger shows %+v, want %s live and hidden", entry, checkout)
+	}
+	if shown := testworld.AwaitSession(app, discount, func(protocol.Session) bool { return true }); protocol.Deref(shown.Hidden) {
+		t.Errorf("session %s, which terminal %s shows, is hidden", discount, terminal)
+	}
+}
+
+func TestWithSharedCodexOffNewClosesTheSessionItLeft(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
+	moveOn(t, app, codex, terminal, "/new", "add a discount field")
+	testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool {
+		return e.Session != nil && e.Session.ID == checkout
+	})
+	if entry := ledgerShowOverTheWebSocket(app, checkout).Entry; entry == nil || protocol.Deref(entry.ClosedAt) == "" || protocol.Deref(entry.Hidden) {
+		t.Errorf("the ledger shows %+v, want %s closed", entry, checkout)
+	}
+}
+
+func TestTwoTerminalsShowOneSharedCodexSessionUntilTheLastTileClosesAndArchivesIt(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	checkout, first, firstTerminal := sharedCodexWaiting(t, w, app)
+	conversation := first.ConversationID
+	other := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
+	second := w.Launched(other)
+	secondTerminal := app.Terminal(other)
+	app.TypeLine(other, "look at the tax table")
+	second.Prompted()
+	second.Reply("Looked. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, other, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+
+	moveOn(t, app, second, secondTerminal, "/resume "+conversation, "lock it")
+	if second.ConversationID != conversation {
+		t.Fatalf("the second terminal shows %s, want %s", second.ConversationID, conversation)
+	}
+	testworld.AwaitSession(app, other, func(s protocol.Session) bool { return protocol.Deref(s.Hidden) })
+	if got := sessionShownIn(t, w, app, secondTerminal); got != checkout {
+		t.Fatalf("the second terminal shows session %s, want %s", got, checkout)
+	}
+	if got := sessionShownIn(t, w, app, firstTerminal); got != checkout {
+		t.Fatalf("the first terminal shows session %s, want %s", got, checkout)
+	}
+	reply := "Locked. <!-- attn:state=idle -->"
+	second.Reply(reply)
+	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+
+	desktop, tile := tileOf(t, w, app, firstTerminal)
+	if closed := closeTileFromApp(app, desktop, tile); !closed.Success {
+		t.Fatalf("close the first tile: %s", protocol.Deref(closed.Error))
+	}
+	if entry := ledgerShowOverTheWebSocket(app, checkout).Entry; entry == nil || protocol.Deref(entry.ClosedAt) != "" {
+		t.Fatalf("closing one of two tiles left %+v, want %s live", entry, checkout)
+	}
+
+	desktop, tile = tileOf(t, w, app, secondTerminal)
+	if closed := closeTileFromApp(app, desktop, tile); !closed.Success {
+		t.Fatalf("close the last tile: %s", protocol.Deref(closed.Error))
+	}
+	testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool {
+		return e.Session != nil && e.Session.ID == checkout
+	})
+	entry := ledgerShowOverTheWebSocket(app, checkout).Entry
+	if entry == nil || protocol.Deref(entry.ClosedAt) == "" || entry.Usage == nil || entry.Usage.TotalTokens == 0 {
+		t.Fatalf("the ledger shows %+v, want %s closed with its usage", entry, checkout)
+	}
+	if !archivedInCodex(t, w, conversation) {
+		t.Errorf("conversation %s was not archived in Codex", conversation)
+	}
+
+	reopened := reopenOverTheWebSocket(app, checkout)
+	if !reopened.Success {
+		t.Fatalf("resume %s from the ledger: %s", checkout, protocol.Deref(reopened.Error))
+	}
+	resumed := w.Launched(checkout)
+	if !resumed.Resumed || resumed.ConversationID != conversation {
+		t.Fatalf("the resumed Codex shows %s (resumed=%v), want conversation %s", resumed.ConversationID, resumed.Resumed, conversation)
+	}
+	app.TypeLine(checkout, "round the total")
+	if got := resumed.Prompted(); got != "round the total" || resumed.ConversationID != conversation {
+		t.Errorf("the resumed Codex took %q in %s, want it in %s", got, resumed.ConversationID, conversation)
+	}
+}
+
+func TestInputReachesAHiddenSharedCodexSessionWithoutTouchingAnotherTerminalsDraft(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
+	conversation := codex.ConversationID
+	moveOn(t, app, codex, terminal, "/new", "add a discount field")
+	codex.Reply("Added. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return protocol.Deref(s.Hidden) })
+	typeInto(app, terminal, "half a thought")
+
+	if got := submitSessionAnnotationFeedback(app, checkout, sessionAnnotationFeedback); !got.success || got.status != "delivered" {
+		t.Fatalf("feedback to the hidden session = %+v, want it delivered", got)
+	}
+	server := w.CodexServer()
+	if got := server.Prompted(conversation); got != sessionAnnotationFeedback {
+		t.Fatalf("the hidden conversation took %q, want the feedback", got)
+	}
+	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	server.Reply(conversation, "Locked it. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+
+	typeInto(app, terminal, " more\r")
+	if got := codex.Prompted(); got != "half a thought more" {
+		t.Errorf("the other terminal sent %q, want its draft untouched", got)
+	}
+
+	if closed := closeFromApp(app, checkout); !closed.Accepted {
+		t.Fatalf("close the hidden session: %s", protocol.Deref(closed.Error))
+	}
+	if entry := ledgerShowOverTheWebSocket(app, checkout).Entry; entry == nil || protocol.Deref(entry.ClosedAt) == "" {
+		t.Errorf("the ledger shows %+v, want %s closed", entry, checkout)
+	}
+	if !archivedInCodex(t, w, conversation) {
+		t.Errorf("closing the hidden session left conversation %s unarchived", conversation)
+	}
+	codex.Reply("Both added. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, sessionShownIn(t, w, app, terminal), func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+}
+
+func TestShowingAHiddenSharedCodexSessionReplaysTheApprovalItWaitsOn(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
+	conversation := codex.ConversationID
+	moveOn(t, app, codex, terminal, "/new", "add a discount field")
+	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return protocol.Deref(s.Hidden) })
+	if got := submitSessionAnnotationFeedback(app, checkout, sessionAnnotationFeedback); !got.success {
+		t.Fatalf("feedback to the hidden session = %+v", got)
+	}
+	server := w.CodexServer()
+	server.Prompted(conversation)
+	server.AskApproval(conversation)
+	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool {
+		return s.State == protocol.SessionStatePendingApproval && protocol.Deref(s.Hidden)
+	})
+
+	if shown := requestShowSession(app, checkout); !shown.Success {
+		t.Fatalf("show %s: %s", checkout, protocol.Deref(shown.Error))
+	}
+	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return !protocol.Deref(s.Hidden) })
+	shown := w.Launched(checkout)
+	if !shown.Resumed || shown.ConversationID != conversation {
+		t.Fatalf("the new tile's Codex shows %s (resumed=%v), want %s", shown.ConversationID, shown.Resumed, conversation)
+	}
+	app.AwaitScreen(checkout, "Allow the command to run?")
+	app.TypeLine(checkout, "1")
+	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	server.Reply(conversation, "Migrated. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+}
+
+func TestASharedCodexSessionAndItsConversationShareOneName(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
+	conversation := codex.ConversationID
+
+	typeInto(app, terminal, "/rename Checkout race\r")
+	codex.Prompted()
+	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return s.Label == "Checkout race" })
+
+	renamed := testworld.Request(app, protocol.RenameSessionMessage{Cmd: protocol.CmdRenameSession, SessionID: checkout, Label: "Tax lock"},
+		protocol.EventRenameResult, func(r protocol.RenameResultMessage) bool { return r.ID == checkout })
+	if !renamed.Success {
+		t.Fatalf("rename %s: %s", checkout, protocol.Deref(renamed.Error))
+	}
+	w.CodexServer().AwaitName(conversation, "Tax lock")
+}
+
+func TestAPlainCodexCannotResumeAConversationASharedSessionHolds(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	checkout, codex, _ := sharedCodexWaiting(t, w, app)
+	setSetting(t, app, "codex_shared_enabled", "false")
+
+	refused, _, _ := w.RequestSpawn(app, fakeagent.Codex, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
+		m.ResumeSessionID = protocol.Ptr(codex.ConversationID)
+	})
+	if refused.Success || !strings.Contains(protocol.Deref(refused.Error), checkout) {
+		t.Errorf("resuming %s in a plain Codex = %+v, want it refused for %s", codex.ConversationID, refused, checkout)
+	}
+}
+
+func sharedCodexWaiting(t *testing.T, w *world, app *testworld.Peer) (string, *fakeagent.Run, string) {
+	t.Helper()
+	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
+	codex := w.Launched(session)
+	terminal := app.Terminal(session)
+	app.TypeLine(session, "find the flaky checkout test")
+	codex.Prompted()
+	codex.Reply("It races the tax lookup. Lock it? <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+	return session, codex, terminal
+}
+
+// moveOn switches a terminal's Codex to another conversation, which attn learns from the next prompt.
+func moveOn(t *testing.T, app *testworld.Peer, codex *fakeagent.Run, terminal, command, prompt string) {
+	t.Helper()
+	typeInto(app, terminal, command+"\r")
+	codex.Prompted()
+	typeInto(app, terminal, prompt+"\r")
+	if got := codex.Prompted(); got != prompt {
+		t.Fatalf("codex took %q, want %q", got, prompt)
+	}
+}
+
+func typeInto(app *testworld.Peer, terminal, text string) {
+	app.T.Helper()
+	probe := uuid.NewString()
+	testworld.Request(app, protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: text, ProbeID: protocol.Ptr(probe)},
+		protocol.EventPtyInputProbeResult, func(r protocol.PtyInputProbeResultMessage) bool { return r.ProbeID == probe })
+}
+
+func tileOf(t *testing.T, w *world, app *testworld.Peer, terminal string) (string, string) {
+	t.Helper()
+	for _, desktop := range viewProfile(t, w, app.SelectedProfile()).desktops {
+		for _, pane := range desktop.Panes {
+			if pane.RuntimeID == terminal {
+				return desktop.ID, pane.PaneID
+			}
+		}
+	}
+	t.Fatalf("no tile holds terminal %s", terminal)
+	return "", ""
+}
+
+func sessionShownIn(t *testing.T, w *world, app *testworld.Peer, terminal string) string {
+	t.Helper()
+	for _, desktop := range viewProfile(t, w, app.SelectedProfile()).desktops {
+		for _, pane := range desktop.Panes {
+			if pane.RuntimeID == terminal {
+				return pane.SessionID
+			}
+		}
+	}
+	t.Fatalf("no tile holds terminal %s", terminal)
+	return ""
+}
+
+func archivedInCodex(t *testing.T, w *world, conversation string) bool {
+	t.Helper()
+	entries, _ := os.ReadDir(filepath.Join(w.Dir, "toolhome", ".codex", "archived_sessions"))
+	return slices.ContainsFunc(entries, func(e os.DirEntry) bool { return strings.HasSuffix(e.Name(), conversation+".jsonl") })
+}

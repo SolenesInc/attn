@@ -86,7 +86,7 @@ func (d *Daemon) conversationIn(t harness.TerminalID, observation agentConversat
 		d.observeAgentConversation(observation)
 	case owner == "":
 		err = d.opened(t, session, observation)
-	case d.ownerLive(owner):
+	case d.ownerLive(owner) && !d.codexShared().launched(session.ID):
 		// A live owner keeps its terminal, so this session takes the conversation over in place.
 		d.observeAgentConversation(observation)
 	default:
@@ -161,6 +161,10 @@ func (d *Daemon) applyAgentConversation(observation agentConversationObservation
 	d.rememberDispatchResume(observation.SessionID, observation.NativeID)
 	d.resetSessionActivityRuntime(observation.SessionID)
 	d.publishFact(FactSessionConversationChanged, observation.SessionID, observation)
+	if session := d.store.Get(observation.SessionID); session != nil && session.Agent == protocol.SessionAgentCodex &&
+		!sessionLabelIsPlaceholder(session.Label, session.Directory, session.ID) {
+		d.codexShared().mirrorName(session.ID, session.Label)
+	}
 	return true
 }
 
