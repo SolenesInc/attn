@@ -284,6 +284,10 @@ func (r *codexShared) archive(sessionID string) {
 	if conversation == "" || session == nil {
 		return
 	}
+	if other := r.d.store.OtherOpenSessionHolding(conversation, sessionID); other != "" {
+		r.d.logf("shared Codex: conversation %s of closed session %s stays unarchived: session %s still holds it", conversation, sessionID, other)
+		return
+	}
 	defer r.d.drainTranscriptWatcher(sessionID)()
 	defer r.settleUsage(sessionID)
 	ctx, cancel := context.WithTimeout(context.Background(), codexServerStartLimit)

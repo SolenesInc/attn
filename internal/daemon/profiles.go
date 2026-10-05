@@ -603,6 +603,9 @@ func (d *Daemon) handleDesktopCloseTile(client *wsClient, msg *protocol.DesktopC
 			return profileActionOutcome{}, profiles.Errorf(profiles.CodeNotFound, "desktop %s has no terminal tile %s", msg.DesktopID, msg.TileID)
 		}
 		tile := desktop.Panes[i]
+		if _, remote := d.sessionOwningEndpoint(tile.SessionID); remote && len(d.terminals().Of(harness.SessionID(tile.SessionID))) > 1 {
+			return profileActionOutcome{}, profiles.Errorf(profiles.CodeInvalid, "session %s runs on another host and shows in several tiles; close the session instead", tile.SessionID)
+		}
 		if d.codexShared().movedOn(tile.SessionID, harness.TerminalID(tile.RuntimeID)) {
 			d.hide(tile.SessionID, harness.TerminalID(tile.RuntimeID))
 			d.detachSession(client, tile.RuntimeID)

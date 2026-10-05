@@ -84,5 +84,8 @@ Probed on 0.160.0 with a mock model. Shared Codex relies on these.
 - After the first prompt the TUI names the conversation with an ephemeral
   `thread_title` conversation, then `thread/name/set` on the real one;
   `thread/name/set` from any connection renames it in every TUI.
+- One process writes a conversation at a time: while an app-server holds it
+  loaded, another app-server or a plain `codex resume` fails with `already has
+  an active writer`. Either can take it once the holder unloads it.
 - `thread/archive` moves the rollout to `archived_sessions/` (flat, no dated
   directories) and refuses later resumes; `thread/unarchive` moves it back.

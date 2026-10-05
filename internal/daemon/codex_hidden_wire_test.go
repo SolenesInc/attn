@@ -256,6 +256,36 @@ func TestAConversationResumedInAnotherProfileIsThatProfilesOwnSharedCodexSession
 	if other := queriedSession(t, w.Client(), elsewhere); other.Label == "Release train" {
 		t.Errorf("renaming the conversation here renamed %s in profile %s", elsewhere, side.ID)
 	}
+
+	if closed := closeFromApp(sideApp, elsewhere); !closed.Accepted {
+		t.Fatalf("close %s in profile %s: %s", elsewhere, side.ID, protocol.Deref(closed.Error))
+	}
+	if archivedInCodex(t, w, conversation) {
+		t.Errorf("closing %s archived conversation %s, which %s still holds", elsewhere, conversation, resumed)
+	}
+}
+
+func TestAHiddenSharedCodexTurnEndsWhenItsAppServerExits(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
+	conversation := codex.ConversationID
+	moveOn(t, app, codex, terminal, "/new", "add a discount field")
+	codex.Reply("Added. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return protocol.Deref(s.Hidden) })
+	if got := submitSessionAnnotationFeedback(app, checkout, sessionAnnotationFeedback); !got.success {
+		t.Fatalf("feedback to the hidden session = %+v", got)
+	}
+	w.CodexServer().Prompted(conversation)
+	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool {
+		return protocol.Deref(s.Hidden) && s.State == protocol.SessionStateWorking
+	})
+
+	codex.CrashAppServer()
+	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool {
+		return protocol.Deref(s.Hidden) && s.State == protocol.SessionStateIdle
+	})
 }
 
 func sharedCodexWaiting(t *testing.T, w *world, app *testworld.Peer) (string, *fakeagent.Run, string) {

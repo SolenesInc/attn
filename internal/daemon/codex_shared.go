@@ -53,6 +53,7 @@ type codexServer struct {
 	mu       sync.Mutex
 	control  *codexshared.Client
 	loaded   map[string]bool
+	dropped  map[string]bool
 	parents  map[string]string
 	epoch    string
 	seq      atomic.Uint64
@@ -271,6 +272,12 @@ func (r *codexShared) watchControl(s *codexServer, client *codexshared.Client) {
 	}
 	s.mu.Lock()
 	if s.control == client {
+		for conversation := range s.loaded {
+			if s.dropped == nil {
+				s.dropped = make(map[string]bool)
+			}
+			s.dropped[conversation] = true
+		}
 		s.control, s.loaded = nil, nil
 	}
 	s.mu.Unlock()
@@ -328,13 +335,19 @@ func (r *codexShared) observeServer(s *codexServer, m codexshared.Message) {
 	}
 	s.mu.Unlock()
 	if unloaded != "" {
-		r.d.life.Go("codexConversationUnloaded", func() { r.unloaded(s.profile, unloaded) })
+		r.d.life.Go("codexConversationUnloaded", func() { r.unloaded(s, unloaded, false) })
 	}
 }
 
-func (r *codexShared) unloaded(profile, conversation string) {
-	sessionID := r.d.store.OpenSessionHolding(profile, conversation)
+// A server exit ends a hidden session's turn: no terminal is left to resume and restate it.
+func (r *codexShared) unloaded(s *codexServer, conversation string, exited bool) {
+	sessionID := r.d.store.OpenSessionHolding(s.profile, conversation)
 	session := r.d.store.Get(sessionID)
+	if session != nil && exited && r.hidden(sessionID) &&
+		(session.State == protocol.SessionStateWorking || session.State == protocol.SessionStatePendingApproval) {
+		r.report(s, sessionID, harness.TurnEnded, false)
+		return
+	}
 	if session == nil || session.State == protocol.SessionStateRecoverable || session.State == protocol.SessionStateIdle ||
 		r.d.sessionLive(context.Background(), sessionID) || r.hidden(sessionID) {
 		return
@@ -633,17 +646,23 @@ func (r *codexShared) terminalExited(t harness.TerminalID) {
 		exited.ensureMu.Lock()
 		defer exited.ensureMu.Unlock()
 		exited.mu.Lock()
-		held := make([]string, 0, len(exited.loaded))
-		for conversation := range exited.loaded {
+		held := make([]string, 0, len(exited.loaded)+len(exited.dropped))
+		for conversation := range exited.dropped {
 			held = append(held, conversation)
 		}
+		if exited.control != nil {
+			for conversation := range exited.loaded {
+				held = append(held, conversation)
+			}
+		}
+		exited.dropped = nil
 		exited.mu.Unlock()
 		if client := exited.client(); client != nil {
 			client.Close()
 		}
 		r.d.logf("shared Codex: the app-server of profile %s exited; the next connection starts it again", exited.profile)
 		for _, conversation := range held {
-			r.d.life.Go("codexConversationUnloaded", func() { r.unloaded(exited.profile, conversation) })
+			r.d.life.Go("codexConversationUnloaded", func() { r.unloaded(exited, conversation, true) })
 		}
 	}
 	if !r.serverRunning(context.Background(), t) {
