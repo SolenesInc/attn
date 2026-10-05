@@ -443,8 +443,9 @@ async function main() {
         runner.assert(prompt.text.includes(pane.paneId) === false, 'Report does not expose internal pane ids in its consent UI');
         if (process.env.ATTN_HARNESS_RECORD === '1') await delay(1_000);
         await client.request('dom_click', { selector: '.diagnostic-report-actions .primary' });
-        await client.request('dom_wait', { selector: '.toast-row', textIncludes: 'Diagnostic report saved', timeoutMs: 10_000 });
         generatedReportPath = await waitForDiagnosticReport(downloadsDir, reportsBefore);
+        await client.request('dom_wait', { selector: '.diagnostic-report-sheet', absent: true, timeoutMs: 10_000 });
+        await client.request('dom_wait', { selector: '.toast', absent: true, timeoutMs: 10_000 });
         const serialized = fs.readFileSync(generatedReportPath, 'utf8');
         if (serialized.includes(privateText)) throw new Error('Diagnostic report exposed composition text');
         const report = JSON.parse(serialized);

@@ -1,5 +1,5 @@
-import { act, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
 import { renderApp } from './test/renderApp';
 
 function evicted(reason: string, evictedAt = '2026-08-09T12:00:00Z') {
@@ -20,39 +20,11 @@ describe('App eviction notice', () => {
     });
   });
 
-  it('tells the user, in their terms, that the app fell behind and reconnected, once, with the shared six-second fade', async () => {
+  it.each(['client too slow', 'command buffer overflow'])('keeps a reconnect notice quiet for %s', async (reason) => {
     const { daemon } = await renderApp();
-    expect(screen.queryByRole('alert')).toBeNull();
-
-    daemon.emit(evicted('client too slow'));
-
-    const alert = screen.getByRole('alert');
-    expect(alert).toHaveTextContent('fell behind on updates');
-    expect(alert).toHaveTextContent('Reconnected');
-    expect(alert).not.toHaveTextContent('client too slow');
-
-    await act(() => vi.advanceTimersByTimeAsync(5_900));
-    expect(screen.getByRole('alert')).toHaveTextContent('fell behind on updates');
-
-    await act(() => vi.advanceTimersByTimeAsync(300));
-    await act(() => vi.advanceTimersByTimeAsync(300));
-    expect(screen.queryByRole('alert')).toBeNull();
-  });
-
-  it('passes an unfamiliar reason through rather than inventing one', async () => {
-    const { daemon } = await renderApp();
-
-    daemon.emit(evicted('command buffer overflow'));
-
-    expect(screen.getByRole('alert')).toHaveTextContent('command buffer overflow');
-  });
-
-  it('drops the timestamp rather than printing a broken one', async () => {
-    const { daemon } = await renderApp();
-
-    daemon.emit(evicted('client too slow', 'not-a-date'));
-
-    expect(screen.getByRole('alert')).toHaveTextContent('fell behind on updates');
-    expect(screen.getByRole('alert')).not.toHaveTextContent('Invalid');
+    await daemon.emit(evicted(reason));
+    await daemon.idle();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Reconnected/)).not.toBeInTheDocument();
   });
 });

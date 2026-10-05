@@ -116,7 +116,7 @@ export function useAppController({
   const contextSessionId = useSessionBehindScreen();
 
   const appErrors = useAppErrors({ settingError, clearSettingError });
-  const { showError, showNotice } = appErrors;
+  const { showError } = appErrors;
 
   const desktopRuntime = useDesktopRuntimeController(sessions, shownAgentId);
   const {
@@ -168,7 +168,6 @@ export function useAppController({
     profileSessions,
     attentionQueue,
     showError,
-    showNotice,
   });
   const {
     view,
@@ -598,8 +597,7 @@ export function useAppController({
     window.close();
   }, []);
 
-  const showNavigationNotice = useCallback((message: string) => showError(message), [showError]);
-  const desktopNavigation = useDesktopNavigation(showNavigationNotice);
+  const desktopNavigation = useDesktopNavigation(showError);
 
   useKeyboardShortcuts({
     onNewSession: () => handleNewSession('vertical'),

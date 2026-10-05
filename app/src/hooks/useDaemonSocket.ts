@@ -314,15 +314,6 @@ const MAX_PENDING_ATTACH_OUTPUTS = 512;
 const CLIENT_INSTANCE_ID =
   globalThis.crypto?.randomUUID?.() ?? `client-${Math.random().toString(36).slice(2)}`;
 
-export function explainEviction(reason: string, evictedAt: string): string {
-  const when = new Date(evictedAt);
-  const at = Number.isNaN(when.getTime()) ? '' : ` at ${when.toLocaleTimeString()}`;
-  if (reason === 'client too slow') {
-    return `Reconnected. The daemon dropped this window${at} because it fell behind on updates.`;
-  }
-  return `Reconnected. The daemon dropped this window${at}: ${reason}.`;
-}
-
 export class AutomationActionTimeoutError extends Error {}
 
 export class AutomationActionError extends Error {
@@ -803,7 +794,6 @@ export function useDaemonSocket({
   const instanceCheckedRef = useRef<boolean>(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [migrationFailure, setMigrationFailure] = useState<MigrationFailure | null>(null);
-  const [disconnectExplanation, setDisconnectExplanation] = useState<string | null>(null);
   const [connectionGeneration, setConnectionGeneration] = useState(0);
   const connectionGenerationRef = useRef(0);
   const emitSessionLedger = useCallback((event: SessionLedgerUpdate | { type: 'connection'; connected: boolean }) => {
@@ -2546,9 +2536,6 @@ export function useDaemonSocket({
             console.warn(
               `[Daemon] Previous connection was dropped at ${data.evicted_at}: ${data.reason} ` +
               `(${data.undelivered_messages} messages undelivered)`,
-            );
-            setDisconnectExplanation(
-              explainEviction(data.reason ?? 'no reason given', data.evicted_at ?? ''),
             );
             break;
           }
@@ -4881,10 +4868,6 @@ export function useDaemonSocket({
   );
 
 
-  const clearDisconnectExplanation = useCallback(() => {
-    setDisconnectExplanation(null);
-  }, []);
-
   return {
     isConnected: wsRef.current?.readyState === WebSocket.OPEN,
     connectionError,
@@ -4914,8 +4897,6 @@ export function useDaemonSocket({
     sendMigrationSuggest,
     sendMigrationUndo,
     sendMigrationFinish,
-    disconnectExplanation,
-    clearDisconnectExplanation,
     connectionGeneration,
     hasReceivedInitialState,
     settings: settingsRef.current,

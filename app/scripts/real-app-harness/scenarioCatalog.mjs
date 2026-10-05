@@ -10,7 +10,7 @@ export const scenarioCatalog = [
   {
     id: 'launch-desktops',
     runnerId: 'LAUNCH-DESKTOPS',
-    label: 'Launch desktops: mandatory review, named pending sharing, settings and actionable arrivals',
+    label: 'Launch desktops: mandatory review, named pending sharing, settings, protected errors and quiet background wakes',
     command: ['node', 'scripts/real-app-harness/scenario-launch-desktops.mjs'],
   },
   {

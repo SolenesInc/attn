@@ -3,12 +3,9 @@ import { create } from 'zustand';
 export interface ToastRow {
   id: string;
   message: string;
-  source: string;
-  tone: 'error' | 'notice';
+  source?: string;
   actionLabel?: string;
   sessionId?: string;
-  launchKind?: 'crew' | 'automation';
-  desktopLabel?: string;
   action?: () => void | Promise<unknown>;
   completed?: boolean;
 }

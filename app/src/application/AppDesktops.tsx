@@ -9,7 +9,6 @@ import { withFreshDesktopRevisions } from '../hooks/desktopRevisions';
 import { desktopLabel, desktopTerminalState, orderedDesktops } from '../utils/desktops';
 import {
   useAppAppearanceContext,
-  useAppErrorsContext,
   useAppGardenActionsContext,
   useAppInputs,
   useAppPanelsContext,
@@ -57,7 +56,6 @@ export function AppDesktops() {
     zoomModeBySessionId,
     setZoomModeBySessionId,
   } = useAppShell();
-  const { handleTerminalModelRecovered } = useAppErrorsContext();
   const { seedPopoverRequest, usagePopoverRequest } = useAppPanelsContext();
   const { terminalFontSize, resolvedTheme } = useAppAppearanceContext();
   const { delegationSessions } = useAppSessionsContext();
@@ -149,7 +147,6 @@ export function AppDesktops() {
                 });
               });
           }}
-          onTerminalModelRecovered={handleTerminalModelRecovered}
           terminalState={terminalState}
           desktopSelectionStyle={desktopSelectionStyle}
           activePaneId={desktop.active_pane_id}

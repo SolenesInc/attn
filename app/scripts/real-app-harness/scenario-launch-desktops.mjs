@@ -131,7 +131,8 @@ try {
     await wait('.launch-desktop-field', { textIncludes: 'Launch review' });
     await capture('05-launch-settings.png');
   });
-  await runner.step('a_user_wake_goes_there_and_background_wake_is_an_actionable_row', async () => {
+  await runner.step('a_user_wake_goes_there_and_background_wake_stays_quiet', async () => {
+    const memberHeading = await client.request('dom_text', { selector: '.crew-member-heading h2' });
     const userLaunched = observer.waitForMessage((message) => message.event === 'crew_updated' && message.members?.find((member) => member.id === members[0].item_id && member.binding_session), 'app crew wake');
     await click('[data-testid="crew-restart"]');
     await click('[data-testid="crew-confirm-restart"]');
@@ -141,21 +142,28 @@ try {
     await wait('dialog[aria-labelledby="crew-panel-title"][open]', { absent: true });
     const userState = await client.request('get_state');
     runner.assert(shownAgentId(userState) === userWake.session_id, 'An app wake shows the member in the app', { view: userState.view, activeLeaf: userState.activeLeaf });
+    await driver.pressKey('w', { command: true, shift: process.platform === 'linux' });
+    await wait('.toast', { textIncludes: 'is protected' });
+    const error = await client.request('dom_text', { selector: '.toast' });
+    runner.assert(error.text.includes(memberHeading.text), 'Closing a crew session still explains its protection', error);
+    runner.assert(!error.text.includes('Dismiss') && !error.text.includes('fades'), 'The error has no dismissal button or timer explanation', error);
+    await wait('.toast-source', { absent: true });
+    await client.request('dom_hover', { selector: '.toast' });
+    const hovered = await client.request('dom_text', { selector: '.toast' });
+    runner.assert(!hovered.text.includes('paused'), 'Hovering an error does not add pause text', hovered);
+    await capture('06-protected-error.png');
+    await client.request('dom_hover', { selector: '.toast', leave: true });
+    await wait('.toast', { absent: true });
     await openCrew();
     const output = cli('crew', 'wake', members[1].item_id, '--json');
     const arrival = JSON.parse(output.slice(output.indexOf('{')));
     runner.assert(Boolean(arrival.session_id), 'The CLI wake succeeds', arrival);
-    await wait('.toast-row button', { textIncludes: members[1].name });
-    await wait('.toast:popover-open');
-    runner.writeJson('toast-viewport-bounds.json', await client.request('dom_bounds', { selector: '.toast' }));
-    await client.request('dom_focus', { selector: '.toast-row button' });
-    await capture('06-background-arrival.png');
-    await driver.pressEnter();
-    await wait('.toast-row', { textIncludes: '✓ Done' });
+    await wait(`[data-testid="crew-roster-${members[1].item_id}"] .is-awake`);
+    await wait('.toast', { absent: true });
     const state = await client.request('get_state');
-    runner.assert(shownAgentId(state) === arrival.session_id, 'The toast action selects the arriving agent', state);
-    runner.writeJson('toast-after-activation.json', { toast: await client.request('dom_text', { selector: '.toast' }), state });
-    await capture('07-click-to-go.png');
+    runner.assert(shownAgentId(state) === userWake.session_id, 'A background wake keeps the currently shown agent', state);
+    await wait('[data-testid="crew-panel"]');
+    await capture('07-quiet-background-wake.png');
     runner.writeJson('launch-choices.json', { members: crew().filter((member) => members.some((item) => item.item_id === member.id)), arrival });
   });
   await runner.finishSuccess({ realCopy, members: members.map((item) => item.item_id) });

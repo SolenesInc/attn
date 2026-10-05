@@ -1,4 +1,3 @@
-import { useToastStore } from '../store/toasts';
 import { useCallback, useRef, useState } from 'react';
 import type { useDaemonApi } from '../contexts/DaemonApiContext';
 import type { AppView } from '../navigation/sessionNavigation';
@@ -137,7 +136,6 @@ export function useAppDiagnostics({
         },
       );
       await saveDiagnosticReport(report);
-      useToastStore.getState().append({ message: 'Diagnostic report saved', source: 'Diagnostics', tone: 'notice' });
     },
     [diagnosticCapture, getPaneSize, getPaneText],
   );

@@ -1,9 +1,7 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { gesture, pressShortcut, renderApp } from './test/renderApp';
+import { gesture, renderApp } from './test/renderApp';
 import { defaultProfile, emptyDesktop, crewMember, daemonSession, soloDesktop } from './test/daemonFixtures';
-import { savedSettings, serveSettings } from './test/settings';
-import { openSession } from './test/appFixtures';
 import { LaunchDesktopKind, MigrationPhase } from './types/generated';
 
 const crewItem = (id: string): NonNullable<import('./test/protocol').EventMessage<'launch_desktop_result'>['item']> => ({ kind: LaunchDesktopKind.Crew, item_id: id, name: id, profile_id: 'default', confirmed: false, setting: { label: `${id} (new)` } });
@@ -56,103 +54,30 @@ describe('launch desktops', () => {
     expect(screen.queryByText('Change later in Manage crew')).not.toBeInTheDocument();
   });
 
-  it('keeps arrivals inside the open Crew focus boundary and navigates from there', async () => {
+  it.each([LaunchDesktopKind.Crew, LaunchDesktopKind.Automation])('keeps a %s background launch quiet while Manage crew is open', async (kind) => {
     const { daemon } = await renderApp({ initialState: { crew: [crewMember('alder')], sessions: [daemonSession('s1')], desktops: [soloDesktop('s1')] } });
     await gesture(daemon, () => fireEvent.click(screen.getByTestId('manage-crew')));
-    await daemon.emit({ event: 'background_launch', session_id: 'keel-day', profile_id: 'profile-default', desktop_id: 'review', name: 'Keel', requested_by: 'Alder', desktop_label: 'Review', kind: LaunchDesktopKind.Crew });
-    await daemon.idle();
     const dialog = screen.getByRole('dialog', { name: 'Manage crew' });
-    const action = within(dialog).getByRole('button', { name: /Keel.*Click to go/ });
-    action.focus();
-    expect(document.activeElement).toBe(action);
-    await gesture(daemon, () => fireEvent.click(action));
-    expect(daemon.sentOf('desktop_show_session').map(({ session_id }) => session_id)).toEqual(['keel-day']);
-    expect(screen.getByText('✓ Done')).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: 'Manage crew' })).not.toBeInTheDocument();
-  });
-
-  it.each([
-    ['agent palette', 'ui.actionMenu', 'Agents'],
-    ['command palette', 'ui.commandPalette', 'Commands'],
-    ['fullscreen Garden', 'board.open', 'The garden'],
-    ['shortcuts', 'ui.showShortcuts', 'Keyboard Shortcuts'],
-    ['shortcut editor', 'ui.showShortcuts', 'Customize Shortcuts'],
-    ['release notes', 'ui.commandPalette', "What's new"],
-  ] as const)('shows an arrival above the %s and closes it when navigating', async (_surface, shortcut, title) => {
-    const { daemon } = await renderApp({ initialState: { sessions: [daemonSession('s1')], desktops: [soloDesktop('s1')] } });
-    await gesture(daemon, () => pressShortcut(shortcut));
-    if (title === 'Customize Shortcuts') await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Edit shortcuts' })));
-    if (title === "What's new") {
-      const search = screen.getByRole('combobox');
-      fireEvent.change(search, { target: { value: ">What's new" } });
-      await gesture(daemon, () => fireEvent.keyDown(search, { key: 'Enter' }));
-    }
-    if (title === 'The garden') await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Expand the garden' })));
-    expect(screen.getByRole('dialog', { name: title })).toBeInTheDocument();
-    await daemon.emit({ event: 'background_launch', session_id: 's1', profile_id: 'profile-default', desktop_id: 'review', name: 'Keel', requested_by: 'Alder', desktop_label: 'Review', kind: LaunchDesktopKind.Crew });
+    const button = within(dialog).getAllByRole('button')[0];
+    button.focus();
+    const existingAlerts = screen.queryAllByRole('alert');
+    await daemon.emit({ event: 'background_launch', session_id: 'keel-day', profile_id: 'profile-default', desktop_id: 'review', name: 'Keel', requested_by: 'Alder', desktop_label: 'Review', kind });
     await daemon.idle();
-    const action = screen.getByRole('button', { name: /Keel.*Click to go/ });
-    action.focus();
-    expect(document.activeElement).toBe(action);
-    await gesture(daemon, () => fireEvent.click(action));
-    expect(screen.queryByRole('dialog', { name: title })).not.toBeInTheDocument();
-    expect(daemon.sentOf('desktop_show_session').map(({ session_id }) => session_id)).toEqual(['s1']);
-    expect(screen.getByText('✓ Done')).toBeInTheDocument();
-  });
-
-  it('closes Settings through its draft-saving close action when navigating an arrival', async () => {
-    const { daemon } = await renderApp({ initialState: { sessions: [daemonSession('s1')], desktops: [soloDesktop('s1')] } });
-    await gesture(daemon, () => pressShortcut('ui.openSettings'));
-    expect(screen.getByTestId('settings-modal')).toBeInTheDocument();
-    serveSettings(daemon);
-    await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-agents')));
-    const model = screen.getByTestId('settings-default-model-claude');
-    model.focus();
-    fireEvent.change(model, { target: { value: 'sonnet' } });
-    await daemon.emit({ event: 'background_launch', session_id: 's1', profile_id: 'profile-default', desktop_id: 'review', name: 'Keel', requested_by: 'Alder', desktop_label: 'Review', kind: LaunchDesktopKind.Crew });
-    await daemon.idle();
-    await gesture(daemon, () => {
-      const action = screen.getByRole('button', { name: /Keel.*Click to go/ });
-      action.focus();
-      fireEvent.click(action);
-    });
-    expect(screen.queryByTestId('settings-modal')).not.toBeInTheDocument();
-    expect(savedSettings(daemon)).toEqual([['default_model_claude', 'sonnet']]);
-    expect(daemon.sentOf('desktop_show_session').map(({ session_id }) => session_id)).toEqual(['s1']);
-    expect(screen.getByText('✓ Done')).toBeInTheDocument();
-  });
-
-  it('dismisses a snooze chooser for a toast action', async () => {
-    const { daemon } = await renderApp({ initialState: {
-      settings: { queue_mode_enabled: 'true' },
-      sessions: ['s1', 's2'].map((id) => daemonSession(id, { state: 'idle', turn_owed: true })),
-      desktops: ['s1', 's2'].map((id) => soloDesktop(id)),
-    } });
-    await openSession(daemon, 's1');
-    await gesture(daemon, () => pressShortcut('session.snooze'));
-    expect(screen.getByRole('menu', { name: 'Snooze s1' })).toBeInTheDocument();
-    await daemon.emit({ event: 'background_launch', session_id: 's1', profile_id: 'profile-default', desktop_id: 'review', name: 'Keel', requested_by: 'Alder', desktop_label: 'Review', kind: LaunchDesktopKind.Crew });
-    await daemon.idle();
-    await gesture(daemon, () => {
-      const action = screen.getByRole('button', { name: /Keel.*Click to go/ });
-      action.focus();
-      fireEvent.click(action);
-    });
-    expect(screen.queryByRole('menu', { name: 'Snooze s1' })).not.toBeInTheDocument();
-    expect(screen.getByText('✓ Done')).toBeInTheDocument();
-  });
-
-  it('groups background arrivals, names the requester and goes only when clicked', async () => {
-    const { daemon } = await renderApp({ initialState: { profiles: [defaultProfile('d1')], desktops: [emptyDesktop('d1')] } });
-    await daemon.emit({ event: 'background_launch', session_id: 'alder-day', profile_id: 'profile-default', desktop_id: 'review', name: 'Alder', requested_by: 'Trellis', desktop_label: 'Review (no ⌘ number)', kind: LaunchDesktopKind.Crew });
-    await daemon.emit({ event: 'background_launch', session_id: 'checks-run', profile_id: 'another-profile', desktop_id: 'checks', name: 'Checks', requested_by: 'automation', desktop_label: 'Checks (no ⌘ number)', kind: LaunchDesktopKind.Automation });
-    await daemon.idle();
-    expect(screen.getByText('2 notifications')).toBeInTheDocument();
-    expect(screen.getByText('Trellis')).toBeInTheDocument();
+    expect(screen.queryByText('Keel')).not.toBeInTheDocument();
+    expect(screen.queryAllByRole('alert')).toEqual(existingAlerts);
+    expect(screen.getByRole('dialog', { name: 'Manage crew' })).toBe(dialog);
+    expect(document.activeElement).toBe(button);
     expect(daemon.sentOf('desktop_show_session')).toEqual([]);
-    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /Alder.*Click to go/ })));
-    expect(daemon.sentOf('desktop_show_session').map(({ session_id }) => session_id)).toEqual(['alder-day']);
-    expect(screen.getByText('✓ Done')).toBeInTheDocument();
-    expect(screen.getByText('2 notifications')).toBeInTheDocument();
+  });
+
+  it('keeps background launches quiet across profiles without navigating', async () => {
+    const { daemon } = await renderApp({ initialState: { profiles: [defaultProfile('d1')], desktops: [emptyDesktop('d1')] } });
+    await daemon.emit({ event: 'background_launch', session_id: 'alder-day', profile_id: 'profile-default', desktop_id: 'review', name: 'Alder', requested_by: 'Trellis', desktop_label: 'Review', kind: LaunchDesktopKind.Crew });
+    await daemon.emit({ event: 'background_launch', session_id: 'checks-run', profile_id: 'another-profile', desktop_id: 'checks', name: 'Checks', requested_by: 'automation', desktop_label: 'Checks', kind: LaunchDesktopKind.Automation });
+    await daemon.idle();
+    expect(screen.queryByText('2 notifications')).not.toBeInTheDocument();
+    expect(screen.queryByText('Trellis')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(daemon.sentOf('desktop_show_session')).toEqual([]);
   });
 });

@@ -7,7 +7,7 @@ import { withFreshDesktopRevisions } from './desktopRevisions';
 import { actThenShow } from '../application/openThenShow';
 import { desktopInSlot } from '../utils/desktops';
 
-type ShowNotice = (message: string) => void;
+type ShowError = (message: string) => void;
 
 function currentDesktopOf(state: ReturnType<typeof useProfilesStore.getState>): Desktop | undefined {
   return state.desktops.find((desktop) => desktop.id === state.currentDesktopId);
@@ -17,7 +17,7 @@ function failureMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-export function useDesktopNavigation(showNotice: ShowNotice) {
+export function useDesktopNavigation(showError: ShowError) {
   const {
     sendDesktopSetCurrent,
     sendDesktopMoveLeaf,
@@ -44,9 +44,9 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
 
   const report = useCallback(
     (action: Promise<unknown>) => {
-      void action.catch((err) => showNotice(failureMessage(err)));
+      void action.catch((err) => showError(failureMessage(err)));
     },
-    [showNotice],
+    [showError],
   );
 
   const switchToDesktop = useCallback(
@@ -94,10 +94,7 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
         : state.desktops.find((desktop) => desktop.id === to.desktopId);
       if (!source || !profileId || existing?.id === source.id || (slot === undefined && !existing)) return;
       const leafId = source.active_pane_id;
-      if (!leafId) {
-        showNotice('Nothing is active to move.');
-        return;
-      }
+      if (!leafId) return;
       const targetOf = async (): Promise<string> => {
         if (existing) return existing.id;
         const created = (await sendDesktopCreate(profileId, slot)).desktops?.[0];
@@ -127,7 +124,7 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
       await actThenShow({ kind: 'move', leafId, sourceDesktopId: source.id, targetDesktopId: existing?.id }, move, (moved) =>
         moved.leafId ? { desktopId: moved.targetId, leafId: moved.leafId } : null);
     },
-    [sendDesktopCreate, sendDesktopMoveLeaf, showNotice],
+    [sendDesktopCreate, sendDesktopMoveLeaf],
   );
 
   const moveActiveLeafToDesktop = useCallback(
