@@ -226,14 +226,15 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
     try {
       const previousId = identity.current.id;
       const retained = { ...draft(), id: crypto.randomUUID() };
-      await cache.current.save(retained); identity.current = retained; stagedFiles.current.clear();
+      const next = await cache.current.discard(retained, async () => {
+        identity.current = retained; stagedFiles.current.clear();
+        await client.current!.discard(previousId, retained.files.map(file => file.id));
+      });
+      identity.current = next;
       if (!mounted.current) return;
-      await client.current!.discard(previousId, files.map(file => file.id));
-      if (!mounted.current) return;
-      const next = newQuickCaptureDraft(); await cache.current.save(next); identity.current = next;
       draftGeneration.current++; ownedFiles.current.clear(); stagedFiles.current.clear(); setFiles([]); setText(''); setMailbox('chief');
-    } catch (error) { stagedFiles.current.clear(); setError(String(error)); }
-    finally { sending.current = false; setSubmitting(false); }
+    } catch (error) { stagedFiles.current.clear(); if (mounted.current) setError(String(error)); }
+    finally { sending.current = false; if (mounted.current) setSubmitting(false); }
   }
 
   useEffect(() => {
