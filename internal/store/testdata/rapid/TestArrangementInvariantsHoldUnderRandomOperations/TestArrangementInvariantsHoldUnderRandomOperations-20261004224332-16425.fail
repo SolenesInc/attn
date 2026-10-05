@@ -1,0 +1,88 @@
+# 2026/10/04 22:43:32.220782 [TestArrangementInvariantsHoldUnderRandomOperations] [rapid] draw action: "create"
+# 2026/10/04 22:43:32.221154 [TestArrangementInvariantsHoldUnderRandomOperations] [rapid] draw action: "place"
+# 2026/10/04 22:43:32.221218 [TestArrangementInvariantsHoldUnderRandomOperations] [rapid] draw desktop: profiles.Desktop{ID:"profile-5edfa275-fce5-4230-bac9-cd747ad5003a/desktop_1", ProfileID:"profile-5edfa275-fce5-4230-bac9-cd747ad5003a", Name:"", ShortcutSlot:1, OrderKey:"i", Tree:layouttree.Node{Type:"", PaneID:"", TileID:"", TileKind:"", TileParams:"", TileSessionID:"", SplitID:"", Direction:"", Ratio:0, RatioLocked:false, RatioMode:"", Children:[]layouttree.Node(nil)}, ActivePaneID:"", Panes:[]profiles.Pane(nil), Revision:1}
+# 2026/10/04 22:43:32.221283 [TestArrangementInvariantsHoldUnderRandomOperations] [rapid] draw stale: 1
+# 2026/10/04 22:43:32.221286 [TestArrangementInvariantsHoldUnderRandomOperations] [rapid] draw session: "agent-0"
+# 2026/10/04 22:43:32.221286 [TestArrangementInvariantsHoldUnderRandomOperations] [rapid] draw direction: "vertical"
+# 2026/10/04 22:43:32.221288 [TestArrangementInvariantsHoldUnderRandomOperations] [rapid] draw share: 1.5
+# 2026/10/04 22:43:32.221606 [TestArrangementInvariantsHoldUnderRandomOperations] [rapid] draw action: "dock_tile"
+# 2026/10/04 22:43:32.221674 [TestArrangementInvariantsHoldUnderRandomOperations] [rapid] draw desktop: profiles.Desktop{ID:"profile-5edfa275-fce5-4230-bac9-cd747ad5003a/desktop_1", ProfileID:"profile-5edfa275-fce5-4230-bac9-cd747ad5003a", Name:"", ShortcutSlot:1, OrderKey:"i", Tree:layouttree.Node{Type:"pane", PaneID:"pane-0f938805-ed4e-4776-8ae1-73611a159560", TileID:"", TileKind:"", TileParams:"", TileSessionID:"", SplitID:"", Direction:"", Ratio:0, RatioLocked:false, RatioMode:"", Children:[]layouttree.Node(nil)}, ActivePaneID:"pane-0f938805-ed4e-4776-8ae1-73611a159560", Panes:[]profiles.Pane{profiles.Pane{PaneID:"pane-0f938805-ed4e-4776-8ae1-73611a159560", DesktopID:"profile-5edfa275-fce5-4230-bac9-cd747ad5003a/desktop_1", Kind:"agent", SessionID:"agent-0", RuntimeID:"agent-0", Title:"", Status:"ready", Error:""}}, Revision:2}
+# 2026/10/04 22:43:32.221731 [TestArrangementInvariantsHoldUnderRandomOperations] [rapid] draw stale: 1
+# 2026/10/04 22:43:32.221767 [TestArrangementInvariantsHoldUnderRandomOperations] [rapid] draw anchor: "pane-0f938805-ed4e-4776-8ae1-73611a159560"
+# 2026/10/04 22:43:32.221768 [TestArrangementInvariantsHoldUnderRandomOperations] [rapid] draw direction: "vertical"
+# 2026/10/04 22:43:32.221769 [TestArrangementInvariantsHoldUnderRandomOperations] [rapid] draw before: false
+# 2026/10/04 22:43:32.222030 [TestArrangementInvariantsHoldUnderRandomOperations] [rapid] draw action: "move"
+# 2026/10/04 22:43:32.222098 [TestArrangementInvariantsHoldUnderRandomOperations] [rapid] draw source: profiles.Desktop{ID:"profile-5edfa275-fce5-4230-bac9-cd747ad5003a/desktop_1", ProfileID:"profile-5edfa275-fce5-4230-bac9-cd747ad5003a", Name:"", ShortcutSlot:1, OrderKey:"i", Tree:layouttree.Node{Type:"split", PaneID:"", TileID:"", TileKind:"", TileParams:"", TileSessionID:"", SplitID:"split-tile-1", Direction:"vertical", Ratio:0.4, RatioLocked:true, RatioMode:"automatic", Children:[]layouttree.Node{layouttree.Node{Type:"pane", PaneID:"pane-0f938805-ed4e-4776-8ae1-73611a159560", TileID:"", TileKind:"", TileParams:"", TileSessionID:"", SplitID:"", Direction:"", Ratio:0, RatioLocked:false, RatioMode:"", Children:[]layouttree.Node(nil)}, layouttree.Node{Type:"tile", PaneID:"", TileID:"tile-1", TileKind:"markdown", TileParams:"{}", TileSessionID:"", SplitID:"", Direction:"", Ratio:0, RatioLocked:false, RatioMode:"", Children:[]layouttree.Node(nil)}}}, ActivePaneID:"pane-0f938805-ed4e-4776-8ae1-73611a159560", Panes:[]profiles.Pane{profiles.Pane{PaneID:"pane-0f938805-ed4e-4776-8ae1-73611a159560", DesktopID:"profile-5edfa275-fce5-4230-bac9-cd747ad5003a/desktop_1", Kind:"agent", SessionID:"agent-0", RuntimeID:"agent-0", Title:"", Status:"ready", Error:""}}, Revision:3}
+# 2026/10/04 22:43:32.222224 [TestArrangementInvariantsHoldUnderRandomOperations] [rapid] draw target: profiles.Desktop{ID:"profile-5edfa275-fce5-4230-bac9-cd747ad5003a/desktop_2", ProfileID:"profile-5edfa275-fce5-4230-bac9-cd747ad5003a", Name:"", ShortcutSlot:2, OrderKey:"r", Tree:layouttree.Node{Type:"", PaneID:"", TileID:"", TileKind:"", TileParams:"", TileSessionID:"", SplitID:"", Direction:"", Ratio:0, RatioLocked:false, RatioMode:"", Children:[]layouttree.Node(nil)}, ActivePaneID:"", Panes:[]profiles.Pane(nil), Revision:1}
+# 2026/10/04 22:43:32.222264 [TestArrangementInvariantsHoldUnderRandomOperations] [rapid] draw leaf: "tile-1"
+# 2026/10/04 22:43:32.222265 [TestArrangementInvariantsHoldUnderRandomOperations] [rapid] draw anchor: ""
+# 2026/10/04 22:43:32.222265 [TestArrangementInvariantsHoldUnderRandomOperations] [rapid] draw direction: "vertical"
+# 2026/10/04 22:43:32.222266 [TestArrangementInvariantsHoldUnderRandomOperations] [rapid] draw before: false
+# 2026/10/04 22:43:32.222267 [TestArrangementInvariantsHoldUnderRandomOperations] [rapid] draw share: 1.5
+# 2026/10/04 22:43:32.222269 [TestArrangementInvariantsHoldUnderRandomOperations] [rapid] draw stale: 1
+# 2026/10/04 22:43:32.222269 [TestArrangementInvariantsHoldUnderRandomOperations] [rapid] draw stale: 1
+# 2026/10/04 22:43:32.222375 [TestArrangementInvariantsHoldUnderRandomOperations] operation failed with an untyped error: sql: no rows in result set
+# 
+v0.4.8#408661221681940302
+0x1084210842108
+0x0
+0x0
+0x1084210842108
+0x6b74f03291620
+0x4
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1084210842108
+0x0
+0x1
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1084210842108
+0x38e38e38e38e4
+0x3
+0x0
+0x0
+0x0
+0x1
+0x0
+0x1
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0
+0x1

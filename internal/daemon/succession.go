@@ -33,15 +33,22 @@ func (d *Daemon) shows(t harness.TerminalID, from *protocol.Session, owner strin
 }
 
 func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.Succession, observation agentConversationObservation) error {
-	d.drainTranscriptWatcher(from.ID)
-	if _, err := d.captureGardenSessionSnapshot(from); err != nil {
-		d.logf("garden: preserving execution %s before its terminal moved on: %v", from.ID, err)
+	unlockEnds := d.lockTerminalEnds(from.ID)
+	sc.KeepFrom = d.othersRun(from.ID, t)
+	if !sc.KeepFrom {
+		d.drainTranscriptWatcher(from.ID)
+		if _, err := d.captureGardenSessionSnapshot(from); err != nil {
+			d.logf("garden: preserving execution %s before its terminal moved on: %v", from.ID, err)
+		}
 	}
 	sc.From = from.ID
 	sc.Conversation = store.SessionConversation{NativeID: observation.NativeID, TranscriptPath: observation.TranscriptPath}
 	changed, err := d.store.CommitSuccession(sc, string(t))
+	unlockEnds()
 	if err != nil {
-		d.ensureTranscriptWatcherAtPath(from.ID, d.store.GetSessionConversation(from.ID).TranscriptPath)
+		if !sc.KeepFrom {
+			d.ensureTranscriptWatcherAtPath(from.ID, d.store.GetSessionConversation(from.ID).TranscriptPath)
+		}
 		return err
 	}
 
@@ -58,8 +65,10 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 	d.publishFact(FactSessionRegistered, sc.To, nil)
 	d.publishArrangementChanged(changed[0].ProfileID)
 
-	d.recordSessionClose(from.ID, func() (bool, error) { return true, nil })
-	d.publishSessionUnregistered(from)
+	if !sc.KeepFrom {
+		d.recordSessionClose(from.ID, func() (bool, error) { return true, nil })
+		d.publishSessionUnregistered(from)
+	}
 	d.logf("terminal %s moved on from session %s to %s for conversation %s", t, from.ID, sc.To, observation.NativeID)
 	return nil
 }

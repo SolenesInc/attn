@@ -19,11 +19,12 @@ type Succession struct {
 	Conversation SessionConversation
 	Launch       LaunchIntent
 	Close        SessionClose
+	KeepFrom     bool
 }
 
 // CommitSuccession opens sc.To, or reopens it when it exists, in the pane that holds terminal; the pane now
 // shows it and To's other panes, whose terminals are dead, close. sc.From closes into the ledger in the same
-// transaction. It returns the desktops it changed, terminal's first.
+// transaction unless KeepFrom. It returns the desktops it changed, terminal's first.
 func (s *Store) CommitSuccession(sc Succession, terminal string) ([]profiles.Desktop, error) {
 	var changed []profiles.Desktop
 	err := s.profilesTx(func(tx *sql.Tx, now string) error {
@@ -54,10 +55,14 @@ func (s *Store) CommitSuccession(sc Succession, terminal string) ([]profiles.Des
 		if err := tx.QueryRow(`SELECT desktop_id FROM desktop_panes WHERE runtime_id = ?`, terminal).Scan(&desktopID); err != nil {
 			return fmt.Errorf("no pane holds terminal %s: %w", terminal, err)
 		}
-		if dead, err := removeSessionPlacement(tx, now, sc.To); err != nil {
+		dead, err := removeSessionPlacement(tx, now, sc.To)
+		if err != nil {
 			return fmt.Errorf("close the dead panes of %s: %w", sc.To, err)
-		} else if dead != nil && dead.ID != desktopID {
-			changed = append(changed, *dead)
+		}
+		for _, desktop := range dead {
+			if desktop.ID != desktopID {
+				changed = append(changed, desktop)
+			}
 		}
 		desktop, err := loadDesktop(tx, desktopID)
 		if err != nil {
@@ -72,6 +77,9 @@ func (s *Store) CommitSuccession(sc Succession, terminal string) ([]profiles.Des
 			return fmt.Errorf("show successor %s: %w", sc.To, err)
 		}
 		changed = append([]profiles.Desktop{desktop}, changed...)
+		if sc.KeepFrom {
+			return nil
+		}
 		if _, _, err = s.closeSessionTx(tx, sc.From, sc.Close, at); err == nil {
 			_, err = tx.Exec(`UPDATE sessions SET agent_driver_plugin_name = '', agent_driver_run_id = '', agent_driver_report_seq = 0,
 				agent_driver_transcript_path = '' WHERE id = ?`, sc.From)
@@ -83,6 +91,9 @@ func (s *Store) CommitSuccession(sc Succession, terminal string) ([]profiles.Des
 	})
 	if err != nil {
 		return nil, err
+	}
+	if sc.KeepFrom {
+		return changed, nil
 	}
 	s.forgetSessionCost(sc.From)
 	s.mu.Lock()

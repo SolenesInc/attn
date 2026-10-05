@@ -9,6 +9,7 @@ import (
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestADelegatedSessionKeepsShowingItsRoleAfterTheRoleIsRemovedAndTheDaemonRestarts(t *testing.T) {
@@ -75,7 +76,9 @@ func TestADelegatedSessionKeepsShowingItsRoleAfterTheRoleIsRemovedAndTheDaemonRe
 		t.Fatalf("removing the research role: %s", protocol.Deref(saved.Error))
 	}
 	for _, run := range runs {
+		run.Prompted()
 		run.Exit(0)
+		testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == run.SessionID })
 	}
 	w.restart()
 	for id, role := range want {

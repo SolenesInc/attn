@@ -189,8 +189,8 @@ type Daemon struct {
 	prepareSessionTeardownHook        func(string) error
 	teardownMu                        sync.Mutex
 	tearingDown                       map[string]chan struct{}
-	sessionLifecycleLocksMu           sync.Mutex
-	sessionLifecycleLocks             map[string]*sessionLifecycleLockEntry
+	sessionLifecycleLocks             sessionLocks
+	terminalEndLocks                  sessionLocks
 	spawnLocksMu                      sync.Mutex
 	spawnLocks                        map[string]*spawnLock
 	sessionInputOnce                  sync.Once
@@ -1649,6 +1649,10 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 			return false
 		}
 	}
+	if !d.endTerminal(sessionID, info.ID) {
+		d.logf("terminal %s exited; session %s runs on in its other terminals", info.ID, sessionID)
+		return true
+	}
 	d.sessionInputs().forgetSession(sessionID)
 	d.stopTranscriptWatcher(sessionID)
 	d.closePluginDriverSession(sessionID, "exited", &info.ExitCode, info.Signal)
@@ -1734,7 +1738,7 @@ type sessionTeardown struct {
 	// Captured before the pane closes: teardown kills the terminals the session showed.
 	terminals        []harness.TerminalID
 	driverRun        store.AgentDriverReportCursor
-	lifecycleLock    *sessionLifecycleLockLease
+	lifecycleLock    *sessionLockLease
 	lifecycleRelease sync.Once
 }
 
