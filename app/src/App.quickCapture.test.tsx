@@ -253,13 +253,53 @@ describe('Quick Capture app wire behavior', () => {
     expect(editor()).not.toHaveAttribute('readonly');
     let allowed = false;
     await gesture(daemon, () => {
-      allowed = fireEvent.paste(editor(), { clipboardData: { files: [], types: [format],
+      allowed = fireEvent.paste(editor(), { clipboardData: { files: [], items: [{ kind: 'string', type: format }], types: [format],
         getData: (type: string) => type === format ? 'Pasted message' : '' } });
     });
     expect(allowed).toBe(true);
     expect(readImage).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: 'Remove Pasted screenshot' })).toBeNull();
     expect(daemon.sentOf('quick_capture_attachment_put')).toEqual([]);
+  });
+
+  it.each([false, true])('attaches Copy Image bytes alongside HTML (URL text: %s)', async withUrl => {
+    const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=';
+    const binary = atob(pngBase64);
+    const file = new File([Uint8Array.from(binary, char => char.charCodeAt(0))], 'copied.png', { type: 'image/png' });
+    let readyToDecode!: (image: HTMLImageElement) => void;
+    const decoding = new Promise<HTMLImageElement>(resolve => { readyToDecode = resolve; });
+    vi.spyOn(window, 'Image').mockImplementation(function () {
+      const image = document.createElement('img'); readyToDecode(image); return image;
+    });
+    const { daemon } = await captureApp(daemon => {
+      vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).startsWith('data:')) return localFetch(input, init);
+        throw new Error('app wire tests reach no network');
+      });
+      daemon.on('quick_capture_list', () => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID,
+        success: true, result: { list: { items: [], draft_assets: [] } } }));
+      daemon.on('quick_capture_attachment_put', command => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID,
+        success: true, result: { upload: { next_offset: command.offset + atob(command.data_base64).length } } }));
+    });
+    await gesture(daemon, () => fireEvent.change(editor(), { target: { value: 'Existing message' } }));
+    let allowed = true;
+    await gesture(daemon, () => {
+      allowed = fireEvent.paste(editor(), { clipboardData: {
+        files: [file], types: ['text/html', 'Files', ...(withUrl ? ['text/plain', 'text/uri-list'] : [])],
+        items: [{ kind: 'string', type: 'text/html' }, { kind: 'file', type: 'image/png' }],
+        getData: (type: string) => type === 'text/html' ? '<img src="https://example.invalid/copied.png">'
+          : withUrl && type === 'text/plain' ? 'https://example.invalid/copied.png' : '',
+      } });
+    });
+    expect(allowed).toBe(false);
+    await act(async () => fireEvent.load(await decoding));
+    const uploaded = await daemon.received('quick_capture_attachment_put');
+    await daemon.idle();
+    expect(atob(uploaded.data_base64)).toBe(binary);
+    expect(uploaded.name).toBe('copied.png');
+    expect(readImage).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Remove copied.png' })).toBeInTheDocument();
+    expect(editor()).toHaveValue('Existing message');
   });
 
   it('sends once with stable identity and clears only after a durable receipt', async () => {
