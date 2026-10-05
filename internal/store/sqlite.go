@@ -1382,6 +1382,7 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
  BEGIN UPDATE sessions SET last_desktop_id = (SELECT desktop_id FROM desktop_panes WHERE session_id = OLD.session_id
  ORDER BY created_at DESC, pane_id DESC LIMIT 1) WHERE id = OLD.session_id; END;
 `},
+	{171, "remember the focus order of each desktop", ""},
 }
 
 const migration99SQL = `
@@ -2245,6 +2246,11 @@ func applyPendingMigrations(db *sql.DB, recorded, currentVersion, through int) e
 			}
 		} else if m.version == 140 {
 			if err := applyMigration140(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 171 {
+			if err := addDesktopFocusHistory(tx); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}

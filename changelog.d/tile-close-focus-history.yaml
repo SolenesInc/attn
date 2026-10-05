@@ -1,0 +1,3 @@
+kind: fixed
+area: desktops
+change: Closing the focused tile returns to the most recently focused surviving tile on that desktop, including after a restart.

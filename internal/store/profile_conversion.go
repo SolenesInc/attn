@@ -102,6 +102,9 @@ func applyProfileConversion(tx *sql.Tx) error {
 	if err := addPaneRuntimeColumn(tx); err != nil {
 		return err
 	}
+	if err := addDesktopFocusHistory(tx); err != nil {
+		return err
+	}
 	input, err := readLegacyWorkspaces(tx)
 	if err != nil {
 		return err

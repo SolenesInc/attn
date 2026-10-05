@@ -10,6 +10,7 @@ import {
   shownAgentId,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
+import { createWindowDriver } from './platform.mjs';
 import {
   waitForPaneAttached,
   waitForPaneShellReady,
@@ -232,6 +233,7 @@ async function main() {
   });
 
   const client = new UiAutomationClient(options);
+  const driver = createWindowDriver({ appPath: options.appPath, client });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const createdSessionIds = [];
   let keptSessionId = null;
@@ -290,6 +292,38 @@ async function main() {
       );
       await assertRemainingDesktopSelected(runner, client, keptSessionId, splitSessionId);
       note(`remaining desktop session selected after close`, { keptSessionId });
+    });
+
+    await runner.step('closing_tiles_follows_focus_history_with_several_survivors', async () => {
+      const b = (await splitWithShortcut(client, keptSessionId, 'terminal.splitVertical', 2)).pane;
+      const c = (await splitWithShortcut(client, keptSessionId, 'terminal.splitVertical', 3)).pane;
+      const d = (await splitWithShortcut(client, keptSessionId, 'terminal.splitVertical', 4)).pane;
+      createdSessionIds.push(b.sessionId, c.sessionId, d.sessionId);
+      for (const pane of [kept.pane, b, c]) {
+        await client.request('focus_pane', { sessionId: pane.sessionId, paneId: pane.paneId });
+      }
+      await driver.pressKey('w', { command: true, shift: process.platform === 'linux' });
+      await waitForSessionAbsentFromDaemon(observer, c.sessionId, 'C closed through native shortcut');
+      await waitForActiveSession(client, b.sessionId, 'A -> B -> C, close C returns to B');
+      await waitForPaneInputFocused(client, b.sessionId, b.paneId, 'B receives keyboard focus after C closes');
+
+      const replacementC = (await splitWithShortcut(client, keptSessionId, 'terminal.splitVertical', 4)).pane;
+      createdSessionIds.push(replacementC.sessionId);
+      for (const pane of [kept.pane, b, replacementC, d, replacementC]) {
+        await client.request('focus_pane', { sessionId: pane.sessionId, paneId: pane.paneId });
+      }
+      await client.request('dispatch_shortcut', { shortcutId: 'terminal.close' });
+      await waitForSessionAbsentFromDaemon(observer, replacementC.sessionId, 'revisited C closed');
+      await waitForActiveSession(client, d.sessionId, 'A -> B -> C -> D -> C, close C returns to D');
+      await waitForPaneInputFocused(client, d.sessionId, d.paneId, 'D receives keyboard focus after C closes');
+
+      await client.request('close_pane', { sessionId: b.sessionId, paneId: b.paneId });
+      await waitForSessionAbsentFromDaemon(observer, b.sessionId, 'background B closed');
+      runner.assert(shownAgentId(await client.request('get_state')) === d.sessionId, 'Closing background B keeps D selected');
+      await driver.pressKey('w', { command: true, shift: process.platform === 'linux' });
+      await waitForSessionAbsentFromDaemon(observer, d.sessionId, 'D closed through native shortcut');
+      await waitForActiveSession(client, keptSessionId, 'repeated close skips removed B and C and returns to A');
+      await waitForPaneInputFocused(client, keptSessionId, kept.pane.paneId, 'A receives keyboard focus after D closes');
     });
 
     let closing;

@@ -3,6 +3,7 @@ package store
 import (
 	"cmp"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -177,12 +178,12 @@ func ensureLiveProfileNameFree(tx *sql.Tx, name, exceptID string) error {
 	return nil
 }
 
-const desktopColumns = `id, profile_id, name, order_key, tree_json, active_pane_id, revision`
+const desktopColumns = `id, profile_id, name, order_key, tree_json, active_pane_id, focus_history, revision`
 
 func scanDesktopRow(row rowScanner) (profiles.Desktop, error) {
 	var desktop profiles.Desktop
-	var treeJSON string
-	if err := row.Scan(&desktop.ID, &desktop.ProfileID, &desktop.Name, &desktop.OrderKey, &treeJSON, &desktop.ActivePaneID, &desktop.Revision); err != nil {
+	var treeJSON, focusJSON string
+	if err := row.Scan(&desktop.ID, &desktop.ProfileID, &desktop.Name, &desktop.OrderKey, &treeJSON, &desktop.ActivePaneID, &focusJSON, &desktop.Revision); err != nil {
 		return profiles.Desktop{}, err
 	}
 	desktop.ShortcutSlot = profiles.DesktopSlot(desktop.ID)
@@ -191,6 +192,9 @@ func scanDesktopRow(row rowScanner) (profiles.Desktop, error) {
 		return profiles.Desktop{}, profiles.Errorf(profiles.CodeInvalid, "desktop %s has a stored tree that does not decode: %v", desktop.ID, err)
 	}
 	desktop.Tree = tree
+	if err := json.Unmarshal([]byte(focusJSON), &desktop.FocusHistory); err != nil {
+		return profiles.Desktop{}, profiles.Errorf(profiles.CodeInvalid, "desktop %s has a stored focus history that does not decode: %v", desktop.ID, err)
+	}
 	return desktop, nil
 }
 
@@ -708,11 +712,15 @@ func saveDesktop(tx *sql.Tx, now string, desktop *profiles.Desktop) error {
 		}
 		treeJSON = encoded
 	}
+	focusJSON, err := json.Marshal(desktop.FocusHistory)
+	if err != nil {
+		return err
+	}
 	desktop.Revision++
-	_, err := tx.Exec(`
-		UPDATE desktops SET name = ?, order_key = ?, tree_json = ?, active_pane_id = ?, revision = ?, updated_at = ?
+	_, err = tx.Exec(`
+		UPDATE desktops SET name = ?, order_key = ?, tree_json = ?, active_pane_id = ?, focus_history = ?, revision = ?, updated_at = ?
 		WHERE id = ?`,
-		desktop.Name, desktop.OrderKey, treeJSON, desktop.ActivePaneID, desktop.Revision, now, desktop.ID)
+		desktop.Name, desktop.OrderKey, treeJSON, desktop.ActivePaneID, string(focusJSON), desktop.Revision, now, desktop.ID)
 	return err
 }
 
@@ -823,8 +831,7 @@ func (s *Store) SetActivePane(desktopID, paneID string) (profiles.Profile, profi
 		if profile, err = loadLiveProfile(tx, desktop.ProfileID); err != nil {
 			return err
 		}
-		desktop.ActivePaneID = paneID
-		if _, err := tx.Exec(`UPDATE desktops SET active_pane_id = ?, updated_at = ? WHERE id = ?`, paneID, now, desktopID); err != nil {
+		if err := saveDesktopFocus(tx, now, &desktop, paneID); err != nil {
 			return err
 		}
 		return touchProfileUse(tx, &profile, now)
@@ -832,12 +839,21 @@ func (s *Store) SetActivePane(desktopID, paneID string) (profiles.Profile, profi
 	return profile, desktop, err
 }
 
+func saveDesktopFocus(tx *sql.Tx, now string, desktop *profiles.Desktop, leafID string) error {
+	*desktop = profiles.Focus(profiles.Focus(*desktop, desktop.ActivePaneID), leafID)
+	focusJSON, err := json.Marshal(desktop.FocusHistory)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(`UPDATE desktops SET active_pane_id = ?, focus_history = ?, updated_at = ? WHERE id = ?`, leafID, string(focusJSON), now, desktop.ID)
+	return err
+}
+
 func showDesktopLeaf(tx *sql.Tx, now string, profile *profiles.Profile, desktop *profiles.Desktop, leafID string) error {
 	if !layouttree.HasLeaf(desktop.Tree, leafID) {
 		return profiles.Errorf(profiles.CodeNotFound, "leaf %q does not belong to desktop %s", leafID, desktop.ID)
 	}
-	desktop.ActivePaneID = leafID
-	if _, err := tx.Exec(`UPDATE desktops SET active_pane_id = ?, updated_at = ? WHERE id = ?`, leafID, now, desktop.ID); err != nil {
+	if err := saveDesktopFocus(tx, now, desktop, leafID); err != nil {
 		return err
 	}
 	profile.CurrentDesktopID = desktop.ID
@@ -1044,8 +1060,8 @@ func insertDesktopPanes(tx *sql.Tx, now string, desktop profiles.Desktop, create
 	return nil
 }
 
-func settleForWrite(desktop profiles.Desktop) profiles.Desktop {
-	desktop = profiles.Settle(desktop)
+func settleForWrite(desktop profiles.Desktop, previousTree layouttree.Node) profiles.Desktop {
+	desktop = profiles.SettleAfter(desktop, previousTree)
 	for i := range desktop.Panes {
 		desktop.Panes[i].DesktopID = desktop.ID
 		if desktop.Panes[i].Status == "" {
@@ -1063,7 +1079,12 @@ func writeArrivingArrangement(tx *sql.Tx, now string, desktop *profiles.Desktop,
 	if err := layouttree.Validate(desktop.Tree); err != nil {
 		return profiles.Errorf(profiles.CodeInvalid, "desktop %s: %v", desktop.ID, err)
 	}
-	*desktop = settleForWrite(*desktop)
+	previous, err := scanDesktopRow(tx.QueryRow(`SELECT `+desktopColumns+` FROM desktops WHERE id = ?`, desktop.ID))
+	if err != nil {
+		return err
+	}
+	desktop.FocusHistory = profiles.Focus(previous, previous.ActivePaneID).FocusHistory
+	*desktop = settleForWrite(*desktop, previous.Tree)
 	if err := profiles.CheckDesktop(*desktop); err != nil {
 		return err
 	}
