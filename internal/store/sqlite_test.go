@@ -46,8 +46,8 @@ func TestMigrations_AppliedOnNewDB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSchemaVersion() error = %v", err)
 	}
-	if version != latestSchemaVersion() {
-		t.Errorf("schema version = %d, want %d", version, latestSchemaVersion())
+	if version != LatestSchemaVersion() {
+		t.Errorf("schema version = %d, want %d", version, LatestSchemaVersion())
 	}
 
 	var count int
@@ -55,8 +55,8 @@ func TestMigrations_AppliedOnNewDB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("counting migrations error = %v", err)
 	}
-	if count != len(migrations) {
-		t.Errorf("migration count = %d, want %d", count, len(migrations))
+	if count != len(allMigrations()) {
+		t.Errorf("migration count = %d, want %d", count, len(allMigrations()))
 	}
 }
 
@@ -81,8 +81,8 @@ func TestMigrations_Idempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("counting migrations error = %v", err)
 	}
-	if count != len(migrations) {
-		t.Errorf("migration count after reopen = %d, want %d", count, len(migrations))
+	if count != len(allMigrations()) {
+		t.Errorf("migration count after reopen = %d, want %d", count, len(allMigrations()))
 	}
 }
 
@@ -131,16 +131,6 @@ func TestMigrations_MigratedColumnsExist(t *testing.T) {
 			t.Errorf("Column %s.%s should exist after migrations: %v", tc.table, tc.column, err)
 		}
 	}
-}
-
-func latestSchemaVersion() int {
-	max := 0
-	for _, m := range migrations {
-		if m.version > max {
-			max = m.version
-		}
-	}
-	return max
 }
 
 func TestMigration148PreservesPendingGardenMailboxReceiptsAndNamesItsBell(t *testing.T) {

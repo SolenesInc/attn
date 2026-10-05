@@ -100,21 +100,6 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 );
 `
 
-type migration struct {
-	version int
-	desc    string
-	sql     string
-	apply   func(*sql.Tx) error
-}
-
-func (m migration) run(tx *sql.Tx) error {
-	if m.apply != nil {
-		return m.apply(tx)
-	}
-	_, err := tx.Exec(m.sql)
-	return err
-}
-
 const delegationOperationsSchema = `CREATE TABLE IF NOT EXISTS delegation_operations (
 	request_id TEXT PRIMARY KEY,
 	operation_id TEXT NOT NULL UNIQUE,
@@ -1277,7 +1262,9 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
 			SELECT id, closed_intentionally_at FROM sessions WHERE closed_intentionally_at <> '';
 	`, nil},
 	{131, "repair partial agent driver cursor schemas", ``, applyMigration131},
-	{132, "separate agent mailbox receipts from message content", legacyMigration132SQL, func(tx *sql.Tx) error { return applyMigration132(tx, legacyMigration132SQL) }},
+	{132, "separate agent mailbox receipts from message content", legacyMigration132SQL, func(tx *sql.Tx) error {
+		return applyMigration132(tx, legacyMigration132SQL)
+	}},
 	{133, "index unread agent mailbox delivery", `
 		DROP INDEX IF EXISTS idx_agent_mailbox_recipient_queued;
 		CREATE INDEX IF NOT EXISTS idx_agent_mailbox_recipient_unread
@@ -1299,7 +1286,9 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
 		DELETE FROM tasks WHERE kind IN ('compact_context', 'summarize_session', 'narrate_workspace', 'notebook_cron');
 	`, nil},
 	{135, "closing a session records it instead of deleting it", "", applyMigration135},
-	{136, "observed worktree state, the keep pin and the sweep log", legacyMigration136SQL, func(tx *sql.Tx) error { return applyMigration136(tx, legacyMigration136SQL) }},
+	{136, "observed worktree state, the keep pin and the sweep log", legacyMigration136SQL, func(tx *sql.Tx) error {
+		return applyMigration136(tx, legacyMigration136SQL)
+	}},
 	{137, "name the repository a session ran in so the ledger can filter by it", "", applyMigration137},
 	{138, "persist delegation preferences", legacyMigration138SQL, func(tx *sql.Tx) error {
 		if _, err := tx.Exec(legacyMigration138SQL); err != nil {
@@ -1330,7 +1319,9 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
 	{155, "session last-seen stamps move to UTC so the ledger window compares instants", "", applyMigration155},
 	{156, "drop session todos", "", applyMigration156},
 	{157, "retire the apps platform state", "", applyMigration157},
-	{158, "create profiles, desktops and their panes beside the workspace tables", legacyMigration158SQL, func(tx *sql.Tx) error { return applyMigration158(tx, legacyMigration158SQL) }},
+	{158, "create profiles, desktops and their panes beside the workspace tables", legacyMigration158SQL, func(tx *sql.Tx) error {
+		return applyMigration158(tx, legacyMigration158SQL)
+	}},
 	{ProfileConversionSchemaVersion, "convert legacy workspaces into the Default profile and its desktops", "", applyProfileConversion},
 	{160, "record the profile each crew member belongs to", `
 		CREATE TABLE IF NOT EXISTS crew_profiles (
@@ -1339,8 +1330,12 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
 		);
 		CREATE INDEX IF NOT EXISTS idx_crew_profiles_profile ON crew_profiles(profile_id);
 	`, nil},
-	{161, "give each profile its own chief of staff", legacyMigration161SQL, func(tx *sql.Tx) error { return applyMigration161(tx, legacyMigration161SQL) }},
-	{162, "drop the retired workspace tables and columns", legacyMigration162SQL, func(tx *sql.Tx) error { return applyMigration162(tx, legacyMigration162SQL) }},
+	{161, "give each profile its own chief of staff", legacyMigration161SQL, func(tx *sql.Tx) error {
+		return applyMigration161(tx, legacyMigration161SQL)
+	}},
+	{162, "drop the retired workspace tables and columns", legacyMigration162SQL, func(tx *sql.Tx) error {
+		return applyMigration162(tx, legacyMigration162SQL)
+	}},
 	{163, "file GPT-6.1 Sol long-context observations under their tier", "", func(tx *sql.Tx) error { return migrateSessionCostTiers(tx, 163) }},
 	{164, "keep conversations referenced by open work", `
  CREATE TABLE IF NOT EXISTS kept_conversations (
@@ -1351,8 +1346,12 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
  );
  `, nil},
 	{165, "scope the Garden to profiles", "", migrateGardenProfiles},
-	{166, "pin and forget kept conversations", legacyMigration166SQL, func(tx *sql.Tx) error { return applyMigration166(tx, legacyMigration166SQL) }},
-	{167, "place background launches and remember the desktop each item starts on", legacyMigration167SQL, func(tx *sql.Tx) error { return applyMigration167(tx, legacyMigration167SQL) }},
+	{166, "pin and forget kept conversations", legacyMigration166SQL, func(tx *sql.Tx) error {
+		return applyMigration166(tx, legacyMigration166SQL)
+	}},
+	{167, "place background launches and remember the desktop each item starts on", legacyMigration167SQL, func(tx *sql.Tx) error {
+		return applyMigration167(tx, legacyMigration167SQL)
+	}},
 	{168, "addressed inbox delivery", `
  CREATE TABLE inbox_items (
  id TEXT PRIMARY KEY, address TEXT NOT NULL, kind TEXT NOT NULL,
@@ -1601,16 +1600,6 @@ type SchemaUpgrade struct {
 	BackupPath   string
 }
 
-type SchemaBehindError struct {
-	DatabasePath string
-	Current      int
-	Required     int
-}
-
-func (e *SchemaBehindError) Error() string {
-	return fmt.Sprintf("the database at %s is at schema v%d and this attn needs v%d; only the daemon upgrades it, so start the daemon (`attn daemon ensure`) and retry", e.DatabasePath, e.Current, e.Required)
-}
-
 func openSQLite(dbPath string) (*sql.DB, *tableWrites, error) {
 	dir := filepath.Dir(dbPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -1641,18 +1630,6 @@ func openSQLite(dbPath string) (*sql.DB, *tableWrites, error) {
 	return db, writes, nil
 }
 
-func OpenDBAtSchemaVersion(dbPath string, version int) (*sql.DB, error) {
-	db, _, err := openSQLite(dbPath)
-	if err != nil {
-		return nil, err
-	}
-	if err := applyPendingMigrations(db, 0, 0, version); err != nil {
-		db.Close()
-		return nil, err
-	}
-	return db, nil
-}
-
 func OpenDB(dbPath string) (*sql.DB, error) {
 	db, _, _, err := openUpgradedDB(dbPath)
 	return db, err
@@ -1678,26 +1655,6 @@ func openUpgradedDB(dbPath string) (*sql.DB, *tableWrites, SchemaUpgrade, error)
 		return nil, nil, upgrade, err
 	}
 	return db, writes, upgrade, nil
-}
-
-func openCurrentDB(dbPath string) (*sql.DB, *tableWrites, error) {
-	if _, err := os.Stat(dbPath); err != nil {
-		return nil, nil, fmt.Errorf("opening the database at %s: %w", dbPath, err)
-	}
-	db, writes, err := openSQLite(dbPath)
-	if err != nil {
-		return nil, nil, err
-	}
-	current, err := recordedSchemaVersion(db)
-	if err != nil {
-		db.Close()
-		return nil, nil, fmt.Errorf("reading the schema version of %s: %w", dbPath, err)
-	}
-	if current < LatestSchemaVersion() {
-		db.Close()
-		return nil, nil, &SchemaBehindError{DatabasePath: dbPath, Current: current, Required: LatestSchemaVersion()}
-	}
-	return db, writes, nil
 }
 
 var migratedSchema struct {
@@ -1783,103 +1740,6 @@ func migrateDB(db *sql.DB, dbPath string) error {
 	return err
 }
 
-func upgradeSchema(db *sql.DB, dbPath string) (SchemaUpgrade, error) {
-	upgrade := SchemaUpgrade{DatabasePath: dbPath, To: LatestSchemaVersion()}
-	recorded, err := recordedSchemaVersion(db)
-	if err != nil {
-		return upgrade, fmt.Errorf("getting schema version: %w", err)
-	}
-	upgrade.From = recorded
-	currentVersion, err := legacySchemaVersion(db, recorded)
-	if err != nil {
-		return upgrade, fmt.Errorf("detecting an unversioned legacy schema: %w", err)
-	}
-	if currentVersion >= upgrade.To {
-		return upgrade, nil
-	}
-	if err := refuseEarlyProfileLadder(db, dbPath, currentVersion); err != nil {
-		return upgrade, err
-	}
-
-	if currentVersion > 0 && dbPath != "" && dbPath != ":memory:" {
-		path, err := backupPreMigration(db, dbPath, currentVersion)
-		if err != nil {
-			return upgrade, fmt.Errorf("backing up %s before upgrading schema v%d to v%d: %w", dbPath, currentVersion, upgrade.To, err)
-		}
-		upgrade.BackupPath = path
-		log.Printf("[store] pre-migration backup written to %s (schema v%d -> v%d)", path, currentVersion, upgrade.To)
-	}
-
-	if err := applyPendingMigrations(db, recorded, currentVersion, upgrade.To); err != nil {
-		return upgrade, err
-	}
-	return upgrade, nil
-}
-
-// Desktops dev builds once ran profiles at 152-156 or 156-160 (profiles beside sessions.todos);
-// next's own 158 is the Sol migration, which the desktops ladder runs at 163 (no profiles table).
-func refuseEarlyProfileLadder(db *sql.DB, dbPath string, current int) error {
-	if current < 152 {
-		return nil
-	}
-	var profiles, todos int
-	if err := db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'profiles'`).Scan(&profiles); err != nil {
-		return err
-	}
-	if err := db.QueryRow(`SELECT count(*) FROM pragma_table_info('sessions') WHERE name = 'todos'`).Scan(&todos); err != nil {
-		return err
-	}
-	if profiles == 0 && current >= 158 {
-		return fmt.Errorf("database %s (schema v%d) was upgraded by a build of next whose migration 158 files GPT-6.1 Sol cost observations; this build creates profiles at 158 and runs that migration at 163, so it cannot upgrade it. Reset this instance's database by moving %s aside; production databases never ran that build and are not affected", dbPath, current, dbPath)
-	}
-	if profiles == 0 || todos == 0 {
-		return nil
-	}
-	return fmt.Errorf("database %s (schema v%d) was upgraded by a development build of the desktops branch whose profile migrations ran before next's migrations 156–157 existed (profiles now migrate at 158–162); this build cannot upgrade it. Reset this instance's database by moving %s aside; production databases never ran that build and are not affected", dbPath, current, dbPath)
-}
-
-// One commit for every pending migration: a fresh database runs all of them,
-// and a commit per migration measured 468 fsyncs on Linux (2026-09-29).
-func applyPendingMigrations(db *sql.DB, recorded, currentVersion, through int) error {
-	tx, err := db.Begin()
-	if err != nil {
-		return fmt.Errorf("starting the schema upgrade transaction: %w", err)
-	}
-	defer tx.Rollback()
-	if _, err := tx.Exec(baseSchema); err != nil {
-		return fmt.Errorf("creating the base schema: %w", err)
-	}
-	if err := recordLegacySchemaVersions(tx, recorded, currentVersion); err != nil {
-		return err
-	}
-
-	for _, m := range migrations {
-		if m.version <= currentVersion {
-			continue
-		}
-		if m.version > through {
-			break
-		}
-
-		if err := m.run(tx); err != nil {
-			return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-		}
-
-		if _, err := tx.Exec(
-			"INSERT INTO schema_migrations (version, applied_at) VALUES (?, datetime('now'))",
-			m.version,
-		); err != nil {
-			tx.Rollback()
-			return fmt.Errorf("recording migration %d: %w", m.version, err)
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("committing the schema upgrade: %w", err)
-	}
-	return nil
-}
-
 func applyMigration157(tx *sql.Tx) error {
 	rows, err := tx.Query(`SELECT id FROM document_collections WHERE namespace LIKE 'app/%'`)
 	if err != nil {
@@ -1951,7 +1811,7 @@ func migrateSessionCostTiers(tx *sql.Tx, version int) error {
 			log.Printf("[store] migration %d: skipped unreadable session cost for %s: %v", version, id, err)
 			continue
 		}
-		if !rekeyLongContextObservations(&state, onlyModel) {
+		if !rekeyLegacyLongContextObservations(&state, onlyModel) {
 			continue
 		}
 		encoded, err := json.Marshal(state)
@@ -3780,7 +3640,7 @@ func applyMigration126(tx *sql.Tx) error {
 		var title, slug string
 		json.Unmarshal(body["title"], &title)
 		json.Unmarshal(body["step_slug"], &slug)
-		if want := garden.StepSlug(title); want != slug {
+		if want := legacyGardenStepSlug(title); want != slug {
 			encoded, _ := json.Marshal(want)
 			body["step_slug"] = encoded
 			next, err := json.Marshal(body)
@@ -4242,17 +4102,6 @@ func recordLegacySchemaVersions(tx *sql.Tx, recorded, legacy int) error {
 	return nil
 }
 
-func recordedSchemaVersion(db *sql.DB) (int, error) {
-	var tables int
-	if err := db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'`).Scan(&tables); err != nil {
-		return 0, err
-	}
-	if tables == 0 {
-		return 0, nil
-	}
-	return getCurrentVersion(db)
-}
-
 func getCurrentVersion(db *sql.DB) (int, error) {
 	var version int
 	err := db.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version)
@@ -4264,11 +4113,4 @@ func getCurrentVersion(db *sql.DB) (int, error) {
 
 func GetSchemaVersion(db *sql.DB) (int, error) {
 	return getCurrentVersion(db)
-}
-
-func LatestSchemaVersion() int {
-	if len(migrations) == 0 {
-		return 0
-	}
-	return migrations[len(migrations)-1].version
 }

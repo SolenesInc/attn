@@ -9,7 +9,14 @@ import (
 // Migration fixtures run serially; restore the production migration list before returning.
 func withMigrationsThrough(version int, run func() error) error {
 	all := migrations
-	defer func() { migrations = all }()
+	timestamps := timestampedMigrations
+	defer func() { migrations = all; timestampedMigrations = timestamps }()
+	timestampedMigrations = nil
+	for _, m := range timestamps {
+		if m.version <= version {
+			timestampedMigrations = append(timestampedMigrations, m)
+		}
+	}
 	for i, m := range all {
 		if m.version > version {
 			migrations = all[:i]

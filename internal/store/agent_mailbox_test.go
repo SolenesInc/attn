@@ -40,20 +40,11 @@ func TestMigration132SeparatesMailboxReceiptsAndPayloads(t *testing.T) {
 		t.Fatalf("plant pre-132 schema: %v", err)
 	}
 
-	tx, err := s.db.Begin()
+	migrated, err := OpenDBAtSchemaVersion(dbPath, 132)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var migrationSQL string
-	for _, m := range migrations {
-		if m.version == 132 {
-			migrationSQL = m.sql
-		}
-	}
-	if err := applyMigration132(tx, migrationSQL); err != nil {
-		t.Fatalf("migration132: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
+	if err := migrated.Close(); err != nil {
 		t.Fatal(err)
 	}
 

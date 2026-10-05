@@ -53,15 +53,16 @@ func productionDaemon(t *testing.T) (*Daemon, string) {
 
 func schemaVersionOf(t *testing.T, path string) int {
 	t.Helper()
-	_, err := store.OpenCurrent(path)
-	var behind *store.SchemaBehindError
-	if errors.As(err, &behind) {
-		return behind.Current
-	}
+	db, err := sql.Open("sqlite3", path)
 	if err != nil {
-		t.Fatalf("OpenCurrent: %v", err)
+		t.Fatal(err)
 	}
-	return store.LatestSchemaVersion()
+	defer db.Close()
+	version, err := store.GetSchemaVersion(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return version
 }
 
 func TestADaemonThatFindsTheLockHeldExitsWithoutTouchingTheDatabase(t *testing.T) {

@@ -21,20 +21,11 @@ func TestMigration133IndexesUnreadMailboxFIFO(t *testing.T) {
 	`); err != nil {
 		t.Fatalf("rewind migration 133: %v", err)
 	}
-	tx, err := s.db.Begin()
+	migrated, err := OpenDBAtSchemaVersion(dbPath, 133)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var migrationSQL string
-	for _, m := range migrations {
-		if m.version == 133 {
-			migrationSQL = m.sql
-		}
-	}
-	if _, err := tx.Exec(migrationSQL); err != nil {
-		t.Fatalf("migration133: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
+	if err := migrated.Close(); err != nil {
 		t.Fatal(err)
 	}
 
