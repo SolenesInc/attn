@@ -10,9 +10,30 @@ const noop = () => {};
 const long = (words: string) => `${words}-${'and-then-some-more-'.repeat(4)}end`;
 
 const params = new URLSearchParams(window.location.search);
+const popupNames = params.has('popupNames');
 const desktopIds = Array.from({ length: params.has('oneDesktop') ? 1 : 11 }, (_, index) => `desk-${index + 1}`);
 
-const sessions = [
+const sessions = popupNames ? [
+  { id: 'chief', label: 'Chief', state: 'idle' as const, chiefOfStaff: true, desktopId: desktopIds[0] },
+  ...[
+    'sidebar-scroll', 'fam-v1', 'Sidebar header', 'palette-order-0095', 'priority-queue',
+    'sidebar-scroll-01b9', 'tile-close-focus', 'capture-orch', 'typed-ids', 'fam-backup',
+    'capture-review', 'Queue Sidebar Header Redesign',
+  ].map((label, index) => ({
+    id: `agent-${index}`,
+    label,
+    state: index < 3 ? 'waiting_input' as const : index === 11 ? 'idle' as const : 'working' as const,
+    desktopId: desktopIds[index % desktopIds.length],
+    turnOwed: index < 3,
+    turnOpenedAt: index < 3 ? `2026-09-26T0${index}:00:00Z` : undefined,
+  })),
+  ...Array.from({ length: params.has('overflow') ? 8 : 0 }, (_, index) => ({
+    id: `extra-${index}`,
+    label: `zzz extra agent ${index + 1}`,
+    state: 'idle' as const,
+    desktopId: desktopIds[0],
+  })),
+] : [
   ...[0, 1, 2, 3].map((index) => ({
     id: `owed-${index}`,
     label: long(`an-agent-with-a-long-label-${index}`),
@@ -78,8 +99,9 @@ export function QueueBarHarness({ onReady, setTriggerRerender }: HarnessProps) {
           desktops={desktops}
           visualIndexByDesktopId={new Map(desktopIds.slice(0, 9).map((id, index) => [id, index]))}
           queue={buildQueueBands(desktops)}
+          crew={popupNames ? [{ id: 'alder' }, { id: 'keel' }, { id: 'trellis' }] : []}
           instance="harness"
-          profileName={long('A-very-long-profile-name-typed-without-spaces').repeat(params.has('oneDesktop') ? 6 : 1)}
+          profileName={popupNames ? 'Default' : long('A-very-long-profile-name-typed-without-spaces').repeat(params.has('oneDesktop') ? 6 : 1)}
           criticalNotifications={{ count: 3, title: long('a-critical-notification-title') }}
           onOpenNotifications={noop}
           onSelectSession={noop}

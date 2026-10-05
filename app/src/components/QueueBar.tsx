@@ -80,7 +80,6 @@ function WaitingPill() {
       className="queue-bar-pill"
       data-testid="queue-bar-pill"
       data-waiting={turns.length}
-      title={`Hover to peek · click or ${formatShortcut('ui.actionMenu')} to open the palette`}
       onClick={onOpenAgents}
     >
       <span className="queue-bar-pill-count">
@@ -157,7 +156,7 @@ function WaitingPeek() {
     <QueueBarPeek testId="queue-bar-waiting-peek">
       {shown.map((row) =>
         row.kind === 'divider' ? (
-          <AgentRowView key={row.key} row={row} now={now} slotOf={slotOf} />
+          <AgentRowView key={row.key} row={row} now={now} slotOf={slotOf} showCrewDetails={false} />
         ) : (
           <button
             key={row.key}
@@ -167,18 +166,15 @@ function WaitingPeek() {
             data-testid={`queue-bar-peek-${row.key}`}
             onClick={() => pick(row)}
           >
-            <AgentRowView row={row} now={now} slotOf={slotOf} />
+            <AgentRowView row={row} now={now} slotOf={slotOf} showCrewDetails={false} />
           </button>
         ),
       )}
       {more > 0 && (
         <div className="queue-bar-peek-more" data-testid="queue-bar-peek-more">
-          {more} more · {formatShortcut('ui.actionMenu')} to filter · {formatShortcut('ui.commandPalette')} commands
+          {more} more · {formatShortcut('ui.actionMenu')} to search
         </div>
       )}
-      <div className="queue-bar-peek-foot">
-        Automation runs are not in the queue · ⚙ chip on the right, or {formatShortcut('session.nextRun')}
-      </div>
     </QueueBarPeek>
   );
 }

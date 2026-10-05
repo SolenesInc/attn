@@ -1,5 +1,26 @@
 import { expect, test } from '@playwright/test';
 
+test('fits the session names from the queue popup and stays within a narrow viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/test-harness/?component=QueueBar&popupNames&oneDesktop');
+  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  await page.getByTestId('queue-bar-waiting').hover();
+
+  const names = page.locator('[data-testid=queue-bar-waiting-peek] .unified-palette-name');
+  await expect(names).toHaveCount(16);
+  expect(await names.evaluateAll((elements) => elements.every((element) => element.scrollWidth <= element.clientWidth))).toBe(true);
+  await expect(page.getByTestId('queue-bar-pill')).not.toHaveAttribute('title');
+
+  for (const width of [800, 520]) {
+    await page.mouse.move(0, 400);
+    await page.setViewportSize({ width, height: 900 });
+    await page.getByTestId('queue-bar-waiting').hover();
+    const panel = (await page.locator('[data-testid=queue-bar-waiting-peek] .queue-bar-peek-panel').boundingBox())!;
+    expect(panel.x).toBeGreaterThanOrEqual(0);
+    expect(panel.x + panel.width).toBeLessThanOrEqual(width);
+  }
+});
+
 test('keeps every bar control on screen at 800px with long profile, waiting and automation names', async ({ page }) => {
   await page.setViewportSize({ width: 800, height: 600 });
   await page.goto('/test-harness/?component=QueueBar');

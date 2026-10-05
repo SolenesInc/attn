@@ -1,9 +1,33 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { daemonSession, soloDesktop } from './test/daemonFixtures';
+import { crewMember, daemonSession, soloDesktop } from './test/daemonFixtures';
 import { renderApp } from './test/renderApp';
 
 describe('App queue rows', () => {
+  it('shows crew names in the queue popup and launch destinations in the full palette', async () => {
+    const awake = daemonSession('keel-session', { label: 'Keel', crew_member: 'keel', state: 'working' });
+    const { daemon } = await renderApp({
+      initialState: {
+        settings: { queue_mode_enabled: 'true' },
+        sessions: [awake],
+        desktops: [soloDesktop(awake.id)],
+        crew: [crewMember('alder', { launch_desktop: { label: 'Review' } }), crewMember('keel')],
+      },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
+    await daemon.idle();
+    const pill = screen.getByTestId('queue-bar-pill');
+    fireEvent.pointerEnter(screen.getByTestId('queue-bar-waiting'));
+    const peek = screen.getByTestId('queue-bar-waiting-peek');
+    expect(within(peek).getByText('Alder')).toHaveTextContent(/^Alder$/);
+    expect(within(peek).getByText('Keel')).toHaveTextContent(/^Keel$/);
+
+    fireEvent.click(pill);
+    await daemon.idle();
+    expect(screen.getByText('Alder')).toHaveTextContent('Review');
+  });
+
   it('calls a labeled chief Chief in the crew block and restores its name when demoted', async () => {
     const chief = daemonSession('coordinator', {
       label: 'Profiles epic coordinator', state: 'idle', chief_of_staff: true,
