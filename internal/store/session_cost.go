@@ -130,15 +130,6 @@ func (s *Store) writeSessionCost(sessionID string, state SessionCostState) error
 	return err
 }
 
-func (s *Store) writeClosedSessionCost(sessionID string, state SessionCostState) error {
-	encoded, err := json.Marshal(state)
-	if err != nil {
-		return fmt.Errorf("encode session cost for %s: %w", sessionID, err)
-	}
-	_, err = s.db.Exec("UPDATE sessions SET session_cost_json = ? WHERE id = ? AND closed_at != ''", string(encoded), sessionID)
-	return err
-}
-
 func (s *Store) flushSessionCosts() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -451,12 +442,8 @@ func (s *Store) updateSessionCost(sessionID string, mutate func(*SessionCostStat
 	}
 
 	entry, live, err := s.liveSessionCost(sessionID)
-	if err != nil {
+	if err != nil || !live {
 		return err
-	}
-	if !live {
-		mutate(&entry.state)
-		return s.writeClosedSessionCost(sessionID, entry.state)
 	}
 	now := time.Now()
 	if !mutate(&entry.state) && now.Sub(entry.savedAt) < sessionCostSaveInterval {
