@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { EventMessage } from './test/protocol';
 import { soloDesktop, daemonSession } from './test/daemonFixtures';
 import { gesture, renderApp } from './test/renderApp';
+import { openActionMenu } from './test/appFixtures';
 
 type WorkflowRun = EventMessage<'workflow_run_updated'>['run'];
 type Call = NonNullable<WorkflowRun['agent_calls']>[number];
@@ -37,8 +38,9 @@ async function openWorkflowRuns(listed: WorkflowRun[], hydrated: Record<string, 
   }));
   fireEvent.click(screen.getByRole('button', { name: 'Open s1' }));
   await daemon.idle();
-  fireEvent.click(screen.getByRole('button', { name: 'Workflow Runs' }));
-  await daemon.idle();
+  const search = await openActionMenu(daemon);
+  fireEvent.change(search, { target: { value: '>workflow runs' } });
+  await gesture(daemon, () => fireEvent.keyDown(search, { key: 'Enter' }));
   return daemon;
 }
 
@@ -56,7 +58,7 @@ describe('App workflow runs', () => {
 
     await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
     expect(view().queryByRole('button', { name: 'Hide' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Workflow Runs' })).not.toHaveClass('active');
+    expect(document.querySelector('.dock-panel--workflow-run')?.closest('.side-panel-shell')).not.toHaveClass('is-open');
   });
 
   it('shows the latest run of the open session, never another session’s', async () => {

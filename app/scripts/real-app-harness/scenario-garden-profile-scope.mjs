@@ -52,7 +52,7 @@ async function main() {
     await client.request('dom_click', { selector: '.profile-switcher-form button[type="submit"]' });
     await waitDom({ selector: '.profile-switcher', absent: true });
     await openSwitcher();
-    await waitDom({ selector: '.profile-switcher-item:has(.profile-switcher-selected) .profile-switcher-name', textIncludes: name });
+    await waitDom({ selector: '.profile-switcher-item:has([aria-label="Current profile"]) .profile-switcher-name', textIncludes: name });
     await client.request('dom_key', { selector: '.profile-switcher', key: 'Escape' });
     const current = await state();
     const profile = current.profiles.find((p) => p.name === name);
@@ -69,10 +69,10 @@ async function main() {
     })));
     const index = labels.findIndex((label) => label.text === destination?.name);
     runner.assert(index >= 0, 'the destination profile is in the switcher', current);
-    await client.request('dom_click', { selector: `.profile-switcher-item:nth-of-type(${index + 1})` });
+    await client.request('dom_click', { selector: `.profile-switcher-item:nth-of-type(${index + 1}) .profile-switcher-choose` });
     await waitDom({ selector: '.profile-switcher', absent: true });
     await openSwitcher();
-    await waitDom({ selector: '.profile-switcher-item:has(.profile-switcher-selected) .profile-switcher-name', textIncludes: destination.name });
+    await waitDom({ selector: '.profile-switcher-item:has([aria-label="Current profile"]) .profile-switcher-name', textIncludes: destination.name });
     await client.request('dom_key', { selector: '.profile-switcher', key: 'Escape' });
     runner.assert((await state()).selectedProfileId === id, 'switching selects the destination');
   };

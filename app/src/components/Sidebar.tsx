@@ -3,7 +3,7 @@ import { CriticalNotificationStrip } from './CriticalNotificationStrip';
 import { QueueBar } from './QueueBar';
 import { QueueSidebar } from './QueueSidebar';
 import './Sidebar.css';
-import { SidebarCollapsed, SidebarCrewManage, SidebarFooter, SidebarHeader, SidebarPopovers } from './SidebarChrome';
+import { SidebarCollapsed, SidebarSleepingCrew, SidebarFooter, SidebarHeader, SidebarPopovers } from './SidebarChrome';
 import { SidebarContext, useSidebarContext } from './SidebarContext';
 import { HomeIcon } from './SidebarIcons';
 import type { SidebarProps } from './sidebarTypes';
@@ -66,10 +66,9 @@ function SidebarExpanded() {
         <span className="sidebar-home-shortcut">{formatShortcut('session.goToDashboard')}</span>
       </button>
 
-      <SidebarCrewManage />
-      <SidebarDesktopOverview />
-
       <div className={`session-list ${reorderDrag ? 'session-list--reordering' : ''}`.trim()}>
+        <SidebarSleepingCrew />
+        <SidebarDesktopOverview />
         <SidebarDesktopList />
         {leafDrag && (
           <div

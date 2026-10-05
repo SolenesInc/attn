@@ -20,7 +20,8 @@
   display: flex;
   flex-direction: column;
   left: 12px;
-  min-width: 220px;
+  width: 260px;
+  max-width: calc(100vw - 24px);
   outline: none;
   padding: 4px;
   position: absolute;
@@ -28,7 +29,7 @@
 }
 
 .profile-switcher-item {
-  align-items: baseline;
+  align-items: center;
   background: none;
   border: none;
   border-radius: 5px;
@@ -37,7 +38,8 @@
   display: flex;
   font-size: var(--font-size-md);
   gap: 8px;
-  padding: 6px 8px;
+  padding: 0 4px 0 8px;
+  min-height: 30px;
   text-align: left;
 }
 
@@ -51,8 +53,8 @@
 }
 
 .profile-switcher-selected {
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  font-size: 13px;
 }
 
 .profile-switcher-actions {
@@ -68,10 +70,10 @@
   background: none;
   border: none;
   border-radius: 5px;
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   cursor: pointer;
   display: flex;
-  font-size: var(--font-size-sm);
+  font-size: 13px;
   gap: 4px;
   padding: 4px 6px;
 }
@@ -90,11 +92,7 @@
   color: var(--color-error);
 }
 
-.profile-switcher-actions kbd {
-  font-family: inherit;
-  font-size: var(--font-size-xs);
-  opacity: 0.8;
-}
+
 
 .profile-switcher-form {
   display: flex;
@@ -104,8 +102,8 @@
 }
 
 .profile-switcher-label {
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  font-size: 13px;
   max-width: 280px;
   padding: 4px 8px;
 }
@@ -125,7 +123,60 @@
 
 .profile-switcher-error {
   color: var(--color-error);
-  font-size: var(--font-size-sm);
+  font-size: 13px;
   max-width: 280px;
   padding: 4px 8px;
 }
+
+.profile-switcher-choose {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.profile-switcher-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profile-switcher-selected { width: 12px; flex: none; color: var(--accent); }
+.profile-switcher-row-actions { display: none; gap: 2px; flex: none; }
+.profile-switcher-item.focused .profile-switcher-row-actions,
+.profile-switcher-item:hover .profile-switcher-row-actions,
+.profile-switcher-item:focus-within .profile-switcher-row-actions { display: inline-flex; }
+.profile-switcher-row-actions button,
+.profile-switcher-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 5px;
+  height: 22px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--color-text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+.profile-switcher-row-actions button:hover { background: var(--color-bg-elevated); color: var(--color-text-primary); }
+.profile-switcher-row-actions .is-danger:hover { color: var(--color-error); }
+.profile-switcher svg { width: 13px; height: 13px; flex: none; }
+.profile-switcher-actions button { font-size: 13px; gap: 8px; padding: 6px 8px; }
+.profile-switcher > .profile-switcher-actions button { flex: 1; }
+.profile-switcher > .profile-switcher-actions kbd { margin-left: auto; }
+.profile-switcher kbd {
+  padding: 1px 5px;
+  color: var(--color-text-tertiary);
+  background: var(--color-bg-app);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  font: 10px/1.4 ui-monospace, 'SFMono-Regular', monospace;
+  white-space: nowrap;
+}
+.profile-switcher kbd.symbol-key { font-family: inherit; font-size: 12px; line-height: 1.2; }
+.profile-switcher-back { align-self: flex-start; margin: 4px 8px; }
+.profile-switcher button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

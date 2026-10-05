@@ -131,7 +131,7 @@ describe('sidebar harness identity', () => {
     const props = { ...baseProps, ...data, crew: [{ id: 'fern' }, { id: 'sleeping' }] };
     const { rerender } = render(<Sidebar {...props} agentListOpen queue={buildQueueBands(data.desktops)} />);
     expect(within(screen.getByTestId('queue-crew-fern')).getByRole('img', { name: 'Pi · idle' })).toBeInTheDocument();
-    expect(within(screen.getByTestId('queue-crew-sleeping')).queryByRole('img')).not.toBeInTheDocument();
+    expect(within(screen.getByTestId('queue-crew-sleeping')).getByRole('img', { name: 'Unknown harness · idle' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open Implement sidebar logos' })).toHaveAttribute('title', expect.stringContaining('Codex'));
     expect(screen.getByRole('img', { name: 'Claude · idle' })).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'Custom Driver · idle' })).toBeInTheDocument();
@@ -153,7 +153,7 @@ describe('sidebar harness identity', () => {
       />,
     );
 
-    expect(screen.getByTestId('manage-crew')).toHaveTextContent(queueMode ? 'manage' : 'Manage crew2');
+    expect(screen.getByTestId('manage-crew')).toHaveTextContent('manage');
     fireEvent.click(screen.getByTestId('manage-crew'));
     expect(onManageCrew).toHaveBeenCalledOnce();
   });

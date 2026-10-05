@@ -359,29 +359,6 @@ describe('the queue sidebar', () => {
   });
 });
 
-describe('the queue sidebar header', () => {
-  it('names the profile with its waiting count and switches profile', () => {
-    const onSwitchProfile = vi.fn();
-    renderSidebar(sessions, true, { profileName: 'Work', onSwitchProfile });
-    const pill = screen.getByTestId('queue-profile-pill');
-    expect(pill).toHaveTextContent('Work2');
-    fireEvent.click(pill);
-    expect(onSwitchProfile).toHaveBeenCalledOnce();
-  });
-
-  it('reaches a new agent and the commands, badged with what needs a look', () => {
-    const onNewSession = vi.fn();
-    const onOpenCommands = vi.fn();
-    renderSidebar(sessions, true, { onNewSession, onOpenCommands, commandsBadge: 12 });
-
-    fireEvent.click(screen.getByTestId('queue-new-agent'));
-    expect(onNewSession).toHaveBeenCalledOnce();
-    expect(screen.getByTestId('queue-commands')).toHaveTextContent('9+');
-    fireEvent.click(screen.getByTestId('queue-commands'));
-    expect(onOpenCommands).toHaveBeenCalledOnce();
-  });
-});
-
 describe('the desktop strip', () => {
   it('puts every slotted desktop on a chip, dotted where a turn waits', () => {
     const onSelectDesktop = vi.fn();
@@ -771,11 +748,6 @@ describe('the crew in the sidebar', () => {
       roster,
     );
     expect(screen.getByTestId('queue-crew-sable').getAttribute('data-crew-state')).toBe('awake');
-  });
-
-  it('renders no crew rows while the queue arrangement is off', () => {
-    renderSidebar(sessions, false, { crew: roster });
-    expect(screen.queryByTestId('queue-crew-alder')).toBeNull();
   });
 
   describe('arming a wake', () => {

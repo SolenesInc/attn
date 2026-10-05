@@ -39,7 +39,10 @@ async function openWorktrees(list: Reply, sessions: DaemonSession[] = []) {
   vi.setSystemTime(NOW);
   view.daemon.on('worktree_list', () => list);
   view.daemon.on('worktree_sweep_log', () => ({ event: 'worktree_sweep_log_result', success: true, worktree_sweep_log_result: { entries: [], omitted: 0 } }));
-  await gesture(view.daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Open Worktrees' })));
+  await gesture(view.daemon, () => {
+    fireEvent.click(screen.getByRole('button', { name: /^Open Ledger/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Worktrees' }));
+  });
   return view;
 }
 

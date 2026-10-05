@@ -39,6 +39,7 @@ export interface QueueBandSessionView {
 export interface CrewMemberView {
   launch_desktop?: { label?: string };
   id: string;
+  resolved_agent?: string;
   binding_session?: string;
 }
 
@@ -206,7 +207,7 @@ export interface RowWhere {
 }
 
 interface CrewRowProps {
-  desktopLabel?: string;
+  agent?: string;
   member: string;
   row?: QueueRow<QueueBandSessionView>;
   where?: RowWhere;
@@ -225,7 +226,7 @@ export function CrewRowView(props: CrewRowProps) {
   ) : (
     <SleepingCrewRow
       member={props.member}
-      desktopLabel={props.desktopLabel}
+      agent={props.agent}
       selected={props.selected}
       onWake={props.onWake}
       onOpenMemberActions={props.onOpenMemberActions}
@@ -235,11 +236,11 @@ export function CrewRowView(props: CrewRowProps) {
 
 function SleepingCrewRow({
   member,
-  desktopLabel,
+  agent,
   selected,
   onWake,
   onOpenMemberActions,
-}: Pick<CrewRowProps, 'member' | 'selected' | 'onWake' | 'onOpenMemberActions' | 'desktopLabel'>) {
+}: Pick<CrewRowProps, 'member' | 'selected' | 'onWake' | 'onOpenMemberActions' | 'agent'>) {
   const { phase, trigger, rowRef } = useWakeConfirm(onWake);
   const armed = phase === 'armed';
   const name = crewDisplayName(member);
@@ -261,20 +262,21 @@ function SleepingCrewRow({
         onClick={trigger}
         disabled={!onWake}
       />
-      <button
-        type="button"
-        className="queue-crew-sun"
-        data-testid={`queue-crew-wake-${member}`}
-        title={armed ? `Click again to wake ${name}` : `Wake ${name} — start its day`}
-        aria-label={wakeLabel}
-        onClick={trigger}
-        disabled={!onWake}
-      >
-        <CrewWakeSun phase={phase} />
-      </button>
+      <SessionLead agent={agent} state="idle" seed={member} />
       <SessionLabel label={name} />
-      {desktopLabel && <span className="queue-crew-desktop" title={desktopLabel}>{desktopLabel}</span>}
-      <span className="session-trailing" />
+      <span className="session-trailing">
+        <button
+          type="button"
+          className="queue-crew-sun"
+          data-testid={`queue-crew-wake-${member}`}
+          title={armed ? `Click again to wake ${name}` : `Wake ${name} — start its day`}
+          aria-label={wakeLabel}
+          onClick={trigger}
+          disabled={!onWake}
+        >
+          <CrewWakeSun phase={phase} />
+        </button>
+      </span>
       {(onWake || onOpenMemberActions) && (
         <div className="session-actions">
           {armed && <span className="crew-wake-confirm">confirm</span>}

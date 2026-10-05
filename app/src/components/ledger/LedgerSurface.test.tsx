@@ -77,7 +77,8 @@ describe('the sessions and worktrees ledger', () => {
     expect(ledger()).toBeNull();
     expect(selectedAgent()).toBe('run live');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open Worktrees' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Open Ledger/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Worktrees' }));
     await daemon.idle();
     fireEvent.keyDown(row('attn--feat-one'), { key: '3' });
     await daemon.idle();

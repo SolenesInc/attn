@@ -75,7 +75,14 @@ export function useAppCommands(): PaletteCommand[] {
   const desktops = useProfilesStore((state) => state.desktops);
   const profiles = useProfilesStore((state) => state.profiles);
   const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
-  const { goToDashboard, handleSelectDesktop, handleJumpToWaiting, handleNextRun } = useNavigationContext();
+  const {
+    goToDashboard,
+    handleSelectDesktop,
+    handleJumpToWaiting,
+    handleNextRun,
+    desktopSelectionStyle,
+    handleDesktopSelectionStyleChange,
+  } = useNavigationContext();
   const { desktopNavigation, setDesktopOverviewOpen, setProfileSwitcherOpen } = useDesktopNavigationContext();
   const { handleNewSession } = useSessionLaunchContext();
   const { handleSettleActiveTurn } = useAttentionQueueContext();
@@ -396,6 +403,14 @@ export function useAppCommands(): PaletteCommand[] {
         icon: <ContextActionIcon />,
         run: handleToggleSidebarHarnessLogos,
       },
+      ...(['dim', 'rail', 'spotlight'] as const).map((style) => ({
+        id: `tile-focus-${style}`,
+        title: `Tile focus: ${style}`,
+        description: desktopSelectionStyle === style ? 'Current tile focus style' : `Use ${style} to mark the selected tile`,
+        keywords: ['tile', 'focus', 'style', 'selection', 'dim', 'rail', 'spotlight'],
+        icon: <ContextActionIcon />,
+        run: () => handleDesktopSelectionStyleChange(style),
+      })),
       {
         id: 'toggle-auto-settle',
         title: isAutoSettleEnabled(settings) ? 'Turn off auto-settle' : 'Turn on auto-settle',
@@ -448,6 +463,8 @@ export function useAppCommands(): PaletteCommand[] {
       handleToggleCrewQueue,
       handleOpenCrew,
       handleToggleSidebarHarnessLogos,
+      desktopSelectionStyle,
+      handleDesktopSelectionStyleChange,
       sendSetSetting,
       handleCreateDiagnosticReport,
     ],

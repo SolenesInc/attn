@@ -29,6 +29,15 @@
   font-size: inherit;
 }
 
+.queue-chief-glyph,
+.queue-crew-sun {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+
 .queue-chief-glyph {
   color: var(--accent);
   font-family: inherit;
@@ -40,8 +49,6 @@
   z-index: 1;
   display: grid;
   place-items: center;
-  width: 14px;
-  height: 20px;
   padding: 0;
   border: 0;
   background: none;

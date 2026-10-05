@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('keeps the compact rail controls usable with eight desktops and a 9+ tool badge', async ({ page }) => {
+test('keeps the compact rail controls usable with eight desktops and unread notifications', async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto('/test-harness/?component=SidebarRail');
   await page.waitForFunction(() => window.__HARNESS__?.ready === true);
@@ -13,9 +13,9 @@ test('keeps the compact rail controls usable with eight desktops and a 9+ tool b
     expect(box.height).toBe(30);
     await expect(button).toBeInViewport();
   }
-  const badge = rail.locator('.sidebar-tool-badge');
-  await expect(badge).toHaveText('9+');
-  await expect(badge).toBeInViewport();
+  await expect(rail.getByLabel('Unread notifications')).toBeInViewport();
+  await page.getByRole('button', { name: 'Commands', exact: true }).click();
+  expect(await page.evaluate(() => window.__HARNESS__.getCalls('commands'))).toEqual([[]]);
   const second = page.getByRole('button', { name: 'Queue polish (⌘2)' });
   await second.hover();
   await second.click();
@@ -61,21 +61,21 @@ test('pins the tools and bottom actions at 600px while scrolling desktops and re
   const add = page.getByTitle('New Session (⌘N)');
   await expect(expand).toBeInViewport();
   await expect(add).toBeInViewport();
-  const tool = (await page.getByTitle('Tool 1').boundingBox())!;
+  const tool = (await page.getByTitle('Garden', { exact: true }).boundingBox())!;
   const bottom = (await expand.boundingBox())!;
   const last = page.getByRole('button', { name: 'Sketches (⌘8)' });
-  await expect(last).not.toBeInViewport();
+  await expect(last).not.toBeInViewport({ ratio: 1 });
   await page.getByRole('button', { name: 'Sidebar refinement (⌘1)' }).hover();
   await page.mouse.wheel(0, 600);
-  await expect(last).toBeInViewport();
+  await expect(last).toBeInViewport({ ratio: 1 });
   await last.click();
   await expect(last).toHaveAttribute('aria-current', 'true');
   expect(await expand.boundingBox()).toEqual(bottom);
-  expect(await page.getByTitle('Tool 1').boundingBox()).toEqual(tool);
+  expect(await page.getByTitle('Garden', { exact: true }).boundingBox()).toEqual(tool);
 
   await page.reload();
   await page.waitForFunction(() => window.__HARNESS__?.ready === true);
   await page.evaluate(() => window.__HARNESS__.triggerRerender());
   await expect(last).toHaveAttribute('aria-current', 'true');
-  await expect(last).toBeInViewport();
+  await expect(last).toBeInViewport({ ratio: 1 });
 });

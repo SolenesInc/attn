@@ -6,15 +6,16 @@ import { CrewMemberActionsPopover } from './CrewMemberActionsPopover';
 import { crewDisplayName } from '../utils/crewName';
 import './Sidebar.css';
 import { useSidebarContext } from './SidebarContext';
-import { CollapseIcon, ExpandIcon, HomeIcon, PlusIcon } from './SidebarIcons';
+import { ExpandIcon, HomeIcon, PlusIcon } from './SidebarIcons';
 import { desktopShortcut, hasNoLeaves } from './sidebarModel';
 import { DesktopChip } from './SidebarDesktops';
-import { SidebarSettings } from './SidebarSettings';
+import { CrewRowView } from './QueueRows';
+import { CommandsButton, SidebarPanelButtons } from './SidebarHeader';
+export { SidebarHeader } from './SidebarHeader';
 
 export function SidebarCollapsed() {
   const {
     instance,
-    headerActions,
     onNewSession,
     onGoToDashboard,
     homeActive,
@@ -40,24 +41,9 @@ export function SidebarCollapsed() {
         >
           <HomeIcon />
         </button>
+        <CommandsButton collapsed />
         <div className="icon-divider" />
-        {headerActions.map((action) => (
-          <button
-            key={action.id}
-            className={`icon-btn sidebar-tool-btn ${action.active ? 'active' : ''} ${action.toneClassName || ''}`}
-            onClick={action.onClick}
-            title={action.title}
-            disabled={action.disabled}
-            aria-label={action.title}
-          >
-            {action.icon}
-            {action.badge !== undefined && (
-              <span className="sidebar-tool-badge">
-                {typeof action.badge === 'number' && action.badge > 9 ? '9+' : action.badge}
-              </span>
-            )}
-          </button>
-        ))}
+        <SidebarPanelButtons collapsed />
         <div className="icon-divider" />
         <RailDesktops />
         <button
@@ -182,14 +168,29 @@ export function SidebarFooter() {
   );
 }
 
-export function SidebarCrewManage() {
-  const { crew, onManageCrew } = useSidebarContext();
-  if (!crew?.length || !onManageCrew) return null;
+export function SidebarSleepingCrew() {
+  const { crew, onManageCrew, onWakeCrewMember, openCrewMemberActions } = useSidebarContext();
+  if (!crew?.length) return null;
+  const sleeping = crew.filter((member) => !member.binding_session);
   return (
-    <button type="button" className="sidebar-crew-manage" data-testid="manage-crew" onClick={onManageCrew}>
-      <span>Manage crew</span>
-      <span className="sidebar-crew-count">{crew.length}</span>
-    </button>
+    <div className="sidebar-sleeping-crew">
+      <div className="queue-section-rule queue-crew-rule">
+        <span>Crew</span>
+        <span className="queue-rule-line" aria-hidden="true" />
+        {onManageCrew && <button type="button" data-testid="manage-crew" onClick={onManageCrew}>manage</button>}
+      </div>
+      {sleeping.map((member) => (
+        <CrewRowView
+          key={member.id}
+          member={member.id}
+          agent={member.resolved_agent}
+          selected={false}
+          delegates={[]}
+          onWake={onWakeCrewMember && (() => onWakeCrewMember(member.id))}
+          onOpenMemberActions={(event) => openCrewMemberActions(member.id, event)}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -272,81 +273,6 @@ export function SidebarPopovers() {
           onClose={() => setCrewActionsTarget(null)}
         />
       )}
-    </>
-  );
-}
-
-export function SidebarHeader() {
-  const {
-    instance,
-    headerActions,
-    queueModeEnabled,
-    onToggleQueueMode,
-    crewQueueEnabled,
-    onToggleCrewQueue,
-    harnessLogosEnabled,
-    onToggleHarnessLogos,
-    desktopSelectionStyle,
-    onDesktopSelectionStyleChange,
-    onNewSession,
-    onToggleCollapse,
-  } = useSidebarContext();
-  return (
-    <>
-      <div className="sidebar-header">
-        {instance && (
-          <div className="sidebar-instance-marker">
-            instance <strong>{instance}</strong>
-          </div>
-        )}
-        <div className="sidebar-tool-row">
-          {headerActions.map((action) => (
-            <button
-              key={action.id}
-              className={`sidebar-tool-btn ${action.active ? 'active' : ''} ${action.toneClassName || ''}`}
-              onClick={action.onClick}
-              title={action.title}
-              disabled={action.disabled}
-              aria-label={action.title}
-            >
-              {action.icon}
-              {action.badge !== undefined && (
-                <span className="sidebar-tool-badge">
-                  {typeof action.badge === 'number' && action.badge > 9 ? '9+' : action.badge}
-                </span>
-              )}
-            </button>
-          ))}
-          <button
-            className="collapse-btn"
-            onClick={onToggleCollapse}
-            title="Collapse sidebar"
-            aria-label="Collapse sidebar"
-          >
-            <CollapseIcon />
-          </button>
-        </div>
-        <div className="sidebar-header-row">
-          <button
-            className="new-session-btn"
-            onClick={onNewSession}
-            title={`New Session (${formatShortcut('session.new')})`}
-            aria-label="New Session"
-          >
-            <PlusIcon />
-          </button>
-          <SidebarSettings
-            queueModeEnabled={queueModeEnabled}
-            onToggleQueueMode={onToggleQueueMode}
-            crewQueueEnabled={crewQueueEnabled}
-            onToggleCrewQueue={onToggleCrewQueue}
-            harnessLogosEnabled={harnessLogosEnabled}
-            onToggleHarnessLogos={onToggleHarnessLogos}
-            desktopSelectionStyle={desktopSelectionStyle}
-            onDesktopSelectionStyleChange={onDesktopSelectionStyleChange}
-          />
-        </div>
-      </div>
     </>
   );
 }

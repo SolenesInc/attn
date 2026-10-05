@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { _resetEscapeStackForTest } from '../hooks/useEscapeStack';
@@ -116,4 +116,38 @@ describe('ProfileSwitcher', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('work is the last profile, and attn always keeps one.');
     expect(onDelete).not.toHaveBeenCalled();
   });
+  it('closes the list on Esc after mouse focus', () => {
+    const onClose = vi.fn();
+    render(<ProfileSwitcher {...props({ onClose })} />);
+    act(() => screen.getByRole('menuitem', { name: 'home' }).focus());
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['Rename home', 'Rename home'],
+    ['Delete home', null],
+    ['New profile', 'New profile name'],
+  ])('returns from mouse-opened %s on Esc and keeps keyboard actions working', (action, inputLabel) => {
+    const onClose = vi.fn();
+    render(<ProfileSwitcher {...props({ onClose })} />);
+    const button = screen.getByRole('button', { name: action === 'New profile' ? /New profile/ : action });
+    button.focus();
+    fireEvent.click(button);
+    if (inputLabel) expect(screen.getByLabelText(inputLabel)).toHaveFocus();
+    else expect(menu()).toHaveFocus();
+
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+    expect(menu()).toHaveFocus();
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.keyDown(document.activeElement!, { key: 'r' });
+    expect(screen.getByLabelText(action === 'New profile' ? 'Rename work' : 'Rename home')).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+    fireEvent.keyDown(document.activeElement!, { key: 'Backspace' });
+    expect(screen.getByText(/Clean up its agents/)).toBeInTheDocument();
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
 });

@@ -48,5 +48,4 @@
 .toast-footer { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: 11px; color: var(--color-text-muted); }
 .toast-footer > span:first-child { white-space: nowrap; }
 .toast-close { margin-left: auto; padding: 0; border: 0; background: transparent; color: var(--color-text-secondary); font: inherit; cursor: pointer; }
-.queue-crew-desktop { color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; margin-left: 8px; }
 .crew-desktop-label { color: var(--color-text-muted); padding: 6px 12px; font-size: 11px; }
