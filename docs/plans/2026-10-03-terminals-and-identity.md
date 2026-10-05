@@ -20,7 +20,7 @@ Step 4 adds:
 
 - no terminal table: panes already persist `runtime_id → session_id`;
 - one column, `sessions.succeeds`;
-- one protocol bump, 331, which skips the epic's 329 and 330.
+- a generated protocol schema hash, produced by `make generate-types`.
 
 New terminals get their own ids from the registry PR onwards, so the existing suites check the identity split before any feature depends on it.
 
@@ -55,7 +55,7 @@ references the home holds move, in PR 6.
    - `sessions.succeeds` points at it.
    - The successor gets a new name, as any new session in that pane would.
 5. **The daemon resolves caller ids.** It tries a terminal, then an open session. A closed session's id is not followed to its successor: a message to a cleared agent is refused as for any closed session, not rerouted to an agent without its context. There is no new CLI command and no extra round trip, and hooks already resolve on the daemon side.
-6. **One protocol bump for the step, 331.** Every wire change lands in PR 1.
+6. **Generate the protocol schema hash for the step.** Every wire change lands in PR 1; run `make generate-types`.
 7. **Codex's `/clear` and `/new` follow the same rule as Claude's `/clear`** (PR 3). Codex reports the new thread on the first turn of the new chat (SessionStart, then UserPromptSubmit), so the pane switches when the user first prompts it. **Unchanged in step 4:** Copilot, shell sessions, and bare-CLI wrapper sessions.
 
 ---
@@ -283,7 +283,7 @@ CREATE INDEX idx_sessions_succeeds ON sessions(succeeds) WHERE succeeds != '';
 2. **What follows a new conversation?** **Decided: nothing but the terminal.** Clearing clears the identity; the agent after `/clear` knows nothing of the old one's obligations, so they stay with the closed predecessor and come back with it on Reopen. A crew member's `/clear` ends its day.
 3. **No `terminal_views` in step 4.** The plan names it as the neutral table. **Default: panes persist the map.** `terminal_views` lands in step 6, when a terminal needs state a pane cannot hold: resolution, raw title, generation.
 4. **Contract.** **Default:** `Events.Conversation(t, c)` plus typed ids in step 4. `Opened`, `Shows`, `Up`, `Down` and `End` move to step 6, which has their callers.
-5. **Protocol.** **Default: one bump to 331 for the whole step, with every wire change in PR 1.** `succeeds` lands one PR ahead of its daemon producer but has a tested app consumer.
+5. **Protocol.** **Default: generate the protocol schema hash with every wire change in PR 1.** `succeeds` lands one PR ahead of its daemon producer but has a tested app consumer.
 6. **Remote verification and release gating.** **Default:** PR 6 builds the two-daemon stack with a fake `ssh`, and lands before the first release cut after PR 3. If the hub's bootstrap makes the harness too costly, verify on a real Linux endpoint and ask before merging.
 7. **Bare-CLI wrapper sessions.** **Default: a follow-up after step 4.** Until then they keep moving the conversation within the session. The terminal mapping rides on the `external_process` receipt that already persists, so no table is needed.
 8. **Codex `/new`.** **Decided: same as `/clear`, in PR 3.**

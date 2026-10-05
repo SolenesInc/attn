@@ -98,8 +98,6 @@ Ownership:
 
     <internal/automode/automode.go          Preset type; Presets(); PresetFor(policy, mode)
      internal/protocol/schema/main.tsp      approval_policy and sandbox_mode on SpawnSessionMessage
-     internal/protocol/constants.go         ProtocolVersion bump
-     app/src/hooks/useDaemonSocket.ts       PROTOCOL_VERSION bump
      internal/daemon/spawn_pipeline.go      applies the launch intent's pair over the daemon default
      plugins/attn-pi/approval/rules.ts      refuses file-tool writes under Read Only (F1)
      plugins/attn-pi/approval/session.ts    /permissions picker; repaints the status line (F2)
@@ -124,8 +122,8 @@ func PresetFor(policy, mode string) (Preset, bool) // false when no preset match
  }
 ```
 
-New wire fields: edit main.tsp, make generate-types, bump ProtocolVersion and
-PROTOCOL_VERSION.>
+New wire fields: edit main.tsp and run make generate-types; commit the generated
+types and protocol schema hash.>
 
 Behavior:
 

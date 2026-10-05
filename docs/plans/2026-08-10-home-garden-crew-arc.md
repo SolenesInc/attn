@@ -159,7 +159,7 @@ plan; this stage pins its place in the sequence.
 - Home not connected → loud refusal, nothing queues.
 - Riders, in order: seed commands (unfencing stage 3), cross-daemon
   msg/peek (extending stage 1), ticket retirement's outpost leg.
-- Price: protocol bump, intent/result messages, routing on both daemons,
+- Price: protocol schema change, intent/result messages, routing on both daemons,
   the enrollment check. No new transport, no new auth, no new machinery
   class.
 
