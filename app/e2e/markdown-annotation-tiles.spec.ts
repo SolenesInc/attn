@@ -45,3 +45,16 @@ test.describe('markdown annotations across tiles', () => {
     await expect.poll(() => highlightedTexts(page)).toEqual(['target words']);
   });
 });
+
+test('a fragment link scrolls its own tile when another tile shows the same document', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/test-harness/?component=MarkdownAnnotationTiles&document=fragments');
+  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  const first = page.getByRole('region', { name: 'First tile' });
+  const second = page.getByRole('region', { name: 'Second tile' });
+  await expect(second.getByRole('heading', { name: 'Setup' })).not.toBeInViewport();
+  await second.getByRole('link', { name: 'Jump', exact: true }).click();
+  await expect(second.getByRole('heading', { name: 'Setup' })).toBeInViewport();
+  await expect(first.getByRole('heading', { name: 'Setup' })).not.toBeInViewport();
+  expect(await first.evaluate((tile) => tile.scrollTop)).toBe(0);
+});

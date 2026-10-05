@@ -69,6 +69,8 @@ export function TileSidebarRow({
   onSelect,
   onClose,
   onReload,
+  'aria-current': ariaCurrent,
+  'data-select-key': selectKey,
 }: {
   desktopId: string;
   tile: TileLeaf;
@@ -77,6 +79,8 @@ export function TileSidebarRow({
   onSelect: () => void;
   onClose: () => void;
   onReload: () => void;
+  'aria-current'?: 'true';
+  'data-select-key'?: string;
 }) {
   const seeds = useDaemonStore((state) => state.seeds);
   const { desktops } = useSidebarContext();
@@ -91,6 +95,7 @@ export function TileSidebarRow({
   return (
     <div
       className={`session-item sidebar-leaf-row desktop-tile-item ${selected ? 'selected' : ''}`.trim()}
+      aria-current={ariaCurrent}
       data-testid={`sidebar-tile-${desktopId}-${tile.tileId}`}
       data-tile-kind={tile.tileKind}
       title={tileIdentifier || tile.tileId}
@@ -99,6 +104,7 @@ export function TileSidebarRow({
         type="button"
         className="sidebar-row-select"
         aria-label={`Open ${title}`}
+        data-select-key={selectKey}
         onClick={onSelect}
       />
       <span className="desktop-tile-icon" aria-hidden="true">{kind.icon}</span>
@@ -190,6 +196,8 @@ export function SidebarSessionRow({
   showSettling,
   delegates,
   grouped = false,
+  'aria-current': ariaCurrent,
+  'data-select-key': selectKey,
 }: {
   session: LocalSession;
   selected: boolean;
@@ -203,6 +211,8 @@ export function SidebarSessionRow({
   showSettling: boolean;
   delegates: readonly LocalSession[];
   grouped?: boolean;
+  'aria-current'?: 'true';
+  'data-select-key'?: string;
 }) {
   const harnessTitle = harnessLabel(session.agent);
   const stateTitle = session.state === 'recoverable'
@@ -214,6 +224,7 @@ export function SidebarSessionRow({
       className={`session-item sidebar-leaf-row ${grouped ? 'grouped' : ''} ${selected ? 'selected' : ''} ${session.state === 'recoverable' ? 'recoverable' : ''} ${draggable ? 'session-item--draggable' : ''} ${dragging ? 'session-item--dragging' : ''}`
         .trim()
         .replace(/\s+/g, ' ')}
+      aria-current={ariaCurrent}
       data-testid={`sidebar-session-${session.id}`}
       data-session-id={session.id}
       data-state={session.state}
@@ -223,6 +234,7 @@ export function SidebarSessionRow({
         type="button"
         className="sidebar-row-select"
         aria-label={`Open ${session.label}`}
+        data-select-key={selectKey}
         title={hoverTitle}
         onClick={onSelect}
         onClickCapture={onClickCapture}
