@@ -67,18 +67,27 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 // drainTranscriptWatcher stops a session's usage watchers and waits for their last reconcile.
 func (d *Daemon) drainTranscriptWatcher(sessionID string) {
 	d.watchersMu.Lock()
+	if d.usageDraining == nil {
+		d.usageDraining = make(map[string]bool)
+	}
+	d.usageDraining[sessionID] = true
 	watcher := d.transcriptWatch[sessionID]
 	pluginWatcher := d.pluginUsageWatch[sessionID]
 	delete(d.transcriptWatch, sessionID)
 	delete(d.pluginUsageWatch, sessionID)
+	idle := d.usageIdle[sessionID]
 	d.watchersMu.Unlock()
 	if pluginWatcher != nil {
 		close(pluginWatcher.stopCh)
-		<-pluginWatcher.doneCh
 	}
 	if watcher != nil {
 		close(watcher.stopCh)
-		<-watcher.doneCh
+	}
+	if idle != nil {
+		<-idle
 	}
 	d.reconcileDeferredUsage(sessionID)
+	d.watchersMu.Lock()
+	delete(d.usageDraining, sessionID)
+	d.watchersMu.Unlock()
 }

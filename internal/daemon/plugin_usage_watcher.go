@@ -25,7 +25,7 @@ func (d *Daemon) ensurePluginUsageWatcher(sessionID, agent, path string) {
 
 	d.watchersMu.Lock()
 	previous := d.pluginUsageWatch[sessionID]
-	if previous != nil && previous.path == path {
+	if d.usageDraining[sessionID] || previous != nil && previous.path == path {
 		d.watchersMu.Unlock()
 		return
 	}
@@ -41,6 +41,7 @@ func (d *Daemon) ensurePluginUsageWatcher(sessionID, agent, path string) {
 		d.watchersMu.Unlock()
 		return
 	}
+	d.beginUsageRunLocked(sessionID)
 	if d.pluginUsageWatch == nil {
 		d.pluginUsageWatch = make(map[string]*pluginUsageWatcher)
 	}
@@ -65,6 +66,7 @@ func (d *Daemon) seedPluginUsageBaseline(sessionID, path string) {
 }
 
 func (d *Daemon) runPluginUsageWatcher(w *pluginUsageWatcher, tracker *sessionUsageTracker) {
+	defer d.endUsageRun(w.sessionID)
 	defer close(w.doneCh)
 	ticker := time.NewTicker(transcriptPollInterval)
 	defer ticker.Stop()

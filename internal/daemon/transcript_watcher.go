@@ -289,7 +289,7 @@ func (d *Daemon) startTranscriptWatcherAtPath(sessionID string, agent protocol.S
 	}
 	d.watchersMu.Lock()
 	session := d.lookupTranscriptWatcherSession(sessionID)
-	if session == nil || session.Agent != agent {
+	if session == nil || session.Agent != agent || d.usageDraining[sessionID] {
 		d.watchersMu.Unlock()
 		return
 	}
@@ -303,6 +303,7 @@ func (d *Daemon) startTranscriptWatcherAtPath(sessionID string, agent protocol.S
 		d.watchersMu.Unlock()
 		return
 	}
+	d.beginUsageRunLocked(sessionID)
 	if d.transcriptWatch == nil {
 		d.transcriptWatch = make(map[string]*transcriptWatcher)
 	}
@@ -425,6 +426,27 @@ func (d *Daemon) deferFinalUsage(sessionID string, reconcile func()) {
 	d.watchersMu.Unlock()
 }
 
+func (d *Daemon) beginUsageRunLocked(sessionID string) {
+	if d.usageRuns == nil {
+		d.usageRuns = make(map[string]int)
+		d.usageIdle = make(map[string]chan struct{})
+	}
+	if d.usageRuns[sessionID]++; d.usageIdle[sessionID] == nil {
+		d.usageIdle[sessionID] = make(chan struct{})
+	}
+}
+
+func (d *Daemon) endUsageRun(sessionID string) {
+	d.watchersMu.Lock()
+	defer d.watchersMu.Unlock()
+	if d.usageRuns[sessionID]--; d.usageRuns[sessionID] > 0 {
+		return
+	}
+	close(d.usageIdle[sessionID])
+	delete(d.usageRuns, sessionID)
+	delete(d.usageIdle, sessionID)
+}
+
 func (d *Daemon) reconcileDeferredUsage(sessionID string) {
 	d.watchersMu.Lock()
 	reconciles := d.finalUsage[sessionID]
@@ -456,6 +478,7 @@ func (d *Daemon) liveTranscriptPath(sessionID string, agent protocol.SessionAgen
 }
 
 func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
+	defer d.endUsageRun(w.sessionID)
 	defer close(w.doneCh)
 
 	if w.behavior == nil {
