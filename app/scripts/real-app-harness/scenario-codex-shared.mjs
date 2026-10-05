@@ -58,7 +58,7 @@ async function submit(sessionId, paneId, text) {
 
 async function queueRow(sessionId) {
   const queue = await client.request('queue_get_state');
-  return [...queue.turns, ...queue.settled, ...queue.pinned, ...queue.snoozed.rows].find((row) => row.id === sessionId) ?? null;
+  return [...queue.turns, ...queue.settled, ...queue.snoozed.rows].find((row) => row.id === sessionId) ?? null;
 }
 
 async function openLedger() {
