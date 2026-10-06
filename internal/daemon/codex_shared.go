@@ -52,12 +52,12 @@ type codexServer struct {
 	ensureMu sync.Mutex
 	mu       sync.Mutex
 	control  *codexshared.Client
-	loaded   map[string]bool
-	dropped  map[string]bool
-	parents  map[string]string
-	epoch    string
-	seq      atomic.Uint64
-	events   codexEvents
+	// Conversations the server has loaded, as last heard; kept while the control connection is down.
+	held    map[string]bool
+	parents map[string]string
+	epoch   string
+	seq     atomic.Uint64
+	events  codexEvents
 }
 
 type codexView struct {
@@ -236,23 +236,16 @@ func (r *codexShared) connect(ctx context.Context, s *codexServer) error {
 			epoch := fmt.Sprintf("%s%s:%d", codexLinkEpochPrefix, s.profile, r.seq)
 			r.mu.Unlock()
 			s.mu.Lock()
-			s.control, s.loaded, s.epoch = client, make(map[string]bool, len(list.Data)), epoch
-			for _, id := range list.Data {
-				s.loaded[id] = true
-				delete(s.dropped, id)
-			}
-			gone := s.dropped
-			s.dropped = nil
+			s.control, s.epoch = client, epoch
+			gone := s.hold(list.Data)
 			s.mu.Unlock()
-			for conversation := range gone {
-				r.d.life.Go("codexConversationUnloaded", func() { r.unloaded(s, conversation, true) })
-			}
+			r.lose(s, gone)
 			if !r.d.life.Go("codexServerControl", func() { r.watchControl(s, client) }) {
 				client.Close()
 				return errDaemonStopping
 			}
 			r.restoreParents(s, client, list.Data)
-			s.events.run(r.d, func() { r.restateHiddenStates(s, client, epoch) })
+			s.events.run(r.d, func() { r.restateHiddenStates(s, client) })
 			return nil
 		}
 		if ctx.Err() != nil {
@@ -279,15 +272,32 @@ func (r *codexShared) watchControl(s *codexServer, client *codexshared.Client) {
 	}
 	s.mu.Lock()
 	if s.control == client {
-		for conversation := range s.loaded {
-			if s.dropped == nil {
-				s.dropped = make(map[string]bool)
-			}
-			s.dropped[conversation] = true
-		}
-		s.control, s.loaded = nil, nil
+		s.control = nil
 	}
 	s.mu.Unlock()
+}
+
+// hold replaces the held set with what the server reports loading and returns what it let go.
+func (s *codexServer) hold(loaded []string) []string {
+	fresh := make(map[string]bool, len(loaded))
+	for _, conversation := range loaded {
+		fresh[conversation] = true
+	}
+	var gone []string
+	for conversation := range s.held {
+		if !fresh[conversation] {
+			gone = append(gone, conversation)
+			delete(s.parents, conversation)
+		}
+	}
+	s.held = fresh
+	return gone
+}
+
+func (r *codexShared) lose(s *codexServer, conversations []string) {
+	for _, conversation := range conversations {
+		r.d.life.Go("codexConversationLost", func() { r.lost(s, conversation) })
+	}
 }
 
 func (r *codexShared) observeServer(s *codexServer, m codexshared.Message) {
@@ -317,11 +327,10 @@ func (r *codexShared) observeServer(s *codexServer, m codexshared.Message) {
 		r.observeStatus(s, m)
 	}
 	s.mu.Lock()
-	if s.loaded == nil {
-		s.mu.Unlock()
-		return
+	var gone []string
+	if s.held == nil {
+		s.held = make(map[string]bool)
 	}
-	unloaded := ""
 	if p.Thread.Parent != "" && p.Thread.ID != "" {
 		if s.parents == nil {
 			s.parents = make(map[string]string)
@@ -330,32 +339,33 @@ func (r *codexShared) observeServer(s *codexServer, m codexshared.Message) {
 	}
 	switch {
 	case m.Method == "thread/started" && !p.Thread.Ephemeral && p.Thread.ID != "":
-		s.loaded[p.Thread.ID] = true
+		s.held[p.Thread.ID] = true
 	case m.Method == "thread/status/changed" && p.Status.Type != "notLoaded" && p.ThreadID != "":
-		s.loaded[p.ThreadID] = true
+		s.held[p.ThreadID] = true
 	case m.Method == "thread/closed" || p.Status.Type == "notLoaded":
-		if s.loaded[p.ThreadID] {
-			unloaded = p.ThreadID
+		if s.held[p.ThreadID] {
+			gone = append(gone, p.ThreadID)
 		}
-		delete(s.loaded, p.ThreadID)
+		delete(s.held, p.ThreadID)
 		delete(s.parents, p.ThreadID)
 	}
 	s.mu.Unlock()
-	if unloaded != "" {
-		r.d.life.Go("codexConversationUnloaded", func() { r.unloaded(s, unloaded, false) })
-	}
+	r.lose(s, gone)
 }
 
-// A server exit ends the running turn: it fires no Stop hook, and a reconnecting TUI restates nothing.
-func (r *codexShared) unloaded(s *codexServer, conversation string, exited bool) {
-	sessionID := r.d.store.OpenSessionHolding(s.profile, conversation)
+// lost settles a conversation the server no longer holds. Codex unloads only idle conversations, so a
+// turn still running was cut off: the server exited, and no Stop hook or reconnecting TUI will end it.
+func (r *codexShared) lost(s *codexServer, conversation string) {
+	sessionID := r.holder(s.profile, conversation)
 	session := r.d.store.Get(sessionID)
-	if session != nil && exited &&
-		(session.State == protocol.SessionStateWorking || session.State == protocol.SessionStatePendingApproval) {
+	if session == nil {
+		return
+	}
+	if session.State == protocol.SessionStateWorking || session.State == protocol.SessionStatePendingApproval {
 		r.report(s, sessionID, harness.TurnEnded, false)
 		return
 	}
-	if session == nil || session.State == protocol.SessionStateRecoverable || session.State == protocol.SessionStateIdle ||
+	if session.State == protocol.SessionStateRecoverable || session.State == protocol.SessionStateIdle ||
 		r.d.sessionLive(context.Background(), sessionID) || r.hidden(sessionID) {
 		return
 	}
@@ -389,7 +399,7 @@ func (r *codexShared) serverHolds(session *protocol.Session) bool {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.control != nil && s.loaded[native]
+	return s.control != nil && s.held[native]
 }
 
 func (r *codexShared) openView(t harness.TerminalID, profile string) (string, error) {
@@ -499,22 +509,10 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 	if ephemeral, _ := params["ephemeral"].(bool); ephemeral {
 		return nil, nil
 	}
-	sessionID := r.d.sessionInTerminal(v.terminal)
-	if conversation, _ := params["threadId"].(string); method == "thread/resume" && conversation != "" {
-		if holder := r.holder(v.profile, conversation); holder != "" {
-			sessionID = holder
-		} else if owner := r.d.store.ConversationOwner(sessionID, conversation); owner != "" {
-			sessionID = owner
-		}
-	}
+	sessionID, launchAs, chief := r.launching(v, method, params)
 	config, _ := params["config"].(map[string]any)
 	if config == nil {
 		config = make(map[string]any)
-	}
-	// A new conversation in a terminal that shows one becomes a plain successor: no chief or crew role.
-	launchAs, chief := sessionID, r.d.isChiefOfStaffSession(sessionID)
-	if method != "thread/resume" && r.conversation(sessionID) != "" {
-		launchAs, chief = "", false
 	}
 	if limit := r.d.launchContextWindowCap(launchAs, string(protocol.SessionAgentCodex), chief); limit > 0 {
 		config["model_auto_compact_token_limit"] = limit
@@ -556,6 +554,23 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 		}
 		r.show(v, result.Thread.ID)
 	}, nil
+}
+
+// A resume configures its conversation's own session; a new conversation in a terminal that shows one
+// configures a plain successor, with no chief or crew role.
+func (r *codexShared) launching(v *codexView, method string, params map[string]any) (session, launchAs protocol.SessionID, chief bool) {
+	session = r.d.sessionInTerminal(v.terminal)
+	if conversation, _ := params["threadId"].(string); method == "thread/resume" && conversation != "" {
+		if holder := r.holder(v.profile, conversation); holder != "" {
+			session = holder
+		} else if owner := r.d.store.ConversationOwner(session, conversation); owner != "" {
+			session = owner
+		}
+	}
+	if method != "thread/resume" && r.conversation(session) != "" {
+		return session, "", false
+	}
+	return session, session, r.d.isChiefOfStaffSession(session)
 }
 
 func (r *codexShared) instructions(sessionID protocol.SessionID, profile string, chief bool) string {
@@ -643,28 +658,20 @@ func (r *codexShared) terminalExited(t harness.TerminalID) {
 		}
 	}
 	r.mu.Unlock()
-	if exited != nil {
+	// A server already restarted under the same id was reconciled by its own connect.
+	if exited != nil && !r.serverRunning(context.Background(), t) {
 		exited.ensureMu.Lock()
 		defer exited.ensureMu.Unlock()
 		exited.mu.Lock()
-		held := make([]string, 0, len(exited.loaded)+len(exited.dropped))
-		for conversation := range exited.dropped {
-			held = append(held, conversation)
-		}
-		if exited.control != nil {
-			for conversation := range exited.loaded {
-				held = append(held, conversation)
-			}
-		}
-		exited.dropped = nil
+		gone := exited.hold(nil)
+		client := exited.control
+		exited.control = nil
 		exited.mu.Unlock()
-		if client := exited.client(); client != nil {
+		if client != nil {
 			client.Close()
 		}
 		r.d.logf("shared Codex: the app-server of profile %s exited; the next connection starts it again", exited.profile)
-		for _, conversation := range held {
-			r.d.life.Go("codexConversationUnloaded", func() { r.unloaded(exited, conversation, true) })
-		}
+		r.lose(exited, gone)
 	}
 	if !r.serverRunning(context.Background(), t) {
 		if err := r.d.removePTYSession(t); err != nil {
@@ -768,7 +775,7 @@ func (d *Daemon) codexThreadCaller(profile, conversation string) protocol.Sessio
 				return s
 			}
 		}
-		if s := d.store.OpenSessionHolding(profile, conversation); s != "" {
+		if s := r.holder(profile, conversation); s != "" {
 			return s
 		}
 		if conversation = r.parent(profile, conversation); conversation == "" {

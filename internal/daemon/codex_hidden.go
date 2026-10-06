@@ -257,7 +257,7 @@ func (r *codexShared) observeStatus(s *codexServer, m codexshared.Message) {
 	})
 }
 
-func (r *codexShared) restateHiddenStates(s *codexServer, client *codexshared.Client, epoch string) {
+func (r *codexShared) restateHiddenStates(s *codexServer, client *codexshared.Client) {
 	for _, session := range r.d.store.List("") {
 		stale := session.State == protocol.SessionStateUnknown || session.State == protocol.SessionStateWorking ||
 			session.State == protocol.SessionStatePendingApproval
@@ -277,7 +277,7 @@ func (r *codexShared) restateHiddenStates(s *codexServer, client *codexshared.Cl
 			continue
 		}
 		if turn, ok := read.Thread.Status.turn(); ok {
-			r.d.linkEvents().Turn(harness.SessionID(session.ID), time.Now(), harness.TurnEvent{Turn: turn, Epoch: epoch, Seq: s.seq.Add(1), Restated: true})
+			r.report(s, session.ID, turn, true)
 		}
 	}
 }
@@ -487,7 +487,7 @@ func (r *codexShared) loadedElsewhere(profile, conversation string) string {
 	r.mu.Unlock()
 	for p, s := range servers {
 		s.mu.Lock()
-		held := p != profile && (s.control != nil && s.loaded[conversation] || s.dropped[conversation])
+		held := p != profile && s.held[conversation]
 		s.mu.Unlock()
 		if held {
 			return p
