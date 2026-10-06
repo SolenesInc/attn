@@ -19,11 +19,11 @@ func TestCodexRespawnResumesTheConversationItsSessionStartHookReported(t *testin
 	first.Prompted()
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 
-	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: session})
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == session })
+	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: protocol.SessionID(session)})
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
 
 	w.Spawn(app, fakeagent.Codex, cwd, func(m *protocol.SpawnSessionMessage) {
-		m.ID = session
+		m.ID = protocol.SessionID(session)
 		m.ResumeSessionID = protocol.Ptr(session)
 	})
 	resumed := w.Launched(session)

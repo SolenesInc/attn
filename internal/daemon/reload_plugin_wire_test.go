@@ -12,8 +12,8 @@ import (
 
 func reloadPi(app *testworld.Peer, session string) protocol.ReloadSessionResultMessage {
 	app.T.Helper()
-	return testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: session, Cols: 100, Rows: 30},
-		protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return r.ID == session })
+	return testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 100, Rows: 30},
+		protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == session })
 }
 
 func converse(t *testing.T, app *testworld.Peer, session string, run *fakeagent.Run, prompt string) {

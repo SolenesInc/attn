@@ -24,6 +24,7 @@ export class DaemonObserver {
     this.connectTimeoutMs = connectTimeoutMs;
     this.ws = null;
     this.sessionsById = new Map();
+    this.terminalBindings = new Map();
     this.endpointsById = new Map();
     this.settings = new Map();
     this.connected = false;
@@ -246,13 +247,12 @@ export class DaemonObserver {
     return this.sessionsById.get(sessionId) || null;
   }
 
-  // The PTY runtime a session's pane places; a session no pane places runs under its own id.
+  // Binding snapshots include sessions in every profile, even without a pane.
   terminalOf(sessionId) {
-    for (const desktop of this.desktops) {
-      const pane = desktop.panes.find((entry) => entry.session_id === sessionId && entry.runtime_id);
-      if (pane) return pane.runtime_id;
+    for (const [terminal, session] of this.terminalBindings) {
+      if (session === sessionId) return terminal;
     }
-    return sessionId;
+    throw new Error(`No terminal binding received for session ${sessionId}`);
   }
 
   getEndpoint(endpointId) {
@@ -461,6 +461,10 @@ export class DaemonObserver {
         this.profileId = data.selected_profile_id ?? null;
         this.profile = (data.profiles || []).find((profile) => profile.id === this.profileId) ?? null;
         this.desktops = data.desktops || [];
+        this.terminalBindings = new Map((data.terminal_bindings || []).map(({ terminal_id, session_id }) => [terminal_id, session_id]));
+        break;
+      case 'terminal_bindings_updated':
+        this.terminalBindings = new Map((data.terminal_bindings || []).map(({ terminal_id, session_id }) => [terminal_id, session_id]));
         break;
       case 'profile_arrangement_changed':
         if (data.profile?.id === this.profileId) {

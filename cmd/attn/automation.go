@@ -38,7 +38,7 @@ func runAutomationCommand() {
 		automationUsage()
 		os.Exit(2)
 	}
-	c := client.New(client.DefaultSocketPath()).WithGardenProfile(profile, strings.TrimSpace(os.Getenv("ATTN_SESSION_ID")))
+	c := client.New(client.DefaultSocketPath()).WithGardenProfile(profile, currentSessionOrExit())
 	var err error
 	var definitionID int
 	switch args[2] {

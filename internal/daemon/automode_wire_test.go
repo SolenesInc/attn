@@ -929,7 +929,7 @@ func TestADenialArrivingByRelayAndByTheLedgerIsListedAndAnnouncedOnce(t *testing
 		}
 		var sessions []string
 		for _, d := range listed.Denials {
-			sessions = append(sessions, d.SessionID)
+			sessions = append(sessions, string(d.SessionID))
 		}
 		slices.Sort(sessions)
 		want := []string{relayedFirst, recoveredFirst}

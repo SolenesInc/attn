@@ -173,7 +173,7 @@ func TestEveryEndpointCommandRefusesWithoutAnSSHCallOrALocalFallback(t *testing.
 		t.Errorf("spawn on a removed endpoint refused with %q, want endpoint not found", unknown)
 	}
 	for _, id := range []string{"remote-launch", "ghost-launch"} {
-		if w.d.store.Get(id) != nil {
+		if w.d.store.Get(protocol.SessionID(id)) != nil {
 			t.Errorf("%s was spawned locally instead of refused", id)
 		}
 	}

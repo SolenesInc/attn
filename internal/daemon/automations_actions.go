@@ -351,8 +351,8 @@ func (d *Daemon) automationSocketScope(msg any) (string, error) {
 		return "", err
 	}
 	var caller struct {
-		SourceSessionID string `json:"source_session_id"`
-		ProfileID       string `json:"profile_id"`
+		SourceSessionID protocol.SessionID `json:"source_session_id"`
+		ProfileID       string             `json:"profile_id"`
 	}
 	if err := json.Unmarshal(raw, &caller); err != nil {
 		return "", err

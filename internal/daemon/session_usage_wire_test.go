@@ -38,8 +38,8 @@ func TestAResumedConversationCountsOnlyTheUsageAfterTheResume(t *testing.T) {
 	first.Subagent(oldResearch)
 	first.Reply(oldAnswer)
 	awaitUsageTokens(app, earlier, claudeTokens(oldResearch)+claudeTokens(oldAnswer))
-	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: earlier})
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == earlier })
+	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: protocol.SessionID(earlier)})
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == earlier })
 
 	session := w.Spawn(app, fakeagent.Claude, cwd, func(m *protocol.SpawnSessionMessage) {
 		m.ResumeSessionID = protocol.Ptr(first.ConversationID)

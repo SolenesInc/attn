@@ -85,7 +85,7 @@ func TestOpeningADocumentAnswersTheOpenerBeforeTheBroadcastTheOpenCaused(t *test
 
 		requestID := uuid.NewString()
 		opened := testworld.Request(app, protocol.OpenMarkdownMessage{
-			Cmd: protocol.CmdOpenMarkdown, Path: notes, SessionID: protocol.Ptr("a"), RequestID: protocol.Ptr(requestID),
+			Cmd: protocol.CmdOpenMarkdown, Path: notes, SessionID: protocol.Ptr(protocol.SessionID("a")), RequestID: protocol.Ptr(requestID),
 		}, protocol.EventOpenMarkdownResult, func(r protocol.OpenMarkdownResultMessage) bool {
 			return protocol.Deref(r.RequestID) == requestID
 		})
@@ -108,7 +108,7 @@ func TestALaunchPlacementReachesTheLauncherAsItsAnswerBeforeTheSpawnResult(t *te
 		t.Fatalf("spawn answered %+v with pane %q", spawned, pane)
 	}
 
-	ownAnswerFirst(t, logSince(t, app, mark), spawned.ID, protocol.EventSpawnResult)
+	ownAnswerFirst(t, logSince(t, app, mark), string(spawned.ID), protocol.EventSpawnResult)
 }
 
 func TestAChangeThatLandsWhileAClientsRequestIsHeldStillReachesItWhenTheRequestFails(t *testing.T) {

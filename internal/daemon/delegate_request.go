@@ -17,7 +17,7 @@ type resolvedDelegationLaunch struct {
 	Cmd                string
 	RequestID          string
 	ProfileID          *string
-	SourceSessionID    *string
+	SourceSessionID    *protocol.SessionID
 	Assignment         protocol.DelegateAssignment
 	Checkout           *protocol.DelegateCheckout
 	Cwd                string
@@ -43,7 +43,7 @@ type resolvedDelegationLaunch struct {
 	PreferencesRevision   *int
 	SeedTitle             string
 	ParentSeedID          string
-	PreviousTenderSession string
+	PreviousTenderSession protocol.SessionID
 }
 
 func resolveLaunchInput(msg *protocol.DelegateMessage) resolvedDelegationLaunch {
@@ -136,7 +136,7 @@ func (d *Daemon) resolveAcceptedDelegationBase(msg *protocol.DelegateMessage) (s
 
 func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 	msg *protocol.DelegateMessage,
-	reservedSeedID, reservedBaseCommit, reservedNoteID, sessionID, ownedWorktreePath string,
+	reservedSeedID string, reservedBaseCommit string, reservedNoteID string, sessionID protocol.SessionID, ownedWorktreePath string,
 	worktreeOwned bool,
 	handoverSeedRev int,
 	handoverTenderSession, handoverTenderMember string,
@@ -186,13 +186,13 @@ func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 		if msg.Assignment.Handover != nil {
 			previousTenderSession := seed.TenderSession
 			if handoverSeedRev > 0 {
-				previousTenderSession = strings.TrimSpace(handoverTenderSession)
+				previousTenderSession = protocol.SessionID(strings.TrimSpace(handoverTenderSession))
 			}
 			runtime.PreviousTenderSession = previousTenderSession
 			alreadyBound := strings.TrimSpace(operationID) != "" && d.handoverAlreadyBound(operationID, sessionID, seedID)
 			if handoverSeedRev > 0 && !alreadyBound {
 				if int(doc.Rev) < handoverSeedRev ||
-					seed.TenderSession != strings.TrimSpace(handoverTenderSession) ||
+					seed.TenderSession != protocol.SessionID(strings.TrimSpace(handoverTenderSession)) ||
 					seed.TenderMember != strings.TrimSpace(handoverTenderMember) {
 					return nil, fmt.Errorf("seed %s ownership changed after the delegation request was accepted", seedID)
 				}

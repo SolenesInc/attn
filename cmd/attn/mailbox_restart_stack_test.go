@@ -49,7 +49,7 @@ func TestAnOutstandingInboxRingSurvivesAProcessRestart(t *testing.T) {
 	run.Reply("Ready. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, recipient, func(session protocol.Session) bool { return session.State == protocol.SessionStateIdle })
 	app.AwaitScreen(recipient, "Ready. <!-- attn:state=idle -->")
-	sent, err := cli.AgentMsg(recipient, sender, "retain the outstanding attempt")
+	sent, err := cli.AgentMsg(recipient, protocol.SessionID(sender), "retain the outstanding attempt")
 	if err != nil || sent.Status == protocol.AgentMsgStatusRefused {
 		t.Fatalf("send=%+v, %v", sent, err)
 	}
@@ -64,11 +64,11 @@ func TestAnOutstandingInboxRingSurvivesAProcessRestart(t *testing.T) {
 	if prompt := run.Prompted(); prompt != "continue without reading" {
 		t.Fatalf("restart renewed the outstanding ring: %q", prompt)
 	}
-	status, err := s.Client().AgentMsgStatus(sent.MessageID, sender)
+	status, err := s.Client().AgentMsgStatus(sent.MessageID, protocol.SessionID(sender))
 	if err != nil || status.State != protocol.AgentMessageStateNotified {
 		t.Fatalf("durable receipt=%+v, %v", status, err)
 	}
-	batch, err := s.Client().AgentInboxBatch(recipient, 0)
+	batch, err := s.Client().AgentInboxBatch(protocol.SessionID(recipient), 0)
 	if err != nil || len(batch.Items) != 1 || batch.Items[0].Address != "session:"+recipient {
 		t.Fatalf("durable item=%+v, %v", batch, err)
 	}
@@ -87,7 +87,7 @@ func TestRestartDuringInboxPrimingKeepsTheDayAndOutstandingDelay(t *testing.T) {
 	if err != nil || sent.Status != protocol.AgentMsgStatusQueued || sent.TargetSessionID == "" {
 		t.Fatalf("asleep send=%+v, %v", sent, err)
 	}
-	day := s.Launched(sent.TargetSessionID)
+	day := s.Launched(string(sent.TargetSessionID))
 	day.Prompted()
 	s.Stop()
 	s.Start()
@@ -95,7 +95,7 @@ func TestRestartDuringInboxPrimingKeepsTheDayAndOutstandingDelay(t *testing.T) {
 		t.Fatalf("restart woke a second day: %s, original %s", bound, sent.TargetSessionID)
 	}
 	day.Reply("Ready. <!-- attn:state=idle -->")
-	s.App().TypeLine(sent.TargetSessionID, "continue without reading")
+	s.App().TypeLine(string(sent.TargetSessionID), "continue without reading")
 	if prompt := day.Prompted(); prompt != "continue without reading" {
 		t.Fatalf("restart renewed the outstanding wake attempt: %q", prompt)
 	}

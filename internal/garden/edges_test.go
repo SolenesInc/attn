@@ -1,6 +1,10 @@
 package garden
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/victorarias/attn/internal/protocol"
+)
 
 func seedWith(id string, edges ...Edge) Seed {
 	return Seed{ID: id, Title: id, Status: StatusPlanted, Edges: edges}
@@ -29,13 +33,13 @@ func equal(got, want []string) bool {
 	return true
 }
 
-func noSession(string) bool { return false }
+func noSession(protocol.SessionID) bool { return false }
 
 func TestUnblocks(t *testing.T) {
 	closed := func(seed Seed) Seed { seed.Status = StatusHarvested; return seed }
 	held := func(seed Seed, session, member string) Seed {
 		seed.Status = StatusGrowing
-		seed.TenderSession = session
+		seed.TenderSession = protocol.SessionID(session)
 		seed.TenderMember = member
 		return seed
 	}
@@ -141,7 +145,7 @@ func TestUnblocks(t *testing.T) {
 func TestReady(t *testing.T) {
 	held := func(seed Seed, session, member string) Seed {
 		seed.Status = StatusGrowing
-		seed.TenderSession = session
+		seed.TenderSession = protocol.SessionID(session)
 		seed.TenderMember = member
 		return seed
 	}
@@ -149,7 +153,7 @@ func TestReady(t *testing.T) {
 	tests := []struct {
 		name  string
 		seeds []Seed
-		live  func(string) bool
+		live  func(protocol.SessionID) bool
 		want  []string
 	}{
 		{
@@ -240,19 +244,19 @@ func TestReady(t *testing.T) {
 		{
 			name:  "a live session holds its seed",
 			seeds: []Seed{held(seedWith("s-a"), "sess-1", "")},
-			live:  func(id string) bool { return id == "sess-1" },
+			live:  func(id protocol.SessionID) bool { return id == "sess-1" },
 			want:  []string{},
 		},
 		{
 			name:  "a session the daemon no longer knows releases its seed",
 			seeds: []Seed{held(seedWith("s-a"), "sess-gone", "")},
-			live:  func(string) bool { return false },
+			live:  func(protocol.SessionID) bool { return false },
 			want:  []string{"s-a"},
 		},
 		{
 			name:  "a member-only tender always holds: attn cannot tell that a person walked away",
 			seeds: []Seed{held(seedWith("s-a"), "", "victor")},
-			live:  func(string) bool { return false },
+			live:  func(protocol.SessionID) bool { return false },
 			want:  []string{},
 		},
 		{

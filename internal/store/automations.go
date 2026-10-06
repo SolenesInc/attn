@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/automation"
 	"github.com/victorarias/attn/internal/docstore"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 func parseOptionalAutomationTime(value string) *time.Time {
@@ -63,7 +64,8 @@ type AutomationRun struct {
 	Attempts                          int
 	LastError                         string
 	SeedID, LegacyTicketID            string
-	SessionID, ProfileID              string
+	SessionID                         protocol.SessionID
+	ProfileID                         string
 	ResolvedLocationJSON              string
 	CreatedAt, UpdatedAt              time.Time
 	DeliveredAt                       *time.Time
@@ -73,7 +75,8 @@ type AutomationContinuityBinding struct {
 	ID, ContinuityKey                   string
 	DefinitionID                        int
 	SeedID, OriginRunID, LegacyTicketID string
-	SessionID, ProfileID                string
+	SessionID                           protocol.SessionID
+	ProfileID                           string
 	Status, ReleasedReason              string
 	ReleasedAt                          *time.Time
 	CreatedAt, UpdatedAt                time.Time
@@ -88,13 +91,18 @@ type AutomationOccurrence struct {
 type AutomationProvenanceRecord struct {
 	RunID, DefinitionName, DefinitionSpecJSON string
 	DefinitionID                              int
-	SessionID, SeedID, TicketID               string
+	SessionID                                 protocol.SessionID
+	SeedID                                    string
+	TicketID                                  string
 	Provider, SubjectKey, PayloadJSON         string
 	CreatedAt                                 time.Time
 }
 
 type AutomationRunReservation struct {
-	RunID, OccurrenceID, SeedID, SessionID string
+	RunID        string
+	OccurrenceID string
+	SeedID       string
+	SessionID    protocol.SessionID
 }
 
 type AutomationReviewRequestCandidate struct {
@@ -484,7 +492,7 @@ func getOrCreateActiveAutomationContinuityBindingTx(tx *sql.Tx, definitionID int
 	return err
 }
 
-func (s *Store) AutomationSessionHasContinuityBinding(sessionID string) (bool, error) {
+func (s *Store) AutomationSessionHasContinuityBinding(sessionID protocol.SessionID) (bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if sessionID == "" {
@@ -1238,8 +1246,8 @@ func (s *Store) GetAutomationProvenanceRecord(runID string) (*AutomationProvenan
 	return &record, nil
 }
 
-func (s *Store) GetLatestAutomationProvenanceRecordForSession(sessionID string) (*AutomationProvenanceRecord, error) {
-	return s.getLatestAutomationProvenanceRecord(`r.session_id=?`, sessionID)
+func (s *Store) GetLatestAutomationProvenanceRecordForSession(sessionID protocol.SessionID) (*AutomationProvenanceRecord, error) {
+	return s.getLatestAutomationProvenanceRecord(`r.session_id=?`, string(sessionID))
 }
 
 func (s *Store) GetLatestAutomationProvenanceRecordForSeed(seedID string) (*AutomationProvenanceRecord, error) {

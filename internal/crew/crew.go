@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/victorarias/attn/internal/docstore"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 const Surface = "the crew"
@@ -29,20 +30,20 @@ const CharterFileName = "CHARTER.md"
 const DefaultAgent = "claude"
 
 type Member struct {
-	ID             string   `json:"id"`
-	CharterPath    string   `json:"charter_path"`
-	HomeDir        string   `json:"home_dir"`
-	CWD            string   `json:"cwd"`
-	Agent          string   `json:"agent"`
-	Model          string   `json:"model"`
-	Effort         string   `json:"effort"`
-	AwarenessDirs  []string `json:"awareness_dirs"`
-	BindingSession string   `json:"binding_session"`
+	ID             string             `json:"id"`
+	CharterPath    string             `json:"charter_path"`
+	HomeDir        string             `json:"home_dir"`
+	CWD            string             `json:"cwd"`
+	Agent          string             `json:"agent"`
+	Model          string             `json:"model"`
+	Effort         string             `json:"effort"`
+	AwarenessDirs  []string           `json:"awareness_dirs"`
+	BindingSession protocol.SessionID `json:"binding_session"`
 
-	LetterPath      string   `json:"letter_path"`
-	LetterSession   string   `json:"letter_session"`
-	AutonomousWakes []string `json:"autonomous_wakes"`
-	Restart         *Restart `json:"restart,omitempty"`
+	LetterPath      string             `json:"letter_path"`
+	LetterSession   protocol.SessionID `json:"letter_session"`
+	AutonomousWakes []string           `json:"autonomous_wakes"`
+	Restart         *Restart           `json:"restart,omitempty"`
 }
 
 type RestartState string
@@ -55,15 +56,15 @@ const (
 )
 
 type Restart struct {
-	RequestID          string       `json:"request_id"`
-	SessionID          string       `json:"session_id"`
-	State              RestartState `json:"state"`
-	DeliveryStatus     string       `json:"delivery_status,omitempty"`
-	Detail             string       `json:"detail,omitempty"`
-	Error              string       `json:"error,omitempty"`
-	LetterPath         string       `json:"letter_path,omitempty"`
-	SuccessorSessionID string       `json:"successor_session_id,omitempty"`
-	Withdrawn          bool         `json:"withdrawn,omitempty"`
+	RequestID          string             `json:"request_id"`
+	SessionID          protocol.SessionID `json:"session_id"`
+	State              RestartState       `json:"state"`
+	DeliveryStatus     string             `json:"delivery_status,omitempty"`
+	Detail             string             `json:"detail,omitempty"`
+	Error              string             `json:"error,omitempty"`
+	LetterPath         string             `json:"letter_path,omitempty"`
+	SuccessorSessionID protocol.SessionID `json:"successor_session_id,omitempty"`
+	Withdrawn          bool               `json:"withdrawn,omitempty"`
 }
 
 type RestartRequest struct {
@@ -79,7 +80,7 @@ func (m Member) LaunchAgent() string {
 	return DefaultAgent
 }
 
-func (m Member) FiledLetterFor(sessionID string) (string, bool) {
+func (m Member) FiledLetterFor(sessionID protocol.SessionID) (string, bool) {
 	if sessionID == "" || m.LetterPath == "" || m.LetterSession != sessionID {
 		return "", false
 	}
@@ -164,11 +165,11 @@ func DisplayName(id string) string {
 	return string(unicode.ToUpper(first)) + id[size:]
 }
 
-func HolderName(member, session string) string {
+func HolderName(member string, session protocol.SessionID) string {
 	if strings.TrimSpace(member) != "" {
 		return DisplayName(member)
 	}
-	return strings.TrimSpace(session)
+	return string(protocol.TrimID(session))
 }
 
 func Resolve(name string, members []Member) (Member, bool) {

@@ -97,7 +97,7 @@ func (c *Codex) BuildCommand(opts SpawnOpts) *exec.Cmd {
 
 func (c *Codex) BuildEnv(opts SpawnOpts) []string {
 	env := []string{
-		"ATTN_SESSION_ID=" + opts.SessionID,
+		"ATTN_TERMINAL_ID=" + string(opts.TerminalID),
 		"ATTN_AGENT=codex",
 	}
 	if wrapper := strings.TrimSpace(opts.WrapperPath); wrapper != "" {
@@ -394,7 +394,7 @@ func codexToolFreeHeadlessArgs(request HeadlessTaskRequest, window int) []string
 
 func (c *Codex) GenerateConfigOverrides(opts SpawnOpts) []string {
 	overrides := hooks.GenerateCodexConfigOverrides(
-		opts.SessionID,
+		string(opts.TerminalID),
 		opts.SocketPath,
 		opts.WrapperPath,
 		opts.launchSpec(),

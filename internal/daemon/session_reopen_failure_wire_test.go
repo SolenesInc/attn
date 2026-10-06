@@ -19,7 +19,7 @@ func TestAReopenWhoseAgentCannotStartPutsTheWorkBackAsItWas(t *testing.T) {
 	closedPi := func(dir, reason string) protocol.SessionLedgerEntry {
 		session := w.Spawn(app, fakeagent.Pi, dir)
 		w.Launched(session)
-		if _, err := cli.AgentClose(session, session, reason); err != nil {
+		if _, err := cli.AgentClose(session, protocol.SessionID(session), reason); err != nil {
 			t.Fatalf("%s closes itself: %v", session, err)
 		}
 		return awaitClosed(app, session)
@@ -43,7 +43,7 @@ func TestAReopenWhoseAgentCannotStartPutsTheWorkBackAsItWas(t *testing.T) {
 		if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: c.closed.ID, Action: string(c.action)}); err == nil || !strings.Contains(err.Error(), "provider is unreachable") {
 			t.Errorf("%s: the reopen = %v, want it failing with pi's reason", c.closed.ID, err)
 		}
-		after := showSession(t, cli, c.closed.ID)
+		after := showSession(t, cli, string(c.closed.ID))
 		if protocol.Deref(after.ClosedAt) != protocol.Deref(c.closed.ClosedAt) || protocol.Deref(after.ClosedBy) != protocol.Deref(c.closed.ClosedBy) ||
 			protocol.Deref(after.CloseReason) != protocol.Deref(c.closed.CloseReason) {
 			t.Errorf("%s: after the failed reopen the close reads %s by %s (%q), want it as it was: %s by %s (%q)", c.closed.ID,

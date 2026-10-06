@@ -697,14 +697,12 @@ func buildSpawnEnv(loginShell string, opts SpawnOptions, agent, wrapperPath stri
 	env = filterEnvKeys(env, "TERM_PROGRAM_VERSION")
 	env = MergeEnvironment(env, []string{"TERM=xterm-256color", "TERM_PROGRAM=ghostty"})
 	env = launchenv.WithActiveAttnFirst(env, wrapperPath)
-	if agent == "shell" {
-		env = filterEnvKeys(env, "ATTN_SESSION_ID", "ATTN_AGENT")
-	}
+	env = filterEnvKeys(env, "ATTN_TERMINAL_ID", "ATTN_SESSION_ID", "ATTN_AGENT")
 	if agent != "shell" {
 		env = MergeEnvironment(env, []string{
 			"ATTN_INSIDE_APP=1",
 			"ATTN_DAEMON_MANAGED=1",
-			"ATTN_SESSION_ID=" + opts.ID,
+			"ATTN_TERMINAL_ID=" + opts.ID,
 			"ATTN_AGENT=" + agent,
 		})
 		if wrapperPath != "" {

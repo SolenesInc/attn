@@ -66,7 +66,7 @@ func (w *world) bootBubbleClaude(t *testing.T, id string) *bubbleClaude {
 	}
 	agent := &bubbleClaude{t: t, id: id, self: string(term.Options.ID), cli: w.Client(), term: term, transcript: fakeagent.WriteClaudeTranscript(t, cwd, conversation)}
 	term.OnSubmit(agent.take)
-	if err := agent.cli.ObserveAgentConversation(agent.self, agent.transcript.ConversationID, agent.transcript.Path); err != nil {
+	if err := agent.cli.ObserveAgentConversation(protocol.TerminalID(agent.self), agent.transcript.ConversationID, agent.transcript.Path); err != nil {
 		t.Fatalf("session start of %s: %v", id, err)
 	}
 	term.Heartbeat("not_busy", "Claude Code")
@@ -83,7 +83,7 @@ func (w *world) bootBubbleClaude(t *testing.T, id string) *bubbleClaude {
 
 func (a *bubbleClaude) take(prompt string) {
 	a.transcript.Prompt(prompt)
-	if err := a.cli.UpdateStateFromHookEvidence(a.self, protocol.StateWorking, "", "user_prompt_submit", prompt); err != nil {
+	if err := a.cli.UpdateStateFromHookEvidence(protocol.TerminalID(a.self), protocol.StateWorking, "", "user_prompt_submit", prompt); err != nil {
 		a.t.Errorf("%s reports its prompt taken: %v", a.id, err)
 	}
 }
@@ -92,7 +92,7 @@ func (a *bubbleClaude) reply(text string) {
 	a.t.Helper()
 	synctest.Wait()
 	a.transcript.Answer(text)
-	if err := a.cli.SendStop(a.self, a.transcript.Path, client.StopFacts{}); err != nil {
+	if err := a.cli.SendStop(protocol.TerminalID(a.self), a.transcript.Path, client.StopFacts{}); err != nil {
 		a.t.Fatalf("%s stops: %v", a.id, err)
 	}
 	synctest.Wait()

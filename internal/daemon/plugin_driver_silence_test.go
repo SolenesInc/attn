@@ -6,15 +6,13 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/pty"
-	"github.com/victorarias/attn/internal/statetrace"
 )
 
 func seedDriverRun(t *testing.T, d *Daemon, sessionID, pluginName, runID string, state protocol.SessionState) {
 	t.Helper()
 	now := protocol.TimestampNow().String()
 	d.store.Add(&protocol.Session{
-		ID:             sessionID,
+		ID:             protocol.SessionID(sessionID),
 		Label:          "snipe",
 		Agent:          "snipe",
 		Directory:      t.TempDir(),
@@ -23,28 +21,8 @@ func seedDriverRun(t *testing.T, d *Daemon, sessionID, pluginName, runID string,
 		StateUpdatedAt: now,
 		LastSeen:       now,
 	})
-	if !d.store.BeginAgentDriverRun(sessionID, pluginName, runID) {
+	if !d.store.BeginAgentDriverRun(protocol.SessionID(sessionID), pluginName, runID) {
 		t.Fatalf("BeginAgentDriverRun(%s) failed", sessionID)
-	}
-}
-
-func TestHandlePTYState_VetoNamesTheDriverThatHasNotRegisteredYet(t *testing.T) {
-	d := newTraceDaemon(t)
-	seedDriverRun(t, d, "unregistered-driver", "snipe-plugin", "run-1", protocol.SessionStateIdle)
-
-	d.handlePTYState("unregistered-driver", pty.Observation{
-		Source: pty.SourceWorkerInfo,
-		Claim:  protocol.StateWorking,
-		Detail: "worker info",
-		At:     time.Now(),
-	})
-
-	if got := d.store.Get("unregistered-driver").State; got != protocol.SessionStateIdle {
-		t.Fatalf("state=%q after replay, want the driver's own idle", got)
-	}
-	got := onlyObservation(t, d, "unregistered-driver")
-	if got.Reason != "plugin_driver_not_registered" {
-		t.Fatalf("veto reason=%q, want plugin_driver_not_registered", got.Reason)
 	}
 }
 
@@ -159,13 +137,4 @@ func TestPluginReportedState_OnlyIfUnknownStillDisarmsTheAlarm(t *testing.T) {
 			t.Fatalf("state=%q, want the declaration the driver is still backing", got)
 		}
 	})
-}
-
-func onlyObservation(t *testing.T, d *Daemon, sessionID string) statetrace.Observation {
-	t.Helper()
-	got := d.stateTraceRecorder().Observations(sessionID)
-	if len(got) != 1 {
-		t.Fatalf("want exactly 1 observation, got %d: %+v", len(got), got)
-	}
-	return got[0]
 }

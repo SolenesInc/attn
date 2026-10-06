@@ -17,7 +17,7 @@ func TestTheTaskListShowsTheNewestUpdatedTaskFirstWithinASecond(t *testing.T) {
 		sessions := []string{"s0", "s1234", "s12345", "s5"}
 		registerSessions(t, w, cli, sessions...)
 		for _, id := range sessions {
-			if err := cli.UpdateState(id, protocol.StateWaitingInput); err != nil {
+			if err := cli.UpdateState(protocol.TerminalID(w.Terminal(id)), protocol.StateWaitingInput); err != nil {
 				t.Fatalf("report %s waiting: %v", id, err)
 			}
 			testworld.AwaitSession(app, id, func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) })
@@ -26,7 +26,7 @@ func TestTheTaskListShowsTheNewestUpdatedTaskFirstWithinASecond(t *testing.T) {
 		until := time.Now().Add(time.Hour).Format(time.RFC3339Nano)
 		for i, step := range []time.Duration{0, 123400 * time.Microsecond, 50 * time.Microsecond, 376550 * time.Microsecond} {
 			w.advance(step)
-			app.Send(protocol.SnoozeTurnMessage{Cmd: protocol.CmdSnoozeTurn, SessionID: sessions[i], Until: until})
+			app.Send(protocol.SnoozeTurnMessage{Cmd: protocol.CmdSnoozeTurn, SessionID: protocol.SessionID(sessions[i]), Until: until})
 			testworld.AwaitSession(app, sessions[i], func(s protocol.Session) bool { return protocol.Deref(s.TurnSnoozedUntil) != "" })
 		}
 

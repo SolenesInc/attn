@@ -21,7 +21,7 @@ type deliveredMessage struct {
 
 func sendFeedback(app *testworld.Peer, session, text string) string {
 	requestID := uuid.NewString()
-	app.Send(protocol.SessionAnnotationsSubmitMessage{Cmd: protocol.CmdSessionAnnotationsSubmit, RequestID: requestID, SessionID: session, Text: text})
+	app.Send(protocol.SessionAnnotationsSubmitMessage{Cmd: protocol.CmdSessionAnnotationsSubmit, RequestID: requestID, SessionID: protocol.SessionID(session), Text: text})
 	return requestID
 }
 

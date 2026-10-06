@@ -73,7 +73,7 @@ func (id sessionInputAttemptID) String() string {
 
 type sessionInputDelivery struct {
 	id                sessionInputAttemptID
-	sessionID         string
+	sessionID         protocol.SessionID
 	text              string
 	origin            sessionInputOrigin
 	placement         sessionInputPlacement
@@ -82,34 +82,34 @@ type sessionInputDelivery struct {
 	resend            func()
 }
 
-func maintenanceSessionInput(domain, key, sessionID, text string, placement sessionInputPlacement) sessionInputDelivery {
+func maintenanceSessionInput(domain string, key string, sessionID protocol.SessionID, text string, placement sessionInputPlacement) sessionInputDelivery {
 	return sessionInputDelivery{
 		id:        inputAttemptID(domain, key),
-		sessionID: strings.TrimSpace(sessionID),
+		sessionID: protocol.TrimID(sessionID),
 		text:      text,
 		origin:    maintenanceInput(domain),
 		placement: placement,
 	}
 }
 
-func userConversationSessionInput(key, sessionID, text string, placement sessionInputPlacement) sessionInputDelivery {
+func userConversationSessionInput(key string, sessionID protocol.SessionID, text string, placement sessionInputPlacement) sessionInputDelivery {
 	return sessionInputDelivery{
 		id:        inputAttemptID("user-conversation", key),
-		sessionID: strings.TrimSpace(sessionID),
+		sessionID: protocol.TrimID(sessionID),
 		text:      text,
 		origin:    userConversationInput(),
 		placement: placement,
 	}
 }
 
-func annotationSessionInput(key, sessionID, text string) sessionInputDelivery {
+func annotationSessionInput(key string, sessionID protocol.SessionID, text string) sessionInputDelivery {
 	delivery := userConversationSessionInput(key, sessionID, text, sessionInputAtTurnBoundary)
 	delivery.allowUserComposer = true
 	return delivery
 }
 
 type sessionInputRunRef struct {
-	sessionID string
+	sessionID protocol.SessionID
 	epoch     uint64
 }
 
@@ -149,7 +149,7 @@ type sessionInputLane struct {
 type sessionInputModule struct {
 	daemon  *Daemon
 	mu      sync.Mutex
-	lanes   map[string]*sessionInputLane
+	lanes   map[protocol.SessionID]*sessionInputLane
 	stopped bool
 }
 
@@ -203,12 +203,12 @@ func sessionInputDeferredError(err error) bool {
 
 func (d *Daemon) sessionInputs() *sessionInputModule {
 	d.sessionInputOnce.Do(func() {
-		d.sessionInputState = &sessionInputModule{daemon: d, lanes: make(map[string]*sessionInputLane)}
+		d.sessionInputState = &sessionInputModule{daemon: d, lanes: make(map[protocol.SessionID]*sessionInputLane)}
 	})
 	return d.sessionInputState
 }
 
-func (m *sessionInputModule) lane(sessionID string) *sessionInputLane {
+func (m *sessionInputModule) lane(sessionID protocol.SessionID) *sessionInputLane {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	lane := m.lanes[sessionID]
@@ -219,7 +219,7 @@ func (m *sessionInputModule) lane(sessionID string) *sessionInputLane {
 	return lane
 }
 
-func (m *sessionInputModule) forgetSession(sessionID string) {
+func (m *sessionInputModule) forgetSession(sessionID protocol.SessionID) {
 	lane := m.closeLane(sessionID)
 	if lane == nil {
 		return
@@ -233,7 +233,7 @@ func (m *sessionInputModule) forgetSession(sessionID string) {
 
 // handOverSubmit gives the session a terminal now shows the prompt the user typed while it showed the
 // old one: Codex reports a new chat on its first prompt. attn's own pastes stay with the old session.
-func (m *sessionInputModule) handOverSubmit(from, to string) {
+func (m *sessionInputModule) handOverSubmit(from protocol.SessionID, to protocol.SessionID) {
 	src := m.lane(from)
 	src.mu.Lock()
 	typed := src.userSubmit
@@ -248,11 +248,11 @@ func (m *sessionInputModule) handOverSubmit(from, to string) {
 	dst.mu.Unlock()
 }
 
-func (m *sessionInputModule) fenceSession(sessionID string) {
+func (m *sessionInputModule) fenceSession(sessionID protocol.SessionID) {
 	m.closeLane(sessionID)
 }
 
-func (m *sessionInputModule) closeLane(sessionID string) *sessionInputLane {
+func (m *sessionInputModule) closeLane(sessionID protocol.SessionID) *sessionInputLane {
 	m.mu.Lock()
 	lane := m.lanes[sessionID]
 	m.mu.Unlock()
@@ -274,7 +274,7 @@ func (m *sessionInputModule) armRetryLocked(lane *sessionInputLane, delivery ses
 	m.scheduleLocked(lane, delivery.sessionID, delivery.id.String(), after, delivery.resend)
 }
 
-func (m *sessionInputModule) scheduleLocked(lane *sessionInputLane, sessionID, key string, after time.Duration, resend func()) {
+func (m *sessionInputModule) scheduleLocked(lane *sessionInputLane, sessionID protocol.SessionID, key string, after time.Duration, resend func()) {
 	if lane.stopped {
 		return
 	}
@@ -292,7 +292,7 @@ func (m *sessionInputModule) scheduleLocked(lane *sessionInputLane, sessionID, k
 	lane.retries[key] = entry
 }
 
-func (m *sessionInputModule) fireRetry(sessionID, key string, self *sessionInputRetry) {
+func (m *sessionInputModule) fireRetry(sessionID protocol.SessionID, key string, self *sessionInputRetry) {
 	m.mu.Lock()
 	lane := m.lanes[sessionID]
 	m.mu.Unlock()
@@ -340,7 +340,7 @@ func (lane *sessionInputLane) stopRetriesLocked() {
 }
 
 func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDelivery) sessionInputAttempt {
-	if delivery.id.String() == "" || strings.TrimSpace(delivery.sessionID) == "" || strings.TrimSpace(delivery.text) == "" {
+	if delivery.id.String() == "" || protocol.TrimID(delivery.sessionID) == "" || strings.TrimSpace(delivery.text) == "" {
 		return sessionInputAttempt{stage: sessionInputFailed, err: errors.New("session input needs an attempt id, session id, and text")}
 	}
 	ctx, cancel := context.WithCancel(ctx)
@@ -459,11 +459,11 @@ func (lane *sessionInputLane) forfeitNextLocked() {
 	lane.titleNext = nil
 }
 
-func (m *sessionInputModule) recordOwedLocked(lane *sessionInputLane, sessionID string) {
+func (m *sessionInputModule) recordOwedLocked(lane *sessionInputLane, sessionID protocol.SessionID) {
 	m.daemon.recordPlacedInputOwed(sessionID, lane.occupied && reportsTurnStarts(string(m.daemon.sessionAgent(sessionID))))
 }
 
-func (m *sessionInputModule) releaseComposerLocked(lane *sessionInputLane, sessionID string) {
+func (m *sessionInputModule) releaseComposerLocked(lane *sessionInputLane, sessionID protocol.SessionID) {
 	if !lane.occupied {
 		return
 	}
@@ -485,7 +485,7 @@ func sessionInputPhaseAllows(placement sessionInputPlacement, state protocol.Ses
 	return deliveryAllowedForPhase(placement, state) == nil
 }
 
-func (m *sessionInputModule) observePromptSubmitted(sessionID string) (run sessionInputRunRef, credited, typed bool) {
+func (m *sessionInputModule) observePromptSubmitted(sessionID protocol.SessionID) (run sessionInputRunRef, credited, typed bool) {
 	lane := m.lane(sessionID)
 	lane.mu.Lock()
 	defer lane.mu.Unlock()
@@ -500,7 +500,7 @@ func (m *sessionInputModule) observePromptSubmitted(sessionID string) (run sessi
 	return current.ref, current.credited, typed
 }
 
-func (m *sessionInputModule) ensureRunLocked(lane *sessionInputLane, sessionID string) *sessionInputRunState {
+func (m *sessionInputModule) ensureRunLocked(lane *sessionInputLane, sessionID protocol.SessionID) *sessionInputRunState {
 	if lane.run != nil {
 		return lane.run
 	}
@@ -509,7 +509,7 @@ func (m *sessionInputModule) ensureRunLocked(lane *sessionInputLane, sessionID s
 	return lane.run
 }
 
-func (m *sessionInputModule) observePhase(sessionID string, phase protocol.SessionState) {
+func (m *sessionInputModule) observePhase(sessionID protocol.SessionID, phase protocol.SessionState) {
 	lane := m.lane(sessionID)
 	lane.mu.Lock()
 	defer lane.mu.Unlock()
@@ -535,7 +535,7 @@ func (m *sessionInputModule) observePhase(sessionID string, phase protocol.Sessi
 	lane.run = nil
 }
 
-func (m *sessionInputModule) currentUserRun(sessionID string) (sessionInputRunRef, bool) {
+func (m *sessionInputModule) currentUserRun(sessionID protocol.SessionID) (sessionInputRunRef, bool) {
 	lane := m.lane(sessionID)
 	lane.mu.Lock()
 	defer lane.mu.Unlock()
@@ -546,7 +546,7 @@ func (m *sessionInputModule) currentUserRun(sessionID string) (sessionInputRunRe
 }
 
 // attn's own words earned credit at custody; this hook never matches prompt text.
-func (d *Daemon) observePromptSubmitted(sessionID string, at time.Time) bool {
+func (d *Daemon) observePromptSubmitted(sessionID protocol.SessionID, at time.Time) bool {
 	run, credited, typed := d.sessionInputs().observePromptSubmitted(sessionID)
 	d.markModelRequestStarted(sessionID, at)
 	if credited {
@@ -555,10 +555,10 @@ func (d *Daemon) observePromptSubmitted(sessionID string, at time.Time) bool {
 	return typed
 }
 
-func (d *Daemon) markModelRequestStarted(sessionID string, at time.Time) bool {
+func (d *Daemon) markModelRequestStarted(sessionID protocol.SessionID, at time.Time) bool {
 	if d.store == nil || !d.store.MarkModelRequestStarted(sessionID, at) {
 		return false
 	}
-	d.publishFact(FactSessionModelRequestStarted, sessionID, nil)
+	d.publishFact(FactSessionModelRequestStarted, string(sessionID), nil)
 	return true
 }

@@ -1,11 +1,12 @@
 package daemon_test
 
 import (
-	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/testworld"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestAPluginApprovalReportDoesNotWaitForAnotherSessionsInboxReply(t *testing.T) {
@@ -19,7 +20,7 @@ func TestAPluginApprovalReportDoesNotWaitForAnotherSessionsInboxReply(t *testing
 		awaitingInput(t, app, driver, recipient, recipientRun)
 		awaitingInput(t, app, driver, asking, askingRun)
 		sent := make(chan error, 1)
-		go func() { _, err := cli.AgentMsg(recipient, asking, "take a look"); sent <- err }()
+		go func() { _, err := cli.AgentMsg(recipient, protocol.SessionID(asking), "take a look"); sent <- err }()
 		var message deliveredMessage
 		held := driver.asked("driver.deliver_message", &message)
 		if message.SessionID != recipientRun.SessionID || !strings.Contains(message.Text, inboxDoorbell) {

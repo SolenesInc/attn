@@ -17,18 +17,18 @@ func TestTheSeedDocumentShowsBodyChildrenLogAndWhetherItsTenderHolds(t *testing.
 	app, cli := w.App(), w.Client()
 	tender := spawnPanes(w, app, w.Path("tender"))[0]
 	body := "# Crown\n\nRead this."
-	crown, err := cli.SeedPlant(tender.session, "Crown", body, "", "", "")
+	crown, err := cli.SeedPlant(protocol.SessionID(tender.session), "Crown", body, "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	child, err := cli.SeedPlant(tender.session, "Child", "", crown.Seed.ID, "", "")
+	child, err := cli.SeedPlant(protocol.SessionID(tender.session), "Child", "", crown.Seed.ID, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cli.SeedPlant(tender.session, "Grandchild", "", child.Seed.ID, "", ""); err != nil {
+	if _, err := cli.SeedPlant(protocol.SessionID(tender.session), "Grandchild", "", child.Seed.ID, "", ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cli.SeedNote(tender.session, crown.Seed.ID, "reader log entry", "", "", false, nil); err != nil {
+	if _, err := cli.SeedNote(protocol.SessionID(tender.session), crown.Seed.ID, "reader log entry", "", "", false, nil); err != nil {
 		t.Fatal(err)
 	}
 	lifeMove(t, cli, tender.session, crown.Seed.ID, "tend", "", "")
@@ -47,13 +47,13 @@ func TestTheSeedDocumentShowsBodyChildrenLogAndWhetherItsTenderHolds(t *testing.
 	if doc.NotesTotal != 1 || len(doc.Notes) != 1 || doc.Notes[0].Body != "reader log entry" {
 		t.Errorf("the document log = %+v of %d, want the one note", doc.Notes, doc.NotesTotal)
 	}
-	if !doc.TenderHolds || doc.Seed.TenderSession != tender.session {
+	if !doc.TenderHolds || string(doc.Seed.TenderSession) != tender.session {
 		t.Errorf("while %s is live the document reads tender %q holding=%t, want it holding", tender.session, doc.Seed.TenderSession, doc.TenderHolds)
 	}
 
 	closePane(app, tender)
 	ended := seedReaderDocument(app, crown.Seed.ID)
-	if !ended.Success || ended.Document == nil || ended.Document.TenderHolds || ended.Document.Seed.TenderSession != tender.session {
+	if !ended.Success || ended.Document == nil || ended.Document.TenderHolds || string(ended.Document.Seed.TenderSession) != tender.session {
 		t.Errorf("after the tender ended the document = %+v, want tender %s kept without a live hold", ended.Document, tender.session)
 	}
 
@@ -71,7 +71,7 @@ func TestOpeningASeedDocksBesideItsCallerOrOnTheCurrentDesktop(t *testing.T) {
 	t.Run("beside the opener, bound to the tender until it lets go", func(t *testing.T) {
 		seed := plantSeedAs(t, cli, opener.session, "Read me")
 		lifeMove(t, cli, tender.session, seed, "tend", "", "")
-		opened := seedReaderOpen(app, protocol.OpenSeedMessage{SeedID: seed, SessionID: protocol.Ptr(opener.session)})
+		opened := seedReaderOpen(app, protocol.OpenSeedMessage{SeedID: seed, SessionID: protocol.Ptr(protocol.SessionID(opener.session))})
 		tileID := protocol.Deref(opened.TileID)
 		if !opened.Success || protocol.Deref(opened.DesktopID) != opener.desktop || tileID == "" {
 			t.Fatalf("opening beside %s = %+v", opener.session, opened)
@@ -79,7 +79,7 @@ func TestOpeningASeedDocksBesideItsCallerOrOnTheCurrentDesktop(t *testing.T) {
 		seedReaderTileIs(t, w, opener.desktop, tileID, seed, tender.session)
 
 		lifeMove(t, cli, tender.session, seed, "park", "", "")
-		reopened := seedReaderOpen(app, protocol.OpenSeedMessage{SeedID: seed, SessionID: protocol.Ptr(opener.session)})
+		reopened := seedReaderOpen(app, protocol.OpenSeedMessage{SeedID: seed, SessionID: protocol.Ptr(protocol.SessionID(opener.session))})
 		if !reopened.Success || protocol.Deref(reopened.TileID) != tileID {
 			t.Fatalf("reopening = %+v, want tile %s again", reopened, tileID)
 		}
@@ -113,7 +113,7 @@ func TestOpeningASeedDocksBesideItsCallerOrOnTheCurrentDesktop(t *testing.T) {
 	})
 
 	t.Run("an unplanted seed is named", func(t *testing.T) {
-		if refused := seedReaderOpen(app, protocol.OpenSeedMessage{SeedID: "s-ffffff", SessionID: protocol.Ptr(opener.session)}); refused.Success || !strings.Contains(protocol.Deref(refused.Error), "s-ffffff") {
+		if refused := seedReaderOpen(app, protocol.OpenSeedMessage{SeedID: "s-ffffff", SessionID: protocol.Ptr(protocol.SessionID(opener.session))}); refused.Success || !strings.Contains(protocol.Deref(refused.Error), "s-ffffff") {
 			t.Errorf("opening an unplanted seed = %+v, want a refusal naming it", refused)
 		}
 	})
@@ -123,8 +123,8 @@ func TestOpeningASeedDocksBesideItsCallerOrOnTheCurrentDesktop(t *testing.T) {
 		file := markdownFile(t, w, "concurrent.md")
 		other := w.App()
 		markdownRequest, seedRequest := uuid.NewString(), uuid.NewString()
-		app.Send(protocol.OpenMarkdownMessage{Cmd: protocol.CmdOpenMarkdown, Path: file, SessionID: protocol.Ptr(tender.session), RequestID: protocol.Ptr(markdownRequest)})
-		other.Send(protocol.OpenSeedMessage{Cmd: protocol.CmdOpenSeed, SeedID: seed, SessionID: protocol.Ptr(tender.session), RequestID: protocol.Ptr(seedRequest)})
+		app.Send(protocol.OpenMarkdownMessage{Cmd: protocol.CmdOpenMarkdown, Path: file, SessionID: protocol.Ptr(protocol.SessionID(tender.session)), RequestID: protocol.Ptr(markdownRequest)})
+		other.Send(protocol.OpenSeedMessage{Cmd: protocol.CmdOpenSeed, SeedID: seed, SessionID: protocol.Ptr(protocol.SessionID(tender.session)), RequestID: protocol.Ptr(seedRequest)})
 		markdown := testworld.Await(app, protocol.EventOpenMarkdownResult, func(r protocol.OpenMarkdownResultMessage) bool { return protocol.Deref(r.RequestID) == markdownRequest })
 		opened := testworld.Await(other, protocol.EventOpenSeedResult, func(r protocol.OpenSeedResultMessage) bool { return protocol.Deref(r.RequestID) == seedRequest })
 		if !markdown.Success || !opened.Success {

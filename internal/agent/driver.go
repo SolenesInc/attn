@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/victorarias/attn/internal/protocol"
+
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/transcript"
 )
@@ -145,7 +147,7 @@ func boolEnv(key string) (bool, bool) {
 }
 
 type SpawnOpts struct {
-	SessionID       string
+	TerminalID      protocol.TerminalID
 	CWD             string
 	Label           string
 	InitialPrompt   string

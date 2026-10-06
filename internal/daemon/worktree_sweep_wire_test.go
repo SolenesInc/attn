@@ -398,7 +398,7 @@ func TestRemovingASeedsWorktreeNotesItOnTheSeed(t *testing.T) {
 		t.Fatalf("harvesting %s: %v", finished.SeedID, err)
 	}
 	for _, delegated := range []*protocol.DelegateResult{finished, open} {
-		if _, err := cli.AgentClose(delegated.SessionID, caller, "done for now"); err != nil {
+		if _, err := cli.AgentClose(string(delegated.SessionID), protocol.SessionID(caller), "done for now"); err != nil {
 			t.Fatalf("closing %s: %v", delegated.SessionID, err)
 		}
 	}

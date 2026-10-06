@@ -18,7 +18,7 @@ func (c *Client) CrewList() (*protocol.CrewListResult, error) {
 	return resp.CrewListResult, nil
 }
 
-func (c *Client) CrewWake(member, agent, sourceSessionID string) (*protocol.CrewWakeResult, error) {
+func (c *Client) CrewWake(member string, agent string, sourceSessionID protocol.SessionID) (*protocol.CrewWakeResult, error) {
 	msg := protocol.CrewWakeMessage{Cmd: protocol.CmdCrewWake, Member: member}
 	if agent != "" {
 		msg.Agent = protocol.Ptr(agent)
@@ -73,7 +73,7 @@ func (c *Client) CrewRestart(member, requestID string) (*protocol.CrewRestartRes
 	if err != nil {
 		return nil, fmt.Errorf("read the current crew day before restarting it: %w", err)
 	}
-	var expectedSessionID string
+	var expectedSessionID protocol.SessionID
 	var expectedRevision int
 	found := false
 	for _, candidate := range roster.Members {
@@ -100,7 +100,7 @@ func (c *Client) CrewRestart(member, requestID string) (*protocol.CrewRestartRes
 	return resp.CrewRestartResult, nil
 }
 
-func (c *Client) CrewPrime(sessionID string) (*protocol.CrewPrimeResult, error) {
+func (c *Client) CrewPrime(sessionID protocol.SessionID) (*protocol.CrewPrimeResult, error) {
 	resp, err := c.send(protocol.CrewPrimeMessage{Cmd: protocol.CmdCrewPrime, SessionID: sessionID})
 	if err != nil {
 		return nil, err
@@ -111,7 +111,7 @@ func (c *Client) CrewPrime(sessionID string) (*protocol.CrewPrimeResult, error) 
 	return resp.CrewPrimeResult, nil
 }
 
-func (c *Client) CrewHandoff(sessionID, note string, retry bool, close protocol.CrewDayClose) (*protocol.CrewHandoffResult, error) {
+func (c *Client) CrewHandoff(sessionID protocol.SessionID, note string, retry bool, close protocol.CrewDayClose) (*protocol.CrewHandoffResult, error) {
 	msg := protocol.CrewHandoffMessage{Cmd: protocol.CmdCrewHandoff, SessionID: sessionID, Note: note}
 	if retry {
 		msg.Retry = protocol.Ptr(true)

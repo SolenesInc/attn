@@ -5,7 +5,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (d *Daemon) launchRequester(sessionID, fallback string) string {
+func (d *Daemon) launchRequester(sessionID protocol.SessionID, fallback string) string {
 	if session := d.store.Get(sessionID); session != nil && session.Label != "" {
 		return session.Label
 	}
@@ -27,7 +27,7 @@ func (d *Daemon) showCrewWake(result *protocol.CrewWakeResult, client *wsClient,
 	return nil
 }
 
-func (d *Daemon) announceBackgroundLaunch(kind, itemID, sessionID, requestedBy string) {
+func (d *Daemon) announceBackgroundLaunch(kind string, itemID string, sessionID protocol.SessionID, requestedBy string) {
 	placement, placed, err := d.store.SessionPlacement(sessionID)
 	if err != nil || !placed {
 		return
@@ -42,7 +42,7 @@ func (d *Daemon) announceBackgroundLaunch(kind, itemID, sessionID, requestedBy s
 		d.logf("background launch placement %s: %v", sessionID, err)
 		return
 	}
-	d.publishFact(FactBackgroundLaunch, sessionID, protocol.BackgroundLaunchMessage{Event: protocol.EventBackgroundLaunch, SessionID: sessionID, ProfileID: placement.ProfileID, DesktopID: placement.DesktopID, Name: item.Name, RequestedBy: requestedBy, DesktopLabel: label, Kind: protocol.LaunchDesktopKind(kind)})
+	d.publishFact(FactBackgroundLaunch, string(sessionID), protocol.BackgroundLaunchMessage{Event: protocol.EventBackgroundLaunch, SessionID: sessionID, ProfileID: placement.ProfileID, DesktopID: placement.DesktopID, Name: item.Name, RequestedBy: requestedBy, DesktopLabel: label, Kind: protocol.LaunchDesktopKind(kind)})
 }
 
 func (d *Daemon) projectBackgroundLaunch(ev bus.Event) {

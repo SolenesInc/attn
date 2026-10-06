@@ -24,7 +24,7 @@ func registerDelegationCaller(t *testing.T, w *world, cli *client.Client, id str
 
 func plantDelegationSeed(t *testing.T, cli *client.Client, sessionID, title string) string {
 	t.Helper()
-	planted, err := cli.SeedPlant(sessionID, title, "Work on "+strings.ToLower(title)+".", "", "", "")
+	planted, err := cli.SeedPlant(protocol.SessionID(sessionID), title, "Work on "+strings.ToLower(title)+".", "", "", "")
 	if err != nil {
 		t.Fatalf("plant %q: %v", title, err)
 	}
@@ -33,14 +33,14 @@ func plantDelegationSeed(t *testing.T, cli *client.Client, sessionID, title stri
 
 func moveDelegationSeed(t *testing.T, cli *client.Client, sessionID, seedID, verb, reason string) {
 	t.Helper()
-	if _, err := cli.SeedTransition(sessionID, seedID, verb, reason, "", false, client.SeedTransitionOptions{}); err != nil {
+	if _, err := cli.SeedTransition(protocol.SessionID(sessionID), seedID, verb, reason, "", false, client.SeedTransitionOptions{}); err != nil {
 		t.Fatalf("%s moves %s to %s: %v", sessionID, seedID, verb, err)
 	}
 }
 
 func delegateAtSeed(source, cwd, seedID string) protocol.DelegateMessage {
 	return protocol.DelegateMessage{
-		Cmd: protocol.CmdDelegate, Cwd: cwd, SourceSessionID: protocol.Ptr(source), Agent: protocol.Ptr("codex"),
+		Cmd: protocol.CmdDelegate, Cwd: cwd, SourceSessionID: protocol.Ptr(protocol.SessionID(source)), Agent: protocol.Ptr("codex"),
 		Assignment: protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindSeed, SeedID: protocol.Ptr(seedID)},
 	}
 }
@@ -111,7 +111,7 @@ func TestDelegatingAtASeedHandsItToTheDelegate(t *testing.T) {
 		if err != nil || result.SeedID != row.seed || shown.Seed.TenderSession != result.SessionID {
 			t.Errorf("%s: the delegation bound seed %s and left %+v, %v; want %s tended by %s", row.name, result.SeedID, shown, err, row.seed, result.SessionID)
 		}
-		if predecessor := protocol.Deref(result.PredecessorSessionID); predecessor != row.predecessor {
+		if predecessor := protocol.Deref(result.PredecessorSessionID); string(predecessor) != row.predecessor {
 			t.Errorf("%s: the delegation reports predecessor %q; want %q", row.name, predecessor, row.predecessor)
 		}
 	}
@@ -143,9 +143,9 @@ func TestASeedBeingDelegatedRefusesOtherClaimsWhileItsDelegateBoots(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	testworld.AwaitSession(app, accepted.SessionID, func(protocol.Session) bool { return true })
+	testworld.AwaitSession(app, string(accepted.SessionID), func(protocol.Session) bool { return true })
 
-	if _, err := cli.SeedTransition("contender", seed, "tend", "", "", false, client.SeedTransitionOptions{}); err == nil || !strings.Contains(err.Error(), "being tended by "+accepted.SessionID) {
+	if _, err := cli.SeedTransition("contender", seed, "tend", "", "", false, client.SeedTransitionOptions{}); err == nil || !strings.Contains(err.Error(), string("being tended by "+accepted.SessionID)) {
 		t.Errorf("claiming the seed while its delegate boots = %v, want it refused naming the delegate", err)
 	}
 	boot()
@@ -168,14 +168,14 @@ func TestAMessageToASeedReachesItsCurrentOrNextTender(t *testing.T) {
 	untended := plantSeedAs(t, cli, "caller", "Nobody has this")
 
 	sendAgentMessage(t, cli, "caller", delegated.SeedID, "the schema moved")
-	if inbox := inboxContents(readInbox(t, cli, delegated.SessionID, 0).Items); !strings.Contains(inbox, "the schema moved") {
+	if inbox := inboxContents(readInbox(t, cli, string(delegated.SessionID), 0).Items); !strings.Contains(inbox, "the schema moved") {
 		t.Errorf("the seed's tender received %q; want the message sent to its seed", inbox)
 	}
 	sendAgentMessage(t, cli, "caller", untended, "anyone there?")
 	if _, err := cli.SeedTransition(delegated.SessionID, untended, "tend", "", "", false, client.SeedTransitionOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	if mail := inboxContents(readInbox(t, cli, delegated.SessionID, 0).Items); !strings.Contains(mail, "anyone there?") {
+	if mail := inboxContents(readInbox(t, cli, string(delegated.SessionID), 0).Items); !strings.Contains(mail, "anyone there?") {
 		t.Fatalf("next tender inbox=%q", mail)
 	}
 }
@@ -189,10 +189,10 @@ func TestNestedDelegatesCarryTheirSeedAndDispatcher(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cli.SeedWatch(observer, first.SeedID, false); err != nil {
+	if _, err := cli.SeedWatch(protocol.SessionID(observer), first.SeedID, false); err != nil {
 		t.Fatal(err)
 	}
-	nestedRequest := delegateFrom(first.SessionID, cwd, "Migrate the first table", fakeagent.Codex)
+	nestedRequest := delegateFrom(string(first.SessionID), cwd, "Migrate the first table", fakeagent.Codex)
 	nestedRequest.Label = protocol.Ptr("first table")
 	nested, err := cli.Delegate(nestedRequest)
 	if err != nil {
@@ -211,11 +211,11 @@ func TestNestedDelegatesCarryTheirSeedAndDispatcher(t *testing.T) {
 		t.Errorf("the nested delegation planted %+v; want it part of %s, planted by %s and tended by %s", shown.Seed, first.SeedID, first.SessionID, nested.SessionID)
 	}
 	for _, want := range []struct{ session, seed, dispatcher string }{
-		{first.SessionID, first.SeedID, "caller"},
-		{nested.SessionID, nested.SeedID, first.SessionID},
+		{string(first.SessionID), first.SeedID, "caller"},
+		{string(nested.SessionID), nested.SeedID, string(first.SessionID)},
 	} {
 		testworld.AwaitSession(app, want.session, func(s protocol.Session) bool {
-			return protocol.Deref(s.SeedID) == want.seed && protocol.Deref(s.DispatcherSessionID) == want.dispatcher
+			return protocol.Deref(s.SeedID) == want.seed && string(protocol.Deref(s.DispatcherSessionID)) == want.dispatcher
 		})
 	}
 	if caller := sessionOfDelegate(t, w, "caller"); caller.SeedID != nil || caller.DispatcherSessionID != nil {
@@ -229,7 +229,7 @@ func TestNestedDelegatesCarryTheirSeedAndDispatcher(t *testing.T) {
 	if len(bells) != 1 || protocol.Deref(bells[0].Hint) != "tended" || !strings.Contains(bells[0].Content, nested.SeedID) {
 		t.Errorf("the plot's watcher received %q; want one bell that %s is tended", inboxContents(bells), nested.SeedID)
 	}
-	for _, directlyPrompted := range []string{first.SessionID, nested.SessionID} {
+	for _, directlyPrompted := range []string{string(first.SessionID), string(nested.SessionID)} {
 		if items := readInbox(t, cli, directlyPrompted, 0).Items; len(items) != 0 {
 			t.Errorf("%s, who planned or was prompted with the work, received %q", directlyPrompted, inboxContents(items))
 		}

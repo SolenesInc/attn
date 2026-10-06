@@ -121,7 +121,7 @@ func TestAgentMessageIsReadableByIDOnlyByItsRecipientAndSurvivesARestart(t *test
 	w.restart()
 	app = w.App()
 	w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
-		m.ID = recipient
+		m.ID = protocol.SessionID(recipient)
 		m.ResumeSessionID = protocol.Ptr(recipient)
 	})
 	app.TypeLine(recipient, "what changed?")
@@ -129,14 +129,14 @@ func TestAgentMessageIsReadableByIDOnlyByItsRecipientAndSurvivesARestart(t *test
 		t.Fatalf("restart renewed an outstanding ring: %q", got)
 	}
 
-	read, err := cli.AgentInbox(sent.MessageID, recipient)
+	read, err := cli.AgentInbox(sent.MessageID, protocol.SessionID(recipient))
 	if err != nil {
 		t.Fatalf("the recipient reads its message by ID: %v", err)
 	}
 	if read.Content != "the discount is applied after tax" || read.State != protocol.AgentMessageStateRead || read.ReadAt == nil {
 		t.Fatalf("read = %+v", read)
 	}
-	again, err := cli.AgentInbox(sent.MessageID, recipient)
+	again, err := cli.AgentInbox(sent.MessageID, protocol.SessionID(recipient))
 	if err != nil || protocol.Deref(again.ReadAt) != protocol.Deref(read.ReadAt) {
 		t.Errorf("a repeat read = %+v, %v; want the same message read at the same time", again, err)
 	}
@@ -156,7 +156,7 @@ func registerSessions(t *testing.T, w *world, cli *client.Client, ids ...string)
 
 func sendAgentMessage(t *testing.T, cli *client.Client, from, to, body string) *protocol.AgentMsgResult {
 	t.Helper()
-	result, err := cli.AgentMsg(to, from, body)
+	result, err := cli.AgentMsg(to, protocol.SessionID(from), body)
 	if err != nil {
 		t.Fatalf("%s messages %s: %v", from, to, err)
 	}
@@ -168,7 +168,7 @@ func sendAgentMessage(t *testing.T, cli *client.Client, from, to, body string) *
 
 func readInbox(t *testing.T, cli *client.Client, recipient string, limit int) *protocol.AgentInboxBatchResult {
 	t.Helper()
-	batch, err := cli.AgentInboxBatch(recipient, limit)
+	batch, err := cli.AgentInboxBatch(protocol.SessionID(recipient), limit)
 	if err != nil {
 		t.Fatalf("%s reads its inbox: %v", recipient, err)
 	}

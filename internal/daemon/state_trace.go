@@ -31,8 +31,8 @@ func (d *Daemon) stateTraceRecorder() *statetrace.Recorder {
 	return d.stateTrace
 }
 
-func (d *Daemon) recordStateObservation(sessionID string, obs statetrace.Observation) {
-	if strings.TrimSpace(sessionID) == "" {
+func (d *Daemon) recordStateObservation(sessionID protocol.SessionID, obs statetrace.Observation) {
+	if protocol.TrimID(sessionID) == "" {
 		return
 	}
 	if obs.RecordedAt.IsZero() {
@@ -66,7 +66,7 @@ func (d *Daemon) traceStateChange(change sessionStateChange, outcome statetrace.
 	})
 }
 
-func (d *Daemon) traceStateVeto(sessionID string, origin stateOrigin, claim, reason string) {
+func (d *Daemon) traceStateVeto(sessionID protocol.SessionID, origin stateOrigin, claim, reason string) {
 	d.recordStateObservation(sessionID, statetrace.Observation{
 		Source:     origin.source,
 		Claim:      claim,
@@ -77,7 +77,7 @@ func (d *Daemon) traceStateVeto(sessionID string, origin stateOrigin, claim, rea
 	})
 }
 
-func (d *Daemon) traceStateEvidence(sessionID string, origin stateOrigin, claim string) {
+func (d *Daemon) traceStateEvidence(sessionID protocol.SessionID, origin stateOrigin, claim string) {
 	d.recordStateObservation(sessionID, statetrace.Observation{
 		Source:     origin.source,
 		Claim:      claim,
@@ -87,7 +87,7 @@ func (d *Daemon) traceStateEvidence(sessionID string, origin stateOrigin, claim 
 	})
 }
 
-func (d *Daemon) traceStateSkip(sessionID, source, reason string) {
+func (d *Daemon) traceStateSkip(sessionID protocol.SessionID, source string, reason string) {
 	d.recordStateObservation(sessionID, statetrace.Observation{
 		Source:  source,
 		Outcome: statetrace.OutcomeSkipped,
@@ -95,12 +95,12 @@ func (d *Daemon) traceStateSkip(sessionID, source, reason string) {
 	})
 }
 
-func (d *Daemon) forgetStateTrace(sessionID string) {
+func (d *Daemon) forgetStateTrace(sessionID protocol.SessionID) {
 	d.stateTraceRecorder().Forget(sessionID)
 }
 
 func (d *Daemon) handleStateExplain(conn net.Conn, msg *protocol.StateExplainMessage) {
-	session := d.store.Get(strings.TrimSpace(msg.TargetSessionID))
+	session := d.store.Get(protocol.SessionID(strings.TrimSpace(msg.TargetSessionID)))
 	if session == nil {
 		d.sendError(conn, "session_not_found")
 		return
@@ -138,7 +138,7 @@ func (d *Daemon) stateExplainResult(session *protocol.Session) *protocol.StateEx
 	}
 	result := &protocol.StateExplainResult{
 		SessionID:    session.ID,
-		Agent:        string(session.Agent),
+		Agent:        session.Agent,
 		State:        string(session.State),
 		Observations: observations,
 		Capacity:     d.stateTraceRecorder().Capacity(),
@@ -153,49 +153,52 @@ func (d *Daemon) stateExplainResult(session *protocol.Session) *protocol.StateEx
 }
 
 func (d *Daemon) handleHookNotification(conn net.Conn, msg *protocol.HookNotificationMessage) {
+	sessionID := d.sessionInTerminal(msg.ID)
 	kind := strings.TrimSpace(msg.NotificationType)
 	if kind == "" {
 		d.sendError(conn, "missing notification_type")
 		return
 	}
 	message := strings.TrimSpace(protocol.Deref(msg.Message))
-	d.traceStateEvidence(msg.ID, stateOrigin{
+	d.traceStateEvidence(sessionID, stateOrigin{
 		source: stateSourceHookNotify,
 		detail: message,
 	}, kind)
-	d.recordNotificationEvidence(msg.ID, kind, message)
+	d.recordNotificationEvidence(sessionID, kind, message)
 	d.sendOK(conn)
 }
 
 func (d *Daemon) handleHookStopFailure(conn net.Conn, msg *protocol.HookStopFailureMessage) {
+	sessionID := d.sessionInTerminal(msg.ID)
 	errorType := strings.TrimSpace(msg.ErrorType)
 	if errorType == "" {
 		d.sendError(conn, "missing error_type")
 		return
 	}
 	message := strings.TrimSpace(protocol.Deref(msg.ErrorMessage))
-	d.traceStateEvidence(msg.ID, stateOrigin{
+	d.traceStateEvidence(sessionID, stateOrigin{
 		source: stateSourceHookStopFailure,
 		detail: message,
 	}, errorType)
-	d.recordStopFailureEvidence(msg.ID, errorType, message)
+	d.recordStopFailureEvidence(sessionID, errorType, message)
 	d.sendOK(conn)
 }
 
 func (d *Daemon) handleHookCompaction(conn net.Conn, msg *protocol.HookCompactionMessage) {
+	sessionID := d.sessionInTerminal(msg.ID)
 	phase := "finished"
 	if msg.Active {
 		phase = "started"
 	}
-	d.traceStateEvidence(msg.ID, stateOrigin{
+	d.traceStateEvidence(sessionID, stateOrigin{
 		source: stateSourceHookCompaction,
 		detail: strings.TrimSpace(protocol.Deref(msg.Trigger)),
 	}, phase)
-	d.recordCompactionEvidence(msg.ID, msg.Active)
+	d.recordCompactionEvidence(sessionID, msg.Active)
 	d.sendOK(conn)
 }
 
-func (d *Daemon) tracePermissionMode(sessionID, mode string) {
+func (d *Daemon) tracePermissionMode(sessionID protocol.SessionID, mode string) {
 	mode = strings.TrimSpace(mode)
 	if mode == "" {
 		return

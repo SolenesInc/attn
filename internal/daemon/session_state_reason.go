@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"strings"
 	"sync"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -10,15 +9,15 @@ import (
 
 type sessionStateReasons struct {
 	mu      sync.Mutex
-	reasons map[string]string
+	reasons map[protocol.SessionID]string
 }
 
 func newSessionStateReasons() *sessionStateReasons {
-	return &sessionStateReasons{reasons: make(map[string]string)}
+	return &sessionStateReasons{reasons: make(map[protocol.SessionID]string)}
 }
 
-func (r *sessionStateReasons) set(sessionID, reason string) bool {
-	if r == nil || strings.TrimSpace(sessionID) == "" {
+func (r *sessionStateReasons) set(sessionID protocol.SessionID, reason string) bool {
+	if r == nil || protocol.TrimID(sessionID) == "" {
 		return false
 	}
 	r.mu.Lock()
@@ -30,7 +29,7 @@ func (r *sessionStateReasons) set(sessionID, reason string) bool {
 	return true
 }
 
-func (r *sessionStateReasons) get(sessionID string) string {
+func (r *sessionStateReasons) get(sessionID protocol.SessionID) string {
 	if r == nil {
 		return ""
 	}
@@ -39,7 +38,7 @@ func (r *sessionStateReasons) get(sessionID string) string {
 	return r.reasons[sessionID]
 }
 
-func (r *sessionStateReasons) forget(sessionID string) {
+func (r *sessionStateReasons) forget(sessionID protocol.SessionID) {
 	if r == nil {
 		return
 	}
@@ -55,7 +54,7 @@ func (d *Daemon) stateReasons() *sessionStateReasons {
 	return d.sessionStateReason
 }
 
-func (d *Daemon) recordStateReason(sessionID string, resolution sessionstate.Resolution) bool {
+func (d *Daemon) recordStateReason(sessionID protocol.SessionID, resolution sessionstate.Resolution) bool {
 	return d.stateReasons().set(sessionID, string(resolution.Reason))
 }
 

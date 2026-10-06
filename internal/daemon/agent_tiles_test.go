@@ -38,7 +38,7 @@ func openBrowserFor(t *testing.T, d *Daemon, sessionID, url string) protocol.Res
 	defer clientConn.Close()
 	msg := &protocol.OpenBrowserMessage{Cmd: protocol.CmdOpenBrowser, URL: url}
 	if sessionID != "" {
-		msg.SessionID = protocol.Ptr(sessionID)
+		msg.SessionID = protocol.Ptr(protocol.SessionID(sessionID))
 	}
 	go d.handleOpenBrowser(serverConn, msg)
 	var resp protocol.Response

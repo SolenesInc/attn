@@ -17,7 +17,7 @@ func TestAParkedVerdictHoldsAYieldedTurnWorkingPastTheIdlePromptUntilItExpires(t
 		app, cli := w.App(), w.Client()
 		transcript, _ := hookedClaudeAtWork(t, w, app, cli, "deploy to staging")
 		transcript.Answer("The deploy is running in the background; I'll continue when it completes.")
-		yieldWithBackgroundWork(t, cli, transcript)
+		yieldWithBackgroundWork(t, w, cli, transcript)
 		task := w.HeadlessTask()
 		if !strings.Contains(task.Prompt, "yielded with 1 background process") {
 			t.Errorf("the verdict prompt %q does not say the turn yielded with work running", task.Prompt)
@@ -30,7 +30,7 @@ func TestAParkedVerdictHoldsAYieldedTurnWorkingPastTheIdlePromptUntilItExpires(t
 			t.Fatalf("the parked turn is %s, want working", parked.State)
 		}
 
-		if err := cli.RecordNotification("s1", "idle_prompt", "Claude is waiting for your input"); err != nil {
+		if err := cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), "idle_prompt", "Claude is waiting for your input"); err != nil {
 			t.Fatalf("notify idle_prompt: %v", err)
 		}
 		w.advance(30*time.Minute - time.Second)
@@ -52,7 +52,7 @@ func TestADoneVerdictOnAYieldedTurnSettlesItDespiteTheWorkStillRunning(t *testin
 		app, cli := w.App(), w.Client()
 		transcript, _ := hookedClaudeAtWork(t, w, app, cli, "deploy to staging")
 		transcript.Answer("Staging is deployed. The log tail left running is not mine to wait on.")
-		yieldWithBackgroundWork(t, cli, transcript)
+		yieldWithBackgroundWork(t, w, cli, transcript)
 		answerTurnVerdict(t, w, "DONE")
 		settled := testworld.AwaitSession(app, "s1", func(s protocol.Session) bool {
 			return s.State != protocol.SessionStateWorking && s.State != protocol.SessionStateLaunching
@@ -73,20 +73,20 @@ func hookedClaudeAtWork(t *testing.T, w *world, app *testworld.Peer, cli *client
 	if err := w.InjectSession("s1", "checkout work", cwd, protocol.SessionAgentClaude); err != nil {
 		t.Fatalf("register: %v", err)
 	}
-	if err := cli.ObserveAgentConversation("s1", transcript.ConversationID, transcript.Path); err != nil {
+	if err := cli.ObserveAgentConversation(protocol.TerminalID(w.Terminal("s1")), transcript.ConversationID, transcript.Path); err != nil {
 		t.Fatalf("bind the conversation: %v", err)
 	}
 	transcript.Prompt(prompt)
-	if err := cli.UpdateStateFromHookEvidence("s1", protocol.StateWorking, "", "user_prompt_submit", prompt); err != nil {
+	if err := cli.UpdateStateFromHookEvidence(protocol.TerminalID(w.Terminal("s1")), protocol.StateWorking, "", "user_prompt_submit", prompt); err != nil {
 		t.Fatalf("report the prompt taken: %v", err)
 	}
 	working := testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	return transcript, working
 }
 
-func yieldWithBackgroundWork(t *testing.T, cli *client.Client, transcript *fakeagent.ClaudeTranscript) {
+func yieldWithBackgroundWork(t *testing.T, w *world, cli *client.Client, transcript *fakeagent.ClaudeTranscript) {
 	t.Helper()
-	if err := cli.SendStop("s1", transcript.Path, client.StopFacts{BackgroundTasks: []protocol.StopBackgroundTask{
+	if err := cli.SendStop(protocol.TerminalID(w.Terminal("s1")), transcript.Path, client.StopFacts{BackgroundTasks: []protocol.StopBackgroundTask{
 		{Type: "background_session", Status: "running", Name: protocol.Ptr("./deploy.sh staging")},
 	}}); err != nil {
 		t.Fatalf("stop with background work: %v", err)

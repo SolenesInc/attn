@@ -46,7 +46,7 @@ func TestStateExplainReplaysEachClaimAndWhatBecameOfIt(t *testing.T) {
 
 	var result protocol.StateExplainResult
 	s.Attn("state", "explain", id, "--json").JSON(t, &result)
-	if result.SessionID != id || result.Agent != "claude" || result.State != string(protocol.SessionStateWaitingInput) || result.Capacity == 0 {
+	if string(result.SessionID) != id || result.Agent != "claude" || result.State != string(protocol.SessionStateWaitingInput) || result.Capacity == 0 {
 		t.Fatalf("state explain --json = %+v", result)
 	}
 	if !slices.ContainsFunc(result.Observations, func(obs protocol.StateExplainEntry) bool { return obs.Outcome == "applied" }) {

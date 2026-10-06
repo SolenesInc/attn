@@ -41,7 +41,7 @@ func GenerateCodexConfigOverrides(sessionID, socketPath, wrapperPath string, lau
 	stop := command("_hook-stop")
 
 	overrides := []string{
-		"shell_environment_policy.set.ATTN_SESSION_ID=" + strconv.Quote(strings.TrimSpace(sessionID)),
+		"shell_environment_policy.set.ATTN_TERMINAL_ID=" + strconv.Quote(strings.TrimSpace(sessionID)),
 		"shell_environment_policy.set.ATTN_WRAPPER_PATH=" + strconv.Quote(wrapper),
 		"features.hooks=true",
 		"features.terminal_resize_reflow=true",

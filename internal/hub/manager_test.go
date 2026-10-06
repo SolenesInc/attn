@@ -124,8 +124,8 @@ func TestManagerPendingSessionRouteReservesSpawnEndpoint(t *testing.T) {
 	manager := NewManager(endpointStore, nil, nil, nil, nil, nil)
 	manager.ReservePendingSessionRoute(record.ID, "sess-pending")
 
-	if endpointID, ok := manager.EndpointIDForPTYTarget("sess-pending"); !ok || endpointID != record.ID {
-		t.Fatalf("EndpointIDForPTYTarget(sess-pending) = (%q, %v), want (%q, true)", endpointID, ok, record.ID)
+	if endpointID, ok := manager.EndpointIDForSession("sess-pending"); !ok || endpointID != record.ID {
+		t.Fatalf("EndpointIDForSession(sess-pending) = (%q, %v), want (%q, true)", endpointID, ok, record.ID)
 	}
 
 	if changed, count := manager.upsertRemoteSession(record.ID, protocol.Session{
@@ -565,7 +565,7 @@ func TestManagerForwardBrowserControlReturnsOwningEndpointResult(t *testing.T) {
 		Cmd:       protocol.CmdBrowserControl,
 		Action:    "get_title",
 		RequestID: protocol.Ptr("request-1"),
-		SessionID: protocol.Ptr("remote-session"),
+		SessionID: protocol.Ptr(protocol.SessionID("remote-session")),
 	})
 	if err != nil {
 		t.Fatalf("ForwardBrowserControl() error = %v", err)
@@ -705,15 +705,16 @@ func TestForwardRefusesAParkedEndpointWhoseConnectionDropped(t *testing.T) {
 func TestForwardPTYCommandRefusesAParkedEndpoint(t *testing.T) {
 	manager := NewManager(store.New(), nil, nil, nil, nil, nil)
 	manager.runtimes["endpoint-1"] = &endpointRuntime{
-		record:   store.EndpointRecord{ID: "endpoint-1", Name: "gpu-box"},
-		sessions: map[string]protocol.Session{"session-1": {ID: "session-1"}},
+		record:    store.EndpointRecord{ID: "endpoint-1", Name: "gpu-box"},
+		sessions:  map[protocol.SessionID]protocol.Session{"session-1": {ID: "session-1"}},
+		terminals: map[protocol.TerminalID]protocol.SessionID{"terminal-1": "session-1"},
 		info: protocol.EndpointInfo{
 			Status:        "binary_mismatch",
 			StatusMessage: protocol.Ptr("remote binary (abc1234) differs from this client (def5678) — click Sync to update"),
 		},
 	}
 
-	err := manager.ForwardPTYCommand(context.Background(), "session-1", []byte(`{"cmd":"pty_input"}`))
+	err := manager.ForwardPTYCommand(context.Background(), "terminal-1", []byte(`{"cmd":"pty_input"}`))
 	var parked *ParkedEndpointError
 	if !errors.As(err, &parked) {
 		t.Fatalf("ForwardPTYCommand() error = %v, want *ParkedEndpointError", err)
@@ -845,8 +846,7 @@ func TestForwardSessionCloseRefusalEndsOnlyItsOwnClose(t *testing.T) {
 	results := make(chan error, 2)
 	for _, sessionID := range []string{"sess-a", "sess-b"} {
 		go func() {
-			results <- manager.ForwardSessionClose(ctx, "endpoint-1", sessionID,
-				[]byte(fmt.Sprintf(`{"cmd":"unregister","id":%q}`, sessionID)))
+			results <- manager.ForwardSessionClose(ctx, "endpoint-1", protocol.SessionID(sessionID), []byte(fmt.Sprintf(`{"cmd":"unregister","id":%q}`, sessionID)))
 		}()
 	}
 	for range 2 {

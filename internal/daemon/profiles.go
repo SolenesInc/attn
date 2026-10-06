@@ -4,9 +4,10 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"github.com/victorarias/attn/internal/crew"
 	"path/filepath"
 	"strings"
+
+	"github.com/victorarias/attn/internal/crew"
 
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/enrollment"
@@ -419,7 +420,7 @@ func (d *Daemon) countRemoteProfileSessions(profileID string) (int, error) {
 	if d.hubManager == nil {
 		return 0, nil
 	}
-	counted := map[string]bool{}
+	counted := map[protocol.SessionID]bool{}
 	for _, session := range d.hubManager.RemoteSessions() {
 		if d.store.Get(session.ID) != nil || counted[session.ID] {
 			continue

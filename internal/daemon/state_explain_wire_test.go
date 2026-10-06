@@ -22,13 +22,13 @@ func TestStateExplainAttributesEachHookClaimToItsSourceAndCollapsesRepeats(t *te
 		}
 
 		reported := time.Now()
-		if err := cli.UpdateStateFromHook("s1", protocol.StateWorking, "auto"); err != nil {
+		if err := cli.UpdateStateFromHook(protocol.TerminalID(w.Terminal("s1")), protocol.StateWorking, "auto"); err != nil {
 			t.Fatalf("report s1 working: %v", err)
 		}
 		working := testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 		w.advance(time.Second)
 		notified := time.Now()
-		if err := cli.RecordNotification("s1", "permission_prompt", "Claude needs your permission"); err != nil {
+		if err := cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), "permission_prompt", "Claude needs your permission"); err != nil {
 			t.Fatalf("notify s1: %v", err)
 		}
 		w.advance(time.Second)
@@ -48,7 +48,7 @@ func TestStateExplainAttributesEachHookClaimToItsSourceAndCollapsesRepeats(t *te
 
 		first := time.Now()
 		for range 3 {
-			if err := cli.UpdateState("s2", protocol.StateWorking); err != nil {
+			if err := cli.UpdateState(protocol.TerminalID(w.Terminal("s2")), protocol.StateWorking); err != nil {
 				t.Fatalf("report s2 working: %v", err)
 			}
 			w.advance(time.Second)
@@ -72,13 +72,13 @@ func TestStateExplainFollowsASessionThroughItsTurnARestartAndItsClose(t *testing
 	app, cli := w.App(), w.Client()
 	spawned, _, _ := w.RequestSpawn(app, fakeagent.Claude, w.Path("shop"))
 	session := spawned.ID
-	run := w.Launched(session)
-	app.TypeLine(session, "rename the checkout module")
+	run := w.Launched(string(session))
+	app.TypeLine(string(session), "rename the checkout module")
 	run.Prompted()
 	run.ReplyAfterStop("Keep the old import path as an alias? <!-- attn:state=waiting_input -->")
-	waiting := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+	waiting := testworld.AwaitSession(app, string(session), func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 
-	explained := stateExplainOf(t, cli, session)
+	explained := stateExplainOf(t, cli, string(session))
 	if explained.SessionID != session || explained.Agent != "claude" || explained.State != string(protocol.SessionStateWaitingInput) ||
 		protocol.Deref(explained.StateSince) != waiting.StateSince {
 		t.Fatalf("explain names %s (%s) %s since %s, want %s (claude) waiting_input since %s",
@@ -94,12 +94,12 @@ func TestStateExplainFollowsASessionThroughItsTurnARestartAndItsClose(t *testing
 		stateExplainRow{source: "resolver", claim: "waiting_input", outcome: "applied", cause: "resolver_observation", detail: "classifier_verdict"},
 	)
 
-	app.TypeLine(session, "yes, keep it")
+	app.TypeLine(string(session), "yes, keep it")
 	run.Prompted()
-	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	testworld.AwaitSession(app, string(session), func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	w.restart()
 	app = w.App()
-	recovered := stateExplainOf(t, cli, session)
+	recovered := stateExplainOf(t, cli, string(session))
 	if recovered.State != string(protocol.SessionStateRecoverable) {
 		t.Fatalf("after the restart explain shows the session %s, want recoverable", recovered.State)
 	}
@@ -107,11 +107,11 @@ func TestStateExplainFollowsASessionThroughItsTurnARestartAndItsClose(t *testing
 		stateExplainRow{source: "startup_recovery", claim: "recoverable", outcome: "applied", cause: "startup_recovery"},
 	)
 
-	if closed := closeFromApp(app, session); !closed.Accepted {
+	if closed := closeFromApp(app, string(session)); !closed.Accepted {
 		t.Fatalf("close the session: %s", protocol.Deref(closed.Error))
 	}
 	testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool { return e.Session != nil && e.Session.ID == session })
-	if _, err := cli.StateExplain(session); err == nil || !strings.Contains(err.Error(), "session_not_found") {
+	if _, err := cli.StateExplain(string(session)); err == nil || !strings.Contains(err.Error(), "session_not_found") {
 		t.Fatalf("explain of a closed session answered %v, want session_not_found", err)
 	}
 }

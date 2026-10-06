@@ -19,15 +19,15 @@ func TestDaemon_BroadcastRawWSMessage_RoutesRemotePTYTrafficToInterestedClients(
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	clientAttached := &wsClient{
 		send:            make(chan outboundMessage, 8),
-		attachedStreams: make(map[string]ptybackend.Stream),
-		attachedRemote:  make(map[string]struct{}),
-		pendingRemote:   make(map[string]struct{}),
+		attachedStreams: make(map[protocol.TerminalID]ptybackend.Stream),
+		attachedRemote:  make(map[protocol.TerminalID]struct{}),
+		pendingRemote:   make(map[protocol.TerminalID]struct{}),
 	}
 	clientOther := &wsClient{
 		send:            make(chan outboundMessage, 8),
-		attachedStreams: make(map[string]ptybackend.Stream),
-		attachedRemote:  make(map[string]struct{}),
-		pendingRemote:   make(map[string]struct{}),
+		attachedStreams: make(map[protocol.TerminalID]ptybackend.Stream),
+		attachedRemote:  make(map[protocol.TerminalID]struct{}),
+		pendingRemote:   make(map[protocol.TerminalID]struct{}),
 	}
 	d.wsHub.clients[clientAttached] = true
 	d.wsHub.clients[clientOther] = true
@@ -92,15 +92,15 @@ func TestDaemon_BroadcastRawWSMessage_RoutesPendingRemotePTYOutputBeforeAttachRe
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	clientPending := &wsClient{
 		send:            make(chan outboundMessage, 8),
-		attachedStreams: make(map[string]ptybackend.Stream),
-		attachedRemote:  make(map[string]struct{}),
-		pendingRemote:   make(map[string]struct{}),
+		attachedStreams: make(map[protocol.TerminalID]ptybackend.Stream),
+		attachedRemote:  make(map[protocol.TerminalID]struct{}),
+		pendingRemote:   make(map[protocol.TerminalID]struct{}),
 	}
 	clientOther := &wsClient{
 		send:            make(chan outboundMessage, 8),
-		attachedStreams: make(map[string]ptybackend.Stream),
-		attachedRemote:  make(map[string]struct{}),
-		pendingRemote:   make(map[string]struct{}),
+		attachedStreams: make(map[protocol.TerminalID]ptybackend.Stream),
+		attachedRemote:  make(map[protocol.TerminalID]struct{}),
+		pendingRemote:   make(map[protocol.TerminalID]struct{}),
 	}
 	d.wsHub.clients[clientPending] = true
 	d.wsHub.clients[clientOther] = true
@@ -132,9 +132,9 @@ func TestDaemon_BroadcastRawWSMessage_RemoteSessionExitedClearsRemoteAttachState
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	client := &wsClient{
 		send:            make(chan outboundMessage, 8),
-		attachedStreams: make(map[string]ptybackend.Stream),
-		attachedRemote:  make(map[string]struct{}),
-		pendingRemote:   make(map[string]struct{}),
+		attachedStreams: make(map[protocol.TerminalID]ptybackend.Stream),
+		attachedRemote:  make(map[protocol.TerminalID]struct{}),
+		pendingRemote:   make(map[protocol.TerminalID]struct{}),
 	}
 	d.wsHub.clients[client] = true
 	client.attachedRemote["remote-runtime-1"] = struct{}{}
@@ -254,7 +254,7 @@ func TestDaemon_PruneSessionsWithoutPTY_RemovesTheReapedPane(t *testing.T) {
 	if removed := d.pruneSessionsWithoutPTY(d.storedSessionIDs(), time.Time{}); removed != 1 {
 		t.Fatalf("pruneSessionsWithoutPTY removed = %d, want 1", removed)
 	}
-	if got := d.store.Get(sessionID); got != nil {
+	if got := d.store.Get(protocol.SessionID(sessionID)); got != nil {
 		t.Fatalf("store.Get(%q) = %+v, want nil", sessionID, got)
 	}
 	if desktop, err := d.store.GetDesktop(desktopID); err != nil || len(desktop.Panes) != 0 {
@@ -266,7 +266,7 @@ func addStalePlacedSession(t *testing.T, d *Daemon, sessionID string) string {
 	t.Helper()
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
-		ID: sessionID, Label: sessionID, Agent: protocol.SessionAgentCodex, Directory: "/tmp/stale",
+		ID: protocol.SessionID(sessionID), Label: sessionID, Agent: protocol.SessionAgentCodex, Directory: "/tmp/stale",
 		ProfileID: defaultProfileID(t, d.store),
 		State:     protocol.SessionStateWorking, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
@@ -319,7 +319,7 @@ func TestDaemon_HandleUnregisterWS_KeepsTheOtherAgentOnItsDesktop(t *testing.T) 
 	}
 	for _, id := range []string{"sess-primary", "sess-next"} {
 		d.store.Add(&protocol.Session{
-			ID: id, Label: id, Directory: t.TempDir(), ProfileID: profile.ID,
+			ID: protocol.SessionID(id), Label: id, Directory: t.TempDir(), ProfileID: profile.ID,
 			State: protocol.StateWorking, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 		})
 		placeTestSession(t, d, id, profile.CurrentDesktopID)
@@ -327,7 +327,7 @@ func TestDaemon_HandleUnregisterWS_KeepsTheOtherAgentOnItsDesktop(t *testing.T) 
 
 	client := &wsClient{
 		send:            make(chan outboundMessage, 8),
-		attachedStreams: make(map[string]ptybackend.Stream),
+		attachedStreams: make(map[protocol.TerminalID]ptybackend.Stream),
 	}
 	d.wsHub.clients[client] = true
 

@@ -14,8 +14,8 @@ func wakeMember(t *testing.T, s *testworld.Stack, name string) string {
 	t.Helper()
 	var woken protocol.CrewWakeResult
 	s.Attn("crew", "wake", name, "--json").JSON(t, &woken)
-	s.Launched(woken.SessionID).Prompted()
-	return woken.SessionID
+	s.Launched(string(woken.SessionID)).Prompted()
+	return string(woken.SessionID)
 }
 
 func filedLetter(t *testing.T, stdout, member string) string {
@@ -79,7 +79,7 @@ func TestAHandoffFilesTheLetterAndTurnsTheDayOverAsAsked(t *testing.T) {
 	requireLines(t, "stdout", stuck.Stdout, "Trellis's letter is filed at ")
 	requireLines(t, "stderr", stuck.Stderr, "handoff: no successor was woken: ", "`attn handoff --retry`")
 	path := filedLetter(t, stuck.Stdout, "Trellis")
-	if day := protocol.Deref(crewRoster(t, s)["trellis"].BindingSession); day != trellis {
+	if day := protocol.Deref(crewRoster(t, s)["trellis"].BindingSession); string(day) != trellis {
 		t.Fatalf("after the failed nap trellis is bound to %q, want its day %s", day, trellis)
 	}
 
@@ -89,10 +89,10 @@ func TestAHandoffFilesTheLetterAndTurnsTheDayOverAsAsked(t *testing.T) {
 	retried := s.Run(testworld.Invocation{Args: []string{"handoff", "--retry"}, Session: trellis})
 	requireStdout(t, retried, "Trellis's letter was already filed at "+path+".\n", "Trellis's next day is session ")
 	next := protocol.Deref(crewRoster(t, s)["trellis"].BindingSession)
-	if next == "" || next == trellis || !strings.Contains(retried.Stdout, "session "+next[:8]+", waking now") {
+	if next == "" || string(next) == trellis || !strings.Contains(retried.Stdout, string("session "+next[:8]+", waking now")) {
 		t.Fatalf("the retry woke %q:\n%s", next, retried.Stdout)
 	}
-	s.Launched(next).Prompted()
+	s.Launched(string(next)).Prompted()
 	if filed, err := os.ReadFile(path); err != nil || string(filed) != "Dear next trellis,\n" {
 		t.Fatalf("the retried letter reads %q (%v), want the one letter filed before", filed, err)
 	}

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -14,7 +15,7 @@ const exitScreenMaxBytes = 256 * 1024
 
 const exitScreenSnapshotTimeout = modelCaptureSnapshotTimeout
 
-func (d *Daemon) captureExitScreen(sessionID string, info ptybackend.ExitInfo) {
+func (d *Daemon) captureExitScreen(sessionID protocol.SessionID, info ptybackend.ExitInfo) {
 	if d.store == nil || d.store.Get(sessionID) == nil {
 		return
 	}
@@ -50,7 +51,7 @@ func clampExitScreenText(text string) string {
 	return fmt.Sprintf("[exit screen truncated: %d bytes rendered, attn keeps the last %d]\n%s", len(text), exitScreenMaxBytes, tail)
 }
 
-func (d *Daemon) restoreExitScreen(sessionID string, prior *store.SessionExitScreen) {
+func (d *Daemon) restoreExitScreen(sessionID protocol.SessionID, prior *store.SessionExitScreen) {
 	if prior == nil || d.store.GetSessionExitScreen(sessionID) != nil {
 		return
 	}

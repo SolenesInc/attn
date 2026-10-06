@@ -46,7 +46,7 @@ flags:
   --retry            turn the day over with the letter already filed; no -m
   --sleep            end the day; do not start the next one
   --nap              start the next day even if the user is away
-  --session <id>     the session closing its day (defaults to ATTN_SESSION_ID)
+  --session <id>     the session closing its day (defaults to the current session)
   --json             print the machine result as JSON
 `)
 }
@@ -55,18 +55,18 @@ type handoffArgs struct {
 	note    string
 	retry   bool
 	close   protocol.CrewDayClose
-	session string
+	session protocol.SessionID
 	json    bool
 }
 
-func parseHandoffArgs(args []string, envSession string) (handoffArgs, error) {
+func parseHandoffArgs(args []string, envSession func() protocol.SessionID) (handoffArgs, error) {
 	fs := flag.NewFlagSet("handoff", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	message := fs.String("m", "", "the letter; - reads it from stdin")
 	retry := fs.Bool("retry", false, "turn the day over with the letter already filed")
 	sleep := fs.Bool("sleep", false, "end the day rather than starting the next one")
 	nap := fs.Bool("nap", false, "start the next day even if the user is away")
-	session := fs.String("session", "", "the session closing its day (defaults to ATTN_SESSION_ID)")
+	session := fs.String("session", "", "the session closing its day (defaults to the current session)")
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
 	if err := fs.Parse(args); err != nil {
 		return handoffArgs{}, err
@@ -83,7 +83,7 @@ func parseHandoffArgs(args []string, envSession string) (handoffArgs, error) {
 	if !*retry && strings.TrimSpace(*message) == "" {
 		return handoffArgs{}, errors.New(`the letter is the handoff — pass it with -m "<your letter>", or -m - to pipe it in`)
 	}
-	parsed := handoffArgs{note: *message, retry: *retry, session: strings.TrimSpace(*session), json: *jsonOut}
+	parsed := handoffArgs{note: *message, retry: *retry, session: protocol.SessionID(strings.TrimSpace(*session)), json: *jsonOut}
 	switch {
 	case *sleep:
 		parsed.close = protocol.CrewDayCloseSleep
@@ -91,13 +91,13 @@ func parseHandoffArgs(args []string, envSession string) (handoffArgs, error) {
 		parsed.close = protocol.CrewDayCloseNap
 	}
 	if parsed.session == "" {
-		parsed.session = strings.TrimSpace(envSession)
+		parsed.session = protocol.TrimID(envSession())
 	}
 	return parsed, nil
 }
 
 func runHandoff(args []string) {
-	parsed, err := parseHandoffArgs(args, os.Getenv("ATTN_SESSION_ID"))
+	parsed, err := parseHandoffArgs(args, currentSessionOrExit)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "handoff: %v\n", err)
 		writeHandoffHelp(os.Stderr)
@@ -135,5 +135,5 @@ func runHandoff(args []string) {
 		return
 	}
 	fmt.Printf("%s's next day is session %s, waking now. This one ends here.\n",
-		crew.DisplayName(result.Member), agentShortID(protocol.Deref(result.SessionID)))
+		crew.DisplayName(result.Member), agentShortID(string(protocol.Deref(result.SessionID))))
 }

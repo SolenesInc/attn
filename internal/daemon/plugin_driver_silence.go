@@ -12,15 +12,15 @@ const pluginDriverSilenceGrace = 2 * time.Minute
 type pluginDriverSilenceWatch struct {
 	mu     sync.Mutex
 	life   *lifetime
-	armed  map[string]*time.Timer
+	armed  map[protocol.SessionID]*time.Timer
 	closed bool
 }
 
 func newPluginDriverSilenceWatch(life *lifetime) *pluginDriverSilenceWatch {
-	return &pluginDriverSilenceWatch{life: life, armed: map[string]*time.Timer{}}
+	return &pluginDriverSilenceWatch{life: life, armed: map[protocol.SessionID]*time.Timer{}}
 }
 
-func (w *pluginDriverSilenceWatch) arm(sessionID string, grace time.Duration, fire func()) {
+func (w *pluginDriverSilenceWatch) arm(sessionID protocol.SessionID, grace time.Duration, fire func()) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.closed {
@@ -32,7 +32,7 @@ func (w *pluginDriverSilenceWatch) arm(sessionID string, grace time.Duration, fi
 	w.armed[sessionID] = w.life.AfterFunc("pluginDriverSilence", grace, fire)
 }
 
-func (w *pluginDriverSilenceWatch) disarm(sessionID string) bool {
+func (w *pluginDriverSilenceWatch) disarm(sessionID protocol.SessionID) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	timer, ok := w.armed[sessionID]
@@ -79,7 +79,7 @@ func (d *Daemon) armPluginDriverSilenceWatchForEveryRun() {
 	}
 }
 
-func (d *Daemon) armPluginDriverSilenceWatchForRun(sessionID, runID, pluginName string) {
+func (d *Daemon) armPluginDriverSilenceWatchForRun(sessionID protocol.SessionID, runID string, pluginName string) {
 	grace := d.pluginDriverSilenceGrace()
 	if grace <= 0 {
 		return
@@ -89,13 +89,13 @@ func (d *Daemon) armPluginDriverSilenceWatchForRun(sessionID, runID, pluginName 
 	})
 }
 
-func (d *Daemon) notePluginDriverReport(sessionID string) {
+func (d *Daemon) notePluginDriverReport(sessionID protocol.SessionID) {
 	if d.pluginDriverSilence().disarm(sessionID) {
 		d.logf("plugin driver silence cleared: session=%s", sessionID)
 	}
 }
 
-func (d *Daemon) forgetPluginDriverSilenceWatch(sessionID string) {
+func (d *Daemon) forgetPluginDriverSilenceWatch(sessionID protocol.SessionID) {
 	d.pluginDriverSilence().disarm(sessionID)
 }
 
@@ -106,7 +106,7 @@ func (d *Daemon) pluginDriverSilenceGrace() time.Duration {
 	return pluginDriverSilenceGrace
 }
 
-func (d *Daemon) declarePluginDriverSilent(sessionID, runID, pluginName string, grace time.Duration) {
+func (d *Daemon) declarePluginDriverSilent(sessionID protocol.SessionID, runID string, pluginName string, grace time.Duration) {
 	if d.store == nil {
 		return
 	}

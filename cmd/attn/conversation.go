@@ -128,7 +128,7 @@ func conversationList(args []string) {
 				reasons = append(reasons, "awaiting next keep pass")
 			}
 		}
-		rows = append(rows, []string{row.Title, row.ResumeID, row.Agent, size, strings.Join(reasons, "; "), strings.Join(row.SessionIds, ", ")})
+		rows = append(rows, []string{row.Title, row.ResumeID, row.Agent, size, strings.Join(reasons, "; "), joinSessionIDs(row.SessionIds, ", ")})
 	}
 	printWorktreeTable(rows)
 }
@@ -142,4 +142,12 @@ func formatConversationBytes(bytes int) string {
 	default:
 		return fmt.Sprintf("%.1f MB", float64(bytes)/1000000)
 	}
+}
+
+func joinSessionIDs(ids []protocol.SessionID, sep string) string {
+	values := make([]string, len(ids))
+	for i, id := range ids {
+		values[i] = string(id)
+	}
+	return strings.Join(values, sep)
 }

@@ -20,21 +20,21 @@ func TestResumingASeedRelaunchesItsTenderInItsOwnConversation(t *testing.T) {
 	app, cli := w.App(), w.Client()
 	delegated := seedResumeDelegate(t, w, fakeagent.Codex, "api")
 	session, seed := delegated.SessionID, delegated.SeedID
-	first := w.Launched(session)
+	first := w.Launched(string(session))
 
 	running := seedResumeRequest(app, seed)
 	if !running.Success || !protocol.Deref(running.AlreadyRunning) || protocol.Deref(running.SessionID) != session {
 		t.Fatalf("resuming while %s runs = %+v, want it focused as already running", session, running)
 	}
 	first.Prompted()
-	app.TypeLine(session, "still you?")
+	app.TypeLine(string(session), "still you?")
 	if got := first.Prompted(); got != "still you?" {
 		t.Fatalf("after the resume the running codex received %q, want the next input", got)
 	}
 
 	before := lifeShow(t, cli, seed)
-	closePane(app, sessionPane{session: session})
-	if closed := showSession(t, cli, session); protocol.Deref(closed.ClosedAt) == "" {
+	closePane(app, sessionPane{session: string(session)})
+	if closed := showSession(t, cli, string(session)); protocol.Deref(closed.ClosedAt) == "" {
 		t.Fatalf("the ledger shows %+v after the pane closed, want it closed", closed)
 	}
 
@@ -42,14 +42,14 @@ func TestResumingASeedRelaunchesItsTenderInItsOwnConversation(t *testing.T) {
 	if !resumed.Success || protocol.Deref(resumed.SessionID) != session || protocol.Deref(resumed.AlreadyRunning) {
 		t.Fatalf("resuming the closed tender = %+v, want %s relaunched", resumed, session)
 	}
-	seedResumeContinues(t, w, first, session)
+	seedResumeContinues(t, w, first, string(session))
 	if profile := protocol.Deref(resumed.ProfileID); profile != protocol.Deref(delegated.ProfileID) {
 		t.Errorf("the resume came back in profile %s, want the tender's own %s", profile, protocol.Deref(delegated.ProfileID))
 	}
-	if relaunched := sessionOfDelegate(t, w, session); relaunched.Directory != delegated.Directory {
+	if relaunched := sessionOfDelegate(t, w, string(session)); relaunched.Directory != delegated.Directory {
 		t.Errorf("the relaunched session works in %s, want %s", relaunched.Directory, delegated.Directory)
 	}
-	if reopened := showSession(t, cli, session); protocol.Deref(reopened.ClosedAt) != "" {
+	if reopened := showSession(t, cli, string(session)); protocol.Deref(reopened.ClosedAt) != "" {
 		t.Errorf("the ledger still shows %s closed at %s after the resume", session, protocol.Deref(reopened.ClosedAt))
 	}
 	if after := lifeShow(t, cli, seed); after.Seed.Status != before.Seed.Status || after.Seed.TenderSession != before.Seed.TenderSession || after.NotesTotal != before.NotesTotal {
@@ -57,13 +57,13 @@ func TestResumingASeedRelaunchesItsTenderInItsOwnConversation(t *testing.T) {
 			before.Seed.Status, before.Seed.TenderSession, before.NotesTotal, after.Seed.Status, after.Seed.TenderSession, after.NotesTotal)
 	}
 
-	lifeMove(t, cli, session, seed, "park", "", "")
-	closePane(app, sessionPane{session: session})
+	lifeMove(t, cli, string(session), seed, "park", "", "")
+	closePane(app, sessionPane{session: string(session)})
 	reclaimed := seedResumeRequest(app, seed)
 	if !reclaimed.Success || protocol.Deref(reclaimed.SessionID) != session {
 		t.Fatalf("resuming the parked seed = %+v, want %s relaunched", reclaimed, session)
 	}
-	seedResumeContinues(t, w, first, session)
+	seedResumeContinues(t, w, first, string(session))
 	if got := lifeShow(t, cli, seed).Seed; got.Status != "growing" || got.TenderSession != session || protocol.Deref(got.LastExecutionID) != session {
 		t.Errorf("the resumed parked seed = %+v, want it growing again under %s", got, session)
 	}
@@ -89,15 +89,15 @@ func TestAResumeThatCannotReachItsConversationIsRefusedAndCreatesNothing(t *test
 	}
 
 	removed := seedResumeDelegate(t, w, fakeagent.Codex, "removed")
-	w.Launched(removed.SessionID)
-	closePane(app, sessionPane{session: removed.SessionID})
+	w.Launched(string(removed.SessionID))
+	closePane(app, sessionPane{session: string(removed.SessionID)})
 	if err := os.RemoveAll(removed.Directory); err != nil {
 		t.Fatal(err)
 	}
 
 	forgotten := seedResumeDelegate(t, w, fakeagent.Codex, "forgotten")
-	conversation := w.Launched(forgotten.SessionID).ConversationID
-	closePane(app, sessionPane{session: forgotten.SessionID})
+	conversation := w.Launched(string(forgotten.SessionID)).ConversationID
+	closePane(app, sessionPane{session: string(forgotten.SessionID)})
 	sessionRecoveryDeleteTranscript(t, conversation)
 
 	desktops := seedResumeDesktops(w)
@@ -184,8 +184,8 @@ func TestAResumeWhoseAgentCannotStartLeavesNoPaneBehind(t *testing.T) {
 	app, cli := w.App(), w.Client()
 	pluginDriverSettings(app, "pi")
 	delegated := seedResumeDelegate(t, w, fakeagent.Pi, "api")
-	w.Launched(delegated.SessionID)
-	closePane(app, sessionPane{session: delegated.SessionID})
+	w.Launched(string(delegated.SessionID))
+	closePane(app, sessionPane{session: string(delegated.SessionID)})
 	before := paneSessions(w)
 	seed := lifeShow(t, cli, delegated.SeedID).Seed
 
@@ -206,9 +206,9 @@ func TestPiResumeAndReopenRequireTheSavedConversation(t *testing.T) {
 	app, cli := w.App(), w.Client()
 	pluginDriverSettings(app, "pi")
 	delegated := seedResumeDelegate(t, w, fakeagent.Pi, "api")
-	first := w.Launched(delegated.SessionID)
+	first := w.Launched(string(delegated.SessionID))
 	close := func() {
-		closePane(app, sessionPane{session: delegated.SessionID})
+		closePane(app, sessionPane{session: string(delegated.SessionID)})
 	}
 	close()
 
@@ -218,12 +218,12 @@ func TestPiResumeAndReopenRequireTheSavedConversation(t *testing.T) {
 	if got := seedResumeRequest(app, delegated.SeedID); !got.Success {
 		t.Fatalf("resume stored Pi conversation: %+v", got)
 	}
-	seedResumeContinues(t, w, first, delegated.SessionID)
+	seedResumeContinues(t, w, first, string(delegated.SessionID))
 	close()
-	if got := reopenOverTheWebSocket(app, delegated.SessionID); !got.Success {
+	if got := reopenOverTheWebSocket(app, string(delegated.SessionID)); !got.Success {
 		t.Fatalf("reopen stored Pi conversation: %+v", got)
 	}
-	seedResumeContinues(t, w, first, delegated.SessionID)
+	seedResumeContinues(t, w, first, string(delegated.SessionID))
 	close()
 
 	home, err := toolhome.Dir()
@@ -242,14 +242,14 @@ func TestPiResumeAndReopenRequireTheSavedConversation(t *testing.T) {
 	if got := before.Seed.Continuation; got == nil || got.ResumeAvailable || !strings.Contains(protocol.Deref(got.ResumeReason), "pi's storage") {
 		t.Fatalf("Pi seed after its file was deleted = %+v, want unavailable with storage reason", got)
 	}
-	verdict := reopenVerdict(t, cli, delegated.SessionID)
+	verdict := reopenVerdict(t, cli, string(delegated.SessionID))
 	if verdict.Reopenable || !slices.Equal(verdict.Actions, []protocol.SessionReopenAction{protocol.SessionReopenActionStartFreshSamePlace}) {
 		t.Fatalf("Pi reopen after deletion = %+v, want only an explicit fresh start", verdict)
 	}
 	desktops := seedResumeDesktops(w)
 	panes := paneSessions(w)
 	resumed := seedResumeRequest(app, delegated.SeedID)
-	reopened := reopenOverTheWebSocket(app, delegated.SessionID)
+	reopened := reopenOverTheWebSocket(app, string(delegated.SessionID))
 	for name, result := range map[string]struct {
 		success bool
 		reason  string
@@ -270,7 +270,7 @@ func TestPiResumeAndReopenRequireTheSavedConversation(t *testing.T) {
 	if after := paneSessions(w); !slices.Equal(after, panes) {
 		t.Errorf("refusal changed panes: %v -> %v", panes, after)
 	}
-	if got := showSession(t, cli, delegated.SessionID); protocol.Deref(got.ClosedAt) == "" {
+	if got := showSession(t, cli, string(delegated.SessionID)); protocol.Deref(got.ClosedAt) == "" {
 		t.Error("refusal reopened the ledger session")
 	}
 	if _, err := os.Stat(files[0]); !os.IsNotExist(err) {

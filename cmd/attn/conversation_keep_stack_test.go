@@ -25,10 +25,10 @@ func TestKeptConversationSurvivesDaemonRestartAndResumeRestoresIt(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	first := s.Launched(delegated.SessionID)
+	first := s.Launched(string(delegated.SessionID))
 	first.Prompted()
 	shared := plant(t, s, "Keep another piece of this conversation")
-	if tended := s.Run(testworld.Invocation{Args: []string{"seed", "tend", shared.ID}, Session: delegated.SessionID}); tended.Code != 0 {
+	if tended := s.Run(testworld.Invocation{Args: []string{"seed", "tend", shared.ID}, Session: string(delegated.SessionID)}); tended.Code != 0 {
 		t.Fatalf("tend shared conversation: %+v", tended)
 	}
 	first.Reply("remember this <!-- attn:state=waiting_input -->")
@@ -41,7 +41,7 @@ func TestKeptConversationSurvivesDaemonRestartAndResumeRestoresIt(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	closed := s.Attn("agent", "close", delegated.SessionID, "-m", "verify durable conversation", "--source-session", delegated.SessionID)
+	closed := s.Attn("agent", "close", string(delegated.SessionID), "-m", "verify durable conversation", "--source-session", string(delegated.SessionID))
 	if closed.Code != 0 {
 		t.Fatalf("close: %+v", closed)
 	}
@@ -70,7 +70,7 @@ func TestKeptConversationSurvivesDaemonRestartAndResumeRestoresIt(t *testing.T) 
 		t.Fatalf("resume: %+v", result)
 	}
 
-	resumed := s.Launched(delegated.SessionID)
+	resumed := s.Launched(string(delegated.SessionID))
 	if !resumed.Resumed || resumed.ConversationID != first.ConversationID {
 		t.Fatalf("resumed conversation: %+v", resumed)
 	}
@@ -94,11 +94,11 @@ func TestConversationCLIListPinUnkeepAndForget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	first := s.Launched(delegated.SessionID)
+	first := s.Launched(string(delegated.SessionID))
 	first.Prompted()
 	app := s.App()
 
-	if result := s.Attn("conversation", "keep", delegated.SessionID); result.Code != 0 {
+	if result := s.Attn("conversation", "keep", string(delegated.SessionID)); result.Code != 0 {
 		t.Fatalf("live pin: %+v", result)
 	}
 	testworld.AwaitTaskDone(app, "conversation_keep")
@@ -106,11 +106,11 @@ func TestConversationCLIListPinUnkeepAndForget(t *testing.T) {
 	if pending.Code != 0 || !strings.Contains(pending.Stdout, "0 kept · 0 B · 1 pending") || !strings.Contains(pending.Stdout, "copy once quiet") || !strings.Contains(pending.Stdout, first.ConversationID) {
 		t.Fatalf("pending list: %+v", pending)
 	}
-	if result := s.Attn("conversation", "unkeep", delegated.SessionID); result.Code != 0 {
+	if result := s.Attn("conversation", "unkeep", string(delegated.SessionID)); result.Code != 0 {
 		t.Fatalf("live unpin: %+v", result)
 	}
 	testworld.AwaitTaskDone(app, "conversation_keep")
-	if result := s.Attn("agent", "close", delegated.SessionID, "-m", "done", "--source-session", delegated.SessionID); result.Code != 0 {
+	if result := s.Attn("agent", "close", string(delegated.SessionID), "-m", "done", "--source-session", string(delegated.SessionID)); result.Code != 0 {
 		t.Fatalf("close: %+v", result)
 	}
 	testworld.AwaitTaskDone(app, "conversation_keep")
@@ -118,14 +118,14 @@ func TestConversationCLIListPinUnkeepAndForget(t *testing.T) {
 	if shown.Code != 0 || strings.Contains(shown.Stdout, "0.0 MB") || !strings.Contains(shown.Stdout, "kept by attn (") || !(strings.Contains(shown.Stdout, " B)") || strings.Contains(shown.Stdout, " KB)")) {
 		t.Fatalf("small archive display: %+v", shown)
 	}
-	for _, args := range [][]string{{"conversation", "keep", first.ConversationID}, {"conversation", "unkeep", delegated.SessionID}, {"conversation", "keep", delegated.SessionID}} {
+	for _, args := range [][]string{{"conversation", "keep", first.ConversationID}, {"conversation", "unkeep", string(delegated.SessionID)}, {"conversation", "keep", string(delegated.SessionID)}} {
 		if result := s.Attn(args...); result.Code != 0 {
 			t.Fatalf("%v: %+v", args, result)
 		}
 		testworld.AwaitTaskDone(app, "conversation_keep")
 	}
 	list := s.Attn("conversation", "list")
-	for _, want := range []string{"1 kept · ", "CONVERSATION", first.ConversationID, "claude", "pinned ", "open seed ", delegated.SeedID, delegated.SessionID} {
+	for _, want := range []string{"1 kept · ", "CONVERSATION", first.ConversationID, "claude", "pinned ", "open seed ", delegated.SeedID, string(delegated.SessionID)} {
 		if list.Code != 0 || !strings.Contains(list.Stdout, want) {
 			t.Errorf("list missing %q: %+v", want, list)
 		}
@@ -133,7 +133,7 @@ func TestConversationCLIListPinUnkeepAndForget(t *testing.T) {
 	if strings.Contains(list.Stdout, "0.0 MB") {
 		t.Fatalf("small list size rounded to zero: %+v", list)
 	}
-	refused := s.Attn("conversation", "forget", delegated.SessionID)
+	refused := s.Attn("conversation", "forget", string(delegated.SessionID))
 	if refused.Code == 0 || !strings.Contains(refused.Stderr, delegated.SeedID) {
 		t.Fatalf("open seed forget: %+v", refused)
 	}

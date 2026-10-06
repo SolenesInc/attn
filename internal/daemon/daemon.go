@@ -68,9 +68,9 @@ type workerReconcileReport struct {
 	ChangedSessionIDs []string
 }
 
-func (r *workerReconcileReport) markChanged(sessionID string) {
+func (r *workerReconcileReport) markChanged(sessionID protocol.SessionID) {
 	r.Changed = true
-	r.ChangedSessionIDs = append(r.ChangedSessionIDs, sessionID)
+	r.ChangedSessionIDs = append(r.ChangedSessionIDs, string(sessionID))
 }
 
 const (
@@ -158,26 +158,26 @@ type Daemon struct {
 	upgradingMu                       sync.Mutex
 	upgradingWorkers                  map[harness.TerminalID]bool
 	watchersMu                        sync.Mutex
-	transcriptWatch                   map[string]*transcriptWatcher
-	pluginUsageWatch                  map[string]*pluginUsageWatcher
-	finalUsage                        map[string][]func()
-	usageRuns                         map[string]int
-	usageIdle                         map[string]chan struct{}
-	usageDraining                     map[string]bool
+	transcriptWatch                   map[protocol.SessionID]*transcriptWatcher
+	pluginUsageWatch                  map[protocol.SessionID]*pluginUsageWatcher
+	finalUsage                        map[protocol.SessionID][]func()
+	usageRuns                         map[protocol.SessionID]int
+	usageIdle                         map[protocol.SessionID]chan struct{}
+	usageDraining                     map[protocol.SessionID]bool
 	transcriptWatcherSessionLookup    func(string) *protocol.Session
 	transcriptResumeLookup            func(protocol.SessionAgent, string) string
 	classifiedMu                      sync.Mutex
-	classifiedTurn                    map[string]string
-	classifyingTurn                   map[string]string
+	classifiedTurn                    map[protocol.SessionID]string
+	classifyingTurn                   map[protocol.SessionID]string
 	classificationTranscriptExtractor func(*protocol.Session, string, int, time.Time) (string, string, error)
 	forcedStopMu                      sync.Mutex
-	forcedStop                        map[string]time.Time
+	forcedStop                        map[protocol.SessionID]time.Time
 	pendingConversationMu             sync.Mutex
-	pendingConversation               map[string]agentConversationObservation
+	pendingConversation               map[protocol.SessionID]agentConversationObservation
 	sessionTitleMu                    sync.Mutex
 	sessionTitleExec                  func(ctx context.Context, session *protocol.Session, conversation string) (string, error)
-	sessionTitleAttempted             map[string]struct{}
-	sessionTitleInitialPrompt         map[string][sha256.Size]byte
+	sessionTitleAttempted             map[protocol.SessionID]struct{}
+	sessionTitleInitialPrompt         map[protocol.SessionID][sha256.Size]byte
 	seedArtifactMu                    sync.Mutex
 	delegationModelQueries            singleflight.Group
 	delegationMu                      sync.Mutex
@@ -185,17 +185,17 @@ type Daemon struct {
 	delegationCheckoutMu              sync.Mutex
 	delegationWaitsForFirstTurn       bool
 	launchWatchMu                     sync.Mutex
-	launchWatches                     map[string]*launchWatch
-	recoveredLaunches                 map[string]*launchWatch
+	launchWatches                     map[protocol.SessionID]*launchWatch
+	recoveredLaunches                 map[protocol.SessionID]*launchWatch
 	reloadingMu                       sync.Mutex
 	reloadingTerminals                map[harness.TerminalID]bool
 	prepareSessionTeardownHook        func(string) error
 	teardownMu                        sync.Mutex
-	tearingDown                       map[string]chan struct{}
+	tearingDown                       map[protocol.SessionID]chan struct{}
 	sessionLifecycleLocks             sessionLocks
 	terminalEndLocks                  sessionLocks
 	spawnLocksMu                      sync.Mutex
-	spawnLocks                        map[string]*spawnLock
+	spawnLocks                        map[protocol.SessionID]*spawnLock
 	sessionInputOnce                  sync.Once
 	sessionInputState                 *sessionInputModule
 	terminalsOnce                     sync.Once
@@ -222,14 +222,14 @@ type Daemon struct {
 	supportInputTraceOnce             sync.Once
 	supportInputTrace                 *supportInputTraceRing
 	lastInputMu                       sync.Mutex
-	lastAutoSettleActivityAt          map[string]time.Time
+	lastAutoSettleActivityAt          map[protocol.SessionID]time.Time
 	autoSettleFireMu                  sync.Mutex
 
 	emptyDesktops emptyDesktopRemoval
 
 	autoSettleMu         sync.Mutex
-	autoSettleTimers     map[string]*autoSettleTimer
-	autoSettleDismissals map[string]bool
+	autoSettleTimers     map[protocol.SessionID]*autoSettleTimer
+	autoSettleDismissals map[protocol.SessionID]bool
 
 	snoozeMu sync.Mutex
 
@@ -254,9 +254,9 @@ type Daemon struct {
 	pluginSupervisor    *pluginSupervisor
 	pluginHealthEnabled bool
 	pluginDriverMu      sync.Mutex
-	pluginLaunching     map[string]pluginSessionLaunch
-	pluginReports       map[string][]pendingPluginReport
-	pluginExits         map[string]ptybackend.ExitInfo
+	pluginLaunching     map[protocol.SessionID]pluginSessionLaunch
+	pluginReports       map[protocol.SessionID][]pendingPluginReport
+	pluginExits         map[protocol.SessionID]ptybackend.ExitInfo
 	pluginDir           string
 	bundledPluginDir    string
 	busPinMu            sync.Mutex
@@ -278,7 +278,7 @@ type Daemon struct {
 	terminalTheme   pty.TerminalTheme
 
 	currentAgentMu        sync.RWMutex
-	currentAgentSessionID string
+	currentAgentSessionID protocol.SessionID
 
 	openTileMu sync.Mutex
 
@@ -302,10 +302,10 @@ type Daemon struct {
 	gardenBellsResolvedThrough int64
 	gardenReviewMu             sync.Mutex
 	dispatchSeedsMu            sync.Mutex
-	dispatchSeeds              map[string]string
-	dispatchersBySession       map[string]garden.Tender
-	dispatchFromChief          map[string]bool
-	dispatchProjectionRevs     map[string]int64
+	dispatchSeeds              map[protocol.SessionID]string
+	dispatchersBySession       map[protocol.SessionID]garden.Tender
+	dispatchFromChief          map[protocol.SessionID]bool
+	dispatchProjectionRevs     map[protocol.SessionID]int64
 	dispatchSeedsLoaded        bool
 
 	automationsBroadcastHook func(*protocol.AutomationsChangedMessage)
@@ -342,7 +342,7 @@ type Daemon struct {
 	taskFailureRenderers map[string]taskFailureRenderer
 
 	sessionActivityRunsMu sync.Mutex
-	sessionActivityRuns   map[string]sessionActivityRun
+	sessionActivityRuns   map[protocol.SessionID]sessionActivityRun
 }
 
 func (d *Daemon) addWarning(code, message string) {
@@ -542,19 +542,19 @@ func New(socketPath string) *Daemon {
 		workflowDirty:       make(map[string]bool),
 		workflowEngineConn:  make(map[string]workflowEngineSink),
 		ptyBackend:          ptybackend.NewEmbedded(manager),
-		transcriptWatch:     make(map[string]*transcriptWatcher),
+		transcriptWatch:     make(map[protocol.SessionID]*transcriptWatcher),
 		pendingInitialWS:    make(map[*wsClient]struct{}),
 		startedCh:           make(chan struct{}),
-		classifiedTurn:      make(map[string]string),
-		classifyingTurn:     make(map[string]string),
-		forcedStop:          make(map[string]time.Time),
-		pendingConversation: make(map[string]agentConversationObservation),
+		classifiedTurn:      make(map[protocol.SessionID]string),
+		classifyingTurn:     make(map[protocol.SessionID]string),
+		forcedStop:          make(map[protocol.SessionID]time.Time),
+		pendingConversation: make(map[protocol.SessionID]agentConversationObservation),
 		tailscale:           newTailscaleRuntime(),
 		plugins:             newPluginRegistry(),
 		pluginHealthEnabled: true,
 		pluginDir:           pluginDirForSocket(socketPath),
 		bundledPluginDir:    bundledPluginDirForExecutable(),
-		spawnLocks:          make(map[string]*spawnLock),
+		spawnLocks:          make(map[protocol.SessionID]*spawnLock),
 	}
 	d.wireGitExecution(productionGitExecutorConfig)
 	d.delegationWaitsForFirstTurn = true
@@ -578,20 +578,20 @@ func NewForTesting(socketPath string) *Daemon {
 		ghRegistry:          github.NewClientRegistry(),
 		hubManager:          nil,
 		ptyBackend:          ptybackend.NewEmbedded(manager),
-		transcriptWatch:     make(map[string]*transcriptWatcher),
+		transcriptWatch:     make(map[protocol.SessionID]*transcriptWatcher),
 		pendingInitialWS:    make(map[*wsClient]struct{}),
 		startedCh:           make(chan struct{}),
-		classifiedTurn:      make(map[string]string),
-		classifyingTurn:     make(map[string]string),
-		forcedStop:          make(map[string]time.Time),
-		pendingConversation: make(map[string]agentConversationObservation),
+		classifiedTurn:      make(map[protocol.SessionID]string),
+		classifyingTurn:     make(map[protocol.SessionID]string),
+		forcedStop:          make(map[protocol.SessionID]time.Time),
+		pendingConversation: make(map[protocol.SessionID]agentConversationObservation),
 		tailscale:           newTailscaleRuntime(),
 		plugins:             newPluginRegistry(),
 		pluginDir:           pluginDirForSocket(socketPath),
 		bundledPluginDir:    bundledPluginDirForExecutable(),
 		workflowDirty:       make(map[string]bool),
 		workflowEngineConn:  make(map[string]workflowEngineSink),
-		spawnLocks:          make(map[string]*spawnLock),
+		spawnLocks:          make(map[protocol.SessionID]*spawnLock),
 		jobQueue:            jobs.New(jobs.Options{}),
 	}
 	d.wireGitExecution(productionGitExecutorConfig)
@@ -620,16 +620,16 @@ func (d *Daemon) Start() error {
 		d.startedCh = make(chan struct{})
 	}
 	if d.transcriptWatch == nil {
-		d.transcriptWatch = make(map[string]*transcriptWatcher)
+		d.transcriptWatch = make(map[protocol.SessionID]*transcriptWatcher)
 	}
 	if d.classifiedTurn == nil {
-		d.classifiedTurn = make(map[string]string)
+		d.classifiedTurn = make(map[protocol.SessionID]string)
 	}
 	if d.classifyingTurn == nil {
-		d.classifyingTurn = make(map[string]string)
+		d.classifyingTurn = make(map[protocol.SessionID]string)
 	}
 	if d.forcedStop == nil {
-		d.forcedStop = make(map[string]time.Time)
+		d.forcedStop = make(map[protocol.SessionID]time.Time)
 	}
 	if d.ptyBackend == nil {
 		d.ptyBackend = ptybackend.NewEmbedded(pty.NewManager(d.logf))
@@ -947,15 +947,15 @@ func (d *Daemon) Start() error {
 	}
 }
 
-func (d *Daemon) storedSessionIDs() map[string]struct{} {
-	ids := make(map[string]struct{})
+func (d *Daemon) storedSessionIDs() map[protocol.SessionID]struct{} {
+	ids := make(map[protocol.SessionID]struct{})
 	for _, session := range d.store.List("") {
 		ids[session.ID] = struct{}{}
 	}
 	return ids
 }
 
-func (d *Daemon) pruneSessionsWithoutPTY(previousRunSessions map[string]struct{}, recoveryStartedAt time.Time) int {
+func (d *Daemon) pruneSessionsWithoutPTY(previousRunSessions map[protocol.SessionID]struct{}, recoveryStartedAt time.Time) int {
 	if d.store == nil {
 		return 0
 	}
@@ -1012,10 +1012,10 @@ func (d *Daemon) canReviveSession(session *protocol.Session) bool {
 }
 
 func (d *Daemon) sessionConversationSurvives(session *protocol.Session, intent store.LaunchIntent) bool {
-	if string(session.Agent) == protocol.AgentShellValue {
+	if session.Agent == protocol.AgentShellValue {
 		return true
 	}
-	driver := agentdriver.Get(string(session.Agent))
+	driver := agentdriver.Get(session.Agent)
 	resumeID := agentdriver.ResolveSpawnResumeSessionID(driver, session.ID, "", d.store.GetResumeSessionID(session.ID))
 	if d.conversationKnown(driver, resumeID) {
 		return true
@@ -1032,7 +1032,7 @@ func (d *Daemon) pluginDriverReportsState(agent protocol.SessionAgent) bool {
 	return ok && driver.Capabilities["state_reporting"]
 }
 
-func (d *Daemon) performStartupPTYRecovery(previousRunSessions map[string]struct{}, recoveryStartedAt time.Time) {
+func (d *Daemon) performStartupPTYRecovery(previousRunSessions map[protocol.SessionID]struct{}, recoveryStartedAt time.Time) {
 
 	recoveryReport, recoverErr := d.recoverPTYBackend(10 * time.Second)
 	if recoverErr != nil {
@@ -1093,7 +1093,7 @@ func (d *Daemon) recoverPTYBackend(timeout time.Duration) (ptybackend.RecoveryRe
 	return d.ptyBackend.Recover(recoveryCtx)
 }
 
-func (d *Daemon) reconcileStartupWorkerSessions(recoveryReport ptybackend.RecoveryReport, recoverErr error, previousRunSessions map[string]struct{}, recoveryStartedAt time.Time) {
+func (d *Daemon) reconcileStartupWorkerSessions(recoveryReport ptybackend.RecoveryReport, recoverErr error, previousRunSessions map[protocol.SessionID]struct{}, recoveryStartedAt time.Time) {
 	allowIdleDemotion := recoverErr == nil && recoveryReport.Missing == 0 && recoveryReport.Failed == 0
 	if !allowIdleDemotion {
 		for attempt := 1; attempt <= startupRecoveryRetryMax; attempt++ {
@@ -1193,27 +1193,28 @@ func (d *Daemon) reconcileStartupWorkerSessions(recoveryReport ptybackend.Recove
 	}
 }
 
-func (d *Daemon) reconcileSessionsWithWorkerBackend(ctx context.Context, allowIdleDemotion bool, previousRunSessions map[string]struct{}, recoveryStartedAt time.Time) workerReconcileReport {
+func (d *Daemon) reconcileSessionsWithWorkerBackend(ctx context.Context, allowIdleDemotion bool, previousRunSessions map[protocol.SessionID]struct{}, recoveryStartedAt time.Time) workerReconcileReport {
 	return d.reconcileSessionsWithWorkerBackendState(ctx, allowIdleDemotion, allowIdleDemotion, previousRunSessions, recoveryStartedAt)
 }
 
-func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, allowIdleDemotion, allowTombstoneCleanup bool, previousRunSessions map[string]struct{}, recoveryStartedAt time.Time) workerReconcileReport {
+func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, allowIdleDemotion, allowTombstoneCleanup bool, previousRunSessions map[protocol.SessionID]struct{}, recoveryStartedAt time.Time) workerReconcileReport {
 	report := workerReconcileReport{}
 	if d.store == nil || d.ptyBackend == nil {
 		return report
 	}
 
 	liveTerminals := d.liveTerminals(ctx)
-	liveIDs := make(map[string]struct{}, len(liveTerminals))
-	shownBy := make(map[string]harness.TerminalID, len(liveTerminals))
+	liveIDs := make(map[protocol.SessionID]struct{}, len(liveTerminals))
+	shownBy := make(map[protocol.SessionID]harness.TerminalID, len(liveTerminals))
 	placed := make(map[harness.TerminalID]bool, len(liveTerminals))
 	for terminalID := range liveTerminals {
 		sessionID, isPlaced := d.terminals().Showing(terminalID)
 		if !isPlaced {
-			sessionID = harness.SessionID(terminalID)
+			d.logf("worker reconciliation left runtime %s to the orphan prune: no pane places it", terminalID)
+			continue
 		}
-		liveIDs[string(sessionID)] = struct{}{}
-		shownBy[string(sessionID)] = terminalID
+		liveIDs[sessionID] = struct{}{}
+		shownBy[sessionID] = terminalID
 		placed[terminalID] = isPlaced
 	}
 
@@ -1277,7 +1278,7 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 			}
 			label := filepath.Base(directory)
 			if label == "" || label == "." || label == string(filepath.Separator) {
-				label = sessionID
+				label = string(sessionID)
 			}
 
 			state, ok := sessionStateFromRecoveredInfo(info)
@@ -1420,13 +1421,13 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 	return report
 }
 
-func (d *Daemon) scheduleDeferredWorkerReconciliation(previousRunSessions map[string]struct{}, recoveryStartedAt time.Time) {
+func (d *Daemon) scheduleDeferredWorkerReconciliation(previousRunSessions map[protocol.SessionID]struct{}, recoveryStartedAt time.Time) {
 	d.life.Go("runDeferredWorkerReconciliation", func() {
 		d.runDeferredWorkerReconciliation(deferredRecoveryMaxAttempts, deferredRecoveryRetryInterval, previousRunSessions, recoveryStartedAt)
 	})
 }
 
-func (d *Daemon) runDeferredWorkerReconciliation(maxAttempts int, retryInterval time.Duration, previousRunSessions map[string]struct{}, recoveryStartedAt time.Time) {
+func (d *Daemon) runDeferredWorkerReconciliation(maxAttempts int, retryInterval time.Duration, previousRunSessions map[protocol.SessionID]struct{}, recoveryStartedAt time.Time) {
 	if d.ptyBackend == nil || maxAttempts <= 0 {
 		return
 	}
@@ -1627,7 +1628,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 	}
 	sessionID, shown := d.shownIn(info.ID)
 	if ended, ending := d.terminals().takeEnding(info.ID); ending && !shown {
-		sessionID, shown = string(ended), true
+		sessionID, shown = ended, true
 	}
 	if !shown {
 		d.logf("pty exit of terminal %s, which no session shows; removing its runtime", info.ID)
@@ -1669,7 +1670,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 	}
 	d.releaseExitedCrewBinding(sessionID)
 
-	d.publishFact(FactSessionPTYExited, sessionID, ptyExit{
+	d.publishFact(FactSessionPTYExited, string(sessionID), ptyExit{
 		Terminal: string(info.ID),
 		ExitCode: info.ExitCode,
 		Signal:   info.Signal,
@@ -1696,7 +1697,7 @@ func (d *Daemon) projectSessionPTYExited(ev bus.Event) {
 	event := &protocol.WebSocketEvent{
 		Event:     protocol.EventSessionExited,
 		ID:        protocol.Ptr(terminal),
-		SessionID: protocol.Ptr(ev.Subject),
+		SessionID: protocol.Ptr(protocol.SessionID(ev.Subject)),
 		ExitCode:  protocol.Ptr(exit.ExitCode),
 	}
 	if exit.Signal != "" {
@@ -1752,7 +1753,7 @@ func (t *sessionTeardown) releaseLifecycle() {
 	t.lifecycleRelease.Do(t.lifecycleLock.Unlock)
 }
 
-func (d *Daemon) terminateSession(sessionID string, sig syscall.Signal) {
+func (d *Daemon) terminateSession(sessionID protocol.SessionID, sig syscall.Signal) {
 	if err := d.terminateSessionChecked(sessionID, sig); err != nil {
 		d.logf("session teardown failed for %s: requested=%s error=%v", sessionID, signalName(sig), err)
 		d.markForcedStopClassification(sessionID)
@@ -1770,7 +1771,7 @@ func (d *Daemon) terminateSession(sessionID string, sig syscall.Signal) {
 	}
 }
 
-func (d *Daemon) markSessionTerminationIntent(sessionID string) error {
+func (d *Daemon) markSessionTerminationIntent(sessionID protocol.SessionID) error {
 	d.markForcedStopClassification(sessionID)
 	if d.store != nil {
 		if err := d.store.MarkSessionIntentionalClose(sessionID, time.Now()); err != nil {
@@ -1780,7 +1781,7 @@ func (d *Daemon) markSessionTerminationIntent(sessionID string) error {
 	return nil
 }
 
-func (d *Daemon) terminateSessionChecked(sessionID string, sig syscall.Signal) error {
+func (d *Daemon) terminateSessionChecked(sessionID protocol.SessionID, sig syscall.Signal) error {
 	if err := d.markSessionTerminationIntent(sessionID); err != nil {
 		return err
 	}
@@ -1795,13 +1796,13 @@ func (d *Daemon) terminateSessionChecked(sessionID string, sig syscall.Signal) e
 	return nil
 }
 
-func (d *Daemon) terminateSessionRuntimeChecked(sessionID string, terminals []harness.TerminalID, sig syscall.Signal) error {
+func (d *Daemon) terminateSessionRuntimeChecked(sessionID protocol.SessionID, terminals []harness.TerminalID, sig syscall.Signal) error {
 	if d.ptyBackend == nil {
 		d.stopTranscriptWatcher(sessionID)
 		return nil
 	}
 	for _, terminal := range terminals {
-		d.terminals().noteEnding(terminal, harness.SessionID(sessionID), time.Now())
+		d.terminals().noteEnding(terminal, sessionID, time.Now())
 		err := d.ptyBackend.Kill(context.Background(), terminal, sig)
 		if err != nil {
 			d.terminals().takeEnding(terminal)
@@ -1819,7 +1820,7 @@ func (d *Daemon) terminateSessionRuntimeChecked(sessionID string, terminals []ha
 	return nil
 }
 
-func (d *Daemon) unregisterSession(sessionID string, sig syscall.Signal) *protocol.Session {
+func (d *Daemon) unregisterSession(sessionID protocol.SessionID, sig syscall.Signal) *protocol.Session {
 	session := d.store.Get(sessionID)
 	if session == nil && d.hubManager != nil {
 		session = d.hubManager.RemoteSession(sessionID)
@@ -1834,7 +1835,7 @@ func (d *Daemon) unregisterSession(sessionID string, sig syscall.Signal) *protoc
 	return session
 }
 
-func (d *Daemon) prepareSessionTeardown(sessionID string) (*sessionTeardown, error) {
+func (d *Daemon) prepareSessionTeardown(sessionID protocol.SessionID) (*sessionTeardown, error) {
 	lifecycleLock := d.sessionLifecycleLockFor(sessionID)
 	lifecycleLock.Lock()
 	session := d.store.Get(sessionID)
@@ -1848,13 +1849,13 @@ func (d *Daemon) prepareSessionTeardown(sessionID string) (*sessionTeardown, err
 	}
 	d.markForcedStopClassification(sessionID)
 	if d.prepareSessionTeardownHook != nil {
-		if err := d.prepareSessionTeardownHook(sessionID); err != nil {
+		if err := d.prepareSessionTeardownHook(string(sessionID)); err != nil {
 			d.clearForcedStopClassification(sessionID)
 			lifecycleLock.Unlock()
 			return nil, err
 		}
 	}
-	driverRun, err := d.store.PrepareSessionTeardown(sessionID, time.Now())
+	driverRun, err := d.store.PrepareSessionTeardown(sessionID, d.primaryTerminal(sessionID), time.Now())
 	if err != nil {
 		d.clearForcedStopClassification(sessionID)
 		lifecycleLock.Unlock()
@@ -1863,11 +1864,11 @@ func (d *Daemon) prepareSessionTeardown(sessionID string) (*sessionTeardown, err
 	return &sessionTeardown{session: session, terminals: d.terminalsOf(sessionID), driverRun: driverRun, lifecycleLock: lifecycleLock}, nil
 }
 
-func (d *Daemon) commitSessionUnregister(sessionID string, closed store.SessionClose) {
+func (d *Daemon) commitSessionUnregister(sessionID protocol.SessionID, closed store.SessionClose) {
 	d.closeSession(sessionID, closed)
 }
 
-func (d *Daemon) cancelSessionTeardown(sessionID string, teardown *sessionTeardown) {
+func (d *Daemon) cancelSessionTeardown(sessionID protocol.SessionID, teardown *sessionTeardown) {
 	defer teardown.releaseLifecycle()
 	d.clearForcedStopClassification(sessionID)
 	if err := d.store.CancelSessionTeardown(sessionID); err != nil {
@@ -1875,7 +1876,7 @@ func (d *Daemon) cancelSessionTeardown(sessionID string, teardown *sessionTeardo
 	}
 }
 
-func (d *Daemon) resumeSessionTeardown(sessionID string) *sessionTeardown {
+func (d *Daemon) resumeSessionTeardown(sessionID protocol.SessionID) *sessionTeardown {
 	driverRun, found, err := d.store.PrepareExistingSessionTeardown(sessionID, time.Now())
 	if err != nil {
 		d.logf("session teardown recovery failed for %s: %v", sessionID, err)
@@ -1890,29 +1891,34 @@ func (d *Daemon) resumeSessionTeardown(sessionID string) *sessionTeardown {
 	return &sessionTeardown{session: session, terminals: terminals, driverRun: driverRun}
 }
 
-func (d *Daemon) notifyPreparedPluginDriverSessionClosed(sessionID string, teardown *sessionTeardown, sig syscall.Signal) bool {
+func (d *Daemon) notifyPreparedPluginDriverSessionClosed(sessionID protocol.SessionID, teardown *sessionTeardown, sig syscall.Signal) bool {
 	run := teardown.driverRun
 	if run.RunID == "" {
 		return true
 	}
+	crashAt("session-close-before-driver-notification")
 	claimed, err := d.store.ClaimSessionTeardownDriverRun(sessionID, run.RunID)
 	if err != nil {
 		d.logf("plugin session close claim failed: session=%s run=%s error=%v", sessionID, run.RunID, err)
 		return false
 	}
 	if claimed {
-		d.notifyPluginDriverSessionClosed(run.PluginName, teardown.terminals[0], run.RunID, "killed", nil, signalName(sig))
+		if run.TerminalID != "" {
+			d.notifyPluginDriverSessionClosed(run.PluginName, run.TerminalID, run.RunID, "killed", nil, signalName(sig))
+		} else {
+			d.logf("plugin session close: legacy teardown has no terminal: session=%s run=%s", sessionID, run.RunID)
+		}
 	}
 	return true
 }
 
-func (d *Daemon) sessionTeardownInFlight(sessionID string) bool {
+func (d *Daemon) sessionTeardownInFlight(sessionID protocol.SessionID) bool {
 	d.teardownMu.Lock()
 	defer d.teardownMu.Unlock()
 	return d.tearingDown[sessionID] != nil
 }
 
-func (d *Daemon) waitForSessionTeardown(sessionID string) {
+func (d *Daemon) waitForSessionTeardown(sessionID protocol.SessionID) {
 	d.teardownMu.Lock()
 	done := d.tearingDown[sessionID]
 	d.teardownMu.Unlock()
@@ -1921,10 +1927,10 @@ func (d *Daemon) waitForSessionTeardown(sessionID string) {
 	}
 }
 
-func (d *Daemon) terminateSessionAsync(sessionID string, sig syscall.Signal, teardown *sessionTeardown) <-chan struct{} {
+func (d *Daemon) terminateSessionAsync(sessionID protocol.SessionID, sig syscall.Signal, teardown *sessionTeardown) <-chan struct{} {
 	d.teardownMu.Lock()
 	if d.tearingDown == nil {
-		d.tearingDown = make(map[string]chan struct{})
+		d.tearingDown = make(map[protocol.SessionID]chan struct{})
 	}
 	if done := d.tearingDown[sessionID]; done != nil {
 		d.teardownMu.Unlock()
@@ -1963,19 +1969,19 @@ func (d *Daemon) terminateSessionAsync(sessionID string, sig syscall.Signal, tea
 	return done
 }
 
-func (d *Daemon) closeSession(sessionID string, closed store.SessionClose) {
+func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.SessionClose) {
 	d.recordSessionClose(sessionID, func() (bool, error) {
 		return d.store.CloseSession(sessionID, closed, time.Now())
 	})
 }
 
-func (d *Daemon) restoreSessionClose(sessionID string, closed store.SessionCloseRecord) {
+func (d *Daemon) restoreSessionClose(sessionID protocol.SessionID, closed store.SessionCloseRecord) {
 	d.recordSessionClose(sessionID, func() (bool, error) {
 		return d.store.RestoreSessionClose(sessionID, closed)
 	})
 }
 
-func (d *Daemon) recordSessionClose(sessionID string, commit func() (bool, error)) {
+func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() (bool, error)) {
 	defer d.announceUnplacement(sessionID)()
 	if session := d.store.Get(sessionID); session != nil {
 		if _, err := d.captureGardenSessionSnapshot(session); err != nil {
@@ -1994,7 +2000,7 @@ func (d *Daemon) recordSessionClose(sessionID string, commit func() (bool, error
 		d.invalidateGardenSeedParties("session close")
 		entry := d.store.SessionLedgerEntry(sessionID)
 		d.decorateLedgerEntryWithUsage(entry)
-		d.publishFact(FactSessionClosed, sessionID, entry)
+		d.publishFact(FactSessionClosed, string(sessionID), entry)
 	}
 	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)
@@ -2006,7 +2012,7 @@ func (d *Daemon) recordSessionClose(sessionID string, commit func() (bool, error
 	d.clearClassifyingTurn(sessionID)
 }
 
-func (d *Daemon) removeReapedSession(sessionID string) {
+func (d *Daemon) removeReapedSession(sessionID protocol.SessionID) {
 	defer d.announceUnplacement(sessionID)()
 	if session := d.store.Get(sessionID); session != nil {
 		if _, err := d.captureGardenSessionExecution(session); err != nil {
@@ -2020,7 +2026,7 @@ func (d *Daemon) removeReapedSession(sessionID string) {
 	d.releaseCrewBindingIfSession(sessionID)
 }
 
-func (d *Daemon) forgetSessionRuntime(sessionID string) {
+func (d *Daemon) forgetSessionRuntime(sessionID protocol.SessionID) {
 	d.stopTranscriptWatcher(sessionID)
 
 	d.kickInboxAfterCommit(inbox.ToSession(sessionID))
@@ -2034,7 +2040,7 @@ func (d *Daemon) forgetSessionRuntime(sessionID string) {
 	d.forgetPluginDriverSilenceWatch(sessionID)
 }
 
-func (d *Daemon) forgetSessionTrace(sessionID string) {
+func (d *Daemon) forgetSessionTrace(sessionID protocol.SessionID) {
 	d.forgetStateTrace(sessionID)
 	d.evidenceTable().forget(sessionID)
 	d.sessionResolver().forget(sessionID)
@@ -2495,7 +2501,6 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.sendError(conn, err.Error())
 		return
 	}
-	d.resolveCallers(msg)
 	release, held := d.life.Hold("handleConnection")
 	if !held {
 		d.sendError(conn, errDaemonStopping.Error())
@@ -2597,7 +2602,7 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleDesktopMoveSession(conn, msg.(*protocol.DesktopMoveSessionMessage))
 	case protocol.CmdSetSessionPriority:
 		priority := msg.(*protocol.SetSessionPriorityMessage)
-		if d.forwardedToSessionOwner(conn, strings.TrimSpace(priority.SessionID), priority) {
+		if d.forwardedToSessionOwner(conn, protocol.TrimID(priority.SessionID), priority) {
 			return
 		}
 		if err := d.setSessionPriority(priority); err != nil {
@@ -2766,7 +2771,7 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 	}
 }
 
-func (d *Daemon) projectSessionEvent(event, sessionID string) {
+func (d *Daemon) projectSessionEvent(event string, sessionID protocol.SessionID) {
 	decorated := d.sessionForBroadcast(d.store.Get(sessionID))
 	if decorated == nil {
 		return
@@ -2793,7 +2798,7 @@ func (d *Daemon) publishSessionUnregistered(session *protocol.Session) {
 		return
 	}
 	d.invalidateGardenSeedParties("session unregister")
-	d.publishFact(FactSessionUnregistered, session.ID, d.sessionForBroadcast(session))
+	d.publishFact(FactSessionUnregistered, string(session.ID), d.sessionForBroadcast(session))
 }
 
 func (d *Daemon) handleUnregister(conn net.Conn, msg *protocol.UnregisterMessage) {
@@ -2814,24 +2819,25 @@ func (d *Daemon) handleUnregister(conn net.Conn, msg *protocol.UnregisterMessage
 }
 
 func (d *Daemon) handleState(conn net.Conn, msg *protocol.StateMessage) {
-	d.logf("hook evidence: id=%s state=%s", msg.ID, msg.State)
-	d.tracePermissionMode(msg.ID, protocol.Deref(msg.PermissionMode))
-	d.recordReviewerEvidenceFromPermissionMode(msg.ID, protocol.Deref(msg.PermissionMode))
-	d.traceStateEvidence(msg.ID, stateOrigin{source: stateSourceHook}, msg.State)
-	d.recordBracketEvidence(msg.ID, msg.State)
+	sessionID := d.sessionInTerminal(msg.ID)
+	d.logf("hook evidence: id=%s state=%s", sessionID, msg.State)
+	d.tracePermissionMode(sessionID, protocol.Deref(msg.PermissionMode))
+	d.recordReviewerEvidenceFromPermissionMode(sessionID, protocol.Deref(msg.PermissionMode))
+	d.traceStateEvidence(sessionID, stateOrigin{source: stateSourceHook}, msg.State)
+	d.recordBracketEvidence(sessionID, msg.State)
 	if strings.EqualFold(strings.TrimSpace(protocol.Deref(msg.HookEvent)), "user_prompt_submit") &&
 		strings.TrimSpace(protocol.Deref(msg.Prompt)) != "" {
 		origin := sessionInputOrigin{}
-		if d.observePromptSubmitted(msg.ID, time.Now()) {
+		if d.observePromptSubmitted(sessionID, time.Now()) {
 			origin = userConversationInput()
 		}
-		d.life.Go("maybeGenerateSessionTitleFromPrompt", func() { d.maybeGenerateSessionTitleFromPrompt(msg.ID, protocol.Deref(msg.Prompt), origin) })
+		d.life.Go("maybeGenerateSessionTitleFromPrompt", func() { d.maybeGenerateSessionTitleFromPrompt(sessionID, protocol.Deref(msg.Prompt), origin) })
 	}
-	d.store.Touch(msg.ID)
+	d.store.Touch(sessionID)
 	d.sendOK(conn)
 }
 
-func (d *Daemon) persistResumeSessionID(sessionID, resumeSessionID string) {
+func (d *Daemon) persistResumeSessionID(sessionID protocol.SessionID, resumeSessionID string) {
 	if _, err := d.store.TransitionSessionResumeID(sessionID, resumeSessionID); err != nil {
 		d.logf("persistResumeSessionID: update failed for session %s: %v", sessionID, err)
 	}
@@ -2839,20 +2845,21 @@ func (d *Daemon) persistResumeSessionID(sessionID, resumeSessionID string) {
 }
 
 func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
+	sessionID := d.sessionInTerminal(msg.ID)
 	reportedTranscriptPath := strings.TrimSpace(msg.TranscriptPath)
-	msg.TranscriptPath = d.resolveStopTranscriptPath(d.store.Get(msg.ID), reportedTranscriptPath)
+	msg.TranscriptPath = d.resolveStopTranscriptPath(d.store.Get(sessionID), reportedTranscriptPath)
 	if reportedTranscriptPath != "" && msg.TranscriptPath != reportedTranscriptPath {
-		d.logf("handleStop: ignored transcript path for session=%s: reported=%s bound=%s", msg.ID, reportedTranscriptPath, msg.TranscriptPath)
+		d.logf("handleStop: ignored transcript path for session=%s: reported=%s bound=%s", sessionID, reportedTranscriptPath, msg.TranscriptPath)
 	}
-	d.logf("handleStop: session=%s, transcript_path=%s", msg.ID, msg.TranscriptPath)
+	d.logf("handleStop: session=%s, transcript_path=%s", sessionID, msg.TranscriptPath)
 
-	relaxBackgroundWork := d.isChiefOfStaffSession(msg.ID)
-	classifies := !d.consumeForcedStopClassification(msg.ID)
+	relaxBackgroundWork := d.isChiefOfStaffSession(sessionID)
+	classifies := !d.consumeForcedStopClassification(sessionID)
 	if classifies {
-		d.cancelAutoSettle(msg.ID, "stop judged")
+		d.cancelAutoSettle(sessionID, "stop judged")
 	}
 	d.recordStopFacts(
-		msg.ID,
+		sessionID,
 		!relaxBackgroundWork && hasActiveBackgroundTask(msg),
 		hasPendingSessionCron(msg),
 	)
@@ -2860,51 +2867,51 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 		tasks := describeBackgroundTasks(msg)
 		d.logf(
 			"handleStop: non-terminal stop session=%s pending_crons=%d background_tasks=[%s]",
-			msg.ID, protocol.Deref(msg.PendingSessionCrons), tasks,
+			sessionID, protocol.Deref(msg.PendingSessionCrons), tasks,
 		)
 		d.traceStateEvidence(
-			msg.ID,
+			sessionID,
 			stateOrigin{source: stateSourceStopHook, detail: "non-terminal stop: " + tasks},
 			"",
 		)
 		d.sendOK(conn)
 		if !classifies {
-			d.logf("handleStop: skipping yield classification for daemon-terminated session=%s", msg.ID)
+			d.logf("handleStop: skipping yield classification for daemon-terminated session=%s", sessionID)
 			return
 		}
 		classification := stopClassification{
 			yielded:                true,
 			runningBackgroundTasks: runningBackgroundTaskCount(msg),
 		}
-		d.life.Go("classifyStop", func() { d.classifyStop(msg.ID, msg.TranscriptPath, classification) })
+		d.life.Go("classifyStop", func() { d.classifyStop(sessionID, msg.TranscriptPath, classification) })
 		return
 	}
 
-	d.recordTurnEndedEvidence(msg.ID, classifies)
+	d.recordTurnEndedEvidence(sessionID, classifies)
 
-	if session := d.store.Get(msg.ID); session != nil {
-		driver := agentdriver.Get(string(session.Agent))
+	if session := d.store.Get(sessionID); session != nil {
+		driver := agentdriver.Get(session.Agent)
 		resumeSessionID := agentdriver.ResumeSessionIDFromTranscriptPath(driver, msg.TranscriptPath)
-		observation := agentConversationObservation{SessionID: msg.ID, NativeID: resumeSessionID, TranscriptPath: msg.TranscriptPath}
+		observation := agentConversationObservation{SessionID: sessionID, NativeID: resumeSessionID, TranscriptPath: msg.TranscriptPath}
 		switch {
 		case resumeSessionID == "":
 		case agentdriver.EffectiveCapabilities(driver).HasHooks:
 			d.observeAgentConversation(observation)
-			d.rememberDispatchResume(msg.ID, resumeSessionID)
+			d.rememberDispatchResume(sessionID, resumeSessionID)
 		case d.claimAgentConversation(observation):
-			d.rememberDispatchResume(msg.ID, resumeSessionID)
+			d.rememberDispatchResume(sessionID, resumeSessionID)
 		}
 	}
-	d.store.Touch(msg.ID)
+	d.store.Touch(sessionID)
 	d.sendOK(conn)
 
 	if !classifies {
-		d.logf("handleStop: skipping classification for daemon-terminated session=%s", msg.ID)
+		d.logf("handleStop: skipping classification for daemon-terminated session=%s", sessionID)
 		return
 	}
 
-	d.life.Go("classifySessionState", func() { d.classifySessionState(msg.ID, msg.TranscriptPath) })
-	d.life.Go("maybeGenerateSessionTitle", func() { d.maybeGenerateSessionTitle(msg.ID, msg.TranscriptPath) })
+	d.life.Go("classifySessionState", func() { d.classifySessionState(sessionID, msg.TranscriptPath) })
+	d.life.Go("maybeGenerateSessionTitle", func() { d.maybeGenerateSessionTitle(sessionID, msg.TranscriptPath) })
 }
 
 func (d *Daemon) resolveStopTranscriptPath(session *protocol.Session, reported string) string {
@@ -2948,7 +2955,7 @@ func (d *Daemon) extractLastAssistantMessage(session *protocol.Session, transcri
 		return lastMessage, "", err
 	}
 
-	driver := agentdriver.Get(string(session.Agent))
+	driver := agentdriver.Get(session.Agent)
 	lastMessage, turnID, err := agentdriver.ExtractLastAssistantForClassification(
 		driver,
 		transcriptPath,
@@ -2966,7 +2973,7 @@ func (d *Daemon) extractLastAssistantMessage(session *protocol.Session, transcri
 	return lastMessage, turnID, nil
 }
 
-func (d *Daemon) classifiedTurnID(sessionID string) string {
+func (d *Daemon) classifiedTurnID(sessionID protocol.SessionID) string {
 	d.classifiedMu.Lock()
 	defer d.classifiedMu.Unlock()
 	if d.classifiedTurn == nil {
@@ -2975,16 +2982,16 @@ func (d *Daemon) classifiedTurnID(sessionID string) string {
 	return d.classifiedTurn[sessionID]
 }
 
-func (d *Daemon) setClassifiedTurnID(sessionID, turnID string) {
+func (d *Daemon) setClassifiedTurnID(sessionID protocol.SessionID, turnID string) {
 	d.classifiedMu.Lock()
 	defer d.classifiedMu.Unlock()
 	if d.classifiedTurn == nil {
-		d.classifiedTurn = make(map[string]string)
+		d.classifiedTurn = make(map[protocol.SessionID]string)
 	}
 	d.classifiedTurn[sessionID] = turnID
 }
 
-func (d *Daemon) clearClassifiedTurn(sessionID string) {
+func (d *Daemon) clearClassifiedTurn(sessionID protocol.SessionID) {
 	d.classifiedMu.Lock()
 	defer d.classifiedMu.Unlock()
 	if d.classifiedTurn == nil {
@@ -2993,11 +3000,11 @@ func (d *Daemon) clearClassifiedTurn(sessionID string) {
 	delete(d.classifiedTurn, sessionID)
 }
 
-func (d *Daemon) beginClassifyingTurn(sessionID, turnID string) bool {
+func (d *Daemon) beginClassifyingTurn(sessionID protocol.SessionID, turnID string) bool {
 	d.classifiedMu.Lock()
 	defer d.classifiedMu.Unlock()
 	if d.classifyingTurn == nil {
-		d.classifyingTurn = make(map[string]string)
+		d.classifyingTurn = make(map[protocol.SessionID]string)
 	}
 	if d.classifiedTurn != nil && d.classifiedTurn[sessionID] == turnID {
 		return false
@@ -3009,7 +3016,7 @@ func (d *Daemon) beginClassifyingTurn(sessionID, turnID string) bool {
 	return true
 }
 
-func (d *Daemon) clearClassifyingTurn(sessionID string) {
+func (d *Daemon) clearClassifyingTurn(sessionID protocol.SessionID) {
 	d.classifiedMu.Lock()
 	defer d.classifiedMu.Unlock()
 	if d.classifyingTurn == nil {
@@ -3018,15 +3025,15 @@ func (d *Daemon) clearClassifyingTurn(sessionID string) {
 	delete(d.classifyingTurn, sessionID)
 }
 
-func (d *Daemon) markForcedStopClassification(sessionID string) {
-	if strings.TrimSpace(sessionID) == "" {
+func (d *Daemon) markForcedStopClassification(sessionID protocol.SessionID) {
+	if protocol.TrimID(sessionID) == "" {
 		return
 	}
 	now := time.Now()
 	d.forcedStopMu.Lock()
 	defer d.forcedStopMu.Unlock()
 	if d.forcedStop == nil {
-		d.forcedStop = make(map[string]time.Time)
+		d.forcedStop = make(map[protocol.SessionID]time.Time)
 	}
 	for id, markedAt := range d.forcedStop {
 		if now.Sub(markedAt) > forcedStopSuppressTTL {
@@ -3036,8 +3043,8 @@ func (d *Daemon) markForcedStopClassification(sessionID string) {
 	d.forcedStop[sessionID] = now
 }
 
-func (d *Daemon) consumeForcedStopClassification(sessionID string) bool {
-	if strings.TrimSpace(sessionID) == "" {
+func (d *Daemon) consumeForcedStopClassification(sessionID protocol.SessionID) bool {
+	if protocol.TrimID(sessionID) == "" {
 		return false
 	}
 	now := time.Now()
@@ -3059,7 +3066,7 @@ func (d *Daemon) consumeForcedStopClassification(sessionID string) bool {
 	return now.Sub(markedAt) <= forcedStopSuppressTTL
 }
 
-func (d *Daemon) clearForcedStopClassification(sessionID string) {
+func (d *Daemon) clearForcedStopClassification(sessionID protocol.SessionID) {
 	d.forcedStopMu.Lock()
 	defer d.forcedStopMu.Unlock()
 	delete(d.forcedStop, sessionID)
@@ -3092,11 +3099,11 @@ func (d *Daemon) sessionForBroadcast(session *protocol.Session) *protocol.Sessio
 
 func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 	session *protocol.Session,
-	chiefs map[string]string,
-	delegatedFromChief map[string]bool,
-	crewBySession map[string]string,
-	seedBySession map[string]string,
-	dispatcherBySession map[string]garden.Tender,
+	chiefs map[string]protocol.SessionID,
+	delegatedFromChief map[protocol.SessionID]bool,
+	crewBySession map[protocol.SessionID]string,
+	seedBySession map[protocol.SessionID]string,
+	dispatcherBySession map[protocol.SessionID]garden.Tender,
 ) *protocol.Session {
 	clone := cloneSession(session)
 	if clone == nil {
@@ -3153,7 +3160,7 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 	return out
 }
 
-func (d *Daemon) sessionDelegationRoles() map[string]*protocol.SessionDelegationRole {
+func (d *Daemon) sessionDelegationRoles() map[protocol.SessionID]*protocol.SessionDelegationRole {
 	roles, err := d.store.SessionDelegationRoles()
 	if err != nil {
 		d.logf("session delegation roles: %v", err)
@@ -3188,11 +3195,11 @@ func (d *Daemon) remoteSessionsForBroadcast() []protocol.Session {
 	return sessions
 }
 
-func (d *Daemon) broadcastSessionStateChanged(sessionID string) {
-	d.publishFact(FactSessionStateChanged, sessionID, nil)
+func (d *Daemon) broadcastSessionStateChanged(sessionID protocol.SessionID) {
+	d.publishFact(FactSessionStateChanged, string(sessionID), nil)
 }
 
-func (d *Daemon) projectSessionStateChanged(sessionID string) {
+func (d *Daemon) projectSessionStateChanged(sessionID protocol.SessionID) {
 	session := d.store.Get(sessionID)
 	decorated := d.sessionForBroadcast(session)
 	if decorated == nil {
@@ -3227,6 +3234,7 @@ func (d *Daemon) projectRateLimited(ev bus.Event) {
 }
 
 func (d *Daemon) handleFilesEdited(conn net.Conn, msg *protocol.FilesEditedMessage) {
+	sessionID := d.sessionInTerminal(msg.ID)
 	for _, path := range msg.Paths {
 		path = strings.TrimSpace(path)
 		if !filepath.IsAbs(path) {
@@ -3237,7 +3245,7 @@ func (d *Daemon) handleFilesEdited(conn net.Conn, msg *protocol.FilesEditedMessa
 		default:
 			continue
 		}
-		d.store.RecordFileActivity(path, store.FileActivitySourceEdited, msg.ID)
+		d.store.RecordFileActivity(path, store.FileActivitySourceEdited, sessionID)
 	}
 	d.sendOK(conn)
 }
@@ -3255,7 +3263,7 @@ func (d *Daemon) handleQuery(conn net.Conn, msg *protocol.QueryMessage) {
 		Profiles: profiles,
 	}
 	if msg.CallerID != nil {
-		resp.CallerSessionID = msg.CallerID
+		resp.CallerSessionID = protocol.Ptr(d.sessionInTerminal(*msg.CallerID))
 	}
 	json.NewEncoder(conn).Encode(resp)
 }
@@ -3727,7 +3735,7 @@ func (d *Daemon) handleInjectTestSession(conn net.Conn, msg *protocol.InjectTest
 		return
 	}
 
-	msg.Session.Agent = normalizeStoredSessionAgent(string(msg.Session.Agent), protocol.SessionAgentCodex)
+	msg.Session.Agent = normalizeStoredSessionAgent(msg.Session.Agent, protocol.SessionAgentCodex)
 	stampSessionTimestamps(&msg.Session, string(protocol.TimestampNow()))
 	profile, err := d.requestedOrRecentProfile(msg.Session.ProfileID)
 	if err != nil {
@@ -3746,7 +3754,7 @@ func (d *Daemon) handleInjectTestSession(conn net.Conn, msg *protocol.InjectTest
 		d.sendError(conn, err.Error())
 		return
 	}
-	d.publishFact(FactSessionRegistered, msg.Session.ID, nil)
+	d.publishFact(FactSessionRegistered, string(msg.Session.ID), nil)
 	if !protocol.Deref(msg.Unplaced) {
 		d.placeLaunchedSession(&msg.Session, &launchPlacement{direction: layouttree.DirectionVertical, focus: true})
 	}
@@ -3923,7 +3931,7 @@ func (d *Daemon) checkAllBranches() {
 				info.Repository != protocol.Deref(session.Repository) {
 				d.store.UpdateBranch(session.ID, info.Branch, info.IsWorktree, info.MainRepo, info.Repository)
 				d.logf("Branch changed: session=%s branch=%s isWorktree=%v", session.ID, info.Branch, info.IsWorktree)
-				d.publishFact(FactSessionBranchChanged, session.ID, nil)
+				d.publishFact(FactSessionBranchChanged, string(session.ID), nil)
 			}
 		}
 	})

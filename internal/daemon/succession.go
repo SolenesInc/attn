@@ -14,21 +14,21 @@ import (
 func (d *Daemon) opened(t harness.TerminalID, from *protocol.Session, observation agentConversationObservation) error {
 	launch, _ := d.store.LaunchIntent(from.ID)
 	launch.ChiefOfStaff = false
-	to := uuid.NewString()
+	to := protocol.SessionID(uuid.NewString())
 	return d.succeed(t, from, store.Succession{
 		To:     to,
 		Label:  defaultSessionLabel(from.Directory, to),
 		Launch: launch,
-		Close:  store.SessionClose{Reason: "cleared; its terminal moved on to " + to},
+		Close:  store.SessionClose{Reason: string("cleared; its terminal moved on to " + to)},
 	}, observation)
 }
 
 // shows puts owner, which holds the conversation t reports and runs in no live terminal, in t: a closed
 // owner reopens in place, an open one leaves its dead panes. The caller holds both lifecycle locks.
-func (d *Daemon) shows(t harness.TerminalID, from *protocol.Session, owner string, observation agentConversationObservation) error {
+func (d *Daemon) shows(t harness.TerminalID, from *protocol.Session, owner protocol.SessionID, observation agentConversationObservation) error {
 	return d.succeed(t, from, store.Succession{
 		To:    owner,
-		Close: store.SessionClose{Reason: "resumed; its terminal moved on to " + owner},
+		Close: store.SessionClose{Reason: string("resumed; its terminal moved on to " + owner)},
 	}, observation)
 }
 
@@ -44,7 +44,7 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 	}
 	sc.From = from.ID
 	sc.Conversation = store.SessionConversation{NativeID: observation.NativeID, TranscriptPath: observation.TranscriptPath}
-	changed, err := d.store.CommitSuccession(sc, string(t))
+	_, err := d.store.CommitSuccession(sc, t)
 	unlockEnds()
 	defer release()
 	if err != nil {
@@ -65,8 +65,8 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 		LastMovement:   terminal.LastMovement,
 	})
 	d.startTranscriptWatcherAtPath(sc.To, from.Agent, from.Directory, d.sessionStartedAt(sc.To), observation.TranscriptPath)
-	d.publishFact(FactSessionRegistered, sc.To, nil)
-	d.publishArrangementChanged(changed[0].ProfileID)
+	d.publishFact(FactSessionRegistered, string(sc.To), nil)
+	d.publishArrangementChanged(from.ProfileID)
 
 	if !sc.KeepFrom {
 		d.recordSessionClose(from.ID, func() (bool, error) { return true, nil })
@@ -78,10 +78,10 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 
 // drainTranscriptWatcher stops a session's usage watchers, waits for their last reconcile, and refuses
 // new ones until release.
-func (d *Daemon) drainTranscriptWatcher(sessionID string) (release func()) {
+func (d *Daemon) drainTranscriptWatcher(sessionID protocol.SessionID) (release func()) {
 	d.watchersMu.Lock()
 	if d.usageDraining == nil {
-		d.usageDraining = make(map[string]bool)
+		d.usageDraining = make(map[protocol.SessionID]bool)
 	}
 	d.usageDraining[sessionID] = true
 	watcher := d.transcriptWatch[sessionID]

@@ -1,0 +1,4 @@
+kind: fixed
+area: cli
+change: Agent commands resolve the conversation shown in their terminal, so presence, session rename and pull request receipts use the current session id.
+notes: Terminal and session ids have distinct Go types; new launches use ATTN_TERMINAL_ID, with compatibility for existing ATTN_SESSION_ID launches.

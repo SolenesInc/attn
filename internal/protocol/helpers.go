@@ -7,6 +7,10 @@ import (
 	"time"
 )
 
+func TrimID[T ~string](id T) T {
+	return T(strings.TrimSpace(string(id)))
+}
+
 type Timestamp string
 
 func (t Timestamp) Time() time.Time {

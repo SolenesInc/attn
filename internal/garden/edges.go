@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 const (
@@ -133,7 +135,7 @@ func reaches(seeds []Seed, start, kind, target string) []string {
 	return walk(start)
 }
 
-func Ready(seeds []Seed, sessionLive func(sessionID string) bool) []Seed {
+func Ready(seeds []Seed, sessionLive func(sessionID protocol.SessionID) bool) []Seed {
 	graph := readiness(seeds)
 	ready := make([]Seed, 0, len(seeds))
 	for _, seed := range seeds {

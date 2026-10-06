@@ -25,7 +25,7 @@ func automationResolvedLocationJSON(t *testing.T, mainRepo, worktree string) str
 func claimTerminalAutomationRun(t *testing.T, s *store.Store, def *store.AutomationDefinition, requestID string, observedAt time.Time, resolvedLocationJSON string) *store.AutomationRun {
 	t.Helper()
 	run, created, err := s.ClaimManualAutomationRun(def.ID, requestID, "", `{}`, def.Revision, `{}`, observedAt, store.AutomationRunReservation{
-		RunID: "run-" + requestID, OccurrenceID: "occ-" + requestID, SeedID: "ticket-" + requestID, SessionID: "session-" + requestID,
+		RunID: "run-" + requestID, OccurrenceID: "occ-" + requestID, SeedID: "ticket-" + requestID, SessionID: protocol.SessionID("session-" + requestID),
 	})
 	if err != nil || !created {
 		t.Fatalf("claim %s created=%v err=%v", requestID, created, err)

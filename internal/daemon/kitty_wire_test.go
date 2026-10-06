@@ -42,7 +42,7 @@ func testKittyPlacementsReachOnlyClientsThatAskedForThem(t *testing.T, w *world)
 
 	typist.TypeLine(session, kittyShowImage)
 	for _, name := range []string{"describes and decodes frames", "describes without frames"} {
-		placed := testworld.Await(peers[name], protocol.EventKittyPlacements, func(m protocol.KittyPlacementsMessage) bool { return m.ID == terminal })
+		placed := testworld.Await(peers[name], protocol.EventKittyPlacements, func(m protocol.KittyPlacementsMessage) bool { return string(m.ID) == terminal })
 		if len(placed.Placements) != 1 || placed.Seq == 0 {
 			t.Fatalf("%s: kitty_placements = %+v, want the one image at its output seq", name, placed)
 		}
@@ -54,7 +54,7 @@ func testKittyPlacementsReachOnlyClientsThatAskedForThem(t *testing.T, w *world)
 	typist.TypeLine(session, kittyClearImages)
 	typist.TypeLine(session, `printf 'mark%s\n' er-cleared`)
 	for _, name := range []string{"describes and decodes frames", "describes without frames"} {
-		cleared := testworld.Await(peers[name], protocol.EventKittyPlacements, func(m protocol.KittyPlacementsMessage) bool { return m.ID == terminal })
+		cleared := testworld.Await(peers[name], protocol.EventKittyPlacements, func(m protocol.KittyPlacementsMessage) bool { return string(m.ID) == terminal })
 		if cleared.Placements == nil || len(cleared.Placements) != 0 {
 			t.Errorf("%s: after clearing, kitty_placements = %+v, want an explicit empty list", name, cleared)
 		}
@@ -81,25 +81,25 @@ func testKittyImagesOnScreenAreServedInTheFormEachClientReads(t *testing.T, w *w
 	describer := transportPeer(w, protocol.CapabilityKittyImages)
 	kittyAttach(describer, terminal)
 	describer.TypeLine(session, kittyShowImage)
-	testworld.Await(describer, protocol.EventKittyPlacements, func(m protocol.KittyPlacementsMessage) bool { return m.ID == terminal })
+	testworld.Await(describer, protocol.EventKittyPlacements, func(m protocol.KittyPlacementsMessage) bool { return string(m.ID) == terminal })
 
 	relayed := kittyImage(describer, terminal, 77)
 	plain := kittyImage(transportPeer(w), terminal, 77)
 	for name, result := range map[string]protocol.KittyImageResultMessage{"a client without frames": relayed, "a plain client": plain} {
 		pixels, err := base64.StdEncoding.DecodeString(protocol.Deref(result.DataB64))
-		if !result.Success || err != nil || !bytes.Equal(pixels, kittyImagePixels) || result.ID != terminal || result.ImageID != 77 ||
+		if !result.Success || err != nil || !bytes.Equal(pixels, kittyImagePixels) || string(result.ID) != terminal || result.ImageID != 77 ||
 			protocol.Deref(result.Width) != 2 || protocol.Deref(result.Height) != 2 || protocol.Deref(result.Format) != "rgb" || protocol.Deref(result.Generation) == 0 {
 			t.Errorf("%s got image 77 as %+v (pixels %v, %v), want base64 rgb 2x2 pixels with a generation", name, result, pixels, err)
 		}
 	}
 
 	framed := transportConnectRaw(t, w, protocol.CapabilityKittyImages, protocol.CapabilityBinaryPtyOutput)
-	framed.send(protocol.GetKittyImageMessage{Cmd: protocol.CmdGetKittyImage, ID: terminal, ImageID: 77})
+	framed.send(protocol.GetKittyImageMessage{Cmd: protocol.CmdGetKittyImage, ID: protocol.TerminalID(terminal), ImageID: 77})
 	frame, err := protocol.DecodeKittyImageFrame(framed.next("a kitty image frame", func(f transportFrame) bool { return f.binary }).data)
 	if err != nil {
 		t.Fatalf("the binary answer does not decode as a kitty image frame: %v", err)
 	}
-	if frame.SessionID != terminal || frame.ImageID != 77 || frame.Width != 2 || frame.Height != 2 || frame.Format != protocol.KittyImageFormatCodeRGB ||
+	if string(frame.TerminalID) != terminal || frame.ImageID != 77 || frame.Width != 2 || frame.Height != 2 || frame.Format != protocol.KittyImageFormatCodeRGB ||
 		frame.Generation != uint64(protocol.Deref(plain.Generation)) || !bytes.Equal(frame.Pixels, kittyImagePixels) {
 		t.Errorf("a client with frames got image 77 as %+v, want the same rgb 2x2 pixels and generation as the base64 answer", frame)
 	}
@@ -131,7 +131,7 @@ func TestAKittyImageKeepsOneIdentityThatNoOtherSessionShares(t *testing.T) {
 			kittyAttach(describer, terminal)
 			describer.TypeLine(session, "clear; "+kittyShowImage)
 			placed := testworld.Await(describer, protocol.EventKittyPlacements, func(m protocol.KittyPlacementsMessage) bool {
-				return m.ID == terminal && len(m.Placements) == 1
+				return string(m.ID) == terminal && len(m.Placements) == 1
 			})
 			generations[terminal] = placed.Placements[0].ImageGeneration
 			terminals = append(terminals, terminal)
@@ -145,8 +145,8 @@ func TestAKittyImageKeepsOneIdentityThatNoOtherSessionShares(t *testing.T) {
 		if reattached.Snapshot == nil || len(reattached.Snapshot.Placements) != 1 || reattached.Snapshot.Placements[0].ImageGeneration != generations[shop] {
 			t.Errorf("a client attaching later got snapshot placements %+v, want image 77 at generation %d", reattached.Snapshot, generations[shop])
 		}
-		describer.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: shop, Cols: 60, Rows: 12})
-		resized := testworld.Await(describer, protocol.EventKittyPlacements, func(m protocol.KittyPlacementsMessage) bool { return m.ID == shop })
+		describer.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: protocol.TerminalID(shop), Cols: 60, Rows: 12})
+		resized := testworld.Await(describer, protocol.EventKittyPlacements, func(m protocol.KittyPlacementsMessage) bool { return string(m.ID) == shop })
 		if len(resized.Placements) != 1 || resized.Placements[0].ImageGeneration != generations[shop] {
 			t.Errorf("after a resize the placements are %+v, want image 77 described again at generation %d", resized.Placements, generations[shop])
 		}
@@ -166,7 +166,7 @@ func TestAKittyStorageLimitOfZeroTurnsImagesOff(t *testing.T) {
 
 	describer.TypeLine(session, kittyShowImage+`; printf 'mark%s\n' er-drawn`)
 	transportAwaitOutput(describer, terminal, "marker-drawn")
-	describer.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: terminal, Cols: 60, Rows: 12})
+	describer.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: protocol.TerminalID(terminal), Cols: 60, Rows: 12})
 	if missing := kittyImage(describer, terminal, 77); missing.Success {
 		t.Errorf("with images off image 77 was served at generation %d", protocol.Deref(missing.Generation))
 	}
@@ -184,7 +184,7 @@ func TestResizingASessionWithoutImagesDescribesNoPlacements(t *testing.T) {
 	describer := transportPeer(w, protocol.CapabilityKittyImages)
 	kittyAttach(describer, terminal)
 
-	describer.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: terminal, Cols: 60, Rows: 12})
+	describer.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: protocol.TerminalID(terminal), Cols: 60, Rows: 12})
 	describer.TypeLine(session, `printf 'mark%s\n' er-resized`)
 	transportAwaitOutput(describer, terminal, "marker-resized")
 	for _, e := range describer.Received() {
@@ -209,7 +209,7 @@ func TestClientsGetTheImageStreamRewrittenAndAResyncWhenItsLayoutCannotBeCarried
 			t.Fatal(err)
 		}
 
-		describer.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: terminal, Cols: 20, Rows: 6, Xpixel: protocol.Ptr(20 * 8), Ypixel: protocol.Ptr(6 * 16)})
+		describer.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: protocol.TerminalID(terminal), Cols: 20, Rows: 6, Xpixel: protocol.Ptr(20 * 8), Ypixel: protocol.Ptr(6 * 16)})
 		describer.TypeLine(session, "cat "+payload)
 		var seen []byte
 		testworld.Await(describer, protocol.EventPtyOutput, func(e protocol.WebSocketEvent) bool {
@@ -246,19 +246,19 @@ func onEachPtyBackend(t *testing.T, script func(t *testing.T, w *world)) {
 
 func kittyAttach(p *testworld.Peer, terminal string) protocol.AttachResultMessage {
 	p.T.Helper()
-	return testworld.Request(p, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal},
-		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })
+	return testworld.Request(p, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(terminal)},
+		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return string(r.ID) == terminal })
 }
 
 func kittyImage(p *testworld.Peer, terminal string, imageID int) protocol.KittyImageResultMessage {
 	p.T.Helper()
-	return testworld.Request(p, protocol.GetKittyImageMessage{Cmd: protocol.CmdGetKittyImage, ID: terminal, ImageID: imageID},
+	return testworld.Request(p, protocol.GetKittyImageMessage{Cmd: protocol.CmdGetKittyImage, ID: protocol.TerminalID(terminal), ImageID: imageID},
 		protocol.EventKittyImageResult, func(r protocol.KittyImageResultMessage) bool { return r.ImageID == imageID })
 }
 
 func kittyRawImage(t *testing.T, p *transportRawPeer, terminal string, imageID int) protocol.KittyImageResultMessage {
 	t.Helper()
-	p.send(protocol.GetKittyImageMessage{Cmd: protocol.CmdGetKittyImage, ID: terminal, ImageID: imageID})
+	p.send(protocol.GetKittyImageMessage{Cmd: protocol.CmdGetKittyImage, ID: protocol.TerminalID(terminal), ImageID: imageID})
 	var result protocol.KittyImageResultMessage
 	frame := p.next("kitty_image_result", func(f transportFrame) bool { return f.event == protocol.EventKittyImageResult })
 	if err := json.Unmarshal(frame.data, &result); err != nil {

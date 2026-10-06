@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/inbox"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 var (
@@ -57,7 +58,7 @@ func (s *Store) PeerMessageRecord(id string) (inbox.PeerRecord, error) {
 	return peerMessageRecord(s.db, id)
 }
 
-func (s *Store) ReadPeerMessage(id, readBy string, addresses []inbox.Address, at time.Time) (inbox.PeerRecord, bool, error) {
+func (s *Store) ReadPeerMessage(id string, readBy protocol.SessionID, addresses []inbox.Address, at time.Time) (inbox.PeerRecord, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -114,7 +115,7 @@ func (s *Store) ReadPeerMessage(id, readBy string, addresses []inbox.Address, at
 	return record, true, nil
 }
 
-func (s *Store) PeerMessageGuardCounts(sender string, to inbox.Address, body string, dedupeSince, rateSince time.Time) (inbox.PeerGuardCounts, error) {
+func (s *Store) PeerMessageGuardCounts(sender protocol.SessionID, to inbox.Address, body string, dedupeSince, rateSince time.Time) (inbox.PeerGuardCounts, error) {
 	recipient := to.String()
 	s.mu.Lock()
 	defer s.mu.Unlock()

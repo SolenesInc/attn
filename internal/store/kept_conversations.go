@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"log"
 	"time"
+
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 type KeptConversation struct {
@@ -119,11 +121,11 @@ func (s *Store) TombstoneKeptConversation(agent, resumeID string, at time.Time, 
 type ConversationPin struct {
 	Agent     string
 	ResumeID  string
-	SessionID string
+	SessionID protocol.SessionID
 	PinnedAt  time.Time
 }
 
-func (s *Store) PinConversation(agent, resumeID, sessionID string, at time.Time) error {
+func (s *Store) PinConversation(agent string, resumeID string, sessionID protocol.SessionID, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {

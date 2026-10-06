@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"text/tabwriter"
 
@@ -21,7 +20,7 @@ func sessionPRClient() *client.Client {
 }
 
 type sessionPRArgs struct {
-	sessionID string
+	sessionID protocol.SessionID
 	url       string
 	mode      prreadiness.Mode
 	reviewer  string
@@ -31,7 +30,7 @@ type sessionPRArgs struct {
 func parseSessionPRArgs(command string, args []string) (sessionPRArgs, error) {
 	fs := flag.NewFlagSet("pr "+command, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	session := fs.String("session", "", "session id (defaults to ATTN_SESSION_ID)")
+	session := fs.String("session", "", "session id (defaults to the current session)")
 	asJSON := fs.Bool("json", false, "print the result as JSON")
 	modeValue := fs.String("mode", string(prreadiness.ModeGreen), "green, codex, or formal-review")
 	reviewer := fs.String("reviewer", "", "reviewer login (formal-review only)")
@@ -53,11 +52,11 @@ func parseSessionPRArgs(command string, args []string) (sessionPRArgs, error) {
 		return sessionPRArgs{}, err
 	}
 	parsed := sessionPRArgs{
-		sessionID: strings.TrimSpace(*session), asJSON: *asJSON,
+		sessionID: protocol.SessionID(strings.TrimSpace(*session)), asJSON: *asJSON,
 		mode: mode, reviewer: strings.TrimSpace(*reviewer),
 	}
 	if parsed.sessionID == "" {
-		parsed.sessionID = strings.TrimSpace(os.Getenv("ATTN_SESSION_ID"))
+		parsed.sessionID = currentSessionOrExit()
 	}
 	if parsed.sessionID == "" {
 		return parsed, errors.New("no session — pass --session <id>, or run inside an attn session")
@@ -126,7 +125,7 @@ func watchOrUnwatchSessionPR(command string, parsed sessionPRArgs, stdout, stder
 	return 0
 }
 
-func recordOrForgetSessionPR(command, sessionID, url string, stdout, stderr io.Writer) int {
+func recordOrForgetSessionPR(command string, sessionID protocol.SessionID, url string, stdout, stderr io.Writer) int {
 	c := sessionPRClient()
 	report, verb := c.RecordPullRequestCreated, "recorded"
 	if command == "forget" {
@@ -140,15 +139,15 @@ func recordOrForgetSessionPR(command, sessionID, url string, stdout, stderr io.W
 	return 0
 }
 
-func listSessionPRs(sessionID, url string, watchesOnly, asJSON bool, stdout, stderr io.Writer) int {
-	sessions, shown, err := sessionPRClient().QueryAs(sessionID)
+func listSessionPRs(sessionID protocol.SessionID, url string, watchesOnly, asJSON bool, stdout, stderr io.Writer) int {
+	sessions, err := sessionPRClient().Query("")
 	if err != nil {
 		fmt.Fprintf(stderr, "pr ls: %v\n", err)
 		return prWaitExitError
 	}
 	var found *protocol.Session
 	for i := range sessions {
-		if sessions[i].ID == shown {
+		if sessions[i].ID == sessionID {
 			found = &sessions[i]
 			break
 		}

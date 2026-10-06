@@ -25,7 +25,7 @@ func TestReloadResumesALiveConversationWithTheSameLaunch(t *testing.T) {
 	first := w.Launched(talked)
 	reloadConverse(t, app, talked, first)
 	talkedTerminal := app.Terminal(talked)
-	app.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: talkedTerminal, Cols: 91, Rows: 33})
+	app.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: protocol.TerminalID(talkedTerminal), Cols: 91, Rows: 33})
 	testworld.Await(app, protocol.EventPtyResized, func(e protocol.WebSocketEvent) bool {
 		return protocol.Deref(e.ID) == talkedTerminal && protocol.Deref(e.Cols) == 91
 	})
@@ -66,7 +66,7 @@ func TestReloadRelaunchesAnExitedSessionAtTheClientsGeometry(t *testing.T) {
 		m.Effort = protocol.Ptr("high")
 	})
 	w.Launched(session).Exit(0)
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == session })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
 
 	for _, tc := range []struct {
 		name, id, refusal string
@@ -74,15 +74,15 @@ func TestReloadRelaunchesAnExitedSessionAtTheClientsGeometry(t *testing.T) {
 		{"an exited session without geometry", session, "geometry"},
 		{"an unknown session", "no-such-session", "session not found"},
 	} {
-		refused := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: tc.id},
-			protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return r.ID == tc.id })
+		refused := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(tc.id)},
+			protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == tc.id })
 		if refused.Success || !strings.Contains(protocol.Deref(refused.Error), tc.refusal) {
 			t.Errorf("reloading %s answered %+v, want a refusal mentioning %q", tc.name, refused, tc.refusal)
 		}
 	}
 
-	reloaded := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: session, Cols: 91, Rows: 33},
-		protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return r.ID == session })
+	reloaded := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 91, Rows: 33},
+		protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == session })
 	if !reloaded.Success {
 		t.Fatalf("reloading the exited session with geometry: %s", protocol.Deref(reloaded.Error))
 	}
@@ -123,7 +123,7 @@ func TestReloadKeepsTheApprovalItStartedWith(t *testing.T) {
 	} {
 		if tc.exit {
 			reloadedRuns[tc.session].Exit(0)
-			testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == tc.session })
+			testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == tc.session })
 			launchIntentReload(t, app, tc.session)
 		} else {
 			reloadRespawned(t, app, tc.session)
@@ -152,7 +152,7 @@ func TestChangingTheChiefRelaunchesExactlyTheAffectedAgents(t *testing.T) {
 	alice, bob, carol := conversing("alice"), conversing("bob"), conversing("carol")
 	shell := w.Spawn(app, shellHarness, w.Path("dora"))
 	runs[carol].Exit(0)
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == carol })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == carol })
 
 	relaunchedAs := func(what, session string, chief bool) {
 		t.Helper()
@@ -202,8 +202,8 @@ func reloadConverse(t *testing.T, app *testworld.Peer, session string, run *fake
 
 func reloadRespawned(t *testing.T, app *testworld.Peer, session string) {
 	t.Helper()
-	reloaded := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: session, Cols: 100, Rows: 30},
-		protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return r.ID == session })
+	reloaded := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 100, Rows: 30},
+		protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == session })
 	if !reloaded.Success {
 		t.Fatalf("reload %s: %s", session, protocol.Deref(reloaded.Error))
 	}

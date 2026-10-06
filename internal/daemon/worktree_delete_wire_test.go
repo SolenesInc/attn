@@ -40,7 +40,7 @@ func TestDeletingADirtyWorktreeNeedsForceAndThenTakesItsSessionsAlong(t *testing
 	if surface, err := cli.WorktreeList(repo, 0); err != nil || !slices.Equal(worktreeCreatePaths(surface.Worktrees), []string{path}) {
 		t.Errorf("the worktree surface after the refused delete = %+v, %v; want %s still listed", surface, err, path)
 	}
-	if sessions, err := cli.Query(""); err != nil || len(sessions) != 1 || sessions[0].ID != session {
+	if sessions, err := cli.Query(""); err != nil || len(sessions) != 1 || string(sessions[0].ID) != session {
 		t.Errorf("sessions after the refused delete = %+v, %v; want %s still there", sessions, err, session)
 	}
 
@@ -65,7 +65,7 @@ func TestDeletingADirtyWorktreeNeedsForceAndThenTakesItsSessionsAlong(t *testing
 		return len(e.Worktrees) == 1 && e.Worktrees[0].Path == path
 	})
 	testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool {
-		return e.Session != nil && e.Session.ID == session
+		return e.Session != nil && string(e.Session.ID) == session
 	})
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Errorf("the forced delete left the directory: %v", err)

@@ -494,7 +494,7 @@ func proposeAutoModeValue(verb, kind, target, value string, asJSON bool) {
 }
 
 func autoModeProposer() string {
-	return strings.TrimSpace(os.Getenv("ATTN_SESSION_ID"))
+	return string(currentSessionOrExit())
 }
 
 func runAutoModeDenials(args []string) {

@@ -69,7 +69,7 @@ func TestOnlyProgramsSubscribedToMode2031HearTheColorSchemeChange(t *testing.T) 
 			for _, background := range []string{"#ffffff", "#fefefe"} {
 				app.Send(protocol.SetTerminalThemeMessage{Cmd: protocol.CmdSetTerminalTheme, Background: background})
 			}
-			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: app.Terminal(shell), Data: "c"})
+			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(app.Terminal(shell)), Data: "c"})
 
 			want := "\x1b[?997;1n|\x1b[?997;1n|"
 			if mode == "subscribed" {

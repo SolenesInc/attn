@@ -90,7 +90,7 @@ func (d *Daemon) placeAnsweringRequester(session *protocol.Session, placement *l
 	defer d.releaseArrangements(requester)
 	placed := d.placeLaunchedSession(session, placement)
 	if placed.paneID != "" {
-		d.sendArrangement(requester, session.ID, nil)
+		d.sendArrangement(requester, string(session.ID), nil)
 	}
 	return placed
 }
@@ -103,12 +103,12 @@ func (d *Daemon) placeLaunchedSession(session *protocol.Session, placement *laun
 	var paneID string
 	var err error
 	if placement.kind != "" || placement.reopen {
-		desktop, paneID, err = d.store.PlaceBackgroundSession(session.ID, string(placement.terminal), placement.kind, placement.itemID, placement.reopen)
+		desktop, paneID, err = d.store.PlaceBackgroundSession(session.ID, placement.terminal, placement.kind, placement.itemID, placement.reopen)
 	} else {
 		desktop, paneID, err = d.store.PlaceLaunchedSession(store.SessionPlacementRequest{
 			DesktopID:    placement.desktopID,
 			SessionID:    session.ID,
-			RuntimeID:    string(placement.terminal),
+			RuntimeID:    placement.terminal,
 			AnchorPaneID: placement.anchorPaneID,
 			Direction:    placement.direction,
 			Title:        session.Label,
@@ -126,7 +126,7 @@ func (d *Daemon) placeLaunchedSession(session *protocol.Session, placement *laun
 	return placementOutcome{desktopID: desktop.ID, paneID: paneID}
 }
 
-func (d *Daemon) announceUnplacement(sessionID string) func() {
+func (d *Daemon) announceUnplacement(sessionID protocol.SessionID) func() {
 	placement, placed, err := d.store.SessionPlacement(sessionID)
 	if err != nil || !placed {
 		return func() {}
@@ -138,7 +138,7 @@ func (d *Daemon) announceUnplacement(sessionID string) func() {
 	}
 }
 
-func (d *Daemon) placementBeside(sessionID string) *launchPlacement {
+func (d *Daemon) placementBeside(sessionID protocol.SessionID) *launchPlacement {
 	placement, placed, err := d.store.SessionPlacement(sessionID)
 	if err != nil {
 		d.logf("reading the placement of session %s: %v", sessionID, err)
@@ -173,7 +173,7 @@ func (d *Daemon) resolveDesktopRef(profile profiles.Profile, ref string) (profil
 		elsewhere.ID, owner.Name, profile.Name, profiles.DesktopDirectory(profile, desktops))
 }
 
-func (d *Daemon) sessionProfileID(sessionID string) (string, error) {
+func (d *Daemon) sessionProfileID(sessionID protocol.SessionID) (string, error) {
 	profileID, err := d.store.SessionProfileID(sessionID)
 	var missing *profiles.Error
 	if !errors.As(err, &missing) || missing.Code != profiles.CodeNotFound || d.hubManager == nil {
@@ -185,8 +185,8 @@ func (d *Daemon) sessionProfileID(sessionID string) (string, error) {
 	return profileID, err
 }
 
-func (d *Daemon) callerProfile(callerSessionID string) (profiles.Profile, error) {
-	callerSessionID = strings.TrimSpace(callerSessionID)
+func (d *Daemon) callerProfile(callerSessionID protocol.SessionID) (profiles.Profile, error) {
+	callerSessionID = protocol.TrimID(callerSessionID)
 	if callerSessionID == "" {
 		return d.store.MostRecentlyUsedProfile()
 	}

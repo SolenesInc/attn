@@ -20,7 +20,7 @@ func TestReviewRequestsMadeBeforeTheAutomationWatchedStartNoReviewAcrossARestart
 	if pr := first.Automation.PullRequest; pr == nil || pr.Number != 42 {
 		t.Fatalf("the first review ran on %+v, want only #42, requested after the automation began watching", first.Automation)
 	}
-	r.w.Launched(protocol.Deref(first.SessionID))
+	r.w.Launched(string(protocol.Deref(first.SessionID)))
 
 	setAutomationEnabled(t, r.cli, 1, false)
 	r.github.request(43, r.head, false)
@@ -33,14 +33,14 @@ func TestReviewRequestsMadeBeforeTheAutomationWatchedStartNoReviewAcrossARestart
 	if pr := after.Automation.PullRequest; pr == nil || pr.Number != 44 {
 		t.Fatalf("after re-enabling, the review ran on %+v, want only #44; #43 was requested while the automation was off", after.Automation)
 	}
-	r.w.Launched(protocol.Deref(after.SessionID))
+	r.w.Launched(string(protocol.Deref(after.SessionID)))
 
 	r.rerequest(43)
 	again := r.awaitNewRun(1, "delivered", first, after)
 	if pr := again.Automation.PullRequest; pr == nil || pr.Number != 43 {
 		t.Errorf("a fresh request for #43 ran on %+v, want #43", again.Automation)
 	}
-	r.w.Launched(protocol.Deref(again.SessionID))
+	r.w.Launched(string(protocol.Deref(again.SessionID)))
 }
 
 func TestAPushToAPullRequestUnderReviewStartsAReviewOfTheNewHeadOnEachAutomationsOwnThread(t *testing.T) {
@@ -53,7 +53,7 @@ func TestAPushToAPullRequestUnderReviewStartsAReviewOfTheNewHeadOnEachAutomation
 	threads := map[int]protocol.AutomationRunSummary{}
 	for _, id := range []int{1, 2} {
 		threads[id] = r.awaitNewRun(id, "delivered")
-		r.w.Launched(protocol.Deref(threads[id].SessionID))
+		r.w.Launched(string(protocol.Deref(threads[id].SessionID)))
 	}
 	if protocol.Deref(threads[1].SeedID) == protocol.Deref(threads[2].SeedID) {
 		t.Fatalf("both automations reviewed #42 on seed %s, want a thread each", protocol.Deref(threads[1].SeedID))

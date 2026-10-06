@@ -5,6 +5,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 const (
@@ -35,18 +37,18 @@ const (
 )
 
 type Node struct {
-	Type          string    `json:"type"`
-	PaneID        string    `json:"pane_id,omitempty"`
-	TileID        string    `json:"tile_id,omitempty"`
-	TileKind      string    `json:"tile_kind,omitempty"`
-	TileParams    string    `json:"tile_params,omitempty"`
-	TileSessionID string    `json:"tile_session_id,omitempty"`
-	SplitID       string    `json:"split_id,omitempty"`
-	Direction     Direction `json:"direction,omitempty"`
-	Ratio         float64   `json:"ratio,omitempty"`
-	RatioLocked   bool      `json:"ratio_locked,omitempty"`
-	RatioMode     RatioMode `json:"ratio_mode,omitempty"`
-	Children      []Node    `json:"children,omitempty"`
+	Type          string             `json:"type"`
+	PaneID        string             `json:"pane_id,omitempty"`
+	TileID        string             `json:"tile_id,omitempty"`
+	TileKind      string             `json:"tile_kind,omitempty"`
+	TileParams    string             `json:"tile_params,omitempty"`
+	TileSessionID protocol.SessionID `json:"tile_session_id,omitempty"`
+	SplitID       string             `json:"split_id,omitempty"`
+	Direction     Direction          `json:"direction,omitempty"`
+	Ratio         float64            `json:"ratio,omitempty"`
+	RatioLocked   bool               `json:"ratio_locked,omitempty"`
+	RatioMode     RatioMode          `json:"ratio_mode,omitempty"`
+	Children      []Node             `json:"children,omitempty"`
 }
 
 func DefaultLayout(paneID string) Node {
@@ -241,7 +243,7 @@ func normalizeTile(node Node) (Node, bool) {
 		TileID:        tileID,
 		TileKind:      tileKind,
 		TileParams:    node.TileParams,
-		TileSessionID: strings.TrimSpace(node.TileSessionID),
+		TileSessionID: protocol.TrimID(node.TileSessionID),
 	}, false
 }
 
@@ -408,7 +410,7 @@ func TileParamsByID(node Node, tileID string) (string, bool) {
 
 func TileSessionIDByID(node Node, tileID string) (string, bool) {
 	tile, found := findNode(node, isTile(tileID))
-	return tile.TileSessionID, found
+	return string(tile.TileSessionID), found
 }
 
 func updateTile(node Node, tileID string, update func(*Node)) (Node, bool) {
@@ -422,8 +424,8 @@ func updateTile(node Node, tileID string, update func(*Node)) (Node, bool) {
 	})
 }
 
-func UpdateTileSessionID(node Node, tileID, sessionID string) (Node, bool) {
-	return updateTile(node, tileID, func(tile *Node) { tile.TileSessionID = strings.TrimSpace(sessionID) })
+func UpdateTileSessionID(node Node, tileID string, sessionID protocol.SessionID) (Node, bool) {
+	return updateTile(node, tileID, func(tile *Node) { tile.TileSessionID = protocol.TrimID(sessionID) })
 }
 
 func UpdateTileParams(node Node, tileID, tileParams string) (Node, bool) {
@@ -454,7 +456,7 @@ type TileLeaf struct {
 	TileID        string
 	TileKind      string
 	TileParams    string
-	TileSessionID string
+	TileSessionID protocol.SessionID
 }
 
 func TileLeaves(node Node) []TileLeaf {
@@ -473,11 +475,11 @@ func TileLeaves(node Node) []TileLeaf {
 	return leaves
 }
 
-func DockTile(node Node, anchorID string, direction Direction, before bool, splitID, tileID, tileKind, tileParams, tileSessionID string, ratio float64) (Node, bool) {
+func DockTile(node Node, anchorID string, direction Direction, before bool, splitID string, tileID string, tileKind string, tileParams string, tileSessionID protocol.SessionID, ratio float64) (Node, bool) {
 	tileID = strings.TrimSpace(tileID)
 	tileKind = strings.TrimSpace(tileKind)
 	anchorID = strings.TrimSpace(anchorID)
-	tileSessionID = strings.TrimSpace(tileSessionID)
+	tileSessionID = protocol.TrimID(tileSessionID)
 	if tileID == "" || tileKind == "" || anchorID == "" || anchorID == tileID || HasPane(node, tileID) {
 		return node, false
 	}

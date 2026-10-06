@@ -17,6 +17,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/victorarias/attn/internal/harness"
 )
 
 type Harness string
@@ -218,7 +220,7 @@ func serve(cfg config, style composer, conv conversation) int {
 	}
 	a.control.start()
 	var boot bootingResult
-	if err := a.control.call(context.Background(), methodBooting, bootingParams{AttnSessionID: os.Getenv("ATTN_SESSION_ID")}, &boot); err != nil {
+	if err := a.control.call(context.Background(), methodBooting, bootingParams{AttnSessionID: string(harness.TerminalFromEnv())}, &boot); err != nil {
 		return 1
 	}
 	if boot.Exit {
@@ -231,9 +233,9 @@ func serve(cfg config, style composer, conv conversation) int {
 	report.Pid = os.Getpid()
 	report.Argv = os.Args
 	report.Env = os.Environ()
-	report.AttnSessionID = os.Getenv("ATTN_SESSION_ID")
+	report.AttnSessionID = string(harness.TerminalFromEnv())
 	if report.AttnSessionID == "" {
-		began = errors.Join(began, errors.New("ATTN_SESSION_ID is not set"))
+		began = errors.Join(began, errors.New("ATTN_TERMINAL_ID is not set"))
 	}
 	if began != nil {
 		report.Error = began.Error()

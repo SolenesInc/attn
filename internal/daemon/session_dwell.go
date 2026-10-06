@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"strings"
 	"sync"
 	"time"
 
@@ -10,7 +9,7 @@ import (
 
 type dwellGate struct {
 	mu      sync.Mutex
-	pending map[string]dwellPending
+	pending map[protocol.SessionID]dwellPending
 }
 
 type dwellPending struct {
@@ -19,11 +18,11 @@ type dwellPending struct {
 }
 
 func newDwellGate() *dwellGate {
-	return &dwellGate{pending: make(map[string]dwellPending)}
+	return &dwellGate{pending: make(map[protocol.SessionID]dwellPending)}
 }
 
-func (g *dwellGate) ready(sessionID string, state protocol.SessionState, dwell time.Duration, now time.Time) bool {
-	if g == nil || strings.TrimSpace(sessionID) == "" {
+func (g *dwellGate) ready(sessionID protocol.SessionID, state protocol.SessionState, dwell time.Duration, now time.Time) bool {
+	if g == nil || protocol.TrimID(sessionID) == "" {
 		return true
 	}
 	g.mu.Lock()
@@ -44,7 +43,7 @@ func (g *dwellGate) ready(sessionID string, state protocol.SessionState, dwell t
 	return true
 }
 
-func (g *dwellGate) deadline(sessionID string) time.Time {
+func (g *dwellGate) deadline(sessionID protocol.SessionID) time.Time {
 	if g == nil {
 		return time.Time{}
 	}
@@ -53,7 +52,7 @@ func (g *dwellGate) deadline(sessionID string) time.Time {
 	return g.pending[sessionID].until
 }
 
-func (g *dwellGate) clear(sessionID string) {
+func (g *dwellGate) clear(sessionID protocol.SessionID) {
 	if g == nil {
 		return
 	}

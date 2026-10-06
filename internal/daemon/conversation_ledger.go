@@ -50,7 +50,7 @@ func (d *Daemon) resolveKeptConversation(id string) (conversationKey, string, er
 			key := conversationKey{pin.Agent, pin.ResumeID}
 			if pin.ResumeID == id {
 				if _, exists := matches[key]; !exists {
-					matches[key] = pin.SessionID
+					matches[key] = string(pin.SessionID)
 				}
 			}
 		}
@@ -182,13 +182,13 @@ func (d *Daemon) keptConversationList(includeDeleted bool) (*protocol.KeptConver
 		rowsByKey[key] = row
 	}
 	for key, row := range rowsByKey {
-		row.Title, row.SessionIds, row.Seeds = key.resumeID, []string{}, seeds[key]
+		row.Title, row.SessionIds, row.Seeds = key.resumeID, []protocol.SessionID{}, seeds[key]
 		if row.Seeds == nil {
 			row.Seeds = []protocol.KeptConversationSeed{}
 		}
 		sort.Slice(row.Seeds, func(i, j int) bool { return row.Seeds[i].ID < row.Seeds[j].ID })
 		for i, entry := range byKey[key] {
-			row.SessionIds = append(row.SessionIds, entry.ID)
+			row.SessionIds = append(row.SessionIds, protocol.SessionID(entry.ID))
 			if i == 0 && entry.Label != "" {
 				row.Title = entry.Label
 			}
@@ -231,7 +231,7 @@ func (d *Daemon) keepConversation(id string, keep bool) error {
 		if !d.conversationKnown(agentdriver.Get(key.agent), key.resumeID) {
 			return fmt.Errorf("nothing left to keep: %s no longer has conversation %s and attn has no copy", key.agent, key.resumeID)
 		}
-		err = d.store.PinConversation(key.agent, key.resumeID, session, time.Now())
+		err = d.store.PinConversation(key.agent, key.resumeID, protocol.SessionID(session), time.Now())
 	} else {
 		err = d.store.UnpinConversation(key.agent, key.resumeID)
 	}

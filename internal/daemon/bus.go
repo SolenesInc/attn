@@ -136,13 +136,13 @@ func buildWireProjections() []projection {
 	return []projection{
 		{
 			filter: bus.Filter{FactSessionStateChanged},
-			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(ev.Subject) },
+			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(protocol.SessionID(ev.Subject)) },
 		},
 		{
 			filter: bus.Filter{FactSessionRegistered},
 			apply: func(d *Daemon, ev bus.Event) {
-				d.projectSessionEvent(protocol.EventSessionRegistered, ev.Subject)
-				if d.crewMemberBoundTo(ev.Subject) != "" {
+				d.projectSessionEvent(protocol.EventSessionRegistered, protocol.SessionID(ev.Subject))
+				if d.crewMemberBoundTo(protocol.SessionID(ev.Subject)) != "" {
 					d.projectCrewRoster()
 				}
 				d.projectGardenSeeds()
@@ -150,39 +150,39 @@ func buildWireProjections() []projection {
 		},
 		{
 			filter: bus.Filter{FactSessionCapChanged, FactSessionModelRequestStarted},
-			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(ev.Subject) },
+			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(protocol.SessionID(ev.Subject)) },
 		},
 		{
 			filter: bus.Filter{FactSessionActivityChanged},
-			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(ev.Subject) },
+			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(protocol.SessionID(ev.Subject)) },
 		},
 		{
 			filter: bus.Filter{FactSessionCostChanged},
-			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(ev.Subject) },
+			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(protocol.SessionID(ev.Subject)) },
 		},
 		{
 			filter: bus.Filter{FactSessionTerminalBuildChanged},
-			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(ev.Subject) },
+			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(protocol.SessionID(ev.Subject)) },
 		},
 		{
 			filter: bus.Filter{FactSessionConversationChanged},
-			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(ev.Subject) },
+			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(protocol.SessionID(ev.Subject)) },
 		},
 		{
 			filter: bus.Filter{FactSessionPullRequestChanged},
-			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(ev.Subject) },
+			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(protocol.SessionID(ev.Subject)) },
 		},
 		{
 			filter: bus.Filter{FactSessionReregistered, FactSessionRenamed},
 			apply: func(d *Daemon, ev bus.Event) {
-				d.projectSessionEvent(protocol.EventSessionStateChanged, ev.Subject)
+				d.projectSessionEvent(protocol.EventSessionStateChanged, protocol.SessionID(ev.Subject))
 			},
 		},
 		{
 			filter: bus.Filter{FactSessionAssistantWindowChanged},
 			apply: func(d *Daemon, ev bus.Event) {
 				d.wsHub.BroadcastValue(&protocol.SessionMessagesChangedMessage{
-					Event: protocol.EventSessionMessagesChanged, SessionID: ev.Subject,
+					Event: protocol.EventSessionMessagesChanged, SessionID: protocol.SessionID(ev.Subject),
 				})
 			},
 		},
@@ -226,6 +226,10 @@ func buildWireProjections() []projection {
 		{
 			filter: bus.Filter{FactProfileCreated, FactProfileRenamed, FactProfileDeleted, FactProfileArrangementChanged},
 			apply:  func(d *Daemon, _ bus.Event) { d.projectProfilesChanged() },
+		},
+		{
+			filter: bus.Filter{FactProfileArrangementChanged, FactProfileDeleted, FactSessionClosed, FactSessionUnregistered, FactWorktreeSessionsRemoved},
+			apply:  func(d *Daemon, _ bus.Event) { d.projectTerminalBindings() },
 		},
 		{
 			filter: bus.Filter{FactProfileArrangementChanged},

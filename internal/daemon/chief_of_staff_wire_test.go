@@ -13,15 +13,15 @@ import (
 
 func setChiefOfStaff(app *testworld.Peer, sessionID string, chief bool) protocol.ChiefOfStaffResultMessage {
 	app.T.Helper()
-	return testworld.Request(app, protocol.SetChiefOfStaffMessage{Cmd: protocol.CmdSetChiefOfStaff, SessionID: sessionID, ChiefOfStaff: chief},
-		protocol.EventChiefOfStaffResult, func(m protocol.ChiefOfStaffResultMessage) bool { return m.SessionID == sessionID })
+	return testworld.Request(app, protocol.SetChiefOfStaffMessage{Cmd: protocol.CmdSetChiefOfStaff, SessionID: protocol.SessionID(sessionID), ChiefOfStaff: chief},
+		protocol.EventChiefOfStaffResult, func(m protocol.ChiefOfStaffResultMessage) bool { return string(m.SessionID) == sessionID })
 }
 
 func chiefsOf(w *world) []string {
 	var chiefs []string
 	for _, session := range w.App().Initial.Sessions {
 		if protocol.Deref(session.ChiefOfStaff) {
-			chiefs = append(chiefs, session.ID)
+			chiefs = append(chiefs, string(session.ID))
 		}
 	}
 	return chiefs
@@ -69,21 +69,21 @@ func TestCreatingASessionAsChiefAssignsTheRoleOnlyWhenItCan(t *testing.T) {
 
 	shell := w.Spawn(app, fakeagent.Harness(protocol.AgentShellValue), w.Path("shell"), asChief)
 	app.TypeLine(shell, "exit")
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == shell })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == shell })
 
 	respawned := w.Spawn(app, fakeagent.Claude, w.Path("plain"))
 	w.Launched(respawned)
-	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: respawned})
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == respawned })
-	w.Spawn(app, fakeagent.Claude, w.Path("plain"), asChief, func(m *protocol.SpawnSessionMessage) { m.ID = respawned })
+	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: protocol.SessionID(respawned)})
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == respawned })
+	w.Spawn(app, fakeagent.Claude, w.Path("plain"), asChief, func(m *protocol.SpawnSessionMessage) { m.ID = protocol.SessionID(respawned) })
 	w.Launched(respawned)
 
 	failed := uuid.NewString()
 	missingDirectory := w.Path("gone")
 	if result := testworld.Request(app, protocol.SpawnSessionMessage{
-		Cmd: protocol.CmdSpawnSession, ID: failed, Agent: string(fakeagent.Claude), Cwd: missingDirectory, ProfileID: app.SelectedProfile(),
+		Cmd: protocol.CmdSpawnSession, ID: protocol.SessionID(failed), Agent: string(fakeagent.Claude), Cwd: missingDirectory, ProfileID: app.SelectedProfile(),
 		Cols: 100, Rows: 30, ChiefOfStaff: protocol.Ptr(true),
-	}, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return r.ID == failed }); result.Success {
+	}, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return string(r.ID) == failed }); result.Success {
 		t.Fatalf("a spawn into missing directory %s succeeded", missingDirectory)
 	}
 

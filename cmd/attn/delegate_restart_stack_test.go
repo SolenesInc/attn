@@ -60,7 +60,7 @@ func TestAHandoverInterruptedByARestartFinishesOnTheSuccessorThatOutlivedIt(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.Launched(predecessor.SessionID)
+	s.Launched(string(predecessor.SessionID))
 	handover := protocol.DelegateMessage{
 		Cmd: protocol.CmdDelegate, RequestID: "handover", Cwd: cwd, Agent: protocol.Ptr("codex"),
 		Assignment: protocol.DelegateAssignment{
@@ -78,7 +78,7 @@ func TestAHandoverInterruptedByARestartFinishesOnTheSuccessorThatOutlivedIt(t *t
 	s.Stop()
 	s.Start()
 	boot()
-	successor := s.Launched(accepted.SessionID)
+	successor := s.Launched(string(accepted.SessionID))
 	result, err := s.Client().Delegate(handover)
 	if err != nil || result.SessionID != accepted.SessionID {
 		t.Fatalf("after the restart the handover = %+v, %v; want it finished on %s", result, err, accepted.SessionID)

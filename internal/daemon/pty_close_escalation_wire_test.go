@@ -29,11 +29,11 @@ func TestClosingAPaneEndsItsProcessWhateverSignalsItIgnores(t *testing.T) {
 	sessions := map[string]string{}
 	for name, traps := range programs {
 		result, _, _ := w.RequestSpawn(app, shellHarness, cwd)
-		sessions[name] = result.ID
+		sessions[name] = string(result.ID)
 		if !result.Success {
 			t.Fatalf("spawn for %q failed: %s", name, protocol.Deref(result.Error))
 		}
-		held := filepath.Join(w.Dir, "held-"+result.ID)
+		held := filepath.Join(w.Dir, string("held-"+result.ID))
 		if err := syscall.Mkfifo(held, 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -48,8 +48,8 @@ func TestClosingAPaneEndsItsProcessWhateverSignalsItIgnores(t *testing.T) {
 			_ = f.Close()
 			done <- ended{said: said, err: err}
 		}(gone[name])
-		app.TypeLine(result.ID, `exec bash -c '`+traps+`; echo held-$((6*7)); while :; do sleep 1; done' 3>`+held)
-		app.AwaitScreen(result.ID, "held-42")
+		app.TypeLine(string(result.ID), `exec bash -c '`+traps+`; echo held-$((6*7)); while :; do sleep 1; done' 3>`+held)
+		app.AwaitScreen(string(result.ID), "held-42")
 	}
 	for name, session := range sessions {
 		closed := closeFromApp(app, session)

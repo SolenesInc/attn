@@ -50,7 +50,7 @@ func conversationUntil(app *testworld.Peer, session string, done func(texts []st
 	for attempt := 0; ; attempt++ {
 		requestID := session + "-" + string(rune('a'+attempt))
 		window := testworld.Request(app, protocol.SessionMessagesGetMessage{
-			Cmd: protocol.CmdSessionMessagesGet, RequestID: requestID, SessionID: session,
+			Cmd: protocol.CmdSessionMessagesGet, RequestID: requestID, SessionID: protocol.SessionID(session),
 		}, protocol.EventSessionMessagesGetResult, func(r protocol.SessionMessagesGetResultMessage) bool { return r.RequestID == requestID })
 		if window.Status != protocol.SessionMessageWindowStatusDiscovering {
 			if window.Status != protocol.SessionMessageWindowStatusReady {
@@ -64,6 +64,6 @@ func conversationUntil(app *testworld.Peer, session string, done func(texts []st
 				return texts
 			}
 		}
-		testworld.Await(app, protocol.EventSessionMessagesChanged, func(e protocol.SessionMessagesChangedMessage) bool { return e.SessionID == session })
+		testworld.Await(app, protocol.EventSessionMessagesChanged, func(e protocol.SessionMessagesChangedMessage) bool { return string(e.SessionID) == session })
 	}
 }

@@ -3,6 +3,8 @@ package inbox
 import (
 	"fmt"
 	"strings"
+
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 type addressKind uint8
@@ -19,19 +21,19 @@ type Address struct {
 	id   string
 }
 
-func ToSession(id string) Address      { return Address{sessionAddress, id} }
-func ToMember(id string) Address       { return Address{memberAddress, id} }
-func ToChief(profileID string) Address { return Address{chiefAddress, profileID} }
-func ToSeed(id string) Address         { return Address{seedAddress, id} }
+func ToSession(id protocol.SessionID) Address { return Address{sessionAddress, string(id)} }
+func ToMember(id string) Address              { return Address{memberAddress, id} }
+func ToChief(profileID string) Address        { return Address{chiefAddress, profileID} }
+func ToSeed(id string) Address                { return Address{seedAddress, id} }
 func (a Address) SeedID() string {
 	if a.kind == seedAddress {
 		return a.id
 	}
 	return ""
 }
-func (a Address) SessionID() string {
+func (a Address) SessionID() protocol.SessionID {
 	if a.kind == sessionAddress {
-		return a.id
+		return protocol.SessionID(a.id)
 	}
 	return ""
 }
@@ -65,7 +67,7 @@ func ParseAddress(s string) (Address, error) {
 	if ok && id != "" {
 		switch prefix {
 		case "session":
-			return ToSession(id), nil
+			return ToSession(protocol.SessionID(id)), nil
 		case "member":
 			return ToMember(id), nil
 		case "seed":

@@ -23,10 +23,18 @@ func TestAHookReportedStateReachesTheAppOnTheEdge(t *testing.T) {
 			report func() error
 			want   protocol.SessionState
 		}{
-			{func() error { return cli.UpdateState("s1", protocol.StateWorking) }, protocol.SessionStateWorking},
-			{func() error { return cli.RecordNotification("s1", "permission_prompt", "Allow edit?") }, protocol.SessionStatePendingApproval},
-			{func() error { return cli.UpdateState("s1", protocol.StateWorking) }, protocol.SessionStateWorking},
-			{func() error { return cli.UpdateState("s1", protocol.StateWaitingInput) }, protocol.SessionStateWaitingInput},
+			{func() error {
+				return cli.UpdateState(protocol.TerminalID(w.Terminal("s1")), protocol.StateWorking)
+			}, protocol.SessionStateWorking},
+			{func() error {
+				return cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), "permission_prompt", "Allow edit?")
+			}, protocol.SessionStatePendingApproval},
+			{func() error {
+				return cli.UpdateState(protocol.TerminalID(w.Terminal("s1")), protocol.StateWorking)
+			}, protocol.SessionStateWorking},
+			{func() error {
+				return cli.UpdateState(protocol.TerminalID(w.Terminal("s1")), protocol.StateWaitingInput)
+			}, protocol.SessionStateWaitingInput},
 		} {
 			reported := time.Now()
 			if err := step.report(); err != nil {
@@ -46,8 +54,12 @@ func TestAnOpenTurnThatStopsMovingGoesStuckOnTime(t *testing.T) {
 		report func(w *world) error
 		reason string
 	}{
-		{"an open bracket", func(w *world) error { return w.Client().UpdateState("s1", protocol.StateWorking) }, "bracket_open"},
-		{"a compaction", func(w *world) error { return w.Client().RecordCompaction("s1", true, "auto") }, "compacting"},
+		{"an open bracket", func(w *world) error {
+			return w.Client().UpdateState(protocol.TerminalID(w.Terminal("s1")), protocol.StateWorking)
+		}, "bracket_open"},
+		{"a compaction", func(w *world) error {
+			return w.Client().RecordCompaction(protocol.TerminalID(w.Terminal("s1")), true, "auto")
+		}, "compacting"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			inBubble(t, func(t *testing.T, w *world) {
@@ -92,7 +104,7 @@ func TestAGuardedApprovalSurfacesExactlyAfterItsDwell(t *testing.T) {
 		guardedClaudeAtWork(t, app, cli, w)
 
 		asked := time.Now()
-		if err := cli.RecordNotification("s1", "permission_prompt", "Allow edit?"); err != nil {
+		if err := cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), "permission_prompt", "Allow edit?"); err != nil {
 			t.Fatalf("notify: %v", err)
 		}
 		w.advance(time.Minute)
@@ -110,15 +122,15 @@ func TestAnApprovalTheReviewerSettlesInsideTheDwellNeverReachesTheApp(t *testing
 		cli := w.Client()
 		guardedClaudeAtWork(t, app, cli, w)
 
-		if err := cli.RecordNotification("s1", "permission_prompt", "Allow edit?"); err != nil {
+		if err := cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), "permission_prompt", "Allow edit?"); err != nil {
 			t.Fatalf("notify: %v", err)
 		}
 		w.advance(10 * time.Second)
-		if err := cli.UpdateStateFromHook("s1", protocol.StateWorking, "auto"); err != nil {
+		if err := cli.UpdateStateFromHook(protocol.TerminalID(w.Terminal("s1")), protocol.StateWorking, "auto"); err != nil {
 			t.Fatalf("report working: %v", err)
 		}
 		w.advance(2 * time.Minute)
-		if err := cli.UpdateState("s1", protocol.StateWaitingInput); err != nil {
+		if err := cli.UpdateState(protocol.TerminalID(w.Terminal("s1")), protocol.StateWaitingInput); err != nil {
 			t.Fatalf("report waiting_input: %v", err)
 		}
 
@@ -144,7 +156,7 @@ func TestHooksThatAgreeWithTheSessionStateBroadcastNothing(t *testing.T) {
 		before := stateChangesOf(app, "s1")
 
 		for range 3 {
-			if err := cli.UpdateStateFromHook("s1", protocol.StateWorking, "auto"); err != nil {
+			if err := cli.UpdateStateFromHook(protocol.TerminalID(w.Terminal("s1")), protocol.StateWorking, "auto"); err != nil {
 				t.Fatalf("report working again: %v", err)
 			}
 			w.advance(time.Second)
@@ -163,14 +175,14 @@ func TestAHookThatStrongerEvidenceOutranksDoesNotMoveTheSession(t *testing.T) {
 		if err := w.InjectSession("s1", "s1", w.Path("s1"), protocol.SessionAgentClaude); err != nil {
 			t.Fatalf("register: %v", err)
 		}
-		if err := cli.RecordNotification("s1", "permission_prompt", "Allow edit?"); err != nil {
+		if err := cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), "permission_prompt", "Allow edit?"); err != nil {
 			t.Fatalf("notify: %v", err)
 		}
 		testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
 		w.advance(time.Second)
 		before := stateChangesOf(app, "s1")
 
-		if err := cli.UpdateState("s1", protocol.StateIdle); err != nil {
+		if err := cli.UpdateState(protocol.TerminalID(w.Terminal("s1")), protocol.StateIdle); err != nil {
 			t.Fatalf("report idle: %v", err)
 		}
 		w.advance(time.Second)
@@ -201,9 +213,9 @@ func TestAnAgentThatDiesMidTurnReportsItsExitBeforeItsIdle(t *testing.T) {
 	run.Exit(1)
 
 	testworld.Await(app, protocol.EventSessionStateChanged, func(e protocol.WebSocketEvent) bool {
-		return e.Session != nil && e.Session.ID == session && protocol.Deref(e.Session.StateReason) == "process_exited"
+		return e.Session != nil && string(e.Session.ID) == session && protocol.Deref(e.Session.StateReason) == "process_exited"
 	})
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.WebSocketEvent) bool { return protocol.Deref(e.SessionID) == session })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.WebSocketEvent) bool { return string(protocol.Deref(e.SessionID)) == session })
 	if order := exitOrderOf(app, session); order != "exited, idle" {
 		t.Fatalf("the app heard of the death as %q, want the exit before the idle it causes", order)
 	}
@@ -213,9 +225,9 @@ func exitOrderOf(p *testworld.Peer, id string) string {
 	var order []string
 	for _, e := range p.Received() {
 		switch {
-		case e.Event == protocol.EventSessionExited && protocol.Deref(e.SessionID) == id:
+		case e.Event == protocol.EventSessionExited && string(protocol.Deref(e.SessionID)) == id:
 			order = append(order, "exited")
-		case e.Event == protocol.EventSessionStateChanged && e.Session != nil && e.Session.ID == id &&
+		case e.Event == protocol.EventSessionStateChanged && e.Session != nil && string(e.Session.ID) == id &&
 			protocol.Deref(e.Session.StateReason) == "process_exited":
 			order = append(order, "idle")
 		}
@@ -226,7 +238,7 @@ func exitOrderOf(p *testworld.Peer, id string) string {
 func stateChangesOf(p *testworld.Peer, id string) int {
 	changes := 0
 	for _, e := range p.Received() {
-		if e.Event == protocol.EventSessionStateChanged && e.Session != nil && e.Session.ID == id {
+		if e.Event == protocol.EventSessionStateChanged && e.Session != nil && string(e.Session.ID) == id {
 			changes++
 		}
 	}
@@ -238,7 +250,7 @@ func guardedClaudeAtWork(t *testing.T, app *testworld.Peer, cli *client.Client, 
 	if err := w.InjectSession("s1", "s1", w.Path("s1"), protocol.SessionAgentClaude); err != nil {
 		t.Fatalf("register: %v", err)
 	}
-	if err := cli.UpdateStateFromHook("s1", protocol.StateWorking, "auto"); err != nil {
+	if err := cli.UpdateStateFromHook(protocol.TerminalID(w.Terminal("s1")), protocol.StateWorking, "auto"); err != nil {
 		t.Fatalf("report working: %v", err)
 	}
 	testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })

@@ -83,9 +83,11 @@ func snoozeReport(t *testing.T, w *world, cli *client.Client, id, state string) 
 	defer app.Close()
 	report := cli.UpdateState
 	if state == protocol.StatePendingApproval {
-		report = func(id, _ string) error { return cli.RecordNotification(id, "permission_prompt", "Allow edit?") }
+		report = func(id protocol.TerminalID, _ string) error {
+			return cli.RecordNotification(id, "permission_prompt", "Allow edit?")
+		}
 	}
-	if err := report(id, state); err != nil {
+	if err := report(protocol.TerminalID(w.Terminal(id)), state); err != nil {
 		t.Fatalf("%s reports %s: %v", id, state, err)
 	}
 	return testworld.AwaitSession(app, id, func(s protocol.Session) bool { return string(s.State) == state })

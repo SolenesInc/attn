@@ -16,7 +16,7 @@ func TestASettledTurnStaysSettledWhileTheAgentRepaintsSlowerThanItsHeartbeatLast
 		if owed := queriedSession(t, agent.cli, agent.id); !protocol.Deref(owed.TurnOwed) {
 			t.Fatalf("a finished turn is %+v, want it owed", owed)
 		}
-		app.Send(protocol.SettleTurnMessage{Cmd: protocol.CmdSettleTurn, SessionID: agent.id})
+		app.Send(protocol.SettleTurnMessage{Cmd: protocol.CmdSettleTurn, SessionID: protocol.SessionID(agent.id)})
 		w.advance(0)
 		if settled := queriedSession(t, agent.cli, agent.id); protocol.Deref(settled.TurnOwed) {
 			t.Fatal("settling did not close the turn")

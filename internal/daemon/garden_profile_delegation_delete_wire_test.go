@@ -35,9 +35,9 @@ func TestProfileDeletionAccountsForDelegationsStillPreparingTheirCheckout(t *tes
 			gate.arm(t)
 			request := delegateCheckoutAt(repo, delegateNewWorktree("pending", "main"))
 			request.RequestID = uuid.NewString()
-			request.SourceSessionID = protocol.Ptr(source)
+			request.SourceSessionID = protocol.Ptr(protocol.SessionID(source))
 			request.Checkout.Path = protocol.Ptr(path)
-			scoped := cli.WithGardenProfile(side.ID, source)
+			scoped := cli.WithGardenProfile(side.ID, protocol.SessionID(source))
 			accepted, err := scoped.StartDelegation(request)
 			if err != nil {
 				t.Fatal(err)
@@ -49,7 +49,7 @@ func TestProfileDeletionAccountsForDelegationsStillPreparingTheirCheckout(t *tes
 					gate.release(t)
 				}
 			}()
-			listed, err := scoped.SeedList(source, false, 0)
+			listed, err := scoped.SeedList(protocol.SessionID(source), false, 0)
 			if err != nil || len(listed.Seeds) != 0 {
 				t.Fatalf("checkout preparation must precede seed creation: %+v %v", listed, err)
 			}
@@ -83,11 +83,11 @@ func TestProfileDeletionAccountsForDelegationsStillPreparingTheirCheckout(t *tes
 			if err != nil {
 				t.Fatal(err)
 			}
-			lifeMove(t, scoped, worker.SessionID, worker.SeedID, "harvest", "finished", "")
-			if _, err := cli.AgentClose(worker.SessionID, worker.SessionID, "finished my work"); err != nil {
+			lifeMove(t, scoped, string(worker.SessionID), worker.SeedID, "harvest", "finished", "")
+			if _, err := cli.AgentClose(string(worker.SessionID), worker.SessionID, "finished my work"); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := cli.AgentClose(source, source, "finished dispatching"); err != nil {
+			if _, err := cli.AgentClose(source, protocol.SessionID(source), "finished dispatching"); err != nil {
 				t.Fatal(err)
 			}
 

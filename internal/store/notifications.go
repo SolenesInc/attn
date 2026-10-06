@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 type NotificationSeverity string
@@ -47,9 +48,9 @@ type NotificationRecord struct {
 }
 
 type NotificationAction struct {
-	Kind     string `json:"kind"`
-	Label    string `json:"label"`
-	TargetID string `json:"target_id"`
+	Kind     string             `json:"kind"`
+	Label    string             `json:"label"`
+	TargetID protocol.SessionID `json:"target_id"`
 }
 
 func (s *Store) AddNotification(rec NotificationRecord, now time.Time) (NotificationRecord, error) {

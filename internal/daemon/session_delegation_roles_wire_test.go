@@ -47,8 +47,12 @@ func TestADelegatedSessionKeepsShowingItsRoleAfterTheRoleIsRemovedAndTheDaemonRe
 		if err != nil {
 			t.Fatalf("delegating %s: %v", label, err)
 		}
-		runs = append(runs, w.Launched(accepted.SessionID))
-		return accepted.SessionID
+		run := w.Launched(string(accepted.SessionID))
+		if prompt := run.Prompted(); prompt == "" {
+			t.Fatal("delegated session started without its briefing")
+		}
+		runs = append(runs, run)
+		return string(accepted.SessionID)
 	}
 	review := delegate("review", func(m *protocol.DelegateMessage) { m.Role = protocol.Ptr("review") })
 	research := delegate("research", func(m *protocol.DelegateMessage) { m.Role = protocol.Ptr("research") })
@@ -76,9 +80,8 @@ func TestADelegatedSessionKeepsShowingItsRoleAfterTheRoleIsRemovedAndTheDaemonRe
 		t.Fatalf("removing the research role: %s", protocol.Deref(saved.Error))
 	}
 	for _, run := range runs {
-		run.Prompted()
 		run.Exit(0)
-		testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == run.SessionID })
+		testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == protocol.SessionID(run.SessionID) })
 	}
 	w.restart()
 	for id, role := range want {

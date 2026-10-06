@@ -46,7 +46,7 @@ func TestEncodePtyOutputFrameRejectsBadID(t *testing.T) {
 	if _, err := EncodePtyOutputFrame("", 1, []byte("x")); err == nil {
 		t.Error("expected error for empty session id")
 	}
-	if _, err := EncodePtyOutputFrame(strings.Repeat("a", 256), 1, []byte("x")); err == nil {
+	if _, err := EncodePtyOutputFrame(TerminalID(strings.Repeat("a", 256)), 1, []byte("x")); err == nil {
 		t.Error("expected error for 256-byte session id")
 	}
 }

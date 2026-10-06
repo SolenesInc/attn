@@ -9,6 +9,7 @@ import (
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 func pathWithin(root, target string) bool {
@@ -214,7 +215,7 @@ func (d *Daemon) validateCrewAwarenessDirs(member crew.Member) error {
 	return nil
 }
 
-func (d *Daemon) validateCrewBoundLaunchDir(sessionID, dir string) (string, error) {
+func (d *Daemon) validateCrewBoundLaunchDir(sessionID protocol.SessionID, dir string) (string, error) {
 	members, _, err := d.readCrewMembers()
 	if docstore.IsUndeclaredCollection(err) {
 		return dir, nil

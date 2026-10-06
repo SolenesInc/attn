@@ -9,6 +9,7 @@ import (
 
 	"github.com/victorarias/attn/internal/automode"
 	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 type AutoModeProposal struct {
@@ -24,7 +25,7 @@ type AutoModeProposal struct {
 
 type AutoModeDenial struct {
 	ID        int64
-	SessionID string
+	SessionID protocol.SessionID
 	Tool      string
 	Signature string
 	Reason    string

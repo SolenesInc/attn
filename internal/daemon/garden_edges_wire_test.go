@@ -149,12 +149,12 @@ func TestADispatchedSessionIsReadyForItsPlot(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	planner := spawnPanes(w, app, w.Path("planner"))[0].session
-	plot, err := cli.SeedPlant(planner, "the plot", "Work through the plot.", "", "", "")
+	plot, err := cli.SeedPlant(protocol.SessionID(planner), "the plot", "Work through the plot.", "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	crown := plot.Seed.ID
-	inside, err := cli.SeedPlant(planner, "inside", "", crown, "", "")
+	inside, err := cli.SeedPlant(protocol.SessionID(planner), "inside", "", crown, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,16 +175,16 @@ func TestADispatchedSessionIsReadyForItsPlot(t *testing.T) {
 		t.Fatalf("dispatching the plot: %s", protocol.Deref(delegated.Error))
 	}
 	dispatched := delegated.Result.SessionID
-	w.Launched(dispatched)
+	w.Launched(string(dispatched))
 
-	scoped := edgeReady(t, cli, dispatched, "", false)
+	scoped := edgeReady(t, cli, string(dispatched), "", false)
 	if got := lifeSeedIDs(scoped.Seeds); !slices.Equal(got, []string{inside.Seed.ID}) || scoped.Scope != "plot" || scoped.ScopeID != crown {
 		t.Errorf("the dispatched session's ready = %v scoped to %s/%s, want the plot's child in plot %s", got, scoped.Scope, scoped.ScopeID, crown)
 	}
 	if scoped.Crown == nil || scoped.Crown.ID != crown || scoped.Crown.PlotProgress == nil {
 		t.Errorf("the plot answer carries crown %+v, want the crown with its progress", scoped.Crown)
 	}
-	whole := edgeReady(t, cli, dispatched, "", true)
+	whole := edgeReady(t, cli, string(dispatched), "", true)
 	if got := lifeSeedIDs(whole.Seeds); !slices.Equal(got, []string{inside.Seed.ID, outside}) || whole.Scope != "garden" {
 		t.Errorf("--all from the dispatched session = %v scoped to %s, want the whole garden", got, whole.Scope)
 	}
@@ -255,7 +255,7 @@ func edgeLink(t *testing.T, cli *client.Client, from, kind, to string) *protocol
 
 func edgeReady(t *testing.T, cli *client.Client, session, plot string, all bool) *protocol.SeedReadyResult {
 	t.Helper()
-	ready, err := cli.SeedReady(session, plot, all)
+	ready, err := cli.SeedReady(protocol.SessionID(session), plot, all)
 	if err != nil {
 		t.Fatalf("ready as %q: %v", session, err)
 	}

@@ -73,8 +73,8 @@ func (c *Copilot) BuildCommand(opts SpawnOpts) *exec.Cmd {
 
 func (c *Copilot) BuildEnv(opts SpawnOpts) []string {
 	var env []string
-	if id := strings.TrimSpace(opts.SessionID); id != "" {
-		env = append(env, "ATTN_SESSION_ID="+id)
+	if id := protocol.TrimID(opts.TerminalID); id != "" {
+		env = append(env, "ATTN_TERMINAL_ID="+string(id))
 	}
 	if opts.Executable != "" && opts.Executable != c.DefaultExecutable() {
 		env = append(env, c.ExecutableEnvVar()+"="+opts.Executable)

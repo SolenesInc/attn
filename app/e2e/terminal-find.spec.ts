@@ -53,7 +53,8 @@ async function writeTerminalOutput(
   output: string,
 ) {
   await page.evaluate(({ id, data }) => {
-    window.__TEST_EMIT_PTY_DATA?.(id, data);
+    const terminal = window.__TEST_GET_ACTIVE_SESSION_PANE_RUNTIME?.(id);
+    if (terminal) window.__TEST_EMIT_PTY_DATA?.(terminal, data);
   }, { id: sessionId, data: output });
 }
 

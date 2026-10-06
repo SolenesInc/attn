@@ -15,7 +15,7 @@ func addCostSession(t *testing.T, d *Daemon, id string, agent protocol.SessionAg
 	t.Helper()
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
-		ID: id, Agent: agent, Label: id, Directory: t.TempDir(),
+		ID: protocol.SessionID(id), Agent: agent, Label: id, Directory: t.TempDir(),
 		State: protocol.StateWorking, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
 }

@@ -311,7 +311,20 @@ export async function runDomAutomationAction(
       if (!(element instanceof HTMLElement)) {
         throw new Error(`dom_bounds selector not found in DOM: ${selector}`);
       }
-      return { bounds: rectSnapshot(element) };
+      const panel = element.closest<HTMLElement>('.side-panel');
+      return {
+        bounds: rectSnapshot(element),
+        panel: panel ? {
+          shellClass: panel.parentElement?.className,
+          hidden: panel.getAttribute('aria-hidden'),
+          transform: getComputedStyle(panel).transform,
+          opacity: getComputedStyle(panel).opacity,
+          animations: panel.getAnimations().map((animation) => ({
+            state: animation.playState,
+            currentTime: animation.currentTime,
+          })),
+        } : null,
+      };
     }
     case 'dom_text': {
       const selector = typeof payload.selector === 'string' ? payload.selector : null;

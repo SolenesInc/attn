@@ -476,7 +476,7 @@ func (d *Daemon) eachSeedExecution(visit func(garden.Seed, garden.Dispatch)) {
 		}
 		for _, doc := range read.Documents {
 			seed, err := garden.Decode(doc.Body)
-			if err != nil || strings.TrimSpace(seed.LastExecutionID) == "" {
+			if err != nil || protocol.TrimID(seed.LastExecutionID) == "" {
 				continue
 			}
 			dispatch, ok := d.gardenDispatch(seed.LastExecutionID)

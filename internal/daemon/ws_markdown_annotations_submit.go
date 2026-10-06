@@ -9,7 +9,7 @@ import (
 )
 
 func (d *Daemon) handleMarkdownAnnotationsSubmit(client *wsClient, msg *protocol.MarkdownAnnotationsSubmitMessage) {
-	targetSession := strings.TrimSpace(protocol.Deref(msg.TargetSessionID))
+	targetSession := protocol.SessionID(strings.TrimSpace(protocol.Deref(msg.TargetSessionID)))
 	targetSeed := strings.TrimSpace(protocol.Deref(msg.TargetSeedID))
 	source, sourceErr := d.resolveAnnotationDocumentSource(msg.DocumentUri, msg.SourceKind, msg.Path, msg.SeedID)
 	path, seedID := annotationSourcePointers(source)
@@ -74,7 +74,7 @@ func (d *Daemon) handleMarkdownAnnotationsSubmit(client *wsClient, msg *protocol
 	if targetSession != "" {
 		session := d.store.Get(targetSession)
 		if session == nil {
-			fail("session not found: " + targetSession)
+			fail(string("session not found: " + targetSession))
 			return
 		}
 		if !sessionInputPhaseAllows(sessionInputAtTurnBoundary, session.State) {

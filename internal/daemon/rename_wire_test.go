@@ -11,7 +11,7 @@ import (
 
 func renameFromApp(app *testworld.Peer, cmd any, id string) protocol.RenameResultMessage {
 	app.T.Helper()
-	return testworld.Request(app, cmd, protocol.EventRenameResult, func(r protocol.RenameResultMessage) bool { return r.ID == id })
+	return testworld.Request(app, cmd, protocol.EventRenameResult, func(r protocol.RenameResultMessage) bool { return string(r.ID) == id })
 }
 
 func TestARenamedSessionKeepsItsNameAcrossRespawn(t *testing.T) {
@@ -23,32 +23,32 @@ func TestARenamedSessionKeepsItsNameAcrossRespawn(t *testing.T) {
 	w.Launched(session)
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.Label == "original" })
 
-	blank := renameFromApp(app, protocol.RenameSessionMessage{Cmd: protocol.CmdRenameSession, SessionID: session, Label: "   "}, session)
+	blank := renameFromApp(app, protocol.RenameSessionMessage{Cmd: protocol.CmdRenameSession, SessionID: protocol.SessionID(session), Label: "   "}, session)
 	if blank.Success {
 		t.Error("renaming the session to a blank name was accepted")
 	}
-	if err := cli.RenameSession(session, strings.Repeat("x", 49)); err == nil || !strings.Contains(err.Error(), "over the 48-character limit") {
+	if err := cli.RenameSession(protocol.SessionID(session), strings.Repeat("x", 49)); err == nil || !strings.Contains(err.Error(), "over the 48-character limit") {
 		t.Errorf("renaming to 49 characters over the CLI = %v, want a refusal naming the 48-character limit", err)
 	}
 	if label := queriedSession(t, cli, session).Label; label != "original" {
 		t.Errorf("label after the refused renames = %q, want original", label)
 	}
 
-	if err := cli.RenameSession(session, "  review store tripwires  "); err != nil {
+	if err := cli.RenameSession(protocol.SessionID(session), "  review store tripwires  "); err != nil {
 		t.Fatalf("rename over the CLI: %v", err)
 	}
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.Label == "review store tripwires" })
 
-	renamed := renameFromApp(app, protocol.RenameSessionMessage{Cmd: protocol.CmdRenameSession, SessionID: session, Label: "renamed"}, session)
+	renamed := renameFromApp(app, protocol.RenameSessionMessage{Cmd: protocol.CmdRenameSession, SessionID: protocol.SessionID(session), Label: "renamed"}, session)
 	if !renamed.Success {
 		t.Fatalf("rename from the app: %s", protocol.Deref(renamed.Error))
 	}
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.Label == "renamed" })
 
-	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: session})
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == session })
+	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: protocol.SessionID(session)})
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
 	w.Spawn(app, fakeagent.Claude, cwd, func(m *protocol.SpawnSessionMessage) {
-		m.ID = session
+		m.ID = protocol.SessionID(session)
 		m.ResumeSessionID = protocol.Ptr(session)
 		m.Label = protocol.Ptr("original")
 	})

@@ -29,7 +29,7 @@ func TestAPtyResizeIsEchoedOnceInStreamOrderKeepingTheCellSizeWhenPixelsAreUnusa
 		plain.TypeLine(session, fmt.Sprintf(`printf 'be%%s\n' fore-%d`, i))
 		transportAwaitOutput(plain, terminal, before)
 
-		plain.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: terminal, Cols: cols, Rows: rows, Xpixel: tc.xpixel, Ypixel: tc.ypixel})
+		plain.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: protocol.TerminalID(terminal), Cols: cols, Rows: rows, Xpixel: tc.xpixel, Ypixel: tc.ypixel})
 		plain.TypeLine(session, fmt.Sprintf(`stty size; printf 'af%%s\n' ter-%d`, i))
 		transportAwaitOutput(plain, terminal, after)
 
@@ -69,7 +69,7 @@ func TestAProgramReadsThePixelGeometryOfItsLastResize(t *testing.T) {
 	session := w.Spawn(app, shellHarness, w.Path("shop"))
 	winsize := fakeagent.InstallWinsize(t, w.Dir)
 
-	app.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: app.Terminal(session), Cols: 40, Rows: 12, Xpixel: protocol.Ptr(40 * 18), Ypixel: protocol.Ptr(12 * 45)})
+	app.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: protocol.TerminalID(app.Terminal(session)), Cols: 40, Rows: 12, Xpixel: protocol.Ptr(40 * 18), Ypixel: protocol.Ptr(12 * 45)})
 	app.TypeLine(session, winsize)
 	app.AwaitScreen(session, "winsize cols=40 rows=12 xpixel=720 ypixel=540")
 }

@@ -55,7 +55,7 @@ func serveWatchedPullRequest(t *testing.T, gh watchedPullRequestGitHub) {
 func watchPullRequestAs(t *testing.T, cli *client.Client, session string, mode protocol.PullRequestWatchMode, reviewer string) {
 	t.Helper()
 	recordPullRequest(t, cli, session, watchedPullRequestURL)
-	if err := cli.WatchSessionPullRequest(session, watchedPullRequestURL, mode, reviewer); err != nil {
+	if err := cli.WatchSessionPullRequest(protocol.SessionID(session), watchedPullRequestURL, mode, reviewer); err != nil {
 		t.Fatalf("%s watches the pull request: %v", session, err)
 	}
 }

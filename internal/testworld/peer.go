@@ -90,7 +90,8 @@ func (p *Peer) read() {
 }
 
 func (p *Peer) recordOutput(data []byte) {
-	sessionID, seq, output, err := protocol.DecodePtyOutputFrame(data)
+	terminalID, seq, output, err := protocol.DecodePtyOutputFrame(data)
+	sessionID := string(terminalID)
 	if err != nil {
 		return
 	}
@@ -163,13 +164,13 @@ func (p *Peer) Terminal(sessionID string) string {
 		pane, ok = p.paneShowingLocked(sessionID)
 		return ok, nil
 	})
-	return pane.RuntimeID
+	return string(pane.RuntimeID)
 }
 
 func (p *Peer) paneShowingLocked(sessionID string) (protocol.DesktopPane, bool) {
 	for _, desktop := range p.panes {
 		for _, pane := range desktop.Panes {
-			if pane.SessionID == sessionID && pane.RuntimeID != "" {
+			if pane.SessionID == protocol.SessionID(sessionID) && pane.RuntimeID != "" {
 				return pane, true
 			}
 		}
@@ -182,13 +183,13 @@ func (p *Peer) recordSnapshot(data []byte) {
 	if err := json.Unmarshal(data, &result); err != nil || !result.Success {
 		return
 	}
-	p.attached[result.ID] = true
+	p.attached[string(result.ID)] = true
 	if result.Snapshot == nil {
-		p.seed(result.ID, nil, nil)
+		p.seed(string(result.ID), nil, nil)
 		return
 	}
 	lastSeq := uint32(protocol.Deref(result.LastSeq))
-	p.seed(result.ID, p.decodeScreen(result.ID, result.Snapshot.SnapshotB64), &lastSeq)
+	p.seed(string(result.ID), p.decodeScreen(string(result.ID), result.Snapshot.SnapshotB64), &lastSeq)
 }
 
 func (p *Peer) recordScreenSnapshot(data []byte) {
@@ -197,7 +198,7 @@ func (p *Peer) recordScreenSnapshot(data []byte) {
 		return
 	}
 	lastSeq := uint32(protocol.Deref(result.LastSeq))
-	p.seed(result.ID, p.decodeScreen(result.ID, protocol.Deref(result.ScreenSnapshot)), &lastSeq)
+	p.seed(string(result.ID), p.decodeScreen(string(result.ID), protocol.Deref(result.ScreenSnapshot)), &lastSeq)
 }
 
 func (p *Peer) decodeScreen(sessionID, encoded string) []byte {
@@ -283,7 +284,7 @@ func (p *Peer) TypeLine(sessionID, text string) {
 	p.T.Helper()
 	terminal := p.Terminal(sessionID)
 	p.attach(terminal)
-	p.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: text + "\r"})
+	p.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(terminal), Data: text + "\r"})
 }
 
 func (p *Peer) AwaitScreen(sessionID, text string) {
@@ -331,8 +332,8 @@ func (p *Peer) attach(terminal string) {
 	if attached {
 		return
 	}
-	result := Request(p, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal},
-		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })
+	result := Request(p, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(terminal)},
+		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == protocol.TerminalID(terminal) })
 	if !result.Success {
 		p.T.Fatalf("attach %s refused: %s", terminal, protocol.Deref(result.Error))
 	}
@@ -436,7 +437,7 @@ func AwaitSession(p *Peer, id string, match func(protocol.Session) bool) protoco
 				carrier.Sessions = append(carrier.Sessions, *carrier.Session)
 			}
 			for _, s := range carrier.Sessions {
-				if s.ID == id && match(s) {
+				if s.ID == protocol.SessionID(id) && match(s) {
 					found = s
 					if listed {
 						if f.took == nil {
@@ -460,7 +461,7 @@ func AwaitSession(p *Peer, id string, match func(protocol.Session) bool) protoco
 func AwaitStateAfter(p *Peer, previous protocol.Session, match func(protocol.Session) bool) protocol.Session {
 	p.T.Helper()
 	after := stateSince(p.T, previous)
-	return AwaitSession(p, previous.ID, func(s protocol.Session) bool {
+	return AwaitSession(p, string(previous.ID), func(s protocol.Session) bool {
 		return stateSince(p.T, s).After(after) && match(s)
 	})
 }

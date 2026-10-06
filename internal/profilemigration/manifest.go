@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 const (
@@ -38,18 +40,18 @@ type DroppedWorkspace struct {
 }
 
 type DroppedPlacement struct {
-	SessionID       string `json:"session_id"`
-	WorkspaceID     string `json:"workspace_id"`
-	PaneID          string `json:"pane_id"`
-	KeptWorkspaceID string `json:"kept_workspace_id"`
-	KeptPaneID      string `json:"kept_pane_id"`
+	SessionID       protocol.SessionID `json:"session_id"`
+	WorkspaceID     string             `json:"workspace_id"`
+	PaneID          string             `json:"pane_id"`
+	KeptWorkspaceID string             `json:"kept_workspace_id"`
+	KeptPaneID      string             `json:"kept_pane_id"`
 }
 
 type DroppedPane struct {
-	WorkspaceID string `json:"workspace_id"`
-	PaneID      string `json:"pane_id"`
-	SessionID   string `json:"session_id,omitempty"`
-	Reason      string `json:"reason"`
+	WorkspaceID string             `json:"workspace_id"`
+	PaneID      string             `json:"pane_id"`
+	SessionID   protocol.SessionID `json:"session_id,omitempty"`
+	Reason      string             `json:"reason"`
 }
 
 type RenamedPane struct {

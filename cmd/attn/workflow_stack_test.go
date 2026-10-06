@@ -97,6 +97,9 @@ func TestWorkflowRunRecordsEachRunWithTheDaemonAndReportsHowItEnded(t *testing.T
 		t.Errorf("a run with workflows disabled exited %d: %s", r.Code, r.Stderr)
 	}
 	enableWorkflows(t, app)
+	if err := s.InjectSession("sess-env", "workflow caller", s.Path("caller"), protocol.SessionAgentCodex); err != nil {
+		t.Fatal(err)
+	}
 
 	inline := s.Run(testworld.Invocation{Args: []string{"workflow", "run", echo, "--wait", "--args", `{"a":1}`}, Session: "sess-env"})
 	if out := finishedWorkflow(t, inline); inline.Code != 0 || out.Status != "completed" || string(out.Result) != `{"a":1}` || *out.CallsTotal != 0 {

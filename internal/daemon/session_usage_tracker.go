@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/victorarias/attn/internal/protocol"
+
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/sessioncost"
 	"github.com/victorarias/attn/internal/store"
@@ -13,7 +15,7 @@ import (
 
 type sessionUsageTracker struct {
 	daemon    *Daemon
-	sessionID string
+	sessionID protocol.SessionID
 	agent     string
 	resolver  transcript.UsageSourceResolver
 	rootPath  string
@@ -40,7 +42,7 @@ func (d *Daemon) newSessionUsageTracker(w *transcriptWatcher, rootPath string) *
 }
 
 func newSessionUsageTrackerAt(
-	d *Daemon, sessionID, agent, rootPath string, resolver transcript.UsageSourceResolver,
+	d *Daemon, sessionID protocol.SessionID, agent string, rootPath string, resolver transcript.UsageSourceResolver,
 ) *sessionUsageTracker {
 	return &sessionUsageTracker{
 		daemon: d, sessionID: sessionID, agent: agent, resolver: resolver, rootPath: rootPath,
@@ -174,7 +176,7 @@ func (t *sessionUsageTracker) readIfMoved(tracked *trackedUsageSource) {
 		return
 	}
 	if changed {
-		t.daemon.publishFact(FactSessionCostChanged, t.sessionID, nil)
+		t.daemon.publishFact(FactSessionCostChanged, string(t.sessionID), nil)
 	}
 }
 
@@ -233,7 +235,7 @@ func (t *sessionUsageTracker) markIncomplete() {
 		return
 	}
 	if changed {
-		t.daemon.publishFact(FactSessionCostChanged, t.sessionID, nil)
+		t.daemon.publishFact(FactSessionCostChanged, string(t.sessionID), nil)
 	}
 }
 

@@ -1,5 +1,7 @@
 package inbox
 
+import "github.com/victorarias/attn/internal/protocol"
+
 type Kind string
 
 const (
@@ -25,7 +27,7 @@ type Item struct {
 
 type Message struct {
 	ID              string
-	SenderSessionID string
+	SenderSessionID protocol.SessionID
 	Body            string
 	CreatedAt       string
 }
@@ -41,7 +43,7 @@ const (
 type PeerRecord struct {
 	To         Address
 	Message    Message
-	ReadBy     string
+	ReadBy     protocol.SessionID
 	NotifiedAt string
 	ReadAt     string
 }

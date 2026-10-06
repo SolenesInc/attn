@@ -19,24 +19,24 @@ func TestADelegateShowsItsDispatcherAcrossTheDispatchersLife(t *testing.T) {
 		t.Fatal(err)
 	}
 	firstDay := wakeCrew(t, cli, "alder", string(fakeagent.Codex)).SessionID
-	firstDayRun := w.Launched(firstDay)
-	fromAlder := gardenDispatchDelegate(t, w, cli, firstDay, cwd, "Map the checkout")
+	firstDayRun := w.Launched(string(firstDay))
+	fromAlder := gardenDispatchDelegate(t, w, cli, string(firstDay), cwd, "Map the checkout")
 	plain, workspace, pane := w.RequestSpawn(app, fakeagent.Codex, w.Path("plain"))
 	if !plain.Success {
 		t.Fatalf("spawn the plain dispatcher: %s", protocol.Deref(plain.Error))
 	}
-	w.Launched(plain.ID)
-	fromPlain := gardenDispatchDelegate(t, w, cli, plain.ID, cwd, "Tidy the cart")
+	w.Launched(string(plain.ID))
+	fromPlain := gardenDispatchDelegate(t, w, cli, string(plain.ID), cwd, "Tidy the cart")
 
 	shows := func(when, delegate, session, member string) {
 		t.Helper()
 		shown := sessionOfDelegate(t, w, delegate)
-		if protocol.Deref(shown.DispatcherSessionID) != session || protocol.Deref(shown.DispatcherMember) != member {
+		if string(protocol.Deref(shown.DispatcherSessionID)) != session || protocol.Deref(shown.DispatcherMember) != member {
 			t.Errorf("%s the delegate %s shows dispatcher session %q and member %q, want %q and %q", when, delegate, protocol.Deref(shown.DispatcherSessionID), protocol.Deref(shown.DispatcherMember), session, member)
 		}
 	}
-	shows("while its dispatchers live", fromAlder, firstDay, "alder")
-	shows("while its dispatchers live", fromPlain, plain.ID, "")
+	shows("while its dispatchers live", fromAlder, string(firstDay), "alder")
+	shows("while its dispatchers live", fromPlain, string(plain.ID), "")
 
 	watching := w.App()
 	firstDayRun.Exit(0)
@@ -46,11 +46,11 @@ func TestADelegateShowsItsDispatcherAcrossTheDispatchersLife(t *testing.T) {
 	shows("once alder's day ended and alder sleeps", fromAlder, "", "alder")
 
 	secondDay := wakeCrew(t, cli, "alder", string(fakeagent.Codex)).SessionID
-	w.Launched(secondDay)
-	shows("once alder woke into a new day", fromAlder, secondDay, "alder")
+	w.Launched(string(secondDay))
+	shows("once alder woke into a new day", fromAlder, string(secondDay), "alder")
 
-	closePane(app, sessionPane{session: plain.ID, desktop: workspace, pane: pane})
-	awaitClosed(app, plain.ID)
+	closePane(app, sessionPane{session: string(plain.ID), desktop: workspace, pane: pane})
+	awaitClosed(app, string(plain.ID))
 	shows("once its plain dispatcher closed", fromPlain, "", "")
 }
 
@@ -62,6 +62,6 @@ func gardenDispatchDelegate(t *testing.T, w *world, cli *client.Client, dispatch
 	if err != nil {
 		t.Fatalf("%s delegates %q: %v", dispatcher, brief, err)
 	}
-	w.Launched(delegated.SessionID)
-	return delegated.SessionID
+	w.Launched(string(delegated.SessionID))
+	return string(delegated.SessionID)
 }

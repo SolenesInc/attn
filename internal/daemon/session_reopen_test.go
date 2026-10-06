@@ -58,7 +58,7 @@ func closeReopenSession(t *testing.T, d *Daemon, session reopenSession) {
 		session.ProfileID = defaultProfileID(t, d.store)
 	}
 	entry := &protocol.Session{
-		ID: session.ID, Label: session.ID,
+		ID: protocol.SessionID(session.ID), Label: session.ID,
 		Agent:     protocol.SessionAgent(session.Agent),
 		Directory: session.Directory, ProfileID: session.ProfileID,
 		State:      protocol.SessionStateIdle,
@@ -77,13 +77,13 @@ func closeReopenSession(t *testing.T, d *Daemon, session reopenSession) {
 		if session.Intent != nil {
 			intent = *session.Intent
 		}
-		d.store.SetLaunchIntent(session.ID, intent)
+		d.store.SetLaunchIntent(protocol.SessionID(session.ID), intent)
 	}
 	if session.Resume != "" {
-		d.persistResumeSessionID(session.ID, session.Resume)
+		d.persistResumeSessionID(protocol.SessionID(session.ID), session.Resume)
 	}
 	if session.CostCursor != "" {
-		if err := d.store.SetSessionCostCursor(session.ID, session.CostCursor); err != nil {
+		if err := d.store.SetSessionCostCursor(protocol.SessionID(session.ID), session.CostCursor); err != nil {
 			t.Fatalf("set the cost cursor of %s: %v", session.ID, err)
 		}
 	}
@@ -91,8 +91,8 @@ func closeReopenSession(t *testing.T, d *Daemon, session reopenSession) {
 	if closedBy == "" {
 		closedBy = store.SessionClosedByUser
 	}
-	d.closeSession(session.ID, store.SessionClose{By: closedBy, Reason: session.Reason})
-	if !d.store.SessionClosed(session.ID) {
+	d.closeSession(protocol.SessionID(session.ID), store.SessionClose{By: closedBy, Reason: session.Reason})
+	if !d.store.SessionClosed(protocol.SessionID(session.ID)) {
 		t.Fatalf("session %s did not close into the ledger", session.ID)
 	}
 }

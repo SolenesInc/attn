@@ -18,8 +18,8 @@ func TestASessionContextWindowCapRelaunchesTheAgentAndIsRefusedForAShellOrOutOfB
 	shell := w.Spawn(app, shellHarness, w.Path("docs"))
 	pin := func(session string, tokens int) protocol.SessionContextWindowCapResultMessage {
 		t.Helper()
-		return testworld.Request(app, protocol.SetSessionContextWindowCapMessage{Cmd: protocol.CmdSetSessionContextWindowCap, SessionID: session, Cap: tokens},
-			protocol.EventSessionContextWindowCapResult, func(r protocol.SessionContextWindowCapResultMessage) bool { return r.SessionID == session })
+		return testworld.Request(app, protocol.SetSessionContextWindowCapMessage{Cmd: protocol.CmdSetSessionContextWindowCap, SessionID: protocol.SessionID(session), Cap: tokens},
+			protocol.EventSessionContextWindowCapResult, func(r protocol.SessionContextWindowCapResultMessage) bool { return string(r.SessionID) == session })
 	}
 
 	if got := pin(shell, 200000); got.Success {

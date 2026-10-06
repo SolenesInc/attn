@@ -5,10 +5,12 @@ import (
 	"errors"
 	"log"
 	"time"
+
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 type SessionExitScreen struct {
-	SessionID  string
+	SessionID  protocol.SessionID
 	Text       string
 	Cols       int
 	Rows       int
@@ -35,7 +37,7 @@ func (s *Store) SaveSessionExitScreen(rec SessionExitScreen, now time.Time) erro
 	return err
 }
 
-func (s *Store) GetSessionExitScreen(sessionID string) *SessionExitScreen {
+func (s *Store) GetSessionExitScreen(sessionID protocol.SessionID) *SessionExitScreen {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
@@ -55,7 +57,7 @@ func (s *Store) GetSessionExitScreen(sessionID string) *SessionExitScreen {
 	return &rec
 }
 
-func (s *Store) DeleteSessionExitScreen(sessionID string) error {
+func (s *Store) DeleteSessionExitScreen(sessionID protocol.SessionID) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {

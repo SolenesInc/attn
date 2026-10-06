@@ -15,12 +15,12 @@ func TestAVerdictLandingAfterAnApprovalLeavesTheApprovalStanding(t *testing.T) {
 		app, cli := w.App(), w.Client()
 		transcript, _ := hookedClaudeAtWork(t, w, app, cli, "migrate the orders table")
 		transcript.Answer("The migration is written.")
-		if err := cli.SendStop("s1", transcript.Path, client.StopFacts{}); err != nil {
+		if err := cli.SendStop(protocol.TerminalID(w.Terminal("s1")), transcript.Path, client.StopFacts{}); err != nil {
 			t.Fatalf("stop: %v", err)
 		}
 		verdict := w.HeadlessTask()
 
-		if err := cli.RecordNotification("s1", "permission_prompt", "Allow the migration to run?"); err != nil {
+		if err := cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), "permission_prompt", "Allow the migration to run?"); err != nil {
 			t.Fatalf("notify: %v", err)
 		}
 		asking := testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
@@ -42,7 +42,7 @@ func TestAnAutoSettleCountdownStandsDownWhileTheTurnsStopIsJudgedAndRearmsAfter(
 		app, cli := w.App(), w.Client()
 		setSetting(t, app, "auto_settle_enabled", "true")
 		transcript, _ := hookedClaudeAtWork(t, w, app, cli, "look around")
-		if err := cli.UpdateState("s1", protocol.StateWaitingInput); err != nil {
+		if err := cli.UpdateState(protocol.TerminalID(w.Terminal("s1")), protocol.StateWaitingInput); err != nil {
 			t.Fatalf("report waiting_input: %v", err)
 		}
 		testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) })
@@ -54,7 +54,7 @@ func TestAnAutoSettleCountdownStandsDownWhileTheTurnsStopIsJudgedAndRearmsAfter(
 		})
 
 		transcript.Answer("The deploy is running in the background; I'll continue when it completes.")
-		yieldWithBackgroundWork(t, cli, transcript)
+		yieldWithBackgroundWork(t, w, cli, transcript)
 		verdict := w.HeadlessTask()
 		judging := testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return protocol.Deref(s.StateReason) == "background_work" })
 		if judging.State != protocol.SessionStateWorking || !protocol.Deref(judging.TurnOwed) || judging.AutoSettleFiresAt != nil {

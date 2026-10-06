@@ -51,12 +51,12 @@ function resolveAttnBin() {
   throw new Error('attn binary not found (build ./attn or set ATTN_HARNESS_BIN)');
 }
 
-function startWaitingPresent(attnBin, instance, { cwd, sessionId }) {
+function startWaitingPresent(attnBin, instance, { cwd, terminalId }) {
   const child = spawn(attnBin, ['present', '--wait', '--json'], {
     cwd,
     env: instanceCliEnv(instance, {
       ATTN_SOCKET_PATH: socketPathForInstance(instance),
-      ATTN_SESSION_ID: sessionId,
+      ATTN_TERMINAL_ID: terminalId,
     }),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -141,7 +141,7 @@ async function main() {
 
     presentationId = await runner.step('a_waiting_present_opens_a_presentation', async () => {
       const existingIds = new Set((await getPresentations({ port })).map((p) => p.id));
-      waitingPresent = startWaitingPresent(attnBin, instance, { cwd: repoDir, sessionId });
+      waitingPresent = startWaitingPresent(attnBin, instance, { cwd: repoDir, terminalId: observer.terminalOf(sessionId) });
       runner.registerCleanup('stop_waiting_present', () => waitingPresent?.kill());
       const opened = await Promise.race([
         pollFor(async () => {

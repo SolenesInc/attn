@@ -4,13 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"strings"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
 
 func (d *Daemon) handleDesktopMoveSession(conn net.Conn, msg *protocol.DesktopMoveSessionMessage) {
-	result, err := d.moveSessionToDesktop(strings.TrimSpace(protocol.Deref(msg.CallerSessionID)), strings.TrimSpace(msg.SessionID), msg.Desktop)
+	result, err := d.moveSessionToDesktop(protocol.TrimID(protocol.Deref(msg.CallerSessionID)), protocol.TrimID(msg.SessionID), msg.Desktop)
 	if err != nil {
 		d.sendError(conn, "desktop move: "+err.Error())
 		return
@@ -18,7 +17,7 @@ func (d *Daemon) handleDesktopMoveSession(conn net.Conn, msg *protocol.DesktopMo
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, DesktopMoveSessionResult: result})
 }
 
-func (d *Daemon) moveSessionToDesktop(callerID, sessionID, ref string) (*protocol.DesktopMoveSessionResult, error) {
+func (d *Daemon) moveSessionToDesktop(callerID protocol.SessionID, sessionID protocol.SessionID, ref string) (*protocol.DesktopMoveSessionResult, error) {
 	if err := d.requireHome("profiles and desktops"); err != nil {
 		return nil, err
 	}
@@ -65,7 +64,7 @@ func (d *Daemon) moveSessionToDesktop(callerID, sessionID, ref string) (*protoco
 
 // mayMoveSession lets a session move itself and its delegates, and the chief
 // move any session of its profile; no caller is the user.
-func (d *Daemon) mayMoveSession(callerID string, session *protocol.Session) error {
+func (d *Daemon) mayMoveSession(callerID protocol.SessionID, session *protocol.Session) error {
 	if callerID == "" || callerID == session.ID {
 		return nil
 	}

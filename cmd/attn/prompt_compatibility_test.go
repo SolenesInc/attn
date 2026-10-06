@@ -46,7 +46,7 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 	for _, label := range []string{"", "A colleague", "sender-i"} {
 		var b bytes.Buffer
 		printAgentInboxBatch(&b, &protocol.AgentInboxBatchResult{Items: []protocol.AgentInboxItem{
-			{Kind: "peer_message", Content: "  Message λ {{literal}}\nnext  ", SenderSessionID: protocol.Ptr(" sender-id-123 "), SenderLabel: protocol.Ptr(label)},
+			{Kind: "peer_message", Content: "  Message λ {{literal}}\nnext  ", SenderSessionID: protocol.Ptr(protocol.SessionID(" sender-id-123 ")), SenderLabel: protocol.Ptr(label)},
 			{Kind: "garden_seed", Content: " s-example moved: note "},
 			{Kind: "maintenance_prompt", Content: " Maintain {{literal}}\nnext ", SourceID: protocol.Ptr("s-example")},
 			{Kind: "unknown", SourceID: protocol.Ptr(" s-example ")},

@@ -31,7 +31,7 @@ func registerTestSession(socketPath, id, label, dir string) error {
 	if err := json.NewEncoder(conn).Encode(protocol.InjectTestSessionMessage{
 		Cmd: protocol.CmdInjectTestSession,
 		Session: protocol.Session{
-			ID: id, Label: label, Directory: dir, Agent: protocol.SessionAgentClaude,
+			ID: protocol.SessionID(id), Label: label, Directory: dir, Agent: protocol.SessionAgentClaude,
 			State: protocol.SessionStateLaunching,
 		},
 	}); err != nil {
@@ -70,7 +70,7 @@ func deleteTestProfile(t testing.TB, s *store.Store, profileID string) {
 func placeTestSession(t testing.TB, d *Daemon, sessionID, desktopID string) profiles.Desktop {
 	t.Helper()
 	desktop, _, err := d.store.PlaceLaunchedSession(store.SessionPlacementRequest{
-		DesktopID: desktopID, SessionID: sessionID, Status: profiles.PaneStatusReady,
+		DesktopID: desktopID, SessionID: protocol.SessionID(sessionID), Status: profiles.PaneStatusReady,
 	})
 	if err != nil {
 		t.Fatalf("place %s on desktop %q: %v", sessionID, desktopID, err)
@@ -80,7 +80,7 @@ func placeTestSession(t testing.TB, d *Daemon, sessionID, desktopID string) prof
 
 func focusTestAgent(t testing.TB, d *Daemon, sessionID string) {
 	t.Helper()
-	placement, placed, err := d.store.SessionPlacement(sessionID)
+	placement, placed, err := d.store.SessionPlacement(protocol.SessionID(sessionID))
 	if err != nil {
 		t.Fatalf("read the placement of %s: %v", sessionID, err)
 	}
@@ -89,14 +89,14 @@ func focusTestAgent(t testing.TB, d *Daemon, sessionID string) {
 		if err != nil {
 			t.Fatalf("read the most recent profile: %v", err)
 		}
-		if session := d.store.Get(sessionID); session != nil && session.ProfileID == "" {
+		if session := d.store.Get(protocol.SessionID(sessionID)); session != nil && session.ProfileID == "" {
 			session.ProfileID = profile.ID
 			if err := d.store.AddChecked(session); err != nil {
 				t.Fatalf("give %s its initial profile: %v", sessionID, err)
 			}
 		}
 		placeTestSession(t, d, sessionID, profile.CurrentDesktopID)
-		if placement, _, err = d.store.SessionPlacement(sessionID); err != nil {
+		if placement, _, err = d.store.SessionPlacement(protocol.SessionID(sessionID)); err != nil {
 			t.Fatalf("read the placement of %s: %v", sessionID, err)
 		}
 	}
@@ -205,17 +205,17 @@ func setTestChief(d *Daemon, sessionID string) error {
 	if err != nil {
 		return err
 	}
-	if d.store.Get(sessionID) == nil {
+	if d.store.Get(protocol.SessionID(sessionID)) == nil {
 		now := string(protocol.TimestampNow())
-		d.store.Add(&protocol.Session{ID: sessionID, Label: sessionID, State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now})
+		d.store.Add(&protocol.Session{ID: protocol.SessionID(sessionID), Label: sessionID, State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now})
 	}
-	if session := d.store.Get(sessionID); session.ProfileID == "" {
+	if session := d.store.Get(protocol.SessionID(sessionID)); session.ProfileID == "" {
 		session.ProfileID = profile.ID
 		if err := d.store.AddChecked(session); err != nil {
 			return err
 		}
 	}
-	_, _, err = d.store.SetProfileChief(sessionID)
+	_, _, err = d.store.SetProfileChief(protocol.SessionID(sessionID))
 	return err
 }
 
@@ -243,7 +243,7 @@ func TestSpawnBesideAFocusedTileDocksTheAgentBesideIt(t *testing.T) {
 	spawn.Placement = &protocol.SessionPlacement{AnchorPaneID: protocol.Ptr("tile-notebook")}
 	d.handleSpawnSession(client, spawn)
 
-	result := expectSpawnResult(t, client, spawn.ID, true)
+	result := expectSpawnResult(t, client, string(spawn.ID), true)
 	if result.PaneID == nil {
 		t.Fatalf("spawn_result = %+v, want the agent placed beside the tile", result)
 	}
@@ -255,7 +255,7 @@ func TestSpawnBesideAFocusedTileDocksTheAgentBesideIt(t *testing.T) {
 
 func desktopOf(t testing.TB, d *Daemon, sessionID string) string {
 	t.Helper()
-	placement, placed, err := d.store.SessionPlacement(sessionID)
+	placement, placed, err := d.store.SessionPlacement(protocol.SessionID(sessionID))
 	if err != nil {
 		t.Fatalf("read the placement of %s: %v", sessionID, err)
 	}

@@ -206,7 +206,7 @@ func TestADelegationReportsTheProviderWorktreeWhenItsAfterCreateHookFails(t *tes
 	hook := connectPlugin(t, w, "delegation-after-hook", "worktree.after_create")
 
 	request := delegateCheckoutAt(repo, delegateNewWorktree("feat/provider-path", "HEAD"))
-	request.SourceSessionID = protocol.Ptr(source)
+	request.SourceSessionID = protocol.Ptr(protocol.SessionID(source))
 	request.RequestID = "provider-path"
 	delegated := make(chan error, 1)
 	go func() {

@@ -1,13 +1,17 @@
 package daemon
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/victorarias/attn/internal/protocol"
+)
 
 type spawnLock struct {
 	mu   sync.Mutex
 	refs int
 }
 
-func (d *Daemon) acquireSpawnLock(sessionID string) (release func()) {
+func (d *Daemon) acquireSpawnLock(sessionID protocol.SessionID) (release func()) {
 	d.spawnLocksMu.Lock()
 	lock := d.spawnLocks[sessionID]
 	if lock == nil {

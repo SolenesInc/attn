@@ -1,7 +1,9 @@
 package harness
 
-// SessionID names an attn agent: its ledger entry, inbox address, crew day, usage and name.
-type SessionID string
+import "github.com/victorarias/attn/internal/protocol"
 
-// TerminalID names a PTY runtime a pane places. ATTN_SESSION_ID carries it to the harness.
-type TerminalID string
+// SessionID names an attn conversation in the ledger.
+type SessionID = protocol.SessionID
+
+// TerminalID names a PTY placed in a terminal tile.
+type TerminalID = protocol.TerminalID

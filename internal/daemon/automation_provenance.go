@@ -42,8 +42,8 @@ func automationProvenance(record store.AutomationProvenanceRecord) (*protocol.Au
 	return provenance, nil
 }
 
-func (d *Daemon) latestAutomationProvenance() map[string]*protocol.AutomationProvenance {
-	bySession := make(map[string]*protocol.AutomationProvenance)
+func (d *Daemon) latestAutomationProvenance() map[protocol.SessionID]*protocol.AutomationProvenance {
+	bySession := make(map[protocol.SessionID]*protocol.AutomationProvenance)
 	records, err := d.store.ListLatestAutomationProvenanceRecords()
 	if err != nil {
 		d.logf("list automation provenance: %v", err)
@@ -62,12 +62,12 @@ func (d *Daemon) latestAutomationProvenance() map[string]*protocol.AutomationPro
 	return bySession
 }
 
-func (d *Daemon) automationProvenanceForSession(sessionID string) *protocol.AutomationProvenance {
+func (d *Daemon) automationProvenanceForSession(sessionID protocol.SessionID) *protocol.AutomationProvenance {
 	record, err := d.store.GetLatestAutomationProvenanceRecordForSession(sessionID)
 	return d.automationProvenanceFromRecord("session", sessionID, record, err)
 }
 
-func (d *Daemon) automationProvenanceFromRecord(kind, id string, record *store.AutomationProvenanceRecord, err error) *protocol.AutomationProvenance {
+func (d *Daemon) automationProvenanceFromRecord(kind string, id protocol.SessionID, record *store.AutomationProvenanceRecord, err error) *protocol.AutomationProvenance {
 	if err != nil {
 		d.logf("load automation provenance for %s %s: %v", kind, id, err)
 		return nil

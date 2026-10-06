@@ -18,11 +18,10 @@ const agentCloseReasonMaxChars = garden.MaxReasonChars
 const agentCloseTendedSeedLimit = 100
 
 func (d *Daemon) handleAgentClose(conn net.Conn, msg *protocol.AgentCloseMessage) {
-	caller, errCode := d.resolveSessionByIDOrPrefix(msg.SourceSessionID)
+	caller, errCode := d.resolveSessionByIDOrPrefix(string(msg.SourceSessionID))
 	if caller == nil {
 		d.replyAgentMsgError(conn, "sender_"+errCode, fmt.Sprintf(
-			"the caller %q is not a session on this daemon; a close is attributed to the session that asked for it",
-			strings.TrimSpace(msg.SourceSessionID)))
+			"the caller %q is not a session on this daemon; a close is attributed to the session that asked for it", protocol.TrimID(msg.SourceSessionID)))
 		return
 	}
 
@@ -63,7 +62,7 @@ func (d *Daemon) handleAgentClose(conn net.Conn, msg *protocol.AgentCloseMessage
 	}
 
 	d.logf("agent close: session %s closes %s as %s: %s", caller.ID, target.ID, rule, reason)
-	closing, err := d.beginSessionClose(target.ID, store.SessionClose{By: caller.ID, Reason: reason}, nil)
+	closing, err := d.beginSessionClose(target.ID, store.SessionClose{By: string(caller.ID), Reason: reason}, nil)
 	if err != nil {
 		d.replyAgentMsgError(conn, "close_failed", fmt.Sprintf(
 			"session %s is still running: %v", shortSessionID(target.ID), err))
@@ -87,7 +86,7 @@ type agentCloseRefusal struct {
 }
 
 func (d *Daemon) resolveAgentCloseTarget(msg *protocol.AgentCloseMessage, caller *protocol.Session) (*protocol.Session, *agentCloseRefusal) {
-	reference := strings.TrimSpace(msg.TargetSessionID)
+	reference := protocol.SessionID(strings.TrimSpace(msg.TargetSessionID))
 	if seedID := strings.TrimSpace(protocol.Deref(msg.TargetSeedID)); seedID != "" {
 		seed, _, err := d.readSeed(seedID)
 		if err != nil {
@@ -106,7 +105,7 @@ func (d *Daemon) resolveAgentCloseTarget(msg *protocol.AgentCloseMessage, caller
 		if err != nil {
 			return nil, &agentCloseRefusal{"seed_untended", err.Error()}
 		}
-		reference = tender
+		reference = protocol.SessionID(tender)
 	}
 	target, errCode := d.resolveAgentCloseSession(reference)
 	switch {
@@ -121,8 +120,8 @@ func (d *Daemon) resolveAgentCloseTarget(msg *protocol.AgentCloseMessage, caller
 	}
 }
 
-func (d *Daemon) resolveAgentCloseSession(reference string) (*protocol.Session, string) {
-	reference = strings.TrimSpace(reference)
+func (d *Daemon) resolveAgentCloseSession(reference protocol.SessionID) (*protocol.Session, string) {
+	reference = protocol.TrimID(reference)
 	if reference == "" {
 		return nil, "session_not_found"
 	}
@@ -136,7 +135,7 @@ func (d *Daemon) resolveAgentCloseSession(reference string) (*protocol.Session, 
 	}
 	var match *protocol.Session
 	for _, session := range d.agentCloseCandidates() {
-		if !strings.HasPrefix(session.ID, reference) {
+		if !strings.HasPrefix(string(session.ID), string(reference)) {
 			continue
 		}
 		if match != nil && match.ID != session.ID {
@@ -168,9 +167,9 @@ func (d *Daemon) agentCloseRule(caller, target *protocol.Session) (protocol.Agen
 	if d.chiefOfProfile(target.ProfileID) == caller.ID || (target.ProfileID == "" && d.isChiefOfStaffSession(caller.ID)) {
 		return protocol.AgentCloseRuleChiefOfStaff, nil
 	}
-	dispatcher := ""
+	var dispatcher protocol.SessionID
 	if dispatch, ok := d.gardenDispatch(target.ID); ok {
-		dispatcher = strings.TrimSpace(dispatch.DispatcherSession)
+		dispatcher = protocol.TrimID(dispatch.DispatcherSession)
 	}
 	if dispatcher != "" && dispatcher == caller.ID {
 		return protocol.AgentCloseRuleDispatcher, nil
@@ -194,7 +193,7 @@ func (d *Daemon) noteCloseOnTendedSeeds(
 	read, _, err := d.runDocQuery(docstore.Query{
 		Namespace:  garden.Namespace,
 		Collection: garden.CollectionSeeds,
-		Filters:    []docstore.Filter{{Field: "tender_session", Op: docstore.OpEq, Value: target.ID}, {Field: "profile_id", Op: docstore.OpEq, Value: caller.ProfileID}},
+		Filters:    []docstore.Filter{{Field: "tender_session", Op: docstore.OpEq, Value: string(target.ID)}, {Field: "profile_id", Op: docstore.OpEq, Value: caller.ProfileID}},
 		Limit:      agentCloseTendedSeedLimit,
 	})
 	if err != nil {
@@ -245,8 +244,8 @@ func (d *Daemon) seedTenderSession(seedID string) (string, error) {
 		return "", err
 	}
 	tender := seed.Tender()
-	if session := strings.TrimSpace(tender.Session); session != "" {
-		return session, nil
+	if session := protocol.TrimID(tender.Session); session != "" {
+		return string(session), nil
 	}
 	if tender.Named() {
 		return "", fmt.Errorf(

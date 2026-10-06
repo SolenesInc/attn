@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"github.com/victorarias/attn/internal/protocol"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,7 +12,7 @@ import (
 
 func decidedReopenVerdict(t *testing.T, d *Daemon, sessionID string) *sessionReopenVerdict {
 	t.Helper()
-	entry := d.store.SessionLedgerEntry(sessionID)
+	entry := d.store.SessionLedgerEntry(protocol.SessionID(sessionID))
 	if entry == nil {
 		t.Fatalf("no ledger row for %s", sessionID)
 	}

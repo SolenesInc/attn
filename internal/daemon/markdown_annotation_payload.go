@@ -2,9 +2,10 @@ package daemon
 
 import (
 	"fmt"
-	"github.com/victorarias/attn/internal/prompts"
 	"sort"
 	"strings"
+
+	"github.com/victorarias/attn/internal/prompts"
 
 	"github.com/victorarias/attn/internal/protocol"
 )

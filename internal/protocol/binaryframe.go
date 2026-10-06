@@ -34,9 +34,9 @@ func KittyImageFormatName(code byte) (string, bool) {
 	return kittyImageFormatNames[code], true
 }
 
-func EncodeKittyImageFrame(sessionID string, imageID uint32, generation uint64, width, height uint32, format byte, pixels []byte) ([]byte, error) {
-	if len(sessionID) == 0 || len(sessionID) > 255 {
-		return nil, fmt.Errorf("session id length %d out of range [1,255]", len(sessionID))
+func EncodeKittyImageFrame(terminalID TerminalID, imageID uint32, generation uint64, width, height uint32, format byte, pixels []byte) ([]byte, error) {
+	if len(terminalID) == 0 || len(terminalID) > 255 {
+		return nil, fmt.Errorf("terminal id length %d out of range [1,255]", len(terminalID))
 	}
 	if _, ok := KittyImageFormatName(format); !ok {
 		return nil, fmt.Errorf("unknown kitty image format code %d", format)
@@ -44,10 +44,10 @@ func EncodeKittyImageFrame(sessionID string, imageID uint32, generation uint64, 
 	if len(pixels) == 0 {
 		return nil, fmt.Errorf("kitty image %d carries no pixels for its %dx%d header", imageID, width, height)
 	}
-	frame := make([]byte, binaryKittyImageHeaderBytes+len(sessionID)+len(pixels))
+	frame := make([]byte, binaryKittyImageHeaderBytes+len(terminalID)+len(pixels))
 	frame[0] = BinaryFrameTypeKittyImage
-	frame[1] = byte(len(sessionID))
-	offset := 2 + copy(frame[2:], sessionID)
+	frame[1] = byte(len(terminalID))
+	offset := 2 + copy(frame[2:], terminalID)
 	binary.BigEndian.PutUint32(frame[offset:], imageID)
 	binary.BigEndian.PutUint64(frame[offset+4:], generation)
 	binary.BigEndian.PutUint32(frame[offset+12:], width)
@@ -58,7 +58,7 @@ func EncodeKittyImageFrame(sessionID string, imageID uint32, generation uint64, 
 }
 
 type KittyImageFrame struct {
-	SessionID  string
+	TerminalID TerminalID
 	ImageID    uint32
 	Generation uint64
 	Width      uint32
@@ -84,7 +84,7 @@ func DecodeKittyImageFrame(frame []byte) (KittyImageFrame, error) {
 		return KittyImageFrame{}, fmt.Errorf("unknown kitty image format code %d", format)
 	}
 	return KittyImageFrame{
-		SessionID:  string(frame[2:offset]),
+		TerminalID: TerminalID(frame[2:offset]),
 		ImageID:    binary.BigEndian.Uint32(frame[offset:]),
 		Generation: binary.BigEndian.Uint64(frame[offset+4:]),
 		Width:      binary.BigEndian.Uint32(frame[offset+12:]),
@@ -94,20 +94,20 @@ func DecodeKittyImageFrame(frame []byte) (KittyImageFrame, error) {
 	}, nil
 }
 
-func EncodePtyOutputFrame(sessionID string, seq uint32, data []byte) ([]byte, error) {
-	if len(sessionID) == 0 || len(sessionID) > 255 {
-		return nil, fmt.Errorf("session id length %d out of range [1,255]", len(sessionID))
+func EncodePtyOutputFrame(terminalID TerminalID, seq uint32, data []byte) ([]byte, error) {
+	if len(terminalID) == 0 || len(terminalID) > 255 {
+		return nil, fmt.Errorf("terminal id length %d out of range [1,255]", len(terminalID))
 	}
-	frame := make([]byte, binaryPtyHeaderBytes+len(sessionID)+len(data))
+	frame := make([]byte, binaryPtyHeaderBytes+len(terminalID)+len(data))
 	frame[0] = BinaryFrameTypePtyOutput
-	frame[1] = byte(len(sessionID))
-	offset := 2 + copy(frame[2:], sessionID)
+	frame[1] = byte(len(terminalID))
+	offset := 2 + copy(frame[2:], terminalID)
 	binary.BigEndian.PutUint32(frame[offset:], seq)
 	copy(frame[offset+4:], data)
 	return frame, nil
 }
 
-func DecodePtyOutputFrame(frame []byte) (sessionID string, seq uint32, data []byte, err error) {
+func DecodePtyOutputFrame(frame []byte) (terminalID TerminalID, seq uint32, data []byte, err error) {
 	if len(frame) < binaryPtyHeaderBytes+1 {
 		return "", 0, nil, fmt.Errorf("frame too short: %d bytes", len(frame))
 	}
@@ -118,8 +118,8 @@ func DecodePtyOutputFrame(frame []byte) (sessionID string, seq uint32, data []by
 	if idLen == 0 || len(frame) < binaryPtyHeaderBytes+idLen {
 		return "", 0, nil, fmt.Errorf("frame too short for id length %d: %d bytes", idLen, len(frame))
 	}
-	sessionID = string(frame[2 : 2+idLen])
+	terminalID = TerminalID(frame[2 : 2+idLen])
 	seq = binary.BigEndian.Uint32(frame[2+idLen:])
 	data = frame[binaryPtyHeaderBytes+idLen:]
-	return sessionID, seq, data, nil
+	return terminalID, seq, data, nil
 }

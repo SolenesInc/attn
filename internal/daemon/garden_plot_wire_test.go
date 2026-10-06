@@ -96,7 +96,7 @@ func TestTheCrownCarriesItsPlotProgress(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	planter := spawnPanes(w, app, w.Path("planter"))[0].session
-	planted, err := cli.SeedPlot(planter, "", protocol.SeedPlotMessage{
+	planted, err := cli.SeedPlot(protocol.SessionID(planter), "", protocol.SeedPlotMessage{
 		Title: "ship it", Children: []protocol.SeedPlotChild{
 			{Title: "a"}, {Title: "b", Blocks: []string{"a"}},
 			{Title: "c"}, {Title: "d", Blocks: []string{"c"}}, {Title: "e"}, {Title: "f"},
@@ -109,16 +109,16 @@ func TestTheCrownCarriesItsPlotProgress(t *testing.T) {
 		child        int
 		verb, reason string
 	}{{1, "tend", ""}, {1, "harvest", "done"}, {3, "tend", ""}, {4, "park", ""}, {5, "wither", ""}} {
-		if _, err := cli.SeedTransition(planter, planted.Children[move.child].ID, move.verb, move.reason, "", false, client.SeedTransitionOptions{}); err != nil {
+		if _, err := cli.SeedTransition(protocol.SessionID(planter), planted.Children[move.child].ID, move.verb, move.reason, "", false, client.SeedTransitionOptions{}); err != nil {
 			t.Fatalf("%s child %d: %v", move.verb, move.child, err)
 		}
 	}
-	if _, err := cli.SeedPlant(planter, "g", "", planted.Children[4].ID, "", ""); err != nil {
+	if _, err := cli.SeedPlant(protocol.SessionID(planter), "g", "", planted.Children[4].ID, "", ""); err != nil {
 		t.Fatal(err)
 	}
 
 	want := protocol.SeedPlotProgress{Total: 7, Done: 1, Withered: 1, Growing: 1, Dormant: 1, Ready: 2, Blocked: 1}
-	shown, err := cli.SeedShow(planter, planted.Crown.ID)
+	shown, err := cli.SeedShow(protocol.SessionID(planter), planted.Crown.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,7 +177,7 @@ func TestADelegationAtACrownIsScopedToItsPlot(t *testing.T) {
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	planted, err := cli.SeedPlot(planner, "", protocol.SeedPlotMessage{
+	planted, err := cli.SeedPlot(protocol.SessionID(planner), "", protocol.SeedPlotMessage{
 		Title: "ship the thing", Body: protocol.Ptr("# the plan"),
 		Children: []protocol.SeedPlotChild{
 			{Title: "first step", Blocks: []string{"third-step"}},
@@ -191,7 +191,7 @@ func TestADelegationAtACrownIsScopedToItsPlot(t *testing.T) {
 	first, second := planted.Children[0].ID, planted.Children[1].ID
 	outside := plantSeedAs(t, cli, planner, "somewhere else")
 	for _, body := range []string{"old direction", "the fixture is seeded"} {
-		if _, err := cli.SeedNote(planner, first, body, "trellis", garden.NoteKindHandoff, false, nil); err != nil {
+		if _, err := cli.SeedNote(protocol.SessionID(planner), first, body, "trellis", garden.NoteKindHandoff, false, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -209,7 +209,7 @@ func TestADelegationAtACrownIsScopedToItsPlot(t *testing.T) {
 		t.Fatalf("delegating at the crown: %s", protocol.Deref(delegated.Error))
 	}
 	delegate := delegated.Result.SessionID
-	w.Launched(delegate)
+	w.Launched(string(delegate))
 
 	primed, err := cli.SeedReady(delegate, "", false)
 	if err != nil {
@@ -224,7 +224,7 @@ func TestADelegationAtACrownIsScopedToItsPlot(t *testing.T) {
 	if len(primed.Handoffs) != 1 || primed.Handoffs[0].Body != "the fixture is seeded" || primed.Handoffs[0].AuthorMember != "trellis" {
 		t.Errorf("the delegate is handed %+v, want only the freshest handoff", primed.Handoffs)
 	}
-	if everywhere := gardenPlotReadyIDs(t, cli, delegate, "", true); !slices.Contains(everywhere, outside) {
+	if everywhere := gardenPlotReadyIDs(t, cli, string(delegate), "", true); !slices.Contains(everywhere, outside) {
 		t.Errorf("--all from the delegate = %v, want the seed outside the plot too", everywhere)
 	}
 }
@@ -250,7 +250,7 @@ func gardenPlotList(t *testing.T, cli *client.Client, stale bool, windowSeconds 
 
 func gardenPlotReadyIDs(t *testing.T, cli *client.Client, session, crown string, all bool) []string {
 	t.Helper()
-	ready, err := cli.SeedReady(session, crown, all)
+	ready, err := cli.SeedReady(protocol.SessionID(session), crown, all)
 	if err != nil {
 		t.Fatalf("seed ready: %v", err)
 	}
@@ -268,7 +268,7 @@ func gardenPlotSeedIDs(seeds []protocol.Seed) []string {
 func gardenPlotDelegate(app *testworld.Peer, agent fakeagent.Harness, source, requestID, crown, cwd string) protocol.DelegateResultMessage {
 	return testworld.Request(app, protocol.DelegateMessage{
 		Cmd: protocol.CmdDelegate, RequestID: requestID, Cwd: cwd, Agent: protocol.Ptr(string(agent)),
-		SourceSessionID: protocol.Ptr(source),
+		SourceSessionID: protocol.Ptr(protocol.SessionID(source)),
 		Assignment:      protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindSeed, SeedID: protocol.Ptr(crown)},
 	}, protocol.EventDelegateResult, func(m protocol.DelegateResultMessage) bool { return protocol.Deref(m.RequestID) == requestID })
 }

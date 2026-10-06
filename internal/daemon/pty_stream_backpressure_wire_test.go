@@ -23,7 +23,7 @@ func TestAClientThatStopsReadingAFloodingTerminalIsToldToResyncWhenItReadsAgain(
 		slow := transportDial(t, ctx, w)
 		evictionHello(t, ctx, slow, "slow-reader")
 		backpressureReadUntil(t, slow, func(e protocol.WebSocketEvent) bool { return e.Event == protocol.EventInitialState })
-		attach, err := json.Marshal(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: id})
+		attach, err := json.Marshal(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(id)})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -35,7 +35,7 @@ func TestAClientThatStopsReadingAFloodingTerminalIsToldToResyncWhenItReadsAgain(
 		})
 
 		for range 3 {
-			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: id, Data: strings.Repeat("x", 200)})
+			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(id), Data: strings.Repeat("x", 200)})
 			synctest.Wait()
 		}
 		w.advance(2 * time.Second)

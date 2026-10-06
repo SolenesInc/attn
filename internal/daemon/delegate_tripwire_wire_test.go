@@ -29,7 +29,7 @@ func TestADelegationWhoseAgentReportsNoTurnReturnsAtTheTripwireNamingPeek(t *tes
 			t.Errorf("the delegation returned after %s, want the 90s tripwire", waited)
 		}
 		note := protocol.Deref(result.FirstTurnUnconfirmed)
-		for _, want := range []string{"no turn reported by the agent within 1m30s", "attn agent peek " + result.SessionID[:8]} {
+		for _, want := range []string{"no turn reported by the agent within 1m30s", string("attn agent peek " + result.SessionID[:8])} {
 			if !strings.Contains(note, want) {
 				t.Errorf("the unconfirmed first turn reads %q, want it to say %q", note, want)
 			}

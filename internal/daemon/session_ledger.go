@@ -138,7 +138,7 @@ func (d *Daemon) reopenVerdictsForPage(entries []protocol.SessionLedgerEntry) []
 }
 
 func (d *Daemon) handleSessionShow(conn net.Conn, msg *protocol.SessionShowMessage) {
-	entry := d.store.SessionLedgerEntry(strings.TrimSpace(msg.SessionID))
+	entry := d.store.SessionLedgerEntry(protocol.TrimID(msg.SessionID))
 	if entry == nil {
 		d.sendError(conn, "session_not_found")
 		return
@@ -196,12 +196,12 @@ func (d *Daemon) sendSessionShowWSResult(client *wsClient, msg *protocol.Session
 		Event:     protocol.EventSessionShowResult,
 		RequestID: protocol.Deref(msg.RequestID),
 	}
-	if entry := d.store.SessionLedgerEntry(strings.TrimSpace(msg.SessionID)); entry != nil {
+	if entry := d.store.SessionLedgerEntry(protocol.TrimID(msg.SessionID)); entry != nil {
 		d.decorateLedgerEntryWithUsage(entry)
 		reply.Success = true
 		reply.Entry = entry
 	} else {
-		reply.Error = protocol.Ptr(fmt.Sprintf("this daemon never ran session %s", strings.TrimSpace(msg.SessionID)))
+		reply.Error = protocol.Ptr(fmt.Sprintf("this daemon never ran session %s", protocol.TrimID(msg.SessionID)))
 	}
 	d.sendToClient(client, reply)
 }

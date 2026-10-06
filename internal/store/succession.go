@@ -9,12 +9,13 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/profiles"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 // Succession puts To in the terminal From showed: To takes From's place, process, driver run and
 // Conversation; everything else stays with From. A new To gets Label and Launch; an existing one keeps its own.
 type Succession struct {
-	From, To     string
+	From, To     protocol.SessionID
 	Label        string
 	Conversation SessionConversation
 	Launch       LaunchIntent
@@ -25,7 +26,7 @@ type Succession struct {
 // CommitSuccession opens sc.To, or reopens it when it exists, in the pane that holds terminal; the pane now
 // shows it and To's other panes, whose terminals are dead, close. sc.From closes into the ledger in the same
 // transaction unless KeepFrom. It returns the desktops it changed, terminal's first.
-func (s *Store) CommitSuccession(sc Succession, terminal string) ([]profiles.Desktop, error) {
+func (s *Store) CommitSuccession(sc Succession, terminal protocol.TerminalID) ([]profiles.Desktop, error) {
 	var changed []profiles.Desktop
 	err := s.profilesTx(func(tx *sql.Tx, now string) error {
 		var open int
@@ -52,31 +53,39 @@ func (s *Store) CommitSuccession(sc Succession, terminal string) ([]profiles.Des
 			return fmt.Errorf("open successor %s: %w", sc.To, err)
 		}
 		var desktopID string
-		if err := tx.QueryRow(`SELECT desktop_id FROM desktop_panes WHERE runtime_id = ?`, terminal).Scan(&desktopID); err != nil {
-			return fmt.Errorf("no pane holds terminal %s: %w", terminal, err)
+		if err := tx.QueryRow(`SELECT desktop_id FROM desktop_panes WHERE runtime_id = ?`, terminal).Scan(&desktopID); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
 		}
 		dead, err := removeSessionPlacement(tx, now, sc.To)
 		if err != nil {
 			return fmt.Errorf("close the dead panes of %s: %w", sc.To, err)
+		}
+		if _, err := tx.Exec(`DELETE FROM terminal_bindings WHERE session_id = ?`, sc.To); err != nil {
+			return err
+		}
+		if err := bindTerminalTx(tx, terminal, sc.To); err != nil {
+			return err
 		}
 		for _, desktop := range dead {
 			if desktop.ID != desktopID {
 				changed = append(changed, desktop)
 			}
 		}
-		desktop, err := loadDesktop(tx, desktopID)
-		if err != nil {
-			return err
-		}
-		for i := range desktop.Panes {
-			if desktop.Panes[i].RuntimeID == terminal {
-				desktop.Panes[i].SessionID = sc.To
+		if desktopID != "" {
+			desktop, err := loadDesktop(tx, desktopID)
+			if err != nil {
+				return err
 			}
+			for i := range desktop.Panes {
+				if desktop.Panes[i].RuntimeID == terminal {
+					desktop.Panes[i].SessionID = sc.To
+				}
+			}
+			if err := writeCurrentDesktopArrangement(tx, now, &desktop); err != nil {
+				return fmt.Errorf("show successor %s: %w", sc.To, err)
+			}
+			changed = append([]profiles.Desktop{desktop}, changed...)
 		}
-		if err := writeDesktopArrangement(tx, now, &desktop); err != nil {
-			return fmt.Errorf("show successor %s: %w", sc.To, err)
-		}
-		changed = append([]profiles.Desktop{desktop}, changed...)
 		if sc.KeepFrom {
 			return nil
 		}

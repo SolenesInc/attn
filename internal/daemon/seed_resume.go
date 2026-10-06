@@ -12,7 +12,7 @@ import (
 )
 
 type seedResumeOutcome struct {
-	SessionID      string
+	SessionID      protocol.SessionID
 	ProfileID      string
 	AlreadyRunning bool
 }
@@ -62,13 +62,13 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 	}
 	continuation := d.continuationForSeedForeground(seed)
 	if continuation == nil {
-		if tender := strings.TrimSpace(seed.TenderSession); tender != "" {
+		if tender := protocol.TrimID(seed.TenderSession); tender != "" {
 			return nil, fmt.Errorf("%s was tended by session %s, but no continuation was saved", seedID, tender)
 		}
 		return nil, fmt.Errorf("%s has no agent conversation to resume", seedID)
 	}
 	execution := continuation.Execution
-	sessionID := strings.TrimSpace(execution.SessionID)
+	sessionID := protocol.TrimID(execution.SessionID)
 	if sessionID == "" {
 		return nil, fmt.Errorf("%s has no agent conversation to resume", seedID)
 	}
@@ -140,7 +140,7 @@ func (d *Daemon) bindResumedSeed(
 	_ foregroundCleanupProtection,
 	seed garden.Seed,
 	seedDoc docstore.Document,
-	sessionID, directory, agent, resumeID string,
+	sessionID protocol.SessionID, directory string, agent string, resumeID string,
 ) error {
 	next, err := garden.Transition(seed, garden.VerbTend, garden.Ask{
 		Actor: garden.Tender{Session: sessionID},
@@ -196,14 +196,14 @@ func (d *Daemon) bindResumedSeed(
 		dispatchExpected = dispatchDoc.Rev
 	}
 	seedFact := documentChangedFact(garden.Namespace, garden.CollectionSeeds, seed.ID, false)
-	dispatchFact := documentChangedFact(garden.Namespace, garden.CollectionDispatches, sessionID, false)
+	dispatchFact := documentChangedFact(garden.Namespace, garden.CollectionDispatches, string(sessionID), false)
 	commits := []store.DocumentCommit{
 		{
 			Write: store.DocumentWrite{Schema: *seedSchema, ID: seed.ID, Body: seedBody, Expected: &seedExpected},
 			Fact:  seedFact,
 		},
 		{
-			Write: store.DocumentWrite{Schema: *dispatchSchema, ID: sessionID, Body: dispatchBody, Expected: &dispatchExpected},
+			Write: store.DocumentWrite{Schema: *dispatchSchema, ID: string(sessionID), Body: dispatchBody, Expected: &dispatchExpected},
 			Fact:  dispatchFact,
 		},
 	}

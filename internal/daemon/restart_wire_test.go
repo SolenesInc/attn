@@ -45,7 +45,7 @@ func TestRestartKeepsConversationsThatCanResumeAndPrunesTheRest(t *testing.T) {
 	initial := app.Initial
 	states := map[string]protocol.SessionState{}
 	for _, s := range initial.Sessions {
-		states[s.ID] = s.State
+		states[string(s.ID)] = s.State
 	}
 	if states[talked] != protocol.SessionStateRecoverable {
 		t.Fatalf("session with a conversation came back %q, want recoverable", states[talked])
@@ -65,7 +65,7 @@ func TestRestartKeepsConversationsThatCanResumeAndPrunesTheRest(t *testing.T) {
 
 	boot := w.HoldNextBoot()
 	w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
-		m.ID = talked
+		m.ID = protocol.SessionID(talked)
 		m.ResumeSessionID = protocol.Ptr(talked)
 	})
 	testworld.AwaitSession(app, talked, func(s protocol.Session) bool { return s.State == protocol.SessionStateLaunching })

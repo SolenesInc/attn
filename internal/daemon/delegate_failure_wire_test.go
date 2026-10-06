@@ -33,7 +33,7 @@ func TestADelegationWhoseAgentCannotStartRemovesItsPaneAndKeepsItsWorktree(t *te
 		request.Agent = protocol.Ptr("pi")
 		request.Label = protocol.Ptr(strings.ReplaceAll(row.name, " ", "-"))
 		if row.source != "" {
-			request.SourceSessionID = protocol.Ptr(row.source)
+			request.SourceSessionID = protocol.Ptr(protocol.SessionID(row.source))
 		}
 		request.Checkout = &protocol.DelegateCheckout{Kind: protocol.DelegateCheckoutKindReuse, Branch: "main"}
 		request.AllowWorktreeReuse = protocol.Ptr(true)
@@ -52,7 +52,7 @@ func TestADelegationWhoseAgentCannotStartRemovesItsPaneAndKeepsItsWorktree(t *te
 	}
 
 	after := w.App().Initial
-	if len(after.Sessions) != 1 || after.Sessions[0].ID != source {
+	if len(after.Sessions) != 1 || string(after.Sessions[0].ID) != source {
 		t.Errorf("after the failed delegations the sessions are %+v, want only the caller %s", after.Sessions, source)
 	}
 	if !slices.EqualFunc(after.Desktops, before.Desktops, func(a, b protocol.Desktop) bool {
@@ -92,7 +92,7 @@ func TestADelegationFailsNamingTheScreenWhenItsAgentExitsBeforeItsFirstTurn(t *t
 		if delegate.ID == "" {
 			t.Fatalf("the %s delegate that exited was removed; it is the evidence", agent)
 		}
-		if exit, _ := peekExit(t, cli, delegate.ID, "is ambiguous across providers"); exit.Code != 1 {
+		if exit, _ := peekExit(t, cli, string(delegate.ID), "is ambiguous across providers"); exit.Code != 1 {
 			t.Errorf("peek of the %s delegate shows exit %+v, want code 1", agent, exit)
 		}
 		notes, err := cli.SeedNotes("", protocol.Deref(delegate.SeedID), 5)

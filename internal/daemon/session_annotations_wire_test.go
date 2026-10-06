@@ -61,7 +61,7 @@ func saveSessionAnnotations(app *testworld.Peer, sessionID string, generation in
 	app.T.Helper()
 	requestID := uuid.NewString()
 	return testworld.Request(app, protocol.SessionAnnotationsSaveMessage{
-		Cmd: protocol.CmdSessionAnnotationsSave, RequestID: requestID, SessionID: sessionID,
+		Cmd: protocol.CmdSessionAnnotationsSave, RequestID: requestID, SessionID: protocol.SessionID(sessionID),
 		Generation: generation, Annotations: marks, Note: protocol.Ptr(note),
 	}, protocol.EventSessionAnnotationsSaveResult, func(r protocol.SessionAnnotationsSaveResultMessage) bool { return r.RequestID == requestID })
 }
@@ -70,7 +70,7 @@ func clearSessionAnnotations(app *testworld.Peer, sessionID string, generation i
 	app.T.Helper()
 	requestID := uuid.NewString()
 	return testworld.Request(app, protocol.SessionAnnotationsClearMessage{
-		Cmd: protocol.CmdSessionAnnotationsClear, RequestID: requestID, SessionID: sessionID, Generation: generation,
+		Cmd: protocol.CmdSessionAnnotationsClear, RequestID: requestID, SessionID: protocol.SessionID(sessionID), Generation: generation,
 	}, protocol.EventSessionAnnotationsClearResult, func(r protocol.SessionAnnotationsClearResultMessage) bool { return r.RequestID == requestID })
 }
 
@@ -78,6 +78,6 @@ func getSessionAnnotations(app *testworld.Peer, sessionID string) protocol.Sessi
 	app.T.Helper()
 	requestID := uuid.NewString()
 	return testworld.Request(app, protocol.SessionAnnotationsGetMessage{
-		Cmd: protocol.CmdSessionAnnotationsGet, RequestID: requestID, SessionID: sessionID,
+		Cmd: protocol.CmdSessionAnnotationsGet, RequestID: requestID, SessionID: protocol.SessionID(sessionID),
 	}, protocol.EventSessionAnnotationsGetResult, func(r protocol.SessionAnnotationsGetResultMessage) bool { return r.RequestID == requestID })
 }

@@ -41,7 +41,7 @@ func TestAnUnreadSeedBellSaysTheSeedWasUnblocked(t *testing.T) {
 
 func plantSeedAs(t *testing.T, cli *client.Client, sessionID, title string) string {
 	t.Helper()
-	planted, err := cli.SeedPlant(sessionID, title, "", "", "", "")
+	planted, err := cli.SeedPlant(protocol.SessionID(sessionID), title, "", "", "", "")
 	if err != nil {
 		t.Fatalf("plant %q: %v", title, err)
 	}

@@ -22,7 +22,7 @@ func TestATurnSettledInTheSecondItOpenedInReopensWhenTheSessionIsDueAgain(t *tes
 				if err := w.InjectSession("s1", "s1", w.Path("s1"), protocol.SessionAgentClaude); err != nil {
 					t.Fatalf("register: %v", err)
 				}
-				if err := cli.UpdateState("s1", protocol.StateWaitingInput); err != nil {
+				if err := cli.UpdateState(protocol.TerminalID(w.Terminal("s1")), protocol.StateWaitingInput); err != nil {
 					t.Fatalf("report waiting_input: %v", err)
 				}
 				testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) })
@@ -43,5 +43,5 @@ func TestATurnSettledInTheSecondItOpenedInReopensWhenTheSessionIsDueAgain(t *tes
 }
 
 func snoozeUntil(app *testworld.Peer, sessionID string, until time.Time) {
-	app.Send(protocol.SnoozeTurnMessage{Cmd: protocol.CmdSnoozeTurn, SessionID: sessionID, Until: until.Format(time.RFC3339Nano)})
+	app.Send(protocol.SnoozeTurnMessage{Cmd: protocol.CmdSnoozeTurn, SessionID: protocol.SessionID(sessionID), Until: until.Format(time.RFC3339Nano)})
 }

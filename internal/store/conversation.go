@@ -7,6 +7,8 @@ import (
 	"log"
 	"strings"
 	"time"
+
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 type SessionConversation struct {
@@ -16,20 +18,20 @@ type SessionConversation struct {
 
 var ErrConversationClaimed = errors.New("conversation is bound to another open session")
 
-func (s *Store) TransitionSessionConversation(sessionID, nativeID, transcriptPath string) (bool, error) {
+func (s *Store) TransitionSessionConversation(sessionID protocol.SessionID, nativeID string, transcriptPath string) (bool, error) {
 	return s.transitionSessionConversation(sessionID, nativeID, transcriptPath, true, false)
 }
 
-func (s *Store) ClaimSessionConversation(sessionID, nativeID, transcriptPath string) (bool, error) {
+func (s *Store) ClaimSessionConversation(sessionID protocol.SessionID, nativeID string, transcriptPath string) (bool, error) {
 	return s.transitionSessionConversation(sessionID, nativeID, transcriptPath, true, true)
 }
 
-func (s *Store) TransitionSessionResumeID(sessionID, nativeID string) (bool, error) {
+func (s *Store) TransitionSessionResumeID(sessionID protocol.SessionID, nativeID string) (bool, error) {
 	return s.transitionSessionConversation(sessionID, nativeID, "", false, false)
 }
 
-func (s *Store) transitionSessionConversation(sessionID, nativeID, transcriptPath string, pathRequired, exclusive bool) (bool, error) {
-	sessionID = strings.TrimSpace(sessionID)
+func (s *Store) transitionSessionConversation(sessionID protocol.SessionID, nativeID string, transcriptPath string, pathRequired, exclusive bool) (bool, error) {
+	sessionID = protocol.TrimID(sessionID)
 	nativeID = strings.TrimSpace(nativeID)
 	transcriptPath = strings.TrimSpace(transcriptPath)
 	if sessionID == "" || nativeID == "" || (pathRequired && transcriptPath == "") {
@@ -106,7 +108,7 @@ func (s *Store) transitionSessionConversation(sessionID, nativeID, transcriptPat
 	return true, nil
 }
 
-func (s *Store) GetSessionConversation(sessionID string) SessionConversation {
+func (s *Store) GetSessionConversation(sessionID protocol.SessionID) SessionConversation {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -116,8 +118,7 @@ func (s *Store) GetSessionConversation(sessionID string) SessionConversation {
 
 	var binding SessionConversation
 	if err := s.db.QueryRow(
-		`SELECT resume_session_id, transcript_path FROM sessions WHERE id = ?`,
-		strings.TrimSpace(sessionID),
+		`SELECT resume_session_id, transcript_path FROM sessions WHERE id = ?`, protocol.TrimID(sessionID),
 	).Scan(&binding.NativeID, &binding.TranscriptPath); err != nil {
 		return SessionConversation{}
 	}
@@ -127,7 +128,7 @@ func (s *Store) GetSessionConversation(sessionID string) SessionConversation {
 }
 
 // ConversationBoundToOtherSession reports whether an open session other than sessionID holds nativeID.
-func (s *Store) ConversationBoundToOtherSession(sessionID, nativeID string) bool {
+func (s *Store) ConversationBoundToOtherSession(sessionID protocol.SessionID, nativeID string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -137,8 +138,7 @@ func (s *Store) ConversationBoundToOtherSession(sessionID, nativeID string) bool
 	var bound bool
 	if err := s.db.QueryRow(
 		`SELECT EXISTS(SELECT 1 FROM sessions WHERE resume_session_id = ? AND id != ? AND closed_at = '')`,
-		strings.TrimSpace(nativeID),
-		strings.TrimSpace(sessionID),
+		strings.TrimSpace(nativeID), protocol.TrimID(sessionID),
 	).Scan(&bound); err != nil {
 		return false
 	}
@@ -147,23 +147,23 @@ func (s *Store) ConversationBoundToOtherSession(sessionID, nativeID string) bool
 
 // ConversationOwner names the session other than sessionID that holds nativeID: an open one first,
 // else the one closed last. It is empty when none does.
-func (s *Store) ConversationOwner(sessionID, nativeID string) string {
+func (s *Store) ConversationOwner(sessionID protocol.SessionID, nativeID string) protocol.SessionID {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
 		return ""
 	}
-	var owner string
+	var owner protocol.SessionID
 	if err := s.db.QueryRow(`SELECT id FROM sessions WHERE resume_session_id = ? AND id != ?
 		AND profile_id = (SELECT profile_id FROM sessions WHERE id = ?)
 		ORDER BY closed_at = '' DESC, closed_at DESC LIMIT 1`,
-		strings.TrimSpace(nativeID), strings.TrimSpace(sessionID), strings.TrimSpace(sessionID)).Scan(&owner); err != nil {
+		strings.TrimSpace(nativeID), protocol.TrimID(sessionID), protocol.TrimID(sessionID)).Scan(&owner); err != nil {
 		return ""
 	}
 	return owner
 }
 
-func (s *Store) SetSessionLaunchedAt(sessionID string, launchedAt time.Time) {
+func (s *Store) SetSessionLaunchedAt(sessionID protocol.SessionID, launchedAt time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -179,7 +179,7 @@ func (s *Store) SetSessionLaunchedAt(sessionID string, launchedAt time.Time) {
 	}
 }
 
-func (s *Store) SessionLaunchedAt(sessionID string) time.Time {
+func (s *Store) SessionLaunchedAt(sessionID protocol.SessionID) time.Time {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 

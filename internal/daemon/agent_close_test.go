@@ -38,7 +38,7 @@ func addAgentCloseSession(t *testing.T, d *Daemon, id, label string) {
 	t.Helper()
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
-		ID: id, Label: label, Agent: protocol.SessionAgentClaude,
+		ID: protocol.SessionID(id), Label: label, Agent: protocol.SessionAgentClaude,
 		Directory: "/tmp/" + id, ProfileID: defaultProfileID(t, d.store),
 		State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
@@ -50,7 +50,7 @@ func callAgentClose(t *testing.T, d *Daemon, target, source, reason string) prot
 		d.handleAgentClose(conn, &protocol.AgentCloseMessage{
 			Cmd:             protocol.CmdAgentClose,
 			TargetSessionID: target,
-			SourceSessionID: source,
+			SourceSessionID: protocol.SessionID(source),
 			Reason:          reason,
 		})
 	})
@@ -58,7 +58,7 @@ func callAgentClose(t *testing.T, d *Daemon, target, source, reason string) prot
 
 func closedEntry(t *testing.T, d *Daemon, sessionID string) protocol.SessionLedgerEntry {
 	t.Helper()
-	entry := d.store.SessionLedgerEntry(sessionID)
+	entry := d.store.SessionLedgerEntry(protocol.SessionID(sessionID))
 	if entry == nil {
 		t.Fatalf("SessionLedgerEntry(%s) = nil, want a closed row", sessionID)
 	}
@@ -107,7 +107,7 @@ func startAgentCloseOutpost(t *testing.T, d *Daemon, sessions ...protocol.Sessio
 	waitForSocket(t, outpost.socketPath, 10*time.Second)
 
 	for _, session := range sessions {
-		if err := registerTestSession(outpost.socketPath, session.ID, session.Label, session.Directory); err != nil {
+		if err := registerTestSession(outpost.socketPath, string(session.ID), session.Label, session.Directory); err != nil {
 			t.Fatalf("register %s on the outpost: %v", session.ID, err)
 		}
 	}
@@ -151,7 +151,7 @@ func waitForAgentClose(t *testing.T, what string, cond func() bool) {
 }
 
 func remoteAgentCloseSession(id, label string) protocol.Session {
-	return protocol.Session{ID: id, Label: label, Directory: "/srv/" + id}
+	return protocol.Session{ID: protocol.SessionID(id), Label: label, Directory: "/srv/" + id}
 }
 
 func TestAgentCloseReachesADelegateAnEndpointOwns(t *testing.T) {

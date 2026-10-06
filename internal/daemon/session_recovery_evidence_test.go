@@ -38,14 +38,14 @@ func newRecoveryHome(t *testing.T) recoveryHome {
 
 func giveLaunchIntent(t *testing.T, d *Daemon, sessionID string) {
 	t.Helper()
-	d.store.SetLaunchIntent(sessionID, store.LaunchIntent{ApprovalRoute: launchcontract.ApprovalRouteUser})
+	d.store.SetLaunchIntent(protocol.SessionID(sessionID), store.LaunchIntent{ApprovalRoute: launchcontract.ApprovalRouteUser})
 }
 
 func addStaleSession(t *testing.T, d *Daemon, id string, agent protocol.SessionAgent, state protocol.SessionState) {
 	t.Helper()
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
-		ID:             id,
+		ID:             protocol.SessionID(id),
 		Label:          id,
 		Agent:          agent,
 		Directory:      "/tmp/" + id,
@@ -55,7 +55,7 @@ func addStaleSession(t *testing.T, d *Daemon, id string, agent protocol.SessionA
 		StateUpdatedAt: now,
 		LastSeen:       now,
 	})
-	t.Cleanup(func() { d.store.Remove(id) })
+	t.Cleanup(func() { d.store.Remove(protocol.SessionID(id)) })
 }
 
 func deadWorkerBackend() *fakeWorkerReconcileBackend {

@@ -12,9 +12,9 @@ func TestOnlyAPromptTheHarnessMarksSubmittedCountsAsTheUsersTurn(t *testing.T) {
 		app, cli := autoSettleOwingSession(t, w)
 		w.advance(time.Minute)
 		requested := protocol.Deref(sessionStateLastShown(t, app).LastModelRequestAt)
-		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: "s1", Data: "the user's answer\r"})
+		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(app.Terminal("s1")), Data: "the user's answer\r"})
 		w.advance(0)
-		if err := cli.UpdateStateFromHookEvidence("s1", protocol.StateWorking, "", "", "the user's answer"); err != nil {
+		if err := cli.UpdateStateFromHookEvidence(protocol.TerminalID(w.Terminal("s1")), protocol.StateWorking, "", "", "the user's answer"); err != nil {
 			t.Fatalf("report working from an ordinary hook: %v", err)
 		}
 		w.advance(autoSettleDefaultArm + autoSettleDefaultCountdown)
@@ -25,7 +25,7 @@ func TestOnlyAPromptTheHarnessMarksSubmittedCountsAsTheUsersTurn(t *testing.T) {
 			}
 		}
 
-		if err := cli.UpdateStateFromHookEvidence("s1", protocol.StateWorking, "", "user_prompt_submit", "the user's answer"); err != nil {
+		if err := cli.UpdateStateFromHookEvidence(protocol.TerminalID(w.Terminal("s1")), protocol.StateWorking, "", "user_prompt_submit", "the user's answer"); err != nil {
 			t.Fatalf("report the prompt taken: %v", err)
 		}
 		submitted := time.Now()
@@ -41,13 +41,13 @@ func TestOnlyAPromptTheHarnessMarksSubmittedCountsAsTheUsersTurn(t *testing.T) {
 func TestTheUsersPromptArmsAutoSettleWhenTheHarnessReportsWorkingBeforeItsSubmitHook(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app, cli := autoSettleOwingSession(t, w)
-		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: "s1", Data: "fix the flaky test\r"})
+		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(app.Terminal("s1")), Data: "fix the flaky test\r"})
 		w.advance(0)
-		if err := cli.UpdateState("s1", protocol.StateWorking); err != nil {
+		if err := cli.UpdateState(protocol.TerminalID(w.Terminal("s1")), protocol.StateWorking); err != nil {
 			t.Fatalf("report working: %v", err)
 		}
 		w.advance(time.Second)
-		if err := cli.UpdateStateFromHookEvidence("s1", protocol.StateWorking, "", "user_prompt_submit", "fix the flaky test"); err != nil {
+		if err := cli.UpdateStateFromHookEvidence(protocol.TerminalID(w.Terminal("s1")), protocol.StateWorking, "", "user_prompt_submit", "fix the flaky test"); err != nil {
 			t.Fatalf("report the prompt taken: %v", err)
 		}
 		submitted := time.Now()

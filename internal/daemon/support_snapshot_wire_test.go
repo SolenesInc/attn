@@ -31,20 +31,20 @@ func TestASupportSnapshotCarriesBoundedEvidenceWithoutInputOrWarningText(t *test
 		t.Helper()
 		probes++
 		id := fmt.Sprintf("probe-%d", probes)
-		answer := testworld.Request(app, protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: shell, Data: "a", Source: protocol.Ptr("automation"), ProbeID: protocol.Ptr(id)},
+		answer := testworld.Request(app, protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(shell), Data: "a", Source: protocol.Ptr("automation"), ProbeID: protocol.Ptr(id)},
 			protocol.EventPtyInputProbeResult, func(r protocol.PtyInputProbeResultMessage) bool { return r.ProbeID == id })
-		if answer.ID != shell || !answer.Success || answer.WriteDurationUs < 0 {
+		if string(answer.ID) != shell || !answer.Success || answer.WriteDurationUs < 0 {
 			t.Errorf("probed input %s answered %+v, want a successful write to %s", id, answer, shell)
 		}
 	}
 	for i := range capacity + 2 {
-		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: gone, Data: "lost secret", TraceID: protocol.Ptr(fmt.Sprintf("gone-%d", i))})
+		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(gone), Data: "lost secret", TraceID: protocol.Ptr(fmt.Sprintf("gone-%d", i))})
 		if i%100 == 99 {
 			probe()
 		}
 	}
 	for _, trace := range []string{"kept-1", "kept-2"} {
-		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: shell, Data: "do not retain me", Source: protocol.Ptr("user"), TraceID: protocol.Ptr(trace)})
+		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(shell), Data: "do not retain me", Source: protocol.Ptr("user"), TraceID: protocol.Ptr(trace)})
 	}
 
 	snapshot, raw := supportSnapshotRequest(app, "after", []string{shell})
@@ -64,11 +64,11 @@ func TestASupportSnapshotCarriesBoundedEvidenceWithoutInputOrWarningText(t *test
 		t.Errorf("the traces are not in the order they arrived")
 	}
 	oldest, newest := snapshot.InputTraces[0], snapshot.InputTraces[capacity-2:]
-	if oldest.TraceID != "gone-4" || oldest.RuntimeID != gone || oldest.WriteResult != "failed" || protocol.Deref(oldest.ErrorClass) != "session_not_found" {
+	if oldest.TraceID != "gone-4" || string(oldest.RuntimeID) != gone || oldest.WriteResult != "failed" || protocol.Deref(oldest.ErrorClass) != "session_not_found" {
 		t.Errorf("the oldest kept trace = %+v, want gone-4, failed as session_not_found", oldest)
 	}
 	for i, trace := range newest {
-		if trace.TraceID != fmt.Sprintf("kept-%d", i+1) || trace.RuntimeID != shell || trace.WriteResult != "accepted" ||
+		if trace.TraceID != fmt.Sprintf("kept-%d", i+1) || string(trace.RuntimeID) != shell || trace.WriteResult != "accepted" ||
 			trace.Source != "user" || trace.ByteCount != len("do not retain me") || trace.ErrorClass != nil {
 			t.Errorf("newest trace %d = %+v, want kept-%d accepted by %s with its byte count", i, trace, i+1, shell)
 		}
@@ -76,7 +76,7 @@ func TestASupportSnapshotCarriesBoundedEvidenceWithoutInputOrWarningText(t *test
 	if !slices.Contains(snapshot.WarningCodes, "pty_backend_unsupported") {
 		t.Errorf("the snapshot's warning codes = %v, want the daemon's pty_backend_unsupported", snapshot.WarningCodes)
 	}
-	if len(snapshot.Runtimes) != 1 || snapshot.Runtimes[0].RuntimeID != shell || !protocol.Deref(snapshot.Runtimes[0].Running) {
+	if len(snapshot.Runtimes) != 1 || string(snapshot.Runtimes[0].RuntimeID) != shell || !protocol.Deref(snapshot.Runtimes[0].Running) {
 		t.Errorf("the snapshot's runtimes = %+v, want only the running %s", snapshot.Runtimes, shell)
 	}
 	for _, leaked := range []string{"do not retain me", "lost secret", "not found", "not available in this build"} {
@@ -88,7 +88,7 @@ func TestASupportSnapshotCarriesBoundedEvidenceWithoutInputOrWarningText(t *test
 
 func supportSnapshotRequest(app *testworld.Peer, requestID string, runtimes []string) (protocol.SupportSnapshotResultMessage, json.RawMessage) {
 	app.T.Helper()
-	raw := testworld.Request(app, protocol.SupportSnapshotMessage{Cmd: protocol.CmdSupportSnapshot, RequestID: requestID, RuntimeIds: runtimes},
+	raw := testworld.Request(app, protocol.SupportSnapshotMessage{Cmd: protocol.CmdSupportSnapshot, RequestID: requestID, RuntimeIds: terminalIDs(runtimes)},
 		protocol.EventSupportSnapshotResult, func(raw json.RawMessage) bool {
 			var result protocol.SupportSnapshotResultMessage
 			return json.Unmarshal(raw, &result) == nil && result.RequestID == requestID
@@ -98,4 +98,15 @@ func supportSnapshotRequest(app *testworld.Peer, requestID string, runtimes []st
 		app.T.Fatalf("decode the support snapshot: %v", err)
 	}
 	return result, raw
+}
+
+func terminalIDs(ids []string) []protocol.TerminalID {
+	if ids == nil {
+		return nil
+	}
+	result := make([]protocol.TerminalID, len(ids))
+	for i, id := range ids {
+		result[i] = protocol.TerminalID(id)
+	}
+	return result
 }

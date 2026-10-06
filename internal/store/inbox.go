@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/victorarias/attn/internal/protocol"
+
 	"github.com/victorarias/attn/internal/inbox"
 )
 
@@ -120,7 +122,7 @@ func scanInboxDelivery(row inboxDeliveryScanner) (InboxDelivery, error) {
 			return InboxDelivery{}, fmt.Errorf("peer mailbox item %s has no peer message", delivery.Item.ID)
 		}
 		delivery.Peer = &inbox.Message{
-			ID: peerID, SenderSessionID: peerSender, Body: body, CreatedAt: at,
+			ID: peerID, SenderSessionID: protocol.SessionID(peerSender), Body: body, CreatedAt: at,
 		}
 	}
 	return delivery, nil
@@ -167,7 +169,7 @@ func (s *Store) UnreadInboxDeliveries(to inbox.Address) ([]InboxDelivery, error)
 	return deliveries, rows.Err()
 }
 
-func (s *Store) ReadInbox(addresses []inbox.Address, readBy string, limit int, at time.Time) ([]InboxDelivery, int, error) {
+func (s *Store) ReadInbox(addresses []inbox.Address, readBy protocol.SessionID, limit int, at time.Time) ([]InboxDelivery, int, error) {
 	addressJSON := inboxAddressJSON(addresses)
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -230,7 +232,7 @@ func (s *Store) ReadInbox(addresses []inbox.Address, readBy string, limit int, a
 			deliveries[i].Item.NotifiedAt = stamp
 		}
 		deliveries[i].Item.ReadAt = stamp
-		deliveries[i].Item.ReadBy = readBy
+		deliveries[i].Item.ReadBy = string(readBy)
 	}
 
 	for _, address := range addresses {
@@ -251,7 +253,7 @@ func (s *Store) ReadInbox(addresses []inbox.Address, readBy string, limit int, a
 	return deliveries, remaining, nil
 }
 
-func (s *Store) ReadGardenSeedInboxItems(to inbox.Address, readBy, seedID string, at time.Time) (bool, error) {
+func (s *Store) ReadGardenSeedInboxItems(to inbox.Address, readBy protocol.SessionID, seedID string, at time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, err := s.db.Begin()
