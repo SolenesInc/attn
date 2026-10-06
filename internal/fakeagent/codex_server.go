@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
@@ -32,6 +33,7 @@ const (
 	methodThreadName     = "thread_name"
 	methodAskQuestion    = "ask_question"
 	methodInstructions   = "instructions"
+	methodRunTool        = "run_tool"
 	codexApprovalRequest = "item/commandExecution/requestApproval"
 )
 
@@ -40,6 +42,7 @@ const (
 type codexAppServer struct {
 	cfg     config
 	hooks   hookSet
+	toolEnv []string
 	mu      sync.Mutex
 	threads map[string]*codexServerThread
 	conns   map[*codexServerConn]bool
@@ -80,6 +83,7 @@ func runCodexAppServer(cfg config) int {
 	s := &codexAppServer{
 		cfg:     cfg,
 		hooks:   hookSet{groups: configured.groups, env: os.Environ()},
+		toolEnv: configured.env,
 		threads: map[string]*codexServerThread{},
 		conns:   map[*codexServerConn]bool{},
 		prompts: map[string]chan string{},
@@ -749,6 +753,19 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 		s.mu.Unlock()
 		s.status(t)
 		return struct{}{}, nil
+	case methodRunTool:
+		t, err := s.loaded(p.ThreadID)
+		if err != nil {
+			return nil, err
+		}
+		cmd := exec.Command("/bin/sh", "-c", p.Text)
+		cmd.Dir = t.c.cwd
+		cmd.Env = withEnv(s.toolEnv, "CODEX_THREAD_ID", p.ThreadID)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return nil, fmt.Errorf("%v: %s", err, out)
+		}
+		return promptedResult{Text: string(out), ConversationID: p.ThreadID}, nil
 	case methodInstructions:
 		s.mu.Lock()
 		t := s.threads[p.ThreadID]

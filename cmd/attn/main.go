@@ -26,6 +26,7 @@ import (
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/daemonctl"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/pathutil"
@@ -2433,14 +2434,11 @@ func runProbeTUI() {
 }
 
 func hookCaller(id protocol.TerminalID, input hookInput) protocol.TerminalID {
-	profile, server := os.LookupEnv(hooks.CodexThreadHooksEnv)
-	if !server {
+	profile, shared := os.LookupEnv(harness.CodexSharedProfileEnv)
+	if !shared {
 		return id
 	}
-	if conversation := strings.TrimSpace(input.SessionID); conversation != "" {
-		return protocol.TerminalID(hooks.CodexThreadCaller(profile, conversation))
-	}
-	return ""
+	return harness.CodexThreadTerminal(profile, input.SessionID)
 }
 
 func hookTerminalIDFromArgOrEnv(index int) protocol.TerminalID {

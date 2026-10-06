@@ -41,6 +41,29 @@ func TestNewInASharedCodexTerminalLeavesTheSessionItLeftOpenAndHidden(t *testing
 	}
 }
 
+func TestASharedCodexToolSpeaksAsItsConversationsSessionAfterItsTerminalMovesOn(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
+	hidden := codex.ConversationID
+	moveOn(t, app, codex, terminal, "/new", "add a discount field")
+	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return protocol.Deref(s.Hidden) })
+	shown := sessionShownIn(t, w, app, terminal)
+
+	if got := submitSessionAnnotationFeedback(app, checkout, sessionAnnotationFeedback); !got.success {
+		t.Fatalf("feedback to the hidden session = %+v", got)
+	}
+	server := w.CodexServer()
+	server.Prompted(hidden)
+	for conversation, want := range map[string]string{hidden: checkout, codex.ConversationID: shown} {
+		got := strings.TrimSpace(server.RunTool(conversation, `"$ATTN_WRAPPER_PATH" presence`))
+		if got != "running inside attn (session "+want+")" {
+			t.Errorf("a tool of conversation %s reports %q, want session %s", conversation, got, want)
+		}
+	}
+}
+
 func TestWithSharedCodexOffNewClosesTheSessionItLeft(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()

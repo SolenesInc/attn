@@ -7,27 +7,9 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/victorarias/attn/internal/harness"
 )
-
-const CodexThreadHooksEnv = "ATTN_CODEX_THREAD_HOOKS"
-
-const CodexThreadCallerPrefix = "codex:"
-
-func CodexThreadCaller(profile, conversation string) string {
-	return CodexThreadCallerPrefix + profile + ":" + conversation
-}
-
-func ParseCodexThreadCaller(id string) (profile, conversation string, ok bool) {
-	rest, ok := strings.CutPrefix(strings.TrimSpace(id), CodexThreadCallerPrefix)
-	if !ok {
-		return "", "", false
-	}
-	i := strings.LastIndex(rest, ":")
-	if i < 0 || rest[i+1:] == "" {
-		return "", "", false
-	}
-	return rest[:i], rest[i+1:], true
-}
 
 func GenerateCodexConfigOverrides(terminalID, socketPath, wrapperPath string, launch Launch) []string {
 	wrapper := hookWrapper(wrapperPath)
@@ -47,8 +29,21 @@ func GenerateCodexConfigOverrides(terminalID, socketPath, wrapperPath string, la
 	return overrides
 }
 
-func GenerateCodexServerConfigOverrides(wrapperPath, profile string) []string {
-	return codexHookOverrides(codexHookCommand(hookWrapper(wrapperPath), "env "+shellQuote(CodexThreadHooksEnv+"="+profile)+" "))
+// Every conversation the server runs gets this environment, including ones attn resumes itself.
+func GenerateCodexServerConfigOverrides(wrapperPath, socketPath, profile string) []string {
+	wrapper := hookWrapper(wrapperPath)
+	overrides := codexHookOverrides(codexHookCommand(wrapper, "env "+shellQuote(harness.CodexSharedProfileEnv+"="+profile)+" "))
+	for _, env := range [][2]string{
+		{harness.CodexSharedProfileEnv, profile},
+		{"ATTN_TERMINAL_ID", ""},
+		{"ATTN_SESSION_ID", ""},
+		{"ATTN_AGENT", "codex"},
+		{"ATTN_SOCKET_PATH", strings.TrimSpace(socketPath)},
+		{"ATTN_WRAPPER_PATH", wrapper},
+	} {
+		overrides = append(overrides, "shell_environment_policy.set."+env[0]+"="+strconv.Quote(env[1]))
+	}
+	return overrides
 }
 
 func hookWrapper(wrapperPath string) string {

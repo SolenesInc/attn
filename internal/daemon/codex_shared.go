@@ -194,7 +194,7 @@ func (r *codexShared) startServer(ctx context.Context, s *codexServer, executabl
 		return err
 	}
 	command := []string{r.codexExecutable(executable), "app-server"}
-	for _, override := range hooks.GenerateCodexServerConfigOverrides(r.d.wrapperPath(), s.profile) {
+	for _, override := range hooks.GenerateCodexServerConfigOverrides(r.d.wrapperPath(), r.d.socketPath, s.profile) {
 		command = append(command, "-c", override)
 	}
 	command = append(command, "--listen", "unix://"+s.socket)
@@ -202,7 +202,7 @@ func (r *codexShared) startServer(ctx context.Context, s *codexServer, executabl
 		ID: s.terminal, Agent: codexServerAgent, Label: "Codex app-server", CWD: r.dir(), Cols: 80, Rows: 24,
 		ExternalCommand: command,
 		// The server runs every terminal's conversations, so it carries no terminal's identity.
-		ExternalEnv:   []string{"ATTN_SESSION_ID=", "ATTN_AGENT="},
+		ExternalEnv:   []string{"ATTN_TERMINAL_ID=", "ATTN_SESSION_ID=", "ATTN_AGENT="},
 		LoginShellEnv: r.d.cachedLoginShellEnv(),
 		DaemonEnv:     r.d.spawnRoutingEnv(),
 	}
@@ -511,15 +511,6 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 	if config == nil {
 		config = make(map[string]any)
 	}
-	for key, value := range map[string]string{
-		"ATTN_TERMINAL_ID":  string(v.terminal),
-		"ATTN_AGENT":        string(protocol.SessionAgentCodex),
-		"ATTN_SOCKET_PATH":  r.d.socketPath,
-		"ATTN_WRAPPER_PATH": r.d.wrapperPath(),
-	} {
-		config["shell_environment_policy.set."+key] = value
-	}
-	config["features.hooks"] = true
 	// A new conversation in a terminal that shows one becomes a plain successor: no chief or crew role.
 	launchAs, chief := sessionID, r.d.isChiefOfStaffSession(sessionID)
 	if method != "thread/resume" && r.conversation(sessionID) != "" {

@@ -8,7 +8,6 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/harness"
-	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -38,7 +37,7 @@ func (d *Daemon) handleObserveAgentConversation(conn net.Conn, msg *protocol.Set
 		d.sendOK(conn)
 		return
 	}
-	if profile, conversation, ok := hooks.ParseCodexThreadCaller(string(terminal)); ok {
+	if profile, conversation, ok := harness.ParseCodexThreadTerminal(terminal); ok {
 		shown, showing := d.codexShared().terminalShowing(profile, conversation)
 		if !showing {
 			d.logf("agent conversation: no terminal shows shared Codex conversation %s", conversation)

@@ -37,6 +37,14 @@ func (s *CodexServer) AskQuestion(conversation string) {
 	s.call(methodAskQuestion, serverThreadParams{ThreadID: conversation}, nil)
 }
 
+// RunTool runs command as a shell tool of the conversation, in the environment Codex gives one.
+func (s *CodexServer) RunTool(conversation, command string) string {
+	s.t.Helper()
+	var ran promptedResult
+	s.call(methodRunTool, serverThreadParams{ThreadID: conversation, Text: command}, &ran)
+	return ran.Text
+}
+
 func (s *CodexServer) Instructions(conversation string) string {
 	s.t.Helper()
 	var started promptedResult

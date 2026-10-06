@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/harness"
-	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -43,7 +42,7 @@ func (d *Daemon) shownIn(t harness.TerminalID) (protocol.SessionID, bool) {
 }
 
 func (d *Daemon) sessionInTerminal(t protocol.TerminalID) protocol.SessionID {
-	if profile, conversation, ok := hooks.ParseCodexThreadCaller(string(t)); ok {
+	if profile, conversation, ok := harness.ParseCodexThreadTerminal(t); ok {
 		return d.codexThreadCaller(profile, conversation)
 	}
 	session, _ := d.terminals().Showing(protocol.TrimID(t))
