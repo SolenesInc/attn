@@ -84,10 +84,6 @@ if [[ "$local_sha" != "$main_sha" ]]; then
 fi
 require_remote_tag_absent "$remote" "$version_tag" "prepare release" \
   "tag ${version_tag} already exists"
-if git show-ref --verify --quiet "refs/heads/${release_branch}"; then
-  echo "prepare release: local branch ${release_branch} already exists" >&2
-  exit 1
-fi
 if git ls-remote --exit-code --heads "$remote" "$release_branch" >/dev/null 2>&1; then
   echo "prepare release: remote branch ${release_branch} already exists" >&2
   exit 1
@@ -150,7 +146,7 @@ if [[ "$fragment_count" == 1 ]]; then
 fi
 
 echo "Cutting ${release_branch} from ${main_sha}..."
-git switch -c "$release_branch" "$main_sha"
+git switch --detach "$main_sha"
 
 ./scripts/compile-changelog.sh
 go run ./cmd/release-train version set "$version_tag"
@@ -233,10 +229,11 @@ Do not merge until \`PR gate\` and \`App acceptance\` are green on \`${candidate
 EOF
 
 echo "Pushing ${release_branch}..."
-git push -u "$remote" "$release_branch"
+git push "$remote" "HEAD:refs/heads/${release_branch}"
 pr_url="$(gh pr create --base main --head "$release_branch" \
   --title "chore(release): prepare ${version_tag}" --body-file "$body")"
 
+git switch main
 echo "Opened release candidate ${pr_url}"
 echo "Next: review the changelog and merge once PR gate and App acceptance are green."
 echo "This command did not merge, tag, or start a release."

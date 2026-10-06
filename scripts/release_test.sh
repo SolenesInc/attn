@@ -225,5 +225,14 @@ if grep -Eq '(^| )(pr merge|workflow run release)' "$FAKE_GH_LOG"; then
   echo "candidate preparation crossed a merge or release boundary" >&2
   exit 1
 fi
+[[ "$(git -C "$fixture_repo" branch --show-current)" == main ]]
+if git -C "$fixture_repo" show-ref --verify --quiet refs/heads/release/v99.98.97; then
+  echo "candidate preparation left a local release branch behind" >&2
+  exit 1
+fi
+
+git --git-dir="$fixture_origin" update-ref -d "$candidate_ref"
+run_release v99.98.97 >"$work/retry.out"
+git --git-dir="$fixture_origin" rev-parse --verify --quiet "$candidate_ref" >/dev/null
 
 echo "release preparation: OK"
