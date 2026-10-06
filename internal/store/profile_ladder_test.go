@@ -56,9 +56,7 @@ func TestHistoricalProfileDatabasesPreserveDesktopsAndUsageOnUpgrade(t *testing.
 				t.Fatal(err)
 			}
 
-			var s *Store
-			var upgrade SchemaUpgrade
-			err = withMigrationsThrough(171, func() error { var err error; s, upgrade, err = Open(path); return err })
+			s, upgrade, err := Open(path)
 			if err != nil {
 				t.Fatalf("upgrade from %d: %v", start.schema, err)
 			}
