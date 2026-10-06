@@ -288,6 +288,50 @@ func TestAConversationResumedInAnotherProfileIsThatProfilesOwnSharedCodexSession
 	}
 }
 
+func TestAReopenedSharedCodexSessionNamesItsConversationAgainAfterAnotherProfileRenamedIt(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	side := createProfile(app, "Side")
+	sideApp := w.AppOn(side.ID)
+	elsewhere := w.Spawn(sideApp, fakeagent.Codex, w.Path("shop"))
+	sideCodex := w.Launched(elsewhere)
+	sideApp.TypeLine(elsewhere, "plan the release")
+	sideCodex.Prompted()
+	sideCodex.Reply("Planned. <!-- attn:state=idle -->")
+	testworld.AwaitSession(sideApp, elsewhere, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	conversation := sideCodex.ConversationID
+	renamed := testworld.Request(sideApp, protocol.RenameSessionMessage{Cmd: protocol.CmdRenameSession, SessionID: protocol.SessionID(elsewhere), Label: "Release plan"},
+		protocol.EventRenameResult, func(r protocol.RenameResultMessage) bool { return string(r.ID) == elsewhere })
+	if !renamed.Success {
+		t.Fatalf("rename %s: %s", elsewhere, protocol.Deref(renamed.Error))
+	}
+	w.CodexServer().AwaitName(conversation, "Release plan")
+
+	here := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
+	codex := w.Launched(here)
+	terminal := app.Terminal(here)
+	moveOn(t, app, codex, terminal, "/resume "+conversation, "ship it")
+	resumed := sessionShownIn(t, w, app, terminal)
+	typeInto(app, terminal, "/rename Release train\r")
+	codex.Prompted()
+	testworld.AwaitSession(app, resumed, func(s protocol.Session) bool { return s.Label == "Release train" })
+	w.CodexServer().AwaitName(conversation, "Release train")
+
+	for _, c := range []struct {
+		app     *testworld.Peer
+		session string
+	}{{app, resumed}, {sideApp, elsewhere}} {
+		if closed := closeFromApp(c.app, c.session); !closed.Accepted {
+			t.Fatalf("close %s: %s", c.session, protocol.Deref(closed.Error))
+		}
+	}
+	if reopened := reopenOverTheWebSocket(sideApp, elsewhere); !reopened.Success {
+		t.Fatalf("reopen %s: %s", elsewhere, protocol.Deref(reopened.Error))
+	}
+	w.CodexServer().AwaitName(conversation, "Release plan")
+}
+
 func TestASharedLaunchRefusesAConversationAnotherProfilesServerHolds(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()

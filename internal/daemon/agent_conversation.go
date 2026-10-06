@@ -160,10 +160,7 @@ func (d *Daemon) applyAgentConversation(observation agentConversationObservation
 	d.rememberDispatchResume(observation.SessionID, observation.NativeID)
 	d.resetSessionActivityRuntime(observation.SessionID)
 	d.publishFact(FactSessionConversationChanged, string(observation.SessionID), observation)
-	if session := d.store.Get(observation.SessionID); session != nil && session.Agent == protocol.SessionAgentCodex &&
-		!sessionLabelIsPlaceholder(session.Label, session.Directory, session.ID) {
-		d.codexShared().mirrorName(session.ID, session.Label)
-	}
+	d.codexShared().mirrorLabel(observation.SessionID)
 	return true
 }
 

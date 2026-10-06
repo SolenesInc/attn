@@ -55,12 +55,17 @@ type codexServer struct {
 	// Conversations the server has loaded, as last heard; kept while the control connection is down.
 	held    map[string]bool
 	parents map[string]string
-	// While connect installs the loaded list, notifications wait here to apply on top of it.
-	connecting bool
-	early      []codexshared.Message
-	epoch      string
-	seq        atomic.Uint64
-	events     codexEvents
+	// The connection whose notifications count; others are superseded and dropped.
+	attempt *codexAttempt
+	epoch   string
+	seq     atomic.Uint64
+	events  codexEvents
+}
+
+// Until its loaded list is held, an attempt's notifications wait to apply on top of it.
+type codexAttempt struct {
+	connected bool
+	early     []codexshared.Message
 }
 
 type codexView struct {
@@ -217,18 +222,21 @@ func (r *codexShared) startServer(ctx context.Context, s *codexServer, executabl
 }
 
 func (r *codexShared) connect(ctx context.Context, s *codexServer) error {
-	s.mu.Lock()
-	s.connecting, s.early = true, nil
-	s.mu.Unlock()
 	defer func() {
 		s.mu.Lock()
-		s.connecting, s.early = false, nil
+		if s.attempt != nil && !s.attempt.connected {
+			s.attempt = nil
+		}
 		s.mu.Unlock()
 	}()
 	deadline := time.Now().Add(codexServerStartLimit)
 	for {
+		a := &codexAttempt{}
+		s.mu.Lock()
+		s.attempt = a
+		s.mu.Unlock()
 		attempt, cancel := context.WithTimeout(ctx, codexServerCallLimit)
-		client, err := codexshared.Connect(attempt, s.socket, codexClientName, func(m codexshared.Message) { r.observeServer(s, m) })
+		client, err := codexshared.Connect(attempt, s.socket, codexClientName, func(m codexshared.Message) { r.observeServer(s, a, m) })
 		var loaded json.RawMessage
 		if err == nil {
 			loaded, err = client.Call(attempt, "thread/loaded/list", map[string]any{})
@@ -249,10 +257,10 @@ func (r *codexShared) connect(ctx context.Context, s *codexServer) error {
 			s.mu.Lock()
 			s.control, s.epoch = client, epoch
 			gone := s.hold(list.Data)
-			for _, m := range s.early {
+			for _, m := range a.early {
 				gone = append(gone, s.track(m)...)
 			}
-			s.connecting, s.early = false, nil
+			a.connected, a.early = true, nil
 			s.mu.Unlock()
 			r.lose(s, gone)
 			if !r.d.life.Go("codexServerControl", func() { r.watchControl(s, client) }) {
@@ -315,7 +323,7 @@ func (r *codexShared) lose(s *codexServer, conversations []string) {
 	}
 }
 
-func (r *codexShared) observeServer(s *codexServer, m codexshared.Message) {
+func (r *codexShared) observeServer(s *codexServer, a *codexAttempt, m codexshared.Message) {
 	switch m.Method {
 	case "thread/name/updated":
 		r.observeName(s, m)
@@ -328,9 +336,11 @@ func (r *codexShared) observeServer(s *codexServer, m codexshared.Message) {
 	}
 	s.mu.Lock()
 	var gone []string
-	if s.connecting {
-		s.early = append(s.early, m)
-	} else {
+	switch {
+	case s.attempt != a:
+	case !a.connected:
+		a.early = append(a.early, m)
+	default:
 		gone = s.track(m)
 	}
 	s.mu.Unlock()
@@ -569,7 +579,10 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 		if len(reply.Error) > 0 || json.Unmarshal(reply.Result, &result) != nil || result.Thread.ID == "" {
 			return
 		}
-		if method != "thread/resume" {
+		if method == "thread/resume" {
+			// The rollout keeps the last name any profile gave it; a new binding mirrors when it lands.
+			r.mirrorLabel(r.holder(v.profile, result.Thread.ID))
+		} else {
 			if err := r.materialize(v.profile, result.Thread.ID); err != nil {
 				r.d.logf("shared Codex: refused conversation %s, which could not be written: %v", result.Thread.ID, err)
 				reply.Result = nil
@@ -683,10 +696,15 @@ func (r *codexShared) terminalExited(t harness.TerminalID) {
 		}
 	}
 	r.mu.Unlock()
-	// A server already restarted under the same id was reconciled by its own connect.
-	if exited != nil && !r.serverRunning(context.Background(), t) {
+	// Checked under ensureMu: a server restarted under the same id was reconciled by its own connect.
+	if exited != nil {
 		exited.ensureMu.Lock()
 		defer exited.ensureMu.Unlock()
+	}
+	if r.serverRunning(context.Background(), t) {
+		return
+	}
+	if exited != nil {
 		exited.mu.Lock()
 		gone := exited.hold(nil)
 		client := exited.control
@@ -698,10 +716,8 @@ func (r *codexShared) terminalExited(t harness.TerminalID) {
 		r.d.logf("shared Codex: the app-server of profile %s exited; the next connection starts it again", exited.profile)
 		r.lose(exited, gone)
 	}
-	if !r.serverRunning(context.Background(), t) {
-		if err := r.d.removePTYSession(t); err != nil {
-			r.d.logf("pty backend remove on exit failed for %s: %v", t, err)
-		}
+	if err := r.d.removePTYSession(t); err != nil {
+		r.d.logf("pty backend remove on exit failed for %s: %v", t, err)
 	}
 }
 

@@ -409,6 +409,13 @@ func (r *codexShared) observeName(s *codexServer, m codexshared.Message) {
 	})
 }
 
+func (r *codexShared) mirrorLabel(sessionID protocol.SessionID) {
+	if session := r.d.store.Get(sessionID); session != nil && session.Agent == protocol.SessionAgentCodex &&
+		!sessionLabelIsPlaceholder(session.Label, session.Directory, session.ID) {
+		r.mirrorName(session.ID, session.Label)
+	}
+}
+
 // attn's label is the one that counts.
 func (r *codexShared) mirrorName(sessionID protocol.SessionID, label string) {
 	conversation := r.conversation(sessionID)
