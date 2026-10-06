@@ -79,7 +79,7 @@ func runSessionReopen(args []string) {
 	}
 
 	result, err := client.New("").SessionReopen(client.SessionReopenOptions{
-		SessionID: parsed.target,
+		SessionID: protocol.SessionID(parsed.target),
 		Action:    parsed.action,
 		Directory: parsed.cwd,
 	})
@@ -106,7 +106,7 @@ func fprintSessionReopen(w io.Writer, result *protocol.SessionReopenResult) {
 		result.SessionID, result.Directory, result.ProfileID, result.Action)
 }
 
-func fprintSessionReopenVerdict(w io.Writer, sessionID string, reopen *protocol.SessionReopen) {
+func fprintSessionReopenVerdict(w io.Writer, sessionID protocol.SessionID, reopen *protocol.SessionReopen) {
 	if reopen == nil {
 		return
 	}

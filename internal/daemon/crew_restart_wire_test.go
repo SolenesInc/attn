@@ -30,7 +30,7 @@ func appRestartCrew(app *testworld.Peer, msg protocol.CrewRestartMessage) protoc
 
 func readCrewInbox(t *testing.T, cli *client.Client, session string) []protocol.AgentInboxItem {
 	t.Helper()
-	batch, err := cli.AgentInboxBatch(session, 20)
+	batch, err := cli.AgentInboxBatch(protocol.SessionID(session), 20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func TestACrewRestartAsksTheDayToHandOffAndCompletesOnItsSuccessor(t *testing.T)
 	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
 	day := wakeCrew(t, cli, "trellis", "")
-	w.Launched(day.SessionID)
+	w.Launched(string(day.SessionID))
 	letters := crewLetters(t, w, "trellis")
 
 	queued := restartCrew(t, cli, "trellis", "restart-1")
@@ -54,7 +54,7 @@ func TestACrewRestartAsksTheDayToHandOffAndCompletesOnItsSuccessor(t *testing.T)
 	if after := crewLetters(t, w, "trellis"); !slices.Equal(after, letters) {
 		t.Fatalf("asking for a restart filed letters %q; the day writes its own", after)
 	}
-	inbox := readCrewInbox(t, cli, day.SessionID)
+	inbox := readCrewInbox(t, cli, string(day.SessionID))
 	if len(inbox) != 1 || inbox[0].Content != prompts.RenderText("crew", "restart-requested", prompts.Values{}) {
 		t.Fatalf("the day's inbox = %+v, want one restart request", inbox)
 	}
@@ -62,9 +62,9 @@ func TestACrewRestartAsksTheDayToHandOffAndCompletesOnItsSuccessor(t *testing.T)
 		t.Fatalf("after the day read its inbox the restart is %q, want requested", state)
 	}
 
-	handed := crewHandoff(t, cli, day.SessionID, "I wrote this letter myself.", false, "")
+	handed := crewHandoff(t, cli, string(day.SessionID), "I wrote this letter myself.", false, "")
 	successor := protocol.Deref(handed.SessionID)
-	w.Launched(successor)
+	w.Launched(string(successor))
 	completed := crewRosterMember(t, cli, "trellis")
 	if completed.Restart.State != protocol.CrewRestartStateCompleted || protocol.Deref(completed.Restart.SuccessorSessionID) != successor ||
 		protocol.Deref(completed.BindingSession) != successor {
@@ -91,7 +91,7 @@ func TestACrewRestartActsOnlyOnTheDayTheUserSaw(t *testing.T) {
 	app := w.App()
 	cli := w.Client()
 
-	asleep := protocol.CrewRestartMessage{Member: "alder", RequestID: "wake-alder", ExpectedSessionID: protocol.Ptr(""),
+	asleep := protocol.CrewRestartMessage{Member: "alder", RequestID: "wake-alder", ExpectedSessionID: protocol.Ptr(protocol.SessionID("")),
 		ExpectedRevision: protocol.Ptr(crewRosterMember(t, cli, "alder").Revision)}
 	woke := appRestartCrew(app, asleep)
 	if !woke.Success || woke.Restart == nil || woke.Restart.State != protocol.CrewRestartStateCompleted || woke.Member == nil ||
@@ -99,7 +99,7 @@ func TestACrewRestartActsOnlyOnTheDayTheUserSaw(t *testing.T) {
 		t.Fatalf("restarting asleep alder = %+v, want it woken directly", woke)
 	}
 	firstDay := protocol.Deref(woke.Member.BindingSession)
-	w.Launched(firstDay)
+	w.Launched(string(firstDay))
 
 	for _, malformed := range []struct {
 		msg  protocol.CrewRestartMessage
@@ -107,7 +107,7 @@ func TestACrewRestartActsOnlyOnTheDayTheUserSaw(t *testing.T) {
 	}{
 		{protocol.CrewRestartMessage{Member: "alder"}, "request id"},
 		{protocol.CrewRestartMessage{Member: "alder", RequestID: "missing-day"}, "expected session id"},
-		{protocol.CrewRestartMessage{Member: "keel", RequestID: "missing-revision", ExpectedSessionID: protocol.Ptr("")}, "expected revision"},
+		{protocol.CrewRestartMessage{Member: "keel", RequestID: "missing-revision", ExpectedSessionID: protocol.Ptr(protocol.SessionID(""))}, "expected revision"},
 	} {
 		if refused := appRestartCrew(app, malformed.msg); refused.Success || !strings.Contains(protocol.Deref(refused.Error), malformed.want) {
 			t.Errorf("restart %+v = %+v, want it refused naming %q", malformed.msg, refused, malformed.want)
@@ -116,8 +116,8 @@ func TestACrewRestartActsOnlyOnTheDayTheUserSaw(t *testing.T) {
 
 	actedOn := crewRosterMember(t, cli, "alder")
 	restartCrew(t, cli, "alder", "newer-request")
-	secondDay := protocol.Deref(crewHandoff(t, cli, firstDay, "Move to the next day.", false, "").SessionID)
-	w.Launched(secondDay)
+	secondDay := protocol.Deref(crewHandoff(t, cli, string(firstDay), "Move to the next day.", false, "").SessionID)
+	w.Launched(string(secondDay))
 	sessions := crewSessionCount(t, cli)
 	delayed := appRestartCrew(app, protocol.CrewRestartMessage{Member: "alder", RequestID: "delayed-request",
 		ExpectedSessionID: protocol.Ptr(firstDay), ExpectedRevision: protocol.Ptr(actedOn.Revision)})
@@ -138,7 +138,7 @@ func TestACrewRestartActsOnlyOnTheDayTheUserSaw(t *testing.T) {
 
 	read := crewRosterMember(t, cli, "keel")
 	setCrew(t, cli, "keel", protocol.CrewSetMessage{Effort: protocol.Ptr("high")})
-	raced := protocol.CrewRestartMessage{Member: "keel", RequestID: "raced", ExpectedSessionID: protocol.Ptr(""), ExpectedRevision: protocol.Ptr(read.Revision)}
+	raced := protocol.CrewRestartMessage{Member: "keel", RequestID: "raced", ExpectedSessionID: protocol.Ptr(protocol.SessionID("")), ExpectedRevision: protocol.Ptr(read.Revision)}
 	if conflict := appRestartCrew(app, raced); conflict.Success || !conflict.Conflict || protocol.Deref(conflict.Member.Effort) != "high" {
 		t.Fatalf("a restart racing a settings edit = %+v, want a conflict carrying the edit", conflict)
 	}
@@ -150,7 +150,7 @@ func TestACrewRestartActsOnlyOnTheDayTheUserSaw(t *testing.T) {
 	if !retried.Success || retried.Restart == nil || retried.Restart.State != protocol.CrewRestartStateCompleted {
 		t.Fatalf("retrying the conflicted request against the current revision = %+v, want it to wake keel", retried)
 	}
-	w.Launched(protocol.Deref(retried.Restart.SuccessorSessionID))
+	w.Launched(string(protocol.Deref(retried.Restart.SuccessorSessionID)))
 }
 
 func TestADayThatEndsDuringARestartIsSucceeded(t *testing.T) {
@@ -170,10 +170,10 @@ func TestADayThatEndsDuringARestartIsSucceeded(t *testing.T) {
 			w := newCrewWorld(t, fakeagent.Claude)
 			cli := w.Client()
 			day := wakeCrew(t, cli, "alder", "")
-			run := w.Launched(day.SessionID)
+			run := w.Launched(string(day.SessionID))
 			restartCrew(t, cli, "alder", "ended-day")
 			if row.after == protocol.CrewRestartStateRequested {
-				readCrewInbox(t, cli, day.SessionID)
+				readCrewInbox(t, cli, string(day.SessionID))
 			}
 
 			app := row.end(w, run)
@@ -182,7 +182,7 @@ func TestADayThatEndsDuringARestartIsSucceeded(t *testing.T) {
 			if successor == "" || successor == day.SessionID || protocol.Deref(alder.Restart.SuccessorSessionID) != successor {
 				t.Fatalf("after the day ended alder = %+v with restart %+v, want a fresh day completing ended-day", alder, alder.Restart)
 			}
-			w.Launched(successor)
+			w.Launched(string(successor))
 		})
 	}
 }
@@ -190,7 +190,7 @@ func TestADayThatEndsDuringARestartIsSucceeded(t *testing.T) {
 func exitCrewDay(w *world, day *fakeagent.Run) *testworld.Peer {
 	app := w.App()
 	day.Exit(0)
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == day.SessionID })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == day.SessionID })
 	return app
 }
 
@@ -221,10 +221,10 @@ func TestAMemberWhoseDayVanishedRestartsIntoAFreshDay(t *testing.T) {
 	app := w.App()
 	cli := w.Client()
 	day := wakeCrew(t, cli, "alder", "")
-	run := w.Launched(day.SessionID)
+	run := w.Launched(string(day.SessionID))
 	run.Prompted()
 	run.Reply("Looking around. <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, day.SessionID, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	testworld.AwaitSession(app, string(day.SessionID), func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 
 	w.restart()
 	app = w.App()
@@ -233,13 +233,13 @@ func TestAMemberWhoseDayVanishedRestartsIntoAFreshDay(t *testing.T) {
 	if shown.BindingSession != nil {
 		t.Fatalf("the roster shows alder awake in the day that died with the daemon: %s", *shown.BindingSession)
 	}
-	restarted := appRestartCrew(app, protocol.CrewRestartMessage{Member: "alder", RequestID: "vanished", ExpectedSessionID: protocol.Ptr(""), ExpectedRevision: protocol.Ptr(shown.Revision)})
+	restarted := appRestartCrew(app, protocol.CrewRestartMessage{Member: "alder", RequestID: "vanished", ExpectedSessionID: protocol.Ptr(protocol.SessionID("")), ExpectedRevision: protocol.Ptr(shown.Revision)})
 	fresh := protocol.Deref(restarted.Restart.SuccessorSessionID)
 	if !restarted.Success || restarted.Restart.State != protocol.CrewRestartStateCompleted || fresh == "" || fresh == day.SessionID ||
 		protocol.Deref(restarted.Member.BindingSession) != fresh {
 		t.Fatalf("restarting alder = %+v, want a fresh day", restarted)
 	}
-	w.Launched(fresh)
+	w.Launched(string(fresh))
 }
 
 func TestDeletingACrewDaysWorktreeResumesItsRestart(t *testing.T) {
@@ -252,9 +252,9 @@ func TestDeletingACrewDaysWorktreeResumesItsRestart(t *testing.T) {
 		worktree := createWorktree(t, app, repo, branch)
 		setCrew(t, cli, member, protocol.CrewSetMessage{Cwd: protocol.Ptr(worktree)})
 		day := wakeCrew(t, cli, member, "")
-		w.Launched(day.SessionID)
+		w.Launched(string(day.SessionID))
 		restartCrew(t, cli, member, member+"-restart")
-		return worktree, day.SessionID
+		return worktree, string(day.SessionID)
 	}
 
 	worktree, day := dayInWorktree("alder", "alder-day")
@@ -264,11 +264,11 @@ func TestDeletingACrewDaysWorktreeResumesItsRestart(t *testing.T) {
 	}
 	alder := crewRosterMember(t, cli, "alder")
 	successor := protocol.Deref(alder.BindingSession)
-	if alder.Restart.State != protocol.CrewRestartStateCompleted || successor == "" || successor == day || protocol.Deref(alder.Restart.SuccessorSessionID) != successor {
+	if alder.Restart.State != protocol.CrewRestartStateCompleted || successor == "" || string(successor) == day || protocol.Deref(alder.Restart.SuccessorSessionID) != successor {
 		t.Fatalf("after its worktree was deleted alder = %+v with restart %+v, want a successor completing the restart", alder, alder.Restart)
 	}
-	w.Launched(successor)
-	if list, err := cli.List(""); err != nil || slices.ContainsFunc(list.Sessions, func(s protocol.Session) bool { return s.ID == day }) {
+	w.Launched(string(successor))
+	if list, err := cli.List(""); err != nil || slices.ContainsFunc(list.Sessions, func(s protocol.Session) bool { return string(s.ID) == day }) {
 		t.Fatalf("the day in the deleted worktree is still listed (%v)", err)
 	}
 

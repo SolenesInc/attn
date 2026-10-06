@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/inbox"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 // sendToInbox is the way to put something in front of an agent.
@@ -59,8 +60,8 @@ func (d *Daemon) withdrawFromInbox(to inbox.Address, kind inbox.Kind, key string
 }
 
 // chiefAddressOf is the chief inbox of the profile this session is chief of.
-func (d *Daemon) chiefAddressOf(sessionID string) (inbox.Address, bool) {
-	sessionID = strings.TrimSpace(sessionID)
+func (d *Daemon) chiefAddressOf(sessionID protocol.SessionID) (inbox.Address, bool) {
+	sessionID = protocol.TrimID(sessionID)
 	if sessionID == "" || d.store == nil {
 		return inbox.Address{}, false
 	}
@@ -70,7 +71,7 @@ func (d *Daemon) chiefAddressOf(sessionID string) (inbox.Address, bool) {
 	}
 	return inbox.ToChief(profileID), true
 }
-func (d *Daemon) inboxAddressOf(sessionID string) inbox.Address {
+func (d *Daemon) inboxAddressOf(sessionID protocol.SessionID) inbox.Address {
 	if member := d.crewMemberBoundTo(sessionID); member != "" {
 		return inbox.ToMember(member)
 	}
@@ -79,7 +80,7 @@ func (d *Daemon) inboxAddressOf(sessionID string) inbox.Address {
 	}
 	return inbox.ToSession(sessionID)
 }
-func (d *Daemon) inboxRoleAddresses(sessionID string) []inbox.Address {
+func (d *Daemon) inboxRoleAddresses(sessionID protocol.SessionID) []inbox.Address {
 	addresses := []inbox.Address{inbox.ToSession(sessionID)}
 	if member := d.crewMemberBoundTo(sessionID); member != "" {
 		addresses = append(addresses, inbox.ToMember(member))
@@ -90,7 +91,7 @@ func (d *Daemon) inboxRoleAddresses(sessionID string) []inbox.Address {
 	return addresses
 }
 
-func (d *Daemon) inboxAddressesOf(sessionID string) ([]inbox.Address, error) {
+func (d *Daemon) inboxAddressesOf(sessionID protocol.SessionID) ([]inbox.Address, error) {
 	addresses := []inbox.Address{inbox.ToSession(sessionID)}
 	if chief, ok := d.chiefAddressOf(sessionID); ok {
 		addresses = append(addresses, chief)
@@ -130,7 +131,7 @@ func (d *Daemon) inboxAddressesOf(sessionID string) ([]inbox.Address, error) {
 	}
 	return addresses, nil
 }
-func (d *Daemon) kickSessionInboxAddresses(sessionID string) {
+func (d *Daemon) kickSessionInboxAddresses(sessionID protocol.SessionID) {
 	d.life.Go("inbox-session-ready", func() {
 		addresses, err := d.inboxAddressesOf(sessionID)
 		if err != nil {

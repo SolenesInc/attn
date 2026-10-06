@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useDelegationChainControl, useDelegationChainTrigger } from './delegationChainContext';
 import { hasDelegationChain, type DelegationSession } from '../utils/delegationLinks';
 import './SessionLabel.css';
+import { SessionPriority } from './SessionPriority';
 
 // Load-bearing: the panel starts at the rail's right edge and never re-enters it,
 // or it blacks out the row's actions; it portals to document.body past the clip.
@@ -31,17 +32,17 @@ export function SessionLabel({ label, session, hasDelegates = false }: {
 }) {
   const controller = useDelegationChainControl();
   if (session && controller && hasDelegationChain(session, hasDelegates)) {
-    return <DelegationChainLabel label={label} sessionId={session.id} />;
+    return <DelegationChainLabel label={label} sessionId={session.id} priority={session.priority} />;
   }
-  return <OverflowSessionLabel label={label} />;
+  return <OverflowSessionLabel label={label} priority={session?.priority} />;
 }
 
-function DelegationChainLabel({ label, sessionId }: { label: string; sessionId: string }) {
+function DelegationChainLabel({ label, sessionId, priority }: { label: string; sessionId: string; priority?: boolean }) {
   const trigger = useDelegationChainTrigger(sessionId, 'row');
-  return <span className="session-label" ref={trigger.ref}>{label}</span>;
+  return <span className="session-label" ref={trigger.ref}><SessionPriority priority={priority} />{label}</span>;
 }
 
-function OverflowSessionLabel({ label }: { label: string }) {
+function OverflowSessionLabel({ label, priority }: { label: string; priority?: boolean }) {
   const spanRef = useRef<HTMLSpanElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [reveal, setReveal] = useState<RevealStyle | null>(null);
@@ -119,7 +120,7 @@ function OverflowSessionLabel({ label }: { label: string }) {
 
   return (
     <>
-      <span className="session-label" ref={spanRef}>{label}</span>
+      <span className="session-label" ref={spanRef}><SessionPriority priority={priority} />{label}</span>
       {reveal
         ? createPortal(
             <div

@@ -104,6 +104,7 @@ export function AppDesktops() {
           desktopSessions={desktopSessions.map((entry) => ({
             id: entry.id,
             label: entry.label,
+            priority: entry.priority,
             agent: entry.agent,
             cwd: entry.cwd,
             endpointId: entry.endpointId,
@@ -125,6 +126,7 @@ export function AppDesktops() {
           seedTargetSessions={daemonSessions.map((session) => ({
             sessionId: session.id,
             label: session.label || session.id,
+            priority: session.priority,
             state: session.state,
           }))}
           gardenSeeds={seeds}

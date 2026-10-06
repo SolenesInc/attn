@@ -432,8 +432,8 @@ func (d *Daemon) resolveLaunchEffort(agent string, chief bool, requested string)
 	return d.defaultLaunchEffort(agent)
 }
 
-func (d *Daemon) launchContextWindowCap(sessionID, agent string, chief bool) int {
-	if session := d.store.Get(strings.TrimSpace(sessionID)); session != nil {
+func (d *Daemon) launchContextWindowCap(sessionID protocol.SessionID, agent string, chief bool) int {
+	if session := d.store.Get(protocol.TrimID(sessionID)); session != nil {
 		if cap := protocol.Deref(session.ContextWindowCap); cap > 0 {
 			return cap
 		}

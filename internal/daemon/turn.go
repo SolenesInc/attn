@@ -1,7 +1,7 @@
 package daemon
 
 import (
-	"strings"
+	"fmt"
 	"time"
 
 	"github.com/victorarias/attn/internal/attention"
@@ -13,7 +13,7 @@ func (d *Daemon) handleSettleTurn(msg *protocol.SettleTurnMessage) {
 	if d == nil || d.store == nil || msg == nil {
 		return
 	}
-	sessionID := strings.TrimSpace(msg.SessionID)
+	sessionID := protocol.TrimID(msg.SessionID)
 	if sessionID == "" {
 		return
 	}
@@ -25,7 +25,7 @@ func (d *Daemon) handleSettleTurn(msg *protocol.SettleTurnMessage) {
 	d.broadcastSessionStateChanged(sessionID)
 }
 
-func (d *Daemon) traceSettle(sessionID string) {
+func (d *Daemon) traceSettle(sessionID protocol.SessionID) {
 	session := d.store.Get(sessionID)
 	if session == nil {
 		return
@@ -57,8 +57,17 @@ func (d *Daemon) decorateSessionWithTurn(session *protocol.Session) {
 
 func (d *Daemon) attentionInputFor(session *protocol.Session) attention.Input {
 	in := attention.Input{
-		IsShell:      string(session.Agent) == protocol.AgentShellValue,
+		IsShell:      session.Agent == protocol.AgentShellValue,
 		ChiefOfStaff: protocol.Deref(session.ChiefOfStaff),
 	}
 	return in
+}
+
+func (d *Daemon) setSessionPriority(msg *protocol.SetSessionPriorityMessage) error {
+	sessionID := protocol.TrimID(msg.SessionID)
+	if !d.store.SetSessionPriority(sessionID, msg.Priority) {
+		return fmt.Errorf("cannot set priority for session %s: no open session updated", sessionID)
+	}
+	d.broadcastSessionStateChanged(sessionID)
+	return nil
 }

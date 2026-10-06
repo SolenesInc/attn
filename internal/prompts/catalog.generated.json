@@ -1595,6 +1595,17 @@
                               "description": "Reporting seed, if one is bound to the session."
                             }
                           }
+                        },
+                        {
+                          "name": "seed_title",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "seed_title",
+                              "kind": "text",
+                              "description": "Title of the reporting seed."
+                            }
+                          }
                         }
                       ]
                     }
@@ -1621,6 +1632,17 @@
                     "name": "seed_id",
                     "kind": "text",
                     "description": "Reporting seed, if one is bound to the session."
+                  }
+                }
+              },
+              {
+                "name": "seed_title",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "seed_title",
+                    "kind": "text",
+                    "description": "Title of the reporting seed."
                   }
                 }
               }
@@ -1664,6 +1686,17 @@
                               "description": "Reporting seed, if one is bound to the session."
                             }
                           }
+                        },
+                        {
+                          "name": "seed_title",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "seed_title",
+                              "kind": "text",
+                              "description": "Title of the reporting seed."
+                            }
+                          }
                         }
                       ]
                     }
@@ -1690,6 +1723,17 @@
                     "name": "seed_id",
                     "kind": "text",
                     "description": "Reporting seed, if one is bound to the session."
+                  }
+                }
+              },
+              {
+                "name": "seed_title",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "seed_title",
+                    "kind": "text",
+                    "description": "Title of the reporting seed."
                   }
                 }
               }
@@ -1826,6 +1870,17 @@
                                           "name": "seed_id",
                                           "kind": "text",
                                           "description": "Reporting seed, if one is bound to the session."
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "name": "seed_title",
+                                      "node": {
+                                        "kind": "input",
+                                        "field": {
+                                          "name": "seed_title",
+                                          "kind": "text",
+                                          "description": "Title of the reporting seed."
                                         }
                                       }
                                     }
@@ -4851,5 +4906,5 @@
       ]
     }
   ],
-  "definitions_hash": "611f66a4a9d43950d928da84ce01d1825dfe5a187c31b2fa1e46e3c0677396d7"
+  "definitions_hash": "b94a7bf98dc26e17c9237105af2fab9dc53f8d52a483e22ef6aa741e2af9ee02"
 }

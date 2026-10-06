@@ -1,3 +1,4 @@
+import { SessionPriority } from '../SessionPriority';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import type { SessionLedgerEntry, SessionLedgerFacets, SessionUsage } from '../../types/generated';
@@ -417,6 +418,7 @@ function sessionRow(entry: SessionLedgerEntry, context: RowContext): RowModel {
   if (context.canKeepConversation && entry.agent === 'claude') verbs.push(conversationVerb(entry));
 
   const meta: ReactNode[] = [
+    entry.priority ? <SessionPriority key="priority" priority /> : null,
     entry.agent,
     profileText(entry) || null,
     <span className="is-mono is-path" title={entry.directory} key="dir">{shortPath(entry.directory)}</span>,

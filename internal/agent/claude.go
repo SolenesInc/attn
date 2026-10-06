@@ -84,7 +84,7 @@ func (c *Claude) BuildCommand(opts SpawnOpts) *exec.Cmd {
 		useSessionID = false
 	}
 	if useSessionID {
-		args = append(args, "--session-id", opts.SessionID)
+		args = append(args, "--session-id", string(opts.TerminalID))
 	}
 
 	if strings.TrimSpace(opts.SettingsPath) != "" {
@@ -438,7 +438,7 @@ func (c *Claude) PrepareLaunch(opts SpawnOpts) error {
 }
 
 func (c *Claude) GenerateHooksConfig(opts SpawnOpts) string {
-	return hooks.Generate(opts.SessionID, opts.SocketPath, opts.WrapperPath, claudeSettingsEnv(opts))
+	return hooks.Generate(string(opts.TerminalID), opts.SocketPath, opts.WrapperPath, claudeSettingsEnv(opts))
 }
 
 func claudeSettingsEnv(opts SpawnOpts) map[string]string {

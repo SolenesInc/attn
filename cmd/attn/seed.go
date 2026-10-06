@@ -240,7 +240,7 @@ flags:
   --member <name>    the crew member asking, recorded as planter, tender or
                      note author
   --profile <name|id> required outside attn when several profiles exist
-  --session <id>     the session asking (defaults to ATTN_SESSION_ID)
+  --session <id>     the session asking (defaults to the current session)
   --limit <n>        how many log entries to read (notes), or how many hits to
                      answer with (search; default %d, at most %d)
   --json             print the result as JSON
@@ -339,7 +339,7 @@ func newSeedFlags(verb string) *seedFlags {
 	return &seedFlags{
 		fs:             fs,
 		profile:        fs.String("profile", "", "profile name or id outside an attn session"),
-		session:        fs.String("session", "", "session id (defaults to ATTN_SESSION_ID)"),
+		session:        fs.String("session", "", "session id (defaults to the current session)"),
 		member:         fs.String("member", "", "crew member planting this seed"),
 		json:           fs.Bool("json", false, "print the result as JSON"),
 		all:            fs.Bool("all", false, "the whole garden, overriding a dispatched session's plot"),
@@ -405,11 +405,11 @@ func (f *seedFlags) parse(verb string, args []string) []string {
 	}
 }
 
-func (f *seedFlags) sessionID() string {
+func (f *seedFlags) sessionID() protocol.SessionID {
 	if id := strings.TrimSpace(*f.session); id != "" {
-		return id
+		return protocol.SessionID(id)
 	}
-	return strings.TrimSpace(os.Getenv("ATTN_SESSION_ID"))
+	return currentSessionOrExit()
 }
 
 func (f *seedFlags) wasSet(name string) bool {
@@ -460,9 +460,7 @@ func runSeedPlant(args []string) {
 	if len(positionals) != 1 {
 		seedFail("plant", fmt.Errorf(`needs exactly one title, got %d: attn seed plant "what this is" [-m "the detail"]`, len(positionals)))
 	}
-	result, err := f.client().SeedPlant(
-		f.sessionID(), positionals[0], f.text("plant"), strings.TrimSpace(*f.partOf), strings.TrimSpace(*f.discoveredFrom), strings.TrimSpace(*f.member),
-	)
+	result, err := f.client().SeedPlant(f.sessionID(), positionals[0], f.text("plant"), strings.TrimSpace(*f.partOf), strings.TrimSpace(*f.discoveredFrom), strings.TrimSpace(*f.member))
 	if err != nil {
 		seedFail("plant", err)
 	}
@@ -896,8 +894,7 @@ func runSeedSendToChief(args []string) {
 	if err != nil {
 		seedFail("send-to-chief", err)
 	}
-	result, err := c.SeedSendToChief(
-		f.sessionID(), document.Seed, strings.TrimSpace(f.text("send-to-chief")))
+	result, err := c.SeedSendToChief(f.sessionID(), document.Seed, strings.TrimSpace(f.text("send-to-chief")))
 	if err != nil {
 		seedFail("send-to-chief", err)
 	}
@@ -1075,7 +1072,7 @@ func fprintSeedReady(out io.Writer, result *protocol.SeedReadyResult) {
 		plotIDs[plot.ID] = true
 	}
 	for _, row := range rows {
-		seed, status := row.seed, string(row.seed.Status)
+		seed, status := row.seed, row.seed.Status
 		if plotIDs[seed.ID] {
 			status = "plot"
 		}
@@ -1167,8 +1164,7 @@ func runSeedTransition(verb string, args []string) {
 	if err != nil {
 		seedFail(verb, err)
 	}
-	result, err := f.client().SeedTransition(
-		f.sessionID(), seedID, verb, f.text(verb), strings.TrimSpace(*f.member), *f.force, opts)
+	result, err := f.client().SeedTransition(f.sessionID(), seedID, verb, f.text(verb), strings.TrimSpace(*f.member), *f.force, opts)
 	if err != nil {
 		seedFail(verb, err)
 	}
@@ -1221,7 +1217,7 @@ func fprintTransition(w io.Writer, result *protocol.SeedTransitionResult, cleare
 	} else if len(cleared) > 0 && cleared[0] {
 		fmt.Fprintln(w, "harvest-on-merge cleared")
 	}
-	if open := openPlotSeeds(result.Seed); open > 0 && closedSeedStatus(string(result.Seed.Status)) {
+	if open := openPlotSeeds(result.Seed); open > 0 && closedSeedStatus(result.Seed.Status) {
 		fmt.Fprintf(w, "its plot still holds %d open seed(s) — a closed plot over open work reads as done; close them too, or replant this one\n", open)
 	}
 	fprintUnblocked(w, result.Unblocked)
@@ -1287,8 +1283,7 @@ func runSeedNote(args []string) {
 	if len(positionals) != 1 {
 		seedFail("note", fmt.Errorf(`needs exactly one seed id, got %d: attn seed note s-7k3f9m -m "what happened"`, len(positionals)))
 	}
-	result, err := f.client().SeedNote(
-		f.sessionID(), positionals[0], f.text("note"), strings.TrimSpace(*f.member), f.noteKind(), *f.ring, nil)
+	result, err := f.client().SeedNote(f.sessionID(), positionals[0], f.text("note"), strings.TrimSpace(*f.member), f.noteKind(), *f.ring, nil)
 	if err != nil {
 		seedFail("note", err)
 	}
@@ -1359,9 +1354,7 @@ func runSeedArtifact(verb string, args []string) {
 		seedFail(verb, err)
 	}
 	if handled {
-		result, err := f.client().SeedArtifactTransfer(
-			f.sessionID(), seedID, plan.operation, plan.source, plan.filename, plan.destination, nil,
-		)
+		result, err := f.client().SeedArtifactTransfer(f.sessionID(), seedID, plan.operation, plan.source, plan.filename, plan.destination, nil)
 		if err != nil {
 			seedFail(verb, err)
 		}
@@ -1392,8 +1385,7 @@ func runSeedArtifact(verb string, args []string) {
 	if verb == "detach" {
 		kind = garden.NoteKindDetach
 	}
-	result, err := f.client().SeedNote(
-		f.sessionID(), seedID, f.text(verb), strings.TrimSpace(*f.member), kind, false, artifact)
+	result, err := f.client().SeedNote(f.sessionID(), seedID, f.text(verb), strings.TrimSpace(*f.member), kind, false, artifact)
 	if err != nil {
 		seedFail(verb, err)
 	}

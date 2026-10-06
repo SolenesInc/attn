@@ -64,6 +64,7 @@ export function useAppSessions({
       daemonSessions.map((session) => ({
         id: session.id,
         label: session.label,
+        priority: session.priority,
         agent: normalizeSessionAgent(session.agent),
         state: normalizeSessionState(session.state),
         dispatcher_session_id: session.dispatcher_session_id,
@@ -107,6 +108,7 @@ export function useAppSessions({
       daemonSessions.map((session) => ({
         id: session.id,
         label: session.label,
+        priority: session.priority,
         directory: session.directory,
       })),
     [daemonSessions],

@@ -17,12 +17,12 @@ func TestAHandedBackReviewHeldByTheUsersTypingLandsOnceTheyAreQuiet(t *testing.T
 		presenter := w.bubbleClaude(t, app, "presenter")
 		repo := newRepo(t, "shop")
 		manifest := fmt.Sprintf("version: 1\nkind: changes\ntitle: \"Checkout\"\nframe:\n  repo: %q\n  base: HEAD\n  head: HEAD\n", repo)
-		opened, err := cli.PresentOpen(presenter.id, manifest, "")
+		opened, err := cli.PresentOpen(protocol.SessionID(presenter.id), manifest, "")
 		if err != nil {
 			t.Fatalf("present: %v", err)
 		}
 
-		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: presenter.self, Data: "half a thought"})
+		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(presenter.self), Data: "half a thought"})
 		approved := testworld.Request(app, protocol.PresentSubmitRoundMessage{Cmd: protocol.CmdPresentSubmitRound, RoundID: opened.RoundID, Verdict: "approved", Handback: true},
 			protocol.EventPresentSubmitRoundResult, func(r protocol.PresentSubmitRoundResultMessage) bool { return r.RoundID == opened.RoundID })
 		if !approved.Success {
@@ -49,7 +49,7 @@ func TestANotebookEntryForAChiefHeldByTheUsersTypingLandsOnceTheyAreQuiet(t *tes
 		synctest.Wait()
 		chief = w.bootBubbleClaude(t, chief.id)
 
-		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: chief.self, Data: "half a thought"})
+		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(chief.self), Data: "half a thought"})
 		sent := notebookAskSendToChief(app, "notes/today.md", "follow up on the release")
 		if !sent.Success || sent.Result == nil || sent.Result.Nudged {
 			t.Fatalf("sending to a chief the user is typing to = %+v, want it written and not nudged yet", sent)
@@ -70,16 +70,16 @@ func TestAPresentationHandbackReachesItsMemberAfterThePresentingDayEnds(t *testi
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
 		cli, app := w.Client(), w.App()
-		first := w.bootBubbleClaude(t, wakeCrew(t, cli, "trellis", "").SessionID)
+		first := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "trellis", "").SessionID))
 		first.reply("Ready. <!-- attn:state=idle -->")
-		opened, err := cli.PresentOpen(first.id, presentationManifest("Checkout", newRepo(t, "shop"), "HEAD", "HEAD", ""), "")
+		opened, err := cli.PresentOpen(protocol.SessionID(first.id), presentationManifest("Checkout", newRepo(t, "shop"), "HEAD", "HEAD", ""), "")
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := cli.CrewHandoff(first.id, "Review tomorrow", false, protocol.CrewDayCloseSleep); err != nil {
+		if _, err := cli.CrewHandoff(protocol.SessionID(first.id), "Review tomorrow", false, protocol.CrewDayCloseSleep); err != nil {
 			t.Fatal(err)
 		}
-		if err := cli.Unregister(first.id); err != nil {
+		if err := cli.Unregister(protocol.SessionID(first.id)); err != nil {
 			t.Fatal(err)
 		}
 		approved := testworld.Request(app, protocol.PresentSubmitRoundMessage{Cmd: protocol.CmdPresentSubmitRound, RoundID: opened.RoundID, Verdict: "approved", Handback: true}, protocol.EventPresentSubmitRoundResult, func(r protocol.PresentSubmitRoundResultMessage) bool { return r.RoundID == opened.RoundID })
@@ -88,10 +88,10 @@ func TestAPresentationHandbackReachesItsMemberAfterThePresentingDayEnds(t *testi
 		}
 		synctest.Wait()
 		nextID := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession)
-		if nextID == "" || nextID == first.id {
+		if nextID == "" || string(nextID) == first.id {
 			t.Fatalf("no successor: %q", nextID)
 		}
-		next := w.bootBubbleClaude(t, nextID)
+		next := w.bootBubbleClaude(t, string(nextID))
 		next.reply("Ready. <!-- attn:state=idle -->")
 		items := readInbox(t, cli, next.id, 0).Items
 		if len(items) != 1 || items[0].Address != "member:trellis" || !strings.Contains(items[0].Content, "attn present feedback") {

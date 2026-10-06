@@ -23,7 +23,7 @@ func (d *Daemon) handleSnoozeTurn(msg *protocol.SnoozeTurnMessage) {
 	if d == nil || d.store == nil || msg == nil {
 		return
 	}
-	sessionID := strings.TrimSpace(msg.SessionID)
+	sessionID := protocol.TrimID(msg.SessionID)
 	if sessionID == "" {
 		return
 	}
@@ -49,14 +49,14 @@ func (d *Daemon) handleWakeTurn(msg *protocol.WakeTurnMessage) {
 	if d == nil || msg == nil {
 		return
 	}
-	sessionID := strings.TrimSpace(msg.SessionID)
+	sessionID := protocol.TrimID(msg.SessionID)
 	if sessionID == "" {
 		return
 	}
 	d.wakeSnooze(sessionID, time.Now(), "user")
 }
 
-func (d *Daemon) wakeSnooze(sessionID string, at time.Time, cause string) {
+func (d *Daemon) wakeSnooze(sessionID protocol.SessionID, at time.Time, cause string) {
 	if d == nil || d.store == nil || sessionID == "" {
 		return
 	}
@@ -73,7 +73,7 @@ func (d *Daemon) wakeSnooze(sessionID string, at time.Time, cause string) {
 	d.finishSnoozeWake(sessionID, at, cause)
 }
 
-func (d *Daemon) applySnoozeWakeAt(sessionID string, deadline, at time.Time) bool {
+func (d *Daemon) applySnoozeWakeAt(sessionID protocol.SessionID, deadline, at time.Time) bool {
 	session := d.store.Get(sessionID)
 	if session == nil {
 		return false
@@ -84,7 +84,7 @@ func (d *Daemon) applySnoozeWakeAt(sessionID string, deadline, at time.Time) boo
 	return d.store.WakeTurnAt(sessionID, deadline)
 }
 
-func (d *Daemon) finishSnoozeWake(sessionID string, at time.Time, cause string) {
+func (d *Daemon) finishSnoozeWake(sessionID protocol.SessionID, at time.Time, cause string) {
 	if d.debugLogging {
 		d.logf("snooze woken: session=%s cause=%s", sessionID, cause)
 	}
@@ -98,14 +98,14 @@ func (d *Daemon) finishSnoozeWake(sessionID string, at time.Time, cause string) 
 	d.broadcastSessionStateChanged(sessionID)
 }
 
-func (d *Daemon) turnOpensAtOnWake(sessionID string, deadline time.Time) time.Time {
+func (d *Daemon) turnOpensAtOnWake(sessionID protocol.SessionID, deadline time.Time) time.Time {
 	if deadline.After(d.store.TurnStamps(sessionID).SettledAt) {
 		return deadline
 	}
 	return time.Now()
 }
 
-func (d *Daemon) currentStateClaim(sessionID string) string {
+func (d *Daemon) currentStateClaim(sessionID protocol.SessionID) string {
 	session := d.store.Get(sessionID)
 	if session == nil {
 		return ""
@@ -113,14 +113,14 @@ func (d *Daemon) currentStateClaim(sessionID string) string {
 	return string(session.State)
 }
 
-func (d *Daemon) turnOpeningFor(sessionID string, state protocol.SessionState) store.TurnOpening {
+func (d *Daemon) turnOpeningFor(sessionID protocol.SessionID, state protocol.SessionState) store.TurnOpening {
 	if !attention.OpensTurn(state) {
 		return store.TurnOpening{}
 	}
 	return store.TurnOpening{Opens: true, BreaksSnooze: attention.BreaksSnooze(state, d.stateReasons().get(sessionID))}
 }
 
-func (d *Daemon) dropEndedSnoozeWake(sessionID, state string, ended time.Time) {
+func (d *Daemon) dropEndedSnoozeWake(sessionID protocol.SessionID, state string, ended time.Time) {
 	if ended.IsZero() {
 		return
 	}
@@ -136,7 +136,7 @@ func (d *Daemon) dropEndedSnoozeWake(sessionID, state string, ended time.Time) {
 	}
 }
 
-func (d *Daemon) enqueueSnoozeWake(sessionID string, deadline time.Time) error {
+func (d *Daemon) enqueueSnoozeWake(sessionID protocol.SessionID, deadline time.Time) error {
 	runner := d.jobQueueRef()
 	if runner == nil || runner.Disabled() {
 		return jobs.ErrDisabled
@@ -146,14 +146,14 @@ func (d *Daemon) enqueueSnoozeWake(sessionID string, deadline time.Time) error {
 		delay = 0
 	}
 	_, err := runner.Enqueue(snoozeWakeKind, jobs.EnqueueOptions{
-		UniqueKey: sessionID,
+		UniqueKey: string(sessionID),
 		Payload:   snoozeWakePayload{Deadline: deadline.UTC()},
 		Delay:     delay,
 	})
 	return err
 }
 
-func (d *Daemon) scheduleSnoozeWake(sessionID string, deadline time.Time) bool {
+func (d *Daemon) scheduleSnoozeWake(sessionID protocol.SessionID, deadline time.Time) bool {
 	if err := d.enqueueSnoozeWake(sessionID, deadline); err != nil {
 		d.logf("snooze wake schedule failed: session=%s: %v", sessionID, err)
 		at := time.Now()
@@ -171,7 +171,7 @@ func (d *Daemon) snoozeWakeHandler(ctx context.Context, job *jobs.Job) (any, err
 	if d == nil || d.store == nil {
 		return nil, nil
 	}
-	sessionID := strings.TrimSpace(jobSubject(job))
+	sessionID := protocol.SessionID(strings.TrimSpace(jobSubject(job)))
 	if sessionID == "" {
 		return nil, errors.New("session_snooze_wake requires a session id")
 	}
@@ -197,20 +197,20 @@ func (d *Daemon) snoozeWakeHandler(ctx context.Context, job *jobs.Job) (any, err
 	return nil, nil
 }
 
-func (d *Daemon) removeSnoozeWake(sessionID string) {
+func (d *Daemon) removeSnoozeWake(sessionID protocol.SessionID) {
 	runner := d.jobQueueRef()
 	if runner == nil || runner.Disabled() {
 		return
 	}
-	runner.RemoveByKey(snoozeWakeKind, sessionID)
+	runner.RemoveByKey(snoozeWakeKind, string(sessionID))
 }
 
-func (d *Daemon) removeSnoozeWakeFor(sessionID string, deadline time.Time) {
+func (d *Daemon) removeSnoozeWakeFor(sessionID protocol.SessionID, deadline time.Time) {
 	runner := d.jobQueueRef()
 	if runner == nil || runner.Disabled() {
 		return
 	}
-	job, err := runner.GetByKey(snoozeWakeKind, sessionID)
+	job, err := runner.GetByKey(snoozeWakeKind, string(sessionID))
 	if err != nil || job == nil {
 		return
 	}
@@ -220,7 +220,7 @@ func (d *Daemon) removeSnoozeWakeFor(sessionID string, deadline time.Time) {
 	}
 }
 
-func (d *Daemon) clearSnoozeState(sessionID string) {
+func (d *Daemon) clearSnoozeState(sessionID protocol.SessionID) {
 	d.snoozeMu.Lock()
 	defer d.snoozeMu.Unlock()
 	d.removeSnoozeWake(sessionID)
@@ -244,7 +244,7 @@ func (d *Daemon) reconcileSnoozeWakeJobs() {
 	} else {
 		for _, job := range queued {
 			if job.Kind == snoozeWakeKind {
-				if _, live := snoozed[job.UniqueKey]; !live {
+				if _, live := snoozed[protocol.SessionID(job.UniqueKey)]; !live {
 					runner.Remove(job.ID)
 				}
 			}

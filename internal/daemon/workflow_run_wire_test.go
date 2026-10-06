@@ -27,7 +27,7 @@ func TestWorkflowRunsSurviveARestartNewestFirstEvenWithinOneSecond(t *testing.T)
 		at := second.Add(run.offset).Format(time.RFC3339Nano)
 		if _, err := cli.WorkflowRunUpsert(&protocol.WorkflowRun{
 			RunID: run.id, ScriptPath: "ship.ts", ScriptHash: "h", Status: protocol.WorkflowRunStatusCompleted,
-			ArgsJson: protocol.Ptr(`{"target":"main"}`), SessionID: protocol.Ptr(run.session), Phase: protocol.Ptr("plan"),
+			ArgsJson: protocol.Ptr(`{"target":"main"}`), SessionID: protocol.Ptr(protocol.SessionID(run.session)), Phase: protocol.Ptr("plan"),
 			Resumable: true, CreatedAt: at, UpdatedAt: at,
 		}); err != nil {
 			t.Fatalf("upsert %s: %v", run.id, err)
@@ -65,7 +65,7 @@ func TestWorkflowRunsSurviveARestartNewestFirstEvenWithinOneSecond(t *testing.T)
 		"":     {"a-fourth", "b-third", "c-second", "d-first"},
 		"ship": {"b-third", "d-first"},
 	} {
-		runs, err := cli.WorkflowRunList(session)
+		runs, err := cli.WorkflowRunList(protocol.SessionID(session))
 		if err != nil {
 			t.Fatal(err)
 		}

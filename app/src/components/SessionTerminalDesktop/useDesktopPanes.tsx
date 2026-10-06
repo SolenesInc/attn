@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import type { DesktopTileSessionOption } from './DesktopDockTile';
 import { type TerminalLayoutNode, type TileLeaf } from '../../types/desktop';
 import { delegatesByDispatcher } from '../../utils/delegationLinks';
 import type { SessionTerminalDesktopProps } from './desktopTypes';
@@ -54,7 +55,7 @@ export function useDesktopPanes({
 
   const tileSessionOptions = useMemo(() => {
     const seen = new Set<string>();
-    const options: { sessionId: string; label: string; state?: string }[] = [];
+    const options: DesktopTileSessionOption[] = [];
     for (const pane of agentPanes) {
       if (seen.has(pane.sessionId)) {
         continue;
@@ -64,6 +65,7 @@ export function useDesktopPanes({
       options.push({
         sessionId: pane.sessionId,
         label: session?.label || pane.title || pane.sessionId,
+        priority: session?.priority,
         ...(session?.state ? { state: session.state } : {}),
       });
     }

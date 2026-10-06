@@ -30,7 +30,7 @@ func TestAPluginDelegateGivenOnlyAModelRunsAtTheDefaultEffortItsDriverCanPin(t *
 			if err != nil {
 				t.Fatal(err)
 			}
-			argv := w.Launched(result.SessionID).Argv
+			argv := w.Launched(string(result.SessionID)).Argv
 			model, _ := flagValue(argv, "--model")
 			effort, _ := flagValue(argv, "--thinking")
 			if model != "spotify-glm/zai-org/GLM-5.2-FP8" || effort != row.wantEffort {

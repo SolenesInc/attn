@@ -22,30 +22,30 @@ import (
 // Control-connection turn reports arrive in order, so no driver run fences them.
 const codexLinkEpochPrefix = "codex-app-server:"
 
-func (r *codexShared) launchedShared(sessionID string) bool {
+func (r *codexShared) launchedShared(sessionID protocol.SessionID) bool {
 	intent, ok := r.d.store.LaunchIntent(sessionID)
 	return ok && intent.CodexShared
 }
 
-func (r *codexShared) conversation(sessionID string) string {
+func (r *codexShared) conversation(sessionID protocol.SessionID) string {
 	if !r.launchedShared(sessionID) {
 		return ""
 	}
 	return r.d.store.GetSessionConversation(sessionID).NativeID
 }
 
-func (r *codexShared) hidden(sessionID string) bool {
+func (r *codexShared) hidden(sessionID protocol.SessionID) bool {
 	if len(r.d.terminals().Of(harness.SessionID(sessionID))) > 0 {
 		return false
 	}
 	return r.d.store.Get(sessionID) != nil && r.conversation(sessionID) != ""
 }
 
-func (r *codexShared) keepsWhenLeft(sessionID string) bool {
+func (r *codexShared) keepsWhenLeft(sessionID protocol.SessionID) bool {
 	return r.conversation(sessionID) != ""
 }
 
-func (r *codexShared) holder(profile, conversation string) string {
+func (r *codexShared) holder(profile, conversation string) protocol.SessionID {
 	sessionID := r.d.store.OpenSessionHolding(profile, conversation)
 	if sessionID == "" || !r.launchedShared(sessionID) {
 		return ""
@@ -72,7 +72,7 @@ func (d *Daemon) decorateLedgerEntryHidden(entry *protocol.SessionLedgerEntry) {
 	}
 }
 
-func (r *codexShared) shownThread(sessionID string) string {
+func (r *codexShared) shownThread(sessionID protocol.SessionID) string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, t := range r.d.terminals().Of(harness.SessionID(sessionID)) {
@@ -225,7 +225,7 @@ func (q *codexEvents) run(d *Daemon, f func()) {
 	}
 }
 
-func (r *codexShared) report(s *codexServer, sessionID string, turn harness.Turn, restated bool) {
+func (r *codexShared) report(s *codexServer, sessionID protocol.SessionID, turn harness.Turn, restated bool) {
 	s.mu.Lock()
 	epoch := s.epoch
 	s.mu.Unlock()
@@ -283,7 +283,7 @@ func (r *codexShared) restateHiddenStates(s *codexServer, client *codexshared.Cl
 }
 
 // The rollout moves to archived_sessions; read its usage to the end after archiving.
-func (r *codexShared) archive(sessionID string) {
+func (r *codexShared) archive(sessionID protocol.SessionID) {
 	conversation := r.conversation(sessionID)
 	session := r.d.store.Get(sessionID)
 	if conversation == "" || session == nil {
@@ -309,7 +309,7 @@ func (r *codexShared) archive(sessionID string) {
 }
 
 // A close can come before the watcher's first read.
-func (r *codexShared) settleUsage(sessionID string) {
+func (r *codexShared) settleUsage(sessionID protocol.SessionID) {
 	path := r.d.store.GetSessionConversation(sessionID).TranscriptPath
 	if path == "" {
 		return
@@ -320,7 +320,7 @@ func (r *codexShared) settleUsage(sessionID string) {
 	}
 }
 
-func (r *codexShared) archivedByClose(sessionID, conversation string) bool {
+func (r *codexShared) archivedByClose(sessionID protocol.SessionID, conversation string) bool {
 	return conversation != "" && r.launchedShared(sessionID) && transcript.FindArchivedCodexTranscript(conversation) != ""
 }
 
@@ -342,7 +342,7 @@ func (r *codexShared) unarchive(profile, conversation string) error {
 	return nil
 }
 
-func (r *codexShared) showSession(sessionID string) error {
+func (r *codexShared) showSession(sessionID protocol.SessionID) error {
 	session := r.d.store.Get(sessionID)
 	intent, ok := r.d.store.LaunchIntent(sessionID)
 	conversation := r.conversation(sessionID)
@@ -361,7 +361,7 @@ func (r *codexShared) showSession(sessionID string) error {
 	return nil
 }
 
-func (r *codexShared) movedOn(sessionID string, t harness.TerminalID) bool {
+func (r *codexShared) movedOn(sessionID protocol.SessionID, t harness.TerminalID) bool {
 	r.mu.Lock()
 	v := r.views[t]
 	thread := ""
@@ -376,7 +376,7 @@ func (r *codexShared) movedOn(sessionID string, t harness.TerminalID) bool {
 	return conversation != "" && conversation != thread
 }
 
-func (d *Daemon) hide(sessionID string, t harness.TerminalID) {
+func (d *Daemon) hide(sessionID protocol.SessionID, t harness.TerminalID) {
 	lifecycle := d.sessionLifecycleLockFor(sessionID)
 	lifecycle.Lock()
 	unlock := d.lockTerminalEnds(sessionID)
@@ -386,7 +386,7 @@ func (d *Daemon) hide(sessionID string, t harness.TerminalID) {
 	d.dropTerminal(t)
 	unlock()
 	lifecycle.Unlock()
-	d.publishFact(FactSessionReregistered, sessionID, nil)
+	d.publishFact(FactSessionReregistered, string(sessionID), nil)
 }
 
 func (r *codexShared) observeName(s *codexServer, m codexshared.Message) {
@@ -405,12 +405,12 @@ func (r *codexShared) observeName(s *codexServer, m codexshared.Message) {
 			return
 		}
 		r.d.store.UpdateSessionLabel(sessionID, name)
-		r.d.publishFact(FactSessionRenamed, sessionID, nil)
+		r.d.publishFact(FactSessionRenamed, string(sessionID), nil)
 	})
 }
 
 // attn's label is the one that counts.
-func (r *codexShared) mirrorName(sessionID, label string) {
+func (r *codexShared) mirrorName(sessionID protocol.SessionID, label string) {
 	conversation := r.conversation(sessionID)
 	session := r.d.store.Get(sessionID)
 	if conversation == "" || session == nil {

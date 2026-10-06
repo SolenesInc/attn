@@ -134,7 +134,7 @@ func TestAttachRefusesToReviveWhatItShouldNot(t *testing.T) {
 	app = attachReviveMakeRecoverable(t, w, app, recoverable, w.Launched(recoverable), false)
 	exited := w.Spawn(app, fakeagent.Claude, w.Path("blog"))
 	w.Launched(exited).Exit(0)
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == exited })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == exited })
 	recoverableTerminal, exitedTerminal := app.Terminal(recoverable), app.Terminal(exited)
 
 	for _, tc := range []struct {
@@ -144,18 +144,18 @@ func TestAttachRefusesToReviveWhatItShouldNot(t *testing.T) {
 	}{
 		{
 			name:    "without the revive policy",
-			attach:  protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: recoverableTerminal},
+			attach:  protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(recoverableTerminal)},
 			refusal: "session not found",
 		},
 		{
 			name: "without geometry",
-			attach: protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: recoverableTerminal,
+			attach: protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(recoverableTerminal),
 				AttachPolicy: protocol.Ptr(protocol.AttachPolicyRevive), Cols: protocol.Ptr(0), Rows: protocol.Ptr(24)},
 			refusal: "revive requires pty geometry",
 		},
 		{
 			name: "a session that is not recoverable",
-			attach: protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: exitedTerminal,
+			attach: protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(exitedTerminal),
 				AttachPolicy: protocol.Ptr(protocol.AttachPolicyRevive), Cols: protocol.Ptr(80), Rows: protocol.Ptr(24)},
 			refusal: "session not recoverable",
 		},
@@ -181,7 +181,7 @@ func TestAFailedReviveLeavesTheSessionRecoverableAndTheConnectionResponsive(t *t
 	run.Prompted()
 	run.Reply("Error: the registry refused the push <!-- attn:state=idle -->")
 	run.Exit(1)
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == session })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
 	w.restart()
 	app = w.App()
 	cli := w.Client()
@@ -198,10 +198,10 @@ func TestAFailedReviveLeavesTheSessionRecoverableAndTheConnectionResponsive(t *t
 	}
 
 	terminal := app.Terminal(session)
-	app.Send(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal,
+	app.Send(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(terminal),
 		AttachPolicy: protocol.Ptr(protocol.AttachPolicyRevive), Cols: protocol.Ptr(80), Rows: protocol.Ptr(24)})
 	listing := browseForPicker(app, browsed+string(os.PathSeparator), nil)
-	failed := testworld.Await(app, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })
+	failed := testworld.Await(app, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return string(r.ID) == terminal })
 
 	if failed.Success || !strings.Contains(protocol.Deref(failed.Error), cwd) {
 		t.Errorf("reviving in a removed directory answered %+v, want a failure naming %s", failed, cwd)
@@ -228,7 +228,7 @@ func attachReviveMakeRecoverable(t *testing.T, w *world, app *testworld.Peer, se
 	w.restart()
 	app = w.App()
 	for _, s := range app.Initial.Sessions {
-		if s.ID == session && s.State == protocol.SessionStateRecoverable {
+		if string(s.ID) == session && s.State == protocol.SessionStateRecoverable {
 			return app
 		}
 	}
@@ -239,9 +239,9 @@ func attachReviveMakeRecoverable(t *testing.T, w *world, app *testworld.Peer, se
 func attachRevive(app *testworld.Peer, session string, cols, rows int) protocol.AttachResultMessage {
 	app.T.Helper()
 	terminal := app.Terminal(session)
-	return testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal,
+	return testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(terminal),
 		AttachPolicy: protocol.Ptr(protocol.AttachPolicyRevive), Cols: protocol.Ptr(cols), Rows: protocol.Ptr(rows)},
-		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })
+		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return string(r.ID) == terminal })
 }
 
 func attachRevivePinnedClaude(t *testing.T, w *world) string {
@@ -277,5 +277,5 @@ location: {type: directory, path: %q}
 	if !run.Success || protocol.Deref(run.Run.SessionID) == "" {
 		t.Fatalf("automation_run = %+v, want a delivered run with its session", run)
 	}
-	return protocol.Deref(run.Run.SessionID)
+	return string(protocol.Deref(run.Run.SessionID))
 }

@@ -1,3 +1,6 @@
+import { PROTOCOL_VERSION } from '../types/protocolVersion';
+export { PROTOCOL_VERSION } from '../types/protocolVersion';
+import { handleCommandUsageEvent } from './daemonCommandUsageEvents';
 import { handleLaunchDesktopEvent } from './daemonLaunchDesktopEvents';
 import { handleDelegationDaemonEvent, type DelegationSettingsState, type DelegationModelCatalog } from './daemonDelegationEvents';
 import {
@@ -15,6 +18,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { isTauri } from '@tauri-apps/api/core';
 import { readMigrationFailureMarker, type MigrationFailure } from '../utils/migrationFailure';
 import type {
+  CommandUsage,
   Session as GeneratedSession,
   PR as GeneratedPR,
   Worktree as GeneratedWorktree,
@@ -307,8 +311,6 @@ export interface RateLimitState {
   resetAt: Date;
 }
 
-// Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '352';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -823,8 +825,6 @@ export function useDaemonSocket({
   const MAX_RECONNECTS_BEFORE_PAUSE = 8;
   const MAX_RECONNECT_DELAY_MS = 5000;
   const RECOVERY_NOTICE = 'Daemon is recovering PTY sessions. Please retry in a moment.';
-  const DAEMON_RESTART_NOTICE = 'Restarting daemon...';
-  const daemonRestartInProgressRef = useRef(false);
 
   const showRecoveringNoticeForCommand = useCallback((cmd: string | undefined) => {
     if (!cmd) return;
@@ -1100,7 +1100,6 @@ export function useDaemonSocket({
 
     ws.onopen = () => {
       console.log('[Daemon] WebSocket connected');
-      daemonRestartInProgressRef.current = false;
       setConnectionError(null);
       useProfilesStore.getState().connectionOpened();
       connectionGenerationRef.current += 1;
@@ -1205,33 +1204,7 @@ export function useDaemonSocket({
             daemonInstanceIDRef.current = data.daemon_instance_id || '';
             if (data.protocol_version && data.protocol_version !== PROTOCOL_VERSION) {
               console.error(`[Daemon] Protocol version mismatch: daemon=${data.protocol_version}, client=${PROTOCOL_VERSION}`);
-              const daemonVersion = Number(data.protocol_version);
-              const clientVersion = Number(PROTOCOL_VERSION);
-              const activeSessions = data.sessions?.length || 0;
-              if (!Number.isNaN(daemonVersion) && !Number.isNaN(clientVersion) && daemonVersion < clientVersion) {
-                if (isTauri()) {
-                  setConnectionError(DAEMON_RESTART_NOTICE);
-                  if (!daemonRestartInProgressRef.current) {
-                    daemonRestartInProgressRef.current = true;
-                    console.log(`[Daemon] Restarting older daemon ${data.protocol_version} to match app protocol ${PROTOCOL_VERSION}`);
-                    void invoke('ensure_daemon').catch((err) => {
-                      console.error('[Daemon] Failed to restart daemon after protocol mismatch:', err);
-                      daemonRestartInProgressRef.current = false;
-                      setConnectionError(
-                        `New daemon version available. Restart when ready (${activeSessions} active sessions may be lost). daemon v${data.protocol_version}, app v${PROTOCOL_VERSION}`
-                      );
-                      circuitOpenRef.current = true;
-                    });
-                  }
-                  ws.close();
-                  return;
-                }
-                setConnectionError(
-                  `New daemon version available. Restart when ready (${activeSessions} active sessions may be lost). daemon v${data.protocol_version}, app v${PROTOCOL_VERSION}`
-                );
-              } else {
-                setConnectionError(`Version mismatch: daemon v${data.protocol_version}, app v${PROTOCOL_VERSION}. Restart/reinstall required.`);
-              }
+              setConnectionError(`Version mismatch: daemon v${data.protocol_version}, app v${PROTOCOL_VERSION}. Restart/reinstall required.`);
               circuitOpenRef.current = true;
               ws.close();
               return;
@@ -2576,6 +2549,7 @@ export function useDaemonSocket({
             if (handleCrewDaemonEvent(data, pending)) break;
             if (handleProfileDaemonEvent(data, pending)) break;
             if (handleLaunchDesktopEvent(data, pending)) break;
+            if (handleCommandUsageEvent(data, pending)) break;
             if (handleAutoModeDaemonEvent(data, pending)) break;
             if (handleConversationDaemonEvent(data, pending, () => setKeptConversationsChangeSignal((signal) => signal + 1))) break;
             if (handleWorktreeDaemonEvent(data, pending, {
@@ -2663,7 +2637,6 @@ export function useDaemonSocket({
       clearTimeout(circuitResetTimeoutRef.current);
       circuitResetTimeoutRef.current = null;
     }
-    daemonRestartInProgressRef.current = false;
     circuitOpenRef.current = false;
     reconnectAttemptsRef.current = 0;
     reconnectDelayRef.current = 1000;
@@ -4153,6 +4126,12 @@ export function useDaemonSocket({
   const sendFsIndex = useCallback((root?: string, extensions?: string[]): Promise<FsIndexResult> =>
     sendRequest<FsIndexResult>('fs_index', { ...(root ? { root } : {}), ...(extensions && extensions.length > 0 ? { extensions } : {}) }, 'Filesystem index timed out'), [sendRequest]);
 
+  const sendGetCommandUsage = useCallback((profileId: string): Promise<CommandUsage[]> =>
+    sendRequest('get_command_usage', { profile_id: profileId }, 'Reading command history timed out'), [sendRequest]);
+
+  const sendRecordCommandUsage = useCallback((profileId: string, commandId: string): Promise<boolean> =>
+    sendRequest('record_command_usage', { profile_id: profileId, command_id: commandId }, 'Saving command history timed out'), [sendRequest]);
+
   const sendRecentFiles = useCallback((limit?: number, root?: string): Promise<RecentFile[]> => {
     const requestId = nextRequestID('recent_files');
     const key = `recent_files:${requestId}`;
@@ -4286,6 +4265,12 @@ export function useDaemonSocket({
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ cmd: 'settle_turn', session_id: sessionId }));
+  }, []);
+
+  const sendSetSessionPriority = useCallback((sessionId: string, priority: boolean) => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ cmd: 'set_session_priority', session_id: sessionId, priority }));
   }, []);
 
   const sendSnoozeTurn = useCallback((sessionId: string, until: Date) => {
@@ -4980,6 +4965,8 @@ export function useDaemonSocket({
     sendFsWatch,
     sendFsUnwatch,
     sendFsIndex,
+    sendGetCommandUsage,
+    sendRecordCommandUsage,
     sendRecentFiles,
     sendGetRecentLocations,
     sendBrowseDirectory,
@@ -5011,6 +4998,7 @@ export function useDaemonSocket({
     sendAutoModeEnvNotes,
     sendBusSetConsumerEnabled,
     sendSettleTurn,
+    sendSetSessionPriority,
     sendSnoozeTurn,
     sendWakeTurn,
     sendCancelCountdown,

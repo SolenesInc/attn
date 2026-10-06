@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/docstore"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 const Surface = "the garden"
@@ -45,34 +46,34 @@ type Var struct {
 }
 
 type Seed struct {
-	ID              string `json:"id"`
-	ProfileID       string `json:"profile_id"`
-	Title           string `json:"title"`
-	Body            string `json:"body"`
-	Status          string `json:"status"`
-	StepSlug        string `json:"step_slug"`
-	PlanterSession  string `json:"planter_session"`
-	PlanterMember   string `json:"planter_member"`
-	TenderSession   string `json:"tender_session"`
-	TenderMember    string `json:"tender_member"`
-	LastExecutionID string `json:"last_execution_id,omitempty"`
-	StateChangedAt  string `json:"state_changed_at,omitempty"`
-	Edges           []Edge `json:"edges"`
-	Template        bool   `json:"template"`
-	Gate            bool   `json:"gate"`
-	Vars            []Var  `json:"vars"`
-	Reason          string `json:"reason,omitempty"`
+	ID              string             `json:"id"`
+	ProfileID       string             `json:"profile_id"`
+	Title           string             `json:"title"`
+	Body            string             `json:"body"`
+	Status          string             `json:"status"`
+	StepSlug        string             `json:"step_slug"`
+	PlanterSession  protocol.SessionID `json:"planter_session"`
+	PlanterMember   string             `json:"planter_member"`
+	TenderSession   protocol.SessionID `json:"tender_session"`
+	TenderMember    string             `json:"tender_member"`
+	LastExecutionID protocol.SessionID `json:"last_execution_id,omitempty"`
+	StateChangedAt  string             `json:"state_changed_at,omitempty"`
+	Edges           []Edge             `json:"edges"`
+	Template        bool               `json:"template"`
+	Gate            bool               `json:"gate"`
+	Vars            []Var              `json:"vars"`
+	Reason          string             `json:"reason,omitempty"`
 
 	HarvestWhen            *HarvestCondition `json:"harvest_when,omitempty"`
 	HarvestWhenPullRequest string            `json:"harvest_when_pull_request"`
 }
 
 type HarvestCondition struct {
-	PullRequest  string `json:"pull_request"`
-	URL          string `json:"url"`
-	SetAt        string `json:"set_at"`
-	SetBySession string `json:"set_by_session,omitempty"`
-	SetByMember  string `json:"set_by_member,omitempty"`
+	PullRequest  string             `json:"pull_request"`
+	URL          string             `json:"url"`
+	SetAt        string             `json:"set_at"`
+	SetBySession protocol.SessionID `json:"set_by_session,omitempty"`
+	SetByMember  string             `json:"set_by_member,omitempty"`
 }
 
 func ValidateHarvestCondition(c HarvestCondition) error {
@@ -115,22 +116,22 @@ func NotesSchema() docstore.CollectionSchema {
 }
 
 type Dispatch struct {
-	SessionID         string `json:"session_id"`
-	Crown             string `json:"crown"`
-	DispatcherSession string `json:"dispatcher_session,omitempty"`
-	DispatcherMember  string `json:"dispatcher_member,omitempty"`
-	Cwd               string `json:"cwd,omitempty"`
-	Agent             string `json:"agent,omitempty"`
-	HostKind          string `json:"host_kind,omitempty"`
-	EndpointID        string `json:"endpoint_id,omitempty"`
-	RepositoryRoot    string `json:"repository_root,omitempty"`
-	RepositorySubdir  string `json:"repository_subdir,omitempty"`
-	Branch            string `json:"branch,omitempty"`
-	CapturedAt        string `json:"captured_at,omitempty"`
-	SupersededBy      string `json:"superseded_by,omitempty"`
-	OperationID       string `json:"operation_id,omitempty"`
-	FromChief         bool   `json:"from_chief,omitempty"`
-	Resume            string `json:"resume,omitempty"`
+	SessionID         protocol.SessionID `json:"session_id"`
+	Crown             string             `json:"crown"`
+	DispatcherSession protocol.SessionID `json:"dispatcher_session,omitempty"`
+	DispatcherMember  string             `json:"dispatcher_member,omitempty"`
+	Cwd               string             `json:"cwd,omitempty"`
+	Agent             string             `json:"agent,omitempty"`
+	HostKind          string             `json:"host_kind,omitempty"`
+	EndpointID        string             `json:"endpoint_id,omitempty"`
+	RepositoryRoot    string             `json:"repository_root,omitempty"`
+	RepositorySubdir  string             `json:"repository_subdir,omitempty"`
+	Branch            string             `json:"branch,omitempty"`
+	CapturedAt        string             `json:"captured_at,omitempty"`
+	SupersededBy      protocol.SessionID `json:"superseded_by,omitempty"`
+	OperationID       string             `json:"operation_id,omitempty"`
+	FromChief         bool               `json:"from_chief,omitempty"`
+	Resume            string             `json:"resume,omitempty"`
 }
 
 const (

@@ -40,24 +40,24 @@ type sessionActivityRun struct {
 	ResumeID   string
 }
 
-func (d *Daemon) sessionActivityRunRecord(sessionID string) sessionActivityRun {
+func (d *Daemon) sessionActivityRunRecord(sessionID protocol.SessionID) sessionActivityRun {
 	d.sessionActivityRunsMu.Lock()
 	defer d.sessionActivityRunsMu.Unlock()
 	return d.sessionActivityRuns[sessionID]
 }
 
-func (d *Daemon) noteSessionActivityRun(sessionID string, mutate func(*sessionActivityRun)) {
+func (d *Daemon) noteSessionActivityRun(sessionID protocol.SessionID, mutate func(*sessionActivityRun)) {
 	d.sessionActivityRunsMu.Lock()
 	defer d.sessionActivityRunsMu.Unlock()
 	if d.sessionActivityRuns == nil {
-		d.sessionActivityRuns = make(map[string]sessionActivityRun)
+		d.sessionActivityRuns = make(map[protocol.SessionID]sessionActivityRun)
 	}
 	record := d.sessionActivityRuns[sessionID]
 	mutate(&record)
 	d.sessionActivityRuns[sessionID] = record
 }
 
-func (d *Daemon) forgetSessionActivityRuns(live map[string]struct{}) {
+func (d *Daemon) forgetSessionActivityRuns(live map[protocol.SessionID]struct{}) {
 	d.sessionActivityRunsMu.Lock()
 	defer d.sessionActivityRunsMu.Unlock()
 	for id := range d.sessionActivityRuns {
@@ -85,7 +85,7 @@ func (d *Daemon) sessionActivityScanHandler(context.Context, *jobs.Job) (any, er
 	}
 
 	now := time.Now()
-	live := make(map[string]struct{})
+	live := make(map[protocol.SessionID]struct{})
 	var due []string
 	for _, session := range d.store.List("") {
 		live[session.ID] = struct{}{}
@@ -101,7 +101,7 @@ func (d *Daemon) sessionActivityScanHandler(context.Context, *jobs.Job) (any, er
 		if !d.transcriptMovedSince(session, latest(stored.At, run.ObservedAt)) {
 			continue
 		}
-		due = append(due, session.ID)
+		due = append(due, string(session.ID))
 	}
 	d.forgetSessionActivityRuns(live)
 	if len(due) == 0 {
@@ -112,7 +112,7 @@ func (d *Daemon) sessionActivityScanHandler(context.Context, *jobs.Job) (any, er
 		return nil, nil
 	}
 	for _, sessionID := range due {
-		d.enqueueSessionActivity(sessionID)
+		d.enqueueSessionActivity(protocol.SessionID(sessionID))
 	}
 	return nil, nil
 }
@@ -155,8 +155,8 @@ type sessionActivityPayload struct {
 	ResumeID   string `json:"resume_id,omitempty"`
 }
 
-func (d *Daemon) enqueueSessionActivity(sessionID string) {
-	sessionID = strings.TrimSpace(sessionID)
+func (d *Daemon) enqueueSessionActivity(sessionID protocol.SessionID) {
+	sessionID = protocol.TrimID(sessionID)
 	if sessionID == "" {
 		return
 	}
@@ -180,7 +180,7 @@ func (d *Daemon) enqueueSessionActivity(sessionID string) {
 		return
 	}
 	if _, err := runner.Enqueue(sessionActivityKind, jobs.EnqueueOptions{
-		UniqueKey: sessionID,
+		UniqueKey: string(sessionID),
 		Payload: sessionActivityPayload{
 			Transcript: transcriptPath,
 			ResumeID:   resumeID,
@@ -194,13 +194,13 @@ func sessionGeneratesActivity(session *protocol.Session) bool {
 	if session == nil {
 		return false
 	}
-	if session.ParentSessionID != nil && strings.TrimSpace(*session.ParentSessionID) != "" {
+	if session.ParentSessionID != nil && protocol.TrimID(*session.ParentSessionID) != "" {
 		return false
 	}
 	if session.EndpointID != nil && strings.TrimSpace(*session.EndpointID) != "" {
 		return false
 	}
-	driver := agentdriver.Get(string(session.Agent))
+	driver := agentdriver.Get(session.Agent)
 	if driver == nil {
 		return false
 	}
@@ -212,7 +212,7 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 	if !d.activityEnabled() || d.PresenceTier() == PresenceAway {
 		return nil, nil
 	}
-	sessionID := strings.TrimSpace(jobSubject(job))
+	sessionID := protocol.SessionID(strings.TrimSpace(jobSubject(job)))
 	if sessionID == "" {
 		return nil, errors.New("session_activity requires a session id")
 	}
@@ -241,7 +241,7 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 	if stored.Cursor == "" {
 		return nil, d.reseedSessionActivity(sessionID, resumeID, transcriptPath)
 	}
-	window, err := activity.Read(transcriptPath, string(session.Agent), stored.Cursor)
+	window, err := activity.Read(transcriptPath, session.Agent, stored.Cursor)
 	switch {
 	case err == nil:
 	case errors.Is(err, transcript.ErrCursorMismatch) ||
@@ -321,12 +321,12 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 	if !d.store.UpdateSessionActivityForConversation(sessionID, resumeID, line, time.Now(), window.NextCursor) {
 		return nil, nil
 	}
-	d.publishFact(FactSessionActivityChanged, sessionID, nil)
+	d.publishFact(FactSessionActivityChanged, string(sessionID), nil)
 	d.logf("session_activity: session=%s agent=%s model=%s line=%q", sessionID, config.Agent, config.Model, line)
 	return nil, nil
 }
 
-func (d *Daemon) reseedSessionActivity(sessionID, resumeID, transcriptPath string) error {
+func (d *Daemon) reseedSessionActivity(sessionID protocol.SessionID, resumeID string, transcriptPath string) error {
 	head, err := activity.SeedCursor(transcriptPath)
 	if err != nil {
 		return fmt.Errorf("session_activity: seed cursor for %s: %w", transcriptPath, err)
@@ -335,7 +335,7 @@ func (d *Daemon) reseedSessionActivity(sessionID, resumeID, transcriptPath strin
 	return nil
 }
 
-func (d *Daemon) advanceSessionActivityCursor(sessionID, resumeID string, stored store.SessionActivity, next string) error {
+func (d *Daemon) advanceSessionActivityCursor(sessionID protocol.SessionID, resumeID string, stored store.SessionActivity, next string) error {
 	if next == "" || next == stored.Cursor {
 		return nil
 	}
@@ -349,7 +349,7 @@ func (d *Daemon) clearAllSessionActivity() {
 			continue
 		}
 		d.store.UpdateSessionActivity(session.ID, "", time.Time{}, "")
-		d.publishFact(FactSessionActivityChanged, session.ID, nil)
+		d.publishFact(FactSessionActivityChanged, string(session.ID), nil)
 	}
 }
 
@@ -382,15 +382,15 @@ func (d *Daemon) handleActivityStatus(conn net.Conn, _ *protocol.ActivityStatusM
 }
 
 func (d *Daemon) handleClearSessionActivity(conn net.Conn, msg *protocol.ClearSessionActivityMessage) {
-	sessionID := strings.TrimSpace(msg.ID)
+	sessionID := protocol.TrimID(msg.ID)
 	if sessionID == "" {
 		d.sendError(conn, "clear session activity: id is required")
 		return
 	}
 	if !d.store.UpdateSessionActivity(sessionID, "", time.Time{}, "") {
-		d.sendError(conn, "clear session activity: session not found: "+sessionID)
+		d.sendError(conn, string("clear session activity: session not found: "+sessionID))
 		return
 	}
-	d.publishFact(FactSessionActivityChanged, sessionID, nil)
+	d.publishFact(FactSessionActivityChanged, string(sessionID), nil)
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true})
 }

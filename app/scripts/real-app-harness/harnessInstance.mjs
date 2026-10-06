@@ -247,6 +247,8 @@ const ROUTING_OVERRIDE_ENV = [
   'ATTN_DB_PATH',
   'ATTN_CONFIG_PATH',
   'ATTN_PLUGIN_DIR',
+  'ATTN_TERMINAL_ID',
+  'ATTN_SESSION_ID',
 ];
 
 let routingDropAnnounced = false;

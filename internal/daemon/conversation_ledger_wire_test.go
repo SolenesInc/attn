@@ -33,11 +33,11 @@ func TestConversationKeepPassNotifiesOnceForMultipleCopies(t *testing.T) {
 	var paths []string
 	for _, name := range []string{"one", "two"} {
 		delegated := seedResumeDelegate(t, w, fakeagent.Claude, name)
-		run := w.Launched(delegated.SessionID)
+		run := w.Launched(string(delegated.SessionID))
 		run.Prompted()
 		run.Reply("source answer <!-- attn:state=waiting_input -->")
 		paths = append(paths, transcript.FindClaudeTranscript(run.ConversationID))
-		closePane(app, sessionPane{session: delegated.SessionID})
+		closePane(app, sessionPane{session: string(delegated.SessionID)})
 		testworld.AwaitTaskDone(app, "conversation_keep")
 	}
 	before := conversationRows(t, cli, false)
@@ -87,11 +87,11 @@ func TestConversationPinCopiesUnreferencedClosedSessionAndUnkeepExpires(t *testi
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	delegated := seedResumeDelegate(t, w, fakeagent.Claude, "api")
-	first := w.Launched(delegated.SessionID)
+	first := w.Launched(string(delegated.SessionID))
 	first.Prompted()
-	lifeMove(t, cli, delegated.SessionID, delegated.SeedID, "wither", "finished", "")
+	lifeMove(t, cli, string(delegated.SessionID), delegated.SeedID, "wither", "finished", "")
 	testworld.AwaitTaskDone(app, "conversation_keep")
-	closePane(app, sessionPane{session: delegated.SessionID})
+	closePane(app, sessionPane{session: string(delegated.SessionID)})
 	testworld.AwaitTaskDone(app, "conversation_keep")
 	if rows := conversationRows(t, cli, false); len(rows.Rows) != 0 {
 		t.Fatalf("unreferenced closed session was copied: %+v", rows)
@@ -110,7 +110,7 @@ func TestConversationPinCopiesUnreferencedClosedSessionAndUnkeepExpires(t *testi
 	if pinned.Count != 1 || pinned.StoredBytes != pinned.Rows[0].Kept.Bytes || pinned.NextDeleteAfter != nil {
 		t.Fatalf("pinned totals: %+v", pinned)
 	}
-	if err := cli.KeptConversationKeep(delegated.SessionID, false); err != nil {
+	if err := cli.KeptConversationKeep(string(delegated.SessionID), false); err != nil {
 		t.Fatal(err)
 	}
 	testworld.AwaitTaskDone(app, "conversation_keep")
@@ -136,11 +136,11 @@ func TestConversationPinSurvivesSeedWitherAndRestart(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	delegated := seedResumeDelegate(t, w, fakeagent.Claude, "api")
-	first := w.Launched(delegated.SessionID)
+	first := w.Launched(string(delegated.SessionID))
 	first.Prompted()
-	closePane(app, sessionPane{session: delegated.SessionID})
+	closePane(app, sessionPane{session: string(delegated.SessionID)})
 	testworld.AwaitTaskDone(app, "conversation_keep")
-	pin := testworld.Request(app, protocol.KeptConversationKeepMessage{Cmd: protocol.CmdKeptConversationKeep, SessionID: delegated.SessionID, Keep: true, RequestID: protocol.Ptr("pin")}, protocol.EventKeptConversationKeepResult, func(r protocol.KeptConversationKeepResultEvent) bool { return protocol.Deref(r.RequestID) == "pin" })
+	pin := testworld.Request(app, protocol.KeptConversationKeepMessage{Cmd: protocol.CmdKeptConversationKeep, SessionID: string(delegated.SessionID), Keep: true, RequestID: protocol.Ptr("pin")}, protocol.EventKeptConversationKeepResult, func(r protocol.KeptConversationKeepResultEvent) bool { return protocol.Deref(r.RequestID) == "pin" })
 	if !pin.Success {
 		t.Fatalf("pin: %+v", pin)
 	}
@@ -165,19 +165,19 @@ func TestConversationForgetRefusesOpenSeedsThenDeletesOnlyAttnsCopy(t *testing.T
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	delegated := seedResumeDelegate(t, w, fakeagent.Claude, "api")
-	first := w.Launched(delegated.SessionID)
+	first := w.Launched(string(delegated.SessionID))
 	first.Prompted()
-	closePane(app, sessionPane{session: delegated.SessionID})
+	closePane(app, sessionPane{session: string(delegated.SessionID)})
 	testworld.AwaitTaskDone(app, "conversation_keep")
 	path := transcript.FindClaudeTranscript(first.ConversationID)
 	original, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := cli.KeptConversationForget(delegated.SessionID); err == nil || !strings.Contains(err.Error(), delegated.SeedID) || !strings.Contains(err.Error(), "harvest or wither") {
+	if err := cli.KeptConversationForget(string(delegated.SessionID)); err == nil || !strings.Contains(err.Error(), delegated.SeedID) || !strings.Contains(err.Error(), "harvest or wither") {
 		t.Fatalf("open reference refusal: %v", err)
 	}
-	if err := cli.KeptConversationKeep(delegated.SessionID, true); err != nil {
+	if err := cli.KeptConversationKeep(string(delegated.SessionID), true); err != nil {
 		t.Fatal(err)
 	}
 	testworld.AwaitTaskDone(app, "conversation_keep")
@@ -227,11 +227,11 @@ func TestConversationForgetRefusesOpenSeedsThenDeletesOnlyAttnsCopy(t *testing.T
 	if !resumed.Success {
 		t.Fatalf("native files should still resume after forget: %+v", resumed)
 	}
-	next := w.Launched(resumed.ID)
+	next := w.Launched(string(resumed.ID))
 	if !next.Resumed || next.ConversationID != first.ConversationID {
 		t.Fatalf("native resume: %+v", next)
 	}
-	closePane(app, sessionPane{session: resumed.ID})
+	closePane(app, sessionPane{session: string(resumed.ID)})
 	testworld.AwaitTaskDone(app, "conversation_keep")
 	if rows := conversationRows(t, cli, false); len(rows.Rows) != 0 {
 		t.Fatalf("forget left pin: %+v", rows)
@@ -243,7 +243,7 @@ func TestConversationForgetRefusesOpenSeedsThenDeletesOnlyAttnsCopy(t *testing.T
 	if rows := conversationRows(t, cli, false); rows.PendingCount != 0 {
 		t.Fatalf("missing conversation left a pending pin: %+v", rows)
 	}
-	verdict := reopenVerdict(t, cli, delegated.SessionID)
+	verdict := reopenVerdict(t, cli, string(delegated.SessionID))
 	date := conversationDateForTest(protocol.Deref(tombstone.DeletedAt))
 	if verdict.Reopenable || !strings.Contains(protocol.Deref(verdict.Reason), "you deleted attn's copy") || !strings.Contains(protocol.Deref(verdict.Reason), date) {
 		t.Fatalf("forget resume refusal: %+v", verdict)
@@ -279,14 +279,14 @@ func TestConversationIdentifiersRefuseAmbiguityAndListTotalsCountOnlyLiveCopies(
 	total := 0
 	for _, name := range []string{"one", "two"} {
 		delegated := seedResumeDelegate(t, w, fakeagent.Claude, name)
-		run := w.Launched(delegated.SessionID)
+		run := w.Launched(string(delegated.SessionID))
 		run.Prompted()
 		run.Reply("on it <!-- attn:state=waiting_input -->")
-		closePane(app, sessionPane{session: delegated.SessionID})
+		closePane(app, sessionPane{session: string(delegated.SessionID)})
 		testworld.AwaitTaskDone(app, "conversation_keep")
 		lifeMove(t, cli, "", delegated.SeedID, "wither", "finished", "")
 		testworld.AwaitTaskDone(app, "conversation_keep")
-		if err := cli.KeptConversationKeep(delegated.SessionID, true); err != nil {
+		if err := cli.KeptConversationKeep(string(delegated.SessionID), true); err != nil {
 			t.Fatal(err)
 		}
 		testworld.AwaitTaskDone(app, "conversation_keep")
@@ -299,7 +299,7 @@ func TestConversationIdentifiersRefuseAmbiguityAndListTotalsCountOnlyLiveCopies(
 	if before.Count != 2 || before.StoredBytes != total {
 		t.Fatalf("two-copy totals: %+v, sum=%d", before, total)
 	}
-	collision := w.Spawn(app, fakeagent.Codex, w.Path("collision"), func(msg *protocol.SpawnSessionMessage) { msg.ID = originals[0] })
+	collision := w.Spawn(app, fakeagent.Codex, w.Path("collision"), func(msg *protocol.SpawnSessionMessage) { msg.ID = protocol.SessionID(originals[0]) })
 	run := w.Launched(collision)
 	app.TypeLine(collision, "identify")
 	run.Prompted()
@@ -356,7 +356,7 @@ func TestConversationLivePinIsVisibleBeforeCopyAndCanBeRemoved(t *testing.T) {
 	if row.Kept != nil || row.SourceBytes != nil || row.PinnedAt == nil || !strings.Contains(protocol.Deref(row.PendingReason), "quiet") {
 		t.Fatalf("pending row: %+v", row)
 	}
-	shown, err := cli.SessionShow(id)
+	shown, err := cli.SessionShow(protocol.SessionID(id))
 	if err != nil || protocol.Deref(shown.Entry.ConversationPinnedAt) != *row.PinnedAt {
 		t.Fatalf("live ledger pin: %+v, %v", shown, err)
 	}
@@ -371,7 +371,7 @@ func TestConversationLivePinIsVisibleBeforeCopyAndCanBeRemoved(t *testing.T) {
 	if rows := conversationRows(t, cli, false); rows.PendingCount != 0 || len(rows.Rows) != 0 {
 		t.Fatalf("unpin should remove pending row: %+v", rows)
 	}
-	shown, err = cli.SessionShow(id)
+	shown, err = cli.SessionShow(protocol.SessionID(id))
 	if err != nil || shown.Entry.ConversationPinnedAt != nil {
 		t.Fatalf("ledger pin survived unkeep: %+v, %v", shown, err)
 	}
@@ -381,7 +381,7 @@ func TestConversationSeedReferenceIsVisibleBeforeCopy(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	delegated := seedResumeDelegate(t, w, fakeagent.Claude, "api")
-	run := w.Launched(delegated.SessionID)
+	run := w.Launched(string(delegated.SessionID))
 	run.Prompted()
 	run.Reply("live <!-- attn:state=waiting_input -->")
 	plantSeedAs(t, cli, "", "drain the keep pass")
@@ -394,7 +394,7 @@ func TestConversationSeedReferenceIsVisibleBeforeCopy(t *testing.T) {
 	if row.Kept != nil || row.SourceBytes != nil || row.PinnedAt != nil || len(row.Seeds) != 1 || row.Seeds[0].ID != delegated.SeedID || len(row.SessionIds) != 1 || row.SessionIds[0] != delegated.SessionID || !strings.Contains(protocol.Deref(row.PendingReason), "quiet") || !strings.Contains(protocol.Deref(row.PendingReason), row.Seeds[0].Slug) {
 		t.Fatalf("seed-only pending row: %+v", row)
 	}
-	lifeMove(t, cli, delegated.SessionID, delegated.SeedID, "wither", "finished", "")
+	lifeMove(t, cli, string(delegated.SessionID), delegated.SeedID, "wither", "finished", "")
 	testworld.AwaitTaskDone(app, "conversation_keep")
 	if rows := conversationRows(t, cli, false); rows.PendingCount != 0 || len(rows.Rows) != 0 {
 		t.Fatalf("closed seed left a pending row: %+v", rows)

@@ -38,7 +38,7 @@ type desktopTileDock struct {
 	tileID    string
 	tileKind  string
 	params    string
-	sessionID string
+	sessionID protocol.SessionID
 	anchorID  string
 	edge      protocol.LayoutDockEdge
 	share     float64
@@ -82,7 +82,7 @@ func (d *Daemon) handleDesktopDockTile(client *wsClient, msg *protocol.DesktopDo
 			tileID:    strings.TrimSpace(msg.TileID),
 			tileKind:  strings.TrimSpace(msg.TileKind),
 			params:    strings.TrimSpace(protocol.Deref(msg.TileParams)),
-			sessionID: strings.TrimSpace(protocol.Deref(msg.TileSessionID)),
+			sessionID: protocol.TrimID(protocol.Deref(msg.TileSessionID)),
 			anchorID:  protocol.Deref(msg.AnchorID),
 			edge:      msg.Edge,
 			share:     protocol.Deref(msg.TileShare),
@@ -139,7 +139,7 @@ func (d *Daemon) effectiveTileParams(tile layouttree.TileLeaf, requested string)
 	return d.validatedTileParams(tile.TileKind, requested)
 }
 
-func (d *Daemon) checkedTileSession(desktop profiles.Desktop, sessionID string) error {
+func (d *Daemon) checkedTileSession(desktop profiles.Desktop, sessionID protocol.SessionID) error {
 	if sessionID == "" {
 		return nil
 	}
@@ -196,7 +196,7 @@ type desktopTileUpdate struct {
 	tileID    string
 	params    string
 	hasParams bool
-	sessionID string
+	sessionID protocol.SessionID
 }
 
 func (d *Daemon) checkedDesktopTileUpdate(desktopID string, update desktopTileUpdate) (desktopTileUpdate, error) {
@@ -253,7 +253,7 @@ func (d *Daemon) handleDesktopUpdateTile(client *wsClient, msg *protocol.Desktop
 			tileID:    strings.TrimSpace(msg.TileID),
 			params:    strings.TrimSpace(protocol.Deref(msg.TileParams)),
 			hasParams: msg.TileParams != nil,
-			sessionID: strings.TrimSpace(protocol.Deref(msg.TileSessionID)),
+			sessionID: protocol.TrimID(protocol.Deref(msg.TileSessionID)),
 		})
 		if err != nil {
 			return profileActionOutcome{}, err

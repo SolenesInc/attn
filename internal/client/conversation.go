@@ -2,6 +2,7 @@ package client
 
 import (
 	"errors"
+
 	"github.com/victorarias/attn/internal/protocol"
 )
 

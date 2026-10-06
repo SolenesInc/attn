@@ -41,9 +41,9 @@ type wsClient struct {
 	browserHostAuthenticated bool
 	bearerAuthorized         bool
 
-	attachedStreams map[string]ptybackend.Stream
-	attachedRemote  map[string]struct{}
-	pendingRemote   map[string]struct{}
+	attachedStreams map[protocol.TerminalID]ptybackend.Stream
+	attachedRemote  map[protocol.TerminalID]struct{}
+	pendingRemote   map[protocol.TerminalID]struct{}
 	attachMu        sync.Mutex
 
 	docSubscriptions clientDocSubscriptions
@@ -276,20 +276,20 @@ func (c *wsClient) gitStatusEndpointIDValue() string {
 	return c.gitStatusEndpointID
 }
 
-func (c *wsClient) notePendingRemoteAttach(sessionID string) {
-	if c == nil || strings.TrimSpace(sessionID) == "" {
+func (c *wsClient) notePendingRemoteAttach(sessionID protocol.TerminalID) {
+	if c == nil || protocol.TrimID(sessionID) == "" {
 		return
 	}
 	c.attachMu.Lock()
 	defer c.attachMu.Unlock()
 	if c.pendingRemote == nil {
-		c.pendingRemote = make(map[string]struct{})
+		c.pendingRemote = make(map[protocol.TerminalID]struct{})
 	}
 	c.pendingRemote[sessionID] = struct{}{}
 }
 
-func (c *wsClient) resolvePendingRemoteAttach(sessionID string, success bool) bool {
-	if c == nil || strings.TrimSpace(sessionID) == "" {
+func (c *wsClient) resolvePendingRemoteAttach(sessionID protocol.TerminalID, success bool) bool {
+	if c == nil || protocol.TrimID(sessionID) == "" {
 		return false
 	}
 	c.attachMu.Lock()
@@ -303,7 +303,7 @@ func (c *wsClient) resolvePendingRemoteAttach(sessionID string, success bool) bo
 	delete(c.pendingRemote, sessionID)
 	if success {
 		if c.attachedRemote == nil {
-			c.attachedRemote = make(map[string]struct{})
+			c.attachedRemote = make(map[protocol.TerminalID]struct{})
 		}
 		c.attachedRemote[sessionID] = struct{}{}
 	} else if c.attachedRemote != nil {
@@ -312,8 +312,8 @@ func (c *wsClient) resolvePendingRemoteAttach(sessionID string, success bool) bo
 	return true
 }
 
-func (c *wsClient) hasRemoteAttach(sessionID string) bool {
-	if c == nil || strings.TrimSpace(sessionID) == "" {
+func (c *wsClient) hasRemoteAttach(sessionID protocol.TerminalID) bool {
+	if c == nil || protocol.TrimID(sessionID) == "" {
 		return false
 	}
 	c.attachMu.Lock()
@@ -325,8 +325,8 @@ func (c *wsClient) hasRemoteAttach(sessionID string) bool {
 	return ok
 }
 
-func (c *wsClient) wantsRemoteAttachTraffic(sessionID string) bool {
-	if c == nil || strings.TrimSpace(sessionID) == "" {
+func (c *wsClient) wantsRemoteAttachTraffic(sessionID protocol.TerminalID) bool {
+	if c == nil || protocol.TrimID(sessionID) == "" {
 		return false
 	}
 	c.attachMu.Lock()
@@ -344,8 +344,8 @@ func (c *wsClient) wantsRemoteAttachTraffic(sessionID string) bool {
 	return false
 }
 
-func (c *wsClient) clearRemoteAttach(sessionID string) {
-	if c == nil || strings.TrimSpace(sessionID) == "" {
+func (c *wsClient) clearRemoteAttach(sessionID protocol.TerminalID) {
+	if c == nil || protocol.TrimID(sessionID) == "" {
 		return
 	}
 	c.attachMu.Lock()
@@ -735,9 +735,9 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 		connectedAt:        time.Now(),
 		trustedTauriOrigin: isTrustedTauriOrigin(origin),
 		bearerAuthorized:   bearerAuthorized,
-		attachedStreams:    make(map[string]ptybackend.Stream),
-		attachedRemote:     make(map[string]struct{}),
-		pendingRemote:      make(map[string]struct{}),
+		attachedStreams:    make(map[protocol.TerminalID]ptybackend.Stream),
+		attachedRemote:     make(map[protocol.TerminalID]struct{}),
+		pendingRemote:      make(map[protocol.TerminalID]struct{}),
 	}
 	release, held := d.life.Hold("handleWS")
 	if !held {
@@ -768,6 +768,7 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 	}
 	state := d.currentStateProjection(client.selectedProfile())
 	event := &protocol.InitialStateMessage{
+		TerminalBindings:       d.terminals().Bindings(),
 		Event:                  protocol.EventInitialState,
 		ProtocolVersion:        protocol.Ptr(protocol.ProtocolVersion),
 		SourceFingerprint:      protocol.Ptr(buildinfo.SourceFingerprint),
@@ -1243,6 +1244,10 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleFetchPRDetailsWS(client, msg.(*protocol.FetchPRDetailsMessage))
 	case protocol.CmdClearWarnings:
 		d.handleClearWarningsWS()
+	case protocol.CmdSetSessionPriority:
+		if err := d.setSessionPriority(msg.(*protocol.SetSessionPriorityMessage)); err != nil {
+			d.sendCommandError(client, protocol.CmdSetSessionPriority, err.Error())
+		}
 	case protocol.CmdSettleTurn:
 		d.handleSettleTurn(msg.(*protocol.SettleTurnMessage))
 	case protocol.CmdSnoozeTurn:
@@ -1319,6 +1324,10 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleUnregisterWS(client, msg.(*protocol.UnregisterMessage))
 	case protocol.CmdGetRecentLocations:
 		d.handleGetRecentLocationsWS(client, msg.(*protocol.GetRecentLocationsMessage))
+	case protocol.CmdGetCommandUsage:
+		d.handleGetCommandUsage(client, msg.(*protocol.GetCommandUsageMessage))
+	case protocol.CmdRecordCommandUsage:
+		d.handleRecordCommandUsage(client, msg.(*protocol.RecordCommandUsageMessage))
 	case protocol.CmdRecentFiles:
 		d.handleRecentFilesWS(client, msg.(*protocol.RecentFilesMessage))
 	case protocol.CmdBrowseDirectory:
@@ -1580,8 +1589,17 @@ func (d *Daemon) forwardEndpointScopedCommand(client *wsClient, cmd string, msg 
 	}
 }
 
-func remoteCommandSessionID(cmd string, msg interface{}) string {
+func remoteCommandSessionID(cmd string, msg interface{}) protocol.SessionID {
 	switch cmd {
+	case protocol.CmdKillSession:
+		if typed, ok := msg.(*protocol.KillSessionMessage); ok {
+			return typed.ID
+		}
+	case protocol.CmdReloadSession:
+		if typed, ok := msg.(*protocol.ReloadSessionMessage); ok {
+			return typed.ID
+		}
+
 	case protocol.CmdRenameSession:
 		if typed, ok := msg.(*protocol.RenameSessionMessage); ok {
 			return typed.SessionID
@@ -1592,7 +1610,11 @@ func remoteCommandSessionID(cmd string, msg interface{}) string {
 		}
 	case protocol.CmdMarkdownAnnotationsSubmit:
 		if typed, ok := msg.(*protocol.MarkdownAnnotationsSubmitMessage); ok {
-			return protocol.Deref(typed.TargetSessionID)
+			return protocol.SessionID(protocol.Deref(typed.TargetSessionID))
+		}
+	case protocol.CmdSetSessionPriority:
+		if typed, ok := msg.(*protocol.SetSessionPriorityMessage); ok {
+			return typed.SessionID
 		}
 	case protocol.CmdSettleTurn:
 		if typed, ok := msg.(*protocol.SettleTurnMessage); ok {
@@ -1692,7 +1714,7 @@ func remoteCommandEndpointID(cmd string, msg interface{}) string {
 	return ""
 }
 
-func remoteCommandPTYTargetID(cmd string, msg interface{}) string {
+func remoteCommandPTYTargetID(cmd string, msg interface{}) protocol.TerminalID {
 	switch cmd {
 	case protocol.CmdSpawnSession:
 	case protocol.CmdAttachSession:
@@ -1717,14 +1739,6 @@ func remoteCommandPTYTargetID(cmd string, msg interface{}) string {
 		}
 	case protocol.CmdPtyResize:
 		if typed, ok := msg.(*protocol.PtyResizeMessage); ok {
-			return typed.ID
-		}
-	case protocol.CmdKillSession:
-		if typed, ok := msg.(*protocol.KillSessionMessage); ok {
-			return typed.ID
-		}
-	case protocol.CmdReloadSession:
-		if typed, ok := msg.(*protocol.ReloadSessionMessage); ok {
 			return typed.ID
 		}
 	}
@@ -1826,7 +1840,7 @@ func (d *Daemon) broadcastRawWSMessage(payload []byte) {
 			return
 		}
 		d.wsHub.SendRawTextToMatchingClients(payload, func(client *wsClient) bool {
-			return client.resolvePendingRemoteAttach(envelope.ID, envelope.Success)
+			return client.resolvePendingRemoteAttach(protocol.TerminalID(envelope.ID), envelope.Success)
 		})
 		return
 	case protocol.EventPtyOutput, protocol.EventPtyResized, protocol.EventPtyInputProbeResult, protocol.EventPtyDesync, protocol.EventKittyPlacements, protocol.EventKittyImageResult:
@@ -1835,13 +1849,13 @@ func (d *Daemon) broadcastRawWSMessage(payload []byte) {
 			return
 		}
 		d.wsHub.sendStreamToMatchingClients(payload, func(client *wsClient) bool {
-			return client.wantsRemoteAttachTraffic(envelope.ID)
+			return client.wantsRemoteAttachTraffic(protocol.TerminalID(envelope.ID))
 		})
 		return
 	case protocol.EventSessionExited:
 		if strings.TrimSpace(envelope.ID) != "" {
 			d.wsHub.ForEachClient(func(client *wsClient) {
-				client.clearRemoteAttach(envelope.ID)
+				client.clearRemoteAttach(protocol.TerminalID(envelope.ID))
 			})
 		}
 	}

@@ -499,7 +499,7 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 	if ephemeral, _ := params["ephemeral"].(bool); ephemeral {
 		return nil, nil
 	}
-	sessionID := r.d.callerID(string(v.terminal))
+	sessionID := r.d.sessionInTerminal(v.terminal)
 	if conversation, _ := params["threadId"].(string); method == "thread/resume" && conversation != "" {
 		if holder := r.holder(v.profile, conversation); holder != "" {
 			sessionID = holder
@@ -512,7 +512,7 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 		config = make(map[string]any)
 	}
 	for key, value := range map[string]string{
-		"ATTN_SESSION_ID":   string(v.terminal),
+		"ATTN_TERMINAL_ID":  string(v.terminal),
 		"ATTN_AGENT":        string(protocol.SessionAgentCodex),
 		"ATTN_SOCKET_PATH":  r.d.socketPath,
 		"ATTN_WRAPPER_PATH": r.d.wrapperPath(),
@@ -567,7 +567,7 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 	}, nil
 }
 
-func (r *codexShared) instructions(sessionID, profile string, chief bool) string {
+func (r *codexShared) instructions(sessionID protocol.SessionID, profile string, chief bool) string {
 	launch, err := r.d.preparePluginLaunchInstructions(sessionID, profile, chief, false)
 	if err != nil {
 		r.d.logf("shared Codex: no attn instructions for session %s: %v", sessionID, err)
@@ -769,12 +769,12 @@ func (r *codexShared) parent(profile, conversation string) string {
 }
 
 // A subagent's hooks belong to its root's session.
-func (d *Daemon) codexThreadCaller(profile, conversation string) string {
-	r, asked := d.codexShared(), conversation
+func (d *Daemon) codexThreadCaller(profile, conversation string) protocol.SessionID {
+	r := d.codexShared()
 	for range 8 {
 		if t, ok := r.terminalShowing(profile, conversation); ok {
 			if s, ok := d.terminals().Showing(t); ok {
-				return string(s)
+				return s
 			}
 		}
 		if s := d.store.OpenSessionHolding(profile, conversation); s != "" {
@@ -784,7 +784,7 @@ func (d *Daemon) codexThreadCaller(profile, conversation string) string {
 			break
 		}
 	}
-	return hooks.CodexThreadCaller(profile, asked)
+	return ""
 }
 
 func (d *Daemon) wrapperPath() string {

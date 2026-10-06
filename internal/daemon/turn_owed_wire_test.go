@@ -29,8 +29,12 @@ func TestATurnOpensAtAWaitSurvivesTheWorkAndOnlySettleClosesIt(t *testing.T) {
 			}
 			return shown
 		}
-		working := func() error { return cli.UpdateState("s1", protocol.StateWorking) }
-		waiting := func() error { return cli.UpdateState("s1", protocol.StateWaitingInput) }
+		working := func() error {
+			return cli.UpdateState(protocol.TerminalID(w.Terminal("s1")), protocol.StateWorking)
+		}
+		waiting := func() error {
+			return cli.UpdateState(protocol.TerminalID(w.Terminal("s1")), protocol.StateWaitingInput)
+		}
 		settle := func() error {
 			app.Send(protocol.SettleTurnMessage{Cmd: protocol.CmdSettleTurn, SessionID: "s1"})
 			return nil
@@ -42,7 +46,7 @@ func TestATurnOpensAtAWaitSurvivesTheWorkAndOnlySettleClosesIt(t *testing.T) {
 		if protocol.Deref(report(protocol.SessionStateWorking, working).TurnOwed) {
 			t.Fatal("a session at work owes a turn")
 		}
-		if err := cli.SendStop("s1", "", client.StopFacts{PendingSessionCrons: 1}); err != nil {
+		if err := cli.SendStop(protocol.TerminalID(w.Terminal("s1")), "", client.StopFacts{PendingSessionCrons: 1}); err != nil {
 			t.Fatalf("stop: %v", err)
 		}
 		finished := testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
@@ -82,7 +86,7 @@ func TestATurnOpensAtAWaitSurvivesTheWorkAndOnlySettleClosesIt(t *testing.T) {
 		}
 		w.advance(time.Second)
 		asking := report(protocol.SessionStatePendingApproval, func() error {
-			return cli.RecordNotification("s1", "permission_prompt", "Allow edit?")
+			return cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), "permission_prompt", "Allow edit?")
 		})
 		if !protocol.Deref(asking.TurnOwed) {
 			t.Fatal("an approval request after a settle opened no turn")
@@ -102,8 +106,8 @@ func TestSessionsTheQueueSkipsNeverOweATurn(t *testing.T) {
 	shell := w.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), w.Path("scripts"))
 	chief := w.Spawn(app, fakeagent.Claude, w.Path("office"))
 	w.Launched(chief)
-	chiefResult := testworld.Request(app, protocol.SetChiefOfStaffMessage{Cmd: protocol.CmdSetChiefOfStaff, SessionID: chief, ChiefOfStaff: true},
-		protocol.EventChiefOfStaffResult, func(r protocol.ChiefOfStaffResultMessage) bool { return r.SessionID == chief })
+	chiefResult := testworld.Request(app, protocol.SetChiefOfStaffMessage{Cmd: protocol.CmdSetChiefOfStaff, SessionID: protocol.SessionID(chief), ChiefOfStaff: true},
+		protocol.EventChiefOfStaffResult, func(r protocol.ChiefOfStaffResultMessage) bool { return string(r.SessionID) == chief })
 	if chiefResult.Error != nil {
 		t.Fatalf("make %s the chief of staff: %s", chief, *chiefResult.Error)
 	}
@@ -124,7 +128,7 @@ func TestSessionsTheQueueSkipsNeverOweATurn(t *testing.T) {
 		}
 	}
 	app.TypeLine(shell, "exit")
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == shell })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == shell })
 	for id, since := range map[string]int{shell: 0, chief: madeChief} {
 		for _, s := range sessionUpdatesOf(app, id)[since:] {
 			if protocol.Deref(s.TurnOwed) {

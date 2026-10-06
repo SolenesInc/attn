@@ -100,7 +100,7 @@ func (c *Codex) BuildCommand(opts SpawnOpts) *exec.Cmd {
 
 func (c *Codex) BuildEnv(opts SpawnOpts) []string {
 	env := []string{
-		"ATTN_SESSION_ID=" + opts.SessionID,
+		"ATTN_TERMINAL_ID=" + string(opts.TerminalID),
 		"ATTN_AGENT=codex",
 	}
 	if wrapper := strings.TrimSpace(opts.WrapperPath); wrapper != "" {
@@ -399,7 +399,7 @@ func (c *Codex) GenerateConfigOverrides(opts SpawnOpts) []string {
 	var overrides []string
 	// A remote terminal drops hooks, environment and instructions; the app-server and attn's proxy own them.
 	if opts.CodexRemote == "" {
-		overrides = hooks.GenerateCodexConfigOverrides(opts.SessionID, opts.SocketPath, opts.WrapperPath, opts.launchSpec())
+		overrides = hooks.GenerateCodexConfigOverrides(string(opts.TerminalID), opts.SocketPath, opts.WrapperPath, opts.launchSpec())
 	}
 	if opts.TrustWorkingDirectory {
 		overrides = append(overrides, fmt.Sprintf(`projects.%s.trust_level="trusted"`, strconv.Quote(opts.CWD)))

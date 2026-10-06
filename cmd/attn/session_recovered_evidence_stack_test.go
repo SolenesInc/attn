@@ -17,7 +17,7 @@ func TestAnAgentThatMovedOnWhileTheDaemonWasDownComesBackAsItNowIs(t *testing.T)
 	app, cli := s.App(), s.Client()
 	finished, finishedRun := claudeAtWork(t, s, app, "finished")
 	answered, answeredRun := claudeAtWork(t, s, app, "answered")
-	if err := cli.RecordNotification(answered, "permission_prompt", "Allow edit?"); err != nil {
+	if err := cli.RecordNotification(protocol.TerminalID(app.Terminal(answered)), "permission_prompt", "Allow edit?"); err != nil {
 		t.Fatalf("ask for approval: %v", err)
 	}
 	testworld.AwaitSession(app, answered, func(x protocol.Session) bool { return x.State == protocol.SessionStatePendingApproval })
@@ -30,7 +30,7 @@ func TestAnAgentThatMovedOnWhileTheDaemonWasDownComesBackAsItNowIs(t *testing.T)
 
 	came := map[string]protocol.Session{}
 	for _, x := range app.Initial.Sessions {
-		came[x.ID] = x
+		came[string(x.ID)] = x
 	}
 	if came[answered].State == protocol.SessionStatePendingApproval {
 		t.Errorf("the approval answered while the daemon was down came back pending")
@@ -74,7 +74,7 @@ func TestACodexReviewerKeepsAnsweringBriefApprovalsUnseenAfterADaemonRestart(t *
 	codex.Reply("Ran it. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
 	for _, e := range app.Received() {
-		if e.Session != nil && e.Session.ID == session && e.Session.State == protocol.SessionStatePendingApproval {
+		if e.Session != nil && string(e.Session.ID) == session && e.Session.State == protocol.SessionStatePendingApproval {
 			t.Fatal("after the restart the app saw an approval the reviewer answered inside its dwell")
 		}
 	}

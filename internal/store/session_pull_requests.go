@@ -13,7 +13,7 @@ import (
 )
 
 type SessionPullRequestRecord struct {
-	SessionID          string
+	SessionID          protocol.SessionID
 	PRID               string
 	Repository         string
 	Number             int
@@ -80,7 +80,7 @@ func recordSessionPullRequest(ex execer, rec SessionPullRequestRecord, now time.
 	return affected > 0, nil
 }
 
-func (s *Store) ListSessionPullRequests(sessionID string) []SessionPullRequestRecord {
+func (s *Store) ListSessionPullRequests(sessionID protocol.SessionID) []SessionPullRequestRecord {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
@@ -99,7 +99,7 @@ func (s *Store) ListSessionPullRequests(sessionID string) []SessionPullRequestRe
 	return records
 }
 
-func (s *Store) ListSessionPullRequestsBySession() map[string][]SessionPullRequestRecord {
+func (s *Store) ListSessionPullRequestsBySession() map[protocol.SessionID][]SessionPullRequestRecord {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
@@ -118,7 +118,7 @@ func (s *Store) ListSessionPullRequestsBySession() map[string][]SessionPullReque
 	if err != nil {
 		return nil
 	}
-	bySession := make(map[string][]SessionPullRequestRecord)
+	bySession := make(map[protocol.SessionID][]SessionPullRequestRecord)
 	for _, rec := range records {
 		bySession[rec.SessionID] = append(bySession[rec.SessionID], rec)
 	}
@@ -295,7 +295,7 @@ func (s *Store) TouchSessionPullRequestActivity(prID string, at time.Time) error
 	return err
 }
 
-func (s *Store) ForgetSessionPullRequest(sessionID string, to inbox.Address, prID string) (bool, error) {
+func (s *Store) ForgetSessionPullRequest(sessionID protocol.SessionID, to inbox.Address, prID string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {

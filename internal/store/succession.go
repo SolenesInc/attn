@@ -9,12 +9,13 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/profiles"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 // Succession puts To in the terminal From showed: To takes From's place, process, driver run and
 // Conversation; everything else stays with From. A new To gets Label and Launch; an existing one keeps its own.
 type Succession struct {
-	From, To     string
+	From, To     protocol.SessionID
 	Label        string
 	Conversation SessionConversation
 	Launch       LaunchIntent
@@ -27,7 +28,7 @@ type Succession struct {
 // CommitSuccession opens sc.To, or reopens it when it exists, in the pane that holds terminal; the pane now
 // shows it and To's other panes close unless their terminals are Live. sc.From closes into the ledger in the
 // same transaction unless KeepFrom. It returns the desktops it changed, terminal's first.
-func (s *Store) CommitSuccession(sc Succession, terminal string) ([]profiles.Desktop, error) {
+func (s *Store) CommitSuccession(sc Succession, terminal protocol.TerminalID) ([]profiles.Desktop, error) {
 	var changed []profiles.Desktop
 	err := s.profilesTx(func(tx *sql.Tx, now string) error {
 		var open int
@@ -54,31 +55,45 @@ func (s *Store) CommitSuccession(sc Succession, terminal string) ([]profiles.Des
 			return fmt.Errorf("open successor %s: %w", sc.To, err)
 		}
 		var desktopID string
-		if err := tx.QueryRow(`SELECT desktop_id FROM desktop_panes WHERE runtime_id = ?`, terminal).Scan(&desktopID); err != nil {
-			return fmt.Errorf("no pane holds terminal %s: %w", terminal, err)
+		if err := tx.QueryRow(`SELECT desktop_id FROM desktop_panes WHERE runtime_id = ?`, terminal).Scan(&desktopID); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
 		}
 		dead, err := removeSessionTiles(tx, now, sc.To, sc.Live)
 		if err != nil {
 			return fmt.Errorf("close the dead panes of %s: %w", sc.To, err)
+		}
+		if err := unbindDeadTerminalsTx(tx, sc.To, sc.Live); err != nil {
+			return err
+		}
+		if err := bindTerminalTx(tx, terminal, sc.To); err != nil {
+			return err
 		}
 		for _, desktop := range dead {
 			if desktop.ID != desktopID {
 				changed = append(changed, desktop)
 			}
 		}
-		desktop, err := loadDesktop(tx, desktopID)
-		if err != nil {
-			return err
-		}
-		for i := range desktop.Panes {
-			if desktop.Panes[i].RuntimeID == terminal {
-				desktop.Panes[i].SessionID = sc.To
+		if desktopID != "" {
+			desktop, err := loadDesktop(tx, desktopID)
+			if err != nil {
+				return err
 			}
+			createdAt, err := paneCreationTimes(tx, desktopID)
+			if err != nil {
+				return err
+			}
+			switched := make(map[string]string)
+			for i := range desktop.Panes {
+				if desktop.Panes[i].RuntimeID == terminal {
+					desktop.Panes[i].SessionID = sc.To
+					switched[desktop.Panes[i].PaneID] = createdAt[desktop.Panes[i].PaneID]
+				}
+			}
+			if err := writeCurrentArrivingArrangement(tx, now, &desktop, switched); err != nil {
+				return fmt.Errorf("show successor %s: %w", sc.To, err)
+			}
+			changed = append([]profiles.Desktop{desktop}, changed...)
 		}
-		if err := writeDesktopArrangement(tx, now, &desktop); err != nil {
-			return fmt.Errorf("show successor %s: %w", sc.To, err)
-		}
-		changed = append([]profiles.Desktop{desktop}, changed...)
 		if sc.KeepFrom {
 			return nil
 		}
@@ -116,11 +131,11 @@ func openSuccessorTx(tx *sql.Tx, sc Succession, at string) error {
 	_, err = tx.Exec(`
 		INSERT INTO sessions (id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository,
 			state, state_since, state_updated_at, last_model_request_at, last_seen, launched_at, context_window_cap,
-			resume_session_id, transcript_path, launch_intent, session_cost_json, succeeds,
+			resume_session_id, transcript_path, launch_intent, session_cost_json, succeeds, priority,
 			agent_driver_plugin_name, agent_driver_run_id, agent_driver_report_seq, agent_driver_transcript_path)
 		SELECT ?, ?, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository,
 			'idle', ?, ?, ?, ?, launched_at, context_window_cap,
-			?, ?, ?, ?, id,
+			?, ?, ?, ?, id, priority,
 			agent_driver_plugin_name, agent_driver_run_id, agent_driver_report_seq, agent_driver_transcript_path
 		FROM sessions WHERE id = ?`,
 		sc.To, sc.Label,
@@ -153,4 +168,32 @@ func takeOverTx(tx *sql.Tx, sc Succession, at string) error {
 	}
 	_, err := tx.Exec(`DELETE FROM session_exit_screens WHERE session_id = ?`, sc.To)
 	return err
+}
+
+func unbindDeadTerminalsTx(tx *sql.Tx, session protocol.SessionID, live map[string]bool) error {
+	rows, err := tx.Query(`SELECT terminal_id FROM terminal_bindings WHERE session_id = ?`, session)
+	if err != nil {
+		return err
+	}
+	var dead []string
+	for rows.Next() {
+		var terminal string
+		if err := rows.Scan(&terminal); err != nil {
+			rows.Close()
+			return err
+		}
+		if !live[terminal] {
+			dead = append(dead, terminal)
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, terminal := range dead {
+		if _, err := tx.Exec(`DELETE FROM terminal_bindings WHERE terminal_id = ?`, terminal); err != nil {
+			return err
+		}
+	}
+	return nil
 }

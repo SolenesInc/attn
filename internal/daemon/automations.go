@@ -96,7 +96,7 @@ func (d *Daemon) newAutomationRunReservation(definition *store.AutomationDefinit
 	if err != nil {
 		return store.AutomationRunReservation{}, err
 	}
-	return store.AutomationRunReservation{RunID: runID, OccurrenceID: uuid.NewString(), SeedID: seedID, SessionID: uuid.NewString()}, nil
+	return store.AutomationRunReservation{RunID: runID, OccurrenceID: uuid.NewString(), SeedID: seedID, SessionID: protocol.SessionID(uuid.NewString())}, nil
 }
 
 func (d *Daemon) mintAutomationSeedID() (string, error) {

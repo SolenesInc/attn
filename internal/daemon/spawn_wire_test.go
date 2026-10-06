@@ -37,9 +37,9 @@ func TestASpawnTheDaemonRefusesRegistersNothing(t *testing.T) {
 	} {
 		id := uuid.NewString()
 		refused := testworld.Request(app, protocol.SpawnSessionMessage{
-			Cmd: protocol.CmdSpawnSession, ID: id, Agent: protocol.AgentShellValue, Cwd: w.Path("shell"),
+			Cmd: protocol.CmdSpawnSession, ID: protocol.SessionID(id), Agent: protocol.AgentShellValue, Cwd: w.Path("shell"),
 			ProfileID: c.profile, Placement: &protocol.SessionPlacement{DesktopID: protocol.Ptr(c.desktop)}, Cols: 100, Rows: 30,
-		}, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return r.ID == id })
+		}, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return string(r.ID) == id })
 		if refused.Success || !strings.Contains(protocol.Deref(refused.Error), c.refusal) {
 			t.Errorf("a spawn into %s = %+v, want it refused with %q", c.name, refused, c.refusal)
 		}
@@ -61,7 +61,7 @@ func TestASpawnWithoutALabelIsNamedAfterItsDirectoryOnItsDesktop(t *testing.T) {
 	if !spawned.Success || desktop == "" || pane == "" {
 		t.Fatalf("spawn = %+v, want it placed on the current desktop", spawned)
 	}
-	w.Launched(spawned.ID)
+	w.Launched(string(spawned.ID))
 
 	registered := testworld.Await(app, protocol.EventSessionRegistered, func(e protocol.WebSocketEvent) bool {
 		return e.Session != nil && e.Session.ID == spawned.ID
@@ -92,14 +92,14 @@ func TestTwoSpawnsOfOneSessionStartOneAgent(t *testing.T) {
 			t.Errorf("spawning the live %s session again: %s", agent, protocol.Deref(again.Error))
 		}
 		boot()
-		run := w.Launched(first.ID)
-		app.TypeLine(first.ID, "fix the build")
+		run := w.Launched(string(first.ID))
+		app.TypeLine(string(first.ID), "fix the build")
 		if got := run.Prompted(); got != "fix the build" {
 			t.Errorf("the %s launched first received %q, want the user's prompt", agent, got)
 		}
-		testworld.AwaitSession(app, first.ID, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+		testworld.AwaitSession(app, string(first.ID), func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 		run.Reply("Fixed. <!-- attn:state=idle -->")
-		testworld.AwaitSession(app, first.ID, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+		testworld.AwaitSession(app, string(first.ID), func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 		registrations := 0
 		for _, e := range app.Received() {
 			if e.Event == protocol.EventSessionRegistered && e.Session != nil && e.Session.ID == first.ID {
@@ -115,14 +115,14 @@ func TestTwoSpawnsOfOneSessionStartOneAgent(t *testing.T) {
 		w.Spawn(app, agent, cwd, func(m *protocol.SpawnSessionMessage) {
 			m.ID = first.ID
 			if agent == fakeagent.Claude {
-				m.ResumeSessionID = protocol.Ptr(first.ID)
+				m.ResumeSessionID = protocol.Ptr(string(first.ID))
 			}
 		})
-		next := w.Launched(first.ID)
+		next := w.Launched(string(first.ID))
 		if agent == fakeagent.Claude && (!next.Resumed || next.ConversationID != run.ConversationID) {
 			t.Errorf("the next claude launch ran %q, want the respawn resuming conversation %s", next.Argv, run.ConversationID)
 		}
-		app.TypeLine(first.ID, "run the tests")
+		app.TypeLine(string(first.ID), "run the tests")
 		if got := next.Prompted(); got != "run the tests" {
 			t.Errorf("the respawned %s received %q, want the user's prompt", agent, got)
 		}

@@ -642,14 +642,18 @@ export async function waitForMockPtyBanner(
 ) {
   await expect
     .poll(
-      async () => page.evaluate((id) => window.__TEST_GET_SESSION_PANE_TEXT?.(id) ?? '', sessionId),
+      async () => page.evaluate((id) => {
+        const terminal = window.__TEST_GET_ACTIVE_SESSION_PANE_RUNTIME?.(id);
+        const text = window.__TEST_GET_SESSION_PANE_TEXT?.(id) ?? '';
+        return terminal !== null && terminal !== undefined && text.includes(`attn mock pty: ${terminal}`);
+      }, sessionId),
       {
         message:
           `mock pty banner never reached the pane for ${sessionId}; the session did not `
           + `attach, or startup output is being dropped before the pane registers`,
       },
     )
-    .toContain(`attn mock pty: ${sessionId}`);
+    .toBe(true);
 }
 
 export { expect };

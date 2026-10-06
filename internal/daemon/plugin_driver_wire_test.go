@@ -93,14 +93,14 @@ func TestAPiSessionFollowsItsDriversReportsAndResumesItsConversationAfterItExits
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 
 	first.Exit(7)
-	exited := testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == session })
+	exited := testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
 	if exited.ExitCode != 7 {
 		t.Errorf("session_exited carries exit code %d, want pi's 7", exited.ExitCode)
 	}
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 
 	relaunchedBy := w.App()
-	w.Spawn(relaunchedBy, fakeagent.Pi, cwd, func(m *protocol.SpawnSessionMessage) { m.ID = session })
+	w.Spawn(relaunchedBy, fakeagent.Pi, cwd, func(m *protocol.SpawnSessionMessage) { m.ID = protocol.SessionID(session) })
 	second := w.Launched(session)
 	if !second.Resumed || second.ConversationID != first.ConversationID {
 		t.Fatalf("the relaunch ran pi %q, want its driver resuming conversation %s from the metadata it reported", second.Argv, first.ConversationID)

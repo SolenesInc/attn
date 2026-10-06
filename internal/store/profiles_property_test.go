@@ -33,7 +33,7 @@ func TestArrangementInvariantsHoldUnderRandomOperations(t *testing.T) {
 			}
 			now := string(protocol.TimestampNow())
 			if err := s.AddChecked(&protocol.Session{
-				ID: sessionIDs[i], Label: sessionIDs[i], Agent: protocol.SessionAgentCodex, Directory: "/tmp/project", ProfileID: owner,
+				ID: protocol.SessionID(sessionIDs[i]), Label: sessionIDs[i], Agent: protocol.SessionAgentCodex, Directory: "/tmp/project", ProfileID: owner,
 				State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 			}); err != nil {
 				t.Fatalf("AddChecked: %v", err)
@@ -74,7 +74,7 @@ func TestArrangementInvariantsHoldUnderRandomOperations(t *testing.T) {
 				desktop := draw("desktop")
 				_, _, err := s.PlaceSession(SessionPlacementRequest{
 					DesktopID: desktop.ID, ExpectedRevision: revision(desktop),
-					SessionID: rapid.SampledFrom(sessionIDs).Draw(t, "session"),
+					SessionID: protocol.SessionID(rapid.SampledFrom(sessionIDs).Draw(t, "session")),
 					Direction: rapid.SampledFrom(directions).Draw(t, "direction"), NewPaneShare: rapid.Float64Range(-0.5, 1.5).Draw(t, "share"),
 				})
 				refusal(err)
@@ -140,10 +140,10 @@ func TestArrangementInvariantsHoldUnderRandomOperations(t *testing.T) {
 						t.Fatalf("stored desktop broke an invariant: %v", err)
 					}
 					for _, pane := range desktop.Panes {
-						if where, dup := placedOn[pane.SessionID]; dup {
+						if where, dup := placedOn[string(pane.SessionID)]; dup {
 							t.Fatalf("session %s is placed on %s and %s", pane.SessionID, where, desktop.ID)
 						}
-						placedOn[pane.SessionID] = desktop.ID
+						placedOn[string(pane.SessionID)] = desktop.ID
 						if owner, _ := s.SessionProfileID(pane.SessionID); owner != desktop.ProfileID {
 							t.Fatalf("session %s of profile %s is placed on a desktop of profile %s", pane.SessionID, owner, desktop.ProfileID)
 						}

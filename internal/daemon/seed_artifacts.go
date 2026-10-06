@@ -925,7 +925,7 @@ func (d *Daemon) gitTrackedSource(source string) (bool, string, error) {
 	return tracked, display, err
 }
 
-func (d *Daemon) detachLegacyArtifactReference(seedID, authorSession string, legacy garden.ArtifactReference) error {
+func (d *Daemon) detachLegacyArtifactReference(seedID string, authorSession protocol.SessionID, legacy garden.ArtifactReference) error {
 	for _, current := range d.seedArtifactReferences(seedID) {
 		candidate := artifactFromProtocol(&current)
 		if candidate != nil && candidate.Identity() == legacy.Identity() {

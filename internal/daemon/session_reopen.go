@@ -33,7 +33,7 @@ type branchInspection struct {
 }
 
 type sessionReopenVerdict struct {
-	SessionID      string
+	SessionID      protocol.SessionID
 	Entry          *protocol.SessionLedgerEntry
 	Execution      garden.Dispatch
 	Live           bool
@@ -273,7 +273,7 @@ func (d *Daemon) goneBranchVerdict(verdict *sessionReopenVerdict, gone, branch s
 	return state, gone + "; " + tail
 }
 
-func (d *Daemon) branchMerged(sessionID, branch string) bool {
+func (d *Daemon) branchMerged(sessionID protocol.SessionID, branch string) bool {
 	if branch == "" {
 		return false
 	}
@@ -340,7 +340,7 @@ func reopenBranchWarning(ctx context.Context, gitView reopenGit, execution garde
 }
 
 type sessionReopenOutcome struct {
-	SessionID       string
+	SessionID       protocol.SessionID
 	ProfileID       string
 	Directory       string
 	Action          protocol.SessionReopenAction
@@ -349,7 +349,7 @@ type sessionReopenOutcome struct {
 }
 
 func (d *Daemon) reopenSession(
-	sessionID string, action protocol.SessionReopenAction, directory string,
+	sessionID protocol.SessionID, action protocol.SessionReopenAction, directory string,
 ) (*sessionReopenOutcome, error) {
 	var outcome *sessionReopenOutcome
 	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
@@ -361,9 +361,9 @@ func (d *Daemon) reopenSession(
 }
 
 func (d *Daemon) reopenSessionProtected(
-	protection foregroundCleanupProtection, sessionID string, action protocol.SessionReopenAction, directory string,
+	protection foregroundCleanupProtection, sessionID protocol.SessionID, action protocol.SessionReopenAction, directory string,
 ) (*sessionReopenOutcome, error) {
-	sessionID = strings.TrimSpace(sessionID)
+	sessionID = protocol.TrimID(sessionID)
 	if sessionID == "" {
 		return nil, fmt.Errorf("session_id is required")
 	}
@@ -605,7 +605,7 @@ func mutateReopenWorktreeAdmitted(
 }
 
 type sessionReopenPlan struct {
-	SessionID         string
+	SessionID         protocol.SessionID
 	Directory         string
 	Title             string
 	ProfileID         string
@@ -614,7 +614,7 @@ type sessionReopenPlan struct {
 }
 
 type sessionRuntimeReopened struct {
-	SessionID      string
+	SessionID      protocol.SessionID
 	ProfileID      string
 	AlreadyRunning bool
 }
@@ -724,7 +724,7 @@ func (d *Daemon) reopenSessionRuntimeProtected(
 	}
 	spawn := &protocol.SpawnSessionMessage{
 		Cmd: protocol.CmdSpawnSession, ID: session.ID, Cwd: session.Directory,
-		ProfileID: session.ProfileID, Agent: string(session.Agent), Cols: 80, Rows: 24,
+		ProfileID: session.ProfileID, Agent: session.Agent, Cols: 80, Rows: 24,
 		Label: protocol.Ptr(session.Label),
 	}
 	policy := internalSpawnPolicy{}
@@ -767,7 +767,7 @@ func (d *Daemon) reopenSessionRuntimeProtected(
 	return &sessionRuntimeReopened{SessionID: plan.SessionID, ProfileID: profileID}, nil
 }
 
-func (r *delegationRollback) onSessionReopened(sessionID string, closed store.SessionCloseRecord) {
+func (r *delegationRollback) onSessionReopened(sessionID protocol.SessionID, closed store.SessionCloseRecord) {
 	r.undo = append(r.undo, func(foregroundCleanupProtection) error {
 		r.d.terminateSession(sessionID, syscall.SIGTERM)
 		r.d.restoreSessionClose(sessionID, closed)
@@ -793,12 +793,12 @@ func (r *delegationRollback) onSessionRespawned(
 		} else {
 			r.d.store.ClearLaunchIntent(prior.ID)
 		}
-		r.d.publishFact(FactSessionReregistered, prior.ID, nil)
+		r.d.publishFact(FactSessionReregistered, string(prior.ID), nil)
 		return nil
 	})
 }
 
-func (r *delegationRollback) onConversationForgotten(sessionID string, prior store.SessionConversation) {
+func (r *delegationRollback) onConversationForgotten(sessionID protocol.SessionID, prior store.SessionConversation) {
 	r.undo = append(r.undo, func(foregroundCleanupProtection) error {
 		if strings.TrimSpace(prior.NativeID) == "" {
 			return nil
@@ -812,7 +812,7 @@ func (r *delegationRollback) onConversationForgotten(sessionID string, prior sto
 	})
 }
 
-func (d *Daemon) forgetDispatchResume(sessionID string) {
+func (d *Daemon) forgetDispatchResume(sessionID protocol.SessionID) {
 	if _, err := d.updateGardenDispatch(sessionID, func(current garden.Dispatch) (garden.Dispatch, bool, error) {
 		if strings.TrimSpace(current.Resume) == "" {
 			return current, false, nil

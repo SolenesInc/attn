@@ -1,28 +1,11 @@
 package store
 
 import (
+	"github.com/victorarias/attn/internal/protocol"
 	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/victorarias/attn/internal/protocol"
 )
-
-func addTurnSession(t *testing.T, s *Store, id string, state protocol.SessionState) {
-	t.Helper()
-	now := time.Now().Format(time.RFC3339Nano)
-	if err := s.AddChecked(&protocol.Session{
-		ID:             id,
-		Label:          id,
-		Directory:      "/tmp/" + id,
-		State:          state,
-		StateSince:     now,
-		StateUpdatedAt: now,
-		LastSeen:       now,
-	}); err != nil {
-		t.Fatalf("add session %s: %v", id, err)
-	}
-}
 
 func TestMigration81BackfillsOpenTurnsFromStateSince(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-81.db")
@@ -59,7 +42,7 @@ func TestMigration81BackfillsOpenTurnsFromStateSince(t *testing.T) {
 		"approval": "2026-07-26T11:00:00Z",
 		"unknown":  "2026-07-26T12:00:00Z",
 	} {
-		got := migrated.TurnStamps(id).OpenedAt
+		got := migrated.TurnStamps(protocol.SessionID(id)).OpenedAt
 		if got.IsZero() {
 			t.Errorf("%s: no turn opened by the backfill", id)
 			continue
@@ -69,7 +52,7 @@ func TestMigration81BackfillsOpenTurnsFromStateSince(t *testing.T) {
 		}
 	}
 	for _, id := range []string{"working", "idle"} {
-		if !migrated.TurnStamps(id).OpenedAt.IsZero() {
+		if !migrated.TurnStamps(protocol.SessionID(id)).OpenedAt.IsZero() {
 			t.Errorf("%s: backfill opened a turn for a state that does not open one", id)
 		}
 	}

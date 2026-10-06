@@ -2,6 +2,7 @@ import { act, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import App from './App';
+import { PROTOCOL_VERSION } from './types/protocolVersion';
 import { initialState, installScriptedDaemon } from './test/scriptedDaemon';
 
 const ensureCalls = () => vi.mocked(invoke).mock.calls.filter(([command]) => command === 'ensure_daemon').length;
@@ -34,19 +35,22 @@ describe('App daemon ensure', () => {
     expect(screen.queryByText(startupError)).toBeNull();
   });
 
-  it('runs daemon ensure again when the daemon speaks another protocol version', async () => {
+  it.each(['41', '999999', 'ffffffffffff', '000000000000'])('stops on protocol %s after startup ensure without restarting again', async (protocolVersion) => {
     vi.mocked(invoke).mockResolvedValue(undefined);
     let ensuresBeforeHandshake = 0;
     const daemon = installScriptedDaemon({ initialState: false });
     daemon.on('client_hello', () => {
       ensuresBeforeHandshake = ensureCalls();
-      return initialState({ protocol_version: '41' });
+      return initialState({ protocol_version: protocolVersion });
     });
     render(<App />);
     await act(() => daemon.connected());
     await daemon.idle();
 
-    expect(ensureCalls()).toBeGreaterThan(ensuresBeforeHandshake);
+    expect(screen.getByRole('status')).toHaveTextContent(
+      `Version mismatch: daemon v${protocolVersion}, app v${PROTOCOL_VERSION}. Restart/reinstall required.`,
+    );
+    expect(ensureCalls()).toBe(ensuresBeforeHandshake);
     expect(daemon.connections[0].readyState).toBe(WebSocket.CLOSED);
   });
 });

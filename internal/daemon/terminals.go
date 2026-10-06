@@ -4,25 +4,20 @@ import (
 	"cmp"
 	"context"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/hooks"
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
 
-// terminalRegistry is the in-memory copy of the terminal-to-session map pane rows persist.
-// Readers never touch SQLite; the store syncs it after every commit that can move a pane.
 type terminalRegistry struct {
-	mu    sync.RWMutex
-	byID  map[harness.TerminalID]*terminal
-	shown uint64
-	// A terminal that leaves its pane can still exit, killed by its session's close or on its own;
-	// that exit still names the session it showed.
-	ending map[harness.TerminalID]endingTerminal
-	// A launch's terminal starts before its pane exists; its hooks still name its session.
+	mu       sync.RWMutex
+	byID     map[harness.TerminalID]*terminal
+	shown    uint64
+	ending   map[harness.TerminalID]endingTerminal
 	expected map[harness.TerminalID]harness.SessionID
 }
 
@@ -39,45 +34,27 @@ func (d *Daemon) terminals() *terminalRegistry {
 	return d.terminalState
 }
 
-// loadTerminals feeds the registry from the store, which hands it every pane row after each commit.
 func (d *Daemon) loadTerminals() {
-	d.store.OnPaneTerminals(d.terminals().sync)
+	d.store.OnTerminalBindings(d.terminals().sync)
 }
 
-// shownIn resolves a terminal to its session. A runtime no pane places is its own session
-// when one is open under its id: runtimes from before the upgrade share their session's id.
-func (d *Daemon) shownIn(t harness.TerminalID) (string, bool) {
-	if s, ok := d.terminals().Showing(t); ok {
-		return string(s), true
-	}
-	if t != "" && d.store != nil && d.store.Get(string(t)) != nil {
-		return string(t), true
-	}
-	return "", false
+func (d *Daemon) shownIn(t harness.TerminalID) (protocol.SessionID, bool) {
+	return d.terminals().Showing(t)
 }
 
-// callerID resolves the id a hook or CLI call carries: the session a terminal shows, else the id
-// unchanged, so an open session's id and an unknown id reach their handler as before.
-func (d *Daemon) callerID(id string) string {
-	if profile, conversation, ok := hooks.ParseCodexThreadCaller(id); ok {
+func (d *Daemon) sessionInTerminal(t protocol.TerminalID) protocol.SessionID {
+	if profile, conversation, ok := hooks.ParseCodexThreadCaller(string(t)); ok {
 		return d.codexThreadCaller(profile, conversation)
 	}
-	if s, ok := d.terminals().Showing(harness.TerminalID(strings.TrimSpace(id))); ok {
-		return string(s)
-	}
-	return id
+	session, _ := d.terminals().Showing(protocol.TrimID(t))
+	return session
 }
 
-// terminalsOf lists the terminals showing a session; a session no pane places runs under its own id.
-func (d *Daemon) terminalsOf(sessionID string) []harness.TerminalID {
-	if ids := d.terminals().Of(harness.SessionID(sessionID)); len(ids) > 0 {
-		return ids
-	}
-	return []harness.TerminalID{harness.TerminalID(sessionID)}
+func (d *Daemon) terminalsOf(sessionID protocol.SessionID) []harness.TerminalID {
+	return d.terminals().Of(sessionID)
 }
 
-// primaryTerminal prefers a live terminal; the backend is asked only when several show the session.
-func (d *Daemon) primaryTerminal(sessionID string) harness.TerminalID {
+func (d *Daemon) primaryTerminal(sessionID protocol.SessionID) harness.TerminalID {
 	ids := d.terminalsOf(sessionID)
 	if len(ids) > 1 {
 		live := d.liveTerminals(context.Background())
@@ -87,7 +64,10 @@ func (d *Daemon) primaryTerminal(sessionID string) harness.TerminalID {
 			}
 		}
 	}
-	return ids[0]
+	if len(ids) > 0 {
+		return ids[0]
+	}
+	return ""
 }
 
 func (d *Daemon) liveTerminals(ctx context.Context) map[harness.TerminalID]struct{} {
@@ -106,7 +86,7 @@ func (d *Daemon) terminalLive(t harness.TerminalID) bool {
 	return live
 }
 
-func (d *Daemon) sessionLive(ctx context.Context, sessionID string) bool {
+func (d *Daemon) sessionLive(ctx context.Context, sessionID protocol.SessionID) bool {
 	live := d.liveTerminals(ctx)
 	for _, id := range d.terminalsOf(sessionID) {
 		if _, ok := live[id]; ok {
@@ -116,8 +96,8 @@ func (d *Daemon) sessionLive(ctx context.Context, sessionID string) bool {
 	return false
 }
 
-func (d *Daemon) liveSessions(ctx context.Context) map[string]struct{} {
-	sessions := make(map[string]struct{})
+func (d *Daemon) liveSessions(ctx context.Context) map[protocol.SessionID]struct{} {
+	sessions := make(map[protocol.SessionID]struct{})
 	for id := range d.liveTerminals(ctx) {
 		if sessionID, ok := d.shownIn(id); ok {
 			sessions[sessionID] = struct{}{}
@@ -126,18 +106,17 @@ func (d *Daemon) liveSessions(ctx context.Context) map[string]struct{} {
 	return sessions
 }
 
-// sync replaces the registry's placements with panes; a terminal no pane holds any more is ending.
-func (r *terminalRegistry) sync(panes []store.PaneTerminal) {
+func (r *terminalRegistry) sync(bindings []store.TerminalBinding) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	placed := make(map[harness.TerminalID]struct{}, len(panes))
-	for _, pane := range panes {
-		id := harness.TerminalID(strings.TrimSpace(pane.RuntimeID))
-		session := harness.SessionID(strings.TrimSpace(pane.SessionID))
+	bound := make(map[harness.TerminalID]struct{}, len(bindings))
+	for _, binding := range bindings {
+		id := protocol.TrimID(binding.TerminalID)
+		session := protocol.TrimID(binding.SessionID)
 		if id == "" || session == "" {
 			continue
 		}
-		placed[id] = struct{}{}
+		bound[id] = struct{}{}
 		delete(r.expected, id)
 		entry := r.byID[id]
 		if entry == nil {
@@ -151,7 +130,7 @@ func (r *terminalRegistry) sync(panes []store.PaneTerminal) {
 	}
 	now := time.Now()
 	for id, entry := range r.byID {
-		if _, kept := placed[id]; !kept {
+		if _, kept := bound[id]; !kept {
 			delete(r.byID, id)
 			r.endLocked(id, entry.shows, now)
 		}
@@ -175,7 +154,6 @@ func (r *terminalRegistry) expect(t harness.TerminalID, s harness.SessionID) {
 	r.expected[t] = s
 }
 
-// unexpect drops a launch's terminal whose pane never came.
 func (r *terminalRegistry) unexpect(t harness.TerminalID) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -243,8 +221,6 @@ func (r *terminalRegistry) forgetKey(t harness.TerminalID) {
 	}
 }
 
-// An exit owed to a closed pane lands within milliseconds (embedded) or never (worker),
-// so a minute bounds the notes without racing a late exit.
 const endingGrace = time.Minute
 
 type endingTerminal struct {
@@ -273,4 +249,21 @@ func (r *terminalRegistry) takeEnding(t harness.TerminalID) (harness.SessionID, 
 	note, ok := r.ending[t]
 	delete(r.ending, t)
 	return note.session, ok
+}
+
+func (r *terminalRegistry) Bindings() []protocol.TerminalBinding {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	bindings := make([]protocol.TerminalBinding, 0, len(r.byID))
+	for id, entry := range r.byID {
+		bindings = append(bindings, protocol.TerminalBinding{TerminalID: id, SessionID: entry.shows})
+	}
+	slices.SortFunc(bindings, func(a, b protocol.TerminalBinding) int { return cmp.Compare(a.TerminalID, b.TerminalID) })
+	return bindings
+}
+
+func (d *Daemon) projectTerminalBindings() {
+	d.projectSnapshot(protocol.EventTerminalBindingsUpdated, func() {
+		d.wsHub.BroadcastValue(&protocol.TerminalBindingsUpdatedMessage{Event: protocol.EventTerminalBindingsUpdated, TerminalBindings: d.terminals().Bindings()})
+	})
 }

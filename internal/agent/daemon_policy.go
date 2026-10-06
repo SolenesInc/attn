@@ -57,11 +57,11 @@ func recoveredStateFromPTYClaim(ptyState string) (protocol.SessionState, bool) {
 	}
 }
 
-func ResolveSpawnResumeSessionID(d Driver, existingSessionID, requestedResumeID, storedResumeID string) string {
+func ResolveSpawnResumeSessionID(d Driver, existingSessionID protocol.SessionID, requestedResumeID string, storedResumeID string) string {
 	requested := strings.TrimSpace(requestedResumeID)
 	stored := strings.TrimSpace(storedResumeID)
 	if p, ok := d.(ResumePolicyProvider); ok {
-		return strings.TrimSpace(p.ResolveSpawnResumeSessionID(existingSessionID, requested, stored))
+		return strings.TrimSpace(p.ResolveSpawnResumeSessionID(string(existingSessionID), requested, stored))
 	}
 	return requested
 }

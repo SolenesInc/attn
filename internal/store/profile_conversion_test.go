@@ -150,7 +150,7 @@ func placements(desktops []profiles.Desktop) map[string]string {
 	placed := make(map[string]string)
 	for _, desktop := range desktops {
 		for _, pane := range desktop.Panes {
-			placed[pane.SessionID] = desktop.ID
+			placed[string(pane.SessionID)] = desktop.ID
 		}
 	}
 	return placed
@@ -351,7 +351,7 @@ func TestConversionPreservesMixedTreesRatiosAndPendingAgents(t *testing.T) {
 	}
 	statuses := map[string]profiles.PaneStatus{}
 	for _, p := range desktop.Panes {
-		statuses[p.SessionID] = p.Status
+		statuses[string(p.SessionID)] = p.Status
 	}
 	if !reflect.DeepEqual(statuses, map[string]profiles.PaneStatus{"live": profiles.PaneStatusReady, "pending": profiles.PaneStatusSpawning}) {
 		t.Fatalf("panes = %+v, want the live and the pending agent", desktop.Panes)
@@ -534,8 +534,8 @@ func TestOpenCurrentRefusesAnOlderSchemaWithoutUpgradingIt(t *testing.T) {
 	}
 	_, err := OpenCurrent(f.path)
 	var behind *SchemaBehindError
-	if !errors.As(err, &behind) || behind.Current != ProfileConversionSchemaVersion-1 || behind.Required != LatestSchemaVersion() {
-		t.Fatalf("OpenCurrent = %v, want a refusal naming v%d and v%d", err, ProfileConversionSchemaVersion-1, LatestSchemaVersion())
+	if !errors.As(err, &behind) || len(behind.Missing) == 0 || behind.Missing[0] != ProfileConversionSchemaVersion {
+		t.Fatalf("OpenCurrent = %v, want a refusal naming missing migration %d", err, ProfileConversionSchemaVersion)
 	}
 	if !strings.Contains(err.Error(), "attn daemon ensure") {
 		t.Fatalf("refusal %q does not say how to upgrade", err)

@@ -19,7 +19,7 @@ func TestSendingASeedToTheChiefHandsItOverUnlessItChanged(t *testing.T) {
 		// Drain the setup move before its late bell can reach the next tender or new watchers.
 		w.advance(0)
 		for _, watcher := range []string{"sender", "observer"} {
-			if _, err := cli.SeedWatch(watcher, seed, false); err != nil {
+			if _, err := cli.SeedWatch(protocol.SessionID(watcher), seed, false); err != nil {
 				t.Fatal(err)
 			}
 		}

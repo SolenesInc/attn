@@ -23,16 +23,16 @@ func TestASeedRemembersWhereAndHowItsClosedOrReapedTenderRan(t *testing.T) {
 		repo := newRepo(t, name)
 		cwd := filepath.Join(repo, subdir)
 		spawned, workspace, pane := w.RequestSpawn(app, fakeagent.Codex, cwd)
-		run := w.Launched(spawned.ID)
-		app.TypeLine(spawned.ID, "fix the "+name+" checkout")
+		run := w.Launched(string(spawned.ID))
+		app.TypeLine(string(spawned.ID), "fix the "+name+" checkout")
 		run.Prompted()
 		run.Reply("Fixed. <!-- attn:state=idle -->")
-		testworld.AwaitSession(app, spawned.ID, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-		seed := plantSeedAs(t, cli, spawned.ID, "fix the "+name+" checkout")
+		testworld.AwaitSession(app, string(spawned.ID), func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+		seed := plantSeedAs(t, cli, string(spawned.ID), "fix the "+name+" checkout")
 		if _, err := cli.SeedTransition(spawned.ID, seed, "tend", "", "", false, client.SeedTransitionOptions{}); err != nil {
 			t.Fatalf("%s tends %s: %v", spawned.ID, seed, err)
 		}
-		tenders[name] = &tender{repo: repo, cwd: cwd, seed: seed, pane: sessionPane{session: spawned.ID, desktop: workspace, pane: pane}, run: run}
+		tenders[name] = &tender{repo: repo, cwd: cwd, seed: seed, pane: sessionPane{session: string(spawned.ID), desktop: workspace, pane: pane}, run: run}
 	}
 
 	closed := tenders["closed"]
@@ -42,7 +42,7 @@ func TestASeedRemembersWhereAndHowItsClosedOrReapedTenderRan(t *testing.T) {
 	reaped := tenders["reaped"]
 	runGit(t, reaped.repo, "checkout", "-b", "feature/reaped")
 	reaped.run.Exit(0)
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == reaped.pane.session })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == reaped.pane.session })
 	removeReopenRollout(t, w, reaped.run.ConversationID)
 	w.restart()
 	w.App()

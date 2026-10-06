@@ -148,7 +148,7 @@ func (w *World) Terminal(sessionID string) string {
 	hello := w.appHello()
 	if sessions, err := w.Client().Query(""); err == nil {
 		for _, session := range sessions {
-			if session.ID == sessionID && session.ProfileID != "" {
+			if session.ID == protocol.SessionID(sessionID) && session.ProfileID != "" {
 				hello.ProfileID = protocol.Ptr(session.ProfileID)
 			}
 		}
@@ -174,7 +174,7 @@ func (w *World) Spawn(p *Peer, h fakeagent.Harness, cwd string, opts ...func(*pr
 	if !result.Success {
 		w.T.Fatalf("spawn %s in %s failed: %s", h, cwd, protocol.Deref(result.Error))
 	}
-	return result.ID
+	return string(result.ID)
 }
 
 func (w *World) RequestSpawn(p *Peer, h fakeagent.Harness, cwd string, opts ...func(*protocol.SpawnSessionMessage)) (result protocol.SpawnResultMessage, desktopID, paneID string) {
@@ -184,7 +184,7 @@ func (w *World) RequestSpawn(p *Peer, h fakeagent.Harness, cwd string, opts ...f
 	}
 	msg := protocol.SpawnSessionMessage{
 		Cmd:       protocol.CmdSpawnSession,
-		ID:        uuid.NewString(),
+		ID:        protocol.SessionID(uuid.NewString()),
 		Agent:     string(h),
 		Cwd:       cwd,
 		ProfileID: p.SelectedProfile(),
@@ -195,7 +195,7 @@ func (w *World) RequestSpawn(p *Peer, h fakeagent.Harness, cwd string, opts ...f
 	for _, opt := range opts {
 		opt(&msg)
 	}
-	if msg.Placement != nil && protocol.Deref(msg.Placement.DesktopID) == "" && p.Placed(msg.ID) {
+	if msg.Placement != nil && protocol.Deref(msg.Placement.DesktopID) == "" && p.Placed(string(msg.ID)) {
 		msg.Placement = nil
 	}
 	result = Request(p, msg, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return r.ID == msg.ID })
@@ -246,17 +246,17 @@ func (w *World) LogDaemonTail() {
 }
 
 func (w *World) InjectSession(id, label, dir string, agent protocol.SessionAgent) error {
-	return w.inject(protocol.Session{ID: id, Label: label, Directory: dir, Agent: agent, State: protocol.SessionStateLaunching})
+	return w.inject(protocol.Session{ID: protocol.SessionID(id), Label: label, Directory: dir, Agent: agent, State: protocol.SessionStateLaunching})
 }
 
 func (w *World) InjectCrewSession(id, label, dir, member string) error {
-	return w.inject(protocol.Session{ID: id, Label: label, Directory: dir, Agent: protocol.SessionAgentClaude, State: protocol.SessionStateLaunching, CrewMember: protocol.Ptr(member)})
+	return w.inject(protocol.Session{ID: protocol.SessionID(id), Label: label, Directory: dir, Agent: protocol.SessionAgentClaude, State: protocol.SessionStateLaunching, CrewMember: protocol.Ptr(member)})
 }
 
 // InjectUnplacedSession registers a session no pane places, so reports under its id route as an unplaced terminal's.
 func (w *World) InjectUnplacedSession(id, label, dir string, agent protocol.SessionAgent) error {
 	return w.send(protocol.InjectTestSessionMessage{Cmd: protocol.CmdInjectTestSession, Unplaced: protocol.Ptr(true),
-		Session: protocol.Session{ID: id, Label: label, Directory: dir, Agent: agent, State: protocol.SessionStateLaunching}})
+		Session: protocol.Session{ID: protocol.SessionID(id), Label: label, Directory: dir, Agent: agent, State: protocol.SessionStateLaunching}})
 }
 
 func (w *World) inject(session protocol.Session) error {

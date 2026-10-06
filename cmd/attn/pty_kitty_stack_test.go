@@ -28,12 +28,12 @@ func TestReopeningATerminalDescribesOnlyTheImagesItsSnapshotShows(t *testing.T) 
 
 	reopened := s.App()
 	terminal := reopened.Terminal(shell)
-	reopened.Send(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal, AttachPolicy: protocol.Ptr(protocol.AttachPolicyRelaunchRestore)})
+	reopened.Send(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(terminal), AttachPolicy: protocol.Ptr(protocol.AttachPolicyRelaunchRestore)})
 	snapshot.Await()
 	app.TypeLine(shell, show("6", 71))
 	moved := awaitPlacement(app, shell, 71)
 	snapshot.Release()
-	result := testworld.Await(reopened, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })
+	result := testworld.Await(reopened, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return string(r.ID) == terminal })
 	if !result.Success || result.Snapshot == nil {
 		t.Fatalf("reopening the terminal returned %+v, want a snapshot", result)
 	}
@@ -87,7 +87,7 @@ func awaitPlacement(p *testworld.Peer, session string, image int) protocol.Kitty
 	p.T.Helper()
 	terminal := p.Terminal(session)
 	return testworld.Await(p, protocol.EventKittyPlacements, func(m protocol.KittyPlacementsMessage) bool {
-		return m.ID == terminal && slices.Contains(placementImages(m.Placements), image)
+		return string(m.ID) == terminal && slices.Contains(placementImages(m.Placements), image)
 	})
 }
 

@@ -51,7 +51,7 @@ func addGardenSession(t *testing.T, d *Daemon, id string) {
 	t.Helper()
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
-		ID: id, Label: id, State: "idle", ProfileID: defaultProfileID(t, d.store),
+		ID: protocol.SessionID(id), Label: id, State: "idle", ProfileID: defaultProfileID(t, d.store),
 		StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
 }
@@ -71,7 +71,7 @@ func transition(t *testing.T, d *Daemon, session, seedID string, verb garden.Ver
 		Cmd: protocol.CmdSeedTransition, SeedID: seedID, Verb: string(verb),
 	}
 	if session != "" {
-		msg.SourceSessionID = protocol.Ptr(session)
+		msg.SourceSessionID = protocol.Ptr(protocol.SessionID(session))
 	}
 	if reason != "" {
 		msg.Reason = protocol.Ptr(reason)

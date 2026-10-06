@@ -8,6 +8,7 @@ import (
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/garden"
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -38,7 +39,7 @@ func (d *Daemon) ringSeedUnblocked(unblocked []garden.Seed, excludedSessionIDs .
 	cause := firstString(excludedSessionIDs)
 	for _, seed := range unblocked {
 		_ = d.handleSeedEventForTest(seedEvents.NameUnblocked, seed.ID, seedEvents.UnblockedPayload{
-			BlockerSeedID: "s-9k3f9m", CausedBySessionID: cause,
+			BlockerSeedID: "s-9k3f9m", CausedBySessionID: protocol.SessionID(cause),
 		})
 	}
 }

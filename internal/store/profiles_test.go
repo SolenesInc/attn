@@ -42,7 +42,7 @@ func addProfileSession(t *testing.T, s *Store, id, profileID string) {
 	t.Helper()
 	now := string(protocol.TimestampNow())
 	if err := s.AddChecked(&protocol.Session{
-		ID: id, Label: id, Agent: protocol.SessionAgentCodex, Directory: "/tmp/project", ProfileID: profileID,
+		ID: protocol.SessionID(id), Label: id, Agent: protocol.SessionAgentCodex, Directory: "/tmp/project", ProfileID: profileID,
 		State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	}); err != nil {
 		t.Fatalf("adding session %s: %v", id, err)
@@ -65,7 +65,7 @@ func mustPlace(t *testing.T, s *Store, desktopID, sessionID string) (profiles.De
 		t.Fatalf("GetDesktop(%s): %v", desktopID, err)
 	}
 	placed, paneID, err := s.PlaceSession(SessionPlacementRequest{
-		DesktopID: desktopID, ExpectedRevision: desktop.Revision, SessionID: sessionID,
+		DesktopID: desktopID, ExpectedRevision: desktop.Revision, SessionID: protocol.SessionID(sessionID),
 		Direction: layouttree.DirectionVertical, Title: sessionID,
 	})
 	if err != nil {
@@ -100,10 +100,10 @@ func assertStoredDesktopsHoldTheirInvariants(t *testing.T, s *Store, profileID s
 		}
 		current = current || desktop.ID == profile.CurrentDesktopID
 		for _, pane := range desktop.Panes {
-			if other, dup := sessions[pane.SessionID]; dup {
+			if other, dup := sessions[string(pane.SessionID)]; dup {
 				t.Fatalf("session %s is placed on desktops %s and %s", pane.SessionID, other, desktop.ID)
 			}
-			sessions[pane.SessionID] = desktop.ID
+			sessions[string(pane.SessionID)] = desktop.ID
 		}
 	}
 	if !profile.Deleted() && !current {

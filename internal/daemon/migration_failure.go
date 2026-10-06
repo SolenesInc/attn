@@ -60,8 +60,8 @@ func (d *Daemon) openStore() error {
 		return fmt.Errorf("opening the database at %s: %w (details in %s)", dbPath, err, markerPath)
 	}
 	d.store = opened
-	if upgrade.From != upgrade.To {
-		d.logf("database %s upgraded from schema v%d to v%d; backup %s", dbPath, upgrade.From, upgrade.To, upgrade.BackupPath)
+	if upgrade.BackupPath != "" || upgrade.From < upgrade.To {
+		d.logf("database %s applied schema migrations (previous v%d, build requires v%d); backup %s", dbPath, upgrade.From, upgrade.To, upgrade.BackupPath)
 	}
 	if err := os.Remove(markerPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		d.logf("could not remove the stale migration failure marker %s: %v", markerPath, err)

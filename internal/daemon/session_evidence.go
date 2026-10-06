@@ -15,20 +15,20 @@ import (
 
 type sessionEvidenceTable struct {
 	mu       sync.Mutex
-	sessions map[string]*sessionstate.Evidence
+	sessions map[protocol.SessionID]*sessionstate.Evidence
 }
 
 func newSessionEvidenceTable() *sessionEvidenceTable {
-	return &sessionEvidenceTable{sessions: make(map[string]*sessionstate.Evidence)}
+	return &sessionEvidenceTable{sessions: make(map[protocol.SessionID]*sessionstate.Evidence)}
 }
 
 func (t *sessionEvidenceTable) updateIf(
-	sessionID string,
+	sessionID protocol.SessionID,
 	admit func() bool,
 	unchanged func(*sessionstate.Evidence) bool,
 	mutate func(*sessionstate.Evidence),
 ) bool {
-	if t == nil || strings.TrimSpace(sessionID) == "" {
+	if t == nil || protocol.TrimID(sessionID) == "" {
 		return false
 	}
 	t.mu.Lock()
@@ -54,7 +54,7 @@ func (t *sessionEvidenceTable) updateIf(
 	return true
 }
 
-func (t *sessionEvidenceTable) snapshot(sessionID string) (sessionstate.Evidence, bool) {
+func (t *sessionEvidenceTable) snapshot(sessionID protocol.SessionID) (sessionstate.Evidence, bool) {
 	if t == nil {
 		return sessionstate.Evidence{}, false
 	}
@@ -67,7 +67,7 @@ func (t *sessionEvidenceTable) snapshot(sessionID string) (sessionstate.Evidence
 	return *evidence, true
 }
 
-func (t *sessionEvidenceTable) forget(sessionID string) {
+func (t *sessionEvidenceTable) forget(sessionID protocol.SessionID) {
 	if t == nil {
 		return
 	}
@@ -76,7 +76,7 @@ func (t *sessionEvidenceTable) forget(sessionID string) {
 	delete(t.sessions, sessionID)
 }
 
-func (d *Daemon) recordEvidence(sessionID string, at time.Time, mutate func(*sessionstate.Evidence)) bool {
+func (d *Daemon) recordEvidence(sessionID protocol.SessionID, at time.Time, mutate func(*sessionstate.Evidence)) bool {
 	return d.updateEvidence(sessionID, nil, movedAt(at, mutate))
 }
 
@@ -88,7 +88,7 @@ func movedAt(at time.Time, mutate func(*sessionstate.Evidence)) func(*sessionsta
 }
 
 func (d *Daemon) updateEvidence(
-	sessionID string,
+	sessionID protocol.SessionID,
 	unchanged func(*sessionstate.Evidence) bool,
 	mutate func(*sessionstate.Evidence),
 ) bool {
@@ -115,7 +115,7 @@ func (d *Daemon) dwellGate() *dwellGate {
 	return d.sessionDwell
 }
 
-func (d *Daemon) recordPTYEvidence(sessionID string, obs pty.Observation) bool {
+func (d *Daemon) recordPTYEvidence(sessionID protocol.SessionID, obs pty.Observation) bool {
 	at := obs.At
 	if at.IsZero() {
 		at = time.Now()
@@ -139,7 +139,7 @@ func holdsSettledHeartbeat(e *sessionstate.Evidence, obs pty.Observation) bool {
 		e.Heartbeat.Detail == obs.Detail
 }
 
-func (d *Daemon) evidenceHoldsSettledHeartbeat(sessionID string, obs pty.Observation) bool {
+func (d *Daemon) evidenceHoldsSettledHeartbeat(sessionID protocol.SessionID, obs pty.Observation) bool {
 	evidence, ok := d.evidenceTable().snapshot(sessionID)
 	return ok && holdsSettledHeartbeat(&evidence, obs)
 }
@@ -184,12 +184,12 @@ func heartbeatEvidence(obs pty.Observation, at time.Time) (func(*sessionstate.Ev
 	}, true
 }
 
-func (d *Daemon) startEvidence(sessionID string, fresh sessionstate.Evidence) {
+func (d *Daemon) startEvidence(sessionID protocol.SessionID, fresh sessionstate.Evidence) {
 	d.dwellGate().clear(sessionID)
 	d.updateEvidence(sessionID, nil, func(e *sessionstate.Evidence) { *e = fresh })
 }
 
-func (d *Daemon) recordPlacedInputOwed(sessionID string, owed bool) {
+func (d *Daemon) recordPlacedInputOwed(sessionID protocol.SessionID, owed bool) {
 	d.updateEvidence(sessionID, func(e *sessionstate.Evidence) bool {
 		return e.PlacedInputOwed == owed || (owed && sessionstate.TookATurn(*e))
 	}, func(e *sessionstate.Evidence) {
@@ -201,12 +201,12 @@ func reportsTurnStarts(agent string) bool {
 	return agentdriver.EffectiveCapabilities(agentdriver.Get(agent)).HasHooks
 }
 
-func (d *Daemon) initialPromptPending(sessionID string) bool {
+func (d *Daemon) initialPromptPending(sessionID protocol.SessionID) bool {
 	evidence, _ := d.evidenceTable().snapshot(sessionID)
 	return evidence.InitialPromptOwed
 }
 
-func (d *Daemon) recordBracketEvidence(sessionID, state string) {
+func (d *Daemon) recordBracketEvidence(sessionID protocol.SessionID, state string) {
 	at := time.Now()
 	d.recordEvidence(sessionID, at, func(e *sessionstate.Evidence) {
 		switch state {
@@ -248,7 +248,7 @@ func (d *Daemon) recordBracketEvidence(sessionID, state string) {
 	})
 }
 
-func (d *Daemon) recordTranscriptEvidence(sessionID, state, detail string, at time.Time) {
+func (d *Daemon) recordTranscriptEvidence(sessionID protocol.SessionID, state string, detail string, at time.Time) {
 	d.traceStateEvidence(
 		sessionID,
 		stateOrigin{source: stateSourceTranscript, detail: detail, observedAt: at},
@@ -257,7 +257,7 @@ func (d *Daemon) recordTranscriptEvidence(sessionID, state, detail string, at ti
 	d.recordBracketEvidence(sessionID, state)
 }
 
-func (d *Daemon) recordTurnAbortedEvidence(sessionID, detail string, abortedAt, observedAt time.Time) {
+func (d *Daemon) recordTurnAbortedEvidence(sessionID protocol.SessionID, detail string, abortedAt, observedAt time.Time) {
 	if observedAt.IsZero() {
 		observedAt = time.Now()
 	}
@@ -277,7 +277,7 @@ func (d *Daemon) recordTurnAbortedEvidence(sessionID, detail string, abortedAt, 
 	})
 }
 
-func (d *Daemon) recordTurnBracketClosedEvidence(sessionID string, at time.Time) {
+func (d *Daemon) recordTurnBracketClosedEvidence(sessionID protocol.SessionID, at time.Time) {
 	if at.IsZero() {
 		at = time.Now()
 	}
@@ -287,7 +287,7 @@ func (d *Daemon) recordTurnBracketClosedEvidence(sessionID string, at time.Time)
 	})
 }
 
-func (d *Daemon) recordTurnEndedEvidence(sessionID string, classifies bool) {
+func (d *Daemon) recordTurnEndedEvidence(sessionID protocol.SessionID, classifies bool) {
 	at := time.Now()
 	d.recordEvidence(sessionID, at, func(e *sessionstate.Evidence) {
 		e.TurnOpen = false
@@ -312,20 +312,20 @@ func classifierVerdictMutation(state string, observedAt time.Time) func(*session
 	}
 }
 
-func (d *Daemon) recordStopFacts(sessionID string, backgroundWork, pendingCron bool) {
+func (d *Daemon) recordStopFacts(sessionID protocol.SessionID, backgroundWork, pendingCron bool) {
 	d.recordEvidence(sessionID, time.Now(), func(e *sessionstate.Evidence) {
 		e.BackgroundWork = backgroundWork
 		e.PendingCron = pendingCron
 	})
 }
 
-func (d *Daemon) recordReviewerEvidence(sessionID string, inLoop bool) {
+func (d *Daemon) recordReviewerEvidence(sessionID protocol.SessionID, inLoop bool) {
 	d.recordEvidence(sessionID, time.Now(), func(e *sessionstate.Evidence) {
 		e.ReviewerInLoop = inLoop
 	})
 }
 
-func (d *Daemon) recordReviewerEvidenceFromPermissionMode(sessionID, permissionMode string) {
+func (d *Daemon) recordReviewerEvidenceFromPermissionMode(sessionID protocol.SessionID, permissionMode string) {
 	mode := strings.TrimSpace(permissionMode)
 	if mode == "" {
 		return
@@ -340,7 +340,7 @@ func permissionModeGovernsApprovals(agent protocol.SessionAgent) bool {
 	return agent == protocol.SessionAgentClaude
 }
 
-func (d *Daemon) sessionAgent(sessionID string) protocol.SessionAgent {
+func (d *Daemon) sessionAgent(sessionID protocol.SessionID) protocol.SessionAgent {
 	if d.store == nil {
 		return ""
 	}
@@ -356,7 +356,7 @@ const (
 	notifyIdlePrompt       = "idle_prompt"
 )
 
-func (d *Daemon) recordNotificationEvidence(sessionID, notificationType, message string) {
+func (d *Daemon) recordNotificationEvidence(sessionID protocol.SessionID, notificationType string, message string) {
 	at := time.Now()
 	switch strings.TrimSpace(notificationType) {
 	case notifyPermissionPrompt:
@@ -375,7 +375,7 @@ func (d *Daemon) recordNotificationEvidence(sessionID, notificationType, message
 	}
 }
 
-func (d *Daemon) recordStopFailureEvidence(sessionID, errorType, message string) {
+func (d *Daemon) recordStopFailureEvidence(sessionID protocol.SessionID, errorType string, message string) {
 	at := time.Now()
 	detail := strings.TrimSpace(errorType)
 	if message = strings.TrimSpace(message); message != "" {
@@ -391,13 +391,13 @@ func (d *Daemon) recordStopFailureEvidence(sessionID, errorType, message string)
 	})
 }
 
-func (d *Daemon) recordCompactionEvidence(sessionID string, active bool) {
+func (d *Daemon) recordCompactionEvidence(sessionID protocol.SessionID, active bool) {
 	d.recordEvidence(sessionID, time.Now(), func(e *sessionstate.Evidence) {
 		e.Compacting = active
 	})
 }
 
-func (d *Daemon) recordProcessEvidence(sessionID string, exited bool) {
+func (d *Daemon) recordProcessEvidence(sessionID protocol.SessionID, exited bool) {
 	if !exited {
 		return
 	}
@@ -412,14 +412,14 @@ func (d *Daemon) recordProcessEvidence(sessionID string, exited bool) {
 	})
 }
 
-func (d *Daemon) recordClassifierStarted(sessionID string, at time.Time) {
+func (d *Daemon) recordClassifierStarted(sessionID protocol.SessionID, at time.Time) {
 	d.recordEvidence(sessionID, at, func(e *sessionstate.Evidence) {
 		e.ClassifyingSince = at
 	})
 	d.cancelAutoSettle(sessionID, "classification started")
 }
 
-func (d *Daemon) concludeClassification(sessionID string, verdict func(*sessionstate.Evidence)) {
+func (d *Daemon) concludeClassification(sessionID protocol.SessionID, verdict func(*sessionstate.Evidence)) {
 	if session := d.store.Get(sessionID); session != nil {
 		d.syncAutoSettle(sessionID, string(session.State))
 	}
@@ -441,7 +441,7 @@ var resolverOwnedStates = map[protocol.SessionState]bool{
 	protocol.SessionStateUnknown:         true,
 }
 
-func (d *Daemon) publishResolution(sessionID string, current protocol.SessionState, resolution sessionstate.Resolution, dwell time.Duration, now time.Time) (resolverOwnsState bool) {
+func (d *Daemon) publishResolution(sessionID protocol.SessionID, current protocol.SessionState, resolution sessionstate.Resolution, dwell time.Duration, now time.Time) (resolverOwnsState bool) {
 	linkOwns := d.linkOwnsState(sessionID)
 	resolverOwnsState = resolverOwnedStates[current] && !linkOwns
 	if resolution.Hold {
@@ -486,7 +486,7 @@ func resolutionDetail(resolution sessionstate.Resolution) string {
 	return string(resolution.Reason) + ": " + resolution.Detail
 }
 
-func (d *Daemon) traceResolutionSkip(sessionID string, resolution sessionstate.Resolution, reason string) {
+func (d *Daemon) traceResolutionSkip(sessionID protocol.SessionID, resolution sessionstate.Resolution, reason string) {
 	d.recordStateObservation(sessionID, statetrace.Observation{
 		Source:  stateSourceResolver,
 		Claim:   string(resolution.State),

@@ -42,8 +42,8 @@ func TestARelaunchedSessionKeepsTheChoicesItWasSpawnedWith(t *testing.T) {
 	}
 	check("at spawn", w.Launched(session))
 
-	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: session})
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == session })
+	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: protocol.SessionID(session)})
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
 	launchIntentReload(t, app, session)
 	reloaded := w.Launched(session)
 	check("reloaded after it exited", reloaded)
@@ -62,8 +62,8 @@ func TestARelaunchedSessionKeepsTheChoicesItWasSpawnedWith(t *testing.T) {
 
 func launchIntentReload(t *testing.T, app *testworld.Peer, session string) {
 	t.Helper()
-	reloaded := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: session, Cols: 100, Rows: 30},
-		protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return r.ID == session })
+	reloaded := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 100, Rows: 30},
+		protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == session })
 	if !reloaded.Success {
 		t.Fatalf("reload %s: %s", session, protocol.Deref(reloaded.Error))
 	}

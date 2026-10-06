@@ -36,8 +36,8 @@ func TestProfileDeletionRefusesAnAutomationUntilItIsDeleted(t *testing.T) {
 		}
 		first := runs[0]
 		worker, seed := protocol.Deref(first.SessionID), protocol.Deref(first.SeedID)
-		lifeMove(t, cli, worker, seed, "harvest", "finished", "")
-		if _, err := cli.AgentClose(worker, worker, "finished this automation run"); err != nil {
+		lifeMove(t, cli, string(worker), seed, "harvest", "finished", "")
+		if _, err := cli.AgentClose(string(worker), worker, "finished this automation run"); err != nil {
 			t.Fatal(err)
 		}
 		for _, current := range w.AppOn(side.ID).Initial.Profiles {

@@ -74,7 +74,7 @@ During design and review, ask: what could we remove from this design and still
 satisfy the full requirement?
 
 - The daemon owns application state; the app owns rendering.
-- Make protocol bumps and DB migrations as needed by the changes.
+- Follow [the database migration rules](docs/db-migrations.md) for schema changes.
 - Diagnose before fixing. If the cause is unknown, propose instrumentation.
 - Do not commit spikes.
 - Riskier changes, such as a new harness integration or PTY runtime, land first
@@ -197,9 +197,10 @@ Follow [Testing](docs/testing.md). In short:
 
 For command/event/message-shape changes:
 
-1. Edit `internal/protocol/schema/main.tsp`; run `make generate-types`.
-2. Increment `ProtocolVersion` in `internal/protocol/constants.go` and
-   `PROTOCOL_VERSION` in `app/src/hooks/useDaemonSocket.ts`.
+Edit `internal/protocol/schema/main.tsp`; run `make generate-types` and commit
+the generated files. This also writes the protocol schema hash into
+`internal/protocol/protocol_version.go` and `app/src/types/protocolVersion.ts`.
+`make check-types` checks that all generated files are current.
 
 Never hand-edit `internal/protocol/generated.go` or `app/src/types/generated.ts`.
 
@@ -241,6 +242,7 @@ clearer.
 
 Read the relevant entry when the task touches its subject. When changing or working on:
 
+- Database schema or migrations => docs/db-migrations.md
 - Tests, before writing, changing, or deleting them => docs/testing.md
 - How a harness behaves, before relying on it => docs/harnesses.md; check new
   claims in its source or with a probe and record them there

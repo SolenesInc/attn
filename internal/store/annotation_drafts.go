@@ -59,7 +59,7 @@ func (t annotationDraftTable) get(s *Store, key string) (annotationDraft, error)
 	}, nil
 }
 
-func (t annotationDraftTable) save(s *Store, key, annotationsJSON, note string, generation int, now time.Time) error {
+func (t annotationDraftTable) save(s *Store, key string, annotationsJSON string, note string, generation int, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

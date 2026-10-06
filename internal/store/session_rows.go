@@ -11,8 +11,8 @@ import (
 type sessionRows struct {
 	mu      sync.Mutex
 	gen     uint64
-	rows    map[string]*protocol.Session
-	drivers map[string]AgentDriverReportCursor
+	rows    map[protocol.SessionID]*protocol.Session
+	drivers map[protocol.SessionID]AgentDriverReportCursor
 }
 
 func (c *sessionRows) resetLocked(gen uint64) {
@@ -20,11 +20,11 @@ func (c *sessionRows) resetLocked(gen uint64) {
 		return
 	}
 	c.gen = gen
-	c.rows = make(map[string]*protocol.Session)
-	c.drivers = make(map[string]AgentDriverReportCursor)
+	c.rows = make(map[protocol.SessionID]*protocol.Session)
+	c.drivers = make(map[protocol.SessionID]AgentDriverReportCursor)
 }
 
-func (c *sessionRows) session(id string, gen uint64) (*protocol.Session, bool) {
+func (c *sessionRows) session(id protocol.SessionID, gen uint64) (*protocol.Session, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.resetLocked(gen)
@@ -35,14 +35,14 @@ func (c *sessionRows) session(id string, gen uint64) (*protocol.Session, bool) {
 	return cloneSession(row), true
 }
 
-func (c *sessionRows) putSession(id string, gen uint64, row *protocol.Session) {
+func (c *sessionRows) putSession(id protocol.SessionID, gen uint64, row *protocol.Session) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.resetLocked(gen)
 	c.rows[id] = cloneSession(row)
 }
 
-func (c *sessionRows) driver(id string, gen uint64) (AgentDriverReportCursor, bool) {
+func (c *sessionRows) driver(id protocol.SessionID, gen uint64) (AgentDriverReportCursor, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.resetLocked(gen)
@@ -50,7 +50,7 @@ func (c *sessionRows) driver(id string, gen uint64) (AgentDriverReportCursor, bo
 	return cursor, ok
 }
 
-func (c *sessionRows) putDriver(id string, gen uint64, cursor AgentDriverReportCursor) {
+func (c *sessionRows) putDriver(id protocol.SessionID, gen uint64, cursor AgentDriverReportCursor) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.resetLocked(gen)

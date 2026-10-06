@@ -21,16 +21,16 @@ import (
 func exitDriven(app *testworld.Peer, driver *driverPeer, session string) {
 	app.T.Helper()
 	terminal := app.Terminal(session)
-	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: "\x04"})
+	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(terminal), Data: "\x04"})
 	if closed := driver.closed(); closed.SessionID != terminal || closed.Reason != "exited" {
 		app.T.Fatalf("the driver was told %+v, want terminal %s of %s to have exited", closed, terminal, session)
 	}
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == session })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
 }
 
 func relaunchDriven(w *world, driver *driverPeer, session, cwd string) driverLaunch {
 	w.T.Helper()
-	w.Spawn(w.App(), fakeagent.Harness(driver.agent), cwd, func(m *protocol.SpawnSessionMessage) { m.ID = session })
+	w.Spawn(w.App(), fakeagent.Harness(driver.agent), cwd, func(m *protocol.SpawnSessionMessage) { m.ID = protocol.SessionID(session) })
 	return driver.launched()
 }
 
@@ -54,7 +54,7 @@ func TestADriverThatResumesIsHandedTheConversationItWasNamedOrLastReported(t *te
 	metadata := func(seq uint64, native string) {
 		t.Helper()
 		driver.mustReport("session.report_metadata", map[string]any{
-			"session_id": session, "run_id": named.RunID, "seq": seq,
+			"session_id": named.SessionID, "run_id": named.RunID, "seq": seq,
 			"metadata": map[string]string{"snipe_session_id": native}, "resume_session_id": native,
 		})
 	}
@@ -76,7 +76,7 @@ func TestADriverWithoutResumeRelaunchesFreshWhateverConversationItReported(t *te
 	cwd := w.Path("shop")
 	session, run := spawnDriven(w, app, driver, cwd)
 	driver.mustReport("session.report_metadata", map[string]any{
-		"session_id": session, "run_id": run.RunID, "seq": 1,
+		"session_id": run.SessionID, "run_id": run.RunID, "seq": 1,
 		"metadata": map[string]string{"snipe_session_id": "native-id"}, "resume_session_id": "native-id",
 	})
 	exitDriven(app, driver, session)
@@ -101,10 +101,10 @@ func TestAStalledResumeInspectionTimesOutAndIsRetriedOnTheNextRead(t *testing.T)
 		}
 		delegated := <-delegations
 		driver.mustReport("session.report_metadata", map[string]any{
-			"session_id": delegated.SessionID, "run_id": run.RunID, "seq": 2,
+			"session_id": run.SessionID, "run_id": run.RunID, "seq": 2,
 			"metadata": map[string]string{"native_id": "saved-conversation"}, "resume_session_id": "saved-conversation",
 		})
-		closePane(app, sessionPane{session: delegated.SessionID})
+		closePane(app, sessionPane{session: string(delegated.SessionID)})
 
 		shown := make(chan *protocol.SeedShowResult, 1)
 		go func() { shown <- lifeShow(t, cli, delegated.SeedID) }()
@@ -144,10 +144,10 @@ func TestAGardenReviewWaitsForAStalledResumeDriverOnlyOncePerCapture(t *testing.
 			}
 			delegated := <-delegations
 			driver.mustReport("session.report_metadata", map[string]any{
-				"session_id": delegated.SessionID, "run_id": run.RunID, "seq": 2,
+				"session_id": run.SessionID, "run_id": run.RunID, "seq": 2,
 				"metadata": map[string]string{"native_id": name}, "resume_session_id": name,
 			})
-			closePane(app, sessionPane{session: delegated.SessionID})
+			closePane(app, sessionPane{session: string(delegated.SessionID)})
 		}
 		shown := make(chan *protocol.SeedReviewResult, 1)
 		go func() { shown <- gardenReviewShow(t, cli, "") }()
@@ -190,10 +190,10 @@ func TestAGardenReviewWaitsForIndependentDriversTogether(t *testing.T) {
 			}
 			delegated := <-delegations
 			driver.mustReport("session.report_metadata", map[string]any{
-				"session_id": delegated.SessionID, "run_id": run.RunID, "seq": 2,
+				"session_id": run.SessionID, "run_id": run.RunID, "seq": 2,
 				"resume_session_id": agent + "-conversation", "metadata": map[string]string{"native_id": agent + "-conversation"},
 			})
-			closePane(app, sessionPane{session: delegated.SessionID})
+			closePane(app, sessionPane{session: string(delegated.SessionID)})
 		}
 		shown := make(chan *protocol.SeedReviewResult, 1)
 		go func() { shown <- gardenReviewShow(t, cli, "") }()
@@ -232,10 +232,10 @@ func TestAGardenReviewJoinsResumeInspectionWhenItsAdvisorReturnsDuringShutdown(t
 	}
 	delegated := <-delegations
 	driver.mustReport("session.report_metadata", map[string]any{
-		"session_id": delegated.SessionID, "run_id": run.RunID, "seq": 2,
+		"session_id": run.SessionID, "run_id": run.RunID, "seq": 2,
 		"resume_session_id": "saved-conversation", "metadata": map[string]string{"native_id": "saved-conversation"},
 	})
-	closePane(app, sessionPane{session: delegated.SessionID})
+	closePane(app, sessionPane{session: string(delegated.SessionID)})
 	now.Store(time.Now().Add(garden.DefaultStaleWindow).UnixNano())
 	t.Setenv("ATTN_HEADLESS_TASKS", "on")
 	reviews := make(chan protocol.GardenReview, 1)
@@ -307,10 +307,10 @@ func TestAGardenReviewInspectsSharedPluginStorageOncePerCapture(t *testing.T) {
 			delegated := <-delegations
 			seeds[name] = delegated.SeedID
 			driver.mustReport("session.report_metadata", map[string]any{
-				"session_id": delegated.SessionID, "run_id": run.RunID, "seq": 2,
+				"session_id": run.SessionID, "run_id": run.RunID, "seq": 2,
 				"metadata": map[string]string{"native_id": "shared-id"}, "resume_session_id": "shared-id",
 			})
-			closePane(app, sessionPane{session: delegated.SessionID})
+			closePane(app, sessionPane{session: string(delegated.SessionID)})
 		}
 		shown := make(chan *protocol.SeedReviewResult, 1)
 		for _, firstAvailable := range []bool{true, false} {
@@ -372,7 +372,7 @@ func TestRecreatingAWorktreeChecksPluginStorageAfterProjectSettingsReturn(t *tes
 			runGit(t, repo, "commit", "-m", "Configure external Pi storage")
 			worktree := reopenWorktree(t, repo, "feat/project-storage")
 			session, run := spawnDriven(w, app, driver, worktree)
-			driver.mustReport("session.report_metadata", map[string]any{"session_id": session, "run_id": run.RunID, "seq": 1, "metadata": map[string]string{"native_id": "saved-conversation"}, "resume_session_id": "saved-conversation"})
+			driver.mustReport("session.report_metadata", map[string]any{"session_id": run.SessionID, "run_id": run.RunID, "seq": 1, "metadata": map[string]string{"native_id": "saved-conversation"}, "resume_session_id": "saved-conversation"})
 			closeSession(t, cli, session, "finished for now")
 			awaitClosed(app, session)
 			if err := os.RemoveAll(worktree); err != nil {
@@ -385,7 +385,7 @@ func TestRecreatingAWorktreeChecksPluginStorageAfterProjectSettingsReturn(t *tes
 			}
 			done := make(chan error, 1)
 			go func() {
-				_, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: session, Action: string(protocol.SessionReopenActionRecreateWorktreeAndReopen)})
+				_, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: protocol.SessionID(session), Action: string(protocol.SessionReopenActionRecreateWorktreeAndReopen)})
 				done <- err
 			}()
 			var inspection resumeInspection

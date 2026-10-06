@@ -53,8 +53,8 @@ const crewSleepPromptGrace = 10 * time.Minute
 
 type crewLifecycleMemo struct {
 	mu                     sync.Mutex
-	lastHeartbeat          map[string]crewHeartbeat
-	lastSleepPromptAttempt map[string]time.Time
+	lastHeartbeat          map[protocol.SessionID]crewHeartbeat
+	lastSleepPromptAttempt map[protocol.SessionID]time.Time
 }
 
 type crewHeartbeat struct {
@@ -64,26 +64,26 @@ type crewHeartbeat struct {
 
 func newCrewLifecycleMemo() *crewLifecycleMemo {
 	return &crewLifecycleMemo{
-		lastHeartbeat:          make(map[string]crewHeartbeat),
-		lastSleepPromptAttempt: make(map[string]time.Time),
+		lastHeartbeat:          make(map[protocol.SessionID]crewHeartbeat),
+		lastSleepPromptAttempt: make(map[protocol.SessionID]time.Time),
 	}
 }
 
 // heartbeatDue never sends one cache generation a second heartbeat: attn cannot tell whether the agent missed the first.
-func (m *crewLifecycleMemo) heartbeatDue(sessionID, generation string, now time.Time, grace time.Duration) bool {
+func (m *crewLifecycleMemo) heartbeatDue(sessionID protocol.SessionID, generation string, now time.Time, grace time.Duration) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	last, ok := m.lastHeartbeat[sessionID]
 	return !ok || (last.generation != generation && now.Sub(last.at) >= grace)
 }
 
-func (m *crewLifecycleMemo) recordHeartbeat(sessionID, generation string, at time.Time) {
+func (m *crewLifecycleMemo) recordHeartbeat(sessionID protocol.SessionID, generation string, at time.Time) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.lastHeartbeat[sessionID] = crewHeartbeat{generation: generation, at: at}
 }
 
-func (m *crewLifecycleMemo) mayPromptSleep(sessionID string, now time.Time, grace time.Duration) bool {
+func (m *crewLifecycleMemo) mayPromptSleep(sessionID protocol.SessionID, now time.Time, grace time.Duration) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if last, ok := m.lastSleepPromptAttempt[sessionID]; ok && now.Sub(last) < grace {
@@ -93,7 +93,7 @@ func (m *crewLifecycleMemo) mayPromptSleep(sessionID string, now time.Time, grac
 	return true
 }
 
-func (m *crewLifecycleMemo) forget(sessionID string) {
+func (m *crewLifecycleMemo) forget(sessionID protocol.SessionID) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.lastHeartbeat, sessionID)
@@ -161,7 +161,7 @@ func (d *Daemon) crewWakeLedger() crew.WakeLedger {
 }
 
 func (d *Daemon) crewCacheState(session *protocol.Session, now time.Time) crew.CacheState {
-	state := crew.CacheState{TTL: d.crewCacheTTL(string(session.Agent))}
+	state := crew.CacheState{TTL: d.crewCacheTTL(session.Agent)}
 	switch session.State {
 	case protocol.SessionStateWorking, protocol.SessionStateLaunching:
 		return state
@@ -243,7 +243,7 @@ func (d *Daemon) crewLifecycleTick(now time.Time) {
 	}
 }
 
-func (d *Daemon) actOnCrewMember(member crew.Member, sessionID string, action crew.Action, cache crew.CacheState, now time.Time) {
+func (d *Daemon) actOnCrewMember(member crew.Member, sessionID protocol.SessionID, action crew.Action, cache crew.CacheState, now time.Time) {
 	switch action {
 	case crew.ActionHeartbeat:
 		session := d.store.Get(sessionID)
@@ -254,7 +254,7 @@ func (d *Daemon) actOnCrewMember(member crew.Member, sessionID string, action cr
 		if !d.crewMemo().heartbeatDue(sessionID, generation, now, d.crewHeartbeatLead()) {
 			return
 		}
-		delivery := maintenanceSessionInput("crew-heartbeat", sessionID+"/"+generation, sessionID, crewHeartbeatPrompt, sessionInputWhenPromptReady)
+		delivery := maintenanceSessionInput("crew-heartbeat", string(sessionID)+"/"+generation, sessionID, crewHeartbeatPrompt, sessionInputWhenPromptReady)
 		delivery.resend = func() {
 			d.actOnCrewMember(member, sessionID, action, cache, time.Now())
 		}
@@ -272,7 +272,7 @@ func (d *Daemon) actOnCrewMember(member crew.Member, sessionID string, action cr
 			return
 		}
 		generation := protocol.Deref(session.LastModelRequestAt)
-		receipt, err := d.sendToInbox(inbox.Item{ID: "crew-auto-sleep/" + sessionID + "/" + generation, To: inbox.ToSession(sessionID), Kind: inbox.Notice, Source: member.ID, Key: "crew-auto-sleep", Text: crewSleepPrompt})
+		receipt, err := d.sendToInbox(inbox.Item{ID: "crew-auto-sleep/" + string(sessionID) + "/" + generation, To: inbox.ToSession(sessionID), Kind: inbox.Notice, Source: member.ID, Key: "crew-auto-sleep", Text: crewSleepPrompt})
 		if err != nil {
 			d.logf("crew: %s's sleep request could not be recorded: %v", crew.DisplayName(member.ID), err)
 			return

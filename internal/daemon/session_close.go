@@ -15,7 +15,7 @@ type sessionCloseInFlight struct {
 }
 
 func (d *Daemon) beginSessionClose(
-	sessionID string, closed store.SessionClose, client *wsClient,
+	sessionID protocol.SessionID, closed store.SessionClose, client *wsClient,
 ) (sessionCloseInFlight, error) {
 	teardown, err := d.prepareSessionTeardown(sessionID)
 	if err != nil {
@@ -30,19 +30,18 @@ func (d *Daemon) beginSessionClose(
 	d.codexShared().archive(sessionID)
 	d.commitSessionUnregister(sessionID, closed)
 	if client != nil {
-		d.detachSession(client, sessionID)
 		for _, terminal := range teardown.terminals {
-			d.detachSession(client, string(terminal))
+			d.detachSession(client, terminal)
 		}
 	}
 	if teardown != nil && teardown.session != nil {
 		d.publishSessionUnregistered(teardown.session)
-		d.publishFact(FactSessionTerminated, teardown.session.ID, nil)
+		d.publishFact(FactSessionTerminated, string(teardown.session.ID), nil)
 	}
 	return sessionCloseInFlight{teardown: teardown}, nil
 }
 
-func (d *Daemon) finishSessionClose(sessionID string, closing sessionCloseInFlight) {
+func (d *Daemon) finishSessionClose(sessionID protocol.SessionID, closing sessionCloseInFlight) {
 	if closing.teardown != nil {
 		done := d.terminateSessionAsync(sessionID, syscall.SIGTERM, closing.teardown)
 		if session := closing.teardown.session; session != nil && session.Agent == protocol.SessionAgentCodex {
@@ -54,14 +53,14 @@ func (d *Daemon) finishSessionClose(sessionID string, closing sessionCloseInFlig
 	}
 }
 
-func (d *Daemon) sessionOwningEndpoint(sessionID string) (string, bool) {
+func (d *Daemon) sessionOwningEndpoint(sessionID protocol.SessionID) (string, bool) {
 	if d.hubManager == nil {
 		return "", false
 	}
 	return d.hubManager.EndpointIDForSession(sessionID)
 }
 
-func (d *Daemon) forwardSessionClose(endpointID, sessionID string, closed store.SessionClose) error {
+func (d *Daemon) forwardSessionClose(endpointID string, sessionID protocol.SessionID, closed store.SessionClose) error {
 	msg := protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: sessionID}
 	if closed.By != "" && closed.By != store.SessionClosedByUser {
 		msg.ClosedBy = protocol.Ptr(closed.By)

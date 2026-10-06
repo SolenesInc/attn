@@ -24,6 +24,7 @@ export interface QueueBandSessionView {
   state: UISessionState;
   state_reason?: string;
   chiefOfStaff?: boolean;
+  priority?: boolean;
   turnOwed?: boolean;
   turnOpenedAt?: string;
   turnSnoozedUntil?: string;

@@ -17,12 +17,13 @@ import (
 )
 
 type Invocation struct {
-	Args    []string
-	Session string
-	Stdin   string
-	Env     []string
-	Binary  string
-	Dir     string
+	Args     []string
+	Session  string
+	Terminal string
+	Stdin    string
+	Env      []string
+	Binary   string
+	Dir      string
 }
 
 type Result struct {
@@ -105,8 +106,20 @@ func (s *Stack) command(ctx context.Context, inv Invocation) *exec.Cmd {
 	cmd.WaitDelay = fakeagent.HangGuard
 	cmd.Dir = inv.Dir
 	cmd.Env = s.env()
-	if inv.Session != "" {
-		cmd.Env = append(cmd.Env, "ATTN_SESSION_ID="+inv.Session, "ATTN_INSIDE_APP=1")
+	terminalID := inv.Terminal
+	if terminalID == "" && inv.Session != "" {
+		terminalID = inv.Session
+		if sessions, err := s.Client().Query(""); err == nil {
+			for _, session := range sessions {
+				if string(session.ID) == inv.Session {
+					terminalID = s.Terminal(inv.Session)
+					break
+				}
+			}
+		}
+	}
+	if terminalID != "" {
+		cmd.Env = append(cmd.Env, "ATTN_TERMINAL_ID="+terminalID, "ATTN_INSIDE_APP=1")
 	}
 	if len(inv.Args) > 0 && inv.Args[0] == "daemon" && (len(inv.Args) == 1 || inv.Args[1] == "ensure") {
 		file, err := s.wsListener.File()

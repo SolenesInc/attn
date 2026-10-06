@@ -104,8 +104,8 @@ func TestSessionLedgerCommandsReadClosedSessionsAndBringThemBack(t *testing.T) {
 
 	scratch := s.Spawn(app, fakeagent.Claude, s.Path("blog"))
 	s.Launched(scratch)
-	if closed := testworld.Request(app, protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: scratch},
-		protocol.EventSessionCloseResult, func(r protocol.SessionCloseResultMessage) bool { return r.SessionID == scratch }); !closed.Accepted {
+	if closed := testworld.Request(app, protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: protocol.SessionID(scratch)},
+		protocol.EventSessionCloseResult, func(r protocol.SessionCloseResultMessage) bool { return string(r.SessionID) == scratch }); !closed.Accepted {
 		t.Fatalf("closing %s was refused: %s", scratch, protocol.Deref(closed.Error))
 	}
 	if closed := s.Run(testworld.Invocation{Session: source, Args: []string{"agent", "close", worker.SessionID, "-m", "brief delivered"}}); closed.Code != 0 {

@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 const (
@@ -25,7 +27,7 @@ const (
 type Observation struct {
 	CapturedAt    time.Time
 	CaptureReason string
-	SessionID     string
+	SessionID     protocol.SessionID
 	Agent         string
 	DaemonState   string
 	StateReason   string
@@ -62,13 +64,13 @@ type Recorder struct {
 	dir string
 
 	mu       sync.Mutex
-	sessions map[string]sessionCursor
+	sessions map[protocol.SessionID]sessionCursor
 }
 
 func New(dir string) *Recorder {
 	return &Recorder{
 		dir:      filepath.Clean(dir),
-		sessions: make(map[string]sessionCursor),
+		sessions: make(map[protocol.SessionID]sessionCursor),
 	}
 }
 
@@ -79,8 +81,8 @@ func (r *Recorder) Dir() string {
 	return r.dir
 }
 
-func (r *Recorder) Due(sessionID, daemonState string, now time.Time, interval time.Duration) (string, bool) {
-	if r == nil || strings.TrimSpace(sessionID) == "" {
+func (r *Recorder) Due(sessionID protocol.SessionID, daemonState string, now time.Time, interval time.Duration) (string, bool) {
+	if r == nil || protocol.TrimID(sessionID) == "" {
 		return "", false
 	}
 	if interval <= 0 {
@@ -105,7 +107,7 @@ func (r *Recorder) Record(obs Observation, maxBytes int64) (bool, error) {
 	if r == nil {
 		return false, errors.New("nil model capture recorder")
 	}
-	if strings.TrimSpace(obs.SessionID) == "" {
+	if protocol.TrimID(obs.SessionID) == "" {
 		return false, errors.New("model capture observation has no session id")
 	}
 	if obs.CapturedAt.IsZero() {
@@ -135,7 +137,7 @@ func (r *Recorder) Record(obs Observation, maxBytes int64) (bool, error) {
 		SchemaVersion:  schemaVersion,
 		CapturedAt:     obs.CapturedAt,
 		CaptureReason:  obs.CaptureReason,
-		SessionKey:     sha256Hex(obs.SessionID),
+		SessionKey:     sha256Hex(string(obs.SessionID)),
 		Agent:          strings.TrimSpace(strings.ToLower(obs.Agent)),
 		DaemonState:    obs.DaemonState,
 		StateReason:    obs.StateReason,

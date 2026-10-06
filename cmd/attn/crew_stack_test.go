@@ -115,25 +115,25 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 
 	requireStdout(t, s.Attn("crew", "wake", "trellis"), "Trellis is awake in session ")
 	day := protocol.Deref(crewRoster(t, s)["trellis"].BindingSession)
-	trellis := s.Launched(day)
+	trellis := s.Launched(string(day))
 	trellis.Prompted()
-	requireLines(t, "trellis's row", crewRow(t, s.Attn("crew", "list").Stdout, "Trellis"), " awake ", " "+day[:8]+" ")
+	requireLines(t, "trellis's row", crewRow(t, s.Attn("crew", "list").Stdout, "Trellis"), " awake ", string(" "+day[:8]+" "))
 	agents := s.Attn("agent", "list").Stdout
 	requireLines(t, "agent list", agents, "MEMBER", "An ID or awake MEMBER here works with `attn agent peek <target>`")
-	requireLines(t, "trellis's agent row", crewRow(t, agents, day[:8]), " Trellis ")
-	requireStdout(t, s.Attn("agent", "peek", "trellis"), "session "+day, "crew member: this session is Trellis today")
+	requireLines(t, "trellis's agent row", crewRow(t, agents, string(day[:8])), " Trellis ")
+	requireStdout(t, s.Attn("agent", "peek", "trellis"), string("session "+day), "crew member: this session is Trellis today")
 	requireFailure(t, s.Attn("agent", "peek", "keel"), "agent peek: ", "Keel is asleep", "never wakes", "`attn crew wake keel`")
-	requireStdout(t, s.Attn("crew", "wake", "trellis"), "Trellis is already awake in session "+day[:8]+" — nothing was launched.")
+	requireStdout(t, s.Attn("crew", "wake", "trellis"), string("Trellis is already awake in session "+day[:8]+" — nothing was launched."))
 
 	trellis.Exit(0)
-	testworld.AwaitSession(app, day, func(x protocol.Session) bool { return protocol.Deref(x.StateReason) == "process_exited" })
-	requireStdout(t, s.Attn("crew", "wake", "trellis"), "Previous session "+day[:8]+" had exited; its binding was released.\n", "Trellis is awake in session ")
+	testworld.AwaitSession(app, string(day), func(x protocol.Session) bool { return protocol.Deref(x.StateReason) == "process_exited" })
+	requireStdout(t, s.Attn("crew", "wake", "trellis"), string("Previous session "+day[:8]+" had exited; its binding was released.\n"), "Trellis is awake in session ")
 	next := protocol.Deref(crewRoster(t, s)["trellis"].BindingSession)
 	if next == day || next == "" {
 		t.Fatalf("trellis woke into %q after %q exited", next, day)
 	}
-	s.Launched(next).Prompted()
-	requireStdout(t, s.Attn("crew", "sleep", "trellis"), "Sleep request for Trellis is queued in session "+next[:8]+" — ")
+	s.Launched(string(next)).Prompted()
+	requireStdout(t, s.Attn("crew", "sleep", "trellis"), string("Sleep request for Trellis is queued in session "+next[:8]+" — "))
 	requireStdout(t, s.Attn("crew", "sleep", "keel"), "Keel is already asleep", "no sleep request was sent")
 
 	var woken protocol.CrewWakeResult
@@ -141,12 +141,12 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 	if woken.Member != "keel" || woken.AlreadyAwake || woken.SessionID == "" {
 		t.Fatalf("crew wake keel --agent codex --json = %+v", woken)
 	}
-	if codex := s.Launched(woken.SessionID); codex.Harness != fakeagent.Codex {
+	if codex := s.Launched(string(woken.SessionID)); codex.Harness != fakeagent.Codex {
 		t.Fatalf("keel woke on %s, want codex", codex.Harness)
 	} else {
 		codex.Exit(0)
 	}
-	testworld.AwaitSession(app, woken.SessionID, func(x protocol.Session) bool { return protocol.Deref(x.StateReason) == "process_exited" })
+	testworld.AwaitSession(app, string(woken.SessionID), func(x protocol.Session) bool { return protocol.Deref(x.StateReason) == "process_exited" })
 
 	restarts := make([]protocol.CrewRestartResult, 2)
 	for i := range restarts {
@@ -176,14 +176,14 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 			days = append(days, session.ID)
 		}
 	}
-	if !slices.Equal(days, []string{successor}) {
+	if !slices.Equal(days, []string{string(successor)}) {
 		t.Fatalf("a retried restart left keel in sessions %q, want only %s", days, successor)
 	}
-	keel := s.Launched(successor)
+	keel := s.Launched(string(successor))
 	keel.Prompted()
 	keel.Reply("Read the charter. <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, successor, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
-	requireStdout(t, s.Attn("crew", "sleep", "keel"), "Asked Keel in session "+successor[:8]+" to write its handoff and file it with `attn handoff --sleep`.")
+	testworld.AwaitSession(app, string(successor), func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
+	requireStdout(t, s.Attn("crew", "sleep", "keel"), string("Asked Keel in session "+successor[:8]+" to write its handoff and file it with `attn handoff --sleep`."))
 
 	unknown := s.Attn("crew", "restart", "nobody")
 	receipt, _, _ := strings.Cut(unknown.Stderr, "\n")

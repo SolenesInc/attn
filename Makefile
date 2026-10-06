@@ -1,4 +1,4 @@
-.PHONY: git-hooks lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-instance-harness verify-ghostty-vt-wasm test test-scripts test-v test-watch test-frontend test-e2e clean generate-types ensure-go-jsonschema check-types build-app ensure-codesign-identity sign-app app-screenshot dist release release-hotfix
+.PHONY: git-hooks lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-instance-harness verify-ghostty-vt-wasm test test-scripts test-v test-watch test-frontend test-e2e clean generate-types ensure-go-jsonschema check-types generate-schema check-schema check-migrations build-app ensure-codesign-identity sign-app app-screenshot dist release release-hotfix
 
 # Bare `make` does the full prod inner loop: install + open the app.
 # `make install` is install-only (for scripts/CI that drive the launch
@@ -32,7 +32,7 @@ endif
 INSTANCE_ROUTING_VARS = ATTN_DATA_DIR ATTN_SOCKET_PATH ATTN_DB_PATH ATTN_CONFIG_PATH ATTN_PLUGIN_DIR ATTN_WS_PORT
 # Routing env that must NOT leak from a parent attn terminal into an isolated
 # instance daemon we (re)start. Shared by every non-default instance install.
-INSTANCE_DAEMON_UNSET = $(foreach var,$(INSTANCE_ROUTING_VARS),-u $(var)) -u ATTN_WRAPPER_PATH -u ATTN_INSIDE_APP -u ATTN_DAEMON_MANAGED -u ATTN_PTY_WORKER -u ATTN_SESSION_ID -u ATTN_AGENT
+INSTANCE_DAEMON_UNSET = $(foreach var,$(INSTANCE_ROUTING_VARS),-u $(var)) -u ATTN_WRAPPER_PATH -u ATTN_INSIDE_APP -u ATTN_DAEMON_MANAGED -u ATTN_PTY_WORKER -u ATTN_TERMINAL_ID -u ATTN_SESSION_ID -u ATTN_AGENT
 # An install takes INSTANCE=<name> as the intent and drops the inherited routing,
 # but the shell it ran from still points somewhere else — say so, because every
 # other attn command in that shell will refuse (config.ValidateInstanceRouting).
@@ -414,11 +414,16 @@ generate-types: ensure-go-jsonschema
 	# signatures. Those were quicktype's defaults until 26, which flipped both
 	# preferences on — so the flags are only redundant with the version pin
 	# for as long as both stay put. Keep them explicit.
-	npx quicktype@26.0.0 \
-		--src internal/protocol/schema/tsp-output/json-schema/*.json \
+	# Go needs the named scalar roots; TypeScript resolves their references to strings.
+	# Passing those roots to quicktype also emits unused, unexported aliases.
+	@set --; for schema in internal/protocol/schema/tsp-output/json-schema/*.json; do \
+		case "$$schema" in */SessionID.json|*/TerminalID.json) ;; *) set -- "$$@" "$$schema" ;; esac; \
+	done; npx quicktype@26.0.0 \
+		--src "$$@" \
 		--src-lang schema --lang typescript \
 		--no-prefer-unions --no-prefer-unknown \
 		-o app/src/types/generated.ts
+	node scripts/generate-protocol-version.mjs
 
 # CI check: verify generated files are up-to-date.
 #
@@ -427,7 +432,20 @@ generate-types: ensure-go-jsonschema
 # diff runs and this passes silently — commit the edit if you are trying to
 # reproduce a drift failure locally.
 check-types: generate-types
-	git diff --exit-code internal/protocol/generated.go app/src/types/generated.ts
+	git diff --exit-code internal/protocol/generated.go app/src/types/generated.ts internal/protocol/protocol_version.go app/src/types/protocolVersion.ts
+
+MIGRATION_BASE ?= origin/next
+
+check-migrations:
+	go run ./cmd/db-migrations check-history --base "$(MIGRATION_BASE)"
+
+generate-schema:
+	go run ./scripts/generate-schema > internal/store/schema.sql
+
+check-schema:
+	@dump=$$(mktemp); trap 'rm -f "$$dump"' EXIT; \
+		go run ./scripts/generate-schema > "$$dump" && \
+		diff -u internal/store/schema.sql "$$dump"
 
 # Build the packaged app for $(INSTANCE) (empty = prod). All bundle metadata is
 # derived from `attn instance resolve` by scripts/build-app-instance.sh: the

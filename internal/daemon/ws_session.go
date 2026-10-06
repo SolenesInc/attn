@@ -15,7 +15,7 @@ func (d *Daemon) handleClearWarningsWS() {
 
 func unregisterSessionClose(msg *protocol.UnregisterMessage) store.SessionClose {
 	closed := store.SessionClose{
-		By:     strings.TrimSpace(protocol.Deref(msg.ClosedBy)),
+		By:     protocol.TrimID(protocol.Deref(msg.ClosedBy)),
 		Reason: strings.TrimSpace(protocol.Deref(msg.CloseReason)),
 	}
 	if closed.By == "" {
@@ -24,7 +24,7 @@ func unregisterSessionClose(msg *protocol.UnregisterMessage) store.SessionClose 
 	return closed
 }
 
-func (d *Daemon) beginUserSessionClose(sessionID string, closed store.SessionClose, client *wsClient) (sessionCloseInFlight, error) {
+func (d *Daemon) beginUserSessionClose(sessionID protocol.SessionID, closed store.SessionClose, client *wsClient) (sessionCloseInFlight, error) {
 	if err := d.sessionCloseError(sessionID); err != nil {
 		d.logf("refusing to close protected session %s: %v", sessionID, err)
 		return sessionCloseInFlight{}, err
@@ -44,7 +44,7 @@ func (d *Daemon) handleUnregisterWS(client *wsClient, msg *protocol.UnregisterMe
 	d.finishSessionClose(msg.ID, closing)
 }
 
-func (d *Daemon) answerSessionClose(client *wsClient, sessionID string, refusal error) {
+func (d *Daemon) answerSessionClose(client *wsClient, sessionID protocol.SessionID, refusal error) {
 	answer := &protocol.SessionCloseResultMessage{
 		Event:     protocol.EventSessionCloseResult,
 		SessionID: sessionID,

@@ -11,7 +11,7 @@ func (d *Daemon) resolveSpawnParent(spawnedFrom string, profile profiles.Profile
 	if !isShell || placement == nil {
 		return ""
 	}
-	parentID := d.satelliteParentOf(strings.TrimSpace(spawnedFrom))
+	parentID := protocol.SessionID(d.satelliteParentOf(protocol.SessionID(strings.TrimSpace(spawnedFrom))))
 	if parentID == "" {
 		return ""
 	}
@@ -19,10 +19,10 @@ func (d *Daemon) resolveSpawnParent(spawnedFrom string, profile profiles.Profile
 	if err != nil || !placed || parentPlacement.DesktopID != placement.targetDesktop(profile) {
 		return ""
 	}
-	return parentID
+	return string(parentID)
 }
 
-func (d *Daemon) satelliteParentOf(baseID string) string {
+func (d *Daemon) satelliteParentOf(baseID protocol.SessionID) string {
 	if baseID == "" {
 		return ""
 	}
@@ -31,11 +31,11 @@ func (d *Daemon) satelliteParentOf(baseID string) string {
 		return ""
 	}
 	parentID := base.ID
-	if string(base.Agent) == protocol.AgentShellValue {
-		parentID = strings.TrimSpace(protocol.Deref(base.ParentSessionID))
+	if base.Agent == protocol.AgentShellValue {
+		parentID = protocol.TrimID(protocol.Deref(base.ParentSessionID))
 	}
 	if parentID == "" || d.store.Get(parentID) == nil {
 		return ""
 	}
-	return parentID
+	return string(parentID)
 }

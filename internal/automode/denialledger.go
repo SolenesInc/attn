@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 const DenialLedgerFileName = "attn-automode-denials.jsonl"
@@ -21,13 +23,13 @@ func DenialLedgerPath(dataDir string) string {
 }
 
 type DenialLedgerRecord struct {
-	SessionID  string    `json:"session_id"`
-	ToolCallID string    `json:"tool_call_id"`
-	Tool       string    `json:"tool"`
-	Action     string    `json:"action"`
-	Reason     string    `json:"reason"`
-	Rule       string    `json:"rule"`
-	At         time.Time `json:"-"`
+	SessionID  protocol.SessionID `json:"session_id"`
+	ToolCallID string             `json:"tool_call_id"`
+	Tool       string             `json:"tool"`
+	Action     string             `json:"action"`
+	Reason     string             `json:"reason"`
+	Rule       string             `json:"rule"`
+	At         time.Time          `json:"-"`
 
 	Clearable *bool `json:"clearable,omitempty"`
 
@@ -101,7 +103,7 @@ func readDenialGeneration(path string, into *DenialLedgerReading) error {
 			continue
 		}
 		into.Records = append(into.Records, DenialLedgerRecord{
-			SessionID:  strings.TrimSpace(raw.SessionID),
+			SessionID:  protocol.SessionID(strings.TrimSpace(raw.SessionID)),
 			ToolCallID: strings.TrimSpace(raw.ToolCallID),
 			Tool:       strings.TrimSpace(raw.Tool),
 			Action:     strings.TrimSpace(raw.Action),

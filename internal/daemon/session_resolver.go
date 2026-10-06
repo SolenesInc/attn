@@ -4,20 +4,21 @@ import (
 	"sync"
 	"time"
 
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionstate"
 )
 
 type sessionResolver struct {
 	mu   sync.Mutex
-	due  map[string]time.Time
+	due  map[protocol.SessionID]time.Time
 	wake chan struct{}
 }
 
 func newSessionResolver() *sessionResolver {
-	return &sessionResolver{due: make(map[string]time.Time), wake: make(chan struct{}, 1)}
+	return &sessionResolver{due: make(map[protocol.SessionID]time.Time), wake: make(chan struct{}, 1)}
 }
 
-func (r *sessionResolver) soon(sessionID string) {
+func (r *sessionResolver) soon(sessionID protocol.SessionID) {
 	r.mu.Lock()
 	r.due[sessionID] = time.Time{}
 	r.mu.Unlock()
@@ -37,14 +38,14 @@ func (r *sessionResolver) takeDue(now time.Time) []string {
 	var ids []string
 	for id, at := range r.due {
 		if !at.After(now) {
-			ids = append(ids, id)
+			ids = append(ids, string(id))
 			delete(r.due, id)
 		}
 	}
 	return ids
 }
 
-func (r *sessionResolver) after(sessionID string, at time.Time) {
+func (r *sessionResolver) after(sessionID protocol.SessionID, at time.Time) {
 	if at.IsZero() {
 		return
 	}
@@ -55,7 +56,7 @@ func (r *sessionResolver) after(sessionID string, at time.Time) {
 	}
 }
 
-func (r *sessionResolver) forget(sessionID string) {
+func (r *sessionResolver) forget(sessionID protocol.SessionID) {
 	r.mu.Lock()
 	delete(r.due, sessionID)
 	r.mu.Unlock()
@@ -82,7 +83,7 @@ func (d *Daemon) sessionResolver() *sessionResolver {
 	return d.sessionResolverState
 }
 
-func (d *Daemon) resolveSoon(sessionID string) {
+func (d *Daemon) resolveSoon(sessionID protocol.SessionID) {
 	d.sessionResolver().soon(sessionID)
 }
 
@@ -112,11 +113,11 @@ func (d *Daemon) runSessionResolver() {
 func (d *Daemon) resolveDue(now time.Time) {
 	resolver := d.sessionResolver()
 	for _, sessionID := range resolver.takeDue(now) {
-		resolver.after(sessionID, d.resolveSession(sessionID, now))
+		resolver.after(protocol.SessionID(sessionID), d.resolveSession(protocol.SessionID(sessionID), now))
 	}
 }
 
-func (d *Daemon) resolveSession(sessionID string, now time.Time) time.Time {
+func (d *Daemon) resolveSession(sessionID protocol.SessionID, now time.Time) time.Time {
 	session := d.store.Get(sessionID)
 	if session == nil {
 		d.forgetSessionTrace(sessionID)
@@ -126,7 +127,7 @@ func (d *Daemon) resolveSession(sessionID string, now time.Time) time.Time {
 	if !ok {
 		return time.Time{}
 	}
-	policy := sessionstate.PolicyFor(string(session.Agent))
+	policy := sessionstate.PolicyFor(session.Agent)
 	resolution := sessionstate.Resolve(evidence, policy, now)
 	owned := d.publishResolution(sessionID, session.State, resolution, sessionstate.DwellFor(resolution.State, evidence, policy), now)
 	if d.store.Get(sessionID) == nil {

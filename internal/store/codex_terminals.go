@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"github.com/victorarias/attn/internal/protocol"
 	"time"
 )
 
@@ -58,26 +59,26 @@ func (s *Store) CodexTerminals() ([]CodexTerminal, error) {
 	return terminals, rows.Err()
 }
 
-func (s *Store) OtherOpenSessionHolding(nativeID, exceptSessionID string) string {
+func (s *Store) OtherOpenSessionHolding(nativeID string, exceptSessionID protocol.SessionID) protocol.SessionID {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil || nativeID == "" {
 		return ""
 	}
-	var id string
+	var id protocol.SessionID
 	if err := s.db.QueryRow(`SELECT id FROM sessions WHERE resume_session_id = ? AND closed_at = '' AND id != ? LIMIT 1`, nativeID, exceptSessionID).Scan(&id); err != nil {
 		return ""
 	}
 	return id
 }
 
-func (s *Store) OpenSessionHolding(profileID, nativeID string) string {
+func (s *Store) OpenSessionHolding(profileID, nativeID string) protocol.SessionID {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil || nativeID == "" {
 		return ""
 	}
-	var id string
+	var id protocol.SessionID
 	if err := s.db.QueryRow(`SELECT id FROM sessions WHERE profile_id = ? AND resume_session_id = ? AND closed_at = '' LIMIT 1`, profileID, nativeID).Scan(&id); err != nil {
 		return ""
 	}

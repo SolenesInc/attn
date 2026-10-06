@@ -10,7 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -122,10 +121,10 @@ func (d *Daemon) recordSupportInputTrace(msg *protocol.PtyInputMessage, received
 
 func (d *Daemon) handleSupportSnapshot(client *wsClient, msg *protocol.SupportSnapshotMessage) {
 	traces, total := d.supportInputTraceRing().snapshot()
-	runtimeIDs := make(map[string]struct{}, len(traces))
+	runtimeIDs := make(map[protocol.TerminalID]struct{}, len(traces))
 	if msg.RuntimeIds != nil {
 		for _, runtimeID := range msg.RuntimeIds {
-			if runtimeID = strings.TrimSpace(runtimeID); runtimeID != "" {
+			if runtimeID = protocol.TrimID(runtimeID); runtimeID != "" {
 				runtimeIDs[runtimeID] = struct{}{}
 			}
 		}
@@ -138,7 +137,7 @@ func (d *Daemon) handleSupportSnapshot(client *wsClient, msg *protocol.SupportSn
 	defer cancel()
 	if msg.RuntimeIds == nil && d.ptyBackend != nil {
 		for _, runtimeID := range d.ptyBackend.TerminalIDs(ctx) {
-			runtimeIDs[string(runtimeID)] = struct{}{}
+			runtimeIDs[runtimeID] = struct{}{}
 			if len(runtimeIDs) >= supportInputTraceCapacity {
 				break
 			}
@@ -147,13 +146,13 @@ func (d *Daemon) handleSupportSnapshot(client *wsClient, msg *protocol.SupportSn
 
 	ids := make([]string, 0, len(runtimeIDs))
 	for runtimeID := range runtimeIDs {
-		ids = append(ids, runtimeID)
+		ids = append(ids, string(runtimeID))
 	}
 	sort.Strings(ids)
 	runtimes := make([]protocol.SupportRuntimeEvidence, 0, len(ids))
 	for _, runtimeID := range ids {
-		_, attached := client.attachedStreams[runtimeID]
-		runtimes = append(runtimes, d.supportRuntimeEvidence(ctx, runtimeID, attached))
+		_, attached := client.attachedStreams[protocol.TerminalID(runtimeID)]
+		runtimes = append(runtimes, d.supportRuntimeEvidence(ctx, protocol.TerminalID(runtimeID), attached))
 	}
 	warnings := d.getWarnings()
 	warningCodes := make([]string, 0, len(warnings))
@@ -178,14 +177,14 @@ func (d *Daemon) handleSupportSnapshot(client *wsClient, msg *protocol.SupportSn
 	})
 }
 
-func (d *Daemon) supportRuntimeEvidence(ctx context.Context, runtimeID string, attached bool) protocol.SupportRuntimeEvidence {
+func (d *Daemon) supportRuntimeEvidence(ctx context.Context, runtimeID protocol.TerminalID, attached bool) protocol.SupportRuntimeEvidence {
 	evidence := protocol.SupportRuntimeEvidence{
 		RuntimeID: runtimeID,
 		Backend:   d.ptyBackendMode(),
 		Attached:  attached,
 	}
 	if buildProvider, ok := d.ptyBackend.(ptybackend.TerminalBuildProvider); ok {
-		format, known := buildProvider.SessionTerminalBuild(harness.TerminalID(runtimeID))
+		format, known := buildProvider.SessionTerminalBuild(runtimeID)
 		evidence.TerminalBuildKnown = known
 		if known {
 			evidence.TerminalBuild = protocol.Ptr(format)
@@ -195,7 +194,7 @@ func (d *Daemon) supportRuntimeEvidence(ctx context.Context, runtimeID string, a
 	if !ok {
 		return evidence
 	}
-	info, err := infoProvider.SessionInfo(ctx, harness.TerminalID(runtimeID))
+	info, err := infoProvider.SessionInfo(ctx, runtimeID)
 	if err != nil {
 		evidence.InfoErrorClass = protocol.Ptr(supportErrorClass(err))
 		return evidence

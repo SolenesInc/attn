@@ -84,7 +84,8 @@ type endpointRuntime struct {
 	pendingRemoteWeb *pendingRemoteWebAction
 	pendingBootstrap bool
 
-	sessions map[string]protocol.Session
+	sessions  map[protocol.SessionID]protocol.Session
+	terminals map[protocol.TerminalID]protocol.SessionID
 }
 
 type pendingRemoteWebAction struct {
@@ -118,10 +119,10 @@ type Manager struct {
 
 	mu              sync.RWMutex
 	runtimes        map[string]*endpointRuntime
-	pending         map[string]pendingSessionRoute
+	pending         map[protocol.SessionID]pendingSessionRoute
 	browserControls map[string]pendingBrowserControl
-	sessionCloses   map[string][]*sessionCloseWaiter
-	sessionRenames  map[string]*sessionCloseWaiter
+	sessionCloses   map[protocol.SessionID][]*sessionCloseWaiter
+	sessionRenames  map[protocol.SessionID]*sessionCloseWaiter
 	ctx             context.Context
 	cancel          context.CancelFunc
 	started         bool
@@ -151,16 +152,16 @@ func NewManager(
 		homeDaemonID:    homeDaemonID,
 		logf:            logf,
 		runtimes:        make(map[string]*endpointRuntime),
-		pending:         make(map[string]pendingSessionRoute),
+		pending:         make(map[protocol.SessionID]pendingSessionRoute),
 		browserControls: make(map[string]pendingBrowserControl),
-		sessionCloses:   make(map[string][]*sessionCloseWaiter),
-		sessionRenames:  make(map[string]*sessionCloseWaiter),
+		sessionCloses:   make(map[protocol.SessionID][]*sessionCloseWaiter),
+		sessionRenames:  make(map[protocol.SessionID]*sessionCloseWaiter),
 	}
 	for _, record := range endpointStore.ListEndpoints() {
 		m.runtimes[record.ID] = &endpointRuntime{
 			record:   record,
 			info:     infoFromRecord(record),
-			sessions: make(map[string]protocol.Session),
+			sessions: make(map[protocol.SessionID]protocol.Session),
 		}
 	}
 	return m
@@ -299,7 +300,7 @@ func (m *Manager) UpdateEndpoint(id string, update store.EndpointUpdate) (*store
 	if !ok {
 		runtime = &endpointRuntime{
 			info:     infoFromRecord(*record),
-			sessions: make(map[string]protocol.Session),
+			sessions: make(map[protocol.SessionID]protocol.Session),
 		}
 		m.runtimes[id] = runtime
 	}
@@ -422,7 +423,7 @@ func (m *Manager) stopRuntimeLocked(runtime *endpointRuntime) {
 		killAndReap(runtime.cmd)
 		runtime.cmd = nil
 	}
-	runtime.sessions = make(map[string]protocol.Session)
+	runtime.sessions = make(map[protocol.SessionID]protocol.Session)
 	m.clearPendingRoutesLocked(runtime.record.ID)
 	zero := 0
 	runtime.info.SessionCount = protocol.Ptr(zero)
@@ -592,6 +593,7 @@ func (m *Manager) consumeRemote(ctx context.Context, id string, conn *websocket.
 			if remoteProtocol := strings.TrimSpace(protocol.Deref(msg.ProtocolVersion)); remoteProtocol != "" && remoteProtocol != protocol.ProtocolVersion {
 				return false, &VersionMismatchError{RemoteVersion: remoteProtocol, LocalVersion: protocol.ProtocolVersion}
 			}
+			m.replaceRemoteTerminals(id, msg.TerminalBindings)
 			changed := m.ReplaceRemoteSessions(id, msg.Sessions)
 			caps := capabilitiesFromInitialState(&msg)
 			sessionCount := int32(len(msg.Sessions))
@@ -607,6 +609,11 @@ func (m *Manager) consumeRemote(ctx context.Context, id string, conn *websocket.
 				m.publishSessionsChanged(id)
 			}
 			connected = true
+		case protocol.EventTerminalBindingsUpdated:
+			var msg protocol.TerminalBindingsUpdatedMessage
+			if json.Unmarshal(data, &msg) == nil {
+				m.replaceRemoteTerminals(id, msg.TerminalBindings)
+			}
 		case protocol.EventSettingsUpdated:
 			var msg protocol.SettingsUpdatedMessage
 			if err := json.Unmarshal(data, &msg); err != nil {
@@ -639,9 +646,9 @@ func (m *Manager) consumeRemote(ctx context.Context, id string, conn *websocket.
 			}
 		case protocol.EventSessionCloseResult:
 			var msg struct {
-				SessionID string `json:"session_id"`
-				Accepted  bool   `json:"accepted"`
-				Error     string `json:"error"`
+				SessionID protocol.SessionID `json:"session_id"`
+				Accepted  bool               `json:"accepted"`
+				Error     string             `json:"error"`
 			}
 			if err := json.Unmarshal(data, &msg); err != nil {
 				continue
@@ -790,7 +797,7 @@ func (m *Manager) RemoteSessions() []protocol.Session {
 	return out
 }
 
-func (m *Manager) EndpointIDForSession(sessionID string) (string, bool) {
+func (m *Manager) EndpointIDForSession(sessionID protocol.SessionID) (string, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	for endpointID, runtime := range m.runtimes {
@@ -804,7 +811,7 @@ func (m *Manager) EndpointIDForSession(sessionID string) (string, bool) {
 	return "", false
 }
 
-func (m *Manager) RemoteSession(sessionID string) *protocol.Session {
+func (m *Manager) RemoteSession(sessionID protocol.SessionID) *protocol.Session {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	for _, runtime := range m.runtimes {
@@ -816,8 +823,8 @@ func (m *Manager) RemoteSession(sessionID string) *protocol.Session {
 	return nil
 }
 
-func (m *Manager) ForgetSession(sessionID string) bool {
-	if strings.TrimSpace(sessionID) == "" {
+func (m *Manager) ForgetSession(sessionID protocol.SessionID) bool {
+	if protocol.TrimID(sessionID) == "" {
 		return false
 	}
 
@@ -844,18 +851,28 @@ func (m *Manager) ForgetSession(sessionID string) bool {
 	return changed
 }
 
-func (m *Manager) EndpointIDForPTYTarget(targetID string) (string, bool) {
+func (m *Manager) EndpointIDForPTYTarget(targetID protocol.TerminalID) (string, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	for endpointID, runtime := range m.runtimes {
-		if _, ok := runtime.sessions[targetID]; ok {
+		if _, ok := runtime.terminals[targetID]; ok {
 			return endpointID, true
 		}
 	}
-	if pending, ok := m.pendingSessionRouteLocked(targetID, time.Now()); ok {
-		return pending.endpointID, true
-	}
 	return "", false
+}
+
+func (m *Manager) replaceRemoteTerminals(endpointID string, bindings []protocol.TerminalBinding) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	runtime := m.runtimes[endpointID]
+	if runtime == nil {
+		return
+	}
+	runtime.terminals = make(map[protocol.TerminalID]protocol.SessionID, len(bindings))
+	for _, binding := range bindings {
+		runtime.terminals[binding.TerminalID] = binding.SessionID
+	}
 }
 
 func (m *Manager) EndpointIDForPath(targetPath string) (string, bool) {
@@ -879,8 +896,8 @@ func (m *Manager) EndpointIDForPath(targetPath string) (string, bool) {
 	return "", false
 }
 
-func (m *Manager) ReservePendingSessionRoute(endpointID, sessionID string) {
-	if strings.TrimSpace(endpointID) == "" || strings.TrimSpace(sessionID) == "" {
+func (m *Manager) ReservePendingSessionRoute(endpointID string, sessionID protocol.SessionID) {
+	if protocol.TrimID(endpointID) == "" || protocol.TrimID(sessionID) == "" {
 		return
 	}
 	m.mu.Lock()
@@ -948,7 +965,7 @@ func refusalLocked(endpointID string, runtime *endpointRuntime) error {
 	}
 }
 
-func (m *Manager) ForwardPTYCommand(ctx context.Context, targetID string, payload []byte) error {
+func (m *Manager) ForwardPTYCommand(ctx context.Context, targetID protocol.TerminalID, payload []byte) error {
 	endpointID, ok := m.EndpointIDForPTYTarget(targetID)
 	if !ok {
 		return fmt.Errorf("pty target not found: %s", targetID)
@@ -1073,7 +1090,7 @@ type sessionCloseWaiter struct {
 
 const sessionCloseAckTimeout = 15 * time.Second
 
-func (m *Manager) ForwardSessionClose(ctx context.Context, endpointID, sessionID string, payload []byte) error {
+func (m *Manager) ForwardSessionClose(ctx context.Context, endpointID string, sessionID protocol.SessionID, payload []byte) error {
 	waiter := &sessionCloseWaiter{endpointID: endpointID, answer: make(chan error, 1)}
 	m.mu.Lock()
 	m.sessionCloses[sessionID] = append(m.sessionCloses[sessionID], waiter)
@@ -1097,7 +1114,7 @@ func (m *Manager) ForwardSessionClose(ctx context.Context, endpointID, sessionID
 	}
 }
 
-func (m *Manager) forgetSessionCloseWaiter(sessionID string, forget *sessionCloseWaiter) {
+func (m *Manager) forgetSessionCloseWaiter(sessionID protocol.SessionID, forget *sessionCloseWaiter) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	remaining := m.sessionCloses[sessionID][:0]
@@ -1113,7 +1130,7 @@ func (m *Manager) forgetSessionCloseWaiter(sessionID string, forget *sessionClos
 	m.sessionCloses[sessionID] = remaining
 }
 
-func (m *Manager) answerSessionClose(endpointID, sessionID string, accepted bool, reason string) {
+func (m *Manager) answerSessionClose(endpointID string, sessionID protocol.SessionID, accepted bool, reason string) {
 	var answer error
 	if !accepted {
 		if reason = strings.TrimSpace(reason); reason == "" {
@@ -1142,7 +1159,7 @@ func (m *Manager) answerSessionClose(endpointID, sessionID string, accepted bool
 
 const sessionRenameAckTimeout = 10 * time.Second
 
-func (m *Manager) ForwardSessionRename(ctx context.Context, endpointID, sessionID string, payload []byte) error {
+func (m *Manager) ForwardSessionRename(ctx context.Context, endpointID string, sessionID protocol.SessionID, payload []byte) error {
 	waiter := &sessionCloseWaiter{endpointID: endpointID, answer: make(chan error, 1)}
 	m.mu.Lock()
 	if _, busy := m.sessionRenames[sessionID]; busy {
@@ -1176,7 +1193,7 @@ func (m *Manager) ForwardSessionRename(ctx context.Context, endpointID, sessionI
 	}
 }
 
-func (m *Manager) answerSessionRename(endpointID, sessionID string, accepted bool, reason string) {
+func (m *Manager) answerSessionRename(endpointID string, sessionID protocol.SessionID, accepted bool, reason string) {
 	var answer error
 	if !accepted {
 		if reason = strings.TrimSpace(reason); reason == "" {
@@ -1213,7 +1230,7 @@ func (m *Manager) ReplaceRemoteSessions(id string, sessions []protocol.Session) 
 	if !ok {
 		return false
 	}
-	next := make(map[string]protocol.Session, len(sessions))
+	next := make(map[protocol.SessionID]protocol.Session, len(sessions))
 	for _, session := range sessions {
 		tagged := tagRemoteSession(id, session)
 		next[tagged.ID] = tagged
@@ -1233,7 +1250,7 @@ func (m *Manager) upsertRemoteSession(id string, session protocol.Session) (bool
 		return false, 0
 	}
 	if runtime.sessions == nil {
-		runtime.sessions = make(map[string]protocol.Session)
+		runtime.sessions = make(map[protocol.SessionID]protocol.Session)
 	}
 	tagged := tagRemoteSession(id, session)
 	delete(m.pending, tagged.ID)
@@ -1244,7 +1261,7 @@ func (m *Manager) upsertRemoteSession(id string, session protocol.Session) (bool
 	return true, len(runtime.sessions)
 }
 
-func (m *Manager) removeRemoteSession(id, sessionID string) (bool, int) {
+func (m *Manager) removeRemoteSession(id string, sessionID protocol.SessionID) (bool, int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	runtime, ok := m.runtimes[id]
@@ -1270,13 +1287,13 @@ func (m *Manager) clearRemoteSessions(id string) bool {
 		return false
 	}
 	m.clearPendingRoutesLocked(id)
-	runtime.sessions = make(map[string]protocol.Session)
+	runtime.sessions = make(map[protocol.SessionID]protocol.Session)
 	zero := 0
 	runtime.info.SessionCount = protocol.Ptr(zero)
 	return true
 }
 
-func (m *Manager) pendingSessionRouteLocked(sessionID string, now time.Time) (pendingSessionRoute, bool) {
+func (m *Manager) pendingSessionRouteLocked(sessionID protocol.SessionID, now time.Time) (pendingSessionRoute, bool) {
 	pending, ok := m.pending[sessionID]
 	if !ok {
 		return pendingSessionRoute{}, false
@@ -1319,7 +1336,7 @@ func tagRemoteSession(endpointID string, session protocol.Session) protocol.Sess
 	return tagged
 }
 
-func sessionsEqual(left, right map[string]protocol.Session) bool {
+func sessionsEqual(left, right map[protocol.SessionID]protocol.Session) bool {
 	if len(left) != len(right) {
 		return false
 	}
@@ -1347,6 +1364,7 @@ func sessionsMatch(left, right protocol.Session) bool {
 		left.StateUpdatedAt == right.StateUpdatedAt &&
 		protocol.Deref(left.StateReason) == protocol.Deref(right.StateReason) &&
 		protocol.Deref(left.TurnOwed) == protocol.Deref(right.TurnOwed) &&
+		protocol.Deref(left.Priority) == protocol.Deref(right.Priority) &&
 		protocol.Deref(left.TurnOpenedAt) == protocol.Deref(right.TurnOpenedAt) &&
 		protocol.Deref(left.TurnSnoozedUntil) == protocol.Deref(right.TurnSnoozedUntil) &&
 		protocol.Deref(left.ParentSessionID) == protocol.Deref(right.ParentSessionID) &&

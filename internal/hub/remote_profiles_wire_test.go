@@ -2,6 +2,7 @@ package hub_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -19,6 +20,7 @@ func TestRemoteProfileChangesArriveThroughSnapshotsAndSessionUpdates(t *testing.
 	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
 	defer cancel()
 	frames := make(chan any)
+	commands := make(chan protocol.PtyInputMessage, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := websocket.Accept(w, r, nil)
 		if err != nil {
@@ -31,6 +33,19 @@ func TestRemoteProfileChangesArriveThroughSnapshotsAndSessionUpdates(t *testing.
 			t.Error(err)
 			return
 		}
+		go func() {
+			for {
+				var command protocol.PtyInputMessage
+				if err := wsjson.Read(ctx, conn, &command); err != nil {
+					return
+				}
+				select {
+				case commands <- command:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
 		for {
 			select {
 			case frame := <-frames:
@@ -71,7 +86,7 @@ func TestRemoteProfileChangesArriveThroughSnapshotsAndSessionUpdates(t *testing.
 		session := protocol.Session{ID: "remote-worker", ProfileID: step.profile, State: protocol.SessionStateIdle}
 		switch step.event {
 		case protocol.EventInitialState:
-			frame = protocol.InitialStateMessage{Event: step.event, Sessions: []protocol.Session{session}, ProtocolVersion: protocol.Ptr(protocol.ProtocolVersion)}
+			frame = protocol.InitialStateMessage{Event: step.event, Sessions: []protocol.Session{session, {ID: "other-session", ProfileID: "Other"}}, TerminalBindings: []protocol.TerminalBinding{{TerminalID: "worker-terminal", SessionID: session.ID}, {TerminalID: "other-terminal", SessionID: "other-session"}}, ProtocolVersion: protocol.Ptr(protocol.ProtocolVersion)}
 		case protocol.EventSessionsUpdated:
 			frame = protocol.SessionsUpdatedMessage{Event: step.event, Sessions: []protocol.Session{session}}
 		default:
@@ -95,4 +110,36 @@ func TestRemoteProfileChangesArriveThroughSnapshotsAndSessionUpdates(t *testing.
 			t.Fatalf("%s lost the remote profile or endpoint: %+v", step.event, remote)
 		}
 	}
+	forward := func(terminal protocol.TerminalID) {
+		t.Helper()
+		payload, err := json.Marshal(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: "eA=="})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := manager.ForwardPTYCommand(ctx, terminal, payload); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case got := <-commands:
+			if got.ID != terminal || got.Data != "eA==" {
+				t.Fatalf("forwarded %+v", got)
+			}
+		case <-ctx.Done():
+			t.Fatal("endpoint received no PTY command")
+		}
+	}
+	forward("other-terminal")
+	frames <- protocol.TerminalBindingsUpdatedMessage{Event: protocol.EventTerminalBindingsUpdated, TerminalBindings: []protocol.TerminalBinding{{TerminalID: "new-other-terminal", SessionID: "other-session"}}}
+	// A subsequent session change is the barrier after the binding update.
+	frames <- protocol.SessionsUpdatedMessage{Event: protocol.EventSessionsUpdated, Sessions: []protocol.Session{{ID: "remote-worker", ProfileID: "Other"}}}
+	select {
+	case <-changed:
+	case <-ctx.Done():
+		t.Fatal("hub did not apply the binding update")
+	}
+	if _, found := manager.EndpointIDForPTYTarget("other-terminal"); found {
+		t.Fatal("removed terminal still routes")
+	}
+	forward("new-other-terminal")
+
 }

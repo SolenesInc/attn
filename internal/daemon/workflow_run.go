@@ -123,7 +123,7 @@ func (d *Daemon) getWorkflowRunHydrated(runID string) (*protocol.WorkflowRun, er
 	return run, nil
 }
 
-func (d *Daemon) listWorkflowRunsHydrated(sessionID string) ([]*protocol.WorkflowRun, error) {
+func (d *Daemon) listWorkflowRunsHydrated(sessionID protocol.SessionID) ([]*protocol.WorkflowRun, error) {
 	rows, err := d.store.ListWorkflowRuns(sessionID)
 	if err != nil {
 		return nil, err

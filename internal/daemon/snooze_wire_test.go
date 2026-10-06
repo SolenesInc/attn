@@ -17,7 +17,7 @@ func TestWakeOpensTheTurnAtTheWakeInstant(t *testing.T) {
 		if err := w.InjectSession("s1", "s1", w.Path("s1"), protocol.SessionAgentClaude); err != nil {
 			t.Fatalf("register: %v", err)
 		}
-		if err := cli.UpdateState("s1", protocol.StateWaitingInput); err != nil {
+		if err := cli.UpdateState(protocol.TerminalID(w.Terminal("s1")), protocol.StateWaitingInput); err != nil {
 			t.Fatalf("report waiting_input: %v", err)
 		}
 		owed := testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) })
@@ -25,7 +25,7 @@ func TestWakeOpensTheTurnAtTheWakeInstant(t *testing.T) {
 		until := time.Now().Add(time.Minute)
 		snoozeUntil(app, "s1", until)
 		testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return protocol.Deref(s.TurnSnoozedUntil) != "" })
-		if err := cli.UpdateState("s1", protocol.StateIdle); err != nil {
+		if err := cli.UpdateState(protocol.TerminalID(w.Terminal("s1")), protocol.StateIdle); err != nil {
 			t.Fatalf("report idle: %v", err)
 		}
 		w.advance(time.Minute)
@@ -53,7 +53,7 @@ func TestAReplacedSnoozeWakesOnlyAtItsOwnDeadline(t *testing.T) {
 		app := w.App()
 		cli := w.Client()
 		registerSessions(t, w, cli, "s1")
-		if err := cli.UpdateState("s1", protocol.StateWaitingInput); err != nil {
+		if err := cli.UpdateState(protocol.TerminalID(w.Terminal("s1")), protocol.StateWaitingInput); err != nil {
 			t.Fatalf("report waiting_input: %v", err)
 		}
 		testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) })
@@ -116,7 +116,7 @@ func TestAPendingSnoozeOutlivesARestart(t *testing.T) {
 
 	w.restart()
 	app = w.App()
-	i := slices.IndexFunc(app.Initial.Sessions, func(s protocol.Session) bool { return s.ID == session })
+	i := slices.IndexFunc(app.Initial.Sessions, func(s protocol.Session) bool { return string(s.ID) == session })
 	if i < 0 {
 		t.Fatal("the snoozed session did not come back after a restart")
 	}

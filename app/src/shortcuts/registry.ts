@@ -66,6 +66,7 @@ export const MAC_SHORTCUTS = {
   // tests record it as an exclusive leader.
   'session.settle': { key: 'e', meta: true, shift: true },
   // ⌘⇧S carries no Menu::default accelerator and, being a Cmd chord, never reaches the PTY.
+  'session.priority': { key: 'i', meta: true, shift: true },
   'session.snooze': { key: 's', meta: true, shift: true },
   // AppKit consumes ⌘. as `cancelOperation:` before any DOM keydown, so a native menu item
   // in `app_menu` (src-tauri/src/lib.rs) delivers it via `attn:native-shortcut`. The entry
@@ -169,6 +170,7 @@ export const LINUX_SHORTCUTS = {
   'session.nextRun': { key: 'j', meta: true, alt: true },
   'sidebar.agentList': { key: 'a', meta: true, alt: true },
   'session.settle': { key: 'e', meta: true, alt: true },
+  'session.priority': { key: 'i', meta: true, alt: true },
   'session.snooze': { key: 's', meta: true, alt: true },
   'session.cancelCountdown': { key: '.', code: 'Period', meta: true, shift: true },
   'session.toggleSidebar': { key: 'b', meta: true, alt: true },

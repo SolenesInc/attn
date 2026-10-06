@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -12,7 +13,7 @@ import (
 
 func delegateFrom(source, cwd, text string, agent fakeagent.Harness) protocol.DelegateMessage {
 	request := brief(cwd, text)
-	request.SourceSessionID = protocol.Ptr(source)
+	request.SourceSessionID = protocol.Ptr(protocol.SessionID(source))
 	request.Agent = protocol.Ptr(string(agent))
 	return request
 }
@@ -31,7 +32,7 @@ func desktopOfDelegate(t *testing.T, w *world, desktopID string) protocol.Deskto
 func delegatePaneSessions(desktop protocol.Desktop) []string {
 	var sessions []string
 	for _, pane := range desktop.Panes {
-		sessions = append(sessions, pane.SessionID)
+		sessions = append(sessions, string(pane.SessionID))
 	}
 	return sessions
 }
@@ -44,7 +45,7 @@ func TestADelegateStartsOnASeedPointerBesideItsCaller(t *testing.T) {
 			cwd := w.Path("api")
 			sourceResult, sourceDesktop, _ := w.RequestSpawn(app, fakeagent.Codex, cwd)
 			source := sourceResult.ID
-			request := delegateFrom(source, cwd, "Migrate the store to the new schema", agent)
+			request := delegateFrom(string(source), cwd, "Migrate the store to the new schema", agent)
 			request.RequestID = "migrate"
 			request.Label = protocol.Ptr("Store migration")
 
@@ -57,7 +58,7 @@ func TestADelegateStartsOnASeedPointerBesideItsCaller(t *testing.T) {
 			if result.FirstTurnAt == nil {
 				t.Errorf("the delegation returned %+v; want the first turn it saw", result)
 			}
-			prompt := w.Launched(result.SessionID).Prompted()
+			prompt := w.Launched(string(result.SessionID)).Prompted()
 			if !strings.Contains(prompt, "attn seed show "+result.SeedID) {
 				t.Errorf("the delegate was prompted %q; want a pointer to seed %s", prompt, result.SeedID)
 			}
@@ -80,10 +81,10 @@ func TestADelegateStartsOnASeedPointerBesideItsCaller(t *testing.T) {
 			if protocol.Deref(result.DesktopID) != sourceDesktop || result.Directory != cwd {
 				t.Errorf("the delegate runs on desktop %q at %s; want the caller's %s at %s", protocol.Deref(result.DesktopID), result.Directory, sourceDesktop, cwd)
 			}
-			if panes := delegatePaneSessions(desktopOfDelegate(t, w, sourceDesktop)); len(panes) != 2 || panes[1] != result.SessionID {
+			if panes := delegatePaneSessions(desktopOfDelegate(t, w, sourceDesktop)); len(panes) != 2 || panes[1] != string(result.SessionID) {
 				t.Errorf("the caller's desktop holds panes for %v; want the caller and then the delegate", panes)
 			}
-			delegate := testworld.AwaitSession(app, result.SessionID, func(s protocol.Session) bool { return protocol.Deref(s.SeedID) != "" })
+			delegate := testworld.AwaitSession(app, string(result.SessionID), func(s protocol.Session) bool { return protocol.Deref(s.SeedID) != "" })
 			if protocol.Deref(delegate.SeedID) != result.SeedID || string(delegate.Agent) != string(agent) || protocol.Deref(delegate.DelegatedFromChief) {
 				t.Errorf("the app sees the delegate as %+v; want a %s session on seed %s, not delegated from a chief", delegate, agent, result.SeedID)
 			}
@@ -143,7 +144,7 @@ func TestADelegatesModelAndEffortReachItsCommandLineOrAreRefusedByFlag(t *testin
 			if err != nil {
 				t.Fatal(err)
 			}
-			argv := w.Launched(result.SessionID).Argv
+			argv := w.Launched(string(result.SessionID)).Argv
 			if model, _ := delegateLaunchFlag(argv, "--model"); model != row.wantModel {
 				t.Errorf("%s launched with --model %q; want %q (argv %q)", row.agent, model, row.wantModel, argv)
 			}
@@ -167,7 +168,7 @@ func TestADelegatesModelAndEffortReachItsCommandLineOrAreRefusedByFlag(t *testin
 func sessionOfDelegate(t *testing.T, w *world, sessionID string) protocol.Session {
 	t.Helper()
 	for _, session := range w.App().Initial.Sessions {
-		if session.ID == sessionID {
+		if string(session.ID) == sessionID {
 			return session
 		}
 	}
@@ -193,13 +194,13 @@ func TestADelegationFromTheChiefIsMarkedAndLandsBesideTheChief(t *testing.T) {
 	if err != nil {
 		t.Fatalf("delegating from the chief: %v", err)
 	}
-	if prompt := w.Launched(result.SessionID).Prompted(); !strings.Contains(prompt, "attn seed show "+result.SeedID) {
+	if prompt := w.Launched(string(result.SessionID)).Prompted(); !strings.Contains(prompt, "attn seed show "+result.SeedID) {
 		t.Errorf("the chief's delegate was prompted %q; want a pointer to seed %s", prompt, result.SeedID)
 	}
 	if shown, err := cli.SeedShow("", result.SeedID); err != nil || shown.Seed.TenderSession != result.SessionID || shown.Seed.Body != "Audit the backlog" {
 		t.Errorf("the chief's delegation planted %+v, %v; want the brief tended by %s", shown, err, result.SessionID)
 	}
-	delegate := testworld.AwaitSession(app, result.SessionID, func(s protocol.Session) bool { return protocol.Deref(s.DelegatedFromChief) })
+	delegate := testworld.AwaitSession(app, string(result.SessionID), func(s protocol.Session) bool { return protocol.Deref(s.DelegatedFromChief) })
 	if protocol.Deref(delegate.ChiefOfStaff) {
 		t.Errorf("the chief's delegate reads as the chief itself: %+v", delegate)
 	}
@@ -212,38 +213,158 @@ func TestADelegationFromTheChiefIsMarkedAndLandsBesideTheChief(t *testing.T) {
 	}
 }
 
-func TestADelegationNamesItsSession(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	cli := w.Client()
-	longDirectory := strings.Repeat("invoice-", 7)
-	for _, row := range []struct {
-		name, directory, label, want string
-	}{
-		{name: "an explicit name", directory: "svc", label: "Payments API", want: "Payments API"},
-		{name: "the directory's name", directory: "ledger", want: "ledger"},
-		{name: "a long directory name cut to fit", directory: longDirectory, want: strings.TrimSuffix(strings.Repeat("invoice-", 6), "-")},
-		{name: "a long directory name cut before trailing punctuation", directory: strings.Repeat("b", 44) + "   . more", want: strings.Repeat("b", 44)},
-		{name: "a long directory name cut by characters, not bytes", directory: strings.Repeat("é", 60), want: strings.Repeat("é", 48)},
+func TestADelegationNamesItsSeedAndSessionFromItsBrief(t *testing.T) {
+	longTitle := strings.Repeat("invoice ", 10) + "reconciliation more detail"
+	for i, row := range []struct{ name, brief, label, title, want string }{
+		{name: "heading", brief: "# Fix the queue jump\n\nInvestigate queue movement.", title: "Fix the queue jump", want: "Fix the queue jump"},
+		{name: "hash in the heading text", brief: "# Document C#", title: "Document C#", want: "Document C#"},
+		{name: "closing hashes after a text hash", brief: "# Document C# ###", title: "Document C#", want: "Document C#"},
+		{name: "later heading", brief: "Context first\n\n### Reconcile  the\tledgers ###\nBody", title: "Reconcile the ledgers", want: "Reconcile the ledgers"},
+		{name: "fenced example falls back to first line", brief: "Fix the queue jump\n\n```markdown\n# Example\n```", title: "Fix the queue jump", want: "Fix the queue jump"},
+		{name: "real heading after fenced example", brief: "Context first\n\n```markdown\n# Example\n```\n\n# Fix the queue jump", title: "Fix the queue jump", want: "Fix the queue jump"},
+		{name: "tilde fence", brief: "Context first\n~~~markdown\n# Example\n~~~\n# Fix the queue jump", title: "Fix the queue jump", want: "Fix the queue jump"},
+		{name: "shorter fence cannot close", brief: "Context first\n````markdown\n```\n# Example\n````\n# Fix the queue jump", title: "Fix the queue jump", want: "Fix the queue jump"},
+		{name: "different marker cannot close", brief: "Context first\n~~~markdown\n```\n# Example\n~~~\n# Fix the queue jump", title: "Fix the queue jump", want: "Fix the queue jump"},
+		{name: "closing fence must end the line", brief: "Context first\n```markdown\n```still code\n# Example\n```\n# Fix the queue jump", title: "Fix the queue jump", want: "Fix the queue jump"},
+		{name: "longer closing fence", brief: "Context first\n```markdown\n# Example\n````` \t\n# Fix the queue jump", title: "Fix the queue jump", want: "Fix the queue jump"},
+		{name: "indented fences and CRLF", brief: "Context first\r\n   ```markdown\r\n# Example\r\n  ``` \t\r\n# Fix the queue jump", title: "Fix the queue jump", want: "Fix the queue jump"},
+		{name: "unclosed fence", brief: "Fix the queue jump\n```markdown\n# Example", title: "Fix the queue jump", want: "Fix the queue jump"},
+		{name: "backticks in info do not open a fence", brief: "Context first\n``` example `inline`\n# Fix the queue jump", title: "Fix the queue jump", want: "Fix the queue jump"},
+		{name: "empty heading does not stop scanning", brief: "Context first\n# ###\n# Fix the queue jump", title: "Fix the queue jump", want: "Fix the queue jump"},
+		{name: "later indented line is not a title heading", brief: "Context first\n   # Example\n# Fix the queue jump", title: "Fix the queue jump", want: "Fix the queue jump"},
+		{name: "first non-empty line", brief: "\n\t Reconcile  the ledgers \nDetails", title: "Reconcile the ledgers", want: "Reconcile the ledgers"},
+		{name: "long first line", brief: longTitle, title: strings.TrimSpace(strings.Repeat("invoice ", 10)), want: "invoice invoice invoice invoice invoice invoice"},
+		{name: "unicode", brief: "###### " + strings.Repeat("é", 90), title: strings.Repeat("é", 80), want: strings.Repeat("é", 48)},
+		{name: "explicit name", brief: "# Reconcile the ledgers", label: "Payments API", title: "Payments API", want: "Payments API"},
 	} {
-		cwd := w.Path(row.directory)
-		if err := os.MkdirAll(cwd, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		request := brief(cwd, "Reconcile the ledgers")
-		request.Agent = protocol.Ptr("codex")
-		if row.label != "" {
-			request.Label = protocol.Ptr(row.label)
-		}
-		result, err := cli.Delegate(request)
-		if err != nil {
-			t.Fatalf("%s: %v", row.name, err)
-		}
-		if result.Directory != cwd || protocol.Deref(result.DesktopID) == "" {
-			t.Errorf("%s: a delegation without a caller runs at %s on desktop %q; want %s, placed", row.name, result.Directory, protocol.Deref(result.DesktopID), cwd)
-		}
-		if label := sessionOfDelegate(t, w, result.SessionID).Label; label != row.want {
-			t.Errorf("%s: the delegate is labelled %q; want %q", row.name, label, row.want)
-		}
+		t.Run(row.name, func(t *testing.T) {
+			w := newWorld(t, fakeagent.Codex)
+			cli := w.Client()
+			cwd := w.Path(string(rune('a' + i)))
+			if err := os.MkdirAll(cwd, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			request := brief(cwd, row.brief)
+			request.Agent = protocol.Ptr("codex")
+			if row.label != "" {
+				request.Label = protocol.Ptr(row.label)
+			}
+			result, err := cli.Delegate(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			shown, err := cli.SeedShow("", result.SeedID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if shown.Seed.Title != row.title || shown.Seed.Body != strings.TrimSpace(row.brief) {
+				t.Errorf("seed = %+v; want title %q and original brief", shown.Seed, row.title)
+			}
+			session := sessionOfDelegate(t, w, string(result.SessionID))
+			if session.Label != row.want {
+				t.Errorf("label = %q; want %q", session.Label, row.want)
+			}
+			if prompt := w.Launched(string(result.SessionID)).Prompted(); !strings.Contains(prompt, row.title) {
+				t.Errorf("opening = %q; want seed title %q", prompt, row.title)
+			}
+		})
+	}
+}
+
+func TestDerivedDelegationNamesUseTheFirstFreeDesktopSuffix(t *testing.T) {
+	for _, mode := range []string{"beside a caller", "standalone", "unplaced caller"} {
+		t.Run(mode, func(t *testing.T) {
+			w := newWorld(t, fakeagent.Codex)
+			app, cli := w.App(), w.Client()
+			var sourceID protocol.SessionID
+			var desktop string
+			if mode == "beside a caller" {
+				source, sourceDesktop, _ := w.RequestSpawn(app, fakeagent.Codex, w.Path("source"))
+				sourceID, desktop = source.ID, sourceDesktop
+			} else if mode == "unplaced caller" {
+				sourceID = "caller"
+				registerSessions(t, w, cli, string(sourceID))
+			}
+			cwd := w.Path("task")
+			if err := os.MkdirAll(cwd, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			for _, title := range []string{"Fix the queue jump", "Reconcile v1.2.", strings.Repeat("é", 70)} {
+				for n := 1; n <= 3; n++ {
+					request := brief(cwd, "# "+title+"\n\nDo the task.")
+					request.Agent = protocol.Ptr("codex")
+					if sourceID != "" {
+						request.SourceSessionID = protocol.Ptr(sourceID)
+					}
+					result, err := cli.Delegate(request)
+					if err != nil {
+						t.Fatal(err)
+					}
+					want := title
+					if n == 1 {
+						want = string([]rune(title)[:min(48, len([]rune(title)))])
+					} else {
+						want = string([]rune(title)[:min(44, len([]rune(title)))]) + fmt.Sprintf(" (%d)", n)
+					}
+					if session := sessionOfDelegate(t, w, string(result.SessionID)); session.Label != want {
+						t.Errorf("label = %q; want %q", session.Label, want)
+					}
+					if desktop == "" {
+						desktop = protocol.Deref(result.DesktopID)
+					}
+					if protocol.Deref(result.DesktopID) != desktop {
+						t.Errorf("desktop = %s; want %s", protocol.Deref(result.DesktopID), desktop)
+					}
+					if shown, err := cli.SeedShow("", result.SeedID); err != nil || shown.Seed.Title != title {
+						t.Errorf("seed = %+v, %v; want title %q", shown, err, title)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestAnExistingSeedNamesItsDelegateAndHandover(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	source := w.Spawn(app, fakeagent.Codex, w.Path("source"))
+	title := "Fix the queue jump"
+	seed := plantDelegationSeed(t, cli, source, title)
+	cwd := w.Path("task")
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	first, err := cli.Delegate(delegateAtSeed(source, cwd, seed))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if label := sessionOfDelegate(t, w, string(first.SessionID)).Label; label != title {
+		t.Errorf("seed delegate label = %q; want %q", label, title)
+	}
+	request := delegateAtSeed(source, cwd, seed)
+	request.Assignment.Handover = &protocol.DelegateHandover{}
+	second, err := cli.Delegate(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if label := sessionOfDelegate(t, w, string(second.SessionID)).Label; label != title+" (2)" {
+		t.Errorf("handover label = %q; want suffix (2)", label)
+	}
+	if prompt := w.Launched(string(second.SessionID)).Prompted(); !strings.Contains(prompt, title) {
+		t.Errorf("handover opening = %q; want title", prompt)
+	}
+	request = delegateAtSeed(source, cwd, seed)
+	request.Assignment.Handover = &protocol.DelegateHandover{}
+	request.Label = protocol.Ptr("Queue reviewer")
+	third, err := cli.Delegate(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if label := sessionOfDelegate(t, w, string(third.SessionID)).Label; label != "Queue reviewer" {
+		t.Errorf("explicit handover label = %q", label)
+	}
+	if shown, err := cli.SeedShow("", seed); err != nil || shown.Seed.Title != title {
+		t.Errorf("seed = %+v, %v; want title unchanged", shown, err)
 	}
 }
 
@@ -251,7 +372,7 @@ func TestADelegationThatCannotBePlacedIsRefusedBeforeAnythingLaunches(t *testing
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
 	for _, name := range []string{"reviewer", "writer"} {
-		w.Spawn(app, fakeagent.Codex, w.Path("docs"), func(m *protocol.SpawnSessionMessage) { m.ID, m.Label = name, protocol.Ptr(name) })
+		w.Spawn(app, fakeagent.Codex, w.Path("docs"), func(m *protocol.SpawnSessionMessage) { m.ID, m.Label = protocol.SessionID(name), protocol.Ptr(name) })
 	}
 	if err := os.MkdirAll(w.Path("svc"), 0o755); err != nil {
 		t.Fatal(err)
@@ -269,7 +390,7 @@ func TestADelegationThatCannotBePlacedIsRefusedBeforeAnythingLaunches(t *testing
 		request := brief(row.cwd, "Reconcile the ledgers")
 		request.Agent = protocol.Ptr("codex")
 		if row.source != "" {
-			request.SourceSessionID = protocol.Ptr(row.source)
+			request.SourceSessionID = protocol.Ptr(protocol.SessionID(row.source))
 		}
 		if row.label != "" {
 			request.Label = protocol.Ptr(row.label)
@@ -292,7 +413,7 @@ func TestADelegateAtACustomDirectoryStaysBesideItsCaller(t *testing.T) {
 	if err := os.MkdirAll(target, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	request := delegateFrom(source.ID, target, "Work in the target directory", fakeagent.Codex)
+	request := delegateFrom(string(source.ID), target, "Work in the target directory", fakeagent.Codex)
 	result, err := cli.Delegate(request)
 	if err != nil {
 		t.Fatal(err)
@@ -300,7 +421,7 @@ func TestADelegateAtACustomDirectoryStaysBesideItsCaller(t *testing.T) {
 	if result.Directory != target || protocol.Deref(result.DesktopID) != desktop {
 		t.Fatalf("delegation = %+v; want %s beside the source on %s", result, target, desktop)
 	}
-	if session := sessionOfDelegate(t, w, result.SessionID); session.Directory != target {
+	if session := sessionOfDelegate(t, w, string(result.SessionID)); session.Directory != target {
 		t.Errorf("session directory = %s; want %s", session.Directory, target)
 	}
 }

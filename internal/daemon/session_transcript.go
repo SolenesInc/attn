@@ -14,7 +14,7 @@ import (
 const sessionTranscriptPageSize = 200
 
 func (d *Daemon) handleSessionTranscript(conn net.Conn, msg *protocol.SessionTranscriptMessage) {
-	session := d.store.Get(strings.TrimSpace(msg.TargetSessionID))
+	session := d.store.Get(protocol.SessionID(strings.TrimSpace(msg.TargetSessionID)))
 	if session == nil {
 		d.sendError(conn, "session_not_found")
 		return
@@ -26,7 +26,7 @@ func (d *Daemon) handleSessionTranscript(conn net.Conn, msg *protocol.SessionTra
 		return
 	}
 
-	page, err := transcript.ReadEventPage(path, string(session.Agent), strings.TrimSpace(protocol.Deref(msg.AfterCursor)), sessionTranscriptPageSize)
+	page, err := transcript.ReadEventPage(path, session.Agent, strings.TrimSpace(protocol.Deref(msg.AfterCursor)), sessionTranscriptPageSize)
 	if err != nil {
 		switch {
 		case errors.Is(err, transcript.ErrInvalidCursor):

@@ -10,9 +10,9 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (d *Daemon) profileChiefs() map[string]string {
+func (d *Daemon) profileChiefs() map[string]protocol.SessionID {
 	if d.store == nil {
-		return map[string]string{}
+		return map[string]protocol.SessionID{}
 	}
 	byProfile, err := d.store.ProfileChiefs()
 	if err != nil {
@@ -21,15 +21,15 @@ func (d *Daemon) profileChiefs() map[string]string {
 	return byProfile
 }
 
-func (d *Daemon) chiefOfProfile(profileID string) string {
+func (d *Daemon) chiefOfProfile(profileID string) protocol.SessionID {
 	if profileID == "" {
 		return ""
 	}
 	return d.profileChiefs()[profileID]
 }
 
-func (d *Daemon) isChiefOfStaffSession(sessionID string) bool {
-	sessionID = strings.TrimSpace(sessionID)
+func (d *Daemon) isChiefOfStaffSession(sessionID protocol.SessionID) bool {
+	sessionID = protocol.TrimID(sessionID)
 	if sessionID == "" || d.store == nil {
 		return false
 	}
@@ -37,16 +37,16 @@ func (d *Daemon) isChiefOfStaffSession(sessionID string) bool {
 	return err == nil && d.chiefOfProfile(profileID) == sessionID
 }
 
-func (d *Daemon) chiefForCaller(callerSessionID string) string {
+func (d *Daemon) chiefForCaller(callerSessionID protocol.SessionID) string {
 	profile, err := d.callerProfile(callerSessionID)
 	if err != nil {
 		return ""
 	}
-	return d.chiefOfProfile(profile.ID)
+	return string(d.chiefOfProfile(profile.ID))
 }
 
 func (d *Daemon) chiefForClient(client *wsClient) string {
-	return d.chiefOfProfile(d.profileForClient(client))
+	return string(d.chiefOfProfile(d.profileForClient(client)))
 }
 
 func (d *Daemon) profileForClient(client *wsClient) string {
@@ -60,7 +60,7 @@ func (d *Daemon) profileForClient(client *wsClient) string {
 	return profile.ID
 }
 
-func (d *Daemon) decorateChiefOfStaff(session *protocol.Session, chiefByProfile map[string]string) {
+func (d *Daemon) decorateChiefOfStaff(session *protocol.Session, chiefByProfile map[string]protocol.SessionID) {
 	if session == nil {
 		return
 	}
@@ -71,18 +71,18 @@ func (d *Daemon) decorateChiefOfStaff(session *protocol.Session, chiefByProfile 
 	session.ChiefOfStaff = nil
 }
 
-func (d *Daemon) delegatedFromChiefSessionIDs() map[string]bool {
+func (d *Daemon) delegatedFromChiefSessionIDs() map[protocol.SessionID]bool {
 	if d.store == nil {
 		return nil
 	}
-	delegated := map[string]bool{}
+	delegated := map[protocol.SessionID]bool{}
 	for sessionID := range d.gardenDispatchesFromChief() {
 		delegated[sessionID] = true
 	}
 	return delegated
 }
 
-func (d *Daemon) decorateDelegatedFromChief(session *protocol.Session, delegatedFromChief map[string]bool) {
+func (d *Daemon) decorateDelegatedFromChief(session *protocol.Session, delegatedFromChief map[protocol.SessionID]bool) {
 	if session == nil {
 		return
 	}
@@ -93,7 +93,7 @@ func (d *Daemon) decorateDelegatedFromChief(session *protocol.Session, delegated
 	session.DelegatedFromChief = nil
 }
 
-func (d *Daemon) sessionExists(sessionID string) bool {
+func (d *Daemon) sessionExists(sessionID protocol.SessionID) bool {
 	if d.store != nil && d.store.Get(sessionID) != nil {
 		return true
 	}
@@ -103,8 +103,8 @@ func (d *Daemon) sessionExists(sessionID string) bool {
 	return d.hubManager != nil && d.hubManager.RemoteSession(sessionID) != nil
 }
 
-func (d *Daemon) clearChiefOfStaffIfSession(sessionID string) {
-	if d.store == nil || strings.TrimSpace(sessionID) == "" {
+func (d *Daemon) clearChiefOfStaffIfSession(sessionID protocol.SessionID) {
+	if d.store == nil || protocol.TrimID(sessionID) == "" {
 		return
 	}
 	if _, err := d.store.ClearProfileChief(sessionID); err != nil {
@@ -128,7 +128,7 @@ func (d *Daemon) nudgeChiefOfStaff(profileID, attemptKey, prompt string) bool {
 	return receipt.Rang || receipt.Outstanding
 }
 
-func (d *Daemon) maybeAssignChiefOnSpawn(sessionID, agent, profileID string, requested bool, existingSession *protocol.Session) bool {
+func (d *Daemon) maybeAssignChiefOnSpawn(sessionID protocol.SessionID, agent string, profileID string, requested bool, existingSession *protocol.Session) bool {
 	if !requested || existingSession != nil || d.store == nil {
 		return false
 	}
@@ -150,7 +150,7 @@ func (d *Daemon) maybeAssignChiefOnSpawn(sessionID, agent, profileID string, req
 }
 
 func (d *Daemon) handleSetChiefOfStaff(client *wsClient, msg *protocol.SetChiefOfStaffMessage) {
-	sessionID := strings.TrimSpace(msg.SessionID)
+	sessionID := protocol.TrimID(msg.SessionID)
 	if sessionID == "" {
 		d.sendChiefOfStaffResult(client, sessionID, msg.ChiefOfStaff, "", fmt.Errorf("missing session_id"))
 		return
@@ -178,7 +178,7 @@ func (d *Daemon) handleSetChiefOfStaff(client *wsClient, msg *protocol.SetChiefO
 			return
 		}
 		if session := d.store.Get(sessionID); session != nil {
-			if driver, ok := d.ensurePluginRegistry().driver(string(session.Agent)); ok {
+			if driver, ok := d.ensurePluginRegistry().driver(session.Agent); ok {
 				switch {
 				case !driver.Capabilities["launch_instructions"]:
 					d.sendChiefOfStaffResult(client, sessionID, true, previousSessionID, fmt.Errorf("agent %q cannot be chief of staff without launch_instructions capability", session.Agent))
@@ -192,19 +192,19 @@ func (d *Daemon) handleSetChiefOfStaff(client *wsClient, msg *protocol.SetChiefO
 	}
 
 	prepared := make([]*preparedPluginRoleReload, 0, 2)
-	preparedSessions := make(map[string]bool)
+	preparedSessions := make(map[protocol.SessionID]bool)
 	if roleChanged {
-		desiredRoles := map[string]bool{sessionID: msg.ChiefOfStaff}
+		desiredRoles := map[protocol.SessionID]bool{sessionID: msg.ChiefOfStaff}
 		if msg.ChiefOfStaff && previousSessionID != "" && previousSessionID != sessionID {
 			desiredRoles[previousSessionID] = false
 		}
 		ids := make([]string, 0, len(desiredRoles))
 		for id := range desiredRoles {
-			ids = append(ids, id)
+			ids = append(ids, string(id))
 		}
 		sort.Strings(ids)
 		for _, id := range ids {
-			reload, pluginSession, err := d.preparePluginRoleReload(id, desiredRoles[id])
+			reload, pluginSession, err := d.preparePluginRoleReload(protocol.SessionID(id), desiredRoles[protocol.SessionID(id)])
 			if err != nil {
 				for i := len(prepared) - 1; i >= 0; i-- {
 					prepared[i].abort()
@@ -213,7 +213,7 @@ func (d *Daemon) handleSetChiefOfStaff(client *wsClient, msg *protocol.SetChiefO
 				return
 			}
 			if pluginSession {
-				preparedSessions[id] = true
+				preparedSessions[protocol.SessionID(id)] = true
 			}
 			if reload != nil {
 				prepared = append(prepared, reload)
@@ -251,21 +251,21 @@ func (d *Daemon) handleSetChiefOfStaff(client *wsClient, msg *protocol.SetChiefO
 	var reloadIDs []string
 	if roleChanged {
 		if !preparedSessions[sessionID] {
-			reloadIDs = append(reloadIDs, sessionID)
+			reloadIDs = append(reloadIDs, string(sessionID))
 		}
 		if msg.ChiefOfStaff && previousSessionID != "" && !preparedSessions[previousSessionID] {
-			reloadIDs = append(reloadIDs, previousSessionID)
+			reloadIDs = append(reloadIDs, string(previousSessionID))
 		}
 	}
 	if len(reloadIDs) == 0 {
-		d.publishFact(FactSessionChiefRoleChanged, sessionID, nil)
+		d.publishFact(FactSessionChiefRoleChanged, string(sessionID), nil)
 	} else {
 		d.life.Go("reloadChiefGuidance", func() {
 			for _, id := range reloadIDs {
-				d.reloadSessionAgent(id)
+				d.reloadSessionAgent(protocol.SessionID(id))
 			}
 			// The completed role change kicks the new holder’s inbox.
-			d.publishFact(FactSessionChiefRoleChanged, sessionID, nil)
+			d.publishFact(FactSessionChiefRoleChanged, string(sessionID), nil)
 		})
 	}
 
@@ -274,9 +274,9 @@ func (d *Daemon) handleSetChiefOfStaff(client *wsClient, msg *protocol.SetChiefO
 
 func (d *Daemon) sendChiefOfStaffResult(
 	client *wsClient,
-	sessionID string,
+	sessionID protocol.SessionID,
 	chiefOfStaff bool,
-	previousSessionID string,
+	previousSessionID protocol.SessionID,
 	err error,
 ) {
 	result := protocol.ChiefOfStaffResultMessage{

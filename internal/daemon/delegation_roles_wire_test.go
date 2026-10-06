@@ -131,13 +131,13 @@ func TestADelegateLaunchedInARoleGetsOnlyThatRolesGuidance(t *testing.T) {
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	request := brief(cwd, "Implement the discount field")
+	request := brief(cwd, "# Discount field\n\nImplement the discount field")
 	request.Role = protocol.Ptr("build")
 	result, err := cli.Delegate(request)
 	if err != nil {
 		t.Fatal(err)
 	}
-	launched := w.Launched(result.SessionID)
+	launched := w.Launched(string(result.SessionID))
 	prompt := launched.Prompted()
 	for _, want := range []string{"Role: Builder", "Check {{literal}} carefully", "Stop once the tests pass", "attn seed show " + result.SeedID} {
 		if !strings.Contains(prompt, want) {

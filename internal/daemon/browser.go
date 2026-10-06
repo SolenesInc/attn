@@ -97,8 +97,8 @@ func validateBrowserURL(raw string) (string, error) {
 	return parsed.String(), nil
 }
 
-func (d *Daemon) browserTargetFor(sessionID string) (browserTarget, error) {
-	sessionID = strings.TrimSpace(sessionID)
+func (d *Daemon) browserTargetFor(sessionID protocol.SessionID) (browserTarget, error) {
+	sessionID = protocol.TrimID(sessionID)
 	if sessionID != "" && d.store.Get(sessionID) == nil && d.hubManager != nil && d.hubManager.RemoteSession(sessionID) != nil {
 		return browserTarget{}, fmt.Errorf("agent %s runs on an outpost: %w", sessionID, hub.ErrOutpostsOff)
 	}

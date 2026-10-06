@@ -20,7 +20,7 @@ func queriedSession(t *testing.T, cli *client.Client, id string) protocol.Sessio
 		t.Fatalf("query sessions: %v", err)
 	}
 	for _, s := range listed {
-		if s.ID == id {
+		if string(s.ID) == id {
 			return s
 		}
 	}
@@ -32,14 +32,14 @@ func exitShells(app *testworld.Peer, ids ...string) {
 	app.T.Helper()
 	for _, id := range ids {
 		app.TypeLine(id, "exit")
-		testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == id })
+		testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == id })
 	}
 }
 
 func closeFromApp(app *testworld.Peer, sessionID string) protocol.SessionCloseResultMessage {
 	app.T.Helper()
-	return testworld.Request(app, protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: sessionID},
-		protocol.EventSessionCloseResult, func(r protocol.SessionCloseResultMessage) bool { return r.SessionID == sessionID })
+	return testworld.Request(app, protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: protocol.SessionID(sessionID)},
+		protocol.EventSessionCloseResult, func(r protocol.SessionCloseResultMessage) bool { return string(r.SessionID) == sessionID })
 }
 
 func closeTileFromApp(app *testworld.Peer, desktopID, tileID string) protocol.ProfileActionResultMessage {
@@ -52,7 +52,7 @@ func placedPane(t *testing.T, w *world, sessionID string) (protocol.Desktop, str
 	t.Helper()
 	for _, desktop := range w.App().Initial.Desktops {
 		for _, pane := range desktop.Panes {
-			if pane.SessionID == sessionID {
+			if string(pane.SessionID) == sessionID {
 				return desktop, pane.PaneID
 			}
 		}

@@ -5,6 +5,9 @@ using TypeSpec.JsonSchema;
 @jsonSchema
 namespace Protocol;
 
+scalar SessionID extends string;
+scalar TerminalID extends string;
+
 // ============================================================================
 // Enums
 // ============================================================================
@@ -174,7 +177,7 @@ model SessionDelegationRole {
 }
 
 model Session {
-  id: string;
+  id: SessionID;
   label: string;
   agent: string;                // Built-in ID or registered plugin driver ID
   directory: string;
@@ -193,24 +196,25 @@ model Session {
   crew_member?: string;         // The crew member whose active binding this session is — "this session is trellis today". Stamped by the daemon at launch, judged live at broadcast, absent for every unbound session.
   delegated_from_chief?: boolean; // True when this session was delegated from the chief of staff (recorded by the Garden dispatch)
   seed_id?: string;             // The seed this session reports to: the crown a delegation was dispatched at, or the seed planted for it. Read from the session's dispatch record at broadcast, never stored on the session — the record is the single answer to what a session reports to. Absent for a session no delegation bound.
-  dispatcher_session_id?: string; // The live session for this session's dispatcher, resolved from its dispatch record at broadcast and never stored on the session. Absent when nothing resolves.
+  dispatcher_session_id?: SessionID; // The live session for this session's dispatcher, resolved from its dispatch record at broadcast and never stored on the session. Absent when nothing resolves.
   dispatcher_member?: string;   // The crew member whose day dispatched this session. Read from the dispatch record and present even when no live session resolves.
   delegation_role?: SessionDelegationRole;
   turn_owed?: boolean;          // True when the user owes this session a turn. Derived at broadcast from the turn stamps plus the queue's exclusions (shell, chief); never stored, and never recomputed by a client.
   turn_opened_at?: string;      // ISO timestamp the outstanding turn opened; the queue's sort key. Absent when nothing is owed.
+  priority?: boolean;
   turn_snoozed_until?: string;  // ISO timestamp a live snooze runs to. Present only while the deferral holds; its presence is what puts the row in the sidebar's snoozed section, and while it is set no state can open a turn for this session except one that breaks through.
   auto_settle_fires_at?: string; // ISO timestamp the auto-settle countdown will close this session's turn. Present only while the countdown is running, which is the whole contract: it is what the terminal tile animates against, and its absence is what says nothing is pending. Absent during the arm delay, when auto-settle is off, and after a cancel.
   auto_settle_held?: boolean;   // True while the auto-settle countdown is frozen because the user is typing or moving the pointer in this session. Mutually exclusive with auto_settle_fires_at by construction: a frozen countdown has no deadline to animate against, so the tile draws a full paused bar and waits. It clears on its own five quiet seconds after the last interaction, when a fresh deadline replaces it.
   auto_settle_dismiss_armed?: boolean; // True while a standing dismissal covers this session's next auto-settle, whether the user armed it during a countdown or ahead of one. Excludes the other two by construction: arming is what stops a pending timer. It is spent at the end of the `working` stretch it covers, and pressing the cancel-countdown shortcut again while nothing is counting down disarms it.
   context_window_cap?: int32;   // Per-session context-window cap in tokens, set by the user on this one session. Absent means no pin — the launch falls back to the chief or per-agent default settings. A pin outranks both, and takes effect at the next launch of the agent (the daemon reloads a live session in place when the pin changes).
-  parent_session_id?: string;   // The agent session a shell was split from. Spawn-time provenance resolved by the daemon, always an agent id and never another shell's, so there is no chain to walk. Whether the link is live is judged at read (parent present on the same desktop), so the field itself is never cleared.
+  parent_session_id?: SessionID;   // The agent session a shell was split from. Spawn-time provenance resolved by the daemon, always an agent id and never another shell's, so there is no chain to walk. Whether the link is live is judged at read (parent present on the same desktop), so the field itself is never cleared.
   activity?: string;            // One short present-tense line saying what the agent is doing right now, generated from its transcript by a headless agent. Display only — it never feeds attention, the queue, or state classification. Absent when the feature is off or nothing has been generated for this session yet.
   activity_at?: string;         // ISO timestamp the activity line was generated. Present whenever activity is, so a client can age out a line the generator has stopped refreshing rather than showing it as current.
   usage?: SessionUsage;         // Primary native conversation plus native subagents. Visible attn delegations remain separate sessions.
   automation?: AutomationProvenance; // Present when this session was launched by an automation; latest run wins for a continuity thread.
   pull_requests?: SessionPullRequest[]; // Pull requests this session's agent opened, newest first. Joined at broadcast from the session_pull_requests table, never stored on the session row.
   terminal_build_stale?: boolean; // True when this session's pty-worker was built against a different libghostty-vt than the daemon, which happens when the app updates under a running session. The two then hold different terminal implementations and stop agreeing about the grid, so the app offers a reload. Derived at broadcast from the format tag the worker reports at its handshake; never stored, and absent for every same-build session, which is all of them outside an upgrade window.
-  succeeds?: string;            // The session this one replaced in its terminal, when the harness there moved to another conversation; that session closed into the ledger, unless it is a shared Codex session, which stays open. Durable: it stays set after the predecessor is reopened.
+  succeeds?: SessionID;            // The session this one replaced in its terminal, when the harness there moved to another conversation; that session closed into the ledger, unless it is a shared Codex session, which stays open. Durable: it stays set after the predecessor is reopened.
   hidden?: boolean;             // True while this open shared Codex session has no terminal tile: its terminal moved to another conversation. It keeps its state and takes input; desktop_show_session gives it a tile again. Derived at broadcast; absent otherwise.
   last_seen: string;            // ISO timestamp, always set
 }
@@ -252,7 +256,7 @@ model PresentManifestView {
 // kind is "changes" for now (reserved for future presentation kinds).
 model Presentation {
   id: string;
-  session_id: string;
+  session_id: SessionID;
   title: string;
   kind: string;
   repo_path: string;
@@ -454,7 +458,7 @@ model FileActivity {
   source: string;       // "opened" | "edited"
   last_at: string;      // ISO timestamp
   count: int32;
-  session_id?: string;  // the session in play at the time, when known
+  session_id?: SessionID;  // the session in play at the time, when known
 }
 
 model DirectoryEntry {
@@ -522,8 +526,8 @@ model DesktopPane {
   pane_id: string;
   desktop_id: string;
   kind: LayoutPaneKind;
-  session_id: string;
-  runtime_id: string; // The terminal the pane holds; PTY commands address it. It outlives the session shown in it.
+  session_id: SessionID;
+  runtime_id: TerminalID; // The terminal the pane holds; PTY commands address it. It outlives the session shown in it.
   title: string;
   status: LayoutPaneStatus;
   error?: string;
@@ -601,7 +605,7 @@ model ClientHelloMessage {
 
 model UnregisterMessage {
   cmd: "unregister";
-  id: string;
+  id: SessionID;
   // Absent, the close is the user's.
   closed_by?: string;
   close_reason?: string;
@@ -609,7 +613,7 @@ model UnregisterMessage {
 
 model StateMessage {
   cmd: "state";
-  id: string;
+  id: TerminalID;
   state: string;
   // permission_mode is the agent's *resolved* approval mode at the moment the
   // hook fired ("default", "auto", "acceptEdits", …). attn's own launch flags
@@ -635,7 +639,7 @@ model StateMessage {
 // low-latency trigger.
 model HookNotificationMessage {
   cmd: "hook_notification";
-  id: string;
+  id: TerminalID;
   notification_type: string;
   message?: string;
 }
@@ -651,7 +655,7 @@ model HookNotificationMessage {
 // human-readable form.
 model HookStopFailureMessage {
   cmd: "hook_stop_failure";
-  id: string;
+  id: TerminalID;
   error_type: string;
   error_message?: string;
 }
@@ -663,7 +667,7 @@ model HookStopFailureMessage {
 // and false on PostCompact; trigger is "manual" or "auto".
 model HookCompactionMessage {
   cmd: "hook_compaction";
-  id: string;
+  id: TerminalID;
   active: boolean;
   trigger?: string;
 }
@@ -673,7 +677,7 @@ model HookCompactionMessage {
 // durable binding; a pathless observation cannot replace it.
 model SetSessionResumeIDMessage {
   cmd: "set_session_resume_id";
-  id: string;
+  id: TerminalID;
   resume_session_id: string;
   transcript_path?: string;
 }
@@ -723,7 +727,7 @@ model SessionListMessage {
 model SessionShowMessage {
   cmd: "session_show";
   request_id?: string; // set by the WS frontend to correlate the result event
-  session_id: string;
+  session_id: SessionID;
 }
 
 // Brings a closed session back under its own id. Without an action it performs
@@ -731,7 +735,7 @@ model SessionShowMessage {
 model SessionReopenMessage {
   cmd: "session_reopen";
   request_id?: string; // set by the WS frontend to correlate the result event
-  session_id: string;
+  session_id: SessionID;
   action?: SessionReopenAction;
   // Where to start, for `start_fresh_elsewhere`.
   directory?: string;
@@ -766,7 +770,7 @@ model AgentMsgMessage {
   cmd: "agent_msg";
   target_session_id: string;    // full id or unique prefix; empty when addressing a seed
   target_seed_id?: string;      // deliver to this seed's tender
-  source_session_id: string;    // who is speaking; the daemon composes from this
+  source_session_id: SessionID;    // who is speaking; the daemon composes from this
   content: string;
 }
 
@@ -780,7 +784,7 @@ model AgentCloseMessage {
   cmd: "agent_close";
   target_session_id: string;    // full id or unique prefix; empty when addressing a seed
   target_seed_id?: string;      // close whoever tends this seed
-  source_session_id: string;    // who is closing
+  source_session_id: SessionID;    // who is closing
   reason: string;
 }
 
@@ -793,7 +797,7 @@ enum AgentCloseRule {
 }
 
 model AgentCloseResult {
-  target_session_id: string;
+  target_session_id: SessionID;
   label: string;
   reason: string;
   rule: AgentCloseRule;
@@ -805,7 +809,7 @@ model AgentCloseResult {
 model AgentInboxMessage {
   cmd: "agent_inbox";
   message_id?: string;
-  recipient_session_id: string;
+  recipient_session_id: SessionID;
   limit?: int32;
 }
 
@@ -813,7 +817,7 @@ model AgentInboxMessage {
 model AgentMsgStatusMessage {
   cmd: "agent_msg_status";
   message_id: string;
-  sender_session_id: string;
+  sender_session_id: SessionID;
 }
 
 // A Stop is not always terminal: the turn may yield with background work still
@@ -829,7 +833,7 @@ model AgentMsgStatusMessage {
 // caused by omitting the state update.
 model StopMessage {
   cmd: "stop";
-  id: string;
+  id: TerminalID;
   transcript_path: string;
   background_tasks?: StopBackgroundTask[];
   pending_session_crons?: int32;
@@ -848,7 +852,7 @@ model StopBackgroundTask {
 // show, so a session reporting source files costs a no-op rather than log rows.
 model FilesEditedMessage {
   cmd: "files_edited";
-  id: string;
+  id: TerminalID;
   paths: string[];
 }
 
@@ -856,20 +860,21 @@ model FilesEditedMessage {
 // (known host, parseable number) and dedup, so a repeated report is a no-op.
 model PullRequestCreatedMessage {
   cmd: "pull_request_created";
-  id: string;
+  id: SessionID;
   url: string;
+  terminal_id?: TerminalID;
 }
 
 // The way out: drops one recorded pull request from a session.
 model PullRequestForgetMessage {
   cmd: "pull_request_forget";
-  id: string;
+  id: SessionID;
   url: string;
 }
 
 model PullRequestWatchMessage {
   cmd: "pull_request_watch";
-  id: string;
+  id: SessionID;
   url: string;
   mode: PullRequestWatchMode;
   reviewer?: string;
@@ -885,7 +890,7 @@ model PullRequestWatchResultMessage {
 
 model PullRequestUnwatchMessage {
   cmd: "pull_request_unwatch";
-  id: string;
+  id: SessionID;
   url: string;
   request_id?: string;
 }
@@ -1099,12 +1104,13 @@ model DelegateMessage {
   profile_id?: string;
   cmd: "delegate";
   request_id: string; // Stable caller-supplied idempotency key for one logical delegation
-  source_session_id?: string;
+  source_session_id?: SessionID;
   assignment: DelegateAssignment;
   cwd: string;
   checkout?: DelegateCheckout;
   agent?: string;
   label?: string;
+  priority?: boolean;
   yolo_mode?: boolean;
   `model`?: string; // Pin the delegated agent's model (alias or full id); empty = agent default
   effort?: string; // Pin the delegated agent's reasoning effort; empty = agent default
@@ -1121,7 +1127,7 @@ model SeedHandoverRequest {
   seed_id: string;
   handoff?: string;
   expected_rev: safeint;
-  expected_tender_session: string;
+  expected_tender_session: SessionID;
   expected_tender_member: string;
   review?: SeedReviewActionContext;
   note_id?: string; // Reserved recovery identity for a new handoff note.
@@ -1129,14 +1135,14 @@ model SeedHandoverRequest {
 
 model DelegateStatusMessage {
   profile_id?: string;
-  source_session_id?: string;
+  source_session_id?: SessionID;
   cmd: "delegate_status";
   id: string; // Request id or daemon-issued operation id
 }
 
 model PresentOpenMessage {
   cmd: "present_open";
-  source_session_id: string;
+  source_session_id: SessionID;
   manifest_yaml: string;
   presentation_id?: string;
 }
@@ -1223,12 +1229,12 @@ model NotebookSendToChiefMessage {
 // `attn notebook …` subcommands were removed.
 model NotebookGuideMessage {
   cmd: "notebook_guide";
-  session_id?: string; // when set, session_is_chief reflects this session's role
+  session_id?: SessionID; // when set, session_is_chief reflects this session's role
 }
 
 model JournalAppendMessage {
   cmd: "journal_append";
-  source_session_id?: string;
+  source_session_id?: SessionID;
   entry: string;
   date?: string; // YYYY-MM-DD; defaults to today in the daemon's local timezone
 }
@@ -1391,12 +1397,12 @@ model DelegateWorktreeRequest {
 model QueryMessage {
   cmd: "query";
   filter?: string;
-  caller_id?: string; // The caller's ATTN_SESSION_ID; the response's caller_session_id names the session its terminal shows.
+  caller_id?: TerminalID; // The caller's ATTN_TERMINAL_ID; the response's caller_session_id names the session its terminal shows.
 }
 
 model HeartbeatMessage {
   cmd: "heartbeat";
-  id: string;
+  id: SessionID;
 }
 
 // SettleTurnMessage closes the turn a session opened. It is the only way a turn
@@ -1405,7 +1411,13 @@ model HeartbeatMessage {
 // Fire-and-forget; the daemon broadcasts the session afterwards.
 model SettleTurnMessage {
   cmd: "settle_turn";
-  session_id: string;
+  session_id: SessionID;
+}
+
+model SetSessionPriorityMessage {
+  cmd: "set_session_priority";
+  session_id: SessionID;
+  priority: boolean;
 }
 
 // SnoozeTurnMessage defers a session until an instant: it closes any open turn
@@ -1418,7 +1430,7 @@ model SettleTurnMessage {
 // remote endpoint's daemon does not share. Fire-and-forget.
 model SnoozeTurnMessage {
   cmd: "snooze_turn";
-  session_id: string;
+  session_id: SessionID;
   until: string;
 }
 
@@ -1427,12 +1439,12 @@ model SnoozeTurnMessage {
 // daemon's call. Fire-and-forget.
 model WakeTurnMessage {
   cmd: "wake_turn";
-  session_id: string;
+  session_id: SessionID;
 }
 
 model CancelCountdownMessage {
   cmd: "cancel_countdown";
-  session_id: string;
+  session_id: SessionID;
 }
 
 model QueryPRsMessage {
@@ -1675,6 +1687,25 @@ model GetRecentLocationsMessage {
   request_id?: string;
 }
 
+model CommandUsage {
+  command_id: string;
+  score: float64;
+  last_used_at: string;
+}
+
+model GetCommandUsageMessage {
+  cmd: "get_command_usage";
+  request_id: string;
+  profile_id: string;
+}
+
+model RecordCommandUsageMessage {
+  cmd: "record_command_usage";
+  request_id: string;
+  profile_id: string;
+  command_id: string;
+}
+
 // Recently touched files, frecency-ranked (frequency weighted by recency, the
 // same model as get_recent_locations). Feeds the ⌘P markdown opener's list on
 // an empty query. Entries whose file no longer exists are pruned rather than
@@ -1784,7 +1815,7 @@ model WorkflowRunGetMessage {
 
 model WorkflowRunListMessage {
   cmd: "workflow_run_list";
-  session_id?: string;
+  session_id?: SessionID;
 }
 
 model WorkflowRunCancelMessage {
@@ -1813,9 +1844,9 @@ model AutomationApplyMessage {
   expected_revision?: int32;
   launch_desktop_name?: string;
   launch_desktop_setting?: LaunchDesktopSetting;
-  source_session_id?: string; // The calling agent; scopes the request to its profile.
+  source_session_id?: SessionID; // The calling agent; scopes the request to its profile.
 }
-model AutomationRunMessage { cmd: "automation_run"; definition_id: safeint; request_id: string; input_json?: string; pr_url?: string; profile_id?: string; source_session_id?: string; }
+model AutomationRunMessage { cmd: "automation_run"; definition_id: safeint; request_id: string; input_json?: string; pr_url?: string; profile_id?: string; source_session_id?: SessionID; }
 
 // Dual-surface (unix-socket `attn automation validate` + WS "Validate"
 // button): runs exactly the checks automation_apply runs before persisting
@@ -1838,7 +1869,7 @@ model AutomationDeleteMessage {
   definition_id: safeint;
   request_id?: string;
   profile_id?: string;
-  source_session_id?: string; // The calling agent; scopes the request to its profile.
+  source_session_id?: SessionID; // The calling agent; scopes the request to its profile.
 }
 
 // Same dual-surface shape as automation_delete above. Unlike delete, cleanup
@@ -1849,7 +1880,7 @@ model AutomationCleanupMessage {
   definition_id: safeint;
   request_id?: string;
   profile_id?: string;
-  source_session_id?: string; // The calling agent; scopes the request to its profile.
+  source_session_id?: SessionID; // The calling agent; scopes the request to its profile.
 }
 
 // Every automations command sees only one profile's definitions: the connection's
@@ -1861,7 +1892,7 @@ model AutomationDefinitionsGetMessage {
   cmd: "automation_definitions_get";
   request_id?: string;
   profile_id?: string;
-  source_session_id?: string; // The calling agent; scopes the request to its profile.
+  source_session_id?: SessionID; // The calling agent; scopes the request to its profile.
 }
 
 // WS-only: the editor's load-for-edit and load-for-create-template call, in
@@ -1875,14 +1906,14 @@ model AutomationDefinitionGetMessage {
   definition_id: safeint;
   request_id?: string;
   profile_id?: string;
-  source_session_id?: string; // The calling agent; scopes the request to its profile.
+  source_session_id?: SessionID; // The calling agent; scopes the request to its profile.
 }
 model AutomationRunsGetMessage {
   cmd: "automation_runs_get";
   definition_id: safeint;
   request_id?: string;
   profile_id?: string;
-  source_session_id?: string; // The calling agent; scopes the request to its profile.
+  source_session_id?: SessionID; // The calling agent; scopes the request to its profile.
 }
 model AutomationSetEnabledMessage {
   cmd: "automation_set_enabled";
@@ -1890,12 +1921,12 @@ model AutomationSetEnabledMessage {
   enabled: boolean;
   request_id?: string;
   profile_id?: string;
-  source_session_id?: string; // The calling agent; scopes the request to its profile.
+  source_session_id?: SessionID; // The calling agent; scopes the request to its profile.
 }
 
 model SpawnSessionMessage {
   cmd: "spawn_session";
-  id: string;
+  id: SessionID;
   cwd: string;
   endpoint_id?: string;
   profile_id: string;       // The profile the session belongs to; empty over WebSocket means the connection's selected profile. Refused before any side effect when it resolves to nothing or to a deleted profile
@@ -1906,6 +1937,7 @@ model SpawnSessionMessage {
   label?: string;
   resume_session_id?: string;
   resume_picker?: boolean;
+  priority?: boolean;
   yolo_mode?: boolean;
   // Per-session auto mode, for an agent whose driver advertises `auto_mode`.
   // Tri-state on purpose: absent follows the promoted config's
@@ -1920,7 +1952,7 @@ model SpawnSessionMessage {
   approval_policy?: string;
   sandbox_mode?: string;
   chief_of_staff?: boolean;    // Launch this session already holding the chief role (guidance injected at first spawn)
-  spawned_from?: string;       // The session this one was split from. Consulted only for agent "shell": the daemon resolves it to the owning agent session and stores that as the satellite's parent.
+  spawned_from?: SessionID;       // The session this one was split from. Consulted only for agent "shell": the daemon resolves it to the owning agent session and stores that as the satellite's parent.
   initial_prompt?: string;
   executable?: string;         // Generic executable override for selected agent
   claude_executable?: string;  // Backward compatibility
@@ -1942,7 +1974,7 @@ model SessionPlacement {
 
 model AttachSessionMessage {
   cmd: "attach_session";
-  id: string; // The terminal (pane runtime_id)
+  id: TerminalID; // The terminal (pane runtime_id)
   attach_policy?: AttachPolicy;
   // PTY geometry for revive; required when attach_policy is "revive"
   cols?: int32;
@@ -1951,7 +1983,7 @@ model AttachSessionMessage {
 
 model DetachSessionMessage {
   cmd: "detach_session";
-  id: string; // The terminal (pane runtime_id)
+  id: TerminalID; // The terminal (pane runtime_id)
 }
 
 // Read-only request for a terminal's current rendered screen. Unlike
@@ -1959,7 +1991,7 @@ model DetachSessionMessage {
 // seed observers that then dedup live output against last_seq.
 model GetScreenSnapshotMessage {
   cmd: "get_screen_snapshot";
-  id: string; // The terminal (pane runtime_id)
+  id: TerminalID; // The terminal (pane runtime_id)
 }
 
 // Pulls the pixels behind a placement. Images are pulled on miss, never pushed:
@@ -1973,13 +2005,13 @@ model GetScreenSnapshotMessage {
 // 0x02, without it as base64 in kitty_image_result.
 model GetKittyImageMessage {
   cmd: "get_kitty_image";
-  id: string;
+  id: TerminalID;
   image_id: safeint;
 }
 
 model PtyInputMessage {
   cmd: "pty_input";
-  id: string; // The terminal (pane runtime_id)
+  id: TerminalID; // The terminal (pane runtime_id)
   data: string;
   // Who produced these bytes. Absent or "user" is a keystroke and stamps the
   // daemon's composer clock; "pointer" (mouse reports), "response" (terminal
@@ -2001,13 +2033,13 @@ model SupportSnapshotMessage {
   endpoint_id?: string;
   // Restricts the potentially expensive backend inspection to runtimes the
   // requesting app can actually describe in this report.
-  runtime_ids?: string[];
+  runtime_ids?: TerminalID[];
 }
 
 model SupportInputTrace {
   sequence: safeint;
   trace_id: string;
-  runtime_id: string;
+  runtime_id: TerminalID;
   received_at_unix_ms: safeint;
   source: string;
   byte_count: safeint;
@@ -2017,7 +2049,7 @@ model SupportInputTrace {
 }
 
 model SupportRuntimeEvidence {
-  runtime_id: string;
+  runtime_id: TerminalID;
   backend: string;
   attached: boolean;
   running?: boolean;
@@ -2033,7 +2065,7 @@ model SupportRuntimeEvidence {
 
 model TerminalPointerActivityMessage {
   cmd: "terminal_pointer_activity";
-  id: string; // The terminal (pane runtime_id)
+  id: TerminalID; // The terminal (pane runtime_id)
 }
 
 // Asks for the durable event bus's operator picture: what the log holds, which
@@ -2165,7 +2197,7 @@ model BusSetConsumerEnabledResultMessage {
 // derived rather than reporting a lie.
 model PtyResizeMessage {
   cmd: "pty_resize";
-  id: string; // The terminal (pane runtime_id)
+  id: TerminalID; // The terminal (pane runtime_id)
   cols: int32;
   rows: int32;
   xpixel?: int32;
@@ -2210,7 +2242,7 @@ model ActivityStatusResult {
 }
 
 model ActivityStatusSession {
-  id: string;
+  id: SessionID;
   label: string;
   activity?: string;
   activity_at?: string;
@@ -2229,7 +2261,7 @@ model ActivityStatusSession {
 // was already summarized.
 model ClearSessionActivityMessage {
   cmd: "clear_session_activity";
-  id: string;
+  id: SessionID;
 }
 
 // Pushes the app's resolved terminal theme colors to the daemon. Fire-and-forget:
@@ -2244,7 +2276,7 @@ model SetTerminalThemeMessage {
 
 model KillSessionMessage {
   cmd: "kill_session";
-  id: string;
+  id: SessionID;
   signal?: string; // "SIGTERM", "SIGINT", ...
 }
 
@@ -2254,7 +2286,7 @@ model KillSessionMessage {
 // worker exists to read geometry from).
 model ReloadSessionMessage {
   cmd: "reload_session";
-  id: string;
+  id: SessionID;
   cols: int32;
   rows: int32;
 }
@@ -2268,7 +2300,8 @@ model ReloadSessionMessage {
 model OpenSentFilesMessage {
   cmd: "open_sent_files";
   paths: string[];
-  session_id?: string;
+  session_id?: SessionID;
+  terminal_id?: TerminalID;
 }
 
 // Open a markdown file into a docked, live-reloading tile. Sent by the
@@ -2280,7 +2313,7 @@ model OpenSentFilesMessage {
 model OpenMarkdownMessage {
   cmd: "open_markdown";
   path: string;
-  session_id?: string;
+  session_id?: SessionID;
   request_id?: string;
 }
 
@@ -2300,7 +2333,7 @@ model OpenSeedMessage {
   "profile_id"?: string;
   cmd: "open_seed";
   seed_id: string;
-  session_id?: string;
+  session_id?: SessionID;
   standalone?: boolean;
   request_id?: string;
 }
@@ -2367,7 +2400,7 @@ model SessionMessage {
 // session state.
 model SessionMessagesGetMessage {
   cmd: "session_messages_get";
-  session_id: string;
+  session_id: SessionID;
   request_id: string;
 }
 
@@ -2381,7 +2414,7 @@ enum SessionMessageWindowStatus {
 model SessionMessagesGetResultMessage {
   event: "session_messages_get_result";
   request_id: string;
-  session_id: string;
+  session_id: SessionID;
   success: boolean;
   error?: string;
   // The command succeeded independently of the transcript's domain lifecycle.
@@ -2402,7 +2435,7 @@ model SessionMessagesGetResultMessage {
 // authoritative implementation.
 model SessionMessagesChangedMessage {
   event: "session_messages_changed";
-  session_id: string;
+  session_id: SessionID;
 }
 
 // One persisted terminal annotation. Offsets address `message_key`'s markdown,
@@ -2429,7 +2462,7 @@ model SessionAnnotation {
 // seeds its counter past any tombstone even when the list is empty.
 model SessionAnnotationsGetMessage {
   cmd: "session_annotations_get";
-  session_id: string;
+  session_id: SessionID;
   request_id: string;
 }
 
@@ -2437,7 +2470,7 @@ model SessionAnnotationsGetMessage {
 model SessionAnnotationsGetResultMessage {
   event: "session_annotations_get_result";
   request_id: string;
-  session_id: string;
+  session_id: SessionID;
   success: boolean;
   error?: string;
   annotations: SessionAnnotation[];
@@ -2453,7 +2486,7 @@ model SessionAnnotationsGetResultMessage {
 // edit.
 model SessionAnnotationsSaveMessage {
   cmd: "session_annotations_save";
-  session_id: string;
+  session_id: SessionID;
   annotations: SessionAnnotation[];
   // Saved with the marks and cleared with them, because it is one thing the
   // user is composing and sends in one keystroke.
@@ -2466,7 +2499,7 @@ model SessionAnnotationsSaveMessage {
 model SessionAnnotationsSaveResultMessage {
   event: "session_annotations_save_result";
   request_id: string;
-  session_id: string;
+  session_id: SessionID;
   success: boolean;
   error?: string;
   // The save carried a generation at or below the stored one or the tombstone.
@@ -2479,7 +2512,7 @@ model SessionAnnotationsSaveResultMessage {
 // Idempotent, and works on a session that never had a row.
 model SessionAnnotationsClearMessage {
   cmd: "session_annotations_clear";
-  session_id: string;
+  session_id: SessionID;
   generation: int32;
   request_id: string;
 }
@@ -2488,7 +2521,7 @@ model SessionAnnotationsClearMessage {
 model SessionAnnotationsClearResultMessage {
   event: "session_annotations_clear_result";
   request_id: string;
-  session_id: string;
+  session_id: SessionID;
   success: boolean;
   error?: string;
   generation: int32;
@@ -2507,7 +2540,7 @@ model SessionAnnotationsClearResultMessage {
 // nothing is ever submitted.
 model SessionAnnotationsSubmitMessage {
   cmd: "session_annotations_submit";
-  session_id: string;
+  session_id: SessionID;
   // The composed feedback, delivered as one pasted block.
   text: string;
   request_id: string;
@@ -2523,7 +2556,7 @@ model SessionAnnotationsSubmitMessage {
 model SessionAnnotationsSubmitResultMessage {
   event: "session_annotations_submit_result";
   request_id: string;
-  session_id: string;
+  session_id: SessionID;
   success: boolean;
   status: string;
   error?: string;
@@ -2650,7 +2683,7 @@ model MarkdownAnnotationsSubmitResultMessage {
   source_kind: string;
   path?: string;
   seed_id?: string;
-  target_session_id?: string;
+  target_session_id?: SessionID;
   target_seed_id?: string;
   success: boolean;
   status: string;
@@ -2663,7 +2696,7 @@ model MarkdownAnnotationsSubmitResultMessage {
 model OpenBrowserMessage {
   cmd: "open_browser";
   url: string;
-  session_id?: string;
+  session_id?: SessionID;
 }
 
 // Ask the visible in-app browser host to perform an action. Sent by the CLI
@@ -2674,7 +2707,7 @@ model BrowserControlMessage {
   params?: string;
   selector?: string;
   text?: string;
-  session_id?: string;
+  session_id?: SessionID;
   request_id?: string;
 }
 
@@ -2787,7 +2820,7 @@ model DesktopSetActivePaneMessage {
 model DesktopShowSessionMessage {
   cmd: "desktop_show_session";
   request_id: string;
-  session_id: string;
+  session_id: SessionID;
 }
 
 // Moves a session's pane to another desktop of its profile, beside that
@@ -2799,13 +2832,13 @@ model DesktopShowSessionMessage {
 // never changes.
 model DesktopMoveSessionMessage {
   cmd: "desktop_move_session";
-  session_id: string;
-  caller_session_id?: string;
+  session_id: SessionID;
+  caller_session_id?: SessionID;
   desktop: string;
 }
 
 model DesktopMoveSessionResult {
-  session_id: string;
+  session_id: SessionID;
   desktop_id: string;
   pane_id: string;
   from_desktop_id?: string; // absent when unchanged
@@ -2828,7 +2861,7 @@ model DesktopPlaceSessionMessage {
   request_id: string;
   desktop_id: string;
   expected_revision: safeint;
-  session_id: string;
+  session_id: SessionID;
   anchor_pane_id?: string;
   direction?: LayoutSplitDirection;
   new_pane_share?: float64;     // The new pane's share of the split, in (0,1)
@@ -2887,7 +2920,7 @@ model DesktopDockTileMessage {
   tile_id: string;
   tile_kind: string;
   tile_params?: string;
-  tile_session_id?: string;
+  tile_session_id?: SessionID;
   anchor_id?: string;
   edge: LayoutDockEdge;
   tile_share?: float64;
@@ -2900,7 +2933,7 @@ model DesktopUpdateTileMessage {
   expected_revision: safeint;
   tile_id: string;
   tile_params?: string;
-  tile_session_id?: string;
+  tile_session_id?: SessionID;
 }
 
 model DesktopTileContentMessage {
@@ -2977,7 +3010,7 @@ model MigrationDraftDesktop {
 
 model BackgroundLaunchMessage {
  event: "background_launch";
- session_id: string;
+ session_id: SessionID;
  profile_id: string;
  desktop_id: string;
  name: string;
@@ -3010,7 +3043,7 @@ model LaunchDesktopGetMessage {
 }
 model LaunchDesktopSetMessage {
   profile_id?: string;
-  source_session_id?: string;
+  source_session_id?: SessionID;
   desktop_ref?: string;
   cmd: "launch_desktop_set";
   request_id: string;
@@ -3102,7 +3135,7 @@ model MigrationChangedMessage {
 // it survives session re-registration and respawn so a rename is durable.
 model RenameSessionMessage {
   cmd: "rename_session";
-  session_id: string;
+  session_id: SessionID;
   label: string;
 }
 
@@ -3112,7 +3145,7 @@ model RenameSessionMessage {
 // place (resume-preserving) so the cap takes effect immediately.
 model SetSessionContextWindowCapMessage {
   cmd: "set_session_context_window_cap";
-  session_id: string;
+  session_id: SessionID;
   cap: int32;
 }
 
@@ -3120,13 +3153,23 @@ model SetSessionContextWindowCapMessage {
 // session transfers the singleton role from the previous holder.
 model SetChiefOfStaffMessage {
   cmd: "set_chief_of_staff";
-  session_id: string;
+  session_id: SessionID;
   chief_of_staff: boolean;
 }
 
 // ============================================================================
 // Result/Event Messages (Daemon → Client)
 // ============================================================================
+
+model TerminalBinding {
+  terminal_id: TerminalID;
+  session_id: SessionID;
+}
+
+model TerminalBindingsUpdatedMessage {
+  event: "terminal_bindings_updated";
+  terminal_bindings: TerminalBinding[];
+}
 
 model InitialStateMessage {
   event: "initial_state";
@@ -3140,6 +3183,7 @@ model InitialStateMessage {
    */
   home_daemon_id?: string;
   sessions?: Session[];
+  terminal_bindings?: TerminalBinding[];
   endpoints?: EndpointInfo[];
   profiles?: Profile[];
   migration_phase?: MigrationPhase;
@@ -3195,7 +3239,7 @@ model SessionUnregisteredMessage {
 // The answer to a forwarded unregister, from the daemon that owns the session.
 model SessionCloseResultMessage {
   event: "session_close_result";
-  session_id: string;
+  session_id: SessionID;
   accepted: boolean;
   error?: string;
 }
@@ -3223,7 +3267,7 @@ model SessionsUpdatedMessage {
 model RenameResultMessage {
   event: "rename_result";
   cmd: string;
-  id: string;
+  id: SessionID;
   success: boolean;
   error?: string;
 }
@@ -3233,7 +3277,7 @@ model RenameResultMessage {
 // broadcast separately via sessions_updated.
 model SessionContextWindowCapResultMessage {
   event: "session_context_window_cap_result";
-  session_id: string;
+  session_id: SessionID;
   cap: int32;
   success: boolean;
   error?: string;
@@ -3241,9 +3285,9 @@ model SessionContextWindowCapResultMessage {
 
 model ChiefOfStaffResultMessage {
   event: "chief_of_staff_result";
-  session_id: string;
+  session_id: SessionID;
   chief_of_staff: boolean;
-  previous_session_id?: string;
+  previous_session_id?: SessionID;
   success: boolean;
   error?: string;
 }
@@ -3623,7 +3667,7 @@ model WorkflowRun {
   script_path: string;
   script_hash: string;
   args_json?: string;
-  session_id?: string;
+  session_id?: SessionID;
   status: WorkflowRunStatus;
   phase?: string;
   harness?: string;
@@ -3693,7 +3737,7 @@ model AutomationRunSummary {
   last_error?: string;
   cancel_reason?: string;
   seed_id?: string;
-  session_id?: string;
+  session_id?: SessionID;
   created_at: string;
   updated_at: string;
   delivered_at?: string;
@@ -3821,7 +3865,7 @@ model AutomationsChangedMessage {
 // Reviewer agent streaming events
 model SpawnResultMessage {
   event: "spawn_result";
-  id: string;
+  id: SessionID;
   success: boolean;
   error?: string;
   // The pane the agent was placed in. A spawn whose placement fails fails
@@ -3832,7 +3876,7 @@ model SpawnResultMessage {
 
 model ReloadSessionResultMessage {
   event: "reload_session_result";
-  id: string;
+  id: SessionID;
   success: boolean;
   error?: string;
 }
@@ -3913,7 +3957,7 @@ model AttachSnapshot {
 
 model AttachResultMessage {
   event: "attach_result";
-  id: string; // The terminal (pane runtime_id)
+  id: TerminalID; // The terminal (pane runtime_id)
   success: boolean;
   // The server-authoritative restore. Present whenever the attach restores prior
   // terminal state; the client decodes a terminal from snapshot.snapshot_b64.
@@ -3931,7 +3975,7 @@ model AttachResultMessage {
 
 model GetScreenSnapshotResultMessage {
   event: "get_screen_snapshot_result";
-  id: string;
+  id: TerminalID;
   success: boolean;
   screen_snapshot?: string; // base64 ANSI replay of the visible frame
   screen_rows?: int32;
@@ -3945,7 +3989,7 @@ model GetScreenSnapshotResultMessage {
 
 model PtyOutputMessage {
   event: "pty_output";
-  id: string; // The terminal (pane runtime_id)
+  id: TerminalID; // The terminal (pane runtime_id)
   data: string; // base64 bytes
   seq: int32;
 }
@@ -3955,7 +3999,7 @@ model PtyOutputMessage {
 // PTY backend portion without requiring synchronized clocks on remote hosts.
 model PtyInputProbeResultMessage {
   event: "pty_input_probe_result";
-  id: string;
+  id: TerminalID;
   probe_id: string;
   success: boolean;
   write_duration_us: safeint;
@@ -3980,15 +4024,15 @@ model SupportSnapshotResultMessage {
 
 model SessionExitedMessage {
   event: "session_exited";
-  id: string;          // The terminal whose process exited
-  session_id: string;  // The session that terminal showed when it exited
+  id: TerminalID;          // The terminal whose process exited
+  session_id: SessionID;  // The session that terminal showed when it exited
   exit_code: int32;
   signal?: string;
 }
 
 model PtyDesyncMessage {
   event: "pty_desync";
-  id: string; // The terminal (pane runtime_id)
+  id: TerminalID; // The terminal (pane runtime_id)
   reason: string;
 }
 
@@ -4006,7 +4050,7 @@ model PtyDesyncMessage {
 // rather than a fresh seq, so equal seqs happen and both are truthful.
 model KittyPlacementsMessage {
   event: "kitty_placements";
-  id: string;
+  id: TerminalID;
   seq: int32;
   placements: KittyPlacement[];
 }
@@ -4035,7 +4079,7 @@ model KittyPlacementsMessage {
 // error names the image id and the client drops that placement's render.
 model KittyImageResultMessage {
   event: "kitty_image_result";
-  id: string;
+  id: TerminalID;
   image_id: safeint;
   success: boolean;
   generation?: safeint;
@@ -4053,7 +4097,7 @@ model KittyImageResultMessage {
 // session_exited (which leaves a dead pane) — the process was replaced, not closed.
 model RuntimeRespawnedMessage {
   event: "runtime_respawned";
-  id: string; // The terminal (pane runtime_id)
+  id: TerminalID; // The terminal (pane runtime_id)
 }
 
 // Echoes the geometry the resizing client sent, pixels included, so the other
@@ -4061,7 +4105,7 @@ model RuntimeRespawnedMessage {
 // unknown" rule as PtyResizeMessage.
 model PtyResizedMessage {
   event: "pty_resized";
-  id: string; // The terminal (pane runtime_id)
+  id: TerminalID; // The terminal (pane runtime_id)
   cols: integer;
   rows: integer;
   xpixel?: int32;
@@ -4468,13 +4512,13 @@ model Seed {
   "status": string;
   // The seed's stable name within its plot; derived from the title at planting.
   "step_slug": string;
-  "planter_session": string;
+  "planter_session": SessionID;
   "planter_member": string;
-  "tender_session": string;
+  "tender_session": SessionID;
   "tender_member": string;
   // The most recent attn session that worked this seed. It survives Park and
   // session removal; current ownership remains tender_session/tender_member.
-  "last_execution_id"?: string;
+  "last_execution_id"?: SessionID;
   // The latest lifecycle state transition. Legacy seeds use updated_at as a
   // conservative fallback and say so through state_changed_at_exact.
   "state_changed_at": string;
@@ -4515,7 +4559,7 @@ model SeedHarvestCondition {
   "pull_request": string;
   "url": string;
   "set_at": string;
-  "set_by_session"?: string;
+  "set_by_session"?: SessionID;
   "set_by_member"?: string;
   "checked_at"?: string;
 }
@@ -4529,7 +4573,7 @@ model KeptConversationRow {
   agent: string;
   resume_id: string;
   title: string;
-  session_ids: string[];
+  session_ids: SessionID[];
   source_bytes?: safeint;
   kept?: KeptConversation;
   pinned_at?: string;
@@ -4658,7 +4702,7 @@ model SeedPlantMessage {
   "profile_id"?: string;
 
   "cmd": "seed_plant";
-  "source_session_id"?: string;
+  "source_session_id"?: SessionID;
   "title": string;
   "body"?: string;
   // A crown to plant under: the seed is born part of that plot. Refused when
@@ -4682,7 +4726,7 @@ model SeedPlotMessage {
   "profile_id"?: string;
 
   "cmd": "seed_plot";
-  "source_session_id"?: string;
+  "source_session_id"?: SessionID;
   "member"?: string;
   "title": string;
   "body"?: string;
@@ -4708,7 +4752,7 @@ model SeedListMessage {
   "profile_id"?: string;
 
   "cmd": "seed_list";
-  "source_session_id"?: string;
+  "source_session_id"?: SessionID;
   // Only the open seeds whose log has not moved for the window — a query for
   // a person's judgment, never a reaper.
   "stale"?: boolean;
@@ -4734,7 +4778,7 @@ model SeedSearchMessage {
   "profile_id"?: string;
 
   "cmd": "seed_search";
-  "source_session_id"?: string;
+  "source_session_id"?: SessionID;
   // Whitespace-separated terms. A seed matches when one field — its title, its
   // body, or one log entry — carries every term, so a snippet can show why.
   "query": string;
@@ -4769,7 +4813,7 @@ model SeedShowMessage {
   "cmd": "seed_show";
   // The reading session. When present, showing the seed consumes its pending
   // bell for this reader and reports its effective watch coverage.
-  "source_session_id"?: string;
+  "source_session_id"?: SessionID;
   "seed_id": string;
 }
 
@@ -4807,7 +4851,7 @@ model SeedShowResult {
 // preserved rather than overwritten by the editor's older snapshot.
 model SeedEditMessage {
   "profile_id"?: string;
-  "source_session_id"?: string;
+  "source_session_id"?: SessionID;
 
   "cmd": "seed_edit";
   "seed_id": string;
@@ -4823,7 +4867,7 @@ model SeedEditResult {
 // clients also re-read this model for the ledger and bounded-snapshot fallback.
 model SeedDocumentGetMessage {
   "profile_id"?: string;
-  "source_session_id"?: string;
+  "source_session_id"?: SessionID;
 
   "cmd": "seed_document_get";
   "seed_id": string;
@@ -4871,7 +4915,7 @@ model SeedArtifactTransferMessage {
 
   "cmd": "seed_artifact_transfer";
   "request_id"?: string;
-  "source_session_id"?: string;
+  "source_session_id"?: SessionID;
   "seed_id": string;
   // move | copy | detach.
   "operation": string;
@@ -4912,7 +4956,7 @@ model SeedArtifactTransferResultMessage {
 // `artifact` accepts any regular managed file for explicit row actions.
 model SeedArtifactTargetMessage {
   "profile_id"?: string;
-  "source_session_id"?: string;
+  "source_session_id"?: SessionID;
 
   "cmd": "seed_artifact_target";
   "request_id": string;
@@ -4953,7 +4997,7 @@ model SeedRelation {
 // naming both seeds and the edge to remove.
 model SeedLinkMessage {
   "profile_id"?: string;
-  "source_session_id"?: string;
+  "source_session_id"?: SessionID;
 
   "cmd": "seed_link";
   "seed_id": string;
@@ -4978,7 +5022,7 @@ model SeedReadyMessage {
   "profile_id"?: string;
 
   "cmd": "seed_ready";
-  "source_session_id"?: string;
+  "source_session_id"?: SessionID;
   // A crown: the answer is that plot's seeds.
   "plot"?: string;
   // The whole garden, overriding a dispatched session's plot inference.
@@ -5009,7 +5053,7 @@ model SeedTransitionMessage {
   "profile_id"?: string;
 
   "cmd": "seed_transition";
-  "source_session_id"?: string;
+  "source_session_id"?: SessionID;
   // Set by a WebSocket caller, which correlates the answer by request_id; the
   // unix-socket callers read the response off their own connection and omit it.
   "request_id"?: string;
@@ -5090,7 +5134,7 @@ model SeedNote {
   // attach and detach are the only kinds that carry an artifact.
   "kind": string;
   "body": string;
-  "author_session": string;
+  "author_session": SessionID;
   "author_member": string;
   "created_at": string;
   "artifact"?: SeedArtifactReference;
@@ -5100,7 +5144,7 @@ model SeedNoteMessage {
   "profile_id"?: string;
 
   "cmd": "seed_note";
-  "source_session_id"?: string;
+  "source_session_id"?: SessionID;
   // Set by a WebSocket caller, as on seed_transition.
   "request_id"?: string;
   "seed_id": string;
@@ -5138,7 +5182,7 @@ model SeedNotesMessage {
 
   "cmd": "seed_notes";
   // Reading the log consumes this session's pending bell for the seed.
-  "source_session_id"?: string;
+  "source_session_id"?: SessionID;
   "seed_id": string;
   "limit"?: int32;
 }
@@ -5154,7 +5198,7 @@ model SeedWatchMessage {
   "profile_id"?: string;
 
   "cmd": "seed_watch";
-  "source_session_id": string;
+  "source_session_id": SessionID;
   "seed_id": string;
   "unwatch"?: boolean;
 }
@@ -5176,7 +5220,7 @@ model SeedWatchResult {
 // profile_arrangement_changed broadcasts. An untended seed refuses by name —
 // there is nobody to reopen.
 model SeedResumeMessage {
-  "source_session_id"?: string;
+  "source_session_id"?: SessionID;
 
   "cmd": "seed_resume";
   "request_id"?: string;
@@ -5195,7 +5239,7 @@ model SeedResumeResultMessage {
   "request_id": string;
   "success": boolean;
   "error"?: string;
-  "session_id"?: string;
+  "session_id"?: SessionID;
   "profile_id"?: string;
   "already_running"?: boolean;
 }
@@ -5208,10 +5252,10 @@ model SeedSendToChiefMessage {
 
   "cmd": "seed_send_to_chief";
   "request_id"?: string;
-  "source_session_id"?: string;
+  "source_session_id"?: SessionID;
   "seed_id": string;
   "expected_rev": safeint;
-  "expected_tender_session": string;
+  "expected_tender_session": SessionID;
   "expected_tender_member": string;
   "guidance"?: string;
   // Present only when this resolves one captured Review garden item.
@@ -5220,7 +5264,7 @@ model SeedSendToChiefMessage {
 
 model SeedSendToChiefResult {
   "seed": Seed;
-  "chief_session_id": string;
+  "chief_session_id": SessionID;
   "delivery_status": AgentMsgStatus;
   "detail": string;
 }
@@ -5312,7 +5356,7 @@ model SeedReviewActionContext {
 
 model SeedReviewStartMessage {
   "profile_id"?: string;
-  "source_session_id"?: string;
+  "source_session_id"?: SessionID;
 
   "cmd": "seed_review_start";
   "request_id"?: string;
@@ -5320,7 +5364,7 @@ model SeedReviewStartMessage {
 
 model SeedReviewShowMessage {
   "profile_id"?: string;
-  "source_session_id"?: string;
+  "source_session_id"?: SessionID;
 
   "cmd": "seed_review_show";
   "request_id"?: string;
@@ -5330,7 +5374,7 @@ model SeedReviewShowMessage {
 
 model SeedReviewCancelMessage {
   "profile_id"?: string;
-  "source_session_id"?: string;
+  "source_session_id"?: SessionID;
 
   "cmd": "seed_review_cancel";
   "request_id"?: string;
@@ -5339,7 +5383,7 @@ model SeedReviewCancelMessage {
 
 model SeedReviewRetryMessage {
   "profile_id"?: string;
-  "source_session_id"?: string;
+  "source_session_id"?: SessionID;
 
   "cmd": "seed_review_retry";
   "request_id"?: string;
@@ -5349,7 +5393,7 @@ model SeedReviewRetryMessage {
 
 model SeedReviewKeepMessage {
   "profile_id"?: string;
-  "source_session_id"?: string;
+  "source_session_id"?: SessionID;
 
   "cmd": "seed_review_keep";
   "request_id"?: string;
@@ -5359,7 +5403,7 @@ model SeedReviewKeepMessage {
 
 model SeedReviewDraftMessage {
   "profile_id"?: string;
-  "source_session_id"?: string;
+  "source_session_id"?: SessionID;
 
   "cmd": "seed_review_draft";
   "request_id": string;
@@ -5526,7 +5570,7 @@ model AutoModeProposalInfo {
 // One call auto mode refused, as the session reported it.
 model AutoModeDenialInfo {
   "id": safeint;
-  "session_id": string;
+  "session_id": SessionID;
   "tool": string;
   // The blocked call in one line — the same text the model was given.
   "signature": string;
@@ -5769,7 +5813,7 @@ model Response {
   delegation_preferences_revision?: DelegationPreferencesRevision;
   delegation_preferences_history?: DelegationPreferencesHistoryResult;
   sessions?: Session[];
-  caller_session_id?: string;
+  caller_session_id?: SessionID;
   profiles?: Profile[];
   prs?: PR[];
   repos?: RepoState[];
@@ -5864,7 +5908,7 @@ model StateExplainEntry {
 }
 
 model StateExplainResult {
-  session_id: string;
+  session_id: SessionID;
   agent: string;
   state: string;
   state_since?: string;
@@ -5892,7 +5936,7 @@ model AgentPeekExit {
 }
 
 model AgentPeekResult {
-  session_id: string;
+  session_id: SessionID;
   label: string;
   agent: string;
   profile_name?: string;
@@ -5950,7 +5994,7 @@ model CrewMember {
   // The session living this member's current day. Present only while that
   // session is live — the daemon judges the binding at read, so presence IS
   // "awake" and a caller never re-derives liveness.
-  binding_session?: string;
+  binding_session?: SessionID;
   restart?: CrewRestart;
 }
 
@@ -6075,7 +6119,7 @@ model CrewWakeMessage {
   profile_id?: string;
   // The calling session, for a wake asked by an agent; its profile applies as
   // profile_id does.
-  source_session_id?: string;
+  source_session_id?: SessionID;
 }
 
 // CrewWakeResultMessage replies to a websocket crew_wake, correlated by
@@ -6090,25 +6134,25 @@ model CrewWakeResultMessage {
   // The wake succeeded, but showing its session failed.
   show_error?: string;
   member?: string;
-  session_id?: string;
+  session_id?: SessionID;
   profile_id?: string;
   already_awake?: boolean;
   // Present when wake found a stale binding, released it, and started this
   // fresh day. The caller names the repair instead of silently focusing a
   // replacement for a process that had already exited.
-  released_session_id?: string;
+  released_session_id?: SessionID;
 }
 
 model CrewWakeResult {
   member: string;
-  session_id: string;
+  session_id: SessionID;
   profile_id: string;
   // True when the member was already awake and session_id is the day that was
   // already running — nothing was launched.
   already_awake: boolean;
   // The dead day whose stale binding this wake released before launching the
   // returned session. Absent when there was no stale binding.
-  released_session_id?: string;
+  released_session_id?: SessionID;
 }
 
 // Ask an awake member to close its day and sleep. This is consented closure:
@@ -6130,7 +6174,7 @@ model CrewSleepResultMessage {
   success: boolean;
   error?: string;
   member?: string;
-  session_id?: string;
+  session_id?: SessionID;
   already_asleep?: boolean;
   delivery_status?: AgentMsgStatus;
   detail?: string;
@@ -6139,7 +6183,7 @@ model CrewSleepResultMessage {
 model CrewSleepResult {
   member: string;
   // Absent when the member was already asleep and no request was sent.
-  session_id?: string;
+  session_id?: SessionID;
   already_asleep: boolean;
   // Absent on the already-asleep no-op.
   delivery_status?: AgentMsgStatus;
@@ -6195,20 +6239,20 @@ enum CrewRestartState {
 
 model CrewRestart {
   request_id: string;
-  session_id: string;
+  session_id: SessionID;
   state: CrewRestartState;
   delivery_status?: AgentMsgStatus;
   detail?: string;
   error?: string;
   letter_path?: string;
-  successor_session_id?: string;
+  successor_session_id?: SessionID;
 }
 
 model CrewRestartMessage {
   cmd: "crew_restart";
   member: string;
   request_id: string;
-  expected_session_id?: string;
+  expected_session_id?: SessionID;
   expected_revision?: safeint;
 }
 
@@ -6232,7 +6276,7 @@ model CrewRestartResultMessage {
 // the answer is empty for the sessions — most of them — that are nobody.
 model CrewPrimeMessage {
   cmd: "crew_prime";
-  session_id: string;
+  session_id: SessionID;
 }
 
 model CrewPrimeResult {
@@ -6250,7 +6294,7 @@ model CrewPrimeResult {
 // crew handoff is a member's day-line, and a session that is nobody has none.
 model CrewHandoffMessage {
   cmd: "crew_handoff";
-  session_id: string;
+  session_id: SessionID;
   note: string;
   // Turn the day over with the letter this day already filed, instead of
   // writing one. The way out of a turnover that failed behind a filed letter:
@@ -6275,7 +6319,7 @@ model CrewHandoffResult {
   member: string;
   path: string;
   // The session living the member's new day. Absent when no nap ran.
-  session_id?: string;
+  session_id?: SessionID;
   // Why no successor was woken, when none was.
   nap_error?: string;
   // What the day did: `nap` started the next one, `sleep` ended it. Absent when
@@ -6302,7 +6346,7 @@ enum AgentMsgStatus {
 
 model AgentMsgResult {
   message_id: string;
-  target_session_id: string;
+  target_session_id: SessionID;
   status: AgentMsgStatus;
   detail: string;
 }
@@ -6316,7 +6360,7 @@ enum AgentMessageState {
 // The durable peer message returned to its authorized sender or recipient.
 model AgentPeerMessage {
   message_id: string;
-  sender_session_id: string;
+  sender_session_id: SessionID;
   sender_label: string;
   target_session_id: string;
   content: string;
@@ -6335,7 +6379,7 @@ model AgentInboxItem {
   source_id?: string;
   hint?: string;
   content: string;
-  sender_session_id?: string;
+  sender_session_id?: SessionID;
   sender_label?: string;
   created_at: string;
   notified_at: string;
@@ -6357,7 +6401,7 @@ model EvidenceExcerpt {
 model SessionInstructionsResult {
   answer: string;
   evidence: EvidenceExcerpt[];
-  session_id: string;
+  session_id: SessionID;
   transcript_path: string;
   transcript_fingerprint: string;
   `model`: string;
@@ -6380,7 +6424,7 @@ model SessionTranscriptEvent {
 }
 
 model SessionTranscriptResult {
-  session_id: string;
+  session_id: SessionID;
   events: SessionTranscriptEvent[];
   next_cursor: string;
   at_end: boolean;
@@ -6389,7 +6433,8 @@ model SessionTranscriptResult {
 // A session as the ledger holds it. Distinct from Session, which is the live
 // broadcast shape: this one outlives the runtime and carries how it ended.
 model SessionLedgerEntry {
-  id: string;
+  priority?: boolean;
+  id: SessionID;
   conversation_pinned_at?: string;
   label: string;
   agent: string;
@@ -6453,7 +6498,7 @@ model SessionListResult {
 }
 
 model SessionReopenEntry {
-  session_id: string;
+  session_id: SessionID;
   reopen: SessionReopen;
 }
 
@@ -6494,7 +6539,7 @@ model SessionReopen {
 }
 
 model SessionReopenResult {
-  session_id: string;
+  session_id: SessionID;
   profile_id: string;
   directory: string;
   action: SessionReopenAction;
@@ -6505,7 +6550,7 @@ model SessionReopenResult {
 
 model DelegateResult {
   seed_id: string;
-  session_id: string;
+  session_id: SessionID;
   profile_id?: string;
   directory: string;
   branch?: string;
@@ -6515,7 +6560,7 @@ model DelegateResult {
   agent: string;
   `model`: string;
   effort: string;
-  predecessor_session_id?: string;
+  predecessor_session_id?: SessionID;
   // Where the delegated agent sits when placement is reported.
   desktop_id?: string;
   pane_id?: string;
@@ -6544,7 +6589,7 @@ model DelegationOperation {
   request_id: string;
   state: DelegationOperationState;
   progress: string;
-  session_id: string;
+  session_id: SessionID;
   seed_id?: string;
   directory?: string;
   branch?: string;
@@ -6943,6 +6988,22 @@ model FsUnwatchResultMessage {
   root?: string;
 }
 
+model GetCommandUsageResultMessage {
+  event: "get_command_usage_result";
+  request_id: string;
+  profile_id: string;
+  success: boolean;
+  error?: string;
+  entries: CommandUsage[];
+}
+
+model RecordCommandUsageResultMessage {
+  event: "record_command_usage_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+}
+
 // Result of recent_files. files are absolute paths, best-first by frecency.
 model RecentFilesResultMessage {
   event: "recent_files_result";
@@ -6997,10 +7058,10 @@ model WebSocketEvent {
   tile_id?: string;
   tile_kind?: string;
   content?: string;
-  runtime_id?: string;
-  session_id?: string;
+  runtime_id?: TerminalID;
+  session_id?: SessionID;
   chief_of_staff?: boolean;
-  previous_session_id?: string;
+  previous_session_id?: SessionID;
   session?: Session;
   sessions?: Session[];
   prs?: PR[];
@@ -7194,6 +7255,8 @@ alias DaemonEvent =
   | FsWatchResultMessage
   | FsUnwatchResultMessage
   | FsIndexResultMessage
+  | GetCommandUsageResultMessage
+  | RecordCommandUsageResultMessage
   | RecentFilesResultMessage
   | FsChangedMessage
   | TaskListResultMessage

@@ -30,14 +30,14 @@ func TestEveryAttachDuringABlockBurstGetsBlocksThatPointAtTheirOwnPrompts(t *tes
 		t.Fatal(err)
 	}
 
-	terminal := app.Terminal(shell)
-	app.TypeLine(shell, "sh "+burst)
+	terminal := app.Terminal(string(shell))
+	app.TypeLine(string(shell), "sh "+burst)
 	var attaches []protocol.AttachResultMessage
 	for i := range 20 {
-		app.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: terminal, Cols: 60 + 20*(i%3), Rows: 30})
+		app.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: protocol.TerminalID(terminal), Cols: 60 + 20*(i%3), Rows: 30})
 		attaches = append(attaches, kittyAttach(transportPeer(w), terminal))
 	}
-	app.AwaitScreen(shell, "burst-2")
+	app.AwaitScreen(string(shell), "burst-2")
 	settled := kittyAttach(transportPeer(w), terminal)
 
 	for i, attached := range append(attaches, settled) {
@@ -59,8 +59,8 @@ func TestEveryAttachDuringABlockBurstGetsBlocksThatPointAtTheirOwnPrompts(t *tes
 	}
 
 	closing := transportPeer(w)
-	closing.Send(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal})
-	closed := closeFromApp(app, shell)
+	closing.Send(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(terminal)})
+	closed := closeFromApp(app, string(shell))
 	if !closed.Accepted {
 		t.Fatalf("closing the session while a client attached failed: %s", protocol.Deref(closed.Error))
 	}

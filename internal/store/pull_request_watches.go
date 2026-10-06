@@ -8,12 +8,13 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/inbox"
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/prreadiness"
 )
 
 type PullRequestWatch struct {
 	To            inbox.Address
-	SessionID     string
+	SessionID     protocol.SessionID
 	PRID          string
 	Mode          prreadiness.Mode
 	Reviewer      string
@@ -110,7 +111,7 @@ func (s *Store) StopPullRequestWatch(to inbox.Address, prID string) (bool, error
 		return false, err
 	}
 	defer tx.Rollback()
-	var sessionID string
+	var sessionID protocol.SessionID
 	if err := tx.QueryRow(`SELECT session_id FROM pull_request_watches WHERE address=? AND pr_id=?`, to.String(), prID).Scan(&sessionID); errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	} else if err != nil {
@@ -219,7 +220,7 @@ func (s *Store) SessionPullRequestSessionIDs(prID string) ([]string, error) {
 
 type PullRequestWatchReconcile struct {
 	To            inbox.Address
-	SessionID     string
+	SessionID     protocol.SessionID
 	PRID          string
 	CreatedAt     string
 	Mode          prreadiness.Mode
@@ -329,7 +330,7 @@ func (s *Store) ReconcilePullRequestWatch(update PullRequestWatchReconcile) ([]I
 	return deliveries, projectionChanged, nil
 }
 
-func (s *Store) RecordPullRequestWatchFailure(to inbox.Address, sessionID, prID, createdAt string, mode prreadiness.Mode, reviewer, message string, outage inbox.Item, at time.Time) (*InboxDelivery, error) {
+func (s *Store) RecordPullRequestWatchFailure(to inbox.Address, sessionID protocol.SessionID, prID string, createdAt string, mode prreadiness.Mode, reviewer, message string, outage inbox.Item, at time.Time) (*InboxDelivery, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, err := s.db.Begin()

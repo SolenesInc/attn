@@ -30,11 +30,11 @@ func (d *Daemon) handleAgentPeek(conn net.Conn, msg *protocol.AgentPeekMessage) 
 }
 
 func (d *Daemon) resolveAgentPeekTarget(target string) (*protocol.Session, string) {
-	target = strings.TrimSpace(target)
+	target = protocol.TrimID(target)
 	if target == "" {
 		return nil, "session_not_found"
 	}
-	if session := d.store.Get(target); session != nil {
+	if session := d.store.Get(protocol.SessionID(target)); session != nil {
 		return session, ""
 	}
 	if status, err := d.enrollmentStatus(); err == nil && status.IsHome() {
@@ -57,16 +57,16 @@ func (d *Daemon) resolveAgentPeekTarget(target string) (*protocol.Session, strin
 }
 
 func (d *Daemon) resolveSessionByIDOrPrefix(target string) (*protocol.Session, string) {
-	target = strings.TrimSpace(target)
+	target = protocol.TrimID(target)
 	if target == "" {
 		return nil, "session_not_found"
 	}
-	if session := d.store.Get(target); session != nil {
+	if session := d.store.Get(protocol.SessionID(target)); session != nil {
 		return session, ""
 	}
 	var match *protocol.Session
 	for _, session := range d.store.List("") {
-		if !strings.HasPrefix(session.ID, target) {
+		if !strings.HasPrefix(string(session.ID), target) {
 			continue
 		}
 		if match != nil {
@@ -85,7 +85,7 @@ func (d *Daemon) agentPeekResult(session *protocol.Session) *protocol.AgentPeekR
 	result := &protocol.AgentPeekResult{
 		SessionID:   decorated.ID,
 		Label:       decorated.Label,
-		Agent:       string(decorated.Agent),
+		Agent:       decorated.Agent,
 		State:       string(decorated.State),
 		StateSince:  decorated.StateSince,
 		LastSeen:    decorated.LastSeen,
@@ -114,7 +114,7 @@ func (d *Daemon) agentPeekResult(session *protocol.Session) *protocol.AgentPeekR
 	return result
 }
 
-func (d *Daemon) agentPeekScreen(sessionID string) *protocol.AgentPeekScreen {
+func (d *Daemon) agentPeekScreen(sessionID protocol.SessionID) *protocol.AgentPeekScreen {
 	provider, ok := d.ptyBackend.(ptybackend.ScreenSnapshotProvider)
 	if !ok {
 		return nil

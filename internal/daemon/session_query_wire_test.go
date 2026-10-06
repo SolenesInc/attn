@@ -20,7 +20,7 @@ func TestQueryFiltersByStateAndOrdersByLabelThenID(t *testing.T) {
 	}
 	for _, s := range sessions {
 		w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
-			m.ID = s.id
+			m.ID = protocol.SessionID(s.id)
 			m.Label = protocol.Ptr(s.label)
 		})
 	}
@@ -53,7 +53,7 @@ func TestARenameReachesTheSession(t *testing.T) {
 	w.Launched(session)
 	before := queriedSession(t, cli, session)
 
-	if err := cli.RenameSession(session, "checkout"); err != nil {
+	if err := cli.RenameSession(protocol.SessionID(session), "checkout"); err != nil {
 		t.Fatalf("rename: %v", err)
 	}
 	renamed := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.Label == "checkout" })

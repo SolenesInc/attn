@@ -1,8 +1,6 @@
 package daemon
 
 import (
-	"strings"
-
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -13,7 +11,7 @@ const (
 )
 
 func (d *Daemon) handleSessionMessagesGet(client *wsClient, msg *protocol.SessionMessagesGetMessage) {
-	sessionID := strings.TrimSpace(msg.SessionID)
+	sessionID := protocol.TrimID(msg.SessionID)
 	result := protocol.SessionMessagesGetResultMessage{
 		Event:     protocol.EventSessionMessagesGetResult,
 		RequestID: msg.RequestID,
@@ -29,7 +27,7 @@ func (d *Daemon) handleSessionMessagesGet(client *wsClient, msg *protocol.Sessio
 
 	session := d.store.Get(sessionID)
 	if session == nil {
-		result.Error = protocol.Ptr("session_messages_get: unknown session " + sessionID)
+		result.Error = protocol.Ptr("session_messages_get: unknown session " + string(sessionID))
 		d.sendToClient(client, result)
 		return
 	}

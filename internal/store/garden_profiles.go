@@ -10,7 +10,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (s *Store) GardenSessionProfileID(sessionID string) (string, error) {
+func (s *Store) GardenSessionProfileID(sessionID protocol.SessionID) (string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
@@ -121,7 +121,7 @@ func checkSeedProfileWrite(q rowQuerier, schema docstore.CollectionSchema, table
 	if err == nil && previous != seed.ProfileID {
 		return fmt.Errorf("seed %s belongs to profile %s for life; cannot move it to profile %q", id, previous, owner.Name)
 	}
-	for _, sessionID := range []string{seed.TenderSession} {
+	for _, sessionID := range []protocol.SessionID{seed.TenderSession} {
 		if sessionID == "" {
 			continue
 		}

@@ -26,7 +26,7 @@ func TestALivePiAgentWaitingForTheUserStillWaitsAfterADaemonRestart(t *testing.T
 	s.Start()
 	app = s.App()
 	for _, x := range app.Initial.Sessions {
-		if x.ID != session {
+		if string(x.ID) != session {
 			continue
 		}
 		if x.State != protocol.SessionStateWaitingInput {

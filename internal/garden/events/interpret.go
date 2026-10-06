@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 type Interpreted struct {
@@ -80,8 +81,10 @@ func (m *Model) Recipients(seedID string, decision Interpreted, resolver RoleRes
 	excluded := map[string]bool{}
 	for _, sessionID := range decision.excluded {
 		excluded[sessionID] = true
-		if addresses, ok := resolver.(interface{ AddressesOfSession(string) []string }); ok {
-			for _, address := range addresses.AddressesOfSession(sessionID) {
+		if addresses, ok := resolver.(interface {
+			AddressesOfSession(protocol.SessionID) []string
+		}); ok {
+			for _, address := range addresses.AddressesOfSession(protocol.SessionID(sessionID)) {
 				excluded[address] = true
 			}
 		}

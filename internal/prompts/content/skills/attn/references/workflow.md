@@ -209,7 +209,7 @@ run that is still progressing.
 - `--wait` — block in the foreground until the run reaches a terminal status, then
   print the same JSON shape as `workflow result` and exit non-zero on failure.
   Without `--wait`, the run is detached and the runId is printed immediately.
-- `--session <id>` — attach the run to a session. Defaults to `ATTN_SESSION_ID`.
+- `--session <id>` — attach the run to a session. Defaults to the session currently shown in this terminal.
 - `--resume <runId>` — resume a prior run, replaying its journaled prefix and
   re-running the first divergent call (and everything structurally after it).
 - `--harness <codex|claude>` — the agent harness. Default `codex`.
@@ -254,4 +254,4 @@ This is the monitoring command. It prints the run `status`, current `phase`, a
     attn workflow list [--session <id>]
 
 Lists runs for a session (`runId`, `status`, `phase`, `script`, `created_at`,
-`resumable`). Defaults to `ATTN_SESSION_ID`; pass an empty session to list all.
+`resumable`). Defaults to the session currently shown in this terminal; pass an empty session to list all.

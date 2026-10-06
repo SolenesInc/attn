@@ -158,6 +158,7 @@ export function useAppController({
   const {
     waitingLocalSessions,
     handleSettleShortcut,
+    handlePriorityShortcut,
     handleSnoozeShortcut,
     queueModeEnabled,
   } = attentionQueue;
@@ -608,6 +609,7 @@ export function useAppController({
     onJumpToWaiting: handleJumpToWaiting,
     onNextRun: handleNextRun,
     onSettleTurn: handleSettleShortcut,
+    onPriority: handlePriorityShortcut,
     onSnoozeTurn: handleSnoozeShortcut,
     onCancelCountdown: handleCancelCountdown,
     onSwitchToDesktopSlot: (slot) => {

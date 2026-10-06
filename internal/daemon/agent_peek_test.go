@@ -69,7 +69,7 @@ func addCharacterizationSession(
 	t.Helper()
 	directory := t.TempDir()
 	d.store.Add(&protocol.Session{
-		ID:             id,
+		ID:             protocol.SessionID(id),
 		Label:          id,
 		Agent:          agent,
 		Directory:      directory,

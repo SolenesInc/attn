@@ -22,14 +22,14 @@ func TestPeekShowsTheLastExitAndALaterExitReplacesIt(t *testing.T) {
 	first.Prompted()
 	first.Reply("Error: the registry refused the push <!-- attn:state=idle -->")
 	first.Exit(1)
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == session })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
 	earlier, _ := peekExit(t, cli, session, "the registry refused the push")
 	if earlier.Code != 1 || earlier.At == "" {
 		t.Errorf("first exit = %+v, want code 1 with its time", earlier)
 	}
 
 	w.Spawn(app, fakeagent.Claude, cwd, func(m *protocol.SpawnSessionMessage) {
-		m.ID = session
+		m.ID = protocol.SessionID(session)
 		m.ResumeSessionID = protocol.Ptr(session)
 	})
 	second := w.Launched(session)
@@ -37,7 +37,7 @@ func TestPeekShowsTheLastExitAndALaterExitReplacesIt(t *testing.T) {
 	second.Prompted()
 	second.Reply("Error: the disk is full <!-- attn:state=idle -->")
 	second.Exit(2)
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == session })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
 	later, screen := peekExit(t, cli, session, "the disk is full")
 	if later.Code != 2 || later.At < earlier.At {
 		t.Errorf("second exit = %+v after %+v, want code 2 replacing the first", later, earlier)

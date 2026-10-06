@@ -89,7 +89,7 @@ func TestDelegateStartsTheRequestItsFlagsDescribeAndRefusesRetiredOnes(t *testin
 		t.Errorf("delegate printed %+v, want the source session's claude on a new feat/parser worktree at the agent's default model and high effort", result)
 	}
 	testworld.AwaitSession(app, result.SessionID, func(x protocol.Session) bool {
-		return protocol.Deref(x.DispatcherSessionID) == source && protocol.Deref(x.Branch) == "feat/parser" && x.Directory == result.Directory
+		return string(protocol.Deref(x.DispatcherSessionID)) == source && protocol.Deref(x.Branch) == "feat/parser" && x.Directory == result.Directory
 	})
 	run := s.Launched(result.SessionID)
 	if i := slices.Index(run.Argv, "--effort"); i < 0 || run.Argv[i+1] != "high" || slices.Contains(run.Argv, "--model") {

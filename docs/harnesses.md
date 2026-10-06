@@ -8,6 +8,22 @@ Every entry was checked against the harness's source or a probe, and names
 the version it was checked on. Do not add or rely on a claim from memory:
 read the source or probe the binary first, then record it here.
 
+## attn identities at the harness boundary
+
+`ATTN_TERMINAL_ID` identifies the launched terminal. Older launches carry the
+same identity under `ATTN_SESSION_ID`. A terminal can change conversations with
+`/clear` or `/resume`. CLI commands address the conversation shown when the
+command starts; hooks apply to the conversation shown when the report arrives.
+Native harness conversation ids remain separate text values.
+
+Removing a placement keeps the terminal addressable, including after daemon
+restart. Closing a session ends its terminal associations. When several
+terminals show one session, ending one leaves the others running.
+
+Plugin driver payloads retain the `session_id` wire spelling for the terminal.
+Close notifications, including those completed after restart, use the original
+terminal identity.
+
 ## Claude Code
 
 Probed on 2.1.288 with a mock API.
@@ -48,7 +64,8 @@ Read in the source at openai/codex 60947e2341.
   fire no SessionStart or SessionEnd; a spawned one fires SubagentStart
   (`core/src/hook_runtime.rs`).
 - Hooks run in the process that runs the turn: the terminal's own Codex
-  process for a PTY launch, so `ATTN_SESSION_ID` names the terminal; the
+  process for a PTY launch, so `ATTN_TERMINAL_ID` names the terminal (older launches use
+  `ATTN_SESSION_ID` with the same meaning); the
   app-server for a `--remote` TUI, so a hook there cannot name the terminal.
 
 ### Codex app-server and `--remote`

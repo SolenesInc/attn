@@ -25,12 +25,12 @@ func (d *Daemon) handleTerminalBuildChanged(terminal harness.TerminalID, workerF
 		return
 	}
 	if d.terminalCanReplayBuild(terminal) {
-		d.publishFact(FactSessionTerminalBuildChanged, sessionID, nil)
+		d.publishFact(FactSessionTerminalBuildChanged, string(sessionID), nil)
 		return
 	}
 	upgrader, canUpgrade := d.ptyBackend.(ptybackend.WorkerUpgrader)
 	if !canUpgrade || !inplaceUpgradeEnabled() || workerFormat == buildinfo.SnapshotFormat {
-		d.publishFact(FactSessionTerminalBuildChanged, sessionID, nil)
+		d.publishFact(FactSessionTerminalBuildChanged, string(sessionID), nil)
 		return
 	}
 	if !d.claimWorkerUpgrade(terminal) {
@@ -62,14 +62,14 @@ func (d *Daemon) releaseWorkerUpgrade(terminal harness.TerminalID) {
 	delete(d.upgradingWorkers, terminal)
 }
 
-func (d *Daemon) upgradeStaleWorker(sessionID string, terminal harness.TerminalID, upgrader ptybackend.WorkerUpgrader) {
+func (d *Daemon) upgradeStaleWorker(sessionID protocol.SessionID, terminal harness.TerminalID, upgrader ptybackend.WorkerUpgrader) {
 	defer d.releaseWorkerUpgrade(terminal)
 	ctx, cancel := context.WithTimeout(context.Background(), terminalUpgradeTimeout)
 	defer cancel()
 	if err := upgrader.UpgradeWorker(ctx, terminal); err != nil {
 		d.logf("terminal upgrade: session=%s failed within %s (%v); offering a reload instead",
 			sessionID, terminalUpgradeTimeout, err)
-		d.publishFact(FactSessionTerminalBuildChanged, sessionID, nil)
+		d.publishFact(FactSessionTerminalBuildChanged, string(sessionID), nil)
 		return
 	}
 	d.logf("terminal upgrade: session=%s worker swapped in place", sessionID)

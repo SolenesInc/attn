@@ -37,11 +37,11 @@ func TestCopilotRespawnResumesTheConversationItsTranscriptBound(t *testing.T) {
 	first.Reply("Keep the old import path as an alias? <!-- attn:state=waiting_input -->")
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 
-	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: session})
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == session })
+	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: protocol.SessionID(session)})
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
 
 	w.Spawn(app, fakeagent.Copilot, cwd, func(m *protocol.SpawnSessionMessage) {
-		m.ID = session
+		m.ID = protocol.SessionID(session)
 		m.ResumeSessionID = protocol.Ptr(session)
 	})
 	resumed := w.Launched(session)
@@ -85,10 +85,10 @@ func TestCopilotSessionsSharingADirectoryEachFollowTheirOwnConversation(t *testi
 	firstRun.Reply("Renamed, alias kept. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, first, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 
-	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: second})
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == second })
+	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: protocol.SessionID(second)})
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == second })
 	w.Spawn(app, fakeagent.Copilot, cwd, func(m *protocol.SpawnSessionMessage) {
-		m.ID = second
+		m.ID = protocol.SessionID(second)
 		m.ResumeSessionID = protocol.Ptr(second)
 	})
 	resumed := w.Launched(second)
@@ -112,8 +112,8 @@ func TestACodexSessionWithoutHooksStopsLookingForAnUnboundTranscript(t *testing.
 
 func messageWindow(app *testworld.Peer, session string) protocol.SessionMessagesGetResultMessage {
 	app.T.Helper()
-	testworld.Await(app, protocol.EventSessionMessagesChanged, func(e protocol.SessionMessagesChangedMessage) bool { return e.SessionID == session })
+	testworld.Await(app, protocol.EventSessionMessagesChanged, func(e protocol.SessionMessagesChangedMessage) bool { return string(e.SessionID) == session })
 	return testworld.Request(app, protocol.SessionMessagesGetMessage{
-		Cmd: protocol.CmdSessionMessagesGet, RequestID: "window-" + session, SessionID: session,
+		Cmd: protocol.CmdSessionMessagesGet, RequestID: "window-" + session, SessionID: protocol.SessionID(session),
 	}, protocol.EventSessionMessagesGetResult, func(r protocol.SessionMessagesGetResultMessage) bool { return r.RequestID == "window-"+session })
 }

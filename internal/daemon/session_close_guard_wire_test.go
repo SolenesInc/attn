@@ -22,8 +22,8 @@ func TestTheChiefAndCrewMembersCannotBeClosedButTheirNeighboursCan(t *testing.T)
 		t.Fatalf("make %s the chief: %s", chief.session, protocol.Deref(made.Error))
 	}
 	woken := wakeCrew(t, cli, "trellis", "")
-	w.Launched(woken.SessionID)
-	crewPane := sessionPane{session: woken.SessionID}
+	w.Launched(string(woken.SessionID))
+	crewPane := sessionPane{session: string(woken.SessionID)}
 
 	protected := []struct {
 		pane    sessionPane
@@ -33,7 +33,7 @@ func TestTheChiefAndCrewMembersCannotBeClosedButTheirNeighboursCan(t *testing.T)
 		{crewPane, "Trellis is protected from closing; put Trellis to sleep first"},
 	}
 	for _, p := range protected {
-		app.Send(protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: p.pane.session})
+		app.Send(protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: protocol.SessionID(p.pane.session)})
 		if refused := testworld.Refused(app); protocol.Deref(refused.Cmd) != protocol.CmdUnregister || !strings.Contains(protocol.Deref(refused.Error), p.refusal) {
 			t.Errorf("unregister %s refused with %s: %q, want %q", p.pane.session, protocol.Deref(refused.Cmd), protocol.Deref(refused.Error), p.refusal)
 		}
@@ -43,21 +43,21 @@ func TestTheChiefAndCrewMembersCannotBeClosedButTheirNeighboursCan(t *testing.T)
 		}
 	}
 
-	app.Send(protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: unregistered.session})
+	app.Send(protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: protocol.SessionID(unregistered.session)})
 	testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool {
-		return e.Session != nil && e.Session.ID == unregistered.session
+		return e.Session != nil && string(e.Session.ID) == unregistered.session
 	})
 	if closed := closeTileFromApp(app, worker.desktop, worker.pane); !closed.Success {
 		t.Fatalf("close the tile of %s: %s", worker.session, protocol.Deref(closed.Error))
 	}
 	testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool {
-		return e.Session != nil && e.Session.ID == worker.session
+		return e.Session != nil && string(e.Session.ID) == worker.session
 	})
 
 	view := w.App().Initial
 	live := map[string]protocol.Session{}
 	for _, s := range view.Sessions {
-		live[s.ID] = s
+		live[string(s.ID)] = s
 	}
 	if !protocol.Deref(live[chief.session].ChiefOfStaff) {
 		t.Errorf("after the refused closes %s is no longer a live chief: %+v", chief.session, live[chief.session])
@@ -65,7 +65,7 @@ func TestTheChiefAndCrewMembersCannotBeClosedButTheirNeighboursCan(t *testing.T)
 	if got := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession); got != woken.SessionID {
 		t.Errorf("trellis is bound to %q after the refused closes, want %s", got, woken.SessionID)
 	}
-	if _, ok := live[woken.SessionID]; !ok {
+	if _, ok := live[string(woken.SessionID)]; !ok {
 		t.Errorf("after the refused closes trellis's session %s is no longer live", woken.SessionID)
 	}
 	for _, gone := range []string{worker.session, unregistered.session} {

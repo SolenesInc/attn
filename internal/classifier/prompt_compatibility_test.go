@@ -1,8 +1,9 @@
 package classifier
 
 import (
-	"github.com/victorarias/attn/internal/prompttest"
 	"testing"
+
+	"github.com/victorarias/attn/internal/prompttest"
 )
 
 func TestLegacyPromptCompatibility(t *testing.T) {

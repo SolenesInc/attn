@@ -389,7 +389,7 @@ async function main() {
       try { run(binary, ['daemon', 'stop'], daemonEnv); } catch {}
       run(binary, ['daemon', 'ensure'], daemonEnv);
       await waitForDaemonReady(binary, daemonEnv);
-      await launchFreshAppAndConnect(client, observer);
+      await launchFreshAppAndConnect(client, observer, { sweepStaleSessions: false });
 
       await client.request('automations_open_panel');
       const state = await poll(async () => {

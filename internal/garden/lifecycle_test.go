@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 const (
@@ -12,9 +14,9 @@ const (
 	other = "sess-you"
 )
 
-func alive(string) bool { return true }
+func alive(protocol.SessionID) bool { return true }
 
-func gone(string) bool { return false }
+func gone(protocol.SessionID) bool { return false }
 
 func seedIn(status string, tender Tender) Seed {
 	return Seed{

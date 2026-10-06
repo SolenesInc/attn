@@ -22,7 +22,7 @@ func DefaultSocketPath() string {
 
 type Client struct {
 	gardenProfile string
-	gardenSession string
+	gardenSession protocol.SessionID
 	socketPath    string
 	dial          func() (net.Conn, error)
 }
@@ -175,7 +175,7 @@ func (c *Client) connect() (net.Conn, error) {
 	return conn, nil
 }
 
-func (c *Client) WithGardenProfile(profileID, sessionID string) *Client {
+func (c *Client) WithGardenProfile(profileID string, sessionID protocol.SessionID) *Client {
 	scoped := *c
 	scoped.gardenProfile, scoped.gardenSession = profileID, sessionID
 	return &scoped
@@ -245,7 +245,7 @@ func ErrorCode(err error) string {
 	return ""
 }
 
-func (c *Client) Unregister(id string) error {
+func (c *Client) Unregister(id protocol.SessionID) error {
 	msg := protocol.UnregisterMessage{
 		Cmd: protocol.CmdUnregister,
 		ID:  id,
@@ -254,15 +254,15 @@ func (c *Client) Unregister(id string) error {
 	return err
 }
 
-func (c *Client) UpdateState(id, state string) error {
+func (c *Client) UpdateState(id protocol.TerminalID, state string) error {
 	return c.UpdateStateFromHook(id, state, "")
 }
 
-func (c *Client) UpdateStateFromHook(id, state, permissionMode string) error {
+func (c *Client) UpdateStateFromHook(id protocol.TerminalID, state string, permissionMode string) error {
 	return c.UpdateStateFromHookEvidence(id, state, permissionMode, "", "")
 }
 
-func (c *Client) UpdateStateFromHookEvidence(id, state, permissionMode, hookEvent, prompt string) error {
+func (c *Client) UpdateStateFromHookEvidence(id protocol.TerminalID, state string, permissionMode string, hookEvent string, prompt string) error {
 	msg := protocol.StateMessage{
 		Cmd:   protocol.CmdState,
 		ID:    id,
@@ -281,7 +281,7 @@ func (c *Client) UpdateStateFromHookEvidence(id, state, permissionMode, hookEven
 	return err
 }
 
-func (c *Client) RecordNotification(id, notificationType, message string) error {
+func (c *Client) RecordNotification(id protocol.TerminalID, notificationType string, message string) error {
 	msg := protocol.HookNotificationMessage{
 		Cmd:              protocol.CmdHookNotification,
 		ID:               id,
@@ -294,7 +294,7 @@ func (c *Client) RecordNotification(id, notificationType, message string) error 
 	return err
 }
 
-func (c *Client) RecordStopFailure(id, errorType, message string) error {
+func (c *Client) RecordStopFailure(id protocol.TerminalID, errorType string, message string) error {
 	msg := protocol.HookStopFailureMessage{
 		Cmd:       protocol.CmdHookStopFailure,
 		ID:        id,
@@ -307,7 +307,7 @@ func (c *Client) RecordStopFailure(id, errorType, message string) error {
 	return err
 }
 
-func (c *Client) RecordCompaction(id string, active bool, trigger string) error {
+func (c *Client) RecordCompaction(id protocol.TerminalID, active bool, trigger string) error {
 	msg := protocol.HookCompactionMessage{
 		Cmd:    protocol.CmdHookCompaction,
 		ID:     id,
@@ -320,7 +320,7 @@ func (c *Client) RecordCompaction(id string, active bool, trigger string) error 
 	return err
 }
 
-func (c *Client) ObserveAgentConversation(id, nativeID, transcriptPath string) error {
+func (c *Client) ObserveAgentConversation(id protocol.TerminalID, nativeID string, transcriptPath string) error {
 	msg := protocol.SetSessionResumeIDMessage{
 		Cmd:             protocol.CmdSetSessionResumeID,
 		ID:              id,
@@ -333,7 +333,7 @@ func (c *Client) ObserveAgentConversation(id, nativeID, transcriptPath string) e
 	return err
 }
 
-func (c *Client) SessionInstructions(targetSessionID, question string) (*protocol.SessionInstructionsResult, error) {
+func (c *Client) SessionInstructions(targetSessionID string, question string) (*protocol.SessionInstructionsResult, error) {
 	resp, err := c.send(protocol.SessionInstructionsMessage{
 		Cmd:             protocol.CmdSessionInstructions,
 		TargetSessionID: targetSessionID,
@@ -399,10 +399,10 @@ func (c *Client) SessionList(opts SessionListOptions) (*protocol.SessionListResu
 	return resp.SessionListResult, nil
 }
 
-func (c *Client) SessionShow(sessionID string) (*protocol.SessionShowResult, error) {
+func (c *Client) SessionShow(sessionID protocol.SessionID) (*protocol.SessionShowResult, error) {
 	resp, err := c.send(protocol.SessionShowMessage{
 		Cmd:       protocol.CmdSessionShow,
-		SessionID: strings.TrimSpace(sessionID),
+		SessionID: protocol.TrimID(sessionID),
 	})
 	if err != nil {
 		return nil, err
@@ -413,18 +413,18 @@ func (c *Client) SessionShow(sessionID string) (*protocol.SessionShowResult, err
 	return resp.SessionShowResult, nil
 }
 
-func (c *Client) RenameSession(sessionID, name string) error {
+func (c *Client) RenameSession(sessionID protocol.SessionID, name string) error {
 	_, err := c.send(protocol.RenameSessionMessage{
 		Cmd:       protocol.CmdRenameSession,
-		SessionID: strings.TrimSpace(sessionID),
+		SessionID: protocol.TrimID(sessionID),
 		Label:     strings.TrimSpace(name),
 	})
 	return err
 }
 
-func (c *Client) MoveSessionToDesktop(callerSessionID, sessionID, desktop string) (*protocol.DesktopMoveSessionResult, error) {
-	msg := protocol.DesktopMoveSessionMessage{Cmd: protocol.CmdDesktopMoveSession, SessionID: strings.TrimSpace(sessionID), Desktop: strings.TrimSpace(desktop)}
-	if caller := strings.TrimSpace(callerSessionID); caller != "" {
+func (c *Client) MoveSessionToDesktop(callerSessionID protocol.SessionID, sessionID protocol.SessionID, desktop string) (*protocol.DesktopMoveSessionResult, error) {
+	msg := protocol.DesktopMoveSessionMessage{Cmd: protocol.CmdDesktopMoveSession, SessionID: protocol.TrimID(sessionID), Desktop: strings.TrimSpace(desktop)}
+	if caller := protocol.TrimID(callerSessionID); caller != "" {
 		msg.CallerSessionID = protocol.Ptr(caller)
 	}
 	resp, err := c.send(msg)
@@ -438,7 +438,7 @@ func (c *Client) MoveSessionToDesktop(callerSessionID, sessionID, desktop string
 }
 
 type SessionReopenOptions struct {
-	SessionID string
+	SessionID protocol.SessionID
 	Action    string
 	Directory string
 }
@@ -446,7 +446,7 @@ type SessionReopenOptions struct {
 func (c *Client) SessionReopen(opts SessionReopenOptions) (*protocol.SessionReopenResult, error) {
 	msg := protocol.SessionReopenMessage{
 		Cmd:       protocol.CmdSessionReopen,
-		SessionID: strings.TrimSpace(opts.SessionID),
+		SessionID: protocol.TrimID(opts.SessionID),
 	}
 	if action := strings.TrimSpace(opts.Action); action != "" {
 		msg.Action = protocol.Ptr(protocol.SessionReopenAction(action))
@@ -464,7 +464,7 @@ func (c *Client) SessionReopen(opts SessionReopenOptions) (*protocol.SessionReop
 	return resp.SessionReopenResult, nil
 }
 
-func (c *Client) SessionTranscript(targetSessionID, afterCursor string) (*protocol.SessionTranscriptResult, error) {
+func (c *Client) SessionTranscript(targetSessionID string, afterCursor string) (*protocol.SessionTranscriptResult, error) {
 	msg := protocol.SessionTranscriptMessage{
 		Cmd:             protocol.CmdSessionTranscript,
 		TargetSessionID: targetSessionID,
@@ -510,7 +510,7 @@ func (c *Client) AgentPeek(targetSessionID string) (*protocol.AgentPeekResult, e
 	return resp.AgentPeekResult, nil
 }
 
-func (c *Client) AgentMsg(target, sourceSessionID, content string) (*protocol.AgentMsgResult, error) {
+func (c *Client) AgentMsg(target string, sourceSessionID protocol.SessionID, content string) (*protocol.AgentMsgResult, error) {
 	msg := protocol.AgentMsgMessage{
 		Cmd:             protocol.CmdAgentMsg,
 		TargetSessionID: target,
@@ -531,7 +531,7 @@ func (c *Client) AgentMsg(target, sourceSessionID, content string) (*protocol.Ag
 	return resp.AgentMsgResult, nil
 }
 
-func (c *Client) AgentClose(target, sourceSessionID, reason string) (*protocol.AgentCloseResult, error) {
+func (c *Client) AgentClose(target string, sourceSessionID protocol.SessionID, reason string) (*protocol.AgentCloseResult, error) {
 	msg := protocol.AgentCloseMessage{
 		Cmd:             protocol.CmdAgentClose,
 		TargetSessionID: target,
@@ -552,7 +552,7 @@ func (c *Client) AgentClose(target, sourceSessionID, reason string) (*protocol.A
 	return resp.AgentCloseResult, nil
 }
 
-func (c *Client) AgentInbox(messageID, recipientSessionID string) (*protocol.AgentPeerMessage, error) {
+func (c *Client) AgentInbox(messageID string, recipientSessionID protocol.SessionID) (*protocol.AgentPeerMessage, error) {
 	resp, err := c.send(protocol.AgentInboxMessage{
 		Cmd: protocol.CmdAgentInbox, MessageID: protocol.Ptr(messageID),
 		RecipientSessionID: recipientSessionID,
@@ -566,7 +566,7 @@ func (c *Client) AgentInbox(messageID, recipientSessionID string) (*protocol.Age
 	return resp.AgentInboxResult, nil
 }
 
-func (c *Client) AgentInboxBatch(recipientSessionID string, limit int) (*protocol.AgentInboxBatchResult, error) {
+func (c *Client) AgentInboxBatch(recipientSessionID protocol.SessionID, limit int) (*protocol.AgentInboxBatchResult, error) {
 	resp, err := c.send(protocol.AgentInboxMessage{
 		Cmd: protocol.CmdAgentInbox, RecipientSessionID: recipientSessionID,
 		Limit: protocol.Ptr(limit),
@@ -580,7 +580,7 @@ func (c *Client) AgentInboxBatch(recipientSessionID string, limit int) (*protoco
 	return resp.AgentInboxBatchResult, nil
 }
 
-func (c *Client) AgentMsgStatus(messageID, senderSessionID string) (*protocol.AgentPeerMessage, error) {
+func (c *Client) AgentMsgStatus(messageID string, senderSessionID protocol.SessionID) (*protocol.AgentPeerMessage, error) {
 	resp, err := c.send(protocol.AgentMsgStatusMessage{
 		Cmd: protocol.CmdAgentMsgStatus, MessageID: messageID,
 		SenderSessionID: senderSessionID,
@@ -599,7 +599,7 @@ type StopFacts struct {
 	PendingSessionCrons int
 }
 
-func (c *Client) SendStop(id, transcriptPath string, facts StopFacts) error {
+func (c *Client) SendStop(id protocol.TerminalID, transcriptPath string, facts StopFacts) error {
 	msg := protocol.StopMessage{
 		Cmd:                 protocol.CmdStop,
 		ID:                  id,
@@ -611,7 +611,7 @@ func (c *Client) SendStop(id, transcriptPath string, facts StopFacts) error {
 	return err
 }
 
-func (c *Client) RecordFilesEdited(id string, paths []string) error {
+func (c *Client) RecordFilesEdited(id protocol.TerminalID, paths []string) error {
 	msg := protocol.FilesEditedMessage{
 		Cmd:   protocol.CmdFilesEdited,
 		ID:    id,
@@ -621,7 +621,7 @@ func (c *Client) RecordFilesEdited(id string, paths []string) error {
 	return err
 }
 
-func (c *Client) RecordPullRequestCreated(id, url string) error {
+func (c *Client) RecordPullRequestCreated(id protocol.SessionID, url string) error {
 	msg := protocol.PullRequestCreatedMessage{
 		Cmd: protocol.CmdPullRequestCreated,
 		ID:  id,
@@ -631,7 +631,7 @@ func (c *Client) RecordPullRequestCreated(id, url string) error {
 	return err
 }
 
-func (c *Client) ForgetSessionPullRequest(id, url string) error {
+func (c *Client) ForgetSessionPullRequest(id protocol.SessionID, url string) error {
 	msg := protocol.PullRequestForgetMessage{
 		Cmd: protocol.CmdPullRequestForget,
 		ID:  id,
@@ -641,7 +641,7 @@ func (c *Client) ForgetSessionPullRequest(id, url string) error {
 	return err
 }
 
-func (c *Client) WatchSessionPullRequest(id, url string, mode protocol.PullRequestWatchMode, reviewer string) error {
+func (c *Client) WatchSessionPullRequest(id protocol.SessionID, url string, mode protocol.PullRequestWatchMode, reviewer string) error {
 	msg := protocol.PullRequestWatchMessage{
 		Cmd: protocol.CmdPullRequestWatch, ID: id, URL: url, Mode: mode,
 	}
@@ -652,7 +652,7 @@ func (c *Client) WatchSessionPullRequest(id, url string, mode protocol.PullReque
 	return err
 }
 
-func (c *Client) UnwatchSessionPullRequest(id, url string) error {
+func (c *Client) UnwatchSessionPullRequest(id protocol.SessionID, url string) error {
 	msg := protocol.PullRequestUnwatchMessage{Cmd: protocol.CmdPullRequestUnwatch, ID: id, URL: url}
 	_, err := c.send(msg)
 	return err
@@ -719,7 +719,7 @@ func (c *Client) Delegate(request protocol.DelegateMessage) (*protocol.DelegateR
 	return op.Result, nil
 }
 
-func (c *Client) PresentOpen(sourceSessionID, manifestYAML, presentationID string) (*protocol.PresentOpenResult, error) {
+func (c *Client) PresentOpen(sourceSessionID protocol.SessionID, manifestYAML string, presentationID string) (*protocol.PresentOpenResult, error) {
 	msg := protocol.PresentOpenMessage{
 		Cmd:             protocol.CmdPresentOpen,
 		SourceSessionID: sourceSessionID,
@@ -756,7 +756,7 @@ func (c *Client) PresentFeedback(presentationID string, seq int) (*protocol.Pres
 	return resp.PresentFeedbackResult, nil
 }
 
-func (c *Client) NotebookGuide(sessionID string) (*protocol.NotebookGuideResult, error) {
+func (c *Client) NotebookGuide(sessionID protocol.SessionID) (*protocol.NotebookGuideResult, error) {
 	msg := protocol.NotebookGuideMessage{Cmd: protocol.CmdNotebookGuide}
 	if sessionID != "" {
 		msg.SessionID = protocol.Ptr(sessionID)
@@ -771,7 +771,7 @@ func (c *Client) NotebookGuide(sessionID string) (*protocol.NotebookGuideResult,
 	return resp.NotebookGuide, nil
 }
 
-func (c *Client) AppendJournal(sourceSessionID, date, entry string) (*protocol.JournalAppendResult, error) {
+func (c *Client) AppendJournal(sourceSessionID protocol.SessionID, date string, entry string) (*protocol.JournalAppendResult, error) {
 	msg := protocol.JournalAppendMessage{Cmd: protocol.CmdJournalAppend, Entry: entry}
 	if sourceSessionID != "" {
 		msg.SourceSessionID = protocol.Ptr(sourceSessionID)
@@ -800,7 +800,7 @@ func (c *Client) ActivityStatus() (*protocol.ActivityStatusResult, error) {
 	return resp.ActivityStatusResult, nil
 }
 
-func (c *Client) ClearSessionActivity(sessionID string) error {
+func (c *Client) ClearSessionActivity(sessionID protocol.SessionID) error {
 	_, err := c.send(protocol.ClearSessionActivityMessage{
 		Cmd: protocol.CmdClearSessionActivity,
 		ID:  sessionID,
@@ -825,7 +825,7 @@ func (c *Client) queryResponse(filter string) (*protocol.Response, error) {
 }
 
 // QueryAs lists sessions and names the one the caller's terminal shows.
-func (c *Client) QueryAs(callerID string) ([]protocol.Session, string, error) {
+func (c *Client) QueryAs(callerID protocol.TerminalID) ([]protocol.Session, protocol.SessionID, error) {
 	resp, err := c.send(protocol.QueryMessage{Cmd: protocol.CmdQuery, CallerID: &callerID})
 	if err != nil {
 		return nil, "", err
@@ -860,7 +860,7 @@ func (c *Client) List(filter string) (*ListResult, error) {
 	}, nil
 }
 
-func (c *Client) Heartbeat(id string) error {
+func (c *Client) Heartbeat(id protocol.SessionID) error {
 	msg := protocol.HeartbeatMessage{
 		Cmd: protocol.CmdHeartbeat,
 		ID:  id,
@@ -869,7 +869,7 @@ func (c *Client) Heartbeat(id string) error {
 	return err
 }
 
-func (c *Client) OpenMarkdown(path, sessionID string) error {
+func (c *Client) OpenMarkdown(path string, sessionID protocol.SessionID) error {
 	msg := protocol.OpenMarkdownMessage{
 		Cmd:  protocol.CmdOpenMarkdown,
 		Path: path,
@@ -881,7 +881,7 @@ func (c *Client) OpenMarkdown(path, sessionID string) error {
 	return err
 }
 
-func (c *Client) OpenSeed(seedID, sessionID string) error {
+func (c *Client) OpenSeed(seedID string, sessionID protocol.SessionID) error {
 	msg := protocol.OpenSeedMessage{Cmd: protocol.CmdOpenSeed, SeedID: seedID}
 	if sessionID != "" {
 		msg.SessionID = protocol.Ptr(sessionID)
@@ -890,7 +890,7 @@ func (c *Client) OpenSeed(seedID, sessionID string) error {
 	return err
 }
 
-func (c *Client) OpenSentFiles(sessionID string, paths []string) error {
+func (c *Client) OpenSentFiles(sessionID protocol.SessionID, paths []string) error {
 	msg := protocol.OpenSentFilesMessage{
 		Cmd:   protocol.CmdOpenSentFiles,
 		Paths: paths,
@@ -902,7 +902,7 @@ func (c *Client) OpenSentFiles(sessionID string, paths []string) error {
 	return err
 }
 
-func (c *Client) OpenBrowser(url, sessionID string) error {
+func (c *Client) OpenBrowser(url string, sessionID protocol.SessionID) error {
 	msg := protocol.OpenBrowserMessage{
 		Cmd: protocol.CmdOpenBrowser,
 		URL: url,
@@ -914,11 +914,11 @@ func (c *Client) OpenBrowser(url, sessionID string) error {
 	return err
 }
 
-func (c *Client) BrowserControl(action, selector, text, sessionID string) (string, error) {
+func (c *Client) BrowserControl(action string, selector string, text string, sessionID protocol.SessionID) (string, error) {
 	return c.BrowserCommand(action, "", selector, text, sessionID)
 }
 
-func (c *Client) BrowserCommand(action, params, selector, text, sessionID string) (string, error) {
+func (c *Client) BrowserCommand(action string, params string, selector string, text string, sessionID protocol.SessionID) (string, error) {
 	msg := protocol.BrowserControlMessage{
 		Cmd:    protocol.CmdBrowserControl,
 		Action: action,
@@ -1096,7 +1096,7 @@ func (c *Client) WorkflowRunGet(runID string) (*protocol.WorkflowRun, error) {
 	return result.Run, nil
 }
 
-func (c *Client) WorkflowRunList(sessionID string) ([]protocol.WorkflowRun, error) {
+func (c *Client) WorkflowRunList(sessionID protocol.SessionID) ([]protocol.WorkflowRun, error) {
 	msg := protocol.WorkflowRunListMessage{
 		Cmd: protocol.CmdWorkflowRunList,
 	}
@@ -1171,4 +1171,19 @@ func (c *Client) SetAutomationLaunchDesktop(id int, desktop string, name *string
 		return nil, err
 	}
 	return &result, nil
+}
+
+func (c *Client) SetSessionPriority(sessionID protocol.SessionID, priority bool) error {
+	_, err := c.send(protocol.SetSessionPriorityMessage{Cmd: protocol.CmdSetSessionPriority, SessionID: protocol.TrimID(sessionID), Priority: priority})
+	return err
+}
+func (c *Client) OpenSentFilesFromTerminal(terminalID protocol.TerminalID, paths []string) error {
+	msg := protocol.OpenSentFilesMessage{Cmd: protocol.CmdOpenSentFiles, TerminalID: protocol.Ptr(terminalID), Paths: paths}
+	_, err := c.send(msg)
+	return err
+}
+func (c *Client) RecordPullRequestCreatedFromTerminal(terminalID protocol.TerminalID, url string) error {
+	msg := protocol.PullRequestCreatedMessage{Cmd: protocol.CmdPullRequestCreated, TerminalID: protocol.Ptr(terminalID), URL: url}
+	_, err := c.send(msg)
+	return err
 }

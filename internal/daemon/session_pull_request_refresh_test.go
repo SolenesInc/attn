@@ -86,7 +86,7 @@ func serveHost(d *Daemon, host string, served *fakePRHost) {
 func recordPRForRefresh(t *testing.T, d *Daemon, sessionID, url string) {
 	t.Helper()
 	if resp := sendPRCommand(t, d, protocol.PullRequestCreatedMessage{
-		Cmd: protocol.CmdPullRequestCreated, ID: sessionID, URL: url,
+		Cmd: protocol.CmdPullRequestCreated, ID: protocol.SessionID(sessionID), URL: url,
 	}); !resp.Ok {
 		t.Fatalf("record response = %+v", resp)
 	}
@@ -139,7 +139,7 @@ func readinessObservation() *prreadiness.Observation {
 
 func watchPRForRefresh(t *testing.T, d *Daemon, sessionID string, mode prreadiness.Mode, reviewer string) {
 	t.Helper()
-	rec, err := d.sessionPullRequestIdentity(sessionID, "https://github.com/victorarias/attn/pull/71")
+	rec, err := d.sessionPullRequestIdentity(protocol.SessionID(sessionID), "https://github.com/victorarias/attn/pull/71")
 	if err != nil {
 		t.Fatal(err)
 	}

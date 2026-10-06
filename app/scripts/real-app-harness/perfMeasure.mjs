@@ -311,9 +311,9 @@ export function assertDaemonRestartDoesNotHostSession(instance, {
   readDaemonPid = readLiveDaemonPid,
   readPidFile = readLivePidFile,
 } = {}) {
-  const sessionId = String(env.ATTN_SESSION_ID || '').trim();
+  const terminalId = String(env.ATTN_TERMINAL_ID || env.ATTN_SESSION_ID || '').trim();
   const hostingSocket = String(env.ATTN_SOCKET_PATH || '').trim();
-  if (!sessionId || !hostingSocket) return;
+  if (!terminalId || !hostingSocket) return;
 
   const targetSocket = resolveSocket(instance);
   const targetPid = readDaemonPid(instance);
@@ -323,7 +323,7 @@ export function assertDaemonRestartDoesNotHostSession(instance, {
   if (sameDaemon) {
     throw new Error(
       `refusing to restart instance ${JSON.stringify(instance || 'production')} daemon pid ${targetPid ?? 'unknown'} `
-      + `at ${targetSocket}: it hosts invoking session ${sessionId}; run from another instance or pass --no-restart-daemon`,
+      + `at ${targetSocket}: it hosts invoking terminal ${terminalId}; run from another instance or pass --no-restart-daemon`,
     );
   }
 }

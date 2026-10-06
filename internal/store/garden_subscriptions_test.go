@@ -56,7 +56,7 @@ func seedSubscriptionHistory(t *testing.T, s *Store) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.PutDocument(*dispatchSchema, dispatch.SessionID, body, now, nil); err != nil {
+		if _, err := s.PutDocument(*dispatchSchema, string(dispatch.SessionID), body, now, nil); err != nil {
 			t.Fatal(err)
 		}
 	}

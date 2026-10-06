@@ -79,7 +79,7 @@ func TestTheActivityLineSaysWhatTheAgentDidSinceTheLastLineWhileTheUserWatches(t
 		t.Errorf("after an empty answer the line is %q, want the previous one kept", line)
 	}
 
-	if err := cli.ClearSessionActivity(session); err != nil {
+	if err := cli.ClearSessionActivity(protocol.SessionID(session)); err != nil {
 		t.Fatal(err)
 	}
 	if line := protocol.Deref(activitySession(t, cli, session).Activity); line != "" {
@@ -115,12 +115,12 @@ func TestALineAboutAClearedConversationNeverLandsOnTheSessionAfterIt(t *testing.
 	activityTurn(t, w, app, agent, session, "publish the notes", "Published the release notes.")
 	task := w.HeadlessTask()
 	next := clearClaude(app, agent, session)
-	if line := protocol.Deref(activitySession(t, cli, next.ID).Activity); line != "" {
+	if line := protocol.Deref(activitySession(t, cli, string(next.ID)).Activity); line != "" {
 		t.Errorf("the session /clear opened shows the old conversation's line %q", line)
 	}
 	task.Answer("Publishing the release notes")
 	awaitActivityTask(app, session, func(task protocol.Task) bool { return task.State == "done" })
-	if line := protocol.Deref(activitySession(t, cli, next.ID).Activity); line != "" {
+	if line := protocol.Deref(activitySession(t, cli, string(next.ID)).Activity); line != "" {
 		t.Errorf("a line about the cleared conversation landed on the session after it: %q", line)
 	}
 }
@@ -169,7 +169,7 @@ func activityStatus(t *testing.T, cli *client.Client) *protocol.ActivityStatusRe
 func activitySession(t *testing.T, cli *client.Client, session string) protocol.ActivityStatusSession {
 	t.Helper()
 	for _, s := range activityStatus(t, cli).Sessions {
-		if s.ID == session {
+		if string(s.ID) == session {
 			return s
 		}
 	}

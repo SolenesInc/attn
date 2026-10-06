@@ -21,19 +21,19 @@ func TestAHandoverStartsTheSuccessorWhereThePredecessorLeftOff(t *testing.T) {
 	if err := os.MkdirAll(w.Path("api"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	predecessor, err := cli.Delegate(delegateFrom(source, w.Path("api"), "Investigate the tracked task.", fakeagent.Codex))
+	predecessor, err := cli.Delegate(delegateFrom(source, w.Path("api"), "# Investigate the tracked task\n\nTrace the failing test.", fakeagent.Codex))
 	if err != nil {
 		t.Fatal(err)
 	}
-	w.Launched(predecessor.SessionID)
+	w.Launched(string(predecessor.SessionID))
 	seed := predecessor.SeedID
 	sibling := plantSeedAs(t, cli, source, "second responsibility")
-	lifeMove(t, cli, predecessor.SessionID, sibling, "tend", "", "")
+	lifeMove(t, cli, string(predecessor.SessionID), sibling, "tend", "", "")
 	unfinished := seedArtifactsWrite(t, predecessor.Directory, "unfinished.txt", []byte("still here"))
 	body := lifeShow(t, cli, seed).Seed.Body
 	observer := w.Spawn(app, fakeagent.Codex, w.Path("observer"))
 	for _, watcher := range []string{source, observer} {
-		if _, err := cli.SeedWatch(watcher, seed, false); err != nil {
+		if _, err := cli.SeedWatch(protocol.SessionID(watcher), seed, false); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -50,21 +50,21 @@ func TestAHandoverStartsTheSuccessorWhereThePredecessorLeftOff(t *testing.T) {
 	if got, err := os.ReadFile(unfinished); err != nil || string(got) != "still here" {
 		t.Errorf("the unfinished work reads %q (%v), want it intact", got, err)
 	}
-	prompt := w.Launched(successor.SessionID).Prompted()
+	prompt := w.Launched(string(successor.SessionID)).Prompted()
 	if !strings.Contains(prompt, "attn seed show "+seed) || strings.Contains(prompt, body) || strings.Contains(prompt, "Continue from the failing test.") {
 		t.Errorf("the successor was prompted %q, want a pointer to attn seed show %s without the seed's body or handoff", prompt, seed)
 	}
-	seedHandoverHeldBy(t, cli, seed, successor.SessionID, 1)
+	seedHandoverHeldBy(t, cli, seed, string(successor.SessionID), 1)
 	if notes := lifeShow(t, cli, seed).Notes; notes[0].Kind != "handoff" || notes[0].Body != "Continue from the failing test." {
 		t.Errorf("the seed's log leads with %+v, want the handoff", notes[0])
 	}
 	if held := lifeShow(t, cli, sibling).Seed.TenderSession; held != predecessor.SessionID {
 		t.Errorf("the handover moved %s, which %s also tended, to %q", sibling, predecessor.SessionID, held)
 	}
-	if kept := sessionOfDelegate(t, w, predecessor.SessionID); kept.ID != predecessor.SessionID || protocol.Deref(kept.SeedID) == seed {
+	if kept := sessionOfDelegate(t, w, string(predecessor.SessionID)); kept.ID != predecessor.SessionID || protocol.Deref(kept.SeedID) == seed {
 		t.Errorf("the predecessor reads as %+v, want its conversation kept without the seed", kept)
 	}
-	if got := protocol.Deref(sessionOfDelegate(t, w, successor.SessionID).SeedID); got != seed {
+	if got := protocol.Deref(sessionOfDelegate(t, w, string(successor.SessionID)).SeedID); got != seed {
 		t.Errorf("the successor's session carries seed %q, want %s", got, seed)
 	}
 
@@ -77,7 +77,7 @@ func TestAHandoverStartsTheSuccessorWhereThePredecessorLeftOff(t *testing.T) {
 	if bells := readInbox(t, cli, source, 0).Items; len(bells) != 0 {
 		t.Errorf("the source received %q, want no bell for its own handover", inboxContents(bells))
 	}
-	if items := readInbox(t, cli, successor.SessionID, 0).Items; slices.ContainsFunc(items, func(item protocol.AgentInboxItem) bool { return protocol.Deref(item.Hint) == "tended" }) {
+	if items := readInbox(t, cli, string(successor.SessionID), 0).Items; slices.ContainsFunc(items, func(item protocol.AgentInboxItem) bool { return protocol.Deref(item.Hint) == "tended" }) {
 		t.Errorf("the successor, prompted directly, also received %q", inboxContents(items))
 	}
 
@@ -97,27 +97,27 @@ func TestAHandoverStartsTheSuccessorWhereThePredecessorLeftOff(t *testing.T) {
 	if shown, err := cli.SeedShow(successor.SessionID, seed); err != nil || shown.Watching {
 		t.Errorf("after the retry the successor watches %s again (%v)", seed, err)
 	}
-	seedHandoverHeldBy(t, cli, seed, successor.SessionID, 1)
+	seedHandoverHeldBy(t, cli, seed, string(successor.SessionID), 1)
 }
 
 func TestAHandedOverSeedResumesTheSuccessorsConversation(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
 	predecessor := seedResumeDelegate(t, w, fakeagent.Codex, "api")
-	w.Launched(predecessor.SessionID)
+	w.Launched(string(predecessor.SessionID))
 
 	successor, err := cli.Delegate(seedHandoverRequest("", predecessor.Directory, predecessor.SeedID, "Pick up where the tests failed."))
 	if err != nil {
 		t.Fatal(err)
 	}
-	first := w.Launched(successor.SessionID)
-	closePane(app, sessionPane{session: successor.SessionID})
+	first := w.Launched(string(successor.SessionID))
+	closePane(app, sessionPane{session: string(successor.SessionID)})
 
 	if resumed := seedResumeRequest(app, predecessor.SeedID); !resumed.Success || protocol.Deref(resumed.SessionID) != successor.SessionID {
 		t.Fatalf("resuming the handed-over seed = %+v, want %s relaunched", resumed, successor.SessionID)
 	}
-	seedResumeContinues(t, w, first, successor.SessionID)
-	seedHandoverHeldBy(t, cli, predecessor.SeedID, successor.SessionID, 1)
+	seedResumeContinues(t, w, first, string(successor.SessionID))
+	seedHandoverHeldBy(t, cli, predecessor.SeedID, string(successor.SessionID), 1)
 }
 
 func TestAHandoverWithoutAPreviousExecutionStartsWhereItWasAsked(t *testing.T) {
@@ -133,11 +133,11 @@ func TestAHandoverWithoutAPreviousExecutionStartsWhereItWasAsked(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	w.Launched(successor.SessionID)
+	w.Launched(string(successor.SessionID))
 	if successor.Directory != placed {
 		t.Errorf("the successor works in %s, want the submitted %s", successor.Directory, placed)
 	}
-	seedHandoverHeldBy(t, cli, seed, successor.SessionID, 0)
+	seedHandoverHeldBy(t, cli, seed, string(successor.SessionID), 0)
 	if notes := lifeShow(t, cli, seed).NotesTotal; notes != 0 {
 		t.Errorf("the handover of an unplaced seed wrote %d notes, want none", notes)
 	}
@@ -152,9 +152,9 @@ func TestAHandoverRecreatesTheSavedBranchAfterItsWorktreeWasDeleted(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	w.Launched(predecessor.SessionID)
+	w.Launched(string(predecessor.SessionID))
 	worktreeRoot := filepath.Dir(predecessor.Directory)
-	closePane(app, sessionPane{session: predecessor.SessionID})
+	closePane(app, sessionPane{session: string(predecessor.SessionID)})
 
 	deleted := testworld.Request(app, protocol.DeleteWorktreeMessage{Cmd: protocol.CmdDeleteWorktree, Path: worktreeRoot, Force: protocol.Ptr(true)},
 		protocol.EventDeleteWorktreeResult, func(r protocol.DeleteWorktreeResultMessage) bool { return r.Path == worktreeRoot })
@@ -171,7 +171,7 @@ func TestAHandoverRecreatesTheSavedBranchAfterItsWorktreeWasDeleted(t *testing.T
 	if err != nil {
 		t.Fatalf("handing over into the deleted worktree: %v", err)
 	}
-	w.Launched(successor.SessionID)
+	w.Launched(string(successor.SessionID))
 	if successor.Directory != predecessor.Directory || !protocol.Deref(successor.WorktreeCreated) {
 		t.Errorf("the successor works in %s (worktree created %t), want %s recreated", successor.Directory, protocol.Deref(successor.WorktreeCreated), predecessor.Directory)
 	}
@@ -188,7 +188,7 @@ func seedHandoverRequest(source, cwd, seedID, note string) protocol.DelegateMess
 		},
 	}
 	if source != "" {
-		request.SourceSessionID = protocol.Ptr(source)
+		request.SourceSessionID = protocol.Ptr(protocol.SessionID(source))
 	}
 	if note != "" {
 		request.Assignment.Handover.Note = protocol.Ptr(note)
@@ -202,7 +202,7 @@ func seedHandoverHeldBy(t *testing.T, cli *client.Client, seedID, sessionID stri
 	if err != nil {
 		t.Fatal(err)
 	}
-	if shown.Seed.TenderSession != sessionID || protocol.Deref(shown.Seed.LastExecutionID) != sessionID {
+	if string(shown.Seed.TenderSession) != sessionID || string(protocol.Deref(shown.Seed.LastExecutionID)) != sessionID {
 		t.Errorf("%s is tended by %q in execution %q, want %s", seedID, shown.Seed.TenderSession, protocol.Deref(shown.Seed.LastExecutionID), sessionID)
 	}
 	found := 0
@@ -221,7 +221,7 @@ func TestAHandoverWhoseSuccessorCannotStartKeepsTheSeedWithItsSuccessor(t *testi
 	app, cli := w.App(), w.Client()
 	pluginDriverSettings(app, "pi")
 	predecessor := seedResumeDelegate(t, w, fakeagent.Codex, "api")
-	w.Launched(predecessor.SessionID)
+	w.Launched(string(predecessor.SessionID))
 
 	allow := w.RefusePiLaunches("pi could not start: the model provider is unreachable")
 	request := seedHandoverRequest("", predecessor.Directory, predecessor.SeedID, "Continue from the failing test.")
@@ -233,7 +233,7 @@ func TestAHandoverWhoseSuccessorCannotStartKeepsTheSeedWithItsSuccessor(t *testi
 	if result, err := cli.Delegate(request); err == nil || !strings.Contains(err.Error(), "provider is unreachable") {
 		t.Fatalf("handing over to a pi that cannot start = %+v, %v; want the launch failure", result, err)
 	}
-	seedHandoverHeldBy(t, cli, predecessor.SeedID, accepted.SessionID, 1)
+	seedHandoverHeldBy(t, cli, predecessor.SeedID, string(accepted.SessionID), 1)
 	for _, session := range w.App().Initial.Sessions {
 		if session.ID == accepted.SessionID {
 			t.Errorf("the successor that could not start is still listed: %+v", session)
@@ -247,8 +247,8 @@ func TestAHandoverWhoseSuccessorCannotStartKeepsTheSeedWithItsSuccessor(t *testi
 	if err != nil {
 		t.Fatalf("handing the seed over again once pi can start: %v", err)
 	}
-	if prompt := w.Launched(successor.SessionID).Prompted(); !strings.Contains(prompt, "attn seed show "+predecessor.SeedID) {
+	if prompt := w.Launched(string(successor.SessionID)).Prompted(); !strings.Contains(prompt, "attn seed show "+predecessor.SeedID) {
 		t.Errorf("the successor was prompted %q, want a pointer to its seed", prompt)
 	}
-	seedHandoverHeldBy(t, cli, predecessor.SeedID, successor.SessionID, 1)
+	seedHandoverHeldBy(t, cli, predecessor.SeedID, string(successor.SessionID), 1)
 }

@@ -34,7 +34,7 @@ type ActivityStatusSession struct {
 	Error *string `json:"error,omitempty,omitzero"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID SessionID `json:"id"`
 
 	// Label corresponds to the JSON schema field "label".
 	Label string `json:"label"`
@@ -62,7 +62,7 @@ type AgentCloseMessage struct {
 	Reason string `json:"reason"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID string `json:"source_session_id"`
+	SourceSessionID SessionID `json:"source_session_id"`
 
 	// TargetSeedID corresponds to the JSON schema field "target_seed_id".
 	TargetSeedID *string `json:"target_seed_id,omitempty,omitzero"`
@@ -85,7 +85,7 @@ type AgentCloseResult struct {
 	SeedIds []string `json:"seed_ids"`
 
 	// TargetSessionID corresponds to the JSON schema field "target_session_id".
-	TargetSessionID string `json:"target_session_id"`
+	TargetSessionID SessionID `json:"target_session_id"`
 }
 
 type AgentCloseRule string
@@ -131,7 +131,7 @@ type AgentInboxItem struct {
 	SenderLabel *string `json:"sender_label,omitempty,omitzero"`
 
 	// SenderSessionID corresponds to the JSON schema field "sender_session_id".
-	SenderSessionID *string `json:"sender_session_id,omitempty,omitzero"`
+	SenderSessionID *SessionID `json:"sender_session_id,omitempty,omitzero"`
 
 	// SourceID corresponds to the JSON schema field "source_id".
 	SourceID *string `json:"source_id,omitempty,omitzero"`
@@ -148,7 +148,7 @@ type AgentInboxMessage struct {
 	MessageID *string `json:"message_id,omitempty,omitzero"`
 
 	// RecipientSessionID corresponds to the JSON schema field "recipient_session_id".
-	RecipientSessionID string `json:"recipient_session_id"`
+	RecipientSessionID SessionID `json:"recipient_session_id"`
 }
 
 type AgentMessageState string
@@ -165,7 +165,7 @@ type AgentMsgMessage struct {
 	Content string `json:"content"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID string `json:"source_session_id"`
+	SourceSessionID SessionID `json:"source_session_id"`
 
 	// TargetSeedID corresponds to the JSON schema field "target_seed_id".
 	TargetSeedID *string `json:"target_seed_id,omitempty,omitzero"`
@@ -185,7 +185,7 @@ type AgentMsgResult struct {
 	Status AgentMsgStatus `json:"status"`
 
 	// TargetSessionID corresponds to the JSON schema field "target_session_id".
-	TargetSessionID string `json:"target_session_id"`
+	TargetSessionID SessionID `json:"target_session_id"`
 }
 
 type AgentMsgStatus string
@@ -198,7 +198,7 @@ type AgentMsgStatusMessage struct {
 	MessageID string `json:"message_id"`
 
 	// SenderSessionID corresponds to the JSON schema field "sender_session_id".
-	SenderSessionID string `json:"sender_session_id"`
+	SenderSessionID SessionID `json:"sender_session_id"`
 }
 
 const AgentMsgStatusNotified AgentMsgStatus = "notified"
@@ -251,7 +251,7 @@ type AgentPeekResult struct {
 	Screen *AgentPeekScreen `json:"screen,omitempty,omitzero"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 
 	// State corresponds to the JSON schema field "state".
 	State string `json:"state"`
@@ -297,7 +297,7 @@ type AgentPeerMessage struct {
 	SenderLabel string `json:"sender_label"`
 
 	// SenderSessionID corresponds to the JSON schema field "sender_session_id".
-	SenderSessionID string `json:"sender_session_id"`
+	SenderSessionID SessionID `json:"sender_session_id"`
 
 	// State corresponds to the JSON schema field "state".
 	State AgentMessageState `json:"state"`
@@ -361,7 +361,7 @@ type AttachResultMessage struct {
 	Event string `json:"event"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID TerminalID `json:"id"`
 
 	// LastSeq corresponds to the JSON schema field "last_seq".
 	LastSeq *int `json:"last_seq,omitempty,omitzero"`
@@ -396,7 +396,7 @@ type AttachSessionMessage struct {
 	Cols *int `json:"cols,omitempty,omitzero"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID TerminalID `json:"id"`
 
 	// Rows corresponds to the JSON schema field "rows".
 	Rows *int `json:"rows,omitempty,omitzero"`
@@ -514,7 +514,7 @@ type AutoModeDenialInfo struct {
 	Rule string `json:"rule"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 
 	// Signature corresponds to the JSON schema field "signature".
 	Signature string `json:"signature"`
@@ -986,7 +986,7 @@ type AutomationApplyMessage struct {
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type AutomationApplyResultMessage struct {
@@ -1026,7 +1026,7 @@ type AutomationCleanupMessage struct {
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type AutomationCleanupResultMessage struct {
@@ -1066,7 +1066,7 @@ type AutomationDefinitionGetMessage struct {
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type AutomationDefinitionResultMessage struct {
@@ -1141,7 +1141,7 @@ type AutomationDefinitionsGetMessage struct {
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type AutomationDefinitionsResultMessage struct {
@@ -1175,7 +1175,7 @@ type AutomationDeleteMessage struct {
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type AutomationDeleteResultMessage struct {
@@ -1229,7 +1229,7 @@ type AutomationRunMessage struct {
 	RequestID string `json:"request_id"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type AutomationRunResultMessage struct {
@@ -1278,7 +1278,7 @@ type AutomationRunSummary struct {
 	SeedID *string `json:"seed_id,omitempty,omitzero"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID *string `json:"session_id,omitempty,omitzero"`
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
 
 	// State corresponds to the JSON schema field "state".
 	State string `json:"state"`
@@ -1301,7 +1301,7 @@ type AutomationRunsGetMessage struct {
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type AutomationRunsResultMessage struct {
@@ -1344,7 +1344,7 @@ type AutomationSetEnabledMessage struct {
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type AutomationSetEnabledResultMessage struct {
@@ -1420,7 +1420,7 @@ type BackgroundLaunchMessage struct {
 	RequestedBy string `json:"requested_by"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 }
 
 type BootstrapEndpointMessage struct {
@@ -1530,7 +1530,7 @@ type BrowserControlMessage struct {
 	Selector *string `json:"selector,omitempty,omitzero"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID *string `json:"session_id,omitempty,omitzero"`
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
 
 	// Text corresponds to the JSON schema field "text".
 	Text *string `json:"text,omitempty,omitzero"`
@@ -1797,7 +1797,7 @@ type CancelCountdownMessage struct {
 	Cmd string `json:"cmd"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 }
 
 type ChiefOfStaffResultMessage struct {
@@ -1811,10 +1811,10 @@ type ChiefOfStaffResultMessage struct {
 	Event string `json:"event"`
 
 	// PreviousSessionID corresponds to the JSON schema field "previous_session_id".
-	PreviousSessionID *string `json:"previous_session_id,omitempty,omitzero"`
+	PreviousSessionID *SessionID `json:"previous_session_id,omitempty,omitzero"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
@@ -1825,7 +1825,7 @@ type ClearSessionActivityMessage struct {
 	Cmd string `json:"cmd"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID SessionID `json:"id"`
 }
 
 type ClearWarningsMessage struct {
@@ -1900,6 +1900,17 @@ type CommandErrorMessage struct {
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
+}
+
+type CommandUsage struct {
+	// CommandID corresponds to the JSON schema field "command_id".
+	CommandID string `json:"command_id"`
+
+	// LastUsedAt corresponds to the JSON schema field "last_used_at".
+	LastUsedAt string `json:"last_used_at"`
+
+	// Score corresponds to the JSON schema field "score".
+	Score float64 `json:"score"`
 }
 
 type CreateWorktreeFromBranchMessage struct {
@@ -2126,7 +2137,7 @@ type CrewHandoffMessage struct {
 	Retry *bool `json:"retry,omitempty,omitzero"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 }
 
 type CrewHandoffResult struct {
@@ -2143,7 +2154,7 @@ type CrewHandoffResult struct {
 	Path string `json:"path"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID *string `json:"session_id,omitempty,omitzero"`
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
 }
 
 type CrewHandoffSummary struct {
@@ -2211,7 +2222,7 @@ type CrewMember struct {
 	AwarenessDirs []string `json:"awareness_dirs"`
 
 	// BindingSession corresponds to the JSON schema field "binding_session".
-	BindingSession *string `json:"binding_session,omitempty,omitzero"`
+	BindingSession *SessionID `json:"binding_session,omitempty,omitzero"`
 
 	// CharterPath corresponds to the JSON schema field "charter_path".
 	CharterPath string `json:"charter_path"`
@@ -2261,7 +2272,7 @@ type CrewPrimeMessage struct {
 	Cmd string `json:"cmd"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 }
 
 type CrewPrimeResult struct {
@@ -2295,13 +2306,13 @@ type CrewRestart struct {
 	RequestID string `json:"request_id"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 
 	// State corresponds to the JSON schema field "state".
 	State CrewRestartState `json:"state"`
 
 	// SuccessorSessionID corresponds to the JSON schema field "successor_session_id".
-	SuccessorSessionID *string `json:"successor_session_id,omitempty,omitzero"`
+	SuccessorSessionID *SessionID `json:"successor_session_id,omitempty,omitzero"`
 }
 
 type CrewRestartMessage struct {
@@ -2312,7 +2323,7 @@ type CrewRestartMessage struct {
 	ExpectedRevision *int `json:"expected_revision,omitempty,omitzero"`
 
 	// ExpectedSessionID corresponds to the JSON schema field "expected_session_id".
-	ExpectedSessionID *string `json:"expected_session_id,omitempty,omitzero"`
+	ExpectedSessionID *SessionID `json:"expected_session_id,omitempty,omitzero"`
 
 	// Member corresponds to the JSON schema field "member".
 	Member string `json:"member"`
@@ -2451,7 +2462,7 @@ type CrewSleepResult struct {
 	Member string `json:"member"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID *string `json:"session_id,omitempty,omitzero"`
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
 }
 
 type CrewSleepResultMessage struct {
@@ -2477,7 +2488,7 @@ type CrewSleepResultMessage struct {
 	RequestID string `json:"request_id"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID *string `json:"session_id,omitempty,omitzero"`
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
@@ -2508,7 +2519,7 @@ type CrewWakeMessage struct {
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type CrewWakeResult struct {
@@ -2522,10 +2533,10 @@ type CrewWakeResult struct {
 	ProfileID string `json:"profile_id"`
 
 	// ReleasedSessionID corresponds to the JSON schema field "released_session_id".
-	ReleasedSessionID *string `json:"released_session_id,omitempty,omitzero"`
+	ReleasedSessionID *SessionID `json:"released_session_id,omitempty,omitzero"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 }
 
 type CrewWakeResultMessage struct {
@@ -2545,13 +2556,13 @@ type CrewWakeResultMessage struct {
 	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// ReleasedSessionID corresponds to the JSON schema field "released_session_id".
-	ReleasedSessionID *string `json:"released_session_id,omitempty,omitzero"`
+	ReleasedSessionID *SessionID `json:"released_session_id,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID *string `json:"session_id,omitempty,omitzero"`
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
 
 	// ShowError corresponds to the JSON schema field "show_error".
 	ShowError *string `json:"show_error,omitempty,omitzero"`
@@ -2649,6 +2660,9 @@ type DelegateMessage struct {
 	// Model corresponds to the JSON schema field "model".
 	Model *string `json:"model,omitempty,omitzero"`
 
+	// Priority corresponds to the JSON schema field "priority".
+	Priority *bool `json:"priority,omitempty,omitzero"`
+
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
@@ -2665,7 +2679,7 @@ type DelegateMessage struct {
 	Role *string `json:"role,omitempty,omitzero"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 
 	// YoloMode corresponds to the JSON schema field "yolo_mode".
 	YoloMode *bool `json:"yolo_mode,omitempty,omitzero"`
@@ -2705,7 +2719,7 @@ type DelegateResult struct {
 
 	// PredecessorSessionID corresponds to the JSON schema field
 	// "predecessor_session_id".
-	PredecessorSessionID *string `json:"predecessor_session_id,omitempty,omitzero"`
+	PredecessorSessionID *SessionID `json:"predecessor_session_id,omitempty,omitzero"`
 
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID *string `json:"profile_id,omitempty,omitzero"`
@@ -2717,7 +2731,7 @@ type DelegateResult struct {
 	SeedID string `json:"seed_id"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 
 	// WorktreeCreated corresponds to the JSON schema field "worktree_created".
 	WorktreeCreated *bool `json:"worktree_created,omitempty,omitzero"`
@@ -2751,7 +2765,7 @@ type DelegateStatusMessage struct {
 	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type DelegateWorktreeRequest struct {
@@ -2913,7 +2927,7 @@ type DelegationOperation struct {
 	SeedID *string `json:"seed_id,omitempty,omitzero"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 
 	// State corresponds to the JSON schema field "state".
 	State DelegationOperationState `json:"state"`
@@ -3280,7 +3294,7 @@ type DesktopDockTileMessage struct {
 	TileParams *string `json:"tile_params,omitempty,omitzero"`
 
 	// TileSessionID corresponds to the JSON schema field "tile_session_id".
-	TileSessionID *string `json:"tile_session_id,omitempty,omitzero"`
+	TileSessionID *SessionID `json:"tile_session_id,omitempty,omitzero"`
 
 	// TileShare corresponds to the JSON schema field "tile_share".
 	TileShare *float64 `json:"tile_share,omitempty,omitzero"`
@@ -3322,7 +3336,7 @@ type DesktopMoveLeafMessage struct {
 
 type DesktopMoveSessionMessage struct {
 	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
-	CallerSessionID *string `json:"caller_session_id,omitempty,omitzero"`
+	CallerSessionID *SessionID `json:"caller_session_id,omitempty,omitzero"`
 
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -3331,7 +3345,7 @@ type DesktopMoveSessionMessage struct {
 	Desktop string `json:"desktop"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 }
 
 type DesktopMoveSessionResult struct {
@@ -3345,7 +3359,7 @@ type DesktopMoveSessionResult struct {
 	PaneID string `json:"pane_id"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 
 	// Unchanged corresponds to the JSON schema field "unchanged".
 	Unchanged *bool `json:"unchanged,omitempty,omitzero"`
@@ -3365,10 +3379,10 @@ type DesktopPane struct {
 	PaneID string `json:"pane_id"`
 
 	// RuntimeID corresponds to the JSON schema field "runtime_id".
-	RuntimeID string `json:"runtime_id"`
+	RuntimeID TerminalID `json:"runtime_id"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 
 	// Status corresponds to the JSON schema field "status".
 	Status LayoutPaneStatus `json:"status"`
@@ -3400,7 +3414,7 @@ type DesktopPlaceSessionMessage struct {
 	RequestID string `json:"request_id"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 }
 
 type DesktopRemoveLeafMessage struct {
@@ -3527,7 +3541,7 @@ type DesktopShowSessionMessage struct {
 	RequestID string `json:"request_id"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 }
 
 type DesktopTileContentMessage struct {
@@ -3573,7 +3587,7 @@ type DesktopUpdateTileMessage struct {
 	TileParams *string `json:"tile_params,omitempty,omitzero"`
 
 	// TileSessionID corresponds to the JSON schema field "tile_session_id".
-	TileSessionID *string `json:"tile_session_id,omitempty,omitzero"`
+	TileSessionID *SessionID `json:"tile_session_id,omitempty,omitzero"`
 }
 
 type DetachSessionMessage struct {
@@ -3581,7 +3595,7 @@ type DetachSessionMessage struct {
 	Cmd string `json:"cmd"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID TerminalID `json:"id"`
 }
 
 type DirectoryEntry struct {
@@ -4118,7 +4132,7 @@ type FileActivity struct {
 	Path string `json:"path"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID *string `json:"session_id,omitempty,omitzero"`
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
 
 	// Source corresponds to the JSON schema field "source".
 	Source string `json:"source"`
@@ -4155,7 +4169,7 @@ type FilesEditedMessage struct {
 	Cmd string `json:"cmd"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID TerminalID `json:"id"`
 
 	// Paths corresponds to the JSON schema field "paths".
 	Paths []string `json:"paths"`
@@ -4717,6 +4731,37 @@ type GardenSeedsUpdatedMessage struct {
 	Total int `json:"total"`
 }
 
+type GetCommandUsageMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type GetCommandUsageResultMessage struct {
+	// Entries corresponds to the JSON schema field "entries".
+	Entries []CommandUsage `json:"entries"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
 type GetDefaultBranchMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -4767,7 +4812,7 @@ type GetKittyImageMessage struct {
 	Cmd string `json:"cmd"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID TerminalID `json:"id"`
 
 	// ImageID corresponds to the JSON schema field "image_id".
 	ImageID int `json:"image_id"`
@@ -4873,7 +4918,7 @@ type GetScreenSnapshotMessage struct {
 	Cmd string `json:"cmd"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID TerminalID `json:"id"`
 }
 
 type GetScreenSnapshotResultMessage struct {
@@ -4887,7 +4932,7 @@ type GetScreenSnapshotResultMessage struct {
 	Event string `json:"event"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID TerminalID `json:"id"`
 
 	// LastSeq corresponds to the JSON schema field "last_seq".
 	LastSeq *int `json:"last_seq,omitempty,omitzero"`
@@ -5051,7 +5096,7 @@ type HeartbeatMessage struct {
 	Cmd string `json:"cmd"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID SessionID `json:"id"`
 }
 
 type HeatState string
@@ -5068,7 +5113,7 @@ type HookCompactionMessage struct {
 	Cmd string `json:"cmd"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID TerminalID `json:"id"`
 
 	// Trigger corresponds to the JSON schema field "trigger".
 	Trigger *string `json:"trigger,omitempty,omitzero"`
@@ -5079,7 +5124,7 @@ type HookNotificationMessage struct {
 	Cmd string `json:"cmd"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID TerminalID `json:"id"`
 
 	// Message corresponds to the JSON schema field "message".
 	Message *string `json:"message,omitempty,omitzero"`
@@ -5099,7 +5144,7 @@ type HookStopFailureMessage struct {
 	ErrorType string `json:"error_type"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID TerminalID `json:"id"`
 }
 
 type InitialStateMessage struct {
@@ -5165,6 +5210,9 @@ type InitialStateMessage struct {
 
 	// SourceFingerprint corresponds to the JSON schema field "source_fingerprint".
 	SourceFingerprint *string `json:"source_fingerprint,omitempty,omitzero"`
+
+	// TerminalBindings corresponds to the JSON schema field "terminal_bindings".
+	TerminalBindings []TerminalBinding `json:"terminal_bindings,omitempty,omitzero"`
 
 	// Warnings corresponds to the JSON schema field "warnings".
 	Warnings []DaemonWarning `json:"warnings,omitempty,omitzero"`
@@ -5253,7 +5301,7 @@ type JournalAppendMessage struct {
 	Entry string `json:"entry"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type JournalAppendResult struct {
@@ -5408,7 +5456,7 @@ type KeptConversationRow struct {
 	Seeds []KeptConversationSeed `json:"seeds"`
 
 	// SessionIds corresponds to the JSON schema field "session_ids".
-	SessionIds []string `json:"session_ids"`
+	SessionIds []SessionID `json:"session_ids"`
 
 	// SourceBytes corresponds to the JSON schema field "source_bytes".
 	SourceBytes *int `json:"source_bytes,omitempty,omitzero"`
@@ -5438,7 +5486,7 @@ type KillSessionMessage struct {
 	Cmd string `json:"cmd"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID SessionID `json:"id"`
 
 	// Signal corresponds to the JSON schema field "signal".
 	Signal *string `json:"signal,omitempty,omitzero"`
@@ -5464,7 +5512,7 @@ type KittyImageResultMessage struct {
 	Height *int `json:"height,omitempty,omitzero"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID TerminalID `json:"id"`
 
 	// ImageID corresponds to the JSON schema field "image_id".
 	ImageID int `json:"image_id"`
@@ -5531,7 +5579,7 @@ type KittyPlacementsMessage struct {
 	Event string `json:"event"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID TerminalID `json:"id"`
 
 	// Placements corresponds to the JSON schema field "placements".
 	Placements []KittyPlacement `json:"placements"`
@@ -5631,7 +5679,7 @@ type LaunchDesktopSetMessage struct {
 	Setting *LaunchDesktopSetting `json:"setting,omitempty,omitzero"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type LaunchDesktopSetting struct {
@@ -6010,7 +6058,7 @@ type MarkdownAnnotationsSubmitResultMessage struct {
 	TargetSeedID *string `json:"target_seed_id,omitempty,omitzero"`
 
 	// TargetSessionID corresponds to the JSON schema field "target_session_id".
-	TargetSessionID *string `json:"target_session_id,omitempty,omitzero"`
+	TargetSessionID *SessionID `json:"target_session_id,omitempty,omitzero"`
 }
 
 type MergePRMessage struct {
@@ -6303,7 +6351,7 @@ type NotebookGuideMessage struct {
 	Cmd string `json:"cmd"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID *string `json:"session_id,omitempty,omitzero"`
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
 }
 
 type NotebookGuideResult struct {
@@ -6618,7 +6666,7 @@ type OpenBrowserMessage struct {
 	Cmd string `json:"cmd"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID *string `json:"session_id,omitempty,omitzero"`
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
 
 	// URL corresponds to the JSON schema field "url".
 	URL string `json:"url"`
@@ -6635,7 +6683,7 @@ type OpenMarkdownMessage struct {
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID *string `json:"session_id,omitempty,omitzero"`
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
 }
 
 type OpenMarkdownResultMessage struct {
@@ -6675,7 +6723,7 @@ type OpenSeedMessage struct {
 	SeedID string `json:"seed_id"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID *string `json:"session_id,omitempty,omitzero"`
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
 
 	// Standalone corresponds to the JSON schema field "standalone".
 	Standalone *bool `json:"standalone,omitempty,omitzero"`
@@ -6712,7 +6760,10 @@ type OpenSentFilesMessage struct {
 	Paths []string `json:"paths"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID *string `json:"session_id,omitempty,omitzero"`
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
+
+	// TerminalID corresponds to the JSON schema field "terminal_id".
+	TerminalID *TerminalID `json:"terminal_id,omitempty,omitzero"`
 }
 
 type PR struct {
@@ -7072,7 +7123,7 @@ type PresentOpenMessage struct {
 	PresentationID *string `json:"presentation_id,omitempty,omitzero"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID string `json:"source_session_id"`
+	SourceSessionID SessionID `json:"source_session_id"`
 }
 
 type PresentOpenResult struct {
@@ -7150,7 +7201,7 @@ type Presentation struct {
 	RepoPath string `json:"repo_path"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 
 	// Status corresponds to the JSON schema field "status".
 	Status string `json:"status"`
@@ -7380,7 +7431,7 @@ type PtyDesyncMessage struct {
 	Event string `json:"event"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID TerminalID `json:"id"`
 
 	// Reason corresponds to the JSON schema field "reason".
 	Reason string `json:"reason"`
@@ -7394,7 +7445,7 @@ type PtyInputMessage struct {
 	Data string `json:"data"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID TerminalID `json:"id"`
 
 	// ProbeID corresponds to the JSON schema field "probe_id".
 	ProbeID *string `json:"probe_id,omitempty,omitzero"`
@@ -7414,7 +7465,7 @@ type PtyInputProbeResultMessage struct {
 	Event string `json:"event"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID TerminalID `json:"id"`
 
 	// ProbeID corresponds to the JSON schema field "probe_id".
 	ProbeID string `json:"probe_id"`
@@ -7434,7 +7485,7 @@ type PtyOutputMessage struct {
 	Event string `json:"event"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID TerminalID `json:"id"`
 
 	// Seq corresponds to the JSON schema field "seq".
 	Seq int `json:"seq"`
@@ -7448,7 +7499,7 @@ type PtyResizeMessage struct {
 	Cols int `json:"cols"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID TerminalID `json:"id"`
 
 	// Rows corresponds to the JSON schema field "rows".
 	Rows int `json:"rows"`
@@ -7468,7 +7519,7 @@ type PtyResizedMessage struct {
 	Event string `json:"event"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID TerminalID `json:"id"`
 
 	// Rows corresponds to the JSON schema field "rows".
 	Rows int `json:"rows"`
@@ -7485,7 +7536,10 @@ type PullRequestCreatedMessage struct {
 	Cmd string `json:"cmd"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID SessionID `json:"id"`
+
+	// TerminalID corresponds to the JSON schema field "terminal_id".
+	TerminalID *TerminalID `json:"terminal_id,omitempty,omitzero"`
 
 	// URL corresponds to the JSON schema field "url".
 	URL string `json:"url"`
@@ -7496,7 +7550,7 @@ type PullRequestForgetMessage struct {
 	Cmd string `json:"cmd"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID SessionID `json:"id"`
 
 	// URL corresponds to the JSON schema field "url".
 	URL string `json:"url"`
@@ -7524,7 +7578,7 @@ type PullRequestUnwatchMessage struct {
 	Cmd string `json:"cmd"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID SessionID `json:"id"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
@@ -7552,7 +7606,7 @@ type PullRequestWatchMessage struct {
 	Cmd string `json:"cmd"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID SessionID `json:"id"`
 
 	// Mode corresponds to the JSON schema field "mode".
 	Mode PullRequestWatchMode `json:"mode"`
@@ -7594,7 +7648,7 @@ type QueryAuthorsMessage struct {
 
 type QueryMessage struct {
 	// CallerID corresponds to the JSON schema field "caller_id".
-	CallerID *string `json:"caller_id,omitempty,omitzero"`
+	CallerID *TerminalID `json:"caller_id,omitempty,omitzero"`
 
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -7695,6 +7749,34 @@ type RecentLocationsResultMessage struct {
 	Success bool `json:"success"`
 }
 
+type RecordCommandUsageMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// CommandID corresponds to the JSON schema field "command_id".
+	CommandID string `json:"command_id"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type RecordCommandUsageResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
 type RecordString map[string]interface{}
 
 type RefreshPRsMessage struct {
@@ -7721,7 +7803,7 @@ type ReloadSessionMessage struct {
 	Cols int `json:"cols"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID SessionID `json:"id"`
 
 	// Rows corresponds to the JSON schema field "rows".
 	Rows int `json:"rows"`
@@ -7735,7 +7817,7 @@ type ReloadSessionResultMessage struct {
 	Event string `json:"event"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID SessionID `json:"id"`
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
@@ -7768,7 +7850,7 @@ type RenameResultMessage struct {
 	Event string `json:"event"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID SessionID `json:"id"`
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
@@ -7782,7 +7864,7 @@ type RenameSessionMessage struct {
 	Label string `json:"label"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 }
 
 type RepoInfo struct {
@@ -7877,7 +7959,7 @@ type Response struct {
 	AutomodeShowResult *AutoModeShowResult `json:"automode_show_result,omitempty,omitzero"`
 
 	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
-	CallerSessionID *string `json:"caller_session_id,omitempty,omitzero"`
+	CallerSessionID *SessionID `json:"caller_session_id,omitempty,omitzero"`
 
 	// CrewCharterGetResult corresponds to the JSON schema field
 	// "crew_charter_get_result".
@@ -8144,7 +8226,7 @@ type RuntimeRespawnedMessage struct {
 	Event string `json:"event"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID TerminalID `json:"id"`
 }
 
 type Seed struct {
@@ -8170,13 +8252,13 @@ type Seed struct {
 	ID string `json:"id"`
 
 	// LastExecutionID corresponds to the JSON schema field "last_execution_id".
-	LastExecutionID *string `json:"last_execution_id,omitempty,omitzero"`
+	LastExecutionID *SessionID `json:"last_execution_id,omitempty,omitzero"`
 
 	// PlanterMember corresponds to the JSON schema field "planter_member".
 	PlanterMember string `json:"planter_member"`
 
 	// PlanterSession corresponds to the JSON schema field "planter_session".
-	PlanterSession string `json:"planter_session"`
+	PlanterSession SessionID `json:"planter_session"`
 
 	// PlotProgress corresponds to the JSON schema field "plot_progress".
 	PlotProgress *SeedPlotProgress `json:"plot_progress,omitempty,omitzero"`
@@ -8213,7 +8295,7 @@ type Seed struct {
 	TenderMember string `json:"tender_member"`
 
 	// TenderSession corresponds to the JSON schema field "tender_session".
-	TenderSession string `json:"tender_session"`
+	TenderSession SessionID `json:"tender_session"`
 
 	// Title corresponds to the JSON schema field "title".
 	Title string `json:"title"`
@@ -8276,7 +8358,7 @@ type SeedArtifactTargetMessage struct {
 	SeedID string `json:"seed_id"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedArtifactTargetResult struct {
@@ -8339,7 +8421,7 @@ type SeedArtifactTransferMessage struct {
 	SourcePath *string `json:"source_path,omitempty,omitzero"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedArtifactTransferResult struct {
@@ -8476,7 +8558,7 @@ type SeedDocumentGetMessage struct {
 	SeedID string `json:"seed_id"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedDocumentGetResultMessage struct {
@@ -8518,7 +8600,7 @@ type SeedEditMessage struct {
 	SeedID string `json:"seed_id"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedEditResult struct {
@@ -8536,7 +8618,7 @@ type SeedHandoverRequest struct {
 
 	// ExpectedTenderSession corresponds to the JSON schema field
 	// "expected_tender_session".
-	ExpectedTenderSession string `json:"expected_tender_session"`
+	ExpectedTenderSession SessionID `json:"expected_tender_session"`
 
 	// Handoff corresponds to the JSON schema field "handoff".
 	Handoff *string `json:"handoff,omitempty,omitzero"`
@@ -8565,7 +8647,7 @@ type SeedHarvestCondition struct {
 	SetByMember *string `json:"set_by_member,omitempty,omitzero"`
 
 	// SetBySession corresponds to the JSON schema field "set_by_session".
-	SetBySession *string `json:"set_by_session,omitempty,omitzero"`
+	SetBySession *SessionID `json:"set_by_session,omitempty,omitzero"`
 
 	// URL corresponds to the JSON schema field "url".
 	URL string `json:"url"`
@@ -8590,7 +8672,7 @@ type SeedLinkMessage struct {
 	SeedID string `json:"seed_id"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 
 	// ToSeedID corresponds to the JSON schema field "to_seed_id".
 	ToSeedID string `json:"to_seed_id"`
@@ -8615,7 +8697,7 @@ type SeedListMessage struct {
 	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 
 	// Stale corresponds to the JSON schema field "stale".
 	Stale *bool `json:"stale,omitempty,omitzero"`
@@ -8643,7 +8725,7 @@ type SeedNote struct {
 	AuthorMember string `json:"author_member"`
 
 	// AuthorSession corresponds to the JSON schema field "author_session".
-	AuthorSession string `json:"author_session"`
+	AuthorSession SessionID `json:"author_session"`
 
 	// Body corresponds to the JSON schema field "body".
 	Body string `json:"body"`
@@ -8690,7 +8772,7 @@ type SeedNoteMessage struct {
 	SeedID string `json:"seed_id"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedNoteResult struct {
@@ -8729,7 +8811,7 @@ type SeedNotesMessage struct {
 	SeedID string `json:"seed_id"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedNotesResult struct {
@@ -8760,7 +8842,7 @@ type SeedPlantMessage struct {
 	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 
 	// Title corresponds to the JSON schema field "title".
 	Title string `json:"title"`
@@ -8799,7 +8881,7 @@ type SeedPlotMessage struct {
 	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 
 	// Title corresponds to the JSON schema field "title".
 	Title string `json:"title"`
@@ -8850,7 +8932,7 @@ type SeedReadyMessage struct {
 	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedReadyResult struct {
@@ -8901,7 +8983,7 @@ type SeedResumeMessage struct {
 	SeedID string `json:"seed_id"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedResumeResultMessage struct {
@@ -8921,7 +9003,7 @@ type SeedResumeResultMessage struct {
 	RequestID string `json:"request_id"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID *string `json:"session_id,omitempty,omitzero"`
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
@@ -8949,7 +9031,7 @@ type SeedReviewCancelMessage struct {
 	ReviewID string `json:"review_id"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedReviewDraftMessage struct {
@@ -8969,7 +9051,7 @@ type SeedReviewDraftMessage struct {
 	SeedID string `json:"seed_id"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedReviewDraftResultMessage struct {
@@ -9006,7 +9088,7 @@ type SeedReviewKeepMessage struct {
 	SeedID string `json:"seed_id"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedReviewResult struct {
@@ -9060,7 +9142,7 @@ type SeedReviewRetryMessage struct {
 	SeedID string `json:"seed_id"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedReviewShowMessage struct {
@@ -9077,7 +9159,7 @@ type SeedReviewShowMessage struct {
 	ReviewID *string `json:"review_id,omitempty,omitzero"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedReviewStartMessage struct {
@@ -9091,7 +9173,7 @@ type SeedReviewStartMessage struct {
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedSearchHit struct {
@@ -9119,7 +9201,7 @@ type SeedSearchMessage struct {
 	Query string `json:"query"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedSearchResult struct {
@@ -9149,7 +9231,7 @@ type SeedSendToChiefMessage struct {
 
 	// ExpectedTenderSession corresponds to the JSON schema field
 	// "expected_tender_session".
-	ExpectedTenderSession string `json:"expected_tender_session"`
+	ExpectedTenderSession SessionID `json:"expected_tender_session"`
 
 	// Guidance corresponds to the JSON schema field "guidance".
 	Guidance *string `json:"guidance,omitempty,omitzero"`
@@ -9167,12 +9249,12 @@ type SeedSendToChiefMessage struct {
 	SeedID string `json:"seed_id"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedSendToChiefResult struct {
 	// ChiefSessionID corresponds to the JSON schema field "chief_session_id".
-	ChiefSessionID string `json:"chief_session_id"`
+	ChiefSessionID SessionID `json:"chief_session_id"`
 
 	// DeliveryStatus corresponds to the JSON schema field "delivery_status".
 	DeliveryStatus AgentMsgStatus `json:"delivery_status"`
@@ -9212,7 +9294,7 @@ type SeedShowMessage struct {
 	SeedID string `json:"seed_id"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedShowResult struct {
@@ -9276,7 +9358,7 @@ type SeedTransitionMessage struct {
 	SeedID string `json:"seed_id"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 
 	// Verb corresponds to the JSON schema field "verb".
 	Verb string `json:"verb"`
@@ -9344,7 +9426,7 @@ type SeedWatchMessage struct {
 	SeedID string `json:"seed_id"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID string `json:"source_session_id"`
+	SourceSessionID SessionID `json:"source_session_id"`
 
 	// Unwatch corresponds to the JSON schema field "unwatch".
 	Unwatch *bool `json:"unwatch,omitempty,omitzero"`
@@ -9413,7 +9495,7 @@ type Session struct {
 
 	// DispatcherSessionID corresponds to the JSON schema field
 	// "dispatcher_session_id".
-	DispatcherSessionID *string `json:"dispatcher_session_id,omitempty,omitzero"`
+	DispatcherSessionID *SessionID `json:"dispatcher_session_id,omitempty,omitzero"`
 
 	// EndpointID corresponds to the JSON schema field "endpoint_id".
 	EndpointID *string `json:"endpoint_id,omitempty,omitzero"`
@@ -9422,7 +9504,7 @@ type Session struct {
 	Hidden *bool `json:"hidden,omitempty,omitzero"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID SessionID `json:"id"`
 
 	// IsWorktree corresponds to the JSON schema field "is_worktree".
 	IsWorktree *bool `json:"is_worktree,omitempty,omitzero"`
@@ -9441,7 +9523,10 @@ type Session struct {
 	MainRepo *string `json:"main_repo,omitempty,omitzero"`
 
 	// ParentSessionID corresponds to the JSON schema field "parent_session_id".
-	ParentSessionID *string `json:"parent_session_id,omitempty,omitzero"`
+	ParentSessionID *SessionID `json:"parent_session_id,omitempty,omitzero"`
+
+	// Priority corresponds to the JSON schema field "priority".
+	Priority *bool `json:"priority,omitempty,omitzero"`
 
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID string `json:"profile_id"`
@@ -9468,7 +9553,7 @@ type Session struct {
 	StateUpdatedAt string `json:"state_updated_at"`
 
 	// Succeeds corresponds to the JSON schema field "succeeds".
-	Succeeds *string `json:"succeeds,omitempty,omitzero"`
+	Succeeds *SessionID `json:"succeeds,omitempty,omitzero"`
 
 	// TerminalBuildStale corresponds to the JSON schema field "terminal_build_stale".
 	TerminalBuildStale *bool `json:"terminal_build_stale,omitempty,omitzero"`
@@ -9523,7 +9608,7 @@ type SessionAnnotationsClearMessage struct {
 	RequestID string `json:"request_id"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 }
 
 type SessionAnnotationsClearResultMessage struct {
@@ -9540,7 +9625,7 @@ type SessionAnnotationsClearResultMessage struct {
 	RequestID string `json:"request_id"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
@@ -9554,7 +9639,7 @@ type SessionAnnotationsGetMessage struct {
 	RequestID string `json:"request_id"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 }
 
 type SessionAnnotationsGetResultMessage struct {
@@ -9577,7 +9662,7 @@ type SessionAnnotationsGetResultMessage struct {
 	RequestID string `json:"request_id"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
@@ -9600,7 +9685,7 @@ type SessionAnnotationsSaveMessage struct {
 	RequestID string `json:"request_id"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 }
 
 type SessionAnnotationsSaveResultMessage struct {
@@ -9617,7 +9702,7 @@ type SessionAnnotationsSaveResultMessage struct {
 	RequestID string `json:"request_id"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 
 	// Stale corresponds to the JSON schema field "stale".
 	Stale *bool `json:"stale,omitempty,omitzero"`
@@ -9634,7 +9719,7 @@ type SessionAnnotationsSubmitMessage struct {
 	RequestID string `json:"request_id"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 
 	// Text corresponds to the JSON schema field "text".
 	Text string `json:"text"`
@@ -9651,7 +9736,7 @@ type SessionAnnotationsSubmitResultMessage struct {
 	RequestID string `json:"request_id"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 
 	// Status corresponds to the JSON schema field "status".
 	Status string `json:"status"`
@@ -9671,7 +9756,7 @@ type SessionCloseResultMessage struct {
 	Event string `json:"event"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 }
 
 type SessionClosedMessage struct {
@@ -9693,7 +9778,7 @@ type SessionContextWindowCapResultMessage struct {
 	Event string `json:"event"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
@@ -9718,14 +9803,16 @@ type SessionExitedMessage struct {
 	ExitCode int `json:"exit_code"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID TerminalID `json:"id"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 
 	// Signal corresponds to the JSON schema field "signal".
 	Signal *string `json:"signal,omitempty,omitzero"`
 }
+
+type SessionID string
 
 type SessionInstructionsMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
@@ -9752,7 +9839,7 @@ type SessionInstructionsResult struct {
 	ReasoningEffort string `json:"reasoning_effort"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 
 	// TranscriptFingerprint corresponds to the JSON schema field
 	// "transcript_fingerprint".
@@ -9789,7 +9876,7 @@ type SessionLedgerEntry struct {
 	Hidden *bool `json:"hidden,omitempty,omitzero"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID SessionID `json:"id"`
 
 	// IsWorktree corresponds to the JSON schema field "is_worktree".
 	IsWorktree *bool `json:"is_worktree,omitempty,omitzero"`
@@ -9802,6 +9889,9 @@ type SessionLedgerEntry struct {
 
 	// MainRepo corresponds to the JSON schema field "main_repo".
 	MainRepo *string `json:"main_repo,omitempty,omitzero"`
+
+	// Priority corresponds to the JSON schema field "priority".
+	Priority *bool `json:"priority,omitempty,omitzero"`
 
 	// ProfileDeleted corresponds to the JSON schema field "profile_deleted".
 	ProfileDeleted *bool `json:"profile_deleted,omitempty,omitzero"`
@@ -9940,7 +10030,7 @@ type SessionMessagesChangedMessage struct {
 	Event string `json:"event"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 }
 
 type SessionMessagesGetMessage struct {
@@ -9951,7 +10041,7 @@ type SessionMessagesGetMessage struct {
 	RequestID string `json:"request_id"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 }
 
 type SessionMessagesGetResultMessage struct {
@@ -9971,7 +10061,7 @@ type SessionMessagesGetResultMessage struct {
 	RequestID string `json:"request_id"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 
 	// Status corresponds to the JSON schema field "status".
 	Status SessionMessageWindowStatus `json:"status"`
@@ -10102,7 +10192,7 @@ type SessionReopenEntry struct {
 	Reopen SessionReopen `json:"reopen"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 }
 
 type SessionReopenMessage struct {
@@ -10119,7 +10209,7 @@ type SessionReopenMessage struct {
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 }
 
 type SessionReopenResult struct {
@@ -10136,7 +10226,7 @@ type SessionReopenResult struct {
 	ProfileID string `json:"profile_id"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 
 	// WorktreeCreated corresponds to the JSON schema field "worktree_created".
 	WorktreeCreated *string `json:"worktree_created,omitempty,omitzero"`
@@ -10170,7 +10260,7 @@ type SessionShowMessage struct {
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 }
 
 type SessionShowResult struct {
@@ -10265,7 +10355,7 @@ type SessionTranscriptResult struct {
 	NextCursor string `json:"next_cursor"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 }
 
 type SessionUnregisteredMessage struct {
@@ -10351,7 +10441,7 @@ type SetChiefOfStaffMessage struct {
 	Cmd string `json:"cmd"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 }
 
 type SetClientPresenceMessage struct {
@@ -10398,7 +10488,18 @@ type SetSessionContextWindowCapMessage struct {
 	Cmd string `json:"cmd"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
+}
+
+type SetSessionPriorityMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Priority corresponds to the JSON schema field "priority".
+	Priority bool `json:"priority"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
 }
 
 type SetSessionResumeIDMessage struct {
@@ -10406,7 +10507,7 @@ type SetSessionResumeIDMessage struct {
 	Cmd string `json:"cmd"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID TerminalID `json:"id"`
 
 	// ResumeSessionID corresponds to the JSON schema field "resume_session_id".
 	ResumeSessionID string `json:"resume_session_id"`
@@ -10471,7 +10572,7 @@ type SettleTurnMessage struct {
 	Cmd string `json:"cmd"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 }
 
 type SnoozeTurnMessage struct {
@@ -10479,7 +10580,7 @@ type SnoozeTurnMessage struct {
 	Cmd string `json:"cmd"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 
 	// Until corresponds to the JSON schema field "until".
 	Until string `json:"until"`
@@ -10496,7 +10597,7 @@ type SpawnResultMessage struct {
 	Event string `json:"event"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID SessionID `json:"id"`
 
 	// PaneID corresponds to the JSON schema field "pane_id".
 	PaneID *string `json:"pane_id,omitempty,omitzero"`
@@ -10546,7 +10647,7 @@ type SpawnSessionMessage struct {
 	Executable *string `json:"executable,omitempty,omitzero"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID SessionID `json:"id"`
 
 	// InitialPrompt corresponds to the JSON schema field "initial_prompt".
 	InitialPrompt *string `json:"initial_prompt,omitempty,omitzero"`
@@ -10559,6 +10660,9 @@ type SpawnSessionMessage struct {
 
 	// Placement corresponds to the JSON schema field "placement".
 	Placement *SessionPlacement `json:"placement,omitempty,omitzero"`
+
+	// Priority corresponds to the JSON schema field "priority".
+	Priority *bool `json:"priority,omitempty,omitzero"`
 
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID string `json:"profile_id"`
@@ -10576,7 +10680,7 @@ type SpawnSessionMessage struct {
 	SandboxMode *string `json:"sandbox_mode,omitempty,omitzero"`
 
 	// SpawnedFrom corresponds to the JSON schema field "spawned_from".
-	SpawnedFrom *string `json:"spawned_from,omitempty,omitzero"`
+	SpawnedFrom *SessionID `json:"spawned_from,omitempty,omitzero"`
 
 	// YoloMode corresponds to the JSON schema field "yolo_mode".
 	YoloMode *bool `json:"yolo_mode,omitempty,omitzero"`
@@ -10634,7 +10738,7 @@ type StateExplainResult struct {
 	Observations []StateExplainEntry `json:"observations"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 
 	// State corresponds to the JSON schema field "state".
 	State string `json:"state"`
@@ -10651,7 +10755,7 @@ type StateMessage struct {
 	HookEvent *string `json:"hook_event,omitempty,omitzero"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID TerminalID `json:"id"`
 
 	// PermissionMode corresponds to the JSON schema field "permission_mode".
 	PermissionMode *string `json:"permission_mode,omitempty,omitzero"`
@@ -10682,7 +10786,7 @@ type StopMessage struct {
 	Cmd string `json:"cmd"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID TerminalID `json:"id"`
 
 	// PendingSessionCrons corresponds to the JSON schema field
 	// "pending_session_crons".
@@ -10728,7 +10832,7 @@ type SupportInputTrace struct {
 	ReceivedAtUnixMs int `json:"received_at_unix_ms"`
 
 	// RuntimeID corresponds to the JSON schema field "runtime_id".
-	RuntimeID string `json:"runtime_id"`
+	RuntimeID TerminalID `json:"runtime_id"`
 
 	// Sequence corresponds to the JSON schema field "sequence".
 	Sequence int `json:"sequence"`
@@ -10772,7 +10876,7 @@ type SupportRuntimeEvidence struct {
 	Running *bool `json:"running,omitempty,omitzero"`
 
 	// RuntimeID corresponds to the JSON schema field "runtime_id".
-	RuntimeID string `json:"runtime_id"`
+	RuntimeID TerminalID `json:"runtime_id"`
 
 	// State corresponds to the JSON schema field "state".
 	State *string `json:"state,omitempty,omitzero"`
@@ -10795,7 +10899,7 @@ type SupportSnapshotMessage struct {
 	RequestID string `json:"request_id"`
 
 	// RuntimeIds corresponds to the JSON schema field "runtime_ids".
-	RuntimeIds []string `json:"runtime_ids,omitempty,omitzero"`
+	RuntimeIds []TerminalID `json:"runtime_ids,omitempty,omitzero"`
 }
 
 type SupportSnapshotResultMessage struct {
@@ -10930,12 +11034,30 @@ type TasksChangedMessage struct {
 	Event string `json:"event"`
 }
 
+type TerminalBinding struct {
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+
+	// TerminalID corresponds to the JSON schema field "terminal_id".
+	TerminalID TerminalID `json:"terminal_id"`
+}
+
+type TerminalBindingsUpdatedMessage struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// TerminalBindings corresponds to the JSON schema field "terminal_bindings".
+	TerminalBindings []TerminalBinding `json:"terminal_bindings"`
+}
+
+type TerminalID string
+
 type TerminalPointerActivityMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID TerminalID `json:"id"`
 }
 
 type UninstallPluginMessage struct {
@@ -10957,7 +11079,7 @@ type UnregisterMessage struct {
 	Cmd string `json:"cmd"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID SessionID `json:"id"`
 }
 
 type UnsubscribeGitStatusMessage struct {
@@ -10990,7 +11112,7 @@ type WakeTurnMessage struct {
 	Cmd string `json:"cmd"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
+	SessionID SessionID `json:"session_id"`
 }
 
 type WebSocketEvent struct {
@@ -11089,7 +11211,7 @@ type WebSocketEvent struct {
 	Plugins []PluginInfo `json:"plugins,omitempty,omitzero"`
 
 	// PreviousSessionID corresponds to the JSON schema field "previous_session_id".
-	PreviousSessionID *string `json:"previous_session_id,omitempty,omitzero"`
+	PreviousSessionID *SessionID `json:"previous_session_id,omitempty,omitzero"`
 
 	// Priority corresponds to the JSON schema field "priority".
 	Priority *int `json:"priority,omitempty,omitzero"`
@@ -11128,7 +11250,7 @@ type WebSocketEvent struct {
 	Running *bool `json:"running,omitempty,omitzero"`
 
 	// RuntimeID corresponds to the JSON schema field "runtime_id".
-	RuntimeID *string `json:"runtime_id,omitempty,omitzero"`
+	RuntimeID *TerminalID `json:"runtime_id,omitempty,omitzero"`
 
 	// ScreenCols corresponds to the JSON schema field "screen_cols".
 	ScreenCols *int `json:"screen_cols,omitempty,omitzero"`
@@ -11153,7 +11275,7 @@ type WebSocketEvent struct {
 	Session *Session `json:"session,omitempty,omitzero"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID *string `json:"session_id,omitempty,omitzero"`
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
 
 	// SessionLedgerEntry corresponds to the JSON schema field "session_ledger_entry".
 	SessionLedgerEntry *SessionLedgerEntry `json:"session_ledger_entry,omitempty,omitzero"`
@@ -11349,7 +11471,7 @@ type WorkflowRun struct {
 	ScriptPath string `json:"script_path"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID *string `json:"session_id,omitempty,omitzero"`
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
 
 	// Status corresponds to the JSON schema field "status".
 	Status WorkflowRunStatus `json:"status"`
@@ -11379,7 +11501,7 @@ type WorkflowRunListMessage struct {
 	Cmd string `json:"cmd"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID *string `json:"session_id,omitempty,omitzero"`
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
 }
 
 type WorkflowRunStatus string

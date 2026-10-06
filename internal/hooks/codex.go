@@ -29,10 +29,10 @@ func ParseCodexThreadCaller(id string) (profile, conversation string, ok bool) {
 	return rest[:i], rest[i+1:], true
 }
 
-func GenerateCodexConfigOverrides(sessionID, socketPath, wrapperPath string, launch Launch) []string {
+func GenerateCodexConfigOverrides(terminalID, socketPath, wrapperPath string, launch Launch) []string {
 	wrapper := hookWrapper(wrapperPath)
 	overrides := []string{
-		"shell_environment_policy.set.ATTN_SESSION_ID=" + strconv.Quote(strings.TrimSpace(sessionID)),
+		"shell_environment_policy.set.ATTN_TERMINAL_ID=" + strconv.Quote(strings.TrimSpace(terminalID)),
 		"shell_environment_policy.set.ATTN_WRAPPER_PATH=" + strconv.Quote(wrapper),
 	}
 	overrides = append(overrides, codexHookOverrides(codexHookCommand(wrapper, ""))...)

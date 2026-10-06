@@ -38,12 +38,12 @@ func TestASessionRespawnedWithAPromptOpensItsTurnOnlyAtTheVerdict(t *testing.T) 
 			testworld.AwaitSession(app, session, func(s protocol.Session) bool {
 				return protocol.Deref(s.StateReason) == "process_exited"
 			})
-			app.Send(protocol.SettleTurnMessage{Cmd: protocol.CmdSettleTurn, SessionID: session})
+			app.Send(protocol.SettleTurnMessage{Cmd: protocol.CmdSettleTurn, SessionID: protocol.SessionID(session)})
 			testworld.AwaitSession(app, session, func(s protocol.Session) bool { return !protocol.Deref(s.TurnOwed) })
 			respawnedAt := len(sessionUpdatesOf(app, session))
 
 			w.Spawn(app, h, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
-				m.ID = session
+				m.ID = protocol.SessionID(session)
 				m.InitialPrompt = protocol.Ptr("list the checkout tests")
 			})
 			run := w.Launched(session)
@@ -72,7 +72,7 @@ func TestInputTheUserTypesOverNoLongerHoldsABootingSessionOutOfIdle(t *testing.T
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	app.AwaitScreen(session, "? for shortcuts")
 	annotate(app, session, "the cart total is off by one")
-	testworld.Request(app, protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: app.Terminal(session), Data: "actually", ProbeID: protocol.Ptr("takeover")},
+	testworld.Request(app, protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(app.Terminal(session)), Data: "actually", ProbeID: protocol.Ptr("takeover")},
 		protocol.EventPtyInputProbeResult, func(r protocol.PtyInputProbeResultMessage) bool { return r.ProbeID == "takeover" })
 
 	boot()
@@ -90,7 +90,7 @@ func TestTheNextTurnSettlesOnItsOwnVerdict(t *testing.T) {
 	})
 	run := w.Launched(session)
 	workUntilTheVerdict(t, app, session, run, "rename the checkout module", protocol.SessionStateWaitingInput, 0)
-	app.Send(protocol.SettleTurnMessage{Cmd: protocol.CmdSettleTurn, SessionID: session})
+	app.Send(protocol.SettleTurnMessage{Cmd: protocol.CmdSettleTurn, SessionID: protocol.SessionID(session)})
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return !protocol.Deref(s.TurnOwed) })
 	answeredAt := len(sessionUpdatesOf(app, session))
 
@@ -139,7 +139,7 @@ func annotate(p *testworld.Peer, session, text string) {
 	result := testworld.Request(p, protocol.SessionAnnotationsSubmitMessage{
 		Cmd:       protocol.CmdSessionAnnotationsSubmit,
 		RequestID: requestID,
-		SessionID: session,
+		SessionID: protocol.SessionID(session),
 		Text:      text,
 	}, protocol.EventSessionAnnotationsSubmitResult, func(r protocol.SessionAnnotationsSubmitResultMessage) bool {
 		return r.RequestID == requestID
@@ -152,7 +152,7 @@ func annotate(p *testworld.Peer, session, text string) {
 func sessionUpdatesOf(p *testworld.Peer, id string) []protocol.Session {
 	var updates []protocol.Session
 	for _, e := range p.Received() {
-		if e.Session != nil && e.Session.ID == id {
+		if e.Session != nil && string(e.Session.ID) == id {
 			updates = append(updates, *e.Session)
 		}
 	}

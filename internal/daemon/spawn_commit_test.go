@@ -20,7 +20,7 @@ func newSpawnCommitTestDaemon(t *testing.T) (*Daemon, *fakeSpawnBackend, string)
 func spawnCommitMessage(id, profileID, cwd string) *protocol.SpawnSessionMessage {
 	return &protocol.SpawnSessionMessage{
 		Cmd:       protocol.CmdSpawnSession,
-		ID:        id,
+		ID:        protocol.SessionID(id),
 		Cwd:       cwd,
 		Agent:     protocol.AgentShellValue,
 		ProfileID: profileID,
@@ -48,7 +48,7 @@ func TestSpawnCommitPreservesExistingEndpointID(t *testing.T) {
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
 		ID:             msg.ID,
-		Label:          msg.ID,
+		Label:          string(msg.ID),
 		Agent:          protocol.SessionAgentShell,
 		Directory:      cwd,
 		ProfileID:      msg.ProfileID,

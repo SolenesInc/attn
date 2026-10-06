@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 func TestRecorderPersistsPrivateDeduplicatedObservations(t *testing.T) {
@@ -106,7 +108,7 @@ func TestRecorderSegmentsActiveHourToKeepTotalUnderCap(t *testing.T) {
 		saved, err := recorder.Record(Observation{
 			CapturedAt:    start.Add(time.Duration(index) * time.Second),
 			CaptureReason: "initial",
-			SessionID:     sessionID,
+			SessionID:     protocol.SessionID(sessionID),
 			Agent:         "claude",
 			DaemonState:   "waiting_input",
 			ViewportText:  strings.Repeat(sessionID, 100),

@@ -21,10 +21,10 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 	}
 	for _, body := range []string{"", " Brief λ {{literal}}\nnext line "} {
 		for _, seed := range []string{"", "s-example"} {
-			out["delegation/"+body+"/"+seed] = prompts.RenderText("delegation", "opening", prompts.Values{"seed_id": seed})
+			out["delegation/"+body+"/"+seed] = prompts.RenderText("delegation", "opening", prompts.Values{"seed_id": seed, "seed_title": "Review the queue change"})
 			for _, review := range []bool{false, true} {
 				for _, pr := range []*automation.PullRequestInput{nil, {Number: 12, URL: "https://example.org/review/12", HeadSHA: "abc"}} {
-					out[fmt.Sprintf("automation/%s/%s/%t/%t", body, seed, review, pr != nil)] = automationSessionPrompt(body, "/tmp/input", seed, "Daily \"review\"", pr, review)
+					out[fmt.Sprintf("automation/%s/%s/%t/%t", body, seed, review, pr != nil)] = automationSessionPrompt(body, "/tmp/input", seed, "Review the queue change", "Daily \"review\"", pr, review)
 				}
 			}
 		}
@@ -67,7 +67,7 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 	out["chief/assignment"] = chiefSeedAssignmentPrompt("s-example")
 	for _, body := range []string{"", " Task λ {{literal}} "} {
 		for _, handoff := range []string{"", " Next {{literal}} "} {
-			out["handover/"+body+"/"+handoff] = prompts.RenderText("delegation", "handover", prompts.Values{"seed_id": "s-example"})
+			out["handover/"+body+"/"+handoff] = prompts.RenderText("delegation", "handover", prompts.Values{"seed_id": "s-example", "seed_title": "Review the queue change"})
 		}
 	}
 	out["garden-update"] = mailboxItemContent(store.InboxDelivery{Item: store.InboxItem{Item: inbox.Item{Kind: inbox.SeedUpdate, Source: "s-example", Hint: "note"}}})

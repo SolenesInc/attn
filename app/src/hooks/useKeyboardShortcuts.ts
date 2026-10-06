@@ -13,6 +13,7 @@ interface KeyboardShortcutsConfig {
   onNextRun: () => void;
   /** Undefined while the queue arrangement is off; the keystroke is then unbound. */
   onSettleTurn?: () => void;
+  onPriority?: () => void;
   onSnoozeTurn?: () => void;
   onCancelCountdown?: () => void;
   onSwitchToDesktopSlot: (slot: number) => void;
@@ -54,6 +55,7 @@ export function useKeyboardShortcuts({
   onJumpToWaiting,
   onNextRun,
   onSettleTurn,
+  onPriority,
   onSnoozeTurn,
   onCancelCountdown,
   onSwitchToDesktopSlot,
@@ -102,6 +104,7 @@ export function useKeyboardShortcuts({
   useShortcut('session.nextRun', onNextRun, enabled);
   useShortcut('sidebar.agentList', onShowAgentList, enabled);
   useShortcut('session.settle', onSettleTurn ?? (() => {}), enabled && !!onSettleTurn);
+  useShortcut('session.priority', onPriority ?? (() => {}), enabled && !!onPriority);
   useShortcut('session.snooze', onSnoozeTurn ?? (() => {}), enabled && !!onSnoozeTurn);
   // Delivered by a native menu item, not the page's keydown listener: AppKit eats
   // ⌘. before the WebView sees it.

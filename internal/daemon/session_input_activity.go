@@ -5,9 +5,10 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (d *Daemon) noteUserInput(terminal harness.TerminalID, sessionID, source string, data []byte) bool {
+func (d *Daemon) noteUserInput(terminal harness.TerminalID, sessionID protocol.SessionID, source string, data []byte) bool {
 	if sessionID == "" || !isComposerKeystroke(source, data) {
 		return false
 	}
@@ -15,7 +16,7 @@ func (d *Daemon) noteUserInput(terminal harness.TerminalID, sessionID, source st
 	previous, placed := d.terminals().noteKey(terminal, now)
 	d.lastInputMu.Lock()
 	if d.lastAutoSettleActivityAt == nil {
-		d.lastAutoSettleActivityAt = make(map[string]time.Time)
+		d.lastAutoSettleActivityAt = make(map[protocol.SessionID]time.Time)
 	}
 	d.lastAutoSettleActivityAt[sessionID] = now
 	d.lastInputMu.Unlock()
@@ -25,26 +26,26 @@ func (d *Daemon) noteUserInput(terminal harness.TerminalID, sessionID, source st
 	return true
 }
 
-func (d *Daemon) noteAutoSettleActivity(sessionID string) bool {
+func (d *Daemon) noteAutoSettleActivity(sessionID protocol.SessionID) bool {
 	if sessionID == "" {
 		return false
 	}
 	d.lastInputMu.Lock()
 	if d.lastAutoSettleActivityAt == nil {
-		d.lastAutoSettleActivityAt = make(map[string]time.Time)
+		d.lastAutoSettleActivityAt = make(map[protocol.SessionID]time.Time)
 	}
 	d.lastAutoSettleActivityAt[sessionID] = time.Now()
 	d.lastInputMu.Unlock()
 	return true
 }
 
-func (d *Daemon) forgetUserInput(sessionID string) {
-	for _, terminal := range d.terminals().Of(harness.SessionID(sessionID)) {
+func (d *Daemon) forgetUserInput(sessionID protocol.SessionID) {
+	for _, terminal := range d.terminals().Of(sessionID) {
 		d.terminals().forgetKey(terminal)
 	}
 }
 
-func (d *Daemon) userInputQuietRemaining(sessionID string, within time.Duration) time.Duration {
+func (d *Daemon) userInputQuietRemaining(sessionID protocol.SessionID, within time.Duration) time.Duration {
 	return quietRemaining(d.terminals().lastKeyOf(d.primaryTerminal(sessionID)), within)
 }
 
@@ -59,13 +60,13 @@ func quietRemaining(last time.Time, within time.Duration) time.Duration {
 	return remaining
 }
 
-func (d *Daemon) autoSettleActivityQuietRemaining(sessionID string, within time.Duration) time.Duration {
+func (d *Daemon) autoSettleActivityQuietRemaining(sessionID protocol.SessionID, within time.Duration) time.Duration {
 	d.lastInputMu.Lock()
 	defer d.lastInputMu.Unlock()
 	return d.autoSettleActivityQuietRemainingLocked(sessionID, within)
 }
 
-func (d *Daemon) autoSettleActivityQuietRemainingLocked(sessionID string, within time.Duration) time.Duration {
+func (d *Daemon) autoSettleActivityQuietRemainingLocked(sessionID protocol.SessionID, within time.Duration) time.Duration {
 	last, ok := d.lastAutoSettleActivityAt[sessionID]
 	if !ok {
 		return 0
@@ -77,7 +78,7 @@ func (d *Daemon) autoSettleActivityQuietRemainingLocked(sessionID string, within
 	return remaining
 }
 
-func (d *Daemon) settleIfAutoSettleQuiet(sessionID string, within time.Duration) (quiet time.Duration, settled bool) {
+func (d *Daemon) settleIfAutoSettleQuiet(sessionID protocol.SessionID, within time.Duration) (quiet time.Duration, settled bool) {
 	d.lastInputMu.Lock()
 	defer d.lastInputMu.Unlock()
 	if remaining := d.autoSettleActivityQuietRemainingLocked(sessionID, within); remaining > 0 {

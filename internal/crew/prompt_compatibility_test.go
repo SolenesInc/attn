@@ -1,10 +1,11 @@
 package crew
 
 import (
-	"github.com/victorarias/attn/internal/prompttest"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/victorarias/attn/internal/prompttest"
 )
 
 func TestLegacyPromptCompatibility(t *testing.T) {

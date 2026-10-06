@@ -27,7 +27,7 @@ func (d *Daemon) handleSessionInstructions(conn net.Conn, msg *protocol.SessionI
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), sessionInstructionsTimeout)
 	defer cancel()
-	result, err := service.Ask(ctx, sessioninstructions.Request{TargetSessionID: msg.TargetSessionID, Question: msg.Question})
+	result, err := service.Ask(ctx, sessioninstructions.Request{TargetSessionID: protocol.SessionID(msg.TargetSessionID), Question: msg.Question})
 	if err != nil {
 		var sessionErr *sessioninstructions.Error
 		if errors.As(err, &sessionErr) {

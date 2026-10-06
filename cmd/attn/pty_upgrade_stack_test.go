@@ -41,12 +41,13 @@ func TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations(t *testing.T) {
 	script := `#!/bin/sh
 set -eu
 stty -echo
-transcript="$ATTN_TOOL_HOME/.codex/sessions/native-$ATTN_SESSION_ID.jsonl"
+terminal_id="${ATTN_TERMINAL_ID:-${ATTN_SESSION_ID:-}}"
+transcript="$ATTN_TOOL_HOME/.codex/sessions/native-$terminal_id.jsonl"
 mkdir -p "$ATTN_TOOL_HOME/.codex/sessions"
-printf '{"type":"session_meta","payload":{"id":"native-%s","cwd":"%s"}}\n' "$ATTN_SESSION_ID" "$PWD" > "$transcript"
-printf '{"session_id":"native-%s","transcript_path":"%s"}' "$ATTN_SESSION_ID" "$transcript" | "$ATTN_WRAPPER_PATH" _hook-session-start
+printf '{"type":"session_meta","payload":{"id":"native-%s","cwd":"%s"}}\n' "$terminal_id" "$PWD" > "$transcript"
+printf '{"session_id":"native-%s","transcript_path":"%s"}' "$terminal_id" "$transcript" | "$ATTN_WRAPPER_PATH" _hook-session-start
 while IFS= read -r line; do
-  printf '__ACK_%s_%s_%s__\n' "$ATTN_SESSION_ID" "$line" "$$"
+  printf '__ACK_%s_%s_%s__\n' "$terminal_id" "$line" "$$"
   previous=''; resume=''
   for arg in "$@"; do
     if [ "$previous" = resume ]; then resume="$arg"; fi
@@ -436,7 +437,7 @@ func (d *upgradeDaemon) read(ctx context.Context) (map[string]any, string, []byt
 		if err != nil {
 			d.t.Fatal(err)
 		}
-		return nil, id, output
+		return nil, string(id), output
 	}
 	var event map[string]any
 	if err := json.Unmarshal(data, &event); err != nil {
@@ -588,8 +589,8 @@ func (d *upgradeDaemon) placedTerminal(id string) string {
 			_ = json.Unmarshal(data, &arrangement)
 			for _, desktop := range arrangement.Desktops {
 				for _, pane := range desktop.Panes {
-					if pane.SessionID == id && pane.RuntimeID != "" {
-						terminal = pane.RuntimeID
+					if string(pane.SessionID) == id && pane.RuntimeID != "" {
+						terminal = string(pane.RuntimeID)
 					}
 				}
 			}

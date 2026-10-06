@@ -84,12 +84,12 @@ func TestANewDesktopChoiceExistsAtOnceAndItemsChoosingItShareIt(t *testing.T) {
 		t.Fatalf("shared choice: %+v", shared)
 	}
 	for _, member := range []string{"trellis", "alder"} {
-		day, err := cli.CrewWake(member, "", caller)
+		day, err := cli.CrewWake(member, "", protocol.SessionID(caller))
 		if err != nil {
 			t.Fatal(err)
 		}
-		w.Launched(day.SessionID)
-		assertBackgroundPlacement(t, w, profile, day.SessionID, slot5, current, active)
+		w.Launched(string(day.SessionID))
+		assertBackgroundPlacement(t, w, profile, string(day.SessionID), slot5, current, active)
 		arrival := testworld.Await(app, protocol.EventBackgroundLaunch, func(r protocol.BackgroundLaunchMessage) bool { return r.SessionID == day.SessionID })
 		if arrival.Name != member || arrival.DesktopLabel != "5 · Review" || arrival.RequestedBy == "" {
 			t.Fatalf("arrival: %+v", arrival)
@@ -153,8 +153,8 @@ func TestANewAutomationStartsOnItsOwnNamedDesktopWithoutTakingFocus(t *testing.T
 		t.Fatal(err)
 	}
 	session := protocol.Deref(run.Run.SessionID)
-	w.Launched(session)
-	assertBackgroundPlacement(t, w, profile, session, own, current, active)
+	w.Launched(string(session))
+	assertBackgroundPlacement(t, w, profile, string(session), own, current, active)
 	arrival := testworld.Await(app, protocol.EventBackgroundLaunch, func(event protocol.BackgroundLaunchMessage) bool { return event.SessionID == session })
 	if arrival.Name != "Nightly check" || arrival.RequestedBy != "automation" || arrival.DesktopLabel != "Nightly check (no ⌘ number)" {
 		t.Fatalf("automation arrival: %+v", arrival)
@@ -263,8 +263,8 @@ func TestUpgradingAnInstallWithOnlyAutomationsRequiresLaunchReviewAndPlacesExist
 		t.Fatal(err)
 	}
 	during := protocol.Deref(run.Run.SessionID)
-	w.Launched(during)
-	assertBackgroundPlacement(t, w, profileID, during, current.ID, current.ID, active)
+	w.Launched(string(during))
+	assertBackgroundPlacement(t, w, profileID, string(during), current.ID, current.ID, active)
 	finished := testworld.Request(app, protocol.MigrationFinishMessage{Cmd: protocol.CmdMigrationFinish, RequestID: "finish", ExpectedRevision: result.State.Revision}, protocol.EventMigrationResult, func(r protocol.MigrationResultMessage) bool { return r.RequestID == "finish" })
 	if !finished.Success || finished.State.Phase != protocol.MigrationPhaseComplete {
 		t.Fatalf("accept suggestions = %+v", finished)
@@ -296,7 +296,7 @@ func TestReopenReturnsToItsNumberedDesktopEvenAfterItWasRemoved(t *testing.T) {
 	targetAnchor := w.Spawn(app, fakeagent.Codex, w.Path("target-anchor"))
 	w.Launched(targetAnchor)
 	switchDesktop(app, profile, current.ID)
-	if _, err := cli.MoveSessionToDesktop(session, session, target.ID); err != nil {
+	if _, err := cli.MoveSessionToDesktop(protocol.SessionID(session), protocol.SessionID(session), target.ID); err != nil {
 		t.Fatal(err)
 	}
 	closeSession(t, cli, session, "done")
@@ -304,7 +304,7 @@ func TestReopenReturnsToItsNumberedDesktopEvenAfterItWasRemoved(t *testing.T) {
 	closeSession(t, cli, targetAnchor, "empty the desktop")
 	awaitClosed(app, targetAnchor)
 	awaitDesktopRemoved(t, w, profile, target.ID)
-	if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: session}); err != nil {
+	if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: protocol.SessionID(session)}); err != nil {
 		t.Fatal(err)
 	}
 	w.Launched(session)
@@ -388,7 +388,7 @@ func TestALaunchWhoseDesktopWasRemovedLandsOnTheCurrentDesktopWithoutFocus(t *te
 		if result := testworld.Await(app, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return r.ID == request.ID }); !result.Success {
 			t.Fatalf("a launch whose desktop vanished = %+v", result)
 		}
-		assertBackgroundPlacement(t, w, profile, request.ID, current.ID, current.ID, active)
+		assertBackgroundPlacement(t, w, profile, string(request.ID), current.ID, current.ID, active)
 
 		driver.mu.Lock()
 		driver.holdLaunch = false

@@ -38,7 +38,7 @@ func TestSessionUsageCountsEveryMessageOnceAcrossARestart(t *testing.T) {
 	}
 
 	w.Spawn(app, fakeagent.Claude, cwd, func(m *protocol.SpawnSessionMessage) {
-		m.ID = session
+		m.ID = protocol.SessionID(session)
 		m.ResumeSessionID = protocol.Ptr(session)
 	})
 	resumed := w.Launched(session)

@@ -23,7 +23,11 @@ type sessionPullRequestFact struct {
 }
 
 func (d *Daemon) handlePullRequestCreated(conn net.Conn, msg *protocol.PullRequestCreatedMessage) {
-	rec, err := d.sessionPullRequestIdentity(msg.ID, msg.URL)
+	sessionID := msg.ID
+	if msg.TerminalID != nil {
+		sessionID = d.sessionInTerminal(*msg.TerminalID)
+	}
+	rec, err := d.sessionPullRequestIdentity(sessionID, msg.URL)
 	if err != nil {
 		d.sendError(conn, err.Error())
 		return
@@ -155,10 +159,10 @@ func (d *Daemon) watchSessionPullRequest(rec store.SessionPullRequestRecord, mod
 	}
 	if changed {
 		d.kickInboxAfterCommit(address)
-		d.publishSessionPullRequestMembershipChanged(rec.PRID, rec.SessionID)
+		d.publishSessionPullRequestMembershipChanged(rec.PRID, string(rec.SessionID))
 		d.schedulePullRequestRefreshNow(rec.SessionID, rec.PRID)
 	} else if recorded {
-		d.publishFact(FactSessionPullRequestChanged, rec.SessionID, sessionPullRequestFact{PRID: rec.PRID})
+		d.publishFact(FactSessionPullRequestChanged, string(rec.SessionID), sessionPullRequestFact{PRID: rec.PRID})
 	}
 	return nil
 }
@@ -177,7 +181,7 @@ func (d *Daemon) unwatchSessionPullRequest(rec store.SessionPullRequestRecord) e
 		return fmt.Errorf("session %s is not watching pull request %s", rec.SessionID, rec.PRID)
 	}
 	d.kickInboxAfterCommit(addresses...)
-	d.publishSessionPullRequestMembershipChanged(rec.PRID, rec.SessionID)
+	d.publishSessionPullRequestMembershipChanged(rec.PRID, string(rec.SessionID))
 	return nil
 }
 
@@ -202,7 +206,7 @@ func (d *Daemon) recordSessionPullRequest(rec store.SessionPullRequestRecord) er
 		return fmt.Errorf("record pull request %s: %w", rec.PRID, err)
 	}
 	if recorded {
-		d.publishFact(FactSessionPullRequestChanged, rec.SessionID, sessionPullRequestFact{PRID: rec.PRID})
+		d.publishFact(FactSessionPullRequestChanged, string(rec.SessionID), sessionPullRequestFact{PRID: rec.PRID})
 	}
 	return nil
 }
@@ -221,13 +225,13 @@ func (d *Daemon) forgetSessionPullRequest(rec store.SessionPullRequestRecord) er
 		return fmt.Errorf("session %s has no pull request %s recorded", rec.SessionID, rec.PRID)
 	}
 	d.kickInboxAfterCommit(addresses...)
-	d.publishSessionPullRequestMembershipChanged(rec.PRID, rec.SessionID)
+	d.publishSessionPullRequestMembershipChanged(rec.PRID, string(rec.SessionID))
 	return nil
 }
 
-func (d *Daemon) sessionPullRequestIdentity(id, url string) (store.SessionPullRequestRecord, error) {
+func (d *Daemon) sessionPullRequestIdentity(id protocol.SessionID, url string) (store.SessionPullRequestRecord, error) {
 	var rec store.SessionPullRequestRecord
-	sessionID := strings.TrimSpace(id)
+	sessionID := protocol.TrimID(id)
 	if sessionID == "" {
 		return rec, fmt.Errorf("pull request report needs a session id")
 	}
@@ -325,7 +329,7 @@ func (d *Daemon) sessionPullRequestsForSession(session *protocol.Session) []prot
 	return d.sessionPullRequestsForBroadcast(d.sessionPullRequestRecords(session.ID, addresses, d.store.ListSessionPullRequestsBySession(), byPR), addresses, byPR)
 }
 
-func (d *Daemon) forwardedToSessionOwner(conn net.Conn, sessionID string, msg any) bool {
+func (d *Daemon) forwardedToSessionOwner(conn net.Conn, sessionID protocol.SessionID, msg any) bool {
 	endpointID := d.sessionOwnerEndpoint(sessionID)
 	if endpointID == "" {
 		return false
@@ -343,7 +347,7 @@ func (d *Daemon) forwardedToSessionOwner(conn net.Conn, sessionID string, msg an
 	return true
 }
 
-func (d *Daemon) sessionOwnerEndpoint(sessionID string) string {
+func (d *Daemon) sessionOwnerEndpoint(sessionID protocol.SessionID) string {
 	if d.hubManager == nil || d.store.Get(sessionID) != nil {
 		return ""
 	}
@@ -354,7 +358,7 @@ func (d *Daemon) sessionOwnerEndpoint(sessionID string) string {
 	return endpointID
 }
 
-func (d *Daemon) sessionPullRequestRecords(sessionID string, addresses []inbox.Address, bySession map[string][]store.SessionPullRequestRecord, byPR map[string][]store.PullRequestWatch) []store.SessionPullRequestRecord {
+func (d *Daemon) sessionPullRequestRecords(sessionID protocol.SessionID, addresses []inbox.Address, bySession map[protocol.SessionID][]store.SessionPullRequestRecord, byPR map[string][]store.PullRequestWatch) []store.SessionPullRequestRecord {
 	records := append([]store.SessionPullRequestRecord(nil), bySession[sessionID]...)
 	for prID, watches := range byPR {
 		for _, watch := range watches {

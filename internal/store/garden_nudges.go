@@ -6,10 +6,11 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/inbox"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 type GardenSeedWatch struct {
-	WatcherSessionID string
+	WatcherSessionID protocol.SessionID
 	SeedID           string
 }
 
@@ -26,7 +27,7 @@ type GardenSeedBellDelivery struct {
 
 const gardenSeedUnblockedHint = "unblocked"
 
-func (s *Store) SetGardenSeedWatch(watcherSessionID, seedID string, watching bool, now time.Time) (bool, error) {
+func (s *Store) SetGardenSeedWatch(watcherSessionID protocol.SessionID, seedID string, watching bool, now time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -237,7 +238,7 @@ func (s *Store) PendingGardenSeedBellNames() ([]string, error) {
 	return names, rows.Err()
 }
 
-func (s *Store) UnreadGardenSeedMailboxSeeds(sessionID string) ([]string, error) {
+func (s *Store) UnreadGardenSeedMailboxSeeds(sessionID protocol.SessionID) ([]string, error) {
 	items, err := s.UnreadGardenSeedMailboxItems(inbox.ToSession(sessionID))
 	if err != nil {
 		return nil, err

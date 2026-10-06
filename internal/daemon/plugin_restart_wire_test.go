@@ -20,7 +20,7 @@ func TestAPluginSessionWhoseAgentDiedWithTheDaemonComesBackResumable(t *testing.
 	app = w.App()
 	came := protocol.Session{}
 	for _, s := range app.Initial.Sessions {
-		if s.ID == session {
+		if string(s.ID) == session {
 			came = s
 		}
 	}
@@ -28,7 +28,7 @@ func TestAPluginSessionWhoseAgentDiedWithTheDaemonComesBackResumable(t *testing.
 		t.Fatalf("after its agent died with the daemon the pi session is %q, want recoverable", came.State)
 	}
 	pluginDriverSettings(app, "pi")
-	w.Spawn(app, fakeagent.Pi, cwd, func(m *protocol.SpawnSessionMessage) { m.ID = session })
+	w.Spawn(app, fakeagent.Pi, cwd, func(m *protocol.SpawnSessionMessage) { m.ID = protocol.SessionID(session) })
 	if resumed := w.Launched(session); !resumed.Resumed || resumed.ConversationID != first.ConversationID {
 		t.Fatalf("reopening the pi session resumed=%v conversation %s, want %s", resumed.Resumed, resumed.ConversationID, first.ConversationID)
 	}

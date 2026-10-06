@@ -37,7 +37,7 @@ func TestAReportedPullRequestLandsOnItsSessionOnceUntilItIsForgotten(t *testing.
 		{"a url that is not a pull request", s1, "https://github.com/victorarias/attn/issues/12", []string{"pull request url"}},
 		{"a session the daemon never heard of", "typo", url, []string{"unknown session", "typo"}},
 	} {
-		err := cli.RecordPullRequestCreated(refused.session, refused.url)
+		err := cli.RecordPullRequestCreated(protocol.SessionID(refused.session), refused.url)
 		for _, want := range refused.wants {
 			if err == nil || !strings.Contains(err.Error(), want) {
 				t.Errorf("%s = %v, want a refusal naming %q", refused.name, err, want)
@@ -49,20 +49,20 @@ func TestAReportedPullRequestLandsOnItsSessionOnceUntilItIsForgotten(t *testing.
 		return len(s.PullRequests) == 1 && s.PullRequests[0].Repository == "ghe.example.test/acme/widget"
 	})
 
-	if err := cli.ForgetSessionPullRequest(s1, url); err != nil {
+	if err := cli.ForgetSessionPullRequest(protocol.SessionID(s1), url); err != nil {
 		t.Fatalf("forget: %v", err)
 	}
 	testworld.AwaitSession(app, s1, func(s protocol.Session) bool { return len(s.PullRequests) == 0 })
 	if landed := pullRequestChangesOf(app, s1); !slices.EqualFunc(landed, [][]int{{71}, {}}, slices.Equal) {
 		t.Errorf("s1's pull requests reached the app as %v, want #71 once and then none", landed)
 	}
-	if err := cli.ForgetSessionPullRequest(s1, url); err == nil || !strings.Contains(err.Error(), "no pull request") {
+	if err := cli.ForgetSessionPullRequest(protocol.SessionID(s1), url); err == nil || !strings.Contains(err.Error(), "no pull request") {
 		t.Errorf("forgetting twice = %v, want it to say there is no such pull request", err)
 	}
 
 	seen := map[string][]int{}
 	for _, session := range w.App().Initial.Sessions {
-		seen[session.ID] = pullNumbers(session)
+		seen[string(session.ID)] = pullNumbers(session)
 	}
 	if len(seen[s1]) != 0 || !slices.Equal(seen[s2], []int{12}) {
 		t.Errorf("a new app sees pull requests %v, want only s2's #12", seen)
@@ -96,8 +96,8 @@ func TestPullRequestCommandsAHubForwardsLandOnTheOwningSession(t *testing.T) {
 	testworld.Await[protocol.InitialStateMessage](hubPeer, protocol.EventInitialState, nil)
 	const url = "https://github.com/victorarias/attn/pull/71"
 
-	hubPeer.Send(protocol.PullRequestCreatedMessage{Cmd: protocol.CmdPullRequestCreated, ID: s1, URL: url})
+	hubPeer.Send(protocol.PullRequestCreatedMessage{Cmd: protocol.CmdPullRequestCreated, ID: protocol.SessionID(s1), URL: url})
 	testworld.AwaitSession(app, s1, func(s protocol.Session) bool { return len(s.PullRequests) == 1 && s.PullRequests[0].Number == 71 })
-	hubPeer.Send(protocol.PullRequestForgetMessage{Cmd: protocol.CmdPullRequestForget, ID: s1, URL: url})
+	hubPeer.Send(protocol.PullRequestForgetMessage{Cmd: protocol.CmdPullRequestForget, ID: protocol.SessionID(s1), URL: url})
 	testworld.AwaitSession(app, s1, func(s protocol.Session) bool { return len(s.PullRequests) == 0 })
 }

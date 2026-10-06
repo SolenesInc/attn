@@ -25,25 +25,25 @@ type Store struct {
 
 	durable bool
 
-	sessions               map[string]*protocol.Session
-	turnStamps             map[string]TurnStamps
-	activityCursors        map[string]string
-	sessionCosts           map[string]SessionCostState
-	agentDriverRuns        map[string]AgentDriverReportCursor
-	agentDriverTranscripts map[string]string
-	teardownIntents        map[string]SessionTeardownIntent
-	sessionCloses          map[string]sessionCloseMark
-	agentMetadata          map[string]string
+	sessions               map[protocol.SessionID]*protocol.Session
+	turnStamps             map[protocol.SessionID]TurnStamps
+	activityCursors        map[protocol.SessionID]string
+	sessionCosts           map[protocol.SessionID]SessionCostState
+	agentDriverRuns        map[protocol.SessionID]AgentDriverReportCursor
+	agentDriverTranscripts map[protocol.SessionID]string
+	teardownIntents        map[protocol.SessionID]SessionTeardownIntent
+	sessionCloses          map[protocol.SessionID]sessionCloseMark
+	agentMetadata          map[protocol.SessionID]string
 	recentLocations        map[string]*protocol.RecentLocation
 	settings               map[string]string
 	writes                 *tableWrites
 	sessionRows            sessionRows
-	touchedAt              map[string]time.Time
+	touchedAt              map[protocol.SessionID]time.Time
 	costMu                 sync.Mutex
-	liveCosts              map[string]*sessionCostEntry
+	liveCosts              map[protocol.SessionID]*sessionCostEntry
 	profilesSeq            int64
 	emptyDesktop           func(emptiedAt time.Time)
-	paneTerminals          func([]PaneTerminal)
+	terminalBindings       func([]TerminalBinding)
 }
 
 // touchResolution bounds how stale last_seen may be; its tightest reader, the Claude
@@ -51,6 +51,7 @@ type Store struct {
 const touchResolution = 5 * time.Second
 
 type AgentDriverReportCursor struct {
+	TerminalID protocol.TerminalID
 	PluginName string
 	RunID      string
 	Seq        uint64
@@ -63,7 +64,7 @@ type SessionTeardownIntent struct {
 
 type ActiveAgentDriverRun struct {
 	TranscriptPath string
-	SessionID      string
+	SessionID      protocol.SessionID
 	RunID          string
 	Metadata       string
 	Seq            uint64
@@ -107,12 +108,12 @@ func newDBStore(db *sql.DB, writes *tableWrites, dbPath string, durable bool) (*
 
 func newMapBackedStore() *Store {
 	return &Store{
-		sessions:        make(map[string]*protocol.Session),
-		agentDriverRuns: make(map[string]AgentDriverReportCursor),
-		teardownIntents: make(map[string]SessionTeardownIntent),
-		sessionCloses:   make(map[string]sessionCloseMark),
-		sessionCosts:    make(map[string]SessionCostState),
-		agentMetadata:   make(map[string]string),
+		sessions:        make(map[protocol.SessionID]*protocol.Session),
+		agentDriverRuns: make(map[protocol.SessionID]AgentDriverReportCursor),
+		teardownIntents: make(map[protocol.SessionID]SessionTeardownIntent),
+		sessionCloses:   make(map[protocol.SessionID]sessionCloseMark),
+		sessionCosts:    make(map[protocol.SessionID]SessionCostState),
+		agentMetadata:   make(map[protocol.SessionID]string),
 		recentLocations: make(map[string]*protocol.RecentLocation),
 	}
 }
@@ -158,6 +159,9 @@ func cloneSession(session *protocol.Session) *protocol.Session {
 	}
 	if session.TurnOpenedAt != nil {
 		cloned.TurnOpenedAt = protocol.Ptr(protocol.Deref(session.TurnOpenedAt))
+	}
+	if session.Priority != nil {
+		cloned.Priority = protocol.Ptr(protocol.Deref(session.Priority))
 	}
 	if session.TurnSnoozedUntil != nil {
 		cloned.TurnSnoozedUntil = protocol.Ptr(protocol.Deref(session.TurnSnoozedUntil))
@@ -235,13 +239,14 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 			return fmt.Errorf("add session %s: %w", session.ID, ErrSessionClosed)
 		}
 		if s.sessions == nil {
-			s.sessions = make(map[string]*protocol.Session)
+			s.sessions = make(map[protocol.SessionID]*protocol.Session)
 		}
 		stored := cloneSession(session)
 		if stored.LastModelRequestAt == nil && stored.StateUpdatedAt != "" {
 			stored.LastModelRequestAt = protocol.Ptr(stored.StateUpdatedAt)
 		}
 		if existing := s.sessions[session.ID]; existing != nil {
+			stored.Priority = existing.Priority
 			if existing.ProfileID != "" {
 				stored.ProfileID = existing.ProfileID
 			}
@@ -276,7 +281,7 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 		return fmt.Errorf("add session %s: %w", session.ID, err)
 	}
 
-	normalizedAgent := strings.TrimSpace(strings.ToLower(string(session.Agent)))
+	normalizedAgent := strings.TrimSpace(strings.ToLower(session.Agent))
 	if normalizedAgent == "" {
 		normalizedAgent = string(protocol.SessionAgentCodex)
 	}
@@ -287,8 +292,8 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 	}
 	_, err := s.db.Exec(`
 		INSERT INTO sessions
-		(id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, parent_session_id, last_seen)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		(id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, parent_session_id, last_seen, priority)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			label = excluded.label,
 			agent = excluded.agent,
@@ -324,6 +329,7 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 		lastModelRequestAt,
 		protocol.Deref(session.ParentSessionID),
 		session.LastSeen,
+		boolToInt(protocol.Deref(session.Priority)),
 	)
 	if err != nil {
 		return fmt.Errorf("insert session %s: %w", session.ID, err)
@@ -347,7 +353,7 @@ func (s *Store) refuseJoiningDeletedProfileLocked(session *protocol.Session) err
 	return err
 }
 
-func (s *Store) Get(id string) *protocol.Session {
+func (s *Store) Get(id protocol.SessionID) *protocol.Session {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -369,12 +375,12 @@ func (s *Store) Get(id string) *protocol.Session {
 	var session protocol.Session
 	var stateSince, stateUpdatedAt, lastSeen string
 	var turnOpenedAt, turnSettledAt, turnSnoozedUntil, succeeds string
-	var isWorktree int
+	var isWorktree, priority int
 	var contextWindowCap int
 	var endpointID, branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, succeeds
+		SELECT id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, succeeds, priority
 		FROM sessions WHERE id = ? AND closed_at = ''`, id).Scan(
 		&session.ID,
 		&session.Label,
@@ -399,6 +405,7 @@ func (s *Store) Get(id string) *protocol.Session {
 		&turnSettledAt,
 		&turnSnoozedUntil,
 		&succeeds,
+		&priority,
 	)
 	if err != nil {
 		return nil
@@ -409,14 +416,17 @@ func (s *Store) Get(id string) *protocol.Session {
 		SnoozedUntil: parseTurnStamp(turnSnoozedUntil),
 	})
 
+	if priority != 0 {
+		session.Priority = protocol.Ptr(true)
+	}
 	if contextWindowCap > 0 {
 		session.ContextWindowCap = protocol.Ptr(contextWindowCap)
 	}
 	if parentSessionID.Valid && parentSessionID.String != "" {
-		session.ParentSessionID = protocol.Ptr(parentSessionID.String)
+		session.ParentSessionID = protocol.Ptr(protocol.SessionID(parentSessionID.String))
 	}
 	if succeeds != "" {
-		session.Succeeds = protocol.Ptr(succeeds)
+		session.Succeeds = protocol.Ptr(protocol.SessionID(succeeds))
 	}
 	applyActivity(&session, activity.String, activityAt.String)
 
@@ -453,7 +463,7 @@ var sessionOwnedTables = []string{
 	"session_exit_screens",
 }
 
-func (s *Store) Remove(id string) {
+func (s *Store) Remove(id protocol.SessionID) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -472,15 +482,17 @@ func (s *Store) Remove(id string) {
 	if err := deleteSessionRows(s.db, id); err != nil {
 		log.Printf("[store] Remove: session %s: %v", id, err)
 	}
+	s.announceTerminalBindingsLocked()
 }
 
-func deleteSessionRows(db execer, id string) error {
+func deleteSessionRows(db execer, id protocol.SessionID) error {
 	var failures []error
 	exec := func(what, query string, args ...any) {
 		if _, err := db.Exec(query, args...); err != nil {
 			failures = append(failures, fmt.Errorf("drop %s: %w", what, err))
 		}
 	}
+	exec("terminal bindings", "DELETE FROM terminal_bindings WHERE session_id = ?", id)
 	exec("the session", "DELETE FROM sessions WHERE id = ?", id)
 	exec("session PRs", `DELETE FROM session_pull_requests WHERE session_id=? AND NOT EXISTS(SELECT 1 FROM pull_request_watches w WHERE w.session_id=session_pull_requests.session_id AND w.pr_id=session_pull_requests.pr_id AND w.address NOT LIKE 'session:%')`, id)
 	exec("session PR watches", `DELETE FROM pull_request_watches WHERE address=?`, "session:"+id)
@@ -518,11 +530,11 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 
 	if stateFilter == "" {
 		rows, err = s.db.Query(`
-			SELECT id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, succeeds
+			SELECT id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, succeeds, priority
 			FROM sessions WHERE closed_at = '' ORDER BY label, id`)
 	} else {
 		rows, err = s.db.Query(`
-			SELECT id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, succeeds
+			SELECT id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, succeeds, priority
 			FROM sessions WHERE state = ? AND closed_at = '' ORDER BY label, id`, stateFilter)
 	}
 	if err != nil {
@@ -535,7 +547,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 		var session protocol.Session
 		var stateSince, stateUpdatedAt, lastSeen string
 		var turnOpenedAt, turnSettledAt, turnSnoozedUntil, succeeds string
-		var isWorktree int
+		var isWorktree, priority int
 		var contextWindowCap int
 		var endpointID, branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
@@ -563,6 +575,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 			&turnSettledAt,
 			&turnSnoozedUntil,
 			&succeeds,
+			&priority,
 		)
 		if err != nil {
 			continue
@@ -573,14 +586,17 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 			SnoozedUntil: parseTurnStamp(turnSnoozedUntil),
 		})
 
+		if priority != 0 {
+			session.Priority = protocol.Ptr(true)
+		}
 		if contextWindowCap > 0 {
 			session.ContextWindowCap = protocol.Ptr(contextWindowCap)
 		}
 		if parentSessionID.Valid && parentSessionID.String != "" {
-			session.ParentSessionID = protocol.Ptr(parentSessionID.String)
+			session.ParentSessionID = protocol.Ptr(protocol.SessionID(parentSessionID.String))
 		}
 		if succeeds != "" {
-			session.Succeeds = protocol.Ptr(succeeds)
+			session.Succeeds = protocol.Ptr(protocol.SessionID(succeeds))
 		}
 		applyActivity(&session, activity.String, activityAt.String)
 
@@ -636,13 +652,13 @@ func (s *Store) HasSessionInDirectory(directory string) bool {
 	return count > 0
 }
 
-func (s *Store) UpdateState(id, state string) bool {
+func (s *Store) UpdateState(id protocol.SessionID, state string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.updateStateLocked(id, state, time.Now())
 }
 
-func (s *Store) updateStateLocked(id, state string, at time.Time) bool {
+func (s *Store) updateStateLocked(id protocol.SessionID, state string, at time.Time) bool {
 	now := string(protocol.NewTimestamp(at))
 	if s.db == nil {
 		session := s.sessions[id]
@@ -665,10 +681,10 @@ func (s *Store) updateStateLocked(id, state string, at time.Time) bool {
 	return err == nil && updated == 1
 }
 
-func (s *Store) MarkModelRequestStarted(id string, at time.Time) bool {
+func (s *Store) MarkModelRequestStarted(id protocol.SessionID, at time.Time) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if strings.TrimSpace(id) == "" || at.IsZero() {
+	if protocol.TrimID(id) == "" || at.IsZero() {
 		return false
 	}
 	stamp := string(protocol.NewTimestamp(at))
@@ -701,7 +717,7 @@ func (s *Store) MarkModelRequestStarted(id string, at time.Time) bool {
 	return updated == 1
 }
 
-func (s *Store) UpdateBranch(id, branch string, isWorktree bool, mainRepo, repository string) {
+func (s *Store) UpdateBranch(id protocol.SessionID, branch string, isWorktree bool, mainRepo, repository string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -734,7 +750,7 @@ func (s *Store) UpdateBranch(id, branch string, isWorktree bool, mainRepo, repos
 	}
 }
 
-func (s *Store) UpdateSessionLabel(id, label string) {
+func (s *Store) UpdateSessionLabel(id protocol.SessionID, label string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -750,7 +766,7 @@ func (s *Store) UpdateSessionLabel(id, label string) {
 	}
 }
 
-func (s *Store) Touch(id string) {
+func (s *Store) Touch(id protocol.SessionID) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -771,12 +787,12 @@ func (s *Store) Touch(id string) {
 		return
 	}
 	if s.touchedAt == nil {
-		s.touchedAt = make(map[string]time.Time)
+		s.touchedAt = make(map[protocol.SessionID]time.Time)
 	}
 	s.touchedAt[id] = now
 }
 
-func (s *Store) SetResumeSessionID(id, resumeSessionID string) {
+func (s *Store) SetResumeSessionID(id protocol.SessionID, resumeSessionID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -798,15 +814,15 @@ func (s *Store) SetResumeSessionID(id, resumeSessionID string) {
 	}
 }
 
-func (s *Store) GetResumeSessionID(id string) string {
+func (s *Store) GetResumeSessionID(id protocol.SessionID) string {
 	return s.GetSessionConversation(id).NativeID
 }
 
-func (s *Store) GetSessionTranscriptPath(id string) string {
+func (s *Store) GetSessionTranscriptPath(id protocol.SessionID) string {
 	return s.GetSessionConversation(id).TranscriptPath
 }
 
-func (s *Store) SetLaunchIntent(id string, intent LaunchIntent) {
+func (s *Store) SetLaunchIntent(id protocol.SessionID, intent LaunchIntent) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -824,7 +840,7 @@ func (s *Store) SetLaunchIntent(id string, intent LaunchIntent) {
 	}
 }
 
-func (s *Store) ClearLaunchIntent(id string) {
+func (s *Store) ClearLaunchIntent(id protocol.SessionID) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -836,7 +852,7 @@ func (s *Store) ClearLaunchIntent(id string) {
 	}
 }
 
-func (s *Store) LaunchIntent(id string) (LaunchIntent, bool) {
+func (s *Store) LaunchIntent(id protocol.SessionID) (LaunchIntent, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -860,13 +876,13 @@ func (s *Store) LaunchIntent(id string) (LaunchIntent, bool) {
 	return intent, true
 }
 
-func (s *Store) MarkSessionIntentionalClose(id string, now time.Time) error {
+func (s *Store) MarkSessionIntentionalClose(id protocol.SessionID, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if s.db == nil {
 		if s.teardownIntents == nil {
-			s.teardownIntents = make(map[string]SessionTeardownIntent)
+			s.teardownIntents = make(map[protocol.SessionID]SessionTeardownIntent)
 		}
 		intent := s.teardownIntents[id]
 		intent.RequestedAt = now
@@ -883,7 +899,7 @@ func (s *Store) MarkSessionIntentionalClose(id string, now time.Time) error {
 	return nil
 }
 
-func (s *Store) SessionCloseIntentionalChecked(id string) (bool, error) {
+func (s *Store) SessionCloseIntentionalChecked(id protocol.SessionID) (bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -899,7 +915,7 @@ func (s *Store) SessionCloseIntentionalChecked(id string) (bool, error) {
 	return found == 1, nil
 }
 
-func (s *Store) SessionCloseIntentional(id string) bool {
+func (s *Store) SessionCloseIntentional(id protocol.SessionID) bool {
 	intentional, err := s.SessionCloseIntentionalChecked(id)
 	if err != nil {
 		log.Printf("[store] SessionCloseIntentional: %v", err)
@@ -908,16 +924,16 @@ func (s *Store) SessionCloseIntentional(id string) bool {
 	return intentional
 }
 
-func (s *Store) PrepareSessionTeardown(id string, now time.Time) (AgentDriverReportCursor, error) {
-	run, _, err := s.prepareSessionTeardown(id, now, true)
+func (s *Store) PrepareSessionTeardown(id protocol.SessionID, terminalID protocol.TerminalID, now time.Time) (AgentDriverReportCursor, error) {
+	run, _, err := s.prepareSessionTeardown(id, terminalID, now, true)
 	return run, err
 }
 
-func (s *Store) PrepareExistingSessionTeardown(id string, now time.Time) (AgentDriverReportCursor, bool, error) {
-	return s.prepareSessionTeardown(id, now, false)
+func (s *Store) PrepareExistingSessionTeardown(id protocol.SessionID, now time.Time) (AgentDriverReportCursor, bool, error) {
+	return s.prepareSessionTeardown(id, "", now, false)
 }
 
-func (s *Store) prepareSessionTeardown(id string, now time.Time, create bool) (AgentDriverReportCursor, bool, error) {
+func (s *Store) prepareSessionTeardown(id protocol.SessionID, terminalID protocol.TerminalID, now time.Time, create bool) (AgentDriverReportCursor, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -926,7 +942,7 @@ func (s *Store) prepareSessionTeardown(id string, now time.Time, create bool) (A
 			if !create {
 				return AgentDriverReportCursor{}, false, nil
 			}
-			s.teardownIntents = make(map[string]SessionTeardownIntent)
+			s.teardownIntents = make(map[protocol.SessionID]SessionTeardownIntent)
 		}
 		intent, found := s.teardownIntents[id]
 		if !found && !create {
@@ -935,6 +951,9 @@ func (s *Store) prepareSessionTeardown(id string, now time.Time, create bool) (A
 		if intent.DriverRun.RunID == "" {
 			intent.DriverRun = s.agentDriverRuns[id]
 			delete(s.agentDriverRuns, id)
+		}
+		if intent.DriverRun.TerminalID == "" {
+			intent.DriverRun.TerminalID = terminalID
 		}
 		intent.RequestedAt = now
 		s.teardownIntents[id] = intent
@@ -948,8 +967,8 @@ func (s *Store) prepareSessionTeardown(id string, now time.Time, create bool) (A
 	defer tx.Rollback()
 
 	var run AgentDriverReportCursor
-	err = tx.QueryRow(`SELECT driver_plugin_name, driver_run_id, driver_report_seq
-		FROM session_teardown_tombstones WHERE session_id = ?`, id).Scan(&run.PluginName, &run.RunID, &run.Seq)
+	err = tx.QueryRow(`SELECT driver_plugin_name, driver_run_id, driver_report_seq, driver_terminal_id
+		FROM session_teardown_tombstones WHERE session_id = ?`, id).Scan(&run.PluginName, &run.RunID, &run.Seq, &run.TerminalID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return AgentDriverReportCursor{}, false, fmt.Errorf("read session %s teardown owner: %w", id, err)
 	}
@@ -964,16 +983,20 @@ func (s *Store) prepareSessionTeardown(id string, now time.Time, create bool) (A
 			return AgentDriverReportCursor{}, false, fmt.Errorf("read session %s driver owner: %w", id, err)
 		}
 	}
+	if run.TerminalID == "" {
+		run.TerminalID = terminalID
+	}
 	run.PluginName = strings.TrimSpace(run.PluginName)
 	run.RunID = strings.TrimSpace(run.RunID)
 	if _, err := tx.Exec(`INSERT INTO session_teardown_tombstones
-		(session_id, requested_at, driver_plugin_name, driver_run_id, driver_report_seq)
-		VALUES (?, ?, ?, ?, ?)
+		(session_id, requested_at, driver_plugin_name, driver_run_id, driver_report_seq, driver_terminal_id)
+		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(session_id) DO UPDATE SET requested_at = excluded.requested_at,
+ driver_terminal_id = CASE WHEN session_teardown_tombstones.driver_terminal_id = '' THEN excluded.driver_terminal_id ELSE session_teardown_tombstones.driver_terminal_id END,
 			driver_plugin_name = CASE WHEN session_teardown_tombstones.driver_run_id = '' THEN excluded.driver_plugin_name ELSE session_teardown_tombstones.driver_plugin_name END,
 			driver_run_id = CASE WHEN session_teardown_tombstones.driver_run_id = '' THEN excluded.driver_run_id ELSE session_teardown_tombstones.driver_run_id END,
 			driver_report_seq = CASE WHEN session_teardown_tombstones.driver_run_id = '' THEN excluded.driver_report_seq ELSE session_teardown_tombstones.driver_report_seq END`,
-		id, now.Format(time.RFC3339Nano), run.PluginName, run.RunID, run.Seq); err != nil {
+		id, now.Format(time.RFC3339Nano), run.PluginName, run.RunID, run.Seq, run.TerminalID); err != nil {
 		return AgentDriverReportCursor{}, false, fmt.Errorf("persist session %s teardown owner: %w", id, err)
 	}
 	if run.RunID != "" {
@@ -988,12 +1011,12 @@ func (s *Store) prepareSessionTeardown(id string, now time.Time, create bool) (A
 	return run, true, nil
 }
 
-func (s *Store) SessionTeardownIntentIDs() []string {
+func (s *Store) SessionTeardownIntentIDs() []protocol.SessionID {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	if s.db == nil {
-		ids := make([]string, 0, len(s.teardownIntents))
+		ids := make([]protocol.SessionID, 0, len(s.teardownIntents))
 		for id := range s.teardownIntents {
 			ids = append(ids, id)
 		}
@@ -1005,9 +1028,9 @@ func (s *Store) SessionTeardownIntentIDs() []string {
 		return nil
 	}
 	defer rows.Close()
-	var ids []string
+	var ids []protocol.SessionID
 	for rows.Next() {
-		var id string
+		var id protocol.SessionID
 		if rows.Scan(&id) == nil {
 			ids = append(ids, id)
 		}
@@ -1015,7 +1038,7 @@ func (s *Store) SessionTeardownIntentIDs() []string {
 	return ids
 }
 
-func (s *Store) ClaimSessionTeardownDriverRun(id, runID string) (bool, error) {
+func (s *Store) ClaimSessionTeardownDriverRun(id protocol.SessionID, runID string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -1039,7 +1062,7 @@ func (s *Store) ClaimSessionTeardownDriverRun(id, runID string) (bool, error) {
 	return err == nil && updated == 1, err
 }
 
-func (s *Store) CancelSessionTeardown(id string) error {
+func (s *Store) CancelSessionTeardown(id protocol.SessionID) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -1061,8 +1084,8 @@ func (s *Store) CancelSessionTeardown(id string) error {
 	}
 	defer tx.Rollback()
 	var run AgentDriverReportCursor
-	if err := tx.QueryRow(`SELECT driver_plugin_name, driver_run_id, driver_report_seq
-		FROM session_teardown_tombstones WHERE session_id = ?`, id).Scan(&run.PluginName, &run.RunID, &run.Seq); err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err := tx.QueryRow(`SELECT driver_plugin_name, driver_run_id, driver_report_seq, driver_terminal_id
+		FROM session_teardown_tombstones WHERE session_id = ?`, id).Scan(&run.PluginName, &run.RunID, &run.Seq, &run.TerminalID); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
 	if run.RunID != "" {
@@ -1077,7 +1100,7 @@ func (s *Store) CancelSessionTeardown(id string) error {
 	return tx.Commit()
 }
 
-func (s *Store) ClearSessionIntentionalClose(id string) {
+func (s *Store) ClearSessionIntentionalClose(id protocol.SessionID) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -1092,7 +1115,7 @@ func (s *Store) ClearSessionIntentionalClose(id string) {
 	}
 }
 
-func (s *Store) GetAgentMetadata(id string) string {
+func (s *Store) GetAgentMetadata(id protocol.SessionID) string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -1204,7 +1227,7 @@ func (s *Store) ListActiveAgentDriverRuns() []ActiveAgentDriverRun {
 	return runs
 }
 
-func (s *Store) SetAgentDriverTranscriptPath(id, runID, path string) bool {
+func (s *Store) SetAgentDriverTranscriptPath(id protocol.SessionID, runID string, path string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -1219,7 +1242,7 @@ func (s *Store) SetAgentDriverTranscriptPath(id, runID, path string) bool {
 			return false
 		}
 		if s.agentDriverTranscripts == nil {
-			s.agentDriverTranscripts = make(map[string]string)
+			s.agentDriverTranscripts = make(map[protocol.SessionID]string)
 		}
 		s.agentDriverTranscripts[id] = path
 		return true
@@ -1238,7 +1261,7 @@ func (s *Store) SetAgentDriverTranscriptPath(id, runID, path string) bool {
 	return updated == 1
 }
 
-func (s *Store) GetAgentDriverTranscriptPath(id string) string {
+func (s *Store) GetAgentDriverTranscriptPath(id protocol.SessionID) string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -1254,7 +1277,7 @@ func (s *Store) GetAgentDriverTranscriptPath(id string) string {
 	return strings.TrimSpace(path)
 }
 
-func (s *Store) BeginAgentDriverRun(id, pluginName, runID string) bool {
+func (s *Store) BeginAgentDriverRun(id protocol.SessionID, pluginName string, runID string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -1268,7 +1291,7 @@ func (s *Store) BeginAgentDriverRun(id, pluginName, runID string) bool {
 			return false
 		}
 		if s.agentDriverRuns == nil {
-			s.agentDriverRuns = make(map[string]AgentDriverReportCursor)
+			s.agentDriverRuns = make(map[protocol.SessionID]AgentDriverReportCursor)
 		}
 		s.agentDriverRuns[id] = AgentDriverReportCursor{PluginName: pluginName, RunID: runID}
 		delete(s.agentDriverTranscripts, id)
@@ -1288,7 +1311,7 @@ func (s *Store) BeginAgentDriverRun(id, pluginName, runID string) bool {
 	return updated == 1
 }
 
-func (s *Store) GetAgentDriverRun(id string) AgentDriverReportCursor {
+func (s *Store) GetAgentDriverRun(id protocol.SessionID) AgentDriverReportCursor {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -1316,7 +1339,7 @@ func (s *Store) GetAgentDriverRun(id string) AgentDriverReportCursor {
 	return cursor
 }
 
-func (s *Store) EndAgentDriverRun(id string) AgentDriverReportCursor {
+func (s *Store) EndAgentDriverRun(id protocol.SessionID) AgentDriverReportCursor {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -1358,13 +1381,13 @@ func (s *Store) EndAgentDriverRun(id string) AgentDriverReportCursor {
 	return cursor
 }
 
-func (s *Store) ApplyAgentDriverState(id, runID string, seq uint64, state string, requestStartedAt time.Time) bool {
+func (s *Store) ApplyAgentDriverState(id protocol.SessionID, runID string, seq uint64, state string, requestStartedAt time.Time) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.applyAgentDriverStateLocked(id, runID, seq, state, requestStartedAt, time.Now())
 }
 
-func (s *Store) applyAgentDriverStateLocked(id, runID string, seq uint64, state string, requestStartedAt, at time.Time) bool {
+func (s *Store) applyAgentDriverStateLocked(id protocol.SessionID, runID string, seq uint64, state string, requestStartedAt, at time.Time) bool {
 	runID = strings.TrimSpace(runID)
 	if runID == "" || seq == 0 {
 		return false
@@ -1420,7 +1443,7 @@ func (s *Store) applyAgentDriverStateLocked(id, runID string, seq uint64, state 
 	return updated == 1
 }
 
-func (s *Store) ApplyAgentDriverMetadata(id, runID string, seq uint64, metadata string) bool {
+func (s *Store) ApplyAgentDriverMetadata(id protocol.SessionID, runID string, seq uint64, metadata string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -1436,7 +1459,7 @@ func (s *Store) ApplyAgentDriverMetadata(id, runID string, seq uint64, metadata 
 		cursor.Seq = seq
 		s.agentDriverRuns[id] = cursor
 		if s.agentMetadata == nil {
-			s.agentMetadata = make(map[string]string)
+			s.agentMetadata = make(map[protocol.SessionID]string)
 		}
 		s.agentMetadata[id] = strings.TrimSpace(metadata)
 		return true
@@ -2344,7 +2367,7 @@ func boolToInt(b bool) int {
 	return 0
 }
 
-func nullPtrString(s *string) interface{} {
+func nullPtrString[T ~string](s *T) interface{} {
 	if s == nil || *s == "" {
 		return nil
 	}

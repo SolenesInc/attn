@@ -16,15 +16,15 @@ import (
 
 func respawn(w *world, app *testworld.Peer, agent fakeagent.Harness, session, cwd string) *fakeagent.Run {
 	w.T.Helper()
-	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: session})
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == session })
+	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: protocol.SessionID(session)})
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
 	return revive(w, app, agent, session, cwd)
 }
 
 func revive(w *world, app *testworld.Peer, agent fakeagent.Harness, session, cwd string) *fakeagent.Run {
 	w.T.Helper()
 	w.Spawn(app, agent, cwd, func(m *protocol.SpawnSessionMessage) {
-		m.ID = session
+		m.ID = protocol.SessionID(session)
 		m.ResumeSessionID = protocol.Ptr(session)
 	})
 	return w.Launched(session)
@@ -33,7 +33,7 @@ func revive(w *world, app *testworld.Peer, agent fakeagent.Harness, session, cwd
 func awaitSuccessor(app *testworld.Peer, predecessor string) protocol.Session {
 	app.T.Helper()
 	return *testworld.Await(app, protocol.EventSessionRegistered, func(e protocol.WebSocketEvent) bool {
-		return e.Session != nil && protocol.Deref(e.Session.Succeeds) == predecessor
+		return e.Session != nil && string(protocol.Deref(e.Session.Succeeds)) == predecessor
 	}).Session
 }
 
@@ -62,37 +62,37 @@ func TestClearOpensANewSessionInTheSameTerminalAndClosesTheOldOneWhole(t *testin
 	cleared := claude.ConversationID
 
 	next := clearClaude(app, claude, first)
-	if next.ID == first || next.Label != "shop" {
+	if string(next.ID) == first || next.Label != "shop" {
 		t.Errorf("after /clear the terminal shows %s named %q, want a new session named like a new one in shop", next.ID, next.Label)
 	}
-	if got := app.Terminal(next.ID); got != terminal {
+	if got := app.Terminal(string(next.ID)); got != terminal {
 		t.Errorf("the new session runs in terminal %s, want %s, the one /clear ran in", got, terminal)
 	}
 	closed := awaitClosed(app, first)
-	if !strings.Contains(protocol.Deref(closed.CloseReason), next.ID) || closed.Label != "checkout" {
+	if !strings.Contains(protocol.Deref(closed.CloseReason), string(next.ID)) || closed.Label != "checkout" {
 		t.Errorf("the cleared session's ledger row = %+v, want it closed under its own name naming %s", closed, next.ID)
 	}
 	testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool {
-		return e.Session != nil && e.Session.ID == first
+		return e.Session != nil && string(e.Session.ID) == first
 	})
-	if got, want := handoverEvents(app.Log(), first, next.ID), []string{
+	if got, want := handoverEvents(app.Log(), first, string(next.ID)), []string{
 		protocol.EventSessionRegistered, protocol.EventProfileArrangementChanged, protocol.EventSessionClosed, protocol.EventSessionUnregistered,
 	}; !slices.Equal(got, want) {
 		t.Errorf("the app heard the handover as %v, want %v so it never shows the terminal without a session", got, want)
 	}
 
-	app.TypeLine(next.ID, "now the tests")
+	app.TypeLine(string(next.ID), "now the tests")
 	if got := claude.Prompted(); got != "now the tests" {
 		t.Fatalf("typing after /clear reached claude as %q", got)
 	}
-	testworld.AwaitSession(app, next.ID, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	testworld.AwaitSession(app, string(next.ID), func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	tested := "Which framework? <!-- attn:state=waiting_input -->"
 	claude.Reply(tested)
-	testworld.AwaitSession(app, next.ID, func(s protocol.Session) bool {
+	testworld.AwaitSession(app, string(next.ID), func(s protocol.Session) bool {
 		return s.State == protocol.SessionStateWaitingInput && s.Usage != nil && s.Usage.TotalTokens == claudeTokens(tested)
 	})
 
-	if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: first}); err != nil {
+	if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: protocol.SessionID(first)}); err != nil {
 		t.Fatalf("reopen %s: %v", first, err)
 	}
 	reopened := w.Launched(first)
@@ -107,11 +107,11 @@ func TestClearOpensANewSessionInTheSameTerminalAndClosesTheOldOneWhole(t *testin
 	}
 
 	claude.Exit(1)
-	exited := testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == terminal })
+	exited := testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.ID) == terminal })
 	if exited.SessionID != next.ID {
 		t.Errorf("the exit of terminal %s ended session %s, want %s", terminal, exited.SessionID, next.ID)
 	}
-	testworld.AwaitSession(app, next.ID, func(s protocol.Session) bool { return protocol.Deref(s.StateReason) == "process_exited" })
+	testworld.AwaitSession(app, string(next.ID), func(s protocol.Session) bool { return protocol.Deref(s.StateReason) == "process_exited" })
 	if reason := protocol.Deref(queriedSession(t, cli, first).StateReason); reason == "process_exited" {
 		t.Errorf("the exit of %s's terminal ended the reopened %s too", next.ID, first)
 	}
@@ -133,13 +133,13 @@ func handoverEvents(log []json.RawMessage, from, to string) []string {
 		var step bool
 		switch e.Event {
 		case protocol.EventSessionRegistered:
-			step = e.Session != nil && e.Session.ID == to
+			step = e.Session != nil && string(e.Session.ID) == to
 		case protocol.EventProfileArrangementChanged:
 			step = paneShowing(e.Desktops, to) != nil
 		case protocol.EventSessionClosed:
-			step = e.SessionLedgerEntry != nil && e.SessionLedgerEntry.ID == from
+			step = e.SessionLedgerEntry != nil && string(e.SessionLedgerEntry.ID) == from
 		case protocol.EventSessionUnregistered:
-			step = e.Session != nil && e.Session.ID == from
+			step = e.Session != nil && string(e.Session.ID) == from
 		}
 		if step && !slices.Contains(heard, e.Event) {
 			heard = append(heard, e.Event)
@@ -151,7 +151,7 @@ func handoverEvents(log []json.RawMessage, from, to string) []string {
 func paneShowing(desktops []protocol.Desktop, sessionID string) *protocol.DesktopPane {
 	for _, desktop := range desktops {
 		for i, pane := range desktop.Panes {
-			if pane.SessionID == sessionID {
+			if string(pane.SessionID) == sessionID {
 				return &desktop.Panes[i]
 			}
 		}
@@ -185,19 +185,19 @@ func TestResumeToAClosedSessionsConversationReopensItInThePane(t *testing.T) {
 	awaitClosed(app, first)
 
 	heard := len(app.Log())
-	resumeClaude(app, claude, cleared.ID, checkout)
-	back := awaitSuccessor(app, cleared.ID)
-	if back.ID != first || back.Label != "checkout" {
+	resumeClaude(app, claude, string(cleared.ID), checkout)
+	back := awaitSuccessor(app, string(cleared.ID))
+	if string(back.ID) != first || back.Label != "checkout" {
 		t.Fatalf("/resume %s brought back %s named %q, want %s, the closed session that holds it", checkout, back.ID, back.Label, first)
 	}
 	if got := app.Terminal(first); got != terminal {
 		t.Errorf("%s came back in terminal %s, want %s, the one /resume ran in", first, got, terminal)
 	}
-	awaitClosed(app, cleared.ID)
+	awaitClosed(app, string(cleared.ID))
 	testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool {
 		return e.Session != nil && e.Session.ID == cleared.ID
 	})
-	if got, want := handoverEvents(app.Log()[heard:], cleared.ID, first), []string{
+	if got, want := handoverEvents(app.Log()[heard:], string(cleared.ID), first), []string{
 		protocol.EventSessionRegistered, protocol.EventProfileArrangementChanged, protocol.EventSessionClosed, protocol.EventSessionUnregistered,
 	}; !slices.Equal(got, want) {
 		t.Errorf("the app heard the handover as %v, want %v so it follows the terminal", got, want)
@@ -237,17 +237,17 @@ func TestResumeToARecoverableSessionsConversationMovesItIntoThePane(t *testing.T
 	terminal := app.Terminal(current)
 	claude := w.Launched(current)
 	resumeClaude(app, claude, current, flaky)
-	if moved := awaitSuccessor(app, current); moved.ID != earlier {
+	if moved := awaitSuccessor(app, current); string(moved.ID) != earlier {
 		t.Fatalf("/resume %s showed session %s, want %s, the recoverable session that holds it", flaky, moved.ID, earlier)
 	}
 	awaitClosed(app, current)
 	arrangement := testworld.Await(app, protocol.EventProfileArrangementChanged, func(e protocol.ProfileArrangementChangedMessage) bool {
 		pane := paneShowing(e.Desktops, earlier)
-		return pane != nil && pane.RuntimeID == terminal
+		return pane != nil && string(pane.RuntimeID) == terminal
 	})
 	for _, desktop := range arrangement.Desktops {
 		for _, pane := range desktop.Panes {
-			if pane.RuntimeID == dead {
+			if string(pane.RuntimeID) == dead {
 				t.Errorf("after %s moved into terminal %s its dead pane %s stayed: %+v", earlier, terminal, pane.PaneID, desktop.Panes)
 			}
 		}
@@ -266,16 +266,16 @@ func TestACrewMembersClearEndsItsDay(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	woken := wakeCrew(t, cli, "trellis", "")
-	day := w.Launched(woken.SessionID)
+	day := w.Launched(string(woken.SessionID))
 	day.Prompted()
 	day.Reply("Ready. <!-- attn:state=idle -->")
 
-	next := clearClaude(app, day, woken.SessionID)
-	awaitClosed(app, woken.SessionID)
+	next := clearClaude(app, day, string(woken.SessionID))
+	awaitClosed(app, string(woken.SessionID))
 	if binding := crewRosterMember(t, cli, "trellis").BindingSession; binding != nil {
 		t.Errorf("after the day's /clear trellis is bound to %s, want its day ended", *binding)
 	}
-	if member := protocol.Deref(queriedSession(t, cli, next.ID).CrewMember); member != "" {
+	if member := protocol.Deref(queriedSession(t, cli, string(next.ID)).CrewMember); member != "" {
 		t.Errorf("the session after /clear works as crew member %q, want it unbound", member)
 	}
 }
@@ -285,33 +285,33 @@ func TestADelegateThatClearsLeavesItsSeedAndMailWithItsClosedSession(t *testing.
 	app, cli := w.App(), w.Client()
 	delegated := seedResumeDelegate(t, w, fakeagent.Claude, "api")
 	delegate, seed := delegated.SessionID, delegated.SeedID
-	claude := w.Launched(delegate)
+	claude := w.Launched(string(delegate))
 	claude.Prompted()
 	claude.Reply("Looking into it. <!-- attn:state=idle -->")
 
-	next := clearClaude(app, claude, delegate)
-	awaitClosed(app, delegate)
+	next := clearClaude(app, claude, string(delegate))
+	awaitClosed(app, string(delegate))
 	if tender := lifeShow(t, cli, seed).Seed.TenderSession; tender != delegate {
 		t.Errorf("after /clear seed %s is tended by %q, want the cleared %s", seed, tender, delegate)
 	}
-	if sent, err := cli.AgentMsg(delegate, next.ID, "are you still on it?"); err == nil {
+	if sent, err := cli.AgentMsg(string(delegate), next.ID, "are you still on it?"); err == nil {
 		t.Errorf("a message to the cleared %s = %+v, want it refused as for any closed session", delegate, sent)
 	}
-	if sent := sendAgentMessage(t, cli, next.ID, seed, "the deployment is ready"); sent.Status != protocol.AgentMsgStatusQueued {
+	if sent := sendAgentMessage(t, cli, string(next.ID), seed, "the deployment is ready"); sent.Status != protocol.AgentMsgStatusQueued {
 		t.Fatalf("mail for the cleared tender's seed = %+v, want it queued", sent)
 	}
 
 	if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: delegate}); err != nil {
 		t.Fatalf("reopen %s: %v", delegate, err)
 	}
-	back := w.Launched(delegate)
-	app.TypeLine(delegate, "where were we?")
+	back := w.Launched(string(delegate))
+	app.TypeLine(string(delegate), "where were we?")
 	back.Prompted()
 	back.Reply("On the tracked task. <!-- attn:state=idle -->")
 	if got := back.Prompted(); !strings.Contains(got, inboxDoorbell) {
 		t.Fatalf("the reopened tender was prompted with %q, want the inbox doorbell", got)
 	}
-	if mail := readInbox(t, cli, delegate, 0).Items; len(mail) != 1 || mail[0].Content != "the deployment is ready" {
+	if mail := readInbox(t, cli, string(delegate), 0).Items; len(mail) != 1 || mail[0].Content != "the deployment is ready" {
 		t.Errorf("the reopened tender's inbox = %+v, want the mail that queued while it was closed", mail)
 	}
 }
@@ -331,20 +331,20 @@ func TestAClearedTerminalComesBackShowingItsNewSessionInItsNewConversation(t *te
 
 	w.restart()
 	app = w.App()
-	if slices.ContainsFunc(app.Initial.Sessions, func(s protocol.Session) bool { return s.ID == first }) {
+	if slices.ContainsFunc(app.Initial.Sessions, func(s protocol.Session) bool { return string(s.ID) == first }) {
 		t.Errorf("the session /clear replaced came back after a restart")
 	}
-	if got := app.Terminal(next.ID); got != terminal {
+	if got := app.Terminal(string(next.ID)); got != terminal {
 		t.Errorf("after a restart %s runs in terminal %s, want %s", next.ID, got, terminal)
 	}
-	resumed := revive(w, app, fakeagent.Claude, next.ID, cwd)
+	resumed := revive(w, app, fakeagent.Claude, string(next.ID), cwd)
 	if !resumed.Resumed || resumed.ConversationID != started {
 		t.Fatalf("reviving %s ran claude %q, want it resuming %s, the conversation /clear started", next.ID, resumed.Argv, started)
 	}
-	app.TypeLine(next.ID, "still there?")
+	app.TypeLine(string(next.ID), "still there?")
 	resumed.Prompted()
 	resumed.Reply("Still here. <!-- attn:state=waiting_input -->")
-	testworld.AwaitSession(app, next.ID, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+	testworld.AwaitSession(app, string(next.ID), func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 }
 
 func TestCodexNewOpensANewSessionOnTheNewChatsFirstPrompt(t *testing.T) {
@@ -374,11 +374,11 @@ func TestCodexNewOpensANewSessionOnTheNewChatsFirstPrompt(t *testing.T) {
 		t.Fatalf("/new kept codex in conversation %s", launched)
 	}
 	awaitClosed(app, first)
-	testworld.AwaitSession(app, next.ID, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	testworld.AwaitSession(app, string(next.ID), func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	codex.Reply("Fixed with a lock. <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, next.ID, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	testworld.AwaitSession(app, string(next.ID), func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 
-	resumed := respawn(w, app, fakeagent.Codex, next.ID, cwd)
+	resumed := respawn(w, app, fakeagent.Codex, string(next.ID), cwd)
 	if !resumed.Resumed || resumed.ConversationID != started {
 		t.Fatalf("respawn ran codex %q; want it to resume %s, the conversation /new started", resumed.Argv, started)
 	}
@@ -401,21 +401,21 @@ func TestCodexResumeReopensTheClosedSessionOnTheNextPrompt(t *testing.T) {
 	next := awaitSuccessor(app, first)
 	awaitClosed(app, first)
 	codex.Reply("Written. <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, next.ID, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	testworld.AwaitSession(app, string(next.ID), func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 
-	app.TypeLine(next.ID, "/resume "+flaky)
+	app.TypeLine(string(next.ID), "/resume "+flaky)
 	codex.Prompted()
-	app.TypeLine(next.ID, "now fix it")
+	app.TypeLine(string(next.ID), "now fix it")
 	if got := codex.Prompted(); got != "now fix it" || codex.ConversationID != flaky {
 		t.Fatalf("codex took %q in conversation %s, want it in %s", got, codex.ConversationID, flaky)
 	}
-	if back := awaitSuccessor(app, next.ID); back.ID != first {
+	if back := awaitSuccessor(app, string(next.ID)); string(back.ID) != first {
 		t.Fatalf("/resume %s showed session %s, want %s, the closed session that holds it", flaky, back.ID, first)
 	}
 	if got := app.Terminal(first); got != terminal {
 		t.Errorf("%s came back in terminal %s, want %s", first, got, terminal)
 	}
-	awaitClosed(app, next.ID)
+	awaitClosed(app, string(next.ID))
 	testworld.AwaitSession(app, first, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	codex.Reply("Fixed with a lock. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, first, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
@@ -444,7 +444,7 @@ func TestCodexResumeFromATerminalWithNoConversationYetReopensTheClosedSession(t 
 	if got := resumed.Prompted(); got != "now fix it" || resumed.ConversationID != flaky {
 		t.Fatalf("codex took %q in conversation %s, want it in %s", got, resumed.ConversationID, flaky)
 	}
-	if back := awaitSuccessor(app, fresh); back.ID != first {
+	if back := awaitSuccessor(app, fresh); back.ID != protocol.SessionID(first) {
 		t.Fatalf("/resume %s before any prompt showed session %s, want %s, the closed session that holds it", flaky, back.ID, first)
 	}
 	if got := app.Terminal(first); got != terminal {
@@ -460,8 +460,8 @@ func TestASessionLaunchedToResumeAConversationKeepsResumingIt(t *testing.T) {
 	cwd := w.Path("api")
 	earlier := w.Spawn(app, fakeagent.Codex, cwd)
 	conversation := w.Launched(earlier).ConversationID
-	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: earlier})
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == earlier })
+	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: protocol.SessionID(earlier)})
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == earlier })
 
 	session := w.Spawn(app, fakeagent.Codex, cwd, func(m *protocol.SpawnSessionMessage) {
 		m.ResumeSessionID = protocol.Ptr(conversation)
@@ -491,8 +491,8 @@ func TestARelaunchThatCannotResumeKeepsTheSessionAndAdoptsItsNewConversation(t *
 		t.Fatal(err)
 	}
 
-	reloaded := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: session, Cols: 100, Rows: 30},
-		protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return r.ID == session })
+	reloaded := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 100, Rows: 30},
+		protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == session })
 	if !reloaded.Success {
 		t.Fatalf("reload failed: %s", protocol.Deref(reloaded.Error))
 	}
@@ -505,7 +505,7 @@ func TestARelaunchThatCannotResumeKeepsTheSessionAndAdoptsItsNewConversation(t *
 	fresh.Reply("Green. <!-- attn:state=waiting_input -->")
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 	for _, e := range app.Received() {
-		if e.Event == protocol.EventSessionRegistered && e.Session != nil && protocol.Deref(e.Session.Succeeds) == session {
+		if e.Event == protocol.EventSessionRegistered && e.Session != nil && string(protocol.Deref(e.Session.Succeeds)) == session {
 			t.Fatalf("a relaunch of %s opened session %s after it", session, e.Session.ID)
 		}
 	}
@@ -531,10 +531,10 @@ func TestResumeToAConversationHeldInAnotherProfileOpensANewSessionHere(t *testin
 	claude := w.Launched(here)
 	resumeClaude(app, claude, here, held)
 	opened := awaitSuccessor(app, here)
-	if opened.ID == elsewhere || opened.ProfileID != app.SelectedProfile() {
+	if string(opened.ID) == elsewhere || opened.ProfileID != app.SelectedProfile() {
 		t.Fatalf("/resume %s showed %s in profile %s, want a new session in this profile", held, opened.ID, opened.ProfileID)
 	}
-	if got := app.Terminal(opened.ID); got != terminal {
+	if got := app.Terminal(string(opened.ID)); got != terminal {
 		t.Errorf("the new session runs in terminal %s, want %s, the one /resume ran in", got, terminal)
 	}
 	if other := queriedSession(t, cli, elsewhere); other.ProfileID != side.ID {

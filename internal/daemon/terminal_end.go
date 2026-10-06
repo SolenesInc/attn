@@ -6,18 +6,20 @@ import (
 	"syscall"
 
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 )
 
 // Take after the session's lifecycle lock.
-func (d *Daemon) lockTerminalEnds(sessionID string) (unlock func()) {
+func (d *Daemon) lockTerminalEnds(sessionID protocol.SessionID) (unlock func()) {
 	lease := d.terminalEndLocks.lease(sessionID)
 	lease.Lock()
 	return lease.Unlock
 }
 
 // Hold lockTerminalEnds.
-func (d *Daemon) othersRun(live map[harness.TerminalID]struct{}, sessionID string, t harness.TerminalID) bool {
+func (d *Daemon) othersRun(sessionID protocol.SessionID, t harness.TerminalID) bool {
+	live := d.liveTerminals(context.Background())
 	for _, id := range d.terminals().Of(harness.SessionID(sessionID)) {
 		if _, running := live[id]; running && id != t {
 			return true
@@ -26,9 +28,9 @@ func (d *Daemon) othersRun(live map[harness.TerminalID]struct{}, sessionID strin
 	return false
 }
 
-func (d *Daemon) endTerminal(sessionID string, t harness.TerminalID) (last bool) {
+func (d *Daemon) endTerminal(sessionID protocol.SessionID, t harness.TerminalID) (last bool) {
 	defer d.lockTerminalEnds(sessionID)()
-	if !d.othersRun(d.liveTerminals(context.Background()), sessionID, t) {
+	if !d.othersRun(sessionID, t) {
 		return true
 	}
 	d.dropTerminal(t)
@@ -36,12 +38,12 @@ func (d *Daemon) endTerminal(sessionID string, t harness.TerminalID) (last bool)
 }
 
 // The last terminal stays for the caller to close with the session.
-func (d *Daemon) closeTerminal(sessionID string, t harness.TerminalID) (last bool) {
+func (d *Daemon) closeTerminal(sessionID protocol.SessionID, t harness.TerminalID) (last bool) {
 	lifecycle := d.sessionLifecycleLockFor(sessionID)
 	lifecycle.Lock()
 	defer lifecycle.Unlock()
 	defer d.lockTerminalEnds(sessionID)()
-	if !d.othersRun(d.liveTerminals(context.Background()), sessionID, t) {
+	if !d.othersRun(sessionID, t) {
 		return true
 	}
 	if err := d.ptyBackend.Kill(context.Background(), t, syscall.SIGTERM); err != nil && !errors.Is(err, pty.ErrSessionNotFound) {
@@ -55,7 +57,7 @@ func (d *Daemon) dropTerminal(t harness.TerminalID) {
 	if err := d.removePTYSession(t); err != nil {
 		d.logf("removing the runtime of terminal %s: %v", t, err)
 	}
-	desktop, removed, err := d.store.RemoveTerminalTile(string(t))
+	desktop, removed, err := d.store.RemoveTerminalTile(t)
 	if err != nil {
 		d.logf("removing the tile of terminal %s: %v", t, err)
 	} else if removed {

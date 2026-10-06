@@ -40,7 +40,7 @@ export function useAttentionQueue({
   enrichedLocalSessions,
   shownAgentId,
 }: Options) {
-  const { sendSetSetting, sendSettleTurn, sendWakeTurn } = useDaemonApi();
+  const { sendSetSetting, sendSettleTurn, sendWakeTurn, sendSetSessionPriority } = useDaemonApi();
   const { selectAgent, goHomeAwaitingNextTurn } = useSessionStore();
   const handleToggleQueueMode = useCallback(() => {
     sendSetSetting(QUEUE_MODE_SETTING, isQueueModeEnabled(settings) ? 'false' : 'true');
@@ -189,6 +189,15 @@ export function useAttentionQueue({
     [queueModeEnabled, handleSettleActiveTurn, shortcutTarget, sendSettleTurn, queueBands, selectAgent, goHomeAwaitingNextTurn],
   );
 
+  const togglePriority = useCallback((session: { id: string; priority?: boolean }) => {
+    sendSetSessionPriority(session.id, !session.priority);
+  }, [sendSetSessionPriority]);
+
+  const handlePriorityShortcut = useCallback(() => {
+    const target = shortcutTarget();
+    if (target) togglePriority(target.session);
+  }, [shortcutTarget, togglePriority]);
+
   const handleSnoozeShortcut = useMemo(
     () =>
       queueModeEnabled
@@ -242,6 +251,8 @@ export function useAttentionQueue({
     openSnoozeMenu,
     handleSnoozeActiveSession,
     handleSettleShortcut,
+    togglePriority,
+    handlePriorityShortcut,
     handleSnoozeShortcut,
     handleToggleQueueMode,
     handleToggleCrewQueue,

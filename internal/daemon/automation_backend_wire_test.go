@@ -39,7 +39,7 @@ location: {type: directory, path: %q}
 			if !run.Success || protocol.Deref(run.Run.SessionID) == "" {
 				t.Fatalf("automation_run = %+v, want a delivered run with a session", run)
 			}
-			agent := w.Launched(protocol.Deref(run.Run.SessionID))
+			agent := w.Launched(string(protocol.Deref(run.Run.SessionID)))
 			for _, flag := range [][]string{{"--model", "sonnet"}, {"--effort", "high"}, {"--permission-mode", "auto"}} {
 				if !containsAutomationFlag(agent.Argv, flag[0], flag[1]) {
 					t.Errorf("the agent was launched with %q, want %s %s", agent.Argv, flag[0], flag[1])

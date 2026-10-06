@@ -52,7 +52,7 @@ func (d *Daemon) crewSleep(name string) (*protocol.CrewSleepResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	sessionID := strings.TrimSpace(member.BindingSession)
+	sessionID := protocol.TrimID(member.BindingSession)
 	if sessionID == "" {
 		return &protocol.CrewSleepResult{
 			Member:        member.ID,

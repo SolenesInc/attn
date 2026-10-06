@@ -27,7 +27,7 @@ func TestAgentPeekShowsStateWorkspaceLatestReplyAndScreen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("peek: %v", err)
 	}
-	if peek.SessionID != session || peek.State != string(protocol.SessionStateWaitingInput) || protocol.Deref(peek.ProfileName) != "Default" {
+	if string(peek.SessionID) != session || peek.State != string(protocol.SessionStateWaitingInput) || protocol.Deref(peek.ProfileName) != "Default" {
 		t.Errorf("peek = %+v, want %s waiting for input in the Default profile", peek, session)
 	}
 	if last := protocol.Deref(peek.LastAssistantMessage); !strings.Contains(last, "latest answer") || strings.Contains(last, "first answer") {
@@ -50,11 +50,11 @@ func TestAgentPeekResolvesItsAddress(t *testing.T) {
 		w.Launched(session)
 	}
 	firstDay := wakeCrew(t, cli, "keel", "")
-	firstDayAgent := w.Launched(firstDay.SessionID)
+	firstDayAgent := w.Launched(string(firstDay.SessionID))
 	peekResolves := func(address, want string) {
 		t.Helper()
 		peek, err := cli.AgentPeek(address)
-		if err != nil || peek.SessionID != want {
+		if err != nil || string(peek.SessionID) != want {
 			t.Errorf("peek %q = %+v, %v; want %s", address, peek, err, want)
 		}
 	}
@@ -68,13 +68,13 @@ func TestAgentPeekResolvesItsAddress(t *testing.T) {
 	peekResolves("aaa", first)
 	peekRefuses("aa", "ambiguous_session")
 	peekRefuses("zzz", "session_not_found")
-	peekResolves("Keel", firstDay.SessionID)
+	peekResolves("Keel", string(firstDay.SessionID))
 
 	firstDayAgent.Exit(1)
 	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == firstDay.SessionID })
 	nextDay := wakeCrew(t, cli, "keel", "")
-	w.Launched(nextDay.SessionID)
-	peekResolves("keel", nextDay.SessionID)
+	w.Launched(string(nextDay.SessionID))
+	peekResolves("keel", string(nextDay.SessionID))
 	w.Launched(w.Spawn(app, fakeagent.Claude, w.Path("keel-session"), func(m *protocol.SpawnSessionMessage) { m.ID = "keel" }))
 	peekResolves("keel", "keel")
 
@@ -98,14 +98,14 @@ func TestAgentPeekForgetsAnExitOnceARespawnSucceeds(t *testing.T) {
 	claude.Prompted()
 	claude.Reply("Error: Model \"gpt-5.6-sol\" is ambiguous across providers <!-- attn:state=idle -->")
 	claude.Exit(1)
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == session })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
 	exited, _ := peekExit(t, cli, session, "is ambiguous across providers")
 	if exited.Code != 1 || exited.Signal != nil || exited.At == "" {
 		t.Errorf("exit = %+v, want code 1 with its time", exited)
 	}
 
 	w.Spawn(app, fakeagent.Claude, cwd, func(m *protocol.SpawnSessionMessage) {
-		m.ID = session
+		m.ID = protocol.SessionID(session)
 		m.ResumeSessionID = protocol.Ptr(session)
 	})
 	w.Launched(session)
@@ -121,7 +121,7 @@ func TestAnOversizedExitScreenKeepsItsTailAndSaysSo(t *testing.T) {
 		m.Cols, m.Rows = 1000, 300
 	})
 	app.TypeLine(shell, `awk 'BEGIN { for (i = 0; i < 300; i++) { printf "%04d", i; for (j = 0; j < 990; j++) printf "x"; print "" } }'; exit 3`)
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == shell })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == shell })
 
 	peek, err := cli.AgentPeek(shell)
 	if err != nil || peek.Exit == nil || peek.Exit.Code != 3 || peek.Screen == nil {
@@ -144,5 +144,5 @@ func TestAnOversizedExitScreenKeepsItsTailAndSaysSo(t *testing.T) {
 }
 
 func withIDPrefix(prefix string) func(*protocol.SpawnSessionMessage) {
-	return func(m *protocol.SpawnSessionMessage) { m.ID = prefix + m.ID }
+	return func(m *protocol.SpawnSessionMessage) { m.ID = protocol.SessionID(prefix + string(m.ID)) }
 }

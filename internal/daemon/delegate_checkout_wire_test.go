@@ -55,19 +55,18 @@ func TestADelegatedWorktreeStartsFromTheExactBaseWhereItWasAsked(t *testing.T) {
 		checkout            *protocol.DelegateCheckout
 		wantDirectory, head string
 		wantDesktop         string
-		wantLabel           string
 	}{
-		{name: "from the caller's checkout", source: source, cwd: repo, checkout: delegateNewWorktree("feature/a", "base"),
+		{name: "from the caller's checkout", source: string(source), cwd: repo, checkout: delegateNewWorktree("feature/a", "base"),
 			wantDirectory: filepath.Join(root, "shop--feature-a"), head: base, wantDesktop: sourceDesktop},
 		{name: "from a subdirectory, on a stale remote ref", cwd: filepath.Join(repo, "web"), checkout: delegateNewWorktree("feature/b", "origin/main"),
-			wantDirectory: filepath.Join(root, "shop--feature-b", "web"), head: local, wantLabel: "web"},
+			wantDirectory: filepath.Join(root, "shop--feature-b", "web"), head: local},
 		{name: "on a branch name longer than a session name", cwd: repo, checkout: delegateNewWorktree("feat/delegated-with-a-branch-name-past-the-cap", "main"),
-			wantDirectory: filepath.Join(root, "shop--feat-delegated-with-a-branch-name-past-the-cap"), head: local, wantLabel: "shop--feat-delegated-with-a-branch-name-past-the"},
+			wantDirectory: filepath.Join(root, "shop--feat-delegated-with-a-branch-name-past-the-cap"), head: local},
 		{name: "outside Git", cwd: outsideGit, wantDirectory: outsideGit},
 	} {
 		request := delegateCheckoutAt(row.cwd, row.checkout)
 		if row.source != "" {
-			request.SourceSessionID = protocol.Ptr(row.source)
+			request.SourceSessionID = protocol.Ptr(protocol.SessionID(row.source))
 			request.Label = protocol.Ptr("discount")
 		}
 		result, err := cli.Delegate(request)
@@ -94,11 +93,7 @@ func TestADelegatedWorktreeStartsFromTheExactBaseWhereItWasAsked(t *testing.T) {
 		if row.wantDesktop != "" && protocol.Deref(result.DesktopID) != row.wantDesktop {
 			t.Errorf("%s: the delegate landed on desktop %s; want the caller's %s", row.name, protocol.Deref(result.DesktopID), row.wantDesktop)
 		}
-		if row.wantLabel != "" {
-			if label := sessionOfDelegate(t, w, result.SessionID).Label; label != row.wantLabel {
-				t.Errorf("%s: the delegate is named %q; want %q", row.name, label, row.wantLabel)
-			}
-		}
+
 	}
 	if fetched := strings.TrimSpace(runGit(t, repo, "rev-parse", "origin/main")); fetched != local {
 		t.Errorf("the repository's origin/main moved to %s; a delegation must not fetch", fetched)
@@ -196,7 +191,7 @@ func TestADelegationNeverSharesACheckoutWithoutConsent(t *testing.T) {
 		{name: "creating the occupied worktree again, consenting to share", request: delegateCheckoutAt(repo, recreate), consent: true,
 			refusal: "cannot be reinterpreted as checkout reuse"},
 		{name: "reusing the occupied worktree", request: delegateCheckoutAt(shared, reuse),
-			refusal: "checkout " + shared + " is used by active Attn session " + owner.SessionID + "; pass --allow-worktree-reuse"},
+			refusal: "checkout " + shared + " is used by active Attn session " + string(owner.SessionID) + "; pass --allow-worktree-reuse"},
 		{name: "reusing a folder inside the occupied worktree", request: delegateCheckoutAt(nested, reuse),
 			refusal: "checkout " + shared + " is used by active Attn session"},
 		{name: "reusing the occupied worktree, consenting to share", request: delegateCheckoutAt(shared, reuse), consent: true, sharedIn: shared},
@@ -238,11 +233,11 @@ func TestADelegateStillBootingHoldsItsCheckoutAgainstAnother(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	testworld.AwaitSession(app, accepted.SessionID, func(protocol.Session) bool { return true })
+	testworld.AwaitSession(app, string(accepted.SessionID), func(protocol.Session) bool { return true })
 
 	second := delegateCheckoutAt(repo, reuseMain)
 	second.Label = protocol.Ptr("second")
-	if result, err := cli.Delegate(second); err == nil || !strings.Contains(err.Error(), "checkout "+repo+" is used by active Attn session "+accepted.SessionID) {
+	if result, err := cli.Delegate(second); err == nil || !strings.Contains(err.Error(), "checkout "+repo+" is used by active Attn session "+string(accepted.SessionID)) {
 		t.Errorf("a second delegation into the checkout the first is still launching in = %+v, %v; want it refused", result, err)
 	}
 	boot()

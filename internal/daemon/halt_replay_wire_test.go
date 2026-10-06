@@ -25,11 +25,11 @@ func TestAHaltRecordedBeforeTheSessionStartedDoesNotEndItsTurn(t *testing.T) {
 		if err := w.InjectSession("s1", "checkout essay", cwd, protocol.SessionAgentClaude); err != nil {
 			t.Fatalf("register: %v", err)
 		}
-		if err := cli.ObserveAgentConversation("s1", transcript.ConversationID, transcript.Path); err != nil {
+		if err := cli.ObserveAgentConversation(protocol.TerminalID(w.Terminal("s1")), transcript.ConversationID, transcript.Path); err != nil {
 			t.Fatalf("bind the conversation: %v", err)
 		}
 		transcript.Prompt("just the outline then")
-		if err := cli.UpdateStateFromHookEvidence("s1", protocol.StateWorking, "", "user_prompt_submit", "just the outline then"); err != nil {
+		if err := cli.UpdateStateFromHookEvidence(protocol.TerminalID(w.Terminal("s1")), protocol.StateWorking, "", "user_prompt_submit", "just the outline then"); err != nil {
 			t.Fatalf("report the prompt taken: %v", err)
 		}
 		working := testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })

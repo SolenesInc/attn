@@ -28,7 +28,7 @@ func TestAgentsThatDieAfterADaemonRestartBreakThroughTheirSnooze(t *testing.T) {
 			return x.State == protocol.SessionStateWaitingInput && protocol.Deref(x.TurnOwed)
 		})
 		until := time.Now().Add(time.Hour).Format(time.RFC3339Nano)
-		app.Send(protocol.SnoozeTurnMessage{Cmd: protocol.CmdSnoozeTurn, SessionID: id, Until: until})
+		app.Send(protocol.SnoozeTurnMessage{Cmd: protocol.CmdSnoozeTurn, SessionID: protocol.SessionID(id), Until: until})
 		testworld.AwaitSession(app, id, func(x protocol.Session) bool { return protocol.Deref(x.TurnSnoozedUntil) != "" })
 	}
 
@@ -61,7 +61,7 @@ func TestASnoozeTheDaemonCrashedWhileWakingWakesAfterTheRestart(t *testing.T) {
 	app = s.App()
 	var came protocol.Session
 	for _, x := range app.Initial.Sessions {
-		if x.ID == id {
+		if string(x.ID) == id {
 			came = x
 		}
 	}
@@ -100,7 +100,7 @@ func TestASnoozeWakesOnTimeWhileGitHubHangs(t *testing.T) {
 	}
 
 	register(t, s, "waiting", "waiting")
-	if err := s.Client().UpdateState("waiting", protocol.StateWaitingInput); err != nil {
+	if err := s.Client().UpdateState(protocol.TerminalID(app.Terminal("waiting")), protocol.StateWaitingInput); err != nil {
 		t.Fatalf("waiting reports waiting: %v", err)
 	}
 	testworld.AwaitSession(app, "waiting", func(x protocol.Session) bool { return protocol.Deref(x.TurnOwed) })
@@ -113,5 +113,5 @@ func TestASnoozeWakesOnTimeWhileGitHubHangs(t *testing.T) {
 
 func snooze(app *testworld.Peer, id string, lasting time.Duration) {
 	until := time.Now().Add(lasting).Format(time.RFC3339Nano)
-	app.Send(protocol.SnoozeTurnMessage{Cmd: protocol.CmdSnoozeTurn, SessionID: id, Until: until})
+	app.Send(protocol.SnoozeTurnMessage{Cmd: protocol.CmdSnoozeTurn, SessionID: protocol.SessionID(id), Until: until})
 }

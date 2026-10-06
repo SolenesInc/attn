@@ -57,12 +57,12 @@ func TestDoorbellDefersWhenTheScreenIsUnavailable(t *testing.T) {
 	sessionID := "session-no-screen"
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
-		ID: sessionID, Label: "member", Agent: protocol.SessionAgentClaude,
+		ID: protocol.SessionID(sessionID), Label: "member", Agent: protocol.SessionAgentClaude,
 		State: protocol.SessionStateWorking, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
 
 	backend.screenUnavailable = true
-	delivery := maintenanceSessionInput("screen-test", "unavailable", sessionID, "[attn] hand off now", sessionInputAtTurnBoundary)
+	delivery := maintenanceSessionInput("screen-test", "unavailable", protocol.SessionID(sessionID), "[attn] hand off now", sessionInputAtTurnBoundary)
 	if attempt := d.sessionInputs().try(context.Background(), delivery); !errors.Is(attempt.err, errSessionInputScreenUnavailable) {
 		t.Fatalf("typing without a screen returned %v, want errSessionInputScreenUnavailable", attempt.err)
 	}

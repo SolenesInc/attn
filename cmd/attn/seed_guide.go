@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/victorarias/attn/internal/prompts"
 	"io"
 	"os"
+
+	"github.com/victorarias/attn/internal/prompts"
 )
 
 func runSeedGuide(args []string) {

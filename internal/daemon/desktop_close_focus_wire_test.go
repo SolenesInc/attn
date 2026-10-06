@@ -126,7 +126,7 @@ func TestAnAgentExitReturnsToThePreviouslyFocusedTile(t *testing.T) {
 	desktop, paneB := viewProfile(t, w, profileID).paneOf(t, sessions[1])
 	watcher := w.AppOn(profileID)
 	w.Launched(sessions[2]).Exit(0)
-	testworld.Await(watcher, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == sessions[2] })
+	testworld.Await(watcher, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == protocol.SessionID(sessions[2]) })
 	if result := closeFromApp(app, sessions[2]); result.Error != nil {
 		t.Fatal(*result.Error)
 	}

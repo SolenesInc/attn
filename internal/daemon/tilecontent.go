@@ -97,7 +97,7 @@ func refreshTileContentHash(path string, sig tileContentSig, now time.Time) tile
 	return sig
 }
 
-func (d *Daemon) openMarkdownTile(path, callerSessionID string) (desktopID, tileID string, err error) {
+func (d *Daemon) openMarkdownTile(path string, callerSessionID protocol.SessionID) (desktopID, tileID string, err error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return "", "", fmt.Errorf("path is required")
@@ -129,7 +129,7 @@ func (d *Daemon) openMarkdownTile(path, callerSessionID string) (desktopID, tile
 	return desktop.ID, tileID, nil
 }
 
-func (d *Daemon) openSeedTile(seedID, callerSessionID string, standalone bool, selectedProfile ...string) (desktopID, tileID string, err error) {
+func (d *Daemon) openSeedTile(seedID string, callerSessionID protocol.SessionID, standalone bool, selectedProfile ...string) (desktopID, tileID string, err error) {
 	if err := d.requireHome(garden.Surface); err != nil {
 		return "", "", err
 	}
@@ -176,8 +176,8 @@ func (d *Daemon) openSeedTile(seedID, callerSessionID string, standalone bool, s
 	return desktop.ID, tileID, nil
 }
 
-func (d *Daemon) seedTileSession(tenderSessionID string, location agentLocation) string {
-	tenderSessionID = strings.TrimSpace(tenderSessionID)
+func (d *Daemon) seedTileSession(tenderSessionID protocol.SessionID, location agentLocation) protocol.SessionID {
+	tenderSessionID = protocol.TrimID(tenderSessionID)
 	if tenderSessionID == "" {
 		return location.sessionID
 	}
@@ -224,6 +224,9 @@ func (d *Daemon) handleOpenSentFiles(conn net.Conn, msg *protocol.OpenSentFilesM
 		return
 	}
 	sessionID := protocol.Deref(msg.SessionID)
+	if msg.TerminalID != nil {
+		sessionID = d.sessionInTerminal(*msg.TerminalID)
+	}
 	for _, path := range msg.Paths {
 		path = strings.TrimSpace(path)
 		switch strings.ToLower(filepath.Ext(path)) {

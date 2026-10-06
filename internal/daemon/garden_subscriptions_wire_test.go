@@ -25,7 +25,7 @@ func TestADelegatedSessionWatchesItsSeedAndAResumeKeepsItsUnwatch(t *testing.T) 
 	if inherited.Changed || !inherited.Watching || !reflect.DeepEqual(inherited.WatchingVia, []string{child}) {
 		t.Errorf("the child's delegate unwatching the leaf = %+v, want still watching via %s", inherited, child)
 	}
-	if shown, err := cli.SeedShow(atChild, leaf); err != nil || !reflect.DeepEqual(shown.WatchingVia, []string{child}) {
+	if shown, err := cli.SeedShow(protocol.SessionID(atChild), leaf); err != nil || !reflect.DeepEqual(shown.WatchingVia, []string{child}) {
 		t.Errorf("show of the leaf = %+v (%v), want watching via %s", shown, err, child)
 	}
 
@@ -52,13 +52,13 @@ func gardenSubscriptionDelegate(t *testing.T, w *world, app *testworld.Peer, sou
 	if !delegated.Success {
 		t.Fatalf("delegating %s: %s", seedID, protocol.Deref(delegated.Error))
 	}
-	w.Launched(delegated.Result.SessionID)
-	return delegated.Result.SessionID
+	w.Launched(string(delegated.Result.SessionID))
+	return string(delegated.Result.SessionID)
 }
 
 func gardenSubscriptionWatching(t *testing.T, cli *client.Client, session, seedID string) bool {
 	t.Helper()
-	shown, err := cli.SeedShow(session, seedID)
+	shown, err := cli.SeedShow(protocol.SessionID(session), seedID)
 	if err != nil {
 		t.Fatalf("show %s: %v", seedID, err)
 	}

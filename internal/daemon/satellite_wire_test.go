@@ -17,7 +17,7 @@ func TestAShellSplitFromAnAgentOnItsDesktopBecomesItsSatellite(t *testing.T) {
 	spawnOn := func(h fakeagent.Harness, dir, base, desktop string) string {
 		id := w.Spawn(app, h, dir, func(m *protocol.SpawnSessionMessage) {
 			if base != "" {
-				m.SpawnedFrom = protocol.Ptr(base)
+				m.SpawnedFrom = protocol.Ptr(protocol.SessionID(base))
 			}
 			if desktop != "" {
 				m.Placement = &protocol.SessionPlacement{DesktopID: protocol.Ptr(desktop)}
@@ -59,11 +59,11 @@ func TestAShellSplitFromAnAgentOnItsDesktopBecomesItsSatellite(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			announced := testworld.AwaitSession(app, c.session, func(protocol.Session) bool { return true })
-			if got := protocol.Deref(announced.ParentSessionID); got != c.wantParent {
+			if got := protocol.Deref(announced.ParentSessionID); string(got) != c.wantParent {
 				t.Errorf("the app was told parent %q, want %q", got, c.wantParent)
 			}
 			queried := queriedSession(t, cli, c.session)
-			if got := protocol.Deref(queried.ParentSessionID); got != c.wantParent {
+			if got := protocol.Deref(queried.ParentSessionID); string(got) != c.wantParent {
 				t.Errorf("the CLI lists parent %q, want %q", got, c.wantParent)
 			}
 			if c.wantParent != "" && protocol.Deref(queried.TurnOwed) {
@@ -73,6 +73,6 @@ func TestAShellSplitFromAnAgentOnItsDesktopBecomesItsSatellite(t *testing.T) {
 	}
 	for _, id := range shells {
 		app.TypeLine(id, "exit")
-		testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == id })
+		testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == id })
 	}
 }

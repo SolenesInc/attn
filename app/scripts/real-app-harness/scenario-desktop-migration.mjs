@@ -47,6 +47,7 @@ function legacyWorkspacesSql(fixtureDir) {
     'DELETE FROM desktops;',
     'DELETE FROM profiles;',
     'DELETE FROM profile_migration;',
+    'DROP TABLE command_usage;',
     // A pre-profile install has no launch rows and no crew or automation profiles.
     'DELETE FROM launch_desktops;',
     'DELETE FROM crew_profiles;',
@@ -71,6 +72,9 @@ function legacyWorkspacesSql(fixtureDir) {
     // It also predates successions (169), which add sessions.succeeds.
     'DROP INDEX idx_sessions_succeeds;',
     'ALTER TABLE sessions DROP COLUMN succeeds;',
+    'ALTER TABLE sessions DROP COLUMN priority;',
+    'ALTER TABLE session_teardown_tombstones DROP COLUMN driver_terminal_id;',
+    'DROP TABLE terminal_bindings;',
     `DELETE FROM sessions WHERE id IN (${LEGACY_WORKSPACES.flatMap((_, offset) => agentsOf(offset + 1)).map(sql).join(', ')});`,
   ];
   LEGACY_WORKSPACES.forEach((title, offset) => {

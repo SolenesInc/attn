@@ -2,8 +2,6 @@ package protocol
 
 import "time"
 
-const ProtocolVersion = "352"
-
 const (
 	ErrorCodeConflict             = "conflict"
 	ErrorCodeUndeclaredCollection = "undeclared_collection"
@@ -141,6 +139,7 @@ const (
 	CmdPullRequestUnwatch            = "pull_request_unwatch"
 	CmdQuery                         = "query"
 	CmdHeartbeat                     = "heartbeat"
+	CmdSetSessionPriority            = "set_session_priority"
 	CmdSettleTurn                    = "settle_turn"
 	CmdSnoozeTurn                    = "snooze_turn"
 	CmdWakeTurn                      = "wake_turn"
@@ -185,6 +184,8 @@ const (
 	CmdInjectTestPR                  = "inject_test_pr"
 	CmdInjectTestSession             = "inject_test_session"
 	CmdGetRecentLocations            = "get_recent_locations"
+	CmdGetCommandUsage               = "get_command_usage"
+	CmdRecordCommandUsage            = "record_command_usage"
 	CmdRecentFiles                   = "recent_files"
 	CmdBrowseDirectory               = "browse_directory"
 	CmdInspectPath                   = "inspect_path"
@@ -335,6 +336,7 @@ const (
 	EventSessionCloseResult              = "session_close_result"
 	EventSessionStateChanged             = "session_state_changed"
 	EventNotebookChanged                 = "notebook_changed"
+	EventTerminalBindingsUpdated         = "terminal_bindings_updated"
 	EventSessionsUpdated                 = "sessions_updated"
 	EventPullRequestWatchResult          = "pull_request_watch_result"
 	EventPullRequestUnwatchResult        = "pull_request_unwatch_result"
@@ -422,6 +424,8 @@ const (
 	EventPluginActionResult              = "plugin_action_result"
 	EventRateLimited                     = "rate_limited"
 	EventRecentLocationsResult           = "recent_locations_result"
+	EventGetCommandUsageResult           = "get_command_usage_result"
+	EventRecordCommandUsageResult        = "record_command_usage_result"
 	EventRecentFilesResult               = "recent_files_result"
 	EventBrowseDirectoryResult           = "browse_directory_result"
 	EventInspectPathResult               = "inspect_path_result"

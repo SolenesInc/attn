@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -29,18 +30,18 @@ type launchWatch struct {
 	outcome launchOutcome
 }
 
-func (d *Daemon) watchLaunch(sessionID string) *launchWatch {
+func (d *Daemon) watchLaunch(sessionID protocol.SessionID) *launchWatch {
 	watch := &launchWatch{done: make(chan struct{})}
 	d.launchWatchMu.Lock()
 	if d.launchWatches == nil {
-		d.launchWatches = make(map[string]*launchWatch)
+		d.launchWatches = make(map[protocol.SessionID]*launchWatch)
 	}
 	d.launchWatches[sessionID] = watch
 	d.launchWatchMu.Unlock()
 	return watch
 }
 
-func (d *Daemon) forgetLaunchWatch(sessionID string, watch *launchWatch) {
+func (d *Daemon) forgetLaunchWatch(sessionID protocol.SessionID, watch *launchWatch) {
 	d.launchWatchMu.Lock()
 	if d.launchWatches[sessionID] == watch {
 		delete(d.launchWatches, sessionID)
@@ -48,11 +49,11 @@ func (d *Daemon) forgetLaunchWatch(sessionID string, watch *launchWatch) {
 	d.launchWatchMu.Unlock()
 }
 
-func (d *Daemon) resolveLaunchWatch(sessionID string, outcome launchOutcome) {
+func (d *Daemon) resolveLaunchWatch(sessionID protocol.SessionID, outcome launchOutcome) {
 	d.claimLaunchWatch(sessionID).settle(outcome)
 }
 
-func (d *Daemon) claimLaunchWatch(sessionID string) *launchWatch {
+func (d *Daemon) claimLaunchWatch(sessionID protocol.SessionID) *launchWatch {
 	d.launchWatchMu.Lock()
 	defer d.launchWatchMu.Unlock()
 	watch := d.launchWatches[sessionID]
@@ -76,22 +77,22 @@ func harnessReportedState(source string) bool {
 	return false
 }
 
-func (d *Daemon) noteLaunchStarted(sessionID string) {
+func (d *Daemon) noteLaunchStarted(sessionID protocol.SessionID) {
 	d.resolveLaunchWatch(sessionID, launchOutcome{startedAt: time.Now()})
 }
 
-func (d *Daemon) noteLaunchExited(sessionID string, info ptybackend.ExitInfo) {
+func (d *Daemon) noteLaunchExited(sessionID protocol.SessionID, info ptybackend.ExitInfo) {
 	d.resolveLaunchWatch(sessionID, launchOutcome{exit: d.exitScreenOrBare(sessionID, info)})
 }
 
-func (d *Daemon) exitScreenOrBare(sessionID string, info ptybackend.ExitInfo) *store.SessionExitScreen {
+func (d *Daemon) exitScreenOrBare(sessionID protocol.SessionID, info ptybackend.ExitInfo) *store.SessionExitScreen {
 	if exit := d.store.GetSessionExitScreen(sessionID); exit != nil {
 		return exit
 	}
 	return &store.SessionExitScreen{SessionID: sessionID, ExitCode: info.ExitCode, ExitSignal: info.Signal}
 }
 
-func (d *Daemon) awaitDelegatedLaunch(sessionID string, watch *launchWatch) launchOutcome {
+func (d *Daemon) awaitDelegatedLaunch(sessionID protocol.SessionID, watch *launchWatch) launchOutcome {
 	defer d.forgetLaunchWatch(sessionID, watch)
 	select {
 	case <-watch.done:
@@ -120,7 +121,7 @@ func (d *Daemon) awaitDelegatedLaunch(sessionID string, watch *launchWatch) laun
 	}
 }
 
-func delegationExitError(agent, sessionID string, exit *store.SessionExitScreen) error {
+func delegationExitError(agent string, sessionID protocol.SessionID, exit *store.SessionExitScreen) error {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s exited with %s before its first turn; session %s and its pane were kept, `attn agent peek %s` shows what it left",
 		agent, describeExit(exit), sessionID, shortSessionID(sessionID))
@@ -140,7 +141,7 @@ func describeExit(exit *store.SessionExitScreen) string {
 	return fmt.Sprintf("code %d", exit.ExitCode)
 }
 
-func (d *Daemon) noteDelegatedExitOnSeed(seedID, agent, sessionID string, exit *store.SessionExitScreen) {
+func (d *Daemon) noteDelegatedExitOnSeed(seedID string, agent string, sessionID protocol.SessionID, exit *store.SessionExitScreen) {
 	if strings.TrimSpace(seedID) == "" {
 		return
 	}
@@ -176,14 +177,14 @@ func (d *Daemon) watchRecoveredLaunches() {
 		watch := d.watchLaunch(sessionID)
 		d.launchWatchMu.Lock()
 		if d.recoveredLaunches == nil {
-			d.recoveredLaunches = make(map[string]*launchWatch)
+			d.recoveredLaunches = make(map[protocol.SessionID]*launchWatch)
 		}
 		d.recoveredLaunches[sessionID] = watch
 		d.launchWatchMu.Unlock()
 	}
 }
 
-func (d *Daemon) takeRecoveredLaunch(sessionID string) *launchWatch {
+func (d *Daemon) takeRecoveredLaunch(sessionID protocol.SessionID) *launchWatch {
 	d.launchWatchMu.Lock()
 	defer d.launchWatchMu.Unlock()
 	watch := d.recoveredLaunches[sessionID]

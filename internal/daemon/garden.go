@@ -83,7 +83,7 @@ func (d *Daemon) plantSeedProtected(_ foregroundCleanupProtection, schema docsto
 	}
 	occurrences = append(occurrences, planted)
 	if seed.Status == garden.StatusGrowing {
-		tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, seed.ID, seed.PlanterSession, seed.TenderSession)
+		tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, seed.ID, seed.PlanterSession, string(seed.TenderSession))
 		if err != nil {
 			return docstore.Document{}, err
 		}
@@ -91,7 +91,7 @@ func (d *Daemon) plantSeedProtected(_ foregroundCleanupProtection, schema docsto
 	}
 	for _, edge := range seed.Edges {
 		linked, err := seedEvents.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.EdgeLinked, seed.ID, seedEvents.EdgePayload{
-			EdgeKind: string(edge.Kind), TargetSeedID: edge.To, CausedBySessionID: seed.PlanterSession,
+			EdgeKind: edge.Kind, TargetSeedID: edge.To, CausedBySessionID: seed.PlanterSession,
 		})
 		if err != nil {
 			return docstore.Document{}, err
@@ -299,7 +299,7 @@ func seedToProtocol(seed garden.Seed, doc docstore.Document, ready bool) protoco
 		PlanterMember:       seed.PlanterMember,
 		TenderSession:       seed.TenderSession,
 		TenderMember:        seed.TenderMember,
-		LastExecutionID:     protocol.Ptr(strings.TrimSpace(seed.LastExecutionID)),
+		LastExecutionID:     protocol.Ptr(protocol.TrimID(seed.LastExecutionID)),
 		StateChangedAt:      stateChangedAt,
 		StateChangedAtExact: stateChangedAtExact,
 		Edges:               make([]protocol.SeedEdge, 0, len(seed.Edges)),
@@ -311,7 +311,7 @@ func seedToProtocol(seed garden.Seed, doc docstore.Document, ready bool) protoco
 		CreatedAt:           doc.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:           doc.UpdatedAt.UTC().Format(time.RFC3339),
 	}
-	if strings.TrimSpace(seed.LastExecutionID) == "" {
+	if protocol.TrimID(seed.LastExecutionID) == "" {
 		out.LastExecutionID = nil
 	}
 	if seed.Reason != "" {
@@ -434,7 +434,7 @@ func (d *Daemon) handleSeedPlant(conn net.Conn, msg *protocol.SeedPlantMessage) 
 		return
 	}
 
-	sessionID := strings.TrimSpace(protocol.Deref(msg.SourceSessionID))
+	sessionID := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
 	seed := garden.Seed{
 		ProfileID:      protocol.Deref(msg.ProfileID),
 		Title:          title,
@@ -493,7 +493,7 @@ func (d *Daemon) handleSeedPlot(conn net.Conn, msg *protocol.SeedPlotMessage) {
 		d.sendGardenError(conn, "plot", err)
 		return
 	}
-	sessionID := strings.TrimSpace(protocol.Deref(msg.SourceSessionID))
+	sessionID := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
 	member := strings.TrimSpace(protocol.Deref(msg.Member))
 
 	var result protocol.SeedPlotResult
@@ -711,7 +711,7 @@ func (d *Daemon) handleSeedShow(conn net.Conn, msg *protocol.SeedShowMessage) {
 	if progress, ok := read.progress(seed.ID); ok {
 		wire.PlotProgress = progress
 	}
-	sessionID := strings.TrimSpace(protocol.Deref(msg.SourceSessionID))
+	sessionID := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
 	coverage, err := d.seedWatchCoverage(sessionID, seed.ID)
 	if err != nil {
 		d.sendGardenError(conn, "show", err)
@@ -772,7 +772,7 @@ func (d *Daemon) applySeedBodyEdit(id, body string, causedBy ...string) (garden.
 		}
 		seed.Body = body
 		occurrence, err := seedEvents.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.BodyEdited, seed.ID, seedEvents.CausePayload{
-			CausedBySessionID: firstString(causedBy),
+			CausedBySessionID: protocol.SessionID(firstString(causedBy)),
 		})
 		if err != nil {
 			return garden.Seed{}, docstore.Document{}, err
@@ -925,7 +925,7 @@ func (d *Daemon) handleSeedLink(conn net.Conn, msg *protocol.SeedLinkMessage) {
 		}
 		var occurrence seedEvents.Occurrence
 		payload := seedEvents.EdgePayload{
-			EdgeKind: string(kind), TargetSeedID: to,
+			EdgeKind: kind, TargetSeedID: to,
 		}
 		if verb == "unlink" {
 			occurrence, err = seedEvents.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.EdgeUnlinked, next.ID, payload)
@@ -981,7 +981,7 @@ func (d *Daemon) handleSeedReady(conn net.Conn, msg *protocol.SeedReadyMessage) 
 	var result *protocol.SeedReadyResult
 	var err error
 	if crown == "" && !protocol.Deref(msg.All) {
-		result, err = d.gardenPrime(strings.TrimSpace(protocol.Deref(msg.SourceSessionID)), protocol.Deref(msg.ProfileID))
+		result, err = d.gardenPrime(protocol.TrimID(protocol.Deref(msg.SourceSessionID)), protocol.Deref(msg.ProfileID))
 	} else {
 		result, err = d.gardenReadyResult(crown, protocol.Deref(msg.ProfileID))
 	}
@@ -1058,19 +1058,19 @@ func (d *Daemon) dispatchesCollection() (*docstore.CollectionSchema, error) {
 	return d.collectionFor(garden.Namespace, garden.CollectionDispatches)
 }
 
-func (d *Daemon) recordGardenDispatch(sessionID, crown, dispatcherSession, cwd, agent string, fromChief bool) error {
+func (d *Daemon) recordGardenDispatch(sessionID protocol.SessionID, crown string, dispatcherSession protocol.SessionID, cwd string, agent string, fromChief bool) error {
 	observed := d.observeGardenDispatchExecution(sessionID, cwd, agent)
 	return d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 		return d.recordGardenDispatchProtected(protection, sessionID, crown, dispatcherSession, fromChief, observed)
 	})
 }
 
-func (d *Daemon) recordGardenDispatchProtected(protection foregroundCleanupProtection, sessionID, crown, dispatcherSession string, fromChief bool, observed garden.Dispatch) error {
+func (d *Daemon) recordGardenDispatchProtected(protection foregroundCleanupProtection, sessionID protocol.SessionID, crown string, dispatcherSession protocol.SessionID, fromChief bool, observed garden.Dispatch) error {
 	return d.recordGardenDispatchObservedProtected(protection, sessionID, crown, dispatcherSession, fromChief, observed)
 }
 
-func (d *Daemon) observeGardenDispatchExecution(sessionID, cwd, agent string) garden.Dispatch {
-	sessionID = strings.TrimSpace(sessionID)
+func (d *Daemon) observeGardenDispatchExecution(sessionID protocol.SessionID, cwd string, agent string) garden.Dispatch {
+	sessionID = protocol.TrimID(sessionID)
 	observed := d.observedGardenExecution(&protocol.Session{
 		ID: sessionID, Directory: cwd, Agent: protocol.SessionAgent(agent),
 	}, "", d.gardenTime())
@@ -1084,17 +1084,17 @@ func (d *Daemon) observeGardenDispatchExecution(sessionID, cwd, agent string) ga
 	return observed
 }
 
-func (d *Daemon) recordGardenDispatchObservedProtected(_ foregroundCleanupProtection, sessionID, crown, dispatcherSession string, fromChief bool, observed garden.Dispatch) error {
+func (d *Daemon) recordGardenDispatchObservedProtected(_ foregroundCleanupProtection, sessionID protocol.SessionID, crown string, dispatcherSession protocol.SessionID, fromChief bool, observed garden.Dispatch) error {
 	_, err := d.updateGardenDispatch(sessionID, func(current garden.Dispatch) (garden.Dispatch, bool, error) {
 		next := mergeGardenExecution(current, observed)
 		if wanted := strings.TrimSpace(crown); wanted != "" {
-			if successor := strings.TrimSpace(current.SupersededBy); successor != "" {
+			if successor := protocol.TrimID(current.SupersededBy); successor != "" {
 				return garden.Dispatch{}, false, fmt.Errorf(
 					"session %s was already superseded by %s while binding it to %s", sessionID, successor, wanted)
 			}
 			next.Crown = wanted
 		}
-		if dispatcher := strings.TrimSpace(dispatcherSession); dispatcher != "" {
+		if dispatcher := protocol.SessionID(strings.TrimSpace(string(dispatcherSession))); dispatcher != "" {
 			next.DispatcherSession = dispatcher
 			next.DispatcherMember = d.crewMembersBySession()[dispatcher]
 		}
@@ -1104,8 +1104,8 @@ func (d *Daemon) recordGardenDispatchObservedProtected(_ foregroundCleanupProtec
 	return err
 }
 
-func (d *Daemon) rememberDispatchResume(sessionID, resumeSessionID string) error {
-	sessionID, resumeSessionID = strings.TrimSpace(sessionID), strings.TrimSpace(resumeSessionID)
+func (d *Daemon) rememberDispatchResume(sessionID protocol.SessionID, resumeSessionID string) error {
+	sessionID, resumeSessionID = protocol.TrimID(sessionID), strings.TrimSpace(resumeSessionID)
 	if sessionID == "" || resumeSessionID == "" {
 		return nil
 	}
@@ -1122,7 +1122,7 @@ func (d *Daemon) rememberDispatchResume(sessionID, resumeSessionID string) error
 	return err
 }
 
-func (d *Daemon) validateDispatchCrown(crown, sourceSessionID string) error {
+func (d *Daemon) validateDispatchCrown(crown string, sourceSessionID protocol.SessionID) error {
 	if crown == "" {
 		return nil
 	}
@@ -1139,7 +1139,7 @@ func (d *Daemon) validateDispatchCrown(crown, sourceSessionID string) error {
 			crown, seed.Status, crown)
 	}
 	held := seed.Tender()
-	if held.Holds(d.sessionExists) && !held.Is(garden.Tender{Session: strings.TrimSpace(sourceSessionID)}) {
+	if held.Holds(d.sessionExists) && !held.Is(garden.Tender{Session: protocol.TrimID(sourceSessionID)}) {
 		return fmt.Errorf(
 			"%s is being tended by %s, and a seed has one tender at a time; dispatching here would hand it to a new agent.\n"+
 				"Wait for %s to harvest or park it, plant the work as its own seed, or say what you need on the log: attn seed note %s -m \"…\"",
@@ -1148,7 +1148,7 @@ func (d *Daemon) validateDispatchCrown(crown, sourceSessionID string) error {
 	return nil
 }
 
-func (d *Daemon) gardenDispatch(sessionID string) (garden.Dispatch, bool) {
+func (d *Daemon) gardenDispatch(sessionID protocol.SessionID) (garden.Dispatch, bool) {
 	if sessionID == "" || d.store == nil {
 		return garden.Dispatch{}, false
 	}
@@ -1156,7 +1156,7 @@ func (d *Daemon) gardenDispatch(sessionID string) (garden.Dispatch, bool) {
 	if err != nil {
 		return garden.Dispatch{}, false
 	}
-	doc, found, err := d.store.GetDocument(*schema, sessionID)
+	doc, found, err := d.store.GetDocument(*schema, string(sessionID))
 	if err != nil || !found {
 		return garden.Dispatch{}, false
 	}
@@ -1168,7 +1168,7 @@ func (d *Daemon) gardenDispatch(sessionID string) (garden.Dispatch, bool) {
 	return dispatch, true
 }
 
-func (d *Daemon) gardenDispatchCrown(sessionID string) (string, bool) {
+func (d *Daemon) gardenDispatchCrown(sessionID protocol.SessionID) (string, bool) {
 	dispatch, ok := d.gardenDispatch(sessionID)
 	if !ok {
 		return "", false
@@ -1184,7 +1184,7 @@ func (d *Daemon) gardenDispatchCrown(sessionID string) (string, bool) {
 	return crown, crown != ""
 }
 
-func (d *Daemon) gardenDispatchSeedsBySession() map[string]string {
+func (d *Daemon) gardenDispatchSeedsBySession() map[protocol.SessionID]string {
 	if d.store == nil {
 		return nil
 	}
@@ -1203,24 +1203,24 @@ func (d *Daemon) gardenDispatchSeedsBySession() map[string]string {
 			d.dispatchSeeds, d.dispatchersBySession, d.dispatchFromChief, d.dispatchProjectionRevs, d.dispatchSeedsLoaded = nil, nil, nil, nil, true
 			return nil
 		}
-		loaded := make(map[string]string, len(read.Documents))
-		dispatchers := make(map[string]garden.Tender, len(read.Documents))
-		fromChief := map[string]bool{}
-		revisions := make(map[string]int64, len(read.Documents))
+		loaded := make(map[protocol.SessionID]string, len(read.Documents))
+		dispatchers := make(map[protocol.SessionID]garden.Tender, len(read.Documents))
+		fromChief := map[protocol.SessionID]bool{}
+		revisions := make(map[protocol.SessionID]int64, len(read.Documents))
 		for _, doc := range read.Documents {
-			revisions[doc.ID] = doc.Rev
+			revisions[protocol.SessionID(doc.ID)] = doc.Rev
 			dispatch, err := garden.DecodeDispatch(doc.Body)
 			if err != nil {
 				continue
 			}
 			if dispatcher := dispatch.Dispatcher(); dispatcher.Named() {
-				dispatchers[doc.ID] = dispatcher
+				dispatchers[protocol.SessionID(doc.ID)] = dispatcher
 			}
 			if crown := activeDispatchCrown(dispatch); crown != "" {
-				loaded[doc.ID] = crown
+				loaded[protocol.SessionID(doc.ID)] = crown
 			}
 			if dispatch.FromChief {
-				fromChief[doc.ID] = true
+				fromChief[protocol.SessionID(doc.ID)] = true
 			}
 		}
 		d.dispatchSeeds, d.dispatchersBySession, d.dispatchFromChief, d.dispatchProjectionRevs = loaded, dispatchers, fromChief, revisions
@@ -1229,7 +1229,7 @@ func (d *Daemon) gardenDispatchSeedsBySession() map[string]string {
 	return d.dispatchSeeds
 }
 
-func (d *Daemon) rememberDispatchProjection(sessionID string, dispatch garden.Dispatch, rev int64) {
+func (d *Daemon) rememberDispatchProjection(sessionID protocol.SessionID, dispatch garden.Dispatch, rev int64) {
 	d.dispatchSeedsMu.Lock()
 	defer d.dispatchSeedsMu.Unlock()
 	if !d.dispatchSeedsLoaded {
@@ -1238,7 +1238,7 @@ func (d *Daemon) rememberDispatchProjection(sessionID string, dispatch garden.Di
 	if current, ok := d.dispatchProjectionRevs[sessionID]; ok && rev < current {
 		return
 	}
-	nextSeeds := make(map[string]string, len(d.dispatchSeeds)+1)
+	nextSeeds := make(map[protocol.SessionID]string, len(d.dispatchSeeds)+1)
 	for id, seed := range d.dispatchSeeds {
 		nextSeeds[id] = seed
 	}
@@ -1247,7 +1247,7 @@ func (d *Daemon) rememberDispatchProjection(sessionID string, dispatch garden.Di
 	} else {
 		delete(nextSeeds, sessionID)
 	}
-	nextChief := make(map[string]bool, len(d.dispatchFromChief)+1)
+	nextChief := make(map[protocol.SessionID]bool, len(d.dispatchFromChief)+1)
 	for id := range d.dispatchFromChief {
 		nextChief[id] = true
 	}
@@ -1256,7 +1256,7 @@ func (d *Daemon) rememberDispatchProjection(sessionID string, dispatch garden.Di
 	} else {
 		delete(nextChief, sessionID)
 	}
-	nextDispatchers := make(map[string]garden.Tender, len(d.dispatchersBySession)+1)
+	nextDispatchers := make(map[protocol.SessionID]garden.Tender, len(d.dispatchersBySession)+1)
 	for id, dispatcher := range d.dispatchersBySession {
 		nextDispatchers[id] = dispatcher
 	}
@@ -1266,7 +1266,7 @@ func (d *Daemon) rememberDispatchProjection(sessionID string, dispatch garden.Di
 		delete(nextDispatchers, sessionID)
 	}
 	if d.dispatchProjectionRevs == nil {
-		d.dispatchProjectionRevs = map[string]int64{}
+		d.dispatchProjectionRevs = map[protocol.SessionID]int64{}
 	}
 	d.dispatchSeeds = nextSeeds
 	d.dispatchersBySession = nextDispatchers
@@ -1274,21 +1274,21 @@ func (d *Daemon) rememberDispatchProjection(sessionID string, dispatch garden.Di
 	d.dispatchProjectionRevs[sessionID] = rev
 }
 
-func (d *Daemon) gardenDispatchersBySession() map[string]garden.Tender {
+func (d *Daemon) gardenDispatchersBySession() map[protocol.SessionID]garden.Tender {
 	d.gardenDispatchSeedsBySession()
 	d.dispatchSeedsMu.Lock()
 	defer d.dispatchSeedsMu.Unlock()
 	return d.dispatchersBySession
 }
 
-func (d *Daemon) gardenDispatchesFromChief() map[string]bool {
+func (d *Daemon) gardenDispatchesFromChief() map[protocol.SessionID]bool {
 	d.gardenDispatchSeedsBySession()
 	d.dispatchSeedsMu.Lock()
 	defer d.dispatchSeedsMu.Unlock()
 	return d.dispatchFromChief
 }
 
-func (d *Daemon) decorateSessionSeed(session *protocol.Session, seedBySession map[string]string) {
+func (d *Daemon) decorateSessionSeed(session *protocol.Session, seedBySession map[protocol.SessionID]string) {
 	if session == nil {
 		return
 	}
@@ -1303,7 +1303,7 @@ func (d *Daemon) decorateSessionSeed(session *protocol.Session, seedBySession ma
 	session.SeedID = nil
 }
 
-func (d *Daemon) decorateSessionDispatcher(session *protocol.Session, dispatcherBySession map[string]garden.Tender) {
+func (d *Daemon) decorateSessionDispatcher(session *protocol.Session, dispatcherBySession map[protocol.SessionID]garden.Tender) {
 	if session == nil {
 		return
 	}
@@ -1318,12 +1318,12 @@ func (d *Daemon) decorateSessionDispatcher(session *protocol.Session, dispatcher
 	}
 }
 
-func (d *Daemon) gardenPrime(sessionID string, profileID ...string) (*protocol.SeedReadyResult, error) {
+func (d *Daemon) gardenPrime(sessionID protocol.SessionID, profileID ...string) (*protocol.SeedReadyResult, error) {
 	if err := d.requireHome(garden.Surface); err != nil {
 		return nil, err
 	}
 	crown := ""
-	if at, ok := d.gardenDispatchCrown(strings.TrimSpace(sessionID)); ok {
+	if at, ok := d.gardenDispatchCrown(protocol.TrimID(sessionID)); ok {
 		if _, _, err := d.readSeed(at); err == nil {
 			crown = at
 		}
@@ -1343,7 +1343,7 @@ func (d *Daemon) handleSeedTransition(conn net.Conn, msg *protocol.SeedTransitio
 	}
 	ask, sessionID := d.seedTransitionAsk(msg)
 	if harvestWhenRequested(msg) {
-		seed, doc, err := d.applyHarvestWhenRequest(msg, verb, ask, sessionID)
+		seed, doc, err := d.applyHarvestWhenRequest(msg, verb, ask, protocol.SessionID(sessionID))
 		if err != nil {
 			d.sendGardenError(conn, string(verb), err)
 			return
@@ -1373,7 +1373,7 @@ func (d *Daemon) handleSeedTransition(conn net.Conn, msg *protocol.SeedTransitio
 }
 
 func (d *Daemon) seedTransitionAsk(msg *protocol.SeedTransitionMessage) (garden.Ask, string) {
-	sessionID := strings.TrimSpace(protocol.Deref(msg.SourceSessionID))
+	sessionID := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
 	memberName := strings.TrimSpace(protocol.Deref(msg.Member))
 	actorSession := sessionID
 	if memberName != "" {
@@ -1388,7 +1388,7 @@ func (d *Daemon) seedTransitionAsk(msg *protocol.SeedTransitionMessage) (garden.
 		Reason:       protocol.Deref(msg.Reason),
 		Force:        protocol.Deref(msg.Force),
 		CauseSession: sessionID,
-	}, sessionID
+	}, string(sessionID)
 }
 
 func (d *Daemon) seedTransitionWire(seed garden.Seed, doc docstore.Document) protocol.Seed {
@@ -1425,7 +1425,7 @@ func (d *Daemon) applySeedTransitionDetailedAtRevision(
 }
 
 func (d *Daemon) applySeedTransitionDetailedAs(
-	id string, verb garden.Verb, ask garden.Ask, comment string, sessionLive func(string) bool,
+	id string, verb garden.Verb, ask garden.Ask, comment string, sessionLive func(protocol.SessionID) bool,
 ) (garden.Seed, docstore.Document, seedTransitionNotes, error) {
 	return d.applySeedTransitionDetailedAsAtRevision(id, verb, ask, comment, sessionLive, 0)
 }
@@ -1433,7 +1433,7 @@ func (d *Daemon) applySeedTransitionDetailedAs(
 var errSeedRevisionMoved = errors.New("")
 
 func (d *Daemon) applySeedTransitionDetailedAsAtRevision(
-	id string, verb garden.Verb, ask garden.Ask, comment string, sessionLive func(string) bool, expectedRev int64,
+	id string, verb garden.Verb, ask garden.Ask, comment string, sessionLive func(protocol.SessionID) bool, expectedRev int64,
 ) (garden.Seed, docstore.Document, seedTransitionNotes, error) {
 	var seed garden.Seed
 	var doc docstore.Document
@@ -1448,7 +1448,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevision(
 
 func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 	protection foregroundCleanupProtection,
-	id string, verb garden.Verb, ask garden.Ask, comment string, sessionLive func(string) bool, expectedRev int64,
+	id string, verb garden.Verb, ask garden.Ask, comment string, sessionLive func(protocol.SessionID) bool, expectedRev int64,
 ) (garden.Seed, docstore.Document, seedTransitionNotes, error) {
 	comment = strings.TrimSpace(comment)
 	if comment != "" && verb != garden.VerbPark {
@@ -1487,7 +1487,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 		if next.Status != seed.Status {
 			next.StateChangedAt = formatGardenTime(d.gardenTime())
 		}
-		if verb == garden.VerbTend && strings.TrimSpace(ask.Actor.Session) != "" {
+		if verb == garden.VerbTend && protocol.TrimID(ask.Actor.Session) != "" {
 			execution, executionErr := d.ensureGardenExecution(ask.Actor.Session)
 			if executionErr != nil {
 				return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, executionErr
@@ -1499,15 +1499,15 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 		if d.beforeSeedMoveWrite != nil {
 			d.beforeSeedMoveWrite(id)
 		}
-		cause := strings.TrimSpace(ask.CauseSession)
+		cause := protocol.TrimID(ask.CauseSession)
 		if cause == "" {
-			cause = strings.TrimSpace(ask.Actor.Session)
+			cause = protocol.TrimID(ask.Actor.Session)
 		}
 		lifecycleOccurrence := gardenSeedLifecycleOccurrence
 		if ask.SuppressNotification {
 			lifecycleOccurrence = quietGardenSeedLifecycleOccurrence
 		}
-		lifecycle, err := lifecycleOccurrence(verb, next.ID, cause, ask.DirectlyNotifiedSession)
+		lifecycle, err := lifecycleOccurrence(verb, next.ID, cause, string(ask.DirectlyNotifiedSession))
 		if err != nil {
 			return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, err
 		}
@@ -1738,7 +1738,7 @@ func (d *Daemon) handleSeedNote(conn net.Conn, msg *protocol.SeedNoteMessage) {
 		d.sendGardenError(conn, "note", err)
 		return
 	}
-	authorSession := strings.TrimSpace(protocol.Deref(msg.SourceSessionID))
+	authorSession := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
 	note, err := d.appendSeedNote(
 		msg.SeedID,
 		msg.Body,
@@ -1783,10 +1783,10 @@ func resolveNoteArtifact(kind string, artifact *garden.ArtifactReference, body s
 }
 
 func (d *Daemon) appendSeedNote(
-	seedID, body, authorSession, member, kindName string,
+	seedID string, body string, authorSession protocol.SessionID, member string, kindName string,
 	artifact *garden.ArtifactReference,
 	attentionRequested bool,
-	causedBySessionID string,
+	causedBySessionID protocol.SessionID,
 ) (protocol.SeedNote, error) {
 	kind, err := garden.ParseNoteKind(kindName)
 	if err != nil {
@@ -1807,7 +1807,7 @@ func (d *Daemon) appendSeedNote(
 	if err != nil {
 		return protocol.SeedNote{}, err
 	}
-	authorSession = strings.TrimSpace(authorSession)
+	authorSession = protocol.TrimID(authorSession)
 	note := garden.Note{
 		Seed:          seed.ID,
 		Kind:          kind,
@@ -1824,7 +1824,7 @@ func (d *Daemon) appendSeedNote(
 }
 
 func (d *Daemon) mintAndWriteNote(
-	schema docstore.CollectionSchema, note garden.Note, attentionRequested bool, causedBySessionID string,
+	schema docstore.CollectionSchema, note garden.Note, attentionRequested bool, causedBySessionID protocol.SessionID,
 ) (garden.Note, docstore.Document, error) {
 	const mintAttempts = 3
 	var lastErr error
@@ -1844,7 +1844,7 @@ func (d *Daemon) mintAndWriteNote(
 			gardenSeedEventModel, gardenSeedEventVocabulary.NoteAdded, note.Seed,
 			seedEvents.NoteAddedPayload{
 				NoteID: note.ID, AttentionRequested: attentionRequested,
-				CausedBySessionID: strings.TrimSpace(causedBySessionID),
+				CausedBySessionID: protocol.TrimID(causedBySessionID),
 			},
 		)
 		if err != nil {

@@ -25,7 +25,7 @@ func runActivity() {
 			fmt.Fprintln(os.Stderr, "usage: attn activity clear <session-id>")
 			os.Exit(1)
 		}
-		activityClear(strings.TrimSpace(args[1]))
+		activityClear(protocol.SessionID(strings.TrimSpace(args[1])))
 	default:
 		fmt.Fprintf(os.Stderr, "unknown activity command: %s\n\n", args[0])
 		fmt.Fprint(os.Stderr, activityUsage)
@@ -108,7 +108,7 @@ func activityAgeSuffix(stamp *string) string {
 	}
 }
 
-func activityClear(sessionID string) {
+func activityClear(sessionID protocol.SessionID) {
 	warnIfDaemonVersionMismatch()
 	if err := client.New("").ClearSessionActivity(sessionID); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)

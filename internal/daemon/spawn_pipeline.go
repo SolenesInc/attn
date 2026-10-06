@@ -51,7 +51,7 @@ type spawnRequest struct {
 	spawnStartedAt  time.Time
 	driver          agentdriver.Driver
 	resumeSessionID string
-	parentSessionID string
+	parentSessionID protocol.SessionID
 	autoModeDriver  bool
 	codexShared     bool
 }
@@ -95,7 +95,7 @@ type spawnOutcome struct {
 	err         error
 }
 
-func (plan *spawnPlan) rollback(d *Daemon, sessionID string) {
+func (plan *spawnPlan) rollback(d *Daemon, sessionID protocol.SessionID) {
 	if plan.cleanupInitialPromptOnReturn {
 		plan.cleanupInitialPrompt()
 	}
@@ -107,7 +107,7 @@ func (plan *spawnPlan) rollback(d *Daemon, sessionID string) {
 	}
 }
 
-func (plan *spawnPlan) restoreLaunchIntent(d *Daemon, sessionID string) {
+func (plan *spawnPlan) restoreLaunchIntent(d *Daemon, sessionID protocol.SessionID) {
 	if plan.conversationPersisted {
 		plan.conversationPersisted = false
 		d.restoreSessionConversation(sessionID, plan.priorConversation)
@@ -224,9 +224,9 @@ func (d *Daemon) normalizeSpawnRequest(req *spawnRequest) *spawnRejection {
 	if rejection := d.checkExistingSessionMembership(req); rejection != nil {
 		return rejection
 	}
-	req.parentSessionID = d.resolveSpawnParent(protocol.Deref(req.msg.SpawnedFrom), req.profile, req.placement, req.isShell)
+	req.parentSessionID = protocol.SessionID(d.resolveSpawnParent(string(protocol.Deref(req.msg.SpawnedFrom)), req.profile, req.placement, req.isShell))
 	if req.parentSessionID == "" && req.existingSession != nil {
-		req.parentSessionID = strings.TrimSpace(protocol.Deref(req.existingSession.ParentSessionID))
+		req.parentSessionID = protocol.TrimID(protocol.Deref(req.existingSession.ParentSessionID))
 	}
 	return nil
 }
@@ -344,7 +344,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		d.beginPluginSessionLaunch(msg.ID, req.pluginDriver.PluginName, plan.pluginRunID)
 		params := pluginDriverSpawnParams{
 			Agent:           req.agent,
-			SessionID:       string(terminal),
+			TerminalID:      terminal,
 			RunID:           plan.pluginRunID,
 			CWD:             req.cwd,
 			Label:           req.label,
@@ -505,7 +505,7 @@ func (d *Daemon) prepareSharedCodexLaunch(req *spawnRequest, plan *spawnPlan) er
 	return nil
 }
 
-func (d *Daemon) spawnSessionRuntime(sessionID string, opts ptybackend.SpawnOptions) error {
+func (d *Daemon) spawnSessionRuntime(sessionID protocol.SessionID, opts ptybackend.SpawnOptions) error {
 	opts.DaemonEnv = d.spawnRoutingEnv()
 	err := d.ptyBackend.Spawn(context.Background(), opts)
 	if err == nil {
@@ -517,26 +517,24 @@ func (d *Daemon) spawnSessionRuntime(sessionID string, opts ptybackend.SpawnOpti
 // spawnTerminal picks the terminal a launch runs in before its worker starts: the one a pane already
 // holds for the session, else a new one its pane will record, else the session's own id when unplaced.
 func (d *Daemon) spawnTerminal(req *spawnRequest) harness.TerminalID {
-	session := harness.SessionID(req.msg.ID)
+	session := req.msg.ID
 	if terminal, ok := d.terminals().Primary(session); ok {
 		return terminal
 	}
-	if req.placement == nil {
-		return harness.TerminalID(req.msg.ID)
-	}
+
 	terminal := harness.TerminalID(uuid.NewString())
-	req.placement.terminal = terminal
+	if req.placement != nil {
+		req.placement.terminal = terminal
+	}
 	d.terminals().expect(terminal, session)
 	return terminal
 }
 
 // launchedHere reports whether a resume id names the conversation a launch of this session
 // created: the session's own id before terminals had ids, else one of its terminals.
-func (d *Daemon) launchedHere(sessionID, resumeID string) bool {
-	if resumeID == sessionID {
-		return true
-	}
-	return slices.Contains(d.terminals().Of(harness.SessionID(sessionID)), harness.TerminalID(resumeID))
+func (d *Daemon) launchedHere(sessionID protocol.SessionID, resumeID string) bool {
+
+	return slices.Contains(d.terminals().Of(sessionID), harness.TerminalID(resumeID))
 }
 
 // persistLaunchedConversation records the conversation a launch starts before its worker runs, so
@@ -563,7 +561,7 @@ func (d *Daemon) persistLaunchedConversation(req *spawnRequest, plan *spawnPlan)
 	}
 }
 
-func (d *Daemon) restoreSessionConversation(sessionID string, prior store.SessionConversation) {
+func (d *Daemon) restoreSessionConversation(sessionID protocol.SessionID, prior store.SessionConversation) {
 	var err error
 	switch {
 	case prior.NativeID == "":
@@ -685,7 +683,7 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		d.observeAgentConversation(pending)
 	}
 	d.store.UpsertRecentLocation(req.cwd)
-	d.publishFact(fact, session.ID, nil)
+	d.publishFact(fact, string(session.ID), nil)
 	if req.hasPluginDriver {
 		if exit := d.finishPluginSessionLaunch(msg.ID, true); exit != nil {
 			d.handlePTYExit(*exit)

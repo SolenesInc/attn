@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
@@ -14,7 +15,7 @@ import (
 func spawnTestClient() *wsClient {
 	return &wsClient{
 		send:            make(chan outboundMessage, 8),
-		attachedStreams: make(map[string]ptybackend.Stream),
+		attachedStreams: make(map[protocol.TerminalID]ptybackend.Stream),
 	}
 }
 

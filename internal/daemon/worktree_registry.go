@@ -195,7 +195,7 @@ func (d *Daemon) sessionActivityByWorktree(liveSessions map[string][]string) map
 	activity := make(map[string]time.Time, len(liveSessions))
 	for path, sessionIDs := range liveSessions {
 		for _, sessionID := range sessionIDs {
-			session := d.store.Get(sessionID)
+			session := d.store.Get(protocol.SessionID(sessionID))
 			if session == nil {
 				continue
 			}
@@ -449,7 +449,7 @@ func (d *Daemon) liveSessionsByWorktree(repo string) map[string][]string {
 	for _, session := range d.store.List("") {
 		for _, row := range rows {
 			if pathAtOrBelow(session.Directory, row.Path) {
-				byPath[row.Path] = append(byPath[row.Path], session.ID)
+				byPath[row.Path] = append(byPath[row.Path], string(session.ID))
 			}
 		}
 	}

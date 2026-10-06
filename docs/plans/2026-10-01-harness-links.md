@@ -303,7 +303,7 @@ abstraction: about 49 sites in 16 generic daemon files branch on the Codex
 owner, and Codex names are durable (migration 161, `codex_mode`,
 `codex_resolution`) and on the wire. **It is not merged as it stands.**
 Releases are cut from `next`, so what lands there is a promise, and renaming
-later costs a migration, a protocol bump and a rewrite of those sites. This
+later costs a migration, a protocol schema change and a rewrite of those sites. This
 rests on that cost and on refactoring first, not on performance.
 
 Refactoring in place on the epic is credible for the Codex runtime itself:
@@ -332,7 +332,7 @@ Each step is PR-sized unless noted. Verification follows `docs/instances.md`.
 | # | Step | Behavior change |
 |---|---|---|
 | 1 | **Done.** `internal/harness` with `Voice`, `Input`, `Custody` and `Link`; the PTY path moved unchanged into `session_input_pty.go`; pi's plugin delivery as the first link, chosen per delivery from the session's plugin driver run record and the plugin registry, with the PTY as the fallback when no link takes the voice; any error maps to deferred. Pending candidates, receipt matching and the PTY-only quiet window are unchanged (step 5 retired the receipt matching). | None |
-| 2 | The epic's neutral wins, one PR each, parallel to 1: PTY worker teardown hardening (`instance clean` refuses to wipe while a worker survives); `SessionLedgerEntry.usage` with the inspector and `attn session show` lines (protocol bump); the ledger focus-trap fix; a decision on the PTY Backend settings card the epic deleted. | `instance clean` exits non-zero and keeps data when a worker cannot be reaped; ledger and CLI show usage for every harness |
+| 2 | The epic's neutral wins, one PR each, parallel to 1: PTY worker teardown hardening (`instance clean` refuses to wipe while a worker survives); `SessionLedgerEntry.usage` with the inspector and `attn session show` lines (protocol schema change); the ledger focus-trap fix; a decision on the PTY Backend settings card the epic deleted. | `instance clean` exits non-zero and keeps data when a worker cannot be reaped; ledger and CLI show usage for every harness |
 | 3 | **Done.** `Turn`, `TurnEvent{Turn, Epoch, Seq, Restated}` and `Events{Turn}`; pi's `report_state` and `report_stop` reach core as `Turn` events, applied as before (the store's epoch and sequence fence, `only_if_unknown` as `Restated`); the precedence rule is `linkOwnsState`, today's plugin-driver ownership under a neutral name. Deferred to step 6: the resolver's `link` slot, `Ended`'s outcome, and `Shape.Provides`, since pi installs no hooks to drop. Needs 1. | None; a pi session's state origin reads `link`, its cause `link_turn`, and the resolver and terminal vetoes `link_owns_state`; the silence declaration keeps `plugin_driver` |
 | 4 | The identity rule ([design](2026-10-03-terminals-and-identity.md)): terminal registry with ids distinct from session ids; `Opened` and `Shows` for single-session links, with Claude `/clear` and `/resume` and pi as consumers; terminal-to-session resolution for PTY exit, state, input and layout. Existing rows keep `runtime_id` = session id. Daemon and app may split. Needs 1. | Claude `/clear` opens a new session; the old one closes into the ledger, reopenable (design, open question 1) |
 | 5 | **Done.** Retire receipts on the PTY route: `observePromptTaken` matching, pending candidates, `sessionInputTakenWindow`, `await`, the indeterminate stage, `report_input_taken`. Crew heartbeat records `Custody.At` with no wait; owed input clears on the next turn start. Needs 1. | Heartbeats stop waiting up to 3 s; annotation results are taken or not taken |
@@ -406,8 +406,8 @@ Nothing from the epic is promised: it is on neither `next` nor `main`.
   never landed. The conversation id stays in `sessions.resume_session_id`;
   the neutral tables are `terminal_views` and a link kind and endpoint on the
   run record. The adapter's blob uses tagged JSON fields.
-- **Protocol** bumps once per step from `next`'s 328; the epic's 329 and 330
-  are never reused.
+- **Protocol** is generated from the wire schema with `make generate-types`
+  in each step; commit the generated types and schema hash.
 - **Settings:** one family, `link.<harness>` (`link.codex`: `off` |
   `app-server`; `link.claude`: `off` | `inbox` | `mod`), rendered generically
   under Experimental. Running sessions keep the route they started with. The

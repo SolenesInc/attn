@@ -29,7 +29,7 @@ func notificationToProtocol(rec store.NotificationRecord) protocol.Notification 
 	}
 	for _, action := range rec.Actions {
 		pn.Actions = append(pn.Actions, protocol.NotificationAction{
-			Kind: action.Kind, Label: action.Label, TargetID: action.TargetID,
+			Kind: action.Kind, Label: action.Label, TargetID: string(action.TargetID),
 		})
 	}
 	if !rec.ReadAt.IsZero() {
@@ -208,24 +208,24 @@ func renderUnknownTaskFailure(t *jobs.Job) store.NotificationRecord {
 }
 
 func retryTaskAction(t *jobs.Job) store.NotificationAction {
-	return store.NotificationAction{Kind: notificationActionRetryTask, Label: "Retry", TargetID: t.ID}
+	return store.NotificationAction{Kind: notificationActionRetryTask, Label: "Retry", TargetID: protocol.SessionID(t.ID)}
 }
 
-func openSessionAction(sessionID string) store.NotificationAction {
+func openSessionAction(sessionID protocol.SessionID) store.NotificationAction {
 	return store.NotificationAction{Kind: notificationActionOpenSession, Label: "Open session", TargetID: sessionID}
 }
 
-func (d *Daemon) sessionFailureName(sessionID string) string {
+func (d *Daemon) sessionFailureName(sessionID protocol.SessionID) string {
 	if d.store != nil {
 		if session := d.store.Get(sessionID); session != nil && strings.TrimSpace(session.Label) != "" {
 			return fmt.Sprintf("%q", session.Label)
 		}
 	}
-	return "session " + sessionID
+	return string("session " + sessionID)
 }
 
 func (d *Daemon) renderSessionActivityFailure(t *jobs.Job) store.NotificationRecord {
-	sessionID := jobSubject(t)
+	sessionID := protocol.SessionID(jobSubject(t))
 	name := d.sessionFailureName(sessionID)
 	return taskFailureNotification(t,
 		"Couldn’t update activity for "+name,
@@ -235,7 +235,7 @@ func (d *Daemon) renderSessionActivityFailure(t *jobs.Job) store.NotificationRec
 }
 
 func (d *Daemon) renderSessionTitleFailure(t *jobs.Job) store.NotificationRecord {
-	sessionID := jobSubject(t)
+	sessionID := protocol.SessionID(jobSubject(t))
 	name := d.sessionFailureName(sessionID)
 	return taskFailureNotification(t,
 		"Couldn’t name "+name,
@@ -245,7 +245,7 @@ func (d *Daemon) renderSessionTitleFailure(t *jobs.Job) store.NotificationRecord
 }
 
 func (d *Daemon) renderSnoozeWakeFailure(t *jobs.Job) store.NotificationRecord {
-	sessionID := jobSubject(t)
+	sessionID := protocol.SessionID(jobSubject(t))
 	name := d.sessionFailureName(sessionID)
 	return taskFailureNotification(t,
 		"Couldn’t wake "+name,

@@ -47,7 +47,7 @@ func TestWithSharedCodexOffNewClosesTheSessionItLeft(t *testing.T) {
 	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
 	moveOn(t, app, codex, terminal, "/new", "add a discount field")
 	testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool {
-		return e.Session != nil && e.Session.ID == checkout
+		return e.Session != nil && string(e.Session.ID) == checkout
 	})
 	if entry := ledgerShowOverTheWebSocket(app, checkout).Entry; entry == nil || protocol.Deref(entry.ClosedAt) == "" || protocol.Deref(entry.Hidden) {
 		t.Errorf("the ledger shows %+v, want %s closed", entry, checkout)
@@ -96,7 +96,7 @@ func TestTwoTerminalsShowOneSharedCodexSessionUntilTheLastTileClosesAndArchivesI
 		t.Fatalf("close the last tile: %s", protocol.Deref(closed.Error))
 	}
 	testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool {
-		return e.Session != nil && e.Session.ID == checkout
+		return e.Session != nil && string(e.Session.ID) == checkout
 	})
 	entry := ledgerShowOverTheWebSocket(app, checkout).Entry
 	if entry == nil || protocol.Deref(entry.ClosedAt) == "" || entry.Usage == nil || entry.Usage.TotalTokens == 0 {
@@ -204,8 +204,8 @@ func TestASharedCodexSessionAndItsConversationShareOneName(t *testing.T) {
 	codex.Prompted()
 	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return s.Label == "Checkout race" })
 
-	renamed := testworld.Request(app, protocol.RenameSessionMessage{Cmd: protocol.CmdRenameSession, SessionID: checkout, Label: "Tax lock"},
-		protocol.EventRenameResult, func(r protocol.RenameResultMessage) bool { return r.ID == checkout })
+	renamed := testworld.Request(app, protocol.RenameSessionMessage{Cmd: protocol.CmdRenameSession, SessionID: protocol.SessionID(checkout), Label: "Tax lock"},
+		protocol.EventRenameResult, func(r protocol.RenameResultMessage) bool { return string(r.ID) == checkout })
 	if !renamed.Success {
 		t.Fatalf("rename %s: %s", checkout, protocol.Deref(renamed.Error))
 	}
@@ -383,7 +383,7 @@ func moveOn(t *testing.T, app *testworld.Peer, codex *fakeagent.Run, terminal, c
 func typeInto(app *testworld.Peer, terminal, text string) {
 	app.T.Helper()
 	probe := uuid.NewString()
-	testworld.Request(app, protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: text, ProbeID: protocol.Ptr(probe)},
+	testworld.Request(app, protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(terminal), Data: text, ProbeID: protocol.Ptr(probe)},
 		protocol.EventPtyInputProbeResult, func(r protocol.PtyInputProbeResultMessage) bool { return r.ProbeID == probe })
 }
 
@@ -391,7 +391,7 @@ func tileOf(t *testing.T, w *world, app *testworld.Peer, terminal string) (strin
 	t.Helper()
 	for _, desktop := range viewProfile(t, w, app.SelectedProfile()).desktops {
 		for _, pane := range desktop.Panes {
-			if pane.RuntimeID == terminal {
+			if string(pane.RuntimeID) == terminal {
 				return desktop.ID, pane.PaneID
 			}
 		}
@@ -404,8 +404,8 @@ func sessionShownIn(t *testing.T, w *world, app *testworld.Peer, terminal string
 	t.Helper()
 	for _, desktop := range viewProfile(t, w, app.SelectedProfile()).desktops {
 		for _, pane := range desktop.Panes {
-			if pane.RuntimeID == terminal {
-				return pane.SessionID
+			if string(pane.RuntimeID) == terminal {
+				return string(pane.SessionID)
 			}
 		}
 	}

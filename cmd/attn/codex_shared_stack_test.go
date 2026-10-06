@@ -105,7 +105,7 @@ func TestAHiddenSharedCodexSessionSurvivesADaemonRestartAndTakesInput(t *testing
 	s.Stop()
 	s.Start()
 	app = s.App()
-	i := slices.IndexFunc(app.Initial.Sessions, func(x protocol.Session) bool { return x.ID == session })
+	i := slices.IndexFunc(app.Initial.Sessions, func(x protocol.Session) bool { return string(x.ID) == session })
 	if i < 0 {
 		t.Fatalf("session %s is gone after the restart", session)
 	}
@@ -115,7 +115,7 @@ func TestAHiddenSharedCodexSessionSurvivesADaemonRestartAndTakesInput(t *testing
 	requestID := uuid.NewString()
 	feedback := "Lock the tax table before the lookup."
 	delivered := testworld.Request(app, protocol.SessionAnnotationsSubmitMessage{
-		Cmd: protocol.CmdSessionAnnotationsSubmit, RequestID: requestID, SessionID: session, Text: feedback,
+		Cmd: protocol.CmdSessionAnnotationsSubmit, RequestID: requestID, SessionID: protocol.SessionID(session), Text: feedback,
 	}, protocol.EventSessionAnnotationsSubmitResult, func(r protocol.SessionAnnotationsSubmitResultMessage) bool { return r.RequestID == requestID })
 	if !delivered.Success {
 		t.Fatalf("feedback to the hidden session: %s", protocol.Deref(delivered.Error))
@@ -131,6 +131,6 @@ func TestAHiddenSharedCodexSessionSurvivesADaemonRestartAndTakesInput(t *testing
 func typeLineInto(app *testworld.Peer, terminal, text string) {
 	app.T.Helper()
 	probe := uuid.NewString()
-	testworld.Request(app, protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: text + "\r", ProbeID: protocol.Ptr(probe)},
+	testworld.Request(app, protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(terminal), Data: text + "\r", ProbeID: protocol.Ptr(probe)},
 		protocol.EventPtyInputProbeResult, func(r protocol.PtyInputProbeResultMessage) bool { return r.ProbeID == probe })
 }

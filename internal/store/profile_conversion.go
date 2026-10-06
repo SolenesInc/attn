@@ -11,6 +11,7 @@ import (
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profilemigration"
 	"github.com/victorarias/attn/internal/profiles"
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/rankkey"
 )
 
@@ -273,7 +274,7 @@ func decodeLegacyTree(ws legacyWorkspace, layout legacyLayout, newID func(string
 }
 
 func (c *convertedWorkspaces) dropPane(workspaceID, paneID, sessionID, reason string) {
-	c.Manifest.DroppedPanes = append(c.Manifest.DroppedPanes, profilemigration.DroppedPane{WorkspaceID: workspaceID, PaneID: paneID, SessionID: sessionID, Reason: reason})
+	c.Manifest.DroppedPanes = append(c.Manifest.DroppedPanes, profilemigration.DroppedPane{WorkspaceID: workspaceID, PaneID: paneID, SessionID: protocol.SessionID(sessionID), Reason: reason})
 }
 
 func (c *convertedWorkspaces) retainedAgents(input legacyInput, ws legacyWorkspace, rank int, tree layouttree.Node) (layouttree.Node, []placementCandidate) {
@@ -340,7 +341,7 @@ func convertLegacyWorkspaces(input legacyInput, profileID string, newID func(str
 	for _, candidate := range dropped {
 		winner := kept[candidate.sessionID]
 		result.Manifest.DroppedPlacements = append(result.Manifest.DroppedPlacements, profilemigration.DroppedPlacement{
-			SessionID: candidate.sessionID, WorkspaceID: candidate.workspaceID, PaneID: candidate.paneID,
+			SessionID: protocol.SessionID(candidate.sessionID), WorkspaceID: candidate.workspaceID, PaneID: candidate.paneID,
 			KeptWorkspaceID: winner.workspaceID, KeptPaneID: winner.paneID,
 		})
 		for i := range retained {
@@ -422,7 +423,7 @@ func legacyDesktopPane(desktopID, paneID string, pane legacyPane, session legacy
 	default:
 		status = profiles.PaneStatusReady
 	}
-	return profiles.Pane{PaneID: paneID, DesktopID: desktopID, Kind: profiles.PaneKindAgent, SessionID: pane.SessionID, RuntimeID: cmp.Or(pane.RuntimeID, pane.SessionID), Title: title, Status: status, Error: pane.Error}
+	return profiles.Pane{PaneID: paneID, DesktopID: desktopID, Kind: profiles.PaneKindAgent, SessionID: protocol.SessionID(pane.SessionID), RuntimeID: protocol.TerminalID(cmp.Or(pane.RuntimeID, pane.SessionID)), Title: title, Status: status, Error: pane.Error}
 }
 
 func writeProfileConversion(tx *sql.Tx, result convertedWorkspaces) error {

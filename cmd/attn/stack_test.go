@@ -32,7 +32,7 @@ func labelled(name string) func(*protocol.SpawnSessionMessage) {
 func settle(app *testworld.Peer, id string) {
 	app.T.Helper()
 	testworld.AwaitSession(app, id, func(x protocol.Session) bool { return protocol.Deref(x.TurnOwed) })
-	app.Send(protocol.SettleTurnMessage{Cmd: protocol.CmdSettleTurn, SessionID: id})
+	app.Send(protocol.SettleTurnMessage{Cmd: protocol.CmdSettleTurn, SessionID: protocol.SessionID(id)})
 	testworld.AwaitSession(app, id, func(x protocol.Session) bool {
 		return x.State == protocol.SessionStateIdle && !protocol.Deref(x.TurnOwed)
 	})

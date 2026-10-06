@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/garden"
-	"github.com/victorarias/attn/internal/protocol"
 )
 
 func migrationOrderError(registry []migration) error {
@@ -46,8 +45,8 @@ func TestMigrations_AppliedOnNewDB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSchemaVersion() error = %v", err)
 	}
-	if version != latestSchemaVersion() {
-		t.Errorf("schema version = %d, want %d", version, latestSchemaVersion())
+	if version != LatestSchemaVersion() {
+		t.Errorf("schema version = %d, want %d", version, LatestSchemaVersion())
 	}
 
 	var count int
@@ -55,8 +54,8 @@ func TestMigrations_AppliedOnNewDB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("counting migrations error = %v", err)
 	}
-	if count != len(migrations) {
-		t.Errorf("migration count = %d, want %d", count, len(migrations))
+	if count != len(allMigrations()) {
+		t.Errorf("migration count = %d, want %d", count, len(allMigrations()))
 	}
 }
 
@@ -81,8 +80,8 @@ func TestMigrations_Idempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("counting migrations error = %v", err)
 	}
-	if count != len(migrations) {
-		t.Errorf("migration count after reopen = %d, want %d", count, len(migrations))
+	if count != len(allMigrations()) {
+		t.Errorf("migration count after reopen = %d, want %d", count, len(allMigrations()))
 	}
 }
 
@@ -131,16 +130,6 @@ func TestMigrations_MigratedColumnsExist(t *testing.T) {
 			t.Errorf("Column %s.%s should exist after migrations: %v", tc.table, tc.column, err)
 		}
 	}
-}
-
-func latestSchemaVersion() int {
-	max := 0
-	for _, m := range migrations {
-		if m.version > max {
-			max = m.version
-		}
-	}
-	return max
 }
 
 func TestMigration148PreservesPendingGardenMailboxReceiptsAndNamesItsBell(t *testing.T) {
@@ -744,15 +733,6 @@ func TestMigration131_RepairsPartialAgentDriverCursorSchemas(t *testing.T) {
 				t.Fatalf("repaired cursor = %+v, want %+v", got, want)
 			}
 
-			store := &Store{db: migrated}
-			teardown, err := store.PrepareSessionTeardown("partial-driver", time.Date(2026, 9, 2, 12, 30, 0, 0, time.UTC))
-			if err != nil {
-				t.Fatalf("PrepareSessionTeardown after repair: %v", err)
-			}
-			if teardown != want {
-				t.Fatalf("teardown cursor = %+v, want %+v", teardown, want)
-			}
-
 			var applied int
 			if err := migrated.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE version = 131`).Scan(&applied); err != nil {
 				t.Fatalf("read migration 131: %v", err)
@@ -1105,10 +1085,9 @@ func TestMigration121BackfillsTheRequestClockAndIsRewindSafe(t *testing.T) {
 	defer s.Close()
 
 	observed := "2026-08-23T10:15:00Z"
-	s.Add(&protocol.Session{
-		ID: "legacy-session", State: protocol.SessionStateWaitingInput,
-		StateSince: observed, StateUpdatedAt: observed, LastSeen: observed,
-	})
+	if _, err := s.db.Exec(`INSERT INTO sessions (id, label, directory, state, state_since, state_updated_at, last_seen) VALUES ('legacy-session', 'Legacy', '/tmp/legacy', 'waiting_input', ?, ?, ?)`, observed, observed, observed); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := s.db.Exec(`UPDATE sessions SET last_model_request_at = NULL WHERE id = 'legacy-session'`); err != nil {
 		t.Fatalf("clear request clock: %v", err)
 	}
@@ -1140,7 +1119,9 @@ func TestMigration123AddsTranscriptPathAndIsRewindSafe(t *testing.T) {
 	}
 	defer s.Close()
 
-	s.Add(&protocol.Session{ID: "legacy-session", Agent: protocol.SessionAgentCodex})
+	if _, err := s.db.Exec(`INSERT INTO sessions (id, label, directory, agent, state_since, state_updated_at, last_seen) VALUES ('legacy-session', 'Legacy', '/tmp/legacy', 'codex', '', '', '')`); err != nil {
+		t.Fatal(err)
+	}
 	s.SetResumeSessionID("legacy-session", "native-legacy")
 
 	if _, err := s.db.Exec(`
@@ -1198,7 +1179,7 @@ func TestMigration145AdoptsGardenDispatchForAutomationContinuity(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("load dispatch collection: found=%v err=%v", found, err)
 	}
-	if _, err := s.PutDocument(*dispatches, run.SessionID, []byte(`{"session_id":"session-1","crown":"s-live01"}`), now, nil); err != nil {
+	if _, err := s.PutDocument(*dispatches, string(run.SessionID), []byte(`{"session_id":"session-1","crown":"s-live01"}`), now, nil); err != nil {
 		t.Fatal(err)
 	}
 

@@ -24,17 +24,17 @@ func TestSeedSearchReachesEverySeedAndSaysWhereItMatched(t *testing.T) {
 		{"fts", "Full-text index for the docstore", "Give every docstore collection a SQLite FTS mirror."},
 		{"panel", "Garden panel renders a seed body as markdown", "The panel shows raw markdown today."},
 	} {
-		planted, err := cli.SeedPlant(gardener, seed.title, seed.body, "", "", "")
+		planted, err := cli.SeedPlant(protocol.SessionID(gardener), seed.title, seed.body, "", "", "")
 		if err != nil {
 			t.Fatalf("plant %q: %v", seed.title, err)
 		}
 		ids[seed.key] = planted.Seed.ID
 	}
 	gardenSearchNote(t, cli, gardener, ids["board"], "Prototyped the drop target in the panel and it felt right; the dispatch dialog is the missing half.")
-	if _, err := cli.SeedTransition(gardener, ids["tickets"], "harvest", "Tickets are gone; every seed lives in the garden.", "", false, client.SeedTransitionOptions{}); err != nil {
+	if _, err := cli.SeedTransition(protocol.SessionID(gardener), ids["tickets"], "harvest", "Tickets are gone; every seed lives in the garden.", "", false, client.SeedTransitionOptions{}); err != nil {
 		t.Fatalf("harvest the tickets seed: %v", err)
 	}
-	if _, err := cli.SeedTransition(gardener, ids["fts"], "wither", "A scan answers this in a couple of milliseconds, so an index earns nothing.", "", false, client.SeedTransitionOptions{}); err != nil {
+	if _, err := cli.SeedTransition(protocol.SessionID(gardener), ids["fts"], "wither", "A scan answers this in a couple of milliseconds, so an index earns nothing.", "", false, client.SeedTransitionOptions{}); err != nil {
 		t.Fatalf("wither the index seed: %v", err)
 	}
 
@@ -93,7 +93,7 @@ func TestSeedSearchReachesEverySeedAndSaysWhereItMatched(t *testing.T) {
 		}},
 	} {
 		t.Run("refuses "+tc.name, func(t *testing.T) {
-			_, err := cli.SeedSearch(gardener, tc.query, tc.limit)
+			_, err := cli.SeedSearch(protocol.SessionID(gardener), tc.query, tc.limit)
 			if err == nil {
 				t.Fatal("answered; want a refusal")
 			}
@@ -108,14 +108,14 @@ func TestSeedSearchReachesEverySeedAndSaysWhereItMatched(t *testing.T) {
 
 func gardenSearchNote(t *testing.T, cli *client.Client, session, seedID, body string) {
 	t.Helper()
-	if _, err := cli.SeedNote(session, seedID, body, "", "", false, nil); err != nil {
+	if _, err := cli.SeedNote(protocol.SessionID(session), seedID, body, "", "", false, nil); err != nil {
 		t.Fatalf("note %q on %s: %v", body, seedID, err)
 	}
 }
 
 func gardenSearch(t *testing.T, cli *client.Client, session, query string, limit int) *protocol.SeedSearchResult {
 	t.Helper()
-	result, err := cli.SeedSearch(session, query, limit)
+	result, err := cli.SeedSearch(protocol.SessionID(session), query, limit)
 	if err != nil {
 		t.Fatalf("search %q: %v", query, err)
 	}

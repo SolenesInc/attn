@@ -35,7 +35,10 @@ async function emit(
   id: string,
   data: string,
 ) {
-  await page.evaluate(({ id, data }) => window.__TEST_EMIT_PTY_DATA?.(id, data), { id, data });
+  await page.evaluate(({ id, data }) => {
+    const terminal = window.__TEST_GET_ACTIVE_SESSION_PANE_RUNTIME?.(id);
+    if (terminal) window.__TEST_EMIT_PTY_DATA?.(terminal, data);
+  }, { id, data });
 }
 
 async function readTrace(
@@ -315,7 +318,8 @@ test('hidden split desktop defers paints until return after a window resize', as
   const hiddenFrame = fullFrame('HIDDEN', 35, 90);
   await page.evaluate(({ id, payloads }) => {
     for (const payload of payloads) {
-      window.__TEST_EMIT_PTY_DATA?.(id, payload);
+      const terminal = window.__TEST_GET_ACTIVE_SESSION_PANE_RUNTIME?.(id);
+      if (terminal) window.__TEST_EMIT_PTY_DATA?.(terminal, payload);
     }
   }, { id: agentId, payloads: chunks(hiddenFrame, 32) });
   await expect

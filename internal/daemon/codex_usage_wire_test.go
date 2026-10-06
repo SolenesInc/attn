@@ -40,7 +40,7 @@ func TestCodexUsageCountsNestedSubagentsAndGuardianReviewsAndANewConversationCou
 	next := awaitSuccessor(app, session)
 	fixed := "Fixed with a lock. <!-- attn:state=idle -->"
 	codex.Reply(fixed)
-	if usage := awaitUsageTokens(app, next.ID, claudeTokens(fixed)); usage.MeasurementIncomplete != nil {
+	if usage := awaitUsageTokens(app, string(next.ID), claudeTokens(fixed)); usage.MeasurementIncomplete != nil {
 		t.Errorf("usage of the session /new opened = %+v, want it complete", usage)
 	}
 	if after, err := os.ReadFile(rollout); err != nil || !bytes.Equal(after, before) {

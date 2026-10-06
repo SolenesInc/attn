@@ -194,7 +194,7 @@ func (d *Daemon) handleNotebookGuide(conn net.Conn, msg *protocol.NotebookGuideM
 		d.sendError(conn, "notebook: "+err.Error())
 		return
 	}
-	sessionID := strings.TrimSpace(protocol.Deref(msg.SessionID))
+	sessionID := protocol.TrimID(protocol.Deref(msg.SessionID))
 	sessionIsChief := d.isChiefOfStaffSession(sessionID)
 	if sessionIsChief {
 		if _, _, serr := d.ensureNotebookScaffold(); serr != nil {

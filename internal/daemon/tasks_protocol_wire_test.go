@@ -20,7 +20,7 @@ func TestATaskTransitionReachesTheAppAndItsListingNeverCarriesThePayload(t *test
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) })
 	watcher := w.App()
 
-	watcher.Send(protocol.SnoozeTurnMessage{Cmd: protocol.CmdSnoozeTurn, SessionID: session, Until: time.Now().Add(time.Hour).Format(time.RFC3339Nano)})
+	watcher.Send(protocol.SnoozeTurnMessage{Cmd: protocol.CmdSnoozeTurn, SessionID: protocol.SessionID(session), Until: time.Now().Add(time.Hour).Format(time.RFC3339Nano)})
 	testworld.Await[protocol.TasksChangedMessage](watcher, protocol.EventTasksChanged, nil)
 	testworld.AwaitSession(watcher, session, func(s protocol.Session) bool { return protocol.Deref(s.TurnSnoozedUntil) != "" })
 

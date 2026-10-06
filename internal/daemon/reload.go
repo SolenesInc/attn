@@ -51,7 +51,7 @@ func (d *Daemon) clearReloading(id harness.TerminalID) {
 
 type sessionLocks struct {
 	mu    sync.Mutex
-	locks map[string]*sessionLockEntry
+	locks map[protocol.SessionID]*sessionLockEntry
 }
 
 type sessionLockEntry struct {
@@ -61,7 +61,7 @@ type sessionLockEntry struct {
 
 type sessionLockLease struct {
 	table     *sessionLocks
-	sessionID string
+	sessionID protocol.SessionID
 	entry     *sessionLockEntry
 }
 
@@ -79,11 +79,11 @@ func (l *sessionLockLease) Unlock() {
 	}
 }
 
-func (t *sessionLocks) lease(sessionID string) *sessionLockLease {
+func (t *sessionLocks) lease(sessionID protocol.SessionID) *sessionLockLease {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.locks == nil {
-		t.locks = make(map[string]*sessionLockEntry)
+		t.locks = make(map[protocol.SessionID]*sessionLockEntry)
 	}
 	entry := t.locks[sessionID]
 	if entry == nil {
@@ -94,12 +94,12 @@ func (t *sessionLocks) lease(sessionID string) *sessionLockLease {
 	return &sessionLockLease{table: t, sessionID: sessionID, entry: entry}
 }
 
-func (d *Daemon) sessionLifecycleLockFor(sessionID string) *sessionLockLease {
+func (d *Daemon) sessionLifecycleLockFor(sessionID protocol.SessionID) *sessionLockLease {
 	return d.sessionLifecycleLocks.lease(sessionID)
 }
 
 // lockSessionLifecycles takes the sessions' lifecycle locks in id order, so two handovers never wait on each other.
-func (d *Daemon) lockSessionLifecycles(ids ...string) (unlock func()) {
+func (d *Daemon) lockSessionLifecycles(ids ...protocol.SessionID) (unlock func()) {
 	ids = slices.Compact(slices.Sorted(slices.Values(ids)))
 	leases := make([]*sessionLockLease, 0, len(ids))
 	for _, id := range ids {
@@ -117,7 +117,7 @@ func (d *Daemon) lockSessionLifecycles(ids ...string) (unlock func()) {
 	}
 }
 
-func (d *Daemon) sessionHasLiveWorker(sessionID string) bool {
+func (d *Daemon) sessionHasLiveWorker(sessionID protocol.SessionID) bool {
 	return d.sessionLive(context.Background(), sessionID)
 }
 
@@ -140,8 +140,8 @@ func (d *Daemon) agentSupportsChiefReload(agent string) bool {
 	return true
 }
 
-func (d *Daemon) reloadSessionAgent(sessionID string) {
-	sessionID = strings.TrimSpace(sessionID)
+func (d *Daemon) reloadSessionAgent(sessionID protocol.SessionID) {
+	sessionID = protocol.TrimID(sessionID)
 	if sessionID == "" || d.ptyBackend == nil || d.store == nil {
 		return
 	}
@@ -159,7 +159,7 @@ func (d *Daemon) reloadSessionAgent(sessionID string) {
 		d.logf("reload: session %s not found (closed or remote); skipping", sessionID)
 		return
 	}
-	agent := string(session.Agent)
+	agent := session.Agent
 	if !d.agentSupportsChiefReload(agent) {
 		d.logf("reload: agent %q for session %s has no chief-guidance launch path; skipping", agent, sessionID)
 		return
@@ -184,8 +184,8 @@ func (d *Daemon) reloadSessionAgent(sessionID string) {
 	}
 }
 
-func (d *Daemon) reloadSessionForClient(sessionID string, cols, rows int) error {
-	sessionID = strings.TrimSpace(sessionID)
+func (d *Daemon) reloadSessionForClient(sessionID protocol.SessionID, cols, rows int) error {
+	sessionID = protocol.TrimID(sessionID)
 	if sessionID == "" {
 		return errors.New("session not found")
 	}
@@ -224,13 +224,13 @@ func (d *Daemon) reloadSessionForClient(sessionID string, cols, rows int) error 
 	if rejection := d.runSpawnPipeline(spawnMsg, policy); rejection != nil {
 		return rejection.reason()
 	}
-	d.publishFact(FactSessionRespawned, sessionID, ptyRespawn{Terminal: string(d.primaryTerminal(sessionID))})
+	d.publishFact(FactSessionRespawned, string(sessionID), ptyRespawn{Terminal: string(d.primaryTerminal(sessionID))})
 	return nil
 }
 
 // persistReloadedConversation records the conversation a reload launches before it runs, or clears a
 // stale one when the harness names it, so its report reads as this session's and opens no successor.
-func (d *Daemon) persistReloadedConversation(sessionID string, opts ptybackend.SpawnOptions) {
+func (d *Daemon) persistReloadedConversation(sessionID protocol.SessionID, opts ptybackend.SpawnOptions) {
 	driver := agentdriver.Get(opts.Agent)
 	conversation := agentdriver.SpawnResumeSessionID(driver, string(opts.ID), opts.ResumeSessionID, opts.ResumePicker)
 	if conversation == d.store.GetResumeSessionID(sessionID) || (conversation == "" && !conversationDecidesIdentity(driver)) {
@@ -263,7 +263,7 @@ func (d *Daemon) handleReloadSession(client *wsClient, msg *protocol.ReloadSessi
 	d.sendToClient(client, result)
 }
 
-func (d *Daemon) executePreparedSessionReload(sessionID string, opts ptybackend.SpawnOptions, pluginReload *preparedPluginReload) error {
+func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts ptybackend.SpawnOptions, pluginReload *preparedPluginReload) error {
 	if pluginReload != nil {
 		defer pluginReload.abort()
 	}
@@ -315,7 +315,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID string, opts ptybackend.
 	}
 	d.store.SetLaunchIntent(sessionID, intent)
 	d.recordReviewerEvidence(sessionID, opts.ApprovalRoute.ReviewerInLoop())
-	d.publishFact(FactSessionRespawned, sessionID, ptyRespawn{Terminal: string(terminal)})
+	d.publishFact(FactSessionRespawned, string(sessionID), ptyRespawn{Terminal: string(terminal)})
 	d.logf("reload: respawned %s (agent=%s resume=%t yolo=%t)", sessionID, opts.Agent, opts.ResumeSessionID != "", opts.YoloMode)
 	return nil
 }
@@ -379,8 +379,8 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 		}
 	}
 
-	agent := normalizeSpawnAgent(string(session.Agent))
-	if pluginDriver, ok := d.ensurePluginRegistry().driver(string(session.Agent)); ok {
+	agent := normalizeSpawnAgent(session.Agent)
+	if pluginDriver, ok := d.ensurePluginRegistry().driver(session.Agent); ok {
 		agent = pluginDriver.Agent
 	}
 	driver := agentdriver.Get(agent)
@@ -413,7 +413,7 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 		LoginShellEnv:           d.cachedLoginShellEnv(),
 		WorkflowGuidanceEnabled: parseBooleanSetting(d.store.GetSetting(SettingWorkflowsEnabled)),
 		AutoApprove:             false,
-		ContextWindowCap:        d.launchContextWindowCap(sessionID, string(session.Agent), d.isChiefOfStaffSession(sessionID)),
+		ContextWindowCap:        d.launchContextWindowCap(sessionID, session.Agent, d.isChiefOfStaffSession(sessionID)),
 	}
 	if !params.UnattendedLaunch.IsZero() {
 		if err := params.UnattendedLaunch.Validate(); err != nil {
@@ -443,7 +443,7 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 
 type preparedPluginReload struct {
 	d          *Daemon
-	sessionID  string
+	sessionID  protocol.SessionID
 	pluginName string
 	runID      string
 	completed  bool
@@ -487,7 +487,7 @@ func pluginReloadCapabilityError(reg pluginDriverRegistration, isChief bool) err
 }
 
 func (d *Daemon) preparePluginReload(session *protocol.Session, opts *ptybackend.SpawnOptions, isChief bool) (*preparedPluginReload, error) {
-	reg, ok := d.ensurePluginRegistry().driver(string(session.Agent))
+	reg, ok := d.ensurePluginRegistry().driver(session.Agent)
 	if !ok {
 		return nil, nil
 	}
@@ -500,14 +500,14 @@ func (d *Daemon) preparePluginReload(session *protocol.Session, opts *ptybackend
 		d: d, sessionID: session.ID, pluginName: reg.PluginName, runID: runID,
 	}
 	params := pluginDriverSpawnParams{
-		Agent:     reg.Agent,
-		SessionID: string(opts.ID),
-		RunID:     runID,
-		CWD:       session.Directory,
-		Label:     session.Label,
-		Yolo:      opts.YoloMode,
-		Model:     opts.Model,
-		Effort:    opts.Effort,
+		Agent:      reg.Agent,
+		TerminalID: opts.ID,
+		RunID:      runID,
+		CWD:        session.Directory,
+		Label:      session.Label,
+		Yolo:       opts.YoloMode,
+		Model:      opts.Model,
+		Effort:     opts.Effort,
 	}
 	if reg.Capabilities["launch_instructions"] {
 		instructions, err := d.preparePluginLaunchInstructions(session.ID, session.ProfileID, isChief,
@@ -569,7 +569,7 @@ func (d *Daemon) preparePluginReload(session *protocol.Session, opts *ptybackend
 
 type preparedPluginRoleReload struct {
 	d         *Daemon
-	sessionID string
+	sessionID protocol.SessionID
 	opts      ptybackend.SpawnOptions
 	plugin    *preparedPluginReload
 	lock      *sessionLockLease
@@ -594,12 +594,12 @@ func (p *preparedPluginRoleReload) execute() error {
 	return p.d.executePreparedSessionReload(p.sessionID, p.opts, p.plugin)
 }
 
-func (d *Daemon) preparePluginRoleReload(sessionID string, desiredChief bool) (*preparedPluginRoleReload, bool, error) {
+func (d *Daemon) preparePluginRoleReload(sessionID protocol.SessionID, desiredChief bool) (*preparedPluginRoleReload, bool, error) {
 	session := d.store.Get(sessionID)
 	if session == nil {
 		return nil, false, nil
 	}
-	reg, registered := d.ensurePluginRegistry().driver(string(session.Agent))
+	reg, registered := d.ensurePluginRegistry().driver(session.Agent)
 	activeRun := d.store.GetAgentDriverRun(sessionID)
 	pluginSession := registered || activeRun.RunID != ""
 	if !pluginSession {
@@ -631,7 +631,7 @@ func (d *Daemon) preparePluginRoleReload(sessionID string, desiredChief bool) (*
 		lock.Unlock()
 		return nil, true, err
 	}
-	opts.ContextWindowCap = d.launchContextWindowCap(sessionID, string(session.Agent), desiredChief)
+	opts.ContextWindowCap = d.launchContextWindowCap(sessionID, session.Agent, desiredChief)
 	pluginReload, err := d.preparePluginReload(session, &opts, desiredChief)
 	if err != nil {
 		lock.Unlock()

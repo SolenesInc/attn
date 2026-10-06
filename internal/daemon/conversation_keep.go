@@ -525,7 +525,7 @@ func restoreConversationArchive(path, agent, resumeID string, now time.Time) err
 	}
 }
 
-func (d *Daemon) keptConversationForSession(id string) *protocol.KeptConversation {
+func (d *Daemon) keptConversationForSession(id protocol.SessionID) *protocol.KeptConversation {
 	entry := d.store.SessionLedgerEntry(id)
 	if entry == nil {
 		return nil

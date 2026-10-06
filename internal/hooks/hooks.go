@@ -3,8 +3,9 @@ package hooks
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/victorarias/attn/internal/prompts"
 	"strings"
+
+	"github.com/victorarias/attn/internal/prompts"
 )
 
 type HookEntry struct {

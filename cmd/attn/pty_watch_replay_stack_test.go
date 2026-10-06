@@ -26,7 +26,7 @@ func TestAnApprovalAskedWhileTheDaemonWasDownStillWaitsAfterTheRestart(t *testin
 	app = s.App()
 	var came protocol.Session
 	for _, x := range app.Initial.Sessions {
-		if x.ID == session {
+		if string(x.ID) == session {
 			came = x
 		}
 	}

@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -21,11 +20,11 @@ func (d *Daemon) handleSetSessionContextWindowCap(client *wsClient, msg *protoco
 	d.sendToClient(client, result)
 }
 
-func (d *Daemon) setSessionContextWindowCap(sessionID string, cap int) error {
+func (d *Daemon) setSessionContextWindowCap(sessionID protocol.SessionID, cap int) error {
 	if d == nil || d.store == nil {
 		return fmt.Errorf("store unavailable")
 	}
-	id := strings.TrimSpace(sessionID)
+	id := protocol.TrimID(sessionID)
 	if id == "" {
 		return fmt.Errorf("missing session_id")
 	}
@@ -38,7 +37,7 @@ func (d *Daemon) setSessionContextWindowCap(sessionID string, cap int) error {
 			return fmt.Errorf("context window cap must be 0 (no cap) or between %d and %d tokens; got %d", contextWindowCapMin, contextWindowCapMax, cap)
 		}
 	}
-	switch normalizeSpawnAgent(string(session.Agent)) {
+	switch normalizeSpawnAgent(session.Agent) {
 	case string(protocol.SessionAgentClaude), string(protocol.SessionAgentCodex):
 	default:
 		return fmt.Errorf("agent %q takes no context-window cap; only claude and codex launches carry one", session.Agent)
@@ -49,7 +48,7 @@ func (d *Daemon) setSessionContextWindowCap(sessionID string, cap int) error {
 	if !d.store.SetSessionContextWindowCap(id, cap) {
 		return fmt.Errorf("persist context-window cap failed")
 	}
-	d.publishFact(FactSessionCapChanged, id, nil)
+	d.publishFact(FactSessionCapChanged, string(id), nil)
 	if d.sessionHasLiveWorker(id) {
 		d.life.Go("reloadSessionAgent", func() { d.reloadSessionAgent(id) })
 	}

@@ -17,13 +17,14 @@ type resolvedDelegationLaunch struct {
 	Cmd                string
 	RequestID          string
 	ProfileID          *string
-	SourceSessionID    *string
+	SourceSessionID    *protocol.SessionID
 	Assignment         protocol.DelegateAssignment
 	Checkout           *protocol.DelegateCheckout
 	Cwd                string
 	Agent              *string
 	Label              *string
 	YoloMode           *bool
+	Priority           *bool
 	Model              *string
 	Effort             *string
 	AllowWorktreeReuse *bool
@@ -40,15 +41,16 @@ type resolvedDelegationLaunch struct {
 	Handover              *protocol.SeedHandoverRequest
 	Confirm               *bool
 	PreferencesRevision   *int
+	SeedTitle             string
 	ParentSeedID          string
-	PreviousTenderSession string
+	PreviousTenderSession protocol.SessionID
 }
 
 func resolveLaunchInput(msg *protocol.DelegateMessage) resolvedDelegationLaunch {
 	return resolvedDelegationLaunch{
 		ProfileID: msg.ProfileID, RequestID: msg.RequestID, SourceSessionID: msg.SourceSessionID,
 		Assignment: msg.Assignment, Checkout: msg.Checkout, Cwd: msg.Cwd,
-		Agent: msg.Agent, Label: msg.Label, YoloMode: msg.YoloMode,
+		Agent: msg.Agent, Label: msg.Label, YoloMode: msg.YoloMode, Priority: msg.Priority,
 		Model: msg.Model, Effort: msg.Effort, AllowWorktreeReuse: msg.AllowWorktreeReuse,
 		Role: msg.Role, Choice: msg.Choice, Fallback: msg.Fallback, Provider: msg.Provider,
 		Review: msg.Review, Desktop: msg.Desktop,
@@ -134,7 +136,7 @@ func (d *Daemon) resolveAcceptedDelegationBase(msg *protocol.DelegateMessage) (s
 
 func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 	msg *protocol.DelegateMessage,
-	reservedSeedID, reservedBaseCommit, reservedNoteID, sessionID, ownedWorktreePath string,
+	reservedSeedID string, reservedBaseCommit string, reservedNoteID string, sessionID protocol.SessionID, ownedWorktreePath string,
 	worktreeOwned bool,
 	handoverSeedRev int,
 	handoverTenderSession, handoverTenderMember string,
@@ -164,6 +166,10 @@ func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 			}
 		}
 		runtime.Brief = protocol.Ptr(strings.TrimSpace(protocol.Deref(msg.Assignment.Brief)))
+		runtime.SeedTitle = strings.TrimSpace(protocol.Deref(msg.Label))
+		if runtime.SeedTitle == "" {
+			runtime.SeedTitle = garden.TitleFromBrief(protocol.Deref(runtime.Brief))
+		}
 		runtime.Plot = protocol.Ptr(seedID)
 	} else {
 		seedID := strings.TrimSpace(protocol.Deref(msg.Assignment.SeedID))
@@ -175,17 +181,18 @@ func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 			return nil, fmt.Errorf("seed %s is %s; replant it before delegating", seedID, seed.Status)
 		}
 		runtime.Brief = protocol.Ptr(seed.Body)
+		runtime.SeedTitle = seed.Title
 		runtime.Plot = protocol.Ptr(seedID)
 		if msg.Assignment.Handover != nil {
 			previousTenderSession := seed.TenderSession
 			if handoverSeedRev > 0 {
-				previousTenderSession = strings.TrimSpace(handoverTenderSession)
+				previousTenderSession = protocol.SessionID(strings.TrimSpace(handoverTenderSession))
 			}
 			runtime.PreviousTenderSession = previousTenderSession
 			alreadyBound := strings.TrimSpace(operationID) != "" && d.handoverAlreadyBound(operationID, sessionID, seedID)
 			if handoverSeedRev > 0 && !alreadyBound {
 				if int(doc.Rev) < handoverSeedRev ||
-					seed.TenderSession != strings.TrimSpace(handoverTenderSession) ||
+					seed.TenderSession != protocol.SessionID(strings.TrimSpace(handoverTenderSession)) ||
 					seed.TenderMember != strings.TrimSpace(handoverTenderMember) {
 					return nil, fmt.Errorf("seed %s ownership changed after the delegation request was accepted", seedID)
 				}
@@ -204,9 +211,6 @@ func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 					}
 				}
 				runtime.Handover.NoteID = protocol.Ptr(noteID)
-			}
-			if runtime.Label == nil {
-				runtime.Label = protocol.Ptr(handoverSessionName(seed.Title, sessionID))
 			}
 		}
 	}

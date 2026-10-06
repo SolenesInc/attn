@@ -189,7 +189,11 @@ func fprintSessionList(w io.Writer, result *protocol.SessionListResult, args ses
 		if args.reopen {
 			fmt.Fprintf(table, "%s\t", sessionReopenColumn(verdicts[entry.ID]))
 		}
-		fmt.Fprintf(table, "%s\n", entry.Label)
+		label := entry.Label
+		if protocol.Deref(entry.Priority) {
+			label = "⚑ " + label
+		}
+		fmt.Fprintf(table, "%s\n", label)
 	}
 	table.Flush()
 
@@ -220,8 +224,8 @@ func emptySessionListMessage(args sessionListArgs) string {
 	}
 }
 
-func sessionReopenVerdictsByID(entries []protocol.SessionReopenEntry) map[string]*protocol.SessionReopen {
-	verdicts := make(map[string]*protocol.SessionReopen, len(entries))
+func sessionReopenVerdictsByID(entries []protocol.SessionReopenEntry) map[protocol.SessionID]*protocol.SessionReopen {
+	verdicts := make(map[protocol.SessionID]*protocol.SessionReopen, len(entries))
 	for i := range entries {
 		verdicts[entries[i].SessionID] = &entries[i].Reopen
 	}
@@ -264,11 +268,11 @@ func parseSessionShowArgs(args []string) (string, error) {
 }
 
 type sessionRenameArgs struct {
-	sessionID string
+	sessionID protocol.SessionID
 	name      string
 }
 
-func parseSessionRenameArgs(args []string, ownSessionID string) (sessionRenameArgs, error) {
+func parseSessionRenameArgs(args []string, ownSessionID func() protocol.SessionID) (sessionRenameArgs, error) {
 	var parsed sessionRenameArgs
 	var positional []string
 	for i := 0; i < len(args); i++ {
@@ -279,9 +283,9 @@ func parseSessionRenameArgs(args []string, ownSessionID string) (sessionRenameAr
 				return sessionRenameArgs{}, errors.New("--session needs a session id")
 			}
 			i++
-			parsed.sessionID = strings.TrimSpace(args[i])
+			parsed.sessionID = protocol.SessionID(strings.TrimSpace(args[i]))
 		case strings.HasPrefix(arg, "--session="):
-			parsed.sessionID = strings.TrimSpace(strings.TrimPrefix(arg, "--session="))
+			parsed.sessionID = protocol.SessionID(strings.TrimSpace(strings.TrimPrefix(arg, "--session=")))
 		case strings.HasPrefix(arg, "-") && arg != "-":
 			return sessionRenameArgs{}, fmt.Errorf("unknown flag %s", arg)
 		default:
@@ -296,7 +300,7 @@ func parseSessionRenameArgs(args []string, ownSessionID string) (sessionRenameAr
 		return sessionRenameArgs{}, errors.New("the name cannot be empty")
 	}
 	if parsed.sessionID == "" {
-		parsed.sessionID = strings.TrimSpace(ownSessionID)
+		parsed.sessionID = protocol.TrimID(ownSessionID())
 	}
 	if parsed.sessionID == "" {
 		return sessionRenameArgs{}, errors.New("no session: pass --session <id> or run inside an attn session")
@@ -305,7 +309,7 @@ func parseSessionRenameArgs(args []string, ownSessionID string) (sessionRenameAr
 }
 
 func runSessionRename(args []string) {
-	parsed, err := parseSessionRenameArgs(args, os.Getenv("ATTN_SESSION_ID"))
+	parsed, err := parseSessionRenameArgs(args, currentSessionOrExit)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "session rename: %v\n", err)
 		writeSessionHelp(os.Stderr)
@@ -319,14 +323,15 @@ func runSessionRename(args []string) {
 }
 
 type sessionMoveArgs struct {
-	desktop, sessionID string
-	json               bool
+	desktop   string
+	sessionID protocol.SessionID
+	json      bool
 }
 
-func parseSessionMoveArgs(args []string, ownSessionID string) (sessionMoveArgs, error) {
+func parseSessionMoveArgs(args []string, ownSessionID protocol.SessionID) (sessionMoveArgs, error) {
 	fs := flag.NewFlagSet("session move", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	session := fs.String("session", "", "session to move (defaults to ATTN_SESSION_ID)")
+	session := fs.String("session", "", "session to move (defaults to the current session)")
 	jsonOut := fs.Bool("json", false, "print the result as JSON")
 	var positional []string
 	for rest := args; ; {
@@ -342,15 +347,15 @@ func parseSessionMoveArgs(args []string, ownSessionID string) (sessionMoveArgs, 
 	if len(positional) != 1 || strings.TrimSpace(positional[0]) == "" {
 		return sessionMoveArgs{}, errors.New("exactly one desktop is required: its shortcut digit (1-9), its name or its id")
 	}
-	parsed := sessionMoveArgs{desktop: strings.TrimSpace(positional[0]), sessionID: strings.TrimSpace(*session), json: *jsonOut}
-	if parsed.sessionID == "" && strings.TrimSpace(ownSessionID) == "" {
+	parsed := sessionMoveArgs{desktop: strings.TrimSpace(positional[0]), sessionID: protocol.SessionID(strings.TrimSpace(*session)), json: *jsonOut}
+	if parsed.sessionID == "" && protocol.TrimID(ownSessionID) == "" {
 		return sessionMoveArgs{}, errors.New("no session; run inside attn or pass --session")
 	}
 	return parsed, nil
 }
 
 func runSessionMove(args []string) {
-	own := os.Getenv("ATTN_SESSION_ID")
+	own := currentSessionOrExit()
 	parsed, err := parseSessionMoveArgs(args, own)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "session move: %v\n", err)
@@ -380,7 +385,7 @@ func runSessionShow(args []string) {
 		os.Exit(2)
 	}
 
-	result, err := client.New("").SessionShow(target)
+	result, err := client.New("").SessionShow(protocol.SessionID(target))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "session show: %v\n", err)
 		os.Exit(1)
@@ -393,6 +398,9 @@ func fprintSessionShow(w io.Writer, result protocol.SessionShowResult) {
 	fmt.Fprintf(w, "%s  %s\n", entry.ID, entry.Label)
 	fmt.Fprintf(w, "agent      %s\n", entry.Agent)
 	fmt.Fprintf(w, "state      %s\n", sessionLedgerState(entry))
+	if protocol.Deref(entry.Priority) {
+		fmt.Fprintln(w, "priority   on")
+	}
 	fmt.Fprintf(w, "directory  %s\n", entry.Directory)
 	if branch := protocol.Deref(entry.Branch); branch != "" {
 		fmt.Fprintf(w, "branch     %s\n", branch)

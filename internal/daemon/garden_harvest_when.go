@@ -22,7 +22,7 @@ func harvestWhenRequested(msg *protocol.SeedTransitionMessage) bool {
 }
 
 func (d *Daemon) applyHarvestWhenRequest(
-	msg *protocol.SeedTransitionMessage, verb garden.Verb, ask garden.Ask, sessionID string,
+	msg *protocol.SeedTransitionMessage, verb garden.Verb, ask garden.Ask, sessionID protocol.SessionID,
 ) (garden.Seed, docstore.Document, error) {
 	seedID := strings.TrimSpace(msg.SeedID)
 	if verb != garden.VerbHarvest {
@@ -48,7 +48,7 @@ func (d *Daemon) applyHarvestWhenRequest(
 }
 
 func (d *Daemon) armHarvestWhenMerged(
-	seedID, url string, ask garden.Ask, sessionID string,
+	seedID, url string, ask garden.Ask, sessionID protocol.SessionID,
 ) (garden.Seed, docstore.Document, error) {
 	seed, _, err := d.readSeed(seedID)
 	if err != nil {
@@ -63,7 +63,7 @@ func (d *Daemon) armHarvestWhenMerged(
 		return garden.Seed{}, docstore.Document{}, err
 	}
 	if rec.State == sessionPullRequestMerged {
-		return d.fulfilHarvestWhen(seed, rec, nil, sessionID)
+		return d.fulfilHarvestWhen(seed, rec, nil, string(sessionID))
 	}
 	if rec.State == sessionPullRequestClosed {
 		return garden.Seed{}, docstore.Document{}, fmt.Errorf(
@@ -73,7 +73,7 @@ func (d *Daemon) armHarvestWhenMerged(
 		PullRequest:  rec.PRID,
 		URL:          rec.URL,
 		SetAt:        formatGardenTime(d.gardenTime()),
-		SetBySession: strings.TrimSpace(ask.Actor.Session),
+		SetBySession: protocol.TrimID(ask.Actor.Session),
 		SetByMember:  strings.TrimSpace(ask.Actor.Member),
 	}
 	if err := garden.ValidateHarvestCondition(condition); err != nil {
@@ -153,7 +153,7 @@ func (d *Daemon) armHarvestWhenMerged(
 }
 
 func (d *Daemon) settleFreshlyArmed(
-	seed garden.Seed, written docstore.Document, sessionID string,
+	seed garden.Seed, written docstore.Document, sessionID protocol.SessionID,
 ) (garden.Seed, docstore.Document, error) {
 	rec, ok := d.store.SessionPullRequestByID(seed.HarvestWhen.PullRequest)
 	if !ok {
@@ -161,10 +161,10 @@ func (d *Daemon) settleFreshlyArmed(
 	}
 	switch rec.State {
 	case sessionPullRequestMerged:
-		return d.fulfilHarvestWhen(seed, rec, seed.HarvestWhen, sessionID)
+		return d.fulfilHarvestWhen(seed, rec, seed.HarvestWhen, string(sessionID))
 	case sessionPullRequestClosed:
 		cleared, doc, err := d.clearHarvestWhen(seed.ID, seed.HarvestWhen,
-			harvestWhenClosedNote(rec), garden.Tender{Member: harvestWhenActor}, sessionID)
+			harvestWhenClosedNote(rec), garden.Tender{Member: harvestWhenActor}, string(sessionID))
 		if err != nil {
 			return garden.Seed{}, docstore.Document{}, err
 		}
@@ -199,7 +199,7 @@ func (d *Daemon) fulfilHarvestWhen(
 	reason := harvestWhenMergedReason(rec)
 	ask := garden.Ask{
 		Actor: garden.Tender{Member: harvestWhenActor}, Reason: reason, Force: true,
-		CauseSession: firstString(excludedSessions),
+		CauseSession: protocol.SessionID(firstString(excludedSessions)),
 	}
 	var harvested garden.Seed
 	var doc docstore.Document
@@ -241,9 +241,9 @@ func (d *Daemon) clearHarvestWhen(
 		}
 		next := seed
 		next.HarvestWhen = nil
-		cause := firstString(causedBy)
+		cause := protocol.SessionID(firstString(causedBy))
 		if cause == "" {
-			cause = strings.TrimSpace(actor.Session)
+			cause = protocol.TrimID(actor.Session)
 		}
 		cleared, eventErr := seedEvents.Occur(
 			gardenSeedEventModel, gardenSeedEventVocabulary.HarvestWhenCleared, seed.ID,
@@ -275,9 +275,9 @@ func (d *Daemon) clearHarvestWhen(
 }
 
 func (d *Daemon) clearHarvestWhenRequested(
-	seedID string, ask garden.Ask, sessionID string,
+	seedID string, ask garden.Ask, sessionID protocol.SessionID,
 ) (garden.Seed, docstore.Document, error) {
-	seed, doc, err := d.clearHarvestWhen(seedID, nil, harvestWhenClearedNote, ask.Actor, sessionID)
+	seed, doc, err := d.clearHarvestWhen(seedID, nil, harvestWhenClearedNote, ask.Actor, string(sessionID))
 	if err != nil {
 		return garden.Seed{}, docstore.Document{}, err
 	}
@@ -288,7 +288,7 @@ func (d *Daemon) clearHarvestWhenRequested(
 func (d *Daemon) harvestWhenNote(seedID, body string, actor garden.Tender) garden.Note {
 	return garden.Note{
 		Seed: seedID, Kind: garden.NoteKindNote, Body: body,
-		AuthorSession: strings.TrimSpace(actor.Session), AuthorMember: strings.TrimSpace(actor.Member),
+		AuthorSession: protocol.TrimID(actor.Session), AuthorMember: strings.TrimSpace(actor.Member),
 	}
 }
 
@@ -317,8 +317,8 @@ func (d *Daemon) harvestWhenAttachment(
 	return note, true
 }
 
-func (d *Daemon) harvestWhenPullRequest(seedID, url, sessionID string) (store.SessionPullRequestRecord, error) {
-	sessionID = strings.TrimSpace(sessionID)
+func (d *Daemon) harvestWhenPullRequest(seedID string, url string, sessionID protocol.SessionID) (store.SessionPullRequestRecord, error) {
+	sessionID = protocol.TrimID(sessionID)
 	if sessionID == "" {
 		return store.SessionPullRequestRecord{}, fmt.Errorf(
 			"harvest --when-merged needs a session to track the pull request")

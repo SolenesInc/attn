@@ -65,7 +65,7 @@ func (e *ErrLedgerLimitTooLarge) Error() string {
 		e.Asked, e.Max, e.Max)
 }
 
-func (s *Store) CloseSession(id string, closed SessionClose, now time.Time) (bool, error) {
+func (s *Store) CloseSession(id protocol.SessionID, closed SessionClose, now time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -82,7 +82,7 @@ func (s *Store) CloseSession(id string, closed SessionClose, now time.Time) (boo
 			return false, nil
 		}
 		if s.sessionCloses == nil {
-			s.sessionCloses = make(map[string]sessionCloseMark)
+			s.sessionCloses = make(map[protocol.SessionID]sessionCloseMark)
 		}
 		if _, already := s.sessionCloses[id]; already {
 			return false, nil
@@ -108,7 +108,7 @@ func (s *Store) CloseSession(id string, closed SessionClose, now time.Time) (boo
 	if err := tx.Commit(); err != nil {
 		return false, fmt.Errorf("close session %s: %w", id, err)
 	}
-	s.announcePaneTerminalsLocked()
+	s.announceTerminalBindingsLocked()
 	if emptied {
 		s.announceEmptyDesktop(now)
 	}
@@ -118,7 +118,7 @@ func (s *Store) CloseSession(id string, closed SessionClose, now time.Time) (boo
 
 // closeSessionTx closes an open session's row, unplaces it and finalizes its cost; the caller forgets
 // the cost and announces an emptied desktop after commit.
-func (s *Store) closeSessionTx(tx *sql.Tx, id string, closed SessionClose, at string) (bool, bool, error) {
+func (s *Store) closeSessionTx(tx *sql.Tx, id protocol.SessionID, closed SessionClose, at string) (bool, bool, error) {
 	result, err := tx.Exec(`UPDATE sessions SET closed_at = ?, closed_by = ?, close_reason = ?
 		WHERE id = ? AND closed_at = ''`, at, closed.By, strings.TrimSpace(closed.Reason), id)
 	if err != nil {
@@ -141,6 +141,9 @@ func (s *Store) closeSessionTx(tx *sql.Tx, id string, closed SessionClose, at st
 	if err := unplaceClosingSession(tx, unplacedAt, id); err != nil {
 		return false, false, fmt.Errorf("close session %s: %w", id, err)
 	}
+	if _, err := tx.Exec(`DELETE FROM terminal_bindings WHERE session_id = ?`, id); err != nil {
+		return false, false, fmt.Errorf("close session %s terminal bindings: %w", id, err)
+	}
 	emptied, err := stampEmptyDesktops(tx, unplacedAt)
 	if err != nil {
 		return false, false, fmt.Errorf("close session %s: %w", id, err)
@@ -148,7 +151,7 @@ func (s *Store) closeSessionTx(tx *sql.Tx, id string, closed SessionClose, at st
 	return true, emptied, nil
 }
 
-func finalizeSessionCostTx(tx *sql.Tx, id string) error {
+func finalizeSessionCostTx(tx *sql.Tx, id protocol.SessionID) error {
 	var raw string
 	if err := tx.QueryRow("SELECT session_cost_json FROM sessions WHERE id = ?", id).Scan(&raw); err != nil {
 		return err
@@ -176,7 +179,7 @@ type SessionCloseRecord struct {
 	ProfileID string
 }
 
-func (s *Store) ReopenSession(id string) (SessionCloseRecord, bool, error) {
+func (s *Store) ReopenSession(id protocol.SessionID) (SessionCloseRecord, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -220,7 +223,7 @@ func (s *Store) ReopenSession(id string) (SessionCloseRecord, bool, error) {
 	return lifted, true, nil
 }
 
-func (s *Store) RestoreSessionClose(id string, closed SessionCloseRecord) (bool, error) {
+func (s *Store) RestoreSessionClose(id protocol.SessionID, closed SessionCloseRecord) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -258,22 +261,25 @@ func (s *Store) RestoreSessionClose(id string, closed SessionCloseRecord) (bool,
 		if err := unplaceClosingSession(tx, time.Now().UTC().Format(sortableTimeFormat), id); err != nil {
 			return false, fmt.Errorf("restore the close of session %s: %w", id, err)
 		}
+		if _, err := tx.Exec(`DELETE FROM terminal_bindings WHERE session_id = ?`, id); err != nil {
+			return false, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return false, fmt.Errorf("restore the close of session %s: %w", id, err)
 	}
-	s.announcePaneTerminalsLocked()
+	s.announceTerminalBindingsLocked()
 	s.forgetSessionCost(id)
 	return affected == 1, nil
 }
 
-func (s *Store) SessionClosed(id string) bool {
+func (s *Store) SessionClosed(id protocol.SessionID) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.sessionClosedLocked(id)
 }
 
-func (s *Store) sessionClosedLocked(id string) bool {
+func (s *Store) sessionClosedLocked(id protocol.SessionID) bool {
 	if s.db == nil {
 		_, closed := s.sessionCloses[id]
 		return closed
@@ -286,7 +292,7 @@ func (s *Store) sessionClosedLocked(id string) bool {
 	return closedAt != ""
 }
 
-func (s *Store) SessionLedgerEntry(id string) *protocol.SessionLedgerEntry {
+func (s *Store) SessionLedgerEntry(id protocol.SessionID) *protocol.SessionLedgerEntry {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -320,7 +326,7 @@ func (s *Store) SessionLedger(query SessionLedgerQuery) (SessionLedgerPage, erro
 	return s.sessionLedgerDB(query, limit)
 }
 
-const ledgerSelect = `SELECT id, label, agent, directory, profile_id,
+const ledgerSelect = `SELECT id, label, agent, directory, profile_id, priority,
 	COALESCE((SELECT name FROM profiles WHERE profiles.id = sessions.profile_id), ''),
 	COALESCE((SELECT deleted_at FROM profiles WHERE profiles.id = sessions.profile_id), ''),
 	branch, is_worktree, main_repo, repository, state, last_seen, closed_at, closed_by, close_reason,
@@ -540,7 +546,7 @@ func (s *Store) sessionLedgerMemory(query SessionLedgerQuery, limit int) (Sessio
 	})
 
 	if cursor := strings.TrimSpace(query.Before); cursor != "" {
-		entry := s.ledgerEntryMemoryLocked(cursor)
+		entry := s.ledgerEntryMemoryLocked(protocol.SessionID(cursor))
 		if entry == nil {
 			return SessionLedgerPage{}, &ErrUnknownLedgerCursor{ID: cursor}
 		}
@@ -548,7 +554,7 @@ func (s *Store) sessionLedgerMemory(query SessionLedgerQuery, limit int) (Sessio
 		kept := entries[:0]
 		for _, entry := range entries {
 			instant := ledgerInstant(entry)
-			if instant < at || (instant == at && entry.ID < cursor) {
+			if instant < at || (instant == at && string(entry.ID) < cursor) {
 				kept = append(kept, entry)
 			}
 		}
@@ -593,12 +599,12 @@ func sortedFacets(counts map[string]int) []protocol.SessionLedgerFacet {
 	return facets
 }
 
-func (s *Store) sessionIsLiveLocked(id string) bool {
+func (s *Store) sessionIsLiveLocked(id protocol.SessionID) bool {
 	_, live := s.sessions[id]
 	return live
 }
 
-func (s *Store) ledgerEntryMemoryLocked(id string) *protocol.SessionLedgerEntry {
+func (s *Store) ledgerEntryMemoryLocked(id protocol.SessionID) *protocol.SessionLedgerEntry {
 	if mark, closed := s.sessionCloses[id]; closed {
 		entry := ledgerEntryFromSession(mark.session, mark)
 		return &entry
@@ -614,7 +620,7 @@ func (s *Store) ledgerEntryMemoryLocked(id string) *protocol.SessionLedgerEntry 
 func finishLedgerPage(page SessionLedgerPage, matching int) SessionLedgerPage {
 	page.Omitted = matching - len(page.Entries)
 	if page.Omitted > 0 && len(page.Entries) > 0 {
-		page.NextBefore = page.Entries[len(page.Entries)-1].ID
+		page.NextBefore = string(page.Entries[len(page.Entries)-1].ID)
 	}
 	return page
 }
@@ -637,9 +643,10 @@ func ledgerEntryFromSession(session *protocol.Session, mark sessionCloseMark) pr
 	entry := protocol.SessionLedgerEntry{
 		ID:         session.ID,
 		Label:      session.Label,
-		Agent:      string(session.Agent),
+		Agent:      session.Agent,
 		Directory:  session.Directory,
 		ProfileID:  session.ProfileID,
+		Priority:   session.Priority,
 		Branch:     session.Branch,
 		IsWorktree: session.IsWorktree,
 		MainRepo:   session.MainRepo,
@@ -663,9 +670,15 @@ type ledgerScanner interface {
 
 func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 	var entry protocol.SessionLedgerEntry
-	var isWorktree int
+	var isWorktree, priority int
 	var branch, mainRepo, repository sql.NullString
-	var profileDeletedAt, closedAt, closedBy, closeReason, pinnedAt string
+	var (
+		profileDeletedAt string
+		closedAt         string
+		closedBy         string
+		closeReason      string
+		pinnedAt         string
+	)
 
 	err := row.Scan(
 		&entry.ID,
@@ -673,6 +686,7 @@ func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 		&entry.Agent,
 		&entry.Directory,
 		&entry.ProfileID,
+		&priority,
 		&entry.ProfileName,
 		&profileDeletedAt,
 		&branch,
@@ -688,6 +702,9 @@ func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 	)
 	if err != nil {
 		return protocol.SessionLedgerEntry{}, err
+	}
+	if priority != 0 {
+		entry.Priority = protocol.Ptr(true)
 	}
 	if pinnedAt != "" {
 		entry.ConversationPinnedAt = protocol.Ptr(pinnedAt)
@@ -717,7 +734,7 @@ func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 	return entry, nil
 }
 
-func unplaceClosingSession(tx *sql.Tx, now, id string) error {
+func unplaceClosingSession(tx *sql.Tx, now string, id protocol.SessionID) error {
 	if _, err := tx.Exec(`SAVEPOINT unplace_closing_session`); err != nil {
 		return err
 	}
