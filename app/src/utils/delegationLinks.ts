@@ -4,6 +4,7 @@ import type { SessionDelegationRole } from '../types/generated';
 export interface DelegationSession {
   id: string;
   label: string;
+  priority?: boolean;
   dispatcher_session_id?: string;
   dispatcher_member?: string;
   delegation_role?: SessionDelegationRole;

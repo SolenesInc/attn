@@ -24,6 +24,7 @@ type resolvedDelegationLaunch struct {
 	Agent              *string
 	Label              *string
 	YoloMode           *bool
+	Priority           *bool
 	Model              *string
 	Effort             *string
 	AllowWorktreeReuse *bool
@@ -49,7 +50,7 @@ func resolveLaunchInput(msg *protocol.DelegateMessage) resolvedDelegationLaunch 
 	return resolvedDelegationLaunch{
 		ProfileID: msg.ProfileID, RequestID: msg.RequestID, SourceSessionID: msg.SourceSessionID,
 		Assignment: msg.Assignment, Checkout: msg.Checkout, Cwd: msg.Cwd,
-		Agent: msg.Agent, Label: msg.Label, YoloMode: msg.YoloMode,
+		Agent: msg.Agent, Label: msg.Label, YoloMode: msg.YoloMode, Priority: msg.Priority,
 		Model: msg.Model, Effort: msg.Effort, AllowWorktreeReuse: msg.AllowWorktreeReuse,
 		Role: msg.Role, Choice: msg.Choice, Fallback: msg.Fallback, Provider: msg.Provider,
 		Review: msg.Review, Desktop: msg.Desktop,

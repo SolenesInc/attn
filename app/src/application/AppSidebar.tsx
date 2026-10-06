@@ -78,6 +78,7 @@ export function AppSidebar() {
     crewQueueEnabled,
     queueBands,
     openSnoozeMenu,
+    togglePriority,
   } = useAttentionQueueContext();
   const { onScreenSessionIds } = useDesktopResidencyContext();
   const {
@@ -121,6 +122,7 @@ export function AppSidebar() {
           nextDesktopId,
         })
       }
+      onTogglePriority={togglePriority}
       onChangeChiefOfStaff={handleChangeChiefOfStaff}
       crew={crew}
       onWakeCrewMember={handleWakeCrewMember}

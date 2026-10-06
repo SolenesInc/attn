@@ -26,6 +26,7 @@ import { currentHarnessInstance, dataDirForInstance, instanceCliEnv } from './ha
 import { ensureClaudePromptReadyViaPty, writeQueueAgentFixture } from './scenarioAgents.mjs';
 import { waitForFirstDesktopPane, waitForPaneInputFocus } from './scenarioAssertions.mjs';
 import { registeredAgentPid } from './workerRegistry.mjs';
+import { captureScreenshotData } from './nativeWindowCapture.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 
@@ -989,6 +990,24 @@ async function main() {
         !observer.getSession(alpha.sessionId)?.turn_snoozed_until,
         'and the daemon dropped the deadline',
       );
+    });
+
+    await runner.step('priority_turns_go_first_and_native_shortcut_clears_the_flag', async () => {
+      const gamma = await createAgent(client, observer, runner, 'gamma', 'Queue priority');
+      createdSessionIds.push(gamma.sessionId);
+      await client.request('dom_click', { selector: `[data-testid="session-actions-${gamma.sessionId}"]` });
+      await client.request('dom_click', { selector: '[data-testid="session-priority-action"]' });
+      const marked = await waitForTurns(client, [gamma.sessionId, beta.sessionId, alpha.sessionId], 'the marked turn ahead of older turns');
+      runner.assert(observer.getSession(gamma.sessionId)?.priority, 'the daemon broadcasts the priority flag');
+      runner.assert(marked.turns[0].id === gamma.sessionId, 'the priority session is first on screen');
+      await client.request('select_session', { sessionId: beta.sessionId });
+      await pressShortcutKeys(client, driver, 'session.settle');
+      await waitForTurns(client, [gamma.sessionId, alpha.sessionId], 'the middle turn settled');
+      runner.assert(shownAgentId(await client.request('get_state')) === gamma.sessionId, 'settle advances to the priority head');
+      await captureScreenshotData(path.join(runner.runDir, 'priority-head.png'), { client, selector: '.sidebar' });
+      await pressShortcutKeys(client, driver, 'session.priority');
+      await waitForTurns(client, [alpha.sessionId, gamma.sessionId], 'native priority shortcut restores oldest-first order');
+      runner.assert(!observer.getSession(gamma.sessionId)?.priority, 'the native shortcut cleared priority');
     });
 
     const result = await runner.finishSuccess({

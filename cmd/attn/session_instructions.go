@@ -67,6 +67,12 @@ func runSession() {
 			return
 		}
 		runSessionReopen(os.Args[3:])
+	case "priority":
+		if hasHelpFlag(os.Args[3:]) {
+			writeSessionHelp(os.Stdout)
+			return
+		}
+		runSessionPriority(os.Args[3:])
 	case "rename":
 		if hasHelpFlag(os.Args[3:]) {
 			writeSessionHelp(os.Stdout)
@@ -317,6 +323,9 @@ commands:
         read one ledger row, live or closed, including who closed it and why.
         A closed row also carries the reopen verdict: whether it comes back,
         why not when it does not, and the actions offered instead.
+  priority on|off [--session <id>]
+        mark a session so its owed turns go first, or clear that flag. Defaults
+        to the session running this command. Any agent may mark any session.
   rename <name> [--session <id>]
         give a session the name a person reads in the sidebar and the ledger:
         a few plain words about the work, up to 48 characters. Defaults to the

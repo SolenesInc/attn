@@ -243,6 +243,12 @@ func buildSpawnSessionRecord(msg *protocol.SpawnSessionMessage, agent, cwd, labe
 		state, stateSince, stateUpdatedAt = protocol.SessionStateWorking, nowStr, nowStr
 	}
 	session := &protocol.Session{ID: msg.ID, Label: label, Agent: protocol.SessionAgent(agent), Directory: cwd, State: state, StateSince: stateSince, StateUpdatedAt: stateUpdatedAt, LastSeen: nowStr, ProfileID: profileID}
+	if protocol.Deref(msg.Priority) {
+		session.Priority = protocol.Ptr(true)
+	}
+	if existing != nil {
+		session.Priority = existing.Priority
+	}
 	if parentSessionID != "" {
 		session.ParentSessionID = protocol.Ptr(parentSessionID)
 	}

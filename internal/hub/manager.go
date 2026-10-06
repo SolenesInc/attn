@@ -1347,6 +1347,7 @@ func sessionsMatch(left, right protocol.Session) bool {
 		left.StateUpdatedAt == right.StateUpdatedAt &&
 		protocol.Deref(left.StateReason) == protocol.Deref(right.StateReason) &&
 		protocol.Deref(left.TurnOwed) == protocol.Deref(right.TurnOwed) &&
+		protocol.Deref(left.Priority) == protocol.Deref(right.Priority) &&
 		protocol.Deref(left.TurnOpenedAt) == protocol.Deref(right.TurnOpenedAt) &&
 		protocol.Deref(left.TurnSnoozedUntil) == protocol.Deref(right.TurnSnoozedUntil) &&
 		protocol.Deref(left.ParentSessionID) == protocol.Deref(right.ParentSessionID) &&

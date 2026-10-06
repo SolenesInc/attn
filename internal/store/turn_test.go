@@ -4,25 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/victorarias/attn/internal/protocol"
 )
-
-func addTurnSession(t *testing.T, s *Store, id string, state protocol.SessionState) {
-	t.Helper()
-	now := time.Now().Format(time.RFC3339Nano)
-	if err := s.AddChecked(&protocol.Session{
-		ID:             id,
-		Label:          id,
-		Directory:      "/tmp/" + id,
-		State:          state,
-		StateSince:     now,
-		StateUpdatedAt: now,
-		LastSeen:       now,
-	}); err != nil {
-		t.Fatalf("add session %s: %v", id, err)
-	}
-}
 
 func TestMigration81BackfillsOpenTurnsFromStateSince(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-81.db")

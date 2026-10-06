@@ -158,6 +158,9 @@ func cloneSession(session *protocol.Session) *protocol.Session {
 	if session.TurnOpenedAt != nil {
 		cloned.TurnOpenedAt = protocol.Ptr(protocol.Deref(session.TurnOpenedAt))
 	}
+	if session.Priority != nil {
+		cloned.Priority = protocol.Ptr(protocol.Deref(session.Priority))
+	}
 	if session.TurnSnoozedUntil != nil {
 		cloned.TurnSnoozedUntil = protocol.Ptr(protocol.Deref(session.TurnSnoozedUntil))
 	}
@@ -241,6 +244,7 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 			stored.LastModelRequestAt = protocol.Ptr(stored.StateUpdatedAt)
 		}
 		if existing := s.sessions[session.ID]; existing != nil {
+			stored.Priority = existing.Priority
 			if existing.ProfileID != "" {
 				stored.ProfileID = existing.ProfileID
 			}
@@ -286,8 +290,8 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 	}
 	_, err := s.db.Exec(`
 		INSERT INTO sessions
-		(id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, parent_session_id, last_seen)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		(id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, parent_session_id, last_seen, priority)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			label = excluded.label,
 			agent = excluded.agent,
@@ -323,6 +327,7 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 		lastModelRequestAt,
 		protocol.Deref(session.ParentSessionID),
 		session.LastSeen,
+		boolToInt(protocol.Deref(session.Priority)),
 	)
 	if err != nil {
 		return fmt.Errorf("insert session %s: %w", session.ID, err)
@@ -368,12 +373,12 @@ func (s *Store) Get(id string) *protocol.Session {
 	var session protocol.Session
 	var stateSince, stateUpdatedAt, lastSeen string
 	var turnOpenedAt, turnSettledAt, turnSnoozedUntil, succeeds string
-	var isWorktree int
+	var isWorktree, priority int
 	var contextWindowCap int
 	var endpointID, branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, succeeds
+		SELECT id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, succeeds, priority
 		FROM sessions WHERE id = ? AND closed_at = ''`, id).Scan(
 		&session.ID,
 		&session.Label,
@@ -398,6 +403,7 @@ func (s *Store) Get(id string) *protocol.Session {
 		&turnSettledAt,
 		&turnSnoozedUntil,
 		&succeeds,
+		&priority,
 	)
 	if err != nil {
 		return nil
@@ -408,6 +414,9 @@ func (s *Store) Get(id string) *protocol.Session {
 		SnoozedUntil: parseTurnStamp(turnSnoozedUntil),
 	})
 
+	if priority != 0 {
+		session.Priority = protocol.Ptr(true)
+	}
 	if contextWindowCap > 0 {
 		session.ContextWindowCap = protocol.Ptr(contextWindowCap)
 	}
@@ -517,11 +526,11 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 
 	if stateFilter == "" {
 		rows, err = s.db.Query(`
-			SELECT id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, succeeds
+			SELECT id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, succeeds, priority
 			FROM sessions WHERE closed_at = '' ORDER BY label, id`)
 	} else {
 		rows, err = s.db.Query(`
-			SELECT id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, succeeds
+			SELECT id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, succeeds, priority
 			FROM sessions WHERE state = ? AND closed_at = '' ORDER BY label, id`, stateFilter)
 	}
 	if err != nil {
@@ -534,7 +543,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 		var session protocol.Session
 		var stateSince, stateUpdatedAt, lastSeen string
 		var turnOpenedAt, turnSettledAt, turnSnoozedUntil, succeeds string
-		var isWorktree int
+		var isWorktree, priority int
 		var contextWindowCap int
 		var endpointID, branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
@@ -562,6 +571,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 			&turnSettledAt,
 			&turnSnoozedUntil,
 			&succeeds,
+			&priority,
 		)
 		if err != nil {
 			continue
@@ -572,6 +582,9 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 			SnoozedUntil: parseTurnStamp(turnSnoozedUntil),
 		})
 
+		if priority != 0 {
+			session.Priority = protocol.Ptr(true)
+		}
 		if contextWindowCap > 0 {
 			session.ContextWindowCap = protocol.Ptr(contextWindowCap)
 		}

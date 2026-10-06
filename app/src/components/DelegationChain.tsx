@@ -1,3 +1,4 @@
+import { SessionPriority } from './SessionPriority';
 import {
   forwardRef, useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect,
   useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode,
@@ -155,7 +156,7 @@ function DelegationChainPopover({ open, sessions, controller, onSelectSession }:
               >
                 <span className="delegation-chain-branch" aria-hidden="true">{depth > 0 ? '↳' : ''}</span>
                 <span className="delegation-chain-role-icon" data-role={session.delegation_role?.builtin}><SessionRoleIcon role={session.delegation_role} /></span>
-                <span className="delegation-chain-agent"><span>{session.label}</span><small>{session.delegation_role?.name ?? harnessLabel(session.agent)}</small></span>
+                <span className="delegation-chain-agent"><span><SessionPriority priority={session.priority} />{session.label}</span><small>{session.delegation_role?.name ?? harnessLabel(session.agent)}</small></span>
                 {session.id === open.sessionId && <span className="delegation-chain-current">current</span>}
                 <StateIndicator state={session.state} size="sm" seed={session.id} />
               </button>

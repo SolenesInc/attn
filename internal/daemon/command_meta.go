@@ -92,6 +92,7 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdPullRequestUnwatch:            commandMetadata(ScopeSession, false, true),
 	protocol.CmdQuery:                         commandMetadata(ScopeHubMerge, false, true),
 	protocol.CmdHeartbeat:                     commandMetadata(ScopeSession, false, true),
+	protocol.CmdSetSessionPriority:            commandMetadata(ScopeSession, false, true),
 	protocol.CmdSettleTurn:                    commandMetadata(ScopeSession, false, true),
 	protocol.CmdSetSessionContextWindowCap:    commandMetadata(ScopeSession, false, true),
 	protocol.CmdSnoozeTurn:                    commandMetadata(ScopeSession, false, true),

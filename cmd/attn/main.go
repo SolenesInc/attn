@@ -770,6 +770,7 @@ assignment. The delegated agent reads the seed when it starts.
 assignment:
   --brief TEXT / --brief-file PATH   create a seed for new work
   --seed ID                          use an existing seed
+  --priority                         put the delegate's owed turns first
   --handover                         transfer that seed to a new agent
   -m TEXT                            optional handover note
 
@@ -1269,6 +1270,7 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	briefText := fs.String("brief", "", "delegated task brief")
 	briefFile := fs.String("brief-file", "", "file containing the delegated task brief")
 	seedID := fs.String("seed", "", "existing seed containing the assignment")
+	priority := fs.Bool("priority", false, "mark the delegate as priority")
 	handover := fs.Bool("handover", false, "transfer an existing seed to the new agent")
 	handoffNote := fs.String("m", "", "optional handover note")
 	ticketID := fs.String("ticket", "", "retired: delegations bind a seed, not a ticket")
@@ -1463,6 +1465,9 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 		}
 	}
 	request := protocol.DelegateMessage{Cmd: protocol.CmdDelegate, ProfileID: protocol.Ptr(strings.TrimSpace(*profile)), RequestID: stableRequestID, Assignment: assignment, Cwd: customCWD, Checkout: checkout}
+	if *priority {
+		request.Priority = protocol.Ptr(true)
+	}
 	if source != "" {
 		request.SourceSessionID = protocol.Ptr(source)
 	}

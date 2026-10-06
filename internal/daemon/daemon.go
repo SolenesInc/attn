@@ -2595,6 +2595,16 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleSessionReopen(conn, msg.(*protocol.SessionReopenMessage))
 	case protocol.CmdDesktopMoveSession:
 		d.handleDesktopMoveSession(conn, msg.(*protocol.DesktopMoveSessionMessage))
+	case protocol.CmdSetSessionPriority:
+		priority := msg.(*protocol.SetSessionPriorityMessage)
+		if d.forwardedToSessionOwner(conn, strings.TrimSpace(priority.SessionID), priority) {
+			return
+		}
+		if err := d.setSessionPriority(priority); err != nil {
+			d.sendError(conn, err.Error())
+		} else {
+			d.sendOK(conn)
+		}
 	case protocol.CmdRenameSession:
 		d.handleRenameSessionConn(conn, msg.(*protocol.RenameSessionMessage))
 	case protocol.CmdStateExplain:

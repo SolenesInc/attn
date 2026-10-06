@@ -282,6 +282,7 @@ func (d *Daemon) crewNapSpawn(member crew.Member, session *protocol.Session) (*p
 			Rows:      rows,
 		}
 	}
+	spawnMsg.Priority = session.Priority
 	spawnMsg.ID = uuid.NewString()
 	spawnMsg.Label = protocol.Ptr(crew.DisplayName(member.ID))
 	spawnMsg.InitialPrompt = protocol.Ptr(crewNapPrompt)

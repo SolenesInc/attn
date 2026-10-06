@@ -17,6 +17,7 @@ import type { Chip, LedgerMenu, ListItem, RowGlyph, RowModel, RowNote, RowVerb }
 export interface WorktreeSessionRef {
   id: string;
   label: string;
+  priority?: boolean;
   directory: string;
 }
 
@@ -380,7 +381,7 @@ function worktreeRow(worktree: Worktree, context: WorktreeRowContext): RowModel 
     : [
       worktree.pinned ? { id: 'unpin', label: 'Unpin' } : { id: 'keep', label: 'Keep' },
       { id: 'sessions', label: 'Sessions here' },
-      ...context.live.map((session) => ({ id: `session:${session.id}`, label: `Go to ${session.label || session.id}` })),
+      ...context.live.map((session) => ({ id: `session:${session.id}`, label: `Go to ${session.priority ? '⚑ ' : ''}${session.label || session.id}` })),
       { id: 'delete', label: 'Delete…', danger: true },
     ];
   const idle = worktree.last_activity_at ? relativeStamp(worktree.last_activity_at, context.now) : null;

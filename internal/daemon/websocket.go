@@ -1241,6 +1241,10 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleFetchPRDetailsWS(client, msg.(*protocol.FetchPRDetailsMessage))
 	case protocol.CmdClearWarnings:
 		d.handleClearWarningsWS()
+	case protocol.CmdSetSessionPriority:
+		if err := d.setSessionPriority(msg.(*protocol.SetSessionPriorityMessage)); err != nil {
+			d.sendCommandError(client, protocol.CmdSetSessionPriority, err.Error())
+		}
 	case protocol.CmdSettleTurn:
 		d.handleSettleTurn(msg.(*protocol.SettleTurnMessage))
 	case protocol.CmdSnoozeTurn:
@@ -1595,6 +1599,10 @@ func remoteCommandSessionID(cmd string, msg interface{}) string {
 	case protocol.CmdMarkdownAnnotationsSubmit:
 		if typed, ok := msg.(*protocol.MarkdownAnnotationsSubmitMessage); ok {
 			return protocol.Deref(typed.TargetSessionID)
+		}
+	case protocol.CmdSetSessionPriority:
+		if typed, ok := msg.(*protocol.SetSessionPriorityMessage); ok {
+			return typed.SessionID
 		}
 	case protocol.CmdSettleTurn:
 		if typed, ok := msg.(*protocol.SettleTurnMessage); ok {

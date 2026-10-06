@@ -1,3 +1,4 @@
+import { SessionPriority } from './SessionPriority';
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 import { TURN_AGE_TICK_MS, useNow } from '../hooks/useNow';
@@ -90,7 +91,7 @@ function WaitingPill() {
       {lead.map((row, index) => (
         <span key={row.session.id} className="queue-bar-crumb-wrap">
           {index > 0 && <span className="queue-bar-sep">›</span>}
-          <span className="queue-bar-crumb">{row.session.label}</span>
+          <span className="queue-bar-crumb"><SessionPriority priority={row.session.priority} />{row.session.label}</span>
         </span>
       ))}
       {hidden > 0 && <span className="queue-bar-crumb is-more">+{hidden}</span>}

@@ -36,7 +36,7 @@ function OpenPalette({
   const { desktopViews, handleSelectSession, handleSelectTile } = useNavigationContext();
   const { crewQueueEnabled } = useAttentionQueueContext();
   const { handleWakeCrewMember } = useAppGardenActionsContext();
-  const { desktopTileContents, sendSettleTurn, sendSnoozeTurn, sendGetCommandUsage, sendRecordCommandUsage } = useDaemonApi();
+  const { desktopTileContents, sendSettleTurn, sendSnoozeTurn, sendSetSessionPriority, sendGetCommandUsage, sendRecordCommandUsage } = useDaemonApi();
   const desktops = useProfilesStore((state) => state.desktops);
   const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
   const crew = useDaemonStore((state) => state.crew);
@@ -99,6 +99,7 @@ function OpenPalette({
       onWakeMember={handleWakeCrewMember}
       onOpenTile={handleSelectTile}
       onSettle={(session) => void sendSettleTurn(session.id)}
+      onPriority={(session) => sendSetSessionPriority(session.id, !session.priority)}
       onSnooze={(session, until) => void sendSnoozeTurn(session.id, until)}
     />
   );

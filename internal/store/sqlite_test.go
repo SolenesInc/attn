@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/garden"
-	"github.com/victorarias/attn/internal/protocol"
 )
 
 func migrationOrderError(registry []migration) error {
@@ -1095,10 +1094,9 @@ func TestMigration121BackfillsTheRequestClockAndIsRewindSafe(t *testing.T) {
 	defer s.Close()
 
 	observed := "2026-08-23T10:15:00Z"
-	s.Add(&protocol.Session{
-		ID: "legacy-session", State: protocol.SessionStateWaitingInput,
-		StateSince: observed, StateUpdatedAt: observed, LastSeen: observed,
-	})
+	if _, err := s.db.Exec(`INSERT INTO sessions (id, label, directory, state, state_since, state_updated_at, last_seen) VALUES ('legacy-session', 'Legacy', '/tmp/legacy', 'waiting_input', ?, ?, ?)`, observed, observed, observed); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := s.db.Exec(`UPDATE sessions SET last_model_request_at = NULL WHERE id = 'legacy-session'`); err != nil {
 		t.Fatalf("clear request clock: %v", err)
 	}
@@ -1130,7 +1128,9 @@ func TestMigration123AddsTranscriptPathAndIsRewindSafe(t *testing.T) {
 	}
 	defer s.Close()
 
-	s.Add(&protocol.Session{ID: "legacy-session", Agent: protocol.SessionAgentCodex})
+	if _, err := s.db.Exec(`INSERT INTO sessions (id, label, directory, agent, state_since, state_updated_at, last_seen) VALUES ('legacy-session', 'Legacy', '/tmp/legacy', 'codex', '', '', '')`); err != nil {
+		t.Fatal(err)
+	}
 	s.SetResumeSessionID("legacy-session", "native-legacy")
 
 	if _, err := s.db.Exec(`

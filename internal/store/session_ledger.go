@@ -320,7 +320,7 @@ func (s *Store) SessionLedger(query SessionLedgerQuery) (SessionLedgerPage, erro
 	return s.sessionLedgerDB(query, limit)
 }
 
-const ledgerSelect = `SELECT id, label, agent, directory, profile_id,
+const ledgerSelect = `SELECT id, label, agent, directory, profile_id, priority,
 	COALESCE((SELECT name FROM profiles WHERE profiles.id = sessions.profile_id), ''),
 	COALESCE((SELECT deleted_at FROM profiles WHERE profiles.id = sessions.profile_id), ''),
 	branch, is_worktree, main_repo, repository, state, last_seen, closed_at, closed_by, close_reason,
@@ -640,6 +640,7 @@ func ledgerEntryFromSession(session *protocol.Session, mark sessionCloseMark) pr
 		Agent:      string(session.Agent),
 		Directory:  session.Directory,
 		ProfileID:  session.ProfileID,
+		Priority:   session.Priority,
 		Branch:     session.Branch,
 		IsWorktree: session.IsWorktree,
 		MainRepo:   session.MainRepo,
@@ -663,7 +664,7 @@ type ledgerScanner interface {
 
 func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 	var entry protocol.SessionLedgerEntry
-	var isWorktree int
+	var isWorktree, priority int
 	var branch, mainRepo, repository sql.NullString
 	var profileDeletedAt, closedAt, closedBy, closeReason, pinnedAt string
 
@@ -673,6 +674,7 @@ func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 		&entry.Agent,
 		&entry.Directory,
 		&entry.ProfileID,
+		&priority,
 		&entry.ProfileName,
 		&profileDeletedAt,
 		&branch,
@@ -688,6 +690,9 @@ func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 	)
 	if err != nil {
 		return protocol.SessionLedgerEntry{}, err
+	}
+	if priority != 0 {
+		entry.Priority = protocol.Ptr(true)
 	}
 	if pinnedAt != "" {
 		entry.ConversationPinnedAt = protocol.Ptr(pinnedAt)
