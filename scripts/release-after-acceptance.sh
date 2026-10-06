@@ -56,7 +56,9 @@ fi
 if "$script_root/workflow-job-gate.sh" ci.yml "$sha" push main 'App acceptance'; then
   echo "release after acceptance: CI App acceptance is green for main $sha"
 else
-  "$script_root/app-acceptance-gate.sh" "$sha"
+  "$script_root/workflow-job-gate.sh" \
+    app-acceptance.yml "$sha" workflow_dispatch main 'App acceptance'
+  echo "release after acceptance: manual App acceptance receipt is green for $sha"
 fi
 
 tag="$(go run ./cmd/release-train accepted-main tag --head "$sha")"

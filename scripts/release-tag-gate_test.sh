@@ -10,25 +10,11 @@ mkdir -p "$work/bin"
 cat >"$work/bin/gh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/pulls/42/commits?'* ]]; then
-  printf '%s\n' "$FAKE_CANDIDATE_SHA"
-  exit 0
-fi
-if [[ "$1" == api ]] && [[ "$*" == *'/pulls'* ]]; then
-  printf '42\trelease/v99.98.97\thttps://github.com/example/attn/pull/42\n'
-  exit 0
-fi
-if [[ "$1" == api ]] && [[ "$*" == *"/git/commits/$FAKE_CANDIDATE_SHA"* ]]; then
-  printf '%s\n' "$FAKE_CANDIDATE_TREE"
-  exit 0
-fi
-if [[ "$1" == api ]] && [[ "$*" == *"/git/commits/$FAKE_MAIN_SHA"* ]]; then
-  printf '%s\n' "$FAKE_MAIN_TREE"
-  exit 0
-fi
 if [[ "$1" == api ]] && [[ "$*" == *'/actions/workflows/app-acceptance.yml/runs?'* ]]; then
-  printf '2026-08-29T10:00:00Z\t43\tApp acceptance %s\tcompleted\tsuccess\t%s\n' "$FAKE_CANDIDATE_SHA" \
-    'https://github.com/example/attn/actions/runs/43'
+  if [[ "${FAKE_APP_MODE:-success}" != missing ]] && [[ "$*" =~ App\ acceptance\ ([0-9a-f]{40}) ]]; then
+    printf '2026-08-29T10:00:00Z\t43\tApp acceptance %s\tcompleted\tsuccess\t%s\n' "${BASH_REMATCH[1]}" \
+      'https://github.com/example/attn/actions/runs/43'
+  fi
   exit 0
 fi
 if [[ "$1" == api ]] && [[ "$*" == *'/actions/workflows/ci.yml/runs?'* ]]; then
@@ -68,9 +54,6 @@ export GOCACHE="$work/go-cache"
 export FAKE_ACCEPTANCE_MODE=success
 export FAKE_ACCEPTANCE_STATUS=completed
 export FAKE_ACCEPTANCE_CONCLUSION=success
-export FAKE_CANDIDATE_SHA=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-export FAKE_CANDIDATE_TREE=cccccccccccccccccccccccccccccccccccccccc
-export FAKE_MAIN_TREE="$FAKE_CANDIDATE_TREE"
 
 repo="$work/repo"
 git clone -q "$root" "$repo"
@@ -90,7 +73,6 @@ EOF
 git -C "$repo" add -A
 git -C "$repo" commit -q -m 'chore(release): prepare v99.98.97'
 accepted_sha="$(git -C "$repo" rev-parse HEAD)"
-export FAKE_MAIN_SHA="$accepted_sha"
 git -C "$repo" tag v99.98.97
 git -C "$repo" update-ref refs/remotes/origin/main "$accepted_sha"
 export FAKE_ACCEPTANCE_SHA="$accepted_sha"
@@ -120,13 +102,14 @@ run_gate v99.98.97 >"$work/success.out"
 grep -Fq 'v99.98.97 is accepted' "$work/success.out"
 grep -Fq "release_sha=$accepted_sha" "$GITHUB_OUTPUT"
 
-export FAKE_MAIN_TREE=dddddddddddddddddddddddddddddddddddddddd
-expect_failure 'differs from app-accepted candidate tree' run_gate v99.98.97
+grep -Fq "manual App acceptance receipt is green for $accepted_sha" "$work/success.out"
+export FAKE_APP_MODE=missing
+expect_failure 'has no app-acceptance.yml workflow_dispatch run' run_gate v99.98.97
 export FAKE_CI_APP_MODE=success
 run_gate v99.98.97 >"$work/ci-app-acceptance.out"
 grep -Fq "CI App acceptance is green for $accepted_sha" "$work/ci-app-acceptance.out"
 export FAKE_CI_APP_MODE=missing
-export FAKE_MAIN_TREE="$FAKE_CANDIDATE_TREE"
+export FAKE_APP_MODE=success
 
 export FAKE_ACCEPTANCE_CONCLUSION=failure
 expect_failure 'Acceptance is completed/failure' run_gate v99.98.97

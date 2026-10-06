@@ -876,15 +876,11 @@ jobs:
             echo "app acceptance: Linux serial matrix and macOS native clipboard are green for $HEAD_SHA"
             exit 0
           fi
-          if [[ "$EVENT_NAME/$HEAD_BRANCH" =~ ^pull_request/release/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          if [[ "$EVENT_NAME/$HEAD_BRANCH" =~ ^pull_request/release/v[0-9]+\.[0-9]+\.[0-9]+$ ]] || \
+            [ "$EVENT_NAME/$GITHUB_REF" = push/refs/heads/main ]; then
             ./scripts/workflow-job-gate.sh \
               app-acceptance.yml "$HEAD_SHA" workflow_dispatch main 'App acceptance'
-            echo "app acceptance: protected-main manual override is green for $HEAD_SHA"
-            exit 0
-          fi
-          if [ "$EVENT_NAME/$GITHUB_REF" = push/refs/heads/main ]; then
-            ./scripts/app-acceptance-gate.sh "$HEAD_SHA"
-            echo "app acceptance: candidate receipt covers main $HEAD_SHA"
+            echo "app acceptance: manual receipt covers $HEAD_SHA"
             exit 0
           fi
           if [ "$BUILD_RESULT" != success ]; then

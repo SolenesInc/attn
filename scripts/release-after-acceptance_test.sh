@@ -50,10 +50,6 @@ if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/runs/45/jobs?'* ]]
     'https://github.com/example/attn/actions/runs/45/job/10'
   exit 0
 fi
-if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/pulls/42/commits?'* ]]; then
-  printf '%s\n' "$FAKE_CANDIDATE_SHA"
-  exit 0
-fi
 if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/workflows/release.yml/runs?'* ]]; then
   if [[ "${FAKE_RELEASE_RUN_PAGE_2:-0}" == 1 ]] || grep -q '^api --method POST repos/.*/dispatches ' "$FAKE_GH_LOG"; then
     release_status="${FAKE_RELEASE_RUN_STATUS:-completed}"
@@ -64,23 +60,9 @@ if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/workflows/release.
   fi
   exit 0
 fi
-if [[ "$1" == api ]] && [[ "$*" == *'/pulls'* ]]; then
-  if [[ "${FAKE_CANDIDATE_MODE:-success}" != missing ]]; then
-    printf '42\trelease/v99.98.97\thttps://github.com/example/attn/pull/42\n'
-  fi
-  exit 0
-fi
-if [[ "$1" == api ]] && [[ "$*" == *"/git/commits/$FAKE_CANDIDATE_SHA"* ]]; then
-  printf '%s\n' "$FAKE_CANDIDATE_TREE"
-  exit 0
-fi
-if [[ "$1" == api ]] && [[ "$*" == *'/git/commits/'* ]]; then
-  printf '%s\n' "$FAKE_MAIN_TREE"
-  exit 0
-fi
 if [[ "$1" == api ]] && [[ "$*" == *'/actions/workflows/app-acceptance.yml/runs?'* ]]; then
-  if [[ "${FAKE_APP_MODE:-success}" != missing ]]; then
-    printf '2026-08-29T10:00:00Z\t43\tApp acceptance %s\tcompleted\tsuccess\t%s\n' "$FAKE_CANDIDATE_SHA" \
+  if [[ "${FAKE_APP_MODE:-success}" != missing ]] && [[ "$*" =~ App\ acceptance\ ([0-9a-f]{40}) ]]; then
+    printf '2026-08-29T10:00:00Z\t43\tApp acceptance %s\tcompleted\tsuccess\t%s\n' "${BASH_REMATCH[1]}" \
       'https://github.com/example/attn/actions/runs/43'
   fi
   exit 0
@@ -116,10 +98,6 @@ export GOCACHE="$work/go-cache"
 export FAKE_GH_LOG="$work/gh.log"
 export FAKE_ACCEPTANCE_CONCLUSION=success
 export FAKE_TAG_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-export FAKE_CANDIDATE_SHA=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-export FAKE_CANDIDATE_TREE=dddddddddddddddddddddddddddddddddddddddd
-export FAKE_MAIN_TREE="$FAKE_CANDIDATE_TREE"
-export FAKE_CANDIDATE_MODE=success
 export FAKE_APP_MODE=success
 export FAKE_APP_CONCLUSION=success
 export FAKE_CI_APP_MODE=missing
@@ -135,12 +113,10 @@ setup_fixture() {
   fixture_repo="$work/$name-repo"
   : >"$FAKE_GH_LOG"
 
-  export FAKE_CANDIDATE_MODE=success
   export FAKE_APP_MODE=success
   export FAKE_APP_CONCLUSION=success
   export FAKE_CI_APP_MODE=missing
   export FAKE_CI_APP_CONCLUSION=success
-  export FAKE_MAIN_TREE="$FAKE_CANDIDATE_TREE"
   export FAKE_RELEASE_RUN_PAGE_2=0
   export FAKE_RELEASE_RUN_STATUS=completed
   export FAKE_RELEASE_RUN_CONCLUSION=success
@@ -232,8 +208,8 @@ setup_fixture automated-app
 export FAKE_CI_APP_MODE=success
 run_release_after_acceptance >"$work/automated-app.out"
 grep -Fq "CI App acceptance is green for main $candidate_sha" "$work/automated-app.out"
-if grep -q '/pulls' "$FAKE_GH_LOG"; then
-  echo "green main App acceptance queried the candidate override" >&2
+if grep -q 'app-acceptance.yml' "$FAKE_GH_LOG"; then
+  echo "green main App acceptance queried the manual receipt" >&2
   exit 1
 fi
 export FAKE_CI_APP_MODE=missing
@@ -264,14 +240,6 @@ export FAKE_APP_CONCLUSION=failure
 expect_failure 'App acceptance is completed/failure' run_release_after_acceptance
 if git --git-dir="$fixture_origin" show-ref --verify --quiet "refs/tags/$candidate_tag"; then
   echo "red App acceptance created a tag" >&2
-  exit 1
-fi
-
-setup_fixture moved-base-tree
-export FAKE_MAIN_TREE=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
-expect_failure 'differs from app-accepted candidate tree' run_release_after_acceptance
-if git --git-dir="$fixture_origin" show-ref --verify --quiet "refs/tags/$candidate_tag"; then
-  echo "moved candidate baseline created a tag" >&2
   exit 1
 fi
 

@@ -56,6 +56,10 @@ EOF
 cat >"$work/bin/claude" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ -n "${FAKE_CLAUDE_FAIL:-}" ]]; then
+  echo 'changelog writer failed' >&2
+  exit 1
+fi
 printf '%s\n' "$#" >"$FAKE_CLAUDE_ARGC"
 cat >"$FAKE_CLAUDE_INPUT"
 if [[ -n "${FAKE_CLAUDE_PREAMBLE:-}" ]]; then
@@ -226,6 +230,8 @@ if grep -Eq '(^| )(pr merge|workflow run release)' "$FAKE_GH_LOG"; then
   exit 1
 fi
 [[ "$(git -C "$fixture_repo" branch --show-current)" == main ]]
+[[ -z "$(git -C "$fixture_repo" status --porcelain)" ]]
+[[ "$(git -C "$fixture_repo" worktree list | wc -l | tr -d ' ')" == 1 ]]
 if git -C "$fixture_repo" show-ref --verify --quiet refs/heads/release/v99.98.97; then
   echo "candidate preparation left a local release branch behind" >&2
   exit 1
@@ -234,5 +240,13 @@ fi
 git --git-dir="$fixture_origin" update-ref -d "$candidate_ref"
 run_release v99.98.97 >"$work/retry.out"
 git --git-dir="$fixture_origin" rev-parse --verify --quiet "$candidate_ref" >/dev/null
+
+git --git-dir="$fixture_origin" update-ref -d "$candidate_ref"
+export FAKE_CLAUDE_FAIL=1
+expect_failure 'changelog writer failed' run_release v99.98.97
+unset FAKE_CLAUDE_FAIL
+[[ "$(git -C "$fixture_repo" branch --show-current)" == main ]]
+[[ -z "$(git -C "$fixture_repo" status --porcelain)" ]]
+[[ "$(git -C "$fixture_repo" worktree list | wc -l | tr -d ' ')" == 1 ]]
 
 echo "release preparation: OK"

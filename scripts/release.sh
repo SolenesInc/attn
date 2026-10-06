@@ -137,8 +137,15 @@ for command in claude pnpm cargo; do
 done
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/attn-release-candidate.XXXXXX")"
-trap 'rm -rf "$work"' EXIT
+prepare="$work/worktree"
+cleanup() {
+  git -C "$root" worktree remove --force "$prepare" >/dev/null 2>&1 || true
+  rm -rf "$work"
+}
+trap cleanup EXIT
 body="$work/pr-body.md"
+git worktree add -q --detach "$prepare" "$main_sha"
+cd "$prepare"
 fragment_count="$(find changelog.d -maxdepth 1 -type f -name '*.yaml' | wc -l | tr -d '[:space:]')"
 fragment_noun=fragments
 if [[ "$fragment_count" == 1 ]]; then
@@ -146,12 +153,10 @@ if [[ "$fragment_count" == 1 ]]; then
 fi
 
 echo "Cutting ${release_branch} from ${main_sha}..."
-git switch --detach "$main_sha"
-
 ./scripts/compile-changelog.sh
 go run ./cmd/release-train version set "$version_tag"
 (cd app && pnpm install --frozen-lockfile)
-(cd app/src-tauri && cargo check -q)
+cargo metadata --manifest-path app/src-tauri/Cargo.toml --format-version 1 >/dev/null
 go run ./cmd/release-train version check "$version_tag"
 go run ./cmd/release-train manifest write --version "$version_tag" --main "$main_sha"
 
@@ -226,6 +231,8 @@ A manual dispatch does not restart this candidate's CI run. Rerun CI after
 recording the override.
 
 Do not merge until \`PR gate\` and \`App acceptance\` are green on \`${candidate_sha}\`.
+If App acceptance cannot cover the merged release commit on \`main\` either, record
+the same receipt with \`candidate_sha\` set to that commit and rerun its CI.
 EOF
 
 echo "Pushing ${release_branch}..."
@@ -233,7 +240,6 @@ git push "$remote" "HEAD:refs/heads/${release_branch}"
 pr_url="$(gh pr create --base main --head "$release_branch" \
   --title "chore(release): prepare ${version_tag}" --body-file "$body")"
 
-git switch main
 echo "Opened release candidate ${pr_url}"
 echo "Next: review the changelog and merge once PR gate and App acceptance are green."
 echo "This command did not merge, tag, or start a release."

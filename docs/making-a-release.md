@@ -31,8 +31,9 @@ commit: when its Acceptance is green, it gets tagged and published.
 release was cut ship with it, and their fragments stay pending for the next
 release.
 
-If the automated app acceptance cannot cover the candidate, record a manual
-receipt with the command printed in the release PR.
+If the automated app acceptance cannot cover the release PR or the merged
+release commit, record a manual receipt for that exact commit with the command
+printed in the release PR, then rerun its CI.
 
 If Acceptance fails on the release commit, fix it on `main` and prepare the
 release again with the same version.

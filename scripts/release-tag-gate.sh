@@ -44,7 +44,9 @@ fi
 if "$script_root/workflow-job-gate.sh" ci.yml "$tag_sha" push main 'App acceptance'; then
   echo "release tag gate: CI App acceptance is green for $tag_sha"
 else
-  "$script_root/app-acceptance-gate.sh" "$tag_sha"
+  "$script_root/workflow-job-gate.sh" \
+    app-acceptance.yml "$tag_sha" workflow_dispatch main 'App acceptance'
+  echo "release tag gate: manual App acceptance receipt is green for $tag_sha"
 fi
 "$script_root/workflow-job-gate.sh" ci.yml "$tag_sha" push main Acceptance
 
