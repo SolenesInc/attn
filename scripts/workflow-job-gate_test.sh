@@ -11,28 +11,52 @@ cat >"$work/bin/gh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >>"$FAKE_GH_LOG"
-if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/workflows/app-acceptance.yml/runs?'* ]]; then
-  if [[ "${FAKE_RUN_MODE:-success}" != missing ]]; then
-    printf '2026-08-29T10:00:00Z\t42\tApp acceptance %s\t%s\t%s\t%s\n' "$FAKE_RUN_SHA" \
-      "${FAKE_RUN_STATUS:-completed}" "${FAKE_RUN_CONCLUSION:-success}" \
-      'https://github.com/example/attn/actions/runs/42'
+filter=''
+previous=''
+for arg in "$@"; do
+  if [[ "$previous" == --jq ]]; then
+    filter="$arg"
   fi
+  previous="$arg"
+done
+run_conclusion="${FAKE_RUN_CONCLUSION:-success}"
+job_conclusion="${FAKE_JOB_CONCLUSION:-success}"
+if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/workflows/app-acceptance.yml/runs?'* ]]; then
+  jq -n --arg mode "${FAKE_RUN_MODE:-success}" --arg sha "$FAKE_RUN_SHA" \
+    --arg status "${FAKE_RUN_STATUS:-completed}" --arg conclusion "$run_conclusion" '{workflow_runs: (
+      if $mode == "missing" then [] else [
+        {created_at: "2026-08-29T10:00:00Z", id: 41, head_branch: "main", event: "workflow_dispatch",
+         display_title: "App acceptance bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", status: "completed",
+         conclusion: "success", html_url: "https://github.com/example/attn/actions/runs/41"},
+        {created_at: "2026-08-29T10:00:00Z", id: 42, head_branch: "main", event: "workflow_dispatch",
+         display_title: ("App acceptance " + $sha), status: $status,
+         conclusion: (if $conclusion == "none" then null else $conclusion end),
+         html_url: "https://github.com/example/attn/actions/runs/42"}
+      ] end)}' | jq -r "$filter"
   exit 0
 fi
 if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/workflows/'*'/runs?'* ]]; then
-  if [[ "${FAKE_RUN_MODE:-success}" != missing ]]; then
-    printf '2026-08-29T10:00:00Z\t42\t%s\t%s\t%s\t%s\n' "$FAKE_RUN_SHA" \
-      "${FAKE_RUN_STATUS:-completed}" "${FAKE_RUN_CONCLUSION:-success}" \
-      'https://github.com/example/attn/actions/runs/42'
-  fi
+  event="$(sed -E 's/.*[?&]event=([a-z_]+).*/\1/' <<<"$*")"
+  jq -n --arg mode "${FAKE_RUN_MODE:-success}" --arg sha "$FAKE_RUN_SHA" --arg event "$event" \
+    --arg status "${FAKE_RUN_STATUS:-completed}" --arg conclusion "$run_conclusion" '{workflow_runs: (
+      if $mode == "missing" then [] else [
+        {created_at: "2026-08-29T10:00:00Z", id: 42, head_sha: $sha, event: $event, status: $status,
+         conclusion: (if $conclusion == "none" then null else $conclusion end),
+         html_url: "https://github.com/example/attn/actions/runs/42"}
+      ] end)}' | jq -r "$filter"
   exit 0
 fi
 if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/runs/42/jobs?'* ]]; then
-  if [[ "${FAKE_JOB_MODE:-success}" != missing ]]; then
-    printf '%s\t%s\t%s\n' "${FAKE_JOB_STATUS:-completed}" \
-      "${FAKE_JOB_CONCLUSION:-success}" \
-      'https://github.com/example/attn/actions/runs/42/job/7'
-  fi
+  jq -n --arg mode "${FAKE_JOB_MODE:-success}" --arg status "${FAKE_JOB_STATUS:-completed}" \
+    --arg conclusion "$job_conclusion" '{jobs: (
+      [{name: "App acceptance build", status: "completed", conclusion: "success",
+        html_url: "https://github.com/example/attn/actions/runs/42/job/6"}] +
+      if $mode == "missing" then [] else [
+        {name: "Acceptance", status: $status, conclusion: $conclusion,
+         html_url: "https://github.com/example/attn/actions/runs/42/job/7"},
+        {name: "App acceptance", status: $status, conclusion: $conclusion,
+         html_url: "https://github.com/example/attn/actions/runs/42/job/8"}
+      ] end)}' | jq -r "$filter"
   exit 0
 fi
 echo "unexpected gh command: $*" >&2
@@ -109,6 +133,11 @@ export FAKE_JOB_CONCLUSION=failure
 expect_failure 'Acceptance is completed/failure' \
   "$gate" ci.yml "$sha" push main Acceptance
 export FAKE_JOB_CONCLUSION=success
+
+export FAKE_JOB_MODE=missing
+expect_failure "has 0 'App acceptance' jobs" \
+  "$gate" ci.yml "$sha" pull_request - 'App acceptance'
+export FAKE_JOB_MODE=success
 
 export FAKE_RUN_MODE=missing
 expect_failure 'has no app-acceptance.yml workflow_dispatch run' \
