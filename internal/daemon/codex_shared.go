@@ -239,16 +239,15 @@ func (r *codexShared) connect(ctx context.Context, s *codexServer) error {
 			s.control, s.loaded, s.epoch = client, make(map[string]bool, len(list.Data)), epoch
 			for _, id := range list.Data {
 				s.loaded[id] = true
+				delete(s.dropped, id)
 			}
 			s.mu.Unlock()
 			if !r.d.life.Go("codexServerControl", func() { r.watchControl(s, client) }) {
 				client.Close()
 				return errDaemonStopping
 			}
-			s.events.run(r.d, func() {
-				r.restoreParents(s, client, list.Data)
-				r.restateHiddenStates(s, client, epoch)
-			})
+			r.restoreParents(s, client, list.Data)
+			s.events.run(r.d, func() { r.restateHiddenStates(s, client, epoch) })
 			return nil
 		}
 		if ctx.Err() != nil {
@@ -499,6 +498,8 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 	if conversation, _ := params["threadId"].(string); method == "thread/resume" && conversation != "" {
 		if holder := r.holder(v.profile, conversation); holder != "" {
 			sessionID = holder
+		} else if owner := r.d.store.ConversationOwner(sessionID, conversation); owner != "" {
+			sessionID = owner
 		}
 	}
 	config, _ := params["config"].(map[string]any)

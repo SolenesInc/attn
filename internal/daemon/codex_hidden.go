@@ -485,7 +485,7 @@ func (r *codexShared) loadedElsewhere(profile, conversation string) string {
 	r.mu.Unlock()
 	for p, s := range servers {
 		s.mu.Lock()
-		held := p != profile && s.control != nil && s.loaded[conversation]
+		held := p != profile && (s.control != nil && s.loaded[conversation] || s.dropped[conversation])
 		s.mu.Unlock()
 		if held {
 			return p
