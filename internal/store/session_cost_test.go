@@ -165,7 +165,9 @@ func TestLegacyCostMigrationsKeepTheirStoredTierRules(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer s.Close()
-			s.Add(&protocol.Session{ID: "fixture", Label: "fixture"})
+			if _, err := s.db.Exec(`INSERT INTO sessions (id, label, directory, state, state_since, state_updated_at, last_seen) VALUES ('fixture', 'fixture', '', 'idle', '', '', '')`); err != nil {
+				t.Fatal(err)
+			}
 			raw := fmt.Sprintf(`{"initialized":true,"ledger":{"%s|%s":{%s}},"observations":{"request":{"observation_id":"request","model":%q,"purpose":%q,"fast_mode":%t,"usage":{%s}}}}`, c.purpose, c.model, c.usage, c.model, c.purpose, c.fast, c.usage)
 			if _, err := s.db.Exec("UPDATE sessions SET session_cost_json = ? WHERE id = 'fixture'", raw); err != nil {
 				t.Fatal(err)
