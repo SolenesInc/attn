@@ -259,7 +259,9 @@ func (r *codexShared) observeStatus(s *codexServer, m codexshared.Message) {
 
 func (r *codexShared) restateHiddenStates(s *codexServer, client *codexshared.Client, epoch string) {
 	for _, session := range r.d.store.List("") {
-		if session.ProfileID != s.profile || session.State != protocol.SessionStateUnknown || !r.hidden(session.ID) {
+		stale := session.State == protocol.SessionStateUnknown || session.State == protocol.SessionStateWorking ||
+			session.State == protocol.SessionStatePendingApproval
+		if session.ProfileID != s.profile || !stale || !r.hidden(session.ID) {
 			continue
 		}
 		ctx, cancel := context.WithTimeout(r.d.life.Context(), codexServerCallLimit)

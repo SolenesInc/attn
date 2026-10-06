@@ -241,7 +241,12 @@ func (r *codexShared) connect(ctx context.Context, s *codexServer) error {
 				s.loaded[id] = true
 				delete(s.dropped, id)
 			}
+			gone := s.dropped
+			s.dropped = nil
 			s.mu.Unlock()
+			for conversation := range gone {
+				r.d.life.Go("codexConversationUnloaded", func() { r.unloaded(s, conversation, true) })
+			}
 			if !r.d.life.Go("codexServerControl", func() { r.watchControl(s, client) }) {
 				client.Close()
 				return errDaemonStopping
