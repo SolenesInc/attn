@@ -133,6 +133,7 @@ export function useAppCommands(): PaletteCommand[] {
       ...(handleSettleActiveTurn
         ? [{
             id: 'settle-active-session',
+            pinned: true,
             title: 'Settle this agent',
             description: 'Close the turn it owes you',
             keywords: ['settle', 'done', 'queue', 'turn'],
@@ -144,6 +145,7 @@ export function useAppCommands(): PaletteCommand[] {
       ...(agentOnScreenId
         ? [{
             id: 'reload-active-session',
+            pinned: true,
             title: 'Reload this agent',
             description: 'Restart the agent in its current pane',
             keywords: ['session', 'reload', 'restart', 'relaunch'],
@@ -211,6 +213,7 @@ export function useAppCommands(): PaletteCommand[] {
       ...(editorUnavailableReason === null
         ? [{
             id: 'open-in-editor',
+            pinned: true,
             title: 'Open in editor',
             description: 'The active agent\u2019s folder in your editor',
             keywords: ['editor', 'zed', 'code', 'folder'],
@@ -478,6 +481,7 @@ export function useAppCommands(): PaletteCommand[] {
       ? [
           {
             id: 'show-delegation-chain',
+            pinned: true,
             title: 'Show delegation chain',
             description: 'Navigate this agent’s dispatcher, peers, and delegates',
             keywords: ['role', 'orchestrator', 'builder', 'parent', 'children', 'agent', 'session'],
@@ -493,6 +497,7 @@ export function useAppCommands(): PaletteCommand[] {
         ? [
             {
               id: 'show-tended-seeds',
+              pinned: true,
               title: `Show ${activeSession.label}'s seeds`,
               description: 'The seeds this agent is tending, and what it reports to',
               keywords: ['seed', 'seeds', 'tend', 'tending', 'garden', 'plot', 'agent', 'session'],
@@ -512,6 +517,7 @@ export function useAppCommands(): PaletteCommand[] {
         ? [
             {
               id: 'show-session-usage',
+              pinned: true,
               title: `Show ${activeSession.label}'s usage`,
               description: 'Token and cost totals for each model in this session',
               keywords: ['usage', 'tokens', 'cost', 'models', 'agent', 'session'],
@@ -529,6 +535,7 @@ export function useAppCommands(): PaletteCommand[] {
         ? [
             {
               id: 'set-session-context-cap',
+              pinned: true,
               title: activeSession.contextWindowCap
                 ? `Change ${activeSession.label}'s context window cap`
                 : `Cap ${activeSession.label}'s context window`,
@@ -577,6 +584,7 @@ export function useAppCommands(): PaletteCommand[] {
     if (handleWakeActiveSession) {
       return [...actionMenuItemsWithDesktopActions, {
         id: 'wake-active-session',
+        pinned: true,
         title: 'Wake this agent now',
         description: 'End the snooze and let it back into the queue',
         keywords: ['wake', 'snooze', 'defer', 'queue', 'turn'],
@@ -587,6 +595,7 @@ export function useAppCommands(): PaletteCommand[] {
     if (handleSnoozeActiveSession) {
       return [...actionMenuItemsWithDesktopActions, {
         id: 'snooze-active-session',
+        pinned: true,
         title: 'Snooze this agent…',
         description: 'Take it off your plate until a time you choose',
         keywords: ['snooze', 'defer', 'later', 'queue', 'turn'],

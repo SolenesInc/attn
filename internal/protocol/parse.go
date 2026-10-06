@@ -180,6 +180,8 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdInjectTestPR:                  decodeInto[InjectTestPRMessage],
 	CmdInjectTestSession:             decodeInto[InjectTestSessionMessage],
 	CmdGetRecentLocations:            decodeInto[GetRecentLocationsMessage],
+	CmdGetCommandUsage:               decodeInto[GetCommandUsageMessage],
+	CmdRecordCommandUsage:            decodeInto[RecordCommandUsageMessage],
 	CmdRecentFiles:                   decodeInto[RecentFilesMessage],
 	CmdBrowseDirectory:               decodeInto[BrowseDirectoryMessage],
 	CmdInspectPath:                   decodeInto[InspectPathMessage],

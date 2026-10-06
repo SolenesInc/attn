@@ -1,4 +1,6 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { CommandUsage } from '../types/generated';
+import { useToastStore } from '../store/toasts';
 import type { PaletteState } from '../components/palette/paletteState';
 import { UnifiedPalette } from '../components/palette/UnifiedPalette';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
@@ -16,9 +18,10 @@ import {
 import { useAppCommands } from './useAppCommands';
 
 export function AppPalette() {
+  const profileId = useProfilesStore((state) => state.selectedProfileId);
   const { palette, setPalette } = useAppPanelsContext();
   if (palette === null) return null;
-  return <OpenPalette state={palette} onStateChange={setPalette} onClose={() => setPalette(null)} />;
+  return <OpenPalette key={profileId} state={palette} onStateChange={setPalette} onClose={() => setPalette(null)} />;
 }
 
 function OpenPalette({
@@ -33,12 +36,36 @@ function OpenPalette({
   const { desktopViews, handleSelectSession, handleSelectTile } = useNavigationContext();
   const { crewQueueEnabled } = useAttentionQueueContext();
   const { handleWakeCrewMember } = useAppGardenActionsContext();
-  const { desktopTileContents, sendSettleTurn, sendSnoozeTurn } = useDaemonApi();
+  const { desktopTileContents, sendSettleTurn, sendSnoozeTurn, sendGetCommandUsage, sendRecordCommandUsage } = useDaemonApi();
   const desktops = useProfilesStore((state) => state.desktops);
   const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
   const crew = useDaemonStore((state) => state.crew);
   const seeds = useDaemonStore((state) => state.seeds);
   const commands = useAppCommands();
+  const [usage, setUsage] = useState<CommandUsage[] | null>(null);
+  useEffect(() => {
+    let current = true;
+    if (!selectedProfileId) {
+      setUsage([]);
+      return;
+    }
+    void sendGetCommandUsage(selectedProfileId).then(
+      (entries) => { if (current) setUsage(entries); },
+      (error: Error) => {
+        if (!current) return;
+        useToastStore.getState().append({ source: 'Command history', message: error.message });
+        setUsage([]);
+      },
+    );
+    return () => { current = false; };
+  }, [selectedProfileId, sendGetCommandUsage]);
+
+  const recordCommand = (commandId: string) => {
+    if (!selectedProfileId) return;
+    void sendRecordCommandUsage(selectedProfileId, commandId).catch((error: Error) => {
+      useToastStore.getState().append({ source: 'Command history', message: error.message });
+    });
+  };
 
   const tileTitle = useCallback(
     (desktopId: string, tile: TileLeaf) =>
@@ -65,6 +92,9 @@ function OpenPalette({
       agents={agents}
       desktops={desktops}
       commands={commands}
+      commandUsage={usage ?? []}
+      commandsLoading={usage === null}
+      onCommandPick={recordCommand}
       onOpenAgent={(session) => handleSelectSession(session.id)}
       onWakeMember={handleWakeCrewMember}
       onOpenTile={handleSelectTile}

@@ -1,6 +1,6 @@
 import { useMemo, useState, type KeyboardEvent } from 'react';
 import FocusTrap from '../AppFocusTrap';
-import type { Desktop } from '../../types/generated';
+import type { CommandUsage, Desktop } from '../../types/generated';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
 import { isChord, matchesShortcut, type ShortcutId } from '../../shortcuts/registry';
 import { resolveBinding } from '../../shortcuts/resolver';
@@ -33,6 +33,9 @@ interface UnifiedPaletteProps<S extends PaletteSession> {
   agents: AgentPaletteInput<S>;
   desktops: readonly Desktop[];
   commands: readonly PaletteCommand[];
+  commandUsage?: readonly CommandUsage[];
+  commandsLoading?: boolean;
+  onCommandPick?: (commandId: string) => void;
   onOpenAgent: (session: S) => void;
   onWakeMember: (member: string) => void;
   onOpenTile: (desktopId: string, tileId: string) => void;
@@ -64,6 +67,8 @@ function usePaletteItems<S extends PaletteSession>(
   state: PaletteState,
   agents: AgentPaletteInput<S>,
   commands: readonly PaletteCommand[],
+  usage: readonly CommandUsage[],
+  loading: boolean,
 ) {
   const { query } = state;
   const commandMode = query.startsWith(COMMAND_PREFIX);
@@ -73,8 +78,8 @@ function usePaletteItems<S extends PaletteSession>(
     [agents, allAgentRows, commandMode, query],
   );
   const matchingCommands = useMemo(
-    () => (commandMode ? filterCommands(commands, query.slice(COMMAND_PREFIX.length)) : []),
-    [commandMode, commands, query],
+    () => (commandMode && !loading ? filterCommands(commands, query.slice(COMMAND_PREFIX.length), usage) : []),
+    [commandMode, commands, query, usage, loading],
   );
   const snoozedRow = state.mode === 'snooze'
     ? allAgentRows.find((row) => row.kind === 'agent' && row.session.id === state.sessionId)
@@ -93,7 +98,7 @@ function usePaletteItems<S extends PaletteSession>(
       mode: 'commands' as const,
       snoozing: null,
       items: matchingCommands.map((command): Item<S> => ({ mode: 'commands', command })),
-      count: `${matchingCommands.length} of ${commands.length}`,
+      count: loading ? null : `${matchingCommands.length} of ${commands.length}`,
     };
   }
   return {
@@ -168,6 +173,9 @@ export function UnifiedPalette<S extends PaletteSession>({
   agents,
   desktops,
   commands,
+  commandUsage = [],
+  commandsLoading = false,
+  onCommandPick,
   onOpenAgent,
   onWakeMember,
   onOpenTile,
@@ -175,7 +183,7 @@ export function UnifiedPalette<S extends PaletteSession>({
   onSnooze,
 }: UnifiedPaletteProps<S>) {
   const [agentKeyAfterSnooze, setAgentKeyAfterSnooze] = useState<string | null>(null);
-  const { mode, snoozing, items, count } = usePaletteItems(state, agents, commands);
+  const { mode, snoozing, items, count } = usePaletteItems(state, agents, commands, commandUsage, commandsLoading);
   const leaveSnooze = (session: S) => {
     setAgentKeyAfterSnooze(`agent:${session.id}`);
     onStateChange({ mode: 'search', query: state.query });
@@ -204,6 +212,7 @@ export function UnifiedPalette<S extends PaletteSession>({
       leaveSnooze(snoozing.session);
       return;
     }
+    if (item.mode === 'commands') onCommandPick?.(item.command.id);
     onClose();
     if (item.mode === 'commands') {
       item.command.run(opener);
@@ -265,7 +274,7 @@ export function UnifiedPalette<S extends PaletteSession>({
           itemKey={itemKey}
           renderItem={renderItem}
           isSelectable={isSelectable}
-          emptyLabel={mode === 'commands' ? 'No matching commands' : 'No match'}
+          emptyLabel={mode === 'commands' ? commandsLoading ? 'Loading command history…' : 'No matching commands' : 'No match'}
           onPick={pick}
           onClose={onClose}
           onEscape={snoozing ? () => leaveSnooze(snoozing.session) : onClose}

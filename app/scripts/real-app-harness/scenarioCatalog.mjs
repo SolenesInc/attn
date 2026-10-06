@@ -2,6 +2,12 @@ const REMOTE_ENDPOINTS_OFF = 'remote endpoints are off in this release, so the a
 
 export const scenarioCatalog = [
   {
+    id: 'palette-order',
+    runnerId: 'PALETTE-ORDER',
+    label: 'Command palette learns selections, preserves pins, and restores native input focus',
+    command: ['node', 'scripts/real-app-harness/scenario-palette-order.mjs'],
+  },
+  {
     id: 'home-dock',
     runnerId: 'HOME-DOCK',
     label: 'Dock panels over home: native pointer, keyboard focus and Escape',

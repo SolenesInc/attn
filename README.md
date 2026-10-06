@@ -181,6 +181,12 @@ center the selection in the expanded sidebar or collapsed desktop rail. Clicking
 inside either list keeps its scroll position. Reduced motion makes these jumps
 instant; going Home clears the list selection.
 
+The command palette keeps available current-agent actions pinned near the top.
+Other commands rise as you select them in the palette, with history shared
+within each profile. Each selection's weight halves every two weeks, so the
+order adapts when your habits change. Stronger text matches come first when
+you search. History stays fixed for an opening; reopening picks up new uses.
+
 ### Selecting text in agent terminals
 
 Agents like Claude Code enable terminal mouse tracking, which means a normal

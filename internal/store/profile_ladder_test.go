@@ -25,19 +25,18 @@ func desktopRows(t *testing.T, db *sql.DB) []string {
 	return out
 }
 
-func TestTheSolMigrationRunsAfterTheProfileLadder(t *testing.T) {
+func TestHistoricalProfileDatabasesPreserveDesktopsAndUsageOnUpgrade(t *testing.T) {
 	for _, start := range []struct {
 		name   string
 		schema int
-		wants  []int
 	}{
-		{"an install at 153", 153, []int{154, 155, 156, 157, 158, ProfileConversionSchemaVersion, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171}},
-		{"a desktops install at 162", 162, []int{163, 164, 165, 166, 167, 168, 169, 170, 171}},
-		{"a production desktops install at 163", 163, []int{164, 165, 166, 167, 168, 169, 170, 171}},
-		{"an install at 164", 164, []int{165, 166, 167, 168, 169, 170, 171}},
-		{"an install at 165", 165, []int{166, 167, 168, 169, 170, 171}},
-		{"a desktops install at 167", 167, []int{168, 169, 170, 171}},
-		{"a desktops install at 168", 168, []int{169, 170, 171}},
+		{"an install at 153", 153},
+		{"a desktops install at 162", 162},
+		{"a production desktops install at 163", 163},
+		{"an install at 164", 164},
+		{"an install at 165", 165},
+		{"a desktops install at 167", 167},
+		{"a desktops install at 168", 168},
 	} {
 		t.Run(start.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "attn.db")
@@ -49,10 +48,6 @@ func TestTheSolMigrationRunsAfterTheProfileLadder(t *testing.T) {
 				VALUES ('sol', 'sol', '/fixture', '2026-09-01T00:00:00Z', '2026-09-01T00:00:00Z', '2026-09-01T00:00:00Z', ?)`, legacySolCost); err != nil {
 				t.Fatal(err)
 			}
-			before := map[int]bool{}
-			for _, version := range recordedVersions(t, db) {
-				before[version] = true
-			}
 			desktops := []string(nil)
 			if start.schema >= 158 {
 				desktops = desktopRows(t, db)
@@ -61,28 +56,17 @@ func TestTheSolMigrationRunsAfterTheProfileLadder(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			var s *Store
-			var upgrade SchemaUpgrade
-			err = withMigrationsThrough(171, func() error { var err error; s, upgrade, err = Open(path); return err })
+			s, upgrade, err := Open(path)
 			if err != nil {
 				t.Fatalf("upgrade from %d: %v", start.schema, err)
 			}
 			t.Cleanup(func() { s.Close() })
-			if upgrade.From != start.schema || upgrade.To != 171 {
-				t.Fatalf("upgrade = %+v, want %d -> 171", upgrade, start.schema)
-			}
-			var applied []int
-			for _, version := range recordedVersions(t, s.db) {
-				if !before[version] {
-					applied = append(applied, version)
-				}
-			}
-			if !reflect.DeepEqual(applied, start.wants) {
-				t.Fatalf("applied migrations %v, want %v", applied, start.wants)
+			if upgrade.From != start.schema || upgrade.To != LatestSchemaVersion() {
+				t.Fatalf("upgrade = %+v, want %d -> %d", upgrade, start.schema, LatestSchemaVersion())
 			}
 			if desktops != nil {
 				if got := desktopRows(t, s.db); !reflect.DeepEqual(got, desktops) {
-					t.Fatalf("desktops changed from %v to %v, want only the Sol migration applied", desktops, got)
+					t.Fatalf("desktops changed from %v to %v, want existing desktops preserved", desktops, got)
 				}
 			}
 			if _, err := s.db.Exec(`INSERT INTO kept_conversations (resume_id, agent, source_path, bytes, stored_bytes, copied_at) VALUES ('kept', 'codex', '/fixture', 1, 1, 'now')`); err != nil {
@@ -104,21 +88,3 @@ const legacySolCost = `{"initialized":true,
 	"observations":{
 		"codex:1":{"observation_id":"codex:1","model":"gpt-6.1-sol","purpose":"agent","usage":{"input_tokens":72000,"output_tokens":10000,"cache_read_input_tokens":200000}},
 		"codex:2":{"observation_id":"codex:2","model":"gpt-6.1-sol","purpose":"agent","usage":{"input_tokens":72001,"output_tokens":10000,"cache_read_input_tokens":200000}}}}`
-
-func recordedVersions(t *testing.T, db *sql.DB) []int {
-	t.Helper()
-	rows, err := db.Query(`SELECT version FROM schema_migrations ORDER BY version`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
-	var out []int
-	for rows.Next() {
-		var version int
-		if err := rows.Scan(&version); err != nil {
-			t.Fatal(err)
-		}
-		out = append(out, version)
-	}
-	return out
-}

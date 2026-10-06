@@ -1902,6 +1902,17 @@ type CommandErrorMessage struct {
 	Success bool `json:"success"`
 }
 
+type CommandUsage struct {
+	// CommandID corresponds to the JSON schema field "command_id".
+	CommandID string `json:"command_id"`
+
+	// LastUsedAt corresponds to the JSON schema field "last_used_at".
+	LastUsedAt string `json:"last_used_at"`
+
+	// Score corresponds to the JSON schema field "score".
+	Score float64 `json:"score"`
+}
+
 type CreateWorktreeFromBranchMessage struct {
 	// Branch corresponds to the JSON schema field "branch".
 	Branch string `json:"branch"`
@@ -4701,6 +4712,37 @@ type GardenSeedsUpdatedMessage struct {
 
 	// Total corresponds to the JSON schema field "total".
 	Total int `json:"total"`
+}
+
+type GetCommandUsageMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type GetCommandUsageResultMessage struct {
+	// Entries corresponds to the JSON schema field "entries".
+	Entries []CommandUsage `json:"entries"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
 }
 
 type GetDefaultBranchMessage struct {
@@ -7676,6 +7718,34 @@ type RecentLocationsResultMessage struct {
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type RecordCommandUsageMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// CommandID corresponds to the JSON schema field "command_id".
+	CommandID string `json:"command_id"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type RecordCommandUsageResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
