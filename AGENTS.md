@@ -197,9 +197,10 @@ Follow [Testing](docs/testing.md). In short:
 
 For command/event/message-shape changes:
 
-1. Edit `internal/protocol/schema/main.tsp`; run `make generate-types`.
-2. Increment `ProtocolVersion` in `internal/protocol/constants.go` and
-   `PROTOCOL_VERSION` in `app/src/hooks/useDaemonSocket.ts`.
+Edit `internal/protocol/schema/main.tsp`; run `make generate-types` and commit
+the generated files. This also writes the protocol schema hash into
+`internal/protocol/protocol_version.go` and `app/src/types/protocolVersion.ts`.
+`make check-types` checks that all generated files are current.
 
 Never hand-edit `internal/protocol/generated.go` or `app/src/types/generated.ts`.
 

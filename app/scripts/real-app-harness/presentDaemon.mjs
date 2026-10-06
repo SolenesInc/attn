@@ -5,13 +5,13 @@ import WebSocket from 'ws';
 import { defaultDaemonPortForInstance, harnessClientHello } from './harnessInstance.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
-const DAEMON_SOCKET_HOOK_PATH = path.resolve(HARNESS_DIR, '../../src/hooks/useDaemonSocket.ts');
+const PROTOCOL_VERSION_PATH = path.resolve(HARNESS_DIR, '../../src/types/protocolVersion.ts');
 
 export function readFrontendProtocolVersion() {
-  const source = fs.readFileSync(DAEMON_SOCKET_HOOK_PATH, 'utf8');
-  const match = /export const PROTOCOL_VERSION = '(\d+)'/.exec(source);
+  const source = fs.readFileSync(PROTOCOL_VERSION_PATH, 'utf8');
+  const match = /export const PROTOCOL_VERSION = '([^']+)'/.exec(source);
   if (!match) {
-    throw new Error(`Could not find PROTOCOL_VERSION in ${DAEMON_SOCKET_HOOK_PATH}`);
+    throw new Error(`Could not find PROTOCOL_VERSION in ${PROTOCOL_VERSION_PATH}`);
   }
   return match[1];
 }

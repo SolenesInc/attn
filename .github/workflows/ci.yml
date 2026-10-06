@@ -84,13 +84,16 @@ jobs:
               - '.github/workflows/ci.yml'
               - '.tool-versions'
               - '.github/actions/setup-toolchains/**'
-            # Every input to the type pipeline plus both of its outputs. The
+            # Every input to the type pipeline plus its generated outputs. The
             # outputs are listed so a hand-edit is gated even when no schema
             # moved — that edit is exactly what this catches.
             generated:
               - 'internal/protocol/schema/**'
               - 'internal/protocol/generated.go'
+              - 'internal/protocol/protocol_version.go'
               - 'app/src/types/generated.ts'
+              - 'app/src/types/protocolVersion.ts'
+              - 'scripts/generate-protocol-version.mjs'
               - 'Makefile'
               - '.github/workflows/ci.yml'
               - '.tool-versions'

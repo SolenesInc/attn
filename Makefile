@@ -419,6 +419,7 @@ generate-types: ensure-go-jsonschema
 		--src-lang schema --lang typescript \
 		--no-prefer-unions --no-prefer-unknown \
 		-o app/src/types/generated.ts
+	node scripts/generate-protocol-version.mjs
 
 # CI check: verify generated files are up-to-date.
 #
@@ -427,7 +428,7 @@ generate-types: ensure-go-jsonschema
 # diff runs and this passes silently — commit the edit if you are trying to
 # reproduce a drift failure locally.
 check-types: generate-types
-	git diff --exit-code internal/protocol/generated.go app/src/types/generated.ts
+	git diff --exit-code internal/protocol/generated.go app/src/types/generated.ts internal/protocol/protocol_version.go app/src/types/protocolVersion.ts
 
 # Build the packaged app for $(INSTANCE) (empty = prod). All bundle metadata is
 # derived from `attn instance resolve` by scripts/build-app-instance.sh: the

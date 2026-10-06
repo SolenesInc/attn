@@ -2,8 +2,6 @@ package protocol
 
 import "time"
 
-const ProtocolVersion = "350"
-
 const (
 	ErrorCodeConflict             = "conflict"
 	ErrorCodeUndeclaredCollection = "undeclared_collection"

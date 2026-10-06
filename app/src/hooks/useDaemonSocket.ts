@@ -1,3 +1,5 @@
+import { PROTOCOL_VERSION } from '../types/protocolVersion';
+export { PROTOCOL_VERSION } from '../types/protocolVersion';
 import { handleLaunchDesktopEvent } from './daemonLaunchDesktopEvents';
 import { handleDelegationDaemonEvent, type DelegationSettingsState, type DelegationModelCatalog } from './daemonDelegationEvents';
 import {
@@ -307,8 +309,6 @@ export interface RateLimitState {
   resetAt: Date;
 }
 
-// Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '350';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -823,8 +823,6 @@ export function useDaemonSocket({
   const MAX_RECONNECTS_BEFORE_PAUSE = 8;
   const MAX_RECONNECT_DELAY_MS = 5000;
   const RECOVERY_NOTICE = 'Daemon is recovering PTY sessions. Please retry in a moment.';
-  const DAEMON_RESTART_NOTICE = 'Restarting daemon...';
-  const daemonRestartInProgressRef = useRef(false);
 
   const showRecoveringNoticeForCommand = useCallback((cmd: string | undefined) => {
     if (!cmd) return;
@@ -1099,7 +1097,6 @@ export function useDaemonSocket({
 
     ws.onopen = () => {
       console.log('[Daemon] WebSocket connected');
-      daemonRestartInProgressRef.current = false;
       setConnectionError(null);
       useProfilesStore.getState().connectionOpened();
       connectionGenerationRef.current += 1;
@@ -1204,33 +1201,7 @@ export function useDaemonSocket({
             daemonInstanceIDRef.current = data.daemon_instance_id || '';
             if (data.protocol_version && data.protocol_version !== PROTOCOL_VERSION) {
               console.error(`[Daemon] Protocol version mismatch: daemon=${data.protocol_version}, client=${PROTOCOL_VERSION}`);
-              const daemonVersion = Number(data.protocol_version);
-              const clientVersion = Number(PROTOCOL_VERSION);
-              const activeSessions = data.sessions?.length || 0;
-              if (!Number.isNaN(daemonVersion) && !Number.isNaN(clientVersion) && daemonVersion < clientVersion) {
-                if (isTauri()) {
-                  setConnectionError(DAEMON_RESTART_NOTICE);
-                  if (!daemonRestartInProgressRef.current) {
-                    daemonRestartInProgressRef.current = true;
-                    console.log(`[Daemon] Restarting older daemon ${data.protocol_version} to match app protocol ${PROTOCOL_VERSION}`);
-                    void invoke('ensure_daemon').catch((err) => {
-                      console.error('[Daemon] Failed to restart daemon after protocol mismatch:', err);
-                      daemonRestartInProgressRef.current = false;
-                      setConnectionError(
-                        `New daemon version available. Restart when ready (${activeSessions} active sessions may be lost). daemon v${data.protocol_version}, app v${PROTOCOL_VERSION}`
-                      );
-                      circuitOpenRef.current = true;
-                    });
-                  }
-                  ws.close();
-                  return;
-                }
-                setConnectionError(
-                  `New daemon version available. Restart when ready (${activeSessions} active sessions may be lost). daemon v${data.protocol_version}, app v${PROTOCOL_VERSION}`
-                );
-              } else {
-                setConnectionError(`Version mismatch: daemon v${data.protocol_version}, app v${PROTOCOL_VERSION}. Restart/reinstall required.`);
-              }
+              setConnectionError(`Version mismatch: daemon v${data.protocol_version}, app v${PROTOCOL_VERSION}. Restart/reinstall required.`);
               circuitOpenRef.current = true;
               ws.close();
               return;
@@ -2662,7 +2633,6 @@ export function useDaemonSocket({
       clearTimeout(circuitResetTimeoutRef.current);
       circuitResetTimeoutRef.current = null;
     }
-    daemonRestartInProgressRef.current = false;
     circuitOpenRef.current = false;
     reconnectAttemptsRef.current = 0;
     reconnectDelayRef.current = 1000;
