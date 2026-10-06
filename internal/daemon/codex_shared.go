@@ -245,7 +245,10 @@ func (r *codexShared) connect(ctx context.Context, s *codexServer) error {
 				client.Close()
 				return errDaemonStopping
 			}
-			s.events.run(r.d, func() { r.restateHiddenStates(s, client, epoch) })
+			s.events.run(r.d, func() {
+				r.restoreParents(s, client, list.Data)
+				r.restateHiddenStates(s, client, epoch)
+			})
 			return nil
 		}
 		if ctx.Err() != nil {
@@ -339,11 +342,11 @@ func (r *codexShared) observeServer(s *codexServer, m codexshared.Message) {
 	}
 }
 
-// A server exit ends a hidden session's turn: no terminal is left to resume and restate it.
+// A server exit ends the running turn: it fires no Stop hook, and a reconnecting TUI restates nothing.
 func (r *codexShared) unloaded(s *codexServer, conversation string, exited bool) {
 	sessionID := r.d.store.OpenSessionHolding(s.profile, conversation)
 	session := r.d.store.Get(sessionID)
-	if session != nil && exited && r.hidden(sessionID) &&
+	if session != nil && exited &&
 		(session.State == protocol.SessionStateWorking || session.State == protocol.SessionStatePendingApproval) {
 		r.report(s, sessionID, harness.TurnEnded, false)
 		return
@@ -721,6 +724,29 @@ func (r *codexShared) recoverViews(ctx context.Context) {
 	r.mu.Unlock()
 	for _, profile := range profiles {
 		r.idleSoon(profile)
+	}
+}
+
+// Subagents announce their parent only in thread/started, which a reconnect does not replay.
+func (r *codexShared) restoreParents(s *codexServer, client *codexshared.Client, loaded []string) {
+	for _, id := range loaded {
+		ctx, cancel := context.WithTimeout(r.d.life.Context(), codexServerCallLimit)
+		raw, err := client.Call(ctx, "thread/read", map[string]any{"threadId": id})
+		cancel()
+		var read struct {
+			Thread struct {
+				Parent string `json:"parentThreadId"`
+			} `json:"thread"`
+		}
+		if err != nil || json.Unmarshal(raw, &read) != nil || read.Thread.Parent == "" {
+			continue
+		}
+		s.mu.Lock()
+		if s.parents == nil {
+			s.parents = make(map[string]string)
+		}
+		s.parents[id] = read.Thread.Parent
+		s.mu.Unlock()
 	}
 }
 

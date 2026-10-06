@@ -84,3 +84,18 @@ func TestASharedCodexAppServerThatExitsStartsAgainAndTheTerminalCarriesOn(t *tes
 		t.Errorf("app-servers launched = %v, want the first and the one that replaced it", servers)
 	}
 }
+
+func TestASharedCodexTurnTheAppServerTookDownEnds(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
+	codex := w.Launched(session)
+	app.TypeLine(session, "add a discount field")
+	codex.Prompted()
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	watcher := w.App()
+
+	codex.CrashAppServer()
+	testworld.AwaitSession(watcher, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+}
