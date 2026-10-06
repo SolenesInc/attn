@@ -1,7 +1,9 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { soloDesktop, daemonSession, type DaemonSession } from './test/daemonFixtures';
-import { renderApp } from './test/renderApp';
+import { openSession } from './test/appFixtures';
+import { agentPane, daemonDesktop, soloDesktop, daemonSession, type DaemonSession } from './test/daemonFixtures';
+import { laidOutDesktop, pane } from './test/desktopLayouts';
+import { pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
 async function renderOrchestrator(overrides: Partial<DaemonSession> = {}) {
@@ -57,6 +59,30 @@ describe('chief and crew sessions are protected from close', () => {
 
     expect(closeCommands(daemon)).toEqual([]);
     expect(toast()).toHaveTextContent('Coda is protected — put Coda to sleep to close the day.');
+  });
+
+  it('closes only the tile when another tile still shows the chief', async () => {
+    const { daemon } = await renderApp({
+      initialState: {
+        sessions: [daemonSession('a', { state: 'idle', chief_of_staff: true })],
+        desktops: [
+          laidOutDesktop(pane('a'), ['a']),
+          daemonDesktop('other', { root: { type: 'pane', pane_id: 'pane-a2' }, panes: [{ ...agentPane('a', 'other', 'term-2'), pane_id: 'pane-a2' }] }, { order_key: 'b' }),
+        ],
+      },
+      script: (d) => {
+        d.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true, last_seq: 0 }));
+      },
+    });
+    await openSession(daemon, 'a');
+
+    pressShortcut('session.close');
+    await daemon.idle();
+
+    expect(daemon.sent.filter(({ cmd }) => cmd === 'unregister' || cmd === 'desktop_close_tile')).toEqual([
+      { cmd: 'desktop_close_tile', request_id: expect.any(String), desktop_id: 'ws', tile_id: 'pane-a' },
+    ]);
+    expect(toast()).toBeNull();
   });
 
   it('closes an ordinary session normally and shows no hint', async () => {

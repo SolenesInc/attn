@@ -69,17 +69,12 @@ export async function runSharedMockServer() {
   const announceStatus = (thread) => broadcast('thread/status/changed', { threadId: thread.id, status: statusOf(thread) });
 
   const runHooks = async (thread, event, extra = {}) => {
-    const env = { ...process.env };
-    for (const [key, value] of Object.entries(thread.config)) {
-      const name = /^shell_environment_policy\.set\.(.+)$/.exec(key)?.[1];
-      if (name) env[name] = String(value);
-    }
     const input = JSON.stringify({
       session_id: thread.id, transcript_path: thread.path, cwd: thread.cwd, hook_event_name: event,
       model: 'mock-agent-1', permission_mode: 'default', ...(thread.turnId ? { turn_id: thread.turnId } : {}), ...extra,
     });
     const cwd = fs.existsSync(thread.cwd) ? thread.cwd : process.cwd();
-    for (const command of hooks[event] || []) await runShell(command, cwd, env, input);
+    for (const command of hooks[event] || []) await runShell(command, cwd, process.env, input);
   };
 
   const write = (thread, records) => {

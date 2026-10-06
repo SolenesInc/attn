@@ -55,9 +55,12 @@ type codexServer struct {
 	// Conversations the server has loaded, as last heard; kept while the control connection is down.
 	held    map[string]bool
 	parents map[string]string
-	epoch   string
-	seq     atomic.Uint64
-	events  codexEvents
+	// While connect installs the loaded list, notifications wait here to apply on top of it.
+	connecting bool
+	early      []codexshared.Message
+	epoch      string
+	seq        atomic.Uint64
+	events     codexEvents
 }
 
 type codexView struct {
@@ -214,6 +217,14 @@ func (r *codexShared) startServer(ctx context.Context, s *codexServer, executabl
 }
 
 func (r *codexShared) connect(ctx context.Context, s *codexServer) error {
+	s.mu.Lock()
+	s.connecting, s.early = true, nil
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		s.connecting, s.early = false, nil
+		s.mu.Unlock()
+	}()
 	deadline := time.Now().Add(codexServerStartLimit)
 	for {
 		attempt, cancel := context.WithTimeout(ctx, codexServerCallLimit)
@@ -238,6 +249,10 @@ func (r *codexShared) connect(ctx context.Context, s *codexServer) error {
 			s.mu.Lock()
 			s.control, s.epoch = client, epoch
 			gone := s.hold(list.Data)
+			for _, m := range s.early {
+				gone = append(gone, s.track(m)...)
+			}
+			s.connecting, s.early = false, nil
 			s.mu.Unlock()
 			r.lose(s, gone)
 			if !r.d.life.Go("codexServerControl", func() { r.watchControl(s, client) }) {
@@ -301,6 +316,29 @@ func (r *codexShared) lose(s *codexServer, conversations []string) {
 }
 
 func (r *codexShared) observeServer(s *codexServer, m codexshared.Message) {
+	switch m.Method {
+	case "thread/name/updated":
+		r.observeName(s, m)
+		return
+	case "thread/status/changed":
+		r.observeStatus(s, m)
+	case "thread/started", "thread/closed":
+	default:
+		return
+	}
+	s.mu.Lock()
+	var gone []string
+	if s.connecting {
+		s.early = append(s.early, m)
+	} else {
+		gone = s.track(m)
+	}
+	s.mu.Unlock()
+	r.lose(s, gone)
+}
+
+// track applies a lifecycle notification to the held set and returns what the server let go. Hold s.mu.
+func (s *codexServer) track(m codexshared.Message) []string {
 	var p struct {
 		ThreadID string `json:"threadId"`
 		Thread   struct {
@@ -312,22 +350,9 @@ func (r *codexShared) observeServer(s *codexServer, m codexshared.Message) {
 			Type string `json:"type"`
 		} `json:"status"`
 	}
-	switch m.Method {
-	case "thread/started", "thread/status/changed", "thread/closed":
-	case "thread/name/updated":
-		r.observeName(s, m)
-		return
-	default:
-		return
-	}
 	if json.Unmarshal(m.Params, &p) != nil {
-		return
+		return nil
 	}
-	if m.Method == "thread/status/changed" {
-		r.observeStatus(s, m)
-	}
-	s.mu.Lock()
-	var gone []string
 	if s.held == nil {
 		s.held = make(map[string]bool)
 	}
@@ -343,14 +368,14 @@ func (r *codexShared) observeServer(s *codexServer, m codexshared.Message) {
 	case m.Method == "thread/status/changed" && p.Status.Type != "notLoaded" && p.ThreadID != "":
 		s.held[p.ThreadID] = true
 	case m.Method == "thread/closed" || p.Status.Type == "notLoaded":
-		if s.held[p.ThreadID] {
-			gone = append(gone, p.ThreadID)
-		}
+		gone := s.held[p.ThreadID]
 		delete(s.held, p.ThreadID)
 		delete(s.parents, p.ThreadID)
+		if gone {
+			return []string{p.ThreadID}
+		}
 	}
-	s.mu.Unlock()
-	r.lose(s, gone)
+	return nil
 }
 
 // lost settles a conversation the server no longer holds. Codex unloads only idle conversations, so a
