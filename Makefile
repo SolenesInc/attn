@@ -1,4 +1,4 @@
-.PHONY: git-hooks lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-instance-harness verify-ghostty-vt-wasm test test-scripts test-v test-watch test-frontend test-e2e clean generate-types ensure-go-jsonschema check-types build-app ensure-codesign-identity sign-app app-screenshot dist release release-hotfix
+.PHONY: git-hooks lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-instance-harness verify-ghostty-vt-wasm test test-scripts test-v test-watch test-frontend test-e2e clean generate-types ensure-go-jsonschema check-types generate-schema check-schema check-migrations build-app ensure-codesign-identity sign-app app-screenshot dist release release-hotfix
 
 # Bare `make` does the full prod inner loop: install + open the app.
 # `make install` is install-only (for scripts/CI that drive the launch
@@ -429,6 +429,19 @@ generate-types: ensure-go-jsonschema
 # reproduce a drift failure locally.
 check-types: generate-types
 	git diff --exit-code internal/protocol/generated.go app/src/types/generated.ts internal/protocol/protocol_version.go app/src/types/protocolVersion.ts
+
+MIGRATION_BASE ?= origin/next
+
+check-migrations:
+	go run ./cmd/db-migrations check-history --base "$(MIGRATION_BASE)"
+
+generate-schema:
+	go run ./scripts/generate-schema > internal/store/schema.sql
+
+check-schema:
+	@dump=$$(mktemp); trap 'rm -f "$$dump"' EXIT; \
+		go run ./scripts/generate-schema > "$$dump" && \
+		diff -u internal/store/schema.sql "$$dump"
 
 # Build the packaged app for $(INSTANCE) (empty = prod). All bundle metadata is
 # derived from `attn instance resolve` by scripts/build-app-instance.sh: the

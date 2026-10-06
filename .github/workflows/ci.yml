@@ -88,6 +88,9 @@ jobs:
             # outputs are listed so a hand-edit is gated even when no schema
             # moved — that edit is exactly what this catches.
             generated:
+              - 'cmd/db-migrations/**'
+              - 'internal/store/**'
+              - 'scripts/generate-schema/**'
               - 'internal/protocol/schema/**'
               - 'internal/protocol/generated.go'
               - 'internal/protocol/protocol_version.go'
@@ -233,6 +236,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Go and Node.js
         uses: ./.github/actions/setup-toolchains
@@ -250,8 +255,13 @@ jobs:
         working-directory: internal/protocol/schema
         run: pnpm install --frozen-lockfile
 
+      - name: Check migration history
+        env:
+          MIGRATION_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: make check-migrations
+
       - name: Regenerate and diff
-        run: make check-types
+        run: make check-types check-schema
 
   backend:
     name: Daemon

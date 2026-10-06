@@ -100,12 +100,6 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 );
 `
 
-type migration struct {
-	version int
-	desc    string
-	sql     string
-}
-
 const delegationOperationsSchema = `CREATE TABLE IF NOT EXISTS delegation_operations (
 	request_id TEXT PRIMARY KEY,
 	operation_id TEXT NOT NULL UNIQUE,
@@ -128,538 +122,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_delegation_operations_active_ticket
 	ON delegation_operations(ticket_id)
 	WHERE ticket_id != '' AND state IN ('accepted', 'preparing');`
 
-var migrations = []migration{
-	{1, "add head_sha to prs", "ALTER TABLE prs ADD COLUMN head_sha TEXT"},
-	{2, "add head_branch to prs", "ALTER TABLE prs ADD COLUMN head_branch TEXT"},
-	{3, "add comment_count to prs", "ALTER TABLE prs ADD COLUMN comment_count INTEGER NOT NULL DEFAULT 0"},
-	{4, "add approved_by_me to prs", "ALTER TABLE prs ADD COLUMN approved_by_me INTEGER NOT NULL DEFAULT 0"},
-	{5, "add heat_state to prs", "ALTER TABLE prs ADD COLUMN heat_state TEXT NOT NULL DEFAULT 'cold'"},
-	{6, "add last_heat_activity_at to prs", "ALTER TABLE prs ADD COLUMN last_heat_activity_at TEXT"},
-	{7, "add last_seen_ci_status to pr_interactions", "ALTER TABLE pr_interactions ADD COLUMN last_seen_ci_status TEXT"},
-	{8, "add branch to sessions", "ALTER TABLE sessions ADD COLUMN branch TEXT"},
-	{9, "add is_worktree to sessions", "ALTER TABLE sessions ADD COLUMN is_worktree INTEGER NOT NULL DEFAULT 0"},
-	{10, "add main_repo to sessions", "ALTER TABLE sessions ADD COLUMN main_repo TEXT"},
-	{11, "create recent_locations table", `CREATE TABLE IF NOT EXISTS recent_locations (
-		path TEXT PRIMARY KEY,
-		label TEXT NOT NULL,
-		last_seen TEXT NOT NULL,
-		use_count INTEGER NOT NULL DEFAULT 1
-	)`},
-	{12, "create reviews table", `CREATE TABLE IF NOT EXISTS reviews (
-		id TEXT PRIMARY KEY,
-		branch TEXT NOT NULL,
-		pr_number INTEGER,
-		repo_path TEXT NOT NULL,
-		created_at TEXT NOT NULL,
-		updated_at TEXT NOT NULL,
-		UNIQUE(repo_path, branch)
-	)`},
-	{13, "create review_viewed_files table", `CREATE TABLE IF NOT EXISTS review_viewed_files (
-		review_id TEXT NOT NULL,
-		filepath TEXT NOT NULL,
-		viewed_at TEXT NOT NULL,
-		PRIMARY KEY (review_id, filepath),
-		FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE
-	)`},
-	{14, "create review_comments table", `CREATE TABLE IF NOT EXISTS review_comments (
-		id TEXT PRIMARY KEY,
-		review_id TEXT NOT NULL,
-		filepath TEXT NOT NULL,
-		line_start INTEGER NOT NULL,
-		line_end INTEGER NOT NULL,
-		content TEXT NOT NULL,
-		author TEXT NOT NULL,
-		resolved INTEGER NOT NULL DEFAULT 0,
-		created_at TEXT NOT NULL,
-		FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE
-	)`},
-	{15, "add resolution tracking to review_comments", `
-		ALTER TABLE review_comments ADD COLUMN resolved_by TEXT NOT NULL DEFAULT '';
-		ALTER TABLE review_comments ADD COLUMN resolved_at TEXT NOT NULL DEFAULT '';
-	`},
-	{16, "create reviewer_sessions table", `CREATE TABLE IF NOT EXISTS reviewer_sessions (
-		id TEXT PRIMARY KEY,
-		review_id TEXT NOT NULL,
-		commit_sha TEXT NOT NULL,
-		transcript TEXT NOT NULL,
-		started_at TEXT NOT NULL,
-		completed_at TEXT,
-		FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE
-	)`},
-	{17, "add wont_fix tracking to review_comments", `
-		ALTER TABLE review_comments ADD COLUMN wont_fix INTEGER NOT NULL DEFAULT 0;
-		ALTER TABLE review_comments ADD COLUMN wont_fix_by TEXT NOT NULL DEFAULT '';
-		ALTER TABLE review_comments ADD COLUMN wont_fix_at TEXT NOT NULL DEFAULT '';
-	`},
-	{18, "create authors table", `CREATE TABLE IF NOT EXISTS authors (
-		author TEXT PRIMARY KEY,
-		muted INTEGER NOT NULL DEFAULT 0
-	)`},
-	{19, "add author to prs", "ALTER TABLE prs ADD COLUMN author TEXT NOT NULL DEFAULT ''"},
-	{20, "add host to prs and migrate ids", `
-		ALTER TABLE prs ADD COLUMN host TEXT NOT NULL DEFAULT 'github.com';
-		UPDATE prs SET id = 'github.com:' || id WHERE id NOT LIKE '%:%';
-		UPDATE pr_interactions SET pr_id = 'github.com:' || pr_id WHERE pr_id NOT LIKE '%:%';
-		CREATE UNIQUE INDEX IF NOT EXISTS idx_prs_host_repo_number ON prs(host, repo, number);
-	`},
-	{21, "add agent to sessions", "ALTER TABLE sessions ADD COLUMN agent TEXT NOT NULL DEFAULT 'codex'"},
-	{22, "add recoverable to sessions", "ALTER TABLE sessions ADD COLUMN recoverable INTEGER NOT NULL DEFAULT 0"},
-	{23, "add resume_session_id to sessions", "ALTER TABLE sessions ADD COLUMN resume_session_id TEXT NOT NULL DEFAULT ''"},
-	{24, "create session_review_loops table", `CREATE TABLE IF NOT EXISTS session_review_loops (
-		session_id TEXT PRIMARY KEY,
-		status TEXT NOT NULL,
-		preset_id TEXT,
-		custom_prompt TEXT,
-		resolved_prompt TEXT NOT NULL,
-		iteration_count INTEGER NOT NULL DEFAULT 0,
-		iteration_limit INTEGER NOT NULL,
-		stop_requested INTEGER NOT NULL DEFAULT 0,
-		advance_token TEXT NOT NULL,
-		stop_reason TEXT,
-		last_prompt_at TEXT,
-		last_advance_at TEXT,
-		last_user_input_at TEXT,
-		created_at TEXT NOT NULL,
-		updated_at TEXT NOT NULL,
-		FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
-	)`},
-	{25, "create review_loop_runs table", `CREATE TABLE IF NOT EXISTS review_loop_runs (
-		id TEXT PRIMARY KEY,
-		source_session_id TEXT NOT NULL,
-		repo_path TEXT NOT NULL,
-		status TEXT NOT NULL,
-		preset_id TEXT,
-		custom_prompt TEXT,
-		resolved_prompt TEXT NOT NULL,
-		handoff_payload_json TEXT,
-		iteration_count INTEGER NOT NULL DEFAULT 0,
-		iteration_limit INTEGER NOT NULL,
-		pending_interaction_id TEXT,
-		last_decision TEXT,
-		last_result_summary TEXT,
-		last_error TEXT,
-		stop_reason TEXT,
-		created_at TEXT NOT NULL,
-		updated_at TEXT NOT NULL,
-		completed_at TEXT,
-		FOREIGN KEY (source_session_id) REFERENCES sessions(id) ON DELETE CASCADE
-	);
-	CREATE INDEX IF NOT EXISTS idx_review_loop_runs_source_session_created_at
-		ON review_loop_runs(source_session_id, created_at DESC);
-	CREATE INDEX IF NOT EXISTS idx_review_loop_runs_status
-		ON review_loop_runs(status);`},
-	{26, "create review_loop_iterations table", `CREATE TABLE IF NOT EXISTS review_loop_iterations (
-		id TEXT PRIMARY KEY,
-		loop_id TEXT NOT NULL,
-		iteration_number INTEGER NOT NULL,
-		status TEXT NOT NULL,
-		decision TEXT,
-		summary TEXT,
-		result_text TEXT,
-		changes_made INTEGER,
-		files_touched_json TEXT,
-		blocking_reason TEXT,
-		suggested_next_focus TEXT,
-		structured_output_json TEXT,
-		assistant_trace_json TEXT,
-		error TEXT,
-		started_at TEXT NOT NULL,
-		completed_at TEXT,
-		UNIQUE(loop_id, iteration_number),
-		FOREIGN KEY (loop_id) REFERENCES review_loop_runs(id) ON DELETE CASCADE
-	);
-	CREATE INDEX IF NOT EXISTS idx_review_loop_iterations_loop_id_iteration_number
-		ON review_loop_iterations(loop_id, iteration_number ASC);`},
-	{27, "create review_loop_interactions table", `CREATE TABLE IF NOT EXISTS review_loop_interactions (
-		id TEXT PRIMARY KEY,
-		loop_id TEXT NOT NULL,
-		iteration_id TEXT,
-		kind TEXT NOT NULL,
-		question TEXT NOT NULL,
-		answer TEXT,
-		status TEXT NOT NULL,
-		created_at TEXT NOT NULL,
-		answered_at TEXT,
-		consumed_at TEXT,
-		FOREIGN KEY (loop_id) REFERENCES review_loop_runs(id) ON DELETE CASCADE,
-		FOREIGN KEY (iteration_id) REFERENCES review_loop_iterations(id) ON DELETE SET NULL
-	);
-	CREATE INDEX IF NOT EXISTS idx_review_loop_interactions_loop_id_created_at
-		ON review_loop_interactions(loop_id, created_at ASC);
-	CREATE INDEX IF NOT EXISTS idx_review_loop_interactions_status
-		ON review_loop_interactions(status);`},
-	{28, "add result_text to review_loop_iterations", "ALTER TABLE review_loop_iterations ADD COLUMN result_text TEXT"},
-	{29, "add change_stats_json to review_loop_iterations", "ALTER TABLE review_loop_iterations ADD COLUMN change_stats_json TEXT"},
-	{30, "create workspace persistence tables", `CREATE TABLE IF NOT EXISTS session_workspaces (
-		session_id TEXT PRIMARY KEY,
-		active_pane_id TEXT NOT NULL,
-		layout_json TEXT NOT NULL,
-		updated_at TEXT NOT NULL
-	);
-	CREATE TABLE IF NOT EXISTS workspace_panes (
-		session_id TEXT NOT NULL,
-		pane_id TEXT NOT NULL,
-		runtime_id TEXT NOT NULL DEFAULT '',
-		kind TEXT NOT NULL,
-		title TEXT NOT NULL,
-		created_at TEXT NOT NULL,
-		updated_at TEXT NOT NULL,
-		PRIMARY KEY (session_id, pane_id)
-	);
-	CREATE INDEX IF NOT EXISTS idx_workspace_panes_runtime_id
-		ON workspace_panes(runtime_id);`},
-	{31, "add endpoint_id to sessions", "ALTER TABLE sessions ADD COLUMN endpoint_id TEXT"},
-	{32, "create endpoints table", `CREATE TABLE IF NOT EXISTS endpoints (
-		id TEXT PRIMARY KEY,
-		name TEXT NOT NULL,
-		ssh_target TEXT NOT NULL,
-		enabled INTEGER NOT NULL DEFAULT 1,
-		created_at TEXT NOT NULL,
-		updated_at TEXT NOT NULL
-	)`},
-	{33, "drop unused wont_fix columns from review_comments", ""},
-	{34, "add profile to endpoints", "ALTER TABLE endpoints ADD COLUMN profile TEXT NOT NULL DEFAULT ''"},
-	{35, "create canvas-workspaces table and add workspace_id to sessions", `
-	CREATE TABLE IF NOT EXISTS workspaces (
-		id TEXT PRIMARY KEY,
-		title TEXT NOT NULL,
-		directory TEXT NOT NULL,
-		muted INTEGER NOT NULL DEFAULT 0,
-		created_at TEXT NOT NULL
-	);
-		ALTER TABLE sessions ADD COLUMN workspace_id TEXT;
-		CREATE INDEX IF NOT EXISTS idx_sessions_workspace_id ON sessions(workspace_id);
-	`},
-	{36, "create canvas workspace panels table", `
-		CREATE TABLE IF NOT EXISTS canvas_workspace_panels (
-			workspace_id TEXT NOT NULL,
-			panel_id TEXT NOT NULL,
-			session_id TEXT NOT NULL,
-			kind TEXT NOT NULL,
-			title TEXT NOT NULL,
-			world_x REAL NOT NULL,
-			world_y REAL NOT NULL,
-			width REAL NOT NULL,
-			height REAL NOT NULL,
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL,
-			PRIMARY KEY (workspace_id, panel_id)
-		);
-		CREATE UNIQUE INDEX IF NOT EXISTS idx_canvas_workspace_panels_session_id
-			ON canvas_workspace_panels(session_id);
-		CREATE INDEX IF NOT EXISTS idx_canvas_workspace_panels_workspace_id
-			ON canvas_workspace_panels(workspace_id);
-	`},
-	{37, "migrate session layouts to workspace layouts", ""},
-	{38, "add opaque agent metadata to sessions", "ALTER TABLE sessions ADD COLUMN agent_metadata TEXT NOT NULL DEFAULT ''"},
-	{39, "add agent driver report cursor to sessions", `
-		ALTER TABLE sessions ADD COLUMN agent_driver_plugin_name TEXT NOT NULL DEFAULT '';
-		ALTER TABLE sessions ADD COLUMN agent_driver_run_id TEXT NOT NULL DEFAULT '';
-		ALTER TABLE sessions ADD COLUMN agent_driver_report_seq INTEGER NOT NULL DEFAULT 0;
-	`},
-	{40, "add workspace pane lifecycle status", ""},
-	{41, "move session mute state to workspaces", `
-		ALTER TABLE workspaces ADD COLUMN muted INTEGER NOT NULL DEFAULT 0;
-	`},
-	{42, "create workspace contexts table", `
-		CREATE TABLE IF NOT EXISTS workspace_contexts (
-			workspace_id TEXT PRIMARY KEY,
-			content TEXT NOT NULL,
-			revision INTEGER NOT NULL,
-			updated_by_session_id TEXT NOT NULL,
-			updated_at TEXT NOT NULL
-		);
-	`},
-	{43, "create profile roles table", `
-		CREATE TABLE IF NOT EXISTS profile_roles (
-			role TEXT PRIMARY KEY,
-			session_id TEXT NOT NULL
-		);
-	`},
-	{44, "create chief of staff dispatches table", `
-		CREATE TABLE IF NOT EXISTS chief_of_staff_dispatches (
-			id TEXT PRIMARY KEY,
-			chief_session_id TEXT NOT NULL,
-			session_id TEXT NOT NULL UNIQUE,
-			workspace_id TEXT NOT NULL,
-			brief TEXT NOT NULL,
-			label TEXT NOT NULL,
-			agent TEXT NOT NULL,
-			directory TEXT NOT NULL,
-			branch TEXT NOT NULL DEFAULT '',
-			latest_report TEXT NOT NULL DEFAULT '',
-			reported_at TEXT NOT NULL DEFAULT '',
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL
-		);
-		CREATE INDEX IF NOT EXISTS idx_chief_dispatches_chief_created
-			ON chief_of_staff_dispatches(chief_session_id, created_at DESC);
-	`},
-	{45, "add structured coordination report to chief dispatches", `
-		ALTER TABLE chief_of_staff_dispatches
-			ADD COLUMN structured_report_json TEXT NOT NULL DEFAULT '';
-	`},
-	{46, "create chief of staff dispatch messages table", `
-		CREATE TABLE IF NOT EXISTS chief_of_staff_dispatch_messages (
-			id TEXT PRIMARY KEY,
-			dispatch_id TEXT NOT NULL,
-			sender_session_id TEXT NOT NULL,
-			target_session_id TEXT NOT NULL,
-			content TEXT NOT NULL,
-			created_at TEXT NOT NULL,
-			read_at TEXT NOT NULL DEFAULT '',
-			acknowledged_at TEXT NOT NULL DEFAULT '',
-			acknowledgement TEXT NOT NULL DEFAULT '',
-			FOREIGN KEY(dispatch_id) REFERENCES chief_of_staff_dispatches(id) ON DELETE CASCADE
-		);
-		CREATE INDEX IF NOT EXISTS idx_chief_dispatch_messages_dispatch_created
-			ON chief_of_staff_dispatch_messages(dispatch_id, created_at, id);
-		CREATE INDEX IF NOT EXISTS idx_chief_dispatch_messages_target_unread
-			ON chief_of_staff_dispatch_messages(target_session_id, read_at, created_at);
-	`},
-	{47, "create workspace context janitor backups table", `
-		CREATE TABLE IF NOT EXISTS workspace_context_janitor_backups (
-			workspace_id TEXT PRIMARY KEY,
-			source_revision INTEGER NOT NULL,
-			source_content TEXT NOT NULL,
-			result_revision INTEGER NOT NULL,
-			agent TEXT NOT NULL,
-			model TEXT NOT NULL,
-			created_at TEXT NOT NULL
-		);
-	`},
-	{48, "drop label from recent_locations", "ALTER TABLE recent_locations DROP COLUMN label"},
-	{49, "add rank to workspaces", `ALTER TABLE workspaces ADD COLUMN rank TEXT NOT NULL DEFAULT ''`},
-	{50, "repair missing workspace rank", `SELECT 1`},
-	{51, "create workflow engine journal tables", `CREATE TABLE IF NOT EXISTS workflow_runs (
-    run_id TEXT PRIMARY KEY,
-    script_path TEXT NOT NULL,
-    script_hash TEXT NOT NULL,
-    args_json TEXT,
-    session_id TEXT,
-    workspace_id TEXT,
-    status TEXT NOT NULL,
-    phase TEXT,
-    harness TEXT,
-    result_json TEXT,
-    last_error TEXT,
-    resumable INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    completed_at TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_workflow_runs_status
-    ON workflow_runs(status);
-CREATE INDEX IF NOT EXISTS idx_workflow_runs_created_at
-    ON workflow_runs(created_at DESC);
-CREATE TABLE IF NOT EXISTS workflow_agent_calls (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    run_id TEXT NOT NULL,
-    ordinal TEXT NOT NULL,
-    label TEXT,
-    phase TEXT,
-    prompt_hash TEXT,
-    schema_hash TEXT,
-    resolved_model TEXT,
-    resolved_harness TEXT,
-    agent_type TEXT,
-    result_json TEXT,
-    status TEXT NOT NULL,
-    error TEXT,
-    result_path TEXT,
-    started_at TEXT,
-    completed_at TEXT,
-    UNIQUE(run_id, ordinal),
-    FOREIGN KEY (run_id) REFERENCES workflow_runs(run_id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS idx_workflow_agent_calls_run_id
-    ON workflow_agent_calls(run_id, id ASC);`},
-	{52, "rename workspace context janitor backups to keeper compact backups", ""},
-	{53, "add closed_state to chief of staff dispatches", ""},
-	{54, "add pinned to workspaces", ""},
-	{55, "create ticket tables", `CREATE TABLE IF NOT EXISTS tickets (
-    id            TEXT PRIMARY KEY,
-    title         TEXT NOT NULL,
-    description   TEXT NOT NULL DEFAULT '',
-    status        TEXT NOT NULL,
-    assignee      TEXT NOT NULL DEFAULT '',
-    cwd           TEXT NOT NULL DEFAULT '',
-    last_agent_id TEXT NOT NULL DEFAULT '',
-    project_id    TEXT NOT NULL DEFAULT '',
-    created_at    TEXT NOT NULL,
-    updated_at    TEXT NOT NULL,
-    closed_at     TEXT NOT NULL DEFAULT '',
-    archived_at   TEXT NOT NULL DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);
-CREATE INDEX IF NOT EXISTS idx_tickets_archived_closed
-    ON tickets(archived_at, closed_at);
-CREATE TABLE IF NOT EXISTS ticket_activity (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    ticket_id   TEXT NOT NULL,
-    kind        TEXT NOT NULL,
-    author      TEXT NOT NULL DEFAULT '',
-    from_status TEXT NOT NULL DEFAULT '',
-    to_status   TEXT NOT NULL DEFAULT '',
-    comment     TEXT NOT NULL DEFAULT '',
-    created_at  TEXT NOT NULL,
-    FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS idx_ticket_activity_ticket
-    ON ticket_activity(ticket_id, id ASC);
-CREATE TABLE IF NOT EXISTS ticket_attachments (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    ticket_id   TEXT NOT NULL,
-    filename    TEXT NOT NULL,
-    path        TEXT NOT NULL DEFAULT '',
-    note        TEXT NOT NULL DEFAULT '',
-    created_at  TEXT NOT NULL,
-    FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS idx_ticket_attachments_ticket
-    ON ticket_attachments(ticket_id, id ASC);`},
-	{56, "create ticket event log", `CREATE TABLE IF NOT EXISTS ticket_events (
-    seq         INTEGER PRIMARY KEY AUTOINCREMENT,
-    ticket_id   TEXT NOT NULL,
-    kind        TEXT NOT NULL,
-    author      TEXT NOT NULL DEFAULT '',
-    from_status TEXT NOT NULL DEFAULT '',
-    to_status   TEXT NOT NULL DEFAULT '',
-    comment     TEXT NOT NULL DEFAULT '',
-    detail      TEXT NOT NULL DEFAULT '',
-    created_at  TEXT NOT NULL,
-    FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS idx_ticket_events_ticket
-    ON ticket_events(ticket_id, seq);
-CREATE TABLE IF NOT EXISTS ticket_event_cursors (
-    identity   TEXT NOT NULL,
-    ticket_id  TEXT NOT NULL,
-    cursor     INTEGER NOT NULL DEFAULT 0,
-    updated_at TEXT NOT NULL DEFAULT '',
-    PRIMARY KEY (identity, ticket_id),
-    FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
-);`},
-	{57, "add resume_session_id to tickets", "ALTER TABLE tickets ADD COLUMN resume_session_id TEXT NOT NULL DEFAULT ''"},
-	{58, "create ticket subscriptions", `CREATE TABLE IF NOT EXISTS ticket_subscriptions (
-    identity   TEXT NOT NULL,
-    ticket_id  TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT '',
-    PRIMARY KEY (identity, ticket_id),
-    FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
-);`},
-	{59, "drop review_loop tables and settings", `
-		DROP TABLE IF EXISTS review_loop_interactions;
-		DROP TABLE IF EXISTS review_loop_iterations;
-		DROP TABLE IF EXISTS review_loop_runs;
-		DROP TABLE IF EXISTS session_review_loops;
-		DELETE FROM settings WHERE key IN ('review_loop_prompt_presets','review_loop_last_preset','review_loop_last_prompt','review_loop_last_iterations','review_loop_model');
-	`},
-	{60, "add reconciled_at to tickets", "ALTER TABLE tickets ADD COLUMN reconciled_at TEXT NOT NULL DEFAULT ''"},
-	{61, "create tasks table", `CREATE TABLE IF NOT EXISTS tasks (
-		id TEXT PRIMARY KEY,
-		kind TEXT NOT NULL,
-		subject TEXT NOT NULL,
-		state TEXT NOT NULL,
-		attempts INTEGER NOT NULL DEFAULT 0,
-		next_attempt_at TEXT NOT NULL,
-		last_error TEXT NOT NULL DEFAULT '',
-		meta_json TEXT NOT NULL DEFAULT '',
-		requeued INTEGER NOT NULL DEFAULT 0,
-		created_at TEXT NOT NULL,
-		updated_at TEXT NOT NULL
-	)`},
-	{62, "create notifications table", `CREATE TABLE IF NOT EXISTS notifications (
-		id TEXT PRIMARY KEY,
-		kind TEXT NOT NULL,
-		title TEXT NOT NULL DEFAULT '',
-		body TEXT NOT NULL DEFAULT '',
-		detail TEXT NOT NULL DEFAULT '',
-		source_kind TEXT NOT NULL DEFAULT '',
-		source_id TEXT NOT NULL DEFAULT '',
-		created_at TEXT NOT NULL,
-		read_at TEXT NOT NULL DEFAULT ''
-	);
-	CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at)`},
-	{63, "create presentation tables", `
-		CREATE TABLE IF NOT EXISTS presentations (
-			id TEXT PRIMARY KEY,
-			session_id TEXT NOT NULL,
-			ticket_id TEXT,
-			title TEXT NOT NULL,
-			kind TEXT NOT NULL,
-			repo_path TEXT NOT NULL,
-			status TEXT NOT NULL DEFAULT 'open',
-			created_at TEXT NOT NULL
-		);
-		CREATE INDEX IF NOT EXISTS idx_presentations_session ON presentations(session_id);
-		CREATE TABLE IF NOT EXISTS presentation_rounds (
-			id TEXT PRIMARY KEY,
-			presentation_id TEXT NOT NULL REFERENCES presentations(id) ON DELETE CASCADE,
-			seq INTEGER NOT NULL,
-			manifest_yaml TEXT NOT NULL,
-			base_sha TEXT NOT NULL,
-			head_sha TEXT NOT NULL,
-			created_at TEXT NOT NULL,
-			submitted_at TEXT,
-			UNIQUE(presentation_id, seq)
-		);
-		CREATE TABLE IF NOT EXISTS presentation_comments (
-			id TEXT PRIMARY KEY,
-			round_id TEXT NOT NULL REFERENCES presentation_rounds(id) ON DELETE CASCADE,
-			filepath TEXT NOT NULL,
-			line_start INTEGER NOT NULL,
-			line_end INTEGER NOT NULL,
-			side TEXT NOT NULL,
-			content TEXT NOT NULL,
-			author TEXT NOT NULL DEFAULT 'user',
-			created_at TEXT NOT NULL
-		);
-		CREATE INDEX IF NOT EXISTS idx_presentation_comments_round ON presentation_comments(round_id);
-	`},
-	{64, "add closed_intentionally_at to sessions", "ALTER TABLE sessions ADD COLUMN closed_intentionally_at TEXT NOT NULL DEFAULT ''"},
-	{65, "add verdict to presentation_rounds", ""},
-	{66, "add durable ticket role ownership", `
-		CREATE TABLE IF NOT EXISTS ticket_role_owners (
-			role TEXT NOT NULL,
-			ticket_id TEXT NOT NULL,
-			created_at TEXT NOT NULL DEFAULT '',
-			PRIMARY KEY (role, ticket_id),
-			FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
-		);
-		CREATE INDEX IF NOT EXISTS idx_ticket_role_owners_ticket
-			ON ticket_role_owners(ticket_id, role);
-		INSERT OR IGNORE INTO ticket_role_owners (role, ticket_id, created_at)
-		SELECT 'chief_of_staff', t.id, t.created_at
-		FROM tickets t
-		JOIN ticket_events e ON e.ticket_id = t.id AND e.kind = 'created'
-		WHERE t.assignee != ''
-			AND t.archived_at = ''
-			AND t.status NOT IN ('done', 'failed', 'crashed')
-			AND NOT EXISTS (
-				SELECT 1 FROM ticket_events assigned
-				WHERE assigned.ticket_id = t.id AND assigned.kind = 'assigned'
-			);
-	`},
-	{67, "rename ticket artifact handover records to attachments", `
-		UPDATE ticket_activity SET kind = 'attach' WHERE kind = 'handover';
-		UPDATE ticket_events SET kind = 'attach_submitted' WHERE kind = 'handover_submitted';
-	`},
-	{68, "create markdown annotation drafts table", `CREATE TABLE IF NOT EXISTS markdown_annotation_drafts (
-		path TEXT PRIMARY KEY,
-		annotations_json TEXT NOT NULL,
-		generation INTEGER NOT NULL,
-		tombstone_generation INTEGER NOT NULL DEFAULT 0,
-		updated_at TEXT NOT NULL
-	)`},
-	{69, "create ticket delivery attention table", `CREATE TABLE IF NOT EXISTS ticket_delivery_attention (
-		observer_key TEXT PRIMARY KEY,
-		last_attention_at TEXT NOT NULL
-	)`},
-	{70, "create delegation operations table", delegationOperationsSchema},
-	{71, "add delegation worktree ownership token", ""},
-	{72, "add delegation initiating chief identity", ""},
-	{73, "create automation foundation tables", `
+const legacyMigration73SQL = `
 		CREATE TABLE IF NOT EXISTS automation_definitions (
 			id TEXT PRIMARY KEY,
 			name TEXT NOT NULL,
@@ -703,361 +166,9 @@ CREATE TABLE IF NOT EXISTS ticket_event_cursors (
 		);
 		CREATE INDEX IF NOT EXISTS idx_automation_runs_definition_created
 			ON automation_runs(definition_id, created_at DESC);
-	`},
-	{74, "add GitHub automation observation and continuity", `
-		CREATE TABLE IF NOT EXISTS automation_provider_cursors (
-			definition_id TEXT NOT NULL,
-			provider TEXT NOT NULL,
-			scope TEXT NOT NULL,
-			observed_at TEXT NOT NULL,
-			PRIMARY KEY(definition_id, provider, scope),
-			FOREIGN KEY(definition_id) REFERENCES automation_definitions(id)
-		);
-		CREATE TABLE IF NOT EXISTS automation_review_request_edges (
-			definition_id TEXT NOT NULL,
-			subject_key TEXT NOT NULL,
-			host TEXT NOT NULL,
-			active INTEGER NOT NULL DEFAULT 0,
-			cycle INTEGER NOT NULL DEFAULT 0,
-			accepted_cycle INTEGER NOT NULL DEFAULT 0,
-			last_observed_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL,
-			PRIMARY KEY(definition_id, subject_key),
-			FOREIGN KEY(definition_id) REFERENCES automation_definitions(id)
-		);
-		CREATE INDEX IF NOT EXISTS idx_automation_review_edges_host
-			ON automation_review_request_edges(definition_id, host, active);
-		CREATE TABLE IF NOT EXISTS automation_continuity_bindings (
-			definition_id TEXT NOT NULL,
-			continuity_key TEXT NOT NULL,
-			ticket_id TEXT NOT NULL,
-			session_id TEXT NOT NULL,
-			workspace_id TEXT NOT NULL,
-			pane_id TEXT NOT NULL,
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL,
-			PRIMARY KEY(definition_id, continuity_key),
-			FOREIGN KEY(definition_id) REFERENCES automation_definitions(id)
-		);
-		CREATE TABLE IF NOT EXISTS automation_ticket_occurrence_events (
-			run_id TEXT PRIMARY KEY,
-			ticket_id TEXT NOT NULL,
-			created_at TEXT NOT NULL,
-			FOREIGN KEY(run_id) REFERENCES automation_runs(id),
-			FOREIGN KEY(ticket_id) REFERENCES tickets(id)
-		);
-	`},
-	{75, "persist the applied automation definition YAML", ""},
-	{76, "automations v2: definitions clean slate", ""},
-	{77, "automations v2: explicit run and binding state", ""},
-	{78, "add launch_intent to sessions", ""},
-	{79, "convert recoverable flag to session state", ""},
-	{80, "create file_activity table", `CREATE TABLE IF NOT EXISTS file_activity (
-		path TEXT NOT NULL,
-		source TEXT NOT NULL,
-		session_id TEXT,
-		last_at TEXT NOT NULL,
-		count INTEGER NOT NULL DEFAULT 1,
-		PRIMARY KEY(path, source)
-	);
-	CREATE INDEX IF NOT EXISTS idx_file_activity_last_at ON file_activity(last_at DESC);`},
-	{81, "add turn stamps to sessions", ""},
-	{82, "define the ticket participant rule once as a view", `
-		DROP VIEW IF EXISTS ticket_participants;
-		CREATE VIEW ticket_participants (ticket_id, identity) AS
-			SELECT id, assignee FROM tickets WHERE assignee != ''
-			UNION
-			SELECT e.ticket_id, e.author FROM ticket_events e
-			WHERE e.author != '' AND e.kind != 'commented'
-				AND NOT (
-					e.kind = 'created' AND EXISTS (
-						SELECT 1 FROM ticket_role_owners ro WHERE ro.ticket_id = e.ticket_id
-					)
-				)
-			UNION
-			SELECT ticket_id, identity FROM ticket_subscriptions WHERE identity != ''
-			UNION
-			SELECT ticket_id, ('role:' || role) FROM ticket_role_owners WHERE role != '';
-	`},
-	{83, "reserve tickets during delegation preparation", `
-		CREATE UNIQUE INDEX IF NOT EXISTS idx_delegation_operations_active_ticket
-			ON delegation_operations(ticket_id)
-			WHERE ticket_id != '' AND state IN ('accepted', 'preparing');
-	`},
-	{84, "create event bus log and consumer cursors", `CREATE TABLE IF NOT EXISTS bus_events (
-    seq        INTEGER PRIMARY KEY AUTOINCREMENT,
-    name       TEXT NOT NULL,
-    subject    TEXT NOT NULL DEFAULT '',
-    payload    TEXT NOT NULL DEFAULT '',
-    source     TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_bus_events_name ON bus_events(name, seq);
-CREATE INDEX IF NOT EXISTS idx_bus_events_subject ON bus_events(subject, seq);
-CREATE TABLE IF NOT EXISTS bus_consumers (
-    name       TEXT PRIMARY KEY,
-    cursor     INTEGER NOT NULL DEFAULT 0,
-    filter     TEXT NOT NULL DEFAULT '',
-    enabled    INTEGER NOT NULL DEFAULT 1,
-    updated_at TEXT NOT NULL DEFAULT ''
-);`},
-	{85, "add the snooze deadline to sessions", ""},
-	{86, "create session annotation drafts table", `CREATE TABLE IF NOT EXISTS session_annotation_drafts (
-		session_id TEXT PRIMARY KEY,
-		annotations_json TEXT NOT NULL,
-		generation INTEGER NOT NULL,
-		tombstone_generation INTEGER NOT NULL DEFAULT 0,
-		updated_at TEXT NOT NULL
-	)`},
-	{87, "create the durable job queue", `CREATE TABLE IF NOT EXISTS jobs (
-    id           TEXT PRIMARY KEY,
-    kind         TEXT NOT NULL,
-    unique_key   TEXT NOT NULL DEFAULT '',
-    priority     INTEGER NOT NULL DEFAULT 0,
-    payload      TEXT NOT NULL DEFAULT '',
-    result       TEXT NOT NULL DEFAULT '',
-    state        TEXT NOT NULL,
-    attempts     INTEGER NOT NULL DEFAULT 0,
-    max_attempts INTEGER NOT NULL DEFAULT 0,
-    scheduled_at TEXT NOT NULL,
-    last_error   TEXT NOT NULL DEFAULT '',
-    requeued     INTEGER NOT NULL DEFAULT 0,
-    created_at   TEXT NOT NULL,
-    updated_at   TEXT NOT NULL
-);
--- Coalescing identity. Partial, because a job without a unique key is
--- deliberately distinct and any number of them may coexist.
-CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_unique_key ON jobs(kind, unique_key) WHERE unique_key <> '';
--- The dispatch selection: claimable rows in the order they are claimed.
-CREATE INDEX IF NOT EXISTS idx_jobs_eligible ON jobs(state, scheduled_at, priority DESC);`},
-	{88, "create the document store", `CREATE TABLE IF NOT EXISTS documents (
-    namespace  TEXT NOT NULL,
-    collection TEXT NOT NULL,
-    id         TEXT NOT NULL,
-    body       TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    PRIMARY KEY (namespace, collection, id)
-);
--- Every query is scoped to one collection, so the primary key is also the
--- access path: a query scans the (namespace, collection) prefix and no further.
--- Declared fields carry no index of their own in v1 (see the A3 plan) — the
--- declaration is the contract, and the physical index waits for a measurement.
-CREATE TABLE IF NOT EXISTS document_collections (
-    namespace   TEXT NOT NULL,
-    collection  TEXT NOT NULL,
-    fields_json TEXT NOT NULL,
-    updated_at  TEXT NOT NULL,
-    PRIMARY KEY (namespace, collection)
-);`},
-	{89, "rebuild the document store as a table per collection", ``},
-	{90, "give every document a revision", ``},
-	{91, "store document timestamps in an encoding that sorts", ``},
-	{92, "add the session pin and the satellite parent to sessions", ``},
-	{93, "add the note to session annotation drafts", ``},
-	{94, "store job and notification timestamps in an encoding that sorts", ``},
-	{95, "store turn, cursor and listing timestamps in an encoding that sorts", ``},
-	{96, "add the context-window cap pin to sessions", ``},
-	{97, "add the activity line and its transcript cursor to sessions", ``},
-	{99, "attribute role-acted ticket events to the role", ``},
-	{100, "add the severity level to notifications", ``},
-	{101, "create agent messages and drop the dispatch message table", `
-		CREATE TABLE IF NOT EXISTS agent_messages (
-			id TEXT PRIMARY KEY,
-			sender_session_id TEXT NOT NULL,
-			target_session_id TEXT NOT NULL,
-			content TEXT NOT NULL,
-			created_at TEXT NOT NULL,
-			delivered_at TEXT NOT NULL DEFAULT ''
-		);
-		CREATE INDEX IF NOT EXISTS idx_agent_messages_target_queued
-			ON agent_messages(target_session_id, delivered_at, created_at, id);
-		CREATE INDEX IF NOT EXISTS idx_agent_messages_sender_created
-			ON agent_messages(sender_session_id, target_session_id, created_at);
-		DROP TABLE IF EXISTS chief_of_staff_dispatch_messages;
-	`},
-	{104, "remember a parked supervised child across daemon restarts", `CREATE TABLE IF NOT EXISTS supervised_parks (
-    child           TEXT PRIMARY KEY,
-    parked_at       TEXT NOT NULL,
-    restart_attempt INTEGER NOT NULL DEFAULT 0,
-    exit_at         TEXT NOT NULL DEFAULT '',
-    exit_code       INTEGER,
-    exit_signal     TEXT NOT NULL DEFAULT '',
-    exit_error      TEXT NOT NULL DEFAULT ''
-);`},
-	{106, "add durable per-session token cost state", ``},
-	{107, "record which ticket event a delivery covered", ``},
-	{109, "auto mode config, proposals and denials", `CREATE TABLE IF NOT EXISTS automode_config (
-    id               INTEGER PRIMARY KEY CHECK (id = 1),
-    enabled_default  INTEGER NOT NULL DEFAULT 1,
-    environment      TEXT NOT NULL DEFAULT '[]',
-    allow_patterns   TEXT NOT NULL DEFAULT '[]',
-    hard_deny        TEXT NOT NULL DEFAULT '[]',
-    classifier_model TEXT NOT NULL DEFAULT '',
-    escalation_model TEXT NOT NULL DEFAULT '',
-    updated_at       TEXT NOT NULL DEFAULT ''
-);
-CREATE TABLE IF NOT EXISTS automode_proposals (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    kind        TEXT NOT NULL,
-    target      TEXT NOT NULL DEFAULT '',
-    value       TEXT NOT NULL,
-    proposed_by TEXT NOT NULL DEFAULT '',
-    state       TEXT NOT NULL DEFAULT 'pending',
-    created_at  TEXT NOT NULL,
-    resolved_at TEXT NOT NULL DEFAULT ''
-);
--- The review list: everything still pending, oldest first.
-CREATE INDEX IF NOT EXISTS idx_automode_proposals_state ON automode_proposals(state, id);
-CREATE TABLE IF NOT EXISTS automode_denials (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT NOT NULL DEFAULT '',
-    tool       TEXT NOT NULL DEFAULT '',
-    signature  TEXT NOT NULL DEFAULT '',
-    reason     TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DESC);`},
-	{110, "record which rule denied an auto mode call", ``},
-	{111, "one pending auto mode proposal per asker", `CREATE UNIQUE INDEX IF NOT EXISTS
-    idx_automode_proposals_pending_ask
-    ON automode_proposals(kind, target, value, proposed_by)
-    WHERE state = 'pending';`},
-	{114, "auto mode judges from an ordered model list per layer", ``},
-	{117, "index automation provenance lookups", `
-		CREATE INDEX IF NOT EXISTS idx_automation_runs_session_created
-			ON automation_runs(session_id, created_at DESC, id DESC);
-		CREATE INDEX IF NOT EXISTS idx_automation_runs_ticket_created
-			ON automation_runs(ticket_id, created_at DESC, id DESC);
-	`},
-	{118, "the ticket board's font scale becomes the garden's", `
-		INSERT OR IGNORE INTO settings (key, value)
-			SELECT 'gardenScale', value FROM settings WHERE key = 'ticketBoardScale';
-		DELETE FROM settings WHERE key = 'ticketBoardScale';
-	`},
-	{119, "record review automation activation baselines", ``},
-	{120, "watch seeds and coalesce their unread bells", `
-		CREATE TABLE IF NOT EXISTS garden_seed_watches (
-			watcher_session_id TEXT NOT NULL,
-			seed_id TEXT NOT NULL,
-			created_at TEXT NOT NULL,
-			PRIMARY KEY(watcher_session_id, seed_id)
-		);
-		CREATE INDEX IF NOT EXISTS idx_garden_seed_watches_seed
-			ON garden_seed_watches(seed_id, watcher_session_id);
-		CREATE TABLE IF NOT EXISTS garden_seed_bells (
-			watcher_session_id TEXT NOT NULL,
-			seed_id TEXT NOT NULL,
-			event_kind TEXT NOT NULL,
-			message_id TEXT NOT NULL UNIQUE,
-			created_at TEXT NOT NULL,
-			PRIMARY KEY(watcher_session_id, seed_id)
-		);
-	`},
-	{121, "record the last observed model request per session", `
-		ALTER TABLE sessions ADD COLUMN last_model_request_at TEXT;
-		UPDATE sessions SET last_model_request_at = state_updated_at
-			WHERE last_model_request_at IS NULL OR last_model_request_at = '';
-	`},
-	{122, "journal the one-time legacy ticket recovery", `
-		CREATE TABLE IF NOT EXISTS legacy_ticket_recovery_runs (
-			version                 INTEGER PRIMARY KEY,
-			state                   TEXT NOT NULL,
-			inventory_json          TEXT NOT NULL,
-			counts_json             TEXT NOT NULL DEFAULT '{}',
-			warning_notification_id TEXT NOT NULL DEFAULT '',
-			started_at              TEXT NOT NULL,
-			recovery_at             TEXT NOT NULL,
-			finished_at             TEXT NOT NULL DEFAULT '',
-			terminal_error          TEXT NOT NULL DEFAULT ''
-		);
-		CREATE TABLE IF NOT EXISTS legacy_ticket_recovery_sources (
-			run_version INTEGER NOT NULL,
-			path        TEXT NOT NULL,
-			family      TEXT NOT NULL,
-			size        INTEGER NOT NULL,
-			mod_time_ns INTEGER NOT NULL,
-			sha256      TEXT NOT NULL,
-			state       TEXT NOT NULL DEFAULT 'pending',
-			detail      TEXT NOT NULL DEFAULT '',
-			PRIMARY KEY (run_version, path)
-		);
-		CREATE INDEX IF NOT EXISTS idx_legacy_ticket_recovery_sources_state
-			ON legacy_ticket_recovery_sources(run_version, state);
-		CREATE TABLE IF NOT EXISTS legacy_ticket_recovery_items (
-			fingerprint              TEXT PRIMARY KEY,
-			run_version              INTEGER NOT NULL,
-			source_kind              TEXT NOT NULL,
-			source_key               TEXT NOT NULL,
-			ticket_id                TEXT NOT NULL DEFAULT '',
-			recovered_local_identity TEXT NOT NULL DEFAULT '',
-			result                   TEXT NOT NULL,
-			detail                   TEXT NOT NULL DEFAULT '',
-			created_at               TEXT NOT NULL
-		);
-		CREATE INDEX IF NOT EXISTS idx_legacy_ticket_recovery_items_ticket
-			ON legacy_ticket_recovery_items(ticket_id, fingerprint);
-		CREATE TABLE IF NOT EXISTS legacy_ticket_seed_links (
-			ticket_id               TEXT PRIMARY KEY,
-			seed_id                 TEXT NOT NULL UNIQUE,
-			source_kind             TEXT NOT NULL,
-			evidence_fingerprint    TEXT NOT NULL,
-			original_terminal_state TEXT NOT NULL,
-			created_at              TEXT NOT NULL
-		);
-	`},
-	{123, "persist session transcript bindings", ``},
-	{124, "one model list for both classifier passes", ``},
-	{125, "the environment becomes slots the rules can look up", ``},
-	{126, "seed slugs drop their stop words", ``},
-	{127, "pull requests a session's agent opened", `
-		CREATE TABLE IF NOT EXISTS session_pull_requests (
-			session_id        TEXT NOT NULL,
-			pr_id             TEXT NOT NULL,
-			repository        TEXT NOT NULL,
-			number            INTEGER NOT NULL,
-			url               TEXT NOT NULL,
-			created_at        TEXT NOT NULL,
-			title             TEXT NOT NULL DEFAULT '',
-			draft             INTEGER NOT NULL DEFAULT 0,
-			state             TEXT NOT NULL DEFAULT 'open',
-			ci_status         TEXT NOT NULL DEFAULT '',
-			review_status     TEXT NOT NULL DEFAULT '',
-			mergeable_state   TEXT NOT NULL DEFAULT '',
-			head_sha          TEXT NOT NULL DEFAULT '',
-			head_branch       TEXT NOT NULL DEFAULT '',
-			status_fetched_at TEXT NOT NULL DEFAULT '',
-			last_activity_at  TEXT NOT NULL DEFAULT '',
-			PRIMARY KEY (session_id, pr_id)
-		);
-		CREATE INDEX IF NOT EXISTS idx_session_pull_requests_session
-			ON session_pull_requests(session_id, created_at DESC);
-	`},
-	{128, "session pull request refresh keeps its own pacing cursor", ``},
-	{129, "the screen a session showed when its process exited", `
-		CREATE TABLE IF NOT EXISTS session_exit_screens (
-			session_id  TEXT PRIMARY KEY,
-			text        TEXT NOT NULL DEFAULT '',
-			cols        INTEGER NOT NULL DEFAULT 0,
-			rows        INTEGER NOT NULL DEFAULT 0,
-			exit_code   INTEGER NOT NULL DEFAULT 0,
-			exit_signal TEXT NOT NULL DEFAULT '',
-			exited_at   TEXT NOT NULL
-		);
-	`},
-	{130, "intentional session teardown survives session removal", `
-		CREATE TABLE IF NOT EXISTS session_teardown_tombstones (
-			session_id        TEXT PRIMARY KEY,
-			requested_at      TEXT NOT NULL,
-			driver_plugin_name TEXT NOT NULL DEFAULT '',
-			driver_run_id      TEXT NOT NULL DEFAULT '',
-			driver_report_seq  INTEGER NOT NULL DEFAULT 0
-		);
-		INSERT OR IGNORE INTO session_teardown_tombstones (session_id, requested_at)
-			SELECT id, closed_intentionally_at FROM sessions WHERE closed_intentionally_at <> '';
-	`},
-	{131, "repair partial agent driver cursor schemas", ``},
-	{132, "separate agent mailbox receipts from message content", `
+	`
+
+const legacyMigration132SQL = `
 		CREATE TABLE IF NOT EXISTS peer_messages (
 			id                TEXT PRIMARY KEY,
 			sender_session_id TEXT NOT NULL,
@@ -1122,29 +233,9 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
 
 		DROP TABLE garden_seed_bells;
 		DROP TABLE agent_messages;
-	`},
-	{133, "index unread agent mailbox delivery", `
-		DROP INDEX IF EXISTS idx_agent_mailbox_recipient_queued;
-		CREATE INDEX IF NOT EXISTS idx_agent_mailbox_recipient_unread
-			ON agent_mailbox_items(recipient_session_id, created_at, id)
-			WHERE read_at = '';
-	`},
-	{134, "remove the workspace context and the keeper duties", `
-		DROP TABLE IF EXISTS workspace_keeper_compact_backups;
-		DROP TABLE IF EXISTS workspace_context_janitor_backups;
-		DROP TABLE IF EXISTS workspace_contexts;
-		DELETE FROM settings WHERE key IN (
-			'workspace_keeper_compact', 'workspace_context_janitor',
-			'notebook.summarize_session', 'notebook.summarize_session.enabled',
-			'notebook.narrate_workspace', 'notebook.narrate_workspace.enabled',
-			'notebook.tasks_enabled', 'notebook.cron.frequency', 'notebook.cron.timezone',
-			'notebook.dreaming.frequency', 'notebook.dreaming.timezone', 'notebook.dreaming.enabled'
-		);
-		DELETE FROM jobs WHERE kind IN ('compact_context', 'summarize_session', 'narrate_workspace', 'notebook_cron');
-		DELETE FROM tasks WHERE kind IN ('compact_context', 'summarize_session', 'narrate_workspace', 'notebook_cron');
-	`},
-	{135, "closing a session records it instead of deleting it", ""},
-	{136, "observed worktree state, the keep pin and the sweep log", `
+	`
+
+const legacyMigration136SQL = `
 		CREATE TABLE IF NOT EXISTS worktree_sweep_log (
 			id          TEXT PRIMARY KEY,
 			path        TEXT NOT NULL,
@@ -1174,29 +265,11 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
 			observed_at TEXT NOT NULL,
 			PRIMARY KEY (main_repo, branch)
 		);
-	`},
-	{137, "name the repository a session ran in so the ledger can filter by it", ""},
-	{138, "persist delegation preferences", `CREATE TABLE IF NOT EXISTS delegation_preferences (id INTEGER PRIMARY KEY CHECK (id = 1), config TEXT NOT NULL);`},
-	{139, "convert dispatch notifications to Garden subscriptions", ""},
-	{140, "auto mode globs become prefix rules, hosts and an approval policy", ``},
-	{141, "record where a plugin session's harness writes its transcript", ""},
-	{142, "add explicit delegation recovery facts", ""},
-	{143, "snapshot accepted delegation handovers", ""},
-	{144, "snapshot accepted delegation parents", ""},
-	{145, "move automation continuity from tickets to Garden seeds", ""},
-	{146, "guardian model selection", ""},
-	{147, "record structured task failure diagnostics", ""},
-	{148, "durable Garden seed event handling", ``},
-	{149, "index delegation session identity", `CREATE INDEX IF NOT EXISTS idx_delegation_operations_session ON delegation_operations(session_id)`},
-	{150, "durable pull request readiness watches", ``},
-	{151, "rename install profiles to instances", ``},
-	{152, "file long-context session cost observations under their tier", ``},
-	{153, "keep every delegation preferences revision", ``},
-	{154, "record when a session's agent process launched", ""},
-	{155, "session last-seen stamps move to UTC so the ledger window compares instants", ""},
-	{156, "drop session todos", ""},
-	{157, "retire the apps platform state", ""},
-	{158, "create profiles, desktops and their panes beside the workspace tables", `
+	`
+
+const legacyMigration138SQL = `CREATE TABLE IF NOT EXISTS delegation_preferences (id INTEGER PRIMARY KEY CHECK (id = 1), config TEXT NOT NULL);`
+
+const legacyMigration158SQL = `
 		CREATE TABLE IF NOT EXISTS profiles (
 			id TEXT PRIMARY KEY,
 			name TEXT NOT NULL,
@@ -1239,16 +312,9 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
 			imported_groups TEXT NOT NULL DEFAULT '',
 			draft TEXT NOT NULL DEFAULT ''
 		);
-	`},
-	{ProfileConversionSchemaVersion, "convert legacy workspaces into the Default profile and its desktops", ""},
-	{160, "record the profile each crew member belongs to", `
-		CREATE TABLE IF NOT EXISTS crew_profiles (
-			member_id TEXT PRIMARY KEY,
-			profile_id TEXT NOT NULL
-		);
-		CREATE INDEX IF NOT EXISTS idx_crew_profiles_profile ON crew_profiles(profile_id);
-	`},
-	{161, "give each profile its own chief of staff", `
+	`
+
+const legacyMigration161SQL = `
 		UPDATE profiles SET chief_session_id = (
 			SELECT r.session_id FROM instance_roles r WHERE r.role = 'chief_of_staff'
 		)
@@ -1257,30 +323,23 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
 			WHERE r.role = 'chief_of_staff' AND s.profile_id != ''
 		);
 		DROP TABLE IF EXISTS instance_roles;
-	`},
-	{162, "drop the retired workspace tables and columns", `
+	`
+
+const legacyMigration162SQL = `
 		DROP INDEX IF EXISTS idx_sessions_workspace_id;
 		DROP TABLE IF EXISTS workspace_layout_panes;
 		DROP TABLE IF EXISTS workspace_layouts;
 		DROP TABLE IF EXISTS workspaces;
-	`},
-	{163, "file GPT-6.1 Sol long-context observations under their tier", ""},
-	{164, "keep conversations referenced by open work", `
- CREATE TABLE IF NOT EXISTS kept_conversations (
- resume_id TEXT NOT NULL, agent TEXT NOT NULL,
- source_path TEXT NOT NULL, bytes INTEGER NOT NULL, stored_bytes INTEGER NOT NULL,
- copied_at TEXT NOT NULL, released_at TEXT NOT NULL DEFAULT '', deleted_at TEXT NOT NULL DEFAULT '',
- PRIMARY KEY (agent, resume_id)
- );
- `},
-	{165, "scope the Garden to profiles", ""},
-	{166, "pin and forget kept conversations", `
+	`
+
+const legacyMigration166SQL = `
  CREATE TABLE IF NOT EXISTS kept_conversation_pins (
  agent TEXT NOT NULL, resume_id TEXT NOT NULL, session_id TEXT NOT NULL, pinned_at TEXT NOT NULL,
  PRIMARY KEY (agent, resume_id)
  );
- `},
-	{167, "place background launches and remember the desktop each item starts on", `
+ `
+
+const legacyMigration167SQL = `
  CREATE TABLE IF NOT EXISTS launch_desktops (
  kind TEXT NOT NULL CHECK(kind IN ('automation', 'crew')), item_id TEXT NOT NULL,
  desktop_id TEXT NOT NULL, confirmed INTEGER NOT NULL DEFAULT 0,
@@ -1306,7 +365,993 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
  BEGIN UPDATE profile_migration SET revision = revision + 1 WHERE phase = 'launch_required'; END;
  CREATE TRIGGER IF NOT EXISTS launch_review_crew_profile AFTER UPDATE ON crew_profiles WHEN OLD.profile_id != NEW.profile_id
  BEGIN UPDATE profile_migration SET revision = revision + 1 WHERE phase = 'launch_required'; END;
- `},
+ `
+
+const legacyMigration169SQL = `
+ ALTER TABLE sessions ADD COLUMN succeeds TEXT NOT NULL DEFAULT '';
+ CREATE INDEX idx_sessions_succeeds ON sessions(succeeds) WHERE succeeds != '';
+`
+
+var migrations = []migration{
+	{1, "add head_sha to prs", "ALTER TABLE prs ADD COLUMN head_sha TEXT", nil},
+	{2, "add head_branch to prs", "ALTER TABLE prs ADD COLUMN head_branch TEXT", nil},
+	{3, "add comment_count to prs", "ALTER TABLE prs ADD COLUMN comment_count INTEGER NOT NULL DEFAULT 0", nil},
+	{4, "add approved_by_me to prs", "ALTER TABLE prs ADD COLUMN approved_by_me INTEGER NOT NULL DEFAULT 0", nil},
+	{5, "add heat_state to prs", "ALTER TABLE prs ADD COLUMN heat_state TEXT NOT NULL DEFAULT 'cold'", nil},
+	{6, "add last_heat_activity_at to prs", "ALTER TABLE prs ADD COLUMN last_heat_activity_at TEXT", nil},
+	{7, "add last_seen_ci_status to pr_interactions", "ALTER TABLE pr_interactions ADD COLUMN last_seen_ci_status TEXT", nil},
+	{8, "add branch to sessions", "ALTER TABLE sessions ADD COLUMN branch TEXT", nil},
+	{9, "add is_worktree to sessions", "ALTER TABLE sessions ADD COLUMN is_worktree INTEGER NOT NULL DEFAULT 0", nil},
+	{10, "add main_repo to sessions", "ALTER TABLE sessions ADD COLUMN main_repo TEXT", nil},
+	{11, "create recent_locations table", `CREATE TABLE IF NOT EXISTS recent_locations (
+		path TEXT PRIMARY KEY,
+		label TEXT NOT NULL,
+		last_seen TEXT NOT NULL,
+		use_count INTEGER NOT NULL DEFAULT 1
+	)`, nil},
+	{12, "create reviews table", `CREATE TABLE IF NOT EXISTS reviews (
+		id TEXT PRIMARY KEY,
+		branch TEXT NOT NULL,
+		pr_number INTEGER,
+		repo_path TEXT NOT NULL,
+		created_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL,
+		UNIQUE(repo_path, branch)
+	)`, nil},
+	{13, "create review_viewed_files table", `CREATE TABLE IF NOT EXISTS review_viewed_files (
+		review_id TEXT NOT NULL,
+		filepath TEXT NOT NULL,
+		viewed_at TEXT NOT NULL,
+		PRIMARY KEY (review_id, filepath),
+		FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE
+	)`, nil},
+	{14, "create review_comments table", `CREATE TABLE IF NOT EXISTS review_comments (
+		id TEXT PRIMARY KEY,
+		review_id TEXT NOT NULL,
+		filepath TEXT NOT NULL,
+		line_start INTEGER NOT NULL,
+		line_end INTEGER NOT NULL,
+		content TEXT NOT NULL,
+		author TEXT NOT NULL,
+		resolved INTEGER NOT NULL DEFAULT 0,
+		created_at TEXT NOT NULL,
+		FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE
+	)`, nil},
+	{15, "add resolution tracking to review_comments", `
+		ALTER TABLE review_comments ADD COLUMN resolved_by TEXT NOT NULL DEFAULT '';
+		ALTER TABLE review_comments ADD COLUMN resolved_at TEXT NOT NULL DEFAULT '';
+	`, nil},
+	{16, "create reviewer_sessions table", `CREATE TABLE IF NOT EXISTS reviewer_sessions (
+		id TEXT PRIMARY KEY,
+		review_id TEXT NOT NULL,
+		commit_sha TEXT NOT NULL,
+		transcript TEXT NOT NULL,
+		started_at TEXT NOT NULL,
+		completed_at TEXT,
+		FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE
+	)`, nil},
+	{17, "add wont_fix tracking to review_comments", `
+		ALTER TABLE review_comments ADD COLUMN wont_fix INTEGER NOT NULL DEFAULT 0;
+		ALTER TABLE review_comments ADD COLUMN wont_fix_by TEXT NOT NULL DEFAULT '';
+		ALTER TABLE review_comments ADD COLUMN wont_fix_at TEXT NOT NULL DEFAULT '';
+	`, nil},
+	{18, "create authors table", `CREATE TABLE IF NOT EXISTS authors (
+		author TEXT PRIMARY KEY,
+		muted INTEGER NOT NULL DEFAULT 0
+	)`, nil},
+	{19, "add author to prs", "ALTER TABLE prs ADD COLUMN author TEXT NOT NULL DEFAULT ''", nil},
+	{20, "add host to prs and migrate ids", `
+		ALTER TABLE prs ADD COLUMN host TEXT NOT NULL DEFAULT 'github.com';
+		UPDATE prs SET id = 'github.com:' || id WHERE id NOT LIKE '%:%';
+		UPDATE pr_interactions SET pr_id = 'github.com:' || pr_id WHERE pr_id NOT LIKE '%:%';
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_prs_host_repo_number ON prs(host, repo, number);
+	`, applyMigration20},
+	{21, "add agent to sessions", "ALTER TABLE sessions ADD COLUMN agent TEXT NOT NULL DEFAULT 'codex'", applyMigration21},
+	{22, "add recoverable to sessions", "ALTER TABLE sessions ADD COLUMN recoverable INTEGER NOT NULL DEFAULT 0", applyMigration22},
+	{23, "add resume_session_id to sessions", "ALTER TABLE sessions ADD COLUMN resume_session_id TEXT NOT NULL DEFAULT ''", applyMigration23},
+	{24, "create session_review_loops table", `CREATE TABLE IF NOT EXISTS session_review_loops (
+		session_id TEXT PRIMARY KEY,
+		status TEXT NOT NULL,
+		preset_id TEXT,
+		custom_prompt TEXT,
+		resolved_prompt TEXT NOT NULL,
+		iteration_count INTEGER NOT NULL DEFAULT 0,
+		iteration_limit INTEGER NOT NULL,
+		stop_requested INTEGER NOT NULL DEFAULT 0,
+		advance_token TEXT NOT NULL,
+		stop_reason TEXT,
+		last_prompt_at TEXT,
+		last_advance_at TEXT,
+		last_user_input_at TEXT,
+		created_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL,
+		FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+	)`, nil},
+	{25, "create review_loop_runs table", `CREATE TABLE IF NOT EXISTS review_loop_runs (
+		id TEXT PRIMARY KEY,
+		source_session_id TEXT NOT NULL,
+		repo_path TEXT NOT NULL,
+		status TEXT NOT NULL,
+		preset_id TEXT,
+		custom_prompt TEXT,
+		resolved_prompt TEXT NOT NULL,
+		handoff_payload_json TEXT,
+		iteration_count INTEGER NOT NULL DEFAULT 0,
+		iteration_limit INTEGER NOT NULL,
+		pending_interaction_id TEXT,
+		last_decision TEXT,
+		last_result_summary TEXT,
+		last_error TEXT,
+		stop_reason TEXT,
+		created_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL,
+		completed_at TEXT,
+		FOREIGN KEY (source_session_id) REFERENCES sessions(id) ON DELETE CASCADE
+	);
+	CREATE INDEX IF NOT EXISTS idx_review_loop_runs_source_session_created_at
+		ON review_loop_runs(source_session_id, created_at DESC);
+	CREATE INDEX IF NOT EXISTS idx_review_loop_runs_status
+		ON review_loop_runs(status);`, nil},
+	{26, "create review_loop_iterations table", `CREATE TABLE IF NOT EXISTS review_loop_iterations (
+		id TEXT PRIMARY KEY,
+		loop_id TEXT NOT NULL,
+		iteration_number INTEGER NOT NULL,
+		status TEXT NOT NULL,
+		decision TEXT,
+		summary TEXT,
+		result_text TEXT,
+		changes_made INTEGER,
+		files_touched_json TEXT,
+		blocking_reason TEXT,
+		suggested_next_focus TEXT,
+		structured_output_json TEXT,
+		assistant_trace_json TEXT,
+		error TEXT,
+		started_at TEXT NOT NULL,
+		completed_at TEXT,
+		UNIQUE(loop_id, iteration_number),
+		FOREIGN KEY (loop_id) REFERENCES review_loop_runs(id) ON DELETE CASCADE
+	);
+	CREATE INDEX IF NOT EXISTS idx_review_loop_iterations_loop_id_iteration_number
+		ON review_loop_iterations(loop_id, iteration_number ASC);`, nil},
+	{27, "create review_loop_interactions table", `CREATE TABLE IF NOT EXISTS review_loop_interactions (
+		id TEXT PRIMARY KEY,
+		loop_id TEXT NOT NULL,
+		iteration_id TEXT,
+		kind TEXT NOT NULL,
+		question TEXT NOT NULL,
+		answer TEXT,
+		status TEXT NOT NULL,
+		created_at TEXT NOT NULL,
+		answered_at TEXT,
+		consumed_at TEXT,
+		FOREIGN KEY (loop_id) REFERENCES review_loop_runs(id) ON DELETE CASCADE,
+		FOREIGN KEY (iteration_id) REFERENCES review_loop_iterations(id) ON DELETE SET NULL
+	);
+	CREATE INDEX IF NOT EXISTS idx_review_loop_interactions_loop_id_created_at
+		ON review_loop_interactions(loop_id, created_at ASC);
+	CREATE INDEX IF NOT EXISTS idx_review_loop_interactions_status
+		ON review_loop_interactions(status);`, nil},
+	{28, "add result_text to review_loop_iterations", "ALTER TABLE review_loop_iterations ADD COLUMN result_text TEXT", applyMigration28},
+	{29, "add change_stats_json to review_loop_iterations", "ALTER TABLE review_loop_iterations ADD COLUMN change_stats_json TEXT", applyMigration29},
+	{30, "create workspace persistence tables", `CREATE TABLE IF NOT EXISTS session_workspaces (
+		session_id TEXT PRIMARY KEY,
+		active_pane_id TEXT NOT NULL,
+		layout_json TEXT NOT NULL,
+		updated_at TEXT NOT NULL
+	);
+	CREATE TABLE IF NOT EXISTS workspace_panes (
+		session_id TEXT NOT NULL,
+		pane_id TEXT NOT NULL,
+		runtime_id TEXT NOT NULL DEFAULT '',
+		kind TEXT NOT NULL,
+		title TEXT NOT NULL,
+		created_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL,
+		PRIMARY KEY (session_id, pane_id)
+	);
+	CREATE INDEX IF NOT EXISTS idx_workspace_panes_runtime_id
+		ON workspace_panes(runtime_id);`, nil},
+	{31, "add endpoint_id to sessions", "ALTER TABLE sessions ADD COLUMN endpoint_id TEXT", applyMigration31},
+	{32, "create endpoints table", `CREATE TABLE IF NOT EXISTS endpoints (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		ssh_target TEXT NOT NULL,
+		enabled INTEGER NOT NULL DEFAULT 1,
+		created_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL
+	)`, nil},
+	{33, "drop unused wont_fix columns from review_comments", "", applyMigration33},
+	{34, "add profile to endpoints", "ALTER TABLE endpoints ADD COLUMN profile TEXT NOT NULL DEFAULT ''", applyMigration34},
+	{35, "create canvas-workspaces table and add workspace_id to sessions", `
+	CREATE TABLE IF NOT EXISTS workspaces (
+		id TEXT PRIMARY KEY,
+		title TEXT NOT NULL,
+		directory TEXT NOT NULL,
+		muted INTEGER NOT NULL DEFAULT 0,
+		created_at TEXT NOT NULL
+	);
+		ALTER TABLE sessions ADD COLUMN workspace_id TEXT;
+		CREATE INDEX IF NOT EXISTS idx_sessions_workspace_id ON sessions(workspace_id);
+	`, applyMigration35},
+	{36, "create canvas workspace panels table", `
+		CREATE TABLE IF NOT EXISTS canvas_workspace_panels (
+			workspace_id TEXT NOT NULL,
+			panel_id TEXT NOT NULL,
+			session_id TEXT NOT NULL,
+			kind TEXT NOT NULL,
+			title TEXT NOT NULL,
+			world_x REAL NOT NULL,
+			world_y REAL NOT NULL,
+			width REAL NOT NULL,
+			height REAL NOT NULL,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			PRIMARY KEY (workspace_id, panel_id)
+		);
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_canvas_workspace_panels_session_id
+			ON canvas_workspace_panels(session_id);
+		CREATE INDEX IF NOT EXISTS idx_canvas_workspace_panels_workspace_id
+			ON canvas_workspace_panels(workspace_id);
+	`, nil},
+	{37, "migrate session layouts to workspace layouts", "", applyMigration37},
+	{38, "add opaque agent metadata to sessions", "ALTER TABLE sessions ADD COLUMN agent_metadata TEXT NOT NULL DEFAULT ''", applyMigration38},
+	{39, "add agent driver report cursor to sessions", `
+		ALTER TABLE sessions ADD COLUMN agent_driver_plugin_name TEXT NOT NULL DEFAULT '';
+		ALTER TABLE sessions ADD COLUMN agent_driver_run_id TEXT NOT NULL DEFAULT '';
+		ALTER TABLE sessions ADD COLUMN agent_driver_report_seq INTEGER NOT NULL DEFAULT 0;
+	`, applyMigration39},
+	{40, "add workspace pane lifecycle status", "", applyMigration40},
+	{41, "move session mute state to workspaces", `
+		ALTER TABLE workspaces ADD COLUMN muted INTEGER NOT NULL DEFAULT 0;
+	`, applyMigration41},
+	{42, "create workspace contexts table", `
+		CREATE TABLE IF NOT EXISTS workspace_contexts (
+			workspace_id TEXT PRIMARY KEY,
+			content TEXT NOT NULL,
+			revision INTEGER NOT NULL,
+			updated_by_session_id TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		);
+	`, nil},
+	{43, "create profile roles table", `
+		CREATE TABLE IF NOT EXISTS profile_roles (
+			role TEXT PRIMARY KEY,
+			session_id TEXT NOT NULL
+		);
+	`, nil},
+	{44, "create chief of staff dispatches table", `
+		CREATE TABLE IF NOT EXISTS chief_of_staff_dispatches (
+			id TEXT PRIMARY KEY,
+			chief_session_id TEXT NOT NULL,
+			session_id TEXT NOT NULL UNIQUE,
+			workspace_id TEXT NOT NULL,
+			brief TEXT NOT NULL,
+			label TEXT NOT NULL,
+			agent TEXT NOT NULL,
+			directory TEXT NOT NULL,
+			branch TEXT NOT NULL DEFAULT '',
+			latest_report TEXT NOT NULL DEFAULT '',
+			reported_at TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_chief_dispatches_chief_created
+			ON chief_of_staff_dispatches(chief_session_id, created_at DESC);
+	`, nil},
+	{45, "add structured coordination report to chief dispatches", `
+		ALTER TABLE chief_of_staff_dispatches
+			ADD COLUMN structured_report_json TEXT NOT NULL DEFAULT '';
+	`, applyMigration45},
+	{46, "create chief of staff dispatch messages table", `
+		CREATE TABLE IF NOT EXISTS chief_of_staff_dispatch_messages (
+			id TEXT PRIMARY KEY,
+			dispatch_id TEXT NOT NULL,
+			sender_session_id TEXT NOT NULL,
+			target_session_id TEXT NOT NULL,
+			content TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			read_at TEXT NOT NULL DEFAULT '',
+			acknowledged_at TEXT NOT NULL DEFAULT '',
+			acknowledgement TEXT NOT NULL DEFAULT '',
+			FOREIGN KEY(dispatch_id) REFERENCES chief_of_staff_dispatches(id) ON DELETE CASCADE
+		);
+		CREATE INDEX IF NOT EXISTS idx_chief_dispatch_messages_dispatch_created
+			ON chief_of_staff_dispatch_messages(dispatch_id, created_at, id);
+		CREATE INDEX IF NOT EXISTS idx_chief_dispatch_messages_target_unread
+			ON chief_of_staff_dispatch_messages(target_session_id, read_at, created_at);
+	`, nil},
+	{47, "create workspace context janitor backups table", `
+		CREATE TABLE IF NOT EXISTS workspace_context_janitor_backups (
+			workspace_id TEXT PRIMARY KEY,
+			source_revision INTEGER NOT NULL,
+			source_content TEXT NOT NULL,
+			result_revision INTEGER NOT NULL,
+			agent TEXT NOT NULL,
+			model TEXT NOT NULL,
+			created_at TEXT NOT NULL
+		);
+	`, nil},
+	{48, "drop label from recent_locations", "ALTER TABLE recent_locations DROP COLUMN label", applyMigration48},
+	{49, "add rank to workspaces", `ALTER TABLE workspaces ADD COLUMN rank TEXT NOT NULL DEFAULT ''`, applyMigration49},
+	{50, "repair missing workspace rank", `SELECT 1`, applyMigration49},
+	{51, "create workflow engine journal tables", `CREATE TABLE IF NOT EXISTS workflow_runs (
+    run_id TEXT PRIMARY KEY,
+    script_path TEXT NOT NULL,
+    script_hash TEXT NOT NULL,
+    args_json TEXT,
+    session_id TEXT,
+    workspace_id TEXT,
+    status TEXT NOT NULL,
+    phase TEXT,
+    harness TEXT,
+    result_json TEXT,
+    last_error TEXT,
+    resumable INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    completed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_workflow_runs_status
+    ON workflow_runs(status);
+CREATE INDEX IF NOT EXISTS idx_workflow_runs_created_at
+    ON workflow_runs(created_at DESC);
+CREATE TABLE IF NOT EXISTS workflow_agent_calls (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL,
+    ordinal TEXT NOT NULL,
+    label TEXT,
+    phase TEXT,
+    prompt_hash TEXT,
+    schema_hash TEXT,
+    resolved_model TEXT,
+    resolved_harness TEXT,
+    agent_type TEXT,
+    result_json TEXT,
+    status TEXT NOT NULL,
+    error TEXT,
+    result_path TEXT,
+    started_at TEXT,
+    completed_at TEXT,
+    UNIQUE(run_id, ordinal),
+    FOREIGN KEY (run_id) REFERENCES workflow_runs(run_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_workflow_agent_calls_run_id
+    ON workflow_agent_calls(run_id, id ASC);`, nil},
+	{52, "rename workspace context janitor backups to keeper compact backups", "", applyMigration52},
+	{53, "add closed_state to chief of staff dispatches", "", applyMigration53},
+	{54, "add pinned to workspaces", "", applyMigration54},
+	{55, "create ticket tables", `CREATE TABLE IF NOT EXISTS tickets (
+    id            TEXT PRIMARY KEY,
+    title         TEXT NOT NULL,
+    description   TEXT NOT NULL DEFAULT '',
+    status        TEXT NOT NULL,
+    assignee      TEXT NOT NULL DEFAULT '',
+    cwd           TEXT NOT NULL DEFAULT '',
+    last_agent_id TEXT NOT NULL DEFAULT '',
+    project_id    TEXT NOT NULL DEFAULT '',
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL,
+    closed_at     TEXT NOT NULL DEFAULT '',
+    archived_at   TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);
+CREATE INDEX IF NOT EXISTS idx_tickets_archived_closed
+    ON tickets(archived_at, closed_at);
+CREATE TABLE IF NOT EXISTS ticket_activity (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticket_id   TEXT NOT NULL,
+    kind        TEXT NOT NULL,
+    author      TEXT NOT NULL DEFAULT '',
+    from_status TEXT NOT NULL DEFAULT '',
+    to_status   TEXT NOT NULL DEFAULT '',
+    comment     TEXT NOT NULL DEFAULT '',
+    created_at  TEXT NOT NULL,
+    FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_ticket_activity_ticket
+    ON ticket_activity(ticket_id, id ASC);
+CREATE TABLE IF NOT EXISTS ticket_attachments (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticket_id   TEXT NOT NULL,
+    filename    TEXT NOT NULL,
+    path        TEXT NOT NULL DEFAULT '',
+    note        TEXT NOT NULL DEFAULT '',
+    created_at  TEXT NOT NULL,
+    FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_ticket_attachments_ticket
+    ON ticket_attachments(ticket_id, id ASC);`, nil},
+	{56, "create ticket event log", `CREATE TABLE IF NOT EXISTS ticket_events (
+    seq         INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticket_id   TEXT NOT NULL,
+    kind        TEXT NOT NULL,
+    author      TEXT NOT NULL DEFAULT '',
+    from_status TEXT NOT NULL DEFAULT '',
+    to_status   TEXT NOT NULL DEFAULT '',
+    comment     TEXT NOT NULL DEFAULT '',
+    detail      TEXT NOT NULL DEFAULT '',
+    created_at  TEXT NOT NULL,
+    FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_ticket_events_ticket
+    ON ticket_events(ticket_id, seq);
+CREATE TABLE IF NOT EXISTS ticket_event_cursors (
+    identity   TEXT NOT NULL,
+    ticket_id  TEXT NOT NULL,
+    cursor     INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (identity, ticket_id),
+    FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
+);`, nil},
+	{57, "add resume_session_id to tickets", "ALTER TABLE tickets ADD COLUMN resume_session_id TEXT NOT NULL DEFAULT ''", applyMigration57},
+	{58, "create ticket subscriptions", `CREATE TABLE IF NOT EXISTS ticket_subscriptions (
+    identity   TEXT NOT NULL,
+    ticket_id  TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (identity, ticket_id),
+    FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
+);`, nil},
+	{59, "drop review_loop tables and settings", `
+		DROP TABLE IF EXISTS review_loop_interactions;
+		DROP TABLE IF EXISTS review_loop_iterations;
+		DROP TABLE IF EXISTS review_loop_runs;
+		DROP TABLE IF EXISTS session_review_loops;
+		DELETE FROM settings WHERE key IN ('review_loop_prompt_presets','review_loop_last_preset','review_loop_last_prompt','review_loop_last_iterations','review_loop_model');
+	`, nil},
+	{60, "add reconciled_at to tickets", "ALTER TABLE tickets ADD COLUMN reconciled_at TEXT NOT NULL DEFAULT ''", applyMigration60},
+	{61, "create tasks table", `CREATE TABLE IF NOT EXISTS tasks (
+		id TEXT PRIMARY KEY,
+		kind TEXT NOT NULL,
+		subject TEXT NOT NULL,
+		state TEXT NOT NULL,
+		attempts INTEGER NOT NULL DEFAULT 0,
+		next_attempt_at TEXT NOT NULL,
+		last_error TEXT NOT NULL DEFAULT '',
+		meta_json TEXT NOT NULL DEFAULT '',
+		requeued INTEGER NOT NULL DEFAULT 0,
+		created_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL
+	)`, nil},
+	{62, "create notifications table", `CREATE TABLE IF NOT EXISTS notifications (
+		id TEXT PRIMARY KEY,
+		kind TEXT NOT NULL,
+		title TEXT NOT NULL DEFAULT '',
+		body TEXT NOT NULL DEFAULT '',
+		detail TEXT NOT NULL DEFAULT '',
+		source_kind TEXT NOT NULL DEFAULT '',
+		source_id TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL,
+		read_at TEXT NOT NULL DEFAULT ''
+	);
+	CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at)`, nil},
+	{63, "create presentation tables", `
+		CREATE TABLE IF NOT EXISTS presentations (
+			id TEXT PRIMARY KEY,
+			session_id TEXT NOT NULL,
+			ticket_id TEXT,
+			title TEXT NOT NULL,
+			kind TEXT NOT NULL,
+			repo_path TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'open',
+			created_at TEXT NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_presentations_session ON presentations(session_id);
+		CREATE TABLE IF NOT EXISTS presentation_rounds (
+			id TEXT PRIMARY KEY,
+			presentation_id TEXT NOT NULL REFERENCES presentations(id) ON DELETE CASCADE,
+			seq INTEGER NOT NULL,
+			manifest_yaml TEXT NOT NULL,
+			base_sha TEXT NOT NULL,
+			head_sha TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			submitted_at TEXT,
+			UNIQUE(presentation_id, seq)
+		);
+		CREATE TABLE IF NOT EXISTS presentation_comments (
+			id TEXT PRIMARY KEY,
+			round_id TEXT NOT NULL REFERENCES presentation_rounds(id) ON DELETE CASCADE,
+			filepath TEXT NOT NULL,
+			line_start INTEGER NOT NULL,
+			line_end INTEGER NOT NULL,
+			side TEXT NOT NULL,
+			content TEXT NOT NULL,
+			author TEXT NOT NULL DEFAULT 'user',
+			created_at TEXT NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_presentation_comments_round ON presentation_comments(round_id);
+	`, nil},
+	{64, "add closed_intentionally_at to sessions", "ALTER TABLE sessions ADD COLUMN closed_intentionally_at TEXT NOT NULL DEFAULT ''", applyMigration64},
+	{65, "add verdict to presentation_rounds", "", applyMigration65},
+	{66, "add durable ticket role ownership", `
+		CREATE TABLE IF NOT EXISTS ticket_role_owners (
+			role TEXT NOT NULL,
+			ticket_id TEXT NOT NULL,
+			created_at TEXT NOT NULL DEFAULT '',
+			PRIMARY KEY (role, ticket_id),
+			FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
+		);
+		CREATE INDEX IF NOT EXISTS idx_ticket_role_owners_ticket
+			ON ticket_role_owners(ticket_id, role);
+		INSERT OR IGNORE INTO ticket_role_owners (role, ticket_id, created_at)
+		SELECT 'chief_of_staff', t.id, t.created_at
+		FROM tickets t
+		JOIN ticket_events e ON e.ticket_id = t.id AND e.kind = 'created'
+		WHERE t.assignee != ''
+			AND t.archived_at = ''
+			AND t.status NOT IN ('done', 'failed', 'crashed')
+			AND NOT EXISTS (
+				SELECT 1 FROM ticket_events assigned
+				WHERE assigned.ticket_id = t.id AND assigned.kind = 'assigned'
+			);
+	`, nil},
+	{67, "rename ticket artifact handover records to attachments", `
+		UPDATE ticket_activity SET kind = 'attach' WHERE kind = 'handover';
+		UPDATE ticket_events SET kind = 'attach_submitted' WHERE kind = 'handover_submitted';
+	`, nil},
+	{68, "create markdown annotation drafts table", `CREATE TABLE IF NOT EXISTS markdown_annotation_drafts (
+		path TEXT PRIMARY KEY,
+		annotations_json TEXT NOT NULL,
+		generation INTEGER NOT NULL,
+		tombstone_generation INTEGER NOT NULL DEFAULT 0,
+		updated_at TEXT NOT NULL
+	)`, nil},
+	{69, "create ticket delivery attention table", `CREATE TABLE IF NOT EXISTS ticket_delivery_attention (
+		observer_key TEXT PRIMARY KEY,
+		last_attention_at TEXT NOT NULL
+	)`, nil},
+	{70, "create delegation operations table", delegationOperationsSchema, nil},
+	{71, "add delegation worktree ownership token", "", applyMigration71},
+	{72, "add delegation initiating chief identity", "", applyMigration72},
+	{73, "create automation foundation tables", legacyMigration73SQL, func(tx *sql.Tx) error {
+		if _, err := tx.Exec(legacyMigration73SQL); err != nil {
+			return err
+		}
+		return applyMigration73(tx)
+	}},
+	{74, "add GitHub automation observation and continuity", `
+		CREATE TABLE IF NOT EXISTS automation_provider_cursors (
+			definition_id TEXT NOT NULL,
+			provider TEXT NOT NULL,
+			scope TEXT NOT NULL,
+			observed_at TEXT NOT NULL,
+			PRIMARY KEY(definition_id, provider, scope),
+			FOREIGN KEY(definition_id) REFERENCES automation_definitions(id)
+		);
+		CREATE TABLE IF NOT EXISTS automation_review_request_edges (
+			definition_id TEXT NOT NULL,
+			subject_key TEXT NOT NULL,
+			host TEXT NOT NULL,
+			active INTEGER NOT NULL DEFAULT 0,
+			cycle INTEGER NOT NULL DEFAULT 0,
+			accepted_cycle INTEGER NOT NULL DEFAULT 0,
+			last_observed_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			PRIMARY KEY(definition_id, subject_key),
+			FOREIGN KEY(definition_id) REFERENCES automation_definitions(id)
+		);
+		CREATE INDEX IF NOT EXISTS idx_automation_review_edges_host
+			ON automation_review_request_edges(definition_id, host, active);
+		CREATE TABLE IF NOT EXISTS automation_continuity_bindings (
+			definition_id TEXT NOT NULL,
+			continuity_key TEXT NOT NULL,
+			ticket_id TEXT NOT NULL,
+			session_id TEXT NOT NULL,
+			workspace_id TEXT NOT NULL,
+			pane_id TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			PRIMARY KEY(definition_id, continuity_key),
+			FOREIGN KEY(definition_id) REFERENCES automation_definitions(id)
+		);
+		CREATE TABLE IF NOT EXISTS automation_ticket_occurrence_events (
+			run_id TEXT PRIMARY KEY,
+			ticket_id TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			FOREIGN KEY(run_id) REFERENCES automation_runs(id),
+			FOREIGN KEY(ticket_id) REFERENCES tickets(id)
+		);
+	`, nil},
+	{75, "persist the applied automation definition YAML", "", applyMigration75},
+	{76, "automations v2: definitions clean slate", "", applyMigration76},
+	{77, "automations v2: explicit run and binding state", "", applyMigration77},
+	{78, "add launch_intent to sessions", "", applyMigration78},
+	{79, "convert recoverable flag to session state", "", applyMigration79},
+	{80, "create file_activity table", `CREATE TABLE IF NOT EXISTS file_activity (
+		path TEXT NOT NULL,
+		source TEXT NOT NULL,
+		session_id TEXT,
+		last_at TEXT NOT NULL,
+		count INTEGER NOT NULL DEFAULT 1,
+		PRIMARY KEY(path, source)
+	);
+	CREATE INDEX IF NOT EXISTS idx_file_activity_last_at ON file_activity(last_at DESC);`, nil},
+	{81, "add turn stamps to sessions", "", applyMigration81},
+	{82, "define the ticket participant rule once as a view", `
+		DROP VIEW IF EXISTS ticket_participants;
+		CREATE VIEW ticket_participants (ticket_id, identity) AS
+			SELECT id, assignee FROM tickets WHERE assignee != ''
+			UNION
+			SELECT e.ticket_id, e.author FROM ticket_events e
+			WHERE e.author != '' AND e.kind != 'commented'
+				AND NOT (
+					e.kind = 'created' AND EXISTS (
+						SELECT 1 FROM ticket_role_owners ro WHERE ro.ticket_id = e.ticket_id
+					)
+				)
+			UNION
+			SELECT ticket_id, identity FROM ticket_subscriptions WHERE identity != ''
+			UNION
+			SELECT ticket_id, ('role:' || role) FROM ticket_role_owners WHERE role != '';
+	`, nil},
+	{83, "reserve tickets during delegation preparation", `
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_delegation_operations_active_ticket
+			ON delegation_operations(ticket_id)
+			WHERE ticket_id != '' AND state IN ('accepted', 'preparing');
+	`, nil},
+	{84, "create event bus log and consumer cursors", `CREATE TABLE IF NOT EXISTS bus_events (
+    seq        INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL,
+    subject    TEXT NOT NULL DEFAULT '',
+    payload    TEXT NOT NULL DEFAULT '',
+    source     TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_bus_events_name ON bus_events(name, seq);
+CREATE INDEX IF NOT EXISTS idx_bus_events_subject ON bus_events(subject, seq);
+CREATE TABLE IF NOT EXISTS bus_consumers (
+    name       TEXT PRIMARY KEY,
+    cursor     INTEGER NOT NULL DEFAULT 0,
+    filter     TEXT NOT NULL DEFAULT '',
+    enabled    INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT NOT NULL DEFAULT ''
+);`, nil},
+	{85, "add the snooze deadline to sessions", "", applyMigration85},
+	{86, "create session annotation drafts table", `CREATE TABLE IF NOT EXISTS session_annotation_drafts (
+		session_id TEXT PRIMARY KEY,
+		annotations_json TEXT NOT NULL,
+		generation INTEGER NOT NULL,
+		tombstone_generation INTEGER NOT NULL DEFAULT 0,
+		updated_at TEXT NOT NULL
+	)`, nil},
+	{87, "create the durable job queue", `CREATE TABLE IF NOT EXISTS jobs (
+    id           TEXT PRIMARY KEY,
+    kind         TEXT NOT NULL,
+    unique_key   TEXT NOT NULL DEFAULT '',
+    priority     INTEGER NOT NULL DEFAULT 0,
+    payload      TEXT NOT NULL DEFAULT '',
+    result       TEXT NOT NULL DEFAULT '',
+    state        TEXT NOT NULL,
+    attempts     INTEGER NOT NULL DEFAULT 0,
+    max_attempts INTEGER NOT NULL DEFAULT 0,
+    scheduled_at TEXT NOT NULL,
+    last_error   TEXT NOT NULL DEFAULT '',
+    requeued     INTEGER NOT NULL DEFAULT 0,
+    created_at   TEXT NOT NULL,
+    updated_at   TEXT NOT NULL
+);
+-- Coalescing identity. Partial, because a job without a unique key is
+-- deliberately distinct and any number of them may coexist.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_unique_key ON jobs(kind, unique_key) WHERE unique_key <> '';
+-- The dispatch selection: claimable rows in the order they are claimed.
+CREATE INDEX IF NOT EXISTS idx_jobs_eligible ON jobs(state, scheduled_at, priority DESC);`, nil},
+	{88, "create the document store", `CREATE TABLE IF NOT EXISTS documents (
+    namespace  TEXT NOT NULL,
+    collection TEXT NOT NULL,
+    id         TEXT NOT NULL,
+    body       TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (namespace, collection, id)
+);
+-- Every query is scoped to one collection, so the primary key is also the
+-- access path: a query scans the (namespace, collection) prefix and no further.
+-- Declared fields carry no index of their own in v1 (see the A3 plan) — the
+-- declaration is the contract, and the physical index waits for a measurement.
+CREATE TABLE IF NOT EXISTS document_collections (
+    namespace   TEXT NOT NULL,
+    collection  TEXT NOT NULL,
+    fields_json TEXT NOT NULL,
+    updated_at  TEXT NOT NULL,
+    PRIMARY KEY (namespace, collection)
+);`, nil},
+	{89, "rebuild the document store as a table per collection", ``, applyMigration89},
+	{90, "give every document a revision", ``, applyMigration90},
+	{91, "store document timestamps in an encoding that sorts", ``, applyMigration91},
+	{92, "add the session pin and the satellite parent to sessions", ``, applyMigration92},
+	{93, "add the note to session annotation drafts", ``, applyMigration93},
+	{94, "store job and notification timestamps in an encoding that sorts", ``, applyMigration94},
+	{95, "store turn, cursor and listing timestamps in an encoding that sorts", ``, applyMigration95},
+	{96, "add the context-window cap pin to sessions", ``, applyMigration96},
+	{97, "add the activity line and its transcript cursor to sessions", ``, applyMigration97},
+	{99, "attribute role-acted ticket events to the role", ``, applyMigration99},
+	{100, "add the severity level to notifications", ``, applyMigration100},
+	{101, "create agent messages and drop the dispatch message table", `
+		CREATE TABLE IF NOT EXISTS agent_messages (
+			id TEXT PRIMARY KEY,
+			sender_session_id TEXT NOT NULL,
+			target_session_id TEXT NOT NULL,
+			content TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			delivered_at TEXT NOT NULL DEFAULT ''
+		);
+		CREATE INDEX IF NOT EXISTS idx_agent_messages_target_queued
+			ON agent_messages(target_session_id, delivered_at, created_at, id);
+		CREATE INDEX IF NOT EXISTS idx_agent_messages_sender_created
+			ON agent_messages(sender_session_id, target_session_id, created_at);
+		DROP TABLE IF EXISTS chief_of_staff_dispatch_messages;
+	`, nil},
+	{104, "remember a parked supervised child across daemon restarts", `CREATE TABLE IF NOT EXISTS supervised_parks (
+    child           TEXT PRIMARY KEY,
+    parked_at       TEXT NOT NULL,
+    restart_attempt INTEGER NOT NULL DEFAULT 0,
+    exit_at         TEXT NOT NULL DEFAULT '',
+    exit_code       INTEGER,
+    exit_signal     TEXT NOT NULL DEFAULT '',
+    exit_error      TEXT NOT NULL DEFAULT ''
+);`, nil},
+	{106, "add durable per-session token cost state", ``, applyMigration106},
+	{107, "record which ticket event a delivery covered", ``, applyMigration107},
+	{109, "auto mode config, proposals and denials", `CREATE TABLE IF NOT EXISTS automode_config (
+    id               INTEGER PRIMARY KEY CHECK (id = 1),
+    enabled_default  INTEGER NOT NULL DEFAULT 1,
+    environment      TEXT NOT NULL DEFAULT '[]',
+    allow_patterns   TEXT NOT NULL DEFAULT '[]',
+    hard_deny        TEXT NOT NULL DEFAULT '[]',
+    classifier_model TEXT NOT NULL DEFAULT '',
+    escalation_model TEXT NOT NULL DEFAULT '',
+    updated_at       TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS automode_proposals (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind        TEXT NOT NULL,
+    target      TEXT NOT NULL DEFAULT '',
+    value       TEXT NOT NULL,
+    proposed_by TEXT NOT NULL DEFAULT '',
+    state       TEXT NOT NULL DEFAULT 'pending',
+    created_at  TEXT NOT NULL,
+    resolved_at TEXT NOT NULL DEFAULT ''
+);
+-- The review list: everything still pending, oldest first.
+CREATE INDEX IF NOT EXISTS idx_automode_proposals_state ON automode_proposals(state, id);
+CREATE TABLE IF NOT EXISTS automode_denials (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL DEFAULT '',
+    tool       TEXT NOT NULL DEFAULT '',
+    signature  TEXT NOT NULL DEFAULT '',
+    reason     TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DESC);`, nil},
+	{110, "record which rule denied an auto mode call", ``, applyMigration110},
+	{111, "one pending auto mode proposal per asker", `CREATE UNIQUE INDEX IF NOT EXISTS
+    idx_automode_proposals_pending_ask
+    ON automode_proposals(kind, target, value, proposed_by)
+    WHERE state = 'pending';`, nil},
+	{114, "auto mode judges from an ordered model list per layer", ``, applyMigration114},
+	{117, "index automation provenance lookups", `
+		CREATE INDEX IF NOT EXISTS idx_automation_runs_session_created
+			ON automation_runs(session_id, created_at DESC, id DESC);
+		CREATE INDEX IF NOT EXISTS idx_automation_runs_ticket_created
+			ON automation_runs(ticket_id, created_at DESC, id DESC);
+	`, nil},
+	{118, "the ticket board's font scale becomes the garden's", `
+		INSERT OR IGNORE INTO settings (key, value)
+			SELECT 'gardenScale', value FROM settings WHERE key = 'ticketBoardScale';
+		DELETE FROM settings WHERE key = 'ticketBoardScale';
+	`, nil},
+	{119, "record review automation activation baselines", ``, applyMigration119},
+	{120, "watch seeds and coalesce their unread bells", `
+		CREATE TABLE IF NOT EXISTS garden_seed_watches (
+			watcher_session_id TEXT NOT NULL,
+			seed_id TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			PRIMARY KEY(watcher_session_id, seed_id)
+		);
+		CREATE INDEX IF NOT EXISTS idx_garden_seed_watches_seed
+			ON garden_seed_watches(seed_id, watcher_session_id);
+		CREATE TABLE IF NOT EXISTS garden_seed_bells (
+			watcher_session_id TEXT NOT NULL,
+			seed_id TEXT NOT NULL,
+			event_kind TEXT NOT NULL,
+			message_id TEXT NOT NULL UNIQUE,
+			created_at TEXT NOT NULL,
+			PRIMARY KEY(watcher_session_id, seed_id)
+		);
+	`, nil},
+	{121, "record the last observed model request per session", `
+		ALTER TABLE sessions ADD COLUMN last_model_request_at TEXT;
+		UPDATE sessions SET last_model_request_at = state_updated_at
+			WHERE last_model_request_at IS NULL OR last_model_request_at = '';
+	`, applyMigration121},
+	{122, "journal the one-time legacy ticket recovery", `
+		CREATE TABLE IF NOT EXISTS legacy_ticket_recovery_runs (
+			version                 INTEGER PRIMARY KEY,
+			state                   TEXT NOT NULL,
+			inventory_json          TEXT NOT NULL,
+			counts_json             TEXT NOT NULL DEFAULT '{}',
+			warning_notification_id TEXT NOT NULL DEFAULT '',
+			started_at              TEXT NOT NULL,
+			recovery_at             TEXT NOT NULL,
+			finished_at             TEXT NOT NULL DEFAULT '',
+			terminal_error          TEXT NOT NULL DEFAULT ''
+		);
+		CREATE TABLE IF NOT EXISTS legacy_ticket_recovery_sources (
+			run_version INTEGER NOT NULL,
+			path        TEXT NOT NULL,
+			family      TEXT NOT NULL,
+			size        INTEGER NOT NULL,
+			mod_time_ns INTEGER NOT NULL,
+			sha256      TEXT NOT NULL,
+			state       TEXT NOT NULL DEFAULT 'pending',
+			detail      TEXT NOT NULL DEFAULT '',
+			PRIMARY KEY (run_version, path)
+		);
+		CREATE INDEX IF NOT EXISTS idx_legacy_ticket_recovery_sources_state
+			ON legacy_ticket_recovery_sources(run_version, state);
+		CREATE TABLE IF NOT EXISTS legacy_ticket_recovery_items (
+			fingerprint              TEXT PRIMARY KEY,
+			run_version              INTEGER NOT NULL,
+			source_kind              TEXT NOT NULL,
+			source_key               TEXT NOT NULL,
+			ticket_id                TEXT NOT NULL DEFAULT '',
+			recovered_local_identity TEXT NOT NULL DEFAULT '',
+			result                   TEXT NOT NULL,
+			detail                   TEXT NOT NULL DEFAULT '',
+			created_at               TEXT NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_legacy_ticket_recovery_items_ticket
+			ON legacy_ticket_recovery_items(ticket_id, fingerprint);
+		CREATE TABLE IF NOT EXISTS legacy_ticket_seed_links (
+			ticket_id               TEXT PRIMARY KEY,
+			seed_id                 TEXT NOT NULL UNIQUE,
+			source_kind             TEXT NOT NULL,
+			evidence_fingerprint    TEXT NOT NULL,
+			original_terminal_state TEXT NOT NULL,
+			created_at              TEXT NOT NULL
+		);
+	`, nil},
+	{123, "persist session transcript bindings", ``, applyMigration123},
+	{124, "one model list for both classifier passes", ``, applyMigration124},
+	{125, "the environment becomes slots the rules can look up", ``, applyMigration125},
+	{126, "seed slugs drop their stop words", ``, applyMigration126},
+	{127, "pull requests a session's agent opened", `
+		CREATE TABLE IF NOT EXISTS session_pull_requests (
+			session_id        TEXT NOT NULL,
+			pr_id             TEXT NOT NULL,
+			repository        TEXT NOT NULL,
+			number            INTEGER NOT NULL,
+			url               TEXT NOT NULL,
+			created_at        TEXT NOT NULL,
+			title             TEXT NOT NULL DEFAULT '',
+			draft             INTEGER NOT NULL DEFAULT 0,
+			state             TEXT NOT NULL DEFAULT 'open',
+			ci_status         TEXT NOT NULL DEFAULT '',
+			review_status     TEXT NOT NULL DEFAULT '',
+			mergeable_state   TEXT NOT NULL DEFAULT '',
+			head_sha          TEXT NOT NULL DEFAULT '',
+			head_branch       TEXT NOT NULL DEFAULT '',
+			status_fetched_at TEXT NOT NULL DEFAULT '',
+			last_activity_at  TEXT NOT NULL DEFAULT '',
+			PRIMARY KEY (session_id, pr_id)
+		);
+		CREATE INDEX IF NOT EXISTS idx_session_pull_requests_session
+			ON session_pull_requests(session_id, created_at DESC);
+	`, nil},
+	{128, "session pull request refresh keeps its own pacing cursor", ``, applyMigration128},
+	{129, "the screen a session showed when its process exited", `
+		CREATE TABLE IF NOT EXISTS session_exit_screens (
+			session_id  TEXT PRIMARY KEY,
+			text        TEXT NOT NULL DEFAULT '',
+			cols        INTEGER NOT NULL DEFAULT 0,
+			rows        INTEGER NOT NULL DEFAULT 0,
+			exit_code   INTEGER NOT NULL DEFAULT 0,
+			exit_signal TEXT NOT NULL DEFAULT '',
+			exited_at   TEXT NOT NULL
+		);
+	`, nil},
+	{130, "intentional session teardown survives session removal", `
+		CREATE TABLE IF NOT EXISTS session_teardown_tombstones (
+			session_id        TEXT PRIMARY KEY,
+			requested_at      TEXT NOT NULL,
+			driver_plugin_name TEXT NOT NULL DEFAULT '',
+			driver_run_id      TEXT NOT NULL DEFAULT '',
+			driver_report_seq  INTEGER NOT NULL DEFAULT 0
+		);
+		INSERT OR IGNORE INTO session_teardown_tombstones (session_id, requested_at)
+			SELECT id, closed_intentionally_at FROM sessions WHERE closed_intentionally_at <> '';
+	`, nil},
+	{131, "repair partial agent driver cursor schemas", ``, applyMigration131},
+	{132, "separate agent mailbox receipts from message content", legacyMigration132SQL, func(tx *sql.Tx) error {
+		return applyMigration132(tx, legacyMigration132SQL)
+	}},
+	{133, "index unread agent mailbox delivery", `
+		DROP INDEX IF EXISTS idx_agent_mailbox_recipient_queued;
+		CREATE INDEX IF NOT EXISTS idx_agent_mailbox_recipient_unread
+			ON agent_mailbox_items(recipient_session_id, created_at, id)
+			WHERE read_at = '';
+	`, nil},
+	{134, "remove the workspace context and the keeper duties", `
+		DROP TABLE IF EXISTS workspace_keeper_compact_backups;
+		DROP TABLE IF EXISTS workspace_context_janitor_backups;
+		DROP TABLE IF EXISTS workspace_contexts;
+		DELETE FROM settings WHERE key IN (
+			'workspace_keeper_compact', 'workspace_context_janitor',
+			'notebook.summarize_session', 'notebook.summarize_session.enabled',
+			'notebook.narrate_workspace', 'notebook.narrate_workspace.enabled',
+			'notebook.tasks_enabled', 'notebook.cron.frequency', 'notebook.cron.timezone',
+			'notebook.dreaming.frequency', 'notebook.dreaming.timezone', 'notebook.dreaming.enabled'
+		);
+		DELETE FROM jobs WHERE kind IN ('compact_context', 'summarize_session', 'narrate_workspace', 'notebook_cron');
+		DELETE FROM tasks WHERE kind IN ('compact_context', 'summarize_session', 'narrate_workspace', 'notebook_cron');
+	`, nil},
+	{135, "closing a session records it instead of deleting it", "", applyMigration135},
+	{136, "observed worktree state, the keep pin and the sweep log", legacyMigration136SQL, func(tx *sql.Tx) error {
+		return applyMigration136(tx, legacyMigration136SQL)
+	}},
+	{137, "name the repository a session ran in so the ledger can filter by it", "", applyMigration137},
+	{138, "persist delegation preferences", legacyMigration138SQL, func(tx *sql.Tx) error {
+		if _, err := tx.Exec(legacyMigration138SQL); err != nil {
+			return err
+		}
+		has, err := columnExists(tx, "delegation_operations", "resolved_preferences")
+		if err == nil && !has {
+			_, err = tx.Exec("ALTER TABLE delegation_operations ADD COLUMN resolved_preferences TEXT NOT NULL DEFAULT ''")
+		}
+		return err
+	}},
+	{139, "convert dispatch notifications to Garden subscriptions", "", migrateGardenDispatchWatches},
+	{140, "auto mode globs become prefix rules, hosts and an approval policy", ``, applyMigration140},
+	{141, "record where a plugin session's harness writes its transcript", "", applyMigration141},
+	{142, "add explicit delegation recovery facts", "", applyMigration142},
+	{143, "snapshot accepted delegation handovers", "", applyMigration143},
+	{144, "snapshot accepted delegation parents", "", applyMigration144},
+	{145, "move automation continuity from tickets to Garden seeds", "", applyMigration145},
+	{146, "guardian model selection", "", applyMigration146},
+	{147, "record structured task failure diagnostics", "", applyMigration147},
+	{148, "durable Garden seed event handling", ``, applyMigration148},
+	{149, "index delegation session identity", `CREATE INDEX IF NOT EXISTS idx_delegation_operations_session ON delegation_operations(session_id)`, nil},
+	{150, "durable pull request readiness watches", ``, applyMigration150},
+	{151, "rename install profiles to instances", ``, applyMigration151},
+	{152, "file long-context session cost observations under their tier", ``, func(tx *sql.Tx) error { return migrateSessionCostTiers(tx, 152) }},
+	{153, "keep every delegation preferences revision", ``, applyMigration153},
+	{154, "record when a session's agent process launched", "", applyMigration154},
+	{155, "session last-seen stamps move to UTC so the ledger window compares instants", "", applyMigration155},
+	{156, "drop session todos", "", applyMigration156},
+	{157, "retire the apps platform state", "", applyMigration157},
+	{158, "create profiles, desktops and their panes beside the workspace tables", legacyMigration158SQL, func(tx *sql.Tx) error {
+		return applyMigration158(tx, legacyMigration158SQL)
+	}},
+	{ProfileConversionSchemaVersion, "convert legacy workspaces into the Default profile and its desktops", "", applyProfileConversion},
+	{160, "record the profile each crew member belongs to", `
+		CREATE TABLE IF NOT EXISTS crew_profiles (
+			member_id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_crew_profiles_profile ON crew_profiles(profile_id);
+	`, nil},
+	{161, "give each profile its own chief of staff", legacyMigration161SQL, func(tx *sql.Tx) error {
+		return applyMigration161(tx, legacyMigration161SQL)
+	}},
+	{162, "drop the retired workspace tables and columns", legacyMigration162SQL, func(tx *sql.Tx) error {
+		return applyMigration162(tx, legacyMigration162SQL)
+	}},
+	{163, "file GPT-6.1 Sol long-context observations under their tier", "", func(tx *sql.Tx) error { return migrateSessionCostTiers(tx, 163) }},
+	{164, "keep conversations referenced by open work", `
+ CREATE TABLE IF NOT EXISTS kept_conversations (
+ resume_id TEXT NOT NULL, agent TEXT NOT NULL,
+ source_path TEXT NOT NULL, bytes INTEGER NOT NULL, stored_bytes INTEGER NOT NULL,
+ copied_at TEXT NOT NULL, released_at TEXT NOT NULL DEFAULT '', deleted_at TEXT NOT NULL DEFAULT '',
+ PRIMARY KEY (agent, resume_id)
+ );
+ `, nil},
+	{165, "scope the Garden to profiles", "", migrateGardenProfiles},
+	{166, "pin and forget kept conversations", legacyMigration166SQL, func(tx *sql.Tx) error {
+		return applyMigration166(tx, legacyMigration166SQL)
+	}},
+	{167, "place background launches and remember the desktop each item starts on", legacyMigration167SQL, func(tx *sql.Tx) error {
+		return applyMigration167(tx, legacyMigration167SQL)
+	}},
 	{168, "addressed inbox delivery", `
  CREATE TABLE inbox_items (
  id TEXT PRIMARY KEY, address TEXT NOT NULL, kind TEXT NOT NULL,
@@ -1357,11 +1402,14 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
  DELETE FROM tasks WHERE kind IN ('reconcile','recover_legacy_closed_work');
  ALTER TABLE presentations ADD COLUMN address TEXT NOT NULL DEFAULT '';
  UPDATE presentations SET address = 'session:' || session_id;
-`},
-	{169, "record the session a successor replaced in its terminal, and the terminal each pane holds", `
- ALTER TABLE sessions ADD COLUMN succeeds TEXT NOT NULL DEFAULT '';
- CREATE INDEX idx_sessions_succeeds ON sessions(succeeds) WHERE succeeds != '';
-`},
+`, nil},
+	{169, "record the session a successor replaced in its terminal, and the terminal each pane holds", legacyMigration169SQL, func(tx *sql.Tx) error {
+		if err := addPaneRuntimeColumn(tx); err != nil {
+			return err
+		}
+		_, err := tx.Exec(legacyMigration169SQL)
+		return err
+	}},
 	{170, "let several terminal tiles show one session", `
  CREATE TABLE desktop_panes_several (
  pane_id TEXT PRIMARY KEY, desktop_id TEXT NOT NULL, kind TEXT NOT NULL, session_id TEXT NOT NULL,
@@ -1381,8 +1429,8 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
  WHEN OLD.session_id != '' AND EXISTS (SELECT 1 FROM desktop_panes WHERE session_id = OLD.session_id)
  BEGIN UPDATE sessions SET last_desktop_id = (SELECT desktop_id FROM desktop_panes WHERE session_id = OLD.session_id
  ORDER BY created_at DESC, pane_id DESC LIMIT 1) WHERE id = OLD.session_id; END;
-`},
-	{171, "remember the focus order of each desktop", ""},
+`, nil},
+	{171, "remember the focus order of each desktop", "", addDesktopFocusHistory},
 }
 
 const migration99SQL = `
@@ -1552,16 +1600,6 @@ type SchemaUpgrade struct {
 	BackupPath   string
 }
 
-type SchemaBehindError struct {
-	DatabasePath string
-	Current      int
-	Required     int
-}
-
-func (e *SchemaBehindError) Error() string {
-	return fmt.Sprintf("the database at %s is at schema v%d and this attn needs v%d; only the daemon upgrades it, so start the daemon (`attn daemon ensure`) and retry", e.DatabasePath, e.Current, e.Required)
-}
-
 func openSQLite(dbPath string) (*sql.DB, *tableWrites, error) {
 	dir := filepath.Dir(dbPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -1592,18 +1630,6 @@ func openSQLite(dbPath string) (*sql.DB, *tableWrites, error) {
 	return db, writes, nil
 }
 
-func OpenDBAtSchemaVersion(dbPath string, version int) (*sql.DB, error) {
-	db, _, err := openSQLite(dbPath)
-	if err != nil {
-		return nil, err
-	}
-	if err := applyPendingMigrations(db, 0, 0, version); err != nil {
-		db.Close()
-		return nil, err
-	}
-	return db, nil
-}
-
 func OpenDB(dbPath string) (*sql.DB, error) {
 	db, _, _, err := openUpgradedDB(dbPath)
 	return db, err
@@ -1629,26 +1655,6 @@ func openUpgradedDB(dbPath string) (*sql.DB, *tableWrites, SchemaUpgrade, error)
 		return nil, nil, upgrade, err
 	}
 	return db, writes, upgrade, nil
-}
-
-func openCurrentDB(dbPath string) (*sql.DB, *tableWrites, error) {
-	if _, err := os.Stat(dbPath); err != nil {
-		return nil, nil, fmt.Errorf("opening the database at %s: %w", dbPath, err)
-	}
-	db, writes, err := openSQLite(dbPath)
-	if err != nil {
-		return nil, nil, err
-	}
-	current, err := recordedSchemaVersion(db)
-	if err != nil {
-		db.Close()
-		return nil, nil, fmt.Errorf("reading the schema version of %s: %w", dbPath, err)
-	}
-	if current < LatestSchemaVersion() {
-		db.Close()
-		return nil, nil, &SchemaBehindError{DatabasePath: dbPath, Current: current, Required: LatestSchemaVersion()}
-	}
-	return db, writes, nil
 }
 
 var migratedSchema struct {
@@ -1734,572 +1740,6 @@ func migrateDB(db *sql.DB, dbPath string) error {
 	return err
 }
 
-func upgradeSchema(db *sql.DB, dbPath string) (SchemaUpgrade, error) {
-	upgrade := SchemaUpgrade{DatabasePath: dbPath, To: LatestSchemaVersion()}
-	recorded, err := recordedSchemaVersion(db)
-	if err != nil {
-		return upgrade, fmt.Errorf("getting schema version: %w", err)
-	}
-	upgrade.From = recorded
-	currentVersion, err := legacySchemaVersion(db, recorded)
-	if err != nil {
-		return upgrade, fmt.Errorf("detecting an unversioned legacy schema: %w", err)
-	}
-	if currentVersion >= upgrade.To {
-		return upgrade, nil
-	}
-	if err := refuseEarlyProfileLadder(db, dbPath, currentVersion); err != nil {
-		return upgrade, err
-	}
-
-	if currentVersion > 0 && dbPath != "" && dbPath != ":memory:" {
-		path, err := backupPreMigration(db, dbPath, currentVersion)
-		if err != nil {
-			return upgrade, fmt.Errorf("backing up %s before upgrading schema v%d to v%d: %w", dbPath, currentVersion, upgrade.To, err)
-		}
-		upgrade.BackupPath = path
-		log.Printf("[store] pre-migration backup written to %s (schema v%d -> v%d)", path, currentVersion, upgrade.To)
-	}
-
-	if err := applyPendingMigrations(db, recorded, currentVersion, upgrade.To); err != nil {
-		return upgrade, err
-	}
-	return upgrade, nil
-}
-
-// Desktops dev builds once ran profiles at 152-156 or 156-160 (profiles beside sessions.todos);
-// next's own 158 is the Sol migration, which the desktops ladder runs at 163 (no profiles table).
-func refuseEarlyProfileLadder(db *sql.DB, dbPath string, current int) error {
-	if current < 152 {
-		return nil
-	}
-	var profiles, todos int
-	if err := db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'profiles'`).Scan(&profiles); err != nil {
-		return err
-	}
-	if err := db.QueryRow(`SELECT count(*) FROM pragma_table_info('sessions') WHERE name = 'todos'`).Scan(&todos); err != nil {
-		return err
-	}
-	if profiles == 0 && current >= 158 {
-		return fmt.Errorf("database %s (schema v%d) was upgraded by a build of next whose migration 158 files GPT-6.1 Sol cost observations; this build creates profiles at 158 and runs that migration at 163, so it cannot upgrade it. Reset this instance's database by moving %s aside; production databases never ran that build and are not affected", dbPath, current, dbPath)
-	}
-	if profiles == 0 || todos == 0 {
-		return nil
-	}
-	return fmt.Errorf("database %s (schema v%d) was upgraded by a development build of the desktops branch whose profile migrations ran before next's migrations 156–157 existed (profiles now migrate at 158–162); this build cannot upgrade it. Reset this instance's database by moving %s aside; production databases never ran that build and are not affected", dbPath, current, dbPath)
-}
-
-// One commit for every pending migration: a fresh database runs all of them,
-// and a commit per migration measured 468 fsyncs on Linux (2026-09-29).
-func applyPendingMigrations(db *sql.DB, recorded, currentVersion, through int) error {
-	tx, err := db.Begin()
-	if err != nil {
-		return fmt.Errorf("starting the schema upgrade transaction: %w", err)
-	}
-	defer tx.Rollback()
-	if _, err := tx.Exec(baseSchema); err != nil {
-		return fmt.Errorf("creating the base schema: %w", err)
-	}
-	if err := recordLegacySchemaVersions(tx, recorded, currentVersion); err != nil {
-		return err
-	}
-
-	for _, m := range migrations {
-		if m.version <= currentVersion {
-			continue
-		}
-		if m.version > through {
-			break
-		}
-
-		if m.version == 156 {
-			if err := applyMigration156(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 141 {
-			if err := applyMigration141(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 137 {
-			if err := applyMigration137(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 135 {
-			if err := applyMigration135(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 20 {
-			if err := applyMigration20(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 21 {
-			if err := applyMigration21(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 22 {
-			if err := applyMigration22(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 23 {
-			if err := applyMigration23(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 28 {
-			if err := applyMigration28(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 29 {
-			if err := applyMigration29(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 31 {
-			if err := applyMigration31(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 33 {
-			if err := applyMigration33(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 34 {
-			if err := applyMigration34(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 35 {
-			if err := applyMigration35(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 37 {
-			if err := applyMigration37(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 38 {
-			if err := applyMigration38(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 39 {
-			if err := applyMigration39(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 40 {
-			if err := applyMigration40(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 41 {
-			if err := applyMigration41(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 45 {
-			if err := applyMigration45(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 48 {
-			if err := applyMigration48(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 49 || m.version == 50 {
-			if err := applyMigration49(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 52 {
-			if err := applyMigration52(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 53 {
-			if err := applyMigration53(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 54 {
-			if err := applyMigration54(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 57 {
-			if err := applyMigration57(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 60 {
-			if err := applyMigration60(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 64 {
-			if err := applyMigration64(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 65 {
-			if err := applyMigration65(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 71 {
-			if err := applyMigration71(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 72 {
-			if err := applyMigration72(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 73 {
-			if _, err := tx.Exec(m.sql); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-			if err := applyMigration73(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 75 {
-			if err := applyMigration75(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 76 {
-			if err := applyMigration76(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 77 {
-			if err := applyMigration77(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 78 {
-			if err := applyMigration78(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 79 {
-			if err := applyMigration79(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 81 {
-			if err := applyMigration81(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 85 {
-			if err := applyMigration85(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 89 {
-			if err := applyMigration89(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 90 {
-			if err := applyMigration90(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 91 {
-			if err := applyMigration91(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 92 {
-			if err := applyMigration92(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 93 {
-			if err := applyMigration93(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 94 {
-			if err := applyMigration94(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 95 {
-			if err := applyMigration95(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 96 {
-			if err := applyMigration96(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 97 {
-			if err := applyMigration97(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 99 {
-			if err := applyMigration99(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 100 {
-			if err := applyMigration100(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 106 {
-			if err := applyMigration106(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 107 {
-			if err := applyMigration107(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 110 {
-			if err := applyMigration110(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 119 {
-			if err := applyMigration119(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 121 {
-			if err := applyMigration121(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 123 {
-			if err := applyMigration123(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 114 {
-			if err := applyMigration114(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 124 {
-			if err := applyMigration124(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 125 {
-			if err := applyMigration125(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 126 {
-			if err := applyMigration126(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 128 {
-			if err := applyMigration128(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 131 {
-			if err := applyMigration131(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 139 {
-			if err := migrateGardenDispatchWatches(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 142 {
-			if err := applyMigration142(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 143 {
-			if err := applyMigration143(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 144 {
-			if err := applyMigration144(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 145 {
-			if err := applyMigration145(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 146 {
-			if err := applyMigration146(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 147 {
-			if err := applyMigration147(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 148 {
-			if err := applyMigration148(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 152 || m.version == 163 {
-			if err := migrateSessionCostTiers(tx, m.version); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 165 {
-			if err := migrateGardenProfiles(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 153 {
-			if err := applyMigration153(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 151 {
-			if err := applyMigration151(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 154 {
-			if err := applyMigration154(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 155 {
-			if err := applyMigration155(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 150 {
-			if err := applyMigration150(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 162 {
-			if err := applyMigration162(tx, m.sql); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 161 {
-			if err := applyMigration161(tx, m.sql); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 158 {
-			if err := applyMigration158(tx, m.sql); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == ProfileConversionSchemaVersion {
-			if err := applyProfileConversion(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 138 {
-			if _, err := tx.Exec(m.sql); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-			has, err := columnExists(tx, "delegation_operations", "resolved_preferences")
-			if err == nil && !has {
-				_, err = tx.Exec("ALTER TABLE delegation_operations ADD COLUMN resolved_preferences TEXT NOT NULL DEFAULT ''")
-			}
-			if err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 132 {
-			if err := applyMigration132(tx, m.sql); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 136 {
-			if err := applyMigration136(tx, m.sql); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 140 {
-			if err := applyMigration140(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 171 {
-			if err := addDesktopFocusHistory(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 169 {
-			err := addPaneRuntimeColumn(tx)
-			if err == nil {
-				_, err = tx.Exec(m.sql)
-			}
-			if err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 167 {
-			if err := applyMigration167(tx, m.sql); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 166 {
-			if err := applyMigration166(tx, m.sql); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 157 {
-			if err := applyMigration157(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else {
-			if _, err := tx.Exec(m.sql); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		}
-
-		if _, err := tx.Exec(
-			"INSERT INTO schema_migrations (version, applied_at) VALUES (?, datetime('now'))",
-			m.version,
-		); err != nil {
-			tx.Rollback()
-			return fmt.Errorf("recording migration %d: %w", m.version, err)
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("committing the schema upgrade: %w", err)
-	}
-	return nil
-}
-
 func applyMigration157(tx *sql.Tx) error {
 	rows, err := tx.Query(`SELECT id FROM document_collections WHERE namespace LIKE 'app/%'`)
 	if err != nil {
@@ -2371,7 +1811,7 @@ func migrateSessionCostTiers(tx *sql.Tx, version int) error {
 			log.Printf("[store] migration %d: skipped unreadable session cost for %s: %v", version, id, err)
 			continue
 		}
-		if !rekeyLongContextObservations(&state, onlyModel) {
+		if !rekeyLegacyLongContextObservations(&state, onlyModel) {
 			continue
 		}
 		encoded, err := json.Marshal(state)
@@ -4200,7 +3640,7 @@ func applyMigration126(tx *sql.Tx) error {
 		var title, slug string
 		json.Unmarshal(body["title"], &title)
 		json.Unmarshal(body["step_slug"], &slug)
-		if want := garden.StepSlug(title); want != slug {
+		if want := legacyGardenStepSlug(title); want != slug {
 			encoded, _ := json.Marshal(want)
 			body["step_slug"] = encoded
 			next, err := json.Marshal(body)
@@ -4662,17 +4102,6 @@ func recordLegacySchemaVersions(tx *sql.Tx, recorded, legacy int) error {
 	return nil
 }
 
-func recordedSchemaVersion(db *sql.DB) (int, error) {
-	var tables int
-	if err := db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'`).Scan(&tables); err != nil {
-		return 0, err
-	}
-	if tables == 0 {
-		return 0, nil
-	}
-	return getCurrentVersion(db)
-}
-
 func getCurrentVersion(db *sql.DB) (int, error) {
 	var version int
 	err := db.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version)
@@ -4684,11 +4113,4 @@ func getCurrentVersion(db *sql.DB) (int, error) {
 
 func GetSchemaVersion(db *sql.DB) (int, error) {
 	return getCurrentVersion(db)
-}
-
-func LatestSchemaVersion() int {
-	if len(migrations) == 0 {
-		return 0
-	}
-	return migrations[len(migrations)-1].version
 }

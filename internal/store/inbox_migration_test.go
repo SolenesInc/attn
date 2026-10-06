@@ -62,7 +62,7 @@ func TestMigration168PreservesInboxHistoryAndWatchAddresses(t *testing.T) {
 		t.Fatalf("migrated outstanding=%q err=%v", outstanding, err)
 	}
 	var version int
-	if err := db.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil || version != latestSchemaVersion() {
+	if err := db.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil || version != LatestSchemaVersion() {
 		t.Fatalf("MAX(version)=%d err=%v", version, err)
 	}
 	if _, err := db.Exec("SELECT * FROM agent_mailbox_items"); err == nil {

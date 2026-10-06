@@ -534,8 +534,8 @@ func TestOpenCurrentRefusesAnOlderSchemaWithoutUpgradingIt(t *testing.T) {
 	}
 	_, err := OpenCurrent(f.path)
 	var behind *SchemaBehindError
-	if !errors.As(err, &behind) || behind.Current != ProfileConversionSchemaVersion-1 || behind.Required != LatestSchemaVersion() {
-		t.Fatalf("OpenCurrent = %v, want a refusal naming v%d and v%d", err, ProfileConversionSchemaVersion-1, LatestSchemaVersion())
+	if !errors.As(err, &behind) || len(behind.Missing) == 0 || behind.Missing[0] != ProfileConversionSchemaVersion {
+		t.Fatalf("OpenCurrent = %v, want a refusal naming missing migration %d", err, ProfileConversionSchemaVersion)
 	}
 	if !strings.Contains(err.Error(), "attn daemon ensure") {
 		t.Fatalf("refusal %q does not say how to upgrade", err)
