@@ -18,23 +18,6 @@ type seedHandoverPlan struct {
 	alreadyBound bool
 }
 
-func handoverSessionName(title, sessionID string) string {
-	suffix := strings.ReplaceAll(strings.TrimSpace(sessionID), "-", "")
-	if len(suffix) > 4 {
-		suffix = suffix[:4]
-	}
-	baseLimit := maxSessionNameRunes - len(suffix) - 1
-	base := []rune(strings.TrimSpace(title))
-	if len(base) > baseLimit {
-		base = base[:baseLimit]
-	}
-	name := strings.TrimRight(string(base), "-_. \t")
-	if name == "" {
-		name = "handover"
-	}
-	return name + "-" + suffix
-}
-
 func (d *Daemon) handoverAlreadyBound(operationID, sessionID, seedID string) bool {
 	dispatch, ok := d.gardenDispatch(sessionID)
 	if !ok || strings.TrimSpace(dispatch.OperationID) != strings.TrimSpace(operationID) ||

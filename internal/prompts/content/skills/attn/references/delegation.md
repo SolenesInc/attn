@@ -8,7 +8,7 @@ Use `attn delegate --help` for the installed command syntax. Read the complete b
 
 ## Choose the assignment
 
-For new work, pass a brief. Attn creates its seed. If you are working on a reporting seed, the new seed becomes its child.
+For new work, pass a brief. Attn creates its seed. Start the brief with a `#` heading to name the seed and the agent. If you are working on a reporting seed, the new seed becomes its child.
 
 ```sh
 attn delegate --brief-file question.md --role pathfinder --cwd /notes

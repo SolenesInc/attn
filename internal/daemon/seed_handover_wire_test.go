@@ -21,7 +21,7 @@ func TestAHandoverStartsTheSuccessorWhereThePredecessorLeftOff(t *testing.T) {
 	if err := os.MkdirAll(w.Path("api"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	predecessor, err := cli.Delegate(delegateFrom(source, w.Path("api"), "Investigate the tracked task.", fakeagent.Codex))
+	predecessor, err := cli.Delegate(delegateFrom(source, w.Path("api"), "# Investigate the tracked task\n\nTrace the failing test.", fakeagent.Codex))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -653,7 +653,11 @@ func (d *Daemon) continueAutomationSessionForeground(req automation.WorkRequest,
 	return nil
 }
 
-func (d *Daemon) automationSessionLaunch(req automation.WorkRequest, directory, inputPath string) (string, string) {
+func (d *Daemon) automationSessionLaunch(req automation.WorkRequest, directory, inputPath string) (string, string, error) {
+	seed, _, err := d.readSeed(req.IDs.SeedID)
+	if err != nil {
+		return "", "", err
+	}
 	pullRequest, pullRequestErr := automation.ParsePullRequestInput(req.Context)
 	var pullRequestTarget *automation.PullRequestInput
 	if pullRequestErr == nil {
@@ -663,8 +667,8 @@ func (d *Daemon) automationSessionLaunch(req automation.WorkRequest, directory, 
 	if definition, err := d.store.GetAutomationDefinition(req.DefinitionID); err == nil && definition != nil {
 		definitionName = definition.Name
 	}
-	prompt := automationSessionPrompt(req.Prompt, inputPath, req.IDs.SeedID, definitionName, pullRequestTarget, pullRequestErr == nil)
-	return automationSessionLabel(req, directory), prompt
+	prompt := automationSessionPrompt(req.Prompt, inputPath, req.IDs.SeedID, seed.Title, definitionName, pullRequestTarget, pullRequestErr == nil)
+	return automationSessionLabel(req, directory), prompt, nil
 }
 
 func automationSessionLabel(req automation.WorkRequest, directory string) string {
@@ -676,7 +680,10 @@ func automationSessionLabel(req automation.WorkRequest, directory string) string
 }
 
 func (d *Daemon) startAutomationSession(req automation.WorkRequest, directory, inputPath string) error {
-	label, prompt := d.automationSessionLaunch(req, directory, inputPath)
+	label, prompt, err := d.automationSessionLaunch(req, directory, inputPath)
+	if err != nil {
+		return err
+	}
 	client := newInternalWSClient()
 	message := &protocol.SpawnSessionMessage{Cmd: protocol.CmdSpawnSession, ID: req.IDs.SessionID, Cwd: directory, ProfileID: req.IDs.ProfileID, Agent: req.Launch.Agent, Cols: 80, Rows: 24, Label: protocol.Ptr(label), InitialPrompt: protocol.Ptr(prompt), Model: protocol.Ptr(req.Launch.Model), Effort: protocol.Ptr(req.Launch.Effort), Executable: protocol.Ptr(req.Launch.Executable)}
 	d.handleSpawnSessionWithPolicy(client, message, internalSpawnPolicy{unattendedLaunch: req.Launch, launchPlacement: &launchPlacement{kind: "automation", itemID: strconv.Itoa(req.DefinitionID)}})
@@ -758,11 +765,12 @@ func (d *Daemon) ensureAutomationOccurrenceInput(req automation.WorkRequest) (st
 	}
 	return path, nil
 }
-func automationSessionPrompt(configuredPrompt, inputPath, seedID, definitionName string, pullRequest *automation.PullRequestInput, localOnlyReview bool) string {
+func automationSessionPrompt(configuredPrompt, inputPath, seedID, seedTitle, definitionName string, pullRequest *automation.PullRequestInput, localOnlyReview bool) string {
 	values := prompts.Values{
 		"brief":        configuredPrompt,
 		"input_path":   inputPath,
 		"seed_id":      seedID,
+		"seed_title":   seedTitle,
 		"local_review": fmt.Sprint(localOnlyReview),
 		"has_target":   fmt.Sprint(pullRequest != nil && localOnlyReview),
 	}
