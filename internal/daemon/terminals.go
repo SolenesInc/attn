@@ -12,16 +12,11 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// terminalRegistry is the in-memory copy of the terminal-to-session map the store persists.
-// Readers never touch SQLite; the store syncs it after every commit that can change a binding.
 type terminalRegistry struct {
-	mu    sync.RWMutex
-	byID  map[harness.TerminalID]*terminal
-	shown uint64
-	// A closed session's terminal can still exit after its binding is removed;
-	// that exit still names the session it showed.
-	ending map[harness.TerminalID]endingTerminal
-	// A launch's terminal starts before its pane exists; its hooks still name its session.
+	mu       sync.RWMutex
+	byID     map[harness.TerminalID]*terminal
+	shown    uint64
+	ending   map[harness.TerminalID]endingTerminal
 	expected map[harness.TerminalID]harness.SessionID
 }
 
@@ -38,12 +33,10 @@ func (d *Daemon) terminals() *terminalRegistry {
 	return d.terminalState
 }
 
-// loadTerminals feeds the registry from persisted bindings after each commit.
 func (d *Daemon) loadTerminals() {
 	d.store.OnTerminalBindings(d.terminals().sync)
 }
 
-// shownIn resolves a terminal through its persisted or pending binding.
 func (d *Daemon) shownIn(t harness.TerminalID) (protocol.SessionID, bool) {
 	return d.terminals().Showing(t)
 }
@@ -57,7 +50,6 @@ func (d *Daemon) terminalsOf(sessionID protocol.SessionID) []harness.TerminalID 
 	return d.terminals().Of(sessionID)
 }
 
-// primaryTerminal prefers a live terminal; the backend is asked only when several show the session.
 func (d *Daemon) primaryTerminal(sessionID protocol.SessionID) harness.TerminalID {
 	ids := d.terminalsOf(sessionID)
 	if len(ids) > 1 {
@@ -110,7 +102,6 @@ func (d *Daemon) liveSessions(ctx context.Context) map[protocol.SessionID]struct
 	return sessions
 }
 
-// sync replaces the registry's bindings; a terminal whose session closed is ending.
 func (r *terminalRegistry) sync(bindings []store.TerminalBinding) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -159,7 +150,6 @@ func (r *terminalRegistry) expect(t harness.TerminalID, s harness.SessionID) {
 	r.expected[t] = s
 }
 
-// unexpect drops a launch's terminal whose pane never came.
 func (r *terminalRegistry) unexpect(t harness.TerminalID) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -227,8 +217,6 @@ func (r *terminalRegistry) forgetKey(t harness.TerminalID) {
 	}
 }
 
-// An exit owed to a closed pane lands within milliseconds (embedded) or never (worker),
-// so a minute bounds the notes without racing a late exit.
 const endingGrace = time.Minute
 
 type endingTerminal struct {

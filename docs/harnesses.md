@@ -11,20 +11,18 @@ read the source or probe the binary first, then record it here.
 ## attn identities at the harness boundary
 
 `ATTN_TERMINAL_ID` identifies the launched terminal. Older launches carry the
-same identity under `ATTN_SESSION_ID`. Terminal bindings survive removal of a placement and daemon restart; closing
-a session removes all its bindings. When several terminals show one session,
-ending one removes only its binding; the session runs on in the others. A terminal can change conversations with
-`/clear` or `/resume`, so CLI commands resolve its current attn session when they
-start, and hooks resolve it when the daemon receives them. Native harness
-conversation ids remain separate text values.
+same identity under `ATTN_SESSION_ID`. A terminal can change conversations with
+`/clear` or `/resume`. CLI commands address the conversation shown when the
+command starts; hooks apply to the conversation shown when the report arrives.
+Native harness conversation ids remain separate text values.
 
-The binding migration records the old self-ID mapping for open sessions with no
-pane mapping. Known pane terminals take precedence; runtime lookup uses only
-these persisted bindings and pending launches.
+Removing a placement keeps the terminal addressable, including after daemon
+restart. Closing a session ends its terminal associations. When several
+terminals show one session, ending one leaves the others running.
 
 Plugin driver payloads retain the `session_id` wire spelling for the terminal.
-Session teardown saves that terminal before removing its pane, so restart
-recovery can finish the driver notification with the original identity.
+Close notifications, including those completed after restart, use the original
+terminal identity.
 
 ## Claude Code
 
