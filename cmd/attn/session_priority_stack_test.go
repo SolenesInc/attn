@@ -50,18 +50,18 @@ func TestSessionPriorityCLI(t *testing.T) {
 	app := s.App()
 	id := s.Spawn(app, fakeagent.Claude, s.Path("priority"))
 	cliAgent := s.Launched(id)
-	terminal, ok := envValue(cliAgent.Env, "ATTN_SESSION_ID")
+	terminal, ok := envValue(cliAgent.Env, "ATTN_TERMINAL_ID")
 	if !ok || terminal != app.Terminal(id) {
-		t.Fatalf("agent carries ATTN_SESSION_ID=%q, want its terminal", terminal)
+		t.Fatalf("agent carries ATTN_TERMINAL_ID=%q, want its terminal", terminal)
 	}
 	for _, value := range []string{"on", "off"} {
-		result := s.Run(testworld.Invocation{Session: terminal, Args: []string{"session", "priority", value}})
+		result := s.Run(testworld.Invocation{Terminal: terminal, Args: []string{"session", "priority", value}})
 		if result.Code != 0 {
 			t.Fatalf("priority %s: %s", value, result.Stderr)
 		}
 		testworld.AwaitSession(app, id, func(row protocol.Session) bool { return protocol.Deref(row.Priority) == (value == "on") })
 	}
-	delegatedResult := s.Run(testworld.Invocation{Session: terminal, Args: []string{"delegate", "--brief", "Priority task", "--cwd", s.Path("priority"), "--name", "priority worker", "--agent", "claude", "--model", "default", "--priority"}})
+	delegatedResult := s.Run(testworld.Invocation{Terminal: terminal, Args: []string{"delegate", "--brief", "Priority task", "--cwd", s.Path("priority"), "--name", "priority worker", "--agent", "claude", "--model", "default", "--priority"}})
 	if delegatedResult.Code != 0 {
 		t.Fatalf("delegate --priority: %s", delegatedResult.Stderr)
 	}
