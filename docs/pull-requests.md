@@ -1,12 +1,11 @@
-# Working with `next`
+# Pull requests
 
-Ordinary PRs branch from and target `next`; only release candidates and
-`hotfix/*` branches target `main`.
+Every PR branches from and targets `main`.
 
 ```bash
-git fetch origin next
-git switch -c fix/example origin/next
-gh pr create --base next
+git fetch origin main
+git switch -c fix/example origin/main
+gh pr create
 ```
 
 - Open PRs ready for review with a scoped conventional-commit title and a
@@ -16,3 +15,5 @@ gh pr create --base next
   and only with the user's permission.
 - The slopradar comment is information for the reviewer, never a gate.
 - Watch with a [PR watch](../README.md#watching-pull-requests) in `--mode codex`.
+- `next` is a read-only mirror of `main` for older checkouts. Nothing merges
+  into it.

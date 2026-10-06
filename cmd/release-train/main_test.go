@@ -75,31 +75,15 @@ func (repo *testRepository) commit(subject string) string {
 
 func (repo *testRepository) writeManifest(manifest candidateManifest) {
 	repo.t.Helper()
-	publication := manifest.Publication
-	if publication == "" {
-		publication = publicationAutomatic
-	}
-	data := "version: " + manifest.Version + "\nkind: " + manifest.Kind +
-		"\npublication: " + publication + "\nsource_sha: " + manifest.SourceSHA +
-		"\nmain_sha: " + manifest.MainSHA + "\n"
-	repo.write(defaultManifestPath, data)
+	repo.write(defaultManifestPath, "version: "+manifest.Version+"\nmain_sha: "+manifest.MainSHA+"\n")
 }
 
-func (repo *testRepository) prepareCandidate(kind string) (mainSHA, sourceSHA, headSHA string) {
+func (repo *testRepository) prepareCandidate() (mainSHA, headSHA string) {
 	repo.t.Helper()
-	mainSHA = repo.git("rev-parse", "main")
-	branch := "next"
-	if kind == "hotfix" {
-		branch = "hotfix/fix-release"
-	}
-	repo.git("switch", "-q", "-c", branch)
 	repo.write("changelog.d/accepted.yaml", "kind: fixed\narea: release\nchange: accepted change\n")
-	if kind == "hotfix" {
-		repo.write("fix.txt", "the urgent fix\n")
-	}
-	sourceSHA = repo.commit("accepted source")
+	mainSHA = repo.commit("accepted change on main")
 	repo.git("switch", "-q", "-c", "release/v0.12.0")
-	receipt, err := fragmentReceipt(repo.root, sourceSHA)
+	receipt, err := fragmentReceipt(repo.root, mainSHA)
 	if err != nil {
 		repo.t.Fatal(err)
 	}
@@ -108,9 +92,16 @@ func (repo *testRepository) prepareCandidate(kind string) (mainSHA, sourceSHA, h
 	}
 	repo.remove("changelog.d/accepted.yaml")
 	repo.write("CHANGELOG.md", "# Changelog\n\n## [2026-08-28]\n\n- Accepted change.\n\n"+receipt+"\n")
-	repo.writeManifest(candidateManifest{Version: "0.12.0", Kind: kind, SourceSHA: sourceSHA, MainSHA: mainSHA})
+	repo.writeManifest(candidateManifest{Version: "0.12.0", MainSHA: mainSHA})
 	headSHA = repo.commit("prepare release")
-	return mainSHA, sourceSHA, headSHA
+	return mainSHA, headSHA
+}
+
+func (repo *testRepository) squashRelease() string {
+	repo.t.Helper()
+	repo.git("switch", "-q", "main")
+	repo.git("merge", "--squash", "release/v0.12.0")
+	return repo.commit("chore(release): prepare v0.12.0")
 }
 
 func TestVersionSetUpdatesEverySource(t *testing.T) {
@@ -149,15 +140,11 @@ func TestManifestValidation(t *testing.T) {
 		body    string
 		wantErr string
 	}{
-		{name: "promotion", body: "version: 1.2.3\nkind: promotion\nsource_sha: " + sha + "\nmain_sha: " + sha + "\n"},
-		{name: "held promotion", body: "version: 1.2.3\nkind: promotion\npublication: held\nsource_sha: " + sha + "\nmain_sha: " + sha + "\n"},
-		{name: "hotfix", body: "version: 1.2.3\nkind: hotfix\nsource_sha: " + sha + "\nmain_sha: " + sha + "\n"},
-		{name: "unknown kind", body: "version: 1.2.3\nkind: patch\nsource_sha: " + sha + "\nmain_sha: " + sha + "\n", wantErr: "kind must be"},
-		{name: "unknown publication", body: "version: 1.2.3\nkind: promotion\npublication: later\nsource_sha: " + sha + "\nmain_sha: " + sha + "\n", wantErr: "publication must be"},
-		{name: "held hotfix", body: "version: 1.2.3\nkind: hotfix\npublication: held\nsource_sha: " + sha + "\nmain_sha: " + sha + "\n", wantErr: "hotfix publication cannot be held"},
-		{name: "short sha", body: "version: 1.2.3\nkind: promotion\nsource_sha: abc123\nmain_sha: " + sha + "\n", wantErr: "full commit SHA"},
-		{name: "unknown field", body: "version: 1.2.3\nkind: promotion\nsource_sha: " + sha + "\nmain_sha: " + sha + "\nbranch: next\n", wantErr: "field branch not found"},
-		{name: "second document", body: "version: 1.2.3\nkind: promotion\nsource_sha: " + sha + "\nmain_sha: " + sha + "\n---\nversion: 1.2.4\n", wantErr: "more than one YAML document"},
+		{name: "release", body: "version: 1.2.3\nmain_sha: " + sha + "\n"},
+		{name: "bad version", body: "version: v1.2\nmain_sha: " + sha + "\n", wantErr: "version must look like"},
+		{name: "short sha", body: "version: 1.2.3\nmain_sha: abc123\n", wantErr: "full commit SHA"},
+		{name: "retired train field", body: "version: 1.2.3\nkind: promotion\nmain_sha: " + sha + "\n", wantErr: "field kind not found"},
+		{name: "second document", body: "version: 1.2.3\nmain_sha: " + sha + "\n---\nversion: 1.2.4\n", wantErr: "more than one YAML document"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -176,66 +163,38 @@ func TestManifestValidation(t *testing.T) {
 	}
 }
 
-func TestManifestWriteRecordsExactCommits(t *testing.T) {
+func TestManifestWriteRecordsMain(t *testing.T) {
 	repo := newTestRepository(t)
 	mainSHA := repo.git("rev-parse", "main")
-	repo.git("switch", "-q", "-c", "next")
-	repo.write("feature.txt", "accepted\n")
-	sourceSHA := repo.commit("accepted source")
 	var output strings.Builder
-	err := runManifest(repo.root, []string{
-		"write", "--version", "v0.12.0", "--kind", "promotion",
-		"--source", "HEAD", "--main", "main",
-	}, &output)
-	if err != nil {
+	if err := runManifest(repo.root, []string{"write", "--version", "v0.12.0", "--main", "main"}, &output); err != nil {
 		t.Fatal(err)
 	}
 	manifest, err := readManifest(filepath.Join(repo.root, defaultManifestPath))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if manifest.Version != "0.12.0" || manifest.Kind != "promotion" || manifest.Publication != publicationAutomatic || manifest.SourceSHA != sourceSHA || manifest.MainSHA != mainSHA {
+	if manifest.Version != "0.12.0" || manifest.MainSHA != mainSHA {
 		t.Fatalf("manifest = %+v", manifest)
 	}
 }
 
-func TestAcceptedMainReportsHeldPublication(t *testing.T) {
+func TestCandidateValidationAcceptsAPreparedRelease(t *testing.T) {
 	repo := newTestRepository(t)
-	_, _, _ = repo.prepareCandidate("promotion")
-	manifest, err := readManifest(filepath.Join(repo.root, defaultManifestPath))
-	if err != nil {
+	mainSHA, headSHA := repo.prepareCandidate()
+	if err := validateCandidate(repo.root, validCandidateInput(mainSHA, headSHA)); err != nil {
 		t.Fatal(err)
-	}
-	manifest.Publication = publicationHeld
-	repo.writeManifest(manifest)
-	repo.commit("hold publication")
-
-	var output strings.Builder
-	if err := runAcceptedMain(repo.root, []string{"publication", "--head", "HEAD"}, &output); err != nil {
-		t.Fatal(err)
-	}
-	if got := strings.TrimSpace(output.String()); got != publicationHeld {
-		t.Fatalf("publication = %q", got)
 	}
 }
 
-func TestCandidateValidationAcceptsPromotionAndHotfix(t *testing.T) {
-	for _, kind := range []string{"promotion", "hotfix"} {
-		t.Run(kind, func(t *testing.T) {
-			repo := newTestRepository(t)
-			mainSHA, _, headSHA := repo.prepareCandidate(kind)
-			acceptance := "success"
-			if kind == "hotfix" {
-				acceptance = ""
-			}
-			err := validateCandidate(repo.root, candidateValidation{
-				manifestPath: defaultManifestPath, currentMainRef: mainSHA, headRef: headSHA,
-				sourceAcceptance: acceptance, tagStatus: "absent", otherOpenCandidates: 0,
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
-		})
+func TestCandidateValidationAllowsMainToMoveOn(t *testing.T) {
+	repo := newTestRepository(t)
+	_, headSHA := repo.prepareCandidate()
+	repo.git("switch", "-q", "main")
+	repo.write("changelog.d/later.yaml", "kind: fixed\narea: queue\nchange: later work\n")
+	repo.commit("fix(queue): later work")
+	if err := validateCandidate(repo.root, validCandidateInput("main", headSHA)); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -247,45 +206,29 @@ func TestCandidateValidationRejectsUnsafeState(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name: "missing acceptance",
-			input: func(main, head string) candidateValidation {
-				return validCandidateInput(main, head, "")
-			},
-			wantErr: "acceptance is missing",
-		},
-		{
-			name: "red acceptance",
-			input: func(main, head string) candidateValidation {
-				return validCandidateInput(main, head, "failure")
-			},
-			wantErr: "expected success",
-		},
-		{
 			name: "another candidate is open",
 			input: func(main, head string) candidateValidation {
-				input := validCandidateInput(main, head, "success")
+				input := validCandidateInput(main, head)
 				input.otherOpenCandidates = 1
 				return input
 			},
 			wantErr: "other open release candidate",
 		},
 		{
-			name: "main moved",
+			name: "recorded main is not on current main",
 			mutate: func(repo *testRepository, _, _ string) {
-				repo.git("switch", "-q", "main")
-				repo.write("main-moved.txt", "new main\n")
-				repo.commit("move main")
-				repo.git("switch", "-q", "release/v0.12.0")
+				emptyTree := repo.git("hash-object", "-t", "tree", "/dev/null")
+				repo.git("update-ref", "refs/heads/unrelated", repo.git("commit-tree", emptyTree, "-m", "unrelated root"))
 			},
 			input: func(_ string, head string) candidateValidation {
-				return validCandidateInput("main", head, "success")
+				return validCandidateInput("unrelated", head)
 			},
-			wantErr: "main moved",
+			wantErr: "recorded main is not on current main",
 		},
 		{
 			name: "remote tag exists",
 			input: func(main, head string) candidateValidation {
-				input := validCandidateInput(main, head, "success")
+				input := validCandidateInput(main, head)
 				input.tagStatus = "present"
 				return input
 			},
@@ -298,7 +241,7 @@ func TestCandidateValidationRejectsUnsafeState(t *testing.T) {
 				repo.commit("mismatch version")
 			},
 			input: func(main, _ string) candidateValidation {
-				return validCandidateInput(main, "HEAD", "success")
+				return validCandidateInput(main, "HEAD")
 			},
 			wantErr: "expected 0.12.0",
 		},
@@ -309,7 +252,7 @@ func TestCandidateValidationRejectsUnsafeState(t *testing.T) {
 				repo.commit("late code change")
 			},
 			input: func(main, _ string) candidateValidation {
-				return validCandidateInput(main, "HEAD", "success")
+				return validCandidateInput(main, "HEAD")
 			},
 			wantErr: "non-release file",
 		},
@@ -320,7 +263,7 @@ func TestCandidateValidationRejectsUnsafeState(t *testing.T) {
 				if err != nil {
 					repo.t.Fatal(err)
 				}
-				data, err := readRepositoryFile(repo.root, manifest.SourceSHA, "CHANGELOG.md")
+				data, err := readRepositoryFile(repo.root, manifest.MainSHA, "CHANGELOG.md")
 				if err != nil {
 					repo.t.Fatal(err)
 				}
@@ -328,7 +271,7 @@ func TestCandidateValidationRejectsUnsafeState(t *testing.T) {
 				repo.commit("drop release notes")
 			},
 			input: func(main, _ string) candidateValidation {
-				return validCandidateInput(main, "HEAD", "success")
+				return validCandidateInput(main, "HEAD")
 			},
 			wantErr: "fragments were removed without updating CHANGELOG.md",
 		},
@@ -339,7 +282,7 @@ func TestCandidateValidationRejectsUnsafeState(t *testing.T) {
 				if err != nil {
 					repo.t.Fatal(err)
 				}
-				data, err := readRepositoryFile(repo.root, manifest.SourceSHA, "CHANGELOG.md")
+				data, err := readRepositoryFile(repo.root, manifest.MainSHA, "CHANGELOG.md")
 				if err != nil {
 					repo.t.Fatal(err)
 				}
@@ -347,7 +290,7 @@ func TestCandidateValidationRejectsUnsafeState(t *testing.T) {
 				repo.commit("edit changelog without compiling fragments")
 			},
 			input: func(main, _ string) candidateValidation {
-				return validCandidateInput(main, "HEAD", "success")
+				return validCandidateInput(main, "HEAD")
 			},
 			wantErr: "does not contain the frozen fragment receipt",
 		},
@@ -355,7 +298,7 @@ func TestCandidateValidationRejectsUnsafeState(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := newTestRepository(t)
-			mainSHA, _, headSHA := repo.prepareCandidate("promotion")
+			mainSHA, headSHA := repo.prepareCandidate()
 			if tc.mutate != nil {
 				tc.mutate(repo, mainSHA, headSHA)
 			}
@@ -369,43 +312,33 @@ func TestCandidateValidationRejectsUnsafeState(t *testing.T) {
 
 func TestCandidateValidationAllowsInternalFragmentsWithoutChangelogUpdate(t *testing.T) {
 	repo := newTestRepository(t)
-	mainSHA := repo.git("rev-parse", "main")
-	repo.git("switch", "-q", "-c", "next")
 	repo.write("changelog.d/internal.yaml", "kind: internal\narea: release\nchange: internal change\n")
-	sourceSHA := repo.commit("accepted internal source")
+	mainSHA := repo.commit("internal change on main")
 	repo.git("switch", "-q", "-c", "release/v0.12.0")
 	if err := setVersions(repo.root, "0.12.0"); err != nil {
 		t.Fatal(err)
 	}
 	repo.remove("changelog.d/internal.yaml")
-	repo.writeManifest(candidateManifest{Version: "0.12.0", Kind: "promotion", SourceSHA: sourceSHA, MainSHA: mainSHA})
+	repo.writeManifest(candidateManifest{Version: "0.12.0", MainSHA: mainSHA})
 	headSHA := repo.commit("prepare internal release")
 
-	if err := validateCandidate(repo.root, validCandidateInput(mainSHA, headSHA, "success")); err != nil {
+	if err := validateCandidate(repo.root, validCandidateInput(mainSHA, headSHA)); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func validCandidateInput(main, head, acceptance string) candidateValidation {
+func validCandidateInput(main, head string) candidateValidation {
 	return candidateValidation{
 		manifestPath: defaultManifestPath, currentMainRef: main, headRef: head,
-		sourceAcceptance: acceptance, tagStatus: "absent", otherOpenCandidates: 0,
+		tagStatus: "absent", otherOpenCandidates: 0,
 	}
 }
 
-func TestAcceptedMainValidationSurvivesSquashAndRepair(t *testing.T) {
+func TestAcceptedMainValidatesOnlyTheReleaseCommit(t *testing.T) {
 	repo := newTestRepository(t)
-	_, sourceSHA, _ := repo.prepareCandidate("promotion")
-	repo.git("switch", "-q", "main")
-	repo.git("merge", "--squash", "release/v0.12.0")
-	mainSHA := repo.commit("release: accept v0.12.0")
-
-	command := exec.Command("git", "merge-base", "--is-ancestor", sourceSHA, mainSHA)
-	command.Dir = repo.root
-	if command.Run() == nil {
-		t.Fatal("test setup retained source ancestry across a squash merge")
-	}
-	manifest, err := validateAcceptedMain(repo.root, mainSHA, defaultManifestPath)
+	repo.prepareCandidate()
+	releaseSHA := repo.squashRelease()
+	manifest, err := validateAcceptedMain(repo.root, releaseSHA, defaultManifestPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -413,10 +346,36 @@ func TestAcceptedMainValidationSurvivesSquashAndRepair(t *testing.T) {
 		t.Fatalf("version = %q", manifest.Version)
 	}
 
-	repo.write("repair.txt", "repair the accepted main tree\n")
-	repairedSHA := repo.commit("fix(release): repair accepted main")
-	if _, err := validateAcceptedMain(repo.root, repairedSHA, defaultManifestPath); err != nil {
-		t.Fatalf("repaired main: %v", err)
+	repo.write("later.txt", "ordinary work after the release\n")
+	laterSHA := repo.commit("feat: later work on main")
+	_, err = validateAcceptedMain(repo.root, laterSHA, defaultManifestPath)
+	if err == nil || !strings.Contains(err.Error(), "is not a release commit") {
+		t.Fatalf("expected later main commit to be refused, got %v", err)
+	}
+}
+
+func TestAcceptedMainKeepsFragmentsThatLandedDuringTheRelease(t *testing.T) {
+	repo := newTestRepository(t)
+	repo.prepareCandidate()
+	repo.git("switch", "-q", "main")
+	repo.write("changelog.d/later.yaml", "kind: fixed\narea: queue\nchange: later work\n")
+	repo.commit("fix(queue): later work")
+	releaseSHA := repo.squashRelease()
+	if _, err := validateAcceptedMain(repo.root, releaseSHA, defaultManifestPath); err != nil {
+		t.Fatal(err)
+	}
+	if !repo.exists("changelog.d/later.yaml") {
+		t.Fatal("release consumed a fragment it did not compile")
+	}
+}
+
+func TestAcceptedMainValidatesAReleaseMergedWithAMergeCommit(t *testing.T) {
+	repo := newTestRepository(t)
+	repo.prepareCandidate()
+	repo.git("switch", "-q", "main")
+	repo.git("merge", "-q", "--no-ff", "-m", "Merge release/v0.12.0", "release/v0.12.0")
+	if _, err := validateAcceptedMain(repo.root, repo.git("rev-parse", "HEAD"), defaultManifestPath); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -434,11 +393,11 @@ func TestAcceptedMainValidationRejectsUnsafeState(t *testing.T) {
 			wantErr: "expected 0.12.0",
 		},
 		{
-			name: "pending fragment",
+			name: "compiled fragment left behind",
 			mutate: func(repo *testRepository) {
-				repo.write("changelog.d/late.yaml", "kind: fixed\narea: release\nchange: late repair\n")
+				repo.write("changelog.d/accepted.yaml", "kind: fixed\narea: release\nchange: accepted change\n")
 			},
-			wantErr: "pending changelog fragments",
+			wantErr: "still contains the changelog fragments it compiled: changelog.d/accepted.yaml",
 		},
 		{
 			name: "unrelated recorded main",
@@ -447,10 +406,8 @@ func TestAcceptedMainValidationRejectsUnsafeState(t *testing.T) {
 				if err != nil {
 					repo.t.Fatal(err)
 				}
-				repo.git("switch", "-q", "--orphan", "unrelated")
-				repo.write("unrelated.txt", "unrelated history\n")
-				manifest.MainSHA = repo.commit("unrelated root")
-				repo.git("switch", "-q", "main")
+				emptyTree := repo.git("hash-object", "-t", "tree", "/dev/null")
+				manifest.MainSHA = repo.git("commit-tree", emptyTree, "-m", "unrelated root")
 				repo.writeManifest(manifest)
 			},
 			wantErr: "recorded main is not an ancestor",
@@ -462,7 +419,7 @@ func TestAcceptedMainValidationRejectsUnsafeState(t *testing.T) {
 				if err != nil {
 					repo.t.Fatal(err)
 				}
-				data, err := readRepositoryFile(repo.root, manifest.SourceSHA, "CHANGELOG.md")
+				data, err := readRepositoryFile(repo.root, manifest.MainSHA, "CHANGELOG.md")
 				if err != nil {
 					repo.t.Fatal(err)
 				}
@@ -474,12 +431,11 @@ func TestAcceptedMainValidationRejectsUnsafeState(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := newTestRepository(t)
-			repo.prepareCandidate("promotion")
+			repo.prepareCandidate()
 			repo.git("switch", "-q", "main")
 			repo.git("merge", "--squash", "release/v0.12.0")
-			repo.commit("release: accept v0.12.0")
 			tc.mutate(repo)
-			headSHA := repo.commit("unsafe accepted main")
+			headSHA := repo.commit("chore(release): prepare v0.12.0")
 			_, err := validateAcceptedMain(repo.root, headSHA, defaultManifestPath)
 			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 				t.Fatalf("expected %q, got %v", tc.wantErr, err)
@@ -532,105 +488,5 @@ func TestFragmentReceiptBindsPathsAndBlobs(t *testing.T) {
 	}
 	if changed == receipt {
 		t.Fatal("fragment receipt did not change with a source blob")
-	}
-}
-
-func TestPromotionSyncConsumesOnlyTheFrozenFragments(t *testing.T) {
-	repo := newTestRepository(t)
-	mainAtCut := repo.git("rev-parse", "main")
-	repo.git("switch", "-q", "-c", "next")
-	repo.write("changelog.d/frozen.yaml", "kind: added\narea: release\nchange: frozen change\n")
-	repo.write("feature.txt", "frozen feature\n")
-	sourceSHA := repo.commit("feature: accepted for release")
-
-	repo.git("switch", "-q", "-c", "release/v0.12.0")
-	if err := setVersions(repo.root, "0.12.0"); err != nil {
-		t.Fatal(err)
-	}
-	repo.remove("changelog.d/frozen.yaml")
-	repo.write("CHANGELOG.md", "# Changelog\n\n## [2026-08-28]\n\n- Frozen feature.\n")
-	repo.writeManifest(candidateManifest{Version: "0.12.0", Kind: "promotion", SourceSHA: sourceSHA, MainSHA: mainAtCut})
-	candidateHead := repo.commit("release: v0.12.0")
-
-	repo.git("switch", "-q", "next")
-	repo.write("changelog.d/later.yaml", "kind: added\narea: release\nchange: later change\n")
-	repo.write("later.txt", "not in the frozen candidate\n")
-	repo.commit("feature: after the freeze")
-	if repo.git("ls-tree", "-r", "--name-only", candidateHead, "--", "changelog.d/later.yaml") != "" {
-		t.Fatal("the frozen candidate included a later next change")
-	}
-
-	repo.git("switch", "-q", "main")
-	repo.git("merge", "--squash", "release/v0.12.0")
-	mainRelease := repo.commit("release: v0.12.0")
-	repo.git("switch", "-q", "next")
-	repo.git("merge", "--no-ff", "main", "-m", "sync main after v0.12.0")
-
-	if !repo.exists("changelog.d/frozen.yaml") || !repo.exists("changelog.d/later.yaml") {
-		t.Fatal("test setup did not reproduce squash merge retaining both fragments")
-	}
-	if _, err := syncReleasedFragments(repo.root, defaultManifestPath, mainRelease, "HEAD", false); err == nil || !strings.Contains(err.Error(), "released fragments remain") {
-		t.Fatalf("check should catch the retained released fragment, got %v", err)
-	}
-	removed, err := syncReleasedFragments(repo.root, defaultManifestPath, mainRelease, "HEAD", true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if removed != 1 {
-		t.Fatalf("removed %d fragments, want 1", removed)
-	}
-	if repo.exists("changelog.d/frozen.yaml") {
-		t.Fatal("released fragment survived sync")
-	}
-	if !repo.exists("changelog.d/later.yaml") {
-		t.Fatal("post-candidate fragment was consumed")
-	}
-	repo.commit("chore(release): consume v0.12.0 fragments")
-	if _, err := syncReleasedFragments(repo.root, defaultManifestPath, mainRelease, "HEAD", false); err != nil {
-		t.Fatal(err)
-	}
-	repo.git("merge-base", "--is-ancestor", mainRelease, "HEAD")
-}
-
-func TestPromotionSyncRefusesARewrittenReleasedFragment(t *testing.T) {
-	repo := newTestRepository(t)
-	mainAtCut := repo.git("rev-parse", "main")
-	repo.git("switch", "-q", "-c", "next")
-	repo.write("changelog.d/frozen.yaml", "kind: added\narea: release\nchange: original\n")
-	sourceSHA := repo.commit("accepted source")
-	repo.git("switch", "-q", "-c", "release/v0.11.1")
-	repo.remove("changelog.d/frozen.yaml")
-	repo.writeManifest(candidateManifest{Version: "0.11.1", Kind: "promotion", SourceSHA: sourceSHA, MainSHA: mainAtCut})
-	repo.commit("prepare candidate")
-	repo.git("switch", "-q", "main")
-	repo.git("merge", "--squash", "release/v0.11.1")
-	mainRelease := repo.commit("release: v0.11.1")
-	repo.git("switch", "-q", "next")
-	repo.write("changelog.d/frozen.yaml", "kind: added\narea: release\nchange: rewritten\n")
-	repo.commit("rewrite fragment after freeze")
-	repo.git("merge", "--no-ff", "main", "-m", "sync main")
-
-	_, err := syncReleasedFragments(repo.root, defaultManifestPath, mainRelease, "HEAD", true)
-	if err == nil || !strings.Contains(err.Error(), "changed after the candidate") {
-		t.Fatalf("expected rewritten-fragment refusal, got %v", err)
-	}
-}
-
-func TestPromotionSyncRefusesToDeleteFromADirtyWorktree(t *testing.T) {
-	repo := newTestRepository(t)
-	mainSHA := repo.git("rev-parse", "main")
-	repo.git("switch", "-q", "-c", "next")
-	repo.write("changelog.d/frozen.yaml", "kind: added\narea: release\nchange: original\n")
-	sourceSHA := repo.commit("accepted source")
-	repo.writeManifest(candidateManifest{Version: "0.11.1", Kind: "promotion", SourceSHA: sourceSHA, MainSHA: mainSHA})
-	repo.commit("carry release manifest")
-	repo.write("changelog.d/frozen.yaml", "kind: added\narea: release\nchange: uncommitted rewrite\n")
-
-	_, err := syncReleasedFragments(repo.root, defaultManifestPath, mainSHA, "HEAD", true)
-	if err == nil || !strings.Contains(err.Error(), "working tree must be clean") {
-		t.Fatalf("expected dirty-worktree refusal, got %v", err)
-	}
-	if !repo.exists("changelog.d/frozen.yaml") {
-		t.Fatal("dirty fragment was deleted")
 	}
 }

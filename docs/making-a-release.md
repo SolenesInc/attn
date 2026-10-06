@@ -16,38 +16,38 @@ fields: `symptom`, `notes`. CI validates fragments;
 
 ## Release
 
-From a clean, current `next` with green Acceptance:
+From a clean, current `main` with green Acceptance:
 
 ```bash
-./scripts/release.sh vX.Y.Z          # add --hold to promote without publishing
+./scripts/release.sh vX.Y.Z
 ```
 
-This opens a frozen `release/vX.Y.Z` PR to `main`. Merge it once `PR gate` and
-`App acceptance` are green. `main` then earns Acceptance, gets tagged, and
-publishes. A `--hold` candidate stops after Acceptance: no tag, no release, and
-that version is never published. If `main` moves before merging, prepare the
-candidate again.
+This cuts `release/vX.Y.Z` from that commit, compiles its fragments into
+`CHANGELOG.md`, bumps every version, and opens a PR to `main`. Merge it once
+`PR gate` and `App acceptance` are green. The merged commit is the release
+commit: when its Acceptance is green, it gets tagged and published.
 
-If the automated app acceptance cannot cover the candidate, record a manual
-receipt with the command printed in the candidate PR.
+`main` may keep moving while the release PR is open. Changes merged after the
+release was cut ship with it, and their fragments stay pending for the next
+release.
+
+If the automated app acceptance cannot cover the release PR or the merged
+release commit, record a manual receipt for that exact commit with the command
+printed in the release PR, then rerun its CI.
+
+If Acceptance fails on the release commit, fix it on `main` and prepare the
+release again with the same version.
 
 ## Hotfix
 
-Branch `hotfix/*` from `main`, commit the fix and fragment, then run
-`make release-hotfix VERSION_TAG=vX.Y.Z`. If `main` Acceptance fails before
-publication, repair it the same way, editing `CHANGELOG.md` directly.
-
-## Sync main into next
-
-After every `main` change, run `./scripts/sync-main-to-next.sh` and merge its PR
-with a merge commit.
+Fix forward: merge the fix to `main`, then release a patch version.
 
 ## After publishing
 
 Confirm the release has the versioned DMG, `attn_aarch64.dmg`,
 `attn-linux-amd64`, and `attn-linux-arm64`, then check
 `brew upgrade --cask victorarias/attn/attn`. A failed publication leaves a draft
-and a `Release health` issue; after fixing, retry while the tag still names `main`:
+and a `Release health` issue; after fixing, retry the tag:
 
 ```bash
 gh api --method POST repos/victorarias/attn/dispatches \
@@ -55,3 +55,8 @@ gh api --method POST repos/victorarias/attn/dispatches \
 ```
 
 Update the What's New modal (`app/src/components/WhatsNewModal.tsx`) for milestones.
+
+## The `next` branch
+
+`next` mirrors `main` so older checkouts keep pulling. A workflow fast-forwards
+it after every push to `main`; nothing else writes to it.

@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       candidate_sha:
-        description: Full release candidate commit SHA
+        description: Full commit SHA the receipt covers
         required: true
         type: string
       instance:

@@ -129,7 +129,7 @@ satisfy the full requirement?
 - `pnpm --dir app run dev`: Runs the frontend/app dev server
 - `make lint`: Overall linter
 
-`make test` skips the Go suite when only `docs/`, root Markdown and `app/src` changed since `origin/next`; `FORCE=1` runs it and `DIFF_BASE=<ref>` compares against another branch.
+`make test` skips the Go suite when only `docs/`, root Markdown and `app/src` changed since `origin/main`; `FORCE=1` runs it and `DIFF_BASE=<ref>` compares against another branch.
 
 Choose checks for affected CLI, daemon, app, protocol, and Linux paths using
 [verification requirements](docs/instances.md#verification-requirements).
@@ -247,8 +247,8 @@ Read the relevant entry when the task touches its subject. When changing or work
 - How a harness behaves, before relying on it => docs/harnesses.md; check new
   claims in its source or with a probe and record them there
 - Agent-facing content in `internal/prompts/content/**`, its Go definitions, or CLI help => docs/prompt-authoring.md
-- Branches, PRs, merges, or waiting on reviews => docs/working-with-next.md
-- Changelog fragments, releases, hotfixes, or syncing `main` into `next` => docs/making-a-release.md
+- Branches, PRs, merges, or waiting on reviews => docs/pull-requests.md
+- Changelog fragments, releases, or hotfixes => docs/making-a-release.md
 - Installing, launching, or verifying instances => docs/instances.md
 - Frontend code or shortcuts => app/AGENTS.md
 - Packaged-app scenarios or recording/publishing evidence => app/scripts/real-app-harness/AGENTS.md

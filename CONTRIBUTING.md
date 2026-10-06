@@ -21,7 +21,7 @@ Not all contributions will be accepted. Opening an issue first sets expectations
 
 ## Development Workflow
 
-Follow [Working with next](docs/working-with-next.md) for branches and pull
+Follow [Pull requests](docs/pull-requests.md) for branches and pull
 requests, and [Instances](docs/instances.md) for development setup and verification.
 Reference the issue in your PR.
 
