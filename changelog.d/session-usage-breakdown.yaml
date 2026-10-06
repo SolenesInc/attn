@@ -1,3 +1,0 @@
-kind: changed
-area: sessions
-change: Session headers include native subagent usage and open a per-model token and cost breakdown.

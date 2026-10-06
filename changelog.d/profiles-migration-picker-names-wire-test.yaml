@@ -1,3 +1,0 @@
-kind: internal
-area: app
-change: The migration picker's duplicate-name regression runs through the real app against the scripted daemon instead of a mocked component.

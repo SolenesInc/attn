@@ -1,9 +1,0 @@
-kind: fixed
-area: garden
-change: >
-  A seed bell now rings the seed's parties as they were when the event
-  happened. Before, bells were addressed when the background consumer got to
-  them, so a session that started watching or tending the seed moments later
-  could receive a bell for an event that predated it, such as the Chief
-  receiving a "tended" bell for the sender's own earlier move alongside its
-  assignment.

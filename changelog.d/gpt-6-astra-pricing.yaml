@@ -1,3 +1,0 @@
-kind: added
-area: session-cost
-change: Session cost estimates now include GPT-6 Astra standard token pricing.

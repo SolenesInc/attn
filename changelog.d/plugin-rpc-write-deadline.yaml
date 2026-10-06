@@ -1,3 +1,0 @@
-kind: fixed
-area: plugins
-change: Stop plugin RPC calls at their caller deadline when a plugin stops reading.

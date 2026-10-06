@@ -1,3 +1,0 @@
-kind: internal
-area: daemon
-change: "Codex `/resume` typed before a new terminal's first prompt brings back the session that recorded the conversation, as `/resume` already does after a prompt; the fake Codex reports a new chat on its first turn, like Codex."

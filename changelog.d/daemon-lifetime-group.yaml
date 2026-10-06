@@ -1,3 +1,0 @@
-kind: internal
-area: daemon
-change: One daemon lifetime owns every background goroutine and timer, so stopping the daemon waits for all of them before the database closes.

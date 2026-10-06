@@ -1,4 +1,0 @@
-kind: fixed
-area: terminal
-change: A terminal that falls behind a burst of output now resyncs from a fresh snapshot when the lag is in a slow app connection or in a daemon that stalls reading its PTY worker, not only on the embedded backend.
-symptom: A terminal attached while an agent printed heavily could stop showing new output until reopened.

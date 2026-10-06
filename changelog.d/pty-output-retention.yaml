@@ -1,4 +1,0 @@
-kind: fixed
-area: terminal
-change: The app no longer keeps a copy of every terminal output chunk, so its memory stays flat while agents print.
-symptom: The app's web process grew by hundreds of megabytes per hour while agents were printing, and never gave the memory back.

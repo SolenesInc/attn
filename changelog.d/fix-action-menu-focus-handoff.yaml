@@ -1,3 +1,0 @@
-kind: fixed
-area: app
-change: Keep keyboard focus on dialogs opened from the action menu.

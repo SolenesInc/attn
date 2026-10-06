@@ -1,3 +1,0 @@
-kind: fixed
-area: daemon
-change: An app runtime's "last exit" time reads the same before and after a daemon restart, and agents no longer inherit another session's guidance markers from the daemon's environment.

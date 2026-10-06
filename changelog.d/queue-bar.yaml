@@ -1,3 +1,0 @@
-kind: added
-area: app
-change: Collapsing the queue sidebar (Cmd+B on macOS, Ctrl+Alt+B on Linux) turns it into a bar across the top of the window. A waiting pill shows how many turns wait and the three oldest; hovering it peeks every agent and tile, clicking it opens the palette. A runs chip on the right counts automation runs and the ones that need you; hovering it peeks the runs by automation, clicking it opens the next one. Desktop chips show how many turns wait on each desktop and take dragged panes.

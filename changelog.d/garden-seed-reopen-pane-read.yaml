@@ -1,3 +1,0 @@
-kind: internal
-area: testing
-change: Reveal and attach shell panes before checking their command output in Garden acceptance scenarios.

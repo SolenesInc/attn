@@ -1,3 +1,0 @@
-kind: changed
-area: queue
-change: The queue sidebar shows as many waiting agents as fit and counts only hidden agents in its list toggle.

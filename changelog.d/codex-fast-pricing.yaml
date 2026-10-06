@@ -1,3 +1,0 @@
-kind: fixed
-area: sessions
-change: Session costs include GPT-6.1 Sol pricing and Codex fast-mode rates when the transcript records the configured service tier.

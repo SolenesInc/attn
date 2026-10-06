@@ -1,3 +1,0 @@
-kind: fixed
-area: agents
-change: Agent peek accepts an awake crew member's stable name across session replacement.

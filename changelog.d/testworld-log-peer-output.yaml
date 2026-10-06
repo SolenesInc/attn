@@ -1,3 +1,0 @@
-kind: internal
-area: testing
-change: A failed wire or stack test now logs the last 4096 bytes each peer received per session, so a stalled script shows where it stopped.

@@ -1,4 +1,0 @@
-kind: changed
-area: sessions
-change: The Sessions ledger shows and filters by profile (`profile:name` in the query, `attn session list --profile <id>`), and a closed session keeps the profile it ran in even after that profile is deleted.
-notes: The ledger's `ws:` filter and workspace column are gone; profiles replace workspaces.

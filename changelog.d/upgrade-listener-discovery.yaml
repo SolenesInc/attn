@@ -1,3 +1,0 @@
-kind: internal
-area: testing
-change: Keep historical PTY upgrade tests isolated by letting each daemon bind its own ephemeral WebSocket port.

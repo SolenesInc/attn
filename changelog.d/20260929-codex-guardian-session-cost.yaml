@@ -1,4 +1,0 @@
-kind: fixed
-area: sessions
-change: Codex session cost now includes auto-review usage and cache writes, and Settings lets you choose which model auto-review is billed as.
-symptom: Codex session cost ran well below what Codex actually used.

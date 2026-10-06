@@ -1,3 +1,0 @@
-kind: internal
-area: ci
-change: Keep Go and React Doctor caches reusable without copying them into every pull request scope, and accept healthy Go cache paths before their first build.

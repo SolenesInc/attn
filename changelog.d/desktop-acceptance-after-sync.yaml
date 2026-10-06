@@ -1,3 +1,0 @@
-kind: internal
-area: testing
-change: Update packaged-app acceptance scenarios for desktop residency, delegate inbox reads, and the session move CLI contract.

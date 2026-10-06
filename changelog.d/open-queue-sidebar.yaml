@@ -1,3 +1,0 @@
-kind: added
-area: app
-change: Queue mode has its own narrower sidebar. Chief and crew sit on top, then the three oldest turns with the desktop each one lives on, then an All agents list (Cmd+Shift+A, Ctrl+Alt+A on Linux) with a filter, the working agents and the snoozed ones. A strip of desktop chips at the bottom marks where turns wait and takes dragged panes. Arrow keys walk the rows, typing filters, Esc steps back, and Cmd+Shift+E / Cmd+Shift+S settle or snooze the focused row.

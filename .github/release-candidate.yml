@@ -1,5 +1,2 @@
-version: 0.11.2
-kind: promotion
-publication: held
-source_sha: b215d74e53b43ab97fd1ccbbaa2d2d5036d24f9c
-main_sha: c67a8e468cc198694a020785ac5660985adbb605
+version: 0.12.0
+main_sha: 6914e41cde80c61ec386a74406d3ab6b92baf776

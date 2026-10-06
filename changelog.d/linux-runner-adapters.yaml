@@ -1,3 +1,0 @@
-kind: internal
-area: testing
-change: Run Linux sandbox and packaged-app verification through shared Lima, OrbStack, and SSH adapters.

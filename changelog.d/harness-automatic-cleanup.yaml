@@ -1,3 +1,0 @@
-kind: internal
-area: harness
-change: Every scenario runner executes registered cleanup before reporting completion.

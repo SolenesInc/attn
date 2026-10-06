@@ -1,3 +1,0 @@
-kind: internal
-area: tests
-change: Wait on acknowledged plugin-driver reports in the installed fixture.

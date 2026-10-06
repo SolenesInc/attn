@@ -1,3 +1,0 @@
-kind: fixed
-area: sidebar
-change: Desktop sidebars smoothly center keyboard and other external selections, respect clicks in the list, and scroll instantly with reduced motion.

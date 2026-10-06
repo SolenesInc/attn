@@ -1,3 +1,0 @@
-kind: internal
-area: ci
-change: Drop the timing measurement from the app acceptance Go cache step; the receipt lives in the pull request record.

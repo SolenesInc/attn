@@ -1,3 +1,0 @@
-kind: internal
-area: sessions
-change: A session ends with its last terminal. A terminal that exits, or moves on to another session, while another terminal still runs its session ends alone and drops its tile; the last one ends the session as before. attn still gives a session one terminal, so nothing changes yet.

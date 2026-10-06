@@ -1,3 +1,0 @@
-kind: internal
-area: testing
-change: The installed worktree provider restart test handles daemon requests while awaiting its hello response.

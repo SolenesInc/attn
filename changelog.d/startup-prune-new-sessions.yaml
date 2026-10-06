@@ -1,3 +1,0 @@
-kind: fixed
-area: sessions
-change: Sessions started right after the daemon launches are no longer removed by startup recovery as stale leftovers of the previous run.

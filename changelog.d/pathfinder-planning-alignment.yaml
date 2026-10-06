@@ -1,3 +1,0 @@
-kind: changed
-area: delegation
-change: The attn-workflow skill supports the Pathfinder approach in the current conversation and guides agents to expose consequential assumptions, follow decision consequences, suggest purposeful spikes for the user to choose, check shared understanding before dispatching work, and use proportionate rigor with validation at system boundaries. `attn seed guide` calls the prototype deliverable a spike.

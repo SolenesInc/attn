@@ -1,3 +1,0 @@
-kind: fixed
-area: queue
-change: Auto-settle keeps its countdown when working state arrives before the prompt receipt.

@@ -1,3 +1,0 @@
-kind: internal
-area: pull requests
-change: PR readiness watches send GraphQL queries GitHub accepts, checked in tests against GitHub's public schema.

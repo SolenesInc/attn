@@ -1,3 +1,0 @@
-kind: internal
-area: build
-change: make test runs only the Go suite and skips it when only docs and app/src changed, and CI no longer runs the shell script tests.
