@@ -254,14 +254,7 @@ func TestAConversationResumedInAnotherProfileIsThatProfilesOwnSharedCodexSession
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
 	setSetting(t, app, "codex_shared_enabled", "true")
-	side := createProfile(app, "Side")
-	sideApp := w.AppOn(side.ID)
-	elsewhere := w.Spawn(sideApp, fakeagent.Codex, w.Path("shop"))
-	sideCodex := w.Launched(elsewhere)
-	sideApp.TypeLine(elsewhere, "plan the release")
-	sideCodex.Prompted()
-	sideCodex.Reply("Planned. <!-- attn:state=idle -->")
-	testworld.AwaitSession(sideApp, elsewhere, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	side, sideApp, elsewhere, sideCodex := sideCodexIdle(t, w, app)
 	conversation := sideCodex.ConversationID
 
 	here := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
@@ -298,14 +291,7 @@ func reopenRenamedSharedCodexSession(t *testing.T, way string) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
 	setSetting(t, app, "codex_shared_enabled", "true")
-	side := createProfile(app, "Side")
-	sideApp := w.AppOn(side.ID)
-	elsewhere := w.Spawn(sideApp, fakeagent.Codex, w.Path("shop"))
-	sideCodex := w.Launched(elsewhere)
-	sideApp.TypeLine(elsewhere, "plan the release")
-	sideCodex.Prompted()
-	sideCodex.Reply("Planned. <!-- attn:state=idle -->")
-	testworld.AwaitSession(sideApp, elsewhere, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	_, sideApp, elsewhere, sideCodex := sideCodexIdle(t, w, app)
 	conversation := sideCodex.ConversationID
 	renamed := testworld.Request(sideApp, protocol.RenameSessionMessage{Cmd: protocol.CmdRenameSession, SessionID: protocol.SessionID(elsewhere), Label: "Release plan"},
 		protocol.EventRenameResult, func(r protocol.RenameResultMessage) bool { return string(r.ID) == elsewhere })
@@ -355,16 +341,8 @@ func TestAConversationAnotherProfileResumesCountsItsTurnsOnlyThere(t *testing.T)
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
 	setSetting(t, app, "codex_shared_enabled", "true")
-	side := createProfile(app, "Side")
-	sideApp := w.AppOn(side.ID)
-	elsewhere := w.Spawn(sideApp, fakeagent.Codex, w.Path("shop"))
-	sideCodex := w.Launched(elsewhere)
-	sideApp.TypeLine(elsewhere, "plan the release")
-	sideCodex.Prompted()
-	sideCodex.Reply("Planned. <!-- attn:state=idle -->")
-	before := testworld.AwaitSession(sideApp, elsewhere, func(s protocol.Session) bool {
-		return s.State == protocol.SessionStateIdle && s.Usage != nil && s.Usage.TotalTokens > 0
-	}).Usage.TotalTokens
+	side, sideApp, elsewhere, sideCodex := sideCodexIdle(t, w, app)
+	before := queriedSession(t, w.Client(), elsewhere).Usage.TotalTokens
 	conversation := sideCodex.ConversationID
 	moveOn(t, sideApp, sideCodex, sideApp.Terminal(elsewhere), "/new", "start the changelog")
 	testworld.AwaitSession(sideApp, elsewhere, func(s protocol.Session) bool { return protocol.Deref(s.Hidden) })
@@ -386,14 +364,7 @@ func TestASharedLaunchRefusesAConversationAnotherProfilesServerHolds(t *testing.
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
 	setSetting(t, app, "codex_shared_enabled", "true")
-	side := createProfile(app, "Side")
-	sideApp := w.AppOn(side.ID)
-	elsewhere := w.Spawn(sideApp, fakeagent.Codex, w.Path("shop"))
-	sideCodex := w.Launched(elsewhere)
-	sideApp.TypeLine(elsewhere, "plan the release")
-	sideCodex.Prompted()
-	sideCodex.Reply("Planned. <!-- attn:state=idle -->")
-	testworld.AwaitSession(sideApp, elsewhere, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	side, _, _, sideCodex := sideCodexIdle(t, w, app)
 
 	refused, _, _ := w.RequestSpawn(app, fakeagent.Codex, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
 		m.ResumeSessionID = protocol.Ptr(sideCodex.ConversationID)
@@ -507,6 +478,22 @@ func sharedCodexWaiting(t *testing.T, w *world, app *testworld.Peer) (string, *f
 	codex.Reply("It races the tax lookup. Lock it? <!-- attn:state=waiting_input -->")
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 	return session, codex, terminal
+}
+
+// sideCodexIdle runs one turn of a shared Codex session in a second profile and waits for it to settle.
+func sideCodexIdle(t *testing.T, w *world, app *testworld.Peer) (protocol.Profile, *testworld.Peer, string, *fakeagent.Run) {
+	t.Helper()
+	side := createProfile(app, "Side")
+	sideApp := w.AppOn(side.ID)
+	elsewhere := w.Spawn(sideApp, fakeagent.Codex, w.Path("shop"))
+	sideCodex := w.Launched(elsewhere)
+	sideApp.TypeLine(elsewhere, "plan the release")
+	sideCodex.Prompted()
+	sideCodex.Reply("Planned. <!-- attn:state=idle -->")
+	testworld.AwaitSession(sideApp, elsewhere, func(s protocol.Session) bool {
+		return s.State == protocol.SessionStateIdle && s.Usage != nil && s.Usage.TotalTokens > 0
+	})
+	return side, sideApp, elsewhere, sideCodex
 }
 
 func moveOn(t *testing.T, app *testworld.Peer, codex *fakeagent.Run, terminal, command, prompt string) {

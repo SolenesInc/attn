@@ -317,21 +317,10 @@ func (s *codexServer) hold(loaded []string) []string {
 	return gone
 }
 
-// Releases queue in notification order, ahead of any watcher a later resume of the conversation starts.
+// Losses queue in notification order, ahead of whatever a later resume of the conversation reports.
 func (r *codexShared) lose(s *codexServer, conversations []string) {
 	for _, conversation := range conversations {
-		s.events.run(r.d, func() { r.release(s, conversation) })
-		r.d.life.Go("codexConversationLost", func() { r.lost(s, conversation) })
-	}
-}
-
-// Another profile may resume the rollout next; only the profile running it may read its turns.
-func (r *codexShared) release(s *codexServer, conversation string) {
-	s.mu.Lock()
-	again := s.held[conversation]
-	s.mu.Unlock()
-	if sessionID := r.holder(s.profile, conversation); sessionID != "" && !again {
-		r.d.drainTranscriptWatcher(sessionID)()
+		s.events.run(r.d, func() { r.lost(s, conversation) })
 	}
 }
 
@@ -402,11 +391,16 @@ func (s *codexServer) track(m codexshared.Message) []string {
 // lost settles a conversation the server no longer holds. Codex unloads only idle conversations, so a
 // turn still running was cut off: the server exited, and no Stop hook or reconnecting TUI will end it.
 func (r *codexShared) lost(s *codexServer, conversation string) {
+	s.mu.Lock()
+	again := s.held[conversation]
+	s.mu.Unlock()
 	sessionID := r.holder(s.profile, conversation)
 	session := r.d.store.Get(sessionID)
-	if session == nil {
+	if again || session == nil {
 		return
 	}
+	// Another profile may resume the rollout next; only the profile running it may read its turns.
+	r.d.drainTranscriptWatcher(sessionID)()
 	if session.State == protocol.SessionStateWorking || session.State == protocol.SessionStatePendingApproval {
 		r.report(s, sessionID, harness.TurnEnded, false)
 		return
