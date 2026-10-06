@@ -22,8 +22,3 @@ func stopDaemonBackground(t *testing.T, d *Daemon) {
 		d.pluginDriverSilence().stop()
 	})
 }
-
-func newTraceDaemon(t *testing.T) *Daemon {
-	t.Helper()
-	return NewForTesting(filepath.Join(t.TempDir(), "state.sock"))
-}

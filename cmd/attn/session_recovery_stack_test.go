@@ -33,7 +33,7 @@ func TestLiveAgentsKeepTheirStateAndSnoozeAcrossADaemonRestart(t *testing.T) {
 	}
 	ask := func(id string) {
 		t.Helper()
-		if err := cli.RecordNotification(id, "permission_prompt", "Allow edit?"); err != nil {
+		if err := cli.RecordNotification(protocol.TerminalID(app.Terminal(id)), "permission_prompt", "Allow edit?"); err != nil {
 			t.Fatalf("ask for approval: %v", err)
 		}
 		testworld.AwaitSession(app, id, func(x protocol.Session) bool { return x.State == protocol.SessionStatePendingApproval })
@@ -48,7 +48,7 @@ func TestLiveAgentsKeepTheirStateAndSnoozeAcrossADaemonRestart(t *testing.T) {
 	ask(asking)
 	snoozed, snoozedRun := start("snoozed")
 	reply(snoozed, snoozedRun, protocol.SessionStateIdle)
-	app.Send(protocol.SnoozeTurnMessage{Cmd: protocol.CmdSnoozeTurn, SessionID: snoozed, Until: time.Now().Add(time.Hour).Format(time.RFC3339Nano)})
+	app.Send(protocol.SnoozeTurnMessage{Cmd: protocol.CmdSnoozeTurn, SessionID: protocol.SessionID(snoozed), Until: time.Now().Add(time.Hour).Format(time.RFC3339Nano)})
 	testworld.AwaitSession(app, snoozed, func(x protocol.Session) bool { return protocol.Deref(x.TurnSnoozedUntil) != "" })
 
 	s.Stop()
@@ -63,16 +63,16 @@ func TestLiveAgentsKeepTheirStateAndSnoozeAcrossADaemonRestart(t *testing.T) {
 		snoozed: protocol.SessionStateIdle,
 	}
 	for _, x := range app.Initial.Sessions {
-		if w, ok := want[x.ID]; ok && x.State != w {
+		if w, ok := want[string(x.ID)]; ok && x.State != w {
 			t.Errorf("%s came back %s, want the %s its live agent is still in", filepath.Base(x.Directory), x.State, w)
 		}
-		delete(want, x.ID)
+		delete(want, string(x.ID))
 	}
 	if len(want) != 0 {
 		t.Errorf("sessions missing after the restart: %v", want)
 	}
 
-	app.Send(protocol.WakeTurnMessage{Cmd: protocol.CmdWakeTurn, SessionID: snoozed})
+	app.Send(protocol.WakeTurnMessage{Cmd: protocol.CmdWakeTurn, SessionID: protocol.SessionID(snoozed)})
 	testworld.AwaitSession(app, snoozed, func(x protocol.Session) bool {
 		return protocol.Deref(x.TurnOwed) && protocol.Deref(x.TurnSnoozedUntil) == ""
 	})

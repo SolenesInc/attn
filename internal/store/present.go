@@ -7,11 +7,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/inbox"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 type Presentation struct {
 	ID                   string
-	SessionID            string
+	SessionID            protocol.SessionID
 	To                   inbox.Address
 	Title                string
 	Kind                 string
@@ -46,7 +47,7 @@ type PresentationComment struct {
 	CreatedAt string
 }
 
-func (s *Store) CreatePresentation(sessionID string, to inbox.Address, title, kind, repoPath string, now time.Time) (*Presentation, error) {
+func (s *Store) CreatePresentation(sessionID protocol.SessionID, to inbox.Address, title, kind, repoPath string, now time.Time) (*Presentation, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

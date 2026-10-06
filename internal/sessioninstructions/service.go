@@ -66,9 +66,9 @@ type ModelRunner interface {
 }
 
 type SessionLookup interface {
-	Get(string) *protocol.Session
-	GetResumeSessionID(string) string
-	GetSessionTranscriptPath(string) string
+	Get(protocol.SessionID) *protocol.Session
+	GetResumeSessionID(protocol.SessionID) string
+	GetSessionTranscriptPath(protocol.SessionID) string
 }
 
 type TranscriptFinder interface {
@@ -84,12 +84,12 @@ type Service struct {
 }
 
 type Request struct {
-	TargetSessionID string
+	TargetSessionID protocol.SessionID
 	Question        string
 }
 
 func (s Service) Ask(ctx context.Context, req Request) (*protocol.SessionInstructionsResult, error) {
-	if strings.TrimSpace(req.TargetSessionID) == "" {
+	if protocol.TrimID(req.TargetSessionID) == "" {
 		return nil, &Error{Code: "session_not_found", Message: "The target session was not found"}
 	}
 	if strings.TrimSpace(req.Question) == "" {
@@ -102,7 +102,7 @@ func (s Service) Ask(ctx context.Context, req Request) (*protocol.SessionInstruc
 	if session == nil {
 		return nil, &Error{Code: "session_not_found", Message: "The target session was not found"}
 	}
-	if string(session.Agent) != protocol.SessionAgentCodex {
+	if session.Agent != protocol.SessionAgentCodex {
 		return nil, &Error{Code: "transcript_unavailable", Message: "The target transcript is unavailable"}
 	}
 	resumeID := strings.TrimSpace(s.Store.GetResumeSessionID(req.TargetSessionID))
@@ -330,7 +330,7 @@ func normalize(value string) string {
 	return b.String()
 }
 
-func resultFromCandidate(candidate ModelAnswer, sessionID, path, fingerprint, effort string, turns []ConversationTurn) *protocol.SessionInstructionsResult {
+func resultFromCandidate(candidate ModelAnswer, sessionID protocol.SessionID, path string, fingerprint string, effort string, turns []ConversationTurn) *protocol.SessionInstructionsResult {
 	byID := make(map[string]ConversationTurn, len(turns))
 	for _, turn := range turns {
 		byID[turn.ID] = turn

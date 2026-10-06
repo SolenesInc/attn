@@ -31,14 +31,14 @@ func TestMailForAnAgentMidTurnStaysSealedUntilItsTurnEndsThenRings(t *testing.T)
 		t.Fatalf("a message mid-turn = %+v, want queued", sent)
 	}
 	for _, reader := range []string{recipient, bystander} {
-		if read, err := cli.AgentInbox(sent.MessageID, reader); err == nil {
+		if read, err := cli.AgentInbox(sent.MessageID, protocol.SessionID(reader)); err == nil {
 			t.Errorf("%s read the queued message by its ID: %+v", reader, read)
 		}
 	}
-	if _, err := cli.AgentMsgStatus(sent.MessageID, bystander); client.ErrorCode(err) != "message_not_found" {
+	if _, err := cli.AgentMsgStatus(sent.MessageID, protocol.SessionID(bystander)); client.ErrorCode(err) != "message_not_found" {
 		t.Errorf("a bystander asking for the message's status = %v, want message_not_found", err)
 	}
-	if status, err := cli.AgentMsgStatus(sent.MessageID, sender); err != nil || status.State != protocol.AgentMessageStateQueued {
+	if status, err := cli.AgentMsgStatus(sent.MessageID, protocol.SessionID(sender)); err != nil || status.State != protocol.AgentMessageStateQueued {
 		t.Errorf("the sender asking for the message's status = %+v, %v; want queued", status, err)
 	}
 
@@ -46,7 +46,7 @@ func TestMailForAnAgentMidTurnStaysSealedUntilItsTurnEndsThenRings(t *testing.T)
 	if got := agent.Prompted(); !strings.Contains(got, inboxDoorbell) || strings.Contains(got, "rebase again") {
 		t.Fatalf("once its turn ended the agent was prompted with %q, want only the inbox doorbell", got)
 	}
-	read, err := cli.AgentInbox(sent.MessageID, recipient)
+	read, err := cli.AgentInbox(sent.MessageID, protocol.SessionID(recipient))
 	if err != nil || read.Content != "when you surface, rebase again" {
 		t.Fatalf("the rung recipient reads its message = %+v, %v", read, err)
 	}
@@ -202,7 +202,7 @@ func TestTheSocketAnswersOversizeMessagesWithTheirLimits(t *testing.T) {
 	panes := spawnPanes(w, app, w.Path("sender"), w.Path("target"))
 	sender, target := panes[0].session, panes[1].session
 
-	refused, err := cli.AgentMsg(target, sender, strings.Repeat("x", 32769))
+	refused, err := cli.AgentMsg(target, protocol.SessionID(sender), strings.Repeat("x", 32769))
 	if err != nil || refused.Status != protocol.AgentMsgStatusRefused || !strings.Contains(refused.Detail, "32769") || !strings.Contains(refused.Detail, "32768") {
 		t.Errorf("a message one character over the cap = %+v, %v; want a refusal naming 32769 and 32768", refused, err)
 	}
@@ -231,10 +231,10 @@ func TestMessagingACrewMemberReachesItsDayWakingItIfNeeded(t *testing.T) {
 	sender := spawnPanes(w, app, w.Path("sender"))[0].session
 
 	keel := wakeCrew(t, cli, "keel", "")
-	keelDay := w.Launched(keel.SessionID)
+	keelDay := w.Launched(string(keel.SessionID))
 	keelDay.Prompted()
 	keelDay.Reply("Morning. <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, keel.SessionID, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	testworld.AwaitSession(app, string(keel.SessionID), func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	toKeel := sendAgentMessage(t, cli, sender, "Keel", "the garden is ready")
 	if toKeel.Status != protocol.AgentMsgStatusNotified || toKeel.TargetSessionID != keel.SessionID || toKeel.Detail != "notified Keel" {
 		t.Fatalf("a message to the awake Keel = %+v, want notified on its day %s", toKeel, keel.SessionID)
@@ -250,7 +250,7 @@ func TestMessagingACrewMemberReachesItsDayWakingItIfNeeded(t *testing.T) {
 	if first.Status != protocol.AgentMsgStatusQueued || !strings.Contains(first.Detail, "woke Trellis") || first.TargetSessionID == "" {
 		t.Fatalf("a message to the sleeping Trellis = %+v, want it queued on a day it woke", first)
 	}
-	trellisDay := w.Launched(first.TargetSessionID)
+	trellisDay := w.Launched(string(first.TargetSessionID))
 	second := sendAgentMessage(t, cli, sender, "trellis", "and the flaky test")
 	if second.Status != protocol.AgentMsgStatusQueued || second.TargetSessionID != first.TargetSessionID {
 		t.Fatalf("a message while Trellis wakes = %+v, want it queued behind the same day", second)
@@ -263,12 +263,12 @@ func TestMessagingACrewMemberReachesItsDayWakingItIfNeeded(t *testing.T) {
 	if got := trellisDay.Prompted(); !strings.Contains(got, inboxDoorbell) {
 		t.Fatalf("after its wake turn Trellis was prompted with %q, want the inbox doorbell", got)
 	}
-	if got := inboxContents(readInbox(t, cli, first.TargetSessionID, 0).Items); got != "please inspect the broken build and the flaky test" {
+	if got := inboxContents(readInbox(t, cli, string(first.TargetSessionID), 0).Items); got != "please inspect the broken build and the flaky test" {
 		t.Fatalf("Trellis's inbox = %q, want both messages in order", got)
 	}
 	trellisDay.Reply("Looking. <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, first.TargetSessionID, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-	app.TypeLine(first.TargetSessionID, "status?")
+	testworld.AwaitSession(app, string(first.TargetSessionID), func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	app.TypeLine(string(first.TargetSessionID), "status?")
 	if got := trellisDay.Prompted(); got != "status?" {
 		t.Fatalf("Trellis was next prompted with %q, want the user's words and no second doorbell", got)
 	}
@@ -299,7 +299,7 @@ func TestMailForAMemberWhoseLaunchFailsWaitsForItsNextDay(t *testing.T) {
 	before := paneSessions(w)
 
 	allow := w.RefusePiLaunches("pi could not start: the model provider is unreachable")
-	if result, err := cli.AgentMsg("keel", sender, "please wake"); err != nil || result.Status != protocol.AgentMsgStatusQueued || !strings.Contains(result.Detail, "provider is unreachable") {
+	if result, err := cli.AgentMsg("keel", protocol.SessionID(sender), "please wake"); err != nil || result.Status != protocol.AgentMsgStatusQueued || !strings.Contains(result.Detail, "provider is unreachable") {
 		t.Fatalf("mail for a Keel that cannot wake = %+v, %v; want the launch failure", result, err)
 	}
 	if bound := crewRosterMember(t, cli, "keel").BindingSession; bound != nil {
@@ -312,10 +312,10 @@ func TestMailForAMemberWhoseLaunchFailsWaitsForItsNextDay(t *testing.T) {
 	allow()
 	woke := wakeCrew(t, cli, "keel", "")
 	sendAgentMessage(t, cli, sender, "keel", "the build is green")
-	day := w.Launched(woke.SessionID)
+	day := w.Launched(string(woke.SessionID))
 	day.Prompted()
 	day.Reply("Morning. <!-- attn:state=idle -->")
-	if got := inboxContents(readInbox(t, cli, woke.SessionID, 0).Items); got != "please wake the build is green" {
+	if got := inboxContents(readInbox(t, cli, string(woke.SessionID), 0).Items); got != "please wake the build is green" {
 		t.Errorf("Keel's next day reads %q, want the saved mail across its failed wake", got)
 	}
 }

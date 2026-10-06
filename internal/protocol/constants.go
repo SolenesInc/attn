@@ -335,6 +335,7 @@ const (
 	EventSessionCloseResult              = "session_close_result"
 	EventSessionStateChanged             = "session_state_changed"
 	EventNotebookChanged                 = "notebook_changed"
+	EventTerminalBindingsUpdated         = "terminal_bindings_updated"
 	EventSessionsUpdated                 = "sessions_updated"
 	EventPullRequestWatchResult          = "pull_request_watch_result"
 	EventPullRequestUnwatchResult        = "pull_request_unwatch_result"

@@ -9,7 +9,7 @@ type workflowClient interface {
 	WorkflowRunUpsert(run *protocol.WorkflowRun) (*protocol.WorkflowRun, error)
 	WorkflowCallUpsert(runID string, call *protocol.WorkflowAgentCall) (*protocol.WorkflowRun, error)
 	WorkflowRunGet(runID string) (*protocol.WorkflowRun, error)
-	WorkflowRunList(sessionID string) ([]protocol.WorkflowRun, error)
+	WorkflowRunList(sessionID protocol.SessionID) ([]protocol.WorkflowRun, error)
 	WorkflowRunCancel(runID string) (*protocol.WorkflowRun, error)
 }
 

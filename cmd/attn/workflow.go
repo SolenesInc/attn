@@ -54,14 +54,14 @@ commands:
   result <runId> [--wait]      print a run's terminal result as JSON
   show <runId>                 monitor a run: current phase, calls done/running,
                                and per-call status incl. the in-flight call
-  list [--session <id>]        list runs (default session = ATTN_SESSION_ID)
+  list [--session <id>]        list runs (default: current session)
   cancel <runId>               request cancellation of a run (cooperative)
 
 run options:
   --args <json>                inline JSON args passed to the script
   --args-file <path>           read JSON args from a file (exclusive with --args)
   --wait                       run in the foreground and block until terminal
-  --session <id>               attach the run to a session (default ATTN_SESSION_ID)
+  --session <id>               attach the run to a session (default: current session)
   --resume <runId>             resume a prior run, replaying its journaled prefix
   --harness <codex|claude>     agent harness (default codex)
   --model <m>                  workflow agent model
@@ -74,14 +74,14 @@ type workflowRunArgs struct {
 	argsInline string
 	argsFile   string
 	wait       bool
-	session    string
+	session    protocol.SessionID
 	resume     string
 	harness    string
 	model      string
 	runID      string
 }
 
-func parseWorkflowRunArgs(argv []string, envSession string) (workflowRunArgs, error) {
+func parseWorkflowRunArgs(argv []string, envSession func() protocol.SessionID) (workflowRunArgs, error) {
 	script, rest, err := extractScriptArg(argv)
 	if err != nil {
 		return workflowRunArgs{}, err
@@ -92,7 +92,7 @@ func parseWorkflowRunArgs(argv []string, envSession string) (workflowRunArgs, er
 	argsInline := fs.String("args", "", "inline JSON args")
 	argsFile := fs.String("args-file", "", "read JSON args from a file")
 	wait := fs.Bool("wait", false, "run in the foreground and block until terminal")
-	session := fs.String("session", "", "session id (defaults to ATTN_SESSION_ID)")
+	session := fs.String("session", "", "session id (defaults to the current session)")
 	resume := fs.String("resume", "", "resume a prior run id")
 	harness := fs.String("harness", "codex", "agent harness (codex|claude)")
 	model := fs.String("model", "", "workflow agent model")
@@ -113,14 +113,14 @@ func parseWorkflowRunArgs(argv []string, envSession string) (workflowRunArgs, er
 		argsInline: *argsInline,
 		argsFile:   *argsFile,
 		wait:       *wait,
-		session:    strings.TrimSpace(*session),
+		session:    protocol.SessionID(strings.TrimSpace(*session)),
 		resume:     strings.TrimSpace(*resume),
 		harness:    strings.TrimSpace(*harness),
 		model:      strings.TrimSpace(*model),
 		runID:      strings.TrimSpace(*runID),
 	}
 	if out.session == "" {
-		out.session = strings.TrimSpace(envSession)
+		out.session = protocol.TrimID(envSession())
 	}
 	if out.harness == "" {
 		out.harness = "codex"
@@ -175,7 +175,7 @@ func resolveWorkflowArgsJSON(a workflowRunArgs) (string, error) {
 }
 
 func runWorkflowRun(argv []string) {
-	parsed, err := parseWorkflowRunArgs(argv, os.Getenv("ATTN_SESSION_ID"))
+	parsed, err := parseWorkflowRunArgs(argv, currentSessionOrExit)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "workflow run: %v\n\n", err)
 		writeWorkflowHelp(os.Stderr)
@@ -438,7 +438,7 @@ func detachWorkflowChild(c workflowClient, parsed workflowRunArgs, runID, script
 
 	childArgs := []string{"workflow", "run", parsed.script, "--wait", "--run-id", runID, "--harness", parsed.harness}
 	if parsed.session != "" {
-		childArgs = append(childArgs, "--session", parsed.session)
+		childArgs = append(childArgs, "--session", string(parsed.session))
 	}
 	if parsed.model != "" {
 		childArgs = append(childArgs, "--model", parsed.model)
@@ -740,14 +740,14 @@ type workflowListEntry struct {
 func runWorkflowList(argv []string) {
 	fs := flag.NewFlagSet("workflow list", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	session := fs.String("session", "", "session id (defaults to ATTN_SESSION_ID; empty lists all)")
+	session := fs.String("session", "", "session id (defaults to the current session; empty lists all)")
 	if err := fs.Parse(argv); err != nil {
 		fmt.Fprintf(os.Stderr, "workflow list: %v\n", err)
 		os.Exit(2)
 	}
-	sessionID := strings.TrimSpace(*session)
+	sessionID := protocol.SessionID(strings.TrimSpace(*session))
 	if sessionID == "" {
-		sessionID = strings.TrimSpace(os.Getenv("ATTN_SESSION_ID"))
+		sessionID = currentSessionOrExit()
 	}
 	c := client.New("")
 

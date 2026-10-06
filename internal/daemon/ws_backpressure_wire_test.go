@@ -29,7 +29,7 @@ func TestAStateChangeReachesAnAppWhoseQueueIsFullOfAnotherSessionsOutput(t *test
 		defer cancel()
 		behind := transportDial(t, ctx, w)
 		evictionHello(t, ctx, behind, "behind")
-		attach, err := json.Marshal(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: noisy.self})
+		attach, err := json.Marshal(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(noisy.self)})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -37,7 +37,7 @@ func TestAStateChangeReachesAnAppWhoseQueueIsFullOfAnotherSessionsOutput(t *test
 			t.Fatalf("attach the lagging app to %s: %v", noisy.id, err)
 		}
 		synctest.Wait()
-		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: noisy.self, Data: strings.Repeat("x", 1000)})
+		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(noisy.self), Data: strings.Repeat("x", 1000)})
 		synctest.Wait()
 
 		quiet.reply("Which alias should stay? <!-- attn:state=waiting_input -->")
@@ -82,7 +82,7 @@ func tellsState(data []byte, id string, state protocol.SessionState) bool {
 		carrier.Sessions = append(carrier.Sessions, *carrier.Session)
 	}
 	for _, s := range carrier.Sessions {
-		if s.ID == id && s.State == state {
+		if string(s.ID) == id && s.State == state {
 			return true
 		}
 	}

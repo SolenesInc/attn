@@ -24,7 +24,7 @@ func TestRecentFilesMergeWhatUsersOpenAndAgentsEditUntilAFileIsGone(t *testing.T
 		openMarkdown(t, app, "first", plan)
 		openMarkdown(t, app, "second", plan)
 		openMarkdown(t, app, "first", notes)
-		editFiles(t, cli, "first", agent, w.Path("docs", "script.sh"), "relative.md")
+		editFiles(t, w, cli, "first", agent, w.Path("docs", "script.sh"), "relative.md")
 		files := recentFiles(app, 0, "")
 		if got := paths(files); !slices.Equal(got, []string{plan, notes, agent}) {
 			t.Fatalf("recent files = %v, want the twice-opened plan, then the opened notes above the agent's edit", got)
@@ -34,12 +34,12 @@ func TestRecentFilesMergeWhatUsersOpenAndAgentsEditUntilAFileIsGone(t *testing.T
 		}
 
 		w.advance(time.Minute)
-		editFiles(t, cli, "second", plan)
+		editFiles(t, w, cli, "second", plan)
 		if merged := recentFiles(app, 0, "")[0]; merged.Path != plan || merged.Count != 3 || merged.Source != "edited" {
 			t.Errorf("plan after an agent edit = %+v, want one entry counting all three with the edit as its latest source", merged)
 		}
 
-		editFiles(t, cli, "first", gone)
+		editFiles(t, w, cli, "first", gone)
 		openMarkdown(t, app, "first", gone)
 		if err := os.Remove(gone); err != nil {
 			t.Fatal(err)
@@ -59,15 +59,16 @@ func TestRecentFilesMergeWhatUsersOpenAndAgentsEditUntilAFileIsGone(t *testing.T
 func TestRecentFilesRankByFrecencyBeforeApplyingTheLimit(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
+		placeSessions(t, w, app, cli, "agent")
 		frequentOld, staleOnce, recentTwice := w.Path("docs", "frequent-old.md"), w.Path("docs", "stale-once.md"), w.Path("docs", "recent-twice.md")
 
 		for range 5 {
-			editFiles(t, cli, "agent", frequentOld)
+			editFiles(t, w, cli, "agent", frequentOld)
 		}
-		editFiles(t, cli, "agent", staleOnce)
+		editFiles(t, w, cli, "agent", staleOnce)
 		w.advance(time.Hour)
-		editFiles(t, cli, "agent", recentTwice)
-		editFiles(t, cli, "agent", recentTwice)
+		editFiles(t, w, cli, "agent", recentTwice)
+		editFiles(t, w, cli, "agent", recentTwice)
 		if got := paths(recentFiles(app, 0, "")); !slices.Equal(got, []string{frequentOld, recentTwice, staleOnce}) {
 			t.Fatalf("recent files = %v, want five older edits above two recent ones", got)
 		}
@@ -76,7 +77,7 @@ func TestRecentFilesRankByFrecencyBeforeApplyingTheLimit(t *testing.T) {
 		for i := range 6 {
 			fresh = append(fresh, w.Path("docs", fmt.Sprintf("fresh-%d.md", i)))
 		}
-		editFiles(t, cli, "agent", fresh...)
+		editFiles(t, w, cli, "agent", fresh...)
 		want := append(append([]string{frequentOld, recentTwice}, fresh...), staleOnce)
 		if got := paths(recentFiles(app, 0, "")); !slices.Equal(got, want) {
 			t.Errorf("recent files = %v, want a fresh single edit above an hour-old one", got)
@@ -90,8 +91,9 @@ func TestRecentFilesRankByFrecencyBeforeApplyingTheLimit(t *testing.T) {
 func TestRecentFilesPreferTheCallersWorkspace(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
+		placeSessions(t, w, app, cli, "agent")
 		here, there, sibling := w.Path("repo", "docs", "here.md"), w.Path("elsewhere", "there.md"), w.Path("repo-other", "near.md")
-		editFiles(t, cli, "agent", here, there, sibling)
+		editFiles(t, w, cli, "agent", here, there, sibling)
 
 		if got := paths(recentFiles(app, 0, "")); len(got) != 3 || !slices.Contains(got, here) || !slices.Contains(got, there) || !slices.Contains(got, sibling) {
 			t.Fatalf("recent files without a workspace = %v, want all three", got)
@@ -138,15 +140,15 @@ func requestOpenMarkdown(app *testworld.Peer, sessionID, path string) protocol.O
 	app.T.Helper()
 	requestID := uuid.NewString()
 	return testworld.Request(app, protocol.OpenMarkdownMessage{
-		Cmd: protocol.CmdOpenMarkdown, Path: path, SessionID: protocol.Ptr(sessionID), RequestID: protocol.Ptr(requestID),
+		Cmd: protocol.CmdOpenMarkdown, Path: path, SessionID: protocol.Ptr(protocol.SessionID(sessionID)), RequestID: protocol.Ptr(requestID),
 	}, protocol.EventOpenMarkdownResult, func(r protocol.OpenMarkdownResultMessage) bool {
 		return protocol.Deref(r.RequestID) == requestID
 	})
 }
 
-func editFiles(t *testing.T, cli *client.Client, sessionID string, paths ...string) {
+func editFiles(t *testing.T, w *world, cli *client.Client, sessionID string, paths ...string) {
 	t.Helper()
-	if err := cli.RecordFilesEdited(sessionID, paths); err != nil {
+	if err := cli.RecordFilesEdited(protocol.TerminalID(w.Terminal(sessionID)), paths); err != nil {
 		t.Fatalf("report files %s edited: %v", sessionID, err)
 	}
 }

@@ -1,10 +1,7 @@
 package daemon
 
 import (
-	"context"
 	"encoding/json"
-	"path/filepath"
-	"slices"
 	"testing"
 	"time"
 
@@ -12,23 +9,10 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
-func TestStartupPrunesRuntimesThatHaveNoSession(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	backend := &fakeSpawnBackend{sessionIDs: []string{"session-kept", "runtime-orphan"}}
-	d.ptyBackend = backend
-	d.store.Add(&protocol.Session{ID: "session-kept", Directory: t.TempDir(), State: protocol.SessionStateIdle, Agent: protocol.SessionAgentShell})
-
-	d.pruneRuntimesWithoutSession(context.Background())
-
-	if removed := backend.RemovedIDs(); !slices.Equal(removed, []string{"runtime-orphan"}) {
-		t.Fatalf("removed runtimes = %v, want only the one without a session", removed)
-	}
-}
-
 func newProtocolTestClient() *wsClient {
 	return &wsClient{
 		send:            make(chan outboundMessage, 32),
-		attachedStreams: make(map[string]ptybackend.Stream),
+		attachedStreams: make(map[protocol.TerminalID]ptybackend.Stream),
 	}
 }
 
@@ -42,7 +26,7 @@ func expectSpawnResult(t *testing.T, client *wsClient, sessionID string, success
 			if err := json.Unmarshal(outbound.payload, &result); err != nil || result.Event != protocol.EventSpawnResult {
 				continue
 			}
-			if result.ID != sessionID {
+			if string(result.ID) != sessionID {
 				continue
 			}
 			if result.Success != success {

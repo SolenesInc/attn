@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/protocol"
 	"os"
 	"strings"
 )
@@ -14,9 +15,12 @@ func runSessionPriority(args []string) {
 		os.Exit(2)
 	}
 	fs := flag.NewFlagSet("session priority", flag.ExitOnError)
-	session := fs.String("session", os.Getenv("ATTN_SESSION_ID"), "session to mark")
+	session := fs.String("session", "", "session to mark")
 	fs.Parse(args[1:])
-	id := strings.TrimSpace(*session)
+	id := protocol.SessionID(strings.TrimSpace(*session))
+	if id == "" {
+		id = currentSessionOrExit()
+	}
 	if id == "" || fs.NArg() != 0 {
 		fmt.Fprintln(os.Stderr, "session priority: pass --session <id> or run inside an attn session")
 		os.Exit(2)

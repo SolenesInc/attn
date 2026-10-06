@@ -2,8 +2,9 @@ package daemon
 
 import (
 	"context"
-	"github.com/victorarias/attn/internal/bus"
 	"time"
+
+	"github.com/victorarias/attn/internal/bus"
 
 	"github.com/victorarias/attn/internal/protocol"
 )

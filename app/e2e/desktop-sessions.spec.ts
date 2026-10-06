@@ -280,7 +280,10 @@ test.describe('Desktop Sessions', () => {
     await injectSessions(page, daemon, [{ id: 'gpu-agent', label: 'gpu-agent', cwd: '/tmp/desktop-gpu' }]);
     await page.getByTestId('session-gpu-agent').click();
     await waitForMockPtyBanner(page, 'gpu-agent');
-    await page.evaluate(() => window.__TEST_EMIT_PTY_DATA?.('gpu-agent', '\x1b[?25l\x1b[41mpainted before hiding\x1b[0m\r\nsecond row'));
+    await page.evaluate(() => {
+      const terminal = window.__TEST_GET_ACTIVE_SESSION_PANE_RUNTIME?.('gpu-agent');
+      if (terminal) window.__TEST_EMIT_PTY_DATA?.(terminal, '\x1b[?25l\x1b[41mpainted before hiding\x1b[0m\r\nsecond row');
+    });
     await expect
       .poll(() => page.evaluate(() => window.__TEST_GET_SESSION_PANE_TEXT?.('gpu-agent') ?? ''))
       .toContain('second row');

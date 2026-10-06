@@ -32,20 +32,20 @@ func TestARespawnWhoseAgentCannotStartKeepsTheSessionAndItsLaunch(t *testing.T) 
 		m.Model = protocol.Ptr("claude-sonnet-5")
 	})
 	w.Launched(session)
-	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: session})
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == session })
+	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: protocol.SessionID(session)})
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
 
 	if err := os.RemoveAll(cwd); err != nil {
 		t.Fatal(err)
 	}
 	failed := testworld.Request(app, protocol.SpawnSessionMessage{
-		Cmd: protocol.CmdSpawnSession, ID: session, Agent: string(fakeagent.Claude), Cwd: cwd,
+		Cmd: protocol.CmdSpawnSession, ID: protocol.SessionID(session), Agent: string(fakeagent.Claude), Cwd: cwd,
 		ProfileID: app.SelectedProfile(), Cols: 100, Rows: 30, Model: protocol.Ptr("claude-haiku-5"),
-	}, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return r.ID == session })
+	}, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return string(r.ID) == session })
 	if failed.Success {
 		t.Fatal("a respawn into a deleted directory succeeded")
 	}
-	if !slices.ContainsFunc(w.App().Initial.Sessions, func(s protocol.Session) bool { return s.ID == session }) {
+	if !slices.ContainsFunc(w.App().Initial.Sessions, func(s protocol.Session) bool { return string(s.ID) == session }) {
 		t.Fatal("the failed respawn took the session away")
 	}
 

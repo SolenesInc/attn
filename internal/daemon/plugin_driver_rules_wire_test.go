@@ -21,7 +21,7 @@ func statesShown(app *testworld.Peer, session string) []protocol.SessionState {
 			sessions = append(sessions, *event.Session)
 		}
 		for _, s := range sessions {
-			if s.ID == session && (len(shown) == 0 || shown[len(shown)-1] != s.State) {
+			if string(s.ID) == session && (len(shown) == 0 || shown[len(shown)-1] != s.State) {
 				shown = append(shown, s.State)
 			}
 		}
@@ -36,7 +36,7 @@ func listedState(t *testing.T, w *world, session string) protocol.Session {
 		t.Fatal(err)
 	}
 	for _, s := range listed.Sessions {
-		if s.ID == session {
+		if string(s.ID) == session {
 			return s
 		}
 	}
@@ -67,7 +67,7 @@ func TestADriverSpeaksOnlyForTheRunItOwnsAndOnlyForward(t *testing.T) {
 	if err := owner.state(run, 4, protocol.StatePendingApproval); err != nil {
 		t.Fatal(err)
 	}
-	owner.mustReport("session.report_stop", map[string]any{"session_id": session, "run_id": run.RunID, "seq": 3, "verdict": protocol.StateWaitingInput})
+	owner.mustReport("session.report_stop", map[string]any{"session_id": run.SessionID, "run_id": run.RunID, "seq": 3, "verdict": protocol.StateWaitingInput})
 	stateIs(protocol.SessionStatePendingApproval, "an out-of-order stop")
 	for _, refused := range []struct {
 		name string
@@ -78,7 +78,7 @@ func TestADriverSpeaksOnlyForTheRunItOwnsAndOnlyForward(t *testing.T) {
 		{name: "without a cursor", run: run.RunID, seq: 0, want: "seq must be greater than zero"},
 		{name: "for another run", run: "run-stale", seq: 99, want: "does not own active run"},
 	} {
-		if err := owner.state(driverLaunch{SessionID: session, RunID: refused.run}, refused.seq, protocol.StateIdle); !errorSays(err, refused.want) {
+		if err := owner.state(driverLaunch{SessionID: run.SessionID, RunID: refused.run}, refused.seq, protocol.StateIdle); !errorSays(err, refused.want) {
 			t.Errorf("a report %s was answered %v, want a refusal saying %q", refused.name, err, refused.want)
 		}
 	}
@@ -144,11 +144,11 @@ func TestAReconnectingDriverIsHandedItsOwnRunsAndTheAutoModeConfigItRuns(t *test
 	if len(snipe.registered.ActiveRuns) != 0 || len(snipe.registered.AutoMode) != 0 {
 		t.Errorf("a first registration without auto_mode was answered %+v, want no runs and no auto mode config", snipe.registered)
 	}
-	session, run := spawnDriven(w, app, snipe, w.Path("shop"))
+	_, run := spawnDriven(w, app, snipe, w.Path("shop"))
 	rivalSession := w.Spawn(app, "rival", w.Path("rival"))
 	rival.launched()
 	snipe.mustReport("session.report_metadata", map[string]any{
-		"session_id": session, "run_id": run.RunID, "seq": 1, "metadata": json.RawMessage(`{"native_id":"abc"}`),
+		"session_id": run.SessionID, "run_id": run.RunID, "seq": 1, "metadata": json.RawMessage(`{"native_id":"abc"}`),
 	})
 
 	snipe.leave(w)
@@ -189,12 +189,14 @@ func TestTheOwningDriverIsToldWhenEachOfItsRunsEnds(t *testing.T) {
 		reasons []string
 	}{
 		{name: "killed", run: killedRun, reasons: []string{"killed", "exited"},
-			end: func() { app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: killed}) }},
+			end: func() {
+				app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: protocol.SessionID(killed)})
+			}},
 		{name: "pane closed", run: paneClosedRun, reasons: []string{"killed", "exited"},
 			end: func() { closeSessionPane(app, paneClosed) }},
 		{name: "exited on its own", run: finishedRun, reasons: []string{"exited"},
 			end: func() {
-				app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: app.Terminal(finished), Data: "\x04"})
+				app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(app.Terminal(finished)), Data: "\x04"})
 			}},
 	} {
 		row.end()
@@ -221,7 +223,7 @@ func TestAnEndedRunIsReportedToTheDriverThatLaunchedItEvenAfterAnotherTookTheAge
 	successor := connectDriver(t, w, "successor-plugin", "snipe", map[string]bool{"state_reporting": true})
 	owner = dialDriver(t, w, "snipe-plugin")
 
-	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: session})
+	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: protocol.SessionID(session)})
 	if got := owner.closed(); got.SessionID != run.SessionID || got.RunID != run.RunID {
 		t.Errorf("the launching plugin was told %+v, want the end of its run %s", got, run.RunID)
 	}
@@ -250,12 +252,12 @@ func TestAStopIsClassifiedOnlyForItsOwnRunAndAFailedVerdictIsUnknown(t *testing.
 	app := w.App()
 	driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"state_reporting": true})
 	awaitDriverAvailable(app, "snipe")
-	session, run := spawnDriven(w, app, driver, w.Path("shop"))
+	_, run := spawnDriven(w, app, driver, w.Path("shop"))
 	classify := func(runID, text string) (string, error) {
 		var answer struct {
 			Verdict string `json:"verdict"`
 		}
-		err := driver.call("attn.classify_stop", map[string]any{"session_id": session, "run_id": runID, "assistant_text": text}, &answer)
+		err := driver.call("attn.classify_stop", map[string]any{"session_id": run.SessionID, "run_id": runID, "assistant_text": text}, &answer)
 		return answer.Verdict, err
 	}
 
@@ -284,6 +286,6 @@ func TestADriverFromBeforeCustodyOnlyInputCanStillReportItsInputTaken(t *testing
 	w := newWorld(t)
 	app := w.App()
 	driver := connectDriver(t, w, "old-pi-plugin", "oldpi", map[string]bool{"state_reporting": true, "message_delivery": true})
-	session, run := spawnDriven(w, app, driver, w.Path("shop"))
-	driver.mustReport("session.report_input_taken", map[string]any{"session_id": session, "run_id": run.RunID, "input_id": "inbox-ring/1"})
+	_, run := spawnDriven(w, app, driver, w.Path("shop"))
+	driver.mustReport("session.report_input_taken", map[string]any{"session_id": run.SessionID, "run_id": run.RunID, "input_id": "inbox-ring/1"})
 }

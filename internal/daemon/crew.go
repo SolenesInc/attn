@@ -251,7 +251,7 @@ func (d *Daemon) crewBindingLive(member crew.Member) bool {
 	return member.BindingSession != "" && d.sessionExists(member.BindingSession)
 }
 
-func (d *Daemon) liveSessionForTender(tender garden.Tender) (string, bool) {
+func (d *Daemon) liveSessionForTender(tender garden.Tender) (protocol.SessionID, bool) {
 	memberID := strings.TrimSpace(tender.Member)
 	if memberID != "" {
 		member, found, err := d.resolveCrewMember(memberID)
@@ -260,13 +260,13 @@ func (d *Daemon) liveSessionForTender(tender garden.Tender) (string, bool) {
 		}
 		return member.BindingSession, true
 	}
-	if sessionID := strings.TrimSpace(tender.Session); sessionID != "" && d.store.Get(sessionID) != nil {
+	if sessionID := protocol.TrimID(tender.Session); sessionID != "" && d.store.Get(sessionID) != nil {
 		return sessionID, true
 	}
 	return "", false
 }
 
-func (d *Daemon) claimCrewBinding(memberName, sessionID string) (string, error) {
+func (d *Daemon) claimCrewBinding(memberName string, sessionID protocol.SessionID) (string, error) {
 	if err := d.requireHome(crew.Surface); err != nil {
 		return "", err
 	}
@@ -310,8 +310,8 @@ func (d *Daemon) claimCrewBinding(memberName, sessionID string) (string, error) 
 	return "", fmt.Errorf("the registry record for %q was rewritten under all %d attempts to bind it; try again", memberName, attempts)
 }
 
-func (d *Daemon) releaseCrewBindingIfSession(sessionID string) {
-	if d.store == nil || strings.TrimSpace(sessionID) == "" {
+func (d *Daemon) releaseCrewBindingIfSession(sessionID protocol.SessionID) {
+	if d.store == nil || protocol.TrimID(sessionID) == "" {
 		return
 	}
 	schema, err := d.crewCollection()
@@ -328,7 +328,7 @@ func (d *Daemon) releaseCrewBindingIfSession(sessionID string) {
 	d.releaseCrewBindingsExcept(*schema, members, docs, "", sessionID)
 }
 
-func (d *Daemon) releaseCrewBinding(memberID, sessionID string) (bool, error) {
+func (d *Daemon) releaseCrewBinding(memberID string, sessionID protocol.SessionID) (bool, error) {
 	released := false
 	_, err := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {
 		released = false
@@ -349,7 +349,7 @@ func (d *Daemon) releaseCrewBinding(memberID, sessionID string) (bool, error) {
 	return true, nil
 }
 
-func (d *Daemon) releaseExitedCrewBinding(sessionID string) {
+func (d *Daemon) releaseExitedCrewBinding(sessionID protocol.SessionID) {
 	// Sessions a stopping daemon kills come back recoverable; the next daemon releases and reports them.
 	if d.stopping() {
 		return
@@ -380,13 +380,13 @@ func (d *Daemon) releaseExitedCrewBinding(sessionID string) {
 	}
 }
 
-func (d *Daemon) noteCrewExitedSession(memberID, sessionID string) {
+func (d *Daemon) noteCrewExitedSession(memberID string, sessionID protocol.SessionID) {
 	d.crewExitedMu.Lock()
 	defer d.crewExitedMu.Unlock()
 	if d.crewExitedSessions == nil {
 		d.crewExitedSessions = make(map[string]string)
 	}
-	d.crewExitedSessions[memberID] = sessionID
+	d.crewExitedSessions[memberID] = string(sessionID)
 }
 
 func (d *Daemon) takeCrewExitedSession(memberID string) string {
@@ -397,7 +397,7 @@ func (d *Daemon) takeCrewExitedSession(memberID string) string {
 	return sessionID
 }
 
-func (d *Daemon) releaseCrewBindingsExcept(schema docstore.CollectionSchema, members []crew.Member, docs map[string]docstore.Document, keepID, sessionID string) {
+func (d *Daemon) releaseCrewBindingsExcept(schema docstore.CollectionSchema, members []crew.Member, docs map[string]docstore.Document, keepID string, sessionID protocol.SessionID) {
 	for _, member := range members {
 		if member.BindingSession != sessionID || member.ID == keepID {
 			continue
@@ -414,7 +414,7 @@ func (d *Daemon) releaseCrewBindingsExcept(schema docstore.CollectionSchema, mem
 	}
 }
 
-func (d *Daemon) crewMembersBySession() map[string]string {
+func (d *Daemon) crewMembersBySession() map[protocol.SessionID]string {
 	if d.store == nil {
 		return nil
 	}
@@ -425,21 +425,21 @@ func (d *Daemon) crewMembersBySession() map[string]string {
 		}
 		return nil
 	}
-	var out map[string]string
+	var out map[protocol.SessionID]string
 	for _, member := range members {
 		if !d.crewBindingLive(member) {
 			continue
 		}
 		if out == nil {
-			out = make(map[string]string)
+			out = make(map[protocol.SessionID]string)
 		}
 		out[member.BindingSession] = member.ID
 	}
 	return out
 }
 
-func (d *Daemon) crewMemberBoundTo(sessionID string) string {
-	if d.store == nil || strings.TrimSpace(sessionID) == "" {
+func (d *Daemon) crewMemberBoundTo(sessionID protocol.SessionID) string {
+	if d.store == nil || protocol.TrimID(sessionID) == "" {
 		return ""
 	}
 	members, _, err := d.readCrewMembers()
@@ -457,7 +457,7 @@ func (d *Daemon) crewMemberBoundTo(sessionID string) string {
 	return ""
 }
 
-func (d *Daemon) crewSessionBoundTo(memberID string) (string, error) {
+func (d *Daemon) crewSessionBoundTo(memberID string) (protocol.SessionID, error) {
 	if d.store == nil || strings.TrimSpace(memberID) == "" {
 		return "", nil
 	}
@@ -472,7 +472,7 @@ func (d *Daemon) crewSessionBoundTo(memberID string) (string, error) {
 	return member.BindingSession, nil
 }
 
-func (d *Daemon) decorateCrewMember(session *protocol.Session, membersBySession map[string]string) {
+func (d *Daemon) decorateCrewMember(session *protocol.Session, membersBySession map[protocol.SessionID]string) {
 	if session == nil {
 		return
 	}
@@ -483,7 +483,7 @@ func (d *Daemon) decorateCrewMember(session *protocol.Session, membersBySession 
 	session.CrewMember = nil
 }
 
-func (d *Daemon) resolveTenderMember(memberName, sessionID string) string {
+func (d *Daemon) resolveTenderMember(memberName string, sessionID protocol.SessionID) string {
 	memberName = strings.TrimSpace(memberName)
 	if memberName == "" {
 		return d.crewMemberBoundTo(sessionID)

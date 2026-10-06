@@ -12,6 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/inbox"
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -137,19 +138,19 @@ func firstString(values []string) string {
 	return strings.TrimSpace(values[0])
 }
 
-func gardenSeedLifecycleOccurrence(verb garden.Verb, seedID, causedBySessionID string, directlyNotifiedSessionID ...string) (events.Occurrence, error) {
+func gardenSeedLifecycleOccurrence(verb garden.Verb, seedID string, causedBySessionID protocol.SessionID, directlyNotifiedSessionID ...string) (events.Occurrence, error) {
 	return gardenSeedLifecycleOccurrenceWithAttention(true, verb, seedID, causedBySessionID, directlyNotifiedSessionID...)
 }
 
-func quietGardenSeedLifecycleOccurrence(verb garden.Verb, seedID, causedBySessionID string, directlyNotifiedSessionID ...string) (events.Occurrence, error) {
+func quietGardenSeedLifecycleOccurrence(verb garden.Verb, seedID string, causedBySessionID protocol.SessionID, directlyNotifiedSessionID ...string) (events.Occurrence, error) {
 	return gardenSeedLifecycleOccurrenceWithAttention(false, verb, seedID, causedBySessionID, directlyNotifiedSessionID...)
 }
 
-func gardenSeedLifecycleOccurrenceWithAttention(attentionRequested bool, verb garden.Verb, seedID, causedBySessionID string, directlyNotifiedSessionID ...string) (events.Occurrence, error) {
+func gardenSeedLifecycleOccurrenceWithAttention(attentionRequested bool, verb garden.Verb, seedID string, causedBySessionID protocol.SessionID, directlyNotifiedSessionID ...string) (events.Occurrence, error) {
 	payload := events.LifecyclePayload{
 		AttentionRequested:        attentionRequested,
-		CausedBySessionID:         strings.TrimSpace(causedBySessionID),
-		DirectlyNotifiedSessionID: firstString(directlyNotifiedSessionID),
+		CausedBySessionID:         protocol.TrimID(causedBySessionID),
+		DirectlyNotifiedSessionID: protocol.SessionID(firstString(directlyNotifiedSessionID)),
 	}
 	switch verb {
 	case garden.VerbTend:
@@ -301,7 +302,7 @@ func (r gardenEventRoles) ResolveSeedRole(seedID string, role events.Role) ([]st
 		if err != nil || sessionID == "" {
 			return nil, err
 		}
-		return []string{inbox.ToSession(sessionID).String()}, nil
+		return []string{inbox.ToSession(protocol.SessionID(sessionID)).String()}, nil
 	case events.CoveringWatchers:
 		coverage, err := r.subscriptions.coverageChecked(seedID)
 		if err != nil {
@@ -378,7 +379,7 @@ func (d *Daemon) invalidateGardenSeedParties(reason string) {
 	}
 }
 
-func (r gardenEventRoles) AddressesOfSession(sessionID string) []string {
+func (r gardenEventRoles) AddressesOfSession(sessionID protocol.SessionID) []string {
 	addresses := r.daemon.inboxRoleAddresses(sessionID)
 	values := make([]string, len(addresses))
 	for i, address := range addresses {

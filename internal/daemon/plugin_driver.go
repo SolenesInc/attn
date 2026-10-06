@@ -42,15 +42,15 @@ type pluginDriverRegisterResult struct {
 }
 
 type activePluginRun struct {
-	SessionID string          `json:"session_id"`
-	RunID     string          `json:"run_id"`
-	Metadata  json.RawMessage `json:"metadata,omitempty"`
-	Seq       uint64          `json:"seq"`
+	TerminalID protocol.TerminalID `json:"session_id"`
+	RunID      string              `json:"run_id"`
+	Metadata   json.RawMessage     `json:"metadata,omitempty"`
+	Seq        uint64              `json:"seq"`
 }
 
 type pluginDriverSpawnParams struct {
 	Agent           string                    `json:"agent"`
-	SessionID       string                    `json:"session_id"`
+	TerminalID      protocol.TerminalID       `json:"session_id"`
 	RunID           string                    `json:"run_id"`
 	CWD             string                    `json:"cwd"`
 	Label           string                    `json:"label,omitempty"`
@@ -93,34 +93,37 @@ type pluginResumeAvailability struct {
 }
 
 type pluginReportStateParams struct {
-	SessionID     string `json:"session_id"`
-	RunID         string `json:"run_id"`
-	Seq           uint64 `json:"seq"`
-	State         string `json:"state"`
-	OnlyIfUnknown bool   `json:"only_if_unknown,omitempty"`
+	TerminalID    protocol.TerminalID `json:"session_id"`
+	SessionID     protocol.SessionID  `json:"-"`
+	RunID         string              `json:"run_id"`
+	Seq           uint64              `json:"seq"`
+	State         string              `json:"state"`
+	OnlyIfUnknown bool                `json:"only_if_unknown,omitempty"`
 }
 
 type pluginReportStopParams struct {
-	SessionID string `json:"session_id"`
-	RunID     string `json:"run_id"`
-	Seq       uint64 `json:"seq"`
-	Verdict   string `json:"verdict"`
+	TerminalID protocol.TerminalID `json:"session_id"`
+	SessionID  protocol.SessionID  `json:"-"`
+	RunID      string              `json:"run_id"`
+	Seq        uint64              `json:"seq"`
+	Verdict    string              `json:"verdict"`
 }
 
 type pluginReportMetadataParams struct {
-	SessionID       string          `json:"session_id"`
-	RunID           string          `json:"run_id"`
-	Seq             uint64          `json:"seq"`
-	Metadata        json.RawMessage `json:"metadata"`
-	ResumeSessionID string          `json:"resume_session_id,omitempty"`
+	TerminalID      protocol.TerminalID `json:"session_id"`
+	SessionID       protocol.SessionID  `json:"-"`
+	RunID           string              `json:"run_id"`
+	Seq             uint64              `json:"seq"`
+	Metadata        json.RawMessage     `json:"metadata"`
+	ResumeSessionID string              `json:"resume_session_id,omitempty"`
 }
 
 type pluginDriverSessionClosedParams struct {
-	SessionID string `json:"session_id"`
-	RunID     string `json:"run_id"`
-	Reason    string `json:"reason"`
-	ExitCode  *int   `json:"exit_code,omitempty"`
-	Signal    string `json:"signal,omitempty"`
+	TerminalID protocol.TerminalID `json:"session_id"`
+	RunID      string              `json:"run_id"`
+	Reason     string              `json:"reason"`
+	ExitCode   *int                `json:"exit_code,omitempty"`
+	Signal     string              `json:"signal,omitempty"`
 }
 
 type pluginDriverSessionClosedResult struct {
@@ -128,10 +131,10 @@ type pluginDriverSessionClosedResult struct {
 }
 
 type pluginDeliverMessageParams struct {
-	SessionID string `json:"session_id"`
-	RunID     string `json:"run_id"`
-	InputID   string `json:"input_id"`
-	Text      string `json:"text"`
+	TerminalID protocol.TerminalID `json:"session_id"`
+	RunID      string              `json:"run_id"`
+	InputID    string              `json:"input_id"`
+	Text       string              `json:"text"`
 }
 
 type pluginDeliverMessageResult struct {
@@ -139,46 +142,52 @@ type pluginDeliverMessageResult struct {
 }
 
 type pluginReportPullRequestParams struct {
-	SessionID string `json:"session_id"`
-	RunID     string `json:"run_id"`
-	URL       string `json:"url"`
+	TerminalID protocol.TerminalID `json:"session_id"`
+	SessionID  protocol.SessionID  `json:"-"`
+	RunID      string              `json:"run_id"`
+	URL        string              `json:"url"`
 }
 
 type pluginReportTranscriptPathParams struct {
-	SessionID string `json:"session_id"`
-	RunID     string `json:"run_id"`
-	Path      string `json:"path"`
+	TerminalID protocol.TerminalID `json:"session_id"`
+	SessionID  protocol.SessionID  `json:"-"`
+	RunID      string              `json:"run_id"`
+	Path       string              `json:"path"`
 }
 
 type pluginReportAutoModeDenialParams struct {
-	SessionID string `json:"session_id"`
-	RunID     string `json:"run_id"`
-	Tool      string `json:"tool"`
-	Action    string `json:"action"`
-	Reason    string `json:"reason"`
-	Rule      string `json:"rule"`
-	At        string `json:"at"`
+	TerminalID protocol.TerminalID `json:"session_id"`
+	SessionID  protocol.SessionID  `json:"-"`
+	RunID      string              `json:"run_id"`
+	Tool       string              `json:"tool"`
+	Action     string              `json:"action"`
+	Reason     string              `json:"reason"`
+	Rule       string              `json:"rule"`
+	At         string              `json:"at"`
 }
 
 type pluginReportExecPolicyAmendmentParams struct {
-	SessionID     string   `json:"session_id"`
-	RunID         string   `json:"run_id"`
-	Pattern       []string `json:"pattern"`
-	Decision      string   `json:"decision"`
-	Justification string   `json:"justification"`
+	TerminalID    protocol.TerminalID `json:"session_id"`
+	SessionID     protocol.SessionID  `json:"-"`
+	RunID         string              `json:"run_id"`
+	Pattern       []string            `json:"pattern"`
+	Decision      string              `json:"decision"`
+	Justification string              `json:"justification"`
 }
 
 type pluginReportNetworkAmendmentParams struct {
-	SessionID string `json:"session_id"`
-	RunID     string `json:"run_id"`
-	Host      string `json:"host"`
-	Decision  string `json:"decision"`
+	TerminalID protocol.TerminalID `json:"session_id"`
+	SessionID  protocol.SessionID  `json:"-"`
+	RunID      string              `json:"run_id"`
+	Host       string              `json:"host"`
+	Decision   string              `json:"decision"`
 }
 
 type pluginClassifyStopParams struct {
-	SessionID     string `json:"session_id"`
-	RunID         string `json:"run_id"`
-	AssistantText string `json:"assistant_text"`
+	TerminalID    protocol.TerminalID `json:"session_id"`
+	SessionID     protocol.SessionID  `json:"-"`
+	RunID         string              `json:"run_id"`
+	AssistantText string              `json:"assistant_text"`
 }
 
 type pluginClassifyStopResult struct {
@@ -300,7 +309,7 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 		active := d.store.ListAgentDriverRuns(plugin.name)
 		runs := make([]activePluginRun, 0, len(active))
 		for _, run := range active {
-			item := activePluginRun{SessionID: string(d.primaryTerminal(run.SessionID)), RunID: run.RunID, Seq: run.Seq}
+			item := activePluginRun{TerminalID: d.primaryTerminal(run.SessionID), RunID: run.RunID, Seq: run.Seq}
 			if json.Valid([]byte(run.Metadata)) {
 				item.Metadata = json.RawMessage(run.Metadata)
 			}
@@ -321,7 +330,7 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 		if err := json.Unmarshal(msg.Params, &params); err != nil {
 			return nil, true, fmt.Errorf("decode session.report_state params: %w", err)
 		}
-		params.SessionID = d.callerID(params.SessionID)
+		params.SessionID = d.sessionInTerminal(params.TerminalID)
 		if err := validatePluginReportedState(params); err != nil {
 			return nil, true, err
 		}
@@ -337,7 +346,7 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 		if err := json.Unmarshal(msg.Params, &params); err != nil {
 			return nil, true, fmt.Errorf("decode session.report_stop params: %w", err)
 		}
-		params.SessionID = d.callerID(params.SessionID)
+		params.SessionID = d.sessionInTerminal(params.TerminalID)
 		if err := validatePluginReportedStop(params); err != nil {
 			return nil, true, err
 		}
@@ -353,7 +362,7 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 		if err := json.Unmarshal(msg.Params, &params); err != nil {
 			return nil, true, fmt.Errorf("decode session.report_metadata params: %w", err)
 		}
-		params.SessionID = d.callerID(params.SessionID)
+		params.SessionID = d.sessionInTerminal(params.TerminalID)
 		if len(params.Metadata) == 0 || !json.Valid(params.Metadata) {
 			return nil, true, errors.New("session.report_metadata metadata must be valid JSON")
 		}
@@ -376,7 +385,7 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 		if err := json.Unmarshal(msg.Params, &params); err != nil {
 			return nil, true, fmt.Errorf("decode session.report_pull_request params: %w", err)
 		}
-		params.SessionID = d.callerID(params.SessionID)
+		params.SessionID = d.sessionInTerminal(params.TerminalID)
 		if err := d.authorizePluginSessionReport(plugin, params.SessionID, params.RunID); err != nil {
 			return nil, true, err
 		}
@@ -394,7 +403,7 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 		if err := json.Unmarshal(msg.Params, &params); err != nil {
 			return nil, true, fmt.Errorf("decode session.report_transcript_path params: %w", err)
 		}
-		params.SessionID = d.callerID(params.SessionID)
+		params.SessionID = d.sessionInTerminal(params.TerminalID)
 		path := strings.TrimSpace(params.Path)
 		if path == "" {
 			return nil, true, errors.New("session.report_transcript_path path is required")
@@ -413,7 +422,7 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 		if err := json.Unmarshal(msg.Params, &params); err != nil {
 			return nil, true, fmt.Errorf("decode session.report_automode_denial params: %w", err)
 		}
-		params.SessionID = d.callerID(params.SessionID)
+		params.SessionID = d.sessionInTerminal(params.TerminalID)
 		if strings.TrimSpace(params.Action) == "" {
 			return nil, true, errors.New("session.report_automode_denial action is required")
 		}
@@ -430,7 +439,7 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 		if err := json.Unmarshal(msg.Params, &params); err != nil {
 			return nil, true, fmt.Errorf("decode session.report_execpolicy_amendment params: %w", err)
 		}
-		params.SessionID = d.callerID(params.SessionID)
+		params.SessionID = d.sessionInTerminal(params.TerminalID)
 		if err := d.authorizePluginSessionReport(plugin, params.SessionID, params.RunID); err != nil {
 			return nil, true, err
 		}
@@ -452,7 +461,7 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 		if err := json.Unmarshal(msg.Params, &params); err != nil {
 			return nil, true, fmt.Errorf("decode session.report_network_amendment params: %w", err)
 		}
-		params.SessionID = d.callerID(params.SessionID)
+		params.SessionID = d.sessionInTerminal(params.TerminalID)
 		if err := d.authorizePluginSessionReport(plugin, params.SessionID, params.RunID); err != nil {
 			return nil, true, err
 		}
@@ -473,11 +482,11 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 	}
 }
 
-func (d *Daemon) promoteReportedAmendment(kind, value, sessionID string) error {
+func (d *Daemon) promoteReportedAmendment(kind string, value string, sessionID protocol.SessionID) error {
 	if d.store == nil {
 		return errors.New("no database")
 	}
-	proposedBy := "pi session " + d.sessionLabel(strings.TrimSpace(sessionID))
+	proposedBy := "pi session " + d.sessionLabel(protocol.TrimID(sessionID))
 	proposal, cfg, err := d.store.PromoteReportedAmendment(kind, value, proposedBy, time.Now())
 	if err != nil {
 		return err
@@ -488,8 +497,8 @@ func (d *Daemon) promoteReportedAmendment(kind, value, sessionID string) error {
 	return nil
 }
 
-func (d *Daemon) authorizePluginSessionReport(plugin *pluginConnection, sessionID, runID string) error {
-	sessionID = strings.TrimSpace(sessionID)
+func (d *Daemon) authorizePluginSessionReport(plugin *pluginConnection, sessionID protocol.SessionID, runID string) error {
+	sessionID = protocol.TrimID(sessionID)
 	session := d.store.Get(sessionID)
 	if session == nil {
 		return fmt.Errorf("unknown session %q", sessionID)
@@ -512,7 +521,7 @@ func (d *Daemon) handlePluginClassifyStop(plugin *pluginConnection, msg jsonRPCM
 		_ = plugin.send(jsonRPCFailure(msg.ID, jsonRPCInvalidRequest, "assistant_text is required"))
 		return
 	}
-	params.SessionID = d.callerID(params.SessionID)
+	params.SessionID = d.sessionInTerminal(params.TerminalID)
 	if err := d.authorizePluginSessionReport(plugin, params.SessionID, params.RunID); err != nil {
 		_ = plugin.send(jsonRPCFailure(msg.ID, jsonRPCInvalidRequest, err.Error()))
 		return
@@ -555,7 +564,7 @@ func validatePluginReportCursor(runID string, seq uint64) error {
 
 func (d *Daemon) applyPluginReportedState(params pluginReportStateParams) {
 	d.notePluginDriverReport(params.SessionID)
-	d.linkEvents().Turn(harness.SessionID(params.SessionID), time.Now(), harness.TurnEvent{
+	d.linkEvents().Turn(params.SessionID, time.Now(), harness.TurnEvent{
 		Turn:     pluginReportedTurns[strings.TrimSpace(params.State)],
 		Epoch:    params.RunID,
 		Seq:      params.Seq,
@@ -603,27 +612,27 @@ func (d *Daemon) applyPluginReportedTranscriptPath(params pluginReportTranscript
 	if session == nil {
 		return
 	}
-	d.ensurePluginUsageWatcher(params.SessionID, string(session.Agent), path)
+	d.ensurePluginUsageWatcher(params.SessionID, session.Agent, path)
 }
 
-func (d *Daemon) beginPluginSessionLaunch(sessionID, pluginName, runID string) {
+func (d *Daemon) beginPluginSessionLaunch(sessionID protocol.SessionID, pluginName string, runID string) {
 	d.pluginDriverMu.Lock()
 	defer d.pluginDriverMu.Unlock()
 	if d.pluginLaunching == nil {
-		d.pluginLaunching = make(map[string]pluginSessionLaunch)
+		d.pluginLaunching = make(map[protocol.SessionID]pluginSessionLaunch)
 	}
 	if d.pluginReports == nil {
-		d.pluginReports = make(map[string][]pendingPluginReport)
+		d.pluginReports = make(map[protocol.SessionID][]pendingPluginReport)
 	}
 	if d.pluginExits == nil {
-		d.pluginExits = make(map[string]ptybackend.ExitInfo)
+		d.pluginExits = make(map[protocol.SessionID]ptybackend.ExitInfo)
 	}
 	d.pluginLaunching[sessionID] = pluginSessionLaunch{PluginName: pluginName, RunID: runID}
 	delete(d.pluginReports, sessionID)
 	delete(d.pluginExits, sessionID)
 }
 
-func (d *Daemon) queueReportDuringPluginLaunch(plugin *pluginConnection, sessionID string, report pendingPluginReport) bool {
+func (d *Daemon) queueReportDuringPluginLaunch(plugin *pluginConnection, sessionID protocol.SessionID, report pendingPluginReport) bool {
 	d.pluginDriverMu.Lock()
 	launch, ok := d.pluginLaunching[sessionID]
 	if !ok || launch.PluginName != plugin.name || launch.RunID != report.runID() {
@@ -640,7 +649,7 @@ func (d *Daemon) queueReportDuringPluginLaunch(plugin *pluginConnection, session
 	return true
 }
 
-func (d *Daemon) queueExitDuringPluginLaunch(sessionID string, info ptybackend.ExitInfo) bool {
+func (d *Daemon) queueExitDuringPluginLaunch(sessionID protocol.SessionID, info ptybackend.ExitInfo) bool {
 	d.pluginDriverMu.Lock()
 	launch, ok := d.pluginLaunching[sessionID]
 	if !ok || info.LifecycleID == "" || launch.RunID != info.LifecycleID {
@@ -656,14 +665,14 @@ func (d *Daemon) queueExitDuringPluginLaunch(sessionID string, info ptybackend.E
 	return true
 }
 
-func (d *Daemon) supersededExitDuringPluginLaunch(sessionID string, info ptybackend.ExitInfo) bool {
+func (d *Daemon) supersededExitDuringPluginLaunch(sessionID protocol.SessionID, info ptybackend.ExitInfo) bool {
 	d.pluginDriverMu.Lock()
 	defer d.pluginDriverMu.Unlock()
 	launch, ok := d.pluginLaunching[sessionID]
 	return ok && info.LifecycleID != "" && launch.RunID != info.LifecycleID
 }
 
-func (d *Daemon) finishPluginSessionLaunch(sessionID string, success bool) *ptybackend.ExitInfo {
+func (d *Daemon) finishPluginSessionLaunch(sessionID protocol.SessionID, success bool) *ptybackend.ExitInfo {
 	d.pluginDriverMu.Lock()
 	reports := append([]pendingPluginReport(nil), d.pluginReports[sessionID]...)
 	exit, exited := d.pluginExits[sessionID]
@@ -690,7 +699,7 @@ func (d *Daemon) finishPluginSessionLaunch(sessionID string, success bool) *ptyb
 	return nil
 }
 
-func (d *Daemon) abortPluginSessionLaunch(sessionID, reason string) {
+func (d *Daemon) abortPluginSessionLaunch(sessionID protocol.SessionID, reason string) {
 	d.pluginDriverMu.Lock()
 	launch, ok := d.pluginLaunching[sessionID]
 	delete(d.pluginReports, sessionID)
@@ -716,7 +725,7 @@ func (r pendingPluginReport) runID() string {
 	}
 }
 
-func (d *Daemon) closePluginDriverSession(sessionID, reason string, exitCode *int, signal string) {
+func (d *Daemon) closePluginDriverSession(sessionID protocol.SessionID, reason string, exitCode *int, signal string) {
 	session := d.store.Get(sessionID)
 	if session == nil {
 		d.logf("plugin session close skipped: session=%s reason=%s no longer in store", sessionID, reason)
@@ -733,18 +742,18 @@ func (d *Daemon) closePluginDriverSession(sessionID, reason string, exitCode *in
 
 // notifyPluginDriverSessionClosed addresses the run by the terminal the driver launched it in.
 func (d *Daemon) notifyPluginDriverSessionClosed(pluginName string, terminal harness.TerminalID, runID, reason string, exitCode *int, signal string) {
-	sessionID := string(terminal)
+	sessionID := terminal
 	plugin := d.ensurePluginRegistry().get(pluginName)
 	if plugin == nil {
 		d.logf("plugin session close notification dropped: plugin=%s session=%s run=%s owner disconnected", pluginName, sessionID, runID)
 		return
 	}
 	params := pluginDriverSessionClosedParams{
-		SessionID: sessionID,
-		RunID:     runID,
-		Reason:    strings.TrimSpace(reason),
-		ExitCode:  exitCode,
-		Signal:    strings.TrimSpace(signal),
+		TerminalID: sessionID,
+		RunID:      runID,
+		Reason:     strings.TrimSpace(reason),
+		ExitCode:   exitCode,
+		Signal:     strings.TrimSpace(signal),
 	}
 	d.life.Go("notifyPluginSessionClosed", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), pluginDriverCallTimeout)
@@ -840,7 +849,7 @@ func (d *Daemon) sessionUsesPluginMessageDelivery(session *protocol.Session) boo
 	if cursor.PluginName == "" {
 		return false
 	}
-	driver, ok := d.ensurePluginRegistry().driver(string(session.Agent))
+	driver, ok := d.ensurePluginRegistry().driver(session.Agent)
 	return ok && driver.PluginName == cursor.PluginName && driver.Capabilities["message_delivery"]
 }
 

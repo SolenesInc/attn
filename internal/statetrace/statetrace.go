@@ -5,6 +5,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 const DefaultCapacity = 256
@@ -40,7 +42,7 @@ func (o Observation) sameEvidenceAs(other Observation) bool {
 		o.Detail == other.Detail
 }
 
-func (o Observation) LogLine(sessionID string) string {
+func (o Observation) LogLine(sessionID protocol.SessionID) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "state trace: session=%s source=%s claim=%s outcome=%s", sessionID, orDash(o.Source), orDash(o.Claim), orDash(string(o.Outcome)))
 	if o.Cause != "" {
@@ -71,14 +73,14 @@ func orDash(value string) string {
 type Recorder struct {
 	mu       sync.Mutex
 	capacity int
-	rings    map[string]*ring
+	rings    map[protocol.SessionID]*ring
 }
 
 func New(capacity int) *Recorder {
 	if capacity <= 0 {
 		capacity = DefaultCapacity
 	}
-	return &Recorder{capacity: capacity, rings: make(map[string]*ring)}
+	return &Recorder{capacity: capacity, rings: make(map[protocol.SessionID]*ring)}
 }
 
 func (r *Recorder) Capacity() int {
@@ -88,11 +90,11 @@ func (r *Recorder) Capacity() int {
 	return r.capacity
 }
 
-func (r *Recorder) Record(sessionID string, obs Observation) {
+func (r *Recorder) Record(sessionID protocol.SessionID, obs Observation) {
 	r.RecordIf(sessionID, obs, nil)
 }
 
-func (r *Recorder) RecordIf(sessionID string, obs Observation, admit func() bool) {
+func (r *Recorder) RecordIf(sessionID protocol.SessionID, obs Observation, admit func() bool) {
 	if r == nil || sessionID == "" {
 		return
 	}
@@ -121,7 +123,7 @@ func (r *Recorder) RecordIf(sessionID string, obs Observation, admit func() bool
 	target.push(obs)
 }
 
-func (r *Recorder) Observations(sessionID string) []Observation {
+func (r *Recorder) Observations(sessionID protocol.SessionID) []Observation {
 	if r == nil {
 		return nil
 	}
@@ -143,7 +145,7 @@ func (r *Recorder) SessionCount() int {
 	return len(r.rings)
 }
 
-func (r *Recorder) Forget(sessionID string) {
+func (r *Recorder) Forget(sessionID protocol.SessionID) {
 	if r == nil {
 		return
 	}

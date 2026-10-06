@@ -359,3 +359,54 @@ func TestCreationUsesDistinctIDsWithinOneSecond(t *testing.T) {
 		t.Fatalf("ids = %s, %s", firstID, secondID)
 	}
 }
+
+func TestCLIHistoryIgnoresBlankIdentifierAssertions(t *testing.T) {
+	root := migrationRepository(t)
+	source := strings.Replace(legacyFixture, "func applyMigration2() error { return executeSQL(retiredColumns[0]) }", "func applyMigration2() error { _ = retiredColumns[0]; return nil }", 1)
+	source += "\ntype CurrentStore struct { ID string }\nvar _ = CurrentStore{}\n"
+	writeTestFile(t, root, "internal/store/sqlite.go", source)
+	gitTest(t, root, "add", ".")
+	gitTest(t, root, "commit", "--quiet", "-m", "baseline")
+	base := gitTest(t, root, "rev-parse", "HEAD")
+	writeTestFile(t, root, "internal/store/sqlite.go", strings.Replace(source, "ID string", "ID int", 1))
+	if output, err := cli(t, root, "check-history", "--base", base); err != nil {
+		t.Fatalf("unrelated store frozen through blank identifier: %v\n%s", err, output)
+	}
+	writeTestFile(t, root, "internal/store/sqlite.go", strings.Replace(source, "retiredColumns = []string", "retiredColumns = []int", 1))
+	if output, err := cli(t, root, "check-history", "--base", base); err == nil || !strings.Contains(output, "retiredColumns") {
+		t.Fatalf("real migration dependency was not frozen: %v\n%s", err, output)
+	}
+}
+
+func TestCLIHistoryAllowsStringIdentityAnnotationsButKeepsDataExpressionsFrozen(t *testing.T) {
+	for _, change := range []struct {
+		name, original, identity string
+		refused                  bool
+	}{
+		{"session identity", "pane.SessionID", "protocol.SessionID(pane.SessionID)", false},
+		{"terminal identity", "cmp.Or(pane.RuntimeID, pane.SessionID)", "protocol.TerminalID(cmp.Or(pane.RuntimeID, pane.SessionID))", false},
+		{"changed data", "pane.SessionID", "protocol.SessionID(pane.SessionID + \"changed\")", true},
+		{"numeric conversion", "ProfileConversionSchemaVersion", "protocol.SessionID(ProfileConversionSchemaVersion)", true},
+	} {
+		t.Run(change.name, func(t *testing.T) {
+			root := migrationRepository(t)
+			source := strings.Replace(legacyFixture, "func applyMigration2() error { return executeSQL(retiredColumns[0]) }", "func applyMigration2() error { _ = legacyDesktopPane(legacyPane{}); return nil }", 1)
+			original := "func legacyDesktopPane(pane legacyPane) string { return " + change.original + " }"
+			source += "\nconst ProfileConversionSchemaVersion = 159\ntype legacyPane struct { SessionID, RuntimeID string }\n" + original + "\n"
+			writeTestFile(t, root, "internal/store/sqlite.go", source)
+			gitTest(t, root, "add", ".")
+			gitTest(t, root, "commit", "--quiet", "-m", "baseline")
+			base := gitTest(t, root, "rev-parse", "HEAD")
+			replacement := "func legacyDesktopPane(pane legacyPane) protocol.SessionID { return " + change.identity + " }"
+			writeTestFile(t, root, "internal/store/sqlite.go", strings.Replace(source, original, replacement, 1))
+			output, err := cli(t, root, "check-history", "--base", base)
+			if change.refused {
+				if err == nil || !strings.Contains(output, "legacyDesktopPane") {
+					t.Fatalf("changed data accepted: %v\n%s", err, output)
+				}
+			} else if err != nil {
+				t.Fatalf("identity annotation rejected: %v\n%s", err, output)
+			}
+		})
+	}
+}

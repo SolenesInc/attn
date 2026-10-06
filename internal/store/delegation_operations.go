@@ -23,7 +23,7 @@ type DelegationOperationRecord struct {
 	RequestJSON           string
 	WorktreeOwned         bool
 	WorktreeToken         string
-	ChiefSessionID        string
+	ChiefSessionID        protocol.SessionID
 	BaseCommit            string
 	ParentSeedID          string
 	HandoffNoteID         string
@@ -34,19 +34,19 @@ type DelegationOperationRecord struct {
 
 type DelegationHandoverSnapshot struct {
 	SeedRev       int
-	TenderSession string
+	TenderSession protocol.SessionID
 	TenderMember  string
 }
 
-func (s *Store) ClaimDelegationOperation(requestID, operationID, sessionID, chiefSessionID, seedID, requestJSON string, now time.Time) (*DelegationOperationRecord, bool, error) {
+func (s *Store) ClaimDelegationOperation(requestID string, operationID string, sessionID protocol.SessionID, chiefSessionID protocol.SessionID, seedID string, requestJSON string, now time.Time) (*DelegationOperationRecord, bool, error) {
 	return s.ClaimDelegationOperationWithPreferences(requestID, operationID, sessionID, chiefSessionID, seedID, requestJSON, "", now)
 }
 
-func (s *Store) ClaimDelegationOperationWithPreferences(requestID, operationID, sessionID, chiefSessionID, seedID, requestJSON, resolvedPreferences string, now time.Time) (*DelegationOperationRecord, bool, error) {
+func (s *Store) ClaimDelegationOperationWithPreferences(requestID string, operationID string, sessionID protocol.SessionID, chiefSessionID protocol.SessionID, seedID string, requestJSON string, resolvedPreferences string, now time.Time) (*DelegationOperationRecord, bool, error) {
 	return s.ClaimDelegationOperationWithHandoverSnapshot(requestID, operationID, sessionID, chiefSessionID, seedID, requestJSON, resolvedPreferences, "", "", DelegationHandoverSnapshot{}, now)
 }
 
-func (s *Store) ClaimDelegationOperationWithHandoverSnapshot(requestID, operationID, sessionID, chiefSessionID, seedID, requestJSON, resolvedPreferences, baseCommit, parentSeedID string, handover DelegationHandoverSnapshot, now time.Time) (*DelegationOperationRecord, bool, error) {
+func (s *Store) ClaimDelegationOperationWithHandoverSnapshot(requestID string, operationID string, sessionID protocol.SessionID, chiefSessionID protocol.SessionID, seedID string, requestJSON string, resolvedPreferences string, baseCommit string, parentSeedID string, handover DelegationHandoverSnapshot, now time.Time) (*DelegationOperationRecord, bool, error) {
 	if strings.HasPrefix(requestID, "op-") {
 		return nil, false, fmt.Errorf("request id uses reserved operation prefix op-")
 	}
@@ -124,10 +124,10 @@ func (s *Store) GetDelegationOperation(id string) (*DelegationOperationRecord, e
 	return getDelegationOperation(s.db, id)
 }
 
-func (s *Store) SessionDelegationRoles() (map[string]*protocol.SessionDelegationRole, error) {
+func (s *Store) SessionDelegationRoles() (map[protocol.SessionID]*protocol.SessionDelegationRole, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	roles := map[string]*protocol.SessionDelegationRole{}
+	roles := map[protocol.SessionID]*protocol.SessionDelegationRole{}
 	if s.db == nil {
 		return roles, nil
 	}
@@ -140,7 +140,10 @@ func (s *Store) SessionDelegationRoles() (map[string]*protocol.SessionDelegation
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var sessionID, raw string
+		var (
+			sessionID protocol.SessionID
+			raw       string
+		)
 		if err := rows.Scan(&sessionID, &raw); err != nil {
 			return nil, fmt.Errorf("read session delegation role: %w", err)
 		}
@@ -162,7 +165,20 @@ func (s *Store) SessionDelegationRoles() (map[string]*protocol.SessionDelegation
 
 func getDelegationOperation(db *sql.DB, id string) (*DelegationOperationRecord, error) {
 	var rec DelegationOperationRecord
-	var state, seedID, directory, branch, baseCommit, handoffNoteID, worktreePath, worktreeToken, chiefSessionID, resultJSON, errorText, failureCode string
+	var (
+		state          string
+		seedID         string
+		directory      string
+		branch         string
+		baseCommit     string
+		handoffNoteID  string
+		worktreePath   string
+		worktreeToken  string
+		chiefSessionID protocol.SessionID
+		resultJSON     string
+		errorText      string
+		failureCode    string
+	)
 	var worktreeOwned int
 	err := db.QueryRow(`SELECT request_id, operation_id, request_json, state, progress,
 		session_id, ticket_id, directory, branch, base_commit, parent_seed_id, handoff_note_id, worktree_path, worktree_owned, worktree_token, chief_session_id,
@@ -349,14 +365,13 @@ func (s *Store) PendingDelegationOperations() ([]DelegationOperationRecord, erro
 	return out, nil
 }
 
-func (s *Store) DelegationSessionReserved(sessionID string) bool {
+func (s *Store) DelegationSessionReserved(sessionID protocol.SessionID) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if s.db == nil || strings.TrimSpace(sessionID) == "" {
+	if s.db == nil || protocol.TrimID(sessionID) == "" {
 		return false
 	}
 	var found int
-	err := s.db.QueryRow(`SELECT 1 FROM delegation_operations WHERE session_id = ? AND state IN (?, ?) LIMIT 1`,
-		strings.TrimSpace(sessionID), string(protocol.DelegationOperationStateAccepted), string(protocol.DelegationOperationStatePreparing)).Scan(&found)
+	err := s.db.QueryRow(`SELECT 1 FROM delegation_operations WHERE session_id = ? AND state IN (?, ?) LIMIT 1`, protocol.TrimID(sessionID), string(protocol.DelegationOperationStateAccepted), string(protocol.DelegationOperationStatePreparing)).Scan(&found)
 	return err == nil
 }

@@ -5,11 +5,12 @@ import (
 	"fmt"
 
 	"github.com/victorarias/attn/internal/launchcontract"
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/store"
 )
 
-func (d *Daemon) recoveredApprovalRoute(sessionID string) (launchcontract.ApprovalRoute, bool) {
+func (d *Daemon) recoveredApprovalRoute(sessionID protocol.SessionID) (launchcontract.ApprovalRoute, bool) {
 	if provider, ok := d.ptyBackend.(ptybackend.SessionLaunchParamsProvider); ok {
 		params, err := provider.SessionLaunchParams(context.Background(), d.primaryTerminal(sessionID))
 		if err == nil && params.Recorded {

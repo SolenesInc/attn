@@ -22,7 +22,7 @@ func TestADelegateLandsOnTheDesktopItsCallerNames(t *testing.T) {
 	w.Spawn(app, fakeagent.Codex, w.Path("ops-anchor"))
 	unnamed := createDesktop(app, profile)
 	w.Spawn(app, fakeagent.Codex, w.Path("unnamed-anchor"))
-	focusAgent(t, w, app, source)
+	focusAgent(t, w, app, string(source))
 	side := createProfile(app, "Side")
 
 	delegate := func(name, desktop string) (*protocol.DelegateResult, error) {

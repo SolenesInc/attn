@@ -137,7 +137,7 @@ func TestADelegateLaunchedInARoleGetsOnlyThatRolesGuidance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	launched := w.Launched(result.SessionID)
+	launched := w.Launched(string(result.SessionID))
 	prompt := launched.Prompted()
 	for _, want := range []string{"Role: Builder", "Check {{literal}} carefully", "Stop once the tests pass", "attn seed show " + result.SeedID} {
 		if !strings.Contains(prompt, want) {

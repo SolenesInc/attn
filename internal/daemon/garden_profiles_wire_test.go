@@ -111,17 +111,17 @@ func TestGardenBelongsToTheCallingProfile(t *testing.T) {
 			t.Fatalf("seed ownership: alpha=%s beta=%s", a.Seed.ProfileID, b.Seed.ProfileID)
 		}
 		for _, row := range []struct{ session, seed, profile string }{{"default-worker", a.Seed.ID, original}, {"side-worker", b.Seed.ID, side.ID}} {
-			listed, err := cli.SeedList(row.session, false, 0)
+			listed, err := cli.SeedList(protocol.SessionID(row.session), false, 0)
 			if err != nil || listed.Total != 1 || len(listed.Seeds) != 1 || listed.Seeds[0].ID != row.seed {
 				t.Fatalf("%s list: %+v, %v", row.session, listed, err)
 			}
 			for _, all := range []bool{false, true} {
-				ready, err := cli.SeedReady(row.session, "", all)
+				ready, err := cli.SeedReady(protocol.SessionID(row.session), "", all)
 				if err != nil || len(ready.Seeds) != 1 || ready.Seeds[0].ID != row.seed {
 					t.Fatalf("%s ready all=%v: %+v, %v", row.session, all, ready, err)
 				}
 			}
-			hits, err := cli.SeedSearch(row.session, "profile boundary", 0)
+			hits, err := cli.SeedSearch(protocol.SessionID(row.session), "profile boundary", 0)
 			if err != nil || hits.Searched != 1 || len(hits.Hits) != 1 || hits.Hits[0].Seed.ID != row.seed {
 				t.Fatalf("%s search: %+v, %v", row.session, hits, err)
 			}
@@ -150,7 +150,7 @@ func TestGardenBelongsToTheCallingProfile(t *testing.T) {
 				return err
 			}},
 			{"delegate", func() error {
-				_, err := cross.StartDelegation(protocol.DelegateMessage{Cmd: protocol.CmdDelegate, RequestID: uuid.NewString(), SourceSessionID: protocol.Ptr("default-worker"), Cwd: w.Path(), Agent: protocol.Ptr("codex"), Assignment: protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindSeed, SeedID: protocol.Ptr(b.Seed.ID)}})
+				_, err := cross.StartDelegation(protocol.DelegateMessage{Cmd: protocol.CmdDelegate, RequestID: uuid.NewString(), SourceSessionID: protocol.Ptr(protocol.SessionID("default-worker")), Cwd: w.Path(), Agent: protocol.Ptr("codex"), Assignment: protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindSeed, SeedID: protocol.Ptr(b.Seed.ID)}})
 				return err
 			}},
 		}
@@ -297,7 +297,7 @@ func TestDeletingAProfileWithAClosedSeedAndALiveDelegate(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				lifeMove(t, cli, worker.SessionID, worker.SeedID, "harvest", "finished", "")
+				lifeMove(t, cli, string(worker.SessionID), worker.SeedID, "harvest", "finished", "")
 				remove := func() protocol.ProfileActionResultMessage {
 					for _, current := range w.AppOn(side.ID).Initial.Profiles {
 						if current.ID == side.ID {
@@ -311,7 +311,7 @@ func TestDeletingAProfileWithAClosedSeedAndALiveDelegate(t *testing.T) {
 				if deleted.Success || !strings.Contains(protocol.Deref(deleted.Error), "live agents") {
 					t.Fatalf("live delegate must prevent deletion: %+v", deleted)
 				}
-				if _, err := cli.AgentClose(worker.SessionID, worker.SessionID, "finished my work"); err != nil {
+				if _, err := cli.AgentClose(string(worker.SessionID), worker.SessionID, "finished my work"); err != nil {
 					t.Fatalf("the delegate must always be able to close itself: %v", err)
 				}
 				if _, err := cli.AgentClose("caller", "caller", "finished dispatching"); err != nil {

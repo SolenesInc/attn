@@ -150,7 +150,7 @@ func placements(desktops []profiles.Desktop) map[string]string {
 	placed := make(map[string]string)
 	for _, desktop := range desktops {
 		for _, pane := range desktop.Panes {
-			placed[pane.SessionID] = desktop.ID
+			placed[string(pane.SessionID)] = desktop.ID
 		}
 	}
 	return placed
@@ -351,7 +351,7 @@ func TestConversionPreservesMixedTreesRatiosAndPendingAgents(t *testing.T) {
 	}
 	statuses := map[string]profiles.PaneStatus{}
 	for _, p := range desktop.Panes {
-		statuses[p.SessionID] = p.Status
+		statuses[string(p.SessionID)] = p.Status
 	}
 	if !reflect.DeepEqual(statuses, map[string]profiles.PaneStatus{"live": profiles.PaneStatusReady, "pending": profiles.PaneStatusSpawning}) {
 		t.Fatalf("panes = %+v, want the live and the pending agent", desktop.Panes)

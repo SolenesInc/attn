@@ -62,7 +62,7 @@ func chiefSeedAssignmentPrompt(seedID string) string {
 	return prompts.RenderText("chief", "seed-assignment", prompts.Values{"seed_id": seedID})
 }
 
-func (d *Daemon) deliverChiefSeedAssignment(chiefSessionID, seedID string) (protocol.AgentMsgStatus, string) {
+func (d *Daemon) deliverChiefSeedAssignment(chiefSessionID protocol.SessionID, seedID string) (protocol.AgentMsgStatus, string) {
 	receipt, err := d.sendToInbox(inbox.Item{To: inbox.ToSeed(seedID), Kind: inbox.Notice, Text: chiefSeedAssignmentPrompt(seedID)})
 	if err != nil {
 		d.logf("seed send to Chief: queue %s for %s: %v", seedID, chiefSessionID, err)
@@ -74,7 +74,7 @@ func (d *Daemon) deliverChiefSeedAssignment(chiefSessionID, seedID string) (prot
 	return protocol.AgentMsgStatusNotified, "notified Chief"
 }
 
-func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, chiefSessionID string) (*protocol.SeedSendToChiefResult, error) {
+func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, chiefSessionID protocol.SessionID) (*protocol.SeedSendToChiefResult, error) {
 	if err := d.requireHome(garden.Surface); err != nil {
 		return nil, err
 	}
@@ -107,7 +107,7 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, chiefSess
 		return nil, fmt.Errorf("%s is %s; replant it before sending it to Chief", seed.ID, seed.Status)
 	}
 	if msg.ExpectedRev <= 0 || int(doc.Rev) != msg.ExpectedRev ||
-		seed.TenderSession != strings.TrimSpace(msg.ExpectedTenderSession) ||
+		seed.TenderSession != protocol.TrimID(msg.ExpectedTenderSession) ||
 		seed.TenderMember != strings.TrimSpace(msg.ExpectedTenderMember) {
 		return nil, fmt.Errorf("%s changed since you opened it; refresh it before sending it to Chief", seed.ID)
 	}
@@ -131,8 +131,8 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, chiefSess
 	if err != nil {
 		return nil, err
 	}
-	cause := strings.TrimSpace(protocol.Deref(msg.SourceSessionID))
-	tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, next.ID, cause, chiefSessionID)
+	cause := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
+	tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, next.ID, cause, string(chiefSessionID))
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +182,7 @@ func (d *Daemon) handleSeedSendToChiefWS(client *wsClient, msg *protocol.SeedSen
 	response := protocol.SeedSendToChiefResultMessage{
 		Event: protocol.EventSeedSendToChiefResult, RequestID: protocol.Deref(msg.RequestID),
 	}
-	result, err := d.sendSeedToChief(msg, d.chiefForClient(client))
+	result, err := d.sendSeedToChief(msg, protocol.SessionID(d.chiefForClient(client)))
 	if err != nil {
 		response.Error = protocol.Ptr(err.Error())
 	} else {

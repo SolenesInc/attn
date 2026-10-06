@@ -23,8 +23,8 @@ func TestKittyImageFrameRoundTripsEveryPixelLayout(t *testing.T) {
 		if err != nil {
 			t.Fatalf("decode format %d: %v", code, err)
 		}
-		if decoded.SessionID != "sess-1" {
-			t.Errorf("format %d: session id = %q, want sess-1", code, decoded.SessionID)
+		if decoded.TerminalID != "sess-1" {
+			t.Errorf("format %d: session id = %q, want sess-1", code, decoded.TerminalID)
 		}
 		if decoded.ImageID != 4242 {
 			t.Errorf("format %d: image id = %d, want 4242", code, decoded.ImageID)
@@ -50,7 +50,7 @@ func TestKittyImageFrameRoundTripsEveryPixelLayout(t *testing.T) {
 func TestKittyImageFrameSurvivesSessionIDLengths(t *testing.T) {
 	pixels := []byte{1, 2, 3, 4}
 	for _, id := range []string{"a", "session-with-a-long-name", string(bytes.Repeat([]byte("x"), 255))} {
-		frame, err := EncodeKittyImageFrame(id, 7, 9, 2, 2, KittyImageFormatCodeRGBA, pixels)
+		frame, err := EncodeKittyImageFrame(TerminalID(id), 7, 9, 2, 2, KittyImageFormatCodeRGBA, pixels)
 		if err != nil {
 			t.Fatalf("encode id len %d: %v", len(id), err)
 		}
@@ -58,7 +58,7 @@ func TestKittyImageFrameSurvivesSessionIDLengths(t *testing.T) {
 		if err != nil {
 			t.Fatalf("decode id len %d: %v", len(id), err)
 		}
-		if decoded.SessionID != id || decoded.ImageID != 7 || decoded.Generation != 9 {
+		if decoded.TerminalID != TerminalID(id) || decoded.ImageID != 7 || decoded.Generation != 9 {
 			t.Fatalf("id len %d: got %+v", len(id), decoded)
 		}
 		if !bytes.Equal(decoded.Pixels, pixels) {
@@ -71,7 +71,7 @@ func TestEncodeKittyImageFrameRejectsUnservableFrames(t *testing.T) {
 	if _, err := EncodeKittyImageFrame("", 1, 1, 1, 1, KittyImageFormatCodeRGB, []byte{0}); err == nil {
 		t.Error("encoding an empty session id succeeded, want an error")
 	}
-	if _, err := EncodeKittyImageFrame(string(bytes.Repeat([]byte("x"), 256)), 1, 1, 1, 1, KittyImageFormatCodeRGB, []byte{0}); err == nil {
+	if _, err := EncodeKittyImageFrame(TerminalID(string(bytes.Repeat([]byte("x"), 256))), 1, 1, 1, 1, KittyImageFormatCodeRGB, []byte{0}); err == nil {
 		t.Error("encoding a 256-byte session id succeeded, want an error")
 	}
 	if _, err := EncodeKittyImageFrame("sess-1", 1, 1, 1, 1, 9, []byte{0}); err == nil {

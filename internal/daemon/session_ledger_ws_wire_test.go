@@ -57,7 +57,7 @@ func TestTheAppReadsTheLedgerOverTheWebSocket(t *testing.T) {
 	}
 
 	shown := ledgerShowOverTheWebSocket(app, closed.session)
-	if !shown.Success || shown.Entry == nil || shown.Entry.ID != closed.session {
+	if !shown.Success || shown.Entry == nil || string(shown.Entry.ID) != closed.session {
 		t.Errorf("session_show %s = %+v, want its ledger row", closed.session, shown)
 	}
 	if unknown := ledgerShowOverTheWebSocket(app, "elsewhere"); unknown.Success || !strings.Contains(protocol.Deref(unknown.Error), "elsewhere") {
@@ -103,14 +103,14 @@ func ledgerListOverTheWebSocket(app *testworld.Peer, requestID string, msg proto
 func ledgerShowOverTheWebSocket(app *testworld.Peer, session string) protocol.SessionShowResultMessage {
 	app.T.Helper()
 	requestID := "show-" + session
-	return testworld.Request(app, protocol.SessionShowMessage{Cmd: protocol.CmdSessionShow, RequestID: protocol.Ptr(requestID), SessionID: session},
+	return testworld.Request(app, protocol.SessionShowMessage{Cmd: protocol.CmdSessionShow, RequestID: protocol.Ptr(requestID), SessionID: protocol.SessionID(session)},
 		protocol.EventSessionShowResult, func(r protocol.SessionShowResultMessage) bool { return r.RequestID == requestID })
 }
 
 func reopenOverTheWebSocket(app *testworld.Peer, session string, action ...protocol.SessionReopenAction) protocol.SessionReopenResultMessage {
 	app.T.Helper()
 	requestID := uuid.NewString()
-	msg := protocol.SessionReopenMessage{Cmd: protocol.CmdSessionReopen, RequestID: protocol.Ptr(requestID), SessionID: session}
+	msg := protocol.SessionReopenMessage{Cmd: protocol.CmdSessionReopen, RequestID: protocol.Ptr(requestID), SessionID: protocol.SessionID(session)}
 	for _, a := range action {
 		msg.Action = protocol.Ptr(a)
 	}

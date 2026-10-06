@@ -4,13 +4,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
-	"github.com/victorarias/attn/internal/prompts"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/victorarias/attn/internal/prompts"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/jobs"
@@ -33,7 +34,7 @@ type sessionTitlePayload struct {
 	Source       string `json:"source"`
 }
 
-func (d *Daemon) maybeGenerateSessionTitle(sessionID, transcriptPath string) {
+func (d *Daemon) maybeGenerateSessionTitle(sessionID protocol.SessionID, transcriptPath string) {
 	if !d.sessionWantsAutoTitle(sessionID) {
 		return
 	}
@@ -54,7 +55,7 @@ func (d *Daemon) maybeGenerateSessionTitle(sessionID, transcriptPath string) {
 	d.enqueueSessionTitle(sessionID, slice.Render(), "transcript")
 }
 
-func (d *Daemon) maybeGenerateSessionTitleFromPrompt(sessionID, prompt string, origin sessionInputOrigin) {
+func (d *Daemon) maybeGenerateSessionTitleFromPrompt(sessionID protocol.SessionID, prompt string, origin sessionInputOrigin) {
 	prompt = strings.TrimSpace(prompt)
 	if prompt == "" || !d.sessionWantsAutoTitle(sessionID) {
 		return
@@ -68,7 +69,7 @@ func (d *Daemon) maybeGenerateSessionTitleFromPrompt(sessionID, prompt string, o
 	d.enqueueSessionTitle(sessionID, transcript.ConversationSlice{Brief: prompt, HumanCount: 1}.Render(), "prompt")
 }
 
-func (d *Daemon) rememberSessionTitleInitialPrompt(sessionID, prompt string) {
+func (d *Daemon) rememberSessionTitleInitialPrompt(sessionID protocol.SessionID, prompt string) {
 	d.sessionTitleMu.Lock()
 	defer d.sessionTitleMu.Unlock()
 	prompt = strings.TrimSpace(prompt)
@@ -77,25 +78,25 @@ func (d *Daemon) rememberSessionTitleInitialPrompt(sessionID, prompt string) {
 		return
 	}
 	if d.sessionTitleInitialPrompt == nil {
-		d.sessionTitleInitialPrompt = make(map[string][sha256.Size]byte)
+		d.sessionTitleInitialPrompt = make(map[protocol.SessionID][sha256.Size]byte)
 	}
 	d.sessionTitleInitialPrompt[sessionID] = sha256.Sum256([]byte(prompt))
 }
 
-func (d *Daemon) forgetSessionTitleInitialPrompt(sessionID string) {
+func (d *Daemon) forgetSessionTitleInitialPrompt(sessionID protocol.SessionID) {
 	d.sessionTitleMu.Lock()
 	defer d.sessionTitleMu.Unlock()
 	delete(d.sessionTitleInitialPrompt, sessionID)
 }
 
-func (d *Daemon) matchSessionTitleInitialPrompt(sessionID, prompt string) bool {
+func (d *Daemon) matchSessionTitleInitialPrompt(sessionID protocol.SessionID, prompt string) bool {
 	d.sessionTitleMu.Lock()
 	defer d.sessionTitleMu.Unlock()
 	remembered, ok := d.sessionTitleInitialPrompt[sessionID]
 	return ok && remembered == sha256.Sum256([]byte(prompt))
 }
 
-func (d *Daemon) sessionWantsAutoTitle(sessionID string) bool {
+func (d *Daemon) sessionWantsAutoTitle(sessionID protocol.SessionID) bool {
 	if !sessionAutoTitleEnabled() || d.sessionTitleExec == nil {
 		return false
 	}
@@ -109,7 +110,7 @@ func (d *Daemon) sessionWantsAutoTitle(sessionID string) bool {
 	return !attempted
 }
 
-func (d *Daemon) enqueueSessionTitle(sessionID, conversation, source string) {
+func (d *Daemon) enqueueSessionTitle(sessionID protocol.SessionID, conversation string, source string) {
 	runner := d.headlessJobQueue("session_title")
 	if runner == nil {
 		return
@@ -121,7 +122,7 @@ func (d *Daemon) enqueueSessionTitle(sessionID, conversation, source string) {
 		return
 	}
 	if d.sessionTitleAttempted == nil {
-		d.sessionTitleAttempted = make(map[string]struct{})
+		d.sessionTitleAttempted = make(map[protocol.SessionID]struct{})
 	}
 	d.sessionTitleAttempted[sessionID] = struct{}{}
 	fingerprint, hadFingerprint := d.sessionTitleInitialPrompt[sessionID]
@@ -129,7 +130,7 @@ func (d *Daemon) enqueueSessionTitle(sessionID, conversation, source string) {
 	d.sessionTitleMu.Unlock()
 
 	_, err := runner.Enqueue(sessionTitleKind, jobs.EnqueueOptions{
-		UniqueKey:   sessionID,
+		UniqueKey:   string(sessionID),
 		Payload:     sessionTitlePayload{Conversation: conversation, Source: source},
 		MaxAttempts: sessionTitleAttempts,
 	})
@@ -146,7 +147,7 @@ func (d *Daemon) enqueueSessionTitle(sessionID, conversation, source string) {
 }
 
 func (d *Daemon) sessionTitleHandler(ctx context.Context, job *jobs.Job) (any, error) {
-	sessionID := jobSubject(job)
+	sessionID := protocol.SessionID(jobSubject(job))
 	var payload sessionTitlePayload
 	if err := job.DecodePayload(&payload); err != nil {
 		return nil, err
@@ -175,7 +176,7 @@ func (d *Daemon) sessionTitleHandler(ctx context.Context, job *jobs.Job) (any, e
 	d.store.UpdateSessionLabel(sessionID, title)
 	session.Label = title
 	d.logf("session title %s: %q from %s", sessionID, title, payload.Source)
-	d.publishFact(FactSessionRenamed, sessionID, nil)
+	d.publishFact(FactSessionRenamed, string(sessionID), nil)
 	return title, nil
 }
 
@@ -191,7 +192,7 @@ var (
 	sixLetterWord = regexp.MustCompile(`^(?:s-)?[a-z]{6}$`)
 )
 
-func sessionLabelIsPlaceholder(label, cwd, sessionID string) bool {
+func sessionLabelIsPlaceholder(label string, cwd string, sessionID protocol.SessionID) bool {
 	label = strings.TrimSpace(label)
 	def := defaultSessionLabel(cwd, sessionID)
 	if label == def || label == truncateDelegationName(def) {
@@ -201,7 +202,7 @@ func sessionLabelIsPlaceholder(label, cwd, sessionID string) bool {
 }
 
 func (d *Daemon) execSessionTitle(ctx context.Context, session *protocol.Session, conversation string) (string, error) {
-	providerAgent := titleProviderAgent(string(session.Agent))
+	providerAgent := titleProviderAgent(session.Agent)
 	if providerAgent == "" {
 		return "", fmt.Errorf("no title provider available for agent %q", session.Agent)
 	}
@@ -312,10 +313,10 @@ func sanitizeSessionTitle(raw string) string {
 	return line
 }
 
-func defaultSessionLabel(cwd, sessionID string) string {
+func defaultSessionLabel(cwd string, sessionID protocol.SessionID) string {
 	label := filepath.Base(cwd)
 	if label == "" || label == "." || label == string(filepath.Separator) {
-		return sessionID
+		return string(sessionID)
 	}
 	return label
 }

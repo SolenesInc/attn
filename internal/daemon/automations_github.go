@@ -294,7 +294,7 @@ func (d *Daemon) settleWithdrawnAutomationRun(run *store.AutomationRun) error {
 	_, cancelErr := d.cancelAutomationRun(run, store.AutomationCancelReasonReviewWithdrawn, automationReviewWithdrawnMessage)
 	return cancelErr
 }
-func (d *Daemon) hasAutomationSession(sessionID string) bool {
+func (d *Daemon) hasAutomationSession(sessionID protocol.SessionID) bool {
 	if d.store.Get(sessionID) != nil {
 		return true
 	}

@@ -4,6 +4,8 @@ package harness
 import (
 	"context"
 	"time"
+
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 // Voice says whose words an input carries; a link declares the voices it can deliver.
@@ -18,7 +20,7 @@ const (
 
 // Input is one delivery to a session. ID names the attempt; a link may pass it on.
 type Input struct {
-	Session string
+	Session protocol.SessionID
 	ID      string
 	Text    string
 	Voice   Voice

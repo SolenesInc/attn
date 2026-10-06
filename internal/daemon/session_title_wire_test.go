@@ -31,7 +31,7 @@ func (w *world) sessionLabel(session string) string {
 		w.T.Fatal(err)
 	}
 	for _, s := range listed.Sessions {
-		if s.ID == session {
+		if string(s.ID) == session {
 			return s.Label
 		}
 	}
@@ -126,7 +126,7 @@ func TestTheFirstPromptTypedIntoACodexNewChatTitlesItsNewSession(t *testing.T) {
 		t.Fatalf("the title task asked %q, want the new chat's first prompt", task.Prompt)
 	}
 	task.Answer("Fix cart discounts")
-	awaitLabel(app, next.ID, "Fix cart discounts")
+	awaitLabel(app, string(next.ID), "Fix cart discounts")
 }
 
 func TestATitleIsTheModelsFirstLineWithoutQuotesPrefixOrTrailingPunctuation(t *testing.T) {
@@ -182,7 +182,7 @@ func TestRenamingWhileTheTitleIsGeneratedKeepsTheUsersName(t *testing.T) {
 	app.TypeLine(session, "the login form rejects valid passwords")
 	agent.Prompted()
 	task := w.HeadlessTask()
-	renameFromApp(app, protocol.RenameSessionMessage{Cmd: protocol.CmdRenameSession, SessionID: session, Label: "password bug"}, session)
+	renameFromApp(app, protocol.RenameSessionMessage{Cmd: protocol.CmdRenameSession, SessionID: protocol.SessionID(session), Label: "password bug"}, session)
 	task.Answer("Fix login flow")
 	awaitTitleTask(app, session, func(task protocol.Task) bool { return task.State == "done" })
 	if label := w.sessionLabel(session); label != "password bug" {
@@ -229,19 +229,19 @@ func TestACrewMembersDayKeepsTheMembersName(t *testing.T) {
 	t.Setenv("ATTN_HEADLESS_TASKS", "on")
 	app, cli := w.App(), w.Client()
 	woken := wakeCrew(t, cli, "trellis", "")
-	agent := w.Launched(woken.SessionID)
-	named := testworld.AwaitSession(app, woken.SessionID, func(s protocol.Session) bool { return protocol.Deref(s.CrewMember) == "trellis" })
+	agent := w.Launched(string(woken.SessionID))
+	named := testworld.AwaitSession(app, string(woken.SessionID), func(s protocol.Session) bool { return protocol.Deref(s.CrewMember) == "trellis" })
 
 	agent.Prompted()
 	agent.Reply("I am Trellis. <!-- attn:state=idle -->")
 	answerTurnVerdict(t, w, "DONE")
-	app.TypeLine(woken.SessionID, "the login form rejects valid passwords")
+	app.TypeLine(string(woken.SessionID), "the login form rejects valid passwords")
 	if got := agent.Prompted(); got != "the login form rejects valid passwords" {
 		t.Fatalf("the member was prompted %q", got)
 	}
 	agent.Reply("Fixed the password check. <!-- attn:state=idle -->")
 	answerTurnVerdict(t, w, "DONE")
-	settled := testworld.AwaitSession(app, woken.SessionID, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	settled := testworld.AwaitSession(app, string(woken.SessionID), func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	if settled.Label != named.Label {
 		t.Errorf("the member's day is named %q, want %q", settled.Label, named.Label)
 	}
@@ -262,7 +262,7 @@ func TestAnAnnotationTheUserTypedOverDoesNotTitleTheSession(t *testing.T) {
 		if got := submitSessionAnnotationFeedback(app, agent.id, sessionAnnotationFeedback); got.status != "delivered" {
 			t.Fatalf("submit = %+v, want delivered", got)
 		}
-		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: agent.self, Data: "x"})
+		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(agent.self), Data: "x"})
 		w.advance(0)
 		agent.term.OnSubmit(agent.take)
 		app.TypeLine(agent.id, "the login form rejects valid passwords")

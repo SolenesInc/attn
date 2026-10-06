@@ -50,7 +50,7 @@ func TestAGardenBellRetriesAfterACrewRosterPathFailureIsRepaired(t *testing.T) {
 		if dayID == "" {
 			t.Fatal("Garden event was lost during the roster failure")
 		}
-		day := w.bootBubbleClaude(t, dayID)
+		day := w.bootBubbleClaude(t, string(dayID))
 		day.reply("Ready. <!-- attn:state=idle -->")
 		if mail := readInbox(t, cli, day.id, 0).Items; len(mail) != 1 || !strings.Contains(mail[0].Content, seed) {
 			t.Fatalf("recovered Garden mail=%+v; want the failed event delivered", mail)
@@ -67,7 +67,7 @@ func TestALateSeedBellRingsWhoeverTendsTheSeedNow(t *testing.T) {
 		seedBellsConsumerEnabled(t, app, false)
 		lifeMove(t, cli, "first", seed, "tend", "", "")
 		for _, taker := range []string{"second", "third"} {
-			if _, err := cli.SeedTransition(taker, seed, "tend", "", "", true, client.SeedTransitionOptions{}); err != nil {
+			if _, err := cli.SeedTransition(protocol.SessionID(taker), seed, "tend", "", "", true, client.SeedTransitionOptions{}); err != nil {
 				t.Fatalf("%s takes the seed: %v", taker, err)
 			}
 		}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profiles"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 type world struct {
@@ -16,7 +17,7 @@ type world struct {
 }
 
 func agentPane(id string) profiles.Pane {
-	return profiles.Pane{PaneID: id, Kind: profiles.PaneKindAgent, SessionID: "session-" + id, Status: profiles.PaneStatusReady}
+	return profiles.Pane{PaneID: id, Kind: profiles.PaneKindAgent, SessionID: protocol.SessionID("session-" + id), Status: profiles.PaneStatusReady}
 }
 
 func newWorld(groups int) *world {

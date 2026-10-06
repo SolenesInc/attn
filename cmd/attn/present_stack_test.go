@@ -18,7 +18,7 @@ func presentWait(t *testing.T, s *testworld.Stack, repo, title string) *testworl
 	if err := os.WriteFile(manifest, []byte(yaml), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	waiting := s.Launch(testworld.Invocation{Args: []string{"present", "--manifest", manifest, "--wait"}, Session: "presenter"})
+	waiting := s.Launch(testworld.Invocation{Args: []string{"present", "--manifest", manifest, "--wait", "--session", "presenter"}})
 	waiting.AwaitStderr(fmt.Sprintf("waiting for review of round 1 of %q...", title))
 	return waiting
 }

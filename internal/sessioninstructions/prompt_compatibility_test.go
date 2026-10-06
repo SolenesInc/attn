@@ -1,9 +1,10 @@
 package sessioninstructions
 
 import (
-	"github.com/victorarias/attn/internal/prompttest"
 	"strconv"
 	"testing"
+
+	"github.com/victorarias/attn/internal/prompttest"
 )
 
 func TestLegacyPromptCompatibility(t *testing.T) {

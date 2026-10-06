@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/victorarias/attn/internal/crew"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 type Verb string
@@ -23,7 +24,7 @@ const (
 var Verbs = []Verb{VerbTend, VerbPark, VerbHarvest, VerbWither, VerbReplant}
 
 type Tender struct {
-	Session string
+	Session protocol.SessionID
 	Member  string
 }
 
@@ -31,7 +32,7 @@ func (t Tender) Name() string {
 	if member := strings.TrimSpace(t.Member); member != "" {
 		return member
 	}
-	return strings.TrimSpace(t.Session)
+	return string(protocol.TrimID(t.Session))
 }
 
 func (t Tender) DisplayName() string { return crew.HolderName(t.Member, t.Session) }
@@ -39,18 +40,18 @@ func (t Tender) DisplayName() string { return crew.HolderName(t.Member, t.Sessio
 func (t Tender) Named() bool { return t.Name() != "" }
 
 func (t Tender) Is(other Tender) bool {
-	mine, theirs := strings.TrimSpace(t.Session), strings.TrimSpace(other.Session)
+	mine, theirs := protocol.TrimID(t.Session), protocol.TrimID(other.Session)
 	if mine != "" && theirs != "" {
 		return mine == theirs
 	}
 	return mine == theirs && strings.TrimSpace(t.Member) == strings.TrimSpace(other.Member)
 }
 
-func (t Tender) Holds(sessionLive func(sessionID string) bool) bool {
+func (t Tender) Holds(sessionLive func(sessionID protocol.SessionID) bool) bool {
 	if !t.Named() {
 		return false
 	}
-	if session := strings.TrimSpace(t.Session); session != "" {
+	if session := protocol.TrimID(t.Session); session != "" {
 		return sessionLive(session)
 	}
 	return true
@@ -60,8 +61,8 @@ type Ask struct {
 	Actor                   Tender
 	Reason                  string
 	Force                   bool
-	CauseSession            string
-	DirectlyNotifiedSession string
+	CauseSession            protocol.SessionID
+	DirectlyNotifiedSession protocol.SessionID
 	SuppressNotification    bool
 }
 
@@ -122,7 +123,7 @@ func ParseVerb(raw string) (Verb, error) {
 	return "", fmt.Errorf("%q is not something a seed does; the moves are %s", raw, strings.Join(names, ", "))
 }
 
-func Transition(seed Seed, verb Verb, ask Ask, sessionLive func(sessionID string) bool) (Seed, error) {
+func Transition(seed Seed, verb Verb, ask Ask, sessionLive func(sessionID protocol.SessionID) bool) (Seed, error) {
 	rule, ok := moves[verb]
 	if !ok {
 		return Seed{}, fmt.Errorf("%q is not something a seed does", verb)
@@ -158,7 +159,7 @@ func Transition(seed Seed, verb Verb, ask Ask, sessionLive func(sessionID string
 	next.Status = rule.to
 	switch {
 	case rule.claims:
-		next.TenderSession = strings.TrimSpace(ask.Actor.Session)
+		next.TenderSession = protocol.TrimID(ask.Actor.Session)
 		next.TenderMember = strings.TrimSpace(ask.Actor.Member)
 	default:
 		next.TenderSession = ""
@@ -209,7 +210,7 @@ type Note struct {
 	Seed          string             `json:"seed"`
 	Kind          string             `json:"kind"`
 	Body          string             `json:"body"`
-	AuthorSession string             `json:"author_session"`
+	AuthorSession protocol.SessionID `json:"author_session"`
 	AuthorMember  string             `json:"author_member"`
 	Artifact      *ArtifactReference `json:"artifact,omitempty"`
 }

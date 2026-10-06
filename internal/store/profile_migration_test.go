@@ -98,7 +98,7 @@ func TestFinishAppliesTheDraftOnceAndKeepsAgentsLaunchedMeanwhile(t *testing.T) 
 	at := make(map[string]int)
 	for _, d := range desktops {
 		for _, p := range d.Panes {
-			at[p.SessionID] = d.ShortcutSlot
+			at[string(p.SessionID)] = d.ShortcutSlot
 		}
 	}
 	if at["agent-01"] != 1 || at["agent-02"] != 1 || at["delegated-child"] != 2 || at["agent-10"] != 5 || at["agent-11"] != 0 {

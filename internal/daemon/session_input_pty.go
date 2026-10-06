@@ -21,7 +21,7 @@ var sessionInputSubmitDelay = 150 * time.Millisecond
 
 const sessionInputHeldEnterKey = "\x00held-enter"
 
-func (m *sessionInputModule) holdEnterLocked(lane *sessionInputLane, sessionID string, after time.Duration) {
+func (m *sessionInputModule) holdEnterLocked(lane *sessionInputLane, sessionID protocol.SessionID, after time.Duration) {
 	lane.heldEnter = true
 	m.scheduleLocked(lane, sessionID, sessionInputHeldEnterKey, after, func() { m.pressHeldEnter(sessionID) })
 }
@@ -34,7 +34,7 @@ func (m *sessionInputModule) dropHeldEnterLocked(lane *sessionInputLane) {
 	}
 }
 
-func (m *sessionInputModule) pressHeldEnter(sessionID string) {
+func (m *sessionInputModule) pressHeldEnter(sessionID protocol.SessionID) {
 	lane := m.lane(sessionID)
 	lane.mu.Lock()
 	defer lane.mu.Unlock()
@@ -54,19 +54,19 @@ func (m *sessionInputModule) pressHeldEnter(sessionID string) {
 	m.dropHeldEnterLocked(lane)
 }
 
-func (m *sessionInputModule) promptInTheWayLocked(ctx context.Context, sessionID string) bool {
+func (m *sessionInputModule) promptInTheWayLocked(ctx context.Context, sessionID protocol.SessionID) bool {
 	if state := m.daemon.store.Get(sessionID); state != nil && state.State == protocol.SessionStatePendingApproval {
 		return true
 	}
 	return m.promptShowingLocked(ctx, sessionID)
 }
 
-func (m *sessionInputModule) promptShowingLocked(ctx context.Context, sessionID string) bool {
+func (m *sessionInputModule) promptShowingLocked(ctx context.Context, sessionID protocol.SessionID) bool {
 	_, known, selector := m.daemon.sessionInputScreen(ctx, sessionID)
 	return !known || selector
 }
 
-func (m *sessionInputModule) ptySafetyLocked(ctx context.Context, sessionID string, lane *sessionInputLane, allowUserComposer bool) error {
+func (m *sessionInputModule) ptySafetyLocked(ctx context.Context, sessionID protocol.SessionID, lane *sessionInputLane, allowUserComposer bool) error {
 	if !allowUserComposer {
 		if remaining := m.daemon.userInputQuietRemaining(sessionID, sessionInputQuietWindow); remaining > 0 {
 			return &sessionInputQuietError{retryAfter: remaining}
@@ -83,7 +83,7 @@ func (m *sessionInputModule) ptySafetyLocked(ctx context.Context, sessionID stri
 	return nil
 }
 
-func (m *sessionInputModule) writePTY(ctx context.Context, terminal harness.TerminalID, sessionID string, data []byte, source string) error {
+func (m *sessionInputModule) writePTY(ctx context.Context, terminal harness.TerminalID, sessionID protocol.SessionID, data []byte, source string) error {
 	lane := m.lane(sessionID)
 	if !lane.mu.TryLock() {
 		pausepoint.At(pausepoint.SessionInputLaneContended)
@@ -112,7 +112,7 @@ func (m *sessionInputModule) writePTY(ctx context.Context, terminal harness.Term
 	return m.daemon.ptyBackend.Input(ctx, terminal, data)
 }
 
-func (m *sessionInputModule) clearUnstartedUserSubmitLocked(lane *sessionInputLane, sessionID string) {
+func (m *sessionInputModule) clearUnstartedUserSubmitLocked(lane *sessionInputLane, sessionID protocol.SessionID) {
 	if lane.run != nil || !lane.userSubmit {
 		return
 	}
@@ -120,7 +120,7 @@ func (m *sessionInputModule) clearUnstartedUserSubmitLocked(lane *sessionInputLa
 	m.daemon.forgetUserInput(sessionID)
 }
 
-func (d *Daemon) writeSessionPTY(sessionID string, data []byte, source string) error {
+func (d *Daemon) writeSessionPTY(sessionID protocol.SessionID, data []byte, source string) error {
 	return d.sessionInputs().writePTY(context.Background(), d.primaryTerminal(sessionID), sessionID, data, strings.TrimSpace(source))
 }
 

@@ -39,13 +39,13 @@ func spawnOnAutoModeDriver(t *testing.T, w *world, app *testworld.Peer, driver *
 		t.Fatal(err)
 	}
 	app.Send(protocol.SpawnSessionMessage{
-		Cmd: protocol.CmdSpawnSession, ID: session, Agent: agent, Cwd: cwd, ProfileID: app.SelectedProfile(),
+		Cmd: protocol.CmdSpawnSession, ID: protocol.SessionID(session), Agent: agent, Cwd: cwd, ProfileID: app.SelectedProfile(),
 		Placement: &protocol.SessionPlacement{}, Label: protocol.Ptr(label), Cols: 80, Rows: 24,
 	})
 	var spawn autoModeDriverSpawn
 	id := driver.expect("driver.spawn", &spawn)
 	driver.answer(id, map[string]any{"argv": []string{"/bin/cat"}})
-	if result := testworld.Await(app, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return r.ID == session }); !result.Success {
+	if result := testworld.Await(app, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return string(r.ID) == session }); !result.Success {
 		t.Fatalf("spawning on driver %s: %s", agent, protocol.Deref(result.Error))
 	}
 	return spawn

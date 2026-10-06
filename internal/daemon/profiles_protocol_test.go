@@ -129,7 +129,7 @@ func (w *profilesTestDaemon) mustSend(client *wsClient, command map[string]any) 
 func (w *profilesTestDaemon) agent(sessionID, profileID string) {
 	w.t.Helper()
 	w.d.store.Add(&protocol.Session{
-		ID:        sessionID,
+		ID:        protocol.SessionID(sessionID),
 		ProfileID: profileID,
 		Label:     sessionID,
 		Directory: w.t.TempDir(),

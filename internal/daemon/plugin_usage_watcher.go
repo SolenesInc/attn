@@ -6,18 +6,19 @@ import (
 	"strings"
 	"time"
 
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/transcript"
 )
 
 type pluginUsageWatcher struct {
-	sessionID string
+	sessionID protocol.SessionID
 	path      string
 	stopCh    chan struct{}
 	doneCh    chan struct{}
 }
 
-func (d *Daemon) ensurePluginUsageWatcher(sessionID, agent, path string) {
-	sessionID = strings.TrimSpace(sessionID)
+func (d *Daemon) ensurePluginUsageWatcher(sessionID protocol.SessionID, agent string, path string) {
+	sessionID = protocol.TrimID(sessionID)
 	path = strings.TrimSpace(path)
 	if sessionID == "" || path == "" || !transcript.SupportsUsage(agent) {
 		return
@@ -43,7 +44,7 @@ func (d *Daemon) ensurePluginUsageWatcher(sessionID, agent, path string) {
 	}
 	d.beginUsageRunLocked(sessionID)
 	if d.pluginUsageWatch == nil {
-		d.pluginUsageWatch = make(map[string]*pluginUsageWatcher)
+		d.pluginUsageWatch = make(map[protocol.SessionID]*pluginUsageWatcher)
 	}
 	d.pluginUsageWatch[sessionID] = watcher
 	d.watchersMu.Unlock()
@@ -53,7 +54,7 @@ func (d *Daemon) ensurePluginUsageWatcher(sessionID, agent, path string) {
 	d.logf("plugin usage watcher: started session=%s agent=%s path=%s", sessionID, agent, path)
 }
 
-func (d *Daemon) seedPluginUsageBaseline(sessionID, path string) {
+func (d *Daemon) seedPluginUsageBaseline(sessionID protocol.SessionID, path string) {
 	if d.store == nil {
 		return
 	}
@@ -107,7 +108,7 @@ func (d *Daemon) reconcilePluginUsageOnStop(path string, seen bool, tracker *ses
 	tracker.Reconcile()
 }
 
-func (d *Daemon) stopPluginUsageWatcher(sessionID string) {
+func (d *Daemon) stopPluginUsageWatcher(sessionID protocol.SessionID) {
 	d.watchersMu.Lock()
 	watcher, ok := d.pluginUsageWatch[sessionID]
 	if ok {
@@ -125,7 +126,7 @@ func (d *Daemon) stopAllPluginUsageWatchers() {
 	for _, watcher := range d.pluginUsageWatch {
 		watchers = append(watchers, watcher)
 	}
-	d.pluginUsageWatch = make(map[string]*pluginUsageWatcher)
+	d.pluginUsageWatch = make(map[protocol.SessionID]*pluginUsageWatcher)
 	d.watchersMu.Unlock()
 
 	for _, watcher := range watchers {
@@ -145,6 +146,6 @@ func (d *Daemon) restorePluginUsageWatchers() {
 		if session == nil {
 			continue
 		}
-		d.ensurePluginUsageWatcher(run.SessionID, string(session.Agent), run.TranscriptPath)
+		d.ensurePluginUsageWatcher(run.SessionID, session.Agent, run.TranscriptPath)
 	}
 }

@@ -30,7 +30,7 @@ func TestAHeldRunStartsAfterARestartOnTheDefinitionAsItWasWhenItFellDue(t *testi
 		return automationRunState(runs, held[0].ID) == "delivered"
 	})
 
-	prompt := r.w.Launched(protocol.Deref(held[0].SessionID)).Prompted()
+	prompt := r.w.Launched(string(protocol.Deref(held[0].SessionID))).Prompted()
 	if !strings.Contains(prompt, "Review this pull request.") || strings.Contains(prompt, "for security") {
 		t.Errorf("the held run started with %q, want the prompt it fell due with", prompt)
 	}

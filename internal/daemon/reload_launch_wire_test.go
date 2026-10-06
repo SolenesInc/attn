@@ -43,8 +43,8 @@ func TestAReloadRelaunchesWithTheContextWindowCapTheSessionIsDue(t *testing.T) {
 		t.Errorf("with only a chief cap configured the reloaded worker runs with window %q, want none", got)
 	}
 	setSetting(t, app, "default_context_window_cap_claude", "800000")
-	pin := testworld.Request(app, protocol.SetSessionContextWindowCapMessage{Cmd: protocol.CmdSetSessionContextWindowCap, SessionID: pinned, Cap: 300000},
-		protocol.EventSessionContextWindowCapResult, func(r protocol.SessionContextWindowCapResultMessage) bool { return r.SessionID == pinned })
+	pin := testworld.Request(app, protocol.SetSessionContextWindowCapMessage{Cmd: protocol.CmdSetSessionContextWindowCap, SessionID: protocol.SessionID(pinned), Cap: 300000},
+		protocol.EventSessionContextWindowCapResult, func(r protocol.SessionContextWindowCapResultMessage) bool { return string(r.SessionID) == pinned })
 	if !pin.Success {
 		t.Fatalf("pin %s to 300000: %s", pinned, protocol.Deref(pin.Error))
 	}
@@ -64,12 +64,12 @@ func TestAReloadWhoseAgentCannotStartShowsTheSessionExited(t *testing.T) {
 	if err := os.RemoveAll(cwd); err != nil {
 		t.Fatal(err)
 	}
-	reloaded := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: session, Cols: 100, Rows: 30},
-		protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return r.ID == session })
+	reloaded := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 100, Rows: 30},
+		protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == session })
 	if reloaded.Success {
 		t.Fatal("a reload into a deleted directory succeeded")
 	}
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == session })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
 }
 
 func TestTwoReloadsAtOnceLeaveOneAgentRunning(t *testing.T) {
@@ -79,11 +79,11 @@ func TestTwoReloadsAtOnceLeaveOneAgentRunning(t *testing.T) {
 	w.Launched(session)
 
 	boot := w.HoldNextBoot()
-	reload := protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: session, Cols: 100, Rows: 30}
+	reload := protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 100, Rows: 30}
 	app.Send(reload)
 	other.Send(reload)
 	for _, peer := range []*testworld.Peer{app, other} {
-		result := testworld.Await(peer, protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return r.ID == session })
+		result := testworld.Await(peer, protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == session })
 		if !result.Success {
 			t.Errorf("a concurrent reload failed: %s", protocol.Deref(result.Error))
 		}
@@ -96,7 +96,7 @@ func TestTwoReloadsAtOnceLeaveOneAgentRunning(t *testing.T) {
 	}
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	for _, e := range app.Received() {
-		if e.Event == protocol.EventSessionExited && protocol.Deref(e.SessionID) == session {
+		if e.Event == protocol.EventSessionExited && string(protocol.Deref(e.SessionID)) == session {
 			t.Error("the concurrent reloads showed the session exited")
 		}
 	}

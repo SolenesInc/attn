@@ -9,6 +9,7 @@ import (
 
 	"github.com/victorarias/attn/internal/automode"
 	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -95,7 +96,7 @@ func (d *Daemon) reconcileAutoModeDenialLedger() autoModeLedgerReconcile {
 	return out
 }
 
-func autoModeDenialKey(sessionID, signature string, at time.Time) string {
+func autoModeDenialKey(sessionID protocol.SessionID, signature string, at time.Time) string {
 	return fmt.Sprintf("%s|%s|%s", sessionID, at.UTC().Format(time.RFC3339Nano), signature)
 }
 

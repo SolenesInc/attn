@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 func TestMigration155MovesLastSeenStampsToUTC(t *testing.T) {
@@ -42,7 +44,7 @@ func TestMigration155MovesLastSeenStampsToUTC(t *testing.T) {
 	defer migrated.Close()
 
 	for _, stamp := range stamps {
-		entry := migrated.SessionLedgerEntry(stamp.id)
+		entry := migrated.SessionLedgerEntry(protocol.SessionID(stamp.id))
 		if entry == nil {
 			t.Fatalf("session %s left the ledger", stamp.id)
 		}
@@ -61,7 +63,7 @@ func TestMigration155MovesLastSeenStampsToUTC(t *testing.T) {
 	}
 	var inWindow []string
 	for _, entry := range page.Entries {
-		inWindow = append(inWindow, entry.ID)
+		inWindow = append(inWindow, string(entry.ID))
 	}
 	if len(inWindow) != 3 {
 		t.Errorf("sessions seen between 06:41 and 06:42 UTC = %q, want pacific, berlin and utc", inWindow)

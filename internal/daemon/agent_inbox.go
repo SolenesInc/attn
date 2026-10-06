@@ -14,7 +14,7 @@ import (
 )
 
 func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage) {
-	recipient, errCode := d.resolveSessionByIDOrPrefix(msg.RecipientSessionID)
+	recipient, errCode := d.resolveSessionByIDOrPrefix(string(msg.RecipientSessionID))
 	if recipient == nil {
 		d.sendError(conn, "recipient_"+errCode)
 		return
@@ -59,7 +59,7 @@ func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage
 	}
 }
 
-func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID string, limit int) {
+func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID protocol.SessionID, limit int) {
 	d.lockGardenRoles()
 	addresses, err := d.inboxAddressesOf(recipientSessionID)
 	for _, address := range addresses {
@@ -129,7 +129,7 @@ func mailboxItemContent(delivery store.InboxDelivery) string {
 }
 
 func (d *Daemon) handleAgentMsgStatus(conn net.Conn, msg *protocol.AgentMsgStatusMessage) {
-	sender, errCode := d.resolveSessionByIDOrPrefix(msg.SenderSessionID)
+	sender, errCode := d.resolveSessionByIDOrPrefix(string(msg.SenderSessionID))
 	if sender == nil {
 		d.sendError(conn, "sender_"+errCode)
 		return
@@ -173,7 +173,7 @@ func (d *Daemon) peerMessageResult(record inbox.PeerRecord) *protocol.AgentPeerM
 	}
 	result := &protocol.AgentPeerMessage{
 		MessageID: record.Message.ID, SenderSessionID: record.Message.SenderSessionID,
-		SenderLabel: senderLabel, TargetSessionID: target,
+		SenderLabel: senderLabel, TargetSessionID: string(target),
 		Content: record.Message.Body, State: protocol.AgentMessageState(record.State()),
 		CreatedAt: record.Message.CreatedAt,
 	}

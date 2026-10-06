@@ -42,7 +42,7 @@ func TestADelegationRetryReturnsTheAcceptedOperationAfterTheRolesChange(t *testi
 	if err != nil {
 		t.Fatalf("delegating with the build role: %v", err)
 	}
-	w.Launched(accepted.SessionID)
+	w.Launched(string(accepted.SessionID))
 	off := *saved.Preferences
 	off.Enabled = false
 	if turnedOff := savePreferences(app, off); !turnedOff.Success {

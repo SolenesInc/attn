@@ -8,6 +8,24 @@ Every entry was checked against the harness's source or a probe, and names
 the version it was checked on. Do not add or rely on a claim from memory:
 read the source or probe the binary first, then record it here.
 
+## attn identities at the harness boundary
+
+`ATTN_TERMINAL_ID` identifies the launched terminal. Older launches carry the
+same identity under `ATTN_SESSION_ID`. Terminal bindings survive removal of a placement and daemon restart; closing
+a session removes all its bindings. When several terminals show one session,
+ending one removes only its binding; the session runs on in the others. A terminal can change conversations with
+`/clear` or `/resume`, so CLI commands resolve its current attn session when they
+start, and hooks resolve it when the daemon receives them. Native harness
+conversation ids remain separate text values.
+
+The binding migration records the old self-ID mapping for open sessions with no
+pane mapping. Known pane terminals take precedence; runtime lookup uses only
+these persisted bindings and pending launches.
+
+Plugin driver payloads retain the `session_id` wire spelling for the terminal.
+Session teardown saves that terminal before removing its pane, so restart
+recovery can finish the driver notification with the original identity.
+
 ## Claude Code
 
 Probed on 2.1.288 with a mock API.
@@ -48,5 +66,6 @@ Read in the source at openai/codex 60947e2341.
   fire no SessionStart or SessionEnd; a spawned one fires SubagentStart
   (`core/src/hook_runtime.rs`).
 - Hooks run in the process that runs the turn: the terminal's own Codex
-  process for a PTY launch, so `ATTN_SESSION_ID` names the terminal; the
+  process for a PTY launch, so `ATTN_TERMINAL_ID` names the terminal (older launches use
+  `ATTN_SESSION_ID` with the same meaning); the
   app-server for a `--remote` TUI, so a hook there cannot name the terminal.

@@ -30,7 +30,7 @@ func mustProfileRequest(p *testworld.Peer, cmd any, requestID string) protocol.P
 func requestShowSession(p *testworld.Peer, sessionID string) protocol.ProfileActionResultMessage {
 	p.T.Helper()
 	id := uuid.NewString()
-	return profileRequest(p, protocol.DesktopShowSessionMessage{Cmd: protocol.CmdDesktopShowSession, RequestID: id, SessionID: sessionID}, id)
+	return profileRequest(p, protocol.DesktopShowSessionMessage{Cmd: protocol.CmdDesktopShowSession, RequestID: id, SessionID: protocol.SessionID(sessionID)}, id)
 }
 
 func requestShowLeaf(p *testworld.Peer, desktopID, leafID string) protocol.ProfileActionResultMessage {
@@ -112,7 +112,7 @@ func (v arrangementView) paneOf(t *testing.T, sessionID string) (protocol.Deskto
 	t.Helper()
 	for _, desktop := range v.desktops {
 		for _, pane := range desktop.Panes {
-			if pane.SessionID == sessionID {
+			if string(pane.SessionID) == sessionID {
 				return desktop, pane.PaneID
 			}
 		}

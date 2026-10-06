@@ -147,9 +147,7 @@ func (d *Daemon) handleAutoModePropose(conn net.Conn, msg *protocol.AutoModeProp
 	proposal, err := d.store.CreateAutoModeProposal(
 		strings.TrimSpace(msg.Kind),
 		strings.TrimSpace(protocol.Deref(msg.Target)),
-		strings.TrimSpace(msg.Value),
-		strings.TrimSpace(protocol.Deref(msg.ProposedBy)),
-		time.Now(),
+		strings.TrimSpace(msg.Value), protocol.TrimID(protocol.Deref(msg.ProposedBy)), time.Now(),
 	)
 	if err != nil {
 		d.sendError(conn, err.Error())
@@ -193,7 +191,7 @@ func (d *Daemon) recordAutoModeDenial(params pluginReportAutoModeDenialParams) e
 	if d.store == nil {
 		return fmt.Errorf("no database")
 	}
-	sessionID := strings.TrimSpace(params.SessionID)
+	sessionID := protocol.TrimID(params.SessionID)
 	at := time.Now()
 	if stamp, err := time.Parse(time.RFC3339, strings.TrimSpace(params.At)); err == nil {
 		at = stamp
@@ -223,15 +221,15 @@ func (d *Daemon) recordAutoModeDenial(params pluginReportAutoModeDenialParams) e
 	if notification == "" {
 		return nil
 	}
-	d.publishFact(FactAutoModeDenied, sessionID, nil)
+	d.publishFact(FactAutoModeDenied, string(sessionID), nil)
 	return nil
 }
 
-func (d *Daemon) sessionLabel(sessionID string) string {
+func (d *Daemon) sessionLabel(sessionID protocol.SessionID) string {
 	if session := d.store.Get(sessionID); session != nil && strings.TrimSpace(session.Label) != "" {
 		return session.Label
 	}
-	return sessionID
+	return string(sessionID)
 }
 
 func autoModeDenialNotification(label string, denial store.AutoModeDenial) store.NotificationRecord {
@@ -242,7 +240,7 @@ func autoModeDenialNotification(label string, denial store.AutoModeDenial) store
 		Body:       denial.Signature,
 		Detail:     fmt.Sprintf("%s (%s)", denial.Reason, denial.Rule),
 		SourceKind: "session",
-		SourceID:   denial.SessionID,
+		SourceID:   string(denial.SessionID),
 	}
 }
 

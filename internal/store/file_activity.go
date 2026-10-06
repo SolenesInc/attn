@@ -24,7 +24,7 @@ func sourceWeight(source string) float64 {
 	return 1
 }
 
-func (s *Store) RecordFileActivity(path, source, sessionID string) {
+func (s *Store) RecordFileActivity(path string, source string, sessionID protocol.SessionID) {
 	if path == "" || source == "" {
 		return
 	}
@@ -74,7 +74,7 @@ func (s *Store) GetRecentFiles(limit int, root string) []protocol.FileActivity {
 
 	for rows.Next() {
 		var entry protocol.FileActivity
-		var session *string
+		var session *protocol.SessionID
 		if err := rows.Scan(&entry.Path, &entry.Source, &session, &entry.LastAt, &entry.Count); err != nil {
 			continue
 		}

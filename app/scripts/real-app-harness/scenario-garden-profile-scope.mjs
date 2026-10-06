@@ -33,7 +33,7 @@ async function main() {
   let home;
   const runAttn = async (argv, session = '') => {
     const result = await execFileAsync(appDaemonInTree(options.appPath), argv, {
-      encoding: 'utf8', maxBuffer: Infinity, env: instanceCliEnv(instance, { ATTN_SESSION_ID: session }),
+      encoding: 'utf8', maxBuffer: Infinity, env: instanceCliEnv(instance, { ATTN_TERMINAL_ID: session ? observer.terminalOf(session) : '' }),
     });
     return result.stdout;
   };

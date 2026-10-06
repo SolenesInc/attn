@@ -11,11 +11,11 @@ import (
 )
 
 func (d *Daemon) handleRenameSession(client *wsClient, msg *protocol.RenameSessionMessage) {
-	d.sendRenameResult(client, protocol.CmdRenameSession, strings.TrimSpace(msg.SessionID), d.renameSession(msg))
+	d.sendRenameResult(client, protocol.CmdRenameSession, protocol.TrimID(msg.SessionID), d.renameSession(msg))
 }
 
 func (d *Daemon) handleRenameSessionConn(conn net.Conn, msg *protocol.RenameSessionMessage) {
-	sessionID := strings.TrimSpace(msg.SessionID)
+	sessionID := protocol.TrimID(msg.SessionID)
 	if endpointID := d.sessionOwnerEndpoint(sessionID); endpointID != "" {
 		payload, err := json.Marshal(msg)
 		if err == nil {
@@ -36,7 +36,7 @@ func (d *Daemon) handleRenameSessionConn(conn net.Conn, msg *protocol.RenameSess
 }
 
 func (d *Daemon) renameSession(msg *protocol.RenameSessionMessage) error {
-	sessionID := strings.TrimSpace(msg.SessionID)
+	sessionID := protocol.TrimID(msg.SessionID)
 	label := strings.TrimSpace(msg.Label)
 	if sessionID == "" {
 		return fmt.Errorf("missing session_id")
@@ -53,11 +53,11 @@ func (d *Daemon) renameSession(msg *protocol.RenameSessionMessage) error {
 	}
 	d.store.UpdateSessionLabel(sessionID, label)
 	session.Label = label
-	d.publishFact(FactSessionRenamed, sessionID, nil)
+	d.publishFact(FactSessionRenamed, string(sessionID), nil)
 	return nil
 }
 
-func (d *Daemon) sendRenameResult(client *wsClient, cmd, id string, err error) {
+func (d *Daemon) sendRenameResult(client *wsClient, cmd string, id protocol.SessionID, err error) {
 	result := protocol.RenameResultMessage{
 		Event:   protocol.EventRenameResult,
 		Cmd:     cmd,

@@ -14,7 +14,7 @@ func (d *Daemon) handleSessionAnnotationsGet(client *wsClient, msg *protocol.Ses
 			return protocol.SessionAnnotationsGetResultMessage{
 				Event:       protocol.EventSessionAnnotationsGetResult,
 				RequestID:   msg.RequestID,
-				SessionID:   result.key,
+				SessionID:   protocol.SessionID(result.key),
 				Annotations: result.annotations,
 				Note:        result.note,
 				Generation:  result.generation,
@@ -22,7 +22,7 @@ func (d *Daemon) handleSessionAnnotationsGet(client *wsClient, msg *protocol.Ses
 				Error:       result.err,
 			}
 		})
-	handler.get("session_annotations_get", msg.SessionID, decodeSessionAnnotations)
+	handler.get("session_annotations_get", string(msg.SessionID), decodeSessionAnnotations)
 }
 
 func (d *Daemon) handleSessionAnnotationsSave(client *wsClient, msg *protocol.SessionAnnotationsSaveMessage) {
@@ -35,14 +35,14 @@ func (d *Daemon) handleSessionAnnotationsSave(client *wsClient, msg *protocol.Se
 			return protocol.SessionAnnotationsSaveResultMessage{
 				Event:      protocol.EventSessionAnnotationsSaveResult,
 				RequestID:  msg.RequestID,
-				SessionID:  result.key,
+				SessionID:  protocol.SessionID(result.key),
 				Generation: result.generation,
 				Success:    result.success,
 				Stale:      result.stale,
 				Error:      result.err,
 			}
 		})
-	handler.save("session_annotations_save", msg.SessionID, annotations, protocol.Deref(msg.Note), msg.Generation)
+	handler.save("session_annotations_save", string(msg.SessionID), annotations, protocol.Deref(msg.Note), msg.Generation)
 }
 
 func (d *Daemon) handleSessionAnnotationsClear(client *wsClient, msg *protocol.SessionAnnotationsClearMessage) {
@@ -51,17 +51,17 @@ func (d *Daemon) handleSessionAnnotationsClear(client *wsClient, msg *protocol.S
 			return protocol.SessionAnnotationsClearResultMessage{
 				Event:      protocol.EventSessionAnnotationsClearResult,
 				RequestID:  msg.RequestID,
-				SessionID:  result.key,
+				SessionID:  protocol.SessionID(result.key),
 				Generation: result.generation,
 				Success:    result.success,
 				Error:      result.err,
 			}
 		})
-	handler.clear("session_annotations_clear", msg.SessionID, msg.Generation)
+	handler.clear("session_annotations_clear", string(msg.SessionID), msg.Generation)
 }
 
 func (d *Daemon) handleSessionAnnotationsSubmit(client *wsClient, msg *protocol.SessionAnnotationsSubmitMessage) {
-	sessionID := strings.TrimSpace(msg.SessionID)
+	sessionID := protocol.TrimID(msg.SessionID)
 	result := protocol.SessionAnnotationsSubmitResultMessage{
 		Event:     protocol.EventSessionAnnotationsSubmitResult,
 		RequestID: msg.RequestID,
@@ -81,7 +81,7 @@ func (d *Daemon) handleSessionAnnotationsSubmit(client *wsClient, msg *protocol.
 		return
 	}
 	if d.store.Get(sessionID) == nil {
-		fail("session_annotations_submit: unknown session " + sessionID)
+		fail(string("session_annotations_submit: unknown session " + sessionID))
 		return
 	}
 	delivery := annotationSessionInput(msg.RequestID, sessionID, msg.Text)

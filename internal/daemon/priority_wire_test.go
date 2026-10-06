@@ -13,7 +13,7 @@ func TestPriorityIsBroadcastStickyAndInheritedByClear(t *testing.T) {
 	app := w.App()
 	id := w.Spawn(app, fakeagent.Claude, w.Path("priority"))
 	agent := w.Launched(id)
-	app.Send(protocol.SetSessionPriorityMessage{Cmd: protocol.CmdSetSessionPriority, SessionID: id, Priority: true})
+	app.Send(protocol.SetSessionPriorityMessage{Cmd: protocol.CmdSetSessionPriority, SessionID: protocol.SessionID(id), Priority: true})
 	testworld.AwaitSession(app, id, func(s protocol.Session) bool { return protocol.Deref(s.Priority) })
 	app.TypeLine(id, "Finish this turn")
 	agent.Prompted()
@@ -37,7 +37,7 @@ func TestPriorityIsBroadcastStickyAndInheritedByClear(t *testing.T) {
 	if err := cli.SetSessionPriority(next.ID, false); err != nil {
 		t.Fatal(err)
 	}
-	testworld.AwaitSession(app, next.ID, func(s protocol.Session) bool { return !protocol.Deref(s.Priority) })
+	testworld.AwaitSession(app, string(next.ID), func(s protocol.Session) bool { return !protocol.Deref(s.Priority) })
 }
 
 func TestPriorityDelegationAndHandover(t *testing.T) {
@@ -54,16 +54,16 @@ func TestPriorityDelegationAndHandover(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	w.Launched(first.SessionID).Prompted()
-	if !protocol.Deref(queriedSession(t, cli, first.SessionID).Priority) {
+	w.Launched(string(first.SessionID)).Prompted()
+	if !protocol.Deref(queriedSession(t, cli, string(first.SessionID)).Priority) {
 		t.Fatal("delegate was not born marked")
 	}
 	next, err := cli.Delegate(seedHandoverRequest(source, first.Directory, first.SeedID, "Carry on"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	w.Launched(next.SessionID).Prompted()
-	if !protocol.Deref(queriedSession(t, cli, next.SessionID).Priority) {
+	w.Launched(string(next.SessionID)).Prompted()
+	if !protocol.Deref(queriedSession(t, cli, string(next.SessionID)).Priority) {
 		t.Fatal("handover lost priority")
 	}
 }
@@ -72,14 +72,14 @@ func TestCrewNapInheritsPriority(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
 	day := wakeCrew(t, cli, "keel", "claude")
-	w.Launched(day.SessionID)
+	w.Launched(string(day.SessionID))
 	if err := cli.SetSessionPriority(day.SessionID, true); err != nil {
 		t.Fatal(err)
 	}
-	next := crewHandoff(t, cli, day.SessionID, "Continue the work", false, protocol.CrewDayCloseNap)
+	next := crewHandoff(t, cli, string(day.SessionID), "Continue the work", false, protocol.CrewDayCloseNap)
 	id := protocol.Deref(next.SessionID)
-	w.Launched(id)
-	if !protocol.Deref(queriedSession(t, cli, id).Priority) {
+	w.Launched(string(id))
+	if !protocol.Deref(queriedSession(t, cli, string(id)).Priority) {
 		t.Fatal("nap lost priority")
 	}
 }

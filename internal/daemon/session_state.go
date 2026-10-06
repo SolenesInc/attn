@@ -35,7 +35,7 @@ func (startupRecovery) isSessionStateCause()     {}
 func (hostExitRecovery) isSessionStateCause()    {}
 
 type sessionStateChange struct {
-	sessionID        string
+	sessionID        protocol.SessionID
 	state            string
 	cause            sessionStateCause
 	requestStartedAt time.Time

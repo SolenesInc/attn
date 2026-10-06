@@ -34,7 +34,7 @@ async function main() {
   let agent;
   let seedId;
   const runAttn = (args, sessionId = dispatcher) => execFileSync(appDaemonInTree(options.appPath), args, {
-    encoding: 'utf8', env: instanceCliEnv(instance, { ATTN_SESSION_ID: sessionId ?? '' }),
+    encoding: 'utf8', env: instanceCliEnv(instance, { ATTN_TERMINAL_ID: sessionId ? observer.terminalOf(sessionId) : '' }),
   });
   try {
     const webkitBaseline = await captureWebKitPids();

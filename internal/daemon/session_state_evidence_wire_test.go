@@ -53,20 +53,20 @@ func TestAReplyWithoutAUsableMarkerSettlesIdle(t *testing.T) {
 func TestAnIdleSessionStaysIdleHoweverLongItIsQuiet(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
-		settle func(cli *client.Client) error
+		settle func(w *world, cli *client.Client) error
 	}{
-		{"idle at its prompt", func(cli *client.Client) error {
-			return cli.RecordNotification("s1", "idle_prompt", "Claude is waiting for your input")
+		{"idle at its prompt", func(w *world, cli *client.Client) error {
+			return cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), "idle_prompt", "Claude is waiting for your input")
 		}},
-		{"idle with only a cron pending", func(cli *client.Client) error {
-			return cli.SendStop("s1", "", client.StopFacts{PendingSessionCrons: 1})
+		{"idle with only a cron pending", func(w *world, cli *client.Client) error {
+			return cli.SendStop(protocol.TerminalID(w.Terminal("s1")), "", client.StopFacts{PendingSessionCrons: 1})
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			inBubble(t, func(t *testing.T, w *world) {
 				app, cli := w.App(), w.Client()
 				sessionStateEvidenceAtWork(t, w, app, cli)
-				if err := tc.settle(cli); err != nil {
+				if err := tc.settle(w, cli); err != nil {
 					t.Fatalf("settle: %v", err)
 				}
 				idle := testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
@@ -94,8 +94,10 @@ func TestAReasonChangeAloneReachesTheApp(t *testing.T) {
 			report func() error
 			reason string
 		}{
-			{func() error { return cli.RecordCompaction("s1", true, "auto") }, "compacting"},
-			{func() error { return cli.RecordCompaction("s1", false, "auto") }, "bracket_open"},
+			{func() error { return cli.RecordCompaction(protocol.TerminalID(w.Terminal("s1")), true, "auto") }, "compacting"},
+			{func() error {
+				return cli.RecordCompaction(protocol.TerminalID(w.Terminal("s1")), false, "auto")
+			}, "bracket_open"},
 		} {
 			before := len(sessionUpdatesOf(app, "s1"))
 			if err := step.report(); err != nil {
@@ -115,7 +117,7 @@ func TestAReasonChangeAloneReachesTheApp(t *testing.T) {
 
 		before := len(sessionUpdatesOf(app, "s1"))
 		for range 2 {
-			if err := cli.UpdateState("s1", protocol.StateWorking); err != nil {
+			if err := cli.UpdateState(protocol.TerminalID(w.Terminal("s1")), protocol.StateWorking); err != nil {
 				t.Fatalf("report working again: %v", err)
 			}
 			w.advance(time.Second)
@@ -131,7 +133,7 @@ func TestAStopWithBackgroundWorkHoldsTheSessionUntilItClears(t *testing.T) {
 		app, cli := w.App(), w.Client()
 		sessionStateEvidenceAtWork(t, w, app, cli)
 
-		if err := cli.SendStop("s1", "", client.StopFacts{BackgroundTasks: []protocol.StopBackgroundTask{
+		if err := cli.SendStop(protocol.TerminalID(w.Terminal("s1")), "", client.StopFacts{BackgroundTasks: []protocol.StopBackgroundTask{
 			{Type: "background_session", Status: "running", Name: protocol.Ptr("gh run watch 1234")},
 		}}); err != nil {
 			t.Fatalf("stop with background work: %v", err)
@@ -144,7 +146,7 @@ func TestAStopWithBackgroundWorkHoldsTheSessionUntilItClears(t *testing.T) {
 			t.Fatalf("a minute into its background work the session is %s (%s), want working", got.State, protocol.Deref(got.StateReason))
 		}
 
-		if err := cli.SendStop("s1", "", client.StopFacts{PendingSessionCrons: 1}); err != nil {
+		if err := cli.SendStop(protocol.TerminalID(w.Terminal("s1")), "", client.StopFacts{PendingSessionCrons: 1}); err != nil {
 			t.Fatalf("stop with only a cron pending: %v", err)
 		}
 		w.advance(5 * time.Second)
@@ -160,7 +162,7 @@ func TestEachNotificationTypeMovesTheSessionOnlyAsItsKindSays(t *testing.T) {
 		sessionStateEvidenceAtWork(t, w, app, cli)
 		before := len(sessionUpdatesOf(app, "s1"))
 
-		if err := cli.RecordNotification("s1", "some_future_type", "something new"); err != nil {
+		if err := cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), "some_future_type", "something new"); err != nil {
 			t.Fatalf("notify some_future_type: %v", err)
 		}
 		w.advance(time.Second)
@@ -168,7 +170,7 @@ func TestEachNotificationTypeMovesTheSessionOnlyAsItsKindSays(t *testing.T) {
 			t.Fatalf("an unknown notification type moved the session: %s", describeUpdates(updates))
 		}
 
-		if err := cli.RecordNotification("s1", "idle_prompt", "Claude is waiting for your input"); err != nil {
+		if err := cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), "idle_prompt", "Claude is waiting for your input"); err != nil {
 			t.Fatalf("notify idle_prompt: %v", err)
 		}
 		testworld.AwaitSession(app, "s1", func(s protocol.Session) bool {
@@ -186,13 +188,13 @@ func TestClaudeLeavingAutoModeSurfacesApprovalsWithoutTheDwell(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		guardedClaudeAtWork(t, app, cli, w)
-		if err := cli.UpdateStateFromHook("s1", protocol.StateWorking, "default"); err != nil {
+		if err := cli.UpdateStateFromHook(protocol.TerminalID(w.Terminal("s1")), protocol.StateWorking, "default"); err != nil {
 			t.Fatalf("report working in default mode: %v", err)
 		}
 		w.advance(time.Second)
 
 		asked := time.Now()
-		if err := cli.RecordNotification("s1", "permission_prompt", "Allow edit?"); err != nil {
+		if err := cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), "permission_prompt", "Allow edit?"); err != nil {
 			t.Fatalf("notify: %v", err)
 		}
 		surfaced := testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
@@ -207,7 +209,7 @@ func sessionStateEvidenceAtWork(t *testing.T, w *world, app *testworld.Peer, cli
 	if err := w.InjectSession("s1", "s1", w.Path("s1"), protocol.SessionAgentClaude); err != nil {
 		t.Fatalf("register: %v", err)
 	}
-	if err := cli.UpdateState("s1", protocol.StateWorking); err != nil {
+	if err := cli.UpdateState(protocol.TerminalID(w.Terminal("s1")), protocol.StateWorking); err != nil {
 		t.Fatalf("report working: %v", err)
 	}
 	working := testworld.AwaitSession(app, "s1", func(s protocol.Session) bool {

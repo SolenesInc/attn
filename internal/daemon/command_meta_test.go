@@ -37,7 +37,7 @@ func TestRemoteCommandsRouteToTheDaemonThatOwnsTheirTarget(t *testing.T) {
 		{
 			name: "open_markdown",
 			cmd:  protocol.CmdOpenMarkdown,
-			msg:  &protocol.OpenMarkdownMessage{Path: "/tmp/notes.md", SessionID: protocol.Ptr("sess-open-markdown")},
+			msg:  &protocol.OpenMarkdownMessage{Path: "/tmp/notes.md", SessionID: protocol.Ptr(protocol.SessionID("sess-open-markdown"))},
 			want: route{session: "sess-open-markdown"},
 		},
 		{
@@ -48,7 +48,7 @@ func TestRemoteCommandsRouteToTheDaemonThatOwnsTheirTarget(t *testing.T) {
 		{
 			name: "open_seed stays hub local",
 			cmd:  protocol.CmdOpenSeed,
-			msg:  &protocol.OpenSeedMessage{SeedID: "s-abc123", SessionID: protocol.Ptr("sess-remote")},
+			msg:  &protocol.OpenSeedMessage{SeedID: "s-abc123", SessionID: protocol.Ptr(protocol.SessionID("sess-remote"))},
 		},
 		{
 			name: "markdown_annotations_submit",
@@ -122,7 +122,7 @@ func TestRemoteCommandsRouteToTheDaemonThatOwnsTheirTarget(t *testing.T) {
 	for _, tc := range cases {
 		endpoint, _ := remoteCommandScopedEndpointID(tc.msg, resolver)
 		got := route{
-			session:  remoteCommandSessionID(tc.cmd, tc.msg),
+			session:  string(remoteCommandSessionID(tc.cmd, tc.msg)),
 			endpoint: endpoint,
 		}
 		if got != tc.want {

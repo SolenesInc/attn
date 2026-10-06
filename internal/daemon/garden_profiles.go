@@ -11,8 +11,8 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (d *Daemon) resolveGardenProfile(sessionID, requested, selected string) (profiles.Profile, error) {
-	if sessionID = strings.TrimSpace(sessionID); sessionID != "" {
+func (d *Daemon) resolveGardenProfile(sessionID protocol.SessionID, requested string, selected string) (profiles.Profile, error) {
+	if sessionID = protocol.TrimID(sessionID); sessionID != "" {
 		return d.callerProfile(sessionID)
 	}
 	if selected != "" {
@@ -73,7 +73,7 @@ func (d *Daemon) scopeGardenRequest(cmd string, msg any, selected string) error 
 		return err
 	}
 	var scope struct {
-		SourceSessionID string                            `json:"source_session_id"`
+		SourceSessionID protocol.SessionID                `json:"source_session_id"`
 		ProfileID       string                            `json:"profile_id"`
 		SeedID          string                            `json:"seed_id"`
 		ToSeedID        string                            `json:"to_seed_id"`

@@ -26,7 +26,7 @@ func TestDelegateRetryWithoutPriorityKeepsTheAcceptedRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.Launched(accepted.SessionID).Prompted()
+	s.Launched(string(accepted.SessionID)).Prompted()
 	s.Stop()
 	s.Start()
 	retry := s.Attn("delegate", "--request-id", request.RequestID, "--profile", app.SelectedProfile(),
@@ -36,7 +36,7 @@ func TestDelegateRetryWithoutPriorityKeepsTheAcceptedRequest(t *testing.T) {
 	}
 	var result delegated
 	retry.JSON(t, &result)
-	if result.SessionID != accepted.SessionID || result.SeedID != accepted.SeedID {
+	if result.SessionID != string(accepted.SessionID) || result.SeedID != accepted.SeedID {
 		t.Fatalf("retry = %+v, want session %s and seed %s", result, accepted.SessionID, accepted.SeedID)
 	}
 	if sessions, err := s.Client().Query(""); err != nil || len(sessions) != 1 {
@@ -71,7 +71,7 @@ func TestSessionPriorityCLI(t *testing.T) {
 	testworld.AwaitSession(app, worker.SessionID, func(row protocol.Session) bool { return protocol.Deref(row.Priority) })
 	for _, target := range []string{"missing-session", id} {
 		if target == id {
-			closed := testworld.Request(app, protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: id}, protocol.EventSessionCloseResult, func(r protocol.SessionCloseResultMessage) bool { return r.SessionID == id })
+			closed := testworld.Request(app, protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: protocol.SessionID(id)}, protocol.EventSessionCloseResult, func(r protocol.SessionCloseResultMessage) bool { return r.SessionID == protocol.SessionID(id) })
 			if !closed.Accepted {
 				t.Fatal("closing session refused")
 			}

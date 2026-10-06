@@ -478,7 +478,7 @@ location: {type: directory, path: %q}
 	}
 	awaitAutomationChanged(app, 1)
 	session := protocol.Deref(first.Run.SessionID)
-	agent := w.Launched(session)
+	agent := w.Launched(string(session))
 	for _, flag := range [][]string{{"--model", "sonnet"}, {"--effort", "high"}, {"--permission-mode", "auto"}} {
 		if !containsAutomationFlag(agent.Argv, flag[0], flag[1]) {
 			t.Errorf("the agent was launched with %q, want %s %s", agent.Argv, flag[0], flag[1])

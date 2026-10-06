@@ -162,7 +162,7 @@ func runCrewWake(args []string) {
 		writeCrewHelp(os.Stderr)
 		os.Exit(2)
 	}
-	result, err := client.New("").CrewWake(parsed.member, parsed.agent, strings.TrimSpace(os.Getenv("ATTN_SESSION_ID")))
+	result, err := client.New("").CrewWake(parsed.member, parsed.agent, currentSessionOrExit())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "crew wake: %v\n", err)
 		os.Exit(1)
@@ -172,22 +172,22 @@ func runCrewWake(args []string) {
 		return
 	}
 	if result.AlreadyAwake {
-		fmt.Printf("%s is already awake in session %s — nothing was launched.\n", crew.DisplayName(result.Member), agentShortID(result.SessionID))
+		fmt.Printf("%s is already awake in session %s — nothing was launched.\n", crew.DisplayName(result.Member), agentShortID(string(result.SessionID)))
 		return
 	}
 	if repair := crewWakeRepairLine(result); repair != "" {
 		fmt.Fprintln(os.Stdout, repair)
 	}
 	fmt.Printf("%s is awake in session %s. `attn agent peek %s` watches the day; the priming size is in the daemon log (grep `crew: priming`).\n",
-		crew.DisplayName(result.Member), agentShortID(result.SessionID), result.Member)
+		crew.DisplayName(result.Member), agentShortID(string(result.SessionID)), result.Member)
 }
 
 func crewWakeRepairLine(result *protocol.CrewWakeResult) string {
-	released := strings.TrimSpace(protocol.Deref(result.ReleasedSessionID))
+	released := protocol.TrimID(protocol.Deref(result.ReleasedSessionID))
 	if released == "" {
 		return ""
 	}
-	return fmt.Sprintf("Previous session %s had exited; its binding was released.", agentShortID(released))
+	return fmt.Sprintf("Previous session %s had exited; its binding was released.", agentShortID(string(released)))
 }
 
 type crewSleepArgs struct {
@@ -238,9 +238,9 @@ func crewSleepOutcomeLine(result *protocol.CrewSleepResult) string {
 		if detail == "" {
 			detail = "the member is not taking input right now"
 		}
-		return fmt.Sprintf("Sleep request for %s is queued in session %s — %s", name, agentShortID(protocol.Deref(result.SessionID)), detail)
+		return fmt.Sprintf("Sleep request for %s is queued in session %s — %s", name, agentShortID(string(protocol.Deref(result.SessionID))), detail)
 	}
-	return fmt.Sprintf("Asked %s in session %s to write its handoff and file it with `attn handoff --sleep`.", name, agentShortID(protocol.Deref(result.SessionID)))
+	return fmt.Sprintf("Asked %s in session %s to write its handoff and file it with `attn handoff --sleep`.", name, agentShortID(string(protocol.Deref(result.SessionID))))
 }
 
 type crewRestartArgs struct {
@@ -426,8 +426,8 @@ func printCrewList(w io.Writer, members []protocol.CrewMember) {
 	fmt.Fprintf(w, "%-12s  %-8s  %-8s  %-20s  %-8s  %-10s  %-22s  %s\n", "MEMBER", "STATE", "AGENT", "MODEL", "EFFORT", "SESSION", "LAUNCH DESKTOP", "HOME")
 	for _, member := range members {
 		state, session := "asleep", "-"
-		if id := strings.TrimSpace(protocol.Deref(member.BindingSession)); id != "" {
-			state, session = "awake", agentShortID(id)
+		if id := protocol.TrimID(protocol.Deref(member.BindingSession)); id != "" {
+			state, session = "awake", agentShortID(string(id))
 		}
 		fmt.Fprintf(w, "%-12s  %-8s  %-8s  %-20s  %-8s  %-10s  %-22s  %s\n", crew.DisplayName(member.ID), state, valueOrDash(member.ResolvedAgent), valueOrDash(protocol.Deref(member.ResolvedModel)), valueOrDash(protocol.Deref(member.ResolvedEffort)), session, protocol.Deref(member.ProfileName)+" › "+launchDesktopText(member.LaunchDesktop), member.HomeDir)
 	}

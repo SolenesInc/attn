@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	"github.com/victorarias/attn/internal/ghosttyvt"
-	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -38,10 +37,10 @@ func placementsToProtocol(placements []pty.KittyPlacement) []protocol.KittyPlace
 	return out
 }
 
-func encodeKittyPlacementsMessage(sessionID string, event ptybackend.OutputEvent) (outboundMessage, error) {
+func encodeKittyPlacementsMessage(terminalID protocol.TerminalID, event ptybackend.OutputEvent) (outboundMessage, error) {
 	payload, err := json.Marshal(protocol.KittyPlacementsMessage{
 		Event:      protocol.EventKittyPlacements,
-		ID:         sessionID,
+		ID:         terminalID,
 		Seq:        int(event.Seq),
 		Placements: placementsToProtocol(event.Placements),
 	})
@@ -72,7 +71,7 @@ func (d *Daemon) handleGetKittyImage(client *wsClient, msg *protocol.GetKittyIma
 		return
 	}
 
-	image, err := provider.KittyImage(context.Background(), harness.TerminalID(msg.ID), uint32(msg.ImageID))
+	image, err := provider.KittyImage(context.Background(), msg.ID, uint32(msg.ImageID))
 	if err != nil {
 		d.sendKittyImageFailure(client, msg.ID, msg.ImageID, err.Error())
 		return
@@ -116,10 +115,10 @@ func (d *Daemon) handleGetKittyImage(client *wsClient, msg *protocol.GetKittyIma
 	})
 }
 
-func (d *Daemon) sendKittyImageFailure(client *wsClient, sessionID string, imageID int, reason string) {
+func (d *Daemon) sendKittyImageFailure(client *wsClient, terminalID protocol.TerminalID, imageID int, reason string) {
 	d.sendToClient(client, protocol.KittyImageResultMessage{
 		Event:   protocol.EventKittyImageResult,
-		ID:      sessionID,
+		ID:      terminalID,
 		ImageID: imageID,
 		Success: false,
 		Error:   protocol.Ptr(fmt.Sprintf("kitty image %d: %s", imageID, reason)),

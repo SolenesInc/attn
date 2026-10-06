@@ -37,7 +37,7 @@ func TestAShellCommandThatEndedWhileTheDaemonWasDownComesBackIdle(t *testing.T) 
 	s.Start()
 	app = s.App()
 	for _, x := range app.Initial.Sessions {
-		if x.ID == shell && x.State != protocol.SessionStateIdle {
+		if string(x.ID) == shell && x.State != protocol.SessionStateIdle {
 			testworld.AwaitSession(app, shell, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
 		}
 	}

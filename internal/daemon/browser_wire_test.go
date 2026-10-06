@@ -49,7 +49,7 @@ func TestAttnBrowserOpenDocksBesideTheFocusedAgent(t *testing.T) {
 	app, cli := w.App(), w.Client()
 	host := browserHostPeer(w, "tauri://localhost", browserHostToken)
 	shop, shopDesktop, shopPane := w.RequestSpawn(app, shellHarness, w.Path("shop"))
-	focusAgent(t, w, app, shop.ID)
+	focusAgent(t, w, app, string(shop.ID))
 
 	if err := cli.OpenBrowser("  http://localhost:3000/path  ", ""); err != nil {
 		t.Fatalf("attn browser open: %v", err)
@@ -64,7 +64,7 @@ func TestAttnBrowserOpenDocksBesideTheFocusedAgent(t *testing.T) {
 		t.Errorf("after opening the same URL the desktop holds %v, want the pane and one browser tile", leaves)
 	}
 
-	closeFromApp(app, shop.ID)
+	closeFromApp(app, string(shop.ID))
 	if err := cli.OpenBrowser("https://example.com/retargeted", ""); err != nil {
 		t.Fatalf("attn browser open on the desktop without agents: %v", err)
 	}
@@ -78,12 +78,12 @@ func TestBrowserControlIsBrokeredToTheHostThatWasAsked(t *testing.T) {
 	app, cli := w.App(), w.Client()
 	shop, shopDesktop, _ := w.RequestSpawn(app, shellHarness, w.Path("shop"))
 	docs, _, _ := w.RequestSpawn(app, shellHarness, w.Path("docs"))
-	for _, session := range []string{shop.ID, docs.ID} {
-		if err := cli.OpenBrowser("http://localhost:3000", session); err != nil {
+	for _, session := range []string{string(shop.ID), string(docs.ID)} {
+		if err := cli.OpenBrowser("http://localhost:3000", protocol.SessionID(session)); err != nil {
 			t.Fatalf("open a browser for %s: %v", session, err)
 		}
 	}
-	focusAgent(t, w, app, shop.ID)
+	focusAgent(t, w, app, string(shop.ID))
 	spoof := browserHostPeer(w, "tauri://localhost", browserHostToken)
 	host := browserHostPeer(w, "http://tauri.localhost", browserHostToken)
 
@@ -105,11 +105,11 @@ func TestBrowserControlIsBrokeredToTheHostThatWasAsked(t *testing.T) {
 	}
 
 	ordinary := w.App()
-	ordinary.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: ordinary.Terminal(shop.ID), Data: strings.Repeat("x", 1<<20)})
+	ordinary.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(ordinary.Terminal(string(shop.ID))), Data: strings.Repeat("x", 1<<20)})
 	if status := ordinary.Closed(); status.Code != websocket.StatusMessageTooBig {
 		t.Errorf("an app peer sending a message past the command-sized limit was closed with %d, want %d", status.Code, websocket.StatusMessageTooBig)
 	}
-	exitShells(app, shop.ID, docs.ID)
+	exitShells(app, string(shop.ID), string(docs.ID))
 }
 
 func TestOnlyTheAppsOriginWithTheHostTokenBecomesTheBrowserHost(t *testing.T) {
@@ -120,7 +120,7 @@ func TestOnlyTheAppsOriginWithTheHostTokenBecomesTheBrowserHost(t *testing.T) {
 	if err := cli.OpenBrowser("http://localhost:3000", shop.ID); err != nil {
 		t.Fatalf("open a browser: %v", err)
 	}
-	focusAgent(t, w, app, shop.ID)
+	focusAgent(t, w, app, string(shop.ID))
 
 	for _, tc := range []struct {
 		instance, origin, token string
@@ -158,7 +158,7 @@ func TestOnlyTheAppsOriginWithTheHostTokenBecomesTheBrowserHost(t *testing.T) {
 			}
 		})
 	}
-	exitShells(app, shop.ID)
+	exitShells(app, string(shop.ID))
 }
 
 type browserControlAnswer struct {

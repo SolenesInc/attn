@@ -99,7 +99,7 @@ func claudeHooks(settingsPath, cwd string) (hookSet, error) {
 	return hookSet{groups: settings.Hooks, env: env, cwd: cwd}, nil
 }
 
-var codexHookEnvFromPolicyOnly = []string{"ATTN_SESSION_ID", "ATTN_SOCKET_PATH"}
+var codexHookEnvFromPolicyOnly = []string{"ATTN_TERMINAL_ID", "ATTN_SESSION_ID", "ATTN_SOCKET_PATH"}
 
 type codexConfig struct {
 	Features struct {

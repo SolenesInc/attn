@@ -24,7 +24,7 @@ func TestAClosedSessionLeavesEveryLiveViewAndKeepsItsFirstClose(t *testing.T) {
 	if protocol.Deref(closed.ClosedBy) != gone || protocol.Deref(closed.CloseReason) != "work finished" {
 		t.Errorf("closed row = %+v, want %s closing itself because the work finished", closed, gone)
 	}
-	if err := cli.Unregister(gone); err != nil {
+	if err := cli.Unregister(protocol.SessionID(gone)); err != nil {
 		t.Fatalf("a second close: %v", err)
 	}
 	if again := showSession(t, cli, gone); protocol.Deref(again.ClosedBy) != gone || protocol.Deref(again.CloseReason) != "work finished" ||
@@ -50,15 +50,16 @@ func TestALateReportCannotRewriteAClosedSession(t *testing.T) {
 	cli := w.Client()
 	session := w.Spawn(app, fakeagent.Claude, w.Path("brief"))
 	run := w.Launched(session)
+	terminal := protocol.TerminalID(app.Terminal(session))
 	app.TypeLine(session, "write the brief")
 	run.Prompted()
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	closeSession(t, cli, session, "brief delivered")
 	atClose := showSession(t, cli, session)
 
-	_ = cli.UpdateState(session, protocol.StateWaitingInput)
-	_ = cli.UpdateStateFromHookEvidence(session, protocol.StateWaitingInput, "", "Stop", "")
-	_ = cli.RenameSession(session, "renamed after the close")
+	_ = cli.UpdateState(terminal, protocol.StateWaitingInput)
+	_ = cli.UpdateStateFromHookEvidence(terminal, protocol.StateWaitingInput, "", "Stop", "")
+	_ = cli.RenameSession(protocol.SessionID(session), "renamed after the close")
 
 	after := showSession(t, cli, session)
 	if after.State != atClose.State || after.LastSeen != atClose.LastSeen || after.Label != atClose.Label ||
@@ -81,6 +82,7 @@ func TestAReopenedSessionComesBackWithItsDraftPullRequestsCostTurnAndLaunch(t *t
 		m.YoloMode = protocol.Ptr(true)
 	})
 	first := w.Launched(kept)
+	keptTerminal := protocol.TerminalID(app.Terminal(kept))
 	app.TypeLine(kept, "price the cart")
 	first.Prompted()
 	question := "Which currency? <!-- attn:state=waiting_input -->"
@@ -92,7 +94,7 @@ func TestAReopenedSessionComesBackWithItsDraftPullRequestsCostTurnAndLaunch(t *t
 	if saved := saveSessionAnnotations(app, kept, 1, []protocol.SessionAnnotation{}, "the tax is wrong"); !saved.Success {
 		t.Fatalf("save annotation draft: %s", protocol.Deref(saved.Error))
 	}
-	if err := cli.RecordPullRequestCreated(kept, "https://github.com/acme/shop/pull/7"); err != nil {
+	if err := cli.RecordPullRequestCreated(protocol.SessionID(kept), "https://github.com/acme/shop/pull/7"); err != nil {
 		t.Fatalf("record pull request: %v", err)
 	}
 	testworld.AwaitSession(app, kept, func(s protocol.Session) bool { return len(s.PullRequests) == 1 })
@@ -108,13 +110,13 @@ func TestAReopenedSessionComesBackWithItsDraftPullRequestsCostTurnAndLaunch(t *t
 	closeSession(t, cli, dropped, "drafted")
 	awaitClosed(app, kept)
 	awaitClosed(app, dropped)
-	_ = cli.UpdateState(kept, protocol.StateWorking)
-	_ = cli.UpdateStateFromHookEvidence(kept, protocol.StateIdle, "", "Stop", "")
+	_ = cli.UpdateState(keptTerminal, protocol.StateWorking)
+	_ = cli.UpdateStateFromHookEvidence(keptTerminal, protocol.StateIdle, "", "Stop", "")
 
 	w.restart()
 	app = w.App()
 	cli = w.Client()
-	if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: kept}); err != nil {
+	if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: protocol.SessionID(kept)}); err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
 	resumed := w.Launched(kept)
@@ -150,7 +152,7 @@ func TestAReopenedSessionComesBackWithItsDraftPullRequestsCostTurnAndLaunch(t *t
 	app = w.App()
 	states := map[string]protocol.SessionState{}
 	for _, s := range app.Initial.Sessions {
-		states[s.ID] = s.State
+		states[string(s.ID)] = s.State
 	}
 	if states[kept] != protocol.SessionStateRecoverable {
 		t.Errorf("the reopened session came back %q after a restart, want recoverable", states[kept])
@@ -162,7 +164,7 @@ func TestAReopenedSessionComesBackWithItsDraftPullRequestsCostTurnAndLaunch(t *t
 
 func closeSession(t *testing.T, cli *client.Client, id, reason string) {
 	t.Helper()
-	if _, err := cli.AgentClose(id, id, reason); err != nil {
+	if _, err := cli.AgentClose(id, protocol.SessionID(id), reason); err != nil {
 		t.Fatalf("%s closes itself: %v", id, err)
 	}
 }
@@ -170,14 +172,14 @@ func closeSession(t *testing.T, cli *client.Client, id, reason string) {
 func awaitClosed(app *testworld.Peer, id string) protocol.SessionLedgerEntry {
 	app.T.Helper()
 	closed := testworld.Await(app, protocol.EventSessionClosed, func(e protocol.WebSocketEvent) bool {
-		return e.SessionLedgerEntry != nil && e.SessionLedgerEntry.ID == id
+		return e.SessionLedgerEntry != nil && string(e.SessionLedgerEntry.ID) == id
 	})
 	return *closed.SessionLedgerEntry
 }
 
 func showSession(t *testing.T, cli *client.Client, id string) protocol.SessionLedgerEntry {
 	t.Helper()
-	shown, err := cli.SessionShow(id)
+	shown, err := cli.SessionShow(protocol.SessionID(id))
 	if err != nil {
 		t.Fatalf("session show %s: %v", id, err)
 	}
@@ -192,7 +194,7 @@ func queriedIDs(t *testing.T, cli *client.Client, filter string) []string {
 	}
 	ids := make([]string, 0, len(sessions))
 	for _, s := range sessions {
-		ids = append(ids, s.ID)
+		ids = append(ids, string(s.ID))
 	}
 	return ids
 }

@@ -24,12 +24,12 @@ func newSpawnCharacterizationDaemonOn(t *testing.T, d *Daemon) (*Daemon, *fakeSp
 }
 
 func spawnCharacterizationMessage(id, profileID, cwd string) *protocol.SpawnSessionMessage {
-	return &protocol.SpawnSessionMessage{Cmd: protocol.CmdSpawnSession, ID: id, Cwd: cwd, Agent: protocol.AgentShellValue, ProfileID: profileID, Cols: 80, Rows: 24}
+	return &protocol.SpawnSessionMessage{Cmd: protocol.CmdSpawnSession, ID: protocol.SessionID(id), Cwd: cwd, Agent: protocol.AgentShellValue, ProfileID: profileID, Cols: 80, Rows: 24}
 }
 
 func assertNoSpawnCharacterizationSession(t *testing.T, d *Daemon, backend *fakeSpawnBackend, id string) {
 	t.Helper()
-	if session := d.store.Get(id); session != nil {
+	if session := d.store.Get(protocol.SessionID(id)); session != nil {
 		t.Fatalf("rejected spawn persisted session: %+v", session)
 	}
 	if got := spawnCount(backend); got != 0 {
@@ -51,11 +51,11 @@ func TestSpawnCharacterizationRefusesAMissingOrDeletedProfileBeforeAnySideEffect
 		t.Run(tt.name, func(t *testing.T) {
 			msg := spawnCharacterizationMessage("refused-"+strings.ReplaceAll(tt.name, " ", "-"), tt.profileID, cwd)
 			d.handleSpawnSession(client, msg)
-			result := expectSpawnResult(t, client, msg.ID, false)
+			result := expectSpawnResult(t, client, string(msg.ID), false)
 			if !strings.Contains(protocol.Deref(result.Error), tt.want) {
 				t.Fatalf("refusal = %q, want it to name %q", protocol.Deref(result.Error), tt.want)
 			}
-			assertNoSpawnCharacterizationSession(t, d, backend, msg.ID)
+			assertNoSpawnCharacterizationSession(t, d, backend, string(msg.ID))
 		})
 	}
 }
@@ -66,11 +66,11 @@ func TestSpawnCharacterizationRefusesADesktopOfAnotherProfile(t *testing.T) {
 	msg := spawnCharacterizationMessage("cross-profile", defaultProfileID(t, d.store), cwd)
 	msg.Placement = &protocol.SessionPlacement{DesktopID: protocol.Ptr(work.CurrentDesktopID)}
 	d.handleSpawnSession(client, msg)
-	result := expectSpawnResult(t, client, msg.ID, false)
+	result := expectSpawnResult(t, client, string(msg.ID), false)
 	if !strings.Contains(protocol.Deref(result.Error), work.ID) {
 		t.Fatalf("refusal = %q, want it to name profile %s", protocol.Deref(result.Error), work.ID)
 	}
-	assertNoSpawnCharacterizationSession(t, d, backend, msg.ID)
+	assertNoSpawnCharacterizationSession(t, d, backend, string(msg.ID))
 }
 
 func TestSpawnCharacterizationStampsTheProfileAndPlacesBesideTheAnchor(t *testing.T) {
@@ -79,7 +79,7 @@ func TestSpawnCharacterizationStampsTheProfileAndPlacesBesideTheAnchor(t *testin
 	first := spawnCharacterizationMessage("first", profileID, cwd)
 	first.Placement = &protocol.SessionPlacement{}
 	d.handleSpawnSession(client, first)
-	expectSpawnResult(t, client, first.ID, true)
+	expectSpawnResult(t, client, string(first.ID), true)
 	firstPlacement, placed, err := d.store.SessionPlacement(first.ID)
 	if err != nil || !placed {
 		t.Fatalf("first placement placed=%v err=%v, want it on the current desktop", placed, err)
@@ -88,7 +88,7 @@ func TestSpawnCharacterizationStampsTheProfileAndPlacesBesideTheAnchor(t *testin
 	second := spawnCharacterizationMessage("second", profileID, cwd)
 	second.Placement = &protocol.SessionPlacement{DesktopID: protocol.Ptr(firstPlacement.DesktopID), AnchorPaneID: protocol.Ptr(firstPlacement.PaneID)}
 	d.handleSpawnSession(client, second)
-	expectSpawnResult(t, client, second.ID, true)
+	expectSpawnResult(t, client, string(second.ID), true)
 	if got := d.store.Get(second.ID).ProfileID; got != profileID {
 		t.Fatalf("stored profile = %q, want %q", got, profileID)
 	}

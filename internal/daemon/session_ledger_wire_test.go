@@ -131,7 +131,7 @@ func spawnPanes(w *world, app *testworld.Peer, dirs ...string) []sessionPane {
 		if !spawned.Success {
 			app.T.Fatalf("spawn in %s: %s", dir, protocol.Deref(spawned.Error))
 		}
-		panes = append(panes, sessionPane{session: spawned.ID, desktop: desktop, pane: pane})
+		panes = append(panes, sessionPane{session: string(spawned.ID), desktop: desktop, pane: pane})
 	}
 	for _, p := range panes {
 		w.Launched(p.session)
@@ -173,7 +173,7 @@ func facetCounts(facets []protocol.SessionLedgerFacet) map[string]int {
 func ledgerIDs(page *protocol.SessionListResult) []string {
 	ids := make([]string, 0, len(page.Entries))
 	for _, entry := range page.Entries {
-		ids = append(ids, entry.ID)
+		ids = append(ids, string(entry.ID))
 	}
 	return ids
 }

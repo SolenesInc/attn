@@ -6,6 +6,7 @@ import (
 
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 var (
@@ -13,7 +14,7 @@ var (
 	errCrewRosterUnavailable = errors.New("crew roster is unavailable; try again before closing this session")
 )
 
-func (d *Daemon) sessionCloseError(sessionID string) error {
+func (d *Daemon) sessionCloseError(sessionID protocol.SessionID) error {
 	if d.isChiefOfStaffSession(sessionID) {
 		return errChiefOfStaffProtected
 	}

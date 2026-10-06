@@ -73,7 +73,7 @@ func resolveAutoSettleSeconds(stored string, fallbackSeconds int) time.Duration 
 	return time.Duration(fallbackSeconds) * time.Second
 }
 
-func (d *Daemon) syncAutoSettle(sessionID, state string) {
+func (d *Daemon) syncAutoSettle(sessionID protocol.SessionID, state string) {
 	if state != protocol.StateWorking {
 		d.sessionInputs().observePhase(sessionID, protocol.SessionState(state))
 		d.retireAutoSettleDismissal(sessionID)
@@ -102,7 +102,7 @@ func (d *Daemon) armAutoSettleForUserInput(run sessionInputRunRef) {
 	d.armAutoSettle(run.sessionID)
 }
 
-func (d *Daemon) armAutoSettle(sessionID string) {
+func (d *Daemon) armAutoSettle(sessionID protocol.SessionID) {
 	if sessionID == "" || d.store == nil {
 		return
 	}
@@ -128,7 +128,7 @@ func (d *Daemon) armAutoSettle(sessionID string) {
 	d.autoSettleMu.Unlock()
 }
 
-func (d *Daemon) holdAutoSettle(sessionID string) {
+func (d *Daemon) holdAutoSettle(sessionID protocol.SessionID) {
 	d.autoSettleMu.Lock()
 	entry, ok := d.autoSettleTimers[sessionID]
 	if !ok || entry.phase == autoSettleHeld {
@@ -147,14 +147,14 @@ func (d *Daemon) holdAutoSettle(sessionID string) {
 	}
 }
 
-func (d *Daemon) startAutoSettleHeldLocked(sessionID string, resume autoSettlePhase, window time.Duration) {
+func (d *Daemon) startAutoSettleHeldLocked(sessionID protocol.SessionID, resume autoSettlePhase, window time.Duration) {
 	d.startAutoSettleLocked(sessionID, autoSettleHeld, window)
 	d.autoSettleTimers[sessionID].resume = resume
 }
 
-func (d *Daemon) startAutoSettleLocked(sessionID string, phase autoSettlePhase, window time.Duration) {
+func (d *Daemon) startAutoSettleLocked(sessionID protocol.SessionID, phase autoSettlePhase, window time.Duration) {
 	if d.autoSettleTimers == nil {
-		d.autoSettleTimers = make(map[string]*autoSettleTimer)
+		d.autoSettleTimers = make(map[protocol.SessionID]*autoSettleTimer)
 	}
 	if existing, ok := d.autoSettleTimers[sessionID]; ok {
 		existing.timer.Stop()
@@ -175,7 +175,7 @@ func (d *Daemon) startAutoSettleLocked(sessionID string, phase autoSettlePhase, 
 	close(ready)
 }
 
-func (d *Daemon) stopAutoSettleLocked(sessionID string) (removed, wasVisible bool) {
+func (d *Daemon) stopAutoSettleLocked(sessionID protocol.SessionID) (removed, wasVisible bool) {
 	entry, ok := d.autoSettleTimers[sessionID]
 	if !ok {
 		return false, false
@@ -185,7 +185,7 @@ func (d *Daemon) stopAutoSettleLocked(sessionID string) (removed, wasVisible boo
 	return true, entry.visible()
 }
 
-func (d *Daemon) cancelAutoSettle(sessionID, reason string) {
+func (d *Daemon) cancelAutoSettle(sessionID protocol.SessionID, reason string) {
 	d.autoSettleMu.Lock()
 	removed, wasVisible := d.stopAutoSettleLocked(sessionID)
 	d.autoSettleMu.Unlock()
@@ -197,7 +197,7 @@ func (d *Daemon) cancelAutoSettle(sessionID, reason string) {
 	}
 }
 
-func (d *Daemon) clearAutoSettleState(sessionID string) {
+func (d *Daemon) clearAutoSettleState(sessionID protocol.SessionID) {
 	d.autoSettleMu.Lock()
 	d.stopAutoSettleLocked(sessionID)
 	delete(d.autoSettleDismissals, sessionID)
@@ -213,7 +213,7 @@ func (d *Daemon) stopAutoSettleTimers() {
 	}
 }
 
-func (d *Daemon) autoSettleFire(sessionID string, self *time.Timer) {
+func (d *Daemon) autoSettleFire(sessionID protocol.SessionID, self *time.Timer) {
 	d.autoSettleMu.Lock()
 	entry, ok := d.autoSettleTimers[sessionID]
 	if !ok || entry.timer != self {
@@ -234,7 +234,7 @@ func (d *Daemon) autoSettleFire(sessionID string, self *time.Timer) {
 	d.broadcastSessionStateChanged(sessionID)
 }
 
-func (d *Daemon) runAutoSettleFor(sessionID string, phase, resume autoSettlePhase, armedRun sessionInputRunRef, armedTurn time.Time) string {
+func (d *Daemon) runAutoSettleFor(sessionID protocol.SessionID, phase, resume autoSettlePhase, armedRun sessionInputRunRef, armedTurn time.Time) string {
 	d.autoSettleFireMu.Lock()
 	defer d.autoSettleFireMu.Unlock()
 
@@ -252,7 +252,7 @@ func (d *Daemon) runAutoSettleFor(sessionID string, phase, resume autoSettlePhas
 	if evidence, ok := d.evidenceTable().snapshot(sessionID); ok &&
 		sessionstate.ClassifierVerdictPending(
 			evidence,
-			sessionstate.PolicyFor(string(session.Agent)),
+			sessionstate.PolicyFor(session.Agent),
 			time.Now(),
 		) {
 		return "classifying"
@@ -308,13 +308,13 @@ func (d *Daemon) runAutoSettleFor(sessionID string, phase, resume autoSettlePhas
 	return "settled"
 }
 
-func (d *Daemon) holdFromFire(sessionID string, resume autoSettlePhase, quiet time.Duration) {
+func (d *Daemon) holdFromFire(sessionID protocol.SessionID, resume autoSettlePhase, quiet time.Duration) {
 	d.autoSettleMu.Lock()
 	d.startAutoSettleHeldLocked(sessionID, resume, quiet)
 	d.autoSettleMu.Unlock()
 }
 
-func (d *Daemon) answerAutoSettleByUser(sessionID string) bool {
+func (d *Daemon) answerAutoSettleByUser(sessionID protocol.SessionID) bool {
 	session := d.decoratedSession(sessionID)
 	if !d.autoSettleAppliesTo(session) {
 		return false
@@ -329,7 +329,7 @@ func (d *Daemon) answerAutoSettleByUser(sessionID string) bool {
 		delete(d.autoSettleDismissals, sessionID)
 	} else {
 		if d.autoSettleDismissals == nil {
-			d.autoSettleDismissals = make(map[string]bool)
+			d.autoSettleDismissals = make(map[protocol.SessionID]bool)
 		}
 		d.autoSettleDismissals[sessionID] = working
 	}
@@ -344,14 +344,14 @@ func (d *Daemon) answerAutoSettleByUser(sessionID string) bool {
 	return true
 }
 
-func (d *Daemon) autoSettleDismissalArmed(sessionID string) bool {
+func (d *Daemon) autoSettleDismissalArmed(sessionID protocol.SessionID) bool {
 	d.autoSettleMu.Lock()
 	defer d.autoSettleMu.Unlock()
 	_, armed := d.autoSettleDismissals[sessionID]
 	return armed
 }
 
-func (d *Daemon) coverAutoSettleDismissal(sessionID string) {
+func (d *Daemon) coverAutoSettleDismissal(sessionID protocol.SessionID) {
 	d.autoSettleMu.Lock()
 	if _, armed := d.autoSettleDismissals[sessionID]; armed {
 		d.autoSettleDismissals[sessionID] = true
@@ -359,7 +359,7 @@ func (d *Daemon) coverAutoSettleDismissal(sessionID string) {
 	d.autoSettleMu.Unlock()
 }
 
-func (d *Daemon) retireAutoSettleDismissal(sessionID string) {
+func (d *Daemon) retireAutoSettleDismissal(sessionID protocol.SessionID) {
 	d.autoSettleMu.Lock()
 	covered, armed := d.autoSettleDismissals[sessionID]
 	retire := armed && covered
@@ -409,7 +409,7 @@ func (d *Daemon) decorateSessionWithAutoSettle(clone *protocol.Session) {
 	}
 }
 
-func (d *Daemon) turnOwed(sessionID string) bool {
+func (d *Daemon) turnOwed(sessionID protocol.SessionID) bool {
 	clone := d.decoratedSession(sessionID)
 	if clone == nil {
 		return false
@@ -423,7 +423,7 @@ func (d *Daemon) autoSettleAppliesTo(session *protocol.Session) bool {
 		!attention.Excluded(d.attentionInputFor(session))
 }
 
-func (d *Daemon) decoratedSession(sessionID string) *protocol.Session {
+func (d *Daemon) decoratedSession(sessionID protocol.SessionID) *protocol.Session {
 	if d.store == nil {
 		return nil
 	}
@@ -440,17 +440,17 @@ func (d *Daemon) cancelAllAutoSettle() {
 	for id, entry := range d.autoSettleTimers {
 		entry.timer.Stop()
 		if entry.visible() {
-			visible = append(visible, id)
+			visible = append(visible, string(id))
 		}
 		delete(d.autoSettleTimers, id)
 	}
 	for id := range d.autoSettleDismissals {
-		visible = append(visible, id)
+		visible = append(visible, string(id))
 	}
 	d.autoSettleDismissals = nil
 	d.autoSettleMu.Unlock()
 	for _, id := range visible {
-		d.broadcastSessionStateChanged(id)
+		d.broadcastSessionStateChanged(protocol.SessionID(id))
 	}
 }
 

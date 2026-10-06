@@ -54,7 +54,7 @@ func TestSubmittedAnnotationsReachTheAgentAfterWhatTheUserTyped(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.typed != "" {
 				probe := uuid.NewString()
-				testworld.Request(app, protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: app.Terminal(session), Data: tc.typed, ProbeID: protocol.Ptr(probe)},
+				testworld.Request(app, protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(app.Terminal(session)), Data: tc.typed, ProbeID: protocol.Ptr(probe)},
 					protocol.EventPtyInputProbeResult, func(r protocol.PtyInputProbeResultMessage) bool { return r.ProbeID == probe })
 			}
 			if got := tc.submit(); !got.success || got.status != "delivered" || got.err != "" || !reflect.DeepEqual(got.generation, tc.wantGeneration) {
@@ -171,7 +171,7 @@ func TestAnnotationsThatCannotBeDeliveredTypeNothingAndKeepTheDraft(t *testing.T
 	marks := []protocol.MarkdownAnnotation{{ID: "g1", Type: "global", Text: protocol.Ptr("tighten the intro"), CreatedAt: 1}}
 	saveDocumentAnnotations(app, plan, 2, marks)
 
-	if err := cli.RecordNotification(session, "permission_prompt", "Allow edit?"); err != nil {
+	if err := cli.RecordNotification(protocol.TerminalID(w.Terminal(session)), "permission_prompt", "Allow edit?"); err != nil {
 		t.Fatalf("ask for approval: %v", err)
 	}
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
@@ -210,7 +210,7 @@ func TestAnnotationsThatCannotBeDeliveredTypeNothingAndKeepTheDraft(t *testing.T
 	if got := getDocumentAnnotations(app, plan); len(got.Annotations) != 1 || got.Generation != 2 {
 		t.Errorf("the undelivered draft = %+v, want it kept at generation 2", got)
 	}
-	if err := cli.UpdateState(session, protocol.StateWorking); err != nil {
+	if err := cli.UpdateState(protocol.TerminalID(w.Terminal(session)), protocol.StateWorking); err != nil {
 		t.Fatalf("approve: %v", err)
 	}
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
@@ -240,7 +240,7 @@ func TestAnnotationsTheAgentsTerminalWillNotTakeKeepTheDraft(t *testing.T) {
 		t.Errorf("the undelivered draft = %+v, want it kept at generation 3", draft)
 	}
 	agent.Exit(0)
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == session })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
 }
 
 func TestSeedAnnotationsBecomeANoteOnThatSeedOnly(t *testing.T) {
@@ -352,14 +352,21 @@ func submitDocumentAnnotations(app *testworld.Peer, doc annotatedDocument, targe
 	r := testworld.Request(app, msg, protocol.EventMarkdownAnnotationsSubmitResult,
 		func(r protocol.MarkdownAnnotationsSubmitResultMessage) bool { return r.RequestID == msg.RequestID })
 	return annotationSubmitOutcome{success: r.Success, status: r.Status, err: protocol.Deref(r.Error), generation: r.Generation,
-		targetSeed: r.TargetSeedID, targetSession: r.TargetSessionID}
+		targetSeed: r.TargetSeedID, targetSession: stringPointer(r.TargetSessionID)}
 }
 
 func submitSessionAnnotationFeedback(app *testworld.Peer, sessionID, text string) annotationSubmitOutcome {
 	app.T.Helper()
 	requestID := uuid.NewString()
 	r := testworld.Request(app, protocol.SessionAnnotationsSubmitMessage{
-		Cmd: protocol.CmdSessionAnnotationsSubmit, RequestID: requestID, SessionID: sessionID, Text: text,
+		Cmd: protocol.CmdSessionAnnotationsSubmit, RequestID: requestID, SessionID: protocol.SessionID(sessionID), Text: text,
 	}, protocol.EventSessionAnnotationsSubmitResult, func(r protocol.SessionAnnotationsSubmitResultMessage) bool { return r.RequestID == requestID })
 	return annotationSubmitOutcome{success: r.Success, status: r.Status, err: protocol.Deref(r.Error)}
+}
+
+func stringPointer(id *protocol.SessionID) *string {
+	if id == nil {
+		return nil
+	}
+	return protocol.Ptr(string(*id))
 }

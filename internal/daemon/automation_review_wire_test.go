@@ -33,14 +33,14 @@ func TestAReviewRequestStartsOneReviewerOnTheHeadGitHubNames(t *testing.T) {
 		pr.Repository != "github.test/acme/shop" || pr.Number != 42 || pr.HeadSHA != r.head || protocol.Deref(pr.Title) != automationReviewTitle {
 		t.Errorf("the run's provenance = %+v, want the validated pull request github.test/acme/shop#42 at %s", first.Automation, r.head)
 	}
-	reviewer := testworld.AwaitSession(r.app, session, func(s protocol.Session) bool { return s.Label == "shop#42 · sonnet" })
+	reviewer := testworld.AwaitSession(r.app, string(session), func(s protocol.Session) bool { return s.Label == "shop#42 · sonnet" })
 	if head := strings.TrimSpace(runGit(t, reviewer.Directory, "rev-parse", "HEAD")); head != r.head {
 		t.Errorf("the reviewer's checkout is at %s, want the requested head %s", head, r.head)
 	}
 	if shown, err := r.cli.SeedShow("", seed); err != nil || shown.Seed.Title != "Review shop#42 · sonnet" {
 		t.Errorf("the reviewer's seed = %+v (%v), want it titled after the pull request and model", shown, err)
 	}
-	prompt := r.w.Launched(session).Prompted()
+	prompt := r.w.Launched(string(session)).Prompted()
 	for _, want := range []string{"Target pull request:", "Repository: github.test/acme/shop", "Pull request: #42", "URL: https://github.test/acme/shop/pull/42", "Checked-out head: " + r.head, filepath.Join(r.w.Dir, "automation", "occurrences", first.ID+".json"), "local-only"} {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("the reviewer's prompt lacks %q:\n%s", want, prompt)
@@ -113,7 +113,7 @@ func TestAReviewWhoseCodeIsOutOfReachWaitsForItAcrossARestartOrFails(t *testing.
 	r.awaitRuns(1, func(runs []protocol.AutomationRunSummary) bool {
 		return automationRunState(runs, byNumber[44].ID) == "delivered"
 	})
-	r.w.Launched(protocol.Deref(byNumber[44].SessionID))
+	r.w.Launched(string(protocol.Deref(byNumber[44].SessionID)))
 	for _, run := range withdrawn {
 		if run.ID == byNumber[45].ID && protocol.Deref(run.CancelReason) != "review_withdrawn" {
 			t.Errorf("the review withdrawn while held was cancelled as %q, want review_withdrawn", protocol.Deref(run.CancelReason))
@@ -127,14 +127,14 @@ func TestAStoppedReviewerResumesItsConversationOnlyWhileItsTranscriptAndContract
 	r.refresh()
 	first := r.awaitNewRun(1, "delivered")
 	session := protocol.Deref(first.SessionID)
-	reviewer := r.w.Launched(session)
+	reviewer := r.w.Launched(string(session))
 	reviewer.Prompted()
 	reviewer.Reply("Reviewed.")
 	r.stop(reviewer)
 
 	r.rerequest(42)
 	second := r.awaitNewRun(1, "delivered", first)
-	resumed := r.w.Launched(session)
+	resumed := r.w.Launched(string(session))
 	if !resumed.Resumed || resumed.ConversationID != reviewer.ConversationID || !containsAutomationFlag(resumed.Argv, "--model", "sonnet") || protocol.Deref(second.SeedID) != protocol.Deref(first.SeedID) {
 		t.Errorf("the stopped reviewer came back as %+v on seed %s, want its conversation %s resumed with --model sonnet on seed %s",
 			resumed, protocol.Deref(second.SeedID), reviewer.ConversationID, protocol.Deref(first.SeedID))
@@ -160,7 +160,7 @@ func TestAStoppedReviewerResumesItsConversationOnlyWhileItsTranscriptAndContract
 	if protocol.Deref(fresh.SessionID) == session || protocol.Deref(fresh.SeedID) == protocol.Deref(first.SeedID) {
 		t.Errorf("after the prompt changed the review ran on %s/%s, want a reviewer of its own", protocol.Deref(fresh.SessionID), protocol.Deref(fresh.SeedID))
 	}
-	if again := r.w.Launched(protocol.Deref(fresh.SessionID)); again.Resumed || !strings.Contains(again.Prompted(), "for security") {
+	if again := r.w.Launched(string(protocol.Deref(fresh.SessionID))); again.Resumed || !strings.Contains(again.Prompted(), "for security") {
 		t.Errorf("the reviewer for the new prompt started as %+v, want a fresh conversation on the new prompt", again)
 	}
 }
@@ -172,7 +172,7 @@ func TestAContinuationNotesItsOccurrenceOnceAndLeavesTheThreadOpenWhenItFails(t 
 	r.refresh()
 	first := r.awaitNewRun(1, "delivered")
 	seed := protocol.Deref(first.SeedID)
-	r.w.Launched(protocol.Deref(first.SessionID))
+	r.w.Launched(string(protocol.Deref(first.SessionID)))
 	upstream := newRepo(t, "upstream")
 
 	later := commitFile(t, upstream, "later.go", "package later\n")
@@ -223,11 +223,11 @@ func TestEachManualReviewChecksOutItsOwnHead(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		reviewer := testworld.AwaitSession(r.app, protocol.Deref(run.Run.SessionID), func(s protocol.Session) bool { return s.Directory != "" })
+		reviewer := testworld.AwaitSession(r.app, string(protocol.Deref(run.Run.SessionID)), func(s protocol.Session) bool { return s.Directory != "" })
 		if got := strings.TrimSpace(runGit(t, reviewer.Directory, "rev-parse", "HEAD")); got != head {
 			t.Errorf("review %d checked out %s in %s, want %s", i, got, reviewer.Directory, head)
 		}
-		r.w.Launched(reviewer.ID)
+		r.w.Launched(string(reviewer.ID))
 	}
 }
 
@@ -241,19 +241,19 @@ func TestCleanupRemovesOnlyFinishedCleanReviewCheckoutsAndKeepsTheirHistory(t *t
 			t.Fatal(err)
 		}
 		checkouts[name] = *run.Run
-		r.w.Launched(protocol.Deref(run.Run.SessionID))
+		r.w.Launched(string(protocol.Deref(run.Run.SessionID)))
 	}
 	r.github.request(42, r.head, false)
 	r.refresh()
 	bound := r.awaitNewRun(1, "delivered")
-	r.w.Launched(protocol.Deref(bound.SessionID))
+	r.w.Launched(string(protocol.Deref(bound.SessionID)))
 	for _, run := range []protocol.AutomationRunSummary{checkouts["clean"], checkouts["dirty"], bound} {
 		if err := r.cli.Unregister(protocol.Deref(run.SessionID)); err != nil {
 			t.Fatal(err)
 		}
 	}
 	worktree := func(run protocol.AutomationRunSummary) string {
-		return filepath.Join(r.w.Dir, "automation", "worktrees", protocol.Deref(run.SessionID), "shop")
+		return filepath.Join(r.w.Dir, "automation", "worktrees", string(protocol.Deref(run.SessionID)), "shop")
 	}
 	if err := os.WriteFile(filepath.Join(worktree(checkouts["dirty"]), "notes.txt"), []byte("unsaved review notes\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -362,7 +362,7 @@ func (r *automationReviewWorld) rerequest(number int) {
 func (r *automationReviewWorld) stop(agent *fakeagent.Run) {
 	r.t.Helper()
 	agent.Exit(0)
-	testworld.Await(r.app, protocol.EventSessionExited, func(e protocol.WebSocketEvent) bool { return protocol.Deref(e.SessionID) == agent.SessionID })
+	testworld.Await(r.app, protocol.EventSessionExited, func(e protocol.WebSocketEvent) bool { return string(protocol.Deref(e.SessionID)) == agent.SessionID })
 }
 
 func (r *automationReviewWorld) awaitRuns(id int, match func([]protocol.AutomationRunSummary) bool) []protocol.AutomationRunSummary {

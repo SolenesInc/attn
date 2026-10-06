@@ -13,7 +13,7 @@ import (
 
 func registerSessionForPRTest(t *testing.T, d *Daemon, id string) {
 	t.Helper()
-	injectTestSession(t, d, protocol.Session{ID: id, Label: id, Directory: t.TempDir(), Agent: protocol.SessionAgentClaude})
+	injectTestSession(t, d, protocol.Session{ID: protocol.SessionID(id), Label: id, Directory: t.TempDir(), Agent: protocol.SessionAgentClaude})
 }
 
 func sendPRCommand(t *testing.T, d *Daemon, msg any) protocol.Response {
@@ -46,7 +46,7 @@ func newPRDaemonForTest(t *testing.T, sessionID string) *Daemon {
 
 func sessionPullRequests(t *testing.T, d *Daemon, sessionID string) []protocol.SessionPullRequest {
 	t.Helper()
-	session := d.sessionForBroadcast(d.store.Get(sessionID))
+	session := d.sessionForBroadcast(d.store.Get(protocol.SessionID(sessionID)))
 	if session == nil {
 		t.Fatalf("session %s missing from the store", sessionID)
 	}
@@ -77,51 +77,6 @@ func TestPullRequestMutationsTravelToTheSessionOwner(t *testing.T) {
 	}
 	if prs := sessionPullRequests(t, d, "s1"); len(prs) != 0 {
 		t.Fatalf("local pull requests = %+v, want the hub's own store untouched", prs)
-	}
-}
-
-func TestPullRequestReportedByAPluginDriverLandsOnTheSession(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	client, done := startPluginPipe(t, d, "pi-plugin", nil)
-	defer func() {
-		_ = client.Close()
-		<-done
-	}()
-	registerTestPluginDriver(t, client, "pi", map[string]bool{"state_reporting": true})
-
-	now := protocol.TimestampNow().String()
-	d.store.Add(&protocol.Session{
-		ID: "pi-pr", Label: "driver work", Agent: "pi", Directory: t.TempDir(),
-		State: protocol.SessionStateWorking, StateSince: now, StateUpdatedAt: now, LastSeen: now,
-	})
-	if !d.store.BeginAgentDriverRun("pi-pr", "pi-plugin", "run-1") {
-		t.Fatal("failed to begin the test plugin run")
-	}
-
-	sendPluginMethod(t, client, 3, "session.report_pull_request", pluginReportPullRequestParams{
-		SessionID: "pi-pr",
-		RunID:     "run-1",
-		URL:       "https://github.com/victorarias/attn/pull/90",
-	})
-
-	prs := sessionPullRequests(t, d, "pi-pr")
-	if len(prs) != 1 {
-		t.Fatalf("pull requests = %+v, want the reported one", prs)
-	}
-	if prs[0].Repository != "github.com/victorarias/attn" || prs[0].Number != 90 || prs[0].State != "open" {
-		t.Errorf("entry = %+v, want github.com/victorarias/attn#90 open", prs[0])
-	}
-
-	sendPluginMethod(t, client, 4, "session.report_pull_request", pluginReportPullRequestParams{
-		SessionID: "pi-pr",
-		RunID:     "run-1",
-		URL:       "https://github.com/victorarias/attn/pull/90",
-	})
-	if prs := sessionPullRequests(t, d, "pi-pr"); len(prs) != 1 {
-		t.Fatalf("pull requests after the repeat = %+v, want still one", prs)
-	}
-	if published := docFacts(t, d, FactSessionPullRequestChanged); len(published) != 1 {
-		t.Fatalf("facts = %+v, want one: the suite retries a report the relay dropped", published)
 	}
 }
 

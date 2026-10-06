@@ -38,7 +38,7 @@ func TestAPresentationGrowsRoundsOnlyForTheSessionThatOpenedIt(t *testing.T) {
 		{"another session's presentation", "someone-else", presentationManifest("My Change", repo, "HEAD", "HEAD", ""), opened.PresentationID},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if refused, err := cli.PresentOpen(tc.session, tc.manifest, tc.presentationID); err == nil {
+			if refused, err := cli.PresentOpen(protocol.SessionID(tc.session), tc.manifest, tc.presentationID); err == nil {
 				t.Errorf("presenting %s = %+v, want it refused", tc.name, refused)
 			}
 		})
@@ -294,7 +294,7 @@ func TestSubmittingARoundHandsItBackToThePresenterOnceItIsIdle(t *testing.T) {
 	agent.Prompted()
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 
-	opened, err := cli.PresentOpen(session, presentationManifest("Checkout", repo, "HEAD", "HEAD", ""), "")
+	opened, err := cli.PresentOpen(protocol.SessionID(session), presentationManifest("Checkout", repo, "HEAD", "HEAD", ""), "")
 	if err != nil {
 		t.Fatalf("present: %v", err)
 	}

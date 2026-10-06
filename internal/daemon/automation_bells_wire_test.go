@@ -31,19 +31,19 @@ func TestAnAutomationThreadRingsOnlyWhenContinuedWorkIsReadyOrWithdrawn(t *testi
 	r.refresh()
 	first := r.awaitNewRun(1, "delivered")
 	reviewer, seed := protocol.Deref(first.SessionID), protocol.Deref(first.SeedID)
-	r.w.Launched(reviewer)
-	if bells := automationInbox(t, r, reviewer); len(bells) != 0 {
+	r.w.Launched(string(reviewer))
+	if bells := automationInbox(t, r, string(reviewer)); len(bells) != 0 {
 		t.Errorf("the first run rang its own reviewer with %q", bells)
 	}
 
 	observer := r.w.Spawn(r.app, fakeagent.Claude, r.w.Path("observer"))
 	watcher := r.w.Launched(observer)
 	gardenNudgeWatch(t, r.cli, observer, seed, false)
-	gardenNudgeMove(t, r.cli, reviewer, seed, "park")
+	gardenNudgeMove(t, r.cli, string(reviewer), seed, "park")
 	if prompt := watcher.Prompted(); !strings.Contains(prompt, inboxDoorbell) {
 		t.Fatalf("the parked seed prompted its watcher with %q, want an inbox doorbell", prompt)
 	}
-	if _, err := r.cli.SeedShow(observer, seed); err != nil {
+	if _, err := r.cli.SeedShow(protocol.SessionID(observer), seed); err != nil {
 		t.Fatal(err)
 	}
 	if bells := automationInbox(t, r, observer); len(bells) != 0 {
@@ -56,7 +56,7 @@ func TestAnAutomationThreadRingsOnlyWhenContinuedWorkIsReadyOrWithdrawn(t *testi
 		t.Fatalf("the continued work prompted its watcher with %q, want an inbox doorbell", prompt)
 	}
 	automationOneBell(t, r, "observer", observer, seed, "work.ready", "after the thread was taken up again")
-	automationOneBell(t, r, "reviewer", reviewer, seed, "work.ready", "after the thread was taken up again")
+	automationOneBell(t, r, "reviewer", string(reviewer), seed, "work.ready", "after the thread was taken up again")
 	watcher.Reply("Read the continued work. <!-- attn:state=idle -->")
 
 	upstream := newRepo(t, "upstream")
@@ -75,13 +75,13 @@ func TestAnAutomationThreadRingsOnlyWhenContinuedWorkIsReadyOrWithdrawn(t *testi
 		t.Fatalf("the withdrawn work prompted its watcher with %q, want an inbox doorbell", prompt)
 	}
 	automationOneBell(t, r, "observer", observer, seed, "note.added", "after its held continuation was withdrawn")
-	automationOneBell(t, r, "reviewer", reviewer, seed, "note.added", "after its held continuation was withdrawn")
+	automationOneBell(t, r, "reviewer", string(reviewer), seed, "note.added", "after its held continuation was withdrawn")
 	if _, err := r.cli.SeedShow(reviewer, seed); err != nil {
 		t.Fatal(err)
 	}
 	r.refresh()
 	r.refresh()
-	if bells := automationInbox(t, r, reviewer); len(bells) != 0 {
+	if bells := automationInbox(t, r, string(reviewer)); len(bells) != 0 {
 		t.Errorf("later refreshes rang the reviewer again with %q", bells)
 	}
 	if notes := automationSeedNotesMentioning(t, r.cli, seed, "(automation run "+held.ID+")"); notes != 1 {

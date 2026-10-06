@@ -60,16 +60,17 @@ func TestAWorkingSessionsActivityLineIsWrittenOnlyForNewOutputAndAtMostOncePerIn
 		}
 		transcript := fakeagent.WriteClaudeTranscript(t, cwd, "")
 		transcript.Answer("Reading the checkout plan.")
-		if err := w.InjectUnplacedSession("s1", "checkout work", cwd, protocol.SessionAgentClaude); err != nil {
-			t.Fatalf("register: %v", err)
-		}
-		if err := cli.ObserveAgentConversation("s1", transcript.ConversationID, transcript.Path); err != nil {
+		w.Spawn(app, fakeagent.Claude, cwd, func(m *protocol.SpawnSessionMessage) { m.ID = "s1" })
+		if err := cli.ObserveAgentConversation(protocol.TerminalID(w.Terminal("s1")), transcript.ConversationID, transcript.Path); err != nil {
 			t.Fatalf("bind the conversation: %v", err)
 		}
 		expect := func(when string, want int) []string {
 			t.Helper()
 			asked := lines.asked()
 			if len(asked) != want {
+				if peek, err := cli.AgentPeek("s1"); err == nil {
+					t.Logf("agent at activity failure: %+v; screen: %+v", peek, peek.Screen)
+				}
 				t.Fatalf("%s the activity line was generated %d times, want %d", when, len(asked), want)
 			}
 			return asked

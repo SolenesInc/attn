@@ -97,7 +97,7 @@ func TestBrowserForAnOutpostAgentRefusesByNamingTheFence(t *testing.T) {
 	if resp.Ok || !strings.Contains(protocol.Deref(resp.Error), hub.ErrOutpostsOff.Error()) {
 		t.Fatalf("open_browser for an outpost agent = %+v, want a refusal naming %q", resp, hub.ErrOutpostsOff)
 	}
-	result := d.runBrowserControl(&protocol.BrowserControlMessage{Cmd: protocol.CmdBrowserControl, Action: "get_title", SessionID: protocol.Ptr("remote-agent")})
+	result := d.runBrowserControl(&protocol.BrowserControlMessage{Cmd: protocol.CmdBrowserControl, Action: "get_title", SessionID: protocol.Ptr(protocol.SessionID("remote-agent"))})
 	if !strings.Contains(result.err, hub.ErrOutpostsOff.Error()) {
 		t.Fatalf("browser_control for an outpost agent = %+v, want a refusal naming %q", result, hub.ErrOutpostsOff)
 	}

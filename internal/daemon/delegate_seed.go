@@ -7,11 +7,13 @@ import (
 
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/protocol"
+
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/store"
 )
 
-func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection, operationID, sessionID, plannerSessionID, parentSeedID, brief, name, seedID string, observed garden.Dispatch, fromChief, createSeed bool, profileID ...string) (string, error) {
+func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection, operationID string, sessionID protocol.SessionID, plannerSessionID protocol.SessionID, parentSeedID string, brief string, name string, seedID string, observed garden.Dispatch, fromChief, createSeed bool, profileID ...string) (string, error) {
 	if err := d.requireHome(garden.Surface); err != nil {
 		return "", err
 	}
@@ -73,7 +75,7 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 		return "", profileErr
 	}
 	previousStatus := seed.Status
-	seed, err = garden.Transition(seed, garden.VerbTend, garden.Ask{Actor: garden.Tender{Session: sessionID}}, func(string) bool { return false })
+	seed, err = garden.Transition(seed, garden.VerbTend, garden.Ask{Actor: garden.Tender{Session: sessionID}}, func(protocol.SessionID) bool { return false })
 	if err != nil {
 		return "", err
 	}
@@ -87,7 +89,7 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 	}
 	dispatch := observed
 	dispatch.Crown = seed.ID
-	dispatch.DispatcherSession = strings.TrimSpace(plannerSessionID)
+	dispatch.DispatcherSession = protocol.TrimID(plannerSessionID)
 	dispatch.DispatcherMember = d.crewMembersBySession()[dispatch.DispatcherSession]
 	dispatch.FromChief = fromChief
 	dispatch.OperationID = strings.TrimSpace(operationID)
@@ -98,7 +100,7 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 	dispatchExpected := docstore.ExpectAbsent
 	commits := []store.DocumentCommit{
 		{Write: store.DocumentWrite{Schema: *seedSchema, ID: seed.ID, Body: seedBody, Expected: &seedExpected}, Fact: documentChangedFact(garden.Namespace, garden.CollectionSeeds, seed.ID, false)},
-		{Write: store.DocumentWrite{Schema: *dispatchSchema, ID: sessionID, Body: dispatchBody, Expected: &dispatchExpected}, Fact: documentChangedFact(garden.Namespace, garden.CollectionDispatches, sessionID, false)},
+		{Write: store.DocumentWrite{Schema: *dispatchSchema, ID: string(sessionID), Body: dispatchBody, Expected: &dispatchExpected}, Fact: documentChangedFact(garden.Namespace, garden.CollectionDispatches, string(sessionID), false)},
 	}
 	occurrences := []seedEvents.Occurrence{}
 	if createSeed {
@@ -114,7 +116,7 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 			linked, eventErr := seedEvents.Occur(
 				gardenSeedEventModel, gardenSeedEventVocabulary.EdgeLinked, seed.ID,
 				seedEvents.EdgePayload{
-					EdgeKind: string(edge.Kind), TargetSeedID: edge.To,
+					EdgeKind: edge.Kind, TargetSeedID: edge.To,
 					CausedBySessionID: plannerSessionID,
 				},
 			)
@@ -124,7 +126,7 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 			occurrences = append(occurrences, linked)
 		}
 	}
-	tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, seed.ID, plannerSessionID, sessionID)
+	tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, seed.ID, plannerSessionID, string(sessionID))
 	if err != nil {
 		return "", err
 	}

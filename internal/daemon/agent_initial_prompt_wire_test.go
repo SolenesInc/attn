@@ -33,7 +33,7 @@ func TestEachAgentStartsOnItsInitialPromptAndShowsItsReply(t *testing.T) {
 
 			if h == fakeagent.Copilot {
 				run.Exit(3)
-				exited := testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == session })
+				exited := testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
 				if exited.ExitCode != 3 {
 					t.Fatalf("session_exited exit_code = %d, want copilot's 3", exited.ExitCode)
 				}

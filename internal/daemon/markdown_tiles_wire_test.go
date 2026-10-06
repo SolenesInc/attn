@@ -234,7 +234,7 @@ func TestEachMarkdownFileGetsOneTileThatFollowsItsLatestOpener(t *testing.T) {
 		concurrent = append(concurrent, concurrentOpen{w.App(), markdownFile(t, w, fmt.Sprintf("concurrent-%d.md", i)), uuid.NewString()})
 	}
 	for _, o := range concurrent {
-		o.opener.Send(protocol.OpenMarkdownMessage{Cmd: protocol.CmdOpenMarkdown, Path: o.path, SessionID: protocol.Ptr("s1"), RequestID: protocol.Ptr(o.requestID)})
+		o.opener.Send(protocol.OpenMarkdownMessage{Cmd: protocol.CmdOpenMarkdown, Path: o.path, SessionID: protocol.Ptr(protocol.SessionID("s1")), RequestID: protocol.Ptr(o.requestID)})
 	}
 	for _, o := range concurrent {
 		if opened := testworld.Await(o.opener, protocol.EventOpenMarkdownResult, func(r protocol.OpenMarkdownResultMessage) bool {
@@ -286,7 +286,7 @@ func TestFilesAnAgentSendsOpenAsMarkdownTilesUnlessTurnedOff(t *testing.T) {
 		{"markdown sent by a session", "s1", []string{plan, notes, report}, []string{notes, plan}},
 		{"markdown sent by no session lands beside the current agent", "", []string{later}, []string{later, notes, plan}},
 	} {
-		if err := cli.OpenSentFiles(call.session, call.files); err != nil {
+		if err := cli.OpenSentFiles(protocol.SessionID(call.session), call.files); err != nil {
 			t.Fatalf("%s: the hook call failed: %v", call.name, err)
 		}
 		if got := shown(); !slices.Equal(got, call.want) {

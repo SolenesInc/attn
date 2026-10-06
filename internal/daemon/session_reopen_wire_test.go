@@ -19,7 +19,7 @@ func TestReopeningALiveOrUnknownSessionChangesNothing(t *testing.T) {
 	live := w.Spawn(app, fakeagent.Codex, w.Path("api"))
 	w.Launched(live)
 
-	shown, err := cli.SessionShow(live)
+	shown, err := cli.SessionShow(protocol.SessionID(live))
 	if err != nil {
 		t.Fatalf("session show %s: %v", live, err)
 	}
@@ -193,7 +193,7 @@ func TestEachReopenActionPutsTheWorkBackAsOffered(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: elsewhere.session, Action: string(protocol.SessionReopenActionStartFreshElsewhere)}); err == nil {
+	if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: protocol.SessionID(elsewhere.session), Action: string(protocol.SessionReopenActionStartFreshElsewhere)}); err == nil {
 		t.Error("starting fresh elsewhere without a directory was accepted")
 	}
 	if closedAt := protocol.Deref(showSession(t, cli, elsewhere.session).ClosedAt); closedAt == "" {
@@ -217,7 +217,7 @@ func TestEachReopenActionPutsTheWorkBackAsOffered(t *testing.T) {
 		{"fresh in the same place", samePlace, protocol.SessionReopenActionStartFreshSamePlace, samePlace.dir, false, ""},
 		{"fresh elsewhere", elsewhere, protocol.SessionReopenActionStartFreshElsewhere, chosen, false, ""},
 	} {
-		opts := client.SessionReopenOptions{SessionID: c.closed.session, Action: string(c.action)}
+		opts := client.SessionReopenOptions{SessionID: protocol.SessionID(c.closed.session), Action: string(c.action)}
 		if c.action == protocol.SessionReopenActionStartFreshElsewhere {
 			opts.Directory = chosen
 		}
@@ -248,11 +248,11 @@ func TestAReopenComesBackPlacedInItsOwnProfile(t *testing.T) {
 	awaitClosed(app, kept)
 
 	lone, _, _ := w.RequestSpawn(app, fakeagent.Codex, w.Path("alone"))
-	takeTurn(app, w.Launched(lone.ID), lone.ID)
-	closePane(app, sessionPane{session: lone.ID})
-	awaitClosed(app, lone.ID)
+	takeTurn(app, w.Launched(string(lone.ID)), string(lone.ID))
+	closePane(app, sessionPane{session: string(lone.ID)})
+	awaitClosed(app, string(lone.ID))
 
-	for _, session := range []string{kept, lone.ID} {
+	for _, session := range []string{kept, string(lone.ID)} {
 		if verdict := reopenVerdict(t, cli, session); verdict.ProfileID != profile || verdict.ProfileDeleted {
 			t.Errorf("%s would reopen in profile %q (deleted=%v), want its own %s", session, verdict.ProfileID, verdict.ProfileDeleted, profile)
 		}
@@ -263,7 +263,7 @@ func TestAReopenComesBackPlacedInItsOwnProfile(t *testing.T) {
 		w.Launched(session)
 	}
 	view := viewProfile(t, w, profile)
-	for _, session := range []string{kept, lone.ID} {
+	for _, session := range []string{kept, string(lone.ID)} {
 		desktop, _ := view.paneOf(t, session)
 		if desktop.ProfileID != profile {
 			t.Errorf("reopened %s placed in profile %s, want %s", session, desktop.ProfileID, profile)
@@ -336,14 +336,14 @@ func TestTheSessionListJudgesClosedRowsOnlyWhenAskedAndAgreesWithShow(t *testing
 	}
 	var inRowOrder []string
 	for _, entry := range page.Entries {
-		if slices.Contains(judged, entry.ID) {
-			inRowOrder = append(inRowOrder, entry.ID)
+		if slices.Contains(judged, string(entry.ID)) {
+			inRowOrder = append(inRowOrder, string(entry.ID))
 		}
 	}
 	var verdictOrder []string
 	for _, entry := range page.Reopen {
-		verdictOrder = append(verdictOrder, entry.SessionID)
-		shown := reopenVerdict(t, cli, entry.SessionID)
+		verdictOrder = append(verdictOrder, string(entry.SessionID))
+		shown := reopenVerdict(t, cli, string(entry.SessionID))
 		listed := entry.Reopen
 		if len(listed.Actions) == 0 || protocol.Deref(listed.BranchState) != "local" {
 			t.Errorf("%s is listed offering %v on a %q branch, want an action on its local branch", entry.SessionID, listed.Actions, protocol.Deref(listed.BranchState))
@@ -357,8 +357,8 @@ func TestTheSessionListJudgesClosedRowsOnlyWhenAskedAndAgreesWithShow(t *testing
 	if !slices.Equal(verdictOrder, inRowOrder) {
 		t.Errorf("the page judges %v, want exactly the closed git rows in row order %v", verdictOrder, inRowOrder)
 	}
-	shown, err := cli.SessionShow(notGit)
-	if err != nil || shown.Entry.ID != notGit || shown.Reopen != nil {
+	shown, err := cli.SessionShow(protocol.SessionID(notGit))
+	if err != nil || string(shown.Entry.ID) != notGit || shown.Reopen != nil {
 		t.Errorf("showing the row whose repository is no longer git = %+v (%v), want the row without a verdict", shown, err)
 	}
 }
@@ -388,10 +388,10 @@ func TestReopenTellsAGitFailureFromARefusal(t *testing.T) {
 	if verdict := reopenVerdict(t, cli, present); !verdict.Reopenable || !slices.Equal(verdict.Actions, []protocol.SessionReopenAction{protocol.SessionReopenActionReopen}) {
 		t.Errorf("with git failing, the session whose directory is present = %+v, want it still reopenable", verdict)
 	}
-	if shown, err := cli.SessionShow(missing); err != nil || shown.Reopen != nil {
+	if shown, err := cli.SessionShow(protocol.SessionID(missing)); err != nil || shown.Reopen != nil {
 		t.Errorf("with git failing, showing the session whose worktree is gone = %+v (%v), want its row without a verdict", shown, err)
 	}
-	if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: missing}); err == nil || strings.Contains(err.Error(), "cannot be reopened") {
+	if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: protocol.SessionID(missing)}); err == nil || strings.Contains(err.Error(), "cannot be reopened") {
 		t.Errorf("with git failing, reopening the session whose worktree is gone = %v, want the failure reported rather than a refusal", err)
 	}
 	if verdict := reopenVerdict(t, cli, lost); verdict.Reopenable || len(verdict.Actions) != 0 || !strings.Contains(protocol.Deref(verdict.Reason), "repository is gone") {
@@ -419,7 +419,7 @@ func takeTurn(app *testworld.Peer, run *fakeagent.Run, session string) {
 
 func reopenVerdict(t *testing.T, cli *client.Client, session string) protocol.SessionReopen {
 	t.Helper()
-	shown, err := cli.SessionShow(session)
+	shown, err := cli.SessionShow(protocol.SessionID(session))
 	if err != nil {
 		t.Fatalf("session show %s: %v", session, err)
 	}
@@ -485,7 +485,7 @@ func TestADeletedProfilesSessionOffersNoReopenOrFreshStart(t *testing.T) {
 		t.Fatalf("deleted profile verdict: %+v", verdict)
 	}
 	for _, action := range []string{"reopen", "start_fresh_same_place", "start_fresh_elsewhere"} {
-		if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: session, Action: action, Directory: w.Path("fresh")}); err == nil {
+		if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: protocol.SessionID(session), Action: action, Directory: w.Path("fresh")}); err == nil {
 			t.Fatalf("deleted profile accepted %s", action)
 		}
 	}

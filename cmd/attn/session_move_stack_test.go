@@ -37,7 +37,7 @@ func TestSessionMoveTakesTheCallingSessionToTheNamedDesktop(t *testing.T) {
 	}
 	var result protocol.DesktopMoveSessionResult
 	moved.JSON(t, &result)
-	if result.SessionID != source || result.DesktopID != ops {
+	if string(result.SessionID) != source || result.DesktopID != ops {
 		t.Errorf("session move printed %+v; want %s on Ops %s", result, source, ops)
 	}
 

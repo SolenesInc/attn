@@ -7,6 +7,7 @@ import (
 	"go/format"
 	"go/parser"
 	"go/token"
+	"golang.org/x/tools/go/ast/astutil"
 	"io"
 	"os"
 	"os/exec"
@@ -137,7 +138,9 @@ func legacyDefinitions(files map[string][]byte) (map[string][]byte, []string, er
 					}
 					value := spec.(*ast.ValueSpec)
 					for _, name := range value.Names {
-						declarations[name.Name] = d
+						if name.Name != "_" {
+							declarations[name.Name] = d
+						}
 						if path == "internal/store/sqlite.go" && name.Name == "migrations" {
 							ladder = value
 						}
@@ -177,6 +180,7 @@ func legacyDefinitions(files map[string][]byte) (map[string][]byte, []string, er
 	names := make([]string, 0, len(selected))
 	for name, node := range selected {
 		var data bytes.Buffer
+		node = migrationStringIdentities(node)
 		if err := format.Node(&data, set, node); err != nil {
 			return nil, nil, err
 		}
@@ -201,6 +205,9 @@ func inspectReferences(node ast.Node, visit func(*ast.Ident)) {
 }
 
 func refersToDeclaration(id *ast.Ident, node ast.Node) bool {
+	if id.Name == "_" {
+		return false
+	}
 	if id.Obj == nil {
 		return true
 	}
@@ -215,4 +222,59 @@ func refersToDeclaration(id *ast.Ident, node ast.Node) bool {
 		}
 	}
 	return false
+}
+
+func migrationStringIdentities(node ast.Node) ast.Node {
+	return astutil.Apply(node, func(cursor *astutil.Cursor) bool {
+		switch n := cursor.Node().(type) {
+		case *ast.CallExpr:
+			if migrationIdentityCast(node, n) {
+				cursor.Replace(n.Args[0])
+			}
+		case *ast.SelectorExpr:
+			if migrationIdentityType(n) {
+				cursor.Replace(&ast.Ident{Name: "string", NamePos: n.Pos()})
+			}
+		}
+		return true
+	}, nil)
+}
+
+func migrationIdentityType(expression ast.Expr) bool {
+	selector, ok := expression.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	qualifier, ok := selector.X.(*ast.Ident)
+	return ok && qualifier.Name == "protocol" && (selector.Sel.Name == "SessionID" || selector.Sel.Name == "TerminalID")
+}
+
+func migrationIdentityCast(declaration ast.Node, call *ast.CallExpr) bool {
+	function, ok := declaration.(*ast.FuncDecl)
+	if !ok || len(call.Args) != 1 || call.Ellipsis.IsValid() || !migrationIdentityType(call.Fun) {
+		return false
+	}
+	selector := call.Fun.(*ast.SelectorExpr)
+	var expected string
+	switch function.Name.Name {
+	case "convertLegacyWorkspaces":
+		if selector.Sel.Name == "SessionID" {
+			expected = "candidate.sessionID"
+		}
+	case "legacyDesktopPane":
+		if selector.Sel.Name == "SessionID" {
+			expected = "pane.SessionID"
+		}
+		if selector.Sel.Name == "TerminalID" {
+			expected = "cmp.Or(pane.RuntimeID, pane.SessionID)"
+		}
+	}
+	if expected == "" {
+		return false
+	}
+	var expression bytes.Buffer
+	if err := format.Node(&expression, token.NewFileSet(), call.Args[0]); err != nil {
+		return false
+	}
+	return expression.String() == expected
 }

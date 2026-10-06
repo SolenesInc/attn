@@ -20,7 +20,7 @@ func crewDayInBubble(t *testing.T, w *world, settings map[string]string) (*testw
 	for key, value := range settings {
 		setSetting(t, app, key, value)
 	}
-	day := w.bootBubbleClaude(t, wakeCrew(t, cli, "trellis", "").SessionID)
+	day := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "trellis", "").SessionID))
 	day.reply("Ready. <!-- attn:state=idle -->")
 	return app, day
 }
@@ -148,7 +148,7 @@ func TestACrewDayMidTurnOrAwaitingApprovalIsLeftAlone(t *testing.T) {
 	}{
 		{"working", func(*testing.T, *bubbleClaude) {}},
 		{"pending_approval", func(t *testing.T, day *bubbleClaude) {
-			if err := day.cli.RecordNotification(day.id, "permission_prompt", "Allow edit?"); err != nil {
+			if err := day.cli.RecordNotification(protocol.TerminalID(day.self), "permission_prompt", "Allow edit?"); err != nil {
 				t.Fatal(err)
 			}
 		}},
@@ -214,7 +214,7 @@ func TestDeliveryWakesResumeAfterTheWakeLimitWindow(t *testing.T) {
 		if first.TargetSessionID == "" || !strings.Contains(first.Detail, "woke Trellis") {
 			t.Fatalf("first wake=%+v", first)
 		}
-		w.terminal(first.TargetSessionID).Exit(0)
+		w.terminal(string(first.TargetSessionID)).Exit(0)
 		w.advance(30 * time.Minute)
 		inside := sendAgentMessage(t, cli, "sender", "trellis", "the build broke again")
 		if inside.Status != protocol.AgentMsgStatusQueued || !strings.Contains(inside.Detail, "crew.wake_limit=1") {

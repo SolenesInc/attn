@@ -68,8 +68,8 @@ func TestAGardenReviewFreezesItsCandidatesAndRecipe(t *testing.T) {
 	}
 
 	chief := spawnPanes(w, app, w.Path("chief"))[0].session
-	if made := testworld.Request(app, protocol.SetChiefOfStaffMessage{Cmd: protocol.CmdSetChiefOfStaff, SessionID: chief, ChiefOfStaff: true},
-		protocol.EventChiefOfStaffResult, func(m protocol.ChiefOfStaffResultMessage) bool { return m.SessionID == chief }); !made.Success {
+	if made := testworld.Request(app, protocol.SetChiefOfStaffMessage{Cmd: protocol.CmdSetChiefOfStaff, SessionID: protocol.SessionID(chief), ChiefOfStaff: true},
+		protocol.EventChiefOfStaffResult, func(m protocol.ChiefOfStaffResultMessage) bool { return string(m.SessionID) == chief }); !made.Success {
 		t.Fatalf("make chief the chief of staff: %s", protocol.Deref(made.Error))
 	}
 	withChief := gardenReviewStart(t, cli)
@@ -96,7 +96,7 @@ func TestReviewActionsResolveTheirItems(t *testing.T) {
 
 	stale := gardenReviewStart(t, cli)
 	gardenReviewAwaitFailedFirstAdvice(app, stale.Run.ID)
-	if _, err := cli.SeedNote(reviewer, changed, "new evidence", "", "", false, nil); err != nil {
+	if _, err := cli.SeedNote(protocol.SessionID(reviewer), changed, "new evidence", "", "", false, nil); err != nil {
 		t.Fatal(err)
 	}
 	if refused := gardenReviewMoveFromApp(app, changed, "park", gardenReviewReceipts(stale)[changed]); refused.Success || !strings.Contains(protocol.Deref(refused.Error), "changed since this review item was loaded; refresh the garden") {
@@ -189,7 +189,7 @@ func gardenReviewRegisteredAbandonedSeed(t *testing.T, w *world, cli *client.Cli
 	t.Helper()
 	registerSessions(t, w, cli, session)
 	seed := gardenReviewPlantTended(t, cli, session, title)
-	if err := cli.Unregister(session); err != nil {
+	if err := cli.Unregister(protocol.SessionID(session)); err != nil {
 		t.Fatal(err)
 	}
 	return seed
@@ -197,11 +197,11 @@ func gardenReviewRegisteredAbandonedSeed(t *testing.T, w *world, cli *client.Cli
 
 func gardenReviewPlantTended(t *testing.T, cli *client.Client, session, title string) string {
 	t.Helper()
-	planted, err := cli.SeedPlant(session, title, "Carry "+title+" to the end.", "", "", "")
+	planted, err := cli.SeedPlant(protocol.SessionID(session), title, "Carry "+title+" to the end.", "", "", "")
 	if err != nil {
 		t.Fatalf("plant %q: %v", title, err)
 	}
-	if _, err := cli.SeedTransition(session, planted.Seed.ID, "tend", "", "", false, client.SeedTransitionOptions{}); err != nil {
+	if _, err := cli.SeedTransition(protocol.SessionID(session), planted.Seed.ID, "tend", "", "", false, client.SeedTransitionOptions{}); err != nil {
 		t.Fatalf("tend %q: %v", title, err)
 	}
 	return planted.Seed.ID

@@ -113,7 +113,7 @@ func formatAnchorIssue(issue present.AnchorIssue) string {
 }
 
 func (d *Daemon) handlePresentOpen(conn net.Conn, msg *protocol.PresentOpenMessage) {
-	sourceSessionID := strings.TrimSpace(msg.SourceSessionID)
+	sourceSessionID := protocol.TrimID(msg.SourceSessionID)
 	if sourceSessionID == "" {
 		d.sendError(conn, "present open: source_session_id is required")
 		return
@@ -169,7 +169,7 @@ func (d *Daemon) handlePresentOpen(conn net.Conn, msg *protocol.PresentOpenMessa
 			return
 		}
 		if existing.SessionID != sourceSessionID {
-			d.sendError(conn, "present open: presentation "+presentationID+" does not belong to session "+sourceSessionID)
+			d.sendError(conn, "present open: presentation "+presentationID+" does not belong to session "+string(sourceSessionID))
 			return
 		}
 		pres = existing

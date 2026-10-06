@@ -30,6 +30,6 @@ func TestScreenSnapshotRendersThePaneAtItsSize(t *testing.T) {
 func screenSnapshot(app *testworld.Peer, session string) protocol.GetScreenSnapshotResultMessage {
 	app.T.Helper()
 	terminal := app.Terminal(session)
-	return testworld.Request(app, protocol.GetScreenSnapshotMessage{Cmd: protocol.CmdGetScreenSnapshot, ID: terminal},
-		protocol.EventGetScreenSnapshotResult, func(r protocol.GetScreenSnapshotResultMessage) bool { return r.ID == terminal })
+	return testworld.Request(app, protocol.GetScreenSnapshotMessage{Cmd: protocol.CmdGetScreenSnapshot, ID: protocol.TerminalID(terminal)},
+		protocol.EventGetScreenSnapshotResult, func(r protocol.GetScreenSnapshotResultMessage) bool { return string(r.ID) == terminal })
 }

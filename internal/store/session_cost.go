@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessioncost"
 )
 
@@ -90,7 +91,7 @@ type sessionCostEntry struct {
 	savedAt time.Time
 }
 
-func (s *Store) liveSessionCost(sessionID string) (*sessionCostEntry, bool, error) {
+func (s *Store) liveSessionCost(sessionID protocol.SessionID) (*sessionCostEntry, bool, error) {
 	s.costMu.Lock()
 	defer s.costMu.Unlock()
 	if entry := s.liveCosts[sessionID]; entry != nil {
@@ -109,19 +110,19 @@ func (s *Store) liveSessionCost(sessionID string) (*sessionCostEntry, bool, erro
 		return entry, false, nil
 	}
 	if s.liveCosts == nil {
-		s.liveCosts = make(map[string]*sessionCostEntry)
+		s.liveCosts = make(map[protocol.SessionID]*sessionCostEntry)
 	}
 	s.liveCosts[sessionID] = entry
 	return entry, true, nil
 }
 
-func (s *Store) forgetSessionCost(sessionID string) {
+func (s *Store) forgetSessionCost(sessionID protocol.SessionID) {
 	s.costMu.Lock()
 	delete(s.liveCosts, sessionID)
 	s.costMu.Unlock()
 }
 
-func (s *Store) writeSessionCost(sessionID string, state SessionCostState) error {
+func (s *Store) writeSessionCost(sessionID protocol.SessionID, state SessionCostState) error {
 	encoded, err := json.Marshal(state)
 	if err != nil {
 		return fmt.Errorf("encode session cost for %s: %w", sessionID, err)
@@ -148,7 +149,7 @@ func (s *Store) flushSessionCosts() {
 }
 
 // saveUnsavedSessionCostTx writes a live session's pending cost into tx, so a close finalizes it.
-func (s *Store) saveUnsavedSessionCostTx(tx *sql.Tx, sessionID string) error {
+func (s *Store) saveUnsavedSessionCostTx(tx *sql.Tx, sessionID protocol.SessionID) error {
 	s.costMu.Lock()
 	entry := s.liveCosts[sessionID]
 	s.costMu.Unlock()
@@ -174,7 +175,7 @@ func decodeSessionCostState(raw string) (SessionCostState, error) {
 	return state, nil
 }
 
-func (s *Store) SessionCost(sessionID string) (SessionCostState, error) {
+func (s *Store) SessionCost(sessionID protocol.SessionID) (SessionCostState, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
@@ -193,11 +194,11 @@ type SessionCostUsage struct {
 	Ledger                sessioncost.Ledger `json:"ledger,omitempty"`
 }
 
-func (s *Store) SessionCostUsages(sessionIDs []string) (map[string]SessionCostUsage, error) {
+func (s *Store) SessionCostUsages(sessionIDs []protocol.SessionID) (map[protocol.SessionID]SessionCostUsage, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	usages := make(map[string]SessionCostUsage, len(sessionIDs))
-	var stored []string
+	usages := make(map[protocol.SessionID]SessionCostUsage, len(sessionIDs))
+	var stored []protocol.SessionID
 	s.costMu.Lock()
 	for _, id := range sessionIDs {
 		state, cached := s.sessionCosts[id], s.db == nil
@@ -224,7 +225,8 @@ func (s *Store) SessionCostUsages(sessionIDs []string) (map[string]SessionCostUs
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, raw string
+		var id protocol.SessionID
+		var raw string
 		if err := rows.Scan(&id, &raw); err != nil {
 			return nil, fmt.Errorf("read session costs: %w", err)
 		}
@@ -240,7 +242,7 @@ func (s *Store) SessionCostUsages(sessionIDs []string) (map[string]SessionCostUs
 	return usages, rows.Err()
 }
 
-func (s *Store) SetSessionCostCursor(sessionID, cursor string) error {
+func (s *Store) SetSessionCostCursor(sessionID protocol.SessionID, cursor string) error {
 	return s.updateSessionCost(sessionID, func(state *SessionCostState) bool {
 		durable := !state.Initialized
 		state.Initialized = true
@@ -249,7 +251,7 @@ func (s *Store) SetSessionCostCursor(sessionID, cursor string) error {
 	})
 }
 
-func (s *Store) InitializeSessionCostTracking(sessionID string) error {
+func (s *Store) InitializeSessionCostTracking(sessionID protocol.SessionID) error {
 	return s.updateSessionCost(sessionID, func(state *SessionCostState) bool {
 		durable := !state.Initialized
 		state.Initialized = true
@@ -257,7 +259,7 @@ func (s *Store) InitializeSessionCostTracking(sessionID string) error {
 	})
 }
 
-func (s *Store) InitializeSessionCostSources(sessionID string, cursors map[string]string) error {
+func (s *Store) InitializeSessionCostSources(sessionID protocol.SessionID, cursors map[string]string) error {
 	return s.updateSessionCost(sessionID, func(state *SessionCostState) bool {
 		durable := !state.Initialized
 		if state.Sources == nil {
@@ -278,7 +280,7 @@ func (s *Store) InitializeSessionCostSources(sessionID string, cursors map[strin
 	})
 }
 
-func (s *Store) SetSessionCostSourceCursor(sessionID, sourceID, cursor string) error {
+func (s *Store) SetSessionCostSourceCursor(sessionID protocol.SessionID, sourceID string, cursor string) error {
 	return s.updateSessionCost(sessionID, func(state *SessionCostState) bool {
 		return setSessionCostSourceCursor(state, sourceID, cursor)
 	})
@@ -296,7 +298,7 @@ func setSessionCostSourceCursor(state *SessionCostState, sourceID, cursor string
 	return durable
 }
 
-func (s *Store) MarkSessionCostMeasurementIncomplete(sessionID string) (bool, error) {
+func (s *Store) MarkSessionCostMeasurementIncomplete(sessionID protocol.SessionID) (bool, error) {
 	changed := false
 	err := s.updateSessionCost(sessionID, func(state *SessionCostState) bool {
 		changed = !state.MeasurementIncomplete
@@ -306,7 +308,7 @@ func (s *Store) MarkSessionCostMeasurementIncomplete(sessionID string) (bool, er
 	return changed, err
 }
 
-func (s *Store) MarkSessionCostUsageUnavailable(sessionID, cursor string) (bool, error) {
+func (s *Store) MarkSessionCostUsageUnavailable(sessionID protocol.SessionID, cursor string) (bool, error) {
 	changed := false
 	err := s.updateSessionCost(sessionID, func(state *SessionCostState) bool {
 		durable := !state.Initialized
@@ -319,7 +321,7 @@ func (s *Store) MarkSessionCostUsageUnavailable(sessionID, cursor string) (bool,
 	return changed, err
 }
 
-func (s *Store) ApplySessionCostObservations(sessionID, cursor string, observations []SessionCostObservation) (bool, error) {
+func (s *Store) ApplySessionCostObservations(sessionID protocol.SessionID, cursor string, observations []SessionCostObservation) (bool, error) {
 	changed := false
 	err := s.updateSessionCost(sessionID, func(state *SessionCostState) bool {
 		durable := !state.Initialized
@@ -330,7 +332,7 @@ func (s *Store) ApplySessionCostObservations(sessionID, cursor string, observati
 	return changed, err
 }
 
-func (s *Store) ApplySessionCostSourceObservations(sessionID, sourceID, cursor string, observations []SessionCostObservation) (bool, error) {
+func (s *Store) ApplySessionCostSourceObservations(sessionID protocol.SessionID, sourceID string, cursor string, observations []SessionCostObservation) (bool, error) {
 	changed := false
 	err := s.updateSessionCost(sessionID, func(state *SessionCostState) bool {
 		durable := setSessionCostSourceCursor(state, sourceID, cursor)
@@ -340,7 +342,7 @@ func (s *Store) ApplySessionCostSourceObservations(sessionID, sourceID, cursor s
 	return changed, err
 }
 
-func applySessionCostObservations(sessionID string, state *SessionCostState, observations []SessionCostObservation) bool {
+func applySessionCostObservations(sessionID protocol.SessionID, state *SessionCostState, observations []SessionCostObservation) bool {
 	state.Initialized = true
 	if state.Ledger == nil {
 		state.Ledger = make(sessioncost.Ledger)
@@ -401,7 +403,7 @@ func finalizeSessionCost(state *SessionCostState) {
 
 // updateSessionCost applies mutate, which reports a change a transcript re-read cannot rebuild;
 // that is written at once, anything else at most every sessionCostSaveInterval.
-func (s *Store) updateSessionCost(sessionID string, mutate func(*SessionCostState) bool) error {
+func (s *Store) updateSessionCost(sessionID protocol.SessionID, mutate func(*SessionCostState) bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -409,7 +411,7 @@ func (s *Store) updateSessionCost(sessionID string, mutate func(*SessionCostStat
 			return nil
 		}
 		if s.sessionCosts == nil {
-			s.sessionCosts = make(map[string]SessionCostState)
+			s.sessionCosts = make(map[protocol.SessionID]SessionCostState)
 		}
 		state := cloneSessionCostState(s.sessionCosts[sessionID])
 		mutate(&state)

@@ -24,14 +24,14 @@ var errInboxDoorbellOutstanding = errors.New("agent inbox ring already outstandi
 var errInboxDoorbellInFlight = errors.New("agent inbox ring already being placed")
 
 func sessionReadsInboxDoorbells(session *protocol.Session) bool {
-	return session != nil && !strings.EqualFold(strings.TrimSpace(string(session.Agent)), protocol.AgentShellValue)
+	return session != nil && !strings.EqualFold(strings.TrimSpace(session.Agent), protocol.AgentShellValue)
 }
 
 type inboxDeliveryState struct {
 	mu          sync.Mutex
 	timer       *time.Timer
 	stopped     bool
-	wakeSession string
+	wakeSession protocol.SessionID
 }
 
 func (d *Daemon) inboxState(a inbox.Address) *inboxDeliveryState {
@@ -299,7 +299,7 @@ func (d *Daemon) recoverInbox() {
 		d.kickInbox(a)
 	}
 }
-func (d *Daemon) kickSessionInbox(sessionID, state string) {
+func (d *Daemon) kickSessionInbox(sessionID protocol.SessionID, state string) {
 	if sessionInputPhaseAllows(sessionInputWhenPromptReady, protocol.SessionState(state)) {
 		d.kickSessionInboxAddresses(sessionID)
 	}
@@ -341,7 +341,11 @@ func (d *Daemon) subscribeInboxFacts() {
 			d.life.Go("inbox-chief-change", func() { d.kickChiefInboxes() })
 		default:
 			// Holder resolution runs outside publishMu, through lifetime work.
-			d.life.Go("inbox-holder-change", func() { d.kickSessionInboxAddresses(ev.Subject); d.kickChiefInboxes(); d.kickSeedInboxes() })
+			d.life.Go("inbox-holder-change", func() {
+				d.kickSessionInboxAddresses(protocol.SessionID(ev.Subject))
+				d.kickChiefInboxes()
+				d.kickSeedInboxes()
+			})
 		}
 	})
 }

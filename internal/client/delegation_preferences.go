@@ -2,6 +2,7 @@ package client
 
 import (
 	"fmt"
+
 	"github.com/victorarias/attn/internal/protocol"
 )
 

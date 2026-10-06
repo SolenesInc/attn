@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
@@ -35,7 +36,7 @@ func screenShowsSelector(text string) (string, bool) {
 	return "", false
 }
 
-func (d *Daemon) sessionInputScreen(parent context.Context, sessionID string) (line string, known, selector bool) {
+func (d *Daemon) sessionInputScreen(parent context.Context, sessionID protocol.SessionID) (line string, known, selector bool) {
 	if d.ptyBackend == nil {
 		return "", false, false
 	}

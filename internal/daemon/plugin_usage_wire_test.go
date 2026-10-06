@@ -75,7 +75,7 @@ func TestAPiSessionIsPricedFromTheTranscriptItsDriverReportsGuardianIncluded(t *
 			t.Errorf("a transcript report %s was accepted", refused.name)
 		}
 	}
-	if err := reportTranscript(driver, session, run.RunID, path); err != nil {
+	if err := reportTranscript(driver, run.SessionID, run.RunID, path); err != nil {
 		t.Fatal(err)
 	}
 
@@ -102,14 +102,14 @@ func TestAPiSessionThatEndsBeforeItsTranscriptAppearsIsNotIncomplete(t *testing.
 	awaitDriverAvailable(app, "pi")
 	cwd := w.Path("shop")
 	session, run := spawnDriven(w, app, driver, cwd)
-	if err := reportTranscript(driver, session, run.RunID, w.Path("never-written.jsonl")); err != nil {
+	if err := reportTranscript(driver, run.SessionID, run.RunID, w.Path("never-written.jsonl")); err != nil {
 		t.Fatal(err)
 	}
 	exitDriven(app, driver, session)
 
 	relaunch := relaunchDriven(w, driver, session, cwd)
 	path := w.Path("pi-session.jsonl")
-	if err := reportTranscript(driver, session, relaunch.RunID, path); err != nil {
+	if err := reportTranscript(driver, relaunch.SessionID, relaunch.RunID, path); err != nil {
 		t.Fatal(err)
 	}
 	appendTranscript(t, path, piTranscriptLines(t))

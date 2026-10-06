@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/protocol"
 	"pgregory.net/rapid"
 )
 
@@ -230,7 +231,7 @@ func TestLayoutStaysAWellFormedTreeUnderRandomOperations(t *testing.T) {
 				ratio := drawRatio(t, "ratio")
 
 				next, ok := apply(t, func(n Node) (Node, bool) {
-					return DockTile(n, anchor, direction, before, splitID, tileID, kind, params, session, ratio)
+					return DockTile(n, anchor, direction, before, splitID, tileID, kind, params, protocol.SessionID(session), ratio)
 				})
 				if !ok {
 					t.Fatalf("DockTile of %q against leaf %q, which is in the tree, was refused", tileID, anchor)
@@ -307,7 +308,7 @@ func TestLayoutStaysAWellFormedTreeUnderRandomOperations(t *testing.T) {
 				m.tree = next
 
 				next, ok = apply(t, func(n Node) (Node, bool) {
-					return UpdateTileSessionID(n, tileID, session)
+					return UpdateTileSessionID(n, tileID, protocol.SessionID(session))
 				})
 				if !ok {
 					t.Fatalf("UpdateTileSessionID on tile %q, which is in the tree, was refused", tileID)
@@ -387,7 +388,7 @@ func TestLayoutStaysAWellFormedTreeUnderRandomOperations(t *testing.T) {
 
 				for _, leaf := range TileLeaves(m.tree) {
 					want := m.tiles[leaf.TileID]
-					got := tileMeta{kind: leaf.TileKind, params: leaf.TileParams, session: leaf.TileSessionID}
+					got := tileMeta{kind: leaf.TileKind, params: leaf.TileParams, session: string(leaf.TileSessionID)}
 					if got != want {
 						t.Fatalf("tile %q carries %+v, want %+v", leaf.TileID, got, want)
 					}
@@ -414,7 +415,7 @@ func TestLayoutOperationsDoNotModifyTheirInput(t *testing.T) {
 		}
 
 		before = cloneNode(tree)
-		if _, ok := UpdateTileSessionID(tree, "t1", session); !ok {
+		if _, ok := UpdateTileSessionID(tree, "t1", protocol.SessionID(session)); !ok {
 			t.Fatal("UpdateTileSessionID did not find the tile it was pointed at")
 		}
 		if !reflect.DeepEqual(tree, before) {

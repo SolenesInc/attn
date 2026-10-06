@@ -106,7 +106,7 @@ func TestPromptsRenderShowsExactlyWhatAChiefACrewMemberAndAnOrdinarySessionRecei
 
 	chief := s.Spawn(app, fakeagent.Claude, s.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
 	ordinary := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
-	guide, err := s.Client().NotebookGuide(chief)
+	guide, err := s.Client().NotebookGuide(protocol.SessionID(chief))
 	if err != nil || !guide.SessionIsChief || guide.Root == "" {
 		t.Fatalf("notebook guide for the chief = %+v, %v", guide, err)
 	}
@@ -125,7 +125,7 @@ func TestPromptsRenderShowsExactlyWhatAChiefACrewMemberAndAnOrdinarySessionRecei
 		set     []string
 	}{
 		{name: "chief", session: chief, set: []string{"--set", "notebook_root=" + guide.Root, "--set", "garden_available=true"}},
-		{name: "crew member", session: woken.SessionID, set: []string{"--set", "crew_priming=  \n" + *priming.Guidance + "\n  ", "--set", "garden_available=true"}},
+		{name: "crew member", session: string(woken.SessionID), set: []string{"--set", "crew_priming=  \n" + *priming.Guidance + "\n  ", "--set", "garden_available=true"}},
 		{name: "ordinary", session: ordinary, set: []string{"--set", "garden_available=true"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

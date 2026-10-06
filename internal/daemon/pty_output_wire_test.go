@@ -16,11 +16,11 @@ func TestPtyOutputArrivesInTheFormatEachClientAskedFor(t *testing.T) {
 	framed := transportConnectRaw(t, w, protocol.CapabilityBinaryPtyOutput)
 	plain := transportConnectRaw(t, w)
 	for _, p := range []*transportRawPeer{framed, plain} {
-		p.send(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal})
+		p.send(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(terminal)})
 		p.next("attach_result", func(f transportFrame) bool { return f.event == protocol.EventAttachResult })
 	}
 
-	plain.send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: "printf 'mark%s\\n' er-one\r"})
+	plain.send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(terminal), Data: "printf 'mark%s\\n' er-one\r"})
 
 	framedSeq := transportOutputInOneFormat(t, framed, terminal, "marker-one", true)
 	jsonSeq := transportOutputInOneFormat(t, plain, terminal, "marker-one", false)
@@ -42,7 +42,7 @@ func transportOutputInOneFormat(t *testing.T, p *transportRawPeer, terminal, tex
 			if err != nil {
 				t.Fatalf("a binary frame does not decode as PTY output: %v", err)
 			}
-			return id, frameSeq, data, true
+			return string(id), frameSeq, data, true
 		case f.event == protocol.EventPtyOutput:
 			var e protocol.WebSocketEvent
 			if err := json.Unmarshal(f.data, &e); err != nil {

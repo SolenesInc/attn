@@ -1,7 +1,6 @@
 package store
 
 import (
-	"cmp"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -13,9 +12,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profiles"
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/rankkey"
 )
 
@@ -41,9 +40,9 @@ type LeafMoveRequest struct {
 type SessionPlacementRequest struct {
 	DesktopID        string
 	ExpectedRevision int64
-	SessionID        string
-	// RuntimeID is the terminal already running the session; absent, the session's own id.
-	RuntimeID    string
+	SessionID        protocol.SessionID
+	// RuntimeID selects a terminal; absent, reuse the session binding or allocate one.
+	RuntimeID    protocol.TerminalID
 	AnchorPaneID string
 	Direction    layouttree.Direction
 	NewPaneShare float64
@@ -97,7 +96,7 @@ func (s *Store) profilesTxSeq(fn func(tx *sql.Tx, now string) error) (int64, err
 	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
-	s.announcePaneTerminalsLocked()
+	s.announceTerminalBindingsLocked()
 	if emptied {
 		s.announceEmptyDesktop(at)
 	}
@@ -167,7 +166,10 @@ func queryColumn[T any](q queryer, query string, args ...any) ([]T, error) {
 }
 
 func ensureLiveProfileNameFree(tx *sql.Tx, name, exceptID string) error {
-	var holder, holderName string
+	var (
+		holder     string
+		holderName string
+	)
 	taken, err := rowFound(tx.QueryRow(`SELECT id, name FROM profiles WHERE name = ? COLLATE NOCASE AND deleted_at = '' AND id != ?`, name, exceptID), &holder, &holderName)
 	if err != nil {
 		return err
@@ -555,9 +557,9 @@ func (s *Store) DeleteProfile(id string, expectedRevision int64, remoteLiveSessi
 	return profile, err
 }
 
-func (s *Store) SetProfileChief(sessionID string) (profiles.Profile, string, error) {
+func (s *Store) SetProfileChief(sessionID protocol.SessionID) (profiles.Profile, protocol.SessionID, error) {
 	var profile profiles.Profile
-	var previous string
+	var previous protocol.SessionID
 	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
 		var profileID string
 		err := tx.QueryRow(`SELECT profile_id FROM sessions WHERE id = ? AND closed_at = ''`, sessionID).Scan(&profileID)
@@ -578,7 +580,7 @@ func (s *Store) SetProfileChief(sessionID string) (profiles.Profile, string, err
 	return profile, previous, err
 }
 
-func (s *Store) ClaimProfileChief(profileID, sessionID string) (bool, error) {
+func (s *Store) ClaimProfileChief(profileID string, sessionID protocol.SessionID) (bool, error) {
 	claimed := false
 	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
 		result, err := tx.Exec(`UPDATE profiles SET chief_session_id = ? WHERE id = ? AND chief_session_id = '' AND deleted_at = ''`, sessionID, profileID)
@@ -592,7 +594,7 @@ func (s *Store) ClaimProfileChief(profileID, sessionID string) (bool, error) {
 	return claimed, err
 }
 
-func (s *Store) ClearProfileChief(sessionID string) (string, error) {
+func (s *Store) ClearProfileChief(sessionID protocol.SessionID) (string, error) {
 	var profileID string
 	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
 		found, err := rowFound(tx.QueryRow(`SELECT id FROM profiles WHERE chief_session_id = ? AND deleted_at = ''`, sessionID), &profileID)
@@ -605,8 +607,8 @@ func (s *Store) ClearProfileChief(sessionID string) (string, error) {
 	return profileID, err
 }
 
-func (s *Store) ProfileChiefs() (map[string]string, error) {
-	chiefs := map[string]string{}
+func (s *Store) ProfileChiefs() (map[string]protocol.SessionID, error) {
+	chiefs := map[string]protocol.SessionID{}
 	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
 		rows, err := tx.Query(`SELECT id, chief_session_id FROM profiles WHERE deleted_at = '' AND chief_session_id != ''`)
 		if err != nil {
@@ -614,7 +616,10 @@ func (s *Store) ProfileChiefs() (map[string]string, error) {
 		}
 		defer rows.Close()
 		for rows.Next() {
-			var profileID, sessionID string
+			var (
+				profileID string
+				sessionID protocol.SessionID
+			)
 			if err := rows.Scan(&profileID, &sessionID); err != nil {
 				return err
 			}
@@ -882,8 +887,8 @@ func (s *Store) ShowLeaf(desktopID, leafID string) (profiles.Profile, profiles.D
 	return profile, desktop, leafID, err
 }
 
-func (s *Store) ShowSession(sessionID string) (profiles.Profile, profiles.Desktop, string, error) {
-	sessionID = strings.TrimSpace(sessionID)
+func (s *Store) ShowSession(sessionID protocol.SessionID) (profiles.Profile, profiles.Desktop, string, error) {
+	sessionID = protocol.TrimID(sessionID)
 	var profile profiles.Profile
 	var desktop profiles.Desktop
 	var leafID string
@@ -920,7 +925,7 @@ func (s *Store) ShowSession(sessionID string) (profiles.Profile, profiles.Deskto
 	return profile, desktop, leafID, err
 }
 
-func placeShownSession(tx *sql.Tx, now string, profile profiles.Profile, sessionID string) (profiles.Desktop, string, error) {
+func placeShownSession(tx *sql.Tx, now string, profile profiles.Profile, sessionID protocol.SessionID) (profiles.Desktop, string, error) {
 	var title string
 	if err := tx.QueryRow(`SELECT label FROM sessions WHERE id = ?`, sessionID).Scan(&title); err != nil {
 		return profiles.Desktop{}, "", err
@@ -930,7 +935,7 @@ func placeShownSession(tx *sql.Tx, now string, profile profiles.Profile, session
 		return profiles.Desktop{}, "", err
 	}
 	paneID := newProfileEntityID("pane")
-	desktop, err := placeSessionInTree(current, SessionPlacementRequest{
+	desktop, err := placeSessionInTree(tx, current, SessionPlacementRequest{
 		SessionID: sessionID,
 		Title:     title,
 		Status:    profiles.PaneStatusReady,
@@ -939,7 +944,7 @@ func placeShownSession(tx *sql.Tx, now string, profile profiles.Profile, session
 	if err != nil {
 		return profiles.Desktop{}, "", err
 	}
-	return desktop, paneID, writeDesktopArrangement(tx, now, &desktop)
+	return desktop, paneID, writeCurrentDesktopArrangement(tx, now, &desktop)
 }
 
 func panePersisted(tx *sql.Tx, desktopID string, pane profiles.Pane) (bool, error) {
@@ -1044,11 +1049,16 @@ func paneCreationTimes(tx *sql.Tx, desktopID string) (map[string]string, error) 
 	return createdAt, rows.Err()
 }
 
-func insertDesktopPanes(tx *sql.Tx, now string, desktop profiles.Desktop, createdAt map[string]string) error {
+func insertCurrentDesktopPanes(tx *sql.Tx, now string, desktop profiles.Desktop, createdAt map[string]string) error {
 	for _, pane := range desktop.Panes {
 		at := createdAt[pane.PaneID]
 		if at == "" {
 			at = now
+		}
+		if pane.Kind == profiles.PaneKindAgent && pane.RuntimeID != "" {
+			if err := bindTerminalTx(tx, pane.RuntimeID, pane.SessionID); err != nil {
+				return err
+			}
 		}
 		if _, err := tx.Exec(`
 			INSERT INTO desktop_panes (pane_id, desktop_id, kind, session_id, runtime_id, title, status, error, created_at, updated_at)
@@ -1071,11 +1081,11 @@ func settleForWrite(desktop profiles.Desktop, previousTree layouttree.Node) prof
 	return desktop
 }
 
-func writeDesktopArrangement(tx *sql.Tx, now string, desktop *profiles.Desktop) error {
-	return writeArrivingArrangement(tx, now, desktop, nil)
+func writeCurrentDesktopArrangement(tx *sql.Tx, now string, desktop *profiles.Desktop) error {
+	return writeCurrentArrivingArrangement(tx, now, desktop, nil)
 }
 
-func writeArrivingArrangement(tx *sql.Tx, now string, desktop *profiles.Desktop, arrivingCreatedAt map[string]string) error {
+func writeCurrentArrivingArrangement(tx *sql.Tx, now string, desktop *profiles.Desktop, arrivingCreatedAt map[string]string) error {
 	if err := layouttree.Validate(desktop.Tree); err != nil {
 		return profiles.Errorf(profiles.CodeInvalid, "desktop %s: %v", desktop.ID, err)
 	}
@@ -1099,7 +1109,7 @@ func writeArrivingArrangement(tx *sql.Tx, now string, desktop *profiles.Desktop,
 	if _, err := tx.Exec(`DELETE FROM desktop_panes WHERE desktop_id = ?`, desktop.ID); err != nil {
 		return err
 	}
-	if err := insertDesktopPanes(tx, now, *desktop, createdAt); err != nil {
+	if err := insertCurrentDesktopPanes(tx, now, *desktop, createdAt); err != nil {
 		return err
 	}
 	return saveDesktop(tx, now, desktop)
@@ -1125,12 +1135,12 @@ func (s *Store) UpdateDesktopArrangement(id string, expectedRevision int64, edit
 		edited.ID, edited.ProfileID, edited.Revision = current.ID, current.ProfileID, current.Revision
 		edited.Name, edited.ShortcutSlot, edited.OrderKey = current.Name, current.ShortcutSlot, current.OrderKey
 		desktop = edited
-		return writeDesktopArrangement(tx, now, &desktop)
+		return writeCurrentDesktopArrangement(tx, now, &desktop)
 	})
 	return desktop, err
 }
 
-func placeSessionInTree(desktop profiles.Desktop, request SessionPlacementRequest, paneID string) (profiles.Desktop, error) {
+func placeSessionInTree(tx *sql.Tx, desktop profiles.Desktop, request SessionPlacementRequest, paneID string) (profiles.Desktop, error) {
 	anchor := strings.TrimSpace(request.AnchorPaneID)
 	if anchor != "" && !layouttree.HasLeaf(desktop.Tree, anchor) {
 		return desktop, profiles.Errorf(profiles.CodeNotFound, "anchor leaf %q does not belong to desktop %s", anchor, desktop.ID)
@@ -1160,8 +1170,17 @@ func placeSessionInTree(desktop profiles.Desktop, request SessionPlacementReques
 		}
 		desktop.Tree = next
 	}
-	sessionID := strings.TrimSpace(request.SessionID)
-	runtimeID := cmp.Or(strings.TrimSpace(request.RuntimeID), sessionID)
+	sessionID := protocol.TrimID(request.SessionID)
+	runtimeID := protocol.TrimID(request.RuntimeID)
+	if runtimeID == "" {
+		err := tx.QueryRow(`SELECT terminal_id FROM terminal_bindings WHERE session_id = ? ORDER BY terminal_id LIMIT 1`, sessionID).Scan(&runtimeID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return desktop, err
+		}
+		if runtimeID == "" {
+			runtimeID = protocol.TerminalID(uuid.NewString())
+		}
+	}
 	desktop.Panes = append(desktop.Panes, profiles.Pane{
 		PaneID:    paneID,
 		Kind:      profiles.PaneKindAgent,
@@ -1178,8 +1197,23 @@ func placeSessionInTree(desktop profiles.Desktop, request SessionPlacementReques
 
 func (s *Store) PlaceSession(request SessionPlacementRequest) (profiles.Desktop, string, error) {
 	paneID := newProfileEntityID("pane")
-	desktop, err := s.UpdateDesktopArrangement(request.DesktopID, request.ExpectedRevision, func(desktop profiles.Desktop) (profiles.Desktop, error) {
-		return placeSessionInTree(desktop, request, paneID)
+	var desktop profiles.Desktop
+	err := s.profilesTx(func(tx *sql.Tx, now string) error {
+		current, err := loadDesktop(tx, request.DesktopID)
+		if err != nil {
+			return err
+		}
+		if err := requireRevision("desktop", current.ID, request.ExpectedRevision, current.Revision); err != nil {
+			return err
+		}
+		if _, err := loadLiveProfile(tx, current.ProfileID); err != nil {
+			return err
+		}
+		desktop, err = placeSessionInTree(tx, current, request, paneID)
+		if err != nil {
+			return err
+		}
+		return writeCurrentDesktopArrangement(tx, now, &desktop)
 	})
 	return desktop, paneID, err
 }
@@ -1232,11 +1266,11 @@ func (s *Store) PlaceLaunchedSession(request SessionPlacementRequest) (profiles.
 		if err != nil {
 			return err
 		}
-		desktop, err = placeSessionInTree(current, request, paneID)
+		desktop, err = placeSessionInTree(tx, current, request, paneID)
 		if err != nil {
 			return err
 		}
-		return writeDesktopArrangement(tx, now, &desktop)
+		return writeCurrentDesktopArrangement(tx, now, &desktop)
 	})
 	return desktop, paneID, err
 }
@@ -1350,10 +1384,10 @@ func moveLeafBetweenDesktops(tx *sql.Tx, now string, source, target profiles.Des
 	if request.Activate {
 		target.ActivePaneID = moved.FinalLeafID
 	}
-	if err := writeDesktopArrangement(tx, now, &source); err != nil {
+	if err := writeCurrentDesktopArrangement(tx, now, &source); err != nil {
 		return LeafMove{}, err
 	}
-	if err := writeArrivingArrangement(tx, now, &target, map[string]string{moved.FinalLeafID: createdAt}); err != nil {
+	if err := writeCurrentArrivingArrangement(tx, now, &target, map[string]string{moved.FinalLeafID: createdAt}); err != nil {
 		return LeafMove{}, err
 	}
 	return LeafMove{Source: source, Target: target, FinalLeafID: moved.FinalLeafID}, nil
@@ -1369,7 +1403,7 @@ type SessionDesktopMove struct {
 
 // MoveSessionToDesktop puts a session's newest tile beside another desktop's active leaf;
 // only a moved active tile, onto a desktop not on screen, takes that leaf.
-func (s *Store) MoveSessionToDesktop(sessionID, targetDesktopID, title string) (SessionDesktopMove, error) {
+func (s *Store) MoveSessionToDesktop(sessionID protocol.SessionID, targetDesktopID, title string) (SessionDesktopMove, error) {
 	var result SessionDesktopMove
 	err := s.profilesTx(func(tx *sql.Tx, now string) error {
 		profileID, err := openSessionProfileID(tx, sessionID)
@@ -1393,11 +1427,11 @@ func (s *Store) MoveSessionToDesktop(sessionID, targetDesktopID, title string) (
 		}
 		if len(tiles) == 0 {
 			paneID := newProfileEntityID("pane")
-			desktop, err := placeSessionInTree(target, SessionPlacementRequest{SessionID: sessionID, Direction: layouttree.DirectionVertical, Title: title, Status: profiles.PaneStatusReady}, paneID)
+			desktop, err := placeSessionInTree(tx, target, SessionPlacementRequest{SessionID: sessionID, Direction: layouttree.DirectionVertical, Title: title, Status: profiles.PaneStatusReady}, paneID)
 			if err != nil {
 				return err
 			}
-			if err := writeDesktopArrangement(tx, now, &desktop); err != nil {
+			if err := writeCurrentDesktopArrangement(tx, now, &desktop); err != nil {
 				return err
 			}
 			result = SessionDesktopMove{Move: LeafMove{Target: desktop, FinalLeafID: paneID}, Placed: true}
@@ -1422,8 +1456,11 @@ func (s *Store) MoveSessionToDesktop(sessionID, targetDesktopID, title string) (
 	return result, err
 }
 
-func openSessionProfileID(tx *sql.Tx, sessionID string) (string, error) {
-	var profileID, closedAt string
+func openSessionProfileID(tx *sql.Tx, sessionID protocol.SessionID) (string, error) {
+	var (
+		profileID string
+		closedAt  string
+	)
 	known, err := rowFound(tx.QueryRow(`SELECT profile_id, closed_at FROM sessions WHERE id = ?`, sessionID), &profileID, &closedAt)
 	if err != nil {
 		return "", err
@@ -1437,7 +1474,7 @@ func openSessionProfileID(tx *sql.Tx, sessionID string) (string, error) {
 	return profileID, nil
 }
 
-func (s *Store) SessionProfileID(sessionID string) (string, error) {
+func (s *Store) SessionProfileID(sessionID protocol.SessionID) (string, error) {
 	var profileID string
 	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
 		err := tx.QueryRow(`SELECT profile_id FROM sessions WHERE id = ?`, sessionID).Scan(&profileID)
@@ -1449,7 +1486,7 @@ func (s *Store) SessionProfileID(sessionID string) (string, error) {
 	return profileID, err
 }
 
-func (s *Store) SessionPlacement(sessionID string) (profiles.Placement, bool, error) {
+func (s *Store) SessionPlacement(sessionID protocol.SessionID) (profiles.Placement, bool, error) {
 	var placement profiles.Placement
 	found := false
 	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
@@ -1467,7 +1504,7 @@ type sessionTile struct {
 	desktopID, tileID string
 }
 
-func sessionTiles(tx *sql.Tx, sessionID string) ([]sessionTile, error) {
+func sessionTiles(tx *sql.Tx, sessionID protocol.SessionID) ([]sessionTile, error) {
 	rows, err := tx.Query(`SELECT desktop_id, pane_id FROM desktop_panes WHERE session_id = ? ORDER BY created_at DESC, pane_id DESC`, sessionID)
 	if err != nil {
 		return nil, err
@@ -1484,7 +1521,7 @@ func sessionTiles(tx *sql.Tx, sessionID string) ([]sessionTile, error) {
 	return tiles, rows.Err()
 }
 
-func removeSessionPlacement(tx *sql.Tx, now, sessionID string) ([]profiles.Desktop, error) {
+func removeSessionPlacement(tx *sql.Tx, now string, sessionID protocol.SessionID) ([]profiles.Desktop, error) {
 	tiles, err := sessionTiles(tx, sessionID)
 	if err != nil {
 		return nil, err
@@ -1512,11 +1549,14 @@ func removeTile(tx *sql.Tx, now string, tile sessionTile) (profiles.Desktop, err
 	}
 	desktop.Tree = next
 	desktop.Panes = withoutPane(desktop.Panes, tile.tileID)
-	return desktop, writeDesktopArrangement(tx, now, &desktop)
+	return desktop, writeCurrentDesktopArrangement(tx, now, &desktop)
 }
 
-func (s *Store) RemoveTerminalTile(terminal string) (desktop profiles.Desktop, removed bool, err error) {
+func (s *Store) RemoveTerminalTile(terminal protocol.TerminalID) (desktop profiles.Desktop, removed bool, err error) {
 	err = s.profilesTx(func(tx *sql.Tx, now string) error {
+		if _, err := tx.Exec(`DELETE FROM terminal_bindings WHERE terminal_id = ?`, terminal); err != nil {
+			return err
+		}
 		var tile sessionTile
 		found, err := rowFound(tx.QueryRow(`SELECT desktop_id, pane_id FROM desktop_panes WHERE runtime_id = ?`, terminal), &tile.desktopID, &tile.tileID)
 		if err != nil || !found {
@@ -1529,7 +1569,7 @@ func (s *Store) RemoveTerminalTile(terminal string) (desktop profiles.Desktop, r
 	return desktop, removed, err
 }
 
-func (s *Store) unplaceSessionLocked(at time.Time, sessionID string) error {
+func (s *Store) unplaceSessionLocked(at time.Time, sessionID protocol.SessionID) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -1546,7 +1586,7 @@ func (s *Store) unplaceSessionLocked(at time.Time, sessionID string) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	s.announcePaneTerminalsLocked()
+	s.announceTerminalBindingsLocked()
 	if emptied {
 		s.announceEmptyDesktop(at)
 	}
@@ -1561,13 +1601,13 @@ func (s *Store) unplaceSessionsLocked(reason, where string, args ...any) {
 	}
 	at := time.Now().UTC()
 	for _, id := range sessionIDs {
-		if err := s.unplaceSessionLocked(at, id); err != nil {
+		if err := s.unplaceSessionLocked(at, protocol.SessionID(id)); err != nil {
 			log.Printf("[store] %s: removing the pane of session %s: %v", reason, id, err)
 		}
 	}
 }
 
-func (s *Store) RemoveSessionPlacement(sessionID string) ([]profiles.Desktop, error) {
+func (s *Store) RemoveSessionPlacement(sessionID protocol.SessionID) ([]profiles.Desktop, error) {
 	var desktops []profiles.Desktop
 	err := s.profilesTx(func(tx *sql.Tx, now string) error {
 		var err error

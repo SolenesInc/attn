@@ -257,7 +257,7 @@ func (d *Daemon) dueSessionPullRequests(
 			groups = append(groups, group)
 		}
 		if active {
-			group.sessions = append(group.sessions, rec.SessionID)
+			group.sessions = append(group.sessions, string(rec.SessionID))
 		}
 		group.due = group.due || rec.PRID == forcePRID || sessionPullRequestDueForWatch(rec, len(group.watches) > 0, now)
 	}
@@ -290,7 +290,7 @@ func (d *Daemon) activeSessionPullRequests(records []store.SessionPullRequestRec
 	return active
 }
 
-func (d *Daemon) sessionPullRequestSessionActive(sessionID string) bool {
+func (d *Daemon) sessionPullRequestSessionActive(sessionID protocol.SessionID) bool {
 	session := d.store.Get(sessionID)
 	return session != nil && session.State != protocol.SessionStateRecoverable
 }
@@ -474,14 +474,14 @@ func sessionPullRequestDueForWatch(rec store.SessionPullRequestRecord, watched b
 func sessionPullRequestRecordsForWatches(selected, all []store.SessionPullRequestRecord, watches []store.PullRequestWatch) []store.SessionPullRequestRecord {
 	included := make(map[string]bool, len(selected))
 	for _, record := range selected {
-		included[record.SessionID+"\x00"+record.PRID] = true
+		included[string(record.SessionID)+"\x00"+record.PRID] = true
 	}
 	watched := make(map[string]bool, len(watches))
 	for _, watch := range watches {
-		watched[watch.SessionID+"\x00"+watch.PRID] = true
+		watched[string(watch.SessionID)+"\x00"+watch.PRID] = true
 	}
 	for _, record := range all {
-		key := record.SessionID + "\x00" + record.PRID
+		key := string(record.SessionID) + "\x00" + record.PRID
 		if watched[key] && !included[key] {
 			selected = append(selected, record)
 			included[key] = true
@@ -511,9 +511,9 @@ func (d *Daemon) recordPullRequestWatchFailures(group *sessionPullRequestGroup, 
 		if delivery != nil {
 			d.deliverPullRequestMailbox(*delivery)
 		}
-		changed = append(changed, watch.SessionID)
+		changed = append(changed, string(watch.SessionID))
 		if holder := d.inboxHolder(watch.To); holder != nil && holder.ID != watch.SessionID {
-			changed = append(changed, holder.ID)
+			changed = append(changed, string(holder.ID))
 		}
 	}
 	return changed
@@ -579,9 +579,9 @@ func (d *Daemon) processPullRequestWatches(
 			d.schedulePullRequestSettle(watch, *transition.Evaluation.SettlingUntil, now)
 		}
 		if projectionChanged {
-			changed = append(changed, watch.SessionID)
+			changed = append(changed, string(watch.SessionID))
 			if holder := d.inboxHolder(watch.To); holder != nil && holder.ID != watch.SessionID {
-				changed = append(changed, holder.ID)
+				changed = append(changed, string(holder.ID))
 			}
 		}
 	}
@@ -611,7 +611,7 @@ func (d *Daemon) schedulePullRequestSettle(watch store.PullRequestWatch, deadlin
 	}
 }
 
-func (d *Daemon) schedulePullRequestRefreshNow(sessionID, prID string) {
+func (d *Daemon) schedulePullRequestRefreshNow(sessionID protocol.SessionID, prID string) {
 	runner := d.jobQueueRef()
 	if runner == nil || runner.Disabled() {
 		return

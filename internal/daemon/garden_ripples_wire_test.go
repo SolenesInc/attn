@@ -138,7 +138,7 @@ func rippleChain(t *testing.T, cli *client.Client, blockerTitle, dependentTitle 
 
 func rippleUnblocks(t *testing.T, cli *client.Client, closer, seed, verb string, want ...string) {
 	t.Helper()
-	moved, err := cli.SeedTransition(closer, seed, verb, "closed", "", true, client.SeedTransitionOptions{})
+	moved, err := cli.SeedTransition(protocol.SessionID(closer), seed, verb, "closed", "", true, client.SeedTransitionOptions{})
 	if err != nil {
 		t.Fatalf("%s %s: %v", verb, seed, err)
 	}

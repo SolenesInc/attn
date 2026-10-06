@@ -6,6 +6,7 @@ import (
 
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/hooks"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 const (
@@ -20,7 +21,7 @@ type pluginLaunchInstructions struct {
 	NotebookRoot string `json:"notebook_root,omitempty"`
 }
 
-func (d *Daemon) preparePluginLaunchInstructions(sessionID, profileID string, isChief, selfReportPullRequests bool) (*pluginLaunchInstructions, error) {
+func (d *Daemon) preparePluginLaunchInstructions(sessionID protocol.SessionID, profileID string, isChief, selfReportPullRequests bool) (*pluginLaunchInstructions, error) {
 	gardenHome := d.requireHome(garden.Surface) == nil
 	if isChief {
 		root, _, err := d.ensureNotebookScaffold()
@@ -55,7 +56,7 @@ func (d *Daemon) preparePluginLaunchInstructions(sessionID, profileID string, is
 	}, nil
 }
 
-func (d *Daemon) crewPrimeForLaunch(sessionID string) string {
+func (d *Daemon) crewPrimeForLaunch(sessionID protocol.SessionID) string {
 	_, block, _, err := d.crewPrimeForSession(sessionID)
 	if err != nil {
 		d.logf("crew: refusing launch priming for session %s: %v", sessionID, err)

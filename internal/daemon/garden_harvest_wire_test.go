@@ -146,7 +146,7 @@ func TestArmingRefusalsNameTheirReason(t *testing.T) {
 		{"arming with a reason", shipper, seed, "done enough", client.SeedTransitionOptions{WhenMerged: true}, "the merge writes the reason"},
 		{"clearing a seed that waits on nothing", shipper, seed, "", client.SeedTransitionOptions{WhenMerged: true, ClearHarvestWhen: true}, "has no harvest condition"},
 	} {
-		_, err := cli.SeedTransition(refusal.session, refusal.seed, "harvest", refusal.reason, "", false, refusal.opts)
+		_, err := cli.SeedTransition(protocol.SessionID(refusal.session), refusal.seed, "harvest", refusal.reason, "", false, refusal.opts)
 		lifeRefusal(t, refusal.name, err, refusal.want)
 	}
 	if shown := lifeShow(t, cli, seed).Seed; shown.Status != "planted" || shown.HarvestWhen != nil {
@@ -291,9 +291,9 @@ func TestArmingASeedSomebodyElseHoldsTakesForce(t *testing.T) {
 	lifeMove(t, cli, holder, seed, "tend", "", "")
 
 	options := client.SeedTransitionOptions{WhenMerged: true, PullRequestURL: url}
-	_, err := cli.SeedTransition(shipper, seed, "harvest", "", "trellis", false, options)
+	_, err := cli.SeedTransition(protocol.SessionID(shipper), seed, "harvest", "", "trellis", false, options)
 	lifeRefusal(t, "arming a seed another session tends", err, "is being tended by")
-	forced, err := cli.SeedTransition(shipper, seed, "harvest", "", "trellis", true, options)
+	forced, err := cli.SeedTransition(protocol.SessionID(shipper), seed, "harvest", "", "trellis", true, options)
 	if err != nil {
 		t.Fatalf("forced arm: %v", err)
 	}
@@ -312,7 +312,7 @@ func harvestArm(t *testing.T, cli *client.Client, session, seedID, url string) *
 
 func harvestArmAs(t *testing.T, cli *client.Client, session, member, seedID, url string) *protocol.SeedTransitionResult {
 	t.Helper()
-	armed, err := cli.SeedTransition(session, seedID, "harvest", "", member, false, client.SeedTransitionOptions{WhenMerged: true, PullRequestURL: url})
+	armed, err := cli.SeedTransition(protocol.SessionID(session), seedID, "harvest", "", member, false, client.SeedTransitionOptions{WhenMerged: true, PullRequestURL: url})
 	if err != nil {
 		t.Fatalf("arm %s on %s: %v", seedID, url, err)
 	}
@@ -327,7 +327,7 @@ func harvestSessionPullRequests(t *testing.T, cli *client.Client, session string
 	}
 	var urls []string
 	for _, s := range sessions {
-		if s.ID != session {
+		if string(s.ID) != session {
 			continue
 		}
 		for _, pull := range s.PullRequests {

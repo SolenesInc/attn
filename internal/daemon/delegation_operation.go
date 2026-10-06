@@ -30,7 +30,7 @@ func (d *Daemon) startDelegationForeground(msg *protocol.DelegateMessage) (*prot
 	}
 	msg.RequestID = requestID
 	msg.Cmd = protocol.CmdDelegate
-	if strings.TrimSpace(protocol.Deref(msg.SourceSessionID)) == "" {
+	if protocol.TrimID(protocol.Deref(msg.SourceSessionID)) == "" {
 		msg.SourceSessionID = nil
 	}
 	if err := validateDelegateRequestShape(msg); err != nil {
@@ -56,7 +56,7 @@ func (d *Daemon) startDelegationForeground(msg *protocol.DelegateMessage) (*prot
 		if err := json.Unmarshal([]byte(existing.RequestJSON), &saved); err != nil {
 			return nil, err
 		}
-		if strings.TrimSpace(protocol.Deref(saved.SourceSessionID)) == "" {
+		if protocol.TrimID(protocol.Deref(saved.SourceSessionID)) == "" {
 			saved.SourceSessionID = nil
 		}
 		normalized, err := json.Marshal(saved)
@@ -75,7 +75,7 @@ func (d *Daemon) startDelegationForeground(msg *protocol.DelegateMessage) (*prot
 		return nil, lookupErr
 	}
 	if ref := strings.TrimSpace(protocol.Deref(msg.Desktop)); ref != "" {
-		sourceID := strings.TrimSpace(protocol.Deref(msg.SourceSessionID))
+		sourceID := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
 		if source := d.store.Get(sourceID); source != nil || sourceID == "" {
 			if _, _, err := d.delegationDestination(source, ref, protocol.Deref(msg.ProfileID)); err != nil {
 				return nil, err
@@ -94,9 +94,9 @@ func (d *Daemon) startDelegationForeground(msg *protocol.DelegateMessage) (*prot
 		}
 		resolvedJSON = string(raw)
 	}
-	chiefSessionID := ""
+	var chiefSessionID protocol.SessionID
 	if d.isChiefOfStaffSession(protocol.Deref(msg.SourceSessionID)) {
-		chiefSessionID = strings.TrimSpace(protocol.Deref(msg.SourceSessionID))
+		chiefSessionID = protocol.TrimID(protocol.Deref(msg.SourceSessionID))
 	}
 	seedID := ""
 	parentSeedID := ""
@@ -117,7 +117,7 @@ func (d *Daemon) startDelegationForeground(msg *protocol.DelegateMessage) (*prot
 		}
 	}
 	if msg.Assignment.Kind == protocol.DelegateAssignmentKindNew {
-		if sourceID := strings.TrimSpace(protocol.Deref(msg.SourceSessionID)); sourceID != "" {
+		if sourceID := protocol.TrimID(protocol.Deref(msg.SourceSessionID)); sourceID != "" {
 			parentSeedID, _ = d.gardenDispatchCrown(sourceID)
 		}
 	}
@@ -125,7 +125,7 @@ func (d *Daemon) startDelegationForeground(msg *protocol.DelegateMessage) (*prot
 	if err != nil {
 		return nil, err
 	}
-	record, claimed, err := d.store.ClaimDelegationOperationWithHandoverSnapshot(requestID, "op-"+uuid.NewString(), uuid.NewString(), chiefSessionID, seedID, string(encoded), resolvedJSON, baseCommit, parentSeedID, handoverSnapshot, time.Now())
+	record, claimed, err := d.store.ClaimDelegationOperationWithHandoverSnapshot(requestID, "op-"+uuid.NewString(), protocol.SessionID(uuid.NewString()), chiefSessionID, seedID, string(encoded), resolvedJSON, baseCommit, parentSeedID, handoverSnapshot, time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -321,7 +321,7 @@ func (d *Daemon) delegationOperation(id string) (*protocol.DelegationOperation, 
 	return &operation, nil
 }
 
-func (d *Daemon) scopedDelegationOperation(id, sessionID, requested, selected string) (*protocol.DelegationOperation, error) {
+func (d *Daemon) scopedDelegationOperation(id string, sessionID protocol.SessionID, requested string, selected string) (*protocol.DelegationOperation, error) {
 	profile, err := d.resolveGardenProfile(sessionID, requested, selected)
 	if err != nil {
 		return nil, err

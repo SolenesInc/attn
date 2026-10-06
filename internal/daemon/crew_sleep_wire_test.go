@@ -31,7 +31,7 @@ func TestAskingAMemberToSleepWithdrawsItsPendingRestartAndTheDayEndsAsleep(t *te
 	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
 	day := wakeCrew(t, cli, "trellis", "")
-	w.Launched(day.SessionID)
+	w.Launched(string(day.SessionID))
 	restartCrew(t, cli, "trellis", "then-sleep")
 
 	if slept := sleepCrew(t, w, "trellis"); slept.AlreadyAsleep || protocol.Deref(slept.SessionID) != day.SessionID {
@@ -43,7 +43,7 @@ func TestAskingAMemberToSleepWithdrawsItsPendingRestartAndTheDayEndsAsleep(t *te
 	crewErrorContains(t, err, "still closing after a sleep request")
 	withdrawnRestart(t, w, "trellis", "then-sleep")
 
-	handed := crewHandoff(t, cli, day.SessionID, "Going to sleep as asked.", false, protocol.CrewDayCloseNap)
+	handed := crewHandoff(t, cli, string(day.SessionID), "Going to sleep as asked.", false, protocol.CrewDayCloseNap)
 	if protocol.Deref(handed.Outcome) != protocol.CrewDayCloseSleep || handed.SessionID != nil {
 		t.Fatalf("a nap filed after the sleep request = %+v, want the day ended with nobody behind it", handed)
 	}
@@ -62,14 +62,14 @@ func TestAskingAMemberToSleepWithdrawsItsPendingRestartAndTheDayEndsAsleep(t *te
 	if fresh.Restart.State != protocol.CrewRestartStateCompleted || successor == "" || successor == day.SessionID {
 		t.Fatalf("a restart once trellis is asleep = %+v, want it woken fresh", fresh.Restart)
 	}
-	w.Launched(successor)
+	w.Launched(string(successor))
 }
 
 func TestADayThatExitsAfterItsRestartWasWithdrawnStaysAsleepUntilRestarted(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
 	day := wakeCrew(t, cli, "alder", "")
-	run := w.Launched(day.SessionID)
+	run := w.Launched(string(day.SessionID))
 	restartCrew(t, cli, "alder", "then-sleep")
 	sleepCrew(t, w, "alder")
 
@@ -84,7 +84,7 @@ func TestADayThatExitsAfterItsRestartWasWithdrawnStaysAsleepUntilRestarted(t *te
 	if restarted.Restart.State != protocol.CrewRestartStateCompleted || successor == "" || successor == day.SessionID {
 		t.Fatalf("restarting alder after its day exited = %+v, want a fresh day", restarted.Restart)
 	}
-	w.Launched(successor)
+	w.Launched(string(successor))
 }
 
 func TestAskingAnAsleepMemberToSleepSendsNothingAndWakesNobody(t *testing.T) {
@@ -100,7 +100,7 @@ func TestAskingAnAsleepMemberToSleepSendsNothingAndWakesNobody(t *testing.T) {
 		if got := crewSessionCount(t, cli); got != before {
 			t.Fatalf("sleep woke a session: before=%d after=%d", before, got)
 		}
-		day := w.bootBubbleClaude(t, wakeCrew(t, cli, "trellis", "").SessionID)
+		day := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "trellis", "").SessionID))
 		day.reply("Ready. <!-- attn:state=idle -->")
 		if items := readInbox(t, cli, day.id, 0).Items; len(items) != 0 {
 			t.Fatalf("sleep queued mail=%+v", items)

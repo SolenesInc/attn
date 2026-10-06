@@ -1,6 +1,7 @@
 package store
 
 import (
+	"github.com/victorarias/attn/internal/protocol"
 	"path/filepath"
 	"testing"
 	"time"
@@ -41,7 +42,7 @@ func TestMigration81BackfillsOpenTurnsFromStateSince(t *testing.T) {
 		"approval": "2026-07-26T11:00:00Z",
 		"unknown":  "2026-07-26T12:00:00Z",
 	} {
-		got := migrated.TurnStamps(id).OpenedAt
+		got := migrated.TurnStamps(protocol.SessionID(id)).OpenedAt
 		if got.IsZero() {
 			t.Errorf("%s: no turn opened by the backfill", id)
 			continue
@@ -51,7 +52,7 @@ func TestMigration81BackfillsOpenTurnsFromStateSince(t *testing.T) {
 		}
 	}
 	for _, id := range []string{"working", "idle"} {
-		if !migrated.TurnStamps(id).OpenedAt.IsZero() {
+		if !migrated.TurnStamps(protocol.SessionID(id)).OpenedAt.IsZero() {
 			t.Errorf("%s: backfill opened a turn for a state that does not open one", id)
 		}
 	}

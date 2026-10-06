@@ -35,7 +35,7 @@ func TestTheMessageWindowShowsEachSessionsOwnAnswersOldestFirstUnderStableKeys(t
 	firstRun.Reply("The answer under annotation. <!-- attn:state=idle -->")
 
 	window := messageWindowShowing(app, first, "The answer under annotation.")
-	if got := messageMarkdowns(window); !slices.Equal(got, []string{"An earlier answer.", "The answer under annotation."}) || window.Truncated || window.SessionID != first {
+	if got := messageMarkdowns(window); !slices.Equal(got, []string{"An earlier answer.", "The answer under annotation."}) || window.Truncated || string(window.SessionID) != first {
 		t.Fatalf("the first session's window = %q (truncated %v), want its own two answers oldest first", got, window.Truncated)
 	}
 	again := messageWindowShowing(app, first, "The answer under annotation.")
@@ -109,7 +109,7 @@ func TestTheMessageWindowSaysWhenItIsStillLookingAndWhenThereIsNoTranscript(t *t
 func requestMessageWindow(app *testworld.Peer, session, requestID string) protocol.SessionMessagesGetResultMessage {
 	app.T.Helper()
 	return testworld.Request(app, protocol.SessionMessagesGetMessage{
-		Cmd: protocol.CmdSessionMessagesGet, RequestID: requestID, SessionID: session,
+		Cmd: protocol.CmdSessionMessagesGet, RequestID: requestID, SessionID: protocol.SessionID(session),
 	}, protocol.EventSessionMessagesGetResult, func(r protocol.SessionMessagesGetResultMessage) bool { return r.RequestID == requestID })
 }
 
@@ -120,7 +120,7 @@ func messageWindowShowing(app *testworld.Peer, session, newest string) protocol.
 		if got := messageMarkdowns(window); len(got) > 0 && got[len(got)-1] == newest {
 			return window
 		}
-		testworld.Await(app, protocol.EventSessionMessagesChanged, func(e protocol.SessionMessagesChangedMessage) bool { return e.SessionID == session })
+		testworld.Await(app, protocol.EventSessionMessagesChanged, func(e protocol.SessionMessagesChangedMessage) bool { return string(e.SessionID) == session })
 	}
 }
 

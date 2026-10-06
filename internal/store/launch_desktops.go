@@ -11,6 +11,7 @@ import (
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profilemigration"
 	"github.com/victorarias/attn/internal/profiles"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 // LaunchDesktopSetting names an existing desktop, or with DesktopName a new desktop to create;
@@ -266,7 +267,7 @@ func findDesktop(tx *sql.Tx, id string) (profiles.Desktop, bool, error) {
 	return desktop, err == nil, err
 }
 
-func (s *Store) PlaceBackgroundSession(sessionID, runtimeID, kind, id string, reopen bool) (profiles.Desktop, string, error) {
+func (s *Store) PlaceBackgroundSession(sessionID protocol.SessionID, runtimeID protocol.TerminalID, kind string, id string, reopen bool) (profiles.Desktop, string, error) {
 	paneID := newProfileEntityID("pane")
 	var desktop profiles.Desktop
 	err := s.profilesTx(func(tx *sql.Tx, now string) error {
@@ -303,11 +304,11 @@ func (s *Store) PlaceBackgroundSession(sessionID, runtimeID, kind, id string, re
 		if err := tx.QueryRow(`SELECT label FROM sessions WHERE id = ?`, sessionID).Scan(&title); err != nil {
 			return err
 		}
-		desktop, err = placeSessionInTree(desktop, SessionPlacementRequest{SessionID: sessionID, RuntimeID: runtimeID, Title: title, Direction: layouttree.DirectionVertical, Status: profiles.PaneStatusReady}, paneID)
+		desktop, err = placeSessionInTree(tx, desktop, SessionPlacementRequest{SessionID: sessionID, RuntimeID: runtimeID, Title: title, Direction: layouttree.DirectionVertical, Status: profiles.PaneStatusReady}, paneID)
 		if err != nil {
 			return err
 		}
-		return writeDesktopArrangement(tx, now, &desktop)
+		return writeCurrentDesktopArrangement(tx, now, &desktop)
 	})
 	return desktop, paneID, err
 }
@@ -341,12 +342,12 @@ func placeMigrationRemainder(tx *sql.Tx, now string, profile profiles.Profile) e
 		return err
 	}
 	for _, id := range ids {
-		desktop, err = placeSessionInTree(desktop, SessionPlacementRequest{SessionID: id, Direction: layouttree.DirectionVertical, Status: profiles.PaneStatusReady}, newProfileEntityID("pane"))
+		desktop, err = placeSessionInTree(tx, desktop, SessionPlacementRequest{SessionID: protocol.SessionID(id), Direction: layouttree.DirectionVertical, Status: profiles.PaneStatusReady}, newProfileEntityID("pane"))
 		if err != nil {
 			return err
 		}
 	}
-	return writeDesktopArrangement(tx, now, &desktop)
+	return writeCurrentDesktopArrangement(tx, now, &desktop)
 }
 
 func applyMigration167(tx *sql.Tx, migrationSQL string) error {
@@ -446,44 +447,47 @@ func (s *Store) OnEmptyDesktop(fn func(emptiedAt time.Time)) {
 	s.emptyDesktop = fn
 }
 
-// PaneTerminal is one pane row as the terminal registry sees it.
-type PaneTerminal struct {
-	RuntimeID, SessionID string
+// TerminalBinding survives placement changes until its session closes.
+type TerminalBinding struct {
+	TerminalID protocol.TerminalID
+	SessionID  protocol.SessionID
 }
 
-// OnPaneTerminals hands fn every pane row after each commit that can change them, under the store
+// OnTerminalBindings hands fn every binding after each commit that can change them, under the store
 // lock, so the registry it feeds never sees two commits out of order.
-func (s *Store) OnPaneTerminals(fn func([]PaneTerminal)) {
+func (s *Store) OnTerminalBindings(fn func([]TerminalBinding)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.paneTerminals = fn
-	s.announcePaneTerminalsLocked()
+	s.terminalBindings = fn
+	s.announceTerminalBindingsLocked()
 }
 
-func (s *Store) announcePaneTerminalsLocked() {
-	if s.paneTerminals == nil || s.db == nil {
+func (s *Store) announceTerminalBindingsLocked() {
+	if s.terminalBindings == nil || s.db == nil {
 		return
 	}
-	rows, err := s.db.Query(`SELECT runtime_id, session_id FROM desktop_panes ORDER BY created_at, pane_id`)
+	rows, err := s.db.Query(`SELECT b.terminal_id, b.session_id FROM terminal_bindings b
+ LEFT JOIN desktop_panes p ON p.runtime_id = b.terminal_id
+ ORDER BY COALESCE(p.created_at, ''), COALESCE(p.pane_id, ''), b.terminal_id`)
 	if err != nil {
-		log.Printf("[store] listing pane terminals: %v", err)
+		log.Printf("[store] listing terminal bindings: %v", err)
 		return
 	}
 	defer rows.Close()
-	var panes []PaneTerminal
+	var bindings []TerminalBinding
 	for rows.Next() {
-		var pane PaneTerminal
-		if err := rows.Scan(&pane.RuntimeID, &pane.SessionID); err != nil {
-			log.Printf("[store] listing pane terminals: %v", err)
+		var binding TerminalBinding
+		if err := rows.Scan(&binding.TerminalID, &binding.SessionID); err != nil {
+			log.Printf("[store] listing terminal bindings: %v", err)
 			return
 		}
-		panes = append(panes, pane)
+		bindings = append(bindings, binding)
 	}
 	if err := rows.Err(); err != nil {
-		log.Printf("[store] listing pane terminals: %v", err)
+		log.Printf("[store] listing terminal bindings: %v", err)
 		return
 	}
-	s.paneTerminals(panes)
+	s.terminalBindings(bindings)
 }
 
 func (s *Store) announceEmptyDesktop(emptiedAt time.Time) {
@@ -558,4 +562,10 @@ func appendLaunchDesktopFacts(tx *sql.Tx, desktopID string) error {
 		}
 	}
 	return nil
+}
+
+func bindTerminalTx(tx *sql.Tx, terminal protocol.TerminalID, session protocol.SessionID) error {
+	_, err := tx.Exec(`INSERT INTO terminal_bindings (terminal_id, session_id) VALUES (?, ?)
+ ON CONFLICT(terminal_id) DO UPDATE SET session_id = excluded.session_id`, terminal, session)
+	return err
 }

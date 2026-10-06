@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 var raggedOffsets = []struct {
@@ -75,7 +77,7 @@ func TestMigration95RewritesTurnCursorAndListingStampsThatDoNotSort(t *testing.T
 	}
 	for _, r := range raggedOffsets {
 		if _, _, err := s.ClaimDelegationOperation(
-			r.id, "op-"+r.id, "sess-"+r.id, "chief", "", `{}`, turnBase().Add(r.offset)); err != nil {
+			r.id, "op-"+r.id, protocol.SessionID("sess-"+r.id), "chief", "", `{}`, turnBase().Add(r.offset)); err != nil {
 			t.Fatalf("claim %s: %v", r.id, err)
 		}
 	}

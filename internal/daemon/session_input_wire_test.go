@@ -19,7 +19,7 @@ func TestAHalfTypedDraftSurvivesTheTurnEndingAndAttnsMail(t *testing.T) {
 	app.TypeLine(recipient, "keep going")
 	agent.Prompted()
 
-	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: app.Terminal(recipient), Data: "half a thought"})
+	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(app.Terminal(recipient)), Data: "half a thought"})
 	app.AwaitScreen(recipient, "half a thought")
 	agent.Reply("Done for now. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, recipient, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
@@ -28,7 +28,7 @@ func TestAHalfTypedDraftSurvivesTheTurnEndingAndAttnsMail(t *testing.T) {
 	if held.Status != protocol.AgentMsgStatusQueued {
 		t.Errorf("mail for an agent under a fresh draft = %+v, want it held back", held)
 	}
-	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: app.Terminal(recipient), Data: " about checkout\r"})
+	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(app.Terminal(recipient)), Data: " about checkout\r"})
 	if got := agent.Prompted(); got != "half a thought about checkout" {
 		t.Fatalf("the agent received %q, want the user's draft exactly as typed", got)
 	}
@@ -59,7 +59,7 @@ func TestResendingAnAnnotationBatchNeverPressesEnterOnAnApprovalThatOpenedSince(
 		term := w.terminal(session)
 		term.Heartbeat("not_busy", "Claude Code")
 		submit := protocol.SessionAnnotationsSubmitMessage{
-			Cmd: protocol.CmdSessionAnnotationsSubmit, RequestID: "feedback-1", SessionID: session, Text: sessionAnnotationFeedback,
+			Cmd: protocol.CmdSessionAnnotationsSubmit, RequestID: "feedback-1", SessionID: protocol.SessionID(session), Text: sessionAnnotationFeedback,
 		}
 		send := func() protocol.SessionAnnotationsSubmitResultMessage {
 			return testworld.Request(app, submit, protocol.EventSessionAnnotationsSubmitResult,
@@ -70,7 +70,7 @@ func TestResendingAnAnnotationBatchNeverPressesEnterOnAnApprovalThatOpenedSince(
 		}
 		typed := len(term.Inputs())
 
-		if err := cli.RecordNotification(session, "permission_prompt", "Allow rm -rf build?"); err != nil {
+		if err := cli.RecordNotification(protocol.TerminalID(w.Terminal(session)), "permission_prompt", "Allow rm -rf build?"); err != nil {
 			t.Fatal(err)
 		}
 		testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
@@ -91,7 +91,7 @@ func TestAnAnnotationLeftInTheComposerHoldsAttnsDoorbellUntilATurnTakesItOrTheUs
 			agent.reply("Verified. <!-- attn:state=idle -->")
 		}},
 		{"the user types over it", func(w *world, app *testworld.Peer, agent *bubbleClaude) {
-			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: agent.self, Data: "x"})
+			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(agent.self), Data: "x"})
 			w.advance(30 * time.Second)
 		}},
 	} {

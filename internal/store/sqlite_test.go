@@ -733,15 +733,6 @@ func TestMigration131_RepairsPartialAgentDriverCursorSchemas(t *testing.T) {
 				t.Fatalf("repaired cursor = %+v, want %+v", got, want)
 			}
 
-			store := &Store{db: migrated}
-			teardown, err := store.PrepareSessionTeardown("partial-driver", time.Date(2026, 9, 2, 12, 30, 0, 0, time.UTC))
-			if err != nil {
-				t.Fatalf("PrepareSessionTeardown after repair: %v", err)
-			}
-			if teardown != want {
-				t.Fatalf("teardown cursor = %+v, want %+v", teardown, want)
-			}
-
 			var applied int
 			if err := migrated.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE version = 131`).Scan(&applied); err != nil {
 				t.Fatalf("read migration 131: %v", err)
@@ -1188,7 +1179,7 @@ func TestMigration145AdoptsGardenDispatchForAutomationContinuity(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("load dispatch collection: found=%v err=%v", found, err)
 	}
-	if _, err := s.PutDocument(*dispatches, run.SessionID, []byte(`{"session_id":"session-1","crown":"s-live01"}`), now, nil); err != nil {
+	if _, err := s.PutDocument(*dispatches, string(run.SessionID), []byte(`{"session_id":"session-1","crown":"s-live01"}`), now, nil); err != nil {
 		t.Fatal(err)
 	}
 

@@ -16,7 +16,7 @@ type SessionActivity struct {
 	Cursor string
 }
 
-func (s *Store) GetSessionActivity(id string) SessionActivity {
+func (s *Store) GetSessionActivity(id protocol.SessionID) SessionActivity {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -32,7 +32,11 @@ func (s *Store) GetSessionActivity(id string) SessionActivity {
 		}
 	}
 
-	var line, at, cursor string
+	var (
+		line   string
+		at     string
+		cursor string
+	)
 	err := s.db.QueryRow(
 		`SELECT activity, activity_at, activity_cursor FROM sessions WHERE id = ?`, id,
 	).Scan(&line, &at, &cursor)
@@ -45,16 +49,16 @@ func (s *Store) GetSessionActivity(id string) SessionActivity {
 	return SessionActivity{Line: line, At: parseActivityStamp(at), Cursor: cursor}
 }
 
-func (s *Store) UpdateSessionActivity(id, line string, at time.Time, cursor string) bool {
+func (s *Store) UpdateSessionActivity(id protocol.SessionID, line string, at time.Time, cursor string) bool {
 	return s.updateSessionActivity(id, nil, line, at, cursor)
 }
 
-func (s *Store) UpdateSessionActivityForConversation(id, resumeID, line string, at time.Time, cursor string) bool {
+func (s *Store) UpdateSessionActivityForConversation(id protocol.SessionID, resumeID string, line string, at time.Time, cursor string) bool {
 	resumeID = strings.TrimSpace(resumeID)
 	return s.updateSessionActivity(id, &resumeID, line, at, cursor)
 }
 
-func (s *Store) updateSessionActivity(id string, resumeID *string, line string, at time.Time, cursor string) bool {
+func (s *Store) updateSessionActivity(id protocol.SessionID, resumeID *string, line string, at time.Time, cursor string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -76,7 +80,7 @@ func (s *Store) updateSessionActivity(id string, resumeID *string, line string, 
 		}
 		applyActivity(session, line, stamp)
 		if s.activityCursors == nil {
-			s.activityCursors = make(map[string]string)
+			s.activityCursors = make(map[protocol.SessionID]string)
 		}
 		if cursor == "" {
 			delete(s.activityCursors, id)
@@ -101,16 +105,16 @@ func (s *Store) updateSessionActivity(id string, resumeID *string, line string, 
 	return err == nil && updated == 1
 }
 
-func (s *Store) SetSessionActivityCursor(id, cursor string) bool {
+func (s *Store) SetSessionActivityCursor(id protocol.SessionID, cursor string) bool {
 	return s.setSessionActivityCursor(id, nil, cursor)
 }
 
-func (s *Store) SetSessionActivityCursorForConversation(id, resumeID, cursor string) bool {
+func (s *Store) SetSessionActivityCursorForConversation(id protocol.SessionID, resumeID string, cursor string) bool {
 	resumeID = strings.TrimSpace(resumeID)
 	return s.setSessionActivityCursor(id, &resumeID, cursor)
 }
 
-func (s *Store) setSessionActivityCursor(id string, resumeID *string, cursor string) bool {
+func (s *Store) setSessionActivityCursor(id protocol.SessionID, resumeID *string, cursor string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -122,7 +126,7 @@ func (s *Store) setSessionActivityCursor(id string, resumeID *string, cursor str
 			return false
 		}
 		if s.activityCursors == nil {
-			s.activityCursors = make(map[string]string)
+			s.activityCursors = make(map[protocol.SessionID]string)
 		}
 		if cursor == "" {
 			delete(s.activityCursors, id)

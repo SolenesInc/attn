@@ -38,7 +38,7 @@ func TestAScheduledAutomationFiresOncePerDueInstantWhileEnabled(t *testing.T) {
 			}
 			var threads []string
 			for _, run := range runs {
-				threads = append(threads, "seed:"+protocol.Deref(run.SeedID), "session:"+protocol.Deref(run.SessionID))
+				threads = append(threads, "seed:"+protocol.Deref(run.SeedID), string("session:"+protocol.Deref(run.SessionID)))
 			}
 			if slices.Contains(threads, "seed:") || slices.Contains(threads, "session:") || automationHasDuplicate(threads) {
 				t.Errorf("%s's fresh runs do not each start their own seed and session: %v", id, threads)

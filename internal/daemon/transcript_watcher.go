@@ -22,7 +22,7 @@ const (
 )
 
 type transcriptWatcher struct {
-	sessionID     string
+	sessionID     protocol.SessionID
 	agent         protocol.SessionAgent
 	cwd           string
 	startedAt     time.Time
@@ -46,7 +46,7 @@ type assistantWindowSnapshot struct {
 	Detail   string
 }
 
-func newTranscriptWatcher(sessionID string, agent protocol.SessionAgent, cwd string, startedAt time.Time, behavior agentdriver.TranscriptWatcherBehavior) *transcriptWatcher {
+func newTranscriptWatcher(sessionID protocol.SessionID, agent protocol.SessionAgent, cwd string, startedAt time.Time, behavior agentdriver.TranscriptWatcherBehavior) *transcriptWatcher {
 	return &transcriptWatcher{
 		sessionID: sessionID,
 		agent:     agent,
@@ -195,7 +195,7 @@ func (d *Daemon) awaitsLaunchConversation(w *transcriptWatcher) bool {
 	return findsLaunchConversation(w.agent) && d.store.GetSessionConversation(w.sessionID).NativeID == ""
 }
 
-func (d *Daemon) conversationClaimedByOtherSession(sessionID string) func(nativeID string) bool {
+func (d *Daemon) conversationClaimedByOtherSession(sessionID protocol.SessionID) func(nativeID string) bool {
 	return func(nativeID string) bool {
 		return d.store.ConversationBoundToOtherSession(sessionID, nativeID)
 	}
@@ -219,7 +219,7 @@ func (d *Daemon) bindLaunchConversation(w *transcriptWatcher) bool {
 	return true
 }
 
-func (d *Daemon) sessionHasBoundTranscriptPath(sessionID string) bool {
+func (d *Daemon) sessionHasBoundTranscriptPath(sessionID protocol.SessionID) bool {
 	return strings.TrimSpace(d.store.GetSessionTranscriptPath(sessionID)) != ""
 }
 
@@ -239,7 +239,7 @@ func watcherStopped(w *transcriptWatcher) bool {
 	}
 }
 
-func (d *Daemon) ensureTranscriptWatcherAtPath(sessionID string, transcriptPath string) {
+func (d *Daemon) ensureTranscriptWatcherAtPath(sessionID protocol.SessionID, transcriptPath string) {
 	session := d.store.Get(sessionID)
 	if session == nil || !isTranscriptWatchedAgent(session.Agent) {
 		return
@@ -256,7 +256,7 @@ func (d *Daemon) ensureTranscriptWatcherAtPath(sessionID string, transcriptPath 
 	d.startTranscriptWatcherAtPath(session.ID, session.Agent, session.Directory, d.sessionStartedAt(session.ID), transcriptPath)
 }
 
-func (d *Daemon) sessionStartedAt(sessionID string) time.Time {
+func (d *Daemon) sessionStartedAt(sessionID protocol.SessionID) time.Time {
 	if launchedAt := d.store.SessionLaunchedAt(sessionID); !launchedAt.IsZero() {
 		return launchedAt
 	}
@@ -273,11 +273,11 @@ func (d *Daemon) transcriptBootstrapBytesForAgent(agent protocol.SessionAgent) i
 	return 0
 }
 
-func (d *Daemon) startTranscriptWatcher(sessionID string, agent protocol.SessionAgent, cwd string, startedAt time.Time) {
+func (d *Daemon) startTranscriptWatcher(sessionID protocol.SessionID, agent protocol.SessionAgent, cwd string, startedAt time.Time) {
 	d.startTranscriptWatcherAtPath(sessionID, agent, cwd, startedAt, "")
 }
 
-func (d *Daemon) startTranscriptWatcherAtPath(sessionID string, agent protocol.SessionAgent, cwd string, startedAt time.Time, transcriptPath string) {
+func (d *Daemon) startTranscriptWatcherAtPath(sessionID protocol.SessionID, agent protocol.SessionAgent, cwd string, startedAt time.Time, transcriptPath string) {
 	if !isTranscriptWatchedAgent(agent) {
 		return
 	}
@@ -305,7 +305,7 @@ func (d *Daemon) startTranscriptWatcherAtPath(sessionID string, agent protocol.S
 	}
 	d.beginUsageRunLocked(sessionID)
 	if d.transcriptWatch == nil {
-		d.transcriptWatch = make(map[string]*transcriptWatcher)
+		d.transcriptWatch = make(map[protocol.SessionID]*transcriptWatcher)
 	}
 	previous := d.transcriptWatch[sessionID]
 	d.transcriptWatch[sessionID] = watcher
@@ -316,14 +316,14 @@ func (d *Daemon) startTranscriptWatcherAtPath(sessionID string, agent protocol.S
 	d.logf("transcript watcher: started session=%s agent=%s cwd=%s", sessionID, agent, cwd)
 }
 
-func (d *Daemon) lookupTranscriptWatcherSession(sessionID string) *protocol.Session {
+func (d *Daemon) lookupTranscriptWatcherSession(sessionID protocol.SessionID) *protocol.Session {
 	if d.transcriptWatcherSessionLookup != nil {
-		return d.transcriptWatcherSessionLookup(sessionID)
+		return d.transcriptWatcherSessionLookup(string(sessionID))
 	}
 	return d.store.Get(sessionID)
 }
 
-func (d *Daemon) updateTranscriptWatcherState(sessionID string, state protocol.SessionState) {
+func (d *Daemon) updateTranscriptWatcherState(sessionID protocol.SessionID, state protocol.SessionState) {
 	d.watchersMu.Lock()
 	watcher := d.transcriptWatch[sessionID]
 	d.watchersMu.Unlock()
@@ -373,12 +373,12 @@ func (d *Daemon) applySessionUsageAvailability(w *transcriptWatcher, batch trans
 		break
 	}
 	if changed {
-		d.publishFact(FactSessionCostChanged, w.sessionID, nil)
+		d.publishFact(FactSessionCostChanged, string(w.sessionID), nil)
 	}
 	return nil
 }
 
-func (d *Daemon) stopTranscriptWatcher(sessionID string) {
+func (d *Daemon) stopTranscriptWatcher(sessionID protocol.SessionID) {
 	d.stopPluginUsageWatcher(sessionID)
 	d.watchersMu.Lock()
 	watcher, ok := d.transcriptWatch[sessionID]
@@ -398,7 +398,7 @@ func (d *Daemon) stopAllTranscriptWatchers() {
 	for _, watcher := range d.transcriptWatch {
 		watchers = append(watchers, watcher)
 	}
-	d.transcriptWatch = make(map[string]*transcriptWatcher)
+	d.transcriptWatch = make(map[protocol.SessionID]*transcriptWatcher)
 	d.watchersMu.Unlock()
 
 	for _, watcher := range watchers {
@@ -417,26 +417,26 @@ func (d *Daemon) stopAllTranscriptWatchers() {
 
 // deferFinalUsage hands a watcher's last reconcile to stopAllTranscriptWatchers, which runs it after PTYs and
 // plugins shut down and agents flush usage, even for a watcher already removed from its map.
-func (d *Daemon) deferFinalUsage(sessionID string, reconcile func()) {
+func (d *Daemon) deferFinalUsage(sessionID protocol.SessionID, reconcile func()) {
 	d.watchersMu.Lock()
 	if d.finalUsage == nil {
-		d.finalUsage = make(map[string][]func())
+		d.finalUsage = make(map[protocol.SessionID][]func())
 	}
 	d.finalUsage[sessionID] = append(d.finalUsage[sessionID], reconcile)
 	d.watchersMu.Unlock()
 }
 
-func (d *Daemon) beginUsageRunLocked(sessionID string) {
+func (d *Daemon) beginUsageRunLocked(sessionID protocol.SessionID) {
 	if d.usageRuns == nil {
-		d.usageRuns = make(map[string]int)
-		d.usageIdle = make(map[string]chan struct{})
+		d.usageRuns = make(map[protocol.SessionID]int)
+		d.usageIdle = make(map[protocol.SessionID]chan struct{})
 	}
 	if d.usageRuns[sessionID]++; d.usageIdle[sessionID] == nil {
 		d.usageIdle[sessionID] = make(chan struct{})
 	}
 }
 
-func (d *Daemon) endUsageRun(sessionID string) {
+func (d *Daemon) endUsageRun(sessionID protocol.SessionID) {
 	d.watchersMu.Lock()
 	defer d.watchersMu.Unlock()
 	if d.usageRuns[sessionID]--; d.usageRuns[sessionID] > 0 {
@@ -447,7 +447,7 @@ func (d *Daemon) endUsageRun(sessionID string) {
 	delete(d.usageIdle, sessionID)
 }
 
-func (d *Daemon) reconcileDeferredUsage(sessionID string) {
+func (d *Daemon) reconcileDeferredUsage(sessionID protocol.SessionID) {
 	d.watchersMu.Lock()
 	reconciles := d.finalUsage[sessionID]
 	delete(d.finalUsage, sessionID)
@@ -457,7 +457,7 @@ func (d *Daemon) reconcileDeferredUsage(sessionID string) {
 	}
 }
 
-func (d *Daemon) assistantWindow(sessionID string, agent protocol.SessionAgent) (assistantWindowSnapshot, bool) {
+func (d *Daemon) assistantWindow(sessionID protocol.SessionID, agent protocol.SessionAgent) (assistantWindowSnapshot, bool) {
 	d.watchersMu.Lock()
 	watcher := d.transcriptWatch[sessionID]
 	d.watchersMu.Unlock()
@@ -467,7 +467,7 @@ func (d *Daemon) assistantWindow(sessionID string, agent protocol.SessionAgent) 
 	return watcher.snapshot(), true
 }
 
-func (d *Daemon) liveTranscriptPath(sessionID string, agent protocol.SessionAgent) string {
+func (d *Daemon) liveTranscriptPath(sessionID protocol.SessionID, agent protocol.SessionAgent) string {
 	d.watchersMu.Lock()
 	watcher := d.transcriptWatch[sessionID]
 	d.watchersMu.Unlock()
@@ -551,7 +551,7 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 			}
 			if transcriptPath == "" {
 				if w.setStatus(protocol.SessionMessageWindowStatusUnavailable, "no exact transcript is bound to this live session") {
-					d.publishFact(FactSessionAssistantWindowChanged, w.sessionID, nil)
+					d.publishFact(FactSessionAssistantWindowChanged, string(w.sessionID), nil)
 				}
 				d.logf("transcript watcher: exact transcript unavailable session=%s agent=%s cwd=%s", w.sessionID, w.agent, w.cwd)
 				return
@@ -560,7 +560,7 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 			if err != nil {
 				d.logf("transcript watcher: transcript stat failed session=%s path=%s err=%v", w.sessionID, transcriptPath, err)
 				w.resetSource(protocol.SessionMessageWindowStatusUnavailable, "", "the exact live transcript could not be opened", false)
-				d.publishFact(FactSessionAssistantWindowChanged, w.sessionID, nil)
+				d.publishFact(FactSessionAssistantWindowChanged, string(w.sessionID), nil)
 				return
 			}
 			startOffset := info.Size()
@@ -574,7 +574,7 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 			if err != nil {
 				d.logf("transcript watcher: follower init failed session=%s path=%s err=%v", w.sessionID, transcriptPath, err)
 				w.resetSource(protocol.SessionMessageWindowStatusUnavailable, "", "the exact live transcript could not be read", false)
-				d.publishFact(FactSessionAssistantWindowChanged, w.sessionID, nil)
+				d.publishFact(FactSessionAssistantWindowChanged, string(w.sessionID), nil)
 				return
 			}
 			w.behavior.Reset()
@@ -589,7 +589,7 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 		if err != nil {
 			d.logf("transcript watcher: transcript unavailable, rediscovering session=%s path=%s err=%v", w.sessionID, transcriptPath, err)
 			w.resetSource(protocol.SessionMessageWindowStatusUnavailable, "", "the exact live transcript became unavailable", false)
-			d.publishFact(FactSessionAssistantWindowChanged, w.sessionID, nil)
+			d.publishFact(FactSessionAssistantWindowChanged, string(w.sessionID), nil)
 			transcriptPath = ""
 			follower = nil
 			usageTracker = nil
@@ -609,13 +609,13 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 			if errors.Is(readErr, transcript.ErrCursorMismatch) || errors.Is(readErr, transcript.ErrCursorPastEnd) {
 				d.logf("transcript watcher: transcript replaced session=%s path=%s", w.sessionID, transcriptPath)
 				w.resetSource(protocol.SessionMessageWindowStatusUnavailable, "", "the exact live transcript was replaced", false)
-				d.publishFact(FactSessionAssistantWindowChanged, w.sessionID, nil)
+				d.publishFact(FactSessionAssistantWindowChanged, string(w.sessionID), nil)
 				return
 			}
 			if readErr != nil {
 				d.logf("transcript watcher: read delta error session=%s path=%s err=%v", w.sessionID, transcriptPath, readErr)
 				w.resetSource(protocol.SessionMessageWindowStatusUnavailable, "", "the exact live transcript could not be read", false)
-				d.publishFact(FactSessionAssistantWindowChanged, w.sessionID, nil)
+				d.publishFact(FactSessionAssistantWindowChanged, string(w.sessionID), nil)
 				return
 			}
 
@@ -675,7 +675,7 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 			readFileInfo = info
 		}
 		if windowChanged {
-			d.publishFact(FactSessionAssistantWindowChanged, w.sessionID, nil)
+			d.publishFact(FactSessionAssistantWindowChanged, string(w.sessionID), nil)
 		}
 		if usageSettled && usageTracker != nil {
 			usageTracker.Reconcile()

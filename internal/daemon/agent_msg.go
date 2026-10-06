@@ -41,7 +41,7 @@ func agentMessageGuardVerdict(counts inbox.PeerGuardCounts) string {
 }
 
 func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
-	sender, errCode := d.resolveSessionByIDOrPrefix(msg.SourceSessionID)
+	sender, errCode := d.resolveSessionByIDOrPrefix(string(msg.SourceSessionID))
 	if sender == nil {
 		d.sendError(conn, "sender_"+errCode)
 		return
@@ -62,14 +62,14 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 		return
 	}
 
-	targetRef := msg.TargetSessionID
+	targetRef := protocol.SessionID(msg.TargetSessionID)
 	var address inbox.Address
 	if seedID := strings.TrimSpace(protocol.Deref(msg.TargetSeedID)); seedID != "" {
 		if err := d.requireSeedInProfile(seedID, sender.ProfileID, false); err != nil {
 			d.replyAgentMsgError(conn, "cross_profile", err.Error())
 			return
 		}
-		if strings.TrimSpace(targetRef) != "" {
+		if protocol.TrimID(targetRef) != "" {
 			d.replyAgentMsgError(conn, "ambiguous_target", "a message goes to one place; name a session or a seed, not both")
 			return
 		}
@@ -86,9 +86,9 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 	} else {
 		// A target in another profile is answered exactly like an unknown one.
 		notFound := func() {
-			d.replyAgentMsgError(conn, "session_or_crew_member_not_found", fmt.Sprintf("no session or crew member matches %q; `attn agent list` names sessions and `attn crew list` names members", strings.TrimSpace(targetRef)))
+			d.replyAgentMsgError(conn, "session_or_crew_member_not_found", fmt.Sprintf("no session or crew member matches %q; `attn agent list` names sessions and `attn crew list` names members", protocol.TrimID(targetRef)))
 		}
-		member, found, memberErr := d.resolveCrewMember(targetRef)
+		member, found, memberErr := d.resolveCrewMember(string(targetRef))
 		if found {
 			if d.crewProfileID(member.ID) != sender.ProfileID {
 				notFound()
@@ -96,7 +96,7 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 			}
 			address = inbox.ToMember(member.ID)
 		} else {
-			target, code := d.resolveSessionByIDOrPrefix(targetRef)
+			target, code := d.resolveSessionByIDOrPrefix(string(targetRef))
 			if target == nil {
 				if memberErr != nil {
 					d.sendError(conn, memberErr.Error())
@@ -201,9 +201,9 @@ func sessionDisplayName(session *protocol.Session) string {
 	return shortSessionID(session.ID)
 }
 
-func shortSessionID(id string) string {
+func shortSessionID(id protocol.SessionID) string {
 	if len(id) <= agentShortIDLength {
-		return id
+		return string(id)
 	}
-	return id[:agentShortIDLength]
+	return string(id[:agentShortIDLength])
 }

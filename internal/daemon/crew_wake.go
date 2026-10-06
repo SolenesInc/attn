@@ -213,9 +213,9 @@ func (d *Daemon) crewWakeAskedFor(msg *protocol.CrewWakeMessage, userStarted boo
 	return d.crewWakeDayWithChargeLocked(name, strings.TrimSpace(strings.ToLower(protocol.Deref(msg.Agent))), false, nil, request)
 }
 
-func (d *Daemon) refuseCrossProfileWake(name, askedProfileID, sourceSessionID string) error {
+func (d *Daemon) refuseCrossProfileWake(name string, askedProfileID string, sourceSessionID protocol.SessionID) error {
 	askedProfileID = strings.TrimSpace(askedProfileID)
-	if sourceSessionID = strings.TrimSpace(sourceSessionID); sourceSessionID != "" {
+	if sourceSessionID = protocol.TrimID(sourceSessionID); sourceSessionID != "" {
 		profile, err := d.callerProfile(sourceSessionID)
 		if err != nil {
 			return err
@@ -293,8 +293,8 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 	if err != nil {
 		return nil, err
 	}
-	releasedSessionID := d.takeCrewExitedSession(member.ID)
-	if boundSessionID := strings.TrimSpace(member.BindingSession); boundSessionID != "" {
+	releasedSessionID := protocol.SessionID(d.takeCrewExitedSession(member.ID))
+	if boundSessionID := protocol.TrimID(member.BindingSession); boundSessionID != "" {
 		live, err := d.crewSessionActuallyLive(boundSessionID)
 		if err != nil {
 			return nil, fmt.Errorf("check %s's bound session %s: %w", crew.DisplayName(member.ID), shortSessionID(boundSessionID), err)
@@ -341,7 +341,7 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 		}
 	}
 
-	sessionID := uuid.NewString()
+	sessionID := protocol.SessionID(uuid.NewString())
 	if _, err := d.claimCrewBinding(member.ID, sessionID); err != nil {
 		return nil, err
 	}
@@ -384,7 +384,7 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 	return result, nil
 }
 
-func (d *Daemon) crewSessionActuallyLive(sessionID string) (bool, error) {
+func (d *Daemon) crewSessionActuallyLive(sessionID protocol.SessionID) (bool, error) {
 	if d.store == nil || d.store.Get(sessionID) == nil {
 		return false, nil
 	}
@@ -403,7 +403,7 @@ func (d *Daemon) crewSessionActuallyLive(sessionID string) (bool, error) {
 }
 
 func (d *Daemon) handleCrewPrime(conn net.Conn, msg *protocol.CrewPrimeMessage) {
-	sessionID := strings.TrimSpace(msg.SessionID)
+	sessionID := protocol.TrimID(msg.SessionID)
 	if err := d.requireHome(crew.Surface); err != nil {
 		d.sendCrewError(conn, "prime", err)
 		return
@@ -423,7 +423,7 @@ func (d *Daemon) handleCrewPrime(conn net.Conn, msg *protocol.CrewPrimeMessage) 
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewPrimeResult: result})
 }
 
-func (d *Daemon) crewPrimeForSession(sessionID string) (crew.Member, string, bool, error) {
+func (d *Daemon) crewPrimeForSession(sessionID protocol.SessionID) (crew.Member, string, bool, error) {
 	if sessionID == "" || d.store == nil {
 		return crew.Member{}, "", false, nil
 	}

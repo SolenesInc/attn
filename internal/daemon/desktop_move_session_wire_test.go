@@ -28,7 +28,7 @@ func TestASessionMovesItselfAndItsDelegatesBetweenDesktops(t *testing.T) {
 	id = uuid.NewString()
 	web := mustProfileRequest(app, protocol.DesktopCreateMessage{Cmd: protocol.CmdDesktopCreate, RequestID: id, ProfileID: profile, Name: protocol.Ptr("Web")}, id).Desktops[0]
 	w.Spawn(app, fakeagent.Codex, w.Path("web-anchor"))
-	focusAgent(t, w, app, s.ID)
+	focusAgent(t, w, app, string(s.ID))
 
 	arrangement := func(when string, holds func(map[string]protocol.Desktop) bool) (protocol.ProfileArrangementChangedMessage, map[string]protocol.Desktop) {
 		t.Helper()
@@ -47,7 +47,7 @@ func TestASessionMovesItselfAndItsDelegatesBetweenDesktops(t *testing.T) {
 	}
 	holding := func(desktop protocol.Desktop, session string) bool {
 		for _, pane := range desktop.Panes {
-			if pane.SessionID == session {
+			if string(pane.SessionID) == session {
 				return true
 			}
 		}
@@ -55,18 +55,18 @@ func TestASessionMovesItselfAndItsDelegatesBetweenDesktops(t *testing.T) {
 	}
 	move := func(caller, session, ref string) *protocol.DesktopMoveSessionResult {
 		t.Helper()
-		result, err := cli.MoveSessionToDesktop(caller, session, ref)
+		result, err := cli.MoveSessionToDesktop(protocol.SessionID(caller), protocol.SessionID(session), ref)
 		if err != nil {
 			t.Fatalf("moving %s to %q as %q: %v", session, ref, caller, err)
 		}
 		return result
 	}
 
-	moved := move(s.ID, s.ID, fmt.Sprint(protocol.Deref(ops.ShortcutSlot)))
+	moved := move(string(s.ID), string(s.ID), fmt.Sprint(protocol.Deref(ops.ShortcutSlot)))
 	if moved.DesktopID != ops.ID || protocol.Deref(moved.FromDesktopID) != home {
 		t.Errorf("by digit, the move reports %+v; want from %s to Ops %s", moved, home, ops.ID)
 	}
-	event, desktops := arrangement("a session moving itself onto an empty desktop", func(d map[string]protocol.Desktop) bool { return holding(d[ops.ID], s.ID) })
+	event, desktops := arrangement("a session moving itself onto an empty desktop", func(d map[string]protocol.Desktop) bool { return holding(d[ops.ID], string(s.ID)) })
 	if event.MovedLeaf == nil {
 		event = testworld.Await(app, protocol.EventProfileArrangementChanged, func(e protocol.ProfileArrangementChangedMessage) bool { return e.MovedLeaf != nil })
 	}
@@ -80,14 +80,14 @@ func TestASessionMovesItselfAndItsDelegatesBetweenDesktops(t *testing.T) {
 		t.Errorf("the broadcast names the moved leaf %+v; want %s to %s as %s", m, home, ops.ID, moved.PaneID)
 	}
 
-	moved = move(tt.ID, tt.ID, "oPs")
-	_, desktops = arrangement("the shown pane moving itself by name", func(d map[string]protocol.Desktop) bool { return holding(d[ops.ID], tt.ID) })
+	moved = move(string(tt.ID), string(tt.ID), "oPs")
+	_, desktops = arrangement("the shown pane moving itself by name", func(d map[string]protocol.Desktop) bool { return holding(d[ops.ID], string(tt.ID)) })
 	if desktops[ops.ID].ActivePaneID != moved.PaneID {
 		t.Errorf("the pane that was shown moved, but Ops shows %q; want it, %s", desktops[ops.ID].ActivePaneID, moved.PaneID)
 	}
 
-	move(s.ID, s.ID, web.ID)
-	arrangement("a session moving itself by id", func(d map[string]protocol.Desktop) bool { return holding(d[web.ID], s.ID) })
+	move(string(s.ID), string(s.ID), web.ID)
+	arrangement("a session moving itself by id", func(d map[string]protocol.Desktop) bool { return holding(d[web.ID], string(s.ID)) })
 
 	request := brief(cwd, "Watch the deploy")
 	request.Agent, request.SourceSessionID, request.Label, request.Desktop = protocol.Ptr("codex"), protocol.Ptr(s.ID), protocol.Ptr("watcher"), protocol.Ptr("web")
@@ -95,16 +95,16 @@ func TestASessionMovesItselfAndItsDelegatesBetweenDesktops(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := move(s.ID, delegate.SessionID, "web"); !protocol.Deref(got.Unchanged) {
+	if got := move(string(s.ID), string(delegate.SessionID), "web"); !protocol.Deref(got.Unchanged) {
 		t.Errorf("moving a delegate onto the desktop it is on reports %+v; want unchanged", got)
 	}
 	_, err = cli.MoveSessionToDesktop(tt.ID, delegate.SessionID, "ops")
 	if err == nil || !strings.Contains(err.Error(), "may move itself, the sessions it dispatched") {
 		t.Errorf("a session moving another's delegate was answered %v; want a refusal naming who may move it", err)
 	}
-	move(s.ID, delegate.SessionID, "ops")
-	_, desktops = arrangement("a dispatcher moving its delegate", func(d map[string]protocol.Desktop) bool { return holding(d[ops.ID], delegate.SessionID) })
-	if desktops[ops.ID].ActivePaneID == protocol.Deref(delegate.PaneID) || !holding(desktops[ops.ID], tt.ID) {
+	move(string(s.ID), string(delegate.SessionID), "ops")
+	_, desktops = arrangement("a dispatcher moving its delegate", func(d map[string]protocol.Desktop) bool { return holding(d[ops.ID], string(delegate.SessionID)) })
+	if desktops[ops.ID].ActivePaneID == protocol.Deref(delegate.PaneID) || !holding(desktops[ops.ID], string(tt.ID)) {
 		t.Errorf("a pane that was not shown moved onto Ops and took its active pane %q", desktops[ops.ID].ActivePaneID)
 	}
 
@@ -114,16 +114,16 @@ func TestASessionMovesItselfAndItsDelegatesBetweenDesktops(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	move("", loose.SessionID, "3")
-	arrangement("the user placing an unplaced session", func(d map[string]protocol.Desktop) bool { return holding(d[web.ID], loose.SessionID) })
+	move("", string(loose.SessionID), "3")
+	arrangement("the user placing an unplaced session", func(d map[string]protocol.Desktop) bool { return holding(d[web.ID], string(loose.SessionID)) })
 
 	residentSession, _, resident := w.RequestSpawn(app, fakeagent.Codex, cwd, func(m *protocol.SpawnSessionMessage) {
 		m.Label = protocol.Ptr("resident")
 		m.Placement = &protocol.SessionPlacement{DesktopID: protocol.Ptr(home)}
 	})
-	move(s.ID, s.ID, "1")
+	move(string(s.ID), string(s.ID), "1")
 	_, desktops = arrangement("the shown pane of a background desktop moving onto the one the user sees", func(d map[string]protocol.Desktop) bool {
-		return holding(d[home], s.ID) && holding(d[home], residentSession.ID)
+		return holding(d[home], string(s.ID)) && holding(d[home], string(residentSession.ID))
 	})
 	if desktops[home].ActivePaneID != resident {
 		t.Errorf("a pane arriving on the desktop the user sees took its active pane %q; want %s, unchanged", desktops[home].ActivePaneID, resident)
@@ -134,7 +134,7 @@ func TestASessionMovesItselfAndItsDelegatesBetweenDesktops(t *testing.T) {
 		t.Errorf("an unknown desktop was answered %v; want a refusal listing the desktops", err)
 	}
 
-	sessions := []string{s.ID, tt.ID, delegate.SessionID, loose.SessionID, residentSession.ID}
+	sessions := []string{string(s.ID), string(tt.ID), string(delegate.SessionID), string(loose.SessionID), string(residentSession.ID)}
 	for _, id := range sessions {
 		closeSessionPane(app, id)
 	}

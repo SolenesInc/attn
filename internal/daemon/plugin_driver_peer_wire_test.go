@@ -83,8 +83,12 @@ func connectDriver(t *testing.T, w *world, name, agent string, capabilities map[
 }
 
 func dialDriver(t *testing.T, w *world, name string) *driverPeer {
+	return dialDriverAt(t, w.DialUnix, name)
+}
+
+func dialDriverAt(t *testing.T, dial func() (net.Conn, error), name string) *driverPeer {
 	t.Helper()
-	conn, err := w.DialUnix()
+	conn, err := dial()
 	if err != nil {
 		t.Fatalf("plugin %s dials the daemon: %v", name, err)
 	}

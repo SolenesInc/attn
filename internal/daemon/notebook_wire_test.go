@@ -180,7 +180,7 @@ func TestTheNotebookGuideScaffoldsOnlyForTheChief(t *testing.T) {
 			root := fsNotebookRoot(t, w)
 
 			worker := w.Spawn(app, c.agent, w.Path("worker"))
-			if guide, err := cli.NotebookGuide(worker); err != nil || guide.SessionIsChief || guide.Guidance == "" || guide.Root != root {
+			if guide, err := cli.NotebookGuide(protocol.SessionID(worker)); err != nil || guide.SessionIsChief || guide.Guidance == "" || guide.Root != root {
 				t.Fatalf("a worker's guide = %+v, %v; want guidance under %s without the chief's role", guide, err, root)
 			}
 			if listed := notebookAskList(app, ""); len(listed.Entries) != 0 {
@@ -188,7 +188,7 @@ func TestTheNotebookGuideScaffoldsOnlyForTheChief(t *testing.T) {
 			}
 
 			chief := w.Spawn(app, c.agent, w.Path("chief"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
-			guide, err := cli.NotebookGuide(chief)
+			guide, err := cli.NotebookGuide(protocol.SessionID(chief))
 			if err != nil || !guide.SessionIsChief || guide.Root != root {
 				t.Fatalf("the chief's guide = %+v, %v; want the chief's guidance under %s", guide, err, root)
 			}
@@ -257,7 +257,7 @@ func TestSendToChiefAppendsToTheInboxAndRingsOnlyAReadyChief(t *testing.T) {
 		t.Fatalf("send covered by the outstanding ring=%+v, want nudged", covered)
 	}
 	wantPrompt := prompts.RenderText("chief", "inbox", prompts.Values{"inbox_path": filepath.Join(root, "inbox.md")})
-	if mail, err := cli.AgentInboxBatch(chief, 0); err != nil || len(mail.Items) != 2 || mail.Items[0].Content != wantPrompt || mail.Items[1].Content != wantPrompt {
+	if mail, err := cli.AgentInboxBatch(protocol.SessionID(chief), 0); err != nil || len(mail.Items) != 2 || mail.Items[0].Content != wantPrompt || mail.Items[1].Content != wantPrompt {
 		t.Fatalf("the chief's inbox = %+v, %v; want both selections covered by the same ring", mail, err)
 	}
 	if inbox := notebookAskRead(app, "inbox.md"); inbox.Result == nil || !strings.Contains(inbox.Result.Content, "> remember this decision") || !strings.Contains(inbox.Result.Content, "(/knowledge/index.md)") {
@@ -271,11 +271,11 @@ func TestSendToChiefAppendsToTheInboxAndRingsOnlyAReadyChief(t *testing.T) {
 	if got := agent.Prompted(); !strings.Contains(got, inboxDoorbell) {
 		t.Fatalf("when the chief went idle it was prompted with %q, want the queued doorbell", got)
 	}
-	if mail, err := cli.AgentInboxBatch(chief, 0); err != nil || len(mail.Items) != 1 || mail.Items[0].Content != wantPrompt {
+	if mail, err := cli.AgentInboxBatch(protocol.SessionID(chief), 0); err != nil || len(mail.Items) != 1 || mail.Items[0].Content != wantPrompt {
 		t.Fatalf("the chief's inbox after the queued doorbell = %+v, %v; want the inbox prompt", mail, err)
 	}
 
-	if err := cli.RecordNotification(chief, "permission_prompt", "Allow edit?"); err != nil {
+	if err := cli.RecordNotification(protocol.TerminalID(w.Terminal(chief)), "permission_prompt", "Allow edit?"); err != nil {
 		t.Fatal(err)
 	}
 	testworld.AwaitSession(app, chief, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })

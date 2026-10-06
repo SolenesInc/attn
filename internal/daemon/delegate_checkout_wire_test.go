@@ -56,7 +56,7 @@ func TestADelegatedWorktreeStartsFromTheExactBaseWhereItWasAsked(t *testing.T) {
 		wantDirectory, head string
 		wantDesktop         string
 	}{
-		{name: "from the caller's checkout", source: source, cwd: repo, checkout: delegateNewWorktree("feature/a", "base"),
+		{name: "from the caller's checkout", source: string(source), cwd: repo, checkout: delegateNewWorktree("feature/a", "base"),
 			wantDirectory: filepath.Join(root, "shop--feature-a"), head: base, wantDesktop: sourceDesktop},
 		{name: "from a subdirectory, on a stale remote ref", cwd: filepath.Join(repo, "web"), checkout: delegateNewWorktree("feature/b", "origin/main"),
 			wantDirectory: filepath.Join(root, "shop--feature-b", "web"), head: local},
@@ -66,7 +66,7 @@ func TestADelegatedWorktreeStartsFromTheExactBaseWhereItWasAsked(t *testing.T) {
 	} {
 		request := delegateCheckoutAt(row.cwd, row.checkout)
 		if row.source != "" {
-			request.SourceSessionID = protocol.Ptr(row.source)
+			request.SourceSessionID = protocol.Ptr(protocol.SessionID(row.source))
 			request.Label = protocol.Ptr("discount")
 		}
 		result, err := cli.Delegate(request)
@@ -191,7 +191,7 @@ func TestADelegationNeverSharesACheckoutWithoutConsent(t *testing.T) {
 		{name: "creating the occupied worktree again, consenting to share", request: delegateCheckoutAt(repo, recreate), consent: true,
 			refusal: "cannot be reinterpreted as checkout reuse"},
 		{name: "reusing the occupied worktree", request: delegateCheckoutAt(shared, reuse),
-			refusal: "checkout " + shared + " is used by active Attn session " + owner.SessionID + "; pass --allow-worktree-reuse"},
+			refusal: "checkout " + shared + " is used by active Attn session " + string(owner.SessionID) + "; pass --allow-worktree-reuse"},
 		{name: "reusing a folder inside the occupied worktree", request: delegateCheckoutAt(nested, reuse),
 			refusal: "checkout " + shared + " is used by active Attn session"},
 		{name: "reusing the occupied worktree, consenting to share", request: delegateCheckoutAt(shared, reuse), consent: true, sharedIn: shared},
@@ -233,11 +233,11 @@ func TestADelegateStillBootingHoldsItsCheckoutAgainstAnother(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	testworld.AwaitSession(app, accepted.SessionID, func(protocol.Session) bool { return true })
+	testworld.AwaitSession(app, string(accepted.SessionID), func(protocol.Session) bool { return true })
 
 	second := delegateCheckoutAt(repo, reuseMain)
 	second.Label = protocol.Ptr("second")
-	if result, err := cli.Delegate(second); err == nil || !strings.Contains(err.Error(), "checkout "+repo+" is used by active Attn session "+accepted.SessionID) {
+	if result, err := cli.Delegate(second); err == nil || !strings.Contains(err.Error(), "checkout "+repo+" is used by active Attn session "+string(accepted.SessionID)) {
 		t.Errorf("a second delegation into the checkout the first is still launching in = %+v, %v; want it refused", result, err)
 	}
 	boot()

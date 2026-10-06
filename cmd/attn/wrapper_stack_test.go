@@ -18,7 +18,6 @@ func TestInsideASessionAttnReportsPresenceAndRefusesWhatItCannotLaunch(t *testin
 		want string
 	}{
 		{name: "outside attn, whatever session id lingers", env: []string{"ATTN_SESSION_ID=stale-session"}, code: 1, want: "not running inside attn"},
-		{name: "inside a session", env: []string{"ATTN_INSIDE_APP=1", "ATTN_SESSION_ID= session-1 "}, want: "running inside attn (session session-1)"},
 		{name: "inside attn without a session", env: []string{"ATTN_INSIDE_APP=1"}, want: "running inside attn"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

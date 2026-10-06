@@ -6,7 +6,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (c *Client) SeedPlant(sessionID, title, body, partOf, discoveredFrom, member string) (*protocol.SeedPlantResult, error) {
+func (c *Client) SeedPlant(sessionID protocol.SessionID, title string, body string, partOf string, discoveredFrom string, member string) (*protocol.SeedPlantResult, error) {
 	msg := protocol.SeedPlantMessage{Cmd: protocol.CmdSeedPlant, Title: title}
 	if sessionID != "" {
 		msg.SourceSessionID = protocol.Ptr(sessionID)
@@ -33,7 +33,7 @@ func (c *Client) SeedPlant(sessionID, title, body, partOf, discoveredFrom, membe
 	return resp.SeedPlantResult, nil
 }
 
-func (c *Client) SeedSearch(sessionID, query string, limit int) (*protocol.SeedSearchResult, error) {
+func (c *Client) SeedSearch(sessionID protocol.SessionID, query string, limit int) (*protocol.SeedSearchResult, error) {
 	msg := protocol.SeedSearchMessage{Cmd: protocol.CmdSeedSearch, Query: query}
 	if sessionID != "" {
 		msg.SourceSessionID = protocol.Ptr(sessionID)
@@ -51,7 +51,7 @@ func (c *Client) SeedSearch(sessionID, query string, limit int) (*protocol.SeedS
 	return resp.SeedSearchResult, nil
 }
 
-func (c *Client) SeedList(sessionID string, stale bool, staleWindowSeconds int) (*protocol.SeedListResult, error) {
+func (c *Client) SeedList(sessionID protocol.SessionID, stale bool, staleWindowSeconds int) (*protocol.SeedListResult, error) {
 	msg := protocol.SeedListMessage{Cmd: protocol.CmdSeedList}
 	if sessionID != "" {
 		msg.SourceSessionID = protocol.Ptr(sessionID)
@@ -72,7 +72,7 @@ func (c *Client) SeedList(sessionID string, stale bool, staleWindowSeconds int) 
 	return resp.SeedListResult, nil
 }
 
-func (c *Client) SeedShow(sessionID, seedID string) (*protocol.SeedShowResult, error) {
+func (c *Client) SeedShow(sessionID protocol.SessionID, seedID string) (*protocol.SeedShowResult, error) {
 	msg := protocol.SeedShowMessage{Cmd: protocol.CmdSeedShow, SeedID: seedID}
 	if sessionID != "" {
 		msg.SourceSessionID = protocol.Ptr(sessionID)
@@ -153,7 +153,7 @@ func (c *Client) SeedReviewKeep(seedID string, review protocol.SeedReviewActionC
 }
 
 func (c *Client) SeedSendToChief(
-	sessionID string,
+	sessionID protocol.SessionID,
 	document protocol.Seed,
 	guidance string,
 ) (*protocol.SeedSendToChiefResult, error) {
@@ -178,7 +178,7 @@ func (c *Client) SeedSendToChief(
 	return resp.SeedSendToChiefResult, nil
 }
 
-func (c *Client) SeedArtifactTransfer(sessionID, seedID, operation, sourcePath, filename, destinationPath string, legacy *protocol.SeedArtifactReference) (*protocol.SeedArtifactTransferResult, error) {
+func (c *Client) SeedArtifactTransfer(sessionID protocol.SessionID, seedID string, operation string, sourcePath string, filename string, destinationPath string, legacy *protocol.SeedArtifactReference) (*protocol.SeedArtifactTransferResult, error) {
 	msg := protocol.SeedArtifactTransferMessage{
 		Cmd: protocol.CmdSeedArtifactTransfer, SeedID: seedID, Operation: operation,
 		LegacyReference: legacy,
@@ -222,7 +222,7 @@ type SeedTransitionOptions struct {
 	ClearHarvestWhen bool
 }
 
-func (c *Client) SeedTransition(sessionID, seedID, verb, reason, member string, force bool, opts SeedTransitionOptions) (*protocol.SeedTransitionResult, error) {
+func (c *Client) SeedTransition(sessionID protocol.SessionID, seedID string, verb string, reason string, member string, force bool, opts SeedTransitionOptions) (*protocol.SeedTransitionResult, error) {
 	msg := protocol.SeedTransitionMessage{Cmd: protocol.CmdSeedTransition, SeedID: seedID, Verb: verb}
 	if opts.WhenMerged {
 		merged := protocol.SeedHarvestWhenMerged{}
@@ -260,7 +260,7 @@ func (c *Client) SeedTransition(sessionID, seedID, verb, reason, member string, 
 	return resp.SeedTransitionResult, nil
 }
 
-func (c *Client) SeedNote(sessionID, seedID, body, member, kind string, ring bool, artifact *protocol.SeedArtifactReference) (*protocol.SeedNoteResult, error) {
+func (c *Client) SeedNote(sessionID protocol.SessionID, seedID string, body string, member string, kind string, ring bool, artifact *protocol.SeedArtifactReference) (*protocol.SeedNoteResult, error) {
 	msg := protocol.SeedNoteMessage{Cmd: protocol.CmdSeedNote, SeedID: seedID, Body: body, Artifact: artifact}
 	if sessionID != "" {
 		msg.SourceSessionID = protocol.Ptr(sessionID)
@@ -301,7 +301,7 @@ func (c *Client) SeedLink(seedID, kind, toSeedID string, unlink bool) (*protocol
 	return resp.SeedLinkResult, nil
 }
 
-func (c *Client) SeedReady(sessionID, plot string, all bool) (*protocol.SeedReadyResult, error) {
+func (c *Client) SeedReady(sessionID protocol.SessionID, plot string, all bool) (*protocol.SeedReadyResult, error) {
 	msg := protocol.SeedReadyMessage{Cmd: protocol.CmdSeedReady}
 	if sessionID != "" {
 		msg.SourceSessionID = protocol.Ptr(sessionID)
@@ -322,7 +322,7 @@ func (c *Client) SeedReady(sessionID, plot string, all bool) (*protocol.SeedRead
 	return resp.SeedReadyResult, nil
 }
 
-func (c *Client) SeedNotes(sessionID, seedID string, limit int) (*protocol.SeedNotesResult, error) {
+func (c *Client) SeedNotes(sessionID protocol.SessionID, seedID string, limit int) (*protocol.SeedNotesResult, error) {
 	msg := protocol.SeedNotesMessage{Cmd: protocol.CmdSeedNotes, SeedID: seedID}
 	if sessionID != "" {
 		msg.SourceSessionID = protocol.Ptr(sessionID)
@@ -340,7 +340,7 @@ func (c *Client) SeedNotes(sessionID, seedID string, limit int) (*protocol.SeedN
 	return resp.SeedNotesResult, nil
 }
 
-func (c *Client) SeedWatch(sessionID, seedID string, unwatch bool) (*protocol.SeedWatchResult, error) {
+func (c *Client) SeedWatch(sessionID protocol.SessionID, seedID string, unwatch bool) (*protocol.SeedWatchResult, error) {
 	msg := protocol.SeedWatchMessage{
 		Cmd: protocol.CmdSeedWatch, SourceSessionID: sessionID, SeedID: seedID,
 	}
@@ -357,7 +357,7 @@ func (c *Client) SeedWatch(sessionID, seedID string, unwatch bool) (*protocol.Se
 	return resp.SeedWatchResult, nil
 }
 
-func (c *Client) SeedPlot(sessionID, member string, spec protocol.SeedPlotMessage) (*protocol.SeedPlotResult, error) {
+func (c *Client) SeedPlot(sessionID protocol.SessionID, member string, spec protocol.SeedPlotMessage) (*protocol.SeedPlotResult, error) {
 	spec.Cmd = protocol.CmdSeedPlot
 	if sessionID != "" {
 		spec.SourceSessionID = protocol.Ptr(sessionID)

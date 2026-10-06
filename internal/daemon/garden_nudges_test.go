@@ -46,12 +46,12 @@ func newSeededNudgeGarden(t *testing.T) seededNudgeGarden {
 	addGardenSession(t, d, "sess-b")
 	addGardenSession(t, d, "sess-c")
 	addGardenSession(t, d, "sess-d")
-	crown := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "ship seed nudges"})
+	crown := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr(protocol.SessionID("sess-a")), Title: "ship seed nudges"})
 	child := plant(t, d, protocol.SeedPlantMessage{
-		SourceSessionID: protocol.Ptr("sess-a"), Title: "daemon mechanics", PartOf: protocol.Ptr(crown.ID),
+		SourceSessionID: protocol.Ptr(protocol.SessionID("sess-a")), Title: "daemon mechanics", PartOf: protocol.Ptr(crown.ID),
 	})
 	leaf := plant(t, d, protocol.SeedPlantMessage{
-		SourceSessionID: protocol.Ptr("sess-a"), Title: "delivery proof", PartOf: protocol.Ptr(child.ID),
+		SourceSessionID: protocol.Ptr(protocol.SessionID("sess-a")), Title: "delivery proof", PartOf: protocol.Ptr(child.ID),
 	})
 	return seededNudgeGarden{d: d, crown: crown, child: child, leaf: leaf}
 }
@@ -59,7 +59,7 @@ func newSeededNudgeGarden(t *testing.T) seededNudgeGarden {
 func watchSeed(t *testing.T, d *Daemon, sessionID, seedID string, unwatch bool) *protocol.SeedWatchResult {
 	t.Helper()
 	msg := protocol.SeedWatchMessage{
-		Cmd: protocol.CmdSeedWatch, SourceSessionID: sessionID, SeedID: seedID,
+		Cmd: protocol.CmdSeedWatch, SourceSessionID: protocol.SessionID(sessionID), SeedID: seedID,
 	}
 	if unwatch {
 		msg.Unwatch = protocol.Ptr(true)
@@ -73,7 +73,7 @@ func watchSeed(t *testing.T, d *Daemon, sessionID, seedID string, unwatch bool) 
 
 func queuedSeedBells(t *testing.T, d *Daemon, sessionID string) []string {
 	t.Helper()
-	messages, err := d.store.UnreadInboxDeliveries(inbox.ToSession(sessionID))
+	messages, err := d.store.UnreadInboxDeliveries(inbox.ToSession(protocol.SessionID(sessionID)))
 	if err != nil {
 		t.Fatalf("queued bells for %s: %v", sessionID, err)
 	}

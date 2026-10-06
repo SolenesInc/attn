@@ -34,7 +34,7 @@ func TestASessionsPullRequestsComeBackNewestFirstAndOncePerSession(t *testing.T)
 		t.Errorf("second session's pull requests = %v, want [1]", got)
 	}
 
-	if err := cli.ForgetSessionPullRequest(s1, shopPull(1)); err != nil {
+	if err := cli.ForgetSessionPullRequest(protocol.SessionID(s1), shopPull(1)); err != nil {
 		t.Fatalf("forget: %v", err)
 	}
 	testworld.AwaitSession(app, s1, func(s protocol.Session) bool { return slices.Equal(pullNumbers(s), []int{2}) })
@@ -79,7 +79,7 @@ func shopPull(number int) string {
 
 func recordPullRequest(t *testing.T, cli *client.Client, session, url string) {
 	t.Helper()
-	if err := cli.RecordPullRequestCreated(session, url); err != nil {
+	if err := cli.RecordPullRequestCreated(protocol.SessionID(session), url); err != nil {
 		t.Fatalf("%s records %s: %v", session, url, err)
 	}
 }
@@ -95,7 +95,7 @@ func pullNumbers(s protocol.Session) []int {
 func armWhenMerged(t *testing.T, cli *client.Client, session, seed, url string) {
 	t.Helper()
 	opts := client.SeedTransitionOptions{WhenMerged: true, PullRequestURL: url}
-	if _, err := cli.SeedTransition(session, seed, "harvest", "", "", false, opts); err != nil {
+	if _, err := cli.SeedTransition(protocol.SessionID(session), seed, "harvest", "", "", false, opts); err != nil {
 		t.Fatalf("arm %s on %s: %v", seed, url, err)
 	}
 }

@@ -1,8 +1,9 @@
 package daemon
 
 import (
-	"github.com/victorarias/attn/internal/bus"
 	"time"
+
+	"github.com/victorarias/attn/internal/bus"
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/protocol"

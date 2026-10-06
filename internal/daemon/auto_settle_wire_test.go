@@ -48,7 +48,7 @@ func TestAutoSettleArmsCountsDownAndSettlesTheTurn(t *testing.T) {
 
 				w.advance(tc.countFor / 3)
 				for range 3 {
-					if err := cli.UpdateState("s1", protocol.StateWorking); err != nil {
+					if err := cli.UpdateState(protocol.TerminalID(app.Terminal("s1")), protocol.StateWorking); err != nil {
 						t.Fatalf("report working again: %v", err)
 					}
 				}
@@ -118,13 +118,13 @@ func TestAnInterruptedCountdownVanishesAndOnlyASettleClosesTheTurn(t *testing.T)
 		wantState protocol.SessionState
 		wantOwed  bool
 	}{
-		{"the agent asks a question", func(t *testing.T, _ *testworld.Peer, cli *client.Client) {
-			if err := cli.UpdateState("s1", protocol.StateWaitingInput); err != nil {
+		{"the agent asks a question", func(t *testing.T, app *testworld.Peer, cli *client.Client) {
+			if err := cli.UpdateState(protocol.TerminalID(app.Terminal("s1")), protocol.StateWaitingInput); err != nil {
 				t.Fatalf("report waiting_input: %v", err)
 			}
 		}, protocol.SessionStateWaitingInput, true},
-		{"the agent asks for approval", func(t *testing.T, _ *testworld.Peer, cli *client.Client) {
-			if err := cli.RecordNotification("s1", "permission_prompt", "Allow edit?"); err != nil {
+		{"the agent asks for approval", func(t *testing.T, app *testworld.Peer, cli *client.Client) {
+			if err := cli.RecordNotification(protocol.TerminalID(app.Terminal("s1")), "permission_prompt", "Allow edit?"); err != nil {
 				t.Fatalf("notify: %v", err)
 			}
 		}, protocol.SessionStatePendingApproval, true},
@@ -179,7 +179,7 @@ func TestCancellingTheCountdownStandsForTheStretchItAnswers(t *testing.T) {
 				t.Fatalf("after the cancel the app shows fires_at=%q dismiss_armed=%v, want no countdown and the dismissal standing",
 					protocol.Deref(shown.AutoSettleFiresAt), protocol.Deref(shown.AutoSettleDismissArmed))
 			}
-			if err := cli.UpdateState("s1", protocol.StateWorking); err != nil {
+			if err := cli.UpdateState(protocol.TerminalID(app.Terminal("s1")), protocol.StateWorking); err != nil {
 				t.Fatalf("report working again: %v", err)
 			}
 			w.advance(2 * (autoSettleDefaultArm + autoSettleDefaultCountdown))
@@ -196,7 +196,7 @@ func TestCancellingTheCountdownStandsForTheStretchItAnswers(t *testing.T) {
 		inBubble(t, func(t *testing.T, w *world) {
 			app, cli := autoSettleOwingSession(t, w)
 			autoSettleCancel(w, app)
-			if err := cli.UpdateState("s1", protocol.StateWaitingInput); err != nil {
+			if err := cli.UpdateState(protocol.TerminalID(app.Terminal("s1")), protocol.StateWaitingInput); err != nil {
 				t.Fatalf("report waiting_input again: %v", err)
 			}
 			w.advance(0)
@@ -282,7 +282,7 @@ func TestACancelOnAShellArmsNoDismissal(t *testing.T) {
 	setSetting(t, app, "auto_settle_enabled", "true")
 	shell := w.Spawn(app, "shell", w.Path("api"))
 
-	app.Send(protocol.CancelCountdownMessage{Cmd: protocol.CmdCancelCountdown, SessionID: shell})
+	app.Send(protocol.CancelCountdownMessage{Cmd: protocol.CmdCancelCountdown, SessionID: protocol.SessionID(shell)})
 	autoSettleAfterAppCommandsLand(app)
 
 	if armed := queriedSession(t, cli, shell).AutoSettleDismissArmed; armed != nil {
@@ -302,10 +302,10 @@ func TestUserActivityHoldsTheCountdownUntilQuiet(t *testing.T) {
 		touch func(app *testworld.Peer)
 	}{
 		{"typing", func(app *testworld.Peer) {
-			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: "s1", Data: "x"})
+			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(app.Terminal("s1")), Data: "x"})
 		}},
 		{"pointer movement", func(app *testworld.Peer) {
-			app.Send(protocol.TerminalPointerActivityMessage{Cmd: protocol.CmdTerminalPointerActivity, ID: "s1"})
+			app.Send(protocol.TerminalPointerActivityMessage{Cmd: protocol.CmdTerminalPointerActivity, ID: protocol.TerminalID(app.Terminal("s1"))})
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -355,7 +355,7 @@ func TestUserActivityHoldsTheCountdownUntilQuiet(t *testing.T) {
 			app, cli := autoSettleOwingSession(t, w)
 			autoSettleSteer(t, w, app, cli, "fix the flaky test")
 			w.advance(10 * time.Second)
-			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: "s1", Data: "x"})
+			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(app.Terminal("s1")), Data: "x"})
 			typed := time.Now()
 
 			w.advance(autoSettleDefaultArm)
@@ -377,11 +377,11 @@ func TestUserActivityHoldsTheCountdownUntilQuiet(t *testing.T) {
 			app, cli := autoSettleOwingSession(t, w)
 			autoSettleSteer(t, w, app, cli, "fix the flaky test")
 			w.advance(autoSettleDefaultArm)
-			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: "s1", Data: "x"})
+			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(app.Terminal("s1")), Data: "x"})
 			w.advance(0)
 			autoSettleHeld(t, app)
 
-			if err := cli.RecordNotification("s1", "permission_prompt", "Allow edit?"); err != nil {
+			if err := cli.RecordNotification(protocol.TerminalID(app.Terminal("s1")), "permission_prompt", "Allow edit?"); err != nil {
 				t.Fatalf("notify: %v", err)
 			}
 			asking := testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
@@ -399,7 +399,7 @@ func TestUserActivityHoldsTheCountdownUntilQuiet(t *testing.T) {
 			deadline := steered.Add(autoSettleDefaultArm + autoSettleDefaultCountdown)
 			w.advance(autoSettleDefaultArm)
 			for _, source := range []string{"automation", "attach_replay"} {
-				app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: "s1", Data: "x", Source: protocol.Ptr(source)})
+				app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(app.Terminal("s1")), Data: "x", Source: protocol.Ptr(source)})
 				w.advance(time.Second)
 				if shown := sessionStateLastShown(t, app); shown.AutoSettleHeld != nil || !autoSettleFiresAt(t, shown).Equal(deadline) {
 					t.Fatalf("input from %s shows held=%v fires_at=%q, want the countdown to %s untouched",
@@ -468,7 +468,7 @@ func autoSettleOwingSession(t *testing.T, w *world) (*testworld.Peer, *client.Cl
 	if err := w.InjectSession("s1", "s1", w.Path("s1"), protocol.SessionAgentClaude); err != nil {
 		t.Fatalf("register: %v", err)
 	}
-	if err := cli.UpdateState("s1", protocol.StateWaitingInput); err != nil {
+	if err := cli.UpdateState(protocol.TerminalID(app.Terminal("s1")), protocol.StateWaitingInput); err != nil {
 		t.Fatalf("report waiting_input: %v", err)
 	}
 	testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) })
@@ -477,9 +477,9 @@ func autoSettleOwingSession(t *testing.T, w *world) (*testworld.Peer, *client.Cl
 
 func autoSettleSteer(t *testing.T, w *world, app *testworld.Peer, cli *client.Client, prompt string) time.Time {
 	t.Helper()
-	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: "s1", Data: prompt + "\r"})
+	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(app.Terminal("s1")), Data: prompt + "\r"})
 	w.advance(0)
-	if err := cli.UpdateStateFromHookEvidence("s1", protocol.StateWorking, "", "user_prompt_submit", prompt); err != nil {
+	if err := cli.UpdateStateFromHookEvidence(protocol.TerminalID(app.Terminal("s1")), protocol.StateWorking, "", "user_prompt_submit", prompt); err != nil {
 		t.Fatalf("report the prompt taken: %v", err)
 	}
 	w.advance(0)
@@ -491,7 +491,7 @@ func autoSettleSteer(t *testing.T, w *world, app *testworld.Peer, cli *client.Cl
 
 func autoSettleWaitsAndSteersAgain(t *testing.T, w *world, app *testworld.Peer, cli *client.Client) {
 	t.Helper()
-	if err := cli.UpdateState("s1", protocol.StateWaitingInput); err != nil {
+	if err := cli.UpdateState(protocol.TerminalID(app.Terminal("s1")), protocol.StateWaitingInput); err != nil {
 		t.Fatalf("report waiting_input: %v", err)
 	}
 	w.advance(0)

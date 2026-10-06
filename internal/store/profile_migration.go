@@ -243,7 +243,7 @@ func writeMigrationOutcome(tx *sql.Tx, now string, profile *profiles.Profile, cu
 				return err
 			}
 		}
-		if err := writeDesktopArrangement(tx, now, desktop); err != nil {
+		if err := writeCurrentDesktopArrangement(tx, now, desktop); err != nil {
 			return err
 		}
 	}

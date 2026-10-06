@@ -107,7 +107,7 @@ async function main() {
           const desktop = await observer.createDesktop();
           execFileSync(appDaemonInTree(options.appPath), [
             'session', 'move', desktop.id, '--session', sessionId,
-          ], { encoding: 'utf8', env: instanceCliEnv(currentHarnessInstance(), { ATTN_SESSION_ID: agents[0].sessionId }) });
+          ], { encoding: 'utf8', env: instanceCliEnv(currentHarnessInstance(), { ATTN_TERMINAL_ID: observer.terminalOf(agents[0].sessionId) }) });
           await observer.waitFor(() => observer.desktopOf(sessionId)?.id === desktop.id, 'beta moved to its own desktop');
           await client.request('select_session', { sessionId });
           await waitDom(`.session-terminal-desktop[data-desktop-id="${desktop.id}"]`);

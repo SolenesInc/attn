@@ -81,11 +81,11 @@ func classifyVerdict(state string, err error, stop stopClassification) classifyD
 	return classifyDecision{action: classifyApply, state: state, reason: "classifier"}
 }
 
-func (d *Daemon) classifySessionState(sessionID, transcriptPath string) {
+func (d *Daemon) classifySessionState(sessionID protocol.SessionID, transcriptPath string) {
 	d.classifyStop(sessionID, transcriptPath, stopClassification{})
 }
 
-func (d *Daemon) classifyStop(sessionID, transcriptPath string, stop stopClassification) {
+func (d *Daemon) classifyStop(sessionID protocol.SessionID, transcriptPath string, stop stopClassification) {
 	classificationStartTime := time.Now()
 	d.logf("classifySessionState: starting for session=%s, transcript=%s", sessionID, transcriptPath)
 
@@ -118,7 +118,7 @@ func (d *Daemon) classifyStop(sessionID, transcriptPath string, stop stopClassif
 
 	transcriptEnabled := true
 	classifierEnabled := true
-	if driver := agentdriver.Get(string(session.Agent)); driver != nil {
+	if driver := agentdriver.Get(session.Agent); driver != nil {
 		caps := agentdriver.EffectiveCapabilities(driver)
 		transcriptEnabled = caps.HasTranscript
 		classifierEnabled = caps.HasClassifier
@@ -191,11 +191,11 @@ func (d *Daemon) runClassifier(session *protocol.Session, text string, timeout t
 		return d.classifier.Classify(text, timeout)
 	}
 	if session != nil {
-		driver := agentdriver.Get(string(session.Agent))
+		driver := agentdriver.Get(session.Agent)
 		if state, err, ok := agentdriver.ClassifyWithDriver(
 			driver,
 			text,
-			d.store.GetSetting(executableSettingKey(string(session.Agent))),
+			d.store.GetSetting(executableSettingKey(session.Agent)),
 			session.Directory,
 			timeout,
 		); ok {
@@ -218,7 +218,7 @@ func (d *Daemon) runClassifier(session *protocol.Session, text string, timeout t
 func (d *Daemon) classifyFromMarker(session *protocol.Session, text string) (string, error) {
 	sessionID := ""
 	if session != nil {
-		sessionID = session.ID
+		sessionID = string(session.ID)
 	}
 	state, err := statemarker.Parse(text)
 	switch {

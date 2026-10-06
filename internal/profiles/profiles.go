@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/layouttree"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 const (
@@ -32,7 +33,7 @@ type Profile struct {
 	LastUsedAt       string
 	Revision         int64
 	DeletedAt        string
-	ChiefSessionID   string
+	ChiefSessionID   protocol.SessionID
 }
 
 func (s Profile) Deleted() bool { return s.DeletedAt != "" }
@@ -54,9 +55,9 @@ type Pane struct {
 	PaneID    string
 	DesktopID string
 	Kind      PaneKind
-	SessionID string
+	SessionID protocol.SessionID
 	// RuntimeID names the terminal the pane holds; it outlives the session shown in it.
-	RuntimeID string
+	RuntimeID protocol.TerminalID
 	Title     string
 	Status    PaneStatus
 	Error     string
@@ -156,7 +157,7 @@ func checkPaneRows(desktop Desktop, inTree map[string]struct{}) (map[string]stru
 		if pane.Kind != PaneKindAgent {
 			return nil, Errorf(CodeInvalid, "desktop %s: pane %s has kind %q, want %q", desktop.ID, pane.PaneID, pane.Kind, PaneKindAgent)
 		}
-		if strings.TrimSpace(pane.SessionID) == "" {
+		if protocol.TrimID(pane.SessionID) == "" {
 			return nil, Errorf(CodeInvalid, "desktop %s: pane %s names no session", desktop.ID, pane.PaneID)
 		}
 		switch pane.Status {

@@ -80,7 +80,7 @@ func TestAHandoffReachesTheNextTenderAndOnlyTheTender(t *testing.T) {
 
 	t.Run("an unknown note kind is refused listing every kind", func(t *testing.T) {
 		seed := plantSeedAs(t, cli, successor, "kinds")
-		_, err := cli.SeedNote(successor, seed, "words", "", "farewell", false, nil)
+		_, err := cli.SeedNote(protocol.SessionID(successor), seed, "words", "", "farewell", false, nil)
 		if err == nil {
 			t.Fatal("a note kind nothing knows about was written")
 		}
@@ -94,7 +94,7 @@ func TestAHandoffReachesTheNextTenderAndOnlyTheTender(t *testing.T) {
 
 func gardenHandoffNote(t *testing.T, cli *client.Client, session, seedID, body, member, kind string) protocol.SeedNote {
 	t.Helper()
-	result, err := cli.SeedNote(session, seedID, body, member, kind, false, nil)
+	result, err := cli.SeedNote(protocol.SessionID(session), seedID, body, member, kind, false, nil)
 	if err != nil {
 		t.Fatalf("%s notes %q on %s: %v", session, body, seedID, err)
 	}
@@ -103,7 +103,7 @@ func gardenHandoffNote(t *testing.T, cli *client.Client, session, seedID, body, 
 
 func gardenHandoffMove(t *testing.T, cli *client.Client, session, seedID, verb, reason string) *protocol.SeedTransitionResult {
 	t.Helper()
-	result, err := cli.SeedTransition(session, seedID, verb, reason, "", false, client.SeedTransitionOptions{})
+	result, err := cli.SeedTransition(protocol.SessionID(session), seedID, verb, reason, "", false, client.SeedTransitionOptions{})
 	if err != nil {
 		t.Fatalf("%s %ss %s: %v", session, verb, seedID, err)
 	}

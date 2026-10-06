@@ -6,7 +6,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (s *Store) SetSessionContextWindowCap(id string, cap int) bool {
+func (s *Store) SetSessionContextWindowCap(id protocol.SessionID, cap int) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

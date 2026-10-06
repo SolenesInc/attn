@@ -1,5 +1,7 @@
 package events
 
+import "github.com/victorarias/attn/internal/protocol"
+
 const (
 	NamePlanted                  = "garden.seed.planted"
 	NameTended                   = "garden.seed.tended"
@@ -22,40 +24,40 @@ const (
 )
 
 type CausePayload struct {
-	CausedBySessionID string `json:"caused_by_session_id,omitempty"`
+	CausedBySessionID protocol.SessionID `json:"caused_by_session_id,omitempty"`
 }
 
 type LifecyclePayload struct {
-	AttentionRequested        bool   `json:"attention_requested" required:"true"`
-	CausedBySessionID         string `json:"caused_by_session_id,omitempty"`
-	DirectlyNotifiedSessionID string `json:"directly_notified_session_id,omitempty"`
+	AttentionRequested        bool               `json:"attention_requested" required:"true"`
+	CausedBySessionID         protocol.SessionID `json:"caused_by_session_id,omitempty"`
+	DirectlyNotifiedSessionID protocol.SessionID `json:"directly_notified_session_id,omitempty"`
 }
 
 type NoteAddedPayload struct {
-	NoteID             string `json:"note_id" required:"true"`
-	AttentionRequested bool   `json:"attention_requested" required:"true"`
-	CausedBySessionID  string `json:"caused_by_session_id,omitempty"`
+	NoteID             string             `json:"note_id" required:"true"`
+	AttentionRequested bool               `json:"attention_requested" required:"true"`
+	CausedBySessionID  protocol.SessionID `json:"caused_by_session_id,omitempty"`
 }
 
 type EdgePayload struct {
-	EdgeKind          string `json:"edge_kind" required:"true"`
-	TargetSeedID      string `json:"target_seed_id" required:"true"`
-	CausedBySessionID string `json:"caused_by_session_id,omitempty"`
+	EdgeKind          string             `json:"edge_kind" required:"true"`
+	TargetSeedID      string             `json:"target_seed_id" required:"true"`
+	CausedBySessionID protocol.SessionID `json:"caused_by_session_id,omitempty"`
 }
 
 type HarvestWhenPayload struct {
-	PullRequestID     string `json:"pull_request_id" required:"true"`
-	CausedBySessionID string `json:"caused_by_session_id,omitempty"`
+	PullRequestID     string             `json:"pull_request_id" required:"true"`
+	CausedBySessionID protocol.SessionID `json:"caused_by_session_id,omitempty"`
 }
 
 type UnblockedPayload struct {
-	BlockerSeedID     string `json:"blocker_seed_id" required:"true"`
-	CausedBySessionID string `json:"caused_by_session_id,omitempty"`
+	BlockerSeedID     string             `json:"blocker_seed_id" required:"true"`
+	CausedBySessionID protocol.SessionID `json:"caused_by_session_id,omitempty"`
 }
 
 type WorkReadyPayload struct {
-	AutomationRunID   string `json:"automation_run_id" required:"true"`
-	CausedBySessionID string `json:"caused_by_session_id,omitempty"`
+	AutomationRunID   string             `json:"automation_run_id" required:"true"`
+	CausedBySessionID protocol.SessionID `json:"caused_by_session_id,omitempty"`
 }
 
 type Vocabulary struct {

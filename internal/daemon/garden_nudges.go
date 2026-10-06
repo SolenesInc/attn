@@ -41,7 +41,7 @@ func (d *Daemon) seedTenderMember(seed garden.Seed) (crew.Member, bool, error) {
 
 func (d *Daemon) localGardenTenderSession(seed garden.Seed) (string, error) {
 	tender := seed.Tender()
-	sessionID := strings.TrimSpace(tender.Session)
+	sessionID := protocol.TrimID(tender.Session)
 	if sessionID == "" {
 		if member := strings.TrimSpace(tender.Member); member != "" {
 			var err error
@@ -62,7 +62,7 @@ func (d *Daemon) localGardenTenderSession(seed garden.Seed) (string, error) {
 		if profileID != seed.ProfileID {
 			return "", nil
 		}
-		return sessionID, nil
+		return string(sessionID), nil
 	}
 	if d.hubManager != nil {
 		if endpointID, remote := d.hubManager.EndpointIDForSession(sessionID); remote {
@@ -87,7 +87,7 @@ func (d *Daemon) handleSeedWatch(conn net.Conn, msg *protocol.SeedWatchMessage) 
 		d.sendGardenError(conn, verb, err)
 		return
 	}
-	sessionID := strings.TrimSpace(msg.SourceSessionID)
+	sessionID := protocol.TrimID(msg.SourceSessionID)
 	if sessionID == "" || d.store.Get(sessionID) == nil {
 		d.sendGardenError(conn, verb, fmt.Errorf("watching is for a live attn session; pass --session or run it inside one"))
 		return
@@ -100,7 +100,7 @@ func (d *Daemon) handleSeedWatch(conn net.Conn, msg *protocol.SeedWatchMessage) 
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedWatchResult: result})
 }
 
-func (d *Daemon) setSeedWatch(sessionID, seedID string, watching bool) (*protocol.SeedWatchResult, error) {
+func (d *Daemon) setSeedWatch(sessionID protocol.SessionID, seedID string, watching bool) (*protocol.SeedWatchResult, error) {
 	d.lockGardenRoles()
 	defer d.unlockGardenRoles()
 	changed, err := d.store.SetGardenSeedWatch(sessionID, seedID, watching, time.Now())
@@ -147,13 +147,13 @@ func newGardenSubscriptions(seeds []garden.Seed, watches []store.GardenSeedWatch
 	return subscriptions
 }
 
-func (s gardenSubscriptions) coverage(seedID string) map[string][]string {
+func (s gardenSubscriptions) coverage(seedID string) map[protocol.SessionID][]string {
 	covered, _ := s.coverageChecked(seedID)
 	return covered
 }
 
-func (s gardenSubscriptions) coverageChecked(seedID string) (map[string][]string, error) {
-	covered := map[string][]string{}
+func (s gardenSubscriptions) coverageChecked(seedID string) (map[protocol.SessionID][]string, error) {
+	covered := map[protocol.SessionID][]string{}
 	seen := map[string]bool{}
 	for at := seedID; at != ""; {
 		if seen[at] {
@@ -205,8 +205,8 @@ func (d *Daemon) readGardenSubscriptions() (gardenSubscriptions, error) {
 	return newGardenSubscriptions(read.seeds, eligible), nil
 }
 
-func (d *Daemon) seedWatchCoverage(sessionID, seedID string) ([]string, error) {
-	if strings.TrimSpace(sessionID) == "" {
+func (d *Daemon) seedWatchCoverage(sessionID protocol.SessionID, seedID string) ([]string, error) {
+	if protocol.TrimID(sessionID) == "" {
 		return []string{}, nil
 	}
 	subscriptions, err := d.readGardenSubscriptions()
@@ -220,12 +220,12 @@ func (d *Daemon) seedWatchCoverage(sessionID, seedID string) ([]string, error) {
 	return coverage, nil
 }
 
-func (d *Daemon) discardUncoveredSeedBells(sessionID string) error {
+func (d *Daemon) discardUncoveredSeedBells(sessionID protocol.SessionID) error {
 	return d.discardIneligibleGardenSeedBellsLocked(inbox.ToSession(sessionID))
 }
 
-func (d *Daemon) consumeSeedBell(sessionID, seedID string) {
-	sessionID = strings.TrimSpace(sessionID)
+func (d *Daemon) consumeSeedBell(sessionID protocol.SessionID, seedID string) {
+	sessionID = protocol.TrimID(sessionID)
 	if sessionID == "" || d.store == nil {
 		return
 	}

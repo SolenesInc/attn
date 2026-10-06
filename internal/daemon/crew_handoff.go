@@ -22,7 +22,7 @@ import (
 
 var crewNapPrompt = prompts.RenderText("crew", "successor", prompts.Values{})
 
-func (d *Daemon) transferCrewBinding(memberID, from, to string) error {
+func (d *Daemon) transferCrewBinding(memberID string, from protocol.SessionID, to protocol.SessionID) error {
 	_, err := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {
 		if member.BindingSession != from {
 			return false, fmt.Errorf("%s's day is no longer session %s; nothing was moved", crew.DisplayName(member.ID), shortSessionID(from))
@@ -40,7 +40,7 @@ func (d *Daemon) transferCrewBinding(memberID, from, to string) error {
 	return nil
 }
 
-func (d *Daemon) crewMemberForSession(sessionID string) (crew.Member, bool) {
+func (d *Daemon) crewMemberForSession(sessionID protocol.SessionID) (crew.Member, bool) {
 	member, bound, err := d.boundCrewMember(sessionID)
 	if err != nil {
 		d.logf("crew: reading roster for session %s: %v", sessionID, err)
@@ -48,7 +48,7 @@ func (d *Daemon) crewMemberForSession(sessionID string) (crew.Member, bool) {
 	return member, bound
 }
 
-func (d *Daemon) boundCrewMember(sessionID string) (crew.Member, bool, error) {
+func (d *Daemon) boundCrewMember(sessionID protocol.SessionID) (crew.Member, bool, error) {
 	if sessionID == "" || d.store == nil {
 		return crew.Member{}, false, nil
 	}
@@ -67,18 +67,18 @@ func (d *Daemon) boundCrewMember(sessionID string) (crew.Member, bool, error) {
 	return crew.Member{}, false, nil
 }
 
-func (d *Daemon) crewHandoff(sessionID, note string, retry bool, close protocol.CrewDayClose) (result *protocol.CrewHandoffResult, err error) {
+func (d *Daemon) crewHandoff(sessionID protocol.SessionID, note string, retry bool, close protocol.CrewDayClose) (result *protocol.CrewHandoffResult, err error) {
 	d.crewWakeMu.Lock()
 	defer d.crewWakeMu.Unlock()
 	return d.crewHandoffLocked(sessionID, note, retry, close)
 }
 
-func (d *Daemon) crewHandoffLocked(sessionID, note string, retry bool, close protocol.CrewDayClose) (result *protocol.CrewHandoffResult, err error) {
+func (d *Daemon) crewHandoffLocked(sessionID protocol.SessionID, note string, retry bool, close protocol.CrewDayClose) (result *protocol.CrewHandoffResult, err error) {
 	if err := d.requireHome(crew.Surface); err != nil {
 		return nil, err
 	}
 	if sessionID == "" {
-		return nil, fmt.Errorf("a handoff is filed by the session living the day; none was named (set ATTN_SESSION_ID or pass --session)")
+		return nil, fmt.Errorf("a handoff is filed by the session living the day; none was named (run from its terminal or pass --session)")
 	}
 	member, bound := d.crewMemberForSession(sessionID)
 	if !bound {
@@ -160,7 +160,7 @@ func (d *Daemon) crewDayEndsHere(close protocol.CrewDayClose, now time.Time) boo
 	return d.UserAwayFor(now) >= d.crewAwayLimit()
 }
 
-func (d *Daemon) crewLetterForHandoff(member crew.Member, sessionID, note string, retry bool) (string, error) {
+func (d *Daemon) crewLetterForHandoff(member crew.Member, sessionID protocol.SessionID, note string, retry bool) (string, error) {
 	if err := d.validateCrewMemberPaths(member); err != nil {
 		return "", err
 	}
@@ -199,7 +199,7 @@ func (d *Daemon) crewLetterForHandoff(member crew.Member, sessionID, note string
 	return path, nil
 }
 
-func (d *Daemon) recordCrewLetter(memberID, sessionID, path string) {
+func (d *Daemon) recordCrewLetter(memberID string, sessionID protocol.SessionID, path string) {
 	if _, err := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {
 		if member.BindingSession != sessionID {
 			return false, nil
@@ -212,7 +212,7 @@ func (d *Daemon) recordCrewLetter(memberID, sessionID, path string) {
 	}
 }
 
-func (d *Daemon) crewNap(member crew.Member, oldSessionID string, teardown *sessionTeardown) (newSessionID string, err error) {
+func (d *Daemon) crewNap(member crew.Member, oldSessionID protocol.SessionID, teardown *sessionTeardown) (newSessionID protocol.SessionID, err error) {
 	committed := false
 	defer func() {
 		if !committed {
@@ -275,7 +275,7 @@ func (d *Daemon) crewNapSpawn(member crew.Member, session *protocol.Session) (*p
 		spawnMsg = &protocol.SpawnSessionMessage{
 			Cmd:       protocol.CmdSpawnSession,
 			Cwd:       session.Directory,
-			Agent:     string(session.Agent),
+			Agent:     session.Agent,
 			ProfileID: session.ProfileID,
 			Label:     protocol.Ptr(crew.DisplayName(member.ID)),
 			Cols:      cols,
@@ -283,7 +283,7 @@ func (d *Daemon) crewNapSpawn(member crew.Member, session *protocol.Session) (*p
 		}
 	}
 	spawnMsg.Priority = session.Priority
-	spawnMsg.ID = uuid.NewString()
+	spawnMsg.ID = protocol.SessionID(uuid.NewString())
 	spawnMsg.Label = protocol.Ptr(crew.DisplayName(member.ID))
 	spawnMsg.InitialPrompt = protocol.Ptr(crewNapPrompt)
 	previousAgent := spawnMsg.Agent
@@ -316,7 +316,7 @@ func (d *Daemon) crewNapSpawn(member crew.Member, session *protocol.Session) (*p
 	return spawnMsg, policy
 }
 
-func (d *Daemon) crewSessionGeometry(sessionID string) (int, int) {
+func (d *Daemon) crewSessionGeometry(sessionID protocol.SessionID) (int, int) {
 	cols, rows := 80, 24
 	provider, ok := d.ptyBackend.(ptybackend.SessionInfoProvider)
 	if !ok {
@@ -335,17 +335,17 @@ func (d *Daemon) crewSessionGeometry(sessionID string) (int, int) {
 	return cols, rows
 }
 
-func (d *Daemon) closeNappedSession(sessionID string, teardown *sessionTeardown) {
+func (d *Daemon) closeNappedSession(sessionID protocol.SessionID, teardown *sessionTeardown) {
 	d.commitSessionUnregister(sessionID, store.SessionClose{By: store.SessionClosedByUser, Reason: "crew member put to sleep"})
 	if teardown.session != nil {
 		d.publishSessionUnregistered(teardown.session)
-		d.publishFact(FactSessionTerminated, teardown.session.ID, nil)
+		d.publishFact(FactSessionTerminated, string(teardown.session.ID), nil)
 	}
 	d.terminateSessionAsync(sessionID, syscall.SIGTERM, teardown)
 }
 
 func (d *Daemon) handleCrewHandoff(conn net.Conn, msg *protocol.CrewHandoffMessage) {
-	result, err := d.crewHandoff(strings.TrimSpace(msg.SessionID), msg.Note, protocol.Deref(msg.Retry), protocol.Deref(msg.Close))
+	result, err := d.crewHandoff(protocol.TrimID(msg.SessionID), msg.Note, protocol.Deref(msg.Retry), protocol.Deref(msg.Close))
 	if err != nil {
 		d.sendCrewError(conn, "handoff", err)
 		return

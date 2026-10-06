@@ -125,9 +125,9 @@ func agentListRows(result *client.ListResult) []agentListRow {
 	rows := make([]agentListRow, 0, len(result.Sessions))
 	for _, session := range result.Sessions {
 		rows = append(rows, agentListRow{
-			ID:        session.ID,
+			ID:        string(session.ID),
 			Label:     session.Label,
-			Agent:     string(session.Agent),
+			Agent:     session.Agent,
 			Profile:   profileNames[session.ProfileID],
 			Directory: session.Directory,
 			State:     string(session.State),
@@ -306,11 +306,11 @@ func formatAgentPeekTime(value string) string {
 type agentMsgArgs struct {
 	target  string
 	content string
-	source  string
+	source  protocol.SessionID
 	json    bool
 }
 
-func parseAgentMsgArgs(args []string, envSessionID string) (agentMsgArgs, error) {
+func parseAgentMsgArgs(args []string, envSessionID func() protocol.SessionID) (agentMsgArgs, error) {
 	const usage = "usage: attn agent msg <session-or-member-or-seed> \"text\" [--source-session <id>]"
 	literal := len(args) > 0 && args[0] == "--"
 	if literal {
@@ -325,7 +325,7 @@ func parseAgentMsgArgs(args []string, envSessionID string) (agentMsgArgs, error)
 	}
 	fs := flag.NewFlagSet("agent msg", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	source := fs.String("source-session", "", "sender session id (defaults to ATTN_SESSION_ID)")
+	source := fs.String("source-session", "", "sender session id (defaults to the current session)")
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
 	if err := fs.Parse(args[2:]); err != nil {
 		return agentMsgArgs{}, err
@@ -336,15 +336,8 @@ func parseAgentMsgArgs(args []string, envSessionID string) (agentMsgArgs, error)
 	parsed := agentMsgArgs{
 		target:  strings.TrimSpace(args[0]),
 		content: args[1],
-		source:  strings.TrimSpace(*source),
+		source:  protocol.SessionID(strings.TrimSpace(*source)),
 		json:    *jsonOut,
-	}
-	if parsed.source == "" {
-		parsed.source = strings.TrimSpace(envSessionID)
-	}
-	if parsed.source == "" {
-		return agentMsgArgs{}, errors.New(
-			"no sender: this shell is not an attn session, so pass --source-session <id> (`attn agent list` names the sessions)")
 	}
 	if strings.TrimSpace(parsed.content) == "" {
 		return agentMsgArgs{}, errors.New("the message is empty")
@@ -354,11 +347,18 @@ func parseAgentMsgArgs(args []string, envSessionID string) (agentMsgArgs, error)
 			"message is %d bytes and the limit is %d; send the gist and point at the rest",
 			size, protocol.AgentMessageMaxChars)
 	}
+	if parsed.source == "" {
+		parsed.source = protocol.TrimID(envSessionID())
+	}
+	if parsed.source == "" {
+		return agentMsgArgs{}, errors.New(
+			"no sender: this shell is not an attn session, so pass --source-session <id> (`attn agent list` names the sessions)")
+	}
 	return parsed, nil
 }
 
 func runAgentMsg(args []string) {
-	parsed, err := parseAgentMsgArgs(args, os.Getenv("ATTN_SESSION_ID"))
+	parsed, err := parseAgentMsgArgs(args, currentSessionOrExit)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "agent msg: %v\n", err)
 		os.Exit(2)
@@ -409,11 +409,11 @@ func agentMsgErrorMessage(parsed agentMsgArgs, err error) string {
 type agentCloseArgs struct {
 	target string
 	reason string
-	source string
+	source protocol.SessionID
 	json   bool
 }
 
-func parseAgentCloseArgs(args []string, envSessionID string) (agentCloseArgs, error) {
+func parseAgentCloseArgs(args []string, envSessionID func() protocol.SessionID) (agentCloseArgs, error) {
 	const usage = `usage: attn agent close <session-or-seed> -m "reason" [--source-session <id>]`
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
 		return agentCloseArgs{}, errors.New(usage)
@@ -421,7 +421,7 @@ func parseAgentCloseArgs(args []string, envSessionID string) (agentCloseArgs, er
 	fs := flag.NewFlagSet("agent close", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	reason := fs.String("m", "", "why this session is done")
-	source := fs.String("source-session", "", "closing session id (defaults to ATTN_SESSION_ID)")
+	source := fs.String("source-session", "", "closing session id (defaults to the current session)")
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
 	if err := fs.Parse(args[1:]); err != nil {
 		return agentCloseArgs{}, err
@@ -432,7 +432,7 @@ func parseAgentCloseArgs(args []string, envSessionID string) (agentCloseArgs, er
 	parsed := agentCloseArgs{
 		target: strings.TrimSpace(args[0]),
 		reason: strings.TrimSpace(*reason),
-		source: strings.TrimSpace(*source),
+		source: protocol.SessionID(strings.TrimSpace(*source)),
 		json:   *jsonOut,
 	}
 	if parsed.target == "" {
@@ -443,7 +443,7 @@ func parseAgentCloseArgs(args []string, envSessionID string) (agentCloseArgs, er
 			`a close needs a reason: -m "why this session is done". The session row stays in the ledger and the reason is what the next reader gets`)
 	}
 	if parsed.source == "" {
-		parsed.source = strings.TrimSpace(envSessionID)
+		parsed.source = protocol.TrimID(envSessionID())
 	}
 	if parsed.source == "" {
 		return agentCloseArgs{}, errors.New(
@@ -453,7 +453,7 @@ func parseAgentCloseArgs(args []string, envSessionID string) (agentCloseArgs, er
 }
 
 func runAgentClose(args []string) {
-	parsed, err := parseAgentCloseArgs(args, os.Getenv("ATTN_SESSION_ID"))
+	parsed, err := parseAgentCloseArgs(args, currentSessionOrExit)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "agent close: %v\n", err)
 		os.Exit(2)
@@ -471,11 +471,11 @@ func runAgentClose(args []string) {
 }
 
 func printAgentClose(w io.Writer, result *protocol.AgentCloseResult) {
-	fmt.Fprintf(w, "closed session %s (%s): %s\n", agentShortID(result.TargetSessionID), result.Label, result.Reason)
+	fmt.Fprintf(w, "closed session %s (%s): %s\n", agentShortID(string(result.TargetSessionID)), result.Label, result.Reason)
 	for _, seedID := range result.SeedIds {
 		fmt.Fprintf(w, "noted on %s, which it was tending\n", seedID)
 	}
-	fmt.Fprintf(w, "the session is kept: `attn session show %s` reads it back\n", agentShortID(result.TargetSessionID))
+	fmt.Fprintf(w, "the session is kept: `attn session show %s` reads it back\n", agentShortID(string(result.TargetSessionID)))
 }
 
 func agentCloseErrorMessage(parsed agentCloseArgs, err error) string {
@@ -495,18 +495,18 @@ func agentCloseErrorMessage(parsed agentCloseArgs, err error) string {
 
 type agentMailboxArgs struct {
 	messageID string
-	sessionID string
+	sessionID protocol.SessionID
 	json      bool
 }
 
 type agentInboxArgs struct {
 	messageID string
-	sessionID string
+	sessionID protocol.SessionID
 	limit     int
 	json      bool
 }
 
-func parseAgentInboxArgs(args []string, envSessionID string) (agentInboxArgs, error) {
+func parseAgentInboxArgs(args []string, envSessionID func() protocol.SessionID) (agentInboxArgs, error) {
 	const usage = "usage: attn agent inbox [message-id] [--limit <count>] [--session <id>] [--json]"
 	parsed := agentInboxArgs{limit: inbox.DefaultInboxLimit}
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
@@ -518,7 +518,7 @@ func parseAgentInboxArgs(args []string, envSessionID string) (agentInboxArgs, er
 	}
 	fs := flag.NewFlagSet("agent inbox", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	sessionID := fs.String("session", "", "authorized session id (defaults to ATTN_SESSION_ID)")
+	sessionID := fs.String("session", "", "authorized session id (defaults to the current session)")
 	fs.IntVar(&parsed.limit, "limit", inbox.DefaultInboxLimit, "maximum unread items to return")
 	fs.BoolVar(&parsed.json, "json", false, "print the machine result as JSON")
 	if err := fs.Parse(args); err != nil {
@@ -545,9 +545,9 @@ func parseAgentInboxArgs(args []string, envSessionID string) (agentInboxArgs, er
 	if parsed.messageID != "" && limitSet {
 		return agentInboxArgs{}, errors.New("--limit cannot be used with a message id")
 	}
-	parsed.sessionID = strings.TrimSpace(*sessionID)
+	parsed.sessionID = protocol.SessionID(strings.TrimSpace(*sessionID))
 	if parsed.sessionID == "" {
-		parsed.sessionID = strings.TrimSpace(envSessionID)
+		parsed.sessionID = protocol.TrimID(envSessionID())
 	}
 	if parsed.sessionID == "" {
 		return agentInboxArgs{}, errors.New("no session identity: run this inside an attn session or pass --session <id>")
@@ -555,13 +555,13 @@ func parseAgentInboxArgs(args []string, envSessionID string) (agentInboxArgs, er
 	return parsed, nil
 }
 
-func parseAgentMailboxArgs(command string, args []string, envSessionID string) (agentMailboxArgs, error) {
+func parseAgentMailboxArgs(command string, args []string, envSessionID func() protocol.SessionID) (agentMailboxArgs, error) {
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
 		return agentMailboxArgs{}, fmt.Errorf("usage: attn agent %s <message-id> [--session <id>] [--json]", command)
 	}
 	fs := flag.NewFlagSet("agent "+command, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	sessionID := fs.String("session", "", "authorized session id (defaults to ATTN_SESSION_ID)")
+	sessionID := fs.String("session", "", "authorized session id (defaults to the current session)")
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
 	if err := fs.Parse(args[1:]); err != nil {
 		return agentMailboxArgs{}, err
@@ -570,10 +570,10 @@ func parseAgentMailboxArgs(command string, args []string, envSessionID string) (
 		return agentMailboxArgs{}, fmt.Errorf("usage: attn agent %s <message-id> [--session <id>] [--json]", command)
 	}
 	parsed := agentMailboxArgs{
-		messageID: strings.TrimSpace(args[0]), sessionID: strings.TrimSpace(*sessionID), json: *jsonOut,
+		messageID: strings.TrimSpace(args[0]), sessionID: protocol.SessionID(strings.TrimSpace(*sessionID)), json: *jsonOut,
 	}
 	if parsed.sessionID == "" {
-		parsed.sessionID = strings.TrimSpace(envSessionID)
+		parsed.sessionID = protocol.TrimID(envSessionID())
 	}
 	if parsed.sessionID == "" {
 		return agentMailboxArgs{}, errors.New("no session identity: run this inside an attn session or pass --session <id>")
@@ -582,7 +582,7 @@ func parseAgentMailboxArgs(command string, args []string, envSessionID string) (
 }
 
 func runAgentInbox(args []string) {
-	parsed, err := parseAgentInboxArgs(args, os.Getenv("ATTN_SESSION_ID"))
+	parsed, err := parseAgentInboxArgs(args, currentSessionOrExit)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "agent inbox: %v\n", err)
 		os.Exit(2)
@@ -615,7 +615,7 @@ func runAgentInbox(args []string) {
 }
 
 func runAgentMsgStatus(args []string) {
-	parsed, err := parseAgentMailboxArgs("msg-status", args, os.Getenv("ATTN_SESSION_ID"))
+	parsed, err := parseAgentMailboxArgs("msg-status", args, currentSessionOrExit)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "agent msg-status: %v\n", err)
 		os.Exit(2)
@@ -633,11 +633,11 @@ func runAgentMsgStatus(args []string) {
 }
 
 func printAgentInbox(w io.Writer, message *protocol.AgentPeerMessage) {
-	origin := agentShortID(message.SenderSessionID)
+	origin := agentShortID(string(message.SenderSessionID))
 	if label := strings.TrimSpace(message.SenderLabel); label != "" && label != origin {
 		origin = fmt.Sprintf("%s (%s)", origin, label)
 	}
-	fmt.Fprintln(w, prompts.RenderText("session", "peer-message", prompts.Values{"origin": origin, "message": message.Content, "sender_id": agentShortID(message.SenderSessionID)}))
+	fmt.Fprintln(w, prompts.RenderText("session", "peer-message", prompts.Values{"origin": origin, "message": message.Content, "sender_id": agentShortID(string(message.SenderSessionID))}))
 }
 
 func printAgentInboxBatch(w io.Writer, result *protocol.AgentInboxBatchResult) {
@@ -662,7 +662,7 @@ func printAgentInboxBatch(w io.Writer, result *protocol.AgentInboxBatchResult) {
 			continue
 		}
 		printAgentInbox(w, &protocol.AgentPeerMessage{
-			SenderSessionID: strings.TrimSpace(protocol.Deref(item.SenderSessionID)),
+			SenderSessionID: protocol.TrimID(protocol.Deref(item.SenderSessionID)),
 			SenderLabel:     protocol.Deref(item.SenderLabel), Content: content,
 		})
 	}
@@ -707,7 +707,7 @@ commands:
         the recipient gets a generic inbox notification. A target that cannot take
         input safely keeps it queued. The result says queued, notified, or refused.
         A sleeping member wakes before the notification is placed. The sender defaults to this session
-        (ATTN_SESSION_ID); pass --source-session when running outside one.
+        (resolved from this terminal); pass --source-session when running outside one.
         A seed id reaches its current or next tender, waiting when none is reachable.
         A message that starts with - goes after --, as: agent msg -- <target> "-text"
   close <session-or-seed> -m "reason" [--source-session <id>] [--json]
@@ -717,13 +717,13 @@ commands:
         and the reason is what the next reader gets. It is immediate, so say
         what you have to say first. A seed id closes whoever tends it, and the
         seed keeps its tender with a note about the close.
-        The caller defaults to this session (ATTN_SESSION_ID).
+        The caller defaults to this session (resolved from this terminal).
   inbox [message-id] [--limit <count>] [--session <id>] [--json]
         read up to 20 unread notifications in FIFO order, or one notified peer
         message by id. Each returned item gets its durable read receipt. The batch
-        limit can be 1 through 50. The session defaults to ATTN_SESSION_ID.
+        limit can be 1 through 50. The session defaults to the current session.
   msg-status <message-id> [--session <id>] [--json]
         inspect your sent message as queued, notified, or read. The sender
-        session defaults to ATTN_SESSION_ID.
+        session defaults to the current session.
 `)
 }

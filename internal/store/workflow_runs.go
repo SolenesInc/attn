@@ -4,6 +4,7 @@ import (
 	"database/sql"
 
 	"github.com/victorarias/attn/internal/docstore"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 func normalizeWorkflowStamp(s string) string {
@@ -26,7 +27,7 @@ type WorkflowRunRow struct {
 	ScriptPath  string
 	ScriptHash  string
 	ArgsJSON    *string
-	SessionID   *string
+	SessionID   *protocol.SessionID
 	Status      string
 	Phase       *string
 	Harness     *string
@@ -178,7 +179,7 @@ func (s *Store) GetWorkflowRun(runID string) (*WorkflowRunRow, error) {
 	return run, nil
 }
 
-func (s *Store) ListWorkflowRuns(sessionID string) ([]*WorkflowRunRow, error) {
+func (s *Store) ListWorkflowRuns(sessionID protocol.SessionID) ([]*WorkflowRunRow, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -307,7 +308,7 @@ func scanWorkflowRun(scanner workflowScanner) (*WorkflowRunRow, error) {
 		run.ArgsJSON = &argsJSON.String
 	}
 	if sessionID.Valid && sessionID.String != "" {
-		run.SessionID = &sessionID.String
+		run.SessionID = protocol.Ptr(protocol.SessionID(sessionID.String))
 	}
 	if phase.Valid && phase.String != "" {
 		run.Phase = &phase.String

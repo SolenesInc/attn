@@ -23,7 +23,7 @@ var linkTurnStates = map[harness.Turn]string{
 
 func (e linkEventSink) Turn(s harness.SessionID, at time.Time, event harness.TurnEvent) {
 	d := e.daemon
-	sessionID := string(s)
+	sessionID := s
 	state := linkTurnStates[event.Turn]
 	if event.Restated {
 		if session := d.store.Get(sessionID); session == nil || session.State != protocol.SessionStateUnknown {

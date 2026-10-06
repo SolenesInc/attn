@@ -17,7 +17,7 @@ func TestATurnIsJudgedOnceHoweverManyStopsReportIt(t *testing.T) {
 	transcript.Answer("The migration is written. Should I run it?")
 	stop := func() {
 		t.Helper()
-		if err := cli.SendStop("s1", transcript.Path, client.StopFacts{}); err != nil {
+		if err := cli.SendStop(protocol.TerminalID(w.Terminal("s1")), transcript.Path, client.StopFacts{}); err != nil {
 			t.Fatalf("stop: %v", err)
 		}
 	}
@@ -29,7 +29,7 @@ func TestATurnIsJudgedOnceHoweverManyStopsReportIt(t *testing.T) {
 	stop()
 
 	transcript.Prompt("yes, run it")
-	if err := cli.UpdateStateFromHookEvidence("s1", protocol.StateWorking, "", "user_prompt_submit", "yes, run it"); err != nil {
+	if err := cli.UpdateStateFromHookEvidence(protocol.TerminalID(w.Terminal("s1")), protocol.StateWorking, "", "user_prompt_submit", "yes, run it"); err != nil {
 		t.Fatalf("report the prompt taken: %v", err)
 	}
 	transcript.Answer("Ran it against staging.")

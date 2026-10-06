@@ -24,7 +24,7 @@ func (l pluginLink) Deliver(_ context.Context, in harness.Input) harness.Custody
 	ctx, cancel := context.WithTimeout(context.Background(), pluginDeliverMessageTimeout)
 	defer cancel()
 	var result pluginDeliverMessageResult
-	params := pluginDeliverMessageParams{SessionID: string(l.daemon.primaryTerminal(in.Session)), RunID: cursor.RunID, InputID: in.ID, Text: in.Text}
+	params := pluginDeliverMessageParams{TerminalID: l.daemon.primaryTerminal(in.Session), RunID: cursor.RunID, InputID: in.ID, Text: in.Text}
 	if err := l.daemon.callPlugin(ctx, cursor.PluginName, "driver.deliver_message", params, &result); err != nil {
 		return harness.Custody{Reason: fmt.Sprintf("deliver message via plugin %q: %v", cursor.PluginName, err)}
 	}
@@ -47,7 +47,7 @@ func (d *Daemon) sessionLink(session *protocol.Session, voice harness.Voice) har
 
 // linkOwnsState is core rule 4 for a link whose turn events carry every state: while the
 // session has a driver run whose plugin reports state, the resolver and terminal stand aside.
-func (d *Daemon) linkOwnsState(sessionID string) bool {
+func (d *Daemon) linkOwnsState(sessionID protocol.SessionID) bool {
 	if d.store.GetAgentDriverRun(sessionID).RunID == "" {
 		return false
 	}

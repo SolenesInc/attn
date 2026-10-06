@@ -82,13 +82,14 @@ func TestEveryRemoteOperationRefusesAnUnsupportedEndpointBeforeSideEffects(t *te
 	defer manager.Stop()
 	id := records[0].ID
 	manager.ReplaceRemoteSessions(id, []protocol.Session{{ID: "remote-session"}})
+	manager.replaceRemoteTerminals(id, []protocol.TerminalBinding{{TerminalID: "remote-terminal", SessionID: "remote-session"}})
 	ctx := context.Background()
 
 	operations := map[string]func() error{
 		"bootstrap":  func() error { return manager.BootstrapEndpoint(id) },
 		"remote web": func() error { return manager.SetEndpointRemoteWeb(ctx, id, true) },
 		"forward":    func() error { return manager.ForwardEndpointCommand(ctx, id, []byte(`{"cmd":"spawn_session"}`)) },
-		"pty":        func() error { return manager.ForwardPTYCommand(ctx, "remote-session", []byte(`{"cmd":"pty_input"}`)) },
+		"pty":        func() error { return manager.ForwardPTYCommand(ctx, "remote-terminal", []byte(`{"cmd":"pty_input"}`)) },
 		"close": func() error {
 			return manager.ForwardSessionClose(ctx, id, "remote-session", []byte(`{"cmd":"close_session"}`))
 		},

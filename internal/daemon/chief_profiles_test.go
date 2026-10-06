@@ -10,7 +10,7 @@ import (
 func spawnChiefCandidate(t *testing.T, d *Daemon, client *wsClient, sessionID, profileID string) {
 	t.Helper()
 	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
-		Cmd: protocol.CmdSpawnSession, ID: sessionID, Label: protocol.Ptr(sessionID), Cwd: t.TempDir(),
+		Cmd: protocol.CmdSpawnSession, ID: protocol.SessionID(sessionID), Label: protocol.Ptr(sessionID), Cwd: t.TempDir(),
 		Agent: string(protocol.SessionAgentClaude), ProfileID: profileID, Cols: 80, Rows: 24,
 		ChiefOfStaff: protocol.Ptr(true),
 	})
@@ -36,7 +36,7 @@ func TestEachProfileKeepsItsOwnChief(t *testing.T) {
 		t.Fatal("a second create-as-chief in Work took the role from its chief")
 	}
 	for _, id := range []string{"home-chief", "work-chief"} {
-		if decorated := d.sessionForBroadcast(d.store.Get(id)); decorated.ChiefOfStaff == nil || !*decorated.ChiefOfStaff {
+		if decorated := d.sessionForBroadcast(d.store.Get(protocol.SessionID(id))); decorated.ChiefOfStaff == nil || !*decorated.ChiefOfStaff {
 			t.Fatalf("%s broadcasts chief_of_staff = %v, want true", id, decorated.ChiefOfStaff)
 		}
 	}

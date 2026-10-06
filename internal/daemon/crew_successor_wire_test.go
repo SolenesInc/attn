@@ -17,7 +17,7 @@ func TestASuccessorKeepsItsDaysApprovalModeAndReturnsToTheMembersSavedPins(t *te
 	setSetting(t, app, "auto_approve_enabled", "true")
 
 	day := wakeCrew(t, cli, "keel", "codex")
-	oneDay := w.Launched(day.SessionID)
+	oneDay := w.Launched(string(day.SessionID))
 	if model := crewLaunchFlag(oneDay.Argv, "--model"); oneDay.Harness != fakeagent.Codex || model != "gpt-5.6-sol" {
 		t.Fatalf("a one-day codex wake launched %s on model %q, want codex on its own default gpt-5.6-sol", oneDay.Harness, model)
 	}
@@ -26,8 +26,8 @@ func TestASuccessorKeepsItsDaysApprovalModeAndReturnsToTheMembersSavedPins(t *te
 	}
 
 	setSetting(t, app, "auto_approve_enabled", "false")
-	handed := crewHandoff(t, cli, day.SessionID, "Back to the usual harness tomorrow.", false, protocol.CrewDayCloseNap)
-	next := w.Launched(protocol.Deref(handed.SessionID))
+	handed := crewHandoff(t, cli, string(day.SessionID), "Back to the usual harness tomorrow.", false, protocol.CrewDayCloseNap)
+	next := w.Launched(string(protocol.Deref(handed.SessionID)))
 	model, effort := crewLaunchFlag(next.Argv, "--model"), crewLaunchFlag(next.Argv, "--effort")
 	if next.Harness != fakeagent.Claude || model != "claude-opus-4-1" || effort != "high" {
 		t.Errorf("the successor launched %s on model %q effort %q, want keel's saved claude on claude-opus-4-1 with effort high", next.Harness, model, effort)

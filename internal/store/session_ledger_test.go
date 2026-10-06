@@ -12,7 +12,7 @@ import (
 
 func closeAt(t *testing.T, s *Store, id string, closed SessionClose, at time.Time) {
 	t.Helper()
-	recorded, err := s.CloseSession(id, closed, at)
+	recorded, err := s.CloseSession(protocol.SessionID(id), closed, at)
 	if err != nil {
 		t.Fatalf("close %s: %v", id, err)
 	}
@@ -24,7 +24,7 @@ func closeAt(t *testing.T, s *Store, id string, closed SessionClose, at time.Tim
 func ledgerIDs(page SessionLedgerPage) []string {
 	ids := make([]string, 0, len(page.Entries))
 	for _, entry := range page.Entries {
-		ids = append(ids, entry.ID)
+		ids = append(ids, string(entry.ID))
 	}
 	return ids
 }
@@ -32,7 +32,7 @@ func ledgerIDs(page SessionLedgerPage) []string {
 func addLedgerSession(t *testing.T, s *Store, id, profileID, repository string, lastSeen time.Time) {
 	t.Helper()
 	s.Add(&protocol.Session{
-		ID:         id,
+		ID:         protocol.SessionID(id),
 		Label:      id,
 		Directory:  "/tmp/" + id,
 		ProfileID:  profileID,
@@ -119,7 +119,7 @@ func TestTheLedgerNamesEachRowsProfileAndKeepsItAfterTheProfileIsDeleted(t *test
 	}
 	rows := map[string]protocol.SessionLedgerEntry{}
 	for _, entry := range page.Entries {
-		rows[entry.ID] = entry
+		rows[string(entry.ID)] = entry
 	}
 	if closed := rows["closed-in-work"]; closed.ProfileID != work.ID || closed.ProfileName != "Work" || !protocol.Deref(closed.ProfileDeleted) {
 		t.Errorf("closed row = %s %q deleted=%v, want its deleted profile Work kept as history", closed.ProfileID, closed.ProfileName, closed.ProfileDeleted)

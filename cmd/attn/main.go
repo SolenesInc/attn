@@ -611,7 +611,7 @@ func detectPresence() (sessionID string, present bool) {
 	if os.Getenv("ATTN_INSIDE_APP") != "1" {
 		return "", false
 	}
-	return strings.TrimSpace(os.Getenv("ATTN_SESSION_ID")), true
+	return string(currentSessionOrExit()), true
 }
 
 func runPresence() {
@@ -806,7 +806,7 @@ session options:
                              beside that desktop's active pane without changing
                              what you see. Defaults to beside the source
                              session.
-  --source-session <id>      source session (defaults to ATTN_SESSION_ID)
+  --source-session <id>      source session (defaults to the current session)
   --yolo                     bypass agent approval prompts
 
 Only a handover's predecessor is exempt from checkout occupancy. Any unrelated
@@ -851,7 +851,7 @@ func runJournal() {
 }
 
 type journalAppendArgs struct {
-	sessionID string
+	sessionID protocol.SessionID
 	date      string
 	entry     string
 	jsonOut   bool
@@ -863,7 +863,7 @@ func parseJournalAppendArgs(args []string) (journalAppendArgs, error) {
 	entryText := fs.String("entry", "", "journal entry markdown")
 	entryFile := fs.String("entry-file", "", "file containing the journal entry markdown")
 	date := fs.String("date", "", "journal date as YYYY-MM-DD (defaults to today)")
-	sessionID := fs.String("session", "", "session id (optional; defaults to ATTN_SESSION_ID)")
+	sessionID := fs.String("session", "", "session id (optional; defaults to the current session)")
 	jsonOutput := fs.Bool("json", false, "print the result as JSON")
 	if err := fs.Parse(args); err != nil {
 		return journalAppendArgs{}, err
@@ -887,10 +887,10 @@ func parseJournalAppendArgs(args []string) (journalAppendArgs, error) {
 	}
 	source := strings.TrimSpace(*sessionID)
 	if source == "" {
-		source = strings.TrimSpace(os.Getenv("ATTN_SESSION_ID"))
+		source = string(currentSessionOrExit())
 	}
 	return journalAppendArgs{
-		sessionID: source,
+		sessionID: protocol.SessionID(source),
 		date:      strings.TrimSpace(*date),
 		entry:     entry,
 		jsonOut:   *jsonOutput,
@@ -927,7 +927,7 @@ commands:
         tools (which races other agents writing the same file).
         date defaults to today. --json prints rel_path and hash.
 
-The session defaults to ATTN_SESSION_ID.
+The session defaults to the current session.
 `)
 }
 
@@ -971,7 +971,7 @@ func parsePresentOpenArgs(args []string) (presentOpenArgs, error) {
 	fs.SetOutput(io.Discard)
 	manifest := fs.String("manifest", ".present.yml", "path to the present manifest")
 	presentationID := fs.String("presentation", "", "existing presentation id to add a new round to")
-	session := fs.String("session", "", "session id (defaults to ATTN_SESSION_ID)")
+	session := fs.String("session", "", "session id (defaults to the current session)")
 	jsonOutput := fs.Bool("json", false, "print the result as JSON")
 	wait := fs.Bool("wait", false, "block until the reviewer submits this round or closes the presentation, then print its feedback")
 	if err := fs.Parse(args); err != nil {
@@ -1009,7 +1009,7 @@ func runPresentOpen(args []string) {
 		fmt.Fprintf(os.Stderr, "present: %v\n", err)
 		os.Exit(2)
 	}
-	result, err := client.New("").PresentOpen(source, string(manifestYAML), parsed.PresentationID)
+	result, err := client.New("").PresentOpen(protocol.SessionID(source), string(manifestYAML), parsed.PresentationID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "present: %v\n", err)
 		os.Exit(1)
@@ -1219,7 +1219,7 @@ commands:
 flags for the default (open) form:
   --manifest <path>                 manifest path (default .present.yml)
   --presentation <id>               add a new round to an existing presentation
-  --session <id>                    session id (defaults to ATTN_SESSION_ID)
+  --session <id>                    session id (defaults to the current session)
   --json                            print the result as JSON
   --wait                            block until the round is reviewed or the
                                      presentation is closed, then print the
@@ -1239,7 +1239,7 @@ flags for feedback:
 func resolveDispatchSession(value string) (string, error) {
 	source := strings.TrimSpace(value)
 	if source == "" {
-		source = strings.TrimSpace(os.Getenv("ATTN_SESSION_ID"))
+		source = string(currentSessionOrExit())
 	}
 	if source == "" {
 		return "", errors.New("no session; run inside attn or pass --session")
@@ -1248,10 +1248,10 @@ func resolveDispatchSession(value string) (string, error) {
 }
 
 type notebookGuideClient interface {
-	NotebookGuide(sessionID string) (*protocol.NotebookGuideResult, error)
+	NotebookGuide(sessionID protocol.SessionID) (*protocol.NotebookGuideResult, error)
 }
 
-func resolveChiefNotebookRoot(c notebookGuideClient, sessionID string) string {
+func resolveChiefNotebookRoot(c notebookGuideClient, sessionID protocol.SessionID) string {
 	guide, err := c.NotebookGuide(sessionID)
 	if err != nil || guide == nil || !guide.SessionIsChief {
 		return ""
@@ -1284,7 +1284,7 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	effort := fs.String("effort", "", "pin the delegated agent's reasoning effort")
 	name := fs.String("name", "", "session name; defaults from the brief or seed title")
 	desktop := fs.String("desktop", "", "desktop of the caller's profile: shortcut digit, name or id")
-	sourceSessionID := fs.String("source-session", "", "source session id (defaults to ATTN_SESSION_ID)")
+	sourceSessionID := fs.String("source-session", "", "source session id (defaults to the current session)")
 	yolo := fs.Bool("yolo", false, "launch the target agent in yolo mode")
 	cwd := fs.String("cwd", "", "working folder or repository")
 	reuseCheckout := fs.Bool("reuse-checkout", false, "use the checkout at cwd on its current branch")
@@ -1345,7 +1345,7 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	}
 	source := strings.TrimSpace(*sourceSessionID)
 	if source == "" {
-		source = strings.TrimSpace(os.Getenv("ATTN_SESSION_ID"))
+		source = string(currentSessionOrExit())
 	}
 	if ticket := strings.TrimSpace(*ticketID); ticket != "" {
 		return delegateCLIArgs{}, fmt.Errorf(
@@ -1469,7 +1469,7 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 		request.Priority = protocol.Ptr(true)
 	}
 	if source != "" {
-		request.SourceSessionID = protocol.Ptr(source)
+		request.SourceSessionID = protocol.Ptr(protocol.SessionID(source))
 	}
 	if value := strings.TrimSpace(*agentName); value != "" {
 		request.Agent = protocol.Ptr(value)
@@ -1508,7 +1508,7 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 func parseOpenArgs(args []string) (rawPath string, sessionFlag string, profileFlag string, err error) {
 	fs := flag.NewFlagSet("open", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	sessionID := fs.String("session", "", "session id (defaults to ATTN_SESSION_ID, then the selected session)")
+	sessionID := fs.String("session", "", "session id (defaults to the current session, then the selected session)")
 
 	profileID := fs.String("profile", "", "profile name or id for a seed outside attn")
 	var positionals []string
@@ -1546,9 +1546,9 @@ func runOpen() {
 		os.Exit(1)
 	}
 
-	resolvedSession := sessionFlag
+	resolvedSession := protocol.SessionID(sessionFlag)
 	if resolvedSession == "" {
-		resolvedSession = strings.TrimSpace(os.Getenv("ATTN_SESSION_ID"))
+		resolvedSession = currentSessionOrExit()
 	}
 
 	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
@@ -1592,7 +1592,7 @@ func browserSessionID(sessionFlag string) string {
 	if sessionID := strings.TrimSpace(sessionFlag); sessionID != "" {
 		return sessionID
 	}
-	return strings.TrimSpace(os.Getenv("ATTN_SESSION_ID"))
+	return string(currentSessionOrExit())
 }
 
 func printBrowserUsage(w io.Writer) {
@@ -1651,7 +1651,7 @@ func runBrowser() {
 	subcommand := os.Args[2]
 	fs := flag.NewFlagSet("browser "+subcommand, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	sessionFlag := fs.String("session", "", "session id (defaults to ATTN_SESSION_ID, then the selected session)")
+	sessionFlag := fs.String("session", "", "session id (defaults to the current session, then the selected session)")
 	selector := fs.String("selector", "", "CSS selector")
 	text := fs.String("text", "", "text to enter")
 	paramsJSON := fs.String("params", "{}", "JSON object with action parameters")
@@ -1671,7 +1671,7 @@ func runBrowser() {
 		os.Exit(1)
 	}
 
-	sessionID := browserSessionID(*sessionFlag)
+	sessionID := protocol.SessionID(browserSessionID(*sessionFlag))
 	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
 	textSet := false
 	fs.Visit(func(flag *flag.Flag) {
@@ -2044,14 +2044,15 @@ func runAgentDirectly(requestedAgent string) {
 	}
 
 	c := client.New("")
-	sessionID := strings.TrimSpace(os.Getenv("ATTN_SESSION_ID"))
-	if sessionID == "" {
-		fmt.Fprintf(os.Stderr, "attn: a daemon-managed launch needs ATTN_SESSION_ID; the daemon sets it for every agent it starts\n")
+	terminalID := ownTerminalID()
+	sessionID := currentSessionOrExit()
+	if terminalID == "" {
+		fmt.Fprintf(os.Stderr, "attn: a daemon-managed launch needs ATTN_TERMINAL_ID; the daemon sets it for every agent it starts\n")
 		os.Exit(1)
 	}
 
 	opts := agentdriver.SpawnOpts{
-		SessionID:       sessionID,
+		TerminalID:      terminalID,
 		CWD:             cwd,
 		Label:           parsed.label,
 		InitialPrompt:   initialPrompt,
@@ -2107,7 +2108,7 @@ func runAgentDirectly(requestedAgent string) {
 	}
 	if hp, ok := agentdriver.GetHookProvider(driver); ok {
 		content := hp.GenerateHooksConfig(opts)
-		settingsPath, err := wrapper.WriteSettingsConfig(os.TempDir(), sessionID, content)
+		settingsPath, err := wrapper.WriteSettingsConfig(os.TempDir(), string(terminalID), content)
 		if err != nil {
 			cleanup()
 			fmt.Fprintf(os.Stderr, "error writing hooks config: %v\n", err)
@@ -2120,7 +2121,7 @@ func runAgentDirectly(requestedAgent string) {
 	if ip, ok := agentdriver.GetInstructionsFileProvider(driver); ok {
 		name, content := ip.GenerateInstructionsFile(opts)
 		if strings.TrimSpace(content) != "" {
-			dir, err := wrapper.WriteInstructionsDir(os.TempDir(), sessionID, name, content)
+			dir, err := wrapper.WriteInstructionsDir(os.TempDir(), string(terminalID), name, content)
 			if err != nil {
 				cleanup()
 				fmt.Fprintf(os.Stderr, "error writing launch instructions: %v\n", err)
@@ -2164,10 +2165,10 @@ func runAgentDirectly(requestedAgent string) {
 				transcriptPath = tf.FindTranscriptForResume(opts.ResumeSessionID)
 			}
 			if transcriptPath == "" {
-				transcriptPath = tf.FindTranscript(sessionID, cwd, startedAt)
+				transcriptPath = tf.FindTranscript(string(terminalID), cwd, startedAt)
 			}
 		}
-		if sendErr := c.SendStop(sessionID, transcriptPath, client.StopFacts{}); sendErr != nil {
+		if sendErr := c.SendStop(terminalID, transcriptPath, client.StopFacts{}); sendErr != nil {
 			fmt.Fprintf(os.Stderr, "warning: could not send stop: %v\n", sendErr)
 		}
 	}
@@ -2233,7 +2234,7 @@ func openAppWithDeepLink() {
 }
 
 func runHookStop() {
-	sessionID := hookSessionIDFromArgOrEnv(2)
+	sessionID := hookTerminalIDFromArgOrEnv(2)
 	if sessionID == "" {
 		fmt.Fprintf(os.Stderr, "usage: attn _hook-stop [session_id]\n")
 		os.Exit(1)
@@ -2265,7 +2266,7 @@ func stopFacts(input hookInput) client.StopFacts {
 }
 
 func runHookSessionStart() {
-	sessionID := hookSessionIDFromArgOrEnv(2)
+	sessionID := hookTerminalIDFromArgOrEnv(2)
 	if sessionID == "" {
 		fmt.Fprintf(os.Stderr, "usage: attn _hook-session-start [session_id]\n")
 		os.Exit(1)
@@ -2297,7 +2298,7 @@ func runHookState() {
 }
 
 func runHookNotification() {
-	sessionID := hookSessionIDFromArgOrEnv(2)
+	sessionID := hookTerminalIDFromArgOrEnv(2)
 	if sessionID == "" {
 		fmt.Fprintf(os.Stderr, "usage: attn _hook-notification [session_id]\n")
 		os.Exit(1)
@@ -2317,7 +2318,7 @@ func runHookNotification() {
 }
 
 func runHookStopFailure() {
-	sessionID := hookSessionIDFromArgOrEnv(2)
+	sessionID := hookTerminalIDFromArgOrEnv(2)
 	if sessionID == "" {
 		fmt.Fprintf(os.Stderr, "usage: attn _hook-stop-failure [session_id]\n")
 		os.Exit(1)
@@ -2338,7 +2339,7 @@ func runHookStopFailure() {
 }
 
 func runHookCompact() {
-	sessionID := hookSessionIDFromArgOrEnv(2)
+	sessionID := hookTerminalIDFromArgOrEnv(2)
 	if sessionID == "" || len(os.Args) < 4 {
 		fmt.Fprintf(os.Stderr, "usage: attn _hook-compact <session_id> <start|end>\n")
 		os.Exit(1)
@@ -2356,7 +2357,7 @@ func runHookCompact() {
 }
 
 func runHookToolUse() {
-	sessionID := hookSessionIDFromArgOrEnv(2)
+	sessionID := hookTerminalIDFromArgOrEnv(2)
 	if sessionID == "" {
 		fmt.Fprintf(os.Stderr, "usage: attn _hook-tool-use [session_id]\n")
 		os.Exit(1)
@@ -2380,13 +2381,13 @@ func runHookToolUse() {
 	}
 
 	if sent := hooks.SentFiles(input.ToolName, input.ToolInput, input.CWD); len(sent) > 0 {
-		if err := c.OpenSentFiles(sessionID, sent); err != nil {
+		if err := c.OpenSentFilesFromTerminal(sessionID, sent); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: could not open sent files: %v\n", err)
 		}
 	}
 
 	for _, url := range hooks.PullRequestCreated(input.ToolName, input.ToolInput, input.ToolResponse) {
-		if err := c.RecordPullRequestCreated(sessionID, url); err != nil {
+		if err := c.RecordPullRequestCreatedFromTerminal(sessionID, url); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: could not record pull request %s: %v\n", url, err)
 		}
 	}
@@ -2433,14 +2434,14 @@ func runProbeTUI() {
 	}
 }
 
-func hookSessionIDFromArgOrEnv(index int) string {
+func hookTerminalIDFromArgOrEnv(index int) protocol.TerminalID {
 	if len(os.Args) > index {
-		return strings.TrimSpace(os.Args[index])
+		return protocol.TerminalID(strings.TrimSpace(os.Args[index]))
 	}
-	return strings.TrimSpace(os.Getenv("ATTN_SESSION_ID"))
+	return ownTerminalID()
 }
 
-func parseHookStateArgs() (sessionID string, state string, hookEvent string) {
+func parseHookStateArgs() (terminalID protocol.TerminalID, state string, hookEvent string) {
 	if len(os.Args) < 3 {
 		return "", "", ""
 	}
@@ -2450,7 +2451,7 @@ func parseHookStateArgs() (sessionID string, state string, hookEvent string) {
 		if len(os.Args) >= 4 {
 			event = strings.TrimSpace(os.Args[3])
 		}
-		return strings.TrimSpace(os.Getenv("ATTN_SESSION_ID")), first, event
+		return ownTerminalID(), first, event
 	}
 	if len(os.Args) < 4 {
 		return "", "", ""
@@ -2459,7 +2460,7 @@ func parseHookStateArgs() (sessionID string, state string, hookEvent string) {
 	if len(os.Args) >= 5 {
 		event = strings.TrimSpace(os.Args[4])
 	}
-	return first, strings.TrimSpace(os.Args[3]), event
+	return protocol.TerminalID(first), strings.TrimSpace(os.Args[3]), event
 }
 
 func hookStateValue(value string) bool {
@@ -2474,23 +2475,23 @@ func hookStateValue(value string) bool {
 }
 
 type agentConversationObserver interface {
-	ObserveAgentConversation(attnSessionID, agentSessionID, transcriptPath string) error
+	ObserveAgentConversation(terminalID protocol.TerminalID, agentSessionID, transcriptPath string) error
 }
 
-func observePromptConversation(c agentConversationObserver, attnSessionID, hookEvent string, input hookInput) {
+func observePromptConversation(c agentConversationObserver, terminalID protocol.TerminalID, hookEvent string, input hookInput) {
 	if !strings.EqualFold(strings.TrimSpace(hookEvent), "user_prompt_submit") {
 		return
 	}
-	observeAgentConversation(c, attnSessionID, input.SessionID, input.TranscriptPath)
+	observeAgentConversation(c, terminalID, input.SessionID, input.TranscriptPath)
 }
 
-func observeAgentConversation(c agentConversationObserver, attnSessionID, agentSessionID, transcriptPath string) {
-	agentSessionID = strings.TrimSpace(agentSessionID)
+func observeAgentConversation(c agentConversationObserver, terminalID protocol.TerminalID, agentSessionID string, transcriptPath string) {
+	agentSessionID = protocol.TrimID(agentSessionID)
 	transcriptPath = strings.TrimSpace(transcriptPath)
 	if agentSessionID == "" || transcriptPath == "" {
 		return
 	}
-	if err := c.ObserveAgentConversation(attnSessionID, agentSessionID, transcriptPath); err != nil {
+	if err := c.ObserveAgentConversation(terminalID, agentSessionID, transcriptPath); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: could not observe agent conversation: %v\n", err)
 	}
 }

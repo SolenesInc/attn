@@ -1,8 +1,6 @@
 package daemon
 
 import (
-	"strings"
-
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -27,7 +25,7 @@ func (d *Daemon) handleSeedTransitionWS(client *wsClient, msg *protocol.SeedTran
 	}
 	ask, sessionID := d.seedTransitionAsk(msg)
 	if harvestWhenRequested(msg) {
-		seed, doc, err := d.applyHarvestWhenRequest(msg, verb, ask, sessionID)
+		seed, doc, err := d.applyHarvestWhenRequest(msg, verb, ask, protocol.SessionID(sessionID))
 		if err != nil {
 			fail(err)
 			return
@@ -76,7 +74,7 @@ func (d *Daemon) handleSeedNoteWS(client *wsClient, msg *protocol.SeedNoteMessag
 		fail(err)
 		return
 	}
-	authorSession := strings.TrimSpace(protocol.Deref(msg.SourceSessionID))
+	authorSession := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
 	note, err := d.appendSeedNote(
 		msg.SeedID,
 		msg.Body,
@@ -84,8 +82,7 @@ func (d *Daemon) handleSeedNoteWS(client *wsClient, msg *protocol.SeedNoteMessag
 		protocol.Deref(msg.Member),
 		protocol.Deref(msg.Kind),
 		artifactFromProtocol(msg.Artifact),
-		protocol.Deref(msg.Ring),
-		authorSession,
+		protocol.Deref(msg.Ring), authorSession,
 	)
 	if err != nil {
 		fail(err)

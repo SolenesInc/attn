@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"errors"
-	"strings"
 
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profiles"
@@ -10,14 +9,14 @@ import (
 )
 
 type agentLocation struct {
-	sessionID string
+	sessionID protocol.SessionID
 	profileID string
 	desktopID string
 	paneID    string
 }
 
-func (d *Daemon) currentAgent(callerSessionID string) (agentLocation, error) {
-	if sessionID := strings.TrimSpace(callerSessionID); sessionID != "" {
+func (d *Daemon) currentAgent(callerSessionID protocol.SessionID) (agentLocation, error) {
+	if sessionID := protocol.TrimID(callerSessionID); sessionID != "" {
 		return d.agentLocation(sessionID)
 	}
 	profile, err := d.store.MostRecentlyUsedProfile()
@@ -41,7 +40,7 @@ func (d *Daemon) currentAgent(callerSessionID string) (agentLocation, error) {
 	return location, nil
 }
 
-func (d *Daemon) agentLocation(sessionID string) (agentLocation, error) {
+func (d *Daemon) agentLocation(sessionID protocol.SessionID) (agentLocation, error) {
 	profileID, err := d.store.SessionProfileID(sessionID)
 	if err != nil {
 		return agentLocation{}, err
@@ -79,14 +78,14 @@ func (d *Daemon) refreshCurrentAgent() {
 func (d *Daemon) currentAgentSession() string {
 	d.currentAgentMu.RLock()
 	defer d.currentAgentMu.RUnlock()
-	return d.currentAgentSessionID
+	return string(d.currentAgentSessionID)
 }
 
 type agentTile struct {
 	tileID    string
 	tileKind  string
 	params    string
-	sessionID string
+	sessionID protocol.SessionID
 }
 
 func (d *Daemon) openAgentTile(location agentLocation, tile agentTile) (profiles.Desktop, string, error) {

@@ -161,7 +161,7 @@ func (h annotationDraftHandler[T]) clear(operation, rawKey string, generation in
 func sessionAnnotationDraftAccessors(s *store.Store) annotationDraftAccessors {
 	return annotationDraftAccessors{
 		get: func(key string) (annotationDraft, error) {
-			draft, err := s.GetSessionAnnotationDraft(key)
+			draft, err := s.GetSessionAnnotationDraft(protocol.SessionID(key))
 			if err != nil {
 				return annotationDraft{}, err
 			}
@@ -171,8 +171,12 @@ func sessionAnnotationDraftAccessors(s *store.Store) annotationDraftAccessors {
 				generation:  draft.Generation,
 			}, nil
 		},
-		save:  s.SaveSessionAnnotationDraft,
-		clear: s.ClearSessionAnnotationDraft,
+		save: func(key, annotations, note string, generation int, now time.Time) error {
+			return s.SaveSessionAnnotationDraft(protocol.SessionID(key), annotations, note, generation, now)
+		},
+		clear: func(key string, generation int, now time.Time) error {
+			return s.ClearSessionAnnotationDraft(protocol.SessionID(key), generation, now)
+		},
 	}
 }
 

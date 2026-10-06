@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/launchcontract"
+	"github.com/victorarias/attn/internal/protocol"
 	"gopkg.in/yaml.v3"
 )
 
@@ -498,7 +499,11 @@ func (c ContinuationContract) Equal(other ContinuationContract) bool {
 	return leftErr == nil && rightErr == nil && string(leftJSON) == string(rightJSON)
 }
 
-type DeliveryIDs struct{ SeedID, SessionID, ProfileID string }
+type DeliveryIDs struct {
+	SeedID    string
+	SessionID protocol.SessionID
+	ProfileID string
+}
 type WorkRequest struct {
 	RunID, SubjectKey, ContinuityKey, Provider string
 	DefinitionID                               int
@@ -524,8 +529,13 @@ type ResolvedLocation struct {
 	ProviderRef      string           `json:"provider_ref,omitempty"`
 }
 type DeliveryResult struct {
-	SeedID, SessionID, ProfileID, Directory, Revision, Mode string
-	Resolved                                                json.RawMessage
+	SeedID    string
+	SessionID protocol.SessionID
+	ProfileID string
+	Directory string
+	Revision  string
+	Mode      string
+	Resolved  json.RawMessage
 }
 type Deliverer interface {
 	Deliver(context.Context, WorkRequest) (DeliveryResult, error)

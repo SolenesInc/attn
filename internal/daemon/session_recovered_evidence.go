@@ -8,7 +8,7 @@ import (
 	"github.com/victorarias/attn/internal/sessionstate"
 )
 
-func (d *Daemon) seedRecoveredEvidence(sessionID string, existing *protocol.Session, info ptybackend.SessionInfo) {
+func (d *Daemon) seedRecoveredEvidence(sessionID protocol.SessionID, existing *protocol.Session, info ptybackend.SessionInfo) {
 	if d == nil || existing == nil {
 		return
 	}

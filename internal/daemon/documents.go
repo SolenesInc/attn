@@ -26,10 +26,10 @@ type docSubscription struct {
 }
 
 type documentChanged struct {
-	Namespace  string `json:"namespace"`
-	Collection string `json:"collection"`
-	ID         string `json:"id"`
-	Deleted    bool   `json:"deleted,omitempty"`
+	Namespace  string             `json:"namespace"`
+	Collection string             `json:"collection"`
+	ID         protocol.SessionID `json:"id"`
+	Deleted    bool               `json:"deleted,omitempty"`
 }
 
 type documentCollectionRemoved struct {
@@ -59,9 +59,9 @@ func (d *Daemon) unsubscribeDocumentFacts() {
 	}
 }
 
-func documentChangedFact(namespace, collection, id string, deleted bool) store.BusEvent {
+func documentChangedFact(namespace string, collection string, id string, deleted bool) store.BusEvent {
 	payload, _ := json.Marshal(documentChanged{
-		Namespace: namespace, Collection: collection, ID: id, Deleted: deleted,
+		Namespace: namespace, Collection: collection, ID: protocol.SessionID(id), Deleted: deleted,
 	})
 	return store.BusEvent{
 		Name:    FactDocumentChanged,
