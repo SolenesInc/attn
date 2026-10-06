@@ -314,6 +314,12 @@ func (d *Daemon) resolveSpawnIntent(req *spawnRequest) (*spawnPlan, *spawnReject
 	}
 	plan.spawnOpts.ContextWindowCap = d.launchContextWindowCap(msg.ID, req.agent, plan.isChief)
 	req.codexShared = d.launchesSharedCodex(req)
+	if req.codexShared && req.resumeSessionID != "" {
+		if other := d.codexShared().loadedElsewhere(req.profile.ID, req.resumeSessionID); other != "" {
+			plan.rollback(d, msg.ID)
+			return nil, &spawnRejection{err: fmt.Errorf("conversation %s is open in the shared Codex of profile %s; it can open here once that profile lets it go, about a minute after no terminal shows it", req.resumeSessionID, other)}
+		}
+	}
 	if !req.codexShared && req.agent == string(protocol.SessionAgentCodex) {
 		if holder := d.codexShared().holder(req.profile.ID, req.resumeSessionID); holder != "" && holder != msg.ID {
 			plan.rollback(d, msg.ID)
@@ -456,6 +462,9 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 			d.forgetSessionTrace(msg.ID)
 		} else if restoreErr := d.store.AddCheckedUnlessTeardown(req.existingSession); restoreErr != nil {
 			err = errors.Join(err, fmt.Errorf("restore prior session after spawn failure: %w", restoreErr))
+		}
+		if req.codexShared {
+			d.codexShared().idleSoon(req.profile.ID)
 		}
 		if req.existingSession != nil {
 			d.startEvidence(msg.ID, priorEvidence)

@@ -265,6 +265,27 @@ func TestAConversationResumedInAnotherProfileIsThatProfilesOwnSharedCodexSession
 	}
 }
 
+func TestASharedLaunchRefusesAConversationAnotherProfilesServerHolds(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	side := createProfile(app, "Side")
+	sideApp := w.AppOn(side.ID)
+	elsewhere := w.Spawn(sideApp, fakeagent.Codex, w.Path("shop"))
+	sideCodex := w.Launched(elsewhere)
+	sideApp.TypeLine(elsewhere, "plan the release")
+	sideCodex.Prompted()
+	sideCodex.Reply("Planned. <!-- attn:state=idle -->")
+	testworld.AwaitSession(sideApp, elsewhere, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+
+	refused, _, _ := w.RequestSpawn(app, fakeagent.Codex, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
+		m.ResumeSessionID = protocol.Ptr(sideCodex.ConversationID)
+	})
+	if refused.Success || !strings.Contains(protocol.Deref(refused.Error), side.ID) {
+		t.Errorf("resuming %s here while profile %s holds it = %+v, want it refused naming that profile", sideCodex.ConversationID, side.ID, refused)
+	}
+}
+
 func TestAHiddenSharedCodexSessionThatAsksAQuestionWaitsForTheUser(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()

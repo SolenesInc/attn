@@ -476,6 +476,24 @@ func (r *codexShared) needed(profile string) bool {
 	return false
 }
 
+func (r *codexShared) loadedElsewhere(profile, conversation string) string {
+	r.mu.Lock()
+	servers := make(map[string]*codexServer, len(r.servers))
+	for p, s := range r.servers {
+		servers[p] = s
+	}
+	r.mu.Unlock()
+	for p, s := range servers {
+		s.mu.Lock()
+		held := p != profile && s.control != nil && s.loaded[conversation]
+		s.mu.Unlock()
+		if held {
+			return p
+		}
+	}
+	return ""
+}
+
 func (r *codexShared) idleSoon(profile string) {
 	if profile == "" {
 		return
