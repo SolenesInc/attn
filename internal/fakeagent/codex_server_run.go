@@ -52,6 +52,14 @@ func (s *CodexServer) Instructions(conversation string) string {
 	return started.Text
 }
 
+// CompactLimit is the auto-compact limit the loaded conversation took from its last load, or "".
+func (s *CodexServer) CompactLimit(conversation string) string {
+	s.t.Helper()
+	var loaded promptedResult
+	s.call(methodCompactLimit, serverThreadParams{ThreadID: conversation}, &loaded)
+	return loaded.Text
+}
+
 func (s *CodexServer) call(method string, params, result any) {
 	s.t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), HangGuard)

@@ -554,9 +554,7 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 	if config == nil {
 		config = make(map[string]any)
 	}
-	if limit := r.d.launchContextWindowCap(launchAs, string(protocol.SessionAgentCodex), chief); limit > 0 {
-		config["model_auto_compact_token_limit"] = limit
-	}
+	r.capContext(config, launchAs, chief)
 	// Codex ignores developerInstructions on thread/resume: a conversation keeps the ones it started with.
 	if method != "thread/resume" {
 		if instructions := r.instructions(launchAs, v.profile, chief); instructions != "" {
@@ -612,6 +610,13 @@ func (r *codexShared) launching(v *codexView, method string, params map[string]a
 		return session, "", false
 	}
 	return session, session, r.d.isChiefOfStaffSession(session)
+}
+
+// Codex applies config only when a start or resume loads the conversation, so every load carries the cap.
+func (r *codexShared) capContext(config map[string]any, sessionID protocol.SessionID, chief bool) {
+	if limit := r.d.launchContextWindowCap(sessionID, string(protocol.SessionAgentCodex), chief); limit > 0 {
+		config["model_auto_compact_token_limit"] = limit
+	}
 }
 
 func (r *codexShared) instructions(sessionID protocol.SessionID, profile string, chief bool) string {

@@ -33,6 +33,7 @@ const (
 	methodThreadName     = "thread_name"
 	methodAskQuestion    = "ask_question"
 	methodInstructions   = "instructions"
+	methodCompactLimit   = "compact_limit"
 	methodRunTool        = "run_tool"
 	codexApprovalRequest = "item/commandExecution/requestApproval"
 )
@@ -70,6 +71,7 @@ type codexServerThread struct {
 	approvalID     string
 	question       bool
 	instructions   string
+	compactLimit   string
 }
 
 func runCodexAppServer(cfg config) int {
@@ -234,6 +236,7 @@ type codexServerParams struct {
 	Text           string            `json:"text"`
 	Items          []json.RawMessage `json:"items"`
 	DevInstruction string            `json:"developerInstructions"`
+	Config         map[string]any    `json:"config"`
 	Input          []struct {
 		Text string `json:"text"`
 	} `json:"input"`
@@ -370,7 +373,7 @@ func (s *codexAppServer) start(conn *codexServerConn, p codexServerParams) (any,
 	if p.Ephemeral {
 		return map[string]any{"thread": map[string]any{"id": id.String(), "ephemeral": true}}, nil, nil
 	}
-	t.instructions = p.DevInstruction
+	t.instructions, t.compactLimit = p.DevInstruction, p.compactLimit()
 	s.mu.Lock()
 	s.threads[t.c.conversation] = t
 	s.mu.Unlock()
@@ -396,7 +399,7 @@ func (s *codexAppServer) resume(conn *codexServerConn, p codexServerParams) (any
 			return nil, nil, fmt.Errorf("no rollout found for thread id %s", p.ThreadID)
 		}
 		t = s.newThread(p.ThreadID, cwd, p.Model, path, "resume", time.Now().UTC(), conn)
-		t.written = true
+		t.written, t.compactLimit = true, p.compactLimit()
 		s.mu.Lock()
 		s.threads[p.ThreadID] = t
 		s.mu.Unlock()
@@ -410,6 +413,14 @@ func (s *codexAppServer) resume(conn *codexServerConn, p codexServerParams) (any
 			conn.send(pending)
 		}
 	}, nil
+}
+
+// Stock 0.160.0 applies config only when a start or resume loads the conversation.
+func (p codexServerParams) compactLimit() string {
+	if limit, ok := p.Config["model_auto_compact_token_limit"]; ok {
+		return fmt.Sprint(limit)
+	}
+	return ""
 }
 
 func (s *codexAppServer) findRollout(id string) (path, cwd string) {
@@ -774,6 +785,13 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 			return nil, fmt.Errorf("conversation %s was not started here", p.ThreadID)
 		}
 		return promptedResult{Text: t.instructions, ConversationID: p.ThreadID}, nil
+	case methodCompactLimit:
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if t := s.threads[p.ThreadID]; t != nil {
+			return promptedResult{Text: t.compactLimit, ConversationID: p.ThreadID}, nil
+		}
+		return nil, fmt.Errorf("conversation %s is not loaded here", p.ThreadID)
 	}
 	return nil, fmt.Errorf("unknown method %q", method)
 }

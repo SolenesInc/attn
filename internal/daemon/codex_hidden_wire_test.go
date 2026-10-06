@@ -445,6 +445,26 @@ func TestAHiddenSharedCodexSessionCountsTheTurnsItsInputStarts(t *testing.T) {
 	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return s.Usage != nil && s.Usage.TotalTokens > counted })
 }
 
+func TestAHiddenSharedCodexConversationReloadsWithItsSessionsContextCap(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	setSetting(t, app, "default_context_window_cap_codex", "200000")
+	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
+	conversation := codex.ConversationID
+	moveOn(t, app, codex, terminal, "/new", "add a discount field")
+	codex.Reply("Added. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return protocol.Deref(s.Hidden) })
+
+	if got := submitSessionAnnotationFeedback(app, checkout, sessionAnnotationFeedback); !got.success {
+		t.Fatalf("feedback to the hidden session = %+v", got)
+	}
+	w.CodexServer().Prompted(conversation)
+	if limit := w.CodexServer().CompactLimit(conversation); limit != "200000" {
+		t.Errorf("conversation %s reloaded for hidden input with compact limit %q, want 200000", conversation, limit)
+	}
+}
+
 func TestAHiddenSharedCodexTurnEndsWhenItsAppServerExits(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()

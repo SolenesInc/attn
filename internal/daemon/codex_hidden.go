@@ -119,7 +119,7 @@ func (l codexLink) Deliver(_ context.Context, in harness.Input) harness.Custody 
 	defer cancel()
 	s, client, err := r.control(ctx, session.ProfileID)
 	if err == nil {
-		err = r.startTurn(ctx, client, conversation, in.Text)
+		err = r.startTurn(ctx, client, session.ID, conversation, in.Text)
 	}
 	if err == nil {
 		s.events.run(r.d, func() {
@@ -132,7 +132,7 @@ func (l codexLink) Deliver(_ context.Context, in harness.Input) harness.Custody 
 	return harness.Custody{Taken: true, At: time.Now()}
 }
 
-func (r *codexShared) startTurn(ctx context.Context, client *codexshared.Client, conversation, text string) error {
+func (r *codexShared) startTurn(ctx context.Context, client *codexshared.Client, sessionID protocol.SessionID, conversation, text string) error {
 	call := func(method string, params, result any) error {
 		callCtx, cancel := context.WithTimeout(ctx, codexServerCallLimit)
 		defer cancel()
@@ -147,7 +147,9 @@ func (r *codexShared) startTurn(ctx context.Context, client *codexshared.Client,
 			Status codexThreadStatus `json:"status"`
 		} `json:"thread"`
 	}
-	if err := call("thread/resume", map[string]any{"threadId": conversation, "excludeTurns": true}, &resumed); err != nil {
+	config := make(map[string]any)
+	r.capContext(config, sessionID, r.d.isChiefOfStaffSession(sessionID))
+	if err := call("thread/resume", map[string]any{"threadId": conversation, "excludeTurns": true, "config": config}, &resumed); err != nil {
 		return err
 	}
 	defer func() {
