@@ -1,4 +1,4 @@
-.PHONY: git-hooks lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-instance-harness verify-ghostty-vt-wasm test test-scripts test-v test-watch test-frontend test-e2e clean generate-types ensure-go-jsonschema check-types generate-schema check-schema check-migrations build-app ensure-codesign-identity sign-app app-screenshot dist release release-hotfix
+.PHONY: git-hooks lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-instance-harness verify-ghostty-vt-wasm test test-scripts test-v test-watch test-frontend test-e2e clean generate-types ensure-go-jsonschema check-types generate-schema check-schema check-migrations build-app ensure-codesign-identity sign-app app-screenshot dist release
 
 # Bare `make` does the full prod inner loop: install + open the app.
 # `make install` is install-only (for scripts/CI that drive the launch
@@ -180,7 +180,7 @@ $(GOTESTSUM):
 verify-ghostty-vt-wasm:
 	bash ./app/scripts/ensure-ghostty-vt-wasm.sh
 
-DIFF_BASE ?= origin/next
+DIFF_BASE ?= origin/main
 GO_SUITE_IGNORES := ^(docs/|[^/]*\.md$$|app/src/)
 GO_SUITE_READS := ^app/src/(hooks/useDaemonSocket\.ts$$|ghostty/testdata/)
 test: git-hooks $(NATIVE_VT_DEP) verify-ghostty-vt-wasm
@@ -434,7 +434,7 @@ generate-types: ensure-go-jsonschema
 check-types: generate-types
 	git diff --exit-code internal/protocol/generated.go app/src/types/generated.ts internal/protocol/protocol_version.go app/src/types/protocolVersion.ts
 
-MIGRATION_BASE ?= origin/next
+MIGRATION_BASE ?= origin/main
 
 check-migrations:
 	go run ./cmd/db-migrations check-history --base "$(MIGRATION_BASE)"
@@ -504,9 +504,6 @@ dist: build-app
 
 release:
 	./scripts/release.sh $(VERSION_TAG)
-
-release-hotfix:
-	./scripts/release.sh $(VERSION_TAG) --hotfix
 
 .PHONY: generate-prompts check-prompts prompt-editor test-prompt-editor
 generate-prompts:

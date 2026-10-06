@@ -10,7 +10,7 @@ prompt change. `context` returns that workflow with the complete relevant
 instructions. Start from an event, source, scenario or shared draft:
 
 ```sh
-go run ./cmd/prompt-editor context crew/priming --include crew/wake --base next --json
+go run ./cmd/prompt-editor context crew/priming --include crew/wake --base main --json
 go run ./cmd/prompt-editor context --scenario chief-with-handoff --json
 go run ./cmd/prompt-editor context --draft DRAFT_ID --json
 ```
@@ -48,7 +48,7 @@ Save representative inputs in `internal/prompts/scenarios/ID.json`. `values` sup
 scenario.
 
 ```sh
-go run ./cmd/prompt-editor compare --base next --json
+go run ./cmd/prompt-editor compare --base main --json
 ```
 
 Add `--scenario ID` to narrow `compare`. `check` validates the catalog and scenarios. Comparison defaults to merge-base;
@@ -69,10 +69,10 @@ go run ./cmd/prompt-editor draft create --title 'Clarify wake instructions' --js
 go run ./cmd/prompt-editor context crew/wake --draft DRAFT_ID --json
 go run ./cmd/prompt-editor draft put DRAFT_ID content/crew/wake.md \
   --file /tmp/wake.md --expect SOURCE_REVISION --author agent
-go run ./cmd/prompt-editor draft focus DRAFT_ID --scenario crew-wake --base next
+go run ./cmd/prompt-editor draft focus DRAFT_ID --scenario crew-wake --base main
 go run ./cmd/prompt-editor check --draft DRAFT_ID
-go run ./cmd/prompt-editor compare --draft DRAFT_ID --base next --json
-go run ./cmd/prompt-editor context --draft DRAFT_ID --base next --json
+go run ./cmd/prompt-editor compare --draft DRAFT_ID --base main --json
+go run ./cmd/prompt-editor context --draft DRAFT_ID --base main --json
 go run ./cmd/prompt-editor draft get DRAFT_ID --json
 ```
 
@@ -113,7 +113,7 @@ while the user reviews. Open the appropriate view:
 
 ```sh
 go run ./cmd/prompt-editor show --draft DRAFT_ID \
-  --scenario crew-wake --source content/crew/wake.md --base next --open
+  --scenario crew-wake --source content/crew/wake.md --base main --open
 go run ./cmd/prompt-editor show --review REVIEW_ID --open
 ```
 

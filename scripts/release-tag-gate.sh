@@ -30,19 +30,8 @@ if [[ "$head_sha" != "$trusted_sha" ]]; then
   echo "release tag gate: trusted checkout is $head_sha, expected $trusted_sha" >&2
   exit 1
 fi
-main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
-if [[ "$trusted_sha" != "$main_sha" ]]; then
-  echo "release tag gate: main moved from dispatch SHA $trusted_sha to $main_sha" >&2
-  exit 1
-fi
-if [[ "$tag_sha" != "$main_sha" ]]; then
-  echo "release tag gate: $tag points to $tag_sha, not current main $main_sha" >&2
-  exit 1
-fi
-
-publication="$(go run ./cmd/release-train accepted-main publication --head "$tag_sha")"
-if [[ "$publication" != automatic ]]; then
-  echo "release tag gate: publication is $publication for $tag; refusing release" >&2
+if ! git merge-base --is-ancestor "$tag_sha" 'origin/main'; then
+  echo "release tag gate: $tag points to $tag_sha, which is not on main" >&2
   exit 1
 fi
 
@@ -52,7 +41,11 @@ if [[ "$validated_tag" != "$tag" ]]; then
   exit 1
 fi
 
-"$script_root/app-acceptance-gate.sh" "$tag_sha"
+if "$script_root/workflow-job-gate.sh" ci.yml "$tag_sha" push main 'App acceptance'; then
+  echo "release tag gate: CI App acceptance is green for $tag_sha"
+else
+  "$script_root/app-acceptance-gate.sh" "$tag_sha"
+fi
 "$script_root/workflow-job-gate.sh" ci.yml "$tag_sha" push main Acceptance
 
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then

@@ -69,7 +69,7 @@ func run(args []string, cwd string, now time.Time, stdout, stderr io.Writer) err
 		_, err = fmt.Fprintln(stdout, file)
 		return err
 	case "check-history":
-		base := flags.String("base", "origin/next", "Git revision containing merged migrations")
+		base := flags.String("base", "origin/main", "Git revision containing merged migrations")
 		if err := flags.Parse(args[1:]); err != nil {
 			if errors.Is(err, flag.ErrHelp) {
 				return nil

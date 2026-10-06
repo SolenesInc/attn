@@ -20,11 +20,6 @@ import (
 
 const defaultManifestPath = ".github/release-candidate.yml"
 
-const (
-	publicationAutomatic = "automatic"
-	publicationHeld      = "held"
-)
-
 var (
 	plainVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 	commitPattern       = regexp.MustCompile(`^[0-9a-f]{40,64}$`)
@@ -34,11 +29,8 @@ var (
 )
 
 type candidateManifest struct {
-	Version     string `yaml:"version"`
-	Kind        string `yaml:"kind"`
-	Publication string `yaml:"publication"`
-	SourceSHA   string `yaml:"source_sha"`
-	MainSHA     string `yaml:"main_sha"`
+	Version string `yaml:"version"`
+	MainSHA string `yaml:"main_sha"`
 }
 
 type versionSource struct {
@@ -51,7 +43,6 @@ type candidateValidation struct {
 	manifestPath        string
 	currentMainRef      string
 	headRef             string
-	sourceAcceptance    string
 	tagStatus           string
 	otherOpenCandidates int
 }
@@ -82,8 +73,6 @@ func run(args []string, stdout io.Writer) error {
 		return runCandidate(root, args[1:], stdout)
 	case "accepted-main":
 		return runAcceptedMain(root, args[1:], stdout)
-	case "sync":
-		return runSync(root, args[1:], stdout)
 	case "help", "--help", "-h":
 		_, err := fmt.Fprint(stdout, usage())
 		return err
@@ -104,9 +93,6 @@ commands:
   candidate validate [flags] validate a prepared release candidate
   accepted-main tag          print the manifest's release tag for main
   accepted-main validate     validate and print the release tag for main
-  accepted-main publication  print automatic or held for main
-  sync apply [flags]         consume released fragments after main is merged
-  sync check [flags]         verify main ancestry and fragment consumption
 `
 }
 
@@ -361,14 +347,11 @@ func renderFragments(root string) (string, error) {
 
 func runManifest(root string, args []string, stdout io.Writer) error {
 	if len(args) == 0 || args[0] != "write" {
-		return errors.New("usage: release-train manifest write --version vX.Y.Z --kind <promotion|hotfix> --publication <automatic|held> --source <ref> --main <ref> [--output path]")
+		return errors.New("usage: release-train manifest write --version vX.Y.Z --main <ref> [--output path]")
 	}
 	flags := flag.NewFlagSet("manifest write", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	versionFlag := flags.String("version", "", "release version")
-	kind := flags.String("kind", "", "candidate kind")
-	publication := flags.String("publication", publicationAutomatic, "publication mode")
-	sourceRef := flags.String("source", "", "accepted source ref")
 	mainRef := flags.String("main", "", "main ref at candidate creation")
 	output := flags.String("output", defaultManifestPath, "manifest path")
 	if err := flags.Parse(args[1:]); err != nil {
@@ -378,22 +361,12 @@ func runManifest(root string, args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	sourceSHA, err := resolveCommit(root, *sourceRef)
-	if err != nil {
-		return fmt.Errorf("source: %w", err)
-	}
 	mainSHA, err := resolveCommit(root, *mainRef)
 	if err != nil {
 		return fmt.Errorf("main: %w", err)
 	}
-	manifest := candidateManifest{
-		Version: version, Kind: *kind, Publication: *publication,
-		SourceSHA: sourceSHA, MainSHA: mainSHA,
-	}
+	manifest := candidateManifest{Version: version, MainSHA: mainSHA}
 	if err := validateManifest(manifest); err != nil {
-		return err
-	}
-	if err := requireAncestor(root, mainSHA, sourceSHA, "recorded main is not an ancestor of the accepted source"); err != nil {
 		return err
 	}
 	path := filepath.Join(root, *output)
@@ -407,7 +380,7 @@ func runManifest(root string, args []string, stdout io.Writer) error {
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(stdout, "wrote %s for %s at %s\n", *output, manifest.Kind, sourceSHA)
+	_, err = fmt.Fprintf(stdout, "wrote %s for v%s on main %s\n", *output, version, mainSHA)
 	return err
 }
 
@@ -434,9 +407,6 @@ func decodeManifest(data []byte) (candidateManifest, error) {
 	if err := decoder.Decode(&manifest); err != nil {
 		return candidateManifest{}, err
 	}
-	if manifest.Publication == "" {
-		manifest.Publication = publicationAutomatic
-	}
 	var extra candidateManifest
 	if err := decoder.Decode(&extra); err == nil {
 		return candidateManifest{}, errors.New("manifest holds more than one YAML document")
@@ -453,18 +423,6 @@ func validateManifest(manifest candidateManifest) error {
 	if !plainVersionPattern.MatchString(manifest.Version) {
 		return fmt.Errorf("version must look like 1.2.3 (got %q)", manifest.Version)
 	}
-	if manifest.Kind != "promotion" && manifest.Kind != "hotfix" {
-		return fmt.Errorf("kind must be promotion or hotfix (got %q)", manifest.Kind)
-	}
-	if manifest.Publication != publicationAutomatic && manifest.Publication != publicationHeld {
-		return fmt.Errorf("publication must be automatic or held (got %q)", manifest.Publication)
-	}
-	if manifest.Kind == "hotfix" && manifest.Publication == publicationHeld {
-		return errors.New("hotfix publication cannot be held")
-	}
-	if !commitPattern.MatchString(manifest.SourceSHA) {
-		return errors.New("source_sha must be a full commit SHA")
-	}
 	if !commitPattern.MatchString(manifest.MainSHA) {
 		return errors.New("main_sha must be a full commit SHA")
 	}
@@ -473,7 +431,7 @@ func validateManifest(manifest candidateManifest) error {
 
 func runCandidate(root string, args []string, stdout io.Writer) error {
 	if len(args) == 0 || args[0] != "validate" {
-		return errors.New("usage: release-train candidate validate --current-main <ref> --tag-status absent --other-open-candidates 0 [--source-acceptance success] [--head ref] [--manifest path]")
+		return errors.New("usage: release-train candidate validate --current-main <ref> --tag-status absent --other-open-candidates 0 [--head ref] [--manifest path]")
 	}
 	flags := flag.NewFlagSet("candidate validate", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
@@ -481,7 +439,6 @@ func runCandidate(root string, args []string, stdout io.Writer) error {
 	flags.StringVar(&input.manifestPath, "manifest", input.manifestPath, "candidate manifest")
 	flags.StringVar(&input.currentMainRef, "current-main", "", "current main ref")
 	flags.StringVar(&input.headRef, "head", input.headRef, "candidate head ref")
-	flags.StringVar(&input.sourceAcceptance, "source-acceptance", "", "accepted source conclusion")
 	flags.StringVar(&input.tagStatus, "tag-status", "", "remote candidate tag status")
 	flags.IntVar(&input.otherOpenCandidates, "other-open-candidates", -1, "other open candidate count")
 	if err := flags.Parse(args[1:]); err != nil {
@@ -494,7 +451,7 @@ func runCandidate(root string, args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(stdout, "candidate %s is valid for v%s\n", manifest.SourceSHA, manifest.Version)
+	_, err = fmt.Fprintf(stdout, "candidate on main %s is valid for v%s\n", manifest.MainSHA, manifest.Version)
 	return err
 }
 
@@ -506,12 +463,6 @@ func validateCandidate(root string, input candidateValidation) error {
 	manifest, err := readManifestAtRef(root, headSHA, input.manifestPath)
 	if err != nil {
 		return fmt.Errorf("manifest: %w", err)
-	}
-	if manifest.Kind == "promotion" && strings.ToLower(input.sourceAcceptance) != "success" {
-		if input.sourceAcceptance == "" {
-			return errors.New("source acceptance is missing")
-		}
-		return fmt.Errorf("source acceptance is %s, expected success", input.sourceAcceptance)
 	}
 	if input.otherOpenCandidates < 0 {
 		return errors.New("other open candidate count is missing")
@@ -532,16 +483,10 @@ func validateCandidate(root string, input candidateValidation) error {
 	if err != nil {
 		return fmt.Errorf("current main: %w", err)
 	}
-	if currentMainSHA != manifest.MainSHA {
-		return fmt.Errorf("main moved after the candidate was cut: recorded %s, current %s", manifest.MainSHA, currentMainSHA)
-	}
-	if _, err := resolveCommit(root, manifest.SourceSHA); err != nil {
-		return fmt.Errorf("recorded source: %w", err)
-	}
-	if err := requireAncestor(root, manifest.MainSHA, manifest.SourceSHA, "recorded main is not an ancestor of the candidate source"); err != nil {
+	if err := requireAncestor(root, manifest.MainSHA, currentMainSHA, "recorded main is not on current main"); err != nil {
 		return err
 	}
-	if err := requireAncestor(root, manifest.SourceSHA, headSHA, "recorded source is not an ancestor of the candidate head"); err != nil {
+	if err := requireAncestor(root, manifest.MainSHA, headSHA, "recorded main is not an ancestor of the candidate head"); err != nil {
 		return err
 	}
 	if err := checkVersions(root, headSHA, manifest.Version); err != nil {
@@ -550,10 +495,10 @@ func validateCandidate(root string, input candidateValidation) error {
 	if err := requireNoFragments(root, headSHA); err != nil {
 		return err
 	}
-	if err := requireCompiledChangelog(root, manifest.SourceSHA, headSHA); err != nil {
+	if err := requireCompiledChangelog(root, manifest.MainSHA, headSHA); err != nil {
 		return err
 	}
-	if err := requireReleaseOnlyChanges(root, manifest.SourceSHA, headSHA, input.manifestPath); err != nil {
+	if err := requireReleaseOnlyChanges(root, manifest.MainSHA, headSHA, input.manifestPath); err != nil {
 		return err
 	}
 	return nil
@@ -572,6 +517,28 @@ func requireNoFragments(root, ref string) error {
 	}
 	if len(fragments) > 0 {
 		return fmt.Errorf("candidate still contains pending changelog fragments: %s", strings.Join(fragments, ", "))
+	}
+	return nil
+}
+
+func requireReleasedFragmentsConsumed(root, mainSHA, headSHA string) error {
+	released, err := fragmentBlobs(root, mainSHA)
+	if err != nil {
+		return err
+	}
+	current, err := fragmentBlobs(root, headSHA)
+	if err != nil {
+		return err
+	}
+	var remaining []string
+	for path := range released {
+		if _, ok := current[path]; ok {
+			remaining = append(remaining, path)
+		}
+	}
+	sort.Strings(remaining)
+	if len(remaining) > 0 {
+		return fmt.Errorf("release still contains the changelog fragments it compiled: %s", strings.Join(remaining, ", "))
 	}
 	return nil
 }
@@ -663,8 +630,8 @@ func requireReleaseOnlyChanges(root, source, head, manifestPath string) error {
 }
 
 func runAcceptedMain(root string, args []string, stdout io.Writer) error {
-	if len(args) == 0 || (args[0] != "tag" && args[0] != "validate" && args[0] != "publication") {
-		return errors.New("usage: release-train accepted-main <tag|validate|publication> --head <ref> [--manifest path]")
+	if len(args) == 0 || (args[0] != "tag" && args[0] != "validate") {
+		return errors.New("usage: release-train accepted-main <tag|validate> --head <ref> [--manifest path]")
 	}
 	flags := flag.NewFlagSet("accepted-main "+args[0], flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
@@ -681,10 +648,6 @@ func runAcceptedMain(root string, args []string, stdout io.Writer) error {
 		manifest, err = validateAcceptedMain(root, *headRef, *manifestPath)
 	}
 	if err != nil {
-		return err
-	}
-	if args[0] == "publication" {
-		_, err = fmt.Fprintln(stdout, manifest.Publication)
 		return err
 	}
 	_, err = fmt.Fprintln(stdout, "v"+manifest.Version)
@@ -712,132 +675,32 @@ func validateAcceptedMain(root, headRef, manifestPath string) (candidateManifest
 	if err != nil {
 		return candidateManifest{}, err
 	}
+	if err := requireReleaseCommit(root, headSHA, manifestPath); err != nil {
+		return candidateManifest{}, err
+	}
 	if err := requireAncestor(root, manifest.MainSHA, headSHA, "recorded main is not an ancestor of accepted main"); err != nil {
 		return candidateManifest{}, err
 	}
 	if err := checkVersions(root, headSHA, manifest.Version); err != nil {
 		return candidateManifest{}, err
 	}
-	if err := requireNoFragments(root, headSHA); err != nil {
+	if err := requireReleasedFragmentsConsumed(root, manifest.MainSHA, headSHA); err != nil {
 		return candidateManifest{}, err
 	}
-	if err := requireCompiledChangelog(root, manifest.SourceSHA, headSHA); err != nil {
+	if err := requireCompiledChangelog(root, manifest.MainSHA, headSHA); err != nil {
 		return candidateManifest{}, err
 	}
 	return manifest, nil
 }
 
-func runSync(root string, args []string, stdout io.Writer) error {
-	if len(args) == 0 || (args[0] != "apply" && args[0] != "check") {
-		return errors.New("usage: release-train sync <apply|check> --main <ref> [--head ref] [--manifest path]")
-	}
-	flags := flag.NewFlagSet("sync "+args[0], flag.ContinueOnError)
-	flags.SetOutput(io.Discard)
-	manifestPath := flags.String("manifest", defaultManifestPath, "candidate manifest")
-	mainRef := flags.String("main", "", "released main ref")
-	headRef := flags.String("head", "HEAD", "next commit to inspect")
-	if err := flags.Parse(args[1:]); err != nil {
-		return err
-	}
-	if *mainRef == "" {
-		return errors.New("main ref is required")
-	}
-	if args[0] == "apply" && *headRef != "HEAD" {
-		return errors.New("sync apply only accepts the checked-out HEAD")
-	}
-	removed, err := syncReleasedFragments(root, *manifestPath, *mainRef, *headRef, args[0] == "apply")
+func requireReleaseCommit(root, headSHA, manifestPath string) error {
+	out, err := gitOutput(root, "log", "-1", "--first-parent", "--format=%H", headSHA, "--", manifestPath)
 	if err != nil {
 		return err
 	}
-	if args[0] == "apply" {
-		_, err = fmt.Fprintf(stdout, "removed %d released changelog fragment(s)\n", removed)
-	} else {
-		_, err = fmt.Fprintln(stdout, "main ancestry and released fragments are synchronized")
-	}
-	return err
-}
-
-func syncReleasedFragments(root, manifestPath, mainRef, headRef string, apply bool) (int, error) {
-	if apply {
-		if err := requireCleanWorktree(root); err != nil {
-			return 0, err
-		}
-	}
-	headSHA, err := resolveCommit(root, headRef)
-	if err != nil {
-		return 0, err
-	}
-	mainSHA, err := resolveCommit(root, mainRef)
-	if err != nil {
-		return 0, err
-	}
-	if err := requireAncestor(root, mainSHA, headSHA, "released main is not an ancestor of next"); err != nil {
-		return 0, err
-	}
-	mainManifest, err := readRepositoryFile(root, mainSHA, manifestPath)
-	if err != nil {
-		return 0, fmt.Errorf("released manifest: %w", err)
-	}
-	nextManifest, err := readRepositoryFile(root, headSHA, manifestPath)
-	if err != nil {
-		return 0, fmt.Errorf("next manifest: %w", err)
-	}
-	if !bytes.Equal(mainManifest, nextManifest) {
-		return 0, errors.New("next does not carry the released main manifest")
-	}
-	manifest, err := decodeManifest(nextManifest)
-	if err != nil {
-		return 0, fmt.Errorf("manifest: %w", err)
-	}
-	if err := checkVersions(root, headSHA, manifest.Version); err != nil {
-		return 0, err
-	}
-	if manifest.Kind == "hotfix" {
-		return 0, nil
-	}
-	if err := requireAncestor(root, manifest.SourceSHA, headSHA, "accepted source is not an ancestor of next"); err != nil {
-		return 0, err
-	}
-	fragments, err := fragmentBlobs(root, manifest.SourceSHA)
-	if err != nil {
-		return 0, err
-	}
-	var present []string
-	for path, sourceBlob := range fragments {
-		currentBlob, exists, err := blobAt(root, headSHA, path)
-		if err != nil {
-			return 0, err
-		}
-		if !exists {
-			continue
-		}
-		if currentBlob != sourceBlob {
-			return 0, fmt.Errorf("released fragment %s changed after the candidate was cut", path)
-		}
-		present = append(present, path)
-	}
-	sort.Strings(present)
-	if !apply && len(present) > 0 {
-		return 0, fmt.Errorf("released fragments remain on next: %s", strings.Join(present, ", "))
-	}
-	for _, path := range present {
-		if err := os.Remove(filepath.Join(root, path)); err != nil {
-			return 0, err
-		}
-		if _, err := gitOutput(root, "add", "-u", "--", path); err != nil {
-			return 0, err
-		}
-	}
-	return len(present), nil
-}
-
-func requireCleanWorktree(root string) error {
-	out, err := gitOutput(root, "status", "--porcelain")
-	if err != nil {
-		return err
-	}
-	if len(bytes.TrimSpace(out)) > 0 {
-		return errors.New("working tree must be clean before applying release sync")
+	releaseSHA := strings.TrimSpace(string(out))
+	if releaseSHA != headSHA {
+		return fmt.Errorf("%s is not a release commit; %s last changed at %s", headSHA, manifestPath, releaseSHA)
 	}
 	return nil
 }
@@ -879,20 +742,6 @@ func fragmentReceipt(root, ref string) (string, error) {
 		fmt.Fprintf(digest, "%s\x00%s\n", path, fragments[path])
 	}
 	return fmt.Sprintf("<!-- changelog-fragments-sha256: %x -->", digest.Sum(nil)), nil
-}
-
-func blobAt(root, ref, path string) (string, bool, error) {
-	command := exec.Command("git", "rev-parse", "--verify", ref+":"+path)
-	command.Dir = root
-	out, err := command.Output()
-	if err == nil {
-		return strings.TrimSpace(string(out)), true, nil
-	}
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
-		return "", false, nil
-	}
-	return "", false, err
 }
 
 func normalizeVersion(value string) (string, string, error) {

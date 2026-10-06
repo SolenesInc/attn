@@ -25,7 +25,7 @@
   error until replaced.
 - Never edit or rename a merged migration. Never change the frozen legacy
   ladder, its migration definitions or their reachable package-level helpers and types.
-  `make check-migrations` compares them with `origin/next` and checks that merged SQL and Go files retain their paths
+  `make check-migrations` compares them with `origin/main` and checks that merged SQL and Go files retain their paths
   and contents. CI uses the PR base or the previous push as its baseline.
 - Run `make generate-schema` and commit `internal/store/schema.sql` with the
   migration. CI runs `make check-schema` to check that it is current.

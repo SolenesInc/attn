@@ -15,7 +15,7 @@ command -v gh >/dev/null || {
 
 candidate_rows="$({
   gh api "repos/$GITHUB_REPOSITORY/commits/${main_sha}/pulls" \
-    --jq ".[] | select(.base.ref == \"main\" and .merge_commit_sha == \"$main_sha\") | select(.head.ref | test(\"^(release/v[0-9]+\\\\.[0-9]+\\\\.[0-9]+|hotfix/.+)\$\")) | [.number, .head.ref, .html_url] | @tsv"
+    --jq ".[] | select(.base.ref == \"main\" and .merge_commit_sha == \"$main_sha\") | select(.head.ref | test(\"^release/v[0-9]+\\\\.[0-9]+\\\\.[0-9]+\$\")) | [.number, .head.ref, .html_url] | @tsv"
 } || true)"
 candidate_count="$(printf '%s\n' "$candidate_rows" | awk 'NF { count++ } END { print count + 0 }')"
 if [[ "$candidate_count" -ne 1 ]]; then

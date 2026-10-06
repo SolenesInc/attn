@@ -1,0 +1,3 @@
+kind: internal
+area: release
+change: Releases are cut from main and tagged from their own release commit; the next branch is now a read-only mirror of main.

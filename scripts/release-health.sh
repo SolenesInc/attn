@@ -70,7 +70,7 @@ The release workflow did not complete for \`$tag\`.
 
 $release_state
 
-Fix the failing release step, then rerun the same immutable current-main tag:
+Fix the failing release step, then rerun the same immutable tag:
 
 \`\`\`bash
 gh api --method POST repos/$GITHUB_REPOSITORY/dispatches \\

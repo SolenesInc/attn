@@ -13,33 +13,23 @@ cat >"$work/bin/gh" <<'EOF'
 set -euo pipefail
 printf '%s\n' "$*" >>"$FAKE_GH_LOG"
 
-if [[ "$1 $2" == "api graphql" ]] && [[ "$*" == *'updateRefs'* ]]; then
-  if [[ "${FAKE_ATOMIC_REJECT:-0}" == 1 ]]; then
-    if [[ "${FAKE_ATOMIC_RACE_TAG:-0}" == 1 ]]; then
-      $REAL_GIT --git-dir="$FAKE_ORIGIN" update-ref "refs/tags/$FAKE_EXPECTED_TAG" "$FAKE_EXPECTED_SHA"
-    fi
-    echo 'atomic ref precondition failed' >&2
-    exit 1
-  fi
-  expected_sha=''
+if [[ "$1 $2 $3" == "api --method POST" ]] && [[ "$*" == *'/git/refs '* ]]; then
   tag_ref=''
+  tag_sha=''
   for arg in "$@"; do
     case "$arg" in
-      mainSha=*) expected_sha="${arg#mainSha=}" ;;
-      tagRef=*) tag_ref="${arg#tagRef=}" ;;
+      ref=*) tag_ref="${arg#ref=}" ;;
+      sha=*) tag_sha="${arg#sha=}" ;;
     esac
   done
-  actual_main="$($REAL_GIT --git-dir="$FAKE_ORIGIN" rev-parse refs/heads/main)"
-  if [[ "$actual_main" != "$expected_sha" ]] || \
-    $REAL_GIT --git-dir="$FAKE_ORIGIN" show-ref --verify --quiet "$tag_ref"; then
-    echo 'atomic ref precondition failed' >&2
+  if [[ "${FAKE_CREATE_RACE_TAG:-0}" == 1 ]]; then
+    $REAL_GIT --git-dir="$FAKE_ORIGIN" update-ref "$tag_ref" "$FAKE_RACE_TAG_SHA"
+  fi
+  if $REAL_GIT --git-dir="$FAKE_ORIGIN" show-ref --verify --quiet "$tag_ref"; then
+    echo 'Reference already exists' >&2
     exit 1
   fi
-  $REAL_GIT --git-dir="$FAKE_ORIGIN" update-ref "$tag_ref" "$expected_sha"
-  exit 0
-fi
-if [[ "$1 $2" == "api graphql" ]] && [[ "$*" == *'repository(owner:'* ]]; then
-  printf '%s\n' 'R_fake_repository'
+  $REAL_GIT --git-dir="$FAKE_ORIGIN" update-ref "$tag_ref" "$tag_sha"
   exit 0
 fi
 if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/runs/42/jobs?'* ]]; then
@@ -118,25 +108,6 @@ EOF
 chmod +x "$work/bin/gh"
 
 real_git="$(resolve_test_git)"
-cat >"$work/bin/git" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-if [[ "$*" == 'ls-remote --exit-code origin refs/heads/main' ]] && \
-  [[ -n "${FAKE_MOVE_MAIN_AT_CHECK:-}" ]]; then
-  count=0
-  if [[ -f "$FAKE_MAIN_CHECK_COUNT" ]]; then
-    count="$(cat "$FAKE_MAIN_CHECK_COUNT")"
-  fi
-  count=$((count + 1))
-  printf '%s\n' "$count" >"$FAKE_MAIN_CHECK_COUNT"
-  if [[ "$count" -eq "$FAKE_MOVE_MAIN_AT_CHECK" ]]; then
-    printf '%s\trefs/heads/main\n' "$FAKE_MOVED_MAIN_SHA"
-    exit 0
-  fi
-fi
-exec "$REAL_GIT" "$@"
-EOF
-chmod +x "$work/bin/git"
 
 export PATH="$work/bin:$PATH"
 export REAL_GIT="$real_git"
@@ -153,21 +124,16 @@ export FAKE_APP_MODE=success
 export FAKE_APP_CONCLUSION=success
 export FAKE_CI_APP_MODE=missing
 export FAKE_CI_APP_CONCLUSION=success
-export FAKE_MAIN_CHECK_COUNT="$work/main-check-count"
-export FAKE_MOVED_MAIN_SHA=cccccccccccccccccccccccccccccccccccccccc
-export FAKE_MOVE_MAIN_AT_CHECK=
 export FAKE_RELEASE_RUN_PAGE_2=0
 export FAKE_RELEASE_RUN_STATUS=completed
 export FAKE_RELEASE_RUN_CONCLUSION=success
-export FAKE_ATOMIC_REJECT=0
-export FAKE_ATOMIC_RACE_TAG=0
+export FAKE_CREATE_RACE_TAG=0
 
 setup_fixture() {
   local name="$1"
   fixture_origin="$work/$name-origin.git"
   fixture_repo="$work/$name-repo"
   : >"$FAKE_GH_LOG"
-  : >"$FAKE_MAIN_CHECK_COUNT"
 
   export FAKE_CANDIDATE_MODE=success
   export FAKE_APP_MODE=success
@@ -178,8 +144,7 @@ setup_fixture() {
   export FAKE_RELEASE_RUN_PAGE_2=0
   export FAKE_RELEASE_RUN_STATUS=completed
   export FAKE_RELEASE_RUN_CONCLUSION=success
-  export FAKE_ATOMIC_REJECT=0
-  export FAKE_ATOMIC_RACE_TAG=0
+  export FAKE_CREATE_RACE_TAG=0
 
 	  git init -q --bare "$fixture_origin"
 	  git --git-dir="$fixture_origin" config receive.shallowUpdate true
@@ -199,12 +164,10 @@ setup_fixture() {
   mkdir -p "$fixture_repo/.github"
   cat >"$fixture_repo/.github/release-candidate.yml" <<EOF
 version: $version
-kind: promotion
-source_sha: $baseline_sha
 main_sha: $baseline_sha
 EOF
   git -C "$fixture_repo" add -A
-  git -C "$fixture_repo" commit -q -m 'release: accepted main fixture'
+  git -C "$fixture_repo" commit -q -m 'chore(release): prepare v99.98.97'
 	  candidate_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
 	  candidate_tag="v$version"
 	  export FAKE_EXPECTED_SHA="$candidate_sha"
@@ -238,53 +201,24 @@ expect_failure() {
 setup_fixture red
 export FAKE_ACCEPTANCE_CONCLUSION=failure
 run_release_after_acceptance >"$work/red.out"
-grep -q 'main stays untagged' "$work/red.out"
+grep -q 'release commit stays untagged' "$work/red.out"
 if git --git-dir="$fixture_origin" show-ref --verify --quiet "refs/tags/$candidate_tag"; then
   echo "red Acceptance created a tag" >&2
   exit 1
 fi
 
-setup_fixture stale
+setup_fixture main-moved
 export FAKE_ACCEPTANCE_CONCLUSION=success
-git clone -q "$fixture_origin" "$work/stale-updater"
-git -C "$work/stale-updater" config user.name 'Release Test'
-git -C "$work/stale-updater" config user.email 'release@example.com'
-printf '%s\n' 'main moved' >"$work/stale-updater/moved.txt"
-git -C "$work/stale-updater" add moved.txt
-git -C "$work/stale-updater" commit -q -m 'fix(release): move main'
-git -C "$work/stale-updater" push -q origin main
-run_release_after_acceptance >"$work/stale.out"
-grep -q 'ignoring stale result' "$work/stale.out"
-if git --git-dir="$fixture_origin" show-ref --verify --quiet "refs/tags/$candidate_tag"; then
-  echo "stale Acceptance created a tag" >&2
-  exit 1
-fi
-
-setup_fixture held
-(cd "$fixture_repo" && go run ./cmd/release-train manifest write \
-  --version "$candidate_tag" --kind promotion --publication held \
-  --source "$baseline_sha" --main "$baseline_sha" >/dev/null)
-git -C "$fixture_repo" add .github/release-candidate.yml
-git -C "$fixture_repo" commit -q -m 'chore(release): hold publication'
-printf '%s\n' 'kind: fixed' 'area: release' 'change: held follow-up fixture' \
-  >"$fixture_repo/changelog.d/held-followup.yaml"
-git -C "$fixture_repo" add changelog.d/held-followup.yaml
-git -C "$fixture_repo" commit -q -m 'fix(release): follow up on held main'
-held_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
-git -C "$fixture_repo" push -q origin main
-export FAKE_EXPECTED_SHA="$held_sha"
-: >"$FAKE_GH_LOG"
-run_release_after_acceptance >"$work/held.out"
-grep -Fq "publication is held for $candidate_tag at accepted main $held_sha" "$work/held.out"
-if git --git-dir="$fixture_origin" show-ref --verify --quiet "refs/tags/$candidate_tag"; then
-  echo "held publication created a tag" >&2
-  exit 1
-fi
-if [ -s "$FAKE_GH_LOG" ]; then
-  echo "held publication called GitHub" >&2
-  cat "$FAKE_GH_LOG" >&2
-  exit 1
-fi
+git clone -q "$fixture_origin" "$work/main-moved-updater"
+git -C "$work/main-moved-updater" config user.name 'Release Test'
+git -C "$work/main-moved-updater" config user.email 'release@example.com'
+printf '%s\n' 'main moved' >"$work/main-moved-updater/moved.txt"
+git -C "$work/main-moved-updater" add moved.txt
+git -C "$work/main-moved-updater" commit -q -m 'feat: land work after the release commit'
+git -C "$work/main-moved-updater" push -q origin main
+run_release_after_acceptance >"$work/main-moved.out"
+[[ "$(git --git-dir="$fixture_origin" rev-parse "refs/tags/$candidate_tag")" == "$candidate_sha" ]]
+grep -Fq "api --method POST repos/example/attn/dispatches -f event_type=release -F client_payload[tag]=$candidate_tag" "$FAKE_GH_LOG"
 
 setup_fixture missing-app
 export FAKE_APP_MODE=missing
@@ -304,26 +238,26 @@ if grep -q '/pulls' "$FAKE_GH_LOG"; then
 fi
 export FAKE_CI_APP_MODE=missing
 
-setup_fixture moved-before-tag
-export FAKE_MOVE_MAIN_AT_CHECK=2
-export FAKE_ATOMIC_REJECT=1
-run_release_after_acceptance >"$work/moved-before-tag.out"
-grep -q 'before atomic tagging; leaving' "$work/moved-before-tag.out"
-if git --git-dir="$fixture_origin" show-ref --verify --quiet "refs/tags/$candidate_tag"; then
-  echo "main race created a stale release tag" >&2
+setup_fixture tag-elsewhere
+export FAKE_CREATE_RACE_TAG=1
+export FAKE_RACE_TAG_SHA="$baseline_sha"
+export FAKE_TAG_SHA="$baseline_sha"
+expect_failure "was concurrently created at $baseline_sha, not release commit $candidate_sha" run_release_after_acceptance
+if grep -q '^api --method POST repos/example/attn/dispatches ' "$FAKE_GH_LOG"; then
+  echo "a tag on another commit was dispatched" >&2
   exit 1
 fi
-export FAKE_MOVE_MAIN_AT_CHECK=
-export FAKE_ATOMIC_REJECT=0
+export FAKE_CREATE_RACE_TAG=0
 
 setup_fixture concurrent-tag
-export FAKE_ATOMIC_REJECT=1
-export FAKE_ATOMIC_RACE_TAG=1
+export FAKE_CREATE_RACE_TAG=1
+export FAKE_RACE_TAG_SHA="$candidate_sha"
 export FAKE_TAG_SHA="$candidate_sha"
 run_release_after_acceptance >"$work/concurrent-tag.out"
-grep -q 'concurrently created at accepted main' "$work/concurrent-tag.out"
+grep -q 'concurrently created at release commit' "$work/concurrent-tag.out"
 [[ "$(git --git-dir="$fixture_origin" rev-parse "refs/tags/$candidate_tag")" == "$candidate_sha" ]]
 grep -Fq "api --method POST repos/example/attn/dispatches -f event_type=release -F client_payload[tag]=$candidate_tag" "$FAKE_GH_LOG"
+export FAKE_CREATE_RACE_TAG=0
 
 setup_fixture red-app
 export FAKE_APP_CONCLUSION=failure
@@ -365,18 +299,19 @@ run_release_after_acceptance >"$work/duplicate.out"
 [[ "$(grep -c '^api --method POST repos/example/attn/dispatches ' "$FAKE_GH_LOG")" -eq 1 ]]
 grep -q 'not dispatching again' "$work/duplicate.out"
 
-printf '%s\n' 'urgent fix after the release' >"$fixture_repo/post-release-hotfix.txt"
-git -C "$fixture_repo" add post-release-hotfix.txt
-git -C "$fixture_repo" commit -q -m 'fix(release): add post-release hotfix'
+printf '%s\n' 'kind: fixed' 'area: release' 'change: work after the release' \
+  >"$fixture_repo/changelog.d/after-release.yaml"
+git -C "$fixture_repo" add changelog.d/after-release.yaml
+git -C "$fixture_repo" commit -q -m 'fix: ordinary work after the release'
 git -C "$fixture_repo" push -q origin main
-hotfix_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
-run_release_after_acceptance >"$work/post-release-hotfix.out"
-grep -q "manifest $candidate_tag was consumed at $candidate_sha" "$work/post-release-hotfix.out"
-[[ "$(git --git-dir="$fixture_origin" rev-parse "refs/tags/$candidate_tag")" == "$candidate_sha" ]]
-[[ "$(grep -c '^api --method POST repos/example/attn/dispatches ' "$FAKE_GH_LOG")" -eq 1 ]]
-if grep -Fq "$hotfix_sha" <(git --git-dir="$fixture_origin" show-ref --tags); then
-	echo "post-release hotfix moved or created the consumed tag" >&2
-	exit 1
+later_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
+: >"$FAKE_GH_LOG"
+run_release_after_acceptance >"$work/after-release.out"
+grep -Fq "$later_sha is not a release commit" "$work/after-release.out"
+if [ -s "$FAKE_GH_LOG" ]; then
+  echo "an ordinary main commit called GitHub" >&2
+  cat "$FAKE_GH_LOG" >&2
+  exit 1
 fi
 
 setup_fixture paginated-release-run
@@ -413,22 +348,10 @@ if grep -q '^api --method POST repos/example/attn/dispatches ' "$FAKE_GH_LOG"; t
   exit 1
 fi
 
-setup_fixture repaired
-export FAKE_ACCEPTANCE_CONCLUSION=failure
-run_release_after_acceptance >/dev/null
-printf '%s\n' 'repair exact accepted main' >"$fixture_repo/repair.txt"
-git -C "$fixture_repo" add repair.txt
-git -C "$fixture_repo" commit -q -m 'fix(release): repair main before tagging'
-git -C "$fixture_repo" push -q origin main
-repaired_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
-export FAKE_ACCEPTANCE_CONCLUSION=success
-export FAKE_TAG_SHA="$repaired_sha"
-run_release_after_acceptance >"$work/repaired.out"
-[[ "$(git --git-dir="$fixture_origin" rev-parse "refs/tags/$candidate_tag")" == "$repaired_sha" ]]
-
 setup_fixture forged-tag
 (cd "$fixture_repo" && go run ./cmd/release-train version set v99.98.96 >/dev/null)
-git -C "$fixture_repo" add app
+(cd "$fixture_repo" && go run ./cmd/release-train manifest write --version v99.98.97 --main HEAD >/dev/null)
+git -C "$fixture_repo" add app .github/release-candidate.yml
 git -C "$fixture_repo" commit -q -m 'forge accepted main versions'
 git -C "$fixture_repo" push -q origin main
 forged_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
@@ -450,9 +373,6 @@ for value in \
   grep -Fq "$value" "$root/.github/workflows/release-after-acceptance.yml"
 done
 grep -Fq 'run-name: ${{ github.event.client_payload.tag }}' "$root/.github/workflows/release.yml"
-grep -Fq 'updateRefs(input:' "$root/scripts/release-after-acceptance.sh"
-grep -Fq 'beforeOid: $mainSha, afterOid: $mainSha' "$root/scripts/release-after-acceptance.sh"
-grep -Fq 'beforeOid: $zeroSha, afterOid: $mainSha' "$root/scripts/release-after-acceptance.sh"
 trigger_block="$(sed -n '/^on:/,/^jobs:/p' "$root/.github/workflows/release.yml")"
 grep -Fq 'repository_dispatch:' <<<"$trigger_block"
 grep -Fq 'types: [release]' <<<"$trigger_block"
