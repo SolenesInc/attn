@@ -1464,7 +1464,10 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 			}
 		}
 	}
-	request := protocol.DelegateMessage{Priority: protocol.Ptr(*priority), Cmd: protocol.CmdDelegate, ProfileID: protocol.Ptr(strings.TrimSpace(*profile)), RequestID: stableRequestID, Assignment: assignment, Cwd: customCWD, Checkout: checkout}
+	request := protocol.DelegateMessage{Cmd: protocol.CmdDelegate, ProfileID: protocol.Ptr(strings.TrimSpace(*profile)), RequestID: stableRequestID, Assignment: assignment, Cwd: customCWD, Checkout: checkout}
+	if *priority {
+		request.Priority = protocol.Ptr(true)
+	}
 	if source != "" {
 		request.SourceSessionID = protocol.Ptr(source)
 	}

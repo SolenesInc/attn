@@ -80,5 +80,7 @@ func (d *Daemon) resolveCallers(msg any) {
 		self(m.SessionID)
 	case *protocol.RenameSessionMessage:
 		self(&m.SessionID)
+	case *protocol.SetSessionPriorityMessage:
+		self(&m.SessionID)
 	}
 }
