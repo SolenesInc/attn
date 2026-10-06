@@ -324,6 +324,12 @@ func (r *codexShared) lose(s *codexServer, conversations []string) {
 }
 
 func (r *codexShared) observeServer(s *codexServer, a *codexAttempt, m codexshared.Message) {
+	s.mu.Lock()
+	superseded := s.attempt != a
+	s.mu.Unlock()
+	if superseded {
+		return
+	}
 	switch m.Method {
 	case "thread/name/updated":
 		r.observeName(s, m)
@@ -395,6 +401,13 @@ func (r *codexShared) lost(s *codexServer, conversation string) {
 	session := r.d.store.Get(sessionID)
 	if session == nil {
 		return
+	}
+	// Another profile may resume the rollout next; only the profile running it may read its turns.
+	s.mu.Lock()
+	again := s.held[conversation]
+	s.mu.Unlock()
+	if !again {
+		r.d.drainTranscriptWatcher(sessionID)()
 	}
 	if session.State == protocol.SessionStateWorking || session.State == protocol.SessionStatePendingApproval {
 		r.report(s, sessionID, harness.TurnEnded, false)
@@ -580,15 +593,13 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 			return
 		}
 		if method == "thread/resume" {
-			// The rollout keeps the last name any profile gave it; a new binding mirrors when it lands.
+			// The rollout keeps the last name any profile gave it; a session that comes back names it again.
 			r.mirrorLabel(r.holder(v.profile, result.Thread.ID))
-		} else {
-			if err := r.materialize(v.profile, result.Thread.ID); err != nil {
-				r.d.logf("shared Codex: refused conversation %s, which could not be written: %v", result.Thread.ID, err)
-				reply.Result = nil
-				reply.Error, _ = json.Marshal(map[string]any{"code": -32603, "message": "attn could not write the new conversation to disk: " + err.Error()})
-				return
-			}
+		} else if err := r.materialize(v.profile, result.Thread.ID); err != nil {
+			r.d.logf("shared Codex: refused conversation %s, which could not be written: %v", result.Thread.ID, err)
+			reply.Result = nil
+			reply.Error, _ = json.Marshal(map[string]any{"code": -32603, "message": "attn could not write the new conversation to disk: " + err.Error()})
+			return
 		}
 		r.show(v, result.Thread.ID)
 	}, nil

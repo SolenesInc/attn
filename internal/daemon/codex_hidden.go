@@ -119,6 +119,7 @@ func (l codexLink) Deliver(_ context.Context, in harness.Input) harness.Custody 
 	defer cancel()
 	_, client, err := r.control(ctx, session.ProfileID)
 	if err == nil {
+		r.d.ensureTranscriptWatcherAtPath(session.ID, r.d.store.GetSessionConversation(session.ID).TranscriptPath)
 		err = r.startTurn(ctx, client, conversation, in.Text)
 	}
 	if err != nil {

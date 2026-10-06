@@ -79,6 +79,7 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 	}
 	d.publishFact(FactSessionRegistered, string(sc.To), nil)
 	d.publishArrangementChanged(from.ProfileID)
+	d.codexShared().mirrorLabel(sc.To)
 
 	if !sc.KeepFrom {
 		d.recordSessionClose(from.ID, func() (bool, error) { return true, nil })
