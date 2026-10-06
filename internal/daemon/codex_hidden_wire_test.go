@@ -452,6 +452,28 @@ func TestNewInASharedCodexChiefTerminalStartsAPlainConversation(t *testing.T) {
 	}
 }
 
+func TestAHiddenSharedCodexSessionCountsTheTurnsItsInputStarts(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
+	conversation := codex.ConversationID
+	moveOn(t, app, codex, terminal, "/new", "add a discount field")
+	codex.Reply("Added. <!-- attn:state=idle -->")
+	before := testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return protocol.Deref(s.Hidden) })
+	var counted int
+	if before.Usage != nil {
+		counted = before.Usage.TotalTokens
+	}
+
+	if got := submitSessionAnnotationFeedback(app, checkout, sessionAnnotationFeedback); !got.success {
+		t.Fatalf("feedback to the hidden session = %+v", got)
+	}
+	w.CodexServer().Prompted(conversation)
+	w.CodexServer().Reply(conversation, "Fixed what the notes asked for. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return s.Usage != nil && s.Usage.TotalTokens > counted })
+}
+
 func TestAHiddenSharedCodexTurnEndsWhenItsAppServerExits(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()

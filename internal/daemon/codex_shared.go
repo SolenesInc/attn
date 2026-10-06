@@ -317,37 +317,42 @@ func (s *codexServer) hold(loaded []string) []string {
 	return gone
 }
 
+// Releases queue in notification order, ahead of any watcher a later resume of the conversation starts.
 func (r *codexShared) lose(s *codexServer, conversations []string) {
 	for _, conversation := range conversations {
+		s.events.run(r.d, func() { r.release(s, conversation) })
 		r.d.life.Go("codexConversationLost", func() { r.lost(s, conversation) })
 	}
 }
 
-func (r *codexShared) observeServer(s *codexServer, a *codexAttempt, m codexshared.Message) {
+// Another profile may resume the rollout next; only the profile running it may read its turns.
+func (r *codexShared) release(s *codexServer, conversation string) {
 	s.mu.Lock()
-	superseded := s.attempt != a
+	again := s.held[conversation]
 	s.mu.Unlock()
-	if superseded {
-		return
+	if sessionID := r.holder(s.profile, conversation); sessionID != "" && !again {
+		r.d.drainTranscriptWatcher(sessionID)()
 	}
-	switch m.Method {
-	case "thread/name/updated":
-		r.observeName(s, m)
-		return
-	case "thread/status/changed":
-		r.observeStatus(s, m)
-	case "thread/started", "thread/closed":
-	default:
-		return
-	}
-	s.mu.Lock()
+}
+
+// Effects queue under s.mu, so a superseded connection's land before the next one restates.
+func (r *codexShared) observeServer(s *codexServer, a *codexAttempt, m codexshared.Message) {
 	var gone []string
-	switch {
-	case s.attempt != a:
-	case !a.connected:
-		a.early = append(a.early, m)
-	default:
-		gone = s.track(m)
+	s.mu.Lock()
+	if s.attempt == a {
+		switch m.Method {
+		case "thread/name/updated":
+			r.observeName(s, m)
+		case "thread/status/changed", "thread/started", "thread/closed":
+			if m.Method == "thread/status/changed" {
+				r.observeStatus(s, m)
+			}
+			if a.connected {
+				gone = s.track(m)
+			} else {
+				a.early = append(a.early, m)
+			}
+		}
 	}
 	s.mu.Unlock()
 	r.lose(s, gone)
@@ -401,13 +406,6 @@ func (r *codexShared) lost(s *codexServer, conversation string) {
 	session := r.d.store.Get(sessionID)
 	if session == nil {
 		return
-	}
-	// Another profile may resume the rollout next; only the profile running it may read its turns.
-	s.mu.Lock()
-	again := s.held[conversation]
-	s.mu.Unlock()
-	if !again {
-		r.d.drainTranscriptWatcher(sessionID)()
 	}
 	if session.State == protocol.SessionStateWorking || session.State == protocol.SessionStatePendingApproval {
 		r.report(s, sessionID, harness.TurnEnded, false)

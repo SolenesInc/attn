@@ -117,10 +117,14 @@ func (l codexLink) Deliver(_ context.Context, in harness.Input) harness.Custody 
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), codexServerStartLimit)
 	defer cancel()
-	_, client, err := r.control(ctx, session.ProfileID)
+	s, client, err := r.control(ctx, session.ProfileID)
 	if err == nil {
-		r.d.ensureTranscriptWatcherAtPath(session.ID, r.d.store.GetSessionConversation(session.ID).TranscriptPath)
 		err = r.startTurn(ctx, client, conversation, in.Text)
+	}
+	if err == nil {
+		s.events.run(r.d, func() {
+			r.d.ensureTranscriptWatcherAtPath(session.ID, r.d.store.GetSessionConversation(session.ID).TranscriptPath)
+		})
 	}
 	if err != nil {
 		return harness.Custody{Reason: fmt.Sprintf("deliver to shared Codex conversation %s: %v", conversation, err)}
