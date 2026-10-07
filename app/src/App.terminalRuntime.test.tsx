@@ -201,6 +201,38 @@ describe('App terminal runtime', () => {
     expect(visibleText('s1')).toBe(`${RESTORED_SCREEN} live-after-snapshot`);
   });
 
+  it('keeps output from an agent that exited before its first attach completed', async () => {
+    const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }));
+    open('s1');
+    await daemon.idle();
+    daemon.emit({ event: 'pty_output', id: 's1', seq: 1, data: btoa('Cannot start agent') });
+    daemon.emit({ event: 'attach_result', id: 's1', success: true, running: false, cols: 80, rows: 24, last_seq: 0 });
+    await daemon.idle();
+    expect(visibleText('s1')).toBe('Cannot start agent');
+    fireEvent.keyDown(document.querySelector('canvas')!, { key: 'x', code: 'KeyX' });
+    await daemon.idle();
+    expect(daemon.sentOf('pty_input')).toEqual([]);
+    expect(daemon.sentOf('reload_session')).toEqual([]);
+  });
+
+  it('restores an exited worker snapshot while keeping its terminal stopped', async () => {
+    const resize = resizableTerminals(800, 600);
+    const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }));
+    open('s1');
+    await daemon.idle();
+    daemon.emit({ ...snapshotReply('s1'), running: false });
+    await daemon.idle();
+    expect(visibleText('s1')).toBe(RESTORED_SCREEN);
+
+    const resizes = daemon.sentOf('pty_resize').length;
+    await resize(1000, 800);
+    fireEvent.keyDown(document.querySelector('canvas')!, { key: 'x', code: 'KeyX' });
+    await daemon.idle();
+    expect(daemon.sentOf('pty_resize')).toHaveLength(resizes);
+    expect(daemon.sentOf('pty_input')).toEqual([]);
+    expect(daemon.sentOf('reload_session')).toEqual([]);
+  });
+
   it.each([
     ['a snapshot it cannot decode at all', new Uint8Array([1, 2, 3, 4]), 'raced\nlive'],
     ['a snapshot cut off inside its history', NATIVE_SNAPSHOT.slice(0, NATIVE_SNAPSHOT.length - 1000), `${RESTORED_SCREEN} live`],

@@ -1628,8 +1628,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		return false
 	}
 	defer release()
-	intent := d.consumeTerminalExitIntent(info.ID)
-	if intent == terminalExitReload {
+	if d.consumeTerminalExitIntent(info.ID, terminalExitReload) {
 		d.logf("suppressing exit for reloading terminal %s (runtime replaced in place)", info.ID)
 		return false
 	}
@@ -1638,6 +1637,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		sessionID, shown = ended, true
 	}
 	if !shown {
+		d.clearTerminalExitIntent(info.ID, terminalExitStop)
 		d.logf("pty exit of terminal %s, which no session shows; removing its runtime", info.ID)
 		if err := d.removePTYSession(info.ID); err != nil {
 			d.logf("pty backend remove on exit failed for %s: %v", info.ID, err)
@@ -1660,6 +1660,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 			return false
 		}
 	}
+	stopped := d.consumeTerminalExitIntent(info.ID, terminalExitStop)
 	if !d.endTerminal(sessionID, info.ID) {
 		d.logf("terminal %s exited; session %s runs on in its other terminals", info.ID, sessionID)
 		return true
@@ -1683,7 +1684,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		Signal:   info.Signal,
 	})
 	d.recordProcessEvidence(sessionID, true)
-	if info.ExitCode == 0 && info.Signal == "" && intent != terminalExitStop {
+	if info.ExitCode == 0 && info.Signal == "" && !stopped {
 		closing, err := d.beginSessionClose(sessionID, store.SessionClose{By: string(sessionID), Reason: "Agent exited normally"}, nil)
 		if err != nil {
 			d.logf("closing normally exited session %s: %v", sessionID, err)

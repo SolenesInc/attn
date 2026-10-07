@@ -44,12 +44,14 @@ func (d *Daemon) markReloading(id harness.TerminalID) {
 	d.markTerminalExitIntent(id, terminalExitReload)
 }
 
-func (d *Daemon) consumeTerminalExitIntent(id harness.TerminalID) terminalExitIntent {
+func (d *Daemon) consumeTerminalExitIntent(id harness.TerminalID, intent terminalExitIntent) bool {
 	d.terminalExitIntentMu.Lock()
 	defer d.terminalExitIntentMu.Unlock()
-	intent := d.terminalExitIntents[id]
+	if d.terminalExitIntents[id] != intent {
+		return false
+	}
 	delete(d.terminalExitIntents, id)
-	return intent
+	return true
 }
 
 func (d *Daemon) clearReloading(id harness.TerminalID) {
@@ -57,11 +59,7 @@ func (d *Daemon) clearReloading(id harness.TerminalID) {
 }
 
 func (d *Daemon) clearTerminalExitIntent(id harness.TerminalID, intent terminalExitIntent) {
-	d.terminalExitIntentMu.Lock()
-	defer d.terminalExitIntentMu.Unlock()
-	if d.terminalExitIntents[id] == intent {
-		delete(d.terminalExitIntents, id)
-	}
+	d.consumeTerminalExitIntent(id, intent)
 }
 
 type sessionLocks struct {

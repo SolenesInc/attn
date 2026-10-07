@@ -1837,15 +1837,15 @@ export function useDaemonSocket({
                 }
               }
 
-              if (data.success && data.running === false) {
+              if (data.success && data.running === false && data.screen) {
                 ptyTransportRef.current.clearRuntime(data.id);
                 emitPtyEvent({ event: 'exit_screen', id: data.id, text: data.screen?.text ?? '', cols: data.screen?.cols ?? 0, rows: data.screen?.rows ?? 0 });
                 break;
               }
 
-              if (data.success) {
+              if (data.success && data.running !== false) {
                 ptyTransportRef.current.markRuntimeAttached(data.id);
-              } else {
+              } else if (!data.success) {
                 ptyTransportRef.current.clearRuntime(data.id);
               }
 
@@ -1922,8 +1922,10 @@ export function useDaemonSocket({
                   event: 'attach_complete',
                   id: data.id,
                   restored: attachEffects.restoreAction.kind === 'ghostty_snapshot',
+                  running: data.running,
                 });
-                ptyTransportRef.current.setAttachContext(data.id);
+                if (data.running === false) ptyTransportRef.current.clearRuntime(data.id);
+                else ptyTransportRef.current.setAttachContext(data.id);
               }
             }
             break;

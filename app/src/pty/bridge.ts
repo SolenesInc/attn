@@ -52,7 +52,7 @@ export type PtyResizeSource =
 export type PtyEventPayload =
   | { event: 'data'; id: string; data: string | Uint8Array; seq?: number; suppressResponses?: boolean }
   | { event: 'local_resize'; id: string; cols: number; rows: number; source?: PtyResizeSource }
-  | { event: 'attach_complete'; id: string; restored: boolean }
+  | { event: 'attach_complete'; id: string; restored: boolean; running?: boolean }
   | { event: 'restore_snapshot'; id: string; data: string }
   | { event: 'restore_fallback'; id: string; data: string | Uint8Array; suppressResponses?: boolean }
   | { event: 'seed_blocks'; id: string; blocks: SeededBlock[] }

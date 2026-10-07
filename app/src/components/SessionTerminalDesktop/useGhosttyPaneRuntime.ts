@@ -150,9 +150,14 @@ export function useGhosttyPaneRuntime(
         void terminal.seedPlacements(event.id, event.placements);
         break;
       case 'attach_complete': {
-        stoppedRuntimesRef.current.delete(event.id);
+        if (event.running === false) {
+          stoppedRuntimesRef.current.add(event.id);
+          cancelRuntimeConnection(event.id);
+        } else {
+          stoppedRuntimesRef.current.delete(event.id);
+        }
         const refit = event.restored || !pane || !connectingRef.current.has(pane.runtimeId);
-        if (pane && terminalsLiveRef.current) {
+        if (event.running !== false && pane && terminalsLiveRef.current) {
           runtimeAttachHolds.hold(pane.runtimeId, attachHolderRef.current);
           attachedRuntimesRef.current.add(pane.runtimeId);
           flushPendingResize(pane.runtimeId);

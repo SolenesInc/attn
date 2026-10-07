@@ -1,9 +1,12 @@
 package daemon_test
 
 import (
+	"os"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
+	"testing/synctest"
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
@@ -98,4 +101,73 @@ func TestStoppingAProcessThatExitsCleanlyKeepsItsTile(t *testing.T) {
 	if state := queriedSession(t, w.Client(), session); state.TerminalExit == nil || state.TerminalExit.Code != 0 {
 		t.Fatalf("restarting closed the explicitly stopped session: %+v", state)
 	}
+}
+
+func TestAPluginThatQuitsCleanlyDuringResumeClosesWithoutBlocking(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.App()
+		driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"resume": true})
+		awaitDriverAvailable(app, driver.agent)
+		cwd := w.Path("shop")
+		if err := os.MkdirAll(cwd, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		session, _ := spawnDriven(w, app, driver, cwd)
+		w.terminal(session).Exit(143)
+		testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
+		w.terms.OnNextSpawn(func(term *testworld.Terminal) { term.Exit(0) })
+		result := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 80, Rows: 24}, protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == session })
+		if !result.Success {
+			t.Fatal(protocol.Deref(result.Error))
+		}
+		awaitClosed(app, session)
+		if ids := queriedIDs(t, w.Client(), ""); slices.Contains(ids, session) {
+			t.Fatalf("normally exited plugin is still live: %v", ids)
+		}
+		if ids := ledgerIDs(ledger(t, w.Client(), client.SessionListOptions{Closed: true})); !slices.Contains(ids, session) {
+			t.Fatalf("normally exited plugin is missing from history: %v", ids)
+		}
+	})
+}
+
+func TestStoppingAPluginDuringResumeKeepsItsTileWhenItExitsCleanly(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.App()
+		driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"resume": true})
+		awaitDriverAvailable(app, driver.agent)
+		cwd := w.Path("shop")
+		if err := os.MkdirAll(cwd, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		session, _ := spawnDriven(w, app, driver, cwd)
+		w.terminal(session).Exit(143)
+		testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
+		started, release := make(chan struct{}), make(chan struct{})
+		w.terms.OnNextSpawn(func(term *testworld.Terminal) {
+			term.OnKill(func(syscall.Signal) { term.Exit(0) })
+			close(started)
+			<-release
+		})
+		app.Send(protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 80, Rows: 24})
+		<-started
+		app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: protocol.SessionID(session)})
+		synctest.Wait()
+		close(release)
+		result := testworld.Await(app, protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == session })
+		if !result.Success {
+			t.Fatal(protocol.Deref(result.Error))
+		}
+		exit := testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
+		if exit.ExitCode != 0 {
+			t.Fatalf("stopped plugin exited %d, want 0", exit.ExitCode)
+		}
+		state := queriedSession(t, w.Client(), session)
+		if state.TerminalExit == nil || state.TerminalExit.Code != 0 {
+			t.Fatalf("stopped plugin lost its tile: %+v", state)
+		}
+		w.restart()
+		if state := queriedSession(t, w.Client(), session); state.TerminalExit == nil || state.TerminalExit.Code != 0 {
+			t.Fatalf("restarting closed the stopped plugin: %+v", state)
+		}
+	})
 }

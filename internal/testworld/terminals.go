@@ -20,10 +20,11 @@ const (
 )
 
 type Terminals struct {
-	mu        sync.Mutex
-	terminals map[harness.TerminalID]*Terminal
-	onExit    func(ptybackend.ExitInfo)
-	onState   func(harness.TerminalID, pty.Observation)
+	mu          sync.Mutex
+	terminals   map[harness.TerminalID]*Terminal
+	onExit      func(ptybackend.ExitInfo)
+	onState     func(harness.TerminalID, pty.Observation)
+	onNextSpawn func(*Terminal)
 }
 
 type TerminalInput struct {
@@ -44,6 +45,7 @@ type Terminal struct {
 	screen    []string
 	streams   []chan ptybackend.OutputEvent
 	onSubmit  func(string)
+	onKill    func(syscall.Signal)
 	stall     *terminalStall
 }
 
@@ -62,6 +64,12 @@ func (b *Terminals) Terminal(id string) *Terminal {
 	return b.terminals[harness.TerminalID(id)]
 }
 
+func (b *Terminals) OnNextSpawn(fn func(*Terminal)) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.onNextSpawn = fn
+}
+
 func (b *Terminals) Spawn(_ context.Context, opts ptybackend.SpawnOptions) error {
 	b.mu.Lock()
 	if existing := b.terminals[opts.ID]; existing != nil && existing.running {
@@ -70,7 +78,12 @@ func (b *Terminals) Spawn(_ context.Context, opts ptybackend.SpawnOptions) error
 	}
 	term := &Terminal{owner: b, Options: opts, running: true, screen: []string{terminalComposer}}
 	b.terminals[opts.ID] = term
+	notify := b.onNextSpawn
+	b.onNextSpawn = nil
 	b.mu.Unlock()
+	if notify != nil {
+		notify(term)
+	}
 	return nil
 }
 
@@ -168,11 +181,19 @@ func (b *Terminals) SetTheme(context.Context, harness.TerminalID, pty.TerminalTh
 func (b *Terminals) Kill(_ context.Context, id harness.TerminalID, sig syscall.Signal) error {
 	b.mu.Lock()
 	term, err := b.lookup(id)
+	var notify func(syscall.Signal)
+	if term != nil {
+		notify = term.onKill
+	}
 	b.mu.Unlock()
 	if err != nil {
 		return err
 	}
-	term.Exit(128 + int(sig))
+	if notify != nil {
+		notify(sig)
+	} else {
+		term.Exit(128 + int(sig))
+	}
 	return nil
 }
 
@@ -274,6 +295,12 @@ func (t *Terminal) PaintScreen(text string) {
 	defer t.owner.mu.Unlock()
 	t.screen = []string{text}
 	t.emitLocked("\x1b[2J\x1b[H" + text)
+}
+
+func (t *Terminal) OnKill(fn func(syscall.Signal)) {
+	t.owner.mu.Lock()
+	defer t.owner.mu.Unlock()
+	t.onKill = fn
 }
 
 func (t *Terminal) OnSubmit(fn func(prompt string)) {
