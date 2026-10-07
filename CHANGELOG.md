@@ -18,7 +18,7 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
   opens an overview of every desktop. You can rename a desktop from its sidebar
   header and drag headers to reorder them. An empty desktop shows the new-agent
   launcher, and ⌘N focuses it. A numbered desktop keeps its number for life, so
-  reopened agents go back to it. Documents, seeds and browsers an agent opens
+  resumed agents go back to it. Documents, seeds and browsers an agent opens
   land beside it, and delegates land beside the agent that started them without
   taking your focus. Every window on a profile shows the same desktop and
   focus.
@@ -63,10 +63,10 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
   Open it with ⌘⇧L or the dock's Sessions button. `[` and `]` switch between
   sessions and worktrees, and `/` filters by repository, profile, date or
   words. The inspector shows each session's tokens and cost, even after it
-  closes. Reopen brings a closed session back under its own name, recreating
-  a deleted worktree or fetching its branch if needed, or starts fresh in a
-  folder you pick. The ledger remembers its filters across restarts, and
-  `attn session list | show | reopen` does the same from the CLI.
+  closes. The Reopen button resumes a closed session under its own name,
+  recreating a deleted worktree or fetching its branch if needed, or starts
+  fresh in a folder you pick. The ledger remembers its filters across
+  restarts, and `attn session list | show | reopen` does the same from the CLI.
 - **attn cleans up worktrees whose work has landed.** Once an hour it removes a
   worktree only when the work is merged, the tree is clean, unstashed and fully
   pushed, it has been idle for 14 days, and no live session or open seed uses
@@ -74,8 +74,8 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
   scheduled removal. "Keep forever" protects a worktree, and every removal is
   logged and noted on its seeds. You can turn the sweep off in Settings › Files
   and locations, or manage it with `attn worktree`.
-- **Seeds can be continued after their agent stops.** Resume reopens the exact
-  conversation. Handover starts a new agent on the same seed, keeping
+- **Seeds can be continued after their agent stops.** Resume brings back the
+  exact conversation. Handover starts a new agent on the same seed, keeping
   uncommitted work or recreating a removed worktree from its branch. Review
   garden walks you through growing seeds whose agent is gone, one at a time,
   with the evidence and a suggested next step.
@@ -117,8 +117,8 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
   Guardian model. `/permissions` switches between Read Only, Default, Full
   Access and Untrusted, and `/security` sets protected paths, the network and
   the Guardian. A checkout can add its own rules in `.attn/rules.json`.
-- **Pi sessions reopen into their conversation.** Reopening, reloading or
-  resuming a pi seed continues the same conversation. Pi sessions also get
+- **Pi sessions resume into their conversation.** Resuming or reloading a pi
+  session or seed continues the same conversation. Pi sessions also get
   automatic titles like Claude and Codex sessions.
 - **Session cost knows the newest models.** Pricing now covers Claude Fable
   5.1, Opus 5.5 and Sonnet 5.5, GPT-6 Sol, Luna and Astra, GPT-6.1 Sol, and
@@ -143,8 +143,8 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
   `/clear` (and Codex's `/new`) opens a new session with its own name, keeping
   the tile, its focus and its terminal. The previous session closes into the
   ledger with its conversation, usage, seeds, inbox and pull request watches,
-  and Reopen brings it all back. Annotations and drafts stay with the session
-  they were made for. A crew member's `/clear` ends its session, and the Chief's
+  and the ledger's Reopen button resumes it with all of that. Annotations and
+  drafts stay with the session they were made for. A crew member's `/clear` ends its session, and the Chief's
   gives up the Chief role. Copilot still starts a new conversation within the
   same session.
 - **`/resume` brings back the session that holds the conversation.** If
