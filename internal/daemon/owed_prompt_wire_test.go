@@ -34,7 +34,7 @@ func TestASessionRespawnedWithAPromptOpensItsTurnOnlyAtTheVerdict(t *testing.T) 
 			w := newWorld(t, h)
 			app := w.App()
 			session := w.Spawn(app, h, w.Path("shop"))
-			w.Launched(session).Exit(0)
+			w.Launched(session).Exit(143)
 			testworld.AwaitSession(app, session, func(s protocol.Session) bool {
 				return protocol.Deref(s.StateReason) == "process_exited"
 			})

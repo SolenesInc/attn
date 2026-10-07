@@ -139,7 +139,7 @@ export const scenarioCatalog = [
   {
     id: 'autoclose-on-exit',
     runnerId: 'AUTOCLOSE-ON-EXIT',
-    label: 'Auto-close on clean exit, keep failed exits',
+    label: 'Clean quits close; stopped terminals restore and resume on request',
     command: ['pnpm', 'run', 'real-app:scenario-autoclose-on-exit'],
   },
   {

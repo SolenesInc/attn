@@ -390,6 +390,21 @@ func (d *Daemon) handleAttachSession(client *wsClient, msg *protocol.AttachSessi
 			}
 		}
 	}
+	if errors.Is(err, pty.ErrSessionNotFound) && policy != protocol.AttachPolicyRevive {
+		if sessionID, shown := d.shownIn(terminal); shown {
+			exit := d.store.GetSessionExitScreen(sessionID)
+			session := d.store.Get(sessionID)
+			if exit != nil || (session != nil && session.State == protocol.SessionStateRecoverable) {
+				result := protocol.AttachResultMessage{Event: protocol.EventAttachResult, ID: terminal, Success: true, Running: protocol.Ptr(false), Exit: d.store.GetSessionExit(sessionID)}
+				if exit != nil {
+					result.Screen = &protocol.AgentPeekScreen{Text: exit.Text, Cols: exit.Cols, Rows: exit.Rows}
+				}
+				d.sendToClient(client, result)
+				return
+			}
+		}
+	}
+
 	if err != nil {
 		d.sendToClient(client, protocol.AttachResultMessage{
 			Event:   protocol.EventAttachResult,
@@ -835,6 +850,7 @@ func (d *Daemon) handleKillSession(client *wsClient, msg *protocol.KillSessionMe
 	terminals := d.terminalsOf(sessionID)
 	for _, terminal := range terminals {
 		d.detachSession(client, terminal)
+		d.markTerminalExitIntent(terminal, terminalExitStop)
 	}
 	sig := parseSignal(protocol.Deref(msg.Signal))
 	d.life.Go("killSessionRuntimeAsync", func() { d.killSessionRuntimeAsync(sessionID, terminals, sig) })
@@ -843,8 +859,11 @@ func (d *Daemon) handleKillSession(client *wsClient, msg *protocol.KillSessionMe
 func (d *Daemon) killSessionRuntimeAsync(sessionID protocol.SessionID, terminals []harness.TerminalID, sig syscall.Signal) {
 	var err error
 	for _, terminal := range terminals {
-		if killErr := d.ptyBackend.Kill(context.Background(), terminal, sig); killErr != nil && (err == nil || errors.Is(err, pty.ErrSessionNotFound)) {
-			err = killErr
+		if killErr := d.ptyBackend.Kill(context.Background(), terminal, sig); killErr != nil {
+			d.clearTerminalExitIntent(terminal, terminalExitStop)
+			if err == nil || errors.Is(err, pty.ErrSessionNotFound) {
+				err = killErr
+			}
 		}
 	}
 	if err == nil || errors.Is(err, pty.ErrSessionNotFound) {

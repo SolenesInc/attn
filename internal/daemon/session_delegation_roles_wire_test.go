@@ -80,7 +80,7 @@ func TestADelegatedSessionKeepsShowingItsRoleAfterTheRoleIsRemovedAndTheDaemonRe
 		t.Fatalf("removing the research role: %s", protocol.Deref(saved.Error))
 	}
 	for _, run := range runs {
-		run.Exit(0)
+		run.Exit(143)
 		testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == protocol.SessionID(run.SessionID) })
 	}
 	w.restart()

@@ -464,13 +464,6 @@ export interface FileDiffResult {
   error?: string;
 }
 
-export interface SessionExitInfo {
-  runtimeId: string;
-  sessionId: string;
-  exitCode: number;
-  signal?: string;
-}
-
 export interface NotebookEntry {
   path: string;
   type?: string;
@@ -569,7 +562,6 @@ interface UseDaemonSocketOptions {
   onSettingsUpdate?: (settings: DaemonSettings) => void;
   onSettingError?: (message: string) => void;
   onGitStatusUpdate?: (status: GitStatusUpdate) => void;
-  onSessionExited?: (info: SessionExitInfo) => void;
   endpoint?: DaemonEndpointInstance;
   wsUrl?: string;
 }
@@ -709,7 +701,6 @@ export function useDaemonSocket({
   onSettingsUpdate,
   onSettingError,
   onGitStatusUpdate,
-  onSessionExited,
   endpoint,
   wsUrl,
 }: UseDaemonSocketOptions) {
@@ -741,7 +732,6 @@ export function useDaemonSocket({
     onSettingsUpdate,
     onSettingError,
     onGitStatusUpdate,
-    onSessionExited,
   });
   callbacksRef.current = {
     onSessionsUpdate,
@@ -763,7 +753,6 @@ export function useDaemonSocket({
     onSettingsUpdate,
     onSettingError,
     onGitStatusUpdate,
-    onSessionExited,
   };
   const reconnectTimeoutRef = useRef<number | null>(null);
   const reconnectDelayRef = useRef<number>(1000);
@@ -1848,6 +1837,12 @@ export function useDaemonSocket({
                 }
               }
 
+              if (data.success && data.running === false) {
+                ptyTransportRef.current.clearRuntime(data.id);
+                emitPtyEvent({ event: 'exit_screen', id: data.id, text: data.screen?.text ?? '', cols: data.screen?.cols ?? 0, rows: data.screen?.rows ?? 0 });
+                break;
+              }
+
               if (data.success) {
                 ptyTransportRef.current.markRuntimeAttached(data.id);
               } else {
@@ -1882,7 +1877,6 @@ export function useDaemonSocket({
                   });
                 }
                 ptyTransportRef.current.setLastSeq(data.id, attachEffects.nextSeq);
-                const restoreWasEmitted = attachEffects.restoreAction.kind === 'ghostty_snapshot';
                 if (attachEffects.restoreAction.kind === 'ghostty_snapshot') {
                   emitPtyEvent({
                     event: 'restore_snapshot',
@@ -1924,12 +1918,11 @@ export function useDaemonSocket({
                     emitPtyEvent({ event: 'data', id: data.id, data: chunk.data, seq: chunk.seq });
                   }
                 }
-                if (restoreWasEmitted) {
-                  emitPtyEvent({
-                    event: 'restore_complete',
-                    id: data.id,
-                  });
-                }
+                emitPtyEvent({
+                  event: 'attach_complete',
+                  id: data.id,
+                  restored: attachEffects.restoreAction.kind === 'ghostty_snapshot',
+                });
                 ptyTransportRef.current.setAttachContext(data.id);
               }
             }
@@ -2002,14 +1995,6 @@ export function useDaemonSocket({
                 code: data.exit_code ?? 0,
                 signal: data.signal,
               });
-              if (callbacksRef.current.onSessionExited && data.session_id) {
-                callbacksRef.current.onSessionExited({
-                  runtimeId: data.id,
-                  sessionId: data.session_id,
-                  exitCode: data.exit_code ?? 0,
-                  signal: data.signal,
-                });
-              }
             }
             break;
 
@@ -3062,6 +3047,7 @@ export function useDaemonSocket({
       requestedGeometryAuthoritative?: boolean;
     },
   ) => {
+    if (attachResult.running === false) return;
     const plan = planAttachedRuntimeGeometry(args, attachResult, options);
 
     if (plan.resizeRequired) {

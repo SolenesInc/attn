@@ -187,8 +187,8 @@ type Daemon struct {
 	launchWatchMu                     sync.Mutex
 	launchWatches                     map[protocol.SessionID]*launchWatch
 	recoveredLaunches                 map[protocol.SessionID]*launchWatch
-	reloadingMu                       sync.Mutex
-	reloadingTerminals                map[harness.TerminalID]bool
+	terminalExitIntentMu              sync.Mutex
+	terminalExitIntents               map[harness.TerminalID]terminalExitIntent
 	prepareSessionTeardownHook        func(string) error
 	teardownMu                        sync.Mutex
 	tearingDown                       map[protocol.SessionID]chan struct{}
@@ -976,6 +976,9 @@ func (d *Daemon) pruneSessionsWithoutPTY(previousRunSessions map[protocol.Sessio
 			continue
 		}
 		d.releaseExitedCrewBinding(session.ID)
+		if d.store.GetSessionExit(session.ID) != nil {
+			continue
+		}
 		if d.canReviveSession(session) {
 			if session.State == protocol.SessionStateRecoverable {
 				continue
@@ -1399,6 +1402,9 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 			continue
 		}
 		d.releaseExitedCrewBinding(session.ID)
+		if d.store.GetSessionExit(session.ID) != nil {
+			continue
+		}
 		if d.canReviveSession(session) {
 			if session.State == protocol.SessionStateRecoverable {
 				continue
@@ -1622,7 +1628,8 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		return false
 	}
 	defer release()
-	if d.consumeReloading(info.ID) {
+	intent := d.consumeTerminalExitIntent(info.ID)
+	if intent == terminalExitReload {
 		d.logf("suppressing exit for reloading terminal %s (runtime replaced in place)", info.ID)
 		return false
 	}
@@ -1676,6 +1683,14 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		Signal:   info.Signal,
 	})
 	d.recordProcessEvidence(sessionID, true)
+	if info.ExitCode == 0 && info.Signal == "" && intent != terminalExitStop {
+		closing, err := d.beginSessionClose(sessionID, store.SessionClose{By: string(sessionID), Reason: "Agent exited normally"}, nil)
+		if err != nil {
+			d.logf("closing normally exited session %s: %v", sessionID, err)
+		} else {
+			d.finishSessionClose(sessionID, closing)
+		}
+	}
 	return true
 }
 
@@ -3108,6 +3123,9 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 	clone := cloneSession(session)
 	if clone == nil {
 		return nil
+	}
+	if d.store != nil {
+		clone.TerminalExit = d.store.GetSessionExit(clone.ID)
 	}
 	d.decorateSessionWithStateReason(clone)
 

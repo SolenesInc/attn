@@ -360,6 +360,9 @@ type AttachResultMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
 
+	// Exit corresponds to the JSON schema field "exit".
+	Exit *TerminalExit `json:"exit,omitempty,omitzero"`
+
 	// ID corresponds to the JSON schema field "id".
 	ID TerminalID `json:"id"`
 
@@ -377,6 +380,9 @@ type AttachResultMessage struct {
 
 	// Running corresponds to the JSON schema field "running".
 	Running *bool `json:"running,omitempty,omitzero"`
+
+	// Screen corresponds to the JSON schema field "screen".
+	Screen *AgentPeekScreen `json:"screen,omitempty,omitzero"`
 
 	// Snapshot corresponds to the JSON schema field "snapshot".
 	Snapshot *AttachSnapshot `json:"snapshot,omitempty,omitzero"`
@@ -9541,6 +9547,9 @@ type Session struct {
 	// TerminalBuildStale corresponds to the JSON schema field "terminal_build_stale".
 	TerminalBuildStale *bool `json:"terminal_build_stale,omitempty,omitzero"`
 
+	// TerminalExit corresponds to the JSON schema field "terminal_exit".
+	TerminalExit *TerminalExit `json:"terminal_exit,omitempty,omitzero"`
+
 	// TurnOpenedAt corresponds to the JSON schema field "turn_opened_at".
 	TurnOpenedAt *string `json:"turn_opened_at,omitempty,omitzero"`
 
@@ -11028,6 +11037,17 @@ type TerminalBindingsUpdatedMessage struct {
 
 	// TerminalBindings corresponds to the JSON schema field "terminal_bindings".
 	TerminalBindings []TerminalBinding `json:"terminal_bindings"`
+}
+
+type TerminalExit struct {
+	// At corresponds to the JSON schema field "at".
+	At string `json:"at"`
+
+	// Code corresponds to the JSON schema field "code".
+	Code int `json:"code"`
+
+	// Signal corresponds to the JSON schema field "signal".
+	Signal *string `json:"signal,omitempty,omitzero"`
 }
 
 type TerminalID string

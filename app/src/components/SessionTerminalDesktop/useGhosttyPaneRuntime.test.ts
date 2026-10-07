@@ -166,7 +166,7 @@ describe('useGhosttyPaneRuntime', () => {
 
     act(() => result.current.setTerminalHandle('pane-session', terminal));
     await act(async () => {
-      binding?.onEvent({ event: 'restore_complete', id: 'runtime-1' });
+      binding?.onEvent({ event: 'attach_complete', id: 'runtime-1', restored: true });
       await Promise.resolve();
     });
 
@@ -187,7 +187,7 @@ describe('useGhosttyPaneRuntime', () => {
 
     act(() => {
       result.current.setTerminalHandle('pane-session', terminal);
-      binding?.onEvent({ event: 'restore_complete', id: 'runtime-1' });
+      binding?.onEvent({ event: 'attach_complete', id: 'runtime-1', restored: true });
       isActiveSessionRef.current = false;
       resolveDrain?.();
     });
@@ -516,7 +516,7 @@ describe('useGhosttyPaneRuntime', () => {
     expect(mockPtyResize).not.toHaveBeenCalled();
   });
 
-  it('requests daemon-owned revive for a recoverable pane', async () => {
+  it('reads a recoverable pane without requesting revival', async () => {
     const { result } = renderHook(() => useGhosttyPaneRuntime([
       {
         paneId: 'pane-session',
@@ -539,13 +539,13 @@ describe('useGhosttyPaneRuntime', () => {
         rows: 40,
         shell: false,
         agent: 'claude',
-        policy: 'revive',
+        policy: 'same_app_remount',
       },
       forceResizeBeforeAttach: false,
     });
   });
 
-  it('surfaces a revive attach failure without a client-side retry loop', async () => {
+  it('surfaces a stopped-screen failure without a client-side retry loop', async () => {
     mockPtyAttach.mockRejectedValueOnce(new Error('session not found: runtime-1'));
     const { result } = renderHook(() => useGhosttyPaneRuntime([
       {

@@ -105,7 +105,7 @@ func TestAPiSessionThatEndsBeforeItsTranscriptAppearsIsNotIncomplete(t *testing.
 	if err := reportTranscript(driver, run.SessionID, run.RunID, w.Path("never-written.jsonl")); err != nil {
 		t.Fatal(err)
 	}
-	exitDriven(app, driver, session)
+	stopDriven(app, driver, session)
 
 	relaunch := relaunchDriven(w, driver, session, cwd)
 	path := w.Path("pi-session.jsonl")

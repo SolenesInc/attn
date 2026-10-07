@@ -112,6 +112,7 @@ export function AppDesktops() {
             autoSettleFiresAt: entry.autoSettleFiresAt,
             autoSettleHeld: entry.autoSettleHeld,
             autoSettleDismissArmed: entry.autoSettleDismissArmed,
+            terminalExit: entry.terminalExit,
             terminalBuildStale: entry.terminalBuildStale,
             usage: entry.usage,
             isActive: isCurrent && entry.id === shownSessionId,

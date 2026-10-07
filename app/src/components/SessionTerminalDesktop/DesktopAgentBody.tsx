@@ -1,10 +1,14 @@
+import { useState } from 'react';
 import { AnnotatedTerminal } from '../TerminalAnnotations/AnnotatedTerminal';
 import { TerminalStaleBuildNotice } from '../TerminalStaleBuildNotice';
 import { useDesktopContext } from './DesktopContext';
 import { paneNotice } from './paneNotice';
 import type { DesktopAgentProps } from './desktopTypes';
+import { useSessionStore } from '../../store/sessions';
 
 export function DesktopAgentBody({ agentPane, paneSession, paneTitle }: DesktopAgentProps) {
+  const [resuming, setResuming] = useState(false);
+  const [resumeError, setResumeError] = useState('');
   const {
     desktopId,
     gardenSeeds,
@@ -26,11 +30,34 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle }: DesktopA
     sessionVisible,
     shortcutsEnabled,
     handleGhosttyTerminalReady,
+    handleClosePane,
   } = useDesktopContext();
   const notice = paneNotice(agentPane, paneSession, paneTitle);
+  const stopped = paneSession?.terminalExit || paneSession?.state === 'recoverable';
+  const resume = async () => {
+    setResumeError('');
+    setResuming(true);
+    try {
+      await useSessionStore.getState().reloadSession(agentPane.sessionId, runtime.getPaneSize(agentPane.id) ?? undefined);
+    } catch (error) {
+      setResumeError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setResuming(false);
+    }
+  };
 
   return (
     <div className="desktop-pane-body">
+      {stopped ? (
+        <div className="desktop-agent-stopped" role="status">
+          <div>
+            <strong>Agent stopped.</strong> Resume to continue this conversation.
+            {resumeError ? <div role="alert">{resumeError}</div> : null}
+          </div>
+          <button type="button" disabled={resuming} onClick={() => void resume()}>{resuming ? 'Resuming…' : 'Resume'}</button>
+          <button type="button" disabled={resuming} onClick={() => handleClosePane(agentPane.id)}>Close</button>
+        </div>
+      ) : null}
       {paneSession?.terminalBuildStale && !staleBuildDismissed.has(agentPane.sessionId) ? (
         <TerminalStaleBuildNotice
           onDismiss={() => setStaleBuildDismissed((prev) => new Set(prev).add(agentPane.sessionId))}

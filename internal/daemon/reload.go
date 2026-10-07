@@ -24,29 +24,44 @@ import (
 
 const reloadStuckFlagGrace = 5 * time.Second
 
-func (d *Daemon) markReloading(id harness.TerminalID) {
-	d.reloadingMu.Lock()
-	defer d.reloadingMu.Unlock()
-	if d.reloadingTerminals == nil {
-		d.reloadingTerminals = make(map[harness.TerminalID]bool)
+type terminalExitIntent string
+
+const (
+	terminalExitReload terminalExitIntent = "reload"
+	terminalExitStop   terminalExitIntent = "stop"
+)
+
+func (d *Daemon) markTerminalExitIntent(id harness.TerminalID, intent terminalExitIntent) {
+	d.terminalExitIntentMu.Lock()
+	defer d.terminalExitIntentMu.Unlock()
+	if d.terminalExitIntents == nil {
+		d.terminalExitIntents = make(map[harness.TerminalID]terminalExitIntent)
 	}
-	d.reloadingTerminals[id] = true
+	d.terminalExitIntents[id] = intent
 }
 
-func (d *Daemon) consumeReloading(id harness.TerminalID) bool {
-	d.reloadingMu.Lock()
-	defer d.reloadingMu.Unlock()
-	if d.reloadingTerminals[id] {
-		delete(d.reloadingTerminals, id)
-		return true
-	}
-	return false
+func (d *Daemon) markReloading(id harness.TerminalID) {
+	d.markTerminalExitIntent(id, terminalExitReload)
+}
+
+func (d *Daemon) consumeTerminalExitIntent(id harness.TerminalID) terminalExitIntent {
+	d.terminalExitIntentMu.Lock()
+	defer d.terminalExitIntentMu.Unlock()
+	intent := d.terminalExitIntents[id]
+	delete(d.terminalExitIntents, id)
+	return intent
 }
 
 func (d *Daemon) clearReloading(id harness.TerminalID) {
-	d.reloadingMu.Lock()
-	defer d.reloadingMu.Unlock()
-	delete(d.reloadingTerminals, id)
+	d.clearTerminalExitIntent(id, terminalExitReload)
+}
+
+func (d *Daemon) clearTerminalExitIntent(id harness.TerminalID, intent terminalExitIntent) {
+	d.terminalExitIntentMu.Lock()
+	defer d.terminalExitIntentMu.Unlock()
+	if d.terminalExitIntents[id] == intent {
+		delete(d.terminalExitIntents, id)
+	}
 }
 
 type sessionLocks struct {

@@ -123,8 +123,10 @@ func (d *Daemon) awaitDelegatedLaunch(sessionID protocol.SessionID, watch *launc
 
 func delegationExitError(agent string, sessionID protocol.SessionID, exit *store.SessionExitScreen) error {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s exited with %s before its first turn; session %s and its pane were kept, `attn agent peek %s` shows what it left",
-		agent, describeExit(exit), sessionID, shortSessionID(sessionID))
+	fmt.Fprintf(&b, "%s exited with %s before its first turn (session %s)", agent, describeExit(exit), sessionID)
+	if exit.ExitCode != 0 || exit.ExitSignal != "" {
+		fmt.Fprintf(&b, "; `attn agent peek %s` shows what it left", shortSessionID(sessionID))
+	}
 	if text := strings.TrimRight(exit.Text, "\n"); text != "" {
 		b.WriteString("\nscreen at exit:\n")
 		for _, line := range strings.Split(text, "\n") {
@@ -146,11 +148,13 @@ func (d *Daemon) noteDelegatedExitOnSeed(seedID string, agent string, sessionID 
 		return
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "The delegated agent (%s) exited with %s before starting its first turn, so nothing here was worked on. Session %s and its pane were kept; `attn agent peek %s` shows the screen it left.",
-		agent, describeExit(exit), sessionID, shortSessionID(sessionID))
+	fmt.Fprintf(&b, "The delegated agent (%s) exited with %s before starting its first turn, so nothing here was worked on. Session: %s.", agent, describeExit(exit), sessionID)
+	if exit.ExitCode != 0 || exit.ExitSignal != "" {
+		fmt.Fprintf(&b, " `attn agent peek %s` shows the screen it left.", shortSessionID(sessionID))
+	}
 	if text := strings.TrimRight(exit.Text, "\n"); text != "" {
 		if len(text) > seedNoteExitScreenMaxBytes {
-			text = "[first " + fmt.Sprint(len(text)-seedNoteExitScreenMaxBytes) + " bytes left to peek]\n" + text[len(text)-seedNoteExitScreenMaxBytes:]
+			text = "[first " + fmt.Sprint(len(text)-seedNoteExitScreenMaxBytes) + " bytes omitted]\n" + text[len(text)-seedNoteExitScreenMaxBytes:]
 		}
 		b.WriteString("\n\nScreen at exit:\n\n")
 		for _, line := range strings.Split(text, "\n") {

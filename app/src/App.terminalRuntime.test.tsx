@@ -315,15 +315,16 @@ describe('App terminal runtime', () => {
     expect(resizesAfterAttach(daemon)).toEqual([{ cmd: 'pty_resize', id: 's1', cols: 100, rows: 28 }]);
   });
 
-  it('revives a recoverable session with its geometry in the attach itself', async () => {
+  it('opens a recoverable pane without restarting it', async () => {
     layOutTerminals(800, 600);
     const { daemon } = await renderSessions(daemonSession('s1', { state: 'recoverable' }));
+    daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, running: false }));
 
     open('s1');
     await daemon.idle();
 
     expect(daemon.sent.filter((command) => command.cmd === 'pty_resize' || command.cmd === 'attach_session')).toEqual([
-      { cmd: 'attach_session', id: 's1', attach_policy: 'revive', cols: 100, rows: 28 },
+      { cmd: 'attach_session', id: 's1', attach_policy: 'same_app_remount' },
     ]);
   });
 
@@ -609,6 +610,34 @@ describe('App terminal runtime', () => {
     expect(resizesAfterAttach(daemon)).toEqual([{ cmd: 'pty_resize', id: 's1', cols: 100, rows: 4, xpixel: 800, ypixel: 84 }]);
   });
 
+  it.each([false, true])('resizes a reloaded terminal after its initial attach failed (snapshot=%s)', async (withSnapshot) => {
+    const resize = resizableTerminals(800, 600);
+    const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }));
+    daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: false, error: `session not found: ${id}` }));
+    open('s1');
+    await daemon.idle();
+    expect(visibleText('s1')).toContain('Failed to attach PTY');
+
+    await resize(1000, 600);
+    daemon.on('attach_session', ({ id }) => withSnapshot
+      ? snapshotReply(id)
+      : { event: 'attach_result', id, success: true, cols: 40, rows: 6, running: true, last_seq: 0 });
+    daemon.emit({ event: 'runtime_respawned', id: 's1' });
+    await daemon.idle();
+    await act(() => vi.advanceTimersByTimeAsync(DESKTOP_RESIZE_COALESCE_MS));
+    await daemon.idle();
+    expect(resizesAfterAttach(daemon, 1)).toContainEqual({ cmd: 'pty_resize', id: 's1', cols: 125, rows: 28, xpixel: 1000, ypixel: 588 });
+
+    daemon.emit({ event: 'pty_resized', id: 's1', cols: 125, rows: 28 });
+    daemon.emit({ event: 'pty_output', id: 's1', seq: 11, data: btoa('recovered terminal') });
+    await daemon.idle();
+    expect(visibleText('s1')).toContain('recovered terminal');
+
+    await resize(1200, 600);
+    await daemon.idle();
+    expect(daemon.sentOf('pty_resize').slice(-1)[0]).toEqual({ cmd: 'pty_resize', id: 's1', cols: 150, rows: 28, xpixel: 1200, ypixel: 588 });
+  });
+
   it('follows a narrow pane as it widens, while it is still too narrow to be usable', async () => {
     const resize = resizableTerminals(120, 540);
     const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }));
@@ -879,7 +908,7 @@ describe('App terminal runtime', () => {
     expect(daemon.sentOf('detach_session')).toEqual([]);
   });
 
-  it('shows a failed revive in the terminal and leaves retrying to the user', async () => {
+  it('shows an unreadable stopped screen without restarting or retrying', async () => {
     const { daemon } = await renderSessions(daemonSession('s1', { state: 'recoverable' }));
     daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: false, error: 'session not found: s1' }));
 
@@ -890,7 +919,7 @@ describe('App terminal runtime', () => {
 
     expect(visibleText('s1')).toBe('[Failed to attach PTY: Error: session not found: s1]');
     expect(attachesAndDetaches(daemon)).toEqual([
-      { cmd: 'attach_session', id: 's1', attach_policy: 'revive', cols: 80, rows: 24 },
+      { cmd: 'attach_session', id: 's1', attach_policy: 'same_app_remount' },
       { cmd: 'detach_session', id: 's1' },
     ]);
   });
