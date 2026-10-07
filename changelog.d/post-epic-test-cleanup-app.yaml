@@ -1,3 +1,0 @@
-kind: internal
-area: testing
-change: Replace the app's remaining component and helper tests with App wire tests, trim e2e specs to what needs a real browser, delete the real-app harness's helper tests, and take scenario verdicts from the CLI and protocol instead of the daemon database.

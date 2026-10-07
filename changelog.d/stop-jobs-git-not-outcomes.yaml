@@ -1,3 +1,0 @@
-kind: fixed
-area: daemon
-change: In-process daemon shutdown drains running background jobs and admitted Git mutations without recording shutdown as a failure.

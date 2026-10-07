@@ -1,3 +1,0 @@
-kind: fixed
-area: tests
-change: Consume complete JSON-RPC frames in plugin-driver test pipes.

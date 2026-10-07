@@ -1,3 +1,0 @@
-kind: internal
-area: ci
-change: Log Linux sandbox setup commands and fail with the command name when one exceeds ten minutes.

@@ -1,3 +1,0 @@
-kind: internal
-area: testing
-change: Wait for agent startup before worktree wire tests tear down their repositories.

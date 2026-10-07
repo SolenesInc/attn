@@ -1,3 +1,0 @@
-kind: internal
-area: docs
-change: "The working rules ask riskier changes, such as a new harness integration or PTY runtime, to land first behind an experimental setting, off by default."

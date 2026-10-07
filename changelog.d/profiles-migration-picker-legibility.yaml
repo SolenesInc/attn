@@ -1,3 +1,0 @@
-kind: fixed
-area: app
-change: The desktop migration screen tells apart workspaces that share a name by their first agent, adding a number if those collide too.

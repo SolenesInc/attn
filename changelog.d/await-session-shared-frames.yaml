@@ -1,3 +1,0 @@
-kind: internal
-area: testing
-change: Awaiting one session's update no longer hides another session's update carried in the same session list, which made the Chief transfer wire test time out intermittently.

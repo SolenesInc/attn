@@ -1,3 +1,0 @@
-kind: internal
-area: daemon
-change: A reconnecting app receives the reason for a slow-client eviction even when the old connection's hello is still finishing.

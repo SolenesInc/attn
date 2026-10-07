@@ -1,3 +1,0 @@
-kind: fixed
-area: terminal
-change: Closing a pane no longer tells the daemon to detach a terminal the app never attached.

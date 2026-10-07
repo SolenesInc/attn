@@ -1,3 +1,0 @@
-kind: fixed
-area: navigation
-change: Keep the agent you select after creating another session, instead of jumping back when its delayed selection completes.

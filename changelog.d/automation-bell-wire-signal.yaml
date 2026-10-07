@@ -1,3 +1,0 @@
-kind: internal
-area: testing
-change: Automation thread bell coverage waits for inbox delivery before checking each notification.

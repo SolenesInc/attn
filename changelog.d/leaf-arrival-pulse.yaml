@@ -1,3 +1,0 @@
-kind: fixed
-area: app
-change: Picking an agent or tile shows a brief accent ring around its pane, even when it was already visible.

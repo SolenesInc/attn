@@ -1,4 +1,0 @@
-kind: fixed
-area: garden
-change: Linking a seed older than the newest thousand now finds it.
-symptom: attn refused the link, saying no such seed was planted.

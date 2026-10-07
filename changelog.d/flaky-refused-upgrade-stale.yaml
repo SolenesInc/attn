@@ -1,3 +1,0 @@
-kind: internal
-area: testing
-change: The refused-worker-upgrade stack test reads the reload notice from the initial state when the refusal lands before the app connects.

@@ -1,3 +1,0 @@
-kind: added
-area: sessions
-change: Agent headers can focus one session across the attn shell and restore the previous workspace on exit.

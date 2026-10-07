@@ -1,4 +1,0 @@
-kind: fixed
-area: notebook
-change: A notebook whose root is a symbolic link now lists its notes.
-symptom: The notebook showed no notes when its root folder was a link.

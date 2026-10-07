@@ -1,4 +1,0 @@
-kind: changed
-area: palette
-change: Command palettes learn from the commands you select, with current-agent actions pinned near the top.
-notes: History is shared within each profile. A selection's weight halves every two weeks; stronger text matches still win. Each opening keeps its history order until you close it.

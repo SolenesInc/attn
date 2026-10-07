@@ -1,3 +1,0 @@
-kind: fixed
-area: agents
-change: Ticket activity no longer queues inbox nudges while an agent is waiting for approval.

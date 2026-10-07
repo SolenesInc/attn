@@ -1,3 +1,0 @@
-kind: internal
-area: daemon
-change: Route session input through a harness link when the session has one, with pi's plugin delivery as the first link and the PTY path split into its own file.

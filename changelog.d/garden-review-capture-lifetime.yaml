@@ -1,3 +1,0 @@
-kind: internal
-area: daemon
-change: Garden review joins concurrent plugin inspections under its request or job owner, including during shutdown.

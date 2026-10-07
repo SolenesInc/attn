@@ -1,4 +1,0 @@
-kind: fixed
-area: terminal
-change: A terminal that falls behind a burst of output on the embedded PTY backend resyncs from a fresh snapshot instead of stopping.
-symptom: With the embedded PTY backend, a terminal attached while an agent printed heavily could stop showing new output until reopened.

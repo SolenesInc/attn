@@ -1,3 +1,0 @@
-kind: changed
-area: app
-change: Cmd+Option+1–9 moves the active pane or tile to that desktop and follows it there with the keyboard in it; Cmd+Option+Shift+1–9 moves it and keeps you where you are.

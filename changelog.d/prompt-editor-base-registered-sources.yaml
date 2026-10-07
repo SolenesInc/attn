@@ -1,3 +1,0 @@
-kind: internal
-area: prompts
-change: The prompt editor no longer reports committed prompt files that no event uses as deleted when comparing against a base.

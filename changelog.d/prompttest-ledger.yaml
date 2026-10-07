@@ -1,3 +1,0 @@
-kind: internal
-area: testing
-change: Remove the prompt fixture provenance ledger from internal/prompttest; nothing read it.

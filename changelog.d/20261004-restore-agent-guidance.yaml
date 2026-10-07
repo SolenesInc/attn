@@ -1,3 +1,0 @@
-kind: internal
-area: docs
-change: Restore the agent guidance that a copy from `main` overwrote, keeping every edit made since.

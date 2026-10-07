@@ -1,3 +1,0 @@
-kind: internal
-area: testing
-change: Make the close-pane PTY ordering test subscribe before its readiness marker is emitted.

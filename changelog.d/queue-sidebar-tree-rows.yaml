@@ -1,3 +1,0 @@
-kind: changed
-area: queue
-change: Queue sidebar rows now share the desktop tree's compact layout, with more room for agent names.

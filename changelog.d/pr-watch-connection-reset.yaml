@@ -1,3 +1,0 @@
-kind: fixed
-area: pr-watch
-change: PR watches retry a connection reset on a reused GitHub connection once before reporting that monitoring is delayed.

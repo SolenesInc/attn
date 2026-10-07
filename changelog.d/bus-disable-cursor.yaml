@@ -1,3 +1,0 @@
-kind: fixed
-area: bus
-change: Disabling a bus consumer stops its cursor acknowledgements immediately.

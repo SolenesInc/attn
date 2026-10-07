@@ -1,3 +1,0 @@
-kind: internal
-area: ci
-change: Harden acceptance soak setup and evidence collection across runner classes.
