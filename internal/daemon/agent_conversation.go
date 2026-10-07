@@ -79,6 +79,14 @@ func (d *Daemon) conversationIn(t harness.TerminalID, observation agentConversat
 		d.logf("agent conversation: dropped %s from terminal %s; its owner changed from %q to %q meanwhile", observation.NativeID, t, owner, now)
 		return
 	}
+	// A session keeps the Codex mode it launched with, so an owner of the other mode never runs in t.
+	if owner != "" && d.codexShared().launchedShared(owner) != d.codexShared().launchedShared(session.ID) {
+		if d.store.Get(owner) != nil {
+			d.logf("agent conversation: dropped %s from terminal %s; open session %s runs it in the other Codex mode", observation.NativeID, t, owner)
+			return
+		}
+		owner = ""
+	}
 	var err error
 	switch {
 	case owner == "" && held == "":

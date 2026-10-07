@@ -360,6 +360,26 @@ func TestAConversationAnotherProfileResumesCountsItsTurnsOnlyThere(t *testing.T)
 	}
 }
 
+func TestAClosedPlainCodexConversationResumedInASharedTerminalRunsAsASharedSession(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	plain, plainCodex, _ := sharedCodexWaiting(t, w, app)
+	conversation := plainCodex.ConversationID
+	if closed := closeFromApp(app, plain); !closed.Accepted {
+		t.Fatalf("close %s: %s", plain, protocol.Deref(closed.Error))
+	}
+	setSetting(t, app, "codex_shared_enabled", "true")
+
+	_, codex, terminal := sharedCodexWaiting(t, w, app)
+	moveOn(t, app, codex, terminal, "/resume "+conversation, "carry on")
+	resumed := sessionShownIn(t, w, app, terminal)
+	if resumed == plain {
+		t.Fatalf("/resume %s in a shared terminal reopened plain session %s", conversation, plain)
+	}
+	moveOn(t, app, codex, terminal, "/new", "write the notes")
+	testworld.AwaitSession(app, resumed, func(s protocol.Session) bool { return protocol.Deref(s.Hidden) })
+}
+
 func TestASharedLaunchRefusesAConversationAnotherProfilesServerHolds(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
