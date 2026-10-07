@@ -33,7 +33,7 @@ if [[ "$workflow" == app-acceptance.yml ]]; then
   run_binding="App acceptance $sha"
   run_row="$({
     gh api --paginate "$runs_url" \
-      --jq '.workflow_runs[] | select(.head_branch == "main" and .event == "workflow_dispatch" and .display_title == "'$run_binding'") | [.created_at, .id, .display_title, .status, (.conclusion // "none"), .html_url] | @tsv' |
+      --jq '.workflow_runs[] | select(.head_branch == "main" and .event == "workflow_dispatch" and .display_title == "'"$run_binding"'") | [.created_at, .id, .display_title, .status, (.conclusion // "none"), .html_url] | @tsv' |
       sort -t $'\t' -k1,1 | tail -n 1 | cut -f 2-
   } || true)"
 else
@@ -43,7 +43,7 @@ else
   fi
   run_row="$({
     gh api --paginate "$runs_url" \
-      --jq '.workflow_runs[] | select(.head_sha == "'$sha'" and .event == "'$event'") | [.created_at, .id, .head_sha, .status, (.conclusion // "none"), .html_url] | @tsv' |
+      --jq '.workflow_runs[] | select(.head_sha == "'"$sha"'" and .event == "'"$event"'") | [.created_at, .id, .head_sha, .status, (.conclusion // "none"), .html_url] | @tsv' |
       sort -t $'\t' -k1,1 | tail -n 1 | cut -f 2-
   } || true)"
 fi
@@ -67,7 +67,7 @@ fi
 job_rows="$({
   gh api --paginate \
     "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/jobs?filter=latest&per_page=100" \
-    --jq '.jobs[] | select(.name == "'$job'") | [.status, (.conclusion // "none"), .html_url] | @tsv'
+    --jq '.jobs[] | select(.name == "'"$job"'") | [.status, (.conclusion // "none"), .html_url] | @tsv'
 } || true)"
 job_count="$(printf '%s\n' "$job_rows" | awk 'NF { count++ } END { print count + 0 }')"
 if [[ "$job_count" -ne 1 ]]; then
