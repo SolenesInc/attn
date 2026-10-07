@@ -1,3 +1,0 @@
-kind: internal
-area: store
-change: Pending database migrations apply in one transaction, so a fresh daemon starts with one migration commit instead of 157.

@@ -1,3 +1,0 @@
-kind: fixed
-area: queue
-change: Snooze opens from the action palette in the active agent pane, supports keyboard selection and focus return, and offers 2-hour and 4-hour durations.

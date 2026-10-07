@@ -1,3 +1,0 @@
-kind: internal
-area: agents
-change: Centralize delegation popup lifecycle, trigger ownership, and keyboard focus handoffs without changing its appearance.

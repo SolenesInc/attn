@@ -1,4 +1,0 @@
-kind: added
-area: conversations
-change: List attn's kept Claude conversations with their sizes and retention reasons, keep a conversation forever, or forget attn's copy from the CLI.
-notes: Forget leaves Claude's own files untouched and refuses while open seeds still reference the conversation. Seed output now shows small copies in B or KB.

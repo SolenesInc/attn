@@ -1,3 +1,0 @@
-kind: internal
-area: testing
-change: Wait for Pi driver registration before the revive wire test starts its first session.

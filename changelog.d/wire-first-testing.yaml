@@ -1,3 +1,0 @@
-kind: internal
-area: testing
-change: Tests guard promises at the protocol, durability, CLI, and screen boundaries, with wire tests as the default.

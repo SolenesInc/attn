@@ -1,3 +1,0 @@
-kind: internal
-area: profiles
-change: The desktop cutover is proven end to end on copied real data, and the migration failure screen names the attn commit.

@@ -1,3 +1,0 @@
-kind: internal
-area: testing
-change: The dirty-worktree delete wire test waits for its agent to finish launching before it deletes the worktree the agent started in.

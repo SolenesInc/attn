@@ -1,3 +1,0 @@
-kind: internal
-area: testing
-change: Stop waiting for PTY output when a reattach snapshot already contains the flood's end.

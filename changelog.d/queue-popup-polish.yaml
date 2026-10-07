@@ -1,3 +1,0 @@
-kind: fixed
-area: queue
-change: The collapsed queue popup gives session names more room, shows crew names without repeated labels, and removes redundant hints.

@@ -1,3 +1,0 @@
-kind: internal
-area: ci
-change: Run remote hub and endpoint lifecycle tests under the race detector in CI.

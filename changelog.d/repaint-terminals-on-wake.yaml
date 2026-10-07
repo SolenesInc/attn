@@ -1,3 +1,0 @@
-kind: fixed
-area: terminal
-change: Visible terminal panes repaint when the app returns from sleep, screen lock, or a workspace switch.

@@ -1,3 +1,0 @@
-kind: internal
-area: testing
-change: Check kept-conversation release and deletion after foreground cleanup protection has ended.

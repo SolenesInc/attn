@@ -1,3 +1,0 @@
-kind: changed
-area: garden
-change: A Handover that collides with another change to its seed now fails once with the reason instead of retrying.

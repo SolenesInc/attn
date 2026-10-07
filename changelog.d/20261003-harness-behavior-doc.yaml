@@ -1,3 +1,0 @@
-kind: internal
-area: docs
-change: "`docs/harnesses.md` records how Claude's and Codex's own commands look to attn, checked in their source or by probe, and the guidance list points at it."

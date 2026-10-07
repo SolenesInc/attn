@@ -1,3 +1,0 @@
-kind: internal
-area: tests
-change: Shell tests pin a direct Git executable before shadowing git on PATH.

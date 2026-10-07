@@ -1,3 +1,0 @@
-kind: internal
-area: testing
-change: Wait for startup idle and a complete recipient turn before checking agent message notification in wire and CLI stack tests.

@@ -1,3 +1,0 @@
-kind: fixed
-area: background jobs
-change: Stale runner lock files no longer disable background jobs, and genuine startup conflicts are shown in the app.

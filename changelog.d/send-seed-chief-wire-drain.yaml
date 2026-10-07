@@ -1,3 +1,0 @@
-kind: internal
-area: testing
-change: Drain the initial tend in the send-to-Chief wire test before handing the seed over.

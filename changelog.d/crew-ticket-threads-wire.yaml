@@ -1,4 +1,0 @@
-kind: fixed
-area: crew
-change: Waking a crew member started from the bare CLI keeps its registered day instead of replacing it because it has no daemon-owned terminal.
-notes: External wrapper crashes without unregistering are not detected until daemon restart.

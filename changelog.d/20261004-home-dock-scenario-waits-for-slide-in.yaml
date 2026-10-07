@@ -1,3 +1,0 @@
-kind: internal
-area: testing
-change: "The home-dock acceptance scenario waits for the Automations panel to open and finish sliding in before measuring it."

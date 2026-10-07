@@ -1,4 +1,0 @@
-kind: fixed
-area: delegation
-change: A delegation interrupted by a daemon restart before its agent's first turn now resumes on its session when attn starts again.
-symptom: The delegation was recorded as completed, its session was pruned at startup, and it never resumed.

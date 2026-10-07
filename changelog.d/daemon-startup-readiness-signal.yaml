@@ -1,3 +1,0 @@
-kind: fixed
-area: daemon
-change: Daemon startup waits for the daemon's readiness signal without failing healthy cold starts.

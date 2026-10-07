@@ -1,5 +1,0 @@
-kind: fixed
-area: sessions
-change: >
-  The Sessions surface keeps remembered repository and workspace filters while
-  their facets load after an app restart.

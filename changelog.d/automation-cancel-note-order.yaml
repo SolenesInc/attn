@@ -1,4 +1,0 @@
-kind: fixed
-area: automations
-change: A cancelled automation run notes its seed before the run shows as cancelled.
-symptom: A client reacting to the cancellation could read the seed before the note and bell existed.

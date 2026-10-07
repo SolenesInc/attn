@@ -1,3 +1,0 @@
-kind: fixed
-area: notifications
-change: Explain exhausted background tasks with their trigger, impact, cause, diagnostic output, and available actions.

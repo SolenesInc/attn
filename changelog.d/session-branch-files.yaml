@@ -1,3 +1,0 @@
-kind: fixed
-area: sessions
-change: Read session branches from repository files to speed up terminal opens and reduce idle process launches.

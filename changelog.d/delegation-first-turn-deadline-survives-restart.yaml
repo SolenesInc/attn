@@ -1,4 +1,0 @@
-kind: fixed
-area: delegation
-change: A delegation's 90-second wait for its agent's first turn now counts from the agent's launch, so a daemon restart during the wait no longer restarts the clock.
-symptom: Each restart during the wait granted another full 90 seconds, so repeated restarts could postpone the unconfirmed result indefinitely.

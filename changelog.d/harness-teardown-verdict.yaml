@@ -1,3 +1,0 @@
-kind: internal
-area: harness
-change: Scenario artifacts record cleanup failures after a green verdict.

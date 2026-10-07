@@ -1,3 +1,0 @@
-kind: internal
-area: tests
-change: Wait for the post-turn idle state in the agent mailbox restart wire test.

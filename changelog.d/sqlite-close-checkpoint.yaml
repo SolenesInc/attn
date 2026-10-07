@@ -1,3 +1,0 @@
-kind: internal
-area: testing
-change: Wait for SQLite connections and checkpoint committed state before daemon shutdown completes, fixing copied-database crew fencing failures.

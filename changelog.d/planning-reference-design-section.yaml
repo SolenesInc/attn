@@ -1,3 +1,0 @@
-kind: changed
-area: delegation
-change: The attn-workflow Planning reference requires a design section with ownership, interfaces, behavior and state, and Discuss hands over to it when the outcome is a plan.

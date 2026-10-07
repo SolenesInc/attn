@@ -1,4 +1,0 @@
-kind: fixed
-area: daemon
-change: A kept-conversation cleanup that yields to worktree maintenance now runs again shortly after, or as soon as the worktree sweep ends.
-symptom: Released conversation copies could outlive their grace period until some unrelated activity started another cleanup pass.

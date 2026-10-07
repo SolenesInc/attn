@@ -1,3 +1,0 @@
-kind: fixed
-area: sessions
-change: Sessions whose working directory disappeared no longer stall the new-session location picker while failing to recover.
