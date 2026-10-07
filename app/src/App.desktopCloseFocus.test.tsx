@@ -27,10 +27,12 @@ describe('desktop close focus', () => {
       }
       if (entry === 'clean exit') {
         daemon.emit({ event: 'session_exited', id: 'c', session_id: 'c', exit_code: 0 });
+        relayOut(daemon, split('ab', 'vertical', [pane('a'), pane('b')]), ['a', 'b'], { active: 'pane-b' });
+        daemon.emit({ event: 'session_unregistered', session: daemonSession('c') });
       }
       await daemon.idle();
 
-      expect(daemon.sentOf('unregister')).toEqual([{ cmd: 'unregister', id: 'c' }]);
+      expect(daemon.sentOf('unregister')).toEqual(entry === 'clean exit' ? [] : [{ cmd: 'unregister', id: 'c' }]);
       expect(document.querySelector('[data-session-terminal-desktop="ws"]')).toHaveAttribute('data-active-leaf-id', 'pane-b');
       expect(document.activeElement?.closest('[data-pane-id]')).toHaveAttribute('data-pane-id', 'pane-b');
       expect(daemon.sentOf('desktop_show_leaf')).toEqual([]);

@@ -1,0 +1,3 @@
+kind: fixed
+area: terminals
+change: Stopped agents keep their final screen across reopening and offer Resume or Close. Clean quits close their tiles; explicit Stop keeps them visible.

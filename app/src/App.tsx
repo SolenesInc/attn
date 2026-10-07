@@ -1,6 +1,6 @@
 import { Toast } from './components/Toast';
 import { invoke } from '@tauri-apps/api/core';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import './App.css';
 import { AppContent } from './application/AppContent';
 import { setMarkdownAnnotationsTransport } from './components/MarkdownReader/annotations/transport';
@@ -15,7 +15,6 @@ import {
   DaemonPlugin,
   DaemonPluginIssue,
   DaemonWorktree,
-  SessionExitInfo,
   useDaemonSocket,
 } from './hooks/useDaemonSocket';
 import { useReleaseUpdates } from './hooks/useReleaseUpdates';
@@ -83,17 +82,6 @@ function App() {
     ensureDaemon();
   }, []);
 
-  const sessionExitHandlerRef = useRef<((info: SessionExitInfo) => void) | null>(null);
-  const registerSessionExitHandler = useCallback(
-    (handler: ((info: SessionExitInfo) => void) | null) => {
-      sessionExitHandlerRef.current = handler;
-    },
-    [],
-  );
-  const handleSessionExited = useCallback((info: SessionExitInfo) => {
-    sessionExitHandlerRef.current?.(info);
-  }, []);
-
   const [fsChangeSignals, setFsChangeSignals] = useState<Record<string, number>>({});
   const [notebookTaskChangeSignal, setTaskChangeSignal] = useState(0);
   const [notificationsUnread, setNotificationsUnread] = useState(0);
@@ -139,7 +127,6 @@ function App() {
     },
     onSettingError: setSettingError,
     onWorktreesUpdate: setWorktrees,
-    onSessionExited: handleSessionExited,
   });
 
   const {
@@ -231,7 +218,6 @@ function App() {
               notificationsChangeSignal={notificationsChangeSignal}
               fsChangeSignals={fsChangeSignals}
               notebookTaskChangeSignal={notebookTaskChangeSignal}
-              registerSessionExitHandler={registerSessionExitHandler}
             />
           </MigrationGate>
           <Toast />

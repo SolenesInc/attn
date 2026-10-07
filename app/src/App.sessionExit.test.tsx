@@ -27,13 +27,16 @@ describe('App session exit', () => {
     expect(screen.queryByRole('combobox')).toBeNull();
   });
 
-  it('closes the session whose terminal exited cleanly', async () => {
+  it('lets the daemon close a cleanly exited session', async () => {
     const daemon = await renderSessions();
 
     daemon.emit({ event: 'session_exited', id: 'terminal-1', session_id: 's1', exit_code: 0 });
     await daemon.idle();
 
-    expect(daemon.sentOf('unregister')).toEqual([{ cmd: 'unregister', id: 's1' }]);
+    expect(daemon.sentOf('unregister')).toEqual([]);
+    daemon.emit({ event: 'session_unregistered', session: daemonSession('s1') });
+    await daemon.idle();
+    expect(screen.queryByRole('button', { name: 'Open s1' })).toBeNull();
   });
 
   it('keeps the pane of an agent that was killed, so its end stays readable', async () => {
@@ -55,7 +58,7 @@ describe('App session exit', () => {
     expect(daemon.sentOf('unregister')).toEqual([]);
   });
 
-  it('keeps the pane of an agent whose reload kills it cleanly, and closes it on a clean exit once the reload is done', async () => {
+  it('leaves clean-exit closure to the daemon during and after reload', async () => {
     const daemon = await renderSessions();
     daemon.on('reload_session', () => undefined);
     fireEvent.click(screen.getByRole('button', { name: 'Actions for s1' }));
@@ -70,6 +73,6 @@ describe('App session exit', () => {
     await gesture(daemon, () => daemon.replyTo(reload, { event: 'reload_session_result', id: 's1', success: true }));
     daemon.emit({ event: 'session_exited', id: 'terminal-1', session_id: 's1', exit_code: 0 });
     await daemon.idle();
-    expect(daemon.sentOf('unregister')).toEqual([{ cmd: 'unregister', id: 's1' }]);
+    expect(daemon.sentOf('unregister')).toEqual([]);
   });
 });

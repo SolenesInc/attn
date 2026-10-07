@@ -361,7 +361,7 @@ func (r *automationReviewWorld) rerequest(number int) {
 
 func (r *automationReviewWorld) stop(agent *fakeagent.Run) {
 	r.t.Helper()
-	agent.Exit(0)
+	r.app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: protocol.SessionID(agent.SessionID)})
 	testworld.Await(r.app, protocol.EventSessionExited, func(e protocol.WebSocketEvent) bool { return string(protocol.Deref(e.SessionID)) == agent.SessionID })
 }
 

@@ -65,7 +65,7 @@ func TestReloadRelaunchesAnExitedSessionAtTheClientsGeometry(t *testing.T) {
 		m.Model = protocol.Ptr("claude-sonnet-5")
 		m.Effort = protocol.Ptr("high")
 	})
-	w.Launched(session).Exit(0)
+	w.Launched(session).Exit(143)
 	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
 
 	for _, tc := range []struct {
@@ -122,7 +122,7 @@ func TestReloadKeepsTheApprovalItStartedWith(t *testing.T) {
 		{name: "an automation's exited agent", session: automated, mode: "auto", model: "sonnet", effort: "high", exit: true},
 	} {
 		if tc.exit {
-			reloadedRuns[tc.session].Exit(0)
+			reloadedRuns[tc.session].Exit(143)
 			testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == tc.session })
 			launchIntentReload(t, app, tc.session)
 		} else {
@@ -151,7 +151,7 @@ func TestChangingTheChiefRelaunchesExactlyTheAffectedAgents(t *testing.T) {
 	}
 	alice, bob, carol := conversing("alice"), conversing("bob"), conversing("carol")
 	shell := w.Spawn(app, shellHarness, w.Path("dora"))
-	runs[carol].Exit(0)
+	runs[carol].Exit(143)
 	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == carol })
 
 	relaunchedAs := func(what, session string, chief bool) {

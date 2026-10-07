@@ -1,10 +1,9 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback } from 'react';
 import { useToast } from '../components/Toast';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
-import { SessionExitInfo } from '../hooks/useDaemonSocket';
 import type { useDesktopRuntimeController } from '../hooks/useDesktopRuntimeController';
 import { useProfilesStore } from '../store/profiles';
-import { isSessionReloading, useSessionStore } from '../store/sessions';
+import { useSessionStore } from '../store/sessions';
 import { AppContentProps, sessionCloseProtectionHint } from './appSupport';
 import { useAppSessions } from './useAppSessions';
 
@@ -14,7 +13,6 @@ interface Options {
   sessions: ReturnType<typeof useSessionStore.getState>['sessions'];
   daemonSessions: AppContentProps['daemonSessions'];
   enrichedLocalSessions: ReturnType<typeof useAppSessions>['enrichedLocalSessions'];
-  registerSessionExitHandler: AppContentProps['registerSessionExitHandler'];
   getPaneSize: ReturnType<typeof useDesktopRuntimeController>['getPaneSize'];
   handleSelectSession: (id: string) => boolean;
   showError: ReturnType<typeof useToast>['showError'];
@@ -27,7 +25,6 @@ export function useSessionLifecycle({
   sessions,
   daemonSessions,
   enrichedLocalSessions,
-  registerSessionExitHandler,
   getPaneSize,
   handleSelectSession,
   showError,
@@ -62,25 +59,6 @@ export function useSessionLifecycle({
     },
     [handleCloseSession, sessions],
   );
-
-  const handleSessionProcessExit = useCallback(
-    (info: SessionExitInfo) => {
-      if (info.exitCode !== 0 || info.signal) {
-        return;
-      }
-      // A reload's kill can surface as a clean exit (code 0, no signal); the same id is about to respawn in place, so closing the pane here would tear the pane down under the pending spawn.
-      if (isSessionReloading(info.sessionId)) {
-        return;
-      }
-      handleRequestCloseSession(info.sessionId);
-    },
-    [handleRequestCloseSession],
-  );
-
-  useEffect(() => {
-    registerSessionExitHandler(handleSessionProcessExit);
-    return () => registerSessionExitHandler(null);
-  }, [registerSessionExitHandler, handleSessionProcessExit]);
 
   const handleReloadSession = useCallback(
     (id: string) => {

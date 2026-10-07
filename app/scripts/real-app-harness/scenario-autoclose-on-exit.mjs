@@ -17,6 +17,8 @@ import {
 } from './scenarioAssertions.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
+import { createWindowDriver } from './platform.mjs';
+import { captureScreenshotData } from './nativeWindowCapture.mjs';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -147,7 +149,7 @@ async function main() {
     prefix: 'autoclose-on-exit',
     metadata: {
       agent: 'shell',
-      focus: 'clean exit auto-closes a session; non-zero exit keeps the pane open',
+      focus: 'clean quits close; stopped screens survive relaunch and resume only on request',
     },
   });
 
@@ -188,7 +190,7 @@ async function main() {
     const failed = await runner.step('nonzero_exit_stays_open', async () => {
       const session = await waitForShellDesktop(client, observer, path.join(runner.sessionDir, 'failed'), `autoclose-failed-${runner.runId}`);
       createdSessionIds.push(session.sessionId);
-      await client.request('write_pane', { sessionId: session.sessionId, paneId: session.pane.paneId, text: 'exit 1', submit: true });
+      await client.request('write_pane', { sessionId: session.sessionId, paneId: session.pane.paneId, text: 'echo retained-output-42; exit 1', submit: true });
       await waitForPaneTextContains(
         client,
         session.sessionId,
@@ -210,6 +212,44 @@ async function main() {
       );
       runner.log('[RealAppHarness] Non-zero exit kept the session open.');
       return session;
+    });
+
+    const notice = `[data-pane-id="${failed.pane.paneId}"] .desktop-agent-stopped`;
+    const driver = createWindowDriver({ appPath: options.appPath, client });
+    const clickNoticeButton = async (index) => {
+      const selector = `${notice} button:nth-of-type(${index})`;
+      const [{ bounds }, { logicalBounds }, { innerWidth, innerHeight }] = await Promise.all([
+        client.request('dom_hover', { selector, leave: true }),
+        client.request('get_window_bounds'),
+        client.request('get_terminal_context_menu_state'),
+      ]);
+      await driver.clickWindow(
+        (Math.max(0, logicalBounds.width - innerWidth) / 2 + bounds.x + bounds.width / 2) / logicalBounds.width,
+        (Math.max(0, logicalBounds.height - innerHeight) + bounds.y + bounds.height / 2) / logicalBounds.height,
+      );
+    };
+    await runner.step('stopped_screen_survives_app_relaunch', async () => {
+      runner.assert((await client.request('dom_wait', { selector: notice, timeoutMs: 10_000 })).matched, 'stopped notice offers Resume');
+      await client.launchFreshApp();
+      await client.waitForManifest(20_000);
+      await client.waitForReady(20_000);
+      await client.waitForFrontendResponsive(20_000);
+      await client.request('select_session', { sessionId: failed.sessionId });
+      await waitForPaneTextContains(client, failed.sessionId, failed.pane.paneId, 'retained-output-42', 'saved final screen restored');
+      const text = (await client.request('read_pane_text', { sessionId: failed.sessionId, paneId: failed.pane.paneId })).text;
+      runner.assert(!text.includes('Failed to attach PTY'), 'stopped screen opens without attaching to a missing runtime');
+      runner.assert((await client.request('dom_wait', { selector: notice, timeoutMs: 10_000 })).matched, 'agent remains stopped after reopening');
+      await captureScreenshotData(path.join(runner.runDir, 'stopped-notice.png'), { client, selector: notice });
+    });
+    await runner.step('resume_button_restarts_only_on_request', async () => {
+      await clickNoticeButton(1);
+      runner.assert((await client.request('dom_wait', { selector: notice, absent: true, timeoutMs: 15_000 })).matched, 'Resume removes the stopped notice');
+      await waitForPaneShellReady(client, failed.sessionId, failed.pane.paneId, { timeoutMs: 20_000, description: 'resumed shell ready' });
+      await client.request('write_pane', { sessionId: failed.sessionId, paneId: failed.pane.paneId, text: 'exit 1', submit: true });
+      runner.assert((await client.request('dom_wait', { selector: notice, timeoutMs: 10_000 })).matched, 'later exit is stopped again');
+      await clickNoticeButton(2);
+      await waitForSessionAbsentFromDaemon(observer, failed.sessionId, 'Close ends the stopped session');
+      await waitForSessionGoneFromUi(client, failed.sessionId, 'closed stopped session leaves the UI');
     });
 
     const summary = await runner.finishSuccess({

@@ -208,6 +208,7 @@ export function useDesktopController(
         sessionId: pane.sessionId,
         testSessionId: pane.sessionId,
         state: paneSession?.state,
+        terminalExit: paneSession?.terminalExit,
       });
     }
     return panes;
@@ -1157,6 +1158,7 @@ export function useDesktopController(
     tileBodyRefFor,
     focusLeaf,
     handleGhosttyTerminalReady,
+    handleClosePane,
     paneFrameStyle,
     beginLeafDrag,
   };

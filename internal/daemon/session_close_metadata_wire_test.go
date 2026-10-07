@@ -41,8 +41,7 @@ func TestASeedRemembersWhereAndHowItsClosedOrReapedTenderRan(t *testing.T) {
 
 	reaped := tenders["reaped"]
 	runGit(t, reaped.repo, "checkout", "-b", "feature/reaped")
-	reaped.run.Exit(0)
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == reaped.pane.session })
+	w.stop()
 	removeReopenRollout(t, w, reaped.run.ConversationID)
 	w.restart()
 	w.App()

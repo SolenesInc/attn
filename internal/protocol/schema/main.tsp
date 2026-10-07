@@ -214,6 +214,7 @@ model Session {
   automation?: AutomationProvenance; // Present when this session was launched by an automation; latest run wins for a continuity thread.
   pull_requests?: SessionPullRequest[]; // Pull requests this session's agent opened, newest first. Joined at broadcast from the session_pull_requests table, never stored on the session row.
   terminal_build_stale?: boolean; // True when this session's pty-worker was built against a different libghostty-vt than the daemon, which happens when the app updates under a running session. The two then hold different terminal implementations and stop agreeing about the grid, so the app offers a reload. Derived at broadcast from the format tag the worker reports at its handshake; never stored, and absent for every same-build session, which is all of them outside an upgrade window.
+  terminal_exit?: TerminalExit; // How the agent last exited while the session keeps its final screen; absent while it runs and after Resume. Joined at broadcast from the session_exit_screens table.
   succeeds?: SessionID;            // The session this one replaced in its terminal, when the harness there moved to another conversation; that session closed into the ledger. Durable: it stays set after the predecessor is reopened.
   last_seen: string;            // ISO timestamp, always set
 }
@@ -3944,6 +3945,12 @@ model AttachSnapshot {
   scrollback_truncated: boolean; // ghostty dropped scrollback at its cap
 }
 
+model TerminalExit {
+  code: int32;
+  signal?: string;
+  at: string;
+}
+
 model AttachResultMessage {
   event: "attach_result";
   id: TerminalID; // The terminal (pane runtime_id)
@@ -3959,6 +3966,8 @@ model AttachResultMessage {
   running?: boolean;
   // session was respawned by this attach (revive policy)
   revived?: boolean;
+  exit?: TerminalExit;
+  screen?: AgentPeekScreen;
   error?: string;
 }
 
