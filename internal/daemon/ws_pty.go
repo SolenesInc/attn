@@ -392,14 +392,15 @@ func (d *Daemon) handleAttachSession(client *wsClient, msg *protocol.AttachSessi
 	}
 	if errors.Is(err, pty.ErrSessionNotFound) && policy != protocol.AttachPolicyRevive {
 		if sessionID, shown := d.shownIn(terminal); shown {
-			exit := d.store.GetSessionExitScreen(sessionID)
-			session := d.store.Get(sessionID)
-			if exit != nil || (session != nil && session.State == protocol.SessionStateRecoverable) {
-				result := protocol.AttachResultMessage{Event: protocol.EventAttachResult, ID: terminal, Success: true, Running: protocol.Ptr(false), Exit: d.store.GetSessionExit(sessionID), Screen: &protocol.AgentPeekScreen{}}
-				if exit != nil {
-					result.Screen = &protocol.AgentPeekScreen{Text: exit.Text, Cols: exit.Cols, Rows: exit.Rows}
-				}
-				d.sendToClient(client, result)
+			if exit := d.store.GetSessionExitScreen(sessionID); exit != nil {
+				d.sendToClient(client, protocol.AttachResultMessage{
+					Event:   protocol.EventAttachResult,
+					ID:      terminal,
+					Success: true,
+					Running: protocol.Ptr(false),
+					Exit:    exit.TerminalExit(),
+					Screen:  &protocol.AgentPeekScreen{Text: exit.Text, Cols: exit.Cols, Rows: exit.Rows},
+				})
 				return
 			}
 		}

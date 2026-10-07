@@ -28,7 +28,7 @@ import {
 } from './scenarioAgents.mjs';
 import { claudeTranscriptPath, latestMockCodexRollout, writeMockAgentFixture } from './mockAgent.mjs';
 import { currentHarnessInstance, dataDirForInstance, instanceCliEnv } from './harnessInstance.mjs';
-import { appDaemonInTree, createWindowDriver } from './platform.mjs';
+import { appDaemonInTree } from './platform.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -310,24 +310,10 @@ async function main() {
       }
     });
 
-    await runner.step('resume_the_stopped_codex_pane_and_read_the_old_conversation_back', async () => {
+    await runner.step('revive_the_codex_pane_and_read_the_old_conversation_back', async () => {
       await client.request('select_session', { sessionId: codexSessionId });
       const pane = await waitForFirstDesktopPane(client, codexSessionId, 'revived codex pane', 30_000);
       await waitForPaneVisible(client, codexSessionId, pane.paneId, 30_000);
-      const notice = `[data-pane-id="${pane.paneId}"] .desktop-agent-stopped`;
-      runner.assert((await client.request('dom_wait', { selector: notice, timeoutMs: 10_000 })).matched, 'recovered agent offers Resume');
-      runner.assert(observer.getSession(codexSessionId)?.state === 'recoverable', 'opening the recovered pane keeps its agent stopped');
-      const [{ bounds }, { logicalBounds }, { innerWidth, innerHeight }] = await Promise.all([
-        client.request('dom_hover', { selector: `${notice} button:nth-of-type(1)`, leave: true }),
-        client.request('get_window_bounds'),
-        client.request('get_terminal_context_menu_state'),
-      ]);
-      const driver = createWindowDriver({ appPath: options.appPath, client });
-      await driver.clickWindow(
-        (Math.max(0, logicalBounds.width - innerWidth) / 2 + bounds.x + bounds.width / 2) / logicalBounds.width,
-        (Math.max(0, logicalBounds.height - innerHeight) + bounds.y + bounds.height / 2) / logicalBounds.height,
-      );
-      runner.assert((await client.request('dom_wait', { selector: notice, absent: true, timeoutMs: 15_000 })).matched, 'Resume starts the recovered agent');
       await waitForPaneText(
         client,
         codexSessionId,

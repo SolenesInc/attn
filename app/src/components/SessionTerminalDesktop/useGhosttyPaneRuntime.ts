@@ -281,10 +281,14 @@ export function useGhosttyPaneRuntime(
     }
     const modelSize = terminal.getSize();
     if (!modelSize || !terminalIsCurrent()) return;
-    const stopped = pane.terminalExit || pane.state === 'recoverable';
-    const attachPolicy = stopped || readyRuntimesRef.current.has(pane.runtimeId)
+    const stopped = Boolean(pane.terminalExit);
+    const attachPolicy = stopped
       ? 'same_app_remount'
-      : 'fresh_spawn';
+      : pane.state === 'recoverable'
+        ? 'revive'
+        : readyRuntimesRef.current.has(pane.runtimeId)
+          ? 'same_app_remount'
+          : 'fresh_spawn';
     if (import.meta.env.DEV && pane.testSessionId) {
       const testWindow = window as Window & {
         __TEST_SESSION_INPUT_EVENTS?: Array<{ sessionId: string; event: 'connect_terminal' | 'send_to_pty'; data?: string; source?: string }>;
@@ -297,7 +301,7 @@ export function useGhosttyPaneRuntime(
     // A pane mounted while its session is inactive never measured its container, so its
     // default size must not claim PTY geometry authority until a real fit.
     const geometryMeasured = terminal.hasMeasuredSize();
-    const forceResizeBeforeAttach = !stopped && geometryMeasured;
+    const forceResizeBeforeAttach = !stopped && attachPolicy !== 'revive' && geometryMeasured;
     const measuredResize = geometryMeasured ? pendingResizeRef.current.get(pane.runtimeId) : undefined;
     const attachResize = forceResizeBeforeAttach ? measuredResize : undefined;
     const size = measuredResize ?? modelSize;
@@ -357,7 +361,7 @@ export function useGhosttyPaneRuntime(
 
   const handleTerminalInput = useCallback((paneId: string) => (data: string, source?: string, traceId?: string) => {
     const pane = paneFor(paneId);
-    if (!pane || pane.terminalExit || pane.state === 'recoverable' || stoppedRuntimesRef.current.has(pane.runtimeId)) return;
+    if (!pane || pane.terminalExit || stoppedRuntimesRef.current.has(pane.runtimeId)) return;
     if (import.meta.env.DEV && pane.testSessionId) {
       const testWindow = window as Window & {
         __TEST_SESSION_INPUT_EVENTS?: Array<{ sessionId: string; event: 'connect_terminal' | 'send_to_pty'; data?: string; source?: string }>;
@@ -371,7 +375,7 @@ export function useGhosttyPaneRuntime(
   const handleTerminalResize = useCallback((paneId: string) => (cols: number, rows: number, options?: TerminalResizeOptions) => {
     if (!isActiveSessionRef.current) return;
     const pane = paneFor(paneId);
-    if (!pane || pane.terminalExit || pane.state === 'recoverable' || stoppedRuntimesRef.current.has(pane.runtimeId)) return;
+    if (!pane || pane.terminalExit || stoppedRuntimesRef.current.has(pane.runtimeId)) return;
     // GhosttyTerminal.fit() is the geometry authority. Re-applying MIN_USABLE here dropped
     // legitimate small fits and stranded the PTY taller than the pane.
     if (!Number.isFinite(cols) || !Number.isFinite(rows) || cols < 1 || rows < 1) return;

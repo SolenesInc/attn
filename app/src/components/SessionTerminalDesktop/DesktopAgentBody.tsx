@@ -33,7 +33,7 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle }: DesktopA
     handleClosePane,
   } = useDesktopContext();
   const notice = paneNotice(agentPane, paneSession, paneTitle);
-  const stopped = paneSession?.terminalExit || paneSession?.state === 'recoverable';
+  const stopped = Boolean(paneSession?.terminalExit);
   const resume = async () => {
     setResumeError('');
     setResuming(true);

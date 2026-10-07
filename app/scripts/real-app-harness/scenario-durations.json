@@ -200,14 +200,6 @@
         "seconds": 72.591,
         "runnerClass": "local macOS",
         "note": "Green ATTN_VERDICT durationMs=72591. Covers clean quits, retained final text across app relaunch, and native Resume/Close. Remeasure on Linux CI."
-      },
-      "crash-recovery": {
-        "run": "scenario-crash-recovery-resumability-2026-10-07T12-07-57-286Z",
-        "job": "Local packaged scenario",
-        "recordedAt": "2026-10-07",
-        "seconds": 10.299,
-        "runnerClass": "local macOS",
-        "note": "Green native scenario confirms recovered agents stay stopped on opening and Resume restores their conversation. Remeasure on Linux CI."
       }
     }
   },
@@ -225,7 +217,7 @@
     "automode-environment": 4.8,
     "close-pane-nonblocking": 10,
     "countdown-cancel": 46.3,
-    "crash-recovery": 10.299,
+    "crash-recovery": 9,
     "crew-seed-header": 53.2,
     "delegation-chain": 41.0,
     "delegation-preferences": 25.9,

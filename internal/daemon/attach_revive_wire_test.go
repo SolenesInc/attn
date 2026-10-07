@@ -137,16 +137,16 @@ func TestAttachRefusesToReviveWhatItShouldNot(t *testing.T) {
 	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == exited })
 	recoverableTerminal, exitedTerminal := app.Terminal(recoverable), app.Terminal(exited)
 
-	reading := testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(recoverableTerminal)}, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return string(r.ID) == recoverableTerminal })
-	if !reading.Success || protocol.Deref(reading.Running) || protocol.Deref(reading.Revived) {
-		t.Fatalf("reading a stopped recoverable pane: %+v, want stopped without a revival", reading)
-	}
-
 	for _, tc := range []struct {
 		name    string
 		attach  protocol.AttachSessionMessage
 		refusal string
 	}{
+		{
+			name:    "without the revive policy",
+			attach:  protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(recoverableTerminal)},
+			refusal: "session not found",
+		},
 		{
 			name: "without geometry",
 			attach: protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(recoverableTerminal),
