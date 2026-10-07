@@ -302,7 +302,7 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
 - **attn no longer tracks Claude Code's todo list.** A Claude session that
   stops with unfinished todos is sorted by its last message like any other.
 
-<!-- changelog-fragments-sha256: 2c93c6b0d1814249aada6eecc398c8f05d64c14c38a430fb4e2e6c7e9ff6a92b -->
+<!-- changelog-fragments-sha256: 2820f2fb316be7dcc620af8242c52ff6f9d9a59ec1c32dafbe62d48adfaf1228 -->
 
 ---
 
