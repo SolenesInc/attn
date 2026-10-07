@@ -1684,7 +1684,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		Signal:   info.Signal,
 	})
 	d.recordProcessEvidence(sessionID, true)
-	if info.ExitCode == 0 && info.Signal == "" && !stopped {
+	if info.ExitCode == 0 && info.Signal == "" && !stopped && d.sessionCloseError(sessionID) == nil {
 		closing, err := d.beginSessionClose(sessionID, store.SessionClose{By: string(sessionID), Reason: "Agent exited normally"}, nil)
 		if err != nil {
 			d.logf("closing normally exited session %s: %v", sessionID, err)

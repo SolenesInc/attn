@@ -197,3 +197,30 @@ func TestStoppingAReloadedAgentKeepsItsTileWhenTheOldExitArrivesLate(t *testing.
 		}
 	})
 }
+
+func TestACleanChiefQuitKeepsItsRoleAndStoppedTile(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	session := w.Spawn(app, fakeagent.Claude, w.Path("chief"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
+	w.Launched(session).Exit(0)
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
+	for _, restart := range []bool{false, true} {
+		if restart {
+			w.restart()
+		}
+		state := queriedSession(t, w.Client(), session)
+		if !protocol.Deref(state.ChiefOfStaff) || state.TerminalExit == nil || state.TerminalExit.Code != 0 {
+			t.Fatalf("Chief after restart=%v lost its role or stopped tile: %+v", restart, state)
+		}
+	}
+	app = w.App()
+	result := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 80, Rows: 24}, protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == session })
+	if !result.Success {
+		t.Fatal(protocol.Deref(result.Error))
+	}
+	w.Launched(session)
+	state := queriedSession(t, w.Client(), session)
+	if !protocol.Deref(state.ChiefOfStaff) || state.TerminalExit != nil {
+		t.Fatalf("resumed Chief lost its role or remains stopped: %+v", state)
+	}
+}
