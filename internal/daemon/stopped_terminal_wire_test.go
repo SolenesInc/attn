@@ -224,3 +224,30 @@ func TestACleanChiefQuitKeepsItsRoleAndStoppedTile(t *testing.T) {
 		t.Fatalf("resumed Chief lost its role or remains stopped: %+v", state)
 	}
 }
+
+func TestASecondFailedResumePublishesItsStoppedOutcome(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.App()
+		driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"resume": true, "state_reporting": true})
+		awaitDriverAvailable(app, driver.agent)
+		cwd := w.Path("shop")
+		if err := os.MkdirAll(cwd, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		session, run := spawnDriven(w, app, driver, cwd)
+		if err := driver.state(run, 1, protocol.StateIdle); err != nil {
+			t.Fatal(err)
+		}
+		synctest.Wait()
+		w.terminal(session).Exit(1)
+		testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.TerminalExit != nil && s.TerminalExit.Code == 1 })
+		synctest.Wait()
+		result := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 80, Rows: 24}, protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == session })
+		if !result.Success {
+			t.Fatal(protocol.Deref(result.Error))
+		}
+		synctest.Wait()
+		w.terminal(session).Exit(2)
+		testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.TerminalExit != nil && s.TerminalExit.Code == 2 })
+	})
+}
