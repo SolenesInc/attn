@@ -369,7 +369,7 @@ export const scenarioCatalog = [
   {
     id: 'crash-recovery',
     runnerId: 'CRASH-REC',
-    label: 'A machine crash keeps every session it can bring back and reaps the rest',
+    label: 'A machine crash keeps resumable sessions stopped until Resume and reaps the rest',
     command: ['pnpm', 'run', 'real-app:scenario-crash-recovery'],
     timeoutMs: 360_000,
   },
