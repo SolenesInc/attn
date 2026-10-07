@@ -39,7 +39,9 @@ func TestASessionRespawnedWithAPromptOpensItsTurnOnlyAtTheVerdict(t *testing.T) 
 				return protocol.Deref(s.StateReason) == "process_exited"
 			})
 			app.Send(protocol.SettleTurnMessage{Cmd: protocol.CmdSettleTurn, SessionID: protocol.SessionID(session)})
-			testworld.AwaitSession(app, session, func(s protocol.Session) bool { return !protocol.Deref(s.TurnOwed) })
+			testworld.AwaitSession(app, session, func(s protocol.Session) bool {
+				return s.TerminalExit != nil && protocol.Deref(s.StateReason) == "process_exited" && !protocol.Deref(s.TurnOwed)
+			})
 			respawnedAt := len(sessionUpdatesOf(app, session))
 
 			w.Spawn(app, h, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
