@@ -68,15 +68,14 @@ func (s *Store) DeleteSessionExitScreen(sessionID protocol.SessionID) error {
 }
 
 func (s *Store) GetSessionExit(sessionID protocol.SessionID) *protocol.TerminalExit {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if s.db == nil {
 		return nil
 	}
-	var exit protocol.TerminalExit
-	var signal string
+	var rec SessionExitScreen
 	err := s.db.QueryRow(`SELECT exit_code, exit_signal, exited_at FROM session_exit_screens WHERE session_id = ?`, sessionID).
-		Scan(&exit.Code, &signal, &exit.At)
+		Scan(&rec.ExitCode, &rec.ExitSignal, &rec.ExitedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
@@ -84,8 +83,13 @@ func (s *Store) GetSessionExit(sessionID protocol.SessionID) *protocol.TerminalE
 		log.Printf("[store] GetSessionExit %s: %v", sessionID, err)
 		return nil
 	}
-	if signal != "" {
-		exit.Signal = protocol.Ptr(signal)
+	return rec.TerminalExit()
+}
+
+func (rec *SessionExitScreen) TerminalExit() *protocol.TerminalExit {
+	exit := &protocol.TerminalExit{Code: rec.ExitCode, At: rec.ExitedAt}
+	if rec.ExitSignal != "" {
+		exit.Signal = protocol.Ptr(rec.ExitSignal)
 	}
-	return &exit
+	return exit
 }
