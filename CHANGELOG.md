@@ -110,7 +110,7 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
 - **Crew members are managed from the sidebar.** You can set the harness, model
   and effort for the next wake, edit the charter, read the full letter
   history, and open the seeds a member tends. A member now wakes knowing which
-  seeds it holds, and it can compact in place without losing its identity.
+  seeds it has claimed, and it can compact in place without losing its identity.
 - **Pi runs sandboxed, with Codex's approval model.** Commands are checked
   against prefix rules and run inside a sandbox, and network access goes
   through attn's proxy. Anything that needs approval goes to you or to a
@@ -264,8 +264,8 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
   exited**, and it accepts a crew member's name.
 - **The dashboard flags new changes again** on pull requests you visited or
   approved.
-- **Notebooks list notes in a symlinked folder** and refresh only the tiles
-  showing what changed.
+- **A notebook whose folder is a symlink lists its notes**, and a change on
+  disk refreshes only the editor tiles showing it.
 - **Keyboard and focus work where you expect.** The location picker takes your
   first keystroke even when the app is busy. Snooze works from the keyboard
   and adds 2- and 4-hour options. Escape closes the palette before anything
