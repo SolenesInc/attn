@@ -46,6 +46,7 @@ type Terminal struct {
 	streams   []chan ptybackend.OutputEvent
 	onSubmit  func(string)
 	onKill    func(syscall.Signal)
+	exitHold  <-chan struct{}
 	stall     *terminalStall
 }
 
@@ -361,6 +362,14 @@ func (t *Terminal) Heartbeat(claim, detail string) {
 	}
 }
 
+func (t *Terminal) HoldExitDelivery() func() {
+	t.owner.mu.Lock()
+	defer t.owner.mu.Unlock()
+	release := make(chan struct{})
+	t.exitHold = release
+	return func() { close(release) }
+}
+
 func (t *Terminal) Exit(code int) {
 	t.owner.mu.Lock()
 	if !t.running {
@@ -369,6 +378,7 @@ func (t *Terminal) Exit(code int) {
 	}
 	t.running = false
 	report := t.owner.onExit
+	hold := t.exitHold
 	info := ptybackend.ExitInfo{ID: t.Options.ID, ExitCode: code, LifecycleID: t.Options.LifecycleID}
 	for _, events := range t.streams {
 		select {
@@ -378,7 +388,11 @@ func (t *Terminal) Exit(code int) {
 	}
 	t.owner.mu.Unlock()
 	if report != nil {
-		report(info)
+		if hold != nil {
+			go func() { <-hold; report(info) }()
+		} else {
+			report(info)
+		}
 	}
 }
 

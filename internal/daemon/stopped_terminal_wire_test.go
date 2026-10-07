@@ -171,3 +171,29 @@ func TestStoppingAPluginDuringResumeKeepsItsTileWhenItExitsCleanly(t *testing.T)
 		}
 	})
 }
+
+func TestStoppingAReloadedAgentKeepsItsTileWhenTheOldExitArrivesLate(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.App()
+		agent := w.bubbleClaude(t, app, "shop")
+		releaseOldExit := agent.term.HoldExitDelivery()
+		releaseStoppedExit := make(chan struct{})
+		w.terms.OnNextSpawn(func(term *testworld.Terminal) {
+			term.OnKill(func(syscall.Signal) { <-releaseStoppedExit; term.Exit(0) })
+		})
+		reloadRespawned(t, app, agent.id)
+		app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: protocol.SessionID(agent.id)})
+		synctest.Wait()
+		releaseOldExit()
+		synctest.Wait()
+		close(releaseStoppedExit)
+		exit := testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == agent.id })
+		if exit.ExitCode != 0 {
+			t.Fatalf("replacement exited %d, want its caught Stop returning 0", exit.ExitCode)
+		}
+		state := queriedSession(t, w.Client(), agent.id)
+		if state.TerminalExit == nil || state.TerminalExit.Code != 0 {
+			t.Fatalf("late old exit removed the stopped replacement: %+v", state)
+		}
+	})
+}

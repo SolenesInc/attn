@@ -209,6 +209,9 @@ export function useGhosttyPaneRuntime(
 
   useEffect(() => {
     const desiredRuntimeIds = new Set(panes.map((pane) => pane.runtimeId));
+    for (const runtimeId of stoppedRuntimesRef.current) {
+      if (!desiredRuntimeIds.has(runtimeId)) stoppedRuntimesRef.current.delete(runtimeId);
+    }
     for (const runtimeId of readyRuntimesRef.current) {
       if (!desiredRuntimeIds.has(runtimeId)) readyRuntimesRef.current.delete(runtimeId);
     }

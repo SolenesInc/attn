@@ -24,11 +24,11 @@ import (
 
 const reloadStuckFlagGrace = 5 * time.Second
 
-type terminalExitIntent string
+type terminalExitIntent uint8
 
 const (
-	terminalExitReload terminalExitIntent = "reload"
-	terminalExitStop   terminalExitIntent = "stop"
+	terminalExitReload terminalExitIntent = 1 << iota
+	terminalExitStop
 )
 
 func (d *Daemon) markTerminalExitIntent(id harness.TerminalID, intent terminalExitIntent) {
@@ -37,7 +37,7 @@ func (d *Daemon) markTerminalExitIntent(id harness.TerminalID, intent terminalEx
 	if d.terminalExitIntents == nil {
 		d.terminalExitIntents = make(map[harness.TerminalID]terminalExitIntent)
 	}
-	d.terminalExitIntents[id] = intent
+	d.terminalExitIntents[id] |= intent
 }
 
 func (d *Daemon) markReloading(id harness.TerminalID) {
@@ -47,10 +47,13 @@ func (d *Daemon) markReloading(id harness.TerminalID) {
 func (d *Daemon) consumeTerminalExitIntent(id harness.TerminalID, intent terminalExitIntent) bool {
 	d.terminalExitIntentMu.Lock()
 	defer d.terminalExitIntentMu.Unlock()
-	if d.terminalExitIntents[id] != intent {
+	if d.terminalExitIntents[id]&intent == 0 {
 		return false
 	}
-	delete(d.terminalExitIntents, id)
+	d.terminalExitIntents[id] &^= intent
+	if d.terminalExitIntents[id] == 0 {
+		delete(d.terminalExitIntents, id)
+	}
 	return true
 }
 
