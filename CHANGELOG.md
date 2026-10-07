@@ -13,14 +13,15 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
 - **Desktops replace workspaces.** Each profile holds numbered desktops, and
   the sidebar groups agents by the desktop they live on. ⌘1–⌘9 switch desktops
   (pressing the current digit takes you back to the previous one). Pressing a
-  digit that has no desktop yet creates one. ⌥⌘1–⌥⌘9 send the focused pane to a
+  digit that has no desktop yet creates one. ⌥⌘1–⌥⌘9 send the focused tile to a
   desktop and follow it there; add ⇧ to send it and stay where you are. ⌘G
   opens an overview of every desktop. You can rename a desktop from its sidebar
   header and drag headers to reorder them. An empty desktop shows the new-agent
   launcher, and ⌘N focuses it. A numbered desktop keeps its number for life, so
-  reopened agents go back to it. Documents, seeds, browsers and delegates that
-  an agent opens land beside it without taking your focus. Every window on a
-  profile shows the same desktop and focus.
+  reopened agents go back to it. Documents, seeds and browsers an agent opens
+  land beside it, and delegates land beside the agent that started them without
+  taking your focus. Every window on a profile shows the same desktop and
+  focus.
 - **Profiles keep separate worlds of agents.** ⇧⌘U switches profile, and the
   switcher creates (N), renames (R) and deletes (⌫) profiles. Each profile has
   its own desktops, Garden, chief of staff, crew and automations, and
@@ -33,12 +34,12 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
   window edits the same draft, and quitting resumes where you left off. If the
   data upgrade itself fails, the app shows what broke and where the logs,
   database and backup are, instead of reconnecting forever.
-- **Queue mode has its own sidebar, which collapses into a bar.** Chief and
+- **The queue flow has its own sidebar, which collapses into a bar.** Chief and
   crew sit on top, then as many waiting turns as fit, each with its desktop,
   then All agents (⌘⇧A) with a filter, working agents and snoozed ones. Arrow
   keys walk the rows, typing filters, ⌘⇧E settles and ⌘⇧S snoozes. ⌘↑/⌘↓ step
   through agents in that order. Desktop chips show where turns wait and accept
-  dragged panes. ⌘B collapses the sidebar into a bar across the top of the
+  dragged tiles. ⌘B collapses the sidebar into a bar across the top of the
   window. Its waiting pill and runs chip peek on hover and open on click.
   The queue and desktop sidebars share one header, and either one can wake a
   sleeping crew member.
@@ -86,7 +87,7 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
   `attn seed harvest <id> --when-merged` closes the seed as soon as the merge
   lands. Closing a seed also tells you which seeds it unblocked, and
   `attn seed search` finds seeds by keyword across the whole Garden.
-- **Pane headers show the agent's pull requests and seeds.** A small line
+- **Tile headers show the agent's pull requests and seeds.** A small line
   shows the newest pull request with its checks. Opening it lists state,
   review and mergeability, kept fresh from GitHub while the PR is active.
   Hovering a sidebar row shows the PR number and status color. A seed chip
@@ -107,7 +108,7 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
   inbox. `attn delegate --desktop` and `attn session move` put work on another
   desktop without changing what you see.
 - **Crew members are managed from the sidebar.** You can set the harness, model
-  and effort for the next wake, edit the charter, read the full handoff
+  and effort for the next wake, edit the charter, read the full letter
   history, and open the seeds a member tends. A member now wakes knowing which
   seeds it holds, and it can compact in place without losing its identity.
 - **Pi runs sandboxed, with Codex's approval model.** Commands are checked
@@ -138,16 +139,16 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
 
 ### Changed
 
-- **`/clear` starts a new session in the same pane.** In Claude and Codex,
+- **`/clear` starts a new session in the same tile.** In Claude and Codex,
   `/clear` (and Codex's `/new`) opens a new session with its own name, keeping
-  the pane, its focus and its terminal. The previous session closes into the
+  the tile, its focus and its terminal. The previous session closes into the
   ledger with its conversation, usage, seeds, inbox and pull request watches,
   and Reopen brings it all back. Annotations and drafts stay with the session
-  they were made for. A crew member's `/clear` ends its day, and the Chief's
+  they were made for. A crew member's `/clear` ends its session, and the Chief's
   gives up the Chief role. Copilot still starts a new conversation within the
   same session.
 - **`/resume` brings back the session that holds the conversation.** If
-  another attn session holds that conversation, the pane now shows that
+  another attn session holds that conversation, the tile now shows that
   session under its own name instead of pulling the conversation into the
   current one. The session you left closes into the ledger, so `/clear` and
   then `/resume` takes you back to exactly where you were. Agent commands act
@@ -166,7 +167,7 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
 - **The daemon is much quieter.** An idle daemon runs about 85% fewer database
   statements and no longer syncs to disk on every write, and an active turn
   runs about a fifth of the statements it used to. Session state reaches the
-  app the moment the agent reports it, and nudge countdowns use less CPU. One
+  app the moment the agent reports it, and ring countdowns use less CPU. One
   tradeoff: a power loss can drop the last few writes. A daemon or app crash
   still loses nothing.
 - **Long sessions finish turns as quickly as short ones.** attn now reads only
@@ -188,7 +189,7 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
   members can join the queue through a setting.
 - **The sidebar has a lighter look.** Desktop groups use compact numbered
   rules, tiles show what kind they are, role badges stay beside the name, and
-  picking a pane flashes a thin outline once.
+  picking a tile flashes a thin outline once.
 - **Agent guidance is sharper.** Prompts no longer carry guardrails written
   for older models. Agents treat the outcome written in a seed as the finish
   line, and they search the Garden before planting. The attn-workflow skill
@@ -203,31 +204,31 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
 - **attn no longer presses Enter on an approval prompt you never saw.** If an
   approval prompt appeared just after attn pasted a message, attn's Enter could
   pick "Yes, proceed". attn now waits for your answer.
-- **Automated messages arrive once you stop typing.** Nudges, doorbells, crew
-  check-ins and handoff requests that were held back while you typed now land
+- **Automated messages arrive once you stop typing.** Rings, doorbells, crew
+  check-ins and letter requests that were held back while you typed now land
   after 30 seconds without typing; before, some were dropped. Mouse movement,
   scrolling and terminal replies no longer count as typing. Bursts collapse
-  into one doorbell, shell panes are no longer typed into, and agents waiting
-  on approval aren't nudged.
+  into one doorbell, plain shell tiles are no longer typed into, and agents
+  waiting on approval aren't rung.
 - **Session state stays accurate.** A finished agent no longer stays busy while
-  another pane streams heavy output, and the app sees each agent's state
+  another tile streams heavy output, and the app sees each agent's state
   correctly after a daemon restart. An agent that set its title at boot shows
   as idle. A session parked on a background task settles after 30 minutes.
   Copilot sessions turn idle when a turn ends, not only when copilot exits.
 - **Terminals keep showing output.** A terminal that falls behind a burst of
   output reloads a fresh copy of the screen instead of freezing. Other
   sessions moving between desktops, a corrupt reconnect snapshot or an old
-  connection timeout no longer blank or stall a pane. Visible panes repaint
+  connection timeout no longer blank or stall a tile. Visible tiles repaint
   after sleep. Input to an agent that stopped reading fails after five seconds
   instead of hanging.
 - **Terminals resize cleanly.** Window resizes are grouped, and new and revived
-  panes start at their real size. Folding a pane no longer cuts off its
-  scrollback, and resizes no longer erase finished output. A folded pane
+  tiles start at their real size. Folding a tile no longer cuts off its
+  scrollback, and resizes no longer erase finished output. A folded tile
   expands again as soon as there is room.
 - **The app's memory stays flat while agents print.** It used to grow by
   hundreds of megabytes an hour. Large watched folders on macOS also no longer
   slow down terminal launches.
-- **Closing a pane is instant.** The process finishes shutting down in the
+- **Closing a tile is instant.** The process finishes shutting down in the
   background, slow repositories no longer delay the close, and bash and zsh
   shells exit right away.
 - **The agent you pick stays on screen.** A new session no longer snaps back to
@@ -250,7 +251,7 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
 - **Crew members wake and stay awake reliably.** Closing a crew session no
   longer puts the member to sleep; use Sleep or Nap for that. A pending restart
   wakes the successor in the right place. Members started from the bare CLI
-  keep their day.
+  keep their session.
 - **Seed notifications reach the right people.** A notification goes to
   whoever was involved when the event happened. Unwatching a seed stops its
   delegation updates. Harvest-on-merge keeps working after the session that
