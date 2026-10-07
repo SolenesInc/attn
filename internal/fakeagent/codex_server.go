@@ -34,6 +34,7 @@ const (
 	methodAskQuestion    = "ask_question"
 	methodInstructions   = "instructions"
 	methodCompactLimit   = "compact_limit"
+	methodDropControl    = "drop_control"
 	methodRunTool        = "run_tool"
 	codexApprovalRequest = "item/commandExecution/requestApproval"
 )
@@ -51,6 +52,8 @@ type codexAppServer struct {
 	prompts map[string]chan string
 	names   map[string]string
 	named   chan struct{}
+	// Closed and replaced whenever a control connection lists the loaded conversations.
+	listed chan struct{}
 }
 
 type codexServerConn struct {
@@ -91,6 +94,7 @@ func runCodexAppServer(cfg config) int {
 		prompts: map[string]chan string{},
 		names:   map[string]string{},
 		named:   make(chan struct{}),
+		listed:  make(chan struct{}),
 	}
 	listener, err := net.Listen("unix", path)
 	if err != nil {
@@ -323,6 +327,8 @@ func (s *codexAppServer) handle(conn *codexServerConn, m codexshared.Message) (a
 		return s.steer(conn, p)
 	case "thread/loaded/list":
 		s.mu.Lock()
+		close(s.listed)
+		s.listed = make(chan struct{})
 		ids := make([]string, 0, len(s.threads))
 		for id := range s.threads {
 			ids = append(ids, id)
@@ -785,6 +791,25 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 			return nil, fmt.Errorf("conversation %s was not started here", p.ThreadID)
 		}
 		return promptedResult{Text: t.instructions, ConversationID: p.ThreadID}, nil
+	case methodDropControl:
+		s.mu.Lock()
+		listed := s.listed
+		var dropped []*codexServerConn
+		for conn := range s.conns {
+			if !conn.terminal {
+				dropped = append(dropped, conn)
+			}
+		}
+		s.mu.Unlock()
+		for _, conn := range dropped {
+			_ = conn.ws.CloseNow()
+		}
+		select {
+		case <-listed:
+			return promptedResult{}, nil
+		case <-time.After(HangGuard):
+			return nil, fmt.Errorf("no control connection came back within %s", HangGuard)
+		}
 	case methodCompactLimit:
 		s.mu.Lock()
 		defer s.mu.Unlock()

@@ -125,6 +125,9 @@ func TestTwoTerminalsShowOneSharedCodexSessionUntilTheLastTileClosesAndArchivesI
 	if entry == nil || protocol.Deref(entry.ClosedAt) == "" || entry.Usage == nil || entry.Usage.TotalTokens == 0 {
 		t.Fatalf("the ledger shows %+v, want %s closed with its usage", entry, checkout)
 	}
+	if entry.Usage.MeasurementIncomplete != nil {
+		t.Errorf("closing and archiving %s left its usage %+v, want it complete", checkout, entry.Usage)
+	}
 	if !archivedInCodex(t, w, conversation) {
 		t.Errorf("conversation %s was not archived in Codex", conversation)
 	}
@@ -483,6 +486,18 @@ func TestAHiddenSharedCodexConversationReloadsWithItsSessionsContextCap(t *testi
 	if limit := w.CodexServer().CompactLimit(conversation); limit != "200000" {
 		t.Errorf("conversation %s reloaded for hidden input with compact limit %q, want 200000", conversation, limit)
 	}
+}
+
+func TestASharedCodexServerThatOutlivesAttnsConnectionKeepsReportingToIt(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
+
+	w.CodexServer().DropControl()
+	typeInto(app, terminal, "/rename Checkout race\r")
+	codex.Prompted()
+	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return s.Label == "Checkout race" })
 }
 
 func TestAHiddenSharedCodexTurnEndsWhenItsAppServerExits(t *testing.T) {

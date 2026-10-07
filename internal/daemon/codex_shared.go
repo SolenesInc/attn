@@ -298,6 +298,21 @@ func (r *codexShared) watchControl(s *codexServer, client *codexshared.Client) {
 		s.control = nil
 	}
 	s.mu.Unlock()
+	r.reconnect(s)
+}
+
+// Terminals keep their own connections, so a server that outlives the control one needs it back.
+// Never starts a server: one stopped on purpose stays stopped.
+func (r *codexShared) reconnect(s *codexServer) {
+	ctx := r.d.life.Context()
+	s.ensureMu.Lock()
+	defer s.ensureMu.Unlock()
+	if ctx.Err() != nil || s.client() != nil || !r.serverRunning(ctx, s.terminal) {
+		return
+	}
+	if err := r.connect(ctx, s); err != nil {
+		r.d.logf("shared Codex: reconnecting to the app-server of profile %s: %v", s.profile, err)
+	}
 }
 
 // hold replaces the held set with what the server reports loading and returns what it let go.
