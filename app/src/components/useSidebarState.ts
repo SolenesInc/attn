@@ -1,5 +1,5 @@
 import type { MouseEvent as ReactMouseEvent } from 'react';
-import { useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { isAttentionSessionState } from '../types/sessionState';
 import { type TileContentState } from '../types/desktop';
 import { delegatesByDispatcher } from '../utils/delegationLinks';
@@ -76,6 +76,18 @@ export function useSidebarState({
   homeActive = false,
   onToggleCollapse,
 }: SidebarProps) {
+  const flowButtonRef = useRef<HTMLButtonElement>(null);
+  const restoreFlowFocus = useRef(false);
+  const queueFlow = queue !== null;
+  useLayoutEffect(() => {
+    if (!restoreFlowFocus.current) return;
+    restoreFlowFocus.current = false;
+    flowButtonRef.current?.focus({ preventScroll: true });
+  }, [queueFlow]);
+  const toggleFlow = () => {
+    restoreFlowFocus.current = document.activeElement === flowButtonRef.current;
+    onToggleFlow?.();
+  };
   const sessionWantsAttention = (session: LocalSession) =>
     queue
       ? sessionParticipatesInQueue(session, crewQueueEnabled) && Boolean(session.turnOwed)
@@ -258,7 +270,8 @@ export function useSidebarState({
     profileName,
     onSwitchProfile,
     onOpenCommands,
-    onToggleFlow,
+    onToggleFlow: onToggleFlow ? toggleFlow : undefined,
+    flowButtonRef,
     onOpenAgents,
     peeksSilenced,
     agentListOpen,

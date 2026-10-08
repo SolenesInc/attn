@@ -4,11 +4,12 @@ import { CollapseIcon } from './SidebarIcons';
 import './SidebarHeader.css';
 
 export function FlowToggleButton() {
-  const { queue, collapsed, onToggleFlow } = useSidebarContext();
+  const { queue, collapsed, onToggleFlow, flowButtonRef } = useSidebarContext();
   const title = queue ? 'Switch to desktop flow' : 'Switch to queue flow';
   return (
     <button
       type="button"
+      ref={flowButtonRef}
       className={collapsed ? (queue ? 'queue-bar-tool' : 'icon-btn') : 'sidebar-header-tool'}
       title={title}
       aria-label={title}

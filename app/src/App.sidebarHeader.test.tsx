@@ -40,16 +40,20 @@ describe('shared sidebar header', () => {
     const running = await renderApp({ initialState });
     const { daemon } = running;
     serveSettings(daemon);
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Open s1' })));
     if (collapsed) await gesture(daemon, () => pressShortcut('session.toggleSidebar'));
 
     const toQueue = screen.getByRole('button', { name: 'Switch to queue flow' });
     expect(toQueue).toHaveAttribute('title', 'Switch to queue flow');
+    toQueue.focus();
     await gesture(daemon, () => fireEvent.click(toQueue));
     expect(screen.getByTestId(collapsed ? 'queue-bar' : 'queue-sidebar')).toBeVisible();
     const toDesktop = screen.getByRole('button', { name: 'Switch to desktop flow' });
     expect(toDesktop).toHaveAttribute('title', 'Switch to desktop flow');
+    expect(toDesktop).toHaveFocus();
     await gesture(daemon, () => fireEvent.click(toDesktop));
     expect(screen.queryByTestId(collapsed ? 'queue-bar' : 'queue-sidebar')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Switch to queue flow' })).toHaveFocus();
 
     const commands = await openActionMenu(daemon);
     fireEvent.change(commands, { target: { value: '>Turn on the agent queue' } });
