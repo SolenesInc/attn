@@ -1,7 +1,0 @@
-kind: fixed
-area: crew
-change: >
-  Waking a crew member after a daemon restart now reports the day the restart
-  ended. The stopping daemon no longer releases the member's binding for the
-  sessions it stops itself; those days come back recoverable and the next
-  daemon releases them.

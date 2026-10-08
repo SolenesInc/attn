@@ -1,3 +1,0 @@
-kind: internal
-area: desktops
-change: The daemon shows an agent or a leaf in one transaction with one arrangement broadcast, and a moved leaf's broadcast names where it went, even when the move renames it.

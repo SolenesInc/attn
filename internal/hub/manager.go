@@ -1368,7 +1368,15 @@ func sessionsMatch(left, right protocol.Session) bool {
 		protocol.Deref(left.TurnOpenedAt) == protocol.Deref(right.TurnOpenedAt) &&
 		protocol.Deref(left.TurnSnoozedUntil) == protocol.Deref(right.TurnSnoozedUntil) &&
 		protocol.Deref(left.ParentSessionID) == protocol.Deref(right.ParentSessionID) &&
+		terminalExitsMatch(left.TerminalExit, right.TerminalExit) &&
 		left.LastSeen == right.LastSeen
+}
+
+func terminalExitsMatch(left, right *protocol.TerminalExit) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	return left.Code == right.Code && protocol.Deref(left.Signal) == protocol.Deref(right.Signal) && left.At == right.At
 }
 
 func foreignHomeNotice(homeDaemonID string, msg *protocol.InitialStateMessage) string {

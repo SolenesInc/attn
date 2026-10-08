@@ -18,12 +18,12 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func exitDriven(app *testworld.Peer, driver *driverPeer, session string) {
+func stopDriven(app *testworld.Peer, driver *driverPeer, session string) {
 	app.T.Helper()
 	terminal := app.Terminal(session)
-	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(terminal), Data: "\x04"})
-	if closed := driver.closed(); closed.SessionID != terminal || closed.Reason != "exited" {
-		app.T.Fatalf("the driver was told %+v, want terminal %s of %s to have exited", closed, terminal, session)
+	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: protocol.SessionID(session)})
+	if closed := driver.closed(); closed.SessionID != terminal {
+		app.T.Fatalf("the driver was told %+v, want terminal %s of %s to have stopped", closed, terminal, session)
 	}
 	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
 }
@@ -60,7 +60,7 @@ func TestADriverThatResumesIsHandedTheConversationItWasNamedOrLastReported(t *te
 	}
 	metadata(1, "native-id")
 	metadata(1, "older")
-	exitDriven(app, driver, session)
+	stopDriven(app, driver, session)
 
 	relaunch := relaunchDriven(w, driver, session, cwd)
 	if relaunch.Method != "driver.resume" || relaunch.ResumeSessionID != "native-id" || string(relaunch.Metadata) != `{"snipe_session_id":"native-id"}` {
@@ -79,7 +79,7 @@ func TestADriverWithoutResumeRelaunchesFreshWhateverConversationItReported(t *te
 		"session_id": run.SessionID, "run_id": run.RunID, "seq": 1,
 		"metadata": map[string]string{"snipe_session_id": "native-id"}, "resume_session_id": "native-id",
 	})
-	exitDriven(app, driver, session)
+	stopDriven(app, driver, session)
 
 	if relaunch := relaunchDriven(w, driver, session, cwd); relaunch.Method != "driver.spawn" || relaunch.ResumeSessionID != "" {
 		t.Errorf("the relaunch asked the driver %s for %q, want a fresh driver.spawn", relaunch.Method, relaunch.ResumeSessionID)

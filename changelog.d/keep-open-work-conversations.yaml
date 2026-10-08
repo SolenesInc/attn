@@ -1,3 +1,0 @@
-kind: added
-area: garden
-change: Claude conversations stay resumable while open seeds point at them, with attn keeping a copy for 14 days after the work closes.

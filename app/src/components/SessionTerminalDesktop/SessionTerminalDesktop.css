@@ -705,11 +705,47 @@
 }
 
 .desktop-pane-body {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
   min-width: 0;
   position: relative;
   overflow: hidden;
+}
+
+.desktop-agent-stopped {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.desktop-agent-stopped > div {
+  flex: 1;
+}
+
+.desktop-agent-stopped strong {
+  color: var(--color-text-primary);
+}
+
+.desktop-agent-stopped button {
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  padding: 5px 10px;
+  background: var(--color-bg-button);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.desktop-pane-body > .terminal-container {
+  flex: 1;
+  min-height: 0;
 }
 
 /* Placeholder for a virtualized (unmounted) terminal. Only ever shown inside a

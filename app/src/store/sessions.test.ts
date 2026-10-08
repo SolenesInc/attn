@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { useSessionStore, isSessionReloading } from './sessions';
+import { useSessionStore } from './sessions';
 import { LayoutPaneKind, LayoutPaneStatus, type Desktop } from '../types/generated';
 import type { TerminalLayoutNode } from '../types/desktop';
 
@@ -534,29 +534,9 @@ describe('sessions store', () => {
     expect(mockPtyReload).toHaveBeenCalledWith({ id: 'sess-remote', cols: 80, rows: 24 });
   });
 
-  it('marks the session as reloading while the daemon reload is pending', async () => {
-    await useSessionStore.getState().createSession('Local', '/srv/repo', 'sess-reload', 'codex', undefined, false);
-
-    let duringReload = false;
-    mockPtyReload.mockImplementation(async () => {
-      duringReload = isSessionReloading('sess-reload');
-    });
-
-    expect(isSessionReloading('sess-reload')).toBe(false);
-    await useSessionStore.getState().reloadSession('sess-reload', { cols: 120, rows: 40 });
-
-    expect(duringReload).toBe(true);
-    expect(isSessionReloading('sess-reload')).toBe(false);
-  });
-
-  it('clears the reloading mark when the daemon reload fails', async () => {
+  it('propagates a failed reload to its caller', async () => {
     await useSessionStore.getState().createSession('Local', '/srv/repo', 'sess-reload-fail', 'codex', undefined, false);
     mockPtyReload.mockRejectedValueOnce(new Error('reload failed'));
-
-    await expect(
-      useSessionStore.getState().reloadSession('sess-reload-fail', { cols: 120, rows: 40 }),
-    ).rejects.toThrow('reload failed');
-
-    expect(isSessionReloading('sess-reload-fail')).toBe(false);
+    await expect(useSessionStore.getState().reloadSession('sess-reload-fail', { cols: 120, rows: 40 })).rejects.toThrow('reload failed');
   });
 });

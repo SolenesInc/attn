@@ -1,3 +1,0 @@
-kind: internal
-area: daemon
-change: Wait for remote endpoint loops to finish before closing the daemon store.

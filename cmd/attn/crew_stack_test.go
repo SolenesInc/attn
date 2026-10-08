@@ -125,7 +125,7 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 	requireFailure(t, s.Attn("agent", "peek", "keel"), "agent peek: ", "Keel is asleep", "never wakes", "`attn crew wake keel`")
 	requireStdout(t, s.Attn("crew", "wake", "trellis"), string("Trellis is already awake in session "+day[:8]+" — nothing was launched."))
 
-	trellis.Exit(0)
+	trellis.Exit(143)
 	testworld.AwaitSession(app, string(day), func(x protocol.Session) bool { return protocol.Deref(x.StateReason) == "process_exited" })
 	requireStdout(t, s.Attn("crew", "wake", "trellis"), string("Previous session "+day[:8]+" had exited; its binding was released.\n"), "Trellis is awake in session ")
 	next := protocol.Deref(crewRoster(t, s)["trellis"].BindingSession)
@@ -144,7 +144,7 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 	if codex := s.Launched(string(woken.SessionID)); codex.Harness != fakeagent.Codex {
 		t.Fatalf("keel woke on %s, want codex", codex.Harness)
 	} else {
-		codex.Exit(0)
+		codex.Exit(143)
 	}
 	testworld.AwaitSession(app, string(woken.SessionID), func(x protocol.Session) bool { return protocol.Deref(x.StateReason) == "process_exited" })
 

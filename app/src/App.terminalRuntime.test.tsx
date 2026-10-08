@@ -201,6 +201,38 @@ describe('App terminal runtime', () => {
     expect(visibleText('s1')).toBe(`${RESTORED_SCREEN} live-after-snapshot`);
   });
 
+  it('keeps output from an agent that exited before its first attach completed', async () => {
+    const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }));
+    open('s1');
+    await daemon.idle();
+    daemon.emit({ event: 'pty_output', id: 's1', seq: 1, data: btoa('Cannot start agent') });
+    daemon.emit({ event: 'attach_result', id: 's1', success: true, running: false, cols: 80, rows: 24, last_seq: 0 });
+    await daemon.idle();
+    expect(visibleText('s1')).toBe('Cannot start agent');
+    fireEvent.keyDown(document.querySelector('canvas')!, { key: 'x', code: 'KeyX' });
+    await daemon.idle();
+    expect(daemon.sentOf('pty_input')).toEqual([]);
+    expect(daemon.sentOf('reload_session')).toEqual([]);
+  });
+
+  it('restores an exited worker snapshot while keeping its terminal stopped', async () => {
+    const resize = resizableTerminals(800, 600);
+    const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }));
+    open('s1');
+    await daemon.idle();
+    daemon.emit({ ...snapshotReply('s1'), running: false });
+    await daemon.idle();
+    expect(visibleText('s1')).toBe(RESTORED_SCREEN);
+
+    const resizes = daemon.sentOf('pty_resize').length;
+    await resize(1000, 800);
+    fireEvent.keyDown(document.querySelector('canvas')!, { key: 'x', code: 'KeyX' });
+    await daemon.idle();
+    expect(daemon.sentOf('pty_resize')).toHaveLength(resizes);
+    expect(daemon.sentOf('pty_input')).toEqual([]);
+    expect(daemon.sentOf('reload_session')).toEqual([]);
+  });
+
   it.each([
     ['a snapshot it cannot decode at all', new Uint8Array([1, 2, 3, 4]), 'raced\nlive'],
     ['a snapshot cut off inside its history', NATIVE_SNAPSHOT.slice(0, NATIVE_SNAPSHOT.length - 1000), `${RESTORED_SCREEN} live`],
@@ -607,6 +639,34 @@ describe('App terminal runtime', () => {
     await daemon.idle();
 
     expect(resizesAfterAttach(daemon)).toEqual([{ cmd: 'pty_resize', id: 's1', cols: 100, rows: 4, xpixel: 800, ypixel: 84 }]);
+  });
+
+  it.each([false, true])('resizes a reloaded terminal after its initial attach failed (snapshot=%s)', async (withSnapshot) => {
+    const resize = resizableTerminals(800, 600);
+    const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }));
+    daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: false, error: `session not found: ${id}` }));
+    open('s1');
+    await daemon.idle();
+    expect(visibleText('s1')).toContain('Failed to attach PTY');
+
+    await resize(1000, 600);
+    daemon.on('attach_session', ({ id }) => withSnapshot
+      ? snapshotReply(id)
+      : { event: 'attach_result', id, success: true, cols: 40, rows: 6, running: true, last_seq: 0 });
+    daemon.emit({ event: 'runtime_respawned', id: 's1' });
+    await daemon.idle();
+    await act(() => vi.advanceTimersByTimeAsync(DESKTOP_RESIZE_COALESCE_MS));
+    await daemon.idle();
+    expect(resizesAfterAttach(daemon, 1)).toContainEqual({ cmd: 'pty_resize', id: 's1', cols: 125, rows: 28, xpixel: 1000, ypixel: 588 });
+
+    daemon.emit({ event: 'pty_resized', id: 's1', cols: 125, rows: 28 });
+    daemon.emit({ event: 'pty_output', id: 's1', seq: 11, data: btoa('recovered terminal') });
+    await daemon.idle();
+    expect(visibleText('s1')).toContain('recovered terminal');
+
+    await resize(1200, 600);
+    await daemon.idle();
+    expect(daemon.sentOf('pty_resize').slice(-1)[0]).toEqual({ cmd: 'pty_resize', id: 's1', cols: 150, rows: 28, xpixel: 1200, ypixel: 588 });
   });
 
   it('follows a narrow pane as it widens, while it is still too narrow to be usable', async () => {

@@ -1,3 +1,0 @@
-kind: internal
-area: testing
-change: Fix the input ordering race behind intermittent heartbeat auto-settle wire test failures.

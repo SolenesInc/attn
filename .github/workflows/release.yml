@@ -230,6 +230,27 @@ jobs:
             exit 1
           fi
 
+          notarize() {
+            local submission result status id
+            submission="$1"
+            result="$(xcrun notarytool submit "$submission" \
+              --key "$NOTARY_API_KEY_PATH" \
+              --key-id "$APPLE_API_KEY" \
+              --issuer "$APPLE_API_ISSUER" \
+              --wait --output-format json)"
+            status="$(jq -r '.status' <<<"$result")"
+            id="$(jq -r '.id' <<<"$result")"
+            if [ "$status" != Accepted ]; then
+              xcrun notarytool log "$id" \
+                --key "$NOTARY_API_KEY_PATH" \
+                --key-id "$APPLE_API_KEY" \
+                --issuer "$APPLE_API_ISSUER"
+              echo "notarization of $(basename "$submission") is $status (submission $id); Apple's log is above" >&2
+              exit 1
+            fi
+            echo "notarization of $(basename "$submission") accepted (submission $id)"
+          }
+
           VERSION="${RELEASE_TAG#v}"
           WORK_DIR="$(mktemp -d)"
           cp -R "$APP_PATH" "$WORK_DIR/attn.app"
@@ -238,22 +259,14 @@ jobs:
 
           APP_ZIP="$WORK_DIR/attn.app.zip"
           ditto -c -k --keepParent "$WORK_DIR/attn.app" "$APP_ZIP"
-          xcrun notarytool submit "$APP_ZIP" \
-            --key "$NOTARY_API_KEY_PATH" \
-            --key-id "$APPLE_API_KEY" \
-            --issuer "$APPLE_API_ISSUER" \
-            --wait
+          notarize "$APP_ZIP"
           xcrun stapler staple "$WORK_DIR/attn.app"
           xcrun stapler validate "$WORK_DIR/attn.app"
           spctl -a -t exec -vv "$WORK_DIR/attn.app"
 
           DMG_REBUILT="$WORK_DIR/attn_${VERSION}_aarch64.dmg"
           hdiutil create -volname "attn" -srcfolder "$WORK_DIR/attn.app" -format UDZO "$DMG_REBUILT"
-          xcrun notarytool submit "$DMG_REBUILT" \
-            --key "$NOTARY_API_KEY_PATH" \
-            --key-id "$APPLE_API_KEY" \
-            --issuer "$APPLE_API_ISSUER" \
-            --wait
+          notarize "$DMG_REBUILT"
           xcrun stapler staple "$DMG_REBUILT"
           xcrun stapler validate "$DMG_REBUILT"
 

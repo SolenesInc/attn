@@ -155,7 +155,7 @@ func TestAnAgentWhoseTerminalEndedWhileTheDaemonWasDownShowsNoReloadNotice(t *te
 	codex.Prompted()
 	codex.Reply("Done. <!-- attn:state=idle -->")
 	s.Stop()
-	codex.Exit(0)
+	codex.Exit(143)
 
 	s.Start()
 	if came := initialSession(t, s.App(), session); came.TerminalBuildStale != nil {

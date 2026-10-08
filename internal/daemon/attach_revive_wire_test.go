@@ -133,7 +133,7 @@ func TestAttachRefusesToReviveWhatItShouldNot(t *testing.T) {
 	recoverable := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	app = attachReviveMakeRecoverable(t, w, app, recoverable, w.Launched(recoverable), false)
 	exited := w.Spawn(app, fakeagent.Claude, w.Path("blog"))
-	w.Launched(exited).Exit(0)
+	w.Launched(exited).Exit(143)
 	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == exited })
 	recoverableTerminal, exitedTerminal := app.Terminal(recoverable), app.Terminal(exited)
 
@@ -171,7 +171,7 @@ func TestAttachRefusesToReviveWhatItShouldNot(t *testing.T) {
 	}
 }
 
-func TestAFailedReviveLeavesTheSessionRecoverableAndTheConnectionResponsive(t *testing.T) {
+func TestAFailedResumeKeepsTheStoppedScreenAndTheConnectionResponsive(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
 	cwd := w.Path("shop")
@@ -185,8 +185,8 @@ func TestAFailedReviveLeavesTheSessionRecoverableAndTheConnectionResponsive(t *t
 	w.restart()
 	app = w.App()
 	cli := w.Client()
-	if state := queriedSession(t, cli, session).State; state != protocol.SessionStateRecoverable {
-		t.Fatalf("after the restart the session is %s, want recoverable", state)
+	if state := queriedSession(t, cli, session).State; state != protocol.SessionStateIdle {
+		t.Fatalf("after the restart the session is %s, want stopped idle", state)
 	}
 	before, _ := peekExit(t, cli, session, "the registry refused the push")
 	if err := os.RemoveAll(cwd); err != nil {
@@ -197,23 +197,21 @@ func TestAFailedReviveLeavesTheSessionRecoverableAndTheConnectionResponsive(t *t
 		t.Fatal(err)
 	}
 
-	terminal := app.Terminal(session)
-	app.Send(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(terminal),
-		AttachPolicy: protocol.Ptr(protocol.AttachPolicyRevive), Cols: protocol.Ptr(80), Rows: protocol.Ptr(24)})
+	app.Send(protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 80, Rows: 24})
 	listing := browseForPicker(app, browsed+string(os.PathSeparator), nil)
-	failed := testworld.Await(app, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return string(r.ID) == terminal })
+	failed := testworld.Await(app, protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == session })
 
 	if failed.Success || !strings.Contains(protocol.Deref(failed.Error), cwd) {
-		t.Errorf("reviving in a removed directory answered %+v, want a failure naming %s", failed, cwd)
+		t.Errorf("resuming in a removed directory answered %+v, want a failure naming %s", failed, cwd)
 	}
 	if !listing.Success || !slices.Equal(pickerEntryNames(listing.Entries), []string{"child"}) {
-		t.Errorf("the browse sent after the failed revive answered %+v, want the child directory", listing)
+		t.Errorf("the browse sent after the failed resume answered %+v, want the child directory", listing)
 	}
-	if state := queriedSession(t, cli, session).State; state != protocol.SessionStateRecoverable {
-		t.Errorf("after the failed revive the session is %s, want it recoverable", state)
+	if state := queriedSession(t, cli, session).State; state != protocol.SessionStateIdle {
+		t.Errorf("after the failed resume the session is %s, want it stopped idle", state)
 	}
 	if after, _ := peekExit(t, cli, session, "the registry refused the push"); after != before {
-		t.Errorf("after the failed revive the last exit is %+v, want %+v kept", after, before)
+		t.Errorf("after the failed resume the last exit is %+v, want %+v kept", after, before)
 	}
 }
 

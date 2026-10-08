@@ -166,7 +166,7 @@ describe('useGhosttyPaneRuntime', () => {
 
     act(() => result.current.setTerminalHandle('pane-session', terminal));
     await act(async () => {
-      binding?.onEvent({ event: 'restore_complete', id: 'runtime-1' });
+      binding?.onEvent({ event: 'attach_complete', id: 'runtime-1', restored: true });
       await Promise.resolve();
     });
 
@@ -187,7 +187,7 @@ describe('useGhosttyPaneRuntime', () => {
 
     act(() => {
       result.current.setTerminalHandle('pane-session', terminal);
-      binding?.onEvent({ event: 'restore_complete', id: 'runtime-1' });
+      binding?.onEvent({ event: 'attach_complete', id: 'runtime-1', restored: true });
       isActiveSessionRef.current = false;
       resolveDrain?.();
     });

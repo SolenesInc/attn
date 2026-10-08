@@ -17,14 +17,6 @@ import { desktopSnapshot } from '../utils/desktops';
 
 export type { TerminalDesktopState };
 
-// A reload's exit event looks like a clean voluntary quit (code 0, no signal),
-// which would trip auto-close-on-clean-exit and tear the pane down mid-restore.
-const reloadingSessionIds = new Set<string>();
-
-export function isSessionReloading(id: string): boolean {
-  return reloadingSessionIds.has(id);
-}
-
 export interface Session {
   id: string;
   label: string;
@@ -289,12 +281,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       cols = 80;
       rows = 24;
     }
-    reloadingSessionIds.add(id);
-    try {
-      await ptyReload({ id, cols, rows });
-    } finally {
-      reloadingSessionIds.delete(id);
-    }
+    await ptyReload({ id, cols, rows });
   },
 
   setLauncherConfig: (config: LauncherConfig) => {

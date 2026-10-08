@@ -1,3 +1,0 @@
-kind: changed
-area: sidebar
-change: Queue and desktop sidebars share profile, New, Commands and five panel buttons. Sleeping crew can be woken from either sidebar, and profile rename and delete actions appear on their rows.

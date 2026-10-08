@@ -1,0 +1,26 @@
+name: Mirror next
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: mirror-next
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  mirror:
+    name: Fast-forward next to main
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push main to next without forcing
+        run: |
+          git fetch --no-tags origin main next
+          git push origin refs/remotes/origin/main:refs/heads/next

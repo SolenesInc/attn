@@ -1,3 +1,0 @@
-kind: internal
-area: database
-change: Schema migrations use timestamped files so independent PRs can land in either order. A developer command scaffolds migrations, and CI protects merged migration definitions.

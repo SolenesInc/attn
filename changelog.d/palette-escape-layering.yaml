@@ -1,3 +1,0 @@
-kind: fixed
-area: palette
-change: Escape in the markdown opener or the notebook finder closes the palette, not the image or panel open beneath it.

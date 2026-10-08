@@ -684,12 +684,14 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 	}
 	d.store.UpsertRecentLocation(req.cwd)
 	d.publishFact(fact, string(session.ID), nil)
+	var launchedExit *ptybackend.ExitInfo
 	if req.hasPluginDriver {
-		if exit := d.finishPluginSessionLaunch(msg.ID, true); exit != nil {
-			d.handlePTYExit(*exit)
-		}
+		launchedExit = d.finishPluginSessionLaunch(msg.ID, true)
 	}
 	plan.commit()
+	if launchedExit != nil {
+		d.life.Go("handlePTYExitAfterPluginLaunch", func() { d.handlePTYExit(*launchedExit) })
+	}
 	return &spawnOutcome{}
 }
 

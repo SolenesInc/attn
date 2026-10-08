@@ -1,3 +1,0 @@
-kind: added
-area: pi
-change: Set the default Guardian model and reasoning in attn auto-mode settings for future Pi agent launches.

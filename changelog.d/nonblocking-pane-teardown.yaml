@@ -1,3 +1,0 @@
-kind: fixed
-area: sessions
-change: Closing a pane removes it immediately while its process finishes shutting down in the background.

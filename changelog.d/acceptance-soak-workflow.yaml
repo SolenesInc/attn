@@ -1,3 +1,0 @@
-kind: internal
-area: ci
-change: Run selected packaged-app acceptance scenarios repeatedly from an on-demand workflow.

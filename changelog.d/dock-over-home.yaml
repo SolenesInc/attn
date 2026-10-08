@@ -1,4 +1,0 @@
-kind: fixed
-area: app
-change: Sidebar dock panels appear over the home screen, including Automations on a fresh installation.
-notes: Escape dismisses Automations, Attention and workflow run panels.

@@ -1,3 +1,0 @@
-kind: internal
-area: testing
-change: Replace most remaining internal daemon tests with wire and stack tests, running the real app host and scripted plugin drivers.

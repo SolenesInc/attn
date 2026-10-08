@@ -8,7 +8,6 @@ import {
   DaemonPluginIssue,
   DaemonPR,
   DaemonSession,
-  SessionExitInfo,
 } from '../hooks/useDaemonSocket';
 import { type OpenPRProgress } from '../hooks/useOpenPR';
 import { type TerminalDesktopState } from '../store/sessions';
@@ -192,5 +191,4 @@ export interface AppContentProps {
   notificationsChangeSignal: number;
   fsChangeSignals: Record<string, number>;
   notebookTaskChangeSignal: number;
-  registerSessionExitHandler: (handler: ((info: SessionExitInfo) => void) | null) => void;
 }

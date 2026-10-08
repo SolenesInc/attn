@@ -111,6 +111,8 @@ type Daemon struct {
 	// Serializes PR fetches with review-request edge reconciliation.
 	prRefreshMu                       sync.Mutex
 	automationMu                      sync.Mutex
+	automationLaunchFailures          sync.Map
+	automationLaunchResults           sync.Map
 	automationObservationMu           sync.Mutex
 	automationObservationLocks        map[string]*sync.Mutex
 	automationRepoMu                  sync.Mutex
@@ -187,8 +189,8 @@ type Daemon struct {
 	launchWatchMu                     sync.Mutex
 	launchWatches                     map[protocol.SessionID]*launchWatch
 	recoveredLaunches                 map[protocol.SessionID]*launchWatch
-	reloadingMu                       sync.Mutex
-	reloadingTerminals                map[harness.TerminalID]bool
+	terminalExitIntentMu              sync.Mutex
+	terminalExitIntents               map[harness.TerminalID]terminalExitIntent
 	prepareSessionTeardownHook        func(string) error
 	teardownMu                        sync.Mutex
 	tearingDown                       map[protocol.SessionID]chan struct{}
@@ -978,6 +980,9 @@ func (d *Daemon) pruneSessionsWithoutPTY(previousRunSessions map[protocol.Sessio
 			continue
 		}
 		d.releaseExitedCrewBinding(session.ID)
+		if d.store.GetSessionExit(session.ID) != nil {
+			continue
+		}
 		if d.canReviveSession(session) {
 			if session.State == protocol.SessionStateRecoverable {
 				continue
@@ -1407,6 +1412,9 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 			continue
 		}
 		d.releaseExitedCrewBinding(session.ID)
+		if d.store.GetSessionExit(session.ID) != nil {
+			continue
+		}
 		if d.canReviveSession(session) {
 			if session.State == protocol.SessionStateRecoverable {
 				continue
@@ -1630,7 +1638,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		return false
 	}
 	defer release()
-	if d.consumeReloading(info.ID) {
+	if d.consumeTerminalExitIntent(info.ID, terminalExitReload) {
 		d.logf("suppressing exit for reloading terminal %s (runtime replaced in place)", info.ID)
 		return false
 	}
@@ -1643,6 +1651,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		sessionID, shown = ended, true
 	}
 	if !shown {
+		d.clearTerminalExitIntent(info.ID, terminalExitStop)
 		d.logf("pty exit of terminal %s, which no session shows; removing its runtime", info.ID)
 		if err := d.removePTYSession(info.ID); err != nil {
 			d.logf("pty backend remove on exit failed for %s: %v", info.ID, err)
@@ -1665,6 +1674,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 			return false
 		}
 	}
+	stopped := d.consumeTerminalExitIntent(info.ID, terminalExitStop)
 	if !d.endTerminal(sessionID, info.ID) {
 		d.logf("terminal %s exited; session %s runs on in its other terminals", info.ID, sessionID)
 		return true
@@ -1688,6 +1698,15 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		Signal:   info.Signal,
 	})
 	d.recordProcessEvidence(sessionID, true)
+	d.broadcastSessionStateChanged(sessionID)
+	if info.ExitCode == 0 && info.Signal == "" && !stopped && d.sessionCloseError(sessionID) == nil {
+		closing, err := d.beginSessionClose(sessionID, store.SessionClose{By: string(sessionID), Reason: "Agent exited normally"}, nil)
+		if err != nil {
+			d.logf("closing normally exited session %s: %v", sessionID, err)
+		} else {
+			d.finishSessionClose(sessionID, closing)
+		}
+	}
 	return true
 }
 
@@ -3120,6 +3139,9 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 	clone := cloneSession(session)
 	if clone == nil {
 		return nil
+	}
+	if d.store != nil {
+		clone.TerminalExit = d.store.GetSessionExit(clone.ID)
 	}
 	d.decorateSessionWithStateReason(clone)
 

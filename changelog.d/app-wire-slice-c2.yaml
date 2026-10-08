@@ -1,3 +1,0 @@
-kind: internal
-area: testing
-change: Pane runtime, sidebar, shortcut and terminal input promises are now guarded by App wire tests instead of component and hook tests.

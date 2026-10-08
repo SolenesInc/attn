@@ -192,6 +192,22 @@
         "seconds": 55.41,
         "runnerClass": "local macOS",
         "note": "Green ATTN_VERDICT durationMs=55410, including cleanup. Native command selection, learned ordering, pins, both palette entry paths and terminal focus restoration. Screenshot and summary attached to seed s-e4azmr. Remeasure on Linux CI."
+      },
+      "autoclose-on-exit": {
+        "run": "autoclose-on-exit-2026-10-07T10-41-39-541Z",
+        "job": "Local packaged scenario, stopped-check isolated instance",
+        "recordedAt": "2026-10-07",
+        "seconds": 72.591,
+        "runnerClass": "local macOS",
+        "note": "Green ATTN_VERDICT durationMs=72591. Covers clean quits, retained final text across app relaunch, and native Resume/Close. Remeasure on Linux CI."
+      },
+      "automation-lifecycle": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/37760713271",
+        "job": "App acceptance shard 1/4",
+        "recordedAt": "2026-10-08",
+        "seconds": 68.8,
+        "runnerClass": "github-hosted Linux",
+        "note": "Green matrix result durationMs=68758, including the disk-full failure and fresh-request recovery case."
       }
     }
   },
@@ -201,9 +217,9 @@
     "agent-close": 8.2,
     "agent-queue": 106.589,
     "agent-settings": 18.7,
-    "autoclose-on-exit": 19.1,
+    "autoclose-on-exit": 72.591,
     "automation-form": 10.2,
-    "automation-lifecycle": 49.3,
+    "automation-lifecycle": 68.8,
     "automation-scheduled-cleanup": 40.6,
     "automation-surface": 13.2,
     "automode-environment": 4.8,

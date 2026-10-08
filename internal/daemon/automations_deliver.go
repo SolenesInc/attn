@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -35,22 +36,31 @@ func (d *Daemon) deliverObservedAutomationRun(run *store.AutomationRun) error {
 	return d.deliverAutomationRun(context.Background(), run)
 }
 func (d *Daemon) handleAutomationDeliveryError(run *store.AutomationRun, deliveryErr error) (*store.AutomationRun, error) {
-	var retryable *retryableAutomationDeliveryError
-	// A delivery cut short by shutdown stays pending, and the next start delivers it again.
-	if errors.As(deliveryErr, &retryable) || d.stopping() {
+	if _, launched := d.automationLaunchResults.Load(run.ID); launched {
 		current, err := d.store.GetAutomationRun(run.ID)
 		return current, errors.Join(deliveryErr, err)
 	}
-	failed, failErr := d.failAutomationRun(run, deliveryErr)
-	return failed, errors.Join(deliveryErr, failErr)
-}
-func (d *Daemon) stopping() bool { return d.life.Ended() }
-
-func (d *Daemon) failAutomationRun(run *store.AutomationRun, deliveryErr error) (*store.AutomationRun, error) {
+	var retryable *retryableAutomationDeliveryError
+	message := strings.ToLower(deliveryErr.Error())
+	diskFull := errors.Is(deliveryErr, syscall.ENOSPC) || store.IsStorageFull(deliveryErr) || strings.Contains(message, "no space left on device") || strings.Contains(message, "database or disk is full")
+	// A delivery cut short by shutdown stays pending, and the next start delivers it again.
+	if !diskFull && (errors.As(deliveryErr, &retryable) || d.stopping()) {
+		current, err := d.store.GetAutomationRun(run.ID)
+		return current, errors.Join(deliveryErr, err)
+	}
 	now := time.Now()
 	var persistErr error
-	if err := d.store.MarkAutomationRunFailed(run.ID, deliveryErr.Error(), now); err != nil {
+	if diskFull {
+		d.automationLaunchFailures.Store(run.ID, deliveryErr)
+	}
+	if err := d.store.MarkAutomationRunFailed(run.ID, deliveryErr.Error(), diskFull, now); err != nil {
 		persistErr = errors.Join(persistErr, fmt.Errorf("mark run failed: %w", err))
+		if diskFull {
+			d.broadcastAutomationsChanged(run.DefinitionID)
+			return run, errors.Join(deliveryErr, persistErr)
+		}
+	} else {
+		d.automationLaunchFailures.Delete(run.ID)
 	}
 	if err := d.recordAutomationRunSeedOutcome(run, automationFailureComment(run, deliveryErr.Error())); err != nil {
 		persistErr = errors.Join(persistErr, err)
@@ -60,8 +70,46 @@ func (d *Daemon) failAutomationRun(run *store.AutomationRun, deliveryErr error) 
 	if err != nil {
 		persistErr = errors.Join(persistErr, fmt.Errorf("reload failed run: %w", err))
 	}
-	return failed, persistErr
+	return failed, errors.Join(deliveryErr, persistErr)
 }
+
+func (d *Daemon) persistAutomationLaunchOutcomes() error {
+	var persistErr error
+	d.automationLaunchResults.Range(func(key, value any) bool {
+		id, result := key.(string), value.(automation.DeliveryResult)
+		run, err := d.store.GetAutomationRun(id)
+		if err != nil {
+			persistErr = errors.Join(persistErr, err)
+			return true
+		}
+		if run == nil || run.State != store.AutomationRunStatePending {
+			d.automationLaunchResults.Delete(id)
+			return true
+		}
+		persistErr = errors.Join(persistErr, d.finalizeAutomationRun(run, result))
+		return true
+	})
+	d.automationLaunchFailures.Range(func(key, value any) bool {
+		id, cause := key.(string), value.(error)
+		run, err := d.store.GetAutomationRun(id)
+		if err != nil {
+			persistErr = errors.Join(persistErr, err)
+			return true
+		}
+		if run == nil || run.State != store.AutomationRunStatePending {
+			d.automationLaunchFailures.Delete(id)
+			return true
+		}
+		_, err = d.handleAutomationDeliveryError(run, cause)
+		if _, pending := d.automationLaunchFailures.Load(id); pending {
+			persistErr = errors.Join(persistErr, err)
+		}
+		return true
+	})
+	return persistErr
+}
+func (d *Daemon) stopping() bool { return d.life.Ended() }
+
 func automationFailureComment(run *store.AutomationRun, message string) string {
 	comment := "Automation delivery failed: " + message
 	if run != nil {
@@ -71,6 +119,18 @@ func automationFailureComment(run *store.AutomationRun, message string) string {
 }
 
 func (d *Daemon) cancelAutomationRun(run *store.AutomationRun, reason, message string) (*store.AutomationRun, error) {
+	if result, launched := d.automationLaunchResults.Load(run.ID); launched {
+		persistErr := d.finalizeAutomationRun(run, result.(automation.DeliveryResult))
+		current, err := d.store.GetAutomationRun(run.ID)
+		return current, errors.Join(persistErr, err)
+	}
+	if cause, stopped := d.automationLaunchFailures.Load(run.ID); stopped {
+		failed, err := d.handleAutomationDeliveryError(run, cause.(error))
+		if _, pending := d.automationLaunchFailures.Load(run.ID); pending {
+			return failed, err
+		}
+		return failed, nil
+	}
 	now := time.Now()
 	var persistErr error
 	if err := d.recordAutomationRunSeedOutcome(run, automationFailureComment(run, message)); err != nil {
@@ -157,6 +217,12 @@ func (d *Daemon) recordAutomationRunSeedOutcome(run *store.AutomationRun, body s
 	return err
 }
 func (d *Daemon) deliverAutomationRun(ctx context.Context, run *store.AutomationRun) error {
+	if result, launched := d.automationLaunchResults.Load(run.ID); launched {
+		return d.finalizeAutomationRun(run, result.(automation.DeliveryResult))
+	}
+	if cause, stopped := d.automationLaunchFailures.Load(run.ID); stopped {
+		return cause.(error)
+	}
 	definition, err := d.store.GetAutomationDefinition(run.DefinitionID)
 	if err != nil {
 		return err
@@ -194,6 +260,11 @@ func (d *Daemon) deliverAutomationRun(ctx context.Context, run *store.Automation
 	if err != nil {
 		return err
 	}
+	d.automationLaunchResults.Store(run.ID, result)
+	return d.finalizeAutomationRun(run, result)
+}
+
+func (d *Daemon) finalizeAutomationRun(run *store.AutomationRun, result automation.DeliveryResult) error {
 	ready, err := d.automationWorkReadyOccurrence(run)
 	if err != nil {
 		return err
@@ -211,6 +282,7 @@ func (d *Daemon) deliverAutomationRun(ctx context.Context, run *store.Automation
 	if inserted {
 		announceGardenSeedEvents(d, []int64{seq})
 	}
+	d.automationLaunchResults.Delete(run.ID)
 	d.broadcastAutomationsChanged(run.DefinitionID)
 	return nil
 }

@@ -1,3 +1,0 @@
-kind: fixed
-area: queue
-change: Cancelling keyboard snooze returns focus to the opening control, and modified arrow shortcuts leave the snooze choice unchanged.

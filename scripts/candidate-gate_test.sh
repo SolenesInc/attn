@@ -37,21 +37,10 @@ if [[ "$1" == api ]] && [[ "$*" == *'/actions/workflows/ci.yml/runs?'* ]]; then
     fi
     exit 0
   fi
-  if [[ "${FAKE_ACCEPTANCE_MODE:-success}" != missing ]]; then
-    printf '2026-08-29T10:00:00Z\t42\t%s\tcompleted\tsuccess\t%s\n' "$FAKE_ACCEPTANCE_SHA" \
-      'https://github.com/example/attn/actions/runs/42'
-  fi
-  exit 0
 fi
 if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/runs/44/jobs?'* ]]; then
   printf 'completed\t%s\t%s\n' "${FAKE_CI_APP_CONCLUSION:-success}" \
     'https://github.com/example/attn/actions/runs/44/job/9'
-  exit 0
-fi
-if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/runs/42/jobs?'* ]]; then
-  printf '%s\t%s\t%s\n' "${FAKE_ACCEPTANCE_STATUS:-completed}" \
-    "${FAKE_ACCEPTANCE_CONCLUSION:-success}" \
-    'https://github.com/example/attn/actions/runs/42/job/7'
   exit 0
 fi
 if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/runs/43/jobs?'* ]]; then
@@ -70,9 +59,6 @@ export GITHUB_REPOSITORY=example/attn
 export FAKE_GH_LOG="$work/gh.log"
 export FAKE_CANDIDATES_PAGE_1=
 export FAKE_CANDIDATES_PAGE_2=
-export FAKE_ACCEPTANCE_MODE=success
-export FAKE_ACCEPTANCE_STATUS=completed
-export FAKE_ACCEPTANCE_CONCLUSION=success
 export FAKE_APP_MODE=success
 export FAKE_APP_CONCLUSION=success
 export FAKE_CI_APP_MODE=success
@@ -83,7 +69,12 @@ git clone -q "$root" "$repo"
 git -C "$repo" config user.name 'Candidate Gate Test'
 git -C "$repo" config user.email 'candidate-gate@example.com'
 git -C "$repo" switch -q -C main
+cp "$root/cmd/release-train/main.go" "$repo/cmd/release-train/main.go"
+git -C "$repo" add cmd/release-train/main.go
 git -C "$repo" rm -q --ignore-unmatch -- 'changelog.d/*.yaml'
+printf '%s\n' 'kind: internal' 'area: release' 'change: release fixture' \
+  >"$repo/changelog.d/release-fixture.yaml"
+git -C "$repo" add changelog.d
 git -C "$repo" commit -q --allow-empty -m 'release baseline'
 main_sha="$(git -C "$repo" rev-parse HEAD)"
 git -C "$repo" update-ref refs/remotes/origin/main "$main_sha"
@@ -107,96 +98,50 @@ run_gate() (
   "$gate" "$@"
 )
 
-git -C "$repo" switch -q --detach "$main_sha"
-printf '%s\n' 'promotion feature' >"$repo/promotion.txt"
-printf '%s\n' 'kind: internal' 'area: release' 'change: promotion fixture' \
-  >"$repo/changelog.d/promotion.yaml"
-git -C "$repo" add promotion.txt changelog.d/promotion.yaml
-git -C "$repo" commit -q -m 'feat(release): add promotion fixture'
-promotion_source="$(git -C "$repo" rev-parse HEAD)"
-git -C "$repo" switch -q -c release/v99.98.97
+git -C "$repo" switch -q -c release/v99.98.97 "$main_sha"
 (cd "$repo" && go run ./cmd/release-train version set v99.98.97)
-(cd "$repo" && go run ./cmd/release-train manifest write \
-  --version v99.98.97 --kind promotion \
-  --source "$promotion_source" --main "$main_sha")
-git -C "$repo" rm -q changelog.d/promotion.yaml
+(cd "$repo" && go run ./cmd/release-train manifest write --version v99.98.97 --main "$main_sha")
+git -C "$repo" rm -q changelog.d/release-fixture.yaml
 git -C "$repo" add .github/release-candidate.yml app
 git -C "$repo" commit -q -m 'chore(release): prepare v99.98.97'
-export FAKE_ACCEPTANCE_SHA="$promotion_source"
 export FAKE_CANDIDATES_PAGE_1=$'release/v99.98.97\thttps://github.com/example/attn/pull/1\n'
-run_gate promotion origin/main HEAD release/v99.98.97 >"$work/promotion.out"
-grep -Fq 'source Acceptance is green' "$work/promotion.out"
-grep -Fq 'CI App acceptance is green' "$work/promotion.out"
-(cd "$repo" && "$changelog_gate" main release/v99.98.97) >"$work/promotion-changelog.out"
-grep -Fq 'validated promotion candidate' "$work/promotion-changelog.out"
+run_gate origin/main HEAD release/v99.98.97 >"$work/release.out"
+grep -Fq 'CI App acceptance is green' "$work/release.out"
+(cd "$repo" && "$changelog_gate" main release/v99.98.97) >"$work/release-changelog.out"
+grep -Fq 'validated release candidate' "$work/release-changelog.out"
 
-export FAKE_ACCEPTANCE_CONCLUSION=failure
-expect_failure 'Acceptance is completed/failure' \
-  run_gate promotion origin/main HEAD release/v99.98.97
-export FAKE_ACCEPTANCE_CONCLUSION=success
+expect_failure 'expected release/v99.98.97' run_gate origin/main HEAD release/v99.98.96
+
+later_sha="$(git -C "$repo" commit-tree -p "$main_sha" -m 'feat: later work on main' "$main_sha^{tree}")"
+git -C "$repo" update-ref refs/remotes/origin/main "$later_sha"
+run_gate origin/main HEAD release/v99.98.97 >"$work/main-moved.out"
+grep -Fq 'is a valid release candidate' "$work/main-moved.out"
+git -C "$repo" update-ref refs/remotes/origin/main "$main_sha"
 
 export FAKE_CI_APP_MODE=missing
-run_gate promotion origin/main HEAD release/v99.98.97 >"$work/manual-override.out"
+run_gate origin/main HEAD release/v99.98.97 >"$work/manual-override.out"
 grep -Fq 'manual App acceptance override is green' "$work/manual-override.out"
 
 export FAKE_APP_MODE=missing
 expect_failure 'has no app-acceptance.yml workflow_dispatch run' \
-  run_gate promotion origin/main HEAD release/v99.98.97
+  run_gate origin/main HEAD release/v99.98.97
 export FAKE_APP_MODE=success
 export FAKE_CI_APP_MODE=success
 
-(cd "$repo" && go run ./cmd/release-train manifest write \
-  --version v99.98.97 --kind promotion --publication held \
-  --source "$promotion_source" --main "$main_sha")
-git -C "$repo" add .github/release-candidate.yml
-git -C "$repo" commit -q -m 'chore(release): hold publication'
-: >"$FAKE_GH_LOG"
-export FAKE_APP_MODE=missing
-run_gate promotion origin/main HEAD release/v99.98.97 >"$work/held.out"
-grep -Fq 'publication is held; App acceptance is not claimed' "$work/held.out"
-if grep -q '/actions/workflows/app-acceptance.yml/runs?' "$FAKE_GH_LOG"; then
-  echo "held candidate queried App acceptance" >&2
-  exit 1
-fi
-export FAKE_APP_MODE=success
-
-export FAKE_CANDIDATES_PAGE_2=$'hotfix/other\thttps://github.com/example/attn/pull/102\n'
+export FAKE_CANDIDATES_PAGE_2=$'release/v99.0.0\thttps://github.com/example/attn/pull/102\n'
 expect_failure 'another release candidate is open' \
-  run_gate promotion origin/main HEAD release/v99.98.97
+  run_gate origin/main HEAD release/v99.98.97
 grep -Fq 'api --paginate --method GET repos/{owner}/{repo}/pulls?state=open&base=main&per_page=100' "$FAKE_GH_LOG"
 export FAKE_CANDIDATES_PAGE_1=
 export FAKE_CANDIDATES_PAGE_2=
 
 printf '%s\n' 'not release metadata' >"$repo/late-product-edit.txt"
 git -C "$repo" add late-product-edit.txt
-git -C "$repo" commit -q -m 'fix(release): mutate frozen candidate'
+git -C "$repo" commit -q -m 'fix(release): mutate the candidate'
 expect_failure 'candidate changes non-release file' \
-  run_gate promotion origin/main HEAD release/v99.98.97
+  run_gate origin/main HEAD release/v99.98.97
 
-git -C "$repo" switch -q main
-git -C "$repo" switch -q -c hotfix/startup-crash
-printf '%s\n' 'hotfix' >"$repo/hotfix.txt"
-printf '%s\n' 'kind: internal' 'area: release' 'change: hotfix fixture' \
-  >"$repo/changelog.d/hotfix.yaml"
-git -C "$repo" add hotfix.txt changelog.d/hotfix.yaml
-git -C "$repo" commit -q -m 'fix(app): repair startup crash'
-hotfix_source="$(git -C "$repo" rev-parse HEAD)"
-(cd "$repo" && go run ./cmd/release-train version set v99.98.98)
-(cd "$repo" && go run ./cmd/release-train manifest write \
-  --version v99.98.98 --kind hotfix \
-  --source "$hotfix_source" --main "$main_sha")
-git -C "$repo" rm -q changelog.d/hotfix.yaml
-git -C "$repo" add .github/release-candidate.yml app
-git -C "$repo" commit -q -m 'chore(release): prepare v99.98.98'
-: >"$FAKE_GH_LOG"
-run_gate hotfix origin/main HEAD hotfix/startup-crash >"$work/hotfix.out"
-if grep -q 'event=push' "$FAKE_GH_LOG"; then
-  echo "hotfix candidate queried next Acceptance" >&2
-  exit 1
-fi
-grep -q 'event=pull_request' "$FAKE_GH_LOG"
-
-changelog_job="$(sed -n '/^  changelog:/,/^  main-route:/p' "$root/.github/workflows/ci.yml")"
+changelog_job="$(sed -n '/^  changelog:/,/^  script-tests:/p' "$root/.github/workflows/ci.yml")"
 grep -Fq 'actions: read' <<<"$changelog_job"
 
 echo "candidate gate: OK"

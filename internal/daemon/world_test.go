@@ -219,3 +219,7 @@ type pipeAddr struct{}
 
 func (pipeAddr) Network() string { return "pipe" }
 func (pipeAddr) String() string  { return "pipe" }
+
+func (w *world) RefuseDatabaseCommits() func() {
+	return w.daemon.RefuseDatabaseCommits()
+}

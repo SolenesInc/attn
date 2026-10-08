@@ -1,3 +1,0 @@
-kind: internal
-area: terminal
-change: Make the PTY command-block handoff test deterministic when output precedes attachment.

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-sha="${1:?usage: release-after-acceptance.sh <main-sha> <ci-run-id> <ci-run-url>}"
-ci_run_id="${2:?usage: release-after-acceptance.sh <main-sha> <ci-run-id> <ci-run-url>}"
-ci_run_url="${3:?usage: release-after-acceptance.sh <main-sha> <ci-run-id> <ci-run-url>}"
+sha="${1:?usage: release-after-acceptance.sh <release-sha> <ci-run-id> <ci-run-url>}"
+ci_run_id="${2:?usage: release-after-acceptance.sh <release-sha> <ci-run-id> <ci-run-url>}"
+ci_run_url="${3:?usage: release-after-acceptance.sh <release-sha> <ci-run-id> <ci-run-url>}"
 script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
@@ -26,30 +26,15 @@ if [ "$head_sha" != "$sha" ]; then
   exit 1
 fi
 
-if ! remote_main_line="$(git ls-remote --exit-code origin refs/heads/main)"; then
-  echo "release after acceptance: cannot resolve origin/main" >&2
-  exit 1
-fi
-remote_main_sha="${remote_main_line%%[[:space:]]*}"
-if [ "$remote_main_sha" != "$sha" ]; then
-  echo "release after acceptance: main moved to $remote_main_sha; ignoring stale result for $sha"
-  exit 0
-fi
-
 if [ ! -f .github/release-candidate.yml ]; then
   echo "release after acceptance: $sha has no candidate manifest; nothing to release"
   exit 0
 fi
 
-publication="$(go run ./cmd/release-train accepted-main publication --head "$sha")"
-if [ "$publication" = held ]; then
-  tag="$(go run ./cmd/release-train accepted-main tag --head "$sha")"
-  echo "release after acceptance: publication is held for $tag at accepted main $sha; leaving main untagged"
+release_commit="$(git log -1 --first-parent --format=%H "$sha" -- .github/release-candidate.yml)"
+if [ "$release_commit" != "$sha" ]; then
+  echo "release after acceptance: $sha is not a release commit; the release manifest last changed at $release_commit"
   exit 0
-fi
-if [ "$publication" != automatic ]; then
-  echo "release after acceptance: unsupported publication '$publication'" >&2
-  exit 1
 fi
 
 acceptance_rows="$({
@@ -64,14 +49,16 @@ if [ "$acceptance_count" -ne 1 ]; then
 fi
 IFS=$'\t' read -r acceptance_status acceptance_conclusion acceptance_url <<<"$acceptance_rows"
 if [ "$acceptance_status/$acceptance_conclusion" != "completed/success" ]; then
-  echo "release after acceptance: Acceptance is $acceptance_status/$acceptance_conclusion; main stays untagged ($ci_run_url)"
+  echo "release after acceptance: Acceptance is $acceptance_status/$acceptance_conclusion; release commit stays untagged ($ci_run_url)"
   exit 0
 fi
 
 if "$script_root/workflow-job-gate.sh" ci.yml "$sha" push main 'App acceptance'; then
   echo "release after acceptance: CI App acceptance is green for main $sha"
 else
-  "$script_root/app-acceptance-gate.sh" "$sha"
+  "$script_root/workflow-job-gate.sh" \
+    app-acceptance.yml "$sha" workflow_dispatch main 'App acceptance'
+  echo "release after acceptance: manual App acceptance receipt is green for $sha"
 fi
 
 tag="$(go run ./cmd/release-train accepted-main tag --head "$sha")"
@@ -91,64 +78,30 @@ case "$remote_tag_status" in
   0)
     remote_tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha)"
     if [ "$remote_tag_sha" != "$sha" ]; then
-      echo "release after acceptance: manifest $tag was consumed at $remote_tag_sha; nothing to release from $sha"
-      exit 0
-    fi
-    echo "release after acceptance: $tag already points to accepted main $sha"
-    ;;
-  2)
-    repository_owner="${GITHUB_REPOSITORY%%/*}"
-    repository_name="${GITHUB_REPOSITORY#*/}"
-    repository_id="$({
-      gh api graphql \
-        -f query='query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { id } }' \
-        -F owner="$repository_owner" \
-        -F name="$repository_name" \
-        --jq '.data.repository.id'
-    } || true)"
-    if [ -z "$repository_id" ]; then
-      echo "release after acceptance: cannot resolve repository id for $GITHUB_REPOSITORY" >&2
+      echo "release after acceptance: $tag already points to $remote_tag_sha, not release commit $sha" >&2
       exit 1
     fi
-
-    zero_sha=0000000000000000000000000000000000000000
-    atomic_error=""
-    if atomic_error="$({
-      gh api graphql \
-        -f query='mutation($repositoryId: ID!, $mainSha: GitObjectID!, $zeroSha: GitObjectID!, $tagRef: GitRefname!) {
-          updateRefs(input: {repositoryId: $repositoryId, refUpdates: [
-            {name: "refs/heads/main", beforeOid: $mainSha, afterOid: $mainSha, force: false},
-            {name: $tagRef, beforeOid: $zeroSha, afterOid: $mainSha, force: false}
-          ]}) { clientMutationId }
-        }' \
-        -F repositoryId="$repository_id" \
-        -F mainSha="$sha" \
-        -F zeroSha="$zero_sha" \
-        -F tagRef="refs/tags/$tag" \
-        --silent
+    echo "release after acceptance: $tag already points to release commit $sha"
+    ;;
+  2)
+    if create_error="$({
+      gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+        -f ref="refs/tags/$tag" -f sha="$sha" --silent
     } 2>&1)"; then
-      echo "release after acceptance: atomically created $tag at current main $sha"
+      echo "release after acceptance: created $tag at release commit $sha"
     else
-      latest_main_line="$(git ls-remote --exit-code origin refs/heads/main)"
-      latest_main_sha="${latest_main_line%%[[:space:]]*}"
-      if [ "$latest_main_sha" != "$sha" ]; then
-        echo "release after acceptance: main moved to $latest_main_sha before atomic tagging; leaving $sha untagged"
-        exit 0
-      fi
-
       raced_tag_status=0
-      raced_tag_line="$(git ls-remote --exit-code origin "refs/tags/$tag" 2>/dev/null)" || raced_tag_status=$?
-      if [ "$raced_tag_status" -eq 0 ]; then
-        raced_tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha)"
-        if [ "$raced_tag_sha" != "$sha" ]; then
-          echo "release after acceptance: manifest $tag was consumed at $raced_tag_sha; nothing to release from $sha"
-          exit 0
-        fi
-        echo "release after acceptance: $tag was concurrently created at accepted main $sha"
-      else
-        echo "release after acceptance: atomic main/tag update failed: $atomic_error" >&2
+      git ls-remote --exit-code origin "refs/tags/$tag" >/dev/null 2>&1 || raced_tag_status=$?
+      if [ "$raced_tag_status" -ne 0 ]; then
+        echo "release after acceptance: could not create $tag: $create_error" >&2
         exit 1
       fi
+      raced_tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha)"
+      if [ "$raced_tag_sha" != "$sha" ]; then
+        echo "release after acceptance: $tag was concurrently created at $raced_tag_sha, not release commit $sha" >&2
+        exit 1
+      fi
+      echo "release after acceptance: $tag was concurrently created at release commit $sha"
     fi
     ;;
   *)

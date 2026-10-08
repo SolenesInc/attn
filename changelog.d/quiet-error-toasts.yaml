@@ -1,4 +1,0 @@
-kind: changed
-area: notifications
-change: Toasts report errors only, without timer text, a Dismiss button, or an attn subtitle.
-notes: Success, background launch, recovery, and navigation notices stay quiet. Errors still fade automatically and pause while hovered or focused.

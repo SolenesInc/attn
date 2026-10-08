@@ -1,3 +1,0 @@
-kind: internal
-area: apps
-change: Make the app-version reconcile test assert the retained event's own sequence.

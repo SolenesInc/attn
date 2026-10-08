@@ -29,14 +29,20 @@ describe('desktop close focus', () => {
       }
       if (entry === 'clean exit') {
         daemon.emit({ event: 'session_exited', id: 'c', session_id: 'c', exit_code: 0 });
+        relayOut(daemon, split('ab', 'vertical', [pane('a'), pane('b')]), ['a', 'b'], { active: 'pane-b' });
+        daemon.emit({ event: 'session_unregistered', session: daemonSession('c') });
       }
       await daemon.idle();
 
-      expect(daemon.sent.filter(({ cmd }) => cmd === 'unregister' || cmd === 'desktop_close_tile')).toEqual([
-        entry === 'pane shortcut'
-          ? { cmd: 'desktop_close_tile', request_id: expect.any(String), desktop_id: 'ws', tile_id: 'pane-c' }
-          : { cmd: 'unregister', id: 'c' },
-      ]);
+      expect(daemon.sent.filter(({ cmd }) => cmd === 'unregister' || cmd === 'desktop_close_tile')).toEqual(
+        entry === 'clean exit'
+          ? []
+          : [
+              entry === 'pane shortcut'
+                ? { cmd: 'desktop_close_tile', request_id: expect.any(String), desktop_id: 'ws', tile_id: 'pane-c' }
+                : { cmd: 'unregister', id: 'c' },
+            ],
+      );
       expect(document.querySelector('[data-session-terminal-desktop="ws"]')).toHaveAttribute('data-active-leaf-id', 'pane-b');
       expect(document.activeElement?.closest('[data-pane-id]')).toHaveAttribute('data-pane-id', 'pane-b');
       expect(daemon.sentOf('desktop_show_leaf')).toEqual([]);

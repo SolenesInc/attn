@@ -1,3 +1,0 @@
-kind: internal
-area: app
-change: The app registers its terminal backend again only when a function the registration uses changes.

@@ -1,6 +1,0 @@
-kind: fixed
-area: automations
-change: >
-  An automation run that was being delivered when the daemon stopped now
-  stays pending and is delivered again after the restart, instead of being
-  recorded as failed with "git executor closed".

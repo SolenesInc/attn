@@ -139,7 +139,7 @@ export const scenarioCatalog = [
   {
     id: 'autoclose-on-exit',
     runnerId: 'AUTOCLOSE-ON-EXIT',
-    label: 'Auto-close on clean exit, keep failed exits',
+    label: 'Clean quits close; stopped terminals restore and resume on request',
     command: ['pnpm', 'run', 'real-app:scenario-autoclose-on-exit'],
   },
   {
@@ -232,7 +232,7 @@ export const scenarioCatalog = [
   {
     id: 'automation-lifecycle',
     runnerId: 'AUTOMATION-LIFECYCLE',
-    label: 'Automation lifecycle: edits, permanent deletion and cleanup of finished work',
+    label: 'Automation lifecycle: edits, permanent deletion, cleanup of finished work and stopped disk-full launches',
     command: ['pnpm', 'run', 'real-app:scenario-automation-lifecycle'],
     timeoutMs: 600_000,
   },

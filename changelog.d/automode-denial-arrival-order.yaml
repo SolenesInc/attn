@@ -1,3 +1,0 @@
-kind: fixed
-area: automode
-change: Keep one denial when recovery reads its local record before the live report arrives.

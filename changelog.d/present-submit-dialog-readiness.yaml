@@ -1,3 +1,0 @@
-kind: internal
-area: testing
-change: Present automation commits the submit dialog before confirming the review, without a frame polling deadline.

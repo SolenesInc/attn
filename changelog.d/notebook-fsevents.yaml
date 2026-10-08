@@ -1,3 +1,0 @@
-kind: fixed
-area: notebook
-change: Large watched folders on macOS keep a constant number of open file descriptors, avoiding slow terminal launches and background git commands.

@@ -51,6 +51,7 @@ export function useAppSessions({
       autoSettleFiresAt: daemonSession?.auto_settle_fires_at,
       autoSettleHeld: daemonSession?.auto_settle_held ?? false,
       autoSettleDismissArmed: daemonSession?.auto_settle_dismiss_armed ?? false,
+      terminalExit: daemonSession?.terminal_exit,
       terminalBuildStale: daemonSession?.terminal_build_stale ?? false,
       usage: daemonSession?.usage,
       automation: daemonSession?.automation ?? s.automation,

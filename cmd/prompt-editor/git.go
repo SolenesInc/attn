@@ -89,7 +89,7 @@ func (e *editor) refs(ctx context.Context) (any, error) {
 	refs := strings.Fields(string(data))
 	selected := e.defaultBase
 	if selected == "" {
-		for _, candidate := range []string{"refs/heads/next", "refs/remotes/origin/next", "refs/heads/main", "refs/remotes/origin/main", "refs/heads/master"} {
+		for _, candidate := range []string{"refs/heads/main", "refs/remotes/origin/main", "refs/heads/master"} {
 			for _, ref := range refs {
 				if ref == candidate {
 					selected = ref
