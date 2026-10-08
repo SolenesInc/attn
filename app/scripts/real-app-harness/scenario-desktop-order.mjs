@@ -42,6 +42,12 @@ async function main() {
       profile = (await observer.profileCommand('profile_create', { name: `harness-order-${runner.runId}` })).profile;
       await observer.profileCommand('profile_select', { profile_id: profile.id });
       const one = `${profile.id}/desktop_1`;
+      await pressShortcutKeys(client, driver, 'ui.commandPalette');
+      await wait('[role="combobox"][aria-label="Commands"]', { focused: true });
+      await driver.typeText(`Switch to ${profile.name}`);
+      await wait('.unified-palette-option[aria-selected="true"]', { textIncludes: `Switch to ${profile.name}` });
+      await driver.pressEnter();
+      await wait(`[data-select-key="${one}/"]`);
       const create = async (slot, name = '') => (await observer.profileCommand('desktop_create', { profile_id: profile.id, shortcut_slot: slot, name })).desktops[0].id;
       await observer.profileCommand('desktop_rename', { desktop_id: one, name: 'One', expected_revision: 1 });
       const six = await create(6, 'Six');
@@ -53,8 +59,9 @@ async function main() {
       runner.sorted = [one, six, nine, alpha, named2, named10];
       runner.six = six;
       await observer.profileCommand('desktop_set_order', { profile_id: profile.id, desktop_ids: runner.before });
-      await wait('.sidebar.collapsed');
-      await pressShortcutKeys(client, driver, 'session.toggleSidebar');
+      if (!(await client.request('queue_get_state')).treeDesktopIds.length) {
+        await pressShortcutKeys(client, driver, 'session.toggleSidebar');
+      }
       await wait('.sidebar:not(.collapsed)');
       await assertOrder(runner.before);
       await capture('before');
