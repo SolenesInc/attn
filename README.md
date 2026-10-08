@@ -220,6 +220,10 @@ Your agents can work as a team:
       attn delegate --brief-file task.md --role builder \
         --cwd /repo --new-worktree --branch feature-x --from origin/main
 
+  Add `--desktop 7` to place the delegate on ⌘7. If that numbered desktop is
+  missing, attn recreates it on its shortcut slot and keeps the current desktop
+  in view. A desktop name or id also works within the same profile.
+
   To hand the same seed to an executor, record the next step without repeating
   its plan:
 
