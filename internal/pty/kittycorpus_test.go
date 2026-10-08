@@ -615,6 +615,8 @@ var kittyGroundNamedPrefixes = []string{
 	"\x1b(",
 	"\x1b[1",
 	"\x1b]0;t",
+	"\x1bP1",
+	"\x1bP1$",
 	"\x1bP1$r",
 	"\x1bXsos",
 	"\x1b^pm",

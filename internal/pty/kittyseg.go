@@ -25,6 +25,10 @@ const (
 	kittySegOSC
 	kittySegOSC133Prefix
 	kittySegOSC133Body
+	kittySegDCSEntry
+	kittySegDCSParam
+	kittySegDCSIntermediate
+	kittySegDCSString
 	kittySegOpaque
 	kittySegKitty
 )
@@ -50,7 +54,7 @@ func kittySegAborts(b byte) bool {
 func kittySegOpensInsideString(b byte) (kittySegMode, bool) {
 	switch b {
 	case 0x90:
-		return kittySegOpaque, true
+		return kittySegDCSEntry, true
 	case 0x9b:
 		return kittySegCSI, true
 	case 0x9d:
@@ -69,7 +73,9 @@ func kittySegOpensC1(b byte) (kittySegMode, bool) {
 
 func kittySegOpens7Bit(b byte) (kittySegMode, bool) {
 	switch b {
-	case 'P', 'X', '^', '_':
+	case 'P':
+		return kittySegDCSEntry, true
+	case 'X', '^', '_':
 		return kittySegOpaque, true
 	case ']':
 		return kittySegOSC, true
@@ -77,6 +83,22 @@ func kittySegOpens7Bit(b byte) (kittySegMode, bool) {
 		return kittySegCSI, true
 	}
 	return kittySegOpensC1(b)
+}
+
+func kittySegDCSHeadNext(mode kittySegMode, b byte) kittySegMode {
+	switch {
+	case b >= 0x40 && b <= 0x7e:
+		return kittySegDCSString
+	case b >= 0x20 && b <= 0x2f:
+		return kittySegDCSIntermediate
+	case b >= 0x30 && b <= 0x3f:
+		ignored := mode == kittySegDCSIntermediate || b == ':' || (mode == kittySegDCSParam && b >= 0x3c)
+		if ignored {
+			return kittySegDCSString
+		}
+		return kittySegDCSParam
+	}
+	return mode
 }
 
 type feedSegKind uint8
@@ -269,6 +291,30 @@ scan:
 			default:
 				i++
 			}
+
+		case kittySegDCSEntry, kittySegDCSParam, kittySegDCSIntermediate:
+			switch {
+			case b == oscESC:
+				s.mode = kittySegEscape
+			case kittySegAborts(b):
+				s.mode = kittySegGround
+			case b >= 0x80:
+				if mode, ok := kittySegOpensC1(b); ok {
+					s.mode = mode
+				}
+			default:
+				s.mode = kittySegDCSHeadNext(s.mode, b)
+			}
+			i++
+
+		case kittySegDCSString:
+			switch b {
+			case oscESC:
+				s.mode = kittySegEscape
+			case 0x18, 0x1a:
+				s.mode = kittySegGround
+			}
+			i++
 
 		case kittySegOpaque:
 			switch {
