@@ -18,7 +18,7 @@ export function orderedDesktops(desktops: Desktop[]): Desktop[] {
 }
 
 export function sortedDesktopOrder(desktops: Desktop[]): string[] {
-  const names = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
+  const names = new Intl.Collator('en', { sensitivity: 'base', numeric: true });
   return orderedDesktops(desktops).sort((a, b) => {
     if (a.shortcut_slot || b.shortcut_slot) {
       if (!a.shortcut_slot) return 1;

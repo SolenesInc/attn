@@ -1,5 +1,5 @@
 import { fireEvent, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { openActionMenu } from './test/appFixtures';
 import { defaultProfile, emptyDesktop, DEFAULT_PROFILE_ID } from './test/daemonFixtures';
 import { gesture, renderApp } from './test/renderApp';
@@ -46,6 +46,18 @@ describe('App desktop ordering', () => {
       { cmd: 'desktop_set_order', request_id: expect.any(String), profile_id: DEFAULT_PROFILE_ID, desktop_ids: desktops.map((desktop) => desktop.id) },
     ]);
     expect(screen.getByRole('button', { name: 'Desktops sorted ✓ Done' })).toBeDisabled();
+  });
+
+  it('sorts case-insensitively and numerically when the browser defaults to POSIX collation', async () => {
+    const NativeCollator = Intl.Collator;
+    const collator = vi.spyOn(Intl, 'Collator').mockImplementation(function (locales, options) {
+      return new NativeCollator(locales ?? 'en-US-u-va-posix', options);
+    });
+    onTestFinished(() => collator.mockRestore());
+    const daemon = await sort(false);
+    expect(daemon.sentOf('desktop_set_order')).toEqual([{
+      cmd: 'desktop_set_order', request_id: expect.any(String), profile_id: DEFAULT_PROFILE_ID, desktop_ids: sorted,
+    }]);
   });
 
   it('shows a refused sort without offering Undo', async () => {
