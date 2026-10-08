@@ -26,7 +26,8 @@ const socketPath = (value) => String(value || '').replace(/^unix:\/\//, '');
 const waitingOnApproval = { type: 'active', activeFlags: ['waitingOnApproval'] };
 
 function valueOf(args, ...names) {
-  const index = args.findIndex((arg) => names.includes(arg));
+  const wanted = new Set(names);
+  const index = args.findIndex((arg) => wanted.has(arg));
   return index < 0 ? '' : args[index + 1] || '';
 }
 
@@ -221,7 +222,9 @@ export async function runSharedMockServer() {
     'thread/unarchive': (_conn, params) => {
       const name = (fs.existsSync(archivedDir) ? fs.readdirSync(archivedDir) : []).find((entry) => entry.endsWith(`-${params.threadId}.jsonl`));
       if (!name) throw new Error(`no archived rollout found for thread id ${params.threadId}`);
-      const [year, month, day] = /^rollout-(\d{4}-\d{2}-\d{2})T/.exec(name)[1].split('-');
+      const date = /^rollout-(\d{4})-(\d{2})-(\d{2})T/.exec(name);
+      if (!date) throw new Error(`archived rollout ${name} has no date`);
+      const [, year, month, day] = date;
       const dir = path.join(sessionsDir, year, month, day);
       fs.mkdirSync(dir, { recursive: true });
       fs.renameSync(path.join(archivedDir, name), path.join(dir, name));

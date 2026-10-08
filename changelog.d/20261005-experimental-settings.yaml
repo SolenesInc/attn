@@ -1,5 +1,5 @@
-kind: changed
+kind: added
 area: settings
 change: >
-  Settings has an Experimental section. The Shared PTY host switch moved there
-  from Terminal, and the Terminal section and its Runtime mode display are gone.
+  Settings has an Experimental section, with the Shared Codex switch and the
+  choice to show hidden sessions in the queue.
