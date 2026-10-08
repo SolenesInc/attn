@@ -46,10 +46,10 @@ func (d *Daemon) observeDueSchedules(now time.Time) {
 	}
 	defer release()
 	d.automationMu.Lock()
-	persistErr := d.persistAutomationLaunchFailures()
+	persistErr := d.persistAutomationLaunchOutcomes()
 	d.automationMu.Unlock()
 	if persistErr != nil {
-		d.logf("automation failure persistence: %v", persistErr)
+		d.logf("automation launch persistence: %v", persistErr)
 	}
 	definitions, err := d.store.ListAutomationDefinitions()
 	if err != nil {

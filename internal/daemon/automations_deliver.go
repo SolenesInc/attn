@@ -36,6 +36,10 @@ func (d *Daemon) deliverObservedAutomationRun(run *store.AutomationRun) error {
 	return d.deliverAutomationRun(context.Background(), run)
 }
 func (d *Daemon) handleAutomationDeliveryError(run *store.AutomationRun, deliveryErr error) (*store.AutomationRun, error) {
+	if _, launched := d.automationLaunchResults.Load(run.ID); launched {
+		current, err := d.store.GetAutomationRun(run.ID)
+		return current, errors.Join(deliveryErr, err)
+	}
 	var retryable *retryableAutomationDeliveryError
 	message := strings.ToLower(deliveryErr.Error())
 	diskFull := errors.Is(deliveryErr, syscall.ENOSPC) || store.IsStorageFull(deliveryErr) || strings.Contains(message, "no space left on device") || strings.Contains(message, "database or disk is full")
@@ -69,8 +73,22 @@ func (d *Daemon) handleAutomationDeliveryError(run *store.AutomationRun, deliver
 	return failed, errors.Join(deliveryErr, persistErr)
 }
 
-func (d *Daemon) persistAutomationLaunchFailures() error {
+func (d *Daemon) persistAutomationLaunchOutcomes() error {
 	var persistErr error
+	d.automationLaunchResults.Range(func(key, value any) bool {
+		id, result := key.(string), value.(automation.DeliveryResult)
+		run, err := d.store.GetAutomationRun(id)
+		if err != nil {
+			persistErr = errors.Join(persistErr, err)
+			return true
+		}
+		if run == nil || run.State != store.AutomationRunStatePending {
+			d.automationLaunchResults.Delete(id)
+			return true
+		}
+		persistErr = errors.Join(persistErr, d.finalizeAutomationRun(run, result))
+		return true
+	})
 	d.automationLaunchFailures.Range(func(key, value any) bool {
 		id, cause := key.(string), value.(error)
 		run, err := d.store.GetAutomationRun(id)
@@ -101,6 +119,11 @@ func automationFailureComment(run *store.AutomationRun, message string) string {
 }
 
 func (d *Daemon) cancelAutomationRun(run *store.AutomationRun, reason, message string) (*store.AutomationRun, error) {
+	if result, launched := d.automationLaunchResults.Load(run.ID); launched {
+		persistErr := d.finalizeAutomationRun(run, result.(automation.DeliveryResult))
+		current, err := d.store.GetAutomationRun(run.ID)
+		return current, errors.Join(persistErr, err)
+	}
 	if cause, stopped := d.automationLaunchFailures.Load(run.ID); stopped {
 		failed, err := d.handleAutomationDeliveryError(run, cause.(error))
 		if _, pending := d.automationLaunchFailures.Load(run.ID); pending {
@@ -194,6 +217,9 @@ func (d *Daemon) recordAutomationRunSeedOutcome(run *store.AutomationRun, body s
 	return err
 }
 func (d *Daemon) deliverAutomationRun(ctx context.Context, run *store.AutomationRun) error {
+	if result, launched := d.automationLaunchResults.Load(run.ID); launched {
+		return d.finalizeAutomationRun(run, result.(automation.DeliveryResult))
+	}
 	if cause, stopped := d.automationLaunchFailures.Load(run.ID); stopped {
 		return cause.(error)
 	}
@@ -234,6 +260,11 @@ func (d *Daemon) deliverAutomationRun(ctx context.Context, run *store.Automation
 	if err != nil {
 		return err
 	}
+	d.automationLaunchResults.Store(run.ID, result)
+	return d.finalizeAutomationRun(run, result)
+}
+
+func (d *Daemon) finalizeAutomationRun(run *store.AutomationRun, result automation.DeliveryResult) error {
 	ready, err := d.automationWorkReadyOccurrence(run)
 	if err != nil {
 		return err
@@ -251,6 +282,7 @@ func (d *Daemon) deliverAutomationRun(ctx context.Context, run *store.Automation
 	if inserted {
 		announceGardenSeedEvents(d, []int64{seq})
 	}
+	d.automationLaunchResults.Delete(run.ID)
 	d.broadcastAutomationsChanged(run.DefinitionID)
 	return nil
 }

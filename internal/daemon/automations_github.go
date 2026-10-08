@@ -250,7 +250,7 @@ func (d *Daemon) reconcileAutomationReviewRequests(definitionID int, host string
 func (d *Daemon) reconcileAutomationReviewRequestHeads(definitionID int, host string, observations []store.AutomationReviewRequestObservation, observedAt time.Time) ([]store.AutomationReviewRequestCandidate, error) {
 	d.automationMu.Lock()
 	defer d.automationMu.Unlock()
-	if err := d.persistAutomationLaunchFailures(); err != nil {
+	if err := d.persistAutomationLaunchOutcomes(); err != nil {
 		return nil, err
 	}
 	if err := d.settleWithdrawnAutomationRuns(definitionID, host); err != nil {
