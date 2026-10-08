@@ -120,7 +120,7 @@ stage_plugin() {
   find "${stage_dir}/bin" -maxdepth 1 -name '*.bun-build' -delete
   # Bun emits a linker-signed Mach-O. Some dependency graphs leave bytes after
   # the declared signature, which prevents macOS codesign from replacing it.
-  # Normalize the generated executable before Tauri copies and signs the bundle.
+  # Normalize the generated executable so the build that bundles it can sign it.
   remove_bun_linker_signature "${stage_dir}/bin/${name}"
   chmod 0755 "${stage_dir}/bin/${name}"
   fix_bun_compile_codesign "${stage_dir}/bin/${name}"
