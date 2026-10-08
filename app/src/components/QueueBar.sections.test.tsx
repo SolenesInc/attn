@@ -408,6 +408,6 @@ describe('the desktop chips', () => {
     const target = screen.getByTestId('queue-bar-desktop-2');
     expect(target.classList.contains('is-drop-target')).toBe(true);
     fireEvent.pointerUp(target);
-    expect(onDesktopDragDrop).toHaveBeenCalledWith(expect.objectContaining({ id: 'ws-b' }));
+    expect(onDesktopDragDrop).toHaveBeenCalledWith(expect.objectContaining({ id: 'ws-b' }), false);
   });
 });

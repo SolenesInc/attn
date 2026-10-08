@@ -54,6 +54,12 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-desktop-switching'],
   },
   {
+    id: 'move-with-delegates',
+    runnerId: 'MOVE-WITH-DELEGATES',
+    label: 'Move an agent and its same-desktop delegates through the palette',
+    command: ['node', 'scripts/real-app-harness/scenario-move-with-delegates.mjs'],
+  },
+  {
     id: 'desktop-migration',
     runnerId: 'DESKTOP-MIGRATION',
     label: 'Workspace migration picker: keyboard, native pointer drop, second client, restart, reopen, narrow window, finish',

@@ -26,8 +26,8 @@ export function useDesktopChipDrop() {
         onPointerLeave: () => {
           if (accepts) onDesktopDragLeave?.(desktop);
         },
-        onPointerUp: () => {
-          if (accepts) onDesktopDragDrop?.(desktop);
+        onPointerUp: (event: React.PointerEvent) => {
+          if (accepts) onDesktopDragDrop?.(desktop, event.altKey);
         },
       },
     };

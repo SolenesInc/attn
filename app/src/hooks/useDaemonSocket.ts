@@ -4706,6 +4706,7 @@ export function useDaemonSocket({
       anchorId?: string;
       edge: 'left' | 'right' | 'top' | 'bottom';
       leafShare?: number;
+      withDelegates?: boolean;
       expectedSourceRevision: number;
       expectedTargetRevision: number;
     }) =>
@@ -4715,6 +4716,7 @@ export function useDaemonSocket({
         leaf_id: move.leafId,
         ...(move.anchorId ? { anchor_id: move.anchorId } : {}),
         edge: move.edge,
+        ...(move.withDelegates ? { with_delegates: true } : {}),
         ...(move.leafShare ? { leaf_share: move.leafShare } : {}),
         expected_source_revision: move.expectedSourceRevision,
         expected_target_revision: move.expectedTargetRevision,

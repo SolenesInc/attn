@@ -1354,7 +1354,16 @@ func handOverPane(source, target *profiles.Desktop, leafID, finalLeafID string) 
 	source.Panes = withoutPane(source.Panes, leafID)
 }
 
+type LeafFollower struct {
+	PaneID       string
+	BesidePaneID string
+}
+
 func (s *Store) MoveLeaf(request LeafMoveRequest) (LeafMove, error) {
+	return s.MoveLeafGroup(request, nil)
+}
+
+func (s *Store) MoveLeafGroup(request LeafMoveRequest, followers []LeafFollower) (LeafMove, error) {
 	if request.SourceDesktopID == request.TargetDesktopID {
 		return s.moveLeafWithinDesktop(request)
 	}
@@ -1364,31 +1373,77 @@ func (s *Store) MoveLeaf(request LeafMoveRequest) (LeafMove, error) {
 		if err != nil {
 			return err
 		}
-		result, err = moveLeafBetweenDesktops(tx, now, source, target, request)
+		result, err = moveLeafGroupBetweenDesktops(tx, now, source, target, request, followers)
 		return err
 	})
 	return result, err
 }
 
-func moveLeafBetweenDesktops(tx *sql.Tx, now string, source, target profiles.Desktop, request LeafMoveRequest) (LeafMove, error) {
+func recordArrivingPane(tx *sql.Tx, arrivals map[string]string, sourceID, targetID string) error {
+	var createdAt string
+	if _, err := rowFound(tx.QueryRow(`SELECT created_at FROM desktop_panes WHERE pane_id = ?`, sourceID), &createdAt); err != nil {
+		return err
+	}
+	arrivals[targetID] = createdAt
+	return nil
+}
+
+func moveLeafGroupBetweenDesktops(tx *sql.Tx, now string, source, target profiles.Desktop, request LeafMoveRequest, followers []LeafFollower) (LeafMove, error) {
+	result, err := arrangeLeafBetweenDesktops(source, target, request)
+	if err != nil {
+		return LeafMove{}, err
+	}
+	arrivals := map[string]string{}
+	if err := recordArrivingPane(tx, arrivals, request.LeafID, result.FinalLeafID); err != nil {
+		return LeafMove{}, err
+	}
+	movedIDs := map[string]string{request.LeafID: result.FinalLeafID}
+	for start := 0; start < len(followers); {
+		end := start + 1
+		for end < len(followers) && followers[end].BesidePaneID == followers[start].BesidePaneID {
+			end++
+		}
+		for _, follower := range slices.Backward(followers[start:end]) {
+			anchorID := movedIDs[follower.BesidePaneID]
+			if anchorID == "" {
+				return LeafMove{}, profiles.Errorf(profiles.CodeInvalid, "delegate pane %q has no moved dispatcher pane %q", follower.PaneID, follower.BesidePaneID)
+			}
+			moved, err := arrangeLeafBetweenDesktops(result.Source, result.Target, LeafMoveRequest{
+				SourceDesktopID: request.SourceDesktopID,
+				TargetDesktopID: request.TargetDesktopID,
+				LeafID:          follower.PaneID,
+				AnchorID:        anchorID,
+				Direction:       layouttree.DirectionVertical,
+			})
+			if err != nil {
+				return LeafMove{}, err
+			}
+			if err := recordArrivingPane(tx, arrivals, follower.PaneID, moved.FinalLeafID); err != nil {
+				return LeafMove{}, err
+			}
+			movedIDs[follower.PaneID] = moved.FinalLeafID
+			result.Source, result.Target = moved.Source, moved.Target
+		}
+		start = end
+	}
+	if err := writeCurrentDesktopArrangement(tx, now, &result.Source); err != nil {
+		return LeafMove{}, err
+	}
+	if err := writeCurrentArrivingArrangement(tx, now, &result.Target, arrivals); err != nil {
+		return LeafMove{}, err
+	}
+	return result, nil
+}
+
+func arrangeLeafBetweenDesktops(source, target profiles.Desktop, request LeafMoveRequest) (LeafMove, error) {
 	moved, ok := layouttree.MoveLeafBetweenLayouts(source.Tree, target.Tree, request.LeafID, request.AnchorID, newProfileEntityID("split"), request.Direction, request.Before, firstChildRatio(request.LeafShare, request.Before), uuid.NewString())
 	if !ok {
 		return LeafMove{}, profiles.Errorf(profiles.CodeInvalid, "leaf %q could not move from desktop %s beside %q on desktop %s", request.LeafID, source.ID, request.AnchorID, target.ID)
-	}
-	var createdAt string
-	if _, err := rowFound(tx.QueryRow(`SELECT created_at FROM desktop_panes WHERE pane_id = ?`, request.LeafID), &createdAt); err != nil {
-		return LeafMove{}, err
 	}
 	source.Tree, target.Tree = moved.SourceLayout, moved.TargetLayout
 	handOverPane(&source, &target, request.LeafID, moved.FinalLeafID)
 	if request.Activate {
 		target.ActivePaneID = moved.FinalLeafID
-	}
-	if err := writeCurrentDesktopArrangement(tx, now, &source); err != nil {
-		return LeafMove{}, err
-	}
-	if err := writeCurrentArrivingArrangement(tx, now, &target, map[string]string{moved.FinalLeafID: createdAt}); err != nil {
-		return LeafMove{}, err
 	}
 	return LeafMove{Source: source, Target: target, FinalLeafID: moved.FinalLeafID}, nil
 }
@@ -1446,10 +1501,10 @@ func (s *Store) MoveSessionToDesktop(sessionID protocol.SessionID, targetDesktop
 		if err != nil {
 			return err
 		}
-		move, err := moveLeafBetweenDesktops(tx, now, source, target, LeafMoveRequest{
+		move, err := moveLeafGroupBetweenDesktops(tx, now, source, target, LeafMoveRequest{
 			LeafID: tile.tileID, AnchorID: target.ActivePaneID, Direction: layouttree.DirectionVertical,
 			Activate: source.ActivePaneID == tile.tileID && target.ID != profile.CurrentDesktopID,
-		})
+		}, nil)
 		result = SessionDesktopMove{Move: move, FromLeafID: tile.tileID}
 		return err
 	})

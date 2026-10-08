@@ -208,6 +208,14 @@
         "seconds": 68.8,
         "runnerClass": "github-hosted Linux",
         "note": "Green matrix result durationMs=68758, including the disk-full failure and fresh-request recovery case."
+      },
+      "move-with-delegates": {
+        "run": "move-with-delegates-2026-10-08T21-54-22-793Z",
+        "job": "Local packaged scenario, move-delegates isolated instance",
+        "recordedAt": "2026-10-08",
+        "seconds": 27.874,
+        "runnerClass": "local macOS",
+        "note": "Green ATTN_VERDICT durationMs=27874, including cleanup and recording. Native palette moves a dispatcher, two delegates and a nested delegate against a production DB copy. No overview changes. Final recording and screenshots attached to seed s-4z9ah9. Remeasure on Linux CI."
       }
     }
   },
@@ -265,6 +273,7 @@
     "profile-lifecycle": 18.5,
     "garden-profile-scope": 29.9,
     "launch-desktops": 26.739,
-    "palette-order": 55.41
+    "palette-order": 55.41,
+    "move-with-delegates": 27.874
   }
 }
