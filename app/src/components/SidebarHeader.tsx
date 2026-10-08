@@ -3,6 +3,36 @@ import { useSidebarContext } from './SidebarContext';
 import { CollapseIcon } from './SidebarIcons';
 import './SidebarHeader.css';
 
+export function FlowToggleButton() {
+  const { queue, collapsed, onToggleFlow } = useSidebarContext();
+  const title = queue ? 'Switch to desktop flow' : 'Switch to queue flow';
+  return (
+    <button
+      type="button"
+      className={collapsed ? (queue ? 'queue-bar-tool' : 'icon-btn') : 'sidebar-header-tool'}
+      title={title}
+      aria-label={title}
+      onClick={onToggleFlow}
+      disabled={!onToggleFlow}
+    >
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        {queue ? (
+          <>
+            <rect x="2" y="2" width="12" height="9" rx="1.5" />
+            <path d="M8 11v3M5.5 14h5" />
+          </>
+        ) : (
+          <>
+            <path d="M6 3h8M6 8h8M6 13h8" />
+            <path d="m1.5 6 2 2-2 2" />
+            <path d="M2.5 3h.01M2.5 13h.01" />
+          </>
+        )}
+      </svg>
+    </button>
+  );
+}
+
 export function CommandsButton({ collapsed = false }: { collapsed?: boolean }) {
   const { onOpenCommands } = useSidebarContext();
   return (
@@ -68,6 +98,7 @@ export function SidebarHeader() {
           onClick={onNewSession}
         >New</button>
         <CommandsButton />
+        <FlowToggleButton />
         <button
           type="button"
           className="sidebar-header-tool"
