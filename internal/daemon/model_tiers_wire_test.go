@@ -128,3 +128,12 @@ func TestActivityUsesItsFallbackWhenModelDiscoveryFails(t *testing.T) {
 	task.Answer("Running tests")
 	awaitActivity(app, session, "Running tests")
 }
+
+func TestUnsetAdvisorModelAndEffortStayUnsetInEditableSettings(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	setSetting(t, app, "garden.advisor", `{"agent":"claude","model":"","effort":""}`)
+	if got := gardenAdvisorRecipe(t, w.App().Initial.Settings); got.Model != "" || got.Effort != "" {
+		t.Errorf("editable advisor setting = %+v, want both pins unset", got)
+	}
+}

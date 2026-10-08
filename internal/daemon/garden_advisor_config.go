@@ -32,13 +32,11 @@ func defaultGardenAdvisorConfig(agent string) (gardenAdvisorConfig, error) {
 	switch strings.TrimSpace(strings.ToLower(agent)) {
 	case "codex":
 		return gardenAdvisorConfig{
-			Agent:  "codex",
-			Effort: gardenAdvisorCodexDefaultEffort,
+			Agent: "codex",
 		}, nil
 	case "claude":
 		return gardenAdvisorConfig{
-			Agent:  "claude",
-			Effort: gardenAdvisorClaudeDefaultEffort,
+			Agent: "claude",
 		}, nil
 	case "copilot":
 		return gardenAdvisorConfig{
@@ -72,12 +70,9 @@ func parseGardenAdvisorConfig(raw string) (gardenAdvisorConfig, error) {
 		return gardenAdvisorConfig{}, errors.New("garden advisor requires an agent")
 	}
 
-	defaults, err := defaultGardenAdvisorConfig(config.Agent)
+	_, err := defaultGardenAdvisorConfig(config.Agent)
 	if err != nil {
 		return gardenAdvisorConfig{}, err
-	}
-	if config.Effort == "" {
-		config.Effort = defaults.Effort
 	}
 	driver := agentdriver.Get(config.Agent)
 	if driver == nil {
@@ -117,11 +112,17 @@ func (d *Daemon) gardenAdvisorConfig() (gardenAdvisorConfig, error) {
 		return gardenAdvisorConfig{}, err
 	}
 	fallback := gardenAdvisorCodexDefaultModel
+	defaultEffort := gardenAdvisorCodexDefaultEffort
 	switch config.Agent {
 	case "claude":
 		fallback = gardenAdvisorClaudeDefaultModel
+		defaultEffort = gardenAdvisorClaudeDefaultEffort
 	case "copilot":
 		fallback = gardenAdvisorCopilotDefaultModel
+		defaultEffort = ""
+	}
+	if config.Effort == "" {
+		config.Effort = defaultEffort
 	}
 	if !headless.Enabled() {
 		if config.Model == "" {
