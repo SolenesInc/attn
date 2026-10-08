@@ -56,7 +56,7 @@ export const scenarioCatalog = [
   {
     id: 'move-with-delegates',
     runnerId: 'MOVE-WITH-DELEGATES',
-    label: 'Move an agent and its same-desktop delegates through palette and overview',
+    label: 'Move an agent and its same-desktop delegates through the palette',
     command: ['node', 'scripts/real-app-harness/scenario-move-with-delegates.mjs'],
   },
   {
