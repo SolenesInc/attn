@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"errors"
 	"os"
 	"strings"
@@ -192,14 +193,17 @@ func (d *Daemon) runClassifier(session *protocol.Session, text string, timeout t
 	if d.classifier != nil {
 		return d.classifier.Classify(text, timeout)
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
 	if session != nil {
 		driver := agentdriver.Get(session.Agent)
 		if state, err, ok := agentdriver.ClassifyWithDriver(
+			ctx,
 			driver,
 			text,
 			d.store.GetSetting(executableSettingKey(session.Agent)),
 			session.Directory,
-			d.classifierModel(session.Agent),
+			d.classifierModel(ctx, session.Agent),
 			timeout,
 		); ok {
 			return state, err
@@ -207,11 +211,12 @@ func (d *Daemon) runClassifier(session *protocol.Session, text string, timeout t
 	}
 	claude := agentdriver.Get("claude")
 	if state, err, ok := agentdriver.ClassifyWithDriver(
+		ctx,
 		claude,
 		text,
 		d.store.GetSetting(canonicalExecutableSettingKey("claude")),
 		"",
-		d.classifierModel("claude"),
+		d.classifierModel(ctx, "claude"),
 		timeout,
 	); ok {
 		return state, err
@@ -236,7 +241,7 @@ func (d *Daemon) classifyFromMarker(session *protocol.Session, text string) (str
 	return state, nil
 }
 
-func (d *Daemon) classifierModel(harness string) string {
+func (d *Daemon) classifierModel(ctx context.Context, harness string) string {
 	fallback := ""
 	switch harness {
 	case "claude":
@@ -247,5 +252,5 @@ func (d *Daemon) classifierModel(harness string) string {
 		return ""
 	}
 	explicit := os.Getenv("ATTN_" + strings.ToUpper(harness) + "_CLASSIFIER_MODEL")
-	return d.resolveTierModel(harness, modeltiers.Light, explicit, fallback)
+	return d.resolveTierModel(ctx, harness, modeltiers.Light, explicit, fallback)
 }

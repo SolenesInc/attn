@@ -19,7 +19,15 @@ type harnessModelCatalog struct {
 	TierDefaults protocol.TierDefaults   `json:"tier_defaults"`
 }
 
+type harnessDiscovery struct {
+	Catalog harnessModelCatalog
+	Err     error
+}
+
 func (d *Daemon) loadHarnessModels(ctx context.Context, harness string, refresh bool) (harnessModelCatalog, error) {
+	if err := ctx.Err(); err != nil {
+		return harnessModelCatalog{}, err
+	}
 	if err := delegationprefs.ValidateSelection(delegationprefs.Selection{Harness: harness}, true); err != nil {
 		return harnessModelCatalog{}, err
 	}
@@ -29,78 +37,90 @@ func (d *Daemon) loadHarnessModels(ctx context.Context, harness string, refresh 
 		d.harnessModelCatalogs.Delete(key)
 	}
 	if cached, ok := d.harnessModelCatalogs.Load(key); ok {
-		return cached.(harnessModelCatalog), nil
+		entry := cached.(harnessDiscovery)
+		return entry.Catalog, entry.Err
 	}
-	value, err, _ := d.harnessModelQueries.Do(key, func() (discovered any, err error) {
-		defer func() {
-			if err == nil {
-				d.harnessModelCatalogs.Store(key, discovered)
+	flight := d.harnessModelQueries.DoChan(key, func() (any, error) {
+		var entry harnessDiscovery
+		if !d.life.Do("harness model discovery", func() {
+			if cached, ok := d.harnessModelCatalogs.Load(key); ok {
+				entry = cached.(harnessDiscovery)
+				return
 			}
-		}()
-		if cached, ok := d.harnessModelCatalogs.Load(key); ok {
-			return cached, nil
+			entry.Catalog, entry.Err = d.queryHarnessModels(harness, executable)
+			d.harnessModelCatalogs.Store(key, entry)
+		}) {
+			return nil, errDaemonStopping
 		}
-		ctx, cancel := context.WithTimeout(ctx, time.Minute)
-		defer cancel()
-		defer context.AfterFunc(d.life.Context(), cancel)()
-		result := harnessModelCatalog{Models: []protocol.HarnessModel{}}
-		if plugin, ok := d.ensurePluginRegistry().driver(harness); ok {
-			if !plugin.Capabilities["model_discovery"] {
-				result.Detail = "This harness does not expose model discovery. Add an exact model or use its default."
-				return result, nil
-			}
-			if err := d.callPlugin(ctx, plugin.PluginName, "driver.models", map[string]string{"agent": harness}, &result); err != nil {
-				return nil, err
-			}
-		} else {
-			driver := agentdriver.Get(harness)
-			if driver == nil {
-				return nil, fmt.Errorf("harness %q is not available", harness)
-			}
-			discoverer, ok := driver.(agentdriver.ModelDiscoverer)
-			if !ok {
-				result.Detail = "This harness does not expose model discovery. Add an exact model or use its default."
-				return result, nil
-			}
-			cwd, err := os.MkdirTemp("", "attn-model-discovery-")
-			if err != nil {
-				return nil, err
-			}
-			defer os.RemoveAll(cwd)
-			result.Models, err = discoverer.DiscoverHarnessModels(ctx, executable, cwd)
-			if err != nil {
-				return nil, err
-			}
-			result.Detail = "Models reported by this harness. Catalog membership does not confirm account access."
-		}
-		if result.Models == nil {
-			result.Models = []protocol.HarnessModel{}
-		}
-		for i := range result.Models {
-			m := &result.Models[i]
-			if m.Harness != harness || strings.TrimSpace(m.ID) == "" {
-				return nil, fmt.Errorf("model discovery returned an invalid identity")
-			}
-			if err := delegationprefs.ValidateSelection(delegationprefs.Selection{Harness: harness, Provider: m.Provider, Model: m.ID}, true); err != nil {
-				return nil, err
-			}
-			if m.EffortSupport != "supported" && m.EffortSupport != "unsupported" {
-				m.EffortSupport = protocol.ModelCapabilitySupportUnknown
-			}
-			if m.Access != "supported" && m.Access != "unsupported" {
-				m.Access = protocol.ModelCapabilitySupportUnknown
-			}
-			if m.EffortLevels == nil {
-				m.EffortLevels = []string{}
-			}
-		}
-		return result, nil
+		return entry, nil
 	})
-	if err != nil {
-		return harnessModelCatalog{}, err
+	select {
+	case <-ctx.Done():
+		return harnessModelCatalog{}, ctx.Err()
+	case result := <-flight:
+		if result.Err != nil {
+			return harnessModelCatalog{}, result.Err
+		}
+		entry := result.Val.(harnessDiscovery)
+		return entry.Catalog, entry.Err
 	}
-	catalog := value.(harnessModelCatalog)
-	return catalog, nil
+}
+
+func (d *Daemon) queryHarnessModels(harness, executable string) (harnessModelCatalog, error) {
+	ctx, cancel := context.WithTimeout(d.life.Context(), time.Minute)
+	defer cancel()
+	result := harnessModelCatalog{Models: []protocol.HarnessModel{}}
+	if plugin, ok := d.ensurePluginRegistry().driver(harness); ok {
+		if !plugin.Capabilities["model_discovery"] {
+			result.Detail = "This harness does not expose model discovery. Add an exact model or use its default."
+			return result, nil
+		}
+		if err := d.callPlugin(ctx, plugin.PluginName, "driver.models", map[string]string{"agent": harness}, &result); err != nil {
+			return harnessModelCatalog{}, err
+		}
+	} else {
+		driver := agentdriver.Get(harness)
+		if driver == nil {
+			return harnessModelCatalog{}, fmt.Errorf("harness %q is not available", harness)
+		}
+		discoverer, ok := driver.(agentdriver.ModelDiscoverer)
+		if !ok {
+			result.Detail = "This harness does not expose model discovery. Add an exact model or use its default."
+			return result, nil
+		}
+		cwd, err := os.MkdirTemp("", "attn-model-discovery-")
+		if err != nil {
+			return harnessModelCatalog{}, err
+		}
+		defer os.RemoveAll(cwd)
+		result.Models, err = discoverer.DiscoverHarnessModels(ctx, executable, cwd)
+		if err != nil {
+			return harnessModelCatalog{}, err
+		}
+		result.Detail = "Models reported by this harness. Catalog membership does not confirm account access."
+	}
+	if result.Models == nil {
+		result.Models = []protocol.HarnessModel{}
+	}
+	for i := range result.Models {
+		m := &result.Models[i]
+		if m.Harness != harness || strings.TrimSpace(m.ID) == "" {
+			return harnessModelCatalog{}, fmt.Errorf("model discovery returned an invalid identity")
+		}
+		if err := delegationprefs.ValidateSelection(delegationprefs.Selection{Harness: harness, Provider: m.Provider, Model: m.ID}, true); err != nil {
+			return harnessModelCatalog{}, err
+		}
+		if m.EffortSupport != "supported" && m.EffortSupport != "unsupported" {
+			m.EffortSupport = protocol.ModelCapabilitySupportUnknown
+		}
+		if m.Access != "supported" && m.Access != "unsupported" {
+			m.Access = protocol.ModelCapabilitySupportUnknown
+		}
+		if m.EffortLevels == nil {
+			m.EffortLevels = []string{}
+		}
+	}
+	return result, nil
 }
 
 func (d *Daemon) invalidateHarnessModels(harness string) {
@@ -151,11 +171,11 @@ func (d *Daemon) harnessModels(ctx context.Context, harness string, refresh bool
 	return catalog, nil
 }
 
-func (d *Daemon) resolveTierModel(harness string, tier modeltiers.Tier, explicit, fallback string) string {
+func (d *Daemon) resolveTierModel(ctx context.Context, harness string, tier modeltiers.Tier, explicit, fallback string) string {
 	if explicit = strings.TrimSpace(explicit); explicit != "" {
 		return explicit
 	}
-	catalog, err := d.discoverHarnessModels(context.Background(), harness)
+	catalog, err := d.discoverHarnessModels(ctx, harness)
 	if err != nil {
 		d.logf("%s %s model discovery failed: %v; using fallback %q", harness, tier, err, fallback)
 		return fallback
@@ -178,7 +198,7 @@ func (d *Daemon) handleHarnessModels(client *wsClient, msg *protocol.HarnessMode
 	}
 	catalog, err := d.harnessModels(context.Background(), strings.TrimSpace(msg.Harness), protocol.Deref(msg.Refresh))
 	if err != nil {
-		result.Error = protocol.Ptr(err.Error())
+		result.Error = protocol.Ptr(err.Error() + ". Refresh models after fixing the harness.")
 	} else {
 		result.Success = true
 		result.Models = catalog.Models

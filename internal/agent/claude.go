@@ -557,10 +557,10 @@ func (c *Claude) extractLastAssistantForClassification(
 }
 
 func (c *Claude) Classify(text string, timeout time.Duration) (string, error) {
-	return c.ClassifyWithExecutable(text, "", "", classifier.ClaudeClassifierModel(), timeout)
+	return c.ClassifyWithExecutable(context.Background(), text, "", "", classifier.ClaudeClassifierModel(), timeout)
 }
 
-func (c *Claude) ClassifyWithExecutable(text, executable, workDir, model string, timeout time.Duration) (string, error) {
+func (c *Claude) ClassifyWithExecutable(parent context.Context, text, executable, workDir, model string, timeout time.Duration) (string, error) {
 	if strings.TrimSpace(text) == "" {
 		classifier.DefaultLogger("classifier: empty text, returning idle")
 		return "idle", nil
@@ -579,7 +579,7 @@ func (c *Claude) ClassifyWithExecutable(text, executable, workDir, model string,
 	}
 	defer os.RemoveAll(scratchDir)
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 
 	classifier.DefaultLogger(

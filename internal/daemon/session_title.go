@@ -207,7 +207,7 @@ func (d *Daemon) execSessionTitle(ctx context.Context, session *protocol.Session
 	if providerAgent == "" {
 		return "", fmt.Errorf("no title provider available for agent %q", session.Agent)
 	}
-	return d.execSessionTitleHeadless(ctx, providerAgent, d.sessionTitleModel(providerAgent), conversation)
+	return d.execSessionTitleHeadless(ctx, providerAgent, d.sessionTitleModel(ctx, providerAgent), conversation)
 }
 
 func titleProviderAgent(sessionAgent string) string {
@@ -331,9 +331,9 @@ func sessionAutoTitleEnabled() bool {
 	}
 }
 
-func (d *Daemon) sessionTitleModel(agent string) string {
+func (d *Daemon) sessionTitleModel(ctx context.Context, agent string) string {
 	explicit := os.Getenv("ATTN_" + strings.ToUpper(agent) + "_TITLE_MODEL")
-	return d.resolveTierModel(agent, modeltiers.Light, explicit, fallbackSessionTitleModel(agent))
+	return d.resolveTierModel(ctx, agent, modeltiers.Light, explicit, fallbackSessionTitleModel(agent))
 }
 
 func fallbackSessionTitleModel(agent string) string {

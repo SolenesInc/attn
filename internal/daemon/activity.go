@@ -268,7 +268,7 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 	if config.Agent == "codex" {
 		fallback = activityCodexDefaultModel
 	}
-	config.Model = d.resolveTierModel(config.Agent, modeltiers.Light, config.Model, fallback)
+	config.Model = d.resolveTierModel(ctx, config.Agent, modeltiers.Light, config.Model, fallback)
 
 	prompt := activity.Baseline().Render(activity.Input{
 		State:       string(session.State),

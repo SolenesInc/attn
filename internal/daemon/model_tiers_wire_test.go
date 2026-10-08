@@ -59,6 +59,15 @@ func TestModelTiersAndDefaultsFollowReportedOrderAndOverridesWithoutRediscovery(
 	if refreshed := harnessCatalog(app, "claude", true); refreshed.Success || refreshed.Error == nil {
 		t.Errorf("refresh with missing executable = %+v, want discovery failure", refreshed)
 	}
+	if err := os.Rename(executable+"-saved", executable); err != nil {
+		t.Fatal(err)
+	}
+	if failed := harnessCatalog(app, "claude", false); failed.Success || failed.Error == nil {
+		t.Errorf("cached failure after repair = %+v, want the failure until Refresh", failed)
+	}
+	if recovered := harnessCatalog(app, "claude", true); !recovered.Success {
+		t.Errorf("Refresh after repair = %+v, want recovered discovery", recovered)
+	}
 }
 
 func TestAnUnsetChiefRunsTheDeepDefaultAtLowEffort(t *testing.T) {

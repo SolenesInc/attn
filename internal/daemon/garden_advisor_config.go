@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -128,7 +129,7 @@ func (d *Daemon) gardenAdvisorConfig() (gardenAdvisorConfig, error) {
 		}
 		return config, nil
 	}
-	config.Model = d.resolveTierModel(config.Agent, modeltiers.Light, config.Model, fallback)
+	config.Model = d.resolveTierModel(context.Background(), config.Agent, modeltiers.Light, config.Model, fallback)
 	return config, nil
 }
 

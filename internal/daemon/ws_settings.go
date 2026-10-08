@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -395,7 +396,7 @@ func (d *Daemon) chiefLaunchModel(agent string, chief bool) string {
 	if agent != "claude" && agent != "codex" {
 		return explicit
 	}
-	return d.resolveTierModel(agent, modeltiers.Deep, explicit, "")
+	return d.resolveTierModel(context.Background(), agent, modeltiers.Deep, explicit, "")
 }
 
 func (d *Daemon) chiefLaunchEffort(agent string, chief bool) string {

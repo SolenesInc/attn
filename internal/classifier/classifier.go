@@ -396,10 +396,10 @@ func CodexClassifierModel() string {
 }
 
 func ClassifyWithCodexExecutableInDir(text, configuredExecutable, workDir string, timeout time.Duration) (string, error) {
-	return ClassifyWithCodexModelInDir(text, configuredExecutable, workDir, CodexClassifierModel(), timeout)
+	return ClassifyWithCodexModelInDir(context.Background(), text, configuredExecutable, workDir, CodexClassifierModel(), timeout)
 }
 
-func ClassifyWithCodexModelInDir(text, configuredExecutable, workDir, model string, timeout time.Duration) (string, error) {
+func ClassifyWithCodexModelInDir(parent context.Context, text, configuredExecutable, workDir, model string, timeout time.Duration) (string, error) {
 	if text == "" {
 		DefaultLogger("classifier: empty text, returning idle")
 		return "idle", nil
@@ -409,7 +409,7 @@ func ClassifyWithCodexModelInDir(text, configuredExecutable, workDir, model stri
 	if timeout <= 0 {
 		timeout = defaultCodexClassifierTimeout
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 
 	executable := resolveCodexExecutable(configuredExecutable)
