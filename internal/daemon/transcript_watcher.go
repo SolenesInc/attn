@@ -148,8 +148,8 @@ func (d *Daemon) resolveExactTranscriptPathForWatcher(w *transcriptWatcher) stri
 		if path == "" {
 			continue
 		}
-		if w.agent == protocol.SessionAgentCodex && d.codexShared().launchedShared(w.sessionID) {
-			path = transcript.ResolveCodexRolloutPath(path)
+		if l := d.linkOf(w.sessionID); l != nil {
+			path = l.transcriptPath(path)
 		}
 		if _, err := os.Stat(path); err == nil {
 			return path

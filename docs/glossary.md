@@ -25,6 +25,9 @@ desktop                 one arrangement of tiles; like a macOS Space or a
 terminal                one PTY process in a terminal tile
 └─ runs 1 harness or 1 shell
 harness                 the agent CLI: Claude Code, Codex, pi, Copilot
+link                    a way attn reaches a harness besides its terminal,
+                        such as the shared Codex app-server; a session keeps
+                        the link it launched with
 agent                   a harness that runs in a terminal; the user talks to
                         them; like a coding agent
 ├─ session (1 at a time)
@@ -48,8 +51,8 @@ session                 attn's record of one conversation; like one chat in a
 ledger (1 per profile)  every session, live and closed; like a history
 ├─ session (0..n)
 │  ├─ live              its agent runs in a terminal
-│  │  └─ hidden         live in a shared Codex app-server, but no tile shows
-│  │                    it; like a minimized window
+│  │  └─ hidden         live over its link, but no tile shows it; like a
+│  │                    minimized window
 │  └─ closed            ended; the history stays
 └─ kept conversation (0..n)  attn's own copy of a conversation that its
                              harness would delete; like an archive

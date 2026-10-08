@@ -496,8 +496,8 @@ func (d *Daemon) leafShown(client *wsClient, profile profiles.Profile, desktop p
 
 func (d *Daemon) handleDesktopShowSession(client *wsClient, msg *protocol.DesktopShowSessionMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
-		if d.codexShared().hidden(msg.SessionID) {
-			if err := d.codexShared().showSession(msg.SessionID); err != nil {
+		if d.hidden(msg.SessionID) {
+			if err := d.showHidden(msg.SessionID); err != nil {
 				return profileActionOutcome{}, err
 			}
 		}
@@ -607,7 +607,7 @@ func (d *Daemon) handleDesktopCloseTile(client *wsClient, msg *protocol.DesktopC
 		if _, remote := d.sessionOwningEndpoint(tile.SessionID); remote && len(d.terminals().Of(harness.SessionID(tile.SessionID))) > 1 {
 			return profileActionOutcome{}, profiles.Errorf(profiles.CodeInvalid, "session %s runs on another host and shows in several tiles; close the session instead", tile.SessionID)
 		}
-		if d.codexShared().movedOn(tile.SessionID, harness.TerminalID(tile.RuntimeID)) {
+		if d.movedOn(tile.SessionID, harness.TerminalID(tile.RuntimeID)) {
 			d.hide(tile.SessionID, harness.TerminalID(tile.RuntimeID))
 			d.detachSession(client, tile.RuntimeID)
 		} else if d.closeTerminal(tile.SessionID, harness.TerminalID(tile.RuntimeID)) {

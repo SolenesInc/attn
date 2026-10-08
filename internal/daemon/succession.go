@@ -31,14 +31,14 @@ func (d *Daemon) shows(t harness.TerminalID, from *protocol.Session, owner proto
 	return d.succeed(t, from, store.Succession{
 		To:     owner,
 		Close:  store.SessionClose{Reason: string("resumed; its terminal moved on to " + owner)},
-		KeepTo: d.store.Get(owner) != nil && d.codexShared().launchedShared(owner),
+		KeepTo: d.store.Get(owner) != nil && d.linkOf(owner) != nil,
 	}, observation)
 }
 
 func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.Succession, observation agentConversationObservation) error {
 	unlockEnds := d.lockTerminalEnds(from.ID)
 	live := d.liveTerminals(context.Background())
-	sc.KeepFrom = d.othersRun(from.ID, t) || d.codexShared().keepsWhenLeft(from.ID)
+	sc.KeepFrom = d.othersRun(from.ID, t) || d.keepsWhenLeft(from.ID)
 	sc.Live = make(map[string]bool, len(live))
 	for id := range live {
 		sc.Live[string(id)] = true
@@ -79,13 +79,13 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 	}
 	d.publishFact(FactSessionRegistered, string(sc.To), nil)
 	d.publishArrangementChanged(from.ProfileID)
-	d.codexShared().mirrorLabel(sc.To)
+	d.mirrorLabel(sc.To)
 
 	if !sc.KeepFrom {
 		d.recordSessionClose(from.ID, func() (bool, error) { return true, nil })
 		d.publishSessionUnregistered(from)
 	} else {
-		if d.codexShared().hidden(from.ID) {
+		if d.hidden(from.ID) {
 			d.updateEvidence(from.ID, nil, func(e *sessionstate.Evidence) { e.Heartbeat = nil })
 		}
 		d.publishFact(FactSessionReregistered, string(from.ID), nil)

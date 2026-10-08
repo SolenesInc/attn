@@ -25,6 +25,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/store"
 )
 
 const (
@@ -98,7 +99,7 @@ func codexServerTerminal(profile string) harness.TerminalID {
 	return harness.TerminalID(codexServerTerminalPrefix + codexProfileKey(profile))
 }
 
-func isCodexServerTerminal(t harness.TerminalID) bool {
+func (r *codexShared) process(t harness.TerminalID) bool {
 	return strings.HasPrefix(string(t), codexServerTerminalPrefix)
 }
 
@@ -133,26 +134,42 @@ func (s *codexServer) client() *codexshared.Client {
 	return nil
 }
 
-// A session keeps the mode it launched with.
-func (d *Daemon) launchesSharedCodex(req *spawnRequest) bool {
-	if req.agent != string(protocol.SessionAgentCodex) || req.hasPluginDriver || req.isShell || !req.policy.unattendedLaunch.IsZero() {
-		return false
-	}
-	if intent, ok := d.store.LaunchIntent(req.msg.ID); ok {
-		return intent.CodexShared
-	}
-	return parseBooleanSetting(d.store.GetSetting(SettingCodexSharedEnabled))
+func (r *codexShared) kind() string { return codexLinkKind }
+
+func (r *codexShared) fits(req *spawnRequest) bool {
+	return req.agent == string(protocol.SessionAgentCodex) && !req.hasPluginDriver && !req.isShell && req.policy.unattendedLaunch.IsZero()
 }
 
-func (r *codexShared) prepareLaunch(t harness.TerminalID, profile, executable string) (string, error) {
-	remote, err := r.openView(t, profile)
+func (r *codexShared) enabled() bool {
+	return parseBooleanSetting(r.d.store.GetSetting(SettingCodexSharedEnabled))
+}
+
+func (r *codexShared) admit(profile, conversation string) error {
+	if other := r.loadedElsewhere(profile, conversation); conversation != "" && other != "" {
+		return fmt.Errorf("conversation %s is open in the shared Codex of profile %s; it can open here once that profile lets it go, about a minute after no terminal shows it", conversation, other)
+	}
+	return nil
+}
+
+func (r *codexShared) prepareLaunch(opts *ptybackend.SpawnOptions, profile string) error {
+	executable := opts.Executable
+	if executable == "" {
+		executable = opts.CodexExecutable
+	}
+	remote, err := r.openView(opts.ID, profile)
 	if err != nil {
-		return "", err
+		return err
 	}
 	if _, err := r.ensureServer(r.d.life.Context(), profile, executable); err != nil {
-		return "", err
+		return err
 	}
-	return remote, nil
+	opts.ExternalEnv = append(opts.ExternalEnv, "ATTN_CODEX_REMOTE="+remote)
+	return nil
+}
+
+func (r *codexShared) launchFailed(t harness.TerminalID, profile string) {
+	r.closeView(t)
+	r.idleSoon(profile)
 }
 
 func (r *codexShared) codexExecutable(configured string) string {
@@ -421,7 +438,7 @@ func (r *codexShared) lost(s *codexServer, conversation string) {
 		return
 	}
 	if session.State == protocol.SessionStateRecoverable || session.State == protocol.SessionStateIdle ||
-		r.d.sessionLive(context.Background(), sessionID) || r.hidden(sessionID) {
+		r.d.sessionLive(context.Background(), sessionID) || r.d.hidden(sessionID) {
 		return
 	}
 	if !r.d.canReviveSession(session) {
@@ -435,11 +452,8 @@ func (r *codexShared) lost(s *codexServer, conversation string) {
 	})
 }
 
-func (r *codexShared) serverHolds(session *protocol.Session) bool {
-	if session == nil {
-		return false
-	}
-	if intent, ok := r.d.store.LaunchIntent(session.ID); !ok || !intent.CodexShared {
+func (r *codexShared) holds(session *protocol.Session) bool {
+	if session == nil || !r.launchedShared(session.ID) {
 		return false
 	}
 	native := r.d.store.GetSessionConversation(session.ID).NativeID
@@ -472,7 +486,7 @@ func (r *codexShared) openView(t harness.TerminalID, profile string) (string, er
 		return "", fmt.Errorf("open the Codex proxy of terminal %s: %w", t, err)
 	}
 	v.server = &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) { r.serveView(v, w, req) })}
-	if err := r.d.store.SaveCodexTerminal(string(t), profile); err != nil {
+	if err := r.d.store.SaveTerminalView(store.TerminalView{TerminalID: string(t), Link: codexLinkKind, ProfileID: profile}); err != nil {
 		_ = listener.Close()
 		_ = os.Remove(v.socket)
 		return "", err
@@ -487,7 +501,7 @@ func (r *codexShared) openView(t harness.TerminalID, profile string) (string, er
 }
 
 // A terminal that leaves releases its view, and with it maybe the last use of its server.
-func (r *codexShared) dropView(t harness.TerminalID) {
+func (r *codexShared) terminalDropped(t harness.TerminalID) {
 	r.mu.Lock()
 	v := r.views[t]
 	r.mu.Unlock()
@@ -506,7 +520,7 @@ func (r *codexShared) closeView(t harness.TerminalID) {
 		_ = v.server.Close()
 		_ = os.Remove(v.socket)
 	}
-	if err := r.d.store.DeleteCodexTerminal(string(t)); err != nil {
+	if err := r.d.store.DeleteTerminalView(string(t)); err != nil {
 		r.d.logf("shared Codex: %v", err)
 	}
 }
@@ -617,7 +631,7 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 		}
 		if method == "thread/resume" {
 			// The rollout keeps the last name any profile gave it; a session that comes back names it again.
-			r.mirrorLabel(r.holder(v.profile, result.Thread.ID))
+			r.d.mirrorLabel(r.holder(v.profile, result.Thread.ID))
 		} else if err := r.materialize(v.profile, result.Thread.ID); err != nil {
 			r.d.logf("shared Codex: refused conversation %s, which could not be written: %v", result.Thread.ID, err)
 			reply.Result = nil
@@ -708,7 +722,7 @@ func (r *codexShared) terminalShowing(profile, conversation string) (harness.Ter
 	return found.terminal, true
 }
 
-func (r *codexShared) remoteEnv(t harness.TerminalID) []string {
+func (r *codexShared) respawnEnv(t harness.TerminalID) []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if v := r.views[t]; v != nil {
@@ -719,8 +733,8 @@ func (r *codexShared) remoteEnv(t harness.TerminalID) []string {
 
 // An app-server that exits starts again at the next connection; keep a runtime already restarted under the same id.
 func (r *codexShared) terminalExited(t harness.TerminalID) {
-	if !isCodexServerTerminal(t) {
-		r.dropView(t)
+	if !r.process(t) {
+		r.terminalDropped(t)
 		return
 	}
 	r.mu.Lock()
@@ -756,8 +770,7 @@ func (r *codexShared) terminalExited(t harness.TerminalID) {
 	}
 }
 
-// Runs before startup decides which sessions are still live.
-func (r *codexShared) recoverServers(ctx context.Context) {
+func (r *codexShared) recoverProcesses(ctx context.Context) {
 	live := r.d.liveTerminals(ctx)
 	profiles, err := r.d.store.ListProfiles(false)
 	if err != nil {
@@ -776,10 +789,9 @@ func (r *codexShared) recoverServers(ctx context.Context) {
 	}
 }
 
-// Runs once recovery knows which terminals survived.
 func (r *codexShared) recoverViews(ctx context.Context) {
 	live := r.d.liveTerminals(ctx)
-	terminals, err := r.d.store.CodexTerminals()
+	terminals, err := r.d.store.TerminalViews(codexLinkKind)
 	if err != nil {
 		r.d.logf("shared Codex: %v", err)
 		return
@@ -787,7 +799,7 @@ func (r *codexShared) recoverViews(ctx context.Context) {
 	for _, t := range terminals {
 		id := harness.TerminalID(t.TerminalID)
 		if _, running := live[id]; !running {
-			if err := r.d.store.DeleteCodexTerminal(t.TerminalID); err != nil {
+			if err := r.d.store.DeleteTerminalView(t.TerminalID); err != nil {
 				r.d.logf("shared Codex: %v", err)
 			}
 			continue
@@ -842,23 +854,27 @@ func (r *codexShared) parent(profile, conversation string) string {
 	return s.parents[conversation]
 }
 
-// A subagent's hooks belong to its root's session.
-func (d *Daemon) codexThreadCaller(profile, conversation string) protocol.SessionID {
-	r := d.codexShared()
+// In-server processes name their thread; a subagent's hooks belong to its root's session.
+func (r *codexShared) caller(t protocol.TerminalID) (protocol.SessionID, harness.TerminalID, bool) {
+	profile, conversation, ok := harness.ParseCodexThreadTerminal(t)
+	if !ok {
+		return "", "", false
+	}
+	view, _ := r.terminalShowing(profile, conversation)
 	for range 8 {
-		if t, ok := r.terminalShowing(profile, conversation); ok {
-			if s, ok := d.terminals().Showing(t); ok {
-				return s
+		if shown, ok := r.terminalShowing(profile, conversation); ok {
+			if s, ok := r.d.terminals().Showing(shown); ok {
+				return s, view, true
 			}
 		}
 		if s := r.holder(profile, conversation); s != "" {
-			return s
+			return s, view, true
 		}
 		if conversation = r.parent(profile, conversation); conversation == "" {
 			break
 		}
 	}
-	return ""
+	return "", view, true
 }
 
 func (d *Daemon) wrapperPath() string {

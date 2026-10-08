@@ -9,3 +9,6 @@ change: >
   stays open and takes attn's input through the server; sessions and ledger rows
   carry `hidden`, and the daemon keeps a
   `queue_show_hidden_sessions` setting.
+  The daemon reaches it only through a harness-neutral link seam that records
+  each session's link on its launch intent and each attached terminal in
+  `terminal_views`, so another link can plug in beside it.

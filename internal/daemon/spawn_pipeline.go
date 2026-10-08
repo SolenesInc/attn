@@ -53,7 +53,7 @@ type spawnRequest struct {
 	resumeSessionID string
 	parentSessionID protocol.SessionID
 	autoModeDriver  bool
-	codexShared     bool
+	link            linkRuntime
 }
 
 type spawnPlan struct {
@@ -313,17 +313,18 @@ func (d *Daemon) resolveSpawnIntent(req *spawnRequest) (*spawnPlan, *spawnReject
 		plan.spawnOpts.ApprovalRoute = launchcontract.ResolveApprovalRoute(plan.spawnOpts.YoloMode, plan.spawnOpts.AutoApprove, plan.spawnOpts.UnattendedLaunch)
 	}
 	plan.spawnOpts.ContextWindowCap = d.launchContextWindowCap(msg.ID, req.agent, plan.isChief)
-	req.codexShared = d.launchesSharedCodex(req)
-	if req.codexShared && req.resumeSessionID != "" {
-		if other := d.codexShared().loadedElsewhere(req.profile.ID, req.resumeSessionID); other != "" {
+	req.link = d.launchLink(req)
+	if req.link != nil {
+		if err := req.link.admit(req.profile.ID, req.resumeSessionID); err != nil {
 			plan.rollback(d, msg.ID)
-			return nil, &spawnRejection{err: fmt.Errorf("conversation %s is open in the shared Codex of profile %s; it can open here once that profile lets it go, about a minute after no terminal shows it", req.resumeSessionID, other)}
+			return nil, &spawnRejection{err: err}
 		}
-	}
-	if !req.codexShared && req.agent == string(protocol.SessionAgentCodex) {
-		if holder := d.codexShared().holder(req.profile.ID, req.resumeSessionID); holder != "" && holder != msg.ID {
-			plan.rollback(d, msg.ID)
-			return nil, &spawnRejection{err: fmt.Errorf("conversation %s is open in shared Codex session %s, and two Codex processes must not write one conversation; show that session instead", req.resumeSessionID, holder)}
+	} else if req.resumeSessionID != "" {
+		for _, l := range d.links() {
+			if holder := l.holder(req.profile.ID, req.resumeSessionID); holder != "" && holder != msg.ID {
+				plan.rollback(d, msg.ID)
+				return nil, &spawnRejection{err: fmt.Errorf("conversation %s is open in session %s over a link, and two processes must not write one conversation; show that session instead", req.resumeSessionID, holder)}
+			}
 		}
 	}
 
@@ -429,7 +430,9 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	}
 	plan.priorIntent, plan.hadPriorIntent = d.store.LaunchIntent(session.ID)
 	intent := launchIntentFromSpawnOptions(plan.spawnOpts, plan.isChief)
-	intent.CodexShared = req.codexShared
+	if req.link != nil {
+		intent.Link = req.link.kind()
+	}
 	intent.AutoMode = msg.AutoMode
 	if req.autoModeDriver {
 		intent.ApprovalPolicy, intent.SandboxMode = effectiveSpawnPolicyPair(msg)
@@ -447,14 +450,14 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		InitialPromptOwed: hasInitialPrompt && reportsTurnStarts(req.agent),
 		ReviewerInLoop:    plan.spawnOpts.ApprovalRoute.ReviewerInLoop(),
 	})
-	err := d.prepareSharedCodexLaunch(req, plan)
+	var err error
+	if req.link != nil {
+		err = req.link.prepareLaunch(&plan.spawnOpts, req.profile.ID)
+	}
 	if err == nil {
 		err = d.spawnSessionRuntime(msg.ID, plan.spawnOpts)
 	}
 	if err != nil {
-		if req.codexShared {
-			d.codexShared().closeView(plan.spawnOpts.ID)
-		}
 		d.forgetSessionTitleInitialPrompt(msg.ID)
 		d.restoreExitScreen(msg.ID, priorExit)
 		if req.existingSession == nil {
@@ -463,8 +466,8 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		} else if restoreErr := d.store.AddCheckedUnlessTeardown(req.existingSession); restoreErr != nil {
 			err = errors.Join(err, fmt.Errorf("restore prior session after spawn failure: %w", restoreErr))
 		}
-		if req.codexShared {
-			d.codexShared().idleSoon(req.profile.ID)
+		if req.link != nil {
+			req.link.launchFailed(plan.spawnOpts.ID, req.profile.ID)
 		}
 		if req.existingSession != nil {
 			d.startEvidence(msg.ID, priorEvidence)
@@ -487,22 +490,6 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		d.life.AfterFunc("cleanupInitialPrompt", initialPromptCleanupAfter, plan.cleanupInitialPrompt)
 	}
 	return &spawnOutcome{}
-}
-
-func (d *Daemon) prepareSharedCodexLaunch(req *spawnRequest, plan *spawnPlan) error {
-	if !req.codexShared {
-		return nil
-	}
-	executable := plan.spawnOpts.Executable
-	if executable == "" {
-		executable = plan.spawnOpts.CodexExecutable
-	}
-	remote, err := d.codexShared().prepareLaunch(plan.spawnOpts.ID, req.profile.ID, executable)
-	if err != nil {
-		return err
-	}
-	plan.spawnOpts.ExternalEnv = append(plan.spawnOpts.ExternalEnv, "ATTN_CODEX_REMOTE="+remote)
-	return nil
 }
 
 func (d *Daemon) spawnSessionRuntime(sessionID protocol.SessionID, opts ptybackend.SpawnOptions) error {

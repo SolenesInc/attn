@@ -75,7 +75,7 @@ function legacyWorkspacesSql(fixtureDir) {
     'ALTER TABLE sessions DROP COLUMN priority;',
     'ALTER TABLE session_teardown_tombstones DROP COLUMN driver_terminal_id;',
     'DROP TABLE terminal_bindings;',
-    'DROP TABLE codex_terminals;',
+    'DROP TABLE terminal_views;',
     `DELETE FROM sessions WHERE id IN (${LEGACY_WORKSPACES.flatMap((_, offset) => agentsOf(offset + 1)).map(sql).join(', ')});`,
   ];
   LEGACY_WORKSPACES.forEach((title, offset) => {

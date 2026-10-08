@@ -13,18 +13,19 @@ import (
 
 	"github.com/victorarias/attn/internal/codexshared"
 	"github.com/victorarias/attn/internal/harness"
-	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/transcript"
 )
 
+const codexLinkKind = "codex-app-server"
+
 // Control-connection turn reports arrive in order, so no driver run fences them.
-const codexLinkEpochPrefix = "codex-app-server:"
+const codexLinkEpochPrefix = codexLinkKind + ":"
 
 func (r *codexShared) launchedShared(sessionID protocol.SessionID) bool {
 	intent, ok := r.d.store.LaunchIntent(sessionID)
-	return ok && intent.CodexShared
+	return ok && intent.Link == codexLinkKind
 }
 
 func (r *codexShared) conversation(sessionID protocol.SessionID) string {
@@ -34,42 +35,12 @@ func (r *codexShared) conversation(sessionID protocol.SessionID) string {
 	return r.d.store.GetSessionConversation(sessionID).NativeID
 }
 
-func (r *codexShared) hidden(sessionID protocol.SessionID) bool {
-	if len(r.d.terminals().Of(harness.SessionID(sessionID))) > 0 {
-		return false
-	}
-	return r.d.store.Get(sessionID) != nil && r.conversation(sessionID) != ""
-}
-
-func (r *codexShared) keepsWhenLeft(sessionID protocol.SessionID) bool {
-	return r.conversation(sessionID) != ""
-}
-
 func (r *codexShared) holder(profile, conversation string) protocol.SessionID {
 	sessionID := r.d.store.OpenSessionHolding(profile, conversation)
 	if sessionID == "" || !r.launchedShared(sessionID) {
 		return ""
 	}
 	return sessionID
-}
-
-func (d *Daemon) decorateSessionHidden(clone *protocol.Session) {
-	clone.Hidden = nil
-	if clone.Agent == protocol.SessionAgentCodex && d.codexShared().hidden(clone.ID) {
-		clone.Hidden = protocol.Ptr(true)
-	}
-}
-
-func (d *Daemon) decorateLedgerEntriesHidden(entries []protocol.SessionLedgerEntry) {
-	for i := range entries {
-		d.decorateLedgerEntryHidden(&entries[i])
-	}
-}
-
-func (d *Daemon) decorateLedgerEntryHidden(entry *protocol.SessionLedgerEntry) {
-	if protocol.Deref(entry.ClosedAt) == "" && entry.Agent == string(protocol.SessionAgentCodex) && d.codexShared().hidden(entry.ID) {
-		entry.Hidden = protocol.Ptr(true)
-	}
 }
 
 func (r *codexShared) shownThread(sessionID protocol.SessionID) string {
@@ -95,15 +66,12 @@ func (r *codexShared) control(ctx context.Context, profile string) (*codexServer
 	return s, client, nil
 }
 
-type codexLink struct{ r *codexShared }
-
-func (codexLink) Voices() []harness.Voice {
+func (r *codexShared) Voices() []harness.Voice {
 	return []harness.Voice{harness.VoiceUser, harness.VoiceAttn}
 }
 
 // Deliver runs on its own deadline and ignores ctx, so daemon shutdown does not cut a delivery short.
-func (l codexLink) Deliver(_ context.Context, in harness.Input) harness.Custody {
-	r := l.r
+func (r *codexShared) Deliver(_ context.Context, in harness.Input) harness.Custody {
 	session := r.d.store.Get(in.Session)
 	if session == nil {
 		return harness.Custody{Reason: fmt.Sprintf("session %s is gone", in.Session)}
@@ -268,7 +236,7 @@ func (r *codexShared) restateHiddenStates(s *codexServer, client *codexshared.Cl
 	for _, session := range r.d.store.List("") {
 		stale := session.State == protocol.SessionStateUnknown || session.State == protocol.SessionStateWorking ||
 			session.State == protocol.SessionStatePendingApproval
-		if session.ProfileID != s.profile || !stale || !r.hidden(session.ID) {
+		if session.ProfileID != s.profile || !stale || !r.d.hidden(session.ID) {
 			continue
 		}
 		ctx, cancel := context.WithTimeout(r.d.life.Context(), codexServerCallLimit)
@@ -290,7 +258,7 @@ func (r *codexShared) restateHiddenStates(s *codexServer, client *codexshared.Cl
 }
 
 // The rollout moves to archived_sessions; read its usage to the end after archiving.
-func (r *codexShared) archive(sessionID protocol.SessionID) {
+func (r *codexShared) closed(sessionID protocol.SessionID) {
 	conversation := r.conversation(sessionID)
 	session := r.d.store.Get(sessionID)
 	if conversation == "" || session == nil {
@@ -327,11 +295,11 @@ func (r *codexShared) settleUsage(sessionID protocol.SessionID) {
 	}
 }
 
-func (r *codexShared) archivedByClose(sessionID protocol.SessionID, conversation string) bool {
+func (r *codexShared) setAside(sessionID protocol.SessionID, conversation string) bool {
 	return conversation != "" && r.launchedShared(sessionID) && transcript.FindArchivedCodexTranscript(conversation) != ""
 }
 
-func (r *codexShared) unarchive(profile, conversation string) error {
+func (r *codexShared) restore(profile, conversation string) error {
 	if transcript.FindArchivedCodexTranscript(conversation) == "" {
 		return nil
 	}
@@ -349,51 +317,17 @@ func (r *codexShared) unarchive(profile, conversation string) error {
 	return nil
 }
 
-func (r *codexShared) showSession(sessionID protocol.SessionID) error {
-	session := r.d.store.Get(sessionID)
-	intent, ok := r.d.store.LaunchIntent(sessionID)
-	conversation := r.conversation(sessionID)
-	if session == nil || !ok || conversation == "" {
-		return fmt.Errorf("session %s holds no shared Codex conversation to show", sessionID)
-	}
-	spawn, policy := buildStoredIntentSpawn(session, intent, 80, 24)
-	spawn.ResumeSessionID = protocol.Ptr(conversation)
-	policy.launchPlacement = &launchPlacement{direction: layouttree.DirectionVertical}
-	policy.userStarted = true
-	client := newInternalWSClient()
-	r.d.handleSpawnSessionWithPolicy(client, spawn, policy)
-	if _, err := readInternalActionResult(client); err != nil {
-		return fmt.Errorf("show session %s: %w", sessionID, err)
-	}
-	return nil
-}
-
-func (r *codexShared) movedOn(sessionID protocol.SessionID, t harness.TerminalID) bool {
+func (r *codexShared) shows(t harness.TerminalID) string {
 	r.mu.Lock()
-	v := r.views[t]
-	thread := ""
-	if v != nil {
-		thread = v.thread
+	defer r.mu.Unlock()
+	if v := r.views[t]; v != nil {
+		return v.thread
 	}
-	r.mu.Unlock()
-	if thread == "" {
-		return false
-	}
-	conversation := r.conversation(sessionID)
-	return conversation != "" && conversation != thread
+	return ""
 }
 
-func (d *Daemon) hide(sessionID protocol.SessionID, t harness.TerminalID) {
-	lifecycle := d.sessionLifecycleLockFor(sessionID)
-	lifecycle.Lock()
-	unlock := d.lockTerminalEnds(sessionID)
-	if err := d.ptyBackend.Kill(context.Background(), t, syscall.SIGTERM); err != nil && !errors.Is(err, pty.ErrSessionNotFound) {
-		d.logf("stopping terminal %s: %v", t, err)
-	}
-	d.dropTerminal(t)
-	unlock()
-	lifecycle.Unlock()
-	d.publishFact(FactSessionReregistered, string(sessionID), nil)
+func (r *codexShared) transcriptPath(path string) string {
+	return transcript.ResolveCodexRolloutPath(path)
 }
 
 func (r *codexShared) observeName(s *codexServer, m codexshared.Message) {
@@ -416,15 +350,8 @@ func (r *codexShared) observeName(s *codexServer, m codexshared.Message) {
 	})
 }
 
-func (r *codexShared) mirrorLabel(sessionID protocol.SessionID) {
-	if session := r.d.store.Get(sessionID); session != nil && session.Agent == protocol.SessionAgentCodex &&
-		!sessionLabelIsPlaceholder(session.Label, session.Directory, session.ID) {
-		r.mirrorName(session.ID, session.Label)
-	}
-}
-
 // attn's label is the one that counts.
-func (r *codexShared) mirrorName(sessionID protocol.SessionID, label string) {
+func (r *codexShared) renamed(sessionID protocol.SessionID, label string) {
 	conversation := r.conversation(sessionID)
 	session := r.d.store.Get(sessionID)
 	if conversation == "" || session == nil {
@@ -449,7 +376,7 @@ func (r *codexShared) mirrorName(sessionID protocol.SessionID, label string) {
 	})
 }
 
-func (r *codexShared) stopServerIfUnused(profile string) {
+func (r *codexShared) released(profile string) {
 	r.mu.Lock()
 	s := r.servers[profile]
 	r.mu.Unlock()
@@ -514,5 +441,5 @@ func (r *codexShared) idleSoon(profile string) {
 	if profile == "" {
 		return
 	}
-	r.d.life.Go("codexServerIdle", func() { r.stopServerIfUnused(profile) })
+	r.d.life.Go("codexServerIdle", func() { r.released(profile) })
 }

@@ -152,7 +152,7 @@ func (d *Daemon) decideReopenPlace(
 	gitView reopenGit,
 ) error {
 	conversation, conversationReason := d.reopenConversation(verdict.Execution, verdict.DirectoryState == directoryMissing)
-	if !conversation && d.codexShared().archivedByClose(verdict.SessionID, strings.TrimSpace(verdict.Execution.Resume)) {
+	if l := d.linkOf(verdict.SessionID); !conversation && l != nil && l.setAside(verdict.SessionID, strings.TrimSpace(verdict.Execution.Resume)) {
 		conversation, conversationReason = true, ""
 	}
 	if !hasLaunchIntent {
@@ -736,8 +736,8 @@ func (d *Daemon) reopenSessionRuntimeProtected(
 	}
 	if resumeID := strings.TrimSpace(d.store.GetResumeSessionID(plan.SessionID)); !plan.FreshConversation && resumeID != "" {
 		spawn.ResumeSessionID = protocol.Ptr(resumeID)
-		if intent.CodexShared {
-			if err := d.codexShared().unarchive(profileID, resumeID); err != nil {
+		if l := d.linkNamed(intent.Link); l != nil {
+			if err := l.restore(profileID, resumeID); err != nil {
 				return fail(err)
 			}
 		}

@@ -55,7 +55,7 @@ func (d *Daemon) closeTerminal(sessionID protocol.SessionID, t harness.TerminalI
 
 func (d *Daemon) dropTerminal(t harness.TerminalID) {
 	// Removing the runtime can beat its exit event, so the view goes now rather than on exit.
-	d.codexShared().dropView(t)
+	d.linkTerminalDropped(t)
 	if err := d.removePTYSession(t); err != nil {
 		d.logf("removing the runtime of terminal %s: %v", t, err)
 	}
