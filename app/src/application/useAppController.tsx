@@ -423,7 +423,7 @@ export function useAppController({
     if (!changed) return;
     closeAgentList();
     const focused = document.activeElement;
-    if (!focused || focused === document.body || focused.closest('.sidebar')) {
+    if (!focused || focused === document.body || (sidebarSurface === 'hidden' && focused.closest('.sidebar'))) {
       useSessionStore.getState().requestTerminalFocus();
     }
   }, [closeAgentList, sidebarSurface]);

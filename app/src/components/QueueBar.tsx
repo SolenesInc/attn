@@ -15,6 +15,7 @@ import { agentPaletteRows, type AgentPaletteRow } from './palette/agentPaletteRo
 import './QueueBar.css';
 import { useSidebarContext } from './SidebarContext';
 import { ExpandIcon } from './SidebarIcons';
+import { FlowToggleButton } from './SidebarHeader';
 import type { LocalSession } from './sidebarTypes';
 import { useDesktopChipDrop } from './useDesktopChipDrop';
 
@@ -37,6 +38,7 @@ export function QueueBar() {
       >
         <ExpandIcon />
       </button>
+      <FlowToggleButton />
       {instance && (
         <span className="queue-bar-instance" data-testid="sidebar-instance-marker">
           {instance}

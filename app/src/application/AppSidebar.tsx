@@ -76,6 +76,7 @@ export function AppSidebar() {
   const { handleOpenCrew } = useCrewPanelContext();
   const {
     crewQueueEnabled,
+    handleToggleQueueMode,
     queueBands,
     openSnoozeMenu,
     togglePriority,
@@ -146,6 +147,7 @@ export function AppSidebar() {
       profileName={profileName}
       onSwitchProfile={() => setProfileSwitcherOpen(true)}
       onOpenCommands={() => handleOpenPalette('commands')}
+      onToggleFlow={handleToggleQueueMode}
       onOpenAgents={() => handleOpenPalette('agents')}
       peeksSilenced={windowCovered || agentFocused}
       agentListOpen={agentListOpen}
