@@ -27,7 +27,7 @@ describe('close desktop', () => {
     expect(daemon.arrangement.desktops.map((desktop) => desktop.id)).not.toContain('empty');
   });
 
-  it.each(['sidebar', 'palette'] as const)('asks once with agent, shell and tile counts from %s', async (entry) => {
+  it.each(['sidebar', 'desktop palette', 'queue palette'] as const)('asks once with agent, shell and tile counts from %s', async (entry) => {
     const root = { type: 'split', split_id: 'a', direction: 'vertical', ratio: 0.5, children: [
       { type: 'pane', pane_id: 'pane-agent' },
       { type: 'split', split_id: 'b', direction: 'vertical', ratio: 0.5, children: [
@@ -35,7 +35,7 @@ describe('close desktop', () => {
       ] },
     ] };
     const { daemon } = await renderApp({ initialState: {
-      settings: { queue_mode_enabled: false },
+      settings: { queue_mode_enabled: entry === 'queue palette' },
       sessions: [daemonSession('agent'), daemonSession('shell', { agent: 'shell' })],
       desktops: [daemonDesktop('work', { root, panes: [agentPane('agent', 'work'), agentPane('shell', 'work')] }, { name: 'Work' }), emptyDesktop('other')],
     } });

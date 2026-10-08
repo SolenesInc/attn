@@ -458,42 +458,44 @@ func (d *Daemon) handleDesktopCreate(client *wsClient, msg *protocol.DesktopCrea
 }
 
 func (d *Daemon) handleDesktopClose(client *wsClient, msg *protocol.DesktopCloseMessage) {
-	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
-		desktop, err := d.store.GetDesktop(msg.DesktopID)
-		if err != nil {
-			return profileActionOutcome{}, err
-		}
-		var protected []string
-		for _, pane := range desktop.Panes {
-			if pane.SessionID == "" {
-				continue
-			}
-			if err := d.sessionCloseError(pane.SessionID); err != nil {
-				protected = append(protected, d.desktopSessionName(pane.SessionID)+": "+err.Error())
-			}
-		}
-		if len(protected) > 0 {
-			return profileActionOutcome{}, profiles.Errorf(profiles.CodeInvalid, "Cannot close desktop: move these protected sessions first: %s", strings.Join(protected, "; "))
-		}
-		profile, sessions, err := d.store.CloseDesktop(msg.DesktopID, int64(msg.ExpectedRevision))
-		if err != nil {
-			return profileActionOutcome{}, err
-		}
-		var failures []string
-		for _, id := range sessions {
-			name := d.desktopSessionName(id)
-			closing, err := d.beginSessionCloseAsUser(id, store.SessionClose{By: store.SessionClosedByUser}, nil)
+	d.coalesceSnapshots(func() {
+		d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
+			desktop, err := d.store.GetDesktop(msg.DesktopID)
 			if err != nil {
-				failures = append(failures, name+": "+err.Error())
-				continue
+				return profileActionOutcome{}, err
 			}
-			d.finishSessionClose(id, closing)
-		}
-		d.publishArrangementChanged(profile.ID)
-		if len(failures) > 0 {
-			return profileActionOutcome{}, profiles.Errorf(profiles.CodeInvalid, "Desktop closed; failed to close sessions: %s", strings.Join(failures, "; "))
-		}
-		return profileActionOutcome{profile: &profile, arranges: true}, nil
+			var protected []string
+			for _, pane := range desktop.Panes {
+				if pane.SessionID == "" {
+					continue
+				}
+				if err := d.sessionCloseError(pane.SessionID); err != nil {
+					protected = append(protected, d.desktopSessionName(pane.SessionID)+": "+err.Error())
+				}
+			}
+			if len(protected) > 0 {
+				return profileActionOutcome{}, profiles.Errorf(profiles.CodeInvalid, "Cannot close desktop: move these protected sessions first: %s", strings.Join(protected, "; "))
+			}
+			profile, sessions, err := d.store.CloseDesktop(msg.DesktopID, int64(msg.ExpectedRevision))
+			if err != nil {
+				return profileActionOutcome{}, err
+			}
+			var failures []string
+			for _, id := range sessions {
+				name := d.desktopSessionName(id)
+				closing, err := d.beginSessionCloseAsUser(id, store.SessionClose{By: store.SessionClosedByUser}, nil)
+				if err != nil {
+					failures = append(failures, name+": "+err.Error())
+					continue
+				}
+				d.finishSessionClose(id, closing)
+			}
+			d.publishArrangementChanged(profile.ID)
+			if len(failures) > 0 {
+				return profileActionOutcome{}, profiles.Errorf(profiles.CodeInvalid, "Desktop closed; failed to close sessions: %s", strings.Join(failures, "; "))
+			}
+			return profileActionOutcome{profile: &profile, arranges: true}, nil
+		})
 	})
 }
 
