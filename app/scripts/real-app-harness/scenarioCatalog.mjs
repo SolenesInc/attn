@@ -2,6 +2,12 @@ const REMOTE_ENDPOINTS_OFF = 'remote endpoints are off in this release, so the a
 
 export const scenarioCatalog = [
   {
+    id: 'desktop-order',
+    runnerId: 'DESKTOP-ORDER',
+    label: 'Desktop Sort and Undo preserve arrangements; new numbered desktops follow the nearest lower number',
+    command: ['node', 'scripts/real-app-harness/scenario-desktop-order.mjs'],
+  },
+  {
     id: 'palette-order',
     runnerId: 'PALETTE-ORDER',
     label: 'Command palette learns selections, preserves pins, and restores native input focus',

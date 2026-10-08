@@ -2795,6 +2795,13 @@ model DesktopReorderMessage {
   expected_revision: safeint;
 }
 
+model DesktopSetOrderMessage {
+  cmd: "desktop_set_order";
+  request_id: string;
+  profile_id: string;
+  desktop_ids: string[];
+}
+
 // Selection: last writer wins, no revision.
 model DesktopSetCurrentMessage {
   cmd: "desktop_set_current";

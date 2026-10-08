@@ -39,6 +39,7 @@
 .toast-row small { font: 10.5px monospace; color: var(--color-text-muted); }
 .toast-list--single .toast-row small { display: none; }
 .toast-row--seen { color: var(--color-text-muted); }
+.toast-list--single .toast-row--action small { display: inline-block; margin-top: 6px; color: var(--color-accent); }
 .toast-list--single .toast-row--seen small { display: inline; margin-left: 6px; }
 .toast-row--seen small { color: var(--color-success, #3fb950); }
 .toast-row--new { animation: toast-row-arrival 1.6s ease-out; }
