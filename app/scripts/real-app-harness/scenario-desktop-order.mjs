@@ -27,6 +27,9 @@ async function main() {
       if (current) await observer.profileCommand('profile_delete', { profile_id: current.id, expected_revision: current.revision });
     }
   });
+  runner.registerCleanup('move_pointer', async () => {
+    if (profile) await driver.movePointerInWindow(0.5, 0.5);
+  });
   const wait = (selector, extra = {}) => client.request('dom_wait', { selector, timeoutMs: observer.connectTimeoutMs, ...extra });
   const assertOrder = async (ids) => {
     for (let i = 1; i < ids.length; i++) {
