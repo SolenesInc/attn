@@ -3324,6 +3324,9 @@ type DesktopMoveLeafMessage struct {
 
 	// TargetDesktopID corresponds to the JSON schema field "target_desktop_id".
 	TargetDesktopID string `json:"target_desktop_id"`
+
+	// WithDelegates corresponds to the JSON schema field "with_delegates".
+	WithDelegates *bool `json:"with_delegates,omitempty,omitzero"`
 }
 
 type DesktopMoveSessionMessage struct {

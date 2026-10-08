@@ -422,7 +422,7 @@ describe('the desktop strip', () => {
     fireEvent.pointerEnter(target);
     fireEvent.pointerUp(target);
     expect(onDesktopDragEnter).toHaveBeenCalledWith(expect.objectContaining({ id: 'ws-b' }));
-    expect(onDesktopDragDrop).toHaveBeenCalledWith(expect.objectContaining({ id: 'ws-b' }));
+    expect(onDesktopDragDrop).toHaveBeenCalledWith(expect.objectContaining({ id: 'ws-b' }), false);
   });
 });
 

@@ -1,0 +1,3 @@
+kind: added
+area: desktops
+change: Move an agent and its same-desktop delegates together from the palette or an Option-drag in the sidebar.

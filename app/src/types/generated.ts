@@ -3573,6 +3573,7 @@ export interface DesktopMoveLeafMessage {
     request_id:               string;
     source_desktop_id:        string;
     target_desktop_id:        string;
+    with_delegates?:          boolean;
     [property: string]: any;
 }
 
@@ -18190,6 +18191,7 @@ const typeMap: any = {
         { json: "request_id", js: "request_id", typ: "" },
         { json: "source_desktop_id", js: "source_desktop_id", typ: "" },
         { json: "target_desktop_id", js: "target_desktop_id", typ: "" },
+        { json: "with_delegates", js: "with_delegates", typ: u(undefined, true) },
     ], "any"),
     "DesktopMoveSessionMessage": o([
         { json: "caller_session_id", js: "caller_session_id", typ: u(undefined, "") },

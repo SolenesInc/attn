@@ -543,7 +543,15 @@ func (d *Daemon) handleDesktopPlaceSession(client *wsClient, msg *protocol.Deskt
 func (d *Daemon) handleDesktopMoveLeaf(client *wsClient, msg *protocol.DesktopMoveLeafMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
 		direction, before := layoutDockEdge(msg.Edge)
-		move, err := d.store.MoveLeaf(store.LeafMoveRequest{
+		var followers []store.LeafFollower
+		if protocol.Deref(msg.WithDelegates) && msg.SourceDesktopID != msg.TargetDesktopID {
+			source, err := d.store.GetDesktop(msg.SourceDesktopID)
+			if err != nil {
+				return profileActionOutcome{}, err
+			}
+			followers = d.sameDesktopDelegates(source, msg.LeafID)
+		}
+		move, err := d.store.MoveLeafGroup(store.LeafMoveRequest{
 			SourceDesktopID:        msg.SourceDesktopID,
 			TargetDesktopID:        msg.TargetDesktopID,
 			LeafID:                 msg.LeafID,
@@ -554,7 +562,7 @@ func (d *Daemon) handleDesktopMoveLeaf(client *wsClient, msg *protocol.DesktopMo
 			ExpectedSourceRevision: int64(msg.ExpectedSourceRevision),
 			ExpectedTargetRevision: int64(msg.ExpectedTargetRevision),
 			Activate:               true,
-		})
+		}, followers)
 		changed := []profiles.Desktop{move.Source}
 		if move.Target.ID != move.Source.ID {
 			changed = append(changed, move.Target)
