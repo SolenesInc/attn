@@ -81,6 +81,7 @@ type Code string
 
 const (
 	CodeInvalid        Code = "invalid"
+	CodeLastDesktop    Code = "last_desktop"
 	CodeNotFound       Code = "not_found"
 	CodeStaleRevision  Code = "stale_revision"
 	CodeNameTaken      Code = "name_taken"

@@ -62,6 +62,11 @@ the same focused pane. Closing the focused tile returns to the most recently
 focused tile still on that desktop. Closing a background tile keeps focus where
 it is. Each desktop remembers this order across restarts; if no earlier focused
 tile remains, focus passes to the tile on the left, then another remaining tile.
+Close a desktop from its sidebar × or the palette; Cmd+W closes an empty one.
+A desktop with agents, shells or tiles asks first. Closing keeps sessions in the
+ledger for resuming, and selects the desktop above (or below if it was first).
+The only desktop and desktops holding the chief or awake crew members stay open.
+A closed launch desktop returns when its crew member wakes or its automation runs.
 
 Use "Move with delegates to…" in the command palette to move an agent with its
 delegates on the same desktop, including their delegates. Hold Option when

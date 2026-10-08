@@ -256,6 +256,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdMigrationUndo:                 decodeInto[MigrationUndoMessage],
 	CmdMigrationFinish:               decodeInto[MigrationFinishMessage],
 	CmdDesktopCreate:                 decodeInto[DesktopCreateMessage],
+	CmdDesktopClose:                  decodeInto[DesktopCloseMessage],
 	CmdDesktopRename:                 decodeInto[DesktopRenameMessage],
 	CmdDesktopReorder:                decodeInto[DesktopReorderMessage],
 	CmdDesktopSetOrder:               decodeInto[DesktopSetOrderMessage],

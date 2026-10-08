@@ -502,6 +502,7 @@ enum ProfileErrorCode {
   name_taken,
   slot_taken,
   last_profile,
+  last_desktop,
   profile_deleted,
   cross_profile,
   already_placed,
@@ -2774,6 +2775,13 @@ model DesktopCreateMessage {
   name?: string;
   // Absent, the desktop takes the lowest free slot of 1-9, or none when all are held.
   shortcut_slot?: int32;
+}
+
+model DesktopCloseMessage {
+  cmd: "desktop_close";
+  request_id: string;
+  desktop_id: string;
+  expected_revision: safeint;
 }
 
 model DesktopRenameMessage {

@@ -73,7 +73,8 @@ export function useAppCommands(): PaletteCommand[] {
   const { handleCreateDiagnosticReport } = useAppDiagnosticsContext();
   const contextSessionId = useSessionBehindScreen();
   const agentOnScreenId = useAgentOnScreen();
-  const { handleReloadSession } = useSessionLifecycleContext();
+  const { handleReloadSession, handleRequestCloseDesktop } = useSessionLifecycleContext();
+  const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
   const desktops = useProfilesStore((state) => state.desktops);
   const profiles = useProfilesStore((state) => state.profiles);
   const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
@@ -171,6 +172,13 @@ export function useAppCommands(): PaletteCommand[] {
         icon: <BoardActionIcon />,
         shortcut: keys('desktop.overview'),
         run: () => setDesktopOverviewOpen(true),
+      },
+      {
+        id: 'close-desktop',
+        title: 'Close desktop',
+        keywords: ['desktop', 'close'],
+        icon: <BoardActionIcon />,
+        run: () => { if (currentDesktopId) handleRequestCloseDesktop(currentDesktopId); },
       },
       {
         id: 'new-desktop',
@@ -324,6 +332,8 @@ export function useAppCommands(): PaletteCommand[] {
     handleNextRun,
     handleNewSession,
     handleReloadSession,
+    handleRequestCloseDesktop,
+    currentDesktopId,
     handleSelectDesktop,
     handleSettleActiveTurn,
     notificationsPanelOpen,

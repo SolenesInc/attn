@@ -106,9 +106,13 @@ func loadLaunchItem(tx *sql.Tx, kind, id string) (LaunchDesktopItem, error) {
 		item.Label = item.Name + " (new)"
 		return item, nil
 	}
-	desktop, err := loadDesktop(tx, item.DesktopID)
+	desktop, found, err := findDesktop(tx, item.DesktopID)
 	if err != nil {
 		return item, err
+	}
+	if !found {
+		item.Label = launchDesktopLabel(item.Name, profiles.DesktopSlot(item.DesktopID))
+		return item, nil
 	}
 	name, err := launchDesktopName(tx, desktop)
 	item.Label = launchDesktopLabel(name, desktop.ShortcutSlot)
@@ -249,12 +253,42 @@ func (s *Store) PrepareLaunchMigration() error {
 	})
 }
 
-func launchItemDesktop(tx *sql.Tx, profile profiles.Profile, kind, id string) (profiles.Desktop, error) {
+func launchItemDesktop(tx *sql.Tx, now string, profile profiles.Profile, kind, id string) (profiles.Desktop, error) {
 	var desktopID string
 	if _, err := rowFound(tx.QueryRow(`SELECT desktop_id FROM launch_desktops WHERE kind = ? AND item_id = ?`, kind, id), &desktopID); err != nil {
 		return profiles.Desktop{}, err
 	}
-	return loadLaunchDesktop(tx, profile, desktopID)
+	if desktopID == "" {
+		return loadLaunchDesktop(tx, profile, "")
+	}
+	desktop, found, err := findDesktop(tx, desktopID)
+	if err != nil {
+		return desktop, err
+	}
+	if found {
+		return loadLaunchDesktop(tx, profile, desktopID)
+	}
+	desktop, found, err = findOrRecreateNumberedDesktop(tx, now, profile, desktopID)
+	if err != nil {
+		return desktop, err
+	}
+	if !found {
+		item, err := loadLaunchItem(tx, kind, id)
+		if err != nil {
+			return desktop, err
+		}
+		desktop, err = insertDesktop(tx, now, profile.ID, item.Name, 0)
+		if err != nil {
+			return desktop, err
+		}
+		if _, err := tx.Exec(`UPDATE launch_desktops SET desktop_id = ? WHERE kind = ? AND item_id = ?`, desktop.ID, kind, id); err != nil {
+			return desktop, err
+		}
+	}
+	if err := bumpProfile(tx, &profile); err != nil {
+		return desktop, err
+	}
+	return desktop, appendLaunchDesktopFacts(tx, desktop.ID)
 }
 
 // findDesktop reports a missing desktop as not found; a reopened session's last desktop may be gone.
@@ -305,7 +339,7 @@ func (s *Store) PlaceBackgroundSession(sessionID protocol.SessionID, runtimeID p
 				desktop, err = loadLaunchDesktop(tx, profile, "")
 			}
 		} else {
-			desktop, err = launchItemDesktop(tx, profile, kind, id)
+			desktop, err = launchItemDesktop(tx, now, profile, kind, id)
 		}
 		if err != nil {
 			return err

@@ -1047,6 +1047,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleMigrationFinish(client, msg.(*protocol.MigrationFinishMessage))
 	case protocol.CmdDesktopCreate:
 		d.handleDesktopCreate(client, msg.(*protocol.DesktopCreateMessage))
+	case protocol.CmdDesktopClose:
+		d.handleDesktopClose(client, msg.(*protocol.DesktopCloseMessage))
 	case protocol.CmdDesktopRename:
 		d.handleDesktopRename(client, msg.(*protocol.DesktopRenameMessage))
 	case protocol.CmdDesktopSetOrder:
