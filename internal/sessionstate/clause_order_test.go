@@ -174,6 +174,68 @@ func TestClauseOrder(t *testing.T) {
 			wantState:  protocol.SessionStateIdle,
 			wantReason: ReasonAtPrompt,
 		},
+		{
+			why: "a program status report outranks the title heartbeat and has no " +
+				"expiry: the agent states what it is doing and repeats nothing " +
+				"while it keeps doing it",
+			evidence: Evidence{
+				ProgramStatus:  seen(SourceProgramStatus, ClaimBusy, 10*time.Minute),
+				Heartbeat:      seen(SourceHeartbeat, ClaimSettled, time.Second),
+				TurnEverOpened: true,
+				LastBusyAt:     now.Add(-10 * time.Minute),
+			},
+			wantState:  protocol.SessionStateWorking,
+			wantReason: ReasonProgramWorking,
+		},
+		{
+			why: "a blocked report with a permission kind is an approval the agent " +
+				"announced itself, no hook needed",
+			evidence: Evidence{
+				ProgramStatus:  seen(SourceProgramStatus, ClaimApprovalPending, time.Second),
+				TurnOpen:       true,
+				TurnEverOpened: true,
+			},
+			wantState:  protocol.SessionStatePendingApproval,
+			wantReason: ReasonProgramBlocked,
+		},
+		{
+			why: "a harness edge newer than the program status record outranks it: " +
+				"two signals about the same moment, and the later one is news",
+			evidence: Evidence{
+				ProgramStatus:    seen(SourceProgramStatus, ClaimBusy, 2*time.Second),
+				LastHarnessEvent: seen(SourceHarnessEvent, ClaimApprovalPending, time.Second),
+				TurnOpen:         true,
+				TurnEverOpened:   true,
+				LastBusyAt:       now.Add(-2 * time.Second),
+			},
+			wantState:  protocol.SessionStatePendingApproval,
+			wantReason: ReasonApprovalOpen,
+		},
+		{
+			why: "an open bracket measures its silence from the moment the agent " +
+				"stopped working, not from when it started: a long turn reports " +
+				"working once, and its stop hook still lands after its done report",
+			evidence: Evidence{
+				ProgramStatus:  seen(SourceProgramStatus, ClaimSettled, time.Second),
+				TurnOpen:       true,
+				TurnEverOpened: true,
+				LastBusyAt:     now.Add(-10 * time.Minute),
+				LastMovement:   now.Add(-time.Second),
+			},
+			wantState:  protocol.SessionStateWorking,
+			wantReason: ReasonBracketOpen,
+		},
+		{
+			why: "a settled report after a turn defers to the classifier, as a " +
+				"settled heartbeat does",
+			evidence: Evidence{
+				ProgramStatus:  seen(SourceProgramStatus, ClaimSettled, time.Second),
+				TurnEverOpened: true,
+				LastBusyAt:     now.Add(-time.Minute),
+			},
+			wantState:  protocol.SessionStateIdle,
+			wantReason: ReasonProgramSettled,
+		},
 	} {
 		t.Run(tc.why, func(t *testing.T) {
 			got := Resolve(tc.evidence, policy, now)

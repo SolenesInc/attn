@@ -5,13 +5,14 @@ import "time"
 type Source string
 
 const (
-	SourceWorkerInfo Source = "worker_info"
-	SourceHeartbeat  Source = "heartbeat"
-	SourceUnknown    Source = "unknown"
+	SourceWorkerInfo    Source = "worker_info"
+	SourceHeartbeat     Source = "heartbeat"
+	SourceProgramStatus Source = "program_status"
+	SourceUnknown       Source = "unknown"
 )
 
 func (s Source) ClaimsProtocolState() bool {
-	return s != SourceHeartbeat
+	return s != SourceHeartbeat && s != SourceProgramStatus
 }
 
 type Observation struct {

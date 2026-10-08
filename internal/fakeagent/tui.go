@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"sync"
 	"syscall"
@@ -24,6 +25,7 @@ type composer struct {
 type terminal struct {
 	style   composer
 	in      *os.File
+	early   []byte
 	mu      sync.Mutex
 	line    []rune
 	pasting bool
@@ -60,7 +62,58 @@ func openTerminal(style composer) (*terminal, error) {
 func (t *terminal) title(title string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.write("\x1b]0;" + title + "\x07")
+	t.write(titleSequence(title))
+}
+
+func titleSequence(title string) string {
+	return "\x1b]0;" + title + "\x07"
+}
+
+const (
+	programStatusQuery      = "\x1b]7501;?\x1b\\"
+	primaryDeviceAttributes = "\x1b[c"
+)
+
+func (t *terminal) probeProgramStatus() bool {
+	t.mu.Lock()
+	t.write(programStatusQuery + primaryDeviceAttributes)
+	t.mu.Unlock()
+	var replies []byte
+	chunk := make([]byte, 256)
+	for {
+		n, err := t.in.Read(chunk)
+		replies = append(replies, chunk[:n]...)
+		if start, end, ok := deviceAttributesReply(replies); ok {
+			beforeDA := string(replies[:start])
+			supported := strings.Contains(beforeDA, programStatusQuery)
+			typed := strings.Replace(beforeDA, programStatusQuery, "", 1) + string(replies[end:])
+			t.early = []byte(typed)
+			return supported
+		}
+		if err != nil {
+			return false
+		}
+	}
+}
+
+var deviceAttributesReplyPattern = regexp.MustCompile(`\x1b\[\?[0-9;]*c`)
+
+func deviceAttributesReply(input []byte) (start, end int, ok bool) {
+	at := deviceAttributesReplyPattern.FindIndex(input)
+	if at == nil {
+		return 0, 0, false
+	}
+	return at[0], at[1], true
+}
+
+func programStatusSequence(fields string) string {
+	return "\x1b]7501;" + fields + "\x1b\\"
+}
+
+func (t *terminal) programStatus(fields string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.write(programStatusSequence(fields))
 }
 
 func (t *terminal) echo(prompt string) {
@@ -94,7 +147,7 @@ func onScreen(text string) string {
 }
 
 func (t *terminal) readLines(submit func(string)) {
-	var pending []byte
+	pending := t.consume(t.early, submit)
 	chunk := make([]byte, 4096)
 	for {
 		n, err := t.in.Read(chunk)

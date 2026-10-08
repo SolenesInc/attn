@@ -1,11 +1,18 @@
 use std::time::{Duration, Instant};
 
+use crate::ghostty::{ProgramKind, ProgramState, ProgramStatus};
+
 const KEEPALIVE: Duration = Duration::from_secs(1);
 const MAX_PENDING: usize = 64 * 1024;
+
+pub const HEARTBEAT: &str = "heartbeat";
+pub const PROGRAM_STATUS: &str = "program_status";
+const PROGRAM_CLEAR: &str = "clear";
 
 pub struct Observation {
     pub claim: &'static str,
     pub detail: String,
+    pub source: &'static str,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -25,6 +32,7 @@ pub struct SignalObserver {
     shell_pgid: i32,
     last_foreground_pgid: i32,
     prompt_owner: Option<i32>,
+    program_status_reported: bool,
 }
 
 impl SignalObserver {
@@ -44,7 +52,26 @@ impl SignalObserver {
             shell_pgid: 0,
             last_foreground_pgid: 0,
             prompt_owner: None,
+            program_status_reported: false,
         }
+    }
+
+    pub fn observe_program_status(&mut self, reports: &[ProgramStatus]) -> Vec<Observation> {
+        if self.kind == Kind::Shell {
+            return Vec::new();
+        }
+        reports
+            .iter()
+            .map(|report| {
+                let claim = program_status_claim(report);
+                self.program_status_reported = claim != PROGRAM_CLEAR;
+                Observation {
+                    claim,
+                    detail: report.message.clone(),
+                    source: PROGRAM_STATUS,
+                }
+            })
+            .collect()
     }
 
     pub fn observe(&mut self, chunk: &[u8]) -> Vec<Observation> {
@@ -126,7 +153,7 @@ impl SignalObserver {
         if self.kind == Kind::Shell && code == "133" {
             return self.classify_shell_marker(payload, now);
         }
-        if code != "0" && code != "2" {
+        if (code != "0" && code != "2") || self.program_status_reported {
             return None;
         }
         match self.kind {
@@ -200,7 +227,25 @@ impl SignalObserver {
         self.last_claim.push_str(claim);
         self.last_detail.clone_from(&detail);
         self.last_emit = Some(now);
-        Some(Observation { claim, detail })
+        Some(Observation {
+            claim,
+            detail,
+            source: HEARTBEAT,
+        })
+    }
+}
+
+fn program_status_claim(report: &ProgramStatus) -> &'static str {
+    match (report.state, report.kind) {
+        (ProgramState::Working, _) => "working",
+        (ProgramState::Blocked, ProgramKind::Permission) => "blocked_permission",
+        (ProgramState::Blocked, ProgramKind::Question) => "blocked_question",
+        (ProgramState::Blocked, ProgramKind::Auth) => "blocked_auth",
+        (ProgramState::Blocked, ProgramKind::None) => "blocked",
+        (ProgramState::Done, _) => "done",
+        (ProgramState::Error, _) => "error",
+        (ProgramState::Clear, _) => PROGRAM_CLEAR,
+        (ProgramState::Idle, _) => "idle",
     }
 }
 

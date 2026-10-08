@@ -26,7 +26,7 @@ use crate::queries::{
     ColorScheme, TerminalQueryStream, color_scheme_report, theme_color_scheme,
     track_color_scheme_reports,
 };
-use crate::signals::SignalObserver;
+use crate::signals::{self, SignalObserver};
 use crate::wire::{WireFeeder, mint_epoch};
 
 const READER_STACK_BYTES: usize = 256 * 1024;
@@ -148,10 +148,21 @@ struct Model {
     pixel_height: u16,
 }
 
+impl Lifecycle {
+    fn replayed_source(&self) -> &'static str {
+        if self.state_source == signals::PROGRAM_STATUS {
+            signals::PROGRAM_STATUS
+        } else {
+            "worker_info"
+        }
+    }
+}
+
 struct Lifecycle {
     running: bool,
     state: String,
     state_detail: String,
+    state_source: &'static str,
     exit_code: Option<i32>,
     exit_signal: Option<String>,
 }
@@ -304,6 +315,7 @@ impl Session {
                 running: true,
                 state: "working".to_owned(),
                 state_detail: String::new(),
+                state_source: signals::HEARTBEAT,
                 exit_code: None,
                 exit_signal: None,
             }),
@@ -381,7 +393,7 @@ impl Session {
         });
         if !lifecycle.state.is_empty() {
             result["last_signal_claim"] = Value::String(lifecycle.state.clone());
-            result["last_signal_source"] = Value::String("heartbeat".to_owned());
+            result["last_signal_source"] = Value::String(lifecycle.state_source.to_owned());
             result["last_signal_detail"] = Value::String(lifecycle.state_detail.clone());
         }
         add_exit_fields(&mut result, &lifecycle);
@@ -465,7 +477,7 @@ impl Session {
             &self.id,
             &lifecycle.state,
             &lifecycle.state_detail,
-            "worker_info",
+            lifecycle.replayed_source(),
         ));
         if !lifecycle.running {
             let _ = sender.try_send(exit_event(
@@ -490,7 +502,7 @@ impl Session {
             &self.id,
             &lifecycle.state,
             &lifecycle.state_detail,
-            "worker_info",
+            lifecycle.replayed_source(),
         )];
         if !lifecycle.running {
             events.push(exit_event(
@@ -733,7 +745,9 @@ impl Session {
             let feed = model.wire.feed(data);
             let drained = model.wire.terminal_mut().drain_responses();
             responses.extend(queries.replies_after_feed(model.wire.terminal(), &drained));
-            let observations = model.signals.observe(data);
+            let reports = model.wire.terminal_mut().drain_program_status();
+            let mut observations = model.signals.observe_program_status(&reports);
+            observations.extend(model.signals.observe(data));
             model.seq = model.seq.wrapping_add(1);
             (
                 model.seq,
@@ -757,7 +771,7 @@ impl Session {
             self.force_resync(reason);
         }
         for observation in observations {
-            self.publish_state(observation.claim, &observation.detail, "heartbeat");
+            self.publish_state(observation.claim, &observation.detail, observation.source);
         }
     }
 
@@ -820,13 +834,14 @@ impl Session {
             .kitty_image(image_id)
     }
 
-    fn publish_state(&self, claim: &str, detail: &str, source: &str) {
+    fn publish_state(&self, claim: &str, detail: &str, source: &'static str) {
         {
             let mut lifecycle = self.lifecycle.lock().expect("lifecycle mutex poisoned");
             lifecycle.state.clear();
             lifecycle.state.push_str(claim);
             lifecycle.state_detail.clear();
             lifecycle.state_detail.push_str(detail);
+            lifecycle.state_source = source;
         }
         let event = state_event(&self.id, claim, detail, source);
         self.broadcast_watch(event.clone());
@@ -912,7 +927,7 @@ impl Session {
             .signals
             .observe_shell_poll(self.child_pid, foreground);
         if let Some(observation) = observation {
-            self.publish_state(observation.claim, &observation.detail, "heartbeat");
+            self.publish_state(observation.claim, &observation.detail, observation.source);
         }
     }
 }

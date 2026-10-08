@@ -24,8 +24,8 @@ func (d *Daemon) seedRecoveredEvidence(sessionID protocol.SessionID, existing *p
 		if signalAt.IsZero() {
 			signalAt = time.Now()
 		}
-		if heartbeat, ok := heartbeatEvidence(info.LastSignal, signalAt); ok && !d.evidenceHoldsSettledHeartbeat(sessionID, info.LastSignal) {
-			seeds = append(seeds, heartbeat)
+		if signal, ok := ptyEvidence(info.LastSignal, signalAt); ok && !d.evidenceHoldsPTYEvidence(sessionID, info.LastSignal) {
+			seeds = append(seeds, signal)
 			at = signalAt
 		}
 	}

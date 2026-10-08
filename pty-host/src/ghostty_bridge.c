@@ -30,6 +30,13 @@ void attn_ghostty_set_decoded_image(GhosttySysImage *out, uint32_t width,
 }
 
 typedef struct {
+  uint8_t state;
+  uint8_t kind;
+  uint8_t *message;
+  size_t message_len;
+} AttnProgramStatus;
+
+typedef struct {
   GhosttyTerminal terminal;
   uint16_t cols;
   uint16_t rows;
@@ -38,6 +45,9 @@ typedef struct {
   uint8_t *responses;
   size_t responses_len;
   size_t responses_cap;
+  AttnProgramStatus *program_status;
+  size_t program_status_len;
+  size_t program_status_cap;
 } AttnGhosttyTerminal;
 
 static void attn_write_pty(GhosttyTerminal terminal, void *userdata,
@@ -58,6 +68,32 @@ static void attn_write_pty(GhosttyTerminal terminal, void *userdata,
   }
   memcpy(attn->responses + attn->responses_len, data, len);
   attn->responses_len += len;
+}
+
+static void attn_program_status(GhosttyTerminal terminal, void *userdata,
+                                const GhosttyTerminalProgramStatus *report) {
+  (void)terminal;
+  AttnGhosttyTerminal *attn = userdata;
+  if (attn == NULL || report == NULL || report->id.len != 0) return;
+  if (attn->program_status_len == attn->program_status_cap) {
+    size_t cap = attn->program_status_cap == 0 ? 4 : attn->program_status_cap * 2;
+    AttnProgramStatus *next =
+        realloc(attn->program_status, cap * sizeof(*next));
+    if (next == NULL) return;
+    attn->program_status = next;
+    attn->program_status_cap = cap;
+  }
+  uint8_t *message = NULL;
+  if (report->message.len > 0) {
+    message = malloc(report->message.len);
+    if (message == NULL) return;
+    memcpy(message, report->message.ptr, report->message.len);
+  }
+  AttnProgramStatus *slot = &attn->program_status[attn->program_status_len++];
+  slot->state = (uint8_t)report->state;
+  slot->kind = (uint8_t)report->kind;
+  slot->message = message;
+  slot->message_len = report->message.len;
 }
 
 static GhosttyColorRgb attn_rgb(uint32_t value) {
@@ -88,8 +124,12 @@ static GhosttyResult attn_configure(AttnGhosttyTerminal *attn,
   rc = ghostty_terminal_set(attn->terminal, GHOSTTY_TERMINAL_OPT_USERDATA,
                             attn);
   if (rc != GHOSTTY_SUCCESS) return rc;
-  return ghostty_terminal_set(attn->terminal, GHOSTTY_TERMINAL_OPT_WRITE_PTY,
-                              (const void *)attn_write_pty);
+  rc = ghostty_terminal_set(attn->terminal, GHOSTTY_TERMINAL_OPT_WRITE_PTY,
+                            (const void *)attn_write_pty);
+  if (rc != GHOSTTY_SUCCESS) return rc;
+  return ghostty_terminal_set(attn->terminal,
+                              GHOSTTY_TERMINAL_OPT_PROGRAM_STATUS,
+                              (const void *)attn_program_status);
 }
 
 AttnGhosttyTerminal *attn_ghostty_new(uint16_t cols, uint16_t rows,
@@ -145,10 +185,18 @@ AttnGhosttyTerminal *attn_ghostty_restore(const uint8_t *data, size_t len,
   return attn;
 }
 
+void attn_ghostty_program_status_free(AttnProgramStatus *reports, size_t len) {
+  if (reports == NULL) return;
+  for (size_t i = 0; i < len; i++) free(reports[i].message);
+  free(reports);
+}
+
 void attn_ghostty_free(AttnGhosttyTerminal *attn) {
   if (attn == NULL) return;
   ghostty_terminal_free(attn->terminal);
   free(attn->responses);
+  attn_ghostty_program_status_free(attn->program_status,
+                                   attn->program_status_len);
   free(attn);
 }
 
@@ -322,6 +370,19 @@ uint8_t *attn_ghostty_drain_responses(AttnGhosttyTerminal *attn,
   *out_len = attn->responses_len;
   attn->responses_len = 0;
   return copy;
+}
+
+AttnProgramStatus *attn_ghostty_drain_program_status(AttnGhosttyTerminal *attn,
+                                                     size_t *out_len) {
+  if (out_len == NULL) return NULL;
+  *out_len = 0;
+  if (attn == NULL || attn->program_status_len == 0) return NULL;
+  AttnProgramStatus *reports = attn->program_status;
+  *out_len = attn->program_status_len;
+  attn->program_status = NULL;
+  attn->program_status_len = 0;
+  attn->program_status_cap = 0;
+  return reports;
 }
 
 uint8_t *attn_ghostty_snapshot(AttnGhosttyTerminal *attn, size_t *out_len) {

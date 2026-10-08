@@ -21,7 +21,7 @@ var selectorLines = []string{
 }
 
 type modal struct {
-	title     string
+	announce  string
 	lines     []string
 	resting   func()
 	typed     []byte
@@ -29,7 +29,7 @@ type modal struct {
 }
 
 type approvalAsker interface {
-	approvalTitle() string
+	approvalAnnouncement() string
 	approvalAnswered()
 }
 
@@ -76,7 +76,7 @@ func (a *agent) handleModal(method string) (any, error) {
 			return nil, fmt.Errorf("%T does not script an approval prompt", a.conv)
 		}
 		return struct{}{}, a.term.openModal(&modal{
-			title:     asker.approvalTitle(),
+			announce:  asker.approvalAnnouncement(),
 			lines:     []string{"Allow the command to run?", "› 1. Yes, proceed", "  2. No, and tell Codex what to do differently", "Press enter to confirm or esc to cancel"},
 			resting:   asker.approvalAnswered,
 			answering: true,
@@ -96,12 +96,8 @@ func (t *terminal) openModal(m *modal) error {
 		return fmt.Errorf("a modal is already open")
 	}
 	t.modal = m
-	title := ""
-	if m.title != "" {
-		title = "\x1b]0;" + m.title + "\x07"
-	}
-	// One write, so a test seeing the prompt on screen knows the worker read the title too.
-	t.write(title + "\r\x1b[J" + strings.Join(m.lines, "\r\n"))
+	// One write, so a test seeing the prompt on screen knows the worker read the announcement too.
+	t.write(m.announce + "\r\x1b[J" + strings.Join(m.lines, "\r\n"))
 	return nil
 }
 
@@ -133,8 +129,8 @@ func (t *terminal) capturedByModal(input []byte) bool {
 	return true
 }
 
-func (c *codex) approvalTitle() string {
-	return "[ . ] Action Required | " + c.restingTitle()
+func (c *codex) approvalAnnouncement() string {
+	return titleSequence("[ . ] Action Required | " + c.restingTitle())
 }
 
 func (c *codex) approvalAnswered() {

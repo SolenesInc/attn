@@ -120,13 +120,74 @@ func (d *Daemon) recordPTYEvidence(sessionID protocol.SessionID, obs pty.Observa
 	if at.IsZero() {
 		at = time.Now()
 	}
-	mutate, ok := heartbeatEvidence(obs, at)
+	mutate, ok := ptyEvidence(obs, at)
 	if !ok {
 		return false
 	}
 	return d.updateEvidence(sessionID, func(e *sessionstate.Evidence) bool {
-		return holdsSettledHeartbeat(e, obs)
+		return holdsPTYEvidence(e, obs)
 	}, movedAt(at, mutate))
+}
+
+func ptyEvidence(obs pty.Observation, at time.Time) (func(*sessionstate.Evidence), bool) {
+	if obs.Source == pty.SourceProgramStatus {
+		return programStatusEvidence(obs, at), true
+	}
+	return heartbeatEvidence(obs, at)
+}
+
+func holdsPTYEvidence(e *sessionstate.Evidence, obs pty.Observation) bool {
+	if obs.Source == pty.SourceProgramStatus {
+		return holdsProgramStatus(e, obs)
+	}
+	return e.ProgramStatus != nil || holdsSettledHeartbeat(e, obs)
+}
+
+func programStatusClaim(claim string) (sessionstate.Claim, bool) {
+	switch claim {
+	case pty.ProgramWorking:
+		return sessionstate.ClaimBusy, true
+	case pty.ProgramBlockedPermission:
+		return sessionstate.ClaimApprovalPending, true
+	case pty.ProgramBlocked, pty.ProgramBlockedQuestion, pty.ProgramBlockedAuth:
+		return sessionstate.ClaimNeedsInput, true
+	case pty.ProgramError:
+		return sessionstate.ClaimStopFailed, true
+	case pty.ProgramDone, pty.ProgramIdle:
+		return sessionstate.ClaimSettled, true
+	default:
+		return "", false
+	}
+}
+
+func holdsProgramStatus(e *sessionstate.Evidence, obs pty.Observation) bool {
+	claim, reported := programStatusClaim(obs.Claim)
+	if !reported {
+		return e.ProgramStatus == nil
+	}
+	return e.ProgramStatus != nil &&
+		e.ProgramStatus.Claim == claim &&
+		e.ProgramStatus.Detail == obs.Detail
+}
+
+func programStatusEvidence(obs pty.Observation, at time.Time) func(*sessionstate.Evidence) {
+	claim, reported := programStatusClaim(obs.Claim)
+	return func(e *sessionstate.Evidence) {
+		if claim == sessionstate.ClaimBusy {
+			e.LastBusyAt = at
+		}
+		e.Heartbeat = nil
+		if !reported {
+			e.ProgramStatus = nil
+			return
+		}
+		e.ProgramStatus = &sessionstate.Observation{
+			Source:     sessionstate.SourceProgramStatus,
+			Claim:      claim,
+			Detail:     obs.Detail,
+			ObservedAt: at,
+		}
+	}
 }
 
 func holdsSettledHeartbeat(e *sessionstate.Evidence, obs pty.Observation) bool {
@@ -139,9 +200,9 @@ func holdsSettledHeartbeat(e *sessionstate.Evidence, obs pty.Observation) bool {
 		e.Heartbeat.Detail == obs.Detail
 }
 
-func (d *Daemon) evidenceHoldsSettledHeartbeat(sessionID protocol.SessionID, obs pty.Observation) bool {
+func (d *Daemon) evidenceHoldsPTYEvidence(sessionID protocol.SessionID, obs pty.Observation) bool {
 	evidence, ok := d.evidenceTable().snapshot(sessionID)
-	return ok && holdsSettledHeartbeat(&evidence, obs)
+	return ok && holdsPTYEvidence(&evidence, obs)
 }
 
 func heartbeatEvidence(obs pty.Observation, at time.Time) (func(*sessionstate.Evidence), bool) {

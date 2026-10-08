@@ -1,0 +1,4 @@
+kind: added
+area: agents
+change: attn answers the OSC 7501 program status protocol, so Claude Code reports working, waiting on approval or input, done and failed directly instead of attn reading its title glyphs.
+notes: Terminal DCS strings now keep UTF-8 payload bytes such as "Ü" intact, following the libghostty-vt update this needed.
