@@ -44,6 +44,7 @@ const (
 	AutomationBindingReleasedContractRotated   = "contract_rotated"
 	AutomationBindingReleasedTicketSwept       = "ticket_swept"
 	AutomationBindingReleasedDefinitionDeleted = "definition_deleted"
+	AutomationBindingReleasedLaunchFailed      = "launch_failed"
 )
 
 type AutomationDefinition struct {
@@ -1365,11 +1366,29 @@ func (s *Store) MarkAutomationRunDeliveredWithEvent(
 	}
 	return seq, true, nil
 }
-func (s *Store) MarkAutomationRunFailed(id, message string, now time.Time) error {
+func (s *Store) MarkAutomationRunFailed(id, message string, releaseUnstartedBinding bool, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, e := s.db.Exec(`UPDATE automation_runs SET state=?,last_error=?,updated_at=? WHERE id=?`, AutomationRunStateFailed, message, formatStoredTime(now), id)
-	return e
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	stamp := formatStoredTime(now)
+	if _, err := tx.Exec(`UPDATE automation_runs SET state=?,last_error=?,updated_at=? WHERE id=?`, AutomationRunStateFailed, message, stamp, id); err != nil {
+		return err
+	}
+	if releaseUnstartedBinding {
+		if _, err := tx.Exec(`
+		UPDATE automation_continuity_bindings
+		SET status=?,released_reason=?,released_at=?,updated_at=?
+		WHERE status=? AND origin_run_id=?
+		  AND NOT EXISTS (SELECT 1 FROM sessions WHERE sessions.id=automation_continuity_bindings.session_id)
+	`, AutomationBindingStatusReleased, AutomationBindingReleasedLaunchFailed, stamp, stamp, AutomationBindingStatusActive, id); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func (s *Store) MarkAutomationRunCancelled(id, reason string, now time.Time) error {

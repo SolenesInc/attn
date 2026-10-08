@@ -232,7 +232,7 @@ export const scenarioCatalog = [
   {
     id: 'automation-lifecycle',
     runnerId: 'AUTOMATION-LIFECYCLE',
-    label: 'Automation lifecycle: edits, permanent deletion and cleanup of finished work',
+    label: 'Automation lifecycle: edits, permanent deletion, cleanup of finished work and stopped disk-full launches',
     command: ['pnpm', 'run', 'real-app:scenario-automation-lifecycle'],
     timeoutMs: 600_000,
   },

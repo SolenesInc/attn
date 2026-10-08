@@ -121,6 +121,60 @@ func TestAReviewWhoseCodeIsOutOfReachWaitsForItAcrossARestartOrFails(t *testing.
 	}
 }
 
+func TestAReviewCheckoutStopsAfterDiskFullUntilAnotherReviewIsRequested(t *testing.T) {
+	r := newAutomationReviewWorld(t)
+	filterDir := t.TempDir()
+	attempts := filepath.Join(filterDir, "attempts")
+	filter := filepath.Join(filterDir, "smudge")
+	script := fmt.Sprintf("#!/bin/sh\nprintf 'attempt\\n' >> %q\necho 'error: unable to write file change.go: No space left on device' >&2\nexit 1\n", attempts)
+	if err := os.WriteFile(filter, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, r.clone, "config", "filter.storage.clean", "cat")
+	runGit(t, r.clone, "config", "filter.storage.smudge", filter)
+	runGit(t, r.clone, "config", "filter.storage.required", "true")
+	r.head = commitFile(t, r.clone, ".gitattributes", "change.go filter=storage\n")
+	r.github.request(42, r.head, false)
+	r.refresh()
+	failed := r.awaitNewRun(1, "failed")
+	if !strings.Contains(protocol.Deref(failed.LastError), "No space left on device") {
+		t.Errorf("the failed checkout reports %q, want its disk-full error", protocol.Deref(failed.LastError))
+	}
+	if notes := automationSeedNotesMentioning(t, r.cli, protocol.Deref(failed.SeedID), "No space left on device"); notes != 1 {
+		t.Errorf("the failed checkout has %d failure notes, want one", notes)
+	}
+	for range 3 {
+		r.refresh()
+	}
+	r.w.restart()
+	r.app, r.cli = r.w.App(), r.w.Client()
+	runGit(t, r.clone, "config", "filter.storage.smudge", "cat")
+	r.refresh()
+	if runs := automationRuns(t, r.cli, 1); len(runs) != 1 || runs[0].ID != failed.ID || runs[0].State != "failed" {
+		t.Fatalf("after refreshes, restart and restored storage the runs are %+v, want the original failed run", runs)
+	}
+	if calls, err := os.ReadFile(attempts); err != nil || string(calls) != "attempt\n" {
+		t.Fatalf("checkout attempts = %q (%v), want one", calls, err)
+	}
+	r.rerequest(42)
+	recovered := r.awaitNewRun(1, "delivered", failed)
+	if protocol.Deref(recovered.SessionID) == protocol.Deref(failed.SessionID) || protocol.Deref(recovered.SeedID) == protocol.Deref(failed.SeedID) {
+		t.Errorf("the new request reused the failed launch's session or seed: %+v", recovered)
+	}
+	if shown, err := r.cli.SeedShow("", protocol.Deref(failed.SeedID)); err != nil || shown.Seed.Status != "withered" {
+		t.Errorf("the failed launch's seed = %+v (%v), want it to remain withered", shown, err)
+	}
+	reviewer := r.w.Launched(string(protocol.Deref(recovered.SessionID)))
+	reviewer.Prompted()
+	reviewer.Reply("Reviewed.")
+	r.stop(reviewer)
+	r.rerequest(42)
+	resumed := r.awaitNewRun(1, "delivered", failed, recovered)
+	if again := r.w.Launched(string(protocol.Deref(resumed.SessionID))); !again.Resumed || again.ConversationID != reviewer.ConversationID {
+		t.Errorf("the recovered reviewer started as %+v, want its conversation %s resumed", again, reviewer.ConversationID)
+	}
+}
+
 func TestAStoppedReviewerResumesItsConversationOnlyWhileItsTranscriptAndContractHold(t *testing.T) {
 	r := newAutomationReviewWorld(t)
 	r.github.request(42, r.head, false)

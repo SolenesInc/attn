@@ -168,9 +168,9 @@ location:
 
 const CLEANUP_IDENTITY = 'mock.github.local/owner/repo';
 
-function cleanupLifecycleDefinitionYAML({ id, executable, repoPath, prompt }) {
+function cleanupLifecycleDefinitionYAML({ id, executable, repoPath, prompt, name = 'Slice 7 packaged cleanup-dirty-safe proof' }) {
   return `api_version: ${API_VERSION}
-${id ? `id: ${id}\n` : ''}name: Slice 7 packaged cleanup-dirty-safe proof
+${id ? `id: ${id}\n` : ''}name: ${name}
 trigger:
   type: github_review_requested
   repositories:
@@ -327,6 +327,7 @@ async function main() {
   let editID = 0;
   let deleteID = 0;
   let cleanupID = 0;
+  let diskFullDefinitionID = 0;
   const editDefinitionFile = path.join(runner.sessionDir, 'edit-rebind.yml');
   const deleteDefinitionFile = path.join(runner.sessionDir, 'deletion.yml');
   const cleanupDefinitionFile = path.join(runner.sessionDir, 'cleanup-dirty-safe.yml');
@@ -600,6 +601,57 @@ async function main() {
       disableDefinition(binary, cleanupID, daemonEnv);
     });
 
+    await runner.step('disk_full_launch_stops_retrying_and_fails_visibly', async () => {
+      await setRequested(mock.url, false);
+      await wsRequest(options.wsUrl, { cmd: 'refresh_prs' }, 'refresh_prs_result');
+      const attempts = path.join(runner.sessionDir, 'disk-full-attempts');
+      const filter = path.join(runner.sessionDir, 'disk-full-filter');
+      fs.writeFileSync(filter, `#!/bin/sh\nprintf 'attempt\\n' >> '${attempts.replaceAll("'", "'\\''")}'\nprintf 'No space left on device\\n' >&2\nexit 1\n`, { mode: 0o700 });
+      const git = (args) => execFileSync('git', args, { cwd: cleanupFixture.repo, encoding: 'utf8' });
+      git(['config', 'filter.storage.clean', 'cat']);
+      git(['config', 'filter.storage.smudge', `'${filter.replaceAll("'", "'\\''")}'`]);
+      git(['config', 'filter.storage.required', 'true']);
+      fs.writeFileSync(path.join(cleanupFixture.repo, '.git', 'info', 'attributes'), 'README.md filter=storage\n');
+      const diskFullDefinitionFile = path.join(runner.sessionDir, 'definition-disk-full.yml');
+      fs.writeFileSync(diskFullDefinitionFile, cleanupLifecycleDefinitionYAML({ id: 0, executable: probe.executable, repoPath: cleanupFixture.repo, prompt: 'Disk-full launch proof.', name: 'Disk-full launch proof' }));
+      diskFullDefinitionID = runJSON(binary, ['automation', 'apply', '--file', diskFullDefinitionFile], daemonEnv).id;
+      await wsRequest(options.wsUrl, { cmd: 'refresh_prs' }, 'refresh_prs_result');
+      await setRequested(mock.url, true);
+      await wsRequest(options.wsUrl, { cmd: 'refresh_prs' }, 'refresh_prs_result');
+      const failed = await poll(() => {
+        const rows = runJSON(binary, ['automation', 'runs', diskFullDefinitionID], daemonEnv) || [];
+        return rows[0]?.state === 'failed' ? rows[0] : null;
+      }, 'disk-full launch failure');
+      runner.assert(failed.last_error.includes('No space left on device'), 'disk-full launch records its cause', failed);
+      await client.request('automations_open_panel');
+      const ui = await poll(async () => {
+        const state = await client.request('automations_select_definition', { definitionId: diskFullDefinitionID });
+        return state.runs.find((row) => row.id === failed.id)?.state === 'failed' ? state : null;
+      }, 'disk-full failure in the automations panel');
+      runner.assert(ui.definitions.find((row) => row.id === diskFullDefinitionID)?.failed, 'the automation shows a failure badge', ui);
+      runner.assert(ui.runs.find((row) => row.id === failed.id)?.lastError.includes('No space left on device'), 'run history shows the disk-full cause', ui);
+      await client.request('dom_click', { selector: '.automations-panel__close' });
+      for (let refresh = 0; refresh < 3; refresh++) {
+        await wsRequest(options.wsUrl, { cmd: 'refresh_prs' }, 'refresh_prs_result');
+      }
+      git(['config', 'filter.storage.smudge', 'cat']);
+      await wsRequest(options.wsUrl, { cmd: 'refresh_prs' }, 'refresh_prs_result');
+      const stopped = runJSON(binary, ['automation', 'runs', diskFullDefinitionID], daemonEnv);
+      runner.assert(stopped.length === 1 && stopped[0].state === 'failed', 'polls keep the failed launch stopped after storage recovers', stopped);
+      runner.assert(fs.readFileSync(attempts, 'utf8') === 'attempt\n', 'the failed checkout was attempted only once');
+      await setRequested(mock.url, false);
+      await wsRequest(options.wsUrl, { cmd: 'refresh_prs' }, 'refresh_prs_result');
+      await setRequested(mock.url, true);
+      await wsRequest(options.wsUrl, { cmd: 'refresh_prs' }, 'refresh_prs_result');
+      const recovered = await poll(() => {
+        const rows = runJSON(binary, ['automation', 'runs', diskFullDefinitionID], daemonEnv) || [];
+        return rows.length === 2 && rows[0].state === 'delivered' ? rows[0] : null;
+      }, 'fresh review request after storage recovers');
+      runner.assert(recovered.session_id !== failed.session_id && recovered.seed_id !== failed.seed_id, 'a fresh request starts a new reviewer after the failed launch', { failed, recovered });
+      await client.request('close_session', { sessionId: recovered.session_id });
+      await waitSessionGone(observer, recovered.session_id, 'recovered reviewer to unregister');
+    });
+
     await runner.finishSuccess({ instance, editID, deleteID, cleanupID, run1, run2, run3, deleteRunID });
   } catch (error) {
     await captureFailureEvidence(runner, client).catch(() => {});
@@ -611,6 +663,7 @@ async function main() {
     if (daemonEnv) {
       if (editApplied) { try { disableDefinition(binary, editID, daemonEnv); } catch {} }
       if (deleteApplied) { try { disableDefinition(binary, deleteID, daemonEnv); } catch {} }
+      if (diskFullDefinitionID) { try { disableDefinition(binary, diskFullDefinitionID, daemonEnv); } catch {} }
       if (cleanupApplied) { try { disableDefinition(binary, cleanupID, daemonEnv); } catch {} }
     }
     await client.quitApp().catch(() => {});
