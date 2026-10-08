@@ -648,6 +648,8 @@ async function main() {
         return rows.length === 2 && rows[0].state === 'delivered' ? rows[0] : null;
       }, 'fresh review request after storage recovers');
       runner.assert(recovered.session_id !== failed.session_id && recovered.seed_id !== failed.seed_id, 'a fresh request starts a new reviewer after the failed launch', { failed, recovered });
+      await client.request('close_session', { sessionId: recovered.session_id });
+      await waitSessionGone(observer, recovered.session_id, 'recovered reviewer to unregister');
     });
 
     await runner.finishSuccess({ instance, editID, deleteID, cleanupID, run1, run2, run3, deleteRunID });
