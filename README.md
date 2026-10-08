@@ -65,8 +65,7 @@ tile remains, focus passes to the tile on the left, then another remaining tile.
 
 Use "Move with delegates to…" in the command palette to move an agent with its
 delegates on the same desktop, including their delegates. Hold Option when
-dropping an agent on another desktop
-in the sidebar for the same move. Each delegate lands beside its dispatcher;
+dropping an agent on another desktop in the sidebar for the same move. Each delegate lands beside its dispatcher;
 delegates elsewhere and split shells stay where they are.
 
 **Panes, splits, and first-class shells.** A desktop can hold several sessions
