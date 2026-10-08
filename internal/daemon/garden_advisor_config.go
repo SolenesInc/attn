@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/modeltiers"
 )
 
@@ -120,6 +121,12 @@ func (d *Daemon) gardenAdvisorConfig() (gardenAdvisorConfig, error) {
 		fallback = gardenAdvisorClaudeDefaultModel
 	case "copilot":
 		fallback = gardenAdvisorCopilotDefaultModel
+	}
+	if !headless.Enabled() {
+		if config.Model == "" {
+			config.Model = fallback
+		}
+		return config, nil
 	}
 	config.Model = d.resolveTierModel(config.Agent, modeltiers.Light, config.Model, fallback)
 	return config, nil

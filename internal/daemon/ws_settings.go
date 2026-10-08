@@ -391,7 +391,11 @@ func (d *Daemon) chiefLaunchModel(agent string, chief bool) string {
 	if !chief {
 		return ""
 	}
-	return d.resolveTierModel(agent, modeltiers.Deep, d.store.GetSetting(SettingChiefModelPrefix+strings.ToLower(strings.TrimSpace(agent))), "")
+	explicit := strings.TrimSpace(d.store.GetSetting(SettingChiefModelPrefix + strings.ToLower(strings.TrimSpace(agent))))
+	if agent != "claude" && agent != "codex" {
+		return explicit
+	}
+	return d.resolveTierModel(agent, modeltiers.Deep, explicit, "")
 }
 
 func (d *Daemon) chiefLaunchEffort(agent string, chief bool) string {
@@ -401,7 +405,10 @@ func (d *Daemon) chiefLaunchEffort(agent string, chief bool) string {
 	if effort := strings.TrimSpace(d.store.GetSetting(SettingChiefEffortPrefix + strings.ToLower(strings.TrimSpace(agent)))); effort != "" {
 		return effort
 	}
-	return "low"
+	if agent == "claude" || agent == "codex" {
+		return "low"
+	}
+	return ""
 }
 
 func settingShapesCrewLaunch(key string) bool {
