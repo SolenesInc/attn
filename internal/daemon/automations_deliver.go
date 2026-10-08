@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -36,20 +37,15 @@ func (d *Daemon) deliverObservedAutomationRun(run *store.AutomationRun) error {
 }
 func (d *Daemon) handleAutomationDeliveryError(run *store.AutomationRun, deliveryErr error) (*store.AutomationRun, error) {
 	var retryable *retryableAutomationDeliveryError
+	diskFull := errors.Is(deliveryErr, syscall.ENOSPC) || strings.Contains(strings.ToLower(deliveryErr.Error()), "no space left on device")
 	// A delivery cut short by shutdown stays pending, and the next start delivers it again.
-	if errors.As(deliveryErr, &retryable) || d.stopping() {
+	if !diskFull && (errors.As(deliveryErr, &retryable) || d.stopping()) {
 		current, err := d.store.GetAutomationRun(run.ID)
 		return current, errors.Join(deliveryErr, err)
 	}
-	failed, failErr := d.failAutomationRun(run, deliveryErr)
-	return failed, errors.Join(deliveryErr, failErr)
-}
-func (d *Daemon) stopping() bool { return d.life.Ended() }
-
-func (d *Daemon) failAutomationRun(run *store.AutomationRun, deliveryErr error) (*store.AutomationRun, error) {
 	now := time.Now()
 	var persistErr error
-	if err := d.store.MarkAutomationRunFailed(run.ID, deliveryErr.Error(), now); err != nil {
+	if err := d.store.MarkAutomationRunFailed(run.ID, deliveryErr.Error(), diskFull, now); err != nil {
 		persistErr = errors.Join(persistErr, fmt.Errorf("mark run failed: %w", err))
 	}
 	if err := d.recordAutomationRunSeedOutcome(run, automationFailureComment(run, deliveryErr.Error())); err != nil {
@@ -60,8 +56,10 @@ func (d *Daemon) failAutomationRun(run *store.AutomationRun, deliveryErr error) 
 	if err != nil {
 		persistErr = errors.Join(persistErr, fmt.Errorf("reload failed run: %w", err))
 	}
-	return failed, persistErr
+	return failed, errors.Join(deliveryErr, persistErr)
 }
+func (d *Daemon) stopping() bool { return d.life.Ended() }
+
 func automationFailureComment(run *store.AutomationRun, message string) string {
 	comment := "Automation delivery failed: " + message
 	if run != nil {
