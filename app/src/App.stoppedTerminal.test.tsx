@@ -50,5 +50,7 @@ it('keeps an exited agent stopped across app restart and resumes only on request
 it('closes a stopped agent through the normal close action', async () => {
   const view = await openAttachedTerminals({ sessions: [ended()], desktops: [desktop] });
   await gesture(view.daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Close' })));
-  expect(view.daemon.sentOf('unregister')).toEqual([{ cmd: 'unregister', id: 'ended' }]);
+  expect(view.daemon.sentOf('desktop_close_tile')).toEqual([
+    { cmd: 'desktop_close_tile', request_id: expect.any(String), desktop_id: 'desktop-ended', tile_id: 'pane-ended' },
+  ]);
 });

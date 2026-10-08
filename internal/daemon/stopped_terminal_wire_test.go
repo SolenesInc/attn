@@ -60,6 +60,24 @@ func TestAStoppedAgentKeepsItsScreenAcrossReconnectAndRestartUntilResumed(t *tes
 	}
 }
 
+func TestClosingAStoppedAgentsTileClosesTheSession(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	run := w.Launched(session)
+	terminal := app.Terminal(session)
+	run.Exit(143)
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
+
+	desktop, tile := tileOf(t, w, app, terminal)
+	if closed := closeTileFromApp(app, desktop, tile); !closed.Success {
+		t.Fatalf("close the stopped agent's tile: %s", protocol.Deref(closed.Error))
+	}
+	if entry := ledgerShowOverTheWebSocket(app, session).Entry; entry == nil || protocol.Deref(entry.ClosedAt) == "" {
+		t.Errorf("closing the stopped agent's tile left %+v, want %s closed", entry, session)
+	}
+}
+
 func TestACleanAgentQuitClosesWithoutAnAppRequest(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
