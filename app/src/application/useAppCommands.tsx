@@ -185,6 +185,17 @@ export function useAppCommands(): PaletteCommand[] {
         shortcut: desktop.shortcut_slot ? keys(`desktop.select${desktop.shortcut_slot}` as ShortcutId) : undefined,
         run: () => handleSelectDesktop(desktop.id),
       })),
+      ...(desktopNavigation.canMoveWithDelegates
+        ? orderedDesktops(desktops)
+          .filter((desktop) => desktop.id !== desktopNavigation.currentDesktop?.id)
+          .map((desktop) => ({
+            id: `move-with-delegates-${desktop.id}`,
+            title: `Move with delegates to ${desktopLabel(desktop, desktops)}`,
+            keywords: ['desktop', 'move', 'send', 'delegates'],
+            icon: <BoardActionIcon />,
+            run: () => desktopNavigation.moveActiveLeafToDesktop(desktop.id, false, true),
+          }))
+        : []),
       {
         id: 'switch-profile',
         title: 'Switch profile',

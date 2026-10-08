@@ -97,7 +97,7 @@ export interface SidebarProps {
   dragHoverDesktopId?: string | null;
   onDesktopDragEnter?: (desktop: SidebarDesktop) => void;
   onDesktopDragLeave?: (desktop: SidebarDesktop) => void;
-  onDesktopDragDrop?: (desktop: SidebarDesktop) => void;
+  onDesktopDragDrop?: (desktop: SidebarDesktop, withDelegates?: boolean) => void;
   onNewDesktopDrop?: () => void;
   onSessionDragStart?: (desktopId: string, paneId: string) => void;
   onSessionDragEnd?: () => void;

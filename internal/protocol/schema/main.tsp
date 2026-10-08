@@ -2875,6 +2875,7 @@ model DesktopMoveLeafMessage {
   source_desktop_id: string;
   target_desktop_id: string;
   leaf_id: string;
+  with_delegates?: boolean;
   anchor_id?: string;
   edge: LayoutDockEdge;
   leaf_share?: float64;         // The moved leaf's share of the new split, in (0,1)
