@@ -12,29 +12,6 @@ import { type SaveSetting } from './SettingsAutosave';
 
 export const OPEN_SENT_FILES_ENABLED_SETTING = 'open_sent_files_enabled';
 
-export const PTY_BACKENDS: Record<string, { label: string; hint: string }> = {
-  migrating: {
-    label: 'Dedicated + shared workers',
-    hint: 'Existing terminals keep their worker, including across daemon restarts.',
-  },
-  shared: {
-    label: 'Shared Rust host',
-    hint: 'New terminals share a Rust host. Selected by a backend override.',
-  },
-  worker: {
-    label: 'Dedicated Go workers',
-    hint: 'Sessions run in per-session worker processes and can survive daemon restarts.',
-  },
-  embedded: {
-    label: 'Embedded in daemon',
-    hint: 'Sessions run inside the daemon process and stop if the daemon restarts.',
-  },
-  unknown: {
-    label: 'Unknown',
-    hint: 'Backend mode is not currently reported by the daemon.',
-  },
-};
-
 export interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -77,7 +54,7 @@ export type SettingsSectionID =
   | 'hygiene'
   | 'agents'
   | 'backgroundAgents'
-  | 'terminal'
+  | 'experimental'
   | 'autoMode'
   | 'delegation'
   | 'workflows'

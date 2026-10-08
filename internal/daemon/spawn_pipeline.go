@@ -53,6 +53,7 @@ type spawnRequest struct {
 	resumeSessionID string
 	parentSessionID protocol.SessionID
 	autoModeDriver  bool
+	codexShared     bool
 }
 
 type spawnPlan struct {
@@ -312,6 +313,19 @@ func (d *Daemon) resolveSpawnIntent(req *spawnRequest) (*spawnPlan, *spawnReject
 		plan.spawnOpts.ApprovalRoute = launchcontract.ResolveApprovalRoute(plan.spawnOpts.YoloMode, plan.spawnOpts.AutoApprove, plan.spawnOpts.UnattendedLaunch)
 	}
 	plan.spawnOpts.ContextWindowCap = d.launchContextWindowCap(msg.ID, req.agent, plan.isChief)
+	req.codexShared = d.launchesSharedCodex(req)
+	if req.codexShared && req.resumeSessionID != "" {
+		if other := d.codexShared().loadedElsewhere(req.profile.ID, req.resumeSessionID); other != "" {
+			plan.rollback(d, msg.ID)
+			return nil, &spawnRejection{err: fmt.Errorf("conversation %s is open in the shared Codex of profile %s; it can open here once that profile lets it go, about a minute after no terminal shows it", req.resumeSessionID, other)}
+		}
+	}
+	if !req.codexShared && req.agent == string(protocol.SessionAgentCodex) {
+		if holder := d.codexShared().holder(req.profile.ID, req.resumeSessionID); holder != "" && holder != msg.ID {
+			plan.rollback(d, msg.ID)
+			return nil, &spawnRejection{err: fmt.Errorf("conversation %s is open in shared Codex session %s, and two Codex processes must not write one conversation; show that session instead", req.resumeSessionID, holder)}
+		}
+	}
 
 	return plan, nil
 }
@@ -415,6 +429,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	}
 	plan.priorIntent, plan.hadPriorIntent = d.store.LaunchIntent(session.ID)
 	intent := launchIntentFromSpawnOptions(plan.spawnOpts, plan.isChief)
+	intent.CodexShared = req.codexShared
 	intent.AutoMode = msg.AutoMode
 	if req.autoModeDriver {
 		intent.ApprovalPolicy, intent.SandboxMode = effectiveSpawnPolicyPair(msg)
@@ -432,7 +447,14 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		InitialPromptOwed: hasInitialPrompt && reportsTurnStarts(req.agent),
 		ReviewerInLoop:    plan.spawnOpts.ApprovalRoute.ReviewerInLoop(),
 	})
-	if err := d.spawnSessionRuntime(msg.ID, plan.spawnOpts); err != nil {
+	err := d.prepareSharedCodexLaunch(req, plan)
+	if err == nil {
+		err = d.spawnSessionRuntime(msg.ID, plan.spawnOpts)
+	}
+	if err != nil {
+		if req.codexShared {
+			d.codexShared().closeView(plan.spawnOpts.ID)
+		}
 		d.forgetSessionTitleInitialPrompt(msg.ID)
 		d.restoreExitScreen(msg.ID, priorExit)
 		if req.existingSession == nil {
@@ -440,6 +462,9 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 			d.forgetSessionTrace(msg.ID)
 		} else if restoreErr := d.store.AddCheckedUnlessTeardown(req.existingSession); restoreErr != nil {
 			err = errors.Join(err, fmt.Errorf("restore prior session after spawn failure: %w", restoreErr))
+		}
+		if req.codexShared {
+			d.codexShared().idleSoon(req.profile.ID)
 		}
 		if req.existingSession != nil {
 			d.startEvidence(msg.ID, priorEvidence)
@@ -462,6 +487,22 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		d.life.AfterFunc("cleanupInitialPrompt", initialPromptCleanupAfter, plan.cleanupInitialPrompt)
 	}
 	return &spawnOutcome{}
+}
+
+func (d *Daemon) prepareSharedCodexLaunch(req *spawnRequest, plan *spawnPlan) error {
+	if !req.codexShared {
+		return nil
+	}
+	executable := plan.spawnOpts.Executable
+	if executable == "" {
+		executable = plan.spawnOpts.CodexExecutable
+	}
+	remote, err := d.codexShared().prepareLaunch(plan.spawnOpts.ID, req.profile.ID, executable)
+	if err != nil {
+		return err
+	}
+	plan.spawnOpts.ExternalEnv = append(plan.spawnOpts.ExternalEnv, "ATTN_CODEX_REMOTE="+remote)
+	return nil
 }
 
 func (d *Daemon) spawnSessionRuntime(sessionID protocol.SessionID, opts ptybackend.SpawnOptions) error {

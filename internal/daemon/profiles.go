@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/victorarias/attn/internal/crew"
 
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/enrollment"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
@@ -494,6 +496,11 @@ func (d *Daemon) leafShown(client *wsClient, profile profiles.Profile, desktop p
 
 func (d *Daemon) handleDesktopShowSession(client *wsClient, msg *protocol.DesktopShowSessionMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
+		if d.codexShared().hidden(msg.SessionID) {
+			if err := d.codexShared().showSession(msg.SessionID); err != nil {
+				return profileActionOutcome{}, err
+			}
+		}
 		profile, desktop, leafID, err := d.store.ShowSession(msg.SessionID)
 		if err != nil {
 			return profileActionOutcome{}, err
@@ -583,6 +590,37 @@ func (d *Daemon) handleDesktopRemoveLeaf(client *wsClient, msg *protocol.Desktop
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
 		desktop, err := d.store.RemoveLeaf(msg.DesktopID, msg.LeafID, int64(msg.ExpectedRevision))
 		return d.desktopChanged(desktop), err
+	})
+}
+
+func (d *Daemon) handleDesktopCloseTile(client *wsClient, msg *protocol.DesktopCloseTileMessage) {
+	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
+		desktop, err := d.store.GetDesktop(msg.DesktopID)
+		if err != nil {
+			return profileActionOutcome{}, err
+		}
+		i := slices.IndexFunc(desktop.Panes, func(pane profiles.Pane) bool { return pane.PaneID == msg.TileID })
+		if i < 0 {
+			return profileActionOutcome{}, profiles.Errorf(profiles.CodeNotFound, "desktop %s has no terminal tile %s", msg.DesktopID, msg.TileID)
+		}
+		tile := desktop.Panes[i]
+		if _, remote := d.sessionOwningEndpoint(tile.SessionID); remote && len(d.terminals().Of(harness.SessionID(tile.SessionID))) > 1 {
+			return profileActionOutcome{}, profiles.Errorf(profiles.CodeInvalid, "session %s runs on another host and shows in several tiles; close the session instead", tile.SessionID)
+		}
+		if d.codexShared().movedOn(tile.SessionID, harness.TerminalID(tile.RuntimeID)) {
+			d.hide(tile.SessionID, harness.TerminalID(tile.RuntimeID))
+			d.detachSession(client, tile.RuntimeID)
+		} else if d.closeTerminal(tile.SessionID, harness.TerminalID(tile.RuntimeID)) {
+			closing, err := d.beginSessionCloseAsUser(tile.SessionID, store.SessionClose{By: store.SessionClosedByUser}, client)
+			if err != nil {
+				return profileActionOutcome{}, err
+			}
+			d.finishSessionClose(tile.SessionID, closing)
+		} else {
+			d.detachSession(client, tile.RuntimeID)
+		}
+		desktop, err = d.store.GetDesktop(msg.DesktopID)
+		return profileActionOutcome{desktops: []profiles.Desktop{desktop}, arranges: true}, err
 	})
 }
 

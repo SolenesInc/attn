@@ -7,22 +7,63 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/victorarias/attn/internal/harness"
 )
 
-func GenerateCodexConfigOverrides(sessionID, socketPath, wrapperPath string, launch Launch) []string {
-	wrapper := strings.TrimSpace(wrapperPath)
-	if wrapper == "" {
-		wrapper = "attn"
+func GenerateCodexConfigOverrides(terminalID, socketPath, wrapperPath string, launch Launch) []string {
+	wrapper := hookWrapper(wrapperPath)
+	overrides := []string{
+		"shell_environment_policy.set.ATTN_TERMINAL_ID=" + strconv.Quote(strings.TrimSpace(terminalID)),
+		"shell_environment_policy.set.ATTN_WRAPPER_PATH=" + strconv.Quote(wrapper),
 	}
+	overrides = append(overrides, codexHookOverrides(codexHookCommand(wrapper, ""))...)
+	if socket := strings.TrimSpace(socketPath); socket != "" {
+		overrides = append(overrides,
+			"shell_environment_policy.set.ATTN_SOCKET_PATH="+strconv.Quote(socket),
+		)
+	}
+	if instructions := launch.Instructions(); instructions != "" {
+		overrides = append(overrides, "developer_instructions="+strconv.Quote(instructions))
+	}
+	return overrides
+}
 
-	command := func(args ...string) string {
+// Every conversation the server runs gets this environment, including ones attn resumes itself.
+func GenerateCodexServerConfigOverrides(wrapperPath, socketPath, profile string) []string {
+	wrapper := hookWrapper(wrapperPath)
+	overrides := codexHookOverrides(codexHookCommand(wrapper, "env "+shellQuote(harness.CodexSharedProfileEnv+"="+profile)+" "))
+	for _, env := range [][2]string{
+		{harness.CodexSharedProfileEnv, profile},
+		{"ATTN_TERMINAL_ID", ""},
+		{"ATTN_SESSION_ID", ""},
+		{"ATTN_AGENT", "codex"},
+		{"ATTN_SOCKET_PATH", strings.TrimSpace(socketPath)},
+		{"ATTN_WRAPPER_PATH", wrapper},
+	} {
+		overrides = append(overrides, "shell_environment_policy.set."+env[0]+"="+strconv.Quote(env[1]))
+	}
+	return overrides
+}
+
+func hookWrapper(wrapperPath string) string {
+	if wrapper := strings.TrimSpace(wrapperPath); wrapper != "" {
+		return wrapper
+	}
+	return "attn"
+}
+
+func codexHookCommand(wrapper, prefix string) func(args ...string) string {
+	return func(args ...string) string {
 		parts := []string{shellQuote(wrapper)}
 		for _, arg := range args {
 			parts = append(parts, shellQuote(arg))
 		}
-		return strings.Join(parts, " ")
+		return prefix + strings.Join(parts, " ")
 	}
+}
 
+func codexHookOverrides(command func(args ...string) string) []string {
 	hook := func(command string) string {
 		return fmt.Sprintf(`{ type = "command", command = %s, timeout = 5 }`, strconv.Quote(command))
 	}
@@ -40,9 +81,7 @@ func GenerateCodexConfigOverrides(sessionID, socketPath, wrapperPath string, lau
 	postToolUse := command("_hook-tool-use")
 	stop := command("_hook-stop")
 
-	overrides := []string{
-		"shell_environment_policy.set.ATTN_TERMINAL_ID=" + strconv.Quote(strings.TrimSpace(sessionID)),
-		"shell_environment_policy.set.ATTN_WRAPPER_PATH=" + strconv.Quote(wrapper),
+	return []string{
 		"features.hooks=true",
 		"features.terminal_resize_reflow=true",
 		trustedHashOverrides([]codexHookTrustEntry{
@@ -60,15 +99,6 @@ func GenerateCodexConfigOverrides(sessionID, socketPath, wrapperPath string, lau
 		"hooks.PostToolUse=" + group("*", postToolUse),
 		"hooks.Stop=" + group("", stop),
 	}
-	if socket := strings.TrimSpace(socketPath); socket != "" {
-		overrides = append(overrides,
-			"shell_environment_policy.set.ATTN_SOCKET_PATH="+strconv.Quote(socket),
-		)
-	}
-	if instructions := launch.Instructions(); instructions != "" {
-		overrides = append(overrides, "developer_instructions="+strconv.Quote(instructions))
-	}
-	return overrides
 }
 
 type codexHookTrustEntry struct {

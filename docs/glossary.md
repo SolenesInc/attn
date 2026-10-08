@@ -48,6 +48,8 @@ session                 attn's record of one conversation; like one chat in a
 ledger (1 per profile)  every session, live and closed; like a history
 ├─ session (0..n)
 │  ├─ live              its agent runs in a terminal
+│  │  └─ hidden         live in a shared Codex app-server, but no tile shows
+│  │                    it; like a minimized window
 │  └─ closed            ended; the history stays
 └─ kept conversation (0..n)  attn's own copy of a conversation that its
                              harness would delete; like an archive

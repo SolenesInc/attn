@@ -66,6 +66,9 @@ func (c *Codex) BuildCommand(opts SpawnOpts) *exec.Cmd {
 	} else if opts.ResumePicker {
 		args = append(args, "resume")
 	}
+	if opts.CodexRemote != "" {
+		args = append(args, "--remote", opts.CodexRemote)
+	}
 
 	for _, override := range opts.ConfigOverrides {
 		if strings.TrimSpace(override) == "" {
@@ -393,12 +396,11 @@ func codexToolFreeHeadlessArgs(request HeadlessTaskRequest, window int) []string
 }
 
 func (c *Codex) GenerateConfigOverrides(opts SpawnOpts) []string {
-	overrides := hooks.GenerateCodexConfigOverrides(
-		string(opts.TerminalID),
-		opts.SocketPath,
-		opts.WrapperPath,
-		opts.launchSpec(),
-	)
+	var overrides []string
+	// A remote terminal drops hooks, environment and instructions; the app-server and attn's proxy own them.
+	if opts.CodexRemote == "" {
+		overrides = hooks.GenerateCodexConfigOverrides(string(opts.TerminalID), opts.SocketPath, opts.WrapperPath, opts.launchSpec())
+	}
 	if opts.TrustWorkingDirectory {
 		overrides = append(overrides, fmt.Sprintf(`projects.%s.trust_level="trusted"`, strconv.Quote(opts.CWD)))
 	}

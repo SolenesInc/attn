@@ -1501,11 +1501,11 @@ func (s *Store) SessionPlacement(sessionID protocol.SessionID) (profiles.Placeme
 }
 
 type sessionTile struct {
-	desktopID, tileID string
+	desktopID, tileID, terminal string
 }
 
 func sessionTiles(tx *sql.Tx, sessionID protocol.SessionID) ([]sessionTile, error) {
-	rows, err := tx.Query(`SELECT desktop_id, pane_id FROM desktop_panes WHERE session_id = ? ORDER BY created_at DESC, pane_id DESC`, sessionID)
+	rows, err := tx.Query(`SELECT desktop_id, pane_id, runtime_id FROM desktop_panes WHERE session_id = ? ORDER BY created_at DESC, pane_id DESC`, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -1513,7 +1513,7 @@ func sessionTiles(tx *sql.Tx, sessionID protocol.SessionID) ([]sessionTile, erro
 	var tiles []sessionTile
 	for rows.Next() {
 		var tile sessionTile
-		if err := rows.Scan(&tile.desktopID, &tile.tileID); err != nil {
+		if err := rows.Scan(&tile.desktopID, &tile.tileID, &tile.terminal); err != nil {
 			return nil, err
 		}
 		tiles = append(tiles, tile)
@@ -1522,12 +1522,19 @@ func sessionTiles(tx *sql.Tx, sessionID protocol.SessionID) ([]sessionTile, erro
 }
 
 func removeSessionPlacement(tx *sql.Tx, now string, sessionID protocol.SessionID) ([]profiles.Desktop, error) {
+	return removeSessionTiles(tx, now, sessionID, nil)
+}
+
+func removeSessionTiles(tx *sql.Tx, now string, sessionID protocol.SessionID, keep map[string]bool) ([]profiles.Desktop, error) {
 	tiles, err := sessionTiles(tx, sessionID)
 	if err != nil {
 		return nil, err
 	}
 	var changed []profiles.Desktop
 	for _, tile := range tiles {
+		if keep[tile.terminal] {
+			continue
+		}
 		desktop, err := removeTile(tx, now, tile)
 		if err != nil {
 			return nil, err

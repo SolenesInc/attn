@@ -45,6 +45,8 @@ const (
 	SettingModelCaptureBytes             = "model_capture.bytes"
 	SettingQueueModeEnabled              = "queue_mode_enabled"
 	SettingQueueCrewEnabled              = "queue_crew_enabled"
+	SettingQueueShowHiddenSessions       = "queue_show_hidden_sessions"
+	SettingCodexSharedEnabled            = "codex_shared_enabled"
 	SettingSidebarHarnessLogosEnabled    = "sidebar_harness_logos_enabled"
 	SettingAutoApproveEnabled            = "auto_approve_enabled"
 	SettingOpenSentFilesEnabled          = "open_sent_files_enabled"
@@ -310,6 +312,8 @@ func (d *Daemon) settingsWithAgentAvailability() map[string]interface{} {
 	}
 	settings[SettingQueueModeEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingQueueModeEnabled]))
 	settings[SettingQueueCrewEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingQueueCrewEnabled]))
+	settings[SettingQueueShowHiddenSessions] = strconv.FormatBool(defaultOnBooleanSetting(stored[SettingQueueShowHiddenSessions]))
+	settings[SettingCodexSharedEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingCodexSharedEnabled]))
 	settings[SettingSidebarHarnessLogosEnabled] = strconv.FormatBool(defaultOnBooleanSetting(stored[SettingSidebarHarnessLogosEnabled]))
 	settings[SettingAutoApproveEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingAutoApproveEnabled]))
 	settings[SettingAutoSettleEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingAutoSettleEnabled]))
@@ -489,6 +493,8 @@ func (d *Daemon) validateSetting(key, value string) error {
 	case SettingTheme:
 		return validateTheme(value)
 	case SettingSharedPTYHostEnabled:
+		return validateBooleanSetting(value)
+	case SettingCodexSharedEnabled, SettingQueueShowHiddenSessions:
 		return validateBooleanSetting(value)
 	case SettingTailscaleEnabled, SettingWorkflowsEnabled, SettingAutoApproveEnabled, SettingQueueModeEnabled, SettingQueueCrewEnabled, SettingSidebarHarnessLogosEnabled, SettingAutoSettleEnabled, SettingModelCaptureEnabled, SettingActivityEnabled, SettingOpenSentFilesEnabled, SettingHeadlessTasksEnabled, settingWorktreeSweepEnabled:
 		return validateBooleanSetting(value)

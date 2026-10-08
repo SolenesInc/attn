@@ -215,7 +215,8 @@ model Session {
   pull_requests?: SessionPullRequest[]; // Pull requests this session's agent opened, newest first. Joined at broadcast from the session_pull_requests table, never stored on the session row.
   terminal_build_stale?: boolean; // True when this session's pty-worker was built against a different libghostty-vt than the daemon, which happens when the app updates under a running session. The two then hold different terminal implementations and stop agreeing about the grid, so the app offers a reload. Derived at broadcast from the format tag the worker reports at its handshake; never stored, and absent for every same-build session, which is all of them outside an upgrade window.
   terminal_exit?: TerminalExit; // How the agent last exited while the session keeps its final screen; absent while it runs and after Resume. Joined at broadcast from the session_exit_screens table.
-  succeeds?: SessionID;            // The session this one replaced in its terminal, when the harness there moved to another conversation; that session closed into the ledger. Durable: it stays set after the predecessor is reopened.
+  succeeds?: SessionID;            // The session this one replaced in its terminal, when the harness there moved to another conversation; that session closed into the ledger, unless it is a shared Codex session, which stays open. Durable: it stays set after the predecessor is reopened.
+  hidden?: boolean;             // True while this open shared Codex session has no terminal tile: its terminal moved to another conversation. It keeps its state and takes input; desktop_show_session gives it a tile again. Derived at broadcast; absent otherwise.
   last_seen: string;            // ISO timestamp, always set
 }
 
@@ -2815,7 +2816,8 @@ model DesktopSetActivePaneMessage {
 // Shows an open agent of any live profile in one transaction. Every open
 // agent has a pane: it becomes the active leaf, its desktop current, its
 // profile the requesting client's. Every client on that profile gets one
-// arrangement.
+// arrangement. A hidden shared Codex session gets a new terminal tile on the
+// current desktop whose Codex resumes its conversation.
 model DesktopShowSessionMessage {
   cmd: "desktop_show_session";
   request_id: string;
@@ -2889,6 +2891,15 @@ model DesktopRemoveLeafMessage {
   desktop_id: string;
   leaf_id: string;
   expected_revision: safeint;
+}
+
+// Closes a terminal tile. While another terminal runs its session, only this
+// terminal ends; otherwise the session closes as unregister closes it.
+model DesktopCloseTileMessage {
+  cmd: "desktop_close_tile";
+  request_id: string;
+  desktop_id: string;
+  tile_id: string;
 }
 
 model DesktopSetSplitRatioMessage {
@@ -6458,6 +6469,8 @@ model SessionLedgerEntry {
   close_reason?: string;
   // Absent when the agent reported none. Priced at the current settings, as Session.usage is.
   usage?: SessionUsage;
+  // True on a live shared Codex row that no terminal tile shows, as Session.hidden.
+  hidden?: boolean;
 }
 
 // Counted over the scope and date window alone, so choosing a repository never

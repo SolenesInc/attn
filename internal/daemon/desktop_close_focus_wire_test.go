@@ -41,8 +41,9 @@ func TestClosingTilesWalksTheDesktopFocusHistory(t *testing.T) {
 					}
 				}
 				for i, id := range row.closes {
-					if result := closeFromApp(app, id); result.Error != nil {
-						t.Fatal(*result.Error)
+					_, tile := viewProfile(t, w, profileID).paneOf(t, id)
+					if result := closeTileFromApp(app, desktop.ID, tile); !result.Success {
+						t.Fatal(protocol.Deref(result.Error))
 					}
 					view := viewProfile(t, w, profileID)
 					_, want := view.paneOf(t, row.wants[i])

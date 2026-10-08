@@ -5,9 +5,14 @@ import { isSnoozed } from './snoozeDurations';
  * isQueueModeEnabled so no surface disagrees. */
 export const QUEUE_MODE_SETTING = 'queue_mode_enabled';
 export const QUEUE_CREW_SETTING = 'queue_crew_enabled';
+export const QUEUE_SHOW_HIDDEN_SETTING = 'queue_show_hidden_sessions';
 
 export function isQueueModeEnabled(settings: Record<string, string>): boolean {
   return (settings[QUEUE_MODE_SETTING] || 'false') === 'true';
+}
+
+export function isHiddenInQueue(settings: Record<string, string>): boolean {
+  return (settings[QUEUE_SHOW_HIDDEN_SETTING] || 'true') !== 'false';
 }
 
 export function isCrewQueueEnabled(settings: Record<string, string>): boolean {
@@ -46,6 +51,7 @@ export interface QueueBandSession extends DesktopViewSession {
   turnOwed?: boolean;
   turnOpenedAt?: string;
   turnSnoozedUntil?: string;
+  hidden?: boolean;
   /** Set on a shell: the agent session it was split from. */
   parentSessionId?: string;
   crewMember?: string;
@@ -54,9 +60,10 @@ export interface QueueBandSession extends DesktopViewSession {
   automation?: { definition_id: number };
 }
 
-export interface QueueBandOptions {
+export interface QueueBandOptions<TSession extends QueueBandSession = QueueBandSession> {
   crewInQueue?: boolean;
   now?: number;
+  hidden?: readonly TSession[];
 }
 
 /** Automation runs are browsed separately from the queue. Crew days only join the
@@ -146,7 +153,7 @@ export interface QueueBands<TSession extends QueueBandSession> {
  * band; automation sessions land in none. */
 export function buildQueueBands<TSession extends QueueBandSession>(
   desktops: DesktopWithSessions<TSession>[],
-  optionsOrNow: QueueBandOptions | number = {},
+  optionsOrNow: QueueBandOptions<TSession> | number = {},
 ): QueueBands<TSession> {
   const options = typeof optionsOrNow === 'number' ? { now: optionsOrNow } : optionsOrNow;
   const now = options.now ?? Date.now();
@@ -157,7 +164,14 @@ export function buildQueueBands<TSession extends QueueBandSession>(
   const crew: QueueRow<TSession>[] = [];
   const attachedParents = liveParentIds(desktops);
 
-  for (const desktop of desktops) {
+  const placed = new Set(desktops.flatMap((desktop) => desktop.sessions.map((session) => session.id)));
+  const hiddenOnly = (options.hidden ?? []).filter((session) => !placed.has(session.id));
+  const places = [
+    ...desktops.map((desktop) => ({ id: desktop.id, title: desktop.title, sessions: desktop.sessions })),
+    { id: '', title: '', sessions: hiddenOnly },
+  ];
+
+  for (const desktop of places) {
     for (const session of desktop.sessions) {
       const row: QueueRow<TSession> = {
         session,

@@ -29,6 +29,7 @@ const tileBody = () => document.querySelector<HTMLElement>('[data-pane-id="tile-
 const closed = (daemon: ScriptedDaemon) => daemon.sent.flatMap((command) => {
   if (command.cmd === 'desktop_remove_leaf') return [command.leaf_id];
   if (command.cmd === 'unregister') return [`pane-${command.id}`];
+  if (command.cmd === 'desktop_close_tile') return [command.tile_id];
   return [];
 });
 
