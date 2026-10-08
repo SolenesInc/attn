@@ -45,8 +45,17 @@ func (d *Daemon) handleAutomationDeliveryError(run *store.AutomationRun, deliver
 	}
 	now := time.Now()
 	var persistErr error
+	if diskFull {
+		d.automationLaunchFailures.Store(run.ID, deliveryErr)
+	}
 	if err := d.store.MarkAutomationRunFailed(run.ID, deliveryErr.Error(), diskFull, now); err != nil {
 		persistErr = errors.Join(persistErr, fmt.Errorf("mark run failed: %w", err))
+		if diskFull {
+			d.broadcastAutomationsChanged(run.DefinitionID)
+			return run, errors.Join(deliveryErr, persistErr)
+		}
+	} else {
+		d.automationLaunchFailures.Delete(run.ID)
 	}
 	if err := d.recordAutomationRunSeedOutcome(run, automationFailureComment(run, deliveryErr.Error())); err != nil {
 		persistErr = errors.Join(persistErr, err)
@@ -57,6 +66,28 @@ func (d *Daemon) handleAutomationDeliveryError(run *store.AutomationRun, deliver
 		persistErr = errors.Join(persistErr, fmt.Errorf("reload failed run: %w", err))
 	}
 	return failed, errors.Join(deliveryErr, persistErr)
+}
+
+func (d *Daemon) persistAutomationLaunchFailures() error {
+	var persistErr error
+	d.automationLaunchFailures.Range(func(key, value any) bool {
+		id, cause := key.(string), value.(error)
+		run, err := d.store.GetAutomationRun(id)
+		if err != nil {
+			persistErr = errors.Join(persistErr, err)
+			return true
+		}
+		if run == nil || run.State != store.AutomationRunStatePending {
+			d.automationLaunchFailures.Delete(id)
+			return true
+		}
+		_, err = d.handleAutomationDeliveryError(run, cause)
+		if _, pending := d.automationLaunchFailures.Load(id); pending {
+			persistErr = errors.Join(persistErr, err)
+		}
+		return true
+	})
+	return persistErr
 }
 func (d *Daemon) stopping() bool { return d.life.Ended() }
 
@@ -69,6 +100,13 @@ func automationFailureComment(run *store.AutomationRun, message string) string {
 }
 
 func (d *Daemon) cancelAutomationRun(run *store.AutomationRun, reason, message string) (*store.AutomationRun, error) {
+	if cause, stopped := d.automationLaunchFailures.Load(run.ID); stopped {
+		failed, err := d.handleAutomationDeliveryError(run, cause.(error))
+		if _, pending := d.automationLaunchFailures.Load(run.ID); pending {
+			return failed, err
+		}
+		return failed, nil
+	}
 	now := time.Now()
 	var persistErr error
 	if err := d.recordAutomationRunSeedOutcome(run, automationFailureComment(run, message)); err != nil {
@@ -155,6 +193,9 @@ func (d *Daemon) recordAutomationRunSeedOutcome(run *store.AutomationRun, body s
 	return err
 }
 func (d *Daemon) deliverAutomationRun(ctx context.Context, run *store.AutomationRun) error {
+	if cause, stopped := d.automationLaunchFailures.Load(run.ID); stopped {
+		return cause.(error)
+	}
 	definition, err := d.store.GetAutomationDefinition(run.DefinitionID)
 	if err != nil {
 		return err

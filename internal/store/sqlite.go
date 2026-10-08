@@ -1505,7 +1505,8 @@ func sqliteDSN(dbPath string) string {
 // tableWrites counts row writes to the tables the store caches reads of. SQLite's update
 // hook bumps it on every connection, so no write path can skip invalidating the cache.
 type tableWrites struct {
-	sessions atomic.Uint64
+	sessions    atomic.Uint64
+	commitFault atomic.Bool
 }
 
 type sqliteConnector struct {
@@ -1609,7 +1610,17 @@ func openSQLite(dbPath string) (*sql.DB, *tableWrites, error) {
 	writes := &tableWrites{}
 	db := sql.OpenDB(&sqliteConnector{
 		driver: &sqlite3.SQLiteDriver{ConnectHook: func(conn *sqlite3.SQLiteConn) error {
+			dirty := false
+			conn.RegisterCommitHook(func() int {
+				if dirty && writes.commitFault.Load() {
+					return 1
+				}
+				dirty = false
+				return 0
+			})
+			conn.RegisterRollbackHook(func() { dirty = false })
 			conn.RegisterUpdateHook(func(_ int, _, table string, _ int64) {
+				dirty = true
 				if table == "sessions" {
 					writes.sessions.Add(1)
 				}
@@ -1628,6 +1639,11 @@ func openSQLite(dbPath string) (*sql.DB, *tableWrites, error) {
 		db.SetMaxIdleConns(sqliteFileConnectionPoolSize)
 	}
 	return db, writes, nil
+}
+
+func (s *Store) RefuseCommits() func() {
+	s.writes.commitFault.Store(true)
+	return func() { s.writes.commitFault.Store(false) }
 }
 
 func OpenDB(dbPath string) (*sql.DB, error) {

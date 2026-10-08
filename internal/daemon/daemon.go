@@ -111,6 +111,7 @@ type Daemon struct {
 	// Serializes PR fetches with review-request edge reconciliation.
 	prRefreshMu                       sync.Mutex
 	automationMu                      sync.Mutex
+	automationLaunchFailures          sync.Map
 	automationObservationMu           sync.Mutex
 	automationObservationLocks        map[string]*sync.Mutex
 	automationRepoMu                  sync.Mutex

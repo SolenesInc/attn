@@ -43,6 +43,10 @@ func (w *WireDaemon) Stop() error {
 	return errors.Join(<-w.stopped, w.d.store.Close())
 }
 
+func (w *WireDaemon) RefuseDatabaseCommits() func() {
+	return w.d.store.RefuseCommits()
+}
+
 func UseShippedPasteGap(t testing.TB) {
 	sessionInputSubmitDelay = shippedSessionInputSubmitDelay
 	t.Cleanup(func() { sessionInputSubmitDelay = 0 })
