@@ -1,0 +1,3 @@
+kind: internal
+area: release
+change: Releases sign the bundled plugin executables with the Developer ID, hardened runtime and a secure timestamp, so Apple's notarization accepts an app that ships plugins.
