@@ -5,7 +5,6 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createWindowDriver } from './platform.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
-import { captureScreenshotData } from './nativeWindowCapture.mjs';
 
 async function main() {
   const args = process.argv.slice(2).filter((arg) => arg !== '--');
@@ -31,10 +30,10 @@ async function main() {
   const wait = (selector, extra = {}) => client.request('dom_wait', { selector, timeoutMs: observer.connectTimeoutMs, ...extra });
   const assertOrder = async (ids) => {
     for (let i = 1; i < ids.length; i++) {
-      await wait(`[data-testid="sidebar-desktop-${ids[i-1]}"] + [data-testid="sidebar-desktop-${ids[i]}"]`);
+      await wait(`.desktop-row:has([data-testid="sidebar-desktop-${ids[i-1]}"]) + .desktop-row [data-testid="sidebar-desktop-${ids[i]}"]`);
     }
   };
-  const capture = (name) => captureScreenshotData(path.join(runner.runDir, `${name}.png`), { client });
+  const capture = async (name) => driver.screenshot(path.join(runner.runDir, `${name}.png`), { windowId: await driver.mainWindowId() });
   try {
     await runner.step('create_desktops', async () => {
       await launchFreshAppAndConnect(client, observer);
@@ -54,6 +53,9 @@ async function main() {
       runner.sorted = [one, six, nine, alpha, named2, named10];
       runner.six = six;
       await observer.profileCommand('desktop_set_order', { profile_id: profile.id, desktop_ids: runner.before });
+      await wait('.sidebar.collapsed');
+      await pressShortcutKeys(client, driver, 'session.toggleSidebar');
+      await wait('.sidebar:not(.collapsed)');
       await assertOrder(runner.before);
       await capture('before');
     });
@@ -67,7 +69,9 @@ async function main() {
       const state = await applied;
       runner.assert(JSON.stringify(state.desktops.map((d) => d.id)) === JSON.stringify(runner.sorted), 'Sort applies numbered then case-insensitive numeric name order', state);
       await assertOrder(runner.sorted);
-      await wait('.toast-row--action button small', { textIncludes: 'Undo', visible: true });
+      await wait('.toast-row--action button small', { textIncludes: 'Undo' });
+      const { bounds } = await client.request('dom_bounds', { selector: '.toast-row--action button small' });
+      runner.assert(bounds.width > 0 && bounds.height > 0, 'Undo label is visibly offered', bounds);
       await capture('sorted');
     });
     await runner.step('undo_restores_order', async () => {
