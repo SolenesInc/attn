@@ -198,6 +198,42 @@ try {
     runner.writeJson('idle-app.json', samples);
     await screenshot('final-chain');
   });
+  await runner.step('delegating_to_a_missing_numbered_desktop_keeps_the_callers_view_and_keyboard', async () => {
+    await driver.pressKey('Escape');
+    await client.request('select_session', { sessionId: builder });
+    const before = await client.request('get_state');
+    const sourcePane = before.activeLeaf.leafId;
+    const held = new Set(before.arrangement.desktops.map(desktop => desktop.slot).filter(Boolean));
+    const slot = [7, 1, 2, 3, 4, 5, 6, 8, 9].find(candidate => !held.has(candidate));
+    runner.assert(Boolean(slot), 'the fixture has a missing numbered desktop', before.arrangement);
+    const target = `${before.arrangement.selectedProfileId}/desktop_${slot}`;
+    runner.assert((await client.request('get_pane_state', { sessionId: builder, paneId: sourcePane })).inputFocused,
+      'the caller holds the keyboard before delegation');
+    const placed = observer.waitForMessage(message => message.event === 'profile_arrangement_changed'
+      && message.desktops?.find(desktop => desktop.id === target && desktop.panes.length === 1), 'recreated numbered desktop');
+    const output = runAttn(['delegate', '--source-session', builder, '--agent', 'codex', '--model', MOCK_AGENT_MODEL,
+      '--brief', 'Inspect role identity. Wait for direction.', '--cwd', runner.sessionDir, '--name', 'Missing desktop delegate', '--desktop', String(slot)]);
+    const result = JSON.parse(output.slice(output.indexOf('{')));
+    created.push(result.session_id);
+    const desktop = await placed;
+    runner.assert(result.desktop_id === target && desktop.shortcut_slot === slot && desktop.panes[0].session_id === result.session_id,
+      'delegation recreates the requested slot and places the delegate there', { result, desktop });
+    await waitForSelector(`[data-testid="sidebar-session-${result.session_id}"]`, 'the packaged app renders the delegate');
+    const after = await client.request('get_state');
+    runner.assert(after.arrangement.currentDesktopId === before.arrangement.currentDesktopId
+      && shownAgentId(after) === builder && after.activeLeaf.leafId === sourcePane,
+    'background delegation keeps the current desktop and active caller', after);
+    runner.assert((await client.request('get_pane_state', { sessionId: builder, paneId: sourcePane })).inputFocused,
+      'the caller still holds the keyboard after delegation');
+    await screenshot('missing-numbered-desktop-caller');
+    await pressShortcutKeys(client, driver, `desktop.select${slot}`);
+    await waitForSelector(`[data-pane-id="${result.pane_id}"]`, 'the shortcut shows the recreated desktop');
+    const opened = await client.request('get_state');
+    runner.assert(opened.arrangement.currentDesktopId === target && shownAgentId(opened) === result.session_id,
+      'the recreated desktop is reachable on its numbered shortcut', opened);
+    await screenshot('missing-numbered-desktop-delegate');
+    await client.request('select_session', { sessionId: builder });
+  });
   console.log(JSON.stringify(await runner.finishSuccess({ sessions: created }), null, 2));
 } catch (error) {
   console.error(JSON.stringify(await runner.finishFailure(error), null, 2));

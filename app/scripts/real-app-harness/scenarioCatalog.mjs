@@ -212,7 +212,7 @@ export const scenarioCatalog = [
   {
     id: 'delegation-chain',
     runnerId: 'DelegationChain',
-    label: 'Delegation identity: sidebar and header roles, hover chain and native keyboard navigation',
+    label: 'Delegation identity: roles, hover chain, native keyboard navigation and missing numbered desktop placement',
     command: ['node', 'scripts/real-app-harness/scenario-delegation-chain.mjs'],
   },
   {
