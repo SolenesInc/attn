@@ -7,7 +7,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// TerminalView is a terminal attached to a link rather than running its harness alone.
 type TerminalView struct {
 	TerminalID string
 	Link       string

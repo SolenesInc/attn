@@ -29,7 +29,6 @@ func (r *Run) Prompted() string {
 	return prompted.Text
 }
 
-// Refused waits for the next submitted line and returns why the harness refused it; it fails if it was taken.
 func (r *Run) Refused() string {
 	r.t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), HangGuard)

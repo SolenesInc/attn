@@ -37,7 +37,6 @@ type codexRemoteThread struct {
 	} `json:"thread"`
 }
 
-// Stock 0.160.0 retries after 1, 2, 4 and 8 seconds, then every 8; the fake keeps the shape, faster.
 var codexReconnectBackoff = []time.Duration{20 * time.Millisecond, 40 * time.Millisecond, 80 * time.Millisecond, 160 * time.Millisecond}
 
 func (c *codexRemote) begin(term *terminal) error {

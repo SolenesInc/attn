@@ -2002,7 +2002,7 @@ func (d *Daemon) terminateSessionAsync(sessionID protocol.SessionID, sig syscall
 			profile := teardown.session.ProfileID
 			d.life.Go("linkReleasedAfterClose", func() {
 				<-done
-				l.released(profile)
+				l.profileReleased(profile)
 			})
 		}
 	}

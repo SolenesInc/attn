@@ -31,11 +31,9 @@ import (
 const (
 	codexServerTerminalPrefix = "codex-server-"
 	codexServerAgent          = "codex-app-server"
-	// The first client to initialize names the server's originator for every conversation; match the TUI's.
-	codexClientName = "codex-tui"
-	// Stock 0.160.0 answered within a second of launch; the first start may fetch plugins.
-	codexServerStartLimit = 30 * time.Second
-	codexServerCallLimit  = 5 * time.Second
+	codexClientName           = "codex-tui"
+	codexServerStartLimit     = 30 * time.Second
+	codexServerCallLimit      = 5 * time.Second
 )
 
 type codexShared struct {
@@ -53,17 +51,14 @@ type codexServer struct {
 	ensureMu sync.Mutex
 	mu       sync.Mutex
 	control  *codexshared.Client
-	// Conversations the server has loaded, as last heard; kept while the control connection is down.
-	held    map[string]bool
-	parents map[string]string
-	// The connection whose notifications count; others are superseded and dropped.
-	attempt *codexAttempt
-	epoch   string
-	seq     atomic.Uint64
-	events  codexEvents
+	held     map[string]bool
+	parents  map[string]string
+	attempt  *codexAttempt
+	epoch    string
+	seq      atomic.Uint64
+	events   codexEvents
 }
 
-// Until its loaded list is held, an attempt's notifications wait to apply on top of it.
 type codexAttempt struct {
 	connected bool
 	early     []codexshared.Message
@@ -99,7 +94,7 @@ func codexServerTerminal(profile string) harness.TerminalID {
 	return harness.TerminalID(codexServerTerminalPrefix + codexProfileKey(profile))
 }
 
-func (r *codexShared) process(t harness.TerminalID) bool {
+func (r *codexShared) runsLink(t harness.TerminalID) bool {
 	return strings.HasPrefix(string(t), codexServerTerminalPrefix)
 }
 
@@ -136,11 +131,11 @@ func (s *codexServer) client() *codexshared.Client {
 
 func (r *codexShared) kind() string { return codexLinkKind }
 
-func (r *codexShared) fits(req *spawnRequest) bool {
+func (r *codexShared) canRun(req *spawnRequest) bool {
 	return req.agent == string(protocol.SessionAgentCodex) && !req.hasPluginDriver && !req.isShell && req.policy.unattendedLaunch.IsZero()
 }
 
-func (r *codexShared) enabled() bool {
+func (r *codexShared) enabledForNewLaunches() bool {
 	return parseBooleanSetting(r.d.store.GetSetting(SettingCodexSharedEnabled))
 }
 
@@ -226,10 +221,9 @@ func (r *codexShared) startServer(ctx context.Context, s *codexServer, executabl
 	opts := ptybackend.SpawnOptions{
 		ID: s.terminal, Agent: codexServerAgent, Label: "Codex app-server", CWD: r.dir(), Cols: 80, Rows: 24,
 		ExternalCommand: command,
-		// The server runs every terminal's conversations, so it carries no terminal's identity.
-		ExternalEnv:   []string{"ATTN_TERMINAL_ID=", "ATTN_SESSION_ID=", "ATTN_AGENT="},
-		LoginShellEnv: r.d.cachedLoginShellEnv(),
-		DaemonEnv:     r.d.spawnRoutingEnv(),
+		ExternalEnv:     []string{"ATTN_TERMINAL_ID=", "ATTN_SESSION_ID=", "ATTN_AGENT="},
+		LoginShellEnv:   r.d.cachedLoginShellEnv(),
+		DaemonEnv:       r.d.spawnRoutingEnv(),
 	}
 	if err := r.d.ptyBackend.Spawn(ctx, opts); err != nil {
 		return fmt.Errorf("start the shared Codex app-server: %w", err)
@@ -275,7 +269,7 @@ func (r *codexShared) connect(ctx context.Context, s *codexServer) error {
 			s.control, s.epoch = client, epoch
 			gone := s.hold(list.Data)
 			for _, m := range a.early {
-				gone = append(gone, s.track(m)...)
+				gone = append(gone, s.trackLocked(m)...)
 			}
 			a.connected, a.early = true, nil
 			s.mu.Unlock()
@@ -318,8 +312,6 @@ func (r *codexShared) watchControl(s *codexServer, client *codexshared.Client) {
 	r.reconnect(s)
 }
 
-// Terminals keep their own connections, so a server that outlives the control one needs it back.
-// Never starts a server: one stopped on purpose stays stopped.
 func (r *codexShared) reconnect(s *codexServer) {
 	ctx := r.d.life.Context()
 	s.ensureMu.Lock()
@@ -332,7 +324,6 @@ func (r *codexShared) reconnect(s *codexServer) {
 	}
 }
 
-// hold replaces the held set with what the server reports loading and returns what it let go.
 func (s *codexServer) hold(loaded []string) []string {
 	fresh := make(map[string]bool, len(loaded))
 	for _, conversation := range loaded {
@@ -349,14 +340,12 @@ func (s *codexServer) hold(loaded []string) []string {
 	return gone
 }
 
-// Losses queue in notification order, ahead of whatever a later resume of the conversation reports.
 func (r *codexShared) lose(s *codexServer, conversations []string) {
 	for _, conversation := range conversations {
 		s.events.run(r.d, func() { r.lost(s, conversation) })
 	}
 }
 
-// Effects queue under s.mu, so a superseded connection's land before the next one restates.
 func (r *codexShared) observeServer(s *codexServer, a *codexAttempt, m codexshared.Message) {
 	var gone []string
 	s.mu.Lock()
@@ -369,7 +358,7 @@ func (r *codexShared) observeServer(s *codexServer, a *codexAttempt, m codexshar
 				r.observeStatus(s, m)
 			}
 			if a.connected {
-				gone = s.track(m)
+				gone = s.trackLocked(m)
 			} else {
 				a.early = append(a.early, m)
 			}
@@ -379,8 +368,7 @@ func (r *codexShared) observeServer(s *codexServer, a *codexAttempt, m codexshar
 	r.lose(s, gone)
 }
 
-// track applies a lifecycle notification to the held set and returns what the server let go. Hold s.mu.
-func (s *codexServer) track(m codexshared.Message) []string {
+func (s *codexServer) trackLocked(m codexshared.Message) []string {
 	var p struct {
 		ThreadID string `json:"threadId"`
 		Thread   struct {
@@ -420,8 +408,6 @@ func (s *codexServer) track(m codexshared.Message) []string {
 	return nil
 }
 
-// lost settles a conversation the server no longer holds. Codex unloads only idle conversations, so a
-// turn still running was cut off: the server exited, and no Stop hook or reconnecting TUI will end it.
 func (r *codexShared) lost(s *codexServer, conversation string) {
 	s.mu.Lock()
 	again := s.held[conversation]
@@ -431,7 +417,6 @@ func (r *codexShared) lost(s *codexServer, conversation string) {
 	if again || session == nil {
 		return
 	}
-	// Another profile may resume the rollout next; only the profile running it may read its turns.
 	r.d.drainTranscriptWatcher(sessionID)()
 	if session.State == protocol.SessionStateWorking || session.State == protocol.SessionStatePendingApproval {
 		r.report(s, sessionID, harness.TurnEnded, false)
@@ -452,7 +437,7 @@ func (r *codexShared) lost(s *codexServer, conversation string) {
 	})
 }
 
-func (r *codexShared) holds(session *protocol.Session) bool {
+func (r *codexShared) keepsLoaded(session *protocol.Session) bool {
 	if session == nil || !r.launchedShared(session.ID) {
 		return false
 	}
@@ -500,7 +485,6 @@ func (r *codexShared) openView(t harness.TerminalID, profile string) (string, er
 	return "unix://" + v.socket, nil
 }
 
-// A terminal that leaves releases its view, and with it maybe the last use of its server.
 func (r *codexShared) terminalDropped(t harness.TerminalID) {
 	r.mu.Lock()
 	v := r.views[t]
@@ -574,7 +558,6 @@ func (r *codexShared) serveView(v *codexView, w http.ResponseWriter, req *http.R
 	codexshared.Proxy(ctx, down, up, func(m *codexshared.Message) (func(*codexshared.Message), error) { return r.prepare(v, m) }, nil)
 }
 
-// Codex's remote mode forwards neither instructions nor environment; attn adds them here.
 func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codexshared.Message), error) {
 	method := m.Method
 	switch method {
@@ -590,7 +573,6 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 		return nil, nil
 	}
 	if conversation, _ := params["threadId"].(string); method == "thread/resume" && conversation != "" {
-		// A session keeps the Codex mode it launched with, so an open plain owner keeps its conversation.
 		owner := r.d.store.ConversationOwner(r.d.sessionInTerminal(v.terminal), conversation)
 		if owner != "" && r.d.store.Get(owner) != nil && !r.launchedShared(owner) {
 			return nil, fmt.Errorf("conversation %s belongs to open session %s, which runs plain Codex; close it to resume here", conversation, owner)
@@ -602,7 +584,6 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 		config = make(map[string]any)
 	}
 	r.capContext(config, launchAs, chief)
-	// Codex ignores developerInstructions on thread/resume: a conversation keeps the ones it started with.
 	if method != "thread/resume" {
 		if instructions := r.instructions(launchAs, v.profile, chief); instructions != "" {
 			prior, _ := params["developerInstructions"].(string)
@@ -630,7 +611,6 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 			return
 		}
 		if method == "thread/resume" {
-			// The rollout keeps the last name any profile gave it; a session that comes back names it again.
 			r.d.mirrorLabel(r.holder(v.profile, result.Thread.ID))
 		} else if err := r.materialize(v.profile, result.Thread.ID); err != nil {
 			r.d.logf("shared Codex: refused conversation %s, which could not be written: %v", result.Thread.ID, err)
@@ -642,8 +622,6 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 	}, nil
 }
 
-// A resume configures its conversation's own session; a new conversation in a terminal that shows one
-// configures a plain successor, with no chief or crew role.
 func (r *codexShared) launching(v *codexView, method string, params map[string]any) (session, launchAs protocol.SessionID, chief bool) {
 	session = r.d.sessionInTerminal(v.terminal)
 	if conversation, _ := params["threadId"].(string); method == "thread/resume" && conversation != "" {
@@ -659,7 +637,6 @@ func (r *codexShared) launching(v *codexView, method string, params map[string]a
 	return session, session, r.d.isChiefOfStaffSession(session)
 }
 
-// Codex applies config only when a start or resume loads the conversation, so every load carries the cap.
 func (r *codexShared) capContext(config map[string]any, sessionID protocol.SessionID, chief bool) {
 	if limit := r.d.launchContextWindowCap(sessionID, string(protocol.SessionAgentCodex), chief); limit > 0 {
 		config["model_auto_compact_token_limit"] = limit
@@ -675,7 +652,6 @@ func (r *codexShared) instructions(sessionID protocol.SessionID, profile string,
 	return launch.Content
 }
 
-// Codex resumes only conversations on disk, and a terminal reconnecting after a restart resumes its own.
 func (r *codexShared) materialize(profile, conversation string) error {
 	r.mu.Lock()
 	s := r.servers[profile]
@@ -731,9 +707,8 @@ func (r *codexShared) respawnEnv(t harness.TerminalID) []string {
 	return nil
 }
 
-// An app-server that exits starts again at the next connection; keep a runtime already restarted under the same id.
 func (r *codexShared) terminalExited(t harness.TerminalID) {
-	if !r.process(t) {
+	if !r.runsLink(t) {
 		r.terminalDropped(t)
 		return
 	}
@@ -745,7 +720,6 @@ func (r *codexShared) terminalExited(t harness.TerminalID) {
 		}
 	}
 	r.mu.Unlock()
-	// Checked under ensureMu: a server restarted under the same id was reconciled by its own connect.
 	if exited != nil {
 		exited.ensureMu.Lock()
 		defer exited.ensureMu.Unlock()
@@ -819,7 +793,6 @@ func (r *codexShared) recoverViews(ctx context.Context) {
 	}
 }
 
-// Subagents announce their parent only in thread/started, which a reconnect does not replay.
 func (r *codexShared) restoreParents(s *codexServer, client *codexshared.Client, loaded []string) {
 	for _, id := range loaded {
 		ctx, cancel := context.WithTimeout(r.d.life.Context(), codexServerCallLimit)
@@ -854,8 +827,7 @@ func (r *codexShared) parent(profile, conversation string) string {
 	return s.parents[conversation]
 }
 
-// In-server processes name their thread; a subagent's hooks belong to its root's session.
-func (r *codexShared) caller(t protocol.TerminalID) (protocol.SessionID, harness.TerminalID, bool) {
+func (r *codexShared) resolveCaller(t protocol.TerminalID) (protocol.SessionID, harness.TerminalID, bool) {
 	profile, conversation, ok := harness.ParseCodexThreadTerminal(t)
 	if !ok {
 		return "", "", false

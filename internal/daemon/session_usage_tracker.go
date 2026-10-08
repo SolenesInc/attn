@@ -111,7 +111,6 @@ func (t *sessionUsageTracker) Reconcile() {
 			state.Sources[source.ID] = sourceState
 		}
 		tracked := t.sources[source.ID]
-		// Archiving moves a rollout; its persisted cursor still marks what was counted.
 		if tracked != nil && tracked.source.Path != source.Path {
 			tracked = nil
 		}

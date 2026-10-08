@@ -39,8 +39,6 @@ const (
 	codexApprovalRequest = "item/commandExecution/requestApproval"
 )
 
-// Stock 0.160.0: thread/start writes nothing until a turn or an injected item; an idle unsubscribed
-// conversation unloads after ~60s (here at once).
 type codexAppServer struct {
 	cfg     config
 	hooks   hookSet
@@ -52,8 +50,7 @@ type codexAppServer struct {
 	prompts map[string]chan string
 	names   map[string]string
 	named   chan struct{}
-	// Closed and replaced whenever a control connection lists the loaded conversations.
-	listed chan struct{}
+	listed  chan struct{}
 }
 
 type codexServerConn struct {
@@ -421,7 +418,6 @@ func (s *codexAppServer) resume(conn *codexServerConn, p codexServerParams) (any
 	}, nil
 }
 
-// Stock 0.160.0 applies config only when a start or resume loads the conversation.
 func (p codexServerParams) compactLimit() string {
 	if limit, ok := p.Config["model_auto_compact_token_limit"]; ok {
 		return fmt.Sprint(limit)

@@ -700,22 +700,80 @@ export function WorkflowsSettings({
   );
 }
 
-export function ExperimentalSettings({
+export function TerminalSettings({
+  ptyBackendHint,
   ptyBackendMode,
+  ptyBackendLabel,
   sharedPtyHostActive,
   sharedPtyHostEnabled,
-  codexSharedEnabled,
-  queueShowHiddenSessions,
   onSetSetting,
 }: Pick<
   SettingsModalState,
+  | 'ptyBackendHint'
   | 'ptyBackendMode'
+  | 'ptyBackendLabel'
   | 'sharedPtyHostActive'
   | 'sharedPtyHostEnabled'
-  | 'codexSharedEnabled'
-  | 'queueShowHiddenSessions'
   | 'onSetSetting'
 >) {
+  return (
+    <section className="settings-block">
+      <div className="settings-block-intro">
+        <div className="settings-kicker">Terminal</div>
+        <h3>PTY Backend</h3>
+        <p className="settings-description">
+          Shows whether terminal sessions run in external worker processes or directly in the daemon.
+        </p>
+      </div>
+      <div className="settings-block-body">
+        <div className="settings-row-card compact">
+          <div>
+            <p className="settings-row-title">Runtime mode</p>
+            <p className="settings-row-copy">{ptyBackendHint}</p>
+          </div>
+          <span className={`settings-status mode-${ptyBackendMode}`}>{ptyBackendLabel}</span>
+        </div>
+        <div className="settings-row-card">
+          <div>
+            <p className="settings-row-title">Shared PTY host (experimental)</p>
+            <p className="settings-row-copy" id="shared-pty-host-description">
+              Off by default. Use a shared Rust process for new terminals and agents to reduce memory use. Changes apply
+              to new or explicitly reloaded sessions. Running sessions stay untouched.
+            </p>
+            <p className="settings-row-copy" data-testid="settings-shared-pty-host-status">
+              {ptyBackendMode !== 'migrating'
+                ? 'This setting requires the default daemon backend.'
+                : sharedPtyHostActive
+                  ? 'New sessions use the shared Rust host.'
+                  : sharedPtyHostEnabled
+                    ? 'Shared host unavailable. New sessions use dedicated Go workers; disable and re-enable to retry.'
+                    : 'New sessions use dedicated Go workers.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-label="Shared PTY host (experimental)"
+            aria-checked={sharedPtyHostEnabled}
+            aria-describedby="shared-pty-host-description"
+            className="settings-action"
+            data-testid="settings-shared-pty-host-toggle"
+            disabled={ptyBackendMode !== 'migrating'}
+            onClick={() => onSetSetting('pty_shared_host_enabled', sharedPtyHostEnabled ? 'false' : 'true')}
+          >
+            {sharedPtyHostEnabled ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export function ExperimentalSettings({
+  codexSharedEnabled,
+  queueShowHiddenSessions,
+  onSetSetting,
+}: Pick<SettingsModalState, 'codexSharedEnabled' | 'queueShowHiddenSessions' | 'onSetSetting'>) {
   return (
     <section className="settings-block">
       <div className="settings-block-intro">
@@ -763,37 +821,6 @@ export function ExperimentalSettings({
             onClick={() => onSetSetting('queue_show_hidden_sessions', queueShowHiddenSessions ? 'false' : 'true')}
           >
             {queueShowHiddenSessions ? 'Disable' : 'Enable'}
-          </button>
-        </div>
-        <div className="settings-row-card">
-          <div>
-            <p className="settings-row-title">Shared PTY host (experimental)</p>
-            <p className="settings-row-copy" id="shared-pty-host-description">
-              Off by default. Use a shared Rust process for new terminals and agents to reduce memory use. Changes apply
-              to new or explicitly reloaded sessions. Running sessions stay untouched.
-            </p>
-            <p className="settings-row-copy" data-testid="settings-shared-pty-host-status">
-              {ptyBackendMode !== 'migrating'
-                ? 'This setting requires the default daemon backend.'
-                : sharedPtyHostActive
-                  ? 'New sessions use the shared Rust host.'
-                  : sharedPtyHostEnabled
-                    ? 'Shared host unavailable. New sessions use dedicated Go workers; disable and re-enable to retry.'
-                    : 'New sessions use dedicated Go workers.'}
-            </p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-label="Shared PTY host (experimental)"
-            aria-checked={sharedPtyHostEnabled}
-            aria-describedby="shared-pty-host-description"
-            className="settings-action"
-            data-testid="settings-shared-pty-host-toggle"
-            disabled={ptyBackendMode !== 'migrating'}
-            onClick={() => onSetSetting('pty_shared_host_enabled', sharedPtyHostEnabled ? 'false' : 'true')}
-          >
-            {sharedPtyHostEnabled ? 'Disable' : 'Enable'}
           </button>
         </div>
       </div>

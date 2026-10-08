@@ -13,44 +13,32 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
-// A linkRuntime runs sessions whose harness attn reaches over a link as well as through their
-// terminals, so a session's conversation can outlive every terminal that shows it.
 type linkRuntime interface {
 	harness.Link
 	kind() string
 
-	// fits reports whether the link can run req; enabled, whether launches not yet recorded take it.
-	fits(req *spawnRequest) bool
-	enabled() bool
-	// admit refuses a launch over this link that cannot resume conversation now.
+	canRun(req *spawnRequest) bool
+	enabledForNewLaunches() bool
 	admit(profile, conversation string) error
 	prepareLaunch(opts *ptybackend.SpawnOptions, profile string) error
 	launchFailed(t harness.TerminalID, profile string)
 	respawnEnv(t harness.TerminalID) []string
 
-	// holder is the open session running conversation over this link.
 	holder(profile, conversation string) protocol.SessionID
-	// caller resolves the terminal ids the link's own process gives the hooks and tools it runs.
-	caller(t protocol.TerminalID) (session protocol.SessionID, view harness.TerminalID, ours bool)
-	// shows is the conversation terminal t shows, or "" while unknown.
-	shows(t harness.TerminalID) string
-	// process reports whether t runs the link itself rather than a view.
-	process(t harness.TerminalID) bool
-	// holds reports whether the link keeps session's conversation loaded with no terminal.
-	holds(session *protocol.Session) bool
+	resolveCaller(t protocol.TerminalID) (session protocol.SessionID, view harness.TerminalID, ours bool)
+	shownConversation(t harness.TerminalID) string
+	runsLink(t harness.TerminalID) bool
+	keepsLoaded(session *protocol.Session) bool
 
 	renamed(sessionID protocol.SessionID, label string)
 	closed(sessionID protocol.SessionID)
-	// released follows a session's teardown; the profile may no longer need the link.
-	released(profile string)
-	// setAside reports whether closing the session put conversation where restore brings it back.
-	setAside(sessionID protocol.SessionID, conversation string) bool
+	profileReleased(profile string)
+	setAsideAtClose(sessionID protocol.SessionID, conversation string) bool
 	restore(profile, conversation string) error
 	transcriptPath(path string) string
 
 	terminalDropped(t harness.TerminalID)
 	terminalExited(t harness.TerminalID)
-	// recoverProcesses runs before startup decides which sessions are live; recoverViews after.
 	recoverProcesses(ctx context.Context)
 	recoverViews(ctx context.Context)
 }
@@ -68,7 +56,6 @@ func (d *Daemon) linkNamed(kind string) linkRuntime {
 	return nil
 }
 
-// A session keeps the link it launched with.
 func (d *Daemon) linkOf(sessionID protocol.SessionID) linkRuntime {
 	intent, ok := d.store.LaunchIntent(sessionID)
 	if !ok {
@@ -79,13 +66,13 @@ func (d *Daemon) linkOf(sessionID protocol.SessionID) linkRuntime {
 
 func (d *Daemon) launchLink(req *spawnRequest) linkRuntime {
 	if intent, ok := d.store.LaunchIntent(req.msg.ID); ok {
-		if l := d.linkNamed(intent.Link); l != nil && l.fits(req) {
+		if l := d.linkNamed(intent.Link); l != nil && l.canRun(req) {
 			return l
 		}
 		return nil
 	}
 	for _, l := range d.links() {
-		if l.fits(req) && l.enabled() {
+		if l.canRun(req) && l.enabledForNewLaunches() {
 			return l
 		}
 	}
@@ -94,14 +81,13 @@ func (d *Daemon) launchLink(req *spawnRequest) linkRuntime {
 
 func (d *Daemon) linkProcess(t harness.TerminalID) bool {
 	for _, l := range d.links() {
-		if l.process(t) {
+		if l.runsLink(t) {
 			return true
 		}
 	}
 	return false
 }
 
-// linkConversation is the conversation a link session holds, "" for any other session.
 func (d *Daemon) linkConversation(sessionID protocol.SessionID) string {
 	if d.linkOf(sessionID) == nil {
 		return ""
@@ -109,7 +95,6 @@ func (d *Daemon) linkConversation(sessionID protocol.SessionID) string {
 	return d.store.GetSessionConversation(sessionID).NativeID
 }
 
-// A hidden session is open and live over its link while no terminal shows it.
 func (d *Daemon) hidden(sessionID protocol.SessionID) bool {
 	if len(d.terminals().Of(harness.SessionID(sessionID))) > 0 {
 		return false
@@ -121,26 +106,24 @@ func (d *Daemon) keepsWhenLeft(sessionID protocol.SessionID) bool {
 	return d.linkConversation(sessionID) != ""
 }
 
-// linkKeepsLive exempts from startup pruning a session no terminal runs.
 func (d *Daemon) linkKeepsLive(session *protocol.Session) bool {
 	l := d.linkOf(session.ID)
-	return l != nil && (l.holds(session) || d.hidden(session.ID))
+	return l != nil && (l.keepsLoaded(session) || d.hidden(session.ID))
 }
 
-// movedOn reports whether t has switched to another conversation than the session it is bound to.
 func (d *Daemon) movedOn(sessionID protocol.SessionID, t harness.TerminalID) bool {
 	l := d.linkOf(sessionID)
 	if l == nil {
 		return false
 	}
-	shown := l.shows(t)
+	shown := l.shownConversation(t)
 	conversation := d.store.GetSessionConversation(sessionID).NativeID
 	return shown != "" && conversation != "" && conversation != shown
 }
 
 func (d *Daemon) linkCaller(t protocol.TerminalID) (session protocol.SessionID, view harness.TerminalID, ours bool) {
 	for _, l := range d.links() {
-		if session, view, ours = l.caller(t); ours {
+		if session, view, ours = l.resolveCaller(t); ours {
 			return session, view, true
 		}
 	}
@@ -153,7 +136,6 @@ func (d *Daemon) linkRenamed(sessionID protocol.SessionID, label string) {
 	}
 }
 
-// mirrorLabel hands the link a label the user or attn chose, so its own listings agree.
 func (d *Daemon) mirrorLabel(sessionID protocol.SessionID) {
 	if session := d.store.Get(sessionID); session != nil && !sessionLabelIsPlaceholder(session.Label, session.Directory, session.ID) {
 		d.linkRenamed(session.ID, session.Label)
@@ -203,7 +185,6 @@ func (d *Daemon) decorateLedgerEntryHidden(entry *protocol.SessionLedgerEntry) {
 	}
 }
 
-// showHidden opens a terminal for a hidden session, attached to the conversation its link keeps.
 func (d *Daemon) showHidden(sessionID protocol.SessionID) error {
 	session := d.store.Get(sessionID)
 	intent, ok := d.store.LaunchIntent(sessionID)

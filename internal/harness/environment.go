@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-// CodexSharedProfileEnv marks a process a profile's shared Codex app-server runs: a hook or a tool
-// of one of its conversations, which speaks as that conversation rather than as a terminal.
 const CodexSharedProfileEnv = "ATTN_CODEX_SHARED_PROFILE"
 
 const codexThreadPrefix = "codex:"

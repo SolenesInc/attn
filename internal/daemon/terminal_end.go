@@ -37,7 +37,6 @@ func (d *Daemon) endTerminal(sessionID protocol.SessionID, t harness.TerminalID)
 	return false
 }
 
-// The last terminal stays for the caller to close with the session.
 func (d *Daemon) closeTerminal(sessionID protocol.SessionID, t harness.TerminalID) (last bool) {
 	lifecycle := d.sessionLifecycleLockFor(sessionID)
 	lifecycle.Lock()
@@ -54,7 +53,6 @@ func (d *Daemon) closeTerminal(sessionID protocol.SessionID, t harness.TerminalI
 }
 
 func (d *Daemon) dropTerminal(t harness.TerminalID) {
-	// Removing the runtime can beat its exit event, so the view goes now rather than on exit.
 	d.linkTerminalDropped(t)
 	if err := d.removePTYSession(t); err != nil {
 		d.logf("removing the runtime of terminal %s: %v", t, err)

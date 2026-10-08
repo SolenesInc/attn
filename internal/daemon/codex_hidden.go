@@ -20,7 +20,6 @@ import (
 
 const codexLinkKind = "codex-app-server"
 
-// Control-connection turn reports arrive in order, so no driver run fences them.
 const codexLinkEpochPrefix = codexLinkKind + ":"
 
 func (r *codexShared) launchedShared(sessionID protocol.SessionID) bool {
@@ -70,7 +69,6 @@ func (r *codexShared) Voices() []harness.Voice {
 	return []harness.Voice{harness.VoiceUser, harness.VoiceAttn}
 }
 
-// Deliver runs on its own deadline and ignores ctx, so daemon shutdown does not cut a delivery short.
 func (r *codexShared) Deliver(_ context.Context, in harness.Input) harness.Custody {
 	session := r.d.store.Get(in.Session)
 	if session == nil {
@@ -163,7 +161,6 @@ func (st codexThreadStatus) turn() (harness.Turn, bool) {
 	return harness.TurnUnknown, false
 }
 
-// Notifications run in arrival order, off the connection's reader.
 type codexEvents struct {
 	mu      sync.Mutex
 	queue   []func()
@@ -257,7 +254,6 @@ func (r *codexShared) restateHiddenStates(s *codexServer, client *codexshared.Cl
 	}
 }
 
-// The rollout moves to archived_sessions; read its usage to the end after archiving.
 func (r *codexShared) closed(sessionID protocol.SessionID) {
 	conversation := r.conversation(sessionID)
 	session := r.d.store.Get(sessionID)
@@ -283,7 +279,6 @@ func (r *codexShared) closed(sessionID protocol.SessionID) {
 	}
 }
 
-// A close can come before the watcher's first read.
 func (r *codexShared) settleUsage(sessionID protocol.SessionID) {
 	path := r.d.store.GetSessionConversation(sessionID).TranscriptPath
 	if path == "" {
@@ -295,7 +290,7 @@ func (r *codexShared) settleUsage(sessionID protocol.SessionID) {
 	}
 }
 
-func (r *codexShared) setAside(sessionID protocol.SessionID, conversation string) bool {
+func (r *codexShared) setAsideAtClose(sessionID protocol.SessionID, conversation string) bool {
 	return conversation != "" && r.launchedShared(sessionID) && transcript.FindArchivedCodexTranscript(conversation) != ""
 }
 
@@ -317,7 +312,7 @@ func (r *codexShared) restore(profile, conversation string) error {
 	return nil
 }
 
-func (r *codexShared) shows(t harness.TerminalID) string {
+func (r *codexShared) shownConversation(t harness.TerminalID) string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if v := r.views[t]; v != nil {
@@ -350,7 +345,6 @@ func (r *codexShared) observeName(s *codexServer, m codexshared.Message) {
 	})
 }
 
-// attn's label is the one that counts.
 func (r *codexShared) renamed(sessionID protocol.SessionID, label string) {
 	conversation := r.conversation(sessionID)
 	session := r.d.store.Get(sessionID)
@@ -376,7 +370,7 @@ func (r *codexShared) renamed(sessionID protocol.SessionID, label string) {
 	})
 }
 
-func (r *codexShared) released(profile string) {
+func (r *codexShared) profileReleased(profile string) {
 	r.mu.Lock()
 	s := r.servers[profile]
 	r.mu.Unlock()
@@ -441,5 +435,5 @@ func (r *codexShared) idleSoon(profile string) {
 	if profile == "" {
 		return
 	}
-	r.d.life.Go("codexServerIdle", func() { r.released(profile) })
+	r.d.life.Go("codexServerIdle", func() { r.profileReleased(profile) })
 }

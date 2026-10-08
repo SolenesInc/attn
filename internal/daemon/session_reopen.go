@@ -152,7 +152,7 @@ func (d *Daemon) decideReopenPlace(
 	gitView reopenGit,
 ) error {
 	conversation, conversationReason := d.reopenConversation(verdict.Execution, verdict.DirectoryState == directoryMissing)
-	if l := d.linkOf(verdict.SessionID); !conversation && l != nil && l.setAside(verdict.SessionID, strings.TrimSpace(verdict.Execution.Resume)) {
+	if l := d.linkOf(verdict.SessionID); !conversation && l != nil && l.setAsideAtClose(verdict.SessionID, strings.TrimSpace(verdict.Execution.Resume)) {
 		conversation, conversationReason = true, ""
 	}
 	if !hasLaunchIntent {

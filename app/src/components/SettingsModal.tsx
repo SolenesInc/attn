@@ -14,6 +14,7 @@ import {
   HygieneSettings,
   PluginSettings,
   SectionStatusPills,
+  TerminalSettings,
   ExperimentalSettings,
   WorkflowsSettings,
   DesktopSettings,
@@ -93,7 +94,7 @@ function SettingsModalContent(props: SettingsModalProps & { closeRef: ForwardedR
                       onClick={() => void selectSection(item.id)}
                     >
                       <span>{item.label}</span>
-                      {!['agents', 'backgroundAgents', 'experimental'].includes(item.id) && (
+                      {!['agents', 'backgroundAgents', 'terminal', 'experimental'].includes(item.id) && (
                         <span
                           className={`settings-nav-count${item.id === 'autoMode' && item.count > 0 ? ' waiting' : ''}`}
                         >
@@ -243,11 +244,19 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
     case 'experimental':
       return (
         <ExperimentalSettings
-          ptyBackendMode={state.ptyBackendMode}
-          sharedPtyHostActive={state.sharedPtyHostActive}
-          sharedPtyHostEnabled={state.sharedPtyHostEnabled}
           codexSharedEnabled={state.codexSharedEnabled}
           queueShowHiddenSessions={state.queueShowHiddenSessions}
+          onSetSetting={state.onSetSetting}
+        />
+      );
+    case 'terminal':
+      return (
+        <TerminalSettings
+          ptyBackendHint={state.ptyBackendHint}
+          ptyBackendMode={state.ptyBackendMode}
+          ptyBackendLabel={state.ptyBackendLabel}
+          sharedPtyHostActive={state.sharedPtyHostActive}
+          sharedPtyHostEnabled={state.sharedPtyHostEnabled}
           onSetSetting={state.onSetSetting}
         />
       );

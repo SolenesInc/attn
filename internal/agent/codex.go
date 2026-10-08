@@ -397,7 +397,6 @@ func codexToolFreeHeadlessArgs(request HeadlessTaskRequest, window int) []string
 
 func (c *Codex) GenerateConfigOverrides(opts SpawnOpts) []string {
 	var overrides []string
-	// A remote terminal drops hooks, environment and instructions; the app-server and attn's proxy own them.
 	if opts.CodexRemote == "" {
 		overrides = hooks.GenerateCodexConfigOverrides(string(opts.TerminalID), opts.SocketPath, opts.WrapperPath, opts.launchSpec())
 	}

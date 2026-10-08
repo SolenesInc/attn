@@ -10,6 +10,7 @@ const SECTION_IDS = [
   'hygiene',
   'agents',
   'backgroundAgents',
+  'terminal',
   'experimental',
   'autoMode',
   'connectivity',
@@ -39,7 +40,7 @@ describe('SettingsModal sections', () => {
   });
 
   it('keeps the shared PTY experiment off until the daemon confirms opt-in', async () => {
-    const daemon = await openSection('experimental', { settings: { pty_backend_mode: 'migrating' } }, (scripted) => {
+    const daemon = await openSection('terminal', { settings: { pty_backend_mode: 'migrating' } }, (scripted) => {
       scripted.on('set_setting', () => {});
     });
     expect(sharedHostSwitch()).toHaveAttribute('aria-checked', 'false');
@@ -54,7 +55,7 @@ describe('SettingsModal sections', () => {
   });
 
   it('can turn the shared host off without claiming existing terminals will move', async () => {
-    const daemon = await openSection('experimental', { settings: {
+    const daemon = await openSection('terminal', { settings: {
       pty_backend_mode: 'migrating', pty_shared_host_enabled: 'true', pty_shared_host_active: 'true',
     } });
     expect(sharedHostSwitch()).toHaveAttribute('aria-checked', 'true');
@@ -65,13 +66,13 @@ describe('SettingsModal sections', () => {
   });
 
   it('shows when a saved opt-in fell back to dedicated workers', async () => {
-    await openSection('experimental', { settings: { pty_backend_mode: 'migrating', pty_shared_host_enabled: 'true', pty_shared_host_active: 'false' } });
+    await openSection('terminal', { settings: { pty_backend_mode: 'migrating', pty_shared_host_enabled: 'true', pty_shared_host_active: 'false' } });
     expect(screen.getByTestId('settings-shared-pty-host-status')).toHaveTextContent('Shared host unavailable.');
     expect(sharedHostSwitch()).toBeEnabled();
   });
 
   it.each(['worker', 'shared', 'embedded', 'unknown'])('disables the experiment control on the %s backend', async (mode) => {
-    const daemon = await openSection('experimental', { settings: { pty_backend_mode: mode } });
+    const daemon = await openSection('terminal', { settings: { pty_backend_mode: mode } });
     expect(sharedHostSwitch()).toBeDisabled();
     await gesture(daemon, () => fireEvent.click(sharedHostSwitch()));
     expect(savedSettings(daemon)).toEqual([]);

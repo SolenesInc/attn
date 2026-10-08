@@ -214,7 +214,6 @@ func (r *codexUsageSourceResolver) Discover() ([]UsageSource, error) {
 			}
 		}
 	}
-	// The pre-scan stamp lets a concurrent archive move invalidate the next read.
 	r.archiveInfo, r.archiveLoaded, r.archiveLineage = archiveInfo, true, lineage
 	return sources, nil
 }
@@ -357,7 +356,6 @@ func codexSessionsRoot(path string) string {
 	return ""
 }
 
-// Native archive flattens the dated rollout path and unarchive restores it; the live path stays the source identity.
 func codexUsageSourceIdentity(path string) string {
 	if filepath.Base(filepath.Dir(path)) != "archived_sessions" {
 		return path

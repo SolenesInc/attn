@@ -570,7 +570,6 @@ func sharedCodexWaiting(t *testing.T, w *world, app *testworld.Peer) (string, *f
 	return session, codex, terminal
 }
 
-// sideCodexIdle runs one turn of a shared Codex session in a second profile and waits for it to settle.
 func sideCodexIdle(t *testing.T, w *world, app *testworld.Peer) (protocol.Profile, *testworld.Peer, string, *fakeagent.Run) {
 	t.Helper()
 	side := createProfile(app, "Side")

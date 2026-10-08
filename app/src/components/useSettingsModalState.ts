@@ -33,6 +33,7 @@ import { useAgentSettingDrafts, useSettingDraft } from './settingsDrafts';
 import {
   DEFAULT_CONTEXT_WINDOW_CAP,
   OPEN_SENT_FILES_ENABLED_SETTING,
+  PTY_BACKENDS,
   SettingsModalHandle,
   SettingsModalProps,
   SettingsNavGroup,
@@ -280,7 +281,11 @@ export function useSettingsModalState({
     return eligible;
   }, [actualAgentCapabilities, agentAvailability, orderedAgentList, settings]);
   const agentCapabilityOrder = useMemo(() => AGENT_CAPABILITY_ORDER.map((cap) => cap as string), []);
-  const ptyBackendMode = (settings.pty_backend_mode || 'unknown').toLowerCase();
+  const rawPtyBackendMode = (settings.pty_backend_mode || 'unknown').toLowerCase();
+  const ptyBackendMode = Object.prototype.hasOwnProperty.call(PTY_BACKENDS, rawPtyBackendMode)
+    ? rawPtyBackendMode
+    : 'unknown';
+  const { label: ptyBackendLabel, hint: ptyBackendHint } = PTY_BACKENDS[ptyBackendMode];
   const codexSharedEnabled = settings.codex_shared_enabled === 'true';
   const queueShowHiddenSessions = settings.queue_show_hidden_sessions !== 'false';
   const sharedPtyHostEnabled = settings.pty_shared_host_enabled === 'true';
@@ -674,12 +679,20 @@ export function useSettingsModalState({
         label: 'System',
         items: [
           {
+            id: 'terminal',
+            label: 'Terminal',
+            title: 'Terminal',
+            description: 'How terminal sessions are hosted.',
+            count: 1,
+            keywords: 'pty backend shared rust host workers experimental terminal',
+          },
+          {
             id: 'experimental',
             label: 'Experimental',
             title: 'Experimental',
             description: 'Opt in to features that are still being developed.',
             count: 1,
-            keywords: 'codex shared hidden queue pty backend shared rust host workers experimental terminal',
+            keywords: 'experimental codex shared hidden sessions queue',
           },
           {
             id: 'backgroundTasks',
@@ -798,7 +811,9 @@ export function useSettingsModalState({
     commitPluginPriority,
     handleToggleWorkflows,
     workflowsEnabled,
+    ptyBackendHint,
     ptyBackendMode,
+    ptyBackendLabel,
     sharedPtyHostActive,
     sharedPtyHostEnabled,
     codexSharedEnabled,

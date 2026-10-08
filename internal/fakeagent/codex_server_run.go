@@ -37,7 +37,6 @@ func (s *CodexServer) AskQuestion(conversation string) {
 	s.call(methodAskQuestion, serverThreadParams{ThreadID: conversation}, nil)
 }
 
-// RunTool runs command as a shell tool of the conversation, in the environment Codex gives one.
 func (s *CodexServer) RunTool(conversation, command string) string {
 	s.t.Helper()
 	var ran promptedResult
@@ -52,13 +51,11 @@ func (s *CodexServer) Instructions(conversation string) string {
 	return started.Text
 }
 
-// DropControl breaks every connection that is not a terminal's and waits for a control connection to return.
 func (s *CodexServer) DropControl() {
 	s.t.Helper()
 	s.call(methodDropControl, serverThreadParams{}, nil)
 }
 
-// CompactLimit is the auto-compact limit the loaded conversation took from its last load, or "".
 func (s *CodexServer) CompactLimit(conversation string) string {
 	s.t.Helper()
 	var loaded promptedResult

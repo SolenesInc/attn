@@ -15,7 +15,6 @@ import (
 	"nhooyr.io/websocket"
 )
 
-// The server sends no "jsonrpc" field and ignores one.
 type Message struct {
 	ID     json.RawMessage `json:"id,omitempty"`
 	Method string          `json:"method,omitempty"`
@@ -32,7 +31,6 @@ type RPCError struct {
 func (e *RPCError) Error() string { return fmt.Sprintf("codex %s: %s", e.Method, e.Reply) }
 
 func Dial(ctx context.Context, path string) (*websocket.Conn, error) {
-	// The server links long socket paths into /tmp; connecting by the link's own path overflows sun_path.
 	if resolved, err := filepath.EvalSymlinks(path); err == nil {
 		path = resolved
 	}

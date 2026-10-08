@@ -78,7 +78,6 @@ func (d *Daemon) conversationIn(t harness.TerminalID, observation agentConversat
 		d.logf("agent conversation: dropped %s from terminal %s; its owner changed from %q to %q meanwhile", observation.NativeID, t, owner, now)
 		return
 	}
-	// A session keeps the link it launched with, so an owner on another link never runs in t.
 	if owner != "" && d.linkOf(owner) != d.linkOf(session.ID) {
 		if d.store.Get(owner) != nil {
 			d.logf("agent conversation: dropped %s from terminal %s; open session %s runs it over another link", observation.NativeID, t, owner)

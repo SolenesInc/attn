@@ -29,7 +29,6 @@ func GenerateCodexConfigOverrides(terminalID, socketPath, wrapperPath string, la
 	return overrides
 }
 
-// Every conversation the server runs gets this environment, including ones attn resumes itself.
 func GenerateCodexServerConfigOverrides(wrapperPath, socketPath, profile string) []string {
 	wrapper := hookWrapper(wrapperPath)
 	overrides := codexHookOverrides(codexHookCommand(wrapper, "env "+shellQuote(harness.CodexSharedProfileEnv+"="+profile)+" "))
