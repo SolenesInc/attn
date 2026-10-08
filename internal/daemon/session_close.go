@@ -14,6 +14,14 @@ type sessionCloseInFlight struct {
 	teardown *sessionTeardown
 }
 
+func (d *Daemon) beginSessionCloseAsUser(sessionID protocol.SessionID, closed store.SessionClose, client *wsClient) (sessionCloseInFlight, error) {
+	if err := d.sessionCloseError(sessionID); err != nil {
+		d.logf("refusing to unregister protected session %s: %v", sessionID, err)
+		return sessionCloseInFlight{}, err
+	}
+	return d.beginSessionClose(sessionID, closed, client)
+}
+
 func (d *Daemon) beginSessionClose(
 	sessionID protocol.SessionID, closed store.SessionClose, client *wsClient,
 ) (sessionCloseInFlight, error) {
