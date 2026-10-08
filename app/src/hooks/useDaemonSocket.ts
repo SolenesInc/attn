@@ -2854,8 +2854,8 @@ export function useDaemonSocket({
     sendRequest('delegation_preferences_get', {}, 'Reading delegation preferences timed out'), [sendRequest]);
   const sendDelegationPreferencesSave = useCallback((preferences: DelegationPreferences, installWorkflowSkill = false): Promise<DelegationSettingsState> =>
     sendRequest('delegation_preferences_save', { preferences, ...(installWorkflowSkill ? { install_workflow_skill: true } : {}) }, 'Saving delegation preferences timed out'), [sendRequest]);
-  const sendHarnessModels = useCallback((harness: string): Promise<HarnessModelCatalog> =>
-    sendRequest('harness_models', { harness }, 'Discovering models timed out', MODEL_DISCOVERY_TIMEOUT_MS), [sendRequest]);
+  const sendHarnessModels = useCallback((harness: string, refresh = false): Promise<HarnessModelCatalog> =>
+    sendRequest('harness_models', { harness, ...(refresh ? { refresh: true } : {}) }, 'Discovering models timed out', MODEL_DISCOVERY_TIMEOUT_MS), [sendRequest]);
 
   const sendAutoModeGet = useCallback((): Promise<AutoModeState> => {
     return sendRequest<AutoModeState>(

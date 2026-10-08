@@ -15,6 +15,7 @@ import (
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/jobs"
+	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/transcript"
 )
@@ -206,7 +207,7 @@ func (d *Daemon) execSessionTitle(ctx context.Context, session *protocol.Session
 	if providerAgent == "" {
 		return "", fmt.Errorf("no title provider available for agent %q", session.Agent)
 	}
-	return d.execSessionTitleHeadless(ctx, providerAgent, sessionTitleModel(providerAgent), conversation)
+	return d.execSessionTitleHeadless(ctx, providerAgent, d.sessionTitleModel(providerAgent), conversation)
 }
 
 func titleProviderAgent(sessionAgent string) string {
@@ -330,22 +331,18 @@ func sessionAutoTitleEnabled() bool {
 	}
 }
 
-func sessionTitleModel(agent string) string {
+func (d *Daemon) sessionTitleModel(agent string) string {
+	explicit := os.Getenv("ATTN_" + strings.ToUpper(agent) + "_TITLE_MODEL")
+	return d.resolveTierModel(agent, modeltiers.Light, explicit, fallbackSessionTitleModel(agent))
+}
+
+func fallbackSessionTitleModel(agent string) string {
 	switch agent {
 	case "claude":
-		if v := strings.TrimSpace(os.Getenv("ATTN_CLAUDE_TITLE_MODEL")); v != "" {
-			return v
-		}
 		return "haiku"
 	case "codex":
-		if v := strings.TrimSpace(os.Getenv("ATTN_CODEX_TITLE_MODEL")); v != "" {
-			return v
-		}
 		return "gpt-5.6-luna"
 	case "copilot":
-		if v := strings.TrimSpace(os.Getenv("ATTN_COPILOT_TITLE_MODEL")); v != "" {
-			return v
-		}
 		return "claude-haiku-4.5"
 	default:
 		return ""

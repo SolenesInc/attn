@@ -81,9 +81,9 @@ function scriptDelegation(daemon: ScriptedDaemon, { roles = [], enabled = roles.
   daemon.on('delegation_preferences_get', (load) => (holdingLoads ? void heldLoads.push(load) : answerLoad(load)));
   daemon.on('delegation_preferences_save', (save) => (holdingSaves ? void heldSaves.push(save) : answerSave(save)));
   daemon.on('harness_models', () => ({
-    event: 'harness_models_result',
+    event: 'harness_models_result', tier_defaults: {},
     success: true,
-    models: [{ harness: 'codex', provider: '', id: 'model-a', name: 'Everyday model', description: '', detail: '', effort_support: 'supported', effort_levels: ['medium', 'high'], access: 'unknown' }],
+    models: [{ harness: 'codex', provider: '', id: 'model-a', name: 'Everyday model', description: '', detail: '', tier_source: 'none', effort_support: 'supported', effort_levels: ['medium', 'high'], access: 'unknown' }],
     detail: 'Reported by Codex',
   }));
   return server;

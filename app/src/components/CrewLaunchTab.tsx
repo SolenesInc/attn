@@ -283,7 +283,7 @@ export interface CrewLaunchTabProps {
   catalogError: string;
   onRetryCatalog: () => void;
   autosave: LaunchAutosave;
-  loadModels: (harness: string) => Promise<HarnessModelCatalog>;
+  loadModels: (harness: string, refresh?: boolean) => Promise<HarnessModelCatalog>;
   isConnected: boolean;
   restart?: CrewRestartAttempt;
   onRestart: () => void;

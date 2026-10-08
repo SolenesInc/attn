@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/modeltiers"
 )
 
 const (
@@ -30,19 +31,16 @@ func defaultGardenAdvisorConfig(agent string) (gardenAdvisorConfig, error) {
 	case "codex":
 		return gardenAdvisorConfig{
 			Agent:  "codex",
-			Model:  gardenAdvisorCodexDefaultModel,
 			Effort: gardenAdvisorCodexDefaultEffort,
 		}, nil
 	case "claude":
 		return gardenAdvisorConfig{
 			Agent:  "claude",
-			Model:  gardenAdvisorClaudeDefaultModel,
 			Effort: gardenAdvisorClaudeDefaultEffort,
 		}, nil
 	case "copilot":
 		return gardenAdvisorConfig{
 			Agent: "copilot",
-			Model: gardenAdvisorCopilotDefaultModel,
 		}, nil
 	default:
 		return gardenAdvisorConfig{}, fmt.Errorf("garden advisor agent is not supported: %s", agent)
@@ -75,9 +73,6 @@ func parseGardenAdvisorConfig(raw string) (gardenAdvisorConfig, error) {
 	defaults, err := defaultGardenAdvisorConfig(config.Agent)
 	if err != nil {
 		return gardenAdvisorConfig{}, err
-	}
-	if config.Model == "" {
-		config.Model = defaults.Model
 	}
 	if config.Effort == "" {
 		config.Effort = defaults.Effort
@@ -115,7 +110,19 @@ func (d *Daemon) gardenAdvisorConfig() (gardenAdvisorConfig, error) {
 	if d.store == nil {
 		return gardenAdvisorConfig{}, errors.New("garden advisor settings unavailable")
 	}
-	return parseGardenAdvisorConfig(d.store.GetSetting(SettingGardenAdvisor))
+	config, err := parseGardenAdvisorConfig(d.store.GetSetting(SettingGardenAdvisor))
+	if err != nil {
+		return gardenAdvisorConfig{}, err
+	}
+	fallback := gardenAdvisorCodexDefaultModel
+	switch config.Agent {
+	case "claude":
+		fallback = gardenAdvisorClaudeDefaultModel
+	case "copilot":
+		fallback = gardenAdvisorCopilotDefaultModel
+	}
+	config.Model = d.resolveTierModel(config.Agent, modeltiers.Light, config.Model, fallback)
+	return config, nil
 }
 
 func (d *Daemon) resolveGardenAdvisor(

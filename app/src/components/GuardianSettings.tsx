@@ -12,7 +12,7 @@ const modelEfforts = (model: HarnessModel | undefined) => model?.effort_support 
 export function GuardianSettings({ value = {}, policy, loadModels }: {
   value?: GuardianSelection;
   policy: Pick<AutoModePolicy, 'editing' | 'setPolicy'>;
-  loadModels: (harness: string) => Promise<HarnessModelCatalog>;
+  loadModels: (harness: string, refresh?: boolean) => Promise<HarnessModelCatalog>;
 }) {
   const { catalog, loading, error, discover } = useHarnessModelCatalog(pi, loadModels);
   const [failure, setFailure] = useState('');

@@ -1279,7 +1279,7 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	fallback := fs.Bool("fallback", false, "configured unmatched-work fallback")
 	provider := fs.String("provider", "", "plugin model provider")
 	model := fs.String("model", "", "pin the delegated agent's model (alias or full id)")
-	effort := fs.String("effort", "", "pin the delegated agent's reasoning effort")
+	effort := fs.String("effort", "", "pin the delegated agent's effort")
 	name := fs.String("name", "", "session name; defaults from the brief or seed title")
 	desktop := fs.String("desktop", "", "desktop of the caller's profile: shortcut digit, name or id")
 	sourceSessionID := fs.String("source-session", "", "source session id (defaults to the current session)")

@@ -283,7 +283,7 @@ function AdoptionPanel({ config, templates, names, adoption, onChange, onCancel,
   </section>;
 }
 
-export function DelegationSettings({ policy, loadModels }: { policy: DelegationPreferencesPolicy; loadModels: (harness: string) => Promise<HarnessModelCatalog> }) {
+export function DelegationSettings({ policy, loadModels }: { policy: DelegationPreferencesPolicy; loadModels: (harness: string, refresh?: boolean) => Promise<HarnessModelCatalog> }) {
   const { state, preferences: config, error, generation, reload, save } = policy;
   const [adoption, setAdoption] = useState<Record<string, string> | null>(null);
   const { undo, remember, forget } = useUndo(generation);

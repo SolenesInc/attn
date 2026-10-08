@@ -54,11 +54,11 @@ const preferences = (available = harnesses): Reply => ({
   harnesses: available,
 });
 
-const models = (list: Extract<Reply, { event: 'harness_models_result' }>['models']): Reply => ({ event: 'harness_models_result', success: true, detail: '', models: list });
+const models = (list: Extract<Reply, { event: 'harness_models_result' }>['models']): Reply => ({ event: 'harness_models_result', tier_defaults: {}, success: true, detail: '', models: list });
 
 const astra = models([
-  { harness: 'codex', provider: 'openai', id: 'gpt-6-astra', name: 'Astra', description: '', detail: '', access: 'supported', effort_support: 'supported', effort_levels: ['medium', 'high'] },
-  { harness: 'codex', provider: 'openai', id: 'retired', name: 'Retired', description: '', detail: '', access: 'unsupported', effort_support: 'unknown', effort_levels: [] },
+  { harness: 'codex', provider: 'openai', id: 'gpt-6-astra', name: 'Astra', description: '', detail: '', access: 'supported', tier_source: 'none', effort_support: 'supported', effort_levels: ['medium', 'high'] },
+  { harness: 'codex', provider: 'openai', id: 'retired', name: 'Retired', description: '', detail: '', access: 'unsupported', tier_source: 'none', effort_support: 'unknown', effort_levels: [] },
 ]);
 
 type CrewCommand = 'crew_set' | 'crew_restart' | 'crew_charter_get' | 'crew_charter_set' | 'crew_handoffs_get' | 'crew_handoff_get' | 'delegation_preferences_get' | 'harness_models';
@@ -536,8 +536,8 @@ describe('CrewPanel', () => {
       script: {
         crew_set: [saved({ member: member('keel', 6, { agent: 'codex', model: 'second/shared', resolved_agent: 'codex', resolved_model: 'second/shared' }) })],
         harness_models: [models([
-          { harness: 'codex', provider: 'first', id: 'shared', name: 'Shared one', description: '', detail: '', access: 'supported', effort_support: 'supported', effort_levels: ['low'] },
-          { harness: 'codex', provider: 'second', id: 'shared', name: 'Shared two', description: '', detail: '', access: 'supported', effort_support: 'supported', effort_levels: ['high'] },
+          { harness: 'codex', provider: 'first', id: 'shared', name: 'Shared one', description: '', detail: '', access: 'supported', tier_source: 'none', effort_support: 'supported', effort_levels: ['low'] },
+          { harness: 'codex', provider: 'second', id: 'shared', name: 'Shared two', description: '', detail: '', access: 'supported', tier_source: 'none', effort_support: 'supported', effort_levels: ['high'] },
         ])],
       },
       members: [member('keel', 5, { agent: 'codex', resolved_agent: 'codex' })],
@@ -560,7 +560,7 @@ describe('CrewPanel', () => {
           HOLD,
         ],
         harness_models: [models([
-          { harness: 'codex', provider: 'local', id: 'fixed', name: 'Fixed', description: '', detail: '', access: 'supported', effort_support: 'unsupported', effort_levels: [] },
+          { harness: 'codex', provider: 'local', id: 'fixed', name: 'Fixed', description: '', detail: '', access: 'supported', tier_source: 'none', effort_support: 'unsupported', effort_levels: [] },
         ])],
       },
       members: [member('keel', 5, { agent: 'codex', resolved_agent: 'codex' })],

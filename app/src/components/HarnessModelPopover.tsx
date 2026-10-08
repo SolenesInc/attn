@@ -110,7 +110,7 @@ export function HarnessModelPopover({ value, harnesses, anchor, onChange, onClos
   anchor: Anchor;
   onChange: (selection: DelegationSelection) => void;
   onClose: () => void;
-  loadModels: (harness: string) => Promise<HarnessModelCatalog>;
+  loadModels: (harness: string, refresh?: boolean) => Promise<HarnessModelCatalog>;
 }) {
   const harness = harnesses.find(h => h.id === value.harness);
   const { catalog, loading, error, discover } = useHarnessModelCatalog(harness, loadModels);

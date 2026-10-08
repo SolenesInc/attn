@@ -1,4 +1,4 @@
-import type { DelegationPreferences, DelegationRole, Harness, HarnessModel } from '../types/generated';
+import type { DelegationPreferences, DelegationRole, Harness, HarnessModel, TierDefaults } from '../types/generated';
 import { type PendingRequests, settlePendingRequest } from './daemonPendingRequests';
 import { useDelegationPreferencesPush } from '../store/delegationPreferences';
 
@@ -9,7 +9,7 @@ export interface DelegationSettingsState {
   harnesses: Harness[];
   workflowSkillPaths: string[];
 }
-export interface HarnessModelCatalog { models: HarnessModel[]; detail: string }
+export interface HarnessModelCatalog { models: HarnessModel[]; detail: string; tier_defaults: TierDefaults }
 interface DelegationEvent {
   event?: string;
   success?: boolean;
@@ -22,6 +22,7 @@ interface DelegationEvent {
   harnesses?: Harness[];
   models?: HarnessModel[];
   detail?: string;
+  tier_defaults?: TierDefaults;
 }
 
 export function handleDelegationDaemonEvent(event: DelegationEvent, pending: PendingRequests): boolean {
@@ -36,7 +37,7 @@ export function handleDelegationDaemonEvent(event: DelegationEvent, pending: Pen
   }
   if (event.event === 'harness_models_result') {
     settlePendingRequest(pending, 'harness_models', event,
-      value => value.models ? { models: value.models, detail: value.detail ?? '' } : undefined,
+      value => value.models ? { models: value.models, detail: value.detail ?? '', tier_defaults: value.tier_defaults ?? {} } : undefined,
       'Discovering models failed');
     return true;
   }

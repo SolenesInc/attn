@@ -34,8 +34,8 @@ func TestTheActivityLineSaysWhatTheAgentDidSinceTheLastLineWhileTheUserWatches(t
 
 	activityTurn(t, w, app, agent, session, "run the frontend tests", "The frontend suite is running.")
 	task := w.HeadlessTask()
-	if task.Harness != fakeagent.Claude || task.Model != "claude-haiku-4-5" || task.Effort != "" {
-		t.Errorf("the activity task ran %s %q at effort %q, want Claude's default claude-haiku-4-5", task.Harness, task.Model, task.Effort)
+	if task.Harness != fakeagent.Claude || task.Model != "claude-haiku-fake" || task.Effort != "" {
+		t.Errorf("the activity task ran %s %q at effort %q, want Claude's default claude-haiku-fake", task.Harness, task.Model, task.Effort)
 	}
 	if !strings.Contains(task.Prompt, "The frontend suite is running.") || strings.Contains(task.Prompt, "Starting on the tests.") || strings.Contains(task.Prompt, "I read the plan.") {
 		t.Errorf("the activity prompt %q, want only the output since the line was last seeded", task.Prompt)
@@ -51,8 +51,8 @@ func TestTheActivityLineSaysWhatTheAgentDidSinceTheLastLineWhileTheUserWatches(t
 	setSetting(t, app, "activity.config", `{"agent":"codex"}`)
 	activityTurn(t, w, app, agent, session, "fix the cart test", "The cart test passes now.")
 	task = w.HeadlessTask()
-	if task.Harness != fakeagent.Codex || task.Model != "gpt-5.6-luna" || task.Effort != "low" {
-		t.Errorf("the activity task ran %s %q at effort %q, want Codex's default gpt-5.6-luna at low", task.Harness, task.Model, task.Effort)
+	if task.Harness != fakeagent.Codex || task.Model != "gpt-6-luna" || task.Effort != "low" {
+		t.Errorf("the activity task ran %s %q at effort %q, want Codex's default gpt-6-luna at low", task.Harness, task.Model, task.Effort)
 	}
 	if !strings.Contains(task.Prompt, "Running the frontend test suite") {
 		t.Errorf("the activity prompt %q does not carry the previous line", task.Prompt)

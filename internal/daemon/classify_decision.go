@@ -2,12 +2,14 @@ package daemon
 
 import (
 	"errors"
+	"os"
 	"strings"
 	"time"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/classifier"
 	"github.com/victorarias/attn/internal/headless"
+	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/statemarker"
 )
@@ -197,6 +199,7 @@ func (d *Daemon) runClassifier(session *protocol.Session, text string, timeout t
 			text,
 			d.store.GetSetting(executableSettingKey(session.Agent)),
 			session.Directory,
+			d.classifierModel(session.Agent),
 			timeout,
 		); ok {
 			return state, err
@@ -208,6 +211,7 @@ func (d *Daemon) runClassifier(session *protocol.Session, text string, timeout t
 		text,
 		d.store.GetSetting(canonicalExecutableSettingKey("claude")),
 		"",
+		d.classifierModel("claude"),
 		timeout,
 	); ok {
 		return state, err
@@ -230,4 +234,18 @@ func (d *Daemon) classifyFromMarker(session *protocol.Session, text string) (str
 	}
 	d.logf("classifySessionState: session=%s state marker verdict=%s (headless tasks off)", sessionID, state)
 	return state, nil
+}
+
+func (d *Daemon) classifierModel(harness string) string {
+	fallback := ""
+	switch harness {
+	case "claude":
+		fallback = classifier.ClaudeClassifierModel()
+	case "codex":
+		fallback = classifier.CodexClassifierModel()
+	default:
+		return ""
+	}
+	explicit := os.Getenv("ATTN_" + strings.ToUpper(harness) + "_CLASSIFIER_MODEL")
+	return d.resolveTierModel(harness, modeltiers.Light, explicit, fallback)
 }

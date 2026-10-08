@@ -446,9 +446,9 @@ func (c *Codex) ResumeSessionIDFromTranscriptPath(transcriptPath string) string 
 }
 
 func (c *Codex) Classify(text string, timeout time.Duration) (string, error) {
-	return c.ClassifyWithExecutable(text, "", "", timeout)
+	return c.ClassifyWithExecutable(text, "", "", classifier.CodexClassifierModel(), timeout)
 }
 
-func (c *Codex) ClassifyWithExecutable(text, executable, workDir string, timeout time.Duration) (string, error) {
-	return classifier.ClassifyWithCodexExecutableInDir(text, executable, workDir, timeout)
+func (c *Codex) ClassifyWithExecutable(text, executable, workDir, model string, timeout time.Duration) (string, error) {
+	return classifier.ClassifyWithCodexModelInDir(text, executable, workDir, model, timeout)
 }

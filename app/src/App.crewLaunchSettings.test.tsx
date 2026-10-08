@@ -13,7 +13,7 @@ const harnesses = [
 ];
 
 function codexModel(id: string) {
-  return { harness: 'codex', provider: '', id, name: id, description: '', detail: '', access: 'supported' as const, effort_support: 'supported' as const, effort_levels: [] };
+  return { harness: 'codex', provider: '', id, name: id, description: '', detail: '', access: 'supported' as const, tier_source: 'none' as const, effort_support: 'supported' as const, effort_levels: [] };
 }
 
 const saved = (next: CrewMember): Reply => ({ event: 'crew_set_result', success: true, conflict: false, member: next });
@@ -33,7 +33,7 @@ async function openLaunchSettings(members: CrewMember[], saves: Answer[]) {
     harnesses,
   }));
   daemon.on('harness_models', ({ harness }) => ({
-    event: 'harness_models_result',
+    event: 'harness_models_result', tier_defaults: {},
     success: true,
     detail: '',
     models: harness === 'codex' ? [codexModel('saved-model'), codexModel('local-model')] : [],

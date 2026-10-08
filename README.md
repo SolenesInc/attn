@@ -63,6 +63,9 @@ focused tile still on that desktop. Closing a background tile keeps focus where
 it is. Each desktop remembers this order across restarts; if no earlier focused
 tile remains, focus passes to the tile on the left, then another remaining tile.
 
+Settings about the user's environment, including model tiers for available
+harnesses and models, apply across profiles on the daemon.
+
 **Panes, splits, and first-class shells.** A desktop can hold several sessions
 side by side. Split a pane, open a plain shell as its own session from the same
 dialog you use for agents, and move focus between panes with the keyboard.

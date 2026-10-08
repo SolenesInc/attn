@@ -14,7 +14,7 @@ import type { HarnessModelCatalog } from '../hooks/daemonDelegationEvents';
 
 interface AutoModeSettingsProps {
   policy: AutoModePolicy;
-  loadModels?: (harness: string) => Promise<HarnessModelCatalog>;
+  loadModels?: (harness: string, refresh?: boolean) => Promise<HarnessModelCatalog>;
 }
 
 const APPROVAL_POLICIES = ['untrusted', 'on-request', 'never'];

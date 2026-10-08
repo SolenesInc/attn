@@ -18,16 +18,16 @@ const harnesses: Harness[] = [
 ];
 
 function model(id: string, name: string, overrides: Partial<Model> = {}): Model {
-  return { harness: 'claude', provider: '', id, name, description: '', detail: '', effort_support: 'supported', effort_levels: [], access: 'unknown', ...overrides };
+  return { harness: 'claude', provider: '', id, name, description: '', detail: '', tier_source: 'none', effort_support: 'supported', effort_levels: [], access: 'unknown', ...overrides };
 }
 
 const claudeModels = [
   model('opus', 'Opus', { description: 'Deep work', effort_levels: ['medium', 'high'] }),
-  model('haiku', 'Haiku', { effort_support: 'unsupported' }),
+  model('haiku', 'Haiku', { tier_source: 'none', effort_support: 'unsupported' }),
   model('sonnet', 'Sonnet'),
 ];
 
-const catalog = (): Reply => ({ event: 'harness_models_result', success: true, models: claudeModels, detail: 'Reported by Claude Code' });
+const catalog = (): Reply => ({ event: 'harness_models_result', tier_defaults: {}, success: true, models: claudeModels, detail: 'Reported by Claude Code' });
 
 function role(selection: Partial<Selection> = {}): Role {
   return {
@@ -159,7 +159,7 @@ describe('App delegation settings', () => {
 
   it('says a harness has no models to report apart from failing to discover them', async () => {
     const empty = await openPicker({ harness: 'claude' }, { holdDiscovery: true });
-    await empty.discovery.release({ event: 'harness_models_result', success: true, models: [], detail: 'No discovery API' });
+    await empty.discovery.release({ event: 'harness_models_result', tier_defaults: {}, success: true, models: [], detail: 'No discovery API' });
     expect(inPicker().getByText('No discovery API')).toBeInTheDocument();
     expect(inPicker().queryByRole('alert')).toBeNull();
   });
@@ -167,7 +167,7 @@ describe('App delegation settings', () => {
   it('shows why discovery failed', async () => {
     const failed = await openPicker({ harness: 'claude' }, { holdDiscovery: true });
 
-    await failed.discovery.release({ event: 'harness_models_result', success: false, error: 'Harness unavailable', models: [], detail: '' });
+    await failed.discovery.release({ event: 'harness_models_result', tier_defaults: {}, success: false, error: 'Harness unavailable', models: [], detail: '' });
 
     expect(inPicker().getByRole('alert')).toHaveTextContent('Harness unavailable');
   });

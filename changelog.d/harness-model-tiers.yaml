@@ -1,0 +1,3 @@
+kind: changed
+area: agents
+change: Unset background tasks use discovered model tiers, and model catalogs keep the harness's reported order.

@@ -9,7 +9,7 @@ const failures = new Map<string, string>();
 export function clearHarnessModelCatalogs() { catalogs.clear(); inflight.clear(); failures.clear(); }
 export const knownModelName = (harness: string, provider: string, id: string) => catalogs.get(harness)?.models.find(m => m.id === id && m.provider === provider)?.name || '';
 
-export function useHarnessModelCatalog(harness: Harness | undefined, loadModels: (harness: string) => Promise<HarnessModelCatalog>) {
+export function useHarnessModelCatalog(harness: Harness | undefined, loadModels: (harness: string, refresh?: boolean) => Promise<HarnessModelCatalog>) {
   const [, rerender] = useState(0);
   const id = harness?.id ?? '';
   const wake = (request: Promise<unknown>) => void request.finally(() => rerender(n => n + 1));
@@ -20,8 +20,8 @@ export function useHarnessModelCatalog(harness: Harness | undefined, loadModels:
     if (running && !force) { wake(running); return; }
     catalogs.delete(id);
     failures.delete(id);
-    const request = loadModels(id).then(result => { catalogs.set(id, result); return result; })
-      .catch((e: unknown) => { failures.set(id, e instanceof Error ? e.message : String(e)); return { models: [], detail: '' }; })
+    const request = loadModels(id, force).then(result => { catalogs.set(id, result); return result; })
+      .catch((e: unknown) => { failures.set(id, e instanceof Error ? e.message : String(e)); return { models: [], detail: '', tier_defaults: {} }; })
       .finally(() => { inflight.delete(id); });
     inflight.set(id, request);
     wake(request);

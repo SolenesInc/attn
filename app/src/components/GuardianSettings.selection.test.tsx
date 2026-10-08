@@ -9,8 +9,8 @@ type Guardian = NonNullable<AutoModeConfig['guardian']>;
 
 type Model = EventMessage<'harness_models_result'>['models'][number];
 
-const model: Model = { harness: 'pi', provider: 'fixture', id: 'review', name: 'Reviewer', description: '', detail: '', access: 'supported', effort_support: 'supported', effort_levels: ['off', 'low', 'high'] };
-const plain: Model = { ...model, id: 'plain', name: 'Plain', effort_support: 'unsupported', effort_levels: [] };
+const model: Model = { harness: 'pi', provider: 'fixture', id: 'review', name: 'Reviewer', description: '', detail: '', access: 'supported', tier_source: 'none', effort_support: 'supported', effort_levels: ['off', 'low', 'high'] };
+const plain: Model = { ...model, id: 'plain', name: 'Plain', tier_source: 'none', effort_support: 'unsupported', effort_levels: [] };
 
 function autoModeConfig(guardian: Guardian): AutoModeConfig {
   return {
@@ -32,7 +32,7 @@ async function openGuardian(guardian: Guardian = {}, refusal = '') {
   const { daemon } = await renderApp();
   let config = autoModeConfig(guardian);
   daemon.on('automode_get', () => ({ event: 'automode_state_result', success: true, config, proposals: [], denials: [], environment_slots: [] }));
-  daemon.on('harness_models', () => ({ event: 'harness_models_result', success: true, models: [model, plain], detail: '' }));
+  daemon.on('harness_models', () => ({ event: 'harness_models_result', tier_defaults: {}, success: true, models: [model, plain], detail: '' }));
   daemon.on('automode_policy_set', ({ guardian: next }) => {
     if (refusal) return { event: 'automode_config_result', success: false, error: refusal };
     config = { ...config, guardian: next ?? {} };

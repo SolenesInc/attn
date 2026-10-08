@@ -956,6 +956,15 @@ enum ModelCapabilitySupport {
   capability_unknown: "unknown",
 }
 
+enum ModelTier { light, standard, deep }
+enum ModelTierSource { shipped, override, alias_source: "alias", none }
+
+model TierDefaults {
+  light?: string;
+  standard?: string;
+  deep?: string;
+}
+
 model HarnessModel {
   harness: string;
   provider: string;
@@ -966,6 +975,9 @@ model HarnessModel {
   effort_levels: string[];
   access: ModelCapabilitySupport;
   detail: string;
+  tier?: ModelTier;
+  tier_source: ModelTierSource;
+  shipped_tier?: ModelTier;
 }
 
 model Harness {
@@ -1010,6 +1022,7 @@ model HarnessModelsMessage {
   cmd: "harness_models";
   request_id: string;
   harness: string;
+  refresh?: boolean;
 }
 
 model HarnessModelsResultMessage {
@@ -1019,6 +1032,7 @@ model HarnessModelsResultMessage {
   error?: string;
   models: HarnessModel[];
   detail: string;
+  tier_defaults: TierDefaults;
 }
 
 model DelegationRolesMessage {

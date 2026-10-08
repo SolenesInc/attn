@@ -53,6 +53,9 @@ var codexExecFlags = flagSpec{
 }
 
 func runCodex(cfg config) int {
+	if len(os.Args) > 1 && os.Args[1] == "app-server" {
+		return codexModelDiscovery()
+	}
 	if len(os.Args) > 1 && os.Args[1] == "exec" {
 		return codexExec(codexExecFlags.parse(os.Args[2:])).serve(cfg)
 	}

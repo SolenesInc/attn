@@ -63,15 +63,8 @@ func parseActivityConfig(raw string) (activityConfig, error) {
 		return activityConfig{}, errActivityAgentUnset
 	}
 
-	if config.Model == "" {
-		switch config.Agent {
-		case "claude":
-			config.Model = activityClaudeDefaultModel
-		case "codex":
-			config.Model = activityCodexDefaultModel
-		default:
-			return activityConfig{}, fmt.Errorf("session activity requires a model for agent %s", config.Agent)
-		}
+	if config.Model == "" && config.Agent != "claude" && config.Agent != "codex" {
+		return activityConfig{}, fmt.Errorf("session activity requires a model for agent %s", config.Agent)
 	}
 	if config.Effort == "" && config.Agent == "codex" {
 		config.Effort = activityCodexDefaultEffort

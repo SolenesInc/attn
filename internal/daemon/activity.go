@@ -13,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/activity"
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/jobs"
+	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/transcript"
@@ -263,6 +264,11 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 	if err != nil {
 		return nil, err
 	}
+	fallback := activityClaudeDefaultModel
+	if config.Agent == "codex" {
+		fallback = activityCodexDefaultModel
+	}
+	config.Model = d.resolveTierModel(config.Agent, modeltiers.Light, config.Model, fallback)
 
 	prompt := activity.Baseline().Render(activity.Input{
 		State:       string(session.State),

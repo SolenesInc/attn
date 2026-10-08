@@ -182,6 +182,7 @@ type Daemon struct {
 	sessionTitleInitialPrompt         map[protocol.SessionID][sha256.Size]byte
 	seedArtifactMu                    sync.Mutex
 	harnessModelQueries               singleflight.Group
+	harnessModelCatalogs              sync.Map
 	delegationMu                      sync.Mutex
 	delegationRunning                 map[string]bool
 	delegationCheckoutMu              sync.Mutex

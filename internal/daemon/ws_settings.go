@@ -14,6 +14,7 @@ import (
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/modelcapture"
+	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/sessioncost"
@@ -23,6 +24,7 @@ const (
 	SettingProjectsDirectory             = "projects_directory"
 	SettingUIScale                       = "uiScale"
 	SettingGardenScale                   = "gardenScale"
+	SettingModelTierOverrides            = "model_tier_overrides"
 	SettingClaudeExecutable              = "claude_executable"
 	SettingCodexExecutable               = "codex_executable"
 	SettingCopilotExecutable             = "copilot_executable"
@@ -116,6 +118,9 @@ func (d *Daemon) handleSetSettingWS(client *wsClient, msg *protocol.SetSettingMe
 		return
 	}
 
+	if harness, ok := isAgentExecutableSettingKey(msg.Key); ok {
+		d.invalidateHarnessModels(harness)
+	}
 	if isSessionCostPriceSetting(msg.Key) {
 		d.publishSessionCostReprices()
 	}
@@ -386,14 +391,17 @@ func (d *Daemon) chiefLaunchModel(agent string, chief bool) string {
 	if !chief {
 		return ""
 	}
-	return strings.TrimSpace(d.store.GetSetting(SettingChiefModelPrefix + strings.ToLower(strings.TrimSpace(agent))))
+	return d.resolveTierModel(agent, modeltiers.Deep, d.store.GetSetting(SettingChiefModelPrefix+strings.ToLower(strings.TrimSpace(agent))), "")
 }
 
 func (d *Daemon) chiefLaunchEffort(agent string, chief bool) string {
 	if !chief {
 		return ""
 	}
-	return strings.TrimSpace(d.store.GetSetting(SettingChiefEffortPrefix + strings.ToLower(strings.TrimSpace(agent))))
+	if effort := strings.TrimSpace(d.store.GetSetting(SettingChiefEffortPrefix + strings.ToLower(strings.TrimSpace(agent)))); effort != "" {
+		return effort
+	}
+	return "low"
 }
 
 func settingShapesCrewLaunch(key string) bool {
@@ -471,6 +479,9 @@ func (d *Daemon) applyHeadlessTasksMode() {
 
 func (d *Daemon) validateSetting(key, value string) error {
 	switch key {
+	case SettingModelTierOverrides:
+		_, err := modeltiers.ParseOverrides(value)
+		return err
 	case SettingProjectsDirectory:
 		return validateProjectsDirectory(value)
 	case SettingUIScale:

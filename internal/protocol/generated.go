@@ -5050,6 +5050,15 @@ type HarnessModel struct {
 
 	// Provider corresponds to the JSON schema field "provider".
 	Provider string `json:"provider"`
+
+	// ShippedTier corresponds to the JSON schema field "shipped_tier".
+	ShippedTier *ModelTier `json:"shipped_tier,omitempty,omitzero"`
+
+	// Tier corresponds to the JSON schema field "tier".
+	Tier *ModelTier `json:"tier,omitempty,omitzero"`
+
+	// TierSource corresponds to the JSON schema field "tier_source".
+	TierSource ModelTierSource `json:"tier_source"`
 }
 
 type HarnessModelsMessage struct {
@@ -5058,6 +5067,9 @@ type HarnessModelsMessage struct {
 
 	// Harness corresponds to the JSON schema field "harness".
 	Harness string `json:"harness"`
+
+	// Refresh corresponds to the JSON schema field "refresh".
+	Refresh *bool `json:"refresh,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
@@ -5081,6 +5093,9 @@ type HarnessModelsResultMessage struct {
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
+
+	// TierDefaults corresponds to the JSON schema field "tier_defaults".
+	TierDefaults TierDefaults `json:"tier_defaults"`
 }
 
 type HeartbeatMessage struct {
@@ -6254,6 +6269,19 @@ type ModelCapabilitySupport string
 const ModelCapabilitySupportSupported ModelCapabilitySupport = "supported"
 const ModelCapabilitySupportUnknown ModelCapabilitySupport = "unknown"
 const ModelCapabilitySupportUnsupported ModelCapabilitySupport = "unsupported"
+
+type ModelTier string
+
+const ModelTierDeep ModelTier = "deep"
+const ModelTierLight ModelTier = "light"
+
+type ModelTierSource string
+
+const ModelTierSourceAlias ModelTierSource = "alias"
+const ModelTierSourceNone ModelTierSource = "none"
+const ModelTierSourceOverride ModelTierSource = "override"
+const ModelTierSourceShipped ModelTierSource = "shipped"
+const ModelTierStandard ModelTier = "standard"
 
 type MuteAuthorMessage struct {
 	// Author corresponds to the JSON schema field "author".
@@ -11058,6 +11086,17 @@ type TerminalPointerActivityMessage struct {
 
 	// ID corresponds to the JSON schema field "id".
 	ID TerminalID `json:"id"`
+}
+
+type TierDefaults struct {
+	// Deep corresponds to the JSON schema field "deep".
+	Deep *string `json:"deep,omitempty,omitzero"`
+
+	// Light corresponds to the JSON schema field "light".
+	Light *string `json:"light,omitempty,omitzero"`
+
+	// Standard corresponds to the JSON schema field "standard".
+	Standard *string `json:"standard,omitempty,omitzero"`
 }
 
 type UninstallPluginMessage struct {
