@@ -37,7 +37,8 @@ func (d *Daemon) deliverObservedAutomationRun(run *store.AutomationRun) error {
 }
 func (d *Daemon) handleAutomationDeliveryError(run *store.AutomationRun, deliveryErr error) (*store.AutomationRun, error) {
 	var retryable *retryableAutomationDeliveryError
-	diskFull := errors.Is(deliveryErr, syscall.ENOSPC) || strings.Contains(strings.ToLower(deliveryErr.Error()), "no space left on device")
+	message := strings.ToLower(deliveryErr.Error())
+	diskFull := errors.Is(deliveryErr, syscall.ENOSPC) || store.IsStorageFull(deliveryErr) || strings.Contains(message, "no space left on device") || strings.Contains(message, "database or disk is full")
 	// A delivery cut short by shutdown stays pending, and the next start delivers it again.
 	if !diskFull && (errors.As(deliveryErr, &retryable) || d.stopping()) {
 		current, err := d.store.GetAutomationRun(run.ID)

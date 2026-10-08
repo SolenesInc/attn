@@ -26,6 +26,11 @@ import (
 
 const sqliteFileConnectionPoolSize = 16
 
+func IsStorageFull(err error) bool {
+	var sqliteError sqlite3.Error
+	return errors.As(err, &sqliteError) && sqliteError.Code == sqlite3.ErrFull
+}
+
 const baseSchema = `
 CREATE TABLE IF NOT EXISTS sessions (
 	id TEXT PRIMARY KEY,

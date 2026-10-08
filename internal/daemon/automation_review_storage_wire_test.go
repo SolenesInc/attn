@@ -25,7 +25,7 @@ func TestAReviewCheckoutStaysStoppedWhenSavingItsFailureInitiallyCannotCommit(t 
 	}))
 	defer server.Close()
 	filter := filepath.Join(t.TempDir(), "filter")
-	script := fmt.Sprintf("#!/bin/sh\ncurl -s %q >/dev/null\nprintf 'No space left on device\\n' >&2\nexit 1\n", server.URL)
+	script := fmt.Sprintf("#!/bin/sh\ncurl -s %q >/dev/null\nprintf 'database or disk is full\\n' >&2\nexit 1\n", server.URL)
 	if err := os.WriteFile(filter, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -55,13 +55,13 @@ func TestAReviewCheckoutStaysStoppedWhenSavingItsFailureInitiallyCannotCommit(t 
 	r.w.restart()
 	r.app, r.cli = r.w.App(), r.w.Client()
 	persisted := r.awaitNewRun(1, "failed")
-	if persisted.ID != failed.ID || !strings.Contains(protocol.Deref(persisted.LastError), "No space left on device") {
+	if persisted.ID != failed.ID || !strings.Contains(protocol.Deref(persisted.LastError), "database or disk is full") {
 		t.Fatalf("persisted failure = %+v, want the original disk-full failure", persisted)
 	}
 	if attempts.Load() != 1 {
 		t.Fatalf("checkout attempts after persistence recovers = %d, want one", attempts.Load())
 	}
-	if notes := automationSeedNotesMentioning(t, r.cli, protocol.Deref(failed.SeedID), "No space left on device"); notes != 1 {
+	if notes := automationSeedNotesMentioning(t, r.cli, protocol.Deref(failed.SeedID), "database or disk is full"); notes != 1 {
 		t.Fatalf("failure notes = %d, want one", notes)
 	}
 	runGit(t, r.clone, "config", "filter.storage.smudge", "cat")
