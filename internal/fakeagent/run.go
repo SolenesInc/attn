@@ -29,6 +29,19 @@ func (r *Run) Prompted() string {
 	return prompted.Text
 }
 
+// Refused waits for the next submitted line and returns why the harness refused it; it fails if it was taken.
+func (r *Run) Refused() string {
+	r.t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), HangGuard)
+	defer cancel()
+	var prompted promptedResult
+	err := r.fake.peer.call(ctx, methodPrompted, struct{}{}, &prompted)
+	if err == nil {
+		r.t.Fatalf("%s took %q for session %s, want it refused", r.Harness, prompted.Text, r.SessionID)
+	}
+	return err.Error()
+}
+
 func (r *Run) Reply(text string) {
 	r.t.Helper()
 	r.call(methodReply, textParams{Text: text}, nil)

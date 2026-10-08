@@ -27,7 +27,6 @@ func (d *Daemon) beginSessionClose(
 			return sessionCloseInFlight{}, err
 		}
 	}
-	d.codexShared().archive(sessionID)
 	d.commitSessionUnregister(sessionID, closed)
 	if client != nil {
 		for _, terminal := range teardown.terminals {
@@ -43,13 +42,7 @@ func (d *Daemon) beginSessionClose(
 
 func (d *Daemon) finishSessionClose(sessionID protocol.SessionID, closing sessionCloseInFlight) {
 	if closing.teardown != nil {
-		done := d.terminateSessionAsync(sessionID, syscall.SIGTERM, closing.teardown)
-		if session := closing.teardown.session; session != nil && session.Agent == protocol.SessionAgentCodex {
-			d.life.Go("codexServerIdleAfterClose", func() {
-				<-done
-				d.codexShared().stopServerIfUnused(session.ProfileID)
-			})
-		}
+		d.terminateSessionAsync(sessionID, syscall.SIGTERM, closing.teardown)
 	}
 }
 

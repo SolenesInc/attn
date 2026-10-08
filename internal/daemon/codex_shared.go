@@ -564,6 +564,13 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 	if ephemeral, _ := params["ephemeral"].(bool); ephemeral {
 		return nil, nil
 	}
+	if conversation, _ := params["threadId"].(string); method == "thread/resume" && conversation != "" {
+		// A session keeps the Codex mode it launched with, so an open plain owner keeps its conversation.
+		owner := r.d.store.ConversationOwner(r.d.sessionInTerminal(v.terminal), conversation)
+		if owner != "" && r.d.store.Get(owner) != nil && !r.launchedShared(owner) {
+			return nil, fmt.Errorf("conversation %s belongs to open session %s, which runs plain Codex; close it to resume here", conversation, owner)
+		}
+	}
 	sessionID, launchAs, chief := r.launching(v, method, params)
 	config, _ := params["config"].(map[string]any)
 	if config == nil {

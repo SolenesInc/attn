@@ -383,6 +383,41 @@ func TestAClosedPlainCodexConversationResumedInASharedTerminalRunsAsASharedSessi
 	testworld.AwaitSession(app, resumed, func(s protocol.Session) bool { return protocol.Deref(s.Hidden) })
 }
 
+func TestASharedTerminalRefusesAConversationAnOpenPlainCodexSessionHolds(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	plain, plainCodex, _ := sharedCodexWaiting(t, w, app)
+	conversation := plainCodex.ConversationID
+	plainCodex.Exit(143)
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == plain })
+	setSetting(t, app, "codex_shared_enabled", "true")
+
+	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
+	typeInto(app, terminal, "/resume "+conversation+"\r")
+	if refused := codex.Refused(); !strings.Contains(refused, plain) {
+		t.Errorf("/resume %s was refused with %q, want it to name open plain session %s", conversation, refused, plain)
+	}
+	if shown := sessionShownIn(t, w, app, terminal); shown != checkout {
+		t.Errorf("terminal %s shows %s after the refused /resume, want %s", terminal, shown, checkout)
+	}
+}
+
+func TestClosingASharedCodexSessionFromTheCLIArchivesItsConversation(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	checkout, codex, _ := sharedCodexWaiting(t, w, app)
+	if err := w.Client().Unregister(protocol.SessionID(checkout)); err != nil {
+		t.Fatalf("unregister %s: %v", checkout, err)
+	}
+	testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool {
+		return e.Session != nil && string(e.Session.ID) == checkout
+	})
+	if !archivedInCodex(t, w, codex.ConversationID) {
+		t.Errorf("closing %s from the CLI left conversation %s unarchived", checkout, codex.ConversationID)
+	}
+}
+
 func TestASharedLaunchRefusesAConversationAnotherProfilesServerHolds(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()

@@ -1896,6 +1896,7 @@ func (d *Daemon) prepareSessionTeardown(sessionID protocol.SessionID) (*sessionT
 }
 
 func (d *Daemon) commitSessionUnregister(sessionID protocol.SessionID, closed store.SessionClose) {
+	d.codexShared().archive(sessionID)
 	d.closeSession(sessionID, closed)
 }
 
@@ -1996,6 +1997,13 @@ func (d *Daemon) terminateSessionAsync(sessionID protocol.SessionID, sig syscall
 	// A close the user asked for still ends the session while the daemon stops, on the caller's goroutine.
 	if !d.life.Go("terminateSessionAsync", terminate) {
 		terminate()
+	}
+	if teardown != nil && teardown.session != nil && teardown.session.Agent == protocol.SessionAgentCodex {
+		session := teardown.session
+		d.life.Go("codexServerIdleAfterClose", func() {
+			<-done
+			d.codexShared().stopServerIfUnused(session.ProfileID)
+		})
 	}
 	return done
 }
