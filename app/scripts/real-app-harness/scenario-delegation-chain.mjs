@@ -227,7 +227,7 @@ try {
       'the caller still holds the keyboard after delegation');
     await screenshot('missing-numbered-desktop-caller');
     await pressShortcutKeys(client, driver, `desktop.select${slot}`);
-    await waitForSelector(`[data-pane-id="${result.pane_id}"]`, 'the shortcut shows the recreated desktop');
+    await waitForSelector(`.terminal-wrapper.active [data-pane-id="${result.pane_id}"]`, 'the shortcut shows the recreated desktop');
     const opened = await client.request('get_state');
     runner.assert(opened.arrangement.currentDesktopId === target && shownAgentId(opened) === result.session_id,
       'the recreated desktop is reachable on its numbered shortcut', opened);
