@@ -4,6 +4,8 @@ mod instance;
 mod migration_failure;
 mod native_input;
 mod native_input_diagnostics;
+#[cfg(target_os = "macos")]
+mod native_keyboard;
 mod ui_automation;
 mod wake;
 
@@ -1344,6 +1346,10 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             instance::hold_app_lock()?;
             instance::write_app_pid_file();
             native_input_diagnostics::install();
+            #[cfg(target_os = "macos")]
+            if let Some(window) = app.get_webview_window("main") {
+                native_keyboard::install(&window)?;
+            }
             #[cfg(target_os = "macos")]
             wake::install(&app.handle().clone());
             ui_automation::maybe_start(&app.handle().clone());

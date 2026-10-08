@@ -11,7 +11,7 @@ import {
   printCommonHelp,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { appDaemonInTree, delay } from './platform.mjs';
+import { appDaemonInTree, createWindowDriver, delay } from './platform.mjs';
 import { instanceCliEnv, instanceForAppPath } from './harnessInstance.mjs';
 import {
   captureSessionArtifacts,
@@ -180,10 +180,11 @@ async function main() {
     prefix: 'terminal-input',
     metadata: {
       agent: 'shell',
-      focus: 'background browser keyboard, diagnostic report, shortcut, IME, and Kitty input through libghostty',
+      focus: 'native Ctrl+Return, browser keyboard, diagnostic report, shortcut, IME, and Kitty input through libghostty',
     },
   });
   const client = new UiAutomationClient(options);
+  const driver = createWindowDriver({ appPath: options.appPath, client });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const captureScript = path.join(runner.sessionDir, 'capture-terminal-input.cjs');
   const terminalSelector = '.terminal-wrapper.active .terminal-container';
@@ -364,6 +365,33 @@ async function main() {
       await waitForExactLine(client, sessionId, pane.paneId, 'RIGHT');
     });
 
+    if (process.platform === 'darwin') {
+      await runner.step('native_ctrl_return_reaches_terminal', async () => {
+        await beginCapture('ctrl-return');
+        await driver.pressKey('x');
+        await driver.pressKey('Return', { control: true });
+        await finishCapture('ctrl-return', Buffer.from('x\x1b[27;5;13~').toString('hex'));
+        const menu = await client.request('get_terminal_context_menu_state');
+        runner.assert(!menu.open, 'Ctrl+Return leaves the terminal context menu closed', { menu });
+
+        await beginCapture('kitty-ctrl-return', 'kitty');
+        await driver.pressKey('Return', { control: true });
+        await finishCapture('kitty-ctrl-return', Buffer.from('\x1b[13;5u\x1b[13;5:3u').toString('hex'));
+
+        await beginCapture('find-ctrl-return');
+        await pressShortcut('terminal.find');
+        const findSelector = '[data-testid="ghostty-find-input"]';
+        await client.request('dom_type', { selector: findSelector, text: 'INPUT_READY' });
+        await driver.pressKey('Return', { control: true });
+        const find = await client.request('dom_value', { selector: findSelector });
+        runner.assert(find.value === 'INPUT_READY', 'Ctrl+Return preserves the focused search field', { find });
+        const focus = await client.request('dom_active_element', { selector: findSelector });
+        runner.assert(focus.matches, 'Ctrl+Return keeps keyboard focus in the search field', { focus });
+        await finishCapture('find-ctrl-return', '');
+        await pressKey({ key: 'Escape', code: 'Escape' }, {}, findSelector);
+      });
+    }
+
     await runner.step('navigation_function_and_modifier_bytes', async () => {
       await beginCapture('navigation');
       await pressKey(KEY.HOME);
@@ -520,6 +548,7 @@ async function main() {
         'history-up-down',
         'left-right-backspace',
         'navigation-function-modifier',
+        ...(process.platform === 'darwin' ? ['native-ctrl-return'] : []),
         'application-cursor',
         'kitty-press-repeat-release',
         'unicode-composition',

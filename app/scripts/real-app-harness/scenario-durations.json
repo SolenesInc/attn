@@ -6,6 +6,14 @@
     "matrixSeconds": 826.7,
     "note": "Seconds each scenario took in a green Linux serial matrix. Remeasure from matrix-digest.txt when a scenario changes shape; the shard planner balances on these.",
     "updates": {
+      "terminal-input": {
+        "run": "terminal-input-2026-10-08T22-27-28-485Z",
+        "job": "Local packaged scenario, ctrlreturn isolated instance",
+        "recordedAt": "2026-10-09",
+        "seconds": 23.534,
+        "runnerClass": "local macOS",
+        "note": "Green ATTN_VERDICT durationMs=23534, including cleanup. Covers AppKit context-menu Ctrl+Return dispatch in normal and Kitty modes, Kitty key release, and search-field input and focus. Remeasure on Linux CI."
+      },
       "home-dock": {
         "run": "home-dock-2026-10-04T10-13-29-942Z",
         "job": "Local packaged scenario, dock-home isolated instance",
@@ -264,7 +272,7 @@
     "terminal-annotations": 21.0,
     "terminal-block-resize": 10.6,
     "terminal-context-menu": 9.7,
-    "terminal-input": 12.8,
+    "terminal-input": 23.534,
     "terminal-md-link": 15.9,
     "tr201-local-claude": 8.7,
     "tr301-local-claude": 6.9,

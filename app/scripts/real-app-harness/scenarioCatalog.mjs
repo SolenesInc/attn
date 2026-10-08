@@ -299,7 +299,7 @@ export const scenarioCatalog = [
   {
     id: 'terminal-input',
     runnerId: 'TERMINAL-INPUT',
-    label: 'Terminal input and diagnostic report via packaged browser events, shortcuts, and paste',
+    label: 'Terminal input and diagnostic report via native Ctrl+Return, browser events, shortcuts, and paste',
     command: ['pnpm', 'run', 'real-app:scenario-terminal-input'],
   },
   {
