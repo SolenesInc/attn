@@ -633,3 +633,21 @@ func archivedInCodex(t *testing.T, w *world, conversation string) bool {
 	entries, _ := os.ReadDir(filepath.Join(w.Dir, "toolhome", ".codex", "archived_sessions"))
 	return slices.ContainsFunc(entries, func(e os.DirEntry) bool { return strings.HasSuffix(e.Name(), conversation+".jsonl") })
 }
+
+func TestNewInASharedCodexTerminalKeepsTheSessionsContextCap(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	checkout, _, terminal := sharedCodexWaiting(t, w, app)
+	pinned := testworld.Request(app, protocol.SetSessionContextWindowCapMessage{Cmd: protocol.CmdSetSessionContextWindowCap, SessionID: protocol.SessionID(checkout), Cap: 300000},
+		protocol.EventSessionContextWindowCapResult, func(r protocol.SessionContextWindowCapResultMessage) bool { return string(r.SessionID) == checkout })
+	if !pinned.Success {
+		t.Fatalf("pin the context cap: %s", protocol.Deref(pinned.Error))
+	}
+	codex := w.Launched(checkout)
+
+	moveOn(t, app, codex, terminal, "/new", "add a discount field")
+	if limit := w.CodexServer().CompactLimit(codex.ConversationID); limit != "300000" {
+		t.Errorf("the conversation /new started loaded with compact limit %q, want the session's 300000", limit)
+	}
+}

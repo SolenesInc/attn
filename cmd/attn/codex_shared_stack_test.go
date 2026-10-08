@@ -134,3 +134,49 @@ func typeLineInto(app *testworld.Peer, terminal, text string) {
 	testworld.Request(app, protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(terminal), Data: text + "\r", ProbeID: protocol.Ptr(probe)},
 		protocol.EventPtyInputProbeResult, func(r protocol.PtyInputProbeResultMessage) bool { return r.ProbeID == probe })
 }
+
+func TestAHiddenSharedCodexSessionCutOffByAMachineRestartComesBackIdle(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	s.Start()
+	app := s.App()
+	shareCodex(t, app)
+	session := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
+	codex := s.Launched(session)
+	terminal := app.Terminal(session)
+	app.TypeLine(session, "find the flaky checkout test")
+	codex.Prompted()
+	codex.Reply("It races the tax lookup. Lock it? <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWaitingInput })
+	conversation := codex.ConversationID
+	for _, line := range []string{"/new", "add a discount field"} {
+		typeLineInto(app, terminal, line)
+		codex.Prompted()
+	}
+	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return protocol.Deref(x.Hidden) })
+	submitFeedback(t, app, session, "Lock the tax table before the lookup.")
+	s.CodexServer().Prompted(conversation)
+	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
+
+	s.Reboot()
+	s.Start()
+	app = s.App()
+	i := slices.IndexFunc(app.Initial.Sessions, func(x protocol.Session) bool { return string(x.ID) == session })
+	if i < 0 {
+		t.Fatalf("session %s is gone after the restart", session)
+	}
+	if back := app.Initial.Sessions[i]; !protocol.Deref(back.Hidden) || back.State != protocol.SessionStateIdle {
+		t.Fatalf("after the restart the session is %s (hidden=%v), want it hidden and idle", back.State, protocol.Deref(back.Hidden))
+	}
+}
+
+func submitFeedback(t *testing.T, app *testworld.Peer, session, text string) {
+	t.Helper()
+	requestID := uuid.NewString()
+	delivered := testworld.Request(app, protocol.SessionAnnotationsSubmitMessage{
+		Cmd: protocol.CmdSessionAnnotationsSubmit, RequestID: requestID, SessionID: protocol.SessionID(session), Text: text,
+	}, protocol.EventSessionAnnotationsSubmitResult, func(r protocol.SessionAnnotationsSubmitResultMessage) bool { return r.RequestID == requestID })
+	if !delivered.Success {
+		t.Fatalf("feedback to session %s: %s", session, protocol.Deref(delivered.Error))
+	}
+}

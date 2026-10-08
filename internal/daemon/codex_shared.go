@@ -583,7 +583,7 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 	if config == nil {
 		config = make(map[string]any)
 	}
-	r.capContext(config, launchAs, chief)
+	r.capContext(config, sessionID, chief)
 	if method != "thread/resume" {
 		if instructions := r.instructions(launchAs, v.profile, chief); instructions != "" {
 			prior, _ := params["developerInstructions"].(string)
@@ -753,6 +753,7 @@ func (r *codexShared) recoverProcesses(ctx context.Context) {
 	}
 	for _, profile := range profiles {
 		if _, running := live[codexServerTerminal(profile.ID)]; !running {
+			r.settleTurnsCutOffByServerLoss(profile.ID)
 			continue
 		}
 		connectCtx, cancel := context.WithTimeout(ctx, codexServerCallLimit)
@@ -760,6 +761,22 @@ func (r *codexShared) recoverProcesses(ctx context.Context) {
 			r.d.logf("shared Codex: reconnect to the app-server of profile %s: %v", profile.ID, err)
 		}
 		cancel()
+	}
+}
+
+func (r *codexShared) settleTurnsCutOffByServerLoss(profile string) {
+	for _, session := range r.d.store.List("") {
+		inTurn := session.State == protocol.SessionStateWorking || session.State == protocol.SessionStatePendingApproval ||
+			session.State == protocol.SessionStateUnknown
+		if session.ProfileID != profile || !inTurn || !r.d.hidden(session.ID) {
+			continue
+		}
+		r.d.applyState(sessionStateChange{
+			sessionID: session.ID,
+			state:     protocol.StateIdle,
+			cause:     hostExitRecovery{},
+			origin:    stateOrigin{source: "codex", detail: "the shared app-server was gone at startup"},
+		})
 	}
 }
 

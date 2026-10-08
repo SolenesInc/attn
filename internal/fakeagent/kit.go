@@ -314,3 +314,18 @@ func (k *Kit) verify() {
 		k.t.Errorf("fakeagent: %s", failure)
 	}
 }
+
+func (k *Kit) AwaitExited() {
+	k.t.Helper()
+	k.mu.Lock()
+	fakes := slices.Clone(k.fakes)
+	k.mu.Unlock()
+	deadline := time.After(HangGuard)
+	for _, f := range fakes {
+		select {
+		case <-f.peer.done:
+		case <-deadline:
+			k.t.Fatalf("fake %s %s (pid %d) still runs %s after its host went down", f.Harness, f.Role, f.Pid, HangGuard)
+		}
+	}
+}
