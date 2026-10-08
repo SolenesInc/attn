@@ -22,7 +22,11 @@ async function main() {
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
   runner.registerCleanup('delete_profile', async () => {
-    if (profile) await observer.profileCommand('profile_delete', { profile_id: profile.id, expected_revision: profile.revision });
+    if (profile) {
+      const state = await client.request('get_state');
+      const current = state.arrangement.profiles.find((entry) => entry.id === profile.id);
+      if (current) await observer.profileCommand('profile_delete', { profile_id: current.id, expected_revision: current.revision });
+    }
   });
   const wait = (selector, extra = {}) => client.request('dom_wait', { selector, timeoutMs: observer.connectTimeoutMs, ...extra });
   const assertOrder = async (ids) => {
@@ -40,8 +44,9 @@ async function main() {
       await observer.profileCommand('profile_select', { profile_id: profile.id });
       const one = `${profile.id}/desktop_1`;
       const create = async (slot, name = '') => (await observer.profileCommand('desktop_create', { profile_id: profile.id, shortcut_slot: slot, name })).desktops[0].id;
-      const six = await create(6);
-      const nine = await create(9);
+      await observer.profileCommand('desktop_rename', { desktop_id: one, name: 'One', expected_revision: 1 });
+      const six = await create(6, 'Six');
+      const nine = await create(9, 'Nine');
       const named10 = await create(0, 'Review 10');
       const named2 = await create(0, 'review 2');
       const alpha = await create(0, 'Alpha');
