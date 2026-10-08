@@ -12,10 +12,8 @@ interface DesktopOverviewProps {
   desktops: Desktop[];
   currentDesktopId: string | null;
   canSendActivePane: boolean;
-  canSendWithDelegates?: boolean;
   onSwitch: (desktopId: string) => void;
   onSendActivePane: (desktopId: string) => void;
-  onSendWithDelegates?: (desktopId: string) => void;
   onCreate: () => void;
   onClose: () => void;
 }
@@ -48,10 +46,8 @@ export function DesktopOverview({
   desktops,
   currentDesktopId,
   canSendActivePane,
-  canSendWithDelegates,
   onSwitch,
   onSendActivePane,
-  onSendWithDelegates,
   onCreate,
   onClose,
 }: DesktopOverviewProps) {
@@ -153,11 +149,6 @@ export function DesktopOverview({
           {canSendTo(desktop) && (
             <button type="button" onClick={() => act(() => onSendActivePane(desktop.id))}>
               Send focused pane here ⇧↵
-            </button>
-          )}
-          {canSendTo(desktop) && canSendWithDelegates && (
-            <button type="button" onClick={() => act(() => onSendWithDelegates?.(desktop.id))}>
-              Send with delegates
             </button>
           )}
         </div>

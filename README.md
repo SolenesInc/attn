@@ -63,9 +63,9 @@ focused tile still on that desktop. Closing a background tile keeps focus where
 it is. Each desktop remembers this order across restarts; if no earlier focused
 tile remains, focus passes to the tile on the left, then another remaining tile.
 
-Use "Move with delegates to…" in the command palette or "Send with delegates"
-in the desktop overview to move an agent with its delegates on the same desktop,
-including their delegates. Hold Option when dropping an agent on another desktop
+Use "Move with delegates to…" in the command palette to move an agent with its
+delegates on the same desktop, including their delegates. Hold Option when
+dropping an agent on another desktop
 in the sidebar for the same move. Each delegate lands beside its dispatcher;
 delegates elsewhere and split shells stay where they are.
 

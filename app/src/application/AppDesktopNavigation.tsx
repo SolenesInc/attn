@@ -27,13 +27,11 @@ export function AppDesktopNavigation() {
           desktops={desktops}
           currentDesktopId={currentDesktop?.id ?? null}
           canSendActivePane={Boolean(currentDesktop?.active_pane_id)}
-          canSendWithDelegates={desktopNavigation.canMoveWithDelegates}
           onSwitch={(desktopId) => {
             setView('session');
             switchToDesktop(desktopId);
           }}
           onSendActivePane={(desktopId) => moveActiveLeafToDesktop(desktopId, false)}
-          onSendWithDelegates={(desktopId) => moveActiveLeafToDesktop(desktopId, false, true)}
           onCreate={createDesktop}
           onClose={() => setDesktopOverviewOpen(false)}
         />

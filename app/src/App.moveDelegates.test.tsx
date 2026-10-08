@@ -42,13 +42,6 @@ describe('moving with delegates', () => {
     expect(daemon.sentOf('desktop_move_leaf')).toEqual([]);
   });
 
-  it('sends with delegates from an overview card', async () => {
-    const { daemon } = await setup();
-    await gesture(daemon, () => pressShortcut('desktop.overview'));
-    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Send with delegates' })));
-    expect(daemon.sentOf('desktop_move_leaf')).toEqual([expect.objectContaining({ target_desktop_id: 'target', with_delegates: true })]);
-  });
-
   for (const altKey of [false, true]) {
     it(`reads Option at sidebar drop (${altKey})`, async () => {
       const { daemon } = await setup();

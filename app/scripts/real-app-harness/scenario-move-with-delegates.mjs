@@ -12,7 +12,7 @@ const options = parseCommonArgs(process.argv.slice(2));
 process.env.ATTN_HARNESS_PARK_VISIBLE_PX = '0';
 const runner = createScenarioRunner(options, {
   scenarioId: 'MOVE-WITH-DELEGATES', tier: 'local', prefix: 'move-with-delegates',
-  metadata: { focus: 'Native palette moves a dispatcher, two delegates and a nested delegate together; overview sends them back beside their dispatchers.' },
+  metadata: { focus: 'Native palette moves a dispatcher, two delegates and a nested delegate together beside their dispatchers.' },
 });
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver(options);
@@ -85,37 +85,6 @@ try {
     await dom(`[data-desktop-id="${target.id}"][data-session-visible="1"]`);
     await assertGroup(target.id);
     await screenshot('after-palette-move');
-  });
-  await runner.step('send_the_group_back_from_the_overview', async () => {
-    await pressShortcutKeys(client, driver, 'desktop.overview');
-    const selector = `[data-desktop-id="${source.id}"] .desktop-overview-actions button:last-child`;
-    await dom(selector, { textIncludes: 'Send with delegates' });
-    const [{ bounds: overview }, { logicalBounds }, { innerWidth, innerHeight }] = await Promise.all([
-      client.request('dom_bounds', { selector: '.desktop-overview' }),
-      client.request('get_window_bounds'),
-      client.request('get_terminal_context_menu_state'),
-    ]);
-    const relative = (x, y) => [
-      (Math.max(0, logicalBounds.width - innerWidth) / 2 + x) / logicalBounds.width,
-      (Math.max(0, logicalBounds.height - innerHeight) + y) / logicalBounds.height,
-    ];
-    let { bounds } = await client.request('dom_bounds', { selector });
-    if (bounds.y < overview.y || bounds.y + bounds.height > overview.y + overview.height) {
-      const centerY = overview.y + overview.height / 2;
-      await driver.scrollWindow(...relative(overview.x + overview.width / 2, centerY), centerY - bounds.y - bounds.height / 2);
-      ({ bounds } = await client.request('dom_bounds', { selector }));
-    }
-    runner.assert(bounds.y >= overview.y && bounds.y + bounds.height <= overview.y + overview.height,
-      'overview send button is inside the visible panel', { bounds, overview });
-    await screenshot('overview-send-with-delegates');
-    const moved = observer.waitForMessage(message => message.event === 'profile_arrangement_changed'
-      && message.desktops.some(desktop => desktop.id === source.id && created.every(id => desktop.panes.some(pane => pane.session_id === id))), 'return group arrangement');
-    await driver.clickWindow(...relative(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2));
-    await moved;
-    await client.request('select_session', { sessionId: root });
-    await dom(`[data-desktop-id="${source.id}"][data-session-visible="1"]`);
-    await assertGroup(source.id);
-    await screenshot('after-overview-return');
   });
   await runner.finishSuccess({ root, first, second, nested, source: source.id, target: target.id });
 } catch (error) {
