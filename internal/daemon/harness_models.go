@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sort"
 	"strings"
 	"time"
 
@@ -13,21 +12,21 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-type delegationModelCatalog struct {
-	Models []protocol.DelegationModel `json:"models"`
-	Detail string                     `json:"detail"`
+type harnessModelCatalog struct {
+	Models []protocol.HarnessModel `json:"models"`
+	Detail string                  `json:"detail"`
 }
 
-func (d *Daemon) discoverDelegationModels(ctx context.Context, harness string) (delegationModelCatalog, error) {
+func (d *Daemon) discoverHarnessModels(ctx context.Context, harness string) (harnessModelCatalog, error) {
 	if err := delegationprefs.ValidateSelection(delegationprefs.Selection{Harness: harness}, true); err != nil {
-		return delegationModelCatalog{}, err
+		return harnessModelCatalog{}, err
 	}
 	executable := d.store.GetSetting(executableSettingKey(harness))
-	value, err, _ := d.delegationModelQueries.Do(harness+"\x00"+executable, func() (any, error) {
+	value, err, _ := d.harnessModelQueries.Do(harness+"\x00"+executable, func() (any, error) {
 		ctx, cancel := context.WithTimeout(ctx, time.Minute)
 		defer cancel()
 		defer context.AfterFunc(d.life.Context(), cancel)()
-		result := delegationModelCatalog{Models: []protocol.DelegationModel{}}
+		result := harnessModelCatalog{Models: []protocol.HarnessModel{}}
 		if plugin, ok := d.ensurePluginRegistry().driver(harness); ok {
 			if !plugin.Capabilities["model_discovery"] {
 				result.Detail = "This harness does not expose model discovery. Add an exact model or use its default."
@@ -51,14 +50,14 @@ func (d *Daemon) discoverDelegationModels(ctx context.Context, harness string) (
 				return nil, err
 			}
 			defer os.RemoveAll(cwd)
-			result.Models, err = discoverer.DiscoverDelegationModels(ctx, executable, cwd)
+			result.Models, err = discoverer.DiscoverHarnessModels(ctx, executable, cwd)
 			if err != nil {
 				return nil, err
 			}
 			result.Detail = "Models reported by this harness. Catalog membership does not confirm account access."
 		}
 		if result.Models == nil {
-			result.Models = []protocol.DelegationModel{}
+			result.Models = []protocol.HarnessModel{}
 		}
 		for i := range result.Models {
 			m := &result.Models[i]
@@ -78,26 +77,22 @@ func (d *Daemon) discoverDelegationModels(ctx context.Context, harness string) (
 				m.EffortLevels = []string{}
 			}
 		}
-		sort.SliceStable(result.Models, func(i, j int) bool {
-			a, b := result.Models[i], result.Models[j]
-			return a.Provider+"/"+a.ID < b.Provider+"/"+b.ID
-		})
 		return result, nil
 	})
 	if err != nil {
-		return delegationModelCatalog{}, err
+		return harnessModelCatalog{}, err
 	}
-	return value.(delegationModelCatalog), nil
+	return value.(harnessModelCatalog), nil
 }
 
-func (d *Daemon) handleDelegationModels(client *wsClient, msg *protocol.DelegationModelsMessage) {
-	result := protocol.DelegationModelsResultMessage{Event: protocol.EventDelegationModelsResult, RequestID: msg.RequestID, Models: []protocol.DelegationModel{}}
+func (d *Daemon) handleHarnessModels(client *wsClient, msg *protocol.HarnessModelsMessage) {
+	result := protocol.HarnessModelsResultMessage{Event: protocol.EventHarnessModelsResult, RequestID: msg.RequestID, Models: []protocol.HarnessModel{}}
 	if strings.TrimSpace(msg.RequestID) == "" {
 		result.Error = protocol.Ptr("missing request id")
 		d.sendToClient(client, result)
 		return
 	}
-	catalog, err := d.discoverDelegationModels(context.Background(), strings.TrimSpace(msg.Harness))
+	catalog, err := d.discoverHarnessModels(context.Background(), strings.TrimSpace(msg.Harness))
 	if err != nil {
 		result.Error = protocol.Ptr(err.Error())
 	} else {

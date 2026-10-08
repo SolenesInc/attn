@@ -45,7 +45,7 @@ it('keeps a focused draft when a change made elsewhere reloads the table, and sa
 it('adopts maintained roles from the empty state with the install flag and shows their guidance read-only', async () => {
   const { daemon, saves } = await openDelegation();
   expect(screen.getByText('No roles yet')).toBeInTheDocument();
-  expect(daemon.sentOf('delegation_models')).toHaveLength(0);
+  expect(daemon.sentOf('harness_models')).toHaveLength(0);
   await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Add Attn roles' })));
   expect(saves()).toHaveLength(1);
   const [adoption] = saves();
@@ -69,7 +69,7 @@ it('saves a model picked from the row, an alternative with its condition, and th
   expect(screen.getByText('Pick a harness to see its models. None leaves this route unset.')).toBeInTheDocument();
   await gesture(daemon, () => fireEvent.click(screen.getByRole('option', { name: 'Codex' })));
   expect(saves()).toHaveLength(1);
-  expect(daemon.sentOf('delegation_models').map((command) => command.harness)).toEqual(['codex']);
+  expect(daemon.sentOf('harness_models').map((command) => command.harness)).toEqual(['codex']);
   await gesture(daemon, () => fireEvent.click(screen.getByRole('option', { name: /Everyday model/ })));
   expect(saves()).toHaveLength(2);
   await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'medium' })));
@@ -106,7 +106,7 @@ it('saves a model picked from the row, an alternative with its condition, and th
   expect(server.preferences.enabled).toBe(false);
   expect(screen.getByRole('switch', { name: 'Delegation preferences' })).toHaveAttribute('aria-checked', 'false');
   expect(server.preferences.roles[0].choices).toHaveLength(2);
-  expect(daemon.sentOf('delegation_models')).toHaveLength(1);
+  expect(daemon.sentOf('harness_models')).toHaveLength(1);
 });
 
 it('deletes a role with undo and reloads after a conflict', async () => {
@@ -201,5 +201,5 @@ it('makes an alternative the default and keeps the former default as an alternat
   await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Undo' })));
   expect(saves()).toHaveLength(2);
   expect(server.preferences.roles[0].default_choice_id).toBe('default');
-  expect(daemon.sentOf('delegation_models')).toHaveLength(0);
+  expect(daemon.sentOf('harness_models')).toHaveLength(0);
 });

@@ -34,8 +34,8 @@ func TestAPluginDriverOffersTheModelsItDiscoversOnlyWhenItSaysItCan(t *testing.T
 			w := newWorld(t, fakeagent.Pi)
 			app := w.App()
 			pluginDriverSettings(app, "house")
-			found := testworld.Request(app, protocol.DelegationModelsMessage{Cmd: protocol.CmdDelegationModels, Harness: "house", RequestID: "house-models"},
-				protocol.EventDelegationModelsResult, func(r protocol.DelegationModelsResultMessage) bool { return r.RequestID == "house-models" })
+			found := testworld.Request(app, protocol.HarnessModelsMessage{Cmd: protocol.CmdHarnessModels, Harness: "house", RequestID: "house-models"},
+				protocol.EventHarnessModelsResult, func(r protocol.HarnessModelsResultMessage) bool { return r.RequestID == "house-models" })
 			if !found.Success || len(found.Models) != row.want {
 				t.Fatalf("the house plugin's models = %+v, want %d of them", found, row.want)
 			}

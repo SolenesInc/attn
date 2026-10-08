@@ -36,7 +36,7 @@ const (
 	CmdDelegate                      = "delegate"
 	CmdDelegationPreferencesGet      = "delegation_preferences_get"
 	CmdDelegationPreferencesSave     = "delegation_preferences_save"
-	CmdDelegationModels              = "delegation_models"
+	CmdHarnessModels                 = "harness_models"
 	CmdDelegationRoles               = "delegation_roles"
 	CmdDelegationPreferencesShow     = "delegation_preferences_show"
 	CmdDelegationPreferencesCommit   = "delegation_preferences_commit"
@@ -536,5 +536,5 @@ func (pr *PR) NeedsDetailRefresh() bool {
 const (
 	EventDelegationPreferencesResult  = "delegation_preferences_result"
 	EventDelegationPreferencesChanged = "delegation_preferences_changed"
-	EventDelegationModelsResult       = "delegation_models_result"
+	EventHarnessModelsResult          = "harness_models_result"
 )

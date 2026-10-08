@@ -19,15 +19,15 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-func (d *Daemon) delegationHarnesses() []protocol.DelegationHarness {
-	result := []protocol.DelegationHarness{}
+func (d *Daemon) delegationHarnesses() []protocol.Harness {
+	result := []protocol.Harness{}
 	for _, name := range agentdriver.List() {
 		driver := agentdriver.Get(name)
 		caps := agentdriver.EffectiveCapabilities(driver)
 		if !caps.HasInitialPrompt {
 			continue
 		}
-		result = append(result, protocol.DelegationHarness{ID: name, Name: driver.DisplayName(), Available: isAgentExecutableAvailable(driver.ResolveExecutable(d.store.GetSetting(executableSettingKey(name))), driver.DefaultExecutable()), ModelPin: caps.HasModelPin, EffortPin: caps.HasEffortPin, Discovery: supportsModelDiscovery(driver)})
+		result = append(result, protocol.Harness{ID: name, Name: driver.DisplayName(), Available: isAgentExecutableAvailable(driver.ResolveExecutable(d.store.GetSetting(executableSettingKey(name))), driver.DefaultExecutable()), ModelPin: caps.HasModelPin, EffortPin: caps.HasEffortPin, Discovery: supportsModelDiscovery(driver)})
 	}
 	for _, driver := range d.ensurePluginRegistry().registeredDrivers() {
 		if !driver.Capabilities["initial_prompt"] {
@@ -38,7 +38,7 @@ func (d *Daemon) delegationHarnesses() []protocol.DelegationHarness {
 			continue
 		}
 		health, _, _ := plugin.healthSnapshot()
-		result = append(result, protocol.DelegationHarness{ID: driver.Agent, Name: driver.Agent, Available: health != agentdriver.HealthUnhealthy, ModelPin: driver.Capabilities["model_pin"], EffortPin: driver.Capabilities["effort_pin"], Discovery: driver.Capabilities["model_discovery"]})
+		result = append(result, protocol.Harness{ID: driver.Agent, Name: driver.Agent, Available: health != agentdriver.HealthUnhealthy, ModelPin: driver.Capabilities["model_pin"], EffortPin: driver.Capabilities["effort_pin"], Discovery: driver.Capabilities["model_discovery"]})
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].ID < result[j].ID })
 	return result
@@ -279,11 +279,11 @@ func (d *Daemon) resolveDelegationPreferences(msg *protocol.DelegateMessage) (*d
 			return nil, fmt.Errorf("harness %q uses its configured provider; provider selection is supported by plugin harnesses", s.Harness)
 		}
 	}
-	if err := d.validateDelegationModelEffort(s.Harness, s.Model, s.Effort); err != nil {
+	if err := d.validateHarnessModelEffort(s.Harness, s.Model, s.Effort); err != nil {
 		return nil, err
 	}
 	if s.Model != "" {
-		catalog, err := d.discoverDelegationModels(context.Background(), s.Harness)
+		catalog, err := d.discoverHarnessModels(context.Background(), s.Harness)
 		if err != nil {
 			return nil, fmt.Errorf("validate selected model: %w", err)
 		}

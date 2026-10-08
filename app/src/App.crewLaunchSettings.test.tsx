@@ -32,8 +32,8 @@ async function openLaunchSettings(members: CrewMember[], saves: Answer[]) {
     templates: [],
     harnesses,
   }));
-  daemon.on('delegation_models', ({ harness }) => ({
-    event: 'delegation_models_result',
+  daemon.on('harness_models', ({ harness }) => ({
+    event: 'harness_models_result',
     success: true,
     detail: '',
     models: harness === 'codex' ? [codexModel('saved-model'), codexModel('local-model')] : [],

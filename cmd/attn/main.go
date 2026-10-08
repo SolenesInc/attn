@@ -795,10 +795,8 @@ session options:
   --choice <id>              use an alternative within --role
   --fallback                 use the configured unmatched-work fallback
   --provider <id>            provider for a plugin harness model
-  --effort <level>           pin the agent's reasoning effort (claude: low,
-                             medium, high, xhigh, max; codex: minimal, low,
-                             medium, high, xhigh); defaults to medium for agents
-                             that support reasoning effort
+  --effort <level>           pin the agent's effort; the harness reports its levels
+                             in Settings; defaults to medium when supported
   --name <text>              session name (max 48 chars; defaults from brief or seed title)
   --desktop <ref>            desktop of your profile for the new agent: its
                              shortcut digit (1-9), its name as shown

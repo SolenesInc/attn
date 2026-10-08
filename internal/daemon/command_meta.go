@@ -28,7 +28,7 @@ func commandMetadata(scope CommandScope, blocksDuringRecovery bool, log bool) Co
 var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdDelegationPreferencesGet:      commandMetadata(ScopeHubLocal, false, false),
 	protocol.CmdDelegationPreferencesSave:     commandMetadata(ScopeHubLocal, false, false),
-	protocol.CmdDelegationModels:              commandMetadata(ScopeHubLocal, false, false),
+	protocol.CmdHarnessModels:                 commandMetadata(ScopeHubLocal, false, false),
 	protocol.CmdDelegationRoles:               commandMetadata(ScopeHubLocal, false, false),
 	protocol.CmdDelegationPreferencesShow:     commandMetadata(ScopeHubLocal, false, false),
 	protocol.CmdDelegationPreferencesCommit:   commandMetadata(ScopeHubLocal, false, true),

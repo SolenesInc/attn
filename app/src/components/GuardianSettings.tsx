@@ -1,20 +1,20 @@
 import { useState } from 'react';
-import type { GuardianSelection, DelegationHarness, DelegationModel } from '../types/generated';
-import type { DelegationModelCatalog } from '../hooks/daemonDelegationEvents';
+import type { GuardianSelection, Harness, HarnessModel } from '../types/generated';
+import type { HarnessModelCatalog } from '../hooks/daemonDelegationEvents';
 import type { AutoModePolicy } from '../hooks/useAutoModePolicy';
-import { useDelegationModelCatalog } from '../hooks/useDelegationModelCatalog';
+import { useHarnessModelCatalog } from '../hooks/useHarnessModelCatalog';
 
-const pi: DelegationHarness = { id: 'pi', name: 'Pi', available: true, discovery: true, model_pin: true, effort_pin: true };
+const pi: Harness = { id: 'pi', name: 'Pi', available: true, discovery: true, model_pin: true, effort_pin: true };
 const modelKey = (provider: string, model: string) => JSON.stringify([provider, model]);
 const followEfforts = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
-const modelEfforts = (model: DelegationModel | undefined) => model?.effort_support === 'unsupported' ? ['off'] : model?.effort_levels ?? [];
+const modelEfforts = (model: HarnessModel | undefined) => model?.effort_support === 'unsupported' ? ['off'] : model?.effort_levels ?? [];
 
 export function GuardianSettings({ value = {}, policy, loadModels }: {
   value?: GuardianSelection;
   policy: Pick<AutoModePolicy, 'editing' | 'setPolicy'>;
-  loadModels: (harness: string) => Promise<DelegationModelCatalog>;
+  loadModels: (harness: string) => Promise<HarnessModelCatalog>;
 }) {
-  const { catalog, loading, error, discover } = useDelegationModelCatalog(pi, loadModels);
+  const { catalog, loading, error, discover } = useHarnessModelCatalog(pi, loadModels);
   const [failure, setFailure] = useState('');
   const models = catalog?.models ?? [];
   const selected = models.find(model => model.provider === value.provider && model.id === value.model);
@@ -54,7 +54,7 @@ export function GuardianSettings({ value = {}, policy, loadModels }: {
 }
 
 function GuardianModelSelect({ models, selection, selectedKey, unavailable, loading, busy, onChange }: {
-  models: DelegationModel[];
+  models: HarnessModel[];
   selection: GuardianSelection;
   selectedKey: string;
   unavailable: boolean;

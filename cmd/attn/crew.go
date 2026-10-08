@@ -76,7 +76,8 @@ commands:
         --cwd sets the working directory; --model selects the model.
         --agent accepts claude, codex, or an installed plugin driver.
         --agent "" restores the crew default; --model "" the harness default.
-        --effort selects reasoning effort; --effort "" restores the harness default.
+        --effort selects effort; the harness reports its levels in Settings.
+        --effort "" restores the harness default.
         --awareness-dir sets context dirs. Repeat to replace the saved list.
         Use --awareness-dir "" to clear it.
 `)

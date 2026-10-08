@@ -12,13 +12,16 @@ import (
 func TestClaudeOffersTheModelsItsCLIReportsWithTheirEffortLevels(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
-	found := testworld.Request(app, protocol.DelegationModelsMessage{Cmd: protocol.CmdDelegationModels, Harness: "claude", RequestID: "claude-models"},
-		protocol.EventDelegationModelsResult, func(r protocol.DelegationModelsResultMessage) bool { return r.RequestID == "claude-models" })
+	found := testworld.Request(app, protocol.HarnessModelsMessage{Cmd: protocol.CmdHarnessModels, Harness: "claude", RequestID: "claude-models"},
+		protocol.EventHarnessModelsResult, func(r protocol.HarnessModelsResultMessage) bool { return r.RequestID == "claude-models" })
 	if !found.Success || len(found.Models) != len(fakeagent.ClaudeModels) {
 		t.Fatalf("claude's models = %+v, want the %d its CLI reports", found, len(fakeagent.ClaudeModels))
 	}
-	for _, reported := range fakeagent.ClaudeModels {
-		i := slices.IndexFunc(found.Models, func(m protocol.DelegationModel) bool { return m.ID == reported.Value })
+	for index, reported := range fakeagent.ClaudeModels {
+		if found.Models[index].ID != reported.Value {
+			t.Errorf("model at position %d = %s, want %s in harness reported order", index, found.Models[index].ID, reported.Value)
+		}
+		i := slices.IndexFunc(found.Models, func(m protocol.HarnessModel) bool { return m.ID == reported.Value })
 		if i < 0 {
 			t.Errorf("claude's %s is not offered", reported.Value)
 			continue

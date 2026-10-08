@@ -1,4 +1,4 @@
-import type { DelegationPreferences, DelegationRole, DelegationHarness, DelegationModel } from '../types/generated';
+import type { DelegationPreferences, DelegationRole, Harness, HarnessModel } from '../types/generated';
 import { type PendingRequests, settlePendingRequest } from './daemonPendingRequests';
 import { useDelegationPreferencesPush } from '../store/delegationPreferences';
 
@@ -6,10 +6,10 @@ export interface DelegationSettingsState {
   preferences: DelegationPreferences;
   templates: DelegationRole[];
   expandedRoles: DelegationRole[];
-  harnesses: DelegationHarness[];
+  harnesses: Harness[];
   workflowSkillPaths: string[];
 }
-export interface DelegationModelCatalog { models: DelegationModel[]; detail: string }
+export interface HarnessModelCatalog { models: HarnessModel[]; detail: string }
 interface DelegationEvent {
   event?: string;
   success?: boolean;
@@ -19,8 +19,8 @@ interface DelegationEvent {
   templates?: DelegationRole[];
   expanded_roles?: DelegationRole[];
   workflow_skill_paths?: string[];
-  harnesses?: DelegationHarness[];
-  models?: DelegationModel[];
+  harnesses?: Harness[];
+  models?: HarnessModel[];
   detail?: string;
 }
 
@@ -34,8 +34,8 @@ export function handleDelegationDaemonEvent(event: DelegationEvent, pending: Pen
     }
     return true;
   }
-  if (event.event === 'delegation_models_result') {
-    settlePendingRequest(pending, 'delegation_models', event,
+  if (event.event === 'harness_models_result') {
+    settlePendingRequest(pending, 'harness_models', event,
       value => value.models ? { models: value.models, detail: value.detail ?? '' } : undefined,
       'Discovering models failed');
     return true;

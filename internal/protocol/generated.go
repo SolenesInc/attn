@@ -2821,86 +2821,6 @@ type DelegationFallback struct {
 	Selection DelegationSelection `json:"selection"`
 }
 
-type DelegationHarness struct {
-	// Available corresponds to the JSON schema field "available".
-	Available bool `json:"available"`
-
-	// Discovery corresponds to the JSON schema field "discovery".
-	Discovery bool `json:"discovery"`
-
-	// EffortPin corresponds to the JSON schema field "effort_pin".
-	EffortPin bool `json:"effort_pin"`
-
-	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
-
-	// ModelPin corresponds to the JSON schema field "model_pin".
-	ModelPin bool `json:"model_pin"`
-
-	// Name corresponds to the JSON schema field "name".
-	Name string `json:"name"`
-}
-
-type DelegationModel struct {
-	// Access corresponds to the JSON schema field "access".
-	Access ModelCapabilitySupport `json:"access"`
-
-	// Description corresponds to the JSON schema field "description".
-	Description string `json:"description"`
-
-	// Detail corresponds to the JSON schema field "detail".
-	Detail string `json:"detail"`
-
-	// EffortLevels corresponds to the JSON schema field "effort_levels".
-	EffortLevels []string `json:"effort_levels"`
-
-	// EffortSupport corresponds to the JSON schema field "effort_support".
-	EffortSupport ModelCapabilitySupport `json:"effort_support"`
-
-	// Harness corresponds to the JSON schema field "harness".
-	Harness string `json:"harness"`
-
-	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
-
-	// Name corresponds to the JSON schema field "name".
-	Name string `json:"name"`
-
-	// Provider corresponds to the JSON schema field "provider".
-	Provider string `json:"provider"`
-}
-
-type DelegationModelsMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Harness corresponds to the JSON schema field "harness".
-	Harness string `json:"harness"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID string `json:"request_id"`
-}
-
-type DelegationModelsResultMessage struct {
-	// Detail corresponds to the JSON schema field "detail".
-	Detail string `json:"detail"`
-
-	// Error corresponds to the JSON schema field "error".
-	Error *string `json:"error,omitempty,omitzero"`
-
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// Models corresponds to the JSON schema field "models".
-	Models []DelegationModel `json:"models"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID string `json:"request_id"`
-
-	// Success corresponds to the JSON schema field "success".
-	Success bool `json:"success"`
-}
-
 type DelegationOperation struct {
 	// Branch corresponds to the JSON schema field "branch".
 	Branch *string `json:"branch,omitempty,omitzero"`
@@ -3040,7 +2960,7 @@ type DelegationPreferencesResultMessage struct {
 	ExpandedRoles []DelegationRole `json:"expanded_roles,omitempty,omitzero"`
 
 	// Harnesses corresponds to the JSON schema field "harnesses".
-	Harnesses []DelegationHarness `json:"harnesses,omitempty,omitzero"`
+	Harnesses []Harness `json:"harnesses,omitempty,omitzero"`
 
 	// Preferences corresponds to the JSON schema field "preferences".
 	Preferences *DelegationPreferences `json:"preferences,omitempty,omitzero"`
@@ -5081,6 +5001,86 @@ type GuardianSelection struct {
 
 	// Provider corresponds to the JSON schema field "provider".
 	Provider *string `json:"provider,omitempty,omitzero"`
+}
+
+type Harness struct {
+	// Available corresponds to the JSON schema field "available".
+	Available bool `json:"available"`
+
+	// Discovery corresponds to the JSON schema field "discovery".
+	Discovery bool `json:"discovery"`
+
+	// EffortPin corresponds to the JSON schema field "effort_pin".
+	EffortPin bool `json:"effort_pin"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// ModelPin corresponds to the JSON schema field "model_pin".
+	ModelPin bool `json:"model_pin"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+}
+
+type HarnessModel struct {
+	// Access corresponds to the JSON schema field "access".
+	Access ModelCapabilitySupport `json:"access"`
+
+	// Description corresponds to the JSON schema field "description".
+	Description string `json:"description"`
+
+	// Detail corresponds to the JSON schema field "detail".
+	Detail string `json:"detail"`
+
+	// EffortLevels corresponds to the JSON schema field "effort_levels".
+	EffortLevels []string `json:"effort_levels"`
+
+	// EffortSupport corresponds to the JSON schema field "effort_support".
+	EffortSupport ModelCapabilitySupport `json:"effort_support"`
+
+	// Harness corresponds to the JSON schema field "harness".
+	Harness string `json:"harness"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// Provider corresponds to the JSON schema field "provider".
+	Provider string `json:"provider"`
+}
+
+type HarnessModelsMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Harness corresponds to the JSON schema field "harness".
+	Harness string `json:"harness"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type HarnessModelsResultMessage struct {
+	// Detail corresponds to the JSON schema field "detail".
+	Detail string `json:"detail"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Models corresponds to the JSON schema field "models".
+	Models []HarnessModel `json:"models"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
 }
 
 type HeartbeatMessage struct {

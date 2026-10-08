@@ -7,15 +7,15 @@ import (
 )
 
 type ModelDiscoverer interface {
-	DiscoverDelegationModels(context.Context, string, string) ([]protocol.DelegationModel, error)
+	DiscoverHarnessModels(context.Context, string, string) ([]protocol.HarnessModel, error)
 }
 
-func (c *Claude) DiscoverDelegationModels(ctx context.Context, executable, cwd string) ([]protocol.DelegationModel, error) {
+func (c *Claude) DiscoverHarnessModels(ctx context.Context, executable, cwd string) ([]protocol.HarnessModel, error) {
 	catalog, err := c.DiscoverModels(ctx, executable, cwd)
 	if err != nil {
 		return nil, err
 	}
-	result := make([]protocol.DelegationModel, 0, len(catalog))
+	result := make([]protocol.HarnessModel, 0, len(catalog))
 	for _, m := range catalog {
 		support := protocol.ModelCapabilitySupportUnknown
 		if m.SupportsEffort != nil {
@@ -28,7 +28,7 @@ func (c *Claude) DiscoverDelegationModels(ctx context.Context, executable, cwd s
 		if len(m.SupportedEffortLevels) > 0 {
 			support = protocol.ModelCapabilitySupportSupported
 		}
-		result = append(result, protocol.DelegationModel{Harness: "claude", ID: m.Value, Name: m.DisplayName, Description: m.Description, EffortSupport: support, EffortLevels: append([]string{}, m.SupportedEffortLevels...), Access: protocol.ModelCapabilitySupportUnknown})
+		result = append(result, protocol.HarnessModel{Harness: "claude", ID: m.Value, Name: m.DisplayName, Description: m.Description, EffortSupport: support, EffortLevels: append([]string{}, m.SupportedEffortLevels...), Access: protocol.ModelCapabilitySupportUnknown})
 	}
 	return result, nil
 }
