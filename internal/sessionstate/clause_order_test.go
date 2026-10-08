@@ -212,6 +212,19 @@ func TestClauseOrder(t *testing.T) {
 			wantReason: ReasonApprovalOpen,
 		},
 		{
+			why: "and a newer program status record outranks an older harness " +
+				"edge: an approval a hook settled without a dialog never sends " +
+				"its own all-clear, and the agent reporting done is the answer",
+			evidence: Evidence{
+				ProgramStatus:    seen(SourceProgramStatus, ClaimSettled, time.Second),
+				LastHarnessEvent: seen(SourceHarnessEvent, ClaimApprovalPending, 2*time.Second),
+				TurnEverOpened:   true,
+				LastBusyAt:       now.Add(-time.Minute),
+			},
+			wantState:  protocol.SessionStateIdle,
+			wantReason: ReasonProgramSettled,
+		},
+		{
 			why: "an open bracket measures its silence from the moment the agent " +
 				"stopped working, not from when it started: a long turn reports " +
 				"working once, and its stop hook still lands after its done report",

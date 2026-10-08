@@ -155,7 +155,7 @@ func Resolve(e Evidence, policy Policy, now time.Time) Resolution {
 	}
 
 	if e.ProgramStatus != nil {
-		if r, ok := harnessEdge(e); ok && e.LastHarnessEvent.ObservedAt.After(e.ProgramStatus.ObservedAt) {
+		if r, ok := harnessEdge(e); ok {
 			return r
 		}
 		if r, ok := programStatusEdge(*e.ProgramStatus); ok {
@@ -348,7 +348,7 @@ func ClassifierVerdictPending(e Evidence, policy Policy, now time.Time) bool {
 }
 
 func harnessEdge(e Evidence) (Resolution, bool) {
-	if e.LastHarnessEvent == nil || supersededByBusy(e.LastHarnessEvent, e) {
+	if e.LastHarnessEvent == nil || supersededByBusy(e.LastHarnessEvent, e) || supersededByProgramStatus(e.LastHarnessEvent, e) {
 		return Resolution{}, false
 	}
 	switch e.LastHarnessEvent.Claim {
@@ -424,6 +424,10 @@ func supersededByBusy(o *Observation, e Evidence) bool {
 		return false
 	}
 	return e.LastBusyAt.After(o.ObservedAt)
+}
+
+func supersededByProgramStatus(o *Observation, e Evidence) bool {
+	return e.ProgramStatus != nil && !o.ObservedAt.After(e.ProgramStatus.ObservedAt)
 }
 
 func fresh(o *Observation, claim Claim, now time.Time, ttl time.Duration) bool {
