@@ -37,15 +37,34 @@ func goProgramStatus(term C.GhosttyTerminal, userdata unsafe.Pointer, report *C.
 	if !ok {
 		return
 	}
+	state, known := programStatusStates[report.state]
+	if !known {
+		return
+	}
 	status := ProgramStatus{
-		State:   ProgramStatusState(report.state),
-		Kind:    ProgramStatusKind(report.kind),
+		State:   state,
+		Kind:    programStatusKinds[report.kind],
 		ID:      ghosttyString(report.id),
 		Message: ghosttyString(report.message),
 	}
 	s.mu.Lock()
 	s.programStatus = append(s.programStatus, status)
 	s.mu.Unlock()
+}
+
+var programStatusStates = map[C.GhosttyProgramStatusState]ProgramStatusState{
+	C.GHOSTTY_PROGRAM_STATUS_STATE_IDLE:    ProgramStatusIdle,
+	C.GHOSTTY_PROGRAM_STATUS_STATE_WORKING: ProgramStatusWorking,
+	C.GHOSTTY_PROGRAM_STATUS_STATE_DONE:    ProgramStatusDone,
+	C.GHOSTTY_PROGRAM_STATUS_STATE_BLOCKED: ProgramStatusBlocked,
+	C.GHOSTTY_PROGRAM_STATUS_STATE_ERROR:   ProgramStatusError,
+	C.GHOSTTY_PROGRAM_STATUS_STATE_CLEAR:   ProgramStatusClear,
+}
+
+var programStatusKinds = map[C.GhosttyProgramStatusKind]ProgramStatusKind{
+	C.GHOSTTY_PROGRAM_STATUS_KIND_PERMISSION: ProgramStatusKindPermission,
+	C.GHOSTTY_PROGRAM_STATUS_KIND_QUESTION:   ProgramStatusKindQuestion,
+	C.GHOSTTY_PROGRAM_STATUS_KIND_AUTH:       ProgramStatusKindAuth,
 }
 
 func ghosttyString(s C.GhosttyString) string {

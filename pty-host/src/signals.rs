@@ -333,8 +333,43 @@ fn find_osc_end(bytes: &[u8], start: usize) -> Option<(usize, usize)> {
 
 #[cfg(test)]
 mod tests {
-    use super::{KEEPALIVE, SignalObserver};
+    use super::{KEEPALIVE, PROGRAM_STATUS, SignalObserver};
+    use crate::ghostty::Terminal;
     use std::time::{Duration, Instant};
+
+    #[test]
+    fn root_program_status_replaces_title_claims_until_cleared() {
+        let mut terminal = Terminal::new(80, 24).expect("terminal");
+        let mut observer = SignalObserver::new("claude");
+        let busy_title = "\x1b]0;\u{2736} Claude Code\x07".as_bytes();
+
+        terminal.write(b"\x1b]7501;state=working:id=agent-1:app=claude-code\x1b\\");
+        assert!(
+            observer
+                .observe_program_status(&terminal.drain_program_status())
+                .is_empty()
+        );
+
+        terminal.write(b"\x1b]7501;state=blocked:kind=permission:msg=QWxsb3c/\x1b\\");
+        let blocked = observer.observe_program_status(&terminal.drain_program_status());
+        assert_eq!(blocked.len(), 1);
+        assert_eq!(
+            (
+                blocked[0].claim,
+                blocked[0].detail.as_str(),
+                blocked[0].source
+            ),
+            ("blocked_permission", "Allow?", PROGRAM_STATUS)
+        );
+        assert!(observer.observe(busy_title).is_empty());
+
+        terminal.write(b"\x1b]7501;state=clear\x1b\\");
+        assert_eq!(
+            observer.observe_program_status(&terminal.drain_program_status())[0].claim,
+            "clear"
+        );
+        assert_eq!(observer.observe(busy_title)[0].claim, "busy");
+    }
 
     #[test]
     fn observes_split_codex_title() {

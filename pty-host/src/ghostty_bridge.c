@@ -70,11 +70,34 @@ static void attn_write_pty(GhosttyTerminal terminal, void *userdata,
   attn->responses_len += len;
 }
 
+static bool attn_program_state(GhosttyProgramStatusState state, uint8_t *out) {
+  switch (state) {
+    case GHOSTTY_PROGRAM_STATUS_STATE_IDLE: *out = 0; return true;
+    case GHOSTTY_PROGRAM_STATUS_STATE_WORKING: *out = 1; return true;
+    case GHOSTTY_PROGRAM_STATUS_STATE_DONE: *out = 2; return true;
+    case GHOSTTY_PROGRAM_STATUS_STATE_BLOCKED: *out = 3; return true;
+    case GHOSTTY_PROGRAM_STATUS_STATE_ERROR: *out = 4; return true;
+    case GHOSTTY_PROGRAM_STATUS_STATE_CLEAR: *out = 5; return true;
+    default: return false;
+  }
+}
+
+static uint8_t attn_program_kind(GhosttyProgramStatusKind kind) {
+  switch (kind) {
+    case GHOSTTY_PROGRAM_STATUS_KIND_PERMISSION: return 1;
+    case GHOSTTY_PROGRAM_STATUS_KIND_QUESTION: return 2;
+    case GHOSTTY_PROGRAM_STATUS_KIND_AUTH: return 3;
+    default: return 0;
+  }
+}
+
 static void attn_program_status(GhosttyTerminal terminal, void *userdata,
                                 const GhosttyTerminalProgramStatus *report) {
   (void)terminal;
   AttnGhosttyTerminal *attn = userdata;
+  uint8_t state;
   if (attn == NULL || report == NULL || report->id.len != 0) return;
+  if (!attn_program_state(report->state, &state)) return;
   if (attn->program_status_len == attn->program_status_cap) {
     size_t cap = attn->program_status_cap == 0 ? 4 : attn->program_status_cap * 2;
     AttnProgramStatus *next =
@@ -90,8 +113,8 @@ static void attn_program_status(GhosttyTerminal terminal, void *userdata,
     memcpy(message, report->message.ptr, report->message.len);
   }
   AttnProgramStatus *slot = &attn->program_status[attn->program_status_len++];
-  slot->state = (uint8_t)report->state;
-  slot->kind = (uint8_t)report->kind;
+  slot->state = state;
+  slot->kind = attn_program_kind(report->kind);
   slot->message = message;
   slot->message_len = report->message.len;
 }

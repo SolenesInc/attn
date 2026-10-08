@@ -175,14 +175,15 @@ pub struct ProgramStatus {
 }
 
 impl ProgramStatus {
-    fn from_raw(raw: &RawProgramStatus) -> Self {
+    fn from_raw(raw: &RawProgramStatus) -> Option<Self> {
         let state = match raw.state {
+            0 => ProgramState::Idle,
             1 => ProgramState::Working,
             2 => ProgramState::Done,
             3 => ProgramState::Blocked,
             4 => ProgramState::Error,
             5 => ProgramState::Clear,
-            _ => ProgramState::Idle,
+            _ => return None,
         };
         let kind = match raw.kind {
             1 => ProgramKind::Permission,
@@ -196,11 +197,11 @@ impl ProgramStatus {
             let bytes = unsafe { std::slice::from_raw_parts(raw.message, raw.message_len) };
             String::from_utf8_lossy(bytes).into_owned()
         };
-        Self {
+        Some(Self {
             state,
             kind,
             message,
-        }
+        })
     }
 }
 
@@ -382,7 +383,7 @@ impl Terminal {
         }
         let reports = unsafe { std::slice::from_raw_parts(raw, len) }
             .iter()
-            .map(ProgramStatus::from_raw)
+            .filter_map(ProgramStatus::from_raw)
             .collect();
         unsafe { attn_ghostty_program_status_free(raw, len) };
         reports
