@@ -11,7 +11,7 @@ import { ExpandIcon, HomeIcon, PlusIcon } from './SidebarIcons';
 import { desktopShortcut, hasNoLeaves } from './sidebarModel';
 import { DesktopChip } from './SidebarDesktops';
 import { CrewRowView } from './QueueRows';
-import { CommandsButton, SidebarPanelButtons } from './SidebarHeader';
+import { CommandsButton, FlowToggleButton, SidebarPanelButtons } from './SidebarHeader';
 export { SidebarHeader } from './SidebarHeader';
 
 export function SidebarCollapsed() {
@@ -43,6 +43,7 @@ export function SidebarCollapsed() {
           <HomeIcon />
         </button>
         <CommandsButton collapsed />
+        <FlowToggleButton />
         <div className="icon-divider" />
         <SidebarPanelButtons collapsed />
         <div className="icon-divider" />
