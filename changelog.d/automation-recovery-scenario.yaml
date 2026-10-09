@@ -1,0 +1,3 @@
+kind: internal
+area: tests
+change: Recognize the recovered automation run when it shares a creation timestamp with the failed run in packaged-app acceptance.
