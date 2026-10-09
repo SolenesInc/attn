@@ -1,6 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { agentPane, soloDesktop, daemonSession, daemonDesktop, type DaemonSession } from './test/daemonFixtures';
+import { agentPane, crewMember, soloDesktop, daemonSession, daemonDesktop, type DaemonSession } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
@@ -14,7 +14,7 @@ const team = [
 ];
 
 function renderTeam(sessions: DaemonSession[] = team) {
-  return renderApp({ initialState: { sessions, desktops: sessions.map((session) => soloDesktop(session.id)) } });
+  return renderApp({ initialState: { crew: [crewMember('alder')], sessions, desktops: sessions.map((session) => soloDesktop(session.id)) } });
 }
 
 const chain = () => screen.queryByRole('dialog', { name: 'Delegation chain' });

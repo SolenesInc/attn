@@ -8,7 +8,7 @@ import (
 )
 
 func primingHolding(seeds int, handoff string) Priming {
-	p := Priming{Member: "trellis", HomeDir: "/homes/trellis", HandoffName: "2026-08-13T22-20Z-trellis.md", Handoff: "Where I left off.", GardenRead: true}
+	p := Priming{Name: "Trellis", HomeDir: "/homes/trellis", HandoffName: "2026-08-13T22-20Z-trellis.md", Handoff: "Where I left off.", GardenRead: true}
 	for i := range seeds {
 		p.Held = append(p.Held, HeldSeed{ID: fmt.Sprintf("s-held%02d", i), Slug: fmt.Sprintf("held-seed-%d", i), Title: fmt.Sprintf("Held seed %d", i), Handoff: handoff})
 	}
@@ -27,13 +27,13 @@ func TestPrimingBudgets(t *testing.T) {
 	}{
 		{
 			name:     "a letter at the filing limit is inlined whole",
-			priming:  Priming{Member: "keel", HomeDir: "/homes/keel", HandoffName: "2026-08-13T22-20Z-keel.md", Handoff: letterAtTheLimit},
+			priming:  Priming{Name: "Keel", HomeDir: "/homes/keel", HandoffName: "2026-08-13T22-20Z-keel.md", Handoff: letterAtTheLimit},
 			want:     []string{letterAtTheLimit},
 			unwanted: []string{"Before responding to the user, read the whole file"},
 		},
 		{
 			name:    "a hand-edited oversize letter is cut on a rune and asks for a full read",
-			priming: Priming{Member: "keel", HomeDir: "/homes/keel", HandoffName: "2026-08-13T22-20Z-keel.md", Handoff: strings.Repeat("日", handoffInlineLimit)},
+			priming: Priming{Name: "Keel", HomeDir: "/homes/keel", HandoffName: "2026-08-13T22-20Z-keel.md", Handoff: strings.Repeat("日", handoffInlineLimit)},
 			want:    []string{"hand-edited letter", "Before responding to the user, read the whole file", "2026-08-13T22-20Z-keel.md"},
 		},
 		{
@@ -55,7 +55,7 @@ func TestPrimingBudgets(t *testing.T) {
 		},
 		{
 			name:     "a garden that could not be read is no section at all",
-			priming:  Priming{Member: "trellis", HomeDir: "/homes/trellis"},
+			priming:  Priming{Name: "Trellis", HomeDir: "/homes/trellis"},
 			unwanted: []string{"## What you hold in the garden", "You hold no seeds in the garden"},
 		},
 	}

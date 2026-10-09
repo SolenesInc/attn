@@ -37,7 +37,7 @@ func TestProfileDeletionAccountsForDelegationsStillPreparingTheirCheckout(t *tes
 			request.RequestID = uuid.NewString()
 			request.SourceSessionID = protocol.Ptr(protocol.SessionID(source))
 			request.Checkout.Path = protocol.Ptr(path)
-			scoped := cli.WithGardenProfile(side.ID, protocol.SessionID(source))
+			scoped := cli.WithRequester(side.ID, protocol.SessionID(source))
 			accepted, err := scoped.StartDelegation(request)
 			if err != nil {
 				t.Fatal(err)

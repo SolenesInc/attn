@@ -248,7 +248,7 @@ flags:
 }
 
 func (f *seedFlags) client() *client.Client {
-	return client.New(config.SocketPath()).WithGardenProfile(strings.TrimSpace(*f.profile), f.sessionID())
+	return client.New(config.SocketPath()).WithRequester(strings.TrimSpace(*f.profile), f.sessionID())
 }
 
 var seedPrimeText = hooks.GardenGuidance

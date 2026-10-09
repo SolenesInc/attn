@@ -163,7 +163,7 @@ describe('the queue sidebar', () => {
       id: 'later', label: 'later', state: 'idle', desktopId: 'ws-a',
       turnSnoozedUntil: new Date(Date.now() + 3600_000).toISOString(),
     };
-    renderSidebar([...sessions, unplaced, shell, later], true, { crew: [{ id: 'alder' }] });
+    renderSidebar([...sessions, unplaced, shell, later], true, { crew: [{ key: 'alder', name: 'Alder' }] });
 
     expect(screen.getByTestId('queue-agents-toggle')).toHaveTextContent('3 more agents');
     expect(screen.getByTestId('queue-agents-toggle')).toHaveAttribute('aria-expanded', 'false');
@@ -600,12 +600,12 @@ describe('formatTurnAge', () => {
 });
 
 describe('the crew in the sidebar', () => {
-  const roster = [{ id: 'alder' }, { id: 'keel' }, { id: 'trellis' }];
+  const roster = [{ key: 'alder', name: 'Alder' }, { key: 'keel', name: 'Keel' }, { key: 'trellis', name: 'Trellis' }];
 
   function renderCrew(
     crewSessions: TestSession[],
     overrides: Record<string, unknown> = {},
-    crew: { id: string; binding_session?: string }[] = roster,
+    crew: { key: string; name: string; binding_session?: string }[] = roster,
   ) {
     return renderSidebar([...sessions, ...crewSessions], true, { crew, ...overrides });
   }
@@ -629,11 +629,11 @@ describe('the crew in the sidebar', () => {
     const chiefOnRoster = sessions.map((entry) => (entry.id === 'chief' ? { ...entry, crewMember: 'alder' } : entry));
     const moreAgents = () => screen.getByTestId('queue-agents-toggle').textContent;
 
-    const { unmount } = renderSidebar(chiefOnRoster, true, { crew: [{ id: 'keel' }] });
+    const { unmount } = renderSidebar(chiefOnRoster, true, { crew: [{ key: 'keel', name: 'Keel' }] });
     const withoutChiefOnRoster = moreAgents();
     unmount();
 
-    renderSidebar(chiefOnRoster, true, { crew: [{ id: 'alder' }, { id: 'keel' }] });
+    renderSidebar(chiefOnRoster, true, { crew: [{ key: 'alder', name: 'Alder' }, { key: 'keel', name: 'Keel' }] });
     expect(screen.queryByTestId('queue-crew-alder')).toBeNull();
     expect(screen.getByTestId('queue-chief-chief')).toBeInTheDocument();
     expect(moreAgents()).toBe(withoutChiefOnRoster);

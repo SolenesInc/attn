@@ -110,7 +110,7 @@ func (d *Daemon) inboxAddressesOf(sessionID protocol.SessionID) ([]inbox.Address
 	member := ""
 	for _, candidate := range members {
 		if candidate.BindingSession == sessionID && d.crewBindingLive(candidate) {
-			member = candidate.ID
+			member = candidate.Key.String()
 			addresses = append(addresses, inbox.ToMember(member))
 			break
 		}

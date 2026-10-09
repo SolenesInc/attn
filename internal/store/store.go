@@ -16,12 +16,16 @@ import (
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type Store struct {
-	mu     sync.RWMutex
-	db     *sql.DB
-	dbPath string
+	crewMembers          map[who.MemberKey]CrewIdentity
+	memberSessions       map[protocol.SessionID]who.MemberKey
+	latestMemberSessions map[who.MemberKey]protocol.SessionID
+	mu                   sync.RWMutex
+	db                   *sql.DB
+	dbPath               string
 
 	durable bool
 

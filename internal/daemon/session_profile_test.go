@@ -150,7 +150,7 @@ func TestImportedCrewJoinTheMostRecentlyUsedProfile(t *testing.T) {
 	profileID := defaultProfileID(t, d.store)
 	for _, member := range crewList(t, d) {
 		if member.ProfileID != profileID {
-			t.Fatalf("imported member %s has profile %q, want %s", member.ID, member.ProfileID, profileID)
+			t.Fatalf("imported member %s has profile %q, want %s", member.Key, member.ProfileID, profileID)
 		}
 	}
 }

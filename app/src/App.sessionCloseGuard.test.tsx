@@ -1,12 +1,13 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { soloDesktop, daemonSession, type DaemonSession } from './test/daemonFixtures';
+import { crewMember, soloDesktop, daemonSession, type DaemonSession } from './test/daemonFixtures';
 import { renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
 async function renderOrchestrator(overrides: Partial<DaemonSession> = {}) {
   const rendered = await renderApp({
     initialState: {
+      crew: [crewMember('coda')],
       sessions: [daemonSession('s1', { label: 'orchestrator', ...overrides })],
       desktops: [soloDesktop('s1')],
     },

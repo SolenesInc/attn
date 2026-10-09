@@ -151,7 +151,8 @@ export function seedDocument(seed: DaemonSeed, overrides: Partial<DaemonSeedDocu
 
 export function crewMember(id: string, overrides: Partial<DaemonCrewMember> = {}): DaemonCrewMember {
   return {
-    id,
+    key: id,
+    name: id[0].toUpperCase() + id.slice(1),
     revision: 1,
     charter_path: `/crew/${id}/CHARTER.md`,
     home_dir: `/crew/${id}`,

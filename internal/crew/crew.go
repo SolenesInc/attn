@@ -2,6 +2,7 @@ package crew
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 const Surface = "the crew"
@@ -30,7 +32,7 @@ const CharterFileName = "CHARTER.md"
 const DefaultAgent = "claude"
 
 type Member struct {
-	ID             string             `json:"id"`
+	Key            who.MemberKey      `json:"-"`
 	CharterPath    string             `json:"charter_path"`
 	HomeDir        string             `json:"home_dir"`
 	CWD            string             `json:"cwd"`
@@ -68,9 +70,9 @@ type Restart struct {
 }
 
 type RestartRequest struct {
-	Member           string `json:"member"`
-	RequestID        string `json:"request_id"`
-	RestartRequestID string `json:"restart_request_id"`
+	Member           who.MemberKey `json:"member"`
+	RequestID        string        `json:"request_id"`
+	RestartRequestID string        `json:"restart_request_id"`
 }
 
 func (m Member) LaunchAgent() string {
@@ -123,69 +125,80 @@ func (m Member) Encode() ([]byte, error) {
 	return json.Marshal(m)
 }
 
-func Decode(body []byte) (Member, error) {
+func Decode(id string, body []byte) (Member, error) {
 	var member Member
 	if err := json.Unmarshal(body, &member); err != nil {
 		return Member{}, fmt.Errorf("this member's stored record is not readable: %w", err)
 	}
+	key, err := who.ParseMemberKey(id)
+	if err != nil {
+		return Member{}, err
+	}
+	member.Key = key
 	return member, nil
 }
 
-const MaxIDChars = 40
-
-var memberIDRe = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
-
 const DaemonID = "attn"
 
-func ValidateID(id string) error {
-	if id == "" {
-		return fmt.Errorf("a member id is required")
-	}
-	if len(id) > MaxIDChars {
-		return fmt.Errorf("%q is %d characters and a member id's limit is %d — a member's name is said out loud", id, len(id), MaxIDChars)
-	}
-	if !memberIDRe.MatchString(id) {
-		return fmt.Errorf("%q is not a member id: lowercase letters, digits and - only, starting with a letter, like `trellis`", id)
-	}
-	if id == DaemonID {
-		return fmt.Errorf("%q is the name attn itself moves seeds under; pick another id for a crew member", id)
-	}
-	return docstore.ValidateDocumentID(id)
-}
+var namePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9-]{0,39}$`)
+var idNamePattern = regexp.MustCompile(`^[A-Za-z]-[A-Za-z0-9]{6}$`)
+var ErrNameReservedForChief = errors.New("chief is reserved for the profile's chief")
 
-func DisplayName(id string) string {
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return ""
+func ValidateName(name string) error {
+	name = strings.TrimSpace(name)
+	if strings.EqualFold(name, "chief") {
+		return ErrNameReservedForChief
 	}
-	if id == DaemonID {
+	if name == "" {
+		return errors.New("a crew member name is required")
+	}
+	if len(name) > 40 {
+		return fmt.Errorf("name limit is 40 characters, asked for %d", len(name))
+	}
+	if !namePattern.MatchString(name) {
+		return fmt.Errorf("%q is not a member name: letters, digits and - only, starting with a letter", name)
+	}
+	switch strings.ToLower(name) {
+	case "attn", "user", "you":
+		return fmt.Errorf("%q names who acts, not a crew member", name)
+	}
+	if idNamePattern.MatchString(name) {
+		return fmt.Errorf("%q reads as an id; choose a member name", name)
+	}
+	return nil
+}
+func NameFromKey(k who.MemberKey) string {
+	name := KeyLabel(k)
+	if ValidateName(name) != nil {
+		return k.String() + "-crew"
+	}
+	return name
+}
+func KeyLabel(k who.MemberKey) string {
+	id := k.String()
+	if id == "" || id == DaemonID {
 		return id
 	}
 	first, size := utf8.DecodeRuneInString(id)
 	return string(unicode.ToUpper(first)) + id[size:]
 }
-
 func HolderName(member string, session protocol.SessionID) string {
 	if strings.TrimSpace(member) != "" {
-		return DisplayName(member)
+		k, err := who.ParseMemberKey(member)
+		if err != nil {
+			return strings.TrimSpace(member)
+		}
+		return KeyLabel(k)
 	}
 	return string(protocol.TrimID(session))
 }
 
-func Resolve(name string, members []Member) (Member, bool) {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return Member{}, false
-	}
-	for _, m := range members {
-		if strings.EqualFold(m.ID, name) {
-			return m, true
-		}
-	}
-	return Member{}, false
+type Home struct {
+	Member    Member
+	ProfileID string
 }
 
-func ScanHomes(dir string, warn func(format string, args ...any)) ([]Member, error) {
+func ScanHomes(dir string, warn func(string, ...any)) ([]Home, error) {
 	entries, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -196,28 +209,38 @@ func ScanHomes(dir string, warn func(format string, args ...any)) ([]Member, err
 	if warn == nil {
 		warn = func(string, ...any) {}
 	}
-	var members []Member
+	var homes []Home
+	add := func(home, profile string) bool {
+		charter := filepath.Join(home, CharterFileName)
+		if _, err := os.Stat(charter); err != nil {
+			return false
+		}
+		key, err := who.MemberKeyOfHome(home)
+		if err != nil {
+			warn("crew: skipping home %s: %v", home, err)
+			return true
+		}
+		homes = append(homes, Home{Member: Member{Key: key, HomeDir: home, CharterPath: charter, AwarenessDirs: []string{}}, ProfileID: profile})
+		return true
+	}
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
-		id := entry.Name()
-		home := filepath.Join(dir, id)
-		charter := filepath.Join(home, CharterFileName)
-		if _, err := os.Stat(charter); err != nil {
+		home := filepath.Join(dir, entry.Name())
+		if add(home, "") {
 			continue
 		}
-		if err := ValidateID(id); err != nil {
-			warn("crew: skipping home %s: %v", home, err)
-			continue
+		children, err := os.ReadDir(home)
+		if err != nil {
+			return nil, err
 		}
-		members = append(members, Member{
-			ID:            id,
-			CharterPath:   charter,
-			HomeDir:       home,
-			AwarenessDirs: []string{},
-		})
+		for _, child := range children {
+			if child.IsDir() {
+				add(filepath.Join(home, child.Name()), entry.Name())
+			}
+		}
 	}
-	sort.Slice(members, func(i, j int) bool { return members[i].ID < members[j].ID })
-	return members, nil
+	sort.Slice(homes, func(i, j int) bool { return homes[i].Member.Key.String() < homes[j].Member.Key.String() })
+	return homes, nil
 }

@@ -100,7 +100,7 @@ func TestANewDesktopChoiceExistsAtOnceAndItemsChoosingItShareIt(t *testing.T) {
 	testworld.Await(app, protocol.EventCrewUpdated, func(e protocol.CrewUpdatedMessage) bool {
 		renamed := 0
 		for _, m := range e.Members {
-			if (m.ID == "alder" || m.ID == "trellis") && m.LaunchDesktop != nil && protocol.Deref(m.LaunchDesktop.Label) == "5 · Renamed" {
+			if (m.Key == "alder" || m.Key == "trellis") && m.LaunchDesktop != nil && protocol.Deref(m.LaunchDesktop.Label) == "5 · Renamed" {
 				renamed++
 			}
 		}

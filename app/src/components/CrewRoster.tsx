@@ -1,7 +1,6 @@
 import type { KeyboardEvent, RefObject } from 'react';
 import type { CrewLaunchSaveState } from '../hooks/useCrewLaunchAutosave';
 import type { CrewMember } from '../types/generated';
-import { crewDisplayName } from '../utils/crewName';
 
 export function CrewRoster({ members, visibleMembers, selectedId, filter, listRef, saveState, onFilterChange, onSelect }: {
   members: CrewMember[];
@@ -16,11 +15,11 @@ export function CrewRoster({ members, visibleMembers, selectedId, filter, listRe
   const moveSelection = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
     event.preventDefault();
-    const current = Math.max(0, visibleMembers.findIndex((candidate) => candidate.id === selectedId));
+    const current = Math.max(0, visibleMembers.findIndex((candidate) => candidate.key === selectedId));
     const offset = event.key === 'ArrowDown' ? 1 : -1;
     const next = Math.max(0, Math.min(visibleMembers.length - 1, current + offset));
     const nextMember = visibleMembers[next];
-    if (nextMember) onSelect(nextMember.id, next);
+    if (nextMember) onSelect(nextMember.key, next);
   };
   return (
     <aside className="crew-roster" aria-label="Crew roster">
@@ -31,20 +30,20 @@ export function CrewRoster({ members, visibleMembers, selectedId, filter, listRe
       <div ref={listRef} className="crew-roster-list" onKeyDown={moveSelection}>
         {visibleMembers.map((candidate) => {
           const awake = Boolean(candidate.binding_session);
-          const state = saveState(candidate.id);
+          const state = saveState(candidate.key);
           return (
             <button
               type="button"
-              key={candidate.id}
-              data-crew-roster-member={candidate.id}
-              data-testid={`crew-roster-${candidate.id}`}
-              aria-current={candidate.id === selectedId ? 'true' : undefined}
-              className={candidate.id === selectedId ? 'is-selected' : ''}
-              onClick={() => onSelect(candidate.id)}
+              key={candidate.key}
+              data-crew-roster-member={candidate.key}
+              data-testid={`crew-roster-${candidate.key}`}
+              aria-current={candidate.key === selectedId ? 'true' : undefined}
+              className={candidate.key === selectedId ? 'is-selected' : ''}
+              onClick={() => onSelect(candidate.key)}
             >
-              <span className="crew-avatar" aria-hidden="true">{crewDisplayName(candidate.id).slice(0, 1)}</span>
+              <span className="crew-avatar" aria-hidden="true">{candidate.name.slice(0, 1)}</span>
               <span className="crew-roster-identity">
-                <strong>{crewDisplayName(candidate.id)}</strong>
+                <strong>{candidate.name}</strong>
                 <small>{candidate.launch_desktop?.label}</small>
                 <small><i className={awake ? 'is-awake' : ''} />{awake ? 'Awake' : 'Asleep'}</small>
               </span>

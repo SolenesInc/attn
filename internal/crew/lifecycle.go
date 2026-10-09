@@ -81,9 +81,8 @@ func (l WakeLedger) Within(now time.Time) []time.Time {
 	return kept
 }
 
-func (l WakeLedger) Allows(memberID string, now time.Time) ([]time.Time, error) {
+func (l WakeLedger) Allows(name string, now time.Time) ([]time.Time, error) {
 	kept := l.Within(now)
-	name := DisplayName(memberID)
 	if l.Limit <= 0 {
 		return kept, fmt.Errorf("autonomous wakes are turned off (crew.wake_limit=%d), so %s was not woken; wake it yourself from the sidebar, or raise the limit", l.Limit, name)
 	}

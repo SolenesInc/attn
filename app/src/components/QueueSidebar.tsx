@@ -165,7 +165,8 @@ function CrewBlock() {
         <CrewRowView
           key={member}
           member={member}
-          agent={crew?.find((candidate) => candidate.id === member)?.resolved_agent}
+          name={crew?.find((candidate) => candidate.key === member)?.name}
+          agent={crew?.find((candidate) => candidate.key === member)?.resolved_agent}
           row={row}
           where={row ? where(row) : undefined}
           selected={row ? selectedId === row.session.id : false}

@@ -18,14 +18,16 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 var crewNapPrompt = prompts.RenderText("crew", "successor", prompts.Values{})
 
-func (d *Daemon) transferCrewBinding(memberID string, from protocol.SessionID, to protocol.SessionID) error {
-	_, err := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {
+func (d *Daemon) transferCrewBinding(key who.MemberKey, from protocol.SessionID, to protocol.SessionID) error {
+	memberID := key.String()
+	_, err := d.updateCrewMember(key, func(member *crew.Member) (bool, error) {
 		if member.BindingSession != from {
-			return false, fmt.Errorf("%s's day is no longer session %s; nothing was moved", crew.DisplayName(member.ID), shortSessionID(from))
+			return false, fmt.Errorf("%s's day is no longer session %s; nothing was moved", d.storedMemberName(member.Key.String()), shortSessionID(from))
 		}
 		member.BindingSession = to
 		return true, nil
@@ -36,7 +38,7 @@ func (d *Daemon) transferCrewBinding(memberID string, from protocol.SessionID, t
 
 	d.invalidateGardenSeedParties("crew handoff")
 	d.publishFact(FactCrewBound, memberID, nil)
-	d.logf("crew: %s's binding moved from session %s to %s", crew.DisplayName(memberID), from, to)
+	d.logf("crew: %s's binding moved from session %s to %s", memberID, from, to)
 	return nil
 }
 
@@ -86,9 +88,9 @@ func (d *Daemon) crewHandoffLocked(sessionID protocol.SessionID, note string, re
 	}
 	var filedLetter string
 	defer func() {
-		current, _, readErr := d.crewMember(member.ID)
+		current, _, readErr := d.crewMember(member.Key)
 		if readErr != nil {
-			d.logf("crew: settling %s's restart after the handoff: %v", crew.DisplayName(member.ID), readErr)
+			d.logf("crew: settling %s's restart after the handoff: %v", member.Key.String(), readErr)
 			return
 		}
 		restart := current.Restart
@@ -97,23 +99,23 @@ func (d *Daemon) crewHandoffLocked(sessionID protocol.SessionID, note string, re
 			return
 		}
 		if err != nil {
-			d.failCrewRestart(member.ID, restart.RequestID, sessionID, filedLetter, err)
+			d.failCrewRestart(member.Key, restart.RequestID, sessionID, filedLetter, err)
 			return
 		}
 		if result == nil {
 			return
 		}
 		if result.NapError != nil {
-			d.failCrewRestart(member.ID, restart.RequestID, sessionID, result.Path, errors.New(*result.NapError))
+			d.failCrewRestart(member.Key, restart.RequestID, sessionID, result.Path, errors.New(*result.NapError))
 			return
 		}
 		if protocol.Deref(result.Outcome) != protocol.CrewDayCloseNap || result.SessionID == nil {
 			if restart.State != crew.RestartFailed {
-				d.failCrewRestart(member.ID, restart.RequestID, sessionID, result.Path, errors.New("the day ended without starting a successor"))
+				d.failCrewRestart(member.Key, restart.RequestID, sessionID, result.Path, errors.New("the day ended without starting a successor"))
 			}
 			return
 		}
-		d.completeCrewRestart(member.ID, restart.RequestID, sessionID, result.Path, *result.SessionID)
+		d.completeCrewRestart(member.Key, restart.RequestID, sessionID, result.Path, *result.SessionID)
 	}()
 	path, err := d.crewLetterForHandoff(member, sessionID, note, retry)
 	if err != nil {
@@ -128,20 +130,21 @@ func (d *Daemon) crewHandoffLocked(sessionID protocol.SessionID, note string, re
 		close = protocol.CrewDayCloseSleep
 	}
 
-	result = &protocol.CrewHandoffResult{Member: member.ID, Path: path}
+	result = &protocol.CrewHandoffResult{Member: member.Key.String(),
+		Name: d.memberName(member.Key), Path: path}
 	teardown, err := d.prepareSessionTeardown(sessionID)
 	if err != nil {
-		return nil, fmt.Errorf("prepare %s's day to close: %w", crew.DisplayName(member.ID), err)
+		return nil, fmt.Errorf("prepare %s's day to close: %w", d.storedMemberName(member.Key.String()), err)
 	}
 	if d.crewDayEndsHere(close, time.Now()) {
 		d.closeNappedSession(sessionID, teardown)
-		d.logf("crew: %s went to sleep — session %s ended and nobody was woken behind it", crew.DisplayName(member.ID), sessionID)
+		d.logf("crew: %s went to sleep — session %s ended and nobody was woken behind it", member.Key.String(), sessionID)
 		result.Outcome = protocol.Ptr(protocol.CrewDayCloseSleep)
 		return result, nil
 	}
 	newSessionID, err := d.crewNap(member, sessionID, teardown)
 	if err != nil {
-		d.logf("crew: %s's letter is filed but the nap did not run: %v", crew.DisplayName(member.ID), err)
+		d.logf("crew: %s's letter is filed but the nap did not run: %v", member.Key.String(), err)
 		result.NapError = protocol.Ptr(err.Error())
 		return result, nil
 	}
@@ -170,15 +173,15 @@ func (d *Daemon) crewLetterForHandoff(member crew.Member, sessionID protocol.Ses
 	}
 	if retry {
 		if !hasFiled {
-			return "", fmt.Errorf("%s's day has filed no letter yet, so there is no turnover to retry — write one with `attn handoff -m \"<your letter>\"`", crew.DisplayName(member.ID))
+			return "", fmt.Errorf("%s's day has filed no letter yet, so there is no turnover to retry — write one with `attn handoff -m \"<your letter>\"`", d.storedMemberName(member.Key.String()))
 		}
 		if err := d.validateCrewLetterPath(member, filed); err != nil {
 			return "", err
 		}
 		if _, err := os.Stat(filed); err != nil {
-			return "", fmt.Errorf("%s's filed letter is recorded at %s but is not readable there (%v); file this day's letter again with `attn handoff -m \"<your letter>\"`", crew.DisplayName(member.ID), filed, err)
+			return "", fmt.Errorf("%s's filed letter is recorded at %s but is not readable there (%v); file this day's letter again with `attn handoff -m \"<your letter>\"`", d.storedMemberName(member.Key.String()), filed, err)
 		}
-		d.logf("crew: %s is retrying its turnover with the letter already filed at %s", crew.DisplayName(member.ID), filed)
+		d.logf("crew: %s is retrying its turnover with the letter already filed at %s", member.Key.String(), filed)
 		return filed, nil
 	}
 	if err := crew.ValidateHandoffNote(note); err != nil {
@@ -187,20 +190,21 @@ func (d *Daemon) crewLetterForHandoff(member crew.Member, sessionID protocol.Ses
 	if _, err := d.validateCrewHandoffsDir(member); err != nil {
 		return "", err
 	}
-	path, err := crew.FileHandoff(member.HomeDir, member.ID, note, time.Now())
+	path, err := crew.FileHandoff(member.HomeDir, member.Key.String(), d.memberName(member.Key), note, time.Now())
 	if err != nil {
 		if errors.Is(err, crew.ErrHandoffExists) && hasFiled {
-			return "", fmt.Errorf("%s's letter for this minute is already filed at %s — if the turnover is what failed, `attn handoff --retry` runs it against that letter; if this is a correction, file it as its own letter a minute from now", crew.DisplayName(member.ID), filed)
+			return "", fmt.Errorf("%s's letter for this minute is already filed at %s — if the turnover is what failed, `attn handoff --retry` runs it against that letter; if this is a correction, file it as its own letter a minute from now", d.storedMemberName(member.Key.String()), filed)
 		}
 		return "", err
 	}
-	d.logf("crew: %s filed a letter at %s (%d bytes)", crew.DisplayName(member.ID), path, len(note))
-	d.recordCrewLetter(member.ID, sessionID, path)
+	d.logf("crew: %s filed a letter at %s (%d bytes)", member.Key.String(), path, len(note))
+	d.recordCrewLetter(member.Key, sessionID, path)
 	return path, nil
 }
 
-func (d *Daemon) recordCrewLetter(memberID string, sessionID protocol.SessionID, path string) {
-	if _, err := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {
+func (d *Daemon) recordCrewLetter(key who.MemberKey, sessionID protocol.SessionID, path string) {
+	memberID := key.String()
+	if _, err := d.updateCrewMember(key, func(member *crew.Member) (bool, error) {
 		if member.BindingSession != sessionID {
 			return false, nil
 		}
@@ -208,7 +212,7 @@ func (d *Daemon) recordCrewLetter(memberID string, sessionID protocol.SessionID,
 		member.LetterSession = sessionID
 		return true, nil
 	}); err != nil {
-		d.logf("crew: recording %s's filed letter at %s: %v", crew.DisplayName(memberID), path, err)
+		d.logf("crew: recording %s's filed letter at %s: %v", memberID, path, err)
 	}
 }
 
@@ -231,36 +235,40 @@ func (d *Daemon) crewNap(member crew.Member, oldSessionID protocol.SessionID, te
 	}
 	now := time.Now()
 	if d.UserAwayFor(now) >= d.crewAwayLimit() {
-		if err := d.chargeAutonomousWake(member.ID, now); err != nil {
+		if err := d.chargeAutonomousWake(member.Key, now); err != nil {
 			return "", err
 		}
 	}
 	spawnMsg, policy := d.crewNapSpawn(member, session)
 	launchDir, err := d.resolveCrewWorkDir(spawnMsg.Cwd)
 	if err != nil {
-		return "", fmt.Errorf("wake %s's successor in %s: %w", crew.DisplayName(member.ID), spawnMsg.Cwd, err)
+		return "", fmt.Errorf("wake %s's successor in %s: %w", d.storedMemberName(member.Key.String()), spawnMsg.Cwd, err)
 	}
 	spawnMsg.Cwd = launchDir
 	newSessionID = spawnMsg.ID
 
-	if err := d.transferCrewBinding(member.ID, oldSessionID, newSessionID); err != nil {
+	if err := d.transferCrewBinding(member.Key, oldSessionID, newSessionID); err != nil {
 		return "", err
 	}
 	undoBinding := func() {
-		if err := d.transferCrewBinding(member.ID, newSessionID, oldSessionID); err != nil {
-			d.logf("crew: could not give %s's binding back to session %s: %v", crew.DisplayName(member.ID), oldSessionID, err)
+		if err := d.transferCrewBinding(member.Key, newSessionID, oldSessionID); err != nil {
+			d.logf("crew: could not give %s's binding back to session %s: %v", member.Key.String(), oldSessionID, err)
+			return
+		}
+		if err := d.store.RecordMemberSession(member.Key, oldSessionID); err != nil {
+			d.logf("crew: restore latest session for %s: %v", member.Key, err)
 		}
 	}
 
 	if rejection := d.runSpawnPipeline(spawnMsg, policy); rejection != nil {
 		undoBinding()
-		return "", fmt.Errorf("wake %s's successor: %w", crew.DisplayName(member.ID), rejection.reason())
+		return "", fmt.Errorf("wake %s's successor: %w", d.storedMemberName(member.Key.String()), rejection.reason())
 	}
 
 	d.closeNappedSession(oldSessionID, teardown)
 	committed = true
-	d.announceBackgroundLaunch("crew", member.ID, newSessionID, crew.DisplayName(member.ID)+" handoff")
-	d.logf("crew: %s napped — session %s ended, session %s is the new day", crew.DisplayName(member.ID), oldSessionID, newSessionID)
+	d.announceBackgroundLaunch("crew", member.Key.String(), newSessionID, d.storedMemberName(member.Key.String())+" handoff")
+	d.logf("crew: %s napped — session %s ended, session %s is the new day", member.Key.String(), oldSessionID, newSessionID)
 	return newSessionID, nil
 }
 
@@ -271,20 +279,20 @@ func (d *Daemon) crewNapSpawn(member crew.Member, session *protocol.Session) (*p
 	if intent, ok := d.store.LaunchIntent(session.ID); ok {
 		spawnMsg, policy = buildStoredIntentSpawn(session, intent, cols, rows)
 	} else {
-		d.logf("crew: no launch intent for %s's closing day; the successor launches with defaults", crew.DisplayName(member.ID))
+		d.logf("crew: no launch intent for %s's closing day; the successor launches with defaults", member.Key.String())
 		spawnMsg = &protocol.SpawnSessionMessage{
 			Cmd:       protocol.CmdSpawnSession,
 			Cwd:       session.Directory,
 			Agent:     session.Agent,
 			ProfileID: session.ProfileID,
-			Label:     protocol.Ptr(crew.DisplayName(member.ID)),
+			Label:     protocol.Ptr(d.storedMemberName(member.Key.String())),
 			Cols:      cols,
 			Rows:      rows,
 		}
 	}
 	spawnMsg.Priority = session.Priority
 	spawnMsg.ID = protocol.SessionID(uuid.NewString())
-	spawnMsg.Label = protocol.Ptr(crew.DisplayName(member.ID))
+	spawnMsg.Label = protocol.Ptr(d.storedMemberName(member.Key.String()))
 	spawnMsg.InitialPrompt = protocol.Ptr(crewNapPrompt)
 	previousAgent := spawnMsg.Agent
 	spawnMsg.Agent = member.LaunchAgent()
@@ -308,11 +316,12 @@ func (d *Daemon) crewNapSpawn(member crew.Member, session *protocol.Session) (*p
 	spawnMsg.Placement = nil
 	policy.launchPlacement = d.placementBeside(session.ID)
 	if policy.launchPlacement == nil {
-		policy.launchPlacement = &launchPlacement{kind: "crew", itemID: member.ID}
+		policy.launchPlacement = &launchPlacement{kind: "crew", itemID: member.Key.String()}
 	}
 	if strings.TrimSpace(spawnMsg.Cwd) == "" {
 		spawnMsg.Cwd = member.HomeDir
 	}
+	policy.member = member.Key
 	return spawnMsg, policy
 }
 

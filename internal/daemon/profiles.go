@@ -192,6 +192,7 @@ func (d *Daemon) fillInitialProfileState(client *wsClient, event *protocol.Initi
 		client.selectProfile("")
 		return nil, 0
 	}
+	event.Crew = d.crewRoster(selected)
 	event.SelectedProfileID = protocol.Ptr(selected)
 	event.Desktops = wire
 	if d.requireHome("profiles and desktops") != nil {
@@ -252,7 +253,7 @@ func (d *Daemon) runProfileAction(client *wsClient, action, requestID string, ru
 		d.sendArrangement(client, requestID, outcome.moved)
 	}
 	if previousProfile != client.selectedProfile() {
-		d.sendGardenProfile(client)
+		d.sendProfileSnapshots(client)
 	}
 	d.sendToClient(client, result)
 	d.releaseArrangements(client)
@@ -385,11 +386,11 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 		}
 		members := 0
 		for _, member := range homes {
-			owner, err := d.store.CrewProfile(member.ID)
+			identity, err := d.store.CrewIdentity(member.Member.Key)
 			if err != nil {
 				return profileActionOutcome{}, err
 			}
-			if owner == msg.ProfileID {
+			if identity.ProfileID == msg.ProfileID {
 				members++
 			}
 		}
@@ -408,7 +409,7 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 				scoped.selectProfile(remaining.ID)
 				if scoped != client {
 					d.sendArrangement(scoped, "", nil)
-					d.sendGardenProfile(scoped)
+					d.sendProfileSnapshots(scoped)
 				}
 			}
 		})

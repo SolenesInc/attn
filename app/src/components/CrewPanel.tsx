@@ -10,7 +10,6 @@ import { useEscapeStack } from '../hooks/useEscapeStack';
 import type { DaemonSession, Seed } from '../hooks/useDaemonSocket';
 import { useHarnesses } from '../hooks/useHarnesses';
 import type { CrewMember } from '../types/generated';
-import { crewDisplayName } from '../utils/crewName';
 import { CrewCharterTab } from './CrewCharterTab';
 import { CrewHandoffsTab } from './CrewHandoffsTab';
 import { CrewLaunchTab, type CrewLaunchTabProps } from './CrewLaunchTab';
@@ -44,7 +43,7 @@ const tabs: { id: CrewTab; label: string }[] = [
 
 
 function MemberHeading({ member }: { member: CrewMember }) {
-  const name = crewDisplayName(member.id);
+  const name = member.name;
   const awake = Boolean(member.binding_session);
   return (
     <div className="crew-member-heading">
@@ -88,7 +87,7 @@ function MemberTabPanel({ tab, launch, charterEdit, charterAutosave, handoffs, s
   const member = launch.member;
   switch (tab) {
     case 'launch':
-      return <CrewLaunchTab key={member.id} {...launch} />;
+      return <CrewLaunchTab key={member.key} {...launch} />;
     case 'charter':
       return <CrewCharterTab member={member} edit={charterEdit} autosave={charterAutosave} />;
     case 'handoffs':
@@ -104,7 +103,7 @@ function RestartConfirm({ member, summary, onCancel, onConfirm }: {
   onCancel: () => void;
   onConfirm: () => void;
 }) {
-  const name = crewDisplayName(member.id);
+  const name = member.name;
   return (
     <div className="crew-confirm-backdrop">
       <dialog open className="crew-confirm" role="alertdialog" aria-modal="true" aria-labelledby="crew-confirm-title">
@@ -180,7 +179,7 @@ function CrewPanelSurface({
   const { selectedMember, tab, pending: navigationPending, navigate } = useCrewNavigation({
     members, initialMember, rosterRef, charter: charterAutosave, onClose, onOpenSeed,
   });
-  const selectedMemberId = selectedMember?.id;
+  const selectedMemberId = selectedMember?.key;
   const charterEdit = selectedMemberId ? charterAutosave.read(selectedMemberId) : undefined;
 
   const requestClose = useCallback(() => navigate({ kind: 'close' }), [navigate]);
@@ -201,7 +200,7 @@ function CrewPanelSurface({
   const visibleMembers = useMemo(() => {
     const query = filter.trim().toLowerCase();
     if (!query) return members;
-    return members.filter((member) => crewDisplayName(member.id).toLowerCase().includes(query));
+    return members.filter((member) => member.name.toLowerCase().includes(query));
   }, [filter, members]);
 
   const edit = selectedMemberId ? autosave.read(selectedMemberId) : undefined;
@@ -211,7 +210,7 @@ function CrewPanelSurface({
     if (!member || edit?.state !== 'saved') return;
     setConfirming(false);
     if (member.binding_session) restarts.start(member);
-    else onWakeMember(member.id);
+    else onWakeMember(member.key);
   };
 
   return (
@@ -236,7 +235,7 @@ function CrewPanelSurface({
             <CrewRoster
               members={members}
               visibleMembers={visibleMembers}
-              selectedId={member?.id}
+              selectedId={member?.key}
               filter={filter}
               listRef={rosterRef}
               saveState={(memberId) => autosave.read(memberId)?.state}
@@ -268,7 +267,7 @@ function CrewPanelSurface({
                       onRestart: () => setConfirming(true),
                       onResendRestart: () => restarts.resend(member),
                       onReviewRestart: () => {
-                        restarts.discard(member.id);
+                        restarts.discard(member.key);
                         setConfirming(true);
                       },
                     }}

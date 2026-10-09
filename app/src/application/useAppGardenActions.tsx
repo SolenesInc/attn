@@ -5,7 +5,7 @@ import { type SeedPlacement, type SeedReviewActionContext } from '../hooks/useDa
 import { useDockPanels } from '../hooks/useDockPanels';
 import { useDaemonStore } from '../store/daemonSessions';
 import { gardenPathToSeed, useGardenWalk } from '../store/gardenWalk';
-import { crewDisplayName } from '../utils/crewName';
+import { memberName } from '../store/daemonSessions';
 import { openThenShow } from './openThenShow';
 interface Options {
   sendOpenSeed: ReturnType<typeof useDaemonApi>['sendOpenSeed'];
@@ -154,7 +154,7 @@ export function useAppGardenActions({
         .then((result) => handleSelectSession(result.sessionId))
         .catch((error) =>
           showError(
-            error instanceof Error ? error.message : `Failed to wake ${crewDisplayName(member)}`,
+            error instanceof Error ? error.message : `Failed to wake ${memberName(member)}`,
           ),
         );
     },
@@ -167,7 +167,7 @@ export function useAppGardenActions({
         showError(
           error instanceof Error
             ? error.message
-            : `Failed to ask ${crewDisplayName(member)} to sleep`,
+            : `Failed to ask ${memberName(member)} to sleep`,
         ),
       );
     },

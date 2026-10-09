@@ -66,7 +66,7 @@ func crewRoster(t *testing.T, cli *client.Client) []protocol.CrewMember {
 func crewRosterMember(t *testing.T, cli *client.Client, id string) protocol.CrewMember {
 	t.Helper()
 	members := crewRoster(t, cli)
-	index := slices.IndexFunc(members, func(m protocol.CrewMember) bool { return m.ID == id })
+	index := slices.IndexFunc(members, func(m protocol.CrewMember) bool { return m.Key == id })
 	if index < 0 {
 		t.Fatalf("no member %q in the roster", id)
 	}
@@ -141,7 +141,7 @@ func TestWakingAMemberStartsOneDayWhereItWorksAndBindsItOnTheRoster(t *testing.T
 	}
 	testworld.Await(app, protocol.EventCrewUpdated, func(e protocol.CrewUpdatedMessage) bool {
 		return slices.ContainsFunc(e.Members, func(m protocol.CrewMember) bool {
-			return m.ID == "trellis" && protocol.Deref(m.BindingSession) == woken.SessionID
+			return m.Key == "trellis" && protocol.Deref(m.BindingSession) == woken.SessionID
 		})
 	})
 	if got := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession); got != woken.SessionID {
@@ -175,10 +175,10 @@ func TestCrewHomesJoinTheRosterAsleepAndAClosedDayReleasesItsMember(t *testing.T
 	}
 	for _, member := range members {
 		if member.BindingSession != nil {
-			t.Errorf("%s was imported awake in %s", member.ID, *member.BindingSession)
+			t.Errorf("%s was imported awake in %s", member.Key, *member.BindingSession)
 		}
 		if _, err := os.Stat(member.CharterPath); err != nil {
-			t.Errorf("%s's charter path does not point at its charter: %v", member.ID, err)
+			t.Errorf("%s's charter path does not point at its charter: %v", member.Key, err)
 		}
 	}
 
@@ -436,7 +436,7 @@ func TestRegisteringAsAMemberBindsOneLiveSessionPerMember(t *testing.T) {
 	bindings := func() map[string]string {
 		out := map[string]string{}
 		for _, member := range crewRoster(t, cli) {
-			out[member.ID] = string(protocol.Deref(member.BindingSession))
+			out[member.Key] = string(protocol.Deref(member.BindingSession))
 		}
 		return out
 	}
@@ -444,7 +444,7 @@ func TestRegisteringAsAMemberBindsOneLiveSessionPerMember(t *testing.T) {
 	if err := register("sess-first", "keel"); err != nil {
 		t.Fatal(err)
 	}
-	crewErrorContains(t, register("sess-second", "Keel"), "Keel", "sess-fir")
+	crewErrorContains(t, register("sess-second", "keel"), "Keel", "sess-fir")
 	if err := register("sess-first", "keel"); err != nil {
 		t.Fatalf("a member's own session re-announcing itself was refused: %v", err)
 	}
@@ -487,11 +487,11 @@ func TestARestartReimportsCrewHomesWithoutRewritingTheRoster(t *testing.T) {
 	writeCrewHomeFile(t, w, "scratch", "note.md", "not a member\n")
 	writeCrewHomeFile(t, w, "Not A Member", crew.CharterFileName, "# nope\n")
 	writeCrewHomeFile(t, w, crew.DaemonID, crew.CharterFileName, "# attn\n")
-	writeCrewHomeFile(t, w, strings.Repeat("a", crew.MaxIDChars+1), crew.CharterFileName, "# long\n")
+	writeCrewHomeFile(t, w, strings.Repeat("a", 40+1), crew.CharterFileName, "# long\n")
 	w.restart()
 	cli = w.Client()
-	if got := len(crewRoster(t, cli)); got != 4 {
-		t.Fatalf("roster = %d members after a home and some non-homes were added by hand, want 4", got)
+	if got := len(crewRoster(t, cli)); got != 5 {
+		t.Fatalf("roster = %d members after a home and some non-homes were added by hand, want 5", got)
 	}
 	crewRosterMember(t, cli, "sable")
 }
@@ -695,7 +695,7 @@ func TestADefaultModelOrEffortChangeReachesTheRoster(t *testing.T) {
 	} {
 		setSetting(t, app, change.key, change.value)
 		testworld.Await(app, protocol.EventCrewUpdated, func(e protocol.CrewUpdatedMessage) bool {
-			return slices.ContainsFunc(e.Members, func(m protocol.CrewMember) bool { return m.ID == "trellis" && change.resolved(m) == change.value })
+			return slices.ContainsFunc(e.Members, func(m protocol.CrewMember) bool { return m.Key == "trellis" && change.resolved(m) == change.value })
 		})
 	}
 }
@@ -750,7 +750,7 @@ func TestCrewEditsFromTheAppAreRevisionChecked(t *testing.T) {
 			t.Fatalf("after the refused nap alder is bound to %q, want alder-day", got)
 		}
 		testworld.Await(app, protocol.EventCrewUpdated, func(e protocol.CrewUpdatedMessage) bool {
-			return slices.ContainsFunc(e.Members, func(m protocol.CrewMember) bool { return m.ID == "alder" && m.Revision > awake })
+			return slices.ContainsFunc(e.Members, func(m protocol.CrewMember) bool { return m.Key == "alder" && m.Revision > awake })
 		})
 		if afterLetter := save("save-after-letter", awake, "low"); !afterLetter.Conflict {
 			t.Fatalf("a save carrying the revision from before the letter = %+v, want a conflict", afterLetter)

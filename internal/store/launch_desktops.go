@@ -78,15 +78,14 @@ func (s *Store) LaunchDesktopLabel(desktopID string) (string, error) {
 	return label, err
 }
 
-func loadLaunchItem(tx *sql.Tx, kind, id string) (LaunchDesktopItem, error) {
+func loadNamedLaunchItem(tx *sql.Tx, kind, id string) (LaunchDesktopItem, error) {
 	item := LaunchDesktopItem{Kind: kind, ID: id}
 	var err error
 	switch kind {
 	case "automation":
 		err = tx.QueryRow(`SELECT name,profile_id FROM automation_definitions WHERE id = ? AND deleted_at = ''`, id).Scan(&item.Name, &item.ProfileID)
 	case "crew":
-		item.Name = id
-		err = tx.QueryRow(`SELECT profile_id FROM crew_profiles WHERE member_id = ?`, id).Scan(&item.ProfileID)
+		err = tx.QueryRow(`SELECT name, profile_id FROM crew_members WHERE member_key = ?`, id).Scan(&item.Name, &item.ProfileID)
 	default:
 		return item, profiles.Errorf(profiles.CodeInvalid, "unknown launch desktop kind %q", kind)
 	}
@@ -117,7 +116,7 @@ func loadLaunchItem(tx *sql.Tx, kind, id string) (LaunchDesktopItem, error) {
 }
 
 func loadCurrentLaunchItem(tx *sql.Tx, kind, id string) (LaunchDesktopItem, error) {
-	item, err := loadLaunchItem(tx, kind, id)
+	item, err := loadNamedLaunchItem(tx, kind, id)
 	var missing *profiles.Error
 	if item.DesktopID != "" && errors.As(err, &missing) && missing.Code == profiles.CodeNotFound {
 		item.Label = launchDesktopLabel(item.Name, profiles.DesktopSlot(item.DesktopID))
@@ -128,7 +127,7 @@ func loadCurrentLaunchItem(tx *sql.Tx, kind, id string) (LaunchDesktopItem, erro
 
 func currentLaunchItems(tx *sql.Tx) ([]LaunchDesktopItem, error) {
 	items := []LaunchDesktopItem{}
-	for _, query := range launchItemQueries {
+	for _, query := range namedLaunchItemQueries {
 		ids, err := queryColumn[string](tx, query[1])
 		if err != nil {
 			return nil, err
@@ -181,7 +180,7 @@ func startOnOwnDesktop(tx *sql.Tx, now, kind, id string) error {
 }
 
 func createOwnLaunchDesktop(tx *sql.Tx, now, kind, id string, confirmed bool) error {
-	item, err := loadLaunchItem(tx, kind, id)
+	item, err := loadNamedLaunchItem(tx, kind, id)
 	if err != nil || item.DesktopID != "" {
 		return err
 	}
@@ -224,20 +223,20 @@ func (s *Store) SetLaunchDesktop(kind, id string, setting LaunchDesktopSetting) 
 	})
 }
 
-var launchItemQueries = [][2]string{
+var namedLaunchItemQueries = [][2]string{
 	{"automation", `SELECT id FROM automation_definitions WHERE deleted_at = '' AND profile_id IN (SELECT id FROM profiles WHERE deleted_at = '') ORDER BY id`},
-	{"crew", `SELECT member_id FROM crew_profiles WHERE profile_id IN (SELECT id FROM profiles WHERE deleted_at = '') ORDER BY member_id`},
+	{"crew", `SELECT member_key FROM crew_members WHERE profile_id IN (SELECT id FROM profiles WHERE deleted_at = '') ORDER BY member_key`},
 }
 
-func launchItems(tx *sql.Tx) ([]LaunchDesktopItem, error) {
+func namedLaunchItems(tx *sql.Tx) ([]LaunchDesktopItem, error) {
 	items := []LaunchDesktopItem{}
-	for _, query := range launchItemQueries {
+	for _, query := range namedLaunchItemQueries {
 		ids, err := queryColumn[string](tx, query[1])
 		if err != nil {
 			return nil, err
 		}
 		for _, id := range ids {
-			item, err := loadLaunchItem(tx, query[0], id)
+			item, err := loadNamedLaunchItem(tx, query[0], id)
 			if err != nil {
 				return nil, err
 			}
@@ -271,7 +270,7 @@ func (s *Store) PrepareLaunchMigration() error {
 				}
 			}
 		}
-		items, err := launchItems(tx)
+		items, err := namedLaunchItems(tx)
 		if err != nil {
 			return err
 		}

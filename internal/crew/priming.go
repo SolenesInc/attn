@@ -33,7 +33,7 @@ type PlotReady struct {
 }
 
 type Priming struct {
-	Member        string
+	Name          string
 	HomeDir       string
 	CharterPath   string
 	CWD           string
@@ -55,12 +55,12 @@ func SortHandoffNames(names []string) {
 }
 
 func (p Priming) Block() string {
-	if strings.TrimSpace(p.Member) == "" {
+	if strings.TrimSpace(p.Name) == "" {
 		return ""
 	}
 	handoffsDir := filepath.Join(p.HomeDir, HandoffsDirName)
 	return prompts.RenderText("crew", "priming", prompts.Values{
-		"display_name":     DisplayName(p.Member),
+		"display_name":     p.Name,
 		"home_dir":         p.HomeDir,
 		"has_charter":      fmt.Sprint(strings.TrimSpace(p.Charter) != ""),
 		"charter_file":     CharterFileName,
@@ -77,7 +77,7 @@ func (p Priming) Block() string {
 }
 
 func (p Priming) GardenSection() string {
-	if strings.TrimSpace(p.Member) == "" {
+	if strings.TrimSpace(p.Name) == "" {
 		return ""
 	}
 	total := ""

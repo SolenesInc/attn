@@ -22,9 +22,11 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/sessionstate"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type internalSpawnPolicy struct {
+	member                who.MemberKey
 	launchPlacement       *launchPlacement
 	unattendedLaunch      launchcontract.UnattendedLaunchSpec
 	approvalRoute         launchcontract.ApprovalRoute
@@ -417,6 +419,11 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{err: fmt.Errorf("persist session launch intent: %w", err)}
 	}
+	if !req.policy.member.IsZero() {
+		if err := d.store.RecordMemberSession(req.policy.member, session.ID); err != nil {
+			d.logf("crew: record member session %s: %v", session.ID, err)
+		}
+	}
 	plan.priorIntent, plan.hadPriorIntent = d.store.LaunchIntent(session.ID)
 	intent := launchIntentFromSpawnOptions(plan.spawnOpts, plan.isChief)
 	intent.AutoMode = msg.AutoMode
@@ -578,6 +585,11 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		}
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{err: persistErr}
+	}
+	if !req.policy.member.IsZero() {
+		if err := d.store.RecordMemberSession(req.policy.member, session.ID); err != nil {
+			d.logf("crew: record member session %s: %v", session.ID, err)
+		}
 	}
 	fact := FactSessionRegistered
 	if req.existingSession != nil {

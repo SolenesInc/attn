@@ -18,7 +18,12 @@ const agentShortIDLength = 8
 const agentPeekSnapshotTimeout = modelCaptureSnapshotTimeout
 
 func (d *Daemon) handleAgentPeek(conn net.Conn, msg *protocol.AgentPeekMessage) {
-	session, errCode := d.resolveAgentPeekTarget(msg.TargetSessionID)
+	r, err := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID)
+	if err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
+	session, errCode := d.resolveAgentPeekTarget(r, msg.TargetSessionID)
 	if session == nil {
 		d.sendError(conn, errCode)
 		return
@@ -29,21 +34,28 @@ func (d *Daemon) handleAgentPeek(conn net.Conn, msg *protocol.AgentPeekMessage) 
 	})
 }
 
-func (d *Daemon) resolveAgentPeekTarget(target string) (*protocol.Session, string) {
+func (d *Daemon) resolveAgentPeekTarget(r requester, target string) (*protocol.Session, string) {
 	target = protocol.TrimID(target)
 	if target == "" {
 		return nil, "session_not_found"
 	}
-	if session := d.store.Get(protocol.SessionID(target)); session != nil {
+	if session := d.store.Get(protocol.SessionID(target)); session != nil && session.ProfileID == r.ProfileID() {
 		return session, ""
 	}
 	if status, err := d.enrollmentStatus(); err == nil && status.IsHome() {
-		member, found, err := d.resolveCrewMember(target)
+		identity, found, err := d.store.CrewNamed(r.ProfileID(), target)
+		if key, ok := strings.CutPrefix(target, "member:"); ok {
+			identity, found, err = d.store.CrewKeyed(r.ProfileID(), key)
+		}
 		if err != nil {
 			d.logf("agent peek crew resolution: target=%q err=%v", target, err)
 			return nil, "internal_error"
 		}
 		if found {
+			member, _, err := d.crewMember(identity.Key)
+			if err != nil {
+				return nil, "internal_error"
+			}
 			if !d.crewBindingLive(member) {
 				return nil, "crew_member_asleep"
 			}
@@ -53,7 +65,11 @@ func (d *Daemon) resolveAgentPeekTarget(target string) (*protocol.Session, strin
 			return nil, "crew_member_asleep"
 		}
 	}
-	return d.resolveSessionByIDOrPrefix(target)
+	session, code := d.resolveSessionByIDOrPrefix(target)
+	if session != nil && session.ProfileID != r.ProfileID() {
+		return nil, "session_not_found"
+	}
+	return session, code
 }
 
 func (d *Daemon) resolveSessionByIDOrPrefix(target string) (*protocol.Session, string) {

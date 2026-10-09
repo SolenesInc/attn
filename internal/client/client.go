@@ -175,7 +175,7 @@ func (c *Client) connect() (net.Conn, error) {
 	return conn, nil
 }
 
-func (c *Client) WithGardenProfile(profileID string, sessionID protocol.SessionID) *Client {
+func (c *Client) WithRequester(profileID string, sessionID protocol.SessionID) *Client {
 	scoped := *c
 	scoped.gardenProfile, scoped.gardenSession = profileID, sessionID
 	return &scoped
@@ -192,7 +192,7 @@ func (c *Client) send(msg interface{}) (*protocol.Response, error) {
 			return nil, err
 		}
 		cmd, _ := fields["cmd"].(string)
-		if strings.HasPrefix(cmd, "seed_") || cmd == protocol.CmdOpenSeed || cmd == protocol.CmdDelegateStatus || cmd == protocol.CmdDelegate {
+		if strings.HasPrefix(cmd, "seed_") || cmd == protocol.CmdOpenSeed || cmd == protocol.CmdDelegateStatus || cmd == protocol.CmdDelegate || strings.HasPrefix(cmd, "crew_") || cmd == protocol.CmdAgentPeek {
 			if fields["profile_id"] == nil || fields["profile_id"] == "" {
 				fields["profile_id"] = c.gardenProfile
 			}
@@ -694,7 +694,7 @@ func (c *Client) Delegate(request protocol.DelegateMessage) (*protocol.DelegateR
 	if request.SourceSessionID != nil {
 		sessionID = *request.SourceSessionID
 	}
-	c = c.WithGardenProfile(profileID, sessionID)
+	c = c.WithRequester(profileID, sessionID)
 	op, err := c.StartDelegation(request)
 	if err != nil {
 		return nil, err

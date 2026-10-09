@@ -50,6 +50,7 @@ import (
 	"github.com/victorarias/attn/internal/statetrace"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/transcript"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type workerReconcileReport struct {
@@ -2701,6 +2702,8 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleCrewSleep(conn, msg.(*protocol.CrewSleepMessage))
 	case protocol.CmdCrewSet:
 		d.handleCrewSet(conn, msg.(*protocol.CrewSetMessage))
+	case protocol.CmdCrewRename:
+		d.handleCrewRename(conn, msg.(*protocol.CrewRenameMessage))
 	case protocol.CmdCrewRestart:
 		d.handleCrewRestart(conn, msg.(*protocol.CrewRestartMessage))
 	case protocol.CmdCrewPrime:
@@ -3769,7 +3772,12 @@ func (d *Daemon) handleInjectTestSession(conn net.Conn, msg *protocol.InjectTest
 	}
 	msg.Session.ProfileID = profile.ID
 	if member := strings.TrimSpace(protocol.Deref(msg.Session.CrewMember)); member != "" {
-		if _, err := d.claimCrewBinding(member, msg.Session.ID); err != nil {
+		key, err := who.ParseMemberKey(member)
+		if err != nil {
+			d.sendError(conn, err.Error())
+			return
+		}
+		if _, err := d.claimCrewBinding(key, msg.Session.ID); err != nil {
 			d.sendError(conn, fmt.Sprintf("crew bind %q: %v", member, err))
 			return
 		}
@@ -3778,6 +3786,14 @@ func (d *Daemon) handleInjectTestSession(conn net.Conn, msg *protocol.InjectTest
 		d.releaseCrewBindingIfSession(msg.Session.ID)
 		d.sendError(conn, err.Error())
 		return
+	}
+	if stored := protocol.Deref(msg.Session.CrewMember); stored != "" {
+		member, _, err := d.resolveCrewMember(stored)
+		if err == nil {
+			if err := d.store.RecordMemberSession(member.Key, msg.Session.ID); err != nil {
+				d.logf("crew: record injected member session: %v", err)
+			}
+		}
 	}
 	d.publishFact(FactSessionRegistered, string(msg.Session.ID), nil)
 	if !protocol.Deref(msg.Unplaced) {

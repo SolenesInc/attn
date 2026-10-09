@@ -19,7 +19,7 @@ func crewRoster(t *testing.T, s *testworld.Stack) map[string]protocol.CrewMember
 	s.Attn("crew", "list", "--json").JSON(t, &members)
 	roster := map[string]protocol.CrewMember{}
 	for _, member := range members {
-		roster[member.ID] = member
+		roster[member.Key] = member
 	}
 	return roster
 }
@@ -189,5 +189,22 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 	receipt, _, _ := strings.Cut(unknown.Stderr, "\n")
 	if requestID, printed := strings.CutPrefix(receipt, "crew restart request: request_id="); unknown.Code != 1 || !printed || strings.TrimSpace(requestID) == "" {
 		t.Fatalf("a restart without --request-id exited %d with stderr %q, want a generated receipt first", unknown.Code, unknown.Stderr)
+	}
+}
+
+func TestCrewRenameKeepsTheKeyAndShowsTheNewName(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	writeCharter(t, s, "keel")
+	s.Start()
+	requireStdout(t, s.Attn("crew", "rename", "Keel", "Alfred"), "Keel is now Alfred (member:keel)")
+	requireStdout(t, s.Attn("crew", "list"), "Alfred")
+	result := s.Attn("crew", "rename", "Alfred", "Chief")
+	if result.Code != 1 || !strings.Contains(result.Stderr, "reserved") {
+		t.Fatalf("rename refusal: %+v", result)
+	}
+	roster := crewRoster(t, s)
+	if roster["keel"].Name != "Alfred" {
+		t.Fatalf("roster: %+v", roster)
 	}
 }

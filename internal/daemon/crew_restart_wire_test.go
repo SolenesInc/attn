@@ -198,7 +198,7 @@ func completedCrewRestart(app *testworld.Peer, member, requestID string) protoco
 	app.T.Helper()
 	completed := func(members []protocol.CrewMember) (protocol.CrewMember, bool) {
 		index := slices.IndexFunc(members, func(m protocol.CrewMember) bool {
-			return m.ID == member && m.Restart != nil && m.Restart.RequestID == requestID && m.Restart.State == protocol.CrewRestartStateCompleted
+			return m.Key == member && m.Restart != nil && m.Restart.RequestID == requestID && m.Restart.State == protocol.CrewRestartStateCompleted
 		})
 		if index < 0 {
 			return protocol.CrewMember{}, false

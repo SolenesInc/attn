@@ -14,7 +14,7 @@ func TestGardenProfileMigrationUsesTheConvertedDefaultIdentity(t *testing.T) {
 	for _, state := range []string{garden.StatusPlanted, garden.StatusGrowing, garden.StatusDormant, garden.StatusHarvested, garden.StatusWithered} {
 		t.Run(state, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "attn.db")
-			s, err := newSeededStore(path)
+			s, err := newStoreAtVersion(path, 1791587735114907-1)
 			if err != nil {
 				t.Fatal(err)
 			}

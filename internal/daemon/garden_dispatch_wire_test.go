@@ -41,7 +41,7 @@ func TestADelegateShowsItsDispatcherAcrossTheDispatchersLife(t *testing.T) {
 	watching := w.App()
 	firstDayRun.Exit(0)
 	testworld.Await(watching, protocol.EventCrewUpdated, func(e protocol.CrewUpdatedMessage) bool {
-		return slices.ContainsFunc(e.Members, func(m protocol.CrewMember) bool { return m.ID == "alder" && m.BindingSession == nil })
+		return slices.ContainsFunc(e.Members, func(m protocol.CrewMember) bool { return m.Key == "alder" && m.BindingSession == nil })
 	})
 	shows("once alder's day ended and alder sleeps", fromAlder, "", "alder")
 

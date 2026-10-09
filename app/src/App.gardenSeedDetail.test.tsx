@@ -1,7 +1,7 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { describe, expect, it } from 'vitest';
-import { daemonSession } from './test/daemonFixtures';
+import { crewMember, daemonSession } from './test/daemonFixtures';
 import { gardenRegion, openGarden, openRow, partOf, planted, plot, row, seedHeading } from './test/garden';
 import { gesture } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
@@ -122,7 +122,7 @@ describe('App garden seed detail', () => {
           planted('s-grow33', 'claimed by an unknown session', { status: 'growing', tender_session: '4915e44d-fadd-4dc8-82cf-671cbbf872c0' }),
           planted('s-idle11', 'unclaimed'),
         ],
-        { sessions: [daemonSession('s1'), daemonSession('sess-b', { label: 'Garden polish' })] },
+        { initial: { crew: [crewMember('trellis')] }, sessions: [daemonSession('s1'), daemonSession('sess-b', { label: 'Garden polish' })] },
       );
 
       expect(row('tended by crew')).toHaveTextContent('growing');
@@ -135,7 +135,7 @@ describe('App garden seed detail', () => {
 
     it('follows a seed through its life as the pushes arrive, and says why it closed once opened', async () => {
       const life = planted('s-life11', 'a whole life');
-      const garden = await openGarden([life]);
+      const garden = await openGarden([life], { initial: { crew: [crewMember('trellis')] } });
       expect(row('a whole life')).not.toHaveTextContent('planted');
 
       garden.push([{ ...life, status: 'growing', tender_member: 'trellis', rev: 2 }]);

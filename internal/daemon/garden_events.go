@@ -293,7 +293,7 @@ func (r gardenEventRoles) ResolveSeedRole(seedID string, role events.Role) ([]st
 			if !found {
 				return nil, nil
 			}
-			return []string{inbox.ToMember(member.ID).String()}, nil
+			return []string{inbox.ToMember(member.Key.String()).String()}, nil
 		}
 		sessionID, err := r.daemon.localGardenTenderSession(seed)
 		if errors.Is(err, errRemoteGardenTender) {

@@ -60,7 +60,7 @@ const json = (args) => {
   const output = runAttn(args);
   return JSON.parse(output.slice(output.indexOf(args[0] === 'crew' && args[1] === 'list' ? '[' : '{')));
 };
-const crewMember = (id) => json(['crew', 'list', '--json']).find((member) => member.id === id);
+const crewMember = (id) => json(['crew', 'list', '--json']).find((member) => member.key === id);
 const click = (selector) => client.request('dom_click', { selector });
 const type = (selector, text) => client.request('dom_type', { selector, text });
 const panelText = async () => (await client.request('dom_text', { selector: '[data-testid="crew-panel"]' })).text;
@@ -74,7 +74,7 @@ const settled = (promise) => { promise.catch(() => {}); return promise; };
 const waitForCrew = (member, predicate, description, timeoutMs = 30_000) => settled(observer.waitForMessage(
   (message) => {
     if (message.event !== 'crew_updated') return null;
-    const current = (message.members || []).find((entry) => entry.id === member);
+    const current = (message.members || []).find((entry) => entry.key === member);
     return current && predicate(current) ? current : null;
   },
   description,
@@ -284,6 +284,17 @@ try {
   await waitForDom(`[data-testid="queue-crew-${awake}"][data-crew-state="awake"]`);
   await waitForDom(`[data-testid="queue-crew-${asleep}"]`);
   await waitForDom(`[data-testid="queue-crew-${history}"]`);
+  const renamedName = `Alfred-${memberSuffix}`;
+  const renamedRoster = waitForCrew(awake, (member) => member.name === renamedName, 'the renamed crew roster');
+  const renamed = json(['crew', 'rename', awake, renamedName, '--json']);
+  await renamedRoster;
+  runner.assert(renamed.member === awake && renamed.session_id === firstSession, 'rename keeps the awake identity', renamed);
+  await waitForDom(`[data-testid="queue-crew-${awake}"]`, { textIncludes: renamedName });
+  await click('[data-testid="manage-crew"]');
+  await waitForDom(`[data-testid="crew-roster-${awake}"]`, { textIncludes: renamedName });
+  await screenshot('crew-renamed.png');
+  await click('[data-testid="crew-panel-close"]');
+  runAttn(['crew', 'rename', renamedName, `Alder-${memberSuffix}`]);
   const dashboardSessions = await client.request('list_sessions');
   runner.assert(shownAgentId(dashboardSessions) === null,
     'Crew opens from the dashboard without a placement session', dashboardSessions);

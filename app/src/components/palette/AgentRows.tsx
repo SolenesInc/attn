@@ -2,7 +2,7 @@ import { SessionPriority } from '../SessionPriority';
 import { useDaemonStore } from '../../store/daemonSessions';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
 import type { ShortcutId } from '../../shortcuts/registry';
-import { crewDisplayName } from '../../utils/crewName';
+import { useMemberName } from '../../store/daemonSessions';
 import { formatTurnAge } from '../../utils/queueBands';
 import { isSnoozed } from '../../utils/snoozeDurations';
 import { tileKindLabel } from '../../utils/tilePresentation';
@@ -85,10 +85,11 @@ export function AgentSessionRow({
 }
 
 function SleepingMember({ member, showCrewDetails }: { member: string; showCrewDetails: boolean }) {
-  const label = useDaemonStore((state) => showCrewDetails ? state.crew.find((entry) => entry.id === member)?.launch_desktop?.label : undefined);
+  const name = useMemberName(member);
+  const label = useDaemonStore((state) => showCrewDetails ? state.crew.find((entry) => entry.key === member)?.launch_desktop?.label : undefined);
   return <div className="unified-palette-row">
     <span className="unified-palette-dot is-asleep" />
-    <span className="unified-palette-name">{crewDisplayName(member)}{showCrewDetails && <span className="unified-palette-muted"> · crew{label ? ` · ${label}` : ''}</span>}</span>
+    <span className="unified-palette-name">{name}{showCrewDetails && <span className="unified-palette-muted"> · crew{label ? ` · ${label}` : ''}</span>}</span>
     <kbd className="unified-palette-slot" />
     <span className="unified-palette-pill">asleep</span>
     <span className="unified-palette-age">wake</span>

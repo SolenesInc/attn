@@ -42,7 +42,7 @@ describe('App crew wake and sleep', () => {
 
     await wakeKeel(daemon);
 
-    expect(daemon.sentOf('crew_wake')).toEqual([expect.objectContaining({ member: 'keel' })]);
+    expect(daemon.sentOf('crew_wake')).toEqual([expect.objectContaining({ member: 'member:keel' })]);
     expect(shownDesktops()).toEqual(['desktop-sess-keel']);
   });
 
@@ -79,7 +79,7 @@ describe('App crew wake and sleep', () => {
 
     await askKeelToSleep(daemon);
 
-    expect(daemon.sentOf('crew_sleep')).toEqual([expect.objectContaining({ member: 'keel' })]);
+    expect(daemon.sentOf('crew_sleep')).toEqual([expect.objectContaining({ member: 'member:keel' })]);
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
@@ -214,7 +214,7 @@ describe('App crew in the queue', () => {
       expect(daemon.sentOf('crew_wake')).toEqual([]);
       await gesture(daemon, () => fireEvent.click(sun('trellis')));
 
-      expect(daemon.sentOf('crew_wake')).toEqual([expect.objectContaining({ member: 'trellis' })]);
+      expect(daemon.sentOf('crew_wake')).toEqual([expect.objectContaining({ member: 'member:trellis' })]);
     });
 
     it('wakes once however often the breaking sun is clicked', async () => {
@@ -223,7 +223,7 @@ describe('App crew in the queue', () => {
       for (let click = 0; click < 4; click += 1) fireEvent.click(sun('trellis'));
       await daemon.idle();
 
-      expect(daemon.sentOf('crew_wake')).toEqual([expect.objectContaining({ member: 'trellis' })]);
+      expect(daemon.sentOf('crew_wake')).toEqual([expect.objectContaining({ member: 'member:trellis' })]);
     });
 
     it('keeps the arm while focus moves within its own row', async () => {
@@ -233,7 +233,7 @@ describe('App crew in the queue', () => {
       fireEvent.focusIn(sun('trellis'));
       await gesture(daemon, () => fireEvent.click(sun('trellis')));
 
-      expect(daemon.sentOf('crew_wake')).toEqual([expect.objectContaining({ member: 'trellis' })]);
+      expect(daemon.sentOf('crew_wake')).toEqual([expect.objectContaining({ member: 'member:trellis' })]);
     });
 
     it.each([

@@ -16,6 +16,7 @@ import (
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 var crewRequestedRestartPrompt = prompts.RenderText("crew", "restart-requested", prompts.Values{})
@@ -48,7 +49,18 @@ func crewRestartWire(restart *crew.Restart) *protocol.CrewRestart {
 }
 
 func (d *Daemon) handleCrewRestart(conn net.Conn, msg *protocol.CrewRestartMessage) {
-	result, err := d.crewRestart(strings.TrimSpace(msg.Member), strings.TrimSpace(msg.RequestID), msg.ExpectedSessionID, msg.ExpectedRevision)
+	r, scopeErr := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID)
+	if scopeErr != nil {
+		d.sendCrewError(conn, "request", scopeErr)
+		return
+	}
+	identity, scopeErr := d.resolveMember(r, msg.Member)
+	if scopeErr != nil {
+		d.sendCrewError(conn, "restart", scopeErr)
+		return
+	}
+
+	result, err := d.crewRestart(identity.Key, strings.TrimSpace(msg.RequestID), msg.ExpectedSessionID, msg.ExpectedRevision)
 	if err != nil {
 		d.sendCrewError(conn, "restart", err)
 		return
@@ -57,8 +69,15 @@ func (d *Daemon) handleCrewRestart(conn net.Conn, msg *protocol.CrewRestartMessa
 }
 
 func (d *Daemon) handleCrewRestartWS(client *wsClient, msg *protocol.CrewRestartMessage) {
+	r := requestFromApp(client.selectedProfile())
+	identity, scopeErr := d.resolveMember(r, msg.Member)
+	if scopeErr != nil {
+		d.sendToClient(client, protocol.CrewRestartResultMessage{Event: protocol.EventCrewRestartResult, RequestID: msg.RequestID, Error: protocol.Ptr(scopeErr.Error())})
+		return
+	}
+
 	requestID := strings.TrimSpace(msg.RequestID)
-	result, err := d.crewRestart(strings.TrimSpace(msg.Member), requestID, msg.ExpectedSessionID, msg.ExpectedRevision)
+	result, err := d.crewRestart(identity.Key, requestID, msg.ExpectedSessionID, msg.ExpectedRevision)
 	response := protocol.CrewRestartResultMessage{
 		Event: protocol.EventCrewRestartResult, RequestID: requestID, Success: err == nil, Conflict: false,
 	}
@@ -77,18 +96,18 @@ func (d *Daemon) handleCrewRestartWS(client *wsClient, msg *protocol.CrewRestart
 	d.sendToClient(client, response)
 }
 
-func (d *Daemon) crewRestart(name, requestID string, expectedSessionID *protocol.SessionID, expectedRevision *int) (*protocol.CrewRestartResult, error) {
+func (d *Daemon) crewRestart(key who.MemberKey, requestID string, expectedSessionID *protocol.SessionID, expectedRevision *int) (*protocol.CrewRestartResult, error) {
 	if requestID == "" {
 		return nil, fmt.Errorf("a request id is required so a retry cannot start two successors")
 	}
 	d.crewWakeMu.Lock()
 	defer d.crewWakeMu.Unlock()
 
-	member, doc, err := d.crewMember(name)
+	member, doc, err := d.crewMember(key)
 	if err != nil {
 		return nil, err
 	}
-	receipt, found, err := d.crewRestartRequest(member.ID, requestID)
+	receipt, found, err := d.crewRestartRequest(member.Key.String(), requestID)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +118,7 @@ func (d *Daemon) crewRestart(name, requestID string, expectedSessionID *protocol
 		return nil, d.crewRestartConflict(member, doc.Rev, fmt.Errorf("restart request %q was already accepted for an earlier day and will not restart the current day; inspect `attn crew list --json` for the current restart", requestID))
 	}
 	if member.Restart != nil && member.Restart.RequestID == requestID {
-		if err := d.recordCrewRestartRequest(crew.RestartRequest{Member: member.ID, RequestID: requestID, RestartRequestID: requestID}); err != nil {
+		if err := d.recordCrewRestartRequest(crew.RestartRequest{Member: member.Key, RequestID: requestID, RestartRequestID: requestID}); err != nil {
 			return nil, err
 		}
 		return d.resumeCrewRestart(member, doc.Rev)
@@ -116,24 +135,24 @@ func (d *Daemon) crewRestart(name, requestID string, expectedSessionID *protocol
 	}
 	expected := protocol.TrimID(*expectedSessionID)
 	if expected != visibleSessionID {
-		return nil, d.crewRestartConflict(member, doc.Rev, crewRestartDayChanged(member.ID, expected, visibleSessionID))
+		return nil, d.crewRestartConflict(member, doc.Rev, d.crewRestartDayChanged(member.Key.String(), expected, visibleSessionID))
 	}
 	if int64(*expectedRevision) != doc.Rev {
-		return nil, d.crewRestartConflict(member, doc.Rev, fmt.Errorf("%s's settings or day changed before the restart was applied: expected revision %d, current revision %d; refresh the roster and try again", crew.DisplayName(member.ID), *expectedRevision, doc.Rev))
+		return nil, d.crewRestartConflict(member, doc.Rev, fmt.Errorf("%s's settings or day changed before the restart was applied: expected revision %d, current revision %d; refresh the roster and try again", d.storedMemberName(member.Key.String()), *expectedRevision, doc.Rev))
 	}
 	if member.Restart != nil && member.Restart.State == crew.RestartFailed && member.Restart.Withdrawn &&
 		member.Restart.SessionID == visibleSessionID && visibleSessionID != "" {
 		live, liveErr := d.crewSessionActuallyLive(visibleSessionID)
 		if liveErr != nil {
-			return nil, fmt.Errorf("check %s's closing session %s: %w", crew.DisplayName(member.ID), shortSessionID(visibleSessionID), liveErr)
+			return nil, fmt.Errorf("check %s's closing session %s: %w", d.storedMemberName(member.Key.String()), shortSessionID(visibleSessionID), liveErr)
 		}
 		if live {
-			return nil, d.crewRestartConflict(member, doc.Rev, fmt.Errorf("%s's day in session %s is still closing after a sleep request; wait until the member is asleep, then retry this restart", crew.DisplayName(member.ID), shortSessionID(visibleSessionID)))
+			return nil, d.crewRestartConflict(member, doc.Rev, fmt.Errorf("%s's day in session %s is still closing after a sleep request; wait until the member is asleep, then retry this restart", d.storedMemberName(member.Key.String()), shortSessionID(visibleSessionID)))
 		}
 	}
 	if member.Restart != nil && member.Restart.SessionID == visibleSessionID &&
 		(member.Restart.State == crew.RestartQueued || member.Restart.State == crew.RestartRequested) {
-		if err := d.recordCrewRestartRequest(crew.RestartRequest{Member: member.ID, RequestID: requestID, RestartRequestID: member.Restart.RequestID}); err != nil {
+		if err := d.recordCrewRestartRequest(crew.RestartRequest{Member: member.Key, RequestID: requestID, RestartRequestID: member.Restart.RequestID}); err != nil {
 			return nil, err
 		}
 		return d.resumeCrewRestart(member, doc.Rev)
@@ -157,7 +176,7 @@ func (d *Daemon) crewRestart(name, requestID string, expectedSessionID *protocol
 		if err := d.recordCrewRestart(candidate, doc.Rev, receipts...); err != nil {
 			return nil, err
 		}
-		return d.resumeCrewRestartCurrent(candidate.ID)
+		return d.resumeCrewRestartCurrent(candidate.Key)
 	}
 
 	candidate := member
@@ -165,7 +184,7 @@ func (d *Daemon) crewRestart(name, requestID string, expectedSessionID *protocol
 	if err := d.recordCrewRestart(candidate, doc.Rev, receipts...); err != nil {
 		return nil, err
 	}
-	return d.resumeCrewRestartCurrent(candidate.ID)
+	return d.resumeCrewRestartCurrent(candidate.Key)
 }
 
 type crewRestartConflictError struct {
@@ -197,8 +216,8 @@ func (d *Daemon) crewRestartRequest(memberID, requestID string) (crew.RestartReq
 	if err != nil {
 		return crew.RestartRequest{}, false, err
 	}
-	if receipt.Member != memberID || receipt.RequestID != requestID || receipt.RestartRequestID == "" {
-		return crew.RestartRequest{}, false, fmt.Errorf("stored restart request %q for %s does not match its address", requestID, crew.DisplayName(memberID))
+	if receipt.Member.String() != memberID || receipt.RequestID != requestID || receipt.RestartRequestID == "" {
+		return crew.RestartRequest{}, false, fmt.Errorf("stored restart request %q for %s does not match its address", requestID, d.storedMemberName(memberID))
 	}
 	return receipt, true, nil
 }
@@ -213,9 +232,9 @@ func (d *Daemon) recordCrewRestartRequest(receipt crew.RestartRequest) error {
 		return err
 	}
 	absent := docstore.ExpectAbsent
-	fact := documentChangedFact(crew.Namespace, crew.CollectionRestartRequests, crewRestartRequestDocumentID(receipt.Member, receipt.RequestID), false)
+	fact := documentChangedFact(crew.Namespace, crew.CollectionRestartRequests, crewRestartRequestDocumentID(receipt.Member.String(), receipt.RequestID), false)
 	written, err := d.store.CommitDocumentWrite(store.DocumentWrite{
-		Schema: *schema, ID: crewRestartRequestDocumentID(receipt.Member, receipt.RequestID), Body: body, Expected: &absent,
+		Schema: *schema, ID: crewRestartRequestDocumentID(receipt.Member.String(), receipt.RequestID), Body: body, Expected: &absent,
 	}, fact, time.Now())
 	if err != nil {
 		return err
@@ -225,16 +244,16 @@ func (d *Daemon) recordCrewRestartRequest(receipt crew.RestartRequest) error {
 }
 
 func (d *Daemon) crewRestartAcceptanceReceipts(member crew.Member, requestID string) ([]crew.RestartRequest, error) {
-	receipts := []crew.RestartRequest{{Member: member.ID, RequestID: requestID, RestartRequestID: requestID}}
+	receipts := []crew.RestartRequest{{Member: member.Key, RequestID: requestID, RestartRequestID: requestID}}
 	if member.Restart == nil {
 		return receipts, nil
 	}
-	_, found, err := d.crewRestartRequest(member.ID, member.Restart.RequestID)
+	_, found, err := d.crewRestartRequest(member.Key.String(), member.Restart.RequestID)
 	if err != nil {
 		return nil, err
 	}
 	if !found {
-		receipts = append(receipts, crew.RestartRequest{Member: member.ID, RequestID: member.Restart.RequestID, RestartRequestID: member.Restart.RequestID})
+		receipts = append(receipts, crew.RestartRequest{Member: member.Key, RequestID: member.Restart.RequestID, RestartRequestID: member.Restart.RequestID})
 	}
 	return receipts, nil
 }
@@ -255,9 +274,9 @@ func (d *Daemon) recordCrewRestart(member crew.Member, revision int64, receipts 
 	if err != nil {
 		return err
 	}
-	memberFact := documentChangedFact(crew.Namespace, crew.CollectionMembers, member.ID, false)
+	memberFact := documentChangedFact(crew.Namespace, crew.CollectionMembers, member.Key.String(), false)
 	commits := []store.DocumentCommit{{
-		Write: store.DocumentWrite{Schema: *memberSchema, ID: member.ID, Body: memberBody, Expected: &revision},
+		Write: store.DocumentWrite{Schema: *memberSchema, ID: member.Key.String(), Body: memberBody, Expected: &revision},
 		Fact:  memberFact,
 	}}
 	absent := docstore.ExpectAbsent
@@ -266,7 +285,7 @@ func (d *Daemon) recordCrewRestart(member crew.Member, revision int64, receipts 
 		if encodeErr != nil {
 			return encodeErr
 		}
-		id := protocol.SessionID(crewRestartRequestDocumentID(receipt.Member, receipt.RequestID))
+		id := protocol.SessionID(crewRestartRequestDocumentID(receipt.Member.String(), receipt.RequestID))
 		commits = append(commits, store.DocumentCommit{
 			Write: store.DocumentWrite{Schema: *receiptSchema, ID: string(id), Body: body, Expected: &absent},
 			Fact:  documentChangedFact(crew.Namespace, crew.CollectionRestartRequests, string(id), false),
@@ -277,21 +296,21 @@ func (d *Daemon) recordCrewRestart(member crew.Member, revision int64, receipts 
 		if !docstore.IsConflict(err) {
 			return err
 		}
-		current, doc, readErr := d.crewMember(member.ID)
+		current, doc, readErr := d.crewMember(member.Key)
 		if readErr != nil {
 			return errors.Join(err, readErr)
 		}
-		return d.crewRestartConflict(current, doc.Rev, fmt.Errorf("%s changed while its restart was being recorded; refresh the roster and try again: %w", crew.DisplayName(member.ID), err))
+		return d.crewRestartConflict(current, doc.Rev, fmt.Errorf("%s changed while its restart was being recorded; refresh the roster and try again: %w", d.storedMemberName(member.Key.String()), err))
 	}
 	for i, commit := range commits {
 		d.announceCommittedWrite(commit.Fact, written[i].Seq)
 	}
-	d.publishFact(FactCrewUpdated, member.ID, nil)
+	d.publishFact(FactCrewUpdated, member.Key.String(), nil)
 	return nil
 }
 
-func (d *Daemon) resumeCrewRestartCurrent(memberID string) (*protocol.CrewRestartResult, error) {
-	member, doc, err := d.crewMember(memberID)
+func (d *Daemon) resumeCrewRestartCurrent(key who.MemberKey) (*protocol.CrewRestartResult, error) {
+	member, doc, err := d.crewMember(key)
 	if err != nil {
 		return nil, err
 	}
@@ -312,10 +331,10 @@ func (d *Daemon) resumeCrewRestart(member crew.Member, revision int64) (*protoco
 		}
 		live, err := d.crewSessionActuallyLive(restart.SessionID)
 		if err != nil {
-			return nil, fmt.Errorf("check %s's bound session %s: %w", crew.DisplayName(member.ID), shortSessionID(restart.SessionID), err)
+			return nil, fmt.Errorf("check %s's bound session %s: %w", d.storedMemberName(member.Key.String()), shortSessionID(restart.SessionID), err)
 		}
 		if !live {
-			if _, err := d.releaseCrewBinding(member.ID, restart.SessionID); err != nil {
+			if _, err := d.releaseCrewBinding(member.Key, restart.SessionID); err != nil {
 				return nil, err
 			}
 			return d.wakeForCrewRestart(member, *restart, restart.SessionID)
@@ -324,28 +343,28 @@ func (d *Daemon) resumeCrewRestart(member crew.Member, revision int64) (*protoco
 			if _, err := d.crewHandoffLocked(restart.SessionID, "", true, protocol.CrewDayCloseNap); err != nil {
 				return nil, err
 			}
-			return d.crewRestartResultCurrent(member.ID)
+			return d.crewRestartResultCurrent(member.Key)
 		}
-		if err := d.ensureCrewRestartRequest(member.ID, *restart); err != nil {
+		if err := d.ensureCrewRestartRequest(member.Key, *restart); err != nil {
 			return nil, err
 		}
-		return d.crewRestartResultCurrent(member.ID)
+		return d.crewRestartResultCurrent(member.Key)
 	}
 	if restart.SessionID == "" {
 		if member.BindingSession != "" {
 			live, err := d.crewSessionActuallyLive(member.BindingSession)
 			if err != nil {
-				return nil, fmt.Errorf("check %s's possible wake session %s: %w", crew.DisplayName(member.ID), shortSessionID(member.BindingSession), err)
+				return nil, fmt.Errorf("check %s's possible wake session %s: %w", d.storedMemberName(member.Key.String()), shortSessionID(member.BindingSession), err)
 			}
 			if !live {
-				if _, err := d.releaseCrewBinding(member.ID, member.BindingSession); err != nil {
+				if _, err := d.releaseCrewBinding(member.Key, member.BindingSession); err != nil {
 					return nil, err
 				}
 				return d.wakeForCrewRestart(member, *restart, member.BindingSession)
 			}
-			d.completeCrewRestartWithDetail(member.ID, restart.RequestID, "", "", member.BindingSession,
-				fmt.Sprintf("%s woke in session %s", crew.DisplayName(member.ID), shortSessionID(member.BindingSession)))
-			return d.crewRestartResultCurrent(member.ID)
+			d.completeCrewRestartWithDetail(member.Key, restart.RequestID, "", "", member.BindingSession,
+				fmt.Sprintf("%s woke in session %s", d.storedMemberName(member.Key.String()), shortSessionID(member.BindingSession)))
+			return d.crewRestartResultCurrent(member.Key)
 		}
 		return d.wakeForCrewRestart(member, *restart, "")
 	}
@@ -358,39 +377,39 @@ func (d *Daemon) resumeCrewRestart(member crew.Member, revision int64) (*protoco
 	if member.BindingSession != "" {
 		live, err := d.crewSessionActuallyLive(member.BindingSession)
 		if err != nil {
-			return nil, fmt.Errorf("check %s's successor session %s: %w", crew.DisplayName(member.ID), shortSessionID(member.BindingSession), err)
+			return nil, fmt.Errorf("check %s's successor session %s: %w", d.storedMemberName(member.Key.String()), shortSessionID(member.BindingSession), err)
 		}
 		liveSuccessor = live
 	}
 	if letterErr == nil && hasLetter && liveSuccessor {
-		d.completeCrewRestartWithDetail(member.ID, restart.RequestID, restart.SessionID, letter, member.BindingSession,
+		d.completeCrewRestartWithDetail(member.Key, restart.RequestID, restart.SessionID, letter, member.BindingSession,
 			fmt.Sprintf("the filed handoff was recovered with successor session %s", shortSessionID(member.BindingSession)))
-		return d.crewRestartResultCurrent(member.ID)
+		return d.crewRestartResultCurrent(member.Key)
 	}
 	cause := letterErr
 	if cause == nil {
 		cause = fmt.Errorf("the restart moved from session %s to %s, but a live successor and readable filed letter could not both be proven; retry the turnover from the roster", shortSessionID(restart.SessionID), sessionOrAsleep(member.BindingSession))
 	}
-	if err := d.failCrewRestart(member.ID, restart.RequestID, restart.SessionID, letter, cause); err != nil {
+	if err := d.failCrewRestart(member.Key, restart.RequestID, restart.SessionID, letter, cause); err != nil {
 		return nil, err
 	}
-	return d.crewRestartResultCurrent(member.ID)
+	return d.crewRestartResultCurrent(member.Key)
 }
 
 func (d *Daemon) wakeForCrewRestart(member crew.Member, restart crew.Restart, exitedSessionID protocol.SessionID) (*protocol.CrewRestartResult, error) {
-	woken, err := d.crewWakeWithChargeLocked(member.ID, "", false)
+	woken, err := d.crewWakeWithChargeLocked(member.Key, "", false)
 	if err != nil {
-		if recordErr := d.failCrewRestart(member.ID, restart.RequestID, restart.SessionID, "", err); recordErr != nil {
+		if recordErr := d.failCrewRestart(member.Key, restart.RequestID, restart.SessionID, "", err); recordErr != nil {
 			return nil, errors.Join(err, recordErr)
 		}
 		return nil, err
 	}
-	detail := fmt.Sprintf("%s was asleep and woke in session %s", crew.DisplayName(member.ID), shortSessionID(woken.SessionID))
+	detail := fmt.Sprintf("%s was asleep and woke in session %s", d.storedMemberName(member.Key.String()), shortSessionID(woken.SessionID))
 	if exitedSessionID != "" {
 		detail = fmt.Sprintf("released exited session %s and woke session %s", shortSessionID(exitedSessionID), shortSessionID(woken.SessionID))
 	}
-	d.completeCrewRestartWithDetail(member.ID, restart.RequestID, restart.SessionID, "", woken.SessionID, detail)
-	return d.crewRestartResultCurrent(member.ID)
+	d.completeCrewRestartWithDetail(member.Key, restart.RequestID, restart.SessionID, "", woken.SessionID, detail)
+	return d.crewRestartResultCurrent(member.Key)
 }
 
 func (d *Daemon) crewRestartFiledLetter(member crew.Member, restart crew.Restart) (string, bool, error) {
@@ -422,33 +441,34 @@ func sessionOrAsleep(sessionID protocol.SessionID) string {
 	return shortSessionID(sessionID)
 }
 
-func crewRestartDayChanged(memberID string, expected protocol.SessionID, current protocol.SessionID) error {
-	return fmt.Errorf("%s's day changed before the restart was applied: expected session %s, current session %s; refresh the roster and try again", crew.DisplayName(memberID), sessionOrAsleep(expected), sessionOrAsleep(current))
+func (d *Daemon) crewRestartDayChanged(memberID string, expected protocol.SessionID, current protocol.SessionID) error {
+	return fmt.Errorf("%s's day changed before the restart was applied: expected session %s, current session %s; refresh the roster and try again", d.storedMemberName(memberID), sessionOrAsleep(expected), sessionOrAsleep(current))
 }
 
-func (d *Daemon) ensureCrewRestartRequest(memberID string, restart crew.Restart) error {
+func (d *Daemon) ensureCrewRestartRequest(key who.MemberKey, restart crew.Restart) error {
+	memberID := key.String()
 	itemID := crewRestartMailboxID(memberID, restart.RequestID)
 	receipt, err := d.sendToInbox(inbox.Item{ID: itemID, To: inbox.ToSession(restart.SessionID), Kind: inbox.Notice, Source: restart.RequestID, Key: "crew-restart-" + memberID, Text: crewRequestedRestartPrompt})
 	if err != nil {
 		cause := fmt.Errorf("record restart request: %w", err)
-		if recordErr := d.failCrewRestart(memberID, restart.RequestID, restart.SessionID, "", cause); recordErr != nil {
+		if recordErr := d.failCrewRestart(key, restart.RequestID, restart.SessionID, "", cause); recordErr != nil {
 			return errors.Join(cause, recordErr)
 		}
 		return cause
 	}
 	status := protocol.AgentMsgStatusNotified
-	detail := fmt.Sprintf("asked %s in session %s to file its handoff and start the next day", crew.DisplayName(memberID), shortSessionID(restart.SessionID))
+	detail := fmt.Sprintf("asked %s in session %s to file its handoff and start the next day", d.storedMemberName(memberID), shortSessionID(restart.SessionID))
 	item, _, readErr := d.store.InboxItem(itemID)
 	if readErr != nil {
 		return readErr
 	}
 	if item.ReadAt != "" {
-		detail = fmt.Sprintf("%s read the restart request", crew.DisplayName(memberID))
+		detail = fmt.Sprintf("%s read the restart request", d.storedMemberName(memberID))
 	} else if !receipt.Rang {
 		status = protocol.AgentMsgStatusQueued
 		detail = receipt.Detail
 	}
-	_, updateErr := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {
+	_, updateErr := d.updateCrewMember(key, func(member *crew.Member) (bool, error) {
 		if member.Restart == nil || member.Restart.RequestID != restart.RequestID || member.Restart.SessionID != restart.SessionID ||
 			member.Restart.State == crew.RestartFailed || member.Restart.State == crew.RestartCompleted {
 			return false, nil
@@ -464,7 +484,7 @@ func (d *Daemon) ensureCrewRestartRequest(memberID string, restart crew.Restart)
 		return true, nil
 	})
 	if updateErr != nil {
-		return fmt.Errorf("record restart delivery for %s: %w", crew.DisplayName(memberID), updateErr)
+		return fmt.Errorf("record restart delivery for %s: %w", d.storedMemberName(memberID), updateErr)
 	}
 	return nil
 }
@@ -483,8 +503,8 @@ func (d *Daemon) reconcileCrewRestarts() {
 			(member.Restart.State != crew.RestartQueued && member.Restart.State != crew.RestartRequested) {
 			continue
 		}
-		if _, err := d.crewRestart(member.ID, member.Restart.RequestID, nil, nil); err != nil {
-			d.logf("crew: reconcile %s's restart request: %v", crew.DisplayName(member.ID), err)
+		if _, err := d.crewRestart(member.Key, member.Restart.RequestID, nil, nil); err != nil {
+			d.logf("crew: reconcile %s's restart request: %v", member.Key.String(), err)
 		}
 	}
 }
@@ -494,8 +514,8 @@ func (d *Daemon) crewRestartResult(member crew.Member, revision int64) *protocol
 	return &protocol.CrewRestartResult{Member: wire, Restart: *wire.Restart}
 }
 
-func (d *Daemon) crewRestartResultCurrent(memberID string) (*protocol.CrewRestartResult, error) {
-	member, doc, err := d.crewMember(memberID)
+func (d *Daemon) crewRestartResultCurrent(key who.MemberKey) (*protocol.CrewRestartResult, error) {
+	member, doc, err := d.crewMember(key)
 	if err != nil {
 		return nil, err
 	}
@@ -511,8 +531,9 @@ func pendingCrewRestartFor(member crew.Member, sessionID protocol.SessionID) (cr
 	return *restart, true
 }
 
-func (d *Daemon) failCrewRestart(memberID string, requestID string, sessionID protocol.SessionID, letter string, cause error) error {
-	_, err := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {
+func (d *Daemon) failCrewRestart(key who.MemberKey, requestID string, sessionID protocol.SessionID, letter string, cause error) error {
+	memberID := key.String()
+	_, err := d.updateCrewMember(key, func(member *crew.Member) (bool, error) {
 		if member.Restart == nil || member.Restart.RequestID != requestID || member.Restart.SessionID != sessionID {
 			return false, nil
 		}
@@ -527,20 +548,21 @@ func (d *Daemon) failCrewRestart(memberID string, requestID string, sessionID pr
 		return true, nil
 	})
 	if err != nil {
-		recordErr := fmt.Errorf("record failed restart for %s: %w", crew.DisplayName(memberID), err)
+		recordErr := fmt.Errorf("record failed restart for %s: %w", d.storedMemberName(memberID), err)
 		d.logf("crew: %v", recordErr)
 		return recordErr
 	}
 	return nil
 }
 
-func (d *Daemon) completeCrewRestart(memberID string, requestID string, sessionID protocol.SessionID, letter string, successor protocol.SessionID) {
-	d.completeCrewRestartWithDetail(memberID, requestID, sessionID, letter, successor,
+func (d *Daemon) completeCrewRestart(key who.MemberKey, requestID string, sessionID protocol.SessionID, letter string, successor protocol.SessionID) {
+	d.completeCrewRestartWithDetail(key, requestID, sessionID, letter, successor,
 		fmt.Sprintf("the handoff was filed and successor session %s started", shortSessionID(successor)))
 }
 
-func (d *Daemon) completeCrewRestartWithDetail(memberID string, requestID string, sessionID protocol.SessionID, letter string, successor protocol.SessionID, detail string) {
-	_, err := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {
+func (d *Daemon) completeCrewRestartWithDetail(key who.MemberKey, requestID string, sessionID protocol.SessionID, letter string, successor protocol.SessionID, detail string) {
+	memberID := key.String()
+	_, err := d.updateCrewMember(key, func(member *crew.Member) (bool, error) {
 		if member.Restart == nil || member.Restart.RequestID != requestID || member.Restart.SessionID != sessionID {
 			return false, nil
 		}
@@ -555,7 +577,7 @@ func (d *Daemon) completeCrewRestartWithDetail(memberID string, requestID string
 		return true, nil
 	})
 	if err != nil {
-		d.logf("crew: record completed restart for %s: %v", crew.DisplayName(memberID), err)
+		d.logf("crew: record completed restart for %s: %v", memberID, err)
 		return
 	}
 }
@@ -573,17 +595,17 @@ func (d *Daemon) noteCrewRestartMailboxRead(deliveries []store.InboxDelivery) {
 			if member.Restart == nil || member.Restart.RequestID != delivery.Item.Source || member.Restart.SessionID != delivery.Item.To.SessionID() || member.Restart.State != crew.RestartQueued {
 				continue
 			}
-			_, updateErr := d.updateCrewMember(member.ID, func(current *crew.Member) (bool, error) {
+			_, updateErr := d.updateCrewMember(member.Key, func(current *crew.Member) (bool, error) {
 				if current.Restart == nil || current.Restart.RequestID != delivery.Item.Source || current.Restart.SessionID != delivery.Item.To.SessionID() || current.Restart.State != crew.RestartQueued {
 					return false, nil
 				}
 				current.Restart.State = crew.RestartRequested
 				current.Restart.DeliveryStatus = string(protocol.AgentMsgStatusNotified)
-				current.Restart.Detail = fmt.Sprintf("%s read the restart request", crew.DisplayName(current.ID))
+				current.Restart.Detail = fmt.Sprintf("%s read the restart request", d.storedMemberName(current.Key.String()))
 				return true, nil
 			})
 			if updateErr != nil {
-				d.logf("crew: record %s's restart request read receipt: %v", crew.DisplayName(member.ID), updateErr)
+				d.logf("crew: record %s's restart request read receipt: %v", member.Key.String(), updateErr)
 			}
 		}
 	}
