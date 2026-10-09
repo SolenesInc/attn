@@ -252,5 +252,5 @@ func (d *Daemon) classifierModel(ctx context.Context, harness string) string {
 		return ""
 	}
 	explicit := os.Getenv("ATTN_" + strings.ToUpper(harness) + "_CLASSIFIER_MODEL")
-	return d.resolveTierModel(ctx, harness, modeltiers.Light, explicit, fallback)
+	return d.resolveTierModel(ctx, harness, "", modeltiers.Light, explicit, fallback)
 }

@@ -24,14 +24,16 @@ type harnessDiscovery struct {
 	Err     error
 }
 
-func (d *Daemon) loadHarnessModels(ctx context.Context, harness string, refresh bool) (harnessModelCatalog, error) {
+func (d *Daemon) loadHarnessModels(ctx context.Context, harness, executable string, refresh bool) (harnessModelCatalog, error) {
 	if err := ctx.Err(); err != nil {
 		return harnessModelCatalog{}, err
 	}
 	if err := delegationprefs.ValidateSelection(delegationprefs.Selection{Harness: harness}, true); err != nil {
 		return harnessModelCatalog{}, err
 	}
-	executable := d.store.GetSetting(executableSettingKey(harness))
+	if executable == "" {
+		executable = d.store.GetSetting(executableSettingKey(harness))
+	}
 	key := harness + "\x00" + executable
 	if refresh {
 		d.harnessModelCatalogs.Delete(key)
@@ -133,11 +135,11 @@ func (d *Daemon) invalidateHarnessModels(harness string) {
 }
 
 func (d *Daemon) discoverHarnessModels(ctx context.Context, harness string) (harnessModelCatalog, error) {
-	return d.harnessModels(ctx, harness, false)
+	return d.harnessModels(ctx, harness, "", false)
 }
 
-func (d *Daemon) harnessModels(ctx context.Context, harness string, refresh bool) (harnessModelCatalog, error) {
-	catalog, err := d.loadHarnessModels(ctx, harness, refresh)
+func (d *Daemon) harnessModels(ctx context.Context, harness, executable string, refresh bool) (harnessModelCatalog, error) {
+	catalog, err := d.loadHarnessModels(ctx, harness, executable, refresh)
 	if err != nil {
 		return harnessModelCatalog{}, err
 	}
@@ -171,11 +173,11 @@ func (d *Daemon) harnessModels(ctx context.Context, harness string, refresh bool
 	return catalog, nil
 }
 
-func (d *Daemon) resolveTierModel(ctx context.Context, harness string, tier modeltiers.Tier, explicit, fallback string) string {
+func (d *Daemon) resolveTierModel(ctx context.Context, harness, executable string, tier modeltiers.Tier, explicit, fallback string) string {
 	if explicit = strings.TrimSpace(explicit); explicit != "" {
 		return explicit
 	}
-	catalog, err := d.discoverHarnessModels(ctx, harness)
+	catalog, err := d.harnessModels(ctx, harness, executable, false)
 	if err != nil {
 		d.logf("%s %s model discovery failed: %v; using fallback %q", harness, tier, err, fallback)
 		return fallback
@@ -196,7 +198,7 @@ func (d *Daemon) handleHarnessModels(client *wsClient, msg *protocol.HarnessMode
 		d.sendToClient(client, result)
 		return
 	}
-	catalog, err := d.harnessModels(context.Background(), strings.TrimSpace(msg.Harness), protocol.Deref(msg.Refresh))
+	catalog, err := d.harnessModels(context.Background(), strings.TrimSpace(msg.Harness), "", protocol.Deref(msg.Refresh))
 	if err != nil {
 		result.Error = protocol.Ptr(err.Error() + ". Refresh models after fixing the harness.")
 	} else {

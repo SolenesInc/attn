@@ -333,7 +333,7 @@ func sessionAutoTitleEnabled() bool {
 
 func (d *Daemon) sessionTitleModel(ctx context.Context, agent string) string {
 	explicit := os.Getenv("ATTN_" + strings.ToUpper(agent) + "_TITLE_MODEL")
-	return d.resolveTierModel(ctx, agent, modeltiers.Light, explicit, fallbackSessionTitleModel(agent))
+	return d.resolveTierModel(ctx, agent, "", modeltiers.Light, explicit, fallbackSessionTitleModel(agent))
 }
 
 func fallbackSessionTitleModel(agent string) string {

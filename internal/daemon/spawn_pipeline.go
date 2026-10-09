@@ -278,7 +278,7 @@ func (d *Daemon) resolveSpawnIntent(ctx context.Context, req *spawnRequest) (*sp
 	}
 	plan.chiefAssigned = d.maybeAssignChiefOnSpawn(msg.ID, req.agent, req.profile.ID, requestedChief, req.existingSession)
 	plan.isChief = d.chiefOfProfile(req.profile.ID) == msg.ID
-	plan.spawnOpts.Model = d.resolveLaunchModel(ctx, req.agent, plan.isChief, plan.spawnOpts.Model)
+	plan.spawnOpts.Model = d.resolveLaunchModel(ctx, req.agent, configuredExecutable, plan.isChief, plan.spawnOpts.Model)
 	if err := ctx.Err(); err != nil {
 		plan.rollback(d, msg.ID)
 		return nil, &spawnRejection{err: fmt.Errorf("resolve launch model: %w", err)}

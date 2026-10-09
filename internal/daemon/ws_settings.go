@@ -388,7 +388,7 @@ func isAgentExecutableAvailable(configuredExecutable, defaultExecutable string) 
 	return err == nil
 }
 
-func (d *Daemon) chiefLaunchModel(ctx context.Context, agent string, chief bool) string {
+func (d *Daemon) chiefLaunchModel(ctx context.Context, agent, executable string, chief bool) string {
 	if !chief {
 		return ""
 	}
@@ -396,7 +396,7 @@ func (d *Daemon) chiefLaunchModel(ctx context.Context, agent string, chief bool)
 	if agent != "claude" && agent != "codex" {
 		return explicit
 	}
-	return d.resolveTierModel(ctx, agent, modeltiers.Deep, explicit, "")
+	return d.resolveTierModel(ctx, agent, executable, modeltiers.Deep, explicit, "")
 }
 
 func (d *Daemon) chiefLaunchEffort(agent string, chief bool) string {
@@ -424,11 +424,11 @@ func (d *Daemon) defaultLaunchEffort(agent string) string {
 	return strings.TrimSpace(d.store.GetSetting(SettingDefaultEffortPrefix + strings.ToLower(strings.TrimSpace(agent))))
 }
 
-func (d *Daemon) resolveLaunchModel(ctx context.Context, agent string, chief bool, requested string) string {
+func (d *Daemon) resolveLaunchModel(ctx context.Context, agent, executable string, chief bool, requested string) string {
 	if requested != "" {
 		return requested
 	}
-	if model := d.chiefLaunchModel(ctx, agent, chief); model != "" {
+	if model := d.chiefLaunchModel(ctx, agent, executable, chief); model != "" {
 		return model
 	}
 	return d.defaultLaunchModel(agent)

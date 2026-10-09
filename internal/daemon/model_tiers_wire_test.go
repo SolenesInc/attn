@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -77,6 +78,53 @@ func TestAnUnsetChiefRunsTheDeepDefaultAtLowEffort(t *testing.T) {
 	model, _ := flagValue(chief.Argv, "--model")
 	if model != "gpt-6.1-sol" || !hasArgs(chief.Argv, "-c", `model_reasoning_effort="low"`) {
 		t.Errorf("unset chief launched with %q, want the reported deep default at low effort", chief.Argv)
+	}
+}
+
+func TestChiefDiscoversDefaultsWithItsLaunchExecutable(t *testing.T) {
+	for _, legacy := range []bool{false, true} {
+		t.Run(fmt.Sprintf("legacy=%v", legacy), func(t *testing.T) {
+			w := newWorld(t, fakeagent.Codex)
+			t.Setenv("ATTN_CODEX_EXECUTABLE", "")
+			app := w.App()
+			global := harnessCatalog(app, "codex", false)
+			if !global.Success || protocol.Deref(global.TierDefaults.Deep) != "gpt-6.1-sol" {
+				t.Fatalf("daemon catalog = %+v", global)
+			}
+			executable := filepath.Join(t.TempDir(), "alternate-codex")
+			runtime := strings.ReplaceAll(filepath.Join(w.Dir, "bin", "codex"), "'", "'\\''")
+			script := fmt.Sprintf(`#!/bin/sh
+if [ "$1" = app-server ]; then
+ IFS= read -r initialize
+ printf '%%s\n' '{"id":1,"result":{}}'
+ IFS= read -r initialized
+ IFS= read -r models
+ printf '%%s\n' '{"id":2,"result":{"data":[{"id":"alternate-sol","model":"alternate-sol","displayName":"Alternate Sol","supportedReasoningEfforts":[{"reasoningEffort":"low"}]}],"nextCursor":null}}'
+ cat >/dev/null
+else
+ exec '%s' "$@"
+fi
+`, runtime)
+			if err := os.WriteFile(executable, []byte(script), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			chief := w.Launched(w.Spawn(app, fakeagent.Codex, w.Path("chief"), func(message *protocol.SpawnSessionMessage) {
+				message.ChiefOfStaff = protocol.Ptr(true)
+				if legacy {
+					message.CodexExecutable = protocol.Ptr(executable)
+				} else {
+					message.Executable = protocol.Ptr(executable)
+				}
+			}))
+			model, _ := flagValue(chief.Argv, "--model")
+			if model != "alternate-sol" {
+				t.Errorf("Chief launched %q, want its executable's alternate-sol", chief.Argv)
+			}
+			after := harnessCatalog(app, "codex", false)
+			if protocol.Deref(after.TierDefaults.Deep) != "gpt-6.1-sol" {
+				t.Errorf("alternate launch replaced the daemon catalog: %+v", after)
+			}
+		})
 	}
 }
 
