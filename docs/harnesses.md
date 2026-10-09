@@ -17,8 +17,9 @@ command starts; hooks apply to the conversation shown when the report arrives.
 Native harness conversation ids remain separate text values.
 
 Removing a placement keeps the terminal addressable, including after daemon
-restart. Closing a session ends its terminal associations. When several
-terminals show one session, ending one leaves the others running.
+restart. Closing a session ends its terminal associations. A session is shown
+in at most one terminal: when another terminal resumes its conversation, that
+terminal takes the session over and the previous one stops showing it.
 
 Plugin driver payloads retain the `session_id` wire spelling for the terminal.
 Close notifications, including those completed after restart, use the original
