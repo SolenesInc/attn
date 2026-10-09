@@ -4674,6 +4674,12 @@ export function useDaemonSocket({
     [sendProfileCommand],
   );
 
+  const sendDesktopSetOrder = useCallback(
+    (profileId: string, desktopIds: string[]) =>
+      sendProfileCommand('desktop_set_order', { profile_id: profileId, desktop_ids: desktopIds }),
+    [sendProfileCommand],
+  );
+
   const sendDesktopSetCurrent = useCallback(
     (profileId: string, desktopId: string) =>
       sendProfileCommand('desktop_set_current', { profile_id: profileId, desktop_id: desktopId }),
@@ -4854,6 +4860,7 @@ export function useDaemonSocket({
     sendDesktopCreate,
     sendDesktopRename,
     sendDesktopReorder,
+    sendDesktopSetOrder,
     sendDesktopSetCurrent,
     sendDesktopSetActivePane,
     sendDesktopShowSession,

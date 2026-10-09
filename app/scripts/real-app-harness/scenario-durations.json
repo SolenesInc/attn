@@ -55,12 +55,12 @@
         "note": "Green matrix-digest.txt, including focus exit and cross-workspace focus reset, with recording. Remeasure on Linux CI."
       },
       "delegation-chain": {
-        "run": "delegation-chain-2026-09-13T23-06-51-792Z",
-        "job": "Local serial matrix, frosty-chain instance",
-        "recordedAt": "2026-09-13",
-        "seconds": 41.0,
-        "runnerClass": "local macOS",
-        "note": "Measured from the green matrix-digest.txt; includes native hover, click and command-menu focus checks and idle resource samples, without recording. Remeasure on Linux CI."
+        "run": "https://github.com/SolenesInc/attn/actions/runs/37855772559",
+        "job": "App acceptance shard 2/4",
+        "recordedAt": "2026-10-08",
+        "seconds": 36.132,
+        "runnerClass": "github-hosted Linux",
+        "note": "Green matrix durationMs=36132 on cfdf4867f, run delegation-chain-2026-10-08T23-09-43-822Z. Includes missing numbered desktop recreation, caller keyboard focus and native shortcut reachability."
       },
       "agent-close": {
         "run": "https://github.com/SolenesInc/attn/actions/runs/34544718832",
@@ -216,6 +216,14 @@
         "seconds": 27.874,
         "runnerClass": "local macOS",
         "note": "Green ATTN_VERDICT durationMs=27874, including cleanup and recording. Native palette moves a dispatcher, two delegates and a nested delegate against a production DB copy. No overview changes. Final recording and screenshots attached to seed s-4z9ah9. Remeasure on Linux CI."
+      },
+      "desktop-order": {
+        "run": "desktop-order-2026-10-08T21-40-27-696Z",
+        "job": "Local packaged scenario, desktop-order named instance",
+        "recordedAt": "2026-10-08",
+        "seconds": 23.413,
+        "runnerClass": "local macOS",
+        "note": "Green ATTN_VERDICT durationMs=23413 on ceaf9fd42, including shared-scenario lock wait and cleanup. Native palette Sort, visible Undo, exact sidebar restoration and desktop.select7 after 6. Remeasure on Linux CI."
       }
     }
   },
@@ -235,7 +243,7 @@
     "countdown-cancel": 46.3,
     "crash-recovery": 9,
     "crew-seed-header": 53.2,
-    "delegation-chain": 41.0,
+    "delegation-chain": 36.132,
     "delegation-preferences": 25.9,
     "garden-plot-dispatch": 24.0,
     "garden-seed-header": 17.4,
@@ -273,6 +281,7 @@
     "garden-profile-scope": 29.9,
     "launch-desktops": 26.739,
     "palette-order": 55.41,
-    "move-with-delegates": 27.874
+    "move-with-delegates": 27.874,
+    "desktop-order": 23.413
   }
 }

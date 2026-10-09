@@ -17,6 +17,22 @@ export function orderedDesktops(desktops: Desktop[]): Desktop[] {
   return [...desktops].sort(byOrderKey);
 }
 
+export function sortedDesktopOrder(desktops: Desktop[]): string[] {
+  const names = new Intl.Collator('en', { sensitivity: 'base', numeric: true });
+  return orderedDesktops(desktops).sort((a, b) => {
+    if (a.shortcut_slot || b.shortcut_slot) {
+      if (!a.shortcut_slot) return 1;
+      if (!b.shortcut_slot) return -1;
+      return a.shortcut_slot - b.shortcut_slot;
+    }
+    const aName = a.name.trim();
+    const bName = b.name.trim();
+    if (!aName) return bName ? 1 : 0;
+    if (!bName) return -1;
+    return names.compare(aName, bName);
+  }).map((desktop) => desktop.id);
+}
+
 export function desktopNumber(desktop: Desktop, desktops: Desktop[]): number {
   if (desktop.shortcut_slot) return desktop.shortcut_slot;
   return SHORTCUT_SLOTS.length + extraDesktops(desktops).findIndex((entry) => entry.id === desktop.id) + 1;

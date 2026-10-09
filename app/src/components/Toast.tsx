@@ -49,12 +49,13 @@ function ToastContent() {
       });
     }
   };
+  const actionOnly = rows.every((row) => row.action);
   const actionable = rows.some((row) => row.sessionId || row.action);
   return (
     <div
       ref={toastRef}
       popover="manual"
-      className={`toast toast--error ${fading ? '' : 'visible'}`}
+      className={`toast ${actionOnly ? '' : 'toast--error'} ${fading ? '' : 'visible'}`}
       role="alert"
       tabIndex={0}
       aria-live="assertive"
@@ -65,7 +66,7 @@ function ToastContent() {
         if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
       }}
     >
-      <span className="toast-glyph error" aria-hidden="true">!</span>
+      <span className={`toast-glyph ${actionOnly ? '' : 'error'}`} aria-hidden="true">{actionOnly ? '✓' : '!'}</span>
       <div className="toast-content">
         {rows.length > 1 && <strong className="toast-title">{rows.length} notifications</strong>}
         <div className={`toast-list ${rows.length === 1 ? 'toast-list--single' : ''}`}>
@@ -78,7 +79,7 @@ function ToastContent() {
             />
           ))}
         </div>
-        {actionable && <div className="toast-footer">{rows.length > 1 ? 'click a row to go' : 'click to go'}</div>}
+        {actionable && !actionOnly && <div className="toast-footer">{rows.length > 1 ? 'click a row to go' : 'click to go'}</div>}
       </div>
     </div>
   );
@@ -101,7 +102,7 @@ function NotificationRow({
     </>
   );
   return (
-    <div className={`toast-row ${newest ? 'toast-row--new' : ''} ${row.completed ? 'toast-row--seen' : ''}`}>
+    <div className={`toast-row ${row.action ? 'toast-row--action' : ''} ${newest ? 'toast-row--new' : ''} ${row.completed ? 'toast-row--seen' : ''}`}>
       {row.sessionId || row.action ? (
         <button
           type="button"
@@ -123,6 +124,7 @@ function NotificationRow({
 export function useToast() {
   const append = useToastStore((state) => state.append);
   return {
+    showAction: useCallback((message: string, actionLabel: string, action: NonNullable<ToastRow['action']>) => append({ message, actionLabel, action }), [append]),
     showError: useCallback((message: string) => append({ message }), [append]),
   };
 }

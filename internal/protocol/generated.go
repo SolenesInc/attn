@@ -3414,6 +3414,20 @@ type DesktopSetCurrentMessage struct {
 	RequestID string `json:"request_id"`
 }
 
+type DesktopSetOrderMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// DesktopIds corresponds to the JSON schema field "desktop_ids".
+	DesktopIds []string `json:"desktop_ids"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
 type DesktopSetSplitRatioMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`

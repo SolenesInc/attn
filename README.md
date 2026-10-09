@@ -71,6 +71,13 @@ delegates on the same desktop, including their delegates. Hold Option when
 dropping an agent on another desktop in the sidebar for the same move. Each delegate lands beside its dispatcher;
 delegates elsewhere and split shells stay where they are.
 
+New numbered desktops land immediately after the desktop with the nearest lower
+number in your current order. "Sort desktops" in the command palette sorts
+numbered desktops first, then names in English alphabetic order (case-insensitive,
+with Review 2 before Review 10). Unnamed desktops come last in their current order.
+Undo in the toast restores your previous order; you can still drag desktops after
+sorting.
+
 **Panes, splits, and first-class shells.** A desktop can hold several sessions
 side by side. Split a pane, open a plain shell as its own session from the same
 dialog you use for agents, and move focus between panes with the keyboard.
@@ -227,6 +234,10 @@ Your agents can work as a team:
 
       attn delegate --brief-file task.md --role builder \
         --cwd /repo --new-worktree --branch feature-x --from origin/main
+
+  Add `--desktop 7` to place the delegate on ⌘7. If that numbered desktop is
+  missing, attn recreates it on its shortcut slot and keeps the current desktop
+  in view. A desktop name or id also works within the same profile.
 
   To hand the same seed to an executor, record the next step without repeating
   its plan:

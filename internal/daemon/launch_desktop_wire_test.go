@@ -357,7 +357,7 @@ func TestAnEmptyDesktopTheUserLeftIsRemovedThirtySecondsLaterAndTheCurrentOneNev
 	})
 }
 
-func TestALaunchWhoseDesktopWasRemovedLandsOnTheCurrentDesktopWithoutFocus(t *testing.T) {
+func TestALaunchWhoseNumberedDesktopWasRemovedRecreatesItWithoutFocus(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app := w.App()
 		profile := app.SelectedProfile()
@@ -388,7 +388,7 @@ func TestALaunchWhoseDesktopWasRemovedLandsOnTheCurrentDesktopWithoutFocus(t *te
 		if result := testworld.Await(app, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return r.ID == request.ID }); !result.Success {
 			t.Fatalf("a launch whose desktop vanished = %+v", result)
 		}
-		assertBackgroundPlacement(t, w, profile, string(request.ID), current.ID, current.ID, active)
+		assertBackgroundPlacement(t, w, profile, string(request.ID), target.ID, current.ID, active)
 
 		driver.mu.Lock()
 		driver.holdLaunch = false
@@ -396,7 +396,7 @@ func TestALaunchWhoseDesktopWasRemovedLandsOnTheCurrentDesktopWithoutFocus(t *te
 		later, _ := spawnDriven(w, app, driver, dir, func(m *protocol.SpawnSessionMessage) {
 			m.Placement = &protocol.SessionPlacement{DesktopID: protocol.Ptr(target.ID)}
 		})
-		assertBackgroundPlacement(t, w, profile, later, current.ID, current.ID, active)
+		assertBackgroundPlacement(t, w, profile, later, target.ID, current.ID, active)
 	})
 }
 
