@@ -29,14 +29,6 @@ terminal identity.
 
 Probed on 2.1.288 with a mock API.
 
-Model discovery and effort were probed on 2.1.295 with the real harness on
-2026-10-09. `haiku` reports Haiku 5.5 with medium effort supported. A headless
-`--model haiku --effort medium` call, with tools, hooks, MCP servers and session
-persistence disabled, completed successfully. The full Haiku 4.5 ID
-`claude-haiku-4-5-20251001` reports unknown effort metadata; an isolated call
-with medium also succeeds. These probes check acceptance of the effort flag;
-they do not measure how much reasoning each model performs.
-
 | Action | Hooks, in order | Conversation id |
 |---|---|---|
 | Launch with `--session-id <uuid>` | SessionStart `startup` | that id; no transcript until the first prompt |
@@ -85,11 +77,6 @@ Probed on 2.1.295 under a scratch PTY, and read in its bundled source.
 ## Codex
 
 Read in the source at openai/codex 60947e2341.
-
-Model discovery was probed on 0.162.0 on 2026-10-09. Both reported Luna models,
-`gpt-6-luna` and `gpt-5.6-luna`, support `xhigh`. Their effort levels are low,
-medium, high, xhigh and max; the reported Sol, Astra and Terra models also
-support ultra.
 
 - SessionStart sources are `startup`, `resume`, `clear`, `compact` and `fork`
   (`codex-rs/hooks/src/events/session_start.rs`).
