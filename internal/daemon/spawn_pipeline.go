@@ -664,17 +664,19 @@ func (d *Daemon) runSpawnPipeline(msg *protocol.SpawnSessionMessage, policy inte
 }
 
 func (d *Daemon) runSpawnPipelineReporting(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) (placementOutcome, *spawnRejection) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	var placed placementOutcome
 	var rejection *spawnRejection
-	_ = d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
+	_ = d.worktreeMaintenance.ProtectFromAutomaticCleanup(ctx, func(protection foregroundCleanupProtection) error {
 		placed, rejection = d.runSpawnPipelineProtected(protection, msg, policy)
 		return nil
 	})
 	return placed, rejection
 }
 
-func (d *Daemon) runSpawnPipelineProtected(_ foregroundCleanupProtection, msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) (placementOutcome, *spawnRejection) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func (d *Daemon) runSpawnPipelineProtected(protection foregroundCleanupProtection, msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) (placementOutcome, *spawnRejection) {
+	ctx, cancel := context.WithTimeout(protection.Context(), 30*time.Second)
 	defer cancel()
 	req, rejection := d.validateSpawnPrelock(msg, policy)
 	if rejection != nil {
@@ -683,6 +685,9 @@ func (d *Daemon) runSpawnPipelineProtected(_ foregroundCleanupProtection, msg *p
 	releaseSpawnLock := d.acquireSpawnLock(msg.ID)
 	defer releaseSpawnLock()
 
+	if err := ctx.Err(); err != nil {
+		return placementOutcome{}, &spawnRejection{err: fmt.Errorf("prepare session launch: %w", err)}
+	}
 	if rejection := d.normalizeSpawnRequest(req); rejection != nil {
 		return placementOutcome{}, rejection
 	}

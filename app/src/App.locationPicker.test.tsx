@@ -370,6 +370,20 @@ describe('App location picker', () => {
       expect(chiefToggle()).toBeNull();
     });
 
+    it('waits for the daemon’s Chief discovery result past the server launch budget', async () => {
+      const { daemon } = await openPicker();
+      let held: CommandMessage<'spawn_session'> | undefined;
+      daemon.on('spawn_session', request => { held = request; });
+      await gesture(daemon, () => fireEvent.click(chiefToggle()!));
+      await submitPath(daemon, '/tmp/chief');
+      expect(held).toMatchObject({ chief_of_staff: true });
+      await act(() => vi.advanceTimersByTimeAsync(30000));
+      await daemon.idle();
+      expect(screen.queryByText('Spawn session timed out')).toBeNull();
+      await gesture(daemon, () => daemon.emit({ event: 'spawn_result', id: held!.id, success: false, error: 'Chief discovery exhausted its launch budget' }));
+      expect(screen.getByText('Chief discovery exhausted its launch budget')).toBeInTheDocument();
+    });
+
     it('launches as chief only when the toggle is on', async () => {
       const { daemon } = await openPicker();
       await submitPath(daemon, '/tmp/plain');
