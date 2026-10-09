@@ -1,0 +1,3 @@
+kind: added
+area: desktops
+change: Sort desktops by number and name from the palette, with Undo to restore your arrangement. New numbered desktops land after their nearest lower number.

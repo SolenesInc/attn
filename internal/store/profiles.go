@@ -265,8 +265,30 @@ func insertDesktop(tx *sql.Tx, now, profileID, name string, slot int) (profiles.
 	if err := profiles.ValidateShortcutSlot(slot); err != nil {
 		return profiles.Desktop{}, err
 	}
-	var lastKey string
-	if err := tx.QueryRow(`SELECT COALESCE(MAX(order_key), '') FROM desktops WHERE profile_id = ?`, profileID).Scan(&lastKey); err != nil {
+	desktops, err := listDesktops(tx, profileID)
+	if err != nil {
+		return profiles.Desktop{}, err
+	}
+	position := len(desktops)
+	if slot > 0 {
+		position = 0
+		lowerSlot := 0
+		for i, desktop := range desktops {
+			if desktop.ShortcutSlot > lowerSlot && desktop.ShortcutSlot < slot {
+				lowerSlot = desktop.ShortcutSlot
+				position = i + 1
+			}
+		}
+	}
+	previousKey, nextKey := "", ""
+	if position > 0 {
+		previousKey = desktops[position-1].OrderKey
+	}
+	if position < len(desktops) {
+		nextKey = desktops[position].OrderKey
+	}
+	orderKey, err := rankkey.Between(previousKey, nextKey)
+	if err != nil {
 		return profiles.Desktop{}, err
 	}
 	if err := ensureShortcutSlotFree(tx, profileID, slot); err != nil {
@@ -277,10 +299,10 @@ func insertDesktop(tx *sql.Tx, now, profileID, name string, slot int) (profiles.
 		ProfileID:    profileID,
 		Name:         strings.TrimSpace(name),
 		ShortcutSlot: slot,
-		OrderKey:     rankkey.After(lastKey),
+		OrderKey:     orderKey,
 		Revision:     1,
 	}
-	_, err := tx.Exec(`
+	_, err = tx.Exec(`
 		INSERT INTO desktops (id, profile_id, name, order_key, tree_json, active_pane_id, revision, created_at, updated_at)
 		VALUES (?, ?, ?, ?, '', '', 1, ?, ?)`,
 		desktop.ID, profileID, desktop.Name, desktop.OrderKey, now, now)
@@ -790,6 +812,43 @@ func (s *Store) ReorderDesktop(id, previousID, nextID string, expectedRevision i
 		desktop.OrderKey = key
 		return nil
 	})
+}
+
+func (s *Store) SetDesktopOrder(profileID string, ids []string) ([]profiles.Desktop, error) {
+	var ordered []profiles.Desktop
+	err := s.profilesTx(func(tx *sql.Tx, now string) error {
+		if _, err := loadLiveProfile(tx, profileID); err != nil {
+			return err
+		}
+		desktops, err := listDesktops(tx, profileID)
+		if err != nil {
+			return err
+		}
+		remaining := make(map[string]profiles.Desktop, len(desktops))
+		for _, desktop := range desktops {
+			remaining[desktop.ID] = desktop
+		}
+		if len(ids) != len(desktops) {
+			return profiles.Errorf(profiles.CodeInvalid, "desktop order for profile %s requires all %d desktops exactly once, received %d", profileID, len(desktops), len(ids))
+		}
+		for _, id := range ids {
+			desktop, found := remaining[id]
+			if !found {
+				return profiles.Errorf(profiles.CodeInvalid, "desktop order for profile %s contains unknown or repeated desktop %s", profileID, id)
+			}
+			ordered = append(ordered, desktop)
+			delete(remaining, id)
+		}
+		keys := rankkey.Seed(len(ordered))
+		for i := range ordered {
+			ordered[i].OrderKey = keys[i]
+			if err := saveDesktop(tx, now, &ordered[i]); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	return ordered, err
 }
 
 func deleteDesktop(tx *sql.Tx, id string) error {

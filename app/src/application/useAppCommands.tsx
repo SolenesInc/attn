@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useToast } from '../components/Toast';
 import type { PaletteCommand } from '../components/palette/paletteCommands';
 import { EditorIcon, NotebookIcon, WorkflowIcon } from '../components/Sidebar';
 import { SessionRoleIcon } from '../components/DelegationChain';
@@ -6,7 +7,7 @@ import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { shortcutTokens } from '../shortcuts/formatShortcut';
 import { useDaemonStore } from '../store/daemonSessions';
 import { useProfilesStore } from '../store/profiles';
-import { desktopLabel, orderedDesktops } from '../utils/desktops';
+import { desktopLabel, orderedDesktops, sortedDesktopOrder } from '../utils/desktops';
 import type { ShortcutId } from '../shortcuts/registry';
 import {
   AUTO_SETTLE_ENABLED_SETTING,
@@ -67,7 +68,8 @@ export function useAppCommands(): PaletteCommand[] {
     handleSnoozeActiveSession,
     handleWakeActiveSession,
   } = useAttentionQueueContext();
-  const { sendSetSetting } = useDaemonApi();
+  const { sendSetSetting, sendDesktopSetOrder } = useDaemonApi();
+  const { showAction, showError } = useToast();
   const { handleCreateDiagnosticReport } = useAppDiagnosticsContext();
   const contextSessionId = useSessionBehindScreen();
   const agentOnScreenId = useAgentOnScreen();
@@ -177,6 +179,22 @@ export function useAppCommands(): PaletteCommand[] {
         icon: <BoardActionIcon />,
         run: desktopNavigation.createDesktop,
       },
+      ...(selectedProfileId ? [{
+        id: 'sort-desktops',
+        title: 'Sort desktops',
+        description: 'Numbered desktops first, then names A–Z',
+        keywords: ['desktop', 'order', 'organize'],
+        icon: <BoardActionIcon />,
+        run: async () => {
+          const previous = orderedDesktops(desktops).map((desktop) => desktop.id);
+          try {
+            await sendDesktopSetOrder(selectedProfileId, sortedDesktopOrder(desktops));
+            showAction('Desktops sorted', 'Undo', async () => { await sendDesktopSetOrder(selectedProfileId, previous); });
+          } catch (reason) {
+            showError(reason instanceof Error ? reason.message : String(reason));
+          }
+        },
+      }] : []),
       ...orderedDesktops(desktops).map((desktop) => ({
         id: `desktop-${desktop.id}`,
         title: `Go to ${desktopLabel(desktop, desktops)}`,
@@ -297,6 +315,9 @@ export function useAppCommands(): PaletteCommand[] {
     automationsPanelOpen,
     desktopNavigation,
     desktops,
+    sendDesktopSetOrder,
+    showAction,
+    showError,
     editorUnavailableReason,
     goToDashboard,
     handleJumpToWaiting,

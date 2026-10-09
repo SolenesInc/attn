@@ -216,6 +216,14 @@
         "seconds": 27.874,
         "runnerClass": "local macOS",
         "note": "Green ATTN_VERDICT durationMs=27874, including cleanup and recording. Native palette moves a dispatcher, two delegates and a nested delegate against a production DB copy. No overview changes. Final recording and screenshots attached to seed s-4z9ah9. Remeasure on Linux CI."
+      },
+      "desktop-order": {
+        "run": "desktop-order-2026-10-08T21-40-27-696Z",
+        "job": "Local packaged scenario, desktop-order named instance",
+        "recordedAt": "2026-10-08",
+        "seconds": 23.413,
+        "runnerClass": "local macOS",
+        "note": "Green ATTN_VERDICT durationMs=23413 on ceaf9fd42, including shared-scenario lock wait and cleanup. Native palette Sort, visible Undo, exact sidebar restoration and desktop.select7 after 6. Remeasure on Linux CI."
       }
     }
   },
@@ -273,6 +281,7 @@
     "garden-profile-scope": 29.9,
     "launch-desktops": 26.739,
     "palette-order": 55.41,
-    "move-with-delegates": 27.874
+    "move-with-delegates": 27.874,
+    "desktop-order": 23.413
   }
 }

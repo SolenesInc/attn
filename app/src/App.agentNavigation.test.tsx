@@ -502,6 +502,27 @@ describe('queue', () => {
     expect(selectedAgent()).toBe('s1');
   });
 
+  it.each([['Sort', false], ['Undo', true]])('keeps following the next turn after %s desktops', async (_, undo) => {
+    const view = await renderAgents({ s1: SETTLED, s2: SETTLED });
+    view.daemon.on('desktop_set_order', () => [
+      { event: 'profile_action_result', action: 'desktop_set_order', success: true },
+      view.daemon.arrangement.changed(),
+    ]);
+    const follow = () => within(screen.getByTestId('follow-next-turn')).getByRole('checkbox');
+    if (!undo) await gesture(view.daemon, () => fireEvent.click(follow()));
+    const search = await openActionMenu(view.daemon);
+    fireEvent.change(search, { target: { value: '>Sort desktops' } });
+    await gesture(view.daemon, () => fireEvent.keyDown(search, { key: 'Enter' }));
+    if (undo) {
+      await gesture(view.daemon, () => fireEvent.click(follow()));
+      await gesture(view.daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Desktops sorted Undo' })));
+    }
+
+    await view.update({ s1: SETTLED, s2: OWED });
+
+    expect(selectedAgent()).toBe('s2');
+  });
+
   it('takes the user to the next turn that opens after the queue ran dry', async () => {
     const view = await workTheQueueDownToHome();
 

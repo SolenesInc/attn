@@ -471,6 +471,15 @@ func (d *Daemon) handleDesktopReorder(client *wsClient, msg *protocol.DesktopReo
 	})
 }
 
+func (d *Daemon) handleDesktopSetOrder(client *wsClient, msg *protocol.DesktopSetOrderMessage) {
+	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
+		desktops, err := d.store.SetDesktopOrder(msg.ProfileID, msg.DesktopIds)
+		return profileActionOutcome{desktops: desktops, arranges: true, publish: func() {
+			d.publishArrangementChanged(msg.ProfileID)
+		}}, err
+	})
+}
+
 func (d *Daemon) handleDesktopSetCurrent(client *wsClient, msg *protocol.DesktopSetCurrentMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
 		profile, err := d.store.SetCurrentDesktop(msg.ProfileID, msg.DesktopID)
