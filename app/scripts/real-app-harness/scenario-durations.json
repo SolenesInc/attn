@@ -226,12 +226,12 @@
         "note": "Green ATTN_VERDICT durationMs=23413 on ceaf9fd42, including shared-scenario lock wait and cleanup. Native palette Sort, visible Undo, exact sidebar restoration and desktop.select7 after 6. Remeasure on Linux CI."
       },
       "close-desktop": {
-        "run": "close-desktop-2026-10-09T19-36-43-843Z",
+        "run": "close-desktop-2026-10-09T19-42-22-118Z",
         "job": "Local packaged scenario, close-desk instance with copied production data",
         "recordedAt": "2026-10-09",
-        "seconds": 4.342,
+        "seconds": 33.297,
         "runnerClass": "local macOS",
-        "note": "Green ATTN_VERDICT durationMs=4342 on c509419dc, including cleanup and recording. Native close shortcut on the empty launcher and nonempty close confirmation. Remeasure on Linux CI."
+        "note": "Green ATTN_VERDICT durationMs=33297 on f2be9c0cd, including scenario-lock wait, native window setup, cleanup and recording. Native close shortcut on the empty launcher and centered nonempty close confirmation. First run before the dialog style adjustment was 4.342s. Remeasure on Linux CI."
       }
     }
   },
@@ -291,6 +291,6 @@
     "palette-order": 55.41,
     "move-with-delegates": 27.874,
     "desktop-order": 23.413,
-    "close-desktop": 4.342
+    "close-desktop": 33.297
   }
 }
