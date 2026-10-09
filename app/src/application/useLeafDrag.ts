@@ -139,7 +139,7 @@ export function useLeafDrag({
   );
 
   const sendLeafToDesktop = useCallback(
-    (drag: LeafDesktopDragState, targetDesktopId: string, targetRevision?: number) =>
+    (drag: LeafDesktopDragState, targetDesktopId: string, targetRevision?: number, withDelegates = false) =>
       withFreshDesktopRevisions(
         targetRevision === undefined ? [drag.sourceDesktopId, targetDesktopId] : [drag.sourceDesktopId],
         (revisionOf) =>
@@ -147,6 +147,7 @@ export function useLeafDrag({
             sourceDesktopId: drag.sourceDesktopId,
             targetDesktopId,
             leafId: drag.leafId,
+            ...(withDelegates ? { withDelegates: true } : {}),
             edge: SIDEBAR_LEAF_DROP_PLACEMENT.edge,
             leafShare: SIDEBAR_LEAF_DROP_PLACEMENT.leafShare,
             expectedSourceRevision: revisionOf(drag.sourceDesktopId),
@@ -184,13 +185,13 @@ export function useLeafDrag({
   );
 
   const handleDesktopDragDrop = useCallback(
-    (desktop: { id: string }) => {
+    (desktop: { id: string }, withDelegates = false) => {
       const drag = leafDesktopDragRef.current;
       if (!drag || !acceptsDrop(desktop.id)) return;
       clearHoverTimer();
       setDragHoverDesktopId(null);
       handleSelectDesktop(desktop.id);
-      void sendLeafToDesktop(drag, desktop.id).catch((error) => {
+      void sendLeafToDesktop(drag, desktop.id, undefined, withDelegates).catch((error) => {
         showError(`Could not move that pane: ${failureMessage(error)}`);
       });
     },

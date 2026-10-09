@@ -275,8 +275,8 @@ function DesktopDropGroup({
       onPointerLeave={() => {
         if (canAcceptLeafDrag(desktopView)) onDesktopDragLeave?.(desktopView);
       }}
-      onPointerUp={() => {
-        if (canAcceptLeafDrag(desktopView)) onDesktopDragDrop?.(desktopView);
+      onPointerUp={(event) => {
+        if (canAcceptLeafDrag(desktopView)) onDesktopDragDrop?.(desktopView, event.altKey);
       }}
     >
       {children}

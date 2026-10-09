@@ -166,6 +166,29 @@ jobs:
           echo "NOTARY_API_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
           echo "APPLE_KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
 
+      # Tauri signs the app and its sidecars but leaves resources as they are, and
+      # notarization rejects any unsigned executable inside the bundle. Bun's JIT
+      # needs allow-jit under the hardened runtime; without it the plugin runs
+      # with JIT off, several times slower.
+      - name: Sign bundled plugin executables
+        run: |
+          ENTITLEMENTS="$RUNNER_TEMP/bundled-plugin.entitlements"
+          cat >"$ENTITLEMENTS" <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>com.apple.security.cs.allow-jit</key>
+              <true/>
+          </dict>
+          </plist>
+          EOF
+          while IFS= read -r executable; do
+            codesign --force --sign "$APPLE_SIGNING_IDENTITY" --options runtime --timestamp \
+              --entitlements "$ENTITLEMENTS" "$executable"
+            codesign --verify --strict --verbose=2 "$executable"
+          done < <(find app/src-tauri/bundled-plugins/*/bin -type f | sort)
+
       - name: Build and publish release
         uses: tauri-apps/tauri-action@v0
         env:

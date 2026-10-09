@@ -2,6 +2,8 @@ import { useCallback, useMemo } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
+import { useDaemonStore } from '../store/daemonSessions';
+import { useAgentOnScreen } from './useDesktopSelectionBridge';
 import type { Desktop } from '../types/generated';
 import { withFreshDesktopRevisions } from './desktopRevisions';
 import { actThenShow } from '../application/openThenShow';
@@ -33,6 +35,16 @@ export function useDesktopNavigation(showError: ShowError) {
   const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
   const desktops = useProfilesStore((state) => state.desktops);
   const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
+  const agentOnScreenId = useAgentOnScreen();
+  const sessions = useDaemonStore((state) => state.daemonSessions);
+  const canMoveWithDelegates = useMemo(() => {
+    if (!agentOnScreenId) return false;
+    const delegates = new Set(sessions
+      .filter((session) => session.dispatcher_session_id === agentOnScreenId)
+      .map((session) => session.id));
+    return desktops.find((desktop) => desktop.id === currentDesktopId)?.panes
+      .some((pane) => delegates.has(pane.session_id)) ?? false;
+  }, [agentOnScreenId, currentDesktopId, desktops, sessions]);
   const selectedProfile = useMemo(
     () => profiles.find((profile) => profile.id === selectedProfileId),
     [selectedProfileId, profiles],
@@ -84,7 +96,7 @@ export function useDesktopNavigation(showError: ShowError) {
 
   // A slot with no desktop gets one, created there for this move.
   const moveActiveLeaf = useCallback(
-    async (to: { desktopId: string } | { slot: number }, follow: boolean): Promise<void> => {
+    async (to: { desktopId: string } | { slot: number }, follow: boolean, withDelegates = false): Promise<void> => {
       const state = useProfilesStore.getState();
       const source = currentDesktopOf(state);
       const profileId = state.selectedProfileId;
@@ -110,6 +122,7 @@ export function useDesktopNavigation(showError: ShowError) {
             leafId,
             anchorId: existing?.active_pane_id || undefined,
             edge: 'right',
+            ...(withDelegates ? { withDelegates: true } : {}),
             expectedSourceRevision: revisionOf(source.id),
             expectedTargetRevision: revisionOf(targetId),
           }),
@@ -128,7 +141,7 @@ export function useDesktopNavigation(showError: ShowError) {
   );
 
   const moveActiveLeafToDesktop = useCallback(
-    (desktopId: string, follow: boolean) => report(moveActiveLeaf({ desktopId }, follow)),
+    (desktopId: string, follow: boolean, withDelegates = false) => report(moveActiveLeaf({ desktopId }, follow, withDelegates)),
     [moveActiveLeaf, report],
   );
 
@@ -212,6 +225,7 @@ export function useDesktopNavigation(showError: ShowError) {
     switchToDesktop,
     switchToSlot,
     moveActiveLeafToDesktop,
+    canMoveWithDelegates,
     moveActiveLeafToSlot,
     createDesktop,
     renameDesktop,

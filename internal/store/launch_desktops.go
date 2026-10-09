@@ -267,6 +267,19 @@ func findDesktop(tx *sql.Tx, id string) (profiles.Desktop, bool, error) {
 	return desktop, err == nil, err
 }
 
+func findOrRecreateNumberedDesktop(tx *sql.Tx, now string, profile profiles.Profile, id string) (profiles.Desktop, bool, error) {
+	desktop, found, err := findDesktop(tx, id)
+	if err != nil || found {
+		return desktop, found, err
+	}
+	slot := profiles.DesktopSlot(id)
+	if slot == 0 || id != profiles.NumberedDesktopID(profile.ID, slot) {
+		return desktop, false, nil
+	}
+	desktop, err = insertDesktop(tx, now, profile.ID, "", slot)
+	return desktop, err == nil, err
+}
+
 func (s *Store) PlaceBackgroundSession(sessionID protocol.SessionID, runtimeID protocol.TerminalID, kind string, id string, reopen bool) (profiles.Desktop, string, error) {
 	paneID := newProfileEntityID("pane")
 	var desktop profiles.Desktop
@@ -285,12 +298,9 @@ func (s *Store) PlaceBackgroundSession(sessionID protocol.SessionID, runtimeID p
 				return err
 			}
 			var found bool
-			desktop, found, err = findDesktop(tx, last)
-			slot := profiles.DesktopSlot(last)
+			desktop, found, err = findOrRecreateNumberedDesktop(tx, now, profile, last)
 			switch {
 			case err != nil:
-			case !found && slot != 0 && last == profiles.NumberedDesktopID(profile.ID, slot):
-				desktop, err = insertDesktop(tx, now, profile.ID, "", slot)
 			case !found || desktop.ProfileID != profile.ID:
 				desktop, err = loadLaunchDesktop(tx, profile, "")
 			}

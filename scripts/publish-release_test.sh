@@ -15,15 +15,16 @@ printf '%s\n' "$*" >>"$FAKE_GH_LOG"
 if [[ "$1 $2" == "release view" ]]; then
   exit 0
 fi
-if [[ "$1" == "api" && "$2" == repos/*/releases/tags/* ]]; then
-  tag="${2##*/}"
-  case "$tag" in
-    v1.2.4) printf '124\n' ;;
-    v1.2.5) printf '125\n' ;;
-    v1.2.9) printf '129\n' ;;
-    v1.2.10) printf '1210\n' ;;
-    *) echo "unexpected release tag: $tag" >&2; exit 2 ;;
-  esac
+if [[ "$1 $2 $3 $4" == "api repos/example/attn/releases --paginate --jq" ]]; then
+  jq -r "$5" <<'JSON'
+[
+  {"id": 129, "tag_name": "v1.2.9", "draft": true},
+  {"id": 1210, "tag_name": "v1.2.10", "draft": true},
+  {"id": 125, "tag_name": "v1.2.5", "draft": true},
+  {"id": 124, "tag_name": "v1.2.4", "draft": true},
+  {"id": 123, "tag_name": "v1.2.3", "draft": false}
+]
+JSON
   exit 0
 fi
 if [[ "$1 $2" == "api --method" && "$3" == "PATCH" && "$4" == repos/*/releases/* ]]; then
@@ -65,6 +66,12 @@ export FAKE_LATEST_TAG="$work/latest"
 export FAKE_OLDER_STARTED="$work/older-started"
 export FAKE_OLDER_CONTINUE="$work/older-continue"
 mkdir -p "$FAKE_RELEASE_STATE"
+
+"$script" v1.2.9 >"$work/numeric-older.out"
+"$script" v1.2.10 >"$work/numeric-newer.out"
+[[ "$(<"$FAKE_LATEST_TAG")" == "v1.2.10" ]]
+
+rm -f "$FAKE_RELEASE_STATE"/*
 mkfifo "$FAKE_OLDER_STARTED" "$FAKE_OLDER_CONTINUE"
 
 : >"$FAKE_GH_LOG"
@@ -77,12 +84,6 @@ wait "$older_pid"
 [[ "$(<"$FAKE_LATEST_TAG")" == "v1.2.5" ]]
 grep -Fq 'api --method PATCH repos/example/attn/releases/124 -F draft=false -f make_latest=legacy' "$FAKE_GH_LOG"
 grep -Fq 'api --method PATCH repos/example/attn/releases/125 -F draft=false -f make_latest=legacy' "$FAKE_GH_LOG"
-
-rm -f "$FAKE_RELEASE_STATE"/*
-rm -f "$FAKE_OLDER_STARTED" "$FAKE_OLDER_CONTINUE"
-"$script" v1.2.9 >"$work/numeric-older.out"
-"$script" v1.2.10 >"$work/numeric-newer.out"
-[[ "$(<"$FAKE_LATEST_TAG")" == "v1.2.10" ]]
 
 if "$script" unsafe-tag >"$work/invalid.out" 2>&1; then
   echo "invalid release tag was published" >&2

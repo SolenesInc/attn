@@ -66,6 +66,11 @@ tile remains, focus passes to the tile on the left, then another remaining tile.
 Settings about the user's environment, including model tiers for available
 harnesses and models, apply across profiles on the daemon.
 
+Use "Move with delegates to…" in the command palette to move an agent with its
+delegates on the same desktop, including their delegates. Hold Option when
+dropping an agent on another desktop in the sidebar for the same move. Each delegate lands beside its dispatcher;
+delegates elsewhere and split shells stay where they are.
+
 **Panes, splits, and first-class shells.** A desktop can hold several sessions
 side by side. Split a pane, open a plain shell as its own session from the same
 dialog you use for agents, and move focus between panes with the keyboard.
