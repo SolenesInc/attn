@@ -197,11 +197,11 @@ func (q *codexEvents) run(d *Daemon, f func()) {
 	}
 }
 
-func (r *codexShared) report(s *codexServer, sessionID protocol.SessionID, turn harness.Turn, restated bool) {
+func (r *codexShared) report(s *codexServer, sessionID protocol.SessionID, turn harness.Turn) {
 	s.mu.Lock()
 	epoch := s.epoch
 	s.mu.Unlock()
-	r.d.linkEvents().Turn(harness.SessionID(sessionID), time.Now(), harness.TurnEvent{Turn: turn, Epoch: epoch, Seq: s.seq.Add(1), Restated: restated})
+	r.d.linkEvents().Turn(harness.SessionID(sessionID), time.Now(), harness.TurnEvent{Turn: turn, Epoch: epoch, Seq: s.seq.Add(1)})
 }
 
 func (r *codexShared) observeStatus(s *codexServer, m codexshared.Message) {
@@ -224,12 +224,12 @@ func (r *codexShared) observeStatus(s *codexServer, m codexshared.Message) {
 		case turn == harness.TurnApproval && session.State != protocol.SessionStatePendingApproval,
 			turn == harness.TurnQuestion && session.State != protocol.SessionStateWaitingInput,
 			turn == harness.TurnRunning && blocked:
-			r.report(s, sessionID, turn, false)
+			r.report(s, sessionID, turn)
 		}
 	})
 }
 
-func (r *codexShared) restateHiddenStates(s *codexServer, client *codexshared.Client) {
+func (r *codexShared) reconcileHiddenStates(s *codexServer, client *codexshared.Client) {
 	for _, session := range r.d.store.List("") {
 		stale := session.State == protocol.SessionStateUnknown || session.State == protocol.SessionStateWorking ||
 			session.State == protocol.SessionStatePendingApproval
@@ -249,7 +249,7 @@ func (r *codexShared) restateHiddenStates(s *codexServer, client *codexshared.Cl
 			continue
 		}
 		if turn, ok := read.Thread.Status.turn(); ok {
-			r.report(s, session.ID, turn, true)
+			r.report(s, session.ID, turn)
 		}
 	}
 }

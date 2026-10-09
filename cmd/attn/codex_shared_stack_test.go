@@ -180,3 +180,40 @@ func submitFeedback(t *testing.T, app *testworld.Peer, session, text string) {
 		t.Fatalf("feedback to session %s: %s", session, protocol.Deref(delivered.Error))
 	}
 }
+
+func TestAHiddenSharedCodexTurnThatEndsWhileTheDaemonIsDownSettlesAfterTheRestart(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	s.Start()
+	app := s.App()
+	shareCodex(t, app)
+	session := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
+	codex := s.Launched(session)
+	terminal := app.Terminal(session)
+	app.TypeLine(session, "find the flaky checkout test")
+	codex.Prompted()
+	codex.Reply("It races the tax lookup. Lock it? <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWaitingInput })
+	conversation := codex.ConversationID
+	for _, line := range []string{"/new", "add a discount field"} {
+		typeLineInto(app, terminal, line)
+		codex.Prompted()
+	}
+	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return protocol.Deref(x.Hidden) })
+	submitFeedback(t, app, session, "Lock the tax table before the lookup.")
+	server := s.CodexServer()
+	server.Prompted(conversation)
+	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
+
+	s.Stop()
+	server.Halt(conversation)
+	s.Start()
+	app = s.App()
+	i := slices.IndexFunc(app.Initial.Sessions, func(x protocol.Session) bool { return string(x.ID) == session })
+	if i < 0 {
+		t.Fatalf("session %s is gone after the restart", session)
+	}
+	if app.Initial.Sessions[i].State != protocol.SessionStateIdle {
+		testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
+	}
+}

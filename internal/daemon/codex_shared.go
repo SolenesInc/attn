@@ -279,7 +279,7 @@ func (r *codexShared) connect(ctx context.Context, s *codexServer) error {
 				return errDaemonStopping
 			}
 			r.restoreParents(s, client, list.Data)
-			s.events.run(r.d, func() { r.restateHiddenStates(s, client) })
+			s.events.run(r.d, func() { r.reconcileHiddenStates(s, client) })
 			return nil
 		}
 		if ctx.Err() != nil {
@@ -419,7 +419,7 @@ func (r *codexShared) lost(s *codexServer, conversation string) {
 	}
 	r.d.drainTranscriptWatcher(sessionID)()
 	if session.State == protocol.SessionStateWorking || session.State == protocol.SessionStatePendingApproval {
-		r.report(s, sessionID, harness.TurnEnded, false)
+		r.report(s, sessionID, harness.TurnEnded)
 		return
 	}
 	if session.State == protocol.SessionStateRecoverable || session.State == protocol.SessionStateIdle ||

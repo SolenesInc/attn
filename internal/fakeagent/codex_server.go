@@ -729,8 +729,12 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 		case <-time.After(HangGuard):
 			return nil, fmt.Errorf("conversation %s took no prompt within %s", p.ThreadID, HangGuard)
 		}
-	case methodReply:
-		_, after, err := s.endTurn(methodFakeReply, codexServerParams{ThreadID: p.ThreadID, Text: p.Text})
+	case methodReply, methodHalt:
+		kind := methodFakeReply
+		if method == methodHalt {
+			kind = methodFakeHalt
+		}
+		_, after, err := s.endTurn(kind, codexServerParams{ThreadID: p.ThreadID, Text: p.Text})
 		if err == nil && after != nil {
 			after()
 		}

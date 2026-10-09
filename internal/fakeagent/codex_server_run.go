@@ -22,6 +22,11 @@ func (s *CodexServer) Reply(conversation, text string) {
 	s.call(methodReply, serverThreadParams{ThreadID: conversation, Text: text}, nil)
 }
 
+func (s *CodexServer) Halt(conversation string) {
+	s.t.Helper()
+	s.call(methodHalt, serverThreadParams{ThreadID: conversation}, nil)
+}
+
 func (s *CodexServer) AwaitName(conversation, name string) {
 	s.t.Helper()
 	s.call(methodThreadName, serverThreadParams{ThreadID: conversation, Text: name}, nil)
