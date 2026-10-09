@@ -5,6 +5,7 @@ const SETTINGS_SECTION_IDS = [
   'desktop',
   'hygiene',
   'agents',
+  'models',
   'backgroundAgents',
   'terminal',
   'autoMode',

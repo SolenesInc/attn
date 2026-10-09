@@ -1,4 +1,8 @@
-import { Fragment } from 'react';
+import { useHarnesses } from '../hooks/useHarnesses';
+import { HarnessRouteChip } from './HarnessRouteChip';
+import { HarnessRouteBadge } from './HarnessRouteBadge';
+import { routeFromStored } from '../hooks/useHarnessRoute';
+import { ModelTier } from '../types/generated';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import { agentCapabilityLabel, agentLabel, isAgentAvailable } from '../utils/agentAvailability';
 import { AUTO_SETTLE_ARM_SETTING, AUTO_SETTLE_COUNTDOWN_SETTING } from '../utils/queueBands';
@@ -9,7 +13,6 @@ import { GardenAdvisorSettings } from './GardenAdvisorSettings';
 import { SessionActivitySettings } from './SessionActivitySettings';
 import { SessionCostPriceSettings } from './SessionCostPriceSettings';
 import {
-  CHIEF_EFFORT_LEVELS,
   DEFAULT_CONTEXT_WINDOW_CAP,
   MODEL_CAPTURE_INTERVAL_OPTIONS,
   MODEL_CAPTURE_MAX_GB_OPTIONS,
@@ -793,6 +796,7 @@ export function BackgroundAgentSettings({
   | 'chiefContextCapDraft'
   | 'headlessContextCapDraft'
 >) {
+  const { harnesses } = useHarnesses();
   return (
     <>
       <SessionActivitySettings settings={settings} agents={activityAgents} onSetSetting={onSetSetting} />
@@ -802,7 +806,7 @@ export function BackgroundAgentSettings({
           <div className="settings-kicker">Agents</div>
           <h3>Chief of staff</h3>
           <p className="settings-description">
-            Model and effort for Chief launches. Empty values use the agent's default.
+            Harness, model and effort for Chief launches. Unset models use the deep default at low effort.
           </p>
         </div>
         <div className="settings-block-body">
@@ -811,61 +815,13 @@ export function BackgroundAgentSettings({
           ) : (
             <div className="settings-field-grid two-column">
               {chiefOverrideAgentList.map((agent) => {
-                const inputId = `settings-chief-model-${agent}`;
-                const effortId = `settings-chief-effort-${agent}`;
-                const value = chiefModelDrafts.value(agent);
-                const effortValue = chiefEffortDrafts.value(agent);
-                const effortLevels = CHIEF_EFFORT_LEVELS[agent] || [];
-                return (
-                  <Fragment key={agent}>
-                    <div className="settings-field">
-                      <label className="settings-label" htmlFor={inputId}>
-                        {agentLabel(agent)}
-                      </label>
-                      <input
-                        id={inputId}
-                        data-testid={inputId}
-                        type="text"
-                        value={value}
-                        onChange={(e) => chiefModelDrafts.set(agent, e.target.value)}
-                        onBlur={() => chiefModelDrafts.commit(agent)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            chiefModelDrafts.commit(agent);
-                          }
-                        }}
-                        placeholder="Agent default"
-                        className="settings-input"
-                        autoCapitalize="none"
-                        autoCorrect="off"
-                        spellCheck={false}
-                      />
-                      <SavedMark
-                        shown={savedFlash.saved(`chief_model_${agent}`)}
-                        testID={`settings-chief-model-saved-${agent}`}
-                      />
-                    </div>
-                    <div className="settings-field">
-                      <label className="settings-label" htmlFor={effortId}>
-                        {agentLabel(agent)} effort
-                      </label>
-                      <select
-                        id={effortId}
-                        data-testid={effortId}
-                        className="settings-input"
-                        value={effortValue}
-                        onChange={(e) => chiefEffortDrafts.apply(agent, e.target.value)}
-                      >
-                        <option value="">Agent default</option>
-                        {effortLevels.map((level) => (
-                          <option key={level} value={level}>
-                            {level}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </Fragment>
-                );
+                return <div className="settings-field" key={agent}>
+                  <HarnessRouteChip variant="field" aria-label={`${agentLabel(agent)} Chief model`} data-testid={`settings-chief-route-${agent}`} value={{ harness: agent, provider: '', model: chiefModelDrafts.value(agent), effort: chiefEffortDrafts.value(agent) }} rules={{ harnesses: harnesses.filter(harness => harness.id === agent), fixedHarness: true, tier: ModelTier.Deep, defaultEffort: 'low' }} onChange={route => {
+                    if (route.model !== chiefModelDrafts.value(agent)) void chiefModelDrafts.apply(agent, route.model);
+                    if (route.effort !== chiefEffortDrafts.value(agent)) void chiefEffortDrafts.apply(agent, route.effort);
+                  }} />
+                  <SavedMark shown={savedFlash.saved(`chief_model_${agent}`)} testID={`settings-chief-model-saved-${agent}`} />
+                </div>;
               })}
             </div>
           )}
@@ -975,6 +931,7 @@ export function AgentSettings({
   | 'defaultContextCapDrafts'
   | 'onSetSetting'
 >) {
+  const { harnesses } = useHarnesses();
   const overrideAgents = new Set(defaultOverrideAgentList);
   const capabilityOrder = new Set(agentCapabilityOrder);
   const executableAgents = new Set(executableAgentList);
@@ -1046,53 +1003,14 @@ export function AgentSettings({
               <summary>
                 <span>{agentLabel(agent)}</span>
                 <span className="settings-agent-summary">
-                  {settings[`default_model_${agent}`] || 'Agent default'} · {available ? 'Available' : 'Unavailable'}
+                  <HarnessRouteBadge value={routeFromStored(agent, settings[`default_model_${agent}`] || '', settings[`default_effort_${agent}`] || '')} /> · {available ? 'Available' : 'Unavailable'}
                 </span>
               </summary>
               <div className="settings-agent-content">
-                {overrides && (
-                  <div className="settings-field-grid two-column">
-                    <div className="settings-field">
-                      <label className="settings-label" htmlFor={`settings-default-model-${agent}`}>
-                        Default model
-                      </label>
-                      <input
-                        id={`settings-default-model-${agent}`}
-                        data-testid={`settings-default-model-${agent}`}
-                        className="settings-input"
-                        value={defaultModelDrafts.value(agent)}
-                        placeholder="Agent default"
-                        autoCapitalize="none"
-                        autoCorrect="off"
-                        spellCheck={false}
-                        onChange={(e) => defaultModelDrafts.set(agent, e.target.value)}
-                        onBlur={() => void defaultModelDrafts.commit(agent)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') void defaultModelDrafts.commit(agent);
-                        }}
-                      />
-                    </div>
-                    <div className="settings-field">
-                      <label className="settings-label" htmlFor={`settings-default-effort-${agent}`}>
-                        Reasoning effort
-                      </label>
-                      <select
-                        id={`settings-default-effort-${agent}`}
-                        data-testid={`settings-default-effort-${agent}`}
-                        className="settings-input"
-                        value={defaultEffortDrafts.value(agent)}
-                        onChange={(e) => defaultEffortDrafts.apply(agent, e.target.value)}
-                      >
-                        <option value="">Agent default</option>
-                        {(CHIEF_EFFORT_LEVELS[agent] || []).map((level) => (
-                          <option key={level} value={level}>
-                            {level}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                )}
+                {overrides && <HarnessRouteChip variant="field" aria-label={`${agentLabel(agent)} default model`} data-testid={`settings-default-route-${agent}`} value={{ harness: agent, provider: '', model: defaultModelDrafts.value(agent), effort: defaultEffortDrafts.value(agent) }} rules={{ harnesses: harnesses.filter(harness => harness.id === agent), fixedHarness: true }} onChange={route => {
+                  if (route.model !== defaultModelDrafts.value(agent)) void defaultModelDrafts.apply(agent, route.model);
+                  if (route.effort !== defaultEffortDrafts.value(agent)) void defaultEffortDrafts.apply(agent, route.effort);
+                }} />}
                 {!overrides && (
                   <p className="settings-description">Model and effort follow this agent's own configuration.</p>
                 )}

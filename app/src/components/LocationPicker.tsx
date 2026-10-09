@@ -1,3 +1,5 @@
+import { useOptionalDaemonApi } from '../contexts/DaemonApiContext';
+import { useHarnesses } from '../hooks/useHarnesses';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { useFilesystemSuggestions } from '../hooks/useFilesystemSuggestions';
@@ -121,7 +123,6 @@ const DEFAULT_AGENT_AVAILABILITY: AgentAvailability = {
   claude: true,
   copilot: true,
 };
-const FIXED_AGENT_ORDER: SessionAgent[] = [TERMINAL_AGENT, 'claude', 'codex', 'copilot'];
 
 const normalizeAgent = (value?: string): SessionAgent | null => {
   if (!value) return null;
@@ -384,31 +385,23 @@ export function LocationPicker({
     { homePath, onHomePathChange: handleHomePathChange, enabled: isOpen },
   );
 
+  const daemonApi = useOptionalDaemonApi();
+  const { harnesses, hasCatalog, loading: harnessesLoading, error: harnessesError, retry: retryHarnesses } = useHarnesses(isOpen && !selectedEndpointId);
   const orderedAgentList = useMemo(() => {
-    const ordered: SessionAgent[] = [];
-    const seen = new Set<SessionAgent>();
-    const push = (candidate: SessionAgent) => {
-      if (seen.has(candidate)) return;
-      seen.add(candidate);
-      ordered.push(candidate);
-    };
-    for (const candidate of FIXED_AGENT_ORDER) {
-      push(candidate);
-    }
-    const dynamicAgents = Object.keys(effectiveAgentAvailability) as SessionAgent[];
-    dynamicAgents.sort((a, b) => a.localeCompare(b));
-    for (const candidate of dynamicAgents) {
-      push(candidate);
-    }
-    return ordered;
-  }, [effectiveAgentAvailability]);
+    const reported = Object.keys(effectiveAgentAvailability) as SessionAgent[];
+    if (selectedEndpointId || !daemonApi) return [...new Set([TERMINAL_AGENT, ...reported])];
+    const discovered = harnesses.map(harness => harness.id);
+    const interactive = hasCatalog || harnessesError ? reported.filter(candidate => !discovered.includes(candidate)).sort((a, b) => a.localeCompare(b)) : [];
+    return [...new Set([TERMINAL_AGENT, ...discovered, ...interactive])];
+  }, [effectiveAgentAvailability, harnesses, hasCatalog, harnessesError, selectedEndpointId, daemonApi]);
   const agentShortcutByName = useMemo(() => {
     const shortcuts = new Map<SessionAgent, number>();
+    if (!selectedEndpointId && daemonApi && !hasCatalog) return shortcuts;
     orderedAgentList.filter((candidate) => candidate !== TERMINAL_AGENT).forEach((candidate, index) => {
       shortcuts.set(candidate, index + 1);
     });
     return shortcuts;
-  }, [orderedAgentList]);
+  }, [orderedAgentList, selectedEndpointId, daemonApi, hasCatalog]);
 
   const savedAgent = normalizeAgent(settings[SESSION_AGENT_KEY]);
   const yoloSupported = Boolean(agentCapabilities[agent]?.yolo);
@@ -972,8 +965,8 @@ export function LocationPicker({
 
       const digitMatch = /^Digit([1-9])$/.exec(e.code);
       if (digitMatch) {
-        const idx = Number(digitMatch[1]) - 1;
-        const nextAgent = orderedAgentList.filter((candidate) => candidate !== TERMINAL_AGENT)[idx];
+        e.preventDefault();
+        const nextAgent = [...agentShortcutByName].find(([, number]) => number === Number(digitMatch[1]))?.[0];
         if (nextAgent) {
           e.preventDefault();
           handleAgentChange(nextAgent);
@@ -1012,6 +1005,8 @@ export function LocationPicker({
       <div className="picker-agent-bar">
         <div className="picker-agent-label">SESSION AGENT</div>
         <div className="picker-agent-controls">
+          {!selectedEndpointId && harnessesLoading && <span role="status">Loading harnesses…</span>}
+          {!selectedEndpointId && harnessesError && <span role="alert">{harnessesError}<button type="button" onClick={retryHarnesses}>Retry</button></span>}
           <div className="agent-toggle" role="radiogroup" aria-label={copy.agentAria}>
             {orderedAgentList.map((candidate) => {
               const available = isAgentAvailable(effectiveAgentAvailability, candidate);

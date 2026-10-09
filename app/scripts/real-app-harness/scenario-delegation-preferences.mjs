@@ -112,7 +112,7 @@ try {
     runner.assert(roles().roles.length === 0, 'a role without a harness is not offered to agents');
     await openModel('Builder');
     await click(`${popover} [data-harness="codex"]`);
-    await savedRole('Builder', role => role.choices[0].selection.harness === 'codex');
+    runner.assert((await preferences()).roles.find(role => role.name === 'Builder').choices[0].selection.harness === '', 'browsing harnesses leaves the saved route untouched');
     await until(() => exists(`${popover} [data-model="${MOCK_AGENT_MODEL}"]`), 'Codex lists its models through the mock app-server');
     await click(`${popover} [data-model="${MOCK_AGENT_MODEL}"]`);
     await savedRole('Builder', role => role.choices[0].selection.model === MOCK_AGENT_MODEL);
@@ -125,14 +125,18 @@ try {
     await screenshot('02-roles.png'); await hold();
     await openModel('anything else');
     await click(`${popover} [data-harness="codex"]`);
+    await click(`${popover} [data-model=""]`);
     await until(async () => (await preferences()).fallback.selection.harness === 'codex', 'fallback harness saved');
     runner.assert(roles().fallback?.selection.harness === 'codex', 'fallback configures independently');
     await screenshot('02-fallback.png', 'body'); await hold();
+    await closePopover();
+    await openModel('anything else');
     await click(`${popover} [data-harness=""]`);
     await until(async () => (await preferences()).fallback.selection.harness === '', 'fallback cleared');
     runner.assert(!roles().fallback, 'a cleared fallback is no longer offered to agents');
     await openModel('anything else');
     await click(`${popover} [data-harness="codex"]`);
+    await click(`${popover} [data-model=""]`);
     await until(async () => (await preferences()).fallback.selection.harness === 'codex', 'fallback harness saved again');
     await closePopover();
   });
@@ -159,6 +163,7 @@ try {
     await savedRole('Debug');
     await openModel('Debug');
     await click(`${popover} [data-harness="codex"]`);
+    await click(`${popover} [data-model=""]`);
     await savedRole('Debug', role => role.choices[0].selection.harness === 'codex' && role.choices[0].selection.model === '');
     await closePopover();
     runner.assert(roles().roles.some(r => r.name === 'Debug' && r.choices[0].selection.harness === 'codex'), 'a harness default is a complete choice');

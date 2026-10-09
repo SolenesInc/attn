@@ -1,3 +1,5 @@
+import { clearHarnesses } from './useHarnesses';
+import { clearHarnessModelCatalogs } from './useHarnessRoute';
 import { PROTOCOL_VERSION } from '../types/protocolVersion';
 export { PROTOCOL_VERSION } from '../types/protocolVersion';
 import { handleCommandUsageEvent } from './daemonCommandUsageEvents';
@@ -618,6 +620,10 @@ function contentOnCurrentDesktop(
 
 const ATTACH_RETRY_TIMEOUT_MS = 3_000;
 const ATTACH_RETRY_DELAY_MS = 150;
+const harnessRegistrySignature = (settings: DaemonSettings) => JSON.stringify(Object.entries(settings)
+  .filter(([key]) => key.endsWith('_available') || /_cap_(initial_prompt|model_pin|effort_pin|model_discovery)$/.test(key))
+  .map(([key, value]) => [key, key.endsWith('_available') ? '' : value])
+  .sort(([a], [b]) => a.localeCompare(b)));
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 const MODEL_DISCOVERY_TIMEOUT_MS = 70_000;
 const CREW_RESTART_TIMEOUT_MS = 120_000;
@@ -712,6 +718,7 @@ export function useDaemonSocket({
   const reposRef = useRef<RepoState[]>([]);
   const authorsRef = useRef<AuthorState[]>([]);
   const settingsRef = useRef<DaemonSettings>({});
+  const harnessPluginSignatureRef = useRef('[]');
   const callbacksRef = useRef({
     onSessionsUpdate,
     onNotebookChanged,
@@ -1181,6 +1188,8 @@ export function useDaemonSocket({
 
         switch (data.event) {
           case 'initial_state':
+            clearHarnessModelCatalogs();
+            clearHarnesses();
             useDelegationPreferencesPush.getState().push();
             if (
               data.daemon_instance_id &&
@@ -2089,6 +2098,10 @@ export function useDaemonSocket({
           case 'settings_updated':
             settlePendingRequest(pendingActionsRef.current, 'set_setting', data, () => true, 'Could not save setting');
             if (data.settings) {
+              if (harnessRegistrySignature(settingsRef.current) !== harnessRegistrySignature(data.settings)) {
+                clearHarnesses();
+                clearHarnessModelCatalogs();
+              }
               settingsRef.current = data.settings;
               callbacksRef.current.onSettingsUpdate?.(data.settings);
             }
@@ -2104,6 +2117,12 @@ export function useDaemonSocket({
           case 'plugins_updated': {
             const plugins = data.plugins || [];
             const issues = data.issues || [];
+            const signature = JSON.stringify(plugins.map(plugin => [plugin.name, plugin.dir, plugin.link_target, plugin.version, plugin.installation_state, plugin.connected, plugin.availability, plugin.runtime_state, plugin.health_status]));
+            if (signature !== harnessPluginSignatureRef.current) {
+              harnessPluginSignatureRef.current = signature;
+              clearHarnesses();
+              clearHarnessModelCatalogs();
+            }
             callbacksRef.current.onPluginsUpdate?.(plugins, issues);
             const pending = pendingActionsRef.current.get('list_plugins');
             if (pending) {

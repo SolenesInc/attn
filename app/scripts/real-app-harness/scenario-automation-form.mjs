@@ -87,6 +87,21 @@ async function pollForm(client, predicate, description, timeoutMs = FORM_TIMEOUT
   }, description, timeoutMs);
 }
 
+async function openForm(client, { definitionId } = {}) {
+  if (definitionId) {
+    await client.request('dom_wait', {
+      selector: `[data-testid="automation-edit-${definitionId}"]`,
+      timeoutMs: PANEL_TIMEOUT_MS,
+    });
+  }
+  await client.request('automation_form_open', { definitionId });
+  return pollForm(
+    client,
+    (state) => state.present && state.status === 'ready' && state.definitionId === (definitionId ?? null),
+    'the requested automation form to finish loading',
+  );
+}
+
 function findDefinitionRow(state, definitionId) {
   return (state?.definitions || []).find((row) => row.id === definitionId) || null;
 }
@@ -212,7 +227,7 @@ async function main() {
 
     await runner.step('leg1_create_mode_defaults', async () => {
       await client.request('automations_open_panel');
-      const opened = await client.request('automation_form_open', {});
+      const opened = await openForm(client);
       runner.assert(opened.present === true, 'the form is present after opening New', opened);
       runner.assert(opened.mode === 'create', 'opening New starts in create mode', opened);
       runner.assert(opened.definitionId === null, 'create mode has no definitionId', opened);
@@ -221,8 +236,8 @@ async function main() {
       runner.assert(opened.values.trigger === 'manual', 'the default trigger is manual', opened);
       runner.assert(opened.values.agent === 'codex', 'the default agent is codex', opened);
       runner.assert(
-        opened.values.model === 'gpt-5.6-luna',
-        'the default model is the first codex catalog preset',
+        opened.values.model === '' && opened.values.effort === '',
+        'the default model and effort are left to the harness',
         opened,
       );
       runner.assert(
@@ -299,7 +314,7 @@ async function main() {
       runner.assert(!shownYAML.includes('enabled:'), 'the canonical rendering carries no enabled key — column-only', shownYAML);
       leg3Revision = shownRow.revision;
 
-      const opened = await client.request('automation_form_open', { definitionId: primaryID });
+      const opened = await openForm(client, { definitionId: primaryID });
       runner.assert(opened.mode === 'edit', 'opening an existing definition starts in edit mode', opened);
       runner.assert(opened.definitionId === primaryID, 'edit mode reports the definition id being edited', opened);
       runner.assert(opened.revision === leg3Revision, "edit mode reports the definition's current revision", opened);
@@ -315,7 +330,7 @@ async function main() {
     const localPromptA = 'Local form edit before the out-of-band mutation lands.';
     const outOfBandPrompt = 'Mutated out of band via the bundled CLI while the form was open.';
     await runner.step('leg6_stale_revision_and_reload', async () => {
-      const opened = await client.request('automation_form_open', { definitionId: primaryID });
+      const opened = await openForm(client, { definitionId: primaryID });
       runner.assert(opened.mode === 'edit', 'opening the shared definition for edit starts in edit mode', opened);
       runner.assert(opened.revision === leg3Revision, 'the form holds the current revision before the out-of-band apply', opened);
 
@@ -360,7 +375,7 @@ async function main() {
     await runner.step('leg7_unchanged_resave_is_noop_then_edit_bumps', async () => {
       const rowBefore = findListRow(binary, primaryID, daemonEnv);
 
-      const opened = await client.request('automation_form_open', { definitionId: primaryID });
+      const opened = await openForm(client, { definitionId: primaryID });
       runner.assert(opened.revision === rowBefore.revision, "the form's revision matches the CLI's independently-read revision", { opened, rowBefore });
 
       await client.request('automation_form_submit');
@@ -374,7 +389,7 @@ async function main() {
       );
 
       const renamedName = `${primaryName} (renamed)`;
-      await client.request('automation_form_open', { definitionId: primaryID });
+      await openForm(client, { definitionId: primaryID });
       await client.request('automation_form_set_values', { values: { name: renamedName } });
       await client.request('automation_form_submit');
       await pollForm(client, (state) => state.present === false, 'the semantic edit to save and close the form');
@@ -389,7 +404,7 @@ async function main() {
     });
 
     await runner.step('leg8_github_roundtrip_no_spurious_bump', async () => {
-      await client.request('automation_form_open', {});
+      await openForm(client);
       await client.request('automation_form_set_values', {
         values: githubValues({
           id: githubID,
@@ -409,7 +424,7 @@ async function main() {
       const rowAfterCreate = findListRow(binary, githubID, daemonEnv);
       runner.assert(rowAfterCreate.revision === 1, 'the github create lands at revision 1', rowAfterCreate);
 
-      const reopened = await client.request('automation_form_open', { definitionId: githubID });
+      const reopened = await openForm(client, { definitionId: githubID });
       runner.assert(reopened.values.trigger === 'github_review_requested', 'the reopened form reports the github trigger', reopened);
       runner.assert(
         JSON.stringify(reopened.values.repositoriesInclude) === JSON.stringify(['github.com/acme/widgets']),
@@ -436,7 +451,7 @@ async function main() {
       const rowBefore = findListRow(binary, primaryID, daemonEnv);
       runner.assert(rowBefore && rowBefore.id === primaryID, 'sanity: the shared definition is still live before this leg deletes it', rowBefore);
 
-      const opened = await client.request('automation_form_open', { definitionId: primaryID });
+      const opened = await openForm(client, { definitionId: primaryID });
       runner.assert(opened.revision === rowBefore.revision, "the form holds the definition's current revision before the out-of-band delete", opened);
 
       run(binary, ['automation', 'delete', primaryID], daemonEnv);
@@ -460,7 +475,7 @@ async function main() {
     });
 
     await runner.step('leg10_panel_toggle_and_form_reflects_column', async () => {
-      await client.request('automation_form_open', {});
+      await openForm(client);
       await client.request('automation_form_set_values', {
         values: manualValues({
           id: toggleID,
@@ -486,7 +501,7 @@ async function main() {
       runner.assert(disabledRow.revision === createdRow.revision, 'the toggle does NOT bump revision', { before: createdRow.revision, after: disabledRow.revision });
       runner.assert(!disabledYAML.includes('enabled:'), 'the stored YAML carries no enabled key at all', disabledYAML);
 
-      const opened = await client.request('automation_form_open', { definitionId: toggleID });
+      const opened = await openForm(client, { definitionId: toggleID });
       runner.assert(opened.enabled === false, 'the form header reflects the enabled column on load', opened);
 
       await client.request('automation_form_submit');
@@ -506,7 +521,7 @@ async function main() {
     });
 
     await runner.step('leg11_form_two_step_delete', async () => {
-      await client.request('automation_form_open', {});
+      await openForm(client);
       await client.request('automation_form_set_values', {
         values: manualValues({
           id: deleteID,
@@ -521,7 +536,7 @@ async function main() {
       runner.assert(Number.isInteger(deleteID) && deleteID > 0, 'the daemon assigned a numeric ID', { id: deleteID });
       createdDefinitions.add(deleteID);
 
-      await client.request('automation_form_open', { definitionId: deleteID });
+      await openForm(client, { definitionId: deleteID });
       const afterArm = await client.request('automation_form_click', { button: 'delete' });
       runner.assert(afterArm.deleteArmed === true, 'the first delete click arms the confirmation, does not delete', afterArm);
       runner.assert(findListRow(binary, deleteID, daemonEnv) !== null, 'arming delete does not delete — the definition still exists', deleteID);

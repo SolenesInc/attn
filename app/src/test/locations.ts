@@ -1,3 +1,4 @@
+import { harnesses, serveHarnessCatalogs } from './harnessCatalogs';
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { vi } from 'vitest';
 import { daemonSession } from './daemonFixtures';
@@ -110,8 +111,9 @@ export function pathInput() {
   return screen.getByTestId('location-picker-path-input') as HTMLInputElement;
 }
 
-export async function openPicker(machine: Machine = {}, initialState: Partial<EventMessage<'initial_state'>> = {}) {
+export async function openPicker(machine: Machine = {}, initialState: Partial<EventMessage<'initial_state'>> = {}, reportedHarnesses = harnesses) {
   const view = await renderApp({ initialState });
+  serveHarnessCatalogs(view.daemon, reportedHarnesses);
   serveMachine(view.daemon, machine);
   serveLaunches(view.daemon);
   serveSettings(view.daemon, initialState.settings ?? {});

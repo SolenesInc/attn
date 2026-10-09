@@ -1,3 +1,5 @@
+import { harnessLabel } from '../harnessLabel';
+import { knownModelName } from '../../hooks/useHarnessRoute';
 import { AutomationFormValues } from './automationFormModel';
 
 
@@ -5,11 +7,6 @@ export interface SentenceSegment {
   text: string;
   emphasis?: 'accent' | 'strong' | 'mono';
 }
-
-const AGENT_LABEL: Record<AutomationFormValues['agent'], string> = {
-  codex: 'Codex',
-  claude: 'Claude',
-};
 
 const KNOWN_CRON_PHRASES: Record<string, string> = {
   '* * * * *': 'every minute',
@@ -35,13 +32,12 @@ function capitalize(text: string): string {
   return text.length === 0 ? text : text[0].toUpperCase() + text.slice(1);
 }
 
-function agentSegments(values: AutomationFormValues): SentenceSegment[] {
-  const segments: SentenceSegment[] = [{ text: AGENT_LABEL[values.agent], emphasis: 'strong' }];
-  const model = values.model.trim();
-  if (model !== '') {
-    const effort = values.effort.trim();
-    segments.push({ text: effort !== '' ? ` (${model} · ${effort} effort)` : ` (${model})` });
-  }
+function agentSegments(values: AutomationFormValues, name: string): SentenceSegment[] {
+  const segments: SentenceSegment[] = [{ text: harnessLabel(values.agent), emphasis: 'strong' }];
+  const model = name || values.model.trim();
+  const effort = values.effort.trim();
+  const details = [model, effort ? `${effort} effort` : ''].filter(Boolean).join(' · ');
+  if (details) segments.push({ text: ` (${details})` });
   return segments;
 }
 
@@ -49,14 +45,15 @@ function repositoryCountPhrase(count: number): string {
   return `${count} selected repositor${count === 1 ? 'y' : 'ies'}`;
 }
 
-export function compiledSentenceSegments(values: AutomationFormValues): SentenceSegment[] {
+export function compiledSentenceSegments(values: AutomationFormValues, modelName = knownModelName(values.agent, '', values.model)): SentenceSegment[] {
+  if (values.executable.trim()) modelName = '';
   switch (values.trigger) {
     case 'manual': {
       return [
         { text: 'When you press ' },
         { text: 'Run now', emphasis: 'accent' },
         { text: ' → ' },
-        ...agentSegments(values),
+        ...agentSegments(values, modelName),
         { text: ' works in ' },
         { text: values.directoryPath || '…', emphasis: 'mono' },
         { text: ' — a fresh worker each run, unattended.' },
@@ -77,7 +74,7 @@ export function compiledSentenceSegments(values: AutomationFormValues): Sentence
       return [
         { text: capitalize(phrase), emphasis: 'accent' },
         { text: ' (local time) → ' },
-        ...agentSegments(values),
+        ...agentSegments(values, modelName),
         { text: ' works in ' },
         { text: values.directoryPath || '…', emphasis: 'mono' },
         { text: ` — ${continuityText}, ${catchUpText}, unattended.` },
@@ -92,7 +89,7 @@ export function compiledSentenceSegments(values: AutomationFormValues): Sentence
         { text: 'When ' },
         { text: 'a PR requests your review', emphasis: 'accent' },
         { text: ` on ${scopeText}${excludeText} → ` },
-        ...agentSegments(values),
+        ...agentSegments(values, modelName),
         { text: ' reviews it in a ' },
         { text: 'fresh worktree at the PR head', emphasis: 'strong' },
         { text: ' — one reviewer per PR, later cycles return to it, unattended.' },

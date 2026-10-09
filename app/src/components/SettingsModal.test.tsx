@@ -1,3 +1,4 @@
+import { openRoute, pickModel, pickEffort, enterModel, routeDialog } from '../test/harnessRoute';
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { gesture, renderApp } from '../test/renderApp';
@@ -343,96 +344,42 @@ describe('SettingsModal chief settings', () => {
     expect(savedSettings(daemon)).toEqual([['auto_approve_enabled', 'false']]);
   });
 
-  it('renders a chief-model input per supported agent and commits a typed model on blur', async () => {
-    const daemon = await agentSection('backgroundAgents', {});
-
-    expect(screen.getByTestId('settings-chief-model-codex')).toBeInTheDocument();
-    expect(screen.queryByTestId('settings-chief-model-copilot')).toBeNull();
-    await commitField(daemon, 'settings-chief-model-claude', 'opus');
-    expect(savedSettings(daemon)).toEqual([['chief_model_claude', 'opus']]);
+  it.each(['chief', 'default'] as const)('uses discovered %s model and effort controls with a fixed harness', async (kind) => {
+    const daemon = await agentSection(kind === 'chief' ? 'backgroundAgents' : 'agents', {});
+    const label = kind === 'chief' ? 'Claude Chief model' : 'Claude default model';
+    const field = within(screen.getByRole('button', { name: label }));
+    expect(field.getByText('Harness')).toBeInTheDocument();
+    expect(field.getByText('Claude')).toBeInTheDocument();
+    await openRoute(daemon, label);
+    expect(routeDialog().queryByRole('listbox', { name: 'Harness' })).toBeNull();
+    await pickModel(daemon, 'Opus 5.5');
+    await pickEffort(daemon, 'high');
+    expect(savedSettings(daemon)).toEqual([[`${kind}_model_claude`, 'opus'], [`${kind}_effort_claude`, 'high']]);
   });
 
-  it('does not write when a chief-model input blurs unchanged', async () => {
-    const daemon = await agentSection('backgroundAgents', { chief_model_claude: 'opus' });
-
-    expect(screen.getByTestId('settings-chief-model-claude')).toHaveValue('opus');
-    await commitField(daemon, 'settings-chief-model-claude');
+  it.each(['chief', 'default'] as const)('keeps a missing stored %s model visible and does not write on open', async (kind) => {
+    const daemon = await agentSection(kind === 'chief' ? 'backgroundAgents' : 'agents', { [`${kind}_model_claude`]: 'retired-model', [`${kind}_effort_claude`]: 'future-effort' });
+    const label = kind === 'chief' ? 'Claude Chief model' : 'Claude default model';
+    await openRoute(daemon, label);
+    expect(routeDialog().getByRole('option', { name: /retired-model/ })).toHaveAttribute('aria-selected', 'true');
+    expect(routeDialog().getByRole('textbox', { name: 'Effort' })).toHaveValue('future-effort');
     expect(savedSettings(daemon)).toEqual([]);
   });
 
-  it('clears a chief-model override back to the agent default', async () => {
-    const daemon = await agentSection('backgroundAgents', { chief_model_codex: 'gpt-5.4' });
-
-    expect(screen.getByTestId('settings-chief-model-codex')).toHaveValue('gpt-5.4');
-    await commitField(daemon, 'settings-chief-model-codex', '');
-    expect(savedSettings(daemon)).toEqual([['chief_model_codex', '']]);
+  it.each(['chief', 'default'] as const)('clears a %s model override through its default row', async (kind) => {
+    const daemon = await agentSection(kind === 'chief' ? 'backgroundAgents' : 'agents', { [`${kind}_model_claude`]: 'opus' });
+    await openRoute(daemon, kind === 'chief' ? 'Claude Chief model' : 'Claude default model');
+    await pickModel(daemon, kind === 'chief' ? 'Deep default → Opus 5.5' : 'Claude default');
+    expect(savedSettings(daemon)).toEqual([[`${kind}_model_claude`, '']]);
   });
 
-  it('renders a chief-effort select per supported agent and commits on change', async () => {
+  it('shows deep at low as the unset Chief route and can pin a manual model ID', async () => {
     const daemon = await agentSection('backgroundAgents', {});
-
-    expect(screen.getByTestId('settings-chief-effort-codex')).toBeInTheDocument();
-    expect(screen.queryByTestId('settings-chief-effort-copilot')).toBeNull();
-    await gesture(daemon, () => fireEvent.change(screen.getByTestId('settings-chief-effort-claude'), { target: { value: 'high' } }));
-    expect(savedSettings(daemon)).toEqual([['chief_effort_claude', 'high']]);
-  });
-
-  it('shows a saved chief-effort override', async () => {
-    await agentSection('backgroundAgents', { chief_effort_codex: 'xhigh' });
-
-    expect(screen.getByTestId('settings-chief-effort-codex')).toHaveValue('xhigh');
-  });
-
-  it('keeps an agent visible when only its chief-effort override is saved', async () => {
-    await agentSection('backgroundAgents', { codex_available: 'false', chief_effort_codex: 'low' });
-
-    expect(screen.getByTestId('settings-chief-effort-codex')).toHaveValue('low');
-  });
-
-  it('renders a default-model input per supported agent and commits a typed model on blur', async () => {
-    const daemon = await agentSection('agents', {});
-
-    expect(screen.getByTestId('settings-default-model-codex')).toBeInTheDocument();
-    expect(screen.queryByTestId('settings-default-model-copilot')).toBeNull();
-    await commitField(daemon, 'settings-default-model-claude', 'opus');
-    expect(savedSettings(daemon)).toEqual([['default_model_claude', 'opus']]);
-  });
-
-  it('does not write when a default-model input blurs unchanged', async () => {
-    const daemon = await agentSection('agents', { default_model_claude: 'opus' });
-
-    expect(screen.getByTestId('settings-default-model-claude')).toHaveValue('opus');
-    await commitField(daemon, 'settings-default-model-claude');
-    expect(savedSettings(daemon)).toEqual([]);
-  });
-
-  it('clears a default-model override back to the agent default', async () => {
-    const daemon = await agentSection('agents', { default_model_codex: 'gpt-5.4' });
-
-    expect(screen.getByTestId('settings-default-model-codex')).toHaveValue('gpt-5.4');
-    await commitField(daemon, 'settings-default-model-codex', '');
-    expect(savedSettings(daemon)).toEqual([['default_model_codex', '']]);
-  });
-
-  it('renders a default-effort select per supported agent and commits on change', async () => {
-    const daemon = await agentSection('agents', {});
-
-    expect(screen.getByTestId('settings-default-effort-codex')).toBeInTheDocument();
-    expect(screen.queryByTestId('settings-default-effort-copilot')).toBeNull();
-    await gesture(daemon, () => fireEvent.change(screen.getByTestId('settings-default-effort-claude'), { target: { value: 'high' } }));
-    expect(savedSettings(daemon)).toEqual([['default_effort_claude', 'high']]);
-  });
-
-  it('shows a saved default-effort override', async () => {
-    await agentSection('agents', { default_effort_codex: 'xhigh' });
-
-    expect(screen.getByTestId('settings-default-effort-codex')).toHaveValue('xhigh');
-  });
-
-  it('keeps an agent visible when only its default-effort override is saved', async () => {
-    await agentSection('agents', { codex_available: 'false', default_effort_codex: 'low' });
-
-    expect(screen.getByTestId('settings-default-effort-codex')).toHaveValue('low');
+    expect(screen.getByTestId('settings-chief-route-codex')).toHaveTextContent('Deep default → gpt-6.1-sol');
+    expect(screen.getByTestId('settings-chief-route-codex')).toHaveTextContent('low');
+    await openRoute(daemon, 'Codex Chief model');
+    await enterModel(daemon, 'custom-model');
+    expect(savedSettings(daemon)).toEqual([['chief_model_codex', 'custom-model']]);
   });
 
   it('shows the effective context-window caps', async () => {

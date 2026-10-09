@@ -1,3 +1,5 @@
+import { reportedModel } from './test/harnessCatalogs';
+import { openRoute, pickModel, pickEffort, previewHarness, routeDialog, enterModel } from './test/harnessRoute';
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { EventMessage } from './test/protocol';
@@ -190,6 +192,21 @@ describe('App automation form', () => {
   });
 
   describe('creating', () => {
+    it('starts with the harness defaults and commits a discovered route only after a model choice', async () => {
+      const daemon = await openNew();
+      expect(field('route')).toHaveTextContent('Codex default');
+      await openRoute(daemon, 'Automation model');
+      expect(within(routeDialog().getByRole('listbox', { name: 'Harness' })).getAllByRole('option').map(option => option.textContent)).toEqual(['Claude', 'Codex']);
+      await previewHarness(daemon, 'Claude');
+      expect(field('route')).toHaveTextContent('Codex default');
+      await pickModel(daemon, 'Opus 5.5');
+      await pickEffort(daemon, 'high');
+      expect(field('route')).toHaveTextContent('deep');
+      expect(field('sentence')).toHaveTextContent('Opus 5.5');
+      fillManual();
+      await press(daemon, 'save');
+      expect(applied(daemon)[0].spec.launch).toEqual({ driver: 'claude', model: 'opus', effort: 'high' });
+    });
     it('offers the profile\'s desktops before the new automation exists', async () => {
       const daemon = await openNew({ definitions: [] }, (scripted) => {
         scripted.on('launch_desktop_get', () => ({
@@ -222,7 +239,7 @@ describe('App automation form', () => {
       await press(daemon, 'save');
 
       expect(applied(daemon)).toEqual([
-        { spec: { ...manualSpec('My automation'), id: undefined }, expected_id: 0, expected_revision: 0 },
+        { spec: { ...manualSpec('My automation'), id: undefined, launch: { driver: 'codex' } }, expected_id: 0, expected_revision: 0 },
       ]);
       expect(screen.queryByTestId('automation-form')).toBeNull();
       expect(screen.getByTestId('automations-panel-list')).toBeInTheDocument();
@@ -266,6 +283,65 @@ describe('App automation form', () => {
   });
 
   describe('editing', () => {
+    it('keeps unreported stored model and effort values visible and saves them unchanged', async () => {
+      const spec = { ...manualSpec(), launch: { driver: 'codex', model: 'retired-model', effort: 'future-effort' } };
+      const daemon = await openEdit({ definitions: [definition(1)], spec });
+      expect(field('route')).toHaveTextContent('retired-model');
+      expect(field('route')).toHaveTextContent('future-effort');
+      await openRoute(daemon, 'Automation model');
+      expect(routeDialog().getByRole('textbox', { name: 'Effort' })).toHaveValue('future-effort');
+      await gesture(daemon, () => fireEvent.mouseDown(document.body));
+      await press(daemon, 'save');
+      expect(applied(daemon)[0].spec.launch).toEqual(spec.launch);
+    });
+    it('ignores a warmed global catalog when an executable override is selected', async () => {
+      const spec = { ...manualSpec(), launch: { driver: 'codex', model: 'gpt-6-luna', effort: 'medium' } };
+      const daemon = await openEdit({ definitions: [definition(1)], spec }, daemon => {
+        daemon.on('harness_models', () => ({ event: 'harness_models_result', success: true, models: [reportedModel('codex', 'gpt-6-luna', 'Global Luna', 'light')], tier_defaults: { light: 'gpt-6-luna' }, detail: 'Global executable' }));
+      });
+      expect(field('route')).toHaveTextContent('Global Luna');
+      const reads = daemon.sentOf('harness_models').length;
+      await gesture(daemon, () => type('executable', '/opt/alternate-codex'));
+      expect(field('route')).not.toHaveTextContent('Global Luna');
+      expect(field('sentence')).not.toHaveTextContent('Global Luna');
+      await openRoute(daemon, 'Automation model');
+      expect(routeDialog().queryByRole('option', { name: /^Global Luna/ })).toBeNull();
+      expect(routeDialog().getByRole('textbox', { name: 'Effort' })).toHaveValue('medium');
+      await gesture(daemon, () => fireEvent.mouseDown(field('name')));
+      await gesture(daemon, () => type('executable', ''));
+      expect(field('route')).toHaveTextContent('Global Luna');
+      await gesture(daemon, () => type('executable', '/opt/alternate-codex'));
+      await openRoute(daemon, 'Automation model');
+      await enterModel(daemon, 'override-model');
+      const effort = routeDialog().getByRole('textbox', { name: 'Effort' });
+      fireEvent.change(effort, { target: { value: 'override-effort' } });
+      await gesture(daemon, () => fireEvent.blur(effort));
+      await gesture(daemon, () => fireEvent.mouseDown(field('name')));
+      expect(daemon.sentOf('harness_models')).toHaveLength(reads);
+      await press(daemon, 'save');
+      expect(applied(daemon)[0].spec.launch).toEqual({ driver: 'codex', model: 'override-model', effort: 'override-effort', executable: '/opt/alternate-codex' });
+    });
+    it('does not request global models for an existing executable override', async () => {
+      const spec = { ...manualSpec(), launch: { driver: 'codex', model: 'override-model', effort: 'override-effort', executable: '/opt/alternate-codex' } };
+      const daemon = await openEdit({ definitions: [definition(1)], spec });
+      await openRoute(daemon, 'Automation model');
+      expect(routeDialog().getByRole('textbox', { name: 'Effort' })).toHaveValue('override-effort');
+      expect(daemon.sentOf('harness_models')).toEqual([]);
+      await gesture(daemon, () => fireEvent.mouseDown(field('name')));
+      await press(daemon, 'save');
+      expect(applied(daemon)[0].spec.launch).toEqual(spec.launch);
+    });
+    it('offers manual model editing after a harness-list error', async () => {
+      const daemon = await openEdit({ definitions: [definition(1)], spec: sparseSpec }, daemon => {
+        daemon.on('delegation_preferences_get', () => ({ event: 'delegation_preferences_result', success: false, error: 'Harness list unavailable', preferences: { enabled: false, revision: 0, workflow_skill_enabled: false, roles: [], fallback: { selection: { harness: '', provider: '', model: '', effort: '' }, instructions: '' } }, harnesses: [], templates: [] }));
+      });
+      await openRoute(daemon, 'Automation model');
+      await enterModel(daemon, 'custom-model');
+      await gesture(daemon, () => fireEvent.mouseDown(document.body));
+      expect(field('route')).toHaveTextContent('custom-model');
+      await press(daemon, 'save');
+      expect(applied(daemon)[0].spec.launch).toEqual({ driver: 'codex', model: 'custom-model' });
+    });
     it('loads a GitHub definition into its fields and saves it against the revision it loaded', async () => {
       const daemon = await openEdit({
         definitions: [definition(1, { revision: 7, trigger_type: 'github_review_requested' })],
@@ -273,10 +349,10 @@ describe('App automation form', () => {
       });
 
       expect(field('repositories-include-chip-0')).toHaveTextContent('github.com/acme/widgets');
-      expect(field('model')).toHaveValue('sonnet');
+      expect(field('route')).toHaveTextContent('Sonnet 5.5');
       expect(screen.getByText('Existing requests are left alone when enabled')).toBeInTheDocument();
       expect(field('sentence')).toHaveTextContent('fresh worktree at the PR head');
-      expect(field('sentence')).toHaveTextContent('sonnet');
+      expect(field('sentence')).toHaveTextContent('Sonnet 5.5');
 
       await press(daemon, 'save');
 
@@ -291,11 +367,16 @@ describe('App automation form', () => {
       expect(field('sentence')).toHaveTextContent('Run now');
     });
 
+    it('names a stored effort even when the harness chooses the model', async () => {
+      const daemon = await openEdit({ definitions: [definition(1)], spec: { ...sparseSpec, launch: { driver: 'codex', effort: 'future-effort' } } });
+      expect(field('sentence')).toHaveTextContent('Codex (future-effort effort)');
+      await press(daemon, 'save');
+      expect(applied(daemon)[0].spec.launch).toEqual({ driver: 'codex', effort: 'future-effort' });
+    });
     it('keeps a launch that names only its agent that way, showing the agent defaults', async () => {
       const daemon = await openEdit({ definitions: [definition(1, { revision: 2 })], spec: sparseSpec });
 
-      expect(field('model')).toHaveValue('');
-      expect(field('effort')).toHaveValue('');
+      expect(field('route')).toHaveTextContent('Codex default');
       expect(field('sentence')).not.toHaveTextContent('effort');
 
       await press(daemon, 'save');
@@ -304,9 +385,9 @@ describe('App automation form', () => {
     });
 
     it('names a picked model in the sentence without an effort the agent chooses', async () => {
-      await openEdit({ definitions: [definition(1)], spec: sparseSpec });
-
-      fireEvent.change(field('model'), { target: { value: 'gpt-5.6-luna' } });
+      const daemon = await openEdit({ definitions: [definition(1)], spec: sparseSpec });
+      await openRoute(daemon, 'Automation model');
+      await pickModel(daemon, 'gpt-5.6-luna');
 
       expect(field('sentence')).toHaveTextContent('(gpt-5.6-luna)');
       expect(field('sentence')).not.toHaveTextContent('effort');

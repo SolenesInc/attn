@@ -66,14 +66,14 @@ it('adopts maintained roles from the empty state with the install flag and shows
 it('saves a model picked from the row, an alternative with its condition, and the switch', async () => {
   const { daemon, server, saves, lastSaved } = await openDelegation({ roles: [custom] });
   fireEvent.click(screen.getByRole('button', { name: 'Model for Build' }));
-  expect(screen.getByText('Pick a harness to see its models. None leaves this route unset.')).toBeInTheDocument();
+  expect(screen.getByText('Choose a harness to see its models.')).toBeInTheDocument();
   await gesture(daemon, () => fireEvent.click(screen.getByRole('option', { name: 'Codex' })));
-  expect(saves()).toHaveLength(1);
+  expect(saves()).toHaveLength(0);
   expect(daemon.sentOf('harness_models').map((command) => command.harness)).toEqual(['codex']);
   await gesture(daemon, () => fireEvent.click(screen.getByRole('option', { name: /Everyday model/ })));
-  expect(saves()).toHaveLength(2);
+  expect(saves()).toHaveLength(1);
   await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'medium' })));
-  expect(saves()).toHaveLength(3);
+  expect(saves()).toHaveLength(2);
   expect(lastSaved().roles[0].choices[0].selection).toEqual({ harness: 'codex', provider: '', model: 'model-a', effort: 'medium' });
   expect(screen.queryByText('Needs a model')).not.toBeInTheDocument();
   fireEvent.mouseDown(document.body);
@@ -81,17 +81,17 @@ it('saves a model picked from the row, an alternative with its condition, and th
 
   fireEvent.click(screen.getByRole('button', { name: 'Build' }));
   await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: '+ Alternative model' })));
-  expect(saves()).toHaveLength(4);
+  expect(saves()).toHaveLength(3);
   const name = screen.getByLabelText('Name', { selector: '#altname-' + lastSaved().roles[0].choices[1].id });
   fireEvent.focus(name);
   fireEvent.change(name, { target: { value: 'Hard verification' } });
   await gesture(daemon, () => fireEvent.blur(name));
-  expect(saves()).toHaveLength(5);
+  expect(saves()).toHaveLength(4);
   const when = screen.getByLabelText('When to use this instead of the default');
   fireEvent.focus(when);
   fireEvent.change(when, { target: { value: 'Verification is difficult\n\nOr requirements are ambiguous.' } });
   await gesture(daemon, () => fireEvent.blur(when));
-  expect(saves()).toHaveLength(6);
+  expect(saves()).toHaveLength(5);
   const [, alternative] = server.preferences.roles[0].choices;
   expect(alternative.name).toBe('Hard verification');
   expect(alternative.when).toContain('ambiguous');

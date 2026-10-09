@@ -1,7 +1,9 @@
 import { useAutosaveSetting, type SaveSetting } from './SettingsAutosave';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import type { SessionAgent } from '../types/sessionAgent';
-import { agentLabel } from '../utils/agentAvailability';
+import { useHeadlessHarnesses } from '../hooks/useHarnesses';
+import { HarnessRouteChip } from './HarnessRouteChip';
+import { ModelTier } from '../types/generated';
 import {
   ACTIVITY_CONFIG_SETTING,
   ACTIVITY_ENABLED_SETTING,
@@ -11,22 +13,6 @@ import {
   parseActivityConfigSetting,
   parseActivityIntervalsSetting,
 } from '../utils/activitySettings';
-
-const MODEL_PRESETS: Partial<Record<SessionAgent, { value: string; label: string }[]>> = {
-  claude: [
-    { value: 'claude-haiku-4-5', label: 'Haiku 4.5 (Recommended)' },
-    { value: 'sonnet', label: 'Sonnet (Higher quality)' },
-  ],
-  codex: [
-    { value: 'gpt-5.6-luna', label: 'gpt-5.6-luna (Recommended — fastest, cheapest)' },
-    { value: 'gpt-5.4-mini', label: 'gpt-5.4-mini' },
-  ],
-};
-
-// Effort measured inert on Claude — none, low, medium and high all land within the same output-token band on identical input — so only Codex offers it.
-const EFFORT_LEVELS: Partial<Record<SessionAgent, string[]>> = {
-  codex: ['minimal', 'low', 'medium', 'high'],
-};
 
 interface SessionActivitySettingsProps {
   settings: Record<string, string>;
@@ -63,23 +49,13 @@ export function SessionActivitySettings({
     return JSON.stringify(result);
   });
   const { watching, present } = JSON.parse(intervalsDraft.value) as typeof savedIntervals;
-  const [customModel, setCustomModel] = useState(
-    Boolean(saved.model) && !(MODEL_PRESETS[saved.agent as SessionAgent] ?? []).some((p) => p.value === saved.model),
-  );
   const updateConfig = (updates: Partial<typeof saved>, commit = true) => {
     const next = JSON.stringify({ agent, model, effort, ...updates });
     if (commit) void configDraft.apply(next); else configDraft.set(next);
   };
   const updateInterval = (key: string, value: string) => intervalsDraft.set(JSON.stringify({ watching, present, [key]: value }));
 
-  const presets = agent ? MODEL_PRESETS[agent] ?? [] : [];
-  const efforts = agent ? EFFORT_LEVELS[agent] ?? [] : [];
-
-  const handleAgentChange = (next: SessionAgent | '') => {
-    updateConfig({ agent: next, model: '', effort: '' });
-    setCustomModel(false);
-  };
-
+  const { harnesses, error, retry } = useHeadlessHarnesses(agents, settings);
   const toggle = useCallback(() => {
     onSetSetting(ACTIVITY_ENABLED_SETTING, enabled ? 'false' : 'true');
   }, [enabled, onSetSetting]);
@@ -118,81 +94,8 @@ export function SessionActivitySettings({
           <div className="settings-warning">No installed agent supports scoped headless tasks.</div>
         )}
 
-        <div className="settings-field-grid two-column">
-          <div className="settings-field">
-            <label className="settings-label" htmlFor="settings-activity-agent">Agent</label>
-            <select
-              id="settings-activity-agent"
-              data-testid="settings-activity-agent"
-              className="settings-input"
-              value={agent}
-              onChange={(event) => handleAgentChange(event.target.value as SessionAgent | '')}
-            >
-              <option value="">Select an agent</option>
-              {agents.map((option) => (
-                <option key={option} value={option}>{agentLabel(option)}</option>
-              ))}
-            </select>
-          </div>
-          <div className="settings-field">
-            <label className="settings-label" htmlFor="settings-activity-model">Model</label>
-            <select
-              id="settings-activity-model"
-              data-testid="settings-activity-model"
-              className="settings-input"
-              value={customModel ? 'custom' : model}
-              onChange={(event) => {
-                const next = event.target.value;
-                setCustomModel(next === 'custom');
-                if (next !== 'custom') updateConfig({ model: next });
-              }}
-              disabled={!agent}
-            >
-              <option value="">Recommended default</option>
-              {presets.map((preset) => (
-                <option key={preset.value} value={preset.value}>{preset.label}</option>
-              ))}
-              <option value="custom">Custom…</option>
-            </select>
-          </div>
-        </div>
-
-        {agent && customModel && (
-          <div className="settings-field">
-            <label className="settings-label" htmlFor="settings-activity-model-custom">Custom model</label>
-            <input
-              id="settings-activity-model-custom"
-              data-testid="settings-activity-model-custom"
-              type="text"
-              className="settings-input"
-              value={model}
-              onChange={(event) => updateConfig({ model: event.target.value }, false)}
-              onBlur={configDraft.onBlur}
-              onKeyDown={configDraft.onKeyDown}
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-            />
-          </div>
-        )}
-
-        {efforts.length > 0 && (
-          <div className="settings-field">
-            <label className="settings-label" htmlFor="settings-activity-effort">Reasoning effort</label>
-            <select
-              id="settings-activity-effort"
-              data-testid="settings-activity-effort"
-              className="settings-input"
-              value={effort}
-              onChange={(event) => updateConfig({ effort: event.target.value })}
-            >
-              <option value="">Recommended default</option>
-              {efforts.map((level) => (
-                <option key={level} value={level}>{level}</option>
-              ))}
-            </select>
-          </div>
-        )}
+        {error && <div className="settings-warning" role="alert">{error}<button type="button" className="settings-action quiet" onClick={retry}>Retry</button></div>}
+        <HarnessRouteChip variant="field" aria-label="Session activity model" data-testid="settings-activity-route" value={{ harness: agent, provider: '', model, effort }} rules={{ requireAvailable: true, harnesses, allowNone: true, tier: ModelTier.Light, defaultEffort: 'low', effort: harness => harness !== 'claude' }} onChange={route => updateConfig({ agent: route.harness, model: route.model, effort: route.effort })} />
 
         <div className="settings-field-grid two-column">
           <div className="settings-field">

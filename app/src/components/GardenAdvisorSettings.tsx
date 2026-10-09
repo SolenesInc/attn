@@ -1,26 +1,16 @@
 import { useAutosaveSetting, type SaveSetting } from './SettingsAutosave';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import type { SessionAgent } from '../types/sessionAgent';
+import { useHeadlessHarnesses } from '../hooks/useHarnesses';
+import { HarnessRouteChip } from './HarnessRouteChip';
+import { ModelTier } from '../types/generated';
 import { agentLabel } from '../utils/agentAvailability';
 import {
-  defaultGardenAdvisorConfig,
   GARDEN_ADVISOR_SETTING,
   type GardenAdvisorConfig,
   parseGardenAdvisorSetting,
   serializeGardenAdvisorConfig,
 } from '../utils/gardenAdvisorSettings';
-
-const MODEL_PRESETS: Record<string, { value: string; label: string }[]> = {
-  codex: [{ value: 'gpt-5.6-luna', label: 'gpt-5.6-luna' }],
-  claude: [{ value: 'sonnet', label: 'Sonnet' }],
-  copilot: [{ value: 'claude-sonnet-4.6', label: 'Sonnet' }],
-};
-
-const EFFORT_LEVELS: Record<string, string[]> = {
-  codex: ['minimal', 'low', 'medium', 'high', 'xhigh'],
-  claude: ['low', 'medium', 'high', 'xhigh', 'max'],
-  copilot: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
-};
 
 function serializeAdvisorDraft(draft: string): string {
   return serializeGardenAdvisorConfig(JSON.parse(draft) as GardenAdvisorConfig);
@@ -47,19 +37,9 @@ export function GardenAdvisorSettings({
     const next = JSON.stringify({ agent, model, effort, ...updates });
     if (commit) void draft.apply(next); else draft.set(next);
   };
-  const [customModel, setCustomModel] = useState(
-    Boolean(saved.model) && !(MODEL_PRESETS[saved.agent] ?? []).some((preset) => preset.value === saved.model),
-  );
-
-  const presets = [{ value: '', label: agent === 'copilot' ? 'Copilot default (Sonnet 4.6)' : 'Light default (Recommended)' }, ...(MODEL_PRESETS[agent] ?? [])];
-  const efforts = EFFORT_LEVELS[agent] ?? [];
+  const { harnesses, error, retry } = useHeadlessHarnesses(agents, settings);
   const available = settings[`${agent}_available`] !== 'false'
     && settings[`${agent}_cap_headless_task`] !== 'false';
-
-  const changeAgent = (next: SessionAgent) => {
-    update(defaultGardenAdvisorConfig(next));
-    setCustomModel(false);
-  };
 
   return (
     <section className="settings-block">
@@ -78,79 +58,8 @@ export function GardenAdvisorSettings({
           </div>
         )}
 
-        <div className="settings-field-grid two-column">
-          <div className="settings-field">
-            <label className="settings-label" htmlFor="settings-garden-advisor-agent">Agent</label>
-            <select
-              id="settings-garden-advisor-agent"
-              data-testid="settings-garden-advisor-agent"
-              className="settings-input"
-              value={agent}
-              onChange={(event) => changeAgent(event.target.value)}
-            >
-              {agents.map((option) => (
-                <option key={option} value={option}>{agentLabel(option)}</option>
-              ))}
-            </select>
-          </div>
-          <div className="settings-field">
-            <label className="settings-label" htmlFor="settings-garden-advisor-model">Model</label>
-            <select
-              id="settings-garden-advisor-model"
-              className="settings-input"
-              value={customModel ? 'custom' : model}
-              onChange={(event) => {
-                const next = event.target.value;
-                setCustomModel(next === 'custom');
-                if (next !== 'custom') update({ model: next });
-              }}
-            >
-              {presets.map((preset) => (
-                <option key={preset.value} value={preset.value}>{preset.label}</option>
-              ))}
-              <option value="custom">Custom...</option>
-            </select>
-          </div>
-        </div>
-
-        {customModel && (
-          <div className="settings-field">
-            <label className="settings-label" htmlFor="settings-garden-advisor-model-custom">
-              Custom model
-            </label>
-            <input
-              id="settings-garden-advisor-model-custom"
-              type="text"
-              className="settings-input"
-              value={model}
-              onChange={(event) => update({ model: event.target.value }, false)}
-              onBlur={draft.onBlur}
-              onKeyDown={draft.onKeyDown}
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-            />
-          </div>
-        )}
-
-        {efforts.length > 0 && (
-          <div className="settings-field">
-            <label className="settings-label" htmlFor="settings-garden-advisor-effort">
-              Reasoning effort
-            </label>
-            <select
-              id="settings-garden-advisor-effort"
-              className="settings-input"
-              value={effort}
-              onChange={(event) => update({ effort: event.target.value })}
-            >
-              <option value="">Recommended default</option>
-              {efforts.map((level) => (
-                <option key={level} value={level}>{level}</option>
-              ))}
-            </select>
-          </div>
-        )}
+        {error && <div className="settings-warning" role="alert">{error}<button type="button" className="settings-action quiet" onClick={retry}>Retry</button></div>}
+        <HarnessRouteChip variant="field" aria-label="Garden advisor model" data-testid="settings-garden-advisor-route" value={{ harness: agent, provider: '', model, effort }} rules={{ requireAvailable: true, harnesses, tier: ModelTier.Light, defaultEffort: harness => harness === 'codex' ? 'xhigh' : harness === 'claude' ? 'medium' : '' }} onChange={route => update({ agent: route.harness, model: route.model, effort: route.effort })} />
 
       </div>
     </section>

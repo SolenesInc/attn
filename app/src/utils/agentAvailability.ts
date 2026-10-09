@@ -5,6 +5,10 @@ export type AgentCapabilities = Record<SessionAgent, Record<string, boolean>>;
 
 const BUILTIN_AGENT_ORDER: SessionAgent[] = ['codex', 'claude', 'copilot'];
 
+export function isBuiltinAgent(agent: SessionAgent): boolean {
+  return BUILTIN_AGENT_ORDER.includes(agent);
+}
+
 export const AGENT_CAPABILITY_ORDER = [
   'yolo',
   'resume',
@@ -49,7 +53,7 @@ function parseAgentFromExecutableKey(key: string): SessionAgent | null {
     return null;
   }
   const agent = normalized.slice(0, -'_executable'.length).trim();
-  if (!BUILTIN_AGENT_ORDER.includes(agent)) return null;
+  if (!isBuiltinAgent(agent)) return null;
   return agent;
 }
 

@@ -8,7 +8,6 @@ import { useCallback, useEffect, useRef, useState, type ComponentProps, type Rea
 import {
   useFieldArray,
   useForm,
-  type UseFormGetValues,
   type UseFormSetValue,
   type UseFormRegister,
   type UseFormRegisterReturn,
@@ -26,7 +25,12 @@ import {
   specJSONString,
   specToFormValues,
 } from './automationFormModel';
-import { AutomationAgent, LAUNCH_CATALOG, effortOptionsFor } from './launchCatalog';
+import type { AutomationAgent } from './automationFormModel';
+import { useHarnessChoices } from '../../hooks/useHarnesses';
+import { useKnownModelName } from '../../hooks/useHarnessRoute';
+import { useDaemonApi } from '../../contexts/DaemonApiContext';
+import { HarnessRouteChip } from '../HarnessRouteChip';
+const AUTOMATION_HARNESSES = ['codex', 'claude'];
 import { compiledSentenceSegments, compiledSentenceText, cronPhrase } from './automationCompiledSentence';
 import { setAutomationFormAutomationHandle } from './automationFormAutomation';
 import './AutomationForm.css';
@@ -49,7 +53,6 @@ export interface AutomationFormProps {
 }
 
 type LoadStatus = 'loading' | 'ready' | 'load-error';
-type ModelMode = 'preset' | 'custom';
 
 function errorCode(err: unknown): string {
   const code = (err as { code?: unknown } | null | undefined)?.code;
@@ -60,13 +63,7 @@ function messageOf(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
 }
 
-function modelModeFor(agent: AutomationAgent, model: string): ModelMode {
-  if (model === '') return 'preset';
-  return LAUNCH_CATALOG[agent].models.some((candidate) => candidate.id === model) ? 'preset' : 'custom';
-}
-
 function makeCreateDefaults(): AutomationFormValues {
-  const firstModel = LAUNCH_CATALOG.codex.models[0];
   return {
     name: '',
     id: 0,
@@ -77,8 +74,8 @@ function makeCreateDefaults(): AutomationFormValues {
     repositoriesInclude: [],
     repositoriesExclude: [],
     agent: 'codex',
-    model: firstModel.id,
-    effort: firstModel.defaultEffort,
+    model: '',
+    effort: '',
     executable: '',
     directoryPath: '',
     repositoryOverrides: [],
@@ -105,57 +102,6 @@ function flattenFieldErrors(errors: Record<string, unknown>, prefix = ''): Recor
     }
   }
   return out;
-}
-
-function useModelSelection(
-  getValues: UseFormGetValues<AutomationFormValues>,
-  setValue: UseFormSetValue<AutomationFormValues>,
-  setModelMode: (mode: ModelMode) => void,
-) {
-  const handleAgentChange = useCallback(
-    (event: React.ChangeEvent<HTMLSelectElement>) => {
-      const nextAgent = event.target.value as AutomationAgent;
-      const catalog = LAUNCH_CATALOG[nextAgent];
-      const firstModel = catalog.models[0];
-      setValue('agent', nextAgent, { shouldDirty: true, shouldValidate: true });
-      setValue('model', firstModel.id, { shouldDirty: true, shouldValidate: true });
-      setValue('effort', firstModel.defaultEffort, { shouldDirty: true, shouldValidate: true });
-      setModelMode('preset');
-    },
-    [setValue, setModelMode],
-  );
-
-  const handleModelSelectChange = useCallback(
-    (event: React.ChangeEvent<HTMLSelectElement>) => {
-      const next = event.target.value;
-      const agent = getValues('agent');
-      const catalog = LAUNCH_CATALOG[agent];
-      if (next === '__custom__') {
-        setModelMode('custom');
-        setValue('model', '', { shouldDirty: true, shouldValidate: true });
-        setValue('effort', catalog.customDefaultEffort, { shouldDirty: true, shouldValidate: true });
-        return;
-      }
-      if (next === '') {
-        setModelMode('preset');
-        setValue('model', '', { shouldDirty: true, shouldValidate: true });
-        setValue('effort', '', { shouldDirty: true, shouldValidate: true });
-        return;
-      }
-      setModelMode('preset');
-      const preset = catalog.models.find((candidate) => candidate.id === next);
-      setValue('model', next, { shouldDirty: true, shouldValidate: true });
-      const currentEffort = getValues('effort');
-      if (currentEffort === '') return;
-      const { efforts, defaultEffort } = effortOptionsFor(agent, next);
-      if (!efforts.includes(currentEffort)) {
-        setValue('effort', preset?.defaultEffort ?? defaultEffort, { shouldDirty: true, shouldValidate: true });
-      }
-    },
-    [getValues, setValue, setModelMode],
-  );
-
-  return { handleAgentChange, handleModelSelectChange };
 }
 
 function AutomationNameFields({
@@ -551,98 +497,29 @@ function AutomationTriggerFields({
 
 function AutomationLaunchFields({
   fields,
-  modelMode,
-  onAgentChange,
-  onModelChange,
   desktop,
 }: {
   fields: AutomationFields;
-  modelMode: ModelMode;
-  onAgentChange: ComponentProps<'select'>['onChange'];
-  onModelChange: ComponentProps<'select'>['onChange'];
   desktop: ReactNode;
 }) {
   const { values, regField, fieldError, setValue } = fields;
-  const { efforts } = effortOptionsFor(values.agent, values.model);
-  const catalog = LAUNCH_CATALOG[values.agent];
+  const { settings } = useDaemonApi();
+  const { harnesses, error, retry } = useHarnessChoices(AUTOMATION_HARNESSES, settings);
+  const routeHarnesses = values.executable.trim() ? harnesses.map(harness => ({ ...harness, discovery: false })) : harnesses;
   return (
     <section className="automation-form__section">
       <span className="automation-form__section-label">Runs as</span>
       {desktop}
-      <div className="automation-form__field">
-        <label className="automation-form__label" htmlFor="automation-form-agent">
-          Agent
-        </label>
-        <select
-          id="automation-form-agent"
-          className="automation-form__input"
-          value={values.agent}
-          onChange={onAgentChange}
-          data-testid="automation-form-agent"
-        >
-          <option value="codex">Codex</option>
-          <option value="claude">Claude</option>
-        </select>
-      </div>
-
-      <div className="automation-form__field">
-        <label className="automation-form__label" htmlFor="automation-form-model">
-          Model
-        </label>
-        <select
-          id="automation-form-model"
-          className="automation-form__input"
-          value={modelMode === 'custom' ? '__custom__' : values.model}
-          onChange={onModelChange}
-          data-testid="automation-form-model"
-        >
-          <option value="">Agent default</option>
-          {catalog.models.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-          <option value="__custom__">Custom…</option>
-        </select>
-        {modelMode === 'custom' && (
-          <input
-            className="automation-form__input"
-            placeholder="Model name"
-            data-testid="automation-form-model-custom"
-            {...regField('model')}
-          />
-        )}
-        {fieldError('model') && (
-          <p className="automation-form__field-error" data-testid="automation-form-error-model">
-            {fieldError('model')}
-          </p>
-        )}
-      </div>
-
-      <div className="automation-form__field">
-        <label className="automation-form__label" htmlFor="automation-form-effort">
-          Effort
-        </label>
-        <select
-          id="automation-form-effort"
-          className="automation-form__input"
-          value={values.effort}
-          onChange={(event) => setValue('effort', event.target.value, { shouldDirty: true, shouldValidate: true })}
-          data-testid="automation-form-effort"
-        >
-          <option value="">Agent default</option>
-          {efforts.map((effort) => (
-            <option key={effort} value={effort}>
-              {effort}
-            </option>
-          ))}
-        </select>
-        {fieldError('effort') && (
-          <p className="automation-form__field-error" data-testid="automation-form-error-effort">
-            {fieldError('effort')}
-          </p>
-        )}
-      </div>
+      {error && <div className="settings-warning" role="alert">{error}<button type="button" className="settings-action quiet" onClick={retry}>Retry</button></div>}
+      <HarnessRouteChip variant="field" aria-label="Automation model" data-testid="automation-form-route" value={{ harness: values.agent, provider: '', model: values.model, effort: values.effort }} rules={{ harnesses: routeHarnesses }} onChange={route => {
+        setValue('agent', route.harness as AutomationAgent, { shouldDirty: true, shouldValidate: true });
+        setValue('model', route.model, { shouldDirty: true, shouldValidate: true });
+        setValue('effort', route.effort, { shouldDirty: true, shouldValidate: true });
+      }} />
+      {values.executable.trim() && <p className="automation-form__invariant">Use model and effort IDs accepted by the executable override.</p>}
+      {fieldError('agent') && <p className="automation-form__field-error" data-testid="automation-form-error-agent">{fieldError('agent')}</p>}
+      {fieldError('model') && <p className="automation-form__field-error" data-testid="automation-form-error-model">{fieldError('model')}</p>}
+      {fieldError('effort') && <p className="automation-form__field-error" data-testid="automation-form-error-effort">{fieldError('effort')}</p>}
 
       <p className="automation-form__invariant">
         Automation sessions always run unattended with the agent&apos;s automatic approval mode.
@@ -668,7 +545,8 @@ function AutomationLaunchFields({
 }
 
 function AutomationSentence({ values }: { values: AutomationFormValues }) {
-  const sentenceSegments = compiledSentenceSegments(values);
+  const modelName = useKnownModelName(values.agent, '', values.model);
+  const sentenceSegments = compiledSentenceSegments(values, modelName);
   return (
     <p
       className="automation-form__sentence"
@@ -828,7 +706,6 @@ export function AutomationForm({
   const selectedProfile = useProfilesStore((state) => state.selectedProfileId);
   const [profileId, setProfileId] = useState(selectedProfile ?? '');
   const [enabled, setEnabledState] = useState<boolean | null>(null);
-  const [modelMode, setModelMode] = useState<ModelMode>('preset');
 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
@@ -855,7 +732,6 @@ export function AutomationForm({
           return;
         }
         reset(parsed);
-        setModelMode(modelModeFor(parsed.agent, parsed.model));
         setLoadedId(result.definition?.id ?? definitionId);
         setRevision(result.definition?.revision ?? 0);
         setLaunchDesktop(result.definition?.launch_desktop);
@@ -914,7 +790,6 @@ export function AutomationForm({
           return;
         }
         reset(parsed);
-        setModelMode(modelModeFor(parsed.agent, parsed.model));
         setRevision(result.definition?.revision ?? revision);
         setLaunchDesktop(result.definition?.launch_desktop);
         setProfileId(result.definition?.profile_id ?? profileId);
@@ -995,7 +870,6 @@ export function AutomationForm({
   );
 
   const nameRegister = regField('name');
-  const { handleAgentChange, handleModelSelectChange } = useModelSelection(getValues, setValue, setModelMode);
 
   function addRepository(field: 'repositoriesInclude' | 'repositoriesExclude', raw: string) {
     const canonical = raw.trim().toLowerCase();
@@ -1176,9 +1050,6 @@ export function AutomationForm({
 
         <AutomationLaunchFields
           fields={fields}
-          modelMode={modelMode}
-          onAgentChange={handleAgentChange}
-          onModelChange={handleModelSelectChange}
           desktop={
             <LaunchDesktopSelect
               kind={LaunchDesktopKind.Automation}

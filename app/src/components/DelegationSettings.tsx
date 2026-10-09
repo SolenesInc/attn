@@ -2,9 +2,10 @@ import { useCallback, useEffect, useEffectEvent, useState } from 'react';
 import type { DelegationChoice, DelegationPreferences, DelegationRole, DelegationSelection, Harness } from '../types/generated';
 import type { HarnessModelCatalog } from '../hooks/daemonDelegationEvents';
 import type { DelegationPreferencesPolicy } from '../hooks/useDelegationPreferences';
-import { knownModelName } from '../hooks/useHarnessModelCatalog';
+import { HarnessRouteChip } from './HarnessRouteChip';
 import { DelegationRoleIcon } from './DelegationRoleIcon';
-import { HarnessModelPopover, type Anchor } from './HarnessModelPopover';
+import { HarnessRoutePopover } from './HarnessRoutePopover';
+type Anchor = Element;
 import { FALLBACK, adoptMaintainedRoles, adoptionConflicts, alternatives, complete, defaultChoice, emptySelection, firstLine, freshAdoption, liveRoles, missingTemplates, newID, roleLabel, roleViewer, selectionAt } from './delegationRoles';
 import './DelegationSettings.css';
 
@@ -54,15 +55,7 @@ export function DelegationSwitch({ policy }: { policy: DelegationPreferencesPoli
 }
 
 function ModelCell({ selection, harnesses, label, open, onOpen }: { selection: DelegationSelection; harnesses: Harness[]; label: string; open: boolean; onOpen: (anchor: Anchor) => void }) {
-  const harness = harnesses.find(h => h.id === selection.harness);
-  let className = 'delegation-model';
-  let body: React.ReactNode;
-  if (!complete(selection)) { className += ' unset'; body = 'Choose a model'; }
-  else if (harness && !harness.model_pin) { className += ' pinned'; body = <><span className="h">{harness.name}</span><span className="m">its own model</span>{selection.effort && <span className="e">{selection.effort}</span>}</>; }
-  else body = <><span className="h">{harness?.name ?? selection.harness}</span><span className="m">{selection.model ? knownModelName(selection.harness, selection.provider, selection.model) || `${selection.provider ? `${selection.provider}/` : ''}${selection.model}` : 'default'}</span>{selection.effort && <span className="e">{selection.effort}</span>}</>;
-  return <button type="button" className={className} aria-label={label} aria-haspopup="dialog" aria-expanded={open} onClick={e => onOpen(e.currentTarget)}>
-    {body}<span className="delegation-caret" aria-hidden="true">⌄</span>
-  </button>;
+  return <HarnessRouteChip value={selection} rules={{ harnesses, allowNone: true }} aria-label={label} open={open} onOpen={onOpen} />;
 }
 
 // A draft exists only while the field is focused, so a reload made elsewhere cannot replace what is being typed.
@@ -283,7 +276,7 @@ function AdoptionPanel({ config, templates, names, adoption, onChange, onCancel,
   </section>;
 }
 
-export function DelegationSettings({ policy, loadModels }: { policy: DelegationPreferencesPolicy; loadModels: (harness: string, refresh?: boolean) => Promise<HarnessModelCatalog> }) {
+export function DelegationSettings({ policy }: { policy: DelegationPreferencesPolicy; loadModels: (harness: string, refresh?: boolean) => Promise<HarnessModelCatalog> }) {
   const { state, preferences: config, error, generation, reload, save } = policy;
   const [adoption, setAdoption] = useState<Record<string, string> | null>(null);
   const { undo, remember, forget } = useUndo(generation);
@@ -348,6 +341,6 @@ export function DelegationSettings({ policy, loadModels }: { policy: DelegationP
     {adoption && <AdoptionPanel config={config} templates={missing} names={templateName} adoption={adoption} onChange={setAdoption} onCancel={() => setAdoption(null)} onConfirm={confirmAdoption} />}
     {undo && <div role="status" className="delegation-undo"><span>{undo.label}.</span><button type="button" className="settings-action quiet" onClick={() => { void save(undo.previous); forget(); }}>Undo</button></div>}
     {config.roles.length > 0 && <TableFoot config={config} />}
-    {picker.popover && target && <HarnessModelPopover value={target.value} harnesses={state.harnesses} anchor={picker.popover.anchor} onChange={selection => commit(target.with(selection))} onClose={picker.close} loadModels={loadModels} />}
+    {picker.popover && target && <HarnessRoutePopover value={target.value} rules={{ harnesses: state.harnesses, allowNone: true }} anchor={picker.popover.anchor} onChange={selection => commit(target.with(selection))} onClose={picker.close} />}
   </div>;
 }

@@ -8,7 +8,8 @@ import { useCrewNavigation, type CrewTab } from '../hooks/useCrewNavigation';
 import { useCrewRestart, type CrewRestarts } from '../hooks/useCrewRestart';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import type { DaemonSession, Seed } from '../hooks/useDaemonSocket';
-import type { CrewMember, Harness } from '../types/generated';
+import { useHarnesses } from '../hooks/useHarnesses';
+import type { CrewMember } from '../types/generated';
 import { crewDisplayName } from '../utils/crewName';
 import { CrewCharterTab } from './CrewCharterTab';
 import { CrewHandoffsTab } from './CrewHandoffsTab';
@@ -41,28 +42,6 @@ const tabs: { id: CrewTab; label: string }[] = [
   { id: 'seeds', label: 'Seeds' },
 ];
 
-function useHarnessCatalog(isOpen: boolean, load: () => Promise<{ harnesses: Harness[] }>) {
-  const [harnesses, setHarnesses] = useState<Harness[]>([]);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [request, setRequest] = useState(0);
-  useEffect(() => {
-    if (!isOpen) return;
-    let live = true;
-    setLoading(true);
-    setError('');
-    void load().then((result) => {
-      if (live) setHarnesses(result.harnesses);
-    }).catch((cause) => {
-      if (live) setError(cause instanceof Error ? cause.message : String(cause));
-    }).finally(() => {
-      if (live) setLoading(false);
-    });
-    return () => { live = false; };
-  }, [isOpen, load, request]);
-  const retry = useCallback(() => setRequest((current) => current + 1), []);
-  return { harnesses, error, loading, retry };
-}
 
 function MemberHeading({ member }: { member: CrewMember }) {
   const name = crewDisplayName(member.id);
@@ -149,7 +128,7 @@ interface CrewPanelStores {
   charterAutosave: CrewCharterAutosave;
   handoffs: CrewHandoffHistory;
   restarts: CrewRestarts;
-  catalog: ReturnType<typeof useHarnessCatalog>;
+  catalog: ReturnType<typeof useHarnesses>;
   loadModels: ReturnType<typeof useDaemonApi>['sendHarnessModels'];
 }
 
@@ -163,14 +142,13 @@ export function CrewPanel({ visit, ...surface }: CrewPanelProps) {
     sendCrewCharterSet,
     sendCrewHandoffsGet,
     sendCrewHandoffGet,
-    sendDelegationPreferencesGet,
     sendHarnessModels,
   } = useDaemonApi();
   const autosave = useCrewLaunchAutosave(surface.members, connectionGeneration, sendCrewSet);
   const charterAutosave = useCrewCharterAutosave(connectionGeneration, sendCrewCharterGet, sendCrewCharterSet);
   const handoffs = useCrewHandoffs(connectionGeneration, sendCrewHandoffsGet, sendCrewHandoffGet);
   const restarts = useCrewRestart(sendCrewRestart, autosave.observe);
-  const catalog = useHarnessCatalog(surface.isOpen, sendDelegationPreferencesGet);
+  const catalog = useHarnesses(surface.isOpen);
   return (
     <CrewPanelSurface
       key={visit}

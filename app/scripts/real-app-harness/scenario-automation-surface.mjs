@@ -262,6 +262,19 @@ async function main() {
       runner.assert(row.canRunNow === true, 'manual definition renders the run-now affordance', row);
     });
 
+    await runner.step('existing_launch_route_survives_picker_save', async () => {
+      await client.request('automations_open_panel');
+      await client.request('dom_wait', { selector: `[data-testid="automation-edit-${manualID}"]`, timeoutMs: 30000 });
+      await client.request('automation_form_open', { definitionId: manualID });
+      const openedForm = await poll(async () => { const state = await client.request('automation_form_get_state'); return state.present && state.status === 'ready' ? state : null; }, 'existing automation form to finish loading');
+      runner.assert(openedForm.values.model === 'slice6-manual-probe' && openedForm.values.effort === 'high', 'the shared picker retains the stored unreported launch route', openedForm.values);
+      await client.request('automation_form_submit');
+      await poll(async () => !(await client.request('automation_form_get_state')).present, 'automation form save to finish');
+      const savedDefinition = await observer.requestResult({ cmd: 'automation_definition_get', definition_id: manualID }, 'automation_definition_result');
+      const savedLaunch = JSON.parse(savedDefinition.spec_json).launch;
+      runner.assert(savedLaunch.model === 'slice6-manual-probe' && savedLaunch.effort === 'high', 'saving preserves the stored model and effort', savedLaunch);
+    });
+
     await runner.step('leg2_run_now_and_navigable', async () => {
       await client.request('automations_select_definition', { definitionId: manualID });
       await client.request('automations_run_now', { definitionId: manualID });
