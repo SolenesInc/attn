@@ -282,6 +282,19 @@ size_t attn_ghostty_total_rows(AttnGhosttyTerminal *attn) {
   return rows;
 }
 
+bool attn_ghostty_at_ground(AttnGhosttyTerminal *attn) {
+  bool ground = true;
+  if (attn != NULL) {
+    ghostty_terminal_get(attn->terminal, GHOSTTY_TERMINAL_DATA_VT_GROUND,
+                         &ground);
+  }
+  return ground;
+}
+
+bool attn_ghostty_origin_mode(AttnGhosttyTerminal *attn) {
+  return attn_mode(attn, GHOSTTY_MODE_ORIGIN);
+}
+
 bool attn_ghostty_cursor_visible(AttnGhosttyTerminal *attn) {
   return attn_mode(attn, GHOSTTY_MODE_CURSOR_VISIBLE);
 }

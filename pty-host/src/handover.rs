@@ -35,6 +35,7 @@ pub struct Fallback {
 }
 
 #[derive(Deserialize, Serialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct SessionHandoff {
     pub id: String,
     pub agent: String,
@@ -45,7 +46,8 @@ pub struct SessionHandoff {
     pub cleanup_dir: String,
     pub master_fd: Option<i32>,
     pub screen_path: String,
-    pub carry: Vec<u8>,
+    pub alternate_screen_path: Option<String>,
+    pub removing: bool,
     pub seq: u32,
     pub cols: u16,
     pub rows: u16,
@@ -114,6 +116,9 @@ impl HostHandoff {
     pub fn remove(&self, path: &Path) {
         for session in &self.sessions {
             let _ = fs::remove_file(&session.screen_path);
+            if let Some(alternate) = &session.alternate_screen_path {
+                let _ = fs::remove_file(alternate);
+            }
         }
         let _ = fs::remove_file(path);
     }

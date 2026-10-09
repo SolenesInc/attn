@@ -17,7 +17,7 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
-use crate::ghostty::Theme;
+use crate::ghostty::{HandoverScreen, Theme};
 use crate::handover::{self, Fallback, HostHandoff, write_private};
 use crate::protocol::{
     AttachParams, CommitParams, ERR_BAD_REQUEST, ERR_IMAGE_NOT_FOUND, ERR_IO,
@@ -168,6 +168,7 @@ impl Host {
             ChildReaper::start()?,
             Arc::new(Quiesce::new()?),
         );
+        host.write_registry()?;
         host.start()?;
         host.serve();
         Ok(())
@@ -177,10 +178,17 @@ impl Host {
         let handoff = HostHandoff::read(path)?;
         let mut screens = Vec::with_capacity(handoff.sessions.len());
         for session in &handoff.sessions {
-            screens.push(
-                fs::read(&session.screen_path)
-                    .map_err(|error| format!("read screen of {}: {error}", session.id))?,
-            );
+            let read = |path: &str| {
+                fs::read(path).map_err(|error| format!("read screen of {}: {error}", session.id))
+            };
+            screens.push(HandoverScreen {
+                primary: read(&session.screen_path)?,
+                alternate: session
+                    .alternate_screen_path
+                    .as_deref()
+                    .map(read)
+                    .transpose()?,
+            });
         }
         let reaper = ChildReaper::start()?;
         let quiesce = Arc::new(Quiesce::new()?);
@@ -202,7 +210,9 @@ impl Host {
         let mut adopted = Vec::with_capacity(handoff.sessions.len());
         for (session, screen) in handoff.sessions.iter().zip(&screens) {
             match Session::adopt(session, screen, host.session_runtime()) {
-                Ok(adopted_session) => adopted.push((adopted_session, session.master_fd)),
+                Ok(adopted_session) => {
+                    adopted.push((adopted_session, session.master_fd, session.removing));
+                }
                 Err(error) => {
                     std::mem::forget(adopted);
                     std::mem::forget(host);
@@ -210,15 +220,23 @@ impl Host {
                 }
             }
         }
+        if let Err(error) = host.write_registry() {
+            std::mem::forget(adopted);
+            std::mem::forget(host);
+            return Err(error);
+        }
         handover::disarm_fallback();
         set_cloexec(host.listener.as_raw_fd(), true)?;
-        for (session, master_fd) in adopted {
+        for (session, master_fd, removing) in adopted {
             host.state
                 .lock()
                 .expect("host state mutex poisoned")
                 .sessions
                 .insert(session.id.clone(), Arc::clone(&session));
             session.resume_adopted(master_fd, &host.reaper)?;
+            if removing {
+                session.finish_adopted_removal();
+            }
         }
         host.start()?;
         handoff.remove(path);
@@ -251,7 +269,6 @@ impl Host {
     }
 
     fn start(self: &Arc<Self>) -> Result<(), String> {
-        self.write_registry()?;
         self.start_shell_poller()?;
         self.start_idle_timer()?;
         self.schedule_idle_if_empty();
@@ -270,7 +287,10 @@ impl Host {
         }
         self.quiesce.enter();
         loop {
-            if let Err(error) = self.quiesce.wait_readable(self.listener.as_raw_fd()) {
+            if let Err(error) = self
+                .quiesce
+                .wait_readable(self.listener.as_raw_fd(), || true)
+            {
                 eprintln!("PTY host listener wait failed: {error}");
                 continue;
             }
@@ -531,8 +551,14 @@ impl Host {
             let captured = session
                 .capture_handoff(screen_path.to_string_lossy().into_owned())
                 .and_then(|(entry, screen)| {
-                    write_private(&screen_path, &screen)?;
-                    screen_bytes += screen.len();
+                    write_private(&screen_path, &screen.primary)?;
+                    screen_bytes += screen.primary.len();
+                    if let (Some(path), Some(alternate)) =
+                        (&entry.alternate_screen_path, &screen.alternate)
+                    {
+                        write_private(Path::new(path), alternate)?;
+                        screen_bytes += alternate.len();
+                    }
                     Ok(entry)
                 });
             match captured {

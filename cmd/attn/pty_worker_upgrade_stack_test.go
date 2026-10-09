@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptyhost/ptyhosttest"
@@ -174,9 +175,21 @@ func TestASharedHostTerminalMovesToTheNewBuildAcrossAnUpdate(t *testing.T) {
 	s := testworld.NewStack(t)
 	current := testworld.AttnBinaryWithSnapshotFormat(t, "shared-current")
 	next := testworld.AttnBinaryWithSnapshotFormat(t, "shared-next")
-	s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=shared")
+	s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=migrating")
 	s.StartBinary(current, "ATTN_PTY_HOST_BINARY="+ptyhosttest.BuildWithSnapshotFormat(t, "shared-current"))
 	app := s.App()
+	requestID := uuid.NewString()
+	app.Send(protocol.SetSettingMessage{
+		Cmd: protocol.CmdSetSetting, Key: "pty_shared_host_enabled", Value: "true", RequestID: protocol.Ptr(requestID),
+	})
+	if enabled := testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+		return protocol.Deref(m.RequestID) == requestID
+	}); !protocol.Deref(enabled.Success) {
+		t.Fatalf("enabling the shared PTY host failed: %s", protocol.Deref(enabled.Error))
+	}
+	if active := s.App().Initial.Settings["pty_shared_host_active"]; active != "true" {
+		t.Fatalf("after enabling it the shared PTY host reads active=%q, want true", active)
+	}
 	shell := s.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), s.Path("shop"))
 	pidFile := filepath.Join(s.Dir, "shell.pid")
 	app.TypeLine(shell, "echo $$ > "+pidFile+"; echo started-$((1+1))")
@@ -208,8 +221,8 @@ func TestASharedHostTerminalMovesToTheNewBuildAcrossAnUpdate(t *testing.T) {
 	if host := sharedHostOf(t, s.Dir, terminal); host != hostBefore {
 		t.Fatalf("the terminal moved from host pid %d to %d, want the same process carrying it", hostBefore, host)
 	}
-	if session := testworld.AwaitSession(app, shell, func(protocol.Session) bool { return true }); session.TerminalBuildStale != nil {
-		t.Errorf("the handed-over terminal shows terminal_build_stale=%t, want no reload notice", *session.TerminalBuildStale)
+	if stale := initialSession(t, s.App(), shell).TerminalBuildStale; stale != nil {
+		t.Errorf("after the handover the terminal shows terminal_build_stale=%t, want no reload notice", *stale)
 	}
 	app.TypeLine(shell, "echo $$ > "+pidFile+"; echo still-$((2+2))")
 	app.AwaitScreen(shell, "still-4")

@@ -80,10 +80,11 @@ func (d *Daemon) releaseWorkerUpgrade(terminal harness.TerminalID) {
 }
 
 func (d *Daemon) upgradeStaleWorker(sessionID protocol.SessionID, terminal harness.TerminalID, upgrader ptybackend.WorkerUpgrader) {
-	defer d.releaseWorkerUpgrade(terminal)
 	ctx, cancel := context.WithTimeout(context.Background(), terminalUpgradeTimeout)
 	defer cancel()
-	if err := upgrader.UpgradeWorker(ctx, terminal); err != nil {
+	err := upgrader.UpgradeWorker(ctx, terminal)
+	d.releaseWorkerUpgrade(terminal)
+	if err != nil {
 		d.logf("terminal upgrade: session=%s failed within %s (%v); offering a reload instead",
 			sessionID, terminalUpgradeTimeout, err)
 		d.publishFact(FactSessionTerminalBuildChanged, string(sessionID), nil)

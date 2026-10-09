@@ -1,6 +1,9 @@
 use std::io::ErrorKind;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::sync::{Condvar, Mutex};
+use std::time::{Duration, Instant};
+
+const SEQUENCE_GRACE: Duration = Duration::from_secs(1);
 
 pub struct Quiesce {
     wake_read: OwnedFd,
@@ -12,6 +15,7 @@ pub struct Quiesce {
 #[derive(Default)]
 struct State {
     requested: bool,
+    requested_at: Option<Instant>,
     members: usize,
     parked: usize,
 }
@@ -47,8 +51,20 @@ impl Quiesce {
         self.changed.notify_all();
     }
 
-    pub fn wait_readable(&self, fd: RawFd) -> std::io::Result<()> {
+    pub fn wait_readable(&self, fd: RawFd, at_rest: impl Fn() -> bool) -> std::io::Result<()> {
+        let mut finishing_since: Option<Instant> = None;
         loop {
+            let wake = self.wake_read.as_raw_fd();
+            let watch_wake = finishing_since.is_none();
+            let timeout = finishing_since.map_or(-1, |since| {
+                let left = SEQUENCE_GRACE.saturating_sub(since.elapsed());
+                i32::try_from(left.as_millis()).unwrap_or(i32::MAX)
+            });
+            if timeout == 0 {
+                self.park_mid_sequence();
+                finishing_since = None;
+                continue;
+            }
             let mut fds = [
                 libc::pollfd {
                     fd,
@@ -56,26 +72,49 @@ impl Quiesce {
                     revents: 0,
                 },
                 libc::pollfd {
-                    fd: self.wake_read.as_raw_fd(),
+                    fd: if watch_wake { wake } else { -1 },
                     events: libc::POLLIN,
                     revents: 0,
                 },
             ];
-            if unsafe { libc::poll(fds.as_mut_ptr(), 2, -1) } < 0 {
+            let ready = unsafe { libc::poll(fds.as_mut_ptr(), 2, timeout) };
+            if ready < 0 {
                 let error = std::io::Error::last_os_error();
                 if error.kind() == ErrorKind::Interrupted {
                     continue;
                 }
                 return Err(error);
             }
-            if fds[1].revents != 0 {
-                self.park();
+            if ready == 0 {
+                self.park_mid_sequence();
+                finishing_since = None;
                 continue;
             }
             if fds[0].revents != 0 {
                 return Ok(());
             }
+            if fds[1].revents != 0 {
+                if at_rest() {
+                    self.park();
+                } else {
+                    finishing_since = self.requested_at();
+                }
+            }
         }
+    }
+
+    fn requested_at(&self) -> Option<Instant> {
+        self.state
+            .lock()
+            .expect("quiesce mutex poisoned")
+            .requested_at
+    }
+
+    fn park_mid_sequence(&self) {
+        eprintln!(
+            "PTY host stopped a terminal {SEQUENCE_GRACE:?} into an unfinished escape sequence; its next bytes may show as text"
+        );
+        self.park();
     }
 
     fn park(&self) {
@@ -98,6 +137,7 @@ impl Quiesce {
             return Err("terminals are already stopped for a handover".to_owned());
         }
         state.requested = true;
+        state.requested_at = Some(Instant::now());
         if unsafe { libc::write(self.wake_write.as_raw_fd(), [1_u8].as_ptr().cast(), 1) } != 1 {
             state.requested = false;
             return Err(format!(
@@ -118,6 +158,7 @@ impl Quiesce {
         let mut byte = 0_u8;
         let _ = unsafe { libc::read(self.wake_read.as_raw_fd(), (&raw mut byte).cast(), 1) };
         state.requested = false;
+        state.requested_at = None;
         drop(state);
         self.changed.notify_all();
     }

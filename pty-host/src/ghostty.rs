@@ -67,6 +67,8 @@ unsafe extern "C" {
     fn attn_ghostty_left_right_margin_mode(terminal: *mut c_void) -> bool;
     fn attn_ghostty_wraparound(terminal: *mut c_void) -> bool;
     fn attn_ghostty_cursor_visible(terminal: *mut c_void) -> bool;
+    fn attn_ghostty_at_ground(terminal: *mut c_void) -> bool;
+    fn attn_ghostty_origin_mode(terminal: *mut c_void) -> bool;
     fn attn_ghostty_track_cursor(terminal: *mut c_void) -> *mut c_void;
     fn attn_ghostty_tracked_screen_point(raw: *mut c_void, x: *mut u16, y: *mut u32) -> bool;
     fn attn_ghostty_tracked_free(raw: *mut c_void);
@@ -406,21 +408,27 @@ impl Terminal {
         unsafe { take_bytes(|len| attn_ghostty_vt_dump(self.raw.as_ptr(), len)) }
     }
 
-    pub fn handover_vt(&self) -> Result<Vec<u8>, String> {
+    pub fn handover_vt(&self) -> Result<HandoverScreen, String> {
         let mut scratch = Self::restore(&self.snapshot())?;
         if !scratch.alt_screen_active() {
-            return scratch.dump_active();
+            return Ok(HandoverScreen {
+                primary: scratch.dump_active()?,
+                alternate: None,
+            });
         }
         let alternate = scratch.dump_active()?;
         scratch.write(b"\x1b[?1049l");
-        let mut dump = scratch.dump_active()?;
-        dump.extend_from_slice(b"\x1b[?1049h");
-        dump.extend(alternate);
-        Ok(dump)
+        Ok(HandoverScreen {
+            primary: scratch.dump_active()?,
+            alternate: Some(alternate),
+        })
     }
 
     fn dump_active(&self) -> Result<Vec<u8>, String> {
         let mut dump = self.vt_dump();
+        let region = scroll_region(&dump);
+        let origin = self.origin_mode();
+        dump.extend_from_slice(b"\x1b[r\x1b[?6l");
         let (cols, rows) = self.size();
         let mut probe = Self::new(cols, rows)?;
         probe.write(&dump);
@@ -429,14 +437,33 @@ impl Terminal {
             dump.extend(format!("\x1b[{rows};1H").as_bytes());
             dump.extend(b"\r\n".repeat(deficit));
         }
+        let mut top = 1;
+        if let Some((region_top, bottom)) = region {
+            dump.extend(format!("\x1b[{region_top};{bottom}r").as_bytes());
+            top = region_top;
+        }
         let (x, y) = self.cursor_pos();
-        dump.extend(format!("\x1b[{};{}H", y + 1, x + 1).as_bytes());
+        let row = if origin {
+            dump.extend_from_slice(b"\x1b[?6h");
+            (y + 1).saturating_sub(top - 1)
+        } else {
+            y + 1
+        };
+        dump.extend(format!("\x1b[{row};{}H", x + 1).as_bytes());
         dump.extend_from_slice(if self.cursor_visible() {
             b"\x1b[?25h"
         } else {
             b"\x1b[?25l"
         });
         Ok(dump)
+    }
+
+    pub fn at_ground(&self) -> bool {
+        unsafe { attn_ghostty_at_ground(self.raw.as_ptr()) }
+    }
+
+    fn origin_mode(&self) -> bool {
+        unsafe { attn_ghostty_origin_mode(self.raw.as_ptr()) }
     }
 
     fn cursor_visible(&self) -> bool {
@@ -593,6 +620,31 @@ fn parse_color(value: &str) -> Option<u32> {
     u32::from_str_radix(value, 16).ok()
 }
 
+pub struct HandoverScreen {
+    pub primary: Vec<u8>,
+    pub alternate: Option<Vec<u8>>,
+}
+
+fn scroll_region(dump: &[u8]) -> Option<(u16, u16)> {
+    let mut found = None;
+    let mut rest = dump;
+    while let Some(start) = rest.windows(2).position(|pair| pair == b"\x1b[") {
+        let params = &rest[start + 2..];
+        let end = params
+            .iter()
+            .position(|byte| !(byte.is_ascii_digit() || *byte == b';'))
+            .unwrap_or(params.len());
+        if params.get(end) == Some(&b'r') {
+            let text = std::str::from_utf8(&params[..end]).unwrap_or_default();
+            found = text
+                .split_once(';')
+                .and_then(|(top, bottom)| Some((top.parse().ok()?, bottom.parse().ok()?)));
+        }
+        rest = &params[end..];
+    }
+    found
+}
+
 #[derive(Clone, Default, serde::Deserialize, serde::Serialize)]
 pub struct Theme {
     #[serde(default)]
@@ -619,6 +671,9 @@ mod tests {
         assert!(restored.plain_text().contains("hello from rust"));
     }
 
+    use super::Theme;
+    use crate::wire::WireFeeder;
+
     const COLS: u16 = 40;
     const ROWS: u16 = 10;
 
@@ -628,8 +683,20 @@ mod tests {
         terminal
     }
 
-    fn handed_over(source: &Terminal) -> Terminal {
-        screen(&source.handover_vt().expect("handover dump"))
+    fn adopt(source: &Terminal, theme: &Theme) -> WireFeeder {
+        WireFeeder::adopt(
+            &source.handover_vt().expect("handover dump"),
+            (COLS, ROWS),
+            (0, 0),
+            theme,
+            &[],
+            1,
+        )
+        .expect("adopt")
+    }
+
+    fn handed_over(source: &Terminal) -> WireFeeder {
+        adopt(source, &Theme::default())
     }
 
     fn assert_same_screen(source: &Terminal, replayed: &Terminal, shape: &str) {
@@ -694,22 +761,48 @@ mod tests {
                 "hidden cursor",
                 [numbered(5), b"\x1b[?25l".to_vec()].concat(),
             ),
+            (
+                "scrolling region over blank rows",
+                [numbered(25), b"\x1b[3;8r\x1b[5;1Hinside".to_vec()].concat(),
+            ),
+            (
+                "cleared screen with a scrolling region",
+                [numbered(25), b"\x1b[2J\x1b[3;8r\x1b[4;2Hx".to_vec()].concat(),
+            ),
+            (
+                "origin mode",
+                [numbered(25), b"\x1b[3;8r\x1b[?6h\x1b[2;4Hrelative".to_vec()].concat(),
+            ),
         ];
         for (shape, output) in shapes {
             let source = screen(&output);
-            assert_same_screen(&source, &handed_over(&source), shape);
+            assert_same_screen(&source, handed_over(&source).terminal(), shape);
         }
     }
 
     #[test]
-    fn handover_dump_keeps_relative_redraws_on_their_rows() {
-        let mut source =
-            screen(&[numbered(25), b"> prompt\r\n  status\r\n\x1b[2A".to_vec()].concat());
-        let mut replayed = handed_over(&source);
-        let redraw = b"\r\x1b[J> redrawn prompt\r\n  new status";
-        source.write(redraw);
-        replayed.write(redraw);
-        assert_same_screen(&source, &replayed, "redraw after handover");
+    fn handover_dump_keeps_later_output_on_its_rows() {
+        let prompt = [numbered(25), b"> prompt\r\n  status\r\n\x1b[2A".to_vec()].concat();
+        let region = [numbered(25), b"\x1b[3;8r\x1b[?6h\x1b[6;1H".to_vec()].concat();
+        let redraws: [(&str, &[u8], &[u8]); 2] = [
+            (
+                "relative redraw",
+                &prompt,
+                b"\r\x1b[J> redrawn prompt\r\n  new status",
+            ),
+            (
+                "output inside a region",
+                &region,
+                b"a\r\nb\r\nc\r\nd\r\ne\x1b[2;2Hz",
+            ),
+        ];
+        for (shape, before, after) in redraws {
+            let mut source = screen(before);
+            let mut replayed = handed_over(&source);
+            source.write(after);
+            replayed.terminal_mut().write(after);
+            assert_same_screen(&source, replayed.terminal(), shape);
+        }
     }
 
     #[test]
@@ -717,16 +810,48 @@ mod tests {
         let mut source = screen(&[numbered(25), b"shell prompt$ ".to_vec()].concat());
         source.write(b"\x1b[?1049h\x1b[Hfull screen app\x1b[5;3H");
         let mut replayed = handed_over(&source);
-        assert!(replayed.alt_screen_active());
-        assert_eq!(replayed.viewport_text(ROWS), source.viewport_text(ROWS));
-        assert_eq!(replayed.cursor_pos(), source.cursor_pos());
+        assert!(replayed.terminal().alt_screen_active());
+        assert_eq!(
+            replayed.terminal().viewport_text(ROWS),
+            source.viewport_text(ROWS)
+        );
+        assert_eq!(replayed.terminal().cursor_pos(), source.cursor_pos());
         assert!(
             source.alt_screen_active(),
             "the dump must not change the live terminal"
         );
 
         source.write(b"\x1b[?1049l");
-        replayed.write(b"\x1b[?1049l");
-        assert_same_screen(&source, &replayed, "primary screen after leaving the app");
+        replayed.terminal_mut().write(b"\x1b[?1049l");
+        assert_same_screen(
+            &source,
+            replayed.terminal(),
+            "primary screen after leaving the app",
+        );
+    }
+
+    #[test]
+    fn a_handed_over_terminal_follows_later_theme_changes() {
+        let theme = |background: &str, red: &str| Theme {
+            foreground: "#dddddd".to_owned(),
+            background: background.to_owned(),
+            cursor: "#ffffff".to_owned(),
+            ansi_palette: (0..16)
+                .map(|slot| {
+                    if slot == 1 {
+                        red.to_owned()
+                    } else {
+                        format!("#0{slot:x}0{slot:x}0{slot:x}")
+                    }
+                })
+                .collect(),
+        };
+        let (dark, light) = (theme("#101010", "#aa0000"), theme("#f0f0f0", "#bb1111"));
+        let mut source = screen(&[numbered(12), b"\x1b[31mred text\x1b[0m".to_vec()].concat());
+        source.set_theme(&dark).expect("theme");
+        let mut replayed = adopt(&source, &dark);
+        source.set_theme(&light).expect("theme");
+        replayed.terminal_mut().set_theme(&light).expect("theme");
+        assert_eq!(replayed.terminal().viewport_vt(), source.viewport_vt());
     }
 }

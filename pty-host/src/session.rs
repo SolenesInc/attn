@@ -17,8 +17,7 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use serde::Serialize;
 use serde_json::{Value, json};
 
-use crate::boundary::safe_boundary;
-use crate::ghostty::{Terminal, Theme};
+use crate::ghostty::{HandoverScreen, Terminal, Theme};
 use crate::handover::SessionHandoff;
 use crate::protocol::{
     PreparedLaunchAttempt, SpawnParams, desync_event, exit_event, kitty_placements_event,
@@ -255,7 +254,7 @@ pub struct Session {
     cleanup: Cleanup,
     broadcast: Broadcast,
     quiesce: Arc<Quiesce>,
-    carry: Mutex<Vec<u8>>,
+    removing: AtomicBool,
     connections: AtomicUsize,
     cleanup_scheduled: AtomicBool,
     cleaned: AtomicBool,
@@ -421,7 +420,7 @@ impl Session {
             cleanup,
             broadcast,
             quiesce,
-            carry: Mutex::new(Vec::new()),
+            removing: AtomicBool::new(false),
             connections: AtomicUsize::new(0),
             cleanup_scheduled: AtomicBool::new(false),
             cleaned: AtomicBool::new(false),
@@ -429,11 +428,18 @@ impl Session {
         }
     }
 
-    pub fn freeze_output(&self) -> MutexGuard<'_, ()> {
-        self.delivery
+    pub fn freeze_output(&self) -> (MutexGuard<'_, ()>, MutexGuard<'_, ()>) {
+        let admission = self
+            .delivery
             .admission
             .lock()
-            .expect("delivery admission poisoned")
+            .expect("delivery admission poisoned");
+        let boundary = self
+            .delivery
+            .boundary
+            .lock()
+            .expect("delivery boundary poisoned");
+        (admission, boundary)
     }
 
     pub fn is_pending(&self) -> bool {
@@ -446,7 +452,7 @@ impl Session {
     pub fn capture_handoff(
         &self,
         screen_path: String,
-    ) -> Result<(SessionHandoff, Vec<u8>), String> {
+    ) -> Result<(SessionHandoff, HandoverScreen), String> {
         let model = self.model.lock().expect("model mutex poisoned");
         let lifecycle = self.lifecycle.lock().expect("lifecycle mutex poisoned");
         let master_fd = if lifecycle.running {
@@ -468,8 +474,16 @@ impl Session {
             registry_path: self.registry_path.clone(),
             cleanup_dir: self.cleanup_dir.clone(),
             master_fd,
+            alternate_screen_path: screen
+                .alternate
+                .as_ref()
+                .map(|_| format!("{screen_path}.alt")),
             screen_path,
-            carry: self.carry.lock().expect("carry mutex poisoned").clone(),
+            removing: self.removing.load(Ordering::Acquire)
+                || matches!(
+                    *self.ownership.lock().expect("ownership mutex poisoned"),
+                    Ownership::Abandoned
+                ),
             seq: model.seq,
             cols: model.cols,
             rows: model.rows,
@@ -494,24 +508,17 @@ impl Session {
 
     pub fn adopt(
         handoff: &SessionHandoff,
-        screen: &[u8],
+        screen: &HandoverScreen,
         runtime: SessionRuntime,
     ) -> Result<Arc<Self>, String> {
-        let mut terminal = Terminal::new(handoff.cols, handoff.rows)?;
-        terminal.set_theme(&handoff.theme)?;
-        if handoff.cell_width > 0 && handoff.cell_height > 0 {
-            terminal.resize_no_reflow(
-                handoff.cols,
-                handoff.rows,
-                u32::from(handoff.cell_width),
-                u32::from(handoff.cell_height),
-            )?;
-        }
-        terminal.write(screen);
-        terminal.drain_responses();
-        terminal.drain_program_status();
-        let mut wire = WireFeeder::new(terminal, mint_epoch());
-        wire.restore_blocks(&handoff.blocks, handoff.next_block_id);
+        let wire = WireFeeder::adopt(
+            screen,
+            (handoff.cols, handoff.rows),
+            (handoff.cell_width, handoff.cell_height),
+            &handoff.theme,
+            &handoff.blocks,
+            handoff.next_block_id,
+        )?;
         let mut signals = SignalObserver::new(&handoff.agent);
         signals.restore_program_status(handoff.program_status_reported);
         let SessionRuntime {
@@ -563,11 +570,6 @@ impl Session {
             broadcast,
             quiesce,
         ));
-        session
-            .carry
-            .lock()
-            .expect("carry mutex poisoned")
-            .clone_from(&handoff.carry);
         Ok(session)
     }
 
@@ -589,6 +591,20 @@ impl Session {
         start_reader(Arc::clone(self), pty_reader)?;
         reaper.register(self);
         Ok(())
+    }
+
+    pub fn finish_adopted_removal(self: &Arc<Self>) {
+        let session = Arc::clone(self);
+        if let Err(error) = thread::Builder::new()
+            .name(format!("pty-remove-{}", self.id))
+            .stack_size(128 * 1024)
+            .spawn(move || session.remove())
+        {
+            eprintln!(
+                "terminal {} removal could not resume after the handover: {error}",
+                self.id
+            );
+        }
     }
 
     pub fn note_connected(&self) {
@@ -911,6 +927,7 @@ impl Session {
     }
 
     pub fn remove_checked(self: &Arc<Self>) -> Result<(), String> {
+        self.removing.store(true, Ordering::Release);
         self.signal(libc::SIGTERM)?;
         self.finish_cleanup();
         Ok(())
@@ -954,27 +971,29 @@ impl Session {
     fn read_until_closed(&self, reader: &mut File) {
         let mut buffer = vec![0_u8; 4 * 1024];
         loop {
-            if self.quiesce.wait_readable(reader.as_raw_fd()).is_err() {
-                break;
+            if self
+                .quiesce
+                .wait_readable(reader.as_raw_fd(), || self.parser_at_ground())
+                .is_err()
+            {
+                return;
             }
-            let read = match reader.read(&mut buffer) {
-                Ok(0) => break,
-                Ok(read) => read,
-                Err(error) if error.kind() == ErrorKind::Interrupted => continue,
-                Err(_) => break,
-            };
-            let mut carry = self.carry.lock().expect("carry mutex poisoned");
-            carry.extend_from_slice(&buffer[..read]);
-            let boundary = safe_boundary(&carry);
-            if boundary > 0 {
-                self.observe_output(&carry[..boundary], &self.delivery.admit_output());
-                carry.drain(..boundary);
+            match reader.read(&mut buffer) {
+                Ok(0) => return,
+                Ok(read) => self.observe_output(&buffer[..read], &self.delivery.admit_output()),
+                Err(error) if error.kind() == ErrorKind::Interrupted => {}
+                Err(_) => return,
             }
         }
-        let tail = std::mem::take(&mut *self.carry.lock().expect("carry mutex poisoned"));
-        if !tail.is_empty() {
-            self.observe_output(&tail, &self.delivery.admit_output());
-        }
+    }
+
+    fn parser_at_ground(&self) -> bool {
+        self.model
+            .lock()
+            .expect("model mutex poisoned")
+            .wire
+            .terminal()
+            .at_ground()
     }
 
     fn observe_output(&self, data: &[u8], admission: &OutputAdmission<'_>) {

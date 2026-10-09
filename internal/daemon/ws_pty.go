@@ -677,7 +677,7 @@ func (d *Daemon) resyncEndedStream(client *wsClient, terminalID protocol.Termina
 	if !attached || current != stream || !canProbe || d.stopping() {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), endedStreamProbeTimeout)
+	ctx, cancel := context.WithTimeout(d.life.Context(), endedStreamProbeTimeout)
 	defer cancel()
 	info, err := provider.SessionInfo(ctx, harness.TerminalID(terminalID))
 	if err != nil || !info.Running {
