@@ -71,7 +71,7 @@ func (d *Daemon) checkLaunchPlacement(profile profiles.Profile, placement *launc
 	var missing *profiles.Error
 	if placement.desktopID != "" && errors.As(err, &missing) && missing.Code == profiles.CodeNotFound {
 		target := ""
-		if slot := profiles.DesktopSlot(placement.desktopID); slot != 0 && placement.desktopID == profiles.NumberedDesktopID(profile.ID, slot) {
+		if profiles.IsNumberedDesktopID(profile.ID, placement.desktopID) {
 			target = placement.desktopID
 		}
 		*placement = launchPlacement{desktopID: target, direction: placement.direction}

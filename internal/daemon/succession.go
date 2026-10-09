@@ -59,6 +59,7 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 	terminal, _ := d.evidenceTable().snapshot(from.ID)
 	d.startEvidence(sc.To, sessionstate.Evidence{
 		Heartbeat:      terminal.Heartbeat,
+		ProgramStatus:  terminal.ProgramStatus,
 		Process:        terminal.Process,
 		ReviewerInLoop: terminal.ReviewerInLoop,
 		LastBusyAt:     terminal.LastBusyAt,

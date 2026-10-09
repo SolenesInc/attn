@@ -87,6 +87,12 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-desktop-close-one-session-keeps-selection'],
   },
   {
+    id: 'close-desktop',
+    runnerId: 'CLOSE-DESKTOP',
+    label: 'Close an empty desktop with the native shortcut',
+    command: ['pnpm', 'run', 'real-app:scenario-close-desktop'],
+  },
+  {
     id: 'close-pane-nonblocking',
     runnerId: 'CLOSE-PANE-NONBLOCKING',
     label: 'Close pane does not wait for process teardown',
@@ -299,7 +305,7 @@ export const scenarioCatalog = [
   {
     id: 'terminal-input',
     runnerId: 'TERMINAL-INPUT',
-    label: 'Terminal input and diagnostic report via packaged browser events, shortcuts, and paste',
+    label: 'Terminal input and diagnostic report via native Ctrl+Return, browser events, shortcuts, and paste',
     command: ['pnpm', 'run', 'real-app:scenario-terminal-input'],
   },
   {

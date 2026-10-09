@@ -3160,6 +3160,20 @@ type Desktop struct {
 	TreeJson string `json:"tree_json"`
 }
 
+type DesktopCloseMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID string `json:"desktop_id"`
+
+	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
+	ExpectedRevision int `json:"expected_revision"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
 type DesktopCreateMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -7418,6 +7432,7 @@ const ProfileErrorCodeAlreadyPlaced ProfileErrorCode = "already_placed"
 const ProfileErrorCodeCrossProfile ProfileErrorCode = "cross_profile"
 const ProfileErrorCodeInternal ProfileErrorCode = "internal"
 const ProfileErrorCodeInvalid ProfileErrorCode = "invalid"
+const ProfileErrorCodeLastDesktop ProfileErrorCode = "last_desktop"
 const ProfileErrorCodeLastProfile ProfileErrorCode = "last_profile"
 const ProfileErrorCodeNameTaken ProfileErrorCode = "name_taken"
 const ProfileErrorCodeNotFound ProfileErrorCode = "not_found"

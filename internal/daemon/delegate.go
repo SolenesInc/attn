@@ -836,7 +836,7 @@ func (d *Daemon) delegationDestination(source *protocol.Session, desktopRef stri
 	desktop, err := d.resolveDesktopRef(profile, desktopRef)
 	var missing *profiles.Error
 	if errors.As(err, &missing) && missing.Code == profiles.CodeNotFound {
-		if slot := profiles.DesktopSlot(desktopRef); slot >= profiles.FirstShortcutSlot && slot <= profiles.LastShortcutSlot && desktopRef == profiles.NumberedDesktopID(profile.ID, slot) {
+		if slot := profiles.DesktopSlot(desktopRef); slot >= profiles.FirstShortcutSlot && slot <= profiles.LastShortcutSlot && profiles.IsNumberedDesktopID(profile.ID, desktopRef) {
 			desktop, err = profiles.Desktop{ID: desktopRef}, nil
 		}
 	}

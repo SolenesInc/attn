@@ -526,13 +526,27 @@ mod platform {
         let down = key_event(target, NSEventType::KeyDown, stroke)?;
         let up = key_event(target, NSEventType::KeyUp, stroke)?;
         let chord = stroke.modifiers.command || stroke.modifiers.control;
-        let handled_by = chord
-            .then(|| dispatch_key_equivalent(target, &down))
-            .flatten()
-            .unwrap_or_else(|| {
-                target.window.sendEvent(&down);
-                "responder"
-            });
+        let default_context_menu_key = stroke.key_code == 36
+            && stroke.modifiers.control
+            && !stroke.modifiers.command
+            && !stroke.modifiers.option
+            && !stroke.modifiers.shift;
+        let handled_by = if default_context_menu_key
+            && target
+                .view
+                .respondsToSelector(objc2::sel!(contextMenuKeyDown:))
+        {
+            target.view.contextMenuKeyDown(&down);
+            "context_menu"
+        } else {
+            chord
+                .then(|| dispatch_key_equivalent(target, &down))
+                .flatten()
+                .unwrap_or_else(|| {
+                    target.window.sendEvent(&down);
+                    "responder"
+                })
+        };
         target.window.sendEvent(&up);
         Ok(handled_by)
     }

@@ -5,6 +5,6 @@
 # because upstream's "tip" is rebuilt on every commit to main and its
 # assets cannot be pinned by hash. Consumers download and verify against
 # sha256 before the module ever reaches a build.
-pin=da5ddcb0857c0e4ddb32f7a089911e9038d040f3
+pin=ce63fcba60abb7e11e6435fae32855c20ef3c9cf
 upstream_asset=ghostty-vt.wasm
-sha256=2691dc2863b655a0f0c8865c81870f8fa35634f5b04578d597848468918eef93
+sha256=9dee592dcee43505d13ce58e687fec887fb8b137260d1fadb12aee497e395061

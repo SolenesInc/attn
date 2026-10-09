@@ -51,6 +51,7 @@ export function SidebarDesktopList() {
   const selectionKey = treeSelectionKey(context);
   const {
     onRenameDesktop,
+    onCloseDesktop,
     selectedDesktopId,
     homeActive,
     onSessionDragStart,
@@ -110,7 +111,7 @@ export function SidebarDesktopList() {
                 {shortcut && (
                   <span className="session-shortcut">{shortcut}</span>
                 )}
-                {onRenameDesktop && desktop && (
+                {(onRenameDesktop || onCloseDesktop) && desktop && (
                   <span className="desktop-actions">
                     <button
                       type="button"
@@ -122,6 +123,14 @@ export function SidebarDesktopList() {
                     >
                       ✎
                     </button>
+                    {onCloseDesktop && <button
+                      type="button"
+                      className="desktop-action-btn close-desktop-btn"
+                      data-testid={`close-desktop-${desktopView.id}`}
+                      onClick={(event) => { event.stopPropagation(); onCloseDesktop(desktopView.id); }}
+                      title="Close desktop"
+                      aria-label={`Close ${desktopView.title}`}
+                    >×</button>}
                   </span>
                 )}
               </div>

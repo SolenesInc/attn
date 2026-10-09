@@ -4657,6 +4657,12 @@ export function useDaemonSocket({
     [sendProfileCommand],
   );
 
+  const sendDesktopClose = useCallback(
+    (desktopId: string, expectedRevision: number) =>
+      sendProfileCommand('desktop_close', { desktop_id: desktopId, expected_revision: expectedRevision }),
+    [sendProfileCommand],
+  );
+
   const sendDesktopRename = useCallback(
     (desktopId: string, name: string, expectedRevision: number) =>
       sendProfileCommand('desktop_rename', { desktop_id: desktopId, name, expected_revision: expectedRevision }),
@@ -4858,6 +4864,7 @@ export function useDaemonSocket({
     sendProfileRename,
     sendProfileDelete,
     sendDesktopCreate,
+    sendDesktopClose,
     sendDesktopRename,
     sendDesktopReorder,
     sendDesktopSetOrder,

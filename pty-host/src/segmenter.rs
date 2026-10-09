@@ -18,6 +18,10 @@ enum Mode {
     Osc,
     Osc133Prefix,
     Osc133Body,
+    DcsEntry,
+    DcsParam,
+    DcsIntermediate,
+    DcsString,
     Opaque,
     Kitty,
 }
@@ -207,6 +211,23 @@ impl Segmenter {
                         index += 1;
                     }
                 }
+                Mode::DcsEntry | Mode::DcsParam | Mode::DcsIntermediate => {
+                    self.mode = match byte {
+                        ESC => Mode::Escape,
+                        value if aborts_string(value) => Mode::Ground,
+                        value if value >= 0x80 => opens_c1(value).unwrap_or(self.mode),
+                        value => dcs_head_next(self.mode, value),
+                    };
+                    index += 1;
+                }
+                Mode::DcsString => {
+                    self.mode = match byte {
+                        ESC => Mode::Escape,
+                        0x18 | 0x1a => Mode::Ground,
+                        _ => self.mode,
+                    };
+                    index += 1;
+                }
                 Mode::Opaque => {
                     if byte == ESC {
                         self.mode = Mode::Escape;
@@ -312,9 +333,27 @@ fn aborts_string(byte: u8) -> bool {
     matches!(byte, 0x18 | 0x1a) || c1_executed(byte)
 }
 
+fn dcs_head_next(mode: Mode, byte: u8) -> Mode {
+    match byte {
+        0x40..=0x7e => Mode::DcsString,
+        0x20..=0x2f => Mode::DcsIntermediate,
+        0x30..=0x3f => {
+            let ignored = mode == Mode::DcsIntermediate
+                || byte == b':'
+                || (mode == Mode::DcsParam && byte >= 0x3c);
+            if ignored {
+                Mode::DcsString
+            } else {
+                Mode::DcsParam
+            }
+        }
+        _ => mode,
+    }
+}
+
 fn opens_inside_string(byte: u8) -> Option<Mode> {
     match byte {
-        0x90 => Some(Mode::Opaque),
+        0x90 => Some(Mode::DcsEntry),
         0x9b => Some(Mode::Csi),
         0x9d => Some(Mode::Osc),
         _ => None,
@@ -330,7 +369,8 @@ fn opens_c1(byte: u8) -> Option<Mode> {
 
 fn opens_7bit(byte: u8) -> Option<Mode> {
     match byte {
-        b'P' | b'X' | b'^' | b'_' => Some(Mode::Opaque),
+        b'P' => Some(Mode::DcsEntry),
+        b'X' | b'^' | b'_' => Some(Mode::Opaque),
         b']' => Some(Mode::Osc),
         b'[' => Some(Mode::Csi),
         _ => opens_c1(byte),
@@ -374,6 +414,13 @@ mod tests {
     #[test]
     fn does_not_extract_kitty_from_an_open_osc() {
         let bytes = b"\x1b]0;title\x1b_Ga=T,f=24,s=1,v=1;QQ==\x1b\\";
+        let mut segmenter = Segmenter::default();
+        assert_eq!(segmenter.feed(bytes), vec![Segment::Plain(bytes.to_vec())]);
+    }
+
+    #[test]
+    fn utf8_c1_bytes_do_not_end_a_dcs_string() {
+        let bytes = b"\x1bPq\xc3\x9c\x1b_Ga=T,f=24,s=1,v=1;QQ==\x1b\\";
         let mut segmenter = Segmenter::default();
         assert_eq!(segmenter.feed(bytes), vec![Segment::Plain(bytes.to_vec())]);
     }

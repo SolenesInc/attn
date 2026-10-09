@@ -1,0 +1,3 @@
+kind: fixed
+area: terminals
+change: Ctrl+Return reaches the focused terminal on macOS without opening its context menu.

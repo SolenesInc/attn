@@ -10,11 +10,12 @@ import (
 type Source string
 
 const (
-	SourceHeartbeat    Source = "heartbeat"
-	SourceBracket      Source = "hook_bracket"
-	SourceHarnessEvent Source = "harness_event"
-	SourceClassifier   Source = "classifier"
-	SourceProcess      Source = "process"
+	SourceHeartbeat     Source = "heartbeat"
+	SourceProgramStatus Source = "program_status"
+	SourceBracket       Source = "hook_bracket"
+	SourceHarnessEvent  Source = "harness_event"
+	SourceClassifier    Source = "classifier"
+	SourceProcess       Source = "process"
 )
 
 type Claim string
@@ -40,6 +41,7 @@ type Observation struct {
 
 type Evidence struct {
 	Heartbeat        *Observation
+	ProgramStatus    *Observation
 	LastHarnessEvent *Observation
 	LastClassifier   *Observation
 	Process          *Observation
@@ -114,6 +116,10 @@ type Reason string
 const (
 	ReasonProcessExited     Reason = "process_exited"
 	ReasonHeartbeatBusy     Reason = "heartbeat_busy"
+	ReasonProgramWorking    Reason = "program_working"
+	ReasonProgramBlocked    Reason = "program_blocked"
+	ReasonProgramError      Reason = "program_error"
+	ReasonProgramSettled    Reason = "program_settled"
 	ReasonApprovalOpen      Reason = "approval_open"
 	ReasonQuestionOpen      Reason = "question_open"
 	ReasonCronPending       Reason = "cron_pending"
@@ -148,7 +154,14 @@ func Resolve(e Evidence, policy Policy, now time.Time) Resolution {
 		return Resolution{State: protocol.SessionStateIdle, Reason: ReasonProcessExited, Detail: e.Process.Detail}
 	}
 
-	if fresh(e.Heartbeat, ClaimBusy, now, policy.HeartbeatTTL) {
+	if e.ProgramStatus != nil {
+		if r, ok := harnessEdge(e); ok {
+			return r
+		}
+		if r, ok := programStatusEdge(*e.ProgramStatus); ok {
+			return r
+		}
+	} else if fresh(e.Heartbeat, ClaimBusy, now, policy.HeartbeatTTL) {
 		return running(e)
 	}
 
@@ -215,9 +228,13 @@ func Resolve(e Evidence, policy Policy, now time.Time) Resolution {
 		return settled(e, ReasonBracketStale, policy, now)
 	}
 
-	if e.Heartbeat != nil && TookATurn(e) && !e.TurnOpen && !e.ToolOpen {
-		if e.Heartbeat.Claim == ClaimBusy && !heartbeatSilentFor(e, now, policy.HeartbeatSettleAfter) {
+	signal := liveSignal(e)
+	if signal != nil && TookATurn(e) && !e.TurnOpen && !e.ToolOpen {
+		if signal.Claim == ClaimBusy && !heartbeatSilentFor(e, now, policy.HeartbeatSettleAfter) {
 			return running(e)
+		}
+		if signal.Source == SourceProgramStatus {
+			return settled(e, ReasonProgramSettled, policy, now)
 		}
 		return settled(e, ReasonHeartbeatSettled, policy, now)
 	}
@@ -226,7 +243,7 @@ func Resolve(e Evidence, policy Policy, now time.Time) Resolution {
 		return settled(e, ReasonCronPending, policy, now)
 	}
 
-	if e.Heartbeat != nil && e.Heartbeat.Claim == ClaimSettled && !TookATurn(e) {
+	if signal != nil && signal.Claim == ClaimSettled && !TookATurn(e) {
 		if e.InitialPromptOwed || e.PlacedInputOwed {
 			return Resolution{Hold: true, Reason: ReasonPromptOwed}
 		}
@@ -267,9 +284,10 @@ func expiryInstants(e Evidence, policy Policy, now time.Time) []time.Time {
 	if e.Heartbeat != nil {
 		expires(e.Heartbeat.ObservedAt, policy.HeartbeatTTL)
 	}
-	expires(e.LastBusyAt, policy.HeartbeatSettleAfter)
-	expires(e.LastBusyAt, policy.StaleAfter)
-	expires(e.LastBusyAt, policy.StaleAfter+policy.SettleGrace)
+	lastActive := lastActiveAt(e)
+	expires(lastActive, policy.HeartbeatSettleAfter)
+	expires(lastActive, policy.StaleAfter)
+	expires(lastActive, policy.StaleAfter+policy.SettleGrace)
 	expires(e.LastMovement, policy.StuckAfter)
 	expires(e.ClassifyingSince, policy.ClassifierTimeout)
 	if e.LastClassifier != nil {
@@ -284,10 +302,32 @@ func running(e Evidence) Resolution {
 		return Resolution{State: protocol.SessionStateWorking, Reason: ReasonBracketOpen}
 	}
 	detail := ""
-	if e.Heartbeat != nil {
-		detail = e.Heartbeat.Detail
+	if signal := liveSignal(e); signal != nil {
+		detail = signal.Detail
 	}
 	return Resolution{State: protocol.SessionStateWorking, Reason: ReasonHeartbeatBusy, Detail: detail}
+}
+
+func liveSignal(e Evidence) *Observation {
+	if e.ProgramStatus != nil {
+		return e.ProgramStatus
+	}
+	return e.Heartbeat
+}
+
+func programStatusEdge(o Observation) (Resolution, bool) {
+	switch o.Claim {
+	case ClaimBusy:
+		return Resolution{State: protocol.SessionStateWorking, Reason: ReasonProgramWorking, Detail: o.Detail}, true
+	case ClaimApprovalPending:
+		return Resolution{State: protocol.SessionStatePendingApproval, Reason: ReasonProgramBlocked, Detail: o.Detail}, true
+	case ClaimNeedsInput:
+		return Resolution{State: protocol.SessionStateWaitingInput, Reason: ReasonProgramBlocked, Detail: o.Detail}, true
+	case ClaimStopFailed:
+		return Resolution{State: protocol.SessionStateWaitingInput, Reason: ReasonProgramError, Detail: o.Detail}, true
+	default:
+		return Resolution{}, false
+	}
 }
 
 func settled(e Evidence, fallback Reason, policy Policy, now time.Time) Resolution {
@@ -308,7 +348,7 @@ func ClassifierVerdictPending(e Evidence, policy Policy, now time.Time) bool {
 }
 
 func harnessEdge(e Evidence) (Resolution, bool) {
-	if e.LastHarnessEvent == nil || supersededByBusy(e.LastHarnessEvent, e) {
+	if e.LastHarnessEvent == nil || supersededByBusy(e.LastHarnessEvent, e) || supersededByProgramStatus(e.LastHarnessEvent, e) {
 		return Resolution{}, false
 	}
 	switch e.LastHarnessEvent.Claim {
@@ -386,6 +426,10 @@ func supersededByBusy(o *Observation, e Evidence) bool {
 	return e.LastBusyAt.After(o.ObservedAt)
 }
 
+func supersededByProgramStatus(o *Observation, e Evidence) bool {
+	return e.ProgramStatus != nil && !o.ObservedAt.After(e.ProgramStatus.ObservedAt)
+}
+
 func fresh(o *Observation, claim Claim, now time.Time, ttl time.Duration) bool {
 	return o != nil && o.Claim == claim && now.Sub(o.ObservedAt) <= ttl
 }
@@ -409,8 +453,16 @@ func promptIdleConfirmed(e Evidence) bool {
 }
 
 func heartbeatSilentFor(e Evidence, now time.Time, d time.Duration) bool {
-	if e.LastBusyAt.IsZero() {
+	lastActive := lastActiveAt(e)
+	if lastActive.IsZero() {
 		return false
 	}
-	return now.Sub(e.LastBusyAt) > d
+	return now.Sub(lastActive) > d
+}
+
+func lastActiveAt(e Evidence) time.Time {
+	if e.LastBusyAt.IsZero() || e.ProgramStatus == nil || e.ProgramStatus.ObservedAt.Before(e.LastBusyAt) {
+		return e.LastBusyAt
+	}
+	return e.ProgramStatus.ObservedAt
 }

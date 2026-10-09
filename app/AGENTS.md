@@ -38,5 +38,7 @@ Paths are relative to `app/src`.
 - macOS menu accelerators can swallow keys before the DOM sees them; remove
   conflicting predefined items in `src-tauri/core/src/lib.rs`. Handle Cmd+C through
   `GhosttyTerminal`'s `copy` event.
+- Native keyboard regressions must exercise AppKit's shortcut dispatch.
+  Direct webview key delivery can bypass it, as with Ctrl+Return.
 - On Linux, plain Ctrl+letter belongs to the shell. App actions use Ctrl+Shift,
   or Ctrl+Alt when the macOS binding already has Shift.

@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useToast } from '../components/Toast';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import type { useDesktopRuntimeController } from '../hooks/useDesktopRuntimeController';
@@ -6,6 +6,9 @@ import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { AppContentProps, sessionCloseProtectionHint } from './appSupport';
 import { useAppSessions } from './useAppSessions';
+import { collectLayoutLeaves, parseLayoutJSON } from '../types/desktop';
+import { desktopLabel } from '../utils/desktops';
+import type { Desktop } from '../types/generated';
 
 interface Options {
   shownAgentId: string | null;
@@ -31,8 +34,53 @@ export function useSessionLifecycle({
   chooseReopenDirectory,
   onReopened,
 }: Options) {
-  const { sendUnregisterSession, sendSessionReopen } = useDaemonApi();
+  const { sendUnregisterSession, sendSessionReopen, sendDesktopClose } = useDaemonApi();
   const { closeSession, reloadSession } = useSessionStore();
+  const [desktopClosePrompt, setDesktopClosePrompt] = useState<{
+    desktop: Desktop; label: string; agents: number; shells: number; tiles: number;
+  } | null>(null);
+  const closeProtection = useCallback((desktop: Desktop) => {
+    const protectedNames = desktop.panes.flatMap((pane) => {
+      if (!sessionCloseProtectionHint(daemonSessions, pane.session_id)) return [];
+      const session = daemonSessions.find((entry) => entry.id === pane.session_id);
+      return [session?.label || pane.title || pane.session_id];
+    });
+    if (!protectedNames.length) return false;
+    showError(`Cannot close desktop: move these protected sessions first: ${protectedNames.join(', ')}.`);
+    return true;
+  }, [daemonSessions, showError]);
+  const closeDesktop = useCallback(async (desktop: Desktop) => {
+    if (closeProtection(desktop)) return;
+    try {
+      await sendDesktopClose(desktop.id, desktop.revision);
+    } catch (error) {
+      showError(error instanceof Error ? error.message : String(error));
+    }
+  }, [closeProtection, sendDesktopClose, showError]);
+  const handleRequestCloseDesktop = useCallback((id: string) => {
+    const { desktops } = useProfilesStore.getState();
+    const desktop = desktops.find((entry) => entry.id === id);
+    if (!desktop || closeProtection(desktop)) return;
+    const leaves = collectLayoutLeaves(parseLayoutJSON(desktop.tree_json));
+    if (!leaves.length) {
+      void closeDesktop(desktop);
+      return;
+    }
+    const shells = desktop.panes.filter((pane) => daemonSessions.some(
+      (session) => session.id === pane.session_id && session.agent === 'shell',
+    )).length;
+    setDesktopClosePrompt({
+      desktop, label: desktopLabel(desktop, desktops),
+      agents: desktop.panes.length - shells, shells,
+      tiles: leaves.filter((leaf) => leaf.type === 'tile').length,
+    });
+  }, [closeProtection, closeDesktop, daemonSessions]);
+  const confirmCloseDesktop = useCallback(() => {
+    if (!desktopClosePrompt) return;
+    setDesktopClosePrompt(null);
+    void closeDesktop(desktopClosePrompt.desktop);
+  }, [desktopClosePrompt, closeDesktop]);
+
   const handleCloseSession = useCallback(
     async (id: string) => {
       const closeProtection = sessionCloseProtectionHint(daemonSessions, id);
@@ -106,10 +154,19 @@ export function useSessionLifecycle({
     }
     if (shownAgentId) {
       handleRequestCloseSession(shownAgentId);
+      return;
     }
-  }, [shownAgentId, handleCloseTile, handleRequestCloseSession]);
+    const desktop = useProfilesStore.getState().desktops.find((entry) => entry.id === currentDesktopId);
+    if (desktop && collectLayoutLeaves(parseLayoutJSON(desktop.tree_json)).length === 0) {
+      handleRequestCloseDesktop(desktop.id);
+    }
+  }, [shownAgentId, handleCloseTile, handleRequestCloseSession, handleRequestCloseDesktop]);
 
   return {
+    desktopClosePrompt,
+    cancelCloseDesktop: () => setDesktopClosePrompt(null),
+    confirmCloseDesktop,
+    handleRequestCloseDesktop,
     handleCloseCurrentSessionShortcut,
     handleCloseSession,
     handleRequestCloseSession,
