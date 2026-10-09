@@ -164,6 +164,7 @@ func (w handoverWorld) backend(t *testing.T, format, binary string) *WorkerBacke
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = backend.Shutdown(context.Background()) })
 	if err := backend.ValidateSharedCandidate(context.Background(), false); err != nil {
 		t.Fatal(err)
 	}
