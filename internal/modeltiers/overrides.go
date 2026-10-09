@@ -20,6 +20,9 @@ func ParseOverrides(raw string) (Overrides, error) {
 	if err := decoder.Decode(&entries); err != nil {
 		return nil, fmt.Errorf("invalid model_tier_overrides: %w", err)
 	}
+	if entries == nil {
+		return nil, fmt.Errorf("model_tier_overrides must contain one JSON array")
+	}
 	if err := decoder.Decode(new(any)); err != io.EOF {
 		return nil, fmt.Errorf("model_tier_overrides must contain one JSON array")
 	}

@@ -100,7 +100,7 @@ func TestInvalidTierOverridesAreRefusedAndKeepTheSavedMapping(t *testing.T) {
 	app := w.App()
 	const saved = `[{"harness":"claude","provider":"","model":"claude-sonnet-fake","tier":"light"}]`
 	setSetting(t, app, "model_tier_overrides", saved)
-	for _, raw := range []string{`{}`, `[{"harness":"claude","model":"sonnet","tier":"fast"}]`, `[{"harness":"claude","model":"sonnet","tier":"light","typo":true}]`, `[] []`} {
+	for _, raw := range []string{`null`, `{}`, `[{"harness":"claude","model":"sonnet","tier":"fast"}]`, `[{"harness":"claude","model":"sonnet","tier":"light","typo":true}]`, `[] []`} {
 		refused := gardenAdvisorSetSetting(app, "model_tier_overrides", raw)
 		if protocol.Deref(refused.Success) || refused.Error == nil {
 			t.Errorf("accepted %s: %+v", raw, refused)
