@@ -11,6 +11,7 @@ interface Overlays {
   crewPanelOpen: boolean;
   gardenHoldsWindow: boolean;
   chiefTransferOpen: boolean;
+  desktopCloseOpen: boolean;
   contextCapOpen: boolean;
   sessionCreationOpen: boolean;
   prLauncherOpen: boolean;
@@ -23,6 +24,7 @@ interface Overlays {
 export function appOverlayPolicy(overlays: Overlays) {
   const promptOpen = [
     overlays.chiefTransferOpen,
+    overlays.desktopCloseOpen,
     overlays.contextCapOpen,
     overlays.sessionCreationOpen,
     overlays.prLauncherOpen,
@@ -31,6 +33,7 @@ export function appOverlayPolicy(overlays: Overlays) {
   const libraryOpen = overlays.sessionsOpen || overlays.notebookOpen || overlays.crewPanelOpen;
   const navigationCaptured = [
     overlays.locationPickerOpen,
+    overlays.desktopCloseOpen,
     overlays.whatsNewOpen,
     overlays.shortcutEditorOpen,
     overlays.paletteOpen,

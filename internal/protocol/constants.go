@@ -256,6 +256,7 @@ const (
 	CmdProfileDelete        = "profile_delete"
 	CmdProfileSelect        = "profile_select"
 	CmdDesktopCreate        = "desktop_create"
+	CmdDesktopClose         = "desktop_close"
 	CmdDesktopRename        = "desktop_rename"
 	CmdDesktopReorder       = "desktop_reorder"
 	CmdDesktopSetOrder      = "desktop_set_order"

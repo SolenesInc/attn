@@ -851,6 +851,53 @@ func (s *Store) SetDesktopOrder(profileID string, ids []string) ([]profiles.Desk
 	return ordered, err
 }
 
+func (s *Store) CloseDesktop(id string, expectedRevision int64) (profiles.Profile, []protocol.SessionID, error) {
+	var profile profiles.Profile
+	var sessions []protocol.SessionID
+	err := s.profilesTx(func(tx *sql.Tx, now string) error {
+		desktop, err := loadDesktop(tx, id)
+		if err != nil {
+			return err
+		}
+		if err := requireRevision("desktop", id, expectedRevision, desktop.Revision); err != nil {
+			return err
+		}
+		profile, err = loadLiveProfile(tx, desktop.ProfileID)
+		if err != nil {
+			return err
+		}
+		desktops, err := listDesktops(tx, profile.ID)
+		if err != nil {
+			return err
+		}
+		if len(desktops) == 1 {
+			return profiles.Errorf(profiles.CodeLastDesktop, "Cannot close the only desktop in profile %s", profile.Name)
+		}
+		for i, candidate := range desktops {
+			if candidate.ID == id && profile.CurrentDesktopID == id {
+				neighbour := i - 1
+				if i == 0 {
+					neighbour = 1
+				}
+				profile.CurrentDesktopID = desktops[neighbour].ID
+			}
+		}
+		for _, pane := range desktop.Panes {
+			if pane.SessionID != "" {
+				sessions = append(sessions, pane.SessionID)
+			}
+		}
+		if err := appendLaunchDesktopFacts(tx, id); err != nil {
+			return err
+		}
+		if err := deleteDesktop(tx, id); err != nil {
+			return err
+		}
+		return bumpProfile(tx, &profile)
+	})
+	return profile, sessions, err
+}
+
 func deleteDesktop(tx *sql.Tx, id string) error {
 	if _, err := tx.Exec(`DELETE FROM desktop_panes WHERE desktop_id = ?`, id); err != nil {
 		return err

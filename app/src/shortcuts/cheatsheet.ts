@@ -24,7 +24,7 @@ export function buildCheatsheet(): CheatsheetCategory[] {
       rows: [
         { label: 'New session on this desktop', combos: [fromId('session.new')] },
         { label: 'New session, split sideways', combos: [fromId('session.newHorizontal')] },
-        { label: 'Close session (or focused pane)', combos: [fromId('session.close')] },
+        { label: 'Close session, focused pane or empty desktop', combos: [fromId('session.close')] },
         {
           label: 'Previous / next desktop (queue mode: agent in the queue)',
           combos: [fromId('session.prev'), fromId('session.next')],

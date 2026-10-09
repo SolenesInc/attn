@@ -180,6 +180,7 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdMigrationUndo:                 commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdMigrationFinish:               commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdDesktopCreate:                 commandMetadata(ScopeHubLocal, false, true),
+	protocol.CmdDesktopClose:                  commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdDesktopRename:                 commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdDesktopReorder:                commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdDesktopSetOrder:               commandMetadata(ScopeHubLocal, false, true),

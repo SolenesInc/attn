@@ -87,6 +87,12 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-desktop-close-one-session-keeps-selection'],
   },
   {
+    id: 'close-desktop',
+    runnerId: 'CLOSE-DESKTOP',
+    label: 'Close an empty desktop with the native shortcut',
+    command: ['pnpm', 'run', 'real-app:scenario-close-desktop'],
+  },
+  {
     id: 'close-pane-nonblocking',
     runnerId: 'CLOSE-PANE-NONBLOCKING',
     label: 'Close pane does not wait for process teardown',

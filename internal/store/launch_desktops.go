@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profilemigration"
 	"github.com/victorarias/attn/internal/profiles"
@@ -115,8 +116,36 @@ func loadLaunchItem(tx *sql.Tx, kind, id string) (LaunchDesktopItem, error) {
 	return item, err
 }
 
-func saveLaunchSetting(tx *sql.Tx, now string, kind, id string, setting LaunchDesktopSetting, bumpAutomationRevision bool) error {
+func loadCurrentLaunchItem(tx *sql.Tx, kind, id string) (LaunchDesktopItem, error) {
 	item, err := loadLaunchItem(tx, kind, id)
+	var missing *profiles.Error
+	if item.DesktopID != "" && errors.As(err, &missing) && missing.Code == profiles.CodeNotFound {
+		item.Label = launchDesktopLabel(item.Name, profiles.DesktopSlot(item.DesktopID))
+		return item, nil
+	}
+	return item, err
+}
+
+func currentLaunchItems(tx *sql.Tx) ([]LaunchDesktopItem, error) {
+	items := []LaunchDesktopItem{}
+	for _, query := range launchItemQueries {
+		ids, err := queryColumn[string](tx, query[1])
+		if err != nil {
+			return nil, err
+		}
+		for _, id := range ids {
+			item, err := loadCurrentLaunchItem(tx, query[0], id)
+			if err != nil {
+				return nil, err
+			}
+			items = append(items, item)
+		}
+	}
+	return items, nil
+}
+
+func saveLaunchSetting(tx *sql.Tx, now string, kind, id string, setting LaunchDesktopSetting, bumpAutomationRevision bool) error {
+	item, err := loadCurrentLaunchItem(tx, kind, id)
 	if err != nil {
 		return err
 	}
@@ -127,8 +156,10 @@ func saveLaunchSetting(tx *sql.Tx, now string, kind, id string, setting LaunchDe
 			return err
 		}
 		desktopID = desktop.ID
-	} else if _, err := loadLaunchDesktop(tx, profiles.Profile{ID: item.ProfileID}, desktopID); err != nil {
-		return err
+	} else if desktopID == "" || desktopID != item.DesktopID {
+		if _, err := loadLaunchDesktop(tx, profiles.Profile{ID: item.ProfileID}, desktopID); err != nil {
+			return err
+		}
 	}
 	if kind == "automation" && bumpAutomationRevision && desktopID != item.DesktopID {
 		if _, err := tx.Exec(`UPDATE automation_definitions SET revision = revision + 1 WHERE id = ?`, id); err != nil {
@@ -164,7 +195,11 @@ func createOwnLaunchDesktop(tx *sql.Tx, now, kind, id string, confirmed bool) er
 
 func (s *Store) LaunchDesktopItem(kind, id string) (LaunchDesktopItem, error) {
 	var item LaunchDesktopItem
-	err := s.profilesTx(func(tx *sql.Tx, _ string) error { var err error; item, err = loadLaunchItem(tx, kind, id); return err })
+	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
+		var err error
+		item, err = loadCurrentLaunchItem(tx, kind, id)
+		return err
+	})
 	return item, err
 }
 
@@ -173,7 +208,7 @@ func (s *Store) LaunchDesktopChoices(kind, id string) (LaunchDesktopItem, []prof
 	var desktops []profiles.Desktop
 	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
 		var err error
-		item, err = loadLaunchItem(tx, kind, id)
+		item, err = loadCurrentLaunchItem(tx, kind, id)
 		if err != nil {
 			return err
 		}
@@ -249,12 +284,76 @@ func (s *Store) PrepareLaunchMigration() error {
 	})
 }
 
-func launchItemDesktop(tx *sql.Tx, profile profiles.Profile, kind, id string) (profiles.Desktop, error) {
+func launchItemDesktop(tx *sql.Tx, now string, profile profiles.Profile, kind, id string) (profiles.Desktop, error) {
 	var desktopID string
 	if _, err := rowFound(tx.QueryRow(`SELECT desktop_id FROM launch_desktops WHERE kind = ? AND item_id = ?`, kind, id), &desktopID); err != nil {
 		return profiles.Desktop{}, err
 	}
-	return loadLaunchDesktop(tx, profile, desktopID)
+	if desktopID == "" {
+		return loadLaunchDesktop(tx, profile, "")
+	}
+	desktop, found, err := findDesktop(tx, desktopID)
+	if err != nil {
+		return desktop, err
+	}
+	if found {
+		return loadLaunchDesktop(tx, profile, desktopID)
+	}
+	if profiles.IsNumberedDesktopID(profile.ID, desktopID) {
+		desktop, _, err = findOrRecreateNumberedDesktop(tx, now, profile, desktopID)
+		if err != nil {
+			return desktop, err
+		}
+	} else {
+		item, err := loadCurrentLaunchItem(tx, kind, id)
+		if err != nil {
+			return desktop, err
+		}
+		desktop, err = insertDesktop(tx, now, profile.ID, item.Name, 0)
+		if err != nil {
+			return desktop, err
+		}
+		if err := rebindLaunchDesktop(tx, desktopID, desktop.ID); err != nil {
+			return desktop, err
+		}
+	}
+	if err := bumpProfile(tx, &profile); err != nil {
+		return desktop, err
+	}
+	return desktop, appendLaunchDesktopFacts(tx, desktop.ID)
+}
+
+func rebindLaunchDesktop(tx *sql.Tx, oldID, newID string) error {
+	if _, err := tx.Exec(`UPDATE automation_definitions SET revision = revision + 1
+  WHERE id IN (SELECT item_id FROM launch_desktops WHERE kind = 'automation' AND desktop_id = ?)`, oldID); err != nil {
+		return err
+	}
+	schema, table, found, err := readCollectionTx(tx, crew.Namespace, crew.CollectionMembers)
+	if err != nil {
+		return err
+	}
+	if found {
+		ids, err := queryColumn[string](tx, `SELECT item_id FROM launch_desktops WHERE kind = 'crew' AND desktop_id = ?`, oldID)
+		if err != nil {
+			return err
+		}
+		for _, id := range ids {
+			doc, exists, err := getDocumentWith(tx, schema.Namespace, schema.Collection, table, id)
+			if err != nil {
+				return err
+			}
+			if !exists {
+				continue
+			}
+			write := DocumentWrite{Schema: schema, ID: id, Body: doc.Body, Expected: &doc.Rev}
+			fact := DocumentChangedFact(schema.Namespace, schema.Collection, id, false)
+			if _, _, err := commitDocumentWritesWith(tx, []DocumentCommit{{Write: write, Fact: fact}}, []string{table}, time.Now()); err != nil {
+				return err
+			}
+		}
+	}
+	_, err = tx.Exec(`UPDATE launch_desktops SET desktop_id = ? WHERE desktop_id = ?`, newID, oldID)
+	return err
 }
 
 // findDesktop reports a missing desktop as not found; a reopened session's last desktop may be gone.
@@ -273,7 +372,7 @@ func findOrRecreateNumberedDesktop(tx *sql.Tx, now string, profile profiles.Prof
 		return desktop, found, err
 	}
 	slot := profiles.DesktopSlot(id)
-	if slot == 0 || id != profiles.NumberedDesktopID(profile.ID, slot) {
+	if !profiles.IsNumberedDesktopID(profile.ID, id) {
 		return desktop, false, nil
 	}
 	desktop, err = insertDesktop(tx, now, profile.ID, "", slot)
@@ -305,7 +404,7 @@ func (s *Store) PlaceBackgroundSession(sessionID protocol.SessionID, runtimeID p
 				desktop, err = loadLaunchDesktop(tx, profile, "")
 			}
 		} else {
-			desktop, err = launchItemDesktop(tx, profile, kind, id)
+			desktop, err = launchItemDesktop(tx, now, profile, kind, id)
 		}
 		if err != nil {
 			return err
@@ -421,7 +520,7 @@ func (s *Store) CommitCrewSettings(w DocumentWrite, fact BusEvent, now time.Time
 func (s *Store) LaunchDesktopItems(profileID string) ([]LaunchDesktopItem, error) {
 	var items []LaunchDesktopItem
 	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
-		all, err := launchItems(tx)
+		all, err := currentLaunchItems(tx)
 		for _, item := range all {
 			if item.ProfileID == profileID {
 				items = append(items, item)

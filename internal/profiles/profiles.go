@@ -81,6 +81,7 @@ type Code string
 
 const (
 	CodeInvalid        Code = "invalid"
+	CodeLastDesktop    Code = "last_desktop"
 	CodeNotFound       Code = "not_found"
 	CodeStaleRevision  Code = "stale_revision"
 	CodeNameTaken      Code = "name_taken"
@@ -142,6 +143,11 @@ func DesktopSlot(id string) int {
 		return 0
 	}
 	return slot
+}
+
+func IsNumberedDesktopID(profileID, id string) bool {
+	slot := DesktopSlot(id)
+	return slot != 0 && id == NumberedDesktopID(profileID, slot)
 }
 
 func checkPaneRows(desktop Desktop, inTree map[string]struct{}) (map[string]struct{}, error) {

@@ -362,6 +362,7 @@ export function useAppController({
     crewPanelOpen: crewPanel.open,
     gardenHoldsWindow,
     chiefTransferOpen: Boolean(chiefTransferTarget),
+    desktopCloseOpen: sessionLifecycle.desktopClosePrompt !== null,
     contextCapOpen: Boolean(contextCapPromptSession),
     sessionCreationOpen: Boolean(sessionCreationJob),
     prLauncherOpen: Boolean(openPRLauncherJob),

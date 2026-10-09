@@ -88,6 +88,7 @@ export interface SidebarProps {
       for sessions NOT in here, or it would run twice. */
   onScreenSessionIds?: ReadonlySet<string>;
   onRenameSession?: (sessionId: string, label: string) => Promise<void>;
+  onCloseDesktop?: (desktopId: string) => void;
   onRenameDesktop?: (desktopId: string, title: string) => Promise<void>;
   onTogglePriority?: (session: LocalSession) => void;
   onChangeChiefOfStaff?: (sessionId: string, enabled: boolean) => void;

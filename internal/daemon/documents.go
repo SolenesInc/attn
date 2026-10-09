@@ -60,14 +60,7 @@ func (d *Daemon) unsubscribeDocumentFacts() {
 }
 
 func documentChangedFact(namespace string, collection string, id string, deleted bool) store.BusEvent {
-	payload, _ := json.Marshal(documentChanged{
-		Namespace: namespace, Collection: collection, ID: protocol.SessionID(id), Deleted: deleted,
-	})
-	return store.BusEvent{
-		Name:    FactDocumentChanged,
-		Subject: docstore.Address(namespace, collection, id),
-		Payload: string(payload),
-	}
+	return store.DocumentChangedFact(namespace, collection, id, deleted)
 }
 
 func (d *Daemon) announceCommittedWrite(fact store.BusEvent, seq int64) {

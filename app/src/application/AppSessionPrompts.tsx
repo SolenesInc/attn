@@ -1,3 +1,4 @@
+import { DesktopClosePrompt } from '../components/DesktopClosePrompt';
 import { ChiefOfStaffTransferPrompt } from '../components/ChiefOfStaffTransferPrompt';
 import { LocationPicker } from '../components/LocationPicker';
 import { SessionContextCapPrompt } from '../components/SessionContextCapPrompt';
@@ -9,9 +10,11 @@ import {
   useAppShell,
   useChiefOfStaffContext,
   useSessionLaunchContext,
+  useSessionLifecycleContext,
 } from './AppContexts';
 
 export function AppSessionPrompts() {
+  const { desktopClosePrompt, confirmCloseDesktop, cancelCloseDesktop } = useSessionLifecycleContext();
   const {
     locationPickerOpen,
     locationPickerPurpose,
@@ -42,6 +45,7 @@ export function AppSessionPrompts() {
   } = useChiefOfStaffContext();
   return (
     <>
+      {desktopClosePrompt && <DesktopClosePrompt {...desktopClosePrompt} onConfirm={confirmCloseDesktop} onCancel={cancelCloseDesktop} />}
       <LocationPicker
         isOpen={locationPickerOpen}
         purpose={locationPickerPurpose}

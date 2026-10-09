@@ -4,12 +4,13 @@ import { useEscapeStack } from '../../hooks/useEscapeStack';
 
 interface ModalDialogProps {
   labelledBy: string;
+  className?: string;
   onCancel: () => void;
   onKeyDown?: (event: KeyboardEvent<HTMLDialogElement>) => void;
   children: ReactNode;
 }
 
-export function ModalDialog({ labelledBy, onCancel, onKeyDown, children }: ModalDialogProps) {
+export function ModalDialog({ labelledBy, className, onCancel, onKeyDown, children }: ModalDialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const hostRef = useToastHost(true, ref);
   useEscapeStack(onCancel, true);
@@ -21,7 +22,7 @@ export function ModalDialog({ labelledBy, onCancel, onKeyDown, children }: Modal
   return (
     <dialog
       ref={hostRef}
-      className="mp-dialog"
+      className={['mp-dialog', className].filter(Boolean).join(' ')}
       aria-labelledby={labelledBy}
       onCancel={(event) => event.preventDefault()}
       onKeyDown={onKeyDown}

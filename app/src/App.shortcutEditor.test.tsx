@@ -172,7 +172,7 @@ describe('App shortcut editor', () => {
   it('lets Close session keep ⌘W, which it shares with closing a pane', async () => {
     const { daemon } = await renderEditor({ config: { overrides: { 'session.close': { key: 'j', meta: true, alt: true } } } });
 
-    await record(daemon, 'Close session (or focused pane)', { key: 'w', code: 'KeyW', metaKey: true });
+    await record(daemon, 'Close session, focused pane or empty desktop', { key: 'w', code: 'KeyW', metaKey: true });
 
     expect(screen.queryByRole('button', { name: 'Reassign' })).toBeNull();
     expect(saved(daemon).overrides).toEqual({});

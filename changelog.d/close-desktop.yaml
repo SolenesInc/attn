@@ -1,0 +1,3 @@
+kind: added
+area: desktops
+change: Close a desktop from the sidebar or palette, or press ⌘W on an empty desktop. Closed launch desktops return when their crew member or automation starts.

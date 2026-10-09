@@ -92,7 +92,7 @@ export function AppSidebar() {
     handleLeafDragEnd,
   } = useLeafDragContext();
   const { handleNewSession } = useSessionLaunchContext();
-  const { handleRequestCloseSession, handleReloadSession } = useSessionLifecycleContext();
+  const { handleRequestCloseSession, handleReloadSession, handleRequestCloseDesktop } = useSessionLifecycleContext();
   const { sidebarHeaderActions, dockItems } = useAppSidebarActions();
   const { desktopNavigation } = useDesktopNavigationContext();
   return (
@@ -114,6 +114,7 @@ export function AppSidebar() {
       dockCollapsed={keybindings.dock.collapsed}
       onToggleDockCollapsed={() => keybindings.setDockCollapsed(!keybindings.dock.collapsed)}
       onRenameSession={sendRenameSession}
+      onCloseDesktop={handleRequestCloseDesktop}
       onRenameDesktop={desktopNavigation.renameDesktop}
       onDesktopReorder={({ desktopId, prevDesktopId, nextDesktopId }) =>
         desktopNavigation.reorderDesktop({

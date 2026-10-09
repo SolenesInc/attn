@@ -48,6 +48,7 @@
     "real-app:scenario-tr502": "node scripts/real-app-harness/scenario-tr502-remote-relaunch-splits.mjs",
     "real-app:scenario-session-creation-shortcuts": "node scripts/real-app-harness/scenario-session-creation-shortcuts.mjs",
     "real-app:scenario-linux-shortcuts": "node scripts/real-app-harness/scenario-linux-shortcuts.mjs",
+    "real-app:scenario-close-desktop": "node scripts/real-app-harness/scenario-close-desktop.mjs",
     "real-app:scenario-desktop-splits": "node scripts/real-app-harness/scenario-desktop-splits.mjs",
     "real-app:scenario-desktop-switching": "node scripts/real-app-harness/scenario-desktop-switching.mjs",
     "real-app:scenario-desktop-migration": "node scripts/real-app-harness/scenario-desktop-migration.mjs",
