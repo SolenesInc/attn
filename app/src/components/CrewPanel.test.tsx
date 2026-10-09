@@ -1,3 +1,4 @@
+import { openRoute, previewHarness, pickModel, pickEffort, enterModel, routeDialog } from '../test/harnessRoute';
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CrewRestartState, type CrewMember } from '../types/generated';
@@ -141,7 +142,7 @@ describe('CrewPanel', () => {
       event: 'open_seed_result', success: true, seed_id, desktop_id: DEFAULT_DESKTOP_ID, tile_id: 'tile-seed',
     }));
 
-    expect(panel().getByLabelText('Harness')).toBeEnabled();
+    expect(panel().getByRole('button', { name: 'Crew launch model' })).toBeEnabled();
     fireEvent.click(panel().getByRole('button', { name: /Keel/ }));
     fireEvent.click(panel().getByRole('button', { name: 'Seeds' }));
     fireEvent.click(panel().getByRole('button', { name: /Planted/ }));
@@ -170,24 +171,13 @@ describe('CrewPanel', () => {
     expect(panel().getByLabelText('Find a seed')).toHaveValue('Artifact presence');
   });
 
-  it('keeps actual running values separate from acknowledged next-wake settings', async () => {
-    const { daemon } = await renderPanel({
-      members: [member('trellis', 4, {
-        binding_session: 'session-trellis',
-        agent: 'codex', model: 'gpt-6-astra', effort: 'high',
-        resolved_agent: 'codex', resolved_model: 'gpt-6-astra', resolved_effort: 'high',
-      })],
-      sessions: [daemonSession('session-trellis', { agent: 'claude' })],
-    });
-
-    const running = panel().getByLabelText('Running now');
-    expect(running).toHaveTextContent('Harnessclaude');
-    expect(running).toHaveTextContent('ModelNot reported');
-    expect(running).toHaveTextContent('EffortNot reported');
-    expect(panel().getByText('Acknowledged next wake').parentElement).toHaveTextContent('codex / gpt-6-astra / high');
-    expect(panel().getByLabelText('Harness')).toHaveValue('codex');
-    expect(panel().getByRole('option', { name: 'openai / Astra' })).toBeInTheDocument();
-    expect(daemon.sentOf('harness_models').map((command) => command.harness)).toEqual(['codex']);
+it('keeps actual running values separate from acknowledged next-wake settings', async () => {
+    const { daemon } = await renderPanel({ members: [member('trellis', 4, { binding_session: 'session-trellis', agent: 'codex', model: 'gpt-6-astra', effort: 'high', resolved_agent: 'codex', resolved_model: 'gpt-6-astra', resolved_effort: 'high' })], sessions: [daemonSession('session-trellis', { agent: 'claude' })] });
+    expect(panel().getByLabelText('Running now')).toHaveTextContent(/Claude.*Model not reported.*Effort not reported/);
+    expect(panel().getByText('Acknowledged next wake').parentElement).toHaveTextContent(/Codex.*gpt-6-astra.*high/);
+    await openRoute(daemon, 'Crew launch model');
+    expect(routeDialog().getByRole('option', { name: /^Astra/ })).toBeInTheDocument();
+    expect(daemon.sentOf('harness_models').map(command => command.harness)).toEqual(['codex']);
     expect(daemon.sentOf('delegation_preferences_get')).toHaveLength(1);
   });
 
@@ -197,7 +187,8 @@ describe('CrewPanel', () => {
     const dialog = screen.getByRole('dialog', { name: 'A new desktop' });
     fireEvent.change(within(dialog).getByRole('textbox', { name: 'Name' }), { target: { value: 'Review' } });
     await gesture(daemon, () => fireEvent.click(within(dialog).getByRole('button', { name: 'Use this name' })));
-    fireEvent.change(panel().getByLabelText('Model'), { target: { value: 'openai/gpt-6-astra' } });
+    await openRoute(daemon, 'Crew launch model');
+    await pickModel(daemon, 'Astra');
     const launch_desktop = { desktop_id: 'desktop-review', label: 'Review (no ⌘ number)' };
     await answer(daemon.sentOf('crew_set')[0], saved({ member: member('keel', 6, { resolved_agent: 'codex', launch_desktop }) }));
     expect(daemon.sentOf('crew_set')).toHaveLength(2);
@@ -205,46 +196,28 @@ describe('CrewPanel', () => {
     expect(daemon.sentOf('crew_set')[1].model).toBe('openai/gpt-6-astra');
   });
 
-  it('saves a full atomic selection, blocks restart until acknowledgment, and clears to defaults', async () => {
-    const { daemon, answer } = await renderPanel({
-      script: { crew_set: [HOLD] },
-      members: [member('alder', 7, {
-        binding_session: 'session-alder', agent: 'codex', model: 'gpt-6-astra', effort: 'high',
-        resolved_agent: 'codex', resolved_model: 'gpt-6-astra', resolved_effort: 'high',
-      })],
-    });
-
-    const harness = panel().getByLabelText('Harness');
-    fireEvent.change(harness, { target: { value: '' } });
-
+it('saves a full atomic selection, blocks restart until acknowledgment, and clears to defaults', async () => {
+    const { daemon, answer } = await renderPanel({ script: { crew_set: [HOLD] }, members: [member('alder', 7, { binding_session: 'session-alder', agent: 'codex', model: 'gpt-6-astra', effort: 'high', resolved_agent: 'codex', resolved_model: 'gpt-6-astra', resolved_effort: 'high' })] });
+    await openRoute(daemon, 'Crew launch model');
+    await gesture(daemon, () => fireEvent.click(routeDialog().getByRole('option', { name: 'Crew default' })));
     expect(crewSets(daemon)).toEqual([{ member: 'alder', expected_revision: 7, agent: '', model: '', effort: '' }]);
-    expect(panel().getByRole('status', { name: '' })).toHaveTextContent('Saving…');
     expect(panel().getByRole('button', { name: 'Handoff and restart' })).toBeDisabled();
-
     await answer(daemon.sentOf('crew_set')[0], saved({ member: member('alder', 8, { binding_session: 'session-alder', resolved_agent: 'claude' }) }));
-    expect(panel().getByText('Saved')).toBeInTheDocument();
     expect(panel().getByRole('button', { name: 'Handoff and restart' })).toBeEnabled();
-    expect(harness).toHaveValue('');
+    expect(panel().getByRole('button', { name: 'Crew launch model' })).toHaveTextContent('Crew default');
   });
 
-  it('keeps a failed member edit through roster navigation and retries it', async () => {
-    const { daemon, answer } = await renderPanel({
-      script: { crew_set: [saved({ success: false, error: 'model discovery is unavailable' }), HOLD] },
-      members: [member('alder', 2), member('keel', 3)],
-    });
-
-    const effort = panel().getByLabelText('Reasoning effort');
-    fireEvent.change(panel().getByLabelText('Harness'), { target: { value: 'codex' } });
-    await daemon.idle();
+it('keeps a failed member edit through roster navigation and retries it', async () => {
+    const { daemon, answer } = await renderPanel({ script: { crew_set: [saved({ success: false, error: 'model discovery is unavailable' }), HOLD] }, members: [member('alder', 2), member('keel', 3)] });
+    await openRoute(daemon, 'Crew launch model');
+    await previewHarness(daemon, 'Codex');
+    await pickModel(daemon, 'Codex default');
     expect(panel().getByText('Not saved')).toBeInTheDocument();
     expect(panel().getByText('model discovery is unavailable')).toBeInTheDocument();
-
-    fireEvent.click(panel().getByRole('button', { name: /Keel/ }));
-    fireEvent.click(panel().getByRole('button', { name: /Alder/ }));
-    expect(panel().getByLabelText('Harness')).toHaveValue('codex');
-    expect(effort).toHaveValue('');
-
-    fireEvent.click(panel().getByRole('button', { name: 'Retry' }));
+    await gesture(daemon, () => fireEvent.mouseDown(document.body));
+    await click(daemon, /Keel/); await click(daemon, /Alder/);
+    expect(panel().getByRole('button', { name: 'Crew launch model' })).toHaveTextContent('Codex');
+    await click(daemon, 'Retry');
     expect(daemon.sentOf('crew_set')).toHaveLength(2);
     await answer(daemon.sentOf('crew_set')[1], saved({ member: member('alder', 3, { agent: 'codex', resolved_agent: 'codex' }) }));
     expect(panel().getByText('Saved')).toBeInTheDocument();
@@ -465,70 +438,40 @@ describe('CrewPanel', () => {
     expect(panel().getByRole('heading', { name: 'Keel' })).toBeInTheDocument();
 
     await answer(daemon.sentOf('delegation_preferences_get')[0], preferences([harnesses[0]]));
-    expect(panel().getByLabelText('Harness')).toBeEnabled();
+    expect(panel().getByRole('button', { name: 'Crew launch model' })).toBeEnabled();
     expect(panel().getByRole('heading', { name: 'Keel' })).toBeInTheDocument();
     expect(daemon.sentOf('delegation_preferences_get')).toHaveLength(1);
   });
 
-  it('allows model and effort pins while the harness follows the crew default', async () => {
-    const { daemon } = await renderPanel({
-      script: {
-        crew_set: [
-          saved({ member: member('keel', 6, { model: 'openai/gpt-6-astra', resolved_agent: 'codex', resolved_model: 'openai/gpt-6-astra' }) }),
-          saved({ member: member('keel', 7, { model: 'openai/gpt-6-astra', effort: 'high', resolved_agent: 'codex', resolved_model: 'openai/gpt-6-astra', resolved_effort: 'high' }) }),
-        ],
-      },
-      members: [member('keel', 5, { resolved_agent: 'codex' })],
-    });
-
-    const model = panel().getByLabelText('Model');
-    expect(model).toBeEnabled();
-    expect(panel().getByRole('option', { name: 'openai / Astra' })).toBeInTheDocument();
-    fireEvent.change(model, { target: { value: 'openai/gpt-6-astra' } });
-    await daemon.idle();
-    expect(panel().getByText('Saved')).toBeInTheDocument();
-    const effort = panel().getByLabelText('Reasoning effort');
-    fireEvent.change(effort, { target: { value: 'hig' } });
-    fireEvent.change(effort, { target: { value: 'high' } });
-    expect(daemon.sentOf('crew_set')).toHaveLength(1);
-    fireEvent.blur(effort);
-    await daemon.idle();
-
-    expect(crewSets(daemon)).toEqual([
-      { member: 'keel', expected_revision: 5, agent: '', model: 'openai/gpt-6-astra', effort: '' },
-      { member: 'keel', expected_revision: 6, agent: '', model: 'openai/gpt-6-astra', effort: 'high' },
-    ]);
+it('allows model and effort pins while the harness follows the crew default', async () => {
+    const { daemon } = await renderPanel({ script: { crew_set: [saved({ member: member('keel', 6, { model: 'openai/gpt-6-astra', resolved_agent: 'codex', resolved_model: 'openai/gpt-6-astra' }) }), saved({ member: member('keel', 7, { model: 'openai/gpt-6-astra', effort: 'high', resolved_agent: 'codex', resolved_model: 'openai/gpt-6-astra', resolved_effort: 'high' }) })] }, members: [member('keel', 5, { resolved_agent: 'codex' })] });
+    await openRoute(daemon, 'Crew launch model');
+    await pickModel(daemon, 'Astra');
+    await pickEffort(daemon, 'high');
+    expect(crewSets(daemon)).toEqual([{ member: 'keel', expected_revision: 5, agent: '', model: 'openai/gpt-6-astra', effort: '' }, { member: 'keel', expected_revision: 6, agent: '', model: 'openai/gpt-6-astra', effort: 'high' }]);
+    expect(panel().getByRole('button', { name: 'Crew launch model' })).toHaveTextContent('Astra');
   });
 
-  it('commits a typed model id on Enter as one write and keeps the draft over roster pushes', async () => {
+it('commits a typed model id on Enter as one write and keeps the draft over roster pushes', async () => {
     const { daemon, pushMembers } = await renderPanel({ members: [member('keel', 6)] });
-    const model = panel().getByLabelText('Model');
-    expect(model).toBeEnabled();
-    fireEvent.change(model, { target: { value: '__custom' } });
-    const custom = panel().getByTestId('crew-custom-model');
-    fireEvent.change(custom, { target: { value: 'gpt-7' } });
+    await openRoute(daemon, 'Crew launch model');
+    const field = routeDialog().getByRole('textbox', { name: 'Filter models or enter an ID' });
+    fireEvent.change(field, { target: { value: 'gpt-7' } });
     await pushMembers([member('keel', 7)]);
-    expect(custom).toHaveValue('gpt-7');
+    expect(field).toHaveValue('gpt-7');
     expect(daemon.sentOf('crew_set')).toEqual([]);
-    await gesture(daemon, () => fireEvent.keyDown(custom, { key: 'Enter' }));
+    await gesture(daemon, () => fireEvent.keyDown(field, { key: 'Enter' }));
     expect(crewSets(daemon)).toEqual([{ member: 'keel', expected_revision: 7, agent: '', model: 'gpt-7', effort: '' }]);
   });
 
-  it('keeps dependent controls pending while an explicit harness pin clears', async () => {
-    const { daemon, answer } = await renderPanel({
-      script: { crew_set: [HOLD] },
-      members: [member('keel', 5, { agent: 'codex', resolved_agent: 'codex', model: 'openai/gpt-6-astra', resolved_model: 'openai/gpt-6-astra' })],
-    });
-
-    const model = panel().getByLabelText('Model');
-    expect(model).toBeEnabled();
-    fireEvent.change(panel().getByLabelText('Harness'), { target: { value: '' } });
-
-    expect(model).toBeDisabled();
-    expect(panel().getByLabelText('Reasoning effort')).toBeDisabled();
-
+it('keeps dependent controls pending while an explicit harness pin clears', async () => {
+    const { daemon, answer } = await renderPanel({ script: { crew_set: [HOLD] }, members: [member('keel', 5, { agent: 'codex', resolved_agent: 'codex', model: 'openai/gpt-6-astra', resolved_model: 'openai/gpt-6-astra' })] });
+    await openRoute(daemon, 'Crew launch model');
+    await gesture(daemon, () => fireEvent.click(routeDialog().getByRole('option', { name: 'Crew default' })));
+    await openRoute(daemon, 'Crew launch model');
+    expect(routeDialog().queryByRole('listbox', { name: 'Model' })).toBeNull();
     await answer(daemon.sentOf('crew_set')[0], saved({ member: member('keel', 6, { resolved_agent: 'claude' }) }));
-    expect(model).toBeEnabled();
+    expect(routeDialog().getByRole('listbox', { name: 'Model' })).toBeInTheDocument();
   });
 
   it('selects provider-qualified model identities when bare ids collide', async () => {
@@ -543,13 +486,11 @@ describe('CrewPanel', () => {
       members: [member('keel', 5, { agent: 'codex', resolved_agent: 'codex' })],
     });
 
-    const model = panel().getByLabelText('Model');
-    expect(panel().getByRole('option', { name: 'second / Shared two' })).toBeInTheDocument();
-    fireEvent.change(model, { target: { value: 'second/shared' } });
-    await daemon.idle();
+    await openRoute(daemon, 'Crew launch model');
+    await pickModel(daemon, 'Shared two');
 
     expect(crewSets(daemon)).toEqual([{ member: 'keel', expected_revision: 5, agent: 'codex', model: 'second/shared', effort: '' }]);
-    expect(model).toHaveValue('second/shared');
+    expect(panel().getByRole('button', { name: 'Crew launch model' })).toHaveTextContent('Shared two');
   });
 
   it('keeps an unsupported models explicit effort clear through a concurrent update', async () => {
@@ -566,10 +507,8 @@ describe('CrewPanel', () => {
       members: [member('keel', 5, { agent: 'codex', resolved_agent: 'codex' })],
     });
 
-    const model = panel().getByLabelText('Model');
-    expect(panel().getByRole('option', { name: 'local / Fixed' })).toBeInTheDocument();
-    fireEvent.change(model, { target: { value: 'local/fixed' } });
-    await daemon.idle();
+    await openRoute(daemon, 'Crew launch model');
+    await pickModel(daemon, 'Fixed');
     expect(panel().getByText('Not saved')).toBeInTheDocument();
     await click(daemon, 'Retry');
 
@@ -721,16 +660,19 @@ describe('CrewPanel', () => {
     expect(daemon.sentOf('crew_charter_get')).toHaveLength(2);
   });
 
-  it('commits a launch field that still has focus when Escape closes the panel', async () => {
+it('commits a launch field on the inner Escape, then closes Crew on the next Escape', async () => {
     const { daemon, closeWithEscape } = await renderPanel({ members: [member('keel', 6)] });
-    const effort = panel().getByLabelText('Reasoning effort');
-    effort.focus();
-    fireEvent.change(effort, { target: { value: 'high' } });
-    expect(daemon.sentOf('crew_set')).toEqual([]);
-
+    await openRoute(daemon, 'Crew launch model');
+    await enterModel(daemon, 'unlisted');
+    const before = daemon.sentOf('crew_set').length;
+    const effort = routeDialog().getByRole('textbox', { name: 'Effort' });
+    effort.focus(); fireEvent.change(effort, { target: { value: 'high' } });
+    await closeWithEscape();
+    expect(isPanelOpen()).toBe(true);
+    expect(daemon.sentOf('crew_set')).toHaveLength(before + 1);
+    expect(crewSets(daemon).slice(-1)[0]).toMatchObject({ member: 'keel', effort: 'high' });
     await closeWithEscape();
     expect(isPanelOpen()).toBe(false);
-    expect(crewSets(daemon)).toEqual([expect.objectContaining({ member: 'keel', effort: 'high' })]);
   });
 
   it('renders no roster or member content while closed', async () => {

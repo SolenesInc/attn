@@ -1,3 +1,4 @@
+import { ModelTierSettings } from './ModelTierSettings';
 import { forwardRef, type ForwardedRef } from 'react';
 import { AutoModeSettings } from './AutoModeSettings';
 import { DelegationSettings } from './DelegationSettings';
@@ -93,7 +94,7 @@ function SettingsModalContent(props: SettingsModalProps & { closeRef: ForwardedR
                       onClick={() => void selectSection(item.id)}
                     >
                       <span>{item.label}</span>
-                      {!['agents', 'backgroundAgents', 'terminal'].includes(item.id) && (
+                      {!['agents', 'models', 'backgroundAgents', 'terminal'].includes(item.id) && (
                         <span
                           className={`settings-nav-count${item.id === 'autoMode' && item.count > 0 ? ' waiting' : ''}`}
                         >
@@ -225,6 +226,8 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           onSetSetting={state.onSetSetting}
         />
       );
+    case 'models':
+      return <ModelTierSettings />;
     case 'backgroundAgents':
       return (
         <BackgroundAgentSettings

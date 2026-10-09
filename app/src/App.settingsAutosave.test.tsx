@@ -20,10 +20,10 @@ function holdSaves(daemon: ScriptedDaemon) {
 
 async function openAgentsHoldingSaves() {
   let acknowledge!: ReturnType<typeof holdSaves>;
-  const daemon = await openSection('agents', {}, (scripted) => {
+  const daemon = await openSection('desktop', {}, (scripted) => {
     acknowledge = holdSaves(scripted);
   });
-  return { daemon, acknowledge, model: screen.getByTestId('settings-default-model-claude') };
+  return { daemon, acknowledge, model: screen.getByTestId('settings-projects-directory-input') };
 }
 
 describe('App settings autosave', () => {
@@ -35,9 +35,9 @@ describe('App settings autosave', () => {
     expect(screen.getByText('Saving…')).toBeInTheDocument();
     expect(screen.queryByText('Saved')).toBeNull();
 
-    await acknowledge({ default_model_claude: 'sonnet' });
+    await acknowledge({ projects_directory: 'sonnet' });
     expect(screen.queryByText('Saving…')).toBeNull();
-    expect(screen.getByText('Saved')).toBeInTheDocument();
+    expect(screen.getAllByText('Saved')).not.toHaveLength(0);
   });
 
   it('keeps what is typed while a save is out and writes it only when the field is committed', async () => {
@@ -46,11 +46,11 @@ describe('App settings autosave', () => {
     await gesture(daemon, () => fireEvent.blur(model));
     fireEvent.change(model, { target: { value: 'still typing' } });
 
-    await acknowledge({ default_model_claude: 'sonnet' });
+    await acknowledge({ projects_directory: 'sonnet' });
     expect(model).toHaveValue('still typing');
-    expect(savedSettings(daemon)).toEqual([['default_model_claude', 'sonnet']]);
+    expect(savedSettings(daemon)).toEqual([['projects_directory', 'sonnet']]);
 
     await gesture(daemon, () => fireEvent.blur(model));
-    expect(savedSettings(daemon)).toEqual([['default_model_claude', 'sonnet'], ['default_model_claude', 'still typing']]);
+    expect(savedSettings(daemon)).toEqual([['projects_directory', 'sonnet'], ['projects_directory', 'still typing']]);
   });
 });

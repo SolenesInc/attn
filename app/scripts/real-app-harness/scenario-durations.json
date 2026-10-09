@@ -47,12 +47,12 @@
         "note": "First green run: switch, send, bounce, overview and a second client. Remeasure on Linux CI."
       },
       "crew-management": {
-        "run": "crew-management-2026-09-19T20-31-21-890Z",
-        "job": "Local scenario run, traincrew instance",
-        "recordedAt": "2026-09-19",
-        "seconds": 57.6,
-        "runnerClass": "local macOS",
-        "note": "Green focus-free run with the seeds tab, handoff history, charter editing, reconnect recovery and the restart lifecycle; earlier green runs the same day took 48.6s and 54.2s. Remeasure on Linux CI."
+        "run": "https://github.com/SolenesInc/attn/actions/runs/37878771307",
+        "job": "App acceptance shard 3/4",
+        "recordedAt": "2026-10-09",
+        "seconds": 60.188,
+        "runnerClass": "github-hosted Linux",
+        "note": "Green shared harness/model/effort picker scenario at 67889c737. Matrix elapsed 60.188s; ATTN_VERDICT crew-management-2026-10-09T03-29-18-154Z durationMs=59438, including cleanup."
       },
       "desktop-splits": {
         "run": "workspace-switching-2026-09-15T21-17-34-309Z",
@@ -78,11 +78,12 @@
         "runnerClass": "github-hosted 4vcpu/16GB"
       },
       "automation-form": {
-        "run": "https://github.com/SolenesInc/attn/actions/runs/34551113982",
-        "job": "App acceptance shard 4/4",
-        "recordedAt": "2026-09-11",
-        "seconds": 10.2,
-        "runnerClass": "github-hosted 4vcpu/16GB"
+        "run": "automation-form-2026-10-09T06-00-18-956Z",
+        "job": "Local packaged serial matrix, model-picker isolated instance",
+        "recordedAt": "2026-10-09",
+        "seconds": 67.473,
+        "runnerClass": "local macOS",
+        "note": "Green scenario at cc51c08ae after the discovered picker migration. Matrix elapsed 67.473s; ATTN_VERDICT durationMs=66722, including cleanup. Remeasure on Linux CI; this local display was locked and optional native evidence captures reported errors."
       },
       "automation-scheduled-cleanup": {
         "run": "https://github.com/SolenesInc/attn/actions/runs/34560996731",
@@ -92,11 +93,12 @@
         "runnerClass": "github-hosted 4vcpu/16GB"
       },
       "automation-surface": {
-        "run": "https://github.com/SolenesInc/attn/actions/runs/34552552869",
-        "job": "App acceptance shard 2/4",
-        "recordedAt": "2026-09-11",
-        "seconds": 13.2,
-        "runnerClass": "github-hosted 4vcpu/16GB"
+        "run": "https://github.com/SolenesInc/attn/actions/runs/37889705796",
+        "job": "App acceptance shard 1/4",
+        "recordedAt": "2026-10-09",
+        "seconds": 32.99,
+        "runnerClass": "github-hosted Linux",
+        "note": "Green Automation surface scenario at 8c88b5b92, including save preservation of an unreported model and effort. Matrix elapsed 32.990s; ATTN_VERDICT durationMs=32173, including cleanup."
       },
       "crew-seed-header": {
         "run": "https://github.com/SolenesInc/attn/actions/runs/34560996731",
@@ -127,11 +129,12 @@
         "runnerClass": "github-hosted 4vcpu/16GB"
       },
       "delegation-preferences": {
-        "run": "https://github.com/SolenesInc/attn/actions/runs/34556034570",
-        "job": "App acceptance shard 2/4",
-        "recordedAt": "2026-09-11",
-        "seconds": 25.9,
-        "runnerClass": "github-hosted 4vcpu/16GB"
+        "run": "https://github.com/SolenesInc/attn/actions/runs/37878771307",
+        "job": "App acceptance shard 1/4",
+        "recordedAt": "2026-10-09",
+        "seconds": 40.156,
+        "runnerClass": "github-hosted Linux",
+        "note": "Green shared harness/model/effort picker scenario at 67889c737. Matrix elapsed 40.156s; ATTN_VERDICT delegation-preferences-2026-10-09T03-27-34-532Z durationMs=39357, including cleanup."
       },
       "garden-seed-reopen": {
         "run": "https://github.com/SolenesInc/attn/actions/runs/34556034570",
@@ -210,12 +213,12 @@
         "note": "Green ATTN_VERDICT durationMs=72591. Covers clean quits, retained final text across app relaunch, and native Resume/Close. Remeasure on Linux CI."
       },
       "automation-lifecycle": {
-        "run": "https://github.com/SolenesInc/attn/actions/runs/37760713271",
-        "job": "App acceptance shard 1/4",
-        "recordedAt": "2026-10-08",
-        "seconds": 68.8,
-        "runnerClass": "github-hosted Linux",
-        "note": "Green matrix result durationMs=68758, including the disk-full failure and fresh-request recovery case."
+        "run": "automation-lifecycle-2026-10-09T06-03-03-004Z",
+        "job": "Local packaged serial matrix, model-picker isolated instance",
+        "recordedAt": "2026-10-09",
+        "seconds": 71.804,
+        "runnerClass": "local macOS",
+        "note": "Green scenario at cc51c08ae after the discovered picker migration. Matrix elapsed 71.804s; ATTN_VERDICT durationMs=70990, including cleanup. Remeasure on Linux CI; this local display was locked and optional native evidence captures reported errors."
       },
       "move-with-delegates": {
         "run": "move-with-delegates-2026-10-08T21-54-22-793Z",
@@ -224,6 +227,14 @@
         "seconds": 27.874,
         "runnerClass": "local macOS",
         "note": "Green ATTN_VERDICT durationMs=27874, including cleanup and recording. Native palette moves a dispatcher, two delegates and a nested delegate against a production DB copy. No overview changes. Final recording and screenshots attached to seed s-4z9ah9. Remeasure on Linux CI."
+      },
+      "agent-settings": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/37878771307",
+        "job": "App acceptance shard 1/4",
+        "recordedAt": "2026-10-09",
+        "seconds": 33.189,
+        "runnerClass": "github-hosted Linux",
+        "note": "Green shared harness/model/effort picker scenario at 67889c737. Matrix elapsed 33.189s; ATTN_VERDICT agent-settings-2026-10-09T03-27-01-108Z durationMs=32625, including cleanup."
       },
       "desktop-order": {
         "run": "desktop-order-2026-10-08T21-40-27-696Z",
@@ -248,19 +259,19 @@
     "snooze-keyboard": 103.8,
     "agent-close": 8.2,
     "agent-queue": 106.589,
-    "agent-settings": 18.7,
+    "agent-settings": 33.189,
     "autoclose-on-exit": 72.591,
-    "automation-form": 10.2,
-    "automation-lifecycle": 68.8,
+    "automation-form": 67.473,
+    "automation-lifecycle": 71.804,
     "automation-scheduled-cleanup": 40.6,
-    "automation-surface": 13.2,
+    "automation-surface": 32.99,
     "automode-environment": 4.8,
     "close-pane-nonblocking": 10,
     "countdown-cancel": 46.3,
     "crash-recovery": 9,
     "crew-seed-header": 53.2,
     "delegation-chain": 36.132,
-    "delegation-preferences": 25.9,
+    "delegation-preferences": 40.156,
     "garden-plot-dispatch": 24.0,
     "garden-seed-header": 17.4,
     "garden-seed-read-receipts": 13.4,
@@ -290,7 +301,7 @@
     "desktop-switching": 27.0,
     "desktop-splits": 45.7,
     "worktree-surface": 34.3,
-    "crew-management": 57.6,
+    "crew-management": 60.188,
     "clear-opens-session": 15.0,
     "desktop-migration": 20.7,
     "profile-lifecycle": 18.5,

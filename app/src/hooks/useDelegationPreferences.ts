@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DelegationPreferences } from '../types/generated';
 import type { DelegationSettingsState } from './daemonDelegationEvents';
+import { readHarnessPreferences, rememberHarnesses, useHarnesses } from './useHarnesses';
 import { useDelegationPreferencesPush } from '../store/delegationPreferences';
 
 type Pending = { value: DelegationPreferences; installWorkflowSkill: boolean };
 const message = (e: unknown) => String(e instanceof Error ? e.message : e);
 
 export function useDelegationPreferences(active: boolean, load: () => Promise<DelegationSettingsState>, save: (value: DelegationPreferences, installWorkflowSkill?: boolean) => Promise<DelegationSettingsState>) {
+  const { harnesses, hasCatalog } = useHarnesses(active);
   const [state, setState] = useState<DelegationSettingsState | null>(null);
   const [preferences, setPreferences] = useState<DelegationPreferences | null>(null);
   const [busy, setBusy] = useState(false);
@@ -21,6 +23,7 @@ export function useDelegationPreferences(active: boolean, load: () => Promise<De
   const confirmed = useRef<DelegationPreferences | null>(null);
 
   const confirm = useCallback((next: DelegationSettingsState) => {
+    rememberHarnesses(next);
     revision.current = next.preferences.revision;
     confirmed.current = next.preferences;
     setState(next);
@@ -39,7 +42,7 @@ export function useDelegationPreferences(active: boolean, load: () => Promise<De
   const fetch = useCallback(async () => {
     const id = ++request.current;
     try {
-      const next = await load();
+      const next = await readHarnessPreferences(load, confirmed.current !== null);
       if (id !== request.current) return;
       // A new revision is a change; the same table with fresh harness state is not.
       if (next.preferences.revision !== revision.current) setGeneration(n => n + 1);
@@ -94,6 +97,7 @@ export function useDelegationPreferences(active: boolean, load: () => Promise<De
     return flight.current;
   }, [drain, fetch]);
 
-  return { state, preferences, busy, error, generation, reload, save: persist };
+  const currentState = useMemo(() => state ? { ...state, harnesses: hasCatalog ? harnesses : state.harnesses } : null, [state, harnesses, hasCatalog]);
+  return { state: currentState, preferences, busy, error, generation, reload, save: persist };
 }
 export type DelegationPreferencesPolicy = ReturnType<typeof useDelegationPreferences>;

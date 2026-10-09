@@ -612,6 +612,9 @@ export function useSettingsModalState({
               'agents executables claude codex copilot pi default capabilities model effort pricing context window cap tokens compaction auto-approve unattended',
           },
           {
+            id: 'models', label: 'Models', title: 'Models', description: 'Model tiers and shared defaults.', count: 0, keywords: 'harness model tier light standard deep overrides defaults',
+          },
+          {
             id: 'backgroundAgents',
             label: 'Background agents',
             title: 'Background agents',

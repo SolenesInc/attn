@@ -62,12 +62,7 @@ const json = (args) => {
 };
 const crewMember = (id) => json(['crew', 'list', '--json']).find((member) => member.id === id);
 const click = (selector) => client.request('dom_click', { selector });
-const select = (selector, value) => client.request('dom_select', { selector, value });
 const type = (selector, text) => client.request('dom_type', { selector, text });
-const typeAndCommit = async (selector, text) => {
-  await type(selector, text);
-  await client.request('dom_key', { selector, key: 'Enter' });
-};
 const panelText = async () => (await client.request('dom_text', { selector: '[data-testid="crew-panel"]' })).text;
 const hold = () => process.env.ATTN_HARNESS_RECORD === '1' ? delay(1200) : Promise.resolve();
 const waitForDom = (selector, condition = {}, timeoutMs = 30_000) => client.request(
@@ -407,10 +402,14 @@ try {
     await waitForDom('[data-testid="crew-panel"]', { textIncludes: 'Between days' });
     runner.assert((await panelText()).includes('Wake member'), 'asleep details offer Wake');
     const savedClaude = waitForCrew(asleep, (member) => member.agent === 'claude', 'the explicit asleep harness save');
-    await select('[data-testid="crew-harness"]', 'claude');
+    await click('[data-testid="crew-route"]');
+    await click('dialog[aria-label="Choose a model"] [data-harness="claude"]');
+    await click('dialog[aria-label="Choose a model"] [data-model=""]');
     await savedClaude;
+    await client.request('dom_key', { selector: 'dialog[aria-label="Choose a model"]', key: 'Escape' });
     const savedDefault = waitForCrew(asleep, (member) => !member.agent, 'the crew-default clear');
-    await select('[data-testid="crew-harness"]', '');
+    await click('[data-testid="crew-route"]');
+    await click('dialog[aria-label="Choose a model"] [data-harness=""]');
     await savedDefault;
     await waitForDom('[data-testid="crew-panel"]', { textIncludes: 'Saved' });
     runner.assert((await panelText()).includes('Saved'), 'the cleared default is acknowledged');
@@ -519,19 +518,20 @@ try {
     await click('[data-testid="crew-member-details-action"]');
     await waitForDom('[data-testid="crew-panel"]', { textIncludes: 'Current day active' });
     const running = await client.request('dom_text', { selector: '[aria-label="Running now"]' });
-    runner.assert(running.text.includes('codex') && running.text.includes('ModelNot reported') && running.text.includes('EffortNot reported'), 'running truth stays separate from next-wake pins', running);
+    runner.assert(running.text.includes('Codex') && running.text.includes('Model not reported') && running.text.includes('Effort not reported'), 'running truth stays separate from next-wake pins', running);
     await pressEscapeAndWaitFor(`session-actions-${firstSession}`);
     await click(`[data-testid="session-actions-${firstSession}"]`);
     await click('[data-testid="crew-member-details-action"]');
-    await select('[data-testid="crew-harness"]', 'claude');
-    await waitForDom('[data-testid="crew-model"]', { textIncludes: 'Crew Claude' });
+    await click('[data-testid="crew-route"]');
+    await click('dialog[aria-label="Choose a model"] [data-harness="claude"]');
+    await waitForDom('dialog[aria-label="Choose a model"] [data-model="crew-claude"]');
     const fullSave = waitForCrew(
       awake,
       (member) => member.agent === 'claude' && member.model === 'crew-claude' && member.effort === 'high',
       'the full launch selection to be acknowledged',
     );
-    await select('[data-testid="crew-model"]', 'crew-claude');
-    await typeAndCommit('[data-testid="crew-effort"]', 'high');
+    await click('dialog[aria-label="Choose a model"] [data-model="crew-claude"]');
+    await click('dialog[aria-label="Choose a model"] [data-effort="high"]');
     const saved = await fullSave;
     await waitForDom('[data-testid="crew-panel"]', { textIncludes: 'Saved' });
     runner.writeJson('saved-next-wake.json', saved);
@@ -543,7 +543,8 @@ try {
     const stopped = await stopDaemon(instance);
     runner.assert(Number.isInteger(stopped), 'the scenario stopped its isolated daemon by captured pid', { stopped });
     await disconnected;
-    await typeAndCommit('[data-testid="crew-effort"]', 'low');
+    await click('[data-testid="crew-route"]');
+    await click('dialog[aria-label="Choose a model"] [data-effort="low"]');
     await waitForDom('[data-testid="crew-panel"]', { textIncludes: 'Not saved' });
     runner.assert((await panelText()).includes('WebSocket not connected'), 'the panel explains the transport failure');
     await screenshot('08-save-disconnected.png');

@@ -1,3 +1,4 @@
+import { harnesses } from './test/harnessCatalogs';
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { CommandMessage, EventMessage } from './test/protocol';
@@ -279,6 +280,46 @@ describe('App location picker', () => {
   describe('agents and targets', () => {
     const agentChosen = (name: RegExp) => radio(name).getAttribute('aria-checked') === 'true';
 
+    it('launches an interactive plugin absent from the initial-prompt harness catalog', async () => {
+      const { daemon } = await openPicker({}, { settings: { interactive_available: 'true', interactive_cap_initial_prompt: 'false' } });
+      const choices = within(screen.getByRole('radiogroup', { name: 'Session agent' })).getAllByRole('radio');
+      expect(choices.map(choice => within(choice).getByText(/Terminal|Claude|Codex|Copilot|Pi|Interactive/).textContent)).toEqual(['Terminal', 'Claude', 'Codex', 'Copilot', 'Pi', 'Interactive']);
+      await gesture(daemon, () => fireEvent.click(radio(/interactive/i)));
+      await submitPath(daemon, '/tmp/interactive-plugin');
+      expect(launchedAt(daemon)).toEqual([{ cwd: '/tmp/interactive-plugin', agent: 'interactive' }]);
+    });
+
+    it('keeps agents selectable after a catalog error and preserves selection through Retry', async () => {
+      const { daemon } = await renderApp({ initialState: { settings: { aaa_available: 'true' } }, script: daemon => {
+        daemon.on('delegation_preferences_get', () => ({ event: 'delegation_preferences_result', success: false, error: 'Catalog unavailable', preferences: { enabled: false, revision: 0, workflow_skill_enabled: false, roles: [], fallback: { selection: { harness: '', provider: '', model: '', effort: '' }, instructions: '' } }, harnesses: [], templates: [] }));
+      } });
+      serveMachine(daemon);
+      serveLaunches(daemon);
+      serveSettings(daemon, { aaa_available: 'true' });
+      await gesture(daemon, () => pressShortcut('session.new'));
+      expect(screen.getByRole('alert')).toHaveTextContent('Catalog unavailable');
+      expect(radio(/codex/i)).toBeEnabled();
+      await gesture(daemon, () => fireEvent.click(radio(/^Aaa/)));
+      expect(agentChosen(/^Aaa/)).toBe(true);
+      expect(within(screen.getByRole('radiogroup', { name: 'Session agent' })).queryByText('⌥1')).toBeNull();
+      await press(daemon, '1', { code: 'Digit1', altKey: true });
+      expect(agentChosen(/^Aaa/)).toBe(true);
+      await submitPath(daemon, '/tmp/catalog-unavailable');
+      let held: CommandMessage<'delegation_preferences_get'> | undefined;
+      daemon.on('delegation_preferences_get', request => { held = request; });
+      await gesture(daemon, () => pressShortcut('session.new'));
+      await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Retry' })));
+      expect(radio(/^Aaa/)).toBeEnabled();
+      expect(agentChosen(/^Aaa/)).toBe(true);
+      await gesture(daemon, () => daemon.replyTo(held!, { event: 'delegation_preferences_result', request_id: held!.request_id, success: true, preferences: { enabled: false, revision: 0, workflow_skill_enabled: false, roles: [], fallback: { selection: { harness: '', provider: '', model: '', effort: '' }, instructions: '' } }, harnesses: [harnesses[1], harnesses[0], harnesses[2]], templates: [] }));
+      expect(agentChosen(/^Aaa/)).toBe(true);
+      expect(daemon.sentOf('delegation_preferences_get')).toHaveLength(2);
+      await press(daemon, '1', { code: 'Digit1', altKey: true });
+      expect(agentChosen(/^Codex/)).toBe(true);
+      await submitPath(daemon, '/tmp/catalog-recovered');
+      expect(launchedAt(daemon)).toEqual([{ cwd: '/tmp/catalog-unavailable', agent: 'aaa' }, { cwd: '/tmp/catalog-recovered', agent: 'codex' }]);
+    });
+
     it('offers Terminal on a remote endpoint that reports only agent CLIs', async () => {
       const { daemon } = await openPicker({}, { endpoints: [GPU_BOX] });
 
@@ -400,10 +441,11 @@ describe('App location picker', () => {
 
   describe('auto mode', () => {
     const AUTO_MODE_AGENT = { snipe_available: 'true', snipe_cap_auto_mode: 'true', claude_cap_auto_mode: 'false' };
+    const autoModeHarnesses = [...harnesses, { id: 'snipe', name: 'Snipe', available: true, model_pin: true, effort_pin: true, discovery: false }];
     const autoMode = () => screen.queryByTestId('location-picker-automode-toggle');
 
     async function openWithSnipe(settings: Record<string, string> = AUTO_MODE_AGENT) {
-      const view = await openPicker({}, { settings });
+      const view = await openPicker({}, { settings }, autoModeHarnesses);
       await gesture(view.daemon, () => fireEvent.click(radio(/snipe/i)));
       return view;
     }
@@ -414,7 +456,7 @@ describe('App location picker', () => {
     }
 
     it('offers the toggle only for an agent whose driver advertises auto mode, and a launch without it says nothing about auto mode', async () => {
-      const { daemon } = await openPicker({}, { settings: AUTO_MODE_AGENT });
+      const { daemon } = await openPicker({}, { settings: AUTO_MODE_AGENT }, autoModeHarnesses);
       expect(autoMode()).toBeNull();
 
       await submitPath(daemon, '/tmp/claude-here');

@@ -7,7 +7,6 @@ import {
   Task,
 } from '../hooks/useDaemonSocket';
 import type { ThemePreference } from '../hooks/useTheme';
-import { type SessionAgent } from '../types/sessionAgent';
 import { type SaveSetting } from './SettingsAutosave';
 
 export const OPEN_SENT_FILES_ENABLED_SETTING = 'open_sent_files_enabled';
@@ -76,6 +75,7 @@ export type SettingsSectionID =
   | 'desktop'
   | 'hygiene'
   | 'agents'
+  | 'models'
   | 'backgroundAgents'
   | 'terminal'
   | 'autoMode'
@@ -102,10 +102,7 @@ export function formatByteCount(raw: string | undefined): string {
   return `${value >= 10 || unit === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unit]}`;
 }
 
-export const CHIEF_EFFORT_LEVELS: Partial<Record<SessionAgent, string[]>> = {
-  claude: ['low', 'medium', 'high', 'xhigh', 'max'],
-  codex: ['minimal', 'low', 'medium', 'high', 'xhigh'],
-};
+
 
 export interface SettingsNavItem {
   id: SettingsSectionID;

@@ -1,17 +1,15 @@
+import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { LaunchDesktopKind } from '../types/generated';
-import { useEffect, useRef, useState, type InputHTMLAttributes } from 'react';
 import type { CrewLaunchEdit, CrewLaunchSelection, useCrewLaunchAutosave } from '../hooks/useCrewLaunchAutosave';
 import type { CrewRestartAttempt } from '../hooks/useCrewRestart';
 import type { DaemonSession } from '../hooks/useDaemonSocket';
-import { useHarnessModelCatalog } from '../hooks/useHarnessModelCatalog';
+import { routeFromStored, storedRouteModel, knownHarnessModel } from '../hooks/useHarnessRoute';
+import { HarnessRouteChip } from './HarnessRouteChip';
+import { HarnessRouteBadge } from './HarnessRouteBadge';
 import type { HarnessModelCatalog } from '../hooks/daemonDelegationEvents';
 import type { CrewMember, Harness } from '../types/generated';
 import {
-  currentModel,
   launchSaveCopy,
-  modelIdentity,
-  modelLabel,
-  nextWakeLabel,
   restartBusy,
   restartNotice,
 } from './crewLaunchPresentation';
@@ -19,39 +17,6 @@ import {
 import { LaunchDesktopSelect } from './LaunchDesktopSelect';
 
 type LaunchAutosave = ReturnType<typeof useCrewLaunchAutosave>;
-
-function CommitOnBlurInput({ value, onCommit, onKeyDown, ...rest }: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'> & {
-  value: string;
-  onCommit: (value: string) => void;
-}) {
-  const [draft, setDraft] = useState(value);
-  const [editing, setEditing] = useState(false);
-  const shown = editing ? draft : value;
-  const latest = useRef({ draft, editing, value, onCommit });
-  useEffect(() => {
-    latest.current = { draft, editing, value, onCommit };
-  });
-  const commit = () => {
-    setEditing(false);
-    if (draft !== value) onCommit(draft);
-  };
-  useEffect(() => () => {
-    const { draft: unsent, editing: open, value: saved, onCommit: send } = latest.current;
-    if (open && unsent !== saved) send(unsent);
-  }, []);
-  return (
-    <input
-      {...rest}
-      value={shown}
-      onChange={(event) => { setEditing(true); setDraft(event.target.value); }}
-      onBlur={commit}
-      onKeyDown={(event) => {
-        onKeyDown?.(event);
-        if (event.key === 'Enter') { event.preventDefault(); commit(); }
-      }}
-    />
-  );
-}
 
 function RestartState({ member, attempt, isConnected, onResend, onReview }: {
   member: CrewMember;
@@ -83,115 +48,36 @@ function RunningNow({ member, running }: { member: CrewMember; running?: DaemonS
   return (
     <section className="crew-running" aria-label="Running now">
       <span className="crew-kicker">Running now</span>
-      <div className="crew-runtime-values">
-        <span><small>Harness</small>{running?.agent || 'Not reported'}</span>
-        <span><small>Model</small>Not reported</span>
-        <span><small>Effort</small>Not reported</span>
-      </div>
+      <HarnessRouteBadge unknown value={{ harness: running?.agent || '', provider: '', model: '', effort: '' }} label="Running route" />
       <code>{member.binding_session.slice(0, 8)}</code>
     </section>
   );
 }
 
-function LaunchFields({ member, selection, harnesses, harness, effectiveAgent, catalogLoading, models, update }: {
-  member: CrewMember;
-  selection: CrewLaunchSelection;
-  harnesses: Harness[];
-  harness?: Harness;
-  effectiveAgent: string;
-  catalogLoading: boolean;
-  models: ReturnType<typeof useHarnessModelCatalog>;
-  update: (next: Partial<CrewLaunchSelection>) => void;
+function LaunchFields({ member, selection, harnesses, effectiveAgent, catalogLoading, update }: {
+  member: CrewMember; selection: CrewLaunchSelection; harnesses: Harness[]; harness?: Harness; effectiveAgent: string; catalogLoading: boolean; update: (next: Partial<CrewLaunchSelection>) => void;
 }) {
-  const [manualModel, setManualModel] = useState(false);
-  const catalog = models.catalog;
-  const selectedModel = currentModel(catalog?.models, selection.model);
-  const chooseModel = (value: string) => {
-    if (value === '__custom') {
-      setManualModel(true);
-      return;
-    }
-    setManualModel(false);
-    const nextModel = currentModel(catalog?.models, value);
-    const clearsEffort = nextModel?.effort_support === 'unsupported'
-      || Boolean(nextModel?.effort_levels?.length && selection.effort && !nextModel.effort_levels.includes(selection.effort));
-    update({ model: value, ...(clearsEffort ? { effort: '' } : {}) });
-  };
-  return (
-    <div className="crew-launch-fields">
-      <LaunchDesktopSelect kind={LaunchDesktopKind.Crew} itemId={member.id} profileId={member.profile_id ?? ''} defaultName={member.name || member.id} value={selection.launchDesktop} onChange={(launchDesktop) => update({ launchDesktop })} disabled={catalogLoading} />
-      <label>
-        <span>Harness</span>
-        <select
-          data-testid="crew-harness"
-          value={selection.agent}
-          disabled={catalogLoading}
-          onChange={(event) => {
-            setManualModel(false);
-            update({ agent: event.target.value, model: '', effort: '' });
-          }}
-        >
-          <option value="">Crew default</option>
-          {harnesses.map((candidate) => (
-            <option key={candidate.id} value={candidate.id} disabled={!candidate.available && candidate.id !== selection.agent}>
-              {candidate.name}{candidate.available ? '' : ' (unavailable)'}
-            </option>
-          ))}
-          {selection.agent && !harness && <option value={selection.agent}>{selection.agent} (unavailable)</option>}
-        </select>
-      </label>
-
-      <label>
-        <span>Model</span>
-        <select
-          data-testid="crew-model"
-          value={manualModel ? '__custom' : selection.model}
-          disabled={!effectiveAgent || harness?.model_pin === false}
-          onChange={(event) => chooseModel(event.target.value)}
-        >
-          <option value="">Harness default</option>
-          {catalog?.models.map((candidate) => (
-            <option key={`${candidate.provider}/${candidate.id}`} value={modelIdentity(candidate)} disabled={candidate.access === 'unsupported'}>
-              {modelLabel(candidate)}{candidate.access === 'unsupported' ? ' (unsupported)' : ''}
-            </option>
-          ))}
-          {selection.model && !selectedModel && !manualModel && <option value={selection.model}>{selection.model} (custom)</option>}
-          <option value="__custom">Enter a model ID…</option>
-        </select>
-      </label>
-
-      {manualModel && (
-        <label className="crew-custom-model">
-          <span>Exact model ID</span>
-          <CommitOnBlurInput
-            data-testid="crew-custom-model"
-            autoFocus
-            value={selection.model}
-            placeholder="Model ID from the harness"
-            onCommit={(model) => update({ model, effort: '' })}
-          />
-        </label>
-      )}
-
-      <label>
-        <span>Reasoning effort</span>
-        <CommitOnBlurInput
-          data-testid="crew-effort"
-          list={`crew-efforts-${member.id}`}
-          value={selection.effort}
-          placeholder="Harness default"
-          disabled={!effectiveAgent || harness?.effort_pin === false || selectedModel?.effort_support === 'unsupported'}
-          onCommit={(effort) => update({ effort })}
-        />
-        <datalist id={`crew-efforts-${member.id}`}>
-          {selectedModel?.effort_levels?.map((level) => <option key={level} value={level} />)}
-        </datalist>
-      </label>
-    </div>
-  );
+  const { settings } = useDaemonApi();
+  const value = { ...routeFromStored(effectiveAgent, selection.model, selection.effort), harness: selection.agent };
+  const inherited = routeFromStored(effectiveAgent, member.model ? settings[`default_model_${effectiveAgent}`] || '' : member.resolved_model || '', member.effort ? settings[`default_effort_${effectiveAgent}`] || '' : member.resolved_effort || '');
+  return <div className="crew-launch-fields">
+    <LaunchDesktopSelect kind={LaunchDesktopKind.Crew} itemId={member.id} profileId={member.profile_id ?? ''} defaultName={member.name || member.id} value={selection.launchDesktop} onChange={launchDesktop => update({ launchDesktop })} disabled={catalogLoading} />
+    <HarnessRouteChip variant="field" aria-label="Crew launch model" data-testid="crew-route" value={value} rules={{ harnesses, requireAvailable: true, allowNone: true, noneLabel: 'Crew default', inherited }} disabled={catalogLoading} onChange={route => {
+      const model = storedRouteModel(route);
+      if (route.harness !== selection.agent) { update({ agent: route.harness, model, effort: route.effort }); return; }
+      const patch: Partial<CrewLaunchSelection> = {};
+      if (model !== selection.model) {
+        patch.model = model;
+        const picked = knownHarnessModel(effectiveAgent, route.provider, route.model);
+        if (route.effort === '' && (!picked || picked.effort_support === 'unsupported')) patch.effort = '';
+      }
+      if (route.effort !== selection.effort) patch.effort = route.effort;
+      if (Object.keys(patch).length) update(patch);
+    }} />
+  </div>;
 }
 
-function LaunchCard({ member, edit, harnesses, harness, effectiveAgent, catalogLoading, catalogError, onRetryCatalog, autosave, models }: {
+function LaunchCard({ member, edit, harnesses, harness, effectiveAgent, catalogLoading, catalogError, onRetryCatalog, autosave }: {
   member: CrewMember;
   edit: CrewLaunchEdit;
   harnesses: Harness[];
@@ -201,10 +87,8 @@ function LaunchCard({ member, edit, harnesses, harness, effectiveAgent, catalogL
   catalogError: string;
   onRetryCatalog: () => void;
   autosave: LaunchAutosave;
-  models: ReturnType<typeof useHarnessModelCatalog>;
 }) {
-  const discoveryLabel = models.loading ? 'Discovering models…' : models.catalog ? 'Refresh models' : 'Discover models';
-  const warning = catalogError || models.error || (effectiveAgent && !harness?.available ? 'This harness is unavailable on this daemon.' : '');
+  const warning = catalogError || (effectiveAgent && !harness?.available ? 'This harness is unavailable on this daemon.' : '');
   return (
     <section className="crew-launch-card">
       <div className="crew-launch-title">
@@ -222,7 +106,6 @@ function LaunchCard({ member, edit, harnesses, harness, effectiveAgent, catalogL
         harness={harness}
         effectiveAgent={effectiveAgent}
         catalogLoading={catalogLoading}
-        models={models}
         update={(next) => autosave.update(member.id, next)}
       />
 
@@ -232,14 +115,9 @@ function LaunchCard({ member, edit, harnesses, harness, effectiveAgent, catalogL
           {catalogError && <button type="button" onClick={onRetryCatalog}>Retry harness discovery</button>}
         </div>
       )}
-      {effectiveAgent && harness?.discovery && (
-        <button type="button" className="crew-discover" disabled={models.loading} onClick={() => models.discover(true)}>
-          {discoveryLabel}
-        </button>
-      )}
       <div className="crew-acknowledged" data-testid="crew-acknowledged">
         <span>Acknowledged next wake</span>
-        <strong>{nextWakeLabel(edit)}</strong>
+        <HarnessRouteBadge value={routeFromStored(edit.acknowledged.resolved_agent || '', edit.acknowledged.resolved_model || '', edit.acknowledged.resolved_effort || '')} label="Acknowledged next wake" />
       </div>
       {edit.error && <div className="crew-save-error">{edit.error}</div>}
     </section>
@@ -300,7 +178,6 @@ export function CrewLaunchTab({
   catalogError,
   onRetryCatalog,
   autosave,
-  loadModels,
   isConnected,
   restart,
   onRestart,
@@ -311,7 +188,6 @@ export function CrewLaunchTab({
   const clearingAgent = selection.agent === '' && Boolean(edit.acknowledged.agent);
   const effectiveAgent = clearingAgent ? '' : selection.agent || member.resolved_agent || '';
   const harness = harnesses.find((candidate) => candidate.id === effectiveAgent);
-  const models = useHarnessModelCatalog(harness, loadModels);
 
   return (
     <>
@@ -326,7 +202,6 @@ export function CrewLaunchTab({
         catalogError={catalogError}
         onRetryCatalog={onRetryCatalog}
         autosave={autosave}
-        models={models}
       />
       <RestartSection member={member} edit={edit} restart={restart} isConnected={isConnected} onRestart={onRestart} />
       <RestartState

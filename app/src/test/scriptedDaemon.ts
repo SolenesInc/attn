@@ -1,3 +1,4 @@
+import { serveHarnessCatalogs } from './harnessCatalogs';
 import { act } from '@testing-library/react';
 import { onTestFinished, vi } from 'vitest';
 import { PROTOCOL_VERSION } from '../hooks/useDaemonSocket';
@@ -82,6 +83,7 @@ class DaemonConnection {
   }
 
   emit(message: Reply) {
+    if ((message.event === 'initial_state' || message.event === 'settings_updated') && message.settings) this.daemon.settings = message.settings as Record<string, string>;
     if (this.readyState !== DaemonConnection.OPEN) {
       throw new Error('the daemon has no open connection to deliver to');
     }
@@ -119,10 +121,12 @@ export class ScriptedDaemon {
   private heldReplies: Array<() => void> | null = null;
 
   readonly arrangement: Arrangement;
+  settings: Record<string, string> = {};
 
   constructor(options: ScriptedDaemonOptions = {}) {
     const handshake = options.initialState;
     const initial = initialState(handshake || {});
+    this.settings = initial.settings as Record<string, string>;
     this.arrangement = new Arrangement(initial.profiles ?? [], initial.desktops ?? [], initial.selected_profile_id ?? DEFAULT_PROFILE_ID);
     serveArrangement(this, this.arrangement);
     this.on('get_command_usage', ({ profile_id }) => ({ event: 'get_command_usage_result', profile_id, success: true, entries: [] }));
@@ -133,6 +137,7 @@ export class ScriptedDaemon {
       desktops: this.arrangement.desktops,
       selected_profile_id: this.arrangement.selectedProfileId,
     }));
+    serveHarnessCatalogs(this);
   }
 
   arrange(change: (desktops: DaemonDesktop[]) => DaemonDesktop[]) {

@@ -6,7 +6,6 @@ import {
   repositoryEntry,
   specToFormValues,
 } from './automationFormModel';
-import { effortOptionsFor } from './launchCatalog';
 
 function baseValues(overrides: Partial<AutomationFormValues> = {}): AutomationFormValues {
   return {
@@ -198,8 +197,8 @@ describe('validation matrix', () => {
     expect(issuePaths(baseValues({ prompt: '  ' }))).toContain('prompt');
   });
 
-  it('rejects an effort not offered for the chosen model', () => {
-    expect(issuePaths(baseValues({ agent: 'codex', model: 'gpt-5.4-mini', effort: 'xhigh' }))).toContain('effort');
+  it('preserves a stored effort even when the discovered model does not offer it', () => {
+    expect(issuePaths(baseValues({ agent: 'codex', model: 'gpt-5.4-mini', effort: 'xhigh' }))).not.toContain('effort');
   });
 
   it('accepts an empty model and empty effort — both mean the agent default', () => {
@@ -211,8 +210,8 @@ describe('validation matrix', () => {
     expect(issuePaths(baseValues({ model: 'gpt-5.5', effort: '' }))).not.toContain('effort');
   });
 
-  it('rejects an empty model with an effort outside the agent-default custom list', () => {
-    expect(issuePaths(baseValues({ model: '', effort: 'nonsense' }))).toContain('effort');
+  it('preserves an unreported effort with the harness default model', () => {
+    expect(issuePaths(baseValues({ model: '', effort: 'future-effort' }))).not.toContain('effort');
   });
 
   it('accepts one fully-valid fixture per trigger', () => {
@@ -263,25 +262,4 @@ describe('specToFormValues', () => {
   });
 
 
-});
-
-describe('effortOptionsFor', () => {
-  it('returns the model-specific list for a known model', () => {
-    expect(effortOptionsFor('codex', 'gpt-5.4-mini').efforts).toEqual(['minimal', 'low', 'medium', 'high']);
-    expect(effortOptionsFor('claude', 'haiku').efforts).toEqual(['low', 'medium', 'high']);
-  });
-
-  it('falls back to the agent custom entry for an unrecognized model id', () => {
-    expect(effortOptionsFor('codex', 'some-custom-model')).toEqual({
-      efforts: ['minimal', 'low', 'medium', 'high', 'xhigh'],
-      defaultEffort: 'medium',
-    });
-  });
-
-  it('falls back to the agent custom entry for an empty model id', () => {
-    expect(effortOptionsFor('claude', '')).toEqual({
-      efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
-      defaultEffort: 'medium',
-    });
-  });
 });

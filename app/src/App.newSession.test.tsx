@@ -3,10 +3,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { chosenRow, destinationMemory, HOME, launchedAt, openPicker, pathInput, press, repoInfo, submitPath } from './test/locations';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
+import { harnesses, serveHarnessCatalogs } from './test/harnessCatalogs';
+import { daemonSession, soloDesktop } from './test/daemonFixtures';
+import type { CommandMessage } from './test/protocol';
 import { openSection } from './test/settings';
 
 async function openNewSession(settings: Record<string, string>) {
-  const { daemon } = await renderApp({ initialState: { settings } });
+  const { daemon } = await renderApp({ initialState: { settings }, script: daemon => { if (settings['gemini-cli_available']) serveHarnessCatalogs(daemon, [...harnesses, { id: 'gemini-cli', name: 'Gemini Cli', available: true, model_pin: true, effort_pin: true, discovery: false }].sort((a, b) => a.id.localeCompare(b.id))); } });
   await gesture(daemon, () => pressShortcut('session.new'));
   const options = within(screen.getByRole('radiogroup', { name: /agent/i })).getAllByRole('radio') as HTMLButtonElement[];
   const name = (option: HTMLElement) => option.querySelector('.agent-option-name')?.textContent;
@@ -54,7 +57,7 @@ describe('App new session', () => {
       [
         'the built-in agents when the daemon says nothing',
         {},
-        { offered: ['Terminal', 'Claude', 'Codex', 'Copilot'], unavailable: [], chosen: ['Claude'] },
+        { offered: ['Terminal', 'Claude', 'Codex', 'Copilot'], unavailable: ['Pi'], chosen: ['Claude'] },
       ],
       [
         'the agents the daemon advertises, plugins included',
@@ -64,15 +67,30 @@ describe('App new session', () => {
       [
         'the first available agent when the preferred one is missing',
         { new_session_agent: 'claude', claude_available: 'false', codex_available: 'false' },
-        { offered: ['Terminal', 'Copilot'], unavailable: ['Claude', 'Codex'], chosen: ['Copilot'] },
+        { offered: ['Terminal', 'Copilot'], unavailable: ['Claude', 'Codex', 'Pi'], chosen: ['Copilot'] },
       ],
       [
         'a terminal when no agent CLI is available',
         { codex_available: 'false', claude_available: 'false', copilot_available: 'false' },
-        { offered: ['Terminal'], unavailable: ['Claude', 'Codex', 'Copilot'], chosen: ['Terminal'] },
+        { offered: ['Terminal'], unavailable: ['Claude', 'Codex', 'Copilot', 'Pi'], chosen: ['Terminal'] },
       ],
     ])('offers %s', async (_, settings, expected) => {
       expect(await openNewSession(settings)).toEqual(expected);
+    });
+
+    it('waits for reported harness order before assigning agent shortcuts', async () => {
+      let held: CommandMessage<'delegation_preferences_get'> | undefined;
+      const { daemon } = await renderApp({ initialState: { sessions: [daemonSession('s1')], desktops: [soloDesktop('s1')] }, script: daemon => { daemon.on('delegation_preferences_get', request => { held = request; }); } });
+      await gesture(daemon, () => pressShortcut('session.new'));
+      expect(screen.getByRole('status')).toHaveTextContent('Loading harnesses');
+      const choices = () => within(screen.getByRole('radiogroup', { name: /agent/i }));
+      expect(choices().getAllByRole('radio')).toHaveLength(1);
+      const dialog = pathInput();
+      await gesture(daemon, () => fireEvent.keyDown(dialog, { key: '1', code: 'Digit1', altKey: true }));
+      await gesture(daemon, () => daemon.replyTo(held!, { event: 'delegation_preferences_result', request_id: held!.request_id, success: true, preferences: { enabled: false, revision: 0, workflow_skill_enabled: false, roles: [], fallback: { selection: { harness: '', provider: '', model: '', effort: '' }, instructions: '' } }, harnesses: [harnesses[1], harnesses[0], harnesses[2]], templates: [], expanded_roles: [] }));
+      expect(screen.queryByText('Loading harnesses…')).toBeNull();
+      await gesture(daemon, () => fireEvent.keyDown(dialog, { key: '1', code: 'Digit1', altKey: true }));
+      expect(choices().getByRole('radio', { name: /^Codex/ })).toHaveAttribute('aria-checked', 'true');
     });
 
     it('lists the preferred agent first in Settings, with what each agent supports', async () => {

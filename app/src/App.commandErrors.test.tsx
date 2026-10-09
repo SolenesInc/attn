@@ -4,6 +4,7 @@ import { soloDesktop, daemonSession } from './test/daemonFixtures';
 import type { CommandMessage } from './test/protocol';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
+import { openRoute, enterModel } from './test/harnessRoute';
 import { openSection } from './test/settings';
 
 const parked = 'endpoint gpu-box is parked: remote binary (abc1234) differs from this client (def5678) — click Sync to update';
@@ -31,9 +32,9 @@ describe('App command errors', () => {
       scripted.on('set_setting', (command) => { held.push(command); });
     });
     for (const [agent, model] of [['claude', 'sonnet'], ['codex', 'test-model']]) {
-      const field = screen.getByTestId(`settings-default-model-${agent}`);
-      fireEvent.change(field, { target: { value: model } });
-      fireEvent.blur(field);
+      await openRoute(daemon, `${agent === 'claude' ? 'Claude' : 'Codex'} default model`);
+      await enterModel(daemon, model);
+      if (screen.queryByRole('dialog', { name: 'Choose a model' })) await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
     }
     await daemon.idle();
     const [first, second] = held;

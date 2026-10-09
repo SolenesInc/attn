@@ -449,6 +449,17 @@ async function main() {
     await runner.step('leg2_deleted_ids_stay_deleted', async () => {
       fs.writeFileSync(deleteDefinitionFile, deleteDefinitionYAML({ id: deleteID, locationPath: deleteFixture, executable: probe.executable }));
       deleteID = runJSON(binary, ['automation', 'apply', '--file', deleteDefinitionFile], daemonEnv).id;
+      await client.request('automations_open_panel');
+      await client.request('dom_wait', { selector: `[data-testid="automation-edit-${deleteID}"]`, timeoutMs: 30000 });
+      await client.request('automation_form_open', { definitionId: deleteID });
+      const openedForm = await poll(async () => { const state = await client.request('automation_form_get_state'); return state.present && state.status === 'ready' ? state : null; }, 'existing automation form to finish loading');
+      runner.assert(openedForm.values.model === 'slice7-deletion-probe' && openedForm.values.effort === 'high', 'the shared picker retains the stored unreported launch route', openedForm.values);
+      await client.request('automation_form_submit');
+      await poll(async () => !(await client.request('automation_form_get_state')).present, 'automation form save to finish');
+      const savedDefinition = await observer.requestResult({ cmd: 'automation_definition_get', definition_id: deleteID }, 'automation_definition_result');
+      const savedLaunch = JSON.parse(savedDefinition.spec_json).launch;
+      runner.assert(savedLaunch.model === 'slice7-deletion-probe' && savedLaunch.effort === 'high', 'saving preserves the stored model and effort', savedLaunch);
+
       deleteApplied = true;
 
       await client.request('automations_open_panel');

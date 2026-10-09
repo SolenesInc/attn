@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { GuardianSelection, Harness, HarnessModel } from '../types/generated';
 import type { HarnessModelCatalog } from '../hooks/daemonDelegationEvents';
 import type { AutoModePolicy } from '../hooks/useAutoModePolicy';
-import { useHarnessModelCatalog } from '../hooks/useHarnessModelCatalog';
+import { useHarnessModels } from '../hooks/useHarnessRoute';
 
 const pi: Harness = { id: 'pi', name: 'Pi', available: true, discovery: true, model_pin: true, effort_pin: true };
 const modelKey = (provider: string, model: string) => JSON.stringify([provider, model]);
@@ -14,7 +14,7 @@ export function GuardianSettings({ value = {}, policy, loadModels }: {
   policy: Pick<AutoModePolicy, 'editing' | 'setPolicy'>;
   loadModels: (harness: string, refresh?: boolean) => Promise<HarnessModelCatalog>;
 }) {
-  const { catalog, loading, error, discover } = useHarnessModelCatalog(pi, loadModels);
+  const { catalog, loading, error, discover } = useHarnessModels(pi, loadModels);
   const [failure, setFailure] = useState('');
   const models = catalog?.models ?? [];
   const selected = models.find(model => model.provider === value.provider && model.id === value.model);

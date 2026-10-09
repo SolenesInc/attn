@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AutomationAgent, effortOptionsFor } from './launchCatalog';
+export type AutomationAgent = 'codex' | 'claude';
 
 // Mirrors the validation rules of internal/automation/automation.go so the client
 // rejects the same shapes the daemon would.
@@ -153,19 +153,6 @@ export const automationFormSchema = baseFormSchema.superRefine((values, ctx) => 
   }
   if (values.prompt.trim() === '') {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['prompt'], message: 'A prompt is required.' });
-  }
-
-  // model '' and effort '' both mean "use the agent's default", so a CLI-authored
-  // definition that omits them stays editable here.
-  if (values.effort !== '') {
-    const { efforts } = effortOptionsFor(values.agent, values.model);
-    if (!efforts.includes(values.effort)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['effort'],
-        message: "Effort isn't available for this model.",
-      });
-    }
   }
 
   switch (values.trigger) {

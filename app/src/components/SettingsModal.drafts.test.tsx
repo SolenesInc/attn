@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { gesture, renderApp } from '../test/renderApp';
 import type { CommandMessage } from '../test/protocol';
 import type { ScriptedDaemon } from '../test/scriptedDaemon';
+import { openRoute, pickModel, pickEffort } from '../test/harnessRoute';
 import { openSection, openSettings, savedSettings } from '../test/settings';
 
 function holdSaves(daemon: ScriptedDaemon) {
@@ -71,7 +72,7 @@ describe('SettingsModal drafts', () => {
 
   it('commits a focused field before closing and leaves failed saves open', async () => {
     let refusals = 1;
-    const daemon = await openSection('agents', {}, (scripted) => {
+    const daemon = await openSection('desktop', {}, (scripted) => {
       scripted.on('set_setting', ({ key, value }) => (refusals-- > 0
         ? { event: 'settings_updated', success: false, error: 'database is locked' }
         : [
@@ -79,7 +80,7 @@ describe('SettingsModal drafts', () => {
           { event: 'settings_updated', request_id: undefined, settings: { [key]: value } },
         ]));
     });
-    const model = screen.getByTestId('settings-default-model-claude');
+    const model = screen.getByTestId('settings-projects-directory-input');
     model.focus();
     fireEvent.change(model, { target: { value: 'sonnet' } });
 
@@ -91,18 +92,18 @@ describe('SettingsModal drafts', () => {
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Retry' })));
     await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-close')));
     expect(settingsModal()).toBeNull();
-    expect(savedSettings(daemon)).toEqual([['default_model_claude', 'sonnet'], ['default_model_claude', 'sonnet']]);
+    expect(savedSettings(daemon)).toEqual([['projects_directory', 'sonnet'], ['projects_directory', 'sonnet']]);
   });
 
   it('flushes a focused draft when the settings shortcut closes it', async () => {
-    const daemon = await openSection('backgroundAgents');
-    const field = screen.getByTestId('settings-chief-model-claude');
+    const daemon = await openSection('desktop');
+    const field = screen.getByTestId('settings-projects-directory-input');
     field.focus();
     fireEvent.change(field, { target: { value: 'sonnet' } });
 
     await openSettings(daemon);
 
-    expect(savedSettings(daemon)).toEqual([['chief_model_claude', 'sonnet']]);
+    expect(savedSettings(daemon)).toEqual([['projects_directory', 'sonnet']]);
     expect(settingsModal()).toBeNull();
   });
 
@@ -111,18 +112,18 @@ describe('SettingsModal drafts', () => {
     const daemon = await openSection('agents', { settings: { default_model_claude: 'opus' } }, (scripted) => {
       saves = holdSaves(scripted);
     });
-    const input = screen.getByTestId('settings-default-model-claude');
-    fireEvent.change(input, { target: { value: 'sonnet' } });
-    fireEvent.blur(input);
-    fireEvent.change(input, { target: { value: 'opus' } });
-    fireEvent.blur(input);
-    await daemon.idle();
+    await openRoute(daemon, 'Claude default model');
+    await pickModel(daemon, 'Sonnet 5.5');
+    await pickEffort(daemon, 'default');
+    await openRoute(daemon, 'Claude default model');
+    await pickModel(daemon, 'Opus 5.5');
+    await pickEffort(daemon, 'default');
 
     await saves.acknowledge({ default_model_claude: 'sonnet' });
     await saves.acknowledge({ default_model_claude: 'opus' });
 
     expect(savedSettings(daemon)).toEqual([['default_model_claude', 'sonnet'], ['default_model_claude', 'opus']]);
-    expect(input).toHaveValue('opus');
+    expect(screen.getByTestId('settings-default-route-claude')).toHaveTextContent('Opus 5.5');
   });
 
   it('retains a default-agent reversal while the first selection is saving', async () => {
@@ -147,7 +148,8 @@ describe('SettingsModal drafts', () => {
   it('writes an effort override on change, under the model field’s mark', async () => {
     const daemon = await openSection('backgroundAgents');
 
-    await gesture(daemon, () => fireEvent.change(screen.getByTestId('settings-chief-effort-claude'), { target: { value: 'high' } }));
+    await openRoute(daemon, 'Claude Chief model');
+    await pickEffort(daemon, 'high');
 
     expect(savedSettings(daemon)).toEqual([['chief_effort_claude', 'high']]);
     expect(screen.getByTestId('settings-chief-model-saved-claude')).toBeInTheDocument();
