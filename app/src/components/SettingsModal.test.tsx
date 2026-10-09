@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { gesture, renderApp } from '../test/renderApp';
 import type { EventMessage } from '../test/protocol';
 import type { ScriptedDaemon } from '../test/scriptedDaemon';
+import { defaultProfile } from '../test/daemonFixtures';
 import { openSection, renderSettings, savedSettings } from '../test/settings';
 import { getSettingsAutomationHandle } from './settingsAutomation';
 
@@ -290,6 +291,21 @@ describe('SettingsModal model data capture', () => {
 });
 
 describe('SettingsModal notebook folder', () => {
+  it('names the selected profile and saves its Notebook folder with that profile', async () => {
+    const daemon = await openSection('desktop', {
+      profiles: [defaultProfile('desktop-work', { id: 'profile-work', name: 'Work' })],
+      selected_profile_id: 'profile-work',
+      settings: { 'notebook.root': '~/work-notes', 'notebook.root.effective': '/Users/me/work-notes' },
+    });
+    expect(screen.getByText('Work', { selector: 'strong' })).toBeInTheDocument();
+    const input = screen.getByTestId('settings-notebook-root-input');
+    fireEvent.change(input, { target: { value: '~/notes/work' } });
+    await gesture(daemon, () => fireEvent.blur(input));
+    expect(daemon.sentOf('set_setting')).toEqual([{
+      cmd: 'set_setting', request_id: expect.any(String), key: 'notebook.root', value: '~/notes/work', profile_id: 'profile-work',
+    }]);
+  });
+
   it('shows the override value and the daemon-resolved effective folder', async () => {
     await openSection('desktop', { settings: { 'notebook.root': '~/my-notes', 'notebook.root.effective': '/Users/me/my-notes' } });
 

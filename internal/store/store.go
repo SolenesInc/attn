@@ -40,6 +40,7 @@ type Store struct {
 	agentMetadata          map[protocol.SessionID]string
 	recentLocations        map[string]*protocol.RecentLocation
 	settings               map[string]string
+	profileSettings        map[string]map[string]string
 	writes                 *tableWrites
 	sessionRows            sessionRows
 	touchedAt              map[protocol.SessionID]time.Time
@@ -106,7 +107,12 @@ func newDBStore(db *sql.DB, writes *tableWrites, dbPath string, durable bool) (*
 		db.Close()
 		return nil, err
 	}
-	return &Store{db: db, dbPath: dbPath, durable: durable, settings: settings, writes: writes}, nil
+	profileSettings, err := readProfileSettings(db)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+	return &Store{db: db, dbPath: dbPath, durable: durable, settings: settings, profileSettings: profileSettings, writes: writes}, nil
 }
 
 func newMapBackedStore() *Store {

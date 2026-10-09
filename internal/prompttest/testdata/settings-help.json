@@ -1,0 +1,3 @@
+{
+  "help": "usage: attn settings <command> [--profile <name|id>]\n\nRead and change attn's settings. A setting applies to all profiles\nor to one profile; list shows which. In an agent session, profile\nsettings belong to the session's profile. Outside attn, --profile\npicks the profile; it is required when several profiles exist.\n\ncommands:\n  list [--all] [--json]   key, scope, value and what each setting does;\n                        --all adds read-only values attn computes\n  get <key> [--json]     one setting's value; empty when unset\n  set <key> <value>      change a setting; \"\" restores the default\n                        where the description allows it\n"
+}

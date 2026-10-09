@@ -51,7 +51,7 @@ func addProfileSession(t *testing.T, s *Store, id, profileID string) {
 
 func mustCreateProfile(t *testing.T, s *Store, name string) (profiles.Profile, profiles.Desktop) {
 	t.Helper()
-	profile, desktop, err := s.CreateProfile(name)
+	profile, desktop, err := s.CreateProfile(name, "~/attn-notebook")
 	if err != nil {
 		t.Fatalf("CreateProfile(%q): %v", name, err)
 	}
@@ -442,11 +442,11 @@ func TestProfileIDsSurviveRenameAndDeletedNamesAreReusable(t *testing.T) {
 		t.Fatalf("closing closed-agent: %v", err)
 	}
 
-	_, _, err = s.CreateProfile("  Home ")
+	_, _, err = s.CreateProfile("  Home ", "~/attn-notebook")
 	wantCode(t, err, profiles.CodeNameTaken)
 	_, err = s.RenameProfile(work.ID, "Home", work.Revision)
 	wantCode(t, err, profiles.CodeNameTaken)
-	_, _, err = s.CreateProfile("home")
+	_, _, err = s.CreateProfile("home", "~/attn-notebook")
 	wantCode(t, err, profiles.CodeNameTaken)
 	if err == nil || !strings.Contains(err.Error(), `"Home"`) {
 		t.Errorf("creating \"home\" beside \"Home\" = %v, want a refusal naming the existing profile", err)
@@ -481,7 +481,7 @@ func TestProfileIDsSurviveRenameAndDeletedNamesAreReusable(t *testing.T) {
 	wantCode(t, err, profiles.CodeLastProfile)
 
 	s = restart()
-	reborn, _, err := s.CreateProfile("Office")
+	reborn, _, err := s.CreateProfile("Office", "~/attn-notebook")
 	if err != nil {
 		t.Fatalf("reusing a deleted profile's name: %v", err)
 	}

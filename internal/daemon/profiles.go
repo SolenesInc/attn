@@ -251,6 +251,7 @@ func (d *Daemon) runProfileAction(client *wsClient, action, requestID string, ru
 	}
 	if previousProfile != client.selectedProfile() {
 		d.sendProfileSnapshots(client)
+		d.handleGetSettingsWS(client)
 	}
 	d.sendToClient(client, result)
 	d.releaseArrangements(client)
@@ -355,7 +356,7 @@ func (d *Daemon) desktopChanged(desktop profiles.Desktop) profileActionOutcome {
 
 func (d *Daemon) handleProfileCreate(client *wsClient, msg *protocol.ProfileCreateMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
-		profile, desktop, err := d.store.CreateProfile(msg.Name)
+		profile, desktop, err := d.store.CreateProfile(msg.Name, d.defaultNotebookRoot(msg.Name))
 		return profileActionOutcome{profile: &profile, desktops: []profiles.Desktop{desktop}, publish: func() {
 			d.publishFact(FactProfileCreated, profile.ID, nil)
 		}}, err
@@ -388,6 +389,7 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 		if err != nil {
 			return profileActionOutcome{}, err
 		}
+		d.pruneNotebookRoots()
 		remaining, err := d.store.MostRecentlyUsedProfile()
 		if err != nil {
 			return profileActionOutcome{}, err
@@ -398,6 +400,7 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 				if scoped != client {
 					d.sendArrangement(scoped, "", nil)
 					d.sendProfileSnapshots(scoped)
+					d.handleGetSettingsWS(scoped)
 				}
 			}
 		})

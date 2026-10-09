@@ -9,7 +9,9 @@ profile                 a separate world for the user's work; like a tenant
 ├─ ledger (1)
 ├─ crew member (0..n)   at most 1 is the chief
 ├─ automation (0..n)
-└─ garden (1)
+├─ garden (1)
+├─ notebook (1)        the profile's journal and knowledge base; plain markdown
+└─ setting (0..n)      a saved preference; applies to one profile or all profiles
 ```
 
 ```text

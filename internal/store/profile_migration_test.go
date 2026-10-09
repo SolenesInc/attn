@@ -150,7 +150,7 @@ func TestAClosedImportRetiresAndFinishDoesNotBringItBack(t *testing.T) {
 
 func TestTheProfileHoldingAPendingMigrationCannotBeDeleted(t *testing.T) {
 	_, s, view := convertAgentWorkspaces(t, 2)
-	_, _, err := s.CreateProfile("Work")
+	_, _, err := s.CreateProfile("Work", "~/attn-notebook")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -227,6 +227,19 @@ describe('App notebook tree', () => {
 });
 
 describe('App notebook on-disk changes', () => {
+  it('reloads the tree from the selected profile effective root', async () => {
+    const { daemon } = await openVault();
+    const before = daemon.sent.length;
+    daemon.emit({ event: 'settings_updated', settings: { 'notebook.root.effective': '/work-notes' } });
+    await daemon.idle();
+    const scope = { profile_id: 'profile-default', expected_notebook_root: '/work-notes' };
+    expect(daemon.sent.slice(before).filter((message) => message.cmd.startsWith('fs_'))).toEqual([
+      { cmd: 'fs_list', request_id: expect.any(String), ...scope },
+      { cmd: 'fs_read', request_id: expect.any(String), path: 'knowledge/index.md', ...scope },
+      { cmd: 'fs_index', request_id: expect.any(String), ...scope },
+    ]);
+  });
+
   it.each([
     { event: 'the notebook root', root: NOTEBOOK_ROOT },
     { event: 'an empty root', root: '' },

@@ -256,7 +256,7 @@ func (d *Daemon) guardWorkflowRunStart(run *protocol.WorkflowRun) error {
 	if run == nil || run.Status != protocol.WorkflowRunStatusRunning {
 		return nil
 	}
-	if parseBooleanSetting(d.store.GetSetting(SettingWorkflowsEnabled)) {
+	if parseBooleanSetting(d.daemonSetting(settingWorkflowsEnabled)) {
 		return nil
 	}
 	return fmt.Errorf("workflows are disabled; enable Workflows in attn Settings (Workflows) to run one")

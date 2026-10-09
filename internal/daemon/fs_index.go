@@ -16,10 +16,11 @@ import (
 
 const maxFsIndexEntries = 25000
 
-func (d *Daemon) handleFsIndex(client *wsClient, requestID, rawRoot string, extensions []string) {
+func (d *Daemon) handleFsIndex(client *wsClient, requestID string, rawRoot resolvedFsRoot, extensions []string) {
 	var files []string
 	var truncated bool
-	root, err := d.resolveFsRoot(client, rawRoot)
+	root := string(rawRoot)
+	var err error
 	if err == nil {
 		files, truncated, err = d.indexRoot(root, maxFsIndexEntries, extensions)
 	}

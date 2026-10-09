@@ -29,7 +29,7 @@ func (d *Daemon) modelCaptureDir() string {
 }
 
 func (d *Daemon) modelCaptureEnabled() bool {
-	return d.store != nil && parseBooleanSetting(d.store.GetSetting(SettingModelCaptureEnabled))
+	return d.store != nil && parseBooleanSetting(d.daemonSetting(settingModelCaptureEnabled))
 }
 
 func (d *Daemon) modelCaptureInterval() time.Duration {
@@ -37,7 +37,7 @@ func (d *Daemon) modelCaptureInterval() time.Duration {
 		return defaultModelCaptureIntervalSeconds * time.Second
 	}
 	seconds := resolveBoundedIntSetting(
-		d.store.GetSetting(SettingModelCaptureIntervalSeconds),
+		d.daemonSetting(settingModelCaptureIntervalSeconds),
 		defaultModelCaptureIntervalSeconds,
 		modelCaptureIntervalMinSeconds,
 		modelCaptureIntervalMaxSeconds,
@@ -50,7 +50,7 @@ func (d *Daemon) modelCaptureMaxBytes() int64 {
 		return int64(defaultModelCaptureMaxGB) << 30
 	}
 	gb := resolveBoundedIntSetting(
-		d.store.GetSetting(SettingModelCaptureMaxGB),
+		d.daemonSetting(settingModelCaptureMaxGB),
 		defaultModelCaptureMaxGB,
 		modelCaptureMaxMinGB,
 		modelCaptureMaxMaxGB,

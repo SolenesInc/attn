@@ -199,6 +199,9 @@ func main() {
 	case "automode":
 		maybePrintInstanceBanner()
 		runAutoMode()
+	case "settings":
+		maybePrintInstanceBanner()
+		runSettings()
 	case "journal":
 		maybePrintInstanceBanner()
 		runJournal()
@@ -646,6 +649,7 @@ commands:
   state explain <id>                replay why a session's state is what it is
   delegate --brief-file <path> --cwd <path>    start another agent on a new seed
   delegate --seed <id> --cwd <path>            start another agent on an existing seed
+  settings list|get|set            read and change daemon or profile settings
   journal append --entry <text>     serialized append to the daily notebook journal
   open <file.md|seed-id> [--session <id>]   show a document in attn
   browser <command>                 open and control the in-app browser

@@ -781,7 +781,7 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		Authors:                state.Authors,
 		GithubHosts:            state.GithubHosts,
 		GithubPollingOffReason: gitHubPollingOffReasonField(),
-		Settings:               d.settingsWithAgentAvailability(),
+		Settings:               d.settingsSnapshot(client.selectedProfile()),
 		Warnings:               d.getWarnings(),
 		Seeds:                  state.Seeds,
 		SeedsTotal:             protocol.Ptr(d.countSeedsForBroadcast(client.selectedProfile())),
@@ -1020,6 +1020,12 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		return
 	}
 
+	notebookScope, err := d.resolveNotebookRequest(client, cmd, msg)
+	if err != nil {
+		d.sendNotebookScopeError(client, cmd, msg, err)
+		return
+	}
+
 	switch cmd {
 	case protocol.CmdProfileCreate:
 		d.handleProfileCreate(client, msg.(*protocol.ProfileCreateMessage))
@@ -1105,23 +1111,27 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdNotebookList:
 		nbList := msg.(*protocol.NotebookListMessage)
 		d.life.Go("sendNotebookListWSResult", func() {
-			d.sendNotebookListWSResult(client, protocol.Deref(nbList.RequestID), protocol.Deref(nbList.Prefix))
+			d.sendNotebookListWSResult(client, protocol.Deref(nbList.RequestID), protocol.Deref(nbList.Prefix), notebookScope)
 		})
 	case protocol.CmdNotebookRead:
 		nbRead := msg.(*protocol.NotebookReadMessage)
-		d.life.Go("sendNotebookReadWSResult", func() { d.sendNotebookReadWSResult(client, protocol.Deref(nbRead.RequestID), nbRead.Path) })
+		d.life.Go("sendNotebookReadWSResult", func() {
+			d.sendNotebookReadWSResult(client, protocol.Deref(nbRead.RequestID), nbRead.Path, notebookScope)
+		})
 	case protocol.CmdNotebookBacklinks:
 		nbBack := msg.(*protocol.NotebookBacklinksMessage)
-		d.life.Go("sendNotebookBacklinksWSResult", func() { d.sendNotebookBacklinksWSResult(client, protocol.Deref(nbBack.RequestID), nbBack.Path) })
+		d.life.Go("sendNotebookBacklinksWSResult", func() {
+			d.sendNotebookBacklinksWSResult(client, protocol.Deref(nbBack.RequestID), nbBack.Path, notebookScope)
+		})
 	case protocol.CmdNotebookWrite:
 		nbWrite := msg.(*protocol.NotebookWriteMessage)
 		d.life.Go("sendNotebookWriteWSResult", func() {
-			d.sendNotebookWriteWSResult(client, protocol.Deref(nbWrite.RequestID), nbWrite.Path, nbWrite.Content, protocol.Deref(nbWrite.BaseHash))
+			d.sendNotebookWriteWSResult(client, protocol.Deref(nbWrite.RequestID), nbWrite.Path, nbWrite.Content, protocol.Deref(nbWrite.BaseHash), notebookScope)
 		})
 	case protocol.CmdNotebookSendToChief:
 		nbChief := msg.(*protocol.NotebookSendToChiefMessage)
 		d.life.Go("sendNotebookToChiefWSResult", func() {
-			d.sendNotebookToChiefWSResult(client, protocol.Deref(nbChief.RequestID), protocol.Deref(nbChief.SourcePath), nbChief.Selection)
+			d.sendNotebookToChiefWSResult(client, protocol.Deref(nbChief.RequestID), protocol.Deref(nbChief.SourcePath), nbChief.Selection, notebookScope)
 		})
 	case protocol.CmdTaskList:
 		nbTaskList := msg.(*protocol.TaskListMessage)
@@ -1185,48 +1195,48 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdFsList:
 		fsList := msg.(*protocol.FsListMessage)
 		d.life.Go("sendFsListWSResult", func() {
-			d.sendFsListWSResult(client, protocol.Deref(fsList.RequestID), protocol.Deref(fsList.Path), protocol.Deref(fsList.Root))
+			d.sendFsListWSResult(client, protocol.Deref(fsList.RequestID), protocol.Deref(fsList.Path), notebookScope.root)
 		})
 	case protocol.CmdFsRead:
 		fsRead := msg.(*protocol.FsReadMessage)
 		d.life.Go("sendFsReadWSResult", func() {
-			d.sendFsReadWSResult(client, protocol.Deref(fsRead.RequestID), fsRead.Path, protocol.Deref(fsRead.Root))
+			d.sendFsReadWSResult(client, protocol.Deref(fsRead.RequestID), fsRead.Path, notebookScope.root)
 		})
 	case protocol.CmdFsReadAsset:
 		fsReadAsset := msg.(*protocol.FsReadAssetMessage)
 		d.life.Go("sendFsReadAssetWSResult", func() {
-			d.sendFsReadAssetWSResult(client, protocol.Deref(fsReadAsset.RequestID), fsReadAsset.Path, protocol.Deref(fsReadAsset.Root))
+			d.sendFsReadAssetWSResult(client, protocol.Deref(fsReadAsset.RequestID), fsReadAsset.Path, notebookScope.root)
 		})
 	case protocol.CmdFsWrite:
 		fsWrite := msg.(*protocol.FsWriteMessage)
 		d.life.Go("sendFsWriteWSResult", func() {
-			d.sendFsWriteWSResult(client, protocol.Deref(fsWrite.RequestID), fsWrite.Path, fsWrite.Content, protocol.Deref(fsWrite.BaseHash), protocol.Deref(fsWrite.Root))
+			d.sendFsWriteWSResult(client, protocol.Deref(fsWrite.RequestID), fsWrite.Path, fsWrite.Content, protocol.Deref(fsWrite.BaseHash), notebookScope.root)
 		})
 	case protocol.CmdFsRename:
 		fsRename := msg.(*protocol.FsRenameMessage)
 		d.life.Go("sendFsRenameWSResult", func() {
-			d.sendFsRenameWSResult(client, protocol.Deref(fsRename.RequestID), fsRename.Path, fsRename.NewPath, protocol.Deref(fsRename.Root))
+			d.sendFsRenameWSResult(client, protocol.Deref(fsRename.RequestID), fsRename.Path, fsRename.NewPath, notebookScope.root)
 		})
 	case protocol.CmdFsDelete:
 		fsDelete := msg.(*protocol.FsDeleteMessage)
 		d.life.Go("sendFsDeleteWSResult", func() {
-			d.sendFsDeleteWSResult(client, protocol.Deref(fsDelete.RequestID), fsDelete.Path, protocol.Deref(fsDelete.Root))
+			d.sendFsDeleteWSResult(client, protocol.Deref(fsDelete.RequestID), fsDelete.Path, notebookScope.root)
 		})
 	case protocol.CmdFsExists:
 		fsExists := msg.(*protocol.FsExistsMessage)
 		d.life.Go("sendFsExistsWSResult", func() {
-			d.sendFsExistsWSResult(client, protocol.Deref(fsExists.RequestID), fsExists.Path, protocol.Deref(fsExists.Root))
+			d.sendFsExistsWSResult(client, protocol.Deref(fsExists.RequestID), fsExists.Path, notebookScope.root)
 		})
 	case protocol.CmdFsWatch:
 		fsWatch := msg.(*protocol.FsWatchMessage)
-		d.life.Go("handleFsWatch", func() { d.handleFsWatch(client, protocol.Deref(fsWatch.RequestID), protocol.Deref(fsWatch.Root)) })
+		d.life.Go("handleFsWatch", func() { d.handleFsWatch(client, protocol.Deref(fsWatch.RequestID), notebookScope.root) })
 	case protocol.CmdFsUnwatch:
 		fsUnwatch := msg.(*protocol.FsUnwatchMessage)
-		d.life.Go("handleFsUnwatch", func() { d.handleFsUnwatch(client, protocol.Deref(fsUnwatch.RequestID), protocol.Deref(fsUnwatch.Root)) })
+		d.life.Go("handleFsUnwatch", func() { d.handleFsUnwatch(client, protocol.Deref(fsUnwatch.RequestID), notebookScope.root) })
 	case protocol.CmdFsIndex:
 		fsIndex := msg.(*protocol.FsIndexMessage)
 		d.life.Go("handleFsIndex", func() {
-			d.handleFsIndex(client, protocol.Deref(fsIndex.RequestID), protocol.Deref(fsIndex.Root), fsIndex.Extensions)
+			d.handleFsIndex(client, protocol.Deref(fsIndex.RequestID), notebookScope.root, fsIndex.Extensions)
 		})
 	case protocol.CmdApprovePR:
 		d.handleApprovePRWS(client, msg.(*protocol.ApprovePRMessage))
@@ -1293,7 +1303,7 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleGetSettingsWS(client)
 	case protocol.CmdSetSetting:
 		setting := msg.(*protocol.SetSettingMessage)
-		if setting.Key == SettingSharedPTYHostEnabled {
+		if setting.Key == string(settingSharedPTYHostEnabled) {
 			d.life.Go("handleSetSettingWS", func() { d.handleSetSettingWS(client, setting) })
 		} else {
 			d.handleSetSettingWS(client, setting)

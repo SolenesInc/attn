@@ -135,7 +135,7 @@ func (d *Daemon) seedArtifactDir(seedID string, create bool) (string, string, er
 	if _, _, err := d.readSeed(seedID); err != nil {
 		return "", "", err
 	}
-	root, err := d.notebookRoot()
+	root, err := d.seedNotebookRoot(seedID)
 	if err != nil {
 		return "", "", err
 	}
@@ -144,6 +144,9 @@ func (d *Daemon) seedArtifactDir(seedID string, create bool) (string, string, er
 	}
 	dir := notebook.SeedArtifactsDir(root, seedID)
 	if create {
+		if err := os.MkdirAll(root, 0o755); err != nil {
+			return "", "", fmt.Errorf("create notebook root %q: %w", root, err)
+		}
 		rootInfo, statErr := os.Lstat(root)
 		if statErr != nil || rootInfo.Mode()&os.ModeSymlink != 0 || !rootInfo.IsDir() {
 			if statErr == nil {
@@ -311,12 +314,13 @@ func (d *Daemon) reconcileSeedArtifactObservations() error {
 	if err != nil {
 		return err
 	}
-	root, err := d.notebookRoot()
-	if err != nil {
-		return err
-	}
 	var reconciliationErrors []error
 	for _, seed := range read.seeds {
+		root, err := d.seedNotebookRoot(seed.ID)
+		if err != nil {
+			reconciliationErrors = append(reconciliationErrors, err)
+			continue
+		}
 		dir := notebook.SeedArtifactsDir(root, seed.ID)
 		info, statErr := os.Lstat(dir)
 		if os.IsNotExist(statErr) {
@@ -436,7 +440,7 @@ func (d *Daemon) submitSeedArtifactTransfer(msg *protocol.SeedArtifactTransferMe
 		if msg.DestinationPath != nil {
 			return nil, errors.New("move and copy choose the seed-owned destination; --to belongs to detach")
 		}
-		root, err = d.notebookRoot()
+		root, err = d.seedNotebookRoot(seedID)
 		if err != nil {
 			return nil, err
 		}

@@ -120,7 +120,7 @@ func (d *Daemon) ensureTailscaleServeFromSettings() tailscaleStateSnapshot {
 	if d.tailscale == nil {
 		d.tailscale = newTailscaleRuntime()
 	}
-	snapshot := d.reconcileTailscaleServe(parseBooleanSetting(d.store.GetSetting(SettingTailscaleEnabled)))
+	snapshot := d.reconcileTailscaleServe(parseBooleanSetting(d.daemonSetting(settingTailscaleEnabled)))
 	d.setTailscaleStateSnapshot(snapshot)
 	return snapshot
 }
@@ -129,7 +129,7 @@ func (d *Daemon) refreshTailscaleServeState() {
 	if d.tailscale == nil {
 		d.tailscale = newTailscaleRuntime()
 	}
-	snapshot := d.inspectTailscaleServe(parseBooleanSetting(d.store.GetSetting(SettingTailscaleEnabled)))
+	snapshot := d.inspectTailscaleServe(parseBooleanSetting(d.daemonSetting(settingTailscaleEnabled)))
 	d.setTailscaleStateSnapshot(snapshot)
 }
 

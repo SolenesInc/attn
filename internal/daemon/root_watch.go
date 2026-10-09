@@ -17,9 +17,10 @@ type rootWatch struct {
 	clients  map[*wsClient]int
 }
 
-func (d *Daemon) handleFsWatch(client *wsClient, requestID, rawRoot string) {
-	root, err := d.resolveFsRoot(client, rawRoot)
-	if err == nil && !d.isNotebookRoot(root) {
+func (d *Daemon) handleFsWatch(client *wsClient, requestID string, rawRoot resolvedFsRoot) {
+	root := string(rawRoot)
+	var err error
+	if err == nil {
 		err = d.addFsWatchRef(client, root)
 	}
 	msg := protocol.FsWatchResultMessage{
@@ -35,9 +36,10 @@ func (d *Daemon) handleFsWatch(client *wsClient, requestID, rawRoot string) {
 	d.sendToClient(client, msg)
 }
 
-func (d *Daemon) handleFsUnwatch(client *wsClient, requestID, rawRoot string) {
-	root, err := d.resolveFsRoot(client, rawRoot)
-	if err == nil && !d.isNotebookRoot(root) {
+func (d *Daemon) handleFsUnwatch(client *wsClient, requestID string, rawRoot resolvedFsRoot) {
+	root := string(rawRoot)
+	var err error
+	if err == nil {
 		d.dropFsWatchRef(client, root)
 	}
 	msg := protocol.FsUnwatchResultMessage{
@@ -54,6 +56,7 @@ func (d *Daemon) handleFsUnwatch(client *wsClient, requestID, rawRoot string) {
 }
 
 func (d *Daemon) addFsWatchRef(client *wsClient, root string) error {
+	inNotebook := d.isNotebookRoot(root)
 	d.rootWatchMu.Lock()
 	defer d.rootWatchMu.Unlock()
 	if d.rootWatches == nil {
@@ -61,8 +64,14 @@ func (d *Daemon) addFsWatchRef(client *wsClient, root string) error {
 	}
 	entry, ok := d.rootWatches[root]
 	if !ok {
-		if len(d.rootWatches) >= maxFsWatchers {
-			return fmt.Errorf("too many watched roots")
+		count := 0
+		for _, entry := range d.rootWatches {
+			if len(entry.clients) > 0 && !entry.notebook {
+				count++
+			}
+		}
+		if !inNotebook && count >= maxFsWatchers {
+			return fmt.Errorf("too many watched roots (maxFsWatchers=%d, asked for %d)", maxFsWatchers, count+1)
 		}
 		w, err := notebook.NewWatcherWithCleaner(root, notebook.DefaultWatchDebounce, fsdoc.CleanPath, func(paths []string) {
 			d.rootChanged(root, paths)
@@ -70,7 +79,7 @@ func (d *Daemon) addFsWatchRef(client *wsClient, root string) error {
 		if err != nil {
 			return err
 		}
-		entry = &rootWatch{watcher: w, clients: make(map[*wsClient]int)}
+		entry = &rootWatch{watcher: w, notebook: inNotebook, clients: make(map[*wsClient]int)}
 		d.rootWatches[root] = entry
 	}
 	entry.clients[client]++
@@ -149,9 +158,16 @@ func (d *Daemon) sendFsChangedToWatchers(root string, msg protocol.FsChangedMess
 		}
 	}
 	d.rootWatchMu.Unlock()
+	selected := make(map[*wsClient]bool)
 	for _, c := range clients {
-		d.sendToClient(c, msg)
+		selected[c] = true
 	}
+	d.wsHub.ForEachClient(func(c *wsClient) {
+		notebookRoot, err := d.notebookRoot(c.selectedProfile())
+		if selected[c] || err == nil && notebookRoot == root {
+			d.sendToClient(c, msg)
+		}
+	})
 }
 
 func (d *Daemon) ensureNotebookWatcher(root string) {
@@ -211,13 +227,6 @@ func (d *Daemon) rootChanged(root string, paths []string) {
 
 func (d *Daemon) noteSelfWrite(root string, writes ...notebook.SelfWrite) {
 	d.rootWatcherFor(root).NoteSelfWrite(writes...)
-}
-
-func (d *Daemon) noteNotebookSelfWrite(writes ...notebook.SelfWrite) {
-	root, err := d.notebookRoot()
-	if err == nil {
-		d.noteSelfWrite(root, writes...)
-	}
 }
 
 func (d *Daemon) stopNotebookWatcher() { d.stopFsWatchers() }

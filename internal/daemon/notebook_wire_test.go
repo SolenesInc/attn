@@ -210,28 +210,31 @@ func TestTheNotebookGuideScaffoldsOnlyForTheChief(t *testing.T) {
 func TestNotebookRootSettingIsValidatedAndItsEffectiveValueIsReadOnly(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
-	root := fsNotebookRoot(t, w)
-	custom := fsDir(t, "custom")
-
-	for _, c := range []struct {
-		key, value string
-		ok         bool
-	}{
-		{"notebook.root", "relative/path", false},
-		{"notebook.root", filepath.Join(w.Dir, "notebook"), false},
-		{"notebook.root", custom, true},
-		{"notebook.root", "", true},
-		{"notebook.root.effective", "/tmp/whatever", false},
-	} {
-		if updated := notebookSetting(app, c.key, c.value); protocol.Deref(updated.Success) != c.ok {
-			t.Errorf("setting %s to %q succeeded=%v (%s), want %v", c.key, c.value, protocol.Deref(updated.Success), protocol.Deref(updated.Error), c.ok)
-		}
-		if c.ok {
-			testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
-				return m.RequestID == nil && protocol.Deref(m.ChangedKey) == c.key && m.Settings[c.key] == c.value && m.Settings["notebook.root.effective"] == root
-			})
-		}
+	custom := filepath.Join(w.Dir, "custom")
+	if updated := notebookSetting(app, "notebook.root", "relative/path"); protocol.Deref(updated.Success) {
+		t.Fatal("relative root accepted")
 	}
+	if updated := notebookSetting(app, "notebook.root.effective", custom); protocol.Deref(updated.Success) || !strings.Contains(protocol.Deref(updated.Error), "notebook.root.effective") {
+		t.Fatalf("read-only refusal: %+v", updated)
+	}
+	if updated := notebookSetting(app, "notebook.root", custom); !protocol.Deref(updated.Success) {
+		t.Fatal(protocol.Deref(updated.Error))
+	}
+	testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+		return m.Settings["notebook.root"] == custom && m.Settings["notebook.root.effective"] == custom
+	})
+	if written := notebookAskWrite(app, "note.md", notebookNote("new folder"), ""); !written.Success {
+		t.Fatal(protocol.Deref(written.Error))
+	}
+	if _, err := os.Stat(filepath.Join(custom, "note.md")); err != nil {
+		t.Fatal(err)
+	}
+	if updated := notebookSetting(app, "notebook.root", ""); !protocol.Deref(updated.Success) {
+		t.Fatal(protocol.Deref(updated.Error))
+	}
+	testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+		return m.Settings["notebook.root.effective"] == filepath.Join(w.Dir, "notebook-default")
+	})
 }
 
 func TestSendToChiefAppendsToTheInboxAndRingsOnlyAReadyChief(t *testing.T) {

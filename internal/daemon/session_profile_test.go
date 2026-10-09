@@ -49,7 +49,7 @@ func registerTestSession(socketPath, id, label, dir string) error {
 
 func createTestProfile(t testing.TB, s *store.Store, name string) profiles.Profile {
 	t.Helper()
-	profile, _, err := s.CreateProfile(name)
+	profile, _, err := s.CreateProfile(name, "~/attn-notebook")
 	if err != nil {
 		t.Fatalf("create profile %s: %v", name, err)
 	}

@@ -1,3 +1,4 @@
+import { useProfilesStore } from '../store/profiles';
 import { ModelTierSettings } from './ModelTierSettings';
 import { forwardRef, type ForwardedRef } from 'react';
 import { AutoModeSettings } from './AutoModeSettings';
@@ -23,11 +24,14 @@ import { SettingsModalHandle, SettingsModalProps } from './settingsModalShared';
 import { useSettingsModalState, type SettingsModalState } from './useSettingsModalState';
 export type { SettingsModalHandle } from './settingsModalShared';
 
-export const SettingsModal = forwardRef<SettingsModalHandle, SettingsModalProps>((props, ref) => (
-  <SettingsAutosaveProvider save={props.onSetSetting}>
+export const SettingsModal = forwardRef<SettingsModalHandle, SettingsModalProps>((props, ref) => {
+ const profileId = useProfilesStore((state) => state.selectedProfileId);
+ return (
+  <SettingsAutosaveProvider key={profileId} save={props.onSetSetting}>
     <SettingsModalContent {...props} closeRef={ref} />
   </SettingsAutosaveProvider>
-));
+ );
+});
 
 function SettingsModalContent(props: SettingsModalProps & { closeRef: ForwardedRef<SettingsModalHandle> }) {
   const state = useSettingsModalState(props);

@@ -4236,8 +4236,15 @@ type FsDeleteMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// ExpectedNotebookRoot corresponds to the JSON schema field
+	// "expected_notebook_root".
+	ExpectedNotebookRoot *string `json:"expected_notebook_root,omitempty,omitzero"`
+
 	// Path corresponds to the JSON schema field "path".
 	Path string `json:"path"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
@@ -4289,8 +4296,15 @@ type FsExistsMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// ExpectedNotebookRoot corresponds to the JSON schema field
+	// "expected_notebook_root".
+	ExpectedNotebookRoot *string `json:"expected_notebook_root,omitempty,omitzero"`
+
 	// Path corresponds to the JSON schema field "path".
 	Path string `json:"path"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
@@ -4328,8 +4342,15 @@ type FsIndexMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// ExpectedNotebookRoot corresponds to the JSON schema field
+	// "expected_notebook_root".
+	ExpectedNotebookRoot *string `json:"expected_notebook_root,omitempty,omitzero"`
+
 	// Extensions corresponds to the JSON schema field "extensions".
 	Extensions []string `json:"extensions,omitempty,omitzero"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
@@ -4365,8 +4386,15 @@ type FsListMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// ExpectedNotebookRoot corresponds to the JSON schema field
+	// "expected_notebook_root".
+	ExpectedNotebookRoot *string `json:"expected_notebook_root,omitempty,omitzero"`
+
 	// Path corresponds to the JSON schema field "path".
 	Path *string `json:"path,omitempty,omitzero"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
@@ -4396,8 +4424,15 @@ type FsReadAssetMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// ExpectedNotebookRoot corresponds to the JSON schema field
+	// "expected_notebook_root".
+	ExpectedNotebookRoot *string `json:"expected_notebook_root,omitempty,omitzero"`
+
 	// Path corresponds to the JSON schema field "path".
 	Path string `json:"path"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
@@ -4438,8 +4473,15 @@ type FsReadMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// ExpectedNotebookRoot corresponds to the JSON schema field
+	// "expected_notebook_root".
+	ExpectedNotebookRoot *string `json:"expected_notebook_root,omitempty,omitzero"`
+
 	// Path corresponds to the JSON schema field "path".
 	Path string `json:"path"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
@@ -4480,11 +4522,18 @@ type FsRenameMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// ExpectedNotebookRoot corresponds to the JSON schema field
+	// "expected_notebook_root".
+	ExpectedNotebookRoot *string `json:"expected_notebook_root,omitempty,omitzero"`
+
 	// NewPath corresponds to the JSON schema field "new_path".
 	NewPath string `json:"new_path"`
 
 	// Path corresponds to the JSON schema field "path".
 	Path string `json:"path"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
@@ -4522,6 +4571,13 @@ type FsUnwatchMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// ExpectedNotebookRoot corresponds to the JSON schema field
+	// "expected_notebook_root".
+	ExpectedNotebookRoot *string `json:"expected_notebook_root,omitempty,omitzero"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 
@@ -4549,6 +4605,13 @@ type FsUnwatchResultMessage struct {
 type FsWatchMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
+
+	// ExpectedNotebookRoot corresponds to the JSON schema field
+	// "expected_notebook_root".
+	ExpectedNotebookRoot *string `json:"expected_notebook_root,omitempty,omitzero"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
@@ -4584,8 +4647,15 @@ type FsWriteMessage struct {
 	// Content corresponds to the JSON schema field "content".
 	Content string `json:"content"`
 
+	// ExpectedNotebookRoot corresponds to the JSON schema field
+	// "expected_notebook_root".
+	ExpectedNotebookRoot *string `json:"expected_notebook_root,omitempty,omitzero"`
+
 	// Path corresponds to the JSON schema field "path".
 	Path string `json:"path"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
@@ -5000,8 +5070,20 @@ type GetScreenSnapshotResultMessage struct {
 }
 
 type GetSettingsMessage struct {
+	// All corresponds to the JSON schema field "all".
+	All *bool `json:"all,omitempty,omitzero"`
+
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
+
+	// Key corresponds to the JSON schema field "key".
+	Key *string `json:"key,omitempty,omitzero"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type GitFileChange struct {
@@ -6442,8 +6524,15 @@ type NotebookBacklinksMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// ExpectedNotebookRoot corresponds to the JSON schema field
+	// "expected_notebook_root".
+	ExpectedNotebookRoot *string `json:"expected_notebook_root,omitempty,omitzero"`
+
 	// Path corresponds to the JSON schema field "path".
 	Path string `json:"path"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
@@ -6520,8 +6609,15 @@ type NotebookListMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// ExpectedNotebookRoot corresponds to the JSON schema field
+	// "expected_notebook_root".
+	ExpectedNotebookRoot *string `json:"expected_notebook_root,omitempty,omitzero"`
+
 	// Prefix corresponds to the JSON schema field "prefix".
 	Prefix *string `json:"prefix,omitempty,omitzero"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
@@ -6548,8 +6644,15 @@ type NotebookReadMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// ExpectedNotebookRoot corresponds to the JSON schema field
+	// "expected_notebook_root".
+	ExpectedNotebookRoot *string `json:"expected_notebook_root,omitempty,omitzero"`
+
 	// Path corresponds to the JSON schema field "path".
 	Path string `json:"path"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
@@ -6583,9 +6686,25 @@ type NotebookReadResultMessage struct {
 	Success bool `json:"success"`
 }
 
+type NotebookScope struct {
+	// ExpectedNotebookRoot corresponds to the JSON schema field
+	// "expected_notebook_root".
+	ExpectedNotebookRoot *string `json:"expected_notebook_root,omitempty,omitzero"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+}
+
 type NotebookSendToChiefMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
+
+	// ExpectedNotebookRoot corresponds to the JSON schema field
+	// "expected_notebook_root".
+	ExpectedNotebookRoot *string `json:"expected_notebook_root,omitempty,omitzero"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
@@ -6632,8 +6751,15 @@ type NotebookWriteMessage struct {
 	// Content corresponds to the JSON schema field "content".
 	Content string `json:"content"`
 
+	// ExpectedNotebookRoot corresponds to the JSON schema field
+	// "expected_notebook_root".
+	ExpectedNotebookRoot *string `json:"expected_notebook_root,omitempty,omitzero"`
+
 	// Path corresponds to the JSON schema field "path".
 	Path string `json:"path"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
@@ -8322,6 +8448,12 @@ type Response struct {
 
 	// Sessions corresponds to the JSON schema field "sessions".
 	Sessions []Session `json:"sessions,omitempty,omitzero"`
+
+	// Setting corresponds to the JSON schema field "setting".
+	Setting *SettingEntry `json:"setting,omitempty,omitzero"`
+
+	// SettingsList corresponds to the JSON schema field "settings_list".
+	SettingsList *SettingsListResult `json:"settings_list,omitempty,omitzero"`
 
 	// StateExplainResult corresponds to the JSON schema field "state_explain_result".
 	StateExplainResult *StateExplainResult `json:"state_explain_result,omitempty,omitzero"`
@@ -10681,8 +10813,14 @@ type SetSettingMessage struct {
 	// Key corresponds to the JSON schema field "key".
 	Key string `json:"key"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 
 	// Value corresponds to the JSON schema field "value".
 	Value string `json:"value"`
@@ -10705,6 +10843,42 @@ type SetTerminalThemeMessage struct {
 	Foreground string `json:"foreground"`
 }
 
+type SettingEntry struct {
+	// Description corresponds to the JSON schema field "description".
+	Description string `json:"description"`
+
+	// Family corresponds to the JSON schema field "family".
+	Family *bool `json:"family,omitempty,omitzero"`
+
+	// Key corresponds to the JSON schema field "key".
+	Key string `json:"key"`
+
+	// ReadOnly corresponds to the JSON schema field "read_only".
+	ReadOnly *bool `json:"read_only,omitempty,omitzero"`
+
+	// Scope corresponds to the JSON schema field "scope".
+	Scope SettingScope `json:"scope"`
+
+	// Value corresponds to the JSON schema field "value".
+	Value *string `json:"value,omitempty,omitzero"`
+}
+
+type SettingScope string
+
+const SettingScopeDaemon SettingScope = "daemon"
+const SettingScopeProfile SettingScope = "profile"
+
+type SettingsListResult struct {
+	// Entries corresponds to the JSON schema field "entries".
+	Entries []SettingEntry `json:"entries"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// ProfileName corresponds to the JSON schema field "profile_name".
+	ProfileName string `json:"profile_name"`
+}
+
 type SettingsUpdatedMessage struct {
 	// ChangedKey corresponds to the JSON schema field "changed_key".
 	ChangedKey *string `json:"changed_key,omitempty,omitzero"`
@@ -10714,6 +10888,9 @@ type SettingsUpdatedMessage struct {
 
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
