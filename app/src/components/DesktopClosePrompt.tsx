@@ -1,5 +1,6 @@
 import { ModalDialog } from './MigrationPicker/ModalDialog';
 import './MigrationPicker/MigrationPicker.css';
+import './DesktopClosePrompt.css';
 
 interface Props {
   label: string;
@@ -13,7 +14,7 @@ interface Props {
 export function DesktopClosePrompt({ label, agents, shells, tiles, onConfirm, onCancel }: Props) {
   const count = (value: number, noun: string) => `${value} ${noun}${value === 1 ? '' : 's'}`;
   return (
-    <ModalDialog labelledBy="desktop-close-title" onCancel={onCancel}>
+    <ModalDialog className="desktop-close-prompt" labelledBy="desktop-close-title" onCancel={onCancel}>
       <div className="mp-dialog-top">
         <h2 id="desktop-close-title">Close {label}?</h2>
       </div>

@@ -1,0 +1,15 @@
+.desktop-close-prompt {
+  margin: auto;
+}
+
+.desktop-close-prompt .mp-dialog-body {
+  display: grid;
+  gap: 8px;
+}
+
+.desktop-close-prompt .mp-dialog-actions {
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 0;
+  padding: 0 24px 22px;
+}
