@@ -869,11 +869,11 @@ jobs:
           MACOS_RESULT: ${{ needs.app-acceptance-macos.result }}
         run: |
           if [ "$MACOS_RESULT" != success ]; then
-            echo "app acceptance: macOS native clipboard verification is $MACOS_RESULT for $HEAD_SHA" >&2
+            echo "app acceptance: macOS native clipboard and keyboard verification is $MACOS_RESULT for $HEAD_SHA" >&2
             exit 1
           fi
           if [ "$MATRIX_OUTCOME" = success ] && [ "$SHARD_RESULT" = success ]; then
-            echo "app acceptance: Linux serial matrix and macOS native clipboard are green for $HEAD_SHA"
+            echo "app acceptance: Linux serial matrix and macOS native clipboard and keyboard are green for $HEAD_SHA"
             exit 0
           fi
           if [[ "$EVENT_NAME/$HEAD_BRANCH" =~ ^pull_request/release/v[0-9]+\.[0-9]+\.[0-9]+$ ]] || \
@@ -932,8 +932,8 @@ jobs:
           instance: ${{ env.ATTN_INSTANCE }}
           archive: ${{ steps.build-app.outputs.archive }}
 
-      - name: Run native clipboard scenario
-        run: pnpm --dir app run real-app:serial-matrix -- --scenario terminal-block-copy
+      - name: Run native clipboard and keyboard scenarios
+        run: pnpm --dir app run real-app:serial-matrix -- --scenario terminal-block-copy --scenario terminal-input
 
       - name: Require executed macOS coverage
         run: |
@@ -943,6 +943,7 @@ jobs:
           const { results } = JSON.parse(fs.readFileSync(`${process.env.ATTN_REAL_APP_ARTIFACTS_DIR}/last-matrix.json`, 'utf8'));
           assert.deepEqual(results.map(({ id, code, skipped = false }) => ({ id, code, skipped })), [
             { id: 'terminal-block-copy', code: 0, skipped: false },
+            { id: 'terminal-input', code: 0, skipped: false },
           ]);
           NODE
 
