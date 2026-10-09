@@ -496,6 +496,7 @@ impl Session {
             blocks: model.wire.snapshot_blocks(),
             next_block_id: model.wire.next_block_id(),
             program_status_reported: model.signals.program_status_reported(),
+            shell: model.signals.shell_state(),
             running: lifecycle.running,
             state: lifecycle.state.clone(),
             state_detail: lifecycle.state_detail.clone(),
@@ -521,6 +522,7 @@ impl Session {
         )?;
         let mut signals = SignalObserver::new(&handoff.agent);
         signals.restore_program_status(handoff.program_status_reported);
+        signals.restore_shell_state(handoff.shell);
         let SessionRuntime {
             cleanup,
             broadcast,

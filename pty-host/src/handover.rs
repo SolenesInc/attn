@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::blocks::AttachBlock;
 use crate::ghostty::Theme;
 use crate::quiesce::set_cloexec;
+use crate::signals::ShellState;
 
 pub const CAPABILITY: &str = "handover";
 pub const ADOPT_FLAG: &str = "--adopt-handoff";
@@ -61,6 +62,7 @@ pub struct SessionHandoff {
     pub blocks: Vec<AttachBlock>,
     pub next_block_id: u64,
     pub program_status_reported: bool,
+    pub shell: ShellState,
     pub running: bool,
     pub state: String,
     pub state_detail: String,

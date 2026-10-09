@@ -90,15 +90,16 @@ impl Quiesce {
                 finishing_since = None;
                 continue;
             }
-            if fds[0].revents != 0 {
-                return Ok(());
-            }
             if fds[1].revents != 0 {
                 if at_rest() {
                     self.park();
                 } else {
                     finishing_since = self.requested_at();
                 }
+                continue;
+            }
+            if fds[0].revents != 0 {
+                return Ok(());
             }
         }
     }
@@ -111,6 +112,9 @@ impl Quiesce {
     }
 
     fn park_mid_sequence(&self) {
+        if self.requested_at().is_none() {
+            return;
+        }
         eprintln!(
             "PTY host stopped a terminal {SEQUENCE_GRACE:?} into an unfinished escape sequence; its next bytes may show as text"
         );
@@ -131,7 +135,7 @@ impl Quiesce {
         state.parked -= 1;
     }
 
-    pub fn stop(&self) -> Result<(), String> {
+    pub fn hold(&self) -> Result<(), String> {
         let mut state = self.state.lock().expect("quiesce mutex poisoned");
         if state.requested {
             return Err("terminals are already stopped for a handover".to_owned());
@@ -140,11 +144,18 @@ impl Quiesce {
         state.requested_at = Some(Instant::now());
         if unsafe { libc::write(self.wake_write.as_raw_fd(), [1_u8].as_ptr().cast(), 1) } != 1 {
             state.requested = false;
+            state.requested_at = None;
             return Err(format!(
                 "wake terminal readers: {}",
                 std::io::Error::last_os_error()
             ));
         }
+        Ok(())
+    }
+
+    pub fn stop(&self) -> Result<(), String> {
+        self.hold()?;
+        let state = self.state.lock().expect("quiesce mutex poisoned");
         drop(
             self.changed
                 .wait_while(state, |state| state.parked < state.members)

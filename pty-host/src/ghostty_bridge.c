@@ -291,6 +291,10 @@ bool attn_ghostty_at_ground(AttnGhosttyTerminal *attn) {
   return ground;
 }
 
+bool attn_ghostty_dec_mode(AttnGhosttyTerminal *attn, uint16_t mode) {
+  return attn_mode(attn, ghostty_mode_new(mode, false));
+}
+
 bool attn_ghostty_origin_mode(AttnGhosttyTerminal *attn) {
   return attn_mode(attn, GHOSTTY_MODE_ORIGIN);
 }

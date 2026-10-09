@@ -23,6 +23,13 @@ enum Kind {
     None,
 }
 
+#[derive(Clone, Copy, serde::Deserialize, serde::Serialize)]
+pub struct ShellState {
+    pub shell_pgid: i32,
+    pub last_foreground_pgid: i32,
+    pub prompt_owner: Option<i32>,
+}
+
 pub struct SignalObserver {
     kind: Kind,
     pending: Vec<u8>,
@@ -54,6 +61,20 @@ impl SignalObserver {
             prompt_owner: None,
             program_status_reported: false,
         }
+    }
+
+    pub fn shell_state(&self) -> ShellState {
+        ShellState {
+            shell_pgid: self.shell_pgid,
+            last_foreground_pgid: self.last_foreground_pgid,
+            prompt_owner: self.prompt_owner,
+        }
+    }
+
+    pub fn restore_shell_state(&mut self, state: ShellState) {
+        self.shell_pgid = state.shell_pgid;
+        self.last_foreground_pgid = state.last_foreground_pgid;
+        self.prompt_owner = state.prompt_owner;
     }
 
     pub fn program_status_reported(&self) -> bool {

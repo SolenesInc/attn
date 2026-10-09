@@ -212,6 +212,7 @@ impl Host {
             return Err(error);
         }
         handover::disarm_fallback();
+        host.quiesce.resume();
         handoff.remove(path);
         eprintln!(
             "PTY host adopted {} terminals: pid={} generation={}",
@@ -236,6 +237,7 @@ impl Host {
         }
         self.write_registry()?;
         set_cloexec(self.listener.as_raw_fd(), true)?;
+        self.quiesce.hold()?;
         for (session, master_fd, removing) in adopted {
             self.state
                 .lock()

@@ -69,6 +69,8 @@ unsafe extern "C" {
     fn attn_ghostty_cursor_visible(terminal: *mut c_void) -> bool;
     fn attn_ghostty_at_ground(terminal: *mut c_void) -> bool;
     fn attn_ghostty_origin_mode(terminal: *mut c_void) -> bool;
+    #[cfg(test)]
+    fn attn_ghostty_dec_mode(terminal: *mut c_void, mode: u16) -> bool;
     fn attn_ghostty_track_cursor(terminal: *mut c_void) -> *mut c_void;
     fn attn_ghostty_tracked_screen_point(raw: *mut c_void, x: *mut u16, y: *mut u32) -> bool;
     fn attn_ghostty_tracked_free(raw: *mut c_void);
@@ -462,6 +464,11 @@ impl Terminal {
         unsafe { attn_ghostty_at_ground(self.raw.as_ptr()) }
     }
 
+    #[cfg(test)]
+    pub fn dec_mode(&self, mode: u16) -> bool {
+        unsafe { attn_ghostty_dec_mode(self.raw.as_ptr(), mode) }
+    }
+
     fn origin_mode(&self) -> bool {
         unsafe { attn_ghostty_origin_mode(self.raw.as_ptr()) }
     }
@@ -828,6 +835,32 @@ mod tests {
             replayed.terminal(),
             "primary screen after leaving the app",
         );
+    }
+
+    #[test]
+    fn handover_dump_keeps_input_modes_on_either_screen() {
+        const MODES: [u16; 7] = [1, 1000, 1002, 1004, 1006, 2004, 2031];
+        let enable = MODES
+            .iter()
+            .flat_map(|mode| format!("\x1b[?{mode}h").into_bytes())
+            .collect::<Vec<u8>>();
+        for (screen_name, output) in [
+            ("primary", [numbered(25), enable.clone()].concat()),
+            (
+                "alternate",
+                [numbered(25), b"\x1b[?1049h".to_vec(), enable].concat(),
+            ),
+        ] {
+            let source = screen(&output);
+            let replayed = handed_over(&source);
+            for mode in MODES {
+                assert!(source.dec_mode(mode), "{screen_name}: source mode {mode}");
+                assert!(
+                    replayed.terminal().dec_mode(mode),
+                    "{screen_name}: mode {mode} after the handover"
+                );
+            }
+        }
     }
 
     #[test]
