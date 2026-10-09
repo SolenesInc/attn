@@ -16,7 +16,7 @@ import (
 func TestTheGardenAdvisorSettingRefusesWhatCannotRunAndKeepsTheSavedRecipe(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
-	if got := gardenAdvisorRecipe(t, app.Initial.Settings); got != (gardenAdvisorConfig{Agent: "codex", Model: "gpt-5.6-luna", Effort: "xhigh"}) {
+	if got := gardenAdvisorRecipe(t, app.Initial.Settings); got != (gardenAdvisorConfig{Agent: "codex", Model: "", Effort: ""}) {
 		t.Errorf("with nothing saved the app is sent recipe %+v, want the Codex default", got)
 	}
 

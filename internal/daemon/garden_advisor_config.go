@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,6 +9,8 @@ import (
 	"strings"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/headless"
+	"github.com/victorarias/attn/internal/modeltiers"
 )
 
 const (
@@ -29,20 +32,15 @@ func defaultGardenAdvisorConfig(agent string) (gardenAdvisorConfig, error) {
 	switch strings.TrimSpace(strings.ToLower(agent)) {
 	case "codex":
 		return gardenAdvisorConfig{
-			Agent:  "codex",
-			Model:  gardenAdvisorCodexDefaultModel,
-			Effort: gardenAdvisorCodexDefaultEffort,
+			Agent: "codex",
 		}, nil
 	case "claude":
 		return gardenAdvisorConfig{
-			Agent:  "claude",
-			Model:  gardenAdvisorClaudeDefaultModel,
-			Effort: gardenAdvisorClaudeDefaultEffort,
+			Agent: "claude",
 		}, nil
 	case "copilot":
 		return gardenAdvisorConfig{
 			Agent: "copilot",
-			Model: gardenAdvisorCopilotDefaultModel,
 		}, nil
 	default:
 		return gardenAdvisorConfig{}, fmt.Errorf("garden advisor agent is not supported: %s", agent)
@@ -72,15 +70,9 @@ func parseGardenAdvisorConfig(raw string) (gardenAdvisorConfig, error) {
 		return gardenAdvisorConfig{}, errors.New("garden advisor requires an agent")
 	}
 
-	defaults, err := defaultGardenAdvisorConfig(config.Agent)
+	_, err := defaultGardenAdvisorConfig(config.Agent)
 	if err != nil {
 		return gardenAdvisorConfig{}, err
-	}
-	if config.Model == "" {
-		config.Model = defaults.Model
-	}
-	if config.Effort == "" {
-		config.Effort = defaults.Effort
 	}
 	driver := agentdriver.Get(config.Agent)
 	if driver == nil {
@@ -111,11 +103,35 @@ func (d *Daemon) validateGardenAdvisorSetting(raw string) error {
 	return nil
 }
 
-func (d *Daemon) gardenAdvisorConfig() (gardenAdvisorConfig, error) {
+func (d *Daemon) gardenAdvisorConfig(ctx context.Context) (gardenAdvisorConfig, error) {
 	if d.store == nil {
 		return gardenAdvisorConfig{}, errors.New("garden advisor settings unavailable")
 	}
-	return parseGardenAdvisorConfig(d.store.GetSetting(SettingGardenAdvisor))
+	config, err := parseGardenAdvisorConfig(d.store.GetSetting(SettingGardenAdvisor))
+	if err != nil {
+		return gardenAdvisorConfig{}, err
+	}
+	fallback := gardenAdvisorCodexDefaultModel
+	defaultEffort := gardenAdvisorCodexDefaultEffort
+	switch config.Agent {
+	case "claude":
+		fallback = gardenAdvisorClaudeDefaultModel
+		defaultEffort = gardenAdvisorClaudeDefaultEffort
+	case "copilot":
+		fallback = gardenAdvisorCopilotDefaultModel
+		defaultEffort = ""
+	}
+	if config.Effort == "" {
+		config.Effort = defaultEffort
+	}
+	if !headless.Enabled() {
+		if config.Model == "" {
+			config.Model = fallback
+		}
+		return config, nil
+	}
+	config.Model = d.resolveTierModel(ctx, config.Agent, "", modeltiers.Light, config.Model, fallback)
+	return config, nil
 }
 
 func (d *Daemon) resolveGardenAdvisor(

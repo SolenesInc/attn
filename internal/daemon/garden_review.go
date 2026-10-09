@@ -395,9 +395,13 @@ func gardenReviewEvidenceVersion(item garden.ReviewItem, candidate garden.Review
 	return hex.EncodeToString(digest[:]), nil
 }
 
-func (d *Daemon) startGardenReview(profileID ...string) (garden.ReviewRun, []garden.ReviewItem, error) {
+func (d *Daemon) startGardenReview(ctx context.Context, profileID ...string) (garden.ReviewRun, []garden.ReviewItem, error) {
 	d.gardenReviewMu.Lock()
 	defer d.gardenReviewMu.Unlock()
+
+	if err := ctx.Err(); err != nil {
+		return garden.ReviewRun{}, nil, fmt.Errorf("prepare Garden review (timeout=%s): %w", harnessModelDiscoveryTimeout, err)
+	}
 
 	if run, found, err := d.unfinishedGardenReview(profileID...); err != nil {
 		return garden.ReviewRun{}, nil, err
@@ -405,6 +409,9 @@ func (d *Daemon) startGardenReview(profileID ...string) (garden.ReviewRun, []gar
 		items, itemsErr := d.readGardenReviewItems(run.ID)
 		if itemsErr != nil {
 			return garden.ReviewRun{}, nil, itemsErr
+		}
+		if err := ctx.Err(); err != nil {
+			return garden.ReviewRun{}, nil, fmt.Errorf("prepare Garden review (timeout=%s): %w", harnessModelDiscoveryTimeout, err)
 		}
 		if err := d.enqueueGardenReviewItems(run, items); err != nil {
 			return garden.ReviewRun{}, nil, err
@@ -416,7 +423,7 @@ func (d *Daemon) startGardenReview(profileID ...string) (garden.ReviewRun, []gar
 	if err != nil {
 		return garden.ReviewRun{}, nil, err
 	}
-	config, err := d.gardenAdvisorConfig()
+	config, err := d.gardenAdvisorConfig(ctx)
 	if err != nil {
 		return garden.ReviewRun{}, nil, err
 	}
@@ -438,6 +445,9 @@ func (d *Daemon) startGardenReview(profileID ...string) (garden.ReviewRun, []gar
 	if len(items) == 0 {
 		run.Status = garden.ReviewRunStatusComplete
 		run.CompletedAt = formatGardenTime(now)
+	}
+	if err := ctx.Err(); err != nil {
+		return garden.ReviewRun{}, nil, fmt.Errorf("prepare Garden review (timeout=%s): %w", harnessModelDiscoveryTimeout, err)
 	}
 	if err := d.createGardenReview(run, items); err != nil {
 		return garden.ReviewRun{}, nil, err

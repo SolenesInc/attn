@@ -599,7 +599,7 @@ func (d *Daemon) applyCrewSettings(member *crew.Member, msg *protocol.CrewSetMes
 
 func (d *Daemon) validateCrewLaunchSelection(member crew.Member, requireAvailable bool) error {
 	agent := member.LaunchAgent()
-	var harness *protocol.DelegationHarness
+	var harness *protocol.Harness
 	for _, candidate := range d.delegationHarnesses() {
 		if candidate.ID == agent {
 			copy := candidate
@@ -613,13 +613,13 @@ func (d *Daemon) validateCrewLaunchSelection(member crew.Member, requireAvailabl
 	if requireAvailable && !harness.Available {
 		return fmt.Errorf("agent %q is installed but its executable or driver is unavailable", agent)
 	}
-	if err := d.validateDelegationModelEffort(agent, member.Model, member.Effort); err != nil {
+	if err := d.validateHarnessModelEffort(agent, member.Model, member.Effort); err != nil {
 		return err
 	}
 	if member.Model == "" || !harness.Discovery || !harness.Available {
 		return nil
 	}
-	catalog, err := d.discoverDelegationModels(context.Background(), agent)
+	catalog, err := d.discoverHarnessModels(context.Background(), agent)
 	if err != nil {
 		return fmt.Errorf("validate model %q: %w", member.Model, err)
 	}

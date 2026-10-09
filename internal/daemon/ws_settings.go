@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/modelcapture"
+	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/sessioncost"
@@ -23,6 +25,7 @@ const (
 	SettingProjectsDirectory             = "projects_directory"
 	SettingUIScale                       = "uiScale"
 	SettingGardenScale                   = "gardenScale"
+	SettingModelTierOverrides            = "model_tier_overrides"
 	SettingClaudeExecutable              = "claude_executable"
 	SettingCodexExecutable               = "codex_executable"
 	SettingCopilotExecutable             = "copilot_executable"
@@ -116,6 +119,9 @@ func (d *Daemon) handleSetSettingWS(client *wsClient, msg *protocol.SetSettingMe
 		return
 	}
 
+	if harness, ok := isAgentExecutableSettingKey(msg.Key); ok {
+		d.invalidateHarnessModels(harness)
+	}
 	if isSessionCostPriceSetting(msg.Key) {
 		d.publishSessionCostReprices()
 	}
@@ -382,18 +388,28 @@ func isAgentExecutableAvailable(configuredExecutable, defaultExecutable string) 
 	return err == nil
 }
 
-func (d *Daemon) chiefLaunchModel(agent string, chief bool) string {
+func (d *Daemon) chiefLaunchModel(ctx context.Context, agent, executable string, chief bool) string {
 	if !chief {
 		return ""
 	}
-	return strings.TrimSpace(d.store.GetSetting(SettingChiefModelPrefix + strings.ToLower(strings.TrimSpace(agent))))
+	explicit := strings.TrimSpace(d.store.GetSetting(SettingChiefModelPrefix + strings.ToLower(strings.TrimSpace(agent))))
+	if agent != "claude" && agent != "codex" {
+		return explicit
+	}
+	return d.resolveTierModel(ctx, agent, executable, modeltiers.Deep, explicit, "")
 }
 
 func (d *Daemon) chiefLaunchEffort(agent string, chief bool) string {
 	if !chief {
 		return ""
 	}
-	return strings.TrimSpace(d.store.GetSetting(SettingChiefEffortPrefix + strings.ToLower(strings.TrimSpace(agent))))
+	if effort := strings.TrimSpace(d.store.GetSetting(SettingChiefEffortPrefix + strings.ToLower(strings.TrimSpace(agent)))); effort != "" {
+		return effort
+	}
+	if agent == "claude" || agent == "codex" {
+		return "low"
+	}
+	return ""
 }
 
 func settingShapesCrewLaunch(key string) bool {
@@ -408,11 +424,11 @@ func (d *Daemon) defaultLaunchEffort(agent string) string {
 	return strings.TrimSpace(d.store.GetSetting(SettingDefaultEffortPrefix + strings.ToLower(strings.TrimSpace(agent))))
 }
 
-func (d *Daemon) resolveLaunchModel(agent string, chief bool, requested string) string {
+func (d *Daemon) resolveLaunchModel(ctx context.Context, agent, executable string, chief bool, requested string) string {
 	if requested != "" {
 		return requested
 	}
-	if model := d.chiefLaunchModel(agent, chief); model != "" {
+	if model := d.chiefLaunchModel(ctx, agent, executable, chief); model != "" {
 		return model
 	}
 	return d.defaultLaunchModel(agent)
@@ -471,6 +487,9 @@ func (d *Daemon) applyHeadlessTasksMode() {
 
 func (d *Daemon) validateSetting(key, value string) error {
 	switch key {
+	case SettingModelTierOverrides:
+		_, err := modeltiers.ParseOverrides(value)
+		return err
 	case SettingProjectsDirectory:
 		return validateProjectsDirectory(value)
 	case SettingUIScale:

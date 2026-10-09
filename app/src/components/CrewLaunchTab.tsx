@@ -3,9 +3,9 @@ import { useEffect, useRef, useState, type InputHTMLAttributes } from 'react';
 import type { CrewLaunchEdit, CrewLaunchSelection, useCrewLaunchAutosave } from '../hooks/useCrewLaunchAutosave';
 import type { CrewRestartAttempt } from '../hooks/useCrewRestart';
 import type { DaemonSession } from '../hooks/useDaemonSocket';
-import { useDelegationModelCatalog } from '../hooks/useDelegationModelCatalog';
-import type { DelegationModelCatalog } from '../hooks/daemonDelegationEvents';
-import type { CrewMember, DelegationHarness } from '../types/generated';
+import { useHarnessModelCatalog } from '../hooks/useHarnessModelCatalog';
+import type { HarnessModelCatalog } from '../hooks/daemonDelegationEvents';
+import type { CrewMember, Harness } from '../types/generated';
 import {
   currentModel,
   launchSaveCopy,
@@ -96,11 +96,11 @@ function RunningNow({ member, running }: { member: CrewMember; running?: DaemonS
 function LaunchFields({ member, selection, harnesses, harness, effectiveAgent, catalogLoading, models, update }: {
   member: CrewMember;
   selection: CrewLaunchSelection;
-  harnesses: DelegationHarness[];
-  harness?: DelegationHarness;
+  harnesses: Harness[];
+  harness?: Harness;
   effectiveAgent: string;
   catalogLoading: boolean;
-  models: ReturnType<typeof useDelegationModelCatalog>;
+  models: ReturnType<typeof useHarnessModelCatalog>;
   update: (next: Partial<CrewLaunchSelection>) => void;
 }) {
   const [manualModel, setManualModel] = useState(false);
@@ -194,14 +194,14 @@ function LaunchFields({ member, selection, harnesses, harness, effectiveAgent, c
 function LaunchCard({ member, edit, harnesses, harness, effectiveAgent, catalogLoading, catalogError, onRetryCatalog, autosave, models }: {
   member: CrewMember;
   edit: CrewLaunchEdit;
-  harnesses: DelegationHarness[];
-  harness?: DelegationHarness;
+  harnesses: Harness[];
+  harness?: Harness;
   effectiveAgent: string;
   catalogLoading: boolean;
   catalogError: string;
   onRetryCatalog: () => void;
   autosave: LaunchAutosave;
-  models: ReturnType<typeof useDelegationModelCatalog>;
+  models: ReturnType<typeof useHarnessModelCatalog>;
 }) {
   const discoveryLabel = models.loading ? 'Discovering models…' : models.catalog ? 'Refresh models' : 'Discover models';
   const warning = catalogError || models.error || (effectiveAgent && !harness?.available ? 'This harness is unavailable on this daemon.' : '');
@@ -278,12 +278,12 @@ export interface CrewLaunchTabProps {
   member: CrewMember;
   edit: CrewLaunchEdit;
   running?: DaemonSession;
-  harnesses: DelegationHarness[];
+  harnesses: Harness[];
   catalogLoading: boolean;
   catalogError: string;
   onRetryCatalog: () => void;
   autosave: LaunchAutosave;
-  loadModels: (harness: string) => Promise<DelegationModelCatalog>;
+  loadModels: (harness: string, refresh?: boolean) => Promise<HarnessModelCatalog>;
   isConnected: boolean;
   restart?: CrewRestartAttempt;
   onRestart: () => void;
@@ -311,7 +311,7 @@ export function CrewLaunchTab({
   const clearingAgent = selection.agent === '' && Boolean(edit.acknowledged.agent);
   const effectiveAgent = clearingAgent ? '' : selection.agent || member.resolved_agent || '';
   const harness = harnesses.find((candidate) => candidate.id === effectiveAgent);
-  const models = useDelegationModelCatalog(harness, loadModels);
+  const models = useHarnessModelCatalog(harness, loadModels);
 
   return (
     <>

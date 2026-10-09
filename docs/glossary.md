@@ -25,6 +25,9 @@ desktop                 one arrangement of tiles; like a macOS Space or a
 terminal                one PTY process in a terminal tile
 └─ runs 1 harness or 1 shell
 harness                 the agent CLI: Claude Code, Codex, pi, Copilot
+model                   the AI model a harness runs
+├─ tier (at most 1)      the intelligence a task needs: light, standard or deep
+└─ effort (at most 1)    how much reasoning the model uses
 agent                   a harness that runs in a terminal; the user talks to
                         them; like a coding agent
 ├─ session (1 at a time)

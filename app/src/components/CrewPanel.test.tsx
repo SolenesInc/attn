@@ -54,14 +54,14 @@ const preferences = (available = harnesses): Reply => ({
   harnesses: available,
 });
 
-const models = (list: Extract<Reply, { event: 'delegation_models_result' }>['models']): Reply => ({ event: 'delegation_models_result', success: true, detail: '', models: list });
+const models = (list: Extract<Reply, { event: 'harness_models_result' }>['models']): Reply => ({ event: 'harness_models_result', tier_defaults: {}, success: true, detail: '', models: list });
 
 const astra = models([
-  { harness: 'codex', provider: 'openai', id: 'gpt-6-astra', name: 'Astra', description: '', detail: '', access: 'supported', effort_support: 'supported', effort_levels: ['medium', 'high'] },
-  { harness: 'codex', provider: 'openai', id: 'retired', name: 'Retired', description: '', detail: '', access: 'unsupported', effort_support: 'unknown', effort_levels: [] },
+  { harness: 'codex', provider: 'openai', id: 'gpt-6-astra', name: 'Astra', description: '', detail: '', access: 'supported', tier_source: 'none', effort_support: 'supported', effort_levels: ['medium', 'high'] },
+  { harness: 'codex', provider: 'openai', id: 'retired', name: 'Retired', description: '', detail: '', access: 'unsupported', tier_source: 'none', effort_support: 'unknown', effort_levels: [] },
 ]);
 
-type CrewCommand = 'crew_set' | 'crew_restart' | 'crew_charter_get' | 'crew_charter_set' | 'crew_handoffs_get' | 'crew_handoff_get' | 'delegation_preferences_get' | 'delegation_models';
+type CrewCommand = 'crew_set' | 'crew_restart' | 'crew_charter_get' | 'crew_charter_set' | 'crew_handoffs_get' | 'crew_handoff_get' | 'delegation_preferences_get' | 'harness_models';
 type Script = Partial<Record<CrewCommand, Answer[]>>;
 
 const defaults: Record<CrewCommand, Answer[]> = {
@@ -72,7 +72,7 @@ const defaults: Record<CrewCommand, Answer[]> = {
   crew_handoffs_get: [handoffs('trellis', [])],
   crew_handoff_get: [handoffRefused('no handoff body in this fixture')],
   delegation_preferences_get: [preferences()],
-  delegation_models: [astra],
+  harness_models: [astra],
 };
 
 const panel = () => within(screen.getByTestId('crew-panel'));
@@ -187,7 +187,7 @@ describe('CrewPanel', () => {
     expect(panel().getByText('Acknowledged next wake').parentElement).toHaveTextContent('codex / gpt-6-astra / high');
     expect(panel().getByLabelText('Harness')).toHaveValue('codex');
     expect(panel().getByRole('option', { name: 'openai / Astra' })).toBeInTheDocument();
-    expect(daemon.sentOf('delegation_models').map((command) => command.harness)).toEqual(['codex']);
+    expect(daemon.sentOf('harness_models').map((command) => command.harness)).toEqual(['codex']);
     expect(daemon.sentOf('delegation_preferences_get')).toHaveLength(1);
   });
 
@@ -535,9 +535,9 @@ describe('CrewPanel', () => {
     const { daemon } = await renderPanel({
       script: {
         crew_set: [saved({ member: member('keel', 6, { agent: 'codex', model: 'second/shared', resolved_agent: 'codex', resolved_model: 'second/shared' }) })],
-        delegation_models: [models([
-          { harness: 'codex', provider: 'first', id: 'shared', name: 'Shared one', description: '', detail: '', access: 'supported', effort_support: 'supported', effort_levels: ['low'] },
-          { harness: 'codex', provider: 'second', id: 'shared', name: 'Shared two', description: '', detail: '', access: 'supported', effort_support: 'supported', effort_levels: ['high'] },
+        harness_models: [models([
+          { harness: 'codex', provider: 'first', id: 'shared', name: 'Shared one', description: '', detail: '', access: 'supported', tier_source: 'none', effort_support: 'supported', effort_levels: ['low'] },
+          { harness: 'codex', provider: 'second', id: 'shared', name: 'Shared two', description: '', detail: '', access: 'supported', tier_source: 'none', effort_support: 'supported', effort_levels: ['high'] },
         ])],
       },
       members: [member('keel', 5, { agent: 'codex', resolved_agent: 'codex' })],
@@ -559,8 +559,8 @@ describe('CrewPanel', () => {
           saved({ success: false, conflict: true, error: 'revision conflict', member: member('keel', 6, { agent: 'codex', effort: 'high', resolved_agent: 'codex', resolved_effort: 'high' }) }),
           HOLD,
         ],
-        delegation_models: [models([
-          { harness: 'codex', provider: 'local', id: 'fixed', name: 'Fixed', description: '', detail: '', access: 'supported', effort_support: 'unsupported', effort_levels: [] },
+        harness_models: [models([
+          { harness: 'codex', provider: 'local', id: 'fixed', name: 'Fixed', description: '', detail: '', access: 'supported', tier_source: 'none', effort_support: 'unsupported', effort_levels: [] },
         ])],
       },
       members: [member('keel', 5, { agent: 'codex', resolved_agent: 'codex' })],

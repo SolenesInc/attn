@@ -15,9 +15,10 @@ type ClaudeModel struct {
 }
 
 var ClaudeModels = []ClaudeModel{
-	{Value: "claude-fake-opus", SupportsEffort: true, SupportedEffortLevels: []string{"low", "medium", "high", "max"}},
-	{Value: "claude-fake-sonnet", SupportsEffort: true, SupportedEffortLevels: []string{"medium", "high"}},
-	{Value: "claude-fake-haiku"},
+	{Value: "default", SupportsEffort: true, SupportedEffortLevels: []string{"low", "medium", "high", "max"}},
+	{Value: "claude-opus-fake", SupportsEffort: true, SupportedEffortLevels: []string{"low", "medium", "high", "max"}},
+	{Value: "claude-sonnet-fake", SupportsEffort: true, SupportedEffortLevels: []string{"medium", "high"}},
+	{Value: "claude-haiku-fake"},
 }
 
 func claudeModelDiscovery() int {
@@ -41,4 +42,39 @@ func claudeModelDiscovery() int {
 	}
 	_, _ = io.Copy(io.Discard, os.Stdin)
 	return 0
+}
+
+func codexModelDiscovery() int {
+	decoder := json.NewDecoder(os.Stdin)
+	encoder := json.NewEncoder(os.Stdout)
+	for {
+		var request struct {
+			ID     *int   `json:"id"`
+			Method string `json:"method"`
+		}
+		if err := decoder.Decode(&request); err != nil {
+			if err == io.EOF {
+				return 0
+			}
+			return 1
+		}
+		if request.ID == nil {
+			continue
+		}
+		var result any = map[string]any{}
+		if request.Method == "model/list" {
+			models := []any{}
+			for _, id := range []string{"gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"} {
+				efforts := []any{}
+				for _, effort := range []string{"low", "medium", "high", "xhigh", "max", "ultra"} {
+					efforts = append(efforts, map[string]string{"reasoningEffort": effort})
+				}
+				models = append(models, map[string]any{"id": id, "model": id, "displayName": id, "supportedReasoningEfforts": efforts})
+			}
+			result = map[string]any{"data": models, "nextCursor": nil}
+		}
+		if err := encoder.Encode(map[string]any{"id": *request.ID, "result": result}); err != nil {
+			return 1
+		}
+	}
 }

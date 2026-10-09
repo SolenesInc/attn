@@ -8,15 +8,8 @@ export interface GardenAdvisorConfig {
   effort: string;
 }
 
-const DEFAULTS: Record<string, GardenAdvisorConfig> = {
-  codex: { agent: 'codex', model: 'gpt-5.6-luna', effort: 'xhigh' },
-  claude: { agent: 'claude', model: 'sonnet', effort: 'medium' },
-  copilot: { agent: 'copilot', model: 'claude-sonnet-4.6', effort: '' },
-};
-
 export function defaultGardenAdvisorConfig(agent: SessionAgent = 'codex'): GardenAdvisorConfig {
-  const defaults = DEFAULTS[agent] ?? DEFAULTS.codex;
-  return { ...defaults };
+  return { agent: ['codex', 'claude', 'copilot'].includes(agent) ? agent : 'codex', model: '', effort: '' };
 }
 
 export function parseGardenAdvisorSetting(raw: string | undefined): GardenAdvisorConfig {
@@ -28,9 +21,7 @@ export function parseGardenAdvisorSetting(raw: string | undefined): GardenAdviso
     return {
       agent: defaults.agent,
       model: parsed.model?.trim() || defaults.model,
-      effort: defaults.agent === 'copilot'
-        ? ''
-        : parsed.effort?.trim().toLowerCase() || defaults.effort,
+      effort: parsed.effort?.trim() || '',
     };
   } catch {
     return defaultGardenAdvisorConfig();

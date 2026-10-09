@@ -109,7 +109,7 @@ try {
   await runner.step('background_agents_autosave_valid_recipes', async () => {
     await section('backgroundAgents');
     runner.assert(!/^Save$/m.test(await text('[data-testid="settings-section-backgroundAgents"]')), 'background agents have no Save button');
-    await saved('garden.advisor', '{"agent":"claude","model":"sonnet","effort":"medium"}', () => select('#settings-garden-advisor-agent', 'claude'));
+    await saved('garden.advisor', '{"agent":"claude","model":""}', () => select('#settings-garden-advisor-agent', 'claude'));
     await saved('activity.config', '{"agent":"claude"}', () => select('#settings-activity-agent', 'claude'));
     await type('#settings-chief-model-claude', 'sonnet');
     await saved('chief_model_claude', 'sonnet', () => section('agents'));

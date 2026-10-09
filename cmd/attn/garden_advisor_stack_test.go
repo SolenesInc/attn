@@ -34,8 +34,8 @@ func TestGardenAdviceInterruptedByACrashResumesWithTheReviewsFrozenRecipe(t *tes
 	setSetting(t, app, "garden.advisor", `{"agent":"codex","model":"later","effort":"low"}`)
 	answer := func(task *fakeagent.HeadlessTask) {
 		t.Helper()
-		if task.Harness != fakeagent.Claude || task.Model != "sonnet" || task.Effort != "medium" {
-			t.Errorf("advice uses %s %q at %q; want the frozen Claude sonnet at medium", task.Harness, task.Model, task.Effort)
+		if task.Harness != fakeagent.Claude || task.Model != "claude-haiku-fake" || task.Effort != "medium" {
+			t.Errorf("advice uses %s %q at %q; want the frozen Claude light default at medium", task.Harness, task.Model, task.Effort)
 		}
 		task.Answer(`{"recommendation":"keep_growing","explanation":"Checkout work remains.","evidence":["The discount field is unfinished."]}`)
 	}

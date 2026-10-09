@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useEffectEvent, useState } from 'react';
-import type { DelegationChoice, DelegationPreferences, DelegationRole, DelegationSelection, DelegationHarness } from '../types/generated';
-import type { DelegationModelCatalog } from '../hooks/daemonDelegationEvents';
+import type { DelegationChoice, DelegationPreferences, DelegationRole, DelegationSelection, Harness } from '../types/generated';
+import type { HarnessModelCatalog } from '../hooks/daemonDelegationEvents';
 import type { DelegationPreferencesPolicy } from '../hooks/useDelegationPreferences';
-import { knownModelName } from '../hooks/useDelegationModelCatalog';
+import { knownModelName } from '../hooks/useHarnessModelCatalog';
 import { DelegationRoleIcon } from './DelegationRoleIcon';
-import { DelegationModelPopover, type Anchor } from './DelegationModelPopover';
+import { HarnessModelPopover, type Anchor } from './HarnessModelPopover';
 import { FALLBACK, adoptMaintainedRoles, adoptionConflicts, alternatives, complete, defaultChoice, emptySelection, firstLine, freshAdoption, liveRoles, missingTemplates, newID, roleLabel, roleViewer, selectionAt } from './delegationRoles';
 import './DelegationSettings.css';
 
@@ -53,7 +53,7 @@ export function DelegationSwitch({ policy }: { policy: DelegationPreferencesPoli
   </button>;
 }
 
-function ModelCell({ selection, harnesses, label, open, onOpen }: { selection: DelegationSelection; harnesses: DelegationHarness[]; label: string; open: boolean; onOpen: (anchor: Anchor) => void }) {
+function ModelCell({ selection, harnesses, label, open, onOpen }: { selection: DelegationSelection; harnesses: Harness[]; label: string; open: boolean; onOpen: (anchor: Anchor) => void }) {
   const harness = harnesses.find(h => h.id === selection.harness);
   let className = 'delegation-model';
   let body: React.ReactNode;
@@ -102,7 +102,7 @@ function RoleEditor({ role, onUpdate }: { role: DelegationRole; onUpdate: (role:
 
 function AlternativeRow({ alt, harnesses, open, popoverOpen, onToggle, onOpenPopover, onUpdate, onMakeDefault, onRemove }: {
   alt: DelegationChoice;
-  harnesses: DelegationHarness[];
+  harnesses: Harness[];
   open: boolean;
   popoverOpen: boolean;
   onToggle: () => void;
@@ -134,7 +134,7 @@ function AlternativeRow({ alt, harnesses, open, popoverOpen, onToggle, onOpenPop
 type RoleRowProps = {
   role: DelegationRole;
   view: DelegationRole;
-  harnesses: DelegationHarness[];
+  harnesses: Harness[];
   open: boolean;
   expandedAlt: string | null;
   popoverKey: string | null;
@@ -197,7 +197,7 @@ function RoleRow({ role, view: v, harnesses, open, expandedAlt, popoverKey, onTo
 
 function FallbackRow({ fallback, harnesses, open, popoverOpen, onToggle, onOpenPopover, onChange }: {
   fallback: DelegationPreferences['fallback'];
-  harnesses: DelegationHarness[];
+  harnesses: Harness[];
   open: boolean;
   popoverOpen: boolean;
   onToggle: () => void;
@@ -283,7 +283,7 @@ function AdoptionPanel({ config, templates, names, adoption, onChange, onCancel,
   </section>;
 }
 
-export function DelegationSettings({ policy, loadModels }: { policy: DelegationPreferencesPolicy; loadModels: (harness: string) => Promise<DelegationModelCatalog> }) {
+export function DelegationSettings({ policy, loadModels }: { policy: DelegationPreferencesPolicy; loadModels: (harness: string, refresh?: boolean) => Promise<HarnessModelCatalog> }) {
   const { state, preferences: config, error, generation, reload, save } = policy;
   const [adoption, setAdoption] = useState<Record<string, string> | null>(null);
   const { undo, remember, forget } = useUndo(generation);
@@ -348,6 +348,6 @@ export function DelegationSettings({ policy, loadModels }: { policy: DelegationP
     {adoption && <AdoptionPanel config={config} templates={missing} names={templateName} adoption={adoption} onChange={setAdoption} onCancel={() => setAdoption(null)} onConfirm={confirmAdoption} />}
     {undo && <div role="status" className="delegation-undo"><span>{undo.label}.</span><button type="button" className="settings-action quiet" onClick={() => { void save(undo.previous); forget(); }}>Undo</button></div>}
     {config.roles.length > 0 && <TableFoot config={config} />}
-    {picker.popover && target && <DelegationModelPopover value={target.value} harnesses={state.harnesses} anchor={picker.popover.anchor} onChange={selection => commit(target.with(selection))} onClose={picker.close} loadModels={loadModels} />}
+    {picker.popover && target && <HarnessModelPopover value={target.value} harnesses={state.harnesses} anchor={picker.popover.anchor} onChange={selection => commit(target.with(selection))} onClose={picker.close} loadModels={loadModels} />}
   </div>;
 }

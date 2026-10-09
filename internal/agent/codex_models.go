@@ -11,7 +11,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (c *Codex) DiscoverDelegationModels(ctx context.Context, executable, cwd string) ([]protocol.DelegationModel, error) {
+func (c *Codex) DiscoverHarnessModels(ctx context.Context, executable, cwd string) ([]protocol.HarnessModel, error) {
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, c.ResolveExecutable(executable), "app-server")
@@ -40,7 +40,7 @@ func (c *Codex) DiscoverDelegationModels(ctx context.Context, executable, cwd st
 	return result, err
 }
 
-func readCodexModels(stdout io.Reader, stdin io.Writer) ([]protocol.DelegationModel, error) {
+func readCodexModels(stdout io.Reader, stdin io.Writer) ([]protocol.HarnessModel, error) {
 	encoder, decoder := json.NewEncoder(stdin), json.NewDecoder(stdout)
 	call := func(id int, method string, params any, out any) error {
 		if err := encoder.Encode(map[string]any{"id": id, "method": method, "params": params}); err != nil {
@@ -75,7 +75,7 @@ func readCodexModels(stdout io.Reader, stdin io.Writer) ([]protocol.DelegationMo
 	if err := encoder.Encode(map[string]string{"method": "initialized"}); err != nil {
 		return nil, err
 	}
-	result := []protocol.DelegationModel{}
+	result := []protocol.HarnessModel{}
 	cursor := ""
 	seen := map[string]bool{}
 	for id := 2; ; id++ {
@@ -122,7 +122,7 @@ func readCodexModels(stdout io.Reader, stdin io.Writer) ([]protocol.DelegationMo
 					support = protocol.ModelCapabilitySupportSupported
 				}
 			}
-			result = append(result, protocol.DelegationModel{Harness: "codex", ID: modelID, Name: m.DisplayName, Description: m.Description, EffortSupport: support, EffortLevels: levels, Access: protocol.ModelCapabilitySupportUnknown})
+			result = append(result, protocol.HarnessModel{Harness: "codex", ID: modelID, Name: m.DisplayName, Description: m.Description, EffortSupport: support, EffortLevels: levels, Access: protocol.ModelCapabilitySupportUnknown})
 		}
 		if page.NextCursor == nil || *page.NextCursor == "" {
 			break

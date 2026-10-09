@@ -48,7 +48,7 @@ func parsePreflightArgs(args []string, getenv func(string) string) (preflight.Op
 	effortDefault, effortSource := environmentDefault(getenv, "ATTN_EFFORT", "")
 	agent := fs.String("agent", agentDefault, "agent launch to check")
 	model := fs.String("model", modelDefault, "model pin to check")
-	effort := fs.String("effort", effortDefault, "reasoning effort pin to check")
+	effort := fs.String("effort", effortDefault, "effort pin to check; the harness reports its levels in Settings")
 	appPath := fs.String("app-path", "", "packaged app whose bundled CLI/protocol should be checked")
 	jsonOutput := fs.Bool("json", false, "emit the stable JSON report")
 	help := fs.Bool("help", false, "show help")
@@ -134,7 +134,8 @@ when a required tool, writable path, route, daemon, or protocol check fails.
 options:
   --agent <name>   agent launch to check (ATTN_AGENT, then codex)
   --model <name>   model pin to check (ATTN_MODEL, then agent default)
-  --effort <level> effort pin to check (ATTN_EFFORT, then agent default)
+  --effort <level> effort pin to check (ATTN_EFFORT, then harness default)
+                  the harness reports its levels in Settings
   --app-path <path> packaged app to check (defaults to the selected instance app)
   --json           emit the stable machine-readable report
 `)

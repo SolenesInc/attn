@@ -7,7 +7,7 @@ import type { Reply, ScriptedDaemon } from './test/scriptedDaemon';
 
 type Selection = Role['choices'][number]['selection'];
 type Harness = NonNullable<EventMessage<'delegation_preferences_result'>['harnesses']>[number];
-type Model = NonNullable<EventMessage<'delegation_models_result'>['models']>[number];
+type Model = NonNullable<EventMessage<'harness_models_result'>['models']>[number];
 
 const harnesses: Harness[] = [
   { id: 'claude', name: 'Claude Code', available: true, model_pin: true, effort_pin: true, discovery: true },
@@ -18,16 +18,16 @@ const harnesses: Harness[] = [
 ];
 
 function model(id: string, name: string, overrides: Partial<Model> = {}): Model {
-  return { harness: 'claude', provider: '', id, name, description: '', detail: '', effort_support: 'supported', effort_levels: [], access: 'unknown', ...overrides };
+  return { harness: 'claude', provider: '', id, name, description: '', detail: '', tier_source: 'none', effort_support: 'supported', effort_levels: [], access: 'unknown', ...overrides };
 }
 
 const claudeModels = [
   model('opus', 'Opus', { description: 'Deep work', effort_levels: ['medium', 'high'] }),
-  model('haiku', 'Haiku', { effort_support: 'unsupported' }),
+  model('haiku', 'Haiku', { tier_source: 'none', effort_support: 'unsupported' }),
   model('sonnet', 'Sonnet'),
 ];
 
-const catalog = (): Reply => ({ event: 'delegation_models_result', success: true, models: claudeModels, detail: 'Reported by Claude Code' });
+const catalog = (): Reply => ({ event: 'harness_models_result', tier_defaults: {}, success: true, models: claudeModels, detail: 'Reported by Claude Code' });
 
 function role(selection: Partial<Selection> = {}): Role {
   return {
@@ -44,15 +44,15 @@ function role(selection: Partial<Selection> = {}): Role {
 }
 
 interface Discovery {
-  held: CommandMessage<'delegation_models'>[];
+  held: CommandMessage<'harness_models'>[];
   release(reply?: Reply): Promise<void>;
 }
 
 async function openPicker(selection: Partial<Selection> = {}, { holdDiscovery = false } = {}) {
   const settings = await openDelegationSettings({ roles: [role(selection)], harnesses });
   const { daemon } = settings;
-  const held: CommandMessage<'delegation_models'>[] = [];
-  daemon.on('delegation_models', (request) => (holdDiscovery ? void held.push(request) : catalog()));
+  const held: CommandMessage<'harness_models'>[] = [];
+  daemon.on('harness_models', (request) => (holdDiscovery ? void held.push(request) : catalog()));
   const discovery: Discovery = {
     held,
     release: (reply = catalog()) => gesture(daemon, () => {
@@ -66,7 +66,7 @@ async function openPicker(selection: Partial<Selection> = {}, { holdDiscovery = 
 const opener = () => screen.getByRole('button', { name: 'Model for Build' });
 const picker = () => screen.queryByRole('dialog', { name: 'Choose a model' });
 const inPicker = () => within(picker()!);
-const discoveries = (daemon: ScriptedDaemon) => daemon.sentOf('delegation_models').map((request) => request.harness);
+const discoveries = (daemon: ScriptedDaemon) => daemon.sentOf('harness_models').map((request) => request.harness);
 
 async function openPopover(daemon: ScriptedDaemon) {
   opener().focus();
@@ -159,7 +159,7 @@ describe('App delegation settings', () => {
 
   it('says a harness has no models to report apart from failing to discover them', async () => {
     const empty = await openPicker({ harness: 'claude' }, { holdDiscovery: true });
-    await empty.discovery.release({ event: 'delegation_models_result', success: true, models: [], detail: 'No discovery API' });
+    await empty.discovery.release({ event: 'harness_models_result', tier_defaults: {}, success: true, models: [], detail: 'No discovery API' });
     expect(inPicker().getByText('No discovery API')).toBeInTheDocument();
     expect(inPicker().queryByRole('alert')).toBeNull();
   });
@@ -167,7 +167,7 @@ describe('App delegation settings', () => {
   it('shows why discovery failed', async () => {
     const failed = await openPicker({ harness: 'claude' }, { holdDiscovery: true });
 
-    await failed.discovery.release({ event: 'delegation_models_result', success: false, error: 'Harness unavailable', models: [], detail: '' });
+    await failed.discovery.release({ event: 'harness_models_result', tier_defaults: {}, success: false, error: 'Harness unavailable', models: [], detail: '' });
 
     expect(inPicker().getByRole('alert')).toHaveTextContent('Harness unavailable');
   });

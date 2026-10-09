@@ -156,7 +156,7 @@ func (d *Daemon) resolveDelegationAgent(sourceAgent string, requested *string) (
 	return driver.Name(), nil
 }
 
-func (d *Daemon) validateDelegationModelEffort(agent, model, effort string) error {
+func (d *Daemon) validateHarnessModelEffort(agent, model, effort string) error {
 	if model == "" && effort == "" {
 		return nil
 	}
@@ -537,7 +537,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 	}
 	model := strings.TrimSpace(protocol.Deref(msg.Model))
 	effort := strings.TrimSpace(strings.ToLower(protocol.Deref(msg.Effort)))
-	if err := d.validateDelegationModelEffort(agent, model, effort); err != nil {
+	if err := d.validateHarnessModelEffort(agent, model, effort); err != nil {
 		return nil, err
 	}
 	if resolved == nil && msg.Effort == nil {

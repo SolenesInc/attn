@@ -230,7 +230,7 @@ func (d *Daemon) normalizeSpawnRequest(req *spawnRequest) *spawnRejection {
 	return nil
 }
 
-func (d *Daemon) resolveSpawnIntent(req *spawnRequest) (*spawnPlan, *spawnRejection) {
+func (d *Daemon) resolveSpawnIntent(ctx context.Context, req *spawnRequest) (*spawnPlan, *spawnRejection) {
 	msg := req.msg
 	if !req.hasPluginDriver && protocol.Deref(msg.ResumePicker) && req.resumeSessionID != "" &&
 		!d.conversationReady(req.driver, req.resumeSessionID) {
@@ -278,7 +278,11 @@ func (d *Daemon) resolveSpawnIntent(req *spawnRequest) (*spawnPlan, *spawnReject
 	}
 	plan.chiefAssigned = d.maybeAssignChiefOnSpawn(msg.ID, req.agent, req.profile.ID, requestedChief, req.existingSession)
 	plan.isChief = d.chiefOfProfile(req.profile.ID) == msg.ID
-	plan.spawnOpts.Model = d.resolveLaunchModel(req.agent, plan.isChief, plan.spawnOpts.Model)
+	plan.spawnOpts.Model = d.resolveLaunchModel(ctx, req.agent, configuredExecutable, plan.isChief, plan.spawnOpts.Model)
+	if err := ctx.Err(); err != nil {
+		plan.rollback(d, msg.ID)
+		return nil, &spawnRejection{err: fmt.Errorf("resolve launch model: %w", err)}
+	}
 	plan.spawnOpts.Effort = d.resolveLaunchEffort(req.agent, plan.isChief, plan.spawnOpts.Effort)
 	if launch := req.policy.unattendedLaunch; !launch.IsZero() {
 		if err := launch.Validate(); err != nil {
@@ -660,16 +664,20 @@ func (d *Daemon) runSpawnPipeline(msg *protocol.SpawnSessionMessage, policy inte
 }
 
 func (d *Daemon) runSpawnPipelineReporting(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) (placementOutcome, *spawnRejection) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	var placed placementOutcome
 	var rejection *spawnRejection
-	_ = d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
+	_ = d.worktreeMaintenance.ProtectFromAutomaticCleanup(ctx, func(protection foregroundCleanupProtection) error {
 		placed, rejection = d.runSpawnPipelineProtected(protection, msg, policy)
 		return nil
 	})
 	return placed, rejection
 }
 
-func (d *Daemon) runSpawnPipelineProtected(_ foregroundCleanupProtection, msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) (placementOutcome, *spawnRejection) {
+func (d *Daemon) runSpawnPipelineProtected(protection foregroundCleanupProtection, msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) (placementOutcome, *spawnRejection) {
+	ctx, cancel := context.WithTimeout(protection.Context(), 30*time.Second)
+	defer cancel()
 	req, rejection := d.validateSpawnPrelock(msg, policy)
 	if rejection != nil {
 		return placementOutcome{}, rejection
@@ -677,10 +685,13 @@ func (d *Daemon) runSpawnPipelineProtected(_ foregroundCleanupProtection, msg *p
 	releaseSpawnLock := d.acquireSpawnLock(msg.ID)
 	defer releaseSpawnLock()
 
+	if err := ctx.Err(); err != nil {
+		return placementOutcome{}, &spawnRejection{err: fmt.Errorf("prepare session launch: %w", err)}
+	}
 	if rejection := d.normalizeSpawnRequest(req); rejection != nil {
 		return placementOutcome{}, rejection
 	}
-	plan, rejection := d.resolveSpawnIntent(req)
+	plan, rejection := d.resolveSpawnIntent(ctx, req)
 	if rejection != nil {
 		return placementOutcome{}, rejection
 	}

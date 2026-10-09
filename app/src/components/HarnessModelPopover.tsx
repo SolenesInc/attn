@@ -1,18 +1,18 @@
 import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { DelegationHarness, DelegationModel, DelegationSelection } from '../types/generated';
-import type { DelegationModelCatalog } from '../hooks/daemonDelegationEvents';
-import { useDelegationModelCatalog } from '../hooks/useDelegationModelCatalog';
+import type { Harness, HarnessModel, DelegationSelection } from '../types/generated';
+import type { HarnessModelCatalog } from '../hooks/daemonDelegationEvents';
+import { useHarnessModelCatalog } from '../hooks/useHarnessModelCatalog';
 import { useEscapeStack } from '../hooks/useEscapeStack';
-import './DelegationModelPopover.css';
+import './HarnessModelPopover.css';
 
 export type Anchor = Element;
 
 const VIEWPORT_MARGIN = 16;
 // Built-in harnesses run their configured provider; a plugin harness takes provider/model.
-const isPluginHarness = (harness: DelegationHarness) => !['claude', 'codex', 'copilot'].includes(harness.id);
+const isPluginHarness = (harness: Harness) => !['claude', 'codex', 'copilot'].includes(harness.id);
 
-function HarnessList({ harnesses, value, onPick, onClear }: { harnesses: DelegationHarness[]; value: string; onPick: (harness: DelegationHarness) => void; onClear: () => void }) {
+function HarnessList({ harnesses, value, onPick, onClear }: { harnesses: Harness[]; value: string; onPick: (harness: Harness) => void; onClear: () => void }) {
   const known = harnesses.some(h => h.id === value);
   return <div className="delegation-pop-harnesses" role="listbox" aria-label="Harness">
     <div className="delegation-pop-kicker">Harness</div>
@@ -25,7 +25,7 @@ function HarnessList({ harnesses, value, onPick, onClear }: { harnesses: Delegat
   </div>;
 }
 
-function ModelList({ harness, catalog, loading, value, selected, onPick }: { harness: DelegationHarness; catalog: DelegationModelCatalog | undefined; loading: boolean; value: DelegationSelection; selected: DelegationModel | undefined; onPick: (model: DelegationModel | null) => void }) {
+function ModelList({ harness, catalog, loading, value, selected, onPick }: { harness: Harness; catalog: HarnessModelCatalog | undefined; loading: boolean; value: DelegationSelection; selected: HarnessModel | undefined; onPick: (model: HarnessModel | null) => void }) {
   const entered = value.model && !selected && !loading;
   return <div role="listbox" aria-label="Model" className="delegation-pop-list">
     <button type="button" role="option" className="delegation-pop-model default" data-model="" aria-selected={value.model === ''} onClick={() => onPick(null)}>
@@ -68,7 +68,7 @@ function ManualEntry({ withProvider, onSubmit }: { withProvider: boolean; onSubm
   </form>;
 }
 
-function footText(harness: DelegationHarness | undefined, loading: boolean, catalog: DelegationModelCatalog | undefined) {
+function footText(harness: Harness | undefined, loading: boolean, catalog: HarnessModelCatalog | undefined) {
   if (!harness) return '';
   if (!harness.model_pin) return 'Choosing this harness saves it as the route.';
   if (loading) return `Asking ${harness.name} which models it knows…`;
@@ -77,9 +77,9 @@ function footText(harness: DelegationHarness | undefined, loading: boolean, cata
 }
 
 function ModelsPane({ harness, value, catalog, loading, error, manual, discover, onChange, onDone }: {
-  harness: DelegationHarness;
+  harness: Harness;
   value: DelegationSelection;
-  catalog: DelegationModelCatalog | undefined;
+  catalog: HarnessModelCatalog | undefined;
   loading: boolean;
   error: string;
   manual: boolean;
@@ -89,7 +89,7 @@ function ModelsPane({ harness, value, catalog, loading, error, manual, discover,
 }) {
   const selected = catalog?.models.find(m => m.id === value.model && m.provider === value.provider);
   const showEffort = harness.effort_pin && !loading && selected?.effort_support !== 'unsupported';
-  const pickModel = (model: DelegationModel | null) => {
+  const pickModel = (model: HarnessModel | null) => {
     onDone();
     if (!model) { onChange({ ...value, provider: '', model: '', effort: '' }); return; }
     const effort = model.effort_levels.includes(value.effort) ? value.effort : '';
@@ -104,16 +104,16 @@ function ModelsPane({ harness, value, catalog, loading, error, manual, discover,
   </>;
 }
 
-export function DelegationModelPopover({ value, harnesses, anchor, onChange, onClose, loadModels }: {
+export function HarnessModelPopover({ value, harnesses, anchor, onChange, onClose, loadModels }: {
   value: DelegationSelection;
-  harnesses: DelegationHarness[];
+  harnesses: Harness[];
   anchor: Anchor;
   onChange: (selection: DelegationSelection) => void;
   onClose: () => void;
-  loadModels: (harness: string) => Promise<DelegationModelCatalog>;
+  loadModels: (harness: string, refresh?: boolean) => Promise<HarnessModelCatalog>;
 }) {
   const harness = harnesses.find(h => h.id === value.harness);
-  const { catalog, loading, error, discover } = useDelegationModelCatalog(harness, loadModels);
+  const { catalog, loading, error, discover } = useHarnessModelCatalog(harness, loadModels);
   const [manual, setManual] = useState(false);
   const containerRef = useRef<HTMLDialogElement>(null);
   const [position, setPosition] = useState(() => ({ top: anchor.getBoundingClientRect().bottom + 6, left: anchor.getBoundingClientRect().left }));
@@ -166,7 +166,7 @@ export function DelegationModelPopover({ value, harnesses, anchor, onChange, onC
     return () => { window.clearTimeout(id); document.removeEventListener('mousedown', onMouseDown); };
   }, []);
 
-  const pickHarness = (next: DelegationHarness) => {
+  const pickHarness = (next: Harness) => {
     if (next.id === value.harness) return;
     setManual(false);
     onChange({ harness: next.id, provider: '', model: '', effort: '' });

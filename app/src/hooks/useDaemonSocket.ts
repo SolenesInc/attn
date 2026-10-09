@@ -2,7 +2,7 @@ import { PROTOCOL_VERSION } from '../types/protocolVersion';
 export { PROTOCOL_VERSION } from '../types/protocolVersion';
 import { handleCommandUsageEvent } from './daemonCommandUsageEvents';
 import { handleLaunchDesktopEvent } from './daemonLaunchDesktopEvents';
-import { handleDelegationDaemonEvent, type DelegationSettingsState, type DelegationModelCatalog } from './daemonDelegationEvents';
+import { handleDelegationDaemonEvent, type DelegationSettingsState, type HarnessModelCatalog } from './daemonDelegationEvents';
 import {
   handleCrewDaemonEvent,
   type CrewCharterGetOutcome,
@@ -2652,7 +2652,7 @@ export function useDaemonSocket({
       ...(args.claude_executable && { claude_executable: args.claude_executable }),
       ...(args.codex_executable && { codex_executable: args.codex_executable }),
       ...(args.copilot_executable && { copilot_executable: args.copilot_executable }),
-    }, 'Spawn session timed out', 30000);
+    }, 'Spawn session timed out', args.chief_of_staff ? MODEL_DISCOVERY_TIMEOUT_MS : 30000);
   }, [sendKeyedRequest]);
 
   const sendReloadSession = useCallback((id: string, cols: number, rows: number): Promise<void> => {
@@ -2854,8 +2854,8 @@ export function useDaemonSocket({
     sendRequest('delegation_preferences_get', {}, 'Reading delegation preferences timed out'), [sendRequest]);
   const sendDelegationPreferencesSave = useCallback((preferences: DelegationPreferences, installWorkflowSkill = false): Promise<DelegationSettingsState> =>
     sendRequest('delegation_preferences_save', { preferences, ...(installWorkflowSkill ? { install_workflow_skill: true } : {}) }, 'Saving delegation preferences timed out'), [sendRequest]);
-  const sendDelegationModels = useCallback((harness: string): Promise<DelegationModelCatalog> =>
-    sendRequest('delegation_models', { harness }, 'Discovering models timed out', MODEL_DISCOVERY_TIMEOUT_MS), [sendRequest]);
+  const sendHarnessModels = useCallback((harness: string, refresh = false): Promise<HarnessModelCatalog> =>
+    sendRequest('harness_models', { harness, ...(refresh ? { refresh: true } : {}) }, 'Discovering models timed out', MODEL_DISCOVERY_TIMEOUT_MS), [sendRequest]);
 
   const sendAutoModeGet = useCallback((): Promise<AutoModeState> => {
     return sendRequest<AutoModeState>(
@@ -3887,7 +3887,7 @@ export function useDaemonSocket({
   ), [sendRequest]);
 
   const sendSeedReviewStart = useCallback((): Promise<SeedReviewOverview> => (
-    sendRequest<SeedReviewOverview>('seed_review_start', {}, 'Starting Garden review timed out')
+    sendRequest<SeedReviewOverview>('seed_review_start', {}, 'Starting Garden review timed out', MODEL_DISCOVERY_TIMEOUT_MS)
   ), [sendRequest]);
 
   const sendSeedReviewRetry = useCallback((reviewId: string, seedId: string): Promise<SeedReviewOverview> => (
@@ -4980,7 +4980,7 @@ export function useDaemonSocket({
     sendSupportSnapshot,
     sendDelegationPreferencesGet,
     sendDelegationPreferencesSave,
-    sendDelegationModels,
+    sendHarnessModels,
     sendAutoModeGet,
     sendAutoModePromote,
     sendAutoModeDiscard,

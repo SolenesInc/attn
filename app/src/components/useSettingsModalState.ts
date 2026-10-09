@@ -82,7 +82,7 @@ export function useSettingsModalState({
   const {
     sendDelegationPreferencesGet,
     sendDelegationPreferencesSave,
-    sendDelegationModels,
+    sendHarnessModels,
     sendGetSettings,
     sendBusStatusGet,
     sendBusSetConsumerEnabled,
@@ -845,7 +845,7 @@ export function useSettingsModalState({
     taskChangeSignal,
     sendBusStatusGet,
     sendBusSetConsumerEnabled,
-    sendDelegationModels,
+    sendHarnessModels,
     closeSettings,
     settingsSearch,
     setSettingsSearch,

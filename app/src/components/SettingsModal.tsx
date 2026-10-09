@@ -151,7 +151,7 @@ function SettingsModalContent(props: SettingsModalProps & { closeRef: ForwardedR
 }
 
 function SelectedSection({ state }: { state: SettingsModalState }) {
-  const { selectedSection, delegationPolicy, sendDelegationModels, autoModePolicy } = state;
+  const { selectedSection, delegationPolicy, sendHarnessModels, autoModePolicy } = state;
 
   switch (selectedSection) {
     case 'general':
@@ -293,7 +293,7 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
         />
       );
     case 'delegation':
-      return <DelegationSettings policy={delegationPolicy} loadModels={sendDelegationModels} />;
+      return <DelegationSettings policy={delegationPolicy} loadModels={sendHarnessModels} />;
     case 'workflows':
       return (
         <WorkflowsSettings
@@ -302,7 +302,7 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
         />
       );
     case 'autoMode':
-      return <AutoModeSettings policy={autoModePolicy} loadModels={sendDelegationModels} />;
+      return <AutoModeSettings policy={autoModePolicy} loadModels={sendHarnessModels} />;
     case 'connectivity':
     default:
       return (

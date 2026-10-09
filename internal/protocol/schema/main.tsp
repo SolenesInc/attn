@@ -957,7 +957,16 @@ enum ModelCapabilitySupport {
   capability_unknown: "unknown",
 }
 
-model DelegationModel {
+enum ModelTier { light, standard, deep }
+enum ModelTierSource { shipped, override, alias_source: "alias", none }
+
+model TierDefaults {
+  light?: string;
+  standard?: string;
+  deep?: string;
+}
+
+model HarnessModel {
   harness: string;
   provider: string;
   id: string;
@@ -967,9 +976,12 @@ model DelegationModel {
   effort_levels: string[];
   access: ModelCapabilitySupport;
   detail: string;
+  tier?: ModelTier;
+  tier_source: ModelTierSource;
+  shipped_tier?: ModelTier;
 }
 
-model DelegationHarness {
+model Harness {
   id: string;
   name: string;
   available: boolean;
@@ -999,7 +1011,7 @@ model DelegationPreferencesResultMessage {
   templates?: DelegationRole[];
   expanded_roles?: DelegationRole[];
   workflow_skill_paths?: string[];
-  harnesses?: DelegationHarness[];
+  harnesses?: Harness[];
 }
 
 model DelegationPreferencesChangedMessage {
@@ -1007,19 +1019,21 @@ model DelegationPreferencesChangedMessage {
   revision: safeint;
 }
 
-model DelegationModelsMessage {
-  cmd: "delegation_models";
+model HarnessModelsMessage {
+  cmd: "harness_models";
   request_id: string;
   harness: string;
+  refresh?: boolean;
 }
 
-model DelegationModelsResultMessage {
-  event: "delegation_models_result";
+model HarnessModelsResultMessage {
+  event: "harness_models_result";
   request_id: string;
   success: boolean;
   error?: string;
-  models: DelegationModel[];
+  models: HarnessModel[];
   detail: string;
+  tier_defaults: TierDefaults;
 }
 
 model DelegationRolesMessage {
@@ -7226,7 +7240,7 @@ alias DaemonEvent =
   | GitOperationFinishedMessage
   | DelegationPreferencesResultMessage
   | DelegationPreferencesChangedMessage
-  | DelegationModelsResultMessage
+  | HarnessModelsResultMessage
   | SettingsUpdatedMessage
   | GitHubHostsUpdatedMessage
   | PluginsUpdatedMessage

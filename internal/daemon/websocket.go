@@ -1094,8 +1094,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		}
 		request.ProfileID = protocol.Ptr(profile.ID)
 		d.life.Go("handleDelegateWS", func() { d.handleDelegateWS(client, request) })
-	case protocol.CmdDelegationModels:
-		d.life.Go("handleDelegationModels", func() { d.handleDelegationModels(client, msg.(*protocol.DelegationModelsMessage)) })
+	case protocol.CmdHarnessModels:
+		d.life.Go("handleHarnessModels", func() { d.handleHarnessModels(client, msg.(*protocol.HarnessModelsMessage)) })
 	case protocol.CmdDelegationPreferencesGet:
 		d.handleDelegationPreferencesGet(client, msg.(*protocol.DelegationPreferencesGetMessage))
 	case protocol.CmdDelegationPreferencesSave:

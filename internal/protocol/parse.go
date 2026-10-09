@@ -32,7 +32,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdDelegationPreferencesCommit:   decodeInto[DelegationPreferencesCommitMessage],
 	CmdDelegationPreferencesHistory:  decodeInto[DelegationPreferencesHistoryMessage],
 	CmdDelegationPreferencesRollback: decodeInto[DelegationPreferencesRollbackMessage],
-	CmdDelegationModels:              decodeInto[DelegationModelsMessage],
+	CmdHarnessModels:                 decodeInto[HarnessModelsMessage],
 	CmdDelegationRoles:               decodeInto[DelegationRolesMessage],
 	CmdDelegateStatus:                decodeInto[DelegateStatusMessage],
 	CmdDocDefine:                     decodeInto[DocDefineMessage],

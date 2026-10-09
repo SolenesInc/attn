@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"time"
@@ -36,7 +37,7 @@ type TranscriptClassificationExtractor interface {
 }
 
 type ExecutableClassifierProvider interface {
-	ClassifyWithExecutable(text, executable, workDir string, timeout time.Duration) (string, error)
+	ClassifyWithExecutable(ctx context.Context, text, executable, workDir, model string, timeout time.Duration) (string, error)
 }
 
 func RecoveredRunningSessionState(d Driver, ptyState string) (protocol.SessionState, bool) {
@@ -118,7 +119,7 @@ func ExtractLastAssistantForClassification(
 	return content, "", err
 }
 
-func ClassifyWithDriver(d Driver, text, executable, workDir string, timeout time.Duration) (state string, err error, ok bool) {
+func ClassifyWithDriver(ctx context.Context, d Driver, text, executable, workDir, model string, timeout time.Duration) (state string, err error, ok bool) {
 	cp, hasClassifier := GetClassifier(d)
 	if !hasClassifier {
 		return "", nil, false
@@ -127,7 +128,7 @@ func ClassifyWithDriver(d Driver, text, executable, workDir string, timeout time
 		return "unknown", headless.Refusal("classifier"), true
 	}
 	if ecp, supportsExecutable := cp.(ExecutableClassifierProvider); supportsExecutable {
-		state, err = ecp.ClassifyWithExecutable(text, strings.TrimSpace(executable), strings.TrimSpace(workDir), timeout)
+		state, err = ecp.ClassifyWithExecutable(ctx, text, strings.TrimSpace(executable), strings.TrimSpace(workDir), strings.TrimSpace(model), timeout)
 		return state, err, true
 	}
 	state, err = cp.Classify(text, timeout)

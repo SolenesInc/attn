@@ -1,23 +1,23 @@
 import type { DaemonSession } from '../hooks/useDaemonSocket';
 import type { CrewLaunchEdit, CrewLaunchSaveState } from '../hooks/useCrewLaunchAutosave';
 import type { CrewRestartAttempt } from '../hooks/useCrewRestart';
-import type { CrewMember, DelegationModel } from '../types/generated';
+import type { CrewMember, HarnessModel } from '../types/generated';
 
 export function effectiveMember(roster: CrewMember, acknowledged?: CrewMember): CrewMember {
   if (!acknowledged || roster.revision > acknowledged.revision) return roster;
   return acknowledged;
 }
 
-export function modelLabel(model: DelegationModel): string {
+export function modelLabel(model: HarnessModel): string {
   const name = model.name || model.id;
   return model.provider ? `${model.provider} / ${name}` : name;
 }
 
-export function modelIdentity(model: DelegationModel): string {
+export function modelIdentity(model: HarnessModel): string {
   return model.provider ? `${model.provider}/${model.id}` : model.id;
 }
 
-export function currentModel(catalog: DelegationModel[] | undefined, id: string): DelegationModel | undefined {
+export function currentModel(catalog: HarnessModel[] | undefined, id: string): HarnessModel | undefined {
   return catalog?.find((model) => modelIdentity(model) === id);
 }
 

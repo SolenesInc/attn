@@ -47,8 +47,8 @@ func TestTheGardenAdvisorAdvisesAndDraftsWithTheReviewsFrozenRecipeFromBoundedEv
 	setSetting(t, app, "garden.advisor", `{"agent":"codex","model":"later","effort":"low"}`)
 	frozen := func(task *fakeagent.HeadlessTask, what string) {
 		t.Helper()
-		if task.Harness != fakeagent.Claude || task.Model != "sonnet" || task.Effort != "medium" {
-			t.Errorf("the %s ran %s %q at effort %q, want the review's frozen Claude sonnet at medium", what, task.Harness, task.Model, task.Effort)
+		if task.Harness != fakeagent.Claude || task.Model != "claude-haiku-fake" || task.Effort != "medium" {
+			t.Errorf("the %s ran %s %q at effort %q, want the review's frozen Claude light default at medium", what, task.Harness, task.Model, task.Effort)
 		}
 	}
 	task := w.HeadlessTask()

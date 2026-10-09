@@ -8,7 +8,7 @@ import { useCrewNavigation, type CrewTab } from '../hooks/useCrewNavigation';
 import { useCrewRestart, type CrewRestarts } from '../hooks/useCrewRestart';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import type { DaemonSession, Seed } from '../hooks/useDaemonSocket';
-import type { CrewMember, DelegationHarness } from '../types/generated';
+import type { CrewMember, Harness } from '../types/generated';
 import { crewDisplayName } from '../utils/crewName';
 import { CrewCharterTab } from './CrewCharterTab';
 import { CrewHandoffsTab } from './CrewHandoffsTab';
@@ -41,8 +41,8 @@ const tabs: { id: CrewTab; label: string }[] = [
   { id: 'seeds', label: 'Seeds' },
 ];
 
-function useHarnessCatalog(isOpen: boolean, load: () => Promise<{ harnesses: DelegationHarness[] }>) {
-  const [harnesses, setHarnesses] = useState<DelegationHarness[]>([]);
+function useHarnessCatalog(isOpen: boolean, load: () => Promise<{ harnesses: Harness[] }>) {
+  const [harnesses, setHarnesses] = useState<Harness[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [request, setRequest] = useState(0);
@@ -150,7 +150,7 @@ interface CrewPanelStores {
   handoffs: CrewHandoffHistory;
   restarts: CrewRestarts;
   catalog: ReturnType<typeof useHarnessCatalog>;
-  loadModels: ReturnType<typeof useDaemonApi>['sendDelegationModels'];
+  loadModels: ReturnType<typeof useDaemonApi>['sendHarnessModels'];
 }
 
 export function CrewPanel({ visit, ...surface }: CrewPanelProps) {
@@ -164,7 +164,7 @@ export function CrewPanel({ visit, ...surface }: CrewPanelProps) {
     sendCrewHandoffsGet,
     sendCrewHandoffGet,
     sendDelegationPreferencesGet,
-    sendDelegationModels,
+    sendHarnessModels,
   } = useDaemonApi();
   const autosave = useCrewLaunchAutosave(surface.members, connectionGeneration, sendCrewSet);
   const charterAutosave = useCrewCharterAutosave(connectionGeneration, sendCrewCharterGet, sendCrewCharterSet);
@@ -175,7 +175,7 @@ export function CrewPanel({ visit, ...surface }: CrewPanelProps) {
     <CrewPanelSurface
       key={visit}
       {...surface}
-      stores={{ isConnected, autosave, charterAutosave, handoffs, restarts, catalog, loadModels: sendDelegationModels }}
+      stores={{ isConnected, autosave, charterAutosave, handoffs, restarts, catalog, loadModels: sendHarnessModels }}
     />
   );
 }

@@ -10,11 +10,11 @@ import type { AutoModePolicy } from '../hooks/useAutoModePolicy';
 import { setAutoModeAutomationHandle } from './autoModeAutomation';
 import './AutoModeSettings.css';
 import { GuardianSettings } from './GuardianSettings';
-import type { DelegationModelCatalog } from '../hooks/daemonDelegationEvents';
+import type { HarnessModelCatalog } from '../hooks/daemonDelegationEvents';
 
 interface AutoModeSettingsProps {
   policy: AutoModePolicy;
-  loadModels?: (harness: string) => Promise<DelegationModelCatalog>;
+  loadModels?: (harness: string, refresh?: boolean) => Promise<HarnessModelCatalog>;
 }
 
 const APPROVAL_POLICIES = ['untrusted', 'on-request', 'never'];

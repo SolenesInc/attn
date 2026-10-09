@@ -11,9 +11,9 @@ import {
 } from '../utils/gardenAdvisorSettings';
 
 const MODEL_PRESETS: Record<string, { value: string; label: string }[]> = {
-  codex: [{ value: 'gpt-5.6-luna', label: 'gpt-5.6-luna (Recommended)' }],
-  claude: [{ value: 'sonnet', label: 'Sonnet (Recommended)' }],
-  copilot: [{ value: 'claude-sonnet-4.6', label: 'Sonnet (Recommended)' }],
+  codex: [{ value: 'gpt-5.6-luna', label: 'gpt-5.6-luna' }],
+  claude: [{ value: 'sonnet', label: 'Sonnet' }],
+  copilot: [{ value: 'claude-sonnet-4.6', label: 'Sonnet' }],
 };
 
 const EFFORT_LEVELS: Record<string, string[]> = {
@@ -48,10 +48,10 @@ export function GardenAdvisorSettings({
     if (commit) void draft.apply(next); else draft.set(next);
   };
   const [customModel, setCustomModel] = useState(
-    !(MODEL_PRESETS[saved.agent] ?? []).some((preset) => preset.value === saved.model),
+    Boolean(saved.model) && !(MODEL_PRESETS[saved.agent] ?? []).some((preset) => preset.value === saved.model),
   );
 
-  const presets = MODEL_PRESETS[agent] ?? [];
+  const presets = [{ value: '', label: agent === 'copilot' ? 'Copilot default (Sonnet 4.6)' : 'Light default (Recommended)' }, ...(MODEL_PRESETS[agent] ?? [])];
   const efforts = EFFORT_LEVELS[agent] ?? [];
   const available = settings[`${agent}_available`] !== 'false'
     && settings[`${agent}_cap_headless_task`] !== 'false';
@@ -144,7 +144,7 @@ export function GardenAdvisorSettings({
               value={effort}
               onChange={(event) => update({ effort: event.target.value })}
             >
-              {agent === 'copilot' && <option value="">Recommended default</option>}
+              <option value="">Recommended default</option>
               {efforts.map((level) => (
                 <option key={level} value={level}>{level}</option>
               ))}

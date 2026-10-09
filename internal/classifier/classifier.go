@@ -388,7 +388,18 @@ func ClassifyWithCodexExecutable(text, configuredExecutable string, timeout time
 	return ClassifyWithCodexExecutableInDir(text, configuredExecutable, "", timeout)
 }
 
+func CodexClassifierModel() string {
+	if model := strings.TrimSpace(os.Getenv("ATTN_CODEX_CLASSIFIER_MODEL")); model != "" {
+		return model
+	}
+	return defaultCodexClassifierModel
+}
+
 func ClassifyWithCodexExecutableInDir(text, configuredExecutable, workDir string, timeout time.Duration) (string, error) {
+	return ClassifyWithCodexModelInDir(context.Background(), text, configuredExecutable, workDir, CodexClassifierModel(), timeout)
+}
+
+func ClassifyWithCodexModelInDir(parent context.Context, text, configuredExecutable, workDir, model string, timeout time.Duration) (string, error) {
 	if text == "" {
 		DefaultLogger("classifier: empty text, returning idle")
 		return "idle", nil
@@ -398,17 +409,13 @@ func ClassifyWithCodexExecutableInDir(text, configuredExecutable, workDir string
 	if timeout <= 0 {
 		timeout = defaultCodexClassifierTimeout
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 
 	executable := resolveCodexExecutable(configuredExecutable)
 	reasoningEffort := strings.TrimSpace(strings.ToLower(os.Getenv("ATTN_CODEX_CLASSIFIER_REASONING_EFFORT")))
 	if reasoningEffort == "" {
 		reasoningEffort = defaultCodexReasoningEffort
-	}
-	model := strings.TrimSpace(os.Getenv("ATTN_CODEX_CLASSIFIER_MODEL"))
-	if model == "" {
-		model = defaultCodexClassifierModel
 	}
 
 	prompt := BuildPrompt(text)
