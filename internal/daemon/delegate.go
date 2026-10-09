@@ -4,11 +4,13 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -84,6 +86,10 @@ func (d *Daemon) desktopLabelTaken(name string, placement *launchPlacement) (boo
 		return false, nil
 	}
 	desktop, err := d.store.GetDesktop(placement.desktopID)
+	var missing *profiles.Error
+	if errors.As(err, &missing) && missing.Code == profiles.CodeNotFound {
+		return false, nil
+	}
 	if err != nil {
 		return false, fmt.Errorf("read desktop %s to check the name %q: %w", placement.desktopID, name, err)
 	}
@@ -823,7 +829,17 @@ func (d *Daemon) delegationDestination(source *protocol.Session, desktopRef stri
 		}
 		return profile, beside, nil
 	}
+	desktopRef = strings.TrimSpace(desktopRef)
+	if slot, err := strconv.Atoi(desktopRef); err == nil && slot >= profiles.FirstShortcutSlot && slot <= profiles.LastShortcutSlot {
+		desktopRef = profiles.NumberedDesktopID(profile.ID, slot)
+	}
 	desktop, err := d.resolveDesktopRef(profile, desktopRef)
+	var missing *profiles.Error
+	if errors.As(err, &missing) && missing.Code == profiles.CodeNotFound {
+		if slot := profiles.DesktopSlot(desktopRef); slot >= profiles.FirstShortcutSlot && slot <= profiles.LastShortcutSlot && desktopRef == profiles.NumberedDesktopID(profile.ID, slot) {
+			desktop, err = profiles.Desktop{ID: desktopRef}, nil
+		}
+	}
 	if err != nil {
 		return profiles.Profile{}, nil, fmt.Errorf("--desktop: %w", err)
 	}

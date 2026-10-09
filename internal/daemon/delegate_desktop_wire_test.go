@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -78,7 +79,6 @@ func TestADelegateLandsOnTheDesktopItsCallerNames(t *testing.T) {
 		want      []string
 	}{
 		{name: "an unknown name", ref: "nope", want: []string{`unknown desktop "nope"`, "1 Desktop 1", "2 Ops (" + ops.ID + ")"}},
-		{name: "a digit no desktop holds", ref: "8", want: []string{"no desktop holds shortcut 8", "2 Ops"}},
 		{name: "a desktop of another profile", ref: side.CurrentDesktopID, want: []string{`belongs to profile "Side"`, "2 Ops"}},
 	} {
 		_, err := delegate("refused", row.ref)
@@ -91,5 +91,79 @@ func TestADelegateLandsOnTheDesktopItsCallerNames(t *testing.T) {
 				t.Errorf("%s: the refusal reads %q; want it to name %q", row.name, err, want)
 			}
 		}
+	}
+}
+
+func TestALaunchOntoAMissingDesktopDropsTheAnchorAndRecreatesOnlyNumberedTargets(t *testing.T) {
+	for _, numbered := range []bool{true, false} {
+		t.Run(fmt.Sprintf("numbered=%t", numbered), func(t *testing.T) {
+			w := newWorld(t, fakeagent.Codex)
+			app := w.App()
+			_, current, sourcePane := w.RequestSpawn(app, fakeagent.Codex, w.Path("source"))
+			target, want := "desktop-missing", current
+			if numbered {
+				target = profiles.NumberedDesktopID(app.SelectedProfile(), 7)
+				want = target
+			}
+			spawned, desktopID, _ := w.RequestSpawn(app, fakeagent.Codex, w.Path("launched"), func(m *protocol.SpawnSessionMessage) {
+				m.Placement = &protocol.SessionPlacement{DesktopID: protocol.Ptr(target), AnchorPaneID: protocol.Ptr("missing-anchor")}
+			})
+			if !spawned.Success || desktopID != want {
+				t.Fatalf("spawn = %+v on %s; want success on %s", spawned, desktopID, want)
+			}
+			arrangement := viewProfile(t, w, app.SelectedProfile())
+			if arrangement.profile.CurrentDesktopID != current {
+				t.Errorf("current desktop = %s; want %s", arrangement.profile.CurrentDesktopID, current)
+			}
+			for _, desktop := range arrangement.desktops {
+				if desktop.ID == current && desktop.ActivePaneID != sourcePane {
+					t.Errorf("current desktop shows %s; want caller %s", desktop.ActivePaneID, sourcePane)
+				}
+			}
+		})
+	}
+}
+
+func TestADelegateRecreatesAMissingNumberedDesktop(t *testing.T) {
+	for _, byID := range []bool{false, true} {
+		t.Run(fmt.Sprintf("by-id=%t", byID), func(t *testing.T) {
+			w := newWorld(t, fakeagent.Codex)
+			app := w.App()
+			cwd := w.Path("notes")
+			source, current, sourcePane := w.RequestSpawn(app, fakeagent.Codex, cwd)
+			target := profiles.NumberedDesktopID(app.SelectedProfile(), 7)
+			for _, desktop := range w.App().Initial.Desktops {
+				if desktop.ID == target {
+					t.Fatal("desktop 7 already exists before delegation")
+				}
+			}
+			request := brief(cwd, "Watch the deploy")
+			request.Agent = protocol.Ptr("codex")
+			request.SourceSessionID = protocol.Ptr(source.ID)
+			request.Desktop = protocol.Ptr("7")
+			if byID {
+				request.Desktop = protocol.Ptr(target)
+				request.Label = protocol.Ptr("Watcher")
+			}
+			result, err := w.Client().Delegate(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if protocol.Deref(result.DesktopID) != target {
+				t.Fatalf("delegate landed on %s; want recreated %s", protocol.Deref(result.DesktopID), target)
+			}
+			arrangement := viewProfile(t, w, app.SelectedProfile())
+			if arrangement.profile.CurrentDesktopID != current {
+				t.Fatalf("current desktop = %s; want %s", arrangement.profile.CurrentDesktopID, current)
+			}
+			desktop := arrangement.desktops[target]
+			if protocol.Deref(desktop.ShortcutSlot) != 7 || len(desktop.Panes) != 1 || desktop.Panes[0].SessionID != result.SessionID {
+				t.Errorf("recreated desktop = %+v; want slot 7 holding the delegate", desktop)
+			}
+			caller := arrangement.desktops[current]
+			if len(caller.Panes) != 1 || caller.ActivePaneID != sourcePane {
+				t.Errorf("caller desktop = %+v; want only the caller, still active", caller)
+			}
+		})
 	}
 }

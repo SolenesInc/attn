@@ -1261,7 +1261,11 @@ func (s *Store) PlaceLaunchedSession(request SessionPlacementRequest) (profiles.
 		var missing *profiles.Error
 		if request.DesktopID != "" && errors.As(err, &missing) && missing.Code == profiles.CodeNotFound {
 			request.AnchorPaneID, request.Focus = "", false
-			current, err = loadLaunchDesktop(tx, profile, "")
+			var found bool
+			current, found, err = findOrRecreateNumberedDesktop(tx, now, profile, request.DesktopID)
+			if err == nil && !found {
+				current, err = loadLaunchDesktop(tx, profile, "")
+			}
 		}
 		if err != nil {
 			return err
