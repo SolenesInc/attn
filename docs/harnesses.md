@@ -33,7 +33,8 @@ Model discovery and effort were probed on 2.1.295 with the real harness on
 `--model haiku --effort medium` call, with tools, hooks, MCP servers and session
 persistence disabled, completed successfully. The full Haiku 4.5 ID
 `claude-haiku-4-5-20251001` reports unknown effort metadata; an isolated call
-with medium also succeeds. These probes check acceptance of the effort flag; it does not measure how much reasoning the model performs.
+with medium also succeeds. These probes check acceptance of the effort flag;
+they do not measure how much reasoning each model performs.
 
 | Action | Hooks, in order | Conversation id |
 |---|---|---|
