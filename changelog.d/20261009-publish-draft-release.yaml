@@ -1,0 +1,3 @@
+kind: internal
+area: release
+change: The release workflow publishes its draft release instead of failing to find it, since GitHub returns drafts only from the release list.

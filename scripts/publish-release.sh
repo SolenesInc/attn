@@ -12,7 +12,7 @@ command -v gh >/dev/null || {
   exit 2
 }
 
-release_id="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq .id)"
+release_id="$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate --jq ".[] | select(.tag_name == \"$tag\") | .id")"
 if ! [[ "$release_id" =~ ^[0-9]+$ ]]; then
   echo "publish release: invalid release id '$release_id' for $tag" >&2
   exit 1
