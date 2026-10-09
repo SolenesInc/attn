@@ -148,6 +148,8 @@ func TestCrewWakeRecreatesItsClosedLaunchDesktop(t *testing.T) {
 			if result := requestCloseDesktop(app, viewProfile(t, w, profile).desktops[old]); !result.Success {
 				t.Fatal(protocol.Deref(result.Error))
 			}
+			w.restart()
+			app = w.App()
 			readLaunchSetting(app, "crew", "alder")
 			wake := wakeCrew(t, w.Client(), "alder", "")
 			w.Launched(string(wake.SessionID))
@@ -180,6 +182,8 @@ func TestAutomationRunRecreatesItsClosedLaunchDesktop(t *testing.T) {
 	if result := requestCloseDesktop(app, viewProfile(t, w, profile).desktops[old]); !result.Success {
 		t.Fatal(protocol.Deref(result.Error))
 	}
+	w.restart()
+	app, cli = w.App(), w.Client()
 	readLaunchSetting(app, "automation", fmt.Sprint(definition.ID))
 	result, err := cli.AutomationRun(definition.ID, "after-close", "")
 	if err != nil {

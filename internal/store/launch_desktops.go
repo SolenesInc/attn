@@ -106,21 +106,45 @@ func loadLaunchItem(tx *sql.Tx, kind, id string) (LaunchDesktopItem, error) {
 		item.Label = item.Name + " (new)"
 		return item, nil
 	}
-	desktop, found, err := findDesktop(tx, item.DesktopID)
+	desktop, err := loadDesktop(tx, item.DesktopID)
 	if err != nil {
 		return item, err
-	}
-	if !found {
-		item.Label = launchDesktopLabel(item.Name, profiles.DesktopSlot(item.DesktopID))
-		return item, nil
 	}
 	name, err := launchDesktopName(tx, desktop)
 	item.Label = launchDesktopLabel(name, desktop.ShortcutSlot)
 	return item, err
 }
 
-func saveLaunchSetting(tx *sql.Tx, now string, kind, id string, setting LaunchDesktopSetting, bumpAutomationRevision bool) error {
+func loadCurrentLaunchItem(tx *sql.Tx, kind, id string) (LaunchDesktopItem, error) {
 	item, err := loadLaunchItem(tx, kind, id)
+	var missing *profiles.Error
+	if item.DesktopID != "" && errors.As(err, &missing) && missing.Code == profiles.CodeNotFound {
+		item.Label = launchDesktopLabel(item.Name, profiles.DesktopSlot(item.DesktopID))
+		return item, nil
+	}
+	return item, err
+}
+
+func currentLaunchItems(tx *sql.Tx) ([]LaunchDesktopItem, error) {
+	items := []LaunchDesktopItem{}
+	for _, query := range launchItemQueries {
+		ids, err := queryColumn[string](tx, query[1])
+		if err != nil {
+			return nil, err
+		}
+		for _, id := range ids {
+			item, err := loadCurrentLaunchItem(tx, query[0], id)
+			if err != nil {
+				return nil, err
+			}
+			items = append(items, item)
+		}
+	}
+	return items, nil
+}
+
+func saveLaunchSetting(tx *sql.Tx, now string, kind, id string, setting LaunchDesktopSetting, bumpAutomationRevision bool) error {
+	item, err := loadCurrentLaunchItem(tx, kind, id)
 	if err != nil {
 		return err
 	}
@@ -168,7 +192,11 @@ func createOwnLaunchDesktop(tx *sql.Tx, now, kind, id string, confirmed bool) er
 
 func (s *Store) LaunchDesktopItem(kind, id string) (LaunchDesktopItem, error) {
 	var item LaunchDesktopItem
-	err := s.profilesTx(func(tx *sql.Tx, _ string) error { var err error; item, err = loadLaunchItem(tx, kind, id); return err })
+	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
+		var err error
+		item, err = loadCurrentLaunchItem(tx, kind, id)
+		return err
+	})
 	return item, err
 }
 
@@ -177,7 +205,7 @@ func (s *Store) LaunchDesktopChoices(kind, id string) (LaunchDesktopItem, []prof
 	var desktops []profiles.Desktop
 	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
 		var err error
-		item, err = loadLaunchItem(tx, kind, id)
+		item, err = loadCurrentLaunchItem(tx, kind, id)
 		if err != nil {
 			return err
 		}
@@ -268,12 +296,13 @@ func launchItemDesktop(tx *sql.Tx, now string, profile profiles.Profile, kind, i
 	if found {
 		return loadLaunchDesktop(tx, profile, desktopID)
 	}
-	desktop, found, err = findOrRecreateNumberedDesktop(tx, now, profile, desktopID)
-	if err != nil {
-		return desktop, err
-	}
-	if !found {
-		item, err := loadLaunchItem(tx, kind, id)
+	if profiles.IsNumberedDesktopID(profile.ID, desktopID) {
+		desktop, _, err = findOrRecreateNumberedDesktop(tx, now, profile, desktopID)
+		if err != nil {
+			return desktop, err
+		}
+	} else {
+		item, err := loadCurrentLaunchItem(tx, kind, id)
 		if err != nil {
 			return desktop, err
 		}
@@ -307,7 +336,7 @@ func findOrRecreateNumberedDesktop(tx *sql.Tx, now string, profile profiles.Prof
 		return desktop, found, err
 	}
 	slot := profiles.DesktopSlot(id)
-	if slot == 0 || id != profiles.NumberedDesktopID(profile.ID, slot) {
+	if !profiles.IsNumberedDesktopID(profile.ID, id) {
 		return desktop, false, nil
 	}
 	desktop, err = insertDesktop(tx, now, profile.ID, "", slot)
@@ -455,7 +484,7 @@ func (s *Store) CommitCrewSettings(w DocumentWrite, fact BusEvent, now time.Time
 func (s *Store) LaunchDesktopItems(profileID string) ([]LaunchDesktopItem, error) {
 	var items []LaunchDesktopItem
 	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
-		all, err := launchItems(tx)
+		all, err := currentLaunchItems(tx)
 		for _, item := range all {
 			if item.ProfileID == profileID {
 				items = append(items, item)

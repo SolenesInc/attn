@@ -9,7 +9,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 const options = parseCommonArgs(process.argv.slice(2));
 const runner = createScenarioRunner(options, {
   scenarioId: 'CLOSE-DESKTOP', tier: 'tier1-local-shell', prefix: 'close-desktop',
-  metadata: { focus: 'Native close shortcut closes an empty desktop with the launcher focused and selects its neighbour' },
+  metadata: { focus: 'Native close shortcut closes an empty desktop with the launcher focused and selects its neighbour; activate the named app so native screenshots and recording have a visible window' },
 });
 const client = new UiAutomationClient({ appPath: options.appPath });
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -18,7 +18,10 @@ runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
 
 try {
-  await runner.step('launch_app', () => launchFreshAppAndConnect(client, observer));
+  await runner.step('launch_app', async () => {
+    await launchFreshAppAndConnect(client, observer);
+    await driver.activateApp();
+  });
   const keeper = await observer.profileCommand('desktop_create', { profile_id: observer.profileId, shortcut_slot: 0 });
   const home = keeper.desktops[0].id;
   let empty;

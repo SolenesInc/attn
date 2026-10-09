@@ -145,6 +145,11 @@ func DesktopSlot(id string) int {
 	return slot
 }
 
+func IsNumberedDesktopID(profileID, id string) bool {
+	slot := DesktopSlot(id)
+	return slot != 0 && id == NumberedDesktopID(profileID, slot)
+}
+
 func checkPaneRows(desktop Desktop, inTree map[string]struct{}) (map[string]struct{}, error) {
 	rows := make(map[string]struct{}, len(desktop.Panes))
 	for _, pane := range desktop.Panes {
