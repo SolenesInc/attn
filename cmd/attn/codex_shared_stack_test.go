@@ -88,19 +88,7 @@ func TestAHiddenSharedCodexSessionSurvivesADaemonRestartAndTakesInput(t *testing
 	s.Start()
 	app := s.App()
 	shareCodex(t, app)
-	session := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
-	codex := s.Launched(session)
-	terminal := app.Terminal(session)
-	app.TypeLine(session, "find the flaky checkout test")
-	codex.Prompted()
-	codex.Reply("It races the tax lookup. Lock it? <!-- attn:state=waiting_input -->")
-	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWaitingInput })
-	conversation := codex.ConversationID
-	for _, line := range []string{"/new", "add a discount field"} {
-		typeLineInto(app, terminal, line)
-		codex.Prompted()
-	}
-	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return protocol.Deref(x.Hidden) })
+	session, conversation := hiddenWaitingSharedCodex(t, s, app)
 
 	s.Stop()
 	s.Start()
@@ -112,14 +100,8 @@ func TestAHiddenSharedCodexSessionSurvivesADaemonRestartAndTakesInput(t *testing
 	if hidden := app.Initial.Sessions[i]; !protocol.Deref(hidden.Hidden) || hidden.State != protocol.SessionStateWaitingInput {
 		t.Fatalf("after the restart the session is %s (hidden=%v), want it hidden and still waiting", hidden.State, protocol.Deref(hidden.Hidden))
 	}
-	requestID := uuid.NewString()
 	feedback := "Lock the tax table before the lookup."
-	delivered := testworld.Request(app, protocol.SessionAnnotationsSubmitMessage{
-		Cmd: protocol.CmdSessionAnnotationsSubmit, RequestID: requestID, SessionID: protocol.SessionID(session), Text: feedback,
-	}, protocol.EventSessionAnnotationsSubmitResult, func(r protocol.SessionAnnotationsSubmitResultMessage) bool { return r.RequestID == requestID })
-	if !delivered.Success {
-		t.Fatalf("feedback to the hidden session: %s", protocol.Deref(delivered.Error))
-	}
+	submitFeedback(t, app, session, feedback)
 	server := s.CodexServer()
 	if got := server.Prompted(conversation); got != feedback {
 		t.Fatalf("the hidden conversation took %q, want the feedback", got)
@@ -141,19 +123,7 @@ func TestAHiddenSharedCodexSessionCutOffByAMachineRestartComesBackIdle(t *testin
 	s.Start()
 	app := s.App()
 	shareCodex(t, app)
-	session := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
-	codex := s.Launched(session)
-	terminal := app.Terminal(session)
-	app.TypeLine(session, "find the flaky checkout test")
-	codex.Prompted()
-	codex.Reply("It races the tax lookup. Lock it? <!-- attn:state=waiting_input -->")
-	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWaitingInput })
-	conversation := codex.ConversationID
-	for _, line := range []string{"/new", "add a discount field"} {
-		typeLineInto(app, terminal, line)
-		codex.Prompted()
-	}
-	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return protocol.Deref(x.Hidden) })
+	session, conversation := hiddenWaitingSharedCodex(t, s, app)
 	submitFeedback(t, app, session, "Lock the tax table before the lookup.")
 	s.CodexServer().Prompted(conversation)
 	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
@@ -187,19 +157,7 @@ func TestAHiddenSharedCodexTurnThatEndsWhileTheDaemonIsDownSettlesAfterTheRestar
 	s.Start()
 	app := s.App()
 	shareCodex(t, app)
-	session := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
-	codex := s.Launched(session)
-	terminal := app.Terminal(session)
-	app.TypeLine(session, "find the flaky checkout test")
-	codex.Prompted()
-	codex.Reply("It races the tax lookup. Lock it? <!-- attn:state=waiting_input -->")
-	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWaitingInput })
-	conversation := codex.ConversationID
-	for _, line := range []string{"/new", "add a discount field"} {
-		typeLineInto(app, terminal, line)
-		codex.Prompted()
-	}
-	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return protocol.Deref(x.Hidden) })
+	session, conversation := hiddenWaitingSharedCodex(t, s, app)
 	submitFeedback(t, app, session, "Lock the tax table before the lookup.")
 	server := s.CodexServer()
 	server.Prompted(conversation)
@@ -216,4 +174,47 @@ func TestAHiddenSharedCodexTurnThatEndsWhileTheDaemonIsDownSettlesAfterTheRestar
 	if app.Initial.Sessions[i].State != protocol.SessionStateIdle {
 		testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
 	}
+}
+
+func TestASharedCodexTurnThatEndsWhileTheDaemonIsDownSettlesAfterTheRestart(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	s.Start()
+	app := s.App()
+	shareCodex(t, app)
+	session := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
+	codex := s.Launched(session)
+	app.TypeLine(session, "find the flaky checkout test")
+	codex.Prompted()
+	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
+
+	s.Stop()
+	s.CodexServer().Halt(codex.ConversationID)
+	s.Start()
+	app = s.App()
+	i := slices.IndexFunc(app.Initial.Sessions, func(x protocol.Session) bool { return string(x.ID) == session })
+	if i < 0 {
+		t.Fatalf("session %s is gone after the restart", session)
+	}
+	if app.Initial.Sessions[i].State != protocol.SessionStateIdle {
+		testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
+	}
+}
+
+func hiddenWaitingSharedCodex(t *testing.T, s *testworld.Stack, app *testworld.Peer) (session, conversation string) {
+	t.Helper()
+	session = s.Spawn(app, fakeagent.Codex, s.Path("shop"))
+	codex := s.Launched(session)
+	terminal := app.Terminal(session)
+	app.TypeLine(session, "find the flaky checkout test")
+	codex.Prompted()
+	codex.Reply("It races the tax lookup. Lock it? <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWaitingInput })
+	conversation = codex.ConversationID
+	for _, line := range []string{"/new", "add a discount field"} {
+		typeLineInto(app, terminal, line)
+		codex.Prompted()
+	}
+	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return protocol.Deref(x.Hidden) })
+	return session, conversation
 }
