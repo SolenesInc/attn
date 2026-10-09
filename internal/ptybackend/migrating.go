@@ -278,15 +278,6 @@ func (b *MigratingBackend) SessionTerminalBuild(id harness.TerminalID) (string, 
 	return provider.SessionTerminalBuild(id)
 }
 
-func (b *MigratingBackend) SessionCanReplayWithFormat(id harness.TerminalID, format string) bool {
-	backend, err := b.backendFor(id)
-	if err != nil {
-		return false
-	}
-	provider, ok := backend.(TerminalBuildCompatibilityProvider)
-	return ok && provider.SessionCanReplayWithFormat(id, format)
-}
-
 func (b *MigratingBackend) UpgradeWorker(ctx context.Context, id harness.TerminalID) error {
 	provider, err := sessionProvider[WorkerUpgrader](b, id)
 	if err != nil {
@@ -363,16 +354,15 @@ func sessionProvider[T any](b *MigratingBackend, id harness.TerminalID) (T, erro
 }
 
 var (
-	_ Backend                            = (*MigratingBackend)(nil)
-	_ LifecycleHooks                     = (*MigratingBackend)(nil)
-	_ SessionInfoProvider                = (*MigratingBackend)(nil)
-	_ SessionLaunchParamsProvider        = (*MigratingBackend)(nil)
-	_ WorkerProcessProvider              = (*MigratingBackend)(nil)
-	_ ScreenSnapshotProvider             = (*MigratingBackend)(nil)
-	_ KittyImageProvider                 = (*MigratingBackend)(nil)
-	_ TerminalBuildProvider              = (*MigratingBackend)(nil)
-	_ TerminalBuildCompatibilityProvider = (*MigratingBackend)(nil)
-	_ WorkerUpgrader                     = (*MigratingBackend)(nil)
-	_ SessionLivenessProber              = (*MigratingBackend)(nil)
-	_ RecoverableRuntime                 = (*MigratingBackend)(nil)
+	_ Backend                     = (*MigratingBackend)(nil)
+	_ LifecycleHooks              = (*MigratingBackend)(nil)
+	_ SessionInfoProvider         = (*MigratingBackend)(nil)
+	_ SessionLaunchParamsProvider = (*MigratingBackend)(nil)
+	_ WorkerProcessProvider       = (*MigratingBackend)(nil)
+	_ ScreenSnapshotProvider      = (*MigratingBackend)(nil)
+	_ KittyImageProvider          = (*MigratingBackend)(nil)
+	_ TerminalBuildProvider       = (*MigratingBackend)(nil)
+	_ WorkerUpgrader              = (*MigratingBackend)(nil)
+	_ SessionLivenessProber       = (*MigratingBackend)(nil)
+	_ RecoverableRuntime          = (*MigratingBackend)(nil)
 )

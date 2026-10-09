@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, OpenOptions};
-use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Write};
+use std::os::fd::{AsRawFd, FromRawFd, RawFd};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
@@ -16,13 +17,15 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
-use crate::ghostty::Theme;
+use crate::ghostty::{HandoverScreen, Theme};
+use crate::handover::{self, Fallback, HostHandoff, write_private};
 use crate::protocol::{
     AttachParams, CommitParams, ERR_BAD_REQUEST, ERR_IMAGE_NOT_FOUND, ERR_IO,
     ERR_SESSION_NOT_FOUND, ERR_SESSION_NOT_RUNNING, ERR_UNAUTHORIZED, ERR_UNSUPPORTED_VERSION,
-    HelloParams, InputParams, KittyImageParams, RPC_MAJOR, RPC_MINOR, Request, ResizeParams,
-    SignalParams, SpawnParams, error, is_compatible_version, response,
+    HandoverParams, HelloParams, InputParams, KittyImageParams, RPC_MAJOR, RPC_MINOR, Request,
+    ResizeParams, SignalParams, SpawnParams, error, is_compatible_version, response,
 };
+use crate::quiesce::{Quiesce, set_cloexec};
 use crate::session::{
     Broadcast, ChildReaper, Cleanup, Commit, Session, SessionRuntime, parse_signal,
 };
@@ -41,7 +44,7 @@ pub struct Config {
     pub idle_timeout: Duration,
 }
 
-pub const CAPABILITIES: &[&str] = &[crate::probe_child::CAPABILITY];
+pub const CAPABILITIES: &[&str] = &[crate::probe_child::CAPABILITY, handover::CAPABILITY];
 
 #[derive(Serialize)]
 struct HostRegistry<'a> {
@@ -64,6 +67,8 @@ pub struct Host {
     conn_seq: AtomicU64,
     watchers: Mutex<HashMap<String, HostWatcher>>,
     reaper: ChildReaper,
+    quiesce: Arc<Quiesce>,
+    listener: UnixListener,
 }
 
 #[derive(Default)]
@@ -72,6 +77,7 @@ struct HostState {
     spawning: HashSet<String>,
     idle_deadline: Option<Instant>,
     shutting_down: bool,
+    handing_over: bool,
 }
 
 impl HostState {
@@ -80,7 +86,7 @@ impl HostState {
         {
             return Err("invalid session id".to_owned());
         }
-        if self.shutting_down {
+        if self.shutting_down || self.handing_over {
             return Err("host is shutting down".to_owned());
         }
         if self.sessions.contains_key(id) {
@@ -94,7 +100,14 @@ impl HostState {
     }
 
     fn idle(&self) -> bool {
-        !self.shutting_down && self.sessions.is_empty() && self.spawning.is_empty()
+        !self.shutting_down
+            && !self.handing_over
+            && self.sessions.is_empty()
+            && self.spawning.is_empty()
+    }
+
+    fn spawns_settled(&self) -> bool {
+        self.spawning.is_empty() && !self.sessions.values().any(|session| session.is_pending())
     }
 
     fn schedule_idle(&mut self, deadline: Instant) -> bool {
@@ -118,7 +131,7 @@ impl HostState {
     }
 
     fn begin_shutdown(&mut self) -> Result<Vec<Arc<Session>>, String> {
-        if !self.spawning.is_empty() || self.shutting_down {
+        if !self.spawning.is_empty() || self.shutting_down || self.handing_over {
             return Err("host has a spawn or shutdown in progress".to_owned());
         }
         self.shutting_down = true;
@@ -149,34 +162,161 @@ impl Host {
             .map_err(|error| format!("listen on {}: {error}", cfg.socket_path))?;
         fs::set_permissions(&cfg.socket_path, fs::Permissions::from_mode(0o600))
             .map_err(|error| format!("protect host socket: {error}"))?;
-        let host = Arc::new(Self {
+        let host = Self::new(
+            cfg,
+            listener,
+            ChildReaper::start()?,
+            Arc::new(Quiesce::new()?),
+        );
+        host.write_registry()?;
+        host.start()?;
+        host.serve();
+        Ok(())
+    }
+
+    pub fn adopt(path: &Path) -> Result<(), String> {
+        let handoff = HostHandoff::read(path)?;
+        let mut screens = Vec::with_capacity(handoff.sessions.len());
+        for session in &handoff.sessions {
+            let read = |path: &str| {
+                fs::read(path).map_err(|error| format!("read screen of {}: {error}", session.id))
+            };
+            screens.push(HandoverScreen {
+                primary: read(&session.screen_path)?,
+                alternate: session
+                    .alternate_screen_path
+                    .as_deref()
+                    .map(read)
+                    .transpose()?,
+            });
+        }
+        let reaper = ChildReaper::start()?;
+        let quiesce = Arc::new(Quiesce::new()?);
+        let listener = unsafe { UnixListener::from_raw_fd(handoff.listener_fd) };
+        let host = Self::new(
+            Config {
+                daemon_instance_id: handoff.daemon_instance_id.clone(),
+                artifact: handoff.generation.clone(),
+                socket_path: handoff.socket_path.clone(),
+                registry_dir: handoff.registry_dir.clone(),
+                host_registry_path: handoff.host_registry_path.clone(),
+                control_token: handoff.control_token.clone(),
+                idle_timeout: Duration::from_millis(handoff.idle_timeout_ms),
+            },
+            listener,
+            reaper,
+            quiesce,
+        );
+        let removals = match host.restore(&handoff, &screens) {
+            Ok(removals) => removals,
+            Err(error) => {
+                std::mem::forget(host);
+                return Err(error);
+            }
+        };
+        handover::disarm_fallback();
+        host.quiesce.resume();
+        for session in removals {
+            session.finish_adopted_removal();
+        }
+        handoff.remove(path);
+        eprintln!(
+            "PTY host adopted {} terminals: pid={} generation={}",
+            handoff.sessions.len(),
+            std::process::id(),
+            handoff.generation
+        );
+        host.serve();
+        Ok(())
+    }
+
+    fn restore(
+        self: &Arc<Self>,
+        handoff: &HostHandoff,
+        screens: &[HandoverScreen],
+    ) -> Result<Vec<Arc<Session>>, String> {
+        let mut adopted = Vec::with_capacity(handoff.sessions.len());
+        for (session, screen) in handoff.sessions.iter().zip(screens) {
+            let restored = Session::adopt(session, screen, self.session_runtime())
+                .map_err(|error| format!("adopt terminal {}: {error}", session.id))?;
+            adopted.push((restored, session.master_fd, session.removing));
+        }
+        self.write_registry()?;
+        set_cloexec(self.listener.as_raw_fd(), true)?;
+        self.quiesce.hold()?;
+        let mut removals = Vec::new();
+        for (session, master_fd, removing) in adopted {
+            self.state
+                .lock()
+                .expect("host state mutex poisoned")
+                .sessions
+                .insert(session.id.clone(), Arc::clone(&session));
+            session.resume_adopted(master_fd, &self.reaper)?;
+            if removing {
+                removals.push(session);
+            }
+        }
+        self.start()?;
+        Ok(removals)
+    }
+
+    fn new(
+        cfg: Config,
+        listener: UnixListener,
+        reaper: ChildReaper,
+        quiesce: Arc<Quiesce>,
+    ) -> Arc<Self> {
+        Arc::new(Self {
             cfg,
             state: Mutex::new(HostState::default()),
             idle_changed: Condvar::new(),
             conn_seq: AtomicU64::new(0),
             watchers: Mutex::new(HashMap::new()),
-            reaper: ChildReaper::start()?,
-        });
-        host.write_registry()?;
-        host.start_shell_poller()?;
-        host.start_idle_timer()?;
-        host.schedule_idle_if_empty();
+            reaper,
+            quiesce,
+            listener,
+        })
+    }
+
+    fn start(self: &Arc<Self>) -> Result<(), String> {
+        self.start_shell_poller()?;
+        self.start_idle_timer()?;
+        self.schedule_idle_if_empty();
         eprintln!(
             "PTY host ready: pid={} socket={} format={}",
             std::process::id(),
-            host.cfg.socket_path,
+            self.cfg.socket_path,
             env!("ATTN_PTY_HOST_SNAPSHOT_FORMAT")
         );
+        Ok(())
+    }
 
-        for incoming in listener.incoming() {
-            let stream = match incoming {
-                Ok(stream) => stream,
+    fn serve(self: &Arc<Self>) {
+        if let Err(error) = self.listener.set_nonblocking(true) {
+            eprintln!("PTY host listener stays blocking: {error}");
+        }
+        self.quiesce.enter();
+        loop {
+            if let Err(error) = self
+                .quiesce
+                .wait_readable(self.listener.as_raw_fd(), || true)
+            {
+                eprintln!("PTY host listener wait failed: {error}");
+                continue;
+            }
+            let stream = match self.listener.accept() {
+                Ok((stream, _)) => stream,
+                Err(error) if error.kind() == ErrorKind::WouldBlock => continue,
                 Err(error) => {
                     eprintln!("PTY host accept failed: {error}");
                     continue;
                 }
             };
-            let host = Arc::clone(&host);
+            if let Err(error) = stream.set_nonblocking(false) {
+                eprintln!("PTY host could not make a connection blocking: {error}");
+                continue;
+            }
+            let host = Arc::clone(self);
             let id = host.conn_seq.fetch_add(1, Ordering::Relaxed) + 1;
             if let Err(error) = thread::Builder::new()
                 .name(format!("pty-rpc-{id}"))
@@ -186,7 +326,24 @@ impl Host {
                 eprintln!("PTY host could not start connection {id}: {error}");
             }
         }
-        Ok(())
+    }
+
+    fn session_runtime(self: &Arc<Self>) -> SessionRuntime {
+        let weak = Arc::downgrade(self);
+        let cleanup_host = weak.clone();
+        let cleanup: Cleanup =
+            Arc::new(move |session_id| remove_session(&cleanup_host, &session_id));
+        let broadcast: Broadcast = Arc::new(move |event| {
+            if let Some(host) = weak.upgrade() {
+                host.broadcast_lifecycle(&event);
+            }
+        });
+        SessionRuntime::new(
+            cleanup,
+            broadcast,
+            self.reaper.clone(),
+            Arc::clone(&self.quiesce),
+        )
     }
 
     fn write_registry(&self) -> Result<(), String> {
@@ -224,15 +381,6 @@ impl Host {
             .expect("host state mutex poisoned")
             .begin_spawn(&id)?;
 
-        let weak = Arc::downgrade(self);
-        let cleanup_host = weak.clone();
-        let cleanup: Cleanup =
-            Arc::new(move |session_id| remove_session(&cleanup_host, &session_id));
-        let broadcast: Broadcast = Arc::new(move |event| {
-            if let Some(host) = weak.upgrade() {
-                host.broadcast_lifecycle(&event);
-            }
-        });
         let registry_path = Path::new(&self.cfg.registry_dir)
             .join(format!("{id}.json"))
             .to_string_lossy()
@@ -243,7 +391,7 @@ impl Host {
             &self.cfg.daemon_instance_id,
             &self.cfg.socket_path,
             &self.cfg.control_token,
-            SessionRuntime::new(cleanup, broadcast, self.reaper.clone()),
+            self.session_runtime(),
         );
         let session = match result {
             Ok(session) => session,
@@ -253,6 +401,7 @@ impl Host {
                     .expect("host state mutex poisoned")
                     .spawning
                     .remove(&id);
+                self.idle_changed.notify_all();
                 self.schedule_idle_if_empty();
                 return Err(error);
             }
@@ -264,6 +413,7 @@ impl Host {
                 state.sessions.insert(id.clone(), Arc::clone(&session));
                 state.spawning.remove(&id);
             }
+            self.idle_changed.notify_all();
             for _ in &*watchers {
                 session.note_connected();
             }
@@ -277,6 +427,7 @@ impl Host {
         };
         match session.commit()? {
             Commit::Committed => {
+                self.idle_changed.notify_all();
                 for event in session.lifecycle_events() {
                     self.broadcast_lifecycle(&event);
                 }
@@ -325,6 +476,154 @@ impl Host {
                 .shutting_down = false;
             return Err(error);
         }
+        Ok(())
+    }
+
+    fn hand_over(
+        self: &Arc<Self>,
+        params: &HandoverParams,
+        reply: &UnixStream,
+        request_id: &str,
+    ) -> Result<(), String> {
+        handover::check_executable(&params.executable)?;
+        let current = std::env::current_exe()
+            .map_err(|error| format!("resolve the running host executable: {error}"))?
+            .to_string_lossy()
+            .into_owned();
+        let sessions = self.begin_handover()?;
+        let result = self.quiesce.stop().and_then(|()| {
+            let outcome = self.exec_handover(params, current, &sessions, reply, request_id);
+            self.quiesce.resume();
+            outcome
+        });
+        self.end_handover();
+        result
+    }
+
+    fn begin_handover(&self) -> Result<Vec<Arc<Session>>, String> {
+        let mut state = self.state.lock().expect("host state mutex poisoned");
+        if state.shutting_down || state.handing_over {
+            return Err("host is already shutting down or handing over".to_owned());
+        }
+        state.handing_over = true;
+        state.idle_deadline = None;
+        let state = self
+            .idle_changed
+            .wait_while(state, |state| !state.spawns_settled())
+            .expect("host state mutex poisoned");
+        let mut sessions = state.sessions.values().cloned().collect::<Vec<_>>();
+        sessions.sort_by(|a, b| a.id.cmp(&b.id));
+        Ok(sessions)
+    }
+
+    fn admit_removal(&self, session: &Session) -> bool {
+        let state = self.state.lock().expect("host state mutex poisoned");
+        if state.handing_over {
+            return false;
+        }
+        session.mark_removing();
+        true
+    }
+
+    fn end_handover(&self) {
+        self.state
+            .lock()
+            .expect("host state mutex poisoned")
+            .handing_over = false;
+        self.idle_changed.notify_all();
+        self.schedule_idle_if_empty();
+    }
+
+    fn exec_handover(
+        &self,
+        params: &HandoverParams,
+        current: String,
+        sessions: &[Arc<Session>],
+        reply: &UnixStream,
+        request_id: &str,
+    ) -> Result<(), String> {
+        let _reaping = self.reaper.pause();
+        let _frozen = sessions
+            .iter()
+            .map(|session| session.freeze_output())
+            .collect::<Vec<_>>();
+        let started = Instant::now();
+        let dir = handover::handoff_dir(&self.cfg.host_registry_path);
+        let path = dir.join(format!("host-{}.json", std::process::id()));
+        let mut handoff = HostHandoff::new(
+            self.cfg.daemon_instance_id.clone(),
+            params.generation.clone(),
+            self.cfg.socket_path.clone(),
+            self.cfg.registry_dir.clone(),
+            self.cfg.host_registry_path.clone(),
+            self.cfg.control_token.clone(),
+            u64::try_from(self.cfg.idle_timeout.as_millis()).unwrap_or(u64::MAX),
+        );
+        handoff.listener_fd = self.listener.as_raw_fd();
+        handoff.fallback = Some(Fallback {
+            executable: current,
+            generation: self.cfg.artifact.clone(),
+        });
+        let mut screen_bytes = 0;
+        for session in sessions {
+            let screen_path = dir.join(format!("host-{}-{}.vt", std::process::id(), session.id));
+            let captured = session
+                .capture_handoff(screen_path.to_string_lossy().into_owned())
+                .and_then(|(entry, screen)| {
+                    write_private(&screen_path, &screen.primary)?;
+                    screen_bytes += screen.primary.len();
+                    if let (Some(path), Some(alternate)) =
+                        (&entry.alternate_screen_path, &screen.alternate)
+                    {
+                        write_private(Path::new(path), alternate)?;
+                        screen_bytes += alternate.len();
+                    }
+                    Ok(entry)
+                });
+            match captured {
+                Ok(entry) => handoff.sessions.push(entry),
+                Err(error) => {
+                    handoff.remove(&path);
+                    return Err(format!("capture terminal {}: {error}", session.id));
+                }
+            }
+        }
+        if let Err(error) = handoff.write(&path) {
+            handoff.remove(&path);
+            return Err(error);
+        }
+        let inherited = std::iter::once(handoff.listener_fd)
+            .chain(
+                handoff
+                    .sessions
+                    .iter()
+                    .filter_map(|session| session.master_fd),
+            )
+            .collect::<Vec<RawFd>>();
+        if let Err(error) = inherited.iter().try_for_each(|fd| set_cloexec(*fd, false)) {
+            restore_cloexec(&inherited);
+            handoff.remove(&path);
+            return Err(error);
+        }
+        let mut line = serde_json::to_vec(&response(
+            request_id,
+            json!({"ok": true, "terminals": handoff.sessions.len()}),
+        ))
+        .unwrap_or_default();
+        line.push(b'\n');
+        let _ = (&*reply).write_all(&line);
+        eprintln!(
+            "PTY host handing over {} terminals to {} (generation {}): screens={}B captured in {:?}",
+            handoff.sessions.len(),
+            params.executable,
+            params.generation,
+            screen_bytes,
+            started.elapsed()
+        );
+        let error = handover::exec(&params.executable, &path);
+        eprintln!("PTY host handover failed, resuming the terminals here: {error}");
+        restore_cloexec(&inherited);
+        handoff.remove(&path);
         Ok(())
     }
 
@@ -524,7 +823,6 @@ struct Connection {
     watching: bool,
     watching_all: bool,
     authed: bool,
-    snapshot_format: String,
     close_action: CloseAction,
     pending_sessions: Vec<Arc<Session>>,
 }
@@ -586,7 +884,6 @@ fn handle_connection(host: Arc<Host>, stream: UnixStream, id: u64) {
         watching: false,
         watching_all: false,
         authed: false,
-        snapshot_format: String::new(),
         close_action: CloseAction::Detach,
         pending_sessions: Vec::new(),
     };
@@ -762,7 +1059,6 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
                     .try_clone()
                     .expect("connection clone already succeeded"),
                 params.omit_replay,
-                &connection.snapshot_format,
             );
             connection.subscriber_id = subscriber_id;
             connection.send(response(&request.id, result))
@@ -850,6 +1146,13 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
             let Ok(session) = connection.session(host, &request) else {
                 return connection.fail(&request.id, ERR_SESSION_NOT_FOUND, "session not found");
             };
+            if !host.admit_removal(&session) {
+                return connection.fail(
+                    &request.id,
+                    ERR_IO,
+                    "host is handing its terminals over to a new build; retry the removal",
+                );
+            }
             let sent = connection.send(response(&request.id, json!({"ok": true})));
             session.remove();
             sent
@@ -926,6 +1229,23 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
                 }),
             ))
         }
+        "handover" => {
+            if connection.selected.is_some() {
+                return connection.fail(
+                    &request.id,
+                    ERR_BAD_REQUEST,
+                    "handover requires a host-level hello",
+                );
+            }
+            let params: HandoverParams = match decode_params(&request) {
+                Ok(params) => params,
+                Err(message) => return connection.fail(&request.id, ERR_BAD_REQUEST, message),
+            };
+            match host.hand_over(&params, &connection.shutdown, &request.id) {
+                Ok(()) => false,
+                Err(message) => connection.fail(&request.id, ERR_IO, message),
+            }
+        }
         "upgrade" => connection.fail(&request.id, ERR_BAD_REQUEST, "host upgrade is not required"),
         _ => connection.fail(&request.id, ERR_BAD_REQUEST, "unknown method"),
     }
@@ -970,7 +1290,6 @@ fn handle_hello(host: &Host, connection: &mut Connection, request: &Request) -> 
         connection.selected = Some(session);
     }
     connection.authed = true;
-    connection.snapshot_format = params.snapshot_format;
     connection.send(response(
         &request.id,
         json!({
@@ -1013,6 +1332,14 @@ fn write_connection(stream: UnixStream, receiver: Receiver<Value>) {
     }
 }
 
+fn restore_cloexec(fds: &[RawFd]) {
+    for fd in fds {
+        if let Err(error) = set_cloexec(*fd, true) {
+            eprintln!("PTY host could not restore close-on-exec: {error}");
+        }
+    }
+}
+
 fn remove_session(host: &Weak<Host>, session_id: &str) {
     let Some(host) = host.upgrade() else {
         return;
@@ -1022,6 +1349,7 @@ fn remove_session(host: &Weak<Host>, session_id: &str) {
         .expect("host state mutex poisoned")
         .sessions
         .remove(session_id);
+    host.idle_changed.notify_all();
     host.schedule_idle_if_empty();
 }
 

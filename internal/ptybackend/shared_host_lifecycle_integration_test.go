@@ -357,15 +357,18 @@ func TestSharedHost_KeystrokesReachTheChildAcrossDaemonReplacement(t *testing.T)
 	}
 	if err := first.Spawn(context.Background(), SpawnOptions{
 		ID: "typist", CWD: root, Agent: "lifecycle-probe", Cols: 80, Rows: 24,
-		ExternalCommand: []string{"/bin/sh", "-c", "stty raw -echo && printf __TYPIST_READY__ && exec cat"},
+		ExternalCommand: []string{"/bin/sh", "-c", "stty raw -echo && head -c 1 >/dev/null && printf __TYPIST_READY__ && exec cat"},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	keys := "abcdefghijklmnopqrstuvwxyz0123456789"
 	half := len(keys) / 2
 	var received bytes.Buffer
-	_, stream, err := first.Attach(context.Background(), "typist", "typist-before")
+	_, stream, err := first.Attach(context.Background(), "typist", "typist-before", AttachOptions{OmitReplay: true})
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := first.Input(context.Background(), "typist", []byte("!")); err != nil {
 		t.Fatal(err)
 	}
 	waitForStreamText(t, stream, "__TYPIST_READY__")

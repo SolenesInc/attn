@@ -1,17 +1,20 @@
 mod blocks;
 mod boundary;
 mod ghostty;
+mod handover;
 mod host;
 mod png_decoder;
 mod probe_child;
 mod protocol;
 mod queries;
+mod quiesce;
 mod segmenter;
 mod session;
 mod signals;
 mod wire;
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use host::{Config, Host};
@@ -19,10 +22,10 @@ use host::{Config, Host};
 const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(45);
 
 fn main() {
-    let result = if std::env::args().nth(1).as_deref() == Some(probe_child::FLAG) {
-        probe_child::run()
-    } else {
-        run()
+    let result = match std::env::args().nth(1).as_deref() {
+        Some(probe_child::FLAG) => probe_child::run(),
+        Some(handover::ADOPT_FLAG) => adopt(),
+        _ => run(),
     };
     if let Err(error) = result {
         eprintln!("attn-pty-host: {error}");
@@ -41,6 +44,22 @@ fn run() -> Result<(), String> {
         control_token: required(&args, "control-token")?,
         idle_timeout: idle_timeout(&args)?,
     })
+}
+
+fn adopt() -> Result<(), String> {
+    let path = std::env::args()
+        .nth(2)
+        .map(PathBuf::from)
+        .ok_or_else(|| format!("missing handoff path after {}", handover::ADOPT_FLAG))?;
+    handover::arm_fallback(path.clone());
+    let result = Host::adopt(&path);
+    if let Err(error) = &result
+        && handover::fallback_armed()
+    {
+        eprintln!("attn-pty-host: adopting {} failed: {error}", path.display());
+        handover::fall_back(&path);
+    }
+    result
 }
 
 fn idle_timeout(args: &HashMap<String, String>) -> Result<Duration, String> {

@@ -1,0 +1,3 @@
+kind: fixed
+area: terminals
+change: Terminals on the shared PTY host no longer come back garbled after an update that changes the terminal engine; the host now moves onto the new build in place, keeping every terminal, its agent and its screen.

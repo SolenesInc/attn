@@ -40,8 +40,12 @@ pub struct HelloParams {
     pub control_token: String,
     #[serde(default)]
     pub session_id: String,
-    #[serde(default)]
-    pub snapshot_format: String,
+}
+
+#[derive(Deserialize)]
+pub struct HandoverParams {
+    pub executable: String,
+    pub generation: String,
 }
 
 #[derive(Clone, Deserialize, Serialize)]

@@ -613,7 +613,7 @@ func TestSharedHost_BlockedTerminationDoesNotBlockAnotherSession(t *testing.T) {
 	}
 	if err := backend.Spawn(context.Background(), SpawnOptions{
 		ID: "slow-stop", CWD: root, Agent: "fairness-probe",
-		ExternalCommand: []string{"/bin/sh", "-c", `trap 'printf "__TERM_RECEIVED__\n"; trap "" TERM HUP; while :; do read hold || true; done' TERM; printf "__READY__\n"; while :; do read hold || true; done`},
+		ExternalCommand: []string{"/bin/sh", "-c", `trap 'printf "__TERM_RECEIVED__\n"; trap "" TERM HUP; while :; do read hold || true; done' TERM; read start; printf "__READY__\n"; while :; do read hold || true; done`},
 		Cols:            80,
 		Rows:            24,
 	}); err != nil {
@@ -631,11 +631,14 @@ func TestSharedHost_BlockedTerminationDoesNotBlockAnotherSession(t *testing.T) {
 		_ = syscall.Kill(hostPID, syscall.SIGTERM)
 		_ = waitForPIDsGone(3*time.Second, hostPID)
 	}()
-	_, slowStream, err := backend.Attach(context.Background(), "slow-stop", "fairness-slow")
+	_, slowStream, err := backend.Attach(context.Background(), "slow-stop", "fairness-slow", AttachOptions{OmitReplay: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer slowStream.Close()
+	if err := backend.Input(context.Background(), "slow-stop", []byte("start\n")); err != nil {
+		t.Fatal(err)
+	}
 	waitForStreamText(t, slowStream, "__READY__")
 	slowInfo, err := backend.SessionInfo(context.Background(), "slow-stop")
 	if err != nil {
@@ -739,60 +742,6 @@ func TestSharedHost_BinaryUpgradeLeavesOldSessionsOnOldHost(t *testing.T) {
 		if err := newBackend.Remove(context.Background(), harness.TerminalID(id)); err != nil {
 			t.Fatalf("Remove(%s): %v", id, err)
 		}
-	}
-}
-
-func TestSharedHost_OldGenerationFallsBackToPortableReplay(t *testing.T) {
-	binary := os.Getenv("ATTN_TEST_PTY_HOST")
-	if binary == "" {
-		t.Skip("set ATTN_TEST_PTY_HOST to an attn-pty-host binary")
-	}
-	root, err := os.MkdirTemp("/tmp", "attn-rust-host-portable-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(root)
-	backend, err := NewSharedHost(WorkerBackendConfig{
-		DataRoot: root, DaemonInstanceID: "d-host-portable", BinaryPath: binary,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := backend.Spawn(context.Background(), SpawnOptions{
-		ID: "portable", CWD: t.TempDir(), Agent: "shell", Cols: 80, Rows: 24,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	hostPID := backend.WorkerPIDs(context.Background())["portable"]
-	defer func() {
-		_ = syscall.Kill(hostPID, syscall.SIGTERM)
-		_ = waitForPIDsGone(3*time.Second, hostPID)
-	}()
-
-	_, live, err := backend.Attach(context.Background(), "portable", "portable-live", AttachOptions{OmitReplay: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := backend.Input(context.Background(), "portable", []byte("printf '__PORTABLE_REPLAY__\\n'\n")); err != nil {
-		t.Fatal(err)
-	}
-	waitForStreamText(t, live, "__PORTABLE_REPLAY__")
-	_ = live.Close()
-
-	info, replay, err := backend.Attach(context.Background(), "portable", "portable-replay")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer replay.Close()
-	if len(info.GhosttySnapshot) != 0 {
-		t.Fatalf("native snapshot bytes = %d, want portable replay for mismatched formats", len(info.GhosttySnapshot))
-	}
-	event := waitForStreamText(t, replay, "__PORTABLE_REPLAY__")
-	if !bytes.HasPrefix(event.Data, []byte("\x1bc")) {
-		t.Fatalf("portable replay prefix = %q, want terminal reset", event.Data[:min(len(event.Data), 8)])
-	}
-	if err := backend.Remove(context.Background(), "portable"); err != nil {
-		t.Fatal(err)
 	}
 }
 

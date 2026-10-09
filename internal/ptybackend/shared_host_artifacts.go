@@ -234,6 +234,12 @@ func (b *WorkerBackend) reportRejection(reason string) {
 }
 
 func (b *WorkerBackend) collectSharedArtifacts() {
+	b.handoverMu.Lock()
+	handingOver := len(b.handovers) > 0
+	b.handoverMu.Unlock()
+	if handingOver {
+		return
+	}
 	b.hostMu.Lock()
 	defer b.hostMu.Unlock()
 	lastKnownGood, _ := b.lastKnownGood()
@@ -292,32 +298,9 @@ func (b *WorkerBackend) roundTripProbe(ctx context.Context, artifact ptyhost.Art
 		return errors.New("host does not provide the validation probe")
 	}
 
-	suffix, err := randomToken(6)
+	probe, owner, err := b.spawnProbe(ctx, host, artifact)
 	if err != nil {
 		return err
-	}
-	probe := &workerSession{
-		SessionID:    sharedHostProbePrefix + suffix,
-		SocketPath:   host.SocketPath,
-		ControlToken: host.ControlToken,
-		WorkerPID:    host.HostPID,
-	}
-	workdir := os.TempDir()
-	owner, err := b.openSharedCall(ctx, inc.endpoint(), ptyhost.MethodSpawn, ptyhost.SpawnParams{
-		SessionID: probe.SessionID,
-		Agent:     "probe",
-		CWD:       workdir,
-		Cols:      80,
-		Rows:      24,
-		Attempts: []pty.PreparedLaunchAttempt{{
-			Executable: artifact.Path,
-			Args:       []string{artifact.Path, ptyhost.ProbeChildFlag},
-			Env:        []string{"TERM=xterm-256color"},
-			CWD:        workdir,
-		}},
-	}, nil)
-	if err != nil {
-		return fmt.Errorf("spawn probe: %w", err)
 	}
 	defer owner.Close()
 	defer b.releaseSharedIncarnationIfUnused(inc)
@@ -350,6 +333,37 @@ func (b *WorkerBackend) roundTripProbe(ctx context.Context, artifact ptyhost.Art
 		return fmt.Errorf("detach probe: %w", err)
 	}
 	return nil
+}
+
+func (b *WorkerBackend) spawnProbe(ctx context.Context, host ptyhost.HostRegistry, artifact ptyhost.Artifact) (*workerSession, net.Conn, error) {
+	suffix, err := randomToken(6)
+	if err != nil {
+		return nil, nil, err
+	}
+	probe := &workerSession{
+		SessionID:    sharedHostProbePrefix + suffix,
+		SocketPath:   host.SocketPath,
+		ControlToken: host.ControlToken,
+		WorkerPID:    host.HostPID,
+	}
+	workdir := os.TempDir()
+	owner, err := b.openSharedCall(ctx, incarnationOfHost(host).endpoint(), ptyhost.MethodSpawn, ptyhost.SpawnParams{
+		SessionID: probe.SessionID,
+		Agent:     "probe",
+		CWD:       workdir,
+		Cols:      80,
+		Rows:      24,
+		Attempts: []pty.PreparedLaunchAttempt{{
+			Executable: artifact.Path,
+			Args:       []string{artifact.Path, ptyhost.ProbeChildFlag},
+			Env:        []string{"TERM=xterm-256color"},
+			CWD:        workdir,
+		}},
+	}, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("spawn probe: %w", err)
+	}
+	return probe, owner, nil
 }
 
 func (b *WorkerBackend) watchProbeExit(ctx context.Context, probe *workerSession) (<-chan struct{}, net.Conn, error) {

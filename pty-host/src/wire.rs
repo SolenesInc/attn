@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::Read;
 
 use crate::blocks::BlockTable;
-use crate::ghostty::{KittyImage, KittyPlacement, Terminal};
+use crate::ghostty::{HandoverScreen, KittyImage, KittyPlacement, Terminal, Theme};
 use crate::segmenter::{Segment, Segmenter};
 
 const RESYNC_ANCHOR_LOST: &str = "kitty_layout_anchor_lost";
@@ -45,6 +45,32 @@ impl WireFeeder {
             placements_changed: false,
             resync: None,
         }
+    }
+
+    pub fn adopt(
+        screen: &HandoverScreen,
+        (cols, rows): (u16, u16),
+        (cell_width, cell_height): (u16, u16),
+        theme: &Theme,
+        blocks: &[crate::blocks::AttachBlock],
+        next_block_id: u64,
+    ) -> Result<Self, String> {
+        let mut terminal = Terminal::new(cols, rows)?;
+        if cell_width > 0 && cell_height > 0 {
+            terminal.resize_no_reflow(cols, rows, u32::from(cell_width), u32::from(cell_height))?;
+        }
+        terminal.write(&screen.primary);
+        let mut wire = Self::new(terminal, mint_epoch());
+        wire.blocks = BlockTable::restore(blocks, next_block_id, &wire.terminal);
+        if let Some(alternate) = &screen.alternate {
+            wire.terminal.write(b"\x1b[?1049h");
+            wire.terminal.write(alternate);
+        }
+        wire.terminal.write(b"\x1b]104\x1b\\");
+        wire.terminal.set_theme(theme)?;
+        wire.terminal.drain_responses();
+        wire.terminal.drain_program_status();
+        Ok(wire)
     }
 
     pub fn feed(&mut self, data: &[u8]) -> FeedResult {
@@ -176,6 +202,10 @@ impl WireFeeder {
         self.blocks.snapshot()
     }
 
+    pub fn next_block_id(&self) -> u64 {
+        self.blocks.next_id()
+    }
+
     pub fn snapshot_placements(&self) -> Option<Vec<KittyPlacement>> {
         if self.placements.is_empty() {
             None
@@ -243,7 +273,34 @@ pub fn mint_epoch() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::{WireFeeder, mint_epoch};
-    use crate::ghostty::Terminal;
+    use crate::ghostty::{Terminal, Theme};
+
+    #[test]
+    fn command_blocks_survive_a_handover_under_an_alternate_screen() {
+        let mut source = WireFeeder::new(Terminal::new(60, 12).expect("terminal"), mint_epoch());
+        for command in 0..30 {
+            source.feed(
+                format!("\x1b]133;A\x07$ \x1b]133;C;cmdline=cmd-{command}\x07out {command}\r\n\x1b]133;D;0\x07").as_bytes(),
+            );
+        }
+        source.feed(b"\x1b]133;A\x07$ \x1b]133;C;cmdline=vim\x07\x1b[?1049h\x1b[Hediting");
+        let before = serde_json::to_value(source.snapshot_blocks()).expect("blocks");
+
+        let adopted = WireFeeder::adopt(
+            &source.terminal().handover_vt().expect("dump"),
+            (60, 12),
+            (0, 0),
+            &Theme::default(),
+            &source.snapshot_blocks(),
+            source.next_block_id(),
+        )
+        .expect("adopt");
+        assert!(adopted.terminal().alt_screen_active());
+        assert_eq!(
+            serde_json::to_value(adopted.snapshot_blocks()).expect("blocks"),
+            before
+        );
+    }
 
     #[test]
     fn plain_output_passes_through() {
