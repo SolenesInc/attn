@@ -1,7 +1,6 @@
 package ptybackend
 
 import (
-	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -36,10 +35,10 @@ func TestSharedHost_HandoverMovesEveryTerminalToTheNewBuildInPlace(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := oldBackend.Input(context.Background(), "numbers", []byte("seq 1 40 | sed s/^/row-/\n")); err != nil {
+	if err := oldBackend.Input(context.Background(), "numbers", []byte("seq 1 40 | sed s/^/row-/; cat\n")); err != nil {
 		t.Fatal(err)
 	}
-	waitForPromptAfter(t, live, "row-40")
+	waitForStreamText(t, live, "row-40")
 	_ = live.Close()
 	before, err := oldBackend.ScreenSnapshot(context.Background(), "numbers")
 	if err != nil {
@@ -88,7 +87,7 @@ func TestSharedHost_HandoverMovesEveryTerminalToTheNewBuildInPlace(t *testing.T)
 	if attached.GhosttySnapshotFormat != "handover-new" || len(attached.GhosttySnapshot) == 0 {
 		t.Fatalf("attach after the handover: format=%q snapshot=%dB, want a handover-new snapshot", attached.GhosttySnapshotFormat, len(attached.GhosttySnapshot))
 	}
-	if err := newBackend.Input(context.Background(), "numbers", []byte("printf 'after-%s\\n' five\n")); err != nil {
+	if err := newBackend.Input(context.Background(), "numbers", []byte("\x04printf 'after-%s\\n' five\n")); err != nil {
 		t.Fatal(err)
 	}
 	waitForStreamText(t, stream, "after-five")
@@ -176,24 +175,4 @@ func screenText(screen *pty.ViewportSnapshot) string {
 		return "<no screen>"
 	}
 	return screen.Text
-}
-
-func waitForPromptAfter(t *testing.T, stream Stream, text string) {
-	t.Helper()
-	deadline := time.After(8 * time.Second)
-	var output bytes.Buffer
-	for {
-		select {
-		case event := <-stream.Events():
-			if event.Kind != OutputEventKindOutput {
-				continue
-			}
-			output.Write(event.Data)
-			if at := strings.Index(output.String(), text); at >= 0 && strings.Contains(output.String()[at:], "\x1b]133;B") {
-				return
-			}
-		case <-deadline:
-			t.Fatalf("output = %q, want %q followed by a prompt", output.String(), text)
-		}
-	}
 }
