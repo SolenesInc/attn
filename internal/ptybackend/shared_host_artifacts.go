@@ -234,6 +234,12 @@ func (b *WorkerBackend) reportRejection(reason string) {
 }
 
 func (b *WorkerBackend) collectSharedArtifacts() {
+	b.handoverMu.Lock()
+	handingOver := len(b.handovers) > 0
+	b.handoverMu.Unlock()
+	if handingOver {
+		return
+	}
 	b.hostMu.Lock()
 	defer b.hostMu.Unlock()
 	lastKnownGood, _ := b.lastKnownGood()
