@@ -17,8 +17,9 @@ command starts; hooks apply to the conversation shown when the report arrives.
 Native harness conversation ids remain separate text values.
 
 Removing a placement keeps the terminal addressable, including after daemon
-restart. Closing a session ends its terminal associations. When several
-terminals show one session, ending one leaves the others running.
+restart. Closing a session ends its terminal associations. A session is shown
+in at most one terminal: when another terminal resumes its conversation, that
+terminal takes the session over and the previous one stops showing it.
 
 Plugin driver payloads retain the `session_id` wire spelling for the terminal.
 Close notifications, including those completed after restart, use the original
@@ -44,6 +45,34 @@ Probed on 2.1.288 with a mock API.
   `clear`, then a turn and Stop on the new id with no UserPromptSubmit.
 - The transcript is `<config>/projects/<cwd-slug>/<id>.jsonl`; attn reads the
   conversation id from that name.
+
+### Program status (OSC 7501)
+
+Probed on 2.1.295 under a scratch PTY, and read in its bundled source.
+
+- At startup Claude sends `OSC 7501 ; ?` before its DA1 query. It reports
+  only when the 7501 reply arrives before the DA1 reply; otherwise it never
+  asks again in that process. `CLAUDE_CODE_DISABLE_TERMINAL_TITLE` turns the
+  reports off along with the title.
+- It reports the root record with `app=claude-code`:
+
+  | Claude | Report |
+  |---|---|
+  | busy, or idle with a queued prompt | `working`, with `progress` and `msg` |
+  | permission, sandbox, worker or goal prompt | `blocked kind=permission` |
+  | MCP elicitation | `blocked kind=question` |
+  | other open dialog | `blocked` without a kind |
+  | login failure | `blocked kind=auth` |
+  | turn completed | `done` |
+  | interrupted, or a fresh session | `idle` |
+  | turn failed | `error`, the failure in `msg` |
+
+- Background agents arrive as child records (`id=<agent id>`) with their own
+  `working` or `blocked`; attn reads only the root record.
+- A report is sent only when it changes; there is no heartbeat. When Claude
+  hands the terminal back, on exit or suspend, it sends `state=clear`.
+- Claude keeps setting its title glyphs. Once a terminal has a root record,
+  attn ignores the glyphs until a `clear`.
 
 ## Codex
 

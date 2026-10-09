@@ -281,6 +281,17 @@ mod tests {
     }
 
     #[test]
+    fn answers_the_program_status_probe_before_da1() {
+        let mut terminal = Terminal::new(80, 24).expect("terminal");
+        let output = b"\x1b]7501;?\x1b\\\x1b[c";
+        let queries = TerminalQueries::detect(output);
+        terminal.write(output);
+        let drained = terminal.drain_responses();
+        let replies = String::from_utf8(queries.replies_after_feed(&terminal, &drained)).unwrap();
+        assert_eq!(replies, "\x1b]7501;?\x1b\\\x1b[?1;2c");
+    }
+
+    #[test]
     fn classifies_background_luminance() {
         let mut theme = Theme::default();
         assert_eq!(theme_color_scheme(&theme), ColorScheme::Dark);

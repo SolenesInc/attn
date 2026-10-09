@@ -1,11 +1,18 @@
 use std::time::{Duration, Instant};
 
+use crate::ghostty::{ProgramKind, ProgramState, ProgramStatus};
+
 const KEEPALIVE: Duration = Duration::from_secs(1);
 const MAX_PENDING: usize = 64 * 1024;
+
+pub const HEARTBEAT: &str = "heartbeat";
+pub const PROGRAM_STATUS: &str = "program_status";
+const PROGRAM_CLEAR: &str = "clear";
 
 pub struct Observation {
     pub claim: &'static str,
     pub detail: String,
+    pub source: &'static str,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -25,6 +32,7 @@ pub struct SignalObserver {
     shell_pgid: i32,
     last_foreground_pgid: i32,
     prompt_owner: Option<i32>,
+    program_status_reported: bool,
 }
 
 impl SignalObserver {
@@ -44,7 +52,26 @@ impl SignalObserver {
             shell_pgid: 0,
             last_foreground_pgid: 0,
             prompt_owner: None,
+            program_status_reported: false,
         }
+    }
+
+    pub fn observe_program_status(&mut self, reports: &[ProgramStatus]) -> Vec<Observation> {
+        if self.kind == Kind::Shell {
+            return Vec::new();
+        }
+        reports
+            .iter()
+            .map(|report| {
+                let claim = program_status_claim(report);
+                self.program_status_reported = claim != PROGRAM_CLEAR;
+                Observation {
+                    claim,
+                    detail: report.message.clone(),
+                    source: PROGRAM_STATUS,
+                }
+            })
+            .collect()
     }
 
     pub fn observe(&mut self, chunk: &[u8]) -> Vec<Observation> {
@@ -126,7 +153,7 @@ impl SignalObserver {
         if self.kind == Kind::Shell && code == "133" {
             return self.classify_shell_marker(payload, now);
         }
-        if code != "0" && code != "2" {
+        if (code != "0" && code != "2") || self.program_status_reported {
             return None;
         }
         match self.kind {
@@ -200,7 +227,25 @@ impl SignalObserver {
         self.last_claim.push_str(claim);
         self.last_detail.clone_from(&detail);
         self.last_emit = Some(now);
-        Some(Observation { claim, detail })
+        Some(Observation {
+            claim,
+            detail,
+            source: HEARTBEAT,
+        })
+    }
+}
+
+fn program_status_claim(report: &ProgramStatus) -> &'static str {
+    match (report.state, report.kind) {
+        (ProgramState::Working, _) => "working",
+        (ProgramState::Blocked, ProgramKind::Permission) => "blocked_permission",
+        (ProgramState::Blocked, ProgramKind::Question) => "blocked_question",
+        (ProgramState::Blocked, ProgramKind::Auth) => "blocked_auth",
+        (ProgramState::Blocked, ProgramKind::None) => "blocked",
+        (ProgramState::Done, _) => "done",
+        (ProgramState::Error, _) => "error",
+        (ProgramState::Clear, _) => PROGRAM_CLEAR,
+        (ProgramState::Idle, _) => "idle",
     }
 }
 
@@ -288,8 +333,43 @@ fn find_osc_end(bytes: &[u8], start: usize) -> Option<(usize, usize)> {
 
 #[cfg(test)]
 mod tests {
-    use super::{KEEPALIVE, SignalObserver};
+    use super::{KEEPALIVE, PROGRAM_STATUS, SignalObserver};
+    use crate::ghostty::Terminal;
     use std::time::{Duration, Instant};
+
+    #[test]
+    fn root_program_status_replaces_title_claims_until_cleared() {
+        let mut terminal = Terminal::new(80, 24).expect("terminal");
+        let mut observer = SignalObserver::new("claude");
+        let busy_title = "\x1b]0;\u{2736} Claude Code\x07".as_bytes();
+
+        terminal.write(b"\x1b]7501;state=working:id=agent-1:app=claude-code\x1b\\");
+        assert!(
+            observer
+                .observe_program_status(&terminal.drain_program_status())
+                .is_empty()
+        );
+
+        terminal.write(b"\x1b]7501;state=blocked:kind=permission:msg=QWxsb3c/\x1b\\");
+        let blocked = observer.observe_program_status(&terminal.drain_program_status());
+        assert_eq!(blocked.len(), 1);
+        assert_eq!(
+            (
+                blocked[0].claim,
+                blocked[0].detail.as_str(),
+                blocked[0].source
+            ),
+            ("blocked_permission", "Allow?", PROGRAM_STATUS)
+        );
+        assert!(observer.observe(busy_title).is_empty());
+
+        terminal.write(b"\x1b]7501;state=clear\x1b\\");
+        assert_eq!(
+            observer.observe_program_status(&terminal.drain_program_status())[0].claim,
+            "clear"
+        );
+        assert_eq!(observer.observe(busy_title)[0].claim, "busy");
+    }
 
     #[test]
     fn observes_split_codex_title() {

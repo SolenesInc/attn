@@ -81,6 +81,8 @@ jobs:
               - 'plugins/**'
               - 'app/pnpm-workspace.yaml'
               - 'internal/protocol/schema/**'
+              - 'ghostty-vt.pin'
+              - 'ghostty-vt-wasm.lock'
               - '.github/workflows/ci.yml'
               - '.tool-versions'
               - '.github/actions/setup-toolchains/**'

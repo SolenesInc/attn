@@ -99,6 +99,7 @@ type Session struct {
 	colorSchemeReports atomic.Bool
 
 	harnessSignals *harnessSignalObserver
+	programStatus  *programStatusObserver
 	shellSignals   *shellSignalArbiter
 	onState        func(obs Observation)
 
@@ -368,6 +369,7 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 					readLoopAppliedHook(data)
 				}
 				s.drainGhosttyResponses(logf)
+				programReports := s.drainProgramStatus()
 				if queries.da1BeforeCPR {
 					s.writeDeviceAttributesResponse(logf)
 					s.writeCursorPositionResponse(logf)
@@ -395,9 +397,17 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 					s.forceResync(resync)
 				}
 				s.deliveryMu.Unlock()
-				if s.harnessSignals != nil && s.onState != nil {
-					for _, obs := range s.harnessSignals.Observe(data, time.Now()) {
+				if s.programStatus != nil && s.onState != nil {
+					for _, obs := range s.programStatus.Observe(programReports, time.Now()) {
 						s.emitSignal(obs)
+					}
+				}
+				if s.harnessSignals != nil && s.onState != nil {
+					titleObservations := s.harnessSignals.Observe(data, time.Now())
+					if !s.programStatus.replacesTitles() {
+						for _, obs := range titleObservations {
+							s.emitSignal(obs)
+						}
 					}
 				}
 				if s.shellSignals != nil && s.onState != nil {
@@ -483,6 +493,15 @@ func (s *Session) drainGhosttyResponses(logf func(string, ...interface{})) {
 	if logf != nil {
 		logf("pty ghostty gap reply: session=%s bytes=%d", s.id, len(gap))
 	}
+}
+
+func (s *Session) drainProgramStatus() []ghosttyvt.ProgramStatus {
+	s.replayMu.Lock()
+	defer s.replayMu.Unlock()
+	if s.ghostty == nil {
+		return nil
+	}
+	return s.ghostty.DrainProgramStatus()
 }
 
 func stripScannerOwnedResponses(resp []byte) []byte {

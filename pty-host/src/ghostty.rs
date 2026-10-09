@@ -37,6 +37,14 @@ struct RawImage {
     generation: u64,
 }
 
+#[repr(C)]
+struct RawProgramStatus {
+    state: u8,
+    kind: u8,
+    message: *mut u8,
+    message_len: usize,
+}
+
 unsafe extern "C" {
     fn attn_ghostty_install_png_decoder() -> i32;
     fn attn_ghostty_new(
@@ -82,6 +90,11 @@ unsafe extern "C" {
         palette: *const u32,
     ) -> i32;
     fn attn_ghostty_drain_responses(terminal: *mut c_void, len: *mut usize) -> *mut u8;
+    fn attn_ghostty_drain_program_status(
+        terminal: *mut c_void,
+        len: *mut usize,
+    ) -> *mut RawProgramStatus;
+    fn attn_ghostty_program_status_free(reports: *mut RawProgramStatus, len: usize);
     fn attn_ghostty_snapshot(terminal: *mut c_void, len: *mut usize) -> *mut u8;
     fn attn_ghostty_vt_dump(terminal: *mut c_void, len: *mut usize) -> *mut u8;
     #[cfg(test)]
@@ -134,6 +147,62 @@ fn is_false(value: &bool) -> bool {
 #[allow(clippy::trivially_copy_pass_by_ref)]
 fn is_zero_u32(value: &u32) -> bool {
     *value == 0
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProgramState {
+    Idle,
+    Working,
+    Done,
+    Blocked,
+    Error,
+    Clear,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProgramKind {
+    None,
+    Permission,
+    Question,
+    Auth,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProgramStatus {
+    pub state: ProgramState,
+    pub kind: ProgramKind,
+    pub message: String,
+}
+
+impl ProgramStatus {
+    fn from_raw(raw: &RawProgramStatus) -> Option<Self> {
+        let state = match raw.state {
+            0 => ProgramState::Idle,
+            1 => ProgramState::Working,
+            2 => ProgramState::Done,
+            3 => ProgramState::Blocked,
+            4 => ProgramState::Error,
+            5 => ProgramState::Clear,
+            _ => return None,
+        };
+        let kind = match raw.kind {
+            1 => ProgramKind::Permission,
+            2 => ProgramKind::Question,
+            3 => ProgramKind::Auth,
+            _ => ProgramKind::None,
+        };
+        let message = if raw.message.is_null() || raw.message_len == 0 {
+            String::new()
+        } else {
+            let bytes = unsafe { std::slice::from_raw_parts(raw.message, raw.message_len) };
+            String::from_utf8_lossy(bytes).into_owned()
+        };
+        Some(Self {
+            state,
+            kind,
+            message,
+        })
+    }
 }
 
 pub struct KittyImage {
@@ -304,6 +373,20 @@ impl Terminal {
 
     pub fn drain_responses(&mut self) -> Vec<u8> {
         unsafe { take_bytes(|len| attn_ghostty_drain_responses(self.raw.as_ptr(), len)) }
+    }
+
+    pub fn drain_program_status(&mut self) -> Vec<ProgramStatus> {
+        let mut len = 0_usize;
+        let raw = unsafe { attn_ghostty_drain_program_status(self.raw.as_ptr(), &raw mut len) };
+        if raw.is_null() {
+            return Vec::new();
+        }
+        let reports = unsafe { std::slice::from_raw_parts(raw, len) }
+            .iter()
+            .filter_map(ProgramStatus::from_raw)
+            .collect();
+        unsafe { attn_ghostty_program_status_free(raw, len) };
+        reports
     }
 
     pub fn snapshot(&self) -> Vec<u8> {

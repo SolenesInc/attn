@@ -1,6 +1,7 @@
 package fakeagent
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -31,18 +32,19 @@ var claudeFlags = flagSpec{
 }
 
 type claude struct {
-	cfg          config
-	term         *terminal
-	hooks        hookSet
-	cwd          string
-	conversation string
-	resumed      bool
-	transcript   string
-	model        string
-	permission   string
-	prompt       string
-	streaming    string
-	picker       bool
+	cfg                 config
+	term                *terminal
+	hooks               hookSet
+	cwd                 string
+	conversation        string
+	resumed             bool
+	transcript          string
+	model               string
+	permission          string
+	prompt              string
+	streaming           string
+	picker              bool
+	terminalReadsStatus bool
 }
 
 var claudePrintFlags = flagSpec{
@@ -150,7 +152,9 @@ func (c *claude) begin(term *terminal) error {
 	if c.resumed {
 		source = "resume"
 	}
+	c.terminalReadsStatus = term.probeProgramStatus()
 	term.title(claudeRestingTitle)
+	c.reportStatus("state=idle")
 	return c.hooks.run("SessionStart", source, c.hookInput("SessionStart", map[string]any{"source": source}))
 }
 
@@ -208,6 +212,7 @@ func (c *claude) submit(prompt string) error {
 		return c.resume(strings.TrimSpace(conversation))
 	}
 	c.term.title(claudeBusyTitle)
+	c.reportStatus("state=working")
 	if err := c.hooks.run("UserPromptSubmit", "", c.hookInput("UserPromptSubmit", map[string]any{"prompt": prompt})); err != nil {
 		return err
 	}
@@ -275,6 +280,7 @@ func (c *claude) stream(text string) error {
 func (c *claude) halt() error {
 	c.streaming = ""
 	c.term.title(claudeRestingTitle)
+	c.reportStatus("state=idle")
 	return c.record("user", map[string]any{
 		"role":    "user",
 		"content": []map[string]any{{"type": "text", "text": "[Request interrupted by user]"}},
@@ -316,7 +322,26 @@ func claudeMessageID() string {
 
 func (c *claude) stop() error {
 	c.term.title(claudeRestingTitle)
+	c.reportStatus("state=done")
 	return c.hooks.run("Stop", "", c.hookInput("Stop", map[string]any{"stop_hook_active": false}))
+}
+
+func (c *claude) reportStatus(fields string) {
+	if c.terminalReadsStatus {
+		c.term.programStatus(fields + ":app=claude-code")
+	}
+}
+
+func (c *claude) approvalAnnouncement() string {
+	if !c.terminalReadsStatus {
+		return ""
+	}
+	reason := base64.StdEncoding.EncodeToString([]byte("Bash: run the migration"))
+	return programStatusSequence("state=blocked:kind=permission:app=claude-code:msg=" + reason)
+}
+
+func (c *claude) approvalAnswered() {
+	c.reportStatus("state=working")
 }
 
 func (c *claude) record(kind string, message map[string]any, extra map[string]any) error {

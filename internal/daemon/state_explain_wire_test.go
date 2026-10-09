@@ -85,7 +85,7 @@ func TestStateExplainFollowsASessionThroughItsTurnARestartAndItsClose(t *testing
 			explained.SessionID, explained.Agent, explained.State, protocol.Deref(explained.StateSince), session, waiting.StateSince)
 	}
 	stateExplainShows(t, explained.Observations,
-		stateExplainRow{source: "heartbeat", claim: "busy", outcome: "observed", detail: "Claude Code"},
+		stateExplainRow{source: "program_status", claim: "working", outcome: "observed"},
 	)
 	stateExplainShows(t, explained.Observations,
 		stateExplainRow{source: "hook_state", claim: "working", outcome: "observed"},

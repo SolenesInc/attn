@@ -22,6 +22,7 @@ package ghosttyvt
 // Implemented in callback.go; the terminal invokes it synchronously during
 // vt_write with query-response bytes (CPR, DA1, kitty CSI ? u, DECRQM…).
 extern void goWritePty(GhosttyTerminal term, void* userdata, const uint8_t* data, size_t len);
+extern void goProgramStatus(GhosttyTerminal term, void* userdata, const GhosttyTerminalProgramStatus* report);
 
 // Install the userdata pointer + write_pty callback in one shot. userdata is the
 // address of the sink's cgo.Handle field. ghostty_terminal_set retains it past
@@ -31,7 +32,9 @@ extern void goWritePty(GhosttyTerminal term, void* userdata, const uint8_t* data
 static GhosttyResult ghosttyvt_install(GhosttyTerminal t, void* userdata) {
 	GhosttyResult rc = ghostty_terminal_set(t, GHOSTTY_TERMINAL_OPT_USERDATA, userdata);
 	if (rc != GHOSTTY_SUCCESS) return rc;
-	return ghostty_terminal_set(t, GHOSTTY_TERMINAL_OPT_WRITE_PTY, (const void*)goWritePty);
+	rc = ghostty_terminal_set(t, GHOSTTY_TERMINAL_OPT_WRITE_PTY, (const void*)goWritePty);
+	if (rc != GHOSTTY_SUCCESS) return rc;
+	return ghostty_terminal_set(t, GHOSTTY_TERMINAL_OPT_PROGRAM_STATUS, (const void*)goProgramStatus);
 }
 
 // Set the kitty image storage limit. ghostty_terminal_set reads the value
@@ -266,9 +269,10 @@ type Snapshot struct {
 }
 
 type respSink struct {
-	mu     sync.Mutex
-	buf    []byte
-	handle cgo.Handle
+	mu            sync.Mutex
+	buf           []byte
+	programStatus []ProgramStatus
+	handle        cgo.Handle
 }
 
 type Terminal struct {
@@ -453,6 +457,15 @@ func (t *Terminal) DrainResponses() []byte {
 	}
 	out := s.buf
 	s.buf = nil
+	return out
+}
+
+func (t *Terminal) DrainProgramStatus() []ProgramStatus {
+	s := t.sink
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := s.programStatus
+	s.programStatus = nil
 	return out
 }
 

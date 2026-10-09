@@ -79,6 +79,9 @@ func evidence(t *rapid.T, p sessionstate.Policy) sessionstate.Evidence {
 	return sessionstate.Evidence{
 		Heartbeat: observation(t, "heartbeat", p, 2, sessionstate.SourceHeartbeat,
 			[]sessionstate.Claim{sessionstate.ClaimBusy, sessionstate.ClaimSettled}),
+		ProgramStatus: observation(t, "program_status", p, 2, sessionstate.SourceProgramStatus,
+			[]sessionstate.Claim{sessionstate.ClaimBusy, sessionstate.ClaimSettled, sessionstate.ClaimApprovalPending,
+				sessionstate.ClaimNeedsInput, sessionstate.ClaimStopFailed}),
 		LastHarnessEvent: observation(t, "harness", p, 4, sessionstate.SourceHarnessEvent, everyClaim),
 		LastClassifier: observation(t, "classifier", p, 2, sessionstate.SourceClassifier,
 			[]sessionstate.Claim{sessionstate.ClaimNeedsInput, sessionstate.ClaimIdle, sessionstate.ClaimParked}),
@@ -109,7 +112,7 @@ func rarely(t *rapid.T, label string, p sessionstate.Policy) time.Time {
 
 func laterInstant(t *rapid.T, label string, p sessionstate.Policy, e sessionstate.Evidence, until time.Time) time.Time {
 	stamps := []time.Time{nextChangeBase, e.LastBusyAt, e.PromptIdleAt, e.ClassifyingSince, e.LastMovement}
-	for _, o := range []*sessionstate.Observation{e.Heartbeat, e.LastHarnessEvent, e.LastClassifier, e.Process} {
+	for _, o := range []*sessionstate.Observation{e.Heartbeat, e.ProgramStatus, e.LastHarnessEvent, e.LastClassifier, e.Process} {
 		if o != nil {
 			stamps = append(stamps, o.ObservedAt)
 		}

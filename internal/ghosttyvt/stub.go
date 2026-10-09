@@ -42,6 +42,8 @@ func (t *Terminal) SetCellPixelSize(_, _ int) {}
 
 func (t *Terminal) DrainResponses() []byte { return nil }
 
+func (t *Terminal) DrainProgramStatus() []ProgramStatus { return nil }
+
 func (t *Terminal) Size() (cols, rows int) { return t.cols, t.rows }
 
 func (t *Terminal) PlainText() string { return "" }
