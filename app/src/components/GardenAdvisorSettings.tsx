@@ -51,7 +51,7 @@ export function GardenAdvisorSettings({
     Boolean(saved.model) && !(MODEL_PRESETS[saved.agent] ?? []).some((preset) => preset.value === saved.model),
   );
 
-  const presets = [{ value: '', label: 'Light default (Recommended)' }, ...(MODEL_PRESETS[agent] ?? [])];
+  const presets = [{ value: '', label: agent === 'copilot' ? 'Copilot default (Sonnet 4.6)' : 'Light default (Recommended)' }, ...(MODEL_PRESETS[agent] ?? [])];
   const efforts = EFFORT_LEVELS[agent] ?? [];
   const available = settings[`${agent}_available`] !== 'false'
     && settings[`${agent}_cap_headless_task`] !== 'false';

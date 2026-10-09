@@ -50,6 +50,7 @@ describe('App garden advisor settings', () => {
 
     await gesture(daemon, () => fireEvent.change(field('Agent'), { target: { value: 'copilot' } }));
     expect(recipe()).toEqual({ agent: 'copilot', model: '', effort: '' });
+    expect(within(field('Model')).getByRole('option', { selected: true })).toHaveTextContent('Copilot default (Sonnet 4.6)');
 
     expect(savedSettings(daemon)[0]).toEqual(['garden.advisor', '{"agent":"copilot","model":""}']);
 
