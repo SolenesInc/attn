@@ -68,9 +68,6 @@ ledger for resuming, and selects the desktop above (or below if it was first).
 The only desktop and desktops holding the chief or awake crew members stay open.
 A closed launch desktop returns when its crew member wakes or its automation runs.
 
-Settings about the user's environment, including model tiers for available
-harnesses and models, apply across profiles on the daemon.
-
 Use "Move with delegates to…" in the command palette to move an agent with its
 delegates on the same desktop, including their delegates. Hold Option when
 dropping an agent on another desktop in the sidebar for the same move. Each delegate lands beside its dispatcher;
