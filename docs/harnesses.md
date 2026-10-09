@@ -31,8 +31,9 @@ Probed on 2.1.288 with a mock API.
 Model discovery and effort were probed on 2.1.295 with the real harness on
 2026-10-09. `haiku` reports Haiku 5.5 with medium effort supported. A headless
 `--model haiku --effort medium` call, with tools, hooks, MCP servers and session
-persistence disabled, completed successfully. This checks acceptance of the
-effort flag; it does not measure how much reasoning the model performs.
+persistence disabled, completed successfully. The full Haiku 4.5 ID
+`claude-haiku-4-5-20251001` reports unknown effort metadata; an isolated call
+with medium also succeeds. These probes check acceptance of the effort flag; it does not measure how much reasoning the model performs.
 
 | Action | Hooks, in order | Conversation id |
 |---|---|---|
