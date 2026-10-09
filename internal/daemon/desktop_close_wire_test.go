@@ -151,6 +151,19 @@ func TestCrewWakeRecreatesItsClosedLaunchDesktop(t *testing.T) {
 			w.restart()
 			app = w.App()
 			readLaunchSetting(app, "crew", "alder")
+			member := crewRosterMember(t, w.Client(), "alder")
+			request := uuid.NewString()
+			saved := testworld.Request(app, protocol.CrewSetMessage{
+				Cmd: protocol.CmdCrewSet, Member: "alder", RequestID: protocol.Ptr(request),
+				ExpectedRevision: protocol.Ptr(member.Revision), Effort: protocol.Ptr("high"),
+				LaunchDesktopSetting: &protocol.LaunchDesktopSetting{DesktopID: protocol.Ptr(old)},
+			}, protocol.EventCrewSetResult, func(r protocol.CrewSetResultMessage) bool { return r.RequestID == request })
+			if !saved.Success || saved.Member == nil || protocol.Deref(saved.Member.Effort) != "high" {
+				t.Fatalf("edit crew while desktop closed: %s (%+v)", protocol.Deref(saved.Error), saved)
+			}
+			if _, exists := viewProfile(t, w, profile).desktops[old]; exists {
+				t.Fatal("settings save recreated the closed launch desktop")
+			}
 			wake := wakeCrew(t, w.Client(), "alder", "")
 			w.Launched(string(wake.SessionID))
 			desktop, _ := viewProfile(t, w, profile).paneOf(t, string(wake.SessionID))
@@ -177,7 +190,8 @@ func TestAutomationRunRecreatesItsClosedLaunchDesktop(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	definition := applyAutomation(t, cli, fmt.Sprintf("api_version: attn.dev/automations/v1alpha1\nname: Nightly check\ntrigger: {type: manual}\nprompt: Check locally.\nlaunch: {driver: claude}\nlocation: {type: directory, path: %q}\n", dir))
+	spec := fmt.Sprintf("api_version: attn.dev/automations/v1alpha1\nname: Nightly check\ntrigger: {type: manual}\nprompt: Check locally.\nlaunch: {driver: claude}\nlocation: {type: directory, path: %q}\n", dir)
+	definition := applyAutomation(t, cli, spec)
 	old := protocol.Deref(definition.LaunchDesktop.DesktopID)
 	if result := requestCloseDesktop(app, viewProfile(t, w, profile).desktops[old]); !result.Success {
 		t.Fatal(protocol.Deref(result.Error))
@@ -185,6 +199,19 @@ func TestAutomationRunRecreatesItsClosedLaunchDesktop(t *testing.T) {
 	w.restart()
 	app, cli = w.App(), w.Client()
 	readLaunchSetting(app, "automation", fmt.Sprint(definition.ID))
+	request := uuid.NewString()
+	saved := testworld.Request(app, protocol.AutomationApplyMessage{
+		Cmd: protocol.CmdAutomationApply, RequestID: protocol.Ptr(request),
+		DefinitionYaml: automationEditSpec(definition.ID, strings.Replace(spec, "Check locally.", "Edited while closed.", 1)),
+		ExpectedID:     protocol.Ptr(definition.ID), ExpectedRevision: protocol.Ptr(definition.Revision),
+		LaunchDesktopSetting: &protocol.LaunchDesktopSetting{DesktopID: protocol.Ptr(old)},
+	}, protocol.EventAutomationApplyResult, automationAnswer[protocol.AutomationApplyResultMessage](request))
+	if !saved.Success || saved.Definition == nil || saved.Definition.Revision != definition.Revision+1 {
+		t.Fatalf("edit automation while desktop closed: %s (%+v)", protocol.Deref(saved.Error), saved)
+	}
+	if _, exists := viewProfile(t, w, profile).desktops[old]; exists {
+		t.Fatal("settings save recreated the closed launch desktop")
+	}
 	result, err := cli.AutomationRun(definition.ID, "after-close", "")
 	if err != nil {
 		t.Fatal(err)

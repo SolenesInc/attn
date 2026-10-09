@@ -155,8 +155,10 @@ func saveLaunchSetting(tx *sql.Tx, now string, kind, id string, setting LaunchDe
 			return err
 		}
 		desktopID = desktop.ID
-	} else if _, err := loadLaunchDesktop(tx, profiles.Profile{ID: item.ProfileID}, desktopID); err != nil {
-		return err
+	} else if desktopID == "" || desktopID != item.DesktopID {
+		if _, err := loadLaunchDesktop(tx, profiles.Profile{ID: item.ProfileID}, desktopID); err != nil {
+			return err
+		}
 	}
 	if kind == "automation" && bumpAutomationRevision && desktopID != item.DesktopID {
 		if _, err := tx.Exec(`UPDATE automation_definitions SET revision = revision + 1 WHERE id = ?`, id); err != nil {
