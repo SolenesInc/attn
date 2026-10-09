@@ -182,22 +182,31 @@ func TestCrewWakeRecreatesItsClosedLaunchDesktop(t *testing.T) {
 }
 
 func TestAutomationRunRecreatesItsClosedLaunchDesktop(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
+	w := newCrewWorld(t, fakeagent.Claude)
 	app := w.App()
-	cli := w.Client()
 	profile := app.SelectedProfile()
 	dir := w.Path("check")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	spec := fmt.Sprintf("api_version: attn.dev/automations/v1alpha1\nname: Nightly check\ntrigger: {type: manual}\nprompt: Check locally.\nlaunch: {driver: claude}\nlocation: {type: directory, path: %q}\n", dir)
-	definition := applyAutomation(t, cli, spec)
+	createID := uuid.NewString()
+	created := testworld.Request(app, protocol.AutomationApplyMessage{
+		Cmd: protocol.CmdAutomationApply, RequestID: protocol.Ptr(createID), DefinitionYaml: spec,
+		LaunchDesktopSetting: &protocol.LaunchDesktopSetting{DesktopName: protocol.Ptr("Nightly check")},
+	}, protocol.EventAutomationApplyResult, automationAnswer[protocol.AutomationApplyResultMessage](createID))
+	if !created.Success || created.Definition == nil {
+		t.Fatalf("create shared automation: %s", protocol.Deref(created.Error))
+	}
+	definition := *created.Definition
 	old := protocol.Deref(definition.LaunchDesktop.DesktopID)
+	writeLaunchChoice(app, "crew", "alder", protocol.LaunchDesktopSetting{DesktopID: protocol.Ptr(old)})
 	if result := requestCloseDesktop(app, viewProfile(t, w, profile).desktops[old]); !result.Success {
 		t.Fatal(protocol.Deref(result.Error))
 	}
 	w.restart()
-	app, cli = w.App(), w.Client()
+	app = w.App()
+	cli := w.Client()
 	readLaunchSetting(app, "automation", fmt.Sprint(definition.ID))
 	request := uuid.NewString()
 	saved := testworld.Request(app, protocol.AutomationApplyMessage{
@@ -226,4 +235,15 @@ func TestAutomationRunRecreatesItsClosedLaunchDesktop(t *testing.T) {
 	if protocol.Deref(rebound.Setting.DesktopID) != desktop.ID {
 		t.Fatalf("automation binding: %+v", rebound)
 	}
+	shared := readLaunchSetting(app, "crew", "alder")
+	if protocol.Deref(shared.Setting.DesktopID) != desktop.ID {
+		t.Fatalf("shared target was split: %+v", shared)
+	}
+	wake := wakeCrew(t, cli, "alder", "")
+	w.Launched(string(wake.SessionID))
+	crewDesktop, _ := viewProfile(t, w, profile).paneOf(t, string(wake.SessionID))
+	if crewDesktop.ID != desktop.ID || crewDesktop.Name != "Nightly check" {
+		t.Fatalf("second launch must share the first item's replacement: %+v", crewDesktop)
+	}
+
 }

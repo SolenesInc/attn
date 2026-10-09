@@ -312,7 +312,7 @@ func launchItemDesktop(tx *sql.Tx, now string, profile profiles.Profile, kind, i
 		if err != nil {
 			return desktop, err
 		}
-		if _, err := tx.Exec(`UPDATE launch_desktops SET desktop_id = ? WHERE kind = ? AND item_id = ?`, desktop.ID, kind, id); err != nil {
+		if _, err := tx.Exec(`UPDATE launch_desktops SET desktop_id = ? WHERE desktop_id = ?`, desktop.ID, desktopID); err != nil {
 			return desktop, err
 		}
 	}
