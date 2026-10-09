@@ -33,29 +33,47 @@ describe('App garden advisor settings', () => {
   ])('shows the Codex recipe with %s', async (_, settings) => {
     await openAdvisor(settings);
 
-    expect(recipe()).toEqual({ agent: 'codex', model: 'gpt-5.6-luna', effort: 'xhigh' });
+    expect(recipe()).toEqual({ agent: 'codex', model: '', effort: '' });
   });
 
-  it('fills in the chosen agent’s defaults and saves them as one recipe', async () => {
+  it('leaves model and effort unset when changing the agent', async () => {
     const daemon = await openAdvisor();
 
     await gesture(daemon, () => fireEvent.change(field('Agent'), { target: { value: 'claude' } }));
 
-    expect(recipe()).toEqual({ agent: 'claude', model: 'sonnet', effort: 'medium' });
-    expect(savedSettings(daemon)).toEqual([['garden.advisor', '{"agent":"claude","model":"sonnet","effort":"medium"}']]);
+    expect(recipe()).toEqual({ agent: 'claude', model: '', effort: '' });
+    expect(savedSettings(daemon)).toEqual([['garden.advisor', '{"agent":"claude","model":""}']]);
   });
 
   it('leaves Copilot’s effort to Copilot until the user pins one', async () => {
     const daemon = await openAdvisor();
 
     await gesture(daemon, () => fireEvent.change(field('Agent'), { target: { value: 'copilot' } }));
-    expect(recipe()).toEqual({ agent: 'copilot', model: 'claude-sonnet-4.6', effort: '' });
+    expect(recipe()).toEqual({ agent: 'copilot', model: '', effort: '' });
 
-    expect(savedSettings(daemon)[0]).toEqual(['garden.advisor', '{"agent":"copilot","model":"claude-sonnet-4.6"}']);
+    expect(savedSettings(daemon)[0]).toEqual(['garden.advisor', '{"agent":"copilot","model":""}']);
 
     await gesture(daemon, () => fireEvent.change(field('Reasoning effort'), { target: { value: 'max' } }));
 
-    expect(savedRecipes(daemon)[1]).toEqual({ agent: 'copilot', model: 'claude-sonnet-4.6', effort: 'max' });
+    expect(savedRecipes(daemon)[1]).toEqual({ agent: 'copilot', model: '', effort: 'max' });
+  });
+
+  it.each(['codex', 'claude'])('keeps the %s model unset when only effort changes', async agent => {
+    const daemon = await openAdvisor({ 'garden.advisor': JSON.stringify({ agent, model: '', effort: '' }) });
+    expect(field('Model')).toHaveValue('');
+    expect(field('Reasoning effort')).toHaveValue('');
+    expect(savedRecipes(daemon)).toEqual([]);
+    await gesture(daemon, () => fireEvent.change(field('Reasoning effort'), { target: { value: 'high' } }));
+    expect(savedRecipes(daemon)).toEqual([{ agent, model: '', effort: 'high' }]);
+  });
+
+  it('can clear existing model and effort pins back to their defaults', async () => {
+    const daemon = await openAdvisor({ 'garden.advisor': '{"agent":"codex","model":"gpt-custom","effort":"high"}' });
+    await gesture(daemon, () => fireEvent.change(field('Model'), { target: { value: '' } }));
+    expect(savedRecipes(daemon)[0]).toEqual({ agent: 'codex', model: '', effort: 'high' });
+    await gesture(daemon, () => fireEvent.change(field('Reasoning effort'), { target: { value: '' } }));
+    expect(savedRecipes(daemon)[1]).toEqual({ agent: 'codex', model: '' });
+    expect(recipe()).toEqual({ agent: 'codex', model: '', effort: '' });
   });
 
   it('saves a custom model once the user leaves the field', async () => {
@@ -65,12 +83,12 @@ describe('App garden advisor settings', () => {
 
     await gesture(daemon, () => fireEvent.blur(field('Custom model')));
 
-    expect(savedSettings(daemon)).toEqual([['garden.advisor', '{"agent":"codex","model":"gpt-custom","effort":"xhigh"}']]);
+    expect(savedSettings(daemon)).toEqual([['garden.advisor', '{"agent":"codex","model":"gpt-custom"}']]);
   });
 
   it('keeps a saved agent that can no longer run visible, with a warning', async () => {
     await openAdvisor({
-      'garden.advisor': '{"agent":"copilot","model":"claude-sonnet-4.6"}',
+      'garden.advisor': '{"agent":"copilot","model":""}',
       copilot_available: 'false',
     });
 
