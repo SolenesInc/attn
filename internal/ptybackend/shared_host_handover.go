@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/buildinfo"
-	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptyhost"
 	"github.com/victorarias/attn/internal/ptyworker"
 )
@@ -191,36 +190,12 @@ func (b *WorkerBackend) rehearseSharedHandover(ctx context.Context, from, to pty
 }
 
 func (b *WorkerBackend) spawnCommittedProbe(ctx context.Context, host ptyhost.HostRegistry, artifact ptyhost.Artifact) (*workerSession, error) {
-	suffix, err := randomToken(6)
+	probe, owner, err := b.spawnProbe(ctx, host, artifact)
 	if err != nil {
 		return nil, err
 	}
-	probe := &workerSession{
-		SessionID:    sharedHostProbePrefix + suffix,
-		SocketPath:   host.SocketPath,
-		ControlToken: host.ControlToken,
-		WorkerPID:    host.HostPID,
-	}
-	inc := incarnationOfHost(host)
-	workdir := os.TempDir()
-	owner, err := b.openSharedCall(ctx, inc.endpoint(), ptyhost.MethodSpawn, ptyhost.SpawnParams{
-		SessionID: probe.SessionID,
-		Agent:     "probe",
-		CWD:       workdir,
-		Cols:      80,
-		Rows:      24,
-		Attempts: []pty.PreparedLaunchAttempt{{
-			Executable: artifact.Path,
-			Args:       []string{artifact.Path, ptyhost.ProbeChildFlag},
-			Env:        []string{"TERM=xterm-256color"},
-			CWD:        workdir,
-		}},
-	}, nil)
-	if err != nil {
-		return nil, fmt.Errorf("spawn probe: %w", err)
-	}
 	defer owner.Close()
-	if err := b.commitSharedSession(ctx, inc, probe.SessionID); err != nil {
+	if err := b.commitSharedSession(ctx, incarnationOfHost(host), probe.SessionID); err != nil {
 		return nil, fmt.Errorf("commit probe: %w", err)
 	}
 	return probe, nil
