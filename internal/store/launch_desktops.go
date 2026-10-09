@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profilemigration"
 	"github.com/victorarias/attn/internal/profiles"
@@ -312,7 +313,7 @@ func launchItemDesktop(tx *sql.Tx, now string, profile profiles.Profile, kind, i
 		if err != nil {
 			return desktop, err
 		}
-		if _, err := tx.Exec(`UPDATE launch_desktops SET desktop_id = ? WHERE desktop_id = ?`, desktop.ID, desktopID); err != nil {
+		if err := rebindLaunchDesktop(tx, desktopID, desktop.ID); err != nil {
 			return desktop, err
 		}
 	}
@@ -320,6 +321,39 @@ func launchItemDesktop(tx *sql.Tx, now string, profile profiles.Profile, kind, i
 		return desktop, err
 	}
 	return desktop, appendLaunchDesktopFacts(tx, desktop.ID)
+}
+
+func rebindLaunchDesktop(tx *sql.Tx, oldID, newID string) error {
+	if _, err := tx.Exec(`UPDATE automation_definitions SET revision = revision + 1
+  WHERE id IN (SELECT item_id FROM launch_desktops WHERE kind = 'automation' AND desktop_id = ?)`, oldID); err != nil {
+		return err
+	}
+	schema, table, found, err := readCollectionTx(tx, crew.Namespace, crew.CollectionMembers)
+	if err != nil {
+		return err
+	}
+	if found {
+		ids, err := queryColumn[string](tx, `SELECT item_id FROM launch_desktops WHERE kind = 'crew' AND desktop_id = ?`, oldID)
+		if err != nil {
+			return err
+		}
+		for _, id := range ids {
+			doc, exists, err := getDocumentWith(tx, schema.Namespace, schema.Collection, table, id)
+			if err != nil {
+				return err
+			}
+			if !exists {
+				continue
+			}
+			write := DocumentWrite{Schema: schema, ID: id, Body: doc.Body, Expected: &doc.Rev}
+			fact := DocumentChangedFact(schema.Namespace, schema.Collection, id, false)
+			if _, _, err := commitDocumentWritesWith(tx, []DocumentCommit{{Write: write, Fact: fact}}, []string{table}, time.Now()); err != nil {
+				return err
+			}
+		}
+	}
+	_, err = tx.Exec(`UPDATE launch_desktops SET desktop_id = ? WHERE desktop_id = ?`, newID, oldID)
+	return err
 }
 
 // findDesktop reports a missing desktop as not found; a reopened session's last desktop may be gone.

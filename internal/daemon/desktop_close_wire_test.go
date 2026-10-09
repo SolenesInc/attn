@@ -221,6 +221,7 @@ func TestAutomationRunRecreatesItsClosedLaunchDesktop(t *testing.T) {
 	if _, exists := viewProfile(t, w, profile).desktops[old]; exists {
 		t.Fatal("settings save recreated the closed launch desktop")
 	}
+	crewBefore := crewRosterMember(t, cli, "alder")
 	result, err := cli.AutomationRun(definition.ID, "after-close", "")
 	if err != nil {
 		t.Fatal(err)
@@ -235,9 +236,54 @@ func TestAutomationRunRecreatesItsClosedLaunchDesktop(t *testing.T) {
 	if protocol.Deref(rebound.Setting.DesktopID) != desktop.ID {
 		t.Fatalf("automation binding: %+v", rebound)
 	}
+	staleID := uuid.NewString()
+	stale := testworld.Request(app, protocol.AutomationApplyMessage{
+		Cmd: protocol.CmdAutomationApply, RequestID: protocol.Ptr(staleID),
+		DefinitionYaml: automationEditSpec(definition.ID, strings.Replace(spec, "Check locally.", "Edited after launch.", 1)),
+		ExpectedID:     protocol.Ptr(definition.ID), ExpectedRevision: protocol.Ptr(saved.Definition.Revision),
+		LaunchDesktopSetting: &protocol.LaunchDesktopSetting{DesktopID: protocol.Ptr(old)},
+	}, protocol.EventAutomationApplyResult, automationAnswer[protocol.AutomationApplyResultMessage](staleID))
+	if stale.Success || protocol.Deref(stale.ErrorCode) != "revision_conflict" {
+		t.Fatalf("editor opened before recreation: %s (%+v)", protocol.Deref(stale.Error), stale)
+	}
+	current, err := cli.AutomationDefinition(definition.ID)
+	if err != nil || current.Definition.Revision != saved.Definition.Revision+1 {
+		t.Fatalf("recreated target revision: %+v, %v", current, err)
+	}
+	freshID := uuid.NewString()
+	fresh := testworld.Request(app, protocol.AutomationApplyMessage{
+		Cmd: protocol.CmdAutomationApply, RequestID: protocol.Ptr(freshID),
+		DefinitionYaml: automationEditSpec(definition.ID, strings.Replace(spec, "Check locally.", "Edited after launch.", 1)),
+		ExpectedID:     protocol.Ptr(definition.ID), ExpectedRevision: protocol.Ptr(current.Definition.Revision),
+		LaunchDesktopSetting: &protocol.LaunchDesktopSetting{DesktopID: protocol.Ptr(desktop.ID)},
+	}, protocol.EventAutomationApplyResult, automationAnswer[protocol.AutomationApplyResultMessage](freshID))
+	if !fresh.Success {
+		t.Fatalf("edit after reloading recreated target: %s", protocol.Deref(fresh.Error))
+	}
 	shared := readLaunchSetting(app, "crew", "alder")
 	if protocol.Deref(shared.Setting.DesktopID) != desktop.ID {
 		t.Fatalf("shared target was split: %+v", shared)
+	}
+	crewStaleID := uuid.NewString()
+	crewStale := testworld.Request(app, protocol.CrewSetMessage{
+		Cmd: protocol.CmdCrewSet, Member: "alder", RequestID: protocol.Ptr(crewStaleID),
+		ExpectedRevision: protocol.Ptr(crewBefore.Revision), Effort: protocol.Ptr("high"),
+		LaunchDesktopSetting: &protocol.LaunchDesktopSetting{DesktopID: protocol.Ptr(old)},
+	}, protocol.EventCrewSetResult, func(r protocol.CrewSetResultMessage) bool { return r.RequestID == crewStaleID })
+	if crewStale.Success || !crewStale.Conflict || crewStale.Member == nil || crewStale.Member.LaunchDesktop == nil {
+		t.Fatalf("crew editor before recreation: %s (%+v)", protocol.Deref(crewStale.Error), crewStale)
+	}
+	if protocol.Deref(crewStale.Member.LaunchDesktop.DesktopID) != desktop.ID {
+		t.Fatalf("crew conflict must return replacement: %+v", crewStale.Member)
+	}
+	crewFreshID := uuid.NewString()
+	crewFresh := testworld.Request(app, protocol.CrewSetMessage{
+		Cmd: protocol.CmdCrewSet, Member: "alder", RequestID: protocol.Ptr(crewFreshID),
+		ExpectedRevision: protocol.Ptr(crewStale.Member.Revision), Effort: protocol.Ptr("high"),
+		LaunchDesktopSetting: &protocol.LaunchDesktopSetting{DesktopID: protocol.Ptr(desktop.ID)},
+	}, protocol.EventCrewSetResult, func(r protocol.CrewSetResultMessage) bool { return r.RequestID == crewFreshID })
+	if !crewFresh.Success {
+		t.Fatalf("crew edit after replacement: %s", protocol.Deref(crewFresh.Error))
 	}
 	wake := wakeCrew(t, cli, "alder", "")
 	w.Launched(string(wake.SessionID))

@@ -12,6 +12,16 @@ import (
 
 const documentColumns = `id, body, rev, created_at, updated_at`
 
+func DocumentChangedFact(namespace, collection, id string, deleted bool) BusEvent {
+	payload, _ := json.Marshal(struct {
+		Namespace  string `json:"namespace"`
+		Collection string `json:"collection"`
+		ID         string `json:"id"`
+		Deleted    bool   `json:"deleted,omitempty"`
+	}{namespace, collection, id, deleted})
+	return BusEvent{Name: "document.changed", Subject: docstore.Address(namespace, collection, id), Payload: string(payload)}
+}
+
 func (s *Store) DefineDocumentCollection(schema docstore.CollectionSchema, now time.Time) (bool, error) {
 	if s.db == nil {
 		return false, fmt.Errorf("store: no database")
