@@ -930,8 +930,12 @@ impl Session {
         }
     }
 
-    pub fn remove_checked(self: &Arc<Self>) -> Result<(), String> {
+    pub fn mark_removing(&self) {
         self.removing.store(true, Ordering::Release);
+    }
+
+    pub fn remove_checked(self: &Arc<Self>) -> Result<(), String> {
+        self.mark_removing();
         self.signal(libc::SIGTERM)?;
         self.finish_cleanup();
         Ok(())

@@ -207,12 +207,18 @@ impl Host {
             reaper,
             quiesce,
         );
-        if let Err(error) = host.restore(&handoff, &screens) {
-            std::mem::forget(host);
-            return Err(error);
-        }
+        let removals = match host.restore(&handoff, &screens) {
+            Ok(removals) => removals,
+            Err(error) => {
+                std::mem::forget(host);
+                return Err(error);
+            }
+        };
         handover::disarm_fallback();
         host.quiesce.resume();
+        for session in removals {
+            session.finish_adopted_removal();
+        }
         handoff.remove(path);
         eprintln!(
             "PTY host adopted {} terminals: pid={} generation={}",
@@ -228,7 +234,7 @@ impl Host {
         self: &Arc<Self>,
         handoff: &HostHandoff,
         screens: &[HandoverScreen],
-    ) -> Result<(), String> {
+    ) -> Result<Vec<Arc<Session>>, String> {
         let mut adopted = Vec::with_capacity(handoff.sessions.len());
         for (session, screen) in handoff.sessions.iter().zip(screens) {
             let restored = Session::adopt(session, screen, self.session_runtime())
@@ -238,6 +244,7 @@ impl Host {
         self.write_registry()?;
         set_cloexec(self.listener.as_raw_fd(), true)?;
         self.quiesce.hold()?;
+        let mut removals = Vec::new();
         for (session, master_fd, removing) in adopted {
             self.state
                 .lock()
@@ -246,10 +253,11 @@ impl Host {
                 .insert(session.id.clone(), Arc::clone(&session));
             session.resume_adopted(master_fd, &self.reaper)?;
             if removing {
-                session.finish_adopted_removal();
+                removals.push(session);
             }
         }
-        self.start()
+        self.start()?;
+        Ok(removals)
     }
 
     fn new(
@@ -506,6 +514,15 @@ impl Host {
         let mut sessions = state.sessions.values().cloned().collect::<Vec<_>>();
         sessions.sort_by(|a, b| a.id.cmp(&b.id));
         Ok(sessions)
+    }
+
+    fn admit_removal(&self, session: &Session) -> bool {
+        let state = self.state.lock().expect("host state mutex poisoned");
+        if state.handing_over {
+            return false;
+        }
+        session.mark_removing();
+        true
     }
 
     fn end_handover(&self) {
@@ -1129,6 +1146,13 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
             let Ok(session) = connection.session(host, &request) else {
                 return connection.fail(&request.id, ERR_SESSION_NOT_FOUND, "session not found");
             };
+            if !host.admit_removal(&session) {
+                return connection.fail(
+                    &request.id,
+                    ERR_IO,
+                    "host is handing its terminals over to a new build; retry the removal",
+                );
+            }
             let sent = connection.send(response(&request.id, json!({"ok": true})));
             session.remove();
             sent
