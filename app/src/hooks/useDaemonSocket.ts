@@ -3887,7 +3887,7 @@ export function useDaemonSocket({
   ), [sendRequest]);
 
   const sendSeedReviewStart = useCallback((): Promise<SeedReviewOverview> => (
-    sendRequest<SeedReviewOverview>('seed_review_start', {}, 'Starting Garden review timed out')
+    sendRequest<SeedReviewOverview>('seed_review_start', {}, 'Starting Garden review timed out', MODEL_DISCOVERY_TIMEOUT_MS)
   ), [sendRequest]);
 
   const sendSeedReviewRetry = useCallback((reviewId: string, seedId: string): Promise<SeedReviewOverview> => (

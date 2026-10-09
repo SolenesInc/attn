@@ -1,9 +1,9 @@
-import { fireEvent, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { act, fireEvent, screen, within } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { daemonSeed, daemonSession, type DaemonSeed, type DaemonSeedDocument } from './test/daemonFixtures';
 import { renderGarden } from './test/garden';
 import { gesture, pressShortcut } from './test/renderApp';
-import type { EventMessage } from './test/protocol';
+import type { CommandMessage, EventMessage } from './test/protocol';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
 type Review = EventMessage<'garden_review_updated'>['review'];
@@ -127,6 +127,20 @@ describe('App garden review', () => {
     expect(decision()).not.toBeNull();
   });
 
+  it('waits through model discovery beyond the general request deadline', async () => {
+    const daemon = await openGarden(undefined, { candidates: 3 });
+    let held: CommandMessage<'seed_review_start'> | undefined;
+    daemon.on('seed_review_start', request => { held = request; });
+    await click(daemon, 'Review garden');
+    await act(() => vi.advanceTimersByTimeAsync(10_000));
+    expect(screen.getByText('Starting review…')).toBeInTheDocument();
+    expect(screen.queryByText('Starting Garden review timed out')).toBeNull();
+    await gesture(daemon, () => daemon.replyTo(held!, {
+      event: 'seed_review_result', request_id: held!.request_id, profile_id: 'profile-default', operation: 'start', success: true, candidate_count: 3, review: review(),
+    }));
+    expect(decision()).not.toBeNull();
+    expect(screen.queryByText('Starting review…')).toBeNull();
+  });
   it('opens the review the daemon shows and keeps its progressive updates', async () => {
     const daemon = await openReview();
     expect(advice()).toHaveTextContent('Park');

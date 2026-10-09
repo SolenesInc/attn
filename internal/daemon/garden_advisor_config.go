@@ -103,7 +103,7 @@ func (d *Daemon) validateGardenAdvisorSetting(raw string) error {
 	return nil
 }
 
-func (d *Daemon) gardenAdvisorConfig() (gardenAdvisorConfig, error) {
+func (d *Daemon) gardenAdvisorConfig(ctx context.Context) (gardenAdvisorConfig, error) {
 	if d.store == nil {
 		return gardenAdvisorConfig{}, errors.New("garden advisor settings unavailable")
 	}
@@ -130,7 +130,7 @@ func (d *Daemon) gardenAdvisorConfig() (gardenAdvisorConfig, error) {
 		}
 		return config, nil
 	}
-	config.Model = d.resolveTierModel(context.Background(), config.Agent, "", modeltiers.Light, config.Model, fallback)
+	config.Model = d.resolveTierModel(ctx, config.Agent, "", modeltiers.Light, config.Model, fallback)
 	return config, nil
 }
 

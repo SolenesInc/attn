@@ -93,7 +93,7 @@ func (d *Daemon) handleSeedReviewStart(conn net.Conn, msg *protocol.SeedReviewSt
 		d.sendGardenError(conn, "review start", err)
 		return
 	}
-	run, items, err := d.startGardenReview(protocol.Deref(msg.ProfileID))
+	run, items, err := d.startGardenReview(context.Background(), protocol.Deref(msg.ProfileID))
 	d.sendSeedReviewResponse(conn, "start", &run, items, unresolvedGardenReviewItemCount(items), err)
 }
 
@@ -172,7 +172,9 @@ func (d *Daemon) reviewWSHomeStart(profileID string) (garden.ReviewRun, []garden
 	if err := d.requireHome(garden.Surface); err != nil {
 		return garden.ReviewRun{}, nil, err
 	}
-	return d.startGardenReview(profileID)
+	ctx, cancel := context.WithTimeout(context.Background(), harnessModelDiscoveryTimeout)
+	defer cancel()
+	return d.startGardenReview(ctx, profileID)
 }
 
 func (d *Daemon) handleSeedReviewShowWS(client *wsClient, msg *protocol.SeedReviewShowMessage) {

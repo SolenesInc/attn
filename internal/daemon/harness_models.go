@@ -13,6 +13,8 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
+const harnessModelDiscoveryTimeout = time.Minute
+
 type harnessModelCatalog struct {
 	Models       []protocol.HarnessModel `json:"models"`
 	Detail       string                  `json:"detail"`
@@ -69,7 +71,7 @@ func (d *Daemon) loadHarnessModels(ctx context.Context, harness, executable stri
 }
 
 func (d *Daemon) queryHarnessModels(harness, executable string) (harnessModelCatalog, error) {
-	ctx, cancel := context.WithTimeout(d.life.Context(), time.Minute)
+	ctx, cancel := context.WithTimeout(d.life.Context(), harnessModelDiscoveryTimeout)
 	defer cancel()
 	result := harnessModelCatalog{Models: []protocol.HarnessModel{}}
 	if plugin, ok := d.ensurePluginRegistry().driver(harness); ok {
