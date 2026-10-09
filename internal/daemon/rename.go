@@ -54,6 +54,7 @@ func (d *Daemon) renameSession(msg *protocol.RenameSessionMessage) error {
 	d.store.UpdateSessionLabel(sessionID, label)
 	session.Label = label
 	d.publishFact(FactSessionRenamed, string(sessionID), nil)
+	d.linkRenamed(sessionID, label)
 	return nil
 }
 

@@ -1,4 +1,4 @@
-import { emptyDesktop, type DaemonDesktop, type DaemonProfile } from './daemonFixtures';
+import { daemonSession, emptyDesktop, type DaemonDesktop, type DaemonProfile } from './daemonFixtures';
 import type { CommandMessage } from './protocol';
 import type { Reply, ScriptedDaemon } from './scriptedDaemon';
 
@@ -214,6 +214,15 @@ export function serveArrangement(daemon: ScriptedDaemon, arrangement: Arrangemen
     const desktop = arrangement.desktop(command.desktop_id);
     if (desktop) arrangement.replace(arrangement.withTree(desktop, without(parse(desktop), command.leaf_id)));
     return accepted(command, arrangement);
+  });
+  daemon.on('desktop_close_tile', (command) => {
+    const desktop = arrangement.desktop(command.desktop_id);
+    const tile = desktop?.panes.find((pane) => pane.pane_id === command.tile_id);
+    if (!desktop || !tile) {
+      return refused(command, 'not_found', `desktop ${command.desktop_id} has no terminal tile ${command.tile_id}`);
+    }
+    arrangement.replace(arrangement.withTree(desktop, without(parse(desktop), command.tile_id)));
+    return [{ event: 'session_unregistered', session: daemonSession(tile.session_id) } as Reply, ...accepted(command, arrangement)];
   });
   daemon.on('desktop_update_tile', (command) => {
     const desktop = arrangement.desktop(command.desktop_id);

@@ -98,6 +98,7 @@ export function fakeDesktopCommands() {
     sendDesktopRemoveLeaf: vi.fn(async (_desktopId: string, _leafId: string, _expectedRevision: number) =>
       ok('desktop_remove_leaf'),
     ),
+    sendDesktopCloseTile: vi.fn(async (_desktopId: string, _tileId: string) => ok('desktop_close_tile')),
   };
 }
 

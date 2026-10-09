@@ -41,6 +41,13 @@ async function main() {
     if (live && run.paneId) await client.request('close_pane', { sessionId: live, paneId: run.paneId });
   });
   const row = async (sessionId) => (await client.request('get_session_ui_state', { sessionId })).sidebarItem;
+  const placeInDesktop = async (sessionId) => {
+    const item = await row(sessionId);
+    const desktop = observer.desktopOf(sessionId);
+    if (!item || !desktop) return null;
+    const group = await client.request('dom_bounds', { selector: `[data-testid="sidebar-desktop-${desktop.id}"]` });
+    return { ...item, offset: item.bounds.y - group.bounds.y };
+  };
   const poll = async (read, description, timeoutMs = 10_000) => {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
@@ -77,7 +84,7 @@ async function main() {
     });
 
     await runner.step('clear_replaces_the_row_in_place_and_keeps_focus', async () => {
-      const before = await row(run.first);
+      const before = await placeInDesktop(run.first);
       runner.assert(before?.text.includes(label), 'the sidebar lists the session before /clear', { before });
       await driver.typeText('/clear');
       await driver.pressEnter();
@@ -92,11 +99,11 @@ async function main() {
         terminal: run.terminal, now: observer.terminalOf(run.next),
       });
       runner.assert(successor.label !== label, 'the new session gets a new name', { label: successor.label });
-      const after = await poll(() => row(run.next), 'the new session in the sidebar');
       await poll(async () => !(await row(run.first)), 'the cleared session to leave the sidebar');
+      const after = await poll(() => placeInDesktop(run.next), 'the new session in the sidebar');
       const ui = await client.request('get_session_ui_state', { sessionId: run.next });
       runner.assert(ui.selected, 'the new session stays selected', { ui });
-      runner.assert(!after.text.includes(label) && Math.abs(after.bounds.y - before.bounds.y) <= 1,
+      runner.assert(!after.text.includes(label) && Math.abs(after.offset - before.offset) <= 1,
         'the new session takes the cleared one\'s sidebar row', { before, after });
       await waitForPaneInputFocus(client, run.next, run.paneId);
     });

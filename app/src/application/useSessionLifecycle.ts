@@ -31,11 +31,11 @@ export function useSessionLifecycle({
   chooseReopenDirectory,
   onReopened,
 }: Options) {
-  const { sendUnregisterSession, sendSessionReopen } = useDaemonApi();
+  const { sendUnregisterSession, sendDesktopCloseTile, sendSessionReopen } = useDaemonApi();
   const { closeSession, reloadSession } = useSessionStore();
-  const handleCloseSession = useCallback(
-    async (id: string) => {
-      const closeProtection = sessionCloseProtectionHint(daemonSessions, id);
+  const closeWith = useCallback(
+    async (id: string, close: () => Promise<unknown>, closesSession = true) => {
+      const closeProtection = closesSession ? sessionCloseProtectionHint(daemonSessions, id) : null;
       if (closeProtection) {
         showError(closeProtection);
         return;
@@ -44,12 +44,25 @@ export function useSessionLifecycle({
 
       const localDaemonSession = daemonSessions.find((ds) => ds.id === session?.id);
       if (localDaemonSession && session) {
-        await sendUnregisterSession(session.id);
+        await close();
       } else {
         closeSession(id);
       }
     },
-    [closeSession, daemonSessions, enrichedLocalSessions, sendUnregisterSession, showError],
+    [closeSession, daemonSessions, enrichedLocalSessions, showError],
+  );
+  const handleCloseSession = useCallback(
+    (id: string) => closeWith(id, () => sendUnregisterSession(id)),
+    [closeWith, sendUnregisterSession],
+  );
+  const handleCloseTerminalTile = useCallback(
+    (desktopId: string, tileId: string, sessionId: string) => {
+      const tiles = useProfilesStore.getState().desktops.flatMap((desktop) => desktop.panes).filter((pane) => pane.session_id === sessionId);
+      void closeWith(sessionId, () => sendDesktopCloseTile(desktopId, tileId), tiles.length <= 1).catch((error) => {
+        showError(`Could not close that tile: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    },
+    [closeWith, sendDesktopCloseTile, showError],
   );
 
   const handleRequestCloseSession = useCallback(
@@ -99,19 +112,27 @@ export function useSessionLifecycle({
     const isTile =
       !!tileId &&
       !!document.querySelector(`[data-pane-kind="tile"][data-pane-id="${CSS.escape(tileId)}"]`);
-    const currentDesktopId = useProfilesStore.getState().currentDesktopId;
+    const { currentDesktopId, desktops } = useProfilesStore.getState();
     if (isTile && currentDesktopId) {
       handleCloseTile(currentDesktopId, tileId);
       return;
     }
-    if (shownAgentId) {
-      handleRequestCloseSession(shownAgentId);
+    if (!shownAgentId) return;
+    const showing = desktops.flatMap((desktop) => desktop.panes.filter((pane) => pane.session_id === shownAgentId));
+    const current = desktops.find((desktop) => desktop.id === currentDesktopId);
+    const here = current?.panes.filter((pane) => pane.session_id === shownAgentId) ?? [];
+    const pane = here.find((candidate) => candidate.pane_id === current?.active_pane_id) ?? here[0];
+    if (current && pane && showing.length > 1) {
+      handleCloseTerminalTile(current.id, pane.pane_id, shownAgentId);
+      return;
     }
-  }, [shownAgentId, handleCloseTile, handleRequestCloseSession]);
+    handleRequestCloseSession(shownAgentId);
+  }, [shownAgentId, handleCloseTile, handleCloseTerminalTile, handleRequestCloseSession]);
 
   return {
     handleCloseCurrentSessionShortcut,
     handleCloseSession,
+    handleCloseTerminalTile,
     handleRequestCloseSession,
     handleReloadSession,
     handleReopenSession,

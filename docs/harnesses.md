@@ -67,3 +67,46 @@ Read in the source at openai/codex 60947e2341.
   process for a PTY launch, so `ATTN_TERMINAL_ID` names the terminal (older launches use
   `ATTN_SESSION_ID` with the same meaning); the
   app-server for a `--remote` TUI, so a hook there cannot name the terminal.
+
+### Codex app-server and `--remote`
+
+Probed on 0.160.0 with a mock model. Shared Codex relies on these.
+
+- `codex app-server --listen unix://PATH` speaks WebSocket (`GET /rpc`) on a
+  socket that `PATH` links to under `/tmp/codex-daemon-<uid>/`; a client must
+  resolve the link before connecting when `PATH` is long.
+- Hooks given to the server with `-c` are session-flag hooks; a
+  `hooks.state."/<session-flags>/config.toml:<event>:0:0".trusted_hash` given
+  the same way trusts them. They run in the server's environment and working
+  directory set to the conversation's; stdin carries `session_id` (the
+  conversation), `transcript_path` and `cwd`.
+- `thread/start` writes nothing to disk. `thread/inject_items` with a
+  developer message writes the conversation at once; its first turn still
+  fires SessionStart `startup`, then UserPromptSubmit.
+- `thread/resume` of a conversation not on disk fails with `no rollout found`,
+  even while the server holds it in memory. A `--remote` TUI that loses its
+  socket reconnects and resumes the conversation it shows, so one never
+  written cannot come back.
+- `thread/resume` ignores `developerInstructions`: a conversation keeps the
+  ones it started with. Its `config` (such as `model_auto_compact_token_limit`)
+  applies when the resume loads the conversation.
+- Every connection hears `thread/status/changed` (`idle`, `notLoaded`, or
+  `active` with `waitingOnApproval`), `thread/name/updated` and `thread/closed`
+  for every conversation; only subscribers hear turns, items and approvals.
+  A conversation with no subscriber unloads about 60 s after it goes idle.
+- `turn/start` runs a turn with no terminal attached; `turn/steer` adds input
+  to the running turn and needs its id as `expectedTurnId`.
+- A connection that resumes a conversation gets its pending approval again,
+  with the same request id; any subscriber's answer settles it for all.
+- After the first prompt the TUI names the conversation with an ephemeral
+  `thread_title` conversation, then `thread/name/set` on the real one;
+  `thread/name/set` from any connection renames it in every TUI.
+- A conversation's shell tools get `CODEX_THREAD_ID` (the conversation id) and
+  the server's `-c shell_environment_policy.set.*` values, on every thread
+  including ones another client resumed; hooks run in the server's own
+  environment instead.
+- One process writes a conversation at a time: while an app-server holds it
+  loaded, another app-server or a plain `codex resume` fails with `already has
+  an active writer`. Either can take it once the holder unloads it.
+- `thread/archive` moves the rollout to `archived_sessions/` (flat, no dated
+  directories) and refuses later resumes; `thread/unarchive` moves it back.

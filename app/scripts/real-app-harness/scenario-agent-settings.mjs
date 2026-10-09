@@ -135,6 +135,8 @@ try {
     runner.assert((await text('[data-testid="settings-section-desktop"]')).includes('Editor'), 'editor belongs with file locations');
     await section('terminal');
     runner.assert((await text('[data-testid="settings-section-terminal"]')).includes('PTY Backend'), 'terminal hosting is under System');
+    await section('experimental');
+    runner.assert((await text('[data-testid="settings-section-experimental"]')).includes('Shared Codex'), 'shared Codex is under Experimental');
     await section('workflows');
     runner.assert((await text('[data-testid="settings-section-workflows"]')).includes('Enable workflows'), 'workflows have their own section');
     await section('agents');

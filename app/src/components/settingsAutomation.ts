@@ -7,6 +7,7 @@ const SETTINGS_SECTION_IDS = [
   'agents',
   'backgroundAgents',
   'terminal',
+  'experimental',
   'autoMode',
   'delegation',
   'workflows',

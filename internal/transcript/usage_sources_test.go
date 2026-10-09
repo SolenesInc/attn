@@ -1,6 +1,7 @@
 package transcript
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -34,6 +35,45 @@ func TestClaudeUsageSourcesStayInsideTheNativeSubagentDirectory(t *testing.T) {
 	}
 	if len(sources) != 2 || !sources[0].Root || sources[1].Path != child {
 		t.Fatalf("Claude sources = %+v", sources)
+	}
+}
+
+func TestCodexUsageSourcesKeepTheirIdentityAcrossArchiveLocations(t *testing.T) {
+	for _, rootArchived := range []bool{false, true} {
+		for _, childArchived := range []bool{false, true} {
+			for _, boundArchived := range []bool{false, true} {
+				t.Run(fmt.Sprintf("root=%t/child=%t/binding=%t", rootArchived, childArchived, boundArchived), func(t *testing.T) {
+					home := t.TempDir()
+					live := filepath.Join(home, "sessions", "2026", "10", "02")
+					archived := filepath.Join(home, "archived_sessions")
+					for _, dir := range []string{live, archived} {
+						if err := os.MkdirAll(dir, 0o755); err != nil {
+							t.Fatal(err)
+						}
+					}
+					rootName := "rollout-2026-10-02T12-00-00-root.jsonl"
+					rootDir, childDir := live, live
+					if rootArchived {
+						rootDir = archived
+					}
+					if childArchived {
+						childDir = archived
+					}
+					root := filepath.Join(rootDir, rootName)
+					child := filepath.Join(childDir, "rollout-2026-10-02T12-00-00-child.jsonl")
+					writeSourceRecord(t, root, codexSourceMeta("root", `"cli"`))
+					writeSourceRecord(t, child, codexSourceMeta("child", codexSourceParent("root")))
+					binding := filepath.Join(live, rootName)
+					if boundArchived {
+						binding = filepath.Join(archived, rootName)
+					}
+					sources, err := NewCodexUsageSourceResolver(binding).Discover()
+					if err != nil || len(sources) != 2 || sources[0].ID != filepath.Join(live, rootName) || sources[0].Path != root || sources[1].ID != "child" || sources[1].Path != child {
+						t.Fatalf("sources = %+v (%v), want stable live root identity and native child in either location", sources, err)
+					}
+				})
+			}
+		}
 	}
 }
 
@@ -85,6 +125,120 @@ func TestCodexUsageSourceRetriesAPartialMetadataRecord(t *testing.T) {
 	sources, err = resolver.Discover()
 	if err != nil || len(sources) != 2 || sources[1].ID != "child" {
 		t.Fatalf("completed discovery = %+v, %v", sources, err)
+	}
+}
+
+func TestCodexUsageSourcesDiscoverArchivedGrandchildrenAfterPartialParentCompletes(t *testing.T) {
+	for _, archivedParent := range []bool{false, true} {
+		t.Run(fmt.Sprintf("parentArchived=%t", archivedParent), func(t *testing.T) {
+			home := t.TempDir()
+			live := filepath.Join(home, "sessions", "2026", "10", "02")
+			archive := filepath.Join(home, "archived_sessions")
+			for _, dir := range []string{live, archive} {
+				if err := os.MkdirAll(dir, 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			root := filepath.Join(live, "root.jsonl")
+			parent := filepath.Join(live, "parent.jsonl")
+			if archivedParent {
+				parent = filepath.Join(archive, "parent.jsonl")
+			}
+			grandchild := filepath.Join(archive, "grandchild.jsonl")
+			writeSourceRecord(t, root, codexSourceMeta("root", `"cli"`))
+			if err := os.WriteFile(parent, []byte(codexSourceMeta("parent", codexSourceParent("root"))), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			writeSourceRecord(t, grandchild, codexSourceMeta("grandchild", codexSourceParent("parent")))
+			resolver := NewCodexUsageSourceResolver(root)
+			sources, err := resolver.Discover()
+			if err != nil || len(sources) != 1 {
+				t.Fatalf("partial lineage = %+v, %v", sources, err)
+			}
+			file, err := os.OpenFile(parent, os.O_APPEND|os.O_WRONLY, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = file.WriteString("\n")
+			_ = file.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+			sources, err = resolver.Discover()
+			if err != nil || len(sources) != 3 || sources[1].ID != "parent" || sources[2].ID != "grandchild" {
+				t.Fatalf("complete lineage = %+v, %v", sources, err)
+			}
+		})
+	}
+}
+
+func TestCodexUsageSourcesFollowArchiveMembershipChanges(t *testing.T) {
+	home := t.TempDir()
+	live := filepath.Join(home, "sessions", "2026", "10", "02")
+	archive := filepath.Join(home, "archived_sessions")
+	if err := os.MkdirAll(live, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(live, "root.jsonl")
+	writeSourceRecord(t, root, codexSourceMeta("root", `"cli"`))
+	resolver := NewCodexUsageSourceResolver(root)
+	if sources, err := resolver.Discover(); err != nil || len(sources) != 1 {
+		t.Fatalf("initial = %+v, %v", sources, err)
+	}
+	if err := os.MkdirAll(archive, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	child := filepath.Join(archive, "child.jsonl")
+	writeSourceRecord(t, child, codexSourceMeta("child", codexSourceParent("root")))
+	for _, path := range []string{child, filepath.Join(live, "child.jsonl"), child} {
+		if path != child {
+			if err := os.Rename(child, path); err != nil {
+				t.Fatal(err)
+			}
+		} else if _, err := os.Stat(child); os.IsNotExist(err) {
+			if err := os.Rename(filepath.Join(live, "child.jsonl"), child); err != nil {
+				t.Fatal(err)
+			}
+		}
+		sources, err := resolver.Discover()
+		if err != nil || len(sources) != 2 || sources[1].ID != "child" || sources[1].Path != path {
+			t.Fatalf("moved = %+v, %v", sources, err)
+		}
+	}
+	writeSourceRecord(t, filepath.Join(archive, "new-child.jsonl"), codexSourceMeta("new-child", codexSourceParent("root")))
+	if sources, err := resolver.Discover(); err != nil || len(sources) != 3 {
+		t.Fatalf("new archive child = %+v, %v", sources, err)
+	}
+}
+
+func TestCodexUsageSourcesRetryAnArchiveReadFailure(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses the filesystem permission failure")
+	}
+	home := t.TempDir()
+	live := filepath.Join(home, "sessions", "2026", "10", "02")
+	archive := filepath.Join(home, "archived_sessions")
+	for _, dir := range []string{live, archive} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	root := filepath.Join(live, "root.jsonl")
+	child := filepath.Join(archive, "child.jsonl")
+	writeSourceRecord(t, root, codexSourceMeta("root", `"cli"`))
+	writeSourceRecord(t, child, codexSourceMeta("child", codexSourceParent("root")))
+	if err := os.Chmod(child, 0); err != nil {
+		t.Fatal(err)
+	}
+	resolver := NewCodexUsageSourceResolver(root)
+	if _, err := resolver.Discover(); !os.IsPermission(err) {
+		t.Fatalf("unreadable archive error = %v", err)
+	}
+	if err := os.Chmod(child, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if sources, err := resolver.Discover(); err != nil || len(sources) != 2 || sources[1].ID != "child" {
+		t.Fatalf("recovered read = %+v, %v", sources, err)
 	}
 }
 

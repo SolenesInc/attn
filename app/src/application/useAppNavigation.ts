@@ -24,7 +24,6 @@ interface Options {
   shownAgentId: string | null;
   daemonSessions: AppContentProps['daemonSessions'];
   desktopViews: ReturnType<typeof useAppSessions>['desktopViews'];
-  profileSessions: ReturnType<typeof useAppSessions>['profileSessions'];
   attentionQueue: ReturnType<typeof useAttentionQueue>;
   showError: (message: string) => void;
 }
@@ -32,7 +31,6 @@ export function useAppNavigation({
   shownAgentId,
   daemonSessions,
   desktopViews,
-  profileSessions,
   attentionQueue,
   showError,
 }: Options) {
@@ -67,14 +65,14 @@ export function useAppNavigation({
   const selectCreatedSession = useCallback((id: string, owner?: Element | null) =>
     selectAgent(id, owner, false), [selectAgent]);
 
-  const { wantsAttention, queueBands } = attentionQueue;
+  const { wantsAttention, queueBands, queueSessions } = attentionQueue;
 
   const handleJumpToWaiting = useCallback(() => {
-    const waiting = oldestWantedTurn(profileSessions, wantsAttention);
+    const waiting = oldestWantedTurn(queueSessions, wantsAttention);
     if (waiting) {
       handleSelectSession(waiting.id);
     }
-  }, [profileSessions, handleSelectSession, wantsAttention]);
+  }, [queueSessions, handleSelectSession, wantsAttention]);
 
   const agentOnScreenId = useAgentOnScreen();
   const handleNextRun = useCallback(() => {

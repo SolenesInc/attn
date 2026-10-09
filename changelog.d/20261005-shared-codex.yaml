@@ -1,0 +1,20 @@
+kind: added
+area: codex
+change: >
+  Experimental Shared Codex, in Settings under Experimental (off by default,
+  applies to new Codex terminals). New Codex terminals share one Codex
+  app-server per profile, which keeps running through daemon restarts, and each
+  conversation is one session. When you switch a terminal with /new, /resume or
+  /agents, the conversation you left stays live as a hidden session: it keeps
+  its place in the queue, still takes annotations and messages, and is marked
+  hidden in the Sessions ledger and in `attn session list` and `show`. A hidden
+  session that needs you queues without a desktop chip, and choosing it opens
+  it in a tile on the current desktop with its approval waiting. Closing the
+  last tile of a session archives its conversation and closes the session into
+  the ledger; Reopen unarchives it. attn's name for a session and Codex's name
+  for its conversation follow each other. "Show hidden sessions in the queue"
+  (on by default) turns the hidden rows off.
+notes: >
+  Automations don't use shared Codex yet. A plain Codex terminal can't resume a
+  conversation a shared session holds, and the app-server stops when nothing
+  uses it. See docs/using-shared-codex.md.

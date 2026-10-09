@@ -177,6 +177,7 @@ func (d *Daemon) sessionTitleHandler(ctx context.Context, job *jobs.Job) (any, e
 	session.Label = title
 	d.logf("session title %s: %q from %s", sessionID, title, payload.Source)
 	d.publishFact(FactSessionRenamed, string(sessionID), nil)
+	d.linkRenamed(sessionID, title)
 	return title, nil
 }
 

@@ -15,6 +15,7 @@ import {
   PluginSettings,
   SectionStatusPills,
   TerminalSettings,
+  ExperimentalSettings,
   WorkflowsSettings,
   DesktopSettings,
 } from './SettingsModalSections';
@@ -93,7 +94,7 @@ function SettingsModalContent(props: SettingsModalProps & { closeRef: ForwardedR
                       onClick={() => void selectSection(item.id)}
                     >
                       <span>{item.label}</span>
-                      {!['agents', 'backgroundAgents', 'terminal'].includes(item.id) && (
+                      {!['agents', 'backgroundAgents', 'terminal', 'experimental'].includes(item.id) && (
                         <span
                           className={`settings-nav-count${item.id === 'autoMode' && item.count > 0 ? ' waiting' : ''}`}
                         >
@@ -238,6 +239,14 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           savedFlash={state.savedFlash}
           chiefContextCapDraft={state.chiefContextCapDraft}
           headlessContextCapDraft={state.headlessContextCapDraft}
+        />
+      );
+    case 'experimental':
+      return (
+        <ExperimentalSettings
+          codexSharedEnabled={state.codexSharedEnabled}
+          queueShowHiddenSessions={state.queueShowHiddenSessions}
+          onSetSetting={state.onSetSetting}
         />
       );
     case 'terminal':

@@ -148,6 +148,9 @@ func (d *Daemon) resolveExactTranscriptPathForWatcher(w *transcriptWatcher) stri
 		if path == "" {
 			continue
 		}
+		if l := d.linkOf(w.sessionID); l != nil {
+			path = l.transcriptPath(path)
+		}
 		if _, err := os.Stat(path); err == nil {
 			return path
 		}

@@ -47,6 +47,7 @@ export interface DaemonSessionSnapshot {
   turn_snoozed_until?: string;
   crew_member?: string;
   parent_session_id?: string;
+  hidden?: boolean;
   succeeds?: string;
   id: string;
   label: string;

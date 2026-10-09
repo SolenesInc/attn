@@ -82,6 +82,7 @@ type LaunchIntent struct {
 	Effort           string                              `json:"effort,omitempty"`
 	ChiefOfStaff     bool                                `json:"chief_of_staff,omitempty"`
 	UnattendedLaunch launchcontract.UnattendedLaunchSpec `json:"unattended_launch,omitzero"`
+	Link             string                              `json:"link,omitempty"`
 }
 
 func New() *Store {

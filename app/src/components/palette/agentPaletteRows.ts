@@ -86,8 +86,10 @@ export function agentPaletteRows<S extends PaletteSession>(
   }
 
   const settledIds = new Set(bands.settled.map((row) => row.session.id));
-  const plain = desktops.flatMap((desktop) => desktop.sessions)
-    .filter((session) => settledIds.has(session.id) || session.automation);
+  const plain = [
+    ...desktops.flatMap((desktop) => desktop.sessions).filter((session) => settledIds.has(session.id) || session.automation),
+    ...bands.settled.filter((row) => !row.desktopId).map((row) => row.session),
+  ];
   const rest = [
     ...bands.turns.flatMap((row) => bandRow(row.session, false)),
     ...plain.flatMap((session) => bandRow(session, false)),

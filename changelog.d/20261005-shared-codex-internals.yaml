@@ -1,0 +1,14 @@
+kind: internal
+area: sessions
+change: >
+  Shared Codex runs one Codex app-server per profile as a terminal of its own
+  and gives each Codex terminal a proxy to it, where attn adds its instructions,
+  writes every new conversation to disk at once and learns which conversation
+  the terminal shows. The server's hooks name the conversation, and the daemon
+  routes them to the session that holds it. A session whose terminal moved on
+  stays open and takes attn's input through the server; sessions and ledger rows
+  carry `hidden`, and the daemon keeps a
+  `queue_show_hidden_sessions` setting.
+  The daemon reaches it only through a harness-neutral link seam that records
+  each session's link on its launch intent and each attached terminal in
+  `terminal_views`, so another link can plug in beside it.

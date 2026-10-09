@@ -297,6 +297,9 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 	}
 
 	d.persistReloadedConversation(sessionID, opts)
+	if l := d.linkOf(sessionID); l != nil {
+		opts.ExternalEnv = append(opts.ExternalEnv, l.respawnEnv(terminal)...)
+	}
 	opts.DaemonEnv = d.spawnRoutingEnv()
 	if spawnErr := d.ptyBackend.Spawn(ctx, opts); spawnErr != nil {
 		unlockEnds()
@@ -326,6 +329,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 	if prior, ok := d.store.LaunchIntent(sessionID); ok {
 		intent.AutoMode = prior.AutoMode
 		intent.ApprovalPolicy, intent.SandboxMode = prior.ApprovalPolicy, prior.SandboxMode
+		intent.Link = prior.Link
 	}
 	d.store.SetLaunchIntent(sessionID, intent)
 	d.recordReviewerEvidence(sessionID, opts.ApprovalRoute.ReviewerInLoop())

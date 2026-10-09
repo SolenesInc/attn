@@ -144,12 +144,13 @@ export function useAppController({
     daemonSessions,
     connect,
   });
-  const { enrichedLocalSessions, desktopViews, profileSessions } = appSessions;
+  const { enrichedLocalSessions, desktopViews, profileSessions, hiddenSessions } = appSessions;
 
   const attentionQueue = useAttentionQueue({
     settings,
     desktopViews,
     profileSessions,
+    hiddenSessions,
     enrichedLocalSessions,
     shownAgentId,
   });
@@ -165,7 +166,6 @@ export function useAppController({
     shownAgentId,
     daemonSessions,
     desktopViews,
-    profileSessions,
     attentionQueue,
     showError,
   });

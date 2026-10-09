@@ -825,6 +825,7 @@ export function useDaemonSocket({
       'pty_resize',
       'kill_session',
       'unregister',
+      'desktop_close_tile',
     ]);
     if (!needsNotice.has(cmd)) {
       return;
@@ -4842,6 +4843,12 @@ export function useDaemonSocket({
     [sendProfileCommand],
   );
 
+  const sendDesktopCloseTile = useCallback(
+    (desktopId: string, tileId: string) =>
+      sendProfileCommand('desktop_close_tile', { desktop_id: desktopId, tile_id: tileId }),
+    [sendProfileCommand],
+  );
+
 
   return {
     isConnected: wsRef.current?.readyState === WebSocket.OPEN,
@@ -4863,6 +4870,7 @@ export function useDaemonSocket({
     sendDesktopDockTile,
     sendDesktopUpdateTile,
     sendDesktopRemoveLeaf,
+    sendDesktopCloseTile,
     sendDesktopSetSplitRatio,
     sendMigrationGet,
     sendLaunchDesktopGet,
