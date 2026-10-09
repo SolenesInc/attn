@@ -10,7 +10,6 @@ import (
 
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/config"
-	"github.com/victorarias/attn/internal/fsdoc"
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/prompts"
@@ -36,74 +35,6 @@ func (d *Daemon) notebookStoreFor() (*notebook.Store, error) {
 	d.notebookMu.Unlock()
 	d.ensureNotebookWatcher(root)
 	return store, nil
-}
-
-func (d *Daemon) ensureNotebookWatcher(root string) {
-	select {
-	case <-d.life.Done():
-		return
-	default:
-	}
-	d.notebookWatcherMu.Lock()
-	defer d.notebookWatcherMu.Unlock()
-	if d.notebookWatcher != nil && d.notebookWatchedRoot == root {
-		return
-	}
-	if info, err := os.Stat(root); err != nil || !info.IsDir() {
-		return
-	}
-	if d.notebookWatcher != nil {
-		_ = d.notebookWatcher.Close()
-		d.notebookWatcher = nil
-		d.notebookWatchedRoot = ""
-	}
-	w, err := notebook.NewWatcherWithCleaner(root, notebook.DefaultWatchDebounce, fsdoc.CleanPath, func(paths []string) {
-		d.broadcastFsChanged(root, originExternal, paths...)
-		var mdPaths []string
-		artifactSeeds := map[string]struct{}{}
-		for _, p := range paths {
-			if _, err := notebook.CleanPath(p); err == nil {
-				mdPaths = append(mdPaths, p)
-			}
-			if seedID, ok := seedArtifactSeedFromNotebookPath(p); ok {
-				artifactSeeds[seedID] = struct{}{}
-			}
-		}
-		if len(mdPaths) > 0 {
-			d.broadcastNotebookChanged(originExternal, mdPaths...)
-		}
-		if len(artifactSeeds) > 0 {
-			d.coalesceSnapshots(func() {
-				for seedID := range artifactSeeds {
-					if err := d.recordObservedSeedArtifacts(seedID); err != nil {
-						d.logf("Garden artifact observation for %s: %v", seedID, err)
-					}
-				}
-			})
-		}
-	})
-	if err != nil {
-		d.logf("notebook watcher: failed to watch %s: %v", root, err)
-		return
-	}
-	d.notebookWatcher = w
-	d.notebookWatchedRoot = root
-}
-
-func (d *Daemon) noteNotebookSelfWrite(writes ...notebook.SelfWrite) {
-	d.notebookWatcherMu.Lock()
-	w := d.notebookWatcher
-	d.notebookWatcherMu.Unlock()
-	w.NoteSelfWrite(writes...)
-}
-
-func (d *Daemon) stopNotebookWatcher() {
-	d.notebookWatcherMu.Lock()
-	w := d.notebookWatcher
-	d.notebookWatcher = nil
-	d.notebookWatchedRoot = ""
-	d.notebookWatcherMu.Unlock()
-	_ = w.Close()
 }
 
 func (d *Daemon) notebookRoot() (string, error) {

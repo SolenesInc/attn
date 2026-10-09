@@ -243,13 +243,10 @@ type Daemon struct {
 	recoverySettled     chan struct{}
 	notebookMu          sync.Mutex
 	notebookStore       *notebook.Store
-	notebookWatcherMu   sync.Mutex
-	notebookWatcher     *notebook.Watcher
-	notebookWatchedRoot string
 	fsMu                sync.Mutex
 	fsStores            map[string]*fsdoc.Store
-	fsWatchMu           sync.Mutex
-	fsWatchers          map[string]*fsRootWatch
+	rootWatchMu         sync.Mutex
+	rootWatches         map[string]*rootWatch
 	pendingInitialWS    map[*wsClient]struct{}
 	startedOnce         sync.Once
 	startedCh           chan struct{}
