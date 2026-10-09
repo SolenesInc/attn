@@ -25,6 +25,7 @@ try {
   await runner.step('show_empty_desktop', async () => {
     const result = await observer.profileCommand('desktop_create', { profile_id: observer.profileId, shortcut_slot: 0 });
     empty = result.desktops[0];
+    await client.request('select_desktop', { desktopId: empty.id });
     await client.request('dom_wait', { selector: '[data-testid="empty-desktop-launcher"]', timeoutMs: 5_000 });
     const input = await client.request('dom_wait', { selector: '[data-testid="location-picker-path-input"]', focused: true, timeoutMs: 5_000 });
     runner.writeJson('launcher-input.json', input);
