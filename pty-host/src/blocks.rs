@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use std::sync::Arc;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::ghostty::{Terminal, TrackedRef};
 
@@ -22,10 +22,10 @@ pub struct Marker {
     pub exit_code: Option<i32>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AttachBlock {
     pub id: u64,
-    #[serde(skip_serializing_if = "is_false")]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub pending: bool,
     pub prompt_row: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -119,6 +119,42 @@ impl BlockTable {
                 }
             }
         }
+    }
+
+    pub fn restore(blocks: &[AttachBlock], next_id: u64, terminal: &Terminal) -> Self {
+        let pin = |col: Option<i32>, row: Option<i32>| {
+            let row = u32::try_from(row?).ok()?;
+            let col = u16::try_from(col.unwrap_or(0)).ok()?;
+            terminal.track_screen_point(col, row).map(Arc::new)
+        };
+        let mut table = Self {
+            completed: VecDeque::new(),
+            pending: None,
+            next_id,
+        };
+        for block in blocks {
+            let tracked = TrackedBlock {
+                id: block.id,
+                prompt: pin(None, Some(block.prompt_row)),
+                input: pin(block.input_col, block.input_row),
+                output: pin(None, block.output_start_row),
+                end: pin(None, block.end_row),
+                command: block.command.clone(),
+                exit_code: block.exit_code,
+                has_command: block.command.is_some(),
+                alt_screen: false,
+            };
+            if block.pending {
+                table.pending = Some(tracked);
+            } else {
+                table.complete(tracked);
+            }
+        }
+        table
+    }
+
+    pub fn next_id(&self) -> u64 {
+        self.next_id
     }
 
     pub fn snapshot(&self) -> Vec<AttachBlock> {

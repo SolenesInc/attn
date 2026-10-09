@@ -273,6 +273,15 @@ bool attn_ghostty_wraparound(AttnGhosttyTerminal *attn) {
   return attn_mode(attn, GHOSTTY_MODE_WRAPAROUND);
 }
 
+size_t attn_ghostty_total_rows(AttnGhosttyTerminal *attn) {
+  size_t rows = 0;
+  if (attn != NULL) {
+    ghostty_terminal_get(attn->terminal, GHOSTTY_TERMINAL_DATA_TOTAL_ROWS,
+                         &rows);
+  }
+  return rows;
+}
+
 bool attn_ghostty_cursor_visible(AttnGhosttyTerminal *attn) {
   return attn_mode(attn, GHOSTTY_MODE_CURSOR_VISIBLE);
 }

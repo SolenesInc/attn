@@ -56,6 +56,14 @@ impl SignalObserver {
         }
     }
 
+    pub fn program_status_reported(&self) -> bool {
+        self.program_status_reported
+    }
+
+    pub fn restore_program_status(&mut self, reported: bool) {
+        self.program_status_reported = reported;
+    }
+
     pub fn observe_program_status(&mut self, reports: &[ProgramStatus]) -> Vec<Observation> {
         if self.kind == Kind::Shell {
             return Vec::new();

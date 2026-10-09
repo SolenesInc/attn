@@ -14,10 +14,21 @@ const (
 	MethodHostInfo = "host_info"
 	MethodWatchAll = "watch_all"
 	MethodShutdown = "shutdown"
+	MethodHandover = "handover"
 
 	CapabilityProbeChild = "probe_child"
+	CapabilityHandover   = "handover"
 	ProbeChildFlag       = "--probe-child"
 )
+
+type HandoverParams struct {
+	Executable string `json:"executable"`
+	Generation string `json:"generation"`
+}
+
+type HandoverResult struct {
+	Terminals int `json:"terminals"`
+}
 
 type SpawnParams struct {
 	SessionID   string `json:"session_id"`

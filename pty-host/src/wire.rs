@@ -176,6 +176,14 @@ impl WireFeeder {
         self.blocks.snapshot()
     }
 
+    pub fn next_block_id(&self) -> u64 {
+        self.blocks.next_id()
+    }
+
+    pub fn restore_blocks(&mut self, blocks: &[crate::blocks::AttachBlock], next_id: u64) {
+        self.blocks = BlockTable::restore(blocks, next_id, &self.terminal);
+    }
+
     pub fn snapshot_placements(&self) -> Option<Vec<KittyPlacement>> {
         if self.placements.is_empty() {
             None

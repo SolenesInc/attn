@@ -17,7 +17,9 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use serde::Serialize;
 use serde_json::{Value, json};
 
+use crate::boundary::safe_boundary;
 use crate::ghostty::{Terminal, Theme};
+use crate::handover::SessionHandoff;
 use crate::protocol::{
     PreparedLaunchAttempt, SpawnParams, desync_event, exit_event, kitty_placements_event,
     output_event, resize_event, state_event,
@@ -26,6 +28,7 @@ use crate::queries::{
     ColorScheme, TerminalQueryStream, color_scheme_report, theme_color_scheme,
     track_color_scheme_reports,
 };
+use crate::quiesce::{Quiesce, set_cloexec};
 use crate::signals::{self, SignalObserver};
 use crate::wire::{WireFeeder, mint_epoch};
 
@@ -41,14 +44,21 @@ pub struct SessionRuntime {
     cleanup: Cleanup,
     broadcast: Broadcast,
     reaper: ChildReaper,
+    quiesce: Arc<Quiesce>,
 }
 
 impl SessionRuntime {
-    pub fn new(cleanup: Cleanup, broadcast: Broadcast, reaper: ChildReaper) -> Self {
+    pub fn new(
+        cleanup: Cleanup,
+        broadcast: Broadcast,
+        reaper: ChildReaper,
+        quiesce: Arc<Quiesce>,
+    ) -> Self {
         Self {
             cleanup,
             broadcast,
             reaper,
+            quiesce,
         }
     }
 }
@@ -60,6 +70,7 @@ pub struct ChildReaper {
 
 struct ChildReaperShared {
     sessions: Mutex<HashMap<i32, Weak<Session>>>,
+    reaping: Mutex<()>,
 }
 
 impl ChildReaper {
@@ -67,6 +78,7 @@ impl ChildReaper {
         block_sigchld()?;
         let shared = Arc::new(ChildReaperShared {
             sessions: Mutex::new(HashMap::new()),
+            reaping: Mutex::new(()),
         });
         let thread_shared = Arc::clone(&shared);
         thread::Builder::new()
@@ -75,6 +87,13 @@ impl ChildReaper {
             .spawn(move || reap_children(&thread_shared))
             .map_err(|error| format!("start child reaper: {error}"))?;
         Ok(Self { shared })
+    }
+
+    pub fn pause(&self) -> MutexGuard<'_, ()> {
+        self.shared
+            .reaping
+            .lock()
+            .expect("child reaper gate poisoned")
     }
 
     fn register(&self, session: &Arc<Session>) {
@@ -235,6 +254,8 @@ pub struct Session {
     cleanup_dir: String,
     cleanup: Cleanup,
     broadcast: Broadcast,
+    quiesce: Arc<Quiesce>,
+    carry: Mutex<Vec<u8>>,
     connections: AtomicUsize,
     cleanup_scheduled: AtomicBool,
     cleaned: AtomicBool,
@@ -245,6 +266,20 @@ enum Ownership {
     Pending(Box<RegistryEntry>),
     Committed,
     Abandoned,
+}
+
+struct Parts {
+    id: String,
+    agent: String,
+    cwd: String,
+    child_pid: i32,
+    attempt_index: usize,
+    registry_path: String,
+    cleanup_dir: String,
+    master: Option<File>,
+    model: Model,
+    lifecycle: Lifecycle,
+    ownership: Ownership,
 }
 
 pub enum Commit {
@@ -285,51 +320,48 @@ impl Session {
             cleanup,
             broadcast,
             reaper,
+            quiesce,
         } = runtime;
         let cleanup_dir = params.attempts[attempt_index].cleanup_dir.clone();
-        let session = Arc::new(Self {
-            id: params.session_id.clone(),
-            agent: params.agent.clone(),
-            cwd: params.cwd.clone(),
-            child_pid,
-            attempt_index,
-            registry_path,
-            master: Mutex::new(Some(master)),
-            model: Mutex::new(Model {
-                wire: WireFeeder::new(terminal, mint_epoch()),
-                signals: SignalObserver::new(&params.agent),
-                queries: TerminalQueryStream::default(),
-                theme,
-                reported_scheme,
-                color_scheme_reports: false,
-                seq: 0,
-                cols,
-                rows,
-                cell_width: 0,
-                cell_height: 0,
-                pixel_width: 0,
-                pixel_height: 0,
-            }),
-            delivery: DeliveryGate::new(),
-            lifecycle: Mutex::new(Lifecycle {
-                running: true,
-                state: "working".to_owned(),
-                state_detail: String::new(),
-                state_source: signals::HEARTBEAT,
-                exit_code: None,
-                exit_signal: None,
-            }),
-            lifecycle_changed: Condvar::new(),
-            subscribers: Mutex::new(HashMap::new()),
-            watchers: Mutex::new(HashMap::new()),
-            cleanup_dir,
+        let session = Arc::new(Self::assemble(
+            Parts {
+                id: params.session_id.clone(),
+                agent: params.agent.clone(),
+                cwd: params.cwd.clone(),
+                child_pid,
+                attempt_index,
+                registry_path,
+                cleanup_dir,
+                master: Some(master),
+                model: Model {
+                    wire: WireFeeder::new(terminal, mint_epoch()),
+                    signals: SignalObserver::new(&params.agent),
+                    queries: TerminalQueryStream::default(),
+                    theme,
+                    reported_scheme,
+                    color_scheme_reports: false,
+                    seq: 0,
+                    cols,
+                    rows,
+                    cell_width: 0,
+                    cell_height: 0,
+                    pixel_width: 0,
+                    pixel_height: 0,
+                },
+                lifecycle: Lifecycle {
+                    running: true,
+                    state: "working".to_owned(),
+                    state_detail: String::new(),
+                    state_source: signals::HEARTBEAT,
+                    exit_code: None,
+                    exit_signal: None,
+                },
+                ownership: Ownership::Abandoned,
+            },
             cleanup,
             broadcast,
-            connections: AtomicUsize::new(0),
-            cleanup_scheduled: AtomicBool::new(false),
-            cleaned: AtomicBool::new(false),
-            ownership: Mutex::new(Ownership::Abandoned),
-        });
+            quiesce,
+        ));
 
         let entry = RegistryEntry {
             version: 1,
@@ -363,6 +395,200 @@ impl Session {
         }
         reaper.register(&session);
         Ok(session)
+    }
+
+    fn assemble(
+        parts: Parts,
+        cleanup: Cleanup,
+        broadcast: Broadcast,
+        quiesce: Arc<Quiesce>,
+    ) -> Self {
+        Self {
+            id: parts.id,
+            agent: parts.agent,
+            cwd: parts.cwd,
+            child_pid: parts.child_pid,
+            attempt_index: parts.attempt_index,
+            registry_path: parts.registry_path,
+            master: Mutex::new(parts.master),
+            model: Mutex::new(parts.model),
+            delivery: DeliveryGate::new(),
+            lifecycle: Mutex::new(parts.lifecycle),
+            lifecycle_changed: Condvar::new(),
+            subscribers: Mutex::new(HashMap::new()),
+            watchers: Mutex::new(HashMap::new()),
+            cleanup_dir: parts.cleanup_dir,
+            cleanup,
+            broadcast,
+            quiesce,
+            carry: Mutex::new(Vec::new()),
+            connections: AtomicUsize::new(0),
+            cleanup_scheduled: AtomicBool::new(false),
+            cleaned: AtomicBool::new(false),
+            ownership: Mutex::new(parts.ownership),
+        }
+    }
+
+    pub fn freeze_output(&self) -> MutexGuard<'_, ()> {
+        self.delivery
+            .admission
+            .lock()
+            .expect("delivery admission poisoned")
+    }
+
+    pub fn is_pending(&self) -> bool {
+        matches!(
+            *self.ownership.lock().expect("ownership mutex poisoned"),
+            Ownership::Pending(_)
+        )
+    }
+
+    pub fn capture_handoff(
+        &self,
+        screen_path: String,
+    ) -> Result<(SessionHandoff, Vec<u8>), String> {
+        let model = self.model.lock().expect("model mutex poisoned");
+        let lifecycle = self.lifecycle.lock().expect("lifecycle mutex poisoned");
+        let master_fd = if lifecycle.running {
+            self.master
+                .lock()
+                .expect("master mutex poisoned")
+                .as_ref()
+                .map(AsRawFd::as_raw_fd)
+        } else {
+            None
+        };
+        let screen = model.wire.terminal().handover_vt()?;
+        let handoff = SessionHandoff {
+            id: self.id.clone(),
+            agent: self.agent.clone(),
+            cwd: self.cwd.clone(),
+            child_pid: self.child_pid,
+            attempt_index: self.attempt_index,
+            registry_path: self.registry_path.clone(),
+            cleanup_dir: self.cleanup_dir.clone(),
+            master_fd,
+            screen_path,
+            carry: self.carry.lock().expect("carry mutex poisoned").clone(),
+            seq: model.seq,
+            cols: model.cols,
+            rows: model.rows,
+            cell_width: model.cell_width,
+            cell_height: model.cell_height,
+            pixel_width: model.pixel_width,
+            pixel_height: model.pixel_height,
+            theme: model.theme.clone(),
+            color_scheme_reports: model.color_scheme_reports,
+            blocks: model.wire.snapshot_blocks(),
+            next_block_id: model.wire.next_block_id(),
+            program_status_reported: model.signals.program_status_reported(),
+            running: lifecycle.running,
+            state: lifecycle.state.clone(),
+            state_detail: lifecycle.state_detail.clone(),
+            state_source: lifecycle.state_source.to_owned(),
+            exit_code: lifecycle.exit_code,
+            exit_signal: lifecycle.exit_signal.clone(),
+        };
+        Ok((handoff, screen))
+    }
+
+    pub fn adopt(
+        handoff: &SessionHandoff,
+        screen: &[u8],
+        runtime: SessionRuntime,
+    ) -> Result<Arc<Self>, String> {
+        let mut terminal = Terminal::new(handoff.cols, handoff.rows)?;
+        terminal.set_theme(&handoff.theme)?;
+        if handoff.cell_width > 0 && handoff.cell_height > 0 {
+            terminal.resize_no_reflow(
+                handoff.cols,
+                handoff.rows,
+                u32::from(handoff.cell_width),
+                u32::from(handoff.cell_height),
+            )?;
+        }
+        terminal.write(screen);
+        terminal.drain_responses();
+        terminal.drain_program_status();
+        let mut wire = WireFeeder::new(terminal, mint_epoch());
+        wire.restore_blocks(&handoff.blocks, handoff.next_block_id);
+        let mut signals = SignalObserver::new(&handoff.agent);
+        signals.restore_program_status(handoff.program_status_reported);
+        let SessionRuntime {
+            cleanup,
+            broadcast,
+            reaper: _,
+            quiesce,
+        } = runtime;
+        let session = Arc::new(Self::assemble(
+            Parts {
+                id: handoff.id.clone(),
+                agent: handoff.agent.clone(),
+                cwd: handoff.cwd.clone(),
+                child_pid: handoff.child_pid,
+                attempt_index: handoff.attempt_index,
+                registry_path: handoff.registry_path.clone(),
+                cleanup_dir: handoff.cleanup_dir.clone(),
+                master: None,
+                model: Model {
+                    wire,
+                    signals,
+                    queries: TerminalQueryStream::default(),
+                    reported_scheme: theme_color_scheme(&handoff.theme),
+                    theme: handoff.theme.clone(),
+                    color_scheme_reports: handoff.color_scheme_reports,
+                    seq: handoff.seq,
+                    cols: handoff.cols,
+                    rows: handoff.rows,
+                    cell_width: handoff.cell_width,
+                    cell_height: handoff.cell_height,
+                    pixel_width: handoff.pixel_width,
+                    pixel_height: handoff.pixel_height,
+                },
+                lifecycle: Lifecycle {
+                    running: handoff.running,
+                    state: handoff.state.clone(),
+                    state_detail: handoff.state_detail.clone(),
+                    state_source: if handoff.state_source == signals::PROGRAM_STATUS {
+                        signals::PROGRAM_STATUS
+                    } else {
+                        signals::HEARTBEAT
+                    },
+                    exit_code: handoff.exit_code,
+                    exit_signal: handoff.exit_signal.clone(),
+                },
+                ownership: Ownership::Committed,
+            },
+            cleanup,
+            broadcast,
+            quiesce,
+        ));
+        session
+            .carry
+            .lock()
+            .expect("carry mutex poisoned")
+            .clone_from(&handoff.carry);
+        Ok(session)
+    }
+
+    pub fn resume_adopted(
+        self: &Arc<Self>,
+        master_fd: Option<RawFd>,
+        reaper: &ChildReaper,
+    ) -> Result<(), String> {
+        let Some(fd) = master_fd else {
+            self.schedule_cleanup();
+            return Ok(());
+        };
+        let master = unsafe { File::from_raw_fd(fd) };
+        set_cloexec(fd, true)?;
+        let pty_reader = master
+            .try_clone()
+            .map_err(|error| format!("clone adopted PTY master: {error}"))?;
+        *self.master.lock().expect("master mutex poisoned") = Some(master);
+        start_reader(Arc::clone(self), pty_reader)?;
+        reaper.register(self);
+        Ok(())
     }
 
     pub fn note_connected(&self) {
@@ -407,18 +633,8 @@ impl Session {
         sender: SyncSender<Value>,
         shutdown: UnixStream,
         omit_replay: bool,
-        expected_snapshot_format: &str,
     ) -> Value {
-        let mut model = self.model.lock().expect("model mutex poisoned");
-        let portable_replay = !omit_replay
-            && !expected_snapshot_format.is_empty()
-            && expected_snapshot_format != env!("ATTN_PTY_HOST_SNAPSHOT_FORMAT");
-        if portable_replay {
-            model.seq = model.seq.wrapping_add(1);
-            let mut replay = b"\x1bc".to_vec();
-            replay.extend(model.wire.terminal().vt_dump());
-            let _ = sender.try_send(output_event(&self.id, model.seq, &BASE64.encode(replay)));
-        }
+        let model = self.model.lock().expect("model mutex poisoned");
         let replaced = self
             .subscribers
             .lock()
@@ -446,7 +662,7 @@ impl Session {
             "ghostty_placements": model.wire.snapshot_placements().unwrap_or_default(),
             "ghostty_scrollback_truncated": false
         });
-        if !omit_replay && !portable_replay {
+        if !omit_replay {
             let snapshot = model.wire.terminal().snapshot();
             if !snapshot.is_empty() {
                 result["ghostty_snapshot"] = Value::String(BASE64.encode(snapshot));
@@ -735,6 +951,32 @@ impl Session {
             .map_err(|error| format!("write PTY: {error}"))
     }
 
+    fn read_until_closed(&self, reader: &mut File) {
+        let mut buffer = vec![0_u8; 4 * 1024];
+        loop {
+            if self.quiesce.wait_readable(reader.as_raw_fd()).is_err() {
+                break;
+            }
+            let read = match reader.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(read) => read,
+                Err(error) if error.kind() == ErrorKind::Interrupted => continue,
+                Err(_) => break,
+            };
+            let mut carry = self.carry.lock().expect("carry mutex poisoned");
+            carry.extend_from_slice(&buffer[..read]);
+            let boundary = safe_boundary(&carry);
+            if boundary > 0 {
+                self.observe_output(&carry[..boundary], &self.delivery.admit_output());
+                carry.drain(..boundary);
+            }
+        }
+        let tail = std::mem::take(&mut *self.carry.lock().expect("carry mutex poisoned"));
+        if !tail.is_empty() {
+            self.observe_output(&tail, &self.delivery.admit_output());
+        }
+    }
+
     fn observe_output(&self, data: &[u8], admission: &OutputAdmission<'_>) {
         let _delivery = admission.delivery();
         let (seq, wire, placements, resync, responses, observations) = {
@@ -933,26 +1175,20 @@ impl Session {
 }
 
 fn start_reader(session: Arc<Session>, mut reader: File) -> Result<(), String> {
+    session.quiesce.enter();
+    let quiesce = Arc::clone(&session.quiesce);
     thread::Builder::new()
         .name(format!("pty-read-{}", session.id))
         .stack_size(READER_STACK_BYTES)
         .spawn(move || {
-            let mut buffer = vec![0_u8; 4 * 1024];
-            loop {
-                match reader.read(&mut buffer) {
-                    Ok(0) => return,
-                    Ok(read) => {
-                        let admission = session.delivery.admit_output();
-                        session.observe_output(&buffer[..read], &admission);
-                    }
-                    Err(error) if error.kind() == ErrorKind::Interrupted => {}
-                    Err(error) if error.raw_os_error() == Some(libc::EIO) => return,
-                    Err(_) => return,
-                }
-            }
+            session.read_until_closed(&mut reader);
+            session.quiesce.leave();
         })
         .map(|_| ())
-        .map_err(|error| format!("start PTY reader: {error}"))
+        .map_err(|error| {
+            quiesce.leave();
+            format!("start PTY reader: {error}")
+        })
 }
 
 fn reap_children(shared: &ChildReaperShared) {
@@ -967,6 +1203,7 @@ fn reap_children(shared: &ChildReaperShared) {
             );
             return;
         }
+        let _reaping = shared.reaping.lock().expect("child reaper gate poisoned");
         reap_registered_children(shared);
     }
 }
@@ -1132,8 +1369,8 @@ fn spawn_with_files(
     master: File,
     slave: File,
 ) -> Result<(File, i32), String> {
-    set_cloexec(master.as_raw_fd())?;
-    set_cloexec(slave.as_raw_fd())?;
+    set_cloexec(master.as_raw_fd(), true)?;
+    set_cloexec(slave.as_raw_fd(), true)?;
     let stdout_fd = unsafe { libc::dup(slave.as_raw_fd()) };
     let stderr_fd = unsafe { libc::dup(slave.as_raw_fd()) };
     if stdout_fd < 0 || stderr_fd < 0 {
@@ -1150,8 +1387,8 @@ fn spawn_with_files(
     }
     let stdout = unsafe { File::from_raw_fd(stdout_fd) };
     let stderr = unsafe { File::from_raw_fd(stderr_fd) };
-    set_cloexec(stdout.as_raw_fd())?;
-    set_cloexec(stderr.as_raw_fd())?;
+    set_cloexec(stdout.as_raw_fd(), true)?;
+    set_cloexec(stderr.as_raw_fd(), true)?;
 
     let mut command = Command::new(&attempt.executable);
     if let Some(arg0) = attempt.args.first() {
@@ -1186,17 +1423,6 @@ fn spawn_with_files(
     let pid = i32::try_from(child.id()).map_err(|_| "child pid does not fit i32".to_owned())?;
     drop(child);
     Ok((master, pid))
-}
-
-fn set_cloexec(fd: RawFd) -> Result<(), String> {
-    let flags = unsafe { libc::fcntl(fd, libc::F_GETFD) };
-    if flags < 0 || unsafe { libc::fcntl(fd, libc::F_SETFD, flags | libc::FD_CLOEXEC) } < 0 {
-        return Err(format!(
-            "set close-on-exec: {}",
-            std::io::Error::last_os_error()
-        ));
-    }
-    Ok(())
 }
 
 fn cleanup_unused_attempts(attempts: &[PreparedLaunchAttempt], keep: usize) {

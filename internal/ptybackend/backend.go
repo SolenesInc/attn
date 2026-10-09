@@ -245,10 +245,6 @@ type TerminalBuildProvider interface {
 	SessionTerminalBuild(id harness.TerminalID) (format string, known bool)
 }
 
-type TerminalBuildCompatibilityProvider interface {
-	SessionCanReplayWithFormat(id harness.TerminalID, format string) bool
-}
-
 type WorkerUpgrader interface {
 	UpgradeWorker(ctx context.Context, id harness.TerminalID) error
 }

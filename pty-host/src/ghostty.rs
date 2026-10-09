@@ -53,7 +53,6 @@ unsafe extern "C" {
         scrollback_bytes: u64,
         kitty_bytes: u64,
     ) -> *mut c_void;
-    #[cfg(test)]
     fn attn_ghostty_restore(
         data: *const u8,
         len: usize,
@@ -97,6 +96,8 @@ unsafe extern "C" {
     fn attn_ghostty_program_status_free(reports: *mut RawProgramStatus, len: usize);
     fn attn_ghostty_snapshot(terminal: *mut c_void, len: *mut usize) -> *mut u8;
     fn attn_ghostty_vt_dump(terminal: *mut c_void, len: *mut usize) -> *mut u8;
+    fn attn_ghostty_total_rows(terminal: *mut c_void) -> usize;
+    fn attn_ghostty_track_screen_point(terminal: *mut c_void, x: u16, y: u32) -> *mut c_void;
     #[cfg(test)]
     fn attn_ghostty_plain_text(terminal: *mut c_void, len: *mut usize) -> *mut u8;
     fn attn_ghostty_viewport_vt(terminal: *mut c_void, len: *mut usize) -> *mut u8;
@@ -259,7 +260,6 @@ impl Terminal {
             .ok_or_else(|| format!("libghostty-vt could not create a {cols}x{rows} terminal"))
     }
 
-    #[cfg(test)]
     pub fn restore(snapshot: &[u8]) -> Result<Self, String> {
         let raw = unsafe {
             attn_ghostty_restore(
@@ -306,6 +306,15 @@ impl Terminal {
     pub fn track_cursor(&self) -> Option<TrackedRef> {
         NonNull::new(unsafe { attn_ghostty_track_cursor(self.raw.as_ptr()) })
             .map(|raw| TrackedRef { raw })
+    }
+
+    pub fn track_screen_point(&self, x: u16, y: u32) -> Option<TrackedRef> {
+        NonNull::new(unsafe { attn_ghostty_track_screen_point(self.raw.as_ptr(), x, y) })
+            .map(|raw| TrackedRef { raw })
+    }
+
+    pub fn total_rows(&self) -> usize {
+        unsafe { attn_ghostty_total_rows(self.raw.as_ptr()) }
     }
 
     pub fn resize(
@@ -393,8 +402,45 @@ impl Terminal {
         unsafe { take_bytes(|len| attn_ghostty_snapshot(self.raw.as_ptr(), len)) }
     }
 
-    pub fn vt_dump(&self) -> Vec<u8> {
+    fn vt_dump(&self) -> Vec<u8> {
         unsafe { take_bytes(|len| attn_ghostty_vt_dump(self.raw.as_ptr(), len)) }
+    }
+
+    pub fn handover_vt(&self) -> Result<Vec<u8>, String> {
+        let mut scratch = Self::restore(&self.snapshot())?;
+        if !scratch.alt_screen_active() {
+            return scratch.dump_active();
+        }
+        let alternate = scratch.dump_active()?;
+        scratch.write(b"\x1b[?1049l");
+        let mut dump = scratch.dump_active()?;
+        dump.extend_from_slice(b"\x1b[?1049h");
+        dump.extend(alternate);
+        Ok(dump)
+    }
+
+    fn dump_active(&self) -> Result<Vec<u8>, String> {
+        let mut dump = self.vt_dump();
+        let (cols, rows) = self.size();
+        let mut probe = Self::new(cols, rows)?;
+        probe.write(&dump);
+        let deficit = self.total_rows().saturating_sub(probe.total_rows());
+        if deficit > 0 {
+            dump.extend(format!("\x1b[{rows};1H").as_bytes());
+            dump.extend(b"\r\n".repeat(deficit));
+        }
+        let (x, y) = self.cursor_pos();
+        dump.extend(format!("\x1b[{};{}H", y + 1, x + 1).as_bytes());
+        dump.extend_from_slice(if self.cursor_visible() {
+            b"\x1b[?25h"
+        } else {
+            b"\x1b[?25l"
+        });
+        Ok(dump)
+    }
+
+    fn cursor_visible(&self) -> bool {
+        unsafe { attn_ghostty_cursor_visible(self.raw.as_ptr()) }
     }
 
     pub fn viewport_vt(&self) -> Vec<u8> {
@@ -571,5 +617,116 @@ mod tests {
         assert!(!snapshot.is_empty());
         let restored = Terminal::restore(&snapshot).expect("restore terminal");
         assert!(restored.plain_text().contains("hello from rust"));
+    }
+
+    const COLS: u16 = 40;
+    const ROWS: u16 = 10;
+
+    fn screen(output: &[u8]) -> Terminal {
+        let mut terminal = Terminal::new(COLS, ROWS).expect("create terminal");
+        terminal.write(output);
+        terminal
+    }
+
+    fn handed_over(source: &Terminal) -> Terminal {
+        screen(&source.handover_vt().expect("handover dump"))
+    }
+
+    fn assert_same_screen(source: &Terminal, replayed: &Terminal, shape: &str) {
+        assert_eq!(
+            replayed.viewport_text(ROWS),
+            source.viewport_text(ROWS),
+            "{shape}: visible rows"
+        );
+        assert_eq!(
+            replayed.cursor_pos(),
+            source.cursor_pos(),
+            "{shape}: cursor"
+        );
+        assert_eq!(
+            replayed.total_rows(),
+            source.total_rows(),
+            "{shape}: rows with scrollback"
+        );
+        assert_eq!(
+            replayed.plain_text(),
+            source.plain_text(),
+            "{shape}: scrollback text"
+        );
+    }
+
+    fn numbered(lines: usize) -> Vec<u8> {
+        (0..lines)
+            .flat_map(|line| format!("line {line}\r\n").into_bytes())
+            .collect()
+    }
+
+    #[test]
+    fn handover_dump_restores_every_grid_shape() {
+        let shapes: Vec<(&str, Vec<u8>)> = vec![
+            ("empty", Vec::new()),
+            ("short screen", b"one\r\ntwo\r\nthree".to_vec()),
+            ("blank rows under the cursor after scrolling", numbered(25)),
+            (
+                "prompt above blank rows",
+                [
+                    numbered(25),
+                    b"> prompt\r\n  status\r\n\x1b[2A\x1b[3C".to_vec(),
+                ]
+                .concat(),
+            ),
+            ("full screen", [numbered(25), b"last row".to_vec()].concat()),
+            (
+                "soft-wrapped rows",
+                (0..12)
+                    .flat_map(|line| format!("{line} {}\r\n", "x".repeat(60)).into_bytes())
+                    .collect(),
+            ),
+            (
+                "styled text",
+                [
+                    numbered(15),
+                    b"\x1b[1;31mred\x1b[0m \x1b[38;2;10;20;30mtrue\x1b[0m\r\n".to_vec(),
+                ]
+                .concat(),
+            ),
+            (
+                "hidden cursor",
+                [numbered(5), b"\x1b[?25l".to_vec()].concat(),
+            ),
+        ];
+        for (shape, output) in shapes {
+            let source = screen(&output);
+            assert_same_screen(&source, &handed_over(&source), shape);
+        }
+    }
+
+    #[test]
+    fn handover_dump_keeps_relative_redraws_on_their_rows() {
+        let mut source =
+            screen(&[numbered(25), b"> prompt\r\n  status\r\n\x1b[2A".to_vec()].concat());
+        let mut replayed = handed_over(&source);
+        let redraw = b"\r\x1b[J> redrawn prompt\r\n  new status";
+        source.write(redraw);
+        replayed.write(redraw);
+        assert_same_screen(&source, &replayed, "redraw after handover");
+    }
+
+    #[test]
+    fn handover_dump_keeps_the_primary_screen_under_an_alternate_screen() {
+        let mut source = screen(&[numbered(25), b"shell prompt$ ".to_vec()].concat());
+        source.write(b"\x1b[?1049h\x1b[Hfull screen app\x1b[5;3H");
+        let mut replayed = handed_over(&source);
+        assert!(replayed.alt_screen_active());
+        assert_eq!(replayed.viewport_text(ROWS), source.viewport_text(ROWS));
+        assert_eq!(replayed.cursor_pos(), source.cursor_pos());
+        assert!(
+            source.alt_screen_active(),
+            "the dump must not change the live terminal"
+        );
+
+        source.write(b"\x1b[?1049l");
+        replayed.write(b"\x1b[?1049l");
+        assert_same_screen(&source, &replayed, "primary screen after leaving the app");
     }
 }

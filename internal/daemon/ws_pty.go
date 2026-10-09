@@ -31,6 +31,8 @@ const maxInitialPromptBytes = 1 << 20
 // The wrapper reads its initial prompt as it launches; a file older than this was never going to be read.
 const initialPromptCleanupAfter = 5 * time.Minute
 
+const endedStreamProbeTimeout = 10 * time.Second
+
 func (d *Daemon) writeInitialPromptFile(sessionID protocol.SessionID, prompt string) (string, func(), error) {
 	if strings.TrimSpace(prompt) == "" {
 		return "", func() {}, nil
@@ -664,14 +666,37 @@ func (d *Daemon) forwardPTYStreamEvents(client *wsClient, terminalID protocol.Te
 	}
 
 	d.logf("pty stream events closed: id=%s", terminalID)
+	d.resyncEndedStream(client, terminalID, stream)
+}
+
+func (d *Daemon) resyncEndedStream(client *wsClient, terminalID protocol.TerminalID, stream ptybackend.Stream) {
+	client.attachMu.Lock()
+	current, attached := client.attachedStreams[terminalID]
+	client.attachMu.Unlock()
+	provider, canProbe := d.ptyBackend.(ptybackend.SessionInfoProvider)
+	if !attached || current != stream || !canProbe || d.stopping() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), endedStreamProbeTimeout)
+	defer cancel()
+	info, err := provider.SessionInfo(ctx, harness.TerminalID(terminalID))
+	if err != nil || !info.Running {
+		return
+	}
+	d.logf("pty stream ended while its terminal runs: id=%s; asking the app to reattach", terminalID)
+	d.sendPTYDesync(client, terminalID, "runtime_stream_ended")
 }
 
 func (d *Daemon) desyncPTYStream(client *wsClient, terminalID protocol.TerminalID, stream ptybackend.Stream) {
 	_ = stream.Close()
+	d.sendPTYDesync(client, terminalID, "stream_backpressure")
+}
+
+func (d *Daemon) sendPTYDesync(client *wsClient, terminalID protocol.TerminalID, reason string) {
 	payload, err := json.Marshal(&protocol.WebSocketEvent{
 		Event:  protocol.EventPtyDesync,
 		ID:     protocol.Ptr(string(terminalID)),
-		Reason: protocol.Ptr("stream_backpressure"),
+		Reason: protocol.Ptr(reason),
 	})
 	if err == nil {
 		d.sendOutbound(client, outboundMessage{kind: messageKindText, payload: payload})

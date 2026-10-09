@@ -1,0 +1,146 @@
+use std::io::ErrorKind;
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
+use std::sync::{Condvar, Mutex};
+
+pub struct Quiesce {
+    wake_read: OwnedFd,
+    wake_write: OwnedFd,
+    state: Mutex<State>,
+    changed: Condvar,
+}
+
+#[derive(Default)]
+struct State {
+    requested: bool,
+    members: usize,
+    parked: usize,
+}
+
+impl Quiesce {
+    pub fn new() -> Result<Self, String> {
+        let mut fds = [0; 2];
+        if unsafe { libc::pipe(fds.as_mut_ptr()) } != 0 {
+            return Err(format!(
+                "create quiesce pipe: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        let (wake_read, wake_write) =
+            unsafe { (OwnedFd::from_raw_fd(fds[0]), OwnedFd::from_raw_fd(fds[1])) };
+        for fd in [&wake_read, &wake_write] {
+            set_cloexec(fd.as_raw_fd(), true)?;
+        }
+        Ok(Self {
+            wake_read,
+            wake_write,
+            state: Mutex::new(State::default()),
+            changed: Condvar::new(),
+        })
+    }
+
+    pub fn enter(&self) {
+        self.state.lock().expect("quiesce mutex poisoned").members += 1;
+    }
+
+    pub fn leave(&self) {
+        self.state.lock().expect("quiesce mutex poisoned").members -= 1;
+        self.changed.notify_all();
+    }
+
+    pub fn wait_readable(&self, fd: RawFd) -> std::io::Result<()> {
+        loop {
+            let mut fds = [
+                libc::pollfd {
+                    fd,
+                    events: libc::POLLIN,
+                    revents: 0,
+                },
+                libc::pollfd {
+                    fd: self.wake_read.as_raw_fd(),
+                    events: libc::POLLIN,
+                    revents: 0,
+                },
+            ];
+            if unsafe { libc::poll(fds.as_mut_ptr(), 2, -1) } < 0 {
+                let error = std::io::Error::last_os_error();
+                if error.kind() == ErrorKind::Interrupted {
+                    continue;
+                }
+                return Err(error);
+            }
+            if fds[1].revents != 0 {
+                self.park();
+                continue;
+            }
+            if fds[0].revents != 0 {
+                return Ok(());
+            }
+        }
+    }
+
+    fn park(&self) {
+        let mut state = self.state.lock().expect("quiesce mutex poisoned");
+        if !state.requested {
+            return;
+        }
+        state.parked += 1;
+        self.changed.notify_all();
+        let mut state = self
+            .changed
+            .wait_while(state, |state| state.requested)
+            .expect("quiesce mutex poisoned");
+        state.parked -= 1;
+    }
+
+    pub fn stop(&self) -> Result<(), String> {
+        let mut state = self.state.lock().expect("quiesce mutex poisoned");
+        if state.requested {
+            return Err("terminals are already stopped for a handover".to_owned());
+        }
+        state.requested = true;
+        if unsafe { libc::write(self.wake_write.as_raw_fd(), [1_u8].as_ptr().cast(), 1) } != 1 {
+            state.requested = false;
+            return Err(format!(
+                "wake terminal readers: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        drop(
+            self.changed
+                .wait_while(state, |state| state.parked < state.members)
+                .expect("quiesce mutex poisoned"),
+        );
+        Ok(())
+    }
+
+    pub fn resume(&self) {
+        let mut state = self.state.lock().expect("quiesce mutex poisoned");
+        let mut byte = 0_u8;
+        let _ = unsafe { libc::read(self.wake_read.as_raw_fd(), (&raw mut byte).cast(), 1) };
+        state.requested = false;
+        drop(state);
+        self.changed.notify_all();
+    }
+}
+
+pub fn set_cloexec(fd: RawFd, enabled: bool) -> Result<(), String> {
+    let flags = unsafe { libc::fcntl(fd, libc::F_GETFD) };
+    if flags < 0 {
+        return Err(format!(
+            "read descriptor {fd} flags: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    let flags = if enabled {
+        flags | libc::FD_CLOEXEC
+    } else {
+        flags & !libc::FD_CLOEXEC
+    };
+    if unsafe { libc::fcntl(fd, libc::F_SETFD, flags) } < 0 {
+        return Err(format!(
+            "set descriptor {fd} close-on-exec: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    Ok(())
+}

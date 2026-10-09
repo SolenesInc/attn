@@ -157,6 +157,9 @@ type WorkerBackend struct {
 	artifactMu       sync.Mutex
 	pinned           ptyhost.Artifact
 	candidateVerdict string
+
+	handoverMu sync.Mutex
+	handovers  map[hostIncarnation]*sharedHandover
 }
 
 func (s *workerSession) notePollFailure(now time.Time) (logUnreachable bool, evict bool) {
@@ -258,6 +261,7 @@ func newWorkerBackend(cfg WorkerBackendConfig, kind workerRuntimeKind) (*WorkerB
 		sessions:           make(map[string]*workerSession),
 		sharedControls:     make(map[hostIncarnation]*sharedHostControl),
 		sharedMonitors:     make(map[hostIncarnation]*sharedHostMonitor),
+		handovers:          make(map[hostIncarnation]*sharedHandover),
 	}
 	if kind == workerRuntimeSharedHost {
 		b.loadSharedArtifacts()
@@ -400,17 +404,6 @@ func (b *WorkerBackend) PTYBackendMode() string {
 		return "shared"
 	}
 	return "worker"
-}
-
-func (b *WorkerBackend) SessionCanReplayWithFormat(id harness.TerminalID, format string) bool {
-	sessionID := string(id)
-	if b.kind != workerRuntimeSharedHost || strings.TrimSpace(format) == "" {
-		return false
-	}
-	b.mu.RLock()
-	_, ok := b.sessions[sessionID]
-	b.mu.RUnlock()
-	return ok
 }
 
 func (b *WorkerBackend) SetStateHandler(handler func(id harness.TerminalID, obs pty.Observation)) {
@@ -1341,6 +1334,9 @@ var errUpgradeUnsupported = errors.New("worker does not support in-place upgrade
 
 func (b *WorkerBackend) UpgradeWorker(ctx context.Context, id harness.TerminalID) error {
 	sessionID := string(id)
+	if b.kind == workerRuntimeSharedHost {
+		return b.upgradeSharedTerminal(ctx, sessionID)
+	}
 	if _, err := b.upgrade(ctx, sessionID, b.resolveBinaryPath()); err != nil {
 		return err
 	}

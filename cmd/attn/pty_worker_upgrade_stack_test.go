@@ -4,10 +4,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/ptyhost/ptyhosttest"
+	"github.com/victorarias/attn/internal/ptyworker"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -163,32 +166,72 @@ func TestAnAgentWhoseTerminalEndedWhileTheDaemonWasDownShowsNoReloadNotice(t *te
 	}
 }
 
-func TestASharedHostTerminalShowsNoReloadNoticeAfterAnUpdate(t *testing.T) {
+func TestASharedHostTerminalMovesToTheNewBuildAcrossAnUpdate(t *testing.T) {
 	t.Parallel()
-	host := os.Getenv("ATTN_TEST_PTY_HOST")
-	if host == "" {
-		t.Skip("set ATTN_TEST_PTY_HOST to an attn-pty-host binary")
+	if os.Getenv("ATTN_TEST_PTY_HOST") == "" {
+		t.Skip("set ATTN_TEST_PTY_HOST to run the shared PTY host stack tests")
 	}
 	s := testworld.NewStack(t)
-	next := testworld.AttnBinaryWithSnapshotFormat(t, "next-format")
-	s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=shared", "ATTN_PTY_HOST_BINARY="+host)
-	s.Start()
+	current := testworld.AttnBinaryWithSnapshotFormat(t, "shared-current")
+	next := testworld.AttnBinaryWithSnapshotFormat(t, "shared-next")
+	s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=shared")
+	s.StartBinary(current, "ATTN_PTY_HOST_BINARY="+ptyhosttest.BuildWithSnapshotFormat(t, "shared-current"))
 	app := s.App()
 	shell := s.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), s.Path("shop"))
-	app.TypeLine(shell, "echo started-$((1+1))")
+	pidFile := filepath.Join(s.Dir, "shell.pid")
+	app.TypeLine(shell, "echo $$ > "+pidFile+"; echo started-$((1+1))")
 	app.AwaitScreen(shell, "started-2")
+	shellBefore, err := os.ReadFile(pidFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hostBefore := sharedHostOf(t, s.Dir, app.Terminal(shell))
 	s.Stop()
 
-	s.StartBinary(next)
+	s.StartBinary(next, "ATTN_PTY_HOST_BINARY="+ptyhosttest.BuildWithSnapshotFormat(t, "shared-next"))
 	app = s.App()
-	if came := initialSession(t, app, shell); came.TerminalBuildStale != nil {
-		t.Errorf("the shared-host terminal came back with terminal_build_stale=%t, want it replayed without a reload notice", *came.TerminalBuildStale)
-	}
 	terminal := app.Terminal(shell)
-	testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(terminal)},
-		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return string(r.ID) == terminal })
-	app.TypeLine(shell, "echo still-$((2+2))")
+	attach := func() protocol.AttachResultMessage {
+		return testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(terminal)},
+			protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return string(r.ID) == terminal })
+	}
+	attached := attach()
+	if attached.Snapshot == nil || protocol.Deref(attached.Snapshot.Format) != "shared-next" {
+		testworld.AwaitEvent(app, "the attached stream of "+terminal+" to end when its host hands over", func(e protocol.WebSocketEvent) bool {
+			return e.Event == protocol.EventPtyDesync && protocol.Deref(e.ID) == terminal
+		})
+		attached = attach()
+	}
+	if attached.Snapshot == nil || protocol.Deref(attached.Snapshot.Format) != "shared-next" {
+		t.Fatalf("after the update the terminal attached with snapshot %+v, want its host handed over to shared-next", attached.Snapshot)
+	}
+	if host := sharedHostOf(t, s.Dir, terminal); host != hostBefore {
+		t.Fatalf("the terminal moved from host pid %d to %d, want the same process carrying it", hostBefore, host)
+	}
+	if session := testworld.AwaitSession(app, shell, func(protocol.Session) bool { return true }); session.TerminalBuildStale != nil {
+		t.Errorf("the handed-over terminal shows terminal_build_stale=%t, want no reload notice", *session.TerminalBuildStale)
+	}
+	app.TypeLine(shell, "echo $$ > "+pidFile+"; echo still-$((2+2))")
 	app.AwaitScreen(shell, "still-4")
+	if shellAfter, err := os.ReadFile(pidFile); err != nil || string(shellAfter) != string(shellBefore) {
+		t.Fatalf("the shell is pid %q after the update (err %v), want the same shell %q", shellAfter, err, shellBefore)
+	}
+}
+
+func sharedHostOf(t *testing.T, dataDir, terminal string) int {
+	t.Helper()
+	paths, _ := filepath.Glob(filepath.Join(dataDir, "pty-hosts", "*", "registry", terminal+".json"))
+	if len(paths) != 1 {
+		t.Fatalf("shared host registry entries for %s: %v, want one", terminal, paths)
+	}
+	entry, err := ptyworker.ReadRegistry(paths[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if syscall.Kill(entry.WorkerPID, 0) != nil {
+		t.Fatalf("the host recorded for %s (pid %d) is not running", terminal, entry.WorkerPID)
+	}
+	return entry.WorkerPID
 }
 
 func initialSession(t *testing.T, app *testworld.Peer, id string) protocol.Session {

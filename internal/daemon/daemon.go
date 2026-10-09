@@ -159,6 +159,7 @@ type Daemon struct {
 	sharedPTYHost                     *ptybackend.WorkerBackend
 	upgradingMu                       sync.Mutex
 	upgradingWorkers                  map[harness.TerminalID]bool
+	ptyRecovered                      atomic.Bool
 	watchersMu                        sync.Mutex
 	transcriptWatch                   map[protocol.SessionID]*transcriptWatcher
 	pluginUsageWatch                  map[protocol.SessionID]*pluginUsageWatcher
@@ -891,6 +892,7 @@ func (d *Daemon) Start() error {
 		if d.stopping() {
 			return
 		}
+		d.upgradeStaleTerminals()
 		d.resolveDue(time.Now())
 		d.life.Go("runSessionResolver", d.runSessionResolver)
 		if _, routed := d.ptyBackend.(*ptybackend.MigratingBackend); routed {
