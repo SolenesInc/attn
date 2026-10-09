@@ -645,7 +645,8 @@ async function main() {
       await wsRequest(options.wsUrl, { cmd: 'refresh_prs' }, 'refresh_prs_result');
       const recovered = await poll(() => {
         const rows = runJSON(binary, ['automation', 'runs', diskFullDefinitionID], daemonEnv) || [];
-        return rows.length === 2 && rows[0].state === 'delivered' ? rows[0] : null;
+        const fresh = rows.find((row) => row.id !== failed.id);
+        return rows.length === 2 && fresh?.state === 'delivered' ? fresh : null;
       }, 'fresh review request after storage recovers');
       runner.assert(recovered.session_id !== failed.session_id && recovered.seed_id !== failed.seed_id, 'a fresh request starts a new reviewer after the failed launch', { failed, recovered });
       await client.request('close_session', { sessionId: recovered.session_id });
