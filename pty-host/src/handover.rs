@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::blocks::AttachBlock;
 use crate::ghostty::Theme;
+use crate::quiesce::set_cloexec;
 
 pub const CAPABILITY: &str = "handover";
 pub const ADOPT_FLAG: &str = "--adopt-handoff";
@@ -203,6 +204,9 @@ fn hand_back(path: &Path) -> Result<Fallback, String> {
         .ok_or_else(|| "the handoff names no build to fall back to".to_owned())?;
     let fallback: Fallback = serde_json::from_value(fallback)
         .map_err(|error| format!("parse the fallback build: {error}"))?;
+    for fd in inherited_fds(&handoff) {
+        set_cloexec(fd, false)?;
+    }
     handoff.insert(
         "generation".to_owned(),
         serde_json::Value::String(fallback.generation.clone()),
@@ -210,6 +214,21 @@ fn hand_back(path: &Path) -> Result<Fallback, String> {
     let raw = serde_json::to_vec(&handoff).map_err(|error| format!("encode handoff: {error}"))?;
     write_private(path, &raw)?;
     Ok(fallback)
+}
+
+fn inherited_fds(handoff: &serde_json::Map<String, serde_json::Value>) -> Vec<i32> {
+    let sessions = handoff
+        .get("sessions")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|session| session.get("master_fd"));
+    std::iter::once(handoff.get("listener_fd"))
+        .flatten()
+        .chain(sessions)
+        .filter_map(serde_json::Value::as_i64)
+        .filter_map(|fd| i32::try_from(fd).ok())
+        .collect()
 }
 
 pub fn exec(executable: &str, handoff_path: &Path) -> String {

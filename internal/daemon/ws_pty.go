@@ -680,7 +680,7 @@ func (d *Daemon) resyncEndedStream(client *wsClient, terminalID protocol.Termina
 	ctx, cancel := context.WithTimeout(d.life.Context(), endedStreamProbeTimeout)
 	defer cancel()
 	info, err := provider.SessionInfo(ctx, harness.TerminalID(terminalID))
-	if err != nil || !info.Running {
+	if errors.Is(err, pty.ErrSessionNotFound) || err == nil && !info.Running {
 		return
 	}
 	d.logf("pty stream ended while its terminal runs: id=%s; asking the app to reattach", terminalID)

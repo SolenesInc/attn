@@ -207,38 +207,11 @@ impl Host {
             reaper,
             quiesce,
         );
-        let mut adopted = Vec::with_capacity(handoff.sessions.len());
-        for (session, screen) in handoff.sessions.iter().zip(&screens) {
-            match Session::adopt(session, screen, host.session_runtime()) {
-                Ok(adopted_session) => {
-                    adopted.push((adopted_session, session.master_fd, session.removing));
-                }
-                Err(error) => {
-                    std::mem::forget(adopted);
-                    std::mem::forget(host);
-                    return Err(format!("adopt terminal {}: {error}", session.id));
-                }
-            }
-        }
-        if let Err(error) = host.write_registry() {
-            std::mem::forget(adopted);
+        if let Err(error) = host.restore(&handoff, &screens) {
             std::mem::forget(host);
             return Err(error);
         }
         handover::disarm_fallback();
-        set_cloexec(host.listener.as_raw_fd(), true)?;
-        for (session, master_fd, removing) in adopted {
-            host.state
-                .lock()
-                .expect("host state mutex poisoned")
-                .sessions
-                .insert(session.id.clone(), Arc::clone(&session));
-            session.resume_adopted(master_fd, &host.reaper)?;
-            if removing {
-                session.finish_adopted_removal();
-            }
-        }
-        host.start()?;
         handoff.remove(path);
         eprintln!(
             "PTY host adopted {} terminals: pid={} generation={}",
@@ -248,6 +221,33 @@ impl Host {
         );
         host.serve();
         Ok(())
+    }
+
+    fn restore(
+        self: &Arc<Self>,
+        handoff: &HostHandoff,
+        screens: &[HandoverScreen],
+    ) -> Result<(), String> {
+        let mut adopted = Vec::with_capacity(handoff.sessions.len());
+        for (session, screen) in handoff.sessions.iter().zip(screens) {
+            let restored = Session::adopt(session, screen, self.session_runtime())
+                .map_err(|error| format!("adopt terminal {}: {error}", session.id))?;
+            adopted.push((restored, session.master_fd, session.removing));
+        }
+        self.write_registry()?;
+        set_cloexec(self.listener.as_raw_fd(), true)?;
+        for (session, master_fd, removing) in adopted {
+            self.state
+                .lock()
+                .expect("host state mutex poisoned")
+                .sessions
+                .insert(session.id.clone(), Arc::clone(&session));
+            session.resume_adopted(master_fd, &self.reaper)?;
+            if removing {
+                session.finish_adopted_removal();
+            }
+        }
+        self.start()
     }
 
     fn new(

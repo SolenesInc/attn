@@ -582,12 +582,14 @@ impl Session {
             self.schedule_cleanup();
             return Ok(());
         };
-        let master = unsafe { File::from_raw_fd(fd) };
-        set_cloexec(fd, true)?;
-        let pty_reader = master
-            .try_clone()
-            .map_err(|error| format!("clone adopted PTY master: {error}"))?;
-        *self.master.lock().expect("master mutex poisoned") = Some(master);
+        let pty_reader = {
+            let mut master = self.master.lock().expect("master mutex poisoned");
+            let master = master.insert(unsafe { File::from_raw_fd(fd) });
+            set_cloexec(fd, true)?;
+            master
+                .try_clone()
+                .map_err(|error| format!("clone adopted PTY master: {error}"))?
+        };
         start_reader(Arc::clone(self), pty_reader)?;
         reaper.register(self);
         Ok(())
