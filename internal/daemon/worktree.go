@@ -74,6 +74,7 @@ func (d *Daemon) doCreateWorktreeProtected(protection foregroundCleanupProtectio
 	if err != nil {
 		return "", err
 	}
+	d.store.MonitorWorktreeRepository(mainRepo)
 
 	requestedPath := protocol.Deref(msg.Path)
 	path := requestedPath
@@ -134,7 +135,6 @@ func (d *Daemon) registerCreatedWorktree(_ foregroundCleanupProtection, mainRepo
 		MainRepo:  mainRepo,
 		CreatedAt: time.Now(),
 	}
-	d.store.MonitorWorktreeRepository(mainRepo)
 	d.store.AddWorktree(wt)
 
 	d.publishFact(FactWorktreeCreated, wt.Path, protocol.Worktree{

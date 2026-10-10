@@ -24,6 +24,7 @@ func (d *Daemon) doCreateWorktreeFromBranchProtected(protection foregroundCleanu
 	if err != nil {
 		return "", err
 	}
+	d.store.MonitorWorktreeRepository(mainRepo)
 	branch := msg.Branch
 
 	localBranch := branch

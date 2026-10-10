@@ -29,6 +29,25 @@ func TestWorktreeMonitoringSurvivesItsLastCheckoutAndADaemonRestart(t *testing.T
 	}
 }
 
+func TestACreationAttemptEnrollsTheRepositoryEvenWhenGitRefusesIt(t *testing.T) {
+	w := newWorld(t)
+	app := w.App()
+	repo := newRepo(t, "shop")
+	result := testworld.Request(app, protocol.CreateWorktreeMessage{Cmd: protocol.CmdCreateWorktree, MainRepo: repo, Branch: "main"},
+		protocol.EventCreateWorktreeResult, func(protocol.CreateWorktreeResultMessage) bool { return true })
+	if result.Success {
+		t.Fatal("creating a new branch named main succeeded even though it already exists")
+	}
+	w.restart()
+	app, cli := w.App(), w.Client()
+	external := filepath.Join(filepath.Dir(repo), "external")
+	runGit(t, repo, "worktree", "add", "-b", "external", external)
+	refreshWorktrees(t, cli)
+	if observed := sweepAwaitState(app, external, func(protocol.Worktree) bool { return true }); observed.MainRepo != repo {
+		t.Errorf("external checkout after the refused creation and restart = %+v, want discovery in %s", observed, repo)
+	}
+}
+
 func TestBrowsingARepositoryReadsFreshGitWithoutEnrollingIt(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()

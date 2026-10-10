@@ -98,7 +98,8 @@ one place. Works across GitHub.com and GitHub Enterprise. Open a PR directly
 into a worktree.
 
 **Git worktrees & branches.** Parallel agents need parallel branches. Spin them
-up from the app. When attn creates a worktree, it remembers the repository and
+up from the app. Asking attn to create a worktree enrolls its Git repository,
+even if creation fails. attn remembers the repository and
 monitors all its worktrees, including ones created outside attn. Monitoring
 continues after the last worktree is removed and across daemon restarts.
 Browsing a repository does not enroll it. The sweep keeps dirty, unmerged,

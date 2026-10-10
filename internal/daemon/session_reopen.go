@@ -508,6 +508,7 @@ func (d *Daemon) recreateReopenWorktreeProtected(
 	if err != nil {
 		return "", err
 	}
+	d.store.MonitorWorktreeRepository(plan.repository)
 	if err := d.dispatchWorktreeBeforeCreateHooks(plan.repository, plan.branch, plan.startingFrom, plan.path); err != nil {
 		return "", err
 	}

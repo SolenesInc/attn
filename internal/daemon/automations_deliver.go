@@ -618,6 +618,7 @@ func (d *Daemon) prepareAutomationLocation(ctx context.Context, req automation.W
 			return automation.PreparedLocation{}, &retryableAutomationDeliveryError{cause: fmt.Errorf("managed repository cache: %w", err)}
 		}
 	}
+	d.store.MonitorWorktreeRepository(mainRepo)
 	if err := d.gitExecution().Run(ctx, gitTask{Kind: gitTaskAutomation, Lane: gitDeferred}, func(runCtx context.Context, client *attngit.Client) error {
 		return client.EnsurePullRequestRevision(runCtx, mainRepo, "origin", pr.Number, pr.HeadSHA, authorization)
 	}); err != nil {
@@ -657,8 +658,6 @@ func (d *Daemon) prepareAutomationLocation(ctx context.Context, req automation.W
 	}); err != nil {
 		return automation.PreparedLocation{}, &retryableAutomationDeliveryError{cause: err}
 	}
-	crashAt(crashAfterAutomationWorktree)
-	d.store.MonitorWorktreeRepository(mainRepo)
 	resolved, _ := json.Marshal(automation.ResolvedLocation{
 		Type: "repository_worktree", Repository: identity, ConfiguredSource: source,
 		MainRepository: mainRepo, Worktree: worktree, Revision: pr.HeadSHA,
