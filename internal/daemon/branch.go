@@ -122,29 +122,15 @@ func (d *Daemon) handleGetRepoInfoWS(client *wsClient, msg *protocol.GetRepoInfo
 			worktrees     []git.WorktreeEntry
 			worktreesErr  error
 		}
-		var info repoInfo
-		var worktrees []protocol.Worktree
-		err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
-			var infoErr error
-			info, infoErr = gitValue(protection.Context(), d.gitExecution(), gitTask{Kind: gitTaskRepositoryInfo, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) (repoInfo, error) {
-				currentBranch, runErr := client.GetCurrentBranch(ctx, repo)
-				if runErr != nil {
-					return repoInfo{}, runErr
-				}
-				commitHash, commitTime := client.GetHeadCommitInfo(ctx, repo)
-				defaultBranch, _ := client.GetDefaultBranch(ctx, repo)
-				listedWorktrees, worktreesErr := client.ObserveLiveWorktrees(ctx, repo)
-				return repoInfo{currentBranch: currentBranch, commitHash: commitHash, commitTime: commitTime, defaultBranch: defaultBranch, worktrees: listedWorktrees, worktreesErr: worktreesErr}, nil
-			})
-			if infoErr != nil {
-				return infoErr
+		info, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskRepositoryInfo, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) (repoInfo, error) {
+			currentBranch, runErr := client.GetCurrentBranch(ctx, repo)
+			if runErr != nil {
+				return repoInfo{}, runErr
 			}
-			if info.worktreesErr != nil {
-				worktrees = storedWorktreesAsProtocol(d.store.ListWorktreesByRepo(repo))
-				return nil
-			}
-			worktrees = d.reconcileListedWorktrees(protection, repo, info.worktrees)
-			return nil
+			commitHash, commitTime := client.GetHeadCommitInfo(ctx, repo)
+			defaultBranch, _ := client.GetDefaultBranch(ctx, repo)
+			listedWorktrees, worktreesErr := client.ObserveLiveWorktrees(ctx, repo)
+			return repoInfo{currentBranch: currentBranch, commitHash: commitHash, commitTime: commitTime, defaultBranch: defaultBranch, worktrees: listedWorktrees, worktreesErr: worktreesErr}, nil
 		})
 		if err != nil {
 			d.sendToClient(client, &protocol.GetRepoInfoResultMessage{
@@ -154,6 +140,13 @@ func (d *Daemon) handleGetRepoInfoWS(client *wsClient, msg *protocol.GetRepoInfo
 				Error:      protocol.Ptr(err.Error()),
 			})
 			return
+		}
+
+		var worktrees []protocol.Worktree
+		if info.worktreesErr != nil {
+			worktrees = storedWorktreesAsProtocol(d.store.ListWorktreesByRepo(repo))
+		} else {
+			worktrees = d.listedWorktreesAsProtocol(repo, info.worktrees)
 		}
 
 		if info.defaultBranch == "" {

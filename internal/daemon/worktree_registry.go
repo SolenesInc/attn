@@ -29,58 +29,6 @@ type repositoryFacts struct {
 	sessionActivity   map[string]time.Time
 }
 
-func (d *Daemon) trackedRepositoriesContext(ctx context.Context) ([]string, error) {
-	seen := make(map[string]bool)
-	var repos []string
-	add := func(repo string) {
-		repo = strings.TrimSpace(repo)
-		if repo == "" {
-			return
-		}
-		repo = git.CanonicalizePath(repo)
-		if seen[repo] {
-			return
-		}
-		seen[repo] = true
-		repos = append(repos, repo)
-	}
-	if d.store == nil {
-		return nil, nil
-	}
-	for _, repo := range d.store.ListWorktreeRepos() {
-		add(repo)
-	}
-	for _, session := range d.store.List("") {
-		if repo := strings.TrimSpace(protocol.Deref(session.MainRepo)); repo != "" {
-			add(repo)
-			continue
-		}
-		mapped := false
-		for _, row := range d.store.ListWorktrees() {
-			if pathAtOrBelow(session.Directory, row.Path) {
-				add(row.MainRepo)
-				d.store.UpdateBranch(session.ID, protocol.Deref(session.Branch), true, row.MainRepo, row.MainRepo)
-				mapped = true
-				break
-			}
-		}
-		if mapped {
-			continue
-		}
-		root, err := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitDeferred}, func(runCtx context.Context, client *git.Client) (string, error) {
-			return client.RepositoryRoot(runCtx, session.Directory)
-		})
-		if err != nil {
-			return nil, err
-		}
-		if root != "" {
-			add(root)
-			d.store.UpdateBranch(session.ID, protocol.Deref(session.Branch), protocol.Deref(session.IsWorktree), root, root)
-		}
-	}
-	return repos, nil
-}
-
 func (d *Daemon) reconcileWorktreeRegistryContext(ctx context.Context, repo string, now time.Time) ([]git.WorktreeState, error) {
 	finish := d.beginGitOperation(protocol.GitOperationKindRefreshRepository, repo, nil)
 	states, err := d.listWorktreeStatesContext(ctx, repo)
