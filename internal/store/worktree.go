@@ -137,7 +137,18 @@ func (s *Store) ListWorktrees() []*Worktree {
 	return s.queryWorktrees(`SELECT ` + worktreeColumns + ` FROM worktrees ORDER BY main_repo, path`)
 }
 
-func (s *Store) ListWorktreeRepos() []string {
+func (s *Store) MonitorWorktreeRepository(mainRepo string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.db == nil {
+		return
+	}
+
+	s.execLog(`INSERT INTO monitored_worktree_repositories (main_repo) VALUES (?) ON CONFLICT DO NOTHING`, mainRepo)
+}
+
+func (s *Store) MonitoredWorktreeRepositories() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -145,7 +156,7 @@ func (s *Store) ListWorktreeRepos() []string {
 		return nil
 	}
 
-	rows, err := s.db.Query(`SELECT DISTINCT main_repo FROM worktrees WHERE main_repo != '' ORDER BY main_repo`)
+	rows, err := s.db.Query(`SELECT main_repo FROM monitored_worktree_repositories ORDER BY main_repo`)
 	if err != nil {
 		return nil
 	}

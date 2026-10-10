@@ -1,7 +1,6 @@
 package store
 
 import (
-	"database/sql"
 	"path/filepath"
 	"testing"
 )
@@ -10,35 +9,15 @@ func TestEndpointMigration34BackfillsBlankInstance(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "legacy.db")
 
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := openDBAtVersion(dbPath, 33)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
 	if _, err := db.Exec(`
-		CREATE TABLE endpoints (
-			id TEXT PRIMARY KEY,
-			name TEXT NOT NULL,
-			ssh_target TEXT NOT NULL,
-			enabled INTEGER NOT NULL DEFAULT 1,
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL
-		);
-		CREATE TABLE schema_migrations (
-			version INTEGER PRIMARY KEY,
-			applied_at TEXT NOT NULL
-		);
 		INSERT INTO endpoints (id, name, ssh_target, enabled, created_at, updated_at)
 		VALUES ('endpoint-1', 'gpu', 'user@host', 1, '2026-01-01', '2026-01-01');
 	`); err != nil {
 		t.Fatalf("seed: %v", err)
-	}
-	for v := 1; v <= 33; v++ {
-		if _, err := db.Exec(
-			`INSERT INTO schema_migrations (version, applied_at) VALUES (?, datetime('now'))`,
-			v,
-		); err != nil {
-			t.Fatalf("seed migrations: %v", err)
-		}
 	}
 	if err := db.Close(); err != nil {
 		t.Fatalf("close: %v", err)
