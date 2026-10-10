@@ -715,7 +715,7 @@ func (d *Daemon) continueAutomationSessionForeground(req automation.WorkRequest,
 	_, err := d.reopenSessionRuntime(sessionReopenPlan{
 		SessionID: req.IDs.SessionID, Directory: directory, Title: label,
 		ProfileID: req.IDs.ProfileID,
-	}, d.newDelegationRollback(), nil)
+	}, d.newDelegationRollback())
 	if err != nil {
 		return err
 	}

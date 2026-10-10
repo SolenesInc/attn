@@ -474,7 +474,7 @@ func (d *Daemon) performReopenLocked(
 			return nil, rollback.fail(protection, fmt.Errorf("cannot reopen after restoring the worktree: %s", reason))
 		}
 	}
-	outcome, err := d.reopenSessionRuntimeProtected(protection, plan, rollback, nil)
+	outcome, err := d.reopenSessionRuntimeProtected(protection, plan, rollback)
 	if err != nil {
 		return nil, err
 	}
@@ -619,12 +619,11 @@ type sessionRuntimeReopened struct {
 func (d *Daemon) reopenSessionRuntime(
 	plan sessionReopenPlan,
 	rollback *delegationRollback,
-	afterSpawn func() error,
 ) (*sessionRuntimeReopened, error) {
 	var outcome *sessionRuntimeReopened
 	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 		var reopenErr error
-		outcome, reopenErr = d.reopenSessionRuntimeWithProtection(protection, plan, rollback, afterSpawn)
+		outcome, reopenErr = d.reopenSessionRuntimeWithProtection(protection, plan, rollback)
 		return reopenErr
 	})
 	return outcome, err
@@ -634,19 +633,17 @@ func (d *Daemon) reopenSessionRuntimeWithProtection(
 	protection foregroundCleanupProtection,
 	plan sessionReopenPlan,
 	rollback *delegationRollback,
-	afterSpawn func() error,
 ) (*sessionRuntimeReopened, error) {
 	lifecycleLock := d.sessionLifecycleLockFor(plan.SessionID)
 	lifecycleLock.Lock()
 	defer lifecycleLock.Unlock()
-	return d.reopenSessionRuntimeProtected(protection, plan, rollback, afterSpawn)
+	return d.reopenSessionRuntimeProtected(protection, plan, rollback)
 }
 
 func (d *Daemon) reopenSessionRuntimeProtected(
 	protection foregroundCleanupProtection,
 	plan sessionReopenPlan,
 	rollback *delegationRollback,
-	afterSpawn func() error,
 ) (*sessionRuntimeReopened, error) {
 	fail := func(cause error) (*sessionRuntimeReopened, error) {
 		return nil, rollback.fail(protection, cause)
@@ -658,11 +655,6 @@ func (d *Daemon) reopenSessionRuntimeProtected(
 	}
 	priorSession := d.store.Get(plan.SessionID)
 	if priorSession != nil && d.sessionHasLiveWorker(plan.SessionID) {
-		if afterSpawn != nil {
-			if err := afterSpawn(); err != nil {
-				return fail(err)
-			}
-		}
 		rollback.abandon()
 		return &sessionRuntimeReopened{
 			SessionID: plan.SessionID, ProfileID: priorSession.ProfileID, AlreadyRunning: true,
@@ -749,11 +741,6 @@ func (d *Daemon) reopenSessionRuntimeProtected(
 		rollback.onSessionSpawned(plan.SessionID)
 	}
 
-	if afterSpawn != nil {
-		if err := afterSpawn(); err != nil {
-			return fail(err)
-		}
-	}
 	rollback.abandon()
 	d.logf("reopen: session %s is back in %s in profile %s", plan.SessionID, directory, profileID)
 	return &sessionRuntimeReopened{SessionID: plan.SessionID, ProfileID: profileID}, nil
