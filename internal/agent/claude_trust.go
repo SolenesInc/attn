@@ -86,13 +86,22 @@ func TrustClaudeWorkingDirectory(directory, root string) error {
 		return err
 	}
 	directory = norm.NFC.String(directory)
+	legacyRoot := root
 	if root == "" {
 		root, err = toolhome.Dir()
 		if err != nil {
 			return err
 		}
+		legacyRoot = filepath.Join(root, ".claude")
 	}
 	path := filepath.Join(root, ".claude.json")
+	legacy := filepath.Join(legacyRoot, ".config.json")
+	if _, err := os.Stat(legacy); err == nil {
+		path = legacy
+		root = legacyRoot
+	} else if !os.IsNotExist(err) {
+		return err
+	}
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return err
 	}

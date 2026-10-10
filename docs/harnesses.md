@@ -50,7 +50,8 @@ Read in Claude Code 2.1.296's bundled source on 2026-10-10. Accepting
 folder trust sets `projects[<path>].hasTrustDialogAccepted` to `true` in
 `$CLAUDE_CONFIG_DIR/.claude.json`, or `~/.claude.json` when that variable is
 unset. The path is canonical and NFC-normalized; for a Git project Claude
-uses its repository root. Config writers coordinate through a directory at
+uses its repository root. An existing `.config.json` inside Claude's config
+directory takes precedence over `.claude.json`. Config writers coordinate through a directory at
 the config file's path plus `.lock`. Claude's `proper-lockfile` defaults
 expire a lock after 10 seconds without an update and renew it every 5 seconds.
 

@@ -188,6 +188,41 @@ func TestACrewHomeUsesTheClaudeConfigFromTheLoginShell(t *testing.T) {
 	}
 }
 
+func TestCrewCreationUsesClaudesExistingLegacyConfig(t *testing.T) {
+	w := newWorld(t)
+	root := filepath.Join(w.Dir, "toolhome", ".claude")
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, ".config.json")
+	if err := os.WriteFile(path, []byte(`{"keep":"this"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	created, err := w.Client().CrewCreate(protocol.CrewCreateMessage{Name: "Keel"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config struct {
+		Keep     string `json:"keep"`
+		Projects map[string]struct {
+			Trusted bool `json:"hasTrustDialogAccepted"`
+		} `json:"projects"`
+	}
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatal(err)
+	}
+	if config.Keep != "this" || !config.Projects[created.Member.HomeDir].Trusted {
+		t.Fatalf("legacy config not preserved and trusted: %s", raw)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".claude.json")); !os.IsNotExist(err) {
+		t.Fatalf("unused modern config was written: %v", err)
+	}
+}
+
 func TestACrewWakeTrustsItsExistingClaudeHome(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
