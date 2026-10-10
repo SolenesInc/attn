@@ -262,22 +262,48 @@ func TestResumeToARecoverableSessionsConversationMovesItIntoThePane(t *testing.T
 	testworld.AwaitSession(app, earlier, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 }
 
-func TestACrewMembersClearEndsItsDay(t *testing.T) {
+func TestACrewMembersClearKeepsItsDay(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	woken := wakeCrew(t, cli, "trellis", "")
 	day := w.Launched(string(woken.SessionID))
 	day.Prompted()
 	day.Reply("Ready. <!-- attn:state=idle -->")
-
+	if !strings.Contains(strings.Join(day.Argv, " "), "attn crew prime") {
+		t.Fatal("launch did not carry clear instructions")
+	}
 	next := clearClaude(app, day, string(woken.SessionID))
 	awaitClosed(app, string(woken.SessionID))
-	if binding := crewRosterMember(t, cli, "trellis").BindingSession; binding != nil {
-		t.Errorf("after the day's /clear trellis is bound to %s, want its day ended", *binding)
+	check := func() {
+		if binding := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession); binding != next.ID {
+			t.Fatalf("binding = %s, want %s", binding, next.ID)
+		}
+		session := queriedSession(t, cli, string(next.ID))
+		if protocol.Deref(session.CrewMember) != "trellis" || session.Label != "Trellis" {
+			t.Fatalf("successor = %+v", session)
+		}
+		prime, err := cli.CrewPrime(next.ID)
+		if err != nil || protocol.Deref(prime.Member) != "trellis" || !strings.Contains(protocol.Deref(prime.Guidance), "Trellis") {
+			t.Fatalf("prime = %+v %v", prime, err)
+		}
+		ledger, err := cli.SessionList(client.SessionListOptions{All: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		count := 0
+		for _, row := range ledger.Entries {
+			if protocol.Deref(row.MemberKey) == "trellis" {
+				count++
+				if row.ID != next.ID {
+					t.Fatalf("member ledger row = %+v", row)
+				}
+			}
+		}
+		if count != 1 {
+			t.Fatalf("member ledger rows = %d", count)
+		}
 	}
-	if member := protocol.Deref(queriedSession(t, cli, string(next.ID)).CrewMember); member != "" {
-		t.Errorf("the session after /clear works as crew member %q, want it unbound", member)
-	}
+	check()
 }
 
 func TestADelegateThatClearsLeavesItsSeedAndMailWithItsClosedSession(t *testing.T) {

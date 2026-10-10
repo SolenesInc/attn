@@ -455,11 +455,7 @@ func (d *Daemon) warmLoginShellEnvCache() {
 	if shell == "" {
 		return
 	}
-	env, err := pty.ReadLoginShellEnv(shell)
-	if err != nil {
-		d.logf("login shell env pre-warm failed for %s: %v", shell, err)
-		return
-	}
+	env := pty.LoginShellEnvironment(shell, nil, d.logf)
 	d.loginShellEnvMu.Lock()
 	d.loginShellEnv = env
 	d.loginShellEnvMu.Unlock()
@@ -2749,6 +2745,12 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleCrewSleep(conn, msg.(*protocol.CrewSleepMessage))
 	case protocol.CmdCrewSet:
 		d.handleCrewSet(conn, msg.(*protocol.CrewSetMessage))
+	case protocol.CmdCrewCreate:
+		d.handleCrewCreate(conn, msg.(*protocol.CrewCreateMessage))
+	case protocol.CmdCrewRetire:
+		d.handleCrewRetire(conn, msg.(*protocol.CrewRetireMessage))
+	case protocol.CmdCrewRestore:
+		d.handleCrewRestore(conn, msg.(*protocol.CrewRestoreMessage))
 	case protocol.CmdCrewRename:
 		d.handleCrewRename(conn, msg.(*protocol.CrewRenameMessage))
 	case protocol.CmdCrewRestart:

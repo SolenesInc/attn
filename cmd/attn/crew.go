@@ -31,6 +31,12 @@ func runCrew() {
 		runCrewSleep(os.Args[3:])
 	case "restart":
 		runCrewRestart(os.Args[3:])
+	case "create":
+		runCrewCreate(os.Args[3:])
+	case "retire", "restore":
+		runCrewRetirement(os.Args[2], os.Args[3:])
+	case "prime":
+		runCrewPrime(os.Args[3:])
 	case "rename":
 		runCrewRename(os.Args[3:])
 	case "set":
@@ -53,8 +59,24 @@ Use member:<key> to address a member by permanent key.
 Run crew commands on the home daemon; outposts report which home to use.
 
 commands:
-  list [--json]
-        Show all members and their active sessions, if any.
+  create <name> [--agent <name>] [--model <name>] [--effort <level>]
+                [--cwd <dir>] [--launch-desktop <own|desktop>]
+                [--desktop-name <name>] [--profile <name|id>] [--json]
+        Create a member with their own home and launch desktop. Wake them
+        with attn crew wake <name> to begin their first day.
+
+  retire <member> [--profile <name|id>] [--json]
+        Take a member out of service, release claims and remove watches.
+        Keep their name, home and unread mail; ask an awake member to sleep.
+
+  restore <member> [--profile <name|id>] [--json]
+        Return a retired member to service. Unread mail can wake them.
+
+  prime
+        Print your member identity, charter, letters and claimed seeds.
+
+  list [--all] [--json]
+        Show members in service and their sessions. --all includes retired members.
 
   wake <member> [--agent <name>] [--json]
         Start a session using the member's saved launch settings, on its chosen
@@ -93,6 +115,7 @@ commands:
 }
 
 type crewListArgs struct {
+	all     bool
 	profile string
 	json    bool
 }
@@ -102,13 +125,14 @@ func parseCrewListArgs(args []string) (crewListArgs, error) {
 	profile := fs.String("profile", "", "resolve names in this profile")
 	fs.SetOutput(io.Discard)
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
+	all := fs.Bool("all", false, "include retired members")
 	if err := fs.Parse(args); err != nil {
 		return crewListArgs{}, err
 	}
 	if fs.NArg() != 0 {
 		return crewListArgs{}, errors.New("crew list takes no arguments")
 	}
-	return crewListArgs{profile: *profile, json: *jsonOut}, nil
+	return crewListArgs{profile: *profile, json: *jsonOut, all: *all}, nil
 }
 
 func runCrewList(args []string) {
@@ -118,7 +142,7 @@ func runCrewList(args []string) {
 		writeCrewHelp(os.Stderr)
 		os.Exit(2)
 	}
-	result, err := crewClient(parsed.profile).CrewList()
+	result, err := crewClient(parsed.profile).CrewList(parsed.all)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "crew list: %v\n", err)
 		os.Exit(1)
@@ -440,7 +464,7 @@ func valueOrDash(value string) string {
 
 func printCrewList(w io.Writer, members []protocol.CrewMember) {
 	if len(members) == 0 {
-		fmt.Fprintln(w, "No crew members are registered. A <name>/CHARTER.md home in the active instance's crew directory joins the roster at the daemon's next start.")
+		fmt.Fprintln(w, "No crew members are registered. `attn crew create <name>` creates one. A <name>/CHARTER.md home in the active instance's crew directory joins the roster at the daemon's next start.")
 		return
 	}
 	fmt.Fprintf(w, "%-12s  %-8s  %-8s  %-20s  %-8s  %-10s  %-22s  %s\n", "MEMBER", "STATE", "AGENT", "MODEL", "EFFORT", "SESSION", "LAUNCH DESKTOP", "HOME")
@@ -448,6 +472,9 @@ func printCrewList(w io.Writer, members []protocol.CrewMember) {
 		state, session := "asleep", "-"
 		if id := protocol.TrimID(protocol.Deref(member.BindingSession)); id != "" {
 			state, session = "awake", agentShortID(string(id))
+		}
+		if member.Retired {
+			state = "retired"
 		}
 		fmt.Fprintf(w, "%-12s  %-8s  %-8s  %-20s  %-8s  %-10s  %-22s  %s\n", member.Name, state, valueOrDash(member.ResolvedAgent), valueOrDash(protocol.Deref(member.ResolvedModel)), valueOrDash(protocol.Deref(member.ResolvedEffort)), session, protocol.Deref(member.ProfileName)+" › "+launchDesktopText(member.LaunchDesktop), member.HomeDir)
 	}
@@ -481,4 +508,111 @@ func runCrewRename(args []string) {
 		return
 	}
 	fmt.Printf("%s is now %s (member:%s)\n", result.PreviousName, result.Name, result.Member)
+}
+
+func runCrewCreate(args []string) {
+	fs := flag.NewFlagSet("crew create", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	profile := fs.String("profile", "", "create in this profile")
+	agent := fs.String("agent", "", "the harness to launch")
+	model := fs.String("model", "", "the model to launch")
+	effort := fs.String("effort", "", "the model effort")
+	cwd := fs.String("cwd", "", "working directory")
+	desktop := fs.String("launch-desktop", "", "own or a desktop in this profile")
+	desktopName := fs.String("desktop-name", "", "name for a new desktop")
+	jsonOut := fs.Bool("json", false, "print JSON")
+	name, err := parseMemberAndFlags(fs, args, "crew create")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "crew create: %v\n", err)
+		os.Exit(2)
+	}
+	msg := protocol.CrewCreateMessage{Name: name, Agent: agent, Model: model, Effort: effort, Cwd: cwd}
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "launch-desktop" {
+			msg.LaunchDesktop = desktop
+		}
+		if f.Name == "desktop-name" {
+			msg.LaunchDesktopName = desktopName
+		}
+	})
+	if msg.LaunchDesktopName != nil && msg.LaunchDesktop == nil {
+		fmt.Fprintln(os.Stderr, "crew create: --desktop-name needs --launch-desktop own or an empty slot")
+		os.Exit(2)
+	}
+	result, err := crewClient(*profile).CrewCreate(msg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "crew create: %v\n", err)
+		os.Exit(1)
+	}
+	if *jsonOut {
+		printJSON(result)
+		return
+	}
+	m := result.Member
+	fmt.Printf("Created %s in %s (member:%s).\nHome: %s\nStart their first day: attn crew wake %s\n", m.Name, protocol.Deref(m.ProfileName), m.Key, m.HomeDir, m.Name)
+}
+
+func runCrewRetirement(verb string, args []string) {
+	fs := flag.NewFlagSet("crew "+verb, flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	profile := fs.String("profile", "", "resolve in this profile")
+	jsonOut := fs.Bool("json", false, "print JSON")
+	member, err := parseMemberAndFlags(fs, args, "crew "+verb)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "crew %s: %v\n", verb, err)
+		os.Exit(2)
+	}
+	cli := crewClient(*profile)
+	if verb == "restore" {
+		result, err := cli.CrewRestore(member)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "crew restore: %v\n", err)
+			os.Exit(1)
+		}
+		if *jsonOut {
+			printJSON(result)
+			return
+		}
+		if result.AlreadyActive {
+			fmt.Printf("%s is already in service.\n", result.Member.Name)
+		} else {
+			fmt.Printf("%s is back in service; kept unread mail can wake them.\n", result.Member.Name)
+		}
+		return
+	}
+	result, err := cli.CrewRetire(member)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "crew retire: %v\n", err)
+		os.Exit(1)
+	}
+	if *jsonOut {
+		printJSON(result)
+		return
+	}
+	if result.AlreadyRetired {
+		fmt.Printf("%s was already retired.\n", result.Member.Name)
+	} else {
+		fmt.Printf("%s is retired.\n", result.Member.Name)
+	}
+	fmt.Printf("Released seeds: %s\nRemoved watches: %d\nUnread mail kept: %d\n", valueOrDash(strings.Join(result.ReleasedSeeds, ", ")), result.RemovedWatches, result.Unread)
+	if result.Sleep != nil {
+		fmt.Println(crewSleepOutcomeLine(result.Sleep))
+	}
+}
+
+func runCrewPrime(args []string) {
+	if len(args) != 0 {
+		fmt.Fprintln(os.Stderr, "crew prime: takes no arguments")
+		os.Exit(2)
+	}
+	result, err := client.New("").CrewPrime(currentSessionOrExit())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "crew prime: %v\n", err)
+		os.Exit(1)
+	}
+	if result.Member == nil {
+		fmt.Fprintln(os.Stderr, "this session is not a crew member's; nothing to prime")
+		os.Exit(1)
+	}
+	fmt.Println(protocol.Deref(result.Guidance))
 }

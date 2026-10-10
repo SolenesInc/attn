@@ -25,7 +25,45 @@ Plugin driver payloads retain the `session_id` wire spelling for the terminal.
 Close notifications, including those completed after restart, use the original
 terminal identity.
 
+## Launch instructions after a fresh conversation
+
+Probed outside attn in tmux on 2026-10-08 (Claude and Codex) and
+2026-10-10 (Copilot). Each launch channel held a codeword; the prompt asked
+for only that word, before and after clearing.
+
+| Harness | Launch channel | Result |
+|---|---|---|
+| Claude Code 2.1.296 | `--append-system-prompt` | PELICAN-42 before and after `/clear`; the screen showed a fresh conversation |
+| Codex 0.162.0 | `-c developer_instructions=...` | HERON-17 before, after `/clear`, and after `/new` |
+| Copilot 1.0.82 | `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`, with `attn.instructions.md` | OTTER-63 before and after `/clear`; the cleared screen showed only the new question and answer |
+
+A crew member's launch instructions can therefore ask them to run
+`attn crew prime` when their conversation starts empty. Copilot keeps its
+session binding across `/clear`; Claude and Codex move it to the new session.
+Pi's launch-instruction delivery remains a separate follow-up.
+
 ## Claude Code
+
+### Trusting a crew home
+
+Read in Claude Code 2.1.296's bundled source on 2026-10-10. Accepting
+folder trust sets `projects[<path>].hasTrustDialogAccepted` to `true` in
+`$CLAUDE_CONFIG_DIR/.claude.json`, or `~/.claude.json` when that variable is
+unset. The path is canonical and NFC-normalized; for a Git project Claude
+uses its repository root. An existing `.config.json` inside Claude's config
+directory takes precedence over `.claude.json`. Config writers coordinate through a directory at
+the config file's path plus `.lock`. Claude's `proper-lockfile` defaults
+expire a lock after 10 seconds without an update and renew it every 5 seconds.
+
+attn trusts a member home when it launches the member there, including a
+chief's home. An already-trusted Claude home needs no config lock or write.
+New trust writes preserve the config's mode and symlink target, sync the file,
+and replace it atomically. Lock contention follows Claude's retry delays
+(200, 400, 800, 1600, 3200, 4000 ms), bounded by its 1.5-second startup-write
+budget.
+An unrelated working directory still needs the user's trust decision.
+
+### Conversation commands
 
 Probed on 2.1.288 with a mock API.
 
@@ -75,6 +113,14 @@ Probed on 2.1.295 under a scratch PTY, and read in its bundled source.
   attn ignores the glyphs until a `clear`.
 
 ## Codex
+
+### Crew-home trust on resume
+
+Probed Codex 0.162.0 outside attn on 2026-10-10. A private config copy had
+its saved project-trust entries removed, and the non-repository working
+directory held a `CHARTER.md`. Both `codex resume <id>` and a fresh `codex`
+launch opened without a folder-trust prompt, with either the auto reviewer
+or user reviewer. The resumed conversation retained its earlier answer.
 
 Read in the source at openai/codex 60947e2341.
 

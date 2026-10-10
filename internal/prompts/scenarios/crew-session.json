@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "id": "crew-session",
+  "description": "Crew launch instructions include reorientation after a fresh conversation.",
+  "recipient": "session",
+  "event": "launch",
+  "values": {
+    "notebook_root": "",
+    "workflow_enabled": "false",
+    "garden_available": "true",
+    "self_report_pull_requests": "false"
+  },
+  "inputs": {
+    "crew_priming": "crew-with-handoff"
+  }
+}

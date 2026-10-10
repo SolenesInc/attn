@@ -393,7 +393,12 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 		if err != nil {
 			return profileActionOutcome{}, err
 		}
-		members := len(roster)
+		members := 0
+		for _, member := range roster {
+			if !member.Retired {
+				members++
+			}
+		}
 		d.automationMu.Lock()
 		deleted, err := d.store.DeleteProfile(msg.ProfileID, int64(msg.ExpectedRevision), remote, members)
 		d.automationMu.Unlock()

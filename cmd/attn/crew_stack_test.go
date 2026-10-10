@@ -339,3 +339,118 @@ func TestCrewCommandsResolveTheCallingTerminalsProfile(t *testing.T) {
 		}
 	}
 }
+
+func TestCrewLifecycleCommandsAndClearPriming(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	requireRefusals(t, s, []argvRefusal{
+		{args: []string{"crew", "create"}, want: "takes one member name"},
+		{args: []string{"crew", "create", "Keel", "extra"}, want: "takes one member name"},
+		{args: []string{"crew", "create", "Keel", "--desktop-name", "Boats"}, want: "--desktop-name needs --launch-desktop"},
+		{args: []string{"crew", "retire"}, want: "takes one member name"},
+		{args: []string{"crew", "restore", "Keel", "extra"}, want: "takes one member name"},
+		{args: []string{"crew", "prime", "extra"}, want: "takes no arguments"},
+	})
+	s.Start()
+	app := s.App()
+	requireStdout(t, s.Attn("crew", "create", "Keel"), "Created Keel in Default (member:m-", "Home:", "attn crew wake Keel")
+	var created protocol.CrewCreateResult
+	s.Attn("crew", "create", "Trellis", "--agent", "claude", "--json").JSON(t, &created)
+	var wake protocol.CrewWakeResult
+	s.Attn("crew", "wake", "Trellis", "--json").JSON(t, &wake)
+	day := s.Launched(string(wake.SessionID))
+	day.Prompted()
+	day.Reply("Ready. <!-- attn:state=idle -->")
+	terminal := app.Terminal(string(wake.SessionID))
+	app.TypeLine(string(wake.SessionID), "/clear")
+	if got := day.Prompted(); got != "/clear" {
+		t.Fatalf("clear = %q", got)
+	}
+	next := *testworld.Await(app, protocol.EventSessionRegistered, func(e protocol.WebSocketEvent) bool {
+		return e.Session != nil && protocol.Deref(e.Session.Succeeds) == wake.SessionID
+	}).Session
+	if next.Label != "Trellis" || protocol.Deref(next.CrewMember) != created.Member.Key {
+		t.Fatalf("successor = %+v", next)
+	}
+	invoke := testworld.Invocation{Args: []string{"crew", "prime"}, Terminal: terminal}
+	requireStdout(t, s.Run(invoke), "You are **Trellis**", "this is your first day")
+	requireFailure(t, s.Attn("crew", "prime"), "this session is not a crew member's; nothing to prime")
+	s.Stop()
+	s.Start()
+	requireStdout(t, s.Run(invoke), "You are **Trellis**")
+	roster := crewRoster(t, s)
+	if protocol.Deref(roster[created.Member.Key].BindingSession) != next.ID {
+		t.Fatalf("restart binding = %+v", roster)
+	}
+	requireStdout(t, s.Attn("crew", "retire", "Keel"), "Keel is retired.", "Released seeds: -", "Removed watches: 0", "Unread mail kept: 0")
+	requireStdout(t, s.Attn("crew", "list", "--all"), "Keel", "retired")
+	requireFailure(t, s.Attn("crew", "wake", "Keel"), "crew wake: ", "Keel is retired")
+	requireFailure(t, s.Attn("crew", "create", "Keel"), "crew create: ", "Keel is retired", "restore")
+	requireStdout(t, s.Attn("crew", "restore", "Keel"), "Keel is back in service")
+	requireStdout(t, s.Attn("crew", "restore", "Keel"), "Keel is already in service")
+	var retired protocol.CrewRetireResult
+	s.Attn("crew", "retire", "Keel", "--json").JSON(t, &retired)
+	if !retired.Member.Retired {
+		t.Fatalf("retirement JSON = %+v", retired)
+	}
+	var restored protocol.CrewRestoreResult
+	s.Attn("crew", "restore", "Keel", "--json").JSON(t, &restored)
+	if restored.Member.Retired {
+		t.Fatalf("restore JSON = %+v", restored)
+	}
+}
+
+func TestCrewWakeWhileClearingKeepsTheSuccessor(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	writeCharter(t, s, "keel")
+	s.Start()
+	s.App()
+	first, err := s.Client().CrewWake("Keel", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	day := s.Launched(string(first.SessionID))
+	day.Prompted()
+	day.Reply("Ready. <!-- attn:state=idle -->")
+	s.Stop()
+	committed := s.PauseAt(pausepoint.MemberClearCommit)
+	requested := s.PauseAt(pausepoint.MemberWakeRequested)
+	s.Start()
+	app := s.App()
+	app.TypeLine(string(first.SessionID), "/clear")
+	committed.Await()
+	woke := make(chan *protocol.CrewWakeResult, 1)
+	errors := make(chan error, 1)
+	go func() { result, err := s.Client().CrewWake("Keel", "", ""); woke <- result; errors <- err }()
+	requested.Await()
+	requested.Release()
+	committed.Release()
+	if err := <-errors; err != nil {
+		t.Fatal(err)
+	}
+	result := <-woke
+	next := *testworld.Await(app, protocol.EventSessionRegistered, func(e protocol.WebSocketEvent) bool {
+		return e.Session != nil && protocol.Deref(e.Session.Succeeds) == first.SessionID
+	}).Session
+	if !result.AlreadyAwake || result.SessionID != next.ID || protocol.Deref(next.CrewMember) != "keel" {
+		t.Fatalf("wake = %+v, successor = %+v", result, next)
+	}
+	if got := day.Prompted(); got != "/clear" {
+		t.Fatalf("clear = %q", got)
+	}
+}
+
+func TestCrewLifecycleCommandsRefuseOutpostsBeforeResolvingProfiles(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	s.Start()
+	const home = "d-0123456789abcdef0123456789abcdef"
+	requireStdout(t, s.Attn("enrollment", "enroll", "--home", home))
+	for _, verb := range []string{"create", "retire", "restore"} {
+		result := s.Attn("crew", verb, "Keel", "--profile", "Missing")
+		if result.Code != 1 || !strings.Contains(result.Stderr, "outpost") || !strings.Contains(result.Stderr, "crew") || !strings.Contains(result.Stderr, home) {
+			t.Fatalf("crew %s on an outpost: %+v", verb, result)
+		}
+	}
+}

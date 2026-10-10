@@ -24,6 +24,7 @@ var (
 		Bind("delegation_boundary", delegationBoundary))
 	agentGuidance = Use("session.agent", "content/agent.md",
 		Bind("delegation_boundary", delegationBoundary))
+	crewCleared         = Use("crew.cleared", "content/crew/cleared.md")
 	workflowGuidance    = Use("session.workflow", "content/workflow.md")
 	gardenGuidance      = Use("session.garden", "content/garden.md")
 	pullRequestGuidance = Use("session.pull-request-guidance", "content/session/pull-request-guidance.md")
@@ -44,7 +45,7 @@ var session = Recipient{
 					)),
 				When(Enabled(gardenAvailable), gardenGuidance),
 				When(Enabled(selfReportPullRequests), pullRequestGuidance),
-				When(Present(crewPriming), Input(crewPriming)),
+				When(Present(crewPriming), Compose(Input(crewPriming), crewCleared)),
 			)),
 		On("agent-guidance", "message_fragment", "Non-chief trust and delegation guidance.", agentGuidance),
 		On("garden-guidance", "message_fragment", "Garden instructions when a home is available.", gardenGuidance),

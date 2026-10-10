@@ -141,14 +141,24 @@
                 },
                 "children": [
                   {
-                    "kind": "input",
-                    "field": {
-                      "name": "crew_priming",
-                      "kind": "text",
-                      "description": "Rendered crew identity and predecessor letter, supplied by internal/crew.",
-                      "trim_space": true,
-                      "from": "crew/priming"
-                    }
+                    "kind": "compose",
+                    "children": [
+                      {
+                        "kind": "input",
+                        "field": {
+                          "name": "crew_priming",
+                          "kind": "text",
+                          "description": "Rendered crew identity and predecessor letter, supplied by internal/crew.",
+                          "trim_space": true,
+                          "from": "crew/priming"
+                        }
+                      },
+                      {
+                        "kind": "text",
+                        "id": "crew.cleared",
+                        "source": "content/crew/cleared.md"
+                      }
+                    ]
                   }
                 ]
               }
@@ -4896,5 +4906,5 @@
       ]
     }
   ],
-  "definitions_hash": "4099598b7e2482eac90e91baeea1e2a93f7dccc590f163414ecdeadfcc7e183b"
+  "definitions_hash": "00beac4f636500a298617a3495ab3500173ad52312565030edda413497ae4cfa"
 }

@@ -164,13 +164,13 @@ func TestLaunchScenarioSelectsSourcesAndPreservesInput(t *testing.T) {
 		}
 	}
 	visit(result.Trace)
-	if !reflect.DeepEqual(selected, []string{"session.chief", "delegation.boundary", "session.garden"}) {
+	if !reflect.DeepEqual(selected, []string{"session.chief", "delegation.boundary", "session.garden", "crew.cleared"}) {
 		t.Fatalf("selected sources: %v", selected)
 	}
 	if !reflect.DeepEqual(skipped, []string{"session.agent", "delegation.boundary", "session.workflow", "session.pull-request-guidance"}) {
 		t.Fatalf("skipped sources: %v", skipped)
 	}
-	if !strings.HasSuffix(result.Text, "\n\nCrew {{literal}}.") {
+	if !strings.Contains(result.Text, "\n\nCrew {{literal}}.\n\nWhen your conversation starts empty") {
 		t.Fatalf("crew input was altered: %q", result.Text)
 	}
 	if values["crew_priming"] != " Crew {{literal}}. " {

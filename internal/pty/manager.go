@@ -675,18 +675,9 @@ func buildSpawnEnv(loginShell string, opts SpawnOptions, agent, wrapperPath stri
 		}
 	}
 
-	shellEnv := opts.LoginShellEnv
-	if len(shellEnv) == 0 {
-		shellEnv = readCachedShellEnvFromProcess()
-	}
+	shellEnv := LoginShellEnvironment(loginShell, opts.LoginShellEnv, logf)
 	if len(shellEnv) > 0 {
 		env = MergeEnvironment(env, shellEnv)
-	} else if loginShell != "" {
-		if captured, err := ReadLoginShellEnv(loginShell); err == nil {
-			env = MergeEnvironment(env, captured)
-		} else if logf != nil {
-			logf("pty spawn: failed to capture login shell env from %s: %v", loginShell, err)
-		}
 	}
 	env = filterEnvKeys(env, launchKeys...)
 	env = MergeEnvironment(env, launchEnv)
@@ -736,6 +727,23 @@ func buildSpawnEnv(loginShell string, opts SpawnOptions, agent, wrapperPath stri
 	env = filterEnvKeys(env, "ATTN_PTY_WORKER", "ATTN_CACHED_SHELL_ENV", "ATTN_PTY_EXTERNAL_ENV", "ATTN_PTY_DAEMON_ENV",
 		pausepoint.EnvPoints, pausepoint.EnvSocket)
 	env = MergeEnvironment(env, opts.DaemonEnv)
+	return env
+}
+
+func LoginShellEnvironment(shell string, cached []string, logf LogFunc) []string {
+	if len(cached) != 0 {
+		return cached
+	}
+	if cached := readCachedShellEnvFromProcess(); len(cached) != 0 {
+		return cached
+	}
+	if shell == "" {
+		return nil
+	}
+	env, err := ReadLoginShellEnv(shell)
+	if err != nil && logf != nil {
+		logf("pty spawn: failed to capture login shell env from %s: %v", shell, err)
+	}
 	return env
 }
 

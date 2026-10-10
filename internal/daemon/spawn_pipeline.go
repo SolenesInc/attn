@@ -319,6 +319,26 @@ func (d *Daemon) resolveSpawnIntent(ctx context.Context, req *spawnRequest) (*sp
 		plan.spawnOpts.ApprovalRoute = launchcontract.ResolveApprovalRoute(plan.spawnOpts.YoloMode, plan.spawnOpts.AutoApprove, plan.spawnOpts.UnattendedLaunch)
 	}
 	plan.spawnOpts.ContextWindowCap = d.launchContextWindowCap(msg.ID, req.agent, plan.isChief)
+	if !req.policy.member.IsZero() {
+		member, _, err := d.crewMember(req.policy.member)
+		if err != nil {
+			plan.rollback(d, msg.ID)
+			return nil, &spawnRejection{err: err}
+		}
+		home, err := filepath.EvalSymlinks(member.HomeDir)
+		if err != nil {
+			plan.rollback(d, msg.ID)
+			return nil, &spawnRejection{err: err}
+		}
+		cwd, err := filepath.EvalSymlinks(req.cwd)
+		plan.spawnOpts.TrustWorkingDirectory = err == nil && cwd == home
+		if plan.spawnOpts.TrustWorkingDirectory && req.agent == "claude" {
+			if err := d.trustClaudeCrewHome(home, plan.spawnOpts.LoginShellEnv); err != nil {
+				plan.rollback(d, msg.ID)
+				return nil, &spawnRejection{err: err}
+			}
+		}
+	}
 
 	return plan, nil
 }

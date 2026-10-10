@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/protocol"
@@ -16,6 +17,7 @@ type CrewIdentity struct {
 	Key       who.MemberKey
 	ProfileID string
 	Name      string
+	Retired   bool
 }
 type CrewNameTakenError struct{ Name, Holder string }
 
@@ -23,11 +25,13 @@ func (e *CrewNameTakenError) Error() string {
 	return fmt.Sprintf("crew name %q is already taken by %s in this profile", e.Name, e.Holder)
 }
 
-const crewIdentityColumns = "member_key, profile_id, name"
+const crewIdentityColumns = "member_key, profile_id, name, retired_at"
 
 func scanCrewIdentity(row interface{ Scan(...any) error }) (CrewIdentity, error) {
 	var m CrewIdentity
-	err := row.Scan(&m.Key, &m.ProfileID, &m.Name)
+	var retired string
+	err := row.Scan(&m.Key, &m.ProfileID, &m.Name, &retired)
+	m.Retired = retired != ""
 	return m, err
 }
 func (s *Store) CrewNamed(profileID, name string) (CrewIdentity, bool, error) {
@@ -297,4 +301,87 @@ func (s *Store) MemberLatestSessions() ([]protocol.SessionID, error) {
 		ids = append(ids, id)
 	}
 	return ids, rows.Err()
+}
+
+type NewCrewMember struct {
+	Identity CrewIdentity
+	Doc      DocumentWrite
+	Fact     BusEvent
+	Desktop  *LaunchDesktopSetting
+}
+
+func (s *Store) CreateCrewMember(m NewCrewMember, now time.Time) (DocumentWriteResult, error) {
+	return s.commitCrewBirth(m, now, true)
+}
+
+func (s *Store) FurnishCrewMember(m NewCrewMember, now time.Time) (DocumentWriteResult, error) {
+	return s.commitCrewBirth(m, now, false)
+}
+
+func (s *Store) commitCrewBirth(m NewCrewMember, now time.Time, insert bool) (DocumentWriteResult, error) {
+	table, err := s.documentTable(m.Doc.Schema)
+	if err != nil {
+		return DocumentWriteResult{}, err
+	}
+	var result DocumentWriteResult
+	err = s.profilesTx(func(tx *sql.Tx, stamp string) error {
+		if _, err := loadLiveProfile(tx, m.Identity.ProfileID); err != nil {
+			return err
+		}
+		if insert {
+			if err := ensureCrewNameFree(tx, m.Identity.ProfileID, m.Identity.Name, m.Identity.Key); err != nil {
+				return err
+			}
+			if _, err := tx.Exec("INSERT INTO crew_members(member_key,profile_id,name) VALUES(?,?,?)", m.Identity.Key, m.Identity.ProfileID, m.Identity.Name); err != nil {
+				return err
+			}
+		} else {
+			if _, err := scanCrewIdentity(tx.QueryRow("SELECT "+crewIdentityColumns+" FROM crew_members WHERE member_key = ? AND profile_id = ?", m.Identity.Key, m.Identity.ProfileID)); err != nil {
+				return err
+			}
+		}
+		results, _, err := commitDocumentWritesWith(tx, []DocumentCommit{{Write: m.Doc, Fact: m.Fact}}, []string{table}, now)
+		if err != nil {
+			return err
+		}
+		if m.Desktop == nil {
+			err = startOnOwnDesktop(tx, stamp, "crew", m.Identity.Key.String())
+		} else {
+			err = saveLaunchSetting(tx, stamp, "crew", m.Identity.Key.String(), *m.Desktop, false)
+		}
+		result = results[0]
+		return err
+	})
+	return result, err
+}
+
+func (s *Store) RetireCrewMember(key who.MemberKey, at time.Time) (int, error) {
+	removed := 0
+	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
+		if _, err := tx.Exec("UPDATE crew_members SET retired_at = ? WHERE member_key = ? AND retired_at = ''", at.UTC().Format(time.RFC3339Nano), key); err != nil {
+			return err
+		}
+		result, err := tx.Exec("DELETE FROM pull_request_watches WHERE watcher = ?", who.Member(key))
+		if err != nil {
+			return err
+		}
+		count, err := result.RowsAffected()
+		removed = int(count)
+		return err
+	})
+	return removed, err
+}
+
+func (s *Store) RestoreCrewMember(key who.MemberKey) (bool, error) {
+	restored := false
+	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
+		result, err := tx.Exec("UPDATE crew_members SET retired_at = '' WHERE member_key = ? AND retired_at != ''", key)
+		if err != nil {
+			return err
+		}
+		count, err := result.RowsAffected()
+		restored = count != 0
+		return err
+	})
+	return restored, err
 }

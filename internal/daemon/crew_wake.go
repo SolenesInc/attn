@@ -12,9 +12,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
@@ -93,11 +95,26 @@ func (d *Daemon) crewMember(key who.MemberKey) (crew.Member, docstore.Document, 
 	return member, *doc, err
 }
 
+func (d *Daemon) trustClaudeCrewHome(home string, loginEnv []string) error {
+	env := pty.MergeEnvironment(os.Environ(), pty.LoginShellEnvironment(pty.GetUserLoginShell(), loginEnv, d.logf))
+	configDir := ""
+	for _, entry := range env {
+		if value, found := strings.CutPrefix(entry, "CLAUDE_CONFIG_DIR="); found {
+			configDir = value
+			break
+		}
+	}
+	return agentdriver.TrustClaudeWorkingDirectory(home, configDir)
+}
+
 func (d *Daemon) crewLaunchDir(member crew.Member) (string, error) {
 	if err := d.validateCrewMemberPaths(member); err != nil {
 		return "", err
 	}
 	if err := d.validateCrewAwarenessDirs(member); err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(member.HomeDir, 0o755); err != nil {
 		return "", err
 	}
 	dir := strings.TrimSpace(member.CWD)
@@ -231,6 +248,7 @@ func (d *Daemon) crewWakeAskedFor(msg *protocol.CrewWakeMessage, userStarted boo
 }
 
 func (d *Daemon) handleCrewWake(conn net.Conn, msg *protocol.CrewWakeMessage) {
+	pausepoint.At(pausepoint.MemberWakeRequested)
 	result, err := d.crewWakeAsked(msg)
 	if err != nil {
 		d.sendCrewError(conn, "wake", err)
@@ -274,6 +292,9 @@ func (d *Daemon) crewWakeWithChargeLocked(key who.MemberKey, agent string, auton
 	return d.crewWakeDayWithChargeLocked(key, agent, autonomous, nil, crewWakeRequest{})
 }
 func (d *Daemon) crewWakeDayWithChargeLocked(key who.MemberKey, agent string, autonomous bool, beforeWake func() error, request crewWakeRequest) (*protocol.CrewWakeResult, error) {
+	if err := d.mailRefusal(who.Member(key).Address()); err != nil {
+		return nil, fmt.Errorf("%w; `attn crew restore %s` brings it back", err, d.memberName(key))
+	}
 	member, _, err := d.crewMember(key)
 	if err != nil {
 		return nil, err
