@@ -67,6 +67,13 @@ func TestGardenPartiesMigration(t *testing.T) {
 					t.Fatal(err)
 				}
 
+				if _, err := s.db.Exec(`INSERT INTO sessions(id,label,directory,state_since,state_updated_at,last_seen,profile_id) VALUES('side-plain','Side','/tmp/side','','','','side')`); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := s.db.Exec(`INSERT INTO garden_seed_watches(watcher_session_id,seed_id,created_at) VALUES('bound','s-side01','2026-09-01'),('plain','s-side01','2026-09-02'),('side-plain','s-7k3f9m','2026-09-03'),('delegate','s-7k3f9m','2026-10-04')`); err != nil {
+					t.Fatal(err)
+				}
+
 				put(garden.CollectionNotes, "n-legacy", map[string]any{"id": "n-legacy", "seed": "s-7k3f9m", "kind": "note", "body": "done", "author_member": "attn"})
 				put(garden.CollectionDispatches, "delegate", map[string]any{"session_id": "delegate", "crown": "s-7k3f9m", "dispatcher_session": "bound"})
 				if _, err := s.db.Exec(`INSERT INTO garden_seed_watches(watcher_session_id,seed_id,created_at) VALUES ('bound','s-7k3f9m','2026-10-01'),('old-day','s-7k3f9m','2026-10-02'),('plain','s-7k3f9m','2026-10-03'); INSERT INTO delegation_operations(request_id,operation_id,request_json,state,progress,session_id,created_at,updated_at,handover_tender_session,handover_tender_member) VALUES('req','op-req','{"source_session_id":"bound"}','accepted','','delegate','','','bound','keel'); INSERT INTO bus_events(name,subject,payload,created_at) VALUES('garden.seed.tended','s-7k3f9m','{"attention_requested":true,"caused_by_session_id":"bound","directly_notified_session_id":"plain"}','now'),('garden.seed.body.edited','s-7k3f9m','{}','now')`); err != nil {
@@ -128,9 +135,18 @@ func TestGardenPartiesMigration(t *testing.T) {
 				}
 			}
 			watches, err := s.GardenSeedWatches()
-			if err != nil || len(watches) != 2 {
+			if err != nil || len(watches) != 3 {
 				t.Fatalf("watches: %+v %v", watches, err)
 			}
+			var foreign int
+			if err := s.db.QueryRow(`SELECT count(*) FROM garden_seed_watches WHERE seed_id='s-side01' OR watcher='session:side-plain'`).Scan(&foreign); err != nil || foreign != 0 {
+				t.Fatalf("foreign watches: %d %v", foreign, err)
+			}
+			var reserved int
+			if err := s.db.QueryRow(`SELECT count(*) FROM garden_seed_watches WHERE watcher='session:delegate' AND seed_id='s-7k3f9m'`).Scan(&reserved); err != nil || reserved != 1 {
+				t.Fatalf("reserved delegate watch: %d %v", reserved, err)
+			}
+
 			var oldest string
 			if err := s.db.QueryRow(`SELECT created_at FROM garden_seed_watches WHERE watcher='member:keel'`).Scan(&oldest); err != nil || oldest != "2026-10-01" {
 				t.Fatalf("oldest watch: %s %v", oldest, err)

@@ -329,13 +329,13 @@ async function main() {
 
       const offered = await runInPane(client, pane, `attn seed ready --all --session ${second}`, 'ready in the garden');
       runner.assert(saw(offered, sequenced) && !saw(offered, parallel),
-        'the second delegate already holds its seed and sees the rest of the plot', { offered });
+        'the second delegate already claims its seed and sees the rest of the plot', { offered });
       await runInPane(client, pane, `attn seed tend ${sequenced} --session ${delegated}`, 'is growing');
 
       const refused = await runInPane(client, pane,
         `attn seed tend ${parallel} --session ${delegated}`, 'takes it from them');
-      runner.assert(saw(refused, `${parallel} is being tended by ${second}`),
-        'a second claim on one seed is refused and names who holds it', { refused });
+      runner.assert(saw(refused, `${parallel} is being tended by ${observer.getSession(second).label}`),
+        'a second claim on one seed is refused and names its tender', { refused });
 
       const drained = await runInPane(client, pane, `attn seed ready --session ${delegated}`, 'in the plot under');
       runner.assert(saw(drained, `nothing is ready in the plot under ${crown}`),

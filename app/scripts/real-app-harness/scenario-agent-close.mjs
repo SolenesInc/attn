@@ -218,7 +218,9 @@ async function main() {
       runner.assert(notes.includes(REASON), 'the close reason must land on the seed’s log', { notes });
       const shown = cli(daemonBinary, instance, 'seed', 'show', seed);
       runner.assert(shown.includes('growing'), 'the close must not move the seed', { shown });
-      runner.assert(shown.includes(delegate), 'the closed session must still be the seed’s tender', { shown });
+      const stored = JSON.parse(cli(daemonBinary, instance, 'seed', 'show', seed, '--json')).seed;
+      runner.assert(stored.tender?.ref === `session:${delegate}` && !stored.claimed,
+        'the closed session remains the stored tender with a lapsed claim', { stored });
       runner.writeText('seed-notes.txt', notes);
       runner.writeText('seed-show.txt', shown);
     });

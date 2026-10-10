@@ -95,6 +95,29 @@ func applyMigration1791638944215407(tx *sql.Tx) error {
 		}
 		rows.Close()
 	}
+	rows, err = tx.Query(`SELECT session_id,coalesce(json_extract(request_json,'$.profile_id'),''),coalesce(json_extract(request_json,'$.source_session_id'),'') FROM delegation_operations WHERE state IN ('accepted','preparing')`)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var id, profile, source string
+		if err := rows.Scan(&id, &profile, &source); err != nil {
+			rows.Close()
+			return err
+		}
+		if profile == "" {
+			profile = sessionProfiles[source]
+		}
+		if sessionProfiles[id] == "" {
+			sessionProfiles[id] = profile
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+
 	party := func(id string) string {
 		if id == "" {
 			return ""
@@ -297,6 +320,16 @@ func applyMigration1791638944215407(tx *sql.Tx) error {
 		if err := rows.Scan(&w.old, &w.seed, &w.created); err != nil {
 			rows.Close()
 			return err
+		}
+		owner := sessionProfiles[w.old]
+		if key := members[w.old]; key != "" {
+			if owner != "" && owner != memberProfiles[key] {
+				continue
+			}
+			owner = memberProfiles[key]
+		}
+		if owner == "" || owner != seedProfiles[w.seed] {
+			continue
 		}
 		w.next = party(w.old)
 		key := [2]string{w.next, w.seed}
