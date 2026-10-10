@@ -92,6 +92,7 @@ func TestSettingsCLIRefusesProfileRequestsAfterEnrollmentAsAnOutpost(t *testing.
 	for _, args := range [][]string{
 		{"settings", "list", "--profile", "Default"},
 		{"settings", "get", "theme", "--profile", "Default"},
+		{"settings", "set", "theme", "dark", "--profile", "Default"},
 		{"settings", "get", "notebook.root"},
 	} {
 		result := s.Attn(args...)
@@ -99,5 +100,6 @@ func TestSettingsCLIRefusesProfileRequestsAfterEnrollmentAsAnOutpost(t *testing.
 			t.Fatalf("profile settings on an outpost: %+v", result)
 		}
 	}
-	requireStdout(t, s.Attn("settings", "get", "theme"))
+	requireStdout(t, s.Attn("settings", "set", "theme", "dark"), "theme = dark")
+	requireStdout(t, s.Attn("settings", "get", "theme"), "dark")
 }

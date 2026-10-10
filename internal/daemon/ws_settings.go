@@ -56,7 +56,7 @@ func (d *Daemon) setSetting(msg *protocol.SetSettingMessage) (*protocol.SettingE
 		return nil, err
 	}
 	var profile profiles.Profile
-	if spec.scope == profileScope {
+	if spec.scope == profileScope || protocol.Deref(msg.ProfileID) != "" {
 		if err := d.requireHome("profile settings"); err != nil {
 			return nil, err
 		}
