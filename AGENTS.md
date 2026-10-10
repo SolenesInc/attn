@@ -73,6 +73,20 @@ the full requested behavior.
 During design and review, ask: what could we remove from this design and still
 satisfy the full requirement?
 
+Before adding or strengthening concurrency handling, question the dependency
+that creates the race. Name the user-visible outcome we must preserve, and ask
+whether these operations need to interfere at all. Existing code, tests, and
+review comments do not establish that requirement.
+
+First look for unnecessary shared state, stale whole-object writes, side effects
+in reads, or one user action split across callers. Prefer removing those causes
+over adding guards, retries, rollback, or coordination abstractions. Align
+changes to intended behavior with the user.
+
+Judge simplification across the whole system: fewer states, failure paths, and
+responsibilities to keep consistent. Moving complexity behind a helper does not
+count.
+
 - The daemon owns application state; the app owns rendering.
 - Follow [the database migration rules](docs/db-migrations.md) for schema changes.
 - Diagnose before fixing. If the cause is unknown, propose instrumentation.
