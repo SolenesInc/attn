@@ -21,6 +21,7 @@ function seed(status: string, tender: { session?: string; member?: string } = {}
     template: false,
     tender: { ref: 'member:' + (tender.member ?? ''), name: tender.member ?? '', session_id: tender.session ?? '' },
     claimed: Boolean(tender.member ?? ''),
+    resume_available: false,
 
     title: 'a seed',
     updated_at: '',

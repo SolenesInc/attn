@@ -54,7 +54,9 @@ function corpus(count: number, bodyWords: (rand: () => number) => number): Seed[
       planter: { ref: 'user', name: 'the user' },
       profile_id: 'profile-default',
 
-      tender: member ? {ref:`member:${member}`,name:member} : undefined, claimed:Boolean(member),
+      tender: member ? { ref: `member:${member}`, name: member } : undefined,
+      claimed: Boolean(member),
+      resume_available: false,
 
       vars: [],
     });
