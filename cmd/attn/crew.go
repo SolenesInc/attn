@@ -11,12 +11,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/client"
-
 	"github.com/victorarias/attn/internal/protocol"
 )
 
 func crewClient(profile string) *client.Client {
-	return client.New("").WithRequester(profile, protocol.SessionID(os.Getenv("ATTN_SESSION_ID")))
+	return client.New("").WithRequester(profile, currentSessionOrExit())
 }
 func runCrew() {
 	if len(os.Args) < 3 || os.Args[2] == "-h" || os.Args[2] == "--help" {
@@ -177,7 +176,7 @@ func runCrewWake(args []string) {
 		writeCrewHelp(os.Stderr)
 		os.Exit(2)
 	}
-	result, err := crewClient(parsed.profile).CrewWake(parsed.member, parsed.agent, protocol.SessionID(os.Getenv("ATTN_SESSION_ID")))
+	result, err := crewClient(parsed.profile).CrewWake(parsed.member, parsed.agent, currentSessionOrExit())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "crew wake: %v\n", err)
 		os.Exit(1)

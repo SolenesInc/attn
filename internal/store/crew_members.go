@@ -193,42 +193,97 @@ func (s *Store) RenameCrewMember(key who.MemberKey, name string) (string, error)
 	})
 	return previous, err
 }
+func recordMemberKey(tx *sql.Tx, key who.MemberKey, id protocol.SessionID) error {
+	var stored string
+	if err := tx.QueryRow("SELECT member_key FROM sessions WHERE id = ?", id).Scan(&stored); err != nil {
+		return err
+	}
+	if stored != "" && stored != key.String() {
+		return fmt.Errorf("session %s already belongs to member %s", id, stored)
+	}
+	_, err := tx.Exec("UPDATE sessions SET member_key = ? WHERE id = ?", key, id)
+	return err
+}
+func (s *Store) recordMemberKeyMemory(key who.MemberKey, id protocol.SessionID) error {
+	if _, ok := s.crewMembers[key]; !ok {
+		return fmt.Errorf("crew member %s not found", key)
+	}
+	if s.sessions[id] == nil {
+		return fmt.Errorf("session %s not found", id)
+	}
+	if old := s.memberSessions[id]; !old.IsZero() && old != key {
+		return fmt.Errorf("session %s already belongs to member %s", id, old)
+	}
+	if s.memberSessions == nil {
+		s.memberSessions = map[protocol.SessionID]who.MemberKey{}
+	}
+	s.memberSessions[id] = key
+	return nil
+}
+func (s *Store) RecordMemberLaunchIntent(key who.MemberKey, id protocol.SessionID) error {
+	if s.db == nil {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return s.recordMemberKeyMemory(key, id)
+	}
+	return s.profilesTx(func(tx *sql.Tx, _ string) error { return recordMemberKey(tx, key, id) })
+}
 func (s *Store) RecordMemberSession(key who.MemberKey, id protocol.SessionID) error {
 	if s.db == nil {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		if _, ok := s.crewMembers[key]; !ok {
-			return fmt.Errorf("crew member %s not found", key)
-		}
-		if s.sessions[id] == nil {
-			return fmt.Errorf("session %s not found", id)
-		}
-		if old := s.memberSessions[id]; !old.IsZero() && old != key {
-			return fmt.Errorf("session %s already belongs to member %s", id, old)
-		}
-		if s.memberSessions == nil {
-			s.memberSessions = map[protocol.SessionID]who.MemberKey{}
+		if err := s.recordMemberKeyMemory(key, id); err != nil {
+			return err
 		}
 		if s.latestMemberSessions == nil {
 			s.latestMemberSessions = map[who.MemberKey]protocol.SessionID{}
 		}
-		s.memberSessions[id] = key
 		s.latestMemberSessions[key] = id
 		return nil
 	}
-
 	return s.profilesTx(func(tx *sql.Tx, _ string) error {
-		var stored string
-		if err := tx.QueryRow("SELECT member_key FROM sessions WHERE id = ?", id).Scan(&stored); err != nil {
-			return err
-		}
-		if stored != "" && stored != key.String() {
-			return fmt.Errorf("session %s already belongs to member %s", id, stored)
-		}
-		if _, err := tx.Exec("UPDATE sessions SET member_key = ? WHERE id = ?", key, id); err != nil {
+		if err := recordMemberKey(tx, key, id); err != nil {
 			return err
 		}
 		_, err := tx.Exec("UPDATE crew_members SET latest_session = ? WHERE member_key = ?", id, key)
 		return err
 	})
+}
+
+func (s *Store) MemberLatestSession(key who.MemberKey) (protocol.SessionID, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return s.latestMemberSessions[key], nil
+	}
+	var id protocol.SessionID
+	err := s.db.QueryRow("SELECT latest_session FROM crew_members WHERE member_key = ?", key).Scan(&id)
+	return id, err
+}
+
+func (s *Store) MemberLatestSessions() ([]protocol.SessionID, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	ids := []protocol.SessionID{}
+	if s.db == nil {
+		for _, id := range s.latestMemberSessions {
+			if id != "" {
+				ids = append(ids, id)
+			}
+		}
+		return ids, nil
+	}
+	rows, err := s.db.Query("SELECT latest_session FROM crew_members WHERE latest_session != ''")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id protocol.SessionID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }

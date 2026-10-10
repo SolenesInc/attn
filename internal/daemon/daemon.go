@@ -815,6 +815,13 @@ func (d *Daemon) Start() error {
 	}()
 
 	previousRunSessions := d.storedSessionIDs()
+	previousMemberSessions, err := d.store.MemberLatestSessions()
+	if err != nil {
+		return fmt.Errorf("read crew sessions before recovery: %w", err)
+	}
+	for _, id := range previousMemberSessions {
+		previousRunSessions[id] = struct{}{}
+	}
 	if d.listener == nil {
 		unixListener, err := listenUnixAtomically(d.socketPath)
 		if err != nil {
@@ -976,6 +983,7 @@ func (d *Daemon) pruneSessionsWithoutPTY(previousRunSessions map[protocol.Sessio
 			continue
 		}
 		if _, ok := liveIDs[session.ID]; ok {
+			d.promoteRetainedMemberLaunch(session, previousRunSessions)
 			continue
 		}
 		if sessionUpdatedAfter(session, recoveryStartedAt) {
@@ -983,9 +991,11 @@ func (d *Daemon) pruneSessionsWithoutPTY(previousRunSessions map[protocol.Sessio
 		}
 		d.releaseExitedCrewBinding(session.ID)
 		if d.store.GetSessionExit(session.ID) != nil {
+			d.promoteRetainedMemberLaunch(session, previousRunSessions)
 			continue
 		}
 		if d.canReviveSession(session) {
+			d.promoteRetainedMemberLaunch(session, previousRunSessions)
 			if session.State == protocol.SessionStateRecoverable {
 				continue
 			}
@@ -1327,6 +1337,9 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 			continue
 		}
 
+		if _, previous := previousRunSessions[sessionID]; previous {
+			d.promoteRetainedMemberLaunch(existing, previousRunSessions)
+		}
 		d.store.Touch(sessionID)
 		d.store.ClearSessionIntentionalClose(sessionID)
 
@@ -1399,6 +1412,7 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 				continue
 			}
 			if likelyAlive {
+				d.promoteRetainedMemberLaunch(session, previousRunSessions)
 				report.LikelyAlive++
 				continue
 			}
@@ -1409,9 +1423,11 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 		}
 		d.releaseExitedCrewBinding(session.ID)
 		if d.store.GetSessionExit(session.ID) != nil {
+			d.promoteRetainedMemberLaunch(session, previousRunSessions)
 			continue
 		}
 		if d.canReviveSession(session) {
+			d.promoteRetainedMemberLaunch(session, previousRunSessions)
 			if session.State == protocol.SessionStateRecoverable {
 				continue
 			}
@@ -3758,6 +3774,10 @@ func (d *Daemon) handleInjectTestPR(conn net.Conn, msg *protocol.InjectTestPRMes
 }
 
 func (d *Daemon) handleInjectTestSession(conn net.Conn, msg *protocol.InjectTestSessionMessage) {
+	if strings.TrimSpace(protocol.Deref(msg.Session.CrewMember)) != "" {
+		d.crewWakeMu.Lock()
+		defer d.crewWakeMu.Unlock()
+	}
 	if msg.Session.ID == "" {
 		d.sendError(conn, "Session ID cannot be empty")
 		return

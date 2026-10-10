@@ -220,7 +220,7 @@ func runAgentPeek(args []string) {
 		writeAgentHelp(os.Stderr)
 		os.Exit(2)
 	}
-	result, err := client.New("").WithRequester(parsed.profile, protocol.SessionID(os.Getenv("ATTN_SESSION_ID"))).AgentPeek(parsed.target)
+	result, err := client.New("").WithRequester(parsed.profile, currentSessionOrExit()).AgentPeek(parsed.target)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "agent peek: %s\n", agentPeekErrorMessage(parsed.target, err))
 		os.Exit(1)

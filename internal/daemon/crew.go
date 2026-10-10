@@ -648,3 +648,46 @@ func memberWithKey(key string, members []crew.Member) (crew.Member, bool) {
 	}
 	return crew.Member{}, false
 }
+
+func (d *Daemon) promoteRetainedMemberLaunch(session *protocol.Session, previousRunSessions map[protocol.SessionID]struct{}) {
+	d.crewWakeMu.Lock()
+	defer d.crewWakeMu.Unlock()
+	if !d.store.SessionLaunchedAt(session.ID).IsZero() {
+		return
+	}
+	entry := d.store.SessionLedgerEntry(session.ID)
+	if entry == nil || entry.MemberKey == nil {
+		return
+	}
+	launchedAt, err := time.Parse(time.RFC3339Nano, session.StateSince)
+	if err != nil {
+		d.logf("crew: retained launch %s has unreadable state_since %q: %v", session.ID, session.StateSince, err)
+		return
+	}
+	key, err := who.ParseMemberKey(*entry.MemberKey)
+	if err != nil {
+		d.logf("crew: retained launch %s has invalid member key: %v", session.ID, err)
+		return
+	}
+	member, _, err := d.crewMember(key)
+	if err != nil {
+		d.logf("crew: retained launch %s: %v", session.ID, err)
+		return
+	}
+	if member.BindingSession != session.ID && d.crewBindingLive(member) {
+		d.store.SetSessionLaunchedAt(session.ID, launchedAt, who.MemberKey{})
+		return
+	}
+	latest, err := d.store.MemberLatestSession(key)
+	if err != nil {
+		d.logf("crew: latest session for %s during recovery: %v", key, err)
+		return
+	}
+	if latest != "" && latest != session.ID {
+		if _, previous := previousRunSessions[latest]; !previous {
+			d.store.SetSessionLaunchedAt(session.ID, launchedAt, who.MemberKey{})
+			return
+		}
+	}
+	d.store.SetSessionLaunchedAt(session.ID, launchedAt, key)
+}

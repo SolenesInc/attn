@@ -8,7 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -206,5 +208,129 @@ func TestCrewRenameKeepsTheKeyAndShowsTheNewName(t *testing.T) {
 	roster := crewRoster(t, s)
 	if roster["keel"].Name != "Alfred" {
 		t.Fatalf("roster: %+v", roster)
+	}
+}
+
+func TestAnInterruptedCrewLaunchIsTheLedgerRowWhenItsConversationSurvives(t *testing.T) {
+	for _, newerFinished := range []bool{false, true} {
+		t.Run(map[bool]string{false: "retained", true: "newer_day_finished"}[newerFinished], func(t *testing.T) {
+			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+			writeCharter(t, s, "keel")
+			s.Start()
+			first, err := s.Client().CrewWake("Keel", "", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			run := s.Launched(string(first.SessionID))
+			run.Prompted()
+			run.Reply("Done. <!-- attn:state=idle -->")
+			handed, err := s.Client().CrewHandoff(first.SessionID, "A completed day.", false, protocol.CrewDayCloseSleep)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if newerFinished {
+				if err := os.Rename(handed.Path, handed.Path+".prior"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			s.Stop()
+			commit := s.PauseAt(pausepoint.MemberLaunchCommit)
+			s.StartCrashingAt("member-launch-commit")
+			s.App()
+			done := make(chan error, 1)
+			go func() { _, err := s.Client().CrewWake("Keel", "", ""); done <- err }()
+			commit.Await()
+			roster, err := s.Client().CrewList()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(roster.Members) != 1 || roster.Members[0].BindingSession == nil {
+				t.Fatalf("pending member launch: %+v", roster)
+			}
+			successor := *roster.Members[0].BindingSession
+			run = s.Launched(string(successor))
+			run.Prompted()
+			run.Reply("The interrupted day has a conversation. <!-- attn:state=idle -->")
+			if newerFinished {
+				run.Exit(0)
+			}
+			commit.Release()
+			s.AwaitCrash()
+			if err := <-done; err == nil {
+				t.Fatal("crashed launch unexpectedly succeeded")
+			}
+			expected := successor
+			if newerFinished {
+				recovery := s.PauseAt(pausepoint.DaemonStartupRecovery)
+				s.StartHeldAt(recovery)
+				type wake struct {
+					result *protocol.CrewWakeResult
+					err    error
+				}
+				next := make(chan wake, 1)
+				go func() { result, err := s.Client().CrewWake("Keel", "", ""); next <- wake{result, err} }()
+				commit.Await()
+				commit.Release()
+				launched := <-next
+				if launched.err != nil {
+					t.Fatal(launched.err)
+				}
+				expected = launched.result.SessionID
+				if _, err := s.Client().CrewHandoff(expected, "The newer completed day.", false, protocol.CrewDayCloseSleep); err != nil {
+					t.Fatal(err)
+				}
+				recovery.Release()
+			} else {
+				s.Start()
+			}
+			s.App()
+			check := func() {
+				page, err := s.Client().SessionList(client.SessionListOptions{All: true})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(page.Entries) != 1 || page.Entries[0].ID != expected || protocol.Deref(page.Entries[0].MemberKey) != "keel" {
+					t.Fatalf("recovered member ledger: %+v", page.Entries)
+				}
+			}
+			check()
+			if newerFinished {
+				s.Stop()
+				recovery := s.PauseAt(pausepoint.DaemonStartupRecovery)
+				s.StartHeldAt(recovery)
+				recovery.Release()
+				s.App()
+				check()
+			}
+		})
+	}
+}
+
+func TestCrewCommandsResolveTheCallingTerminalsProfile(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	writeCharter(t, s, "keel")
+	s.Start()
+	app := s.App()
+	created := testworld.Request(app, protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, Name: "Side", RequestID: "side"}, protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "side" })
+	if !created.Success || created.Profile == nil {
+		t.Fatalf("create Side: %+v", created)
+	}
+	sideApp := s.AppOn(created.Profile.ID)
+	caller := s.Spawn(sideApp, fakeagent.Claude, s.Path("side"))
+	terminal := sideApp.Terminal(caller)
+	var roster []protocol.CrewMember
+	s.Run(testworld.Invocation{Args: []string{"crew", "list", "--json"}, Terminal: terminal}).JSON(t, &roster)
+	if len(roster) != 0 {
+		t.Fatalf("Side sees another profile's members: %+v", roster)
+	}
+	for _, args := range [][]string{{"crew", "sleep", "Keel"}, {"crew", "rename", "Keel", "Alfred"}, {"agent", "peek", "Keel"}} {
+		result := s.Run(testworld.Invocation{Args: args, Terminal: terminal})
+		if result.Code != 1 {
+			t.Fatalf("foreign member command %v: %+v", args, result)
+		}
+		if args[0] == "crew" && !strings.Contains(result.Stderr, `profile "Side"`) {
+			t.Fatalf("wrong request scope: %+v", result)
+		}
 	}
 }

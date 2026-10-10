@@ -17,6 +17,7 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/layouttree"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -420,7 +421,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		return &spawnOutcome{err: fmt.Errorf("persist session launch intent: %w", err)}
 	}
 	if !req.policy.member.IsZero() {
-		if err := d.store.RecordMemberSession(req.policy.member, session.ID); err != nil {
+		if err := d.store.RecordMemberLaunchIntent(req.policy.member, session.ID); err != nil {
 			d.logf("crew: record member session %s: %v", session.ID, err)
 		}
 	}
@@ -586,11 +587,7 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{err: persistErr}
 	}
-	if !req.policy.member.IsZero() {
-		if err := d.store.RecordMemberSession(req.policy.member, session.ID); err != nil {
-			d.logf("crew: record member session %s: %v", session.ID, err)
-		}
-	}
+
 	fact := FactSessionRegistered
 	if req.existingSession != nil {
 		fact = FactSessionReregistered
@@ -650,7 +647,11 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		d.rememberDispatchResume(session.ID, plan.launchedConversation)
 	}
 
-	d.store.SetSessionLaunchedAt(session.ID, req.spawnStartedAt)
+	if !req.policy.member.IsZero() {
+		pausepoint.At(pausepoint.MemberLaunchCommit)
+		crashAt(crashBeforeMemberLaunchCommit)
+	}
+	d.store.SetSessionLaunchedAt(session.ID, req.spawnStartedAt, req.policy.member)
 	if !req.isShell {
 		d.startTranscriptWatcher(session.ID, session.Agent, session.Directory, req.spawnStartedAt)
 	}

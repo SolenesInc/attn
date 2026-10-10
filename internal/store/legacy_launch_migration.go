@@ -113,12 +113,3 @@ func loadProfileMigration(tx *sql.Tx) (ProfileMigrationView, error) {
 	view.Plan = view.Plan.Reconcile(desktops).Retire(view.Live)
 	return view, nil
 }
-
-func loadLaunchPreview(tx *sql.Tx, view *ProfileMigrationView) error {
-	if !view.PlacementRequired() {
-		return nil
-	}
-	var err error
-	view.LaunchItems, err = launchItems(tx)
-	return err
-}

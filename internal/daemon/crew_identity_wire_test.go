@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -152,7 +153,9 @@ func TestAMemberIsOneLedgerRow(t *testing.T) {
 			t.Fatalf("nap: %+v", result)
 		}
 		day.SessionID = *result.SessionID
-		w.Launched(string(day.SessionID))
+		run := w.Launched(string(day.SessionID))
+		run.Prompted()
+		run.Reply("Ready. <!-- attn:state=idle -->")
 		path := filepath.Join(crewHome(w, "keel"), crew.HandoffsDirName)
 		if err := os.Rename(result.Path, filepath.Join(path, filepath.Base(result.Path)+".previous")); err != nil {
 			t.Fatal(err)
@@ -185,4 +188,29 @@ func TestAMemberIsOneLedgerRow(t *testing.T) {
 	w.restart()
 	cli = w.Client()
 	check()
+}
+
+func TestAFailedCrewWakeKeepsItsLastLedgerRow(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		writeCrewCharter(t, w, "keel")
+		w.restart()
+		cli := w.Client()
+		day := wakeCrew(t, cli, "Keel", "")
+		if _, err := cli.CrewHandoff(day.SessionID, "Keep this day in the ledger.", false, protocol.CrewDayCloseSleep); err != nil {
+			t.Fatal(err)
+		}
+		w.terms.RefuseNextSpawn(errors.New("PTY allocation failed"))
+		_, err := cli.CrewWake("Keel", "", "")
+		crewErrorContains(t, err, "PTY allocation failed")
+		check := func() {
+			page := ledger(t, cli, client.SessionListOptions{All: true})
+			if len(page.Entries) != 1 || page.Entries[0].ID != day.SessionID || protocol.Deref(page.Entries[0].MemberKey) != "keel" {
+				t.Fatalf("failed wake ledger: %+v", page.Entries)
+			}
+		}
+		check()
+		w.restart()
+		cli = w.Client()
+		check()
+	})
 }

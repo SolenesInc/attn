@@ -24,6 +24,7 @@ const (
 	PtyWatchReplay     = "pty-watch-replay"
 	BusAnnounce        = "bus-announce"
 
+	MemberLaunchCommit        = "member-launch-commit"
 	DaemonStartupRecovery     = "daemon-startup-recovery"
 	SessionInputPasteGap      = "session-input-paste-gap"
 	SessionInputLaneContended = "session-input-lane-contended"
