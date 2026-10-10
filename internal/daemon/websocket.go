@@ -1180,8 +1180,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.life.Go("handleCrewSleepWS", func() { d.handleCrewSleepWS(client, msg.(*protocol.CrewSleepMessage)) })
 	case protocol.CmdCrewSet:
 		d.life.Go("handleCrewSetWS", func() { d.handleCrewSetWS(client, msg.(*protocol.CrewSetMessage)) })
-	case protocol.CmdCrewRestart:
-		d.life.Go("handleCrewRestartWS", func() { d.handleCrewRestartWS(client, msg.(*protocol.CrewRestartMessage)) })
 	case protocol.CmdFsList:
 		fsList := msg.(*protocol.FsListMessage)
 		d.life.Go("sendFsListWSResult", func() {

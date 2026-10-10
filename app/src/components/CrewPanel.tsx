@@ -5,7 +5,6 @@ import { useCrewCharterAutosave, type CrewCharterAutosave, type CrewCharterEdit 
 import { useCrewHandoffs, type CrewHandoffHistory } from '../hooks/useCrewHandoffs';
 import { useCrewLaunchAutosave } from '../hooks/useCrewLaunchAutosave';
 import { useCrewNavigation, type CrewTab } from '../hooks/useCrewNavigation';
-import { useCrewRestart, type CrewRestarts } from '../hooks/useCrewRestart';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import type { DaemonSession, Seed } from '../hooks/useDaemonSocket';
 import { useHarnesses } from '../hooks/useHarnesses';
@@ -16,7 +15,7 @@ import { CrewHandoffsTab } from './CrewHandoffsTab';
 import { CrewLaunchTab, type CrewLaunchTabProps } from './CrewLaunchTab';
 import { CrewRoster } from './CrewRoster';
 import { CrewSeeds, type CrewSeedsProps } from './CrewSeeds';
-import { effectiveMember, nextWakeLabel, runningSessionFor } from './crewLaunchPresentation';
+import { effectiveMember, runningSessionFor } from './crewLaunchPresentation';
 import type { CrewSeedFilter } from './crewSeedOwnership';
 import './CrewPanel.css';
 
@@ -32,6 +31,7 @@ interface CrewPanelProps {
   seedsTotal: number;
   onClose: () => void;
   onWakeMember: (member: string) => void;
+  onSleepMember: (member: string) => void;
   onOpenSeed: (seedId: string, placementSessionId?: string) => void;
 }
 
@@ -98,36 +98,11 @@ function MemberTabPanel({ tab, launch, charterEdit, charterAutosave, handoffs, s
   }
 }
 
-function RestartConfirm({ member, summary, onCancel, onConfirm }: {
-  member: CrewMember;
-  summary: string;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  const name = crewDisplayName(member.id);
-  return (
-    <div className="crew-confirm-backdrop">
-      <dialog open className="crew-confirm" role="alertdialog" aria-modal="true" aria-labelledby="crew-confirm-title">
-        <span className="crew-kicker">Confirm</span>
-        <h2 id="crew-confirm-title">{member.binding_session ? `Restart ${name}?` : `Wake ${name}?`}</h2>
-        <div className="crew-confirm-selection">{summary}</div>
-        <div className="crew-confirm-actions">
-          <button type="button" onClick={onCancel}>Cancel</button>
-          <button type="button" className="is-primary" data-testid="crew-confirm-restart" autoFocus onClick={onConfirm}>
-            {member.binding_session ? 'Request handoff and restart' : 'Wake member'}
-          </button>
-        </div>
-      </dialog>
-    </div>
-  );
-}
-
 interface CrewPanelStores {
   isConnected: boolean;
   autosave: CrewLaunchAutosave;
   charterAutosave: CrewCharterAutosave;
   handoffs: CrewHandoffHistory;
-  restarts: CrewRestarts;
   catalog: ReturnType<typeof useHarnesses>;
   loadModels: ReturnType<typeof useDaemonApi>['sendHarnessModels'];
 }
@@ -137,7 +112,6 @@ export function CrewPanel({ visit, ...surface }: CrewPanelProps) {
     isConnected,
     connectionGeneration,
     sendCrewSet,
-    sendCrewRestart,
     sendCrewCharterGet,
     sendCrewCharterSet,
     sendCrewHandoffsGet,
@@ -147,13 +121,12 @@ export function CrewPanel({ visit, ...surface }: CrewPanelProps) {
   const autosave = useCrewLaunchAutosave(surface.members, connectionGeneration, sendCrewSet);
   const charterAutosave = useCrewCharterAutosave(connectionGeneration, sendCrewCharterGet, sendCrewCharterSet);
   const handoffs = useCrewHandoffs(connectionGeneration, sendCrewHandoffsGet, sendCrewHandoffGet);
-  const restarts = useCrewRestart(sendCrewRestart, autosave.observe);
   const catalog = useHarnesses(surface.isOpen);
   return (
     <CrewPanelSurface
       key={visit}
       {...surface}
-      stores={{ isConnected, autosave, charterAutosave, handoffs, restarts, catalog, loadModels: sendHarnessModels }}
+      stores={{ isConnected, autosave, charterAutosave, handoffs, catalog, loadModels: sendHarnessModels }}
     />
   );
 }
@@ -167,14 +140,14 @@ function CrewPanelSurface({
   seedsTotal,
   onClose,
   onWakeMember,
+  onSleepMember,
   onOpenSeed,
   stores,
 }: Omit<CrewPanelProps, 'visit'> & { stores: CrewPanelStores }) {
-  const { isConnected, autosave, charterAutosave, handoffs, restarts, catalog, loadModels } = stores;
+  const { isConnected, autosave, charterAutosave, handoffs, catalog, loadModels } = stores;
   const [filter, setFilter] = useState('');
   const [seedFilter, setSeedFilter] = useState<CrewSeedFilter>('tending');
   const [seedQuery, setSeedQuery] = useState('');
-  const [confirming, setConfirming] = useState(false);
   const closeRef = useRef<HTMLButtonElement>(null);
   const rosterRef = useRef<HTMLDivElement>(null);
   const { selectedMember, tab, pending: navigationPending, navigate } = useCrewNavigation({
@@ -186,8 +159,7 @@ function CrewPanelSurface({
   const requestClose = useCallback(() => navigate({ kind: 'close' }), [navigate]);
   const openMemberSeed = useCallback((seedId: string) => navigate({ kind: 'seed', seedId }), [navigate]);
 
-  useEscapeStack(requestClose, isOpen && !confirming);
-  useEscapeStack(() => setConfirming(false), isOpen && confirming);
+  useEscapeStack(requestClose, isOpen);
 
   const loadCharter = charterAutosave.load;
   const loadHandoffs = handoffs.load;
@@ -207,13 +179,6 @@ function CrewPanelSurface({
   const edit = selectedMemberId ? autosave.read(selectedMemberId) : undefined;
   const member = selectedMember ? effectiveMember(selectedMember, edit?.acknowledged) : undefined;
 
-  const confirmRestart = () => {
-    if (!member || edit?.state !== 'saved') return;
-    setConfirming(false);
-    if (member.binding_session) restarts.start(member);
-    else onWakeMember(member.id);
-  };
-
   return (
     <div className={`crew-panel-layer ${isOpen ? 'is-open' : ''}`} aria-hidden={!isOpen}>
       <FocusTrap
@@ -225,14 +190,14 @@ function CrewPanelSurface({
         }}
       >
         <dialog open={isOpen} className="crew-panel" data-testid="crew-panel" aria-modal="true" aria-labelledby="crew-panel-title">
-          <header className="crew-panel-bar" inert={confirming}>
+          <header className="crew-panel-bar">
             <div>
               <span className="crew-kicker">Crew</span>
               <h1 id="crew-panel-title">Manage crew</h1>
             </div>
             <button ref={closeRef} type="button" className="crew-close" data-testid="crew-panel-close" disabled={navigationPending} onClick={requestClose}>Close <kbd>Esc</kbd></button>
           </header>
-          {isOpen && <div className="crew-panel-shell" inert={confirming}>
+          {isOpen && <div className="crew-panel-shell">
             <CrewRoster
               members={members}
               visibleMembers={visibleMembers}
@@ -264,13 +229,8 @@ function CrewPanelSurface({
                       autosave,
                       loadModels,
                       isConnected,
-                      restart: restarts.read(member),
-                      onRestart: () => setConfirming(true),
-                      onResendRestart: () => restarts.resend(member),
-                      onReviewRestart: () => {
-                        restarts.discard(member.id);
-                        setConfirming(true);
-                      },
+                      onSleep: () => onSleepMember(member.id),
+                      onWake: () => onWakeMember(member.id),
                     }}
                     charterEdit={charterEdit}
                     charterAutosave={charterAutosave}
@@ -282,10 +242,6 @@ function CrewPanelSurface({
               )}
             </main>
           </div>}
-
-          {confirming && member && edit && (
-            <RestartConfirm member={member} summary={nextWakeLabel(edit)} onCancel={() => setConfirming(false)} onConfirm={confirmRestart} />
-          )}
         </dialog>
       </FocusTrap>
     </div>

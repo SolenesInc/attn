@@ -206,14 +206,10 @@ func (e *deleteWorktreeError) Unwrap() error {
 	return e.err
 }
 
-func (d *Daemon) doDeleteWorktree(path string, endpointID *string, opts deleteWorktreeOptions) (err error) {
-	err = d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
+func (d *Daemon) doDeleteWorktree(path string, endpointID *string, opts deleteWorktreeOptions) error {
+	return d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 		return d.doDeleteWorktreeProtected(protection, path, endpointID, opts)
 	})
-	if err == nil {
-		d.reconcileCrewRestarts()
-	}
-	return err
 }
 
 func (d *Daemon) doDeleteWorktreeProtected(protection foregroundCleanupProtection, path string, endpointID *string, opts deleteWorktreeOptions) (err error) {

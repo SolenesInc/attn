@@ -18,9 +18,8 @@ import (
 const Surface = "the crew"
 
 const (
-	Namespace                 = "core/crew"
-	CollectionMembers         = "members"
-	CollectionRestartRequests = "restart_requests"
+	Namespace         = "core/crew"
+	CollectionMembers = "members"
 )
 
 const HomesDirName = "crew"
@@ -43,34 +42,6 @@ type Member struct {
 	LetterPath      string             `json:"letter_path"`
 	LetterSession   protocol.SessionID `json:"letter_session"`
 	AutonomousWakes []string           `json:"autonomous_wakes"`
-	Restart         *Restart           `json:"restart,omitempty"`
-}
-
-type RestartState string
-
-const (
-	RestartQueued    RestartState = "queued"
-	RestartRequested RestartState = "requested"
-	RestartFailed    RestartState = "failed"
-	RestartCompleted RestartState = "completed"
-)
-
-type Restart struct {
-	RequestID          string             `json:"request_id"`
-	SessionID          protocol.SessionID `json:"session_id"`
-	State              RestartState       `json:"state"`
-	DeliveryStatus     string             `json:"delivery_status,omitempty"`
-	Detail             string             `json:"detail,omitempty"`
-	Error              string             `json:"error,omitempty"`
-	LetterPath         string             `json:"letter_path,omitempty"`
-	SuccessorSessionID protocol.SessionID `json:"successor_session_id,omitempty"`
-	Withdrawn          bool               `json:"withdrawn,omitempty"`
-}
-
-type RestartRequest struct {
-	Member           string `json:"member"`
-	RequestID        string `json:"request_id"`
-	RestartRequestID string `json:"restart_request_id"`
 }
 
 func (m Member) LaunchAgent() string {
@@ -95,22 +66,6 @@ func MembersSchema() docstore.CollectionSchema {
 			{Name: "binding_session", Type: docstore.FieldString},
 		},
 	}
-}
-
-func RestartRequestsSchema() docstore.CollectionSchema {
-	return docstore.CollectionSchema{Namespace: Namespace, Collection: CollectionRestartRequests}
-}
-
-func (r RestartRequest) Encode() ([]byte, error) {
-	return json.Marshal(r)
-}
-
-func DecodeRestartRequest(body []byte) (RestartRequest, error) {
-	var request RestartRequest
-	if err := json.Unmarshal(body, &request); err != nil {
-		return RestartRequest{}, fmt.Errorf("this restart request's stored record is not readable: %w", err)
-	}
-	return request, nil
 }
 
 func (m Member) Encode() ([]byte, error) {

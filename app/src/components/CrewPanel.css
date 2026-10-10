@@ -349,7 +349,7 @@
 }
 
 .crew-launch-title h3,
-.crew-restart h3 {
+.crew-session-action h3 {
   margin: 3px 0 0;
   font-size: 14px;
   font-weight: 620;
@@ -367,8 +367,7 @@
 
 .crew-save-state.is-saving { color: var(--accent); }
 .crew-save-state.is-error { color: var(--color-error); }
-.crew-save-state button,
-.crew-restart-state button {
+.crew-save-state button {
   padding: 0;
   border: 0;
   background: transparent;
@@ -464,7 +463,7 @@
   text-align: right;
 }
 
-.crew-restart {
+.crew-session-action {
   width: min(720px, 100%);
   display: flex;
   align-items: center;
@@ -475,8 +474,7 @@
   border-top: 1px solid var(--color-border-subtle);
 }
 
-.crew-restart button,
-.crew-confirm-actions button {
+.crew-session-action button {
   padding: 7px 10px;
   border: 1px solid var(--color-border);
   border-radius: 7px;
@@ -486,21 +484,7 @@
   cursor: pointer;
 }
 
-.crew-restart button:disabled { opacity: 0.45; cursor: default; }
-
-.crew-restart-state {
-  width: min(720px, 100%);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 10px;
-  color: var(--color-text-muted);
-  font-size: 10px;
-}
-
-.crew-restart-state.is-pending { color: var(--accent); }
-.crew-restart-state.is-complete { color: var(--color-success); }
-.crew-restart-state.is-failed { color: var(--color-error); }
+.crew-session-action button:disabled { opacity: 0.45; cursor: default; }
 
 .crew-charter,
 .crew-handoffs {
@@ -855,55 +839,6 @@
   color: var(--accent);
   cursor: pointer;
   text-decoration: underline;
-}
-
-.crew-confirm-backdrop {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  display: grid;
-  place-items: center;
-  padding: 20px;
-  background: rgba(0, 0, 0, 0.62);
-}
-
-.crew-confirm {
-  width: min(470px, 100%);
-  max-width: none;
-  margin: 0;
-  padding: 23px;
-  border: 1px solid var(--color-border);
-  border-radius: 11px;
-  background: var(--color-bg-panel);
-  color: inherit;
-  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.5);
-}
-
-.crew-confirm h2 {
-  margin: 6px 0 15px;
-  font-size: 19px;
-}
-
-.crew-confirm-selection {
-  padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--color-border));
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
-  color: var(--color-text-secondary);
-  font: 11px 'JetBrains Mono', monospace;
-}
-
-.crew-confirm-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 18px;
-}
-
-.crew-confirm-actions button.is-primary {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--color-accent-contrast, #17110e);
 }
 
 @media (max-width: 760px) {

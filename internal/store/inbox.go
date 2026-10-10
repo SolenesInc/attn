@@ -27,30 +27,6 @@ type InboxDelivery struct {
 	Peer *inbox.Message
 }
 
-func (s *Store) CommitDocumentWriteWithInbox(write DocumentWrite, fact BusEvent, item inbox.Item, at time.Time) (DocumentWriteResult, error) {
-	table, err := s.documentTable(write.Schema)
-	if err != nil {
-		return DocumentWriteResult{}, err
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	tx, err := s.db.Begin()
-	if err != nil {
-		return DocumentWriteResult{}, err
-	}
-	defer tx.Rollback()
-	results, _, err := commitDocumentWritesWith(tx, []DocumentCommit{{Write: write, Fact: fact}}, []string{table}, at)
-	if err != nil {
-		return DocumentWriteResult{}, err
-	}
-	if err := putInbox(tx, item, at); err != nil {
-		return DocumentWriteResult{}, err
-	}
-	if err := tx.Commit(); err != nil {
-		return DocumentWriteResult{}, err
-	}
-	return results[0], nil
-}
 func (s *Store) InboxItem(id string) (InboxItem, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

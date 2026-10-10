@@ -1,0 +1,3 @@
+kind: removed
+area: crew
+change: Crew uses Sleep to request a handoff and Wake to start a sleeping member. The Restart action and its progress tracking are removed.

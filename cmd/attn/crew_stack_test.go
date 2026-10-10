@@ -1,7 +1,6 @@
 package main_test
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -66,8 +65,6 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 		{args: []string{"crew", "sleep"}, want: "takes one member name"},
 		{args: []string{"crew", "sleep", "one", "two"}, want: `takes one member name, not "two"`},
 		{args: []string{"crew", "sleep", "keel", "--request-id", "retry-1"}, want: "not defined: -request-id"},
-		{args: []string{"crew", "restart", "keel", "--request-id", ""}, want: "--request-id cannot be empty"},
-		{args: []string{"crew", "restart", "keel", "--request-id", "   "}, want: "--request-id cannot be empty"},
 		{args: []string{"crew", "set", "keel"}, want: "nothing to set"},
 	})
 
@@ -147,47 +144,4 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 		codex.Exit(143)
 	}
 	testworld.AwaitSession(app, string(woken.SessionID), func(x protocol.Session) bool { return protocol.Deref(x.StateReason) == "process_exited" })
-
-	restarts := make([]protocol.CrewRestartResult, 2)
-	for i := range restarts {
-		restarted := s.Attn("crew", "restart", "keel", "--request-id", " retry-1 ", "--json")
-		var receipt struct {
-			RequestID string `json:"request_id"`
-		}
-		if err := json.Unmarshal([]byte(restarted.Stderr), &receipt); restarted.Code != 0 || err != nil || receipt.RequestID != "retry-1" {
-			t.Fatalf("restart exited %d with stderr %q, want the JSON receipt for retry-1", restarted.Code, restarted.Stderr)
-		}
-		restarted.JSON(t, &restarts[i])
-	}
-	first, retried := restarts[0].Restart, restarts[1].Restart
-	successor := protocol.Deref(first.SuccessorSessionID)
-	if first.RequestID != "retry-1" || first.State != protocol.CrewRestartStateCompleted || successor == "" ||
-		retried.RequestID != first.RequestID || retried.State != first.State || protocol.Deref(retried.SuccessorSessionID) != successor {
-		t.Fatalf("a retried restart = %+v then %+v, want the same completed request", first, retried)
-	}
-	var sessions []struct {
-		ID     string `json:"id"`
-		Member string `json:"member"`
-	}
-	s.Attn("agent", "list", "--json").JSON(t, &sessions)
-	var days []string
-	for _, session := range sessions {
-		if session.Member == "keel" {
-			days = append(days, session.ID)
-		}
-	}
-	if !slices.Equal(days, []string{string(successor)}) {
-		t.Fatalf("a retried restart left keel in sessions %q, want only %s", days, successor)
-	}
-	keel := s.Launched(string(successor))
-	keel.Prompted()
-	keel.Reply("Read the charter. <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, string(successor), func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
-	requireStdout(t, s.Attn("crew", "sleep", "keel"), string("Asked Keel in session "+successor[:8]+" to write its handoff and file it with `attn handoff --sleep`."))
-
-	unknown := s.Attn("crew", "restart", "nobody")
-	receipt, _, _ := strings.Cut(unknown.Stderr, "\n")
-	if requestID, printed := strings.CutPrefix(receipt, "crew restart request: request_id="); unknown.Code != 1 || !printed || strings.TrimSpace(requestID) == "" {
-		t.Fatalf("a restart without --request-id exited %d with stderr %q, want a generated receipt first", unknown.Code, unknown.Stderr)
-	}
 }
