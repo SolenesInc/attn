@@ -34,7 +34,6 @@ import (
 	"github.com/victorarias/attn/internal/probetui"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptyworker"
-	"github.com/victorarias/attn/internal/workflowresult"
 	"github.com/victorarias/attn/internal/wrapper"
 	"golang.org/x/sys/unix"
 )
@@ -72,11 +71,6 @@ type sessionCron struct {
 }
 
 func main() {
-	if len(os.Args) >= 2 && os.Args[1] == "_workflow-result-mcp" {
-		runWorkflowResultMCP(os.Args[2:])
-		return
-	}
-
 	if isProtocolVersionCommand(os.Args) {
 		runProtocolVersion()
 		return
@@ -132,9 +126,6 @@ func main() {
 		runClientToken()
 	case "pty-worker":
 		runPTYWorker()
-	case "workflow":
-		maybePrintInstanceBanner()
-		runWorkflow()
 	case "automation":
 		maybePrintInstanceBanner()
 		runAutomationCommand()
@@ -252,39 +243,6 @@ func main() {
 			writeHelp(os.Stderr)
 			os.Exit(1)
 		}
-	}
-}
-
-func runWorkflowResultMCP(args []string) {
-	fs := flag.NewFlagSet("_workflow-result-mcp", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-	toolName := fs.String("tool-name", "return_result", "the single MCP tool name")
-	schemaPath := fs.String("schema-file", "", "JSON Schema file for the tool inputSchema (empty => permissive)")
-	resultPath := fs.String("result-file", "", "atomic result output file")
-	if err := fs.Parse(args); err != nil || fs.NArg() != 0 ||
-		strings.TrimSpace(*resultPath) == "" || strings.TrimSpace(*toolName) == "" {
-		fmt.Fprintln(os.Stderr, "invalid workflow result MCP arguments")
-		os.Exit(2)
-	}
-	var schema json.RawMessage
-	if p := strings.TrimSpace(*schemaPath); p != "" {
-		b, err := os.ReadFile(p)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-		schema = b
-	}
-	if err := workflowresult.ServeResultSink(
-		context.Background(),
-		*toolName,
-		schema,
-		*resultPath,
-		os.Stdin,
-		os.Stdout,
-	); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
 	}
 }
 
@@ -650,7 +608,6 @@ commands:
   journal append --entry <text>     serialized append to the daily notebook journal
   open <file.md|seed-id> [--session <id>]   show a document in attn
   browser <command>                 open and control the in-app browser
-  workflow <command>                run, inspect, and resume durable workflows
   automation <command>              manage and run durable automations
   preflight                         diagnose tools, paths, routing, and launch settings
   pr <command>                      watch or inspect pull request readiness
@@ -2092,7 +2049,6 @@ func runAgentDirectly(requestedAgent string) {
 		opts.CrewPriming = protocol.Deref(prime.Guidance)
 		opts.AwarenessDirs = prime.AwarenessDirs
 	}
-	opts.InjectWorkflowGuidance = consumeOneShotBoolEnv("ATTN_WORKFLOW_GUIDANCE_ENABLED")
 	opts.AutoApprove = consumeOneShotBoolEnv("ATTN_AUTO_APPROVE")
 	opts.TrustWorkingDirectory = consumeOneShotBoolEnv("ATTN_TRUST_WORKING_DIRECTORY")
 	opts.Model = consumeOneShotEnv("ATTN_MODEL")

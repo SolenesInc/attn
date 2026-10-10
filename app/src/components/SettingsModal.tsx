@@ -16,7 +16,6 @@ import {
   PluginSettings,
   SectionStatusPills,
   TerminalSettings,
-  WorkflowsSettings,
   DesktopSettings,
 } from './SettingsModalSections';
 import { SettingsModalHandle, SettingsModalProps } from './settingsModalShared';
@@ -297,13 +296,6 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
       );
     case 'delegation':
       return <DelegationSettings policy={delegationPolicy} loadModels={sendHarnessModels} />;
-    case 'workflows':
-      return (
-        <WorkflowsSettings
-          handleToggleWorkflows={state.handleToggleWorkflows}
-          workflowsEnabled={state.workflowsEnabled}
-        />
-      );
     case 'autoMode':
       return <AutoModeSettings policy={autoModePolicy} loadModels={sendHarnessModels} />;
     case 'connectivity':

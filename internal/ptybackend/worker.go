@@ -641,7 +641,6 @@ func (b *WorkerBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 	}
 	workerEnv := withoutEnvironmentKeys(os.Environ(),
 		"ATTN_PTY_WORKER",
-		"ATTN_WORKFLOW_GUIDANCE_ENABLED",
 		"ATTN_AUTO_APPROVE",
 		"ATTN_TRUST_WORKING_DIRECTORY",
 		"ATTN_MODEL",
@@ -652,9 +651,6 @@ func (b *WorkerBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 		"ATTN_PTY_DAEMON_ENV",
 	)
 	workerEnv = append(workerEnv, "ATTN_PTY_WORKER=1")
-	if opts.WorkflowGuidanceEnabled {
-		workerEnv = append(workerEnv, "ATTN_WORKFLOW_GUIDANCE_ENABLED=1")
-	}
 	if opts.AutoApprove {
 		workerEnv = append(workerEnv, "ATTN_AUTO_APPROVE=1")
 	}

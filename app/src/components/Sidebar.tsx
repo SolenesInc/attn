@@ -115,5 +115,4 @@ export {
   MarkdownIcon,
   NotebookIcon,
   PRsIcon,
-  WorkflowIcon,
 } from './SidebarIcons';

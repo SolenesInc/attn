@@ -50,8 +50,6 @@ type SpawnOptions struct {
 
 	LoginShellEnv []string
 
-	WorkflowGuidanceEnabled bool
-
 	AutoApprove           bool
 	ApprovalRoute         launchcontract.ApprovalRoute
 	TrustWorkingDirectory bool

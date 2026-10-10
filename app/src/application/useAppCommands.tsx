@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useToast } from '../components/Toast';
 import type { PaletteCommand } from '../components/palette/paletteCommands';
-import { EditorIcon, NotebookIcon, WorkflowIcon } from '../components/Sidebar';
+import { EditorIcon, NotebookIcon } from '../components/Sidebar';
 import { SessionRoleIcon } from '../components/DelegationChain';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { shortcutTokens } from '../shortcuts/formatShortcut';
@@ -39,8 +39,8 @@ import {
   KeyboardActionIcon,
   NotificationsBellIcon,
 } from './AppIcons';
+import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 import { useOpenInEditor } from './useOpenInEditor';
-import { useAgentOnScreen, useSessionBehindScreen } from '../hooks/useDesktopSelectionBridge';
 
 export function useAppCommands(): PaletteCommand[] {
   const seeds = useDaemonStore((state) => state.seeds);
@@ -71,7 +71,6 @@ export function useAppCommands(): PaletteCommand[] {
   const { sendSetSetting, sendDesktopSetOrder } = useDaemonApi();
   const { showAction, showError } = useToast();
   const { handleCreateDiagnosticReport } = useAppDiagnosticsContext();
-  const contextSessionId = useSessionBehindScreen();
   const agentOnScreenId = useAgentOnScreen();
   const { handleReloadSession, handleRequestCloseDesktop } = useSessionLifecycleContext();
   const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
@@ -95,7 +94,6 @@ export function useAppCommands(): PaletteCommand[] {
     setShortcutsOpen,
     setSettingsOpen,
     toggleDockPanel,
-    workflowRunPanelOpen,
     automationsPanelOpen,
     notificationsPanelOpen,
     toggleNotificationsPanel,
@@ -258,17 +256,6 @@ export function useAppCommands(): PaletteCommand[] {
             run: openActiveSessionInEditor,
           }]
         : []),
-      ...(contextSessionId
-        ? [
-            {
-              id: 'workflow-runs',
-              title: workflowRunPanelOpen ? 'Hide workflow runs' : 'Show workflow runs',
-              keywords: ['workflow', 'runs', 'agents', 'panel'],
-              icon: <WorkflowIcon />,
-              run: () => toggleDockPanel('workflowRun'),
-            },
-          ]
-        : []),
       {
         id: 'notebook',
         title: 'Open the notebook',
@@ -319,7 +306,6 @@ export function useAppCommands(): PaletteCommand[] {
     return commands;
   }, [
     agentOnScreenId,
-    contextSessionId,
     automationsPanelOpen,
     desktopNavigation,
     desktops,
@@ -350,7 +336,6 @@ export function useAppCommands(): PaletteCommand[] {
     toggleNotificationsPanel,
     toggleSidebarCollapse,
     whatsNew.open,
-    workflowRunPanelOpen,
   ]);
   const actionMenuItems = useMemo<PaletteCommand[]>(
     () => [

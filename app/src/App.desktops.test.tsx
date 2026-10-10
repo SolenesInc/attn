@@ -38,7 +38,6 @@ vi.mock('./components/GhosttyTerminal', async () => {
 
 vi.mock('./components/Sidebar', () => ({
   EditorIcon: () => null,
-  WorkflowIcon: () => null,
   DiffIcon: () => null,
   PRsIcon: () => null,
   NotebookIcon: () => null,
@@ -251,7 +250,6 @@ describe('desktop surface', () => {
       desktopTileContents: {},
       sendGetFileDiff: vi.fn(async () => ({ success: true, original: '', modified: '' })),
       getRepoInfo: vi.fn(async () => ({ success: true, is_git_repo: true, branch: 'main' })),
-      listWorkflowRuns: vi.fn(async () => ({ success: true, runs: [] })),
       getPresentations: vi.fn(async () => []),
       connectionError: null,
       hasReceivedInitialState: true,

@@ -24,7 +24,7 @@ func TestAClientThatFallsBehindIsDroppedWithoutItsBacklogAndToldWhyOnce(t *testi
 		stalled := evictionStalledClient(t, w, "fell-behind")
 
 		for i := range 300 {
-			setSetting(t, app, "workflows_enabled", strconv.FormatBool(i%2 == 0))
+			setSetting(t, app, "queue_crew_enabled", strconv.FormatBool(i%2 == 0))
 		}
 		w.advance(2 * time.Second)
 

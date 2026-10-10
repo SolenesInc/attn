@@ -79,20 +79,6 @@ enum GitOperationStatus {
   failed,
 }
 
-enum WorkflowRunStatus {
-  running,
-  completed,
-  failed,
-  canceled,
-}
-
-enum WorkflowAgentCallStatus {
-  running,
-  ok,
-  skipped,
-  errored,
-}
-
 // ============================================================================
 // Core Entities
 // ============================================================================
@@ -1810,32 +1796,6 @@ model GetRepoInfoMessage {
   cmd: "get_repo_info";
   repo: string;
   endpoint_id?: string;
-}
-
-model WorkflowRunUpsertMessage {
-  cmd: "workflow_run_upsert";
-  run: WorkflowRun;
-}
-
-model WorkflowCallUpsertMessage {
-  cmd: "workflow_call_upsert";
-  run_id: string;
-  call: WorkflowAgentCall;
-}
-
-model WorkflowRunGetMessage {
-  cmd: "workflow_run_get";
-  run_id: string;
-}
-
-model WorkflowRunListMessage {
-  cmd: "workflow_run_list";
-  session_id?: SessionID;
-}
-
-model WorkflowRunCancelMessage {
-  cmd: "workflow_run_cancel";
-  run_id: string;
 }
 
 // Dual-surface (unix-socket/CLI `attn automation apply` + WS, the app
@@ -3664,42 +3624,6 @@ model GetRepoInfoResultMessage {
   error?: string;
 }
 
-model WorkflowAgentCall {
-  run_id: string;
-  ordinal: string;
-  label?: string;
-  phase?: string;
-  prompt_hash?: string;
-  schema_hash?: string;
-  resolved_model?: string;
-  resolved_harness?: string;
-  agent_type?: string;
-  result_json?: string;
-  status: WorkflowAgentCallStatus;
-  error?: string;
-  result_path?: string;
-  started_at?: string;
-  completed_at?: string;
-}
-
-model WorkflowRun {
-  run_id: string;
-  script_path: string;
-  script_hash: string;
-  args_json?: string;
-  session_id?: SessionID;
-  status: WorkflowRunStatus;
-  phase?: string;
-  harness?: string;
-  result_json?: string;
-  last_error?: string;
-  resumable: boolean;
-  created_at: string;
-  updated_at: string;
-  completed_at?: string;
-  agent_calls?: WorkflowAgentCall[];
-}
-
 model ReviewComment {
   id: string;
   review_id: string;
@@ -3712,21 +3636,6 @@ model ReviewComment {
   resolved_by?: string;  // "user" or "agent" (empty if not resolved)
   resolved_at?: string;  // ISO timestamp (empty if not resolved)
   created_at: string;    // ISO timestamp
-}
-
-model WorkflowRunUpdatedMessage {
-  event: "workflow_run_updated";
-  run: WorkflowRun;
-}
-
-model WorkflowActionResultMessage {
-  event: "workflow_action_result";
-  action: string;
-  run_id?: string;
-  run?: WorkflowRun;
-  runs?: WorkflowRun[];
-  success: boolean;
-  error?: string;
 }
 
 // Compact automations summaries for the WS surface. Canonical state (full
@@ -7254,8 +7163,6 @@ alias DaemonEvent =
   | GitStatusUpdateMessage
   | FileDiffResultMessage
   | GetRepoInfoResultMessage
-  | WorkflowRunUpdatedMessage
-  | WorkflowActionResultMessage
   | AutomationApplyResultMessage
   | AutomationValidateResultMessage
   | AutomationDefinitionsResultMessage

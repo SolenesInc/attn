@@ -99,13 +99,6 @@ func tailString(s string, limit int) string {
 	return "…(truncated) " + s[len(s)-limit:]
 }
 
-func headlessToolNames(toolName string) []string {
-	if name := strings.TrimSpace(toolName); name != "" {
-		return []string{name}
-	}
-	return []string{"read_context", "replace_context"}
-}
-
 func headlessTempDir(workDir string) string {
 	if dir := strings.TrimSpace(workDir); dir != "" {
 		if info, err := os.Stat(dir); err == nil && info.IsDir() {

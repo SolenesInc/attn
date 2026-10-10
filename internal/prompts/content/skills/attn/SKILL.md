@@ -1,6 +1,6 @@
 ---
 name: attn
-description: "Operate attn capabilities from an agent, including user-steered delegations and the user's delegation roles, the garden, workflows, the Notebook, Present reviews, markdown, and the in-app browser. Use when the user explicitly asks for an attn capability or delegation, or when acting as attn's chief of staff. Do not use merely because a task could benefit from delegation, parallel agents, or a background terminal."
+description: "Operate attn capabilities from an agent, including user-steered delegations and the user's delegation roles, the garden, the Notebook, Present reviews, markdown, and the in-app browser. Use when the user explicitly asks for an attn capability or delegation, or when acting as attn's chief of staff. Do not use merely because a task could benefit from delegation, parallel agents, or a background terminal."
 ---
 
 # attn
@@ -18,7 +18,7 @@ Every attn-launched process puts its active attn binary first on `PATH`, so use
 bare `attn` for normal commands.
 
 The installed binary is the authority for command syntax. Discover commands with
-`attn --help` and each group's own help (`attn seed`, `attn workflow`,
+`attn --help` and each group's own help (`attn seed`,
 `attn browser`, `attn delegate --help`); this skill's references carry the rules
 and concepts, not the flags. Never run `attn` with no command to explore — it
 launches or attaches a session — and never probe a mutating command by omitting
@@ -52,9 +52,6 @@ For delegation mechanics and configured role selection, read [references/delegat
   a good seed body, artifacts:** read [references/garden.md](references/garden.md).
 - **Read or maintain the durable Notebook (journal + knowledge base), esp. as
   chief of staff:** read [references/notebook.md](references/notebook.md).
-- **Run a durable, resumable multi-agent workflow — a script that runs headless
-  workflow agents with fan-out/pipeline, journaled and observable via `attn workflow
-  run`:** read [references/workflow.md](references/workflow.md).
 - **Show the user a markdown document:** read
   [references/markdown.md](references/markdown.md).
 - **Present a change for a guided review — author a manifest, open it, or

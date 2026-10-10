@@ -155,9 +155,6 @@ func (c *Copilot) Classify(text string, timeout time.Duration) (string, error) {
 func (c *Copilot) HeadlessTasksAreToolFreeOnly() bool { return true }
 
 func (c *Copilot) RunHeadlessTask(ctx context.Context, request HeadlessTaskRequest) (HeadlessTaskResult, error) {
-	if !request.usesNativeToolsPath() {
-		return HeadlessTaskResult{}, errors.New("copilot headless tasks support only the native tool-free path")
-	}
 	if !request.DisableTools || len(request.AllowedTools) > 0 || len(request.ExtraWritableRoots) > 0 {
 		return HeadlessTaskResult{}, errors.New("copilot headless tasks require tools to be disabled")
 	}
