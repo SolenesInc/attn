@@ -464,8 +464,7 @@ func (s *Session) observeSignals(programReports []ghosttyvt.ProgramStatus, data 
 	s.signalMu.Lock()
 	defer s.signalMu.Unlock()
 	now := time.Now()
-	records := s.programStatus.Observe(programReports, now)
-	for _, obs := range records {
+	for _, obs := range s.programStatus.Observe(programReports, now) {
 		s.emitSignal(obs)
 	}
 	if s.harnessSignals != nil {
@@ -478,7 +477,7 @@ func (s *Session) observeSignals(programReports []ghosttyvt.ProgramStatus, data 
 	}
 	if s.shellSignals != nil {
 		for _, obs := range s.shellSignals.ObserveOutput(data, now) {
-			s.emitShellSignal(obs, len(records) > 0)
+			s.emitShellSignal(obs)
 		}
 	}
 }

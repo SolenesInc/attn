@@ -40,7 +40,7 @@ func TestAProgramInAShellTileReportsItsStateUntilTheShellPromptReturns(t *testin
 				}
 			}
 
-			app.TypeLine(shell, `printf '\033]133;D;0\007\033]7501;state=blocked:kind=permission:msg=deploy?\033\\'; cat `+answered)
+			app.TypeLine(shell, `sh -c "printf '\033]133;D;0\007\033]7501;state=blocked:kind=permission:msg=deploy?\007'; cat `+answered+`"`)
 			asking := testworld.AwaitSession(app, shell, func(x protocol.Session) bool { return x.State != protocol.SessionStateIdle })
 			if asking.State != protocol.SessionStatePendingApproval {
 				t.Fatalf("while a program in the shell reports a permission prompt, in the same output as the previous command's end, the tile is %s (%s), want pending_approval",

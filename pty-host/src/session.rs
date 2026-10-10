@@ -1200,12 +1200,12 @@ impl Session {
             .signal_order
             .lock()
             .expect("signal order mutex poisoned");
-        let observations = self
-            .model
-            .lock()
-            .expect("model mutex poisoned")
-            .signals
-            .observe_shell_poll(self.child_pid, foreground);
+        let observations = {
+            let mut model = self.model.lock().expect("model mutex poisoned");
+            let cleared = model.signals.follow_foreground(self.child_pid, foreground);
+            let heartbeat = model.signals.observe_shell_poll(self.child_pid, foreground);
+            cleared.into_iter().chain(heartbeat).collect::<Vec<_>>()
+        };
         for observation in observations {
             self.publish_state(observation.claim, &observation.detail, observation.source);
         }

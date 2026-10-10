@@ -53,6 +53,12 @@ func (a *shellSignalArbiter) ObservePoll(fgPgid int, now time.Time) (Observation
 	return a.emit(claim, detail, now)
 }
 
+func (a *shellSignalArbiter) forgetLastClaim() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.lastClaim = ""
+}
+
 func (a *shellSignalArbiter) ObserveOutput(chunk []byte, now time.Time) []Observation {
 	if a == nil || len(chunk) == 0 {
 		return nil
@@ -135,23 +141,29 @@ func (s *Session) runShellForegroundPoller(interval time.Duration) {
 			if !ok {
 				continue
 			}
-			s.signalMu.Lock()
-			if obs, ok := s.shellSignals.ObservePoll(fgPgid, time.Now()); ok {
-				s.emitShellSignal(obs, false)
-			}
-			s.signalMu.Unlock()
+			s.observeForeground(fgPgid)
 		}
 	}
 }
 
-func (s *Session) emitShellSignal(obs Observation, recordInSameOutput bool) {
-	if s.programStatus.held() {
-		if obs.Claim != claimNotBusy || recordInSameOutput {
-			return
-		}
-		s.emitSignal(s.programStatus.release(obs.At))
+func (s *Session) observeForeground(fgPgid int) {
+	s.signalMu.Lock()
+	defer s.signalMu.Unlock()
+	now := time.Now()
+	cleared, dropped := s.programStatus.followForeground(fgPgid, s.shellSignals.shellPgid, now)
+	if dropped {
+		s.emitSignal(cleared)
+		s.shellSignals.forgetLastClaim()
 	}
-	s.emitSignal(obs)
+	if obs, ok := s.shellSignals.ObservePoll(fgPgid, now); ok {
+		s.emitShellSignal(obs)
+	}
+}
+
+func (s *Session) emitShellSignal(obs Observation) {
+	if !s.programStatus.held() {
+		s.emitSignal(obs)
+	}
 }
 
 func (s *Session) childProcessGroup() int {
