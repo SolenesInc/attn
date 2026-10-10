@@ -1,0 +1,3 @@
+kind: internal
+area: delegation
+change: The delegation restart stack tests wait until the delegation's pane is placed before restarting the daemon, so they no longer fail when the agent boots before its terminal finishes spawning.
