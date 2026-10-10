@@ -83,7 +83,7 @@ export function useAppSessions({
   );
 
   const selectedProfileChiefId = daemonSessions.find(
-    (session) => session.chief_of_staff === true && session.profile_id === selectedProfileId,
+    (session) => session.chief === true && session.profile_id === selectedProfileId,
   )?.id;
   const notebookChiefSession = enrichedLocalSessions.find((session) => session.id === selectedProfileChiefId);
   const notebookChiefActive = notebookChiefSession

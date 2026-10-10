@@ -302,8 +302,7 @@ export function useAppController({
   });
   const { diagnosticCapture, setDiagnosticCapture, paletteOriginRef } = appDiagnostics;
 
-  const chiefOfStaff = useChiefOfStaff({ enrichedLocalSessions, daemonSessions, showError });
-  const { chiefTransferTarget, setChiefTransferTarget } = chiefOfStaff;
+  const chiefOfStaff = useChiefOfStaff({ daemonSessions });
 
   const [contextCapPromptSession, setContextCapPromptSession] = useState<{
     id: string;
@@ -330,7 +329,6 @@ export function useAppController({
     closeLocationPicker();
     setSnoozeMenu(null);
     delegationChainRef.current?.dismiss();
-    setChiefTransferTarget(null);
     setContextCapPromptSession(null);
     setSessionCreationJob(null);
     setOpenPRLauncherJob(null);
@@ -340,7 +338,7 @@ export function useAppController({
     setProfileSwitcherOpen(false);
   }), [closeCrewPanel, setNotebookOpen, setSessionsOpen, setPalette, closeGarden, gardenHoldsWindow,
     settingsOpen, settingsModalRef, setShortcutsOpen, setShortcutEditorOpen, whatsNewOpen, dismissWhatsNew,
-    closeLocationPicker, setSnoozeMenu, delegationChainRef, setChiefTransferTarget, setSessionCreationJob,
+    closeLocationPicker, setSnoozeMenu, delegationChainRef, setSessionCreationJob,
     setOpenPRLauncherJob, setDiagnosticCapture, setMarkdownOpenerOpen]);
 
   const { blockingOverlayOpen, windowCovered, paletteBlocked, appShortcutsEnabled } = appOverlayPolicy({
@@ -357,7 +355,6 @@ export function useAppController({
     notebookOpen,
     crewPanelOpen: crewPanel.open,
     gardenHoldsWindow,
-    chiefTransferOpen: Boolean(chiefTransferTarget),
     desktopCloseOpen: sessionLifecycle.desktopClosePrompt !== null,
     contextCapOpen: Boolean(contextCapPromptSession),
     sessionCreationOpen: Boolean(sessionCreationJob),

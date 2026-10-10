@@ -558,7 +558,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 	}
 	name := strings.TrimSpace(protocol.Deref(msg.Label))
 	delegatedByChief := initiatingChiefSessionID != "" ||
-		(operationID == "" && d.isChiefOfStaffSession(sourceSessionID))
+		(operationID == "" && d.sessionIsChief(sourceSessionID))
 	createdWorktreePath := ""
 	operationWorktreePath := ""
 	rollback := d.newDelegationRollback()

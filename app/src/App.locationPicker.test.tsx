@@ -398,47 +398,6 @@ describe('App location picker', () => {
     });
   });
 
-  describe('launching as chief of staff', () => {
-    const chiefToggle = () => screen.queryByTestId('location-picker-chief-toggle');
-
-    it('offers the chief toggle only for a claude session while no chief exists', async () => {
-      const { daemon } = await openPicker();
-      expect(chiefToggle()).not.toBeNull();
-      await gesture(daemon, () => fireEvent.click(radio(/terminal/i)));
-      expect(chiefToggle()).toBeNull();
-
-      await openPicker({}, { sessions: [daemonSession('chief', { chief_of_staff: true })], desktops: [soloDesktop('chief')] });
-      expect(chiefToggle()).toBeNull();
-    });
-
-    it('waits for the daemon’s Chief discovery result past the server launch budget', async () => {
-      const { daemon } = await openPicker();
-      let held: CommandMessage<'spawn_session'> | undefined;
-      daemon.on('spawn_session', request => { held = request; });
-      await gesture(daemon, () => fireEvent.click(chiefToggle()!));
-      await submitPath(daemon, '/tmp/chief');
-      expect(held).toMatchObject({ chief_of_staff: true });
-      await act(() => vi.advanceTimersByTimeAsync(30000));
-      await daemon.idle();
-      expect(screen.queryByText('Spawn session timed out')).toBeNull();
-      await gesture(daemon, () => daemon.emit({ event: 'spawn_result', id: held!.id, success: false, error: 'Chief discovery exhausted its launch budget' }));
-      expect(screen.getByText('Chief discovery exhausted its launch budget')).toBeInTheDocument();
-    });
-
-    it('launches as chief only when the toggle is on', async () => {
-      const { daemon } = await openPicker();
-      await submitPath(daemon, '/tmp/plain');
-      await gesture(daemon, () => pressShortcut('session.new'));
-      await gesture(daemon, () => fireEvent.click(chiefToggle()!));
-      await submitPath(daemon, '/tmp/chief');
-
-      expect(launchedAt(daemon)).toEqual([
-        { cwd: '/tmp/plain', agent: 'claude' },
-        { cwd: '/tmp/chief', agent: 'claude', chief_of_staff: true },
-      ]);
-    });
-  });
-
   describe('auto mode', () => {
     const AUTO_MODE_AGENT = { snipe_available: 'true', snipe_cap_auto_mode: 'true', claude_cap_auto_mode: 'false' };
     const autoModeHarnesses = [...harnesses, { id: 'snipe', name: 'Snipe', available: true, model_pin: true, effort_pin: true, discovery: false }];

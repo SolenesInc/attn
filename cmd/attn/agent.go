@@ -664,7 +664,7 @@ commands:
         A message that starts with - goes after --, as: agent msg -- <target> "-text"
   close <session-or-member-or-seed> -m "reason" [--source-session <id>] [--json]
         close a session for good. A session may close itself and the sessions it
-        dispatched; a profile's chief of staff may close any agent of that
+        dispatched; a profile's Chief may close any agent of that
         profile. The reason is required: the session row stays in the ledger,
         and the reason is what the next reader gets. It is immediate, so say
         what you have to say first. A seed id closes whoever tends it, and the

@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "id": "chief-charter",
+  "description": "Built-in charter for a new chief.",
+  "recipient": "chief",
+  "event": "charter",
+  "values": {}
+}

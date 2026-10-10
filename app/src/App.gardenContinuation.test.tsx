@@ -33,7 +33,7 @@ type Seed = typeof PARSER;
 
 async function openSeedInGarden(seed: Seed = PARSER, { chief = false } = {}) {
   const sessions = [daemonSession('s1', { state: 'idle' }), daemonSession('tender', { state: 'idle' })];
-  if (chief) sessions.push(daemonSession('chief', { chief_of_staff: true }));
+  if (chief) sessions.push(daemonSession('chief', { chief: true }));
   const garden = await renderGarden([seed], { sessions });
   const { daemon } = garden;
   let heldFrom = 0;

@@ -18,10 +18,7 @@ func TestLegacyUnplacedTerminalSurvivesBindingMigration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	profile, err := legacy.MostRecentlyUsedProfile()
-	if err != nil {
-		t.Fatal(err)
-	}
+	profile := migrationFixtureProfile(t, legacy, "")
 	desktop, err := legacy.GetDesktop(profile.CurrentDesktopID)
 	if err != nil {
 		t.Fatal(err)
@@ -97,10 +94,7 @@ func TestSeveralLegacyTerminalTilesSurviveBindingMigration(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			profile, err := legacy.MostRecentlyUsedProfile()
-			if err != nil {
-				t.Fatal(err)
-			}
+			profile := migrationFixtureProfile(t, legacy, "")
 			desktop, err := legacy.GetDesktop(profile.CurrentDesktopID)
 			if err != nil {
 				t.Fatal(err)

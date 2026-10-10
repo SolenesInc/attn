@@ -17,7 +17,6 @@ export interface PtySpawnArgs {
   yolo_mode?: boolean | null;
   /** Tri-state: absent follows the promoted auto mode default. */
   auto_mode?: boolean;
-  chief_of_staff?: boolean | null;
   /** The session this one was split from. Only meaningful for a shell: the daemon
    * resolves it to the owning agent and stores that as the satellite's parent. */
   spawned_from?: string;

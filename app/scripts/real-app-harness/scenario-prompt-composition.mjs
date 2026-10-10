@@ -42,7 +42,7 @@ async function main() {
   const instance = currentHarnessInstance();
   if (!instance) throw new Error('Prompt verification requires a named instance');
   const resources = resolveHarnessResources(instance);
-  const env = instanceCliEnv(instance);
+  const env = { ...instanceCliEnv(instance), ATTN_WRAPPER_PATH: resources.appDaemon };
   const cli = args => execFileSync(resources.appDaemon, args, { env, encoding: 'utf8', timeout: 30_000 });
   const client = new UiAutomationClient(options);
   const observer = new DaemonObserver(options);
@@ -78,7 +78,9 @@ async function main() {
             { type: 'reply', text: 'PEER_READ', state: 'idle' },
           ],
         }] });
-        const result = await client.request('create_session', { cwd, label: name, agent, chief_of_staff: chief });
+        const result = chief
+          ? { sessionId: (JSON.parse(cli(['crew', 'set', 'chief', '--agent', agent, '--model', 'gpt-6.1-sol', '--cwd', cwd, '--json'])).binding_session || JSON.parse(cli(['crew', 'wake', 'chief', '--json'])).session_id) }
+          : await client.request('create_session', { cwd, label: name, agent });
         sessions.push(result.sessionId);
         await observer.waitForSession({ id: result.sessionId });
         await waitForFirstDesktopPane(client, result.sessionId, name, 20_000);
@@ -86,7 +88,7 @@ async function main() {
         const text = instructions(captured.text, agent);
         runner.writeText(`${name}-launch.jsonl`, captured.text);
         runner.assert(text.includes('Track work that outlives this turn in seeds'), 'launch carries Garden instructions', { name });
-        runner.assert(text.includes('You are the chief of staff of your profile.') === chief, 'chief branch matches session role', { name });
+        runner.assert(text.includes("You are this profile's Chief") === chief, 'chief branch matches session role', { name });
         launches.push({ id: result.sessionId, cwd });
       });
     }

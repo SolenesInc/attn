@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/victorarias/attn/internal/bus"
@@ -368,6 +369,9 @@ func (d *Daemon) handleProfileCreate(client *wsClient, msg *protocol.ProfileCrea
 			return profileActionOutcome{}, err
 		}
 		profile, desktop, err := d.store.CreateProfile(name, root)
+		if err == nil {
+			err = d.ensureChief(profile.ID, nil)
+		}
 		return profileActionOutcome{profile: &profile, desktops: []profiles.Desktop{desktop}, publish: func() {
 			d.publishFact(FactProfileCreated, profile.ID, nil)
 		}}, err
@@ -395,14 +399,32 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 		}
 		members := 0
 		for _, member := range roster {
-			if !member.Retired {
+			if !member.Retired && !d.isChief(member.Key) {
 				members++
 			}
+		}
+		chief, err := d.chief(msg.ProfileID)
+		if err != nil {
+			return profileActionOutcome{}, err
+		}
+		member, _, err := d.crewMember(chief)
+		if err != nil {
+			return profileActionOutcome{}, err
+		}
+		if d.crewBindingLive(member) {
+			return profileActionOutcome{}, fmt.Errorf("put the chief to sleep first: attn crew sleep chief")
 		}
 		d.automationMu.Lock()
 		deleted, err := d.store.DeleteProfile(msg.ProfileID, int64(msg.ExpectedRevision), remote, members)
 		d.automationMu.Unlock()
 		if err != nil {
+			return profileActionOutcome{}, err
+		}
+		identity, err := d.store.CrewIdentity(chief)
+		if err != nil {
+			return profileActionOutcome{}, err
+		}
+		if _, err := d.retireCrewMember(identity); err != nil {
 			return profileActionOutcome{}, err
 		}
 		d.pruneNotebookRoots()

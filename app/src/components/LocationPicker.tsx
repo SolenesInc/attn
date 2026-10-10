@@ -87,7 +87,6 @@ interface LocationPickerProps {
     agent: SessionAgent,
     endpointId?: string,
     yoloMode?: boolean,
-    chiefOfStaff?: boolean,
     autoMode?: boolean,
   ) => void;
   onGetRecentLocations?: (endpointId?: string) => Promise<{ locations: RecentLocation[]; home_path?: string }>;
@@ -95,13 +94,12 @@ interface LocationPickerProps {
   onInspectPath?: (path: string, endpointId?: string) => Promise<InspectPathResult>;
   onGetRepoInfo?: (mainRepo: string, endpointId?: string) => Promise<{ success: boolean; info?: BackendRepoInfo; error?: string }>;
   onCreateWorktree?: (mainRepo: string, branch: string, path?: string, startingFrom?: string, endpointId?: string) => Promise<{ success: boolean; path?: string; error?: string }>;
-  onCreateWorktreeSession?: (mainRepo: string, branch: string, startingFrom: string, endpointId: string | undefined, agent: SessionAgent, yoloMode: boolean, autoMode?: boolean, chiefOfStaff?: boolean) => void;
+  onCreateWorktreeSession?: (mainRepo: string, branch: string, startingFrom: string, endpointId: string | undefined, agent: SessionAgent, yoloMode: boolean, autoMode?: boolean) => void;
   onDeleteWorktree?: (path: string, endpointId?: string, options?: { force?: boolean }) => Promise<{ success: boolean; error?: string }>;
   onError?: (message: string) => void;
   projectsDirectory?: string;
   agentAvailability?: AgentAvailability;
   endpoints?: DaemonEndpoint[];
-  chiefExists?: boolean;
 }
 
 const MAX_RECENT_LOCATIONS = 10;
@@ -245,7 +243,6 @@ export function LocationPicker({
   projectsDirectory,
   agentAvailability,
   endpoints = [],
-  chiefExists = false,
 }: LocationPickerProps) {
   const { settings, setSetting } = useSettings();
   const localAgentAvailability = agentAvailability || DEFAULT_AGENT_AVAILABILITY;
@@ -273,7 +270,6 @@ export function LocationPicker({
   const [agent, setAgent] = useState<SessionAgent>('claude');
   const [targetId, setTargetId] = useState(LOCAL_TARGET);
   const [yoloMode, setYoloMode] = useState(false);
-  const [chiefOfStaff, setChiefOfStaff] = useState(false);
   const [autoMode, setAutoMode] = useState(true);
   const autoModeTouchedRef = useRef(false);
   const [repoRootPath, setRepoRootPath] = useState<string | null>(null);
@@ -408,7 +404,6 @@ export function LocationPicker({
   const autoModeSupported = Boolean(agentCapabilities[agent]?.[AUTOMODE_CAPABILITY]);
   const autoModeDefault = parseBooleanSetting(settings[AUTOMODE_DEFAULT_KEY]) ?? true;
   // The agent gate matches the daemon's agentSupportsChiefReload.
-  const chiefToggleEligible = !chiefExists && !pathOnly && (agent === 'claude' || agent === 'codex');
 
   const invalidateRequestGeneration = useCallback(() => {
     requestGenerationRef.current += 1;
@@ -454,12 +449,6 @@ export function LocationPicker({
       setYoloMode(false);
     }
   }, [yoloSupported]);
-
-  useEffect(() => {
-    if (!chiefToggleEligible) {
-      setChiefOfStaff(false);
-    }
-  }, [chiefToggleEligible]);
 
   useEffect(() => {
     if (autoModeTouchedRef.current) return;
@@ -597,7 +586,6 @@ export function LocationPicker({
       selectedAgent,
       selectedEndpointId,
       yoloMode && yoloSupported,
-      chiefOfStaff && chiefToggleEligible,
       autoModeSupported ? autoMode : undefined,
     );
     onClose();
@@ -605,8 +593,6 @@ export function LocationPicker({
     agent,
     autoMode,
     autoModeSupported,
-    chiefOfStaff,
-    chiefToggleEligible,
     effectiveAgentAvailability,
     onClose,
     onSelect,
@@ -833,7 +819,6 @@ export function LocationPicker({
         selectedAgent,
         yoloMode && yoloSupported,
         autoModeSupported ? autoMode : undefined,
-        chiefOfStaff && chiefToggleEligible,
       );
       onClose();
       return;
@@ -873,8 +858,6 @@ export function LocationPicker({
     agent,
     autoMode,
     autoModeSupported,
-    chiefOfStaff,
-    chiefToggleEligible,
     effectiveAgentAvailability,
     selectedEndpointId,
     setSelectedPathFromPhysical,
@@ -1055,27 +1038,6 @@ export function LocationPicker({
                 title="Judge calls that reach outside this session's directory against what the conversation asked for, instead of running everything"
               >
                 <span className="agent-option-name">{autoMode ? 'On' : 'Off'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {chiefToggleEligible && (
-        <div className="picker-chief-bar">
-          <div className="picker-agent-label">CHIEF OF STAFF</div>
-          <div className="picker-chief-controls">
-            <div className="agent-toggle">
-              <button
-                type="button"
-                className={`agent-option ${chiefOfStaff ? 'active' : ''}`}
-                data-testid="location-picker-chief-toggle"
-                role="switch"
-                aria-checked={chiefOfStaff}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setChiefOfStaff((prev) => !prev)}
-                title="Launch this session as the chief of staff — it runs the notebook and delegates work to other sessions"
-              >
-                <span className="agent-option-name">{chiefOfStaff ? 'On' : 'Off'}</span>
               </button>
             </div>
           </div>

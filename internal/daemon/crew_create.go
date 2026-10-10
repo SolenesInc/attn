@@ -25,6 +25,7 @@ type crewBirth struct {
 	Effort         string
 	CWD            string
 	Desktop        *store.LaunchDesktopSetting
+	Onboarded      bool
 }
 
 func (d *Daemon) createCrewMember(b crewBirth) (store.CrewIdentity, error) {
@@ -51,9 +52,16 @@ func (d *Daemon) createCrewMember(b crewBirth) (store.CrewIdentity, error) {
 
 func (d *Daemon) furnishCrewMember(id store.CrewIdentity, b crewBirth) error {
 	home := filepath.Join(d.dataRoot, crew.HomesDirName, id.ProfileID, id.Key.String())
-	member := crew.Member{Key: id.Key, HomeDir: home, CharterPath: filepath.Join(home, crew.CharterFileName), AwarenessDirs: []string{}}
-	if err := d.applyCrewSettings(&member, &protocol.CrewSetMessage{Agent: protocol.Ptr(b.Agent), Model: protocol.Ptr(b.Model), Effort: protocol.Ptr(b.Effort), Cwd: protocol.Ptr(b.CWD)}); err != nil {
-		return err
+	member := crew.Member{Onboarded: b.Onboarded, Key: id.Key, HomeDir: home, CharterPath: filepath.Join(home, crew.CharterFileName), AwarenessDirs: []string{}}
+	if b.insertIdentity {
+		if err := d.applyCrewSettings(&member, &protocol.CrewSetMessage{Agent: protocol.Ptr(b.Agent), Model: protocol.Ptr(b.Model), Effort: protocol.Ptr(b.Effort), Cwd: protocol.Ptr(b.CWD)}); err != nil {
+			return err
+		}
+	} else {
+		member.Agent = b.Agent
+		member.Model = b.Model
+		member.Effort = b.Effort
+		member.CWD = b.CWD
 	}
 	if err := d.validateCrewMemberPaths(member); err != nil {
 		return err

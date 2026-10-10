@@ -99,7 +99,7 @@ func (d *Daemon) startDelegationForeground(msg *protocol.DelegateMessage) (*prot
 		return nil, err
 	}
 	var chiefSessionID protocol.SessionID
-	if d.isChiefOfStaffSession(protocol.Deref(msg.SourceSessionID)) {
+	if d.sessionIsChief(protocol.Deref(msg.SourceSessionID)) {
 		chiefSessionID = protocol.TrimID(protocol.Deref(msg.SourceSessionID))
 	}
 	seedID := ""

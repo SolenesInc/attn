@@ -40,7 +40,7 @@ describe('chief and crew sessions are protected from close', () => {
     ['the close action', closeFromSidebar],
     ['⌘W', pressCmdW],
   ])('no-ops %s on the chief session and shows the protected hint', async (_, close) => {
-    const { daemon } = await renderOrchestrator({ chief_of_staff: true });
+    const { daemon } = await renderOrchestrator({ chief: true });
 
     close();
 

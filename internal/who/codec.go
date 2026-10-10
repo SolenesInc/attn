@@ -31,8 +31,6 @@ func parse(text string) (ref, error) {
 		return ref{member, key.String()}, nil
 	case "seed":
 		return ref{tenderOf, id}, nil
-	case "chief":
-		return ref{chiefOf, id}, nil
 	}
 	return ref{}, fmt.Errorf("invalid who reference %q", text)
 }
@@ -48,7 +46,7 @@ func ParseParty(text string) (Party, error) {
 }
 func ParseActor(text string) (Actor, error) {
 	r, err := parse(text)
-	if err == nil && (r.kind == tenderOf || r.kind == chiefOf) {
+	if err == nil && r.kind == tenderOf {
 		err = fmt.Errorf("%q is not an actor", text)
 	}
 	if err != nil {
@@ -74,8 +72,6 @@ func (r ref) String() string {
 		return "member:" + r.id
 	case tenderOf:
 		return "seed:" + r.id
-	case chiefOf:
-		return "chief:" + r.id
 	case user:
 		return "user"
 	case attn:

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -12,6 +11,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/protocol"
@@ -31,8 +32,10 @@ const HomesDirName = "crew"
 const CharterFileName = "CHARTER.md"
 
 const DefaultAgent = "claude"
+const ChiefName = "Chief"
 
 type Member struct {
+	Onboarded      bool               `json:"onboarded,omitempty"`
 	Key            who.MemberKey      `json:"-"`
 	CharterPath    string             `json:"charter_path"`
 	HomeDir        string             `json:"home_dir"`

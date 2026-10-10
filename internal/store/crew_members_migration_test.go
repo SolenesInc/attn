@@ -19,7 +19,8 @@ func TestCrewIdentityMigrationPreservesKeysAndOpenBindings(t *testing.T) {
 				t.Fatal(err)
 			}
 			if declared {
-				p, err := old.MostRecentlyUsedProfile()
+				var p struct{ ID string }
+				err := old.db.QueryRow("SELECT id FROM profiles ORDER BY created_at LIMIT 1").Scan(&p.ID)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -54,7 +55,7 @@ func TestCrewIdentityMigrationPreservesKeysAndOpenBindings(t *testing.T) {
 			if err := old.Close(); err != nil {
 				t.Fatal(err)
 			}
-			upgraded, err := NewWithDB(path)
+			upgraded, err := newStoreAtVersion(path, 1791645298598165-1)
 			if err != nil {
 				t.Fatal(err)
 			}

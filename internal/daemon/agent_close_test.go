@@ -166,7 +166,7 @@ func TestAgentCloseLetsTheChiefCloseASessionOnAnotherEndpoint(t *testing.T) {
 	if !resp.Ok || resp.AgentCloseResult == nil {
 		t.Fatalf("close refused with %s, want the chief's authority to cross the endpoint", agentCloseFailure(resp))
 	}
-	if rule := resp.AgentCloseResult.Rule; rule != protocol.AgentCloseRuleChiefOfStaff {
+	if rule := resp.AgentCloseResult.Rule; rule != protocol.AgentCloseRuleChief {
 		t.Errorf("rule = %q, want chief_of_staff", rule)
 	}
 }
