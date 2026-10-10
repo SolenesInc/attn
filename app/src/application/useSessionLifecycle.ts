@@ -37,7 +37,7 @@ export function useSessionLifecycle({
   const { sendUnregisterSession, sendSessionReopen, sendDesktopClose } = useDaemonApi();
   const { closeSession, reloadSession } = useSessionStore();
   const [desktopClosePrompt, setDesktopClosePrompt] = useState<{
-    desktop: Desktop; label: string; agents: number; shells: number; tiles: number;
+    desktop: Desktop; label: string;
   } | null>(null);
   const closeProtection = useCallback((desktop: Desktop) => {
     const protectedNames = desktop.panes.flatMap((pane) => {
@@ -66,15 +66,8 @@ export function useSessionLifecycle({
       void closeDesktop(desktop);
       return;
     }
-    const shells = desktop.panes.filter((pane) => daemonSessions.some(
-      (session) => session.id === pane.session_id && session.agent === 'shell',
-    )).length;
-    setDesktopClosePrompt({
-      desktop, label: desktopLabel(desktop, desktops),
-      agents: desktop.panes.length - shells, shells,
-      tiles: leaves.filter((leaf) => leaf.type === 'tile').length,
-    });
-  }, [closeProtection, closeDesktop, daemonSessions]);
+    setDesktopClosePrompt({ desktop, label: desktopLabel(desktop, desktops) });
+  }, [closeProtection, closeDesktop]);
   const confirmCloseDesktop = useCallback(() => {
     if (!desktopClosePrompt) return;
     setDesktopClosePrompt(null);

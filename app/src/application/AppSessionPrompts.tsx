@@ -45,7 +45,7 @@ export function AppSessionPrompts() {
   } = useChiefOfStaffContext();
   return (
     <>
-      {desktopClosePrompt && <DesktopClosePrompt {...desktopClosePrompt} onConfirm={confirmCloseDesktop} onCancel={cancelCloseDesktop} />}
+      {desktopClosePrompt && <DesktopClosePrompt label={desktopClosePrompt.label} onConfirm={confirmCloseDesktop} onCancel={cancelCloseDesktop} />}
       <LocationPicker
         isOpen={locationPickerOpen}
         purpose={locationPickerPurpose}

@@ -50,8 +50,8 @@ try {
     await client.request('dom_wait', { selector: `[data-testid="close-desktop-${desktop.id}"]`, timeoutMs: 5_000 });
     await client.request('dom_click', { selector: `[data-testid="close-desktop-${desktop.id}"]` });
     await client.request('dom_wait', { selector: '#desktop-close-title', timeoutMs: 5_000 });
-    const text = await client.request('dom_text', { selector: '.mp-dialog' });
-    runner.assert(text.text.includes('0 agents, 1 shell and 0 tiles'), 'confirmation counts the shell', text);
+    const text = await client.request('dom_text', { selector: '.desktop-close-prompt .mp-dialog-body' });
+    runner.assert(text.text === 'Close this desktop and everything inside it?', 'confirmation closes the desktop and its contents', text);
     await driver.screenshot(`${runner.runDir}/close-confirmation.png`, { windowId: await driver.mainWindowId() });
     const closed = observer.waitForMessage((event) => event.event === 'profile_arrangement_changed'
       && !event.desktops.some((entry) => entry.id === desktop.id) && event, 'nonempty desktop removed');

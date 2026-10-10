@@ -1,7 +1,7 @@
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { openActionMenu, openSession } from './test/appFixtures';
-import { agentPane, daemonDesktop, daemonSession, emptyDesktop, soloDesktop } from './test/daemonFixtures';
+import { agentPane, daemonDesktop, daemonSession, defaultProfile, emptyDesktop, soloDesktop } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 
 describe('close desktop', () => {
@@ -27,7 +27,7 @@ describe('close desktop', () => {
     expect(daemon.arrangement.desktops.map((desktop) => desktop.id)).not.toContain('empty');
   });
 
-  it.each(['sidebar', 'desktop palette', 'queue palette'] as const)('asks once with agent, shell and tile counts from %s', async (entry) => {
+  it.each(['sidebar', 'desktop palette', 'queue palette'] as const)('asks once about closing the desktop and its contents from %s', async (entry) => {
     const root = { type: 'split', split_id: 'a', direction: 'vertical', ratio: 0.5, children: [
       { type: 'pane', pane_id: 'pane-agent' },
       { type: 'split', split_id: 'b', direction: 'vertical', ratio: 0.5, children: [
@@ -50,7 +50,7 @@ describe('close desktop', () => {
       }
     };
     await request();
-    expect(screen.getByRole('dialog', { name: 'Close Work?' })).toHaveTextContent('1 agent, 1 shell and 1 tile');
+    expect(within(screen.getByRole('dialog', { name: 'Close Work?' })).getByText('Close this desktop and everything inside it?')).toBeVisible();
     expect(daemon.sentOf('desktop_close')).toEqual([]);
     await gesture(daemon, () => pressShortcut('session.close'));
     expect(daemon.sentOf('unregister')).toEqual([]);
@@ -60,6 +60,22 @@ describe('close desktop', () => {
     await request();
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Close desktop' })));
     expect(daemon.sentOf('desktop_close')).toEqual([expect.objectContaining({ desktop_id: 'work', expected_revision: 1 })]);
+  });
+
+  it('asks the same confirmation for a shell-only desktop', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      settings: { queue_mode_enabled: false },
+      sessions: [daemonSession('shell', { agent: 'shell' })],
+      profiles: [defaultProfile('work')],
+      desktops: [soloDesktop('shell', { id: 'work', name: 'Work' }), emptyDesktop('other')],
+    } });
+
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Close Work' })));
+
+    const dialog = screen.getByRole('dialog', { name: 'Close Work?' });
+    expect(within(dialog).getByText('Close this desktop and everything inside it?')).toBeVisible();
+    expect(dialog).not.toHaveTextContent(/agents|shells|tiles|ledger/);
+    expect(daemon.sentOf('desktop_close')).toEqual([]);
   });
 
   it.each([{ chief_of_staff: true }, { crew_member: 'alder' }])('names protected sessions and sends nothing', async (protection) => {
