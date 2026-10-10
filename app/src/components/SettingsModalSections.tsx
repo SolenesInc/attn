@@ -374,10 +374,9 @@ export function DesktopSettings({
           <div className="settings-kicker">Notebook</div>
           <h3>Notebook Folder</h3>
           <p className="settings-description">
-            Where attn keeps the Notebook for <strong>{profileName}</strong>: dated journals and the knowledge base as plain markdown you own.
-            Leave blank to choose a folder named after this profile. Changing this points
-            attn at the new folder; your existing notes are not moved, so move or sync the folder yourself if you want
-            the current contents to come along.
+            Journals and knowledge for <strong>{profileName}</strong>, saved as plain markdown you own.
+            Leave blank for a folder named after this profile. Changing the folder doesn't move existing notes;
+            move or sync them yourself.
           </p>
         </div>
         <div className="settings-block-body">

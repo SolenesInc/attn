@@ -173,13 +173,13 @@ func (d *Daemon) crewLetterForHandoff(member crew.Member, sessionID protocol.Ses
 	}
 	if retry {
 		if !hasFiled {
-			return "", fmt.Errorf("%s's day has filed no letter yet, so there is no turnover to retry — write one with `attn handoff -m \"<your letter>\"`", d.storedMemberName(member.Key.String()))
+			return "", fmt.Errorf("%s has no filed letter to retry. Write one with `attn handoff -m \"<your letter>\"`", d.storedMemberName(member.Key.String()))
 		}
 		if err := d.validateCrewLetterPath(member, filed); err != nil {
 			return "", err
 		}
 		if _, err := os.Stat(filed); err != nil {
-			return "", fmt.Errorf("%s's filed letter is recorded at %s but is not readable there (%v); file this day's letter again with `attn handoff -m \"<your letter>\"`", d.storedMemberName(member.Key.String()), filed, err)
+			return "", fmt.Errorf("%s's filed letter at %s is unreadable (%v). File it again with `attn handoff -m \"<your letter>\"`", d.storedMemberName(member.Key.String()), filed, err)
 		}
 		d.logf("crew: %s is retrying its turnover with the letter already filed at %s", member.Key.String(), filed)
 		return filed, nil
@@ -193,7 +193,7 @@ func (d *Daemon) crewLetterForHandoff(member crew.Member, sessionID protocol.Ses
 	path, err := crew.FileHandoff(member.HomeDir, member.Key.String(), d.memberName(member.Key), note, time.Now())
 	if err != nil {
 		if errors.Is(err, crew.ErrHandoffExists) && hasFiled {
-			return "", fmt.Errorf("%s's letter for this minute is already filed at %s — if the turnover is what failed, `attn handoff --retry` runs it against that letter; if this is a correction, file it as its own letter a minute from now", d.storedMemberName(member.Key.String()), filed)
+			return "", fmt.Errorf("%s's letter for this minute is already filed at %s. Run `attn handoff --retry` if the successor failed to start. For a correction, file a new letter next minute", d.storedMemberName(member.Key.String()), filed)
 		}
 		return "", err
 	}

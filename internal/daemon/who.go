@@ -76,9 +76,9 @@ func (d *Daemon) resolveMember(r requester, text string) (store.CrewIdentity, er
 	}
 	hint := ""
 	if keyShapedInput.MatchString(text) {
-		hint = "; pass member:<key> for a key"
+		hint = "; use member:<key> to address a permanent key"
 	}
-	return m, fmt.Errorf("no crew member named %q in profile %q; attn crew list names the roster%s", text, profile.Name, hint)
+	return m, fmt.Errorf("no crew member named %q in profile %q; use `attn crew list` to see names%s", text, profile.Name, hint)
 }
 func (d *Daemon) memberName(key who.MemberKey) string {
 	m, err := d.store.CrewIdentity(key)

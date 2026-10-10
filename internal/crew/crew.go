@@ -161,10 +161,10 @@ func ValidateName(name string) error {
 	}
 	switch strings.ToLower(name) {
 	case "attn", "user", "you":
-		return fmt.Errorf("%q names who acts, not a crew member", name)
+		return fmt.Errorf("%q is a reserved crew member name", name)
 	}
 	if idNamePattern.MatchString(name) {
-		return fmt.Errorf("%q reads as an id; choose a member name", name)
+		return fmt.Errorf("%q looks like an ID; choose a member name", name)
 	}
 	return nil
 }

@@ -127,8 +127,8 @@ func TestCrewNamesFollowTheNameRules(t *testing.T) {
 	w := newCrewWorld(t)
 	cli := w.Client()
 	cases := []struct{ name, rule string }{
-		{"chief", "reserved"}, {"Chief", "reserved"}, {"attn", "who acts"}, {"user", "who acts"}, {"you", "who acts"},
-		{"s-7k3f9m", "reads as an id"}, {"m-7k3f9m", "reads as an id"}, {"", "required"}, {"9lives", "starting with a letter"},
+		{"chief", "reserved"}, {"Chief", "reserved"}, {"attn", "reserved"}, {"user", "reserved"}, {"you", "reserved"},
+		{"s-7k3f9m", "looks like an ID"}, {"m-7k3f9m", "looks like an ID"}, {"", "required"}, {"9lives", "starting with a letter"},
 		{strings.Repeat("a", 41), "limit is 40 characters, asked for 41"}, {"TRELLIS", "already taken"},
 	}
 	for _, c := range cases {
