@@ -107,8 +107,10 @@ func TestSharedHost_ABuildThatFailsToAdoptHandsEveryTerminalBack(t *testing.T) {
 			world := newHandoverWorld(t)
 			t.Setenv("ATTN_PTY_HOST_ADOPT_FAULT", fault)
 			oldBackend := world.backend(t, "fallback-old", ptyhosttest.BuildWithSnapshotFormat(t, "fallback-old"))
-			if err := oldBackend.Spawn(context.Background(), SpawnOptions{ID: "kept", CWD: t.TempDir(), Agent: "shell", Cols: 80, Rows: 24}); err != nil {
-				t.Fatal(err)
+			for _, id := range []harness.TerminalID{"kept", "neighbour"} {
+				if err := oldBackend.Spawn(context.Background(), SpawnOptions{ID: id, CWD: t.TempDir(), Agent: "shell", Cols: 80, Rows: 24}); err != nil {
+					t.Fatal(err)
+				}
 			}
 			if err := os.Unsetenv("ATTN_PTY_HOST_ADOPT_FAULT"); err != nil {
 				t.Fatal(err)
@@ -118,7 +120,7 @@ func TestSharedHost_ABuildThatFailsToAdoptHandsEveryTerminalBack(t *testing.T) {
 				_ = syscall.Kill(hostPID, syscall.SIGTERM)
 				_ = waitForPIDsGone(3*time.Second, hostPID)
 			})
-			kept := fillTerminal(t, oldBackend, "kept")
+			terminals := []filledTerminal{fillTerminal(t, oldBackend, "kept"), fillTerminal(t, oldBackend, "neighbour")}
 			registryBefore := world.hostRegistry(t, hostPID)
 
 			newBackend := world.backend(t, "fallback-new", ptyhosttest.BuildWithAdoptFault(t, "fallback-new"))
@@ -129,11 +131,8 @@ func TestSharedHost_ABuildThatFailsToAdoptHandsEveryTerminalBack(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), "did not take effect") {
 				t.Fatalf("UpgradeWorker = %v, want the live host's failed adopt reported as a handover that did not take effect", err)
 			}
-			if pids := newBackend.WorkerPIDs(context.Background()); pids["kept"] != hostPID {
-				t.Fatalf("host pid after the hand-back = %d, want %d", pids["kept"], hostPID)
-			}
-			if format, _ := newBackend.SessionTerminalBuild("kept"); format != "fallback-old" {
-				t.Fatalf("terminal format after the hand-back = %q, want fallback-old", format)
+			if pids := newBackend.WorkerPIDs(context.Background()); pids["kept"] != hostPID || pids["neighbour"] != hostPID {
+				t.Fatalf("host pids after the hand-back = %v, want both terminals in pid %d", pids, hostPID)
 			}
 			if registryAfter := world.hostRegistry(t, hostPID); registryAfter.ArtifactID != registryBefore.ArtifactID ||
 				registryAfter.Executable != registryBefore.Executable || registryAfter.SnapshotFormat != registryBefore.SnapshotFormat {
@@ -141,7 +140,12 @@ func TestSharedHost_ABuildThatFailsToAdoptHandsEveryTerminalBack(t *testing.T) {
 					registryAfter.ArtifactID, registryAfter.Executable, registryAfter.SnapshotFormat,
 					registryBefore.ArtifactID, registryBefore.Executable, registryBefore.SnapshotFormat)
 			}
-			kept.requireCarriedBy(t, newBackend, "fallback-old")
+			for _, terminal := range terminals {
+				if format, _ := newBackend.SessionTerminalBuild(terminal.id); format != "fallback-old" {
+					t.Fatalf("terminal format of %s after the hand-back = %q, want fallback-old", terminal.id, format)
+				}
+				terminal.requireCarriedBy(t, newBackend, "fallback-old")
+			}
 		})
 	}
 }
@@ -203,10 +207,10 @@ func fillTerminal(t *testing.T, backend *WorkerBackend, id harness.TerminalID) f
 		t.Fatal(err)
 	}
 	defer live.Close()
-	if err := backend.Input(context.Background(), id, []byte("seq 1 40 | sed s/^/row-/; cat\n")); err != nil {
+	if err := backend.Input(context.Background(), id, []byte("seq 1 40 | sed s/^/"+string(id)+"-/; cat\n")); err != nil {
 		t.Fatal(err)
 	}
-	waitForStreamText(t, live, "row-40")
+	waitForStreamText(t, live, string(id)+"-40")
 	snapshot, err := backend.ScreenSnapshot(context.Background(), id)
 	if err != nil {
 		t.Fatal(err)
