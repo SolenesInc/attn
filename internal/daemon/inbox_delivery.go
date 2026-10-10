@@ -75,6 +75,9 @@ func (r delivery) recipientOf(a who.Address) (recipient, error) {
 	return who.SwitchAddress(a, r.toSession, r.toMember, r.toTenderOf, r.toChiefOf)
 }
 func (r delivery) toSession(id protocol.SessionID) (recipient, error) {
+	if err := r.bindings.CheckSession(id); err != nil {
+		return recipient{}, err
+	}
 	if s := r.d.store.Get(id); s != nil {
 		return recipient{ring: s}, nil
 	}
@@ -89,6 +92,9 @@ func (r delivery) toSession(id protocol.SessionID) (recipient, error) {
 	return recipient{wait: fmt.Sprintf("session %s has ended; waits until it is resumed", shortSessionID(id))}, nil
 }
 func (r delivery) toMember(k who.MemberKey) (recipient, error) {
+	if err := r.bindings.Check(who.Member(k)); err != nil {
+		return recipient{}, err
+	}
 	if id, ok := r.bindings.SessionOf(who.Member(k)); ok {
 		return r.toSession(id)
 	}

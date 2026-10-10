@@ -132,6 +132,8 @@ type Daemon struct {
 	presenceMu                        sync.RWMutex
 	crewLifecycleState                *crewLifecycleMemo
 	crewMemoOnce                      sync.Once
+	crewDocumentErrorsMu              sync.Mutex
+	crewDocumentErrors                map[string]int64
 	crewCharterMu                     sync.Mutex
 	life                              lifetime
 	stopOnce                          sync.Once
@@ -1703,7 +1705,10 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		b, actorErr = d.bindings()
 		if actorErr == nil {
 			if party, found := b.PartyOf(sessionID); found {
-				by = party.Actor()
+				actorErr = b.Check(party)
+				if actorErr == nil {
+					by = party.Actor()
+				}
 			} else {
 				actorErr = fmt.Errorf("session %s has no closing actor", sessionID)
 			}
@@ -1724,7 +1729,8 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 			return true
 		}
 		if closeErr := d.sessionCloseError(sessionID); closeErr != nil {
-			if errors.Is(closeErr, errCrewRosterUnavailable) {
+			var unreadable *who.UnreadableMemberError
+			if errors.Is(closeErr, errCrewRosterUnavailable) || errors.As(closeErr, &unreadable) {
 				d.notifySessionCloseFailure(sessionID, closeErr)
 			}
 			return true

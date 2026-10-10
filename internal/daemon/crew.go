@@ -224,6 +224,25 @@ func (d *Daemon) resolveCrewMember(stored string) (crew.Member, bool, error) {
 }
 
 func (d *Daemon) readCrewMembersRaw() ([]crew.Member, map[string]docstore.Document, error) {
+	documents, err := d.readCrewMemberDocuments()
+	if err != nil {
+		return nil, nil, err
+	}
+	members := make([]crew.Member, 0, len(documents))
+	docs := make(map[string]docstore.Document, len(documents))
+	for _, doc := range documents {
+		member, err := crew.Decode(doc.ID, doc.Body)
+		d.reportCrewDocument(doc, err)
+		if err != nil {
+			continue
+		}
+		members = append(members, member)
+		docs[member.Key.String()] = doc
+	}
+	return members, docs, nil
+}
+
+func (d *Daemon) readCrewMemberDocuments() ([]docstore.Document, error) {
 	read, _, err := d.runDocQuery(docstore.Query{
 		Namespace:  crew.Namespace,
 		Collection: crew.CollectionMembers,
@@ -231,19 +250,37 @@ func (d *Daemon) readCrewMembersRaw() ([]crew.Member, map[string]docstore.Docume
 		Limit:      docstore.MaxLimit,
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	members := make([]crew.Member, 0, len(read.Documents))
-	docs := make(map[string]docstore.Document, len(read.Documents))
+	d.crewDocumentErrorsMu.Lock()
+	seen := make(map[string]bool, len(read.Documents))
 	for _, doc := range read.Documents {
-		member, err := crew.Decode(doc.ID, doc.Body)
-		if err != nil {
-			return nil, nil, fmt.Errorf("read crew member %s: %w", doc.ID, err)
-		}
-		members = append(members, member)
-		docs[member.Key.String()] = doc
+		seen[doc.ID] = true
 	}
-	return members, docs, nil
+	for id := range d.crewDocumentErrors {
+		if !seen[id] {
+			delete(d.crewDocumentErrors, id)
+		}
+	}
+	d.crewDocumentErrorsMu.Unlock()
+	return read.Documents, nil
+}
+
+func (d *Daemon) reportCrewDocument(doc docstore.Document, err error) {
+	d.crewDocumentErrorsMu.Lock()
+	defer d.crewDocumentErrorsMu.Unlock()
+	if err == nil {
+		delete(d.crewDocumentErrors, doc.ID)
+		return
+	}
+	if d.crewDocumentErrors == nil {
+		d.crewDocumentErrors = make(map[string]int64)
+	}
+	if d.crewDocumentErrors[doc.ID] >= doc.Rev {
+		return
+	}
+	d.crewDocumentErrors[doc.ID] = doc.Rev
+	d.logf("read crew member %s: %v", doc.ID, err)
 }
 
 func (d *Daemon) updateCrewMember(key who.MemberKey, mutate func(*crew.Member) (bool, error)) (crew.Member, error) {
@@ -493,7 +530,7 @@ func (d *Daemon) decorateCrewMember(session *protocol.Session, bindings who.Bind
 		return
 	}
 	party, _ := bindings.PartyOf(session.ID)
-	if member, ok := party.Member(); ok {
+	if member, ok := party.Member(); ok && bindings.Check(party) == nil {
 		session.CrewMember = protocol.Ptr(member.String())
 		return
 	}

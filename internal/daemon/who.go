@@ -1,6 +1,8 @@
 package daemon
 
 import (
+	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -19,28 +21,52 @@ var keyShapedInput = regexp.MustCompile(`^[a-z][a-z0-9-]{0,39}$`)
 
 func (d *Daemon) bindings() (who.Bindings, error) {
 	bound := make(map[who.MemberKey]protocol.SessionID)
+	unreadable := make(map[who.MemberKey]error)
 	status, err := d.enrollmentStatus()
 	if err != nil {
 		return who.Bindings{}, err
 	}
 	if status.IsHome() {
-		members, _, err := d.readCrewMembersRaw()
+		documents, err := d.readCrewMemberDocuments()
 		if err != nil {
 			return who.Bindings{}, err
 		}
-		for _, m := range members {
-			if m.BindingSession != "" {
-				bound[m.Key] = m.BindingSession
+		for _, doc := range documents {
+			key, err := who.ParseMemberKey(doc.ID)
+			if err != nil {
+				d.reportCrewDocument(doc, err)
+				continue
+			}
+			var binding struct {
+				Session protocol.SessionID `json:"binding_session"`
+			}
+			bindingErr := json.Unmarshal(doc.Body, &binding)
+			if bindingErr == nil && binding.Session != "" {
+				bound[key] = binding.Session
+			}
+			_, err = crew.Decode(doc.ID, doc.Body)
+			d.reportCrewDocument(doc, err)
+			if err != nil {
+				unreadable[key] = fmt.Errorf("crew member %s (%s) is unreadable: %w", d.memberName(key), key, err)
+				if bindingErr != nil || binding.Session == "" || !d.sessionExists(binding.Session) {
+					id, latestErr := d.store.MemberLatestSession(key)
+					if latestErr != nil && !errors.Is(latestErr, sql.ErrNoRows) {
+						return who.Bindings{}, latestErr
+					}
+					if d.store.Get(id) != nil {
+						bound[key] = id
+					}
+				}
 			}
 		}
 	}
-	return who.NewBindings(d.sessionFacts, bound), nil
+	return who.NewBindings(d.sessionFacts, bound, unreadable), nil
 }
 func (d *Daemon) broadcastBindings() who.Bindings {
 	b, err := d.bindings()
 	if err != nil {
 		d.logf("session broadcast bindings: %v", err)
-		return who.NewBindings(d.sessionFacts, nil)
+		return who.NewBindings(d.sessionFacts, nil, nil)
 	}
 	return b
 }
@@ -68,6 +94,10 @@ func (d *Daemon) requestFromSession(id protocol.SessionID, b who.Bindings) (who.
 	r, ok := b.RequestFrom(s.ID)
 	if !ok {
 		return who.Requester{}, &targetError{"sender_session_not_found", fmt.Sprintf("the caller %q has ended", id)}
+	}
+	p, _ := r.Party()
+	if err := b.Check(p); err != nil {
+		return who.Requester{}, err
 	}
 	return r, nil
 }
@@ -243,6 +273,9 @@ func (d *Daemon) resolveSession(r who.Requester, b who.Bindings, text string) (*
 		return nil, err
 	}
 	onSession := func(id protocol.SessionID) (*protocol.Session, error) {
+		if err := b.CheckSession(id); err != nil {
+			return nil, err
+		}
 		if s := d.store.Get(id); s != nil {
 			return s, nil
 		}
@@ -254,6 +287,9 @@ func (d *Daemon) resolveSession(r who.Requester, b who.Bindings, text string) (*
 		return nil, &targetError{"session_ended", fmt.Sprintf("session %s has ended", shortSessionID(id))}
 	}
 	onMember := func(k who.MemberKey) (*protocol.Session, error) {
+		if err := b.Check(who.Member(k)); err != nil {
+			return nil, err
+		}
 		if id, ok := b.SessionOf(who.Member(k)); ok {
 			return onSession(id)
 		}
@@ -296,6 +332,9 @@ func (d *Daemon) seedTender(seed garden.Seed, b who.Bindings) (who.Party, bool, 
 	return who.Party{}, false, nil
 }
 func (d *Daemon) mailboxesOf(id protocol.SessionID, b who.Bindings) ([]who.Address, error) {
+	if err := b.CheckSession(id); err != nil {
+		return nil, err
+	}
 	a := b.AddressesOf(id)
 	if profile, lasts := d.sessionFacts(id); lasts && d.chiefOfProfile(profile) == id {
 		a = append(a, who.ToChiefOf(profile))
@@ -314,6 +353,10 @@ func (d *Daemon) mailboxesOf(id protocol.SessionID, b who.Bindings) ([]who.Addre
 	for _, address := range pending {
 		to, err := (delivery{d, b}).recipientOf(address)
 		if err != nil {
+			var unavailable *who.UnreadableMemberError
+			if errors.As(err, &unavailable) {
+				continue
+			}
 			return nil, err
 		}
 		if to.ring != nil && to.ring.ID == id {

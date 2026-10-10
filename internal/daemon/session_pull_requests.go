@@ -151,6 +151,9 @@ func (d *Daemon) watchSessionPullRequest(rec store.SessionPullRequestRecord, mod
 		return err
 	}
 	watcher, ok := b.PartyOf(rec.SessionID)
+	if err := b.Check(watcher); err != nil {
+		return err
+	}
 	if !ok {
 		return fmt.Errorf("session %s has ended; resume it to watch pull request %s", shortSessionID(rec.SessionID), rec.PRID)
 	}
@@ -180,6 +183,9 @@ func (d *Daemon) unwatchSessionPullRequest(rec store.SessionPullRequestRecord) e
 		return err
 	}
 	addresses := b.AddressesOf(rec.SessionID)
+	if err := b.CheckSession(rec.SessionID); err != nil {
+		return err
+	}
 	changed := false
 	for _, address := range addresses {
 		stopped, err := d.store.StopPullRequestWatch(address, rec.PRID)
@@ -225,6 +231,9 @@ func (d *Daemon) recordSessionPullRequest(rec store.SessionPullRequestRecord) er
 func (d *Daemon) forgetSessionPullRequest(rec store.SessionPullRequestRecord) error {
 	b, err := d.bindings()
 	if err != nil {
+		return err
+	}
+	if err := b.CheckSession(rec.SessionID); err != nil {
 		return err
 	}
 	addresses := b.AddressesOf(rec.SessionID)

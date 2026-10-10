@@ -30,7 +30,8 @@ func TestWhoMigrationPreservesPartiesActorsAndCollisionWinners(t *testing.T) {
 INSERT INTO sessions(id,label,directory,state_since,state_updated_at,last_seen,member_key,closed_at,closed_by) VALUES
  ('bound','Keel','/tmp/who','','','','','',''),
  ('old-day','Keel','/tmp/who','','','','keel','2026-10-01T00:00:00Z','bound'),
- ('plain','Plain','/tmp/who','','','','','2026-10-01T00:00:00Z','user');
+ ('plain','Plain','/tmp/who','','','','','2026-10-01T00:00:00Z','user'),
+ ('unknown-close','Unknown','/tmp/who','','','','','2026-10-01T00:00:00Z','');
 INSERT INTO peer_messages(id,sender_session_id,body,created_at) VALUES
  ('bound-peer','bound','body','2026-10-01T00:00:00Z'),('old-peer','old-day','body','2026-10-01T00:00:00Z'),('plain-peer','plain','body','2026-10-01T00:00:00Z');
 INSERT INTO inbox_items(id,address,kind,source_id,created_at) VALUES
@@ -67,6 +68,18 @@ INSERT INTO kept_conversations(resume_id,agent,source_path,bytes,stored_bytes,co
 			defer upgraded.Close()
 			if !declared {
 				return
+			}
+			before := upgraded.SessionLedgerEntry("unknown-close")
+			lifted, reopened, err := upgraded.ReopenSession("unknown-close")
+			if err != nil || !reopened || !lifted.By.IsZero() {
+				t.Fatalf("reopen unknown actor: %+v, %v, %v", lifted, reopened, err)
+			}
+			if restored, err := upgraded.RestoreSessionClose("unknown-close", lifted); err != nil || !restored {
+				t.Fatalf("restore unknown actor: %v, %v", restored, err)
+			}
+			after := upgraded.SessionLedgerEntry("unknown-close")
+			if before == nil || after == nil || after.ClosedBy != nil || protocol.Deref(after.ClosedAt) != protocol.Deref(before.ClosedAt) || protocol.Deref(after.CloseReason) != protocol.Deref(before.CloseReason) {
+				t.Fatalf("rollback changed an unknown close: before=%+v after=%+v", before, after)
 			}
 			for _, row := range []struct{ id, party, address string }{{"bound-peer", "member:keel", "member:keel"}, {"old-peer", "member:keel", "session:plain"}, {"plain-peer", "session:plain", "chief:profile"}} {
 				peer, err := upgraded.PeerMessageRecord(row.id)

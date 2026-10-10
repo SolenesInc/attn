@@ -17,7 +17,7 @@ func (d *Daemon) sessionCloseError(sessionID protocol.SessionID) error {
 	if d.isChiefOfStaffSession(sessionID) {
 		return errChiefOfStaffProtected
 	}
-	members, _, err := d.readCrewMembers()
+	b, err := d.bindings()
 	if docstore.IsUndeclaredCollection(err) {
 		return nil
 	}
@@ -25,11 +25,13 @@ func (d *Daemon) sessionCloseError(sessionID protocol.SessionID) error {
 		d.logf("crew: refusing to close session %s because its crew identity could not be read: %v", sessionID, err)
 		return errCrewRosterUnavailable
 	}
-	for _, member := range members {
-		if member.BindingSession == sessionID {
-			name := d.storedMemberName(member.Key.String())
-			return fmt.Errorf("%s is protected from closing; put %s to sleep first", name, name)
-		}
+	if err := b.CheckSession(sessionID); err != nil {
+		return err
+	}
+	party, _ := b.PartyOf(sessionID)
+	if key, member := party.Member(); member {
+		name := d.memberName(key)
+		return fmt.Errorf("%s is protected from closing; put %s to sleep first", name, name)
 	}
 	return nil
 }

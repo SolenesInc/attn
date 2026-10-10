@@ -241,8 +241,12 @@ func (s *Store) RestoreSessionClose(id protocol.SessionID, closed SessionCloseRe
 		return false, fmt.Errorf("restore the close of session %s: %w", id, err)
 	}
 	defer tx.Rollback()
+	var by any = closed.By
+	if closed.By.IsZero() {
+		by = ""
+	}
 	result, err := tx.Exec(`UPDATE sessions SET closed_at = ?, closed_by = ?, close_reason = ?
-		WHERE id = ? AND closed_at = ''`, closed.At, closed.By, closed.Reason, id)
+		WHERE id = ? AND closed_at = ''`, closed.At, by, closed.Reason, id)
 	if err != nil {
 		return false, fmt.Errorf("restore the close of session %s: %w", id, err)
 	}

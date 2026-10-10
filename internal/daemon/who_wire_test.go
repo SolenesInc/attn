@@ -12,12 +12,21 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestUnreadableCrewBindingsKeepSessionsVisibleButRefuseAttribution(t *testing.T) {
+func TestUnreadableCrewBindingsAffectOnlyTheirMemberAndRecoverAfterRepair(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	witness, _ := mailIdleAgent(w, app, "witness")
 	day := wakeCrew(t, cli, "Keel", "")
-	w.Launched(string(day.SessionID))
+	run := w.Launched(string(day.SessionID))
+	run.Prompted()
+	healthy := wakeCrew(t, cli, "Trellis", "")
+	w.Launched(string(healthy.SessionID))
+	seed := gardenReviewPlantTended(t, cli, string(day.SessionID), "Keep the bad member's mailbox")
+	sendAgentMessage(t, cli, witness, seed, "leave this for Keel")
+	original, err := cli.DocGet(crew.Namespace, crew.CollectionMembers, "keel")
+	if err != nil || original.Document == nil {
+		t.Fatalf("original member: %+v, %v", original, err)
+	}
 	if _, err := cli.DocPut(crew.Namespace, crew.CollectionMembers, "keel", fmt.Sprintf(`{"binding_session":%q,"awareness_dirs":1}`, day.SessionID), nil); err != nil {
 		t.Fatal(err)
 	}
@@ -29,16 +38,48 @@ func TestUnreadableCrewBindingsKeepSessionsVisibleButRefuseAttribution(t *testin
 		seen := map[protocol.SessionID]bool{}
 		for _, s := range sessions {
 			seen[s.ID] = true
-			if s.CrewMember != nil {
-				t.Fatalf("%s guessed a member from unreadable bindings: %+v", surface, s)
+			if s.ID == day.SessionID && s.CrewMember != nil {
+				t.Fatalf("%s decorated an unreadable member: %+v", surface, s)
+			}
+			if s.ID == healthy.SessionID && protocol.Deref(s.CrewMember) != "trellis" {
+				t.Fatalf("%s lost healthy identity: %+v", surface, s)
 			}
 		}
-		if !seen[day.SessionID] || !seen[protocol.SessionID(witness)] {
-			t.Fatalf("%s hid sessions when the roster could not be read: %+v", surface, sessions)
+		if !seen[day.SessionID] || !seen[healthy.SessionID] || !seen[protocol.SessionID(witness)] {
+			t.Fatalf("%s hid sessions: %+v", surface, sessions)
 		}
 	}
-	if _, err := cli.AgentMsg(witness, day.SessionID, "keep my identity"); err == nil || !strings.Contains(err.Error(), "awareness_dirs") {
+	if _, err := cli.AgentMsg(witness, day.SessionID, "keep my identity"); err == nil || !strings.Contains(err.Error(), "awareness_dirs") || !strings.Contains(err.Error(), "Keel") {
 		t.Fatalf("unreadable member attribution: %v", err)
+	}
+	if _, err := cli.AutoModePropose("host", "", `{"host":"example.com","decision":"allow"}`, day.SessionID); err == nil || !strings.Contains(err.Error(), "awareness_dirs") {
+		t.Fatalf("unreadable proposer: %v", err)
+	}
+	if _, err := cli.WithRequester("", healthy.SessionID).AgentPeek("Keel"); err == nil || !strings.Contains(err.Error(), "awareness_dirs") {
+		t.Fatalf("unreadable target: %v", err)
+	}
+	sendAgentMessage(t, cli, string(healthy.SessionID), witness, "the other member still works")
+	proposed, err := cli.AutoModePropose("host", "", `{"host":"example.org","decision":"allow"}`, healthy.SessionID)
+	if err != nil || proposed.Proposal.ProposedBy.Ref != "member:trellis" {
+		t.Fatalf("healthy proposer: %+v, %v", proposed, err)
+	}
+	readInbox(t, cli, string(healthy.SessionID), 0)
+	readInbox(t, cli, witness, 0)
+	if _, err := cli.AgentClose(witness, protocol.SessionID(witness), "ordinary work finished"); err != nil {
+		t.Fatalf("healthy close: %v", err)
+	}
+	if _, err := cli.DocPut(crew.Namespace, crew.CollectionMembers, "keel", `{"awareness_dirs":1}`, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cli.AutoModePropose("host", "", `{"host":"missing-binding.example.org","decision":"allow"}`, day.SessionID); err == nil || !strings.Contains(err.Error(), "awareness_dirs") || !strings.Contains(err.Error(), "Keel") {
+		t.Fatalf("unreadable member with no binding header was demoted: %v", err)
+	}
+	if _, err := cli.DocPut(crew.Namespace, crew.CollectionMembers, "keel", original.Document.Body, nil); err != nil {
+		t.Fatal(err)
+	}
+	proposed, err = cli.AutoModePropose("host", "", `{"host":"repaired.example.org","decision":"allow"}`, day.SessionID)
+	if err != nil || proposed.Proposal.ProposedBy.Ref != "member:keel" {
+		t.Fatalf("repaired proposer: %+v, %v", proposed, err)
 	}
 }
 
@@ -55,13 +96,19 @@ func TestACrewAgentsCleanExitRecordsTheMemberBeforeReleasingItsBinding(t *testin
 	}
 }
 
-func TestAnAutomaticCloseFailureReachesTheNotificationFeed(t *testing.T) {
+func TestAnAutomaticCloseFailureReachesOnlyTheAffectedMembersNotification(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	id, run := mailIdleAgent(w, app, "shop")
-	if _, err := cli.DocPut(crew.Namespace, crew.CollectionMembers, "keel", `{"awareness_dirs":1}`, nil); err != nil {
+	ordinary, ordinaryRun := mailIdleAgent(w, app, "shop")
+	day := wakeCrew(t, cli, "Keel", "")
+	id := string(day.SessionID)
+	run := w.Launched(id)
+	run.Prompted()
+	if _, err := cli.DocPut(crew.Namespace, crew.CollectionMembers, "keel", fmt.Sprintf(`{"binding_session":%q,"awareness_dirs":1}`, day.SessionID), nil); err != nil {
 		t.Fatal(err)
 	}
+	ordinaryRun.Exit(0)
+	awaitClosed(app, ordinary)
 	run.Exit(0)
 	testworld.Await(app, protocol.EventNotificationsUpdated, func(m protocol.NotificationsUpdatedMessage) bool { return m.UnreadCount == 1 })
 	feed := listNotifications(app)
@@ -69,7 +116,7 @@ func TestAnAutomaticCloseFailureReachesTheNotificationFeed(t *testing.T) {
 		t.Fatalf("close failure notifications: %+v", feed)
 	}
 	n := feed.Notifications[0]
-	if n.Kind != "session_close_failed" || n.SourceID != id || !strings.Contains(n.Detail, "awareness_dirs") || len(n.Actions) != 1 || n.Actions[0].Kind != "open_session" || n.Actions[0].TargetID != id {
+	if n.Kind != "session_close_failed" || n.SourceID != id || !strings.Contains(n.Detail, "awareness_dirs") || !strings.Contains(n.Detail, "Keel") || len(n.Actions) != 1 || n.Actions[0].Kind != "open_session" || n.Actions[0].TargetID != id {
 		t.Fatalf("close failure: %+v", n)
 	}
 	if entry := showSession(t, cli, id); entry.ClosedAt != nil || entry.ClosedBy != nil {
