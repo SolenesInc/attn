@@ -6,8 +6,6 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/google/uuid"
-
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -24,16 +22,7 @@ func TestAProgramInAShellTileReportsItsStateUntilTheShellPromptReturns(t *testin
 			}
 			s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=migrating", "ATTN_PTY_HOST_BINARY="+host)
 			s.Start()
-			app := s.App()
-			requestID := uuid.NewString()
-			app.Send(protocol.SetSettingMessage{
-				Cmd: protocol.CmdSetSetting, Key: "pty_shared_host_enabled", Value: "true", RequestID: protocol.Ptr(requestID),
-			})
-			if enabled := testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
-				return protocol.Deref(m.RequestID) == requestID
-			}); !protocol.Deref(enabled.Success) {
-				t.Fatalf("enabling the shared PTY host failed: %s", protocol.Deref(enabled.Error))
-			}
+			enableSharedHost(t, s.App())
 		},
 	}
 	for name, start := range backends {

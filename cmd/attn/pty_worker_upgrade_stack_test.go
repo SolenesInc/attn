@@ -178,15 +178,7 @@ func TestASharedHostTerminalMovesToTheNewBuildAcrossAnUpdate(t *testing.T) {
 	s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=migrating")
 	s.StartBinary(current, "ATTN_PTY_HOST_BINARY="+ptyhosttest.BuildWithSnapshotFormat(t, "shared-current"))
 	app := s.App()
-	requestID := uuid.NewString()
-	app.Send(protocol.SetSettingMessage{
-		Cmd: protocol.CmdSetSetting, Key: "pty_shared_host_enabled", Value: "true", RequestID: protocol.Ptr(requestID),
-	})
-	if enabled := testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
-		return protocol.Deref(m.RequestID) == requestID
-	}); !protocol.Deref(enabled.Success) {
-		t.Fatalf("enabling the shared PTY host failed: %s", protocol.Deref(enabled.Error))
-	}
+	enableSharedHost(t, app)
 	if active := s.App().Initial.Settings["pty_shared_host_active"]; active != "true" {
 		t.Fatalf("after enabling it the shared PTY host reads active=%q, want true", active)
 	}
@@ -228,6 +220,19 @@ func TestASharedHostTerminalMovesToTheNewBuildAcrossAnUpdate(t *testing.T) {
 	app.AwaitScreen(shell, "still-4")
 	if shellAfter, err := os.ReadFile(pidFile); err != nil || string(shellAfter) != string(shellBefore) {
 		t.Fatalf("the shell is pid %q after the update (err %v), want the same shell %q", shellAfter, err, shellBefore)
+	}
+}
+
+func enableSharedHost(t *testing.T, app *testworld.Peer) {
+	t.Helper()
+	requestID := uuid.NewString()
+	app.Send(protocol.SetSettingMessage{
+		Cmd: protocol.CmdSetSetting, Key: "pty_shared_host_enabled", Value: "true", RequestID: protocol.Ptr(requestID),
+	})
+	if enabled := testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+		return protocol.Deref(m.RequestID) == requestID
+	}); !protocol.Deref(enabled.Success) {
+		t.Fatalf("enabling the shared PTY host failed: %s", protocol.Deref(enabled.Error))
 	}
 }
 
