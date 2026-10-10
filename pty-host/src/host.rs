@@ -257,6 +257,8 @@ impl Host {
             }
         }
         self.start()?;
+        #[cfg(feature = "adopt-fault")]
+        injected_adopt_fault()?;
         Ok(removals)
     }
 
@@ -1329,6 +1331,15 @@ fn write_connection(stream: UnixStream, receiver: Receiver<Value>) {
         {
             return;
         }
+    }
+}
+
+#[cfg(feature = "adopt-fault")]
+fn injected_adopt_fault() -> Result<(), String> {
+    match std::env::var("ATTN_PTY_HOST_ADOPT_FAULT").as_deref() {
+        Ok("panic") => panic!("this test build panics while adopting"),
+        Ok("error") => Err("this test build fails while adopting".to_owned()),
+        _ => Ok(()),
     }
 }
 
