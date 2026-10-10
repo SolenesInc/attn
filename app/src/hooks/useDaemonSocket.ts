@@ -414,26 +414,6 @@ interface RepoInfoResult {
   error?: string;
 }
 
-interface GitFileChange {
-  path: string;
-  status: string;
-  additions?: number;
-  deletions?: number;
-  old_path?: string;
-}
-
-export interface GitStatusUpdate {
-  directory: string;
-  staged: GitFileChange[];
-  unstaged: GitFileChange[];
-  untracked: GitFileChange[];
-  error?: string;
-  mode?: string;
-  limited?: boolean;
-  limited_reason?: string;
-  duration_ms?: number;
-}
-
 export interface FileDiffResult {
   success: boolean;
   original: string;
@@ -537,7 +517,6 @@ interface UseDaemonSocketOptions {
   onWorktreesUpdate?: (worktrees: DaemonWorktree[]) => void;
   onSettingsUpdate?: (settings: DaemonSettings) => void;
   onSettingError?: (message: string) => void;
-  onGitStatusUpdate?: (status: GitStatusUpdate) => void;
   endpoint?: DaemonEndpointInstance;
   wsUrl?: string;
 }
@@ -668,7 +647,6 @@ export function useDaemonSocket({
   onWorktreesUpdate,
   onSettingsUpdate,
   onSettingError,
-  onGitStatusUpdate,
   endpoint,
   wsUrl,
 }: UseDaemonSocketOptions) {
@@ -698,7 +676,6 @@ export function useDaemonSocket({
     onWorktreesUpdate,
     onSettingsUpdate,
     onSettingError,
-    onGitStatusUpdate,
   });
   callbacksRef.current = {
     onSessionsUpdate,
@@ -718,7 +695,6 @@ export function useDaemonSocket({
     onWorktreesUpdate,
     onSettingsUpdate,
     onSettingError,
-    onGitStatusUpdate,
   };
   const reconnectTimeoutRef = useRef<number | null>(null);
   const reconnectDelayRef = useRef<number>(1000);
@@ -733,7 +709,6 @@ export function useDaemonSocket({
   const requestSequenceRef = useRef(0);
   const pendingOutboundCommandsRef = useRef<string[]>([]);
   const recoveryNoticeTimeoutRef = useRef<number | null>(null);
-  const gitStatusSubscriptionRef = useRef<string | null>(null);
   const docSubscriptionsRef = useRef<DocumentSubscriptions | null>(null);
   const docSubscriptions = (docSubscriptionsRef.current ??= new DocumentSubscriptions());
   const ptyTransportRef = useRef(createPtyTransportState<AttachRequestContext>());
@@ -1080,10 +1055,6 @@ export function useDaemonSocket({
         ws.send(JSON.stringify({ cmd: 'get_kitty_image', id: sessionId, image_id: imageId }));
         return true;
       });
-
-      if (gitStatusSubscriptionRef.current) {
-        ws.send(JSON.stringify({ cmd: 'subscribe_git_status', directory: gitStatusSubscriptionRef.current }));
-      }
 
       docSubscriptions.resubscribeAll((payload) => ws.send(JSON.stringify(payload)));
 
@@ -2294,22 +2265,6 @@ export function useDaemonSocket({
             }
             break;
           }
-
-          case 'git_status_update':
-            if (data.directory) {
-              callbacksRef.current.onGitStatusUpdate?.({
-                directory: data.directory,
-                staged: data.staged || [],
-                unstaged: data.unstaged || [],
-                untracked: data.untracked || [],
-                error: data.error,
-                mode: data.mode,
-                limited: data.limited,
-                limited_reason: data.limited_reason,
-                duration_ms: data.duration_ms,
-              });
-            }
-            break;
 
           case 'file_diff_result': {
             const key = `get_file_diff_${data.request_id}`;
@@ -4035,32 +3990,6 @@ export function useDaemonSocket({
     }, 'Ensure repo timed out', GIT_CLONE_TIMEOUT_MS);
   }, [sendKeyedRequest]);
 
-  const sendSubscribeGitStatus = useCallback((directory: string) => {
-    const previousDirectory = gitStatusSubscriptionRef.current;
-    if (previousDirectory === directory) return;
-
-    gitStatusSubscriptionRef.current = directory;
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-
-    if (previousDirectory) {
-      ws.send(JSON.stringify({ cmd: 'unsubscribe_git_status' }));
-    }
-    ws.send(JSON.stringify({ cmd: 'subscribe_git_status', directory }));
-  }, []);
-
-  const sendUnsubscribeGitStatus = useCallback(() => {
-    const hadSubscription = gitStatusSubscriptionRef.current;
-    gitStatusSubscriptionRef.current = null;
-    if (!hadSubscription) return;
-
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-
-    ws.send(JSON.stringify({ cmd: 'unsubscribe_git_status' }));
-  }, []);
-
-
   const sendSettleTurn = useCallback((sessionId: string) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -4757,8 +4686,6 @@ export function useDaemonSocket({
     sendCreateWorktreeFromBranch,
     sendFetchRemotes,
     sendEnsureRepo,
-    sendSubscribeGitStatus,
-    sendUnsubscribeGitStatus,
     sendSessionList,
     subscribeSessionLedger,
     sendSessionShow,

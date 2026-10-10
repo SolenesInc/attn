@@ -128,8 +128,6 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdFetchRemotes:                  commandMetadata(false, true),
 	protocol.CmdListRemoteBranches:            commandMetadata(false, true),
 	protocol.CmdEnsureRepo:                    commandMetadata(false, true),
-	protocol.CmdSubscribeGitStatus:            commandMetadata(false, true),
-	protocol.CmdUnsubscribeGitStatus:          commandMetadata(false, true),
 	protocol.CmdGetFileDiff:                   commandMetadata(false, true),
 	protocol.CmdGetRepoInfo:                   commandMetadata(false, true),
 	protocol.CmdGetPresentations:              commandMetadata(false, true),

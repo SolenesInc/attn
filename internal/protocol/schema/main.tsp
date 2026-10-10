@@ -467,15 +467,6 @@ model Branch {
   is_current?: boolean;    // True if this is the checked-out branch
 }
 
-model GitFileChange {
-  path: string;
-  status: string;        // "modified", "added", "deleted", "renamed", "untracked"
-  additions?: int32;     // Line additions (not available for untracked)
-  deletions?: int32;     // Line deletions (not available for untracked)
-  old_path?: string;     // For renames
-}
-
-
 // Why a profile, desktop or pane command was refused. stale_revision means the
 // command named a revision older than the stored one: re-read the broadcast
 // state and retry against its revision.
@@ -1686,15 +1677,6 @@ model EnsureRepoMessage {
   cmd: "ensure_repo";
   target_path: string;   // Where to clone (e.g., /Users/victor/projects/dashboards-go)
   clone_url: string;     // Git clone URL (e.g., https://github.com/owner/repo.git)
-}
-
-model SubscribeGitStatusMessage {
-  cmd: "subscribe_git_status";
-  directory: string;
-}
-
-model UnsubscribeGitStatusMessage {
-  cmd: "unsubscribe_git_status";
 }
 
 model GetFileDiffMessage {
@@ -3445,19 +3427,6 @@ model EnsureRepoResultMessage {
   cloned?: boolean;
   success?: boolean;
   error?: string;
-}
-
-model GitStatusUpdateMessage {
-  event: "git_status_update";
-  directory: string;
-  staged: GitFileChange[];
-  unstaged: GitFileChange[];
-  untracked: GitFileChange[];
-  error?: string;
-  mode?: string;                 // "full" or "tracked_only"
-  limited?: boolean;             // true when untracked files were skipped
-  limited_reason?: string;       // user-facing reason for the limited result
-  duration_ms?: int32;           // daemon-side status command duration
 }
 
 model FileDiffResultMessage {
@@ -6865,9 +6834,6 @@ model WebSocketEvent {
   original?: string;
   modified?: string;
   base_ref?: string;
-  staged?: GitFileChange[];
-  unstaged?: GitFileChange[];
-  untracked?: GitFileChange[];
 
   // PTY lifecycle
   data?: string;
@@ -6971,7 +6937,6 @@ alias DaemonEvent =
   | FetchRemotesResultMessage
   | ListRemoteBranchesResultMessage
   | EnsureRepoResultMessage
-  | GitStatusUpdateMessage
   | FileDiffResultMessage
   | GetRepoInfoResultMessage
   | AutomationApplyResultMessage

@@ -390,11 +390,10 @@ func isDirtyWorktreeDeleteError(err error) bool {
 }
 
 func (d *Daemon) worktreeHasLocalChanges(path string) bool {
-	status, _, err := d.statusReader().Status(context.Background(), path, gitStatusModeFull)
-	if err != nil || status == nil || status.Error != nil {
-		return false
-	}
-	return len(status.Staged) > 0 || len(status.Unstaged) > 0 || len(status.Untracked) > 0
+	dirtyFiles, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) (int, error) {
+		return client.WorktreeDirtyCount(ctx, path)
+	})
+	return err == nil && dirtyFiles > 0
 }
 
 type worktreeNotFoundError struct {

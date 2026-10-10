@@ -4628,23 +4628,6 @@ type GetSettingsMessage struct {
 	Cmd string `json:"cmd"`
 }
 
-type GitFileChange struct {
-	// Additions corresponds to the JSON schema field "additions".
-	Additions *int `json:"additions,omitempty,omitzero"`
-
-	// Deletions corresponds to the JSON schema field "deletions".
-	Deletions *int `json:"deletions,omitempty,omitzero"`
-
-	// OldPath corresponds to the JSON schema field "old_path".
-	OldPath *string `json:"old_path,omitempty,omitzero"`
-
-	// Path corresponds to the JSON schema field "path".
-	Path string `json:"path"`
-
-	// Status corresponds to the JSON schema field "status".
-	Status string `json:"status"`
-}
-
 type GitHubHostsUpdatedMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
@@ -4711,38 +4694,6 @@ type GitOperationStatus string
 const GitOperationStatusFailed GitOperationStatus = "failed"
 const GitOperationStatusRunning GitOperationStatus = "running"
 const GitOperationStatusSucceeded GitOperationStatus = "succeeded"
-
-type GitStatusUpdateMessage struct {
-	// Directory corresponds to the JSON schema field "directory".
-	Directory string `json:"directory"`
-
-	// DurationMs corresponds to the JSON schema field "duration_ms".
-	DurationMs *int `json:"duration_ms,omitempty,omitzero"`
-
-	// Error corresponds to the JSON schema field "error".
-	Error *string `json:"error,omitempty,omitzero"`
-
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// Limited corresponds to the JSON schema field "limited".
-	Limited *bool `json:"limited,omitempty,omitzero"`
-
-	// LimitedReason corresponds to the JSON schema field "limited_reason".
-	LimitedReason *string `json:"limited_reason,omitempty,omitzero"`
-
-	// Mode corresponds to the JSON schema field "mode".
-	Mode *string `json:"mode,omitempty,omitzero"`
-
-	// Staged corresponds to the JSON schema field "staged".
-	Staged []GitFileChange `json:"staged"`
-
-	// Unstaged corresponds to the JSON schema field "unstaged".
-	Unstaged []GitFileChange `json:"unstaged"`
-
-	// Untracked corresponds to the JSON schema field "untracked".
-	Untracked []GitFileChange `json:"untracked"`
-}
 
 type GuardianSelection struct {
 	// Effort corresponds to the JSON schema field "effort".
@@ -10493,14 +10444,6 @@ type StoredDocument struct {
 	UpdatedAt string `json:"updated_at"`
 }
 
-type SubscribeGitStatusMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Directory corresponds to the JSON schema field "directory".
-	Directory string `json:"directory"`
-}
-
 type SupportInputTrace struct {
 	// ByteCount corresponds to the JSON schema field "byte_count".
 	ByteCount int `json:"byte_count"`
@@ -10778,11 +10721,6 @@ type UnregisterMessage struct {
 	ID SessionID `json:"id"`
 }
 
-type UnsubscribeGitStatusMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-}
-
 type WakeTurnMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -10968,9 +10906,6 @@ type WebSocketEvent struct {
 	// SplitID corresponds to the JSON schema field "split_id".
 	SplitID *string `json:"split_id,omitempty,omitzero"`
 
-	// Staged corresponds to the JSON schema field "staged".
-	Staged []GitFileChange `json:"staged,omitempty,omitzero"`
-
 	// StashRef corresponds to the JSON schema field "stash_ref".
 	StashRef *string `json:"stash_ref,omitempty,omitzero"`
 
@@ -10991,12 +10926,6 @@ type WebSocketEvent struct {
 
 	// Total corresponds to the JSON schema field "total".
 	Total *int `json:"total,omitempty,omitzero"`
-
-	// Unstaged corresponds to the JSON schema field "unstaged".
-	Unstaged []GitFileChange `json:"unstaged,omitempty,omitzero"`
-
-	// Untracked corresponds to the JSON schema field "untracked".
-	Untracked []GitFileChange `json:"untracked,omitempty,omitzero"`
 
 	// Warnings corresponds to the JSON schema field "warnings".
 	Warnings []DaemonWarning `json:"warnings,omitempty,omitzero"`

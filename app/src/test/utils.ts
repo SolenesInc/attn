@@ -31,7 +31,6 @@ export { default as userEvent } from '@testing-library/user-event';
 export {
   MockDaemon,
   createMockDaemon,
-  createGitStatus,
   createFileDiffResult,
   waitForCalls,
   assertNoMoreCalls,
