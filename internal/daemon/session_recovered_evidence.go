@@ -53,7 +53,7 @@ func recoveredHarnessEdge(existing *protocol.Session, info ptybackend.SessionInf
 	if !ok {
 		return nil, time.Time{}, false
 	}
-	if info.HasLastSignal && (info.LastSignal.Source == pty.SourceProgramStatus || info.LastSignal.At.After(concludedAt)) {
+	if info.HasLastSignal && (recordedWait(info.LastSignal) || info.LastSignal.At.After(concludedAt)) {
 		return nil, time.Time{}, false
 	}
 	return func(e *sessionstate.Evidence) {
@@ -65,6 +65,14 @@ func recoveredHarnessEdge(existing *protocol.Session, info ptybackend.SessionInf
 		}
 		e.TurnEverOpened = true
 	}, concludedAt, true
+}
+
+func recordedWait(obs pty.Observation) bool {
+	if obs.Source != pty.SourceProgramStatus {
+		return false
+	}
+	claim, reported := programStatusClaim(obs.Claim)
+	return reported && claim != sessionstate.ClaimBusy && claim != sessionstate.ClaimSettled
 }
 
 func recoveredHarnessClaim(state protocol.SessionState) (sessionstate.Claim, bool) {
