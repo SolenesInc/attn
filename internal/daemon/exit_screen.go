@@ -50,16 +50,3 @@ func clampExitScreenText(text string) string {
 	}
 	return fmt.Sprintf("[exit screen truncated: %d bytes rendered, attn keeps the last %d]\n%s", len(text), exitScreenMaxBytes, tail)
 }
-
-func (d *Daemon) restoreExitScreen(sessionID protocol.SessionID, prior *store.SessionExitScreen) {
-	if prior == nil || d.store.GetSessionExitScreen(sessionID) != nil {
-		return
-	}
-	exitedAt, err := time.Parse(time.RFC3339Nano, prior.ExitedAt)
-	if err != nil {
-		exitedAt = time.Now()
-	}
-	if err := d.store.SaveSessionExitScreen(*prior, exitedAt); err != nil {
-		d.logf("exit screen of the previous process not restored: session=%s err=%v", sessionID, err)
-	}
-}

@@ -19,7 +19,6 @@ interface Options {
   getPaneSize: ReturnType<typeof useDesktopRuntimeController>['getPaneSize'];
   handleSelectSession: (id: string) => boolean;
   showError: ReturnType<typeof useToast>['showError'];
-  chooseReopenDirectory: () => Promise<string | undefined>;
   onReopened: () => void;
 }
 export function useSessionLifecycle({
@@ -31,7 +30,6 @@ export function useSessionLifecycle({
   getPaneSize,
   handleSelectSession,
   showError,
-  chooseReopenDirectory,
   onReopened,
 }: Options) {
   const { sendUnregisterSession, sendSessionReopen, sendDesktopClose } = useDaemonApi();
@@ -116,18 +114,12 @@ export function useSessionLifecycle({
 
   const handleReopenSession = useCallback(
     async (sessionId: string, actionId: string): Promise<boolean> => {
-      let directory: string | undefined;
-      if (actionId === 'start_fresh_elsewhere') {
-        const chosen = await chooseReopenDirectory();
-        if (!chosen) return false;
-        directory = chosen;
-      }
-      const result = await sendSessionReopen(sessionId, actionId, directory);
+      const result = await sendSessionReopen(sessionId, actionId);
       handleSelectSession(result.session_id);
       onReopened();
       return true;
     },
-    [sendSessionReopen, chooseReopenDirectory, onReopened, handleSelectSession],
+    [sendSessionReopen, onReopened, handleSelectSession],
   );
 
   const handleCloseCurrentSessionShortcut = useCallback(() => {

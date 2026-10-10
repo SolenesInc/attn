@@ -264,16 +264,7 @@ func buildSpawnSessionRecord(msg *protocol.SpawnSessionMessage, agent, cwd, labe
 }
 
 func (d *Daemon) handleSpawnSession(client *wsClient, msg *protocol.SpawnSessionMessage) {
-	d.handleSpawnSessionWithPolicy(client, msg, internalSpawnPolicy{userStarted: true, requester: client})
-}
-
-func (d *Daemon) handleSpawnSessionWithPolicy(client *wsClient, msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) {
-	placed, rejection := d.runSpawnPipelineReporting(msg, policy)
-	d.answerSpawn(client, msg.ID, placed, rejection)
-}
-
-func (d *Daemon) handleSpawnSessionWithPolicyProtected(protection foregroundCleanupProtection, client *wsClient, msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) {
-	placed, rejection := d.runSpawnPipelineProtected(protection, msg, policy)
+	placed, rejection := d.runSpawnPipelineReporting(msg, internalSpawnPolicy{userStarted: true, requester: client})
 	d.answerSpawn(client, msg.ID, placed, rejection)
 }
 

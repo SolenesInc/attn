@@ -12,7 +12,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -30,34 +29,6 @@ const (
 )
 
 var delegationGitTask = gitTask{Kind: gitTaskDelegation, Lane: gitInteractive}
-
-type internalActionResult struct {
-	Event     string  `json:"event"`
-	Success   bool    `json:"success"`
-	Error     *string `json:"error,omitempty"`
-	DesktopID *string `json:"desktop_id,omitempty"`
-	PaneID    *string `json:"pane_id,omitempty"`
-}
-
-func newInternalWSClient() *wsClient {
-	return &wsClient{send: make(chan outboundMessage, 4)}
-}
-
-func readInternalActionResult(client *wsClient) (internalActionResult, error) {
-	select {
-	case message := <-client.send:
-		var result internalActionResult
-		if err := json.Unmarshal(message.payload, &result); err != nil {
-			return internalActionResult{}, err
-		}
-		if !result.Success {
-			return result, fmt.Errorf("%s", protocol.Deref(result.Error))
-		}
-		return result, nil
-	default:
-		return internalActionResult{}, fmt.Errorf("daemon operation returned no result")
-	}
-}
 
 func (d *Daemon) validateDelegationName(name string, placement *launchPlacement) error {
 	name = strings.TrimSpace(name)
@@ -257,45 +228,6 @@ func (d *Daemon) activeSessionInCheckout(directory string, excluded ...string) (
 	return worktreeRoot, occupants
 }
 
-type delegationRollback struct {
-	d    *Daemon
-	undo []func(foregroundCleanupProtection) error
-}
-
-func (d *Daemon) newDelegationRollback() *delegationRollback {
-	return &delegationRollback{d: d}
-}
-
-func (r *delegationRollback) fail(protection foregroundCleanupProtection, cause error) error {
-	for i := len(r.undo) - 1; i >= 0; i-- {
-		if err := r.undo[i](protection); err != nil {
-			cause = fmt.Errorf("%w; %v", cause, err)
-		}
-	}
-	r.undo = nil
-	return cause
-}
-
-func (r *delegationRollback) abandon() {
-	r.undo = nil
-}
-
-func (r *delegationRollback) onWorktreeCreated(path string) {
-	r.undo = append(r.undo, func(protection foregroundCleanupProtection) error {
-		if err := r.d.doDeleteWorktreeProtected(protection, path, deleteWorktreeOptions{}); err != nil {
-			return fmt.Errorf("rollback worktree %s: %v", path, err)
-		}
-		return nil
-	})
-}
-
-func (r *delegationRollback) onSessionSpawned(sessionID protocol.SessionID) {
-	r.undo = append(r.undo, func(foregroundCleanupProtection) error {
-		r.d.unregisterSession(sessionID, syscall.SIGTERM)
-		return nil
-	})
-}
-
 func (d *Daemon) delegationWorktreeOwnerPath(worktreePath string) (string, error) {
 	out, err := d.gitOutput(context.Background(), delegationGitTask, git.OpMetadata, worktreePath, "rev-parse", "--git-path", delegationWorktreeOwnerFile)
 	if err != nil {
@@ -430,7 +362,7 @@ func (d *Daemon) createDelegationWorktree(protection foregroundCleanupProtection
 	return worktreePath, true, nil
 }
 
-func (d *Daemon) spawnDelegatedRuntimeProtected(protection foregroundCleanupProtection, msg *resolvedDelegationLaunch, sessionID protocol.SessionID, profileID string, placement *launchPlacement, directory, name, agent, model, effort, seedID, seedTitle string, guidance string) (internalActionResult, error) {
+func (d *Daemon) spawnDelegatedRuntimeProtected(protection foregroundCleanupProtection, msg *resolvedDelegationLaunch, sessionID protocol.SessionID, profileID string, placement *launchPlacement, directory, name, agent, model, effort, seedID, seedTitle string, guidance string) (placementOutcome, error) {
 	initialPrompt := delegatedSeedPrompt(seedID, seedTitle)
 	if guidance != "" {
 		initialPrompt = prompts.DelegationOpeningWithGuidance(initialPrompt, guidance)
@@ -462,9 +394,8 @@ func (d *Daemon) spawnDelegatedRuntimeProtected(protection foregroundCleanupProt
 	if placement != nil {
 		spawnMsg.Placement = &protocol.SessionPlacement{DesktopID: protocol.Ptr(placement.desktopID), AnchorPaneID: protocol.Ptr(placement.anchorPaneID)}
 	}
-	spawnClient := newInternalWSClient()
-	d.handleSpawnSessionWithPolicyProtected(protection, spawnClient, spawnMsg, internalSpawnPolicy{})
-	return readInternalActionResult(spawnClient)
+	placed, rejection := d.runSpawnPipelineProtected(protection, spawnMsg, internalSpawnPolicy{})
+	return placed, rejection.reason()
 }
 
 func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtection, msg *resolvedDelegationLaunch, operationID string, reservedSessionID protocol.SessionID, ownedWorktreePath string, worktreeOwned bool, worktreeToken string, initiatingChiefSessionID protocol.SessionID, resolved *delegationprefs.Resolved) (*protocol.DelegateResult, error) {
@@ -556,7 +487,6 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 		(operationID == "" && d.isChiefOfStaffSession(sourceSessionID))
 	createdWorktreePath := ""
 	operationWorktreePath := ""
-	rollback := d.newDelegationRollback()
 	if existing := d.store.Get(sessionID); existing != nil {
 		if name != "" && existing.Label != name {
 			d.store.UpdateSessionLabel(sessionID, name)
@@ -687,7 +617,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 		}
 		validatedDirectory, directoryErr := validateDelegationDirectory(resolvedDirectory)
 		if directoryErr != nil {
-			return nil, rollback.fail(protection, directoryErr)
+			return nil, directoryErr
 		}
 		directory = validatedDirectory
 		operationWorktreePath = worktreePath
@@ -695,7 +625,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 	if !inSourceCheckout {
 		validatedDirectory, directoryErr := validateDelegationDirectory(directory)
 		if directoryErr != nil {
-			return nil, rollback.fail(protection, directoryErr)
+			return nil, directoryErr
 		}
 		directory = validatedDirectory
 	}
@@ -711,14 +641,13 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 		predecessorID = protocol.TrimID(msg.PreviousTenderSession)
 	}
 	if worktreeRoot, occupants := d.activeSessionInCheckout(directory, string(predecessorID), string(sessionID)); len(occupants) > 0 && !protocol.Deref(msg.AllowWorktreeReuse) {
-		rollback.abandon()
 		return nil, fmt.Errorf("checkout %s is used by active Attn session %s; pass --allow-worktree-reuse only when sharing it is intentional", worktreeRoot, strings.Join(occupants, ", "))
 	}
 
 	if name == "" {
 		name, err = d.derivedDelegationName(msg.SeedTitle, directory, placement)
 		if err != nil {
-			return nil, rollback.fail(protection, err)
+			return nil, err
 		}
 	}
 	seedTitle := cmp.Or(msg.SeedTitle, name)
@@ -742,7 +671,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 	if operationID != "" {
 		if err := d.store.UpdateDelegationOperation(operationID, protocol.DelegationOperationStatePreparing,
 			"assembling the session", profile.ID, "", operationWorktreePath, nil, nil, time.Now()); err != nil {
-			return nil, rollback.fail(protection, err)
+			return nil, err
 		}
 	}
 
@@ -750,14 +679,13 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 	spawned, err := d.spawnDelegatedRuntimeProtected(protection, msg, sessionID, profile.ID, placement, directory, name, agent, model, effort, seedID, seedTitle, guidance)
 	if err != nil {
 		d.forgetLaunchWatch(sessionID, watch)
-		return nil, rollback.fail(protection, fmt.Errorf("spawn delegated session: %w", err))
+		return nil, fmt.Errorf("spawn delegated session: %w", err)
 	}
 
 	session := d.store.Get(sessionID)
 	if session == nil {
-		return nil, rollback.fail(protection, fmt.Errorf("delegated session was not persisted"))
+		return nil, fmt.Errorf("delegated session was not persisted")
 	}
-	rollback.onSessionSpawned(sessionID)
 	d.delegationCheckoutMu.Unlock()
 	checkoutLocked = false
 	if operationID != "" {
@@ -773,8 +701,10 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 		Agent:     agent,
 		Model:     model,
 		Effort:    effort,
-		DesktopID: spawned.DesktopID,
-		PaneID:    spawned.PaneID,
+	}
+	if spawned.paneID != "" {
+		result.DesktopID = protocol.Ptr(spawned.desktopID)
+		result.PaneID = protocol.Ptr(spawned.paneID)
 	}
 	if predecessorID != "" {
 		result.PredecessorSessionID = protocol.Ptr(predecessorID)
@@ -789,7 +719,6 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 	if session.Branch != nil && strings.TrimSpace(*session.Branch) != "" {
 		result.Branch = protocol.Ptr(strings.TrimSpace(*session.Branch))
 	}
-	rollback.abandon()
 	if err := d.confirmDelegatedLaunch(operationID, sessionID, agent, watch, result); err != nil {
 		return nil, err
 	}

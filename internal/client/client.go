@@ -440,7 +440,6 @@ func (c *Client) MoveSessionToDesktop(callerSessionID protocol.SessionID, sessio
 type SessionReopenOptions struct {
 	SessionID protocol.SessionID
 	Action    string
-	Directory string
 }
 
 func (c *Client) SessionReopen(opts SessionReopenOptions) (*protocol.SessionReopenResult, error) {
@@ -450,9 +449,6 @@ func (c *Client) SessionReopen(opts SessionReopenOptions) (*protocol.SessionReop
 	}
 	if action := strings.TrimSpace(opts.Action); action != "" {
 		msg.Action = protocol.Ptr(protocol.SessionReopenAction(action))
-	}
-	if directory := strings.TrimSpace(opts.Directory); directory != "" {
-		msg.Directory = protocol.Ptr(directory)
 	}
 	resp, err := c.send(msg)
 	if err != nil {

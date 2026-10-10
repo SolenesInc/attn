@@ -17,9 +17,8 @@ export function AppSessionPrompts() {
   const { desktopClosePrompt, confirmCloseDesktop, cancelCloseDesktop } = useSessionLifecycleContext();
   const {
     locationPickerOpen,
-    locationPickerPurpose,
     closeLocationPicker,
-    handleLocationSelect,
+    launchLocation,
     handleCreateWorktreeSession,
     sessionCreationJob,
     setSessionCreationJob,
@@ -48,9 +47,8 @@ export function AppSessionPrompts() {
       {desktopClosePrompt && <DesktopClosePrompt label={desktopClosePrompt.label} onConfirm={confirmCloseDesktop} onCancel={cancelCloseDesktop} />}
       <LocationPicker
         isOpen={locationPickerOpen}
-        purpose={locationPickerPurpose}
         onClose={closeLocationPicker}
-        onSelect={handleLocationSelect}
+        onSelect={launchLocation}
         onGetRecentLocations={sendGetRecentLocations}
         onBrowseDirectory={sendBrowseDirectory}
         onInspectPath={sendInspectPath}

@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionstate"
 )
 
 func (d *Daemon) profileChiefs() map[string]protocol.SessionID {
@@ -94,8 +95,11 @@ func (d *Daemon) decorateDelegatedFromChief(session *protocol.Session, delegated
 }
 
 func (d *Daemon) sessionExists(sessionID protocol.SessionID) bool {
-	if d.store != nil && d.store.Get(sessionID) != nil {
-		return true
+	if d.store != nil {
+		if d.store.Get(sessionID) != nil {
+			evidence, _ := d.evidenceTable().snapshot(sessionID)
+			return evidence.Process == nil || evidence.Process.Claim != sessionstate.ClaimExited
+		}
 	}
 	return d.store != nil && d.store.DelegationSessionReserved(sessionID)
 }

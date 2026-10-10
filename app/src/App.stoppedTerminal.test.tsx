@@ -52,3 +52,23 @@ it('closes a stopped agent through the normal close action', async () => {
   await gesture(view.daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Close' })));
   expect(view.daemon.sentOf('unregister')).toEqual([{ cmd: 'unregister', id: 'ended' }]);
 });
+
+it('uses the same Resume action when process evidence says the agent is stopped without an exit code', async () => {
+  const view = await openAttachedTerminals({
+    sessions: [daemonSession('ended', { state: 'idle', state_reason: 'process_exited' })],
+    desktops: [desktop],
+    script: (daemon) => {
+      daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: false, error: 'PTY session not found' }));
+      daemon.on('reload_session', ({ id }) => ({ event: 'reload_session_result', id, success: true }));
+    },
+  });
+  expect(view.daemon.sentOf('reload_session')).toEqual([]);
+  expect(screen.getByText('Agent stopped.')).toBeVisible();
+  await gesture(view.daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Resume' })));
+  expect(view.daemon.sentOf('reload_session')).toEqual([{
+    cmd: 'reload_session', id: 'ended', cols: expect.any(Number), rows: expect.any(Number),
+  }]);
+  view.daemon.emit({ event: 'session_state_changed', session: daemonSession('ended', { state: 'working' }) });
+  await view.daemon.idle();
+  expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull();
+});

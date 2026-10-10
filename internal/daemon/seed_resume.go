@@ -115,7 +115,7 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 		Directory: execution.Cwd,
 		Title:     seed.Title,
 		ProfileID: profileID,
-	}, d.newDelegationRollback())
+	})
 	if err != nil {
 		return nil, err
 	}

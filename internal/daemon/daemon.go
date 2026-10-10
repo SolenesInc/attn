@@ -1967,12 +1967,6 @@ func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.Session
 	})
 }
 
-func (d *Daemon) restoreSessionClose(sessionID protocol.SessionID, closed store.SessionCloseRecord) {
-	d.recordSessionClose(sessionID, func() (bool, error) {
-		return d.store.RestoreSessionClose(sessionID, closed)
-	})
-}
-
 func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() (bool, error)) {
 	defer d.announceUnplacement(sessionID)()
 	if session := d.store.Get(sessionID); session != nil {

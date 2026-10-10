@@ -16,15 +16,11 @@ var sessionReopenActions = []protocol.SessionReopenAction{
 	protocol.SessionReopenActionReopen,
 	protocol.SessionReopenActionRecreateWorktreeAndReopen,
 	protocol.SessionReopenActionFetchRecreateAndReopen,
-	protocol.SessionReopenActionStartFreshSamePlace,
-	protocol.SessionReopenActionStartFreshElsewhere,
-	protocol.SessionReopenActionStartFreshDefaultBranch,
 }
 
 type sessionReopenArgs struct {
 	target string
 	action string
-	cwd    string
 	json   bool
 }
 
@@ -37,7 +33,6 @@ func parseSessionReopenArgs(args []string) (sessionReopenArgs, error) {
 	fs := flag.NewFlagSet("session reopen", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	action := fs.String("action", "", "the action to perform; `attn session show` lists the ones offered")
-	cwd := fs.String("cwd", "", "where to start, for --action start_fresh_elsewhere")
 	jsonOut := fs.Bool("json", false, "print the result as JSON")
 	if err := fs.Parse(args[1:]); err != nil {
 		return sessionReopenArgs{}, err
@@ -50,7 +45,7 @@ func parseSessionReopenArgs(args []string) (sessionReopenArgs, error) {
 		return sessionReopenArgs{}, fmt.Errorf("%q is not a reopen action; the actions are %s",
 			named, strings.Join(sessionReopenActionNames(), ", "))
 	}
-	return sessionReopenArgs{target: target, action: named, cwd: strings.TrimSpace(*cwd), json: *jsonOut}, nil
+	return sessionReopenArgs{target: target, action: named, json: *jsonOut}, nil
 }
 
 func knownSessionReopenAction(name string) bool {
@@ -81,7 +76,6 @@ func runSessionReopen(args []string) {
 	result, err := client.New("").SessionReopen(client.SessionReopenOptions{
 		SessionID: protocol.SessionID(parsed.target),
 		Action:    parsed.action,
-		Directory: parsed.cwd,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "session reopen: %v\n", err)

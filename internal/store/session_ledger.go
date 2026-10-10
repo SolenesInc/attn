@@ -172,105 +172,47 @@ func finalizeSessionCostTx(tx *sql.Tx, id protocol.SessionID) error {
 	return err
 }
 
-type SessionCloseRecord struct {
-	At        string
-	By        string
-	Reason    string
-	ProfileID string
-}
-
-func (s *Store) ReopenSession(id protocol.SessionID) (SessionCloseRecord, bool, error) {
+func (s *Store) ReopenSession(id protocol.SessionID) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if s.db == nil {
 		mark, closed := s.sessionCloses[id]
 		if !closed {
-			return SessionCloseRecord{}, false, nil
+			return nil
 		}
-		lifted := SessionCloseRecord{At: mark.At, By: mark.By, Reason: mark.Reason, ProfileID: mark.session.ProfileID}
 		s.sessions[id] = mark.session
 		delete(s.sessionCloses, id)
-		return lifted, true, nil
+		return nil
 	}
 
 	tx, err := s.db.Begin()
 	if err != nil {
-		return SessionCloseRecord{}, false, fmt.Errorf("reopen session %s: %w", id, err)
+		return fmt.Errorf("reopen session %s: %w", id, err)
 	}
 	defer tx.Rollback()
 
-	var lifted SessionCloseRecord
-	err = tx.QueryRow("SELECT closed_at, closed_by, close_reason, profile_id FROM sessions WHERE id = ? AND closed_at <> ''", id).
-		Scan(&lifted.At, &lifted.By, &lifted.Reason, &lifted.ProfileID)
+	var profileID string
+	err = tx.QueryRow("SELECT profile_id FROM sessions WHERE id = ? AND closed_at <> ''", id).
+		Scan(&profileID)
 	if errors.Is(err, sql.ErrNoRows) {
-		return SessionCloseRecord{}, false, nil
+		return nil
 	}
 	if err != nil {
-		return SessionCloseRecord{}, false, fmt.Errorf("reopen session %s: %w", id, err)
+		return fmt.Errorf("reopen session %s: %w", id, err)
 	}
-	if lifted.ProfileID != "" {
-		if _, err := loadLiveProfile(tx, lifted.ProfileID); err != nil {
-			return SessionCloseRecord{}, false, fmt.Errorf("reopen session %s: %w", id, err)
+	if profileID != "" {
+		if _, err := loadLiveProfile(tx, profileID); err != nil {
+			return fmt.Errorf("reopen session %s: %w", id, err)
 		}
 	}
 	if _, err := tx.Exec(`UPDATE sessions SET closed_at = '', closed_by = '', close_reason = '' WHERE id = ?`, id); err != nil {
-		return SessionCloseRecord{}, false, fmt.Errorf("reopen session %s: %w", id, err)
+		return fmt.Errorf("reopen session %s: %w", id, err)
 	}
 	if err := tx.Commit(); err != nil {
-		return SessionCloseRecord{}, false, fmt.Errorf("reopen session %s: %w", id, err)
+		return fmt.Errorf("reopen session %s: %w", id, err)
 	}
-	return lifted, true, nil
-}
-
-func (s *Store) RestoreSessionClose(id protocol.SessionID, closed SessionCloseRecord) (bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.db == nil {
-		session := s.sessions[id]
-		if session == nil {
-			return false, nil
-		}
-		delete(s.sessions, id)
-		s.sessionCloses[id] = sessionCloseMark{At: closed.At, By: closed.By, Reason: closed.Reason, session: session}
-		return true, nil
-	}
-
-	tx, err := s.db.Begin()
-	if err != nil {
-		return false, fmt.Errorf("restore the close of session %s: %w", id, err)
-	}
-	defer tx.Rollback()
-	result, err := tx.Exec(`UPDATE sessions SET closed_at = ?, closed_by = ?, close_reason = ?
-		WHERE id = ? AND closed_at = ''`, closed.At, closed.By, closed.Reason, id)
-	if err != nil {
-		return false, fmt.Errorf("restore the close of session %s: %w", id, err)
-	}
-	affected, err := result.RowsAffected()
-	if err != nil {
-		return false, fmt.Errorf("restore the close of session %s: %w", id, err)
-	}
-	if affected == 1 {
-		if err := s.saveUnsavedSessionCostTx(tx, id); err != nil {
-			return false, fmt.Errorf("restore the close of session %s: %w", id, err)
-		}
-		if err := finalizeSessionCostTx(tx, id); err != nil {
-			return false, fmt.Errorf("restore the close of session %s: %w", id, err)
-		}
-		if err := unplaceClosingSession(tx, time.Now().UTC().Format(sortableTimeFormat), id); err != nil {
-			return false, fmt.Errorf("restore the close of session %s: %w", id, err)
-		}
-		if _, err := tx.Exec(`DELETE FROM terminal_bindings WHERE session_id = ?`, id); err != nil {
-			return false, err
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return false, fmt.Errorf("restore the close of session %s: %w", id, err)
-	}
-	s.announceTerminalBindingsLocked()
-	s.forgetSessionCost(id)
-	return affected == 1, nil
+	return nil
 }
 
 func (s *Store) SessionClosed(id protocol.SessionID) bool {

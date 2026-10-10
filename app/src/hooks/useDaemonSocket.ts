@@ -2654,11 +2654,9 @@ export function useDaemonSocket({
   const sendSessionReopen = useCallback((
     sessionId: string,
     action?: string,
-    directory?: string,
   ): Promise<SessionReopenResult> => {
     const body: Record<string, unknown> = { session_id: sessionId };
     if (action) body.action = action;
-    if (directory) body.directory = directory;
     return sendRequest<SessionReopenResult>('session_reopen', body, 'Reopening the session timed out', SESSION_REOPEN_TIMEOUT_MS);
   }, [sendRequest]);
 

@@ -63,9 +63,10 @@ func TestSessionLedgerCommandsReadClosedSessionsAndBringThemBack(t *testing.T) {
 		{args: []string{"reopen", "sess-1", "sess-2"}, want: []string{"exactly one session id is required"}},
 		{args: []string{"reopen", "sess-1", "--action", "recreate_worktree"}, want: []string{
 			string(protocol.SessionReopenActionReopen), string(protocol.SessionReopenActionRecreateWorktreeAndReopen),
-			string(protocol.SessionReopenActionFetchRecreateAndReopen), string(protocol.SessionReopenActionStartFreshSamePlace),
-			string(protocol.SessionReopenActionStartFreshElsewhere), string(protocol.SessionReopenActionStartFreshDefaultBranch),
+			string(protocol.SessionReopenActionFetchRecreateAndReopen),
 		}},
+		{args: []string{"reopen", "sess-1", "--action", "start_fresh_elsewhere"}, want: []string{"is not a reopen action"}},
+		{args: []string{"reopen", "sess-1", "--cwd", "/tmp"}, want: []string{"flag provided but not defined"}},
 	} {
 		refused := s.Attn(append([]string{"session"}, tc.args...)...)
 		if refused.Code != 2 {
@@ -187,16 +188,10 @@ func TestSessionLedgerCommandsReadClosedSessionsAndBringThemBack(t *testing.T) {
 	if err := os.RemoveAll(s.Path("blog")); err != nil {
 		t.Fatal(err)
 	}
-	elsewhere := s.Path("elsewhere")
-	if err := os.MkdirAll(elsewhere, 0o755); err != nil {
-		t.Fatal(err)
+	refused := s.Attn("session", "reopen", scratch)
+	if refused.Code != 1 || !strings.Contains(refused.Stderr, "not a worktree attn can put back") {
+		t.Errorf("missing directory reopen = %+v, want refusal", refused)
 	}
-	moved := s.Attn("session", "reopen", scratch, "--action", string(protocol.SessionReopenActionStartFreshElsewhere), "--cwd", elsewhere)
-	if moved.Code != 0 {
-		t.Fatalf("session reopen --cwd exited %d: %s", moved.Code, moved.Stderr)
-	}
-	requireLines(t, "session reopen --cwd", moved.Stdout, scratch+" reopened in "+elsewhere)
-	s.Launched(scratch)
 	if again := s.Attn("session", "reopen", worker.SessionID); again.Code != 0 || !strings.Contains(again.Stdout, worker.SessionID+" is already running") {
 		t.Errorf("reopening a live session exited %d with %q, want it reported as running", again.Code, again.Stdout+again.Stderr)
 	}

@@ -21,7 +21,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/sessionstate"
-	"github.com/victorarias/attn/internal/store"
 )
 
 type internalSpawnPolicy struct {
@@ -64,11 +63,7 @@ type spawnPlan struct {
 	chiefAssigned                bool
 	isChief                      bool
 	chiefAssignmentCommitted     bool
-	priorIntent                  store.LaunchIntent
-	hadPriorIntent               bool
 	launchedConversation         string
-	priorConversation            store.SessionConversation
-	conversationPersisted        bool
 }
 
 type spawnRejection struct {
@@ -104,18 +99,6 @@ func (plan *spawnPlan) rollback(d *Daemon, sessionID protocol.SessionID) {
 	if plan.spawnOpts.ID != "" {
 		d.terminals().unexpect(plan.spawnOpts.ID)
 	}
-}
-
-func (plan *spawnPlan) restoreLaunchIntent(d *Daemon, sessionID protocol.SessionID) {
-	if plan.conversationPersisted {
-		plan.conversationPersisted = false
-		d.restoreSessionConversation(sessionID, plan.priorConversation)
-	}
-	if plan.hadPriorIntent {
-		d.store.SetLaunchIntent(sessionID, plan.priorIntent)
-		return
-	}
-	d.store.ClearLaunchIntent(sessionID)
 }
 
 func (plan *spawnPlan) commit() {
@@ -417,7 +400,6 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{err: fmt.Errorf("persist session launch intent: %w", err)}
 	}
-	plan.priorIntent, plan.hadPriorIntent = d.store.LaunchIntent(session.ID)
 	intent := launchIntentFromSpawnOptions(plan.spawnOpts, plan.isChief)
 	intent.AutoMode = msg.AutoMode
 	if req.autoModeDriver {
@@ -426,30 +408,28 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	d.store.SetLaunchIntent(session.ID, intent)
 	d.persistLaunchedConversation(req, plan)
 	d.rememberSessionTitleInitialPrompt(msg.ID, req.initialPrompt)
-	priorExit := d.store.GetSessionExitScreen(msg.ID)
-	if err := d.store.DeleteSessionExitScreen(msg.ID); err != nil {
-		d.logf("exit screen of the previous process not cleared: session=%s err=%v", msg.ID, err)
-	}
 	hasInitialPrompt := strings.TrimSpace(req.initialPrompt) != ""
-	priorEvidence, _ := d.evidenceTable().snapshot(msg.ID)
 	d.startEvidence(msg.ID, sessionstate.Evidence{
 		InitialPromptOwed: hasInitialPrompt && reportsTurnStarts(req.agent),
 		ReviewerInLoop:    plan.spawnOpts.ApprovalRoute.ReviewerInLoop(),
 	})
-	if err := d.spawnSessionRuntime(msg.ID, plan.spawnOpts); err != nil {
-		d.forgetSessionTitleInitialPrompt(msg.ID)
-		d.restoreExitScreen(msg.ID, priorExit)
+	if req.hasPluginDriver && !d.store.BeginAgentDriverRun(session.ID, req.pluginDriver.PluginName, plan.pluginRunID) {
 		if req.existingSession == nil {
 			d.store.Remove(msg.ID)
 			d.forgetSessionTrace(msg.ID)
-		} else if restoreErr := d.store.AddCheckedUnlessTeardown(req.existingSession); restoreErr != nil {
-			err = errors.Join(err, fmt.Errorf("restore prior session after spawn failure: %w", restoreErr))
 		}
-		if req.existingSession != nil {
-			d.startEvidence(msg.ID, priorEvidence)
-			plan.restoreLaunchIntent(d, msg.ID)
+		d.abortPluginSessionLaunch(msg.ID, "launch_failed")
+		plan.rollback(d, msg.ID)
+		return &spawnOutcome{err: fmt.Errorf("initialize plugin driver run cursor")}
+	}
+	if err := d.spawnSessionRuntime(msg.ID, plan.spawnOpts); err != nil {
+		d.forgetSessionTitleInitialPrompt(msg.ID)
+		if req.existingSession == nil {
+			d.store.Remove(msg.ID)
+			d.forgetSessionTrace(msg.ID)
 		}
 		if req.hasPluginDriver {
+			d.store.EndAgentDriverRun(msg.ID)
 			d.abortPluginSessionLaunch(msg.ID, "launch_failed")
 		}
 		if plan.chiefAssigned {
@@ -457,6 +437,9 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		}
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{err: err}
+	}
+	if err := d.store.DeleteSessionExitScreenBefore(msg.ID, req.spawnStartedAt); err != nil {
+		d.logf("exit screen of the previous process not cleared: session=%s err=%v", msg.ID, err)
 	}
 	if hasInitialPrompt {
 		d.maybeGenerateSessionTitleFromPrompt(msg.ID, req.initialPrompt, sessionInputOrigin{})
@@ -510,32 +493,15 @@ func (d *Daemon) persistLaunchedConversation(req *spawnRequest, plan *spawnPlan)
 		return
 	}
 	plan.launchedConversation = conversation
-	plan.priorConversation = d.store.GetSessionConversation(sessionID)
-	if plan.priorConversation.NativeID == conversation {
+	if d.store.GetResumeSessionID(sessionID) == conversation {
 		return
 	}
-	plan.conversationPersisted = true
 	if clearPicker {
 		d.store.SetResumeSessionID(sessionID, "")
 		return
 	}
 	if _, err := d.store.TransitionSessionResumeID(sessionID, conversation); err != nil {
 		d.logf("spawn: persist launched conversation for session %s: %v", sessionID, err)
-	}
-}
-
-func (d *Daemon) restoreSessionConversation(sessionID protocol.SessionID, prior store.SessionConversation) {
-	var err error
-	switch {
-	case prior.NativeID == "":
-		d.store.SetResumeSessionID(sessionID, "")
-	case prior.TranscriptPath != "":
-		_, err = d.store.TransitionSessionConversation(sessionID, prior.NativeID, prior.TranscriptPath)
-	default:
-		_, err = d.store.TransitionSessionResumeID(sessionID, prior.NativeID)
-	}
-	if err != nil {
-		d.logf("spawn: restore conversation for session %s: %v", sessionID, err)
 	}
 }
 
@@ -549,15 +515,8 @@ func (d *Daemon) removeSessionRuntime(terminal harness.TerminalID) error {
 
 func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 	msg, session := req.msg, plan.launchSession
-	if current := d.store.Get(session.ID); current != nil {
-		session.State = current.State
-		session.StateSince = current.StateSince
-		session.StateUpdatedAt = current.StateUpdatedAt
-		if strings.TrimSpace(current.Label) != "" {
-			session.Label = current.Label
-		}
-	}
-	if err := d.store.AddCheckedUnlessTeardown(session); err != nil {
+	current := d.store.Get(session.ID)
+	if current == nil {
 		if req.hasPluginDriver {
 			d.abortPluginSessionLaunch(msg.ID, "launch_failed")
 		}
@@ -566,24 +525,24 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		}
 		killErr := d.killSessionRuntime(plan.spawnOpts.ID)
 		removeErr := d.removeSessionRuntime(plan.spawnOpts.ID)
-		persistErr := fmt.Errorf("persist spawned session: %w", err)
+		persistErr := fmt.Errorf("spawned session %s is no longer open", session.ID)
 		if killErr != nil {
 			persistErr = fmt.Errorf("%w; kill spawned runtime: %v", persistErr, killErr)
 		}
 		if removeErr != nil {
 			persistErr = fmt.Errorf("%w; remove spawned runtime: %v", persistErr, removeErr)
 		}
-		if req.existingSession != nil {
-			plan.restoreLaunchIntent(d, msg.ID)
-		}
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{err: persistErr}
 	}
+	session = current
 	fact := FactSessionRegistered
 	if req.existingSession != nil {
 		fact = FactSessionReregistered
 	}
-	req.placed = d.placeAnsweringRequester(session, req.placement, req.policy.requester)
+	if req.existingSession == nil {
+		req.placed = d.placeAnsweringRequester(session, req.placement, req.policy.requester)
+	}
 	if req.placed.err != nil {
 		if req.hasPluginDriver {
 			d.abortPluginSessionLaunch(msg.ID, "launch_failed")
@@ -592,9 +551,6 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		if req.existingSession == nil {
 			d.store.Remove(session.ID)
 			d.forgetSessionTrace(session.ID)
-		} else {
-			cleanupErr = errors.Join(cleanupErr, d.store.AddCheckedUnlessTeardown(req.existingSession))
-			plan.restoreLaunchIntent(d, msg.ID)
 		}
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{err: errors.Join(req.placed.err, cleanupErr)}
@@ -603,36 +559,6 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		if err := d.store.InitializeSessionCostTracking(session.ID); err != nil {
 			d.logf("initialize session cost tracking for %s: %v", session.ID, err)
 		}
-	}
-	if req.hasPluginDriver && !d.store.BeginAgentDriverRun(session.ID, req.pluginDriver.PluginName, plan.pluginRunID) {
-		d.abortPluginSessionLaunch(msg.ID, "launch_failed")
-		if plan.chiefAssigned {
-			d.clearChiefOfStaffIfSession(msg.ID)
-		}
-		killErr := d.killSessionRuntime(plan.spawnOpts.ID)
-		removeErr := d.removeSessionRuntime(plan.spawnOpts.ID)
-		if req.existingSession == nil {
-			d.store.Remove(session.ID)
-			d.forgetSessionTrace(session.ID)
-		} else {
-			if req.placed.paneID != "" {
-				_, _ = d.store.RemoveSessionPlacement(session.ID)
-			}
-			_ = d.store.AddCheckedUnlessTeardown(req.existingSession)
-			plan.restoreLaunchIntent(d, msg.ID)
-		}
-		if req.placed.paneID != "" {
-			d.publishArrangementChanged(session.ProfileID)
-		}
-		cursorErr := fmt.Errorf("initialize plugin driver run cursor")
-		if killErr != nil {
-			cursorErr = fmt.Errorf("%w; kill spawned runtime: %v", cursorErr, killErr)
-		}
-		if removeErr != nil {
-			cursorErr = fmt.Errorf("%w; remove spawned runtime: %v", cursorErr, removeErr)
-		}
-		plan.rollback(d, msg.ID)
-		return &spawnOutcome{err: cursorErr}
 	}
 	if plan.launchedConversation != "" {
 		d.rememberDispatchResume(session.ID, plan.launchedConversation)
@@ -675,7 +601,16 @@ func (d *Daemon) runSpawnPipelineReporting(msg *protocol.SpawnSessionMessage, po
 	return placed, rejection
 }
 
-func (d *Daemon) runSpawnPipelineProtected(protection foregroundCleanupProtection, msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) (placementOutcome, *spawnRejection) {
+func (d *Daemon) runSpawnPipelineProtected(protection foregroundCleanupProtection, msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) (placed placementOutcome, rejection *spawnRejection) {
+	defer func() {
+		if rejection == nil || d.store.Get(msg.ID) == nil {
+			return
+		}
+		if !d.sessionHasLiveWorker(msg.ID) {
+			d.recordProcessEvidence(msg.ID, true)
+		}
+		d.publishFact(FactSessionReregistered, string(msg.ID), nil)
+	}()
 	ctx, cancel := context.WithTimeout(protection.Context(), 30*time.Second)
 	defer cancel()
 	req, rejection := d.validateSpawnPrelock(msg, policy)
@@ -690,6 +625,13 @@ func (d *Daemon) runSpawnPipelineProtected(protection foregroundCleanupProtectio
 	}
 	if rejection := d.normalizeSpawnRequest(req); rejection != nil {
 		return placementOutcome{}, rejection
+	}
+	if req.existingSession != nil {
+		req.placed = d.placeAnsweringRequester(req.existingSession, req.placement, req.policy.requester)
+		if req.placed.err != nil {
+			return req.placed, &spawnRejection{err: req.placed.err}
+		}
+		req.placement = nil
 	}
 	plan, rejection := d.resolveSpawnIntent(ctx, req)
 	if rejection != nil {

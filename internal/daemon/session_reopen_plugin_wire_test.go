@@ -29,8 +29,8 @@ func TestAClosedPluginSessionReopensOnlyWhileItsDriverCanResumeIt(t *testing.T) 
 		t.Fatalf("uninstall attn-pi: %s", protocol.Deref(uninstalled.Error))
 	}
 	verdict := reopenVerdict(t, cli, session)
-	if verdict.Reopenable || !slices.Equal(verdict.Actions, []protocol.SessionReopenAction{protocol.SessionReopenActionStartFreshSamePlace}) {
-		t.Errorf("the verdict after pi was uninstalled = %+v, want only a fresh start in place", verdict)
+	if verdict.Reopenable || len(verdict.Actions) != 0 {
+		t.Errorf("the verdict after pi was uninstalled = %+v, want no resume action", verdict)
 	}
 	for _, want := range []string{`"pi"`, "not installed"} {
 		if !strings.Contains(protocol.Deref(verdict.Reason), want) {
@@ -39,7 +39,7 @@ func TestAClosedPluginSessionReopensOnlyWhileItsDriverCanResumeIt(t *testing.T) 
 	}
 }
 
-func TestAClosedSessionOfADriverThatDoesNotResumeOffersOnlyAFreshStart(t *testing.T) {
+func TestAClosedSessionOfADriverThatDoesNotResumeRefusesResume(t *testing.T) {
 	t.Setenv(fakeagent.PiWithoutResumeEnv, "1")
 	w := newWorld(t, fakeagent.Pi)
 	app, cli := w.App(), w.Client()
@@ -50,8 +50,8 @@ func TestAClosedSessionOfADriverThatDoesNotResumeOffersOnlyAFreshStart(t *testin
 	awaitClosed(app, session)
 
 	verdict := reopenVerdict(t, cli, session)
-	if verdict.Reopenable || !slices.Equal(verdict.Actions, []protocol.SessionReopenAction{protocol.SessionReopenActionStartFreshSamePlace}) {
-		t.Errorf("the verdict on a pi session whose driver cannot resume = %+v, want only a fresh start in place", verdict)
+	if verdict.Reopenable || len(verdict.Actions) != 0 {
+		t.Errorf("the verdict on a pi session whose driver cannot resume = %+v, want no resume action", verdict)
 	}
 	for _, want := range []string{`"pi"`, "does not resume"} {
 		if !strings.Contains(protocol.Deref(verdict.Reason), want) {

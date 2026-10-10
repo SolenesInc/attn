@@ -201,7 +201,6 @@ export function useAppController({
     locationPickerOpen,
     handleNewSession,
     createSplitSession,
-    chooseReopenDirectory,
   } = sessionLaunch;
 
   const prLauncher = usePRLauncher({ settings, launchAgent });
@@ -273,7 +272,6 @@ export function useAppController({
     getPaneSize,
     handleSelectSession,
     showError,
-    chooseReopenDirectory,
     onReopened,
   });
   const {

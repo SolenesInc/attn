@@ -246,6 +246,7 @@ func heartbeatEvidence(obs pty.Observation, at time.Time) (func(*sessionstate.Ev
 }
 
 func (d *Daemon) startEvidence(sessionID protocol.SessionID, fresh sessionstate.Evidence) {
+	d.stateReasons().forget(sessionID)
 	d.dwellGate().clear(sessionID)
 	d.updateEvidence(sessionID, nil, func(e *sessionstate.Evidence) { *e = fresh })
 }
