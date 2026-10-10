@@ -526,6 +526,8 @@ function collectSessionUiState(
   const desktopDom = collectDesktopShellMetrics(desktopId);
   const desktopView = collectDesktopViewState(desktopId);
   const desktopModel = serializeDesktopModel(session, getActivePaneIdForSession);
+  const sidebarDesktop = sidebarItem?.closest('.desktop-group');
+  const sidebarList = sidebarItem?.closest('.session-list');
 
   return {
     sessionId,
@@ -541,6 +543,12 @@ function collectSessionUiState(
           bounds: rectSnapshot(sidebarItem),
           automation: readProvenance(sidebarItem),
           pullRequest: sidebarItem.querySelector('.sidebar-session-pr')?.textContent?.trim() || '',
+          desktopId,
+          desktopBounds: rectSnapshot(sidebarDesktop ?? null),
+          rowIndex: Array.from(sidebarDesktop?.querySelectorAll('[data-testid^="sidebar-session-"]') || []).indexOf(sidebarItem),
+          scrollTop: sidebarList instanceof HTMLElement ? sidebarList.scrollTop : null,
+          desktopIds: Array.from(sidebarList?.querySelectorAll('.desktop-group') || [])
+            .map((group) => (group.getAttribute('data-testid') || '').slice('sidebar-desktop-'.length)),
         }
       : null,
     desktopBounds: desktopDom.desktopRoot?.bounds ?? null,
