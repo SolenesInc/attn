@@ -445,15 +445,15 @@ func runCrewSet(args []string) {
 		fmt.Fprintf(os.Stderr, "crew set: %v\n", err)
 		os.Exit(1)
 	}
+	if result.WakeError != nil {
+		fmt.Fprintf(os.Stderr, "settings saved; Chief did not start: %s\n", *result.WakeError)
+	}
 	if parsed.json {
 		printJSON(result.Member)
 		return
 	}
 	if result.WokeSessionID != nil {
 		fmt.Printf("%s woke in session %s\n", result.Member.Name, string(*result.WokeSessionID)[:8])
-	}
-	if result.WakeError != nil {
-		fmt.Fprintf(os.Stderr, "settings saved; Chief did not start: %s\n", *result.WakeError)
 	}
 	record := result.Member
 	fmt.Printf("%s launches in %s on %s, model %s, effort %s\n", record.Name, valueOrDash(protocol.Deref(record.Cwd)), valueOrDash(protocol.Deref(record.ResolvedAgent)), valueOrDash(protocol.Deref(record.ResolvedModel)), valueOrDash(protocol.Deref(record.ResolvedEffort)))

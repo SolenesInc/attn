@@ -45,7 +45,7 @@ describe('chief and crew sessions are protected from close', () => {
     close();
 
     expect(closeCommands(daemon)).toEqual([]);
-    expect(toast()).toHaveTextContent('Chief of staff is protected');
+    expect(toast()).toHaveTextContent('Chief is protected. Put Chief to sleep to close its session.');
   });
 
   it.each([

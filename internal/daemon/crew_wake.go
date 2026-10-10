@@ -312,7 +312,7 @@ func (d *Daemon) crewWakeDayWithChargeLocked(key who.MemberKey, agent string, au
 		return nil, err
 	}
 	if d.isChief(key) && member.Agent == "" {
-		return nil, fmt.Errorf("Chief has no harness yet; pick one: attn crew set chief --agent <harness> --model <model>")
+		return nil, fmt.Errorf("the Chief has no harness yet; pick one: attn crew set chief --agent <harness> --model <model>")
 	}
 	releasedSessionID := protocol.SessionID(d.takeCrewExitedSession(member.Key.String()))
 	if boundSessionID := protocol.TrimID(member.BindingSession); boundSessionID != "" {
@@ -351,7 +351,7 @@ func (d *Daemon) crewWakeDayWithChargeLocked(key who.MemberKey, agent string, au
 		agent = member.LaunchAgent()
 	}
 	if d.isChief(key) && !d.agentSupportsChiefGuidance(agent) {
-		return nil, fmt.Errorf("Chief needs a harness that takes launch instructions; %s does not", agent)
+		return nil, fmt.Errorf("the Chief needs a harness that takes launch instructions; %s does not", agent)
 	}
 	if !d.crewAgentAvailable(agent) {
 		return nil, fmt.Errorf("agent %q is not available", agent)
@@ -577,7 +577,7 @@ func (d *Daemon) crewSet(key who.MemberKey, msg *protocol.CrewSetMessage) (*prot
 		}
 		before := member
 		if chief && msg.Agent != nil && strings.TrimSpace(*msg.Agent) == "" {
-			return nil, false, fmt.Errorf("Chief needs a harness; pick one: attn crew set chief --agent <harness> --model <model>")
+			return nil, false, fmt.Errorf("the Chief needs a harness; pick one: attn crew set chief --agent <harness> --model <model>")
 		}
 		if chief {
 			agent := member.Agent
@@ -585,7 +585,7 @@ func (d *Daemon) crewSet(key who.MemberKey, msg *protocol.CrewSetMessage) (*prot
 				agent = strings.TrimSpace(strings.ToLower(*msg.Agent))
 			}
 			if agent != "" && !d.agentSupportsChiefGuidance(agent) {
-				return nil, false, fmt.Errorf("Chief needs a harness that takes launch instructions; %s does not", agent)
+				return nil, false, fmt.Errorf("the Chief needs a harness that takes launch instructions; %s does not", agent)
 			}
 		}
 		if err := d.applyCrewSettings(&member, msg); err != nil {
@@ -593,7 +593,7 @@ func (d *Daemon) crewSet(key who.MemberKey, msg *protocol.CrewSetMessage) (*prot
 		}
 		if chief && member.Agent != "" {
 			if before.Agent == "" && member.Model == "" {
-				return nil, false, fmt.Errorf("Chief needs a model too: attn crew set chief --agent <harness> --model <model>")
+				return nil, false, fmt.Errorf("the Chief needs a model too: attn crew set chief --agent <harness> --model <model>")
 			}
 		}
 		revision, err := d.writeCrewMemberWithLaunch(*schema, member, doc.Rev, setting)

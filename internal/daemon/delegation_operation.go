@@ -98,10 +98,6 @@ func (d *Daemon) startDelegationForeground(msg *protocol.DelegateMessage) (*prot
 	if err != nil {
 		return nil, err
 	}
-	var chiefSessionID protocol.SessionID
-	if d.sessionIsChief(protocol.Deref(msg.SourceSessionID)) {
-		chiefSessionID = protocol.TrimID(protocol.Deref(msg.SourceSessionID))
-	}
 	seedID := ""
 	parentSeedID := ""
 	handoverSnapshot := store.DelegationHandoverSnapshot{}
@@ -128,7 +124,7 @@ func (d *Daemon) startDelegationForeground(msg *protocol.DelegateMessage) (*prot
 	if err != nil {
 		return nil, err
 	}
-	record, claimed, err := d.store.ClaimDelegationOperationWithHandoverSnapshot(requestID, "op-"+uuid.NewString(), protocol.SessionID(uuid.NewString()), chiefSessionID, r.Actor(), seedID, string(encoded), resolvedJSON, baseCommit, parentSeedID, handoverSnapshot, time.Now())
+	record, claimed, err := d.store.ClaimDelegationOperationWithHandoverSnapshot(requestID, "op-"+uuid.NewString(), protocol.SessionID(uuid.NewString()), r.Actor(), seedID, string(encoded), resolvedJSON, baseCommit, parentSeedID, handoverSnapshot, time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +227,7 @@ func (d *Daemon) runDelegationOperationProtected(protection foregroundCleanupPro
 		d.finishDelegationFailure(id, fmt.Errorf("record resolved delegation: %w", err))
 		return
 	}
-	result, launchErr := d.delegateOperationProtected(protection, runtime, id, record.Operation.SessionID, protocol.Deref(record.Operation.WorktreePath), record.WorktreeOwned, record.WorktreeToken, record.ChiefSessionID, resolved)
+	result, launchErr := d.delegateOperationProtected(protection, runtime, id, record.Operation.SessionID, protocol.Deref(record.Operation.WorktreePath), record.WorktreeOwned, record.WorktreeToken, resolved)
 	if errors.Is(launchErr, errDelegationInterrupted) {
 		return
 	}

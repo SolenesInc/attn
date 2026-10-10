@@ -63,10 +63,10 @@ func chiefSeedAssignmentPrompt(seedID string) string {
 	return prompts.RenderText("chief", "seed-assignment", prompts.Values{"seed_id": seedID})
 }
 
-func (d *Daemon) deliverChiefSeedAssignment(chiefSessionID protocol.SessionID, seedID string) (protocol.AgentMsgStatus, string) {
+func (d *Daemon) deliverChiefSeedAssignment(chief who.Party, seedID string) (protocol.AgentMsgStatus, string) {
 	receipt, err := d.sendToInbox(inbox.Item{To: who.ToTenderOf(seedID), Kind: inbox.Notice, Text: chiefSeedAssignmentPrompt(seedID)})
 	if err != nil {
-		d.logf("seed send to Chief: queue %s for %s: %v", seedID, chiefSessionID, err)
+		d.logf("seed send to Chief: queue %s for %s: %v", seedID, chief, err)
 		return protocol.AgentMsgStatusRefused, "Chief now tends the seed, but its inbox item could not be recorded; the assignment remains on the seed log"
 	}
 	if !receipt.Rang {
@@ -75,7 +75,7 @@ func (d *Daemon) deliverChiefSeedAssignment(chiefSessionID protocol.SessionID, s
 	return protocol.AgentMsgStatusNotified, "notified Chief"
 }
 
-func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, chiefSessionID protocol.SessionID) (*protocol.SeedSendToChiefResult, error) {
+func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage) (*protocol.SeedSendToChiefResult, error) {
 	if err := d.requireHome(garden.Surface); err != nil {
 		return nil, err
 	}
@@ -108,7 +108,7 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, chiefSess
 		d.unlockGardenRoles()
 		return nil, err
 	}
-	chief, err := d.chiefParty(r.ProfileID(), b)
+	chief, err := d.chiefParty(r.ProfileID())
 	if err != nil {
 		d.unlockGardenRoles()
 		return nil, err
@@ -170,7 +170,7 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, chiefSess
 	if err := d.resolveGardenReviewAction(msg.Review, seed.ID, "send_to_chief"); err != nil {
 		d.logf("Garden review: settle %s after Send to Chief: %v", seed.ID, err)
 	}
-	status, detail := d.deliverChiefSeedAssignment(chiefSessionID, seed.ID)
+	status, detail := d.deliverChiefSeedAssignment(chief, seed.ID)
 
 	wire := d.seedWire(next, written, false, b)
 	d.decorateSeedContinuation(&wire, next)
@@ -186,7 +186,7 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, chiefSess
 }
 
 func (d *Daemon) handleSeedSendToChief(conn net.Conn, msg *protocol.SeedSendToChiefMessage) {
-	result, err := d.sendSeedToChief(msg, d.chiefOfProfile(protocol.Deref(msg.ProfileID)))
+	result, err := d.sendSeedToChief(msg)
 	if err != nil {
 		d.sendGardenError(conn, "send-to-chief", err)
 		return
@@ -200,7 +200,7 @@ func (d *Daemon) handleSeedSendToChiefWS(client *wsClient, msg *protocol.SeedSen
 	response := protocol.SeedSendToChiefResultMessage{
 		Event: protocol.EventSeedSendToChiefResult, RequestID: protocol.Deref(msg.RequestID),
 	}
-	result, err := d.sendSeedToChief(msg, protocol.SessionID(d.chiefForClient(client)))
+	result, err := d.sendSeedToChief(msg)
 	if err != nil {
 		response.Error = protocol.Ptr(err.Error())
 	} else {

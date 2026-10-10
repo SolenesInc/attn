@@ -133,7 +133,7 @@ func (d *Daemon) handleCrewRetire(conn net.Conn, msg *protocol.CrewRetireMessage
 		return
 	}
 	if d.isChief(m.Key) {
-		d.sendCrewError(conn, "retire", fmt.Errorf("Chief can't be retired; change its charter, harness or model instead"))
+		d.sendCrewError(conn, "retire", fmt.Errorf("the Chief can't be retired; change its charter, harness or model instead"))
 		return
 	}
 	retired, err := d.retireCrewMember(m)

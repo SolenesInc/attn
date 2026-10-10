@@ -205,15 +205,12 @@ func (d *Daemon) checkGardenClaimant(party who.Party) error {
 	return nil
 }
 
-func (d *Daemon) chiefParty(profileID string, b who.Bindings) (who.Party, error) {
-	chief, ok := b.PartyOf(d.chiefOfProfile(profileID))
-	if !ok {
-		return who.Party{}, errors.New("this profile has no Chief; make one of its agents the Chief first")
-	}
-	if err := b.Check(chief); err != nil {
+func (d *Daemon) chiefParty(profileID string) (who.Party, error) {
+	chief, err := d.chief(profileID)
+	if err != nil {
 		return who.Party{}, err
 	}
-	return chief, d.checkGardenClaimant(chief)
+	return who.Member(chief), nil
 }
 func (d *Daemon) gardenRequester(source *protocol.SessionID, profile *string) (who.Requester, error) {
 	b, err := d.bindings()
