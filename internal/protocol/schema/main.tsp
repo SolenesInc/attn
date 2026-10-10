@@ -206,10 +206,11 @@ model Session {
   state_reason?: string;        // Why the resolver reached this state (e.g. "stuck", "classifier_verdict"); absent for states it does not own
   chief_of_staff?: boolean;     // True when this session holds the instance-wide coordinator role
   crew_member?: string;         // The crew member whose active binding this session is — "this session is trellis today". Stamped by the daemon at launch, judged live at broadcast, absent for every unbound session.
+  crew_member_name?: string;
   delegated_from_chief?: boolean; // True when this session was delegated from the chief of staff (recorded by the Garden dispatch)
   seed_id?: string;             // The seed this session reports to: the crown a delegation was dispatched at, or the seed planted for it. Read from the session's dispatch record at broadcast, never stored on the session — the record is the single answer to what a session reports to. Absent for a session no delegation bound.
   dispatcher_session_id?: SessionID; // The live session for this session's dispatcher, resolved from its dispatch record at broadcast and never stored on the session. Absent when nothing resolves.
-  dispatcher_member?: string;   // The crew member whose day dispatched this session. Read from the dispatch record and present even when no live session resolves.
+  dispatcher?: ActorView;
   delegation_role?: SessionDelegationRole;
   turn_owed?: boolean;          // True when the user owes this session a turn. Derived at broadcast from the turn stamps plus the queue's exclusions (shell, chief); never stored, and never recomputed by a client.
   turn_opened_at?: string;      // ISO timestamp the outstanding turn opened; the queue's sort key. Absent when nothing is owed.
@@ -1151,8 +1152,6 @@ model SeedHandoverRequest {
   seed_id: string;
   handoff?: string;
   expected_rev: safeint;
-  expected_tender_session: SessionID;
-  expected_tender_member: string;
   review?: SeedReviewActionContext;
   note_id?: string; // Reserved recovery identity for a new handoff note.
 }
@@ -4591,12 +4590,12 @@ model Seed {
   "status": string;
   // The seed's stable name within its plot; derived from the title at planting.
   "step_slug": string;
-  "planter_session": SessionID;
-  "planter_member": string;
-  "tender_session": SessionID;
-  "tender_member": string;
+  "planter": ActorView;
+  "tender"?: PartyView;
+  "claimed": boolean;
+  "resume_available": boolean;
   // The most recent attn session that worked this seed. It survives Park and
-  // session removal; current ownership remains tender_session/tender_member.
+  // session removal; the current claim is tender.
   "last_execution_id"?: SessionID;
   // The latest lifecycle state transition. Legacy seeds use updated_at as a
   // conservative fallback and say so through state_changed_at_exact.
@@ -4638,8 +4637,7 @@ model SeedHarvestCondition {
   "pull_request": string;
   "url": string;
   "set_at": string;
-  "set_by_session"?: SessionID;
-  "set_by_member"?: string;
+  "set_by": ActorView;
   "checked_at"?: string;
 }
 
@@ -4785,8 +4783,7 @@ model SeedPlantMessage {
   // A seed this work was discovered while tending. Refused before planting
   // when no such seed is planted.
   "discovered_from"?: string;
-  // The crew member planting, free-string until the crew primitive lands.
-  "member"?: string;
+
 }
 
 model SeedPlantResult {
@@ -4801,7 +4798,7 @@ model SeedPlotMessage {
 
   "cmd": "seed_plot";
   "source_session_id"?: SessionID;
-  "member"?: string;
+
   "title": string;
   "body"?: string;
   "children": SeedPlotChild[];
@@ -4950,10 +4947,6 @@ model SeedDocumentGetMessage {
 
 model SeedDocument {
   "seed": Seed;
-  // Whether the stored tender currently holds this seed. A tender session may
-  // remain in the document after that session exits, so the ids alone cannot
-  // answer where feedback can be delivered.
-  "tender_holds": boolean;
   "children": Seed[];
   "notes": SeedNote[];
   "notes_total": int32;
@@ -5139,10 +5132,9 @@ model SeedTransitionMessage {
   // A log note committed with Park. It is separate from a closing reason and
   // absent for every other lifecycle move.
   "comment"?: string;
-  // The crew member asking, recorded as the tender on a claim.
-  "member"?: string;
-  // Yes, act even though somebody else holds it. Ignored when nobody else
-  // holds the seed.
+  // The member to claim the seed for; accepted only with tend.
+  "assignee"?: string;
+  // Yes, act even though somebody else claims the seed.
   "force"?: boolean;
   // Present only when this lifecycle move resolves one captured Review garden item.
   "review"?: SeedReviewActionContext;
@@ -5208,8 +5200,7 @@ model SeedNote {
   // attach and detach are the only kinds that carry an artifact.
   "kind": string;
   "body": string;
-  "author_session": SessionID;
-  "author_member": string;
+  "author": ActorView;
   "created_at": string;
   "artifact"?: SeedArtifactReference;
 }
@@ -5223,7 +5214,7 @@ model SeedNoteMessage {
   "request_id"?: string;
   "seed_id": string;
   "body": string;
-  "member"?: string;
+
   // Omitted is a plain log entry, so a caller that never heard of kinds
   // writes a note. An unknown kind is refused, naming the whole set.
   "kind"?: string;
@@ -5329,8 +5320,6 @@ model SeedSendToChiefMessage {
   "source_session_id"?: SessionID;
   "seed_id": string;
   "expected_rev": safeint;
-  "expected_tender_session": SessionID;
-  "expected_tender_member": string;
   "guidance"?: string;
   // Present only when this resolves one captured Review garden item.
   "review"?: SeedReviewActionContext;
@@ -5338,7 +5327,7 @@ model SeedSendToChiefMessage {
 
 model SeedSendToChiefResult {
   "seed": Seed;
-  "chief_session_id": SessionID;
+  "chief": PartyView;
   "delivery_status": AgentMsgStatus;
   "detail": string;
 }
@@ -6034,6 +6023,7 @@ model AgentPeekResult {
   exit?: AgentPeekExit;
   // The crew member whose active binding this session is; absent when unbound.
   crew_member?: string;
+  crew_member_name?: string;
 }
 
 // ============================================================================

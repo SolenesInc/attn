@@ -902,6 +902,7 @@ export enum AgentPeekMessageCmd {
 export interface AgentPeekResult {
     agent:                   string;
     crew_member?:            string;
+    crew_member_name?:       string;
     exit?:                   AgentPeekResultExit;
     label:                   string;
     last_assistant_message?: string;
@@ -1987,10 +1988,11 @@ export interface SessionObject {
     chief_of_staff?:            boolean;
     context_window_cap?:        number;
     crew_member?:               string;
+    crew_member_name?:          string;
     delegated_from_chief?:      boolean;
     delegation_role?:           DelegationRoleObject;
     directory:                  string;
-    dispatcher_member?:         string;
+    dispatcher?:                ProposedBy;
     dispatcher_session_id?:     string;
     endpoint_id?:               string;
     id:                         string;
@@ -4967,6 +4969,7 @@ export enum GardenSeedsUpdatedMessageEvent {
 
 export interface SeedElement {
     body:                   string;
+    claimed:                boolean;
     continuation?:          Continuation;
     created_at:             string;
     edges:                  EdgeElement[];
@@ -4974,20 +4977,19 @@ export interface SeedElement {
     harvest_when?:          HarvestWhen;
     id:                     string;
     last_execution_id?:     string;
-    planter_member:         string;
-    planter_session:        string;
+    planter:                ProposedBy;
     plot_progress?:         PlotProgress;
     profile_id:             string;
     ready:                  boolean;
     reason?:                string;
+    resume_available:       boolean;
     rev:                    number;
     state_changed_at:       string;
     state_changed_at_exact: boolean;
     status:                 string;
     step_slug:              string;
     template:               boolean;
-    tender_member:          string;
-    tender_session:         string;
+    tender?:                Sender;
     title:                  string;
     updated_at:             string;
     vars:                   VarElement[];
@@ -5032,12 +5034,11 @@ export interface EdgeElement {
 }
 
 export interface HarvestWhen {
-    checked_at?:     string;
-    pull_request:    string;
-    set_at:          string;
-    set_by_member?:  string;
-    set_by_session?: string;
-    url:             string;
+    checked_at?:  string;
+    pull_request: string;
+    set_at:       string;
+    set_by:       ProposedBy;
+    url:          string;
     [property: string]: any;
 }
 
@@ -7998,6 +7999,7 @@ export interface AgentMsgResultObject {
 export interface AgentPeekResultObject {
     agent:                   string;
     crew_member?:            string;
+    crew_member_name?:       string;
     exit?:                   AgentPeekResultExit;
     label:                   string;
     last_assistant_message?: string;
@@ -8312,14 +8314,13 @@ export interface SeedNoteResultObject {
 }
 
 export interface Note {
-    artifact?:      LegacyReferenceElement;
-    author_member:  string;
-    author_session: string;
-    body:           string;
-    created_at:     string;
-    id:             string;
-    kind:           string;
-    seed_id:        string;
+    artifact?:  LegacyReferenceElement;
+    author:     ProposedBy;
+    body:       string;
+    created_at: string;
+    id:         string;
+    kind:       string;
+    seed_id:    string;
     [property: string]: any;
 }
 
@@ -8381,10 +8382,10 @@ export interface HitElement {
 }
 
 export interface SeedSendToChiefResultObject {
-    chief_session_id: string;
-    delivery_status:  AgentMsgStatus;
-    detail:           string;
-    seed:             SeedElement;
+    chief:           Sender;
+    delivery_status: AgentMsgStatus;
+    detail:          string;
+    seed:            SeedElement;
     [property: string]: any;
 }
 
@@ -8674,6 +8675,7 @@ export enum RuntimeRespawnedMessageEvent {
 
 export interface Seed {
     body:                   string;
+    claimed:                boolean;
     continuation?:          Continuation;
     created_at:             string;
     edges:                  EdgeElement[];
@@ -8681,20 +8683,19 @@ export interface Seed {
     harvest_when?:          HarvestWhen;
     id:                     string;
     last_execution_id?:     string;
-    planter_member:         string;
-    planter_session:        string;
+    planter:                ProposedBy;
     plot_progress?:         PlotProgress;
     profile_id:             string;
     ready:                  boolean;
     reason?:                string;
+    resume_available:       boolean;
     rev:                    number;
     state_changed_at:       string;
     state_changed_at_exact: boolean;
     status:                 string;
     step_slug:              string;
     template:               boolean;
-    tender_member:          string;
-    tender_session:         string;
+    tender?:                Sender;
     title:                  string;
     updated_at:             string;
     vars:                   VarElement[];
@@ -8827,13 +8828,12 @@ export interface SeedContinuation {
 }
 
 export interface SeedDocument {
-    artifacts:    SeedArtifactTransferResultArtifact[];
-    children:     SeedElement[];
-    notes:        Note[];
-    notes_total:  number;
-    references:   LegacyReferenceElement[];
-    seed:         SeedElement;
-    tender_holds: boolean;
+    artifacts:   SeedArtifactTransferResultArtifact[];
+    children:    SeedElement[];
+    notes:       Note[];
+    notes_total: number;
+    references:  LegacyReferenceElement[];
+    seed:        SeedElement;
     [property: string]: any;
 }
 
@@ -8860,13 +8860,12 @@ export interface SeedDocumentGetResultMessage {
 }
 
 export interface SeedDocumentGetResultMessageDocument {
-    artifacts:    SeedArtifactTransferResultArtifact[];
-    children:     SeedElement[];
-    notes:        Note[];
-    notes_total:  number;
-    references:   LegacyReferenceElement[];
-    seed:         SeedElement;
-    tender_holds: boolean;
+    artifacts:   SeedArtifactTransferResultArtifact[];
+    children:    SeedElement[];
+    notes:       Note[];
+    notes_total: number;
+    references:  LegacyReferenceElement[];
+    seed:        SeedElement;
     [property: string]: any;
 }
 
@@ -8899,23 +8898,20 @@ export interface SeedEditResult {
 }
 
 export interface SeedHandoverRequest {
-    expected_rev:            number;
-    expected_tender_member:  string;
-    expected_tender_session: string;
-    handoff?:                string;
-    note_id?:                string;
-    review?:                 DelegateMessageReview;
-    seed_id:                 string;
+    expected_rev: number;
+    handoff?:     string;
+    note_id?:     string;
+    review?:      DelegateMessageReview;
+    seed_id:      string;
     [property: string]: any;
 }
 
 export interface SeedHarvestCondition {
-    checked_at?:     string;
-    pull_request:    string;
-    set_at:          string;
-    set_by_member?:  string;
-    set_by_session?: string;
-    url:             string;
+    checked_at?:  string;
+    pull_request: string;
+    set_at:       string;
+    set_by:       ProposedBy;
+    url:          string;
     [property: string]: any;
 }
 
@@ -8966,14 +8962,13 @@ export interface SeedListResult {
 }
 
 export interface SeedNote {
-    artifact?:      LegacyReferenceElement;
-    author_member:  string;
-    author_session: string;
-    body:           string;
-    created_at:     string;
-    id:             string;
-    kind:           string;
-    seed_id:        string;
+    artifact?:  LegacyReferenceElement;
+    author:     ProposedBy;
+    body:       string;
+    created_at: string;
+    id:         string;
+    kind:       string;
+    seed_id:    string;
     [property: string]: any;
 }
 
@@ -8982,7 +8977,6 @@ export interface SeedNoteMessage {
     body:               string;
     cmd:                SeedNoteMessageCmd;
     kind?:              string;
-    member?:            string;
     profile_id?:        string;
     request_id?:        string;
     ring?:              boolean;
@@ -9036,7 +9030,6 @@ export interface SeedPlantMessage {
     body?:              string;
     cmd:                SeedPlantMessageCmd;
     discovered_from?:   string;
-    member?:            string;
     part_of?:           string;
     profile_id?:        string;
     source_session_id?: string;
@@ -9064,7 +9057,6 @@ export interface SeedPlotMessage {
     body?:              string;
     children:           ChildElement[];
     cmd:                SeedPlotMessageCmd;
-    member?:            string;
     profile_id?:        string;
     source_session_id?: string;
     title:              string;
@@ -9308,16 +9300,14 @@ export interface SeedSearchResult {
 }
 
 export interface SeedSendToChiefMessage {
-    cmd:                     SeedSendToChiefMessageCmd;
-    expected_rev:            number;
-    expected_tender_member:  string;
-    expected_tender_session: string;
-    guidance?:               string;
-    profile_id?:             string;
-    request_id?:             string;
-    review?:                 DelegateMessageReview;
-    seed_id:                 string;
-    source_session_id?:      string;
+    cmd:                SeedSendToChiefMessageCmd;
+    expected_rev:       number;
+    guidance?:          string;
+    profile_id?:        string;
+    request_id?:        string;
+    review?:            DelegateMessageReview;
+    seed_id:            string;
+    source_session_id?: string;
     [property: string]: any;
 }
 
@@ -9326,10 +9316,10 @@ export enum SeedSendToChiefMessageCmd {
 }
 
 export interface SeedSendToChiefResult {
-    chief_session_id: string;
-    delivery_status:  AgentMsgStatus;
-    detail:           string;
-    seed:             SeedElement;
+    chief:           Sender;
+    delivery_status: AgentMsgStatus;
+    detail:          string;
+    seed:            SeedElement;
     [property: string]: any;
 }
 
@@ -9372,11 +9362,11 @@ export interface SeedShowResult {
 }
 
 export interface SeedTransitionMessage {
+    assignee?:           string;
     clear_harvest_when?: boolean;
     cmd:                 SeedTransitionMessageCmd;
     comment?:            string;
     force?:              boolean;
-    member?:             string;
     profile_id?:         string;
     reason?:             string;
     request_id?:         string;
@@ -9460,10 +9450,11 @@ export interface Session {
     chief_of_staff?:            boolean;
     context_window_cap?:        number;
     crew_member?:               string;
+    crew_member_name?:          string;
     delegated_from_chief?:      boolean;
     delegation_role?:           DelegationRoleObject;
     directory:                  string;
-    dispatcher_member?:         string;
+    dispatcher?:                ProposedBy;
     dispatcher_session_id?:     string;
     endpoint_id?:               string;
     id:                         string;
@@ -16964,6 +16955,7 @@ const typeMap: any = {
     "AgentPeekResult": o([
         { json: "agent", js: "agent", typ: "" },
         { json: "crew_member", js: "crew_member", typ: u(undefined, "") },
+        { json: "crew_member_name", js: "crew_member_name", typ: u(undefined, "") },
         { json: "exit", js: "exit", typ: u(undefined, r("AgentPeekResultExit")) },
         { json: "label", js: "label", typ: "" },
         { json: "last_assistant_message", js: "last_assistant_message", typ: u(undefined, "") },
@@ -17661,10 +17653,11 @@ const typeMap: any = {
         { json: "chief_of_staff", js: "chief_of_staff", typ: u(undefined, true) },
         { json: "context_window_cap", js: "context_window_cap", typ: u(undefined, 0) },
         { json: "crew_member", js: "crew_member", typ: u(undefined, "") },
+        { json: "crew_member_name", js: "crew_member_name", typ: u(undefined, "") },
         { json: "delegated_from_chief", js: "delegated_from_chief", typ: u(undefined, true) },
         { json: "delegation_role", js: "delegation_role", typ: u(undefined, r("DelegationRoleObject")) },
         { json: "directory", js: "directory", typ: "" },
-        { json: "dispatcher_member", js: "dispatcher_member", typ: u(undefined, "") },
+        { json: "dispatcher", js: "dispatcher", typ: u(undefined, r("ProposedBy")) },
         { json: "dispatcher_session_id", js: "dispatcher_session_id", typ: u(undefined, "") },
         { json: "endpoint_id", js: "endpoint_id", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
@@ -19533,6 +19526,7 @@ const typeMap: any = {
     ], "any"),
     "SeedElement": o([
         { json: "body", js: "body", typ: "" },
+        { json: "claimed", js: "claimed", typ: true },
         { json: "continuation", js: "continuation", typ: u(undefined, r("Continuation")) },
         { json: "created_at", js: "created_at", typ: "" },
         { json: "edges", js: "edges", typ: a(r("EdgeElement")) },
@@ -19540,20 +19534,19 @@ const typeMap: any = {
         { json: "harvest_when", js: "harvest_when", typ: u(undefined, r("HarvestWhen")) },
         { json: "id", js: "id", typ: "" },
         { json: "last_execution_id", js: "last_execution_id", typ: u(undefined, "") },
-        { json: "planter_member", js: "planter_member", typ: "" },
-        { json: "planter_session", js: "planter_session", typ: "" },
+        { json: "planter", js: "planter", typ: r("ProposedBy") },
         { json: "plot_progress", js: "plot_progress", typ: u(undefined, r("PlotProgress")) },
         { json: "profile_id", js: "profile_id", typ: "" },
         { json: "ready", js: "ready", typ: true },
         { json: "reason", js: "reason", typ: u(undefined, "") },
+        { json: "resume_available", js: "resume_available", typ: true },
         { json: "rev", js: "rev", typ: 0 },
         { json: "state_changed_at", js: "state_changed_at", typ: "" },
         { json: "state_changed_at_exact", js: "state_changed_at_exact", typ: true },
         { json: "status", js: "status", typ: "" },
         { json: "step_slug", js: "step_slug", typ: "" },
         { json: "template", js: "template", typ: true },
-        { json: "tender_member", js: "tender_member", typ: "" },
-        { json: "tender_session", js: "tender_session", typ: "" },
+        { json: "tender", js: "tender", typ: u(undefined, r("Sender")) },
         { json: "title", js: "title", typ: "" },
         { json: "updated_at", js: "updated_at", typ: "" },
         { json: "vars", js: "vars", typ: a(r("VarElement")) },
@@ -19593,8 +19586,7 @@ const typeMap: any = {
         { json: "checked_at", js: "checked_at", typ: u(undefined, "") },
         { json: "pull_request", js: "pull_request", typ: "" },
         { json: "set_at", js: "set_at", typ: "" },
-        { json: "set_by_member", js: "set_by_member", typ: u(undefined, "") },
-        { json: "set_by_session", js: "set_by_session", typ: u(undefined, "") },
+        { json: "set_by", js: "set_by", typ: r("ProposedBy") },
         { json: "url", js: "url", typ: "" },
     ], "any"),
     "PlotProgress": o([
@@ -21419,6 +21411,7 @@ const typeMap: any = {
     "AgentPeekResultObject": o([
         { json: "agent", js: "agent", typ: "" },
         { json: "crew_member", js: "crew_member", typ: u(undefined, "") },
+        { json: "crew_member_name", js: "crew_member_name", typ: u(undefined, "") },
         { json: "exit", js: "exit", typ: u(undefined, r("AgentPeekResultExit")) },
         { json: "label", js: "label", typ: "" },
         { json: "last_assistant_message", js: "last_assistant_message", typ: u(undefined, "") },
@@ -21648,8 +21641,7 @@ const typeMap: any = {
     ], "any"),
     "Note": o([
         { json: "artifact", js: "artifact", typ: u(undefined, r("LegacyReferenceElement")) },
-        { json: "author_member", js: "author_member", typ: "" },
-        { json: "author_session", js: "author_session", typ: "" },
+        { json: "author", js: "author", typ: r("ProposedBy") },
         { json: "body", js: "body", typ: "" },
         { json: "created_at", js: "created_at", typ: "" },
         { json: "id", js: "id", typ: "" },
@@ -21698,7 +21690,7 @@ const typeMap: any = {
         { json: "where", js: "where", typ: "" },
     ], "any"),
     "SeedSendToChiefResultObject": o([
-        { json: "chief_session_id", js: "chief_session_id", typ: "" },
+        { json: "chief", js: "chief", typ: r("Sender") },
         { json: "delivery_status", js: "delivery_status", typ: r("AgentMsgStatus") },
         { json: "detail", js: "detail", typ: "" },
         { json: "seed", js: "seed", typ: r("SeedElement") },
@@ -21913,6 +21905,7 @@ const typeMap: any = {
     ], "any"),
     "Seed": o([
         { json: "body", js: "body", typ: "" },
+        { json: "claimed", js: "claimed", typ: true },
         { json: "continuation", js: "continuation", typ: u(undefined, r("Continuation")) },
         { json: "created_at", js: "created_at", typ: "" },
         { json: "edges", js: "edges", typ: a(r("EdgeElement")) },
@@ -21920,20 +21913,19 @@ const typeMap: any = {
         { json: "harvest_when", js: "harvest_when", typ: u(undefined, r("HarvestWhen")) },
         { json: "id", js: "id", typ: "" },
         { json: "last_execution_id", js: "last_execution_id", typ: u(undefined, "") },
-        { json: "planter_member", js: "planter_member", typ: "" },
-        { json: "planter_session", js: "planter_session", typ: "" },
+        { json: "planter", js: "planter", typ: r("ProposedBy") },
         { json: "plot_progress", js: "plot_progress", typ: u(undefined, r("PlotProgress")) },
         { json: "profile_id", js: "profile_id", typ: "" },
         { json: "ready", js: "ready", typ: true },
         { json: "reason", js: "reason", typ: u(undefined, "") },
+        { json: "resume_available", js: "resume_available", typ: true },
         { json: "rev", js: "rev", typ: 0 },
         { json: "state_changed_at", js: "state_changed_at", typ: "" },
         { json: "state_changed_at_exact", js: "state_changed_at_exact", typ: true },
         { json: "status", js: "status", typ: "" },
         { json: "step_slug", js: "step_slug", typ: "" },
         { json: "template", js: "template", typ: true },
-        { json: "tender_member", js: "tender_member", typ: "" },
-        { json: "tender_session", js: "tender_session", typ: "" },
+        { json: "tender", js: "tender", typ: u(undefined, r("Sender")) },
         { json: "title", js: "title", typ: "" },
         { json: "updated_at", js: "updated_at", typ: "" },
         { json: "vars", js: "vars", typ: a(r("VarElement")) },
@@ -22034,7 +22026,6 @@ const typeMap: any = {
         { json: "notes_total", js: "notes_total", typ: 0 },
         { json: "references", js: "references", typ: a(r("LegacyReferenceElement")) },
         { json: "seed", js: "seed", typ: r("SeedElement") },
-        { json: "tender_holds", js: "tender_holds", typ: true },
     ], "any"),
     "SeedDocumentGetMessage": o([
         { json: "cmd", js: "cmd", typ: r("SeedDocumentGetMessageCmd") },
@@ -22057,7 +22048,6 @@ const typeMap: any = {
         { json: "notes_total", js: "notes_total", typ: 0 },
         { json: "references", js: "references", typ: a(r("LegacyReferenceElement")) },
         { json: "seed", js: "seed", typ: r("SeedElement") },
-        { json: "tender_holds", js: "tender_holds", typ: true },
     ], "any"),
     "SeedEdge": o([
         { json: "kind", js: "kind", typ: "" },
@@ -22075,8 +22065,6 @@ const typeMap: any = {
     ], "any"),
     "SeedHandoverRequest": o([
         { json: "expected_rev", js: "expected_rev", typ: 0 },
-        { json: "expected_tender_member", js: "expected_tender_member", typ: "" },
-        { json: "expected_tender_session", js: "expected_tender_session", typ: "" },
         { json: "handoff", js: "handoff", typ: u(undefined, "") },
         { json: "note_id", js: "note_id", typ: u(undefined, "") },
         { json: "review", js: "review", typ: u(undefined, r("DelegateMessageReview")) },
@@ -22086,8 +22074,7 @@ const typeMap: any = {
         { json: "checked_at", js: "checked_at", typ: u(undefined, "") },
         { json: "pull_request", js: "pull_request", typ: "" },
         { json: "set_at", js: "set_at", typ: "" },
-        { json: "set_by_member", js: "set_by_member", typ: u(undefined, "") },
-        { json: "set_by_session", js: "set_by_session", typ: u(undefined, "") },
+        { json: "set_by", js: "set_by", typ: r("ProposedBy") },
         { json: "url", js: "url", typ: "" },
     ], "any"),
     "SeedHarvestWhenMerged": o([
@@ -22120,8 +22107,7 @@ const typeMap: any = {
     ], "any"),
     "SeedNote": o([
         { json: "artifact", js: "artifact", typ: u(undefined, r("LegacyReferenceElement")) },
-        { json: "author_member", js: "author_member", typ: "" },
-        { json: "author_session", js: "author_session", typ: "" },
+        { json: "author", js: "author", typ: r("ProposedBy") },
         { json: "body", js: "body", typ: "" },
         { json: "created_at", js: "created_at", typ: "" },
         { json: "id", js: "id", typ: "" },
@@ -22133,7 +22119,6 @@ const typeMap: any = {
         { json: "body", js: "body", typ: "" },
         { json: "cmd", js: "cmd", typ: r("SeedNoteMessageCmd") },
         { json: "kind", js: "kind", typ: u(undefined, "") },
-        { json: "member", js: "member", typ: u(undefined, "") },
         { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "ring", js: "ring", typ: u(undefined, true) },
@@ -22165,7 +22150,6 @@ const typeMap: any = {
         { json: "body", js: "body", typ: u(undefined, "") },
         { json: "cmd", js: "cmd", typ: r("SeedPlantMessageCmd") },
         { json: "discovered_from", js: "discovered_from", typ: u(undefined, "") },
-        { json: "member", js: "member", typ: u(undefined, "") },
         { json: "part_of", js: "part_of", typ: u(undefined, "") },
         { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
@@ -22183,7 +22167,6 @@ const typeMap: any = {
         { json: "body", js: "body", typ: u(undefined, "") },
         { json: "children", js: "children", typ: a(r("ChildElement")) },
         { json: "cmd", js: "cmd", typ: r("SeedPlotMessageCmd") },
-        { json: "member", js: "member", typ: u(undefined, "") },
         { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
         { json: "title", js: "title", typ: "" },
@@ -22333,8 +22316,6 @@ const typeMap: any = {
     "SeedSendToChiefMessage": o([
         { json: "cmd", js: "cmd", typ: r("SeedSendToChiefMessageCmd") },
         { json: "expected_rev", js: "expected_rev", typ: 0 },
-        { json: "expected_tender_member", js: "expected_tender_member", typ: "" },
-        { json: "expected_tender_session", js: "expected_tender_session", typ: "" },
         { json: "guidance", js: "guidance", typ: u(undefined, "") },
         { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
@@ -22343,7 +22324,7 @@ const typeMap: any = {
         { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
     "SeedSendToChiefResult": o([
-        { json: "chief_session_id", js: "chief_session_id", typ: "" },
+        { json: "chief", js: "chief", typ: r("Sender") },
         { json: "delivery_status", js: "delivery_status", typ: r("AgentMsgStatus") },
         { json: "detail", js: "detail", typ: "" },
         { json: "seed", js: "seed", typ: r("SeedElement") },
@@ -22373,11 +22354,11 @@ const typeMap: any = {
         { json: "watching_via", js: "watching_via", typ: a("") },
     ], "any"),
     "SeedTransitionMessage": o([
+        { json: "assignee", js: "assignee", typ: u(undefined, "") },
         { json: "clear_harvest_when", js: "clear_harvest_when", typ: u(undefined, true) },
         { json: "cmd", js: "cmd", typ: r("SeedTransitionMessageCmd") },
         { json: "comment", js: "comment", typ: u(undefined, "") },
         { json: "force", js: "force", typ: u(undefined, true) },
-        { json: "member", js: "member", typ: u(undefined, "") },
         { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "reason", js: "reason", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
@@ -22435,10 +22416,11 @@ const typeMap: any = {
         { json: "chief_of_staff", js: "chief_of_staff", typ: u(undefined, true) },
         { json: "context_window_cap", js: "context_window_cap", typ: u(undefined, 0) },
         { json: "crew_member", js: "crew_member", typ: u(undefined, "") },
+        { json: "crew_member_name", js: "crew_member_name", typ: u(undefined, "") },
         { json: "delegated_from_chief", js: "delegated_from_chief", typ: u(undefined, true) },
         { json: "delegation_role", js: "delegation_role", typ: u(undefined, r("DelegationRoleObject")) },
         { json: "directory", js: "directory", typ: "" },
-        { json: "dispatcher_member", js: "dispatcher_member", typ: u(undefined, "") },
+        { json: "dispatcher", js: "dispatcher", typ: u(undefined, r("ProposedBy")) },
         { json: "dispatcher_session_id", js: "dispatcher_session_id", typ: u(undefined, "") },
         { json: "endpoint_id", js: "endpoint_id", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },

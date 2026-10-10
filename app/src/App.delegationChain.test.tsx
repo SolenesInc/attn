@@ -71,8 +71,8 @@ describe('App delegation chain', () => {
 
   it('names a dispatcher that has ended as unavailable text rather than a session to open', async () => {
     await renderTeam([
-      daemonSession('child', { label: 'child', dispatcher_session_id: 'ended', dispatcher_member: 'alder' }),
-      daemonSession('peer', { label: 'peer', dispatcher_session_id: 'ended', dispatcher_member: 'alder' }),
+      daemonSession('child', { label: 'child', dispatcher_session_id: 'ended', dispatcher: {ref:'member:' + ('alder'),name:"Alder"} }),
+      daemonSession('peer', { label: 'peer', dispatcher_session_id: 'ended', dispatcher: {ref:'member:' + ('alder'),name:"Alder"} }),
     ]);
 
     fireEvent.click(trigger('child'));
@@ -102,7 +102,7 @@ describe('App delegation chain', () => {
     const { daemon } = await renderTeam([
       daemonSession('root', { label: 'root session' }),
       daemonSession('child', { label: 'child', dispatcher_session_id: 'root' }),
-      daemonSession('orphan', { label: 'orphan', dispatcher_session_id: 'ended', dispatcher_member: 'alder' }),
+      daemonSession('orphan', { label: 'orphan', dispatcher_session_id: 'ended', dispatcher: {ref:'member:' + ('alder'),name:"Alder"} }),
     ]);
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /^Open child/ })));
 

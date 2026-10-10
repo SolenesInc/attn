@@ -26,7 +26,9 @@ type crewRetirement struct {
 func (d *Daemon) retireCrewMember(m store.CrewIdentity) (crewRetirement, error) {
 	result := crewRetirement{Member: m, AlreadyRetired: m.Retired, ReleasedSeeds: []string{}}
 	d.crewWakeMu.Lock()
+	d.lockGardenRoles()
 	removed, err := d.store.RetireCrewMember(m.Key, time.Now())
+	d.unlockGardenRoles()
 	d.crewWakeMu.Unlock()
 	if err != nil {
 		return result, err
@@ -72,24 +74,25 @@ func (d *Daemon) releaseRetiredClaimsProtected(protection foregroundCleanupProte
 	if err != nil {
 		return released, err
 	}
-	for _, held := range garden.Held(read.seeds, m.Key.String()) {
+	for _, held := range garden.TendedBy(read.seeds, who.Member(m.Key)) {
 		seed, doc, err := d.readSeed(held.ID)
 		if err != nil {
 			return released, err
 		}
-		if seed.Tender().Member != m.Key.String() || seed.Status != garden.StatusGrowing {
+		tender, _ := seed.Claim.Tender()
+		if tender != who.Member(m.Key) || seed.Status != garden.StatusGrowing {
 			continue
 		}
-		next, err := garden.Transition(seed, garden.VerbReplant, garden.Ask{Actor: garden.Tender{Member: crew.DaemonID}, Force: true}, d.sessionExists)
+		next, err := garden.Transition(seed, garden.VerbReplant, garden.Ask{By: who.Attn(), Force: true}, read.bindings)
 		if err != nil {
 			return released, err
 		}
 		next.StateChangedAt = formatGardenTime(d.gardenTime())
-		occurrence, err := gardenSeedLifecycleOccurrence(garden.VerbReplant, next.ID, "", "")
+		occurrence, err := lifecycleOccurrence(garden.VerbReplant, next.ID, garden.Ask{By: who.Attn()})
 		if err != nil {
 			return released, err
 		}
-		_, _, err = d.writeSeedMoveWithNotesProtected(protection, *schema, next, doc.Rev, []seedEvents.Occurrence{occurrence}, []garden.Note{{Seed: seed.ID, Kind: garden.NoteKindNote, AuthorMember: crew.DaemonID, Body: fmt.Sprintf("%s was retired; attn released its claim.", m.Name)}})
+		_, _, err = d.writeSeedMoveWithNotesProtected(protection, *schema, next, doc.Rev, []seedEvents.Occurrence{occurrence}, []garden.Note{{Seed: seed.ID, Kind: garden.NoteKindNote, Author: who.Attn(), Body: fmt.Sprintf("%s was retired; attn released its claim.", m.Name)}})
 		if err != nil {
 			return released, err
 		}

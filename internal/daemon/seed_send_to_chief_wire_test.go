@@ -28,7 +28,7 @@ func TestSendingASeedToTheChiefHandsItOverUnlessItChanged(t *testing.T) {
 		stale.Rev--
 		_, err := cli.SeedSendToChief("sender", stale, "")
 		lifeRefusal(t, "sending a seed changed since it was opened", err, seed, "changed since you opened it")
-		if still := lifeShow(t, cli, seed).Seed; still.TenderSession != "sender" || still.Rev != tended.Rev {
+		if still := lifeShow(t, cli, seed).Seed; protocol.Deref(protocol.Deref(still.Tender).SessionID) != "sender" || still.Rev != tended.Rev {
 			t.Fatalf("the refused send moved the seed: %+v", still)
 		}
 
@@ -36,13 +36,13 @@ func TestSendingASeedToTheChiefHandsItOverUnlessItChanged(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if sent.ChiefSessionID != "chief" || sent.Seed.TenderSession != "chief" {
+		if protocol.Deref(sent.Chief.SessionID) != "chief" || protocol.Deref(protocol.Deref(sent.Seed.Tender).SessionID) != "chief" {
 			t.Errorf("sending to the Chief answered %+v, want the chief tending it", sent)
 		}
 		shown := lifeShow(t, cli, seed)
-		if got := shown.Seed; got.TenderSession != "chief" || protocol.Deref(got.LastExecutionID) != protocol.Deref(tended.LastExecutionID) {
+		if got := shown.Seed; protocol.Deref(protocol.Deref(got.Tender).SessionID) != "chief" || protocol.Deref(got.LastExecutionID) != protocol.Deref(tended.LastExecutionID) {
 			t.Errorf("after the send the seed is tended by %q in execution %q, want chief in %q",
-				got.TenderSession, protocol.Deref(got.LastExecutionID), protocol.Deref(tended.LastExecutionID))
+				protocol.Deref(protocol.Deref(got.Tender).SessionID), protocol.Deref(got.LastExecutionID), protocol.Deref(tended.LastExecutionID))
 		}
 		if len(shown.Notes) == 0 || !strings.Contains(shown.Notes[0].Body, "Sent to Chief") || !strings.Contains(shown.Notes[0].Body, "feature/special") {
 			t.Errorf("the seed's log leads with %+v, want a Sent to Chief note carrying the guidance", shown.Notes)

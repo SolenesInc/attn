@@ -145,6 +145,9 @@ func TestAMemberIsOneLedgerRow(t *testing.T) {
 	cli := w.Client()
 	app := w.App()
 	plain := w.Spawn(app, fakeagent.Claude, w.Path("plain"))
+	plainRun := w.Launched(plain)
+	plainRun.Reply("Keep this conversation. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, plain, func(s protocol.Session) bool { return s.State == protocol.StateIdle })
 	day := wakeCrew(t, cli, "Keel", "")
 	w.Launched(string(day.SessionID))
 	for range 2 {
@@ -278,11 +281,12 @@ func TestAnIncompleteLegacyHomeDoesNotImportItsWorkingDirectories(t *testing.T) 
 func TestAPlotKeepsItsPlanterAcrossCrewRenames(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
-	registerSessions(t, w, cli, "planter")
 	if _, err := cli.CrewRename("Keel", "Alfred"); err != nil {
 		t.Fatal(err)
 	}
-	plot, err := cli.SeedPlot("planter", "Alfred", protocol.SeedPlotMessage{Title: "renamed planter", Children: []protocol.SeedPlotChild{{Title: "its child"}}})
+	day := wakeCrew(t, cli, "Alfred", "").SessionID
+	w.Launched(string(day))
+	plot, err := cli.SeedPlot(day, protocol.SeedPlotMessage{Title: "renamed planter", Children: []protocol.SeedPlotChild{{Title: "its child"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -293,7 +297,7 @@ func TestAPlotKeepsItsPlanterAcrossCrewRenames(t *testing.T) {
 	cli = w.Client()
 	for _, planted := range append([]protocol.Seed{plot.Crown}, plot.Children...) {
 		shown, err := cli.SeedShow("", planted.ID)
-		if err != nil || shown.Seed.PlanterMember != "keel" {
+		if err != nil || shown.Seed.Planter.Ref != "member:keel" {
 			t.Fatalf("plot seed after another rename and restart: %+v %v", shown, err)
 		}
 	}

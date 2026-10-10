@@ -29,7 +29,7 @@ func TestAGardenReviewFreezesItsCandidatesAndRecipe(t *testing.T) {
 	abandoned := gardenReviewAbandonedSeed(t, w, app, cli, "gardener", "old work")
 	keeper := spawnPanes(w, app, w.Path("keeper"))[0]
 	claimed := plantSeedAs(t, cli, keeper.session, "member-owned work")
-	if _, err := cli.SeedTransition("", claimed, "tend", "", "trellis", false, client.SeedTransitionOptions{}); err != nil {
+	if _, err := cli.SeedTransition("", claimed, "tend", "", false, client.SeedTransitionOptions{Assignee: "trellis"}); err != nil {
 		t.Fatalf("trellis tends: %v", err)
 	}
 	closePane(app, keeper)
@@ -96,7 +96,7 @@ func TestReviewActionsResolveTheirItems(t *testing.T) {
 
 	stale := gardenReviewStart(t, cli)
 	gardenReviewAwaitFailedFirstAdvice(app, stale.Run.ID)
-	if _, err := cli.SeedNote(protocol.SessionID(reviewer), changed, "new evidence", "", "", false, nil); err != nil {
+	if _, err := cli.SeedNote(protocol.SessionID(reviewer), changed, "new evidence", "", false, nil); err != nil {
 		t.Fatal(err)
 	}
 	if refused := gardenReviewMoveFromApp(app, changed, "park", gardenReviewReceipts(stale)[changed]); refused.Success || !strings.Contains(protocol.Deref(refused.Error), "changed since this review item was loaded; refresh the garden") {
@@ -197,11 +197,11 @@ func gardenReviewRegisteredAbandonedSeed(t *testing.T, w *world, cli *client.Cli
 
 func gardenReviewPlantTended(t *testing.T, cli *client.Client, session, title string) string {
 	t.Helper()
-	planted, err := cli.SeedPlant(protocol.SessionID(session), title, "Carry "+title+" to the end.", "", "", "")
+	planted, err := cli.SeedPlant(protocol.SessionID(session), title, "Carry "+title+" to the end.", "", "")
 	if err != nil {
 		t.Fatalf("plant %q: %v", title, err)
 	}
-	if _, err := cli.SeedTransition(protocol.SessionID(session), planted.Seed.ID, "tend", "", "", false, client.SeedTransitionOptions{}); err != nil {
+	if _, err := cli.SeedTransition(protocol.SessionID(session), planted.Seed.ID, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
 		t.Fatalf("tend %q: %v", title, err)
 	}
 	return planted.Seed.ID
@@ -325,7 +325,7 @@ func TestAFailedReviewItemRetriesWithFreshEvidenceOrSettles(t *testing.T) {
 		}
 
 		registerSessions(t, w, cli, "closer")
-		if _, err := cli.SeedTransition("closer", harvested, "harvest", "The work is complete.", "", false, client.SeedTransitionOptions{}); err != nil {
+		if _, err := cli.SeedTransition("closer", harvested, "harvest", "The work is complete.", false, client.SeedTransitionOptions{}); err != nil {
 			t.Fatal(err)
 		}
 		settled, err := cli.SeedReviewRetry(review.Run.ID, harvested)

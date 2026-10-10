@@ -11,6 +11,7 @@ import (
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 const agentCloseReasonMaxChars = garden.MaxReasonChars
@@ -54,14 +55,7 @@ func (d *Daemon) handleAgentClose(conn net.Conn, msg *protocol.AgentCloseMessage
 		return
 	}
 
-	if dispatch, ok := d.gardenDispatch(target.ID); caller.ID != target.ID && ok && strings.TrimSpace(dispatch.Crown) != "" {
-		if err := d.requireSeedInProfile(dispatch.Crown, caller.ProfileID, false); err != nil {
-			d.replyAgentMsgError(conn, "cross_profile", err.Error())
-			return
-		}
-	}
-
-	rule, err := d.agentCloseRule(caller, target)
+	rule, err := d.agentCloseRule(caller, target, r)
 	if err != nil {
 		d.replyAgentMsgError(conn, "close_not_authorized", err.Error())
 		return
@@ -84,7 +78,7 @@ func (d *Daemon) handleAgentClose(conn net.Conn, msg *protocol.AgentCloseMessage
 		Label:           sessionDisplayName(target),
 		Reason:          reason,
 		Rule:            rule,
-		SeedIds:         d.noteCloseOnTendedSeeds(target, caller, rule, reason),
+		SeedIds:         d.noteCloseOnTendedSeeds(target, caller, rule, reason, r.Actor()),
 	}
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AgentCloseResult: result})
 	d.finishSessionClose(target.ID, closing)
@@ -101,31 +95,31 @@ func (d *Daemon) agentCloseCandidates() []*protocol.Session {
 	return candidates
 }
 
-func (d *Daemon) agentCloseRule(caller, target *protocol.Session) (protocol.AgentCloseRule, error) {
+func (d *Daemon) agentCloseRule(caller, target *protocol.Session, r who.Requester) (protocol.AgentCloseRule, error) {
 	if caller.ID == target.ID {
 		return protocol.AgentCloseRuleSelf, nil
 	}
 	if d.chiefOfProfile(target.ProfileID) == caller.ID || (target.ProfileID == "" && d.isChiefOfStaffSession(caller.ID)) {
 		return protocol.AgentCloseRuleChiefOfStaff, nil
 	}
-	var dispatcher protocol.SessionID
+	var dispatcher who.Actor
 	if dispatch, ok := d.gardenDispatch(target.ID); ok {
-		dispatcher = protocol.TrimID(dispatch.DispatcherSession)
+		dispatcher = dispatch.Dispatcher
 	}
-	if dispatcher != "" && dispatcher == caller.ID {
+	if !dispatcher.IsZero() && dispatcher == r.Actor() {
 		return protocol.AgentCloseRuleDispatcher, nil
 	}
 	const rules = "a session may close itself and the sessions it dispatched, and a profile's chief of staff may close any agent of that profile"
-	if dispatcher == "" {
+	if dispatcher.IsZero() {
 		return "", fmt.Errorf("%s. Session %s was not dispatched by anyone, so only it and the chief of staff can close it",
 			rules, shortSessionID(target.ID))
 	}
-	return "", fmt.Errorf("%s. Session %s was dispatched by session %s, not by you",
-		rules, shortSessionID(target.ID), shortSessionID(dispatcher))
+	return "", fmt.Errorf("%s. Session %s was dispatched by %s, not by you",
+		rules, shortSessionID(target.ID), d.actorView(dispatcher).Name)
 }
 
 func (d *Daemon) noteCloseOnTendedSeeds(
-	target, caller *protocol.Session, rule protocol.AgentCloseRule, reason string,
+	target, caller *protocol.Session, rule protocol.AgentCloseRule, reason string, author who.Actor,
 ) []string {
 	noted := []string{}
 	if err := d.requireHome(garden.Surface); err != nil {
@@ -134,7 +128,7 @@ func (d *Daemon) noteCloseOnTendedSeeds(
 	read, _, err := d.runDocQuery(docstore.Query{
 		Namespace:  garden.Namespace,
 		Collection: garden.CollectionSeeds,
-		Filters:    []docstore.Filter{{Field: "tender_session", Op: docstore.OpEq, Value: string(target.ID)}, {Field: "profile_id", Op: docstore.OpEq, Value: caller.ProfileID}},
+		Filters:    []docstore.Filter{{Field: "tender", Op: docstore.OpEq, Value: who.PartyOfEndedSession(target.ID).String()}},
 		Limit:      agentCloseTendedSeedLimit,
 	})
 	if err != nil {
@@ -143,7 +137,7 @@ func (d *Daemon) noteCloseOnTendedSeeds(
 	}
 	body := agentCloseSeedNote(target, caller, rule, reason)
 	for _, doc := range read.Documents {
-		if _, err := d.appendSeedNote(doc.ID, body, caller.ID, "", garden.NoteKindNote, nil, false, caller.ID); err != nil {
+		if _, err := d.appendSeedNote(doc.ID, body, author, garden.NoteKindNote, nil, false); err != nil {
 			d.logf("agent close: noting the close of %s on %s: %v", target.ID, doc.ID, err)
 			continue
 		}

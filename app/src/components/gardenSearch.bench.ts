@@ -35,6 +35,7 @@ function corpus(count: number, bodyWords: (rand: () => number) => number): Seed[
   const statuses = ['planted', 'growing', 'harvested', 'withered', 'dormant'];
   const seeds: Seed[] = [];
   for (let i = 0; i < count; i++) {
+    const member = members[Math.floor(rand() * members.length)];
     seeds.push({
       id: `s-${(i * 2654435761).toString(36).slice(-6)}`,
       title: words(rand, 6),
@@ -50,11 +51,13 @@ function corpus(count: number, bodyWords: (rand: () => number) => number): Seed[
       gate: false,
       template: false,
       step_slug: '',
-      planter_member: '',
+      planter: { ref: 'user', name: 'the user' },
       profile_id: 'profile-default',
-    planter_session: '',
-      tender_member: members[Math.floor(rand() * members.length)],
-      tender_session: '',
+
+      tender: member ? { ref: `member:${member}`, name: member } : undefined,
+      claimed: Boolean(member),
+      resume_available: false,
+
       vars: [],
     });
   }
@@ -62,7 +65,7 @@ function corpus(count: number, bodyWords: (rand: () => number) => number): Seed[
 }
 
 const ctx = {
-  tenderOf: (seed: Seed) => seed.tender_member ?? '',
+  tenderOf: (seed: Seed) => seed.tender?.name ?? '',
   blockersOf: () => 0,
 };
 

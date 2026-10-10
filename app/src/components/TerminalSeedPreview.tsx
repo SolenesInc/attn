@@ -8,7 +8,6 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import type { Seed } from '../types/generated';
-import { useMemberName } from '../store/daemonSessions';
 import {
   TERMINAL_SEED_PREVIEW_FALLBACK_SIZE,
   terminalSeedPreviewPlacement,
@@ -55,8 +54,7 @@ export function TerminalSeedPreview({
   const [placement, setPlacement] = useState<TerminalSeedPreviewPlacement | null>(null);
   const titleId = useId();
   const excerpt = terminalSeedBodyExcerpt(seed.body);
-  const name = useMemberName(seed.tender_member);
-  const tender = seed.tender_member ? name : seed.tender_session;
+  const tender = seed.tender?.name;
   const updated = formatAge(seed.updated_at);
 
   useLayoutEffect(() => {

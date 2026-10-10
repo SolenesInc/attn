@@ -11,9 +11,9 @@ func crewRecipient() Recipient {
 	handoffsDirname := TextField("handoffs_dirname", "Handoffs dirname")
 	holdings := ProducedBy(Trimmed(TextField("garden_holdings", "Rendered garden holdings, supplied by internal/crew.")), "crew/garden")
 
-	heldSeeds := TextField("held_seeds", "Held seeds with their freshest handoff notes, one entry per blank-line-separated block.")
-	heldTotal := TextField("held_total", "How many seeds the member holds; blank unless the list was cut.")
-	heldLimit := TextField("held_limit", "How many held seeds this block lists.")
+	heldSeeds := TextField("claimed_seeds", "Claimed seeds with their freshest handoff notes, one entry per blank-line-separated block.")
+	heldTotal := TextField("claimed_total", "How many seeds the member claims; blank unless the list was cut.")
+	heldLimit := TextField("claimed_limit", "How many claimed seeds this block lists.")
 	plotReady := TextField("plot_ready", "One line per plot with its ready count.")
 	gardenRead := FlagField("garden_read", "The garden was readable when the member woke.")
 

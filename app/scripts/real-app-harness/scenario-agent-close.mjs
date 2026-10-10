@@ -161,9 +161,9 @@ async function main() {
     seed = await runner.step('the_delegate_tends_a_seed', async () => {
       const listed = cli(daemonBinary, instance, 'seed', 'ls', '--json');
       const rows = JSON.parse(listed).seeds || [];
-      const mine = rows.filter((row) => row.tender_session === delegate);
+      const mine = rows.filter((row) => row.tender?.session_id === delegate);
       runner.assert(mine.length === 1, 'the delegation planted exactly one seed the delegate tends',
-        { delegate, tenders: rows.map((row) => ({ id: row.id, tender: row.tender_session })) });
+        { delegate, tenders: rows.map((row) => ({ id: row.id, tender: row.tender?.session_id })) });
       runner.writeText('seed-ls.json', `${listed}\n`);
       return mine[0].id;
     });
@@ -174,7 +174,7 @@ async function main() {
         `attn agent close ${delegate} -m "looks done to me" --source-session ${sibling.sessionId}`,
         'close itself');
       runner.assert(saw(refused, 'chief of staff'), 'the refusal names every rule', { refused });
-      runner.assert(saw(refused, dispatcher.sessionId.slice(0, 8)),
+      runner.assert(saw(refused, observer.getSession(dispatcher.sessionId).label),
         'the refusal names who did dispatch the target', { refused });
       const ui = await client.request('get_session_ui_state', { sessionId: delegate });
       runner.assert(ui.exists !== false, 'the refused session is still running', { ui });
@@ -218,7 +218,9 @@ async function main() {
       runner.assert(notes.includes(REASON), 'the close reason must land on the seed’s log', { notes });
       const shown = cli(daemonBinary, instance, 'seed', 'show', seed);
       runner.assert(shown.includes('growing'), 'the close must not move the seed', { shown });
-      runner.assert(shown.includes(delegate), 'the closed session must still be the seed’s tender', { shown });
+      const stored = JSON.parse(cli(daemonBinary, instance, 'seed', 'show', seed, '--json')).seed;
+      runner.assert(stored.tender?.ref === `session:${delegate}` && !stored.claimed,
+        'the closed session remains the stored tender with a lapsed claim', { stored });
       runner.writeText('seed-notes.txt', notes);
       runner.writeText('seed-show.txt', shown);
     });

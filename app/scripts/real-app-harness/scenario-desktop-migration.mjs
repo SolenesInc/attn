@@ -107,6 +107,11 @@ function legacyWorkspacesSql(fixtureDir) {
     statements.push(`INSERT INTO workspace_layouts (workspace_id, active_pane_id, layout_json, updated_at)
       VALUES ('mig-ws-${index}', 'pane-${agents[0]}', ${sql(JSON.stringify(layout))}, 'now');`);
   });
+  statements.push(`ALTER TABLE garden_seed_watches RENAME COLUMN watcher TO watcher_session_id;`);
+  statements.push(`ALTER TABLE delegation_operations DROP COLUMN dispatcher;`);
+  statements.push(`ALTER TABLE delegation_operations DROP COLUMN handover_tender;`);
+  statements.push(`ALTER TABLE delegation_operations ADD COLUMN handover_tender_session TEXT NOT NULL DEFAULT '';`);
+  statements.push(`ALTER TABLE delegation_operations ADD COLUMN handover_tender_member TEXT NOT NULL DEFAULT '';`);
   statements.push(`DELETE FROM schema_migrations WHERE version > ${LAST_SCHEMA_BEFORE_CONVERSION};`);
   return statements.join('\n');
 }

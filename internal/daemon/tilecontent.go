@@ -162,13 +162,15 @@ func (d *Daemon) openSeedTile(seedID string, callerSessionID protocol.SessionID,
 			return "", "", err
 		}
 	}
+	tender, _ := seed.Claim.Tender()
+	tenderSession, _ := d.broadcastBindings().SessionOf(tender)
 	d.openTileMu.Lock()
 	defer d.openTileMu.Unlock()
 	desktop, tileID, err := d.openAgentTile(location, agentTile{
 		tileID:    seedTileIDForID(seed.ID),
 		tileKind:  string(layouttree.TileKindSeed),
 		params:    seed.ID,
-		sessionID: d.seedTileSession(seed.TenderSession, location),
+		sessionID: d.seedTileSession(tenderSession, location),
 	})
 	if err != nil {
 		return "", "", err

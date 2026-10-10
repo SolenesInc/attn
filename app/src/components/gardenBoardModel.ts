@@ -1,5 +1,4 @@
 import type { Seed } from '../hooks/useDaemonSocket';
-import { memberHolderName } from '../store/daemonSessions';
 
 export type ColumnKey = 'ready' | 'growing' | 'parked' | 'closed';
 
@@ -8,13 +7,11 @@ export type Verb = 'park' | 'harvest' | 'wither' | 'replant';
 const CLOSED = new Set(['harvested', 'withered']);
 
 export function tenderOf(seed: Seed): string {
-  return memberHolderName(seed.tender_member, seed.tender_session);
+  return seed.tender?.name ?? '';
 }
 
-export function heldByOther(seed: Seed, liveSessions: Set<string>): string {
-  if (!seed.tender_session && !seed.tender_member) return '';
-  if (seed.tender_session && !liveSessions.has(seed.tender_session)) return '';
-  return tenderOf(seed);
+export function claimedByOther(seed: Seed): string {
+  return seed.claimed ? tenderOf(seed) : '';
 }
 
 export function columnOf(seed: Seed): ColumnKey {

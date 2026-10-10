@@ -9,11 +9,9 @@ export type PaneSeedDisplay = (
   | { kind: 'multi'; tended: Seed[] }
 ) & { crownSeed?: Seed };
 
-export function tendedSeeds(seeds: Seed[], sessionId: string, crewMember?: string): Seed[] {
-  if (!sessionId && !crewMember) return [];
-  return seeds.filter((seed) => seed.tender_session
-    ? Boolean(sessionId && seed.tender_session === sessionId)
-    : Boolean(crewMember && seed.tender_member === crewMember));
+export function tendedSeeds(seeds: Seed[], sessionId: string): Seed[] {
+  if (!sessionId) return [];
+  return seeds.filter((seed) => seed.claimed && seed.tender?.session_id === sessionId);
 }
 
 const MAX_ANCESTRY = 32;
@@ -47,9 +45,8 @@ export function derivePaneSeedDisplay(
   seeds: Seed[],
   sessionId: string,
   crownSeedId: string | undefined,
-  crewMember?: string,
 ): PaneSeedDisplay {
-  const tended = tendedSeeds(seeds, sessionId, crewMember);
+  const tended = tendedSeeds(seeds,sessionId);
   const crownSeed = crownSeedId ? seeds.find((seed) => seed.id === crownSeedId) : undefined;
   if (tended.length === 0) {
     if (!crownSeedId) return { kind: 'none' };

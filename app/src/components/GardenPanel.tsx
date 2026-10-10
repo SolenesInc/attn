@@ -4,7 +4,7 @@ import { gardenPathToSeed, gardenScrollMemory, seedParentID, useGardenWalk } fro
 import type { Seed, SeedHandoverOptions, SeedSendToChiefOptions } from '../hooks/useDaemonSocket';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { isAccelKeyPressed } from '../shortcuts/platform';
-import { memberName, useDaemonStore } from '../store/daemonSessions';
+import { useDaemonStore } from '../store/daemonSessions';
 import { harvestWhenDisplay } from '../utils/harvestWhen';
 import {
   IS_VALUES,
@@ -52,7 +52,6 @@ interface GardenPanelProps {
   reviewOpening?: boolean;
   reviewError?: string;
   onOpenReview?: () => void;
-  tenderSessionLabels?: ReadonlyMap<string, string>;
 }
 
 type ContinuationDraft = {
@@ -125,8 +124,6 @@ async function runContinuation(
   await onSendSeedToChief({
     seedId: document.seed.id,
     expectedRev: document.seed.rev,
-    expectedTenderSession: document.seed.tender_session,
-    expectedTenderMember: document.seed.tender_member,
     guidance: draft.text,
   });
 }
@@ -231,11 +228,7 @@ function isPlot(seed: Seed): boolean {
   return Boolean(seed.plot_progress);
 }
 
-function tenderOf(seed: Seed, sessionLabels?: ReadonlyMap<string, string>): string {
-  if (seed.tender_member.trim()) return memberName(seed.tender_member);
-  if (!seed.tender_session.trim()) return '';
-  return sessionLabels?.get(seed.tender_session)?.trim() || 'session';
-}
+function tenderOf(seed: Seed): string { return seed.tender?.name ?? ''; }
 
 interface Relation {
   label: string;
@@ -353,7 +346,6 @@ interface RowProps {
   match?: SeedMatch;
   home?: Seed;
   option?: boolean;
-  tenderSessionLabels?: ReadonlyMap<string, string>;
 }
 
 function SeedRow({
@@ -365,12 +357,11 @@ function SeedRow({
   match,
   home,
   option,
-  tenderSessionLabels,
 }: RowProps) {
   const progress = seed.plot_progress;
   const signal = signalOf(seed, blockers);
   const armed = harvestWhenDisplay(seed.harvest_when);
-  const tender = tenderOf(seed, tenderSessionLabels);
+  const tender = tenderOf(seed);
   return (
     <li
       className={`garden-row ${statusClass(seed.status)}${isClosed(seed) ? ' is-closed' : ''}${selected ? ' is-selected' : ''}${active ? ' is-active' : ''}`}
@@ -399,7 +390,7 @@ function SeedRow({
           <span className="garden-row__meta">
             <span className={`garden-row__id${match?.idHit ? ' garden-hit' : ''}`}>{seed.id}</span>
             {tender && (
-              <span className="garden-row__tender" title={seed.tender_session || undefined}>
+              <span className="garden-row__tender" title={seed.tender?.session_id}>
                 tended by {tender}
               </span>
             )}
@@ -435,7 +426,6 @@ interface ListProps {
   emptyMessage?: React.ReactNode;
   listId?: string;
   options?: boolean;
-  tenderSessionLabels?: ReadonlyMap<string, string>;
 }
 
 function SeedList({
@@ -450,7 +440,6 @@ function SeedList({
   emptyMessage,
   listId,
   options,
-  tenderSessionLabels,
 }: ListProps) {
   if (seeds.length === 0) return emptyMessage ? <p className="garden-empty">{emptyMessage}</p> : null;
   return (
@@ -466,7 +455,6 @@ function SeedList({
           match={matchByID?.get(seed.id)}
           home={homes && crownOf(seed) !== hereId ? index.byID.get(crownOf(seed)) : undefined}
           option={options}
-          tenderSessionLabels={tenderSessionLabels}
         />
       ))}
     </ul>
@@ -512,7 +500,6 @@ function ColumnList({
   selectedId,
   memory,
   onOpen,
-  tenderSessionLabels,
 }: {
   levelKey: string;
   seeds: Seed[];
@@ -520,7 +507,6 @@ function ColumnList({
   selectedId: string;
   memory: React.MutableRefObject<Map<string, number>>;
   onOpen: (id: string) => void;
-  tenderSessionLabels?: ReadonlyMap<string, string>;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
   useLayoutEffect(() => {
@@ -542,7 +528,6 @@ function ColumnList({
         index={index}
         onOpen={onOpen}
         selectedId={selectedId}
-        tenderSessionLabels={tenderSessionLabels}
         emptyMessage={<>Nothing here yet.</>}
       />
     </div>
@@ -593,7 +578,6 @@ export function GardenPanel({
   reviewOpening = false,
   reviewError = '',
   onOpenReview,
-  tenderSessionLabels,
 }: GardenPanelProps) {
   const crew = useDaemonStore((state) => state.crew);
   const trail = useGardenWalk((walk) => walk.trail);
@@ -652,10 +636,10 @@ export function GardenPanel({
   // client-side search feel slow; receipts in gardenSearch.bench.ts.
   const entries = useMemo(
     () => buildIndex(seeds, {
-      tenderOf: (seed: Seed) => tenderOf(seed, tenderSessionLabels),
+      tenderOf: (seed: Seed) => tenderOf(seed),
       blockersOf: (seed: Seed) => index.blockers.get(seed.id) ?? 0,
     }),
-    [seeds, index, tenderSessionLabels, crew],
+    [seeds,index,crew],
   );
   const entryByID = useMemo(() => {
     const map = new Map<string, SearchEntry>();
@@ -918,7 +902,12 @@ export function GardenPanel({
   const continuationNotesAreCurrent = documentIsCurrent && seedDocument?.snapshot === seeds;
   const continuation = seedDoc?.seed.continuation;
   const seedIsOpen = seedDoc ? !isClosed(seedDoc.seed) : false;
-  const canResume = Boolean(documentIsCurrent && onResumeSeed && seedIsOpen && continuation?.resume_available);
+  const canResume = Boolean(
+    documentIsCurrent &&
+    onResumeSeed &&
+    seedIsOpen &&
+    (here?.resume_available || continuation?.resume_available)
+  );
   const canHandover = Boolean(
     documentIsCurrent && onHandoverSeed && seedIsOpen && continuation,
   );
@@ -1179,7 +1168,6 @@ export function GardenPanel({
       hereId={plotId}
       options
       listId="garden-results"
-      tenderSessionLabels={tenderSessionLabels}
     />
   );
 
@@ -1222,12 +1210,12 @@ export function GardenPanel({
             {here.status}
           </span>
           <HarvestWhenLine condition={here.harvest_when} />
-          {tenderOf(here, tenderSessionLabels) && (
-            <span title={here.tender_session || undefined}>
-              tended by {tenderOf(here, tenderSessionLabels)}
+          {tenderOf(here) && (
+            <span title={here.tender?.session_id}>
+              tended by {tenderOf(here)}
             </span>
           )}
-          {here.planter_member && <span>by {memberName(here.planter_member)}</span>}
+          {here.planter.name && <span>by {here.planter.name}</span>}
           <span>{formatPlantedAt(here.created_at)}</span>
           <span className="garden-head__id">{here.id}</span>
         </div>
@@ -1272,7 +1260,6 @@ export function GardenPanel({
               seeds={lens(children)}
               index={index}
               onOpen={drillInto}
-              tenderSessionLabels={tenderSessionLabels}
               emptyMessage={<>Nothing planted in this plot yet. <code>attn seed plant &quot;what this is&quot; --part-of {here.id}</code> puts something in it.</>}
             />
           )}
@@ -1319,7 +1306,7 @@ export function GardenPanel({
               {spoken.map((note) => (
                 <li key={note.id} data-kind={note.kind} className={note.kind === 'handoff' ? 'is-handoff' : ''}>
                   <div className="garden-log__head">
-                    <span className="garden-log__who">{note.author_member || note.author_session || '—'}</span>
+                    <span className="garden-log__who">{note.author.name || '—'}</span>
                     {note.kind !== 'note' && <span className="garden-log__kind">{note.kind}</span>}
                     <time dateTime={note.created_at} title={formatTimestamp(note.created_at)}>
                       {formatPlantedAt(note.created_at)}
@@ -1393,7 +1380,6 @@ export function GardenPanel({
                 selectedId={level.selectedId}
                 memory={scrollMemory}
                 onOpen={(id) => selectAtLevel(firstVisibleLevel + offset, id)}
-                tenderSessionLabels={tenderSessionLabels}
               />
             ))
           )}
@@ -1451,7 +1437,6 @@ export function GardenPanel({
                   index={index}
                   onOpen={drillInto}
                   selectedId={livingTrail[0] ?? ''}
-                  tenderSessionLabels={tenderSessionLabels}
                   emptyMessage={<>The garden is empty. <code>attn seed plant &quot;what this is&quot;</code> puts something in it.</>}
                 />
               )}

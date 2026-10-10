@@ -10,15 +10,15 @@ import (
 func primingHolding(seeds int, handoff string) Priming {
 	p := Priming{Name: "Trellis", HomeDir: "/homes/trellis", HandoffName: "2026-08-13T22-20Z-trellis.md", Handoff: "Where I left off.", GardenRead: true}
 	for i := range seeds {
-		p.Held = append(p.Held, HeldSeed{ID: fmt.Sprintf("s-held%02d", i), Slug: fmt.Sprintf("held-seed-%d", i), Title: fmt.Sprintf("Held seed %d", i), Handoff: handoff})
+		p.Claims = append(p.Claims, ClaimedSeed{ID: fmt.Sprintf("s-held%02d", i), Slug: fmt.Sprintf("held-seed-%d", i), Title: fmt.Sprintf("Held seed %d", i), Handoff: handoff})
 	}
-	p.HeldTotal = seeds
+	p.ClaimedTotal = seeds
 	return p
 }
 
 func TestPrimingBudgets(t *testing.T) {
 	letterAtTheLimit := strings.Repeat("x", MaxHandoffBytes)
-	noteAtTheBudget := strings.Repeat("x", MaxHeldHandoffBytes)
+	noteAtTheBudget := strings.Repeat("x", MaxClaimedHandoffBytes)
 	cases := []struct {
 		name     string
 		priming  Priming
@@ -44,8 +44,8 @@ func TestPrimingBudgets(t *testing.T) {
 		},
 		{
 			name:    "an oversize held seed's note is cut on a rune and points at the whole note",
-			priming: primingHolding(1, strings.Repeat("日", MaxHeldHandoffBytes)),
-			want:    []string{fmt.Sprintf("[Trimmed at %d bytes of %d; `attn seed notes s-held00` has the whole note.]", MaxHeldHandoffBytes, MaxHeldHandoffBytes*3)},
+			priming: primingHolding(1, strings.Repeat("日", MaxClaimedHandoffBytes)),
+			want:    []string{fmt.Sprintf("[Trimmed at %d bytes of %d; `attn seed notes s-held00` has the whole note.]", MaxClaimedHandoffBytes, MaxClaimedHandoffBytes*3)},
 		},
 		{
 			name:     "a held list that fits says nothing about the tripwire",
@@ -56,7 +56,7 @@ func TestPrimingBudgets(t *testing.T) {
 		{
 			name:     "a garden that could not be read is no section at all",
 			priming:  Priming{Name: "Trellis", HomeDir: "/homes/trellis"},
-			unwanted: []string{"## What you hold in the garden", "You hold no seeds in the garden"},
+			unwanted: []string{"## What you claim in the garden", "You claim no seeds in the garden"},
 		},
 	}
 	for _, tc := range cases {

@@ -6,7 +6,7 @@ import { gardenRegion, openGarden, openRow, partOf, planted, plot, row, seedHead
 import { gesture } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
-const PR_42 = {
+const PR_42 = { set_by: {ref:'user',name:'the user'},
   pull_request: 'github.com:victorarias/attn#42',
   url: 'https://github.com/victorarias/attn/pull/42',
   set_at: '2026-09-02T10:00:00Z',
@@ -20,7 +20,7 @@ async function click(daemon: ScriptedDaemon, name: string | RegExp) {
 }
 
 function note(id: string, body: string) {
-  return { id, seed_id: 's-plan11', kind: 'note', body, author_session: 'sess-a', author_member: 'trellis', created_at: '2026-08-15T09:00:00Z' };
+  return { id, seed_id: 's-plan11', kind: 'note', body,  author: { ref: "member:trellis", name: "Trellis" }, created_at: '2026-08-15T09:00:00Z' };
 }
 
 describe('App garden seed detail', () => {
@@ -103,7 +103,7 @@ describe('App garden seed detail', () => {
     });
 
     it('keeps a pull request it cannot take apart rather than showing nothing', async () => {
-      const { daemon } = await openGarden([planted('s-armed2', 'waiting elsewhere', { harvest_when: { pull_request: 'somewhere-else', url: '', set_at: '' } })]);
+      const { daemon } = await openGarden([planted('s-armed2', 'waiting elsewhere', { harvest_when: { set_by: {ref:'user',name:'the user'},  pull_request: 'somewhere-else', url: '', set_at: '' } })]);
       expect(row('waiting elsewhere')).toHaveTextContent('harvests on somewhere-else');
 
       await openRow(daemon, 'waiting elsewhere');
@@ -117,9 +117,16 @@ describe('App garden seed detail', () => {
     it('shows a seed’s state and who tends it in the row', async () => {
       await openGarden(
         [
-          planted('s-grow11', 'tended by crew', { status: 'growing', tender_member: 'trellis', tender_session: 'sess-a' }),
-          planted('s-grow22', 'claimed by a session', { status: 'growing', tender_session: 'sess-b' }),
-          planted('s-grow33', 'claimed by an unknown session', { status: 'growing', tender_session: '4915e44d-fadd-4dc8-82cf-671cbbf872c0' }),
+          planted('s-grow11', 'tended by crew', { status: 'growing',
+          tender: { ref: 'member:trellis', name: "Trellis", session_id: 'sess-a' },
+          claimed: true,
+          resume_available: false,  }),
+          planted('s-grow22', 'claimed by a session', { status: 'growing',
+          tender: { ref: 'session:sess-b', name:'Garden polish',session_id:'sess-b' },
+          claimed: true }),
+          planted('s-grow33', 'claimed by an unknown session', { status: 'growing',
+          tender: { ref: 'session:4915e44d-fadd-4dc8-82cf-671cbbf872c0', name:'Past session' },
+          claimed: true }),
           planted('s-idle11', 'unclaimed'),
         ],
         { initial: { crew: [crewMember('trellis')] }, sessions: [daemonSession('s1'), daemonSession('sess-b', { label: 'Garden polish' })] },
@@ -128,7 +135,7 @@ describe('App garden seed detail', () => {
       expect(row('tended by crew')).toHaveTextContent('growing');
       expect(row('tended by crew')).toHaveTextContent('tended by Trellis');
       expect(row('claimed by a session')).toHaveTextContent('tended by Garden polish');
-      expect(row('claimed by an unknown session')).toHaveTextContent('tended by session');
+      expect(row('claimed by an unknown session')).toHaveTextContent('tended by Past session');
       expect(row('claimed by an unknown session')).not.toHaveTextContent('4915e44d');
       expect(row('unclaimed')).not.toHaveTextContent('tended by');
     });
@@ -138,7 +145,10 @@ describe('App garden seed detail', () => {
       const garden = await openGarden([life], { initial: { crew: [crewMember('trellis')] } });
       expect(row('a whole life')).not.toHaveTextContent('planted');
 
-      garden.push([{ ...life, status: 'growing', tender_member: 'trellis', rev: 2 }]);
+      garden.push([{ ...life, status: 'growing',
+      tender: { ref: 'member:trellis', name: "Trellis" },
+      claimed: true,
+      resume_available: false, rev: 2 }]);
       expect(row('a whole life')).toHaveTextContent('growing');
       expect(row('a whole life')).toHaveTextContent('tended by Trellis');
 
@@ -169,7 +179,9 @@ describe('App garden seed detail', () => {
   });
 
   describe('the opened seed', () => {
-    const plan = planted('s-plan11', 'Open this plan', { body: '# First body', status: 'growing', tender_member: 'trellis' });
+    const plan = planted('s-plan11', 'Open this plan', { body: '# First body', status: 'growing',
+    tender: { ref: 'member:trellis', name: "Trellis" },
+    claimed: true });
 
     it('reads the seed’s document and opens a linked markdown file from it', async () => {
       const garden = await openGarden([plan]);

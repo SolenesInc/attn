@@ -88,7 +88,7 @@ func TestRetiringAndRestoringAMemberKeepsItsMailAndReleasesItsClaims(t *testing.
 		t.Fatalf("retirement = %+v", retired)
 	}
 	show := lifeShow(t, cli, seed)
-	if show.Seed.Status != "planted" || show.Seed.TenderMember != "" || show.Seed.TenderSession != "" {
+	if show.Seed.Status != "planted" || show.Seed.Tender != nil || show.Seed.Claimed {
 		t.Fatalf("released seed = %+v", show.Seed)
 	}
 	notes, err := cli.SeedNotes("", seed, 0)
@@ -97,7 +97,7 @@ func TestRetiringAndRestoringAMemberKeepsItsMailAndReleasesItsClaims(t *testing.
 	}
 	found := false
 	for _, note := range notes.Notes {
-		if note.AuthorMember == "attn" && note.Body == "Keel was retired; attn released its claim." {
+		if note.Author.Ref == "attn" && note.Body == "Keel was retired; attn released its claim." {
 			found = true
 		}
 	}
@@ -151,12 +151,12 @@ func TestRetiringAndRestoringAMemberKeepsItsMailAndReleasesItsClaims(t *testing.
 	if len(mail.Items) != 1 || mail.Items[0].Content != "keep this mail" {
 		t.Fatalf("kept mail = %+v", mail)
 	}
-	if crewRosterMember(t, cli, key).Name != "Keel" || lifeShow(t, cli, seed).Seed.TenderMember != "" {
+	if crewRosterMember(t, cli, key).Name != "Keel" || lifeShow(t, cli, seed).Seed.Tender != nil {
 		t.Fatal("restore changed name or reclaimed seed")
 	}
 }
 
-func TestRetiringAMemberRemovesItsPullRequestWatch(t *testing.T) {
+func TestRetiringAMemberRemovesItsGardenAndPullRequestWatches(t *testing.T) {
 	serveWatchedPullRequest(t, watchedPullRequestGitHub{state: "OPEN"})
 	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
@@ -164,8 +164,10 @@ func TestRetiringAMemberRemovesItsPullRequestWatch(t *testing.T) {
 	w.Launched(string(wake.SessionID)).Prompted()
 	watchPullRequestAs(t, cli, string(wake.SessionID), protocol.PullRequestWatchModeCodex, "")
 	awaitWatchedPullRequest(app, string(wake.SessionID), func(pr protocol.SessionPullRequest) bool { return protocol.Deref(pr.Watching) })
+	seed := plantSeedAs(t, cli, "", "Watch this work")
+	gardenNudgeWatch(t, cli, string(wake.SessionID), seed, false)
 	retired, err := cli.CrewRetire("Keel")
-	if err != nil || retired.RemovedWatches != 1 {
+	if err != nil || retired.RemovedWatches != 2 {
 		t.Fatalf("retire watches = %+v %v", retired, err)
 	}
 	session := queriedSession(t, cli, string(wake.SessionID))

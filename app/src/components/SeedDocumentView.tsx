@@ -32,7 +32,7 @@ function formatTimestamp(iso: string): string {
 }
 
 function holder(seed: Seed): string {
-  return seed.tender_member || seed.tender_session || '';
+  return seed.tender?.name ?? '';
 }
 
 function progressWords(seed: Seed): string {
@@ -86,7 +86,7 @@ function SeedLogLedger({
             {notes.map((note) => (
               <li key={note.id} data-kind={note.kind} className={note.kind === 'handoff' ? 'is-handoff' : ''}>
                 <div className="seed-document__note-head">
-                  <span>{note.author_member || note.author_session || '—'}</span>
+                  <span>{note.author.name || '—'}</span>
                   {note.kind !== 'note' && <span>{note.kind}</span>}
                   <time dateTime={note.created_at}>{formatTimestamp(note.created_at)}</time>
                 </div>

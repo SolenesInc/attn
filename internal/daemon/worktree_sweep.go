@@ -15,6 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 const (
@@ -416,7 +417,7 @@ func (d *Daemon) recordWorktreeRemoval(
 	body := fmt.Sprintf("attn %s the worktree %s (branch %s of %s): %s.",
 		action, wt.Path, wt.Branch, wt.MainRepo, reason)
 	for _, seedID := range seeds {
-		if _, err := d.appendSeedNote(seedID, body, "", "", "", nil, false, ""); err != nil {
+		if _, err := d.appendSeedNote(seedID, body, who.Attn(), "", nil, false); err != nil {
 			d.logf("worktree removal: noting %s on seed %s: %v", wt.Path, seedID, err)
 		}
 	}
@@ -425,7 +426,7 @@ func (d *Daemon) recordWorktreeRemoval(
 
 func (d *Daemon) seedsForWorktree(wt *store.Worktree) []string {
 	var seeds []string
-	d.eachSeedExecution(func(seed garden.Seed, dispatch garden.Dispatch) {
+	d.eachSeedExecution(func(seed garden.Seed, dispatch garden.Execution) {
 		if worktreeOwnsExecution(wt, dispatch) {
 			seeds = append(seeds, seed.ID)
 		}
@@ -442,7 +443,7 @@ func (d *Daemon) openSeedsByWorktree(repo string) map[string][]string {
 	if len(rows) == 0 {
 		return byPath
 	}
-	d.eachSeedExecution(func(seed garden.Seed, dispatch garden.Dispatch) {
+	d.eachSeedExecution(func(seed garden.Seed, dispatch garden.Execution) {
 		if garden.Closed(seed.Status) {
 			return
 		}
@@ -455,7 +456,7 @@ func (d *Daemon) openSeedsByWorktree(repo string) map[string][]string {
 	return byPath
 }
 
-func worktreeOwnsExecution(wt *store.Worktree, dispatch garden.Dispatch) bool {
+func worktreeOwnsExecution(wt *store.Worktree, dispatch garden.Execution) bool {
 	if pathAtOrBelow(dispatch.Cwd, wt.Path) {
 		return true
 	}
@@ -463,7 +464,7 @@ func worktreeOwnsExecution(wt *store.Worktree, dispatch garden.Dispatch) bool {
 		attngit.CanonicalizePath(dispatch.RepositoryRoot) == attngit.CanonicalizePath(wt.MainRepo)
 }
 
-func (d *Daemon) eachSeedExecution(visit func(garden.Seed, garden.Dispatch)) {
+func (d *Daemon) eachSeedExecution(visit func(garden.Seed, garden.Execution)) {
 	after := ""
 	for {
 		read, _, err := d.runDocQuery(docstore.Query{

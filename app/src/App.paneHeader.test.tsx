@@ -251,7 +251,9 @@ describe('App pane header', () => {
   it('shows and opens the seed a crew member tends', async () => {
     const { daemon } = await openPane(
       { label: 'Fern', crew_member: 'fern' },
-      { seeds: [daemonSeed('s-crew11', { title: 'Member work', tender_member: 'fern' })] },
+      { seeds: [daemonSeed('s-crew11', { title: 'Member work',
+      tender: { ref: 'member:fern', name:"Fern",session_id:"s1" },
+      claimed: true })] },
     );
 
     expect(inHeader().getByTestId('seed-chip-s1')).toHaveTextContent('Member work');

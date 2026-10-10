@@ -14,7 +14,6 @@ import (
 	"nhooyr.io/websocket"
 
 	"github.com/victorarias/attn/internal/enrollment"
-	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/hub"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -154,29 +153,6 @@ func remoteAgentCloseSession(id, label string) protocol.Session {
 	return protocol.Session{ID: protocol.SessionID(id), Label: label, Directory: "/srv/" + id}
 }
 
-func TestAgentCloseReachesADelegateAnEndpointOwns(t *testing.T) {
-	d := newAgentCloseDaemon(t)
-	addAgentCloseSession(t, d, "orchestrator", "Orchestrator")
-	startAgentCloseOutpost(t, d, remoteAgentCloseSession("remote-delegate", "Remote delegate"))
-	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Bench the kernel", Body: protocol.Ptr("run the sweep on the gpu box")})
-	move(t, d, "remote-delegate", seed.ID, garden.VerbTend, "", "")
-	if err := d.recordGardenDispatch("remote-delegate", seed.ID, "orchestrator", "/srv/remote-delegate", "claude", false); err != nil {
-		t.Fatalf("recordGardenDispatch: %v", err)
-	}
-
-	resp := callAgentClose(t, d, "remote-delegate", "orchestrator", "the sweep finished and its numbers are on the seed")
-
-	if !resp.Ok || resp.AgentCloseResult == nil {
-		t.Fatalf("close refused with %s, want the hub to close the session its outpost owns", agentCloseFailure(resp))
-	}
-	if rule := resp.AgentCloseResult.Rule; rule != protocol.AgentCloseRuleDispatcher {
-		t.Errorf("rule = %q, want dispatcher", rule)
-	}
-	if got := resp.AgentCloseResult.SeedIds; len(got) != 1 || got[0] != seed.ID {
-		t.Errorf("seed_ids = %v, want the seed the remote delegate tended", got)
-	}
-}
-
 func TestAgentCloseLetsTheChiefCloseASessionOnAnotherEndpoint(t *testing.T) {
 	d := newAgentCloseDaemon(t)
 	addAgentCloseSession(t, d, "chief", "Chief")
@@ -199,9 +175,8 @@ func TestAgentCloseWritesItsReceiptInTheOwningDaemonsLedger(t *testing.T) {
 	d := newAgentCloseDaemon(t)
 	addAgentCloseSession(t, d, "orchestrator", "Orchestrator")
 	outpost := startAgentCloseOutpost(t, d, remoteAgentCloseSession("remote-delegate", "Remote delegate"), remoteAgentCloseSession("remote-self", "Remote self"))
-	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Bench the kernel", Body: protocol.Ptr("sweep on the gpu box")})
-	if err := d.recordGardenDispatch("remote-delegate", seed.ID, "orchestrator", "/srv/remote-delegate", "claude", false); err != nil {
-		t.Fatalf("recordGardenDispatch: %v", err)
+	if err := setTestChief(d, "orchestrator"); err != nil {
+		t.Fatal(err)
 	}
 
 	const reason = "the sweep finished and its numbers are on the seed"

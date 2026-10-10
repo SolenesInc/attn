@@ -132,7 +132,7 @@ func delegateSeed(t *testing.T, app *testworld.Peer, requestID, seedID, cwd stri
 
 func plantSeed(t *testing.T, w *world, title string) protocol.Seed {
 	t.Helper()
-	planted, err := w.Client().SeedPlant("", title, "Checkout needs a field for discount codes.", "", "", "")
+	planted, err := w.Client().SeedPlant("", title, "Checkout needs a field for discount codes.", "", "")
 	if err != nil {
 		t.Fatalf("plant %q: %v", title, err)
 	}

@@ -17,7 +17,6 @@ export function DesktopAgentSignals({ agentPane, paneSession }: DesktopAgentProp
     gardenSeeds,
     agentPane.sessionId,
     paneSession?.seedId,
-    paneSession?.crewMember,
   );
   const autoSettleFiresAt = paneSession?.autoSettleFiresAt;
   const autoSettleHeld = paneSession?.autoSettleHeld;

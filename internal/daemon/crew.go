@@ -6,12 +6,10 @@ import (
 	"fmt"
 	"net"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
-	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
@@ -317,21 +315,6 @@ func (d *Daemon) crewBindingLive(member crew.Member) bool {
 	return member.BindingSession != "" && d.sessionExists(member.BindingSession)
 }
 
-func (d *Daemon) liveSessionForTender(tender garden.Tender) (protocol.SessionID, bool) {
-	memberID := strings.TrimSpace(tender.Member)
-	if memberID != "" {
-		member, found, err := d.resolveCrewMember(memberID)
-		if err != nil || !found || !d.crewBindingLive(member) {
-			return "", false
-		}
-		return member.BindingSession, true
-	}
-	if sessionID := protocol.TrimID(tender.Session); sessionID != "" && d.store.Get(sessionID) != nil {
-		return sessionID, true
-	}
-	return "", false
-}
-
 func (d *Daemon) claimCrewBinding(key who.MemberKey, sessionID protocol.SessionID) (who.MemberKey, error) {
 	memberName := key.String()
 	if err := d.requireHome(crew.Surface); err != nil {
@@ -482,30 +465,6 @@ func (d *Daemon) releaseCrewBindingsExcept(schema docstore.CollectionSchema, mem
 	}
 }
 
-func (d *Daemon) crewMembersBySession() map[protocol.SessionID]string {
-	if d.store == nil {
-		return nil
-	}
-	members, _, err := d.readCrewMembers()
-	if err != nil {
-		if !docstore.IsUndeclaredCollection(err) {
-			d.logf("crew: reading roster for broadcast: %v", err)
-		}
-		return nil
-	}
-	var out map[protocol.SessionID]string
-	for _, member := range members {
-		if !d.crewBindingLive(member) {
-			continue
-		}
-		if out == nil {
-			out = make(map[protocol.SessionID]string)
-		}
-		out[member.BindingSession] = member.Key.String()
-	}
-	return out
-}
-
 func (d *Daemon) crewMemberBoundTo(sessionID protocol.SessionID) string {
 	if d.store == nil || protocol.TrimID(sessionID) == "" {
 		return ""
@@ -525,35 +484,26 @@ func (d *Daemon) crewMemberBoundTo(sessionID protocol.SessionID) string {
 	return ""
 }
 
-func (d *Daemon) decorateCrewMember(session *protocol.Session, bindings who.Bindings) {
+func (d *Daemon) crewNames() map[who.MemberKey]string {
+	names, err := d.store.CrewNames()
+	if err != nil {
+		d.logf("crew names: %v", err)
+	}
+	return names
+}
+
+func (d *Daemon) decorateCrewMember(session *protocol.Session, bindings who.Bindings, names map[who.MemberKey]string) {
 	if session == nil {
 		return
 	}
 	party, _ := bindings.PartyOf(session.ID)
 	if member, ok := party.Member(); ok && bindings.Check(party) == nil {
 		session.CrewMember = protocol.Ptr(member.String())
+		session.CrewMemberName = protocol.Ptr(names[member])
 		return
 	}
 	session.CrewMember = nil
-}
-
-func (d *Daemon) resolveTenderMember(memberName string, sessionID protocol.SessionID, profileID ...string) string {
-	memberName = strings.TrimSpace(memberName)
-	if memberName == "" {
-		return d.crewMemberBoundTo(sessionID)
-	}
-	b, bindingsErr := d.bindings()
-	if bindingsErr != nil {
-		d.logf("crew tender bindings: %v", bindingsErr)
-		return memberName
-	}
-	r, err := d.requestFromMessage(protocol.Ptr(sessionID), protocol.Ptr(firstProfile(profileID)), b)
-	if err == nil {
-		if member, found, err := d.store.CrewNamed(r.ProfileID(), memberName); err == nil && found {
-			return member.Key.String()
-		}
-	}
-	return memberName
+	session.CrewMemberName = nil
 }
 
 func (d *Daemon) sendCrewError(conn net.Conn, verb string, err error) {

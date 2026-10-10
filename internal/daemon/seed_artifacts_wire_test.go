@@ -302,7 +302,7 @@ func seedArtifactsMarkdown(path string) *protocol.SeedArtifactReference {
 
 func seedArtifactsAttach(t *testing.T, cli *client.Client, seedID, path string) {
 	t.Helper()
-	if _, err := cli.SeedNote("", seedID, "", "", "attach", false, seedArtifactsMarkdown(path)); err != nil {
+	if _, err := cli.SeedNote("", seedID, "", "attach", false, seedArtifactsMarkdown(path)); err != nil {
 		t.Fatalf("attach %s to %s: %v", path, seedID, err)
 	}
 	if references := lifeShow(t, cli, seedID).References; !slices.ContainsFunc(references, func(r protocol.SeedArtifactReference) bool {

@@ -1,3 +1,4 @@
+import type { ActorView } from '../types/generated';
 import type { DesktopWithSessions, DesktopViewSession } from './desktopViewModels';
 import { isSnoozed } from './snoozeDurations';
 
@@ -50,7 +51,7 @@ export interface QueueBandSession extends DesktopViewSession {
   parentSessionId?: string;
   crewMember?: string;
   dispatcher_session_id?: string;
-  dispatcher_member?: string;
+  dispatcher?: ActorView;
   automation?: { definition_id: number };
 }
 

@@ -36,7 +36,7 @@ type branchInspection struct {
 type sessionReopenVerdict struct {
 	SessionID      protocol.SessionID
 	Entry          *protocol.SessionLedgerEntry
-	Execution      garden.Dispatch
+	Execution      garden.Execution
 	Live           bool
 	Reopenable     bool
 	Reason         string
@@ -82,7 +82,7 @@ func (v *sessionReopenVerdict) toProtocol() *protocol.SessionReopen {
 	return out
 }
 
-func (d *Daemon) reopenExecutionFromLedger(entry *protocol.SessionLedgerEntry) garden.Dispatch {
+func (d *Daemon) reopenExecutionFromLedger(entry *protocol.SessionLedgerEntry) garden.Execution {
 	execution, _ := d.gardenDispatch(entry.ID)
 	execution.SessionID = entry.ID
 	if execution.Cwd == "" {
@@ -283,7 +283,7 @@ func (d *Daemon) branchMerged(sessionID protocol.SessionID, branch string) bool 
 	return false
 }
 
-func (d *Daemon) reopenConversation(execution garden.Dispatch, directoryMissing bool) (bool, string) {
+func (d *Daemon) reopenConversation(execution garden.Execution, directoryMissing bool) (bool, string) {
 	resumeID := strings.TrimSpace(execution.Resume)
 	if resumeID == "" {
 		return false, "no conversation id was saved for this session, so there is nothing to resume"
@@ -322,7 +322,7 @@ func (d *Daemon) conversationResumable(agentName, resumeID, cwd string) (bool, s
 	return true, ""
 }
 
-func reopenBranchWarning(ctx context.Context, gitView reopenGit, execution garden.Dispatch) (string, error) {
+func reopenBranchWarning(ctx context.Context, gitView reopenGit, execution garden.Execution) (string, error) {
 	saved := strings.TrimSpace(execution.Branch)
 	if saved == "" {
 		return "", nil
@@ -488,7 +488,7 @@ func (d *Daemon) performReopenLocked(
 	}, nil
 }
 
-func reopenDirectoryInsideWorktree(worktree string, execution garden.Dispatch) string {
+func reopenDirectoryInsideWorktree(worktree string, execution garden.Execution) string {
 	subdir := strings.TrimSpace(execution.RepositorySubdir)
 	if subdir == "" || subdir == "." {
 		return worktree
@@ -603,12 +603,13 @@ func mutateReopenWorktreeAdmitted(
 }
 
 type sessionReopenPlan struct {
-	SessionID         protocol.SessionID
-	Directory         string
-	Title             string
-	ProfileID         string
-	InitialPrompt     string
-	FreshConversation bool
+	afterSessionRecorded func() error
+	SessionID            protocol.SessionID
+	Directory            string
+	Title                string
+	ProfileID            string
+	InitialPrompt        string
+	FreshConversation    bool
 }
 
 type sessionRuntimeReopened struct {
@@ -729,6 +730,7 @@ func (d *Daemon) reopenSessionRuntimeProtected(
 	if ok {
 		spawn, policy = buildStoredIntentSpawn(session, intent, 80, 24)
 	}
+	policy.afterSessionRecorded = plan.afterSessionRecorded
 	if prompt := strings.TrimSpace(plan.InitialPrompt); prompt != "" {
 		spawn.InitialPrompt = protocol.Ptr(prompt)
 	}
@@ -806,7 +808,7 @@ func (r *delegationRollback) onConversationForgotten(sessionID protocol.SessionI
 }
 
 func (d *Daemon) forgetDispatchResume(sessionID protocol.SessionID) {
-	if _, err := d.updateGardenDispatch(sessionID, func(current garden.Dispatch) (garden.Dispatch, bool, error) {
+	if _, err := d.updateGardenDispatch(sessionID, func(current garden.Execution) (garden.Execution, bool, error) {
 		if strings.TrimSpace(current.Resume) == "" {
 			return current, false, nil
 		}

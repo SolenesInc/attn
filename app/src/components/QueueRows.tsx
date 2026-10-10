@@ -1,3 +1,4 @@
+import type { ActorView } from '../types/generated';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { SessionLabel } from './SessionLabel';
 import { harnessLabel } from './harnessLabel';
@@ -32,7 +33,7 @@ export interface QueueBandSessionView {
   autoSettleHeld?: boolean;
   crewMember?: string;
   dispatcher_session_id?: string;
-  dispatcher_member?: string;
+  dispatcher?: ActorView;
   delegation_role?: SessionDelegationRole;
   automation?: AutomationProvenanceValue;
 }

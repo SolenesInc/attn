@@ -96,7 +96,7 @@ func TestOneInboxReadReturnsGardenAndPeerMailOldestFirstExactlyOnce(t *testing.T
 
 		var want []string
 		for i, seed := range seeds {
-			if _, err := cli.SeedNote("worker", seed, "progress on "+seed, "", "", true, nil); err != nil {
+			if _, err := cli.SeedNote("worker", seed, "progress on "+seed, "", true, nil); err != nil {
 				t.Fatalf("note %s: %v", seed, err)
 			}
 			w.advance(time.Millisecond)

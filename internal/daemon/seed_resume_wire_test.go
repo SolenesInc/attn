@@ -52,9 +52,9 @@ func TestResumingASeedRelaunchesItsTenderInItsOwnConversation(t *testing.T) {
 	if reopened := showSession(t, cli, string(session)); protocol.Deref(reopened.ClosedAt) != "" {
 		t.Errorf("the ledger still shows %s closed at %s after the resume", session, protocol.Deref(reopened.ClosedAt))
 	}
-	if after := lifeShow(t, cli, seed); after.Seed.Status != before.Seed.Status || after.Seed.TenderSession != before.Seed.TenderSession || after.NotesTotal != before.NotesTotal {
+	if after := lifeShow(t, cli, seed); after.Seed.Status != before.Seed.Status || protocol.Deref(protocol.Deref(after.Seed.Tender).SessionID) != protocol.Deref(protocol.Deref(before.Seed.Tender).SessionID) || after.NotesTotal != before.NotesTotal {
 		t.Errorf("the resume moved the seed from %s under %s with %d notes to %s under %s with %d notes",
-			before.Seed.Status, before.Seed.TenderSession, before.NotesTotal, after.Seed.Status, after.Seed.TenderSession, after.NotesTotal)
+			before.Seed.Status, protocol.Deref(protocol.Deref(before.Seed.Tender).SessionID), before.NotesTotal, after.Seed.Status, protocol.Deref(protocol.Deref(after.Seed.Tender).SessionID), after.NotesTotal)
 	}
 
 	lifeMove(t, cli, string(session), seed, "park", "", "")
@@ -64,7 +64,7 @@ func TestResumingASeedRelaunchesItsTenderInItsOwnConversation(t *testing.T) {
 		t.Fatalf("resuming the parked seed = %+v, want %s relaunched", reclaimed, session)
 	}
 	seedResumeContinues(t, w, first, string(session))
-	if got := lifeShow(t, cli, seed).Seed; got.Status != "growing" || got.TenderSession != session || protocol.Deref(got.LastExecutionID) != session {
+	if got := lifeShow(t, cli, seed).Seed; got.Status != "growing" || protocol.Deref(protocol.Deref(got.Tender).SessionID) != session || protocol.Deref(got.LastExecutionID) != session {
 		t.Errorf("the resumed parked seed = %+v, want it growing again under %s", got, session)
 	}
 }
@@ -196,8 +196,8 @@ func TestAResumeWhoseAgentCannotStartLeavesNoPaneBehind(t *testing.T) {
 	if after := paneSessions(w); !slices.Equal(after, before) {
 		t.Errorf("the failed resume left panes for %q, want only %q", after, before)
 	}
-	if after := lifeShow(t, cli, delegated.SeedID).Seed; after.TenderSession != seed.TenderSession || after.Status != seed.Status {
-		t.Errorf("the failed resume changed the seed to %s under %q, want %s under %s", after.Status, after.TenderSession, seed.Status, seed.TenderSession)
+	if after := lifeShow(t, cli, delegated.SeedID).Seed; protocol.Deref(protocol.Deref(after.Tender).SessionID) != protocol.Deref(protocol.Deref(seed.Tender).SessionID) || after.Status != seed.Status {
+		t.Errorf("the failed resume changed the seed to %s under %q, want %s under %s", after.Status, protocol.Deref(protocol.Deref(after.Tender).SessionID), seed.Status, protocol.Deref(protocol.Deref(seed.Tender).SessionID))
 	}
 }
 

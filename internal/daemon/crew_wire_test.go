@@ -486,7 +486,7 @@ func TestARestartReimportsCrewHomesWithoutRewritingTheRoster(t *testing.T) {
 	writeCrewCharter(t, w, "sable")
 	writeCrewHomeFile(t, w, "scratch", "note.md", "not a member\n")
 	writeCrewHomeFile(t, w, "Not A Member", crew.CharterFileName, "# nope\n")
-	writeCrewHomeFile(t, w, crew.DaemonID, crew.CharterFileName, "# attn\n")
+	writeCrewHomeFile(t, w, "attn", crew.CharterFileName, "# attn\n")
 	writeCrewHomeFile(t, w, strings.Repeat("a", 40+1), crew.CharterFileName, "# long\n")
 	w.restart()
 	cli = w.Client()
@@ -532,41 +532,22 @@ func TestSeedTendersResolveToTheMemberTheyName(t *testing.T) {
 		}
 	}
 	tend := func(session, seed, member string) (*protocol.SeedTransitionResult, error) {
-		return cli.SeedTransition(protocol.SessionID(session), seed, "tend", "", member, false, client.SeedTransitionOptions{})
+		return cli.SeedTransition(protocol.SessionID(session), seed, "tend", "", false, client.SeedTransitionOptions{Assignee: member})
 	}
 
 	byName := plantSeedAs(t, cli, "sess-a", "Named after a member")
-	if moved, err := tend("sess-a", byName, "Keel"); err != nil || moved.Seed.TenderMember != "keel" {
+	if moved, err := tend("sess-a", byName, "Keel"); err != nil || protocol.Deref(moved.Seed.Tender).Ref != "member:keel" {
 		t.Fatalf("tending as Keel = %+v, %v; want the member keel", moved, err)
 	}
 	bySession := plantSeedAs(t, cli, "sess-a", "Tended from a member's day")
-	if moved, err := tend("sess-keel", bySession, ""); err != nil || moved.Seed.TenderMember != "keel" {
+	if moved, err := tend("sess-keel", bySession, ""); err != nil || protocol.Deref(moved.Seed.Tender).Ref != "member:keel" {
 		t.Fatalf("tending from keel's day = %+v, %v; want the member keel", moved, err)
 	}
 
-	unbound := plantSeedAs(t, cli, "sess-a", "Picked up by a worker")
-	moved, err := tend("sess-a", unbound, "some-worker")
-	if err != nil || moved.Seed.TenderMember != "some-worker" || moved.Seed.TenderSession != "" {
-		t.Fatalf("tending as some-worker = %+v, %v; want the named worker holding it", moved, err)
-	}
-	_, err = tend("sess-b", unbound, "")
-	crewErrorContains(t, err, "Some-worker")
-	if _, err := cli.SeedTransition("sess-a", unbound, "harvest", "done", "some-worker", false, client.SeedTransitionOptions{}); err != nil {
-		t.Fatalf("the named worker could not harvest its seed: %v", err)
-	}
-	if peek, err := cli.AgentPeek("sess-a"); err != nil || peek.CrewMember != nil {
-		t.Fatalf("the worker's session peeks as crew member %v (%v), want none", peek, err)
-	}
+	unknown := plantSeedAs(t, cli, "sess-a", "Unknown member")
+	_, err := tend("sess-a", unknown, "some-worker")
+	crewErrorContains(t, err, "no crew member")
 
-	held := plantSeedAs(t, cli, "sess-a", "A member's work")
-	if _, err := tend("", held, "trellis"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := tend("", held, "Trellis"); err != nil {
-		t.Fatalf("trellis could not re-tend its seed as Trellis: %v", err)
-	}
-	_, err = tend("", held, "keel")
-	crewErrorContains(t, err, "Trellis")
 }
 
 func TestAWokenMemberIsPrimedWithItsCharterLettersAndGarden(t *testing.T) {
@@ -577,7 +558,7 @@ func TestAWokenMemberIsPrimedWithItsCharterLettersAndGarden(t *testing.T) {
 	}
 	plant := func(title, partOf string) string {
 		t.Helper()
-		planted, err := cli.SeedPlant("planter", title, "", partOf, "", "")
+		planted, err := cli.SeedPlant("planter", title, "", partOf, "")
 		if err != nil {
 			t.Fatalf("plant %q: %v", title, err)
 		}
@@ -585,7 +566,7 @@ func TestAWokenMemberIsPrimedWithItsCharterLettersAndGarden(t *testing.T) {
 	}
 	tendAs := func(seed, member string) {
 		t.Helper()
-		if _, err := cli.SeedTransition("", seed, "tend", "", member, false, client.SeedTransitionOptions{}); err != nil {
+		if _, err := cli.SeedTransition("", seed, "tend", "", false, client.SeedTransitionOptions{Assignee: member}); err != nil {
 			t.Fatalf("%s tends %s: %v", member, seed, err)
 		}
 	}
@@ -598,7 +579,7 @@ func TestAWokenMemberIsPrimedWithItsCharterLettersAndGarden(t *testing.T) {
 	tendAs(withNote, "trellis")
 	tendAs(quiet, "trellis")
 	tendAs(alders, "alder")
-	if _, err := cli.SeedNote("", withNote, "The tripwires are measured; the daemon adapter is next.", "trellis", "handoff", false, nil); err != nil {
+	if _, err := cli.SeedNote("", withNote, "The tripwires are measured; the daemon adapter is next.", "handoff", false, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -609,7 +590,7 @@ func TestAWokenMemberIsPrimedWithItsCharterLettersAndGarden(t *testing.T) {
 		"You are **Trellis**",
 		"Where I left off.",
 		crewHomeLetters["trellis"],
-		"## What you hold in the garden",
+		"## What you claim in the garden",
 		"`" + withNote + "` wake-priming-lists-seeds-member-holds — Wake priming lists the seeds a member holds",
 		"Freshest handoff: The tripwires are measured; the daemon adapter is next.",
 		"`" + quiet + "` closing-seed-says-what-unblocked — Closing a seed says what it unblocked",
@@ -645,25 +626,25 @@ func TestAWokenMemberIsPrimedWithItsCharterLettersAndGarden(t *testing.T) {
 		}
 	}
 	primed = crewPriming(t, cli, string(keel.SessionID))
-	for _, want := range []string{"You hold no seeds in the garden.", workDir, notes} {
+	for _, want := range []string{"You claim no seeds in the garden.", workDir, notes} {
 		if !strings.Contains(primed, want) {
 			t.Errorf("keel's priming after its directories moved does not carry %q:\n%s", want, primed)
 		}
 	}
 
-	claims := crew.MaxHeldSeeds + 3
+	claims := crew.MaxClaimedSeeds + 3
 	for i := range claims {
 		tendAs(plant(fmt.Sprintf("Held seed number %d", i), ""), "alder")
 	}
 	alder := wakeCrew(t, cli, "alder", "")
 	w.Launched(string(alder.SessionID))
 	primed = crewPriming(t, cli, string(alder.SessionID))
-	cut := fmt.Sprintf("You hold %d seeds and this block lists the %d you claimed most recently; `attn seed ls --flat` has them all.", claims+1, crew.MaxHeldSeeds)
+	cut := fmt.Sprintf("You claim %d seeds and this block lists the %d you claimed most recently; `attn seed ls --flat` has them all.", claims+1, crew.MaxClaimedSeeds)
 	if !strings.Contains(primed, cut) {
 		t.Errorf("alder's priming does not say %q:\n%s", cut, primed)
 	}
-	if got := strings.Count(primed, "Held seed number"); got != crew.MaxHeldSeeds {
-		t.Errorf("alder's priming lists %d held seeds, want the %d the tripwire allows", got, crew.MaxHeldSeeds)
+	if got := strings.Count(primed, "Held seed number"); got != crew.MaxClaimedSeeds {
+		t.Errorf("alder's priming lists %d held seeds, want the %d the tripwire allows", got, crew.MaxClaimedSeeds)
 	}
 
 	for _, session := range []string{"planter", ""} {

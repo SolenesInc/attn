@@ -39,8 +39,8 @@ export function useTileAnnotations({
   boundSessionIdInput,
   onRetargetTile,
 }: Options) {
-  const seedTenderSessionId = seedDocument?.tender_holds
-    ? seedDocument.seed.tender_session.trim()
+  const seedSessionId = seedDocument?.seed.claimed
+    ? seedDocument.seed.tender?.session_id ?? ''
     : '';
   const annotationsSendRef = useRef<MarkdownAnnotationsSendHandle | null>(null);
   const [annotationCount, setAnnotationCount] = useState(0);
@@ -56,12 +56,12 @@ export function useTileAnnotations({
   const primaryDestination = useMemo<MarkdownAnnotationsDestination | null>(() => {
     if (isSeed) {
       if (!seedDocument || !path) return null;
-      return seedTenderSessionId
-        ? { kind: 'session', sessionId: seedTenderSessionId }
+      return seedSessionId
+        ? { kind: 'session', sessionId: seedSessionId }
         : { kind: 'seed', seedId: path };
     }
     return targetSessionId ? { kind: 'session', sessionId: targetSessionId } : null;
-  }, [isSeed, path, seedDocument, seedTenderSessionId, targetSessionId]);
+  }, [isSeed, path, seedDocument, seedSessionId, targetSessionId]);
   const transportAvailable = getMarkdownAnnotationsTransport() !== null;
 
   const performAnnotationSend = useCallback(
@@ -140,7 +140,7 @@ export function useTileAnnotations({
     closeDestinationMenu,
   } = useAnnotationDestinationMenu({
     isSeed,
-    seedTenderSessionId,
+    seedSessionId,
     seedDocument,
     desktopSessions,
   });
@@ -160,7 +160,7 @@ export function useTileAnnotations({
   } = annotationSendPresentation(
     sendStatus,
     isSeed,
-    seedTenderSessionId,
+    seedSessionId,
     annotationCount,
     targetSessionId,
     targetSessionLabel,
@@ -175,7 +175,7 @@ export function useTileAnnotations({
     clearSendOutcome,
     sendStatusMessage,
     destinationGroupRef,
-    seedTenderSessionId,
+    seedSessionId,
     sendStatus,
     sendHasProblem,
     sendDisabled,
@@ -200,7 +200,7 @@ export function useTileAnnotations({
 function annotationSendPresentation(
   sendStatus: MarkdownSendResult | { kind: 'idle' | 'sending' },
   isSeed: boolean,
-  seedTenderSessionId: string,
+  seedSessionId: string,
   annotationCount: number,
   targetSessionId: string,
   targetSessionLabel: string,
@@ -209,7 +209,7 @@ function annotationSendPresentation(
     sendStatus.kind === 'skipped' || sendStatus.kind === 'warning' || sendStatus.kind === 'error';
   const sendStatusMessage =
     sendStatus.kind === 'sending'
-      ? isSeed && !seedTenderSessionId
+      ? isSeed && !seedSessionId
         ? 'Noting…'
         : 'Sending…'
       : sendStatus.kind === 'sent'
@@ -230,14 +230,14 @@ function annotationSendPresentation(
           ? 'Needs attention'
           : sendStatus.kind === 'error'
             ? 'Send failed'
-            : isSeed && !seedTenderSessionId
+            : isSeed && !seedSessionId
               ? `Note on seed ${annotationCount}`
               : `Send ${annotationCount}`;
   const showSessionSendAction = annotationCount > 0 || sendStatus.kind !== 'idle';
   const sendButtonTitle = sendHasProblem
     ? (sendStatusMessage ?? undefined)
     : isSeed
-      ? seedTenderSessionId
+      ? seedSessionId
         ? `Send annotations to the tending session (${formatShortcut('markdown.sendAnnotations')})`
         : `Leave annotations as a note on the seed (${formatShortcut('markdown.sendAnnotations')})`
       : targetSessionId
@@ -255,15 +255,15 @@ function annotationSendPresentation(
 
 function useAnnotationDestinationMenu({
   isSeed,
-  seedTenderSessionId,
+  seedSessionId,
   seedDocument,
   desktopSessions,
 }: Pick<Options, 'isSeed' | 'seedDocument' | 'desktopSessions'> & {
-  seedTenderSessionId: string;
+  seedSessionId: string;
 }) {
   const destinationMenuKey = isSeed
-    ? seedTenderSessionId && seedDocument
-      ? `seed:${seedTenderSessionId}:${seedDocument.seed.rev}`
+    ? seedSessionId && seedDocument
+      ? `seed:${seedSessionId}:${seedDocument.seed.rev}`
       : null
     : desktopSessions.length > 0
       ? `session:${desktopSessions.map((session) => `${session.sessionId}:${session.state ?? ''}`).join('|')}`

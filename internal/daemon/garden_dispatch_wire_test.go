@@ -31,8 +31,8 @@ func TestADelegateShowsItsDispatcherAcrossTheDispatchersLife(t *testing.T) {
 	shows := func(when, delegate, session, member string) {
 		t.Helper()
 		shown := sessionOfDelegate(t, w, delegate)
-		if string(protocol.Deref(shown.DispatcherSessionID)) != session || protocol.Deref(shown.DispatcherMember) != member {
-			t.Errorf("%s the delegate %s shows dispatcher session %q and member %q, want %q and %q", when, delegate, protocol.Deref(shown.DispatcherSessionID), protocol.Deref(shown.DispatcherMember), session, member)
+		if string(protocol.Deref(shown.DispatcherSessionID)) != session || (member != "" && protocol.Deref(shown.Dispatcher).Ref != protocol.ActorRef("member:"+member)) {
+			t.Errorf("%s the delegate %s shows dispatcher session %q and member %q, want %q and %q", when, delegate, protocol.Deref(shown.DispatcherSessionID), protocol.Deref(shown.Dispatcher).Ref, session, member)
 		}
 	}
 	shows("while its dispatchers live", fromAlder, string(firstDay), "alder")

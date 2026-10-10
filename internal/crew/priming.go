@@ -14,11 +14,11 @@ const HandoffsDirName = "handoffs"
 
 const handoffInlineLimit = MaxHandoffBytes
 
-const MaxHeldSeeds = 10
+const MaxClaimedSeeds = 10
 
-const MaxHeldHandoffBytes = 1200
+const MaxClaimedHandoffBytes = 1200
 
-type HeldSeed struct {
+type ClaimedSeed struct {
 	ID      string
 	Slug    string
 	Title   string
@@ -44,10 +44,10 @@ type Priming struct {
 	HandoffName   string
 	OlderHandoffs []string
 
-	GardenRead bool
-	Held       []HeldSeed
-	HeldTotal  int
-	Plots      []PlotReady
+	GardenRead   bool
+	Claims       []ClaimedSeed
+	ClaimedTotal int
+	Plots        []PlotReady
 }
 
 func SortHandoffNames(names []string) {
@@ -81,24 +81,24 @@ func (p Priming) GardenSection() string {
 		return ""
 	}
 	total := ""
-	if p.HeldTotal > len(p.Held) {
-		total = fmt.Sprint(p.HeldTotal)
+	if p.ClaimedTotal > len(p.Claims) {
+		total = fmt.Sprint(p.ClaimedTotal)
 	}
 	return prompts.RenderText("crew", "garden", prompts.Values{
-		"garden_read": fmt.Sprint(p.GardenRead),
-		"held_seeds":  heldSeedEntries(p.Held),
-		"held_total":  total,
-		"held_limit":  fmt.Sprint(len(p.Held)),
-		"plot_ready":  plotReadyLines(p.Plots),
+		"garden_read":   fmt.Sprint(p.GardenRead),
+		"claimed_seeds": claimedSeedEntries(p.Claims),
+		"claimed_total": total,
+		"claimed_limit": fmt.Sprint(len(p.Claims)),
+		"plot_ready":    plotReadyLines(p.Plots),
 	})
 }
 
-func heldSeedEntries(held []HeldSeed) string {
+func claimedSeedEntries(held []ClaimedSeed) string {
 	entries := make([]string, 0, len(held))
 	for _, seed := range held {
 		note := "No handoff note yet."
 		if text := strings.TrimSpace(seed.Handoff); text != "" {
-			note = "Freshest handoff: " + inlineHeldHandoff(text, seed.ID)
+			note = "Freshest handoff: " + inlineClaimedHandoff(text, seed.ID)
 		}
 		entries = append(entries, fmt.Sprintf("`%s` %s — %s\n%s", seed.ID, seed.Slug, seed.Title, note))
 	}
@@ -113,13 +113,13 @@ func plotReadyLines(plots []PlotReady) string {
 	return strings.Join(lines, "\n")
 }
 
-func inlineHeldHandoff(text, seedID string) string {
-	if len(text) <= MaxHeldHandoffBytes {
+func inlineClaimedHandoff(text, seedID string) string {
+	if len(text) <= MaxClaimedHandoffBytes {
 		return text
 	}
 	return prompts.RenderText("crew", "trimmed-note", prompts.Values{
-		"text":  cutAtRune(text, MaxHeldHandoffBytes),
-		"limit": fmt.Sprint(MaxHeldHandoffBytes),
+		"text":  cutAtRune(text, MaxClaimedHandoffBytes),
+		"limit": fmt.Sprint(MaxClaimedHandoffBytes),
 		"total": fmt.Sprint(len(text)),
 		"seed":  seedID,
 	})

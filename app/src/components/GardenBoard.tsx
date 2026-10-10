@@ -15,7 +15,7 @@ import { useEscapeStack } from '../hooks/useEscapeStack';
 import { harvestWhenDisplay, type HarvestWhenDisplay } from '../utils/harvestWhen';
 import {
   columnOf,
-  heldByOther,
+  claimedByOther,
   legalVerbs,
   tenderOf,
   VERBS,
@@ -28,7 +28,6 @@ import './GardenBoard.css';
 export interface GardenBoardProps {
   seeds: Seed[];
   seedsTotal: number;
-  liveSessions: Set<string>;
   loaded: boolean;
   onTransition: (seedId: string, verb: Verb, reason?: string, force?: boolean, comment?: string) => Promise<unknown>;
   onNote: (seedId: string, body: string) => Promise<unknown>;
@@ -89,7 +88,6 @@ function plotCounts(seed: Seed): string {
 export function GardenBoard({
   seeds,
   seedsTotal,
-  liveSessions,
   loaded,
   onTransition,
   onNote,
@@ -284,7 +282,7 @@ export function GardenBoard({
         compose.seed.id,
         compose.verb,
         spec.reasonOnSeed ? text : undefined,
-        heldByOther(compose.seed, liveSessions) !== '',
+        claimedByOther(compose.seed) !== '',
         compose.verb === 'park' ? text : undefined,
       );
       setCompose(null);
@@ -295,7 +293,7 @@ export function GardenBoard({
     } finally {
       setBusy(false);
     }
-  }, [compose, busy, liveSessions, onNote, onTransition]);
+  }, [compose,busy,onNote,onTransition]);
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (compose) return;
@@ -456,7 +454,7 @@ export function GardenBoard({
                   {composing && (
                     <Composer
                       compose={composing}
-                      takenFrom={heldByOther(composing.seed, liveSessions)}
+                      takenFrom={claimedByOther(composing.seed)}
                       busy={busy}
                       inputRef={composeInput}
                       onCommit={commit}
@@ -490,7 +488,7 @@ export function GardenBoard({
                             menuOpen={menuFor === seed.id}
                             blockers={blockers.get(seed.id) ?? 0}
                             tenderLive={
-                              !seed.tender_session || liveSessions.has(seed.tender_session)
+                              seed.claimed
                             }
                             onSelect={() => setSelected(seed.id)}
                             onPrimary={() => {
@@ -722,7 +720,7 @@ function CardMeta({
     case 'growing':
       return (
         <span className={`garden-card__tender${tenderLive ? '' : ' is-gone'}`}>
-          {tenderOf(seed) || 'held'}
+          {tenderOf(seed) || 'claimed'}
           {!tenderLive && <span className="garden-card__gone"> · session gone</span>}
         </span>
       );

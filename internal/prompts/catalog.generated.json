@@ -1009,9 +1009,9 @@
                 "kind": "choose",
                 "condition": {
                   "field": {
-                    "name": "held_seeds",
+                    "name": "claimed_seeds",
                     "kind": "text",
-                    "description": "Held seeds with their freshest handoff notes, one entry per blank-line-separated block."
+                    "description": "Claimed seeds with their freshest handoff notes, one entry per blank-line-separated block."
                   },
                   "test": "present"
                 },
@@ -1025,13 +1025,13 @@
                         "source": "content/crew/garden.md",
                         "bindings": [
                           {
-                            "name": "held_seeds",
+                            "name": "claimed_seeds",
                             "node": {
                               "kind": "input",
                               "field": {
-                                "name": "held_seeds",
+                                "name": "claimed_seeds",
                                 "kind": "text",
-                                "description": "Held seeds with their freshest handoff notes, one entry per blank-line-separated block."
+                                "description": "Claimed seeds with their freshest handoff notes, one entry per blank-line-separated block."
                               }
                             }
                           }
@@ -1041,9 +1041,9 @@
                         "kind": "when",
                         "condition": {
                           "field": {
-                            "name": "held_total",
+                            "name": "claimed_total",
                             "kind": "text",
-                            "description": "How many seeds the member holds; blank unless the list was cut."
+                            "description": "How many seeds the member claims; blank unless the list was cut."
                           },
                           "test": "present"
                         },
@@ -1054,24 +1054,24 @@
                             "source": "content/crew/garden-more.md",
                             "bindings": [
                               {
-                                "name": "held_total",
+                                "name": "claimed_total",
                                 "node": {
                                   "kind": "input",
                                   "field": {
-                                    "name": "held_total",
+                                    "name": "claimed_total",
                                     "kind": "text",
-                                    "description": "How many seeds the member holds; blank unless the list was cut."
+                                    "description": "How many seeds the member claims; blank unless the list was cut."
                                   }
                                 }
                               },
                               {
-                                "name": "held_limit",
+                                "name": "claimed_limit",
                                 "node": {
                                   "kind": "input",
                                   "field": {
-                                    "name": "held_limit",
+                                    "name": "claimed_limit",
                                     "kind": "text",
-                                    "description": "How many held seeds this block lists."
+                                    "description": "How many claimed seeds this block lists."
                                   }
                                 }
                               }
@@ -4906,5 +4906,5 @@
       ]
     }
   ],
-  "definitions_hash": "00beac4f636500a298617a3495ab3500173ad52312565030edda413497ae4cfa"
+  "definitions_hash": "7733a007cb1c492fdb1fc8088496e3058c0e2ed7025d8c4222c71a941ba25c4f"
 }

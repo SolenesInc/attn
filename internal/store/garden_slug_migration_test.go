@@ -29,12 +29,12 @@ func TestMigration126RecomputesStoredSlugs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var fixture garden.Seed
+	var fixture map[string]any
 	if err := json.Unmarshal(body, &fixture); err != nil {
 		t.Fatal(err)
 	}
-	fixture.ProfileID = profile.Manifest.ProfileID
-	body, err = fixture.Encode()
+	fixture["profile_id"] = profile.Manifest.ProfileID
+	body, err = json.Marshal(fixture)
 	if err != nil {
 		t.Fatal(err)
 	}

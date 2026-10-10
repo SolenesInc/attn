@@ -181,8 +181,6 @@ export type SeedHandoverResult = GeneratedDelegateResult;
 export interface SeedSendToChiefOptions {
   seedId: string;
   expectedRev: number;
-  expectedTenderSession: string;
-  expectedTenderMember: string;
   sourceSessionId?: string;
   guidance?: string;
   review?: SeedReviewActionContext;
@@ -3879,8 +3877,6 @@ export function useDaemonSocket({
         source_session_id: options.sourceSessionId ?? '',
         seed_id: options.seedId,
         expected_rev: options.expectedRev,
-        expected_tender_session: options.expectedTenderSession,
-        expected_tender_member: options.expectedTenderMember,
         ...(options.guidance?.trim() ? { guidance: options.guidance.trim() } : {}),
         ...(options.review ? {
           review: {

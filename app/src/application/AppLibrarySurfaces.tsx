@@ -21,7 +21,7 @@ import {
 
 export function AppLibrarySurfaces() {
   const { seedForSession, handleDeleteWorktreeFromPanel } = useAppShell();
-  const { liveGardenSessions, worktreePanelSessions, gardenSessionLabels } = useAppSessionsContext();
+  const { liveGardenSessions, worktreePanelSessions } = useAppSessionsContext();
   const profiles = useProfilesStore((state) => state.profiles);
   const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
   const profileNames = useMemo(
@@ -156,7 +156,6 @@ export function AppLibrarySurfaces() {
         seeds={seeds}
         seedsTotal={seedsTotal}
         liveSessions={liveGardenSessions}
-        tenderSessionLabels={gardenSessionLabels}
         loaded={hasReceivedInitialState}
         moveSeed={sendSeedTransition}
         noteSeed={sendSeedNote}

@@ -8,6 +8,7 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 func (s *Store) GardenSessionProfileID(sessionID protocol.SessionID) (string, error) {
@@ -113,62 +114,36 @@ func checkSeedProfileWrite(q rowQuerier, schema docstore.CollectionSchema, table
 	if err != nil {
 		return err
 	}
-	var previous, previousMember string
-	err = q.QueryRow(`SELECT json_extract(body, '$.profile_id'), coalesce(json_extract(body, '$.tender_member'), '') FROM `+table+` WHERE id = ?`, id).Scan(&previous, &previousMember)
+	var previous string
+	err = q.QueryRow(`SELECT json_extract(body, '$.profile_id') FROM `+table+` WHERE id = ?`, id).Scan(&previous)
 	if err != nil && err != sql.ErrNoRows {
 		return err
 	}
 	if err == nil && previous != seed.ProfileID {
 		return fmt.Errorf("seed %s belongs to profile %s for life; cannot move it to profile %q", id, previous, owner.Name)
 	}
-	for _, sessionID := range []protocol.SessionID{seed.TenderSession} {
-		if sessionID == "" {
-			continue
-		}
-		var profileID string
-		err := q.QueryRow(`SELECT profile_id FROM sessions WHERE id = ?`, sessionID).Scan(&profileID)
-		if err == sql.ErrNoRows {
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		if profileID != seed.ProfileID {
-			caller, err := loadProfile(q, profileID)
-			if err != nil {
-				return err
-			}
-			return fmt.Errorf("seed %s belongs to profile %q; tender %s belongs to profile %q", id, owner.Name, sessionID, caller.Name)
-		}
-	}
-	if seed.TenderMember != "" && seed.TenderMember != previousMember {
-		var profileID string
-		err := q.QueryRow(`SELECT profile_id FROM crew_members WHERE member_key = ?`, seed.TenderMember).Scan(&profileID)
-		if err != nil && err != sql.ErrNoRows {
-			return err
-		}
-		if err == nil && profileID != seed.ProfileID {
-			caller, err := loadProfile(q, profileID)
-			if err != nil {
-				return err
-			}
-			return fmt.Errorf("seed %s belongs to profile %q; crew member %s belongs to profile %q", id, owner.Name, seed.TenderMember, caller.Name)
-		}
-	}
-	for _, edge := range seed.Edges {
-		var profileID string
-		if err := q.QueryRow(`SELECT json_extract(body, '$.profile_id') FROM `+table+` WHERE id = ?`, edge.To).Scan(&profileID); err == sql.ErrNoRows {
-			continue
-		} else if err != nil {
-			return err
-		}
-		if profileID != seed.ProfileID {
-			target, err := loadProfile(q, profileID)
-			if err != nil {
-				return err
-			}
-			return fmt.Errorf("seed %s belongs to profile %q; edge target %s belongs to profile %q", id, owner.Name, edge.To, target.Name)
-		}
-	}
 	return nil
+}
+
+func (s *Store) PartyProfile(p who.Party) (string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return partyProfile(s.db, p)
+}
+func partyProfile(q rowQuerier, p who.Party) (string, error) {
+	return who.SwitchParty(p, func(id protocol.SessionID) (string, error) {
+		var profile string
+		err := q.QueryRow(`SELECT profile_id FROM sessions WHERE id=? UNION ALL SELECT coalesce(json_extract(request_json,'$.profile_id'),'') FROM delegation_operations WHERE session_id=? AND state IN (?,?) LIMIT 1`, id, id, string(protocol.DelegationOperationStateAccepted), string(protocol.DelegationOperationStatePreparing)).Scan(&profile)
+		if err != nil {
+			return "", fmt.Errorf("read profile for %s: %w", p, err)
+		}
+		return profile, nil
+	}, func(key who.MemberKey) (string, error) {
+		var profile string
+		err := q.QueryRow(`SELECT profile_id FROM crew_members WHERE member_key=?`, key).Scan(&profile)
+		if err != nil {
+			return "", fmt.Errorf("read profile for %s: %w", p, err)
+		}
+		return profile, nil
+	})
 }

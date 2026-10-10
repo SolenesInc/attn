@@ -84,6 +84,32 @@ func (s *Store) CrewIdentity(key who.MemberKey) (CrewIdentity, error) {
 	}
 	return m, err
 }
+func (s *Store) CrewNames() (map[who.MemberKey]string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	names := map[who.MemberKey]string{}
+	if s.db == nil {
+		for key, m := range s.crewMembers {
+			names[key] = m.Name
+		}
+		return names, nil
+	}
+	rows, err := s.db.Query(`SELECT member_key,name FROM crew_members`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var key who.MemberKey
+		var name string
+		if err := rows.Scan(&key, &name); err != nil {
+			return nil, err
+		}
+		names[key] = name
+	}
+	return names, rows.Err()
+}
+
 func (s *Store) CrewRoster(profileID string) ([]CrewIdentity, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -366,7 +392,16 @@ func (s *Store) RetireCrewMember(key who.MemberKey, at time.Time) (int, error) {
 			return err
 		}
 		count, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
 		removed = int(count)
+		result, err = tx.Exec("DELETE FROM garden_seed_watches WHERE watcher=?", who.Member(key))
+		if err != nil {
+			return err
+		}
+		count, err = result.RowsAffected()
+		removed += int(count)
 		return err
 	})
 	return removed, err

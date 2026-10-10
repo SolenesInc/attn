@@ -27,18 +27,18 @@ path = %q
 `, piPluginName, piVersion, piPluginAPIVersion, piPluginName)
 
 type Kit struct {
-	t        testing.TB
-	cfg      config
-	control  net.Listener
-	mu       sync.Mutex
-	launches map[string]chan *Run
-	nextBoot chan struct{}
-	bootAsk  chan struct{}
-	fakes    []*fake
-	failures []string
-	headless chan *HeadlessTask
-	nextExit *bootingResult
-	answerer func(*HeadlessTask)
+	t              testing.TB
+	cfg            config
+	control        net.Listener
+	mu             sync.Mutex
+	launches       map[string]chan *Run
+	nextBoot       chan struct{}
+	bootAsk        chan struct{}
+	fakes          []*fake
+	failures       []string
+	headless       chan *HeadlessTask
+	nextBootResult *bootingResult
+	answerer       func(*HeadlessTask)
 }
 
 type fake struct {

@@ -9,11 +9,13 @@ import (
 	"github.com/victorarias/attn/internal/garden"
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 var errLegacyDelegationRequest = errors.New("this pending delegation used the retired implicit launch contract")
 
 type resolvedDelegationLaunch struct {
+	Dispatcher         who.Actor
 	Cmd                string
 	RequestID          string
 	ProfileID          *string
@@ -35,15 +37,15 @@ type resolvedDelegationLaunch struct {
 	Review             *protocol.SeedReviewActionContext
 	Desktop            *string
 
-	Brief                 *string
-	Worktree              *protocol.DelegateWorktreeRequest
-	Plot                  *string
-	Handover              *protocol.SeedHandoverRequest
-	Confirm               *bool
-	PreferencesRevision   *int
-	SeedTitle             string
-	ParentSeedID          string
-	PreviousTenderSession protocol.SessionID
+	Brief                *string
+	Worktree             *protocol.DelegateWorktreeRequest
+	Plot                 *string
+	Handover             *protocol.SeedHandoverRequest
+	Confirm              *bool
+	PreferencesRevision  *int
+	SeedTitle            string
+	ParentSeedID         string
+	PredecessorSessionID protocol.SessionID
 }
 
 func resolveLaunchInput(msg *protocol.DelegateMessage) resolvedDelegationLaunch {
@@ -139,7 +141,7 @@ func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 	reservedSeedID string, reservedBaseCommit string, reservedNoteID string, sessionID protocol.SessionID, ownedWorktreePath string,
 	worktreeOwned bool,
 	handoverSeedRev int,
-	handoverTenderSession, handoverTenderMember string,
+	handoverTender who.Party,
 	operationID string,
 	parentSeedID string,
 ) (*resolvedDelegationLaunch, error) {
@@ -184,22 +186,21 @@ func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 		runtime.SeedTitle = seed.Title
 		runtime.Plot = protocol.Ptr(seedID)
 		if msg.Assignment.Handover != nil {
-			previousTenderSession := seed.TenderSession
+			tender, _ := seed.Claim.Tender()
+			previous := tender
 			if handoverSeedRev > 0 {
-				previousTenderSession = protocol.SessionID(strings.TrimSpace(handoverTenderSession))
+				previous = handoverTender
 			}
-			runtime.PreviousTenderSession = previousTenderSession
+			runtime.PredecessorSessionID, _ = d.broadcastBindings().SessionOf(previous)
 			alreadyBound := strings.TrimSpace(operationID) != "" && d.handoverAlreadyBound(operationID, sessionID, seedID)
 			if handoverSeedRev > 0 && !alreadyBound {
 				if int(doc.Rev) < handoverSeedRev ||
-					seed.TenderSession != protocol.SessionID(strings.TrimSpace(handoverTenderSession)) ||
-					seed.TenderMember != strings.TrimSpace(handoverTenderMember) {
-					return nil, fmt.Errorf("seed %s ownership changed after the delegation request was accepted", seedID)
+					tender != handoverTender {
+					return nil, fmt.Errorf("seed %s tender changed after the delegation request was accepted", seedID)
 				}
 			}
 			runtime.Handover = &protocol.SeedHandoverRequest{
-				SeedID: seedID, ExpectedRev: int(doc.Rev), ExpectedTenderSession: seed.TenderSession,
-				ExpectedTenderMember: seed.TenderMember, Review: msg.Review,
+				SeedID: seedID, ExpectedRev: int(doc.Rev), Review: msg.Review,
 			}
 			if note := strings.TrimSpace(protocol.Deref(msg.Assignment.Handover.Note)); note != "" {
 				runtime.Handover.Handoff = protocol.Ptr(note)

@@ -207,7 +207,7 @@ runner.registerCleanup('settle_seeds', () => {
 });
 const tendBetweenDays = async (seed) => {
   const read = waitForFileSignal(claimReadReceipt, 'the member reads its claim update');
-  json(['seed', 'tend', seed, '--member', asleep, '--json']);
+  json(['seed', 'tend', seed, '--for', asleep, '--json']);
   await read;
   fs.unlinkSync(claimReadReceipt);
   const day = crewMember(asleep).binding_session;
@@ -300,12 +300,12 @@ try {
     'Crew opens from the dashboard without a placement session', dashboardSessions);
   const desktopIdle = await sampleIdle(webkitBaseline);
 
-  const plot = plant([`Crew verification plot ${memberSuffix}`, '-m', 'The planted list opens this plot in the native desktop tile.', '--member', awake, '--session', firstSession]);
+  const plot = plant([`Crew verification plot ${memberSuffix}`, '-m', 'The planted list opens this plot in the native desktop tile.', '--session', firstSession]);
   crewPlot = plot.id;
-  const child = plant([`Crew planted navigation ${memberSuffix}`, '-m', 'The plot link navigates this same native tile.', '--part-of', crewPlot, '--member', awake, '--session', firstSession]);
+  const child = plant([`Crew planted navigation ${memberSuffix}`, '-m', 'The plot link navigates this same native tile.', '--part-of', crewPlot, '--session', firstSession]);
   crewChild = child.id;
   json(['seed', 'tend', crewChild, '--session', firstSession, '--json']);
-  const held = plant([`Crew asleep claim ${memberSuffix}`, '-m', 'A permanent member claim remains visible between days.', '--member', asleep]);
+  const held = plant([`Crew asleep claim ${memberSuffix}`, '-m', 'A permanent member claim remains visible between days.']);
   asleepHeld = held.id;
   await tendBetweenDays(asleepHeld);
 
@@ -339,7 +339,7 @@ try {
     runner.assert((await panelText()).includes('Tending 1'), 'the current day session claim appears once even with member attribution');
     await click('[data-testid="crew-seed-filter-planted"]');
     await waitForDom(`[data-testid="crew-seed-${crewPlot}"]`);
-    const livePlant = plant([`Crew live planting update ${memberSuffix}`, '--member', awake, '--session', firstSession]);
+    const livePlant = plant([`Crew live planting update ${memberSuffix}`, '--session', firstSession]);
     await waitForDom(`[data-testid="crew-seed-${livePlant.id}"]`);
     const plantedText = await panelText();
     runner.assert(
@@ -432,9 +432,9 @@ try {
     await click('[data-testid="manage-crew"]');
     await click(`[data-testid="crew-roster-${asleep}"]`);
     await click('[data-testid="crew-tab-seeds"]');
-    json(['seed', 'park', asleepHeld, '--member', asleep, '--json']);
+    json(['seed', 'park', asleepHeld, '--force', '--json']);
     await waitForDom('[data-testid="crew-panel"]', { textIncludes: `${asleep[0].toUpperCase()}${asleep.slice(1)} isn't tending a seed.` });
-    json(['seed', 'tend', asleepHeld, '--member', asleep, '--json']);
+    json(['seed', 'tend', asleepHeld, '--for', asleep, '--json']);
     await waitForDom(`[data-testid="crew-seed-${asleepHeld}"]`);
     await pressEscapeAndWaitFor('manage-crew');
   });

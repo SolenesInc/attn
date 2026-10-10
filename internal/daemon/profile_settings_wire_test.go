@@ -59,7 +59,7 @@ func TestEachProfileKeepsItsOwnNotebook(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(owned.root, "knowledge", "index.md")); err != nil {
 			t.Fatal(err)
 		}
-		seed, err := w.Client().SeedPlant(protocol.SessionID(owned.session), "Profile artifact", "Keep this artifact in its birth profile.", "", "", "")
+		seed, err := w.Client().SeedPlant(protocol.SessionID(owned.session), "Profile artifact", "Keep this artifact in its birth profile.", "", "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -250,7 +250,7 @@ func TestTheFirstArtifactCreatesItsProfilesNotebookFolder(t *testing.T) {
 	if _, err := os.Stat(root); !os.IsNotExist(err) {
 		t.Fatalf("Notebook already exists before attachment: %v", err)
 	}
-	seed, err := w.Client().SeedPlant(protocol.SessionID(session), "First artifact", "Keep the result in Work.", "", "", "")
+	seed, err := w.Client().SeedPlant(protocol.SessionID(session), "First artifact", "Keep the result in Work.", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -311,7 +311,7 @@ func TestCopiedForeignSeedArtifactsDoNotChangeTheirBirthProfile(t *testing.T) {
 		t.Fatal(written)
 	}
 	work := createProfile(app, "Work")
-	seed, err := w.Client().WithRequester(work.ID, "").SeedPlant("", "Work artifact", "Keep observations in Work.", "", "", "")
+	seed, err := w.Client().WithRequester(work.ID, "").SeedPlant("", "Work artifact", "Keep observations in Work.", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

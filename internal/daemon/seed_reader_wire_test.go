@@ -17,18 +17,18 @@ func TestTheSeedDocumentShowsBodyChildrenLogAndWhetherItsTenderHolds(t *testing.
 	app, cli := w.App(), w.Client()
 	tender := spawnPanes(w, app, w.Path("tender"))[0]
 	body := "# Crown\n\nRead this."
-	crown, err := cli.SeedPlant(protocol.SessionID(tender.session), "Crown", body, "", "", "")
+	crown, err := cli.SeedPlant(protocol.SessionID(tender.session), "Crown", body, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	child, err := cli.SeedPlant(protocol.SessionID(tender.session), "Child", "", crown.Seed.ID, "", "")
+	child, err := cli.SeedPlant(protocol.SessionID(tender.session), "Child", "", crown.Seed.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cli.SeedPlant(protocol.SessionID(tender.session), "Grandchild", "", child.Seed.ID, "", ""); err != nil {
+	if _, err := cli.SeedPlant(protocol.SessionID(tender.session), "Grandchild", "", child.Seed.ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cli.SeedNote(protocol.SessionID(tender.session), crown.Seed.ID, "reader log entry", "", "", false, nil); err != nil {
+	if _, err := cli.SeedNote(protocol.SessionID(tender.session), crown.Seed.ID, "reader log entry", "", false, nil); err != nil {
 		t.Fatal(err)
 	}
 	lifeMove(t, cli, tender.session, crown.Seed.ID, "tend", "", "")
@@ -47,13 +47,13 @@ func TestTheSeedDocumentShowsBodyChildrenLogAndWhetherItsTenderHolds(t *testing.
 	if doc.NotesTotal != 1 || len(doc.Notes) != 1 || doc.Notes[0].Body != "reader log entry" {
 		t.Errorf("the document log = %+v of %d, want the one note", doc.Notes, doc.NotesTotal)
 	}
-	if !doc.TenderHolds || string(doc.Seed.TenderSession) != tender.session {
-		t.Errorf("while %s is live the document reads tender %q holding=%t, want it holding", tender.session, doc.Seed.TenderSession, doc.TenderHolds)
+	if !doc.Seed.Claimed || string(protocol.Deref(protocol.Deref(doc.Seed.Tender).SessionID)) != tender.session {
+		t.Errorf("while %s is live the document reads tender %q holding=%t, want it holding", tender.session, protocol.Deref(protocol.Deref(doc.Seed.Tender).SessionID), doc.Seed.Claimed)
 	}
 
 	closePane(app, tender)
 	ended := seedReaderDocument(app, crown.Seed.ID)
-	if !ended.Success || ended.Document == nil || ended.Document.TenderHolds || string(ended.Document.Seed.TenderSession) != tender.session {
+	if !ended.Success || ended.Document == nil || ended.Document.Seed.Claimed || protocol.Deref(ended.Document.Seed.Tender).Ref != protocol.PartyRef("session:"+tender.session) {
 		t.Errorf("after the tender ended the document = %+v, want tender %s kept without a live hold", ended.Document, tender.session)
 	}
 
@@ -143,7 +143,7 @@ func TestOpeningASeedDocksBesideItsCallerOrOnTheCurrentDesktop(t *testing.T) {
 func TestAnnotationDraftsFollowTheirTypedDocumentSource(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
-	planted, err := cli.SeedPlant("", "Annotated seed", "", "", "", "")
+	planted, err := cli.SeedPlant("", "Annotated seed", "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

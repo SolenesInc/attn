@@ -72,15 +72,16 @@ func (d *Daemon) resolveSessionByIDOrPrefix(target, profileID string) (*protocol
 func (d *Daemon) agentPeekResult(session *protocol.Session) *protocol.AgentPeekResult {
 	decorated := d.sessionForBroadcast(session)
 	result := &protocol.AgentPeekResult{
-		SessionID:   decorated.ID,
-		Label:       decorated.Label,
-		Agent:       decorated.Agent,
-		State:       string(decorated.State),
-		StateSince:  decorated.StateSince,
-		LastSeen:    decorated.LastSeen,
-		StateReason: decorated.StateReason,
-		TurnOwed:    decorated.TurnOwed,
-		CrewMember:  decorated.CrewMember,
+		SessionID:      decorated.ID,
+		Label:          decorated.Label,
+		Agent:          decorated.Agent,
+		State:          string(decorated.State),
+		StateSince:     decorated.StateSince,
+		LastSeen:       decorated.LastSeen,
+		StateReason:    decorated.StateReason,
+		TurnOwed:       decorated.TurnOwed,
+		CrewMember:     decorated.CrewMember,
+		CrewMemberName: decorated.CrewMemberName,
 	}
 	if profile, err := d.store.GetProfile(decorated.ProfileID); err == nil {
 		result.ProfileName = protocol.Ptr(profile.Name)

@@ -134,6 +134,7 @@ func wireProjections() []projection {
 
 func buildWireProjections() []projection {
 	return []projection{
+		{filter: bus.Filter{FactCrewBound, FactCrewReleased, FactCrewUpdated, FactSessionRenamed, FactSessionClosed, FactSessionReregistered}, apply: func(d *Daemon, _ bus.Event) { d.projectGardenSeeds() }},
 		{
 			filter: bus.Filter{FactSessionStateChanged},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(protocol.SessionID(ev.Subject)) },

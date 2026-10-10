@@ -9,6 +9,7 @@ import { writeMockAgentFixture } from './mockAgent.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
+import { captureFrontWindowScreenshot } from './nativeWindowCapture.mjs';
 
 async function poll(read, description) {
   const deadline = Date.now() + 20_000;
@@ -41,21 +42,18 @@ async function main() {
   });
   const json = (args) => {
     const output = run(args);
-    return JSON.parse(output.slice(output.indexOf('{')));
+    return JSON.parse(output.slice(output.search(/[[{]/)));
   };
   const settleSeeds = () => {
     for (const id of unsettledSeeds) {
-      run(['seed', 'wither', id, '--member', member, '-m', 'Harness fixture cleanup']);
+      run(['seed', 'wither', id, '--force', '-m', 'Harness fixture cleanup']);
       unsettledSeeds.delete(id);
     }
   };
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
-  runner.registerCleanup('delete_member', () => {
-    if (memberRegistered) run(['doc', 'delete', 'core/crew', 'members', member]);
-  });
-  runner.registerCleanup('remove_member_home', () => {
-    if (memberRegistered) fs.rmSync(home, { recursive: true });
+  runner.registerCleanup('retire_member', () => {
+    if (memberRegistered) run(['crew', 'retire', member]);
   });
   runner.registerCleanup('settle_seeds', settleSeeds);
   runner.registerCleanup('close_crew_session', async () => {
@@ -80,6 +78,7 @@ async function main() {
     const state = await client.request('session_seed_chip_get_state', { sessionId });
     return title === null ? !state.present : state.title === title && state;
   }, `header ${title ?? 'to clear'}`);
+  const roster = () => json(['crew','list','--json']).find((entry) => entry.key === member);
   const capture = async (name, sessionId) => {
     const shot = await client.request('capture_screenshot_data', {
       selector: `[data-pane-session-id="${sessionId}"] .desktop-pane-header`,
@@ -111,11 +110,11 @@ async function main() {
     unsettledSeeds.add(second);
     await runner.step('show_member_claims_in_the_existing_header_and_popover', async () => {
       await header(sessionId, null);
-      run(['seed', 'tend', first, '--member', member]);
+      run(['seed', 'tend', first, '--for', member]);
       const single = await header(sessionId, 'Review release notes');
       runner.assert(single.id === first && single.status === 'growing', 'member claim uses the seed-state header', single);
       await capture('one-member-claim', sessionId);
-      run(['seed', 'tend', second, '--member', member]);
+      run(['seed', 'tend', second, '--for', member]);
       await header(sessionId, 'tending 2');
       await client.request('dom_click', { selector: `[data-testid="seed-chip-${sessionId}"]` });
       const popover = await client.request('dom_text', { selector: '.tended-seeds-popover' });
@@ -123,13 +122,29 @@ async function main() {
         'both member claims appear in the existing popover', popover);
       if (process.env.ATTN_HARNESS_RECORD === '1') await delay(1800);
       await client.request('dom_key', { selector: '.tended-seeds-popover', key: 'Escape' });
-      run(['seed', 'park', second, '--member', member]);
+      run(['seed', 'park', second, '--force']);
       await header(sessionId, 'Review release notes');
     });
     await runner.step('retain_the_member_claim_across_sessions_and_open_it', async () => {
       lastHandoffAt = Date.now();
       run(['handoff', '--session', sessionId, '--sleep', '-m', 'Continue checking the member claim.']);
-      const next = await wake();
+      await client.request('open_dock_panel', {panelId:'garden'});
+      await client.request('garden_expand_seed', {seedId:first,reopen:true});
+      await client.request('garden_resume_seed', {seedId:first});
+      const next = await poll(async () => {
+        const binding = roster().binding_session;
+        return binding && binding !== sessionId && binding;
+      }, 'Garden Resume to wake the member');
+      sessions.push(next);
+      const focused = await poll(async () => {
+        const state = await client.request('get_state');
+        return state.activeLeaf?.sessionId === next && state;
+      }, 'Resume to focus the member session');
+      runner.assert(focused.activeLeaf.sessionId === next, 'Garden Resume focuses the member', focused.activeLeaf);
+      runner.writeJson('member-resume-state.json', focused);
+      await captureFrontWindowScreenshot(path.join(runner.runDir,'member-resume-native.png'),{client,driver});
+      const unchanged = json(['seed','show',first,'--json']).seed;
+      runner.assert(unchanged.claimed && unchanged.tender?.ref === `member:${roster().key}`, 'Resume keeps the member claim', unchanged);
       runner.assert(next !== sessionId, 'crew starts a new session', { sessionId, next });
       await header(next, 'Review release notes');
       await capture('member-claim-after-wake', next);
@@ -142,10 +157,10 @@ async function main() {
       const before = metrics();
       await delay(3000);
       runner.writeText('idle-app.txt', `CPU% RSS(KiB)\nbefore ${before}\nafter ${metrics()}\n`);
-      run(['seed', 'harvest', first, '--member', member, '-m', 'Header behavior verified']);
+      run(['seed', 'harvest', first, '--force', '-m', 'Header behavior verified']);
       unsettledSeeds.delete(first);
       await header(next, null);
-      run(['seed', 'tend', second, '--member', member]);
+      run(['seed', 'tend', second, '--for', member]);
       await header(next, 'Verify upload completion');
       await client.request('dom_focus', { selector: `[data-testid="seed-chip-${next}"]` });
       await driver.pressEnter();

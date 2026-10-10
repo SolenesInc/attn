@@ -9,6 +9,7 @@ import (
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type seedResumeOutcome struct {
@@ -60,9 +61,29 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 	if garden.Closed(seed.Status) {
 		return nil, fmt.Errorf("%s is %s; replant it before resuming its agent", seed.ID, seed.Status)
 	}
+	b, err := d.bindings()
+	if err != nil {
+		return nil, err
+	}
+	tender, claimed := seed.Claim.Lasts(b)
+	if key, member := tender.Member(); claimed && member {
+		if err := b.Check(tender); err != nil {
+			return nil, err
+		}
+		d.crewWakeMu.Lock()
+		woke, err := d.crewWakeDayWithChargeLocked(key, "", false, nil, crewWakeRequest{UserStarted: true})
+		d.crewWakeMu.Unlock()
+		if err != nil {
+			return nil, err
+		}
+		if err := d.resolveGardenReviewAction(review, seedID, "resume"); err != nil {
+			d.logf("Garden review: settle %s after Resume: %v", seedID, err)
+		}
+		return &seedResumeOutcome{SessionID: woke.SessionID, ProfileID: seed.ProfileID, AlreadyRunning: woke.AlreadyAwake}, nil
+	}
 	continuation := d.continuationForSeedForeground(seed)
 	if continuation == nil {
-		if tender := protocol.TrimID(seed.TenderSession); tender != "" {
+		if tender, stored := seed.Claim.Tender(); stored {
 			return nil, fmt.Errorf("%s was tended by session %s, but no continuation was saved", seedID, tender)
 		}
 		return nil, fmt.Errorf("%s has no agent conversation to resume", seedID)
@@ -72,9 +93,11 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 	if sessionID == "" {
 		return nil, fmt.Errorf("%s has no agent conversation to resume", seedID)
 	}
-	actor := garden.Tender{Session: sessionID}
-	if _, err := garden.Transition(seed, garden.VerbTend, garden.Ask{Actor: actor}, d.sessionExists); err != nil {
-		return nil, err
+	if claimed {
+		id, _ := tender.Session()
+		if id != sessionID {
+			return nil, d.seedMoveError(&garden.TakeoverRefused{SeedID: seedID, Verb: garden.VerbTend, Tender: tender}, b)
+		}
 	}
 	if existing := d.gardenSession(sessionID); existing != nil && existing.ProfileID != seed.ProfileID {
 		owner, _ := d.store.GetProfile(seed.ProfileID)
@@ -83,8 +106,17 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 	}
 	if existing := d.gardenSession(sessionID); existing != nil &&
 		(execution.HostKind == garden.HostRemote || d.sessionHasLiveWorker(sessionID)) {
-		if _, _, _, err := d.applySeedTransitionDetailedAsAtRevisionProtected(protection,
-			seedID, garden.VerbTend, garden.Ask{Actor: actor}, "", d.sessionExists, expectedRev); err != nil {
+		if _, _, _, err := d.applySeedMoveProtected(protection, seedID, garden.VerbTend, func(b who.Bindings) (seedMoveAsk, error) {
+			r, err := d.requestFromSession(sessionID, b)
+			if err != nil {
+				return seedMoveAsk{}, err
+			}
+			party, err := d.claimantFor(r, "")
+			if err != nil {
+				return seedMoveAsk{}, err
+			}
+			return seedMoveAsk{ask: garden.Ask{By: r.Actor()}, claimant: party, execution: sessionID}, nil
+		}, "", expectedRev); err != nil {
 			return nil, err
 		}
 		if err := d.resolveGardenReviewAction(review, seedID, "resume"); err != nil {
@@ -142,11 +174,23 @@ func (d *Daemon) bindResumedSeed(
 	seedDoc docstore.Document,
 	sessionID protocol.SessionID, directory string, agent string, resumeID string,
 ) error {
-	next, err := garden.Transition(seed, garden.VerbTend, garden.Ask{
-		Actor: garden.Tender{Session: sessionID},
-	}, d.sessionExists)
+	d.lockGardenRoles()
+	defer d.unlockGardenRoles()
+	b, err := d.bindings()
 	if err != nil {
-		return fmt.Errorf("reclaim %s after resume: %w", seed.ID, err)
+		return err
+	}
+	r, err := d.requestFromSession(sessionID, b)
+	if err != nil {
+		return err
+	}
+	party, err := d.claimantFor(r, "")
+	if err != nil {
+		return err
+	}
+	next, err := garden.Tend(seed, party, garden.Ask{By: r.Actor()}, b)
+	if err != nil {
+		return fmt.Errorf("reclaim %s after resume: %w", seed.ID, d.seedMoveError(err, b))
 	}
 	if next.Status != seed.Status {
 		next.StateChangedAt = formatGardenTime(d.gardenTime())
@@ -207,7 +251,7 @@ func (d *Daemon) bindResumedSeed(
 			Fact:  dispatchFact,
 		},
 	}
-	tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, seed.ID, sessionID)
+	tended, err := lifecycleOccurrence(garden.VerbTend, seed.ID, garden.Ask{By: r.Actor()})
 	if err != nil {
 		return err
 	}
@@ -215,12 +259,10 @@ func (d *Daemon) bindResumedSeed(
 	if err != nil {
 		return err
 	}
-	d.lockGardenRoles()
 	written, eventSeqs, err := d.store.CommitDocumentWritesWithEvents(commits, events, d.gardenTime())
 	if err == nil {
 		err = d.discardAllIneligibleGardenSeedBellsLocked()
 	}
-	d.unlockGardenRoles()
 	if err != nil {
 		if docstore.IsConflict(err) {
 			return fmt.Errorf("%s changed while its conversation was resuming; refresh it and try again", seed.ID)
