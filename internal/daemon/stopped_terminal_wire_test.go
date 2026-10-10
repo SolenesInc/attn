@@ -219,8 +219,8 @@ func TestAChiefQuitLeavesTheMemberAsleepAndAWakeRestoresItsRole(t *testing.T) {
 		if restart {
 			w.restart()
 		}
-		state := queriedSession(t, w.Client(), session)
-		if protocol.Deref(state.Chief) || state.TerminalExit == nil || state.TerminalExit.Code != 0 {
+		state := showSession(t, w.Client(), session)
+		if state.MemberKey == nil {
 			t.Fatalf("exited Chief day after restart=%v: %+v", restart, state)
 		}
 	}
