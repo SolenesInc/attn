@@ -172,7 +172,7 @@ func (d *Daemon) reloadSessionAgent(sessionID protocol.SessionID) {
 
 	session := d.store.Get(sessionID)
 	if session == nil {
-		d.logf("reload: session %s not found (closed or remote); skipping", sessionID)
+		d.logf("reload: session %s not found (closed); skipping", sessionID)
 		return
 	}
 	agent := session.Agent

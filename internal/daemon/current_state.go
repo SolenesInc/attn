@@ -4,7 +4,6 @@ import "github.com/victorarias/attn/internal/protocol"
 
 type currentStateProjection struct {
 	Sessions    []protocol.Session
-	Endpoints   []protocol.EndpointInfo
 	Prs         []protocol.PR
 	Repos       []protocol.RepoState
 	Authors     []protocol.AuthorState
@@ -15,8 +14,7 @@ type currentStateProjection struct {
 
 func (d *Daemon) currentStateProjection(profileID ...string) currentStateProjection {
 	return currentStateProjection{
-		Sessions:    d.mergedSessionsForBroadcast(),
-		Endpoints:   d.listEndpointInfos(),
+		Sessions:    d.sessionsForBroadcast(d.store.List("")),
 		Prs:         protocol.PRsToValues(d.store.ListPRs("")),
 		Repos:       protocol.RepoStatesToValues(d.store.ListRepoStates()),
 		Authors:     protocol.AuthorStatesToValues(d.store.ListAuthorStates()),

@@ -501,7 +501,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 	var source *protocol.Session
 	existingSession := d.store.Get(sessionID)
 	if sourceSessionID != "" {
-		source = d.gardenSession(sourceSessionID)
+		source = d.store.Get(sourceSessionID)
 		if source == nil && existingSession == nil {
 			return nil, fmt.Errorf("source session %s was not found; omit --source-session for a standalone launch", sourceSessionID)
 		}

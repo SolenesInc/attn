@@ -61,20 +61,6 @@ func (d *Daemon) initializeSeedLifecycle(seed garden.Seed) garden.Seed {
 	return seed
 }
 
-func (d *Daemon) gardenSession(sessionID protocol.SessionID) *protocol.Session {
-	sessionID = protocol.TrimID(sessionID)
-	if sessionID == "" {
-		return nil
-	}
-	if session := d.store.Get(sessionID); session != nil {
-		return session
-	}
-	if d.hubManager != nil {
-		return d.hubManager.RemoteSession(sessionID)
-	}
-	return nil
-}
-
 func snapshotGardenExecution(session *protocol.Session, resumeID string, now time.Time) garden.Dispatch {
 	if session == nil {
 		return garden.Dispatch{}
@@ -263,7 +249,7 @@ func (d *Daemon) captureGardenSessionExecution(session *protocol.Session) (garde
 			if err != nil {
 				return current, false, err
 			}
-			profileID, err := d.sessionProfileID(session.ID)
+			profileID, err := d.store.SessionProfileID(session.ID)
 			if err != nil {
 				return current, false, err
 			}
@@ -286,7 +272,7 @@ func (d *Daemon) captureGardenSessionSnapshot(session *protocol.Session) (garden
 			if err != nil {
 				return current, false, err
 			}
-			profileID, err := d.sessionProfileID(session.ID)
+			profileID, err := d.store.SessionProfileID(session.ID)
 			if err != nil {
 				return current, false, err
 			}
@@ -300,7 +286,7 @@ func (d *Daemon) captureGardenSessionSnapshot(session *protocol.Session) (garden
 }
 
 func (d *Daemon) ensureGardenExecution(sessionID protocol.SessionID) (garden.Dispatch, error) {
-	session := d.gardenSession(sessionID)
+	session := d.store.Get(protocol.TrimID(sessionID))
 	if session == nil {
 		if execution, ok := d.gardenDispatch(sessionID); ok && strings.TrimSpace(execution.Cwd) != "" && strings.TrimSpace(execution.Agent) != "" {
 			return execution, nil
@@ -372,7 +358,7 @@ func (d *Daemon) normalizedSeedContinuation(seed garden.Seed) (garden.Dispatch, 
 			entry := d.store.SessionLedgerEntry(executionID)
 			foreign := entry != nil && entry.ProfileID != seed.ProfileID
 			if entry == nil {
-				if live := d.gardenSession(executionID); live != nil {
+				if live := d.store.Get(executionID); live != nil {
 					foreign = live.ProfileID != seed.ProfileID
 				}
 			}
@@ -507,7 +493,7 @@ func (d *Daemon) continuationForSeedWithResumeCheck(seed garden.Seed, checkResum
 		DirectoryState:    inspectContinuationDirectory(execution),
 		HandoverPlacement: handoverNeedsPlacement,
 	}
-	if live := d.gardenSession(execution.SessionID); live != nil &&
+	if live := d.store.Get(protocol.TrimID(execution.SessionID)); live != nil &&
 		(strings.TrimSpace(protocol.Deref(live.EndpointID)) != "" || d.sessionHasLiveWorker(live.ID)) {
 		continuation.SessionLive = true
 		continuation.ResumeAvailable = true

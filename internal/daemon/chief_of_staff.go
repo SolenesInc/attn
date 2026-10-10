@@ -97,10 +97,7 @@ func (d *Daemon) sessionExists(sessionID protocol.SessionID) bool {
 	if d.store != nil && d.store.Get(sessionID) != nil {
 		return true
 	}
-	if d.store != nil && d.store.DelegationSessionReserved(sessionID) {
-		return true
-	}
-	return d.hubManager != nil && d.hubManager.RemoteSession(sessionID) != nil
+	return d.store != nil && d.store.DelegationSessionReserved(sessionID)
 }
 
 func (d *Daemon) clearChiefOfStaffIfSession(sessionID protocol.SessionID) {

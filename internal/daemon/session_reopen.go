@@ -12,7 +12,6 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/garden"
 	attngit "github.com/victorarias/attn/internal/git"
-	"github.com/victorarias/attn/internal/hub"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -115,34 +114,6 @@ func (d *Daemon) planReopenProfile(verdict *sessionReopenVerdict) {
 	}
 	profile, err := d.store.GetProfile(profileID)
 	verdict.ProfileDeleted = err != nil || profile.Deleted()
-}
-
-func decideReopenHost(verdict *sessionReopenVerdict, endpoints []protocol.EndpointInfo) bool {
-	if strings.TrimSpace(verdict.Execution.HostKind) != garden.HostRemote {
-		return true
-	}
-	name := endpointName(endpoints, strings.TrimSpace(verdict.Execution.EndpointID))
-	verdict.Reason = fmt.Sprintf("session %s ran on %s. %s", verdict.SessionID, name, hub.UnsupportedReason)
-	return false
-}
-
-func endpointName(endpoints []protocol.EndpointInfo, endpointID string) string {
-	for _, endpoint := range endpoints {
-		if endpoint.ID == endpointID && strings.TrimSpace(endpoint.Name) != "" {
-			return strings.TrimSpace(endpoint.Name)
-		}
-	}
-	if endpointID != "" {
-		return endpointID
-	}
-	return "another host"
-}
-
-func (d *Daemon) endpointInfos() []protocol.EndpointInfo {
-	if d.hubManager == nil {
-		return nil
-	}
-	return d.hubManager.List()
 }
 
 func (d *Daemon) decideReopenPlace(

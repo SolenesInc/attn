@@ -128,13 +128,8 @@ func (d *Daemon) resolveAgentCloseSession(reference protocol.SessionID) (*protoc
 	if session := d.store.Get(reference); session != nil {
 		return session, ""
 	}
-	if d.hubManager != nil {
-		if session := d.hubManager.RemoteSession(reference); session != nil {
-			return session, ""
-		}
-	}
 	var match *protocol.Session
-	for _, session := range d.agentCloseCandidates() {
+	for _, session := range d.store.List("") {
 		if !strings.HasPrefix(string(session.ID), string(reference)) {
 			continue
 		}
@@ -147,17 +142,6 @@ func (d *Daemon) resolveAgentCloseSession(reference protocol.SessionID) (*protoc
 		return nil, "session_not_found"
 	}
 	return match, ""
-}
-
-func (d *Daemon) agentCloseCandidates() []*protocol.Session {
-	candidates := append([]*protocol.Session(nil), d.store.List("")...)
-	if d.hubManager == nil {
-		return candidates
-	}
-	for _, remote := range d.hubManager.RemoteSessions() {
-		candidates = append(candidates, &remote)
-	}
-	return candidates
 }
 
 func (d *Daemon) agentCloseRule(caller, target *protocol.Session) (protocol.AgentCloseRule, error) {

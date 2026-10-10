@@ -8,7 +8,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"net"
 	"net/url"
 	"os"
 	"os/exec"
@@ -120,10 +119,6 @@ func main() {
 	case "daemon":
 		maybePrintInstanceBanner()
 		runDaemonCommand()
-	case "ws-relay":
-		runWSRelay()
-	case "client-token":
-		runClientToken()
 	case "pty-worker":
 		runPTYWorker()
 	case "automation":
@@ -521,33 +516,6 @@ func runDaemonStop() {
 		return
 	}
 	fmt.Printf("daemon %s\n", result.Note)
-}
-
-func runClientToken() {
-	token := config.ClientToken()
-	if token == "" {
-		fmt.Fprintf(os.Stderr, "no client token at %s — the daemon mints it at startup; start it first\n", config.ClientTokenPath())
-		os.Exit(1)
-	}
-	fmt.Println(token)
-}
-
-func runWSRelay() {
-	addr := net.JoinHostPort(config.WSBindAddress(), config.WSPort())
-	conn, err := net.Dial("tcp", addr)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "ws-relay connect %s: %v\n", addr, err)
-		os.Exit(1)
-	}
-	defer conn.Close()
-
-	go func() {
-		_, _ = io.Copy(conn, os.Stdin)
-		if tcpConn, ok := conn.(*net.TCPConn); ok {
-			_ = tcpConn.CloseWrite()
-		}
-	}()
-	_, _ = io.Copy(os.Stdout, conn)
 }
 
 func runList() {

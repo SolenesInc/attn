@@ -35,8 +35,6 @@ const (
 
 	FactWorktreeSessionsRemoved = "worktree.sessions.removed"
 
-	FactEndpointSessionsChanged = "endpoint.sessions.changed"
-
 	FactProfileCreated            = "profile.created"
 	FactProfileRenamed            = "profile.renamed"
 	FactProfileDeleted            = "profile.deleted"
@@ -67,11 +65,6 @@ const (
 
 	FactRepoMuteChanged   = "repo.mute.changed"
 	FactAuthorMuteChanged = "author.mute.changed"
-
-	FactEndpointAdded         = "endpoint.added"
-	FactEndpointRemoved       = "endpoint.removed"
-	FactEndpointChanged       = "endpoint.changed"
-	FactEndpointStatusChanged = "endpoint.status.changed"
 
 	FactPluginInstalled        = "plugin.installed"
 	FactPluginUninstalled      = "plugin.uninstalled"
@@ -218,7 +211,6 @@ func buildWireProjections() []projection {
 				FactSessionChiefRoleChanged,
 				FactSessionReconciled,
 				FactWorktreeSessionsRemoved,
-				FactEndpointSessionsChanged,
 			},
 			apply: func(d *Daemon, _ bus.Event) { d.projectSessionsUpdated() },
 		},
@@ -310,14 +302,6 @@ func buildWireProjections() []projection {
 		{
 			filter: bus.Filter{"github.host.*"},
 			apply:  func(d *Daemon, _ bus.Event) { d.projectGitHubHostsUpdated() },
-		},
-		{
-			filter: bus.Filter{FactEndpointAdded, FactEndpointRemoved, FactEndpointChanged},
-			apply:  func(d *Daemon, _ bus.Event) { d.projectEndpointsUpdated() },
-		},
-		{
-			filter: bus.Filter{FactEndpointStatusChanged},
-			apply:  func(d *Daemon, ev bus.Event) { d.projectEndpointStatusChanged(ev) },
 		},
 		{
 			filter: bus.Filter{
@@ -529,7 +513,6 @@ const (
 	snapshotRepos       = "repos_updated"
 	snapshotAuthors     = "authors_updated"
 	snapshotGHHosts     = "github_hosts_updated"
-	snapshotEndpoints   = "endpoints_updated"
 	snapshotPlugins     = "plugins_updated"
 	snapshotSettings    = "settings_updated"
 	snapshotNotifs      = "notifications_updated"

@@ -397,7 +397,7 @@ func TestProfileIDsSurviveRenameAndDeletedNamesAreReusable(t *testing.T) {
 	if err != nil || converted.Name != DefaultProfileName {
 		t.Fatalf("converted profile = %+v, %v; want %s", converted, err, DefaultProfileName)
 	}
-	if _, err := s.DeleteProfile(converted.ID, converted.Revision, 0, 0); err != nil {
+	if _, err := s.DeleteProfile(converted.ID, converted.Revision, 0); err != nil {
 		t.Fatalf("deleting the converted Default profile: %v", err)
 	}
 	addProfileSession(t, s, "live-agent", work.ID)
@@ -429,19 +429,19 @@ func TestProfileIDsSurviveRenameAndDeletedNamesAreReusable(t *testing.T) {
 		t.Fatalf("live-agent profile after rename = %s, want %s", profileID, work.ID)
 	}
 
-	if _, err := s.DeleteProfile(work.ID, renamed.Revision, 0, 0); err == nil {
+	if _, err := s.DeleteProfile(work.ID, renamed.Revision, 0); err == nil {
 		t.Fatal("deleted a profile with a live agent")
 	}
 	if _, err := s.CloseSession("live-agent", SessionClose{}, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.DeleteProfile(work.ID, renamed.Revision, 0, 0); err != nil {
+	if _, err := s.DeleteProfile(work.ID, renamed.Revision, 0); err != nil {
 		t.Fatal(err)
 	}
 	if profileID, _ := s.SessionProfileID("closed-agent"); profileID != work.ID {
 		t.Fatalf("closed-agent profile = %s, want its history kept at %s", profileID, work.ID)
 	}
-	_, err = s.DeleteProfile(home.ID, home.Revision, 0, 0)
+	_, err = s.DeleteProfile(home.ID, home.Revision, 0)
 	wantCode(t, err, profiles.CodeLastProfile)
 
 	s = restart()

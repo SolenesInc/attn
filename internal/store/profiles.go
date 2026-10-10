@@ -518,7 +518,7 @@ func deleteProfileDesktops(tx *sql.Tx, profileID string) error {
 	return err
 }
 
-func (s *Store) DeleteProfile(id string, expectedRevision int64, remoteLiveSessions, members int) (profiles.Profile, error) {
+func (s *Store) DeleteProfile(id string, expectedRevision int64, members int) (profiles.Profile, error) {
 	var profile profiles.Profile
 	err := s.profilesTx(func(tx *sql.Tx, now string) error {
 		var err error
@@ -561,7 +561,6 @@ func (s *Store) DeleteProfile(id string, expectedRevision int64, remoteLiveSessi
 		if err != nil {
 			return err
 		}
-		sessions += remoteLiveSessions
 		if sessions != 0 || members != 0 || automations != 0 || tiles != 0 || seeds != 0 || pending != 0 || reviews != 0 {
 			return fmt.Errorf("profile %q is not empty: %d live agents, %d crew members, %d automations, %d tiles, %d open seeds and %d pending delegations and %d running Garden reviews; clean up the profile yourself or ask your agent before deleting it", profile.Name, sessions, members, automations, tiles, seeds, pending, reviews)
 		}

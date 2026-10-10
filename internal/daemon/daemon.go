@@ -36,7 +36,6 @@ import (
 	"github.com/victorarias/attn/internal/github"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/headless"
-	"github.com/victorarias/attn/internal/hub"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/layouttree"
@@ -138,7 +137,6 @@ type Daemon struct {
 	logger                            *logging.Logger
 	debugLogging                      bool
 	ghRegistry                        *github.ClientRegistry
-	hubManager                        *hub.Manager
 	classifier                        Classifier
 	repoVisibilityKnown               map[string]string
 	repoVisibilityPending             map[string]bool
@@ -538,7 +536,6 @@ func New(socketPath string) *Daemon {
 		logger:              logger,
 		debugLogging:        logger != nil && logger.DebugEnabled(),
 		ghRegistry:          github.NewClientRegistry(),
-		hubManager:          nil,
 		ptyBackend:          ptybackend.NewEmbedded(manager),
 		transcriptWatch:     make(map[protocol.SessionID]*transcriptWatcher),
 		pendingInitialWS:    make(map[*wsClient]struct{}),
@@ -574,7 +571,6 @@ func NewForTesting(socketPath string) *Daemon {
 		desktopTiles:        newDesktopTileDelivery(),
 		logger:              nil,
 		ghRegistry:          github.NewClientRegistry(),
-		hubManager:          nil,
 		ptyBackend:          ptybackend.NewEmbedded(manager),
 		transcriptWatch:     make(map[protocol.SessionID]*transcriptWatcher),
 		pendingInitialWS:    make(map[*wsClient]struct{}),
@@ -684,16 +680,6 @@ func (d *Daemon) Start() error {
 	d.importCrewHomes()
 	d.removeEmptyDesktops()
 	d.refreshCurrentAgent()
-	if d.hubManager == nil {
-		d.hubManager = hub.NewManager(
-			d.store,
-			d.broadcastEndpointStatusChanged,
-			d.publishEndpointSessionsChanged,
-			d.broadcastRawWSMessage,
-			d.logf,
-			d.homeDaemonIDForEnrollment,
-		)
-	}
 	selectedBackend := strings.TrimSpace(strings.ToLower(os.Getenv("ATTN_PTY_BACKEND")))
 	if selectedBackend == "" {
 		selectedBackend = "migrating"
@@ -836,7 +822,6 @@ func (d *Daemon) Start() error {
 	d.maybeStartDiagServer()
 	d.removeLegacyEmbeddedTailscaleState()
 	d.life.Go("ensureTailscaleServeFromSettingsAndBroadcast", d.ensureTailscaleServeFromSettingsAndBroadcast)
-	d.hubManager.Start(d.life.Context())
 
 	githubHostsReady := make(chan struct{})
 	d.life.Go("refreshGitHubHosts", func() {
@@ -1588,9 +1573,6 @@ func (d *Daemon) stop() {
 	d.sessionInputs().stopRetries()
 	d.stopNotebookWatcher()
 	d.stopFsWatchers()
-	if d.hubManager != nil {
-		d.hubManager.Stop()
-	}
 	d.stopEventBus()
 	d.stopInstalledPlugins()
 	d.stopAllTranscriptWatchers()
@@ -1830,9 +1812,6 @@ func (d *Daemon) terminateSessionRuntimeChecked(sessionID protocol.SessionID, te
 
 func (d *Daemon) unregisterSession(sessionID protocol.SessionID, sig syscall.Signal) *protocol.Session {
 	session := d.store.Get(sessionID)
-	if session == nil && d.hubManager != nil {
-		session = d.hubManager.RemoteSession(sessionID)
-	}
 	if session != nil {
 		if _, err := d.captureGardenSessionSnapshot(session); err != nil {
 			d.logf("garden: preserving execution %s before session removal: %v", sessionID, err)
@@ -1847,9 +1826,6 @@ func (d *Daemon) prepareSessionTeardown(sessionID protocol.SessionID) (*sessionT
 	lifecycleLock := d.sessionLifecycleLockFor(sessionID)
 	lifecycleLock.Lock()
 	session := d.store.Get(sessionID)
-	if session == nil && d.hubManager != nil {
-		session = d.hubManager.RemoteSession(sessionID)
-	}
 	if session != nil {
 		if _, err := d.captureGardenSessionSnapshot(session); err != nil {
 			d.logf("garden: preserving execution %s before session removal: %v", sessionID, err)
@@ -2013,9 +1989,6 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() 
 	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)
 	d.crewMemo().forget(sessionID)
-	if d.hubManager != nil {
-		d.hubManager.ForgetSession(sessionID)
-	}
 	d.clearClassifiedTurn(sessionID)
 	d.clearClassifyingTurn(sessionID)
 }
@@ -2610,9 +2583,6 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleDesktopMoveSession(conn, msg.(*protocol.DesktopMoveSessionMessage))
 	case protocol.CmdSetSessionPriority:
 		priority := msg.(*protocol.SetSessionPriorityMessage)
-		if d.forwardedToSessionOwner(conn, protocol.TrimID(priority.SessionID), priority) {
-			return
-		}
 		if err := d.setSessionPriority(priority); err != nil {
 			d.sendError(conn, err.Error())
 		} else {
@@ -3165,33 +3135,6 @@ func (d *Daemon) sessionDelegationRoles() map[protocol.SessionID]*protocol.Sessi
 		d.logf("session delegation roles: %v", err)
 	}
 	return roles
-}
-
-func (d *Daemon) mergedSessionsForBroadcast() []protocol.Session {
-	localSessions := d.sessionsForBroadcast(d.store.List(""))
-	remoteSessions := d.remoteSessionsForBroadcast()
-	if len(localSessions) == 0 {
-		return remoteSessions
-	}
-	if len(remoteSessions) == 0 {
-		return localSessions
-	}
-	merged := make([]protocol.Session, 0, len(localSessions)+len(remoteSessions))
-	merged = append(merged, localSessions...)
-	merged = append(merged, remoteSessions...)
-	return merged
-}
-
-func (d *Daemon) remoteSessionsForBroadcast() []protocol.Session {
-	if d.hubManager == nil {
-		return nil
-	}
-	sessions := d.hubManager.RemoteSessions()
-	chiefs := d.profileChiefs()
-	for i := range sessions {
-		d.decorateChiefOfStaff(&sessions[i], chiefs)
-	}
-	return sessions
 }
 
 func (d *Daemon) broadcastSessionStateChanged(sessionID protocol.SessionID) {
@@ -3947,10 +3890,6 @@ func (d *Daemon) publishSessionsReconciled(report workerReconcileReport) {
 	})
 }
 
-func (d *Daemon) publishEndpointSessionsChanged(endpointID string) {
-	d.publishFact(FactEndpointSessionsChanged, endpointID, nil)
-}
-
 func (d *Daemon) projectSessionsUpdated() {
 	d.projectSnapshot(snapshotSessions, func() {
 		if d.wsHub == nil || d.store == nil {
@@ -3958,49 +3897,7 @@ func (d *Daemon) projectSessionsUpdated() {
 		}
 		d.wsHub.Broadcast(&protocol.WebSocketEvent{
 			Event:    protocol.EventSessionsUpdated,
-			Sessions: d.mergedSessionsForBroadcast(),
-		})
-	})
-}
-
-func (d *Daemon) listEndpointInfos() []protocol.EndpointInfo {
-	if d.hubManager == nil {
-		records := d.store.ListEndpoints()
-		out := make([]protocol.EndpointInfo, 0, len(records))
-		for _, record := range records {
-			out = append(out, protocol.EndpointInfo{
-				ID:        record.ID,
-				Name:      record.Name,
-				SshTarget: record.SSHTarget,
-				Status:    "disconnected",
-				Enabled:   protocol.Ptr(record.Enabled),
-			})
-		}
-		return out
-	}
-	return d.hubManager.List()
-}
-
-func (d *Daemon) broadcastEndpointStatusChanged(info protocol.EndpointInfo) {
-	d.publishFact(FactEndpointStatusChanged, info.ID, info)
-}
-
-func (d *Daemon) projectEndpointStatusChanged(ev bus.Event) {
-	info, ok := decodeFact[protocol.EndpointInfo](d, ev)
-	if !ok {
-		return
-	}
-	d.broadcastMessage(&protocol.EndpointStatusChangedMessage{
-		Event:    protocol.EventEndpointStatusChanged,
-		Endpoint: info,
-	})
-}
-
-func (d *Daemon) projectEndpointsUpdated() {
-	d.projectSnapshot(snapshotEndpoints, func() {
-		d.broadcastMessage(&protocol.EndpointsUpdatedMessage{
-			Event:     protocol.EventEndpointsUpdated,
-			Endpoints: d.listEndpointInfos(),
+			Sessions: d.sessionsForBroadcast(d.store.List("")),
 		})
 	})
 }

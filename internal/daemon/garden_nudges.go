@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"sort"
@@ -14,8 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
-
-var errRemoteGardenTender = errors.New("garden notifications are home-only")
 
 func (d *Daemon) seedUnblocked(seedID string) ([]garden.Seed, []protocol.Seed) {
 	if d.store == nil {
@@ -39,7 +36,7 @@ func (d *Daemon) seedTenderMember(seed garden.Seed) (crew.Member, bool, error) {
 	return member, true, nil
 }
 
-func (d *Daemon) localGardenTenderSession(seed garden.Seed) (string, error) {
+func (d *Daemon) gardenTenderSession(seed garden.Seed) (string, error) {
 	tender := seed.Tender()
 	sessionID := protocol.TrimID(tender.Session)
 	if sessionID == "" {
@@ -63,11 +60,6 @@ func (d *Daemon) localGardenTenderSession(seed garden.Seed) (string, error) {
 			return "", nil
 		}
 		return string(sessionID), nil
-	}
-	if d.hubManager != nil {
-		if endpointID, remote := d.hubManager.EndpointIDForSession(sessionID); remote {
-			return "", fmt.Errorf("%w; cannot notify tender session %s on outpost %s", errRemoteGardenTender, sessionID, endpointID)
-		}
 	}
 	return "", nil
 }

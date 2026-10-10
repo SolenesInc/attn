@@ -42,9 +42,6 @@ func (d *Daemon) resolveReopen(
 		verdict.Reason = fmt.Sprintf("profile %s was deleted; this session cannot reopen in another profile", verdict.ProfileID)
 		return verdict, nil
 	}
-	if !decideReopenHost(&verdict, d.endpointInfos()) {
-		return verdict, nil
-	}
 	_, hasLaunchIntent := d.store.LaunchIntent(entry.ID)
 	if err := d.decideReopenPlace(ctx, &verdict, hasLaunchIntent, gitView); err != nil {
 		return sessionReopenVerdict{}, err

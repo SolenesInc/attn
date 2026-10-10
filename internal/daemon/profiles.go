@@ -364,10 +364,6 @@ func (d *Daemon) handleProfileRename(client *wsClient, msg *protocol.ProfileRena
 
 func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDeleteMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
-		remote, err := d.countRemoteProfileSessions(msg.ProfileID)
-		if err != nil {
-			return profileActionOutcome{}, err
-		}
 		homes, err := crew.ScanHomes(filepath.Join(d.dataRoot, crew.HomesDirName), d.logf)
 		if err != nil {
 			return profileActionOutcome{}, err
@@ -383,7 +379,7 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 			}
 		}
 		d.automationMu.Lock()
-		deleted, err := d.store.DeleteProfile(msg.ProfileID, int64(msg.ExpectedRevision), remote, members)
+		deleted, err := d.store.DeleteProfile(msg.ProfileID, int64(msg.ExpectedRevision), members)
 		d.automationMu.Unlock()
 		if err != nil {
 			return profileActionOutcome{}, err
@@ -403,27 +399,6 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 		})
 		return profileActionOutcome{arranges: true, publish: func() { d.publishFact(FactProfileDeleted, deleted.ID, nil) }}, nil
 	})
-}
-
-func (d *Daemon) countRemoteProfileSessions(profileID string) (int, error) {
-	if d.hubManager == nil {
-		return 0, nil
-	}
-	counted := map[protocol.SessionID]bool{}
-	for _, session := range d.hubManager.RemoteSessions() {
-		if d.store.Get(session.ID) != nil || counted[session.ID] {
-			continue
-		}
-		owner, err := d.sessionProfileID(session.ID)
-		if err != nil {
-			return 0, err
-		}
-		if owner != profileID {
-			continue
-		}
-		counted[session.ID] = true
-	}
-	return len(counted), nil
 }
 
 func (d *Daemon) handleProfileSelect(client *wsClient, msg *protocol.ProfileSelectMessage) {

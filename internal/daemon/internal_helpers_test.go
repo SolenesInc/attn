@@ -147,20 +147,6 @@ func TestMain(m *testing.M) {
 	))
 }
 
-func waitForSocket(t *testing.T, sockPath string, timeout time.Duration) {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		conn, err := net.DialTimeout("unix", sockPath, 10*time.Millisecond)
-		if err == nil {
-			conn.Close()
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatalf("socket %s not ready after %v", sockPath, timeout)
-}
-
 func shortTempDir(t *testing.T) string {
 	t.Helper()
 	base := "/tmp"

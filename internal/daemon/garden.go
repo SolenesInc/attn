@@ -1036,7 +1036,7 @@ func (d *Daemon) observeGardenDispatchExecution(sessionID protocol.SessionID, cw
 	observed := d.observedGardenExecution(&protocol.Session{
 		ID: sessionID, Directory: cwd, Agent: protocol.SessionAgent(agent),
 	}, "", d.gardenTime())
-	if session := d.gardenSession(sessionID); session != nil {
+	if session := d.store.Get(sessionID); session != nil {
 		resumeID := ""
 		if d.store.Get(sessionID) != nil {
 			resumeID = d.store.GetResumeSessionID(sessionID)
@@ -1135,7 +1135,7 @@ func (d *Daemon) gardenDispatchCrown(sessionID protocol.SessionID) (string, bool
 	crown := activeDispatchCrown(dispatch)
 	if crown != "" {
 		seed, _, err := d.readSeed(crown)
-		profileID, profileErr := d.sessionProfileID(sessionID)
+		profileID, profileErr := d.store.SessionProfileID(sessionID)
 		if err != nil || profileErr != nil || seed.ProfileID != profileID {
 			return "", false
 		}

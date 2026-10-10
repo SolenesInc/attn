@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/victorarias/attn/internal/hub"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -99,9 +98,6 @@ func validateBrowserURL(raw string) (string, error) {
 
 func (d *Daemon) browserTargetFor(sessionID protocol.SessionID) (browserTarget, error) {
 	sessionID = protocol.TrimID(sessionID)
-	if sessionID != "" && d.store.Get(sessionID) == nil && d.hubManager != nil && d.hubManager.RemoteSession(sessionID) != nil {
-		return browserTarget{}, fmt.Errorf("agent %s runs on an outpost: %w", sessionID, hub.ErrOutpostsOff)
-	}
 	location, err := d.currentAgent(sessionID)
 	if err != nil {
 		return browserTarget{}, err
@@ -320,26 +316,6 @@ func (d *Daemon) handleBrowserControl(conn net.Conn, msg *protocol.BrowserContro
 		return
 	}
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, Data: protocol.Ptr(result.data)})
-}
-
-func (d *Daemon) handleRemoteBrowserControl(client *wsClient, msg *protocol.BrowserControlMessage) {
-	requestID := strings.TrimSpace(protocol.Deref(msg.RequestID))
-	if requestID == "" {
-		d.sendCommandError(client, protocol.CmdBrowserControl, "request_id is required")
-		return
-	}
-	result := d.runBrowserControl(msg)
-	response := &protocol.BrowserControlResponseMessage{
-		Event:     protocol.EventBrowserControlResponse,
-		RequestID: requestID,
-		Success:   result.err == "",
-	}
-	if result.err != "" {
-		response.Error = protocol.Ptr(result.err)
-	} else {
-		response.Data = protocol.Ptr(result.data)
-	}
-	d.sendToClient(client, response)
 }
 
 // failBrowserControlFor answers every request waiting on host once it disconnects, instead of letting each

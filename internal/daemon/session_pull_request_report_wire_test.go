@@ -1,13 +1,10 @@
 package daemon_test
 
 import (
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
-	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -79,25 +76,4 @@ func pullRequestChangesOf(app *testworld.Peer, id string) [][]int {
 		}
 	}
 	return changes
-}
-
-func TestPullRequestCommandsAHubForwardsLandOnTheOwningSession(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
-	s1 := spawnPanes(w, w.App(), w.Path("s1"))[0].session
-	app := w.App()
-	token, err := os.ReadFile(filepath.Join(w.Dir, config.ClientTokenFile))
-	if err != nil {
-		t.Fatal(err)
-	}
-	hubPeer := w.Connect(protocol.ClientHelloMessage{
-		Cmd: protocol.CmdClientHello, ClientKind: "hub", Version: "protocol-" + protocol.ProtocolVersion,
-		Capabilities: []string{}, ClientToken: protocol.Ptr(strings.TrimSpace(string(token))),
-	}, nil)
-	testworld.Await[protocol.InitialStateMessage](hubPeer, protocol.EventInitialState, nil)
-	const url = "https://github.com/victorarias/attn/pull/71"
-
-	hubPeer.Send(protocol.PullRequestCreatedMessage{Cmd: protocol.CmdPullRequestCreated, ID: protocol.SessionID(s1), URL: url})
-	testworld.AwaitSession(app, s1, func(s protocol.Session) bool { return len(s.PullRequests) == 1 && s.PullRequests[0].Number == 71 })
-	hubPeer.Send(protocol.PullRequestForgetMessage{Cmd: protocol.CmdPullRequestForget, ID: protocol.SessionID(s1), URL: url})
-	testworld.AwaitSession(app, s1, func(s protocol.Session) bool { return len(s.PullRequests) == 0 })
 }
