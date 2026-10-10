@@ -7,6 +7,7 @@ import (
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestACrewClaimOutlivesItsSessionThroughNapAndClear(t *testing.T) {
@@ -151,43 +152,84 @@ func TestAHandoverByACrewSessionRecordsTheMember(t *testing.T) {
 }
 
 func TestRetiredMembersCannotReclaimWorkThroughResumeOrChief(t *testing.T) {
-	w := newCrewWorld(t, fakeagent.Claude)
-	app, cli := w.App(), w.Client()
-	first := wakeCrew(t, cli, "Keel", "").SessionID
-	w.Launched(string(first)).Prompted()
-	if made := setChiefOfStaff(app, string(first), true); !made.Success {
-		t.Fatal(protocol.Deref(made.Error))
-	}
-	seed := plantSeedAs(t, cli, string(first), "Leave this work released")
-	lifeMove(t, cli, string(first), seed, "tend", "", "")
-	if _, err := cli.CrewRetire("Keel"); err != nil {
-		t.Fatal(err)
-	}
-	released := lifeShow(t, cli, seed).Seed
-	if resumed := seedResumeRequest(app, seed); resumed.Success || !strings.Contains(protocol.Deref(resumed.Error), "Keel is retired") {
-		t.Fatalf("retired Resume: %+v", resumed)
-	}
-	_, err := cli.SeedSendToChief("", released, "")
-	lifeRefusal(t, "assigning to a retired Chief", err, "Keel is retired", "restore")
-	if shown := lifeShow(t, cli, seed).Seed; shown.Rev != released.Rev || shown.Claimed || shown.Tender != nil {
-		t.Fatalf("retired actions changed seed: %+v", shown)
-	}
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		if _, err := cli.CrewCreate(protocol.CrewCreateMessage{Name: "Keel"}); err != nil {
+			t.Fatal(err)
+		}
+		first := wakeCrew(t, cli, "Keel", "").SessionID
+		w.bootBubbleClaude(t, string(first))
+		if made := setChiefOfStaff(app, string(first), true); !made.Success {
+			t.Fatal(protocol.Deref(made.Error))
+		}
+		w.advance(0)
+		seed := plantSeedAs(t, cli, string(first), "Leave this work released")
+		lifeMove(t, cli, string(first), seed, "tend", "", "")
+		if _, err := cli.CrewRetire("Keel"); err != nil {
+			t.Fatal(err)
+		}
+		released := lifeShow(t, cli, seed).Seed
+		if resumed := seedResumeRequest(app, seed); resumed.Success || !strings.Contains(protocol.Deref(resumed.Error), "Keel is retired") {
+			t.Fatalf("retired Resume: %+v", resumed)
+		}
+		_, err := cli.SeedSendToChief("", released, "")
+		lifeRefusal(t, "assigning to a retired Chief", err, "Keel is retired", "restore")
+		if shown := lifeShow(t, cli, seed).Seed; shown.Rev != released.Rev || shown.Claimed || shown.Tender != nil {
+			t.Fatalf("retired actions changed seed: %+v", shown)
+		}
+	})
 }
 
 func TestSendToChiefNeedsOnlyTheRevision(t *testing.T) {
-	w := newCrewWorld(t, fakeagent.Claude)
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		created, err := cli.CrewCreate(protocol.CrewCreateMessage{Name: "Keel"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		chief := wakeCrew(t, cli, "Keel", "").SessionID
+		w.bootBubbleClaude(t, string(chief))
+		if result := setChiefOfStaff(app, string(chief), true); !result.Success {
+			t.Fatal(protocol.Deref(result.Error))
+		}
+		w.advance(0)
+		seed := plantSeedAs(t, cli, "", "Let Keel choose the next context")
+		sent, err := cli.SeedSendToChief("", lifeShow(t, cli, seed).Seed, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if sent.Chief.Ref != protocol.PartyRef("member:"+created.Member.Key) || sent.Seed.Tender == nil || sent.Seed.Tender.Ref != protocol.PartyRef("member:"+created.Member.Key) || !sent.Seed.Claimed {
+			t.Fatalf("crew Chief assignment: %+v", sent)
+		}
+	})
+}
+
+func TestSessionCloseAndReopenRefreshItsGardenClaim(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
-	chief := wakeCrew(t, cli, "Keel", "").SessionID
-	w.Launched(string(chief)).Prompted()
-	if result := setChiefOfStaff(app, string(chief), true); !result.Success {
-		t.Fatal(protocol.Deref(result.Error))
+	id := w.Spawn(app, fakeagent.Codex, w.Path("worker"))
+	run := w.Launched(id)
+	takeTurn(app, run, id)
+	seed := plantSeedAs(t, cli, id, "Refresh the claim with its session")
+	lifeMove(t, cli, id, seed, "tend", "", "")
+	awaitClaim := func(claimed bool) {
+		testworld.Await(app, protocol.EventGardenSeedsUpdated, func(m protocol.GardenSeedsUpdatedMessage) bool {
+			for _, s := range m.Seeds {
+				if s.ID == seed && s.Claimed == claimed && s.Ready != claimed && s.Tender != nil {
+					return (protocol.Deref(s.Tender.SessionID) == protocol.SessionID(id)) == claimed
+				}
+			}
+			return false
+		})
 	}
-	seed := plantSeedAs(t, cli, "", "Let Keel choose the next context")
-	sent, err := cli.SeedSendToChief("", lifeShow(t, cli, seed).Seed, "")
-	if err != nil {
+	awaitClaim(true)
+	if _, err := cli.AgentClose(id, protocol.SessionID(id), "Pause the conversation."); err != nil {
 		t.Fatal(err)
 	}
-	if sent.Chief.Ref != "member:keel" || sent.Seed.Tender == nil || sent.Seed.Tender.Ref != "member:keel" || !sent.Seed.Claimed {
-		t.Fatalf("crew Chief assignment: %+v", sent)
+	awaitClaim(false)
+	if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: protocol.SessionID(id), Action: string(protocol.SessionReopenActionReopen)}); err != nil {
+		t.Fatal(err)
 	}
+	w.Launched(id)
+	awaitClaim(true)
 }
