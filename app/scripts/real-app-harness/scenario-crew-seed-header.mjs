@@ -52,11 +52,8 @@ async function main() {
   };
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
-  runner.registerCleanup('delete_member', () => {
-    if (memberRegistered) run(['doc', 'delete', 'core/crew', 'members', member]);
-  });
-  runner.registerCleanup('remove_member_home', () => {
-    if (memberRegistered) fs.rmSync(home, { recursive: true });
+  runner.registerCleanup('retire_member', () => {
+    if (memberRegistered) run(['crew', 'retire', member]);
   });
   runner.registerCleanup('settle_seeds', settleSeeds);
   runner.registerCleanup('close_crew_session', async () => {
