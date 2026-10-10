@@ -1,0 +1,3 @@
+kind: fixed
+area: delegation
+change: Relative --cwd paths resolve from the caller's directory and preserve subdirectories in delegated worktrees.
