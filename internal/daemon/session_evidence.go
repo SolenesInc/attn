@@ -178,7 +178,7 @@ func programStatusEvidence(obs pty.Observation, at time.Time) func(*sessionstate
 		}
 		e.Heartbeat = nil
 		if !reported {
-			e.ProgramStatus = nil
+			e.ClearProgramStatus()
 			return
 		}
 		e.ProgramStatus = &sessionstate.Observation{

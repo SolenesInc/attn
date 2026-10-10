@@ -20,6 +20,7 @@ const (
 
 type programStatusObserver struct {
 	rootReported bool
+	owner        int
 }
 
 func newProgramStatusObserver(last *Observation) *programStatusObserver {
@@ -36,13 +37,26 @@ func (o *programStatusObserver) Observe(reports []ghosttyvt.ProgramStatus, now t
 		}
 		claim := programStatusClaim(report)
 		o.rootReported = claim != ProgramClear
+		o.owner = 0
 		out = append(out, newObservation(SourceProgramStatus, claim, report.Message, now))
 	}
 	return out
 }
 
-func (o *programStatusObserver) replacesTitles() bool {
-	return o != nil && o.rootReported
+func (o *programStatusObserver) held() bool {
+	return o.rootReported
+}
+
+func (o *programStatusObserver) followForeground(foreground, shell int, now time.Time) (Observation, bool) {
+	if !o.rootReported {
+		return Observation{}, false
+	}
+	if foreground != shell && (o.owner == 0 || o.owner == foreground) {
+		o.owner = foreground
+		return Observation{}, false
+	}
+	o.rootReported = false
+	return newObservation(SourceProgramStatus, ProgramClear, "", now), true
 }
 
 func programStatusClaim(report ghosttyvt.ProgramStatus) string {

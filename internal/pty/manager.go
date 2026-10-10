@@ -330,9 +330,7 @@ func (m *Manager) start(session *Session, lifecycleID string) {
 
 	session.harnessSignals = newHarnessSignalObserver(agentHarnessSignals(session.agent))
 	isShellPane := session.agent == "shell"
-	if !isShellPane {
-		session.programStatus = newProgramStatusObserver(session.lastSignal)
-	}
+	session.programStatus = newProgramStatusObserver(session.lastSignal)
 	if onState != nil {
 		id := session.id
 		session.onState = func(obs Observation) {
