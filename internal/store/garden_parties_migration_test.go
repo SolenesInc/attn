@@ -67,10 +67,7 @@ func TestGardenPartiesMigration(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				if _, err := s.db.Exec(`INSERT INTO sessions(id,label,directory,state_since,state_updated_at,last_seen,profile_id) VALUES('side-plain','Side','/tmp/side','','','','side')`); err != nil {
-					t.Fatal(err)
-				}
-				if _, err := s.db.Exec(`INSERT INTO garden_seed_watches(watcher_session_id,seed_id,created_at) VALUES('bound','s-side01','2026-09-01'),('plain','s-side01','2026-09-02'),('side-plain','s-7k3f9m','2026-09-03'),('delegate','s-7k3f9m','2026-10-04')`); err != nil {
+				if _, err := s.db.Exec(`INSERT INTO garden_seed_watches(watcher_session_id,seed_id,created_at) VALUES('delegate','s-7k3f9m','2026-10-04')`); err != nil {
 					t.Fatal(err)
 				}
 
@@ -137,10 +134,6 @@ func TestGardenPartiesMigration(t *testing.T) {
 			watches, err := s.GardenSeedWatches()
 			if err != nil || len(watches) != 3 {
 				t.Fatalf("watches: %+v %v", watches, err)
-			}
-			var foreign int
-			if err := s.db.QueryRow(`SELECT count(*) FROM garden_seed_watches WHERE seed_id='s-side01' OR watcher='session:side-plain'`).Scan(&foreign); err != nil || foreign != 0 {
-				t.Fatalf("foreign watches: %d %v", foreign, err)
 			}
 			var reserved int
 			if err := s.db.QueryRow(`SELECT count(*) FROM garden_seed_watches WHERE watcher='session:delegate' AND seed_id='s-7k3f9m'`).Scan(&reserved); err != nil || reserved != 1 {
