@@ -175,8 +175,11 @@ func (b *MigratingBackend) Remove(ctx context.Context, id harness.TerminalID) er
 
 func (b *MigratingBackend) TerminalIDs(_ context.Context) []harness.TerminalID {
 	b.mu.RLock()
-	ids := make([]harness.TerminalID, 0, len(b.owners))
+	ids := make([]harness.TerminalID, 0, len(b.owners)+len(b.pendingSpawn))
 	for id := range b.owners {
+		ids = append(ids, id)
+	}
+	for id := range b.pendingSpawn {
 		ids = append(ids, id)
 	}
 	b.mu.RUnlock()
