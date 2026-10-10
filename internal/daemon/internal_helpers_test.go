@@ -36,7 +36,7 @@ func writeCodexInteractiveRollout(t *testing.T, codexHome, nativeID, cwd string,
 	return path
 }
 
-func newEnrolledDaemon(t *testing.T, homeDaemonID string) *Daemon {
+func newEnrolledDaemon(t *testing.T) *Daemon {
 	t.Helper()
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	id, err := enrollment.EnsureDaemonID(d.dataRoot)
@@ -46,11 +46,6 @@ func newEnrolledDaemon(t *testing.T, homeDaemonID string) *Daemon {
 	d.daemonInstanceID = id
 	if err := d.ensureEnrollment(); err != nil {
 		t.Fatalf("ensureEnrollment: %v", err)
-	}
-	if homeDaemonID != "" {
-		if _, err := enrollment.Enroll(d.dataRoot, homeDaemonID); err != nil {
-			t.Fatalf("Enroll: %v", err)
-		}
 	}
 	return d
 }

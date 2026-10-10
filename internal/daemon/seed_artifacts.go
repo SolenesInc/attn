@@ -385,9 +385,6 @@ func (d *Daemon) handleSeedArtifactTransferWS(client *wsClient, msg *protocol.Se
 }
 
 func (d *Daemon) submitSeedArtifactTransfer(msg *protocol.SeedArtifactTransferMessage) (*protocol.SeedArtifactTransferResult, error) {
-	if err := d.requireHome(garden.Surface); err != nil {
-		return nil, err
-	}
 	seedID := strings.TrimSpace(msg.SeedID)
 	if _, _, err := d.readSeed(seedID); err != nil {
 		return nil, err
@@ -943,10 +940,6 @@ func (d *Daemon) handleSeedArtifactTarget(client *wsClient, msg *protocol.SeedAr
 	fail := func(err error) {
 		result.Error = protocol.Ptr(err.Error())
 		d.sendToClient(client, result)
-	}
-	if err := d.requireHome(garden.Surface); err != nil {
-		fail(err)
-		return
 	}
 	filename, err := seedArtifactTargetFilename(msg.RelativeTarget)
 	if err != nil {

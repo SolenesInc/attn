@@ -37,8 +37,8 @@ func TestRefuseOutpost_AllowsAFreshDataRootAndItsOwnHome(t *testing.T) {
 func TestRefuseOutpost_RefusesAnEnrolledOutpostNamingItsHome(t *testing.T) {
 	root := t.TempDir()
 	seedDaemonID(t, root, homeID)
-	if _, err := Enroll(root, otherHome); err != nil {
-		t.Fatalf("enroll: %v", err)
+	if err := writeRecord(filepath.Join(root, RecordFileName), Record{HomeDaemonID: otherHome}); err != nil {
+		t.Fatal(err)
 	}
 	err := RefuseOutpost(root)
 	var outpost *OutpostError

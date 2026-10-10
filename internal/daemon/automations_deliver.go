@@ -394,9 +394,6 @@ func (d *Daemon) automationResumeSessionID(req automation.WorkRequest) (string, 
 	return resumeID, nil
 }
 func (d *Daemon) ensureAutomationSeed(req automation.WorkRequest) (bool, func() error, error) {
-	if err := d.requireHome(garden.Surface); err != nil {
-		return false, nil, err
-	}
 	def, err := d.store.GetAutomationDefinitionIncludingDeleted(req.DefinitionID)
 	if err != nil {
 		return false, nil, err

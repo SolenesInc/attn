@@ -187,9 +187,6 @@ func (d *Daemon) noteCloseOnTendedSeeds(
 	target, caller *protocol.Session, rule protocol.AgentCloseRule, reason string,
 ) []string {
 	noted := []string{}
-	if err := d.requireHome(garden.Surface); err != nil {
-		return noted
-	}
 	read, _, err := d.runDocQuery(docstore.Query{
 		Namespace:  garden.Namespace,
 		Collection: garden.CollectionSeeds,
@@ -236,9 +233,6 @@ func agentCloseSeedNote(target, caller *protocol.Session, rule protocol.AgentClo
 }
 
 func (d *Daemon) seedTenderSession(seedID string) (string, error) {
-	if err := d.requireHome(garden.Surface); err != nil {
-		return "", err
-	}
 	seed, _, err := d.readSeed(seedID)
 	if err != nil {
 		return "", err

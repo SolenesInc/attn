@@ -65,9 +65,6 @@ func (d *Daemon) scopeGardenRequest(cmd string, msg any, selected string) error 
 	if !strings.HasPrefix(cmd, "seed_") {
 		return nil
 	}
-	if err := d.requireHome(garden.Surface); err != nil {
-		return err
-	}
 	raw, err := json.Marshal(msg)
 	if err != nil {
 		return err

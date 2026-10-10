@@ -37,21 +37,19 @@ func (d *Daemon) resolveAgentPeekTarget(target string) (*protocol.Session, strin
 	if session := d.store.Get(protocol.SessionID(target)); session != nil {
 		return session, ""
 	}
-	if status, err := d.enrollmentStatus(); err == nil && status.IsHome() {
-		member, found, err := d.resolveCrewMember(target)
-		if err != nil {
-			d.logf("agent peek crew resolution: target=%q err=%v", target, err)
-			return nil, "internal_error"
-		}
-		if found {
-			if !d.crewBindingLive(member) {
-				return nil, "crew_member_asleep"
-			}
-			if session := d.store.Get(member.BindingSession); session != nil {
-				return session, ""
-			}
+	member, found, err := d.resolveCrewMember(target)
+	if err != nil {
+		d.logf("agent peek crew resolution: target=%q err=%v", target, err)
+		return nil, "internal_error"
+	}
+	if found {
+		if !d.crewBindingLive(member) {
 			return nil, "crew_member_asleep"
 		}
+		if session := d.store.Get(member.BindingSession); session != nil {
+			return session, ""
+		}
+		return nil, "crew_member_asleep"
 	}
 	return d.resolveSessionByIDOrPrefix(target)
 }

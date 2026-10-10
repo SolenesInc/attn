@@ -15,8 +15,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-const Surface = "the crew"
-
 const (
 	Namespace         = "core/crew"
 	CollectionMembers = "members"

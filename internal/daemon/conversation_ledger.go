@@ -88,9 +88,6 @@ func (d *Daemon) resolveKeptConversation(id string) (conversationKey, string, er
 }
 
 func (d *Daemon) keptConversationList(includeDeleted bool) (*protocol.KeptConversationListResult, error) {
-	if err := d.requireHome("conversations"); err != nil {
-		return nil, err
-	}
 	d.conversationKeepMu.Lock()
 	defer d.conversationKeepMu.Unlock()
 	copies, err := d.store.KeptConversations()
@@ -218,9 +215,6 @@ func (d *Daemon) keptConversationList(includeDeleted bool) (*protocol.KeptConver
 }
 
 func (d *Daemon) keepConversation(id string, keep bool) error {
-	if err := d.requireHome("conversations"); err != nil {
-		return err
-	}
 	d.conversationKeepMu.Lock()
 	defer d.conversationKeepMu.Unlock()
 	key, session, err := d.resolveKeptConversation(id)
@@ -244,9 +238,6 @@ func (d *Daemon) keepConversation(id string, keep bool) error {
 }
 
 func (d *Daemon) forgetConversation(id string) error {
-	if err := d.requireHome("conversations"); err != nil {
-		return err
-	}
 	d.conversationKeepMu.Lock()
 	defer d.conversationKeepMu.Unlock()
 	key, _, err := d.resolveKeptConversation(id)

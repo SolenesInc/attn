@@ -75,9 +75,6 @@ func (d *Daemon) deliverChiefSeedAssignment(chiefSessionID protocol.SessionID, s
 }
 
 func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, chiefSessionID protocol.SessionID) (*protocol.SeedSendToChiefResult, error) {
-	if err := d.requireHome(garden.Surface); err != nil {
-		return nil, err
-	}
 	if chiefSessionID == "" || d.store.Get(chiefSessionID) == nil {
 		return nil, fmt.Errorf("this profile has no Chief; make one of its agents the Chief first")
 	}

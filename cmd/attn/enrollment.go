@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/enrollment"
@@ -22,8 +21,6 @@ func runEnrollment() {
 		writeEnrollmentHelp(os.Stdout)
 	case "status":
 		runEnrollmentStatus(os.Args[3:])
-	case "enroll":
-		runEnrollmentEnroll(os.Args[3:])
 	case "leave":
 		runEnrollmentLeave(os.Args[3:])
 	case "--json":
@@ -38,25 +35,16 @@ func runEnrollment() {
 func writeEnrollmentHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn enrollment <command>
 
-Every daemon has exactly one home. A home daemon owns its garden and its crew;
-an outpost is a daemon enrolled to a home and owns none of that — it keeps its
-own sessions, and passes home-level asks upward.
+Older attn versions could enroll a data folder to another daemon. This attn
+never does, and refuses to start in a folder that is still enrolled.
 
 commands:
   status [--json]
-        show this daemon's id, the home that owns its garden and crew, and
-        whether home-level state may live here.
-
-  enroll --home <daemon-id> [--json]
-        record <daemon-id> as this daemon's home. A daemon that is its own home
-        enrolls; one already enrolled to that same home is unchanged; one
-        enrolled to a different home refuses, because re-homing is a decision,
-        never a silent overwrite. This release runs home daemons only, so an
-        enrolled daemon refuses to start until you run leave.
+        show this daemon's id and whether its data folder is enrolled to
+        another daemon.
 
   leave [--json]
-        make this daemon its own home again. This is the way out of enrollment,
-        and what has to happen here before a different home may take it.
+        release the enrollment so the data folder is its own again.
 `)
 }
 
@@ -101,35 +89,9 @@ func runEnrollmentStatus(args []string) {
 func writeEnrollmentStatus(w io.Writer, status enrollment.Status) {
 	fmt.Fprintf(w, "daemon:     %s\n", status.DaemonID)
 	fmt.Fprintf(w, "enrollment: %s\n", status.Describe())
-	if fenceErr := status.RequireHome("the garden and the crew"); fenceErr != nil {
-		fmt.Fprintf(w, "garden and crew: refused here\n\n%v\n", fenceErr)
-		return
+	if !status.IsHome() {
+		fmt.Fprintln(w, "\nThis data folder was enrolled to another daemon by an older attn; run `attn enrollment leave`.")
 	}
-	fmt.Fprintf(w, "garden and crew: this daemon owns them\n")
-}
-
-func runEnrollmentEnroll(args []string) {
-	fs := flag.NewFlagSet("enrollment enroll", flag.ExitOnError)
-	home := fs.String("home", "", "daemon id of the home this daemon belongs to")
-	asJSON := fs.Bool("json", false, "print the result as JSON")
-	_ = fs.Parse(args)
-
-	if strings.TrimSpace(*home) == "" {
-		fmt.Fprintln(os.Stderr, "enrollment enroll: --home <daemon-id> is required")
-		os.Exit(2)
-	}
-
-	result, err := enrollment.Enroll(enrollmentDataRoot(), strings.TrimSpace(*home))
-	var foreign *enrollment.ForeignHomeError
-	if errors.As(err, &foreign) {
-		emitEnrollmentResult(os.Stdout, os.Stderr, result, *asJSON)
-		os.Exit(enrollmentRefusedExitCode)
-	}
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "enrollment enroll: %v\n", err)
-		os.Exit(1)
-	}
-	emitEnrollmentResult(os.Stdout, os.Stderr, result, *asJSON)
 }
 
 func runEnrollmentLeave(args []string) {
@@ -145,22 +107,11 @@ func runEnrollmentLeave(args []string) {
 		}
 		os.Exit(1)
 	}
-	emitEnrollmentResult(os.Stdout, os.Stderr, result, *asJSON)
-}
-
-const enrollmentRefusedExitCode = 3
-
-func emitEnrollmentResult(out, errOut io.Writer, result enrollment.Result, asJSON bool) {
-	if result.Status == "refused" {
-		fmt.Fprintln(errOut, result.Message)
-	}
-	if asJSON {
-		if err := fprintJSON(out, result); err != nil {
-			fmt.Fprintf(errOut, "error encoding json: %v\n", err)
+	if *asJSON {
+		if err := fprintJSON(os.Stdout, result); err != nil {
+			fmt.Fprintf(os.Stderr, "error encoding json: %v\n", err)
 		}
 		return
 	}
-	if result.Status != "refused" {
-		fmt.Fprintln(out, result.Message)
-	}
+	fmt.Fprintln(os.Stdout, result.Message)
 }

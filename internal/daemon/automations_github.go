@@ -17,9 +17,6 @@ import (
 const automationReviewWithdrawnMessage = "GitHub review request withdrawn before delivery"
 
 func (d *Daemon) automationRunPullRequest(ctx context.Context, definitionID int, requestID, rawURL string) (*store.AutomationRun, error) {
-	if err := d.requireHome(automation.Surface); err != nil {
-		return nil, err
-	}
 	if strings.TrimSpace(requestID) == "" {
 		return nil, errors.New("request_id is required")
 	}

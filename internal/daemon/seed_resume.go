@@ -37,9 +37,6 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 	if seedID == "" {
 		return nil, fmt.Errorf("seed_id is required")
 	}
-	if err := d.requireHome(garden.Surface); err != nil {
-		return nil, err
-	}
 	expectedRev := int64(0)
 	if review != nil {
 		item, err := d.validateGardenReviewAction(review, seedID, "resume")

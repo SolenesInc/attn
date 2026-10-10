@@ -174,7 +174,7 @@ func (b *Bootstrapper) enrollRemote(ctx context.Context, sshTarget, instance, ho
 			b.logf("enrollment on %s returned unreadable output %q", sshTarget, stdout)
 			return nil
 		}
-		if result.Changed() {
+		if result.Status == "enrolled" {
 			b.logf("enrolled %s as an outpost of %s", sshTarget, homeDaemonID)
 		}
 		return nil

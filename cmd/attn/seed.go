@@ -82,9 +82,6 @@ title's key words, planted in the garden. Commands take the id; the slug is
 how the seed is spoken of.
 Anything worth handing off, parking, or attributing is a seed.
 
-The garden lives at the home daemon. On an outpost every command here refuses,
-naming the home to run it on.
-
 commands:
   plant "<title>" [-m <body>] [--part-of <plot>] [--discovered-from <seed>] [flags]
         plant a seed and print its id, slug and title. -m takes markdown, or - to read stdin —

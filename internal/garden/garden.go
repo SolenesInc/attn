@@ -10,8 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-const Surface = "the garden"
-
 const (
 	Namespace             = "core/garden"
 	CollectionSeeds       = "seeds"

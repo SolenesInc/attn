@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"encoding/json"
 	"net"
 	"os"
 	"path/filepath"
@@ -15,6 +16,24 @@ func callAgentPeek(t *testing.T, d *Daemon, target string) protocol.Response {
 	return callHandler(t, func(conn net.Conn) {
 		d.handleAgentPeek(conn, &protocol.AgentPeekMessage{Cmd: protocol.CmdAgentPeek, TargetSessionID: target})
 	})
+}
+
+func callHandler(t *testing.T, call func(net.Conn)) protocol.Response {
+	t.Helper()
+	server, client := net.Pipe()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		call(server)
+		_ = server.Close()
+	}()
+	var resp protocol.Response
+	if err := json.NewDecoder(client).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	_ = client.Close()
+	<-done
+	return resp
 }
 
 func TestHandleAgentPeekReturnsStateProfileAndLastMessage(t *testing.T) {

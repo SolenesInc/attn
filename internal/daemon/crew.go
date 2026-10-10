@@ -33,7 +33,7 @@ func (d *Daemon) ensureCrewCollections() {
 func (d *Daemon) importCrewHomes() {
 	d.registerCrewHomes()
 	d.assignCrewProfiles()
-	if d.store == nil || d.requireHome(crew.Surface) != nil {
+	if d.store == nil {
 		return
 	}
 	if err := d.store.PrepareLaunchMigration(); err != nil {
@@ -43,9 +43,6 @@ func (d *Daemon) importCrewHomes() {
 
 func (d *Daemon) registerCrewHomes() {
 	if d.store == nil {
-		return
-	}
-	if err := d.requireHome(crew.Surface); err != nil {
 		return
 	}
 	members, err := crew.ScanHomes(filepath.Join(d.dataRoot, crew.HomesDirName), d.logf)
@@ -86,7 +83,7 @@ func (d *Daemon) registerCrewHomes() {
 }
 
 func (d *Daemon) assignCrewProfiles() {
-	if d.store == nil || d.requireHome(crew.Surface) != nil {
+	if d.store == nil {
 		return
 	}
 	members, _, err := d.readCrewMembersRaw()
@@ -171,9 +168,6 @@ func (d *Daemon) readCrewMembers() ([]crew.Member, map[string]docstore.Document,
 }
 
 func (d *Daemon) resolveCrewMember(address string) (crew.Member, bool, error) {
-	if err := d.requireHome(crew.Surface); err != nil {
-		return crew.Member{}, false, err
-	}
 	members, _, err := d.readCrewMembers()
 	if err != nil {
 		return crew.Member{}, false, err
@@ -207,9 +201,6 @@ func (d *Daemon) readCrewMembersRaw() ([]crew.Member, map[string]docstore.Docume
 }
 
 func (d *Daemon) updateCrewMember(memberID string, mutate func(*crew.Member) (bool, error)) (crew.Member, error) {
-	if err := d.requireHome(crew.Surface); err != nil {
-		return crew.Member{}, err
-	}
 	schema, err := d.crewCollection()
 	if err != nil {
 		return crew.Member{}, err
@@ -259,9 +250,6 @@ func (d *Daemon) liveSessionForTender(tender garden.Tender) (protocol.SessionID,
 }
 
 func (d *Daemon) claimCrewBinding(memberName string, sessionID protocol.SessionID) (string, error) {
-	if err := d.requireHome(crew.Surface); err != nil {
-		return "", err
-	}
 	schema, err := d.crewCollection()
 	if err != nil {
 		return "", err
@@ -531,9 +519,6 @@ func (d *Daemon) crewForBroadcast() []protocol.CrewMember {
 	if d.store == nil {
 		return nil
 	}
-	if err := d.requireHome(crew.Surface); err != nil {
-		return nil
-	}
 	members, docs, err := d.readCrewMembers()
 	if err != nil {
 		if !docstore.IsUndeclaredCollection(err) {
@@ -565,10 +550,6 @@ func (d *Daemon) projectCrewRoster() {
 }
 
 func (d *Daemon) handleCrewList(conn net.Conn, _ *protocol.CrewListMessage) {
-	if err := d.requireHome(crew.Surface); err != nil {
-		d.sendCrewError(conn, "list", err)
-		return
-	}
 	members, docs, err := d.readCrewMembers()
 	if err != nil {
 		d.sendCrewError(conn, "list", err)

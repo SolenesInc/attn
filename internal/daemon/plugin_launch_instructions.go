@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -22,7 +21,6 @@ type pluginLaunchInstructions struct {
 }
 
 func (d *Daemon) preparePluginLaunchInstructions(sessionID protocol.SessionID, profileID string, isChief, selfReportPullRequests bool) (*pluginLaunchInstructions, error) {
-	gardenHome := d.requireHome(garden.Surface) == nil
 	if isChief {
 		root, _, err := d.ensureNotebookScaffold()
 		if err != nil {
@@ -35,7 +33,7 @@ func (d *Daemon) preparePluginLaunchInstructions(sessionID protocol.SessionID, p
 			Kind: pluginInstructionKindChief,
 			Content: hooks.Launch{
 				NotebookRoot:           root,
-				Garden:                 gardenHome,
+				Garden:                 true,
 				Crew:                   d.crewPrimeForLaunch(sessionID),
 				SelfReportPullRequests: selfReportPullRequests,
 			}.Instructions(),
@@ -47,7 +45,7 @@ func (d *Daemon) preparePluginLaunchInstructions(sessionID protocol.SessionID, p
 	return &pluginLaunchInstructions{
 		Kind: pluginInstructionKindAgent,
 		Content: hooks.Launch{
-			Garden:                 gardenHome,
+			Garden:                 true,
 			Crew:                   d.crewPrimeForLaunch(sessionID),
 			SelfReportPullRequests: selfReportPullRequests,
 		}.Instructions(),

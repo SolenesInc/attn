@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/bus"
-	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profilemigration"
 	"github.com/victorarias/attn/internal/profiles"
@@ -122,12 +121,9 @@ func (d *Daemon) runMigrationAction(client *wsClient, action, requestID string, 
 		result.Error = protocol.Ptr(err.Error())
 		code := protocol.ProfileErrorCodeInternal
 		var profileErr *profiles.Error
-		var fenced *enrollment.FencedError
 		switch {
 		case errors.As(err, &profileErr):
 			code = protocol.ProfileErrorCode(profileErr.Code)
-		case errors.As(err, &fenced):
-			code = protocol.ProfileErrorCodeUnavailable
 		default:
 			d.logf("%s failed: %v", action, err)
 		}
@@ -136,10 +132,6 @@ func (d *Daemon) runMigrationAction(client *wsClient, action, requestID string, 
 	}
 	if strings.TrimSpace(requestID) == "" {
 		fail(profiles.Errorf(profiles.CodeInvalid, "%s needs a request_id", action))
-		return
-	}
-	if err := d.requireHome("the workspace migration"); err != nil {
-		fail(err)
 		return
 	}
 	view, publish, err := run()

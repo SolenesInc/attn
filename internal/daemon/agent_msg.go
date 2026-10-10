@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/crew"
-	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -71,10 +70,6 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 		}
 		if protocol.TrimID(targetRef) != "" {
 			d.replyAgentMsgError(conn, "ambiguous_target", "a message goes to one place; name a session or a seed, not both")
-			return
-		}
-		if err := d.requireHome(garden.Surface); err != nil {
-			d.sendError(conn, err.Error())
 			return
 		}
 		seed, _, err := d.readSeed(seedID)

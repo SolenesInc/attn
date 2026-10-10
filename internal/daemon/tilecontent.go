@@ -12,7 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
@@ -130,9 +129,6 @@ func (d *Daemon) openMarkdownTile(path string, callerSessionID protocol.SessionI
 }
 
 func (d *Daemon) openSeedTile(seedID string, callerSessionID protocol.SessionID, standalone bool, selectedProfile ...string) (desktopID, tileID string, err error) {
-	if err := d.requireHome(garden.Surface); err != nil {
-		return "", "", err
-	}
 	seed, _, err := d.readSeed(seedID)
 	if err != nil {
 		return "", "", err

@@ -1,6 +1,8 @@
 package main_test
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -25,14 +27,11 @@ func requireLines(t *testing.T, what, text string, want ...string) {
 	}
 }
 
-func TestEnrollmentNamesTheHomeAndRefusesToBeRehomedSilently(t *testing.T) {
+func TestAnEnrolledDataFolderNamesItsEnrollmentAndLeaveRestoresIt(t *testing.T) {
 	t.Parallel()
-	const (
-		firstHome  = "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-		secondHome = "d-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	)
+	const otherHome = "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	s := testworld.NewStack(t)
-	requireLines(t, "enrollment --help", s.Attn("enrollment", "--help").Stdout, "status", "enroll --home", "leave")
+	requireLines(t, "enrollment --help", s.Attn("enrollment", "--help").Stdout, "status", "leave")
 
 	s.Start()
 	s.Stop()
@@ -42,25 +41,14 @@ func TestEnrollmentNamesTheHomeAndRefusesToBeRehomedSilently(t *testing.T) {
 	if !own.IsHome || own.DaemonID == "" || own.HomeDaemonID != own.DaemonID {
 		t.Fatalf("a fresh daemon's status = %+v, want its own home", own)
 	}
-	requireLines(t, "status on a home", s.Attn("enrollment", "status").Stdout,
-		own.DaemonID, "enrollment: home", "garden and crew: this daemon owns them")
+	requireLines(t, "status on a home", s.Attn("enrollment", "status").Stdout, own.DaemonID, "enrollment: home")
 
-	enrolled := s.Attn("enrollment", "enroll", "--home", firstHome)
-	if enrolled.Code != 0 || enrolled.Stderr != "" || strings.Count(enrolled.Stdout, "\n") != 1 || !strings.Contains(enrolled.Stdout, firstHome) {
-		t.Fatalf("enroll exited %d with stdout %q and stderr %q, want one line naming the home on stdout", enrolled.Code, enrolled.Stdout, enrolled.Stderr)
+	record := `{"home_daemon_id": "` + otherHome + `"}` + "\n"
+	if err := os.WriteFile(filepath.Join(s.Dir, enrollment.RecordFileName), []byte(record), 0o600); err != nil {
+		t.Fatal(err)
 	}
-	requireLines(t, "status on an outpost", s.Attn("enrollment", "status").Stdout,
-		own.DaemonID, "outpost of "+firstHome, "garden and crew: refused here", "attn enrollment leave")
-
-	refused := s.Attn("enrollment", "enroll", "--home", secondHome, "--json")
-	var result enrollmentJSON
-	refused.JSON(t, &result)
-	if refused.Code != 3 || result.Status != "refused" || result.HomeDaemonID != firstHome {
-		t.Fatalf("re-homing exited %d with %+v, want exit 3 and a refusal naming the current home", refused.Code, result)
-	}
-	if !strings.Contains(refused.Stderr, result.Message) || result.Message == "" {
-		t.Fatalf("the refusal wording %q is not on stderr, where the hub reads it: %q", result.Message, refused.Stderr)
-	}
+	requireLines(t, "status when enrolled to another daemon", s.Attn("enrollment", "status").Stdout,
+		own.DaemonID, "enrollment: enrolled to "+otherHome, "attn enrollment leave")
 
 	if left := s.Attn("enrollment", "leave"); left.Code != 0 {
 		t.Fatalf("leave exited %d: %s", left.Code, left.Stderr)

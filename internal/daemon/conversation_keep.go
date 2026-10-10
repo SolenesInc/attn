@@ -143,7 +143,7 @@ func (d *Daemon) referencedConversations() (map[conversationKey]bool, error) {
 }
 
 func (d *Daemon) keepConversations(now time.Time) {
-	if d.store == nil || d.requireHome(garden.Surface) != nil {
+	if d.store == nil {
 		return
 	}
 	d.conversationKeepMu.Lock()

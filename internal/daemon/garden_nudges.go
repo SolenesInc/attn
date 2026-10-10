@@ -78,10 +78,6 @@ func (d *Daemon) handleSeedWatch(conn net.Conn, msg *protocol.SeedWatchMessage) 
 	if !watching {
 		verb = "unwatch"
 	}
-	if err := d.requireHome(garden.Surface); err != nil {
-		d.sendGardenError(conn, verb, err)
-		return
-	}
 	seed, _, err := d.readSeed(msg.SeedID)
 	if err != nil {
 		d.sendGardenError(conn, verb, err)

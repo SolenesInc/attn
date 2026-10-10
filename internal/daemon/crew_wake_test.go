@@ -200,7 +200,7 @@ func writeCrewHomes(t *testing.T, dataRoot string) {
 
 func newCrewDaemon(t *testing.T) *Daemon {
 	t.Helper()
-	d := newEnrolledDaemon(t, "")
+	d := newEnrolledDaemon(t)
 	t.Cleanup(d.stopEventBus)
 	writeCrewHomes(t, d.dataRoot)
 	d.ensureCrewCollections()

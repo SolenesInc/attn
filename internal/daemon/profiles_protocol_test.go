@@ -20,19 +20,12 @@ type profilesTestDaemon struct {
 	t      *testing.T
 	d      *Daemon
 	dbPath string
-
-	homeDaemonID string
 }
 
 func newProfilesTestDaemon(t *testing.T) *profilesTestDaemon {
 	t.Helper()
-	return newProfilesTestDaemonEnrolledAt(t, "")
-}
-
-func newProfilesTestDaemonEnrolledAt(t *testing.T, homeDaemonID string) *profilesTestDaemon {
-	t.Helper()
 	t.Setenv("ATTN_DATA_DIR", t.TempDir())
-	world := &profilesTestDaemon{t: t, dbPath: filepath.Join(t.TempDir(), "attn.db"), homeDaemonID: homeDaemonID}
+	world := &profilesTestDaemon{t: t, dbPath: filepath.Join(t.TempDir(), "attn.db")}
 	world.start()
 	return world
 }
@@ -43,7 +36,7 @@ func (w *profilesTestDaemon) start() {
 	if err != nil {
 		w.t.Fatalf("open store: %v", err)
 	}
-	w.d = newEnrolledDaemon(w.t, w.homeDaemonID)
+	w.d = newEnrolledDaemon(w.t)
 	w.d.clientToken = "the-token"
 	w.d.store = persistent
 	w.t.Cleanup(func() { persistent.Close() })
@@ -477,16 +470,6 @@ func TestProfileCommandWithoutARequestIDIsRefused(t *testing.T) {
 	client, _ := w.connect("")
 	result := w.send(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "attn", "request_id": ""})
 	wantErrorCode(t, result, protocol.ProfileErrorCodeInvalid)
-}
-
-func TestOutpostRefusesProfileCommandsByName(t *testing.T) {
-	w := newProfilesTestDaemonEnrolledAt(t, "d-0123456789abcdef0123456789abcdef")
-	client, _ := w.connect("")
-	result := w.send(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "attn"})
-	wantErrorCode(t, result, protocol.ProfileErrorCodeUnavailable)
-	if live, err := w.d.store.ListProfiles(false); err != nil || len(live) != 1 {
-		t.Fatalf("a refused create left %d profiles (err %v), want only Default", len(live), err)
-	}
 }
 
 func TestSelectingAProfileTellsEveryClientItWasUsed(t *testing.T) {

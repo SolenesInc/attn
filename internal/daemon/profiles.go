@@ -10,7 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/crew"
 
 	"github.com/victorarias/attn/internal/bus"
-	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
@@ -194,9 +193,6 @@ func (d *Daemon) fillInitialProfileState(client *wsClient, event *protocol.Initi
 	}
 	event.SelectedProfileID = protocol.Ptr(selected)
 	event.Desktops = wire
-	if d.requireHome("profiles and desktops") != nil {
-		return nil, 0
-	}
 	return markdownTilesOnCurrentDesktop(profile, desktops), seq
 }
 
@@ -206,12 +202,9 @@ func (d *Daemon) runProfileAction(client *wsClient, action, requestID string, ru
 		result.Error = protocol.Ptr(err.Error())
 		code := protocol.ProfileErrorCodeInternal
 		var profileErr *profiles.Error
-		var fenced *enrollment.FencedError
 		switch {
 		case errors.As(err, &profileErr):
 			code = protocol.ProfileErrorCode(profileErr.Code)
-		case errors.As(err, &fenced):
-			code = protocol.ProfileErrorCodeUnavailable
 		default:
 			d.logf("%s failed: %v", action, err)
 		}
@@ -220,10 +213,6 @@ func (d *Daemon) runProfileAction(client *wsClient, action, requestID string, ru
 	}
 	if strings.TrimSpace(requestID) == "" {
 		fail(profiles.Errorf(profiles.CodeInvalid, "%s needs a request_id", action))
-		return
-	}
-	if err := d.requireHome("profiles and desktops"); err != nil {
-		fail(err)
 		return
 	}
 	previousProfile := client.selectedProfile()

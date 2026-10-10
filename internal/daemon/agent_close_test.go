@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"path/filepath"
@@ -21,7 +20,7 @@ import (
 
 func newAgentCloseDaemon(t *testing.T) *Daemon {
 	t.Helper()
-	d := newEnrolledDaemon(t, "")
+	d := newEnrolledDaemon(t)
 	t.Cleanup(func() {
 		d.stopEventBus()
 		d.sessionInputs().stopRetries()
@@ -287,22 +286,4 @@ func TestAgentCloseRefusesAPrefixTwoEndpointsBothAnswer(t *testing.T) {
 	if !strings.Contains(message, "more than one session") {
 		t.Errorf("refusal %q does not say the prefix matched twice", message)
 	}
-}
-
-func callHandler(t *testing.T, call func(net.Conn)) protocol.Response {
-	t.Helper()
-	server, client := net.Pipe()
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		call(server)
-		_ = server.Close()
-	}()
-	var resp protocol.Response
-	if err := json.NewDecoder(client).Decode(&resp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	_ = client.Close()
-	<-done
-	return resp
 }

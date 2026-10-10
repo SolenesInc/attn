@@ -11,10 +11,6 @@ import (
 )
 
 func (d *Daemon) handleSeedSearch(conn net.Conn, msg *protocol.SeedSearchMessage) {
-	if err := d.requireHome(garden.Surface); err != nil {
-		d.sendGardenError(conn, "search", err)
-		return
-	}
 	terms, err := garden.SearchTerms(msg.Query)
 	if err != nil {
 		d.sendGardenError(conn, "search", err)
