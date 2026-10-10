@@ -761,7 +761,6 @@ export enum AddEndpointMessageCmd {
 
 export interface AgentCloseMessage {
     cmd:               AgentCloseMessageCmd;
-    profile_id?:       string;
     reason:            string;
     source_session_id: string;
     to:                string;
@@ -845,7 +844,6 @@ export enum AgentInboxMessageCmd {
 export interface AgentMsgMessage {
     cmd:               AgentMsgMessageCmd;
     content:           string;
-    profile_id?:       string;
     source_session_id: string;
     to:                string;
     [property: string]: any;
@@ -16881,7 +16879,6 @@ const typeMap: any = {
     ], "any"),
     "AgentCloseMessage": o([
         { json: "cmd", js: "cmd", typ: r("AgentCloseMessageCmd") },
-        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "reason", js: "reason", typ: "" },
         { json: "source_session_id", js: "source_session_id", typ: "" },
         { json: "to", js: "to", typ: "" },
@@ -16937,7 +16934,6 @@ const typeMap: any = {
     "AgentMsgMessage": o([
         { json: "cmd", js: "cmd", typ: r("AgentMsgMessageCmd") },
         { json: "content", js: "content", typ: "" },
-        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "source_session_id", js: "source_session_id", typ: "" },
         { json: "to", js: "to", typ: "" },
     ], "any"),
