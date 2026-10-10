@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
@@ -64,6 +65,47 @@ func TestACreatedCrewHomeIsTrustedWithoutChangingOtherClaudeConfig(t *testing.T)
 	trusted := `projects.` + strconv.Quote(created.Member.HomeDir) + `.trust_level="trusted"`
 	if !strings.Contains(strings.Join(day.Argv, " "), trusted) {
 		t.Fatalf("Codex launch did not trust its crew home: %q", day.Argv)
+	}
+}
+
+func TestCrewCreationRecoversAStaleClaudeConfigLockAndRefusesAnActiveOne(t *testing.T) {
+	for _, stale := range []bool{false, true} {
+		t.Run(strconv.FormatBool(stale), func(t *testing.T) {
+			w := newWorld(t)
+			path := filepath.Join(w.Dir, "toolhome", ".claude", ".claude.json")
+			lock := path + ".lock"
+			if err := os.MkdirAll(lock, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			before := []byte(`{"keep":"this"}`)
+			if err := os.WriteFile(path, before, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if stale {
+				abandoned := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+				if err := os.Chtimes(lock, abandoned, abandoned); err != nil {
+					t.Fatal(err)
+				}
+			}
+			_, err := w.Client().CrewCreate(protocol.CrewCreateMessage{Name: "Keel"})
+			if stale {
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := os.Stat(lock); !os.IsNotExist(err) {
+					t.Fatalf("recovered lock was not released: %v", err)
+				}
+			} else {
+				crewErrorContains(t, err, "config lock", "in use", "try again")
+				raw, err := os.ReadFile(path)
+				if err != nil || string(raw) != string(before) {
+					t.Fatalf("active lock did not protect config: %s (%v)", raw, err)
+				}
+				if _, err := os.Stat(lock); err != nil {
+					t.Fatalf("active lock was removed: %v", err)
+				}
+			}
+		})
 	}
 }
 

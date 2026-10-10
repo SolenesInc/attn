@@ -51,11 +51,14 @@ folder trust sets `projects[<path>].hasTrustDialogAccepted` to `true` in
 `$CLAUDE_CONFIG_DIR/.claude.json`, or `~/.claude.json` when that variable is
 unset. The path is canonical and NFC-normalized; for a Git project Claude
 uses its repository root. Config writers coordinate through a directory at
-the config file's path plus `.lock`.
+the config file's path plus `.lock`. Claude's `proper-lockfile` defaults
+expire a lock after 10 seconds without an update and renew it every 5 seconds.
 
 attn trusts the member home it creates, including a chief's home. Crew
 launches into that home also receive the harness's directory-trust setting.
 An unrelated working directory still needs the user's trust decision.
+
+### Conversation commands
 
 Probed on 2.1.288 with a mock API.
 
