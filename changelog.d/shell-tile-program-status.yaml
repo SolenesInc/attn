@@ -1,0 +1,3 @@
+kind: added
+area: terminals
+change: Shell tiles show the state a program reports over OSC 7501, so `claude` started by hand in a shell tile shows working or waiting for you. The tile returns to its own state when the program exits or the shell prompt returns, and keeps the reported state across daemon restarts.

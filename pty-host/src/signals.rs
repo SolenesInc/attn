@@ -40,6 +40,7 @@ pub struct SignalObserver {
     last_foreground_pgid: i32,
     prompt_owner: Option<i32>,
     program_status_reported: bool,
+    record_owner: i32,
 }
 
 impl SignalObserver {
@@ -60,6 +61,7 @@ impl SignalObserver {
             last_foreground_pgid: 0,
             prompt_owner: None,
             program_status_reported: false,
+            record_owner: 0,
         }
     }
 
@@ -86,14 +88,12 @@ impl SignalObserver {
     }
 
     pub fn observe_program_status(&mut self, reports: &[ProgramStatus]) -> Vec<Observation> {
-        if self.kind == Kind::Shell {
-            return Vec::new();
-        }
         reports
             .iter()
             .map(|report| {
                 let claim = program_status_claim(report);
                 self.program_status_reported = claim != PROGRAM_CLEAR;
+                self.record_owner = 0;
                 Observation {
                     claim,
                     detail: report.message.clone(),
@@ -147,6 +147,29 @@ impl SignalObserver {
         out
     }
 
+    pub fn follow_foreground(
+        &mut self,
+        shell_pgid: i32,
+        foreground_pgid: i32,
+    ) -> Option<Observation> {
+        if !self.program_status_reported {
+            return None;
+        }
+        if foreground_pgid != shell_pgid
+            && (self.record_owner == 0 || self.record_owner == foreground_pgid)
+        {
+            self.record_owner = foreground_pgid;
+            return None;
+        }
+        self.program_status_reported = false;
+        self.last_claim.clear();
+        Some(Observation {
+            claim: PROGRAM_CLEAR,
+            detail: String::new(),
+            source: PROGRAM_STATUS,
+        })
+    }
+
     pub fn observe_shell_poll(
         &mut self,
         shell_pgid: i32,
@@ -182,7 +205,7 @@ impl SignalObserver {
         if self.kind == Kind::Shell && code == "133" {
             return self.classify_shell_marker(payload, now);
         }
-        if (code != "0" && code != "2") || self.program_status_reported {
+        if code != "0" && code != "2" {
             return None;
         }
         match self.kind {
@@ -241,6 +264,9 @@ impl SignalObserver {
         edge: bool,
         now: Instant,
     ) -> Option<Observation> {
+        if self.program_status_reported {
+            return None;
+        }
         let settled_shell_unchanged =
             self.kind == Kind::Shell && claim == "not_busy" && self.last_detail == detail;
         if !edge

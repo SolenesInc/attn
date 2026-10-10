@@ -426,6 +426,13 @@ func supersededByBusy(o *Observation, e Evidence) bool {
 	return e.LastBusyAt.After(o.ObservedAt)
 }
 
+func (e *Evidence) ClearProgramStatus() {
+	if e.LastHarnessEvent != nil && supersededByProgramStatus(e.LastHarnessEvent, *e) {
+		e.LastHarnessEvent = nil
+	}
+	e.ProgramStatus = nil
+}
+
 func supersededByProgramStatus(o *Observation, e Evidence) bool {
 	return e.ProgramStatus != nil && !o.ObservedAt.After(e.ProgramStatus.ObservedAt)
 }

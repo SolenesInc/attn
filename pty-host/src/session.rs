@@ -248,6 +248,7 @@ pub struct Session {
     delivery: DeliveryGate,
     lifecycle: Mutex<Lifecycle>,
     lifecycle_changed: Condvar,
+    signal_order: Mutex<()>,
     subscribers: Mutex<HashMap<String, Subscriber>>,
     watchers: Mutex<HashMap<String, SyncSender<Value>>>,
     cleanup_dir: String,
@@ -414,6 +415,7 @@ impl Session {
             delivery: DeliveryGate::new(),
             lifecycle: Mutex::new(parts.lifecycle),
             lifecycle_changed: Condvar::new(),
+            signal_order: Mutex::new(()),
             subscribers: Mutex::new(HashMap::new()),
             watchers: Mutex::new(HashMap::new()),
             cleanup_dir: parts.cleanup_dir,
@@ -1006,6 +1008,10 @@ impl Session {
 
     fn observe_output(&self, data: &[u8], admission: &OutputAdmission<'_>) {
         let _delivery = admission.delivery();
+        let signal_order = self
+            .signal_order
+            .lock()
+            .expect("signal order mutex poisoned");
         let (seq, wire, placements, resync, responses, observations) = {
             let mut model = self.model.lock().expect("model mutex poisoned");
             let (queries, complete_queries) = model.queries.scan(data);
@@ -1027,6 +1033,10 @@ impl Session {
                 observations,
             )
         };
+        for observation in observations {
+            self.publish_state(observation.claim, &observation.detail, observation.source);
+        }
+        drop(signal_order);
         if !responses.is_empty() {
             let _ = self.write_master(&responses);
         }
@@ -1038,9 +1048,6 @@ impl Session {
         }
         if let Some(reason) = resync {
             self.force_resync(reason);
-        }
-        for observation in observations {
-            self.publish_state(observation.claim, &observation.detail, observation.source);
         }
     }
 
@@ -1189,13 +1196,17 @@ impl Session {
             }
             pgid
         };
-        let observation = self
-            .model
+        let _signal_order = self
+            .signal_order
             .lock()
-            .expect("model mutex poisoned")
-            .signals
-            .observe_shell_poll(self.child_pid, foreground);
-        if let Some(observation) = observation {
+            .expect("signal order mutex poisoned");
+        let observations = {
+            let mut model = self.model.lock().expect("model mutex poisoned");
+            let cleared = model.signals.follow_foreground(self.child_pid, foreground);
+            let heartbeat = model.signals.observe_shell_poll(self.child_pid, foreground);
+            cleared.into_iter().chain(heartbeat).collect::<Vec<_>>()
+        };
+        for observation in observations {
             self.publish_state(observation.claim, &observation.detail, observation.source);
         }
     }
