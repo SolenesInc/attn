@@ -48,7 +48,7 @@ func TestMigration168PreservesInboxHistoryAndWatchAddresses(t *testing.T) {
 		}
 	}
 	var address string
-	if err := db.QueryRow("SELECT address FROM pull_request_watches").Scan(&address); err != nil || address != "session:day-a" {
+	if err := db.QueryRow("SELECT watcher FROM pull_request_watches").Scan(&address); err != nil || address != "session:day-a" {
 		t.Fatalf("watch address=%q err=%v", address, err)
 	}
 	for _, table := range []string{"jobs", "tasks"} {

@@ -476,5 +476,12 @@ func TestClosingTheShownAgentHandsTheSelectionOnWithoutAClientCommand(t *testing
 		if change.Profile.CurrentDesktopID != desktop.ID || shown.ActivePaneID != paneA {
 			t.Fatalf("after closing the shown agent profile %s shows %s leaf %q, want %s leaf %s", profileID, change.Profile.CurrentDesktopID, shown.ActivePaneID, desktop.ID, paneA)
 		}
+		if len(shown.Panes) != 1 || shown.Panes[0].SessionID != "a" {
+			t.Fatalf("desktop after closing b: %+v, want only a's pane", shown)
+		}
+		sessions, err := w.Client().Query("")
+		if err != nil || !slices.ContainsFunc(sessions, func(s protocol.Session) bool { return s.ID == "a" }) || slices.ContainsFunc(sessions, func(s protocol.Session) bool { return s.ID == "b" }) {
+			t.Fatalf("sessions after closing b: %+v, %v", sessions, err)
+		}
 	})
 }

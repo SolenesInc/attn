@@ -61,7 +61,11 @@ func (d *Daemon) settingsList(msg *protocol.GetSettingsMessage) (*protocol.Setti
 		if err := d.requireHome("profile settings"); err != nil {
 			return nil, nil, err
 		}
-		request, err := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID)
+		bindings, err := d.bindings()
+		if err != nil {
+			return nil, nil, err
+		}
+		request, err := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID, bindings)
 		if err != nil {
 			if requested := protocol.Deref(msg.ProfileID); requested != "" {
 				err = fmt.Errorf("settings --profile %q: %w", requested, err)

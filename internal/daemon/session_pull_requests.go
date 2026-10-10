@@ -12,10 +12,10 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/automation"
-	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/prreadiness"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type sessionPullRequestFact struct {
@@ -146,19 +146,29 @@ func (d *Daemon) watchSessionPullRequest(rec store.SessionPullRequestRecord, mod
 	if err := prreadiness.ValidateConfig(mode, reviewer); err != nil {
 		return err
 	}
-	address := d.inboxAddressOf(rec.SessionID)
-	for _, held := range d.inboxRoleAddresses(rec.SessionID) {
-		if _, exists := d.store.PullRequestWatch(held, rec.PRID); exists {
-			address = held
+	b, err := d.bindings()
+	if err != nil {
+		return err
+	}
+	watcher, ok := b.PartyOf(rec.SessionID)
+	if err := b.Check(watcher); err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("session %s has ended; resume it to watch pull request %s", shortSessionID(rec.SessionID), rec.PRID)
+	}
+	for _, held := range b.AddressesOf(rec.SessionID) {
+		if existing, found := d.store.PullRequestWatch(held, rec.PRID); found {
+			watcher = existing.Watcher
 			break
 		}
 	}
-	recorded, changed, err := d.store.WatchPullRequest(rec, address, mode, reviewer, time.Now())
+	recorded, changed, err := d.store.WatchPullRequest(rec, watcher, mode, reviewer, time.Now())
 	if err != nil {
 		return fmt.Errorf("watch pull request %s: %w", rec.PRID, err)
 	}
 	if changed {
-		d.kickInboxAfterCommit(address)
+		d.kickInboxAfterCommit(watcher.Address())
 		d.publishSessionPullRequestMembershipChanged(rec.PRID, string(rec.SessionID))
 		d.schedulePullRequestRefreshNow(rec.SessionID, rec.PRID)
 	} else if recorded {
@@ -168,7 +178,14 @@ func (d *Daemon) watchSessionPullRequest(rec store.SessionPullRequestRecord, mod
 }
 
 func (d *Daemon) unwatchSessionPullRequest(rec store.SessionPullRequestRecord) error {
-	addresses := d.inboxRoleAddresses(rec.SessionID)
+	b, err := d.bindings()
+	if err != nil {
+		return err
+	}
+	addresses := b.AddressesOf(rec.SessionID)
+	if err := b.CheckSession(rec.SessionID); err != nil {
+		return err
+	}
 	changed := false
 	for _, address := range addresses {
 		stopped, err := d.store.StopPullRequestWatch(address, rec.PRID)
@@ -212,7 +229,14 @@ func (d *Daemon) recordSessionPullRequest(rec store.SessionPullRequestRecord) er
 }
 
 func (d *Daemon) forgetSessionPullRequest(rec store.SessionPullRequestRecord) error {
-	addresses := d.inboxRoleAddresses(rec.SessionID)
+	b, err := d.bindings()
+	if err != nil {
+		return err
+	}
+	if err := b.CheckSession(rec.SessionID); err != nil {
+		return err
+	}
+	addresses := b.AddressesOf(rec.SessionID)
 	forgotten := false
 	for _, address := range addresses {
 		removed, err := d.store.ForgetSessionPullRequest(rec.SessionID, address, rec.PRID)
@@ -260,7 +284,7 @@ func (d *Daemon) pullRequestWatchesByPR() map[string][]store.PullRequestWatch {
 	return byPR
 }
 
-func (d *Daemon) sessionPullRequestsForBroadcast(records []store.SessionPullRequestRecord, addresses []inbox.Address, watchesByPR map[string][]store.PullRequestWatch) []protocol.SessionPullRequest {
+func (d *Daemon) sessionPullRequestsForBroadcast(records []store.SessionPullRequestRecord, addresses []who.Address, watchesByPR map[string][]store.PullRequestWatch) []protocol.SessionPullRequest {
 	if len(records) == 0 {
 		return nil
 	}
@@ -291,7 +315,7 @@ func (d *Daemon) sessionPullRequestsForBroadcast(records []store.SessionPullRequ
 		watches := watchesByPR[rec.PRID]
 		if len(watches) > 0 {
 			for _, watch := range watches {
-				if slices.Contains(addresses, watch.To) {
+				if slices.Contains(addresses, watch.Watcher.Address()) {
 					entry.Watching = protocol.Ptr(true)
 					entry.WatchMode = protocol.Ptr(protocol.PullRequestWatchMode(watch.Mode))
 					entry.WatchReviewer = pullRequestField(watch.Reviewer)
@@ -317,14 +341,8 @@ func pullRequestField(value string) *string {
 	return protocol.Ptr(value)
 }
 
-func (d *Daemon) sessionPullRequestsForSession(session *protocol.Session) []protocol.SessionPullRequest {
-	addresses := []inbox.Address{inbox.ToSession(session.ID)}
-	if member := protocol.Deref(session.CrewMember); member != "" {
-		addresses = append(addresses, inbox.ToMember(member))
-	}
-	if protocol.Deref(session.ChiefOfStaff) {
-		addresses = append(addresses, inbox.ToChief(session.ProfileID))
-	}
+func (d *Daemon) sessionPullRequestsForSession(session *protocol.Session, b who.Bindings) []protocol.SessionPullRequest {
+	addresses := b.AddressesOf(session.ID)
 	byPR := d.pullRequestWatchesByPR()
 	return d.sessionPullRequestsForBroadcast(d.sessionPullRequestRecords(session.ID, addresses, d.store.ListSessionPullRequestsBySession(), byPR), addresses, byPR)
 }
@@ -358,11 +376,11 @@ func (d *Daemon) sessionOwnerEndpoint(sessionID protocol.SessionID) string {
 	return endpointID
 }
 
-func (d *Daemon) sessionPullRequestRecords(sessionID protocol.SessionID, addresses []inbox.Address, bySession map[protocol.SessionID][]store.SessionPullRequestRecord, byPR map[string][]store.PullRequestWatch) []store.SessionPullRequestRecord {
+func (d *Daemon) sessionPullRequestRecords(sessionID protocol.SessionID, addresses []who.Address, bySession map[protocol.SessionID][]store.SessionPullRequestRecord, byPR map[string][]store.PullRequestWatch) []store.SessionPullRequestRecord {
 	records := append([]store.SessionPullRequestRecord(nil), bySession[sessionID]...)
 	for prID, watches := range byPR {
 		for _, watch := range watches {
-			if !slices.Contains(addresses, watch.To) {
+			if !slices.Contains(addresses, watch.Watcher.Address()) {
 				continue
 			}
 			for _, rec := range bySession[watch.SessionID] {

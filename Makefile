@@ -417,7 +417,7 @@ generate-types: ensure-go-jsonschema
 	# Go needs the named scalar roots; TypeScript resolves their references to strings.
 	# Passing those roots to quicktype also emits unused, unexported aliases.
 	@set --; for schema in internal/protocol/schema/tsp-output/json-schema/*.json; do \
-		case "$$schema" in */SessionID.json|*/TerminalID.json) ;; *) set -- "$$@" "$$schema" ;; esac; \
+		case "$$schema" in */SessionID.json|*/TerminalID.json|*/PartyRef.json|*/ActorRef.json|*/AddressRef.json) ;; *) set -- "$$@" "$$schema" ;; esac; \
 	done; npx quicktype@26.0.0 \
 		--src "$$@" \
 		--src-lang schema --lang typescript \

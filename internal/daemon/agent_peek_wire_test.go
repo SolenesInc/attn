@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -60,14 +61,14 @@ func TestAgentPeekResolvesItsAddress(t *testing.T) {
 	}
 	peekRefuses := func(address, want string) {
 		t.Helper()
-		if peek, err := cli.AgentPeek(address); err == nil || !strings.Contains(err.Error(), want) {
+		if peek, err := cli.AgentPeek(address); err == nil || client.ErrorCode(err) != want {
 			t.Errorf("peek %q = %+v, %v; want a refusal naming %s", address, peek, err, want)
 		}
 	}
 
 	peekResolves("aaa", first)
 	peekRefuses("aa", "ambiguous_session")
-	peekRefuses("zzz", "session_not_found")
+	peekRefuses("zzz", "session_or_crew_member_not_found")
 	peekResolves("Keel", string(firstDay.SessionID))
 
 	firstDayAgent.Exit(1)
@@ -76,7 +77,8 @@ func TestAgentPeekResolvesItsAddress(t *testing.T) {
 	w.Launched(string(nextDay.SessionID))
 	peekResolves("keel", string(nextDay.SessionID))
 	w.Launched(w.Spawn(app, fakeagent.Claude, w.Path("keel-session"), func(m *protocol.SpawnSessionMessage) { m.ID = "keel" }))
-	peekResolves("keel", "keel")
+	peekResolves("keel", string(nextDay.SessionID))
+	peekResolves("session:keel", "keel")
 
 	sessions := crewSessionCount(t, cli)
 	peekRefuses("trellis", "crew_member_asleep")
@@ -160,7 +162,7 @@ func TestAgentPeekResolvesPrefixesWithinItsRequesterProfile(t *testing.T) {
 	foreign := w.Spawn(w.AppOn(side.ID), fakeagent.Claude, w.Path("foreign"), withIDPrefix("shared-"))
 	w.Launched(foreign)
 	for _, row := range []struct{ profile, source, address, want string }{
-		{address: unique[:8], want: unique},
+		{profile: home, address: unique[:8], want: unique},
 		{profile: home, address: "shared-", want: local},
 		{source: local, address: "shared-", want: local},
 		{profile: side.ID, address: "shared-", want: foreign},
@@ -170,7 +172,7 @@ func TestAgentPeekResolvesPrefixesWithinItsRequesterProfile(t *testing.T) {
 			t.Fatalf("profile %q source %q peek %q: %+v %v, want %s", row.profile, row.source, row.address, peek, err, row.want)
 		}
 	}
-	if _, err := cli.AgentPeek("shared-"); err == nil || !strings.Contains(err.Error(), "ambiguous_session") {
-		t.Fatalf("unscoped prefix must name its ambiguity: %v", err)
+	if _, err := cli.AgentPeek("shared-"); err == nil || !strings.Contains(err.Error(), "choose --profile") {
+		t.Fatalf("unscoped peek must ask for a profile: %v", err)
 	}
 }

@@ -18,69 +18,26 @@ const agentShortIDLength = 8
 const agentPeekSnapshotTimeout = modelCaptureSnapshotTimeout
 
 func (d *Daemon) handleAgentPeek(conn net.Conn, msg *protocol.AgentPeekMessage) {
-	if msg.SourceSessionID == nil && msg.ProfileID == nil {
-		if session := d.store.Get(protocol.SessionID(protocol.TrimID(msg.TargetSessionID))); session != nil {
-			_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AgentPeekResult: d.agentPeekResult(session)})
-			return
-		}
-	}
-	r, err := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID)
+	b, err := d.bindings()
 	if err != nil {
-		if msg.SourceSessionID == nil && msg.ProfileID == nil {
-			if session, code := d.resolveSessionByIDOrPrefix(msg.TargetSessionID, ""); session != nil {
-				_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AgentPeekResult: d.agentPeekResult(session)})
-				return
-			} else if code == "ambiguous_session" {
-				d.sendError(conn, code)
-				return
-			}
-		}
 		d.sendError(conn, err.Error())
 		return
 	}
-	session, errCode := d.resolveAgentPeekTarget(r, msg.TargetSessionID)
-	if session == nil {
-		d.sendError(conn, errCode)
+	r, err := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID, b)
+	if err != nil {
+		d.replyTargetError(conn, err)
 		return
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{
-		Ok:              true,
-		AgentPeekResult: d.agentPeekResult(session),
-	})
-}
-
-func (d *Daemon) resolveAgentPeekTarget(r requester, target string) (*protocol.Session, string) {
-	target = protocol.TrimID(target)
-	if target == "" {
-		return nil, "session_not_found"
+	session, err := d.resolveSession(r, b, msg.To)
+	if err != nil {
+		d.replyTargetError(conn, err)
+		return
 	}
-	if session := d.store.Get(protocol.SessionID(target)); session != nil && session.ProfileID == r.ProfileID() {
-		return session, ""
+	if endpoint := d.sessionOwnerEndpoint(session.ID); endpoint != "" {
+		d.replyAgentMsgError(conn, "remote_delivery_unsupported", "session "+shortSessionID(session.ID)+" runs on outpost "+endpoint+"; peeking outpost sessions is unsupported")
+		return
 	}
-	if status, err := d.enrollmentStatus(); err == nil && status.IsHome() {
-		identity, found, err := d.store.CrewNamed(r.ProfileID(), target)
-		if key, ok := strings.CutPrefix(target, "member:"); ok {
-			identity, found, err = d.store.CrewKeyed(r.ProfileID(), key)
-		}
-		if err != nil {
-			d.logf("agent peek crew resolution: target=%q err=%v", target, err)
-			return nil, "internal_error"
-		}
-		if found {
-			member, _, err := d.crewMember(identity.Key)
-			if err != nil {
-				return nil, "internal_error"
-			}
-			if !d.crewBindingLive(member) {
-				return nil, "crew_member_asleep"
-			}
-			if session := d.store.Get(member.BindingSession); session != nil {
-				return session, ""
-			}
-			return nil, "crew_member_asleep"
-		}
-	}
-	return d.resolveSessionByIDOrPrefix(target, r.ProfileID())
+	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AgentPeekResult: d.agentPeekResult(session)})
 }
 
 func (d *Daemon) resolveSessionByIDOrPrefix(target, profileID string) (*protocol.Session, string) {
@@ -91,8 +48,13 @@ func (d *Daemon) resolveSessionByIDOrPrefix(target, profileID string) (*protocol
 	if session := d.store.Get(protocol.SessionID(target)); session != nil && (profileID == "" || session.ProfileID == profileID) {
 		return session, ""
 	}
+	if d.hubManager != nil {
+		if s := d.hubManager.RemoteSession(protocol.SessionID(target)); s != nil && (profileID == "" || s.ProfileID == profileID) {
+			return s, ""
+		}
+	}
 	var match *protocol.Session
-	for _, session := range d.store.List("") {
+	for _, session := range d.agentCloseCandidates() {
 		if (profileID != "" && session.ProfileID != profileID) || !strings.HasPrefix(string(session.ID), target) {
 			continue
 		}

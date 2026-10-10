@@ -13,7 +13,12 @@ func (d *Daemon) handleCrewRename(conn net.Conn, msg *protocol.CrewRenameMessage
 		d.sendCrewError(conn, "rename", err)
 		return
 	}
-	r, err := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID)
+	b, bindingsErr := d.bindings()
+	if bindingsErr != nil {
+		d.sendError(conn, bindingsErr.Error())
+		return
+	}
+	r, err := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID, b)
 	if err != nil {
 		d.sendCrewError(conn, "rename", err)
 		return

@@ -938,7 +938,7 @@ func fprintSeedShow(w io.Writer, result *protocol.SeedShowResult) {
 	if continuation := result.Seed.Continuation; continuation != nil && continuation.KeptConversation != nil {
 		kept := continuation.KeptConversation
 		switch {
-		case protocol.Deref(kept.DeletedAt) != "" && protocol.Deref(kept.DeletedBy) == "user":
+		case protocol.Deref(kept.DeletedAt) != "" && protocol.Deref(kept.DeletedBy).Ref == "user":
 			fmt.Fprintf(w, "conversation  you deleted attn's copy on %s\n", conversationDate(protocol.Deref(kept.DeletedAt)))
 		case protocol.Deref(kept.DeletedAt) != "":
 			fmt.Fprintf(w, "conversation  attn deleted its copy on %s\n", conversationDate(protocol.Deref(kept.DeletedAt)))

@@ -49,7 +49,12 @@ func crewRestartWire(restart *crew.Restart) *protocol.CrewRestart {
 }
 
 func (d *Daemon) handleCrewRestart(conn net.Conn, msg *protocol.CrewRestartMessage) {
-	r, scopeErr := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID)
+	b, bindingsErr := d.bindings()
+	if bindingsErr != nil {
+		d.sendError(conn, bindingsErr.Error())
+		return
+	}
+	r, scopeErr := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID, b)
 	if scopeErr != nil {
 		d.sendCrewError(conn, "request", scopeErr)
 		return
@@ -69,7 +74,7 @@ func (d *Daemon) handleCrewRestart(conn net.Conn, msg *protocol.CrewRestartMessa
 }
 
 func (d *Daemon) handleCrewRestartWS(client *wsClient, msg *protocol.CrewRestartMessage) {
-	r := requestFromApp(client.selectedProfile())
+	r := who.RequestFromApp(client.selectedProfile())
 	identity, scopeErr := d.resolveMember(r, msg.Member)
 	if scopeErr != nil {
 		d.sendToClient(client, protocol.CrewRestartResultMessage{Event: protocol.EventCrewRestartResult, RequestID: msg.RequestID, Error: protocol.Ptr(scopeErr.Error())})
@@ -448,7 +453,7 @@ func (d *Daemon) crewRestartDayChanged(memberID string, expected protocol.Sessio
 func (d *Daemon) ensureCrewRestartRequest(key who.MemberKey, restart crew.Restart) error {
 	memberID := key.String()
 	itemID := crewRestartMailboxID(memberID, restart.RequestID)
-	receipt, err := d.sendToInbox(inbox.Item{ID: itemID, To: inbox.ToSession(restart.SessionID), Kind: inbox.Notice, Source: restart.RequestID, Key: "crew-restart-" + memberID, Text: crewRequestedRestartPrompt})
+	receipt, err := d.sendToInbox(inbox.Item{ID: itemID, To: who.ToSession(restart.SessionID), Kind: inbox.Notice, Source: restart.RequestID, Key: "crew-restart-" + memberID, Text: crewRequestedRestartPrompt})
 	if err != nil {
 		cause := fmt.Errorf("record restart request: %w", err)
 		if recordErr := d.failCrewRestart(key, restart.RequestID, restart.SessionID, "", cause); recordErr != nil {
@@ -592,11 +597,11 @@ func (d *Daemon) noteCrewRestartMailboxRead(deliveries []store.InboxDelivery) {
 			continue
 		}
 		for _, member := range members {
-			if member.Restart == nil || member.Restart.RequestID != delivery.Item.Source || member.Restart.SessionID != delivery.Item.To.SessionID() || member.Restart.State != crew.RestartQueued {
+			if member.Restart == nil || member.Restart.RequestID != delivery.Item.Source || delivery.Item.To != who.ToSession(member.Restart.SessionID) || member.Restart.State != crew.RestartQueued {
 				continue
 			}
 			_, updateErr := d.updateCrewMember(member.Key, func(current *crew.Member) (bool, error) {
-				if current.Restart == nil || current.Restart.RequestID != delivery.Item.Source || current.Restart.SessionID != delivery.Item.To.SessionID() || current.Restart.State != crew.RestartQueued {
+				if current.Restart == nil || current.Restart.RequestID != delivery.Item.Source || delivery.Item.To != who.ToSession(current.Restart.SessionID) || current.Restart.State != crew.RestartQueued {
 					return false, nil
 				}
 				current.Restart.State = crew.RestartRequested

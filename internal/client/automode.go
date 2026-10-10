@@ -37,14 +37,12 @@ func (c *Client) AutoModeEnvNotes(notes []string) (*protocol.AutoModeEnvResult, 
 	return resp.AutomodeEnvResult, nil
 }
 
-func (c *Client) AutoModePropose(kind, target, value string, proposedBy string) (*protocol.AutoModeProposeResult, error) {
+func (c *Client) AutoModePropose(kind, target, value string, source protocol.SessionID) (*protocol.AutoModeProposeResult, error) {
 	msg := protocol.AutoModeProposeMessage{Cmd: protocol.CmdAutoModePropose, Kind: kind, Value: value}
 	if target != "" {
 		msg.Target = protocol.Ptr(target)
 	}
-	if proposedBy != "" {
-		msg.ProposedBy = protocol.Ptr(proposedBy)
-	}
+	msg.SourceSessionID = source
 	resp, err := c.send(msg)
 	if err != nil {
 		return nil, err

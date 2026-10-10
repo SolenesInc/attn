@@ -6,6 +6,18 @@ using TypeSpec.JsonSchema;
 namespace Protocol;
 
 scalar SessionID extends string;
+
+// Party: session:<id> or member:<key>. IDs are nonempty without whitespace;
+// member keys are lowercase letters, digits and -, starting with a letter, at most 40 characters.
+scalar PartyRef extends string;
+// Actor: Party text, user or attn.
+scalar ActorRef extends string;
+// Address: Party text, seed:<id> or chief:<profile> (until the chief is a member).
+// Parsing accepts only canonical text; zero values cannot encode (ErrNobody).
+scalar AddressRef extends string;
+model PartyView { ref: PartyRef; name: string; session_id?: SessionID; }
+model ActorView { ref: ActorRef; name: string; }
+
 scalar TerminalID extends string;
 
 // ============================================================================
@@ -608,7 +620,7 @@ model UnregisterMessage {
   cmd: "unregister";
   id: SessionID;
   // Absent, the close is the user's.
-  closed_by?: string;
+  closed_by?: ActorRef;
   close_reason?: string;
 }
 
@@ -759,20 +771,16 @@ model AgentPeekMessage {
   source_session_id?: SessionID;
   profile_id?: string;
   cmd: "agent_peek";
-  target_session_id: string;    // crew name, full session id, or unique session prefix
+  to: string;
 }
 
 // One agent sends another a message. The daemon persists the body and types a
 // content-free doorbell into the target's conversation. The recipient reads
 // the body explicitly with AgentInboxMessage.
-// Exactly one destination: a session (or crew member) by id, or a seed, whose
-// tender the daemon resolves. The caller decides which field it fills — a seed
-// id has a shape the CLI recognizes — so the daemon is handed authority instead
-// of a string to sniff.
+// The daemon resolves a name, member key, session reference or seed in the sender’s profile.
 model AgentMsgMessage {
   cmd: "agent_msg";
-  target_session_id: string;    // full id or unique prefix; empty when addressing a seed
-  target_seed_id?: string;      // deliver to this seed's tender
+  to: string;
   source_session_id: SessionID;    // who is speaking; the daemon composes from this
   content: string;
 }
@@ -781,12 +789,11 @@ model AgentMsgMessage {
 // (the Garden dispatch document names it as the dispatcher), and the chief of
 // staff may close any. The reason is required: the ledger keeps the row, and the
 // reason is what the next reader has to go on.
-// Exactly one destination, the same shape as AgentMsgMessage: a session by id or
-// unique prefix, or a seed whose tender the daemon resolves.
+// The daemon resolves the destination like AgentMsgMessage, within the caller's
+// profile: a session reference or prefix, a member name or key, or a seed's tender.
 model AgentCloseMessage {
   cmd: "agent_close";
-  target_session_id: string;    // full id or unique prefix; empty when addressing a seed
-  target_seed_id?: string;      // close whoever tends this seed
+  to: string;
   source_session_id: SessionID;    // who is closing
   reason: string;
 }
@@ -4698,17 +4705,12 @@ model KeptConversationsChangedEvent {
   event: "kept_conversations_changed";
 }
 
-enum KeptConversationDeletedBy {
- sweep,
- user,
-}
-
 model KeptConversation {
  "bytes": safeint;
  "copied_at": string;
  "delete_after"?: string;
  "deleted_at"?: string;
- "deleted_by"?: KeptConversationDeletedBy;
+ "deleted_by"?: ActorView;
  "pinned_at"?: string;
 }
 
@@ -5630,8 +5632,8 @@ model AutoModeProposalInfo {
   "value": string;
   // "value" read back as one line, for a list a human scans.
   "summary": string;
-  // Who proposed it, when the caller said. Empty when nobody did.
-  "proposed_by": string;
+  // The requesting actor. Absent when older attribution is unknown.
+  "proposed_by"?: ActorView;
   // "pending" | "promoted" | "discarded".
   "state": string;
   "created_at": string;
@@ -5691,7 +5693,7 @@ model AutoModeProposeMessage {
   "kind": string;
   "target"?: string;
   "value": string;
-  "proposed_by"?: string;
+  "source_session_id": SessionID;
 }
 
 model AutoModeProposeResult {
@@ -6442,7 +6444,9 @@ enum AgentMsgStatus {
 
 model AgentMsgResult {
   message_id: string;
-  target_session_id: SessionID;
+  to: AddressRef;
+  to_name: string;
+  target_session_id?: SessionID;
   status: AgentMsgStatus;
   detail: string;
 }
@@ -6456,9 +6460,11 @@ enum AgentMessageState {
 // The durable peer message returned to its authorized sender or recipient.
 model AgentPeerMessage {
   message_id: string;
-  sender_session_id: SessionID;
-  sender_label: string;
-  target_session_id: string;
+  sender: PartyView;
+  reply_to: string;
+  to: AddressRef;
+  to_name: string;
+  read_by?: SessionID;
   content: string;
   state: AgentMessageState;
   created_at: string;
@@ -6469,14 +6475,14 @@ model AgentPeerMessage {
 // One durable notification consumed by a bounded inbox read. Content is the
 // peer body or the daemon-authored action text for another mailbox kind.
 model AgentInboxItem {
-  address: string;
+  address: AddressRef;
   item_id: string;
   kind: string;
   source_id?: string;
   hint?: string;
   content: string;
-  sender_session_id?: SessionID;
-  sender_label?: string;
+  sender?: PartyView;
+  reply_to?: string;
   created_at: string;
   notified_at: string;
   read_at: string;
@@ -6552,8 +6558,8 @@ model SessionLedgerEntry {
   last_seen: string;
   // Absent while the session is live. Its presence is what makes the row closed.
   closed_at?: string;
-  // "user", or the id of the session that closed this one.
-  closed_by?: string;
+  // The actor that closed the session. Absent when older attribution is unknown.
+  closed_by?: ActorView;
   // Only agent closes carry one; the user never types a reason.
   close_reason?: string;
   // Absent when the agent reported none. Priced at the current settings, as Session.usage is.

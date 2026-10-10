@@ -118,7 +118,7 @@ async function main() {
       const afterCancel = await observer.requestResult({ cmd: 'kept_conversation_list' }, 'kept_conversation_list_result');
       runner.assert(afterCancel.kept_conversation_list_result.rows.some((row) => row.resume_id === pinned.resume_id), 'Cancel keeps the copy');
       await key(selector(pinned.resume_id), '2');
-      const deleted = awaitRows(observer, (result) => result.rows.some((row) => row.resume_id === pinned.resume_id && row.kept?.deleted_by === 'user'), 'confirmed Forget tombstones the copy');
+      const deleted = awaitRows(observer, (result) => result.rows.some((row) => row.resume_id === pinned.resume_id && row.kept?.deleted_by?.ref === 'user'), 'confirmed Forget tombstones the copy');
       await client.request('dom_focus', { selector: selector(pinned.resume_id) });
       await driver.pressKey('2');
       await deleted;

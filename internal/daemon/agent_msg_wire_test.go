@@ -159,7 +159,7 @@ func TestAgentMessageRefusalsNameTheirReason(t *testing.T) {
 			{"a message to yourself", "sender", "note to self", "yourself"},
 		} {
 			refused, err := cli.AgentMsg(row.target, "sender", row.content)
-			if err != nil || refused.Status != protocol.AgentMsgStatusRefused || !strings.Contains(refused.Detail, row.want) {
+			if err != nil || refused.Status != protocol.AgentMsgStatusRefused || refused.To != protocol.AddressRef("session:"+row.target) || refused.ToName == "" || !strings.Contains(refused.Detail, row.want) {
 				t.Errorf("%s = %+v, %v; want a refusal saying %q", row.name, refused, err, row.want)
 			}
 		}
@@ -203,7 +203,7 @@ func TestTheSocketAnswersOversizeMessagesWithTheirLimits(t *testing.T) {
 	sender, target := panes[0].session, panes[1].session
 
 	refused, err := cli.AgentMsg(target, protocol.SessionID(sender), strings.Repeat("x", 32769))
-	if err != nil || refused.Status != protocol.AgentMsgStatusRefused || !strings.Contains(refused.Detail, "32769") || !strings.Contains(refused.Detail, "32768") {
+	if err != nil || refused.Status != protocol.AgentMsgStatusRefused || refused.To != protocol.AddressRef("session:"+target) || refused.ToName == "" || !strings.Contains(refused.Detail, "32769") || !strings.Contains(refused.Detail, "32768") {
 		t.Errorf("a message one character over the cap = %+v, %v; want a refusal naming 32769 and 32768", refused, err)
 	}
 	if got := readInbox(t, cli, target, 0).Items; len(got) != 0 {
@@ -236,7 +236,7 @@ func TestMessagingACrewMemberReachesItsDayWakingItIfNeeded(t *testing.T) {
 	keelDay.Reply("Morning. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, string(keel.SessionID), func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	toKeel := sendAgentMessage(t, cli, sender, "Keel", "the garden is ready")
-	if toKeel.Status != protocol.AgentMsgStatusNotified || toKeel.TargetSessionID != keel.SessionID || toKeel.Detail != "notified Keel" {
+	if toKeel.Status != protocol.AgentMsgStatusNotified || protocol.Deref(toKeel.TargetSessionID) != keel.SessionID || toKeel.Detail != "notified Keel" {
 		t.Fatalf("a message to the awake Keel = %+v, want notified on its day %s", toKeel, keel.SessionID)
 	}
 	if got := keelDay.Prompted(); !strings.Contains(got, inboxDoorbell) {
@@ -247,12 +247,18 @@ func TestMessagingACrewMemberReachesItsDayWakingItIfNeeded(t *testing.T) {
 	}
 
 	first := sendAgentMessage(t, cli, sender, "trellis", "please inspect the broken build")
-	if first.Status != protocol.AgentMsgStatusQueued || !strings.Contains(first.Detail, "woke Trellis") || first.TargetSessionID == "" {
+	if first.Status != protocol.AgentMsgStatusQueued || !strings.Contains(first.Detail, "woke Trellis") || protocol.Deref(first.TargetSessionID) == "" {
 		t.Fatalf("a message to the sleeping Trellis = %+v, want it queued on a day it woke", first)
 	}
-	trellisDay := w.Launched(string(first.TargetSessionID))
+	arrival := testworld.Await(app, protocol.EventBackgroundLaunch, func(r protocol.BackgroundLaunchMessage) bool {
+		return r.SessionID == protocol.Deref(first.TargetSessionID)
+	})
+	if arrival.RequestedBy != "sender" {
+		t.Fatalf("inbox wake requester = %q, want the sender's label", arrival.RequestedBy)
+	}
+	trellisDay := w.Launched(string(protocol.Deref(first.TargetSessionID)))
 	second := sendAgentMessage(t, cli, sender, "trellis", "and the flaky test")
-	if second.Status != protocol.AgentMsgStatusQueued || second.TargetSessionID != first.TargetSessionID {
+	if second.Status != protocol.AgentMsgStatusQueued || protocol.Deref(second.TargetSessionID) != protocol.Deref(first.TargetSessionID) {
 		t.Fatalf("a message while Trellis wakes = %+v, want it queued behind the same day", second)
 	}
 	wake := trellisDay.Prompted()
@@ -263,12 +269,12 @@ func TestMessagingACrewMemberReachesItsDayWakingItIfNeeded(t *testing.T) {
 	if got := trellisDay.Prompted(); !strings.Contains(got, inboxDoorbell) {
 		t.Fatalf("after its wake turn Trellis was prompted with %q, want the inbox doorbell", got)
 	}
-	if got := inboxContents(readInbox(t, cli, string(first.TargetSessionID), 0).Items); got != "please inspect the broken build and the flaky test" {
+	if got := inboxContents(readInbox(t, cli, string(protocol.Deref(first.TargetSessionID)), 0).Items); got != "please inspect the broken build and the flaky test" {
 		t.Fatalf("Trellis's inbox = %q, want both messages in order", got)
 	}
 	trellisDay.Reply("Looking. <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, string(first.TargetSessionID), func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-	app.TypeLine(string(first.TargetSessionID), "status?")
+	testworld.AwaitSession(app, string(protocol.Deref(first.TargetSessionID)), func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	app.TypeLine(string(protocol.Deref(first.TargetSessionID)), "status?")
 	if got := trellisDay.Prompted(); got != "status?" {
 		t.Fatalf("Trellis was next prompted with %q, want the user's words and no second doorbell", got)
 	}
@@ -345,9 +351,17 @@ func TestAMessageToAnotherProfilesSessionOrMemberIsRefusedAsNotFound(t *testing.
 		selectProfile(app, home)
 		registerSessions(t, w, cli, "home-sender")
 
-		for _, target := range []string{"side-target", "keel"} {
+		seed := plantSeedAs(t, cli, "side-sender", "A seed owned by Side")
+		for _, target := range []string{"side-target", "side-t", "keel", "member:keel", "session:side-target", seed, "seed:" + seed, "Nobody"} {
 			if _, err := cli.AgentMsg(target, "home-sender", "hello"); client.ErrorCode(err) != "session_or_crew_member_not_found" {
 				t.Errorf("a message from Default to Side's %s = %v, want session_or_crew_member_not_found", target, err)
+			}
+			scoped := cli.WithRequester("", "home-sender")
+			if _, err := scoped.AgentPeek(target); client.ErrorCode(err) != "session_or_crew_member_not_found" {
+				t.Errorf("peek %s: %v", target, err)
+			}
+			if _, err := cli.AgentClose(target, "home-sender", "done"); client.ErrorCode(err) != "session_or_crew_member_not_found" {
+				t.Errorf("close %s: %v", target, err)
 			}
 		}
 		sendAgentMessage(t, cli, "side-sender", "side-target", "hello from Side")

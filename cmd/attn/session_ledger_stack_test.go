@@ -120,7 +120,7 @@ func TestSessionLedgerCommandsReadClosedSessionsAndBringThemBack(t *testing.T) {
 		t.Errorf("session list printed:\n%s\nwant a table of the one live session", live)
 	}
 	closedTable := s.Attn("session", "list", "--closed").Stdout
-	for id, closer := range map[string]string{worker.SessionID: source, scratch: "user"} {
+	for id, closer := range map[string]string{worker.SessionID: "shop", scratch: "the"} {
 		if row := strings.Fields(rowOf(closedTable, id)); len(row) < 3 || row[2] != "closed" || !slices.Contains(row[3:], closer) {
 			t.Errorf("session list --closed shows %s as %q, want it closed by %s", id, row, closer)
 		}
@@ -169,7 +169,7 @@ func TestSessionLedgerCommandsReadClosedSessionsAndBringThemBack(t *testing.T) {
 
 	shown := s.Attn("session", "show", worker.SessionID).Stdout
 	requireLines(t, "session show", shown,
-		"state      closed", "branch     feat/ledger", "worktree   yes, of "+repo, "by "+source, "because    brief delivered",
+		"state      closed", "branch     feat/ledger", "worktree   yes, of "+repo, "by shop", "because    brief delivered",
 		"reopen     no: its directory no longer exists; branch feat/ledger is still here, so the worktree can be put back",
 		"place      directory missing, branch local",
 		"attn session reopen "+worker.SessionID+" --action "+string(protocol.SessionReopenActionRecreateWorktreeAndReopen))

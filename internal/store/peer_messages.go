@@ -8,6 +8,7 @@ import (
 
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 var (
@@ -23,7 +24,7 @@ func scanPeerRecord(row peerRecordScanner) (inbox.PeerRecord, error) {
 	var record inbox.PeerRecord
 	var address string
 	err := row.Scan(
-		&record.Message.ID, &record.Message.SenderSessionID, &record.Message.Body,
+		&record.Message.ID, &record.Message.Sender, &record.Message.Body,
 		&record.Message.CreatedAt, &address,
 		&record.NotifiedAt, &record.ReadAt, &record.ReadBy,
 	)
@@ -31,7 +32,7 @@ func scanPeerRecord(row peerRecordScanner) (inbox.PeerRecord, error) {
 		return inbox.PeerRecord{}, ErrPeerMessageNotFound
 	}
 	if err == nil {
-		record.To, err = inbox.ParseAddress(address)
+		record.To, err = who.ParseAddress(address)
 	}
 	return record, err
 }
@@ -40,7 +41,7 @@ func peerMessageRecord(queryer interface {
 	QueryRow(query string, args ...any) *sql.Row
 }, id string) (inbox.PeerRecord, error) {
 	record, err := scanPeerRecord(queryer.QueryRow(`
-		SELECT p.id, p.sender_session_id, p.body, p.created_at,
+		SELECT p.id, p.sender, p.body, p.created_at,
 		       i.address, i.notified_at, i.read_at, i.read_by
 		FROM peer_messages p
 		JOIN inbox_items i ON i.kind = ? AND i.source_id = p.id
@@ -58,7 +59,7 @@ func (s *Store) PeerMessageRecord(id string) (inbox.PeerRecord, error) {
 	return peerMessageRecord(s.db, id)
 }
 
-func (s *Store) ReadPeerMessage(id string, readBy protocol.SessionID, addresses []inbox.Address, at time.Time) (inbox.PeerRecord, bool, error) {
+func (s *Store) ReadPeerMessage(id string, readBy protocol.SessionID, addresses []who.Address, at time.Time) (inbox.PeerRecord, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -115,7 +116,7 @@ func (s *Store) ReadPeerMessage(id string, readBy protocol.SessionID, addresses 
 	return record, true, nil
 }
 
-func (s *Store) PeerMessageGuardCounts(sender protocol.SessionID, to inbox.Address, body string, dedupeSince, rateSince time.Time) (inbox.PeerGuardCounts, error) {
+func (s *Store) PeerMessageGuardCounts(sender who.Party, to who.Address, body string, dedupeSince, rateSince time.Time) (inbox.PeerGuardCounts, error) {
 	recipient := to.String()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -126,13 +127,13 @@ func (s *Store) PeerMessageGuardCounts(sender protocol.SessionID, to inbox.Addre
 			EXISTS (
 				SELECT 1 FROM peer_messages p
 				JOIN inbox_items i ON i.kind = ? AND i.source_id = p.id
-				WHERE p.sender_session_id = ? AND i.address = ?
+				WHERE p.sender = ? AND i.address = ?
 					AND p.body = ? AND p.created_at >= ?
 			),
 			(
 				SELECT COUNT(*) FROM peer_messages p
 				JOIN inbox_items i ON i.kind = ? AND i.source_id = p.id
-				WHERE p.sender_session_id = ? AND i.address = ? AND p.created_at >= ?
+				WHERE p.sender = ? AND i.address = ? AND p.created_at >= ?
 			),
 			(
 				SELECT COUNT(*) FROM inbox_items
@@ -149,7 +150,7 @@ func (s *Store) PeerMessageGuardCounts(sender protocol.SessionID, to inbox.Addre
 	return counts, nil
 }
 
-func (s *Store) PutPeerMessage(message inbox.Message, to inbox.Address) error {
+func (s *Store) PutPeerMessage(message inbox.Message, to who.Address) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	at, err := time.Parse(time.RFC3339Nano, message.CreatedAt)
@@ -161,7 +162,7 @@ func (s *Store) PutPeerMessage(message inbox.Message, to inbox.Address) error {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err = tx.Exec("INSERT INTO peer_messages(id,sender_session_id,body,created_at) VALUES(?,?,?,?)", message.ID, message.SenderSessionID, message.Body, at.UTC().Format(sortableTimeFormat)); err != nil {
+	if _, err = tx.Exec("INSERT INTO peer_messages(id,sender,body,created_at) VALUES(?,?,?,?)", message.ID, message.Sender, message.Body, at.UTC().Format(sortableTimeFormat)); err != nil {
 		return err
 	}
 	if err := putInbox(tx, inbox.Item{ID: message.ID, To: to, Kind: inbox.PeerMessage, Source: message.ID}, at); err != nil {

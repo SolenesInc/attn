@@ -12,12 +12,18 @@ import (
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 var crewRequestedSleepPrompt = prompts.RenderText("crew", "sleep-requested", prompts.Values{})
 
 func (d *Daemon) handleCrewSleep(conn net.Conn, msg *protocol.CrewSleepMessage) {
-	r, scopeErr := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID)
+	b, bindingsErr := d.bindings()
+	if bindingsErr != nil {
+		d.sendError(conn, bindingsErr.Error())
+		return
+	}
+	r, scopeErr := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID, b)
 	if scopeErr != nil {
 		d.sendCrewError(conn, "request", scopeErr)
 		return
@@ -32,7 +38,7 @@ func (d *Daemon) handleCrewSleep(conn net.Conn, msg *protocol.CrewSleepMessage) 
 }
 
 func (d *Daemon) handleCrewSleepWS(client *wsClient, msg *protocol.CrewSleepMessage) {
-	r := requestFromApp(client.selectedProfile())
+	r := who.RequestFromApp(client.selectedProfile())
 
 	result, err := d.crewSleep(r, strings.TrimSpace(msg.Member))
 	response := protocol.CrewSleepResultMessage{
@@ -52,7 +58,7 @@ func (d *Daemon) handleCrewSleepWS(client *wsClient, msg *protocol.CrewSleepMess
 	d.sendToClient(client, response)
 }
 
-func (d *Daemon) crewSleep(r requester, name string) (*protocol.CrewSleepResult, error) {
+func (d *Daemon) crewSleep(r who.Requester, name string) (*protocol.CrewSleepResult, error) {
 	identity, err := d.resolveMember(r, name)
 	if err != nil {
 		return nil, err
@@ -99,7 +105,7 @@ func (d *Daemon) crewSleep(r requester, name string) (*protocol.CrewSleepResult,
 
 	now := time.Now()
 	deliveryID := uuid.NewString()
-	item := inbox.Item{ID: deliveryID, To: inbox.ToSession(sessionID), Kind: inbox.Notice, Text: crewRequestedSleepPrompt}
+	item := inbox.Item{ID: deliveryID, To: who.ToSession(sessionID), Kind: inbox.Notice, Text: crewRequestedSleepPrompt}
 	var receipt inbox.Receipt
 	if _, pending := pendingCrewRestartFor(member, sessionID); pending {
 		member.Restart.State = crew.RestartFailed

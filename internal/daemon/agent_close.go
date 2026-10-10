@@ -18,10 +18,20 @@ const agentCloseReasonMaxChars = garden.MaxReasonChars
 const agentCloseTendedSeedLimit = 100
 
 func (d *Daemon) handleAgentClose(conn net.Conn, msg *protocol.AgentCloseMessage) {
-	caller, errCode := d.resolveSessionByIDOrPrefix(string(msg.SourceSessionID), "")
+	b, err := d.bindings()
+	if err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
+	r, err := d.requestFromSession(msg.SourceSessionID, b)
+	if err != nil {
+		d.replyTargetError(conn, err)
+		return
+	}
+	asking, _ := r.AskingSession()
+	caller, code := d.resolveSessionByIDOrPrefix(string(asking), r.ProfileID())
 	if caller == nil {
-		d.replyAgentMsgError(conn, "sender_"+errCode, fmt.Sprintf(
-			"the caller %q is not a session on this daemon; a close is attributed to the session that asked for it", protocol.TrimID(msg.SourceSessionID)))
+		d.replyAgentMsgError(conn, "sender_"+code, "the caller's session has ended")
 		return
 	}
 
@@ -38,9 +48,9 @@ func (d *Daemon) handleAgentClose(conn net.Conn, msg *protocol.AgentCloseMessage
 		return
 	}
 
-	target, refusal := d.resolveAgentCloseTarget(msg, caller)
-	if refusal != nil {
-		d.replyAgentMsgError(conn, refusal.code, refusal.message)
+	target, err := d.resolveSession(r, b, msg.To)
+	if err != nil {
+		d.replyTargetError(conn, err)
 		return
 	}
 
@@ -62,7 +72,7 @@ func (d *Daemon) handleAgentClose(conn net.Conn, msg *protocol.AgentCloseMessage
 	}
 
 	d.logf("agent close: session %s closes %s as %s: %s", caller.ID, target.ID, rule, reason)
-	closing, err := d.beginSessionClose(target.ID, store.SessionClose{By: string(caller.ID), Reason: reason}, nil)
+	closing, err := d.beginSessionClose(target.ID, store.SessionClose{By: r.Actor(), Reason: reason}, nil)
 	if err != nil {
 		d.replyAgentMsgError(conn, "close_failed", fmt.Sprintf(
 			"session %s is still running: %v", shortSessionID(target.ID), err))
@@ -78,75 +88,6 @@ func (d *Daemon) handleAgentClose(conn net.Conn, msg *protocol.AgentCloseMessage
 	}
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AgentCloseResult: result})
 	d.finishSessionClose(target.ID, closing)
-}
-
-type agentCloseRefusal struct {
-	code    string
-	message string
-}
-
-func (d *Daemon) resolveAgentCloseTarget(msg *protocol.AgentCloseMessage, caller *protocol.Session) (*protocol.Session, *agentCloseRefusal) {
-	reference := protocol.SessionID(strings.TrimSpace(msg.TargetSessionID))
-	if seedID := strings.TrimSpace(protocol.Deref(msg.TargetSeedID)); seedID != "" {
-		seed, _, err := d.readSeed(seedID)
-		if err != nil {
-			return nil, &agentCloseRefusal{"cross_profile", err.Error()}
-		}
-		if seed.TenderSession != caller.ID {
-			if err := d.requireSeedInProfile(seedID, caller.ProfileID, false); err != nil {
-				return nil, &agentCloseRefusal{"cross_profile", err.Error()}
-			}
-		}
-		if reference != "" {
-			return nil, &agentCloseRefusal{"ambiguous_target",
-				"a close ends one session; name a session or a seed, not both"}
-		}
-		tender, err := d.seedTenderSession(seedID)
-		if err != nil {
-			return nil, &agentCloseRefusal{"seed_untended", err.Error()}
-		}
-		reference = protocol.SessionID(tender)
-	}
-	target, errCode := d.resolveAgentCloseSession(reference)
-	switch {
-	case target != nil:
-		return target, nil
-	case errCode == "ambiguous_session":
-		return nil, &agentCloseRefusal{errCode, fmt.Sprintf(
-			"%q matches more than one session; give more of the id (`attn agent list --json` carries full ids)", reference)}
-	default:
-		return nil, &agentCloseRefusal{errCode, fmt.Sprintf(
-			"no session matches %q; `attn agent list` names the sessions this daemon can reach", reference)}
-	}
-}
-
-func (d *Daemon) resolveAgentCloseSession(reference protocol.SessionID) (*protocol.Session, string) {
-	reference = protocol.TrimID(reference)
-	if reference == "" {
-		return nil, "session_not_found"
-	}
-	if session := d.store.Get(reference); session != nil {
-		return session, ""
-	}
-	if d.hubManager != nil {
-		if session := d.hubManager.RemoteSession(reference); session != nil {
-			return session, ""
-		}
-	}
-	var match *protocol.Session
-	for _, session := range d.agentCloseCandidates() {
-		if !strings.HasPrefix(string(session.ID), string(reference)) {
-			continue
-		}
-		if match != nil && match.ID != session.ID {
-			return nil, "ambiguous_session"
-		}
-		match = session
-	}
-	if match == nil {
-		return nil, "session_not_found"
-	}
-	return match, ""
 }
 
 func (d *Daemon) agentCloseCandidates() []*protocol.Session {
@@ -233,26 +174,4 @@ func agentCloseSeedNote(target, caller *protocol.Session, rule protocol.AgentClo
 			"The seed did not move. It still names that session as its tender, so whoever comes next "+
 			"takes it or parks it. `attn session show %s` reads the closed row back.",
 		agentCloseSessionRef(target), closer, reason, shortSessionID(target.ID))
-}
-
-func (d *Daemon) seedTenderSession(seedID string) (string, error) {
-	if err := d.requireHome(garden.Surface); err != nil {
-		return "", err
-	}
-	seed, _, err := d.readSeed(seedID)
-	if err != nil {
-		return "", err
-	}
-	tender := seed.Tender()
-	if session := protocol.TrimID(tender.Session); session != "" {
-		return string(session), nil
-	}
-	if tender.Named() {
-		return "", fmt.Errorf(
-			"%s is tended by %s, who is not in an attn session; message them by name: attn agent msg %s \"…\"",
-			seed.ID, tender.DisplayName(), tender.Name())
-	}
-	return "", fmt.Errorf(
-		"nobody is tending %s, so there is nobody to reach; leave it on the log instead: attn seed note %s -m \"…\"",
-		seed.ID, seed.ID)
 }

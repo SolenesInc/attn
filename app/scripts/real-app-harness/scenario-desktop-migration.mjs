@@ -74,7 +74,12 @@ function legacyWorkspacesSql(fixtureDir) {
     "CREATE TABLE pull_request_watches (session_id TEXT NOT NULL, pr_id TEXT NOT NULL, mode TEXT NOT NULL, reviewer TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, cursor_json TEXT NOT NULL DEFAULT '{}', last_success_at TEXT NOT NULL DEFAULT '', last_error TEXT NOT NULL DEFAULT '', feedback_error TEXT NOT NULL DEFAULT '', outage_active INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (session_id, pr_id));",
     'INSERT INTO pull_request_watches SELECT session_id, pr_id, mode, reviewer, created_at, cursor_json, last_success_at, last_error, feedback_error, outage_active FROM addressed_pull_request_watches;',
     'DROP TABLE addressed_pull_request_watches;',
-    'ALTER TABLE presentations DROP COLUMN address;',
+    'ALTER TABLE presentations DROP COLUMN handback_to;',
+    'ALTER TABLE peer_messages RENAME COLUMN sender TO sender_session_id;',
+    "UPDATE peer_messages SET sender_session_id = substr(sender_session_id, length('session:') + 1) WHERE sender_session_id LIKE 'session:%';",
+    "UPDATE sessions SET closed_by = substr(closed_by, length('session:') + 1) WHERE closed_by LIKE 'session:%';",
+    "UPDATE automode_proposals SET proposed_by = substr(proposed_by, length('session:') + 1) WHERE proposed_by LIKE 'session:%';",
+    "UPDATE kept_conversations SET deleted_by = 'sweep' WHERE deleted_by = 'attn';",
     // It also predates successions (169), which add sessions.succeeds.
     'DROP INDEX idx_sessions_succeeds;',
     'ALTER TABLE sessions DROP COLUMN succeeds;',

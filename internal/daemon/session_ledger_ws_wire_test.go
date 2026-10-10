@@ -19,7 +19,7 @@ func TestTheAppReadsTheLedgerOverTheWebSocket(t *testing.T) {
 	panes := spawnPanes(w, app, w.Path("live"), w.Path("closed"))
 	live, closed := panes[0], panes[1]
 	closePane(app, closed)
-	if row := awaitClosed(app, closed.session); protocol.Deref(row.ClosedBy) != "user" {
+	if row := awaitClosed(app, closed.session); protocol.Deref(row.ClosedBy).Ref != "user" {
 		t.Errorf("session_closed row closed by %q, want user", protocol.Deref(row.ClosedBy))
 	}
 

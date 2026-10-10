@@ -119,6 +119,19 @@ func (d *Daemon) handlePresentOpen(conn net.Conn, msg *protocol.PresentOpenMessa
 		return
 	}
 
+	b, err := d.bindings()
+	if err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
+	r, err := d.requestFromSession(sourceSessionID, b)
+	if err != nil {
+		d.replyTargetError(conn, err)
+		return
+	}
+	sourceSessionID, _ = r.AskingSession()
+	handback, _ := r.Party()
+
 	m, err := present.ParseManifest([]byte(msg.ManifestYaml))
 	if err != nil {
 		d.sendError(conn, "present open: "+err.Error())
@@ -175,7 +188,7 @@ func (d *Daemon) handlePresentOpen(conn net.Conn, msg *protocol.PresentOpenMessa
 		pres = existing
 	} else {
 
-		created, err := d.store.CreatePresentation(sourceSessionID, d.inboxAddressOf(sourceSessionID), m.Title, m.Kind, m.Frame.Repo, now)
+		created, err := d.store.CreatePresentation(sourceSessionID, handback, m.Title, m.Kind, m.Frame.Repo, now)
 		if err != nil {
 			d.sendError(conn, "present open: "+err.Error())
 			return
@@ -542,7 +555,7 @@ func (d *Daemon) handlePresentSubmitRound(client *wsClient, msg *protocol.Presen
 
 func (d *Daemon) handbackPresentationRound(pres *store.Presentation, seq int, verdict string) {
 	values := prompts.Values{"round": fmt.Sprint(seq), "title": fmt.Sprintf("%q", pres.Title), "presentation_id": pres.ID, "approved": fmt.Sprint(verdict == "approved")}
-	_, err := d.sendToInbox(inbox.Item{ID: fmt.Sprintf("present-handback/%s/%d", pres.ID, seq), To: pres.To, Kind: inbox.Notice, Source: pres.ID, Text: prompts.RenderText("session", "present-handback", values)})
+	_, err := d.sendToInbox(inbox.Item{ID: fmt.Sprintf("present-handback/%s/%d", pres.ID, seq), To: pres.HandbackTo.Address(), Kind: inbox.Notice, Source: pres.ID, Text: prompts.RenderText("session", "present-handback", values)})
 	if err != nil {
 		d.logf("present handback: failed to queue presentation %s round %d: %v", pres.ID, seq, err)
 		return

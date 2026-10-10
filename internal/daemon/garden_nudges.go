@@ -9,9 +9,9 @@ import (
 
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/garden"
-	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 var errRemoteGardenTender = errors.New("garden notifications are home-only")
@@ -29,20 +29,28 @@ func (d *Daemon) seedUnblocked(seedID string) ([]garden.Seed, []protocol.Seed) {
 	return unblocked, read.wire(unblocked)
 }
 
-func (d *Daemon) seedTenderMember(seed garden.Seed) (crew.Member, bool, error) {
+func (d *Daemon) seedTenderMember(seed garden.Seed) (store.CrewIdentity, bool, error) {
 	text := seed.Tender().Member
 	identity, found, err := d.store.CrewKeyed(seed.ProfileID, text)
 	if err != nil {
-		return crew.Member{}, false, err
+		return store.CrewIdentity{}, false, err
 	}
 	if !found {
 		identity, found, err = d.store.CrewNamed(seed.ProfileID, text)
 	}
 	if err != nil || !found {
-		return crew.Member{}, false, err
+		return store.CrewIdentity{}, false, err
 	}
-	member, _, err := d.crewMember(identity.Key)
-	return member, err == nil, err
+	_, doc, err := d.crewMember(identity.Key)
+	if err != nil && doc.ID != "" {
+		if _, decodeErr := crew.Decode(doc.ID, doc.Body); decodeErr != nil {
+			return identity, true, nil
+		}
+	}
+	if err != nil {
+		return store.CrewIdentity{}, false, err
+	}
+	return identity, true, nil
 }
 
 func (d *Daemon) localGardenTenderSession(seed garden.Seed) (string, error) {
@@ -53,8 +61,15 @@ func (d *Daemon) localGardenTenderSession(seed garden.Seed) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if found && d.crewBindingLive(member) {
-			sessionID = member.BindingSession
+		if found {
+			b, err := d.bindings()
+			if err != nil {
+				return "", err
+			}
+			if err := b.Check(who.Member(member.Key)); err != nil {
+				return "", err
+			}
+			sessionID, _ = b.SessionOf(who.Member(member.Key))
 		}
 	}
 
@@ -228,7 +243,7 @@ func (d *Daemon) seedWatchCoverage(sessionID protocol.SessionID, seedID string) 
 }
 
 func (d *Daemon) discardUncoveredSeedBells(sessionID protocol.SessionID) error {
-	return d.discardIneligibleGardenSeedBellsLocked(inbox.ToSession(sessionID))
+	return d.discardIneligibleGardenSeedBellsLocked(who.ToSession(sessionID))
 }
 
 func (d *Daemon) consumeSeedBell(sessionID protocol.SessionID, seedID string) {
@@ -237,10 +252,16 @@ func (d *Daemon) consumeSeedBell(sessionID protocol.SessionID, seedID string) {
 		return
 	}
 	d.lockGardenRoles()
-	err := d.discardIneligibleGardenSeedBellsLocked(inbox.ToSession(sessionID))
-	var consumed []inbox.Address
+	b, err := d.bindings()
 	if err == nil {
-		for _, address := range d.inboxRoleAddresses(sessionID) {
+		err = b.CheckSession(sessionID)
+	}
+	if err == nil {
+		err = d.discardIneligibleGardenSeedBellsLocked(who.ToSession(sessionID))
+	}
+	var consumed []who.Address
+	if err == nil {
+		for _, address := range b.AddressesOf(sessionID) {
 			if err = d.discardIneligibleGardenSeedBellsLocked(address); err != nil {
 				break
 			}

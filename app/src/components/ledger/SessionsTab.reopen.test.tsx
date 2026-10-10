@@ -226,8 +226,8 @@ describe('SessionsTab row grammar', () => {
   it('names the session that closed another, falls back to its id, and says you for the user', async () => {
     await openLedger(pages([page({ entries: [
       entry({ id: 'dispatcher', label: 'Ledger work' }),
-      closedEntry('delegate', { label: 'Worktree reclaim', closed_by: 'dispatcher', close_reason: 'it went quiet' }),
-      closedEntry('orphan', { closed_by: 'sess-off-page', close_reason: 'the run finished' }),
+      closedEntry('delegate', { label: 'Worktree reclaim', closed_by: { ref: 'session:dispatcher', name: 'Ledger work' }, close_reason: 'it went quiet' }),
+      closedEntry('orphan', { closed_by: { ref: 'session:sess-off-page', name: 'sess-off-page' }, close_reason: 'the run finished' }),
       closedEntry('mine', { close_reason: undefined }),
     ] })]));
 

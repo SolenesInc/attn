@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -40,14 +39,25 @@ func agentMessageGuardVerdict(counts inbox.PeerGuardCounts) string {
 }
 
 func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
-	sender, errCode := d.resolveSessionByIDOrPrefix(string(msg.SourceSessionID), "")
-	if sender == nil {
-		d.sendError(conn, "sender_"+errCode)
+	b, err := d.bindings()
+	if err != nil {
+		d.sendError(conn, err.Error())
 		return
 	}
-
+	r, err := d.requestFromSession(msg.SourceSessionID, b)
+	if err != nil {
+		d.replyTargetError(conn, err)
+		return
+	}
+	sender, _ := r.Party()
+	asking, _ := r.AskingSession()
+	address, err := d.resolveAddress(r, b, msg.To)
+	if err != nil {
+		d.replyTargetError(conn, err)
+		return
+	}
 	content := strings.TrimSpace(msg.Content)
-	result := &protocol.AgentMsgResult{Status: protocol.AgentMsgStatusRefused}
+	result := &protocol.AgentMsgResult{Status: protocol.AgentMsgStatusRefused, To: address.Ref(), ToName: d.addressName(address, b)}
 	switch {
 	case content == "":
 		result.Detail = "the message is empty; there is nothing to deliver"
@@ -61,70 +71,25 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 		return
 	}
 
-	targetRef := protocol.SessionID(msg.TargetSessionID)
-	var address inbox.Address
-	if seedID := strings.TrimSpace(protocol.Deref(msg.TargetSeedID)); seedID != "" {
-		if err := d.requireSeedInProfile(seedID, sender.ProfileID, false); err != nil {
-			d.replyAgentMsgError(conn, "cross_profile", err.Error())
-			return
-		}
-		if protocol.TrimID(targetRef) != "" {
-			d.replyAgentMsgError(conn, "ambiguous_target", "a message goes to one place; name a session or a seed, not both")
-			return
-		}
-		if err := d.requireHome(garden.Surface); err != nil {
-			d.sendError(conn, err.Error())
-			return
-		}
-		seed, _, err := d.readSeed(seedID)
-		if err != nil {
-			d.replyAgentMsgError(conn, "seed_not_found", err.Error())
-			return
-		}
-		address = inbox.ToSeed(seed.ID)
-	} else {
-		// A target in another profile is answered exactly like an unknown one.
-		notFound := func() {
-			d.replyAgentMsgError(conn, "session_or_crew_member_not_found", fmt.Sprintf("no session or crew member matches %q; `attn agent list` names sessions and `attn crew list` names members", protocol.TrimID(targetRef)))
-		}
-		member, found, memberErr := d.store.CrewNamed(sender.ProfileID, string(targetRef))
-		if key, ok := strings.CutPrefix(string(targetRef), "member:"); ok {
-			member, found, memberErr = d.store.CrewKeyed(sender.ProfileID, key)
-		}
-		if found {
-			address = inbox.ToMember(member.Key.String())
-		} else {
-			target, code := d.resolveSessionByIDOrPrefix(string(targetRef), "")
-			if target == nil {
-				if memberErr != nil {
-					d.sendError(conn, memberErr.Error())
-					return
-				}
-				if code == "session_not_found" {
-					notFound()
-				} else {
-					d.sendError(conn, code)
-				}
-				return
-			}
-			if target.ProfileID != sender.ProfileID {
-				notFound()
-				return
-			}
-			address = d.inboxAddressOf(target.ID)
-		}
+	target, err := (delivery{d, b}).recipientOf(address)
+	if err != nil {
+		d.sendError(conn, err.Error())
+		return
 	}
-	target := d.inboxHolder(address)
-	if target != nil {
-		result.TargetSessionID = target.ID
-		if sender.ID == target.ID {
+	if target.ring != nil {
+		result.TargetSessionID = protocol.Ptr(target.ring.ID)
+		if asking == target.ring.ID {
 			result.Detail = "that is this session; a message to yourself is not a conversation"
 			d.replyAgentMsg(conn, result)
 			return
 		}
 	}
+	if target.remote != nil {
+		d.replyAgentMsgError(conn, "remote_delivery_unsupported", fmt.Sprintf("session %s runs on outpost %s; messaging outpost sessions is unsupported", shortSessionID(target.remote.ID), protocol.Deref(target.remote.EndpointID)))
+		return
+	}
 	now := time.Now()
-	counts, err := d.store.PeerMessageGuardCounts(sender.ID, address, content, now.Add(-agentMessageDedupeWindow), now.Add(-agentMessageRateWindow))
+	counts, err := d.store.PeerMessageGuardCounts(sender, address, content, now.Add(-agentMessageDedupeWindow), now.Add(-agentMessageRateWindow))
 	if err != nil {
 		d.logf("agent msg guard counts: %v", err)
 		d.sendError(conn, "internal_error")
@@ -135,7 +100,7 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 		d.replyAgentMsg(conn, result)
 		return
 	}
-	message := inbox.Message{ID: uuid.NewString(), SenderSessionID: sender.ID, Body: content, CreatedAt: now.UTC().Format(time.RFC3339Nano)}
+	message := inbox.Message{ID: uuid.NewString(), Sender: sender, Body: content, CreatedAt: now.UTC().Format(time.RFC3339Nano)}
 	if err := d.store.PutPeerMessage(message, address); err != nil {
 		d.sendError(conn, "internal_error")
 		return
@@ -147,11 +112,8 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 		result.Status = protocol.AgentMsgStatusNotified
 	}
 	result.Detail = receipt.Detail
-	if holder := d.inboxHolder(address); holder != nil {
-		result.TargetSessionID = holder.ID
-	}
-	if receipt.Rang && address.MemberID() != "" {
-		result.Detail = "notified " + d.storedMemberName(address.MemberID())
+	if receipt.SessionID != "" {
+		result.TargetSessionID = protocol.Ptr(receipt.SessionID)
 	}
 
 	d.replyAgentMsg(conn, result)
