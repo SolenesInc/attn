@@ -779,6 +779,7 @@ model AgentPeekMessage {
 // the body explicitly with AgentInboxMessage.
 // The daemon resolves a name, member key, session reference or seed in the sender’s profile.
 model AgentMsgMessage {
+  profile_id?: string;
   cmd: "agent_msg";
   to: string;
   source_session_id: SessionID;    // who is speaking; the daemon composes from this
@@ -792,6 +793,7 @@ model AgentMsgMessage {
 // The daemon resolves the destination like AgentMsgMessage, within the caller's
 // profile: a session reference or prefix, a member name or key, or a seed's tender.
 model AgentCloseMessage {
+  profile_id?: string;
   cmd: "agent_close";
   to: string;
   source_session_id: SessionID;    // who is closing

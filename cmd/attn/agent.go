@@ -203,7 +203,7 @@ func parseAgentPeekArgs(args []string) (agentPeekArgs, error) {
 	fs := flag.NewFlagSet("agent peek", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
-	profile := fs.String("profile", "", "resolve names in this profile")
+	profile := fs.String("profile", "", "profile name or id (defaults to the current session's profile, or the only profile)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return agentPeekArgs{}, err
 	}
@@ -292,6 +292,7 @@ func formatAgentPeekTime(value string) string {
 }
 
 type agentMsgArgs struct {
+	profile string
 	target  string
 	content string
 	source  protocol.SessionID
@@ -299,7 +300,7 @@ type agentMsgArgs struct {
 }
 
 func parseAgentMsgArgs(args []string, envSessionID func() protocol.SessionID) (agentMsgArgs, error) {
-	const usage = "usage: attn agent msg <session-or-member-or-seed> \"text\" [--source-session <id>]"
+	const usage = "usage: attn agent msg <session-or-member-or-seed> \"text\" [--source-session <id>] [--profile <name|id>]"
 	literal := len(args) > 0 && args[0] == "--"
 	if literal {
 		args = args[1:]
@@ -314,6 +315,7 @@ func parseAgentMsgArgs(args []string, envSessionID func() protocol.SessionID) (a
 	fs := flag.NewFlagSet("agent msg", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	source := fs.String("source-session", "", "sender session id (defaults to the current session)")
+	profile := fs.String("profile", "", "profile name or id (must match the sender's profile)")
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
 	if err := fs.Parse(args[2:]); err != nil {
 		return agentMsgArgs{}, err
@@ -322,6 +324,7 @@ func parseAgentMsgArgs(args []string, envSessionID func() protocol.SessionID) (a
 		return agentMsgArgs{}, errors.New("the message must be one argument; quote it")
 	}
 	parsed := agentMsgArgs{
+		profile: strings.TrimSpace(*profile),
 		target:  strings.TrimSpace(args[0]),
 		content: args[1],
 		source:  protocol.SessionID(strings.TrimSpace(*source)),
@@ -351,7 +354,7 @@ func runAgentMsg(args []string) {
 		fmt.Fprintf(os.Stderr, "agent msg: %v\n", err)
 		os.Exit(2)
 	}
-	result, err := client.New("").AgentMsg(parsed.target, parsed.source, parsed.content)
+	result, err := client.New("").WithRequester(parsed.profile, parsed.source).AgentMsg(parsed.target, parsed.source, parsed.content)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "agent msg: %s\n", err.Error())
 		os.Exit(1)
@@ -374,14 +377,15 @@ func agentMsgOutcomeLine(result *protocol.AgentMsgResult) string {
 }
 
 type agentCloseArgs struct {
-	target string
-	reason string
-	source protocol.SessionID
-	json   bool
+	profile string
+	target  string
+	reason  string
+	source  protocol.SessionID
+	json    bool
 }
 
 func parseAgentCloseArgs(args []string, envSessionID func() protocol.SessionID) (agentCloseArgs, error) {
-	const usage = `usage: attn agent close <session-or-member-or-seed> -m "reason" [--source-session <id>]`
+	const usage = `usage: attn agent close <session-or-member-or-seed> -m "reason" [--source-session <id>] [--profile <name|id>]`
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
 		return agentCloseArgs{}, errors.New(usage)
 	}
@@ -389,6 +393,7 @@ func parseAgentCloseArgs(args []string, envSessionID func() protocol.SessionID) 
 	fs.SetOutput(io.Discard)
 	reason := fs.String("m", "", "why this session is done")
 	source := fs.String("source-session", "", "closing session id (defaults to the current session)")
+	profile := fs.String("profile", "", "profile name or id (must match the caller's profile)")
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
 	if err := fs.Parse(args[1:]); err != nil {
 		return agentCloseArgs{}, err
@@ -397,10 +402,11 @@ func parseAgentCloseArgs(args []string, envSessionID func() protocol.SessionID) 
 		return agentCloseArgs{}, errors.New(usage + "; quote the reason as one argument")
 	}
 	parsed := agentCloseArgs{
-		target: strings.TrimSpace(args[0]),
-		reason: strings.TrimSpace(*reason),
-		source: protocol.SessionID(strings.TrimSpace(*source)),
-		json:   *jsonOut,
+		profile: strings.TrimSpace(*profile),
+		target:  strings.TrimSpace(args[0]),
+		reason:  strings.TrimSpace(*reason),
+		source:  protocol.SessionID(strings.TrimSpace(*source)),
+		json:    *jsonOut,
 	}
 	if parsed.target == "" {
 		return agentCloseArgs{}, errors.New(usage)
@@ -425,7 +431,7 @@ func runAgentClose(args []string) {
 		fmt.Fprintf(os.Stderr, "agent close: %v\n", err)
 		os.Exit(2)
 	}
-	result, err := client.New("").AgentClose(parsed.target, parsed.source, parsed.reason)
+	result, err := client.New("").WithRequester(parsed.profile, parsed.source).AgentClose(parsed.target, parsed.source, parsed.reason)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "agent close: %s\n", err.Error())
 		os.Exit(1)
@@ -644,22 +650,25 @@ commands:
   list [--json]
         the address book: every session on this daemon with its short id,
         name, profile, state, and whether a turn is owed. Read-only.
-  peek <session-or-member-or-seed> [--json]
+  peek <session-or-member-or-seed> [--profile <name|id>] [--json]
         observe a session without interrupting it: state, last
         assistant message, and the rendered screen. Passive — the observed
         agent never notices. Targets resolve inside your profile: a crew name,
         member:<key>, session:<id>, seed id, or unique session id prefix.
         A sleeping crew member stays asleep.
-  msg <session-or-member-or-seed> "text" [--source-session <id>] [--json]
+        Outside attn, the only profile is selected automatically; with several
+        profiles, choose --profile <name|id>.
+  msg <session-or-member-or-seed> "text" [--source-session <id>] [--profile <name|id>] [--json]
         send a session, crew member or seed a message. The body stays in the inbox;
         the recipient gets a generic inbox notification. A target that cannot take
         input safely keeps it queued. The result says queued, notified, or refused.
         A sleeping member wakes before the notification is placed.
         A crew session sends as its member; replies follow that member's next session. The sender defaults to this session
         (resolved from this terminal); pass --source-session when running outside one.
+        --profile must match the sender's profile; it defaults to that profile.
         A seed id reaches its current or next tender, waiting when none is reachable.
         A message that starts with - goes after --, as: agent msg -- <target> "-text"
-  close <session-or-member-or-seed> -m "reason" [--source-session <id>] [--json]
+  close <session-or-member-or-seed> -m "reason" [--source-session <id>] [--profile <name|id>] [--json]
         close a session for good. A session may close itself and the sessions it
         dispatched; a profile's chief of staff may close any agent of that
         profile. The reason is required: the session row stays in the ledger,
@@ -667,6 +676,8 @@ commands:
         what you have to say first. A seed id closes whoever tends it, and the
         seed keeps its tender with a note about the close.
         The caller defaults to this session (resolved from this terminal).
+        Outside attn, pass --source-session. --profile must match the caller's
+        profile; it defaults to that profile and does not grant permission to close.
   inbox [message-id] [--limit <count>] [--session <id>] [--json]
         read up to 20 unread notifications in FIFO order, or one notified peer
         message by id. Each returned item gets its durable read receipt. The batch

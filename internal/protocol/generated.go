@@ -70,6 +70,9 @@ type AgentCloseMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// Reason corresponds to the JSON schema field "reason".
 	Reason string `json:"reason"`
 
@@ -172,6 +175,9 @@ type AgentMsgMessage struct {
 
 	// Content corresponds to the JSON schema field "content".
 	Content string `json:"content"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
 	SourceSessionID SessionID `json:"source_session_id"`

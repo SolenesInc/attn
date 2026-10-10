@@ -44,12 +44,16 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 		d.sendError(conn, err.Error())
 		return
 	}
-	r, err := d.requestFromSession(msg.SourceSessionID, b)
+	r, err := d.requestFromMessage(&msg.SourceSessionID, msg.ProfileID, b)
 	if err != nil {
 		d.replyTargetError(conn, err)
 		return
 	}
-	sender, _ := r.Party()
+	sender, ok := r.Party()
+	if !ok {
+		d.replyAgentMsgError(conn, "sender_session_not_found", "a message needs a sender; pass --source-session <id>")
+		return
+	}
 	asking, _ := r.AskingSession()
 	address, err := d.resolveAddress(r, b, msg.To)
 	if err != nil {

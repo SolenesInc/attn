@@ -23,7 +23,7 @@ func (d *Daemon) handleAgentClose(conn net.Conn, msg *protocol.AgentCloseMessage
 		d.sendError(conn, err.Error())
 		return
 	}
-	r, err := d.requestFromSession(msg.SourceSessionID, b)
+	r, err := d.requestFromMessage(&msg.SourceSessionID, msg.ProfileID, b)
 	if err != nil {
 		d.replyTargetError(conn, err)
 		return
