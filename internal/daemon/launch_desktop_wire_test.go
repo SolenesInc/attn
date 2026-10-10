@@ -352,8 +352,8 @@ func TestAnEmptyDesktopTheUserLeftIsRemovedThirtySecondsLaterAndTheCurrentOneNev
 		})
 		w.advance(time.Hour)
 		view := viewProfile(t, w, profile)
-		if _, exists := view.desktops[left]; exists || len(view.desktops) != 1 || view.profile.CurrentDesktopID != shown.ID {
-			t.Fatalf("after an hour the profile holds %v with %s current, want only the empty current desktop %s", view.desktops, view.profile.CurrentDesktopID, shown.ID)
+		if _, exists := view.desktops[left]; exists || len(view.desktops) != len(app.Initial.Desktops) || view.profile.CurrentDesktopID != shown.ID {
+			t.Fatalf("after an hour the profile holds %v with %s current, want the protected Chief office and the empty current desktop %s", view.desktops, view.profile.CurrentDesktopID, shown.ID)
 		}
 	})
 }
