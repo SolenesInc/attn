@@ -287,6 +287,30 @@ func TestSendToChiefAppendsToTheInboxAndRingsOnlyAReadyChief(t *testing.T) {
 	}
 }
 
+func TestANotebookSelectionWaitsBehindTheUsersTyping(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	chief := w.Spawn(app, fakeagent.Claude, w.Path("chief"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
+	agent := w.Launched(chief)
+	app.TypeLine(chief, "keep the notebook")
+	agent.Prompted()
+	working := testworld.AwaitSession(app, chief, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	agent.Reply("Ready. <!-- attn:state=idle -->")
+	testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(w.Terminal(chief)), Data: "half a thought"})
+	app.AwaitScreen(chief, "half a thought")
+	sent := notebookAskSendToChief(app, "notes/today.md", "follow up on the release")
+	if !sent.Success || sent.Result == nil || sent.Result.Nudged {
+		t.Fatalf("selection beside typing: %+v (%s)", sent, protocol.Deref(sent.Error))
+	}
+	if inbox := notebookAskRead(app, "inbox.md"); !inbox.Success || inbox.Result == nil || !strings.Contains(inbox.Result.Content, "follow up on the release") {
+		t.Fatalf("selection not stored: %+v", inbox)
+	}
+	if mail, err := cli.AgentInboxBatch(protocol.SessionID(chief), 0); err != nil || len(mail.Items) != 1 {
+		t.Fatalf("selection not queued: %+v (%v)", mail, err)
+	}
+}
+
 func TestSendToChiefWithoutAChiefStillLandsAndRefusesBadSelections(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
