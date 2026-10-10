@@ -33,19 +33,21 @@ func applyMigration1791638944215407(tx *sql.Tx) error {
 	rows.Close()
 	keys := map[[2]string]string{}
 	memberProfiles := map[string]string{}
+	retiredMembers := map[string]bool{}
 	sessionProfiles := map[string]string{}
-	rows, err = tx.Query(`SELECT member_key,profile_id FROM crew_members`)
+	rows, err = tx.Query(`SELECT member_key,profile_id,retired_at FROM crew_members`)
 	if err != nil {
 		return err
 	}
 	for rows.Next() {
-		var key, profile string
-		if err := rows.Scan(&key, &profile); err != nil {
+		var key, profile, retired string
+		if err := rows.Scan(&key, &profile, &retired); err != nil {
 			rows.Close()
 			return err
 		}
 		keys[[2]string{profile, strings.ToLower(key)}] = key
 		memberProfiles[key] = profile
+		retiredMembers[key] = retired != ""
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
@@ -297,6 +299,9 @@ func applyMigration1791638944215407(tx *sql.Tx) error {
 		if err := rows.Scan(&w.old, &w.seed, &w.created); err != nil {
 			rows.Close()
 			return err
+		}
+		if retiredMembers[members[w.old]] {
+			continue
 		}
 		w.next = party(w.old)
 		key := [2]string{w.next, w.seed}
