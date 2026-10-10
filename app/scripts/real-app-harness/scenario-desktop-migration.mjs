@@ -48,6 +48,7 @@ function legacyWorkspacesSql(fixtureDir) {
     'DELETE FROM profiles;',
     'DELETE FROM profile_migration;',
     'DROP TABLE command_usage;',
+    'DROP TABLE profile_settings;',
     // A pre-profile install has no launch rows and no crew or automation profiles.
     'DELETE FROM launch_desktops;',
     'DROP TRIGGER launch_review_crew_insert;',

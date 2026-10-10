@@ -1,15 +1,18 @@
 # Notebook
 
-Load this reference when you read or maintain the attn Notebook — the durable,
-instance-wide markdown store — especially when your session is the chief of staff.
-The Notebook outlives any single agent or profile.
+Load this reference when you read or maintain your profile's Notebook, its durable
+markdown store, especially when your session is the chief of staff.
+The Notebook outlives any single agent.
 
 The Notebook is plain markdown on disk, and you maintain it by **editing the files
 directly with native tools** (Read/Write/Edit, plus `ls`/`grep` over the tree).
 There is no `attn notebook` CLI. The notebook root is given to you in your
-operating guidance (the chief-of-staff launch injection); it is
-`~/attn-notebook` by default (per-instance variants append the instance name). Paths
-below are written relative to that `<root>`.
+operating guidance (the chief-of-staff launch injection). Read the saved folder
+with `attn settings get notebook.root`. Change it for your profile with
+`attn settings set notebook.root ~/notes/work`; this does not move existing notes.
+New profiles get `~/attn-notebook-<profile name>`, with the instance name when
+using a named instance and a numeric suffix if the folder is taken. Existing
+profiles keep their previous folder. Paths below are relative to that `<root>`.
 
 ## Orient First
 
@@ -94,5 +97,5 @@ points you at `<root>/index.md` — read it to orient. Read `<root>/knowledge/in
 record durable decisions in the knowledge base as you make them, and keep the
 day's journal current with your view of your profile. Write at a chief-of-staff
 altitude — what moved across your profile's agents, what you delegated and
-decided — not a per-agent play-by-play. Each profile has its own chief; the
-Notebook is the one store you all share.
+decided — not a per-agent play-by-play. Each profile has its own chief and Notebook;
+agents in that profile share it.

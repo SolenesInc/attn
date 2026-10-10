@@ -94,7 +94,7 @@ func (d *Daemon) validateActivitySetting(raw string) error {
 	driver := agentdriver.Get(config.Agent)
 	configured := ""
 	if d.store != nil {
-		configured = d.store.GetSetting(canonicalExecutableSettingKey(config.Agent))
+		configured = d.daemonSetting(daemonSettingKey(canonicalExecutableSettingKey(config.Agent)))
 	}
 	executable := driver.ResolveExecutable(configured)
 	if _, err := exec.LookPath(executable); err != nil {
@@ -146,14 +146,14 @@ func (d *Daemon) activityEnabled() bool {
 	if d.store == nil {
 		return false
 	}
-	return parseBooleanSetting(d.store.GetSetting(SettingActivityEnabled))
+	return parseBooleanSetting(d.daemonSetting(settingActivityEnabled))
 }
 
 func (d *Daemon) activityConfigured() (activityConfig, error) {
 	if d.store == nil {
 		return activityConfig{}, errors.New("session activity settings unavailable")
 	}
-	return parseActivityConfig(d.store.GetSetting(SettingActivityConfig))
+	return parseActivityConfig(d.daemonSetting(settingActivityConfig))
 }
 
 func (d *Daemon) activityInterval(tier PresenceTier) time.Duration {
@@ -162,7 +162,7 @@ func (d *Daemon) activityInterval(tier PresenceTier) time.Duration {
 	}
 	raw := ""
 	if d.store != nil {
-		raw = d.store.GetSetting(SettingActivityIntervals)
+		raw = d.daemonSetting(settingActivityIntervals)
 	}
 	intervals, err := parseActivityIntervals(raw)
 	if err != nil {
@@ -182,7 +182,7 @@ func (d *Daemon) presenceIdleLimit() time.Duration {
 	seconds := defaultActivityPresenceIdleSeconds
 	if d.store != nil {
 		seconds = resolveBoundedIntSetting(
-			d.store.GetSetting(SettingActivityPresenceIdleSeconds),
+			d.daemonSetting(settingActivityPresenceIdleSeconds),
 			defaultActivityPresenceIdleSeconds,
 			activityPresenceIdleMinSeconds,
 			activityPresenceIdleMaxSeconds,
@@ -202,7 +202,7 @@ func (d *Daemon) resolveActivityExecutable(config activityConfig) (agentdriver.H
 	}
 	configured := ""
 	if d.store != nil {
-		configured = d.store.GetSetting(canonicalExecutableSettingKey(config.Agent))
+		configured = d.daemonSetting(daemonSettingKey(canonicalExecutableSettingKey(config.Agent)))
 	}
 	executablePath, err := exec.LookPath(driver.ResolveExecutable(configured))
 	if err != nil {

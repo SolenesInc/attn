@@ -1,3 +1,4 @@
+import { useProfilesStore } from '../store/profiles';
 import { useHarnesses } from '../hooks/useHarnesses';
 import { HarnessRouteChip } from './HarnessRouteChip';
 import { HarnessRouteBadge } from './HarnessRouteBadge';
@@ -250,6 +251,8 @@ export function DesktopSettings({
   worktreeSweepEnabled,
   notebookRootDraft,
   effectiveNotebookRoot,
+  defaultNotebookRoot,
+  notebookSettingsLoaded,
   handleBrowseNotebookRoot,
   handleToggleOpenSentFiles,
   openSentFilesEnabled,
@@ -263,10 +266,13 @@ export function DesktopSettings({
   | 'worktreeSweepEnabled'
   | 'notebookRootDraft'
   | 'effectiveNotebookRoot'
+  | 'defaultNotebookRoot'
+  | 'notebookSettingsLoaded'
   | 'handleBrowseNotebookRoot'
   | 'handleToggleOpenSentFiles'
   | 'openSentFilesEnabled'
 >) {
+  const profileName = useProfilesStore((state) => state.profiles.find((profile) => profile.id === state.selectedProfileId)?.name ?? 'this profile');
   return (
     <>
       <section className="settings-block">
@@ -368,8 +374,8 @@ export function DesktopSettings({
           <div className="settings-kicker">Notebook</div>
           <h3>Notebook Folder</h3>
           <p className="settings-description">
-            Where attn keeps your durable Notebook — dated journals and the knowledge base — as plain markdown you own.
-            Leave blank to use the default (<code>~/attn-notebook</code>, separate per instance). Changing this points
+            Where attn keeps the Notebook for <strong>{profileName}</strong>: dated journals and the knowledge base as plain markdown you own.
+            Leave blank to choose a folder named after this profile. Changing this points
             attn at the new folder; your existing notes are not moved, so move or sync the folder yourself if you want
             the current contents to come along.
           </p>
@@ -379,18 +385,19 @@ export function DesktopSettings({
             <input
               data-testid="settings-notebook-root-input"
               type="text"
+              disabled={!notebookSettingsLoaded}
               value={notebookRootDraft.value}
               onChange={notebookRootDraft.onChange}
               onBlur={notebookRootDraft.commit}
               onKeyDown={notebookRootDraft.onKeyDown}
-              placeholder={effectiveNotebookRoot || '~/attn-notebook'}
+              placeholder={defaultNotebookRoot || undefined}
               className="settings-input"
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
             />
             <SavedMark shown={savedFlash.saved('notebook.root')} testID="settings-notebook-root-saved" />
-            <button className="settings-action" onClick={handleBrowseNotebookRoot}>
+            <button className="settings-action" disabled={!notebookSettingsLoaded} onClick={handleBrowseNotebookRoot}>
               Browse
             </button>
           </div>

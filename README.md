@@ -362,9 +362,19 @@ act as my thinking partner.
 ```
 
 To keep everything in one syncable folder, open **Settings → Notebook Folder**
-and point it at `chief-of-staff/notebook`. Add `notebook/.attn/` to
+and point your profile at `chief-of-staff/notebook`. Each profile has its own
+Notebook folder; existing profiles keep their current folder after upgrading,
+and new profiles get a folder named after them. Add `notebook/.attn/` to
 `.gitignore`; it is machine state. Changing the Notebook Folder does not move
 existing notes.
+Profiles can share a folder when you choose the same path. Clearing the setting
+restores the name-based default; if that is already the profile's folder, it
+stays there.
+
+Agents can read and change settings with `attn settings list|get|set`. The list
+shows whether a setting applies to one profile or all profiles. Inside attn,
+`attn settings set notebook.root ~/notes/work` changes the session's profile.
+Outside attn, use `--profile <name|id>` when several profiles exist.
 
 Then: **Cmd+T**, pick a harness, select the `chief-of-staff` folder, turn
 **Chief of Staff** on (or pick **Make chief of staff** from an existing

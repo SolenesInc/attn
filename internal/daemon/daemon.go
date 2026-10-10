@@ -241,15 +241,13 @@ type Daemon struct {
 	recoveryMu          sync.RWMutex
 	recovering          bool
 	recoverySettled     chan struct{}
+	notebookRootMu      sync.Mutex
 	notebookMu          sync.Mutex
-	notebookStore       *notebook.Store
-	notebookWatcherMu   sync.Mutex
-	notebookWatcher     *notebook.Watcher
-	notebookWatchedRoot string
+	notebookStores      map[string]*notebook.Store
 	fsMu                sync.Mutex
 	fsStores            map[string]*fsdoc.Store
-	fsWatchMu           sync.Mutex
-	fsWatchers          map[string]*fsRootWatch
+	rootWatchMu         sync.Mutex
+	rootWatches         map[string]*rootWatch
 	pendingInitialWS    map[*wsClient]struct{}
 	startedOnce         sync.Once
 	startedCh           chan struct{}
@@ -774,7 +772,7 @@ func (d *Daemon) Start() error {
 			break
 		}
 
-		sharedEnabled := parseBooleanSetting(d.store.GetSetting(SettingSharedPTYHostEnabled))
+		sharedEnabled := parseBooleanSetting(d.daemonSetting(settingSharedPTYHostEnabled))
 		useSharedForNew := sharedEnabled && sharedBackend.SharedArtifactReady()
 		if sharedEnabled && !useSharedForNew && !shouldRunWorkerStartupProbe() && strings.TrimSpace(os.Getenv("ATTN_PTY_HOST_BINARY")) != "" {
 			useSharedForNew = true
@@ -2611,6 +2609,10 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 	case protocol.CmdPresentFeedback:
 		d.handlePresentFeedback(conn, msg.(*protocol.PresentFeedbackMessage))
 
+	case protocol.CmdGetSettings:
+		d.handleGetSettings(conn, msg.(*protocol.GetSettingsMessage))
+	case protocol.CmdSetSetting:
+		d.handleSetSetting(conn, msg.(*protocol.SetSettingMessage))
 	case protocol.CmdNotebookGuide:
 		d.handleNotebookGuide(conn, msg.(*protocol.NotebookGuideMessage))
 	case protocol.CmdJournalAppend:

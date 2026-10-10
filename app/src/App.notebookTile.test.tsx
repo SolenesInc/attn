@@ -3,7 +3,8 @@ import { EditorView } from '@codemirror/view';
 import { describe, expect, it, vi } from 'vitest';
 import { openTiles, stubTextLayout } from './test/appFixtures';
 import type { CommandMessage } from './test/protocol';
-import { pressShortcut } from './test/renderApp';
+import { defaultProfile, desktopWithTiles, emptyDesktop } from './test/daemonFixtures';
+import { gesture, pressShortcut } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
 const NOTEBOOK_ROOT = '/notebook';
@@ -58,6 +59,27 @@ async function selectNote(daemon: ScriptedDaemon, tile: HTMLElement) {
 }
 
 describe('App notebook tile', () => {
+  it('saves a dirty Notebook draft in the old profile before switching', async () => {
+    stubTextLayout();
+    const side = defaultProfile('desktop-side', { id: 'profile-side', name: 'Side' });
+    const { daemon, tile } = await openTiles([notebookTile({ id: 'tile-note' })], {
+      initialState: {
+        profiles: [defaultProfile('desktop-1'), side],
+        desktops: [desktopWithTiles([]), emptyDesktop('desktop-side', { profile_id: side.id })],
+        settings: { 'notebook.root.effective': NOTEBOOK_ROOT },
+      },
+      script: serveFolders,
+    });
+    const editor = tileEditor(tile('tile-note'));
+    act(() => editor.dispatch({ changes: { from: editor.state.doc.length, insert: '\nunsaved text' } }));
+    await gesture(daemon, () => pressShortcut('profile.switch'));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('menuitem', { name: 'Side' })));
+    expect(daemon.sent.filter((request) => request.cmd === 'fs_write' || request.cmd === 'profile_select')).toEqual([
+      { cmd: 'fs_write', request_id: expect.any(String), path: 'plan.md', content: `${NOTE}\n\nfrom the notebook\nunsaved text`, base_hash: 'h1', profile_id: 'profile-default', expected_notebook_root: NOTEBOOK_ROOT },
+      { cmd: 'profile_select', request_id: expect.any(String), profile_id: side.id },
+    ]);
+  });
+
   it('watches a folder outside the notebook, reads through it, and offers no notebook-only features', async () => {
     stubTextLayout();
     const { daemon, tile, layout } = await openNotebookTiles([{ id: 'tile-other', root: '/tmp/other' }], (daemon) => serveFolders(daemon, () => '/private/tmp/other'));

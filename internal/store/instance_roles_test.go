@@ -58,8 +58,11 @@ func TestMigration161MovesTheChiefIntoItsProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = s.Close() })
-	work, _ := mustCreateProfile(t, s, "Work")
-	addProfileSession(t, s, "old-chief", work.ID)
+	workID := "profile-work"
+	if _, err := s.db.Exec("INSERT INTO profiles(id,name,created_at) VALUES(?, 'Work', 'now')", workID); err != nil {
+		t.Fatal(err)
+	}
+	addProfileSession(t, s, "old-chief", workID)
 	if _, err := s.db.Exec(`
 		ALTER TABLE profiles DROP COLUMN chief_session_id;
 		CREATE TABLE instance_roles (role TEXT PRIMARY KEY, session_id TEXT NOT NULL);
@@ -73,7 +76,7 @@ func TestMigration161MovesTheChiefIntoItsProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 	chiefs, err := s.ProfileChiefs()
-	if err != nil || len(chiefs) != 1 || chiefs[work.ID] != "old-chief" {
-		t.Fatalf("chiefs after migration = %v, %v; want old-chief in %s", chiefs, err, work.ID)
+	if err != nil || len(chiefs) != 1 || chiefs[workID] != "old-chief" {
+		t.Fatalf("chiefs after migration = %v, %v; want old-chief in %s", chiefs, err, workID)
 	}
 }

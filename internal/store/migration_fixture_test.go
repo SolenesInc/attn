@@ -38,7 +38,7 @@ func openDBAtVersion(path string, version int) (db *sql.DB, err error) {
 func newStoreAtVersion(path string, version int) (s *Store, err error) {
 	err = withMigrationsThrough(version, func() error {
 		var e error
-		s, e = NewWithDB(path)
+		s, _, e = openLegacySchemaStore(path)
 		return e
 	})
 	return
@@ -56,4 +56,30 @@ func migrationFixtureStore(t *testing.T, version int) *Store {
 
 func migrateDBThrough(db *sql.DB, path string, version int) error {
 	return withMigrationsThrough(version, func() error { return migrateDB(db, path) })
+}
+
+func legacySchemaStore(db *sql.DB, writes *tableWrites, path string) (*Store, error) {
+	settings, err := readSettings(db)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+	return newDBStoreWithSettings(db, writes, path, true, settings, nil), nil
+}
+
+func openLegacySchemaStore(path string) (*Store, SchemaUpgrade, error) {
+	db, writes, upgrade, err := openUpgradedDB(path)
+	if err != nil {
+		return nil, upgrade, err
+	}
+	s, err := legacySchemaStore(db, writes, path)
+	return s, upgrade, err
+}
+
+func openCurrentLegacySchemaStore(path string) (*Store, error) {
+	db, writes, err := openCurrentDB(path)
+	if err != nil {
+		return nil, err
+	}
+	return legacySchemaStore(db, writes, path)
 }

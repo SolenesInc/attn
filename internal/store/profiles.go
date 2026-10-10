@@ -361,7 +361,7 @@ func touchProfileUse(tx *sql.Tx, profile *profiles.Profile, now string) error {
 	return err
 }
 
-func (s *Store) CreateProfile(name string) (profiles.Profile, profiles.Desktop, error) {
+func (s *Store) CreateProfile(name, notebookRoot string) (profiles.Profile, profiles.Desktop, error) {
 	var profile profiles.Profile
 	var desktop profiles.Desktop
 	err := s.profilesTx(func(tx *sql.Tx, now string) error {
@@ -380,8 +380,17 @@ func (s *Store) CreateProfile(name string) (profiles.Profile, profiles.Desktop, 
 		_, err = tx.Exec(`
 			INSERT INTO profiles (id, name, current_desktop_id, last_used_at, revision, created_at, deleted_at)
 			VALUES (?, ?, ?, '', 1, ?, '')`, profile.ID, profile.Name, profile.CurrentDesktopID, now)
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(`INSERT INTO profile_settings (profile_id, key, value) VALUES (?, 'notebook.root', ?)`, profile.ID, notebookRoot)
 		return err
 	})
+	if err == nil {
+		s.mu.Lock()
+		s.profileSettings[profile.ID] = map[string]string{"notebook.root": notebookRoot}
+		s.mu.Unlock()
+	}
 	return profile, desktop, err
 }
 

@@ -251,6 +251,14 @@
         "seconds": 33.297,
         "runnerClass": "local macOS",
         "note": "Green ATTN_VERDICT durationMs=33297 on f2be9c0cd, including scenario-lock wait, native window setup, cleanup and recording. Native close shortcut on the empty launcher and centered nonempty close confirmation. First run before the dialog style adjustment was 4.342s. Remeasure on Linux CI."
+      },
+      "notebook-profile-scope": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/38011475678",
+        "job": "Soak notebook-profile-scope",
+        "recordedAt": "2026-10-10",
+        "seconds": 39.473,
+        "runnerClass": "github-hosted 4vcpu/16GB",
+        "note": "Green ATTN_VERDICT notebook-profile-scope-2026-10-10T01-06-41-695Z durationMs=39473 at c35103154, including cleanup. Native Work/Home/Work switches verify the profile folder in Settings and its journal in the Notebook."
       }
     }
   },
@@ -310,6 +318,7 @@
     "palette-order": 55.41,
     "move-with-delegates": 27.874,
     "desktop-order": 23.413,
-    "close-desktop": 33.297
+    "close-desktop": 33.297,
+    "notebook-profile-scope": 39.473
   }
 }

@@ -24,7 +24,7 @@ type pluginLaunchInstructions struct {
 func (d *Daemon) preparePluginLaunchInstructions(sessionID protocol.SessionID, profileID string, isChief, selfReportPullRequests bool) (*pluginLaunchInstructions, error) {
 	gardenHome := d.requireHome(garden.Surface) == nil
 	if isChief {
-		root, _, err := d.ensureNotebookScaffold()
+		root, _, err := d.ensureNotebookScaffold(profileID)
 		if err != nil {
 			return nil, fmt.Errorf("prepare chief notebook: %w", err)
 		}
@@ -47,7 +47,7 @@ func (d *Daemon) preparePluginLaunchInstructions(sessionID protocol.SessionID, p
 	return &pluginLaunchInstructions{
 		Kind: pluginInstructionKindAgent,
 		Content: hooks.Launch{
-			InjectWorkflow:         parseBooleanSetting(d.store.GetSetting(SettingWorkflowsEnabled)),
+			InjectWorkflow:         parseBooleanSetting(d.daemonSetting(settingWorkflowsEnabled)),
 			Garden:                 gardenHome,
 			Crew:                   d.crewPrimeForLaunch(sessionID),
 			SelfReportPullRequests: selfReportPullRequests,

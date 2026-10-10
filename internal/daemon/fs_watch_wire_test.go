@@ -235,7 +235,7 @@ func TestFsWatchRefusesPastItsCapAndGuardsExplicitRoots(t *testing.T) {
 		fsMustWatch(t, app, watched[i])
 	}
 	oneTooMany := fsDir(t, "one-too-many")
-	if overflow := fsAskWatch(app, oneTooMany); overflow.Success || protocol.Deref(overflow.Error) != "too many watched roots" {
+	if overflow := fsAskWatch(app, oneTooMany); overflow.Success || !strings.Contains(protocol.Deref(overflow.Error), "maxFsWatchers=16, asked for 17") {
 		t.Fatalf("watching one root past the cap = %+v (%s)", overflow, protocol.Deref(overflow.Error))
 	}
 	if unwatched := fsAskUnwatch(app, watched[0]); !unwatched.Success {

@@ -210,28 +210,31 @@ func TestTheNotebookGuideScaffoldsOnlyForTheChief(t *testing.T) {
 func TestNotebookRootSettingIsValidatedAndItsEffectiveValueIsReadOnly(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
-	root := fsNotebookRoot(t, w)
-	custom := fsDir(t, "custom")
-
-	for _, c := range []struct {
-		key, value string
-		ok         bool
-	}{
-		{"notebook.root", "relative/path", false},
-		{"notebook.root", filepath.Join(w.Dir, "notebook"), false},
-		{"notebook.root", custom, true},
-		{"notebook.root", "", true},
-		{"notebook.root.effective", "/tmp/whatever", false},
-	} {
-		if updated := notebookSetting(app, c.key, c.value); protocol.Deref(updated.Success) != c.ok {
-			t.Errorf("setting %s to %q succeeded=%v (%s), want %v", c.key, c.value, protocol.Deref(updated.Success), protocol.Deref(updated.Error), c.ok)
-		}
-		if c.ok {
-			testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
-				return m.RequestID == nil && protocol.Deref(m.ChangedKey) == c.key && m.Settings[c.key] == c.value && m.Settings["notebook.root.effective"] == root
-			})
-		}
+	custom := filepath.Join(w.Dir, "custom")
+	if updated := notebookSetting(app, "notebook.root", "relative/path"); protocol.Deref(updated.Success) {
+		t.Fatal("relative root accepted")
 	}
+	if updated := notebookSetting(app, "notebook.root.effective", custom); protocol.Deref(updated.Success) || !strings.Contains(protocol.Deref(updated.Error), "notebook.root.effective") {
+		t.Fatalf("read-only refusal: %+v", updated)
+	}
+	if updated := notebookSetting(app, "notebook.root", custom); !protocol.Deref(updated.Success) {
+		t.Fatal(protocol.Deref(updated.Error))
+	}
+	testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+		return m.Settings["notebook.root"] == custom && m.Settings["notebook.root.effective"] == custom
+	})
+	if written := notebookAskWrite(app, "note.md", notebookNote("new folder"), ""); !written.Success {
+		t.Fatal(protocol.Deref(written.Error))
+	}
+	if _, err := os.Stat(filepath.Join(custom, "note.md")); err != nil {
+		t.Fatal(err)
+	}
+	if updated := notebookSetting(app, "notebook.root", ""); !protocol.Deref(updated.Success) {
+		t.Fatal(protocol.Deref(updated.Error))
+	}
+	testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+		return m.Settings["notebook.root.effective"] == filepath.Join(w.Dir, "notebook-default")
+	})
 }
 
 func TestSendToChiefAppendsToTheInboxAndRingsOnlyAReadyChief(t *testing.T) {
@@ -281,6 +284,30 @@ func TestSendToChiefAppendsToTheInboxAndRingsOnlyAReadyChief(t *testing.T) {
 	testworld.AwaitSession(app, chief, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
 	if pending := notebookAskSendToChief(app, "/index.md", "wait for approval"); !pending.Success || pending.Result == nil || pending.Result.Nudged {
 		t.Fatalf("sending to a chief waiting on an approval = %+v (%s), want it kept without a nudge", pending.Result, protocol.Deref(pending.Error))
+	}
+}
+
+func TestANotebookSelectionWaitsBehindTheUsersTyping(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	chief := w.Spawn(app, fakeagent.Claude, w.Path("chief"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
+	agent := w.Launched(chief)
+	app.TypeLine(chief, "keep the notebook")
+	agent.Prompted()
+	working := testworld.AwaitSession(app, chief, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	agent.Reply("Ready. <!-- attn:state=idle -->")
+	testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(w.Terminal(chief)), Data: "half a thought"})
+	app.AwaitScreen(chief, "half a thought")
+	sent := notebookAskSendToChief(app, "notes/today.md", "follow up on the release")
+	if !sent.Success || sent.Result == nil || sent.Result.Nudged {
+		t.Fatalf("selection beside typing: %+v (%s)", sent, protocol.Deref(sent.Error))
+	}
+	if inbox := notebookAskRead(app, "inbox.md"); !inbox.Success || inbox.Result == nil || !strings.Contains(inbox.Result.Content, "follow up on the release") {
+		t.Fatalf("selection not stored: %+v", inbox)
+	}
+	if mail, err := cli.AgentInboxBatch(protocol.SessionID(chief), 0); err != nil || len(mail.Items) != 1 {
+		t.Fatalf("selection not queued: %+v (%v)", mail, err)
 	}
 }
 

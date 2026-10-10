@@ -161,6 +161,12 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-autoclose-on-exit'],
   },
   {
+    id: 'notebook-profile-scope',
+    runnerId: 'NotebookProfileScope',
+    label: 'Settings and Notebook follow the selected profile',
+    command: ['node', 'scripts/real-app-harness/scenario-notebook-profile-scope.mjs'],
+  },
+  {
     id: 'garden-profile-scope',
     runnerId: 'GardenProfileScope',
     label: 'Garden rows, search and empty state follow the selected profile',

@@ -18,7 +18,14 @@ func TestLegacyUnplacedTerminalSurvivesBindingMigration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	profile, desktop := mustCreateProfile(t, legacy, "legacy")
+	profile, err := legacy.MostRecentlyUsedProfile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	desktop, err := legacy.GetDesktop(profile.CurrentDesktopID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, id := range []string{"unplaced", "placed", "closed"} {
 		legacyAddSession(t, legacy, id, profile.ID)
 	}
@@ -90,7 +97,14 @@ func TestSeveralLegacyTerminalTilesSurviveBindingMigration(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			profile, desktop := mustCreateProfile(t, legacy, "legacy")
+			profile, err := legacy.MostRecentlyUsedProfile()
+			if err != nil {
+				t.Fatal(err)
+			}
+			desktop, err := legacy.GetDesktop(profile.CurrentDesktopID)
+			if err != nil {
+				t.Fatal(err)
+			}
 			legacyAddSession(t, legacy, "shared", profile.ID)
 			if _, _, err := legacyPlaceSession(legacy, SessionPlacementRequest{DesktopID: desktop.ID, ExpectedRevision: desktop.Revision, SessionID: "shared", RuntimeID: "first-terminal"}); err != nil {
 				t.Fatal(err)

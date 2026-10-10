@@ -1,0 +1,4 @@
+kind: added
+area: settings
+change: Each profile has its own Notebook folder, and attn settings list|get|set lets users and agents read and change settings.
+notes: Existing profiles keep their current notes. New profiles get a folder named after them.

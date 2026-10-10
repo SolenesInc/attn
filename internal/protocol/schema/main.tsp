@@ -1202,13 +1202,20 @@ model PresentFeedbackResult {
 }
 
 
+model NotebookScope {
+  profile_id?: string;
+  expected_notebook_root?: string;
+}
+
 model NotebookListMessage {
+  ...NotebookScope;
   cmd: "notebook_list";
   prefix?: string;
   request_id?: string; // set by the WS frontend to correlate the result event
 }
 
 model NotebookReadMessage {
+  ...NotebookScope;
   cmd: "notebook_read";
   path: string;
   request_id?: string; // set by the WS frontend to correlate the result event
@@ -1216,12 +1223,14 @@ model NotebookReadMessage {
 
 // List the notes whose body links to `path` (root-absolute markdown links).
 model NotebookBacklinksMessage {
+  ...NotebookScope;
   cmd: "notebook_backlinks";
   path: string;
   request_id?: string; // set by the WS frontend for result correlation
 }
 
 model NotebookWriteMessage {
+  ...NotebookScope;
   cmd: "notebook_write";
   path: string;
   content: string;
@@ -1233,6 +1242,7 @@ model NotebookWriteMessage {
 // chief inbox note and, when a chief session is live and idle/waiting, fires a
 // bounded PTY nudge. The UI never messages the chief directly.
 model NotebookSendToChiefMessage {
+  ...NotebookScope;
   cmd: "notebook_send_to_chief";
   selection: string;
   source_path?: string; // the note the selection came from (root-absolute or relative)
@@ -1310,6 +1320,7 @@ model NotificationMarkReadMessage {
 // List the immediate children (files and subdirectories) of one directory under
 // the root. SHALLOW by design: a tree UI expands lazily, one readdir per node.
 model FsListMessage {
+  ...NotebookScope;
   cmd: "fs_list";
   path?: string; // omitted/"" = the root directory itself
   root?: string; // Absolute directory to operate under; omitted/empty = the notebook root.
@@ -1317,6 +1328,7 @@ model FsListMessage {
 }
 
 model FsReadMessage {
+  ...NotebookScope;
   cmd: "fs_read";
   path: string;
   root?: string; // Absolute directory to operate under; omitted/empty = the notebook root.
@@ -1327,6 +1339,7 @@ model FsReadMessage {
 // ![alt](path) images without widening Tauri's fs permissions. Only a fixed
 // allowlist of image extensions is served; anything else is an error.
 model FsReadAssetMessage {
+  ...NotebookScope;
   cmd: "fs_read_asset";
   path: string;
   root?: string; // Absolute directory to operate under; omitted/empty = the notebook root.
@@ -1334,6 +1347,7 @@ model FsReadAssetMessage {
 }
 
 model FsWriteMessage {
+  ...NotebookScope;
   cmd: "fs_write";
   path: string;
   content: string;
@@ -1343,6 +1357,7 @@ model FsWriteMessage {
 }
 
 model FsRenameMessage {
+  ...NotebookScope;
   cmd: "fs_rename";
   path: string;
   new_path: string;
@@ -1351,6 +1366,7 @@ model FsRenameMessage {
 }
 
 model FsDeleteMessage {
+  ...NotebookScope;
   cmd: "fs_delete";
   path: string;
   root?: string; // Absolute directory to operate under; omitted/empty = the notebook root.
@@ -1360,6 +1376,7 @@ model FsDeleteMessage {
 // Check whether a path exists under the root, without reading it. Used to flag
 // in-notebook markdown links that point at a missing note.
 model FsExistsMessage {
+  ...NotebookScope;
   cmd: "fs_exists";
   path: string;
   root?: string; // Absolute directory to operate under; omitted/empty = the notebook root.
@@ -1372,6 +1389,7 @@ model FsExistsMessage {
 // so fs_watch on it is a success no-op. Pair with fs_unwatch when the client no
 // longer needs live updates for that root.
 model FsWatchMessage {
+  ...NotebookScope;
   cmd: "fs_watch";
   root?: string; // Absolute directory to operate under; omitted/empty = the notebook root.
   request_id?: string; // set by the WS frontend to correlate the result event
@@ -1381,6 +1399,7 @@ model FsWatchMessage {
 // once no client holds it open (including on client disconnect). Unwatching a
 // root this client never watched is a success no-op.
 model FsUnwatchMessage {
+  ...NotebookScope;
   cmd: "fs_unwatch";
   root?: string; // Absolute directory to operate under; omitted/empty = the notebook root.
   request_id?: string; // set by the WS frontend to correlate the result event
@@ -1392,6 +1411,7 @@ model FsUnwatchMessage {
 // chokepoint as every other fs_* command, so an explicit root is gated on the
 // authenticated app client.
 model FsIndexMessage {
+  ...NotebookScope;
   cmd: "fs_index";
   root?: string; // Absolute directory to operate under; omitted/empty = the notebook root.
   // Restrict the index to these file extensions, without leading dots and
@@ -1598,13 +1618,34 @@ model WorktreeRefreshResult {
 
 model GetSettingsMessage {
   cmd: "get_settings";
+  source_session_id?: SessionID;
+  profile_id?: string;
+  key?: string;
+  all?: boolean;
 }
 
 model SetSettingMessage {
   cmd: "set_setting";
+  source_session_id?: SessionID;
+  profile_id?: string;
   request_id?: string;
   key: string;
   value: string;
+}
+
+enum SettingScope { daemon, profile }
+model SettingEntry {
+  key: string;
+  scope: SettingScope;
+  description: string;
+  value?: string;
+  read_only?: boolean;
+  family?: boolean;
+}
+model SettingsListResult {
+  profile_id: string;
+  profile_name: string;
+  entries: SettingEntry[];
 }
 
 model ListPluginsMessage {
@@ -3529,6 +3570,7 @@ model GitOperationFinishedMessage {
 }
 
 model SettingsUpdatedMessage {
+  profile_id?: string;
   event: "settings_updated";
   request_id?: string;
   settings?: Record<string>;
@@ -5822,6 +5864,8 @@ model AutoModeEnvSetResultMessage {
 // ============================================================================
 
 model Response {
+  settings_list?: SettingsListResult;
+  setting?: SettingEntry;
   ok: boolean;
   error?: string;
   // A machine-readable name for what went wrong, beside the human-readable
