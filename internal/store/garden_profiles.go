@@ -114,38 +114,13 @@ func checkSeedProfileWrite(q rowQuerier, schema docstore.CollectionSchema, table
 	if err != nil {
 		return err
 	}
-	var previous, previousTender string
-	err = q.QueryRow(`SELECT json_extract(body, '$.profile_id'), coalesce(json_extract(body, '$.tender'), '') FROM `+table+` WHERE id = ?`, id).Scan(&previous, &previousTender)
+	var previous string
+	err = q.QueryRow(`SELECT json_extract(body, '$.profile_id') FROM `+table+` WHERE id = ?`, id).Scan(&previous)
 	if err != nil && err != sql.ErrNoRows {
 		return err
 	}
 	if err == nil && previous != seed.ProfileID {
 		return fmt.Errorf("seed %s belongs to profile %s for life; cannot move it to profile %q", id, previous, owner.Name)
-	}
-	tender, claimed := seed.Claim.Tender()
-	if claimed && tender.String() != previousTender {
-		profileID, err := partyProfile(q, tender)
-		if err != nil {
-			return err
-		}
-		if profileID != seed.ProfileID {
-			return fmt.Errorf("seed %s belongs to profile %q; tender %s belongs to profile %s", id, owner.Name, tender, profileID)
-		}
-	}
-	for _, edge := range seed.Edges {
-		var profileID string
-		if err := q.QueryRow(`SELECT json_extract(body, '$.profile_id') FROM `+table+` WHERE id = ?`, edge.To).Scan(&profileID); err == sql.ErrNoRows {
-			continue
-		} else if err != nil {
-			return err
-		}
-		if profileID != seed.ProfileID {
-			target, err := loadProfile(q, profileID)
-			if err != nil {
-				return err
-			}
-			return fmt.Errorf("seed %s belongs to profile %q; edge target %s belongs to profile %q", id, owner.Name, edge.To, target.Name)
-		}
 	}
 	return nil
 }

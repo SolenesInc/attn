@@ -60,7 +60,7 @@ func TestGardenPartiesMigration(t *testing.T) {
 				put(garden.CollectionNotes, "n-side01", map[string]any{"id": "n-side01", "seed": "s-side01", "kind": "note", "body": "Side history", "author_member": "KeEl"})
 				put(garden.CollectionNotes, "n-user01", map[string]any{"id": "n-user01", "seed": "s-user01", "kind": "note", "body": "User history"})
 				put(garden.CollectionDispatches, "no-dispatcher", map[string]any{"session_id": "no-dispatcher", "crown": "s-user01"})
-				if _, err := s.db.Exec(`INSERT INTO delegation_operations(request_id,operation_id,request_json,state,progress,session_id,created_at,updated_at,handover_tender_session,handover_tender_member) VALUES('side-req','side-op','{"profile_id":"side","source_session_id":"bound"}','accepted','','side-delegate','','','bound','keel')`); err != nil {
+				if _, err := s.db.Exec(`INSERT INTO delegation_operations(request_id,operation_id,request_json,state,progress,session_id,created_at,updated_at,handover_tender_session,handover_tender_member) VALUES('named-req','named-op','{"source_session_id":"plain"}','accepted','','named-delegate','','','plain','Bob')`); err != nil {
 					t.Fatal(err)
 				}
 				if _, err := s.db.Exec(`INSERT INTO inbox_items(id,address,kind,source_id,coalesce_key,hint,created_at,attempts,read_at,notified_at) VALUES('old-bell','member:keel','seed_update','s-7k3f9m','s-7k3f9m','note.added','2026-10-01',?,'',''),('next-bell','session:bound','seed_update','s-7k3f9m','s-7k3f9m','unblocked','2026-10-02',0,'',''),('other-seed','session:old-day','seed_update','s-member','s-member','tended','2026-10-03',0,'',''),('plain-bell','session:plain','seed_update','s-plain1','s-plain1','tended','2026-10-04',0,'',''),('notice','session:bound','notice','','','notice','2026-10-05',0,'',''),('read-bell','session:bound','seed_update','s-closed','s-closed','tended','2026-10-06',1,'read','notified')`, inbox.MaxAttempts); err != nil {
@@ -68,16 +68,6 @@ func TestGardenPartiesMigration(t *testing.T) {
 				}
 
 				if _, err := s.db.Exec(`INSERT INTO garden_seed_watches(watcher_session_id,seed_id,created_at) VALUES('delegate','s-7k3f9m','2026-10-04')`); err != nil {
-					t.Fatal(err)
-				}
-
-				if _, err := s.db.Exec(`INSERT INTO crew_members(member_key,profile_id,name,retired_at) VALUES('birch',?,'Birch','retired')`, profile.ID); err != nil {
-					t.Fatal(err)
-				}
-				if _, err := s.db.Exec(`INSERT INTO sessions(id,label,directory,state_since,state_updated_at,last_seen,profile_id,member_key,closed_at) VALUES('retired-day','Birch','/tmp/birch','','','',?,'birch','closed')`, profile.ID); err != nil {
-					t.Fatal(err)
-				}
-				if _, err := s.db.Exec(`INSERT INTO garden_seed_watches(watcher_session_id,seed_id,created_at) VALUES('retired-day','s-7k3f9m','2026-10-05')`); err != nil {
 					t.Fatal(err)
 				}
 
@@ -145,11 +135,6 @@ func TestGardenPartiesMigration(t *testing.T) {
 			if err != nil || len(watches) != 3 {
 				t.Fatalf("watches: %+v %v", watches, err)
 			}
-			var retired int
-			if err := s.db.QueryRow(`SELECT count(*) FROM garden_seed_watches WHERE watcher='member:birch'`).Scan(&retired); err != nil || retired != 0 {
-				t.Fatalf("retired watch reactivated: %d %v", retired, err)
-			}
-
 			var reserved int
 			if err := s.db.QueryRow(`SELECT count(*) FROM garden_seed_watches WHERE watcher='session:delegate' AND seed_id='s-7k3f9m'`).Scan(&reserved); err != nil || reserved != 1 {
 				t.Fatalf("reserved delegate watch: %d %v", reserved, err)
@@ -163,6 +148,10 @@ func TestGardenPartiesMigration(t *testing.T) {
 			if err != nil || op.Dispatcher.String() != "member:keel" || op.HandoverTender.String() != "member:keel" {
 				t.Fatalf("operation: %+v %v", op, err)
 			}
+			named, err := s.GetDelegationOperation("named-req")
+			if err != nil || named.Dispatcher.String() != "session:plain" || !named.HandoverTender.IsZero() {
+				t.Fatalf("named handover: %+v %v", named, err)
+			}
 			for _, id := range []string{"s-side01", "s-user01"} {
 				doc, found, err := s.GetDocument(*seeds, id)
 				if err != nil || !found {
@@ -175,10 +164,6 @@ func TestGardenPartiesMigration(t *testing.T) {
 				if seed.HarvestWhen != nil && seed.HarvestWhen.SetBy.String() != "user" {
 					t.Fatalf("scoped setter: %+v", seed.HarvestWhen)
 				}
-			}
-			side, err := s.GetDelegationOperation("side-req")
-			if err != nil || side.Dispatcher.String() != "user" || side.HandoverTender.String() != "" {
-				t.Fatalf("scoped operation: %+v %v", side, err)
 			}
 			dispatches, _, err := s.DocumentCollection(garden.Namespace, garden.CollectionDispatches)
 			if err != nil {

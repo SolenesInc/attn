@@ -55,13 +55,6 @@ func (d *Daemon) handleAgentClose(conn net.Conn, msg *protocol.AgentCloseMessage
 		return
 	}
 
-	if dispatch, ok := d.gardenDispatch(target.ID); caller.ID != target.ID && ok && strings.TrimSpace(dispatch.Crown) != "" {
-		if err := d.requireSeedInProfile(dispatch.Crown, caller.ProfileID, false); err != nil {
-			d.replyAgentMsgError(conn, "cross_profile", err.Error())
-			return
-		}
-	}
-
 	rule, err := d.agentCloseRule(caller, target, r)
 	if err != nil {
 		d.replyAgentMsgError(conn, "close_not_authorized", err.Error())
@@ -135,7 +128,7 @@ func (d *Daemon) noteCloseOnTendedSeeds(
 	read, _, err := d.runDocQuery(docstore.Query{
 		Namespace:  garden.Namespace,
 		Collection: garden.CollectionSeeds,
-		Filters:    []docstore.Filter{{Field: "tender", Op: docstore.OpEq, Value: who.PartyOfEndedSession(target.ID).String()}, {Field: "profile_id", Op: docstore.OpEq, Value: caller.ProfileID}},
+		Filters:    []docstore.Filter{{Field: "tender", Op: docstore.OpEq, Value: who.PartyOfEndedSession(target.ID).String()}},
 		Limit:      agentCloseTendedSeedLimit,
 	})
 	if err != nil {
