@@ -99,7 +99,7 @@ func (d *Daemon) agentCloseRule(r who.Requester, caller, target *protocol.Sessio
 	if caller.ID == target.ID {
 		return protocol.AgentCloseRuleSelf, nil
 	}
-	if d.requestedByChief(r) && target.ProfileID == r.ProfileID() {
+	if d.requestedByChief(r) {
 		return protocol.AgentCloseRuleChief, nil
 	}
 	var dispatcher who.Actor
