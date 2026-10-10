@@ -27,7 +27,7 @@ func TestTheChiefOfStaffClosesAnySessionButItself(t *testing.T) {
 	if closed.Rule != protocol.AgentCloseRuleChiefOfStaff || string(closed.TargetSessionID) != stranger {
 		t.Errorf("close = %+v, want stranger closed under the chief_of_staff rule", closed)
 	}
-	if by := protocol.Deref(showSession(t, cli, stranger).ClosedBy); by != chief {
+	if by := protocol.Deref(showSession(t, cli, stranger).ClosedBy).Ref; by != protocol.ActorRef("session:"+chief) {
 		t.Errorf("the ledger names %q as the closer, want the chief", by)
 	}
 
@@ -77,7 +77,7 @@ func TestAgentCloseBySeedClosesItsTender(t *testing.T) {
 	if closed.TargetSessionID != delegated.SessionID || closed.Rule != protocol.AgentCloseRuleDispatcher {
 		t.Errorf("close = %+v, want the seed's tender %s closed by its dispatcher", closed, delegated.SessionID)
 	}
-	if entry := showSession(t, cli, string(delegated.SessionID)); protocol.Deref(entry.ClosedBy) != orchestrator || protocol.Deref(entry.CloseReason) != "its report landed" {
+	if entry := showSession(t, cli, string(delegated.SessionID)); protocol.Deref(entry.ClosedBy).Ref != protocol.ActorRef("session:"+orchestrator) || protocol.Deref(entry.CloseReason) != "its report landed" {
 		t.Errorf("ledger entry = %+v, want it closed by the orchestrator for its reason", entry)
 	}
 }

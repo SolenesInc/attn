@@ -21,7 +21,7 @@ import {
 
 export function AppLibrarySurfaces() {
   const { seedForSession, handleDeleteWorktreeFromPanel } = useAppShell();
-  const { liveGardenSessions, worktreePanelSessions, gardenSessionLabels } = useAppSessionsContext();
+  const { liveGardenSessions, worktreePanelSessions } = useAppSessionsContext();
   const profiles = useProfilesStore((state) => state.profiles);
   const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
   const profileNames = useMemo(
@@ -63,13 +63,6 @@ export function AppLibrarySurfaces() {
     subscribeSessionLedger,
     getWorktreeSweepLog,
     setWorktreeKeep,
-    sendFsList,
-    sendFsRead,
-    sendFsWrite,
-    sendFsExists,
-    sendFsReadAsset,
-    sendNotebookBacklinks,
-    sendNotebookToChief,
     hasReceivedInitialState,
     sendSeedTransition,
     sendSeedNote,
@@ -96,7 +89,9 @@ export function AppLibrarySurfaces() {
   } = useAppGardenActionsContext();
   const { handleReopenSession } = useSessionLifecycleContext();
   const { notificationsChangeSignal } = useAppInputs();
-  const { notebookBrowserListFiles, notebookRootChangeSignal } = useAppNotebookSurfaceContext();
+  const { notebookSurfaceContextValue, notebookRootChangeSignal } = useAppNotebookSurfaceContext();
+  const { effectiveNotebookRoot, makeDaemon } = notebookSurfaceContextValue;
+  const browserDaemon = useMemo(() => makeDaemon(effectiveNotebookRoot), [makeDaemon, effectiveNotebookRoot]);
   const { notebookChiefActive } = useAppSessionsContext();
   const seeds = useDaemonStore((state) => state.seeds);
   const seedsTotal = useDaemonStore((state) => state.seedsTotal);
@@ -145,16 +140,10 @@ export function AppLibrarySurfaces() {
         }}
       />
       <NotebookBrowser
-        isOpen={notebookOpen}
+        key={`${selectedProfileId}:${effectiveNotebookRoot}`}
+        isOpen={notebookOpen && !!effectiveNotebookRoot}
         onClose={() => setNotebookOpen(false)}
-        listDir={sendFsList}
-        readFile={sendFsRead}
-        writeFile={sendFsWrite}
-        existsFile={sendFsExists}
-        readAsset={sendFsReadAsset}
-        backlinksNotebook={sendNotebookBacklinks}
-        sendToChief={sendNotebookToChief}
-        listFiles={notebookBrowserListFiles}
+        {...browserDaemon}
         changeSignal={notebookRootChangeSignal}
         chiefActive={notebookChiefActive}
       />
@@ -167,7 +156,6 @@ export function AppLibrarySurfaces() {
         seeds={seeds}
         seedsTotal={seedsTotal}
         liveSessions={liveGardenSessions}
-        tenderSessionLabels={gardenSessionLabels}
         loaded={hasReceivedInitialState}
         moveSeed={sendSeedTransition}
         noteSeed={sendSeedNote}

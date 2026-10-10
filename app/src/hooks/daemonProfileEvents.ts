@@ -70,6 +70,7 @@ export function handleProfileDaemonEvent(data: ProfileEvent, pending: PendingReq
       const message = data as ProfileArrangementChangedMessage;
       if (useProfilesStore.getState().selectedProfileId !== message.profile.id) {
         useDaemonStore.getState().setSeeds([], 0);
+        useDaemonStore.getState().setCrew([]);
         useGardenWalk.getState().setTrail([]);
         gardenScrollMemory.clear();
       }

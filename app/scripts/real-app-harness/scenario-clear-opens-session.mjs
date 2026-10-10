@@ -79,6 +79,7 @@ async function main() {
     await runner.step('clear_replaces_the_row_in_place_and_keeps_focus', async () => {
       const before = await row(run.first);
       runner.assert(before?.text.includes(label), 'the sidebar lists the session before /clear', { before });
+      runner.writeJson('sidebar-before.json', before);
       await driver.typeText('/clear');
       await driver.pressEnter();
       const successor = await observer.waitFor(
@@ -93,10 +94,13 @@ async function main() {
       });
       runner.assert(successor.label !== label, 'the new session gets a new name', { label: successor.label });
       const after = await poll(() => row(run.next), 'the new session in the sidebar');
+      runner.writeJson('sidebar-after.json', after);
       await poll(async () => !(await row(run.first)), 'the cleared session to leave the sidebar');
       const ui = await client.request('get_session_ui_state', { sessionId: run.next });
       runner.assert(ui.selected, 'the new session stays selected', { ui });
-      runner.assert(!after.text.includes(label) && Math.abs(after.bounds.y - before.bounds.y) <= 1,
+      runner.assert(!after.text.includes(label) && after.desktopId === before.desktopId && after.rowIndex === before.rowIndex
+        && before.desktopBounds && after.desktopBounds
+        && Math.abs((after.bounds.y - after.desktopBounds.y) - (before.bounds.y - before.desktopBounds.y)) <= 1,
         'the new session takes the cleared one\'s sidebar row', { before, after });
       await waitForPaneInputFocus(client, run.next, run.paneId);
     });

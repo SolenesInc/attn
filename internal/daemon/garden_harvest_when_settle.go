@@ -3,10 +3,10 @@ package daemon
 import (
 	"strings"
 
-	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 func (d *Daemon) settleHarvestConditions() (harvested, cleared int) {
@@ -33,7 +33,7 @@ func (d *Daemon) settleHarvestConditions() (harvested, cleared int) {
 			harvested++
 		case sessionPullRequestClosed:
 			note := harvestWhenClosedNote(row)
-			if _, _, err := d.clearHarvestWhen(seed.ID, seed.HarvestWhen, note, garden.Tender{Member: crew.DaemonID}); err != nil {
+			if _, _, err := d.clearHarvestWhen(seed.ID, seed.HarvestWhen, note, who.Attn()); err != nil {
 				d.logf("harvest-on-merge: clearing %s on %s: %v", seed.ID, row.PRID, err)
 				continue
 			}

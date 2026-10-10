@@ -69,7 +69,7 @@ func TestAnOutstandingInboxRingSurvivesAProcessRestart(t *testing.T) {
 		t.Fatalf("durable receipt=%+v, %v", status, err)
 	}
 	batch, err := s.Client().AgentInboxBatch(protocol.SessionID(recipient), 0)
-	if err != nil || len(batch.Items) != 1 || batch.Items[0].Address != "session:"+recipient {
+	if err != nil || len(batch.Items) != 1 || batch.Items[0].Address != protocol.AddressRef("session:"+recipient) {
 		t.Fatalf("durable item=%+v, %v", batch, err)
 	}
 }
@@ -84,22 +84,22 @@ func TestRestartDuringInboxPrimingKeepsTheDayAndOutstandingDelay(t *testing.T) {
 		t.Fatal(err)
 	}
 	sent, err := cli.AgentMsg("trellis", "reviewer", "keep this through priming and restart")
-	if err != nil || sent.Status != protocol.AgentMsgStatusQueued || sent.TargetSessionID == "" {
+	if err != nil || sent.Status != protocol.AgentMsgStatusQueued || protocol.Deref(sent.TargetSessionID) == "" {
 		t.Fatalf("asleep send=%+v, %v", sent, err)
 	}
-	day := s.Launched(string(sent.TargetSessionID))
+	day := s.Launched(string(protocol.Deref(sent.TargetSessionID)))
 	day.Prompted()
 	s.Stop()
 	s.Start()
-	if bound := protocol.Deref(crewRoster(t, s)["trellis"].BindingSession); bound != sent.TargetSessionID {
-		t.Fatalf("restart woke a second day: %s, original %s", bound, sent.TargetSessionID)
+	if bound := protocol.Deref(crewRoster(t, s)["trellis"].BindingSession); bound != protocol.Deref(sent.TargetSessionID) {
+		t.Fatalf("restart woke a second day: %s, original %s", bound, protocol.Deref(sent.TargetSessionID))
 	}
 	day.Reply("Ready. <!-- attn:state=idle -->")
-	s.App().TypeLine(string(sent.TargetSessionID), "continue without reading")
+	s.App().TypeLine(string(protocol.Deref(sent.TargetSessionID)), "continue without reading")
 	if prompt := day.Prompted(); prompt != "continue without reading" {
 		t.Fatalf("restart renewed the outstanding wake attempt: %q", prompt)
 	}
-	batch, err := s.Client().AgentInboxBatch(sent.TargetSessionID, 0)
+	batch, err := s.Client().AgentInboxBatch(protocol.Deref(sent.TargetSessionID), 0)
 	if err != nil || len(batch.Items) != 1 || batch.Items[0].Address != "member:trellis" {
 		t.Fatalf("member item=%+v, %v", batch, err)
 	}

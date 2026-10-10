@@ -3,13 +3,16 @@
 The glossary is attn's domain model, in the sense of domain-driven design.
 
 ```text
-profile                 a separate world for the user's work; like a tenant
+profile                 a separate world for the user's work; like a tenant.
+                        What belongs to a profile never moves to another
 ├─ desktop (1..n)
 ├─ flow (1)
 ├─ ledger (1)
 ├─ crew member (0..n)   at most 1 is the chief
 ├─ automation (0..n)
-└─ garden (1)
+├─ garden (1)
+├─ notebook (1)        the profile's journal and knowledge base; plain markdown
+└─ setting (0..n)      a saved preference; applies to one profile or all profiles
 ```
 
 ```text
@@ -60,6 +63,10 @@ forget                  deletes attn's copy of a conversation
 ```
 
 ```text
+party                   a session or crew member that sends mail or claims work;
+                        like an account
+actor                   a party, the user or attn that did something; like an
+                        audit identity
 address                 who an item is for: a session or a mailbox
 ├─ mailbox              crew member, chief or seed tender; like a shared
 │                       mailbox (support@) that whoever holds the job reads
@@ -88,9 +95,10 @@ garden                  a profile's issue tracker
 └─ seed (0..n)          a ticket
    ├─ state (1)         planted, growing, parked, harvested or withered
    ├─ seed (0..n)       a subtask
-   ├─ tender (at most 1)  the assignee: the session or crew member
+   ├─ claim (at most 1)   the assignment; its tender is a session or crew member
    ├─ note (0..n)       a comment in the ticket's log
    └─ edge (0..n)       blocks or discovered-from
+tender                  the party that claims a seed; like an assignee
 tend                    claim a seed; like assigning a ticket to yourself
 plot                    an epic: a seed with child seeds
 packet                  an epic template
@@ -98,6 +106,7 @@ packet                  an epic template
 
 ```text
 crew member             an agent with a permanent identity and memory
+├─ name (1)             the member’s name; unique in their profile
 ├─ charter (1)          who the member is and what they live for
 ├─ member home (1)      the folder that holds the charter and the letters
 ├─ launch desktop (1)   the desktop where their sessions start
@@ -107,9 +116,12 @@ crew member             an agent with a permanent identity and memory
 chief                   the crew member that coordinates one profile
 asleep                  the member has no session, until something wakes them
 awake                   the member has a session
+retired                 the member is out of service; their identity and memory stay
 wake                    starts a session for the member
 nap                     ends the member's session and starts a new one from
                         their letters
+retire                  takes a member out of service
+restore                 returns a retired member to service
 ```
 
 ```text
@@ -128,7 +140,7 @@ delegation              one agent starts another agent to work on a seed
 ├─ seed (1)             the work
 ├─ role (at most 1)     a way of working for one type of work:
 │                       instructions, harness, model and effort
-├─ dispatcher (1)       the session that started the delegation
+├─ dispatcher (1)       the actor that started the delegation
 └─ delegate (1)         the session that does the work
 handover                a new session takes over a seed and its claim
 ```
@@ -212,12 +224,7 @@ Temporary debt. Read the old name as the new term. Never write the old name.
 ### Changes to make
 
 - Flow is one daemon-wide setting (`queue_mode_enabled`). Make it 1 per profile.
-- Named claims let any name tend a seed. Remove them, or define who can use
-  them.
 - The chief is not a crew member. Make it one.
-- Prompts say hold, held and holder for a claimed seed
-  (internal/prompts/content/garden.md, the delegation reference). Say claim and
-  tender.
 - The ledger may list every profile when a request has no profile. Check, and
   fix.
 - The Ledger button and action say Reopen. Rename them to Resume.

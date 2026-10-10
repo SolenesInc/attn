@@ -60,7 +60,7 @@ const json = (args) => {
   const output = runAttn(args);
   return JSON.parse(output.slice(output.indexOf(args[0] === 'crew' && args[1] === 'list' ? '[' : '{')));
 };
-const crewMember = (id) => json(['crew', 'list', '--json']).find((member) => member.id === id);
+const crewMember = (id) => json(['crew', 'list', '--json']).find((member) => member.key === id);
 const click = (selector) => client.request('dom_click', { selector });
 const type = (selector, text) => client.request('dom_type', { selector, text });
 const panelText = async () => (await client.request('dom_text', { selector: '[data-testid="crew-panel"]' })).text;
@@ -74,7 +74,7 @@ const settled = (promise) => { promise.catch(() => {}); return promise; };
 const waitForCrew = (member, predicate, description, timeoutMs = 30_000) => settled(observer.waitForMessage(
   (message) => {
     if (message.event !== 'crew_updated') return null;
-    const current = (message.members || []).find((entry) => entry.id === member);
+    const current = (message.members || []).find((entry) => entry.key === member);
     return current && predicate(current) ? current : null;
   },
   description,
@@ -207,7 +207,7 @@ runner.registerCleanup('settle_seeds', () => {
 });
 const tendBetweenDays = async (seed) => {
   const read = waitForFileSignal(claimReadReceipt, 'the member reads its claim update');
-  json(['seed', 'tend', seed, '--member', asleep, '--json']);
+  json(['seed', 'tend', seed, '--for', asleep, '--json']);
   await read;
   fs.unlinkSync(claimReadReceipt);
   const day = crewMember(asleep).binding_session;
@@ -284,17 +284,28 @@ try {
   await waitForDom(`[data-testid="queue-crew-${awake}"][data-crew-state="awake"]`);
   await waitForDom(`[data-testid="queue-crew-${asleep}"]`);
   await waitForDom(`[data-testid="queue-crew-${history}"]`);
+  const renamedName = `Alfred-${memberSuffix}`;
+  const renamedRoster = waitForCrew(awake, (member) => member.name === renamedName, 'the renamed crew roster');
+  const renamed = json(['crew', 'rename', awake, renamedName, '--json']);
+  await renamedRoster;
+  runner.assert(renamed.member === awake && renamed.session_id === firstSession, 'rename keeps the awake identity', renamed);
+  await waitForDom(`[data-testid="queue-crew-${awake}"]`, { textIncludes: renamedName });
+  await click('[data-testid="manage-crew"]');
+  await waitForDom(`[data-testid="crew-roster-${awake}"]`, { textIncludes: renamedName });
+  await screenshot('crew-renamed.png');
+  await click('[data-testid="crew-panel-close"]');
+  runAttn(['crew', 'rename', renamedName, `Alder-${memberSuffix}`]);
   const dashboardSessions = await client.request('list_sessions');
   runner.assert(shownAgentId(dashboardSessions) === null,
     'Crew opens from the dashboard without a placement session', dashboardSessions);
   const desktopIdle = await sampleIdle(webkitBaseline);
 
-  const plot = plant([`Crew verification plot ${memberSuffix}`, '-m', 'The planted list opens this plot in the native desktop tile.', '--member', awake, '--session', firstSession]);
+  const plot = plant([`Crew verification plot ${memberSuffix}`, '-m', 'The planted list opens this plot in the native desktop tile.', '--session', firstSession]);
   crewPlot = plot.id;
-  const child = plant([`Crew planted navigation ${memberSuffix}`, '-m', 'The plot link navigates this same native tile.', '--part-of', crewPlot, '--member', awake, '--session', firstSession]);
+  const child = plant([`Crew planted navigation ${memberSuffix}`, '-m', 'The plot link navigates this same native tile.', '--part-of', crewPlot, '--session', firstSession]);
   crewChild = child.id;
   json(['seed', 'tend', crewChild, '--session', firstSession, '--json']);
-  const held = plant([`Crew asleep claim ${memberSuffix}`, '-m', 'A permanent member claim remains visible between days.', '--member', asleep]);
+  const held = plant([`Crew asleep claim ${memberSuffix}`, '-m', 'A permanent member claim remains visible between days.']);
   asleepHeld = held.id;
   await tendBetweenDays(asleepHeld);
 
@@ -328,7 +339,7 @@ try {
     runner.assert((await panelText()).includes('Tending 1'), 'the current day session claim appears once even with member attribution');
     await click('[data-testid="crew-seed-filter-planted"]');
     await waitForDom(`[data-testid="crew-seed-${crewPlot}"]`);
-    const livePlant = plant([`Crew live planting update ${memberSuffix}`, '--member', awake, '--session', firstSession]);
+    const livePlant = plant([`Crew live planting update ${memberSuffix}`, '--session', firstSession]);
     await waitForDom(`[data-testid="crew-seed-${livePlant.id}"]`);
     const plantedText = await panelText();
     runner.assert(
@@ -421,9 +432,9 @@ try {
     await click('[data-testid="manage-crew"]');
     await click(`[data-testid="crew-roster-${asleep}"]`);
     await click('[data-testid="crew-tab-seeds"]');
-    json(['seed', 'park', asleepHeld, '--member', asleep, '--json']);
+    json(['seed', 'park', asleepHeld, '--force', '--json']);
     await waitForDom('[data-testid="crew-panel"]', { textIncludes: `${asleep[0].toUpperCase()}${asleep.slice(1)} isn't tending a seed.` });
-    json(['seed', 'tend', asleepHeld, '--member', asleep, '--json']);
+    json(['seed', 'tend', asleepHeld, '--for', asleep, '--json']);
     await waitForDom(`[data-testid="crew-seed-${asleepHeld}"]`);
     await pressEscapeAndWaitFor('manage-crew');
   });

@@ -7,8 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/victorarias/attn/internal/crew"
-	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type Verb string
@@ -23,47 +22,53 @@ const (
 
 var Verbs = []Verb{VerbTend, VerbPark, VerbHarvest, VerbWither, VerbReplant}
 
-type Tender struct {
-	Session protocol.SessionID
-	Member  string
-}
+type Claim struct{ tender who.Party }
 
-func (t Tender) Name() string {
-	if member := strings.TrimSpace(t.Member); member != "" {
-		return member
-	}
-	return string(protocol.TrimID(t.Session))
-}
-
-func (t Tender) DisplayName() string { return crew.HolderName(t.Member, t.Session) }
-
-func (t Tender) Named() bool { return t.Name() != "" }
-
-func (t Tender) Is(other Tender) bool {
-	mine, theirs := protocol.TrimID(t.Session), protocol.TrimID(other.Session)
-	if mine != "" && theirs != "" {
-		return mine == theirs
-	}
-	return mine == theirs && strings.TrimSpace(t.Member) == strings.TrimSpace(other.Member)
-}
-
-func (t Tender) Holds(sessionLive func(sessionID protocol.SessionID) bool) bool {
-	if !t.Named() {
-		return false
-	}
-	if session := protocol.TrimID(t.Session); session != "" {
-		return sessionLive(session)
-	}
-	return true
-}
+func (c Claim) Tender() (who.Party, bool)              { return c.tender, !c.tender.IsZero() }
+func (c Claim) Lasts(b who.Bindings) (who.Party, bool) { return c.tender, b.Lasts(c.tender) }
+func (c Claim) IsZero() bool                           { return c.tender.IsZero() }
+func (c Claim) MarshalText() ([]byte, error)           { return c.tender.MarshalText() }
+func (c *Claim) UnmarshalText(text []byte) error       { return c.tender.UnmarshalText(text) }
 
 type Ask struct {
-	Actor                   Tender
-	Reason                  string
-	Force                   bool
-	CauseSession            protocol.SessionID
-	DirectlyNotifiedSession protocol.SessionID
-	SuppressNotification    bool
+	By                   who.Actor
+	Reason               string
+	Force                bool
+	DirectlyNotified     who.Party
+	SuppressNotification bool
+}
+
+type TakeoverRefused struct {
+	SeedID string
+	Verb   Verb
+	Tender who.Party
+}
+
+func (e *TakeoverRefused) Error() string {
+	return fmt.Sprintf("%s is being tended by %s; pass --force to %s it", e.SeedID, e.Tender, e.Verb)
+}
+
+func Tend(seed Seed, claimant who.Party, ask Ask, b who.Bindings) (Seed, error) {
+	if claimant.IsZero() {
+		return Seed{}, fmt.Errorf("tending %s needs a party that claims it", seed.ID)
+	}
+	next, err := transition(seed, VerbTend, ask, b, claimant)
+	if err != nil {
+		return Seed{}, err
+	}
+	next.Claim = Claim{tender: claimant}
+	return next, nil
+}
+func Assign(seed Seed, to who.Party) (Seed, error) {
+	if to.IsZero() {
+		return Seed{}, fmt.Errorf("assigning %s needs a party that claims it", seed.ID)
+	}
+	if !slices.Contains(moves[VerbTend].from, seed.Status) {
+		return Seed{}, refuseState(seed, VerbTend, moves[VerbTend])
+	}
+	seed.Status = StatusGrowing
+	seed.Claim = Claim{tender: to}
+	return seed, nil
 }
 
 type move struct {
@@ -123,7 +128,14 @@ func ParseVerb(raw string) (Verb, error) {
 	return "", fmt.Errorf("%q is not something a seed does; the moves are %s", raw, strings.Join(names, ", "))
 }
 
-func Transition(seed Seed, verb Verb, ask Ask, sessionLive func(sessionID protocol.SessionID) bool) (Seed, error) {
+func Transition(seed Seed, verb Verb, ask Ask, b who.Bindings) (Seed, error) {
+	if verb == VerbTend {
+		return Seed{}, fmt.Errorf("tend needs a claimant; use Tend")
+	}
+	return transition(seed, verb, ask, b, who.Party{})
+}
+
+func transition(seed Seed, verb Verb, ask Ask, b who.Bindings, claimant who.Party) (Seed, error) {
 	rule, ok := moves[verb]
 	if !ok {
 		return Seed{}, fmt.Errorf("%q is not something a seed does", verb)
@@ -133,12 +145,8 @@ func Transition(seed Seed, verb Verb, ask Ask, sessionLive func(sessionID protoc
 	if !slices.Contains(rule.from, seed.Status) {
 		return Seed{}, refuseState(seed, verb, rule)
 	}
-	if rule.claims && !ask.Actor.Named() {
-		return Seed{}, fmt.Errorf(
-			"tending %s records who holds it and this call named nobody; run it from an attn session, or pass --member <name>", seed.ID)
-	}
-	if held := seed.Tender(); held.Holds(sessionLive) && !held.Is(ask.Actor) && !ask.Force {
-		return Seed{}, refuseTakeover(seed, verb, held)
+	if tender, claimed := seed.Claim.Lasts(b); claimed && tender != claimant && tender.Actor() != ask.By && !ask.Force {
+		return Seed{}, &TakeoverRefused{SeedID: seed.ID, Verb: verb, Tender: tender}
 	}
 	if rule.needsReason && reason == "" {
 		return Seed{}, fmt.Errorf(
@@ -157,14 +165,8 @@ func Transition(seed Seed, verb Verb, ask Ask, sessionLive func(sessionID protoc
 
 	next := seed
 	next.Status = rule.to
-	switch {
-	case rule.claims:
-		next.TenderSession = protocol.TrimID(ask.Actor.Session)
-		next.TenderMember = strings.TrimSpace(ask.Actor.Member)
-	default:
-		next.TenderSession = ""
-		next.TenderMember = ""
-	}
+	next.Claim = Claim{}
+
 	switch {
 	case rule.keepsReason:
 		next.Reason = reason
@@ -175,21 +177,6 @@ func Transition(seed Seed, verb Verb, ask Ask, sessionLive func(sessionID protoc
 		next.HarvestWhen = nil
 	}
 	return next, nil
-}
-
-func (s Seed) Tender() Tender {
-	return Tender{Session: s.TenderSession, Member: s.TenderMember}
-}
-
-func (d Dispatch) Dispatcher() Tender {
-	return Tender{Session: d.DispatcherSession, Member: d.DispatcherMember}
-}
-
-func refuseTakeover(seed Seed, verb Verb, held Tender) error {
-	return fmt.Errorf(
-		"%s is being tended by %s, and `attn seed %s` takes it from them.\n"+
-			"Pass --force to act anyway; the log will record it. Or say what you need on the log: attn seed note %s -m \"…\"",
-		seed.ID, held.DisplayName(), verb, seed.ID)
 }
 
 func refuseState(seed Seed, verb Verb, rule move) error {
@@ -206,13 +193,12 @@ func refuseState(seed Seed, verb Verb, rule move) error {
 }
 
 type Note struct {
-	ID            string             `json:"id"`
-	Seed          string             `json:"seed"`
-	Kind          string             `json:"kind"`
-	Body          string             `json:"body"`
-	AuthorSession protocol.SessionID `json:"author_session"`
-	AuthorMember  string             `json:"author_member"`
-	Artifact      *ArtifactReference `json:"artifact,omitempty"`
+	ID       string             `json:"id"`
+	Seed     string             `json:"seed"`
+	Kind     string             `json:"kind"`
+	Body     string             `json:"body"`
+	Author   who.Actor          `json:"author"`
+	Artifact *ArtifactReference `json:"artifact,omitempty"`
 }
 
 const (
@@ -261,10 +247,6 @@ func ValidateNote(body string) error {
 		return fmt.Errorf("that note is %d bytes and the limit is %d; a note is what happened and what you learned, not an archive", n, MaxNoteBytes)
 	}
 	return nil
-}
-
-func (n Note) Author() Tender {
-	return Tender{Session: n.AuthorSession, Member: n.AuthorMember}
 }
 
 func NewNoteID() (string, error) { return mintID(noteIDPrefix) }

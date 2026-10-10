@@ -20,11 +20,12 @@ const (
 )
 
 type Terminals struct {
-	mu          sync.Mutex
-	terminals   map[harness.TerminalID]*Terminal
-	onExit      func(ptybackend.ExitInfo)
-	onState     func(harness.TerminalID, pty.Observation)
-	onNextSpawn func(*Terminal)
+	mu             sync.Mutex
+	terminals      map[harness.TerminalID]*Terminal
+	onExit         func(ptybackend.ExitInfo)
+	onState        func(harness.TerminalID, pty.Observation)
+	onNextSpawn    func(*Terminal)
+	nextSpawnError error
 }
 
 type TerminalInput struct {
@@ -71,8 +72,19 @@ func (b *Terminals) OnNextSpawn(fn func(*Terminal)) {
 	b.onNextSpawn = fn
 }
 
+func (b *Terminals) RefuseNextSpawn(err error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.nextSpawnError = err
+}
+
 func (b *Terminals) Spawn(_ context.Context, opts ptybackend.SpawnOptions) error {
 	b.mu.Lock()
+	if err := b.nextSpawnError; err != nil {
+		b.nextSpawnError = nil
+		b.mu.Unlock()
+		return err
+	}
 	if existing := b.terminals[opts.ID]; existing != nil && existing.running {
 		b.mu.Unlock()
 		return fmt.Errorf("session %s already running", opts.ID)

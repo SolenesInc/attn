@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 const (
@@ -135,11 +135,11 @@ func reaches(seeds []Seed, start, kind, target string) []string {
 	return walk(start)
 }
 
-func Ready(seeds []Seed, sessionLive func(sessionID protocol.SessionID) bool) []Seed {
+func Ready(seeds []Seed, b who.Bindings) []Seed {
 	graph := readiness(seeds)
 	ready := make([]Seed, 0, len(seeds))
 	for _, seed := range seeds {
-		if !graph.open(seed) || seed.Tender().Holds(sessionLive) {
+		if _, claimed := seed.Claim.Lasts(b); !graph.open(seed) || claimed {
 			continue
 		}
 		ready = append(ready, seed)

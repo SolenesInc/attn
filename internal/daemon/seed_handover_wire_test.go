@@ -58,7 +58,7 @@ func TestAHandoverStartsTheSuccessorWhereThePredecessorLeftOff(t *testing.T) {
 	if notes := lifeShow(t, cli, seed).Notes; notes[0].Kind != "handoff" || notes[0].Body != "Continue from the failing test." {
 		t.Errorf("the seed's log leads with %+v, want the handoff", notes[0])
 	}
-	if held := lifeShow(t, cli, sibling).Seed.TenderSession; held != predecessor.SessionID {
+	if held := protocol.Deref(protocol.Deref(lifeShow(t, cli, sibling).Seed.Tender).SessionID); held != predecessor.SessionID {
 		t.Errorf("the handover moved %s, which %s also tended, to %q", sibling, predecessor.SessionID, held)
 	}
 	if kept := sessionOfDelegate(t, w, string(predecessor.SessionID)); kept.ID != predecessor.SessionID || protocol.Deref(kept.SeedID) == seed {
@@ -202,8 +202,8 @@ func seedHandoverHeldBy(t *testing.T, cli *client.Client, seedID, sessionID stri
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(shown.Seed.TenderSession) != sessionID || string(protocol.Deref(shown.Seed.LastExecutionID)) != sessionID {
-		t.Errorf("%s is tended by %q in execution %q, want %s", seedID, shown.Seed.TenderSession, protocol.Deref(shown.Seed.LastExecutionID), sessionID)
+	if protocol.Deref(shown.Seed.Tender).Ref != protocol.PartyRef("session:"+sessionID) || string(protocol.Deref(shown.Seed.LastExecutionID)) != sessionID {
+		t.Errorf("%s is tended by %q in execution %q, want %s", seedID, protocol.Deref(protocol.Deref(shown.Seed.Tender).SessionID), protocol.Deref(shown.Seed.LastExecutionID), sessionID)
 	}
 	found := 0
 	for _, note := range shown.Notes {

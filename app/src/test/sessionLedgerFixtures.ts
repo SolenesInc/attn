@@ -23,7 +23,7 @@ export function closedEntry(id: string, overrides: Partial<SessionLedgerEntry> =
     id,
     last_seen: '2026-09-05T09:00:00Z',
     closed_at: CLOSED_AT,
-    closed_by: 'user',
+    closed_by: { ref: 'user', name: 'the user' },
     close_reason: 'work finished',
     ...overrides,
   });

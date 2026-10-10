@@ -21,10 +21,10 @@ func TestAnUnreadSeedBellSaysTheSeedWasUnblocked(t *testing.T) {
 			t.Fatalf("watch the release: %v", err)
 		}
 
-		if _, err := cli.SeedNote("worker", release, "waiting on the build", "", "", true, nil); err != nil {
+		if _, err := cli.SeedNote("worker", release, "waiting on the build", "", true, nil); err != nil {
 			t.Fatalf("ring the watcher with a note: %v", err)
 		}
-		if _, err := cli.SeedTransition("worker", build, "harvest", "fixed", "", false, client.SeedTransitionOptions{}); err != nil {
+		if _, err := cli.SeedTransition("worker", build, "harvest", "fixed", false, client.SeedTransitionOptions{}); err != nil {
 			t.Fatalf("harvest the build: %v", err)
 		}
 		w.advance(0)
@@ -41,7 +41,7 @@ func TestAnUnreadSeedBellSaysTheSeedWasUnblocked(t *testing.T) {
 
 func plantSeedAs(t *testing.T, cli *client.Client, sessionID, title string) string {
 	t.Helper()
-	planted, err := cli.SeedPlant(protocol.SessionID(sessionID), title, "", "", "", "")
+	planted, err := cli.SeedPlant(protocol.SessionID(sessionID), title, "", "", "")
 	if err != nil {
 		t.Fatalf("plant %q: %v", title, err)
 	}

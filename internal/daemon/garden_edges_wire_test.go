@@ -57,7 +57,9 @@ func TestBlockingEdgesGateReadiness(t *testing.T) {
 	edgeLink(t, cli, first, "blocks", second)
 	edgeLink(t, cli, second, "part-of", plot)
 	lifeMove(t, cli, worker, first, "tend", "", "trellis")
-	lifeMove(t, cli, worker, first, "harvest", "done", "trellis")
+	if _, err := cli.SeedTransition(protocol.SessionID(worker), first, "harvest", "done", true, client.SeedTransitionOptions{}); err != nil {
+		t.Fatal(err)
+	}
 	if got := lifeSeedIDs(edgeReady(t, cli, worker, "", false).Seeds); !slices.Equal(got, []string{second}) {
 		t.Errorf("after harvesting the blocker, ready = %v, want the dependent %s", got, second)
 	}
@@ -149,12 +151,12 @@ func TestADispatchedSessionIsReadyForItsPlot(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	planner := spawnPanes(w, app, w.Path("planner"))[0].session
-	plot, err := cli.SeedPlant(protocol.SessionID(planner), "the plot", "Work through the plot.", "", "", "")
+	plot, err := cli.SeedPlant(protocol.SessionID(planner), "the plot", "Work through the plot.", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	crown := plot.Seed.ID
-	inside, err := cli.SeedPlant(protocol.SessionID(planner), "inside", "", crown, "", "")
+	inside, err := cli.SeedPlant(protocol.SessionID(planner), "inside", "", crown, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,11 +195,11 @@ func TestADispatchedSessionIsReadyForItsPlot(t *testing.T) {
 func TestReadyScopesToAPlotAndListsPlotsBeforeLooseSeeds(t *testing.T) {
 	w := newWorld(t)
 	cli := w.Client()
-	firstPlot, err := cli.SeedPlot("", "", protocol.SeedPlotMessage{Title: "first plot", Children: []protocol.SeedPlotChild{{Title: "first child"}}})
+	firstPlot, err := cli.SeedPlot("", protocol.SeedPlotMessage{Title: "first plot", Children: []protocol.SeedPlotChild{{Title: "first child"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	secondPlot, err := cli.SeedPlot("", "", protocol.SeedPlotMessage{Title: "second plot", Children: []protocol.SeedPlotChild{{Title: "second child"}}})
+	secondPlot, err := cli.SeedPlot("", protocol.SeedPlotMessage{Title: "second plot", Children: []protocol.SeedPlotChild{{Title: "second child"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +213,7 @@ func TestReadyScopesToAPlotAndListsPlotsBeforeLooseSeeds(t *testing.T) {
 		t.Errorf("ready --all seeds = %v, want %v", got, want)
 	}
 
-	deeper, err := cli.SeedPlant("", "deeper", "", firstPlot.Children[0].ID, "", "")
+	deeper, err := cli.SeedPlant("", "deeper", "", firstPlot.Children[0].ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -60,9 +60,9 @@ func (d *Daemon) autoSettleConfig() autoSettleConfig {
 		return autoSettleConfig{}
 	}
 	return autoSettleConfig{
-		enabled:   parseBooleanSetting(d.store.GetSetting(SettingAutoSettleEnabled)),
-		arm:       resolveAutoSettleSeconds(d.store.GetSetting(SettingAutoSettleArmSeconds), defaultAutoSettleArmSeconds),
-		countdown: resolveAutoSettleSeconds(d.store.GetSetting(SettingAutoSettleCountdownSeconds), defaultAutoSettleCountdownSeconds),
+		enabled:   parseBooleanSetting(d.daemonSetting(settingAutoSettleEnabled)),
+		arm:       resolveAutoSettleSeconds(d.daemonSetting(settingAutoSettleArmSeconds), defaultAutoSettleArmSeconds),
+		countdown: resolveAutoSettleSeconds(d.daemonSetting(settingAutoSettleCountdownSeconds), defaultAutoSettleCountdownSeconds),
 	}
 }
 

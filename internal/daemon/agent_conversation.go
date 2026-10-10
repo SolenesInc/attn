@@ -55,6 +55,10 @@ func (d *Daemon) conversationIn(t harness.TerminalID, observation agentConversat
 	if held != observation.NativeID {
 		owner = d.store.ConversationOwner(cur, observation.NativeID)
 	}
+	if held != "" && held != observation.NativeID && d.crewMemberBoundTo(cur) != "" {
+		d.crewWakeMu.Lock()
+		defer d.crewWakeMu.Unlock()
+	}
 	defer d.lockSessionLifecycles(cur, owner)()
 	session := d.store.Get(cur)
 	if shown, _ := d.terminals().Showing(t); shown != cur || session == nil || !d.terminalLive(t) {

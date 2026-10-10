@@ -239,14 +239,6 @@ func (d *Daemon) deliverClaimedReviewRun(run *store.AutomationRun) error {
 	return nil
 }
 
-func (d *Daemon) reconcileAutomationReviewRequests(definitionID int, host string, subjects []string, observedAt time.Time) ([]store.AutomationReviewRequestCandidate, error) {
-	observations := make([]store.AutomationReviewRequestObservation, 0, len(subjects))
-	for _, subject := range subjects {
-		observations = append(observations, store.AutomationReviewRequestObservation{SubjectKey: subject})
-	}
-	return d.reconcileAutomationReviewRequestHeads(definitionID, host, observations, observedAt)
-}
-
 func (d *Daemon) reconcileAutomationReviewRequestHeads(definitionID int, host string, observations []store.AutomationReviewRequestObservation, observedAt time.Time) ([]store.AutomationReviewRequestCandidate, error) {
 	d.automationMu.Lock()
 	defer d.automationMu.Unlock()

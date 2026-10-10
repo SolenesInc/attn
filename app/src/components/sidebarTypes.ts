@@ -1,3 +1,4 @@
+import type { ActorView } from '../types/generated';
 import type { MouseEvent as ReactMouseEvent, ReactNode } from 'react';
 import type { CriticalNotificationState } from '../hooks/useDaemonSocket';
 import type {
@@ -33,7 +34,7 @@ export interface LocalSession {
   turnSnoozedUntil?: string;
   crewMember?: string;
   dispatcher_session_id?: string;
-  dispatcher_member?: string;
+  dispatcher?: ActorView;
   delegation_role?: SessionDelegationRole;
   automation?: AutomationProvenanceValue;
   pullRequests?: SessionPullRequest[];

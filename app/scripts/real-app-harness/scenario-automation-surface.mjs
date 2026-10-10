@@ -56,7 +56,7 @@ function sessionsForDefinition(binary, definitionID, env) {
 
 function seedForSession(binary, sessionID, env) {
   const garden = runJSON(binary, ['seed', 'ls', '--json'], env) || {};
-  return (garden.seeds || []).find((seed) => seed.tender_session === sessionID) || null;
+  return (garden.seeds || []).find((seed) => seed.tender?.session_id === sessionID) || null;
 }
 
 function seedByID(binary, seedID, env) {

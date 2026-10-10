@@ -10,6 +10,7 @@ import (
 
 	"github.com/victorarias/attn/internal/delegationprefs"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 var (
@@ -18,35 +19,34 @@ var (
 )
 
 type DelegationOperationRecord struct {
-	Operation             protocol.DelegationOperation
-	ResolvedPreferences   string
-	RequestJSON           string
-	WorktreeOwned         bool
-	WorktreeToken         string
-	ChiefSessionID        protocol.SessionID
-	BaseCommit            string
-	ParentSeedID          string
-	HandoffNoteID         string
-	HandoverSeedRev       int
-	HandoverTenderSession string
-	HandoverTenderMember  string
+	Operation           protocol.DelegationOperation
+	ResolvedPreferences string
+	RequestJSON         string
+	WorktreeOwned       bool
+	WorktreeToken       string
+	ChiefSessionID      protocol.SessionID
+	BaseCommit          string
+	ParentSeedID        string
+	HandoffNoteID       string
+	HandoverSeedRev     int
+	HandoverTender      who.Party
+	Dispatcher          who.Actor
 }
 
 type DelegationHandoverSnapshot struct {
-	SeedRev       int
-	TenderSession protocol.SessionID
-	TenderMember  string
+	SeedRev int
+	Tender  who.Party
 }
 
-func (s *Store) ClaimDelegationOperation(requestID string, operationID string, sessionID protocol.SessionID, chiefSessionID protocol.SessionID, seedID string, requestJSON string, now time.Time) (*DelegationOperationRecord, bool, error) {
-	return s.ClaimDelegationOperationWithPreferences(requestID, operationID, sessionID, chiefSessionID, seedID, requestJSON, "", now)
+func (s *Store) ClaimDelegationOperation(requestID string, operationID string, sessionID protocol.SessionID, chiefSessionID protocol.SessionID, dispatcher who.Actor, seedID string, requestJSON string, now time.Time) (*DelegationOperationRecord, bool, error) {
+	return s.ClaimDelegationOperationWithPreferences(requestID, operationID, sessionID, chiefSessionID, dispatcher, seedID, requestJSON, "", now)
 }
 
-func (s *Store) ClaimDelegationOperationWithPreferences(requestID string, operationID string, sessionID protocol.SessionID, chiefSessionID protocol.SessionID, seedID string, requestJSON string, resolvedPreferences string, now time.Time) (*DelegationOperationRecord, bool, error) {
-	return s.ClaimDelegationOperationWithHandoverSnapshot(requestID, operationID, sessionID, chiefSessionID, seedID, requestJSON, resolvedPreferences, "", "", DelegationHandoverSnapshot{}, now)
+func (s *Store) ClaimDelegationOperationWithPreferences(requestID string, operationID string, sessionID protocol.SessionID, chiefSessionID protocol.SessionID, dispatcher who.Actor, seedID string, requestJSON string, resolvedPreferences string, now time.Time) (*DelegationOperationRecord, bool, error) {
+	return s.ClaimDelegationOperationWithHandoverSnapshot(requestID, operationID, sessionID, chiefSessionID, dispatcher, seedID, requestJSON, resolvedPreferences, "", "", DelegationHandoverSnapshot{}, now)
 }
 
-func (s *Store) ClaimDelegationOperationWithHandoverSnapshot(requestID string, operationID string, sessionID protocol.SessionID, chiefSessionID protocol.SessionID, seedID string, requestJSON string, resolvedPreferences string, baseCommit string, parentSeedID string, handover DelegationHandoverSnapshot, now time.Time) (*DelegationOperationRecord, bool, error) {
+func (s *Store) ClaimDelegationOperationWithHandoverSnapshot(requestID string, operationID string, sessionID protocol.SessionID, chiefSessionID protocol.SessionID, dispatcher who.Actor, seedID string, requestJSON string, resolvedPreferences string, baseCommit string, parentSeedID string, handover DelegationHandoverSnapshot, now time.Time) (*DelegationOperationRecord, bool, error) {
 	if strings.HasPrefix(requestID, "op-") {
 		return nil, false, fmt.Errorf("request id uses reserved operation prefix op-")
 	}
@@ -90,11 +90,11 @@ func (s *Store) ClaimDelegationOperationWithHandoverSnapshot(requestID string, o
 	stamp := now.UTC().Format(sortableTimeFormat)
 	result, err := s.db.Exec(`INSERT INTO delegation_operations
 		(request_id, operation_id, request_json, state, progress, session_id, chief_session_id, ticket_id, resolved_preferences,
-		 base_commit, parent_seed_id, handover_seed_rev, handover_tender_session, handover_tender_member, created_at, updated_at)
+		 base_commit, parent_seed_id, handover_seed_rev, handover_tender, dispatcher, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(request_id) DO NOTHING`, requestID, operationID, requestJSON,
 		string(protocol.DelegationOperationStateAccepted), "accepted by daemon", sessionID, chiefSessionID, seedID, resolvedPreferences,
-		baseCommit, parentSeedID, handover.SeedRev, handover.TenderSession, handover.TenderMember, stamp, stamp)
+		baseCommit, parentSeedID, handover.SeedRev, handover.Tender.String(), dispatcher.String(), stamp, stamp)
 	if err != nil {
 		if seedID != "" && strings.Contains(err.Error(), "delegation_operations.ticket_id") {
 			return nil, false, fmt.Errorf("%w: %s", ErrSeedDelegationReserved, seedID)
@@ -182,12 +182,12 @@ func getDelegationOperation(db *sql.DB, id string) (*DelegationOperationRecord, 
 	var worktreeOwned int
 	err := db.QueryRow(`SELECT request_id, operation_id, request_json, state, progress,
 		session_id, ticket_id, directory, branch, base_commit, parent_seed_id, handoff_note_id, worktree_path, worktree_owned, worktree_token, chief_session_id,
-		handover_seed_rev, handover_tender_session, handover_tender_member, result_json, error, failure_code, resolved_preferences, created_at, updated_at
+		handover_seed_rev, handover_tender, dispatcher, result_json, error, failure_code, resolved_preferences, created_at, updated_at
 		FROM delegation_operations WHERE request_id = ? OR operation_id = ?`, id, id).Scan(
 		&rec.Operation.RequestID, &rec.Operation.OperationID, &rec.RequestJSON, &state,
 		&rec.Operation.Progress, &rec.Operation.SessionID, &seedID,
 		&directory, &branch, &baseCommit, &rec.ParentSeedID, &handoffNoteID, &worktreePath, &worktreeOwned, &worktreeToken, &chiefSessionID,
-		&rec.HandoverSeedRev, &rec.HandoverTenderSession, &rec.HandoverTenderMember,
+		&rec.HandoverSeedRev, &rec.HandoverTender, &rec.Dispatcher,
 		&resultJSON, &errorText, &failureCode, &rec.ResolvedPreferences, &rec.Operation.CreatedAt, &rec.Operation.UpdatedAt)
 	if err != nil {
 		return nil, err

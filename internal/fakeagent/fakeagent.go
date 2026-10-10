@@ -248,6 +248,9 @@ func serve(cfg config, style composer, conv conversation) int {
 		a.term.echo(prompt)
 		a.submit(prompt)
 	}
+	if boot.Screen != "" {
+		term.print(boot.Screen)
+	}
 	go term.readLines(a.submit)
 	<-a.control.done
 	return 0

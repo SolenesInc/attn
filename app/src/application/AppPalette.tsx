@@ -77,7 +77,7 @@ function OpenPalette({
     const now = Date.now();
     return {
       bands: buildQueueBands(desktopViews, { crewInQueue: crewQueueEnabled, now }),
-      crewRoster: crew.filter((member) => member.profile_id === selectedProfileId).map((member) => member.id),
+      crewRoster: crew.map((member) => member.key),
       desktops: desktopViews,
       tileTitle,
       now,

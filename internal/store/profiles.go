@@ -360,7 +360,7 @@ func touchProfileUse(tx *sql.Tx, profile *profiles.Profile, now string) error {
 	return err
 }
 
-func (s *Store) CreateProfile(name string) (profiles.Profile, profiles.Desktop, error) {
+func (s *Store) CreateProfile(name, notebookRoot string) (profiles.Profile, profiles.Desktop, error) {
 	var profile profiles.Profile
 	var desktop profiles.Desktop
 	err := s.profilesTx(func(tx *sql.Tx, now string) error {
@@ -379,8 +379,17 @@ func (s *Store) CreateProfile(name string) (profiles.Profile, profiles.Desktop, 
 		_, err = tx.Exec(`
 			INSERT INTO profiles (id, name, current_desktop_id, last_used_at, revision, created_at, deleted_at)
 			VALUES (?, ?, ?, '', 1, ?, '')`, profile.ID, profile.Name, profile.CurrentDesktopID, now)
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(`INSERT INTO profile_settings (profile_id, key, value) VALUES (?, 'notebook.root', ?)`, profile.ID, notebookRoot)
 		return err
 	})
+	if err == nil {
+		s.mu.Lock()
+		s.profileSettings[profile.ID] = map[string]string{"notebook.root": notebookRoot}
+		s.mu.Unlock()
+	}
 	return profile, desktop, err
 }
 
@@ -662,39 +671,6 @@ func (s *Store) OldestProfile() (profiles.Profile, error) {
 		return err
 	})
 	return profile, err
-}
-
-func (s *Store) CrewProfile(memberID string) (string, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if s.db == nil {
-		return "", profiles.Errorf(profiles.CodeUnavailable, "profiles need the SQLite store")
-	}
-	var profileID string
-	err := s.db.QueryRow(`SELECT profile_id FROM crew_profiles WHERE member_id = ?`, memberID).Scan(&profileID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
-	}
-	return profileID, err
-}
-
-func (s *Store) EnsureCrewProfile(memberID, profileID string) (string, error) {
-	var assigned string
-	err := s.profilesTx(func(tx *sql.Tx, now string) error {
-		err := tx.QueryRow(`SELECT profile_id FROM crew_profiles WHERE member_id = ?`, memberID).Scan(&assigned)
-		if !errors.Is(err, sql.ErrNoRows) {
-			return err
-		}
-		if _, err := loadLiveProfile(tx, profileID); err != nil {
-			return err
-		}
-		assigned = profileID
-		if _, err = tx.Exec(`INSERT INTO crew_profiles(member_id, profile_id) VALUES (?, ?)`, memberID, profileID); err != nil {
-			return err
-		}
-		return startOnOwnDesktop(tx, now, "crew", memberID)
-	})
-	return assigned, err
 }
 
 func (s *Store) CreateDesktop(profileID, name string, shortcutSlot int, takeFreeSlot bool) (profiles.Profile, profiles.Desktop, error) {

@@ -1,3 +1,4 @@
+import type { ActorView } from '../types/generated';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { SessionLabel } from './SessionLabel';
 import { harnessLabel } from './harnessLabel';
@@ -7,7 +8,7 @@ import { CrewWakeSun, useWakeConfirm } from './CrewWake';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import type { UISessionState } from '../types/sessionState';
 import type { QueueRow } from '../utils/queueBands';
-import { crewDisplayName } from '../utils/crewName';
+import { useMemberName } from '../store/daemonSessions';
 import type {
   AutomationProvenance as AutomationProvenanceValue,
   SessionDelegationRole,
@@ -32,14 +33,15 @@ export interface QueueBandSessionView {
   autoSettleHeld?: boolean;
   crewMember?: string;
   dispatcher_session_id?: string;
-  dispatcher_member?: string;
+  dispatcher?: ActorView;
   delegation_role?: SessionDelegationRole;
   automation?: AutomationProvenanceValue;
 }
 
 export interface CrewMemberView {
   launch_desktop?: { label?: string };
-  id: string;
+  key: string;
+  name: string;
   resolved_agent?: string;
   binding_session?: string;
 }
@@ -208,6 +210,7 @@ export interface RowWhere {
 }
 
 interface CrewRowProps {
+  name?: string;
   agent?: string;
   member: string;
   row?: QueueRow<QueueBandSessionView>;
@@ -227,6 +230,7 @@ export function CrewRowView(props: CrewRowProps) {
   ) : (
     <SleepingCrewRow
       member={props.member}
+      name={props.name}
       agent={props.agent}
       selected={props.selected}
       onWake={props.onWake}
@@ -236,15 +240,17 @@ export function CrewRowView(props: CrewRowProps) {
 }
 
 function SleepingCrewRow({
+  name: storedName,
   member,
   agent,
   selected,
   onWake,
   onOpenMemberActions,
-}: Pick<CrewRowProps, 'member' | 'selected' | 'onWake' | 'onOpenMemberActions' | 'agent'>) {
+}: Pick<CrewRowProps, 'member' | 'name' | 'selected' | 'onWake' | 'onOpenMemberActions' | 'agent'>) {
   const { phase, trigger, rowRef } = useWakeConfirm(onWake);
   const armed = phase === 'armed';
-  const name = crewDisplayName(member);
+  const resolvedName = useMemberName(member);
+  const name = storedName ?? resolvedName;
   const wakeLabel = armed ? `Wake ${name} — click again to confirm` : `Wake ${name}`;
   return (
     <div
@@ -303,6 +309,7 @@ function SleepingCrewRow({
 }
 
 function AwakeCrewRow({
+  name: storedName,
   member,
   row,
   where,
@@ -314,7 +321,8 @@ function AwakeCrewRow({
 }: CrewRowProps & {
   row: QueueRow<QueueBandSessionView>;
 }) {
-  const name = crewDisplayName(member);
+  const resolvedName = useMemberName(member);
+  const name = storedName ?? resolvedName;
   const { session } = row;
   const label = session.label || name;
   return (

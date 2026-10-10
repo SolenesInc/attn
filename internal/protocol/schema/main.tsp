@@ -6,6 +6,18 @@ using TypeSpec.JsonSchema;
 namespace Protocol;
 
 scalar SessionID extends string;
+
+// Party: session:<id> or member:<key>. IDs are nonempty without whitespace;
+// member keys are lowercase letters, digits and -, starting with a letter, at most 40 characters.
+scalar PartyRef extends string;
+// Actor: Party text, user or attn.
+scalar ActorRef extends string;
+// Address: Party text, seed:<id> or chief:<profile> (until the chief is a member).
+// Parsing accepts only canonical text; zero values cannot encode (ErrNobody).
+scalar AddressRef extends string;
+model PartyView { ref: PartyRef; name: string; session_id?: SessionID; }
+model ActorView { ref: ActorRef; name: string; }
+
 scalar TerminalID extends string;
 
 // ============================================================================
@@ -180,10 +192,11 @@ model Session {
   state_reason?: string;        // Why the resolver reached this state (e.g. "stuck", "classifier_verdict"); absent for states it does not own
   chief_of_staff?: boolean;     // True when this session holds the instance-wide coordinator role
   crew_member?: string;         // The crew member whose active binding this session is — "this session is trellis today". Stamped by the daemon at launch, judged live at broadcast, absent for every unbound session.
+  crew_member_name?: string;
   delegated_from_chief?: boolean; // True when this session was delegated from the chief of staff (recorded by the Garden dispatch)
   seed_id?: string;             // The seed this session reports to: the crown a delegation was dispatched at, or the seed planted for it. Read from the session's dispatch record at broadcast, never stored on the session — the record is the single answer to what a session reports to. Absent for a session no delegation bound.
   dispatcher_session_id?: SessionID; // The live session for this session's dispatcher, resolved from its dispatch record at broadcast and never stored on the session. Absent when nothing resolves.
-  dispatcher_member?: string;   // The crew member whose day dispatched this session. Read from the dispatch record and present even when no live session resolves.
+  dispatcher?: ActorView;
   delegation_role?: SessionDelegationRole;
   turn_owed?: boolean;          // True when the user owes this session a turn. Derived at broadcast from the turn stamps plus the queue's exclusions (shell, chief); never stored, and never recomputed by a client.
   turn_opened_at?: string;      // ISO timestamp the outstanding turn opened; the queue's sort key. Absent when nothing is owed.
@@ -594,7 +607,7 @@ model UnregisterMessage {
   cmd: "unregister";
   id: SessionID;
   // Absent, the close is the user's.
-  closed_by?: string;
+  closed_by?: ActorRef;
   close_reason?: string;
 }
 
@@ -742,21 +755,19 @@ model StateExplainMessage {
 // already holds. Passive by construction — nothing here touches the target's
 // PTY or generates input, so watching costs the observed agent nothing.
 model AgentPeekMessage {
+  source_session_id?: SessionID;
+  profile_id?: string;
   cmd: "agent_peek";
-  target_session_id: string;    // crew name, full session id, or unique session prefix
+  to: string;
 }
 
 // One agent sends another a message. The daemon persists the body and types a
 // content-free doorbell into the target's conversation. The recipient reads
 // the body explicitly with AgentInboxMessage.
-// Exactly one destination: a session (or crew member) by id, or a seed, whose
-// tender the daemon resolves. The caller decides which field it fills — a seed
-// id has a shape the CLI recognizes — so the daemon is handed authority instead
-// of a string to sniff.
+// The daemon resolves a name, member key, session reference or seed in the sender’s profile.
 model AgentMsgMessage {
   cmd: "agent_msg";
-  target_session_id: string;    // full id or unique prefix; empty when addressing a seed
-  target_seed_id?: string;      // deliver to this seed's tender
+  to: string;
   source_session_id: SessionID;    // who is speaking; the daemon composes from this
   content: string;
 }
@@ -765,12 +776,11 @@ model AgentMsgMessage {
 // (the Garden dispatch document names it as the dispatcher), and the chief of
 // staff may close any. The reason is required: the ledger keeps the row, and the
 // reason is what the next reader has to go on.
-// Exactly one destination, the same shape as AgentMsgMessage: a session by id or
-// unique prefix, or a seed whose tender the daemon resolves.
+// The daemon resolves the destination like AgentMsgMessage, within the caller's
+// profile: a session reference or prefix, a member name or key, or a seed's tender.
 model AgentCloseMessage {
   cmd: "agent_close";
-  target_session_id: string;    // full id or unique prefix; empty when addressing a seed
-  target_seed_id?: string;      // close whoever tends this seed
+  to: string;
   source_session_id: SessionID;    // who is closing
   reason: string;
 }
@@ -1128,8 +1138,6 @@ model SeedHandoverRequest {
   seed_id: string;
   handoff?: string;
   expected_rev: safeint;
-  expected_tender_session: SessionID;
-  expected_tender_member: string;
   review?: SeedReviewActionContext;
   note_id?: string; // Reserved recovery identity for a new handoff note.
 }
@@ -1186,13 +1194,20 @@ model PresentFeedbackResult {
 }
 
 
+model NotebookScope {
+  profile_id?: string;
+  expected_notebook_root?: string;
+}
+
 model NotebookListMessage {
+  ...NotebookScope;
   cmd: "notebook_list";
   prefix?: string;
   request_id?: string; // set by the WS frontend to correlate the result event
 }
 
 model NotebookReadMessage {
+  ...NotebookScope;
   cmd: "notebook_read";
   path: string;
   request_id?: string; // set by the WS frontend to correlate the result event
@@ -1200,12 +1215,14 @@ model NotebookReadMessage {
 
 // List the notes whose body links to `path` (root-absolute markdown links).
 model NotebookBacklinksMessage {
+  ...NotebookScope;
   cmd: "notebook_backlinks";
   path: string;
   request_id?: string; // set by the WS frontend for result correlation
 }
 
 model NotebookWriteMessage {
+  ...NotebookScope;
   cmd: "notebook_write";
   path: string;
   content: string;
@@ -1217,6 +1234,7 @@ model NotebookWriteMessage {
 // chief inbox note and, when a chief session is live and idle/waiting, fires a
 // bounded PTY nudge. The UI never messages the chief directly.
 model NotebookSendToChiefMessage {
+  ...NotebookScope;
   cmd: "notebook_send_to_chief";
   selection: string;
   source_path?: string; // the note the selection came from (root-absolute or relative)
@@ -1294,6 +1312,7 @@ model NotificationMarkReadMessage {
 // List the immediate children (files and subdirectories) of one directory under
 // the root. SHALLOW by design: a tree UI expands lazily, one readdir per node.
 model FsListMessage {
+  ...NotebookScope;
   cmd: "fs_list";
   path?: string; // omitted/"" = the root directory itself
   root?: string; // Absolute directory to operate under; omitted/empty = the notebook root.
@@ -1301,6 +1320,7 @@ model FsListMessage {
 }
 
 model FsReadMessage {
+  ...NotebookScope;
   cmd: "fs_read";
   path: string;
   root?: string; // Absolute directory to operate under; omitted/empty = the notebook root.
@@ -1311,6 +1331,7 @@ model FsReadMessage {
 // ![alt](path) images without widening Tauri's fs permissions. Only a fixed
 // allowlist of image extensions is served; anything else is an error.
 model FsReadAssetMessage {
+  ...NotebookScope;
   cmd: "fs_read_asset";
   path: string;
   root?: string; // Absolute directory to operate under; omitted/empty = the notebook root.
@@ -1318,6 +1339,7 @@ model FsReadAssetMessage {
 }
 
 model FsWriteMessage {
+  ...NotebookScope;
   cmd: "fs_write";
   path: string;
   content: string;
@@ -1327,6 +1349,7 @@ model FsWriteMessage {
 }
 
 model FsRenameMessage {
+  ...NotebookScope;
   cmd: "fs_rename";
   path: string;
   new_path: string;
@@ -1335,6 +1358,7 @@ model FsRenameMessage {
 }
 
 model FsDeleteMessage {
+  ...NotebookScope;
   cmd: "fs_delete";
   path: string;
   root?: string; // Absolute directory to operate under; omitted/empty = the notebook root.
@@ -1344,6 +1368,7 @@ model FsDeleteMessage {
 // Check whether a path exists under the root, without reading it. Used to flag
 // in-notebook markdown links that point at a missing note.
 model FsExistsMessage {
+  ...NotebookScope;
   cmd: "fs_exists";
   path: string;
   root?: string; // Absolute directory to operate under; omitted/empty = the notebook root.
@@ -1356,6 +1381,7 @@ model FsExistsMessage {
 // so fs_watch on it is a success no-op. Pair with fs_unwatch when the client no
 // longer needs live updates for that root.
 model FsWatchMessage {
+  ...NotebookScope;
   cmd: "fs_watch";
   root?: string; // Absolute directory to operate under; omitted/empty = the notebook root.
   request_id?: string; // set by the WS frontend to correlate the result event
@@ -1365,6 +1391,7 @@ model FsWatchMessage {
 // once no client holds it open (including on client disconnect). Unwatching a
 // root this client never watched is a success no-op.
 model FsUnwatchMessage {
+  ...NotebookScope;
   cmd: "fs_unwatch";
   root?: string; // Absolute directory to operate under; omitted/empty = the notebook root.
   request_id?: string; // set by the WS frontend to correlate the result event
@@ -1376,6 +1403,7 @@ model FsUnwatchMessage {
 // chokepoint as every other fs_* command, so an explicit root is gated on the
 // authenticated app client.
 model FsIndexMessage {
+  ...NotebookScope;
   cmd: "fs_index";
   root?: string; // Absolute directory to operate under; omitted/empty = the notebook root.
   // Restrict the index to these file extensions, without leading dots and
@@ -1582,13 +1610,34 @@ model WorktreeRefreshResult {
 
 model GetSettingsMessage {
   cmd: "get_settings";
+  source_session_id?: SessionID;
+  profile_id?: string;
+  key?: string;
+  all?: boolean;
 }
 
 model SetSettingMessage {
   cmd: "set_setting";
+  source_session_id?: SessionID;
+  profile_id?: string;
   request_id?: string;
   key: string;
   value: string;
+}
+
+enum SettingScope { daemon, profile }
+model SettingEntry {
+  key: string;
+  scope: SettingScope;
+  description: string;
+  value?: string;
+  read_only?: boolean;
+  family?: boolean;
+}
+model SettingsListResult {
+  profile_id: string;
+  profile_name: string;
+  entries: SettingEntry[];
 }
 
 model ListPluginsMessage {
@@ -3482,6 +3531,7 @@ model GitOperationFinishedMessage {
 }
 
 model SettingsUpdatedMessage {
+  profile_id?: string;
   event: "settings_updated";
   request_id?: string;
   settings?: Record<string>;
@@ -4444,12 +4494,12 @@ model Seed {
   "status": string;
   // The seed's stable name within its plot; derived from the title at planting.
   "step_slug": string;
-  "planter_session": SessionID;
-  "planter_member": string;
-  "tender_session": SessionID;
-  "tender_member": string;
+  "planter": ActorView;
+  "tender"?: PartyView;
+  "claimed": boolean;
+  "resume_available": boolean;
   // The most recent attn session that worked this seed. It survives Park and
-  // session removal; current ownership remains tender_session/tender_member.
+  // session removal; the current claim is tender.
   "last_execution_id"?: SessionID;
   // The latest lifecycle state transition. Legacy seeds use updated_at as a
   // conservative fallback and say so through state_changed_at_exact.
@@ -4491,8 +4541,7 @@ model SeedHarvestCondition {
   "pull_request": string;
   "url": string;
   "set_at": string;
-  "set_by_session"?: SessionID;
-  "set_by_member"?: string;
+  "set_by": ActorView;
   "checked_at"?: string;
 }
 
@@ -4558,17 +4607,12 @@ model KeptConversationsChangedEvent {
   event: "kept_conversations_changed";
 }
 
-enum KeptConversationDeletedBy {
- sweep,
- user,
-}
-
 model KeptConversation {
  "bytes": safeint;
  "copied_at": string;
  "delete_after"?: string;
  "deleted_at"?: string;
- "deleted_by"?: KeptConversationDeletedBy;
+ "deleted_by"?: ActorView;
  "pinned_at"?: string;
 }
 
@@ -4643,8 +4687,7 @@ model SeedPlantMessage {
   // A seed this work was discovered while tending. Refused before planting
   // when no such seed is planted.
   "discovered_from"?: string;
-  // The crew member planting, free-string until the crew primitive lands.
-  "member"?: string;
+
 }
 
 model SeedPlantResult {
@@ -4659,7 +4702,7 @@ model SeedPlotMessage {
 
   "cmd": "seed_plot";
   "source_session_id"?: SessionID;
-  "member"?: string;
+
   "title": string;
   "body"?: string;
   "children": SeedPlotChild[];
@@ -4808,10 +4851,6 @@ model SeedDocumentGetMessage {
 
 model SeedDocument {
   "seed": Seed;
-  // Whether the stored tender currently holds this seed. A tender session may
-  // remain in the document after that session exits, so the ids alone cannot
-  // answer where feedback can be delivered.
-  "tender_holds": boolean;
   "children": Seed[];
   "notes": SeedNote[];
   "notes_total": int32;
@@ -4997,10 +5036,9 @@ model SeedTransitionMessage {
   // A log note committed with Park. It is separate from a closing reason and
   // absent for every other lifecycle move.
   "comment"?: string;
-  // The crew member asking, recorded as the tender on a claim.
-  "member"?: string;
-  // Yes, act even though somebody else holds it. Ignored when nobody else
-  // holds the seed.
+  // The member to claim the seed for; accepted only with tend.
+  "assignee"?: string;
+  // Yes, act even though somebody else claims the seed.
   "force"?: boolean;
   // Present only when this lifecycle move resolves one captured Review garden item.
   "review"?: SeedReviewActionContext;
@@ -5066,8 +5104,7 @@ model SeedNote {
   // attach and detach are the only kinds that carry an artifact.
   "kind": string;
   "body": string;
-  "author_session": SessionID;
-  "author_member": string;
+  "author": ActorView;
   "created_at": string;
   "artifact"?: SeedArtifactReference;
 }
@@ -5081,7 +5118,7 @@ model SeedNoteMessage {
   "request_id"?: string;
   "seed_id": string;
   "body": string;
-  "member"?: string;
+
   // Omitted is a plain log entry, so a caller that never heard of kinds
   // writes a note. An unknown kind is refused, naming the whole set.
   "kind"?: string;
@@ -5187,8 +5224,6 @@ model SeedSendToChiefMessage {
   "source_session_id"?: SessionID;
   "seed_id": string;
   "expected_rev": safeint;
-  "expected_tender_session": SessionID;
-  "expected_tender_member": string;
   "guidance"?: string;
   // Present only when this resolves one captured Review garden item.
   "review"?: SeedReviewActionContext;
@@ -5196,7 +5231,7 @@ model SeedSendToChiefMessage {
 
 model SeedSendToChiefResult {
   "seed": Seed;
-  "chief_session_id": SessionID;
+  "chief": PartyView;
   "delivery_status": AgentMsgStatus;
   "detail": string;
 }
@@ -5490,8 +5525,8 @@ model AutoModeProposalInfo {
   "value": string;
   // "value" read back as one line, for a list a human scans.
   "summary": string;
-  // Who proposed it, when the caller said. Empty when nobody did.
-  "proposed_by": string;
+  // The requesting actor. Absent when older attribution is unknown.
+  "proposed_by"?: ActorView;
   // "pending" | "promoted" | "discarded".
   "state": string;
   "created_at": string;
@@ -5551,7 +5586,7 @@ model AutoModeProposeMessage {
   "kind": string;
   "target"?: string;
   "value": string;
-  "proposed_by"?: string;
+  "source_session_id": SessionID;
 }
 
 model AutoModeProposeResult {
@@ -5724,6 +5759,8 @@ model AutoModeEnvSetResultMessage {
 // ============================================================================
 
 model Response {
+  settings_list?: SettingsListResult;
+  setting?: SettingEntry;
   ok: boolean;
   error?: string;
   // A machine-readable name for what went wrong, beside the human-readable
@@ -5776,6 +5813,10 @@ model Response {
   agent_inbox_result?: AgentPeerMessage;
   agent_inbox_batch_result?: AgentInboxBatchResult;
   agent_msg_status_result?: AgentPeerMessage;
+  crew_rename_result?: CrewRenameResult;
+  crew_create_result?: CrewCreateResult;
+  crew_retire_result?: CrewRetireResult;
+  crew_restore_result?: CrewRestoreResult;
   crew_list_result?: CrewListResult;
   crew_charter_get_result?: CrewCharterGetResult;
   crew_charter_set_result?: CrewCharterSetResult;
@@ -5886,6 +5927,7 @@ model AgentPeekResult {
   exit?: AgentPeekExit;
   // The crew member whose active binding this session is; absent when unbound.
   crew_member?: string;
+  crew_member_name?: string;
 }
 
 // ============================================================================
@@ -5897,14 +5939,19 @@ model AgentPeekResult {
 // copied onto the wire. Home-only — an outpost is refused by the enrollment
 // fence.
 model CrewListMessage {
+  include_retired?: boolean;
+  source_session_id?: SessionID;
+  profile_id?: string;
   cmd: "crew_list";
 }
 
 // One registered crew member. Paths point at the canonical files.
 model CrewMember {
+  retired: boolean;
   profile_name?: string;
   launch_desktop?: LaunchDesktopSetting;
-  id: string;
+  key: string;
+  name: string;
   profile_id: string; // The profile the member belongs to; it wakes only there
   revision: safeint;
   charter_path: string;
@@ -5940,6 +5987,8 @@ model CrewCharterDocument {
 }
 
 model CrewCharterGetMessage {
+  source_session_id?: SessionID;
+  profile_id?: string;
   cmd: "crew_charter_get";
   member: string;
   request_id?: string;
@@ -5960,6 +6009,8 @@ model CrewCharterGetResultMessage {
 }
 
 model CrewCharterSetMessage {
+  source_session_id?: SessionID;
+  profile_id?: string;
   cmd: "crew_charter_set";
   member: string;
   content: string;
@@ -5996,6 +6047,8 @@ model CrewHandoffDocument {
 }
 
 model CrewHandoffsGetMessage {
+  source_session_id?: SessionID;
+  profile_id?: string;
   cmd: "crew_handoffs_get";
   member: string;
   request_id?: string;
@@ -6016,6 +6069,8 @@ model CrewHandoffsGetResultMessage {
 }
 
 model CrewHandoffGetMessage {
+  source_session_id?: SessionID;
+  profile_id?: string;
   cmd: "crew_handoff_get";
   member: string;
   filename: string;
@@ -6076,6 +6131,7 @@ model CrewWakeResultMessage {
 }
 
 model CrewWakeResult {
+  name: string;
   member: string;
   session_id: SessionID;
   profile_id: string;
@@ -6092,6 +6148,8 @@ model CrewWakeResult {
 // handoff and file it with `attn handoff --sleep`; it does not kill the member.
 // Home-only. An asleep member is a named no-op rather than a silent success.
 model CrewSleepMessage {
+  source_session_id?: SessionID;
+  profile_id?: string;
   cmd: "crew_sleep";
   member: string;
   request_id?: string; // set by the WS frontend to correlate the result event
@@ -6113,6 +6171,7 @@ model CrewSleepResultMessage {
 }
 
 model CrewSleepResult {
+  name: string;
   member: string;
   // Absent when the member was already asleep and no request was sent.
   session_id?: SessionID;
@@ -6126,6 +6185,8 @@ model CrewSleepResult {
 // about. Registry state, not prose: the home's markdown is never rewritten, and
 // an omitted field is left as it was.
 model CrewSetMessage {
+  source_session_id?: SessionID;
+  profile_id?: string;
   launch_desktop?: string; // own, an empty slot 5–9, or a desktop ref of the item's profile
   cmd: "crew_set";
   member: string;
@@ -6181,6 +6242,8 @@ model CrewRestart {
 }
 
 model CrewRestartMessage {
+  source_session_id?: SessionID;
+  profile_id?: string;
   cmd: "crew_restart";
   member: string;
   request_id: string;
@@ -6248,6 +6311,7 @@ enum CrewDayClose {
 // undone by what follows it: when the nap cannot run, the letter is still filed
 // and `nap_error` says why the successor was not woken.
 model CrewHandoffResult {
+  name: string;
   member: string;
   path: string;
   // The session living the member's new day. Absent when no nap ran.
@@ -6263,6 +6327,7 @@ model CrewHandoffResult {
 // woken, or released. Every member is here, awake or asleep: the sidebar shows
 // a sleeping member one action from waking, so it cannot ask per member.
 model CrewUpdatedMessage {
+  profile_id: string;
   event: "crew_updated";
   members: CrewMember[];
 }
@@ -6278,7 +6343,9 @@ enum AgentMsgStatus {
 
 model AgentMsgResult {
   message_id: string;
-  target_session_id: SessionID;
+  to: AddressRef;
+  to_name: string;
+  target_session_id?: SessionID;
   status: AgentMsgStatus;
   detail: string;
 }
@@ -6292,9 +6359,11 @@ enum AgentMessageState {
 // The durable peer message returned to its authorized sender or recipient.
 model AgentPeerMessage {
   message_id: string;
-  sender_session_id: SessionID;
-  sender_label: string;
-  target_session_id: string;
+  sender: PartyView;
+  reply_to: string;
+  to: AddressRef;
+  to_name: string;
+  read_by?: SessionID;
   content: string;
   state: AgentMessageState;
   created_at: string;
@@ -6305,14 +6374,14 @@ model AgentPeerMessage {
 // One durable notification consumed by a bounded inbox read. Content is the
 // peer body or the daemon-authored action text for another mailbox kind.
 model AgentInboxItem {
-  address: string;
+  address: AddressRef;
   item_id: string;
   kind: string;
   source_id?: string;
   hint?: string;
   content: string;
-  sender_session_id?: SessionID;
-  sender_label?: string;
+  sender?: PartyView;
+  reply_to?: string;
   created_at: string;
   notified_at: string;
   read_at: string;
@@ -6365,6 +6434,8 @@ model SessionTranscriptResult {
 // A session as the ledger holds it. Distinct from Session, which is the live
 // broadcast shape: this one outlives the runtime and carries how it ended.
 model SessionLedgerEntry {
+  member_key?: string;
+  member_name?: string;
   priority?: boolean;
   id: SessionID;
   conversation_pinned_at?: string;
@@ -6386,8 +6457,8 @@ model SessionLedgerEntry {
   last_seen: string;
   // Absent while the session is live. Its presence is what makes the row closed.
   closed_at?: string;
-  // "user", or the id of the session that closed this one.
-  closed_by?: string;
+  // The actor that closed the session. Absent when older attribution is unknown.
+  closed_by?: ActorView;
   // Only agent closes carry one; the user never types a reason.
   close_reason?: string;
   // Absent when the agent reported none. Priced at the current settings, as Session.usage is.
@@ -7234,3 +7305,55 @@ alias DaemonEvent =
   | AutoModeDiscardResultMessage
   | AutoModeEnvSetResultMessage
   | AutoModeStateChangedMessage;
+
+model CrewRenameMessage {
+ cmd: "crew_rename";
+ member: string;
+ name: string;
+ source_session_id?: SessionID;
+ profile_id?: string;
+}
+model CrewRenameResult {
+ member: string;
+ name: string;
+ previous_name: string;
+ session_id?: SessionID;
+}
+
+model CrewCreateMessage {
+  cmd: "crew_create";
+  name: string;
+  agent?: string;
+  `model`?: string;
+  effort?: string;
+  cwd?: string;
+  launch_desktop?: string;
+  launch_desktop_name?: string;
+  source_session_id?: SessionID;
+  profile_id?: string;
+}
+model CrewCreateResult { member: CrewMember; }
+model CrewRetireMessage {
+  cmd: "crew_retire";
+  member: string;
+  source_session_id?: SessionID;
+  profile_id?: string;
+}
+model CrewRetireResult {
+  member: CrewMember;
+  already_retired: boolean;
+  released_seeds: string[];
+  removed_watches: int32;
+  unread: int32;
+  sleep?: CrewSleepResult;
+}
+model CrewRestoreMessage {
+  cmd: "crew_restore";
+  member: string;
+  source_session_id?: SessionID;
+  profile_id?: string;
+}
+model CrewRestoreResult {
+  member: CrewMember;
+  already_active: boolean;
+}

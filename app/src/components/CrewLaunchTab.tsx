@@ -61,7 +61,7 @@ function LaunchFields({ member, selection, harnesses, effectiveAgent, catalogLoa
   const value = { ...routeFromStored(effectiveAgent, selection.model, selection.effort), harness: selection.agent };
   const inherited = routeFromStored(effectiveAgent, member.model ? settings[`default_model_${effectiveAgent}`] || '' : member.resolved_model || '', member.effort ? settings[`default_effort_${effectiveAgent}`] || '' : member.resolved_effort || '');
   return <div className="crew-launch-fields">
-    <LaunchDesktopSelect kind={LaunchDesktopKind.Crew} itemId={member.id} profileId={member.profile_id ?? ''} defaultName={member.name || member.id} value={selection.launchDesktop} onChange={launchDesktop => update({ launchDesktop })} disabled={catalogLoading} />
+    <LaunchDesktopSelect kind={LaunchDesktopKind.Crew} itemId={member.key} profileId={member.profile_id ?? ''} defaultName={member.name || member.key} value={selection.launchDesktop} onChange={launchDesktop => update({ launchDesktop })} disabled={catalogLoading} />
     <HarnessRouteChip variant="field" aria-label="Crew launch model" data-testid="crew-route" value={value} rules={{ harnesses, requireAvailable: true, allowNone: true, noneLabel: 'Crew default', inherited }} disabled={catalogLoading} onChange={route => {
       const model = storedRouteModel(route);
       if (route.harness !== selection.agent) { update({ agent: route.harness, model, effort: route.effort }); return; }
@@ -95,7 +95,7 @@ function LaunchCard({ member, edit, harnesses, harness, effectiveAgent, catalogL
         <div><span className="crew-kicker">Next wake</span><h3>Launch settings</h3></div>
         <div className={`crew-save-state is-${edit.state}`} role="status" aria-live="polite">
           {launchSaveCopy(edit.state)}
-          {edit.state === 'error' && <button type="button" onClick={() => autosave.retry(member.id)}>Retry</button>}
+          {edit.state === 'error' && <button type="button" onClick={() => autosave.retry(member.key)}>Retry</button>}
         </div>
       </div>
 
@@ -106,7 +106,7 @@ function LaunchCard({ member, edit, harnesses, harness, effectiveAgent, catalogL
         harness={harness}
         effectiveAgent={effectiveAgent}
         catalogLoading={catalogLoading}
-        update={(next) => autosave.update(member.id, next)}
+        update={(next) => autosave.update(member.key, next)}
       />
 
       {warning && (

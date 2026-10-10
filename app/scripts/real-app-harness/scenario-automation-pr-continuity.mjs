@@ -432,7 +432,7 @@ async function main() {
       runner.assert(resumed.some((arg) => arg.includes('gpt-5.6-sol')) && resumed.some((arg) => arg.includes('high')), 'resume keeps pinned model and effort', { argv: resumed });
       runner.assert(fs.readFileSync(path.join(worktree, 'review-notes.txt'), 'utf8').includes('preserve me'), 'dirty reviewer work survives continuation');
       const continuedSeed = runJSON(binary, ['seed', 'show', seedID, '--json'], daemonEnv)?.seed;
-      runner.assert(continuedSeed?.status === 'growing' && continuedSeed?.tender_session === sessionID, 'successful continuation replants and retends the reviewer seed', continuedSeed);
+      runner.assert(continuedSeed?.status === 'growing' && continuedSeed?.tender?.session_id === sessionID, 'successful continuation replants and retends the reviewer seed', continuedSeed);
       return row;
     });
     await runner.step('daemon_restart_preserves_continuity', async () => {

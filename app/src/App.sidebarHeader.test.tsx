@@ -46,7 +46,7 @@ describe('shared sidebar header', () => {
     await gesture(daemon, () => fireEvent.click(wake));
     expect(daemon.sentOf('crew_wake')).toEqual([]);
     await gesture(daemon, () => fireEvent.click(wake));
-    expect(daemon.sentOf('crew_wake')).toEqual([expect.objectContaining({ member: 'asleep' })]);
+    expect(daemon.sentOf('crew_wake')).toEqual([expect.objectContaining({ member: 'member:asleep' })]);
   });
 
   it('keeps bound crew awake before their session and desktop arrive', async () => {

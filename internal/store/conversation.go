@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/victorarias/attn/internal/who"
 	"log"
 	"strings"
 	"time"
@@ -163,18 +164,39 @@ func (s *Store) ConversationOwner(sessionID protocol.SessionID, nativeID string)
 	return owner
 }
 
-func (s *Store) SetSessionLaunchedAt(sessionID protocol.SessionID, launchedAt time.Time) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+func (s *Store) SetSessionLaunchedAt(sessionID protocol.SessionID, launchedAt time.Time, member who.MemberKey) {
 	if s.db == nil {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if !member.IsZero() {
+			if s.latestMemberSessions == nil {
+				s.latestMemberSessions = map[who.MemberKey]protocol.SessionID{}
+			}
+			s.latestMemberSessions[member] = sessionID
+		}
 		return
 	}
-	if _, err := s.db.Exec(
-		`UPDATE sessions SET launched_at = ? WHERE id = ? AND closed_at = ''`,
-		launchedAt.UTC().Format(time.RFC3339Nano),
-		sessionID,
-	); err != nil {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	err := func() error {
+		tx, err := s.db.Begin()
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		if _, err := tx.Exec("UPDATE sessions SET launched_at = ? WHERE id = ? AND closed_at = ''", launchedAt.UTC().Format(time.RFC3339Nano), sessionID); err != nil {
+			return err
+		}
+		if member.IsZero() {
+			return tx.Commit()
+		}
+		_, err = tx.Exec("UPDATE crew_members SET latest_session = ? WHERE member_key = ? AND EXISTS(SELECT 1 FROM sessions WHERE id = ? AND member_key = ? AND closed_at = '')", sessionID, member, sessionID, member)
+		if err != nil {
+			return err
+		}
+		return tx.Commit()
+	}()
+	if err != nil {
 		log.Printf("[store] SetSessionLaunchedAt: failed for session %s: %v", sessionID, err)
 	}
 }

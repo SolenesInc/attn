@@ -74,7 +74,7 @@ func TestADelegateStartsOnASeedPointerBesideItsCaller(t *testing.T) {
 			}
 			seed := shown.Seed
 			if seed.Body != "Migrate the store to the new schema" || seed.Title != "Store migration" || seed.Status != "growing" ||
-				seed.PlanterSession != source || seed.TenderSession != result.SessionID {
+				seed.Planter.Ref != protocol.ActorRef("session:"+source) || protocol.Deref(protocol.Deref(seed.Tender).SessionID) != result.SessionID {
 				t.Errorf("the delegation planted %+v; want the brief, growing, planted by %s and tended by %s", seed, source, result.SessionID)
 			}
 
@@ -197,7 +197,7 @@ func TestADelegationFromTheChiefIsMarkedAndLandsBesideTheChief(t *testing.T) {
 	if prompt := w.Launched(string(result.SessionID)).Prompted(); !strings.Contains(prompt, "attn seed show "+result.SeedID) {
 		t.Errorf("the chief's delegate was prompted %q; want a pointer to seed %s", prompt, result.SeedID)
 	}
-	if shown, err := cli.SeedShow("", result.SeedID); err != nil || shown.Seed.TenderSession != result.SessionID || shown.Seed.Body != "Audit the backlog" {
+	if shown, err := cli.SeedShow("", result.SeedID); err != nil || protocol.Deref(protocol.Deref(shown.Seed.Tender).SessionID) != result.SessionID || shown.Seed.Body != "Audit the backlog" {
 		t.Errorf("the chief's delegation planted %+v, %v; want the brief tended by %s", shown, err, result.SessionID)
 	}
 	delegate := testworld.AwaitSession(app, string(result.SessionID), func(s protocol.Session) bool { return protocol.Deref(s.DelegatedFromChief) })

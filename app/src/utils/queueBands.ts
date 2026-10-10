@@ -1,3 +1,4 @@
+import type { ActorView } from '../types/generated';
 import type { DesktopWithSessions, DesktopViewSession } from './desktopViewModels';
 import { isSnoozed } from './snoozeDurations';
 
@@ -50,7 +51,7 @@ export interface QueueBandSession extends DesktopViewSession {
   parentSessionId?: string;
   crewMember?: string;
   dispatcher_session_id?: string;
-  dispatcher_member?: string;
+  dispatcher?: ActorView;
   automation?: { definition_id: number };
 }
 
@@ -311,7 +312,7 @@ export function advanceAfterTurnClosed<TSession extends QueueBandSession>(
 }
 
 export function crewRows<TSession extends QueueBandSession>(
-  crew: readonly { id: string }[] | undefined,
+  crew: readonly { key: string }[] | undefined,
   bands: Pick<QueueBands<TSession>, 'chief' | 'crew'>,
 ): { member: string; row?: QueueRow<TSession> }[] {
   const byMember = new Map<string, QueueRow<TSession>>();
@@ -319,7 +320,7 @@ export function crewRows<TSession extends QueueBandSession>(
     const member = row.session.crewMember;
     if (member && !byMember.has(member)) byMember.set(member, row);
   }
-  const members = new Set<string>([...(crew ?? []).map((entry) => entry.id), ...byMember.keys()]);
+  const members = new Set<string>([...(crew ?? []).map((entry) => entry.key), ...byMember.keys()]);
   const chiefMember = bands.chief?.session.crewMember;
   if (chiefMember) members.delete(chiefMember);
   return [...members]

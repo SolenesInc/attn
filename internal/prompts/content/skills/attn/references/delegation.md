@@ -2,7 +2,7 @@
 
 Attn delegation starts a separate agent session the user can inspect and steer. Use it when authorized by the user or the assigned task. A subagent is a native runtime subagent that reports to its caller. Interpret the requested object: "dispatch an agent" means Attn; "use a subagent" means a native subagent.
 
-The seed holds the work: its outcome, plan, constraints, and verification. Delegation assigns an agent to that work, selecting its role, model, effort, and checkout at launch. The agent reads the seed and keeps its plan and progress current. A later handover can assign a different agent to the same seed, with a note explaining the next step and its authorization. The agent does not receive your conversation automatically.
+The seed records the work: its outcome, plan, constraints, and verification. Delegation assigns an agent to that work, selecting its role, model, effort, and checkout at launch. The agent reads the seed and keeps its plan and progress current. A later handover can assign a different agent to the same seed, with a note explaining the next step and its authorization. The agent does not receive your conversation automatically.
 
 Use `attn delegate --help` for the installed command syntax. Read the complete brief before dispatching: state the outcome, starting context, constraints, authorization and verification. Name parent sections, sibling results and artifacts the agent needs and why. Use `attn seed guide` for seed authoring.
 
@@ -36,7 +36,7 @@ attn delegate --seed s-example --handover --role orchestrator \
   -m "The user approved the plan in this seed. Execute it, coordinating implementation and review."
 ```
 
-Attn saves the note and transfers ownership before starting the successor. The previous agent remains running. Handover is the explicit transfer choice; there is no extra force/confirm flag. It does not grant permission beyond the user's authorized task. An ordinary progress note does not invalidate handover; a holder changing during preparation or the seed closing requires reconsidering the request.
+Attn saves the note and transfers ownership before starting the successor. The previous agent remains running. Handover is the explicit transfer choice; there is no extra force/confirm flag. It does not grant permission beyond the user's authorized task. An ordinary progress note does not invalidate handover; the seed's tender changing during preparation or the seed closing requires reconsidering the request.
 
 For a completed design, recommend an Orchestrator when the plan requires coordinated or reviewed Builder work, or benefits from mixing harnesses or models between the coordinating agent and its Builders; otherwise recommend a Builder. Follow the planning process's mandatory checkpoint: show the proposed plan and handoff, then wait for the user's choice even when their earlier request included execution.
 

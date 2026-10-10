@@ -1,6 +1,7 @@
 package store
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -33,7 +34,7 @@ func seedSubscriptionHistory(t *testing.T, s *Store) {
 		t.Fatal(err)
 	}
 	for _, id := range []string{"plot", "child", "separate"} {
-		body, err := (garden.Seed{ID: id, ProfileID: profile.Manifest.ProfileID, Title: id, Status: garden.StatusPlanted}).Encode()
+		body, err := json.Marshal(map[string]any{"id": id, "profile_id": profile.Manifest.ProfileID, "title": id, "status": "planted"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -60,17 +61,29 @@ func seedSubscriptionHistory(t *testing.T, s *Store) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := s.SetGardenSeedWatch("planner", "plot", true, now); err != nil {
+	if _, err := s.db.Exec(`INSERT OR IGNORE INTO garden_seed_watches(watcher_session_id,seed_id,created_at) VALUES (?,?,?)`, "planner", "plot", now.UTC().Format(sortableTimeFormat)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.SetGardenSeedWatch("explicit", "separate", true, now); err != nil {
+	if _, err := s.db.Exec(`INSERT OR IGNORE INTO garden_seed_watches(watcher_session_id,seed_id,created_at) VALUES (?,?,?)`, "explicit", "separate", now.UTC().Format(sortableTimeFormat)); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func sortedGardenWatches(t *testing.T, s *Store) []GardenSeedWatch {
 	t.Helper()
-	watches, err := s.GardenSeedWatches()
+	rows, err := s.db.Query(`SELECT watcher_session_id,seed_id FROM garden_seed_watches`)
+	var watches []GardenSeedWatch
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var watch GardenSeedWatch
+			if err := rows.Scan(&watch.WatcherSessionID, &watch.SeedID); err != nil {
+				t.Fatal(err)
+			}
+			watches = append(watches, watch)
+		}
+		err = rows.Err()
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +126,7 @@ func TestGardenSubscriptionMigrationRunsOnceAndPreservesExplicitWatches(t *testi
 	if err := s.db.QueryRow(`SELECT created_at FROM garden_seed_watches WHERE watcher_session_id = 'planner' AND seed_id = 'plot'`).Scan(&preserved); err != nil || preserved != created {
 		t.Fatalf("explicit watch timestamp = %q, want %q: %v", preserved, created, err)
 	}
-	if _, err := s.SetGardenSeedWatch("planner", "plot", false, time.Now()); err != nil {
+	if _, err := s.db.Exec(`DELETE FROM garden_seed_watches WHERE watcher_session_id="planner" AND seed_id="plot"`); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Close(); err != nil {
@@ -124,7 +137,8 @@ func TestGardenSubscriptionMigrationRunsOnceAndPreservesExplicitWatches(t *testi
 		t.Fatal(err)
 	}
 	defer s.Close()
-	if watching, err := s.GardenSeedWatching("planner", "plot"); err != nil || watching {
+	var watching bool
+	if err := s.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM garden_seed_watches WHERE watcher_session_id="planner" AND seed_id="plot")`).Scan(&watching); err != nil || watching {
 		t.Fatalf("restart resurrected subscription: %v %v", watching, err)
 	}
 }

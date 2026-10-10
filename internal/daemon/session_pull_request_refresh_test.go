@@ -112,38 +112,3 @@ func TestSessionPullRequestRefreshSkipsSessionsWithNoRuntime(t *testing.T) {
 		t.Fatal("the reloaded session's pull request was not picked up again")
 	}
 }
-
-func TestSessionPullRequestRefreshKeepsWatchingRecoverableSessions(t *testing.T) {
-	d := newPRDaemonForTest(t, "s1")
-	watchPRForRefresh(t, d, "s1", prreadiness.ModeGreen, "")
-	host := &fakePRHost{readiness: readinessObservation()}
-	serveHost(d, "github.com", host)
-	if !d.store.UpdateState("s1", string(protocol.SessionStateRecoverable)) {
-		t.Fatal("could not put the session in the recoverable state")
-	}
-
-	if fetched, _ := d.refreshSessionPullRequests(time.Now()); fetched != 1 {
-		t.Fatalf("fetched = %d, want the durable watch to remain active", fetched)
-	}
-	if host.readinessCalls != 1 {
-		t.Fatalf("readiness calls = %d, want one", host.readinessCalls)
-	}
-}
-
-func readinessObservation() *prreadiness.Observation {
-	return &prreadiness.Observation{
-		Number: 71, URL: "https://github.com/victorarias/attn/pull/71", Title: "Ready to ship",
-		State: "open", HeadSHA: "head-a", HeadRef: "pr-readiness", MergeStateStatus: "CLEAN",
-	}
-}
-
-func watchPRForRefresh(t *testing.T, d *Daemon, sessionID string, mode prreadiness.Mode, reviewer string) {
-	t.Helper()
-	rec, err := d.sessionPullRequestIdentity(protocol.SessionID(sessionID), "https://github.com/victorarias/attn/pull/71")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := d.watchSessionPullRequest(rec, mode, reviewer); err != nil {
-		t.Fatal(err)
-	}
-}

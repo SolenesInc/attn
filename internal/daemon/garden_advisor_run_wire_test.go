@@ -34,7 +34,7 @@ func TestTheGardenAdvisorAdvisesAndDraftsWithTheReviewsFrozenRecipeFromBoundedEv
 	if _, err := cli.SeedEdit(seed, strings.Repeat("b", 20000)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cli.SeedNote("", seed, strings.Repeat("n", 2000), "", "", false, nil); err != nil {
+	if _, err := cli.SeedNote("", seed, strings.Repeat("n", 2000), "", false, nil); err != nil {
 		t.Fatal(err)
 	}
 

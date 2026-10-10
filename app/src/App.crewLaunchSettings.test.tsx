@@ -53,7 +53,7 @@ async function setEffort(daemon: ScriptedDaemon, effort: string) {
 }
 
 async function roster(daemon: ScriptedDaemon, members: CrewMember[]) {
-  await gesture(daemon, () => daemon.emit({ event: 'crew_updated', members }));
+  await gesture(daemon, () => daemon.emit({ event: 'crew_updated', profile_id: 'profile-default', members }));
 }
 
 async function answer(daemon: ScriptedDaemon, save: CommandMessage<'crew_set'>, reply: Reply) {

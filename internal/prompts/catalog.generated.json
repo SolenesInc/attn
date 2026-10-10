@@ -118,14 +118,24 @@
                 },
                 "children": [
                   {
-                    "kind": "input",
-                    "field": {
-                      "name": "crew_priming",
-                      "kind": "text",
-                      "description": "Rendered crew identity and predecessor letter, supplied by internal/crew.",
-                      "trim_space": true,
-                      "from": "crew/priming"
-                    }
+                    "kind": "compose",
+                    "children": [
+                      {
+                        "kind": "input",
+                        "field": {
+                          "name": "crew_priming",
+                          "kind": "text",
+                          "description": "Rendered crew identity and predecessor letter, supplied by internal/crew.",
+                          "trim_space": true,
+                          "from": "crew/priming"
+                        }
+                      },
+                      {
+                        "kind": "text",
+                        "id": "crew.cleared",
+                        "source": "content/crew/cleared.md"
+                      }
+                    ]
                   }
                 ]
               }
@@ -576,13 +586,13 @@
                 }
               },
               {
-                "name": "sender_id",
+                "name": "reply_to",
                 "node": {
                   "kind": "input",
                   "field": {
-                    "name": "sender_id",
+                    "name": "reply_to",
                     "kind": "text",
-                    "description": "Reply target."
+                    "description": "Reply target: member name or full session reference."
                   }
                 }
               }
@@ -966,9 +976,9 @@
                 "kind": "choose",
                 "condition": {
                   "field": {
-                    "name": "held_seeds",
+                    "name": "claimed_seeds",
                     "kind": "text",
-                    "description": "Held seeds with their freshest handoff notes, one entry per blank-line-separated block."
+                    "description": "Claimed seeds with their freshest handoff notes, one entry per blank-line-separated block."
                   },
                   "test": "present"
                 },
@@ -982,13 +992,13 @@
                         "source": "content/crew/garden.md",
                         "bindings": [
                           {
-                            "name": "held_seeds",
+                            "name": "claimed_seeds",
                             "node": {
                               "kind": "input",
                               "field": {
-                                "name": "held_seeds",
+                                "name": "claimed_seeds",
                                 "kind": "text",
-                                "description": "Held seeds with their freshest handoff notes, one entry per blank-line-separated block."
+                                "description": "Claimed seeds with their freshest handoff notes, one entry per blank-line-separated block."
                               }
                             }
                           }
@@ -998,9 +1008,9 @@
                         "kind": "when",
                         "condition": {
                           "field": {
-                            "name": "held_total",
+                            "name": "claimed_total",
                             "kind": "text",
-                            "description": "How many seeds the member holds; blank unless the list was cut."
+                            "description": "How many seeds the member claims; blank unless the list was cut."
                           },
                           "test": "present"
                         },
@@ -1011,24 +1021,24 @@
                             "source": "content/crew/garden-more.md",
                             "bindings": [
                               {
-                                "name": "held_total",
+                                "name": "claimed_total",
                                 "node": {
                                   "kind": "input",
                                   "field": {
-                                    "name": "held_total",
+                                    "name": "claimed_total",
                                     "kind": "text",
-                                    "description": "How many seeds the member holds; blank unless the list was cut."
+                                    "description": "How many seeds the member claims; blank unless the list was cut."
                                   }
                                 }
                               },
                               {
-                                "name": "held_limit",
+                                "name": "claimed_limit",
                                 "node": {
                                   "kind": "input",
                                   "field": {
-                                    "name": "held_limit",
+                                    "name": "claimed_limit",
                                     "kind": "text",
-                                    "description": "How many held seeds this block lists."
+                                    "description": "How many claimed seeds this block lists."
                                   }
                                 }
                               }
@@ -4784,5 +4794,5 @@
       ]
     }
   ],
-  "definitions_hash": "153118481691d4a097745fa14fae6fb9d4aaf7f36430cf2db07cc962bb8482be"
+  "definitions_hash": "62de4bdbacdb6be1a9fcdd7d0198d66fb241bc75f2e5a50c07bc0b66eb729ee4"
 }

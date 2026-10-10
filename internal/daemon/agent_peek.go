@@ -18,55 +18,44 @@ const agentShortIDLength = 8
 const agentPeekSnapshotTimeout = modelCaptureSnapshotTimeout
 
 func (d *Daemon) handleAgentPeek(conn net.Conn, msg *protocol.AgentPeekMessage) {
-	session, errCode := d.resolveAgentPeekTarget(msg.TargetSessionID)
-	if session == nil {
-		d.sendError(conn, errCode)
+	b, err := d.bindings()
+	if err != nil {
+		d.sendError(conn, err.Error())
 		return
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{
-		Ok:              true,
-		AgentPeekResult: d.agentPeekResult(session),
-	})
+	r, err := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID, b)
+	if err != nil {
+		d.replyTargetError(conn, err)
+		return
+	}
+	session, err := d.resolveSession(r, b, msg.To)
+	if err != nil {
+		d.replyTargetError(conn, err)
+		return
+	}
+	if endpoint := d.sessionOwnerEndpoint(session.ID); endpoint != "" {
+		d.replyAgentMsgError(conn, "remote_delivery_unsupported", "session "+shortSessionID(session.ID)+" runs on outpost "+endpoint+"; peeking outpost sessions is unsupported")
+		return
+	}
+	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AgentPeekResult: d.agentPeekResult(session)})
 }
 
-func (d *Daemon) resolveAgentPeekTarget(target string) (*protocol.Session, string) {
+func (d *Daemon) resolveSessionByIDOrPrefix(target, profileID string) (*protocol.Session, string) {
 	target = protocol.TrimID(target)
 	if target == "" {
 		return nil, "session_not_found"
 	}
-	if session := d.store.Get(protocol.SessionID(target)); session != nil {
+	if session := d.store.Get(protocol.SessionID(target)); session != nil && (profileID == "" || session.ProfileID == profileID) {
 		return session, ""
 	}
-	if status, err := d.enrollmentStatus(); err == nil && status.IsHome() {
-		member, found, err := d.resolveCrewMember(target)
-		if err != nil {
-			d.logf("agent peek crew resolution: target=%q err=%v", target, err)
-			return nil, "internal_error"
+	if d.hubManager != nil {
+		if s := d.hubManager.RemoteSession(protocol.SessionID(target)); s != nil && (profileID == "" || s.ProfileID == profileID) {
+			return s, ""
 		}
-		if found {
-			if !d.crewBindingLive(member) {
-				return nil, "crew_member_asleep"
-			}
-			if session := d.store.Get(member.BindingSession); session != nil {
-				return session, ""
-			}
-			return nil, "crew_member_asleep"
-		}
-	}
-	return d.resolveSessionByIDOrPrefix(target)
-}
-
-func (d *Daemon) resolveSessionByIDOrPrefix(target string) (*protocol.Session, string) {
-	target = protocol.TrimID(target)
-	if target == "" {
-		return nil, "session_not_found"
-	}
-	if session := d.store.Get(protocol.SessionID(target)); session != nil {
-		return session, ""
 	}
 	var match *protocol.Session
-	for _, session := range d.store.List("") {
-		if !strings.HasPrefix(string(session.ID), target) {
+	for _, session := range d.agentCloseCandidates() {
+		if (profileID != "" && session.ProfileID != profileID) || !strings.HasPrefix(string(session.ID), target) {
 			continue
 		}
 		if match != nil {
@@ -83,15 +72,16 @@ func (d *Daemon) resolveSessionByIDOrPrefix(target string) (*protocol.Session, s
 func (d *Daemon) agentPeekResult(session *protocol.Session) *protocol.AgentPeekResult {
 	decorated := d.sessionForBroadcast(session)
 	result := &protocol.AgentPeekResult{
-		SessionID:   decorated.ID,
-		Label:       decorated.Label,
-		Agent:       decorated.Agent,
-		State:       string(decorated.State),
-		StateSince:  decorated.StateSince,
-		LastSeen:    decorated.LastSeen,
-		StateReason: decorated.StateReason,
-		TurnOwed:    decorated.TurnOwed,
-		CrewMember:  decorated.CrewMember,
+		SessionID:      decorated.ID,
+		Label:          decorated.Label,
+		Agent:          decorated.Agent,
+		State:          string(decorated.State),
+		StateSince:     decorated.StateSince,
+		LastSeen:       decorated.LastSeen,
+		StateReason:    decorated.StateReason,
+		TurnOwed:       decorated.TurnOwed,
+		CrewMember:     decorated.CrewMember,
+		CrewMemberName: decorated.CrewMemberName,
 	}
 	if profile, err := d.store.GetProfile(decorated.ProfileID); err == nil {
 		result.ProfileName = protocol.Ptr(profile.Name)

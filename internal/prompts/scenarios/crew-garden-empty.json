@@ -6,9 +6,9 @@
   "event": "garden",
   "values": {
     "garden_read": "true",
-    "held_seeds": "",
-    "held_total": "",
-    "held_limit": "0",
+    "claimed_seeds": "",
+    "claimed_total": "",
+    "claimed_limit": "0",
     "plot_ready": ""
   }
 }

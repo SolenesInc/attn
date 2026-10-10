@@ -1,0 +1,3 @@
+kind: fixed
+area: agents
+change: Agent peek help and the agent list show how to choose a profile by name or id when running from a plain shell.

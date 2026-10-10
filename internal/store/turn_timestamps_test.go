@@ -4,8 +4,6 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/victorarias/attn/internal/protocol"
 )
 
 var raggedOffsets = []struct {
@@ -76,9 +74,9 @@ func TestMigration95RewritesTurnCursorAndListingStampsThatDoNotSort(t *testing.T
 		t.Fatal(err)
 	}
 	for _, r := range raggedOffsets {
-		if _, _, err := s.ClaimDelegationOperation(
-			r.id, "op-"+r.id, protocol.SessionID("sess-"+r.id), "chief", "", `{}`, turnBase().Add(r.offset)); err != nil {
-			t.Fatalf("claim %s: %v", r.id, err)
+		stamp := turnBase().Add(r.offset).UTC().Format(sortableTimeFormat)
+		if _, err := s.db.Exec(`INSERT INTO delegation_operations(request_id,operation_id,request_json,state,progress,session_id,chief_session_id,created_at,updated_at) VALUES(?,?,?, 'accepted','',?,'chief',?,?)`, r.id, "op-"+r.id, `{}`, "sess-"+r.id, stamp, stamp); err != nil {
+			t.Fatal(err)
 		}
 	}
 
@@ -133,13 +131,21 @@ func assertMigration95Applied(t *testing.T, s *Store) {
 		t.Fatalf("after migration 95 a settled turn still did not reopen")
 	}
 
-	got, err := s.PendingDelegationOperations()
+	rows, err := s.db.Query(`SELECT request_id FROM delegation_operations WHERE state IN ('accepted','preparing') ORDER BY created_at,request_id`)
 	if err != nil {
-		t.Fatalf("pending delegation operations: %v", err)
+		t.Fatal(err)
 	}
-	ids := make([]string, 0, len(got))
-	for _, rec := range got {
-		ids = append(ids, rec.Operation.RequestID)
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
 	}
 	if want := chronologicalRaggedIDs(); !sameOrder(ids, want) {
 		t.Fatalf("after migration 95 the delegations came back as %v, want %v", ids, want)

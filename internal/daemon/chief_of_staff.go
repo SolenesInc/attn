@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 func (d *Daemon) profileChiefs() map[string]protocol.SessionID {
@@ -120,7 +121,7 @@ func (d *Daemon) nudgeChiefOfStaff(profileID, attemptKey, prompt string) bool {
 	if strings.TrimSpace(attemptKey) == "" {
 		itemID = "chief-inbox/" + uuid.NewString()
 	}
-	receipt, err := d.sendToInbox(inbox.Item{ID: itemID, To: inbox.ToChief(profileID), Kind: inbox.Notice, Source: "notebook-inbox", Text: prompt})
+	receipt, err := d.sendToInbox(inbox.Item{ID: itemID, To: who.ToChiefOf(profileID), Kind: inbox.Notice, Source: "notebook-inbox", Text: prompt})
 	if err != nil {
 		d.logf("chief inbox: queue failed: %v", err)
 		return false

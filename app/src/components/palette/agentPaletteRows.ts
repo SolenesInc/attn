@@ -1,7 +1,7 @@
 import type { TileLeaf } from '../../types/desktop';
 import type { UISessionState } from '../../types/sessionState';
 import { headOfQueue, type QueueBandSession, type QueueBands } from '../../utils/queueBands';
-import { crewDisplayName } from '../../utils/crewName';
+import { memberName } from '../../store/daemonSessions';
 import { isSnoozed } from '../../utils/snoozeDurations';
 import type { DesktopWithSessions } from '../../utils/desktopViewModels';
 import { tileKindLabel } from '../../utils/tilePresentation';
@@ -80,7 +80,7 @@ export function agentPaletteRows<S extends PaletteSession>(
     const awake = awakeByMember.get(member);
     if (awake) {
       for (const row of awake) anchored.push(...bandRow(row.session, true));
-    } else if (matches(terms, member, crewDisplayName(member))) {
+    } else if (matches(terms, member, memberName(member))) {
       anchored.push({ kind: 'member', key: `member:${member}`, member });
     }
   }

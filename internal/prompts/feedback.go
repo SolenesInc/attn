@@ -10,7 +10,7 @@ func feedbackEvents() []Event {
 		On("inbox-more", "cli_output", "Read the next batch of unread items.", template("session.inbox-more", "content/session/inbox-more.md", TextField("remaining", "Unread items remaining."))),
 		On("inbox-item", "cli_output", "An inbox item other than a peer message or maintenance prompt.", template("session.inbox-item", "content/session/inbox-item.md", TextField("content", "Rendered inbox item."))),
 		On("peer-message", "cli_output", "Attributed peer message, including the trust boundary and reply command.",
-			template("session.peer-message", "content/session/peer-message.md", TextField("origin", "Sender identity."), TextField("message", "Literal peer message."), TextField("sender_id", "Reply target."))),
+			template("session.peer-message", "content/session/peer-message.md", TextField("origin", "Sender identity."), TextField("message", "Literal peer message."), TextField("reply_to", "Reply target: member name or full session reference."))),
 		On("present-feedback", "seed_note", "Review notice appended to the reporting seed.", notice),
 		On("present-handback", "user_message", "Review notice delivered to an unbound session.", Use("session.present-handback", "content/session/present-handback.md", Bind("notice", notice))),
 	}

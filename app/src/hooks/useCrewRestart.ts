@@ -62,7 +62,7 @@ export function useCrewRestart(
   }, [observe, send]);
 
   const start = useCallback((member: CrewMember) => {
-    deliver(member.id, {
+    deliver(member.key, {
       requestId: crypto.randomUUID(),
       priorRequestId: member.restart?.request_id,
       expectedSessionId: member.binding_session ?? '',
@@ -71,7 +71,7 @@ export function useCrewRestart(
     });
   }, [deliver]);
 
-  const read = useCallback((member: CrewMember) => currentAttempt(member, attempts[member.id]), [attempts]);
+  const read = useCallback((member: CrewMember) => currentAttempt(member, attempts[member.key]), [attempts]);
 
   const resend = useCallback((member: CrewMember) => {
     const pending = member.restart?.state === 'queued' || member.restart?.state === 'requested'
@@ -83,7 +83,7 @@ export function useCrewRestart(
       expectedRevision: member.revision,
       sending: false,
     } : undefined);
-    if (attempt) deliver(member.id, attempt);
+    if (attempt) deliver(member.key, attempt);
   }, [deliver, read]);
 
   const discard = useCallback((member: string) => {

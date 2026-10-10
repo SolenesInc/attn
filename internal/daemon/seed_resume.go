@@ -7,6 +7,7 @@ import (
 
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type seedResumeOutcome struct {
@@ -58,9 +59,29 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 	if garden.Closed(seed.Status) {
 		return nil, fmt.Errorf("%s is %s; replant it before resuming its agent", seed.ID, seed.Status)
 	}
+	b, err := d.bindings()
+	if err != nil {
+		return nil, err
+	}
+	tender, claimed := seed.Claim.Lasts(b)
+	if key, member := tender.Member(); claimed && member {
+		if err := b.Check(tender); err != nil {
+			return nil, err
+		}
+		d.crewWakeMu.Lock()
+		woke, err := d.crewWakeDayWithChargeLocked(key, "", false, nil, crewWakeRequest{UserStarted: true})
+		d.crewWakeMu.Unlock()
+		if err != nil {
+			return nil, err
+		}
+		if err := d.resolveGardenReviewAction(review, seedID, "resume"); err != nil {
+			d.logf("Garden review: settle %s after Resume: %v", seedID, err)
+		}
+		return &seedResumeOutcome{SessionID: woke.SessionID, ProfileID: seed.ProfileID, AlreadyRunning: woke.AlreadyAwake}, nil
+	}
 	continuation := d.continuationForSeedForeground(seed)
 	if continuation == nil {
-		if tender := protocol.TrimID(seed.TenderSession); tender != "" {
+		if tender, stored := seed.Claim.Tender(); stored {
 			return nil, fmt.Errorf("%s was tended by session %s, but no continuation was saved", seedID, tender)
 		}
 		return nil, fmt.Errorf("%s has no agent conversation to resume", seedID)
@@ -70,16 +91,25 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 	if sessionID == "" {
 		return nil, fmt.Errorf("%s has no agent conversation to resume", seedID)
 	}
-	actor := garden.Tender{Session: sessionID}
-	if existing := d.gardenSession(sessionID); existing != nil && existing.ProfileID != seed.ProfileID {
-		owner, _ := d.store.GetProfile(seed.ProfileID)
-		caller, _ := d.store.GetProfile(existing.ProfileID)
-		return nil, fmt.Errorf("seed %s belongs to profile %q; its previous agent now belongs to profile %q: hand the seed to a new agent in its own profile", seed.ID, owner.Name, caller.Name)
+	if claimed {
+		id, _ := tender.Session()
+		if id != sessionID {
+			return nil, d.seedMoveError(&garden.TakeoverRefused{SeedID: seedID, Verb: garden.VerbTend, Tender: tender}, b)
+		}
 	}
 	if existing := d.gardenSession(sessionID); existing != nil &&
 		(execution.HostKind == garden.HostRemote || d.sessionHasLiveWorker(sessionID)) {
-		if _, _, _, err := d.applySeedTransitionDetailedAsAtRevisionProtected(protection,
-			seedID, garden.VerbTend, garden.Ask{Actor: actor}, "", d.sessionExists, expectedRev); err != nil {
+		if _, _, _, err := d.applySeedMoveProtected(protection, seedID, garden.VerbTend, func(b who.Bindings) (seedMoveAsk, error) {
+			r, err := d.requestFromSession(sessionID, b)
+			if err != nil {
+				return seedMoveAsk{}, err
+			}
+			party, err := d.claimantFor(r, "")
+			if err != nil {
+				return seedMoveAsk{}, err
+			}
+			return seedMoveAsk{ask: garden.Ask{By: r.Actor()}, claimant: party, execution: sessionID}, nil
+		}, "", expectedRev); err != nil {
 			return nil, err
 		}
 		if err := d.resolveGardenReviewAction(review, seedID, "resume"); err != nil {
@@ -102,13 +132,10 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 		return nil, fmt.Errorf("%s cannot resume: its profile was deleted", seedID)
 	}
 	profileID := recorded.ProfileID
-	if profileID != seed.ProfileID {
-		owner, _ := d.store.GetProfile(seed.ProfileID)
-		target, _ := d.store.GetProfile(profileID)
-		return nil, fmt.Errorf("seed %s belongs to profile %q; its conversation would reopen in profile %q: hand the seed to a new agent in its own profile", seed.ID, owner.Name, target.Name)
-	}
-	if _, _, _, err := d.applySeedTransitionDetailedAsAtRevisionProtected(protection,
-		seedID, garden.VerbTend, garden.Ask{Actor: actor}, "", d.sessionExists, expectedRev); err != nil {
+	if _, _, _, err := d.applySeedMoveProtected(protection, seedID, garden.VerbTend, func(who.Bindings) (seedMoveAsk, error) {
+		party := who.PartyOfEndedSession(sessionID)
+		return seedMoveAsk{ask: garden.Ask{By: party.Actor()}, claimant: party, execution: sessionID}, nil
+	}, "", expectedRev); err != nil {
 		return nil, err
 	}
 	if err := d.resolveGardenReviewAction(review, seedID, "resume"); err != nil {

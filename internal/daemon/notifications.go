@@ -133,6 +133,29 @@ func (d *Daemon) sendNotificationMarkReadWSResult(client *wsClient, requestID st
 
 const notificationKindTaskFailed = "task_failed"
 
+func (d *Daemon) notifySessionCloseFailure(sessionID protocol.SessionID, cause error) {
+	d.logf("closing normally exited session %s: %v", sessionID, cause)
+	impact := "The agent exited, but attn could not close its session automatically."
+	record, err := d.store.AddNotification(store.NotificationRecord{
+		Kind:       "session_close_failed",
+		Severity:   store.NotificationWarning,
+		Title:      "Could not close " + d.sessionPartyName(sessionID),
+		Body:       impact,
+		Detail:     cause.Error(),
+		Trigger:    "The agent exited normally.",
+		Impact:     impact,
+		Cause:      cause.Error(),
+		SourceKind: "session",
+		SourceID:   string(sessionID),
+		Actions:    []store.NotificationAction{openSessionAction(sessionID)},
+	}, time.Now())
+	if err != nil {
+		d.logf("notifications: add session-close failure for %s: %v", sessionID, err)
+		return
+	}
+	d.publishFact(FactNotificationCreated, record.ID, nil)
+}
+
 const (
 	notificationActionRetryTask   = "retry_task"
 	notificationActionOpenSession = "open_session"

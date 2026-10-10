@@ -1,3 +1,5 @@
+import { useCallback } from 'react';
+import { useProfilesStore } from '../store/profiles';
 import { SettingsModal } from '../components/SettingsModal';
 import { ShortcutEditorModal } from '../components/ShortcutEditorModal';
 import { ShortcutsModal } from '../components/ShortcutsModal';
@@ -49,6 +51,9 @@ export function AppPreferences() {
     sendTaskList,
     sendTaskRetry,
   } = useDaemonApi();
+  const profileId = useProfilesStore((state) => state.selectedProfileId);
+  const saveSetting = useCallback((key: string, value: string) => sendSaveSetting(key, value, profileId), [sendSaveSetting, profileId]);
+
   return (
     <>
       <ShortcutsModal
@@ -91,7 +96,7 @@ export function AppPreferences() {
         onUninstallPlugin={sendUninstallPlugin}
         onRemovePlugin={sendRemovePlugin}
         onSetPluginPriority={sendSetPluginPriority}
-        onSetSetting={sendSaveSetting}
+        onSetSetting={saveSetting}
         themePreference={themePreference}
         onSetTheme={setTheme}
         uiScale={scale}

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 func seedWith(id string, edges ...Edge) Seed {
@@ -39,8 +40,12 @@ func TestUnblocks(t *testing.T) {
 	closed := func(seed Seed) Seed { seed.Status = StatusHarvested; return seed }
 	held := func(seed Seed, session, member string) Seed {
 		seed.Status = StatusGrowing
-		seed.TenderSession = protocol.SessionID(session)
-		seed.TenderMember = member
+		party := who.PartyOfEndedSession(protocol.SessionID(session))
+		if member != "" {
+			key, _ := who.ParseMemberKey(member)
+			party = who.Member(key)
+		}
+		seed.Claim = Claim{tender: party}
 		return seed
 	}
 
@@ -145,8 +150,12 @@ func TestUnblocks(t *testing.T) {
 func TestReady(t *testing.T) {
 	held := func(seed Seed, session, member string) Seed {
 		seed.Status = StatusGrowing
-		seed.TenderSession = protocol.SessionID(session)
-		seed.TenderMember = member
+		party := who.PartyOfEndedSession(protocol.SessionID(session))
+		if member != "" {
+			key, _ := who.ParseMemberKey(member)
+			party = who.Member(key)
+		}
+		seed.Claim = Claim{tender: party}
 		return seed
 	}
 
@@ -272,7 +281,7 @@ func TestReady(t *testing.T) {
 			if live == nil {
 				live = noSession
 			}
-			got := ids(Ready(test.seeds, live))
+			got := ids(Ready(test.seeds, who.NewBindings(func(id protocol.SessionID) (string, bool) { return "profile", live(id) }, nil, nil)))
 			if !equal(got, test.want) {
 				t.Fatalf("Ready = %v, want %v", got, test.want)
 			}

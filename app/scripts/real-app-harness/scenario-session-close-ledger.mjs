@@ -171,7 +171,7 @@ async function main() {
     const ledger = await runner.step('ledger_reads_the_close_back', async () => {
       const shown = ledgerEntry(daemonBinary, instance, sessionId);
       runner.assert(/^state\s+closed$/m.test(shown), 'session show must report the session as closed', { shown });
-      runner.assert(/^closed\s+.* by user$/m.test(shown), 'session show must name the user as the closer', { shown });
+      runner.assert(/^closed\s+.* by the user$/m.test(shown), 'session show must name the user as the closer', { shown });
       runner.assert(/^worktree\s+yes, of /m.test(shown), 'session show must keep the worktree it ran in', { shown });
       const closed = execFileSync(daemonBinary, ['session', 'list', '--closed'], {
         encoding: 'utf8',

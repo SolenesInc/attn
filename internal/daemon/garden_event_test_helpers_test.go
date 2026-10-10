@@ -1,15 +1,9 @@
 package daemon
 
 import (
-	"context"
-	"encoding/json"
-	"time"
-
-	"github.com/victorarias/attn/internal/bus"
-	"github.com/victorarias/attn/internal/garden"
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
-	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"time"
 )
 
 func markAutomationRunDeliveredForTest(s *store.Store, runID, resolved string, now time.Time) error {
@@ -17,29 +11,4 @@ func markAutomationRunDeliveredForTest(s *store.Store, runID, resolved string, n
 		Name: seedEvents.NameWorkReady, Subject: "s-test", Payload: `{"automation_run_id":"` + runID + `"}`,
 	}, now)
 	return err
-}
-
-func (d *Daemon) handleSeedEventForTest(name, seedID string, payload any) error {
-	raw, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-	seq, err := d.store.AppendBusEvent(store.BusEvent{
-		Name: name, Subject: seedID, Payload: string(raw), Source: "test",
-	}, time.Now())
-	if err != nil {
-		return err
-	}
-	return d.handleGardenSeedEvent(context.Background(), bus.Event{
-		Seq: seq, Name: name, Subject: seedID, Payload: raw, Source: "test",
-	})
-}
-
-func (d *Daemon) ringSeedUnblocked(unblocked []garden.Seed, excludedSessionIDs ...string) {
-	cause := firstString(excludedSessionIDs)
-	for _, seed := range unblocked {
-		_ = d.handleSeedEventForTest(seedEvents.NameUnblocked, seed.ID, seedEvents.UnblockedPayload{
-			BlockerSeedID: "s-9k3f9m", CausedBySessionID: protocol.SessionID(cause),
-		})
-	}
 }

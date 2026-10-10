@@ -128,7 +128,7 @@ describe('sidebar harness identity', () => {
 
   it('keeps harness identity when switching between desktop and queue arrangements', () => {
     const data = sidebarData(true);
-    const props = { ...baseProps, ...data, crew: [{ id: 'fern' }, { id: 'sleeping' }] };
+    const props = { ...baseProps, ...data, crew: [{ key: 'fern', name: 'Fern' }, { key: 'sleeping', name: 'Sleeping' }] };
     const { rerender } = render(<Sidebar {...props} agentListOpen queue={buildQueueBands(data.desktops)} />);
     expect(within(screen.getByTestId('queue-crew-fern')).getByRole('img', { name: 'Pi · idle' })).toBeInTheDocument();
     expect(within(screen.getByTestId('queue-crew-sleeping')).getByRole('img', { name: 'Unknown harness · idle' })).toBeInTheDocument();
@@ -147,7 +147,7 @@ describe('sidebar harness identity', () => {
       <Sidebar
         {...baseProps}
         {...data}
-        crew={[{ id: 'fern' }, { id: 'sleeping' }]}
+        crew={[{ key: 'fern', name: 'Fern' }, { key: 'sleeping', name: 'Sleeping' }]}
         queue={queueMode ? buildQueueBands(data.desktops) : null}
         onManageCrew={onManageCrew}
       />,
@@ -164,7 +164,7 @@ describe('sidebar harness identity', () => {
       <Sidebar
         {...baseProps}
         {...data}
-        crew={[{ id: 'fern' }, { id: 'sleeping' }]}
+        crew={[{ key: 'fern', name: 'Fern' }, { key: 'sleeping', name: 'Sleeping' }]}
         queue={buildQueueBands(data.desktops)}
         agentListOpen
         harnessLogosEnabled={false}

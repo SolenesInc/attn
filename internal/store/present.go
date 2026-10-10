@@ -6,14 +6,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type Presentation struct {
 	ID                   string
 	SessionID            protocol.SessionID
-	To                   inbox.Address
+	HandbackTo           who.Party
 	Title                string
 	Kind                 string
 	RepoPath             string
@@ -47,26 +47,26 @@ type PresentationComment struct {
 	CreatedAt string
 }
 
-func (s *Store) CreatePresentation(sessionID protocol.SessionID, to inbox.Address, title, kind, repoPath string, now time.Time) (*Presentation, error) {
+func (s *Store) CreatePresentation(sessionID protocol.SessionID, handbackTo who.Party, title, kind, repoPath string, now time.Time) (*Presentation, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	createdAt := now.UTC().Format(time.RFC3339)
 	p := &Presentation{
-		ID:        uuid.New().String(),
-		SessionID: sessionID,
-		To:        to,
-		Title:     title,
-		Kind:      kind,
-		RepoPath:  repoPath,
-		Status:    "open",
-		CreatedAt: createdAt,
+		ID:         uuid.New().String(),
+		SessionID:  sessionID,
+		HandbackTo: handbackTo,
+		Title:      title,
+		Kind:       kind,
+		RepoPath:   repoPath,
+		Status:     "open",
+		CreatedAt:  createdAt,
 	}
 
 	_, err := s.db.Exec(`
-		INSERT INTO presentations (id, session_id, address, title, kind, repo_path, status, created_at)
+		INSERT INTO presentations (id, session_id, handback_to, title, kind, repo_path, status, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, p.ID, p.SessionID, p.To.String(), p.Title, p.Kind, p.RepoPath, p.Status, p.CreatedAt)
+	`, p.ID, p.SessionID, p.HandbackTo.String(), p.Title, p.Kind, p.RepoPath, p.Status, p.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create presentation: %w", err)
 	}
@@ -139,12 +139,12 @@ func (s *Store) GetPresentation(id string) (*Presentation, error) {
 
 func (s *Store) getPresentationLocked(id string) (*Presentation, error) {
 	var p Presentation
-	var address string
+	var handback_to string
 
 	err := s.db.QueryRow(`
-		SELECT id, session_id, address, title, kind, repo_path, status, created_at
+		SELECT id, session_id, handback_to, title, kind, repo_path, status, created_at
 		FROM presentations WHERE id = ?
-	`, id).Scan(&p.ID, &p.SessionID, &address, &p.Title, &p.Kind, &p.RepoPath, &p.Status, &p.CreatedAt)
+	`, id).Scan(&p.ID, &p.SessionID, &handback_to, &p.Title, &p.Kind, &p.RepoPath, &p.Status, &p.CreatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, err
@@ -152,7 +152,7 @@ func (s *Store) getPresentationLocked(id string) (*Presentation, error) {
 		return nil, fmt.Errorf("failed to get presentation: %w", err)
 	}
 
-	p.To, err = inbox.ParseAddress(address)
+	p.HandbackTo, err = who.ParseParty(handback_to)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +187,7 @@ func (s *Store) ListPresentations() ([]*Presentation, error) {
 	defer s.mu.RUnlock()
 
 	rows, err := s.db.Query(`
-		SELECT id, session_id, address, title, kind, repo_path, status, created_at
+		SELECT id, session_id, handback_to, title, kind, repo_path, status, created_at
 		FROM presentations ORDER BY created_at DESC
 	`)
 	if err != nil {
@@ -198,11 +198,11 @@ func (s *Store) ListPresentations() ([]*Presentation, error) {
 	var result []*Presentation
 	for rows.Next() {
 		var p Presentation
-		var address string
-		if err := rows.Scan(&p.ID, &p.SessionID, &address, &p.Title, &p.Kind, &p.RepoPath, &p.Status, &p.CreatedAt); err != nil {
+		var handback_to string
+		if err := rows.Scan(&p.ID, &p.SessionID, &handback_to, &p.Title, &p.Kind, &p.RepoPath, &p.Status, &p.CreatedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan presentation: %w", err)
 		}
-		p.To, err = inbox.ParseAddress(address)
+		p.HandbackTo, err = who.ParseParty(handback_to)
 		if err != nil {
 			return nil, err
 		}

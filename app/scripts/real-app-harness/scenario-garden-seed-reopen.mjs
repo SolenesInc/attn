@@ -149,7 +149,7 @@ async function main() {
     });
 
     seed = await runner.step('the_delegate_pane_names_its_seed', async () => {
-      const listed = await runInPane(client, pane, 'attn seed ls', delegated);
+      const listed = await runInPane(client, pane, 'attn seed ls --json', 'seeds');
       const planted = seedIDs(listed)[0];
       runner.assert(Boolean(planted), 'the delegation planted a seed', { listed });
 

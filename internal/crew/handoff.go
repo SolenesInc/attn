@@ -21,13 +21,13 @@ func HandoffFileName(member string, at time.Time) string {
 
 var ErrHandoffExists = errors.New("a letter is already filed under that name")
 
-func FileHandoff(homeDir, member, note string, at time.Time) (string, error) {
+func FileHandoff(homeDir, member, name, note string, at time.Time) (string, error) {
 	if err := ValidateHandoffNote(note); err != nil {
 		return "", err
 	}
 	dir := filepath.Join(homeDir, HandoffsDirName)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", fmt.Errorf("making %s's handoffs directory at %s: %w", DisplayName(member), dir, err)
+		return "", fmt.Errorf("making %s's handoffs directory at %s: %w", name, dir, err)
 	}
 	path := filepath.Join(dir, HandoffFileName(member, at))
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
@@ -35,11 +35,11 @@ func FileHandoff(homeDir, member, note string, at time.Time) (string, error) {
 		if os.IsExist(err) {
 			return "", fmt.Errorf("%w: %s — a filed letter is never overwritten, so file the correction as its own letter a minute from now", ErrHandoffExists, path)
 		}
-		return "", fmt.Errorf("filing %s's letter at %s: %w", DisplayName(member), path, err)
+		return "", fmt.Errorf("filing %s's letter at %s: %w", name, path, err)
 	}
 	defer file.Close()
 	if _, err := file.WriteString(ensureTrailingNewline(note)); err != nil {
-		return "", fmt.Errorf("writing %s's letter at %s: %w", DisplayName(member), path, err)
+		return "", fmt.Errorf("writing %s's letter at %s: %w", name, path, err)
 	}
 	return path, nil
 }

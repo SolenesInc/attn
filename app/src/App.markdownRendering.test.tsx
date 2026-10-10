@@ -69,7 +69,7 @@ describe('App markdown rendering', () => {
   it('keeps a single newline as a line break in a seed’s log note', async () => {
     const { reader } = await openSeed('', {
       document: () => ({
-        notes: [{ id: 'n1', seed_id: SEED_ID, kind: 'note', author_member: 'ana', author_session: '', body: 'first line\nsecond line', created_at: '2026-01-01T00:00:00Z' }],
+        notes: [{ id: 'n1', seed_id: SEED_ID, kind: 'note', author: { ref: "member:ana", name: "Ana" },  body: 'first line\nsecond line', created_at: '2026-01-01T00:00:00Z' }],
         notes_total: 1,
       }),
     });

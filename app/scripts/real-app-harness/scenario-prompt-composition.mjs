@@ -113,6 +113,7 @@ async function main() {
       await waitForFirstDesktopPane(client, first.session_id, 'crew member', 20_000);
       const captured = await waitFor(() => transcripts(crewHome).find(file => file.text.includes('CREW_READY')), 'crew wake prompt');
       runner.assert(instructions(captured.text, 'codex').includes(`You are **${crewLabel}**`), 'crew identity reaches developer instructions');
+      runner.assert(instructions(captured.text, 'codex').includes('`attn crew prime` before anything else'), 'crew clear reorientation reaches developer instructions');
       const duplicate = JSON.parse(cli(['crew', 'wake', crewName, '--json']));
       runner.assert(duplicate.already_awake === true && duplicate.session_id === first.session_id, 'wake does not create a second day');
       cli(['crew', 'sleep', crewName, '--json']);

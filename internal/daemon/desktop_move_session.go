@@ -68,7 +68,8 @@ func (d *Daemon) mayMoveSession(callerID protocol.SessionID, session *protocol.S
 	if callerID == "" || callerID == session.ID {
 		return nil
 	}
-	if dispatcher, ok := d.liveSessionForTender(d.gardenDispatchersBySession()[session.ID]); ok && dispatcher == callerID {
+	dispatcherParty, _ := d.gardenDispatchersBySession()[session.ID].Party()
+	if dispatcher, ok := d.broadcastBindings().SessionOf(dispatcherParty); ok && dispatcher == callerID {
 		return nil
 	}
 	if d.isChiefOfStaffSession(callerID) && d.chiefOfProfile(session.ProfileID) == callerID {

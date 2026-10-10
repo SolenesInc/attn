@@ -3,7 +3,7 @@ import type { Seed } from '../hooks/useDaemonSocket';
 type Continuation = NonNullable<Seed['continuation']>;
 
 function conversationLine(kept: NonNullable<Continuation['kept_conversation']>): string {
-  if (kept.deleted_at) return `${kept.deleted_by === 'user' ? 'you deleted attn’s copy' : 'attn deleted its copy'} on ${kept.deleted_at.slice(0, 10)}`;
+  if (kept.deleted_at) return `${kept.deleted_by?.ref === 'user' ? 'you deleted attn’s copy' : 'attn deleted its copy'} on ${kept.deleted_at.slice(0, 10)}`;
   const bytes = kept.bytes;
   const amount = bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB`
     : bytes >= 1e3 ? `${(bytes / 1e3).toFixed(1)} KB` : `${bytes} B`;

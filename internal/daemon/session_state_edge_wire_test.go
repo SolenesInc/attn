@@ -213,7 +213,7 @@ func TestAnAgentThatDiesMidTurnReportsItsExitBeforeItsIdle(t *testing.T) {
 	run.Exit(1)
 
 	testworld.Await(app, protocol.EventSessionStateChanged, func(e protocol.WebSocketEvent) bool {
-		return e.Session != nil && string(e.Session.ID) == session && protocol.Deref(e.Session.StateReason) == "process_exited"
+		return e.Session != nil && string(e.Session.ID) == session && e.Session.State == protocol.SessionStateIdle && protocol.Deref(e.Session.StateReason) == "process_exited"
 	})
 	testworld.Await(app, protocol.EventSessionExited, func(e protocol.WebSocketEvent) bool { return string(protocol.Deref(e.SessionID)) == session })
 	if order := exitOrderOf(app, session); order != "exited, idle" {
@@ -228,8 +228,10 @@ func exitOrderOf(p *testworld.Peer, id string) string {
 		case e.Event == protocol.EventSessionExited && string(protocol.Deref(e.SessionID)) == id:
 			order = append(order, "exited")
 		case e.Event == protocol.EventSessionStateChanged && e.Session != nil && string(e.Session.ID) == id &&
-			protocol.Deref(e.Session.StateReason) == "process_exited":
-			order = append(order, "idle")
+			e.Session.State == protocol.SessionStateIdle && protocol.Deref(e.Session.StateReason) == "process_exited":
+			if len(order) == 0 || order[len(order)-1] != "idle" {
+				order = append(order, "idle")
+			}
 		}
 	}
 	return strings.Join(order, ", ")

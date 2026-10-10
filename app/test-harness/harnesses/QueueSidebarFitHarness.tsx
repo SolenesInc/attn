@@ -45,9 +45,9 @@ const desktops = buildDesktopViewModels([desktop], sessions);
 export function QueueSidebarFitHarness({ onReady, setTriggerRerender }: HarnessProps) {
   const params = new URLSearchParams(window.location.search);
   const desktopFlow = params.has('desktop');
-  const crew = [{ id: 'alder', binding_session: 'crew-awake' }, { id: 'birch' }, { id: 'cedar' }];
+  const crew = [{ key: 'alder', name: 'Alder', binding_session: 'crew-awake' }, { key: 'birch', name: 'Birch' }, { key: 'cedar', name: 'Cedar' }];
   if (params.has('largeCrew')) {
-    crew.push(...sessions.map((session) => ({ id: `sleeping-${session.id}` })));
+    crew.push(...sessions.map((session) => ({ key: `sleeping-${session.id}`, name: `Sleeping ${session.label}` })));
   }
   useEffect(() => {
     onReady();

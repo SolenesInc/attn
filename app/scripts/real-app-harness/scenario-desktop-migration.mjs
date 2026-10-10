@@ -18,7 +18,7 @@ const LEGACY_WORKSPACES = [
 ];
 const PAIRED = new Set([1, 5, 9]);
 const LAST_SCHEMA_BEFORE_CONVERSION = 158;
-const LAST_SCHEMA_REBUILT_BY_FIXTURE = 1791301168635041;
+const LAST_SCHEMA_REBUILT_BY_FIXTURE = 1791638944301904;
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -49,9 +49,15 @@ function legacyWorkspacesSql(fixtureDir) {
     'DELETE FROM profiles;',
     'DELETE FROM profile_migration;',
     'DROP TABLE command_usage;',
+    'DROP TABLE profile_settings;',
     // A pre-profile install has no launch rows and no crew or automation profiles.
     'DELETE FROM launch_desktops;',
-    'DELETE FROM crew_profiles;',
+    'DROP TRIGGER launch_review_crew_insert;',
+    'DROP TRIGGER launch_review_crew_update;',
+    'DROP TABLE crew_members;',
+    'CREATE TABLE crew_profiles (member_id TEXT PRIMARY KEY, profile_id TEXT NOT NULL REFERENCES profiles(id));',
+    'CREATE INDEX idx_crew_profiles_profile ON crew_profiles(profile_id);',
+    'ALTER TABLE sessions DROP COLUMN member_key;',
     "UPDATE automation_definitions SET profile_id = '';",
     // A disabled automation makes the launch step follow placement on every run.
     `INSERT OR REPLACE INTO automation_definitions (id, name, enabled, revision, spec_json, profile_id, created_at, updated_at, deleted_at)
@@ -69,7 +75,12 @@ function legacyWorkspacesSql(fixtureDir) {
     "CREATE TABLE pull_request_watches (session_id TEXT NOT NULL, pr_id TEXT NOT NULL, mode TEXT NOT NULL, reviewer TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, cursor_json TEXT NOT NULL DEFAULT '{}', last_success_at TEXT NOT NULL DEFAULT '', last_error TEXT NOT NULL DEFAULT '', feedback_error TEXT NOT NULL DEFAULT '', outage_active INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (session_id, pr_id));",
     'INSERT INTO pull_request_watches SELECT session_id, pr_id, mode, reviewer, created_at, cursor_json, last_success_at, last_error, feedback_error, outage_active FROM addressed_pull_request_watches;',
     'DROP TABLE addressed_pull_request_watches;',
-    'ALTER TABLE presentations DROP COLUMN address;',
+    'ALTER TABLE presentations DROP COLUMN handback_to;',
+    'ALTER TABLE peer_messages RENAME COLUMN sender TO sender_session_id;',
+    "UPDATE peer_messages SET sender_session_id = substr(sender_session_id, length('session:') + 1) WHERE sender_session_id LIKE 'session:%';",
+    "UPDATE sessions SET closed_by = substr(closed_by, length('session:') + 1) WHERE closed_by LIKE 'session:%';",
+    "UPDATE automode_proposals SET proposed_by = substr(proposed_by, length('session:') + 1) WHERE proposed_by LIKE 'session:%';",
+    "UPDATE kept_conversations SET deleted_by = 'sweep' WHERE deleted_by = 'attn';",
     // It also predates successions (169), which add sessions.succeeds.
     'DROP INDEX idx_sessions_succeeds;',
     'ALTER TABLE sessions DROP COLUMN succeeds;',
@@ -97,6 +108,11 @@ function legacyWorkspacesSql(fixtureDir) {
     statements.push(`INSERT INTO workspace_layouts (workspace_id, active_pane_id, layout_json, updated_at)
       VALUES ('mig-ws-${index}', 'pane-${agents[0]}', ${sql(JSON.stringify(layout))}, 'now');`);
   });
+  statements.push(`ALTER TABLE garden_seed_watches RENAME COLUMN watcher TO watcher_session_id;`);
+  statements.push(`ALTER TABLE delegation_operations DROP COLUMN dispatcher;`);
+  statements.push(`ALTER TABLE delegation_operations DROP COLUMN handover_tender;`);
+  statements.push(`ALTER TABLE delegation_operations ADD COLUMN handover_tender_session TEXT NOT NULL DEFAULT '';`);
+  statements.push(`ALTER TABLE delegation_operations ADD COLUMN handover_tender_member TEXT NOT NULL DEFAULT '';`);
   statements.push(`DELETE FROM schema_migrations WHERE version > ${LAST_SCHEMA_BEFORE_CONVERSION} AND version <= ${LAST_SCHEMA_REBUILT_BY_FIXTURE};`);
   return statements.join('\n');
 }

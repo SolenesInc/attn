@@ -13,7 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/prompts"
 
 	"github.com/victorarias/attn/internal/client"
-	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -87,14 +86,15 @@ func parseAgentListArgs(args []string) (agentListArgs, error) {
 }
 
 type agentListRow struct {
-	ID        string `json:"id"`
-	Label     string `json:"label"`
-	Agent     string `json:"agent"`
-	Profile   string `json:"profile"`
-	Directory string `json:"directory"`
-	State     string `json:"state"`
-	TurnOwed  bool   `json:"turn_owed"`
-	Member    string `json:"member"`
+	ID         string `json:"id"`
+	Label      string `json:"label"`
+	Agent      string `json:"agent"`
+	Profile    string `json:"profile"`
+	Directory  string `json:"directory"`
+	State      string `json:"state"`
+	TurnOwed   bool   `json:"turn_owed"`
+	Member     string `json:"member"`
+	MemberName string `json:"member_name,omitempty"`
 }
 
 func runAgentList(args []string) {
@@ -125,14 +125,15 @@ func agentListRows(result *client.ListResult) []agentListRow {
 	rows := make([]agentListRow, 0, len(result.Sessions))
 	for _, session := range result.Sessions {
 		rows = append(rows, agentListRow{
-			ID:        string(session.ID),
-			Label:     session.Label,
-			Agent:     session.Agent,
-			Profile:   profileNames[session.ProfileID],
-			Directory: session.Directory,
-			State:     string(session.State),
-			TurnOwed:  protocol.Deref(session.TurnOwed),
-			Member:    protocol.Deref(session.CrewMember),
+			ID:         string(session.ID),
+			Label:      session.Label,
+			Agent:      session.Agent,
+			Profile:    profileNames[session.ProfileID],
+			Directory:  session.Directory,
+			State:      string(session.State),
+			TurnOwed:   protocol.Deref(session.TurnOwed),
+			Member:     protocol.Deref(session.CrewMember),
+			MemberName: protocol.Deref(session.CrewMemberName),
 		})
 	}
 	sort.Slice(rows, func(i, j int) bool {
@@ -161,13 +162,13 @@ func printAgentList(w io.Writer, rows []agentListRow) {
 			agentShortIDLength, agentShortID(row.ID),
 			agentListCell(row.Label, 18),
 			agentListCell(row.Agent, 8),
-			agentListCell(crew.DisplayName(row.Member), 10),
+			agentListCell(row.MemberName, 10),
 			agentListCell(row.Profile, 20),
 			agentListCell(row.State, 16),
 			turn,
 		)
 	}
-	fmt.Fprintf(w, "\nAn ID or awake MEMBER here works with `attn agent peek <target>`; --json carries full ids.\n")
+	fmt.Fprintf(w, "\nUse `attn agent peek <id>` to view a session; add --profile <name|id> outside attn when several profiles exist.\n--json shows full IDs. MEMBER shows key labels. Use `attn crew list` for current names.\n")
 }
 
 func agentShortID(id string) string {
@@ -190,8 +191,9 @@ func agentListCell(value string, width int) string {
 }
 
 type agentPeekArgs struct {
-	target string
-	json   bool
+	profile string
+	target  string
+	json    bool
 }
 
 func parseAgentPeekArgs(args []string) (agentPeekArgs, error) {
@@ -202,13 +204,14 @@ func parseAgentPeekArgs(args []string) (agentPeekArgs, error) {
 	fs := flag.NewFlagSet("agent peek", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
+	profile := fs.String("profile", "", "profile name or id (defaults to the current session's profile, or the only profile)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return agentPeekArgs{}, err
 	}
 	if target == "" || fs.NArg() != 0 {
 		return agentPeekArgs{}, errors.New("exactly one target session or crew member is required")
 	}
-	return agentPeekArgs{target: target, json: *jsonOut}, nil
+	return agentPeekArgs{target: target, json: *jsonOut, profile: *profile}, nil
 }
 
 func runAgentPeek(args []string) {
@@ -218,9 +221,9 @@ func runAgentPeek(args []string) {
 		writeAgentHelp(os.Stderr)
 		os.Exit(2)
 	}
-	result, err := client.New("").AgentPeek(parsed.target)
+	result, err := client.New("").WithRequester(parsed.profile, currentSessionOrExit()).AgentPeek(parsed.target)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "agent peek: %s\n", agentPeekErrorMessage(parsed.target, err))
+		fmt.Fprintf(os.Stderr, "agent peek: %s\n", err.Error())
 		os.Exit(1)
 	}
 	if parsed.json {
@@ -230,24 +233,10 @@ func runAgentPeek(args []string) {
 	printAgentPeek(os.Stdout, result)
 }
 
-func agentPeekErrorMessage(target string, err error) string {
-	message := strings.TrimSpace(err.Error())
-	switch strings.TrimSpace(strings.TrimPrefix(message, "daemon error: ")) {
-	case "session_not_found":
-		return fmt.Sprintf("no session or crew member matches %q; `attn agent list` names sessions and `attn crew list` names members", target)
-	case "ambiguous_session":
-		return fmt.Sprintf("%q matches more than one session; give more of the id (`attn agent list --json` carries full ids)", target)
-	case "crew_member_asleep":
-		member := strings.ToLower(strings.TrimSpace(target))
-		return fmt.Sprintf("%s is asleep; `attn agent peek` never wakes crew members. `attn crew wake %s` starts a day", crew.DisplayName(member), member)
-	}
-	return message
-}
-
 func printAgentPeek(w io.Writer, result *protocol.AgentPeekResult) {
 	fmt.Fprintf(w, "session %s (%s) — %s\n", result.SessionID, result.Agent, result.Label)
-	if member := strings.TrimSpace(protocol.Deref(result.CrewMember)); member != "" {
-		fmt.Fprintf(w, "crew member: this session is %s today\n", crew.DisplayName(member))
+	if member := strings.TrimSpace(protocol.Deref(result.CrewMemberName)); member != "" {
+		fmt.Fprintf(w, "crew member: %s\n", member)
 	}
 	if profile := strings.TrimSpace(protocol.Deref(result.ProfileName)); profile != "" {
 		fmt.Fprintf(w, "profile: %s\n", profile)
@@ -365,7 +354,7 @@ func runAgentMsg(args []string) {
 	}
 	result, err := client.New("").AgentMsg(parsed.target, parsed.source, parsed.content)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "agent msg: %s\n", agentMsgErrorMessage(parsed, err))
+		fmt.Fprintf(os.Stderr, "agent msg: %s\n", err.Error())
 		os.Exit(1)
 	}
 	if parsed.json {
@@ -385,27 +374,6 @@ func agentMsgOutcomeLine(result *protocol.AgentMsgResult) string {
 	return fmt.Sprintf("%s: %s (id %s)", result.Status, result.Detail, result.MessageID)
 }
 
-func agentMsgErrorMessage(parsed agentMsgArgs, err error) string {
-	message := strings.TrimSpace(err.Error())
-	code := client.ErrorCode(err)
-	if code == "" {
-		code = strings.TrimSpace(strings.TrimPrefix(message, "daemon error: "))
-	}
-	switch code {
-	case "session_or_crew_member_not_found":
-		return fmt.Sprintf("no session or crew member matches %q; `attn agent list` names sessions and `attn crew list` names members", parsed.target)
-	case "session_not_found":
-		return fmt.Sprintf("no session matches %q; `attn agent list` names the sessions on this daemon", parsed.target)
-	case "ambiguous_session":
-		return fmt.Sprintf("%q matches more than one session; give more of the id (`attn agent list --json` carries full ids)", parsed.target)
-	case "sender_session_not_found":
-		return fmt.Sprintf("the sender %q is not a session on this daemon", parsed.source)
-	case "sender_ambiguous_session":
-		return fmt.Sprintf("the sender %q matches more than one session; give more of the id", parsed.source)
-	}
-	return message
-}
-
 type agentCloseArgs struct {
 	target string
 	reason string
@@ -414,7 +382,7 @@ type agentCloseArgs struct {
 }
 
 func parseAgentCloseArgs(args []string, envSessionID func() protocol.SessionID) (agentCloseArgs, error) {
-	const usage = `usage: attn agent close <session-or-seed> -m "reason" [--source-session <id>]`
+	const usage = `usage: attn agent close <session-or-member-or-seed> -m "reason" [--source-session <id>]`
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
 		return agentCloseArgs{}, errors.New(usage)
 	}
@@ -460,7 +428,7 @@ func runAgentClose(args []string) {
 	}
 	result, err := client.New("").AgentClose(parsed.target, parsed.source, parsed.reason)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "agent close: %s\n", agentCloseErrorMessage(parsed, err))
+		fmt.Fprintf(os.Stderr, "agent close: %s\n", err.Error())
 		os.Exit(1)
 	}
 	if parsed.json {
@@ -476,21 +444,6 @@ func printAgentClose(w io.Writer, result *protocol.AgentCloseResult) {
 		fmt.Fprintf(w, "noted on %s, which it was tending\n", seedID)
 	}
 	fmt.Fprintf(w, "the session is kept: `attn session show %s` reads it back\n", agentShortID(string(result.TargetSessionID)))
-}
-
-func agentCloseErrorMessage(parsed agentCloseArgs, err error) string {
-	message := strings.TrimSpace(err.Error())
-	code := client.ErrorCode(err)
-	if code == "" {
-		code = strings.TrimSpace(strings.TrimPrefix(message, "daemon error: "))
-	}
-	switch code {
-	case "sender_session_not_found":
-		return fmt.Sprintf("the caller %q is not a session on this daemon", parsed.source)
-	case "sender_ambiguous_session":
-		return fmt.Sprintf("the caller %q matches more than one session; give more of the id", parsed.source)
-	}
-	return message
 }
 
 type agentMailboxArgs struct {
@@ -633,11 +586,7 @@ func runAgentMsgStatus(args []string) {
 }
 
 func printAgentInbox(w io.Writer, message *protocol.AgentPeerMessage) {
-	origin := agentShortID(string(message.SenderSessionID))
-	if label := strings.TrimSpace(message.SenderLabel); label != "" && label != origin {
-		origin = fmt.Sprintf("%s (%s)", origin, label)
-	}
-	fmt.Fprintln(w, prompts.RenderText("session", "peer-message", prompts.Values{"origin": origin, "message": message.Content, "sender_id": agentShortID(string(message.SenderSessionID))}))
+	fmt.Fprintln(w, prompts.RenderText("session", "peer-message", prompts.Values{"origin": message.Sender.Name, "message": message.Content, "reply_to": message.ReplyTo}))
 }
 
 func printAgentInboxBatch(w io.Writer, result *protocol.AgentInboxBatchResult) {
@@ -662,8 +611,7 @@ func printAgentInboxBatch(w io.Writer, result *protocol.AgentInboxBatchResult) {
 			continue
 		}
 		printAgentInbox(w, &protocol.AgentPeerMessage{
-			SenderSessionID: protocol.TrimID(protocol.Deref(item.SenderSessionID)),
-			SenderLabel:     protocol.Deref(item.SenderLabel), Content: content,
+			Sender: protocol.Deref(item.Sender), ReplyTo: protocol.Deref(item.ReplyTo), Content: content,
 		})
 	}
 	if result.Remaining > 0 {
@@ -672,7 +620,7 @@ func printAgentInboxBatch(w io.Writer, result *protocol.AgentInboxBatchResult) {
 }
 
 func printAgentMsgStatus(w io.Writer, message *protocol.AgentPeerMessage) {
-	fmt.Fprintf(w, "%s: message %s to session %s\n", message.State, message.MessageID, agentShortID(message.TargetSessionID))
+	fmt.Fprintf(w, "%s: message %s to %s (%s)\n", message.State, message.MessageID, message.ToName, message.To)
 }
 
 func agentMailboxErrorMessage(parsed agentMailboxArgs, err error) string {
@@ -697,20 +645,24 @@ commands:
   list [--json]
         the address book: every session on this daemon with its short id,
         name, profile, state, and whether a turn is owed. Read-only.
-  peek <session-or-member> [--json]
+  peek <session-or-member-or-seed> [--profile <name|id>] [--json]
         observe a session without interrupting it: state, last
         assistant message, and the rendered screen. Passive — the observed
-        agent never notices. The target is a crew name, full session id, or
-        unique session id prefix. A sleeping crew member stays asleep.
+        agent never notices. Targets resolve inside your profile: a crew name,
+        member:<key>, session:<id>, seed id, or unique session id prefix.
+        A sleeping crew member stays asleep.
+        Outside attn, the only profile is selected automatically; with several
+        profiles, choose --profile <name|id>.
   msg <session-or-member-or-seed> "text" [--source-session <id>] [--json]
         send a session, crew member or seed a message. The body stays in the inbox;
         the recipient gets a generic inbox notification. A target that cannot take
         input safely keeps it queued. The result says queued, notified, or refused.
-        A sleeping member wakes before the notification is placed. The sender defaults to this session
+        A sleeping member wakes before the notification is placed.
+        A crew session sends as its member; replies follow that member's next session. The sender defaults to this session
         (resolved from this terminal); pass --source-session when running outside one.
         A seed id reaches its current or next tender, waiting when none is reachable.
         A message that starts with - goes after --, as: agent msg -- <target> "-text"
-  close <session-or-seed> -m "reason" [--source-session <id>] [--json]
+  close <session-or-member-or-seed> -m "reason" [--source-session <id>] [--json]
         close a session for good. A session may close itself and the sessions it
         dispatched; a profile's chief of staff may close any agent of that
         profile. The reason is required: the session row stays in the ledger,
@@ -718,6 +670,7 @@ commands:
         what you have to say first. A seed id closes whoever tends it, and the
         seed keeps its tender with a note about the close.
         The caller defaults to this session (resolved from this terminal).
+        Outside attn, pass --source-session <id>; its profile scopes the target.
   inbox [message-id] [--limit <count>] [--session <id>] [--json]
         read up to 20 unread notifications in FIFO order, or one notified peer
         message by id. Each returned item gets its durable read receipt. The batch

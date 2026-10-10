@@ -14,7 +14,6 @@ import (
 	"nhooyr.io/websocket"
 
 	"github.com/victorarias/attn/internal/enrollment"
-	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/hub"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -49,7 +48,7 @@ func callAgentClose(t *testing.T, d *Daemon, target, source, reason string) prot
 	return callHandler(t, func(conn net.Conn) {
 		d.handleAgentClose(conn, &protocol.AgentCloseMessage{
 			Cmd:             protocol.CmdAgentClose,
-			TargetSessionID: target,
+			To:              target,
 			SourceSessionID: protocol.SessionID(source),
 			Reason:          reason,
 		})
@@ -154,29 +153,6 @@ func remoteAgentCloseSession(id, label string) protocol.Session {
 	return protocol.Session{ID: protocol.SessionID(id), Label: label, Directory: "/srv/" + id}
 }
 
-func TestAgentCloseReachesADelegateAnEndpointOwns(t *testing.T) {
-	d := newAgentCloseDaemon(t)
-	addAgentCloseSession(t, d, "orchestrator", "Orchestrator")
-	startAgentCloseOutpost(t, d, remoteAgentCloseSession("remote-delegate", "Remote delegate"))
-	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Bench the kernel", Body: protocol.Ptr("run the sweep on the gpu box")})
-	move(t, d, "remote-delegate", seed.ID, garden.VerbTend, "", "")
-	if err := d.recordGardenDispatch("remote-delegate", seed.ID, "orchestrator", "/srv/remote-delegate", "claude", false); err != nil {
-		t.Fatalf("recordGardenDispatch: %v", err)
-	}
-
-	resp := callAgentClose(t, d, "remote-delegate", "orchestrator", "the sweep finished and its numbers are on the seed")
-
-	if !resp.Ok || resp.AgentCloseResult == nil {
-		t.Fatalf("close refused with %s, want the hub to close the session its outpost owns", agentCloseFailure(resp))
-	}
-	if rule := resp.AgentCloseResult.Rule; rule != protocol.AgentCloseRuleDispatcher {
-		t.Errorf("rule = %q, want dispatcher", rule)
-	}
-	if got := resp.AgentCloseResult.SeedIds; len(got) != 1 || got[0] != seed.ID {
-		t.Errorf("seed_ids = %v, want the seed the remote delegate tended", got)
-	}
-}
-
 func TestAgentCloseLetsTheChiefCloseASessionOnAnotherEndpoint(t *testing.T) {
 	d := newAgentCloseDaemon(t)
 	addAgentCloseSession(t, d, "chief", "Chief")
@@ -198,10 +174,9 @@ func TestAgentCloseLetsTheChiefCloseASessionOnAnotherEndpoint(t *testing.T) {
 func TestAgentCloseWritesItsReceiptInTheOwningDaemonsLedger(t *testing.T) {
 	d := newAgentCloseDaemon(t)
 	addAgentCloseSession(t, d, "orchestrator", "Orchestrator")
-	outpost := startAgentCloseOutpost(t, d, remoteAgentCloseSession("remote-delegate", "Remote delegate"))
-	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Bench the kernel", Body: protocol.Ptr("sweep on the gpu box")})
-	if err := d.recordGardenDispatch("remote-delegate", seed.ID, "orchestrator", "/srv/remote-delegate", "claude", false); err != nil {
-		t.Fatalf("recordGardenDispatch: %v", err)
+	outpost := startAgentCloseOutpost(t, d, remoteAgentCloseSession("remote-delegate", "Remote delegate"), remoteAgentCloseSession("remote-self", "Remote self"))
+	if err := setTestChief(d, "orchestrator"); err != nil {
+		t.Fatal(err)
 	}
 
 	const reason = "the sweep finished and its numbers are on the seed"
@@ -211,12 +186,20 @@ func TestAgentCloseWritesItsReceiptInTheOwningDaemonsLedger(t *testing.T) {
 		t.Fatalf("close refused with %s, want the close to cross to the outpost", agentCloseFailure(resp))
 	}
 	entry := closedEntry(t, outpost, "remote-delegate")
-	if by := protocol.Deref(entry.ClosedBy); by != "orchestrator" {
+	if by := protocol.Deref(entry.ClosedBy).Ref; by != "session:orchestrator" {
 		t.Errorf("remote closed_by = %q, want the dispatcher that authorized it", by)
 	}
 	if got := protocol.Deref(entry.CloseReason); got != reason {
 		t.Errorf("remote close_reason = %q, want %q", got, reason)
 	}
+	self := callAgentClose(t, d, "remote-self", "remote-self", "finished my remote work")
+	if !self.Ok || self.AgentCloseResult == nil || self.AgentCloseResult.Rule != protocol.AgentCloseRuleSelf {
+		t.Fatalf("remote self close: %+v", self)
+	}
+	if entry := closedEntry(t, outpost, "remote-self"); protocol.Deref(entry.ClosedBy).Ref != "session:remote-self" {
+		t.Fatalf("remote self actor: %+v", entry)
+	}
+
 }
 
 func TestAgentCloseRepeatsWhyTheOwningDaemonRefused(t *testing.T) {
@@ -255,9 +238,9 @@ func TestAgentCloseRefusesWhenTheOwningEndpointCannotTakeIt(t *testing.T) {
 		t.Fatalf("AddEndpoint: %v", err)
 	}
 	d.hubManager = hub.NewManager(d.store, nil, nil, nil, nil, nil)
-	if !d.hubManager.ReplaceRemoteSessions(endpoint.ID, []protocol.Session{
-		remoteAgentCloseSession("remote-worker", "Remote worker"),
-	}) {
+	remote := remoteAgentCloseSession("remote-worker", "Remote worker")
+	remote.ProfileID = defaultProfileID(t, d.store)
+	if !d.hubManager.ReplaceRemoteSessions(endpoint.ID, []protocol.Session{remote}) {
 		t.Fatal("the endpoint mirrored nothing")
 	}
 

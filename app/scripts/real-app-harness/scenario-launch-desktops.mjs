@@ -110,7 +110,7 @@ try {
     await capture('03-shared-new-desktop.png');
     await click('.mp-launch-footer .primary');
     await wait('.mp-done');
-    const starts = crew().filter((member) => members.some((item) => item.item_id === member.id)).map((member) => member.launch_desktop);
+    const starts = crew().filter((member) => members.some((item) => item.item_id === member.key)).map((member) => member.launch_desktop);
     runner.assert(starts.length === 2 && starts[0]?.desktop_id && starts[0].desktop_id === starts[1]?.desktop_id && starts[0].label.includes('Launch review'),
       'Both members start on the one desktop Finish created', starts);
     await capture('04-finished.png');
@@ -133,7 +133,7 @@ try {
   });
   await runner.step('a_user_wake_goes_there_and_background_wake_stays_quiet', async () => {
     const memberHeading = await client.request('dom_text', { selector: '.crew-member-heading h2' });
-    const userLaunched = observer.waitForMessage((message) => message.event === 'crew_updated' && message.members?.find((member) => member.id === members[0].item_id && member.binding_session), 'app crew wake');
+    const userLaunched = observer.waitForMessage((message) => message.event === 'crew_updated' && message.members?.find((member) => member.key === members[0].item_id && member.binding_session), 'app crew wake');
     await click('[data-testid="crew-restart"]');
     await click('[data-testid="crew-confirm-restart"]');
     const launched = await userLaunched;
@@ -164,7 +164,7 @@ try {
     runner.assert(shownAgentId(state) === userWake.session_id, 'A background wake keeps the currently shown agent', state);
     await wait('[data-testid="crew-panel"]');
     await capture('07-quiet-background-wake.png');
-    runner.writeJson('launch-choices.json', { members: crew().filter((member) => members.some((item) => item.item_id === member.id)), arrival });
+    runner.writeJson('launch-choices.json', { members: crew().filter((member) => members.some((item) => item.item_id === member.key)), arrival });
   });
   await runner.finishSuccess({ realCopy, members: members.map((item) => item.item_id) });
 } catch (error) {

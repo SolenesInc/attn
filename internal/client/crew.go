@@ -7,8 +7,12 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (c *Client) CrewList() (*protocol.CrewListResult, error) {
-	resp, err := c.send(protocol.CrewListMessage{Cmd: protocol.CmdCrewList})
+func (c *Client) CrewList(includeRetired ...bool) (*protocol.CrewListResult, error) {
+	msg := protocol.CrewListMessage{Cmd: protocol.CmdCrewList}
+	if len(includeRetired) != 0 {
+		msg.IncludeRetired = protocol.Ptr(includeRetired[0])
+	}
+	resp, err := c.send(msg)
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +81,7 @@ func (c *Client) CrewRestart(member, requestID string) (*protocol.CrewRestartRes
 	var expectedRevision int
 	found := false
 	for _, candidate := range roster.Members {
-		if strings.EqualFold(candidate.ID, strings.TrimSpace(member)) {
+		if strings.EqualFold(candidate.Name, strings.TrimSpace(member)) || "member:"+candidate.Key == strings.TrimSpace(member) {
 			expectedSessionID = protocol.Deref(candidate.BindingSession)
 			expectedRevision = candidate.Revision
 			found = true
@@ -127,4 +131,47 @@ func (c *Client) CrewHandoff(sessionID protocol.SessionID, note string, retry bo
 		return nil, fmt.Errorf("the daemon answered without saying where the letter landed")
 	}
 	return resp.CrewHandoffResult, nil
+}
+
+func (c *Client) CrewRename(member, name string) (*protocol.CrewRenameResult, error) {
+	resp, err := c.send(protocol.CrewRenameMessage{Cmd: protocol.CmdCrewRename, Member: member, Name: name})
+	if err != nil {
+		return nil, err
+	}
+	if resp.CrewRenameResult == nil {
+		return nil, fmt.Errorf("the daemon answered without a rename result")
+	}
+	return resp.CrewRenameResult, nil
+}
+
+func (c *Client) CrewCreate(msg protocol.CrewCreateMessage) (*protocol.CrewCreateResult, error) {
+	msg.Cmd = protocol.CmdCrewCreate
+	resp, err := c.send(msg)
+	if err != nil {
+		return nil, err
+	}
+	if resp.CrewCreateResult == nil {
+		return nil, fmt.Errorf("the daemon answered without a create result")
+	}
+	return resp.CrewCreateResult, nil
+}
+func (c *Client) CrewRetire(member string) (*protocol.CrewRetireResult, error) {
+	resp, err := c.send(protocol.CrewRetireMessage{Cmd: protocol.CmdCrewRetire, Member: member})
+	if err != nil {
+		return nil, err
+	}
+	if resp.CrewRetireResult == nil {
+		return nil, fmt.Errorf("the daemon answered without a retirement result")
+	}
+	return resp.CrewRetireResult, nil
+}
+func (c *Client) CrewRestore(member string) (*protocol.CrewRestoreResult, error) {
+	resp, err := c.send(protocol.CrewRestoreMessage{Cmd: protocol.CmdCrewRestore, Member: member})
+	if err != nil {
+		return nil, err
+	}
+	if resp.CrewRestoreResult == nil {
+		return nil, fmt.Errorf("the daemon answered without a restore result")
+	}
+	return resp.CrewRestoreResult, nil
 }

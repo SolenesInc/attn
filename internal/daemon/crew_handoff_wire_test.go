@@ -230,7 +230,7 @@ func TestHandoffRefusalsLeaveTheDayRunning(t *testing.T) {
 	handed := crewHandoff(t, cli, string(keel.SessionID), "Filed and gone.", false, "")
 	w.Launched(string(protocol.Deref(handed.SessionID)))
 	_, err = cli.CrewHandoff(protocol.Deref(handed.SessionID), "", true, "")
-	crewErrorContains(t, err, "filed no letter yet")
+	crewErrorContains(t, err, "no filed letter to retry")
 }
 
 func TestCrewLettersNeverLeaveTheMemberHome(t *testing.T) {

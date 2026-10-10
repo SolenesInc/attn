@@ -80,7 +80,6 @@ func (d *Daemon) scopeGardenRequest(cmd string, msg any, selected string) error 
 		PartOf          string                            `json:"part_of"`
 		DiscoveredFrom  string                            `json:"discovered_from"`
 		Plot            string                            `json:"plot"`
-		Member          string                            `json:"member"`
 		ReviewID        string                            `json:"review_id"`
 		Review          *protocol.SeedReviewActionContext `json:"review"`
 	}
@@ -106,28 +105,7 @@ func (d *Daemon) scopeGardenRequest(cmd string, msg any, selected string) error 
 			}
 		}
 	}
-	if scope.Member != "" {
-		member := d.resolveTenderMember(scope.Member, scope.SourceSessionID)
-		memberProfile, err := d.store.CrewProfile(member)
-		if err != nil {
-			return err
-		}
-		existingClaim := false
-		if cmd == protocol.CmdSeedTransition && scope.SeedID != "" {
-			seed, _, err := d.readSeed(scope.SeedID)
-			if err != nil {
-				return err
-			}
-			existingClaim = seed.TenderMember == member
-		}
-		if memberProfile != "" && memberProfile != profile.ID && !existingClaim {
-			owner, err := d.store.GetProfile(memberProfile)
-			if err != nil {
-				return err
-			}
-			return fmt.Errorf("crew member %s belongs to profile %q; caller belongs to profile %q", scope.Member, owner.Name, profile.Name)
-		}
-	}
+
 	reviewID := scope.ReviewID
 	if scope.Review != nil {
 		reviewID = scope.Review.ReviewID
@@ -165,10 +143,13 @@ func (d *Daemon) seedBirthProfile(seed garden.Seed) (string, error) {
 	if seed.ProfileID != "" {
 		return seed.ProfileID, nil
 	}
-	sessionID := seed.PlanterSession
-	if sessionID == "" {
-		sessionID = seed.TenderSession
+	if planter, ok := seed.Planter.Party(); ok {
+		return d.store.PartyProfile(planter)
 	}
+	if tender, ok := seed.Claim.Tender(); ok {
+		return d.store.PartyProfile(tender)
+	}
+	var sessionID protocol.SessionID
 	profile, err := d.resolveGardenProfile(sessionID, "", "")
 	if err != nil {
 		return "", err

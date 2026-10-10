@@ -13,7 +13,10 @@ import (
 func TestTheNotebookStaysInsideItsRootEvenWhenTheRootIsALink(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
-	real := fsDir(t, "real-notebook")
+	real := filepath.Join(w.Dir, "real-notebook")
+	if err := os.MkdirAll(real, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	root := filepath.Join(w.Dir, "notebook")
 	if err := os.RemoveAll(root); err != nil {
 		t.Fatal(err)

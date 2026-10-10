@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from 'react';
+import { useProfilesStore } from '../store/profiles';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { fsChangeSignalKey, fsIndexToNotebookEntries } from '../utils/fsChangeSignals';
 import { AppContentProps } from './appSupport';
@@ -32,29 +33,22 @@ export function useAppNotebookSurface({
   sendFsUnwatch,
   connectionGeneration,
 }: Options) {
-  const makeNotebookSurfaceDaemon = useCallback(
-    (root?: string) => ({
-      listDir: (path: string) => sendFsList(path, root),
-      readFile: (path: string) => sendFsRead(path, root),
-      writeFile: (path: string, content: string, baseHash?: string) =>
-        sendFsWrite(path, content, baseHash, root),
-      existsFile: (path: string) => sendFsExists(path, root),
-      readAsset: (path: string) => sendFsReadAsset(path, root),
-      backlinksNotebook: sendNotebookBacklinks,
-      sendToChief: sendNotebookToChief,
-      listFiles: () => sendFsIndex(root).then(fsIndexToNotebookEntries),
-    }),
-    [
-      sendFsList,
-      sendFsRead,
-      sendFsWrite,
-      sendFsExists,
-      sendFsReadAsset,
-      sendNotebookBacklinks,
-      sendNotebookToChief,
-      sendFsIndex,
-    ],
-  );
+  const profileId = useProfilesStore((state) => state.selectedProfileId);
+  const makeNotebookSurfaceDaemon = useCallback((root?: string) => {
+    const notebook = !root || root === effectiveNotebookRoot;
+    const requestRoot = notebook ? undefined : root;
+    const scope = { profile_id: profileId ?? undefined, ...(notebook && effectiveNotebookRoot ? { expected_notebook_root: effectiveNotebookRoot } : {}) };
+    return {
+      listDir: (path: string) => sendFsList(path, requestRoot, scope),
+      readFile: (path: string) => sendFsRead(path, requestRoot, scope),
+      writeFile: (path: string, content: string, baseHash?: string) => sendFsWrite(path, content, baseHash, requestRoot, scope),
+      existsFile: (path: string) => sendFsExists(path, requestRoot, scope),
+      readAsset: (path: string) => sendFsReadAsset(path, requestRoot, scope),
+      backlinksNotebook: (path: string) => sendNotebookBacklinks(path, scope),
+      sendToChief: (selection: string, sourcePath?: string) => sendNotebookToChief(selection, sourcePath, scope),
+      listFiles: () => sendFsIndex(requestRoot, undefined, scope).then(fsIndexToNotebookEntries),
+    };
+  }, [sendFsList, sendFsRead, sendFsWrite, sendFsExists, sendFsReadAsset, sendNotebookBacklinks, sendNotebookToChief, sendFsIndex, profileId, effectiveNotebookRoot]);
 
   const changeSignalFor = useCallback(
     (root?: string) => fsChangeSignals[fsChangeSignalKey(root || '', effectiveNotebookRoot)] || 0,

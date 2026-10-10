@@ -955,10 +955,12 @@ function seedFixture(overrides: Partial<Seed> = {}): Seed {
     state_changed_at_exact: true,
     step_slug: 'seed-reader-plan',
     profile_id: 'profile-default',
-    planter_session: '',
-    planter_member: '',
-    tender_session: 'sess-a',
-    tender_member: 'trellis',
+
+    planter: { ref: 'user', name: 'the user' },
+
+    tender: { ref: 'member:trellis', name: "Trellis", session_id: 'sess-a' },
+    claimed: true,
+    resume_available: false,
     edges: [],
     template: false,
     gate: false,
@@ -977,15 +979,15 @@ function seedDocumentFixture(body = '# Seed body\n\nAnnotate this plan.'): SeedD
       body,
       plot_progress: { total: 1, done: 1, withered: 0, growing: 0, dormant: 0, ready: 0, blocked: 0 },
     }),
-    tender_holds: true,
+
     children: [seedFixture({ id: 's-child1', title: 'Reader child', body: '', status: 'harvested' })],
     notes: [{
       id: 'n-live11',
       seed_id: 's-plan11',
       kind: 'note',
       body: 'Live ledger note',
-      author_session: 'sess-a',
-      author_member: 'trellis',
+
+      author: { ref: "member:trellis", name: "Trellis" },
       created_at: '2026-08-15T09:00:00Z',
     }],
     notes_total: 1,
@@ -1273,8 +1275,8 @@ describe('DesktopDockTile seed reader', () => {
   it('makes Note on seed the unsplit primary when nobody tends the seed', async () => {
     const detail = {
       ...seedDocumentFixture(),
-      seed: seedFixture({ tender_session: '', tender_member: '' }),
-      tender_holds: false,
+      seed: seedFixture({  tender: undefined, claimed: false }),
+
     };
     const daemonApi = createMockDaemonApi({
       sendSeedDocumentGet: vi.fn().mockResolvedValue(detail),
@@ -1334,12 +1336,16 @@ describe('DesktopDockTile seed reader', () => {
     );
     await screen.findByRole('button', { name: 'Send 1' });
 
-    const parked = seedFixture({ tender_session: '', tender_member: '', rev: 2 });
+    const parked = seedFixture({  tender: undefined,
+    claimed: false,
+    resume_available: false, rev: 2 });
     view.rerender(<DesktopDockTile {...props} gardenSeeds={[parked]} />);
     expect(screen.getByRole('button', { name: 'Note on seed 1' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'More annotation destinations' })).toBeNull();
 
-    const claimed = seedFixture({ tender_session: 'sess-b', tender_member: 'trellis', rev: 3 });
+    const claimed = seedFixture({  tender: { ref: 'member:trellis', name: "Trellis", session_id: 'sess-b' },
+    claimed: true,
+    resume_available: false, rev: 3 });
     view.rerender(<DesktopDockTile {...props} gardenSeeds={[claimed]} />);
     const primary = screen.getByRole('button', { name: 'Send 1' });
     expect(screen.getByRole('button', { name: 'More annotation destinations' })).toBeInTheDocument();

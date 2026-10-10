@@ -6,10 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/victorarias/attn/internal/inbox"
-
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type SessionPullRequestRecord struct {
@@ -295,7 +294,7 @@ func (s *Store) TouchSessionPullRequestActivity(prID string, at time.Time) error
 	return err
 }
 
-func (s *Store) ForgetSessionPullRequest(sessionID protocol.SessionID, to inbox.Address, prID string) (bool, error) {
+func (s *Store) ForgetSessionPullRequest(sessionID protocol.SessionID, to who.Address, prID string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -311,10 +310,10 @@ func (s *Store) ForgetSessionPullRequest(sessionID protocol.SessionID, to inbox.
 		return false, err
 	}
 	owner := sessionID
-	if err := tx.QueryRow(`SELECT session_id FROM pull_request_watches WHERE address=? AND pr_id=?`, to.String(), prID).Scan(&owner); err != nil && err != sql.ErrNoRows {
+	if err := tx.QueryRow(`SELECT session_id FROM pull_request_watches WHERE watcher=? AND pr_id=?`, to.String(), prID).Scan(&owner); err != nil && err != sql.ErrNoRows {
 		return false, err
 	}
-	watchResult, err := tx.Exec(`DELETE FROM pull_request_watches WHERE address=? AND pr_id=?`, to.String(), prID)
+	watchResult, err := tx.Exec(`DELETE FROM pull_request_watches WHERE watcher=? AND pr_id=?`, to.String(), prID)
 	if err != nil {
 		return false, err
 	}

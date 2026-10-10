@@ -4,10 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"path/filepath"
 	"strings"
-
-	"github.com/victorarias/attn/internal/crew"
 
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/enrollment"
@@ -15,6 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type profileActionOutcome struct {
@@ -192,6 +190,7 @@ func (d *Daemon) fillInitialProfileState(client *wsClient, event *protocol.Initi
 		client.selectProfile("")
 		return nil, 0
 	}
+	event.Crew = d.crewRoster(selected)
 	event.SelectedProfileID = protocol.Ptr(selected)
 	event.Desktops = wire
 	if d.requireHome("profiles and desktops") != nil {
@@ -252,7 +251,8 @@ func (d *Daemon) runProfileAction(client *wsClient, action, requestID string, ru
 		d.sendArrangement(client, requestID, outcome.moved)
 	}
 	if previousProfile != client.selectedProfile() {
-		d.sendGardenProfile(client)
+		d.sendProfileSnapshots(client)
+		d.handleGetSettingsWS(client)
 	}
 	d.sendToClient(client, result)
 	d.releaseArrangements(client)
@@ -357,7 +357,17 @@ func (d *Daemon) desktopChanged(desktop profiles.Desktop) profileActionOutcome {
 
 func (d *Daemon) handleProfileCreate(client *wsClient, msg *protocol.ProfileCreateMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
-		profile, desktop, err := d.store.CreateProfile(msg.Name)
+		name, err := profiles.ValidateName("profile", msg.Name)
+		if err != nil {
+			return profileActionOutcome{}, err
+		}
+		d.notebookRootMu.Lock()
+		defer d.notebookRootMu.Unlock()
+		root, err := d.defaultNotebookRoot(name, "")
+		if err != nil {
+			return profileActionOutcome{}, err
+		}
+		profile, desktop, err := d.store.CreateProfile(name, root)
 		return profileActionOutcome{profile: &profile, desktops: []profiles.Desktop{desktop}, publish: func() {
 			d.publishFact(FactProfileCreated, profile.ID, nil)
 		}}, err
@@ -379,17 +389,13 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 		if err != nil {
 			return profileActionOutcome{}, err
 		}
-		homes, err := crew.ScanHomes(filepath.Join(d.dataRoot, crew.HomesDirName), d.logf)
+		roster, err := d.store.CrewRoster(msg.ProfileID)
 		if err != nil {
 			return profileActionOutcome{}, err
 		}
 		members := 0
-		for _, member := range homes {
-			owner, err := d.store.CrewProfile(member.ID)
-			if err != nil {
-				return profileActionOutcome{}, err
-			}
-			if owner == msg.ProfileID {
+		for _, member := range roster {
+			if !member.Retired {
 				members++
 			}
 		}
@@ -399,6 +405,7 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 		if err != nil {
 			return profileActionOutcome{}, err
 		}
+		d.pruneNotebookRoots()
 		remaining, err := d.store.MostRecentlyUsedProfile()
 		if err != nil {
 			return profileActionOutcome{}, err
@@ -408,7 +415,8 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 				scoped.selectProfile(remaining.ID)
 				if scoped != client {
 					d.sendArrangement(scoped, "", nil)
-					d.sendGardenProfile(scoped)
+					d.sendProfileSnapshots(scoped)
+					d.handleGetSettingsWS(scoped)
 				}
 			}
 		})
@@ -483,7 +491,7 @@ func (d *Daemon) handleDesktopClose(client *wsClient, msg *protocol.DesktopClose
 			var failures []string
 			for _, id := range sessions {
 				name := d.desktopSessionName(id)
-				closing, err := d.beginSessionCloseAsUser(id, store.SessionClose{By: store.SessionClosedByUser}, nil)
+				closing, err := d.beginSessionCloseAsUser(id, store.SessionClose{By: who.User()}, nil)
 				if err != nil {
 					failures = append(failures, name+": "+err.Error())
 					continue
