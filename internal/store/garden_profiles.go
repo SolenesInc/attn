@@ -99,7 +99,7 @@ func countPendingProfileDelegations(tx *sql.Tx, profileID string) (int, error) {
 	return count, err
 }
 
-func checkSeedProfileWrite(q rowQuerier, schema docstore.CollectionSchema, table, id string, body []byte) error {
+func checkSeedProfileWrite(q rowQuerier, schema docstore.CollectionSchema, id string, body []byte) error {
 	if schema.Namespace != garden.Namespace || schema.Collection != garden.CollectionSeeds {
 		return nil
 	}
@@ -110,19 +110,8 @@ func checkSeedProfileWrite(q rowQuerier, schema docstore.CollectionSchema, table
 	if seed.ProfileID == "" {
 		return fmt.Errorf("seed %s needs profile_id: every seed belongs to one profile", id)
 	}
-	owner, err := loadLiveProfile(q, seed.ProfileID)
-	if err != nil {
-		return err
-	}
-	var previous string
-	err = q.QueryRow(`SELECT json_extract(body, '$.profile_id') FROM `+table+` WHERE id = ?`, id).Scan(&previous)
-	if err != nil && err != sql.ErrNoRows {
-		return err
-	}
-	if err == nil && previous != seed.ProfileID {
-		return fmt.Errorf("seed %s belongs to profile %s for life; cannot move it to profile %q", id, previous, owner.Name)
-	}
-	return nil
+	_, err = loadLiveProfile(q, seed.ProfileID)
+	return err
 }
 
 func (s *Store) PartyProfile(p who.Party) (string, error) {

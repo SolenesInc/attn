@@ -260,16 +260,9 @@ func (d *Daemon) captureGardenSessionExecution(session *protocol.Session) (garde
 	observed := d.observedGardenExecution(session, resumeID, startedAt)
 	return d.updateGardenDispatch(session.ID, func(current garden.Execution) (garden.Execution, bool, error) {
 		if crown := activeDispatchCrown(current); crown != "" {
-			seed, _, err := d.readSeed(crown)
+			_, _, err := d.readSeed(crown)
 			if err != nil {
 				return current, false, err
-			}
-			profileID, err := d.sessionProfileID(session.ID)
-			if err != nil {
-				return current, false, err
-			}
-			if seed.ProfileID != profileID {
-				return current, false, nil
 			}
 		}
 		if capturedAt, err := time.Parse(time.RFC3339Nano, current.CapturedAt); err == nil && capturedAt.After(startedAt) {
@@ -283,16 +276,9 @@ func (d *Daemon) captureGardenSessionExecution(session *protocol.Session) (garde
 func (d *Daemon) captureGardenSessionSnapshot(session *protocol.Session) (garden.Execution, error) {
 	return d.updateGardenDispatch(session.ID, func(current garden.Execution) (garden.Execution, bool, error) {
 		if crown := activeDispatchCrown(current); crown != "" {
-			seed, _, err := d.readSeed(crown)
+			_, _, err := d.readSeed(crown)
 			if err != nil {
 				return current, false, err
-			}
-			profileID, err := d.sessionProfileID(session.ID)
-			if err != nil {
-				return current, false, err
-			}
-			if seed.ProfileID != profileID {
-				return current, false, nil
 			}
 		}
 		observed := snapshotGardenExecution(session, d.store.GetResumeSessionID(session.ID), d.gardenTime())
@@ -371,17 +357,8 @@ func (d *Daemon) normalizedSeedContinuation(seed garden.Seed) (garden.Execution,
 	if executionID := protocol.TrimID(seed.LastExecutionID); executionID != "" {
 		if execution, ok := d.gardenDispatch(executionID); ok {
 			entry := d.store.SessionLedgerEntry(executionID)
-			foreign := entry != nil && entry.ProfileID != seed.ProfileID
-			if entry == nil {
-				if live := d.gardenSession(executionID); live != nil {
-					foreign = live.ProfileID != seed.ProfileID
-				}
-			}
-			if foreign {
-				return garden.Execution{SessionID: executionID}, continuationSourceExecution, true
-			}
 			localLedgerGone := entry == nil && execution.HostKind != garden.HostRemote
-			if entry != nil && entry.ProfileID == seed.ProfileID {
+			if entry != nil {
 				execution.SessionID = entry.ID
 				execution.Cwd = entry.Directory
 				execution.Agent = entry.Agent
