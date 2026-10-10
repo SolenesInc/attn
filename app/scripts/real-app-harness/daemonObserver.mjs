@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
-import { assertProductionRunAllowed, defaultWSURLForInstance, harnessClientHello } from './harnessInstance.mjs';
+import { assertProductionRunAllowed, defaultWSURLForInstance, harnessClientHello, isProductionHarnessTarget } from './harnessInstance.mjs';
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -185,7 +185,8 @@ export class DaemonObserver {
     return this.waitFor(() => this.desktop(created.id), `arrangement with desktop ${created.id}`);
   }
 
-  async closeEmptyNumberedDesktops() {
+  async closeLeftoverNumberedDesktops() {
+    if (isProductionHarnessTarget({ wsUrl: this.wsUrl })) return;
     const leftovers = this.desktops.filter((desktop) => desktop.shortcut_slot
       && desktop.panes.length === 0 && desktop.id !== this.currentDesktopId());
     for (const desktop of leftovers) {

@@ -201,7 +201,7 @@ try {
   await runner.step('delegating_to_a_missing_numbered_desktop_keeps_the_callers_view_and_keyboard', async () => {
     await driver.pressKey('Escape');
     await client.request('select_session', { sessionId: builder });
-    await observer.closeEmptyNumberedDesktops();
+    await observer.closeLeftoverNumberedDesktops();
     const before = await client.request('get_state');
     const sourcePane = before.activeLeaf.leafId;
     const held = new Set(observer.desktops.map(desktop => desktop.shortcut_slot).filter(Boolean));
