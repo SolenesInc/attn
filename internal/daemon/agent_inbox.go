@@ -14,7 +14,7 @@ import (
 )
 
 func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage) {
-	recipient, errCode := d.resolveSessionByIDOrPrefix(string(msg.RecipientSessionID))
+	recipient, errCode := d.resolveSessionByIDOrPrefix(string(msg.RecipientSessionID), "")
 	if recipient == nil {
 		d.sendError(conn, "recipient_"+errCode)
 		return
@@ -129,7 +129,7 @@ func mailboxItemContent(delivery store.InboxDelivery) string {
 }
 
 func (d *Daemon) handleAgentMsgStatus(conn net.Conn, msg *protocol.AgentMsgStatusMessage) {
-	sender, errCode := d.resolveSessionByIDOrPrefix(string(msg.SenderSessionID))
+	sender, errCode := d.resolveSessionByIDOrPrefix(string(msg.SenderSessionID), "")
 	if sender == nil {
 		d.sendError(conn, "sender_"+errCode)
 		return

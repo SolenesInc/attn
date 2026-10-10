@@ -4,7 +4,7 @@ import { gardenPathToSeed, gardenScrollMemory, seedParentID, useGardenWalk } fro
 import type { Seed, SeedHandoverOptions, SeedSendToChiefOptions } from '../hooks/useDaemonSocket';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { isAccelKeyPressed } from '../shortcuts/platform';
-import { crewDisplayName } from '../utils/crewName';
+import { memberName, useDaemonStore } from '../store/daemonSessions';
 import { harvestWhenDisplay } from '../utils/harvestWhen';
 import {
   IS_VALUES,
@@ -232,7 +232,7 @@ function isPlot(seed: Seed): boolean {
 }
 
 function tenderOf(seed: Seed, sessionLabels?: ReadonlyMap<string, string>): string {
-  if (seed.tender_member.trim()) return crewDisplayName(seed.tender_member);
+  if (seed.tender_member.trim()) return memberName(seed.tender_member);
   if (!seed.tender_session.trim()) return '';
   return sessionLabels?.get(seed.tender_session)?.trim() || 'session';
 }
@@ -595,6 +595,7 @@ export function GardenPanel({
   onOpenReview,
   tenderSessionLabels,
 }: GardenPanelProps) {
+  const crew = useDaemonStore((state) => state.crew);
   const trail = useGardenWalk((walk) => walk.trail);
   const setTrail = useGardenWalk((walk) => walk.setTrail);
   const [query, setQuery] = useState('');
@@ -654,7 +655,7 @@ export function GardenPanel({
       tenderOf: (seed: Seed) => tenderOf(seed, tenderSessionLabels),
       blockersOf: (seed: Seed) => index.blockers.get(seed.id) ?? 0,
     }),
-    [seeds, index, tenderSessionLabels],
+    [seeds, index, tenderSessionLabels, crew],
   );
   const entryByID = useMemo(() => {
     const map = new Map<string, SearchEntry>();
@@ -1226,7 +1227,7 @@ export function GardenPanel({
               tended by {tenderOf(here, tenderSessionLabels)}
             </span>
           )}
-          {here.planter_member && <span>by {crewDisplayName(here.planter_member)}</span>}
+          {here.planter_member && <span>by {memberName(here.planter_member)}</span>}
           <span>{formatPlantedAt(here.created_at)}</span>
           <span className="garden-head__id">{here.id}</span>
         </div>

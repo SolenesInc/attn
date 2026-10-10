@@ -708,7 +708,7 @@ func runDelegate() {
 		os.Exit(2)
 	}
 	warnIfDaemonVersionMismatch()
-	c := client.New("").WithGardenProfile(protocol.Deref(args.request.ProfileID), protocol.Deref(args.request.SourceSessionID))
+	c := client.New("").WithRequester(protocol.Deref(args.request.ProfileID), protocol.Deref(args.request.SourceSessionID))
 	fmt.Fprintf(os.Stderr, "delegation request: request_id=%s\n", args.request.RequestID)
 	operation, err := c.StartDelegation(args.request)
 	if err != nil {
@@ -1551,7 +1551,7 @@ func runOpen() {
 
 	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
 	if isSeedOpenTarget(rawPath) {
-		if err := c.WithGardenProfile(profileFlag, "").OpenSeed(rawPath, resolvedSession); err != nil {
+		if err := c.WithRequester(profileFlag, "").OpenSeed(rawPath, resolvedSession); err != nil {
 			fmt.Fprintf(os.Stderr, "open: %v\n", err)
 			os.Exit(1)
 		}

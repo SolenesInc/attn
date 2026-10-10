@@ -158,7 +158,7 @@ func TestCrewPrime_AClaimOlderThanAPageOfTheGardenStillWakesWithItsMember(t *tes
 		}
 	}
 
-	result, err := d.crewWake("trellis", "")
+	result, err := d.crewWakeAsked(&protocol.CrewWakeMessage{Member: "trellis"})
 	if err != nil {
 		t.Fatalf("wake: %v", err)
 	}
@@ -229,7 +229,7 @@ func TestCrewWake_RefusesAMemberOfAnotherProfile(t *testing.T) {
 		{Member: "trellis", SourceSessionID: protocol.Ptr(protocol.SessionID("work-agent"))},
 		{Member: "trellis", SourceSessionID: protocol.Ptr(protocol.SessionID("work-agent")), ProfileID: protocol.Ptr(defaultProfileID(t, d.store))},
 	} {
-		if _, err := d.crewWakeAsked(msg); err == nil || !strings.Contains(err.Error(), work.ID) {
+		if _, err := d.crewWakeAsked(msg); err == nil || !strings.Contains(err.Error(), `profile "Work"`) {
 			t.Fatalf("wake %+v = %v, want a refusal naming profile %s", msg, err, work.ID)
 		}
 	}

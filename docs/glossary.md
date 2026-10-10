@@ -98,6 +98,7 @@ packet                  an epic template
 
 ```text
 crew member             an agent with a permanent identity and memory
+├─ name (1)             the member’s name; unique in their profile
 ├─ charter (1)          who the member is and what they live for
 ├─ member home (1)      the folder that holds the charter and the letters
 ├─ launch desktop (1)   the desktop where their sessions start

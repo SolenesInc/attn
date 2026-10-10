@@ -47,11 +47,11 @@ describe('who still holds a seed', () => {
   const live = new Set(['sess-a']);
 
   it.each([
-    ['a member whose session is alive', { session: 'sess-a', member: 'alder' }, 'Alder'],
+    ['a member whose session is alive', { session: 'sess-a', member: 'alder' }, 'alder'],
     ['a session that is alive', { session: 'sess-a' }, 'sess-a'],
     ['a member whose session has ended', { session: 'sess-gone', member: 'alder' }, ''],
     ['a session that has ended', { session: 'sess-gone' }, ''],
-    ['a member with no session, since attn cannot see a person leave', { member: 'alder' }, 'Alder'],
+    ['a member with no session, since attn cannot see a person leave', { member: 'alder' }, 'alder'],
     ['nobody', {}, ''],
   ])('tended by %s: %j', (_name, tender, holder) => {
     expect(heldByOther(seed('growing', tender), live)).toBe(holder);

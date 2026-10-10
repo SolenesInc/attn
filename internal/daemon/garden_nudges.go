@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/victorarias/attn/internal/crew"
@@ -30,27 +29,35 @@ func (d *Daemon) seedUnblocked(seedID string) ([]garden.Seed, []protocol.Seed) {
 	return unblocked, read.wire(unblocked)
 }
 
-// seedTenderMember resolves a seed's tender name to a crew member of the seed's own profile.
 func (d *Daemon) seedTenderMember(seed garden.Seed) (crew.Member, bool, error) {
-	member, found, err := d.resolveCrewMember(seed.Tender().Member)
-	if err != nil || !found || d.crewProfileID(member.ID) != seed.ProfileID {
+	text := seed.Tender().Member
+	identity, found, err := d.store.CrewKeyed(seed.ProfileID, text)
+	if err != nil {
 		return crew.Member{}, false, err
 	}
-	return member, true, nil
+	if !found {
+		identity, found, err = d.store.CrewNamed(seed.ProfileID, text)
+	}
+	if err != nil || !found {
+		return crew.Member{}, false, err
+	}
+	member, _, err := d.crewMember(identity.Key)
+	return member, err == nil, err
 }
 
 func (d *Daemon) localGardenTenderSession(seed garden.Seed) (string, error) {
 	tender := seed.Tender()
 	sessionID := protocol.TrimID(tender.Session)
-	if sessionID == "" {
-		if member := strings.TrimSpace(tender.Member); member != "" {
-			var err error
-			sessionID, err = d.crewSessionBoundTo(member)
-			if err != nil {
-				return "", err
-			}
+	if sessionID == "" && tender.Member != "" {
+		member, found, err := d.seedTenderMember(seed)
+		if err != nil {
+			return "", err
+		}
+		if found && d.crewBindingLive(member) {
+			sessionID = member.BindingSession
 		}
 	}
+
 	if sessionID == "" {
 		return "", nil
 	}

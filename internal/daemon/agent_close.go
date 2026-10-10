@@ -18,7 +18,7 @@ const agentCloseReasonMaxChars = garden.MaxReasonChars
 const agentCloseTendedSeedLimit = 100
 
 func (d *Daemon) handleAgentClose(conn net.Conn, msg *protocol.AgentCloseMessage) {
-	caller, errCode := d.resolveSessionByIDOrPrefix(string(msg.SourceSessionID))
+	caller, errCode := d.resolveSessionByIDOrPrefix(string(msg.SourceSessionID), "")
 	if caller == nil {
 		d.replyAgentMsgError(conn, "sender_"+errCode, fmt.Sprintf(
 			"the caller %q is not a session on this daemon; a close is attributed to the session that asked for it", protocol.TrimID(msg.SourceSessionID)))

@@ -13,6 +13,7 @@ interface DaemonStore {
 
   crew: CrewMember[];
   setCrew: (crew: CrewMember[]) => void;
+  memberName: (key: string) => string;
 
   prs: DaemonPR[];
   setPRs: (prs: DaemonPR[]) => void;
@@ -42,6 +43,7 @@ export const useDaemonStore = create<DaemonStore>((set, get) => ({
 
   crew: [],
   setCrew: (crew) => set({ crew }),
+  memberName: (key) => get().crew.find((member) => member.key === key)?.name ?? key,
 
   prs: [],
   setPRs: (prs) => set({ prs }),
@@ -65,3 +67,12 @@ export const useDaemonStore = create<DaemonStore>((set, get) => ({
   isConnected: false,
   setConnected: (connected) => set({ isConnected: connected }),
 }));
+
+export function memberName(key: string): string { return useDaemonStore.getState().memberName(key); }
+export function memberHolderName(member: string | undefined, session: string | undefined): string {
+ return member?.trim() ? memberName(member) : session?.trim() ?? '';
+}
+
+export function useMemberName(key: string): string {
+ return useDaemonStore((state) => state.crew.find((member) => member.key === key)?.name ?? key);
+}

@@ -1,4 +1,4 @@
-import { crewDisplayName } from './crewName';
+import { memberName } from '../store/daemonSessions';
 import type { SessionDelegationRole } from '../types/generated';
 
 export interface DelegationSession {
@@ -34,7 +34,7 @@ export function delegationTree<TSession extends DelegationSession>(
   }
   const missingParent = root.dispatcher_session_id && !byId.has(root.dispatcher_session_id);
   const earlierDispatcher = missingParent || (!root.dispatcher_session_id && root.dispatcher_member)
-    ? (root.dispatcher_member ? crewDisplayName(root.dispatcher_member) : 'Earlier session')
+    ? (root.dispatcher_member ? memberName(root.dispatcher_member) : 'Earlier session')
     : null;
   const roots = missingParent ? children.get(root.dispatcher_session_id!) ?? [root] : [root];
   const pending = roots.map((session) => ({ session, depth: 0 })).reverse();

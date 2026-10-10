@@ -1,6 +1,7 @@
 package store
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -52,7 +53,11 @@ func TestEachProfileHasItsOwnChief(t *testing.T) {
 }
 
 func TestMigration161MovesTheChiefIntoItsProfile(t *testing.T) {
-	s, _ := openProfileStore(t)
+	s, err := newStoreAtVersion(filepath.Join(t.TempDir(), "chief.db"), 1791587735114907-1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
 	work, _ := mustCreateProfile(t, s, "Work")
 	addProfileSession(t, s, "old-chief", work.ID)
 	if _, err := s.db.Exec(`

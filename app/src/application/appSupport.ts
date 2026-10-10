@@ -13,7 +13,7 @@ import { type OpenPRProgress } from '../hooks/useOpenPR';
 import { type TerminalDesktopState } from '../store/sessions';
 import type { Presentation } from '../types/generated';
 import { type SessionAgent } from '../types/sessionAgent';
-import { crewDisplayName } from '../utils/crewName';
+import { memberName } from '../store/daemonSessions';
 export const RELEASES_LATEST_API = 'https://api.github.com/repos/victorarias/attn/releases/latest';
 
 export const RELEASES_LATEST_WEB = 'https://github.com/victorarias/attn/releases/latest';
@@ -26,7 +26,7 @@ export const CHIEF_OF_STAFF_CLOSE_HINT =
   'Chief of staff is protected — unset the chief role to close it.';
 
 export function crewMemberCloseHint(memberId: string): string {
-  const name = crewDisplayName(memberId);
+  const name = memberName(memberId);
   return `${name} is protected — put ${name} to sleep to close the day.`;
 }
 

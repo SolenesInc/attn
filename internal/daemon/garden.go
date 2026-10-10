@@ -444,7 +444,7 @@ func (d *Daemon) handleSeedPlant(conn net.Conn, msg *protocol.SeedPlantMessage) 
 		Status:         garden.StatusPlanted,
 		StepSlug:       garden.StepSlug(title),
 		PlanterSession: sessionID,
-		PlanterMember:  d.resolveTenderMember(protocol.Deref(msg.Member), sessionID),
+		PlanterMember:  d.resolveTenderMember(protocol.Deref(msg.Member), sessionID, protocol.Deref(msg.ProfileID)),
 		Edges:          []garden.Edge{},
 		Vars:           []garden.Var{},
 	}
@@ -496,7 +496,7 @@ func (d *Daemon) handleSeedPlot(conn net.Conn, msg *protocol.SeedPlotMessage) {
 		return
 	}
 	sessionID := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
-	member := strings.TrimSpace(protocol.Deref(msg.Member))
+	member := d.resolveTenderMember(protocol.Deref(msg.Member), sessionID, protocol.Deref(msg.ProfileID))
 
 	var result protocol.SeedPlotResult
 	planted := []string{}
@@ -1145,7 +1145,7 @@ func (d *Daemon) validateDispatchCrown(crown string, sourceSessionID protocol.Se
 		return fmt.Errorf(
 			"%s is being tended by %s, and a seed has one tender at a time; dispatching here would hand it to a new agent.\n"+
 				"Wait for %s to harvest or park it, plant the work as its own seed, or say what you need on the log: attn seed note %s -m \"…\"",
-			crown, held.DisplayName(), held.DisplayName(), crown)
+			crown, d.tenderName(seed.ProfileID, held), d.tenderName(seed.ProfileID, held), crown)
 	}
 	return nil
 }
@@ -1422,7 +1422,7 @@ func (d *Daemon) seedTransitionAsk(msg *protocol.SeedTransitionMessage) (garden.
 	}
 	actor := garden.Tender{
 		Session: actorSession,
-		Member:  d.resolveTenderMember(memberName, sessionID),
+		Member:  d.resolveTenderMember(memberName, sessionID, protocol.Deref(msg.ProfileID)),
 	}
 	return garden.Ask{
 		Actor:        actor,
@@ -1596,7 +1596,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 				auditIndex = len(entries)
 				entries = append(entries, garden.Note{
 					Seed: next.ID, Kind: garden.NoteKindNote,
-					Body:          forcedSeedMoveBody(next.ID, verb, ask.Actor, *displaced),
+					Body:          d.forcedSeedMoveBody(next, verb, ask.Actor, *displaced),
 					AuthorSession: ask.Actor.Session, AuthorMember: ask.Actor.Member,
 				})
 			}
@@ -1638,13 +1638,13 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 		id, attempts, verb, id)
 }
 
-func forcedSeedMoveBody(seedID string, verb garden.Verb, actor, displaced garden.Tender) string {
-	forcedBy := actor.DisplayName()
+func (d *Daemon) forcedSeedMoveBody(seed garden.Seed, verb garden.Verb, actor, displaced garden.Tender) string {
+	forcedBy := d.tenderName(seed.ProfileID, actor)
 	if forcedBy == "" {
 		forcedBy = "the attn app"
 	}
 	return fmt.Sprintf("%s forced `attn seed %s %s`; %s held the seed.",
-		forcedBy, verb, seedID, displaced.DisplayName())
+		forcedBy, verb, seed.ID, d.tenderName(seed.ProfileID, displaced))
 }
 
 func (d *Daemon) writeSeedMoveWithNotes(
@@ -1854,7 +1854,7 @@ func (d *Daemon) appendSeedNote(
 		Kind:          kind,
 		Body:          body,
 		AuthorSession: authorSession,
-		AuthorMember:  d.resolveTenderMember(member, authorSession),
+		AuthorMember:  d.resolveTenderMember(member, authorSession, seed.ProfileID),
 		Artifact:      artifact,
 	}
 	written, doc, err := d.mintAndWriteNote(*schema, note, attentionRequested, causedBySessionID)

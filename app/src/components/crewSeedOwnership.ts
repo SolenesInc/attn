@@ -5,7 +5,7 @@ import { tendedSeeds } from './paneSeedDisplay';
 export type CrewSeedFilter = 'tending' | 'planted';
 
 export function seedsTendedByMember(seeds: Seed[], member: CrewMember): Seed[] {
-  return tendedSeeds(seeds, member.binding_session ?? '', member.id);
+  return tendedSeeds(seeds, member.binding_session ?? '', member.key);
 }
 
 export function seedsPlantedByMember(seeds: Seed[], memberId: string): Seed[] {

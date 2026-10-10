@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -28,7 +27,7 @@ func (d *Daemon) sessionCloseError(sessionID protocol.SessionID) error {
 	}
 	for _, member := range members {
 		if member.BindingSession == sessionID {
-			name := crew.DisplayName(member.ID)
+			name := d.storedMemberName(member.Key.String())
 			return fmt.Errorf("%s is protected from closing; put %s to sleep first", name, name)
 		}
 	}

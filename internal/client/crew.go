@@ -77,7 +77,7 @@ func (c *Client) CrewRestart(member, requestID string) (*protocol.CrewRestartRes
 	var expectedRevision int
 	found := false
 	for _, candidate := range roster.Members {
-		if strings.EqualFold(candidate.ID, strings.TrimSpace(member)) {
+		if strings.EqualFold(candidate.Name, strings.TrimSpace(member)) || "member:"+candidate.Key == strings.TrimSpace(member) {
 			expectedSessionID = protocol.Deref(candidate.BindingSession)
 			expectedRevision = candidate.Revision
 			found = true
@@ -127,4 +127,15 @@ func (c *Client) CrewHandoff(sessionID protocol.SessionID, note string, retry bo
 		return nil, fmt.Errorf("the daemon answered without saying where the letter landed")
 	}
 	return resp.CrewHandoffResult, nil
+}
+
+func (c *Client) CrewRename(member, name string) (*protocol.CrewRenameResult, error) {
+	resp, err := c.send(protocol.CrewRenameMessage{Cmd: protocol.CmdCrewRename, Member: member, Name: name})
+	if err != nil {
+		return nil, err
+	}
+	if resp.CrewRenameResult == nil {
+		return nil, fmt.Errorf("the daemon answered without a rename result")
+	}
+	return resp.CrewRenameResult, nil
 }

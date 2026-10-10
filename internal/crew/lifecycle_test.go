@@ -150,7 +150,7 @@ func TestWakeLedger(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			kept, err := WakeLedger{Limit: tc.limit, Window: window, Stamps: tc.stamps}.Allows("trellis", now)
+			kept, err := WakeLedger{Limit: tc.limit, Window: window, Stamps: tc.stamps}.Allows("Trellis", now)
 			if len(kept) != tc.kept {
 				t.Fatalf("kept %d stamps (%v), want %d", len(kept), kept, tc.kept)
 			}

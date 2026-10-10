@@ -756,6 +756,8 @@ model StateExplainMessage {
 // already holds. Passive by construction — nothing here touches the target's
 // PTY or generates input, so watching costs the observed agent nothing.
 model AgentPeekMessage {
+  source_session_id?: SessionID;
+  profile_id?: string;
   cmd: "agent_peek";
   target_session_id: string;    // crew name, full session id, or unique session prefix
 }
@@ -5872,6 +5874,7 @@ model Response {
   agent_inbox_result?: AgentPeerMessage;
   agent_inbox_batch_result?: AgentInboxBatchResult;
   agent_msg_status_result?: AgentPeerMessage;
+  crew_rename_result?: CrewRenameResult;
   crew_list_result?: CrewListResult;
   crew_charter_get_result?: CrewCharterGetResult;
   crew_charter_set_result?: CrewCharterSetResult;
@@ -5993,6 +5996,8 @@ model AgentPeekResult {
 // copied onto the wire. Home-only — an outpost is refused by the enrollment
 // fence.
 model CrewListMessage {
+  source_session_id?: SessionID;
+  profile_id?: string;
   cmd: "crew_list";
 }
 
@@ -6000,7 +6005,8 @@ model CrewListMessage {
 model CrewMember {
   profile_name?: string;
   launch_desktop?: LaunchDesktopSetting;
-  id: string;
+  key: string;
+  name: string;
   profile_id: string; // The profile the member belongs to; it wakes only there
   revision: safeint;
   charter_path: string;
@@ -6036,6 +6042,8 @@ model CrewCharterDocument {
 }
 
 model CrewCharterGetMessage {
+  source_session_id?: SessionID;
+  profile_id?: string;
   cmd: "crew_charter_get";
   member: string;
   request_id?: string;
@@ -6056,6 +6064,8 @@ model CrewCharterGetResultMessage {
 }
 
 model CrewCharterSetMessage {
+  source_session_id?: SessionID;
+  profile_id?: string;
   cmd: "crew_charter_set";
   member: string;
   content: string;
@@ -6092,6 +6102,8 @@ model CrewHandoffDocument {
 }
 
 model CrewHandoffsGetMessage {
+  source_session_id?: SessionID;
+  profile_id?: string;
   cmd: "crew_handoffs_get";
   member: string;
   request_id?: string;
@@ -6112,6 +6124,8 @@ model CrewHandoffsGetResultMessage {
 }
 
 model CrewHandoffGetMessage {
+  source_session_id?: SessionID;
+  profile_id?: string;
   cmd: "crew_handoff_get";
   member: string;
   filename: string;
@@ -6172,6 +6186,7 @@ model CrewWakeResultMessage {
 }
 
 model CrewWakeResult {
+  name: string;
   member: string;
   session_id: SessionID;
   profile_id: string;
@@ -6188,6 +6203,8 @@ model CrewWakeResult {
 // handoff and file it with `attn handoff --sleep`; it does not kill the member.
 // Home-only. An asleep member is a named no-op rather than a silent success.
 model CrewSleepMessage {
+  source_session_id?: SessionID;
+  profile_id?: string;
   cmd: "crew_sleep";
   member: string;
   request_id?: string; // set by the WS frontend to correlate the result event
@@ -6209,6 +6226,7 @@ model CrewSleepResultMessage {
 }
 
 model CrewSleepResult {
+  name: string;
   member: string;
   // Absent when the member was already asleep and no request was sent.
   session_id?: SessionID;
@@ -6222,6 +6240,8 @@ model CrewSleepResult {
 // about. Registry state, not prose: the home's markdown is never rewritten, and
 // an omitted field is left as it was.
 model CrewSetMessage {
+  source_session_id?: SessionID;
+  profile_id?: string;
   launch_desktop?: string; // own, an empty slot 5–9, or a desktop ref of the item's profile
   cmd: "crew_set";
   member: string;
@@ -6277,6 +6297,8 @@ model CrewRestart {
 }
 
 model CrewRestartMessage {
+  source_session_id?: SessionID;
+  profile_id?: string;
   cmd: "crew_restart";
   member: string;
   request_id: string;
@@ -6344,6 +6366,7 @@ enum CrewDayClose {
 // undone by what follows it: when the nap cannot run, the letter is still filed
 // and `nap_error` says why the successor was not woken.
 model CrewHandoffResult {
+  name: string;
   member: string;
   path: string;
   // The session living the member's new day. Absent when no nap ran.
@@ -6359,6 +6382,7 @@ model CrewHandoffResult {
 // woken, or released. Every member is here, awake or asleep: the sidebar shows
 // a sleeping member one action from waking, so it cannot ask per member.
 model CrewUpdatedMessage {
+  profile_id: string;
   event: "crew_updated";
   members: CrewMember[];
 }
@@ -6461,6 +6485,8 @@ model SessionTranscriptResult {
 // A session as the ledger holds it. Distinct from Session, which is the live
 // broadcast shape: this one outlives the runtime and carries how it ended.
 model SessionLedgerEntry {
+  member_key?: string;
+  member_name?: string;
   priority?: boolean;
   id: SessionID;
   conversation_pinned_at?: string;
@@ -7332,3 +7358,17 @@ alias DaemonEvent =
   | AutoModeDiscardResultMessage
   | AutoModeEnvSetResultMessage
   | AutoModeStateChangedMessage;
+
+model CrewRenameMessage {
+ cmd: "crew_rename";
+ member: string;
+ name: string;
+ source_session_id?: SessionID;
+ profile_id?: string;
+}
+model CrewRenameResult {
+ member: string;
+ name: string;
+ previous_name: string;
+ session_id?: SessionID;
+}

@@ -50,6 +50,7 @@ import (
 	"github.com/victorarias/attn/internal/statetrace"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/transcript"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type workerReconcileReport struct {
@@ -814,6 +815,13 @@ func (d *Daemon) Start() error {
 	}()
 
 	previousRunSessions := d.storedSessionIDs()
+	previousMemberSessions, err := d.store.MemberLatestSessions()
+	if err != nil {
+		return fmt.Errorf("read crew sessions before recovery: %w", err)
+	}
+	for _, id := range previousMemberSessions {
+		previousRunSessions[id] = struct{}{}
+	}
 	if d.listener == nil {
 		unixListener, err := listenUnixAtomically(d.socketPath)
 		if err != nil {
@@ -975,6 +983,7 @@ func (d *Daemon) pruneSessionsWithoutPTY(previousRunSessions map[protocol.Sessio
 			continue
 		}
 		if _, ok := liveIDs[session.ID]; ok {
+			d.promoteRetainedMemberLaunch(session, previousRunSessions)
 			continue
 		}
 		if sessionUpdatedAfter(session, recoveryStartedAt) {
@@ -982,9 +991,11 @@ func (d *Daemon) pruneSessionsWithoutPTY(previousRunSessions map[protocol.Sessio
 		}
 		d.releaseExitedCrewBinding(session.ID)
 		if d.store.GetSessionExit(session.ID) != nil {
+			d.promoteRetainedMemberLaunch(session, previousRunSessions)
 			continue
 		}
 		if d.canReviveSession(session) {
+			d.promoteRetainedMemberLaunch(session, previousRunSessions)
 			if session.State == protocol.SessionStateRecoverable {
 				continue
 			}
@@ -1326,6 +1337,9 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 			continue
 		}
 
+		if _, previous := previousRunSessions[sessionID]; previous {
+			d.promoteRetainedMemberLaunch(existing, previousRunSessions)
+		}
 		d.store.Touch(sessionID)
 		d.store.ClearSessionIntentionalClose(sessionID)
 
@@ -1398,6 +1412,7 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 				continue
 			}
 			if likelyAlive {
+				d.promoteRetainedMemberLaunch(session, previousRunSessions)
 				report.LikelyAlive++
 				continue
 			}
@@ -1408,9 +1423,11 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 		}
 		d.releaseExitedCrewBinding(session.ID)
 		if d.store.GetSessionExit(session.ID) != nil {
+			d.promoteRetainedMemberLaunch(session, previousRunSessions)
 			continue
 		}
 		if d.canReviveSession(session) {
+			d.promoteRetainedMemberLaunch(session, previousRunSessions)
 			if session.State == protocol.SessionStateRecoverable {
 				continue
 			}
@@ -2701,6 +2718,8 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleCrewSleep(conn, msg.(*protocol.CrewSleepMessage))
 	case protocol.CmdCrewSet:
 		d.handleCrewSet(conn, msg.(*protocol.CrewSetMessage))
+	case protocol.CmdCrewRename:
+		d.handleCrewRename(conn, msg.(*protocol.CrewRenameMessage))
 	case protocol.CmdCrewRestart:
 		d.handleCrewRestart(conn, msg.(*protocol.CrewRestartMessage))
 	case protocol.CmdCrewPrime:
@@ -3755,6 +3774,10 @@ func (d *Daemon) handleInjectTestPR(conn net.Conn, msg *protocol.InjectTestPRMes
 }
 
 func (d *Daemon) handleInjectTestSession(conn net.Conn, msg *protocol.InjectTestSessionMessage) {
+	if strings.TrimSpace(protocol.Deref(msg.Session.CrewMember)) != "" {
+		d.crewWakeMu.Lock()
+		defer d.crewWakeMu.Unlock()
+	}
 	if msg.Session.ID == "" {
 		d.sendError(conn, "Session ID cannot be empty")
 		return
@@ -3769,7 +3792,12 @@ func (d *Daemon) handleInjectTestSession(conn net.Conn, msg *protocol.InjectTest
 	}
 	msg.Session.ProfileID = profile.ID
 	if member := strings.TrimSpace(protocol.Deref(msg.Session.CrewMember)); member != "" {
-		if _, err := d.claimCrewBinding(member, msg.Session.ID); err != nil {
+		key, err := who.ParseMemberKey(member)
+		if err != nil {
+			d.sendError(conn, err.Error())
+			return
+		}
+		if _, err := d.claimCrewBinding(key, msg.Session.ID); err != nil {
 			d.sendError(conn, fmt.Sprintf("crew bind %q: %v", member, err))
 			return
 		}
@@ -3778,6 +3806,14 @@ func (d *Daemon) handleInjectTestSession(conn net.Conn, msg *protocol.InjectTest
 		d.releaseCrewBindingIfSession(msg.Session.ID)
 		d.sendError(conn, err.Error())
 		return
+	}
+	if stored := protocol.Deref(msg.Session.CrewMember); stored != "" {
+		member, _, err := d.resolveCrewMember(stored)
+		if err == nil {
+			if err := d.store.RecordMemberSession(member.Key, msg.Session.ID); err != nil {
+				d.logf("crew: record injected member session: %v", err)
+			}
+		}
 	}
 	d.publishFact(FactSessionRegistered, string(msg.Session.ID), nil)
 	if !protocol.Deref(msg.Unplaced) {

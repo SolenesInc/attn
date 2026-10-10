@@ -13,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 const (
@@ -260,21 +261,21 @@ func (d *Daemon) actOnCrewMember(member crew.Member, sessionID protocol.SessionI
 		}
 		attempt := d.sessionInputs().try(context.Background(), delivery)
 		if attempt.stage != sessionInputPlaced {
-			d.logf("crew: %s's heartbeat did not reach session %s: %v", crew.DisplayName(member.ID), sessionID, attempt.err)
+			d.logf("crew: %s's heartbeat did not reach session %s: %v", member.Key.String(), sessionID, attempt.err)
 			return
 		}
 		d.crewMemo().recordHeartbeat(sessionID, generation, attempt.at)
 		d.logf("crew: warmed %s's context in session %s (cache estimated %s old against a %s assumption)",
-			crew.DisplayName(member.ID), sessionID, cache.Age.Round(time.Second), cache.TTL)
+			d.storedMemberName(member.Key.String()), sessionID, cache.Age.Round(time.Second), cache.TTL)
 	case crew.ActionSleep:
 		session := d.store.Get(sessionID)
 		if session == nil {
 			return
 		}
 		generation := protocol.Deref(session.LastModelRequestAt)
-		receipt, err := d.sendToInbox(inbox.Item{ID: "crew-auto-sleep/" + string(sessionID) + "/" + generation, To: inbox.ToSession(sessionID), Kind: inbox.Notice, Source: member.ID, Key: "crew-auto-sleep", Text: crewSleepPrompt})
+		receipt, err := d.sendToInbox(inbox.Item{ID: "crew-auto-sleep/" + string(sessionID) + "/" + generation, To: inbox.ToSession(sessionID), Kind: inbox.Notice, Source: member.Key.String(), Key: "crew-auto-sleep", Text: crewSleepPrompt})
 		if err != nil {
-			d.logf("crew: %s's sleep request could not be recorded: %v", crew.DisplayName(member.ID), err)
+			d.logf("crew: %s's sleep request could not be recorded: %v", member.Key.String(), err)
 			return
 		}
 		if !receipt.Rang {
@@ -282,7 +283,7 @@ func (d *Daemon) actOnCrewMember(member crew.Member, sessionID protocol.SessionI
 		}
 
 		d.logf("crew: asked %s to close its day — the user has been away and the cache is %s from lapsing",
-			crew.DisplayName(member.ID), cache.Remaining().Round(time.Second))
+			d.storedMemberName(member.Key.String()), cache.Remaining().Round(time.Second))
 	}
 }
 
@@ -291,12 +292,12 @@ func (d *Daemon) crewMemo() *crewLifecycleMemo {
 	return d.crewLifecycleState
 }
 
-func (d *Daemon) chargeAutonomousWake(memberID string, now time.Time) error {
+func (d *Daemon) chargeAutonomousWake(key who.MemberKey, now time.Time) error {
 	ledger := d.crewWakeLedger()
 	var refusal error
-	if _, err := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {
+	if _, err := d.updateCrewMember(key, func(member *crew.Member) (bool, error) {
 		ledger.Stamps = parseWakeStamps(member.AutonomousWakes)
-		kept, err := ledger.Allows(member.ID, now)
+		kept, err := ledger.Allows(d.memberName(member.Key), now)
 		if err != nil {
 			refusal = err
 			return false, nil

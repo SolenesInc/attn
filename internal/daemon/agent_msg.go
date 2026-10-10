@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
@@ -41,7 +40,7 @@ func agentMessageGuardVerdict(counts inbox.PeerGuardCounts) string {
 }
 
 func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
-	sender, errCode := d.resolveSessionByIDOrPrefix(string(msg.SourceSessionID))
+	sender, errCode := d.resolveSessionByIDOrPrefix(string(msg.SourceSessionID), "")
 	if sender == nil {
 		d.sendError(conn, "sender_"+errCode)
 		return
@@ -88,15 +87,14 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 		notFound := func() {
 			d.replyAgentMsgError(conn, "session_or_crew_member_not_found", fmt.Sprintf("no session or crew member matches %q; `attn agent list` names sessions and `attn crew list` names members", protocol.TrimID(targetRef)))
 		}
-		member, found, memberErr := d.resolveCrewMember(string(targetRef))
+		member, found, memberErr := d.store.CrewNamed(sender.ProfileID, string(targetRef))
+		if key, ok := strings.CutPrefix(string(targetRef), "member:"); ok {
+			member, found, memberErr = d.store.CrewKeyed(sender.ProfileID, key)
+		}
 		if found {
-			if d.crewProfileID(member.ID) != sender.ProfileID {
-				notFound()
-				return
-			}
-			address = inbox.ToMember(member.ID)
+			address = inbox.ToMember(member.Key.String())
 		} else {
-			target, code := d.resolveSessionByIDOrPrefix(string(targetRef))
+			target, code := d.resolveSessionByIDOrPrefix(string(targetRef), "")
 			if target == nil {
 				if memberErr != nil {
 					d.sendError(conn, memberErr.Error())
@@ -153,7 +151,7 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 		result.TargetSessionID = holder.ID
 	}
 	if receipt.Rang && address.MemberID() != "" {
-		result.Detail = "notified " + crew.DisplayName(address.MemberID())
+		result.Detail = "notified " + d.storedMemberName(address.MemberID())
 	}
 
 	d.replyAgentMsg(conn, result)

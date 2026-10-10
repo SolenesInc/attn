@@ -99,7 +99,7 @@ export function QueueBarHarness({ onReady, setTriggerRerender }: HarnessProps) {
           desktops={desktops}
           visualIndexByDesktopId={new Map(desktopIds.slice(0, 9).map((id, index) => [id, index]))}
           queue={buildQueueBands(desktops)}
-          crew={popupNames ? [{ id: 'alder' }, { id: 'keel' }, { id: 'trellis' }] : []}
+          crew={popupNames ? [{ key: 'alder', name: 'Alder' }, { key: 'keel', name: 'Keel' }, { key: 'trellis', name: 'Trellis' }] : []}
           instance="harness"
           profileName={popupNames ? 'Default' : long('A-very-long-profile-name-typed-without-spaces').repeat(params.has('oneDesktop') ? 6 : 1)}
           criticalNotifications={{ count: 3, title: long('a-critical-notification-title') }}

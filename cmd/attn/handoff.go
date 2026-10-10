@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/client"
-	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -122,18 +121,18 @@ func runHandoff(args []string) {
 		return
 	}
 	if parsed.retry {
-		fmt.Printf("%s's letter was already filed at %s.\n", crew.DisplayName(result.Member), result.Path)
+		fmt.Printf("%s's letter was already filed at %s.\n", result.Name, result.Path)
 	} else {
-		fmt.Printf("%s's letter is filed at %s.\n", crew.DisplayName(result.Member), result.Path)
+		fmt.Printf("%s's letter is filed at %s.\n", result.Name, result.Path)
 	}
 	if napErr := strings.TrimSpace(protocol.Deref(result.NapError)); napErr != "" {
-		fmt.Fprintf(os.Stderr, "handoff: no successor was woken: %s\nThis day is still running and %s is still bound to it. `attn handoff --retry` turns it over again with the letter above — it is filed, so do not write another.\n", napErr, crew.DisplayName(result.Member))
+		fmt.Fprintf(os.Stderr, "handoff: no successor was woken: %s\nThis day is still running and %s is still bound to it. `attn handoff --retry` turns it over again with the letter above — it is filed, so do not write another.\n", napErr, result.Name)
 		os.Exit(1)
 	}
 	if protocol.Deref(result.Outcome) == protocol.CrewDayCloseSleep {
-		fmt.Printf("%s is asleep. Nobody was woken behind you; the sidebar has %[1]s one click from a new day.\n", crew.DisplayName(result.Member))
+		fmt.Printf("%s is asleep. Nobody was woken behind you; the sidebar has %[1]s one click from a new day.\n", result.Name)
 		return
 	}
 	fmt.Printf("%s's next day is session %s, waking now. This one ends here.\n",
-		crew.DisplayName(result.Member), agentShortID(string(protocol.Deref(result.SessionID))))
+		result.Name, agentShortID(string(protocol.Deref(result.SessionID))))
 }

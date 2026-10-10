@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -19,7 +20,7 @@ func TestProfileDeletionRefusesARunningGardenReview(t *testing.T) {
 	app, cli := w.App(), w.Client()
 	side := createProfile(app, "Side")
 	selectProfile(app, side.ID)
-	scoped := cli.WithGardenProfile(side.ID, "")
+	scoped := cli.WithRequester(side.ID, "")
 	seed := gardenReviewAbandonedSeed(t, w, w.AppOn(side.ID), scoped, "side-review", "Side review candidate")
 	setSetting(t, app, "garden.advisor", `{"agent":"claude"}`)
 	t.Setenv("ATTN_HEADLESS_TASKS", "on")
@@ -50,7 +51,7 @@ func TestFreeTenderNamesStayInsideTheirSeedsProfile(t *testing.T) {
 		registerSessions(t, w, cli, "default-worker")
 		original := plantSeedAs(t, cli, "default-worker", "free worker in Default")
 		lifeMove(t, cli, "default-worker", original, "tend", "", "keel")
-		if _, err := cli.WithGardenProfile("", "default-worker").SeedEdit(original, "legacy alias remains editable"); err != nil {
+		if _, err := cli.WithRequester("", "default-worker").SeedEdit(original, "legacy alias remains editable"); err != nil {
 			t.Fatal(err)
 		}
 		side := createProfile(app, "Side")
@@ -71,7 +72,7 @@ func TestFreeTenderNamesStayInsideTheirSeedsProfile(t *testing.T) {
 		w.advance(time.Second)
 		selectProfile(homeApp, home)
 		registerSessions(t, w, cli, "default-worker")
-		if _, err := cli.WithGardenProfile("", "default-worker").SeedEdit(original, "the existing free claim stays editable after registration"); err != nil {
+		if _, err := cli.WithRequester("", "default-worker").SeedEdit(original, "the existing free claim stays editable after registration"); err != nil {
 			t.Fatal(err)
 		}
 		lifeMove(t, cli, "default-worker", original, "tend", "", "keel")
@@ -86,6 +87,38 @@ func TestFreeTenderNamesStayInsideTheirSeedsProfile(t *testing.T) {
 		_, err := cli.SeedTransition("default-worker", fresh, "tend", "", "keel", false, client.SeedTransitionOptions{})
 		if err == nil || !strings.Contains(err.Error(), "Default") || !strings.Contains(err.Error(), "Side") {
 			t.Fatalf("registered foreign member claim must name both profiles: %v", err)
+		}
+
+		if _, err := cli.WithRequester(side.ID, "").CrewRename("Keel", "Alfred"); err != nil {
+			t.Fatal(err)
+		}
+		cwd := w.Path("delegation")
+		if err := os.MkdirAll(cwd, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		_, err = cli.Delegate(delegateAtSeed("default-worker", cwd, original))
+		if err == nil || !strings.Contains(err.Error(), "being tended by keel") || strings.Contains(err.Error(), "Alfred") {
+			t.Fatalf("dispatch refusal must preserve the free tender's name: %v", err)
+		}
+		registerSessions(t, w, cli, "default-takeover")
+		if _, err := cli.SeedTransition("default-takeover", original, "tend", "", "", true, client.SeedTransitionOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		notes, err := cli.SeedNotes("default-worker", original, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		foundAudit := false
+		for _, note := range notes.Notes {
+			if strings.Contains(note.Body, "forced `attn seed tend") {
+				foundAudit = true
+				if !strings.Contains(note.Body, "; keel held the seed.") || strings.Contains(note.Body, "Alfred") {
+					t.Fatalf("forced-move audit must preserve the free tender's name: %s", note.Body)
+				}
+			}
+		}
+		if !foundAudit {
+			t.Fatal("forced takeover wrote no audit note")
 		}
 
 	})
@@ -126,7 +159,7 @@ func TestGardenBelongsToTheCallingProfile(t *testing.T) {
 				t.Fatalf("%s search: %+v, %v", row.session, hits, err)
 			}
 		}
-		cross := cli.WithGardenProfile("", "default-worker")
+		cross := cli.WithRequester("", "default-worker")
 		checks := []struct {
 			name string
 			run  func() error
@@ -175,7 +208,7 @@ func TestGardenBelongsToTheCallingProfile(t *testing.T) {
 		if err := cli.OpenSeed(b.Seed.ID, ""); err == nil || !strings.Contains(err.Error(), "--profile") {
 			t.Fatalf("ambiguous seed open: %v", err)
 		}
-		listed, err := cli.WithGardenProfile("Side", "").SeedList("", false, 0)
+		listed, err := cli.WithRequester("Side", "").SeedList("", false, 0)
 		if err != nil || len(listed.Seeds) != 1 || listed.Seeds[0].ID != b.Seed.ID {
 			t.Fatalf("explicit profile: %+v %v", listed, err)
 		}
@@ -238,7 +271,7 @@ func TestProfileDeletionKeepsSeedsInTheirOriginalProfile(t *testing.T) {
 		if deleted := request(); !deleted.Success {
 			t.Fatalf("delete closed garden: %+v", deleted)
 		}
-		archived, err := cli.WithGardenProfile(original, "").SeedShow("", seed)
+		archived, err := cli.WithRequester(original, "").SeedShow("", seed)
 		if err != nil || archived.Seed.ProfileID != side.ID {
 			t.Fatalf("closed seed archival inspection: %+v %v", archived, err)
 		}
@@ -330,18 +363,18 @@ func TestGardenReviewsBelongToTheRequestingProfile(t *testing.T) {
 		app, cli := w.App(), w.Client()
 		original := app.SelectedProfile()
 		side := createProfile(app, "Side")
-		first, err := cli.WithGardenProfile(original, "").SeedReviewStart()
+		first, err := cli.WithRequester(original, "").SeedReviewStart()
 		if err != nil || first.Review == nil || first.Review.Run.ProfileID != original {
 			t.Fatalf("Default review: %+v %v", first, err)
 		}
-		second, err := cli.WithGardenProfile(side.ID, "").SeedReviewStart()
+		second, err := cli.WithRequester(side.ID, "").SeedReviewStart()
 		if err != nil || second.Review == nil || second.Review.Run.ProfileID != side.ID || second.Review.Run.ID == first.Review.Run.ID {
 			t.Fatalf("Side review: %+v %v", second, err)
 		}
-		if _, err := cli.WithGardenProfile(original, "").SeedReviewShow(second.Review.Run.ID); err == nil || !strings.Contains(err.Error(), "Side") || !strings.Contains(err.Error(), "Default") {
+		if _, err := cli.WithRequester(original, "").SeedReviewShow(second.Review.Run.ID); err == nil || !strings.Contains(err.Error(), "Side") || !strings.Contains(err.Error(), "Default") {
 			t.Fatalf("cross-profile review: %v", err)
 		}
-		shown, err := cli.WithGardenProfile(original, "").SeedReviewShow(first.Review.Run.ID)
+		shown, err := cli.WithRequester(original, "").SeedReviewShow(first.Review.Run.ID)
 		if err != nil || shown.Review == nil || shown.Review.Run.ID != first.Review.Run.ID {
 			t.Fatalf("Default latest: %+v %v", shown, err)
 		}

@@ -26,7 +26,7 @@ export function useCrewNavigation({ members, initialMember, rosterRef, charter, 
   onOpenSeed: (seedId: string, placementSessionId?: string) => void;
 }): CrewNavigationState {
   const [selectedId, setSelectedId] = useState(() => (
-    initialMember && members.some((candidate) => candidate.id === initialMember) ? initialMember : members[0]?.id || ''
+    initialMember && members.some((candidate) => candidate.key === initialMember) ? initialMember : members[0]?.key || ''
   ));
   const [tab, setTab] = useState<CrewTab>('launch');
   const [pending, setPending] = useState(false);
@@ -36,8 +36,8 @@ export function useCrewNavigation({ members, initialMember, rosterRef, charter, 
     handlers.current = { onClose, onOpenSeed };
   }, [onClose, onOpenSeed]);
 
-  const selectedMember = members.find((member) => member.id === selectedId) ?? members[0];
-  const selectedMemberId = selectedMember?.id;
+  const selectedMember = members.find((member) => member.key === selectedId) ?? members[0];
+  const selectedMemberId = selectedMember?.key;
   const bindingSession = selectedMember?.binding_session;
   const charterEdit = selectedMemberId ? charter.read(selectedMemberId) : undefined;
   const charterUnsettled = tab === 'charter' && Boolean(charterEdit?.acknowledged)

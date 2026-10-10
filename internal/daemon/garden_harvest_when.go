@@ -126,7 +126,7 @@ func (d *Daemon) armHarvestWhenMerged(
 		notes := make([]garden.Note, 0, 3)
 		if displaced != nil {
 			notes = append(notes, d.harvestWhenNote(
-				seed.ID, forcedSeedMoveBody(seed.ID, garden.VerbPark, ask.Actor, *displaced), ask.Actor))
+				seed.ID, d.forcedSeedMoveBody(seed, garden.VerbPark, ask.Actor, *displaced), ask.Actor))
 		}
 		notes = append(notes, d.harvestWhenNote(seed.ID, harvestWhenArmedNote(rec), ask.Actor))
 		if attachment, ok := d.harvestWhenAttachment(seed.ID, rec, ask.Actor); ok {

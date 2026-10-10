@@ -17,14 +17,17 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/layouttree"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/sessionstate"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type internalSpawnPolicy struct {
+	member                who.MemberKey
 	launchPlacement       *launchPlacement
 	unattendedLaunch      launchcontract.UnattendedLaunchSpec
 	approvalRoute         launchcontract.ApprovalRoute
@@ -417,6 +420,11 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{err: fmt.Errorf("persist session launch intent: %w", err)}
 	}
+	if !req.policy.member.IsZero() {
+		if err := d.store.RecordMemberLaunchIntent(req.policy.member, session.ID); err != nil {
+			d.logf("crew: record member session %s: %v", session.ID, err)
+		}
+	}
 	plan.priorIntent, plan.hadPriorIntent = d.store.LaunchIntent(session.ID)
 	intent := launchIntentFromSpawnOptions(plan.spawnOpts, plan.isChief)
 	intent.AutoMode = msg.AutoMode
@@ -579,6 +587,7 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{err: persistErr}
 	}
+
 	fact := FactSessionRegistered
 	if req.existingSession != nil {
 		fact = FactSessionReregistered
@@ -638,7 +647,11 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		d.rememberDispatchResume(session.ID, plan.launchedConversation)
 	}
 
-	d.store.SetSessionLaunchedAt(session.ID, req.spawnStartedAt)
+	if !req.policy.member.IsZero() {
+		pausepoint.At(pausepoint.MemberLaunchCommit)
+		crashAt(crashBeforeMemberLaunchCommit)
+	}
+	d.store.SetSessionLaunchedAt(session.ID, req.spawnStartedAt, req.policy.member)
 	if !req.isShell {
 		d.startTranscriptWatcher(session.ID, session.Agent, session.Directory, req.spawnStartedAt)
 	}

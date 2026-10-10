@@ -150,7 +150,7 @@ func TestImportedCrewJoinTheMostRecentlyUsedProfile(t *testing.T) {
 	profileID := defaultProfileID(t, d.store)
 	for _, member := range crewList(t, d) {
 		if member.ProfileID != profileID {
-			t.Fatalf("imported member %s has profile %q, want %s", member.ID, member.ProfileID, profileID)
+			t.Fatalf("imported member %s has profile %q, want %s", member.Key, member.ProfileID, profileID)
 		}
 	}
 }
@@ -192,7 +192,7 @@ func TestAppWakeFromAnotherProfileIsRefused(t *testing.T) {
 			decodeInto(t, payload, &result)
 		}
 	}
-	if result.Success || !strings.Contains(protocol.Deref(result.Error), work.ID) {
+	if result.Success || !strings.Contains(protocol.Deref(result.Error), `profile "Work"`) {
 		t.Fatalf("wake from the Work profile = %+v, want a refusal naming it", result)
 	}
 	if spawnCount(backend) != 0 {

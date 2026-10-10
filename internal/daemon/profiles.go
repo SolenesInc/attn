@@ -4,10 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"path/filepath"
 	"strings"
-
-	"github.com/victorarias/attn/internal/crew"
 
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/enrollment"
@@ -192,6 +189,7 @@ func (d *Daemon) fillInitialProfileState(client *wsClient, event *protocol.Initi
 		client.selectProfile("")
 		return nil, 0
 	}
+	event.Crew = d.crewRoster(selected)
 	event.SelectedProfileID = protocol.Ptr(selected)
 	event.Desktops = wire
 	if d.requireHome("profiles and desktops") != nil {
@@ -252,7 +250,7 @@ func (d *Daemon) runProfileAction(client *wsClient, action, requestID string, ru
 		d.sendArrangement(client, requestID, outcome.moved)
 	}
 	if previousProfile != client.selectedProfile() {
-		d.sendGardenProfile(client)
+		d.sendProfileSnapshots(client)
 	}
 	d.sendToClient(client, result)
 	d.releaseArrangements(client)
@@ -379,20 +377,11 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 		if err != nil {
 			return profileActionOutcome{}, err
 		}
-		homes, err := crew.ScanHomes(filepath.Join(d.dataRoot, crew.HomesDirName), d.logf)
+		roster, err := d.store.CrewRoster(msg.ProfileID)
 		if err != nil {
 			return profileActionOutcome{}, err
 		}
-		members := 0
-		for _, member := range homes {
-			owner, err := d.store.CrewProfile(member.ID)
-			if err != nil {
-				return profileActionOutcome{}, err
-			}
-			if owner == msg.ProfileID {
-				members++
-			}
-		}
+		members := len(roster)
 		d.automationMu.Lock()
 		deleted, err := d.store.DeleteProfile(msg.ProfileID, int64(msg.ExpectedRevision), remote, members)
 		d.automationMu.Unlock()
@@ -408,7 +397,7 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 				scoped.selectProfile(remaining.ID)
 				if scoped != client {
 					d.sendArrangement(scoped, "", nil)
-					d.sendGardenProfile(scoped)
+					d.sendProfileSnapshots(scoped)
 				}
 			}
 		})

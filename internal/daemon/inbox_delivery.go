@@ -10,11 +10,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/bus"
-	"github.com/victorarias/attn/internal/crew"
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 var inboxRingText = prompts.RenderText("session", "inbox-notification", nil)
@@ -76,7 +76,7 @@ func (d *Daemon) inboxRecipient(a inbox.Address) (*protocol.Session, string, err
 			if !found {
 				return nil, "", nil
 			}
-			memberID = member.ID
+			memberID = member.Key.String()
 		}
 	}
 	if memberID != "" {
@@ -183,10 +183,10 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 			receipt.Outstanding = holder != nil && memberID == ""
 			receipt.Detail = agentMessageQueuedDetail(errInboxDoorbellOutstanding)
 			if memberID != "" && holder == nil {
-				if member, _, err := d.crewMember(memberID); err == nil {
+				if member, found, err := d.resolveCrewMember(memberID); err == nil && found {
 					ledger := d.crewWakeLedger()
 					ledger.Stamps = parseWakeStamps(member.AutonomousWakes)
-					if _, refusal := ledger.Allows(memberID, now); refusal != nil {
+					if _, refusal := ledger.Allows(d.memberName(member.Key), now); refusal != nil {
 						receipt.Detail = refusal.Error()
 					}
 				}
@@ -195,8 +195,12 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 		}
 		if holder == nil {
 			if member := memberID; member != "" {
+				key, parseErr := who.ParseMemberKey(member)
+				if parseErr != nil {
+					return inbox.Receipt{}, parseErr
+				}
 				d.crewWakeMu.Lock()
-				result, err := d.crewWakeDayWithChargeLocked(member, "", true, func() error {
+				result, err := d.crewWakeDayWithChargeLocked(key, "", true, func() error {
 					started, err := d.store.StampInboxAttempt(a, now)
 					if err != nil {
 						return err
@@ -224,7 +228,7 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 					return receipt, nil
 				}
 				state.wakeSession = result.SessionID
-				receipt.Detail = fmt.Sprintf("woke %s in session %s; notification queued until it reaches a safe prompt", crew.DisplayName(member), shortSessionID(result.SessionID))
+				receipt.Detail = fmt.Sprintf("woke %s in session %s; notification queued until it reaches a safe prompt", d.storedMemberName(member), shortSessionID(result.SessionID))
 				return receipt, nil
 			}
 			if a.SeedID() != "" {

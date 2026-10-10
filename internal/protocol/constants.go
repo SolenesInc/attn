@@ -129,6 +129,7 @@ const (
 	CmdCrewSleep                     = "crew_sleep"
 	CmdCrewSet                       = "crew_set"
 	CmdCrewRestart                   = "crew_restart"
+	CmdCrewRename                    = "crew_rename"
 	CmdCrewPrime                     = "crew_prime"
 	CmdCrewHandoff                   = "crew_handoff"
 	CmdStop                          = "stop"

@@ -78,7 +78,7 @@ export function useCrewLaunchAutosave(
   }), [send]);
   const autosave = useAutosave(spec, connectionGeneration);
 
-  const observe = useCallback((member: CrewMember) => autosave.adopt(member.id, member), [autosave]);
+  const observe = useCallback((member: CrewMember) => autosave.adopt(member.key, member), [autosave]);
 
   useEffect(() => {
     for (const member of members) observe(member);

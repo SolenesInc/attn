@@ -1,3 +1,4 @@
+import { useDaemonStore } from '../../store/daemonSessions';
 import { SessionPriority } from '../SessionPriority';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
@@ -93,7 +94,12 @@ export function SessionsTab({
     initialFilters: restoredFilters,
     onFiltersChange: rememberFilters,
   });
-  const { filters, setFilters, entries, reload } = ledger;
+  const { filters, setFilters, entries: storedEntries, reload } = ledger;
+  const crew = useDaemonStore((state) => state.crew);
+  const entries = useMemo(() => storedEntries.map((entry) => {
+    const member = crew.find((candidate) => candidate.key === entry.member_key);
+    return member ? { ...entry, member_name: member.name } : entry;
+  }), [storedEntries, crew]);
   const { keepNotices, runKeepVerb, clearKeepNotice } = useConversationPins(setConversationKeep, conversationChangeSignal, reload);
 
   const { text, setText, parsed } = useLedgerQueryText({
@@ -106,7 +112,7 @@ export function SessionsTab({
   const visible = useMemo(() => entries.filter((entry) => {
     if (!matchesDir(entry.directory, parsed.dir)) return false;
     return matchesWords(
-      [entry.label, entry.id, entry.agent, entry.branch ?? '', entry.directory, entry.profile_name],
+      [entry.member_name ?? entry.label, entry.id, entry.agent, entry.branch ?? '', entry.directory, entry.profile_name],
       parsed.words,
     );
   }), [entries, parsed.dir, parsed.words]);
@@ -156,7 +162,7 @@ export function SessionsTab({
     [liveSessionIds],
   );
 
-  const labelsBySession = useMemo(() => new Map(entries.map((entry) => [entry.id, entry.label])), [entries]);
+  const labelsBySession = useMemo(() => new Map(entries.map((entry) => [entry.id, entry.member_name ?? entry.label])), [entries]);
   const sessionLabel = useCallback((id: string) => labelsBySession.get(id) || id, [labelsBySession]);
   const nameText = useCallback((text: string) => nameIds(text, (id) => labelsBySession.get(id) || undefined), [labelsBySession]);
   const runVerb = useCallback((key: string, verbId: string) => {
@@ -434,7 +440,7 @@ function sessionRow(entry: SessionLedgerEntry, context: RowContext): RowModel {
   return {
     key: entry.id,
     glyph: sessionGlyph(entry, context.live),
-    title: entry.label || 'untitled session',
+    title: entry.member_name ?? (entry.label || 'untitled session'),
     meta,
     stamp: { text: relativeStamp(stampAt, context.now), hint: fullStamp(stampAt) },
     note: context.note,
@@ -582,7 +588,7 @@ function SessionInspector({
   entry, verdict, note, live, usage, seed, sessionLabel, nameText, now, copied, onCopy, onVerb, actionsAvailable, canKeepConversation,
 }: SessionInspectorProps) {
   return (
-    <Inspector title={entry.label || 'untitled session'} kicker={<SessionKicker entry={entry} live={live} />}>
+    <Inspector title={entry.member_name ?? (entry.label || 'untitled session')} kicker={<SessionKicker entry={entry} live={live} />}>
       <Field label="Profile">{profileText(entry) || '—'}</Field>
       <DirectoryField entry={entry} verdict={verdict} copied={copied} onCopy={onCopy} />
       <BranchField entry={entry} verdict={verdict} />

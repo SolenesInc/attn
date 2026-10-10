@@ -21,7 +21,7 @@ func (d *Daemon) showCrewWake(result *protocol.CrewWakeResult, client *wsClient,
 	client.selectProfile(profile.ID)
 	d.sendArrangement(client, requestID, nil)
 	if changed {
-		d.sendGardenProfile(client)
+		d.sendProfileSnapshots(client)
 	}
 	d.publishArrangementChanged(profile.ID)
 	return nil

@@ -220,6 +220,12 @@ type AgentPeekMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
+
 	// TargetSessionID corresponds to the JSON schema field "target_session_id".
 	TargetSessionID string `json:"target_session_id"`
 }
@@ -1985,8 +1991,14 @@ type CrewCharterGetMessage struct {
 	// Member corresponds to the JSON schema field "member".
 	Member string `json:"member"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type CrewCharterGetResult struct {
@@ -2030,8 +2042,14 @@ type CrewCharterSetMessage struct {
 	// Member corresponds to the JSON schema field "member".
 	Member string `json:"member"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type CrewCharterSetResult struct {
@@ -2097,8 +2115,14 @@ type CrewHandoffGetMessage struct {
 	// Member corresponds to the JSON schema field "member".
 	Member string `json:"member"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type CrewHandoffGetResult struct {
@@ -2150,6 +2174,9 @@ type CrewHandoffResult struct {
 	// Member corresponds to the JSON schema field "member".
 	Member string `json:"member"`
 
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
 	// NapError corresponds to the JSON schema field "nap_error".
 	NapError *string `json:"nap_error,omitempty,omitzero"`
 
@@ -2178,8 +2205,14 @@ type CrewHandoffsGetMessage struct {
 	// Member corresponds to the JSON schema field "member".
 	Member string `json:"member"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type CrewHandoffsGetResult struct {
@@ -2213,6 +2246,12 @@ type CrewHandoffsGetResultMessage struct {
 type CrewListMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type CrewListResult struct {
@@ -2242,14 +2281,17 @@ type CrewMember struct {
 	// HomeDir corresponds to the JSON schema field "home_dir".
 	HomeDir string `json:"home_dir"`
 
-	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	// Key corresponds to the JSON schema field "key".
+	Key string `json:"key"`
 
 	// LaunchDesktop corresponds to the JSON schema field "launch_desktop".
 	LaunchDesktop *LaunchDesktopSetting `json:"launch_desktop,omitempty,omitzero"`
 
 	// Model corresponds to the JSON schema field "model".
 	Model *string `json:"model,omitempty,omitzero"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
 
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID string `json:"profile_id"`
@@ -2295,6 +2337,37 @@ type CrewPrimeResult struct {
 	PrimingBytes int `json:"priming_bytes"`
 }
 
+type CrewRenameMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member string `json:"member"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
+}
+
+type CrewRenameResult struct {
+	// Member corresponds to the JSON schema field "member".
+	Member string `json:"member"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// PreviousName corresponds to the JSON schema field "previous_name".
+	PreviousName string `json:"previous_name"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
+}
+
 type CrewRestart struct {
 	// DeliveryStatus corresponds to the JSON schema field "delivery_status".
 	DeliveryStatus *AgentMsgStatus `json:"delivery_status,omitempty,omitzero"`
@@ -2334,8 +2407,14 @@ type CrewRestartMessage struct {
 	// Member corresponds to the JSON schema field "member".
 	Member string `json:"member"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type CrewRestartResult struct {
@@ -2414,8 +2493,14 @@ type CrewSetMessage struct {
 	// Model corresponds to the JSON schema field "model".
 	Model *string `json:"model,omitempty,omitzero"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type CrewSetResult struct {
@@ -2450,8 +2535,14 @@ type CrewSleepMessage struct {
 	// Member corresponds to the JSON schema field "member".
 	Member string `json:"member"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type CrewSleepResult struct {
@@ -2466,6 +2557,9 @@ type CrewSleepResult struct {
 
 	// Member corresponds to the JSON schema field "member".
 	Member string `json:"member"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
@@ -2506,6 +2600,9 @@ type CrewUpdatedMessage struct {
 
 	// Members corresponds to the JSON schema field "members".
 	Members []CrewMember `json:"members"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
 }
 
 type CrewWakeMessage struct {
@@ -2534,6 +2631,9 @@ type CrewWakeResult struct {
 
 	// Member corresponds to the JSON schema field "member".
 	Member string `json:"member"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
 
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID string `json:"profile_id"`
@@ -8038,6 +8138,9 @@ type Response struct {
 	// CrewPrimeResult corresponds to the JSON schema field "crew_prime_result".
 	CrewPrimeResult *CrewPrimeResult `json:"crew_prime_result,omitempty,omitzero"`
 
+	// CrewRenameResult corresponds to the JSON schema field "crew_rename_result".
+	CrewRenameResult *CrewRenameResult `json:"crew_rename_result,omitempty,omitzero"`
+
 	// CrewRestartResult corresponds to the JSON schema field "crew_restart_result".
 	CrewRestartResult *CrewRestartResult `json:"crew_restart_result,omitempty,omitzero"`
 
@@ -9938,6 +10041,12 @@ type SessionLedgerEntry struct {
 
 	// MainRepo corresponds to the JSON schema field "main_repo".
 	MainRepo *string `json:"main_repo,omitempty,omitzero"`
+
+	// MemberKey corresponds to the JSON schema field "member_key".
+	MemberKey *string `json:"member_key,omitempty,omitzero"`
+
+	// MemberName corresponds to the JSON schema field "member_name".
+	MemberName *string `json:"member_name,omitempty,omitzero"`
 
 	// Priority corresponds to the JSON schema field "priority".
 	Priority *bool `json:"priority,omitempty,omitzero"`

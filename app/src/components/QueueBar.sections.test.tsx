@@ -163,7 +163,7 @@ describe('the waiting peek', () => {
   ];
 
   it('lists the crew block, a divider, then turns and working, without runs', () => {
-    renderBar(crewAndBands, { crew: [{ id: 'scout' }] });
+    renderBar(crewAndBands, { crew: [{ key: 'scout', name: 'Scout' }] });
     expect(screen.queryByTestId('queue-bar-waiting-peek')).toBeNull();
 
     hover('queue-bar-pill');
@@ -231,7 +231,7 @@ describe('the waiting peek', () => {
   it('opens an agent, wakes a member, and closes after either', () => {
     const onSelectSession = vi.fn();
     const onWakeCrewMember = vi.fn();
-    renderBar(crewAndBands, { crew: [{ id: 'scout' }], onSelectSession, onWakeCrewMember });
+    renderBar(crewAndBands, { crew: [{ key: 'scout', name: 'Scout' }], onSelectSession, onWakeCrewMember });
 
     hover('queue-bar-pill');
     fireEvent.click(screen.getByTestId('queue-bar-peek-agent:older'));
