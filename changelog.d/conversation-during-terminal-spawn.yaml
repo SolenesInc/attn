@@ -1,0 +1,4 @@
+kind: fixed
+area: sessions
+change: An agent that reports its conversation while its terminal is still starting keeps it, so the session can be reopened and resumed and shows its cost.
+symptom: On a fast machine some new sessions never bound their transcript; reopen offered no plain resume, usage stayed empty and annotations could not anchor.
