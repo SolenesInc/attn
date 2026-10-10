@@ -40,7 +40,7 @@ func (d *Daemon) validateCrewMemberPaths(member crew.Member) error {
 			return fmt.Errorf("refusing crew member %s: resolve stored %s path %q: %w", d.storedMemberName(member.Key.String()), label, stored, err)
 		}
 		if stored == "" || !filepath.IsAbs(stored) || !pathWithin(root, resolved) {
-			return fmt.Errorf("refusing crew member %s: stored %s path %q is outside this daemon's crew root %q; the likely cause is an attn.db copied from another instance", d.storedMemberName(member.Key.String()), label, stored, root)
+			return fmt.Errorf("crew member %s: stored %s path %q is outside this daemon's crew root %q. Check for an attn.db copied from another instance", d.storedMemberName(member.Key.String()), label, stored, root)
 		}
 	}
 	return nil
@@ -63,7 +63,7 @@ func (d *Daemon) validateCrewLetterPath(member crew.Member, stored string) error
 		return fmt.Errorf("resolve %s's stored handoff path %q: %w", d.storedMemberName(member.Key.String()), stored, err)
 	}
 	if stored == "" || !filepath.IsAbs(stored) || !pathWithin(expectedRoot, letter) {
-		return fmt.Errorf("refusing crew member %s: stored handoff path %q is outside this member's handoffs root %q; the likely cause is a copied attn.db or a symlink leaving the member home", d.storedMemberName(member.Key.String()), stored, expectedRoot)
+		return fmt.Errorf("crew member %s: stored handoff path %q is outside their handoffs root %q. Check for a copied attn.db or a symlink outside their home", d.storedMemberName(member.Key.String()), stored, expectedRoot)
 	}
 	return nil
 }
@@ -82,7 +82,7 @@ func (d *Daemon) validateCrewHandoffsDir(member crew.Member) (string, error) {
 		return "", fmt.Errorf("resolve %s's handoffs directory %q: %w", d.storedMemberName(member.Key.String()), stored, err)
 	}
 	if !pathWithin(home, resolved) {
-		return "", fmt.Errorf("refusing crew member %s: handoffs directory %q resolves outside this member's home %q; the likely cause is a copied attn.db or a symlink leaving the member home", d.storedMemberName(member.Key.String()), stored, home)
+		return "", fmt.Errorf("crew member %s: handoffs directory %q resolves outside their home %q. Check for a copied attn.db or a symlink outside their home", d.storedMemberName(member.Key.String()), stored, home)
 	}
 	return stored, nil
 }

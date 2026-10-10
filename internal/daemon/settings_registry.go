@@ -99,7 +99,7 @@ func (d *Daemon) profileSetting(id string, key profileSettingKey) string {
 }
 
 var settingSpecs = []settingSpec{
-	{key: string(settingModelTierOverrides), scope: daemonScope, description: "Models used for each intelligence tier, as a JSON object. Empty uses harness defaults.", validate: func(d *Daemon, key, value string) error {
+	{key: string(settingModelTierOverrides), scope: daemonScope, description: "Models for each intelligence tier as a JSON object. Empty uses harness defaults.", validate: func(d *Daemon, key, value string) error {
 		_, err := modeltiers.ParseOverrides(value)
 		return err
 	}},
@@ -115,7 +115,7 @@ var settingSpecs = []settingSpec{
 		}
 		return validateUIScale(value)
 	}},
-	{key: string(settingEditorExecutable), scope: daemonScope, description: "Command used to open files in your editor. Empty uses the default editor.", validate: func(d *Daemon, key, value string) error {
+	{key: string(settingEditorExecutable), scope: daemonScope, description: "Command to open files in your editor. Empty uses the default editor.", validate: func(d *Daemon, key, value string) error {
 		return validateEditorSetting(value)
 	}},
 	{key: string(settingNewSessionAgent), scope: daemonScope, description: "Harness selected for new sessions. Empty uses the default harness.", validate: func(d *Daemon, key, value string) error {
@@ -133,7 +133,7 @@ var settingSpecs = []settingSpec{
 	{key: string(settingWorkflowsEnabled), scope: daemonScope, description: "Include workflow guidance in agent instructions: true or false.", validate: func(d *Daemon, key, value string) error {
 		return validateBooleanSetting(value)
 	}},
-	{key: string(settingAutoApproveEnabled), scope: daemonScope, description: "Automatically approve supported agent requests: true or false.", validate: func(d *Daemon, key, value string) error {
+	{key: string(settingAutoApproveEnabled), scope: daemonScope, description: "Auto-approve supported agent requests: true or false.", validate: func(d *Daemon, key, value string) error {
 		return validateBooleanSetting(value)
 	}},
 	{key: string(settingQueueModeEnabled), scope: daemonScope, description: "Use queue flow across all profiles: true or false.", validate: func(d *Daemon, key, value string) error {
@@ -187,7 +187,7 @@ var settingSpecs = []settingSpec{
 	{key: string(settingGardenAdvisor), scope: daemonScope, description: "Garden advisor harness and model as JSON. Empty uses the default advisor.", validate: func(d *Daemon, key, value string) error {
 		return d.validateGardenAdvisorSetting(value)
 	}},
-	{key: string(settingActivityIntervals), scope: daemonScope, description: "Activity sampling intervals as JSON. Empty uses default intervals.", validate: func(d *Daemon, key, value string) error {
+	{key: string(settingActivityIntervals), scope: daemonScope, description: "Activity sampling intervals as JSON. Empty uses defaults.", validate: func(d *Daemon, key, value string) error {
 		_, err := parseActivityIntervals(value)
 		return err
 	}},
@@ -220,7 +220,7 @@ var settingSpecs = []settingSpec{
 	{key: string(settingCrewWakeLimitWindowSeconds), scope: daemonScope, description: "Crew automatic wake accounting window in seconds. Empty uses the default window.", validate: func(d *Daemon, key, value string) error {
 		return validateBoundedIntSetting("crew wake limit window", value, crewWakeLimitWindowMinSecs, crewWakeLimitWindowMaxSecs)
 	}},
-	{key: string(settingNotebookRoot), scope: profileScope, description: "Folder for this profile's Notebook, journal and seed artifacts. Absolute or ~/ path outside attn's data folder. Empty chooses a name-based default; existing notes are not moved.", validate: func(d *Daemon, key, value string) error {
+	{key: string(settingNotebookRoot), scope: profileScope, description: "Folder for this profile's Notebook, journal and seed artifacts. Absolute or ~/ path outside attn's data folder. Empty uses a folder named after the profile; existing notes stay in place.", validate: func(d *Daemon, key, value string) error {
 		return validateNotebookRoot(value)
 	}},
 	{key: string(settingKeybindingsConfig), scope: daemonScope, description: "Keyboard shortcut overrides as JSON. Empty restores default shortcuts.", validate: func(d *Daemon, key, value string) error {
@@ -229,18 +229,18 @@ var settingSpecs = []settingSpec{
 	{key: string(settingSessionsFilters), scope: daemonScope, description: "Saved ledger filters as JSON. Empty restores default filters.", validate: func(d *Daemon, key, value string) error {
 		return validateSessionsFilters(value)
 	}},
-	{key: string(settingReviewerModel), scope: daemonScope, description: "Model used for reviews. Empty uses the default review model.", validate: func(d *Daemon, key, value string) error {
+	{key: string(settingReviewerModel), scope: daemonScope, description: "Review model. Empty uses the default review model.", validate: func(d *Daemon, key, value string) error {
 		return nil
 	}},
 	{key: "<harness>_executable", scope: daemonScope, description: "Executable for this harness. Empty finds the default executable on PATH.", validate: func(d *Daemon, key, value string) error { return validateExecutableSetting(value) }},
 	{key: "new_session_yolo_<harness>", scope: daemonScope, description: "Start this harness with approval bypass: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: "new_session_destination_<harness>", scope: daemonScope, description: "New sessions start in new_worktree or main_repo. Empty uses the default destination.", validate: func(d *Daemon, key, value string) error { return validateNewSessionDestination(value) }},
-	{key: "chief_model_<harness>", scope: daemonScope, description: "Model used for the chief. Empty uses the default deep-tier model.", validate: func(d *Daemon, key, value string) error { return nil }},
-	{key: "chief_effort_<harness>", scope: daemonScope, description: "Reasoning effort used for the chief. Empty uses the harness default.", validate: func(d *Daemon, key, value string) error { return nil }},
-	{key: "default_model_<harness>", scope: daemonScope, description: "Model used for new sessions. Empty uses the harness default.", validate: func(d *Daemon, key, value string) error { return nil }},
-	{key: "default_effort_<harness>", scope: daemonScope, description: "Reasoning effort used for new sessions. Empty uses the harness default.", validate: func(d *Daemon, key, value string) error { return nil }},
+	{key: "chief_model_<harness>", scope: daemonScope, description: "Chief model. Empty uses the default deep-tier model.", validate: func(d *Daemon, key, value string) error { return nil }},
+	{key: "chief_effort_<harness>", scope: daemonScope, description: "Chief reasoning effort. Empty uses the harness default.", validate: func(d *Daemon, key, value string) error { return nil }},
+	{key: "default_model_<harness>", scope: daemonScope, description: "Model for new sessions. Empty uses the harness default.", validate: func(d *Daemon, key, value string) error { return nil }},
+	{key: "default_effort_<harness>", scope: daemonScope, description: "Reasoning effort for new sessions. Empty uses the harness default.", validate: func(d *Daemon, key, value string) error { return nil }},
 	{key: "default_context_window_cap_<harness>", scope: daemonScope, description: "Context budget for new sessions, from 10000 to 2000000 tokens. Empty uses the harness default.", validate: func(d *Daemon, key, value string) error { return validateContextWindowCap(value) }},
-	{key: "crew.cache_ttl_seconds.<member>", scope: daemonScope, description: "Prompt cache lifetime for this crew member, in seconds. Empty uses the shared crew lifetime.", validate: func(d *Daemon, key, value string) error {
+	{key: "crew.cache_ttl_seconds.<member>", scope: daemonScope, description: "Prompt cache lifetime for this member in seconds. Empty uses the shared crew lifetime.", validate: func(d *Daemon, key, value string) error {
 		return validateBoundedIntSetting("crew cache TTL", value, crewCacheTTLMinSeconds, crewCacheTTLMaxSeconds)
 	}},
 	{key: "session_cost.price.<model>", scope: daemonScope, description: "Custom model token prices as JSON. Empty uses catalog prices.", validate: func(d *Daemon, key, value string) error {
@@ -248,7 +248,7 @@ var settingSpecs = []settingSpec{
 		return err
 	}},
 	{key: "session_cost.billed_as.<model>", scope: daemonScope, description: "Billing model alias. Empty removes the alias.", validate: func(d *Daemon, key, value string) error { return sessioncost.ValidateBilledAs(key, value) }},
-	{key: string(settingNotebookRootDefault), scope: profileScope, description: "Folder chosen when this profile clears notebook.root; existing notes are not moved.", readOnly: true},
+	{key: string(settingNotebookRootDefault), scope: profileScope, description: "Default folder for this profile when notebook.root is empty. Existing notes stay in place.", readOnly: true},
 	{key: "notebook.root.effective", scope: profileScope, description: "Resolved Notebook folder for this profile.", readOnly: true},
 	{key: "<harness>_available", scope: daemonScope, description: "Whether this harness executable is available on PATH.", readOnly: true},
 	{key: "<harness>_cap_<capability>", scope: daemonScope, description: "Whether this harness supports the named capability.", readOnly: true},

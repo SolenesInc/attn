@@ -126,13 +126,13 @@ func runHandoff(args []string) {
 		fmt.Printf("%s's letter is filed at %s.\n", result.Name, result.Path)
 	}
 	if napErr := strings.TrimSpace(protocol.Deref(result.NapError)); napErr != "" {
-		fmt.Fprintf(os.Stderr, "handoff: no successor was woken: %s\nThis day is still running and %s is still bound to it. `attn handoff --retry` turns it over again with the letter above — it is filed, so do not write another.\n", napErr, result.Name)
+		fmt.Fprintf(os.Stderr, "handoff: could not wake a successor: %s\n%s still has this session. Run `attn handoff --retry` to use the filed letter; do not write another.\n", napErr, result.Name)
 		os.Exit(1)
 	}
 	if protocol.Deref(result.Outcome) == protocol.CrewDayCloseSleep {
-		fmt.Printf("%s is asleep. Nobody was woken behind you; the sidebar has %[1]s one click from a new day.\n", result.Name)
+		fmt.Printf("%s is asleep. No successor was started. Click %[1]s in the sidebar to wake them.\n", result.Name)
 		return
 	}
-	fmt.Printf("%s's next day is session %s, waking now. This one ends here.\n",
+	fmt.Printf("%s is waking in session %s. This session is ending.\n",
 		result.Name, agentShortID(string(protocol.Deref(result.SessionID))))
 }

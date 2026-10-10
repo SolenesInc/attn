@@ -47,9 +47,9 @@ func writeCrewHelp(w io.Writer) {
 
 Manage the Crew. Members' charters and handoffs persist across sessions
 in the active instance's crew directory. Every member belongs to a profile
-and wakes only there. Names resolve inside your profile, ignoring case.
-Use --profile <name|id> outside an agent when several profiles exist.
-Pass member:<key> to address a permanent key.
+and wakes only there. Names work within your profile, ignoring case.
+Outside attn, use --profile <name|id> when several profiles exist.
+Use member:<key> to address a member by permanent key.
 Run crew commands on the home daemon; outposts report which home to use.
 
 commands:
@@ -66,7 +66,7 @@ commands:
         If already awake, return the existing session.
 
   rename <member> <name> [--json]
-        Change the name while keeping the member's identity, home and mail.
+        Rename a member. Their key, home and mail stay the same.
 
   sleep <member> [--json]
         Ask the member to write a handoff and close with attn handoff --sleep.
@@ -186,13 +186,13 @@ func runCrewWake(args []string) {
 		return
 	}
 	if result.AlreadyAwake {
-		fmt.Printf("%s is already awake in session %s — nothing was launched.\n", result.Name, agentShortID(string(result.SessionID)))
+		fmt.Printf("%s is already awake in session %s.\n", result.Name, agentShortID(string(result.SessionID)))
 		return
 	}
 	if repair := crewWakeRepairLine(result); repair != "" {
 		fmt.Fprintln(os.Stdout, repair)
 	}
-	fmt.Printf("%s is awake in session %s. `attn agent peek %s` watches the day; the priming size is in the daemon log (grep `crew: priming`).\n",
+	fmt.Printf("%s is awake in session %s. View it with `attn agent peek %s`. For priming size, grep `crew: priming` in the daemon log.\n",
 		result.Name, agentShortID(string(result.SessionID)), result.Name)
 }
 

@@ -167,7 +167,7 @@ func printAgentList(w io.Writer, rows []agentListRow) {
 			turn,
 		)
 	}
-	fmt.Fprintf(w, "\nAn ID works with `attn agent peek <target>`; --json carries full ids.\nThe MEMBER column is a key label; `attn crew list` names the current roster.\n")
+	fmt.Fprintf(w, "\nUse `attn agent peek <id>` to view a session; --json shows full IDs.\nMEMBER shows key labels. Use `attn crew list` for current names.\n")
 }
 
 func agentShortID(id string) string {
@@ -249,7 +249,7 @@ func agentPeekErrorMessage(target string, err error) string {
 func printAgentPeek(w io.Writer, result *protocol.AgentPeekResult) {
 	fmt.Fprintf(w, "session %s (%s) — %s\n", result.SessionID, result.Agent, result.Label)
 	if member := strings.TrimSpace(protocol.Deref(result.CrewMember)); member != "" {
-		fmt.Fprintf(w, "crew member: this session is %s today\n", crew.HolderName(member, ""))
+		fmt.Fprintf(w, "crew member: %s\n", crew.HolderName(member, ""))
 	}
 	if profile := strings.TrimSpace(protocol.Deref(result.ProfileName)); profile != "" {
 		fmt.Fprintf(w, "profile: %s\n", profile)

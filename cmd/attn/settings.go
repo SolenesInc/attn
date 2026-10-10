@@ -14,18 +14,16 @@ import (
 func writeSettingsHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn settings <command> [--profile <name|id>]
 
-Read and change attn's settings. A setting applies to all profiles
-or to one profile; list shows which. In an agent session, profile
-settings belong to the session's profile. Outside attn, --profile
-picks a profile for list and profile settings; it is required when
-several profiles exist. Daemon settings need no profile selection.
+Read and change settings. list shows which apply to one profile or all profiles.
+Inside attn, use the session's profile. Outside attn, list and profile settings
+need --profile when several profiles exist. Daemon settings need no profile.
 
 commands:
-  list [--all] [--json]  key, scope, value and what each setting does;
+  list [--all] [--json]  show keys, scopes, values and descriptions;
                        --all adds read-only values attn computes
-  get <key> [--json]    one setting's saved value; empty when unset
+  get <key> [--json]    show the saved value; empty when unset
   set <key> <value>     change a setting; "" restores the default
-                       where the description allows it
+                       if the description allows it
 `)
 }
 

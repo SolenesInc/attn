@@ -313,14 +313,14 @@ func (d *Daemon) claimCrewBinding(key who.MemberKey, sessionID protocol.SessionI
 		}
 		member, ok := memberWithKey(memberName, members)
 		if !ok {
-			return who.MemberKey{}, fmt.Errorf("no crew member %q is registered; `attn crew list` names the roster", memberName)
+			return who.MemberKey{}, fmt.Errorf("no crew member %q is registered; use `attn crew list` to see names", memberName)
 		}
 		if member.BindingSession == sessionID {
 
 			return member.Key, nil
 		}
 		if d.crewBindingLive(member) {
-			return who.MemberKey{}, fmt.Errorf("%s is already awake in session %s; two agents with the same identity never run at once — wait for that day to end, or wake another member",
+			return who.MemberKey{}, fmt.Errorf("%s is already awake in session %s. Wait for it to end, or wake another member",
 				d.storedMemberName(member.Key.String()), shortSessionID(member.BindingSession))
 		}
 		d.releaseCrewBindingsExcept(*schema, members, docs, member.Key.String(), sessionID)

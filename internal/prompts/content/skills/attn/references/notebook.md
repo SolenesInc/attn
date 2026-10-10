@@ -1,18 +1,16 @@
 # Notebook
 
-Load this reference when you read or maintain your profile's Notebook, its durable
-markdown store, especially when your session is the chief of staff.
-The Notebook outlives any single agent.
+Read this reference when you work on your profile's Notebook, especially as chief
+of staff. Its markdown files outlive agent sessions.
 
 The Notebook is plain markdown on disk, and you maintain it by **editing the files
 directly with native tools** (Read/Write/Edit, plus `ls`/`grep` over the tree).
 There is no `attn notebook` CLI. The notebook root is given to you in your
-operating guidance (the chief-of-staff launch injection). Read the saved folder
-with `attn settings get notebook.root`. Change it for your profile with
-`attn settings set notebook.root ~/notes/work`; this does not move existing notes.
-New profiles get `~/attn-notebook-<profile name>`, with the instance name when
-using a named instance and a numeric suffix if the folder is taken. Existing
-profiles keep their previous folder. Paths below are relative to that `<root>`.
+operating guidance. `attn settings get notebook.root` shows the saved folder.
+Use `attn settings set notebook.root ~/notes/work` to change it for your profile;
+existing notes stay in place. New profiles get `~/attn-notebook-<profile name>`.
+Named instances add the instance name; taken folders get a numeric suffix.
+Existing profiles keep their folders. Paths below are relative to `<root>`.
 
 ## Orient First
 

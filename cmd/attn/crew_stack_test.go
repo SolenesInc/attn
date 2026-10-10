@@ -121,11 +121,11 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 	trellis.Prompted()
 	requireLines(t, "trellis's row", crewRow(t, s.Attn("crew", "list").Stdout, "Trellis"), " awake ", string(" "+day[:8]+" "))
 	agents := s.Attn("agent", "list").Stdout
-	requireLines(t, "agent list", agents, "MEMBER", "An ID works with `attn agent peek <target>`")
+	requireLines(t, "agent list", agents, "MEMBER", "Use `attn agent peek <id>` to view a session")
 	requireLines(t, "trellis's agent row", crewRow(t, agents, string(day[:8])), " Trellis ")
-	requireStdout(t, s.Attn("agent", "peek", "trellis"), string("session "+day), "crew member: this session is Trellis today")
+	requireStdout(t, s.Attn("agent", "peek", "trellis"), string("session "+day), "crew member: Trellis")
 	requireFailure(t, s.Attn("agent", "peek", "keel"), "agent peek: ", "Keel is asleep", "never wakes", "`attn crew wake keel`")
-	requireStdout(t, s.Attn("crew", "wake", "trellis"), string("Trellis is already awake in session "+day[:8]+" — nothing was launched."))
+	requireStdout(t, s.Attn("crew", "wake", "trellis"), string("Trellis is already awake in session "+day[:8]+"."))
 
 	trellis.Exit(143)
 	testworld.AwaitSession(app, string(day), func(x protocol.Session) bool { return protocol.Deref(x.StateReason) == "process_exited" })

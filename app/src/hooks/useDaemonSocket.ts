@@ -773,7 +773,7 @@ export function useDaemonSocket({
   const flushNotebookEditors = useCallback(async () => {
     const outcomes = await Promise.all([...notebookEditorsRef.current].map((editor) => editor.flushPendingSave()));
     if (outcomes.some((outcome) => outcome === 'conflict' || outcome === 'error')) {
-      throw new Error('Save the edited Notebook file before changing its profile or folder.');
+      throw new Error('Save your Notebook edits before changing profile or folder.');
     }
   }, []);
   const mdAnnotationsPendingRef = useRef<PendingKeyedRequests>(new Map());
