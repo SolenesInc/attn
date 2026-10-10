@@ -231,7 +231,11 @@ var namedLaunchItemQueries = [][2]string{
 func namedLaunchItems(tx *sql.Tx) ([]LaunchDesktopItem, error) {
 	items := []LaunchDesktopItem{}
 	for _, query := range namedLaunchItemQueries {
-		ids, err := queryColumn[string](tx, query[1])
+		selection := query[1]
+		if query[0] == "crew" {
+			selection = `SELECT member_key FROM crew_members WHERE retired_at = '' AND profile_id IN (SELECT id FROM profiles WHERE deleted_at = '') AND member_key NOT IN (SELECT chief_member FROM profiles) ORDER BY member_key`
+		}
+		ids, err := queryColumn[string](tx, selection)
 		if err != nil {
 			return nil, err
 		}

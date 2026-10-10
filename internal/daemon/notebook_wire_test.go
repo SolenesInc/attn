@@ -258,8 +258,8 @@ func TestSendToChiefAppendsToTheInboxAndRingsOnlyAReadyChief(t *testing.T) {
 	if got := agent.Prompted(); !strings.Contains(got, inboxDoorbell) {
 		t.Fatalf("the idle chief was prompted with %q, want the inbox doorbell", got)
 	}
-	if covered := notebookAskSendToChief(app, "/knowledge/index.md", "another selection before reading"); !covered.Success || covered.Result == nil || !covered.Result.Nudged {
-		t.Fatalf("send covered by the outstanding ring=%+v, want nudged", covered)
+	if covered := notebookAskSendToChief(app, "/knowledge/index.md", "another selection before reading"); !covered.Success || covered.Result == nil || covered.Result.Nudged {
+		t.Fatalf("send covered by the outstanding ring=%+v, want no second ring", covered)
 	}
 	wantPrompt := prompts.RenderText("chief", "inbox", prompts.Values{"inbox_path": filepath.Join(root, "inbox.md")})
 	if mail, err := cli.AgentInboxBatch(protocol.SessionID(chief), 0); err != nil || len(mail.Items) != 2 || mail.Items[0].Content != wantPrompt || mail.Items[1].Content != wantPrompt {

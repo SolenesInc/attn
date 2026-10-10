@@ -357,24 +357,26 @@ func (d *Daemon) desktopChanged(desktop profiles.Desktop) profileActionOutcome {
 }
 
 func (d *Daemon) handleProfileCreate(client *wsClient, msg *protocol.ProfileCreateMessage) {
-	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
-		name, err := profiles.ValidateName("profile", msg.Name)
-		if err != nil {
-			return profileActionOutcome{}, err
-		}
-		d.notebookRootMu.Lock()
-		defer d.notebookRootMu.Unlock()
-		root, err := d.defaultNotebookRoot(name, "")
-		if err != nil {
-			return profileActionOutcome{}, err
-		}
-		profile, desktop, err := d.store.CreateProfile(name, root)
-		if err == nil {
-			err = d.ensureChief(profile.ID, nil)
-		}
-		return profileActionOutcome{profile: &profile, desktops: []profiles.Desktop{desktop}, publish: func() {
-			d.publishFact(FactProfileCreated, profile.ID, nil)
-		}}, err
+	d.coalesceSnapshots(func() {
+		d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
+			name, err := profiles.ValidateName("profile", msg.Name)
+			if err != nil {
+				return profileActionOutcome{}, err
+			}
+			d.notebookRootMu.Lock()
+			defer d.notebookRootMu.Unlock()
+			root, err := d.defaultNotebookRoot(name, "")
+			if err != nil {
+				return profileActionOutcome{}, err
+			}
+			profile, desktop, err := d.store.CreateProfile(name, root)
+			if err == nil {
+				err = d.ensureChief(profile.ID, nil)
+			}
+			return profileActionOutcome{profile: &profile, desktops: []profiles.Desktop{desktop}, publish: func() {
+				d.publishFact(FactProfileCreated, profile.ID, nil)
+			}}, err
+		})
 	})
 }
 

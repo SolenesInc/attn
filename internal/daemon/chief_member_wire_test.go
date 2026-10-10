@@ -51,6 +51,9 @@ func TestEveryProfileHasItsOwnUnconfiguredChief(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
 	defaultProfile := app.SelectedProfile()
+	if app.Initial.MigrationPhase != nil && *app.Initial.MigrationPhase != protocol.MigrationPhaseComplete {
+		t.Fatalf("fresh Chief opened legacy migration: %+v", app.Initial.MigrationPhase)
+	}
 	var chief protocol.CrewMember
 	for _, m := range app.Initial.Crew {
 		if m.Chief {

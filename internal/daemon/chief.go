@@ -153,14 +153,18 @@ func (d *Daemon) ensureChief(profile string, u *store.ChiefUpgrade) error {
 	if err != nil {
 		return err
 	}
-	_, found, err := d.store.GetDocument(*schema, key.String())
+	doc, found, err := d.store.GetDocument(*schema, key.String())
 	if err != nil {
 		return err
 	}
 	if found {
-		member, _, err := d.crewMember(key)
+		member, err := crew.Decode(key.String(), doc.Body)
 		if err != nil {
 			return err
+		}
+		if err := d.validateCrewMemberPaths(member); err != nil {
+			d.logf("Chief home unavailable: %v", err)
+			return nil
 		}
 		if err := os.MkdirAll(member.HomeDir, 0o755); err != nil {
 			return err
