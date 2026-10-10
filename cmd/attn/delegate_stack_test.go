@@ -66,6 +66,72 @@ type delegated struct {
 	SessionID string `json:"session_id"`
 }
 
+func TestDelegateResolvesRelativeCwdFromALinkedWorktree(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s.Start()
+	app := s.App()
+	repo := s.Path("shop")
+	gitRepo(t, repo)
+	if err := os.MkdirAll(filepath.Join(repo, "web", "nested"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "web", "nested", "index.html"), []byte("shop\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	linked := s.Path("shop--caller")
+	for _, args := range [][]string{
+		{"add", "web"},
+		{"-c", "user.name=attn", "-c", "user.email=attn@example.invalid", "commit", "-q", "-m", "web"},
+		{"worktree", "add", "-q", "-b", "caller", linked},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repo
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %s: %v: %s", strings.Join(args, " "), err, out)
+		}
+	}
+	if err := os.Symlink(filepath.Join(linked, "web", "nested"), filepath.Join(linked, "jump")); err != nil {
+		t.Fatal(err)
+	}
+	source := s.Spawn(app, fakeagent.Claude, linked)
+	s.Launched(source)
+
+	for i, row := range []struct {
+		name, dir, cwd, subdir string
+	}{
+		{name: "dot at root", dir: linked, cwd: "."},
+		{name: "relative child", dir: linked, cwd: "./web", subdir: "web"},
+		{name: "dot in subdirectory", dir: filepath.Join(linked, "web"), cwd: ".", subdir: "web"},
+		{name: "relative parent", dir: filepath.Join(linked, "web", "nested"), cwd: "..", subdir: "web"},
+		{name: "relative symlink parent", dir: linked, cwd: "jump/..", subdir: "web"},
+		{name: "absolute symlink parent", dir: linked, cwd: linked + "/jump/..", subdir: "web"},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			branch := fmt.Sprintf("feat/relative-%d", i)
+			started := s.Run(testworld.Invocation{Session: source, Dir: row.dir, Args: []string{"delegate",
+				"--brief", "Work in the selected directory", "--cwd", row.cwd,
+				"--new-worktree", "--branch", branch, "--from", "main", "--model", "default",
+				"--name", fmt.Sprintf("relative-%d", i)}})
+			if started.Code != 0 {
+				t.Fatalf("attn delegate exited %d: %s", started.Code, started.Stderr)
+			}
+			var result delegated
+			started.JSON(t, &result)
+			wantDirectory := filepath.Join(s.Path(fmt.Sprintf("shop--feat-relative-%d", i)), row.subdir)
+			if result.Directory != wantDirectory || result.Branch != branch || result.Checkout != "created" {
+				t.Fatalf("delegate printed %+v, want a created %s checkout at %s", result, branch, wantDirectory)
+			}
+			testworld.AwaitSession(app, result.SessionID, func(x protocol.Session) bool {
+				return x.Directory == wantDirectory && protocol.Deref(x.Branch) == branch
+			})
+			if prompt := s.Launched(result.SessionID).Prompted(); !strings.Contains(prompt, result.SeedID) {
+				t.Errorf("the delegate received %q, want its seed %s", prompt, result.SeedID)
+			}
+		})
+	}
+}
+
 func TestDelegateStartsTheRequestItsFlagsDescribeAndRefusesRetiredOnes(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))

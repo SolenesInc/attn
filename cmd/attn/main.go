@@ -26,6 +26,7 @@ import (
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/daemonctl"
+	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/pathutil"
@@ -1395,6 +1396,10 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	customCWD := strings.TrimSpace(*cwd)
 	if customCWD == "" {
 		return delegateCLIArgs{}, errors.New("--cwd is required")
+	}
+	customCWD, err := filepath.Abs(git.CanonicalizePath(customCWD))
+	if err != nil {
+		return delegateCLIArgs{}, fmt.Errorf("resolve --cwd %q: %w", *cwd, err)
 	}
 	requestedBranch := strings.TrimSpace(*branch)
 	localBranch := strings.TrimSpace(*existingBranch)

@@ -237,6 +237,9 @@ Your agents can work as a team:
       attn delegate --brief-file task.md --role builder \
         --cwd /repo --new-worktree --branch feature-x --from origin/main
 
+  Relative `--cwd` paths, including `.`, resolve from the CLI's current
+  directory. A new worktree preserves the selected checkout subdirectory.
+
   Add `--desktop 7` to place the delegate on ⌘7. If that numbered desktop is
   missing, attn recreates it on its shortcut slot and keeps the current desktop
   in view. A desktop name or id also works within the same profile.
