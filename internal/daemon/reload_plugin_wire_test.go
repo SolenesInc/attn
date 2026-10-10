@@ -77,7 +77,7 @@ func TestAReloadedPluginChiefResumesWithCurrentChiefGuidanceAndItsPins(t *testin
 }
 
 func TestAPluginSessionKeepsRunningWhenItsDriverCannotRelaunchIt(t *testing.T) {
-	t.Setenv(fakeagent.PiCapabilitiesEnv, "launch_instructions")
+	t.Setenv(fakeagent.PiCapabilitiesEnv, "launch_instructions,model_pin,effort_pin,initial_prompt")
 	w := newWorld(t, fakeagent.Pi)
 	app := w.App()
 	pluginDriverSettings(app, "pi")
