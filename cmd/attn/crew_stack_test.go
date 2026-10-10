@@ -405,7 +405,7 @@ func TestCrewWakeWhileClearingKeepsTheSuccessor(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	writeCharter(t, s, "keel")
 	s.Start()
-	app := s.App()
+	s.App()
 	first, err := s.Client().CrewWake("Keel", "", "")
 	if err != nil {
 		t.Fatal(err)
@@ -417,7 +417,7 @@ func TestCrewWakeWhileClearingKeepsTheSuccessor(t *testing.T) {
 	committed := s.PauseAt(pausepoint.MemberClearCommit)
 	requested := s.PauseAt(pausepoint.MemberWakeRequested)
 	s.Start()
-	app = s.App()
+	app := s.App()
 	app.TypeLine(string(first.SessionID), "/clear")
 	committed.Await()
 	woke := make(chan *protocol.CrewWakeResult, 1)
