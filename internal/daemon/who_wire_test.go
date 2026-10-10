@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -130,4 +131,36 @@ func TestSessionsCarryTheirProfileOnTheWire(t *testing.T) {
 		}
 	}
 	t.Fatalf("agent-a absent: %+v", app.Initial.Sessions)
+}
+
+func TestCrewHomePathFailuresDoNotEraseSessionsOrSenderIdentity(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	witness, _ := mailIdleAgent(w, app, "witness")
+	day := wakeCrew(t, cli, "Keel", "")
+	w.Launched(string(day.SessionID))
+	home := crewHome(w, "alder")
+	outside := w.Path("relocated-alder")
+	if err := os.Rename(home, outside); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, home); err != nil {
+		t.Fatal(err)
+	}
+	fresh := w.App()
+	seen := map[protocol.SessionID]bool{}
+	for _, s := range fresh.Initial.Sessions {
+		seen[s.ID] = true
+	}
+	if !seen[day.SessionID] || !seen[protocol.SessionID(witness)] {
+		t.Fatalf("sessions disappeared after an unrelated home moved: %+v", fresh.Initial.Sessions)
+	}
+	sent := sendAgentMessage(t, cli, string(day.SessionID), witness, "still from Keel")
+	status, err := cli.AgentMsgStatus(sent.MessageID, day.SessionID)
+	if err != nil || status.Sender.Ref != "member:keel" {
+		t.Fatalf("sender after a home path failure: %+v, %v", status, err)
+	}
+	if _, err := cli.CrewWake("Alder", "", ""); err == nil {
+		t.Fatal("the relocated home passed the wake path fence")
+	}
 }

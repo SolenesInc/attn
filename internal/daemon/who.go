@@ -24,7 +24,7 @@ func (d *Daemon) bindings() (who.Bindings, error) {
 		return who.Bindings{}, err
 	}
 	if status.IsHome() {
-		members, _, err := d.readCrewMembers()
+		members, _, err := d.readCrewMembersRaw()
 		if err != nil {
 			return who.Bindings{}, err
 		}
