@@ -50,10 +50,8 @@ try {
     await client.request('dom_wait', { selector: `[data-testid="close-desktop-${desktop.id}"]`, timeoutMs: 5_000 });
     await client.request('dom_click', { selector: `[data-testid="close-desktop-${desktop.id}"]` });
     await client.request('dom_wait', { selector: '#desktop-close-title', timeoutMs: 5_000 });
-    const counts = await client.request('dom_text', { selector: '.desktop-close-prompt .mp-dialog-body p:first-child' });
-    runner.assert(counts.text === 'Close 1 shell on this desktop?', 'confirmation lists only the shell', counts);
-    const explanation = await client.request('dom_text', { selector: '.desktop-close-prompt .mp-dialog-body p:last-child' });
-    runner.assert(explanation.text === 'Shells stay in the ledger for resuming.', 'confirmation explains only the shell', explanation);
+    const text = await client.request('dom_text', { selector: '.desktop-close-prompt .mp-dialog-body' });
+    runner.assert(text.text === 'Close this desktop and everything inside it?', 'confirmation closes the desktop and its contents', text);
     await driver.screenshot(`${runner.runDir}/close-confirmation.png`, { windowId: await driver.mainWindowId() });
     const closed = observer.waitForMessage((event) => event.event === 'profile_arrangement_changed'
       && !event.desktops.some((entry) => entry.id === desktop.id) && event, 'nonempty desktop removed');

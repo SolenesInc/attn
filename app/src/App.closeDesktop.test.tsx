@@ -27,7 +27,7 @@ describe('close desktop', () => {
     expect(daemon.arrangement.desktops.map((desktop) => desktop.id)).not.toContain('empty');
   });
 
-  it.each(['sidebar', 'desktop palette', 'queue palette'] as const)('asks once with agent, shell and tile counts from %s', async (entry) => {
+  it.each(['sidebar', 'desktop palette', 'queue palette'] as const)('asks once about closing the desktop and its contents from %s', async (entry) => {
     const root = { type: 'split', split_id: 'a', direction: 'vertical', ratio: 0.5, children: [
       { type: 'pane', pane_id: 'pane-agent' },
       { type: 'split', split_id: 'b', direction: 'vertical', ratio: 0.5, children: [
@@ -50,7 +50,7 @@ describe('close desktop', () => {
       }
     };
     await request();
-    expect(screen.getByRole('dialog', { name: 'Close Work?' })).toHaveTextContent('1 agent, 1 shell and 1 tile');
+    expect(within(screen.getByRole('dialog', { name: 'Close Work?' })).getByText('Close this desktop and everything inside it?')).toBeVisible();
     expect(daemon.sentOf('desktop_close')).toEqual([]);
     await gesture(daemon, () => pressShortcut('session.close'));
     expect(daemon.sentOf('unregister')).toEqual([]);
@@ -62,41 +62,19 @@ describe('close desktop', () => {
     expect(daemon.sentOf('desktop_close')).toEqual([expect.objectContaining({ desktop_id: 'work', expected_revision: 1 })]);
   });
 
-  it.each([
-    { agents: 1, shells: 0, tiles: 0, counts: '1 agent', explanation: 'Agents stay in the ledger for resuming.' },
-    { agents: 3, shells: 0, tiles: 0, counts: '3 agents', explanation: 'Agents stay in the ledger for resuming.' },
-    { agents: 0, shells: 1, tiles: 0, counts: '1 shell', explanation: 'Shells stay in the ledger for resuming.' },
-    { agents: 0, shells: 3, tiles: 0, counts: '3 shells', explanation: 'Shells stay in the ledger for resuming.' },
-    { agents: 0, shells: 0, tiles: 1, counts: '1 tile', explanation: 'Tiles are removed.' },
-    { agents: 0, shells: 0, tiles: 3, counts: '3 tiles', explanation: 'Tiles are removed.' },
-    { agents: 3, shells: 1, tiles: 0, counts: '3 agents and 1 shell', explanation: 'Agents and shells stay in the ledger for resuming.' },
-    { agents: 3, shells: 0, tiles: 1, counts: '3 agents and 1 tile', explanation: 'Agents stay in the ledger for resuming. Tiles are removed.' },
-    { agents: 0, shells: 1, tiles: 3, counts: '1 shell and 3 tiles', explanation: 'Shells stay in the ledger for resuming. Tiles are removed.' },
-    { agents: 3, shells: 1, tiles: 3, counts: '3 agents, 1 shell and 3 tiles', explanation: 'Agents and shells stay in the ledger for resuming. Tiles are removed.' },
-  ])('lists only present kinds for $counts', async ({ agents, shells, tiles, counts, explanation }) => {
-    const sessions = [
-      ...Array.from({ length: agents }, (_, index) => daemonSession(`agent-${index}`)),
-      ...Array.from({ length: shells }, (_, index) => daemonSession(`shell-${index}`, { agent: 'shell' })),
-    ];
-    const leaves = [
-      ...sessions.map((session) => ({ type: 'pane', pane_id: `pane-${session.id}` })),
-      ...Array.from({ length: tiles }, (_, index) => ({ type: 'tile', tile_id: `tile-${index}`, tile_kind: 'markdown', tile_params: '/tmp/reference.md' })),
-    ];
-    const root = leaves.slice(1).reduce<unknown>((left, leaf, index) => ({
-      type: 'split', split_id: `split-${index}`, direction: 'vertical', ratio: 0.5, children: [left, leaf],
-    }), leaves[0]);
+  it('asks the same confirmation for a shell-only desktop', async () => {
     const { daemon } = await renderApp({ initialState: {
       settings: { queue_mode_enabled: false },
-      sessions: [...sessions, daemonSession('other')],
+      sessions: [daemonSession('shell', { agent: 'shell' })],
       profiles: [defaultProfile('work')],
-      desktops: [daemonDesktop('work', { root, panes: sessions.map((session) => agentPane(session.id, 'work')) }, { name: 'Work' }), soloDesktop('other', { id: 'other' })],
+      desktops: [soloDesktop('shell', { id: 'work', name: 'Work' }), emptyDesktop('other')],
     } });
 
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Close Work' })));
 
     const dialog = screen.getByRole('dialog', { name: 'Close Work?' });
-    expect(within(dialog).getByText(`Close ${counts} on this desktop?`)).toBeVisible();
-    expect(within(dialog).getByText(explanation)).toBeVisible();
+    expect(within(dialog).getByText('Close this desktop and everything inside it?')).toBeVisible();
+    expect(dialog).not.toHaveTextContent(/agents|shells|tiles|ledger/);
     expect(daemon.sentOf('desktop_close')).toEqual([]);
   });
 
