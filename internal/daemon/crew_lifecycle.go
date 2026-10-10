@@ -273,7 +273,7 @@ func (d *Daemon) actOnCrewMember(member crew.Member, sessionID protocol.SessionI
 			return
 		}
 		generation := protocol.Deref(session.LastModelRequestAt)
-		receipt, err := d.sendToInbox(inbox.Item{ID: "crew-auto-sleep/" + string(sessionID) + "/" + generation, To: inbox.ToSession(sessionID), Kind: inbox.Notice, Source: member.Key.String(), Key: "crew-auto-sleep", Text: crewSleepPrompt})
+		receipt, err := d.sendToInbox(inbox.Item{ID: "crew-auto-sleep/" + string(sessionID) + "/" + generation, To: who.ToSession(sessionID), Kind: inbox.Notice, Source: member.Key.String(), Key: "crew-auto-sleep", Text: crewSleepPrompt})
 		if err != nil {
 			d.logf("crew: %s's sleep request could not be recorded: %v", member.Key.String(), err)
 			return

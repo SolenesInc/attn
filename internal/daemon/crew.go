@@ -489,21 +489,6 @@ func (d *Daemon) crewMemberBoundTo(sessionID protocol.SessionID) string {
 	return ""
 }
 
-func (d *Daemon) crewSessionBoundTo(memberID string) (protocol.SessionID, error) {
-	if d.store == nil || strings.TrimSpace(memberID) == "" {
-		return "", nil
-	}
-	members, _, err := d.readCrewMembers()
-	if err != nil {
-		return "", err
-	}
-	member, ok := memberWithKey(memberID, members)
-	if !ok || !d.crewBindingLive(member) {
-		return "", nil
-	}
-	return member.BindingSession, nil
-}
-
 func (d *Daemon) decorateCrewMember(session *protocol.Session, membersBySession map[protocol.SessionID]string) {
 	if session == nil {
 		return
@@ -520,7 +505,12 @@ func (d *Daemon) resolveTenderMember(memberName string, sessionID protocol.Sessi
 	if memberName == "" {
 		return d.crewMemberBoundTo(sessionID)
 	}
-	r, err := d.requestFromMessage(protocol.Ptr(sessionID), protocol.Ptr(firstProfile(profileID)))
+	b, bindingsErr := d.bindings()
+	if bindingsErr != nil {
+		d.logf("crew tender bindings: %v", bindingsErr)
+		return memberName
+	}
+	r, err := d.requestFromMessage(protocol.Ptr(sessionID), protocol.Ptr(firstProfile(profileID)), b)
 	if err == nil {
 		if member, found, err := d.store.CrewNamed(r.ProfileID(), memberName); err == nil && found {
 			return member.Key.String()
@@ -633,7 +623,12 @@ func (d *Daemon) handleCrewList(conn net.Conn, msg *protocol.CrewListMessage) {
 		d.sendCrewError(conn, "list", err)
 		return
 	}
-	r, err := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID)
+	b, bindingsErr := d.bindings()
+	if bindingsErr != nil {
+		d.sendError(conn, bindingsErr.Error())
+		return
+	}
+	r, err := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID, b)
 	if err != nil {
 		d.sendCrewError(conn, "list", err)
 		return

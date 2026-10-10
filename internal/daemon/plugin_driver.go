@@ -486,7 +486,15 @@ func (d *Daemon) promoteReportedAmendment(kind string, value string, sessionID p
 	if d.store == nil {
 		return errors.New("no database")
 	}
-	proposedBy := "pi session " + d.sessionLabel(protocol.TrimID(sessionID))
+	b, err := d.bindings()
+	if err != nil {
+		return err
+	}
+	r, err := d.requestFromSession(sessionID, b)
+	if err != nil {
+		return err
+	}
+	proposedBy := r.Actor()
 	proposal, cfg, err := d.store.PromoteReportedAmendment(kind, value, proposedBy, time.Now())
 	if err != nil {
 		return err

@@ -42,9 +42,9 @@ func TestACrewNameResolvesOnlyInItsProfile(t *testing.T) {
 		_, err = scoped.CrewRename(name, "Alfred")
 		crewErrorContains(t, err, "no crew member named", `profile "Side"`)
 		_, err = scoped.AgentPeek(name)
-		crewErrorContains(t, err, "session_not_found")
+		crewErrorContains(t, err, "no session, crew member or seed matches")
 		_, err = scoped.AgentMsg(name, protocol.SessionID(plain), "Hello")
-		crewErrorContains(t, err, "no session or crew member matches")
+		crewErrorContains(t, err, "no session, crew member or seed matches")
 		response := testworld.Request(app, protocol.CrewCharterGetMessage{Cmd: protocol.CmdCrewCharterGet, Member: name, RequestID: protocol.Ptr(name)}, protocol.EventCrewCharterGetResult, func(r protocol.CrewCharterGetResultMessage) bool { return r.RequestID == name })
 		if response.Success || !strings.Contains(protocol.Deref(response.Error), `profile "Side"`) {
 			t.Fatalf("foreign charter: %+v", response)

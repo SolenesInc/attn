@@ -13,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 func TestDaemon_BroadcastRawWSMessage_RoutesRemotePTYTrafficToInterestedClients(t *testing.T) {
@@ -205,7 +206,7 @@ func TestDaemon_LateSpawnCannotRecreateClosingSession(t *testing.T) {
 	if _, err := d.prepareSessionTeardown("late-spawn"); err != nil {
 		t.Fatalf("prepare close: %v", err)
 	}
-	d.commitSessionUnregister("late-spawn", store.SessionClose{By: store.SessionClosedByUser})
+	d.commitSessionUnregister("late-spawn", store.SessionClose{By: who.User()})
 	client := spawnTestClient()
 	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
 		Cmd: protocol.CmdSpawnSession, ID: "late-spawn", Cwd: t.TempDir(), Agent: protocol.AgentShellValue,

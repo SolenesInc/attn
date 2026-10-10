@@ -110,7 +110,7 @@ func conversationList(args []string) {
 			reasons = append(reasons, protocol.Deref(row.PendingReason))
 		case kept.DeletedAt != nil:
 			who := "attn deleted"
-			if protocol.Deref(kept.DeletedBy) == "user" {
+			if protocol.Deref(kept.DeletedBy).Ref == "user" {
 				who = "you deleted"
 			}
 			reasons = append(reasons, who+" "+conversationDate(*kept.DeletedAt))

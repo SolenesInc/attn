@@ -79,7 +79,7 @@ func TestAChiefSeedAssignmentStaysWithItsTenderWhenTheChiefRoleTransfers(t *test
 			t.Fatalf("new Chief received another session's assignment: %+v", items)
 		}
 		items := readInbox(t, cli, "chief", 0).Items
-		if len(items) != 1 || items[0].Address != "seed:"+seed || !strings.Contains(items[0].Content, "attn seed show "+seed) {
+		if len(items) != 1 || items[0].Address != protocol.AddressRef("seed:"+seed) || !strings.Contains(items[0].Content, "attn seed show "+seed) {
 			t.Fatalf("actual tender assignment=%+v", items)
 		}
 	})

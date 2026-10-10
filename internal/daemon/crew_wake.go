@@ -211,7 +211,11 @@ func (d *Daemon) crewWakeAsked(msg *protocol.CrewWakeMessage) (*protocol.CrewWak
 }
 
 func (d *Daemon) crewWakeAskedFor(msg *protocol.CrewWakeMessage, userStarted bool) (*protocol.CrewWakeResult, error) {
-	r, err := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID)
+	b, bindingsErr := d.bindings()
+	if bindingsErr != nil {
+		return nil, bindingsErr
+	}
+	r, err := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID, b)
 	if err != nil {
 		return nil, err
 	}
@@ -443,7 +447,12 @@ func (d *Daemon) crewPrimeForSession(sessionID protocol.SessionID) (crew.Member,
 }
 
 func (d *Daemon) handleCrewSet(conn net.Conn, msg *protocol.CrewSetMessage) {
-	r, err := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID)
+	b, bindingsErr := d.bindings()
+	if bindingsErr != nil {
+		d.sendError(conn, bindingsErr.Error())
+		return
+	}
+	r, err := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID, b)
 	if err != nil {
 		d.sendCrewError(conn, "set", err)
 		return
@@ -467,7 +476,7 @@ func (d *Daemon) handleCrewSet(conn net.Conn, msg *protocol.CrewSetMessage) {
 }
 
 func (d *Daemon) handleCrewSetWS(client *wsClient, msg *protocol.CrewSetMessage) {
-	r := requestFromApp(client.selectedProfile())
+	r := who.RequestFromApp(client.selectedProfile())
 	identity, scopeErr := d.resolveMember(r, msg.Member)
 	if scopeErr != nil {
 		d.sendToClient(client, protocol.CrewSetResultMessage{Event: protocol.EventCrewSetResult, RequestID: protocol.Deref(msg.RequestID), Error: protocol.Ptr(scopeErr.Error())})

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type KeptConversation struct {
@@ -17,7 +18,7 @@ type KeptConversation struct {
 	CopiedAt    time.Time
 	ReleasedAt  time.Time
 	DeletedAt   time.Time
-	DeletedBy   string
+	DeletedBy   who.Actor
 }
 
 const keptConversationColumns = "resume_id, agent, source_path, bytes, stored_bytes, copied_at, released_at, deleted_at, deleted_by"
@@ -83,7 +84,7 @@ func (s *Store) PutKeptConversation(k KeptConversation) error {
 	_, err := s.db.Exec(`INSERT INTO kept_conversations (`+keptConversationColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
  ON CONFLICT(agent, resume_id) DO UPDATE SET source_path=excluded.source_path, bytes=excluded.bytes, stored_bytes=excluded.stored_bytes,
  copied_at=excluded.copied_at, released_at=excluded.released_at, deleted_at=excluded.deleted_at, deleted_by=excluded.deleted_by`,
-		k.ResumeID, k.Agent, k.SourcePath, k.Bytes, k.StoredBytes, keptInstant(k.CopiedAt), keptInstant(k.ReleasedAt), keptInstant(k.DeletedAt), k.DeletedBy)
+		k.ResumeID, k.Agent, k.SourcePath, k.Bytes, k.StoredBytes, keptInstant(k.CopiedAt), keptInstant(k.ReleasedAt), keptInstant(k.DeletedAt), k.DeletedBy.String())
 	return err
 }
 
@@ -108,7 +109,7 @@ func (s *Store) ReleaseKeptConversation(agent, resumeID string, at time.Time) bo
 func (s *Store) RetainKeptConversation(agent, resumeID string) bool {
 	return s.updateKeptConversation("UPDATE kept_conversations SET released_at=? WHERE agent=? AND resume_id=? AND released_at!='' AND deleted_at=''", agent, resumeID, "")
 }
-func (s *Store) TombstoneKeptConversation(agent, resumeID string, at time.Time, by string) error {
+func (s *Store) TombstoneKeptConversation(agent, resumeID string, at time.Time, by who.Actor) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {

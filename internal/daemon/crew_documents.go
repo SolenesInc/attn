@@ -35,7 +35,7 @@ func (d *Daemon) crewCharterRead(member crew.Member) (protocol.CrewCharterDocume
 	return protocol.CrewCharterDocument{Content: string(content), Token: hash}, nil
 }
 
-func (d *Daemon) crewCharterGet(r requester, name string) (*protocol.CrewCharterGetResult, error) {
+func (d *Daemon) crewCharterGet(r who.Requester, name string) (*protocol.CrewCharterGetResult, error) {
 	identity, err := d.resolveMember(r, name)
 	if err != nil {
 		return nil, err
@@ -52,7 +52,7 @@ func (d *Daemon) crewCharterGet(r requester, name string) (*protocol.CrewCharter
 	return &protocol.CrewCharterGetResult{Member: member.Key.String(), Charter: charter}, nil
 }
 
-func (d *Daemon) crewCharterSet(r requester, name, content, expectedToken string) (*protocol.CrewCharterSetResult, error) {
+func (d *Daemon) crewCharterSet(r who.Requester, name, content, expectedToken string) (*protocol.CrewCharterSetResult, error) {
 	identity, err := d.resolveMember(r, name)
 	if err != nil {
 		return nil, err
@@ -98,7 +98,7 @@ func crewHandoffTime(filename string) (time.Time, error) {
 	return when, nil
 }
 
-func (d *Daemon) crewHandoffsGet(r requester, name string) (*protocol.CrewHandoffsGetResult, error) {
+func (d *Daemon) crewHandoffsGet(r who.Requester, name string) (*protocol.CrewHandoffsGetResult, error) {
 	identity, err := d.resolveMember(r, name)
 	if err != nil {
 		return nil, err
@@ -140,7 +140,7 @@ func (d *Daemon) crewHandoffsGet(r requester, name string) (*protocol.CrewHandof
 	return &protocol.CrewHandoffsGetResult{Member: member.Key.String(), Handoffs: handoffs}, nil
 }
 
-func (d *Daemon) crewHandoffGet(r requester, name, filename string) (*protocol.CrewHandoffGetResult, error) {
+func (d *Daemon) crewHandoffGet(r who.Requester, name, filename string) (*protocol.CrewHandoffGetResult, error) {
 	identity, err := d.resolveMember(r, name)
 	if err != nil {
 		return nil, err
@@ -175,7 +175,12 @@ func (d *Daemon) crewHandoffGet(r requester, name, filename string) (*protocol.C
 }
 
 func (d *Daemon) handleCrewCharterGet(conn net.Conn, msg *protocol.CrewCharterGetMessage) {
-	r, scopeErr := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID)
+	b, bindingsErr := d.bindings()
+	if bindingsErr != nil {
+		d.sendError(conn, bindingsErr.Error())
+		return
+	}
+	r, scopeErr := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID, b)
 	if scopeErr != nil {
 		d.sendCrewError(conn, "request", scopeErr)
 		return
@@ -190,7 +195,12 @@ func (d *Daemon) handleCrewCharterGet(conn net.Conn, msg *protocol.CrewCharterGe
 }
 
 func (d *Daemon) handleCrewCharterSet(conn net.Conn, msg *protocol.CrewCharterSetMessage) {
-	r, scopeErr := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID)
+	b, bindingsErr := d.bindings()
+	if bindingsErr != nil {
+		d.sendError(conn, bindingsErr.Error())
+		return
+	}
+	r, scopeErr := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID, b)
 	if scopeErr != nil {
 		d.sendCrewError(conn, "request", scopeErr)
 		return
@@ -205,7 +215,12 @@ func (d *Daemon) handleCrewCharterSet(conn net.Conn, msg *protocol.CrewCharterSe
 }
 
 func (d *Daemon) handleCrewHandoffsGet(conn net.Conn, msg *protocol.CrewHandoffsGetMessage) {
-	r, scopeErr := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID)
+	b, bindingsErr := d.bindings()
+	if bindingsErr != nil {
+		d.sendError(conn, bindingsErr.Error())
+		return
+	}
+	r, scopeErr := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID, b)
 	if scopeErr != nil {
 		d.sendCrewError(conn, "request", scopeErr)
 		return
@@ -220,7 +235,12 @@ func (d *Daemon) handleCrewHandoffsGet(conn net.Conn, msg *protocol.CrewHandoffs
 }
 
 func (d *Daemon) handleCrewHandoffGet(conn net.Conn, msg *protocol.CrewHandoffGetMessage) {
-	r, scopeErr := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID)
+	b, bindingsErr := d.bindings()
+	if bindingsErr != nil {
+		d.sendError(conn, bindingsErr.Error())
+		return
+	}
+	r, scopeErr := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID, b)
 	if scopeErr != nil {
 		d.sendCrewError(conn, "request", scopeErr)
 		return
@@ -243,7 +263,7 @@ func crewDocumentRequestID(value *string) (string, error) {
 }
 
 func (d *Daemon) handleCrewCharterGetWS(client *wsClient, msg *protocol.CrewCharterGetMessage) {
-	r := requestFromApp(client.selectedProfile())
+	r := who.RequestFromApp(client.selectedProfile())
 
 	requestID, err := crewDocumentRequestID(msg.RequestID)
 	var result *protocol.CrewCharterGetResult
@@ -262,7 +282,7 @@ func (d *Daemon) handleCrewCharterGetWS(client *wsClient, msg *protocol.CrewChar
 }
 
 func (d *Daemon) handleCrewCharterSetWS(client *wsClient, msg *protocol.CrewCharterSetMessage) {
-	r := requestFromApp(client.selectedProfile())
+	r := who.RequestFromApp(client.selectedProfile())
 
 	requestID, err := crewDocumentRequestID(msg.RequestID)
 	var result *protocol.CrewCharterSetResult
@@ -281,7 +301,7 @@ func (d *Daemon) handleCrewCharterSetWS(client *wsClient, msg *protocol.CrewChar
 }
 
 func (d *Daemon) handleCrewHandoffsGetWS(client *wsClient, msg *protocol.CrewHandoffsGetMessage) {
-	r := requestFromApp(client.selectedProfile())
+	r := who.RequestFromApp(client.selectedProfile())
 
 	requestID, err := crewDocumentRequestID(msg.RequestID)
 	var result *protocol.CrewHandoffsGetResult
@@ -300,7 +320,7 @@ func (d *Daemon) handleCrewHandoffsGetWS(client *wsClient, msg *protocol.CrewHan
 }
 
 func (d *Daemon) handleCrewHandoffGetWS(client *wsClient, msg *protocol.CrewHandoffGetMessage) {
-	r := requestFromApp(client.selectedProfile())
+	r := who.RequestFromApp(client.selectedProfile())
 
 	requestID, err := crewDocumentRequestID(msg.RequestID)
 	var result *protocol.CrewHandoffGetResult

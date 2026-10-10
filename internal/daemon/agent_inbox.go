@@ -11,6 +11,7 @@ import (
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage) {
@@ -23,7 +24,12 @@ func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage
 		d.handleAgentInboxBatch(conn, recipient.ID, protocol.Deref(msg.Limit))
 		return
 	}
-	addresses, err := d.inboxAddressesOf(recipient.ID)
+	b, err := d.bindings()
+	if err != nil {
+		d.replyPeerMessageError(conn, err)
+		return
+	}
+	addresses, err := d.mailboxesOf(recipient.ID, b)
 	if err != nil {
 		d.replyPeerMessageError(conn, err)
 		return
@@ -34,13 +40,13 @@ func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage
 		d.replyPeerMessageError(conn, err)
 		return
 	}
-	if stored.To.SeedID() != "" {
-		holder, _, err := d.inboxRecipient(stored.To)
+	if seedAddressID(stored.To) != "" {
+		to, err := (delivery{d, b}).recipientOf(stored.To)
 		if err != nil {
 			d.replyPeerMessageError(conn, err)
 			return
 		}
-		if holder != nil && holder.ID == recipient.ID {
+		if to.ring != nil && to.ring.ID == recipient.ID {
 			addresses = append(addresses, stored.To)
 		}
 	}
@@ -52,7 +58,7 @@ func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage
 		return
 	}
 	_ = json.NewEncoder(conn).Encode(protocol.Response{
-		Ok: true, AgentInboxResult: d.peerMessageResult(record),
+		Ok: true, AgentInboxResult: d.peerMessageResult(record, b),
 	})
 	if readNow {
 		d.kickInboxAfterCommit(record.To)
@@ -60,8 +66,13 @@ func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage
 }
 
 func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID protocol.SessionID, limit int) {
+	b, err := d.bindings()
+	if err != nil {
+		d.replyPeerMessageError(conn, err)
+		return
+	}
 	d.lockGardenRoles()
-	addresses, err := d.inboxAddressesOf(recipientSessionID)
+	addresses, err := d.mailboxesOf(recipientSessionID, b)
 	for _, address := range addresses {
 		if err = d.discardIneligibleGardenSeedBellsLocked(address); err != nil {
 			break
@@ -82,7 +93,7 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID protoco
 	d.noteCrewRestartMailboxRead(deliveries)
 	for _, delivery := range deliveries {
 		item := protocol.AgentInboxItem{
-			Address: delivery.Item.To.String(), ItemID: delivery.Item.ID, Kind: string(delivery.Item.Kind),
+			Address: delivery.Item.To.Ref(), ItemID: delivery.Item.ID, Kind: string(delivery.Item.Kind),
 			Content: mailboxItemContent(delivery), CreatedAt: delivery.Item.CreatedAt,
 			NotifiedAt: delivery.Item.NotifiedAt, ReadAt: delivery.Item.ReadAt,
 		}
@@ -93,12 +104,8 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID protoco
 			item.Hint = protocol.Ptr(delivery.Item.Hint)
 		}
 		if delivery.Peer != nil {
-			item.SenderSessionID = protocol.Ptr(delivery.Peer.SenderSessionID)
-			label := shortSessionID(delivery.Peer.SenderSessionID)
-			if sender := d.store.Get(delivery.Peer.SenderSessionID); sender != nil {
-				label = sessionDisplayName(sender)
-			}
-			item.SenderLabel = protocol.Ptr(label)
+			item.Sender = protocol.Ptr(d.partyView(delivery.Peer.Sender, b))
+			item.ReplyTo = protocol.Ptr(d.replyTo(delivery.Peer.Sender))
 		}
 		items = append(items, item)
 	}
@@ -129,13 +136,19 @@ func mailboxItemContent(delivery store.InboxDelivery) string {
 }
 
 func (d *Daemon) handleAgentMsgStatus(conn net.Conn, msg *protocol.AgentMsgStatusMessage) {
-	sender, errCode := d.resolveSessionByIDOrPrefix(string(msg.SenderSessionID), "")
-	if sender == nil {
-		d.sendError(conn, "sender_"+errCode)
+	b, err := d.bindings()
+	if err != nil {
+		d.sendError(conn, err.Error())
 		return
 	}
+	r, err := d.requestFromSession(msg.SenderSessionID, b)
+	if err != nil {
+		d.replyTargetError(conn, err)
+		return
+	}
+	sender, _ := r.Party()
 	record, err := d.store.PeerMessageRecord(strings.TrimSpace(msg.MessageID))
-	if err != nil || record.Message.SenderSessionID != sender.ID {
+	if err != nil || record.Message.Sender != sender {
 		if err != nil && !errors.Is(err, store.ErrPeerMessageNotFound) {
 			d.logf("agent msg status: id=%s err=%v", msg.MessageID, err)
 		}
@@ -143,7 +156,7 @@ func (d *Daemon) handleAgentMsgStatus(conn net.Conn, msg *protocol.AgentMsgStatu
 		return
 	}
 	_ = json.NewEncoder(conn).Encode(protocol.Response{
-		Ok: true, AgentMsgStatusResult: d.peerMessageResult(record),
+		Ok: true, AgentMsgStatusResult: d.peerMessageResult(record, b),
 	})
 }
 
@@ -159,23 +172,13 @@ func (d *Daemon) replyPeerMessageError(conn net.Conn, err error) {
 	}
 }
 
-func (d *Daemon) peerMessageResult(record inbox.PeerRecord) *protocol.AgentPeerMessage {
-	senderLabel := shortSessionID(record.Message.SenderSessionID)
-	if sender := d.store.Get(record.Message.SenderSessionID); sender != nil {
-		senderLabel = sessionDisplayName(sender)
-	}
-	target := record.ReadBy
-	if target == "" {
-		target = record.To.SessionID()
-		if holder := d.inboxHolder(record.To); holder != nil {
-			target = holder.ID
-		}
-	}
+func (d *Daemon) peerMessageResult(record inbox.PeerRecord, b who.Bindings) *protocol.AgentPeerMessage {
 	result := &protocol.AgentPeerMessage{
-		MessageID: record.Message.ID, SenderSessionID: record.Message.SenderSessionID,
-		SenderLabel: senderLabel, TargetSessionID: string(target),
-		Content: record.Message.Body, State: protocol.AgentMessageState(record.State()),
-		CreatedAt: record.Message.CreatedAt,
+		MessageID: record.Message.ID, Sender: d.partyView(record.Message.Sender, b), ReplyTo: d.replyTo(record.Message.Sender),
+		To: record.To.Ref(), ToName: d.addressName(record.To, b), Content: record.Message.Body, State: protocol.AgentMessageState(record.State()), CreatedAt: record.Message.CreatedAt,
+	}
+	if record.ReadBy != "" {
+		result.ReadBy = protocol.Ptr(record.ReadBy)
 	}
 	if record.NotifiedAt != "" {
 		result.NotifiedAt = protocol.Ptr(record.NotifiedAt)

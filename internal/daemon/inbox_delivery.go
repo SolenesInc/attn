@@ -34,11 +34,11 @@ type inboxDeliveryState struct {
 	wakeSession protocol.SessionID
 }
 
-func (d *Daemon) inboxState(a inbox.Address) *inboxDeliveryState {
+func (d *Daemon) inboxState(a who.Address) *inboxDeliveryState {
 	d.inboxMu.Lock()
 	defer d.inboxMu.Unlock()
 	if d.inboxStates == nil {
-		d.inboxStates = make(map[inbox.Address]*inboxDeliveryState)
+		d.inboxStates = make(map[who.Address]*inboxDeliveryState)
 	}
 	state := d.inboxStates[a]
 	if state == nil {
@@ -47,7 +47,7 @@ func (d *Daemon) inboxState(a inbox.Address) *inboxDeliveryState {
 	}
 	return state
 }
-func (d *Daemon) kickInbox(a inbox.Address) {
+func (d *Daemon) kickInbox(a who.Address) {
 	d.life.Go("inbox", func() {
 		select {
 		case <-d.recoverySettledSignal():
@@ -59,55 +59,85 @@ func (d *Daemon) kickInbox(a inbox.Address) {
 		}
 	})
 }
-func (d *Daemon) inboxRecipient(a inbox.Address) (*protocol.Session, string, error) {
-	id, memberID := a.SessionID(), a.MemberID()
-	if seedID := a.SeedID(); seedID != "" {
-		seed, _, err := d.readSeed(seedID)
-		if err != nil {
-			return nil, "", err
-		}
-		tender := seed.Tender()
-		id = tender.Session
-		if tender.Member != "" {
-			member, found, err := d.seedTenderMember(seed)
-			if err != nil {
-				return nil, "", err
-			}
-			if !found {
-				return nil, "", nil
-			}
-			memberID = member.Key.String()
-		}
+
+type recipient struct {
+	ring *protocol.Session
+	wake who.MemberKey
+	wait string
+}
+type delivery struct {
+	d        *Daemon
+	bindings who.Bindings
+}
+
+func (r delivery) recipientOf(a who.Address) (recipient, error) {
+	return who.SwitchAddress(a, r.toSession, r.toMember, r.toTenderOf, r.toChiefOf)
+}
+func (r delivery) toSession(id protocol.SessionID) (recipient, error) {
+	if s := r.d.store.Get(id); s != nil {
+		return recipient{ring: s}, nil
 	}
-	if memberID != "" {
-		var err error
-		id, err = d.crewSessionBoundTo(memberID)
-		if err != nil {
-			return nil, "", err
-		}
+	if r.d.store.DelegationSessionReserved(id) {
+		return recipient{wait: fmt.Sprintf("session %s is starting; waits for it to register", shortSessionID(id))}, nil
 	}
-	if profileID := a.ChiefProfileID(); profileID != "" {
-		id = d.chiefOfProfile(profileID)
+	if r.d.hubManager != nil && r.d.hubManager.RemoteSession(id) != nil {
+		return recipient{wait: fmt.Sprintf("session %s runs on an outpost; remote delivery is unsupported", shortSessionID(id))}, nil
 	}
-	return d.store.Get(id), memberID, nil
+	return recipient{wait: fmt.Sprintf("session %s has ended; waits until it is resumed", shortSessionID(id))}, nil
+}
+func (r delivery) toMember(k who.MemberKey) (recipient, error) {
+	if id, ok := r.bindings.SessionOf(who.Member(k)); ok {
+		return r.toSession(id)
+	}
+	return recipient{wake: k}, nil
+}
+func (r delivery) toTenderOf(id string) (recipient, error) {
+	seed, _, err := r.d.readSeed(id)
+	if err != nil {
+		return recipient{}, err
+	}
+	p, ok, err := r.d.seedTender(seed, r.bindings)
+	if err != nil {
+		return recipient{}, err
+	}
+	if !ok {
+		return recipient{wait: fmt.Sprintf("nobody tends %s; waits for its next tender", id)}, nil
+	}
+	return who.SwitchParty(p, r.toSession, r.toMember)
+}
+func (r delivery) toChiefOf(c who.ChiefMailbox) (recipient, error) {
+	id := r.d.chiefOfProfile(c.ProfileID)
+	if id == "" {
+		return recipient{wait: "no Chief session; waits for the next Chief"}, nil
+	}
+	return r.toSession(id)
 }
 
 // inboxWakeRequester names who a wake for this address answers: the oldest unread message's sender.
-func (d *Daemon) inboxWakeRequester(a inbox.Address) string {
+func (d *Daemon) inboxWakeRequester(a who.Address) string {
 	deliveries, err := d.store.UnreadInboxDeliveries(a)
 	if err != nil || len(deliveries) == 0 {
 		return ""
 	}
 	if peer := deliveries[0].Peer; peer != nil {
-		return d.launchRequester(peer.SenderSessionID, "another agent")
+		return d.replyTo(peer.Sender)
 	}
 	return ""
 }
-func (d *Daemon) inboxHolder(a inbox.Address) *protocol.Session {
-	holder, _, _ := d.inboxRecipient(a)
-	return holder
+func (d *Daemon) inboxHolder(a who.Address) *protocol.Session {
+	b, err := d.bindings()
+	if err != nil {
+		d.logf("inbox holder: %v", err)
+		return nil
+	}
+	to, err := (delivery{d, b}).recipientOf(a)
+	if err != nil {
+		d.logf("inbox holder: %v", err)
+		return nil
+	}
+	return to.ring
 }
-func (d *Daemon) lockInboxState(a inbox.Address) *inboxDeliveryState {
+func (d *Daemon) lockInboxState(a who.Address) *inboxDeliveryState {
 	for {
 		state := d.inboxState(a)
 		state.mu.Lock()
@@ -120,7 +150,7 @@ func (d *Daemon) lockInboxState(a inbox.Address) *inboxDeliveryState {
 		state.mu.Unlock()
 	}
 }
-func (d *Daemon) deliverInbox(a inbox.Address) (inbox.Receipt, error) {
+func (d *Daemon) deliverInbox(a who.Address) (inbox.Receipt, error) {
 	if d.isRecovering() {
 		d.kickInbox(a)
 		return inbox.Receipt{Detail: "queued until daemon recovery completes"}, nil
@@ -129,7 +159,7 @@ func (d *Daemon) deliverInbox(a inbox.Address) (inbox.Receipt, error) {
 	defer state.mu.Unlock()
 	return d.deliverInboxLocked(a, state)
 }
-func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) (inbox.Receipt, error) {
+func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (inbox.Receipt, error) {
 	receipt := inbox.Receipt{}
 	defer func() {
 		if state.timer != nil || state.wakeSession != "" {
@@ -146,6 +176,7 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 		state.timer = nil
 	}
 	if state.stopped || d.life.Ended() {
+		receipt.Detail = "queued (daemon is stopping; waits until recovery completes)"
 		return receipt, nil
 	}
 	{
@@ -161,19 +192,30 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 		return receipt, err
 	}
 	if attempt.Unread == 0 {
+		receipt.Detail = "no unread items remain"
 		state.wakeSession = ""
 		return receipt, nil
 	}
-	holder, memberID, err := d.inboxRecipient(a)
+	b, err := d.bindings()
 	if err != nil {
 		return receipt, err
 	}
+	to, err := (delivery{d, b}).recipientOf(a)
+	if err != nil {
+		return receipt, err
+	}
+	holder, memberID := to.ring, to.wake.String()
 	finishingWake := holder != nil && holder.ID == state.wakeSession
 	if holder == nil || !finishingWake {
 		state.wakeSession = ""
 	}
 	if !finishingWake {
+		if to.wait != "" {
+			receipt.Detail = "queued (" + to.wait + ")"
+			return receipt, nil
+		}
 		if attempt.Live == 0 {
+			receipt.Detail = fmt.Sprintf("queued (inbox.MaxAttempts=%d reached; waits for a read or a new item)", inbox.MaxAttempts)
 			return receipt, nil
 		}
 		now := time.Now()
@@ -195,10 +237,7 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 		}
 		if holder == nil {
 			if member := memberID; member != "" {
-				key, parseErr := who.ParseMemberKey(member)
-				if parseErr != nil {
-					return inbox.Receipt{}, parseErr
-				}
+				key := to.wake
 				d.crewWakeMu.Lock()
 				result, err := d.crewWakeDayWithChargeLocked(key, "", true, func() error {
 					started, err := d.store.StampInboxAttempt(a, now)
@@ -223,6 +262,7 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 					return receipt, nil
 				}
 				if result.AlreadyAwake {
+					receipt.Detail = "queued (member is awake; waits for its session to reach a safe prompt)"
 					state.wakeSession = ""
 					d.kickInbox(a)
 					return receipt, nil
@@ -231,13 +271,7 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 				receipt.Detail = fmt.Sprintf("woke %s in session %s; notification queued until it reaches a safe prompt", d.storedMemberName(member), shortSessionID(result.SessionID))
 				return receipt, nil
 			}
-			if a.SeedID() != "" {
-				receipt.Detail = "queued (seed has no reachable tender; waits for its next tender)"
-			} else if a.ChiefProfileID() != "" {
-				receipt.Detail = "no Chief yet; waits for the next Chief"
-			} else {
-				receipt.Detail = "queued (recipient is gone; waits for it to return)"
-			}
+			receipt.Detail = "queued (" + to.wait + ")"
 			return receipt, nil
 		}
 	}
@@ -269,13 +303,13 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 	}
 	return receipt, nil
 }
-func (d *Daemon) logInboxExhaustion(a inbox.Address) {
+func (d *Daemon) logInboxExhaustion(a who.Address) {
 	attempt, err := d.store.InboxAttempt(a)
 	if err == nil && attempt.Unread > 0 && attempt.Live == 0 {
 		d.logf("inbox: stopped ringing %s after %d attempts (inbox.MaxAttempts=%d); %d unread wait for a read or a new item", a, inbox.MaxAttempts, inbox.MaxAttempts, attempt.Unread)
 	}
 }
-func (d *Daemon) armInboxLocked(a inbox.Address, state *inboxDeliveryState, delay time.Duration) {
+func (d *Daemon) armInboxLocked(a who.Address, state *inboxDeliveryState, delay time.Duration) {
 	if state.timer != nil {
 		state.timer.Stop()
 	}
@@ -315,7 +349,7 @@ func (d *Daemon) kickSeedInboxes() {
 		return
 	}
 	for _, address := range addresses {
-		if address.SeedID() != "" {
+		if seedAddressID(address) != "" {
 			d.kickInbox(address)
 		}
 	}
@@ -327,7 +361,7 @@ func (d *Daemon) kickChiefInboxes() {
 		return
 	}
 	for _, address := range addresses {
-		if address.ChiefProfileID() != "" {
+		if isChiefAddress(address) {
 			d.kickInbox(address)
 		}
 	}
@@ -337,9 +371,14 @@ func (d *Daemon) subscribeInboxFacts() {
 		seedEvents.NameTended, seedEvents.NameParked, seedEvents.NameHarvested, seedEvents.NameWithered, seedEvents.NameReplanted}, func(ev bus.Event) {
 		switch ev.Name {
 		case seedEvents.NameTended, seedEvents.NameParked, seedEvents.NameHarvested, seedEvents.NameWithered, seedEvents.NameReplanted:
-			d.kickInbox(inbox.ToSeed(ev.Subject))
+			d.kickInbox(who.ToTenderOf(ev.Subject))
 		case FactCrewBound, FactCrewReleased, FactCrewUpdated:
-			d.kickInbox(inbox.ToMember(ev.Subject))
+			a, err := d.crewFactAddress(ev)
+			if err != nil {
+				d.logf("inbox crew fact: %v", err)
+				return
+			}
+			d.kickInbox(a)
 			d.life.Go("inbox-seed-holder-change", func() { d.kickSeedInboxes() })
 		case FactSessionChiefRoleChanged:
 			d.life.Go("inbox-chief-change", func() { d.kickChiefInboxes() })

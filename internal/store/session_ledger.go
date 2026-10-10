@@ -11,9 +11,8 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
-
-const SessionClosedByUser = "user"
 
 const SessionLedgerDefaultLimit = 20
 
@@ -22,7 +21,7 @@ const SessionLedgerMaxLimit = 1000
 var ErrSessionClosed = errors.New("session is closed")
 
 type SessionClose struct {
-	By     string
+	By     who.Actor
 	Reason string
 }
 
@@ -69,9 +68,9 @@ func (s *Store) CloseSession(id protocol.SessionID, closed SessionClose, now tim
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	by := strings.TrimSpace(closed.By)
-	if by == "" {
-		by = SessionClosedByUser
+	by := closed.By
+	if by.IsZero() {
+		by = who.User()
 	}
 	at := now.UTC().Format(time.RFC3339Nano)
 	delete(s.touchedAt, id)
@@ -174,7 +173,7 @@ func finalizeSessionCostTx(tx *sql.Tx, id protocol.SessionID) error {
 
 type SessionCloseRecord struct {
 	At        string
-	By        string
+	By        who.Actor
 	Reason    string
 	ProfileID string
 }
@@ -643,7 +642,7 @@ func ledgerInstant(entry protocol.SessionLedgerEntry) string {
 
 type sessionCloseMark struct {
 	At      string
-	By      string
+	By      who.Actor
 	Reason  string
 	session *protocol.Session
 }
@@ -665,7 +664,9 @@ func ledgerEntryFromSession(session *protocol.Session, mark sessionCloseMark) pr
 	}
 	if mark.At != "" {
 		entry.ClosedAt = protocol.Ptr(mark.At)
-		entry.ClosedBy = protocol.Ptr(mark.By)
+		if !mark.By.IsZero() {
+			entry.ClosedBy = protocol.Ptr(protocol.ActorView{Ref: mark.By.Ref(), Name: mark.By.String()})
+		}
 		if mark.Reason != "" {
 			entry.CloseReason = protocol.Ptr(mark.Reason)
 		}
@@ -684,7 +685,7 @@ func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 	var (
 		profileDeletedAt string
 		closedAt         string
-		closedBy         string
+		closedBy         who.Actor
 		closeReason      string
 		pinnedAt         string
 	)
@@ -741,7 +742,9 @@ func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 	}
 	if closedAt != "" {
 		entry.ClosedAt = protocol.Ptr(closedAt)
-		entry.ClosedBy = protocol.Ptr(closedBy)
+		if !closedBy.IsZero() {
+			entry.ClosedBy = protocol.Ptr(protocol.ActorView{Ref: closedBy.Ref(), Name: closedBy.String()})
+		}
 		if closeReason != "" {
 			entry.CloseReason = protocol.Ptr(closeReason)
 		}

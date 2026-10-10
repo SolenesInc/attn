@@ -38,15 +38,23 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 	}
 
 	for _, label := range []string{"", "A colleague"} {
+		origin := label
+		if origin == "" {
+			origin = "sender-i"
+		}
 		var b bytes.Buffer
-		printAgentInbox(&b, &protocol.AgentPeerMessage{SenderSessionID: "sender-id-123", SenderLabel: label, Content: "Message λ {{literal}}\nnext"})
+		printAgentInbox(&b, &protocol.AgentPeerMessage{Sender: protocol.PartyView{Ref: "session:sender-id-123", Name: origin}, ReplyTo: "session:sender-id-123", Content: "Message λ {{literal}}\nnext"})
 		out["inbox/"+label] = b.String()
 	}
 
 	for _, label := range []string{"", "A colleague", "sender-i"} {
+		origin := label
+		if origin == "" {
+			origin = "sender-i"
+		}
 		var b bytes.Buffer
 		printAgentInboxBatch(&b, &protocol.AgentInboxBatchResult{Items: []protocol.AgentInboxItem{
-			{Kind: "peer_message", Content: "  Message λ {{literal}}\nnext  ", SenderSessionID: protocol.Ptr(protocol.SessionID(" sender-id-123 ")), SenderLabel: protocol.Ptr(label)},
+			{Kind: "peer_message", Content: "  Message λ {{literal}}\nnext  ", Sender: protocol.Ptr(protocol.PartyView{Ref: "session:sender-id-123", Name: origin}), ReplyTo: protocol.Ptr("session:sender-id-123")},
 			{Kind: "garden_seed", Content: " s-example moved: note "},
 			{Kind: "maintenance_prompt", Content: " Maintain {{literal}}\nnext ", SourceID: protocol.Ptr("s-example")},
 			{Kind: "unknown", SourceID: protocol.Ptr(" s-example ")},

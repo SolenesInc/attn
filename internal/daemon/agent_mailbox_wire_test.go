@@ -29,7 +29,7 @@ func TestAgentInboxReadsItsOwnMessagesOldestFirstInBoundedBatches(t *testing.T) 
 	if got := inboxContents(batch.Items); got != "first second" || batch.Remaining != 1 {
 		t.Fatalf("first batch = %q with %d remaining, want the two oldest and one left", got, batch.Remaining)
 	}
-	if sender := protocol.Deref(batch.Items[0].SenderSessionID); sender != "sender" {
+	if sender := protocol.Deref(batch.Items[0].Sender).Ref; sender != "session:sender" {
 		t.Errorf("the message names sender %q", sender)
 	}
 	if last := readInbox(t, cli, "target", 2); inboxContents(last.Items) != "third" || last.Remaining != 0 {

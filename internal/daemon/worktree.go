@@ -15,6 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 func (d *Daemon) doListWorktrees(mainRepo string) []protocol.Worktree {
@@ -384,7 +385,7 @@ func (d *Daemon) cleanupDeletedWorktreeSessions(path string) {
 			continue
 		}
 		d.terminateSession(session.ID, syscall.SIGTERM)
-		d.closeSession(session.ID, store.SessionClose{By: store.SessionClosedByUser, Reason: "worktree deleted"})
+		d.closeSession(session.ID, store.SessionClose{By: who.User(), Reason: "worktree deleted"})
 		d.publishSessionUnregistered(session)
 	}
 }

@@ -12,7 +12,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/config"
-	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -498,8 +497,8 @@ func (c *Client) StateExplain(targetSessionID string) (*protocol.StateExplainRes
 
 func (c *Client) AgentPeek(targetSessionID string) (*protocol.AgentPeekResult, error) {
 	resp, err := c.send(protocol.AgentPeekMessage{
-		Cmd:             protocol.CmdAgentPeek,
-		TargetSessionID: targetSessionID,
+		Cmd: protocol.CmdAgentPeek,
+		To:  targetSessionID,
 	})
 	if err != nil {
 		return nil, err
@@ -513,13 +512,9 @@ func (c *Client) AgentPeek(targetSessionID string) (*protocol.AgentPeekResult, e
 func (c *Client) AgentMsg(target string, sourceSessionID protocol.SessionID, content string) (*protocol.AgentMsgResult, error) {
 	msg := protocol.AgentMsgMessage{
 		Cmd:             protocol.CmdAgentMsg,
-		TargetSessionID: target,
+		To:              target,
 		SourceSessionID: sourceSessionID,
 		Content:         content,
-	}
-	if garden.ValidateID(target) == nil {
-		msg.TargetSessionID = ""
-		msg.TargetSeedID = protocol.Ptr(target)
 	}
 	resp, err := c.send(msg)
 	if err != nil {
@@ -534,13 +529,9 @@ func (c *Client) AgentMsg(target string, sourceSessionID protocol.SessionID, con
 func (c *Client) AgentClose(target string, sourceSessionID protocol.SessionID, reason string) (*protocol.AgentCloseResult, error) {
 	msg := protocol.AgentCloseMessage{
 		Cmd:             protocol.CmdAgentClose,
-		TargetSessionID: target,
+		To:              target,
 		SourceSessionID: sourceSessionID,
 		Reason:          reason,
-	}
-	if garden.ValidateID(target) == nil {
-		msg.TargetSessionID = ""
-		msg.TargetSeedID = protocol.Ptr(target)
 	}
 	resp, err := c.send(msg)
 	if err != nil {

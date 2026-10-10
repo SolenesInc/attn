@@ -122,7 +122,7 @@ func (d *Daemon) keptConversationList(includeDeleted bool) (*protocol.KeptConver
 			continue
 		}
 		key := conversationKey{copy.Agent, copy.ResumeID}
-		rowsByKey[key] = protocol.KeptConversationRow{Agent: copy.Agent, ResumeID: copy.ResumeID, SourceBytes: protocol.Ptr(int(copy.Bytes)), Kept: protocolKeptConversation(copy, pins)}
+		rowsByKey[key] = protocol.KeptConversationRow{Agent: copy.Agent, ResumeID: copy.ResumeID, SourceBytes: protocol.Ptr(int(copy.Bytes)), Kept: d.protocolKeptConversation(copy, pins)}
 	}
 	live := make(map[conversationKey]bool)
 	for _, session := range d.store.List("") {

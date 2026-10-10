@@ -40,6 +40,16 @@ type ActivityStatusSession struct {
 	Label string `json:"label"`
 }
 
+type ActorRef string
+
+type ActorView struct {
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// Ref corresponds to the JSON schema field "ref".
+	Ref ActorRef `json:"ref"`
+}
+
 type AddEndpointMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -54,6 +64,8 @@ type AddEndpointMessage struct {
 	SshTarget string `json:"ssh_target"`
 }
 
+type AddressRef string
+
 type AgentCloseMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -64,11 +76,8 @@ type AgentCloseMessage struct {
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
 	SourceSessionID SessionID `json:"source_session_id"`
 
-	// TargetSeedID corresponds to the JSON schema field "target_seed_id".
-	TargetSeedID *string `json:"target_seed_id,omitempty,omitzero"`
-
-	// TargetSessionID corresponds to the JSON schema field "target_session_id".
-	TargetSessionID string `json:"target_session_id"`
+	// To corresponds to the JSON schema field "to".
+	To string `json:"to"`
 }
 
 type AgentCloseResult struct {
@@ -104,7 +113,7 @@ type AgentInboxBatchResult struct {
 
 type AgentInboxItem struct {
 	// Address corresponds to the JSON schema field "address".
-	Address string `json:"address"`
+	Address AddressRef `json:"address"`
 
 	// Content corresponds to the JSON schema field "content".
 	Content string `json:"content"`
@@ -127,11 +136,11 @@ type AgentInboxItem struct {
 	// ReadAt corresponds to the JSON schema field "read_at".
 	ReadAt string `json:"read_at"`
 
-	// SenderLabel corresponds to the JSON schema field "sender_label".
-	SenderLabel *string `json:"sender_label,omitempty,omitzero"`
+	// ReplyTo corresponds to the JSON schema field "reply_to".
+	ReplyTo *string `json:"reply_to,omitempty,omitzero"`
 
-	// SenderSessionID corresponds to the JSON schema field "sender_session_id".
-	SenderSessionID *SessionID `json:"sender_session_id,omitempty,omitzero"`
+	// Sender corresponds to the JSON schema field "sender".
+	Sender *PartyView `json:"sender,omitempty,omitzero"`
 
 	// SourceID corresponds to the JSON schema field "source_id".
 	SourceID *string `json:"source_id,omitempty,omitzero"`
@@ -167,11 +176,8 @@ type AgentMsgMessage struct {
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
 	SourceSessionID SessionID `json:"source_session_id"`
 
-	// TargetSeedID corresponds to the JSON schema field "target_seed_id".
-	TargetSeedID *string `json:"target_seed_id,omitempty,omitzero"`
-
-	// TargetSessionID corresponds to the JSON schema field "target_session_id".
-	TargetSessionID string `json:"target_session_id"`
+	// To corresponds to the JSON schema field "to".
+	To string `json:"to"`
 }
 
 type AgentMsgResult struct {
@@ -185,7 +191,13 @@ type AgentMsgResult struct {
 	Status AgentMsgStatus `json:"status"`
 
 	// TargetSessionID corresponds to the JSON schema field "target_session_id".
-	TargetSessionID SessionID `json:"target_session_id"`
+	TargetSessionID *SessionID `json:"target_session_id,omitempty,omitzero"`
+
+	// To corresponds to the JSON schema field "to".
+	To AddressRef `json:"to"`
+
+	// ToName corresponds to the JSON schema field "to_name".
+	ToName string `json:"to_name"`
 }
 
 type AgentMsgStatus string
@@ -226,8 +238,8 @@ type AgentPeekMessage struct {
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
 	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 
-	// TargetSessionID corresponds to the JSON schema field "target_session_id".
-	TargetSessionID string `json:"target_session_id"`
+	// To corresponds to the JSON schema field "to".
+	To string `json:"to"`
 }
 
 type AgentPeekResult struct {
@@ -299,17 +311,23 @@ type AgentPeerMessage struct {
 	// ReadAt corresponds to the JSON schema field "read_at".
 	ReadAt *string `json:"read_at,omitempty,omitzero"`
 
-	// SenderLabel corresponds to the JSON schema field "sender_label".
-	SenderLabel string `json:"sender_label"`
+	// ReadBy corresponds to the JSON schema field "read_by".
+	ReadBy *SessionID `json:"read_by,omitempty,omitzero"`
 
-	// SenderSessionID corresponds to the JSON schema field "sender_session_id".
-	SenderSessionID SessionID `json:"sender_session_id"`
+	// ReplyTo corresponds to the JSON schema field "reply_to".
+	ReplyTo string `json:"reply_to"`
+
+	// Sender corresponds to the JSON schema field "sender".
+	Sender PartyView `json:"sender"`
 
 	// State corresponds to the JSON schema field "state".
 	State AgentMessageState `json:"state"`
 
-	// TargetSessionID corresponds to the JSON schema field "target_session_id".
-	TargetSessionID string `json:"target_session_id"`
+	// To corresponds to the JSON schema field "to".
+	To AddressRef `json:"to"`
+
+	// ToName corresponds to the JSON schema field "to_name".
+	ToName string `json:"to_name"`
 }
 
 type ApprovePRMessage struct {
@@ -808,7 +826,7 @@ type AutoModeProposalInfo struct {
 	Kind string `json:"kind"`
 
 	// ProposedBy corresponds to the JSON schema field "proposed_by".
-	ProposedBy string `json:"proposed_by"`
+	ProposedBy *ActorView `json:"proposed_by,omitempty,omitzero"`
 
 	// ResolvedAt corresponds to the JSON schema field "resolved_at".
 	ResolvedAt string `json:"resolved_at"`
@@ -833,8 +851,8 @@ type AutoModeProposeMessage struct {
 	// Kind corresponds to the JSON schema field "kind".
 	Kind string `json:"kind"`
 
-	// ProposedBy corresponds to the JSON schema field "proposed_by".
-	ProposedBy *string `json:"proposed_by,omitempty,omitzero"`
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID SessionID `json:"source_session_id"`
 
 	// Target corresponds to the JSON schema field "target".
 	Target *string `json:"target,omitempty,omitzero"`
@@ -5546,16 +5564,11 @@ type KeptConversation struct {
 	DeletedAt *string `json:"deleted_at,omitempty,omitzero"`
 
 	// DeletedBy corresponds to the JSON schema field "deleted_by".
-	DeletedBy *KeptConversationDeletedBy `json:"deleted_by,omitempty,omitzero"`
+	DeletedBy *ActorView `json:"deleted_by,omitempty,omitzero"`
 
 	// PinnedAt corresponds to the JSON schema field "pinned_at".
 	PinnedAt *string `json:"pinned_at,omitempty,omitzero"`
 }
-
-type KeptConversationDeletedBy string
-
-const KeptConversationDeletedBySweep KeptConversationDeletedBy = "sweep"
-const KeptConversationDeletedByUser KeptConversationDeletedBy = "user"
 
 type KeptConversationForgetMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
@@ -7160,6 +7173,19 @@ type PRsUpdatedMessage struct {
 
 	// Prs corresponds to the JSON schema field "prs".
 	Prs []PR `json:"prs,omitempty,omitzero"`
+}
+
+type PartyRef string
+
+type PartyView struct {
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// Ref corresponds to the JSON schema field "ref".
+	Ref PartyRef `json:"ref"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
 }
 
 type PathInspection struct {
@@ -10150,7 +10176,7 @@ type SessionLedgerEntry struct {
 	ClosedAt *string `json:"closed_at,omitempty,omitzero"`
 
 	// ClosedBy corresponds to the JSON schema field "closed_by".
-	ClosedBy *string `json:"closed_by,omitempty,omitzero"`
+	ClosedBy *ActorView `json:"closed_by,omitempty,omitzero"`
 
 	// ConversationPinnedAt corresponds to the JSON schema field
 	// "conversation_pinned_at".
@@ -11430,7 +11456,7 @@ type UnregisterMessage struct {
 	CloseReason *string `json:"close_reason,omitempty,omitzero"`
 
 	// ClosedBy corresponds to the JSON schema field "closed_by".
-	ClosedBy *string `json:"closed_by,omitempty,omitzero"`
+	ClosedBy *ActorRef `json:"closed_by,omitempty,omitzero"`
 
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`

@@ -56,7 +56,7 @@ func (d *Daemon) handleAutoModeShow(conn net.Conn, msg *protocol.AutoModeShowMes
 		Config:          autoModeConfigInfo(cfg),
 		GlobalRules:     globalRules,
 		RepositoryRules: autoModeRuleInfos(repository.Rules),
-		Proposals:       autoModeProposalInfos(proposals),
+		Proposals:       d.autoModeProposalInfos(proposals),
 	}
 	if repository.Path != "" {
 		result.RepositoryRulesPath = protocol.Ptr(repository.Path)
@@ -144,10 +144,20 @@ func (d *Daemon) handleAutoModePropose(conn net.Conn, msg *protocol.AutoModeProp
 	if !d.requireAutoModeStore(conn) {
 		return
 	}
+	b, err := d.bindings()
+	if err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
+	r, err := d.requestFromSession(msg.SourceSessionID, b)
+	if err != nil {
+		d.replyTargetError(conn, err)
+		return
+	}
 	proposal, err := d.store.CreateAutoModeProposal(
 		strings.TrimSpace(msg.Kind),
 		strings.TrimSpace(protocol.Deref(msg.Target)),
-		strings.TrimSpace(msg.Value), protocol.TrimID(protocol.Deref(msg.ProposedBy)), time.Now(),
+		strings.TrimSpace(msg.Value), r.Actor(), time.Now(),
 	)
 	if err != nil {
 		d.sendError(conn, err.Error())
@@ -157,7 +167,7 @@ func (d *Daemon) handleAutoModePropose(conn net.Conn, msg *protocol.AutoModeProp
 	d.sendAutoModeResponse(conn, protocol.Response{
 		Ok: true,
 		AutomodeProposeResult: &protocol.AutoModeProposeResult{
-			Proposal: autoModeProposalInfo(proposal),
+			Proposal: d.autoModeProposalInfo(proposal),
 		},
 	})
 }
@@ -348,24 +358,28 @@ func nonNilCommands(commands [][]string) [][]string {
 	return commands
 }
 
-func autoModeProposalInfo(p store.AutoModeProposal) protocol.AutoModeProposalInfo {
+func (d *Daemon) autoModeProposalInfo(p store.AutoModeProposal) protocol.AutoModeProposalInfo {
+	var by *protocol.ActorView
+	if !p.ProposedBy.IsZero() {
+		by = protocol.Ptr(d.actorView(p.ProposedBy))
+	}
 	return protocol.AutoModeProposalInfo{
 		ID:         int(p.ID),
 		Kind:       p.Kind,
 		Target:     p.Target,
 		Value:      p.Value,
 		Summary:    automode.DescribeProposal(p.Kind, p.Value),
-		ProposedBy: p.ProposedBy,
+		ProposedBy: by,
 		State:      p.State,
 		CreatedAt:  formatAutoModeStamp(p.CreatedAt),
 		ResolvedAt: formatAutoModeStamp(p.ResolvedAt),
 	}
 }
 
-func autoModeProposalInfos(proposals []store.AutoModeProposal) []protocol.AutoModeProposalInfo {
+func (d *Daemon) autoModeProposalInfos(proposals []store.AutoModeProposal) []protocol.AutoModeProposalInfo {
 	out := make([]protocol.AutoModeProposalInfo, 0, len(proposals))
 	for _, p := range proposals {
-		out = append(out, autoModeProposalInfo(p))
+		out = append(out, d.autoModeProposalInfo(p))
 	}
 	return out
 }

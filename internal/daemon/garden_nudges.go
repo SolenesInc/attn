@@ -9,9 +9,9 @@ import (
 
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/garden"
-	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 var errRemoteGardenTender = errors.New("garden notifications are home-only")
@@ -228,7 +228,7 @@ func (d *Daemon) seedWatchCoverage(sessionID protocol.SessionID, seedID string) 
 }
 
 func (d *Daemon) discardUncoveredSeedBells(sessionID protocol.SessionID) error {
-	return d.discardIneligibleGardenSeedBellsLocked(inbox.ToSession(sessionID))
+	return d.discardIneligibleGardenSeedBellsLocked(who.ToSession(sessionID))
 }
 
 func (d *Daemon) consumeSeedBell(sessionID protocol.SessionID, seedID string) {
@@ -237,10 +237,13 @@ func (d *Daemon) consumeSeedBell(sessionID protocol.SessionID, seedID string) {
 		return
 	}
 	d.lockGardenRoles()
-	err := d.discardIneligibleGardenSeedBellsLocked(inbox.ToSession(sessionID))
-	var consumed []inbox.Address
+	b, err := d.bindings()
 	if err == nil {
-		for _, address := range d.inboxRoleAddresses(sessionID) {
+		err = d.discardIneligibleGardenSeedBellsLocked(who.ToSession(sessionID))
+	}
+	var consumed []who.Address
+	if err == nil {
+		for _, address := range b.AddressesOf(sessionID) {
 			if err = d.discardIneligibleGardenSeedBellsLocked(address); err != nil {
 				break
 			}

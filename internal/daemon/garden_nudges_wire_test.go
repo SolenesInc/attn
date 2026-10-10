@@ -328,7 +328,7 @@ func TestAMemberTenderAndItsDayWatchKeepIndependentInboxItems(t *testing.T) {
 		mail := readInbox(t, cli, day.id, 0).Items
 		addresses := map[string]bool{}
 		for _, item := range mail {
-			addresses[item.Address] = true
+			addresses[string(item.Address)] = true
 		}
 		if len(mail) != 2 || !addresses["member:trellis"] || !addresses["session:"+day.id] {
 			t.Fatalf("overlapping subscriptions inbox=%+v", mail)
@@ -338,7 +338,7 @@ func TestAMemberTenderAndItsDayWatchKeepIndependentInboxItems(t *testing.T) {
 			t.Fatal(err)
 		}
 		watcherMail := readInbox(t, cli, day.id, 0).Items
-		if len(watcherMail) != 1 || watcherMail[0].Address != "session:"+day.id || !strings.Contains(watcherMail[0].Content, seed+" moved: note.added") {
+		if len(watcherMail) != 1 || watcherMail[0].Address != protocol.AddressRef("session:"+day.id) || !strings.Contains(watcherMail[0].Content, seed+" moved: note.added") {
 			t.Fatalf("watcher inbox after tender parks=%+v", watcherMail)
 		}
 	})

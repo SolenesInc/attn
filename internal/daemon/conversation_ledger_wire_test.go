@@ -126,7 +126,7 @@ func TestConversationPinCopiesUnreferencedClosedSessionAndUnkeepExpires(t *testi
 		t.Fatalf("expired totals: %+v", rows)
 	}
 	deleted := conversationRows(t, cli, true)
-	if len(deleted.Rows) != 1 || protocol.Deref(deleted.Rows[0].Kept.DeletedBy) != protocol.KeptConversationDeletedBySweep {
+	if len(deleted.Rows) != 1 || protocol.Deref(deleted.Rows[0].Kept.DeletedBy).Ref != "attn" {
 		t.Fatalf("sweep tombstone: %+v", deleted)
 	}
 }
@@ -206,7 +206,7 @@ func TestConversationForgetRefusesOpenSeedsThenDeletesOnlyAttnsCopy(t *testing.T
 		t.Fatalf("live forgotten copy: %+v", rows)
 	}
 	tombstone := conversationRows(t, cli, true).Rows[0].Kept
-	if protocol.Deref(tombstone.DeletedBy) != protocol.KeptConversationDeletedByUser || tombstone.PinnedAt != nil || conversationDateForTest(protocol.Deref(tombstone.DeletedAt)) != time.Now().UTC().Format("2006-01-02") {
+	if protocol.Deref(tombstone.DeletedBy).Ref != "user" || tombstone.PinnedAt != nil || conversationDateForTest(protocol.Deref(tombstone.DeletedAt)) != time.Now().UTC().Format("2006-01-02") {
 		t.Fatalf("user tombstone: %+v", tombstone)
 	}
 	// Model a crash after the committed deletion but before its archive unlink.

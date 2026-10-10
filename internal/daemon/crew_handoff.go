@@ -345,7 +345,7 @@ func (d *Daemon) crewSessionGeometry(sessionID protocol.SessionID) (int, int) {
 }
 
 func (d *Daemon) closeNappedSession(sessionID protocol.SessionID, teardown *sessionTeardown) {
-	d.commitSessionUnregister(sessionID, store.SessionClose{By: store.SessionClosedByUser, Reason: "crew member put to sleep"})
+	d.commitSessionUnregister(sessionID, store.SessionClose{By: who.User(), Reason: "crew member put to sleep"})
 	if teardown.session != nil {
 		d.publishSessionUnregistered(teardown.session)
 		d.publishFact(FactSessionTerminated, string(teardown.session.ID), nil)

@@ -25,7 +25,7 @@ const autoModeState = (proposals: number): Reply => ({
     target: '',
     value: `{"pattern":["curl","https://example.com/${index}"],"decision":"allow"}`,
     summary: `allow curl https://example.com/${index}`,
-    proposed_by: 'session-a',
+    proposed_by: { ref: 'session:session-a', name: 'session-a' },
     state: 'pending',
     created_at: '2026-08-16T10:00:00Z',
     resolved_at: '',

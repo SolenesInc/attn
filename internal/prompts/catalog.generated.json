@@ -609,13 +609,13 @@
                 }
               },
               {
-                "name": "sender_id",
+                "name": "reply_to",
                 "node": {
                   "kind": "input",
                   "field": {
-                    "name": "sender_id",
+                    "name": "reply_to",
                     "kind": "text",
-                    "description": "Reply target."
+                    "description": "Reply target: member name or full session reference."
                   }
                 }
               }
@@ -4896,5 +4896,5 @@
       ]
     }
   ],
-  "definitions_hash": "faf5877519b2278d02629b54d7175042b64c2d893e34e3346f7ede7b3d6fe084"
+  "definitions_hash": "4099598b7e2482eac90e91baeea1e2a93f7dccc590f163414ecdeadfcc7e183b"
 }

@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 // Succession puts To in the terminal From showed: To takes From's place, process, driver run and
@@ -37,8 +37,8 @@ func (s *Store) CommitSuccession(sc Succession, terminal protocol.TerminalID) ([
 		if err != nil {
 			return fmt.Errorf("succeed session %s: %w", sc.From, err)
 		}
-		if strings.TrimSpace(sc.Close.By) == "" {
-			sc.Close.By = SessionClosedByUser
+		if sc.Close.By.IsZero() {
+			sc.Close.By = who.User()
 		}
 		at := time.Now().UTC().Format(time.RFC3339Nano)
 		var exists int

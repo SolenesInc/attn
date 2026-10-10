@@ -429,7 +429,7 @@ function sessionRow(entry: SessionLedgerEntry, context: RowContext): RowModel {
     entry.branch ? <span className="is-mono" key="branch">{entry.branch}</span> : null,
   ];
   if (closed) {
-    meta.push(`closed by ${closedBySomeone(entry, context.sessionLabel)}${entry.close_reason ? `: ${context.nameText(entry.close_reason)}` : ''}`);
+    meta.push(`closed by ${closedBySomeone(entry)}${entry.close_reason ? `: ${context.nameText(entry.close_reason)}` : ''}`);
   }
   // A verdict with actions speaks through its verb; only a dead end needs words on the row.
   if (closed && verdict && verdict.actions.length === 0) {
@@ -577,7 +577,7 @@ function InstantField({ entry, now, sessionLabel, nameText }: {
       {fullStamp(ledgerInstant(entry))} <span className="ledger-muted">({relativeStamp(ledgerInstant(entry), now)})</span>
       {closed && (
         <div className="ledger-muted">
-          by {closedBySomeone(entry, sessionLabel)}{entry.close_reason ? `: ${nameText(entry.close_reason)}` : ''}
+          by {closedBySomeone(entry)}{entry.close_reason ? `: ${nameText(entry.close_reason)}` : ''}
         </div>
       )}
     </Field>

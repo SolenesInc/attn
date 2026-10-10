@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 func closeAt(t *testing.T, s *Store, id string, closed SessionClose, at time.Time) {
@@ -106,8 +107,8 @@ func TestTheLedgerNamesEachRowsProfileAndKeepsItAfterTheProfileIsDeleted(t *test
 	addLedgerSession(t, s, "closed-in-work", work.ID, "/repos/attn", at)
 	addLedgerSession(t, s, "live-in-work", work.ID, "/repos/attn", at.Add(time.Minute))
 	addLedgerSession(t, s, "live-in-home", home.ID, "/repos/attn", at.Add(2*time.Minute))
-	closeAt(t, s, "closed-in-work", SessionClose{By: SessionClosedByUser}, at.Add(3*time.Minute))
-	closeAt(t, s, "live-in-work", SessionClose{By: SessionClosedByUser}, at.Add(3*time.Minute))
+	closeAt(t, s, "closed-in-work", SessionClose{By: who.User()}, at.Add(3*time.Minute))
+	closeAt(t, s, "live-in-work", SessionClose{By: who.User()}, at.Add(3*time.Minute))
 
 	if _, err := s.DeleteProfile(work.ID, work.Revision, 0, 0); err != nil {
 		t.Fatal(err)

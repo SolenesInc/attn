@@ -15,6 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/hub"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 const (
@@ -310,7 +311,7 @@ func (d *Daemon) conversationResumable(agentName, resumeID, cwd string) (bool, s
 	if !d.conversationKnown(driver, resumeID) {
 		reason := fmt.Sprintf("conversation %s is no longer in %s's storage", resumeID, agentName)
 		if kept, ok := d.store.KeptConversation(agentName, resumeID); ok && !kept.DeletedAt.IsZero() {
-			if kept.DeletedBy == "user" {
+			if kept.DeletedBy == who.User() {
 				reason += fmt.Sprintf("; you deleted attn's copy of conversation %s on %s", resumeID, kept.DeletedAt.UTC().Format("2006-01-02"))
 			} else {
 				reason += fmt.Sprintf("; attn deleted its copy of conversation %s on %s, %d days after no open seed pointed at it", resumeID, kept.DeletedAt.UTC().Format("2006-01-02"), int(conversationKeepGrace().Hours()/24))

@@ -12,6 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type profileActionOutcome struct {
@@ -485,7 +486,7 @@ func (d *Daemon) handleDesktopClose(client *wsClient, msg *protocol.DesktopClose
 			var failures []string
 			for _, id := range sessions {
 				name := d.desktopSessionName(id)
-				closing, err := d.beginSessionCloseAsUser(id, store.SessionClose{By: store.SessionClosedByUser}, nil)
+				closing, err := d.beginSessionCloseAsUser(id, store.SessionClose{By: who.User()}, nil)
 				if err != nil {
 					failures = append(failures, name+": "+err.Error())
 					continue

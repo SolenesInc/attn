@@ -507,8 +507,8 @@ func deleteSessionRows(db execer, id protocol.SessionID) error {
 	}
 	exec("terminal bindings", "DELETE FROM terminal_bindings WHERE session_id = ?", id)
 	exec("the session", "DELETE FROM sessions WHERE id = ?", id)
-	exec("session PRs", `DELETE FROM session_pull_requests WHERE session_id=? AND NOT EXISTS(SELECT 1 FROM pull_request_watches w WHERE w.session_id=session_pull_requests.session_id AND w.pr_id=session_pull_requests.pr_id AND w.address NOT LIKE 'session:%')`, id)
-	exec("session PR watches", `DELETE FROM pull_request_watches WHERE address=?`, "session:"+id)
+	exec("session PRs", `DELETE FROM session_pull_requests WHERE session_id=? AND NOT EXISTS(SELECT 1 FROM pull_request_watches w WHERE w.session_id=session_pull_requests.session_id AND w.pr_id=session_pull_requests.pr_id AND w.watcher NOT LIKE 'session:%')`, id)
+	exec("session PR watches", `DELETE FROM pull_request_watches WHERE watcher=?`, who.PartyOfEndedSession(id))
 	for _, table := range sessionOwnedTables {
 		exec(table, "DELETE FROM "+table+" WHERE session_id = ?", id)
 	}

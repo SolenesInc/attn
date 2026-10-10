@@ -11,6 +11,7 @@ import (
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 func actionNames(actions []protocol.SessionReopenAction) []string {
@@ -87,9 +88,13 @@ func closeReopenSession(t *testing.T, d *Daemon, session reopenSession) {
 			t.Fatalf("set the cost cursor of %s: %v", session.ID, err)
 		}
 	}
-	closedBy := session.ClosedBy
-	if closedBy == "" {
-		closedBy = store.SessionClosedByUser
+	closedBy := who.User()
+	if session.ClosedBy != "" {
+		var err error
+		closedBy, err = who.ParseActor("session:" + session.ClosedBy)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 	d.closeSession(protocol.SessionID(session.ID), store.SessionClose{By: closedBy, Reason: session.Reason})
 	if !d.store.SessionClosed(protocol.SessionID(session.ID)) {

@@ -119,7 +119,7 @@ describe('App kept conversations ledger', () => {
   it('requests deleted rows only after toggling and shows user deletion dates', async () => {
     const { daemon } = await open();
     daemon.on('kept_conversation_list', () => ({ event: 'kept_conversation_list_result', success: true,
-      kept_conversation_list_result: { ...fixture, rows: [...fixture.rows, { agent: 'claude', resume_id: 'gone', title: 'Forgotten work', seeds: [], session_ids: [], kept: { ...copy, deleted_at: AT, deleted_by: 'user' } }] } }));
+      kept_conversation_list_result: { ...fixture, rows: [...fixture.rows, { agent: 'claude', resume_id: 'gone', title: 'Forgotten work', seeds: [], session_ids: [], kept: { ...copy, deleted_at: AT, deleted_by: { ref: 'user', name: 'the user' } } }] } }));
     await gesture(daemon, () => fireEvent.click(screen.getByRole('checkbox', { name: 'Show deleted' })));
     expect(within(row('Forgotten work')).getByText('You deleted attn’s copy on 2026-10-01')).toBeInTheDocument();
     await gesture(daemon, () => fireEvent.click(screen.getByRole('checkbox', { name: 'Show deleted' })));

@@ -145,7 +145,7 @@ export function AutoModeSettings({ policy, loadModels }: AutoModeSettingsProps) 
                   <code className="automode-value">{proposal.summary || proposal.value}</code>
                 </span>
                 <span className="automode-proposal-origin">
-                  {proposal.proposed_by || 'unattributed'}
+                  {proposal.proposed_by?.name || 'unattributed'}
                   {proposal.created_at && ` · ${formatStamp(proposal.created_at)}`}
                 </span>
                 <span className="automode-proposal-actions">

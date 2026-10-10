@@ -48,7 +48,7 @@ const proposal = (over: Partial<Proposal> = {}): Proposal => ({
   target: '',
   value: '{"pattern":["git","push"],"decision":"allow"}',
   summary: 'allow, bypass sandbox: git push',
-  proposed_by: 'session-a',
+  proposed_by: { ref: 'session:session-a', name: 'session-a' },
   state: 'pending',
   created_at: '2026-08-16T10:00:00Z',
   resolved_at: '',
@@ -207,7 +207,7 @@ describe('App auto mode', () => {
       await openAutoMode({
         proposals: [
           proposal(),
-          proposal({ id: 8, kind: 'host', value: '{"host":"crates.io","decision":"allow"}', summary: 'allow crates.io', proposed_by: '' }),
+          proposal({ id: 8, kind: 'host', value: '{"host":"crates.io","decision":"allow"}', summary: 'allow crates.io', proposed_by: undefined }),
         ],
       });
 

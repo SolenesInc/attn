@@ -8,6 +8,7 @@ import (
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type sessionCloseInFlight struct {
@@ -63,8 +64,8 @@ func (d *Daemon) sessionOwningEndpoint(sessionID protocol.SessionID) (string, bo
 
 func (d *Daemon) forwardSessionClose(endpointID string, sessionID protocol.SessionID, closed store.SessionClose) error {
 	msg := protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: sessionID}
-	if closed.By != "" && closed.By != store.SessionClosedByUser {
-		msg.ClosedBy = protocol.Ptr(closed.By)
+	if !closed.By.IsZero() && closed.By != who.User() {
+		msg.ClosedBy = protocol.Ptr(closed.By.Ref())
 	}
 	if closed.Reason != "" {
 		msg.CloseReason = protocol.Ptr(closed.Reason)

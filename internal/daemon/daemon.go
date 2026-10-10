@@ -37,7 +37,6 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/hub"
-	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/logging"
@@ -206,7 +205,7 @@ type Daemon struct {
 	terminalsOnce                     sync.Once
 	terminalState                     *terminalRegistry
 	inboxMu                           sync.Mutex
-	inboxStates                       map[inbox.Address]*inboxDeliveryState
+	inboxStates                       map[who.Address]*inboxDeliveryState
 	inboxUnsubscribe                  func()
 	crewWakeMu                        sync.Mutex
 	crewExitedMu                      sync.Mutex
@@ -1696,6 +1695,18 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 			d.logf("pty backend remove on exit failed for %s: %v", info.ID, err)
 		}
 	}
+	b, actorErr := d.bindings()
+	var by who.Actor
+	if actorErr == nil {
+		r, err := d.requestFromSession(sessionID, b)
+		actorErr = err
+		if err == nil {
+			by = r.Actor()
+		}
+	}
+	if actorErr != nil {
+		d.logf("normal exit attribution: %v", actorErr)
+	}
 	d.releaseExitedCrewBinding(sessionID)
 
 	d.publishFact(FactSessionPTYExited, string(sessionID), ptyExit{
@@ -1705,8 +1716,8 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 	})
 	d.recordProcessEvidence(sessionID, true)
 	d.broadcastSessionStateChanged(sessionID)
-	if info.ExitCode == 0 && info.Signal == "" && !stopped && d.sessionCloseError(sessionID) == nil {
-		closing, err := d.beginSessionClose(sessionID, store.SessionClose{By: string(sessionID), Reason: "Agent exited normally"}, nil)
+	if info.ExitCode == 0 && info.Signal == "" && !stopped && d.sessionCloseError(sessionID) == nil && actorErr == nil {
+		closing, err := d.beginSessionClose(sessionID, store.SessionClose{By: by, Reason: "Agent exited normally"}, nil)
 		if err != nil {
 			d.logf("closing normally exited session %s: %v", sessionID, err)
 		} else {
@@ -1924,7 +1935,7 @@ func (d *Daemon) resumeSessionTeardown(sessionID protocol.SessionID) *sessionTea
 	}
 	session := d.store.Get(sessionID)
 	terminals := d.terminalsOf(sessionID)
-	d.closeSession(sessionID, store.SessionClose{By: store.SessionClosedByUser})
+	d.closeSession(sessionID, store.SessionClose{By: who.User()})
 	return &sessionTeardown{session: session, terminals: terminals, driverRun: driverRun}
 }
 
@@ -2066,7 +2077,7 @@ func (d *Daemon) removeReapedSession(sessionID protocol.SessionID) {
 func (d *Daemon) forgetSessionRuntime(sessionID protocol.SessionID) {
 	d.stopTranscriptWatcher(sessionID)
 
-	d.kickInboxAfterCommit(inbox.ToSession(sessionID))
+	d.kickInboxAfterCommit(who.ToSession(sessionID))
 	d.forgetSessionTitleInitialPrompt(sessionID)
 	d.clearAutoSettleState(sessionID)
 	d.lastInputMu.Lock()
@@ -2850,7 +2861,7 @@ func (d *Daemon) handleUnregister(conn net.Conn, msg *protocol.UnregisterMessage
 		d.sendError(conn, fmt.Sprintf("prepare session teardown: %v", err))
 		return
 	}
-	d.commitSessionUnregister(msg.ID, store.SessionClose{By: store.SessionClosedByUser})
+	d.commitSessionUnregister(msg.ID, store.SessionClose{By: who.User()})
 	d.sendOK(conn)
 
 	if teardown != nil && teardown.session != nil {
@@ -3187,18 +3198,17 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 	bySession := d.latestAutomationProvenance()
 	pullRequestsBySession := d.store.ListSessionPullRequestsBySession()
 	pullRequestWatchesByPR := d.pullRequestWatchesByPR()
+	bindings, err := d.bindings()
+	if err != nil {
+		d.logf("session broadcast bindings: %v", err)
+		return nil
+	}
 	out := make([]protocol.Session, 0, len(sessions))
 	for _, session := range sessions {
 		if decorated := d.sessionForBroadcastWithChiefOfStaff(session, chiefs, delegatedFromChief, crewBySession, seedBySession, dispatcherBySession); decorated != nil {
 			decorated.DelegationRole = rolesBySession[decorated.ID]
 			decorated.Automation = bySession[decorated.ID]
-			addresses := []inbox.Address{inbox.ToSession(decorated.ID)}
-			if member := crewBySession[decorated.ID]; member != "" {
-				addresses = append(addresses, inbox.ToMember(member))
-			}
-			if chiefs[decorated.ProfileID] == decorated.ID {
-				addresses = append(addresses, inbox.ToChief(decorated.ProfileID))
-			}
+			addresses := bindings.AddressesOf(decorated.ID)
 			decorated.PullRequests = d.sessionPullRequestsForBroadcast(d.sessionPullRequestRecords(decorated.ID, addresses, pullRequestsBySession, pullRequestWatchesByPR), addresses, pullRequestWatchesByPR)
 			out = append(out, *decorated)
 		}

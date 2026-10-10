@@ -49,7 +49,7 @@ func callAgentClose(t *testing.T, d *Daemon, target, source, reason string) prot
 	return callHandler(t, func(conn net.Conn) {
 		d.handleAgentClose(conn, &protocol.AgentCloseMessage{
 			Cmd:             protocol.CmdAgentClose,
-			TargetSessionID: target,
+			To:              target,
 			SourceSessionID: protocol.SessionID(source),
 			Reason:          reason,
 		})
@@ -211,7 +211,7 @@ func TestAgentCloseWritesItsReceiptInTheOwningDaemonsLedger(t *testing.T) {
 		t.Fatalf("close refused with %s, want the close to cross to the outpost", agentCloseFailure(resp))
 	}
 	entry := closedEntry(t, outpost, "remote-delegate")
-	if by := protocol.Deref(entry.ClosedBy); by != "orchestrator" {
+	if by := protocol.Deref(entry.ClosedBy).Ref; by != "orchestrator" {
 		t.Errorf("remote closed_by = %q, want the dispatcher that authorized it", by)
 	}
 	if got := protocol.Deref(entry.CloseReason); got != reason {

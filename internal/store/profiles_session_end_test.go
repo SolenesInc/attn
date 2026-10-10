@@ -7,6 +7,7 @@ import (
 
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profiles"
+	"github.com/victorarias/attn/internal/who"
 )
 
 func placedPair(t *testing.T) (*Store, profiles.Profile, profiles.Desktop, string, string) {
@@ -187,7 +188,7 @@ func TestRestoringASessionsCloseTakesItsPaneOff(t *testing.T) {
 	_, keptPane := mustPlace(t, s, desktop.ID, "kept")
 	mustPlace(t, s, desktop.ID, "rolled-back")
 
-	if restored, err := s.RestoreSessionClose("rolled-back", SessionCloseRecord{At: "2026-10-01T00:00:00Z", By: SessionClosedByUser}); err != nil || !restored {
+	if restored, err := s.RestoreSessionClose("rolled-back", SessionCloseRecord{At: "2026-10-01T00:00:00Z", By: who.User()}); err != nil || !restored {
 		t.Fatalf("RestoreSessionClose = %v, %v", restored, err)
 	}
 	wantOnlyPane(t, s, desktop.ID, keptPane)

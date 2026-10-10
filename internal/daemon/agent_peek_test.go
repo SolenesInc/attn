@@ -13,7 +13,7 @@ import (
 func callAgentPeek(t *testing.T, d *Daemon, target string) protocol.Response {
 	t.Helper()
 	return callHandler(t, func(conn net.Conn) {
-		d.handleAgentPeek(conn, &protocol.AgentPeekMessage{Cmd: protocol.CmdAgentPeek, TargetSessionID: target})
+		d.handleAgentPeek(conn, &protocol.AgentPeekMessage{Cmd: protocol.CmdAgentPeek, To: target})
 	})
 }
 

@@ -6,6 +6,7 @@ import (
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 func TestSeedContinuationResumesAPluginTenderByCapability(t *testing.T) {
@@ -27,7 +28,7 @@ func TestSeedContinuationResumesAPluginTenderByCapability(t *testing.T) {
 	move(t, d, "sess-snipe", seed.ID, garden.VerbTend, "", "")
 	d.persistResumeSessionID("sess-snipe", "snipe-conv-3")
 	d.store.SetLaunchIntent("sess-snipe", store.LaunchIntent{})
-	d.closeSession("sess-snipe", store.SessionClose{By: store.SessionClosedByUser})
+	d.closeSession("sess-snipe", store.SessionClose{By: who.User()})
 
 	tended, _, err := d.readSeed(seed.ID)
 	if err != nil {

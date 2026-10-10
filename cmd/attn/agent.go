@@ -416,7 +416,7 @@ type agentCloseArgs struct {
 }
 
 func parseAgentCloseArgs(args []string, envSessionID func() protocol.SessionID) (agentCloseArgs, error) {
-	const usage = `usage: attn agent close <session-or-seed> -m "reason" [--source-session <id>]`
+	const usage = `usage: attn agent close <session-or-member-or-seed> -m "reason" [--source-session <id>]`
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
 		return agentCloseArgs{}, errors.New(usage)
 	}
@@ -635,11 +635,7 @@ func runAgentMsgStatus(args []string) {
 }
 
 func printAgentInbox(w io.Writer, message *protocol.AgentPeerMessage) {
-	origin := agentShortID(string(message.SenderSessionID))
-	if label := strings.TrimSpace(message.SenderLabel); label != "" && label != origin {
-		origin = fmt.Sprintf("%s (%s)", origin, label)
-	}
-	fmt.Fprintln(w, prompts.RenderText("session", "peer-message", prompts.Values{"origin": origin, "message": message.Content, "sender_id": agentShortID(string(message.SenderSessionID))}))
+	fmt.Fprintln(w, prompts.RenderText("session", "peer-message", prompts.Values{"origin": message.Sender.Name, "message": message.Content, "reply_to": message.ReplyTo}))
 }
 
 func printAgentInboxBatch(w io.Writer, result *protocol.AgentInboxBatchResult) {
@@ -664,8 +660,7 @@ func printAgentInboxBatch(w io.Writer, result *protocol.AgentInboxBatchResult) {
 			continue
 		}
 		printAgentInbox(w, &protocol.AgentPeerMessage{
-			SenderSessionID: protocol.TrimID(protocol.Deref(item.SenderSessionID)),
-			SenderLabel:     protocol.Deref(item.SenderLabel), Content: content,
+			Sender: protocol.Deref(item.Sender), ReplyTo: protocol.Deref(item.ReplyTo), Content: content,
 		})
 	}
 	if result.Remaining > 0 {
@@ -674,7 +669,7 @@ func printAgentInboxBatch(w io.Writer, result *protocol.AgentInboxBatchResult) {
 }
 
 func printAgentMsgStatus(w io.Writer, message *protocol.AgentPeerMessage) {
-	fmt.Fprintf(w, "%s: message %s to session %s\n", message.State, message.MessageID, agentShortID(message.TargetSessionID))
+	fmt.Fprintf(w, "%s: message %s to %s (%s)\n", message.State, message.MessageID, message.ToName, message.To)
 }
 
 func agentMailboxErrorMessage(parsed agentMailboxArgs, err error) string {
@@ -699,20 +694,22 @@ commands:
   list [--json]
         the address book: every session on this daemon with its short id,
         name, profile, state, and whether a turn is owed. Read-only.
-  peek <session-or-member> [--json]
+  peek <session-or-member-or-seed> [--json]
         observe a session without interrupting it: state, last
         assistant message, and the rendered screen. Passive — the observed
-        agent never notices. The target is a crew name, full session id, or
-        unique session id prefix. A sleeping crew member stays asleep.
+        agent never notices. Targets resolve inside your profile: a crew name,
+        member:<key>, session:<id>, seed id, or unique session id prefix.
+        A sleeping crew member stays asleep.
   msg <session-or-member-or-seed> "text" [--source-session <id>] [--json]
         send a session, crew member or seed a message. The body stays in the inbox;
         the recipient gets a generic inbox notification. A target that cannot take
         input safely keeps it queued. The result says queued, notified, or refused.
-        A sleeping member wakes before the notification is placed. The sender defaults to this session
+        A sleeping member wakes before the notification is placed.
+        A crew session sends as its member; replies follow that member’s next session. The sender defaults to this session
         (resolved from this terminal); pass --source-session when running outside one.
         A seed id reaches its current or next tender, waiting when none is reachable.
         A message that starts with - goes after --, as: agent msg -- <target> "-text"
-  close <session-or-seed> -m "reason" [--source-session <id>] [--json]
+  close <session-or-member-or-seed> -m "reason" [--source-session <id>] [--json]
         close a session for good. A session may close itself and the sessions it
         dispatched; a profile's chief of staff may close any agent of that
         profile. The reason is required: the session row stays in the ledger,

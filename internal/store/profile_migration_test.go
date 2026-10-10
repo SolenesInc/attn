@@ -9,6 +9,7 @@ import (
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profilemigration"
 	"github.com/victorarias/attn/internal/profiles"
+	"github.com/victorarias/attn/internal/who"
 )
 
 func convertAgentWorkspaces(t *testing.T, count int) (*legacyFixture, *Store, ProfileMigrationView) {
@@ -170,7 +171,7 @@ func TestTheProfileHoldingAPendingMigrationCannotBeDeleted(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, session := range s.List("") {
-		s.CloseSession(session.ID, SessionClose{By: SessionClosedByUser}, time.Now())
+		s.CloseSession(session.ID, SessionClose{By: who.User()}, time.Now())
 	}
 
 	if _, err := s.DeleteProfile(converted.ID, converted.Revision, 0, 0); err != nil {

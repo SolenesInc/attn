@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/prompts"
+	"github.com/victorarias/attn/internal/who"
 
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
@@ -63,7 +64,7 @@ func chiefSeedAssignmentPrompt(seedID string) string {
 }
 
 func (d *Daemon) deliverChiefSeedAssignment(chiefSessionID protocol.SessionID, seedID string) (protocol.AgentMsgStatus, string) {
-	receipt, err := d.sendToInbox(inbox.Item{To: inbox.ToSeed(seedID), Kind: inbox.Notice, Text: chiefSeedAssignmentPrompt(seedID)})
+	receipt, err := d.sendToInbox(inbox.Item{To: who.ToTenderOf(seedID), Kind: inbox.Notice, Text: chiefSeedAssignmentPrompt(seedID)})
 	if err != nil {
 		d.logf("seed send to Chief: queue %s for %s: %v", seedID, chiefSessionID, err)
 		return protocol.AgentMsgStatusRefused, "Chief now tends the seed, but its inbox item could not be recorded; the assignment remains on the seed log"
