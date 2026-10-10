@@ -5,11 +5,14 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 	"github.com/victorarias/attn/internal/toolhome"
@@ -185,9 +188,9 @@ func TestAResumeWhoseAgentCannotStartLeavesNoPaneBehind(t *testing.T) {
 	pluginDriverSettings(app, "pi")
 	delegated := seedResumeDelegate(t, w, fakeagent.Pi, "api")
 	w.Launched(string(delegated.SessionID))
+	lifeMove(t, cli, string(delegated.SessionID), delegated.SeedID, "park", "", "")
 	closePane(app, sessionPane{session: string(delegated.SessionID)})
 	before := paneSessions(w)
-	seed := lifeShow(t, cli, delegated.SeedID).Seed
 
 	defer w.RefusePiLaunches("pi could not start: the model provider is unreachable")()
 	if resumed := seedResumeRequest(app, delegated.SeedID); resumed.Success || !strings.Contains(protocol.Deref(resumed.Error), "provider is unreachable") {
@@ -196,8 +199,83 @@ func TestAResumeWhoseAgentCannotStartLeavesNoPaneBehind(t *testing.T) {
 	if after := paneSessions(w); !slices.Equal(after, before) {
 		t.Errorf("the failed resume left panes for %q, want only %q", after, before)
 	}
-	if after := lifeShow(t, cli, delegated.SeedID).Seed; after.TenderSession != seed.TenderSession || after.Status != seed.Status {
-		t.Errorf("the failed resume changed the seed to %s under %q, want %s under %s", after.Status, after.TenderSession, seed.Status, seed.TenderSession)
+	if after := lifeShow(t, cli, delegated.SeedID).Seed; after.TenderSession != delegated.SessionID || after.Status != "growing" {
+		t.Errorf("the failed resume left the seed %s under %q, want growing under %s", after.Status, after.TenderSession, delegated.SessionID)
+	}
+	if stopped := showSession(t, cli, string(delegated.SessionID)); protocol.Deref(stopped.ClosedAt) == "" {
+		t.Fatal("the failed launch left the session open")
+	}
+	registerSessions(t, w, cli, "next-tender")
+	lifeMove(t, cli, "next-tender", delegated.SeedID, "tend", "", "")
+}
+
+func TestSeedChangesDuringResumeDoNotAbortItsConversation(t *testing.T) {
+	for _, action := range []string{"edit", "review harvest"} {
+		t.Run(action, func(t *testing.T) {
+			var now atomic.Int64
+			now.Store(time.Now().UnixNano())
+			w := &world{World: prepareWorld(t), gardenClock: func() time.Time { return time.Unix(0, now.Load()) }}
+			w.start()
+			app, cli := w.App(), w.Client()
+			driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"resume": true, "state_reporting": true})
+			awaitDriverAvailable(app, "snipe")
+			id, first := spawnDriven(w, app, driver, w.Path("api"))
+			session := protocol.SessionID(id)
+			driver.mustReport("session.report_metadata", map[string]any{
+				"session_id": first.SessionID, "run_id": first.RunID, "seq": 1,
+				"resume_session_id": "saved-conversation",
+				"metadata":          map[string]string{"native_id": "saved-conversation"},
+			})
+			seed := gardenReviewPlantTended(t, cli, id, "Resume the tracked task")
+			if action == "edit" {
+				lifeMove(t, cli, string(session), seed, "park", "", "")
+			}
+			closePane(app, sessionPane{session: string(session)})
+
+			request := protocol.SeedResumeMessage{Cmd: protocol.CmdSeedResume, SeedID: seed, RequestID: protocol.Ptr(uuid.NewString())}
+			if action == "review harvest" {
+				now.Store(time.Unix(0, now.Load()).Add(garden.DefaultStaleWindow).UnixNano())
+				review := gardenReviewStart(t, cli)
+				receipt, found := gardenReviewReceipts(review)[seed]
+				if !found {
+					t.Fatalf("review %+v does not include %s", review.Items, seed)
+				}
+				request.Review = &receipt
+			}
+			driver.mu.Lock()
+			driver.holdLaunch = true
+			driver.mu.Unlock()
+			app.Send(request)
+			var launch driverLaunch
+			reply := driver.asked("driver.resume", &launch)
+			if launch.ResumeSessionID != "saved-conversation" {
+				t.Fatalf("resume asked for %q, want the saved conversation", launch.ResumeSessionID)
+			}
+			if tending := lifeShow(t, cli, seed).Seed; tending.Status != "growing" || tending.TenderSession != session {
+				t.Errorf("while launching, the seed is %s under %q, want growing under %s", tending.Status, tending.TenderSession, session)
+			}
+			if action == "edit" {
+				if _, err := cli.SeedEdit(seed, "Updated assignment while the agent starts."); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				lifeMove(t, cli, string(session), seed, "harvest", "The work is complete.", "")
+			}
+			changed := lifeShow(t, cli, seed).Seed
+			driver.answer(reply, map[string]any{"argv": []string{"/bin/cat"}})
+			resumed := testworld.Await(app, protocol.EventSeedResumeResult, func(r protocol.SeedResumeResultMessage) bool {
+				return r.RequestID == protocol.Deref(request.RequestID)
+			})
+			if !resumed.Success || protocol.Deref(resumed.SessionID) != session {
+				t.Fatalf("resume after %s = %+v (%s), want %s reopened", action, resumed, protocol.Deref(resumed.Error), session)
+			}
+			if reopened := showSession(t, cli, id); protocol.Deref(reopened.ClosedAt) != "" {
+				t.Fatal("resume left the session closed")
+			}
+			if after := lifeShow(t, cli, seed).Seed; after.Rev != changed.Rev || after.Body != changed.Body || after.Status != changed.Status || after.TenderSession != changed.TenderSession || protocol.Deref(after.Reason) != protocol.Deref(changed.Reason) {
+				t.Errorf("resume overwrote the change: %+v -> %+v", changed, after)
+			}
+		})
 	}
 }
 

@@ -5,10 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/store"
 )
 
 type seedResumeOutcome struct {
@@ -73,9 +71,6 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 		return nil, fmt.Errorf("%s has no agent conversation to resume", seedID)
 	}
 	actor := garden.Tender{Session: sessionID}
-	if _, err := garden.Transition(seed, garden.VerbTend, garden.Ask{Actor: actor}, d.sessionExists); err != nil {
-		return nil, err
-	}
 	if existing := d.gardenSession(sessionID); existing != nil && existing.ProfileID != seed.ProfileID {
 		owner, _ := d.store.GetProfile(seed.ProfileID)
 		caller, _ := d.store.GetProfile(existing.ProfileID)
@@ -112,19 +107,16 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 		target, _ := d.store.GetProfile(profileID)
 		return nil, fmt.Errorf("seed %s belongs to profile %q; its conversation would reopen in profile %q: hand the seed to a new agent in its own profile", seed.ID, owner.Name, target.Name)
 	}
-	afterSpawn := func() error {
-		if _, err := d.validateGardenReviewAction(review, seedID, "resume"); err != nil {
-			return err
-		}
-		return d.bindResumedSeed(protection, seed, seedDoc, sessionID, strings.TrimSpace(execution.Cwd),
-			strings.TrimSpace(execution.Agent), strings.TrimSpace(execution.Resume))
+	if _, _, _, err := d.applySeedTransitionDetailedAsAtRevisionProtected(protection,
+		seedID, garden.VerbTend, garden.Ask{Actor: actor}, "", d.sessionExists, expectedRev); err != nil {
+		return nil, err
 	}
 	reopened, err := d.reopenSessionRuntimeWithProtection(protection, sessionReopenPlan{
 		SessionID: sessionID,
 		Directory: execution.Cwd,
 		Title:     seed.Title,
 		ProfileID: profileID,
-	}, d.newDelegationRollback(), afterSpawn)
+	}, d.newDelegationRollback())
 	if err != nil {
 		return nil, err
 	}
@@ -134,104 +126,6 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 
 	d.logf("resume: reopened seed %q as session %s", seedID, sessionID)
 	return &seedResumeOutcome{SessionID: reopened.SessionID, ProfileID: reopened.ProfileID}, nil
-}
-
-func (d *Daemon) bindResumedSeed(
-	_ foregroundCleanupProtection,
-	seed garden.Seed,
-	seedDoc docstore.Document,
-	sessionID protocol.SessionID, directory string, agent string, resumeID string,
-) error {
-	next, err := garden.Transition(seed, garden.VerbTend, garden.Ask{
-		Actor: garden.Tender{Session: sessionID},
-	}, d.sessionExists)
-	if err != nil {
-		return fmt.Errorf("reclaim %s after resume: %w", seed.ID, err)
-	}
-	if next.Status != seed.Status {
-		next.StateChangedAt = formatGardenTime(d.gardenTime())
-	}
-	next.LastExecutionID = sessionID
-
-	seedSchema, err := d.seedsCollection()
-	if err != nil {
-		return err
-	}
-	dispatchSchema, err := d.dispatchesCollection()
-	if err != nil {
-		return err
-	}
-	seedBody, err := next.Encode()
-	if err != nil {
-		return err
-	}
-
-	dispatch, dispatchDoc, found, err := d.gardenDispatchDocument(sessionID)
-	if err != nil {
-		return err
-	}
-	session := d.store.Get(sessionID)
-	if session == nil {
-		return fmt.Errorf("resumed session %s is not tracked", sessionID)
-	}
-	dispatch = mergeGardenExecution(dispatch, d.observedGardenExecution(session, resumeID, d.gardenTime()))
-	dispatch.SessionID = sessionID
-	dispatch.Crown = seed.ID
-	dispatch.SupersededBy = ""
-	if dispatch.Cwd == "" {
-		dispatch.Cwd = directory
-	}
-	if dispatch.Agent == "" {
-		dispatch.Agent = agent
-	}
-	dispatch.Resume = resumeID
-	dispatchBody, err := dispatch.Encode()
-	if err != nil {
-		return err
-	}
-
-	seedExpected := seedDoc.Rev
-	dispatchExpected := docstore.ExpectAbsent
-	if found {
-		dispatchExpected = dispatchDoc.Rev
-	}
-	seedFact := documentChangedFact(garden.Namespace, garden.CollectionSeeds, seed.ID, false)
-	dispatchFact := documentChangedFact(garden.Namespace, garden.CollectionDispatches, string(sessionID), false)
-	commits := []store.DocumentCommit{
-		{
-			Write: store.DocumentWrite{Schema: *seedSchema, ID: seed.ID, Body: seedBody, Expected: &seedExpected},
-			Fact:  seedFact,
-		},
-		{
-			Write: store.DocumentWrite{Schema: *dispatchSchema, ID: string(sessionID), Body: dispatchBody, Expected: &dispatchExpected},
-			Fact:  dispatchFact,
-		},
-	}
-	tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, seed.ID, sessionID)
-	if err != nil {
-		return err
-	}
-	events, err := encodeGardenSeedEvents(tended)
-	if err != nil {
-		return err
-	}
-	d.lockGardenRoles()
-	written, eventSeqs, err := d.store.CommitDocumentWritesWithEvents(commits, events, d.gardenTime())
-	if err == nil {
-		err = d.discardAllIneligibleGardenSeedBellsLocked()
-	}
-	d.unlockGardenRoles()
-	if err != nil {
-		if docstore.IsConflict(err) {
-			return fmt.Errorf("%s changed while its conversation was resuming; refresh it and try again", seed.ID)
-		}
-		return err
-	}
-	d.announceCommittedWrite(seedFact, written[0].Seq)
-	d.announceCommittedWrite(dispatchFact, written[1].Seq)
-	announceGardenSeedEvents(d, eventSeqs)
-	d.rememberDispatchProjection(sessionID, dispatch, written[1].Rev)
-	return nil
 }
 
 func (d *Daemon) handleSeedResume(client *wsClient, msg *protocol.SeedResumeMessage) {
