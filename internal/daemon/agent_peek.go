@@ -26,6 +26,15 @@ func (d *Daemon) handleAgentPeek(conn net.Conn, msg *protocol.AgentPeekMessage) 
 	}
 	r, err := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID)
 	if err != nil {
+		if msg.SourceSessionID == nil && msg.ProfileID == nil {
+			if session, code := d.resolveSessionByIDOrPrefix(msg.TargetSessionID, ""); session != nil {
+				_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AgentPeekResult: d.agentPeekResult(session)})
+				return
+			} else if code == "ambiguous_session" {
+				d.sendError(conn, code)
+				return
+			}
+		}
 		d.sendError(conn, err.Error())
 		return
 	}
@@ -71,24 +80,20 @@ func (d *Daemon) resolveAgentPeekTarget(r requester, target string) (*protocol.S
 			return nil, "crew_member_asleep"
 		}
 	}
-	session, code := d.resolveSessionByIDOrPrefix(target)
-	if session != nil && session.ProfileID != r.ProfileID() {
-		return nil, "session_not_found"
-	}
-	return session, code
+	return d.resolveSessionByIDOrPrefix(target, r.ProfileID())
 }
 
-func (d *Daemon) resolveSessionByIDOrPrefix(target string) (*protocol.Session, string) {
+func (d *Daemon) resolveSessionByIDOrPrefix(target, profileID string) (*protocol.Session, string) {
 	target = protocol.TrimID(target)
 	if target == "" {
 		return nil, "session_not_found"
 	}
-	if session := d.store.Get(protocol.SessionID(target)); session != nil {
+	if session := d.store.Get(protocol.SessionID(target)); session != nil && (profileID == "" || session.ProfileID == profileID) {
 		return session, ""
 	}
 	var match *protocol.Session
 	for _, session := range d.store.List("") {
-		if !strings.HasPrefix(string(session.ID), target) {
+		if (profileID != "" && session.ProfileID != profileID) || !strings.HasPrefix(string(session.ID), target) {
 			continue
 		}
 		if match != nil {

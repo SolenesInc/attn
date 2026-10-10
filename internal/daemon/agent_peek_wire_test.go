@@ -146,3 +146,31 @@ func TestAnOversizedExitScreenKeepsItsTailAndSaysSo(t *testing.T) {
 func withIDPrefix(prefix string) func(*protocol.SpawnSessionMessage) {
 	return func(m *protocol.SpawnSessionMessage) { m.ID = protocol.SessionID(prefix + string(m.ID)) }
 }
+
+func TestAgentPeekResolvesPrefixesWithinItsRequesterProfile(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	home := app.SelectedProfile()
+	local := w.Spawn(app, fakeagent.Claude, w.Path("local"), withIDPrefix("shared-"))
+	w.Launched(local)
+	unique := w.Spawn(app, fakeagent.Claude, w.Path("unique"), withIDPrefix("unique-"))
+	w.Launched(unique)
+	side := createProfile(app, "Side")
+	selectProfile(app, side.ID)
+	foreign := w.Spawn(w.AppOn(side.ID), fakeagent.Claude, w.Path("foreign"), withIDPrefix("shared-"))
+	w.Launched(foreign)
+	for _, row := range []struct{ profile, source, address, want string }{
+		{address: unique[:8], want: unique},
+		{profile: home, address: "shared-", want: local},
+		{source: local, address: "shared-", want: local},
+		{profile: side.ID, address: "shared-", want: foreign},
+	} {
+		peek, err := cli.WithRequester(row.profile, protocol.SessionID(row.source)).AgentPeek(row.address)
+		if err != nil || string(peek.SessionID) != row.want {
+			t.Fatalf("profile %q source %q peek %q: %+v %v, want %s", row.profile, row.source, row.address, peek, err, row.want)
+		}
+	}
+	if _, err := cli.AgentPeek("shared-"); err == nil || !strings.Contains(err.Error(), "ambiguous_session") {
+		t.Fatalf("unscoped prefix must name its ambiguity: %v", err)
+	}
+}

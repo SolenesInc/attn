@@ -40,7 +40,7 @@ func agentMessageGuardVerdict(counts inbox.PeerGuardCounts) string {
 }
 
 func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
-	sender, errCode := d.resolveSessionByIDOrPrefix(string(msg.SourceSessionID))
+	sender, errCode := d.resolveSessionByIDOrPrefix(string(msg.SourceSessionID), "")
 	if sender == nil {
 		d.sendError(conn, "sender_"+errCode)
 		return
@@ -94,7 +94,7 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 		if found {
 			address = inbox.ToMember(member.Key.String())
 		} else {
-			target, code := d.resolveSessionByIDOrPrefix(string(targetRef))
+			target, code := d.resolveSessionByIDOrPrefix(string(targetRef), "")
 			if target == nil {
 				if memberErr != nil {
 					d.sendError(conn, memberErr.Error())
