@@ -90,6 +90,29 @@ func TestMigratingBackendToggleKeepsExistingAndPendingOwners(t *testing.T) {
 	}
 }
 
+func TestMigratingBackendListsATerminalFromTheMomentItsSpawnStarts(t *testing.T) {
+	legacy := newMigrationTestBackend()
+	backend, err := NewMigrating(legacy, newMigrationTestBackend(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	started, release := make(chan struct{}), make(chan struct{})
+	legacy.beforeSpawn = func() { close(started); <-release }
+	done := make(chan error, 1)
+	go func() { done <- backend.Spawn(context.Background(), SpawnOptions{ID: "booting"}) }()
+	<-started
+	if ids := backend.TerminalIDs(context.Background()); !reflect.DeepEqual(ids, []harness.TerminalID{"booting"}) {
+		t.Errorf("terminal IDs while the spawn is in progress = %v, want [booting]: its agent can already report its conversation", ids)
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if ids := backend.TerminalIDs(context.Background()); !reflect.DeepEqual(ids, []harness.TerminalID{"booting"}) {
+		t.Errorf("terminal IDs after the spawn = %v, want [booting]", ids)
+	}
+}
+
 func (b *migrationTestBackend) Attach(context.Context, harness.TerminalID, string, ...AttachOptions) (AttachInfo, Stream, error) {
 	return AttachInfo{}, nil, nil
 }
