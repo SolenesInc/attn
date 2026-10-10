@@ -39,20 +39,6 @@ func (d *Daemon) resolveGardenProfile(sessionID protocol.SessionID, requested st
 	return profiles.Profile{}, fmt.Errorf("choose --profile <name|id>; available profiles: %s", strings.Join(choices, ", "))
 }
 
-func (d *Daemon) liveProfileNamed(requested string) (profiles.Profile, error) {
-	live, err := d.store.ListProfiles(false)
-	if err != nil {
-		return profiles.Profile{}, err
-	}
-	requested = strings.TrimSpace(requested)
-	for _, p := range live {
-		if p.ID == requested || strings.EqualFold(p.Name, requested) {
-			return p, nil
-		}
-	}
-	return profiles.Profile{}, fmt.Errorf("profile %q not found; choose --profile <name|id>", requested)
-}
-
 func (d *Daemon) requireSeedInProfile(id, profileID string, archive bool) error {
 	seed, _, err := d.readSeed(id)
 	if err != nil {

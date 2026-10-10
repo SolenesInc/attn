@@ -28,11 +28,11 @@ func TestCrewIdentityMigrationPreservesKeysAndOpenBindings(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
-				side, _, err := old.CreateProfile("Side")
-				if err != nil {
+				sideID := "profile-side"
+				if _, err := old.db.Exec("INSERT INTO profiles(id,name,created_at) VALUES(?, 'Side', 'now')", sideID); err != nil {
 					t.Fatal(err)
 				}
-				if _, err := old.db.Exec("INSERT INTO crew_profiles(member_id,profile_id) VALUES('user-crew',?)", side.ID); err != nil {
+				if _, err := old.db.Exec("INSERT INTO crew_profiles(member_id,profile_id) VALUES('user-crew',?)", sideID); err != nil {
 					t.Fatal(err)
 				}
 				if _, err := old.DefineDocumentCollection(crew.MembersSchema(), time.Now()); err != nil {

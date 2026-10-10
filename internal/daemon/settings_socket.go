@@ -11,29 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (d *Daemon) settingsProfile(session protocol.SessionID, requested string) (profiles.Profile, error) {
-	if protocol.TrimID(session) != "" {
-		profile, err := d.callerProfile(session)
-		if err != nil {
-			return profiles.Profile{}, err
-		}
-		if requested != "" {
-			target, err := d.liveProfileNamed(requested)
-			if err != nil {
-				return profiles.Profile{}, err
-			}
-			if target.ID != profile.ID {
-				return profiles.Profile{}, fmt.Errorf("this session belongs to profile %q; --profile only chooses a profile outside an attn session", profile.Name)
-			}
-		}
-		return profile, nil
-	}
-	if requested != "" {
-		return d.liveProfileNamed(requested)
-	}
-	return d.resolveGardenProfile("", "", "")
-}
-
 func settingEntry(spec settingSpec, key, value string) protocol.SettingEntry {
 	scope := protocol.SettingScopeDaemon
 	if spec.scope == profileScope {
@@ -84,8 +61,14 @@ func (d *Daemon) settingsList(msg *protocol.GetSettingsMessage) (*protocol.Setti
 		if err := d.requireHome("profile settings"); err != nil {
 			return nil, nil, err
 		}
-		var err error
-		profile, err = d.settingsProfile(protocol.Deref(msg.SourceSessionID), protocol.Deref(msg.ProfileID))
+		request, err := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID)
+		if err != nil {
+			if requested := protocol.Deref(msg.ProfileID); requested != "" {
+				err = fmt.Errorf("settings --profile %q: %w", requested, err)
+			}
+			return nil, nil, err
+		}
+		profile, err = d.store.LiveProfile(request.ProfileID())
 		if err != nil {
 			return nil, nil, err
 		}
