@@ -40,7 +40,7 @@ func (d *Daemon) validateCrewMemberPaths(member crew.Member) error {
 			return fmt.Errorf("refusing crew member %s: resolve stored %s path %q: %w", d.storedMemberName(member.Key.String()), label, stored, err)
 		}
 		if stored == "" || !filepath.IsAbs(stored) || !pathWithin(root, resolved) {
-			return fmt.Errorf("crew member %s: stored %s path %q is outside this daemon's crew root %q. Check whether attn.db was copied from another instance", d.storedMemberName(member.Key.String()), label, stored, root)
+			return fmt.Errorf("crew member %s: stored %s path %q is outside this daemon's crew root %q. Check for an attn.db copied from another instance", d.storedMemberName(member.Key.String()), label, stored, root)
 		}
 	}
 	return nil
