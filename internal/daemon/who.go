@@ -36,6 +36,14 @@ func (d *Daemon) bindings() (who.Bindings, error) {
 	}
 	return who.NewBindings(d.sessionFacts, bound), nil
 }
+func (d *Daemon) broadcastBindings() who.Bindings {
+	b, err := d.bindings()
+	if err != nil {
+		d.logf("session broadcast bindings: %v", err)
+		return who.NewBindings(d.sessionFacts, nil)
+	}
+	return b
+}
 func (d *Daemon) sessionFacts(id protocol.SessionID) (string, bool) {
 	if d.hubManager != nil {
 		if s := d.hubManager.RemoteSession(id); s != nil {

@@ -238,8 +238,7 @@ func (d *Daemon) readCrewMembersRaw() ([]crew.Member, map[string]docstore.Docume
 	for _, doc := range read.Documents {
 		member, err := crew.Decode(doc.ID, doc.Body)
 		if err != nil {
-			d.logf("crew: member %s has an unreadable record: %v", doc.ID, err)
-			continue
+			return nil, nil, fmt.Errorf("read crew member %s: %w", doc.ID, err)
 		}
 		members = append(members, member)
 		docs[member.Key.String()] = doc
@@ -489,12 +488,13 @@ func (d *Daemon) crewMemberBoundTo(sessionID protocol.SessionID) string {
 	return ""
 }
 
-func (d *Daemon) decorateCrewMember(session *protocol.Session, membersBySession map[protocol.SessionID]string) {
+func (d *Daemon) decorateCrewMember(session *protocol.Session, bindings who.Bindings) {
 	if session == nil {
 		return
 	}
-	if member := membersBySession[session.ID]; member != "" {
-		session.CrewMember = protocol.Ptr(member)
+	party, _ := bindings.PartyOf(session.ID)
+	if member, ok := party.Member(); ok {
+		session.CrewMember = protocol.Ptr(member.String())
 		return
 	}
 	session.CrewMember = nil

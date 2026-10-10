@@ -789,8 +789,8 @@ model AgentMsgMessage {
 // (the Garden dispatch document names it as the dispatcher), and the chief of
 // staff may close any. The reason is required: the ledger keeps the row, and the
 // reason is what the next reader has to go on.
-// Exactly one destination, the same shape as AgentMsgMessage: a session by id or
-// unique prefix, or a seed whose tender the daemon resolves.
+// The daemon resolves the destination like AgentMsgMessage, within the caller's
+// profile: a session reference or prefix, a member name or key, or a seed's tender.
 model AgentCloseMessage {
   cmd: "agent_close";
   to: string;
@@ -5632,7 +5632,7 @@ model AutoModeProposalInfo {
   "value": string;
   // "value" read back as one line, for a list a human scans.
   "summary": string;
-  // Who proposed it, when the caller said. Empty when nobody did.
+  // The requesting actor. Absent when older attribution is unknown.
   "proposed_by"?: ActorView;
   // "pending" | "promoted" | "discarded".
   "state": string;
@@ -6558,7 +6558,7 @@ model SessionLedgerEntry {
   last_seen: string;
   // Absent while the session is live. Its presence is what makes the row closed.
   closed_at?: string;
-  // "user", or the id of the session that closed this one.
+  // The actor that closed the session. Absent when older attribution is unknown.
   closed_by?: ActorView;
   // Only agent closes carry one; the user never types a reason.
   close_reason?: string;

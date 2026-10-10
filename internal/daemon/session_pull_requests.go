@@ -332,12 +332,7 @@ func pullRequestField(value string) *string {
 	return protocol.Ptr(value)
 }
 
-func (d *Daemon) sessionPullRequestsForSession(session *protocol.Session) []protocol.SessionPullRequest {
-	b, err := d.bindings()
-	if err != nil {
-		d.logf("PR watch bindings: %v", err)
-		return nil
-	}
+func (d *Daemon) sessionPullRequestsForSession(session *protocol.Session, b who.Bindings) []protocol.SessionPullRequest {
 	addresses := b.AddressesOf(session.ID)
 	byPR := d.pullRequestWatchesByPR()
 	return d.sessionPullRequestsForBroadcast(d.sessionPullRequestRecords(session.ID, addresses, d.store.ListSessionPullRequestsBySession(), byPR), addresses, byPR)

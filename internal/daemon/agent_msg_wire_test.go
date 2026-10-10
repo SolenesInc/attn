@@ -250,6 +250,12 @@ func TestMessagingACrewMemberReachesItsDayWakingItIfNeeded(t *testing.T) {
 	if first.Status != protocol.AgentMsgStatusQueued || !strings.Contains(first.Detail, "woke Trellis") || protocol.Deref(first.TargetSessionID) == "" {
 		t.Fatalf("a message to the sleeping Trellis = %+v, want it queued on a day it woke", first)
 	}
+	arrival := testworld.Await(app, protocol.EventBackgroundLaunch, func(r protocol.BackgroundLaunchMessage) bool {
+		return r.SessionID == protocol.Deref(first.TargetSessionID)
+	})
+	if arrival.RequestedBy != "sender" {
+		t.Fatalf("inbox wake requester = %q, want the sender's label", arrival.RequestedBy)
+	}
 	trellisDay := w.Launched(string(protocol.Deref(first.TargetSessionID)))
 	second := sendAgentMessage(t, cli, sender, "trellis", "and the flaky test")
 	if second.Status != protocol.AgentMsgStatusQueued || protocol.Deref(second.TargetSessionID) != protocol.Deref(first.TargetSessionID) {

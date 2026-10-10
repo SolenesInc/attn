@@ -83,13 +83,9 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 			d.replyAgentMsg(conn, result)
 			return
 		}
-		if endpoint := d.sessionOwnerEndpoint(target.ring.ID); endpoint != "" {
-			d.replyAgentMsgError(conn, "remote_delivery_unsupported", fmt.Sprintf("session %s runs on outpost %s; messaging outpost sessions is unsupported", shortSessionID(target.ring.ID), endpoint))
-			return
-		}
 	}
-	if to, err := d.resolveSession(r, b, msg.To); err == nil && d.sessionOwnerEndpoint(to.ID) != "" {
-		d.replyAgentMsgError(conn, "remote_delivery_unsupported", fmt.Sprintf("session %s runs on an outpost; messaging outpost sessions is unsupported", shortSessionID(to.ID)))
+	if target.remote != nil {
+		d.replyAgentMsgError(conn, "remote_delivery_unsupported", fmt.Sprintf("session %s runs on outpost %s; messaging outpost sessions is unsupported", shortSessionID(target.remote.ID), protocol.Deref(target.remote.EndpointID)))
 		return
 	}
 	now := time.Now()
@@ -116,8 +112,8 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 		result.Status = protocol.AgentMsgStatusNotified
 	}
 	result.Detail = receipt.Detail
-	if holder := d.inboxHolder(address); holder != nil {
-		result.TargetSessionID = protocol.Ptr(holder.ID)
+	if receipt.SessionID != "" {
+		result.TargetSessionID = protocol.Ptr(receipt.SessionID)
 	}
 
 	d.replyAgentMsg(conn, result)

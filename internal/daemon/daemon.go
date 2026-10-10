@@ -1695,17 +1695,19 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 			d.logf("pty backend remove on exit failed for %s: %v", info.ID, err)
 		}
 	}
-	b, actorErr := d.bindings()
+	cleanExit := info.ExitCode == 0 && info.Signal == "" && !stopped
 	var by who.Actor
-	if actorErr == nil {
-		r, err := d.requestFromSession(sessionID, b)
-		actorErr = err
-		if err == nil {
-			by = r.Actor()
+	var actorErr error
+	if cleanExit {
+		var b who.Bindings
+		b, actorErr = d.bindings()
+		if actorErr == nil {
+			if party, found := b.PartyOf(sessionID); found {
+				by = party.Actor()
+			} else {
+				actorErr = fmt.Errorf("session %s has no closing actor", sessionID)
+			}
 		}
-	}
-	if actorErr != nil {
-		d.logf("normal exit attribution: %v", actorErr)
 	}
 	d.releaseExitedCrewBinding(sessionID)
 
@@ -1716,10 +1718,20 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 	})
 	d.recordProcessEvidence(sessionID, true)
 	d.broadcastSessionStateChanged(sessionID)
-	if info.ExitCode == 0 && info.Signal == "" && !stopped && d.sessionCloseError(sessionID) == nil && actorErr == nil {
+	if cleanExit {
+		if actorErr != nil {
+			d.notifySessionCloseFailure(sessionID, actorErr)
+			return true
+		}
+		if closeErr := d.sessionCloseError(sessionID); closeErr != nil {
+			if errors.Is(closeErr, errCrewRosterUnavailable) {
+				d.notifySessionCloseFailure(sessionID, closeErr)
+			}
+			return true
+		}
 		closing, err := d.beginSessionClose(sessionID, store.SessionClose{By: by, Reason: "Agent exited normally"}, nil)
 		if err != nil {
-			d.logf("closing normally exited session %s: %v", sessionID, err)
+			d.notifySessionCloseFailure(sessionID, err)
 		} else {
 			d.finishSessionClose(sessionID, closing)
 		}
@@ -3135,18 +3147,19 @@ func cloneSession(session *protocol.Session) *protocol.Session {
 }
 
 func (d *Daemon) sessionForBroadcast(session *protocol.Session) *protocol.Session {
+	b := d.broadcastBindings()
 	decorated := d.sessionForBroadcastWithChiefOfStaff(
 		session,
 		d.profileChiefs(),
 		d.delegatedFromChiefSessionIDs(),
-		d.crewMembersBySession(),
+		b,
 		d.gardenDispatchSeedsBySession(),
 		d.gardenDispatchersBySession(),
 	)
 	if decorated != nil {
 		decorated.DelegationRole = d.sessionDelegationRoles()[decorated.ID]
 		decorated.Automation = d.automationProvenanceForSession(decorated.ID)
-		decorated.PullRequests = d.sessionPullRequestsForSession(decorated)
+		decorated.PullRequests = d.sessionPullRequestsForSession(decorated, b)
 	}
 	return decorated
 }
@@ -3155,7 +3168,7 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 	session *protocol.Session,
 	chiefs map[string]protocol.SessionID,
 	delegatedFromChief map[protocol.SessionID]bool,
-	crewBySession map[protocol.SessionID]string,
+	bindings who.Bindings,
 	seedBySession map[protocol.SessionID]string,
 	dispatcherBySession map[protocol.SessionID]garden.Tender,
 ) *protocol.Session {
@@ -3172,7 +3185,7 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 	d.decorateSessionWithSnooze(clone)
 	d.decorateChiefOfStaff(clone, chiefs)
 	d.decorateDelegatedFromChief(clone, delegatedFromChief)
-	d.decorateCrewMember(clone, crewBySession)
+	d.decorateCrewMember(clone, bindings)
 	d.decorateSessionSeed(clone, seedBySession)
 	d.decorateSessionDispatcher(clone, dispatcherBySession)
 	if seedBySession[clone.ID] != "" && clone.SeedID == nil {
@@ -3191,21 +3204,16 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 	}
 	chiefs := d.profileChiefs()
 	delegatedFromChief := d.delegatedFromChiefSessionIDs()
-	crewBySession := d.crewMembersBySession()
+	bindings := d.broadcastBindings()
 	seedBySession := d.gardenDispatchSeedsBySession()
 	dispatcherBySession := d.gardenDispatchersBySession()
 	rolesBySession := d.sessionDelegationRoles()
 	bySession := d.latestAutomationProvenance()
 	pullRequestsBySession := d.store.ListSessionPullRequestsBySession()
 	pullRequestWatchesByPR := d.pullRequestWatchesByPR()
-	bindings, err := d.bindings()
-	if err != nil {
-		d.logf("session broadcast bindings: %v", err)
-		return nil
-	}
 	out := make([]protocol.Session, 0, len(sessions))
 	for _, session := range sessions {
-		if decorated := d.sessionForBroadcastWithChiefOfStaff(session, chiefs, delegatedFromChief, crewBySession, seedBySession, dispatcherBySession); decorated != nil {
+		if decorated := d.sessionForBroadcastWithChiefOfStaff(session, chiefs, delegatedFromChief, bindings, seedBySession, dispatcherBySession); decorated != nil {
 			decorated.DelegationRole = rolesBySession[decorated.ID]
 			decorated.Automation = bySession[decorated.ID]
 			addresses := bindings.AddressesOf(decorated.ID)

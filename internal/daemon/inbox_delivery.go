@@ -61,9 +61,10 @@ func (d *Daemon) kickInbox(a who.Address) {
 }
 
 type recipient struct {
-	ring *protocol.Session
-	wake who.MemberKey
-	wait string
+	ring   *protocol.Session
+	wake   who.MemberKey
+	wait   string
+	remote *protocol.Session
 }
 type delivery struct {
 	d        *Daemon
@@ -80,8 +81,10 @@ func (r delivery) toSession(id protocol.SessionID) (recipient, error) {
 	if r.d.store.DelegationSessionReserved(id) {
 		return recipient{wait: fmt.Sprintf("session %s is starting; waits for it to register", shortSessionID(id))}, nil
 	}
-	if r.d.hubManager != nil && r.d.hubManager.RemoteSession(id) != nil {
-		return recipient{wait: fmt.Sprintf("session %s runs on an outpost; remote delivery is unsupported", shortSessionID(id))}, nil
+	if r.d.hubManager != nil {
+		if session := r.d.hubManager.RemoteSession(id); session != nil {
+			return recipient{remote: session, wait: fmt.Sprintf("session %s runs on an outpost; remote delivery is unsupported", shortSessionID(id))}, nil
+		}
 	}
 	return recipient{wait: fmt.Sprintf("session %s has ended; waits until it is resumed", shortSessionID(id))}, nil
 }
@@ -114,13 +117,13 @@ func (r delivery) toChiefOf(c who.ChiefMailbox) (recipient, error) {
 }
 
 // inboxWakeRequester names who a wake for this address answers: the oldest unread message's sender.
-func (d *Daemon) inboxWakeRequester(a who.Address) string {
+func (d *Daemon) inboxWakeRequester(a who.Address, b who.Bindings) string {
 	deliveries, err := d.store.UnreadInboxDeliveries(a)
 	if err != nil || len(deliveries) == 0 {
 		return ""
 	}
 	if peer := deliveries[0].Peer; peer != nil {
-		return d.replyTo(peer.Sender)
+		return d.partyView(peer.Sender, b).Name
 	}
 	return ""
 }
@@ -205,6 +208,9 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		return receipt, err
 	}
 	holder, memberID := to.ring, to.wake.String()
+	if holder != nil {
+		receipt.SessionID = holder.ID
+	}
 	finishingWake := holder != nil && holder.ID == state.wakeSession
 	if holder == nil || !finishingWake {
 		state.wakeSession = ""
@@ -249,7 +255,7 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 					}
 					d.logInboxExhaustion(a)
 					return nil
-				}, crewWakeRequest{RequestedBy: d.inboxWakeRequester(a)})
+				}, crewWakeRequest{RequestedBy: d.inboxWakeRequester(a, b)})
 				d.crewWakeMu.Unlock()
 				if errors.Is(err, errInboxNoUnread) {
 					return receipt, nil
@@ -262,12 +268,14 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 					return receipt, nil
 				}
 				if result.AlreadyAwake {
+					receipt.SessionID = result.SessionID
 					receipt.Detail = "queued (member is awake; waits for its session to reach a safe prompt)"
 					state.wakeSession = ""
 					d.kickInbox(a)
 					return receipt, nil
 				}
 				state.wakeSession = result.SessionID
+				receipt.SessionID = result.SessionID
 				receipt.Detail = fmt.Sprintf("woke %s in session %s; notification queued until it reaches a safe prompt", d.storedMemberName(member), shortSessionID(result.SessionID))
 				return receipt, nil
 			}

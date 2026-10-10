@@ -1,14 +1,81 @@
 package daemon_test
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
+
+func TestUnreadableCrewBindingsKeepSessionsVisibleButRefuseAttribution(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	witness, _ := mailIdleAgent(w, app, "witness")
+	day := wakeCrew(t, cli, "Keel", "")
+	w.Launched(string(day.SessionID))
+	if _, err := cli.DocPut(crew.Namespace, crew.CollectionMembers, "keel", fmt.Sprintf(`{"binding_session":%q,"awareness_dirs":1}`, day.SessionID), nil); err != nil {
+		t.Fatal(err)
+	}
+	listed, err := cli.Query("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for surface, sessions := range map[string][]protocol.Session{"CLI": listed, "app": w.App().Initial.Sessions} {
+		seen := map[protocol.SessionID]bool{}
+		for _, s := range sessions {
+			seen[s.ID] = true
+			if s.CrewMember != nil {
+				t.Fatalf("%s guessed a member from unreadable bindings: %+v", surface, s)
+			}
+		}
+		if !seen[day.SessionID] || !seen[protocol.SessionID(witness)] {
+			t.Fatalf("%s hid sessions when the roster could not be read: %+v", surface, sessions)
+		}
+	}
+	if _, err := cli.AgentMsg(witness, day.SessionID, "keep my identity"); err == nil || !strings.Contains(err.Error(), "awareness_dirs") {
+		t.Fatalf("unreadable member attribution: %v", err)
+	}
+}
+
+func TestACrewAgentsCleanExitRecordsTheMemberBeforeReleasingItsBinding(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	day := wakeCrew(t, cli, "Keel", "")
+	run := w.Launched(string(day.SessionID))
+	run.Prompted()
+	run.Exit(0)
+	closed := awaitClosed(app, string(day.SessionID))
+	if by := closed.ClosedBy; by == nil || by.Ref != "member:keel" || by.Name != "Keel" {
+		t.Fatalf("clean-exit actor: %+v", by)
+	}
+}
+
+func TestAnAutomaticCloseFailureReachesTheNotificationFeed(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	id, run := mailIdleAgent(w, app, "shop")
+	if _, err := cli.DocPut(crew.Namespace, crew.CollectionMembers, "keel", `{"awareness_dirs":1}`, nil); err != nil {
+		t.Fatal(err)
+	}
+	run.Exit(0)
+	testworld.Await(app, protocol.EventNotificationsUpdated, func(m protocol.NotificationsUpdatedMessage) bool { return m.UnreadCount == 1 })
+	feed := listNotifications(app)
+	if len(feed.Notifications) != 1 {
+		t.Fatalf("close failure notifications: %+v", feed)
+	}
+	n := feed.Notifications[0]
+	if n.Kind != "session_close_failed" || n.SourceID != id || !strings.Contains(n.Detail, "awareness_dirs") || len(n.Actions) != 1 || n.Actions[0].Kind != "open_session" || n.Actions[0].TargetID != id {
+		t.Fatalf("close failure: %+v", n)
+	}
+	if entry := showSession(t, cli, id); entry.ClosedAt != nil || entry.ClosedBy != nil {
+		t.Fatalf("close failure wrote an actor or closed the session: %+v", entry)
+	}
+}
 
 func TestRepliesToACrewPartyFollowItsNextSession(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)

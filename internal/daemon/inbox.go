@@ -33,6 +33,7 @@ func (d *Daemon) deliverSavedInbox(to who.Address, id string, savedAt time.Time)
 	if !receipt.Rang && d.inboxItemRungSince(id, savedAt) {
 		receipt.Rang, receipt.Outstanding, receipt.Detail = true, false, "notified"
 		if holder := d.inboxHolder(to); holder != nil {
+			receipt.SessionID = holder.ID
 			receipt.Detail = "notified " + sessionDisplayName(holder)
 		}
 	}
