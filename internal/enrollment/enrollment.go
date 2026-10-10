@@ -16,7 +16,6 @@ import (
 const (
 	DaemonIDFileName = "daemon-id"
 	RecordFileName   = "enrollment.json"
-	PlanPath         = "docs/plans/2026-08-10-home-garden-crew-arc.md"
 )
 
 var ErrNoRecord = errors.New("no enrollment record")
@@ -70,9 +69,8 @@ func (e *FencedError) Error() string {
 		return fmt.Sprintf(
 			"refused %s on this daemon: its enrollment record is unreadable, so attn cannot tell whether this is a home.\n"+
 				"  this daemon: %s\n"+
-				"Run `attn enrollment` here to see the record, then `attn enrollment leave` to declare this daemon its own home.\n"+
-				"Why: %s",
-			surface, displayID(e.DaemonID), PlanPath,
+				"Run `attn enrollment` here to see the record, then `attn enrollment leave` to declare this daemon its own home.",
+			surface, displayID(e.DaemonID),
 		)
 	}
 	return fmt.Sprintf(
@@ -81,9 +79,8 @@ func (e *FencedError) Error() string {
 			"  its home:    %s\n"+
 			"The garden and the crew have exactly one owner — the home daemon — and the uplink that would\n"+
 			"carry this ask home is not built yet.\n"+
-			"Do this on the home daemon (%s), or make this daemon its own home again with `attn enrollment leave`.\n"+
-			"Why: %s",
-		surface, displayID(e.DaemonID), home, home, PlanPath,
+			"Do this on the home daemon (%s), or make this daemon its own home again with `attn enrollment leave`.",
+		surface, displayID(e.DaemonID), home, home,
 	)
 }
 
@@ -106,9 +103,8 @@ func (e *ForeignHomeError) Error() string {
 		"this daemon (%s) is already an outpost of %s; %s asked to take it over.\n"+
 			"Enrollment is never overwritten silently: a daemon has exactly one home, and moving it moves its\n"+
 			"garden and crew asks with it.\n"+
-			"To move it, run `attn enrollment leave` here — that makes it a home again — then sync it from %s.\n"+
-			"Why: %s",
-		displayID(e.DaemonID), e.CurrentHome, e.RequestedBy, e.RequestedBy, PlanPath,
+			"To move it, run `attn enrollment leave` here — that makes it a home again — then sync it from %s.",
+		displayID(e.DaemonID), e.CurrentHome, e.RequestedBy, e.RequestedBy,
 	)
 }
 

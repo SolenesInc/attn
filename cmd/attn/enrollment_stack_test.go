@@ -50,7 +50,7 @@ func TestEnrollmentNamesTheHomeAndRefusesToBeRehomedSilently(t *testing.T) {
 		t.Fatalf("enroll exited %d with stdout %q and stderr %q, want one line naming the home on stdout", enrolled.Code, enrolled.Stdout, enrolled.Stderr)
 	}
 	requireLines(t, "status on an outpost", s.Attn("enrollment", "status").Stdout,
-		own.DaemonID, "outpost of "+firstHome, "garden and crew: refused here", "attn enrollment leave", enrollment.PlanPath)
+		own.DaemonID, "outpost of "+firstHome, "garden and crew: refused here", "attn enrollment leave")
 
 	refused := s.Attn("enrollment", "enroll", "--home", secondHome, "--json")
 	var result enrollmentJSON
