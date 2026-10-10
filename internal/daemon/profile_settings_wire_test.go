@@ -267,6 +267,43 @@ func TestTheFirstArtifactCreatesItsProfilesNotebookFolder(t *testing.T) {
 	}
 }
 
+func TestFirstNotebookWritesObserveLaterExternalEdits(t *testing.T) {
+	for _, entry := range []string{"journal", "notebook", "filesystem", "inbox"} {
+		t.Run(entry, func(t *testing.T) {
+			w := newWorld(t)
+			app := w.App()
+			work := createProfile(app, "Work")
+			selectProfile(app, work.ID)
+			root := filepath.Join(w.Dir, "notebook-work")
+			if _, err := os.Stat(root); !os.IsNotExist(err) {
+				t.Fatalf("Notebook exists before first write: %v", err)
+			}
+			switch entry {
+			case "journal":
+				if _, err := w.Client().AppendJournal("", "2026-10-10", "first entry"); err != nil {
+					t.Fatal(err)
+				}
+			case "notebook":
+				if result := notebookAskWrite(app, "first.md", notebookNote("first note"), ""); !result.Success {
+					t.Fatal(result)
+				}
+			case "filesystem":
+				if result := fsAskWrite(app, "", "first.md", notebookNote("first note"), ""); !result.Success {
+					t.Fatal(result)
+				}
+			case "inbox":
+				if result := notebookAskSendToChief(app, "first.md", "first selection"); !result.Success {
+					t.Fatal(result)
+				}
+			}
+			fsWriteFile(t, filepath.Join(root, "external.md"), []byte(notebookNote("external edit")))
+			fsAwaitChanged(app, func(m protocol.FsChangedMessage) bool {
+				return m.Root == root && m.Origin == "external" && slices.Contains(m.Paths, "external.md")
+			})
+		})
+	}
+}
+
 func TestJournalAndNotebookGuideWithoutASessionUseTheLastSelectedProfile(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()

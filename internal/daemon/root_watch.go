@@ -226,7 +226,12 @@ func (d *Daemon) rootChanged(root string, paths []string) {
 }
 
 func (d *Daemon) noteSelfWrite(root string, writes ...notebook.SelfWrite) {
-	d.rootWatcherFor(root).NoteSelfWrite(writes...)
+	watcher := d.rootWatcherFor(root)
+	if watcher == nil && d.isNotebookRoot(root) {
+		d.ensureNotebookWatcher(root)
+		watcher = d.rootWatcherFor(root)
+	}
+	watcher.NoteSelfWrite(writes...)
 }
 
 func (d *Daemon) stopNotebookWatcher() { d.stopFsWatchers() }
