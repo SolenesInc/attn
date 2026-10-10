@@ -651,15 +651,14 @@ func (d *Daemon) prepareAutomationLocation(ctx context.Context, req automation.W
 		}
 		sessionPersisted = true
 	}
-	created, err := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskAutomation, Lane: gitDeferred}, func(runCtx context.Context, client *attngit.Client) (bool, error) {
-		return client.EnsureAutomationSessionWorktree(runCtx, mainRepo, worktree, pr.HeadSHA, authorization, sessionPersisted)
-	})
-	if err != nil {
+	if err := d.gitExecution().Run(ctx, gitTask{Kind: gitTaskAutomation, Lane: gitDeferred}, func(runCtx context.Context, client *attngit.Client) error {
+		_, runErr := client.EnsureAutomationSessionWorktree(runCtx, mainRepo, worktree, pr.HeadSHA, authorization, sessionPersisted)
+		return runErr
+	}); err != nil {
 		return automation.PreparedLocation{}, &retryableAutomationDeliveryError{cause: err}
 	}
-	if created {
-		d.store.MonitorWorktreeRepository(mainRepo)
-	}
+	crashAt(crashAfterAutomationWorktree)
+	d.store.MonitorWorktreeRepository(mainRepo)
 	resolved, _ := json.Marshal(automation.ResolvedLocation{
 		Type: "repository_worktree", Repository: identity, ConfiguredSource: source,
 		MainRepository: mainRepo, Worktree: worktree, Revision: pr.HeadSHA,
