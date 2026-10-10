@@ -545,12 +545,12 @@ function ReviewRail({ items, selectedId, onSelect }: { items: GardenReviewItem[]
   </button>)}</nav>;
 }
 
-function ReviewBody({ complete, selected, atReviewSeed, path, browsedSeed, browsedSeedId, seedLoading, browsedDocument, seedReadError, openSeed, returnToReviewSeed, decision, onExit }: {
-  complete: boolean; selected?: GardenReviewItem; atReviewSeed: boolean; path: Seed[]; browsedSeed?: Seed; browsedSeedId: string;
+function ReviewBody({ complete, actionError, selected, atReviewSeed, path, browsedSeed, browsedSeedId, seedLoading, browsedDocument, seedReadError, openSeed, returnToReviewSeed, decision, onExit }: {
+  complete: boolean; actionError: string; selected?: GardenReviewItem; atReviewSeed: boolean; path: Seed[]; browsedSeed?: Seed; browsedSeedId: string;
   seedLoading: boolean; browsedDocument: SeedDocument | null; seedReadError: string; openSeed: (id: string) => void; returnToReviewSeed: () => void;
   decision: React.ReactNode; onExit: () => void;
 }) {
-  if (complete) return <main className="garden-review__complete"><span aria-hidden="true">✓</span><h2>Garden review complete</h2><p>Every captured seed has been dealt with. New candidates will appear in the next review.</p><button type="button" onClick={onExit}>Back to the garden</button></main>;
+  if (complete) return <main className="garden-review__complete"><span aria-hidden="true">✓</span><h2>Garden review complete</h2><p>Every captured seed has been dealt with. New candidates will appear in the next review.</p>{actionError && <p className="garden-review__error" role="alert">{actionError}</p>}<button type="button" onClick={onExit}>Back to the garden</button></main>;
   if (!selected) return null;
   return <main className="garden-review__reader">
     <article className="garden-review__seed">
@@ -679,6 +679,6 @@ export function GardenReviewPanel({
   return <div className={`garden-review is-${frame}`} data-testid="garden-review">
     <ReviewHeader frame={frame} complete={complete} unresolved={unresolved.length} advised={advised} total={review.items.length} onExit={onExit} onClose={onClose} onToggleFrame={onToggleFrame} />
     <ReviewRail items={review.items} selectedId={selected?.id} onSelect={setSelectedId} />
-    <ReviewBody complete={complete} selected={selected} atReviewSeed={atReviewSeed} path={path} browsedSeed={browsedSeed} browsedSeedId={browsedSeedId} seedLoading={seedLoading} browsedDocument={browsedDocument} seedReadError={seedReadError} openSeed={openSeed} returnToReviewSeed={returnToReviewSeed} decision={decision} onExit={onExit} />
+    <ReviewBody complete={complete} actionError={actionError} selected={selected} atReviewSeed={atReviewSeed} path={path} browsedSeed={browsedSeed} browsedSeedId={browsedSeedId} seedLoading={seedLoading} browsedDocument={browsedDocument} seedReadError={seedReadError} openSeed={openSeed} returnToReviewSeed={returnToReviewSeed} decision={decision} onExit={onExit} />
   </div>;
 }

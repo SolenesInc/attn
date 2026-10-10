@@ -114,6 +114,27 @@ const decision = () => screen.queryByRole('heading', { name: 'What should happen
 const handoff = () => screen.getByLabelText(/What should the new agent know/);
 
 describe('App garden review', () => {
+  it('shows a failed Resume after its review decision has settled', async () => {
+    const daemon = await openReview({ actions: ['resume'], recommendation: 'resume' }, withSavedContext());
+    let held: CommandMessage<'seed_resume'> | undefined;
+    daemon.on('seed_resume', request => { held = request; });
+    await click(daemon, 'Resume');
+    expect(daemon.sentOf('seed_resume')).toEqual([expect.objectContaining({ seed_id: 's-review1', review: receipt })]);
+    const completed = review([reviewItem({ resolution: 'resolved', resolved_action: 'resume' })], { status: 'complete' });
+    daemon.on('seed_review_show', () => ({
+      event: 'seed_review_result', profile_id: 'profile-default', operation: 'show', success: true, candidate_count: 0, review: completed,
+    }));
+    await gesture(daemon, () => daemon.emit({ event: 'garden_review_updated', review: completed }));
+    expect(screen.getByRole('heading', { name: 'Garden review complete' })).toBeInTheDocument();
+
+    await gesture(daemon, () => daemon.replyTo(held!, {
+      event: 'seed_resume_result', request_id: held!.request_id, success: false, error: 'Worker could not start',
+    }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Worker could not start');
+    expect(screen.getByRole('heading', { name: 'Garden review complete' })).toBeInTheDocument();
+  });
+
   it('counts the seeds that need review and starts a new review', async () => {
     const daemon = await openGarden(undefined, { candidates: 3 });
     daemon.on('seed_review_start', () => ({

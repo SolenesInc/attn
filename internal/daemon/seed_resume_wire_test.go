@@ -232,12 +232,15 @@ func TestAResumeWhoseAgentCannotStartLeavesNoPaneBehind(t *testing.T) {
 }
 
 func TestSeedChangesDuringResumeDoNotAbortItsConversation(t *testing.T) {
-	for _, action := range []string{"edit", "review harvest"} {
+	for _, action := range []string{"edit", "review harvest", "review launch failure"} {
 		t.Run(action, func(t *testing.T) {
 			var now atomic.Int64
 			now.Store(time.Now().UnixNano())
-			w := &world{World: prepareWorld(t), gardenClock: func() time.Time { return time.Unix(0, now.Load()) }}
+			w := &world{World: prepareWorld(t, fakeagent.Claude), gardenClock: func() time.Time { return time.Unix(0, now.Load()) }}
 			w.start()
+			if action == "review launch failure" {
+				t.Setenv("ATTN_HEADLESS_TASKS", "on")
+			}
 			app, cli := w.App(), w.Client()
 			driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"resume": true, "state_reporting": true})
 			awaitDriverAvailable(app, "snipe")
@@ -255,9 +258,16 @@ func TestSeedChangesDuringResumeDoNotAbortItsConversation(t *testing.T) {
 			closePane(app, sessionPane{session: string(session)})
 
 			request := protocol.SeedResumeMessage{Cmd: protocol.CmdSeedResume, SeedID: seed, RequestID: protocol.Ptr(uuid.NewString())}
-			if action == "review harvest" {
+			if action != "edit" {
+				setSetting(t, app, "garden.advisor", `{"agent":"claude"}`)
 				now.Store(time.Unix(0, now.Load()).Add(garden.DefaultStaleWindow).UnixNano())
 				review := gardenReviewStart(t, cli)
+				if action == "review launch failure" {
+					w.HeadlessTask().Answer(`{"recommendation":"resume","explanation":"Continue the saved conversation.","evidence":["The original conversation is available."]}`)
+					testworld.Await(app, protocol.EventGardenReviewUpdated, func(m protocol.GardenReviewUpdatedMessage) bool {
+						return m.Review.Run.ID == review.Run.ID && gardenReviewItem(t, &m.Review, seed).Status == "ready"
+					})
+				}
 				receipt, found := gardenReviewReceipts(review)[seed]
 				if !found {
 					t.Fatalf("review %+v does not include %s", review.Items, seed)
@@ -280,19 +290,34 @@ func TestSeedChangesDuringResumeDoNotAbortItsConversation(t *testing.T) {
 				if _, err := cli.SeedEdit(seed, "Updated assignment while the agent starts."); err != nil {
 					t.Fatal(err)
 				}
-			} else {
+			} else if action == "review harvest" {
 				lifeMove(t, cli, string(session), seed, "harvest", "The work is complete.", "")
 			}
 			changed := lifeShow(t, cli, seed).Seed
-			driver.answer(reply, map[string]any{"argv": []string{"/bin/cat"}})
+			agent := "/bin/cat"
+			if action == "review launch failure" {
+				agent = w.Path("missing-agent")
+			}
+			driver.answer(reply, map[string]any{"argv": []string{agent}})
 			resumed := testworld.Await(app, protocol.EventSeedResumeResult, func(r protocol.SeedResumeResultMessage) bool {
 				return r.RequestID == protocol.Deref(request.RequestID)
 			})
-			if !resumed.Success || protocol.Deref(resumed.SessionID) != session {
-				t.Fatalf("resume after %s = %+v (%s), want %s reopened", action, resumed, protocol.Deref(resumed.Error), session)
-			}
-			if reopened := showSession(t, cli, id); protocol.Deref(reopened.ClosedAt) != "" {
-				t.Fatal("resume left the session closed")
+			if action == "review launch failure" {
+				if resumed.Success || !strings.Contains(protocol.Deref(resumed.Error), agent) {
+					t.Fatalf("review resume with a missing agent = %+v, want the launch failure", resumed)
+				}
+				review := gardenReviewShow(t, cli, request.Review.ReviewID).Review
+				item := gardenReviewItem(t, review, seed)
+				if review.Run.Status != "complete" || item.Resolution != "resolved" || protocol.Deref(item.ResolvedAction) != "resume" {
+					t.Errorf("failed resume left review %s and item %+v, want the review decision settled", review.Run.Status, item)
+				}
+			} else {
+				if !resumed.Success || protocol.Deref(resumed.SessionID) != session {
+					t.Fatalf("resume after %s = %+v (%s), want %s reopened", action, resumed, protocol.Deref(resumed.Error), session)
+				}
+				if reopened := showSession(t, cli, id); protocol.Deref(reopened.ClosedAt) != "" {
+					t.Fatal("resume left the session closed")
+				}
 			}
 			if after := lifeShow(t, cli, seed).Seed; after.Rev != changed.Rev || after.Body != changed.Body || after.Status != changed.Status || after.TenderSession != changed.TenderSession || protocol.Deref(after.Reason) != protocol.Deref(changed.Reason) {
 				t.Errorf("resume overwrote the change: %+v -> %+v", changed, after)

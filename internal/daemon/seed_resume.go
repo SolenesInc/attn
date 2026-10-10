@@ -111,6 +111,9 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 		seedID, garden.VerbTend, garden.Ask{Actor: actor}, "", d.sessionExists, expectedRev); err != nil {
 		return nil, err
 	}
+	if err := d.resolveGardenReviewAction(review, seedID, "resume"); err != nil {
+		d.logf("Garden review: settle %s after Resume: %v", seedID, err)
+	}
 	reopened, err := d.reopenSessionRuntimeWithProtection(protection, sessionReopenPlan{
 		SessionID: sessionID,
 		Directory: execution.Cwd,
@@ -120,10 +123,6 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 	if err != nil {
 		return nil, err
 	}
-	if err := d.resolveGardenReviewAction(review, seedID, "resume"); err != nil {
-		d.logf("Garden review: settle %s after Resume: %v", seedID, err)
-	}
-
 	d.logf("resume: reopened seed %q as session %s", seedID, sessionID)
 	return &seedResumeOutcome{SessionID: reopened.SessionID, ProfileID: reopened.ProfileID}, nil
 }
