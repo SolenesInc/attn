@@ -1,0 +1,3 @@
+kind: fixed
+area: desktops
+change: Close desktop confirmations list only the agents, shells and tiles present on the desktop.

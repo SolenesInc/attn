@@ -1,7 +1,7 @@
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { openActionMenu, openSession } from './test/appFixtures';
-import { agentPane, daemonDesktop, daemonSession, emptyDesktop, soloDesktop } from './test/daemonFixtures';
+import { agentPane, daemonDesktop, daemonSession, defaultProfile, emptyDesktop, soloDesktop } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 
 describe('close desktop', () => {
@@ -60,6 +60,44 @@ describe('close desktop', () => {
     await request();
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Close desktop' })));
     expect(daemon.sentOf('desktop_close')).toEqual([expect.objectContaining({ desktop_id: 'work', expected_revision: 1 })]);
+  });
+
+  it.each([
+    { agents: 1, shells: 0, tiles: 0, counts: '1 agent', explanation: 'Agents stay in the ledger for resuming.' },
+    { agents: 3, shells: 0, tiles: 0, counts: '3 agents', explanation: 'Agents stay in the ledger for resuming.' },
+    { agents: 0, shells: 1, tiles: 0, counts: '1 shell', explanation: 'Shells stay in the ledger for resuming.' },
+    { agents: 0, shells: 3, tiles: 0, counts: '3 shells', explanation: 'Shells stay in the ledger for resuming.' },
+    { agents: 0, shells: 0, tiles: 1, counts: '1 tile', explanation: 'Tiles are removed.' },
+    { agents: 0, shells: 0, tiles: 3, counts: '3 tiles', explanation: 'Tiles are removed.' },
+    { agents: 3, shells: 1, tiles: 0, counts: '3 agents and 1 shell', explanation: 'Agents and shells stay in the ledger for resuming.' },
+    { agents: 3, shells: 0, tiles: 1, counts: '3 agents and 1 tile', explanation: 'Agents stay in the ledger for resuming. Tiles are removed.' },
+    { agents: 0, shells: 1, tiles: 3, counts: '1 shell and 3 tiles', explanation: 'Shells stay in the ledger for resuming. Tiles are removed.' },
+    { agents: 3, shells: 1, tiles: 3, counts: '3 agents, 1 shell and 3 tiles', explanation: 'Agents and shells stay in the ledger for resuming. Tiles are removed.' },
+  ])('lists only present kinds for $counts', async ({ agents, shells, tiles, counts, explanation }) => {
+    const sessions = [
+      ...Array.from({ length: agents }, (_, index) => daemonSession(`agent-${index}`)),
+      ...Array.from({ length: shells }, (_, index) => daemonSession(`shell-${index}`, { agent: 'shell' })),
+    ];
+    const leaves = [
+      ...sessions.map((session) => ({ type: 'pane', pane_id: `pane-${session.id}` })),
+      ...Array.from({ length: tiles }, (_, index) => ({ type: 'tile', tile_id: `tile-${index}`, tile_kind: 'markdown', tile_params: '/tmp/reference.md' })),
+    ];
+    const root = leaves.slice(1).reduce<unknown>((left, leaf, index) => ({
+      type: 'split', split_id: `split-${index}`, direction: 'vertical', ratio: 0.5, children: [left, leaf],
+    }), leaves[0]);
+    const { daemon } = await renderApp({ initialState: {
+      settings: { queue_mode_enabled: false },
+      sessions: [...sessions, daemonSession('other')],
+      profiles: [defaultProfile('work')],
+      desktops: [daemonDesktop('work', { root, panes: sessions.map((session) => agentPane(session.id, 'work')) }, { name: 'Work' }), soloDesktop('other', { id: 'other' })],
+    } });
+
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Close Work' })));
+
+    const dialog = screen.getByRole('dialog', { name: 'Close Work?' });
+    expect(within(dialog).getByText(`Close ${counts} on this desktop?`)).toBeVisible();
+    expect(within(dialog).getByText(explanation)).toBeVisible();
+    expect(daemon.sentOf('desktop_close')).toEqual([]);
   });
 
   it.each([{ chief_of_staff: true }, { crew_member: 'alder' }])('names protected sessions and sends nothing', async (protection) => {
