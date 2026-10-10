@@ -496,7 +496,7 @@ func (d *Daemon) handleSeedPlot(conn net.Conn, msg *protocol.SeedPlotMessage) {
 		return
 	}
 	sessionID := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
-	member := strings.TrimSpace(protocol.Deref(msg.Member))
+	member := d.resolveTenderMember(protocol.Deref(msg.Member), sessionID, protocol.Deref(msg.ProfileID))
 
 	var result protocol.SeedPlotResult
 	planted := []string{}

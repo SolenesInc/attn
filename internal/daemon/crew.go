@@ -119,18 +119,29 @@ func (d *Daemon) assignCrewProfiles(homes []crew.Home) {
 				break
 			}
 		}
-		identity := store.CrewIdentity{Key: member.Key, ProfileID: profileID, Name: crew.NameFromKey(member.Key)}
-		_, err := d.store.EnsureCrewMember(identity)
-		var taken *store.CrewNameTakenError
-		if errors.As(err, &taken) {
-			identity.Name = member.Key.String() + "-crew"
-			d.logf("crew: name %s taken; importing %s as %s", taken.Name, member.Key, identity.Name)
-			_, err = d.store.EnsureCrewMember(identity)
-		}
+		_, err := d.importCrewIdentity(member.Key, profileID)
 		if err != nil {
 			d.logf("crew: giving %s a profile: %v", member.Key.String(), err)
 		}
 	}
+}
+
+func (d *Daemon) importCrewIdentity(key who.MemberKey, profileID string) (store.CrewIdentity, error) {
+	base := crew.NameFromKey(key)
+	identity := store.CrewIdentity{Key: key, ProfileID: profileID, Name: base}
+	result, err := d.store.EnsureCrewMember(identity)
+	var taken *store.CrewNameTakenError
+	for number := 2; errors.As(err, &taken); number++ {
+		suffix := fmt.Sprintf("-%d", number)
+		stem := base
+		if len(stem)+len(suffix) > 40 {
+			stem = stem[:40-len(suffix)]
+		}
+		identity.Name = stem + suffix
+		d.logf("crew: name %s taken; trying %s for %s", taken.Name, identity.Name, key)
+		result, err = d.store.EnsureCrewMember(identity)
+	}
+	return result, err
 }
 
 func (d *Daemon) crewProfileID(memberID string) string {

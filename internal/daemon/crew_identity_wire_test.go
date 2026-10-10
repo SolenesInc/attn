@@ -274,3 +274,53 @@ func TestAnIncompleteLegacyHomeDoesNotImportItsWorkingDirectories(t *testing.T) 
 		t.Fatalf("working directory imported as crew: %+v", roster.Members)
 	}
 }
+
+func TestAPlotKeepsItsPlanterAcrossCrewRenames(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	cli := w.Client()
+	registerSessions(t, w, cli, "planter")
+	if _, err := cli.CrewRename("Keel", "Alfred"); err != nil {
+		t.Fatal(err)
+	}
+	plot, err := cli.SeedPlot("planter", "Alfred", protocol.SeedPlotMessage{Title: "renamed planter", Children: []protocol.SeedPlotChild{{Title: "its child"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cli.CrewRename("Alfred", "Robert"); err != nil {
+		t.Fatal(err)
+	}
+	w.restart()
+	cli = w.Client()
+	for _, planted := range append([]protocol.Seed{plot.Crown}, plot.Children...) {
+		shown, err := cli.SeedShow("", planted.ID)
+		if err != nil || shown.Seed.PlanterMember != "keel" {
+			t.Fatalf("plot seed after another rename and restart: %+v %v", shown, err)
+		}
+	}
+}
+
+func TestHomeImportAllocatesAValidUnusedName(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	cli := w.Client()
+	key := strings.Repeat("a", 40)
+	base := "A" + key[1:]
+	if _, err := cli.CrewRename("Keel", base); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cli.CrewRename("Trellis", base[:38]+"-2"); err != nil {
+		t.Fatal(err)
+	}
+	writeCrewHomeFile(t, w, key, crew.CharterFileName, "# A new imported member\n")
+	w.restart()
+	member := crewRosterMember(t, w.Client(), key)
+	if member.Name != base[:38]+"-3" {
+		t.Fatalf("imported member lost or misnamed: %+v", member)
+	}
+	if err := crew.ValidateName(member.Name); err != nil {
+		t.Fatal(err)
+	}
+	w.restart()
+	if again := crewRosterMember(t, w.Client(), key); again.Name != member.Name || again.Key != key {
+		t.Fatalf("imported identity changed on restart: %+v", again)
+	}
+}
