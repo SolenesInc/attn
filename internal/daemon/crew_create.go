@@ -8,11 +8,9 @@ import (
 	"strings"
 	"time"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
 )
@@ -88,22 +86,7 @@ func (d *Daemon) furnishCrewMember(id store.CrewIdentity, b crewBirth) error {
 	if err := os.WriteFile(member.CharterPath, []byte(b.Charter), 0o644); err != nil {
 		return crewHomeWriteError(id, home, err)
 	}
-	if err := d.trustClaudeCrewHome(home, d.cachedLoginShellEnv()); err != nil {
-		return fmt.Errorf("%s exists, but its home could not be trusted for Claude: %w; `attn crew wake %s` tries again", id.Name, err, id.Name)
-	}
 	return nil
-}
-
-func (d *Daemon) trustClaudeCrewHome(home string, loginEnv []string) error {
-	env := pty.MergeEnvironment(os.Environ(), pty.LoginShellEnvironment(pty.GetUserLoginShell(), loginEnv, d.logf))
-	configDir := ""
-	for _, entry := range env {
-		if value, found := strings.CutPrefix(entry, "CLAUDE_CONFIG_DIR="); found {
-			configDir = value
-			break
-		}
-	}
-	return agentdriver.TrustClaudeWorkingDirectory(home, configDir)
 }
 
 func crewHomeWriteError(id store.CrewIdentity, home string, err error) error {

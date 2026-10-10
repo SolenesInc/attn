@@ -1,6 +1,7 @@
 package testworld
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,6 +27,12 @@ func Main(m *testing.M, env ...string) int {
 	_ = os.Setenv(toolhome.EnvVar, toolHome)
 	_ = os.Setenv("CODEX_HOME", filepath.Join(toolHome, ".codex"))
 	_ = os.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(toolHome, ".claude"))
+	shellEnv, _ := json.Marshal([]string{
+		toolhome.EnvVar + "=" + toolHome,
+		"CODEX_HOME=" + filepath.Join(toolHome, ".codex"),
+		"CLAUDE_CONFIG_DIR=" + filepath.Join(toolHome, ".claude"),
+	})
+	_ = os.Setenv("ATTN_CACHED_SHELL_ENV", string(shellEnv))
 	for _, pair := range env {
 		key, value, _ := strings.Cut(pair, "=")
 		_ = os.Setenv(key, value)

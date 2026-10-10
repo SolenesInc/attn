@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
@@ -93,6 +94,18 @@ func (d *Daemon) crewMember(key who.MemberKey) (crew.Member, docstore.Document, 
 		err = d.validateCrewMemberPaths(member)
 	}
 	return member, *doc, err
+}
+
+func (d *Daemon) trustClaudeCrewHome(home string, loginEnv []string) error {
+	env := pty.MergeEnvironment(os.Environ(), pty.LoginShellEnvironment(pty.GetUserLoginShell(), loginEnv, d.logf))
+	configDir := ""
+	for _, entry := range env {
+		if value, found := strings.CutPrefix(entry, "CLAUDE_CONFIG_DIR="); found {
+			configDir = value
+			break
+		}
+	}
+	return agentdriver.TrustClaudeWorkingDirectory(home, configDir)
 }
 
 func (d *Daemon) crewLaunchDir(member crew.Member) (string, error) {

@@ -55,8 +55,12 @@ directory takes precedence over `.claude.json`. Config writers coordinate throug
 the config file's path plus `.lock`. Claude's `proper-lockfile` defaults
 expire a lock after 10 seconds without an update and renew it every 5 seconds.
 
-attn trusts the member home it creates, including a chief's home. Crew
-launches into that home also receive the harness's directory-trust setting.
+attn trusts a member home when it launches the member there, including a
+chief's home. An already-trusted Claude home needs no config lock or write.
+New trust writes preserve the config's mode and symlink target, sync the file,
+and replace it atomically. Lock contention follows Claude's retry delays
+(200, 400, 800, 1600, 3200, 4000 ms), bounded by its 1.5-second startup-write
+budget.
 An unrelated working directory still needs the user's trust decision.
 
 ### Conversation commands
@@ -109,6 +113,14 @@ Probed on 2.1.295 under a scratch PTY, and read in its bundled source.
   attn ignores the glyphs until a `clear`.
 
 ## Codex
+
+### Crew-home trust on resume
+
+Probed Codex 0.162.0 outside attn on 2026-10-10. A private config copy had
+its saved project-trust entries removed, and the non-repository working
+directory held a `CHARTER.md`. Both `codex resume <id>` and a fresh `codex`
+launch opened without a folder-trust prompt, with either the auto reviewer
+or user reviewer. The resumed conversation retained its earlier answer.
 
 Read in the source at openai/codex 60947e2341.
 

@@ -455,11 +455,7 @@ func (d *Daemon) warmLoginShellEnvCache() {
 	if shell == "" {
 		return
 	}
-	env, err := pty.ReadLoginShellEnv(shell)
-	if err != nil {
-		d.logf("login shell env pre-warm failed for %s: %v", shell, err)
-		return
-	}
+	env := pty.LoginShellEnvironment(shell, nil, d.logf)
 	d.loginShellEnvMu.Lock()
 	d.loginShellEnv = env
 	d.loginShellEnvMu.Unlock()
