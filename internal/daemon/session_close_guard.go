@@ -9,14 +9,10 @@ import (
 )
 
 var (
-	errChiefOfStaffProtected = errors.New("chief of staff is protected from closing; unset the chief role first")
 	errCrewRosterUnavailable = errors.New("crew roster is unavailable; try again before closing this session")
 )
 
 func (d *Daemon) sessionCloseError(sessionID protocol.SessionID) error {
-	if d.isChiefOfStaffSession(sessionID) {
-		return errChiefOfStaffProtected
-	}
 	b, err := d.bindings()
 	if docstore.IsUndeclaredCollection(err) {
 		return nil

@@ -54,7 +54,7 @@ func TestAMemberNameRepeatsAcrossProfilesButNotWithinOne(t *testing.T) {
 		}
 		_, err = cli.CrewCreate(protocol.CrewCreateMessage{Name: "keel"})
 		crewErrorContains(t, err, "Keel", "already exists")
-		roster := crewRoster(t, cli)
+		roster := regularCrewMembers(crewRoster(t, cli))
 		if len(roster) != 1 || roster[0].Key != created.Member.Key || roster[0].ProfileID != profile {
 			t.Fatalf("roster = %+v", roster)
 		}
@@ -112,10 +112,13 @@ func TestRetiringAndRestoringAMemberKeepsItsMailAndReleasesItsClaims(t *testing.
 	crewErrorContains(t, err, "Keel is retired")
 	_, err = cli.CrewCreate(protocol.CrewCreateMessage{Name: "Keel"})
 	crewErrorContains(t, err, "Keel is retired", "restore")
-	if members := crewRoster(t, cli); len(members) != 0 {
+	if members := regularCrewMembers(crewRoster(t, cli)); len(members) != 0 {
 		t.Fatalf("active roster = %+v", members)
 	}
 	all, err := cli.CrewList(true)
+	if all != nil {
+		all.Members = regularCrewMembers(all.Members)
+	}
 	if err != nil || len(all.Members) != 1 || !all.Members[0].Retired {
 		t.Fatalf("all roster = %+v %v", all, err)
 	}
@@ -129,6 +132,9 @@ func TestRetiringAndRestoringAMemberKeepsItsMailAndReleasesItsClaims(t *testing.
 	w.restart()
 	cli = w.Client()
 	all, err = cli.CrewList(true)
+	if all != nil {
+		all.Members = regularCrewMembers(all.Members)
+	}
 	if err != nil || !all.Members[0].Retired || all.Members[0].BindingSession != nil {
 		t.Fatalf("retirement after restart = %+v %v", all, err)
 	}
@@ -138,9 +144,10 @@ func TestRetiringAndRestoringAMemberKeepsItsMailAndReleasesItsClaims(t *testing.
 		t.Fatalf("restore = %+v %v", restored, err)
 	}
 	update := testworld.Await(app, protocol.EventCrewUpdated, func(e protocol.CrewUpdatedMessage) bool {
-		return len(e.Members) == 1 && e.Members[0].BindingSession != nil
+		members := regularCrewMembers(e.Members)
+		return len(members) == 1 && members[0].BindingSession != nil
 	})
-	successor := protocol.Deref(update.Members[0].BindingSession)
+	successor := protocol.Deref(regularCrewMembers(update.Members)[0].BindingSession)
 	next := w.Launched(string(successor))
 	next.Prompted()
 	next.Reply("Ready. <!-- attn:state=idle -->")
@@ -225,6 +232,9 @@ func TestARetiredMembersLetterClosesTheDayWithoutANap(t *testing.T) {
 			}
 			awaitClosed(app, string(wake.SessionID))
 			all, err := cli.CrewList(true)
+			if all != nil {
+				all.Members = regularCrewMembers(all.Members)
+			}
 			if err != nil || len(all.Members) != 1 || all.Members[0].Key != created.Member.Key || !all.Members[0].Retired || all.Members[0].BindingSession != nil {
 				t.Fatalf("retired roster = %+v %v", all, err)
 			}
@@ -263,6 +273,9 @@ func TestARetiredMemberThatClearsStillReceivesItsSleepRequest(t *testing.T) {
 		t.Fatalf("cleared retired member's mail = %+v", mail)
 	}
 	all, err := cli.CrewList(true)
+	if all != nil {
+		all.Members = regularCrewMembers(all.Members)
+	}
 	if err != nil || len(all.Members) != 1 || all.Members[0].Key != created.Member.Key || !all.Members[0].Retired || protocol.Deref(all.Members[0].BindingSession) != next.ID {
 		t.Fatalf("cleared retired member = %+v %v", all, err)
 	}

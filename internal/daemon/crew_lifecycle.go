@@ -219,6 +219,9 @@ func (d *Daemon) crewLifecycleTick(now time.Time) {
 	heartbeat := d.crewBoolSetting(string(settingCrewHeartbeatEnabled))
 	autoSleep := d.crewBoolSetting(string(settingCrewAutoSleepEnabled))
 	for _, member := range members {
+		if d.isChief(member.Key) {
+			continue
+		}
 		if !d.crewBindingLive(member) {
 			continue
 		}

@@ -104,14 +104,10 @@ func TestSessionsTheQueueSkipsNeverOweATurn(t *testing.T) {
 	})
 
 	shell := w.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), w.Path("scripts"))
-	chief := w.Spawn(app, fakeagent.Claude, w.Path("office"))
-	w.Launched(chief)
-	chiefResult := testworld.Request(app, protocol.SetChiefOfStaffMessage{Cmd: protocol.CmdSetChiefOfStaff, SessionID: protocol.SessionID(chief), ChiefOfStaff: true},
-		protocol.EventChiefOfStaffResult, func(r protocol.ChiefOfStaffResultMessage) bool { return string(r.SessionID) == chief })
-	if chiefResult.Error != nil {
-		t.Fatalf("make %s the chief of staff: %s", chief, *chiefResult.Error)
-	}
-	w.Launched(chief)
+	chief := configureChiefOn(t, w, app, fakeagent.Claude, "sonnet")
+	run := w.Launched(chief)
+	run.Prompted()
+	run.Reply("Ready. <!-- attn:state=idle -->")
 	madeChief := len(sessionUpdatesOf(app, chief))
 	for _, id := range []string{chief} {
 		testworld.AwaitSession(app, id, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
@@ -123,7 +119,7 @@ func TestSessionsTheQueueSkipsNeverOweATurn(t *testing.T) {
 		if got.State != protocol.SessionStateIdle || got.TurnOwed != nil {
 			t.Errorf("the %s is %s with turn owed %v, want idle at its prompt owing nothing", name, got.State, protocol.Deref(got.TurnOwed))
 		}
-		if id == chief && !protocol.Deref(got.ChiefOfStaff) {
+		if id == chief && !protocol.Deref(got.Chief) {
 			t.Errorf("the chief of staff is not shown as the chief")
 		}
 	}

@@ -122,33 +122,8 @@ describe('useSessionLaunch from the new-session picker', () => {
 
     const { args } = vi.mocked(ptySpawn).mock.calls[0][0];
     expect(args).toMatchObject({ cwd: '/repo/picked', placement: { desktop_id: 'desktop-1' } });
-    expect(args.chief_of_staff).toBeFalsy();
   });
 
-  it('launches a chief of staff into a new worktree when the picker asks for one', async () => {
-    const { result } = renderLaunch(null, {
-      sendCreateWorktree: vi.fn(async () => ({ success: true, path: '/repo/exsin--chief' })),
-    });
-
-    await act(async () => {
-      result.current.handleCreateWorktreeSession('/repo/exsin', 'chief', 'main', undefined, 'shell', false, undefined, true);
-      await vi.waitFor(() => expect(vi.mocked(ptySpawn)).toHaveBeenCalled());
-    });
-
-    const { args } = vi.mocked(ptySpawn).mock.calls[0][0];
-    expect(args).toMatchObject({ cwd: '/repo/exsin--chief', chief_of_staff: true, placement: { desktop_id: 'desktop-1' } });
-  });
-
-  it('launches a chief of staff on the current desktop when the picker asks for one', async () => {
-    const { result } = renderLaunch();
-
-    await act(async () => {
-      await result.current.handleLocationSelect('/repo/chief', 'shell', undefined, false, true);
-    });
-
-    const { args } = vi.mocked(ptySpawn).mock.calls[0][0];
-    expect(args).toMatchObject({ cwd: '/repo/chief', chief_of_staff: true, placement: { desktop_id: 'desktop-1' } });
-  });
 });
 
 describe('useSessionLaunch on a remote endpoint', () => {

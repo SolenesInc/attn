@@ -8,7 +8,6 @@ const (
 	session kind = iota + 1
 	member
 	tenderOf
-	chiefOf
 	user
 	attn
 )
@@ -20,14 +19,12 @@ type ref struct {
 type Party struct{ party ref }
 type Actor struct{ actor ref }
 type Address struct{ address ref }
-type ChiefMailbox struct{ ProfileID string }
 
 func Member(k MemberKey) Party                        { return Party{ref{member, k.String()}} }
 func User() Actor                                     { return Actor{ref{kind: user}} }
 func Attn() Actor                                     { return Actor{ref{kind: attn}} }
 func ToSession(id protocol.SessionID) Address         { return Address{ref{session, string(id)}} }
 func ToTenderOf(id string) Address                    { return Address{ref{tenderOf, id}} }
-func ToChiefOf(id string) Address                     { return Address{ref{chiefOf, id}} }
 func PartyOfEndedSession(id protocol.SessionID) Party { return Party{ref{session, string(id)}} }
 func (p Party) Actor() Actor                          { return Actor{p.party} }
 func (p Party) Address() Address                      { return Address{p.party} }
@@ -62,7 +59,7 @@ func SwitchParty[T any](p Party, onSession func(protocol.SessionID) (T, error), 
 	var zero T
 	return zero, ErrNobody
 }
-func SwitchAddress[T any](a Address, onSession func(protocol.SessionID) (T, error), onMember func(MemberKey) (T, error), onTender func(string) (T, error), onChief func(ChiefMailbox) (T, error)) (T, error) {
+func SwitchAddress[T any](a Address, onSession func(protocol.SessionID) (T, error), onMember func(MemberKey) (T, error), onTender func(string) (T, error)) (T, error) {
 	switch a.address.kind {
 	case session:
 		return onSession(protocol.SessionID(a.address.id))
@@ -70,8 +67,6 @@ func SwitchAddress[T any](a Address, onSession func(protocol.SessionID) (T, erro
 		return onMember(MemberKey{a.address.id})
 	case tenderOf:
 		return onTender(a.address.id)
-	case chiefOf:
-		return onChief(ChiefMailbox{a.address.id})
 	}
 	var zero T
 	return zero, ErrNobody

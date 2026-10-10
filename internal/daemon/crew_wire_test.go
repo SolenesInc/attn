@@ -63,6 +63,16 @@ func crewRoster(t *testing.T, cli *client.Client) []protocol.CrewMember {
 	return roster.Members
 }
 
+func regularCrewMembers(members []protocol.CrewMember) []protocol.CrewMember {
+	regular := []protocol.CrewMember{}
+	for _, member := range members {
+		if !member.Chief {
+			regular = append(regular, member)
+		}
+	}
+	return regular
+}
+
 func crewRosterMember(t *testing.T, cli *client.Client, id string) protocol.CrewMember {
 	t.Helper()
 	members := crewRoster(t, cli)
@@ -169,7 +179,7 @@ func TestCrewHomesJoinTheRosterAsleepAndAClosedDayReleasesItsMember(t *testing.T
 	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
 
-	members := crewRoster(t, cli)
+	members := regularCrewMembers(crewRoster(t, cli))
 	if len(members) != 3 {
 		t.Fatalf("roster = %d members, want the 3 homes on disk", len(members))
 	}
@@ -341,8 +351,8 @@ func TestCrewSetRecordsAndClearsEachFieldIndependently(t *testing.T) {
 		t.Fatalf("switching harness left agent %q effort %q, want codex with its pins cleared", protocol.Deref(switched.Agent), protocol.Deref(switched.Effort))
 	}
 	cleared := setCrew(t, cli, "keel", protocol.CrewSetMessage{Agent: protocol.Ptr("")})
-	if cleared.Agent != nil || cleared.ResolvedAgent != crew.DefaultAgent {
-		t.Fatalf("clearing the agent left %v resolving to %q, want unset resolving to %q", cleared.Agent, cleared.ResolvedAgent, crew.DefaultAgent)
+	if cleared.Agent != nil || protocol.Deref(cleared.ResolvedAgent) != crew.DefaultAgent {
+		t.Fatalf("clearing the agent left %v resolving to %q, want unset resolving to %q", cleared.Agent, protocol.Deref(cleared.ResolvedAgent), crew.DefaultAgent)
 	}
 	if got := crewRosterMember(t, cli, "keel"); got.Agent != nil || protocol.Deref(got.Cwd) != workDir {
 		t.Fatalf("roster keel = agent %v cwd %q, want unset and %q", got.Agent, protocol.Deref(got.Cwd), workDir)
@@ -476,7 +486,7 @@ func TestARestartReimportsCrewHomesWithoutRewritingTheRoster(t *testing.T) {
 
 	w.restart()
 	cli = w.Client()
-	if got := len(crewRoster(t, cli)); got != 3 {
+	if got := len(regularCrewMembers(crewRoster(t, cli))); got != 3 {
 		t.Fatalf("roster = %d members after a restart, want 3", got)
 	}
 	if got := protocol.Deref(crewRosterMember(t, cli, "keel").Cwd); got != workDir {
@@ -490,7 +500,7 @@ func TestARestartReimportsCrewHomesWithoutRewritingTheRoster(t *testing.T) {
 	writeCrewHomeFile(t, w, strings.Repeat("a", 40+1), crew.CharterFileName, "# long\n")
 	w.restart()
 	cli = w.Client()
-	if got := len(crewRoster(t, cli)); got != 5 {
+	if got := len(regularCrewMembers(crewRoster(t, cli))); got != 5 {
 		t.Fatalf("roster = %d members after a home and some non-homes were added by hand, want 5", got)
 	}
 	crewRosterMember(t, cli, "sable")

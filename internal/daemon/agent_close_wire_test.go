@@ -14,25 +14,22 @@ import (
 func TestTheChiefOfStaffClosesAnySessionButItself(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	panes := spawnPanes(w, app, w.Path("chief"), w.Path("stranger"))
-	chief, stranger := panes[0].session, panes[1].session
-	if made := setChiefOfStaff(app, chief, true); !made.Success {
-		t.Fatalf("making chief the chief of staff = %+v", made)
-	}
+	chief := configureChiefOn(t, w, app, fakeagent.Claude, "sonnet")
+	stranger := spawnPanes(w, app, w.Path("stranger"))[0].session
 
 	closed, err := cli.AgentClose(stranger, protocol.SessionID(chief), "abandoned, nobody is driving it")
 	if err != nil {
 		t.Fatalf("the chief closes a stranger: %v", err)
 	}
-	if closed.Rule != protocol.AgentCloseRuleChiefOfStaff || string(closed.TargetSessionID) != stranger {
+	if closed.Rule != protocol.AgentCloseRuleChief || string(closed.TargetSessionID) != stranger {
 		t.Errorf("close = %+v, want stranger closed under the chief_of_staff rule", closed)
 	}
-	if by := protocol.Deref(showSession(t, cli, stranger).ClosedBy).Ref; by != protocol.ActorRef("session:"+chief) {
+	if by := protocol.Deref(showSession(t, cli, stranger).ClosedBy).Ref; by != protocol.ActorRef("member:"+protocol.Deref(queriedSession(t, cli, chief).CrewMember)) {
 		t.Errorf("the ledger names %q as the closer, want the chief", by)
 	}
 
 	_, err = cli.AgentClose(chief, protocol.SessionID(chief), "done for the day")
-	agentCloseRefused(t, err, "session_close_protected", "chief of staff is protected from closing; unset the chief role first")
+	agentCloseRefused(t, err, "session_close_protected", "Chief is protected from closing; put Chief to sleep first")
 	if live := queriedIDs(t, cli, ""); !slices.Contains(live, chief) {
 		t.Errorf("live sessions = %v, want the chief still there", live)
 	}
@@ -43,10 +40,7 @@ func TestACrewMembersDayCannotBeClosedByAnAgent(t *testing.T) {
 	app, cli := w.App(), w.Client()
 	day := wakeCrew(t, cli, "trellis", "")
 	w.Launched(string(day.SessionID))
-	chief := spawnPanes(w, app, w.Path("chief"))[0].session
-	if made := setChiefOfStaff(app, chief, true); !made.Success {
-		t.Fatalf("making chief the chief of staff = %+v", made)
-	}
+	chief := configureChiefOn(t, w, app, fakeagent.Claude, "sonnet")
 
 	_, err := cli.AgentClose(string(day.SessionID), protocol.SessionID(chief), "looks finished to me")
 	agentCloseRefused(t, err, "session_close_protected", "Trellis is protected from closing; put Trellis to sleep first")
@@ -85,17 +79,15 @@ func TestAgentCloseBySeedClosesItsTender(t *testing.T) {
 func TestAgentCloseRefusalsCloseNothing(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	panes := spawnPanes(w, app, w.Path("chief"), w.Path("worker"), w.Path("other"))
-	chief, worker, other := panes[0].session, panes[1].session, panes[2].session
+	chief := configureChiefOn(t, w, app, fakeagent.Claude, "sonnet")
+	panes := spawnPanes(w, app, w.Path("worker"), w.Path("other"))
+	worker, other := panes[0].session, panes[1].session
 	dupes := []string{
 		w.Spawn(app, fakeagent.Claude, w.Path("dupe"), withIDPrefix("dupe-")),
 		w.Spawn(app, fakeagent.Claude, w.Path("dupe"), withIDPrefix("dupe-")),
 	}
 	for _, dupe := range dupes {
 		w.Launched(dupe)
-	}
-	if made := setChiefOfStaff(app, chief, true); !made.Success {
-		t.Fatalf("making chief the chief of staff = %+v", made)
 	}
 	seedling := strings.Repeat("🌱", 400)
 

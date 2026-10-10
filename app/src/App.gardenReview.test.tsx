@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { daemonSeed, daemonSession, type DaemonSeed, type DaemonSeedDocument } from './test/daemonFixtures';
+import { daemonSeed, daemonSession, crewMember, type DaemonSeed, type DaemonSeedDocument } from './test/daemonFixtures';
 import { renderGarden } from './test/garden';
 import { gesture, pressShortcut } from './test/renderApp';
 import type { CommandMessage, EventMessage } from './test/protocol';
@@ -73,11 +73,12 @@ interface GardenScript {
   documents?: Record<string, Partial<DaemonSeedDocument>>;
   candidates?: number;
   chief?: boolean;
+  chiefState?: 'awake' | 'asleep' | 'unconfigured';
 }
 
-async function openGarden(shown: Review | undefined, { seeds = [reviewedSeed], documents = {}, candidates, chief = true }: GardenScript = {}) {
-  const sessions = [daemonSession('s1'), ...(chief ? [daemonSession('chief', { chief_of_staff: true })] : [])];
-  const garden = await renderGarden(seeds, { sessions });
+async function openGarden(shown: Review | undefined, { seeds = [reviewedSeed], documents = {}, candidates, chief = true, chiefState = 'awake' }: GardenScript = {}) {
+  const sessions = [daemonSession('s1'), ...(chief && chiefState === 'awake' ? [daemonSession('chief', { chief: true })] : [])];
+  const garden = await renderGarden(seeds, { sessions, initial: { crew: chief ? [crewMember('chief-key', { name: 'Chief', chief: true, binding_session: chiefState === 'awake' ? 'chief' : undefined, agent: chiefState === 'unconfigured' ? undefined : 'claude', resolved_agent: chiefState === 'unconfigured' ? undefined : 'claude' })] : [] } });
   garden.documents = documents;
   const { daemon } = garden;
   daemon.on('seed_review_show', () => ({
@@ -433,6 +434,11 @@ describe('App garden review', () => {
 
     expect(screen.getByRole('button', { name: 'Park' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Send to Chief' })).toBeNull();
+  });
+
+  it.each(['asleep', 'unconfigured'] as const)('offers Send to Chief while its permanent member is %s', async (chiefState) => {
+    await openReview({}, { chiefState });
+    expect(screen.getByRole('button', { name: 'Send to Chief' })).toBeEnabled();
   });
 
   it('sends a guarded seed to Chief from the active session with optional guidance', async () => {

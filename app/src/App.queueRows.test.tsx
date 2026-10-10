@@ -30,7 +30,7 @@ describe('App queue rows', () => {
 
   it('calls a labeled chief Chief in the crew block and restores its name when demoted', async () => {
     const chief = daemonSession('coordinator', {
-      label: 'Profiles epic coordinator', state: 'idle', chief_of_staff: true,
+      label: 'Profiles epic coordinator', state: 'idle', chief: true,
     });
     const { daemon } = await renderApp({
       initialState: {
@@ -44,13 +44,12 @@ describe('App queue rows', () => {
     expect(within(row).getByText('Chief')).toBeInTheDocument();
     expect(row).toHaveAttribute('title', 'Profiles epic coordinator');
 
-    daemon.emit({ event: 'sessions_updated', sessions: [{ ...chief, chief_of_staff: false }] });
+    daemon.emit({ event: 'sessions_updated', sessions: [{ ...chief, chief: false }] });
     await daemon.idle();
     fireEvent.click(screen.getByTestId('queue-agents-toggle'));
 
     expect(screen.queryByTestId('queue-chief-coordinator')).toBeNull();
     expect(within(screen.getByTestId('queue-settled-coordinator')).getByText('Profiles epic coordinator')).toBeInTheDocument();
-    expect(daemon.sentOf('set_chief_of_staff')).toEqual([]);
   });
 
   it('keeps a snoozed agent name beside its wake time', async () => {

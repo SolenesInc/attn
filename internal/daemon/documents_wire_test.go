@@ -136,6 +136,7 @@ func TestAWriteThatChangedNothingAnnouncesNothing(t *testing.T) {
 	w := newWorld(t)
 	cli, app := w.Client(), w.App()
 	defineRequests(t, cli, gateNS)
+	baseline := producedBy(busStatus(t, app), "document.changed")
 	put(t, cli, gateNS, "a", `{"status":"pending"}`)
 
 	missing, err := cli.DocDelete(gateNS, requests, "never-existed", nil)
@@ -146,7 +147,7 @@ func TestAWriteThatChangedNothingAnnouncesNothing(t *testing.T) {
 	if _, err := cli.DocPut(gateNS, requests, "a", `{"status":"approved"}`, &stale); client.ErrorCode(err) != protocol.ErrorCodeConflict {
 		t.Fatalf("a stale write returned %v, want a conflict", err)
 	}
-	if changes := producedBy(busStatus(t, app), "document.changed"); changes != 1 {
+	if changes := producedBy(busStatus(t, app), "document.changed") - baseline; changes != 1 {
 		t.Fatalf("the log holds %d document.changed fact(s), want only the one write that changed something", changes)
 	}
 }

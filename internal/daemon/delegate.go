@@ -467,7 +467,7 @@ func (d *Daemon) spawnDelegatedRuntimeProtected(protection foregroundCleanupProt
 	return readInternalActionResult(spawnClient)
 }
 
-func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtection, msg *resolvedDelegationLaunch, operationID string, reservedSessionID protocol.SessionID, ownedWorktreePath string, worktreeOwned bool, worktreeToken string, initiatingChiefSessionID protocol.SessionID, resolved *delegationprefs.Resolved) (*protocol.DelegateResult, error) {
+func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtection, msg *resolvedDelegationLaunch, operationID string, reservedSessionID protocol.SessionID, ownedWorktreePath string, worktreeOwned bool, worktreeToken string, resolved *delegationprefs.Resolved) (*protocol.DelegateResult, error) {
 	guidance := ""
 	if resolved != nil {
 		if err := d.ensureDelegationWorkflowSkill(resolved); err != nil {
@@ -557,8 +557,9 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 		}
 	}
 	name := strings.TrimSpace(protocol.Deref(msg.Label))
-	delegatedByChief := initiatingChiefSessionID != "" ||
-		(operationID == "" && d.isChiefOfStaffSession(sourceSessionID))
+	dispatcherParty, _ := msg.Dispatcher.Party()
+	dispatcherKey, _ := dispatcherParty.Member()
+	delegatedByChief := d.isChief(dispatcherKey)
 	createdWorktreePath := ""
 	operationWorktreePath := ""
 	rollback := d.newDelegationRollback()

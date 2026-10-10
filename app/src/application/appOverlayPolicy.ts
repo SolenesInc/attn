@@ -10,7 +10,6 @@ interface Overlays {
   notebookOpen: boolean;
   crewPanelOpen: boolean;
   gardenHoldsWindow: boolean;
-  chiefTransferOpen: boolean;
   desktopCloseOpen: boolean;
   contextCapOpen: boolean;
   sessionCreationOpen: boolean;
@@ -23,7 +22,6 @@ interface Overlays {
 
 export function appOverlayPolicy(overlays: Overlays) {
   const promptOpen = [
-    overlays.chiefTransferOpen,
     overlays.desktopCloseOpen,
     overlays.contextCapOpen,
     overlays.sessionCreationOpen,

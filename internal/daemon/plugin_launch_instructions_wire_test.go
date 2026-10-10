@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/hooks"
-	"github.com/victorarias/attn/internal/protocol"
 )
 
 func TestADriverTakingLaunchInstructionsIsGivenTheAgentsOrTheChiefsGuidance(t *testing.T) {
@@ -18,11 +17,12 @@ func TestADriverTakingLaunchInstructionsIsGivenTheAgentsOrTheChiefsGuidance(t *t
 			w := newWorld(t)
 			app := w.App()
 			driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{
-				"launch_instructions": true, "resume": true, "state_reporting": true, "pull_request_reporting": reportsPullRequests,
+				"launch_instructions": true, "resume": true, "model_pin": true, "initial_prompt": true, "state_reporting": true, "pull_request_reporting": reportsPullRequests,
 			})
 			awaitDriverAvailable(app, "snipe")
 			_, agent := spawnDriven(w, app, driver, w.Path("shop"))
-			_, chief := spawnDriven(w, app, driver, w.Path("chief"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
+			configureChiefOn(t, w, app, scriptedAgent, "chosen-model")
+			chief := driver.launched()
 
 			if got := agent.Instructions; got == nil || got.Kind != "agent" || got.ProfileID != app.SelectedProfile() {
 				t.Fatalf("the agent launch carried instructions %+v, want agent guidance for profile %s", got, app.SelectedProfile())
@@ -39,7 +39,7 @@ func TestADriverTakingLaunchInstructionsIsGivenTheAgentsOrTheChiefsGuidance(t *t
 				{launch: "agent", content: agent.Instructions.Content,
 					want: []string{hooks.AgentGuidance, hooks.GardenGuidance}, unwant: []string{"shared context"}},
 				{launch: "chief", content: chief.Instructions.Content,
-					want: []string{"You are the chief of staff", chief.Instructions.NotebookRoot, hooks.GardenGuidance}},
+					want: []string{"You are this profile's Chief", chief.Instructions.NotebookRoot, hooks.GardenGuidance}},
 			} {
 				for _, want := range row.want {
 					if !strings.Contains(row.content, want) {

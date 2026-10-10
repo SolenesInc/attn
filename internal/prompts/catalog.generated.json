@@ -1474,6 +1474,116 @@
       "description": "Chief",
       "events": [
         {
+          "id": "charter",
+          "delivery": "document",
+          "description": "Built-in charter written to a new chief's home.",
+          "body": {
+            "kind": "text",
+            "id": "chief.charter",
+            "source": "content/chief/charter.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "handover",
+          "delivery": "user_message",
+          "description": "Upgrade notice queued in the new chief's inbox.",
+          "body": {
+            "kind": "choose",
+            "condition": {
+              "field": {
+                "name": "has_previous_member",
+                "kind": "flag",
+                "description": "The previous chief session belongs to a crew member."
+              },
+              "test": "enabled"
+            },
+            "children": [
+              {
+                "kind": "text",
+                "id": "chief.member-handover",
+                "source": "content/chief/member-handover.md",
+                "bindings": [
+                  {
+                    "name": "previous_session",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "previous_session",
+                        "kind": "text",
+                        "description": "Previous chief session"
+                      }
+                    }
+                  },
+                  {
+                    "name": "previous_member",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "previous_member",
+                        "kind": "text",
+                        "description": "Previous chief member key"
+                      }
+                    }
+                  },
+                  {
+                    "name": "previous_member_name",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "previous_member_name",
+                        "kind": "text",
+                        "description": "Previous chief member name"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "kind": "text",
+                "id": "chief.handover",
+                "source": "content/chief/handover.md",
+                "bindings": [
+                  {
+                    "name": "previous_session",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "previous_session",
+                        "kind": "text",
+                        "description": "Previous chief session"
+                      }
+                    }
+                  },
+                  {
+                    "name": "tended",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "tended",
+                        "kind": "text",
+                        "description": "Seeds claimed by the previous chief"
+                      }
+                    }
+                  },
+                  {
+                    "name": "watched",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "watched",
+                        "kind": "text",
+                        "description": "Seeds watched by the previous chief"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
           "id": "seed-assignment",
           "delivery": "user_message",
           "description": "User assigned a seed to the chief to choose its working context.",
@@ -4794,5 +4904,5 @@
       ]
     }
   ],
-  "definitions_hash": "62de4bdbacdb6be1a9fcdd7d0198d66fb241bc75f2e5a50c07bc0b66eb729ee4"
+  "definitions_hash": "1f2277b04967ceb04c538362b857ad7dc345a33548851e52b8cfe302a204b71c"
 }

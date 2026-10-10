@@ -157,7 +157,7 @@ func (d *Daemon) handleNotebookGuide(conn net.Conn, msg *protocol.NotebookGuideM
 		d.sendError(conn, "notebook: "+err.Error())
 		return
 	}
-	sessionIsChief := d.isChiefOfStaffSession(sessionID)
+	sessionIsChief := d.sessionIsChief(sessionID)
 	if sessionIsChief {
 		if _, _, serr := d.ensureNotebookScaffold(profile.ID); serr != nil {
 			d.logf("notebook guide: ensure scaffold failed: %v", serr)
@@ -298,7 +298,7 @@ func (d *Daemon) sendNotebookToChiefWSResult(client *wsClient, requestID, source
 			d.broadcastFsChanged(store.Root(), originUI, relPath)
 			result = &protocol.NotebookSendToChiefResult{
 				Path:   relPath,
-				Nudged: d.nudgeChiefOfStaff(scope.profileID, requestID, chiefInboxNudgePrompt(store.Root())),
+				Nudged: d.nudgeChief(scope.profileID, requestID, chiefInboxNudgePrompt(store.Root())),
 			}
 		}
 	}

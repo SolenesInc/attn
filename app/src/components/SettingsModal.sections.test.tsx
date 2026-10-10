@@ -97,7 +97,7 @@ describe('SettingsModal sections', () => {
     expect(screen.queryByLabelText('Reviewer model')).toBeNull();
     expect(screen.queryByTestId('settings-chief-route-claude')).toBeNull();
     await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-backgroundAgents')));
-    expect(screen.getByTestId('settings-chief-route-claude')).toBeInTheDocument();
+    expect(screen.queryByTestId('settings-chief-route-claude')).toBeNull();
     expect(screen.getByTestId('settings-garden-advisor-route')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^save$/i })).toBeNull();
   });

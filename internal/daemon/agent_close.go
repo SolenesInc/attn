@@ -55,7 +55,7 @@ func (d *Daemon) handleAgentClose(conn net.Conn, msg *protocol.AgentCloseMessage
 		return
 	}
 
-	rule, err := d.agentCloseRule(caller, target, r)
+	rule, err := d.agentCloseRule(r, caller, target)
 	if err != nil {
 		d.replyAgentMsgError(conn, "close_not_authorized", err.Error())
 		return
@@ -95,12 +95,12 @@ func (d *Daemon) agentCloseCandidates() []*protocol.Session {
 	return candidates
 }
 
-func (d *Daemon) agentCloseRule(caller, target *protocol.Session, r who.Requester) (protocol.AgentCloseRule, error) {
+func (d *Daemon) agentCloseRule(r who.Requester, caller, target *protocol.Session) (protocol.AgentCloseRule, error) {
 	if caller.ID == target.ID {
 		return protocol.AgentCloseRuleSelf, nil
 	}
-	if d.chiefOfProfile(target.ProfileID) == caller.ID || (target.ProfileID == "" && d.isChiefOfStaffSession(caller.ID)) {
-		return protocol.AgentCloseRuleChiefOfStaff, nil
+	if d.requestedByChief(r) {
+		return protocol.AgentCloseRuleChief, nil
 	}
 	var dispatcher who.Actor
 	if dispatch, ok := d.gardenDispatch(target.ID); ok {
@@ -109,9 +109,9 @@ func (d *Daemon) agentCloseRule(caller, target *protocol.Session, r who.Requeste
 	if !dispatcher.IsZero() && dispatcher == r.Actor() {
 		return protocol.AgentCloseRuleDispatcher, nil
 	}
-	const rules = "a session may close itself and the sessions it dispatched, and a profile's chief of staff may close any agent of that profile"
+	const rules = "a session may close itself and the sessions it dispatched, and a profile's Chief may close any agent of that profile"
 	if dispatcher.IsZero() {
-		return "", fmt.Errorf("%s. Session %s was not dispatched by anyone, so only it and the chief of staff can close it",
+		return "", fmt.Errorf("%s. Session %s was not dispatched by anyone, so only it and the Chief can close it",
 			rules, shortSessionID(target.ID))
 	}
 	return "", fmt.Errorf("%s. Session %s was dispatched by %s, not by you",
@@ -158,8 +158,8 @@ func agentCloseSeedNote(target, caller *protocol.Session, rule protocol.AgentClo
 	switch rule {
 	case protocol.AgentCloseRuleSelf:
 		closer = "itself"
-	case protocol.AgentCloseRuleChiefOfStaff:
-		closer = "the chief of staff, " + closer
+	case protocol.AgentCloseRuleChief:
+		closer = "the Chief, " + closer
 	case protocol.AgentCloseRuleDispatcher:
 		closer = "its dispatcher, " + closer
 	}

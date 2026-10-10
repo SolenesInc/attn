@@ -83,7 +83,7 @@ describe('App dashboard', () => {
 
   it('marks the chief of staff and takes the user to it from its summary', async () => {
     const { daemon } = await renderHome([
-      agent('chief-1', { label: 'planner', state: 'waiting_input', chief_of_staff: true }),
+      agent('chief-1', { label: 'planner', state: 'waiting_input', chief: true }),
       agent('worker-1', { label: 'parser-worker' }),
     ]);
     expect(within(row('chief-1')!).getByLabelText('Chief of staff')).toBeInTheDocument();
@@ -205,7 +205,7 @@ describe('App dashboard', () => {
 
     it('leaves the chief out of the turns', async () => {
       await renderHome(
-        [agent('chief', { state: 'waiting_input', chief_of_staff: true, turn_owed: true, turn_opened_at: '2026-07-29T09:00:00Z' })],
+        [agent('chief', { state: 'waiting_input', chief: true, turn_owed: true, turn_opened_at: '2026-07-29T09:00:00Z' })],
         { settings: QUEUE },
       );
 
@@ -301,7 +301,7 @@ describe('App dashboard', () => {
     });
 
     it('collects a deferred chief too', async () => {
-      await renderHome([agent('chief', { state: 'idle', chief_of_staff: true, turn_snoozed_until: fromNow(HOUR) })], { settings: QUEUE });
+      await renderHome([agent('chief', { state: 'idle', chief: true, turn_snoozed_until: fromNow(HOUR) })], { settings: QUEUE });
 
       fireEvent.click(within(group('snoozed')!).getByRole('button', { name: /Snoozed/ }));
 

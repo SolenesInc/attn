@@ -215,7 +215,6 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdBrowserControl:                commandMetadata(ScopeSession, true, true),
 	protocol.CmdBrowserControlResult:          commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdRenameSession:                 commandMetadata(ScopeSession, false, true),
-	protocol.CmdSetChiefOfStaff:               commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdDocDefine:                     commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdDocUndefine:                   commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdDocCollections:                commandMetadata(ScopeHubLocal, false, true),

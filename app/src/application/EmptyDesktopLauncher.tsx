@@ -6,7 +6,6 @@ import {
   useAppErrorsContext,
   useAppInputs,
   useAppShell,
-  useChiefOfStaffContext,
   useSessionLaunchContext,
 } from './AppContexts';
 import './EmptyDesktopLauncher.css';
@@ -24,7 +23,6 @@ export function EmptyDesktopLauncher({ desktopId, label, active }: { desktopId: 
   const { agentAvailability } = useAppShell();
   const { showError } = useAppErrorsContext();
   const { settings, daemonEndpoints } = useAppInputs();
-  const { hasChiefOfStaff } = useChiefOfStaffContext();
   const rootRef = useRef<HTMLDivElement>(null);
   const [launching, setLaunching] = useState<string | null>(null);
   // The dialog unmounts after a pick; the inline picker starts over instead.
@@ -45,17 +43,17 @@ export function EmptyDesktopLauncher({ desktopId, label, active }: { desktopId: 
   }, [active, focusLauncher, launching]);
 
   const handleSelect = useCallback(
-    (path: string, agent: SessionAgent, endpointId?: string, yoloMode?: boolean, chiefOfStaff?: boolean, autoMode?: boolean) => {
+    (path: string, agent: SessionAgent, endpointId?: string, yoloMode?: boolean, autoMode?: boolean) => {
       setLaunching(path.split('/').pop() || path);
-      void launchLocation(path, agent, endpointId, yoloMode, chiefOfStaff, autoMode, desktopId)
+      void launchLocation(path, agent, endpointId, yoloMode, autoMode, desktopId)
         .finally(() => setLaunching(null));
     },
     [desktopId, launchLocation],
   );
   const handleCreateWorktree = useCallback(
     (...pick: Parameters<typeof handleCreateWorktreeSession>) => {
-      const [mainRepo, branch, startingFrom, endpointId, agent, yoloMode, autoMode, chiefOfStaff] = pick;
-      handleCreateWorktreeSession(mainRepo, branch, startingFrom, endpointId, agent, yoloMode, autoMode, chiefOfStaff, desktopId);
+      const [mainRepo, branch, startingFrom, endpointId, agent, yoloMode, autoMode] = pick;
+      handleCreateWorktreeSession(mainRepo, branch, startingFrom, endpointId, agent, yoloMode, autoMode, desktopId);
     },
     [desktopId, handleCreateWorktreeSession],
   );
@@ -86,7 +84,6 @@ export function EmptyDesktopLauncher({ desktopId, label, active }: { desktopId: 
           projectsDirectory={settings.projects_directory}
           agentAvailability={agentAvailability}
           endpoints={daemonEndpoints}
-          chiefExists={hasChiefOfStaff}
         />
       )}
     </div>

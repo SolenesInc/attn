@@ -22,11 +22,8 @@ func TestGardenProfileMigrationUsesTheConvertedDefaultIdentity(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			profile, err := s.GetProfile(view.Manifest.ProfileID)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err := s.RenameProfile(profile.ID, "Renamed", profile.Revision); err != nil {
+			profile := migrationFixtureProfile(t, s, view.Manifest.ProfileID)
+			if _, err := s.db.Exec("UPDATE profiles SET name='Renamed',revision=revision+1 WHERE id=?", profile.ID); err != nil {
 				t.Fatal(err)
 			}
 			oldRequest := `{"cmd":"delegate","request_id":"old-request","cwd":"/fixture","assignment":{"kind":"new","brief":"Original assignment"}}`

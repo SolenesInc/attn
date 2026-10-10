@@ -27,13 +27,13 @@ func TestEachProfileKeepsItsOwnNotebook(t *testing.T) {
 	if updated := notebookSetting(defaultApp, "notebook.root", defaultRoot); !protocol.Deref(updated.Success) {
 		t.Fatal(protocol.Deref(updated.Error))
 	}
-	defaultSession := w.Spawn(defaultApp, fakeagent.Claude, w.Path("default-agent"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
+	defaultSession := configureChiefOn(t, w, defaultApp, fakeagent.Claude, "sonnet")
 	work := createProfile(workApp, "Work")
 	selectProfile(workApp, work.ID)
 	if updated := notebookSetting(workApp, "notebook.root", workRoot); !protocol.Deref(updated.Success) {
 		t.Fatal(protocol.Deref(updated.Error))
 	}
-	workSession := w.Spawn(workApp, fakeagent.Claude, w.Path("work-agent"), func(m *protocol.SpawnSessionMessage) { m.ProfileID = work.ID; m.ChiefOfStaff = protocol.Ptr(true) })
+	workSession := configureChiefOn(t, w, workApp, fakeagent.Claude, "sonnet")
 	for _, entry := range []struct {
 		session    protocol.SessionID
 		root, text string

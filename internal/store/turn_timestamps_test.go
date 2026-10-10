@@ -75,7 +75,7 @@ func TestMigration95RewritesTurnCursorAndListingStampsThatDoNotSort(t *testing.T
 	}
 	for _, r := range raggedOffsets {
 		stamp := turnBase().Add(r.offset).UTC().Format(sortableTimeFormat)
-		if _, err := s.db.Exec(`INSERT INTO delegation_operations(request_id,operation_id,request_json,state,progress,session_id,chief_session_id,created_at,updated_at) VALUES(?,?,?, 'accepted','',?,'chief',?,?)`, r.id, "op-"+r.id, `{}`, "sess-"+r.id, stamp, stamp); err != nil {
+		if _, err := s.db.Exec(`INSERT INTO delegation_operations(request_id,operation_id,request_json,state,progress,session_id,created_at,updated_at) VALUES(?,?,?, 'accepted','',?,?,?)`, r.id, "op-"+r.id, `{}`, "sess-"+r.id, stamp, stamp); err != nil {
 			t.Fatal(err)
 		}
 	}
