@@ -211,12 +211,6 @@ export interface CrewSetOptions {
 }
 export type SeedPlacement = 'standalone' | { sessionId: string };
 
-export interface CrewRestartOptions {
-  member: string;
-  requestId: string;
-  expectedSessionId: string;
-  expectedRevision: number;
-}
 export type DaemonPR = GeneratedPR;
 export type DaemonWorktree = GeneratedWorktree;
 export type DaemonPlugin = GeneratedPluginInfo;
@@ -623,7 +617,6 @@ const harnessRegistrySignature = (settings: DaemonSettings) => JSON.stringify(Ob
   .sort(([a], [b]) => a.localeCompare(b)));
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 const MODEL_DISCOVERY_TIMEOUT_MS = 70_000;
-const CREW_RESTART_TIMEOUT_MS = 120_000;
 const SESSION_REOPEN_TIMEOUT_MS = 120_000;
 // Bus status is one aggregate pass over the whole event log. Measured on a copy of production, 209ms
 // at 945k rows — so 30s is roughly a hundred times the worst real log.
@@ -3996,22 +3989,6 @@ export function useDaemonSocket({
     )
   ), [sendRequest]);
 
-  const sendCrewRestart = useCallback((options: CrewRestartOptions): Promise<CrewMutationOutcome> => (
-    sendKeyedRequest(
-      pendingRequestKey('crew_restart', options.requestId),
-      {
-        cmd: 'crew_restart',
-        request_id: options.requestId,
-        member: options.member,
-        expected_session_id: options.expectedSessionId,
-        expected_revision: options.expectedRevision,
-      },
-      `Restarting ${crewDisplayName(options.member)} timed out`,
-      CREW_RESTART_TIMEOUT_MS,
-      true,
-    )
-  ), [sendKeyedRequest]);
-
   const sendTaskList = useCallback((): Promise<Task[]> => {
     const requestId = nextRequestID('task_list');
     const key = `task_list:${requestId}`;
@@ -4910,7 +4887,6 @@ export function useDaemonSocket({
     sendCrewCharterSet,
     sendCrewHandoffsGet,
     sendCrewHandoffGet,
-    sendCrewRestart,
     sendTaskList,
     sendTaskRetry,
     sendNotificationList,

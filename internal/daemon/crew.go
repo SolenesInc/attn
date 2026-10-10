@@ -19,15 +19,14 @@ func (d *Daemon) ensureCrewCollections() {
 	if d.store == nil {
 		return
 	}
-	for _, schema := range []docstore.CollectionSchema{crew.MembersSchema(), crew.RestartRequestsSchema()} {
-		redeclared, err := d.store.DefineDocumentCollection(schema, time.Now())
-		if err != nil {
-			d.logf("crew: declaring %s/%s: %v", schema.Namespace, schema.Collection, err)
-			continue
-		}
-		if redeclared {
-			d.publishCollectionRedeclared(schema.Namespace, schema.Collection)
-		}
+	schema := crew.MembersSchema()
+	redeclared, err := d.store.DefineDocumentCollection(schema, time.Now())
+	if err != nil {
+		d.logf("crew: declaring %s/%s: %v", schema.Namespace, schema.Collection, err)
+		return
+	}
+	if redeclared {
+		d.publishCollectionRedeclared(schema.Namespace, schema.Collection)
 	}
 }
 
@@ -125,13 +124,6 @@ func (d *Daemon) crewCollection() (*docstore.CollectionSchema, error) {
 		return nil, errors.New("no database")
 	}
 	return d.collectionFor(crew.Namespace, crew.CollectionMembers)
-}
-
-func (d *Daemon) crewRestartRequestsCollection() (*docstore.CollectionSchema, error) {
-	if d.store == nil {
-		return nil, errors.New("no database")
-	}
-	return d.collectionFor(crew.Namespace, crew.CollectionRestartRequests)
 }
 
 func (d *Daemon) writeCrewMember(schema docstore.CollectionSchema, member crew.Member, expected int64) (int64, error) {
@@ -367,17 +359,6 @@ func (d *Daemon) releaseExitedCrewBinding(sessionID protocol.SessionID) {
 		return
 	}
 	d.noteCrewExitedSession(member.ID, sessionID)
-	restart, pending := pendingCrewRestartFor(member, sessionID)
-	if !pending || restart.LetterPath != "" || member.LetterSession == sessionID {
-		return
-	}
-	if d.stopping() {
-		// A stopping daemon cannot run the successor; the next daemon completes the queued restart.
-		return
-	}
-	if _, err := d.crewRestart(member.ID, restart.RequestID, nil, nil); err != nil {
-		d.logf("crew: restarting %s after session %s exited: %v", crew.DisplayName(member.ID), sessionID, err)
-	}
 }
 
 func (d *Daemon) noteCrewExitedSession(memberID string, sessionID protocol.SessionID) {
@@ -542,9 +523,6 @@ func (d *Daemon) crewMemberWire(member crew.Member, revision int64) protocol.Cre
 	wire.AwarenessDirs = append([]string{}, member.AwarenessDirs...)
 	if d.crewBindingLive(member) {
 		wire.BindingSession = protocol.Ptr(member.BindingSession)
-	}
-	if member.Restart != nil {
-		wire.Restart = crewRestartWire(member.Restart)
 	}
 	return wire
 }

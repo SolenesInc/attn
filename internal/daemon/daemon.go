@@ -893,10 +893,6 @@ func (d *Daemon) Start() error {
 		if d.stopping() {
 			return
 		}
-		d.reconcileCrewRestarts()
-		if d.stopping() {
-			return
-		}
 		d.lockGardenRoles()
 		gardenBellErr := d.discardAllIneligibleGardenSeedBellsLocked()
 		d.unlockGardenRoles()
@@ -2691,8 +2687,6 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleCrewSleep(conn, msg.(*protocol.CrewSleepMessage))
 	case protocol.CmdCrewSet:
 		d.handleCrewSet(conn, msg.(*protocol.CrewSetMessage))
-	case protocol.CmdCrewRestart:
-		d.handleCrewRestart(conn, msg.(*protocol.CrewRestartMessage))
 	case protocol.CmdCrewPrime:
 		d.handleCrewPrime(conn, msg.(*protocol.CrewPrimeMessage))
 	case protocol.CmdCrewHandoff:

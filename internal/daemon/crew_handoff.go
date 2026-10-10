@@ -73,7 +73,7 @@ func (d *Daemon) crewHandoff(sessionID protocol.SessionID, note string, retry bo
 	return d.crewHandoffLocked(sessionID, note, retry, close)
 }
 
-func (d *Daemon) crewHandoffLocked(sessionID protocol.SessionID, note string, retry bool, close protocol.CrewDayClose) (result *protocol.CrewHandoffResult, err error) {
+func (d *Daemon) crewHandoffLocked(sessionID protocol.SessionID, note string, retry bool, close protocol.CrewDayClose) (*protocol.CrewHandoffResult, error) {
 	if err := d.requireHome(crew.Surface); err != nil {
 		return nil, err
 	}
@@ -84,51 +84,16 @@ func (d *Daemon) crewHandoffLocked(sessionID protocol.SessionID, note string, re
 	if !bound {
 		return nil, fmt.Errorf("this session is not living a crew member's day, so it has no day-line to close. A crew handoff is a member's own letter to its successor; the note you write for whoever tends a piece of work next is `attn seed note <id> -m \"…\" --handoff`")
 	}
-	var filedLetter string
-	defer func() {
-		current, _, readErr := d.crewMember(member.ID)
-		if readErr != nil {
-			d.logf("crew: settling %s's restart after the handoff: %v", crew.DisplayName(member.ID), readErr)
-			return
-		}
-		restart := current.Restart
-		if restart == nil || restart.SessionID != sessionID || restart.Withdrawn ||
-			(restart.State != crew.RestartQueued && restart.State != crew.RestartRequested && restart.State != crew.RestartFailed) {
-			return
-		}
-		if err != nil {
-			d.failCrewRestart(member.ID, restart.RequestID, sessionID, filedLetter, err)
-			return
-		}
-		if result == nil {
-			return
-		}
-		if result.NapError != nil {
-			d.failCrewRestart(member.ID, restart.RequestID, sessionID, result.Path, errors.New(*result.NapError))
-			return
-		}
-		if protocol.Deref(result.Outcome) != protocol.CrewDayCloseNap || result.SessionID == nil {
-			if restart.State != crew.RestartFailed {
-				d.failCrewRestart(member.ID, restart.RequestID, sessionID, result.Path, errors.New("the day ended without starting a successor"))
-			}
-			return
-		}
-		d.completeCrewRestart(member.ID, restart.RequestID, sessionID, result.Path, *result.SessionID)
-	}()
 	path, err := d.crewLetterForHandoff(member, sessionID, note, retry)
 	if err != nil {
 		return nil, err
 	}
-	filedLetter = path
 
 	if retry && close == "" {
 		close = protocol.CrewDayCloseNap
 	}
-	if member.Restart != nil && member.Restart.SessionID == sessionID && member.Restart.Withdrawn {
-		close = protocol.CrewDayCloseSleep
-	}
 
-	result = &protocol.CrewHandoffResult{Member: member.ID, Path: path}
+	result := &protocol.CrewHandoffResult{Member: member.ID, Path: path}
 	teardown, err := d.prepareSessionTeardown(sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("prepare %s's day to close: %w", crew.DisplayName(member.ID), err)
@@ -165,9 +130,6 @@ func (d *Daemon) crewLetterForHandoff(member crew.Member, sessionID protocol.Ses
 		return "", err
 	}
 	filed, hasFiled := member.FiledLetterFor(sessionID)
-	if !hasFiled && member.Restart != nil && member.Restart.SessionID == sessionID && member.Restart.LetterPath != "" {
-		filed, hasFiled = member.Restart.LetterPath, true
-	}
 	if retry {
 		if !hasFiled {
 			return "", fmt.Errorf("%s's day has filed no letter yet, so there is no turnover to retry — write one with `attn handoff -m \"<your letter>\"`", crew.DisplayName(member.ID))

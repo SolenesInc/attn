@@ -1,4 +1,4 @@
-import type { CrewCharterDocument, CrewHandoffDocument, CrewHandoffSummary, CrewMember, CrewRestart } from '../types/generated';
+import type { CrewCharterDocument, CrewHandoffDocument, CrewHandoffSummary, CrewMember } from '../types/generated';
 import { pendingRequestKey, settlePendingRequest, type PendingRequests } from './daemonPendingRequests';
 
 export interface CrewMutationOutcome {
@@ -6,7 +6,6 @@ export interface CrewMutationOutcome {
   conflict: boolean;
   error?: string;
   member?: CrewMember;
-  restart?: CrewRestart;
 }
 
 interface CrewMutationEvent {
@@ -16,7 +15,6 @@ interface CrewMutationEvent {
   conflict?: boolean;
   error?: string;
   member?: CrewMember;
-  restart?: CrewRestart;
   charter?: CrewCharterDocument;
   handoffs?: CrewHandoffSummary[];
   handoff?: CrewHandoffDocument;
@@ -45,7 +43,7 @@ export interface CrewHandoffGetOutcome {
 
 function settleCrewMutation(
   pending: PendingRequests,
-  kind: 'crew_set' | 'crew_restart',
+  kind: 'crew_set',
   event: CrewMutationEvent,
 ): void {
   if (typeof event.request_id !== 'string') return;
@@ -58,7 +56,6 @@ function settleCrewMutation(
     conflict: event.conflict === true,
     ...(event.error ? { error: event.error } : {}),
     ...(event.member ? { member: event.member } : {}),
-    ...(event.restart ? { restart: event.restart } : {}),
   } satisfies CrewMutationOutcome);
 }
 
@@ -95,10 +92,6 @@ export function handleCrewDaemonEvent(event: CrewMutationEvent, pending: Pending
   }
   if (event.event === 'crew_set_result') {
     settleCrewMutation(pending, 'crew_set', event);
-    return true;
-  }
-  if (event.event === 'crew_restart_result') {
-    settleCrewMutation(pending, 'crew_restart', event);
     return true;
   }
   return false;

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -9,7 +8,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/protocol"
@@ -27,8 +25,6 @@ func runCrew() {
 		runCrewWake(os.Args[3:])
 	case "sleep":
 		runCrewSleep(os.Args[3:])
-	case "restart":
-		runCrewRestart(os.Args[3:])
 	case "set":
 		runCrewSet(os.Args[3:])
 	default:
@@ -62,12 +58,6 @@ commands:
   sleep <member> [--json]
         Ask the member to write a handoff and close with attn handoff --sleep.
         The member closes its own session. Do nothing if already asleep.
-
-  restart <member> [--request-id <id>] [--json]
-        ask an awake member to finish its work, write its own handoff and start
-        a fresh day. An asleep member wakes directly. The durable result says
-        queued, requested, failed or completed; delivery alone is not completion.
-        Reuse --request-id when retrying a request whose result was not received.
 
   set <member> [--cwd <dir>] [--agent <name>] [--model <name>] [--effort <level>]
                [--launch-desktop <own|desktop>] [--awareness-dir <dir>]...
@@ -242,77 +232,6 @@ func crewSleepOutcomeLine(result *protocol.CrewSleepResult) string {
 		return fmt.Sprintf("Sleep request for %s is queued in session %s — %s", name, agentShortID(string(protocol.Deref(result.SessionID))), detail)
 	}
 	return fmt.Sprintf("Asked %s in session %s to write its handoff and file it with `attn handoff --sleep`.", name, agentShortID(string(protocol.Deref(result.SessionID))))
-}
-
-type crewRestartArgs struct {
-	member    string
-	requestID string
-	json      bool
-}
-
-func parseCrewRestartArgs(args []string) (crewRestartArgs, error) {
-	fs := flag.NewFlagSet("crew restart", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-	requestID := fs.String("request-id", "", "stable idempotency key")
-	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
-	member, err := parseMemberAndFlags(fs, args, "crew restart")
-	if err != nil {
-		return crewRestartArgs{}, err
-	}
-	requestIDSet := false
-	fs.Visit(func(f *flag.Flag) { requestIDSet = requestIDSet || f.Name == "request-id" })
-	stableRequestID := strings.TrimSpace(*requestID)
-	if requestIDSet && stableRequestID == "" {
-		return crewRestartArgs{}, errors.New("--request-id cannot be empty")
-	}
-	if stableRequestID == "" {
-		stableRequestID = uuid.NewString()
-	}
-	return crewRestartArgs{member: member, requestID: stableRequestID, json: *jsonOut}, nil
-}
-
-func writeCrewRestartReceipt(w io.Writer, parsed crewRestartArgs) error {
-	if parsed.json {
-		return json.NewEncoder(w).Encode(struct {
-			RequestID string `json:"request_id"`
-		}{RequestID: parsed.requestID})
-	}
-	_, err := fmt.Fprintf(w, "crew restart request: request_id=%s\n", parsed.requestID)
-	return err
-}
-
-func runCrewRestart(args []string) {
-	parsed, err := parseCrewRestartArgs(args)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "crew restart: %v\n", err)
-		writeCrewHelp(os.Stderr)
-		os.Exit(2)
-	}
-	if err := writeCrewRestartReceipt(os.Stderr, parsed); err != nil {
-		fmt.Fprintf(os.Stderr, "crew restart: write request receipt: %v\n", err)
-		os.Exit(1)
-	}
-	result, err := client.New("").CrewRestart(parsed.member, parsed.requestID)
-	if err != nil {
-		if parsed.json {
-			_ = json.NewEncoder(os.Stderr).Encode(struct {
-				RequestID string `json:"request_id"`
-				Error     string `json:"error"`
-			}{RequestID: parsed.requestID, Error: err.Error()})
-		} else {
-			fmt.Fprintf(os.Stderr, "crew restart: result not confirmed; inspect the roster or retry with --request-id %s: %v\n", parsed.requestID, err)
-		}
-		os.Exit(1)
-	}
-	if parsed.json {
-		printJSON(result)
-		return
-	}
-	line := fmt.Sprintf("Restart for %s is %s", crew.DisplayName(result.Member.ID), result.Restart.State)
-	if detail := strings.TrimSpace(protocol.Deref(result.Restart.Detail)); detail != "" {
-		line += ": " + detail
-	}
-	fmt.Fprintln(os.Stdout, line+".")
 }
 
 type crewDirList struct {

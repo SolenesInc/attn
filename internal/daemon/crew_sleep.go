@@ -4,14 +4,12 @@ import (
 	"fmt"
 	"net"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/store"
 )
 
 var crewRequestedSleepPrompt = prompts.RenderText("crew", "sleep-requested", prompts.Values{})
@@ -48,7 +46,7 @@ func (d *Daemon) crewSleep(name string) (*protocol.CrewSleepResult, error) {
 	d.crewWakeMu.Lock()
 	defer d.crewWakeMu.Unlock()
 
-	member, doc, err := d.crewMember(name)
+	member, _, err := d.crewMember(name)
 	if err != nil {
 		return nil, err
 	}
@@ -69,11 +67,6 @@ func (d *Daemon) crewSleep(name string) (*protocol.CrewSleepResult, error) {
 			return nil, fmt.Errorf("release %s's exited session %s: %w", crew.DisplayName(member.ID), shortSessionID(sessionID), err)
 		}
 		d.noteCrewExitedSession(member.ID, sessionID)
-		if restart, pending := pendingCrewRestartFor(member, sessionID); pending {
-			if err := d.failCrewRestart(member.ID, restart.RequestID, sessionID, "", fmt.Errorf("session %s exited before the restart ran and %s was put to sleep", shortSessionID(sessionID), crew.DisplayName(member.ID))); err != nil {
-				return nil, err
-			}
-		}
 		return &protocol.CrewSleepResult{
 			Member:        member.ID,
 			AlreadyAsleep: true,
@@ -82,36 +75,7 @@ func (d *Daemon) crewSleep(name string) (*protocol.CrewSleepResult, error) {
 		}, nil
 	}
 
-	now := time.Now()
-	deliveryID := uuid.NewString()
-	item := inbox.Item{ID: deliveryID, To: inbox.ToSession(sessionID), Kind: inbox.Notice, Text: crewRequestedSleepPrompt}
-	var receipt inbox.Receipt
-	if _, pending := pendingCrewRestartFor(member, sessionID); pending {
-		member.Restart.State = crew.RestartFailed
-		member.Restart.Withdrawn = true
-		member.Restart.Error = fmt.Sprintf("the restart was withdrawn because the user asked %s to sleep instead", crew.DisplayName(member.ID))
-		schema, schemaErr := d.crewCollection()
-		if schemaErr != nil {
-			return nil, schemaErr
-		}
-		body, encodeErr := member.Encode()
-		if encodeErr != nil {
-			return nil, encodeErr
-		}
-		fact := documentChangedFact(crew.Namespace, crew.CollectionMembers, member.ID, false)
-		written, commitErr := d.store.CommitDocumentWriteWithInbox(
-			store.DocumentWrite{Schema: *schema, ID: member.ID, Body: body, Expected: &doc.Rev},
-			fact, item, now,
-		)
-		if commitErr != nil {
-			return nil, fmt.Errorf("record %s's sleep request: %w", crew.DisplayName(member.ID), commitErr)
-		}
-		d.announceCommittedWrite(fact, written.Seq)
-		d.publishFact(FactCrewUpdated, member.ID, nil)
-		receipt = d.deliverSavedInbox(item.To, deliveryID, now)
-	} else {
-		receipt, err = d.sendToInbox(item)
-	}
+	receipt, err := d.sendToInbox(inbox.Item{ID: uuid.NewString(), To: inbox.ToSession(sessionID), Kind: inbox.Notice, Text: crewRequestedSleepPrompt})
 	if err != nil {
 		return nil, fmt.Errorf("record %s's sleep request: %w", crew.DisplayName(member.ID), err)
 	}

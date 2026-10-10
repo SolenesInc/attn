@@ -134,8 +134,7 @@ try {
   await runner.step('a_user_wake_goes_there_and_background_wake_stays_quiet', async () => {
     const memberHeading = await client.request('dom_text', { selector: '.crew-member-heading h2' });
     const userLaunched = observer.waitForMessage((message) => message.event === 'crew_updated' && message.members?.find((member) => member.id === members[0].item_id && member.binding_session), 'app crew wake');
-    await click('[data-testid="crew-restart"]');
-    await click('[data-testid="crew-confirm-restart"]');
+    await click('[data-testid="crew-wake"]');
     const launched = await userLaunched;
     const userWake = { session_id: launched.binding_session };
     await observer.waitForSession({ id: userWake.session_id });

@@ -5784,7 +5784,6 @@ model Response {
   crew_wake_result?: CrewWakeResult;
   crew_sleep_result?: CrewSleepResult;
   crew_set_result?: CrewSetResult;
-  crew_restart_result?: CrewRestartResult;
   crew_prime_result?: CrewPrimeResult;
   crew_handoff_result?: CrewHandoffResult;
   seed_plant_result?: SeedPlantResult;
@@ -5927,7 +5926,6 @@ model CrewMember {
   // session is live — the daemon judges the binding at read, so presence IS
   // "awake" and a caller never re-derives liveness.
   binding_session?: SessionID;
-  restart?: CrewRestart;
 }
 
 model CrewListResult {
@@ -6160,47 +6158,6 @@ model CrewSetResultMessage {
   conflict: boolean;
   error?: string;
   member?: CrewMember;
-}
-
-enum CrewRestartState {
-  queued,
-  requested,
-  failed,
-  completed,
-}
-
-model CrewRestart {
-  request_id: string;
-  session_id: SessionID;
-  state: CrewRestartState;
-  delivery_status?: AgentMsgStatus;
-  detail?: string;
-  error?: string;
-  letter_path?: string;
-  successor_session_id?: SessionID;
-}
-
-model CrewRestartMessage {
-  cmd: "crew_restart";
-  member: string;
-  request_id: string;
-  expected_session_id?: SessionID;
-  expected_revision?: safeint;
-}
-
-model CrewRestartResult {
-  member: CrewMember;
-  restart: CrewRestart;
-}
-
-model CrewRestartResultMessage {
-  event: "crew_restart_result";
-  request_id: string;
-  success: boolean;
-  conflict: boolean;
-  error?: string;
-  member?: CrewMember;
-  restart?: CrewRestart;
 }
 
 // What a launching session needs to be its member: the composed priming block
@@ -7112,7 +7069,6 @@ alias DaemonEvent =
   | CrewWakeResultMessage
   | CrewSleepResultMessage
   | CrewSetResultMessage
-  | CrewRestartResultMessage
   | OpenSeedResultMessage
   | BrowserControlResponseMessage
   | PullRequestWatchResultMessage

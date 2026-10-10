@@ -199,7 +199,7 @@ runner.registerCleanup('archive_crew_files', () => {
   const handoffs = path.join(awakeHome, 'handoffs');
   if (!fs.existsSync(handoffs)) return;
   for (const name of fs.readdirSync(handoffs)) {
-    fs.renameSync(path.join(handoffs, name), path.join(runner.runDir, `restart-${name}`));
+    fs.renameSync(path.join(handoffs, name), path.join(runner.runDir, `letter-${name}`));
   }
 });
 runner.registerCleanup('settle_seeds', () => {
@@ -241,8 +241,8 @@ try {
       { includes: 'You have been woken', actions: [{ type: 'reply', text: 'CREW_PANEL_READY', state: 'idle' }] },
       { includes: '📬 You have unread items', submitHook: false, actions: [
         { type: 'attn', args: ['agent', 'inbox'] },
-        { type: 'wait_for_file', path: 'continue-restart', timeoutMs: 30_000 },
-        { type: 'attn', args: ['handoff', '--nap', '-m', 'CREW_PANEL_HANDOFF'] },
+        { type: 'wait_for_file', path: 'continue-sleep', timeoutMs: 30_000 },
+        { type: 'attn', args: ['handoff', '--sleep', '-m', 'CREW_PANEL_HANDOFF'] },
       ] },
     ],
   });
@@ -561,37 +561,36 @@ try {
     await click('[data-testid="crew-tab-launch"]');
   });
 
-  await runner.step('restart_reports_lifecycle_and_launches_one_changed_successor', async () => {
-    await click('[data-testid="crew-restart"]');
-    await screenshot('09-restart-confirmation.png');
-    await click('[data-testid="crew-confirm-restart"]');
-    await waitForDom('[data-testid="crew-panel"]', { textIncludes: 'Handoff requested' });
-    await screenshot('10-restart-requested.png');
-    const completedEvent = waitForCrew(
-      awake,
-      (member) => member.restart?.state === 'completed' && member.binding_session !== firstSession,
-      'the successor launch',
-      45_000,
-    );
-    const successorReceipt = waitForFileSignal(wakeReceipt, 'the successor mock launch', 45_000);
-    fs.writeFileSync(path.join(awakeHome, 'continue-restart'), 'continue\n');
-    const [completed] = await Promise.all([completedEvent, successorReceipt]);
-    successor = completed.binding_session;
+  await runner.step('sleep_requests_a_letter_then_wake_uses_saved_settings', async () => {
+    await click('[data-testid="crew-sleep"]');
+    await screenshot('09-sleep-requested.png');
+    const sleptEvent = waitForCrew(awake, (member) => !member.binding_session, 'the member sleeping', 45_000);
+    fs.writeFileSync(path.join(awakeHome, 'continue-sleep'), 'continue\n');
+    await sleptEvent;
+    await waitForDom('[data-testid="crew-panel"]', { textIncludes: 'Asleep' });
+    await screenshot('10-member-asleep.png');
+    const wokenEvent = waitForCrew(awake, (member) => member.binding_session && member.binding_session !== firstSession, 'the next wake', 45_000);
+    const wakeLaunchReceipt = waitForFileSignal(wakeReceipt, 'the next mock launch', 45_000);
+    await click('[data-testid="crew-wake"]');
+    const [woken] = await Promise.all([wokenEvent, wakeLaunchReceipt]);
+    successor = woken.binding_session;
     await observer.waitForSession({ id: successor, timeoutMs: 30_000 });
-    await waitForDom('[data-testid="crew-panel"]', { textIncludes: 'New day started' });
+    await waitForDom('[data-testid="crew-panel"][open]', { absent: true });
     const bound = [...observer.sessionsById.values()].filter((session) => session.crew_member === awake);
-    runner.assert(bound.length === 1 && bound[0].id === successor, 'exactly one live session owns the member binding', { bound, completed });
+    runner.assert(bound.length === 1 && bound[0].id === successor, 'exactly one live session owns the member binding', { bound, woken });
     const successorTerminal = observer.terminalOf(successor);
     const launch = transcriptLaunches(awakeHome).find((entry) => entry.id === successorTerminal);
-    runner.assert(Boolean(launch), 'the registered successor wrote its launch receipt', { successor, successorTerminal });
+    runner.assert(Boolean(launch), 'the next wake wrote its launch receipt', { successor, successorTerminal });
     const argv = launch.launch?.argv ?? [];
-    runner.assert(argv.includes('--model') && argv[argv.indexOf('--model') + 1] === 'crew-claude', 'the saved model reaches the successor argv', { argv });
-    runner.assert(argv.includes('--effort') && argv[argv.indexOf('--effort') + 1] === 'low', 'the reconnect-saved effort reaches the successor argv', { argv });
-    runner.writeJson('successor-launch.json', { firstSession, successor, argv, completed });
-    await screenshot('11-successor-complete.png');
+    runner.assert(argv.includes('--model') && argv[argv.indexOf('--model') + 1] === 'crew-claude', 'the saved model reaches the next wake argv', { argv });
+    runner.assert(argv.includes('--effort') && argv[argv.indexOf('--effort') + 1] === 'low', 'the reconnect-saved effort reaches the next wake argv', { argv });
+    runner.writeJson('next-wake-launch.json', { firstSession, successor, argv, woken });
+    await screenshot('11-next-wake.png');
   });
 
   await runner.step('open_panel_is_idle_after_the_lifecycle_settles', async () => {
+    await click('[data-testid="manage-crew"]');
+    await waitForDom('[data-testid="crew-panel"][open]');
     runner.writeJson('idle.json', { desktop: desktopIdle, crewPanel: await sampleIdle(webkitBaseline) });
   });
 

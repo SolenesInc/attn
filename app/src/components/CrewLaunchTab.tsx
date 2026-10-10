@@ -1,47 +1,17 @@
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { LaunchDesktopKind } from '../types/generated';
 import type { CrewLaunchEdit, CrewLaunchSelection, useCrewLaunchAutosave } from '../hooks/useCrewLaunchAutosave';
-import type { CrewRestartAttempt } from '../hooks/useCrewRestart';
 import type { DaemonSession } from '../hooks/useDaemonSocket';
 import { routeFromStored, storedRouteModel, knownHarnessModel } from '../hooks/useHarnessRoute';
 import { HarnessRouteChip } from './HarnessRouteChip';
 import { HarnessRouteBadge } from './HarnessRouteBadge';
 import type { HarnessModelCatalog } from '../hooks/daemonDelegationEvents';
 import type { CrewMember, Harness } from '../types/generated';
-import {
-  launchSaveCopy,
-  restartBusy,
-  restartNotice,
-} from './crewLaunchPresentation';
+import { launchSaveCopy } from './crewLaunchPresentation';
 
 import { LaunchDesktopSelect } from './LaunchDesktopSelect';
 
 type LaunchAutosave = ReturnType<typeof useCrewLaunchAutosave>;
-
-function RestartState({ member, attempt, isConnected, onResend, onReview }: {
-  member: CrewMember;
-  attempt?: CrewRestartAttempt;
-  isConnected: boolean;
-  onResend: () => void;
-  onReview: () => void;
-}) {
-  const notice = restartNotice(member, attempt);
-  if (!notice) return null;
-  return (
-    <div className={`crew-restart-state is-${notice.tone}`} role="status">
-      <span>{notice.text}</span>
-      {notice.action && (
-        <button
-          type="button"
-          disabled={notice.action.kind === 'resend' && (!isConnected || Boolean(attempt?.sending))}
-          onClick={notice.action.kind === 'resend' ? onResend : onReview}
-        >
-          {notice.action.label}
-        </button>
-      )}
-    </div>
-  );
-}
 
 function RunningNow({ member, running }: { member: CrewMember; running?: DaemonSession }) {
   if (!member.binding_session) return null;
@@ -124,34 +94,6 @@ function LaunchCard({ member, edit, harnesses, harness, effectiveAgent, catalogL
   );
 }
 
-function RestartSection({ member, edit, restart, isConnected, onRestart }: {
-  member: CrewMember;
-  edit: CrewLaunchEdit;
-  restart?: CrewRestartAttempt;
-  isConnected: boolean;
-  onRestart: () => void;
-}) {
-  const busy = restartBusy(member, restart);
-  const savesAcknowledged = edit.state === 'saved';
-  const restartLabel = busy ? 'Restart in progress…' : member.binding_session ? 'Handoff and restart' : 'Wake';
-  return (
-    <section className="crew-restart">
-      <div>
-        <h3>{member.binding_session ? 'Handoff and restart' : 'Wake member'}</h3>
-      </div>
-      <button
-        type="button"
-        data-testid="crew-restart"
-        disabled={!savesAcknowledged || busy || !isConnected}
-        title={!savesAcknowledged ? 'Wait for launch settings to be saved' : undefined}
-        onClick={onRestart}
-      >
-        {restartLabel}
-      </button>
-    </section>
-  );
-}
-
 export interface CrewLaunchTabProps {
   member: CrewMember;
   edit: CrewLaunchEdit;
@@ -163,10 +105,8 @@ export interface CrewLaunchTabProps {
   autosave: LaunchAutosave;
   loadModels: (harness: string, refresh?: boolean) => Promise<HarnessModelCatalog>;
   isConnected: boolean;
-  restart?: CrewRestartAttempt;
-  onRestart: () => void;
-  onResendRestart: () => void;
-  onReviewRestart: () => void;
+  onSleep: () => void;
+  onWake: () => void;
 }
 
 export function CrewLaunchTab({
@@ -179,10 +119,8 @@ export function CrewLaunchTab({
   onRetryCatalog,
   autosave,
   isConnected,
-  restart,
-  onRestart,
-  onResendRestart,
-  onReviewRestart,
+  onSleep,
+  onWake,
 }: CrewLaunchTabProps) {
   const selection = edit.draft;
   const clearingAgent = selection.agent === '' && Boolean(edit.acknowledged.agent);
@@ -203,14 +141,18 @@ export function CrewLaunchTab({
         onRetryCatalog={onRetryCatalog}
         autosave={autosave}
       />
-      <RestartSection member={member} edit={edit} restart={restart} isConnected={isConnected} onRestart={onRestart} />
-      <RestartState
-        member={member}
-        attempt={restart}
-        isConnected={isConnected}
-        onResend={onResendRestart}
-        onReview={onReviewRestart}
-      />
+      <section className="crew-session-action">
+        <h3>{member.binding_session ? 'Sleep member' : 'Wake member'}</h3>
+        <button
+          type="button"
+          data-testid={member.binding_session ? 'crew-sleep' : 'crew-wake'}
+          disabled={!isConnected || (!member.binding_session && edit.state !== 'saved')}
+          title={!member.binding_session && edit.state !== 'saved' ? 'Wait for launch settings to be saved' : undefined}
+          onClick={member.binding_session ? onSleep : onWake}
+        >
+          {member.binding_session ? 'Sleep' : 'Wake'}
+        </button>
+      </section>
     </>
   );
 }

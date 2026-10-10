@@ -2,7 +2,6 @@ package client
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -66,38 +65,6 @@ func (c *Client) CrewSetWithNamedDesktop(member string, cwd, agent, model, effor
 		return nil, fmt.Errorf("the daemon answered without a member")
 	}
 	return resp.CrewSetResult, nil
-}
-
-func (c *Client) CrewRestart(member, requestID string) (*protocol.CrewRestartResult, error) {
-	roster, err := c.CrewList()
-	if err != nil {
-		return nil, fmt.Errorf("read the current crew day before restarting it: %w", err)
-	}
-	var expectedSessionID protocol.SessionID
-	var expectedRevision int
-	found := false
-	for _, candidate := range roster.Members {
-		if strings.EqualFold(candidate.ID, strings.TrimSpace(member)) {
-			expectedSessionID = protocol.Deref(candidate.BindingSession)
-			expectedRevision = candidate.Revision
-			found = true
-			break
-		}
-	}
-	if !found {
-		return nil, fmt.Errorf("crew member %q is not registered", member)
-	}
-	resp, err := c.send(protocol.CrewRestartMessage{
-		Cmd: protocol.CmdCrewRestart, Member: member, RequestID: requestID,
-		ExpectedSessionID: protocol.Ptr(expectedSessionID), ExpectedRevision: protocol.Ptr(expectedRevision),
-	})
-	if err != nil {
-		return nil, err
-	}
-	if resp.CrewRestartResult == nil {
-		return nil, fmt.Errorf("the daemon answered without a restart result")
-	}
-	return resp.CrewRestartResult, nil
 }
 
 func (c *Client) CrewPrime(sessionID protocol.SessionID) (*protocol.CrewPrimeResult, error) {
