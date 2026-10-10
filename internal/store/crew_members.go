@@ -361,7 +361,8 @@ func (s *Store) commitCrewBirth(m NewCrewMember, now time.Time, insert bool) (Do
 	}
 	var result DocumentWriteResult
 	err = s.profilesTx(func(tx *sql.Tx, stamp string) error {
-		if _, err := loadLiveProfile(tx, m.Identity.ProfileID); err != nil {
+		profile, err := loadLiveProfile(tx, m.Identity.ProfileID)
+		if err != nil {
 			return err
 		}
 		if insert {
@@ -380,9 +381,9 @@ func (s *Store) commitCrewBirth(m NewCrewMember, now time.Time, insert bool) (Do
 		if err != nil {
 			return err
 		}
-		if m.Desktop == nil {
+		if m.Desktop == nil && m.Identity.Key != profile.Chief {
 			err = startOnOwnDesktop(tx, stamp, "crew", m.Identity.Key.String())
-		} else {
+		} else if m.Desktop != nil {
 			err = saveLaunchSetting(tx, stamp, "crew", m.Identity.Key.String(), *m.Desktop, false)
 		}
 		result = results[0]

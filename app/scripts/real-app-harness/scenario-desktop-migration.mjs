@@ -47,6 +47,9 @@ function legacyWorkspacesSql(fixtureDir) {
     'DELETE FROM desktop_panes;',
     'DELETE FROM desktops;',
     'DELETE FROM profiles;',
+    'ALTER TABLE profiles DROP COLUMN chief_member;',
+    "ALTER TABLE profiles ADD COLUMN chief_session_id TEXT NOT NULL DEFAULT '';",
+    'DROP TABLE chief_upgrades;',
     'DELETE FROM profile_migration;',
     'DROP TABLE command_usage;',
     'DROP TABLE profile_settings;',
@@ -111,6 +114,7 @@ function legacyWorkspacesSql(fixtureDir) {
   statements.push(`ALTER TABLE garden_seed_watches RENAME COLUMN watcher TO watcher_session_id;`);
   statements.push(`ALTER TABLE delegation_operations DROP COLUMN dispatcher;`);
   statements.push(`ALTER TABLE delegation_operations DROP COLUMN handover_tender;`);
+  statements.push(`ALTER TABLE delegation_operations ADD COLUMN chief_session_id TEXT NOT NULL DEFAULT '';`);
   statements.push(`ALTER TABLE delegation_operations ADD COLUMN handover_tender_session TEXT NOT NULL DEFAULT '';`);
   statements.push(`ALTER TABLE delegation_operations ADD COLUMN handover_tender_member TEXT NOT NULL DEFAULT '';`);
   statements.push(`DELETE FROM schema_migrations WHERE version > ${LAST_SCHEMA_BEFORE_CONVERSION} AND version <= ${LAST_SCHEMA_REBUILT_BY_FIXTURE};`);

@@ -8,11 +8,11 @@ import (
 
 func TestChiefMembersMigration(t *testing.T) {
 	for _, c := range []struct {
-		name                                                       string
-		previous, session, settings, deleted, legacy, mail, orphan bool
+		name                                                              string
+		previous, session, settings, deleted, legacy, mail, orphan, bound bool
 	}{
 		{name: "empty"}, {name: "session with settings", previous: true, session: true, settings: true},
-		{name: "session without settings", previous: true, session: true}, {name: "missing session", previous: true},
+		{name: "session without settings", previous: true, session: true}, {name: "crew-bound chief", previous: true, session: true, bound: true}, {name: "missing session", previous: true},
 		{name: "deleted profile", previous: true, session: true, deleted: true}, {name: "legacy chief", legacy: true},
 		{name: "read and unread mail", mail: true},
 		{name: "deleted profile with mail", deleted: true, mail: true},
@@ -39,6 +39,10 @@ func TestChiefMembersMigration(t *testing.T) {
 			if c.session {
 				intent, _ := json.Marshal(map[string]string{"model": "intent-model", "effort": "high"})
 				exec("INSERT INTO sessions(id,label,directory,state_since,state_updated_at,last_seen,agent,launch_intent,profile_id) VALUES('old-chief','old','/tmp/chief','','','','codex',?,?)", string(intent), profile)
+			}
+			if c.bound {
+				exec("INSERT INTO crew_members(member_key,profile_id,name) VALUES('keel',?,'Keel')", profile)
+				exec("UPDATE sessions SET member_key='keel',label='Keel' WHERE id='old-chief'")
 			}
 			if c.settings {
 				exec("INSERT INTO settings(key,value) VALUES('chief_model_codex','saved-model'),('chief_effort_codex','medium'),('chief_context_window_cap','160000')")
@@ -101,7 +105,11 @@ func TestChiefMembersMigration(t *testing.T) {
 				if c.settings {
 					wantModel, wantEffort = "saved-model", "medium"
 				}
-				if key != chief || previous != "old-chief" || agent != "codex" || model != wantModel || effort != wantEffort || cwd != "/tmp/chief" || label != "Chief (previous)" {
+				wantLabel := "Chief (previous)"
+				if c.bound {
+					wantLabel = "Keel"
+				}
+				if key != chief || previous != "old-chief" || agent != "codex" || model != wantModel || effort != wantEffort || cwd != "/tmp/chief" || label != wantLabel {
 					t.Fatalf("upgrade %q %q %q %q %q %q label %q", key, previous, agent, model, effort, cwd, label)
 				}
 			}

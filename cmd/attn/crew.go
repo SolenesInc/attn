@@ -449,7 +449,11 @@ func runCrewSet(args []string) {
 		fmt.Fprintf(os.Stderr, "settings saved; Chief did not start: %s\n", *result.WakeError)
 	}
 	if parsed.json {
-		printJSON(result.Member)
+		printJSON(struct {
+			protocol.CrewMember
+			WokeSessionID *protocol.SessionID `json:"woke_session_id,omitempty"`
+			WakeError     *string             `json:"wake_error,omitempty"`
+		}{result.Member, result.WokeSessionID, result.WakeError})
 		return
 	}
 	if result.WokeSessionID != nil {

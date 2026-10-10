@@ -351,7 +351,7 @@ func (d *Daemon) crewWakeDayWithChargeLocked(key who.MemberKey, agent string, au
 		agent = member.LaunchAgent()
 	}
 	if d.isChief(key) && !d.agentSupportsChiefGuidance(agent) {
-		return nil, fmt.Errorf("the Chief needs a harness that takes launch instructions; %s does not", agent)
+		return nil, fmt.Errorf("the Chief needs a harness that takes launch instructions; %s does not. Pick one: attn crew set chief --agent <harness> --model <model>", agent)
 	}
 	if !d.crewAgentAvailable(agent) {
 		return nil, fmt.Errorf("agent %q is not available", agent)
@@ -585,7 +585,7 @@ func (d *Daemon) crewSet(key who.MemberKey, msg *protocol.CrewSetMessage) (*prot
 				agent = strings.TrimSpace(strings.ToLower(*msg.Agent))
 			}
 			if agent != "" && !d.agentSupportsChiefGuidance(agent) {
-				return nil, false, fmt.Errorf("the Chief needs a harness that takes launch instructions; %s does not", agent)
+				return nil, false, fmt.Errorf("the Chief needs a harness that takes launch instructions; %s does not. Pick one: attn crew set chief --agent <harness> --model <model>", agent)
 			}
 		}
 		if err := d.applyCrewSettings(&member, msg); err != nil {

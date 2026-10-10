@@ -106,15 +106,19 @@ func (d *Daemon) ensureChiefs() error {
 	if err != nil {
 		return err
 	}
+	upgrading := make(map[string]bool, len(upgrades))
 	for _, u := range upgrades {
+		upgrading[u.ProfileID] = true
 		if err := d.ensureChief(u.ProfileID, &u); err != nil {
-			return err
+			d.logf("upgrade Chief for profile %s: %v", u.ProfileID, err)
+			continue
 		}
 		if err := d.queueChiefHandover(u); err != nil {
-			return err
+			d.logf("queue Chief handover for profile %s: %v", u.ProfileID, err)
+			continue
 		}
 		if err := d.store.FinishChiefUpgrade(u.Chief); err != nil {
-			return err
+			d.logf("finish Chief upgrade for profile %s: %v", u.ProfileID, err)
 		}
 	}
 	profiles, err := d.store.ListProfiles(true)
@@ -122,7 +126,7 @@ func (d *Daemon) ensureChiefs() error {
 		return err
 	}
 	for _, p := range profiles {
-		if p.Chief.IsZero() {
+		if p.Chief.IsZero() || upgrading[p.ID] {
 			continue
 		}
 		if p.Deleted() {
@@ -132,13 +136,13 @@ func (d *Daemon) ensureChiefs() error {
 			}
 			if !identity.Retired {
 				if _, err := d.retireCrewMember(identity); err != nil {
-					return err
+					d.logf("retire Chief for deleted profile %s: %v", p.ID, err)
 				}
 			}
 			continue
 		}
 		if err := d.ensureChief(p.ID, nil); err != nil {
-			return err
+			d.logf("furnish Chief for profile %s: %v", p.ID, err)
 		}
 	}
 	return nil
@@ -181,9 +185,11 @@ func (d *Daemon) ensureChief(profile string, u *store.ChiefUpgrade) error {
 	}
 	b := crewBirth{ProfileID: profile, Name: crew.ChiefName, Charter: prompts.RenderText("chief", "charter", nil)}
 	if u != nil {
-		b.Agent = u.Agent
-		b.Model = u.Model
-		b.Effort = u.Effort
+		if u.Agent != string(protocol.SessionAgentCopilot) {
+			b.Agent = u.Agent
+			b.Model = u.Model
+			b.Effort = u.Effort
+		}
 		b.CWD = u.CWD
 		b.Onboarded = true
 	}
@@ -191,12 +197,28 @@ func (d *Daemon) ensureChief(profile string, u *store.ChiefUpgrade) error {
 }
 
 func (d *Daemon) queueChiefHandover(u store.ChiefUpgrade) error {
-	tended, watched, err := d.chiefHandoverSeeds(u)
-	if err != nil {
-		return err
+	values := prompts.Values{"previous_session": string(u.Previous)}
+	if previous := d.store.SessionLedgerEntry(u.Previous); previous != nil && previous.MemberKey != nil {
+		key, err := who.ParseMemberKey(*previous.MemberKey)
+		if err != nil {
+			return err
+		}
+		member, err := d.store.CrewIdentity(key)
+		if err != nil {
+			return err
+		}
+		values["has_previous_member"] = "true"
+		values["previous_member"] = key.String()
+		values["previous_member_name"] = member.Name
+	} else {
+		tended, watched, err := d.chiefHandoverSeeds(u)
+		if err != nil {
+			return err
+		}
+		values["tended"], values["watched"] = tended, watched
 	}
-	text := prompts.RenderText("chief", "handover", prompts.Values{"previous_session": string(u.Previous), "tended": tended, "watched": watched})
-	_, err = d.sendToInbox(inbox.Item{ID: "chief-handover/" + u.Chief.String(), To: who.Member(u.Chief).Address(), Kind: inbox.Notice, Source: "chief-upgrade", Text: text})
+	text := prompts.RenderText("chief", "handover", values)
+	_, err := d.sendToInbox(inbox.Item{ID: "chief-handover/" + u.Chief.String(), To: who.Member(u.Chief).Address(), Kind: inbox.Notice, Source: "chief-upgrade", Text: text})
 	return err
 }
 
@@ -205,10 +227,7 @@ func (d *Daemon) chiefHandoverSeeds(u store.ChiefUpgrade) (string, string, error
 	if err != nil {
 		return "", "", err
 	}
-	previous, found := read.bindings.PartyOf(u.Previous)
-	if !found {
-		previous = who.PartyOfEndedSession(u.Previous)
-	}
+	previous := who.PartyOfEndedSession(u.Previous)
 	tended := []string{}
 	for _, seed := range garden.TendedBy(read.seeds, previous) {
 		tended = append(tended, seed.ID)

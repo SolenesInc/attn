@@ -370,12 +370,16 @@ func (d *Daemon) handleProfileCreate(client *wsClient, msg *protocol.ProfileCrea
 				return profileActionOutcome{}, err
 			}
 			profile, desktop, err := d.store.CreateProfile(name, root)
-			if err == nil {
-				err = d.ensureChief(profile.ID, nil)
+			if err != nil {
+				return profileActionOutcome{}, err
 			}
+			setupErr := d.ensureChief(profile.ID, nil)
 			return profileActionOutcome{profile: &profile, desktops: []profiles.Desktop{desktop}, publish: func() {
 				d.publishFact(FactProfileCreated, profile.ID, nil)
-			}}, err
+				if setupErr != nil {
+					d.notifyChiefSetupFailure(profile, setupErr)
+				}
+			}}, nil
 		})
 	})
 }

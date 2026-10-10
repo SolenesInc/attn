@@ -88,7 +88,7 @@ func applyMigration1791645298884411(tx *sql.Tx) error {
 				if _, err := tx.Exec("INSERT INTO chief_upgrades(profile_id,chief_member,previous_session,agent,model,effort,cwd) VALUES(?,?,?,?,?,?,?)", p.id, key, p.previous, agent, model, effort, directory); err != nil {
 					return err
 				}
-				if _, err := tx.Exec("UPDATE sessions SET label = 'Chief (previous)' WHERE id = ?", p.previous); err != nil {
+				if _, err := tx.Exec("UPDATE sessions SET label = 'Chief (previous)' WHERE id = ? AND member_key = ''", p.previous); err != nil {
 					return err
 				}
 			}

@@ -23,7 +23,7 @@ type LaunchDesktopSetting struct {
 }
 
 // LaunchDesktopItem is a crew member or automation and the desktop it starts on. DesktopID is
-// empty only during the launch review, before Finish creates the suggested desktop.
+// empty until a Chief first wakes, or until the launch review creates its desktop.
 type LaunchDesktopItem struct {
 	Kind        string
 	ID          string
@@ -228,14 +228,15 @@ var namedLaunchItemQueries = [][2]string{
 	{"crew", `SELECT member_key FROM crew_members WHERE retired_at = '' AND profile_id IN (SELECT id FROM profiles WHERE deleted_at = '') ORDER BY member_key`},
 }
 
+var migrationLaunchItemQueries = [][2]string{
+	namedLaunchItemQueries[0],
+	{"crew", `SELECT member_key FROM crew_members WHERE retired_at = '' AND profile_id IN (SELECT id FROM profiles WHERE deleted_at = '') AND member_key NOT IN (SELECT chief_member FROM profiles) ORDER BY member_key`},
+}
+
 func namedLaunchItems(tx *sql.Tx) ([]LaunchDesktopItem, error) {
 	items := []LaunchDesktopItem{}
-	for _, query := range namedLaunchItemQueries {
-		selection := query[1]
-		if query[0] == "crew" {
-			selection = `SELECT member_key FROM crew_members WHERE retired_at = '' AND profile_id IN (SELECT id FROM profiles WHERE deleted_at = '') AND member_key NOT IN (SELECT chief_member FROM profiles) ORDER BY member_key`
-		}
-		ids, err := queryColumn[string](tx, selection)
+	for _, query := range migrationLaunchItemQueries {
+		ids, err := queryColumn[string](tx, query[1])
 		if err != nil {
 			return nil, err
 		}
@@ -291,6 +292,16 @@ func launchItemDesktop(tx *sql.Tx, now string, profile profiles.Profile, kind, i
 	var desktopID string
 	if _, err := rowFound(tx.QueryRow(`SELECT desktop_id FROM launch_desktops WHERE kind = ? AND item_id = ?`, kind, id), &desktopID); err != nil {
 		return profiles.Desktop{}, err
+	}
+	if desktopID == "" && kind == "crew" && id == profile.Chief.String() {
+		if err := createOwnLaunchDesktop(tx, now, kind, id, true); err != nil {
+			return profiles.Desktop{}, err
+		}
+		item, err := loadNamedLaunchItem(tx, kind, id)
+		if err != nil {
+			return profiles.Desktop{}, err
+		}
+		desktopID = item.DesktopID
 	}
 	if desktopID == "" {
 		return loadLaunchDesktop(tx, profile, "")
