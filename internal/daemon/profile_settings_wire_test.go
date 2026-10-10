@@ -304,6 +304,33 @@ func TestFirstNotebookWritesObserveLaterExternalEdits(t *testing.T) {
 	}
 }
 
+func TestCopiedForeignSeedArtifactsDoNotChangeTheirBirthProfile(t *testing.T) {
+	w := newWorld(t)
+	app := w.App()
+	if written := notebookAskWrite(app, "anchor.md", notebookNote("Default note"), ""); !written.Success {
+		t.Fatal(written)
+	}
+	work := createProfile(app, "Work")
+	seed, err := w.Client().WithRequester(work.ID, "").SeedPlant("", "Work artifact", "Keep observations in Work.", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := producedBy(busStatus(t, app), "garden.seed.artifact.changed")
+	root := filepath.Join(w.Dir, "notebook")
+	rel := "seeds/" + seed.Seed.ID + "/copied.txt"
+	fsWriteFile(t, filepath.Join(root, filepath.FromSlash(rel)), []byte("copied from another profile"))
+	fsAwaitChanged(app, func(m protocol.FsChangedMessage) bool {
+		return m.Root == root && m.Origin == "external" && slices.Contains(m.Paths, rel)
+	})
+	fsWriteFile(t, filepath.Join(root, "next-change.md"), []byte(notebookNote("next external batch")))
+	fsAwaitChanged(app, func(m protocol.FsChangedMessage) bool {
+		return m.Root == root && m.Origin == "external" && slices.Contains(m.Paths, "next-change.md")
+	})
+	if after := producedBy(busStatus(t, app), "garden.seed.artifact.changed"); after != before {
+		t.Fatalf("copy in Default changed Work's artifacts: observations %d -> %d", before, after)
+	}
+}
+
 func TestJournalAndNotebookGuideWithoutASessionUseTheLastSelectedProfile(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()

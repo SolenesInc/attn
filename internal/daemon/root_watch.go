@@ -217,6 +217,14 @@ func (d *Daemon) rootChanged(root string, paths []string) {
 	if len(artifactSeeds) > 0 {
 		d.coalesceSnapshots(func() {
 			for seedID := range artifactSeeds {
+				seedRoot, err := d.seedNotebookRoot(seedID)
+				if err != nil {
+					d.logf("Garden artifact observation for %s: %v", seedID, err)
+					continue
+				}
+				if seedRoot != root {
+					continue
+				}
 				if err := d.recordObservedSeedArtifacts(seedID); err != nil {
 					d.logf("Garden artifact observation for %s: %v", seedID, err)
 				}
