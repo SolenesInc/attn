@@ -4,6 +4,7 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"path/filepath"
 	"regexp"
 )
@@ -60,3 +61,5 @@ func (k *MemberKey) Scan(src any) error {
 		return fmt.Errorf("who: cannot scan member key from %T", src)
 	}
 }
+
+func MintMemberKey() MemberKey { return MemberKey{key: "m-" + uuid.NewString()[:6]} }

@@ -154,6 +154,7 @@ export function crewMember(id: string, overrides: Partial<DaemonCrewMember> = {}
     key: id,
     name: id[0].toUpperCase() + id.slice(1),
     revision: 1,
+    retired: false,
     charter_path: `/crew/${id}/CHARTER.md`,
     home_dir: `/crew/${id}`,
     awareness_dirs: [],

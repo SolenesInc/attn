@@ -1,0 +1,1 @@
+ALTER TABLE crew_members ADD COLUMN retired_at TEXT NOT NULL DEFAULT '';

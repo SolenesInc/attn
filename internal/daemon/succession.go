@@ -1,7 +1,11 @@
 package daemon
 
 import (
+	"fmt"
+
 	"github.com/google/uuid"
+	"github.com/victorarias/attn/internal/pausepoint"
+	"github.com/victorarias/attn/internal/who"
 
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
@@ -15,12 +19,17 @@ func (d *Daemon) opened(t harness.TerminalID, from *protocol.Session, observatio
 	launch, _ := d.store.LaunchIntent(from.ID)
 	launch.ChiefOfStaff = false
 	to := protocol.SessionID(uuid.NewString())
+	member, bound := d.crewMemberForSession(from.ID)
+	var memberKey who.MemberKey
+	if bound {
+		memberKey = member.Key
+	}
 	return d.succeed(t, from, store.Succession{
 		To:     to,
 		Label:  defaultSessionLabel(from.Directory, to),
 		Launch: launch,
 		Close:  store.SessionClose{Reason: string("cleared; its terminal moved on to " + to)},
-	}, observation)
+	}, observation, memberKey)
 }
 
 // shows puts owner, which holds the conversation t reports and runs in no live terminal, in t: a closed
@@ -29,12 +38,15 @@ func (d *Daemon) shows(t harness.TerminalID, from *protocol.Session, owner proto
 	return d.succeed(t, from, store.Succession{
 		To:    owner,
 		Close: store.SessionClose{Reason: string("resumed; its terminal moved on to " + owner)},
-	}, observation)
+	}, observation, who.MemberKey{})
 }
 
-func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.Succession, observation agentConversationObservation) error {
+func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.Succession, observation agentConversationObservation, memberKey who.MemberKey) error {
 	unlockEnds := d.lockTerminalEnds(from.ID)
 	sc.KeepFrom = d.othersRun(from.ID, t)
+	if !sc.KeepFrom && !memberKey.IsZero() {
+		sc.Label = d.memberName(memberKey)
+	}
 	release := func() {}
 	if !sc.KeepFrom {
 		release = d.drainTranscriptWatcher(from.ID)
@@ -53,6 +65,22 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 			d.ensureTranscriptWatcherAtPath(from.ID, d.store.GetSessionConversation(from.ID).TranscriptPath)
 		}
 		return err
+	}
+
+	if !sc.KeepFrom && !memberKey.IsZero() {
+		pausepoint.At(pausepoint.MemberClearCommit)
+		if member, bound := d.crewMemberForSession(from.ID); bound {
+			if restart, pending := pendingCrewRestartFor(member, from.ID); pending {
+				if err := d.failCrewRestart(memberKey, restart.RequestID, from.ID, "", fmt.Errorf("the day was cleared before it filed its letter")); err != nil {
+					d.logf("crew: clear restart: %v", err)
+				}
+			}
+		}
+		if err := d.transferCrewBinding(memberKey, from.ID, sc.To); err != nil {
+			d.logf("crew: clear binding: %v", err)
+		} else if err := d.store.RecordMemberSession(memberKey, sc.To); err != nil {
+			d.logf("crew: record cleared member session: %v", err)
+		}
 	}
 
 	d.sessionInputs().handOverSubmit(from.ID, sc.To)

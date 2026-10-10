@@ -2749,6 +2749,12 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleCrewSleep(conn, msg.(*protocol.CrewSleepMessage))
 	case protocol.CmdCrewSet:
 		d.handleCrewSet(conn, msg.(*protocol.CrewSetMessage))
+	case protocol.CmdCrewCreate:
+		d.handleCrewCreate(conn, msg.(*protocol.CrewCreateMessage))
+	case protocol.CmdCrewRetire:
+		d.handleCrewRetire(conn, msg.(*protocol.CrewRetireMessage))
+	case protocol.CmdCrewRestore:
+		d.handleCrewRestore(conn, msg.(*protocol.CrewRestoreMessage))
 	case protocol.CmdCrewRename:
 		d.handleCrewRename(conn, msg.(*protocol.CrewRenameMessage))
 	case protocol.CmdCrewRestart:

@@ -76,6 +76,11 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 		d.sendError(conn, err.Error())
 		return
 	}
+	if err := d.mailRefusal(address); err != nil {
+		result.Detail = err.Error()
+		d.replyAgentMsg(conn, result)
+		return
+	}
 	if target.ring != nil {
 		result.TargetSessionID = protocol.Ptr(target.ring.ID)
 		if asking == target.ring.ID {

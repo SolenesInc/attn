@@ -5921,6 +5921,9 @@ model Response {
   agent_inbox_batch_result?: AgentInboxBatchResult;
   agent_msg_status_result?: AgentPeerMessage;
   crew_rename_result?: CrewRenameResult;
+  crew_create_result?: CrewCreateResult;
+  crew_retire_result?: CrewRetireResult;
+  crew_restore_result?: CrewRestoreResult;
   crew_list_result?: CrewListResult;
   crew_charter_get_result?: CrewCharterGetResult;
   crew_charter_set_result?: CrewCharterSetResult;
@@ -6042,6 +6045,7 @@ model AgentPeekResult {
 // copied onto the wire. Home-only — an outpost is refused by the enrollment
 // fence.
 model CrewListMessage {
+  include_retired?: boolean;
   source_session_id?: SessionID;
   profile_id?: string;
   cmd: "crew_list";
@@ -6049,6 +6053,7 @@ model CrewListMessage {
 
 // One registered crew member. Paths point at the canonical files.
 model CrewMember {
+  retired: boolean;
   profile_name?: string;
   launch_desktop?: LaunchDesktopSetting;
   key: string;
@@ -7421,4 +7426,42 @@ model CrewRenameResult {
  name: string;
  previous_name: string;
  session_id?: SessionID;
+}
+
+model CrewCreateMessage {
+  cmd: "crew_create";
+  name: string;
+  agent?: string;
+  `model`?: string;
+  effort?: string;
+  cwd?: string;
+  launch_desktop?: string;
+  launch_desktop_name?: string;
+  source_session_id?: SessionID;
+  profile_id?: string;
+}
+model CrewCreateResult { member: CrewMember; }
+model CrewRetireMessage {
+  cmd: "crew_retire";
+  member: string;
+  source_session_id?: SessionID;
+  profile_id?: string;
+}
+model CrewRetireResult {
+  member: CrewMember;
+  already_retired: boolean;
+  released_seeds: string[];
+  removed_watches: int32;
+  unread: int32;
+  sleep?: CrewSleepResult;
+}
+model CrewRestoreMessage {
+  cmd: "crew_restore";
+  member: string;
+  source_session_id?: SessionID;
+  profile_id?: string;
+}
+model CrewRestoreResult {
+  member: CrewMember;
+  already_active: boolean;
 }

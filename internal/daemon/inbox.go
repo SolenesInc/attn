@@ -11,6 +11,9 @@ import (
 
 // sendToInbox is the way to put something in front of an agent.
 func (d *Daemon) sendToInbox(item inbox.Item) (inbox.Receipt, error) {
+	if err := d.mailRefusal(item.To); err != nil {
+		return inbox.Receipt{}, err
+	}
 	if item.ID == "" {
 		item.ID = uuid.NewString()
 	}

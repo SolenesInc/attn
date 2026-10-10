@@ -25,6 +25,23 @@ Plugin driver payloads retain the `session_id` wire spelling for the terminal.
 Close notifications, including those completed after restart, use the original
 terminal identity.
 
+## Launch instructions after a fresh conversation
+
+Probed outside attn in tmux on 2026-10-08 (Claude and Codex) and
+2026-10-10 (Copilot). Each launch channel held a codeword; the prompt asked
+for only that word, before and after clearing.
+
+| Harness | Launch channel | Result |
+|---|---|---|
+| Claude Code 2.1.296 | `--append-system-prompt` | PELICAN-42 before and after `/clear`; the screen showed a fresh conversation |
+| Codex 0.162.0 | `-c developer_instructions=...` | HERON-17 before, after `/clear`, and after `/new` |
+| Copilot 1.0.82 | `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`, with `attn.instructions.md` | OTTER-63 before and after `/clear`; the cleared screen showed only the new question and answer |
+
+A crew member's launch instructions can therefore ask them to run
+`attn crew prime` when their conversation starts empty. Copilot keeps its
+session binding across `/clear`; Claude and Codex move it to the new session.
+Pi's launch-instruction delivery remains a separate follow-up.
+
 ## Claude Code
 
 Probed on 2.1.288 with a mock API.

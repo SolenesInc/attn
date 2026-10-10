@@ -471,3 +471,21 @@ func (d *Daemon) unregisterSessionClose(msg *protocol.UnregisterMessage) (store.
 	}
 	return store.SessionClose{By: by, Reason: strings.TrimSpace(protocol.Deref(msg.CloseReason))}, nil
 }
+
+func (d *Daemon) mailRefusal(to who.Address) error {
+	_, err := who.SwitchAddress(to,
+		func(protocol.SessionID) (struct{}, error) { return struct{}{}, nil },
+		func(key who.MemberKey) (struct{}, error) {
+			member, err := d.store.CrewIdentity(key)
+			if err != nil {
+				return struct{}{}, err
+			}
+			if member.Retired {
+				return struct{}{}, fmt.Errorf("%s is retired", member.Name)
+			}
+			return struct{}{}, nil
+		},
+		func(string) (struct{}, error) { return struct{}{}, nil },
+		func(who.ChiefMailbox) (struct{}, error) { return struct{}{}, nil })
+	return err
+}

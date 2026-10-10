@@ -15,6 +15,8 @@ import (
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/inbox"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
@@ -102,6 +104,9 @@ func (d *Daemon) crewLaunchDir(member crew.Member) (string, error) {
 	}
 	dir := strings.TrimSpace(member.CWD)
 	if dir == "" {
+		if err := os.MkdirAll(member.HomeDir, 0o755); err != nil {
+			return "", err
+		}
 		return member.HomeDir, nil
 	}
 	info, err := os.Stat(dir)
@@ -231,6 +236,7 @@ func (d *Daemon) crewWakeAskedFor(msg *protocol.CrewWakeMessage, userStarted boo
 }
 
 func (d *Daemon) handleCrewWake(conn net.Conn, msg *protocol.CrewWakeMessage) {
+	pausepoint.At(pausepoint.MemberWakeRequested)
 	result, err := d.crewWakeAsked(msg)
 	if err != nil {
 		d.sendCrewError(conn, "wake", err)
@@ -274,6 +280,9 @@ func (d *Daemon) crewWakeWithChargeLocked(key who.MemberKey, agent string, auton
 	return d.crewWakeDayWithChargeLocked(key, agent, autonomous, nil, crewWakeRequest{})
 }
 func (d *Daemon) crewWakeDayWithChargeLocked(key who.MemberKey, agent string, autonomous bool, beforeWake func() error, request crewWakeRequest) (*protocol.CrewWakeResult, error) {
+	if err := d.mailRefusal(inbox.ToMember(key.String())); err != nil {
+		return nil, fmt.Errorf("%w; `attn crew restore %s` brings it back", err, d.memberName(key))
+	}
 	member, _, err := d.crewMember(key)
 	if err != nil {
 		return nil, err

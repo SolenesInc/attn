@@ -1,0 +1,3 @@
+kind: added
+area: crew
+change: Create, retire and restore crew members from the CLI. Clearing a member's conversation keeps them awake, with crew prime to re-orient.

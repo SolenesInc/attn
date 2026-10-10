@@ -22,6 +22,7 @@ function member(id: string, revision: number, values: Partial<CrewMember> = {}):
     key: id,
     name: id[0].toUpperCase()+id.slice(1),
     revision,
+    retired: false,
     charter_path: `/crew/${id}/CHARTER.md`,
     home_dir: `/crew/${id}`,
     awareness_dirs: [],

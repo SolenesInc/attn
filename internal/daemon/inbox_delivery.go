@@ -98,6 +98,9 @@ func (r delivery) toMember(k who.MemberKey) (recipient, error) {
 	if id, ok := r.bindings.SessionOf(who.Member(k)); ok {
 		return r.toSession(id)
 	}
+	if err := r.d.mailRefusal(who.Member(k).Address()); err != nil {
+		return recipient{wait: fmt.Sprintf("%s; restore it: attn crew restore %s", err, r.d.memberName(k))}, nil
+	}
 	return recipient{wake: k}, nil
 }
 func (r delivery) toTenderOf(id string) (recipient, error) {

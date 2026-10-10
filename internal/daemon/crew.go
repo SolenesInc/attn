@@ -561,7 +561,9 @@ func (d *Daemon) sendCrewError(conn net.Conn, verb string, err error) {
 }
 
 func (d *Daemon) crewMemberWire(member crew.Member, revision int64) protocol.CrewMember {
+	identity, _ := d.store.CrewIdentity(member.Key)
 	wire := protocol.CrewMember{
+		Retired:       identity.Retired,
 		Key:           member.Key.String(),
 		Name:          d.memberName(member.Key),
 		ProfileID:     d.crewProfileID(member.Key.String()),
@@ -606,6 +608,10 @@ func (d *Daemon) crewMemberWire(member crew.Member, revision int64) protocol.Cre
 }
 
 func (d *Daemon) crewRoster(profileID string) []protocol.CrewMember {
+	return d.crewRosterIncludingRetired(profileID, false)
+}
+
+func (d *Daemon) crewRosterIncludingRetired(profileID string, includeRetired bool) []protocol.CrewMember {
 	out := []protocol.CrewMember{}
 	if d.store == nil || d.requireHome(crew.Surface) != nil {
 		return out
@@ -616,6 +622,9 @@ func (d *Daemon) crewRoster(profileID string) []protocol.CrewMember {
 		return out
 	}
 	for _, identity := range identities {
+		if identity.Retired && !includeRetired {
+			continue
+		}
 		member, doc, err := d.crewMember(identity.Key)
 		if err != nil {
 			d.logf("crew roster: %v", err)
@@ -681,7 +690,7 @@ func (d *Daemon) handleCrewList(conn net.Conn, msg *protocol.CrewListMessage) {
 			return
 		}
 	}
-	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewListResult: &protocol.CrewListResult{Members: d.crewRoster(r.ProfileID())}})
+	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewListResult: &protocol.CrewListResult{Members: d.crewRosterIncludingRetired(r.ProfileID(), protocol.Deref(msg.IncludeRetired))}})
 }
 func memberWithKey(key string, members []crew.Member) (crew.Member, bool) {
 	for _, member := range members {

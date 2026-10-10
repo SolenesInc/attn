@@ -225,7 +225,7 @@ func (s *Store) SetLaunchDesktop(kind, id string, setting LaunchDesktopSetting) 
 
 var namedLaunchItemQueries = [][2]string{
 	{"automation", `SELECT id FROM automation_definitions WHERE deleted_at = '' AND profile_id IN (SELECT id FROM profiles WHERE deleted_at = '') ORDER BY id`},
-	{"crew", `SELECT member_key FROM crew_members WHERE profile_id IN (SELECT id FROM profiles WHERE deleted_at = '') ORDER BY member_key`},
+	{"crew", `SELECT member_key FROM crew_members WHERE retired_at = '' AND profile_id IN (SELECT id FROM profiles WHERE deleted_at = '') ORDER BY member_key`},
 }
 
 func namedLaunchItems(tx *sql.Tx) ([]LaunchDesktopItem, error) {
