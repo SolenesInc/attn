@@ -32,23 +32,7 @@ func TestSharedHost_HandoverMovesEveryTerminalToTheNewBuildInPlace(t *testing.T)
 		_ = syscall.Kill(hostPID, syscall.SIGTERM)
 		_ = waitForPIDsGone(3*time.Second, hostPID)
 	})
-	_, live, err := oldBackend.Attach(context.Background(), "numbers", "before", AttachOptions{OmitReplay: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := oldBackend.Input(context.Background(), "numbers", []byte("seq 1 40 | sed s/^/row-/; cat\n")); err != nil {
-		t.Fatal(err)
-	}
-	waitForStreamText(t, live, "row-40")
-	_ = live.Close()
-	before, err := oldBackend.ScreenSnapshot(context.Background(), "numbers")
-	if err != nil {
-		t.Fatal(err)
-	}
-	child, err := oldBackend.SessionInfo(context.Background(), "numbers")
-	if err != nil {
-		t.Fatal(err)
-	}
+	numbers := fillTerminal(t, oldBackend, "numbers")
 
 	newBackend := world.backend(t, "handover-new", ptyhosttest.BuildWithSnapshotFormat(t, "handover-new"))
 	if _, err := newBackend.Recover(context.Background()); err != nil {
@@ -65,33 +49,7 @@ func TestSharedHost_HandoverMovesEveryTerminalToTheNewBuildInPlace(t *testing.T)
 	if pids := newBackend.WorkerPIDs(context.Background()); pids["numbers"] != hostPID || pids["neighbour"] != hostPID {
 		t.Fatalf("host pids after the handover = %v, want both terminals still in pid %d", pids, hostPID)
 	}
-	adopted, err := newBackend.SessionInfo(context.Background(), "numbers")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if adopted.PID != child.PID || !adopted.Running {
-		t.Fatalf("shell after the handover: pid=%d running=%t, want the same running shell pid %d", adopted.PID, adopted.Running, child.PID)
-	}
-	after, err := newBackend.ScreenSnapshot(context.Background(), "numbers")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if after.Screen == nil || before.Screen == nil || after.Screen.Text != before.Screen.Text {
-		t.Fatalf("screen after the handover differs:\nbefore:\n%s\nafter:\n%s", screenText(before.Screen), screenText(after.Screen))
-	}
-
-	attached, stream, err := newBackend.Attach(context.Background(), "numbers", "after")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer stream.Close()
-	if attached.GhosttySnapshotFormat != "handover-new" || len(attached.GhosttySnapshot) == 0 {
-		t.Fatalf("attach after the handover: format=%q snapshot=%dB, want a handover-new snapshot", attached.GhosttySnapshotFormat, len(attached.GhosttySnapshot))
-	}
-	if err := newBackend.Input(context.Background(), "numbers", []byte("\x04printf 'after-%s\\n' five\n")); err != nil {
-		t.Fatal(err)
-	}
-	waitForStreamText(t, stream, "after-five")
+	numbers.requireCarriedBy(t, newBackend, "handover-new")
 }
 
 func TestSharedHost_ABuildThatCannotAdoptNeverTouchesTheLiveHost(t *testing.T) {
@@ -160,30 +118,14 @@ func TestSharedHost_ABuildThatFailsToAdoptHandsEveryTerminalBack(t *testing.T) {
 				_ = syscall.Kill(hostPID, syscall.SIGTERM)
 				_ = waitForPIDsGone(3*time.Second, hostPID)
 			})
-			_, live, err := oldBackend.Attach(context.Background(), "kept", "before", AttachOptions{OmitReplay: true})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := oldBackend.Input(context.Background(), "kept", []byte("seq 1 30 | sed s/^/row-/; cat\n")); err != nil {
-				t.Fatal(err)
-			}
-			waitForStreamText(t, live, "row-30")
-			_ = live.Close()
-			before, err := oldBackend.ScreenSnapshot(context.Background(), "kept")
-			if err != nil {
-				t.Fatal(err)
-			}
-			child, err := oldBackend.SessionInfo(context.Background(), "kept")
-			if err != nil {
-				t.Fatal(err)
-			}
+			kept := fillTerminal(t, oldBackend, "kept")
 			registryBefore := world.hostRegistry(t, hostPID)
 
 			newBackend := world.backend(t, "fallback-new", ptyhosttest.BuildWithAdoptFault(t, "fallback-new"))
 			if _, err := newBackend.Recover(context.Background()); err != nil {
 				t.Fatal(err)
 			}
-			err = newBackend.UpgradeWorker(context.Background(), "kept")
+			err := newBackend.UpgradeWorker(context.Background(), "kept")
 			if err == nil || !strings.Contains(err.Error(), "did not take effect") {
 				t.Fatalf("UpgradeWorker = %v, want the live host's failed adopt reported as a handover that did not take effect", err)
 			}
@@ -199,29 +141,7 @@ func TestSharedHost_ABuildThatFailsToAdoptHandsEveryTerminalBack(t *testing.T) {
 					registryAfter.ArtifactID, registryAfter.Executable, registryAfter.SnapshotFormat,
 					registryBefore.ArtifactID, registryBefore.Executable, registryBefore.SnapshotFormat)
 			}
-			back, err := newBackend.SessionInfo(context.Background(), "kept")
-			if err != nil {
-				t.Fatal(err)
-			}
-			if back.PID != child.PID || !back.Running {
-				t.Fatalf("shell after the hand-back: pid=%d running=%t, want the same running shell pid %d", back.PID, back.Running, child.PID)
-			}
-			after, err := newBackend.ScreenSnapshot(context.Background(), "kept")
-			if err != nil {
-				t.Fatal(err)
-			}
-			if after.Screen == nil || before.Screen == nil || after.Screen.Text != before.Screen.Text {
-				t.Fatalf("screen after the hand-back differs:\nbefore:\n%s\nafter:\n%s", screenText(before.Screen), screenText(after.Screen))
-			}
-			_, stream, err := newBackend.Attach(context.Background(), "kept", "after", AttachOptions{OmitReplay: true})
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer stream.Close()
-			if err := newBackend.Input(context.Background(), "kept", []byte("\x04printf 'back-%s\\n' nine\n")); err != nil {
-				t.Fatal(err)
-			}
-			waitForStreamText(t, stream, "back-nine")
+			kept.requireCarriedBy(t, newBackend, "fallback-old")
 		})
 	}
 }
@@ -268,6 +188,64 @@ func (w handoverWorld) hostRegistry(t *testing.T, hostPID int) ptyhost.HostRegis
 	}
 	t.Fatalf("no host registry entry names pid %d among %v", hostPID, paths)
 	return ptyhost.HostRegistry{}
+}
+
+type filledTerminal struct {
+	id       harness.TerminalID
+	shellPID int
+	screen   *pty.ViewportSnapshot
+}
+
+func fillTerminal(t *testing.T, backend *WorkerBackend, id harness.TerminalID) filledTerminal {
+	t.Helper()
+	_, live, err := backend.Attach(context.Background(), id, "fill", AttachOptions{OmitReplay: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer live.Close()
+	if err := backend.Input(context.Background(), id, []byte("seq 1 40 | sed s/^/row-/; cat\n")); err != nil {
+		t.Fatal(err)
+	}
+	waitForStreamText(t, live, "row-40")
+	snapshot, err := backend.ScreenSnapshot(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := backend.SessionInfo(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return filledTerminal{id: id, shellPID: info.PID, screen: snapshot.Screen}
+}
+
+func (f filledTerminal) requireCarriedBy(t *testing.T, backend *WorkerBackend, format string) {
+	t.Helper()
+	info, err := backend.SessionInfo(context.Background(), f.id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.PID != f.shellPID || !info.Running {
+		t.Fatalf("shell of %s: pid=%d running=%t, want the same running shell pid %d", f.id, info.PID, info.Running, f.shellPID)
+	}
+	now, err := backend.ScreenSnapshot(context.Background(), f.id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if now.Screen == nil || f.screen == nil || now.Screen.Text != f.screen.Text {
+		t.Fatalf("screen of %s differs:\nbefore:\n%s\nnow:\n%s", f.id, screenText(f.screen), screenText(now.Screen))
+	}
+	attached, stream, err := backend.Attach(context.Background(), f.id, "carried")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Close()
+	if attached.GhosttySnapshotFormat != format || len(attached.GhosttySnapshot) == 0 {
+		t.Fatalf("attach of %s: format=%q snapshot=%dB, want a %s snapshot", f.id, attached.GhosttySnapshotFormat, len(attached.GhosttySnapshot), format)
+	}
+	if err := backend.Input(context.Background(), f.id, []byte("\x04printf 'carried-%s\\n' over\n")); err != nil {
+		t.Fatal(err)
+	}
+	waitForStreamText(t, stream, "carried-over")
 }
 
 func screenText(screen *pty.ViewportSnapshot) string {
