@@ -124,9 +124,13 @@ function buildFixtureRepo(root) {
   const names = ['merged', 'pinned', 'dirty'];
   for (let i = 0; i < FILLER_WORKTREES; i += 1) names.push(`spare${i}`);
   for (const name of names) {
-    const wt = path.join(root, `wt-${name}`);
-    git(main, ['worktree', 'add', '-q', '-b', `feat/${name}`, wt, base]);
-    worktrees[name] = fs.realpathSync(wt);
+    const wt = path.join(fs.realpathSync(root), `wt-${name}`);
+    if (name === 'merged') {
+      git(main, ['branch', `feat/${name}`, base]);
+    } else {
+      git(main, ['worktree', 'add', '-q', '-b', `feat/${name}`, wt, base]);
+    }
+    worktrees[name] = wt;
   }
   fs.writeFileSync(path.join(worktrees.dirty, 'wip.txt'), 'unfinished\n');
   return { main: fs.realpathSync(main), worktrees, count: names.length };
@@ -205,7 +209,8 @@ async function main() {
       const started = Date.now();
       fixture = buildFixtureRepo(runner.sessionDir);
       runner.log('fixture_built', {
-        main: fixture.main, worktrees: fixture.count, files: SLOW_REPO_FILES, ms: Date.now() - started,
+        main: fixture.main, worktrees: Object.values(fixture.worktrees).filter((wt) => fs.existsSync(wt)).length,
+        files: SLOW_REPO_FILES, ms: Date.now() - started,
       });
     });
 
@@ -223,8 +228,8 @@ async function main() {
       const before = seedIDs(binary, daemonEnv);
       const known = new Set(observer.sessionsById.keys());
       run(binary, [
-        'delegate', '--agent', 'shell', '--model', 'none', '--reuse-checkout', '--branch', 'feat/merged',
-        '--cwd', fixture.worktrees.merged, '--name', 'wtproof',
+        'delegate', '--agent', 'shell', '--model', 'none', '--new-worktree', '--existing-branch', 'feat/merged',
+        '--worktree-path', fixture.worktrees.merged, '--cwd', fixture.main, '--name', 'wtproof',
         '--source-session', ownerSession, '--brief', BRIEF,
       ], daemonEnv, { timeout: DELEGATE_TIMEOUT_MS });
       const planted = [...seedIDs(binary, daemonEnv)].filter((id) => !before.has(id));

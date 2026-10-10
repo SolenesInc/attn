@@ -122,11 +122,12 @@
         "runnerClass": "github-hosted 4vcpu/16GB"
       },
       "worktree-surface": {
-        "run": "https://github.com/SolenesInc/attn/actions/runs/34544718832",
-        "job": "App acceptance shard 4/4",
-        "recordedAt": "2026-09-11",
-        "seconds": 34.3,
-        "runnerClass": "github-hosted 4vcpu/16GB"
+        "run": "https://github.com/SolenesInc/attn/actions/runs/38078604481",
+        "job": "App acceptance shard 2/4",
+        "recordedAt": "2026-10-10",
+        "seconds": 25.748,
+        "runnerClass": "github-hosted 4vcpu/16GB",
+        "note": "Green worktree-surface code=0 and durationMs=25748 from the shard result artifact. The delegation creates its checkout through attn; the sweep discovers the other external worktrees."
       },
       "delegation-preferences": {
         "run": "https://github.com/SolenesInc/attn/actions/runs/37878771307",
@@ -300,7 +301,7 @@
     "session-creation-shortcuts": 22.6,
     "desktop-switching": 27.0,
     "desktop-splits": 45.7,
-    "worktree-surface": 34.3,
+    "worktree-surface": 25.748,
     "crew-management": 60.188,
     "clear-opens-session": 15.0,
     "desktop-migration": 20.7,

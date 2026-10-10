@@ -18,19 +18,13 @@ import (
 )
 
 func (d *Daemon) doListWorktrees(mainRepo string) []protocol.Worktree {
-	var result []protocol.Worktree
-	_ = d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
-		gitWorktrees, err := gitValue(protection.Context(), d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) ([]git.WorktreeEntry, error) {
-			return client.ObserveLiveWorktrees(ctx, mainRepo)
-		})
-		if err != nil {
-			result = storedWorktreesAsProtocol(d.store.ListWorktreesByRepo(mainRepo))
-			return nil
-		}
-		result = d.reconcileListedWorktrees(protection, mainRepo, gitWorktrees)
-		return nil
+	gitWorktrees, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) ([]git.WorktreeEntry, error) {
+		return client.ObserveLiveWorktrees(ctx, mainRepo)
 	})
-	return result
+	if err != nil {
+		return storedWorktreesAsProtocol(d.store.ListWorktreesByRepo(mainRepo))
+	}
+	return d.listedWorktreesAsProtocol(mainRepo, gitWorktrees)
 }
 
 func storedWorktreesAsProtocol(storedWorktrees []*store.Worktree) []protocol.Worktree {
@@ -46,45 +40,23 @@ func storedWorktreesAsProtocol(storedWorktrees []*store.Worktree) []protocol.Wor
 	return protoWorktrees
 }
 
-func (d *Daemon) reconcileListedWorktrees(_ foregroundCleanupProtection, mainRepo string, liveWorktrees []git.WorktreeEntry) []protocol.Worktree {
-	liveWorktreePaths := make(map[string]bool, len(liveWorktrees))
-	for _, gwt := range liveWorktrees {
-		liveWorktreePaths[gwt.Path] = true
-	}
-
-	var validWorktrees []*store.Worktree
+func (d *Daemon) listedWorktreesAsProtocol(mainRepo string, liveWorktrees []git.WorktreeEntry) []protocol.Worktree {
+	storedByPath := make(map[string]*store.Worktree)
 	for _, wt := range d.store.ListWorktreesByRepo(mainRepo) {
-		if liveWorktreePaths[wt.Path] {
-			validWorktrees = append(validWorktrees, wt)
-		} else {
-			d.store.RemoveWorktree(wt.Path)
-		}
+		storedByPath[wt.Path] = wt
 	}
-
+	result := make([]protocol.Worktree, 0, len(liveWorktrees))
 	for _, gwt := range liveWorktrees {
 		if gwt.Path == mainRepo {
 			continue
 		}
-		found := false
-		for _, wt := range validWorktrees {
-			if wt.Path == gwt.Path {
-				found = true
-				break
-			}
+		wt := protocol.Worktree{Path: gwt.Path, Branch: gwt.Branch, MainRepo: mainRepo}
+		if stored := storedByPath[gwt.Path]; stored != nil {
+			wt.CreatedAt = protocol.Ptr(stored.CreatedAt.Format(time.RFC3339))
 		}
-		if !found {
-			newWt := &store.Worktree{
-				Path:      gwt.Path,
-				Branch:    gwt.Branch,
-				MainRepo:  mainRepo,
-				CreatedAt: time.Now(),
-			}
-			d.store.AddWorktree(newWt)
-			validWorktrees = append(validWorktrees, newWt)
-		}
+		result = append(result, wt)
 	}
-
-	return storedWorktreesAsProtocol(validWorktrees)
+	return result
 }
 
 func (d *Daemon) doCreateWorktree(msg *protocol.CreateWorktreeMessage) (string, error) {
@@ -162,6 +134,7 @@ func (d *Daemon) registerCreatedWorktree(_ foregroundCleanupProtection, mainRepo
 		MainRepo:  mainRepo,
 		CreatedAt: time.Now(),
 	}
+	d.store.MonitorWorktreeRepository(mainRepo)
 	d.store.AddWorktree(wt)
 
 	d.publishFact(FactWorktreeCreated, wt.Path, protocol.Worktree{

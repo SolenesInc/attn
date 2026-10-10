@@ -657,6 +657,8 @@ func (d *Daemon) prepareAutomationLocation(ctx context.Context, req automation.W
 	}); err != nil {
 		return automation.PreparedLocation{}, &retryableAutomationDeliveryError{cause: err}
 	}
+	crashAt(crashAfterAutomationWorktree)
+	d.store.MonitorWorktreeRepository(mainRepo)
 	resolved, _ := json.Marshal(automation.ResolvedLocation{
 		Type: "repository_worktree", Repository: identity, ConfiguredSource: source,
 		MainRepository: mainRepo, Worktree: worktree, Revision: pr.HeadSHA,
