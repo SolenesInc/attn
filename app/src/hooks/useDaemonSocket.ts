@@ -1,11 +1,6 @@
 import { clearHarnesses } from './useHarnesses';
 import { clearHarnessModelCatalogs } from './useHarnessRoute';
 import { PROTOCOL_VERSION } from '../types/protocolVersion';
-export interface NotebookRequestScope {
- profile_id?: string;
- expected_notebook_root?: string;
-}
-
 export { PROTOCOL_VERSION } from '../types/protocolVersion';
 import { handleCommandUsageEvent } from './daemonCommandUsageEvents';
 import { handleLaunchDesktopEvent } from './daemonLaunchDesktopEvents';
@@ -19,7 +14,7 @@ import {
   type CrewMutationOutcome,
 } from './daemonCrewEvents';
 import { useDelegationPreferencesPush } from '../store/delegationPreferences';
-import type { DelegationPreferences } from '../types/generated';
+import type { DelegationPreferences, NotebookScope } from '../types/generated';
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { NotebookSurfaceHandle } from '../components/NotebookSurface';
@@ -3689,12 +3684,12 @@ export function useDaemonSocket({
     settingsRef.current = { ...settingsRef.current, [key]: value };
     callbacksRef.current.onSettingsUpdate?.(settingsRef.current);
 
-    ws.send(JSON.stringify({ cmd: 'set_setting', key, value, profile_id: useProfilesStore.getState().selectedProfileId }));
+    ws.send(JSON.stringify({ cmd: 'set_setting', key, value, ...(key === 'notebook.root' ? { profile_id: useProfilesStore.getState().selectedProfileId } : {}) }));
   }, []);
 
   const sendSaveSetting = useCallback(async (key: string, value: string, profileId = useProfilesStore.getState().selectedProfileId): Promise<void> => {
     if (key === 'notebook.root' && notebookEditorsRef.current.size > 0) await flushNotebookEditors();
-    await sendRequest<boolean>('set_setting', { key, value, profile_id: profileId }, 'Saving the setting timed out');
+    await sendRequest<boolean>('set_setting', { key, value, ...(key === 'notebook.root' ? { profile_id: profileId } : {}) }, 'Saving the setting timed out');
   }, [sendRequest, flushNotebookEditors]);
 
   const sendGetSettings = useCallback(() => {
@@ -4132,34 +4127,34 @@ export function useDaemonSocket({
     });
   }, [nextRequestID]);
 
-  const sendNotebookBacklinks = useCallback((path: string, scope?: NotebookRequestScope): Promise<NotebookEntry[]> =>
+  const sendNotebookBacklinks = useCallback((path: string, scope?: NotebookScope): Promise<NotebookEntry[]> =>
     sendRequest<NotebookEntry[]>('notebook_backlinks', { path, ...scope }, 'Notebook backlinks timed out'), [sendRequest]);
 
-  const sendNotebookToChief = useCallback((selection: string, sourcePath?: string, scope?: NotebookRequestScope): Promise<NotebookSendToChiefResult> =>
+  const sendNotebookToChief = useCallback((selection: string, sourcePath?: string, scope?: NotebookScope): Promise<NotebookSendToChiefResult> =>
     sendRequest<NotebookSendToChiefResult>('notebook_send_to_chief', { ...scope, selection, ...(sourcePath ? { source_path: sourcePath } : {}) }, 'Send to chief timed out'), [sendRequest]);
 
-  const sendFsList = useCallback((path?: string, root?: string, scope?: NotebookRequestScope): Promise<FsEntry[]> =>
+  const sendFsList = useCallback((path?: string, root?: string, scope?: NotebookScope): Promise<FsEntry[]> =>
     sendRequest<FsEntry[]>('fs_list', { ...scope, ...(path ? { path } : {}), ...(root ? { root } : {}) }, 'Filesystem list timed out'), [sendRequest]);
 
-  const sendFsRead = useCallback((path: string, root?: string, scope?: NotebookRequestScope): Promise<FsReadResult> =>
+  const sendFsRead = useCallback((path: string, root?: string, scope?: NotebookScope): Promise<FsReadResult> =>
     sendRequest<FsReadResult>('fs_read', { ...scope, path, ...(root ? { root } : {}) }, 'Filesystem read timed out'), [sendRequest]);
 
-  const sendFsReadAsset = useCallback((path: string, root?: string, scope?: NotebookRequestScope): Promise<FsReadAssetResult> =>
+  const sendFsReadAsset = useCallback((path: string, root?: string, scope?: NotebookScope): Promise<FsReadAssetResult> =>
     sendRequest<FsReadAssetResult>('fs_read_asset', { ...scope, path, ...(root ? { root } : {}) }, 'Filesystem asset read timed out'), [sendRequest]);
 
-  const sendFsWrite = useCallback((path: string, content: string, baseHash?: string, root?: string, scope?: NotebookRequestScope): Promise<FsWriteResult> =>
+  const sendFsWrite = useCallback((path: string, content: string, baseHash?: string, root?: string, scope?: NotebookScope): Promise<FsWriteResult> =>
     sendRequest<FsWriteResult>('fs_write', { ...scope, path, content, ...(baseHash ? { base_hash: baseHash } : {}), ...(root ? { root } : {}) }, 'Filesystem save timed out'), [sendRequest]);
 
-  const sendFsExists = useCallback((path: string, root?: string, scope?: NotebookRequestScope): Promise<FsExistsResult> =>
+  const sendFsExists = useCallback((path: string, root?: string, scope?: NotebookScope): Promise<FsExistsResult> =>
     sendRequest<FsExistsResult>('fs_exists', { ...scope, path, ...(root ? { root } : {}) }, 'Filesystem exists check timed out'), [sendRequest]);
 
-  const sendFsWatch = useCallback((root?: string, scope?: NotebookRequestScope): Promise<FsWatchResult> =>
+  const sendFsWatch = useCallback((root?: string, scope?: NotebookScope): Promise<FsWatchResult> =>
     sendRequest<FsWatchResult>('fs_watch', { ...scope, ...(root ? { root } : {}) }, 'Filesystem watch timed out'), [sendRequest]);
 
-  const sendFsUnwatch = useCallback((root?: string, scope?: NotebookRequestScope): Promise<FsWatchResult> =>
+  const sendFsUnwatch = useCallback((root?: string, scope?: NotebookScope): Promise<FsWatchResult> =>
     sendRequest<FsWatchResult>('fs_unwatch', { ...scope, ...(root ? { root } : {}) }, 'Filesystem unwatch timed out'), [sendRequest]);
 
-  const sendFsIndex = useCallback((root?: string, extensions?: string[], scope?: NotebookRequestScope): Promise<FsIndexResult> =>
+  const sendFsIndex = useCallback((root?: string, extensions?: string[], scope?: NotebookScope): Promise<FsIndexResult> =>
     sendRequest<FsIndexResult>('fs_index', { ...scope, ...(root ? { root } : {}), ...(extensions && extensions.length > 0 ? { extensions } : {}) }, 'Filesystem index timed out'), [sendRequest]);
 
   const sendGetCommandUsage = useCallback((profileId: string): Promise<CommandUsage[]> =>

@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"maps"
-	"strings"
 )
 
 func (s *Store) ProfileSetting(profileID, key string) string {
@@ -46,9 +45,6 @@ func (s *Store) SetProfileSetting(profileID, key, value string) error {
 func readProfileSettings(db *sql.DB) (map[string]map[string]string, error) {
 	rows, err := db.Query(`SELECT profile_id, key, value FROM profile_settings`)
 	if err != nil {
-		if strings.Contains(err.Error(), "no such table: profile_settings") {
-			return make(map[string]map[string]string), nil
-		}
 		return nil, err
 	}
 	defer rows.Close()

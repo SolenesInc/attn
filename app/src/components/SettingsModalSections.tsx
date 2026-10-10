@@ -251,6 +251,7 @@ export function DesktopSettings({
   worktreeSweepEnabled,
   notebookRootDraft,
   effectiveNotebookRoot,
+  defaultNotebookRoot,
   handleBrowseNotebookRoot,
   handleToggleOpenSentFiles,
   openSentFilesEnabled,
@@ -264,6 +265,7 @@ export function DesktopSettings({
   | 'worktreeSweepEnabled'
   | 'notebookRootDraft'
   | 'effectiveNotebookRoot'
+  | 'defaultNotebookRoot'
   | 'handleBrowseNotebookRoot'
   | 'handleToggleOpenSentFiles'
   | 'openSentFilesEnabled'
@@ -381,19 +383,19 @@ export function DesktopSettings({
             <input
               data-testid="settings-notebook-root-input"
               type="text"
-              disabled={!effectiveNotebookRoot}
+              disabled={!effectiveNotebookRoot && !notebookRootDraft.value}
               value={notebookRootDraft.value}
               onChange={notebookRootDraft.onChange}
               onBlur={notebookRootDraft.commit}
               onKeyDown={notebookRootDraft.onKeyDown}
-              placeholder={effectiveNotebookRoot || '~/attn-notebook'}
+              placeholder={defaultNotebookRoot || undefined}
               className="settings-input"
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
             />
             <SavedMark shown={savedFlash.saved('notebook.root')} testID="settings-notebook-root-saved" />
-            <button className="settings-action" disabled={!effectiveNotebookRoot} onClick={handleBrowseNotebookRoot}>
+            <button className="settings-action" disabled={!effectiveNotebookRoot && !notebookRootDraft.value} onClick={handleBrowseNotebookRoot}>
               Browse
             </button>
           </div>

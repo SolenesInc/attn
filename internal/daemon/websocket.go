@@ -1020,9 +1020,9 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		return
 	}
 
-	notebookScope, err := d.resolveNotebookRequest(client, cmd, msg)
+	notebookScope, err := d.resolveNotebookRequest(client, cmd, data)
 	if err != nil {
-		d.sendNotebookScopeError(client, cmd, msg, err)
+		d.sendNotebookScopeError(client, cmd, notebookScope, err)
 		return
 	}
 

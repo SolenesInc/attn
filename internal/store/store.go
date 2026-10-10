@@ -112,7 +112,11 @@ func newDBStore(db *sql.DB, writes *tableWrites, dbPath string, durable bool) (*
 		db.Close()
 		return nil, err
 	}
-	return &Store{db: db, dbPath: dbPath, durable: durable, settings: settings, profileSettings: profileSettings, writes: writes}, nil
+	return newDBStoreWithSettings(db, writes, dbPath, durable, settings, profileSettings), nil
+}
+
+func newDBStoreWithSettings(db *sql.DB, writes *tableWrites, dbPath string, durable bool, settings map[string]string, profileSettings map[string]map[string]string) *Store {
+	return &Store{db: db, dbPath: dbPath, durable: durable, settings: settings, profileSettings: profileSettings, writes: writes}
 }
 
 func newMapBackedStore() *Store {

@@ -1,12 +1,13 @@
 package daemon
 
 import (
+	"fmt"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/notebook"
 	"os"
 )
 
-func (d *Daemon) defaultNotebookRoot(name string) string {
+func (d *Daemon) defaultNotebookRoot(name string) (string, error) {
 	base := config.HarnessNotebookRoot()
 	if base == "" {
 		base = notebook.DefaultRoot("~", config.Instance())
@@ -14,25 +15,27 @@ func (d *Daemon) defaultNotebookRoot(name string) string {
 	return notebook.ProfileDefaultRoot(base, name, d.notebookRootTaken)
 }
 
-func (d *Daemon) notebookRootTaken(raw string) bool {
+func (d *Daemon) notebookRootTaken(raw string) (bool, error) {
 	root, err := normalizeNotebookRoot(raw)
 	if err != nil {
-		return true
+		return false, err
 	}
-	if _, err := os.Stat(root); !os.IsNotExist(err) {
-		return true
+	if _, err := os.Lstat(root); err == nil {
+		return true, nil
+	} else if !os.IsNotExist(err) {
+		return false, fmt.Errorf("inspect Notebook root %q: %w", root, err)
 	}
 	profiles, err := d.store.ListProfiles(false)
 	if err != nil {
-		return true
+		return false, err
 	}
 	for _, p := range profiles {
-		other, err := normalizeNotebookRoot(d.store.ProfileSetting(p.ID, "notebook.root"))
+		other, err := normalizeNotebookRoot(d.profileSetting(p.ID, settingNotebookRoot))
 		if err == nil && root == other {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
 func (d *Daemon) pruneNotebookRoots() {

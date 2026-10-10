@@ -52,6 +52,7 @@ const (
 	settingDefaultEffortPrefix           daemonSettingKey  = "default_effort_"
 	settingNotebookRoot                  profileSettingKey = "notebook.root"
 	settingNotebookRootEffective         profileSettingKey = "notebook.root.effective"
+	settingNotebookRootDefault           profileSettingKey = "notebook.root.default"
 	settingAutoModeEnabledDefault        daemonSettingKey  = "automode_enabled_default"
 	settingActivityEnabled               daemonSettingKey  = "activity.enabled"
 	settingActivityConfig                daemonSettingKey  = "activity.config"
@@ -247,6 +248,7 @@ var settingSpecs = []settingSpec{
 		return err
 	}},
 	{key: "session_cost.billed_as.<model>", scope: daemonScope, description: "Billing model alias. Empty removes the alias.", validate: func(d *Daemon, key, value string) error { return sessioncost.ValidateBilledAs(key, value) }},
+	{key: string(settingNotebookRootDefault), scope: profileScope, description: "Folder chosen when this profile clears notebook.root; existing notes are not moved.", readOnly: true},
 	{key: "notebook.root.effective", scope: profileScope, description: "Resolved Notebook folder for this profile.", readOnly: true},
 	{key: "<harness>_available", scope: daemonScope, description: "Whether this harness executable is available on PATH.", readOnly: true},
 	{key: "<harness>_cap_<capability>", scope: daemonScope, description: "Whether this harness supports the named capability.", readOnly: true},
@@ -314,16 +316,16 @@ func lookupSetting(key string) (settingSpec, bool) {
 	return settingSpec{}, false
 }
 
-func (d *Daemon) validateSetting(key, value string) error {
+func writableSetting(key string) (settingSpec, error) {
 	spec, ok := lookupSetting(key)
 	if !ok {
-		return fmt.Errorf("unknown setting: %s", key)
+		return settingSpec{}, fmt.Errorf("unknown setting: %s", key)
+	}
+	if strings.Contains(spec.key, "<") && spec.key == key {
+		return settingSpec{}, fmt.Errorf("setting %s requires a concrete key; replace its placeholders", key)
 	}
 	if spec.readOnly {
-		return fmt.Errorf("setting %s is read-only", key)
+		return settingSpec{}, fmt.Errorf("setting %s is read-only", key)
 	}
-	if err := spec.validate(d, key, value); err != nil {
-		return fmt.Errorf("setting %s: %w", key, err)
-	}
-	return nil
+	return spec, nil
 }

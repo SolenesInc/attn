@@ -16,6 +16,7 @@ import (
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/modelcapture"
 	"github.com/victorarias/attn/internal/modeltiers"
+	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
@@ -33,8 +34,8 @@ func (d *Daemon) handleGetSettingsWS(client *wsClient) {
 func (d *Daemon) handleSetSettingWS(client *wsClient, msg *protocol.SetSettingMessage) {
 	selected := client.selectedProfile()
 	var err error
-	if requested := protocol.Deref(msg.ProfileID); requested != "" && requested != selected {
-		err = fmt.Errorf("setting %s belongs to profile %q; selected profile is %q", msg.Key, requested, selected)
+	if spec, ok := lookupSetting(msg.Key); ok && spec.scope == profileScope && protocol.Deref(msg.ProfileID) != "" && protocol.Deref(msg.ProfileID) != selected {
+		err = fmt.Errorf("setting %s belongs to profile %q; selected profile is %q", msg.Key, protocol.Deref(msg.ProfileID), selected)
 	} else {
 		msg.ProfileID = protocol.Ptr(selected)
 		_, err = d.setSetting(msg)
@@ -50,29 +51,35 @@ func (d *Daemon) handleSetSettingWS(client *wsClient, msg *protocol.SetSettingMe
 }
 
 func (d *Daemon) setSetting(msg *protocol.SetSettingMessage) (*protocol.SettingEntry, error) {
-	if err := d.validateSetting(msg.Key, msg.Value); err != nil {
+	spec, err := writableSetting(msg.Key)
+	if err != nil {
 		return nil, err
 	}
-	if protocol.Deref(msg.SourceSessionID) != "" && protocol.Deref(msg.ProfileID) != "" {
-		if _, err := d.settingsProfile(protocol.Deref(msg.SourceSessionID), protocol.Deref(msg.ProfileID), ""); err != nil {
-			return nil, err
-		}
-	}
-	spec, _ := lookupSetting(msg.Key)
-	profileID := ""
-	var err error
+	var profile profiles.Profile
 	if spec.scope == profileScope {
 		if err := d.requireHome("profile settings"); err != nil {
 			return nil, err
 		}
-		profile, resolveErr := d.settingsProfile(protocol.Deref(msg.SourceSessionID), protocol.Deref(msg.ProfileID), "")
-		if resolveErr != nil {
-			return nil, resolveErr
+	}
+	if spec.scope == profileScope || protocol.Deref(msg.SourceSessionID) != "" || protocol.Deref(msg.ProfileID) != "" {
+		profile, err = d.settingsProfile(protocol.Deref(msg.SourceSessionID), protocol.Deref(msg.ProfileID))
+		if err != nil {
+			return nil, err
 		}
+	}
+	if err := spec.validate(d, msg.Key, msg.Value); err != nil {
+		return nil, fmt.Errorf("setting %s: %w", msg.Key, err)
+	}
+	profileID := ""
+	if spec.scope == profileScope {
 		profileID = profile.ID
 		d.notebookRootMu.Lock()
 		if msg.Key == string(settingNotebookRoot) && strings.TrimSpace(msg.Value) == "" {
-			msg.Value = d.defaultNotebookRoot(profile.Name)
+			msg.Value, err = d.defaultNotebookRoot(profile.Name)
+			if err != nil {
+				d.notebookRootMu.Unlock()
+				return nil, err
+			}
 		}
 		err = d.store.SetProfileSetting(profileID, msg.Key, msg.Value)
 		d.notebookRootMu.Unlock()
@@ -115,7 +122,7 @@ func (d *Daemon) setSetting(msg *protocol.SetSettingMessage) (*protocol.SettingE
 	d.publishSettingsFact(FactSettingChanged, msg.Key)
 	value := msg.Value
 	if spec.scope == daemonScope {
-		value, _ = d.daemonSettingsSnapshot()[msg.Key].(string)
+		value = d.daemonSetting(daemonSettingKey(msg.Key))
 	}
 	entry := settingEntry(spec, msg.Key, value)
 	return &entry, nil

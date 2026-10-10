@@ -313,12 +313,22 @@ describe('SettingsModal notebook folder', () => {
     expect(screen.getByTestId('settings-notebook-root-effective')).toHaveTextContent('Currently: /Users/me/my-notes');
   });
 
-  it('falls back to the effective default as placeholder when no override is set', async () => {
-    await openSection('desktop', { settings: { 'notebook.root.effective': '/Users/me/attn-notebook' } });
-
+  it('shows the selected profile default as the placeholder when clearing its override', async () => {
+    await openSection('desktop', { settings: { 'notebook.root': '~/custom', 'notebook.root.effective': '/Users/me/custom', 'notebook.root.default': '~/attn-notebook-default-2' } });
     const input = screen.getByTestId('settings-notebook-root-input');
+    fireEvent.change(input, { target: { value: '' } });
     expect(input).toHaveValue('');
-    expect(input).toHaveAttribute('placeholder', '/Users/me/attn-notebook');
+    expect(input).toHaveAttribute('placeholder', '~/attn-notebook-default-2');
+  });
+
+  it('keeps an invalid stored folder editable so the user can repair it', async () => {
+    const daemon = await openSection('desktop', { settings: { 'notebook.root': '/outside-harness', 'notebook.root.default': '/harness/notebook-default' } });
+    const input = screen.getByTestId('settings-notebook-root-input');
+    expect(input).toBeEnabled();
+    expect(within(input.closest('section')!).getByRole('button', { name: 'Browse' })).toBeEnabled();
+    fireEvent.change(input, { target: { value: '/harness/notes' } });
+    await gesture(daemon, () => fireEvent.blur(input));
+    expect(savedSettings(daemon)).toEqual([['notebook.root', '/harness/notes']]);
   });
 
   it('persists a new folder on blur and an empty value to restore the default', async () => {

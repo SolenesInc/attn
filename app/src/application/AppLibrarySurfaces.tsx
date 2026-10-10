@@ -90,8 +90,8 @@ export function AppLibrarySurfaces() {
   const { handleReopenSession } = useSessionLifecycleContext();
   const { notificationsChangeSignal } = useAppInputs();
   const { notebookSurfaceContextValue, notebookRootChangeSignal } = useAppNotebookSurfaceContext();
- const { effectiveNotebookRoot, makeDaemon } = notebookSurfaceContextValue;
- const browserDaemon = useMemo(() => makeDaemon(effectiveNotebookRoot), [makeDaemon, effectiveNotebookRoot]);
+  const { effectiveNotebookRoot, makeDaemon } = notebookSurfaceContextValue;
+  const browserDaemon = useMemo(() => makeDaemon(effectiveNotebookRoot), [makeDaemon, effectiveNotebookRoot]);
   const { notebookChiefActive } = useAppSessionsContext();
   const seeds = useDaemonStore((state) => state.seeds);
   const seedsTotal = useDaemonStore((state) => state.seedsTotal);

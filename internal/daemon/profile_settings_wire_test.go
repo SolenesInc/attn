@@ -105,7 +105,7 @@ func TestEachProfileKeepsItsOwnNotebook(t *testing.T) {
 		}
 	}
 	w.restart()
-	got, err := w.Client().Settings(protocol.SessionID(workSession), "", "notebook.root", false)
+	got, err := w.Client().Settings("", work.ID, "notebook.root", false)
 	if err != nil || protocol.Deref(got.Entries[0].Value) != workRoot {
 		t.Fatalf("root after restart: %+v (%v)", got, err)
 	}
@@ -121,6 +121,7 @@ func TestSettingsFollowTheProfileTheAppShows(t *testing.T) {
 		t.Fatal(protocol.Deref(updated.Error))
 	}
 	other := w.App()
+	selectProfile(other, protocol.Deref(app.Initial.SelectedProfileID))
 	snapshot, err := w.Client().Settings("", work.ID, "theme", false)
 	if err != nil || protocol.Deref(snapshot.Entries[0].Value) != "dark" {
 		t.Fatalf("daemon key: %+v (%v)", snapshot, err)
@@ -294,5 +295,19 @@ func TestConcurrentProfileCreationKeepsCollidingNotebookNamesSeparate(t *testing
 	base := filepath.Join(w.Dir, "notebook-a-b")
 	if a == b || !(a == base && b == base+"-2" || a == base+"-2" && b == base) {
 		t.Fatalf("Notebook roots %q and %q, want separate collision defaults", a, b)
+	}
+}
+
+func TestAProfileFolderAllocationErrorIsReturnedInsteadOfRetriedForever(t *testing.T) {
+	w := newWorld(t)
+	app := w.App()
+	id := uuid.NewString()
+	result := profileRequest(app, protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, RequestID: id, Name: strings.Repeat("a", 1024)}, id)
+	if result.Success || !strings.Contains(protocol.Deref(result.Error), "inspect Notebook root") || !strings.Contains(strings.ToLower(protocol.Deref(result.Error)), "file name too long") {
+		t.Fatalf("folder allocation refusal: %+v", result)
+	}
+	work := createProfile(app, "Work")
+	if work.Name != "Work" {
+		t.Fatal(work)
 	}
 }

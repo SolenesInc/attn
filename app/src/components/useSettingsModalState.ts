@@ -156,6 +156,7 @@ export function useSettingsModalState({
   const actualProjectsDir = settings.projects_directory || '';
   const actualNotebookRoot = settings['notebook.root'] || '';
   const effectiveNotebookRoot = settings['notebook.root.effective'] || '';
+  const defaultNotebookRoot = settings['notebook.root.default'] || '';
   const {
     tailscaleEnabled,
     modelCaptureEnabled,
@@ -782,6 +783,7 @@ export function useSettingsModalState({
     worktreeSweepEnabled,
     notebookRootDraft,
     effectiveNotebookRoot,
+    defaultNotebookRoot,
     handleBrowseNotebookRoot,
     handleToggleOpenSentFiles,
     tailscaleURL,

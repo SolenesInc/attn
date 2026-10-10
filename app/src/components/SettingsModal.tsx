@@ -25,12 +25,12 @@ import { useSettingsModalState, type SettingsModalState } from './useSettingsMod
 export type { SettingsModalHandle } from './settingsModalShared';
 
 export const SettingsModal = forwardRef<SettingsModalHandle, SettingsModalProps>((props, ref) => {
- const profileId = useProfilesStore((state) => state.selectedProfileId);
- return (
+  const profileId = useProfilesStore((state) => state.selectedProfileId);
+  return (
   <SettingsAutosaveProvider key={profileId} save={props.onSetSetting}>
     <SettingsModalContent {...props} closeRef={ref} />
   </SettingsAutosaveProvider>
- );
+  );
 });
 
 function SettingsModalContent(props: SettingsModalProps & { closeRef: ForwardedRef<SettingsModalHandle> }) {
@@ -186,6 +186,7 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           worktreeSweepEnabled={state.worktreeSweepEnabled}
           notebookRootDraft={state.notebookRootDraft}
           effectiveNotebookRoot={state.effectiveNotebookRoot}
+          defaultNotebookRoot={state.defaultNotebookRoot}
           handleBrowseNotebookRoot={state.handleBrowseNotebookRoot}
           handleToggleOpenSentFiles={state.handleToggleOpenSentFiles}
           openSentFilesEnabled={state.openSentFilesEnabled}

@@ -35,7 +35,7 @@ func TestTimestampedMigrationsApplyInEitherArrivalOrder(t *testing.T) {
 				second = newer
 			}
 			registerMigration(second)
-			current, err := OpenCurrent(path)
+			current, err := openCurrentLegacySchemaStore(path)
 			if current != nil {
 				current.Close()
 			}
@@ -43,7 +43,7 @@ func TestTimestampedMigrationsApplyInEitherArrivalOrder(t *testing.T) {
 			if !errors.As(err, &behind) || !reflect.DeepEqual(behind.Missing, []int{second.version}) || !strings.Contains(err.Error(), fmt.Sprintf("%d %s", second.version, second.desc)) {
 				t.Fatalf("OpenCurrent = %v; want missing %d %s", err, second.version, second.desc)
 			}
-			s, upgrade, err := Open(path)
+			s, upgrade, err := openLegacySchemaStore(path)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -69,7 +69,7 @@ func TestTimestampedMigrationsApplyInEitherArrivalOrder(t *testing.T) {
 				}
 			}
 			db.Close()
-			current, err = OpenCurrent(path)
+			current, err = openCurrentLegacySchemaStore(path)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -90,7 +90,7 @@ func TestLegacyMigrationRowGapsDoNotReplayAppliedMigrations(t *testing.T) {
 				t.Fatal(err)
 			}
 			db.Close()
-			s, _, err := Open(path)
+			s, _, err := openLegacySchemaStore(path)
 			if err != nil {
 				t.Fatalf("upgrading legacy database with gaps: %v", err)
 			}
@@ -120,7 +120,7 @@ func TestFailedTimestampedUpgradeRollsBackAllPendingWork(t *testing.T) {
 	db.Close()
 	registerMigration(migration{version: 20261005210200, desc: "first pending column", sql: `ALTER TABLE sessions ADD COLUMN rollback_column TEXT`})
 	registerMigration(migration{version: 20261005210300, desc: "failing pending column", sql: `ALTER TABLE absent_table ADD COLUMN failure TEXT`})
-	s, upgrade, err := Open(path)
+	s, upgrade, err := openLegacySchemaStore(path)
 	if s != nil {
 		s.Close()
 	}
@@ -158,18 +158,18 @@ func TestAnOlderBuildAcceptsUnknownNewerMigrations(t *testing.T) {
 		return err
 	}})
 	path := filepath.Join(t.TempDir(), "attn.db")
-	s, _, err := Open(path)
+	s, _, err := openLegacySchemaStore(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	s.Close()
 	timestampedMigrations = []migration{known}
-	s, err = OpenCurrent(path)
+	s, err = openCurrentLegacySchemaStore(path)
 	if err != nil {
 		t.Fatalf("older build refused newer database: %v", err)
 	}
 	s.Close()
-	s, upgrade, err := Open(path)
+	s, upgrade, err := openLegacySchemaStore(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +203,7 @@ func TestAnOlderMicrosecondMigrationAppliesAfterANewerOne(t *testing.T) {
 	}
 	db.Close()
 	registerMigration(older)
-	current, err := OpenCurrent(path)
+	current, err := openCurrentLegacySchemaStore(path)
 	if current != nil {
 		current.Close()
 	}
@@ -211,7 +211,7 @@ func TestAnOlderMicrosecondMigrationAppliesAfterANewerOne(t *testing.T) {
 	if !errors.As(err, &behind) || !reflect.DeepEqual(behind.Missing, []int{older.version}) {
 		t.Fatalf("missing older id = %v", err)
 	}
-	s, upgrade, err := Open(path)
+	s, upgrade, err := openLegacySchemaStore(path)
 	if err != nil {
 		t.Fatal(err)
 	}

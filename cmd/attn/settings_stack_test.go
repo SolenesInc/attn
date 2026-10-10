@@ -20,6 +20,12 @@ func TestSettingsCLIEnforcesScopesAndExplainsItsKeys(t *testing.T) {
 	root := filepath.Join(s.Dir, "notes")
 	requireStdout(t, s.Attn("settings", "set", "notebook.root", root), "notebook.root = "+root)
 	requireStdout(t, s.Attn("settings", "get", "notebook.root"), root)
+	unset := s.Attn("settings", "get", "chief_context_window_cap")
+	if unset.Code != 0 || strings.TrimSpace(unset.Stdout) != "" {
+		t.Fatalf("unset setting: %+v", unset)
+	}
+	requireStdout(t, s.Attn("settings", "set", "headless_tasks.enabled", "true"), "headless_tasks.enabled = true")
+	requireStdout(t, s.Attn("settings", "get", "headless_tasks.enabled"), "true")
 	id := uuid.NewString()
 	created := testworld.Request(app, protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, RequestID: id, Name: "Work"}, protocol.EventProfileActionResult, func(m protocol.ProfileActionResultMessage) bool { return m.RequestID == id })
 	if !created.Success {
@@ -44,6 +50,10 @@ func TestSettingsCLIEnforcesScopesAndExplainsItsKeys(t *testing.T) {
 			t.Fatalf("scope refusal: %+v", r)
 		}
 	}
+	requireStdout(t, s.Attn("settings", "get", "theme"))
+	if r := s.Attn("settings", "set", "theme", "dark", "--profile", "Bogus"); r.Code != 1 || !strings.Contains(r.Stderr, "Bogus") {
+		t.Fatalf("unknown profile: %+v", r)
+	}
 	plain := s.Attn("settings", "list", "--profile", "Work")
 	requireStdout(t, plain, "this profile", "all profiles", "Folder for this profile")
 	if strings.Contains(plain.Stdout, "notebook.root.effective") {
@@ -52,6 +62,9 @@ func TestSettingsCLIEnforcesScopesAndExplainsItsKeys(t *testing.T) {
 	requireStdout(t, s.Attn("settings", "list", "--all", "--profile", "Work"), "notebook.root.effective")
 	if r := s.Attn("settings", "get", "unknown.key", "--profile", "Work"); r.Code != 1 || !strings.Contains(r.Stderr, "unknown.key") {
 		t.Fatalf("unknown key: %+v", r)
+	}
+	if r := inside("set", "default_model_<harness>", "some-model"); r.Code != 1 || !strings.Contains(r.Stderr, "concrete key") {
+		t.Fatalf("family placeholder: %+v", r)
 	}
 	if r := s.Attn("settings", "set", "theme"); r.Code != 2 {
 		t.Fatalf("usage: %+v", r)

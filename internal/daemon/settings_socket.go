@@ -11,21 +11,27 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (d *Daemon) settingsProfile(session protocol.SessionID, requested, selected string) (profiles.Profile, error) {
-	if selected != "" {
-		return d.store.LiveProfile(selected)
-	}
+func (d *Daemon) settingsProfile(session protocol.SessionID, requested string) (profiles.Profile, error) {
 	if protocol.TrimID(session) != "" {
 		profile, err := d.callerProfile(session)
 		if err != nil {
 			return profiles.Profile{}, err
 		}
-		if requested != "" && requested != profile.ID && !strings.EqualFold(requested, profile.Name) {
-			return profiles.Profile{}, fmt.Errorf("this session belongs to profile %q; --profile only chooses a profile outside an attn session", profile.Name)
+		if requested != "" {
+			target, err := d.liveProfileNamed(requested)
+			if err != nil {
+				return profiles.Profile{}, err
+			}
+			if target.ID != profile.ID {
+				return profiles.Profile{}, fmt.Errorf("this session belongs to profile %q; --profile only chooses a profile outside an attn session", profile.Name)
+			}
 		}
 		return profile, nil
 	}
-	return d.resolveGardenProfile("", requested, "")
+	if requested != "" {
+		return d.liveProfileNamed(requested)
+	}
+	return d.resolveGardenProfile("", "", "")
 }
 
 func settingEntry(spec settingSpec, key, value string) protocol.SettingEntry {
@@ -44,6 +50,17 @@ func settingEntry(spec settingSpec, key, value string) protocol.SettingEntry {
 	return entry
 }
 
+func (d *Daemon) settingValue(profileID string, spec settingSpec, key string, computed map[string]interface{}) string {
+	if spec.readOnly {
+		value, _ := computed[key].(string)
+		return value
+	}
+	if spec.scope == profileScope {
+		return d.profileSetting(profileID, profileSettingKey(key))
+	}
+	return d.daemonSetting(daemonSettingKey(key))
+}
+
 func (d *Daemon) settingsList(msg *protocol.GetSettingsMessage) (*protocol.SettingsListResult, *protocol.SettingEntry, error) {
 	key := protocol.Deref(msg.Key)
 	if key != "" {
@@ -58,9 +75,14 @@ func (d *Daemon) settingsList(msg *protocol.GetSettingsMessage) (*protocol.Setti
 		}
 	}
 	profile := profiles.Profile{}
-	if d.requireHome("profile settings") == nil {
+	needProfile := key == "" || protocol.Deref(msg.ProfileID) != ""
+	if key != "" {
+		spec, _ := lookupSetting(key)
+		needProfile = needProfile || spec.scope == profileScope
+	}
+	if needProfile && d.requireHome("profile settings") == nil {
 		var err error
-		profile, err = d.settingsProfile(protocol.Deref(msg.SourceSessionID), protocol.Deref(msg.ProfileID), "")
+		profile, err = d.settingsProfile(protocol.Deref(msg.SourceSessionID), protocol.Deref(msg.ProfileID))
 		if err != nil {
 			return nil, nil, err
 		}
@@ -68,7 +90,7 @@ func (d *Daemon) settingsList(msg *protocol.GetSettingsMessage) (*protocol.Setti
 	values := d.settingsSnapshot(profile.ID)
 	if key != "" {
 		spec, _ := lookupSetting(key)
-		value, _ := values[key].(string)
+		value := d.settingValue(profile.ID, spec, key, values)
 		entry := settingEntry(spec, key, value)
 		return nil, &entry, nil
 	}
@@ -77,15 +99,15 @@ func (d *Daemon) settingsList(msg *protocol.GetSettingsMessage) (*protocol.Setti
 		if spec.readOnly && !protocol.Deref(msg.All) || spec.scope == profileScope && profile.ID == "" {
 			continue
 		}
-		value, _ := values[spec.key].(string)
+		value := d.settingValue(profile.ID, spec, spec.key, values)
 		result.Entries = append(result.Entries, settingEntry(spec, spec.key, value))
 		if !strings.Contains(spec.key, "<") {
 			continue
 		}
-		for concrete, v := range values {
+		for concrete := range values {
 			matched, ok := lookupSetting(concrete)
 			if ok && matched.key == spec.key && concrete != spec.key {
-				value, _ := v.(string)
+				value := d.settingValue(profile.ID, spec, concrete, values)
 				result.Entries = append(result.Entries, settingEntry(spec, concrete, value))
 			}
 		}
@@ -95,6 +117,7 @@ func (d *Daemon) settingsList(msg *protocol.GetSettingsMessage) (*protocol.Setti
 }
 
 func (d *Daemon) handleGetSettings(conn net.Conn, msg *protocol.GetSettingsMessage) {
+	d.refreshTailscaleServeState()
 	list, entry, err := d.settingsList(msg)
 	if err != nil {
 		d.sendError(conn, err.Error())
@@ -119,6 +142,11 @@ func (d *Daemon) profileSettingsOverlay(profileID string) map[string]interface{}
 	}
 	for k, v := range d.store.ProfileSettings(profileID) {
 		settings[k] = v
+	}
+	if profile, err := d.store.LiveProfile(profileID); err == nil {
+		if root, err := d.defaultNotebookRoot(profile.Name); err == nil {
+			settings[string(settingNotebookRootDefault)] = root
+		}
 	}
 	if root, err := d.notebookRoot(profileID); err == nil {
 		settings[string(settingNotebookRootEffective)] = root

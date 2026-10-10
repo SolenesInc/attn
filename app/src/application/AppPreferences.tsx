@@ -51,8 +51,8 @@ export function AppPreferences() {
     sendTaskList,
     sendTaskRetry,
   } = useDaemonApi();
- const profileId = useProfilesStore((state) => state.selectedProfileId);
- const saveSetting = useCallback((key: string, value: string) => sendSaveSetting(key, value, profileId), [sendSaveSetting, profileId]);
+  const profileId = useProfilesStore((state) => state.selectedProfileId);
+  const saveSetting = useCallback((key: string, value: string) => sendSaveSetting(key, value, profileId), [sendSaveSetting, profileId]);
 
   return (
     <>

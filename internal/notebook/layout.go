@@ -29,7 +29,7 @@ func DefaultRoot(home, instance string) string {
 	return base + "-" + p
 }
 
-func ProfileDefaultRoot(base, profileName string, taken func(string) bool) string {
+func ProfileDefaultRoot(base, profileName string, taken func(string) (bool, error)) (string, error) {
 	var slug strings.Builder
 	for _, r := range strings.ToLower(profileName) {
 		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
@@ -44,10 +44,16 @@ func ProfileDefaultRoot(base, profileName string, taken func(string) bool) strin
 	}
 	root := base + "-" + name
 	candidate := root
-	for n := 2; taken(candidate); n++ {
+	for n := 2; ; n++ {
+		exists, err := taken(candidate)
+		if err != nil {
+			return "", err
+		}
+		if !exists {
+			return candidate, nil
+		}
 		candidate = fmt.Sprintf("%s-%d", root, n)
 	}
-	return candidate
 }
 
 func TicketsDir(root string) string {
