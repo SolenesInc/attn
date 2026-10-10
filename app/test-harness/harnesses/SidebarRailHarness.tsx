@@ -7,7 +7,7 @@ import type { HarnessProps } from '../types';
 import '../../src/App.css';
 
 const noop = () => {};
-const titles = ['Sidebar refinement', 'Queue polish', 'Garden', 'Notebook', 'Remote hosts', 'Terminal rendering', 'Review', 'Sketches'];
+const titles = ['Sidebar refinement', 'Queue polish', 'Garden', 'Notebook', 'Release notes', 'Terminal rendering', 'Review', 'Sketches'];
 const sessions = titles.slice(0, -1).map((label, index) => ({
   id: `agent-${index}`, label, state: index % 2 === 0 ? 'waiting_input' as const : 'idle' as const,
   turnOwed: index % 2 === 0,

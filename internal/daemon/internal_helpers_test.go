@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -34,20 +33,6 @@ func writeCodexInteractiveRollout(t *testing.T, codexHome, nativeID, cwd string,
 		t.Fatalf("chtimes rollout: %v", err)
 	}
 	return path
-}
-
-func newEnrolledDaemon(t *testing.T) *Daemon {
-	t.Helper()
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	id, err := enrollment.EnsureDaemonID(d.dataRoot)
-	if err != nil {
-		t.Fatalf("EnsureDaemonID: %v", err)
-	}
-	d.daemonInstanceID = id
-	if err := d.ensureEnrollment(); err != nil {
-		t.Fatalf("ensureEnrollment: %v", err)
-	}
-	return d
 }
 
 func startPluginPipe(t *testing.T, d *Daemon, name string, surfaces []string) (net.Conn, <-chan struct{}) {

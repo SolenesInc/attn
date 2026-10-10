@@ -15,7 +15,7 @@ type LocationPickerProps = ComponentProps<typeof LocationPicker>;
 
 function buildRecentLocation(overrides?: Partial<RecentLocation>) {
   return {
-    path: '/home/remote/projects/recent-repo',
+    path: '/home/dev/projects/recent-repo',
     last_seen: '2026-04-11T08:30:00Z',
     use_count: 4,
     ...overrides,
@@ -31,12 +31,12 @@ function buildRepoInfo(overrides?: Partial<{
   worktrees: Array<{ path: string; branch: string }>;
 }>) {
   return {
-    repo: '/home/remote/projects/exsin',
+    repo: '/home/dev/projects/exsin',
     current_branch: 'main',
     current_commit_hash: 'abcdef1234567890',
     current_commit_time: '2026-04-03T18:00:00Z',
     default_branch: 'main',
-    worktrees: [{ path: '/home/remote/projects/exsin--feat-images', branch: 'feat-images' }],
+    worktrees: [{ path: '/home/dev/projects/exsin--feat-images', branch: 'feat-images' }],
     ...overrides,
   };
 }
@@ -85,7 +85,7 @@ function renderClosablePicker(props?: Partial<LocationPickerProps>) {
           isOpen={isOpen}
           onClose={() => setIsOpen(false)}
           onSelect={onSelect}
-            {...props}
+          {...props}
         />
       </SettingsProvider>
     );
@@ -130,8 +130,8 @@ describe('LocationPicker', () => {
       success: true,
       inspection: {
         input_path: '~/projects',
-        resolved_path: '/home/remote/projects',
-        home_path: '/home/remote',
+        resolved_path: '/home/dev/projects',
+        home_path: '/home/dev',
         exists: true,
         is_directory: true,
       },
@@ -151,7 +151,7 @@ describe('LocationPicker', () => {
 
     await waitFor(() => {
       expect(onInspectPath).toHaveBeenCalledWith('~/projects');
-      expect(onSelect).toHaveBeenCalledWith('/home/remote/projects', 'claude', false, false, undefined);
+      expect(onSelect).toHaveBeenCalledWith('/home/dev/projects', 'claude', false, false, undefined);
     });
   });
 
@@ -160,8 +160,8 @@ describe('LocationPicker', () => {
       success: true,
       inspection: {
         input_path: '~/projects',
-        resolved_path: '/home/remote/projects',
-        home_path: '/home/remote',
+        resolved_path: '/home/dev/projects',
+        home_path: '/home/dev',
         exists: true,
         is_directory: true,
       },
@@ -174,7 +174,7 @@ describe('LocationPicker', () => {
 
     await waitFor(() => {
       expect(onInspectPath).toHaveBeenCalledWith('~/projects');
-      expect(onSelect).toHaveBeenCalledWith('/home/remote/projects', 'claude', false, false, undefined);
+      expect(onSelect).toHaveBeenCalledWith('/home/dev/projects', 'claude', false, false, undefined);
     });
   });
 
@@ -260,11 +260,11 @@ describe('LocationPicker', () => {
       success: true,
       inspection: {
         input_path: inputPath,
-        resolved_path: '/home/remote/projects/exsin--feat-images',
-        home_path: '/home/remote',
+        resolved_path: '/home/dev/projects/exsin--feat-images',
+        home_path: '/home/dev',
         exists: true,
         is_directory: true,
-        repo_root: '/home/remote/projects/exsin',
+        repo_root: '/home/dev/projects/exsin',
       },
     }));
     const onGetRepoInfo = vi.fn(async () => ({
@@ -293,7 +293,7 @@ describe('LocationPicker', () => {
       inspection: {
         input_path: '/',
         resolved_path: '/',
-        home_path: '/home/remote',
+        home_path: '/home/dev',
         exists: true,
         is_directory: true,
       },
@@ -325,7 +325,7 @@ describe('LocationPicker', () => {
       inspection: {
         input_path: inputPath,
         resolved_path: '/tmp/project',
-        home_path: '/home/remote',
+        home_path: '/home/dev',
         exists: true,
         is_directory: true,
       },
@@ -345,7 +345,7 @@ describe('LocationPicker', () => {
   it('shows the folder name derived from the path on recent rows', async () => {
     const onGetRecentLocations = vi.fn(async () => ({
       locations: [buildRecentLocation()],
-      home_path: '/home/remote',
+      home_path: '/home/dev',
     }));
     renderPicker({ onGetRecentLocations });
 
@@ -359,14 +359,14 @@ describe('LocationPicker', () => {
   it('pre-highlights the top recent location so a bare Enter opens it', async () => {
     const onGetRecentLocations = vi.fn(async () => ({
       locations: [buildRecentLocation()],
-      home_path: '/home/remote',
+      home_path: '/home/dev',
     }));
     const onInspectPath = vi.fn(async () => ({
       success: true,
       inspection: {
         input_path: '~/projects/recent-repo',
-        resolved_path: '/home/remote/projects/recent-repo',
-        home_path: '/home/remote',
+        resolved_path: '/home/dev/projects/recent-repo',
+        home_path: '/home/dev',
         exists: true,
         is_directory: true,
       },
@@ -380,15 +380,15 @@ describe('LocationPicker', () => {
     fireEvent.keyDown(screen.getByTestId('location-picker-path-input'), { key: 'Enter' });
 
     await waitFor(() => {
-      expect(onInspectPath).toHaveBeenCalledWith('/home/remote/projects/recent-repo');
-      expect(onSelect).toHaveBeenCalledWith('/home/remote/projects/recent-repo', 'claude', false, false, undefined);
+      expect(onInspectPath).toHaveBeenCalledWith('/home/dev/projects/recent-repo');
+      expect(onSelect).toHaveBeenCalledWith('/home/dev/projects/recent-repo', 'claude', false, false, undefined);
     });
   });
 
   it('Escape closes the picker while the automatic highlight is active', async () => {
     const onGetRecentLocations = vi.fn(async () => ({
       locations: [buildRecentLocation()],
-      home_path: '/home/remote',
+      home_path: '/home/dev',
     }));
     const { onClose } = renderPicker({ onGetRecentLocations });
 
@@ -403,7 +403,7 @@ describe('LocationPicker', () => {
   it('arrow navigation converts the automatic highlight into a manual one', async () => {
     const onGetRecentLocations = vi.fn(async () => ({
       locations: [buildRecentLocation()],
-      home_path: '/home/remote',
+      home_path: '/home/dev',
     }));
     const { onClose } = renderPicker({ onGetRecentLocations });
 
@@ -430,7 +430,7 @@ describe('LocationPicker', () => {
     });
     renderClosablePicker({ onGetRecentLocations });
 
-    gates[0].resolve({ locations: [buildRecentLocation()], home_path: '/home/remote' });
+    gates[0].resolve({ locations: [buildRecentLocation()], home_path: '/home/dev' });
     await waitFor(() => {
       expect(screen.getByTestId('location-picker-item-0')).toHaveClass('selected');
     });
@@ -441,7 +441,7 @@ describe('LocationPicker', () => {
     const cachedItem = await screen.findByTestId('location-picker-item-0');
     expect(cachedItem).not.toHaveClass('selected');
 
-    gates[1].resolve({ locations: [buildRecentLocation()], home_path: '/home/remote' });
+    gates[1].resolve({ locations: [buildRecentLocation()], home_path: '/home/dev' });
     await waitFor(() => {
       expect(screen.getByTestId('location-picker-item-0')).toHaveClass('selected');
     });
@@ -450,14 +450,14 @@ describe('LocationPicker', () => {
   it('typing consumes the automatic highlight so Enter submits the typed path', async () => {
     const onGetRecentLocations = vi.fn(async () => ({
       locations: [buildRecentLocation()],
-      home_path: '/home/remote',
+      home_path: '/home/dev',
     }));
     const onInspectPath = vi.fn(async () => ({
       success: true,
       inspection: {
         input_path: '/tmp/other',
         resolved_path: '/tmp/other',
-        home_path: '/home/remote',
+        home_path: '/home/dev',
         exists: true,
         is_directory: true,
       },
@@ -481,7 +481,7 @@ describe('LocationPicker', () => {
   it('filters recent locations for ~/ and absolute queries without rewriting the input', async () => {
     const onGetRecentLocations = vi.fn(async () => ({
       locations: [buildRecentLocation()],
-      home_path: '/home/remote',
+      home_path: '/home/dev',
     }));
     renderPicker({ onGetRecentLocations });
 
@@ -494,12 +494,12 @@ describe('LocationPicker', () => {
       expect(input.value).toBe('~/projects/recent-repo');
     });
 
-    fireEvent.change(input, { target: { value: '/home/remote/projects/recent-repo' } });
+    fireEvent.change(input, { target: { value: '/home/dev/projects/recent-repo' } });
 
     await waitFor(() => {
       expect(screen.getByTestId('location-picker-item-0')).toBeInTheDocument();
       expect(screen.getByTestId('location-picker-item-0')).not.toHaveClass('selected');
-      expect(input.value).toBe('/home/remote/projects/recent-repo');
+      expect(input.value).toBe('/home/dev/projects/recent-repo');
     });
   });
 
@@ -508,11 +508,11 @@ describe('LocationPicker', () => {
       success: true,
       inspection: {
         input_path: '~/projects/exsin--feat-images',
-        resolved_path: '/home/remote/projects/exsin--feat-images',
-        home_path: '/home/remote',
+        resolved_path: '/home/dev/projects/exsin--feat-images',
+        home_path: '/home/dev',
         exists: true,
         is_directory: true,
-        repo_root: '/home/remote/projects/exsin',
+        repo_root: '/home/dev/projects/exsin',
       },
     }));
     const onGetRepoInfo = vi.fn(async () => ({
@@ -521,7 +521,7 @@ describe('LocationPicker', () => {
     }));
     const onCreateWorktree = vi.fn(async () => ({
       success: true,
-      path: '/home/remote/projects/exsin--feat-more',
+      path: '/home/dev/projects/exsin--feat-more',
     }));
     const { onSelect } = renderPicker({ onInspectPath, onGetRepoInfo, onCreateWorktree });
 
@@ -541,17 +541,17 @@ describe('LocationPicker', () => {
 
     await waitFor(() => {
       expect(onCreateWorktree).toHaveBeenCalledWith(
-        '/home/remote/projects/exsin',
+        '/home/dev/projects/exsin',
         'feat-more',
         undefined,
         'feat-images',
       );
-      expect(onSelect).toHaveBeenCalledWith('/home/remote/projects/exsin--feat-more', 'claude', false, false, undefined);
+      expect(onSelect).toHaveBeenCalledWith('/home/dev/projects/exsin--feat-more', 'claude', false, false, undefined);
     });
   });
 
   describe('remembered repo destination', () => {
-    const repoRoot = '/home/remote/projects/exsin';
+    const repoRoot = '/home/dev/projects/exsin';
     const destinationKey = `new_session_destination_local_${repoRoot}`;
 
     const inspectRepoRoot = () => vi.fn(async () => ({
@@ -559,7 +559,7 @@ describe('LocationPicker', () => {
       inspection: {
         input_path: '~/projects/exsin',
         resolved_path: repoRoot,
-        home_path: '/home/remote',
+        home_path: '/home/dev',
         exists: true,
         is_directory: true,
         repo_root: repoRoot,
@@ -594,7 +594,7 @@ describe('LocationPicker', () => {
         {
           onInspectPath: inspectRepoRoot(),
           onGetRepoInfo: repoInfoOf(),
-          onCreateWorktree: vi.fn(async () => ({ success: true, path: '/home/remote/projects/exsin--feat-more' })),
+          onCreateWorktree: vi.fn(async () => ({ success: true, path: '/home/dev/projects/exsin--feat-more' })),
         },
         { settings: { [destinationKey]: 'main_repo' }, setSetting },
       );
@@ -618,7 +618,7 @@ describe('LocationPicker', () => {
       fireEvent.click(screen.getByTestId('repo-option-1'));
 
       await waitFor(() => {
-        expect(onSelect).toHaveBeenCalledWith('/home/remote/projects/exsin--feat-images', 'claude', false, false, undefined);
+        expect(onSelect).toHaveBeenCalledWith('/home/dev/projects/exsin--feat-images', 'claude', false, false, undefined);
       });
       expect(setSetting).not.toHaveBeenCalled();
     });
@@ -657,11 +657,11 @@ describe('LocationPicker', () => {
       success: true,
       inspection: {
         input_path: '~/projects/exsin--feat-images',
-        resolved_path: '/home/remote/projects/exsin--feat-images',
-        home_path: '/home/remote',
+        resolved_path: '/home/dev/projects/exsin--feat-images',
+        home_path: '/home/dev',
         exists: true,
         is_directory: true,
-        repo_root: '/home/remote/projects/exsin',
+        repo_root: '/home/dev/projects/exsin',
       },
     }));
     const onGetRepoInfo = vi.fn(async () => ({
@@ -705,7 +705,7 @@ describe('LocationPicker', () => {
           purpose="session"
           onClose={vi.fn()}
           onSelect={vi.fn()}
-            agentAvailability={{ claude: true, codex: true, copilot: false }}
+          agentAvailability={{ claude: true, codex: true, copilot: false }}
         />
       </SettingsProvider>,
     );
@@ -730,7 +730,7 @@ describe('LocationPicker', () => {
           purpose="session"
           onClose={vi.fn()}
           onSelect={vi.fn()}
-            agentAvailability={{ claude: true, codex: true, copilot: false }}
+          agentAvailability={{ claude: true, codex: true, copilot: false }}
         />
       </SettingsProvider>,
     );
@@ -744,11 +744,11 @@ describe('LocationPicker', () => {
       success: true,
       inspection: {
         input_path: '~/projects/exsin--feat-b',
-        resolved_path: '/home/remote/projects/exsin--feat-b',
-        home_path: '/home/remote',
+        resolved_path: '/home/dev/projects/exsin--feat-b',
+        home_path: '/home/dev',
         exists: true,
         is_directory: true,
-        repo_root: '/home/remote/projects/exsin',
+        repo_root: '/home/dev/projects/exsin',
       },
     }));
     const onGetRepoInfo = vi.fn()
@@ -756,15 +756,15 @@ describe('LocationPicker', () => {
         success: true,
         info: buildRepoInfo({
           worktrees: [
-            { path: '/home/remote/projects/exsin--feat-a', branch: 'feat-a' },
-            { path: '/home/remote/projects/exsin--feat-b', branch: 'feat-b' },
+            { path: '/home/dev/projects/exsin--feat-a', branch: 'feat-a' },
+            { path: '/home/dev/projects/exsin--feat-b', branch: 'feat-b' },
           ],
         }),
       })
       .mockResolvedValueOnce({
         success: true,
         info: buildRepoInfo({
-          worktrees: [{ path: '/home/remote/projects/exsin--feat-a', branch: 'feat-a' }],
+          worktrees: [{ path: '/home/dev/projects/exsin--feat-a', branch: 'feat-a' }],
         }),
       });
     const onDeleteWorktree = vi.fn(async () => ({ success: true }));
@@ -782,7 +782,7 @@ describe('LocationPicker', () => {
     fireEvent.keyDown(screen.getByTestId('repo-options'), { key: 'y' });
 
     await waitFor(() => {
-      expect(onDeleteWorktree).toHaveBeenCalledWith('/home/remote/projects/exsin--feat-b');
+      expect(onDeleteWorktree).toHaveBeenCalledWith('/home/dev/projects/exsin--feat-b');
       expect(screen.getByTestId('repo-option-1')).toHaveClass('selected');
     });
   });
@@ -792,11 +792,11 @@ describe('LocationPicker', () => {
       success: true,
       inspection: {
         input_path: '~/projects/exsin--feat-images',
-        resolved_path: '/home/remote/projects/exsin--feat-images',
-        home_path: '/home/remote',
+        resolved_path: '/home/dev/projects/exsin--feat-images',
+        home_path: '/home/dev',
         exists: true,
         is_directory: true,
-        repo_root: '/home/remote/projects/exsin',
+        repo_root: '/home/dev/projects/exsin',
       },
     }));
     const onGetRepoInfo = vi.fn()
@@ -841,11 +841,11 @@ describe('LocationPicker', () => {
       success: true,
       inspection: {
         input_path: '~/projects/exsin',
-        resolved_path: '/home/remote/projects/exsin',
-        home_path: '/home/remote',
+        resolved_path: '/home/dev/projects/exsin',
+        home_path: '/home/dev',
         exists: true,
         is_directory: true,
-        repo_root: '/home/remote/projects/exsin',
+        repo_root: '/home/dev/projects/exsin',
       },
     });
 
@@ -874,11 +874,11 @@ describe('LocationPicker', () => {
       success: true,
       inspection: {
         input_path: '~/projects/exsin',
-        resolved_path: '/home/remote/projects/exsin',
-        home_path: '/home/remote',
+        resolved_path: '/home/dev/projects/exsin',
+        home_path: '/home/dev',
         exists: true,
         is_directory: true,
-        repo_root: '/home/remote/projects/exsin',
+        repo_root: '/home/dev/projects/exsin',
       },
     });
 
@@ -896,11 +896,11 @@ describe('LocationPicker', () => {
       success: true,
       inspection: {
         input_path: '~/projects/exsin',
-        resolved_path: '/home/remote/projects/exsin',
-        home_path: '/home/remote',
+        resolved_path: '/home/dev/projects/exsin',
+        home_path: '/home/dev',
         exists: true,
         is_directory: true,
-        repo_root: '/home/remote/projects/exsin',
+        repo_root: '/home/dev/projects/exsin',
       },
     }));
     const onGetRepoInfo = vi.fn(() => repoInfoGate.promise);
@@ -911,7 +911,7 @@ describe('LocationPicker', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
 
     await waitFor(() => {
-      expect(onGetRepoInfo).toHaveBeenCalledWith('/home/remote/projects/exsin');
+      expect(onGetRepoInfo).toHaveBeenCalledWith('/home/dev/projects/exsin');
     });
 
     fireEvent.keyDown(screen.getByTestId('location-picker-path-input'), { key: 'Escape' });
@@ -944,15 +944,15 @@ describe('LocationPicker', () => {
       success: true,
       inspection: {
         input_path: '~/projects/exsin',
-        resolved_path: '/home/remote/projects/exsin',
-        home_path: '/home/remote',
+        resolved_path: '/home/dev/projects/exsin',
+        home_path: '/home/dev',
         exists: true,
         is_directory: true,
       },
     });
 
     await waitFor(() => {
-      expect(onSelect).toHaveBeenCalledWith('/home/remote/projects/exsin', 'claude', false, false, undefined);
+      expect(onSelect).toHaveBeenCalledWith('/home/dev/projects/exsin', 'claude', false, false, undefined);
     });
   });
 
@@ -961,8 +961,8 @@ describe('LocationPicker', () => {
       success: true,
       inspection: {
         input_path: '~/missing',
-        resolved_path: '/home/remote/missing',
-        home_path: '/home/remote',
+        resolved_path: '/home/dev/missing',
+        home_path: '/home/dev',
         exists: false,
         is_directory: false,
       },
@@ -986,11 +986,11 @@ describe('LocationPicker', () => {
       success: true,
       inspection: {
         input_path: '~/projects/exsin',
-        resolved_path: '/home/remote/projects/exsin',
-        home_path: '/home/remote',
+        resolved_path: '/home/dev/projects/exsin',
+        home_path: '/home/dev',
         exists: true,
         is_directory: true,
-        repo_root: '/home/remote/projects/exsin',
+        repo_root: '/home/dev/projects/exsin',
       },
     }));
     const onGetRepoInfo = vi.fn(() => repoInfoGate.promise);
@@ -1017,11 +1017,11 @@ describe('LocationPicker', () => {
       success: true,
       inspection: {
         input_path: '~/projects/exsin',
-        resolved_path: '/home/remote/projects/exsin',
-        home_path: '/home/remote',
+        resolved_path: '/home/dev/projects/exsin',
+        home_path: '/home/dev',
         exists: true,
         is_directory: true,
-        repo_root: '/home/remote/projects/exsin',
+        repo_root: '/home/dev/projects/exsin',
       },
     }));
     const onGetRepoInfo = vi.fn(async () => ({
@@ -1037,7 +1037,7 @@ describe('LocationPicker', () => {
 
     await waitFor(() => {
       expect(onError).toHaveBeenCalledWith('unborn HEAD');
-      expect(onSelect).toHaveBeenCalledWith('/home/remote/projects/exsin', 'claude', false, false, undefined);
+      expect(onSelect).toHaveBeenCalledWith('/home/dev/projects/exsin', 'claude', false, false, undefined);
     });
   });
 
@@ -1047,11 +1047,11 @@ describe('LocationPicker', () => {
       success: true,
       inspection: {
         input_path: '~/projects/exsin--feat-images',
-        resolved_path: '/home/remote/projects/exsin--feat-images',
-        home_path: '/home/remote',
+        resolved_path: '/home/dev/projects/exsin--feat-images',
+        home_path: '/home/dev',
         exists: true,
         is_directory: true,
-        repo_root: '/home/remote/projects/exsin',
+        repo_root: '/home/dev/projects/exsin',
       },
     }));
     const onGetRepoInfo = vi.fn(async () => ({
@@ -1076,7 +1076,7 @@ describe('LocationPicker', () => {
 
     createGate.resolve({
       success: true,
-      path: '/home/remote/projects/exsin--feat-more',
+      path: '/home/dev/projects/exsin--feat-more',
     });
 
     await waitFor(() => {
@@ -1094,11 +1094,11 @@ describe('LocationPicker', () => {
           success: true,
           inspection: {
             input_path: inputPath,
-            resolved_path: '/home/remote/projects/exsin',
-            home_path: '/home/remote',
+            resolved_path: '/home/dev/projects/exsin',
+            home_path: '/home/dev',
             exists: true,
             is_directory: true,
-            repo_root: '/home/remote/projects/exsin',
+            repo_root: '/home/dev/projects/exsin',
           },
         };
       }
@@ -1107,7 +1107,7 @@ describe('LocationPicker', () => {
         inspection: {
           input_path: inputPath,
           resolved_path: '/tmp/other',
-          home_path: '/home/remote',
+          home_path: '/home/dev',
           exists: true,
           is_directory: true,
         },
@@ -1171,7 +1171,7 @@ describe('LocationPicker', () => {
       inspection: {
         input_path: inputPath,
         resolved_path: resolved,
-        home_path: '/home/remote',
+        home_path: '/home/dev',
         exists: true,
         is_directory: true,
       },
@@ -1199,29 +1199,29 @@ describe('LocationPicker', () => {
     });
 
     it('plumbs chiefOfStaff=true through onSelect when the toggle is on', async () => {
-      const onInspectPath = inspectsTo('/home/remote/projects');
+      const onInspectPath = inspectsTo('/home/dev/projects');
       const { onSelect } = renderPicker({ chiefExists: false, purpose: 'session', onInspectPath });
 
       fireEvent.click(screen.getByTestId('location-picker-chief-toggle'));
       const input = screen.getByTestId('location-picker-path-input');
-      fireEvent.change(input, { target: { value: '/home/remote/projects' } });
+      fireEvent.change(input, { target: { value: '/home/dev/projects' } });
       fireEvent.keyDown(input, { key: 'Enter' });
 
       await waitFor(() => {
-        expect(onSelect).toHaveBeenCalledWith('/home/remote/projects', 'claude', false, true, undefined);
+        expect(onSelect).toHaveBeenCalledWith('/home/dev/projects', 'claude', false, true, undefined);
       });
     });
 
     it('defaults chiefOfStaff to false when the toggle is left off', async () => {
-      const onInspectPath = inspectsTo('/home/remote/projects');
+      const onInspectPath = inspectsTo('/home/dev/projects');
       const { onSelect } = renderPicker({ chiefExists: false, purpose: 'session', onInspectPath });
 
       const input = screen.getByTestId('location-picker-path-input');
-      fireEvent.change(input, { target: { value: '/home/remote/projects' } });
+      fireEvent.change(input, { target: { value: '/home/dev/projects' } });
       fireEvent.keyDown(input, { key: 'Enter' });
 
       await waitFor(() => {
-        expect(onSelect).toHaveBeenCalledWith('/home/remote/projects', 'claude', false, false, undefined);
+        expect(onSelect).toHaveBeenCalledWith('/home/dev/projects', 'claude', false, false, undefined);
       });
     });
   });

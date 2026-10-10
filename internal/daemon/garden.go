@@ -1037,11 +1037,7 @@ func (d *Daemon) observeGardenDispatchExecution(sessionID protocol.SessionID, cw
 		ID: sessionID, Directory: cwd, Agent: protocol.SessionAgent(agent),
 	}, "", d.gardenTime())
 	if session := d.store.Get(sessionID); session != nil {
-		resumeID := ""
-		if d.store.Get(sessionID) != nil {
-			resumeID = d.store.GetResumeSessionID(sessionID)
-		}
-		observed = d.observedGardenExecution(session, resumeID, d.gardenTime())
+		observed = d.observedGardenExecution(session, d.store.GetResumeSessionID(sessionID), d.gardenTime())
 	}
 	return observed
 }

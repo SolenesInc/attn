@@ -6,8 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/victorarias/attn/internal/enrollment"
 )
 
 func decidedReopenVerdict(t *testing.T, d *Daemon, sessionID string) *sessionReopenVerdict {
@@ -37,22 +35,6 @@ func drainClientPayloads(t *testing.T, client *wsClient) [][]byte {
 			return payloads
 		}
 	}
-}
-
-func homeDaemon(t *testing.T, d *Daemon) *Daemon {
-	t.Helper()
-	if d.dataRoot == "" {
-		d.dataRoot = t.TempDir()
-	}
-	id, err := enrollment.EnsureDaemonID(d.dataRoot)
-	if err != nil {
-		t.Fatalf("EnsureDaemonID: %v", err)
-	}
-	d.daemonInstanceID = id
-	if err := d.ensureEnrollment(); err != nil {
-		t.Fatalf("ensureEnrollment: %v", err)
-	}
-	return d
 }
 
 func spawnCount(backend *fakeSpawnBackend) int {

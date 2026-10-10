@@ -3920,14 +3920,14 @@ model CommandErrorMessage {
   error_code?: string;
 }
 
-// Sent once to a reconnecting client that the hub had hung up on for falling
-// behind, keyed on the client_id it sent with its hello. The close status that
-// explains an eviction travels the same TCP stream as the backlog that caused
-// it, so on the link where it matters it arrives long after the disconnect —
-// this is how the reason reaches the client instead.
+// Sent once to a reconnecting client that the daemon had hung up on for
+// falling behind, keyed on the client_id it sent with its hello. The close
+// status that explains an eviction travels the same TCP stream as the backlog
+// that caused it, so it can arrive long after the disconnect; this is how the
+// reason reaches the client instead.
 model ClientEvictionNoticeMessage {
   event: "client_eviction_notice";
-  evicted_at: string;          // RFC3339, when the hub dropped the connection
+  evicted_at: string;          // RFC3339, when the daemon dropped the connection
   reason: string;              // the close reason the client could not read, e.g. "client too slow"
   undelivered_messages: int32; // messages the daemon gave up on handing over
 }

@@ -205,7 +205,7 @@ func RefuseOutpost(dataRoot string) error {
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("refused to run a daemon here: attn cannot tell whether %s is a home or an outpost: %w\nNothing was opened or changed. Repair %s, or move it aside and start again to make this data directory a new home", dataRoot, err, RecordFileName)
+		return fmt.Errorf("refused to run a daemon here: attn cannot tell whether %s was enrolled to another daemon by an older attn: %w\nNothing was opened or changed. Repair %s, or move it aside and start again", dataRoot, err, RecordFileName)
 	}
 	daemonID, err := ReadDaemonID(dataRoot)
 	if err != nil && !errors.Is(err, ErrNoDaemonID) {

@@ -26,7 +26,7 @@ func gardenCall(t *testing.T, run func(net.Conn)) protocol.Response {
 
 func newGardenDaemon(t *testing.T) *Daemon {
 	t.Helper()
-	d := newEnrolledDaemon(t)
+	d := newDaemonForTest(t)
 	t.Cleanup(d.stopEventBus)
 	d.ensureGardenCollections()
 	now := string(protocol.TimestampNow())

@@ -144,14 +144,10 @@ func (d *Daemon) sendSeedReviewResponse(
 }
 
 func (d *Daemon) handleSeedReviewStartWS(client *wsClient, msg *protocol.SeedReviewStartMessage) {
-	run, items, err := d.reviewWSHomeStart(protocol.Deref(msg.ProfileID))
-	d.sendSeedReviewWSResult(client, protocol.Deref(msg.ProfileID), protocol.Deref(msg.RequestID), "start", &run, items, unresolvedGardenReviewItemCount(items), err)
-}
-
-func (d *Daemon) reviewWSHomeStart(profileID string) (garden.ReviewRun, []garden.ReviewItem, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), harnessModelDiscoveryTimeout)
 	defer cancel()
-	return d.startGardenReview(ctx, profileID)
+	run, items, err := d.startGardenReview(ctx, protocol.Deref(msg.ProfileID))
+	d.sendSeedReviewWSResult(client, protocol.Deref(msg.ProfileID), protocol.Deref(msg.RequestID), "start", &run, items, unresolvedGardenReviewItemCount(items), err)
 }
 
 func (d *Daemon) handleSeedReviewShowWS(client *wsClient, msg *protocol.SeedReviewShowMessage) {

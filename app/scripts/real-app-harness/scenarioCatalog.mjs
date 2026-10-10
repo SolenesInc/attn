@@ -1,4 +1,3 @@
-
 export const scenarioCatalog = [
   {
     id: 'desktop-order',

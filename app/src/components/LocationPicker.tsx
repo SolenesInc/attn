@@ -197,7 +197,6 @@ export function LocationPicker({
   chiefExists = false,
 }: LocationPickerProps) {
   const { settings, setSetting } = useSettings();
-  const localAgentAvailability = agentAvailability || DEFAULT_AGENT_AVAILABILITY;
   const noAgentsMessage = 'No supported agent CLI found in PATH.';
   const pathOnly = purpose === 'reopen';
   const pickerTitle = pathOnly ? 'Start fresh where?' : title;
@@ -228,8 +227,8 @@ export function LocationPicker({
 
   const agentCapabilities = useMemo(() => getAgentCapabilities(settings), [settings]);
   const effectiveAgentAvailability = useMemo<AgentAvailability>(
-    () => ({ ...localAgentAvailability, [TERMINAL_AGENT]: true }),
-    [localAgentAvailability],
+    () => ({ ...(agentAvailability || DEFAULT_AGENT_AVAILABILITY), [TERMINAL_AGENT]: true }),
+    [agentAvailability],
   );
   const hasAvailableAgents = hasAnyAvailableAgents(effectiveAgentAvailability);
   const savedYoloMode = useMemo(() => {

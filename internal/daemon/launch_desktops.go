@@ -32,7 +32,6 @@ func (d *Daemon) launchDesktopResult(action, requestID, kind, id string, setting
 		defer d.automationMu.Unlock()
 	}
 	result := protocol.LaunchDesktopResultMessage{Event: protocol.EventLaunchDesktopResult, Action: action, RequestID: requestID}
-	var err error
 	if id == "" && !write {
 		profiles, readErr := d.store.ListProfiles(false)
 		if readErr != nil {
@@ -66,7 +65,8 @@ func (d *Daemon) launchDesktopResult(action, requestID, kind, id string, setting
 		return result
 	}
 	chosen := storeLaunchSetting(setting)
-	if err == nil && ref != nil {
+	var err error
+	if ref != nil {
 		var item store.LaunchDesktopItem
 		item, err = d.store.LaunchDesktopItem(kind, id)
 		if err == nil {

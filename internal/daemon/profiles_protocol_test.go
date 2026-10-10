@@ -36,7 +36,7 @@ func (w *profilesTestDaemon) start() {
 	if err != nil {
 		w.t.Fatalf("open store: %v", err)
 	}
-	w.d = newEnrolledDaemon(w.t)
+	w.d = newDaemonForTest(w.t)
 	w.d.clientToken = "the-token"
 	w.d.store = persistent
 	w.t.Cleanup(func() { persistent.Close() })
