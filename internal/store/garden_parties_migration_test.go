@@ -19,10 +19,7 @@ func TestGardenPartiesMigration(t *testing.T) {
 			s := migrationFixtureStore(t, 1791638943956452-1)
 			now := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
 			if declared {
-				profile, err := s.MostRecentlyUsedProfile()
-				if err != nil {
-					t.Fatal(err)
-				}
+				profile := migrationFixtureProfile(t, s, "")
 				if _, err := s.db.Exec(`INSERT INTO crew_members(member_key,profile_id,name) VALUES('keel',?,'Keel')`, profile.ID); err != nil {
 					t.Fatal(err)
 				}
@@ -44,9 +41,7 @@ func TestGardenPartiesMigration(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					if _, err := s.PutDocument(*schema, id, encoded, now, nil); err != nil {
-						t.Fatal(err)
-					}
+					migrationFixtureDocument(t, s, *schema, id, encoded, now)
 				}
 				put(crew.CollectionMembers, "keel", map[string]any{"id": "keel", "binding_session": "bound"})
 				for _, row := range []struct{ id, member, session string }{{"s-named1", "Bob", ""}, {"s-named2", "Bob", "plain"}, {"s-member", "KeEl", "bound"}, {"s-7k3f9m", "", "bound"}, {"s-closed", "", "old-day"}, {"s-plain1", "", "plain"}} {

@@ -41,6 +41,14 @@ func TestDesktopOrderIsAtomicAndNewNumbersFollowTheirNearestLowerNumber(t *testi
 	app := w.App()
 	profileID := app.Initial.Profiles[0].ID
 	first := app.Initial.Desktops[0]
+	for _, office := range app.Initial.Desktops {
+		if office.ID != first.ID {
+			if result := requestCloseDesktop(app, office); !result.Success {
+				t.Fatal(protocol.Deref(result.Error))
+			}
+		}
+	}
+
 	six := createOrderedDesktop(t, app, profileID, 6)
 	named := createOrderedDesktop(t, app, profileID, 0)
 	three := createOrderedDesktop(t, app, profileID, 3)

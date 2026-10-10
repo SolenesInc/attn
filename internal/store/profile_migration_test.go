@@ -89,8 +89,8 @@ func TestFinishAppliesTheDraftOnceAndKeepsAgentsLaunchedMeanwhile(t *testing.T) 
 	if err != nil || !finish.Finished {
 		t.Fatalf("FinishProfileMigration = %+v, %v", finish, err)
 	}
-	if finish.View.State.Phase != profilemigration.PhaseComplete {
-		t.Fatalf("phase after finish = %s", finish.View.State.Phase)
+	if finish.View.PlacementRequired() {
+		t.Fatalf("placement is still pending after finish: %s", finish.View.State.Phase)
 	}
 	_, desktops, err := s.ProfileArrangement(view.Manifest.ProfileID)
 	if err != nil {
@@ -109,8 +109,14 @@ func TestFinishAppliesTheDraftOnceAndKeepsAgentsLaunchedMeanwhile(t *testing.T) 
 		t.Fatalf("the emptied extra desktop %s survived the finish", extra.DesktopID)
 	}
 
-	again, err := s.FinishProfileMigration(view.State.Revision)
-	if err != nil || again.Finished || again.View.State.Phase != profilemigration.PhaseComplete {
+	if finish.View.State.Phase == profilemigration.PhaseLaunchRequired {
+		finish, err = s.FinishProfileMigration(finish.View.State.Revision)
+		if err != nil || !finish.Finished || finish.View.State.Phase != profilemigration.PhaseComplete {
+			t.Fatalf("Chief launch review: %+v %v", finish, err)
+		}
+	}
+	again, err := s.FinishProfileMigration(finish.View.State.Revision)
+	if err != nil || again.Finished || again.View.State.Phase != finish.View.State.Phase {
 		t.Fatalf("a repeated finish = %+v, %v; want success without changes", again, err)
 	}
 	_, err = s.EditProfileMigration(again.View.State.Revision, keepAll)

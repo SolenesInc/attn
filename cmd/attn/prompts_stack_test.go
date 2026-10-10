@@ -104,7 +104,11 @@ func TestPromptsRenderShowsExactlyWhatAChiefACrewMemberAndAnOrdinarySessionRecei
 	s.Start()
 	app := s.App()
 
-	chief := s.Spawn(app, fakeagent.Claude, s.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
+	chiefSet, err := s.Client().CrewSet("chief", nil, protocol.Ptr("claude"), protocol.Ptr("sonnet"), nil, nil)
+	if err != nil || chiefSet.WokeSessionID == nil {
+		t.Fatalf("configure Chief=%+v %v", chiefSet, err)
+	}
+	chief := string(*chiefSet.WokeSessionID)
 	ordinary := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
 	guide, err := s.Client().NotebookGuide(protocol.SessionID(chief))
 	if err != nil || !guide.SessionIsChief || guide.Root == "" {
@@ -119,12 +123,16 @@ func TestPromptsRenderShowsExactlyWhatAChiefACrewMemberAndAnOrdinarySessionRecei
 		t.Fatalf("crew prime for keel = %+v, %v", priming, err)
 	}
 
+	chiefPriming, err := s.Client().CrewPrime(protocol.SessionID(chief))
+	if err != nil || chiefPriming.Guidance == nil {
+		t.Fatalf("Chief priming: %+v %v", chiefPriming, err)
+	}
 	for _, tc := range []struct {
 		name    string
 		session string
 		set     []string
 	}{
-		{name: "chief", session: chief, set: []string{"--set", "notebook_root=" + guide.Root, "--set", "garden_available=true"}},
+		{name: "chief", session: chief, set: []string{"--set", "notebook_root=" + guide.Root, "--set", "garden_available=true", "--set", "crew_priming=" + *chiefPriming.Guidance}},
 		{name: "crew member", session: string(woken.SessionID), set: []string{"--set", "crew_priming=  \n" + *priming.Guidance + "\n  ", "--set", "garden_available=true"}},
 		{name: "ordinary", session: ordinary, set: []string{"--set", "garden_available=true"}},
 	} {

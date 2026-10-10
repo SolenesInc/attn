@@ -92,8 +92,9 @@ for user-defined crew members.
 
 ## Big rocks (the arc)
 
-- [x] **Chief as crew embryo** — single-holder instance role, durable ticket
-  role identity, protected session. The embryo exists.
+- [x] **Chief as crew member**: every profile starts with a Chief, with a
+  permanent identity, charter and home. They wake once configured and keep
+  their claims and mail across sessions.
 - [~] **Crew primitive** — durable identity + charter + memory home; sessions
   are a member's days; chief migrates to be the first crew member, not a
   special case. Running today as a hand-run skill-layer simulation

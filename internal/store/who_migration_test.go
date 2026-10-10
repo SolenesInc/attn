@@ -61,7 +61,7 @@ INSERT INTO kept_conversations(resume_id,agent,source_path,bytes,stored_bytes,co
 			if err := old.Close(); err != nil {
 				t.Fatal(err)
 			}
-			upgraded, err := NewWithDB(path)
+			upgraded, err := newStoreAtVersion(path, 1791596723596120)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -82,9 +82,9 @@ INSERT INTO kept_conversations(resume_id,agent,source_path,bytes,stored_bytes,co
 				t.Fatalf("rollback changed an unknown close: before=%+v after=%+v", before, after)
 			}
 			for _, row := range []struct{ id, party, address string }{{"bound-peer", "member:keel", "member:keel"}, {"old-peer", "member:keel", "session:plain"}, {"plain-peer", "session:plain", "chief:profile"}} {
-				peer, err := upgraded.PeerMessageRecord(row.id)
-				if err != nil || peer.Message.Sender.String() != row.party || peer.To.String() != row.address {
-					t.Fatalf("peer %s: %+v %v", row.id, peer, err)
+				var sender, address string
+				if err := upgraded.db.QueryRow("SELECT p.sender,i.address FROM peer_messages p JOIN inbox_items i ON i.source_id=p.id AND i.kind='peer_message' WHERE p.id=?", row.id).Scan(&sender, &address); err != nil || sender != row.party || address != row.address {
+					t.Fatalf("peer %s: sender=%q address=%q err=%v", row.id, sender, address, err)
 				}
 			}
 			key, _ := who.ParseMemberKey("keel")

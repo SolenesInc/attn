@@ -46,6 +46,11 @@ func (w *profilesTestDaemon) start() {
 	w.d = newEnrolledDaemon(w.t, w.homeDaemonID)
 	w.d.clientToken = "the-token"
 	w.d.store = persistent
+	w.d.ensureGardenCollections()
+	w.d.ensureCrewCollections()
+	if err := w.d.ensureChiefs(); err != nil {
+		w.t.Fatal(err)
+	}
 	w.t.Cleanup(func() { persistent.Close() })
 }
 
@@ -583,13 +588,19 @@ func TestTheResultReachesItsSenderBeforeTheBroadcast(t *testing.T) {
 	w.d.handleClientMessage(client, data)
 
 	payloads := drainClientPayloads(t, client)
-	if len(payloads) != 2 || eventName(t, payloads[0]) != protocol.EventProfileActionResult || eventName(t, payloads[1]) != protocol.EventProfilesChanged {
-		names := make([]string, 0, len(payloads))
-		for _, payload := range payloads {
-			names = append(names, eventName(t, payload))
-		}
-		t.Fatalf("profile_create sent %v, want profile_action_result then profiles_changed", names)
+	if len(payloads) == 0 || eventName(t, payloads[0]) != protocol.EventProfileActionResult {
+		t.Fatalf("profile result did not precede its broadcasts: %v", payloads)
 	}
+	var profileEvents int
+	for _, payload := range payloads[1:] {
+		if eventName(t, payload) == protocol.EventProfilesChanged {
+			profileEvents++
+		}
+	}
+	if profileEvents != 1 {
+		t.Fatalf("profiles_changed broadcasts = %d, want one", profileEvents)
+	}
+
 }
 
 func TestAStorageFailureIsNotReportedAsUnavailable(t *testing.T) {

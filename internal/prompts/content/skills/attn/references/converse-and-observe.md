@@ -57,9 +57,10 @@ daemon's socket can name any session as the sender.
 
 `attn agent close <session-or-member-or-seed> -m "reason"` ends a session for good. Three
 rules decide whether you may, and a refusal names all three: a session may close
-itself, it may close a session it dispatched, and a profile's chief of staff may
-close any agent of that profile. The chief of staff and a session a crew member is working in are protected
-from every closer, including themselves.
+itself, it may close a session it dispatched, and a profile's Chief may close
+any agent of that profile. Every crew member's current session, including the
+Chief's, is protected from closing. Use `attn crew sleep <name>` to ask them to
+file a letter and sleep.
 
 The reason is required and it is not paperwork. The session row stays in the
 ledger — `attn session show <id>` reads it back, `attn session list --closed`

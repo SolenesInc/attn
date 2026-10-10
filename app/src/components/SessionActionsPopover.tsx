@@ -6,11 +6,9 @@ interface SessionActionsPopoverProps {
   sessionLabel: string;
   priority?: boolean;
   onTogglePriority?: () => void;
-  chiefOfStaff: boolean;
   anchor: { top: number; left: number };
   canRename: boolean;
   onRename: () => void;
-  onChangeChiefOfStaff: (enabled: boolean) => void;
   onCloseSession: () => void;
   onReloadSession: () => void;
   onMemberDetails?: () => void;
@@ -23,11 +21,9 @@ export function SessionActionsPopover({
   sessionLabel,
   priority,
   onTogglePriority,
-  chiefOfStaff,
   anchor,
   canRename,
   onRename,
-  onChangeChiefOfStaff,
   onCloseSession,
   onReloadSession,
   onMemberDetails,
@@ -99,16 +95,6 @@ export function SessionActionsPopover({
           Rename session
         </button>
       )}
-      <button
-        type="button"
-        role="menuitem"
-        className="chief-of-staff-action"
-        data-testid="chief-of-staff-session-action"
-        onClick={() => run(() => onChangeChiefOfStaff(!chiefOfStaff))}
-      >
-        <span aria-hidden="true">⌁</span>
-        {chiefOfStaff ? 'Remove chief role' : 'Make chief of staff'}
-      </button>
       <div className="session-actions-divider" />
       <button type="button" role="menuitem" onClick={() => run(onReloadSession)}>
         <span aria-hidden="true">↻</span>

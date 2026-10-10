@@ -3,7 +3,6 @@ import { useHarnesses } from '../hooks/useHarnesses';
 import { HarnessRouteChip } from './HarnessRouteChip';
 import { HarnessRouteBadge } from './HarnessRouteBadge';
 import { routeFromStored } from '../hooks/useHarnessRoute';
-import { ModelTier } from '../types/generated';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import { agentCapabilityLabel, agentLabel, isAgentAvailable } from '../utils/agentAvailability';
 import { AUTO_SETTLE_ARM_SETTING, AUTO_SETTLE_COUNTDOWN_SETTING } from '../utils/queueBands';
@@ -783,11 +782,7 @@ export function BackgroundAgentSettings({
   activityAgents,
   onSetSetting,
   gardenAdvisorAgents,
-  chiefOverrideAgentList,
-  chiefModelDrafts,
-  chiefEffortDrafts,
   savedFlash,
-  chiefContextCapDraft,
   headlessContextCapDraft,
 }: Pick<
   SettingsModalState,
@@ -795,76 +790,22 @@ export function BackgroundAgentSettings({
   | 'activityAgents'
   | 'onSetSetting'
   | 'gardenAdvisorAgents'
-  | 'chiefOverrideAgentList'
-  | 'chiefModelDrafts'
-  | 'chiefEffortDrafts'
   | 'savedFlash'
-  | 'chiefContextCapDraft'
   | 'headlessContextCapDraft'
 >) {
-  const { harnesses } = useHarnesses();
   return (
     <>
       <SessionActivitySettings settings={settings} agents={activityAgents} onSetSetting={onSetSetting} />
       <GardenAdvisorSettings settings={settings} agents={gardenAdvisorAgents} onSetSetting={onSetSetting} />
       <section className="settings-block">
         <div className="settings-block-intro">
-          <div className="settings-kicker">Agents</div>
-          <h3>Chief of staff</h3>
-          <p className="settings-description">
-            Harness, model and effort for Chief launches. Unset models use the deep default at low effort.
-          </p>
-        </div>
-        <div className="settings-block-body">
-          {chiefOverrideAgentList.length === 0 ? (
-            <div className="settings-warning">No installed agent supports a model or effort override.</div>
-          ) : (
-            <div className="settings-field-grid two-column">
-              {chiefOverrideAgentList.map((agent) => {
-                return <div className="settings-field" key={agent}>
-                  <HarnessRouteChip variant="field" aria-label={`${agentLabel(agent)} Chief model`} data-testid={`settings-chief-route-${agent}`} value={{ harness: agent, provider: '', model: chiefModelDrafts.value(agent), effort: chiefEffortDrafts.value(agent) }} rules={{ harnesses: harnesses.filter(harness => harness.id === agent), fixedHarness: true, tier: ModelTier.Deep, defaultEffort: 'low' }} onChange={route => {
-                    if (route.model !== chiefModelDrafts.value(agent)) void chiefModelDrafts.apply(agent, route.model);
-                    if (route.effort !== chiefEffortDrafts.value(agent)) void chiefEffortDrafts.apply(agent, route.effort);
-                  }} />
-                  <SavedMark shown={savedFlash.saved(`chief_model_${agent}`)} testID={`settings-chief-model-saved-${agent}`} />
-                </div>;
-              })}
-            </div>
-          )}
-        </div>
-      </section>
-      <section className="settings-block">
-        <div className="settings-block-intro">
           <h3>Compaction</h3>
           <p className="settings-description">
-            Token thresholds for the Chief and background runs. Empty values use the default of{' '}
+            Token thresholds for background runs. Empty values use the default of{' '}
             {DEFAULT_CONTEXT_WINDOW_CAP.toLocaleString()} tokens.
           </p>
         </div>
         <div className="settings-block-body settings-field-grid">
-          <div className="settings-field">
-            <label className="settings-label" htmlFor="settings-chief-context-cap">
-              Chief of staff
-            </label>
-            <input
-              id="settings-chief-context-cap"
-              data-testid="settings-chief-context-cap"
-              type="number"
-              min={10000}
-              max={2000000}
-              step={1000}
-              value={chiefContextCapDraft.value}
-              onChange={chiefContextCapDraft.onChange}
-              onBlur={chiefContextCapDraft.commit}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  chiefContextCapDraft.commit();
-                }
-              }}
-              className="settings-input"
-            />
-            <SavedMark shown={savedFlash.saved('chief_context_window_cap')} testID="settings-chief-context-cap-saved" />
-          </div>
           <div className="settings-field">
             <label className="settings-label" htmlFor="settings-headless-context-cap">
               Headless runs

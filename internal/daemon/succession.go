@@ -17,7 +17,6 @@ import (
 // and from closes into the ledger whole. The caller holds from's lifecycle lock.
 func (d *Daemon) opened(t harness.TerminalID, from *protocol.Session, observation agentConversationObservation) error {
 	launch, _ := d.store.LaunchIntent(from.ID)
-	launch.ChiefOfStaff = false
 	to := protocol.SessionID(uuid.NewString())
 	member, bound := d.crewMemberForSession(from.ID)
 	var memberKey who.MemberKey

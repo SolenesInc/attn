@@ -144,6 +144,9 @@ func (d *Daemon) crewHandoffLocked(sessionID protocol.SessionID, note string, re
 	if err != nil {
 		return nil, fmt.Errorf("prepare %s's day to close: %w", d.storedMemberName(member.Key.String()), err)
 	}
+	if close == "" && d.isChief(member.Key) {
+		close = protocol.CrewDayCloseNap
+	}
 	if d.crewDayEndsHere(close, time.Now()) {
 		d.closeNappedSession(sessionID, teardown)
 		d.logf("crew: %s went to sleep — session %s ended and nobody was woken behind it", member.Key.String(), sessionID)

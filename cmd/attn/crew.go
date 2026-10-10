@@ -445,12 +445,18 @@ func runCrewSet(args []string) {
 		fmt.Fprintf(os.Stderr, "crew set: %v\n", err)
 		os.Exit(1)
 	}
+	if result.WakeError != nil {
+		fmt.Fprintf(os.Stderr, "settings saved; Chief did not start: %s\n", *result.WakeError)
+	}
 	if parsed.json {
 		printJSON(result.Member)
 		return
 	}
+	if result.WokeSessionID != nil {
+		fmt.Printf("%s woke in session %s\n", result.Member.Name, string(*result.WokeSessionID)[:8])
+	}
 	record := result.Member
-	fmt.Printf("%s launches in %s on %s, model %s, effort %s\n", record.Name, valueOrDash(protocol.Deref(record.Cwd)), valueOrDash(record.ResolvedAgent), valueOrDash(protocol.Deref(record.ResolvedModel)), valueOrDash(protocol.Deref(record.ResolvedEffort)))
+	fmt.Printf("%s launches in %s on %s, model %s, effort %s\n", record.Name, valueOrDash(protocol.Deref(record.Cwd)), valueOrDash(protocol.Deref(record.ResolvedAgent)), valueOrDash(protocol.Deref(record.ResolvedModel)), valueOrDash(protocol.Deref(record.ResolvedEffort)))
 	fmt.Printf("profile: %s\nlaunch desktop: %s\n", protocol.Deref(record.ProfileName), launchDesktopText(record.LaunchDesktop))
 	fmt.Printf("awareness dirs: %s\n", valueOrDash(strings.Join(record.AwarenessDirs, ", ")))
 }
@@ -476,7 +482,7 @@ func printCrewList(w io.Writer, members []protocol.CrewMember) {
 		if member.Retired {
 			state = "retired"
 		}
-		fmt.Fprintf(w, "%-12s  %-8s  %-8s  %-20s  %-8s  %-10s  %-22s  %s\n", member.Name, state, valueOrDash(member.ResolvedAgent), valueOrDash(protocol.Deref(member.ResolvedModel)), valueOrDash(protocol.Deref(member.ResolvedEffort)), session, protocol.Deref(member.ProfileName)+" › "+launchDesktopText(member.LaunchDesktop), member.HomeDir)
+		fmt.Fprintf(w, "%-12s  %-8s  %-8s  %-20s  %-8s  %-10s  %-22s  %s\n", member.Name, state, valueOrDash(protocol.Deref(member.ResolvedAgent)), valueOrDash(protocol.Deref(member.ResolvedModel)), valueOrDash(protocol.Deref(member.ResolvedEffort)), session, protocol.Deref(member.ProfileName)+" › "+launchDesktopText(member.LaunchDesktop), member.HomeDir)
 	}
 	fmt.Fprintf(w, "\nAn awake MEMBER or SESSION works with `attn agent peek <target>`.\n")
 }

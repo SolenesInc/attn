@@ -25,6 +25,7 @@ type crewBirth struct {
 	Effort         string
 	CWD            string
 	Desktop        *store.LaunchDesktopSetting
+	Onboarded      bool
 }
 
 func (d *Daemon) createCrewMember(b crewBirth) (store.CrewIdentity, error) {
@@ -51,9 +52,16 @@ func (d *Daemon) createCrewMember(b crewBirth) (store.CrewIdentity, error) {
 
 func (d *Daemon) furnishCrewMember(id store.CrewIdentity, b crewBirth) error {
 	home := filepath.Join(d.dataRoot, crew.HomesDirName, id.ProfileID, id.Key.String())
-	member := crew.Member{Key: id.Key, HomeDir: home, CharterPath: filepath.Join(home, crew.CharterFileName), AwarenessDirs: []string{}}
-	if err := d.applyCrewSettings(&member, &protocol.CrewSetMessage{Agent: protocol.Ptr(b.Agent), Model: protocol.Ptr(b.Model), Effort: protocol.Ptr(b.Effort), Cwd: protocol.Ptr(b.CWD)}); err != nil {
-		return err
+	member := crew.Member{Onboarded: b.Onboarded, Key: id.Key, HomeDir: home, CharterPath: filepath.Join(home, crew.CharterFileName), AwarenessDirs: []string{}}
+	if b.insertIdentity {
+		if err := d.applyCrewSettings(&member, &protocol.CrewSetMessage{Agent: protocol.Ptr(b.Agent), Model: protocol.Ptr(b.Model), Effort: protocol.Ptr(b.Effort), Cwd: protocol.Ptr(b.CWD)}); err != nil {
+			return err
+		}
+	} else {
+		member.Agent = b.Agent
+		member.Model = b.Model
+		member.Effort = b.Effort
+		member.CWD = b.CWD
 	}
 	if err := d.validateCrewMemberPaths(member); err != nil {
 		return err
@@ -83,10 +91,30 @@ func (d *Daemon) furnishCrewMember(id store.CrewIdentity, b crewBirth) error {
 	if err := os.MkdirAll(home, 0o755); err != nil {
 		return crewHomeWriteError(id, home, err)
 	}
-	if err := os.WriteFile(member.CharterPath, []byte(b.Charter), 0o644); err != nil {
+	if err := writeCrewCharter(member.CharterPath, b.Charter); err != nil {
 		return crewHomeWriteError(id, home, err)
 	}
 	return nil
+}
+
+func writeCrewCharter(path, charter string) error {
+	file, err := os.CreateTemp(filepath.Dir(path), ".charter-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(file.Name())
+	if err := file.Chmod(0o644); err != nil {
+		file.Close()
+		return err
+	}
+	if _, err := file.WriteString(charter); err != nil {
+		file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	return os.Rename(file.Name(), path)
 }
 
 func crewHomeWriteError(id store.CrewIdentity, home string, err error) error {

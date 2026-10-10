@@ -200,7 +200,17 @@ func (s *Store) EnsureCrewMember(m CrewIdentity) (CrewIdentity, error) {
 func (s *Store) RenameCrewMember(key who.MemberKey, name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if err := crew.ValidateName(name); err != nil {
-		return "", err
+		if !errors.Is(err, crew.ErrNameReservedForChief) {
+			return "", err
+		}
+		identity, readErr := s.CrewIdentity(key)
+		if readErr != nil {
+			return "", readErr
+		}
+		chief, readErr := s.ProfileChief(identity.ProfileID)
+		if readErr != nil || chief != key {
+			return "", err
+		}
 	}
 	if s.db == nil {
 		s.mu.Lock()
@@ -362,7 +372,7 @@ func (s *Store) commitCrewBirth(m NewCrewMember, now time.Time, insert bool) (Do
 				return err
 			}
 		} else {
-			if _, err := scanCrewIdentity(tx.QueryRow("SELECT "+crewIdentityColumns+" FROM crew_members WHERE member_key = ? AND profile_id = ?", m.Identity.Key, m.Identity.ProfileID)); err != nil {
+			if _, err := scanCrewIdentity(tx.QueryRow("SELECT "+crewIdentityColumns+" FROM crew_members WHERE member_key = ?", m.Identity.Key)); err != nil {
 				return err
 			}
 		}

@@ -129,15 +129,16 @@ func TestTwoSpawnsOfOneSessionStartOneAgent(t *testing.T) {
 	}
 }
 
-func TestAChiefStartsOnTheConfiguredChiefModelAndEffort(t *testing.T) {
+func TestAChiefStartsOnItsMembersModelAndEffort(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
-	app := w.App()
-	setSetting(t, app, "chief_model_claude", "claude-opus-4")
-	setSetting(t, app, "chief_effort_claude", "high")
-	chief := w.Launched(w.Spawn(app, fakeagent.Claude, w.Path("chief"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) }))
-	model, _ := flagValue(chief.Argv, "--model")
-	effort, _ := flagValue(chief.Argv, "--effort")
-	if model != "claude-opus-4" || effort != "high" {
-		t.Errorf("the chief ran claude %q, want the configured chief model and effort", chief.Argv)
+	result, err := w.Client().CrewSet("chief", nil, protocol.Ptr("claude"), protocol.Ptr("opus"), protocol.Ptr("high"), nil)
+	if err != nil || result.WokeSessionID == nil {
+		t.Fatalf("configure Chief=%+v %v", result, err)
+	}
+	run := w.Launched(string(*result.WokeSessionID))
+	model, _ := flagValue(run.Argv, "--model")
+	effort, _ := flagValue(run.Argv, "--effort")
+	if model != "opus" || effort != "high" {
+		t.Errorf("chief launch=%q", run.Argv)
 	}
 }

@@ -13,9 +13,9 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func inBubbleWithAgents(t *testing.T, script func(t *testing.T, w *world)) {
+func inBubbleWithAgents(t *testing.T, script func(t *testing.T, w *world), agents ...fakeagent.Harness) {
 	t.Helper()
-	prepared := prepareWorld(t)
+	prepared := prepareWorld(t, agents...)
 	t.Setenv("ATTN_PTY_BACKEND", "embedded")
 	synctest.Test(t, func(t *testing.T) {
 		bubbled := *prepared

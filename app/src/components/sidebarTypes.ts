@@ -92,7 +92,6 @@ export interface SidebarProps {
   onCloseDesktop?: (desktopId: string) => void;
   onRenameDesktop?: (desktopId: string, title: string) => Promise<void>;
   onTogglePriority?: (session: LocalSession) => void;
-  onChangeChiefOfStaff?: (sessionId: string, enabled: boolean) => void;
   crewQueueEnabled?: boolean;
   harnessLogosEnabled?: boolean;
   leafDrag?: { sourceDesktopId: string } | null;

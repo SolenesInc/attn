@@ -38,9 +38,7 @@ func seedSubscriptionHistory(t *testing.T, s *Store) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.PutDocument(*seedsSchema, id, body, now, nil); err != nil {
-			t.Fatal(err)
-		}
+		migrationFixtureDocument(t, s, *seedsSchema, id, body, now)
 	}
 	dispatches := []garden.Dispatch{
 		{SessionID: "old", Crown: "plot", DispatcherSession: "historic", SupersededBy: "current"},
@@ -57,9 +55,7 @@ func seedSubscriptionHistory(t *testing.T, s *Store) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.PutDocument(*dispatchSchema, string(dispatch.SessionID), body, now, nil); err != nil {
-			t.Fatal(err)
-		}
+		migrationFixtureDocument(t, s, *dispatchSchema, string(dispatch.SessionID), body, now)
 	}
 	if _, err := s.db.Exec(`INSERT OR IGNORE INTO garden_seed_watches(watcher_session_id,seed_id,created_at) VALUES (?,?,?)`, "planner", "plot", now.UTC().Format(sortableTimeFormat)); err != nil {
 		t.Fatal(err)

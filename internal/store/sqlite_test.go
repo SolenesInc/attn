@@ -1156,16 +1156,22 @@ func TestMigration145AdoptsGardenDispatchForAutomationContinuity(t *testing.T) {
 	defer s.Close()
 
 	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
-	profile, _ := s.MostRecentlyUsedProfile()
-	def, err := s.UpsertAutomationDefinition(0, "Review", `{}`, profile.ID, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	run, _, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:one", "singleton", def.Revision, `{}`, `{}`, now, AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-old000", SessionID: "session-1",
-	})
-	if err != nil {
-		t.Fatal(err)
+	profile := migrationFixtureProfile(t, s, "")
+	def := struct{ ID, Revision int }{1, 1}
+	run := struct{ ID, SessionID string }{"run-1", "session-1"}
+	stamp := formatStoredTime(now)
+	for _, statement := range []struct {
+		sql  string
+		args []any
+	}{
+		{"INSERT INTO automation_definitions(id,name,enabled,revision,spec_json,profile_id,created_at,updated_at) VALUES(1,'Review',1,1,'{}',?,?,?)", []any{profile.ID, stamp, stamp}},
+		{"INSERT INTO automation_occurrences(id,definition_id,provider,occurrence_key,subject_key,observed_at,payload_json,created_at) VALUES('occ-1',1,'scheduled','scheduled:one','singleton',?,'{}',?)", []any{stamp, stamp}},
+		{"INSERT INTO automation_runs(id,definition_id,occurrence_id,definition_revision,snapshot_json,state,ticket_id,session_id,created_at,updated_at) VALUES('run-1',1,'occ-1',1,'{}','pending','','session-1',?,?)", []any{stamp, stamp}},
+		{"INSERT INTO automation_continuity_bindings(id,definition_id,continuity_key,ticket_id,session_id,created_at,updated_at) VALUES('binding-1',1,'singleton','','session-1',?,?)", []any{stamp, stamp}},
+	} {
+		if _, err := s.db.Exec(statement.sql, statement.args...); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	if _, err := s.db.Exec(`INSERT INTO tickets(id,title,status,assignee,automation_run_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?)`, "legacy-ticket", "Review", "working", run.SessionID, run.ID, formatStoredTime(now), formatStoredTime(now)); err != nil {
@@ -1179,9 +1185,7 @@ func TestMigration145AdoptsGardenDispatchForAutomationContinuity(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("load dispatch collection: found=%v err=%v", found, err)
 	}
-	if _, err := s.PutDocument(*dispatches, string(run.SessionID), []byte(`{"session_id":"session-1","crown":"s-live01"}`), now, nil); err != nil {
-		t.Fatal(err)
-	}
+	migrationFixtureDocument(t, s, *dispatches, string(run.SessionID), []byte(`{"session_id":"session-1","crown":"s-live01"}`), now)
 
 	if _, err := s.db.Exec(`
 		UPDATE automation_runs SET seed_id='',ticket_id='legacy-ticket' WHERE id='run-1';

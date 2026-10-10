@@ -23,6 +23,14 @@ func TestCloseDesktopSelectsItsNeighbourAndRefusesTheLast(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app := w.App()
 		profile := app.SelectedProfile()
+		for _, office := range app.Initial.Desktops {
+			if office.ID != app.Initial.Profiles[0].CurrentDesktopID {
+				if result := requestCloseDesktop(app, office); !result.Success {
+					t.Fatal(protocol.Deref(result.Error))
+				}
+			}
+		}
+
 		first := app.Initial.Desktops[0]
 		second := createDesktop(app, profile)
 		third := createDesktop(app, profile)
@@ -55,6 +63,14 @@ func TestCloseDesktopClosesAgentsAndShellsAndKeepsTheirLedger(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
 	profile := app.SelectedProfile()
+	for _, office := range app.Initial.Desktops {
+		if office.ID != app.Initial.Profiles[0].CurrentDesktopID {
+			if result := requestCloseDesktop(app, office); !result.Success {
+				t.Fatal(protocol.Deref(result.Error))
+			}
+		}
+	}
+
 	keeper := createDesktop(app, profile)
 	switchDesktop(app, profile, app.Initial.Desktops[0].ID)
 	agent := w.Spawn(app, fakeagent.Claude, w.Path("agent"))
@@ -103,19 +119,21 @@ func TestCloseDesktopRefusesProtectedSessionsBeforeClosingAnything(t *testing.T)
 			createDesktop(app, profile)
 			ordinary := w.Spawn(app, fakeagent.Claude, w.Path("ordinary"))
 			w.Launched(ordinary)
-			protected := w.Spawn(app, fakeagent.Claude, w.Path("protected"))
-			w.Launched(protected)
+			var protected string
 			desktop, _ := viewProfile(t, w, profile).paneOf(t, ordinary)
 			if protection == "chief" {
-				if made := setChiefOfStaff(app, protected, true); !made.Success {
-					t.Fatal(protocol.Deref(made.Error))
+				roster := crewRoster(t, w.Client())
+				for _, member := range roster {
+					if member.Chief {
+						writeLaunchChoice(app, "crew", member.Key, protocol.LaunchDesktopSetting{DesktopID: protocol.Ptr(desktop.ID)})
+					}
 				}
+				protected = configureChiefOn(t, w, app, fakeagent.Claude, "sonnet")
 			} else {
 				writeLaunchChoice(app, "crew", "alder", protocol.LaunchDesktopSetting{DesktopID: protocol.Ptr(desktop.ID)})
-				wake := wakeCrew(t, w.Client(), "alder", "")
-				protected = string(wake.SessionID)
-				w.Launched(protected)
+				protected = string(wakeCrew(t, w.Client(), "alder", "").SessionID)
 			}
+			w.Launched(protected)
 			before := viewProfile(t, w, profile)
 			result := requestCloseDesktop(app, before.desktops[desktop.ID])
 			if result.Success || !strings.Contains(protocol.Deref(result.Error), protected) {

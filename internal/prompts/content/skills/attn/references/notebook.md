@@ -88,10 +88,10 @@ filesystem watcher notices your change and refreshes any open in-app browser.
 - **Be concise.** Notes are read by future agents under a token budget; prefer a
   tight summary plus a `sources:` pointer over a transcript.
 
-## As Chief Of Staff
+## As Chief
 
-The Notebook is your home. When you are promoted to the role mid-session, attn
-points you at `<root>/index.md` — read it to orient. Read `<root>/knowledge/index.md`,
+The Notebook holds your profile's journal and knowledge. At wake, read
+`<root>/index.md` and `<root>/knowledge/index.md` to orient,
 record durable decisions in the knowledge base as you make them, and keep the
 day's journal current with your view of your profile. Write at a chief-of-staff
 altitude — what moved across your profile's agents, what you delegated and

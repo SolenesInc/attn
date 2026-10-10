@@ -8,7 +8,7 @@ profile                 a separate world for the user's work; like a tenant.
 ├─ desktop (1..n)
 ├─ flow (1)
 ├─ ledger (1)
-├─ crew member (0..n)   at most 1 is the chief
+├─ crew member (1..n)   exactly 1 is the chief
 ├─ automation (0..n)
 ├─ garden (1)
 ├─ notebook (1)        the profile's journal and knowledge base; plain markdown
@@ -68,7 +68,7 @@ party                   a session or crew member that sends mail or claims work;
 actor                   a party, the user or attn that did something; like an
                         audit identity
 address                 who an item is for: a session or a mailbox
-├─ mailbox              crew member, chief or seed tender; like a shared
+├─ mailbox              crew member or seed tender; like a shared
 │                       mailbox (support@) that whoever holds the job reads
 └─ inbox (1)
    └─ item (0..n)       peer message, seed update, user message,
@@ -224,7 +224,6 @@ Temporary debt. Read the old name as the new term. Never write the old name.
 ### Changes to make
 
 - Flow is one daemon-wide setting (`queue_mode_enabled`). Make it 1 per profile.
-- The chief is not a crew member. Make it one.
 - The ledger may list every profile when a request has no profile. Check, and
   fix.
 - The Ledger button and action say Reopen. Rename them to Resume.

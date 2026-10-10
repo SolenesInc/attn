@@ -74,7 +74,7 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 	})
 
 	s.Start()
-	requireStdout(t, s.Attn("crew", "list"), "No crew members are registered", "<name>/CHARTER.md")
+	requireStdout(t, s.Attn("crew", "list"), "Chief", "asleep")
 	s.Stop()
 	for _, name := range []string{"keel", "trellis"} {
 		writeCharter(t, s, name)
@@ -91,10 +91,10 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 	requireStdout(t, s.Attn("crew", "set", "keel", "--agent", "codex", "--effort", "high", "--awareness-dir", notes, "--awareness-dir", specs),
 		"Keel launches in - on codex, model ", ", effort high\n", "awareness dirs: "+notes+", "+specs+"\n")
 	roster := crewRoster(t, s)
-	if keel := roster["keel"]; keel.ResolvedAgent != "codex" || protocol.Deref(keel.ResolvedEffort) != "high" || !slices.Equal(keel.AwarenessDirs, []string{notes, specs}) {
+	if keel := roster["keel"]; protocol.Deref(keel.ResolvedAgent) != "codex" || protocol.Deref(keel.ResolvedEffort) != "high" || !slices.Equal(keel.AwarenessDirs, []string{notes, specs}) {
 		t.Fatalf("keel after crew set = %+v", keel)
 	}
-	if trellis := roster["trellis"]; trellis.ResolvedAgent != "claude" || trellis.Agent != nil || trellis.Model != nil || trellis.Effort != nil || len(trellis.AwarenessDirs) != 0 {
+	if trellis := roster["trellis"]; protocol.Deref(trellis.ResolvedAgent) != "claude" || trellis.Agent != nil || trellis.Model != nil || trellis.Effort != nil || len(trellis.AwarenessDirs) != 0 {
 		t.Fatalf("setting keel touched trellis: %+v", trellis)
 	}
 	table := s.Attn("crew", "list").Stdout
@@ -103,7 +103,7 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 	requireLines(t, "trellis's row", crewRow(t, table, "Trellis"), " asleep ", " claude ", " "+protocol.Deref(roster["trellis"].ResolvedModel)+" ", filepath.Join(s.Dir, "crew", "trellis"))
 
 	requireStdout(t, s.Attn("crew", "set", "keel", "--agent", "", "--effort", "", "--awareness-dir", ""), "Keel launches in - on claude", "awareness dirs: -\n")
-	if keel := crewRoster(t, s)["keel"]; keel.Agent != nil || keel.Model != nil || keel.Effort != nil || keel.ResolvedAgent != "claude" || len(keel.AwarenessDirs) != 0 {
+	if keel := crewRoster(t, s)["keel"]; keel.Agent != nil || keel.Model != nil || keel.Effort != nil || protocol.Deref(keel.ResolvedAgent) != "claude" || len(keel.AwarenessDirs) != 0 {
 		t.Fatalf("keel after clearing its settings = %+v", keel)
 	}
 	requireStdout(t, s.Attn("crew", "set", "keel", "--model", "claude-fake-sonnet"), "Keel launches in - on claude, model claude-fake-sonnet, ")
@@ -244,10 +244,16 @@ func TestAnInterruptedCrewLaunchIsTheLedgerRowWhenItsConversationSurvives(t *tes
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(roster.Members) != 1 || roster.Members[0].BindingSession == nil {
+			var binding *protocol.SessionID
+			for _, member := range roster.Members {
+				if member.Name == "Keel" {
+					binding = member.BindingSession
+				}
+			}
+			if binding == nil {
 				t.Fatalf("pending member launch: %+v", roster)
 			}
-			successor := *roster.Members[0].BindingSession
+			successor := *binding
 			run = s.Launched(string(successor))
 			run.Prompted()
 			run.Reply("The interrupted day has a conversation. <!-- attn:state=idle -->")
@@ -326,7 +332,7 @@ func TestCrewCommandsResolveTheCallingTerminalsProfile(t *testing.T) {
 	}
 	var roster []protocol.CrewMember
 	s.Run(testworld.Invocation{Args: []string{"crew", "list", "--json"}, Terminal: terminal}).JSON(t, &roster)
-	if len(roster) != 0 {
+	if len(roster) != 1 || !roster[0].Chief {
 		t.Fatalf("Side sees another profile's members: %+v", roster)
 	}
 	for _, args := range [][]string{{"crew", "sleep", "Keel"}, {"crew", "rename", "Keel", "Alfred"}, {"agent", "peek", "Keel"}} {

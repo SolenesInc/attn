@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -15,7 +14,6 @@ import (
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/modelcapture"
-	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -244,6 +242,7 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 		}
 
 		caps := agentdriver.EffectiveCapabilities(driver)
+		settings[capabilitySettingKey(name, "launch_instructions")] = strconv.FormatBool(d.agentSupportsChiefGuidance(name))
 		settings[capabilitySettingKey(name, "hooks")] = strconv.FormatBool(caps.HasHooks)
 		settings[capabilitySettingKey(name, "transcript")] = strconv.FormatBool(caps.HasTranscript)
 		settings[capabilitySettingKey(name, "transcript_watcher")] = strconv.FormatBool(caps.HasTranscriptWatcher)
@@ -321,7 +320,6 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 	if raw, ok := headless.Override(); ok {
 		settings[string(settingHeadlessTasksEnabledOverride)] = raw
 	}
-	settings[string(settingChiefContextWindowCap)] = strconv.Itoa(resolveContextWindowCap(stored[string(settingChiefContextWindowCap)]))
 	settings[string(settingHeadlessContextWindowCap)] = strconv.Itoa(resolveContextWindowCap(stored[string(settingHeadlessContextWindowCap)]))
 	settings[string(settingActivityEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(settingActivityEnabled)]))
 	settings[string(settingActivityPresenceIdleSeconds)] = strconv.Itoa(int(d.presenceIdleLimit() / time.Second))
@@ -382,30 +380,6 @@ func isAgentExecutableAvailable(configuredExecutable, defaultExecutable string) 
 	return err == nil
 }
 
-func (d *Daemon) chiefLaunchModel(ctx context.Context, agent, executable string, chief bool) string {
-	if !chief {
-		return ""
-	}
-	explicit := strings.TrimSpace(d.daemonSetting(daemonSettingKey(string(settingChiefModelPrefix) + strings.ToLower(strings.TrimSpace(agent)))))
-	if agent != "claude" && agent != "codex" {
-		return explicit
-	}
-	return d.resolveTierModel(ctx, agent, executable, modeltiers.Deep, explicit, "")
-}
-
-func (d *Daemon) chiefLaunchEffort(agent string, chief bool) string {
-	if !chief {
-		return ""
-	}
-	if effort := strings.TrimSpace(d.daemonSetting(daemonSettingKey(string(settingChiefEffortPrefix) + strings.ToLower(strings.TrimSpace(agent))))); effort != "" {
-		return effort
-	}
-	if agent == "claude" || agent == "codex" {
-		return "low"
-	}
-	return ""
-}
-
 func settingShapesCrewLaunch(key string) bool {
 	return strings.HasPrefix(key, string(settingDefaultModelPrefix)) || strings.HasPrefix(key, string(settingDefaultEffortPrefix))
 }
@@ -418,34 +392,25 @@ func (d *Daemon) defaultLaunchEffort(agent string) string {
 	return strings.TrimSpace(d.daemonSetting(daemonSettingKey(string(settingDefaultEffortPrefix) + strings.ToLower(strings.TrimSpace(agent)))))
 }
 
-func (d *Daemon) resolveLaunchModel(ctx context.Context, agent, executable string, chief bool, requested string) string {
+func (d *Daemon) resolveLaunchModel(agent, requested string) string {
 	if requested != "" {
 		return requested
-	}
-	if model := d.chiefLaunchModel(ctx, agent, executable, chief); model != "" {
-		return model
 	}
 	return d.defaultLaunchModel(agent)
 }
 
-func (d *Daemon) resolveLaunchEffort(agent string, chief bool, requested string) string {
+func (d *Daemon) resolveLaunchEffort(agent, requested string) string {
 	if requested != "" {
 		return requested
-	}
-	if effort := d.chiefLaunchEffort(agent, chief); effort != "" {
-		return effort
 	}
 	return d.defaultLaunchEffort(agent)
 }
 
-func (d *Daemon) launchContextWindowCap(sessionID protocol.SessionID, agent string, chief bool) int {
+func (d *Daemon) launchContextWindowCap(sessionID protocol.SessionID, agent string) int {
 	if session := d.store.Get(protocol.TrimID(sessionID)); session != nil {
 		if cap := protocol.Deref(session.ContextWindowCap); cap > 0 {
 			return cap
 		}
-	}
-	if chief {
-		return resolveContextWindowCap(d.daemonSetting(settingChiefContextWindowCap))
 	}
 	key := string(settingDefaultContextWindowCapPrefix) + strings.ToLower(strings.TrimSpace(agent))
 	if v := strings.TrimSpace(d.daemonSetting(daemonSettingKey(key))); v != "" {

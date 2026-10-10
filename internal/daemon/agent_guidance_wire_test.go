@@ -92,9 +92,7 @@ func TestAChiefIsGuidedAsTheChiefAndMarkedSoItsHooksAddNoAgentGuidance(t *testin
 		t.Run(string(h), func(t *testing.T) {
 			w := newWorld(t, h)
 			app := w.App()
-			chief := w.Launched(w.Spawn(app, h, w.Path("chief"), func(m *protocol.SpawnSessionMessage) {
-				m.ChiefOfStaff = protocol.Ptr(true)
-			}))
+			chief := w.Launched(configureChiefOn(t, w, app, h, chiefModel(h)))
 			worker := w.Launched(w.Spawn(app, h, w.Path("worker")))
 			for _, tc := range []struct {
 				name     string
@@ -103,13 +101,13 @@ func TestAChiefIsGuidedAsTheChiefAndMarkedSoItsHooksAddNoAgentGuidance(t *testin
 				marker   string
 				unmarked string
 			}{
-				{"the chief", chief, "You are the chief of staff", "ATTN_CHIEF_GUIDANCE", "ATTN_AGENT_GUIDANCE"},
+				{"the chief", chief, "You are this profile's Chief", "ATTN_CHIEF_GUIDANCE", "ATTN_AGENT_GUIDANCE"},
 				{"a worker", worker, agentGuidanceLead, "ATTN_AGENT_GUIDANCE", "ATTN_CHIEF_GUIDANCE"},
 			} {
 				guidance := launchGuidance(t, tc.run)
 				other := agentGuidanceLead
 				if tc.guidance == agentGuidanceLead {
-					other = "You are the chief of staff"
+					other = "You are this profile's Chief"
 				}
 				if !strings.Contains(guidance, tc.guidance) || strings.Contains(guidance, other) {
 					t.Errorf("%s %s launched without only its own guidance:\n%s", tc.name, h, guidance)

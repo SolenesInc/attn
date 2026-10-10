@@ -308,6 +308,7 @@ type Daemon struct {
 	dispatchSeeds              map[protocol.SessionID]string
 	dispatchersBySession       map[protocol.SessionID]who.Actor
 	dispatchFromChief          map[protocol.SessionID]bool
+	chiefsAwaitingUser         map[who.MemberKey]struct{}
 	dispatchProjectionRevs     map[protocol.SessionID]int64
 	dispatchSeedsLoaded        bool
 
@@ -685,6 +686,9 @@ func (d *Daemon) Start() error {
 	d.ensureGardenCollections()
 	d.ensureCrewCollections()
 	d.importCrewHomes()
+	if err := d.ensureChiefs(); err != nil {
+		return fmt.Errorf("ensure chiefs: %w", err)
+	}
 	d.removeEmptyDesktops()
 	d.refreshCurrentAgent()
 	if d.hubManager == nil {
@@ -2063,7 +2067,6 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() 
 		d.decorateLedgerEntryWithUsage(entry)
 		d.publishFact(FactSessionClosed, string(sessionID), entry)
 	}
-	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)
 	d.crewMemo().forget(sessionID)
 	if d.hubManager != nil {
@@ -2083,7 +2086,6 @@ func (d *Daemon) removeReapedSession(sessionID protocol.SessionID) {
 	d.forgetSessionRuntime(sessionID)
 	d.store.Remove(sessionID)
 	d.forgetSessionTrace(sessionID)
-	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)
 }
 
@@ -2926,7 +2928,7 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 	}
 	d.logf("handleStop: session=%s, transcript_path=%s", sessionID, msg.TranscriptPath)
 
-	relaxBackgroundWork := d.isChiefOfStaffSession(sessionID)
+	relaxBackgroundWork := d.sessionIsChief(sessionID)
 	classifies := !d.consumeForcedStopClassification(sessionID)
 	if classifies {
 		d.cancelAutoSettle(sessionID, "stop judged")
@@ -3155,9 +3157,9 @@ func cloneSession(session *protocol.Session) *protocol.Session {
 
 func (d *Daemon) sessionForBroadcast(session *protocol.Session) *protocol.Session {
 	b := d.broadcastBindings()
-	decorated := d.sessionForBroadcastWithChiefOfStaff(
+	decorated := d.sessionForBroadcastWithChief(
 		session,
-		d.profileChiefs(),
+		d.chiefSessions(),
 		d.delegatedFromChiefSessionIDs(),
 		b,
 		d.gardenDispatchSeedsBySession(),
@@ -3172,7 +3174,7 @@ func (d *Daemon) sessionForBroadcast(session *protocol.Session) *protocol.Sessio
 	return decorated
 }
 
-func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
+func (d *Daemon) sessionForBroadcastWithChief(
 	session *protocol.Session,
 	chiefs map[string]protocol.SessionID,
 	delegatedFromChief map[protocol.SessionID]bool,
@@ -3192,7 +3194,7 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 
 	d.decorateSessionWithAutoSettle(clone)
 	d.decorateSessionWithSnooze(clone)
-	d.decorateChiefOfStaff(clone, chiefs)
+	d.decorateChief(clone, chiefs)
 	d.decorateDelegatedFromChief(clone, delegatedFromChief)
 	d.decorateCrewMember(clone, bindings, crewNames)
 	d.decorateSessionSeed(clone, seedBySession)
@@ -3211,7 +3213,7 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 	if len(sessions) == 0 {
 		return nil
 	}
-	chiefs := d.profileChiefs()
+	chiefs := d.chiefSessions()
 	delegatedFromChief := d.delegatedFromChiefSessionIDs()
 	bindings := d.broadcastBindings()
 	seedBySession := d.gardenDispatchSeedsBySession()
@@ -3223,7 +3225,7 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 	pullRequestWatchesByPR := d.pullRequestWatchesByPR()
 	out := make([]protocol.Session, 0, len(sessions))
 	for _, session := range sessions {
-		if decorated := d.sessionForBroadcastWithChiefOfStaff(session, chiefs, delegatedFromChief, bindings, seedBySession, dispatcherBySession, crewNames); decorated != nil {
+		if decorated := d.sessionForBroadcastWithChief(session, chiefs, delegatedFromChief, bindings, seedBySession, dispatcherBySession, crewNames); decorated != nil {
 			decorated.DelegationRole = rolesBySession[decorated.ID]
 			decorated.Automation = bySession[decorated.ID]
 			addresses := bindings.AddressesOf(decorated.ID)
@@ -3262,9 +3264,9 @@ func (d *Daemon) remoteSessionsForBroadcast() []protocol.Session {
 		return nil
 	}
 	sessions := d.hubManager.RemoteSessions()
-	chiefs := d.profileChiefs()
+	chiefs := d.chiefSessions()
 	for i := range sessions {
-		d.decorateChiefOfStaff(&sessions[i], chiefs)
+		d.decorateChief(&sessions[i], chiefs)
 	}
 	return sessions
 }

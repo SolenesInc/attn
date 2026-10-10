@@ -24,8 +24,8 @@ function localSession(id: string, state: Session['state']): Session {
 describe('useAppSessions Notebook chief status', () => {
   it("follows the selected profile's chief, not whichever chief comes first", () => {
     const daemonSessions = [
-      { id: 'home-chief', chief_of_staff: true, profile_id: 'profile-home', state: 'working' },
-      { id: 'work-chief', chief_of_staff: true, profile_id: 'profile-work', state: 'idle' },
+      { id: 'home-chief', chief: true, profile_id: 'profile-home', state: 'working' },
+      { id: 'work-chief', chief: true, profile_id: 'profile-work', state: 'idle' },
     ] as AppContentProps['daemonSessions'];
     const render = () => renderHook(() => useAppSessions({
       daemonEndpoints: [],

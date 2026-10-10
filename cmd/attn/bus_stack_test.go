@@ -82,6 +82,15 @@ func TestTheBusCommandsReportAndTrimTheLogTheDaemonWrote(t *testing.T) {
 	if r := s.Attn("bus", "disable", "garden-seed-bells"); r.Code != 0 {
 		t.Fatalf("attn bus disable garden-seed-bells exited %d: %s", r.Code, r.Stderr)
 	}
+	documentEvents := func(log busLog) int {
+		for _, producer := range log.Producers {
+			if producer.Name == "document.changed" {
+				return producer.Events
+			}
+		}
+		return 0
+	}
+	setupEvents := documentEvents(readBusLog(t, s))
 	cli := s.Client()
 	if _, err := cli.DocDefine(protocol.DocumentCollectionSchema{Namespace: "test/history", Collection: "requests"}); err != nil {
 		t.Fatal(err)
@@ -97,14 +106,7 @@ func TestTheBusCommandsReportAndTrimTheLogTheDaemonWrote(t *testing.T) {
 	if before.Rows == 0 || before.Bytes == 0 || before.OldestAt == "" || before.OldestAt > before.NewestAt {
 		t.Fatalf("bus status after document writes = %+v", before)
 	}
-	if changed := func() int {
-		for _, producer := range before.Producers {
-			if producer.Name == "document.changed" {
-				return producer.Events
-			}
-		}
-		return 0
-	}(); changed != 2 {
+	if changed := documentEvents(before) - setupEvents; changed != 2 {
 		t.Errorf("document.changed events = %d, want two writes", changed)
 	}
 	foundDisabled := false

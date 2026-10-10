@@ -13,7 +13,6 @@ import {
   useAppPanelsContext,
   useAppShell,
   useAttentionQueueContext,
-  useChiefOfStaffContext,
   useCrewPanelContext,
   useDesktopNavigationContext,
   useDesktopResidencyContext,
@@ -62,7 +61,6 @@ export function AppSidebar() {
   const { handleOpenPalette, sidebarSurface, windowCovered, agentFocused } = useAppShell();
   const { keybindings } = useAppAppearanceContext();
   const { criticalNotifications, settings } = useAppInputs();
-  const { handleChangeChiefOfStaff } = useChiefOfStaffContext();
   const allCrew = useDaemonStore((state) => state.crew);
   const profileName = useProfilesStore(
     (state) => state.profiles.find((profile) => profile.id === state.selectedProfileId)?.name,
@@ -123,7 +121,6 @@ export function AppSidebar() {
         })
       }
       onTogglePriority={togglePriority}
-      onChangeChiefOfStaff={handleChangeChiefOfStaff}
       crew={crew}
       onWakeCrewMember={handleWakeCrewMember}
       onSleepCrewMember={handleSleepCrewMember}

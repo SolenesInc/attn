@@ -12,6 +12,8 @@ import {
   defaultAppPathForInstance,
   defaultWSURLForInstance,
   instanceForAppPath,
+  instanceCliEnv,
+  resolveHarnessResources,
 } from './harnessInstance.mjs';
 
 export const DEFAULT_REMOTE_SSH_TARGET =
@@ -175,14 +177,13 @@ export async function sweepStaleHarnessSessions(observer, {
 
   const staleIds = new Set(stale.map((session) => session.id));
 
-  // The daemon refuses to unregister a chief-of-staff session, so demote first;
-  // demoting a non-chief is a no-op.
+  const instance = currentHarnessInstance();
+  const resources = resolveHarnessResources(instance);
   for (const id of staleIds) {
-    try {
-      observer.send({ cmd: 'set_chief_of_staff', session_id: id, chief_of_staff: false });
-    } catch (error) {
-      log(`demote (set_chief_of_staff) for ${id} failed: ${error instanceof Error ? error.message : String(error)}`);
-    }
+    if (!observer.sessionsById.get(id)?.crew_member) continue;
+    execFileSync(resources.appDaemon, ['handoff', '--session', id, '--sleep', '-m', 'The prior harness scenario is over.'], {
+      encoding: 'utf8', env: { ...instanceCliEnv(instance), ATTN_WRAPPER_PATH: resources.appDaemon },
+    });
   }
 
   await observer.unregisterMatchingSessions((session) => staleIds.has(session.id), timeoutMs);

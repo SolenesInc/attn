@@ -166,7 +166,7 @@ func TestAgentCloseLetsTheChiefCloseASessionOnAnotherEndpoint(t *testing.T) {
 	if !resp.Ok || resp.AgentCloseResult == nil {
 		t.Fatalf("close refused with %s, want the chief's authority to cross the endpoint", agentCloseFailure(resp))
 	}
-	if rule := resp.AgentCloseResult.Rule; rule != protocol.AgentCloseRuleChiefOfStaff {
+	if rule := resp.AgentCloseResult.Rule; rule != protocol.AgentCloseRuleChief {
 		t.Errorf("rule = %q, want chief_of_staff", rule)
 	}
 }
@@ -186,8 +186,12 @@ func TestAgentCloseWritesItsReceiptInTheOwningDaemonsLedger(t *testing.T) {
 		t.Fatalf("close refused with %s, want the close to cross to the outpost", agentCloseFailure(resp))
 	}
 	entry := closedEntry(t, outpost, "remote-delegate")
-	if by := protocol.Deref(entry.ClosedBy).Ref; by != "session:orchestrator" {
-		t.Errorf("remote closed_by = %q, want the dispatcher that authorized it", by)
+	chief, err := d.chief(defaultProfileID(t, d.store))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if by := protocol.Deref(entry.ClosedBy).Ref; by != protocol.ActorRef("member:"+chief.String()) {
+		t.Errorf("remote closed_by = %q, want the Chief member that authorized it", by)
 	}
 	if got := protocol.Deref(entry.CloseReason); got != reason {
 		t.Errorf("remote close_reason = %q, want %q", got, reason)

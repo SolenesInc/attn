@@ -6,7 +6,7 @@ Your time here ends by consent: a letter you finish, never a signal that stops y
 attn handoff -m "<your letter>"    # or -m - to pipe it in
 ```
 
-Plain `attn handoff` is presence-decided day turnover. While the user is at the machine, a successor wakes immediately; while the user is away, the member sleeps. When the user asks you to sleep, file with `attn handoff --sleep`: nobody wakes behind it. Use `attn handoff --nap` when you explicitly want a successor regardless of presence.
+Plain `attn handoff` starts a successor while the user is at the machine, and puts an ordinary member to sleep while the user is away. For the Chief, it always starts a successor. When the user asks you to sleep, file with `attn handoff --sleep`: nobody wakes behind it. Use `attn handoff --nap` when you explicitly want a successor regardless of presence.
 
 Filing is the turning of the page: the letter lands in `{{handoffs_dirname}}/`, untouched and append-only, this session closes, and whatever day comes next begins from it. So file it last, when everything you meant to settle is settled. (This letter is yours to your successor; a seed's handoff note belongs to the seed, for whoever tends it next.)
 

@@ -513,14 +513,17 @@ func (d *Daemon) sendCrewError(conn net.Conn, verb string, err error) {
 func (d *Daemon) crewMemberWire(member crew.Member, revision int64) protocol.CrewMember {
 	identity, _ := d.store.CrewIdentity(member.Key)
 	wire := protocol.CrewMember{
-		Retired:       identity.Retired,
-		Key:           member.Key.String(),
-		Name:          d.memberName(member.Key),
-		ProfileID:     d.crewProfileID(member.Key.String()),
-		Revision:      int(revision),
-		CharterPath:   member.CharterPath,
-		HomeDir:       member.HomeDir,
-		ResolvedAgent: member.LaunchAgent(),
+		Retired:     identity.Retired,
+		Key:         member.Key.String(),
+		Name:        d.memberName(member.Key),
+		ProfileID:   d.crewProfileID(member.Key.String()),
+		Revision:    int(revision),
+		CharterPath: member.CharterPath,
+		HomeDir:     member.HomeDir,
+		Chief:       d.isChief(member.Key),
+	}
+	if !wire.Chief || member.Agent != "" {
+		wire.ResolvedAgent = protocol.Ptr(member.LaunchAgent())
 	}
 	if item, err := d.store.LaunchDesktopItem("crew", member.Key.String()); err == nil {
 		setting := protocolLaunchItem(item).Setting
@@ -541,10 +544,10 @@ func (d *Daemon) crewMemberWire(member crew.Member, revision int64) protocol.Cre
 	if member.Effort != "" {
 		wire.Effort = protocol.Ptr(member.Effort)
 	}
-	if model := d.crewWakeModel(member, member.LaunchAgent()); model != nil {
+	if model := d.crewWakeModel(member, member.LaunchAgent()); wire.ResolvedAgent != nil && model != nil {
 		wire.ResolvedModel = model
 	}
-	if effort := d.crewWakeEffort(member, member.LaunchAgent()); effort != nil {
+	if effort := d.crewWakeEffort(member, member.LaunchAgent()); wire.ResolvedAgent != nil && effort != nil {
 		wire.ResolvedEffort = effort
 	}
 	wire.AwarenessDirs = append([]string{}, member.AwarenessDirs...)

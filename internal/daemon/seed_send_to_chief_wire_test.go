@@ -4,16 +4,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
 func TestSendingASeedToTheChiefHandsItOverUnlessItChanged(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
-		registerSessions(t, w, cli, "chief", "sender", "observer")
-		if made := setChiefOfStaff(app, "chief", true); !made.Success {
-			t.Fatalf("making chief the Chief: %s", protocol.Deref(made.Error))
-		}
+		registerSessions(t, w, cli, "sender", "observer")
+		chief := configureChiefOn(t, w, app, fakeagent.Claude, "sonnet")
+		w.bootBubbleClaude(t, chief)
 		seed := plantSeedAs(t, cli, "sender", "Place this work")
 		tended := lifeMove(t, cli, "sender", seed, "tend", "", "")
 		// Drain the setup move before its late bell can reach the next tender or new watchers.
@@ -36,11 +36,11 @@ func TestSendingASeedToTheChiefHandsItOverUnlessItChanged(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if protocol.Deref(sent.Chief.SessionID) != "chief" || protocol.Deref(protocol.Deref(sent.Seed.Tender).SessionID) != "chief" {
+		if protocol.Deref(sent.Chief.SessionID) != protocol.SessionID(chief) || protocol.Deref(protocol.Deref(sent.Seed.Tender).SessionID) != protocol.SessionID(chief) {
 			t.Errorf("sending to the Chief answered %+v, want the chief tending it", sent)
 		}
 		shown := lifeShow(t, cli, seed)
-		if got := shown.Seed; protocol.Deref(protocol.Deref(got.Tender).SessionID) != "chief" || protocol.Deref(got.LastExecutionID) != protocol.Deref(tended.LastExecutionID) {
+		if got := shown.Seed; protocol.Deref(protocol.Deref(got.Tender).SessionID) != protocol.SessionID(chief) || protocol.Deref(got.LastExecutionID) != protocol.Deref(tended.LastExecutionID) {
 			t.Errorf("after the send the seed is tended by %q in execution %q, want chief in %q",
 				protocol.Deref(protocol.Deref(got.Tender).SessionID), protocol.Deref(got.LastExecutionID), protocol.Deref(tended.LastExecutionID))
 		}
@@ -55,32 +55,8 @@ func TestSendingASeedToTheChiefHandsItOverUnlessItChanged(t *testing.T) {
 		if bells := readInbox(t, cli, "sender", 0).Items; len(bells) != 0 {
 			t.Errorf("the sender received %q, want no bell for its own move", inboxContents(bells))
 		}
-		if items := readInbox(t, cli, "chief", 0).Items; len(items) != 1 || protocol.Deref(items[0].Hint) == "tended" || !strings.Contains(items[0].Content, "attn seed show "+seed) {
+		if items := readInbox(t, cli, chief, 0).Items; len(items) != 1 || protocol.Deref(items[0].Hint) == "tended" || !strings.Contains(items[0].Content, "attn seed show "+seed) {
 			t.Errorf("the chief received %q, want only the assignment pointing at %s and no tended bell", inboxContents(items), seed)
 		}
-	})
-}
-
-func TestAChiefSeedAssignmentStaysWithItsTenderWhenTheChiefRoleTransfers(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		app, cli := w.App(), w.Client()
-		registerSessions(t, w, cli, "chief", "sender", "next-chief")
-		if result := setChiefOfStaff(app, "chief", true); !result.Success {
-			t.Fatal(protocol.Deref(result.Error))
-		}
-		seed := plantSeedAs(t, cli, "sender", "place this work")
-		if _, err := cli.SeedSendToChief("sender", lifeShow(t, cli, seed).Seed, ""); err != nil {
-			t.Fatal(err)
-		}
-		if result := setChiefOfStaff(app, "next-chief", true); !result.Success {
-			t.Fatal(protocol.Deref(result.Error))
-		}
-		if items := readInbox(t, cli, "next-chief", 0).Items; len(items) != 0 {
-			t.Fatalf("new Chief received another session's assignment: %+v", items)
-		}
-		items := readInbox(t, cli, "chief", 0).Items
-		if len(items) != 1 || items[0].Address != protocol.AddressRef("seed:"+seed) || !strings.Contains(items[0].Content, "attn seed show "+seed) {
-			t.Fatalf("actual tender assignment=%+v", items)
-		}
-	})
+	}, fakeagent.Claude)
 }

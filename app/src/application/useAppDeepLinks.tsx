@@ -12,7 +12,7 @@ interface Options {
     agent?: SessionAgent,
     endpointId?: string,
     yoloMode?: boolean,
-    options?: { chiefOfStaff?: boolean; autoMode?: boolean },
+    options?: { autoMode?: boolean },
   ) => Promise<string>;
 }
 export function useAppDeepLinks({

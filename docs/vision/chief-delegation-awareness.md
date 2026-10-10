@@ -23,9 +23,11 @@ ring tells the agent to read `attn agent inbox`; item bodies stay in the durable
 inbox. Reading marks delivery and records which session read the item.
 
 The Chief can inspect sessions and message agents directly while continuing to
-use seed notes for durable context. Its notebook notices use the Chief role
-address, so an item can wait for a future Chief. A seed explicitly sent to the
-Chief still reports when no Chief is available.
+use seed notes for durable context. Notebook notices reach the Chief
+member across sessions. Every profile has one Chief; mail waits while they are
+unconfigured and wakes them once a harness and model are chosen. The alias
+`chief` still reaches them after a rename. A seed sent to the Chief stays theirs
+through `/clear`, naps and sleeps.
 
 This loop makes the Chief a place the user can return to for the whole picture,
 without making it a gatekeeper for conversations with other agents.

@@ -12,10 +12,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/rankkey"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type LeafMove struct {
@@ -103,11 +105,11 @@ func (s *Store) profilesTxSeq(fn func(tx *sql.Tx, now string) error) (int64, err
 	return seq, nil
 }
 
-const profileColumns = `id, name, current_desktop_id, last_used_at, revision, deleted_at, chief_session_id`
+const profileColumns = `id, name, current_desktop_id, last_used_at, revision, deleted_at, chief_member`
 
 func scanProfile(row rowScanner) (profiles.Profile, error) {
 	var profile profiles.Profile
-	err := row.Scan(&profile.ID, &profile.Name, &profile.CurrentDesktopID, &profile.LastUsedAt, &profile.Revision, &profile.DeletedAt, &profile.ChiefSessionID)
+	err := row.Scan(&profile.ID, &profile.Name, &profile.CurrentDesktopID, &profile.LastUsedAt, &profile.Revision, &profile.DeletedAt, &profile.Chief)
 	return profile, err
 }
 
@@ -372,15 +374,18 @@ func (s *Store) CreateProfile(name, notebookRoot string) (profiles.Profile, prof
 		if err := ensureLiveProfileNameFree(tx, trimmed, ""); err != nil {
 			return err
 		}
-		profile = profiles.Profile{ID: newProfileEntityID("profile"), Name: trimmed, Revision: 1}
+		profile = profiles.Profile{ID: newProfileEntityID("profile"), Name: trimmed, Revision: 1, Chief: who.MintMemberKey()}
 		if desktop, err = insertDesktop(tx, now, profile.ID, "", profiles.FirstShortcutSlot); err != nil {
 			return err
 		}
 		profile.CurrentDesktopID = desktop.ID
 		_, err = tx.Exec(`
-			INSERT INTO profiles (id, name, current_desktop_id, last_used_at, revision, created_at, deleted_at)
-			VALUES (?, ?, ?, '', 1, ?, '')`, profile.ID, profile.Name, profile.CurrentDesktopID, now)
+			INSERT INTO profiles (id, name, current_desktop_id, last_used_at, revision, created_at, deleted_at, chief_member)
+			VALUES (?, ?, ?, '', 1, ?, '', ?)`, profile.ID, profile.Name, profile.CurrentDesktopID, now, profile.Chief)
 		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`INSERT INTO crew_members(member_key,profile_id,name) VALUES(?,?,?)`, profile.Chief, profile.ID, crew.ChiefName); err != nil {
 			return err
 		}
 		_, err = tx.Exec(`INSERT INTO profile_settings (profile_id, key, value) VALUES (?, 'notebook.root', ?)`, profile.ID, notebookRoot)
@@ -579,86 +584,46 @@ func (s *Store) DeleteProfile(id string, expectedRevision int64, remoteLiveSessi
 			return err
 		}
 		profile.CurrentDesktopID = ""
-		profile.ChiefSessionID = ""
 		profile.DeletedAt = now
 		profile.Revision++
-		_, err = tx.Exec(`UPDATE profiles SET current_desktop_id = '', chief_session_id = '', deleted_at = ?, revision = ? WHERE id = ?`, now, profile.Revision, id)
+		_, err = tx.Exec(`UPDATE profiles SET current_desktop_id = '', deleted_at = ?, revision = ? WHERE id = ?`, now, profile.Revision, id)
 		return err
 	})
 	return profile, err
 }
 
-func (s *Store) SetProfileChief(sessionID protocol.SessionID) (profiles.Profile, protocol.SessionID, error) {
-	var profile profiles.Profile
-	var previous protocol.SessionID
-	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
-		var profileID string
-		err := tx.QueryRow(`SELECT profile_id FROM sessions WHERE id = ? AND closed_at = ''`, sessionID).Scan(&profileID)
-		if errors.Is(err, sql.ErrNoRows) {
-			return profiles.Errorf(profiles.CodeNotFound, "session %s is not a live agent", sessionID)
-		}
-		if err != nil {
-			return err
-		}
-		if profile, err = loadLiveProfile(tx, profileID); err != nil {
-			return err
-		}
-		previous = profile.ChiefSessionID
-		profile.ChiefSessionID = sessionID
-		_, err = tx.Exec(`UPDATE profiles SET chief_session_id = ? WHERE id = ?`, sessionID, profile.ID)
-		return err
-	})
-	return profile, previous, err
+func (s *Store) ProfileChief(profileID string) (who.MemberKey, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var key who.MemberKey
+	if s.db == nil {
+		return key, profiles.Errorf(profiles.CodeUnavailable, "profiles need the SQLite store")
+	}
+	err := s.db.QueryRow("SELECT chief_member FROM profiles WHERE id = ? AND deleted_at = ''", profileID).Scan(&key)
+	return key, err
 }
 
-func (s *Store) ClaimProfileChief(profileID string, sessionID protocol.SessionID) (bool, error) {
-	claimed := false
-	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
-		result, err := tx.Exec(`UPDATE profiles SET chief_session_id = ? WHERE id = ? AND chief_session_id = '' AND deleted_at = ''`, sessionID, profileID)
-		if err != nil {
-			return err
+func (s *Store) ProfileChiefs() (map[string]who.MemberKey, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	chiefs := map[string]who.MemberKey{}
+	if s.db == nil {
+		return chiefs, nil
+	}
+	rows, err := s.db.Query("SELECT id,chief_member FROM profiles WHERE deleted_at = ''")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var profile string
+		var key who.MemberKey
+		if err := rows.Scan(&profile, &key); err != nil {
+			return nil, err
 		}
-		affected, err := result.RowsAffected()
-		claimed = affected == 1
-		return err
-	})
-	return claimed, err
-}
-
-func (s *Store) ClearProfileChief(sessionID protocol.SessionID) (string, error) {
-	var profileID string
-	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
-		found, err := rowFound(tx.QueryRow(`SELECT id FROM profiles WHERE chief_session_id = ? AND deleted_at = ''`, sessionID), &profileID)
-		if err != nil || !found {
-			return err
-		}
-		_, err = tx.Exec(`UPDATE profiles SET chief_session_id = '' WHERE id = ?`, profileID)
-		return err
-	})
-	return profileID, err
-}
-
-func (s *Store) ProfileChiefs() (map[string]protocol.SessionID, error) {
-	chiefs := map[string]protocol.SessionID{}
-	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
-		rows, err := tx.Query(`SELECT id, chief_session_id FROM profiles WHERE deleted_at = '' AND chief_session_id != ''`)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var (
-				profileID string
-				sessionID protocol.SessionID
-			)
-			if err := rows.Scan(&profileID, &sessionID); err != nil {
-				return err
-			}
-			chiefs[profileID] = sessionID
-		}
-		return rows.Err()
-	})
-	return chiefs, err
+		chiefs[profile] = key
+	}
+	return chiefs, rows.Err()
 }
 
 func (s *Store) OldestProfile() (profiles.Profile, error) {

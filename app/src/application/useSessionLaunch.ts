@@ -105,7 +105,6 @@ export function useSessionLaunch({
       endpointId?: string;
       yoloMode?: boolean;
       autoMode?: boolean;
-      chiefOfStaff?: boolean;
       direction: TerminalSplitDirection;
       anchorPaneId?: string;
       spawnedFrom?: string;
@@ -127,7 +126,6 @@ export function useSessionLaunch({
           spawn.agent,
           spawn.endpointId,
           spawn.agent === 'shell' ? false : spawn.yoloMode,
-          spawn.chiefOfStaff,
           spawn.agent === 'shell' ? undefined : spawn.autoMode,
         );
         const spawnArgs = takeSessionSpawnArgs(spawn.sessionId, 80, 24);
@@ -163,7 +161,7 @@ export function useSessionLaunch({
       agent: SessionAgent = 'claude',
       endpointId?: string,
       yoloMode = false,
-      options?: { chiefOfStaff?: boolean; autoMode?: boolean; desktopId?: string },
+      options?: { autoMode?: boolean; desktopId?: string },
     ) =>
       spawnOnCurrentDesktop({
         sessionId: providedSessionId || crypto.randomUUID(),
@@ -173,7 +171,6 @@ export function useSessionLaunch({
         endpointId,
         yoloMode,
         autoMode: options?.autoMode,
-        chiefOfStaff: options?.chiefOfStaff,
         direction: 'vertical',
         desktopId: options?.desktopId,
       }),
@@ -231,39 +228,23 @@ export function useSessionLaunch({
   );
 
   const launchPicked = useCallback(
-    async (pick: {
+    (pick: {
       label: string;
       cwd: string;
       agent: SessionAgent;
       endpointId?: string;
       yoloMode: boolean;
       autoMode?: boolean;
-      chiefOfStaff: boolean;
       desktopId?: string;
-    }): Promise<string | null> => {
-      if (!pick.chiefOfStaff) {
-        await createSplitSession(pick.agent, locationPickerSessionDirection.current, undefined, {
-          cwd: pick.cwd,
-          endpointId: pick.endpointId ?? null,
-          label: pick.label,
-          yoloMode: pick.yoloMode,
-          autoMode: pick.autoMode,
-          desktopId: pick.desktopId,
-        });
-        return null;
-      }
-      const sessionId = await launchAgent(
-        pick.label,
-        pick.cwd,
-        undefined,
-        pick.agent,
-        pick.endpointId,
-        pick.yoloMode,
-        { chiefOfStaff: true, autoMode: pick.autoMode, desktopId: pick.desktopId },
-      );
-      return sessionId;
-    },
-    [createSplitSession, launchAgent],
+    }) => createSplitSession(pick.agent, locationPickerSessionDirection.current, undefined, {
+      cwd: pick.cwd,
+      endpointId: pick.endpointId ?? null,
+      label: pick.label,
+      yoloMode: pick.yoloMode,
+      autoMode: pick.autoMode,
+      desktopId: pick.desktopId,
+    }),
+    [createSplitSession],
   );
 
   const launchLocation = useCallback(
@@ -272,12 +253,9 @@ export function useSessionLaunch({
       agent: SessionAgent,
       endpointId?: string,
       yoloMode = false,
-      chiefOfStaff = false,
       autoMode?: boolean,
       desktopId?: string,
     ) => {
-      const jobId = sessionCreationJobIdRef.current + 1;
-      sessionCreationJobIdRef.current = jobId;
       let selectedAgent: SessionAgent;
       if (endpointId) {
         const endpoint = daemonEndpoints.find((entry) => entry.id === endpointId);
@@ -305,28 +283,7 @@ export function useSessionLaunch({
             : resolvePreferredAgent(agent, agentAvailability, 'codex');
       }
       const folderName = path.split('/').pop() || 'session';
-      const pick = { label: folderName, cwd: path, agent: selectedAgent, endpointId, yoloMode, autoMode, chiefOfStaff, desktopId };
-      if (!chiefOfStaff) {
-        await launchPicked(pick);
-        return;
-      }
-      setSessionCreationJob({
-        id: jobId,
-        label: folderName,
-        path,
-        phase: 'starting_session',
-        error: null,
-      });
-      try {
-        await launchPicked(pick);
-        setSessionCreationJob((current) => (current?.id === jobId ? null : current));
-      } catch (err) {
-        setSessionCreationJob((current) =>
-          current?.id === jobId
-            ? { ...current, error: err instanceof Error ? err.message : 'Failed to create session' }
-            : current,
-        );
-      }
+      await launchPicked({ label: folderName, cwd: path, agent: selectedAgent, endpointId, yoloMode, autoMode, desktopId });
     },
     [agentAvailability, daemonEndpoints, hasAvailableAgents, launchPicked, showError],
   );
@@ -352,7 +309,6 @@ export function useSessionLaunch({
       agent: SessionAgent,
       yoloMode: boolean,
       autoMode?: boolean,
-      chiefOfStaff = false,
       pickedOnDesktopId?: string,
     ) => {
       let desktopId: string;
@@ -404,7 +360,6 @@ export function useSessionLaunch({
             endpointId,
             yoloMode,
             autoMode,
-            chiefOfStaff,
             desktopId,
           });
           setSessionCreationJob((current) => (current?.id === jobId ? null : current));

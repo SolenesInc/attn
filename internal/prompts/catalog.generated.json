@@ -1507,6 +1507,63 @@
       "description": "Chief",
       "events": [
         {
+          "id": "charter",
+          "delivery": "document",
+          "description": "Built-in charter written to a new chief's home.",
+          "body": {
+            "kind": "text",
+            "id": "chief.charter",
+            "source": "content/chief/charter.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "handover",
+          "delivery": "user_message",
+          "description": "Upgrade notice queued in the new chief's inbox.",
+          "body": {
+            "kind": "text",
+            "id": "chief.handover",
+            "source": "content/chief/handover.md",
+            "bindings": [
+              {
+                "name": "previous_session",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "previous_session",
+                    "kind": "text",
+                    "description": "Previous chief session"
+                  }
+                }
+              },
+              {
+                "name": "tended",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "tended",
+                    "kind": "text",
+                    "description": "Seeds claimed by the previous chief"
+                  }
+                }
+              },
+              {
+                "name": "watched",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "watched",
+                    "kind": "text",
+                    "description": "Seeds watched by the previous chief"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
           "id": "seed-assignment",
           "delivery": "user_message",
           "description": "User assigned a seed to the chief to choose its working context.",
@@ -4906,5 +4963,5 @@
       ]
     }
   ],
-  "definitions_hash": "7733a007cb1c492fdb1fc8088496e3058c0e2ed7025d8c4222c71a941ba25c4f"
+  "definitions_hash": "bb2eb07335f77d568a7e4344b7c2b88609f151537a85eb5011a64c566e6c7ef6"
 }

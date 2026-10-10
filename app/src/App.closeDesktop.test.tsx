@@ -62,7 +62,7 @@ describe('close desktop', () => {
     expect(daemon.sentOf('desktop_close')).toEqual([expect.objectContaining({ desktop_id: 'work', expected_revision: 1 })]);
   });
 
-  it.each([{ chief_of_staff: true }, { crew_member: 'alder' }])('names protected sessions and sends nothing', async (protection) => {
+  it.each([{ chief: true }, { crew_member: 'alder' }])('names protected sessions and sends nothing', async (protection) => {
     const { daemon } = await renderApp({ initialState: {
       settings: { queue_mode_enabled: false },
       sessions: [daemonSession('s1', { label: 'Coordinator', ...protection })],

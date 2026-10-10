@@ -2,10 +2,11 @@ package daemon
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/sessioncost"
-	"strings"
 )
 
 const (
@@ -46,8 +47,6 @@ const (
 	settingNewSessionDestinationPrefix   daemonSettingKey  = "new_session_destination_"
 	DestinationNewWorktree                                 = "new_worktree"
 	DestinationMainRepo                                    = "main_repo"
-	settingChiefModelPrefix              daemonSettingKey  = "chief_model_"
-	settingChiefEffortPrefix             daemonSettingKey  = "chief_effort_"
 	settingDefaultModelPrefix            daemonSettingKey  = "default_model_"
 	settingDefaultEffortPrefix           daemonSettingKey  = "default_effort_"
 	settingNotebookRoot                  profileSettingKey = "notebook.root"
@@ -67,7 +66,6 @@ const (
 	settingCrewAwaySeconds               daemonSettingKey  = "crew.away_seconds"
 	settingCrewWakeLimit                 daemonSettingKey  = "crew.wake_limit"
 	settingCrewWakeLimitWindowSeconds    daemonSettingKey  = "crew.wake_limit_window_seconds"
-	settingChiefContextWindowCap         daemonSettingKey  = "chief_context_window_cap"
 	settingHeadlessContextWindowCap      daemonSettingKey  = "headless_context_window_cap"
 	settingDefaultContextWindowCapPrefix daemonSettingKey  = "default_context_window_cap_"
 	settingHeadlessTasksEnabled          daemonSettingKey  = headless.SettingKey
@@ -175,9 +173,6 @@ var settingSpecs = []settingSpec{
 	{key: string(settingAutoSettleCountdownSeconds), scope: daemonScope, description: "Automatic settlement countdown, in seconds. Empty uses the default countdown.", validate: func(d *Daemon, key, value string) error {
 		return validateAutoSettleSeconds("auto-settle countdown", value, autoSettleCountdownMinSeconds, autoSettleCountdownMaxSeconds)
 	}},
-	{key: string(settingChiefContextWindowCap), scope: daemonScope, description: "Chief context budget in tokens, from 10000 to 2000000. Empty uses the default budget.", validate: func(d *Daemon, key, value string) error {
-		return validateContextWindowCap(value)
-	}},
 	{key: string(settingHeadlessContextWindowCap), scope: daemonScope, description: "Background model context budget in tokens, from 10000 to 2000000. Empty uses the default budget.", validate: func(d *Daemon, key, value string) error {
 		return validateContextWindowCap(value)
 	}},
@@ -235,8 +230,6 @@ var settingSpecs = []settingSpec{
 	{key: "<harness>_executable", scope: daemonScope, description: "Executable for this harness. Empty finds the default executable on PATH.", validate: func(d *Daemon, key, value string) error { return validateExecutableSetting(value) }},
 	{key: "new_session_yolo_<harness>", scope: daemonScope, description: "Start this harness with approval bypass: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: "new_session_destination_<harness>", scope: daemonScope, description: "New sessions start in new_worktree or main_repo. Empty uses the default destination.", validate: func(d *Daemon, key, value string) error { return validateNewSessionDestination(value) }},
-	{key: "chief_model_<harness>", scope: daemonScope, description: "Chief model. Empty uses the default deep-tier model.", validate: func(d *Daemon, key, value string) error { return nil }},
-	{key: "chief_effort_<harness>", scope: daemonScope, description: "Chief reasoning effort. Empty uses the harness default.", validate: func(d *Daemon, key, value string) error { return nil }},
 	{key: "default_model_<harness>", scope: daemonScope, description: "Model for new sessions. Empty uses the harness default.", validate: func(d *Daemon, key, value string) error { return nil }},
 	{key: "default_effort_<harness>", scope: daemonScope, description: "Reasoning effort for new sessions. Empty uses the harness default.", validate: func(d *Daemon, key, value string) error { return nil }},
 	{key: "default_context_window_cap_<harness>", scope: daemonScope, description: "Context budget for new sessions, from 10000 to 2000000 tokens. Empty uses the harness default.", validate: func(d *Daemon, key, value string) error { return validateContextWindowCap(value) }},

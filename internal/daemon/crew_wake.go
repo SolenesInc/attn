@@ -29,6 +29,12 @@ const crewWakeAgent = crew.DefaultAgent
 const crewWakeFallbackModel = "fable"
 
 func (d *Daemon) crewWakeModel(member crew.Member, agent string) *string {
+	if d.isChief(member.Key) && strings.EqualFold(strings.TrimSpace(agent), member.LaunchAgent()) {
+		if member.Model == "" {
+			return nil
+		}
+		return protocol.Ptr(member.Model)
+	}
 	if strings.EqualFold(strings.TrimSpace(agent), member.LaunchAgent()) {
 		if model := strings.TrimSpace(member.Model); model != "" {
 			return protocol.Ptr(model)
@@ -44,6 +50,12 @@ func (d *Daemon) crewWakeModel(member crew.Member, agent string) *string {
 }
 
 func (d *Daemon) crewWakeEffort(member crew.Member, agent string) *string {
+	if d.isChief(member.Key) && strings.EqualFold(strings.TrimSpace(agent), member.LaunchAgent()) {
+		if member.Effort == "" {
+			return nil
+		}
+		return protocol.Ptr(member.Effort)
+	}
 	if strings.EqualFold(strings.TrimSpace(agent), member.LaunchAgent()) {
 		if effort := strings.TrimSpace(member.Effort); effort != "" {
 			return protocol.Ptr(effort)
@@ -299,6 +311,9 @@ func (d *Daemon) crewWakeDayWithChargeLocked(key who.MemberKey, agent string, au
 	if err != nil {
 		return nil, err
 	}
+	if d.isChief(key) && member.Agent == "" {
+		return nil, fmt.Errorf("the Chief has no harness yet; pick one: attn crew set chief --agent <harness> --model <model>")
+	}
 	releasedSessionID := protocol.SessionID(d.takeCrewExitedSession(member.Key.String()))
 	if boundSessionID := protocol.TrimID(member.BindingSession); boundSessionID != "" {
 		live, err := d.crewSessionActuallyLive(boundSessionID)
@@ -334,6 +349,9 @@ func (d *Daemon) crewWakeDayWithChargeLocked(key who.MemberKey, agent string, au
 	}
 	if agent == "" {
 		agent = member.LaunchAgent()
+	}
+	if d.isChief(key) && !d.agentSupportsChiefGuidance(agent) {
+		return nil, fmt.Errorf("the Chief needs a harness that takes launch instructions; %s does not", agent)
 	}
 	if !d.crewAgentAvailable(agent) {
 		return nil, fmt.Errorf("agent %q is not available", agent)
@@ -493,7 +511,7 @@ func (d *Daemon) handleCrewSet(conn net.Conn, msg *protocol.CrewSetMessage) {
 		d.sendCrewError(conn, "set", errors.New("the member changed after it was read; reconcile the returned revision and retry"))
 		return
 	}
-	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewSetResult: &protocol.CrewSetResult{Member: *member}})
+	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewSetResult: member})
 }
 
 func (d *Daemon) handleCrewSetWS(client *wsClient, msg *protocol.CrewSetMessage) {
@@ -514,7 +532,12 @@ func (d *Daemon) handleCrewSetWS(client *wsClient, msg *protocol.CrewSetMessage)
 	member, conflict, err := d.crewSet(identity.Key, msg)
 	result := protocol.CrewSetResultMessage{
 		Event: protocol.EventCrewSetResult, RequestID: protocol.Deref(msg.RequestID),
-		Success: err == nil && !conflict, Conflict: conflict, Member: member,
+		Success: err == nil && !conflict, Conflict: conflict,
+	}
+	if member != nil {
+		result.Member = &member.Member
+		result.WokeSessionID = member.WokeSessionID
+		result.WakeError = member.WakeError
 	}
 	if err != nil {
 		result.Error = protocol.Ptr(err.Error())
@@ -524,7 +547,9 @@ func (d *Daemon) handleCrewSetWS(client *wsClient, msg *protocol.CrewSetMessage)
 	d.sendToClient(client, result)
 }
 
-func (d *Daemon) crewSet(key who.MemberKey, msg *protocol.CrewSetMessage) (*protocol.CrewMember, bool, error) {
+func (d *Daemon) crewSet(key who.MemberKey, msg *protocol.CrewSetMessage) (*protocol.CrewSetResult, bool, error) {
+	d.crewWakeMu.Lock()
+	defer d.crewWakeMu.Unlock()
 	if err := d.requireHome(crew.Surface); err != nil {
 		return nil, false, err
 	}
@@ -532,6 +557,7 @@ func (d *Daemon) crewSet(key who.MemberKey, msg *protocol.CrewSetMessage) (*prot
 	if err != nil {
 		return nil, false, err
 	}
+	chief := d.isChief(key)
 	for {
 		member, doc, err := d.crewMember(key)
 		if err != nil {
@@ -539,7 +565,7 @@ func (d *Daemon) crewSet(key who.MemberKey, msg *protocol.CrewSetMessage) (*prot
 		}
 		if msg.ExpectedRevision != nil && int64(*msg.ExpectedRevision) != doc.Rev {
 			wire := d.crewMemberWire(member, doc.Rev)
-			return &wire, true, nil
+			return &protocol.CrewSetResult{Member: wire}, true, nil
 		}
 		setting := storeLaunchSetting(msg.LaunchDesktopSetting)
 		if msg.LaunchDesktop != nil {
@@ -549,8 +575,26 @@ func (d *Daemon) crewSet(key who.MemberKey, msg *protocol.CrewSetMessage) (*prot
 			}
 			setting = &chosen
 		}
+		before := member
+		if chief && msg.Agent != nil && strings.TrimSpace(*msg.Agent) == "" {
+			return nil, false, fmt.Errorf("the Chief needs a harness; pick one: attn crew set chief --agent <harness> --model <model>")
+		}
+		if chief {
+			agent := member.Agent
+			if msg.Agent != nil {
+				agent = strings.TrimSpace(strings.ToLower(*msg.Agent))
+			}
+			if agent != "" && !d.agentSupportsChiefGuidance(agent) {
+				return nil, false, fmt.Errorf("the Chief needs a harness that takes launch instructions; %s does not", agent)
+			}
+		}
 		if err := d.applyCrewSettings(&member, msg); err != nil {
 			return nil, false, err
+		}
+		if chief && member.Agent != "" {
+			if before.Agent == "" && member.Model == "" {
+				return nil, false, fmt.Errorf("the Chief needs a model too: attn crew set chief --agent <harness> --model <model>")
+			}
 		}
 		revision, err := d.writeCrewMemberWithLaunch(*schema, member, doc.Rev, setting)
 		if err == nil {
@@ -559,7 +603,20 @@ func (d *Daemon) crewSet(key who.MemberKey, msg *protocol.CrewSetMessage) (*prot
 				d.publishMigrationChanged(d.crewProfileID(member.Key.String()))
 			}
 			wire := d.crewMemberWire(member, revision)
-			return &wire, false, nil
+			result := &protocol.CrewSetResult{Member: wire}
+			if chief && before.Agent == "" && member.Agent != "" {
+				woke, err := d.crewWakeDayWithChargeLocked(key, "", false, nil, crewWakeRequest{UserStarted: msg.SourceSessionID == nil, RequestedBy: d.launchRequester(protocol.Deref(msg.SourceSessionID), "attn crew set")})
+				if err != nil {
+					result.WakeError = protocol.Ptr(err.Error())
+				} else {
+					result.WokeSessionID = protocol.Ptr(woke.SessionID)
+				}
+				current, doc, err := d.crewMember(key)
+				if err == nil {
+					result.Member = d.crewMemberWire(current, doc.Rev)
+				}
+			}
+			return result, false, nil
 		}
 		if !docstore.IsConflict(err) {
 			return nil, false, err
@@ -570,7 +627,7 @@ func (d *Daemon) crewSet(key who.MemberKey, msg *protocol.CrewSetMessage) (*prot
 				return nil, false, readErr
 			}
 			wire := d.crewMemberWire(current, currentDoc.Rev)
-			return &wire, true, nil
+			return &protocol.CrewSetResult{Member: wire}, true, nil
 		}
 	}
 }

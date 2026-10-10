@@ -23,7 +23,7 @@ func TestAReloadRelaunchesWithTheContextWindowCapTheSessionIsDue(t *testing.T) {
 	t.Setenv("CLAUDE_CODE_AUTO_COMPACT_WINDOW", "")
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
-	chief := w.Spawn(app, fakeagent.Claude, w.Path("chief"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
+	chief := configureChiefOn(t, w, app, fakeagent.Claude, chiefModel(fakeagent.Claude))
 	worker := w.Spawn(app, fakeagent.Claude, w.Path("worker"))
 	pinned := w.Spawn(app, fakeagent.Claude, w.Path("pinned"))
 	for _, session := range []string{chief, worker, pinned} {
@@ -35,12 +35,8 @@ func TestAReloadRelaunchesWithTheContextWindowCapTheSessionIsDue(t *testing.T) {
 		return compactWindow(w.Launched(session))
 	}
 
-	if got := reloaded(chief); got != "128000" {
-		t.Errorf("with no chief cap configured the reloaded chief runs with window %q, want the default 128000", got)
-	}
-	setSetting(t, app, "chief_context_window_cap", "160000")
-	if got := reloaded(worker); got != "" {
-		t.Errorf("with only a chief cap configured the reloaded worker runs with window %q, want none", got)
+	if got := reloaded(chief); got != "" {
+		t.Errorf("chief's default context cap=%q, want the harness default", got)
 	}
 	setSetting(t, app, "default_context_window_cap_claude", "800000")
 	pin := testworld.Request(app, protocol.SetSessionContextWindowCapMessage{Cmd: protocol.CmdSetSessionContextWindowCap, SessionID: protocol.SessionID(pinned), Cap: 300000},
@@ -48,7 +44,7 @@ func TestAReloadRelaunchesWithTheContextWindowCapTheSessionIsDue(t *testing.T) {
 	if !pin.Success {
 		t.Fatalf("pin %s to 300000: %s", pinned, protocol.Deref(pin.Error))
 	}
-	for session, want := range map[string]string{chief: "160000", worker: "800000", pinned: "300000"} {
+	for session, want := range map[string]string{chief: "800000", worker: "800000", pinned: "300000"} {
 		if got := reloaded(session); got != want {
 			t.Errorf("the reloaded %s runs with window %q, want %s", session, got, want)
 		}
