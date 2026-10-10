@@ -319,15 +319,26 @@ func (d *Daemon) partyView(p who.Party, b who.Bindings) protocol.PartyView {
 	if k, ok := p.Member(); ok {
 		v.Name = d.memberName(k)
 	} else if id, ok := p.Session(); ok {
-		v.Name = shortSessionID(id)
-		if s := d.store.Get(id); s != nil {
-			v.Name = sessionDisplayName(s)
-		}
+		v.Name = d.sessionPartyName(id)
 	}
 	if id, ok := b.SessionOf(p); ok {
 		v.SessionID = protocol.Ptr(id)
 	}
 	return v
+}
+func (d *Daemon) sessionPartyName(id protocol.SessionID) string {
+	if session := d.store.Get(id); session != nil {
+		return sessionDisplayName(session)
+	}
+	if d.hubManager != nil {
+		if session := d.hubManager.RemoteSession(id); session != nil {
+			return sessionDisplayName(session)
+		}
+	}
+	if entry := d.store.SessionLedgerEntry(id); entry != nil && strings.TrimSpace(entry.Label) != "" {
+		return entry.Label
+	}
+	return shortSessionID(id)
 }
 func (d *Daemon) actorView(a who.Actor) protocol.ActorView {
 	v := protocol.ActorView{Ref: a.Ref(), Name: a.String()}
@@ -337,10 +348,7 @@ func (d *Daemon) actorView(a who.Actor) protocol.ActorView {
 		if k, ok := p.Member(); ok {
 			v.Name = d.memberName(k)
 		} else if id, ok := p.Session(); ok {
-			v.Name = shortSessionID(id)
-			if s := d.store.Get(id); s != nil {
-				v.Name = sessionDisplayName(s)
-			}
+			v.Name = d.sessionPartyName(id)
 		}
 	}
 	return v

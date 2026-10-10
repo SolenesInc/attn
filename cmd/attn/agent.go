@@ -655,7 +655,7 @@ commands:
         the recipient gets a generic inbox notification. A target that cannot take
         input safely keeps it queued. The result says queued, notified, or refused.
         A sleeping member wakes before the notification is placed.
-        A crew session sends as its member; replies follow that member’s next session. The sender defaults to this session
+        A crew session sends as its member; replies follow that member's next session. The sender defaults to this session
         (resolved from this terminal); pass --source-session when running outside one.
         A seed id reaches its current or next tender, waiting when none is reachable.
         A message that starts with - goes after --, as: agent msg -- <target> "-text"

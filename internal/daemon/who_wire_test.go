@@ -164,3 +164,17 @@ func TestCrewHomePathFailuresDoNotEraseSessionsOrSenderIdentity(t *testing.T) {
 		t.Fatal("the relocated home passed the wake path fence")
 	}
 }
+
+func TestAClosedSessionActorKeepsItsDisplayName(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	id := w.Spawn(app, fakeagent.Claude, w.Path("actor"), func(m *protocol.SpawnSessionMessage) { m.Label = protocol.Ptr("Verifier work") })
+	w.Launched(id)
+	if _, err := cli.AgentClose(id, protocol.SessionID(id), "finished"); err != nil {
+		t.Fatal(err)
+	}
+	entry := showSession(t, cli, id)
+	if by := entry.ClosedBy; by == nil || by.Ref != protocol.ActorRef("session:"+id) || by.Name != "Verifier work" {
+		t.Fatalf("closed actor: %+v", by)
+	}
+}

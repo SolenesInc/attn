@@ -62,7 +62,11 @@ func (d *Daemon) setSetting(msg *protocol.SetSettingMessage) (*protocol.SettingE
 		}
 	}
 	if spec.scope == profileScope || protocol.Deref(msg.SourceSessionID) != "" || protocol.Deref(msg.ProfileID) != "" {
-		request, requestErr := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID)
+		bindings, bindingsErr := d.bindings()
+		if bindingsErr != nil {
+			return nil, bindingsErr
+		}
+		request, requestErr := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID, bindings)
 		if requestErr != nil {
 			if requested := protocol.Deref(msg.ProfileID); requested != "" {
 				requestErr = fmt.Errorf("settings --profile %q: %w", requested, requestErr)

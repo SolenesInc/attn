@@ -51,8 +51,13 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 	}
 	sender, _ := r.Party()
 	asking, _ := r.AskingSession()
+	address, err := d.resolveAddress(r, b, msg.To)
+	if err != nil {
+		d.replyTargetError(conn, err)
+		return
+	}
 	content := strings.TrimSpace(msg.Content)
-	result := &protocol.AgentMsgResult{Status: protocol.AgentMsgStatusRefused}
+	result := &protocol.AgentMsgResult{Status: protocol.AgentMsgStatusRefused, To: address.Ref(), ToName: d.addressName(address, b)}
 	switch {
 	case content == "":
 		result.Detail = "the message is empty; there is nothing to deliver"
@@ -66,13 +71,6 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 		return
 	}
 
-	address, err := d.resolveAddress(r, b, msg.To)
-	if err != nil {
-		d.replyTargetError(conn, err)
-		return
-	}
-	result.To = address.Ref()
-	result.ToName = d.addressName(address, b)
 	target, err := (delivery{d, b}).recipientOf(address)
 	if err != nil {
 		d.sendError(conn, err.Error())

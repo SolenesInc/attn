@@ -159,7 +159,7 @@ func TestAgentMessageRefusalsNameTheirReason(t *testing.T) {
 			{"a message to yourself", "sender", "note to self", "yourself"},
 		} {
 			refused, err := cli.AgentMsg(row.target, "sender", row.content)
-			if err != nil || refused.Status != protocol.AgentMsgStatusRefused || !strings.Contains(refused.Detail, row.want) {
+			if err != nil || refused.Status != protocol.AgentMsgStatusRefused || refused.To != protocol.AddressRef("session:"+row.target) || refused.ToName == "" || !strings.Contains(refused.Detail, row.want) {
 				t.Errorf("%s = %+v, %v; want a refusal saying %q", row.name, refused, err, row.want)
 			}
 		}
@@ -203,7 +203,7 @@ func TestTheSocketAnswersOversizeMessagesWithTheirLimits(t *testing.T) {
 	sender, target := panes[0].session, panes[1].session
 
 	refused, err := cli.AgentMsg(target, protocol.SessionID(sender), strings.Repeat("x", 32769))
-	if err != nil || refused.Status != protocol.AgentMsgStatusRefused || !strings.Contains(refused.Detail, "32769") || !strings.Contains(refused.Detail, "32768") {
+	if err != nil || refused.Status != protocol.AgentMsgStatusRefused || refused.To != protocol.AddressRef("session:"+target) || refused.ToName == "" || !strings.Contains(refused.Detail, "32769") || !strings.Contains(refused.Detail, "32768") {
 		t.Errorf("a message one character over the cap = %+v, %v; want a refusal naming 32769 and 32768", refused, err)
 	}
 	if got := readInbox(t, cli, target, 0).Items; len(got) != 0 {

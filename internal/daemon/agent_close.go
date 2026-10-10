@@ -31,7 +31,7 @@ func (d *Daemon) handleAgentClose(conn net.Conn, msg *protocol.AgentCloseMessage
 	asking, _ := r.AskingSession()
 	caller, code := d.resolveSessionByIDOrPrefix(string(asking), r.ProfileID())
 	if caller == nil {
-		d.replyAgentMsgError(conn, "sender_"+code, "the caller’s session has ended")
+		d.replyAgentMsgError(conn, "sender_"+code, "the caller's session has ended")
 		return
 	}
 

@@ -198,8 +198,9 @@ async function main() {
     await runner.step('the_ledger_names_the_closer_and_the_reason', async () => {
       const shown = cli(daemonBinary, instance, 'session', 'show', delegate);
       runner.assert(/^state\s+closed$/m.test(shown), 'session show must report the session as closed', { shown });
-      runner.assert(shown.includes(dispatcher.sessionId),
-        'session show must name the dispatcher as the closer', { shown });
+      const dispatcherLabel = observer.getSession(dispatcher.sessionId)?.label;
+      runner.assert(dispatcherLabel && shown.includes(` by ${dispatcherLabel}\n`),
+        'session show must name the dispatcher as the closer', { shown, dispatcherLabel });
       runner.assert(shown.includes(REASON), 'session show must carry the reason', { shown });
       const closedList = cli(daemonBinary, instance, 'session', 'list', '--closed');
       runner.assert(closedList.includes(delegate.slice(0, 8)),
