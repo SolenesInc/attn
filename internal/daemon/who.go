@@ -30,7 +30,20 @@ func (d *Daemon) requestFromSession(id protocol.SessionID) (requester, error) {
 }
 func (d *Daemon) requestFromMessage(source *protocol.SessionID, profile *string) (requester, error) {
 	if id := protocol.TrimID(protocol.Deref(source)); id != "" {
-		return d.requestFromSession(id)
+		r, err := d.requestFromSession(id)
+		if err != nil {
+			return requester{}, err
+		}
+		if asked := strings.TrimSpace(protocol.Deref(profile)); asked != "" {
+			owner, err := d.store.GetProfile(r.ProfileID())
+			if err != nil {
+				return requester{}, err
+			}
+			if asked != owner.ID && !strings.EqualFold(asked, owner.Name) {
+				return requester{}, fmt.Errorf("session %s belongs to profile %q (%s), not profile %q it sent", id, owner.Name, owner.ID, asked)
+			}
+		}
+		return r, nil
 	}
 	p, err := d.resolveGardenProfile("", protocol.Deref(profile), "")
 	if err != nil {

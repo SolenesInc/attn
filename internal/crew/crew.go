@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -229,6 +230,11 @@ func ScanHomes(dir string, warn func(string, ...any)) ([]Home, error) {
 		}
 		home := filepath.Join(dir, entry.Name())
 		if add(home, "") {
+			continue
+		}
+		profileText, profileDir := strings.CutPrefix(entry.Name(), "profile-")
+		profileKey, profileErr := uuid.Parse(profileText)
+		if !profileDir || profileErr != nil || profileKey.String() != profileText {
 			continue
 		}
 		children, err := os.ReadDir(home)

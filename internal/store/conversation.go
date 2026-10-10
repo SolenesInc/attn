@@ -176,16 +176,26 @@ func (s *Store) SetSessionLaunchedAt(sessionID protocol.SessionID, launchedAt ti
 		}
 		return
 	}
-	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	err := func() error {
+		tx, err := s.db.Begin()
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
 		if _, err := tx.Exec("UPDATE sessions SET launched_at = ? WHERE id = ? AND closed_at = ''", launchedAt.UTC().Format(time.RFC3339Nano), sessionID); err != nil {
 			return err
 		}
 		if member.IsZero() {
-			return nil
+			return tx.Commit()
 		}
-		_, err := tx.Exec("UPDATE crew_members SET latest_session = ? WHERE member_key = ? AND EXISTS(SELECT 1 FROM sessions WHERE id = ? AND member_key = ? AND closed_at = '')", sessionID, member, sessionID, member)
-		return err
-	})
+		_, err = tx.Exec("UPDATE crew_members SET latest_session = ? WHERE member_key = ? AND EXISTS(SELECT 1 FROM sessions WHERE id = ? AND member_key = ? AND closed_at = '')", sessionID, member, sessionID, member)
+		if err != nil {
+			return err
+		}
+		return tx.Commit()
+	}()
 	if err != nil {
 		log.Printf("[store] SetSessionLaunchedAt: failed for session %s: %v", sessionID, err)
 	}

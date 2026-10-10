@@ -178,6 +178,7 @@ export function useSessionLedger({
       }
       if (!lifecycleRef.current.connected
         || event.connectionGeneration !== lifecycleRef.current.generation) return;
+      if (event.type === 'crew') { setReloadNonce((n) => n + 1); return; }
       const entry = event.entry;
       if (entry.member_key) { setReloadNonce((n) => n + 1); return; }
       const at = now();

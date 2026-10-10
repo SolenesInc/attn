@@ -214,3 +214,63 @@ func TestAFailedCrewWakeKeepsItsLastLedgerRow(t *testing.T) {
 		check()
 	})
 }
+
+func TestAResumedCrewConversationStaysInTheOpenLedgerAfterANewWake(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	cli := w.Client()
+	day := wakeCrew(t, cli, "Keel", "")
+	run := w.Launched(string(day.SessionID))
+	run.Prompted()
+	run.Reply("A day worth keeping. <!-- attn:state=idle -->")
+	if _, err := cli.CrewHandoff(day.SessionID, "Resume this conversation later.", false, protocol.CrewDayCloseSleep); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: day.SessionID}); err != nil {
+		t.Fatal(err)
+	}
+	w.Launched(string(day.SessionID))
+	next := wakeCrew(t, cli, "Keel", "")
+	w.Launched(string(next.SessionID))
+	check := func() {
+		page := ledger(t, cli, client.SessionListOptions{})
+		if len(page.Entries) != 2 {
+			t.Fatalf("live member/conversation ledger: %+v", page.Entries)
+		}
+		found := map[protocol.SessionID]bool{}
+		for _, entry := range page.Entries {
+			found[entry.ID] = true
+		}
+		if !found[day.SessionID] || !found[next.SessionID] {
+			t.Fatalf("resumed conversation hidden: %+v", page.Entries)
+		}
+	}
+	check()
+}
+
+func TestACrewRequesterRefusesAConflictingProfile(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	app := w.App()
+	cli := w.Client()
+	day := wakeCrew(t, cli, "Keel", "")
+	w.Launched(string(day.SessionID))
+	side := createProfile(app, "Side")
+	_, err := cli.WithRequester(side.ID, day.SessionID).CrewList()
+	crewErrorContains(t, err, "belongs to profile", `"Default"`, "not profile")
+	roster, err := cli.WithRequester("Default", day.SessionID).CrewList()
+	if err != nil || len(roster.Members) != 3 {
+		t.Fatalf("matching profile name: %+v %v", roster, err)
+	}
+}
+
+func TestAnIncompleteLegacyHomeDoesNotImportItsWorkingDirectories(t *testing.T) {
+	w := newWorld(t)
+	writeCrewHomeFile(t, w, filepath.Join("keel", "project"), crew.CharterFileName, "# A project document, not a member.\n")
+	w.restart()
+	roster, err := w.Client().CrewList()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(roster.Members) != 0 {
+		t.Fatalf("working directory imported as crew: %+v", roster.Members)
+	}
+}

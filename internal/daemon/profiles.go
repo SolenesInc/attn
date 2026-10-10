@@ -4,10 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"path/filepath"
 	"strings"
-
-	"github.com/victorarias/attn/internal/crew"
 
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/enrollment"
@@ -380,20 +377,11 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 		if err != nil {
 			return profileActionOutcome{}, err
 		}
-		homes, err := crew.ScanHomes(filepath.Join(d.dataRoot, crew.HomesDirName), d.logf)
+		roster, err := d.store.CrewRoster(msg.ProfileID)
 		if err != nil {
 			return profileActionOutcome{}, err
 		}
-		members := 0
-		for _, member := range homes {
-			identity, err := d.store.CrewIdentity(member.Member.Key)
-			if err != nil {
-				return profileActionOutcome{}, err
-			}
-			if identity.ProfileID == msg.ProfileID {
-				members++
-			}
-		}
+		members := len(roster)
 		d.automationMu.Lock()
 		deleted, err := d.store.DeleteProfile(msg.ProfileID, int64(msg.ExpectedRevision), remote, members)
 		d.automationMu.Unlock()

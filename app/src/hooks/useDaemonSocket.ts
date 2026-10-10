@@ -1322,6 +1322,7 @@ export function useDaemonSocket({
           case 'crew_updated':
             if (data.profile_id !== useProfilesStore.getState().selectedProfileId) break;
             callbacksRef.current.onCrewUpdate?.(data.members || []);
+            emitSessionLedger({ type: 'crew' });
             break;
 
           case 'garden_seeds_updated':

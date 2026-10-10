@@ -319,6 +319,9 @@ func TestCrewCommandsResolveTheCallingTerminalsProfile(t *testing.T) {
 	sideApp := s.AppOn(created.Profile.ID)
 	caller := s.Spawn(sideApp, fakeagent.Claude, s.Path("side"))
 	terminal := sideApp.Terminal(caller)
+	if result := s.Attn("agent", "peek", caller, "--json"); result.Code != 0 {
+		t.Fatalf("bare exact-session peek with multiple profiles: %+v", result)
+	}
 	var roster []protocol.CrewMember
 	s.Run(testworld.Invocation{Args: []string{"crew", "list", "--json"}, Terminal: terminal}).JSON(t, &roster)
 	if len(roster) != 0 {

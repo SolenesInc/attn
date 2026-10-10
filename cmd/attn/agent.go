@@ -167,7 +167,7 @@ func printAgentList(w io.Writer, rows []agentListRow) {
 			turn,
 		)
 	}
-	fmt.Fprintf(w, "\nAn ID or awake MEMBER here works with `attn agent peek <target>`; --json carries full ids.\n")
+	fmt.Fprintf(w, "\nAn ID works with `attn agent peek <target>`; --json carries full ids.\nThe MEMBER column is a key label; `attn crew list` names the current roster.\n")
 }
 
 func agentShortID(id string) string {

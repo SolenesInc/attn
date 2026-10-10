@@ -335,7 +335,7 @@ const ledgerSelect = `SELECT member_key, COALESCE((SELECT name FROM crew_members
 const ledgerAt = `CASE WHEN closed_at <> '' THEN closed_at ELSE last_seen END`
 
 func (q SessionLedgerQuery) scopeAndWindow() ([]string, []any) {
-	where := []string{"(sessions.member_key = '' OR sessions.id = (SELECT latest_session FROM crew_members WHERE crew_members.member_key = sessions.member_key))"}
+	where := []string{"(sessions.member_key = '' OR sessions.closed_at = '' OR sessions.id = (SELECT latest_session FROM crew_members WHERE crew_members.member_key = sessions.member_key))"}
 	var args []any
 	switch q.Scope {
 	case SessionLedgerClosed:
@@ -527,7 +527,7 @@ func (s *Store) sessionLedgerMemory(query SessionLedgerQuery, limit int) (Sessio
 	windowed := scoped[:0]
 	for _, entry := range scoped {
 		if key := s.memberSessions[entry.ID]; !key.IsZero() {
-			if s.latestMemberSessions[key] != entry.ID {
+			if s.latestMemberSessions[key] != entry.ID && protocol.Deref(entry.ClosedAt) != "" {
 				continue
 			}
 			entry.MemberKey = protocol.Ptr(key.String())

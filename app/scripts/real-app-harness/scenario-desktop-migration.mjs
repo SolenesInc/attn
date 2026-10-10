@@ -50,7 +50,12 @@ function legacyWorkspacesSql(fixtureDir) {
     'DROP TABLE command_usage;',
     // A pre-profile install has no launch rows and no crew or automation profiles.
     'DELETE FROM launch_desktops;',
-    'DELETE FROM crew_profiles;',
+    'DROP TRIGGER launch_review_crew_insert;',
+    'DROP TRIGGER launch_review_crew_update;',
+    'DROP TABLE crew_members;',
+    'CREATE TABLE crew_profiles (member_id TEXT PRIMARY KEY, profile_id TEXT NOT NULL REFERENCES profiles(id));',
+    'CREATE INDEX idx_crew_profiles_profile ON crew_profiles(profile_id);',
+    'ALTER TABLE sessions DROP COLUMN member_key;',
     "UPDATE automation_definitions SET profile_id = '';",
     // A disabled automation makes the launch step follow placement on every run.
     `INSERT OR REPLACE INTO automation_definitions (id, name, enabled, revision, spec_json, profile_id, created_at, updated_at, deleted_at)

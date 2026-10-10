@@ -18,6 +18,12 @@ const agentShortIDLength = 8
 const agentPeekSnapshotTimeout = modelCaptureSnapshotTimeout
 
 func (d *Daemon) handleAgentPeek(conn net.Conn, msg *protocol.AgentPeekMessage) {
+	if msg.SourceSessionID == nil && msg.ProfileID == nil {
+		if session := d.store.Get(protocol.SessionID(protocol.TrimID(msg.TargetSessionID))); session != nil {
+			_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AgentPeekResult: d.agentPeekResult(session)})
+			return
+		}
+	}
 	r, err := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID)
 	if err != nil {
 		d.sendError(conn, err.Error())

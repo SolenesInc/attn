@@ -31,31 +31,33 @@ func scanCrewIdentity(row interface{ Scan(...any) error }) (CrewIdentity, error)
 	return m, err
 }
 func (s *Store) CrewNamed(profileID, name string) (CrewIdentity, bool, error) {
-	return s.findCrew("profile_id = ? AND name = ? COLLATE NOCASE", profileID, strings.TrimSpace(name))
-}
-func (s *Store) CrewKeyed(profileID, keyText string) (CrewIdentity, bool, error) {
-	return s.findCrew("profile_id = ? AND member_key = ?", profileID, keyText)
-}
-func (s *Store) findCrew(where string, args ...any) (CrewIdentity, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	name = strings.TrimSpace(name)
 	if s.db == nil {
 		for _, m := range s.crewMembers {
-			if where == "member_key = ?" {
-				if m.Key == args[0].(who.MemberKey) {
-					return m, true, nil
-				}
-				continue
-			}
-			if m.ProfileID != args[0].(string) {
-				continue
-			}
-			if where == "profile_id = ? AND member_key = ?" && m.Key.String() == args[1].(string) || where == "profile_id = ? AND name = ? COLLATE NOCASE" && strings.EqualFold(m.Name, args[1].(string)) {
+			if m.ProfileID == profileID && strings.EqualFold(m.Name, name) {
 				return m, true, nil
 			}
 		}
 		return CrewIdentity{}, false, nil
 	}
+	return s.findCrewDB("profile_id = ? AND name = ? COLLATE NOCASE", profileID, name)
+}
+func (s *Store) CrewKeyed(profileID, keyText string) (CrewIdentity, bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		for _, m := range s.crewMembers {
+			if m.ProfileID == profileID && m.Key.String() == keyText {
+				return m, true, nil
+			}
+		}
+		return CrewIdentity{}, false, nil
+	}
+	return s.findCrewDB("profile_id = ? AND member_key = ?", profileID, keyText)
+}
+func (s *Store) findCrewDB(where string, args ...any) (CrewIdentity, bool, error) {
 	m, err := scanCrewIdentity(s.db.QueryRow("SELECT "+crewIdentityColumns+" FROM crew_members WHERE "+where, args...))
 	if errors.Is(err, sql.ErrNoRows) {
 		return CrewIdentity{}, false, nil
@@ -63,7 +65,16 @@ func (s *Store) findCrew(where string, args ...any) (CrewIdentity, bool, error) 
 	return m, err == nil, err
 }
 func (s *Store) CrewIdentity(key who.MemberKey) (CrewIdentity, error) {
-	m, ok, err := s.findCrew("member_key = ?", key)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var m CrewIdentity
+	var ok bool
+	var err error
+	if s.db == nil {
+		m, ok = s.crewMembers[key]
+	} else {
+		m, ok, err = s.findCrewDB("member_key = ?", key)
+	}
 	if err == nil && !ok {
 		err = fmt.Errorf("crew member %s not found", key)
 	}
