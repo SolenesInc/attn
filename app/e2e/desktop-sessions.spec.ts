@@ -134,7 +134,7 @@ test.describe('Desktop Sessions', () => {
     }
     const rules = page.locator('.desktop-rule');
     const headerNames = () => rules.locator('.sidebar-row-select').evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label')?.replace(/^Open /, '')));
-    await expect.poll(headerNames).toEqual(['Desktop 1', 'Desktop 2', 'Desktop 3']);
+    await expect.poll(headerNames).toEqual(['Desktop 1', 'Desktop 2', 'Desktop 3', 'Chief']);
 
     const headerOf = (label: string) =>
       page.locator('.desktop-rule', { has: page.getByRole('button', { name: `Open ${label}`, exact: true }) });
@@ -152,12 +152,12 @@ test.describe('Desktop Sessions', () => {
     await page.keyboard.press('Escape');
     await expect(page.locator('[data-testid="desktop-reorder-seam-0"]')).toHaveCount(0);
     await page.mouse.up();
-    await expect.poll(headerNames).toEqual(['Desktop 1', 'Desktop 2', 'Desktop 3']);
+    await expect.poll(headerNames).toEqual(['Desktop 1', 'Desktop 2', 'Desktop 3', 'Chief']);
 
     await dragHeaderToTop('Desktop 3');
     await page.mouse.up();
 
-    await expect.poll(headerNames).toEqual(['Desktop 3', 'Desktop 1', 'Desktop 2']);
+    await expect.poll(headerNames).toEqual(['Desktop 3', 'Desktop 1', 'Desktop 2', 'Chief']);
     await expect(headerOf('Desktop 3').locator('.session-shortcut')).toHaveText(/3/);
 
     await headerOf('Desktop 2').hover();
@@ -166,13 +166,13 @@ test.describe('Desktop Sessions', () => {
     await expect(nameInput).toHaveAttribute('placeholder', 'Desktop 2');
     await nameInput.fill('Reviews');
     await nameInput.press('Enter');
-    await expect.poll(headerNames).toEqual(['Desktop 3', 'Desktop 1', 'Reviews']);
+    await expect.poll(headerNames).toEqual(['Desktop 3', 'Desktop 1', 'Reviews', 'Chief']);
 
     await headerOf('Reviews').hover();
     await headerOf('Reviews').getByRole('button', { name: 'Rename Reviews' }).click();
     await nameInput.fill('');
     await nameInput.press('Enter');
-    await expect.poll(headerNames).toEqual(['Desktop 3', 'Desktop 1', 'Desktop 2']);
+    await expect.poll(headerNames).toEqual(['Desktop 3', 'Desktop 1', 'Desktop 2', 'Chief']);
   });
 
   test('clicking and keyboard navigation focus panes across agents on one desktop', async ({ page, daemon }) => {
@@ -295,7 +295,7 @@ test.describe('Desktop Sessions', () => {
 
     await page.keyboard.press('Meta+g');
     await page.getByRole('button', { name: '+ New desktop' }).click();
-    await expect(page.locator('.desktop-rule')).toHaveCount(2);
+    await expect(page.locator('.desktop-rule')).toHaveCount(3);
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Open Desktop 2' }).click();
     await expect(canvas).toHaveJSProperty('width', 1);

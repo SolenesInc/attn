@@ -1,12 +1,13 @@
 import { useMemo } from 'react';
 import { useProfilesStore } from '../store/profiles';
-import { AppContentProps } from './appSupport';
+import { useDaemonStore } from '../store/daemonSessions';
 
-export function useChiefOfStaff({ daemonSessions }: { daemonSessions: AppContentProps['daemonSessions'] }) {
+export function useChiefOfStaff() {
+  const crew = useDaemonStore((state) => state.crew);
   const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
   const hasChiefOfStaff = useMemo(
-    () => daemonSessions.some((session) => session.chief === true && session.profile_id === selectedProfileId),
-    [daemonSessions, selectedProfileId],
+    () => crew.some((member) => member.chief && member.profile_id === selectedProfileId),
+    [crew, selectedProfileId],
   );
   return { hasChiefOfStaff };
 }

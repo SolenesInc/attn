@@ -302,7 +302,7 @@ export function useAppController({
   });
   const { diagnosticCapture, setDiagnosticCapture, paletteOriginRef } = appDiagnostics;
 
-  const chiefOfStaff = useChiefOfStaff({ daemonSessions });
+  const chiefOfStaff = useChiefOfStaff();
 
   const [contextCapPromptSession, setContextCapPromptSession] = useState<{
     id: string;
