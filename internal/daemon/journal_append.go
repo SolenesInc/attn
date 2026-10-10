@@ -16,6 +16,10 @@ func (d *Daemon) handleJournalAppend(conn net.Conn, msg *protocol.JournalAppendM
 		d.sendError(conn, "journal append: entry is required")
 		return
 	}
+	if err := d.requireHome("the Notebook"); err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
 	date := ""
 	if msg.Date != nil {
 		date = strings.TrimSpace(*msg.Date)
@@ -23,7 +27,7 @@ func (d *Daemon) handleJournalAppend(conn net.Conn, msg *protocol.JournalAppendM
 	if date == "" {
 		date = time.Now().Format("2006-01-02")
 	}
-	profile, err := d.settingsProfile(protocol.Deref(msg.SourceSessionID), "", "")
+	profile, err := d.callerProfile(protocol.Deref(msg.SourceSessionID))
 	if err != nil {
 		d.sendError(conn, "journal append: "+err.Error())
 		return

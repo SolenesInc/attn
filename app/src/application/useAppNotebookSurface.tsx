@@ -37,7 +37,7 @@ export function useAppNotebookSurface({
   const makeNotebookSurfaceDaemon = useCallback((root?: string) => {
     const notebook = !root || root === effectiveNotebookRoot;
     const requestRoot = notebook ? undefined : root;
-    const scope = { profile_id: profileId, ...(notebook && effectiveNotebookRoot ? { expected_notebook_root: effectiveNotebookRoot } : {}) };
+    const scope = { profile_id: profileId ?? undefined, ...(notebook && effectiveNotebookRoot ? { expected_notebook_root: effectiveNotebookRoot } : {}) };
     return {
       listDir: (path: string) => sendFsList(path, requestRoot, scope),
       readFile: (path: string) => sendFsRead(path, requestRoot, scope),

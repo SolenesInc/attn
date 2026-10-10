@@ -142,8 +142,12 @@ func (d *Daemon) ensureNotebookScaffold(profileID string) (root string, created 
 }
 
 func (d *Daemon) handleNotebookGuide(conn net.Conn, msg *protocol.NotebookGuideMessage) {
+	if err := d.requireHome("the Notebook"); err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
 	sessionID := protocol.TrimID(protocol.Deref(msg.SessionID))
-	profile, err := d.settingsProfile(sessionID, "", "")
+	profile, err := d.callerProfile(sessionID)
 	if err != nil {
 		d.sendError(conn, "notebook: "+err.Error())
 		return

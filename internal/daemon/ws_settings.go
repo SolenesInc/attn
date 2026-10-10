@@ -70,10 +70,12 @@ func (d *Daemon) setSetting(msg *protocol.SetSettingMessage) (*protocol.SettingE
 			return nil, resolveErr
 		}
 		profileID = profile.ID
+		d.notebookRootMu.Lock()
 		if msg.Key == string(settingNotebookRoot) && strings.TrimSpace(msg.Value) == "" {
 			msg.Value = d.defaultNotebookRoot(profile.Name)
 		}
 		err = d.store.SetProfileSetting(profileID, msg.Key, msg.Value)
+		d.notebookRootMu.Unlock()
 	} else if msg.Key == string(settingSharedPTYHostEnabled) {
 		err = d.setSharedPTYHostEnabled(parseBooleanSetting(msg.Value))
 	} else {

@@ -2,7 +2,7 @@ import { clearHarnesses } from './useHarnesses';
 import { clearHarnessModelCatalogs } from './useHarnessRoute';
 import { PROTOCOL_VERSION } from '../types/protocolVersion';
 export interface NotebookRequestScope {
- profile_id: string;
+ profile_id?: string;
  expected_notebook_root?: string;
 }
 
@@ -22,6 +22,7 @@ import { useDelegationPreferencesPush } from '../store/delegationPreferences';
 import type { DelegationPreferences } from '../types/generated';
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import type { NotebookSurfaceHandle } from '../components/NotebookSurface';
 import { isTauri } from '@tauri-apps/api/core';
 import { readMigrationFailureMarker, type MigrationFailure } from '../utils/migrationFailure';
 import type {
@@ -769,6 +770,17 @@ export function useDaemonSocket({
   const reconnectTimeoutRef = useRef<number | null>(null);
   const reconnectDelayRef = useRef<number>(1000);
   const pendingActionsRef = useRef<PendingRequests>(new Map());
+  const notebookEditorsRef = useRef(new Set<NotebookSurfaceHandle>());
+  const registerNotebookEditor = useCallback((editor: NotebookSurfaceHandle) => {
+    notebookEditorsRef.current.add(editor);
+    return () => { notebookEditorsRef.current.delete(editor); };
+  }, []);
+  const flushNotebookEditors = useCallback(async () => {
+    const outcomes = await Promise.all([...notebookEditorsRef.current].map((editor) => editor.flushPendingSave()));
+    if (outcomes.some((outcome) => outcome === 'conflict' || outcome === 'error')) {
+      throw new Error('Save the edited Notebook file before changing its profile or folder.');
+    }
+  }, []);
   const mdAnnotationsPendingRef = useRef<PendingKeyedRequests>(new Map());
   const sessionMessageListenersRef = useRef<Map<string, Set<() => void>>>(new Map());
   const sessionLedgerListenersRef = useRef<Set<(event: SessionLedgerConnectionEvent) => void>>(new Set());
@@ -3681,8 +3693,9 @@ export function useDaemonSocket({
   }, []);
 
   const sendSaveSetting = useCallback(async (key: string, value: string, profileId = useProfilesStore.getState().selectedProfileId): Promise<void> => {
+    if (key === 'notebook.root' && notebookEditorsRef.current.size > 0) await flushNotebookEditors();
     await sendRequest<boolean>('set_setting', { key, value, profile_id: profileId }, 'Saving the setting timed out');
-  }, [sendRequest]);
+  }, [sendRequest, flushNotebookEditors]);
 
   const sendGetSettings = useCallback(() => {
     const ws = wsRef.current;
@@ -4643,7 +4656,10 @@ export function useDaemonSocket({
   }, []);
 
   const sendProfileCommand = useCallback(
-    (cmd: string, body: Record<string, unknown>) => {
+    async (cmd: string, body: Record<string, unknown>) => {
+      if (notebookEditorsRef.current.size > 0 && (cmd === 'profile_select' || cmd === 'profile_delete' && body.profile_id === useProfilesStore.getState().selectedProfileId)) {
+        await flushNotebookEditors();
+      }
       const requestId = nextRequestID(cmd);
       const intent = useSessionStore.getState().commandSent(cmd, body, requestId);
       const request = sendKeyedRequest<ProfileActionResult>(
@@ -4659,7 +4675,7 @@ export function useDaemonSocket({
       }
       return request;
     },
-    [nextRequestID, sendKeyedRequest],
+    [nextRequestID, sendKeyedRequest, flushNotebookEditors],
   );
 
   const sendProfileSelect = useCallback(
@@ -4948,6 +4964,7 @@ export function useDaemonSocket({
     sendListWorktrees,
     sendCreateWorktree,
     sendDeleteWorktree,
+    registerNotebookEditor,
     sendSetSetting,
     sendSaveSetting,
     sendGetSettings,

@@ -1,4 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { useOptionalDaemonApi } from '../contexts/DaemonApiContext';
 import FocusTrap from './AppFocusTrap';
 import type { FsEntry, FsExistsResult, FsReadAssetResult, FsReadResult, FsWriteResult, NotebookEntry, NotebookSendToChiefResult } from '../hooks/useDaemonSocket';
 import { useEscapeStack } from '../hooks/useEscapeStack';
@@ -269,9 +270,10 @@ export const NotebookSurface = forwardRef<NotebookSurfaceHandle, NotebookSurface
   }, [writeBuffer]);
   persistRef.current = persist;
 
-  useImperativeHandle(ref, () => ({
-    flushPendingSave: () => persistRef.current?.() ?? Promise.resolve('noop'),
-  }), []);
+  const editorHandle = useMemo(() => ({ flushPendingSave: () => persistRef.current() }), []);
+  useImperativeHandle(ref, () => editorHandle, [editorHandle]);
+  const registerNotebookEditor = useOptionalDaemonApi()?.registerNotebookEditor;
+  useEffect(() => active ? registerNotebookEditor?.(editorHandle) : undefined, [active, registerNotebookEditor, editorHandle]);
 
   const reloadFromDisk = useCallback(async () => {
     const path = selectedPathRef.current;

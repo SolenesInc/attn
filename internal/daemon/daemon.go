@@ -241,6 +241,7 @@ type Daemon struct {
 	recoveryMu          sync.RWMutex
 	recovering          bool
 	recoverySettled     chan struct{}
+	notebookRootMu      sync.Mutex
 	notebookMu          sync.Mutex
 	notebookStores      map[string]*notebook.Store
 	fsMu                sync.Mutex

@@ -250,3 +250,49 @@ func TestTheFirstArtifactCreatesItsProfilesNotebookFolder(t *testing.T) {
 		t.Fatalf("artifact: %q (%v)", result, err)
 	}
 }
+
+func TestJournalAndNotebookGuideWithoutASessionUseTheLastSelectedProfile(t *testing.T) {
+	w := newWorld(t)
+	app := w.App()
+	work := createProfile(app, "Work")
+	selectProfile(app, work.ID)
+	root := filepath.Join(w.Dir, "notebook-work")
+	result, err := w.Client().AppendJournal("", "2026-10-10", "Work journal outside a session")
+	if err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(filepath.Join(root, result.RelPath))
+	if err != nil || !strings.Contains(string(content), "Work journal outside a session") {
+		t.Fatalf("journal: %s (%v)", content, err)
+	}
+	guide, err := w.Client().NotebookGuide("")
+	if err != nil || guide.Root != root {
+		t.Fatalf("guide: %+v (%v)", guide, err)
+	}
+}
+
+func TestConcurrentProfileCreationKeepsCollidingNotebookNamesSeparate(t *testing.T) {
+	w := newWorld(t)
+	left, right := w.App(), w.App()
+	leftID, rightID := uuid.NewString(), uuid.NewString()
+	left.Send(protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, RequestID: leftID, Name: "A B"})
+	right.Send(protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, RequestID: rightID, Name: "A-B"})
+	one := testworld.Await(left, protocol.EventProfileActionResult, func(m protocol.ProfileActionResultMessage) bool { return m.RequestID == leftID })
+	two := testworld.Await(right, protocol.EventProfileActionResult, func(m protocol.ProfileActionResultMessage) bool { return m.RequestID == rightID })
+	if !one.Success || !two.Success {
+		t.Fatalf("profile creation: %+v, %+v", one, two)
+	}
+	first, err := w.Client().Settings("", one.Profile.ID, "notebook.root", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := w.Client().Settings("", two.Profile.ID, "notebook.root", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, b := protocol.Deref(first.Entries[0].Value), protocol.Deref(second.Entries[0].Value)
+	base := filepath.Join(w.Dir, "notebook-a-b")
+	if a == b || !(a == base && b == base+"-2" || a == base+"-2" && b == base) {
+		t.Fatalf("Notebook roots %q and %q, want separate collision defaults", a, b)
+	}
+}
