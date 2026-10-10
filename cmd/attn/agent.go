@@ -167,7 +167,7 @@ func printAgentList(w io.Writer, rows []agentListRow) {
 			turn,
 		)
 	}
-	fmt.Fprintf(w, "\nUse `attn agent peek <id>` to view a session; --json shows full IDs.\nMEMBER shows key labels. Use `attn crew list` for current names.\n")
+	fmt.Fprintf(w, "\nUse `attn agent peek <id>` to view a session; add --profile <name|id> outside attn when several profiles exist.\n--json shows full IDs. MEMBER shows key labels. Use `attn crew list` for current names.\n")
 }
 
 func agentShortID(id string) string {
@@ -203,7 +203,7 @@ func parseAgentPeekArgs(args []string) (agentPeekArgs, error) {
 	fs := flag.NewFlagSet("agent peek", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
-	profile := fs.String("profile", "", "resolve names in this profile")
+	profile := fs.String("profile", "", "profile name or id (defaults to the current session's profile, or the only profile)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return agentPeekArgs{}, err
 	}
@@ -644,12 +644,14 @@ commands:
   list [--json]
         the address book: every session on this daemon with its short id,
         name, profile, state, and whether a turn is owed. Read-only.
-  peek <session-or-member-or-seed> [--json]
+  peek <session-or-member-or-seed> [--profile <name|id>] [--json]
         observe a session without interrupting it: state, last
         assistant message, and the rendered screen. Passive — the observed
         agent never notices. Targets resolve inside your profile: a crew name,
         member:<key>, session:<id>, seed id, or unique session id prefix.
         A sleeping crew member stays asleep.
+        Outside attn, the only profile is selected automatically; with several
+        profiles, choose --profile <name|id>.
   msg <session-or-member-or-seed> "text" [--source-session <id>] [--json]
         send a session, crew member or seed a message. The body stays in the inbox;
         the recipient gets a generic inbox notification. A target that cannot take
@@ -667,6 +669,7 @@ commands:
         what you have to say first. A seed id closes whoever tends it, and the
         seed keeps its tender with a note about the close.
         The caller defaults to this session (resolved from this terminal).
+        Outside attn, pass --source-session <id>; its profile scopes the target.
   inbox [message-id] [--limit <count>] [--session <id>] [--json]
         read up to 20 unread notifications in FIFO order, or one notified peer
         message by id. Each returned item gets its durable read receipt. The batch
