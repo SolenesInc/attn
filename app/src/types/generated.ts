@@ -3487,17 +3487,16 @@ export enum DesktopCreateMessageCmd {
 }
 
 export interface DesktopDockTileMessage {
-    anchor_id?:        string;
-    cmd:               DesktopDockTileMessageCmd;
-    desktop_id:        string;
-    edge:              LayoutDockEdge;
-    expected_revision: number;
-    request_id:        string;
-    tile_id:           string;
-    tile_kind:         string;
-    tile_params?:      string;
-    tile_session_id?:  string;
-    tile_share?:       number;
+    anchor_id?:       string;
+    cmd:              DesktopDockTileMessageCmd;
+    desktop_id:       string;
+    edge:             LayoutDockEdge;
+    request_id:       string;
+    tile_id:          string;
+    tile_kind:        string;
+    tile_params?:     string;
+    tile_session_id?: string;
+    tile_share?:      number;
     [property: string]: any;
 }
 
@@ -3513,17 +3512,16 @@ export enum LayoutDockEdge {
 }
 
 export interface DesktopMoveLeafMessage {
-    anchor_id?:               string;
-    cmd:                      DesktopMoveLeafMessageCmd;
-    edge:                     LayoutDockEdge;
-    expected_source_revision: number;
-    expected_target_revision: number;
-    leaf_id:                  string;
-    leaf_share?:              number;
-    request_id:               string;
-    source_desktop_id:        string;
-    target_desktop_id:        string;
-    with_delegates?:          boolean;
+    anchor_id?:            string;
+    cmd:                   DesktopMoveLeafMessageCmd;
+    edge?:                 LayoutDockEdge;
+    leaf_id:               string;
+    leaf_share?:           number;
+    request_id:            string;
+    source_desktop_id:     string;
+    target_desktop_id?:    string;
+    target_shortcut_slot?: number;
+    with_delegates?:       boolean;
     [property: string]: any;
 }
 
@@ -3565,14 +3563,13 @@ export interface DesktopPane {
 }
 
 export interface DesktopPlaceSessionMessage {
-    anchor_pane_id?:   string;
-    cmd:               DesktopPlaceSessionMessageCmd;
-    desktop_id:        string;
-    direction?:        LayoutSplitDirection;
-    expected_revision: number;
-    new_pane_share?:   number;
-    request_id:        string;
-    session_id:        string;
+    anchor_pane_id?: string;
+    cmd:             DesktopPlaceSessionMessageCmd;
+    desktop_id:      string;
+    direction?:      LayoutSplitDirection;
+    new_pane_share?: number;
+    request_id:      string;
+    session_id:      string;
     [property: string]: any;
 }
 
@@ -3586,11 +3583,10 @@ export enum LayoutSplitDirection {
 }
 
 export interface DesktopRemoveLeafMessage {
-    cmd:               DesktopRemoveLeafMessageCmd;
-    desktop_id:        string;
-    expected_revision: number;
-    leaf_id:           string;
-    request_id:        string;
+    cmd:        DesktopRemoveLeafMessageCmd;
+    desktop_id: string;
+    leaf_id:    string;
+    request_id: string;
     [property: string]: any;
 }
 
@@ -3599,11 +3595,10 @@ export enum DesktopRemoveLeafMessageCmd {
 }
 
 export interface DesktopRenameMessage {
-    cmd:               DesktopRenameMessageCmd;
-    desktop_id:        string;
-    expected_revision: number;
-    name:              string;
-    request_id:        string;
+    cmd:        DesktopRenameMessageCmd;
+    desktop_id: string;
+    name:       string;
+    request_id: string;
     [property: string]: any;
 }
 
@@ -3614,7 +3609,6 @@ export enum DesktopRenameMessageCmd {
 export interface DesktopReorderMessage {
     cmd:                  DesktopReorderMessageCmd;
     desktop_id:           string;
-    expected_revision:    number;
     next_desktop_id?:     string;
     previous_desktop_id?: string;
     request_id:           string;
@@ -3662,12 +3656,11 @@ export enum DesktopSetOrderMessageCmd {
 }
 
 export interface DesktopSetSplitRatioMessage {
-    cmd:               DesktopSetSplitRatioMessageCmd;
-    desktop_id:        string;
-    expected_revision: number;
-    ratio:             number;
-    request_id:        string;
-    split_id:          string;
+    cmd:        DesktopSetSplitRatioMessageCmd;
+    desktop_id: string;
+    ratio:      number;
+    request_id: string;
+    split_id:   string;
     [property: string]: any;
 }
 
@@ -3714,13 +3707,12 @@ export enum DesktopTileContentMessageEvent {
 }
 
 export interface DesktopUpdateTileMessage {
-    cmd:               DesktopUpdateTileMessageCmd;
-    desktop_id:        string;
-    expected_revision: number;
-    request_id:        string;
-    tile_id:           string;
-    tile_params?:      string;
-    tile_session_id?:  string;
+    cmd:              DesktopUpdateTileMessageCmd;
+    desktop_id:       string;
+    request_id:       string;
+    tile_id:          string;
+    tile_params?:     string;
+    tile_session_id?: string;
     [property: string]: any;
 }
 
@@ -18240,7 +18232,6 @@ const typeMap: any = {
         { json: "cmd", js: "cmd", typ: r("DesktopDockTileMessageCmd") },
         { json: "desktop_id", js: "desktop_id", typ: "" },
         { json: "edge", js: "edge", typ: r("LayoutDockEdge") },
-        { json: "expected_revision", js: "expected_revision", typ: 0 },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "tile_id", js: "tile_id", typ: "" },
         { json: "tile_kind", js: "tile_kind", typ: "" },
@@ -18251,14 +18242,13 @@ const typeMap: any = {
     "DesktopMoveLeafMessage": o([
         { json: "anchor_id", js: "anchor_id", typ: u(undefined, "") },
         { json: "cmd", js: "cmd", typ: r("DesktopMoveLeafMessageCmd") },
-        { json: "edge", js: "edge", typ: r("LayoutDockEdge") },
-        { json: "expected_source_revision", js: "expected_source_revision", typ: 0 },
-        { json: "expected_target_revision", js: "expected_target_revision", typ: 0 },
+        { json: "edge", js: "edge", typ: u(undefined, r("LayoutDockEdge")) },
         { json: "leaf_id", js: "leaf_id", typ: "" },
         { json: "leaf_share", js: "leaf_share", typ: u(undefined, 3.14) },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "source_desktop_id", js: "source_desktop_id", typ: "" },
-        { json: "target_desktop_id", js: "target_desktop_id", typ: "" },
+        { json: "target_desktop_id", js: "target_desktop_id", typ: u(undefined, "") },
+        { json: "target_shortcut_slot", js: "target_shortcut_slot", typ: u(undefined, 0) },
         { json: "with_delegates", js: "with_delegates", typ: u(undefined, true) },
     ], "any"),
     "DesktopMoveSessionMessage": o([
@@ -18289,7 +18279,6 @@ const typeMap: any = {
         { json: "cmd", js: "cmd", typ: r("DesktopPlaceSessionMessageCmd") },
         { json: "desktop_id", js: "desktop_id", typ: "" },
         { json: "direction", js: "direction", typ: u(undefined, r("LayoutSplitDirection")) },
-        { json: "expected_revision", js: "expected_revision", typ: 0 },
         { json: "new_pane_share", js: "new_pane_share", typ: u(undefined, 3.14) },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "session_id", js: "session_id", typ: "" },
@@ -18297,21 +18286,18 @@ const typeMap: any = {
     "DesktopRemoveLeafMessage": o([
         { json: "cmd", js: "cmd", typ: r("DesktopRemoveLeafMessageCmd") },
         { json: "desktop_id", js: "desktop_id", typ: "" },
-        { json: "expected_revision", js: "expected_revision", typ: 0 },
         { json: "leaf_id", js: "leaf_id", typ: "" },
         { json: "request_id", js: "request_id", typ: "" },
     ], "any"),
     "DesktopRenameMessage": o([
         { json: "cmd", js: "cmd", typ: r("DesktopRenameMessageCmd") },
         { json: "desktop_id", js: "desktop_id", typ: "" },
-        { json: "expected_revision", js: "expected_revision", typ: 0 },
         { json: "name", js: "name", typ: "" },
         { json: "request_id", js: "request_id", typ: "" },
     ], "any"),
     "DesktopReorderMessage": o([
         { json: "cmd", js: "cmd", typ: r("DesktopReorderMessageCmd") },
         { json: "desktop_id", js: "desktop_id", typ: "" },
-        { json: "expected_revision", js: "expected_revision", typ: 0 },
         { json: "next_desktop_id", js: "next_desktop_id", typ: u(undefined, "") },
         { json: "previous_desktop_id", js: "previous_desktop_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: "" },
@@ -18337,7 +18323,6 @@ const typeMap: any = {
     "DesktopSetSplitRatioMessage": o([
         { json: "cmd", js: "cmd", typ: r("DesktopSetSplitRatioMessageCmd") },
         { json: "desktop_id", js: "desktop_id", typ: "" },
-        { json: "expected_revision", js: "expected_revision", typ: 0 },
         { json: "ratio", js: "ratio", typ: 3.14 },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "split_id", js: "split_id", typ: "" },
@@ -18365,7 +18350,6 @@ const typeMap: any = {
     "DesktopUpdateTileMessage": o([
         { json: "cmd", js: "cmd", typ: r("DesktopUpdateTileMessageCmd") },
         { json: "desktop_id", js: "desktop_id", typ: "" },
-        { json: "expected_revision", js: "expected_revision", typ: 0 },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "tile_id", js: "tile_id", typ: "" },
         { json: "tile_params", js: "tile_params", typ: u(undefined, "") },

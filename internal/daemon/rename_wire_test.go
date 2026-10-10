@@ -68,7 +68,7 @@ func TestARenamedDesktopKeepsItsNameAcrossARestart(t *testing.T) {
 	desktop := desktopOfDelegate(t, w, desktopID)
 
 	renamed := testworld.Request(app, protocol.DesktopRenameMessage{
-		Cmd: protocol.CmdDesktopRename, DesktopID: desktop.ID, Name: "User Renamed", ExpectedRevision: desktop.Revision, RequestID: "rename",
+		Cmd: protocol.CmdDesktopRename, DesktopID: desktop.ID, Name: "User Renamed", RequestID: "rename",
 	}, protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "rename" })
 	if !renamed.Success {
 		t.Fatalf("rename desktop: %s", protocol.Deref(renamed.Error))

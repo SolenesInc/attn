@@ -1218,8 +1218,8 @@ describe('moving the active leaf to another desktop', () => {
   });
 
   it.each([
-    ['to another desktop', 'desktop.sendStay3', ['d2', 'd3']],
-    ['to the same desktop without following', 'desktop.sendStay2', ['d2', 'd2']],
+    ['to another desktop', 'desktop.sendStay3', [2, 3]],
+    ['to the same desktop without following', 'desktop.sendStay2', [2, 2]],
   ] as const)('drops the follow when the user moves the same leaf %s before the first move answers', async (_, second, targets) => {
     const { daemon } = await renderApp({ initialState: {
       sessions: [daemonSession('s1'), daemonSession('s2'), daemonSession('s3'), daemonSession('s4')],
@@ -1239,10 +1239,10 @@ describe('moving the active leaf to another desktop', () => {
 
     await gesture(daemon, () => pressShortcut('desktop.send2'));
     await gesture(daemon, () => pressShortcut(second));
-    expect(held.map((command) => command.target_desktop_id)).toEqual(targets);
+    expect(held.map((command) => command.target_shortcut_slot)).toEqual(targets);
     const [first] = held;
     await gesture(daemon, () => daemon.replyTo(first, {
-      event: 'profile_action_result', action: first.cmd, request_id: first.request_id ?? '', success: true, pane_id: 'pane-s1',
+      event: 'profile_action_result', action: first.cmd, request_id: first.request_id ?? '', success: true, pane_id: 'pane-s1', desktops: [daemon.arrangement.desktop('d1')!, daemon.arrangement.desktop('d2')!],
     } as Reply));
 
     expect(daemon.sentOf('desktop_show_leaf')).toEqual([]);
@@ -1265,10 +1265,10 @@ describe('moving the active leaf to another desktop', () => {
     await gesture(daemon, () => pressShortcut('desktop.send5'));
     await settleFocus(daemon);
 
-    expect(desktopCommandsAfter(daemon, before)).toEqual(['desktop_create', 'desktop_move_leaf', 'desktop_show_leaf']);
+    expect(desktopCommandsAfter(daemon, before)).toEqual(['desktop_move_leaf', 'desktop_show_leaf']);
     const created = daemon.arrangement.desktops.find((desktop) => desktop.shortcut_slot === 5);
-    expect(daemon.sentOf('desktop_create')).toEqual([expect.objectContaining({ profile_id: daemon.arrangement.profile.id, shortcut_slot: 5 })]);
-    expect(daemon.sentOf('desktop_move_leaf')).toEqual([expect.objectContaining({ leaf_id: 'pane-s1', source_desktop_id: 'd1', target_desktop_id: created?.id })]);
+    expect(daemon.sentOf('desktop_create')).toEqual([]);
+    expect(daemon.sentOf('desktop_move_leaf')).toEqual([expect.objectContaining({ leaf_id: 'pane-s1', source_desktop_id: 'd1', target_shortcut_slot: 5 })]);
     expect(shows(daemon).pop()).toBe(`leaf:${created?.id}/pane-s1`);
     expect(daemon.arrangement.profile.current_desktop_id).toBe(created?.id);
     expect(shownLeaf()).toBe('pane-s1');
@@ -1284,7 +1284,7 @@ describe('moving the active leaf to another desktop', () => {
     await gesture(daemon, () => pressShortcut('desktop.sendStay5'));
     await settleFocus(daemon);
 
-    expect(desktopCommandsAfter(daemon, before)).toEqual(['desktop_create', 'desktop_move_leaf']);
+    expect(desktopCommandsAfter(daemon, before)).toEqual(['desktop_move_leaf']);
     const created = daemon.arrangement.desktops.find((desktop) => desktop.shortcut_slot === 5);
     expect(created?.panes.map((pane) => pane.pane_id)).toEqual(['pane-s1']);
     expect(daemon.arrangement.profile.current_desktop_id).toBe('d1');

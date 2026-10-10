@@ -287,7 +287,7 @@ func TestDaemon_PruneSessionsWithoutPTY_KeepsTheTilesOfItsDesktop(t *testing.T) 
 		t.Fatal(err)
 	}
 	tileID := markdownTileIDForPath("/tmp/notes.md")
-	if _, err := d.store.UpdateDesktopArrangement(desktopID, desktop.Revision, func(desktop profiles.Desktop) (profiles.Desktop, error) {
+	if _, err := d.store.EditDesktopArrangement(desktopID, func(desktop profiles.Desktop) (profiles.Desktop, error) {
 		next, ok := layouttree.DockTile(desktop.Tree, desktop.Panes[0].PaneID, layouttree.DirectionVertical, false, "split-tile", tileID, string(layouttree.TileKindMarkdown), "/tmp/notes.md", "", layouttree.DefaultSplitRatio)
 		if !ok {
 			t.Fatal("dock the markdown tile")

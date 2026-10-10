@@ -22,7 +22,7 @@ func TestLegacyUnplacedTerminalSurvivesBindingMigration(t *testing.T) {
 	for _, id := range []string{"unplaced", "placed", "closed"} {
 		legacyAddSession(t, legacy, id, profile.ID)
 	}
-	_, _, err = legacyPlaceSession(legacy, SessionPlacementRequest{DesktopID: desktop.ID, ExpectedRevision: desktop.Revision, SessionID: "placed", RuntimeID: "distinct-terminal"})
+	_, _, err = legacyPlaceSession(legacy, SessionPlacementRequest{DesktopID: desktop.ID, SessionID: "placed", RuntimeID: "distinct-terminal"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func TestLegacyUnplacedTerminalSurvivesBindingMigration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	placed, _, err := current.PlaceSession(SessionPlacementRequest{DesktopID: desktop.ID, ExpectedRevision: desktop.Revision, SessionID: "unplaced"})
+	placed, _, err := current.PlaceSession(SessionPlacementRequest{DesktopID: desktop.ID, SessionID: "unplaced"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +92,7 @@ func TestSeveralLegacyTerminalTilesSurviveBindingMigration(t *testing.T) {
 			}
 			profile, desktop := mustCreateProfile(t, legacy, "legacy")
 			legacyAddSession(t, legacy, "shared", profile.ID)
-			if _, _, err := legacyPlaceSession(legacy, SessionPlacementRequest{DesktopID: desktop.ID, ExpectedRevision: desktop.Revision, SessionID: "shared", RuntimeID: "first-terminal"}); err != nil {
+			if _, _, err := legacyPlaceSession(legacy, SessionPlacementRequest{DesktopID: desktop.ID, SessionID: "shared", RuntimeID: "first-terminal"}); err != nil {
 				t.Fatal(err)
 			}
 			// Historical schema permits several tiles; placement commands still create only one.

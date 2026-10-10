@@ -64,8 +64,7 @@ func TestASplitRatioTheUserSetStaysLockedAsPanesComeAndGoAndAcrossARestart(t *te
 	} {
 		requestID := uuid.NewString()
 		result := desktopRequest(app, protocol.DesktopSetSplitRatioMessage{
-			Cmd: protocol.CmdDesktopSetSplitRatio, DesktopID: desktop.ID, SplitID: c.split, Ratio: 0.3,
-			ExpectedRevision: desktop.Revision, RequestID: requestID,
+			Cmd: protocol.CmdDesktopSetSplitRatio, DesktopID: desktop.ID, SplitID: c.split, Ratio: 0.3, RequestID: requestID,
 		}, requestID)
 		if result.Success != c.success {
 			t.Fatalf("setting the ratio of %s answered success=%v (%s), want %v", c.split, result.Success, protocol.Deref(result.Error), c.success)
@@ -101,9 +100,8 @@ func TestMovingAPaneWithinItsDesktopResplitsAroundTheDropTarget(t *testing.T) {
 	move := func(anchor string, edge protocol.LayoutDockEdge) protocol.ProfileActionResultMessage {
 		requestID := uuid.NewString()
 		return desktopRequest(app, protocol.DesktopMoveLeafMessage{
-			Cmd: protocol.CmdDesktopMoveLeaf, SourceDesktopID: desktop.ID, TargetDesktopID: desktop.ID,
-			LeafID: firstPane, AnchorID: protocol.Ptr(anchor), Edge: edge, LeafShare: protocol.Ptr(0.5),
-			ExpectedSourceRevision: desktop.Revision, ExpectedTargetRevision: desktop.Revision, RequestID: requestID,
+			Cmd: protocol.CmdDesktopMoveLeaf, SourceDesktopID: desktop.ID, TargetDesktopID: protocol.Ptr(desktop.ID),
+			LeafID: firstPane, AnchorID: protocol.Ptr(anchor), Edge: protocol.Ptr(edge), LeafShare: protocol.Ptr(0.5), RequestID: requestID,
 		}, requestID)
 	}
 

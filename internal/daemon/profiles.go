@@ -508,14 +508,14 @@ func (d *Daemon) desktopSessionName(id protocol.SessionID) string {
 
 func (d *Daemon) handleDesktopRename(client *wsClient, msg *protocol.DesktopRenameMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
-		desktop, err := d.store.RenameDesktop(msg.DesktopID, msg.Name, int64(msg.ExpectedRevision))
+		desktop, err := d.store.RenameDesktop(msg.DesktopID, msg.Name)
 		return d.desktopChanged(desktop), err
 	})
 }
 
 func (d *Daemon) handleDesktopReorder(client *wsClient, msg *protocol.DesktopReorderMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
-		desktop, err := d.store.ReorderDesktop(msg.DesktopID, protocol.Deref(msg.PreviousDesktopID), protocol.Deref(msg.NextDesktopID), int64(msg.ExpectedRevision))
+		desktop, err := d.store.ReorderDesktop(msg.DesktopID, protocol.Deref(msg.PreviousDesktopID), protocol.Deref(msg.NextDesktopID))
 		return d.desktopChanged(desktop), err
 	})
 }
@@ -584,15 +584,14 @@ func (d *Daemon) handleDesktopPlaceSession(client *wsClient, msg *protocol.Deskt
 			title = session.Label
 		}
 		desktop, paneID, err := d.store.PlaceSession(store.SessionPlacementRequest{
-			DesktopID:        msg.DesktopID,
-			ExpectedRevision: int64(msg.ExpectedRevision),
-			SessionID:        msg.SessionID,
-			AnchorPaneID:     protocol.Deref(msg.AnchorPaneID),
-			Direction:        layoutDirection(msg.Direction),
-			NewPaneShare:     protocol.Deref(msg.NewPaneShare),
-			Title:            title,
-			Status:           profiles.PaneStatusReady,
-			Focus:            true,
+			DesktopID:    msg.DesktopID,
+			SessionID:    msg.SessionID,
+			AnchorPaneID: protocol.Deref(msg.AnchorPaneID),
+			Direction:    layoutDirection(msg.Direction),
+			NewPaneShare: protocol.Deref(msg.NewPaneShare),
+			Title:        title,
+			Status:       profiles.PaneStatusReady,
+			Focus:        true,
 		})
 		return d.desktopChanged(desktop).withPaneID(paneID), err
 	})
@@ -600,27 +599,23 @@ func (d *Daemon) handleDesktopPlaceSession(client *wsClient, msg *protocol.Deskt
 
 func (d *Daemon) handleDesktopMoveLeaf(client *wsClient, msg *protocol.DesktopMoveLeafMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
-		direction, before := layoutDockEdge(msg.Edge)
-		var followers []store.LeafFollower
-		if protocol.Deref(msg.WithDelegates) && msg.SourceDesktopID != msg.TargetDesktopID {
-			source, err := d.store.GetDesktop(msg.SourceDesktopID)
-			if err != nil {
-				return profileActionOutcome{}, err
-			}
-			followers = d.sameDesktopDelegates(source, msg.LeafID)
+		direction, before := layoutDockEdge(protocol.Deref(msg.Edge))
+		var dispatchers map[protocol.SessionID]protocol.SessionID
+		if protocol.Deref(msg.WithDelegates) {
+			dispatchers = d.liveDelegateDispatchers()
 		}
 		move, err := d.store.MoveLeafGroup(store.LeafMoveRequest{
-			SourceDesktopID:        msg.SourceDesktopID,
-			TargetDesktopID:        msg.TargetDesktopID,
-			LeafID:                 msg.LeafID,
-			AnchorID:               protocol.Deref(msg.AnchorID),
-			Direction:              direction,
-			Before:                 before,
-			LeafShare:              protocol.Deref(msg.LeafShare),
-			ExpectedSourceRevision: int64(msg.ExpectedSourceRevision),
-			ExpectedTargetRevision: int64(msg.ExpectedTargetRevision),
-			Activate:               true,
-		}, followers)
+			SourceDesktopID:    msg.SourceDesktopID,
+			TargetDesktopID:    protocol.Deref(msg.TargetDesktopID),
+			TargetShortcutSlot: protocol.Deref(msg.TargetShortcutSlot),
+			UseActiveAnchor:    msg.Edge == nil,
+			LeafID:             msg.LeafID,
+			AnchorID:           protocol.Deref(msg.AnchorID),
+			Direction:          direction,
+			Before:             before,
+			LeafShare:          protocol.Deref(msg.LeafShare),
+			Activate:           true,
+		}, dispatchers)
 		changed := []profiles.Desktop{move.Source}
 		if move.Target.ID != move.Source.ID {
 			changed = append(changed, move.Target)
@@ -647,14 +642,14 @@ func layoutDockEdge(edge protocol.LayoutDockEdge) (layouttree.Direction, bool) {
 
 func (d *Daemon) handleDesktopRemoveLeaf(client *wsClient, msg *protocol.DesktopRemoveLeafMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
-		desktop, err := d.store.RemoveLeaf(msg.DesktopID, msg.LeafID, int64(msg.ExpectedRevision))
+		desktop, err := d.store.RemoveLeaf(msg.DesktopID, msg.LeafID)
 		return d.desktopChanged(desktop), err
 	})
 }
 
 func (d *Daemon) handleDesktopSetSplitRatio(client *wsClient, msg *protocol.DesktopSetSplitRatioMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
-		desktop, err := d.store.SetDesktopSplitRatio(msg.DesktopID, msg.SplitID, msg.Ratio, int64(msg.ExpectedRevision))
+		desktop, err := d.store.SetDesktopSplitRatio(msg.DesktopID, msg.SplitID, msg.Ratio)
 		return d.desktopChanged(desktop), err
 	})
 }

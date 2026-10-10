@@ -25,22 +25,21 @@ type LeafMove struct {
 }
 
 type LeafMoveRequest struct {
-	SourceDesktopID        string
-	TargetDesktopID        string
-	LeafID                 string
-	AnchorID               string
-	Direction              layouttree.Direction
-	Before                 bool
-	LeafShare              float64
-	ExpectedSourceRevision int64
-	ExpectedTargetRevision int64
-	Activate               bool
+	SourceDesktopID    string
+	TargetDesktopID    string
+	TargetShortcutSlot int
+	UseActiveAnchor    bool
+	LeafID             string
+	AnchorID           string
+	Direction          layouttree.Direction
+	Before             bool
+	LeafShare          float64
+	Activate           bool
 }
 
 type SessionPlacementRequest struct {
-	DesktopID        string
-	ExpectedRevision int64
-	SessionID        protocol.SessionID
+	DesktopID string
+	SessionID protocol.SessionID
 	// RuntimeID selects a terminal; absent, reuse the session binding or allocate one.
 	RuntimeID    protocol.TerminalID
 	AnchorPaneID string
@@ -751,14 +750,11 @@ func saveDesktop(tx *sql.Tx, now string, desktop *profiles.Desktop) error {
 	return err
 }
 
-func (s *Store) editDesktopRow(id string, expectedRevision int64, edit func(tx *sql.Tx, desktop *profiles.Desktop) error) (profiles.Desktop, error) {
+func (s *Store) editDesktopRow(id string, edit func(tx *sql.Tx, desktop *profiles.Desktop) error) (profiles.Desktop, error) {
 	var desktop profiles.Desktop
 	err := s.profilesTx(func(tx *sql.Tx, now string) error {
 		var err error
 		if desktop, err = loadDesktop(tx, id); err != nil {
-			return err
-		}
-		if err := requireRevision("desktop", id, expectedRevision, desktop.Revision); err != nil {
 			return err
 		}
 		if err := edit(tx, &desktop); err != nil {
@@ -769,8 +765,8 @@ func (s *Store) editDesktopRow(id string, expectedRevision int64, edit func(tx *
 	return desktop, err
 }
 
-func (s *Store) RenameDesktop(id, name string, expectedRevision int64) (profiles.Desktop, error) {
-	return s.editDesktopRow(id, expectedRevision, func(tx *sql.Tx, desktop *profiles.Desktop) error {
+func (s *Store) RenameDesktop(id, name string) (profiles.Desktop, error) {
+	return s.editDesktopRow(id, func(tx *sql.Tx, desktop *profiles.Desktop) error {
 		if desktop.Name == strings.TrimSpace(name) {
 			return nil
 		}
@@ -779,8 +775,8 @@ func (s *Store) RenameDesktop(id, name string, expectedRevision int64) (profiles
 	})
 }
 
-func (s *Store) ReorderDesktop(id, previousID, nextID string, expectedRevision int64) (profiles.Desktop, error) {
-	return s.editDesktopRow(id, expectedRevision, func(tx *sql.Tx, desktop *profiles.Desktop) error {
+func (s *Store) ReorderDesktop(id, previousID, nextID string) (profiles.Desktop, error) {
+	return s.editDesktopRow(id, func(tx *sql.Tx, desktop *profiles.Desktop) error {
 		neighbourKey := func(neighbourID string) (string, error) {
 			if neighbourID == "" {
 				return "", nil
@@ -1221,14 +1217,11 @@ func writeCurrentArrivingArrangement(tx *sql.Tx, now string, desktop *profiles.D
 	return saveDesktop(tx, now, desktop)
 }
 
-func (s *Store) UpdateDesktopArrangement(id string, expectedRevision int64, edit func(desktop profiles.Desktop) (profiles.Desktop, error)) (profiles.Desktop, error) {
+func (s *Store) EditDesktopArrangement(id string, edit func(desktop profiles.Desktop) (profiles.Desktop, error)) (profiles.Desktop, error) {
 	var desktop profiles.Desktop
 	err := s.profilesTx(func(tx *sql.Tx, now string) error {
 		current, err := loadDesktop(tx, id)
 		if err != nil {
-			return err
-		}
-		if err := requireRevision("desktop", id, expectedRevision, current.Revision); err != nil {
 			return err
 		}
 		if _, err := loadLiveProfile(tx, current.ProfileID); err != nil {
@@ -1307,9 +1300,6 @@ func (s *Store) PlaceSession(request SessionPlacementRequest) (profiles.Desktop,
 	err := s.profilesTx(func(tx *sql.Tx, now string) error {
 		current, err := loadDesktop(tx, request.DesktopID)
 		if err != nil {
-			return err
-		}
-		if err := requireRevision("desktop", current.ID, request.ExpectedRevision, current.Revision); err != nil {
 			return err
 		}
 		if _, err := loadLiveProfile(tx, current.ProfileID); err != nil {
@@ -1395,8 +1385,8 @@ func withoutPane(panes []profiles.Pane, paneID string) []profiles.Pane {
 	return kept
 }
 
-func (s *Store) RemoveLeaf(desktopID, leafID string, expectedRevision int64) (profiles.Desktop, error) {
-	return s.UpdateDesktopArrangement(desktopID, expectedRevision, func(desktop profiles.Desktop) (profiles.Desktop, error) {
+func (s *Store) RemoveLeaf(desktopID, leafID string) (profiles.Desktop, error) {
+	return s.EditDesktopArrangement(desktopID, func(desktop profiles.Desktop) (profiles.Desktop, error) {
 		next, ok := layouttree.Remove(desktop.Tree, leafID)
 		if !ok {
 			return desktop, profiles.Errorf(profiles.CodeNotFound, "leaf %q does not belong to desktop %s", leafID, desktopID)
@@ -1407,8 +1397,8 @@ func (s *Store) RemoveLeaf(desktopID, leafID string, expectedRevision int64) (pr
 	})
 }
 
-func (s *Store) SetDesktopSplitRatio(desktopID, splitID string, ratio float64, expectedRevision int64) (profiles.Desktop, error) {
-	return s.UpdateDesktopArrangement(desktopID, expectedRevision, func(desktop profiles.Desktop) (profiles.Desktop, error) {
+func (s *Store) SetDesktopSplitRatio(desktopID, splitID string, ratio float64) (profiles.Desktop, error) {
+	return s.EditDesktopArrangement(desktopID, func(desktop profiles.Desktop) (profiles.Desktop, error) {
 		next, ok := layouttree.SetSplitRatio(desktop.Tree, splitID, ratio)
 		if !ok {
 			return desktop, profiles.Errorf(profiles.CodeNotFound, "split %q does not belong to desktop %s", splitID, desktopID)
@@ -1419,7 +1409,10 @@ func (s *Store) SetDesktopSplitRatio(desktopID, splitID string, ratio float64, e
 }
 
 func (s *Store) moveLeafWithinDesktop(request LeafMoveRequest) (LeafMove, error) {
-	desktop, err := s.UpdateDesktopArrangement(request.SourceDesktopID, request.ExpectedSourceRevision, func(desktop profiles.Desktop) (profiles.Desktop, error) {
+	desktop, err := s.EditDesktopArrangement(request.SourceDesktopID, func(desktop profiles.Desktop) (profiles.Desktop, error) {
+		if err := checkMoveLeaves(desktop, desktop, request); err != nil {
+			return desktop, err
+		}
 		next, ok := layouttree.MoveLeaf(desktop.Tree, request.LeafID, request.AnchorID, newProfileEntityID("split"), request.Direction, request.Before, firstChildRatio(request.LeafShare, request.Before))
 		if !ok {
 			return desktop, profiles.Errorf(profiles.CodeInvalid, "leaf %q could not move beside %q on desktop %s", request.LeafID, request.AnchorID, desktop.ID)
@@ -1430,19 +1423,13 @@ func (s *Store) moveLeafWithinDesktop(request LeafMoveRequest) (LeafMove, error)
 	return LeafMove{Source: desktop, Target: desktop, FinalLeafID: request.LeafID}, err
 }
 
-func loadMoveEnds(tx *sql.Tx, request LeafMoveRequest) (profiles.Desktop, profiles.Desktop, error) {
+func loadMoveEnds(tx *sql.Tx, now string, request LeafMoveRequest) (profiles.Desktop, profiles.Desktop, error) {
 	source, err := loadDesktop(tx, request.SourceDesktopID)
 	if err != nil {
 		return profiles.Desktop{}, profiles.Desktop{}, err
 	}
-	target, err := loadDesktop(tx, request.TargetDesktopID)
+	target, err := moveDestination(tx, now, source.ProfileID, request)
 	if err != nil {
-		return profiles.Desktop{}, profiles.Desktop{}, err
-	}
-	if err := requireRevision("desktop", source.ID, request.ExpectedSourceRevision, source.Revision); err != nil {
-		return profiles.Desktop{}, profiles.Desktop{}, err
-	}
-	if err := requireRevision("desktop", target.ID, request.ExpectedTargetRevision, target.Revision); err != nil {
 		return profiles.Desktop{}, profiles.Desktop{}, err
 	}
 	if source.ProfileID != target.ProfileID {
@@ -1452,6 +1439,36 @@ func loadMoveEnds(tx *sql.Tx, request LeafMoveRequest) (profiles.Desktop, profil
 		return profiles.Desktop{}, profiles.Desktop{}, err
 	}
 	return source, target, nil
+}
+
+func moveDestination(tx *sql.Tx, now, profileID string, request LeafMoveRequest) (profiles.Desktop, error) {
+	if request.TargetDesktopID != "" {
+		if request.TargetShortcutSlot != 0 {
+			return profiles.Desktop{}, profiles.Errorf(profiles.CodeInvalid, "a move needs a target desktop or shortcut slot, not both")
+		}
+		return loadDesktop(tx, request.TargetDesktopID)
+	}
+	if err := profiles.ValidateShortcutSlot(request.TargetShortcutSlot); err != nil {
+		return profiles.Desktop{}, err
+	}
+	slot := request.TargetShortcutSlot
+	if slot != 0 {
+		desktops, err := listDesktops(tx, profileID)
+		if err != nil {
+			return profiles.Desktop{}, err
+		}
+		for _, desktop := range desktops {
+			if desktop.ShortcutSlot == slot {
+				return desktop, nil
+			}
+		}
+	} else {
+		var err error
+		if slot, err = lowestFreeShortcutSlot(tx, profileID); err != nil {
+			return profiles.Desktop{}, err
+		}
+	}
+	return insertDesktop(tx, now, profileID, "", slot)
 }
 
 func handOverPane(source, target *profiles.Desktop, leafID, finalLeafID string) {
@@ -1473,17 +1490,29 @@ func (s *Store) MoveLeaf(request LeafMoveRequest) (LeafMove, error) {
 	return s.MoveLeafGroup(request, nil)
 }
 
-func (s *Store) MoveLeafGroup(request LeafMoveRequest, followers []LeafFollower) (LeafMove, error) {
-	if request.SourceDesktopID == request.TargetDesktopID {
+func (s *Store) MoveLeafGroup(request LeafMoveRequest, dispatchers map[protocol.SessionID]protocol.SessionID) (LeafMove, error) {
+	if request.SourceDesktopID == request.TargetDesktopID && !request.UseActiveAnchor {
 		return s.moveLeafWithinDesktop(request)
 	}
 	var result LeafMove
 	err := s.profilesTx(func(tx *sql.Tx, now string) error {
-		source, target, err := loadMoveEnds(tx, request)
+		source, target, err := loadMoveEnds(tx, now, request)
 		if err != nil {
 			return err
 		}
-		result, err = moveLeafGroupBetweenDesktops(tx, now, source, target, request, followers)
+		request.TargetDesktopID = target.ID
+		if request.UseActiveAnchor {
+			request.AnchorID = target.ActivePaneID
+			request.Direction = layouttree.DirectionVertical
+		}
+		if source.ID == target.ID {
+			result = LeafMove{Source: source, Target: target, FinalLeafID: request.LeafID}
+			if !layouttree.HasLeaf(source.Tree, request.LeafID) {
+				return profiles.Errorf(profiles.CodeNotFound, "leaf %q does not belong to desktop %s", request.LeafID, source.ID)
+			}
+			return nil
+		}
+		result, err = moveLeafGroupBetweenDesktops(tx, now, source, target, request, sameDesktopFollowers(source, request.LeafID, dispatchers))
 		return err
 	})
 	return result, err
@@ -1546,6 +1575,9 @@ func moveLeafGroupBetweenDesktops(tx *sql.Tx, now string, source, target profile
 }
 
 func arrangeLeafBetweenDesktops(source, target profiles.Desktop, request LeafMoveRequest) (LeafMove, error) {
+	if err := checkMoveLeaves(source, target, request); err != nil {
+		return LeafMove{}, err
+	}
 	moved, ok := layouttree.MoveLeafBetweenLayouts(source.Tree, target.Tree, request.LeafID, request.AnchorID, newProfileEntityID("split"), request.Direction, request.Before, firstChildRatio(request.LeafShare, request.Before), uuid.NewString())
 	if !ok {
 		return LeafMove{}, profiles.Errorf(profiles.CodeInvalid, "leaf %q could not move from desktop %s beside %q on desktop %s", request.LeafID, source.ID, request.AnchorID, target.ID)
@@ -1780,4 +1812,50 @@ func (s *Store) RemoveSessionPlacement(sessionID protocol.SessionID) ([]profiles
 		return err
 	})
 	return desktops, err
+}
+
+func sameDesktopFollowers(source profiles.Desktop, rootPaneID string, dispatchers map[protocol.SessionID]protocol.SessionID) []LeafFollower {
+	if len(dispatchers) == 0 {
+		return nil
+	}
+	panes := make(map[string]profiles.Pane, len(source.Panes))
+	for _, pane := range source.Panes {
+		panes[pane.PaneID] = pane
+	}
+	root := panes[rootPaneID]
+	if root.SessionID == "" {
+		return nil
+	}
+	delegates := make(map[protocol.SessionID][]profiles.Pane)
+	for _, leafID := range layouttree.LeafIDs(source.Tree) {
+		pane := panes[leafID]
+		if dispatcher := dispatchers[pane.SessionID]; dispatcher != "" {
+			delegates[dispatcher] = append(delegates[dispatcher], pane)
+		}
+	}
+	queue := []profiles.Pane{root}
+	seen := map[protocol.SessionID]bool{root.SessionID: true}
+	var followers []LeafFollower
+	for i := 0; i < len(queue); i++ {
+		dispatcher := queue[i]
+		for _, pane := range delegates[dispatcher.SessionID] {
+			if seen[pane.SessionID] {
+				continue
+			}
+			seen[pane.SessionID] = true
+			queue = append(queue, pane)
+			followers = append(followers, LeafFollower{PaneID: pane.PaneID, BesidePaneID: dispatcher.PaneID})
+		}
+	}
+	return followers
+}
+
+func checkMoveLeaves(source, target profiles.Desktop, request LeafMoveRequest) error {
+	if !layouttree.HasLeaf(source.Tree, request.LeafID) {
+		return profiles.Errorf(profiles.CodeNotFound, "leaf %q does not belong to desktop %s", request.LeafID, source.ID)
+	}
+	if request.AnchorID != "" && !layouttree.HasLeaf(target.Tree, request.AnchorID) {
+		return profiles.Errorf(profiles.CodeNotFound, "anchor %q does not belong to desktop %s", request.AnchorID, target.ID)
+	}
+	return nil
 }

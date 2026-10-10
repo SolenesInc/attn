@@ -264,8 +264,6 @@ describe('useDaemonSocket profiles', () => {
         targetDesktopId: 'd2',
         leafId: 'pane-1',
         edge: 'right',
-        expectedSourceRevision: 1,
-        expectedTargetRevision: 1,
       });
     });
     const [command] = ws.commands('desktop_move_leaf');
@@ -274,8 +272,6 @@ describe('useDaemonSocket profiles', () => {
       target_desktop_id: 'd2',
       leaf_id: 'pane-1',
       edge: 'right',
-      expected_source_revision: 1,
-      expected_target_revision: 1,
     });
     act(() => {
       ws.emit({
@@ -283,19 +279,19 @@ describe('useDaemonSocket profiles', () => {
         request_id: command.request_id,
         action: 'desktop_move_leaf',
         success: false,
-        error: 'desktop d2 changed since revision 1',
-        error_code: 'stale_revision',
+        error: 'anchor pane-2 does not belong to desktop d2',
+        error_code: 'not_found',
       });
     });
 
     await expect(move).rejects.toBeInstanceOf(ProfileCommandError);
-    await expect(move).rejects.toMatchObject({ code: 'stale_revision', message: 'desktop d2 changed since revision 1' });
+    await expect(move).rejects.toMatchObject({ code: 'not_found', message: 'anchor pane-2 does not belong to desktop d2' });
   });
   it('sends an empty tile_params to clear a tile, and a move carries its drop share', async () => {
     const { ws, result } = await connect();
 
     act(() => {
-      void result.current.sendDesktopUpdateTile({ desktopId: 'd1', expectedRevision: 3, tileId: 'nb', tileParams: '' });
+      void result.current.sendDesktopUpdateTile({ desktopId: 'd1', tileId: 'nb', tileParams: '' });
       void result.current.sendDesktopMoveLeaf({
         sourceDesktopId: 'd1',
         targetDesktopId: 'd1',
@@ -303,8 +299,6 @@ describe('useDaemonSocket profiles', () => {
         anchorId: 'pane-2',
         edge: 'left',
         leafShare: 0.3,
-        expectedSourceRevision: 3,
-        expectedTargetRevision: 3,
       });
     });
 
@@ -319,7 +313,7 @@ describe('useDaemonSocket profiles', () => {
     act(() => {
       dock = result.current.sendDesktopDockTile({
         desktopId: 'd1',
-        expectedRevision: 1,
+
         tileId: 'tile-md',
         tileKind: 'markdown',
         tileParams: '/notes/plan.md',
@@ -329,7 +323,7 @@ describe('useDaemonSocket profiles', () => {
     const [command] = ws.commands('desktop_dock_tile');
     expect(command).toMatchObject({
       desktop_id: 'd1',
-      expected_revision: 1,
+
       tile_id: 'tile-md',
       tile_kind: 'markdown',
       tile_params: '/notes/plan.md',

@@ -74,7 +74,7 @@ func TestAPaneWhoseSessionVanishedNeverBlocksItsDesktop(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.SetDesktopSplitRatio(desktop.ID, current.Tree.SplitID, 0.3, current.Revision); err != nil {
+	if _, err := s.SetDesktopSplitRatio(desktop.ID, current.Tree.SplitID, 0.3); err != nil {
 		t.Fatalf("a desktop holding closed agents refused a ratio change: %v", err)
 	}
 	if _, err := s.RemoveSessionPlacement("agent-a"); err != nil {
@@ -91,7 +91,7 @@ func TestAPaneWhoseSessionVanishedNeverBlocksItsDesktop(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.RemoveLeaf(desktop.ID, paneB, current.Revision); err != nil {
+	if _, err := s.RemoveLeaf(desktop.ID, paneB); err != nil {
 		t.Fatalf("removing the pane of a session that no longer exists: %v", err)
 	}
 	_ = paneA
@@ -101,7 +101,7 @@ func TestAPaneWhoseSessionVanishedNeverBlocksItsDesktop(t *testing.T) {
 		t.Fatal(err)
 	}
 	current, _ = s.GetDesktop(desktop.ID)
-	_, _, err = s.PlaceSession(SessionPlacementRequest{DesktopID: desktop.ID, ExpectedRevision: current.Revision, SessionID: "agent-d"})
+	_, _, err = s.PlaceSession(SessionPlacementRequest{DesktopID: desktop.ID, SessionID: "agent-d"})
 	wantCode(t, err, profiles.CodeSessionClosed)
 }
 
@@ -110,10 +110,10 @@ func TestPlacingWithAShareKeepsThatShare(t *testing.T) {
 	profile, desktop := mustCreateProfile(t, s, "attn")
 	addProfileSession(t, s, "agent-a", profile.ID)
 	addProfileSession(t, s, "agent-b", profile.ID)
-	first, paneA := mustPlace(t, s, desktop.ID, "agent-a")
+	_, paneA := mustPlace(t, s, desktop.ID, "agent-a")
 
 	placed, _, err := s.PlaceSession(SessionPlacementRequest{
-		DesktopID: desktop.ID, ExpectedRevision: first.Revision, SessionID: "agent-b",
+		DesktopID: desktop.ID, SessionID: "agent-b",
 		AnchorPaneID: paneA, Direction: layouttree.DirectionVertical, NewPaneShare: 0.25,
 	})
 	if err != nil {
@@ -146,7 +146,6 @@ func TestAMoveWhoseTargetWriteFailsLeavesTheSourceUntouched(t *testing.T) {
 
 	_, err = s.MoveLeaf(LeafMoveRequest{
 		SourceDesktopID: source.ID, TargetDesktopID: target.ID, LeafID: paneA, Direction: layouttree.DirectionVertical,
-		ExpectedSourceRevision: source.Revision, ExpectedTargetRevision: target.Revision,
 	})
 	wantCode(t, err, profiles.CodeInvalid)
 

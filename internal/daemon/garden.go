@@ -13,8 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
-	"github.com/victorarias/attn/internal/layouttree"
-	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -1283,43 +1281,14 @@ func (d *Daemon) gardenDispatchersBySession() map[protocol.SessionID]garden.Tend
 	return d.dispatchersBySession
 }
 
-func (d *Daemon) sameDesktopDelegates(source profiles.Desktop, rootPaneID string) []store.LeafFollower {
-	panes := make(map[string]profiles.Pane, len(source.Panes))
-	for _, pane := range source.Panes {
-		panes[pane.PaneID] = pane
-	}
-	root := panes[rootPaneID]
-	if root.SessionID == "" || d.store.Get(root.SessionID) == nil {
-		return nil
-	}
+func (d *Daemon) liveDelegateDispatchers() map[protocol.SessionID]protocol.SessionID {
 	dispatchers := make(map[protocol.SessionID]protocol.SessionID)
 	for delegate, tender := range d.gardenDispatchersBySession() {
 		if dispatcher, live := d.liveSessionForTender(tender); live && d.store.Get(delegate) != nil {
 			dispatchers[delegate] = dispatcher
 		}
 	}
-	delegates := make(map[protocol.SessionID][]profiles.Pane)
-	for _, leafID := range layouttree.LeafIDs(source.Tree) {
-		pane := panes[leafID]
-		if dispatcher := dispatchers[pane.SessionID]; dispatcher != "" {
-			delegates[dispatcher] = append(delegates[dispatcher], pane)
-		}
-	}
-	queue := []profiles.Pane{root}
-	seen := map[protocol.SessionID]bool{root.SessionID: true}
-	var followers []store.LeafFollower
-	for i := 0; i < len(queue); i++ {
-		dispatcher := queue[i]
-		for _, pane := range delegates[dispatcher.SessionID] {
-			if seen[pane.SessionID] {
-				continue
-			}
-			seen[pane.SessionID] = true
-			queue = append(queue, pane)
-			followers = append(followers, store.LeafFollower{PaneID: pane.PaneID, BesidePaneID: dispatcher.PaneID})
-		}
-	}
-	return followers
+	return dispatchers
 }
 
 func (d *Daemon) gardenDispatchesFromChief() map[protocol.SessionID]bool {

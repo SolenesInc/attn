@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DockTarget } from '../components/SessionTerminalDesktop/dockTarget';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
-import { withFreshDesktopRevisions } from '../hooks/desktopRevisions';
 import type { useDesktopRuntimeController } from '../hooks/useDesktopRuntimeController';
+import { actThenShow } from './openThenShow';
 import { useProfilesStore } from '../store/profiles';
-import { useSessionStore } from '../store/sessions';
 import { SIDEBAR_LEAF_DROP_PLACEMENT, type LeafDesktopDragState, type LeafDragPreviewState } from './appSupport';
 
 const HOVER_SWITCH_DELAY_MS = 320;
@@ -30,7 +29,7 @@ export function useLeafDrag({
   handleSelectDesktop,
   showError,
 }: Options) {
-  const { sendDesktopMoveLeaf, sendDesktopCreate, sendDesktopSetCurrent } = useDaemonApi();
+  const { sendDesktopMoveLeaf } = useDaemonApi();
   const getActiveLeafDropSnapshot = useCallback(
     () => getDesktopLeafDropSnapshot(currentDesktopIdRef.current),
     [getDesktopLeafDropSnapshot, currentDesktopIdRef],
@@ -139,21 +138,15 @@ export function useLeafDrag({
   );
 
   const sendLeafToDesktop = useCallback(
-    (drag: LeafDesktopDragState, targetDesktopId: string, targetRevision?: number, withDelegates = false) =>
-      withFreshDesktopRevisions(
-        targetRevision === undefined ? [drag.sourceDesktopId, targetDesktopId] : [drag.sourceDesktopId],
-        (revisionOf) =>
-          sendDesktopMoveLeaf({
-            sourceDesktopId: drag.sourceDesktopId,
-            targetDesktopId,
-            leafId: drag.leafId,
-            ...(withDelegates ? { withDelegates: true } : {}),
-            edge: SIDEBAR_LEAF_DROP_PLACEMENT.edge,
-            leafShare: SIDEBAR_LEAF_DROP_PLACEMENT.leafShare,
-            expectedSourceRevision: revisionOf(drag.sourceDesktopId),
-            expectedTargetRevision: targetRevision ?? revisionOf(targetDesktopId),
-          }),
-      ),
+    (drag: LeafDesktopDragState, targetDesktopId?: string, withDelegates = false) =>
+      sendDesktopMoveLeaf({
+        sourceDesktopId: drag.sourceDesktopId,
+        targetDesktopId,
+        leafId: drag.leafId,
+        ...(withDelegates ? { withDelegates: true } : {}),
+        edge: SIDEBAR_LEAF_DROP_PLACEMENT.edge,
+        leafShare: SIDEBAR_LEAF_DROP_PLACEMENT.leafShare,
+      }),
     [sendDesktopMoveLeaf],
   );
 
@@ -166,18 +159,14 @@ export function useLeafDrag({
       leafShare: number | undefined,
     ) => {
       const targetDesktopId = currentDesktopIdRef.current ?? sourceDesktopId;
-      void withFreshDesktopRevisions([...new Set([sourceDesktopId, targetDesktopId])], (revisionOf) =>
-        sendDesktopMoveLeaf({
-          sourceDesktopId,
-          targetDesktopId,
-          leafId,
-          anchorId,
-          edge,
-          leafShare,
-          expectedSourceRevision: revisionOf(sourceDesktopId),
-          expectedTargetRevision: revisionOf(targetDesktopId),
-        }),
-      ).catch((error) => {
+      void sendDesktopMoveLeaf({
+        sourceDesktopId,
+        targetDesktopId,
+        leafId,
+        anchorId,
+        edge,
+        leafShare,
+      }).catch((error) => {
         showError(`Could not move that pane: ${failureMessage(error)}`);
       });
     },
@@ -191,7 +180,7 @@ export function useLeafDrag({
       clearHoverTimer();
       setDragHoverDesktopId(null);
       handleSelectDesktop(desktop.id);
-      void sendLeafToDesktop(drag, desktop.id, undefined, withDelegates).catch((error) => {
+      void sendLeafToDesktop(drag, desktop.id, withDelegates).catch((error) => {
         showError(`Could not move that pane: ${failureMessage(error)}`);
       });
     },
@@ -204,18 +193,17 @@ export function useLeafDrag({
     if (!drag || !profileId) return;
     clearHoverTimer();
     setDragHoverDesktopId(null);
-    void sendDesktopCreate(profileId)
-      .then(async (result) => {
-        const created = result.desktops?.[0];
-        if (!created) throw new Error('The daemon created no desktop.');
-        await sendLeafToDesktop(drag, created.id, created.revision);
-        useSessionStore.getState().setView('session');
-        await sendDesktopSetCurrent(profileId, created.id);
-      })
-      .catch((error) => {
-        showError(`Could not move that pane to a new desktop: ${failureMessage(error)}`);
-      });
-  }, [clearHoverTimer, sendDesktopCreate, sendDesktopSetCurrent, sendLeafToDesktop, showError]);
+    void actThenShow(
+      { kind: 'move', sourceDesktopId: drag.sourceDesktopId, leafId: drag.leafId },
+      () => sendLeafToDesktop(drag),
+      (result) => {
+        const target = result.desktops?.find((desktop) => desktop.id !== drag.sourceDesktopId);
+        return target && result.pane_id ? { desktopId: target.id, leafId: result.pane_id } : null;
+      },
+    ).catch((error) => {
+      showError(`Could not move that pane to a new desktop: ${failureMessage(error)}`);
+    });
+  }, [clearHoverTimer, sendLeafToDesktop, showError]);
 
   return {
     getActiveLeafDropSnapshot,

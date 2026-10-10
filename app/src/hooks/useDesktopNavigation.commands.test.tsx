@@ -5,8 +5,6 @@ import { DaemonApiProvider } from '../contexts/DaemonApiContext';
 import { createMockDaemonApi } from '../test/mocks/daemon';
 import { useProfilesStore } from '../store/profiles';
 import type { Desktop, Profile } from '../types/generated';
-import { ProfileCommandError } from './daemonProfileEvents';
-import { FRESH_ARRANGEMENT_TRIPWIRE_MS } from './desktopRevisions';
 import { useDesktopNavigation } from './useDesktopNavigation';
 
 const PROFILE: Profile = { id: 'set-default', name: 'Default', current_desktop_id: 'd1', revision: 3 };
@@ -54,16 +52,6 @@ function renderNavigation() {
   );
   const { result } = renderHook(() => useDesktopNavigation(showError), { wrapper });
   return { api, showError, result };
-}
-
-function staleRevision() {
-  return new ProfileCommandError({
-    ...ok,
-    action: 'desktop_move_leaf',
-    success: false,
-    error: 'stale',
-    error_code: 'stale_revision',
-  } as never);
 }
 
 async function settle() {
@@ -117,12 +105,8 @@ describe('useDesktopNavigation', () => {
 
     expect(api.sendDesktopMoveLeaf.mock.calls).toEqual([[{
       sourceDesktopId: 'd1',
-      targetDesktopId: 'd2',
+      targetShortcutSlot: 2,
       leafId: 'p1',
-      anchorId: 'p9',
-      edge: 'right',
-      expectedSourceRevision: 4,
-      expectedTargetRevision: 7,
     }]]);
     expect(api.sendDesktopSetActivePane).not.toHaveBeenCalled();
     expect(api.sendDesktopSetCurrent).not.toHaveBeenCalled();
@@ -148,54 +132,7 @@ describe('useDesktopNavigation', () => {
     act(() => result.current.moveActiveLeafToSlot(2, false));
     await settle();
 
-    expect(api.sendDesktopMoveLeaf.mock.calls[0][0]).toMatchObject({ leafId: 't1', targetDesktopId: 'd2', anchorId: 'p9' });
-  });
-
-  it('retries a send once the other client\'s newer arrangement arrives', async () => {
-    seedStore([
-      desktop('d1', { shortcut_slot: 1, tree_json: TREE_WITH_PANE('p1'), active_pane_id: 'p1', revision: 4 }),
-      desktop('d2', { shortcut_slot: 2, revision: 7 }),
-    ]);
-    const { api, result } = renderNavigation();
-    api.sendDesktopMoveLeaf.mockRejectedValueOnce(staleRevision());
-
-    act(() => result.current.moveActiveLeafToDesktop('d2', false));
-    await settle();
-    expect(api.sendDesktopMoveLeaf).toHaveBeenCalledTimes(1);
-
-    act(() => {
-      useProfilesStore.setState((state) => ({
-        desktops: state.desktops.map((entry) => (entry.id === 'd2' ? { ...entry, revision: 8 } : entry)),
-      }));
-    });
-    await settle();
-    await settle();
-
-    expect(api.sendDesktopMoveLeaf.mock.calls.map(([move]) => move.expectedTargetRevision)).toEqual([7, 8]);
-  });
-
-  it('names the wait when a newer arrangement never arrives after a stale send', async () => {
-    vi.useFakeTimers();
-    try {
-      seedStore([
-        desktop('d1', { shortcut_slot: 1, tree_json: TREE_WITH_PANE('p1'), active_pane_id: 'p1', revision: 4 }),
-        desktop('d2', { shortcut_slot: 2, revision: 7 }),
-      ]);
-      const { api, showError, result } = renderNavigation();
-      api.sendDesktopMoveLeaf.mockRejectedValueOnce(staleRevision());
-
-      act(() => result.current.moveActiveLeafToDesktop('d2', false));
-      await settle();
-      await act(async () => {
-        vi.advanceTimersByTime(FRESH_ARRANGEMENT_TRIPWIRE_MS);
-      });
-      await settle();
-
-      expect(api.sendDesktopMoveLeaf).toHaveBeenCalledTimes(1);
-      expect(showError).toHaveBeenCalledWith(expect.stringContaining('did not arrive within 5s'));
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(api.sendDesktopMoveLeaf.mock.calls[0][0]).toMatchObject({ leafId: 't1', targetShortcutSlot: 2 });
   });
 
   it('does nothing quietly when nothing is active to move', () => {
@@ -209,7 +146,7 @@ describe('useDesktopNavigation', () => {
   });
 
 
-  it('renames a desktop at its current revision and hands a refusal back to the rename form', async () => {
+  it('renames a desktop and hands a refusal back to the rename form', async () => {
     seedStore([desktop('d1', { shortcut_slot: 1, revision: 6 })]);
     const { api, showError, result } = renderNavigation();
 
@@ -218,7 +155,7 @@ describe('useDesktopNavigation', () => {
     const refused = act(() => result.current.renameDesktop('d1', ''));
 
     await expect(refused).rejects.toThrow('desktop d1 not found');
-    expect(api.sendDesktopRename.mock.calls).toEqual([['d1', 'Reviews', 6], ['d1', '', 6]]);
+    expect(api.sendDesktopRename.mock.calls).toEqual([['d1', 'Reviews'], ['d1', '']]);
     expect(showError).not.toHaveBeenCalled();
   });
 
@@ -230,7 +167,7 @@ describe('useDesktopNavigation', () => {
     act(() => result.current.reorderDesktop({ desktopId: 'd2', nextDesktopId: 'd1' }));
     await settle();
 
-    expect(api.sendDesktopReorder.mock.calls).toEqual([[{ desktopId: 'd2', nextDesktopId: 'd1', expectedRevision: 3 }]]);
+    expect(api.sendDesktopReorder.mock.calls).toEqual([[{ desktopId: 'd2', nextDesktopId: 'd1' }]]);
     expect(showError).toHaveBeenCalledWith('desktop d3 belongs to another profile');
   });
 

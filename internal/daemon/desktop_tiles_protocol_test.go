@@ -31,7 +31,6 @@ func newDesktopTilesWorld(t *testing.T) *desktopTilesWorld {
 func (w *desktopTilesWorld) apply(command map[string]any) protocol.ProfileActionResultMessage {
 	w.t.Helper()
 	command["desktop_id"] = w.desktop.ID
-	command["expected_revision"] = w.desktop.Revision
 	result := w.mustSend(w.client, command)
 	w.desktop = result.Desktops[0]
 	return result
@@ -115,25 +114,19 @@ func TestATileDocksBesideTheActiveLeafTakesFocusAndReDockingKeepsItsParams(t *te
 	}
 }
 
-func TestDockingATileRefusesAStaleRevisionAndAPaneID(t *testing.T) {
+func TestDockingATileRefusesAPaneIDAndMissingSession(t *testing.T) {
 	w := newDesktopTilesWorld(t)
 	w.agent("agent-a", w.profileID)
 	placed := w.apply(map[string]any{"cmd": protocol.CmdDesktopPlaceSession, "session_id": "agent-a"})
 
-	stale := w.send(w.client, map[string]any{
-		"cmd": protocol.CmdDesktopDockTile, "desktop_id": w.desktop.ID, "expected_revision": w.desktop.Revision - 1,
-		"tile_id": "tile-notebook", "tile_kind": "notebook", "edge": "right",
-	})
-	wantErrorCode(t, stale, protocol.ProfileErrorCodeStaleRevision)
-
 	clash := w.send(w.client, map[string]any{
-		"cmd": protocol.CmdDesktopDockTile, "desktop_id": w.desktop.ID, "expected_revision": w.desktop.Revision,
+		"cmd": protocol.CmdDesktopDockTile, "desktop_id": w.desktop.ID,
 		"tile_id": protocol.Deref(placed.PaneID), "tile_kind": "notebook", "edge": "right",
 	})
 	wantErrorCode(t, clash, protocol.ProfileErrorCodeInvalid)
 
 	unknownSession := w.send(w.client, map[string]any{
-		"cmd": protocol.CmdDesktopDockTile, "desktop_id": w.desktop.ID, "expected_revision": w.desktop.Revision,
+		"cmd": protocol.CmdDesktopDockTile, "desktop_id": w.desktop.ID,
 		"tile_id": "tile-md", "tile_kind": "markdown", "tile_params": "/notes.md", "tile_session_id": "agent-that-never-was", "edge": "right",
 	})
 	wantErrorCode(t, unknownSession, protocol.ProfileErrorCodeNotFound)
@@ -152,19 +145,19 @@ func TestUpdatingATileValidatesItsParamsByKind(t *testing.T) {
 	}
 
 	badURL := w.send(w.client, map[string]any{
-		"cmd": protocol.CmdDesktopUpdateTile, "desktop_id": w.desktop.ID, "expected_revision": w.desktop.Revision,
+		"cmd": protocol.CmdDesktopUpdateTile, "desktop_id": w.desktop.ID,
 		"tile_id": "tile-web", "tile_params": "javascript:alert(1)",
 	})
 	wantErrorCode(t, badURL, protocol.ProfileErrorCodeInvalid)
 
 	markdownPath := w.send(w.client, map[string]any{
-		"cmd": protocol.CmdDesktopUpdateTile, "desktop_id": w.desktop.ID, "expected_revision": w.desktop.Revision,
+		"cmd": protocol.CmdDesktopUpdateTile, "desktop_id": w.desktop.ID,
 		"tile_id": "tile-md", "tile_params": "/elsewhere.md",
 	})
 	wantErrorCode(t, markdownPath, protocol.ProfileErrorCodeInvalid)
 
 	unknownSession := w.send(w.client, map[string]any{
-		"cmd": protocol.CmdDesktopUpdateTile, "desktop_id": w.desktop.ID, "expected_revision": w.desktop.Revision,
+		"cmd": protocol.CmdDesktopUpdateTile, "desktop_id": w.desktop.ID,
 		"tile_id": "tile-md", "tile_session_id": "agent-that-never-was",
 	})
 	wantErrorCode(t, unknownSession, protocol.ProfileErrorCodeNotFound)
@@ -186,7 +179,7 @@ func TestAnEmptyNotebookParamClearsItsRootWhileAMissingOneIsRefused(t *testing.T
 	}
 
 	nothing := w.send(w.client, map[string]any{
-		"cmd": protocol.CmdDesktopUpdateTile, "desktop_id": w.desktop.ID, "expected_revision": w.desktop.Revision,
+		"cmd": protocol.CmdDesktopUpdateTile, "desktop_id": w.desktop.ID,
 		"tile_id": "tile-nb",
 	})
 	wantErrorCode(t, nothing, protocol.ProfileErrorCodeInvalid)
@@ -200,14 +193,14 @@ func TestATileCanOnlyFollowAnAgentOfItsOwnProfile(t *testing.T) {
 	notes := filepath.Join(t.TempDir(), "notes.md")
 
 	docked := w.send(w.client, map[string]any{
-		"cmd": protocol.CmdDesktopDockTile, "desktop_id": w.desktop.ID, "expected_revision": w.desktop.Revision,
+		"cmd": protocol.CmdDesktopDockTile, "desktop_id": w.desktop.ID,
 		"tile_id": "tile-md", "tile_kind": "markdown", "tile_params": notes, "tile_session_id": "their-agent", "edge": "right",
 	})
 	wantErrorCode(t, docked, protocol.ProfileErrorCodeCrossProfile)
 
 	w.apply(map[string]any{"cmd": protocol.CmdDesktopDockTile, "tile_id": "tile-md", "tile_kind": "markdown", "tile_params": notes, "tile_session_id": "my-agent", "edge": "right"})
 	rebound := w.send(w.client, map[string]any{
-		"cmd": protocol.CmdDesktopUpdateTile, "desktop_id": w.desktop.ID, "expected_revision": w.desktop.Revision,
+		"cmd": protocol.CmdDesktopUpdateTile, "desktop_id": w.desktop.ID,
 		"tile_id": "tile-md", "tile_session_id": "their-agent",
 	})
 	wantErrorCode(t, rebound, protocol.ProfileErrorCodeCrossProfile)
@@ -234,7 +227,7 @@ func TestDockingATileValidatesItsParamsLikeAnUpdate(t *testing.T) {
 		"a retired app view":             {"app:kanban/board", `{"board":"work"}`, protocol.ProfileErrorCodeInvalid},
 	} {
 		refused := w.send(w.client, map[string]any{
-			"cmd": protocol.CmdDesktopDockTile, "desktop_id": w.desktop.ID, "expected_revision": w.desktop.Revision,
+			"cmd": protocol.CmdDesktopDockTile, "desktop_id": w.desktop.ID,
 			"tile_id": "tile-new", "tile_kind": command.kind, "tile_params": command.params, "edge": "right",
 		})
 		if refused.Success || refused.ErrorCode == nil || *refused.ErrorCode != command.want {
@@ -254,13 +247,13 @@ func TestDockingATileValidatesItsParamsLikeAnUpdate(t *testing.T) {
 	w.apply(map[string]any{"cmd": protocol.CmdDesktopDockTile, "tile_id": "tile-md", "tile_kind": "markdown", "tile_params": notes, "edge": "right"})
 	for _, kind := range []string{"browser", "seed"} {
 		retyped := w.send(w.client, map[string]any{
-			"cmd": protocol.CmdDesktopDockTile, "desktop_id": w.desktop.ID, "expected_revision": w.desktop.Revision,
+			"cmd": protocol.CmdDesktopDockTile, "desktop_id": w.desktop.ID,
 			"tile_id": "tile-md", "tile_kind": kind, "edge": "left",
 		})
 		wantErrorCode(t, retyped, protocol.ProfileErrorCodeInvalid)
 	}
 	elsewhere := w.send(w.client, map[string]any{
-		"cmd": protocol.CmdDesktopDockTile, "desktop_id": w.desktop.ID, "expected_revision": w.desktop.Revision,
+		"cmd": protocol.CmdDesktopDockTile, "desktop_id": w.desktop.ID,
 		"tile_id": "tile-md", "tile_kind": "markdown", "tile_params": "/elsewhere.md", "edge": "left",
 	})
 	wantErrorCode(t, elsewhere, protocol.ProfileErrorCodeInvalid)
@@ -569,7 +562,6 @@ func TestSendingAFocusedTileToAnotherDesktopKeepsItFocusedThere(t *testing.T) {
 	moved := w.mustSend(w.client, map[string]any{
 		"cmd": protocol.CmdDesktopMoveLeaf, "source_desktop_id": w.desktop.ID, "target_desktop_id": other.ID,
 		"leaf_id": "tile-notebook", "edge": "right",
-		"expected_source_revision": w.desktop.Revision, "expected_target_revision": other.Revision,
 	})
 
 	byID := map[string]protocol.Desktop{}

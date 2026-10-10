@@ -67,11 +67,7 @@ func TestFinishAppliesTheDraftOnceAndKeepsAgentsLaunchedMeanwhile(t *testing.T) 
 	first, second := view.Manifest.Groups[0], view.Manifest.Groups[1]
 	extra := view.Manifest.Groups[9]
 	addProfileSession(t, s, "delegated-child", view.Manifest.ProfileID)
-	source, err := s.GetDesktop(second.DesktopID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := s.PlaceSession(SessionPlacementRequest{DesktopID: second.DesktopID, ExpectedRevision: source.Revision, SessionID: "delegated-child", AnchorPaneID: "pane-agent-02", Direction: layouttree.DirectionVertical}); err != nil {
+	if _, _, err := s.PlaceSession(SessionPlacementRequest{DesktopID: second.DesktopID, SessionID: "delegated-child", AnchorPaneID: "pane-agent-02", Direction: layouttree.DirectionVertical}); err != nil {
 		t.Fatalf("placing a delegated child during the picker: %v", err)
 	}
 	view = edit(t, s, view.State.Revision, func(plan profilemigration.Plan, live []profilemigration.GroupState) (profilemigration.Plan, error) {
@@ -80,7 +76,7 @@ func TestFinishAppliesTheDraftOnceAndKeepsAgentsLaunchedMeanwhile(t *testing.T) 
 	view = edit(t, s, view.State.Revision, func(plan profilemigration.Plan, live []profilemigration.GroupState) (profilemigration.Plan, error) {
 		return plan.Move(live, extra.ID, view.Manifest.Groups[4].DesktopID, "", profilemigration.EdgeRight, 0)
 	})
-	_, err = s.FinishProfileMigration(view.State.Revision)
+	_, err := s.FinishProfileMigration(view.State.Revision)
 	wantCode(t, err, profiles.CodeInvalid)
 	view = edit(t, s, view.State.Revision, keepAll)
 
@@ -184,7 +180,7 @@ func TestFinishKeepsADesktopOrderChangedDuringThePicker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.ReorderDesktop(third.ID, "", view.Manifest.Groups[0].DesktopID, third.Revision); err != nil {
+	if _, err := s.ReorderDesktop(third.ID, "", view.Manifest.Groups[0].DesktopID); err != nil {
 		t.Fatalf("moving desktop 3 first: %v", err)
 	}
 	view = edit(t, s, view.State.Revision, func(plan profilemigration.Plan, live []profilemigration.GroupState) (profilemigration.Plan, error) {

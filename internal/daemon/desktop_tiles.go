@@ -90,7 +90,7 @@ func (d *Daemon) handleDesktopDockTile(client *wsClient, msg *protocol.DesktopDo
 		if err != nil {
 			return profileActionOutcome{}, err
 		}
-		desktop, err := d.store.UpdateDesktopArrangement(msg.DesktopID, int64(msg.ExpectedRevision), func(desktop profiles.Desktop) (profiles.Desktop, error) {
+		desktop, err := d.store.EditDesktopArrangement(msg.DesktopID, func(desktop profiles.Desktop) (profiles.Desktop, error) {
 			return dockTileOnDesktop(desktop, dock)
 		})
 		return d.desktopChanged(desktop), err
@@ -258,7 +258,7 @@ func (d *Daemon) handleDesktopUpdateTile(client *wsClient, msg *protocol.Desktop
 		if err != nil {
 			return profileActionOutcome{}, err
 		}
-		desktop, err := d.store.UpdateDesktopArrangement(msg.DesktopID, int64(msg.ExpectedRevision), func(desktop profiles.Desktop) (profiles.Desktop, error) {
+		desktop, err := d.store.EditDesktopArrangement(msg.DesktopID, func(desktop profiles.Desktop) (profiles.Desktop, error) {
 			return applyDesktopTileUpdate(desktop, update)
 		})
 		return d.desktopChanged(desktop), err

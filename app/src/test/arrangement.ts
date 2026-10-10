@@ -193,8 +193,19 @@ export function serveArrangement(daemon: ScriptedDaemon, arrangement: Arrangemen
   // Like the daemon, a leaf whose id the target already holds lands under a new id.
   daemon.on('desktop_move_leaf', (command) => {
     const source = arrangement.desktop(command.source_desktop_id);
-    const target = arrangement.desktop(command.target_desktop_id);
     const leaf = source ? findLeaf(parse(source), command.leaf_id) : null;
+    let target = command.target_desktop_id ? arrangement.desktop(command.target_desktop_id) : undefined;
+    if (source && leaf && !command.target_desktop_id) {
+      const slot = command.target_shortcut_slot ?? [1, 2, 3, 4, 5, 6, 7, 8, 9].find((candidate) =>
+        !arrangement.desktops.some((desktop) => desktop.profile_id === source.profile_id && desktop.shortcut_slot === candidate));
+      target = slot ? arrangement.desktops.find((desktop) => desktop.profile_id === source.profile_id && desktop.shortcut_slot === slot) : undefined;
+      if (!target) {
+        target = emptyDesktop(slot ? `${source.profile_id}/desktop_${slot}` : `desktop-new-${arrangement.desktops.length + 1}`, {
+          profile_id: source.profile_id, shortcut_slot: slot, order_key: 'z',
+        });
+        arrangement.desktops = [...arrangement.desktops, target];
+      }
+    }
     if (!source || !target || !leaf) {
       return refused(command, 'not_found', `leaf ${command.leaf_id} does not belong to desktop ${command.source_desktop_id}`);
     }
@@ -208,7 +219,7 @@ export function serveArrangement(daemon: ScriptedDaemon, arrangement: Arrangemen
     arrangement.replace({ ...arrangement.withTree(target, tree, panes), active_pane_id: finalId });
     const moved = { from_desktop_id: source.id, from_leaf_id: command.leaf_id, to_desktop_id: target.id, to_leaf_id: finalId };
     const [changed, result] = accepted(command, arrangement, finalId);
-    return [{ ...(changed as object), moved_leaf: moved } as Reply, result];
+    return [{ ...(changed as object), moved_leaf: moved } as Reply, { ...(result as object), desktops: [arrangement.desktop(source.id)!, arrangement.desktop(target.id)!] } as Reply];
   });
   daemon.on('desktop_remove_leaf', (command) => {
     const desktop = arrangement.desktop(command.desktop_id);

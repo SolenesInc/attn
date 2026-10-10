@@ -99,7 +99,7 @@ func TestUnplacedAgentsKeepTheirTerminalAcrossPlacementAndRestart(t *testing.T) 
 			view := viewProfile(t, &world{World: s.World}, profile)
 			desktop, pane := view.paneOf(t, session)
 			request := uuid.NewString()
-			mustProfileRequest(app, protocol.DesktopRemoveLeafMessage{Cmd: protocol.CmdDesktopRemoveLeaf, RequestID: request, DesktopID: desktop.ID, LeafID: pane, ExpectedRevision: desktop.Revision}, request)
+			mustProfileRequest(app, protocol.DesktopRemoveLeafMessage{Cmd: protocol.CmdDesktopRemoveLeaf, RequestID: request, DesktopID: desktop.ID, LeafID: pane}, request)
 			_, caller, err := s.Client().QueryAs(terminal)
 			if err != nil || caller != protocol.SessionID(session) {
 				t.Fatalf("unplaced caller %s: %v", caller, err)
@@ -129,9 +129,9 @@ func TestUnplacedAgentsKeepTheirTerminalAcrossPlacementAndRestart(t *testing.T) 
 					t.Fatal(err)
 				}
 			case "place":
-				current := viewProfile(t, &world{World: s.World}, profile).desktops[desktop.ID]
+
 				request := uuid.NewString()
-				mustProfileRequest(app, protocol.DesktopPlaceSessionMessage{Cmd: protocol.CmdDesktopPlaceSession, RequestID: request, DesktopID: desktop.ID, ExpectedRevision: current.Revision, SessionID: successor.ID}, request)
+				mustProfileRequest(app, protocol.DesktopPlaceSessionMessage{Cmd: protocol.CmdDesktopPlaceSession, RequestID: request, DesktopID: desktop.ID, SessionID: successor.ID}, request)
 			}
 			if got := app.Terminal(session); got != string(terminal) {
 				t.Fatalf("placement changed terminal from %s to %s", terminal, got)
@@ -142,7 +142,7 @@ func TestUnplacedAgentsKeepTheirTerminalAcrossPlacementAndRestart(t *testing.T) 
 			}
 			current, leaf := viewProfile(t, &world{World: s.World}, profile).paneOf(t, session)
 			request = uuid.NewString()
-			mustProfileRequest(app, protocol.DesktopRemoveLeafMessage{Cmd: protocol.CmdDesktopRemoveLeaf, RequestID: request, DesktopID: current.ID, LeafID: leaf, ExpectedRevision: current.Revision}, request)
+			mustProfileRequest(app, protocol.DesktopRemoveLeafMessage{Cmd: protocol.CmdDesktopRemoveLeaf, RequestID: request, DesktopID: current.ID, LeafID: leaf}, request)
 			closeSession(t, s.Client(), session, "done while unplaced")
 			testworld.Await(app, protocol.EventTerminalBindingsUpdated, func(m protocol.TerminalBindingsUpdatedMessage) bool {
 				for _, binding := range m.TerminalBindings {

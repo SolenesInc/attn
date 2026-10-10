@@ -4683,18 +4683,17 @@ export function useDaemonSocket({
   );
 
   const sendDesktopRename = useCallback(
-    (desktopId: string, name: string, expectedRevision: number) =>
-      sendProfileCommand('desktop_rename', { desktop_id: desktopId, name, expected_revision: expectedRevision }),
+    (desktopId: string, name: string) =>
+      sendProfileCommand('desktop_rename', { desktop_id: desktopId, name }),
     [sendProfileCommand],
   );
 
   const sendDesktopReorder = useCallback(
-    (reorder: { desktopId: string; previousDesktopId?: string; nextDesktopId?: string; expectedRevision: number }) =>
+    (reorder: { desktopId: string; previousDesktopId?: string; nextDesktopId?: string }) =>
       sendProfileCommand('desktop_reorder', {
         desktop_id: reorder.desktopId,
         ...(reorder.previousDesktopId ? { previous_desktop_id: reorder.previousDesktopId } : {}),
         ...(reorder.nextDesktopId ? { next_desktop_id: reorder.nextDesktopId } : {}),
-        expected_revision: reorder.expectedRevision,
       }),
     [sendProfileCommand],
   );
@@ -4731,35 +4730,32 @@ export function useDaemonSocket({
   const sendDesktopMoveLeaf = useCallback(
     (move: {
       sourceDesktopId: string;
-      targetDesktopId: string;
+      targetDesktopId?: string;
+      targetShortcutSlot?: number;
       leafId: string;
       anchorId?: string;
-      edge: 'left' | 'right' | 'top' | 'bottom';
+      edge?: 'left' | 'right' | 'top' | 'bottom';
       leafShare?: number;
       withDelegates?: boolean;
-      expectedSourceRevision: number;
-      expectedTargetRevision: number;
     }) =>
       sendProfileCommand('desktop_move_leaf', {
         source_desktop_id: move.sourceDesktopId,
-        target_desktop_id: move.targetDesktopId,
+        ...(move.targetDesktopId ? { target_desktop_id: move.targetDesktopId } : {}),
+        ...(move.targetShortcutSlot !== undefined ? { target_shortcut_slot: move.targetShortcutSlot } : {}),
         leaf_id: move.leafId,
         ...(move.anchorId ? { anchor_id: move.anchorId } : {}),
-        edge: move.edge,
+        ...(move.edge ? { edge: move.edge } : {}),
         ...(move.withDelegates ? { with_delegates: true } : {}),
         ...(move.leafShare ? { leaf_share: move.leafShare } : {}),
-        expected_source_revision: move.expectedSourceRevision,
-        expected_target_revision: move.expectedTargetRevision,
       }),
     [sendProfileCommand],
   );
 
   const sendDesktopPlaceSession = useCallback(
-    (placement: { desktopId: string; sessionId: string; expectedRevision: number; anchorPaneId?: string }) =>
+    (placement: { desktopId: string; sessionId: string; anchorPaneId?: string }) =>
       sendProfileCommand('desktop_place_session', {
         desktop_id: placement.desktopId,
         session_id: placement.sessionId,
-        expected_revision: placement.expectedRevision,
         ...(placement.anchorPaneId ? { anchor_pane_id: placement.anchorPaneId } : {}),
       }),
     [sendProfileCommand],
@@ -4768,7 +4764,6 @@ export function useDaemonSocket({
   const sendDesktopDockTile = useCallback(
     (dock: {
       desktopId: string;
-      expectedRevision: number;
       tileId: string;
       tileKind: string;
       tileParams?: string;
@@ -4779,7 +4774,6 @@ export function useDaemonSocket({
     }) =>
       sendProfileCommand('desktop_dock_tile', {
         desktop_id: dock.desktopId,
-        expected_revision: dock.expectedRevision,
         tile_id: dock.tileId,
         tile_kind: dock.tileKind,
         edge: dock.edge,
@@ -4792,10 +4786,9 @@ export function useDaemonSocket({
   );
 
   const sendDesktopUpdateTile = useCallback(
-    (update: { desktopId: string; expectedRevision: number; tileId: string; tileParams?: string; tileSessionId?: string }) =>
+    (update: { desktopId: string; tileId: string; tileParams?: string; tileSessionId?: string }) =>
       sendProfileCommand('desktop_update_tile', {
         desktop_id: update.desktopId,
-        expected_revision: update.expectedRevision,
         tile_id: update.tileId,
         ...(update.tileParams !== undefined ? { tile_params: update.tileParams } : {}),
         ...(update.tileSessionId ? { tile_session_id: update.tileSessionId } : {}),
@@ -4804,12 +4797,11 @@ export function useDaemonSocket({
   );
 
   const sendDesktopSetSplitRatio = useCallback(
-    (desktopId: string, splitId: string, ratio: number, expectedRevision: number) =>
+    (desktopId: string, splitId: string, ratio: number) =>
       sendProfileCommand('desktop_set_split_ratio', {
         desktop_id: desktopId,
         split_id: splitId,
         ratio,
-        expected_revision: expectedRevision,
       }),
     [sendProfileCommand],
   );
@@ -4868,8 +4860,8 @@ export function useDaemonSocket({
   );
 
   const sendDesktopRemoveLeaf = useCallback(
-    (desktopId: string, leafId: string, expectedRevision: number) =>
-      sendProfileCommand('desktop_remove_leaf', { desktop_id: desktopId, leaf_id: leafId, expected_revision: expectedRevision }),
+    (desktopId: string, leafId: string) =>
+      sendProfileCommand('desktop_remove_leaf', { desktop_id: desktopId, leaf_id: leafId }),
     [sendProfileCommand],
   );
 

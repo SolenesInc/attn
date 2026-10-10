@@ -5,7 +5,6 @@ import App from './App';
 import { useProfilesStore } from './store/profiles';
 import { useSessionStore, type Session } from './store/sessions';
 import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
-import { ProfileCommandError } from './hooks/daemonProfileEvents';
 import { MigrationPhase, type Desktop } from './types/generated';
 import type { TerminalLayoutNode } from './types/desktop';
 import { agentDesktop, arrangeDesktops, fakeDesktopCommands, TEST_PROFILE_ID } from './test/desktops';
@@ -361,30 +360,6 @@ describe('desktop surface', () => {
 
     await waitFor(() => expect(isActive('d-empty')).toBe(true));
     expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('');
-  });
-
-  it('retries closing a tile against the revision another window moved the desktop to', async () => {
-    const { sendDesktopRemoveLeaf } = desktopCommands;
-    sendDesktopRemoveLeaf.mockRejectedValueOnce(new ProfileCommandError({
-      event: 'profile_action_result',
-      request_id: 'test',
-      action: 'desktop_remove_leaf',
-      success: false,
-      error: 'stale',
-      error_code: 'stale_revision',
-    } as never));
-    render(<App />);
-    await userEvent.click(await screen.findByTestId('select-d2'));
-    await userEvent.click(await screen.findByTestId('undock-tile-readme'));
-    expect(sendDesktopRemoveLeaf).toHaveBeenLastCalledWith('d2', 'tile-readme', 1);
-
-    act(() => arrangeDesktops(
-      useProfilesStore.getState().desktops.map((desktop) => (desktop.id === 'd2' ? { ...desktop, revision: 7 } : desktop)),
-      'd2',
-    ));
-
-    await waitFor(() => expect(sendDesktopRemoveLeaf).toHaveBeenLastCalledWith('d2', 'tile-readme', 7));
-    expect(sendDesktopRemoveLeaf).toHaveBeenCalledTimes(2);
   });
 
   it('sends the resolved terminal theme once the daemon handshake completes', async () => {

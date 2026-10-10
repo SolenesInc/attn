@@ -1,8 +1,6 @@
 package daemon
 
 import (
-	"errors"
-
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
@@ -92,32 +90,26 @@ func (d *Daemon) openAgentTile(location agentLocation, tile agentTile) (profiles
 	if location.desktopID == "" {
 		return profiles.Desktop{}, "", profiles.Errorf(profiles.CodeNotFound, "profile %s has no current desktop to open a %s tile on", location.profileID, tile.tileKind)
 	}
-	for attempt := 1; ; attempt++ {
-		if location.sessionID != "" {
-			if placed, err := d.agentLocation(location.sessionID); err == nil {
-				location = placed
-			}
+	if location.sessionID != "" {
+		if placed, err := d.agentLocation(location.sessionID); err == nil {
+			location = placed
 		}
-		desktop, err := d.store.GetDesktop(location.desktopID)
-		if err != nil {
-			return desktop, "", err
-		}
-		tileID := openTileID(desktop, tile)
-		edit, err := d.agentTileEdit(desktop, location.paneID, tile, tileID)
-		if err != nil {
-			return desktop, "", err
-		}
-		updated, err := d.store.UpdateDesktopArrangement(desktop.ID, desktop.Revision, edit)
-		var profileErr *profiles.Error
-		if errors.As(err, &profileErr) && profileErr.Code == profiles.CodeStaleRevision && attempt < 3 {
-			continue
-		}
-		if err != nil {
-			return updated, "", err
-		}
-		d.publishArrangementChanged(updated.ProfileID)
-		return updated, tileID, nil
 	}
+	desktop, err := d.store.GetDesktop(location.desktopID)
+	if err != nil {
+		return desktop, "", err
+	}
+	tileID := openTileID(desktop, tile)
+	edit, err := d.agentTileEdit(desktop, location.paneID, tile, tileID)
+	if err != nil {
+		return desktop, "", err
+	}
+	updated, err := d.store.EditDesktopArrangement(desktop.ID, edit)
+	if err != nil {
+		return updated, "", err
+	}
+	d.publishArrangementChanged(updated.ProfileID)
+	return updated, tileID, nil
 }
 
 func openTileID(desktop profiles.Desktop, tile agentTile) string {

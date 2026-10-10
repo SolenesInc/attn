@@ -3204,9 +3204,6 @@ type DesktopDockTileMessage struct {
 	// Edge corresponds to the JSON schema field "edge".
 	Edge LayoutDockEdge `json:"edge"`
 
-	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
-	ExpectedRevision int `json:"expected_revision"`
-
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
 
@@ -3234,15 +3231,7 @@ type DesktopMoveLeafMessage struct {
 	Cmd string `json:"cmd"`
 
 	// Edge corresponds to the JSON schema field "edge".
-	Edge LayoutDockEdge `json:"edge"`
-
-	// ExpectedSourceRevision corresponds to the JSON schema field
-	// "expected_source_revision".
-	ExpectedSourceRevision int `json:"expected_source_revision"`
-
-	// ExpectedTargetRevision corresponds to the JSON schema field
-	// "expected_target_revision".
-	ExpectedTargetRevision int `json:"expected_target_revision"`
+	Edge *LayoutDockEdge `json:"edge,omitempty,omitzero"`
 
 	// LeafID corresponds to the JSON schema field "leaf_id".
 	LeafID string `json:"leaf_id"`
@@ -3257,7 +3246,10 @@ type DesktopMoveLeafMessage struct {
 	SourceDesktopID string `json:"source_desktop_id"`
 
 	// TargetDesktopID corresponds to the JSON schema field "target_desktop_id".
-	TargetDesktopID string `json:"target_desktop_id"`
+	TargetDesktopID *string `json:"target_desktop_id,omitempty,omitzero"`
+
+	// TargetShortcutSlot corresponds to the JSON schema field "target_shortcut_slot".
+	TargetShortcutSlot *int `json:"target_shortcut_slot,omitempty,omitzero"`
 
 	// WithDelegates corresponds to the JSON schema field "with_delegates".
 	WithDelegates *bool `json:"with_delegates,omitempty,omitzero"`
@@ -3333,9 +3325,6 @@ type DesktopPlaceSessionMessage struct {
 	// Direction corresponds to the JSON schema field "direction".
 	Direction *LayoutSplitDirection `json:"direction,omitempty,omitzero"`
 
-	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
-	ExpectedRevision int `json:"expected_revision"`
-
 	// NewPaneShare corresponds to the JSON schema field "new_pane_share".
 	NewPaneShare *float64 `json:"new_pane_share,omitempty,omitzero"`
 
@@ -3353,9 +3342,6 @@ type DesktopRemoveLeafMessage struct {
 	// DesktopID corresponds to the JSON schema field "desktop_id".
 	DesktopID string `json:"desktop_id"`
 
-	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
-	ExpectedRevision int `json:"expected_revision"`
-
 	// LeafID corresponds to the JSON schema field "leaf_id".
 	LeafID string `json:"leaf_id"`
 
@@ -3370,9 +3356,6 @@ type DesktopRenameMessage struct {
 	// DesktopID corresponds to the JSON schema field "desktop_id".
 	DesktopID string `json:"desktop_id"`
 
-	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
-	ExpectedRevision int `json:"expected_revision"`
-
 	// Name corresponds to the JSON schema field "name".
 	Name string `json:"name"`
 
@@ -3386,9 +3369,6 @@ type DesktopReorderMessage struct {
 
 	// DesktopID corresponds to the JSON schema field "desktop_id".
 	DesktopID string `json:"desktop_id"`
-
-	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
-	ExpectedRevision int `json:"expected_revision"`
 
 	// NextDesktopID corresponds to the JSON schema field "next_desktop_id".
 	NextDesktopID *string `json:"next_desktop_id,omitempty,omitzero"`
@@ -3448,9 +3428,6 @@ type DesktopSetSplitRatioMessage struct {
 
 	// DesktopID corresponds to the JSON schema field "desktop_id".
 	DesktopID string `json:"desktop_id"`
-
-	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
-	ExpectedRevision int `json:"expected_revision"`
 
 	// Ratio corresponds to the JSON schema field "ratio".
 	Ratio float64 `json:"ratio"`
@@ -3516,9 +3493,6 @@ type DesktopUpdateTileMessage struct {
 
 	// DesktopID corresponds to the JSON schema field "desktop_id".
 	DesktopID string `json:"desktop_id"`
-
-	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
-	ExpectedRevision int `json:"expected_revision"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`

@@ -233,7 +233,7 @@ func TestSpawnBesideAFocusedTileDocksTheAgentBesideIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := d.store.UpdateDesktopArrangement(desktop.ID, desktop.Revision, func(desktop profiles.Desktop) (profiles.Desktop, error) {
+	if _, err := d.store.EditDesktopArrangement(desktop.ID, func(desktop profiles.Desktop) (profiles.Desktop, error) {
 		return dockTileOnDesktop(desktop, notebook)
 	}); err != nil {
 		t.Fatal(err)
