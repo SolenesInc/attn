@@ -668,41 +668,6 @@ export function PluginSettings({
   );
 }
 
-export function WorkflowsSettings({
-  handleToggleWorkflows,
-  workflowsEnabled,
-}: Pick<SettingsModalState, 'handleToggleWorkflows' | 'workflowsEnabled'>) {
-  return (
-    <section className="settings-block">
-      <div className="settings-block-intro">
-        <p className="settings-description">
-          Off by default. When on, agents learn how and when to use workflows and only start one when you opt in per
-          task ("attn workflow") or for the session ("hypercode").
-        </p>
-      </div>
-      <div className="settings-block-body">
-        <div className="settings-row-card">
-          <div>
-            <p className="settings-row-title">Enable workflows</p>
-            <p className="settings-row-copy">
-              While off, "attn workflow run" is refused and agents aren't told about workflows. Turning it off won't
-              interrupt a run already in flight.
-            </p>
-          </div>
-          <button
-            type="button"
-            className="settings-action"
-            data-testid="settings-workflows-toggle"
-            onClick={handleToggleWorkflows}
-          >
-            {workflowsEnabled ? 'Disable' : 'Enable'}
-          </button>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 export function TerminalSettings({
   ptyBackendHint,
   ptyBackendMode,

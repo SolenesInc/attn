@@ -33,6 +33,8 @@ func TestInsideASessionAttnReportsPresenceAndRefusesWhatItCannotLaunch(t *testin
 		want string
 	}{
 		{args: []string{"random"}, want: `unknown command "random"`},
+		{args: []string{"workflow", "run", "obsolete.js"}, want: `unknown command "workflow"`},
+		{args: []string{"_workflow-result-mcp"}, want: `unknown command "_workflow-result-mcp"`},
 	} {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
 			got := s.Run(testworld.Invocation{Args: tc.args, Session: "session-1"})

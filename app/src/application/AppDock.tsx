@@ -1,23 +1,18 @@
 import { AttentionDrawer } from '../components/AttentionDrawer';
 import { AutomationsPanel } from '../components/AutomationsPanel';
 import { RightDock } from '../components/RightDock';
-import { WorkflowRunView } from '../components/WorkflowRunView';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import {
   useAppInputs,
   useAppPanelsContext,
   useAttentionQueueContext,
   useNavigationContext,
-  useWorkflowPanelContext,
 } from './AppContexts';
-import { toneForDockPanel } from './appSupport';
-import { useSessionBehindScreen } from '../hooks/useDesktopSelectionBridge';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 
 export function AppDock() {
   const {
     dockPanelStack,
-    workflowRunPanelOpen,
     closeDockPanel,
     attentionPanelOpen,
     automationsPanelOpen,
@@ -26,8 +21,6 @@ export function AppDock() {
     gardenSlotRef,
     closeGarden,
   } = useAppPanelsContext();
-  const contextSessionId = useSessionBehindScreen();
-  const { activeWorkflowRun } = useWorkflowPanelContext();
   const { waitingLocalSessions } = useAttentionQueueContext();
   const { prs } = useAppInputs();
   const { handleSelectSession } = useNavigationContext();
@@ -41,7 +34,6 @@ export function AppDock() {
     deleteAutomationDefinition,
   } = useDaemonApi();
   const openPanels = {
-    workflowRun: workflowRunPanelOpen && Boolean(contextSessionId),
     attention: attentionPanelOpen,
     automations: automationsPanelOpen,
     garden: gardenPanelOpen,
@@ -56,19 +48,6 @@ export function AppDock() {
       <RightDock
         panelOrder={dockPanelStack}
         panels={[
-          {
-            id: 'workflowRun',
-            isOpen: openPanels.workflowRun,
-            width: 'clamp(420px, 50vw, 680px)',
-            tone: activeWorkflowRun ? toneForDockPanel(activeWorkflowRun.status) : 'default',
-            className: 'dock-panel dock-panel--workflow-run',
-            children: contextSessionId ? (
-              <WorkflowRunView
-                run={activeWorkflowRun}
-                onClose={() => closeDockPanel('workflowRun')}
-              />
-            ) : null,
-          },
           {
             id: 'attention',
             isOpen: openPanels.attention,

@@ -80,7 +80,6 @@ export type SettingsSectionID =
   | 'terminal'
   | 'autoMode'
   | 'delegation'
-  | 'workflows'
   | 'connectivity'
   | 'plugins'
   | 'backgroundTasks'

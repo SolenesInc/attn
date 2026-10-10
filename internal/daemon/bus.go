@@ -93,9 +93,8 @@ const (
 	FactDelegationPreferencesChanged = "delegation.preferences.changed"
 	FactAutoModeConfigChanged        = "automode.config.changed"
 
-	FactAutomationChanged  = "automation.changed"
-	FactWorkflowRunUpdated = "workflow.run.updated"
-	FactTaskChanged        = "task.changed"
+	FactAutomationChanged = "automation.changed"
+	FactTaskChanged       = "task.changed"
 
 	FactNotebookFileChanged = "notebook.file.changed"
 
@@ -365,10 +364,6 @@ func buildWireProjections() []projection {
 					d.projectAutomationsChanged(id)
 				}
 			},
-		},
-		{
-			filter: bus.Filter{FactWorkflowRunUpdated},
-			apply:  func(d *Daemon, ev bus.Event) { d.projectWorkflowRunUpdated(ev) },
 		},
 		{
 			filter: bus.Filter{FactTaskChanged},

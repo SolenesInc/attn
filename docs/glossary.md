@@ -221,5 +221,3 @@ Temporary debt. Read the old name as the new term. Never write the old name.
 - The ledger may list every profile when a request has no profile. Check, and
   fix.
 - The Ledger button and action say Reopen. Rename them to Resume.
-- Remove the workflow engine: internal/workflow, internal/workflowresult,
-  `attn workflow` and the workflow run drawer.

@@ -149,8 +149,7 @@ try {
     runner.assert((await text('[data-testid="settings-section-desktop"]')).includes('Editor'), 'editor belongs with file locations');
     await section('terminal');
     runner.assert((await text('[data-testid="settings-section-terminal"]')).includes('PTY Backend'), 'terminal hosting is under System');
-    await section('workflows');
-    runner.assert((await text('[data-testid="settings-section-workflows"]')).includes('Enable workflows'), 'workflows have their own section');
+    runner.assert(!(await text('.settings-nav')).includes('Workflows'), 'workflow engine settings are retired');
     await section('agents');
     await screenshot('04-finished.png');
   });

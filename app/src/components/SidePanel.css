@@ -46,22 +46,6 @@
   will-change: transform, opacity;
 }
 
-.side-panel--running {
-  box-shadow: -24px 0 60px rgba(249, 115, 22, 0.12);
-}
-
-.side-panel--awaiting_user {
-  box-shadow: -24px 0 60px rgba(245, 158, 11, 0.16);
-}
-
-.side-panel--completed {
-  box-shadow: -24px 0 60px rgba(34, 197, 94, 0.12);
-}
-
-.side-panel--error {
-  box-shadow: -24px 0 60px rgba(239, 68, 68, 0.14);
-}
-
 /* The rectangle a detached panel would have filled (see RightDock). It paints
    nothing and takes no input; it exists so a surface rendered outside the dock
    can measure where the dock would have put it. */

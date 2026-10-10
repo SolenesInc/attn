@@ -280,7 +280,6 @@ function renderInputs() {
         {
           notebook_root: "/workspace/notebook",
           self_report_pull_requests: "false",
-          workflow_enabled: "false",
           garden_available: "true",
         },
       ],
@@ -289,7 +288,6 @@ function renderInputs() {
         {
           notebook_root: "",
           self_report_pull_requests: "false",
-          workflow_enabled: "true",
           garden_available: "true",
         },
       ],
@@ -298,7 +296,6 @@ function renderInputs() {
         {
           notebook_root: "",
           self_report_pull_requests: "false",
-          workflow_enabled: "false",
           garden_available: "false",
           crew_priming: "",
         },
