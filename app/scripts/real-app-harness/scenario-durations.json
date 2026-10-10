@@ -47,12 +47,12 @@
         "note": "First green run: switch, send, bounce, overview and a second client. Remeasure on Linux CI."
       },
       "crew-management": {
-        "run": "https://github.com/SolenesInc/attn/actions/runs/37878771307",
-        "job": "App acceptance shard 3/4",
-        "recordedAt": "2026-10-09",
-        "seconds": 60.188,
-        "runnerClass": "github-hosted Linux",
-        "note": "Green shared harness/model/effort picker scenario at 67889c737. Matrix elapsed 60.188s; ATTN_VERDICT crew-management-2026-10-09T03-29-18-154Z durationMs=59438, including cleanup."
+        "run": "crew-management-2026-10-10T21-35-13-264Z",
+        "job": "Linux serial matrix, attn-linux runner VM (Ubuntu 24.04 amd64, 12 vCPU), clean instance",
+        "recordedAt": "2026-10-10",
+        "seconds": 55.269,
+        "runnerClass": "Linux amd64 VM",
+        "note": "Green ATTN_VERDICT durationMs=55269 in a 57/57 green full matrix, including cleanup. Deletes its members before unregistering their sessions, then waits until they are gone."
       },
       "desktop-splits": {
         "run": "workspace-switching-2026-09-15T21-17-34-309Z",
@@ -63,12 +63,12 @@
         "note": "Green matrix-digest.txt, including focus exit and cross-workspace focus reset, with recording. Remeasure on Linux CI."
       },
       "delegation-chain": {
-        "run": "https://github.com/SolenesInc/attn/actions/runs/37855772559",
-        "job": "App acceptance shard 2/4",
-        "recordedAt": "2026-10-08",
-        "seconds": 36.132,
-        "runnerClass": "github-hosted Linux",
-        "note": "Green matrix durationMs=36132 on cfdf4867f, run delegation-chain-2026-10-08T23-09-43-822Z. Includes missing numbered desktop recreation, caller keyboard focus and native shortcut reachability."
+        "run": "delegation-chain-2026-10-10T21-36-08-915Z",
+        "job": "Linux serial matrix, attn-linux runner VM (Ubuntu 24.04 amd64, 12 vCPU), clean instance",
+        "recordedAt": "2026-10-10",
+        "seconds": 33.361,
+        "runnerClass": "Linux amd64 VM",
+        "note": "Green ATTN_VERDICT durationMs=33361 in a 57/57 green full matrix, including cleanup. Closes empty numbered desktops left by earlier scenarios before delegating to a missing one."
       },
       "agent-close": {
         "run": "https://github.com/SolenesInc/attn/actions/runs/34544718832",
@@ -252,6 +252,14 @@
         "seconds": 33.297,
         "runnerClass": "local macOS",
         "note": "Green ATTN_VERDICT durationMs=33297 on f2be9c0cd, including scenario-lock wait, native window setup, cleanup and recording. Native close shortcut on the empty launcher and centered nonempty close confirmation. First run before the dialog style adjustment was 4.342s. Remeasure on Linux CI."
+      },
+      "agent-queue": {
+        "run": "agent-queue-2026-10-10T21-37-29-864Z",
+        "job": "Linux serial matrix, attn-linux runner VM (Ubuntu 24.04 amd64, 12 vCPU), clean instance",
+        "recordedAt": "2026-10-10",
+        "seconds": 132.293,
+        "runnerClass": "Linux amd64 VM",
+        "note": "Green ATTN_VERDICT durationMs=132293 in a 57/57 green full matrix, including cleanup. Closes empty numbered desktops left by earlier scenarios before its agents launch."
       }
     }
   },
@@ -259,7 +267,7 @@
     "conversations-surface": 9.112,
     "snooze-keyboard": 103.8,
     "agent-close": 8.2,
-    "agent-queue": 106.589,
+    "agent-queue": 132.293,
     "agent-settings": 33.189,
     "autoclose-on-exit": 72.591,
     "automation-form": 67.473,
@@ -271,7 +279,7 @@
     "countdown-cancel": 46.3,
     "crash-recovery": 9,
     "crew-seed-header": 53.2,
-    "delegation-chain": 36.132,
+    "delegation-chain": 33.361,
     "delegation-preferences": 40.156,
     "garden-plot-dispatch": 24.0,
     "garden-seed-header": 17.4,
@@ -302,7 +310,7 @@
     "desktop-switching": 27.0,
     "desktop-splits": 45.7,
     "worktree-surface": 25.748,
-    "crew-management": 60.188,
+    "crew-management": 55.269,
     "clear-opens-session": 15.0,
     "desktop-migration": 20.7,
     "profile-lifecycle": 18.5,

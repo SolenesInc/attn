@@ -183,16 +183,16 @@ runner.registerCleanup('restore_queue_mode', () => (
 runner.registerCleanup('remove_member_homes', () => {
   for (const home of [awakeHome, asleepHome, historyHome]) fs.rmSync(home, { recursive: true, force: true });
 });
-runner.registerCleanup('delete_members', () => {
+runner.registerCleanup('retire_crew', async () => {
   if (!membersRegistered) return;
-  for (const member of [awake, asleep, history]) runAttn(['doc', 'delete', 'core/crew', 'members', member]);
-});
-runner.registerCleanup('close_crew_days', () => {
   const observed = [...observer.sessionsById.values()]
     .filter((session) => [awake, asleep, history].includes(session.crew_member))
     .map((session) => session.id);
-  const days = new Set([successor, firstSession, ...observed].filter(Boolean));
-  return Promise.all([...days].map((sessionId) => client.request('close_session', { sessionId }).catch(() => {})));
+  const crewSessions = [...new Set([successor, firstSession, ...observed].filter(Boolean))];
+  for (const member of [awake, asleep, history]) runAttn(['doc', 'delete', 'core/crew', 'members', member]);
+  for (const id of crewSessions.filter((sessionId) => observer.sessionsById.has(sessionId))) observer.send({ cmd: 'unregister', id });
+  await observer.waitFor(() => crewSessions.every((sessionId) => !observer.sessionsById.has(sessionId)),
+    `crew sessions ${crewSessions.join(', ')} closed once their members are deleted`);
 });
 runner.registerCleanup('archive_crew_files', () => {
   if (fs.existsSync(historyHome)) fs.chmodSync(historyHome, 0o755);
