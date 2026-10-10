@@ -680,7 +680,7 @@ model SessionShowMessage {
   session_id: SessionID;
 }
 
-// Brings a closed session back under its own id. Without an action it performs
+// Brings a closed or stopped session back under its own id. Without an action it performs
 // the plain reopen, and refuses naming what is offered instead.
 model SessionReopenMessage {
   cmd: "session_reopen";

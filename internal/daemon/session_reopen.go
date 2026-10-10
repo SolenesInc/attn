@@ -408,6 +408,7 @@ func (d *Daemon) performReopenLocked(
 		ProfileID:       outcome.ProfileID,
 		Directory:       plan.Directory,
 		Action:          action,
+		AlreadyRunning:  outcome.AlreadyRunning,
 		WorktreeCreated: created,
 	}, nil
 }

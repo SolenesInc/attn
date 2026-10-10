@@ -218,6 +218,8 @@ func TestAResumeWhoseAgentCannotStartKeepsItsPaneAndReleasesItsClaim(t *testing.
 	if after := lifeShow(t, cli, delegated.SeedID).Seed; after.TenderSession != delegated.SessionID || after.Status != "growing" {
 		t.Errorf("the failed resume left the seed %s under %q, want growing under %s", after.Status, after.TenderSession, delegated.SessionID)
 	}
+	w.restart()
+	cli = w.Client()
 	registerSessions(t, w, cli, "next-tender")
 	lifeMove(t, cli, "next-tender", delegated.SeedID, "tend", "", "")
 }

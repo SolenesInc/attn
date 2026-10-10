@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/sessionstate"
 )
 
 func (d *Daemon) profileChiefs() map[string]protocol.SessionID {
@@ -95,13 +94,20 @@ func (d *Daemon) decorateDelegatedFromChief(session *protocol.Session, delegated
 }
 
 func (d *Daemon) sessionExists(sessionID protocol.SessionID) bool {
-	if d.store != nil {
-		if d.store.Get(sessionID) != nil {
-			evidence, _ := d.evidenceTable().snapshot(sessionID)
-			return evidence.Process == nil || evidence.Process.Claim != sessionstate.ClaimExited
-		}
+	if d.store != nil && d.store.Get(sessionID) != nil {
+		return true
 	}
 	return d.store != nil && d.store.DelegationSessionReserved(sessionID)
+}
+
+func (d *Daemon) sessionActive(sessionID protocol.SessionID) bool {
+	if !d.sessionExists(sessionID) {
+		return false
+	}
+	if _, hasLaunchIntent := d.store.LaunchIntent(sessionID); hasLaunchIntent {
+		return d.sessionHasLiveWorker(sessionID) || d.store.DelegationSessionReserved(sessionID)
+	}
+	return true
 }
 
 func (d *Daemon) clearChiefOfStaffIfSession(sessionID protocol.SessionID) {

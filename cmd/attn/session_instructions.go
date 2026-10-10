@@ -339,7 +339,7 @@ commands:
         the sessions it dispatched, and the chief any. What the user sees
         stays put unless the moved pane was the one shown on its desktop.
   reopen <id> [--action <name>] [--json]
-        bring a closed session back under its own id, on its last or
+        bring a closed or stopped session back under its own id, on its last or
         current desktop in its profile. Without --action it performs the plain reopen and refuses,
         naming what is offered, when the verdict does not allow one. Actions
         that recreate a worktree or fetch a branch write to the repository and

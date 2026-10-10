@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen, within } from '@testing-library/react';
 import type { SessionReopen } from '../../types/generated';
 import { SessionReopenAction } from '../../types/generated';
-import { soloDesktop, daemonSession, DEFAULT_PROFILE_ID } from '../../test/daemonFixtures';
+import { soloDesktop, daemonSession, DEFAULT_PROFILE_ID, DEFAULT_DESKTOP_ID } from '../../test/daemonFixtures';
 import type { CommandMessage } from '../../test/protocol';
 import type { Reply, ScriptedDaemon } from '../../test/scriptedDaemon';
 import { closedEntry, entry, liveEntry, verdict } from '../../test/sessionLedgerFixtures';
@@ -99,6 +99,21 @@ describe('SessionsTab reopens on demand', () => {
 
     await view.reopened(0);
     expect(ledger()).toBeNull();
+  });
+
+  it('opens the retained stopped attempt and shows its launch error', async () => {
+    const view = await openLedger(pages([page({ entries: [closedEntry('s1')] })]), { reopen: ['hold'] });
+    fireEvent.click(within(row('run s1')).getByRole('button', { name: 'Reopen' }));
+    await view.daemon.idle();
+    view.daemon.arrange(() => [soloDesktop('s1', { id: DEFAULT_DESKTOP_ID })]);
+    view.daemon.emit({ event: 'session_state_changed', session: daemonSession('s1', { state: 'idle', state_reason: 'process_exited' }) });
+    const command = view.daemon.sentOf('session_reopen')[0];
+    view.daemon.replyTo(command, { event: 'session_reopen_result', request_id: command.request_id, success: false, error: 'The model provider is unreachable' });
+    await view.daemon.idle();
+    expect(ledger()).toBeNull();
+    expect(screen.getByText('Agent stopped.')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Resume' })).toBeVisible();
+    expect(screen.getByText('The model provider is unreachable')).toBeVisible();
   });
 
   it('turns a refusal into the actions the session offers instead, and reads them in the inspector', async () => {

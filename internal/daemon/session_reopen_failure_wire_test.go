@@ -62,6 +62,9 @@ func TestAFailedReopenKeepsItsAttemptAndRestoredWorktree(t *testing.T) {
 	if info, err := os.Stat(worktree); err != nil || !info.IsDir() {
 		t.Fatalf("restored worktree %s was removed: %v", worktree, err)
 	}
+	w.restart()
+	app, cli = w.App(), w.Client()
+	awaitDriverAvailable(app, "pi")
 	allowLaunches()
 	if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: plain.ID}); err != nil {
 		t.Fatal(err)
