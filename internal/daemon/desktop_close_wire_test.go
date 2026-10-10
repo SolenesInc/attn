@@ -23,6 +23,14 @@ func TestCloseDesktopSelectsItsNeighbourAndRefusesTheLast(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app := w.App()
 		profile := app.SelectedProfile()
+		for _, office := range app.Initial.Desktops {
+			if office.ID != app.Initial.Profiles[0].CurrentDesktopID {
+				if result := requestCloseDesktop(app, office); !result.Success {
+					t.Fatal(protocol.Deref(result.Error))
+				}
+			}
+		}
+
 		first := app.Initial.Desktops[0]
 		second := createDesktop(app, profile)
 		third := createDesktop(app, profile)
@@ -55,6 +63,14 @@ func TestCloseDesktopClosesAgentsAndShellsAndKeepsTheirLedger(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
 	profile := app.SelectedProfile()
+	for _, office := range app.Initial.Desktops {
+		if office.ID != app.Initial.Profiles[0].CurrentDesktopID {
+			if result := requestCloseDesktop(app, office); !result.Success {
+				t.Fatal(protocol.Deref(result.Error))
+			}
+		}
+	}
+
 	keeper := createDesktop(app, profile)
 	switchDesktop(app, profile, app.Initial.Desktops[0].ID)
 	agent := w.Spawn(app, fakeagent.Claude, w.Path("agent"))
