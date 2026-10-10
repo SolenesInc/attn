@@ -415,7 +415,7 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 		}
 		member, _, err := d.crewMember(chief)
 		if err != nil {
-			return profileActionOutcome{}, err
+			return profileActionOutcome{}, fmt.Errorf("cannot delete this profile: its Chief document or home could not be read (%w); fix the crew folder, then restart the daemon to retry Chief setup", err)
 		}
 		if d.crewBindingLive(member) {
 			return profileActionOutcome{}, fmt.Errorf("put the chief to sleep first: attn crew sleep chief")

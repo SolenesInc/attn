@@ -579,6 +579,11 @@ func TestProfileCreationWarnsWhenChiefSetupFailsAndRestartRepairsIt(t *testing.T
 	if warning.Severity != protocol.NotificationSeverityWarning || warning.SourceID != work.ID || !strings.Contains(warning.Title, "Work") || !strings.Contains(warning.Detail, root) || !strings.Contains(warning.Detail, "not a directory") || !strings.Contains(warning.Body, "restart the daemon") {
 		t.Fatalf("Chief setup warning: %+v", warning)
 	}
+	requestID := uuid.NewString()
+	refused := testworld.Request(app, protocol.ProfileDeleteMessage{Cmd: protocol.CmdProfileDelete, RequestID: requestID, ProfileID: work.ID, ExpectedRevision: work.Revision}, protocol.EventProfileActionResult, func(m protocol.ProfileActionResultMessage) bool { return m.RequestID == requestID })
+	if refused.Success || !strings.Contains(protocol.Deref(refused.Error), "Chief document") || !strings.Contains(protocol.Deref(refused.Error), "fix the crew folder") || !strings.Contains(protocol.Deref(refused.Error), "restart the daemon") {
+		t.Fatalf("delete before setup repair: %+v", refused)
+	}
 	w.restart()
 	side := w.AppOn(work.ID)
 	if side.SelectedProfile() != work.ID {
