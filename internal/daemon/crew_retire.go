@@ -110,6 +110,10 @@ func (d *Daemon) restoreCrewMember(m store.CrewIdentity) (bool, error) {
 }
 
 func (d *Daemon) handleCrewRetire(conn net.Conn, msg *protocol.CrewRetireMessage) {
+	if err := d.requireHome(crew.Surface); err != nil {
+		d.sendCrewError(conn, "retire", err)
+		return
+	}
 	r, err := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID)
 	if err != nil {
 		d.sendCrewError(conn, "retire", err)
@@ -134,6 +138,10 @@ func (d *Daemon) handleCrewRetire(conn net.Conn, msg *protocol.CrewRetireMessage
 }
 
 func (d *Daemon) handleCrewRestore(conn net.Conn, msg *protocol.CrewRestoreMessage) {
+	if err := d.requireHome(crew.Surface); err != nil {
+		d.sendCrewError(conn, "restore", err)
+		return
+	}
 	r, err := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID)
 	if err != nil {
 		d.sendCrewError(conn, "restore", err)

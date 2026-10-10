@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -187,5 +188,44 @@ func TestRetiredMembersDoNotBlockProfileDeletion(t *testing.T) {
 	result := testworld.Request(app, protocol.ProfileDeleteMessage{Cmd: protocol.CmdProfileDelete, ProfileID: profile.ID, ExpectedRevision: profile.Revision, RequestID: "delete-retired"}, protocol.EventProfileActionResult, func(e protocol.ProfileActionResultMessage) bool { return e.RequestID == "delete-retired" })
 	if !result.Success {
 		t.Fatalf("delete = %+v", result)
+	}
+}
+
+func TestARetiredMembersLetterClosesTheDayWithoutANap(t *testing.T) {
+	for _, how := range []struct {
+		name  string
+		close protocol.CrewDayClose
+	}{
+		{name: "default"}, {name: "nap", close: protocol.CrewDayCloseNap},
+	} {
+		t.Run(how.name, func(t *testing.T) {
+			w := newWorld(t, fakeagent.Claude)
+			app, cli := w.App(), w.Client()
+			created, err := cli.CrewCreate(protocol.CrewCreateMessage{Name: "Keel"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			wake := wakeCrew(t, cli, "Keel", "")
+			w.Launched(string(wake.SessionID)).Prompted()
+			if _, err := cli.CrewRetire("Keel"); err != nil {
+				t.Fatal(err)
+			}
+			filed, err := cli.CrewHandoff(wake.SessionID, "Keep my letter for a later return.", false, how.close)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if protocol.Deref(filed.Outcome) != protocol.CrewDayCloseSleep || filed.SessionID != nil || filed.NapError != nil {
+				t.Fatalf("retired closure = %+v", filed)
+			}
+			letter, err := os.ReadFile(filed.Path)
+			if err != nil || !strings.Contains(string(letter), "Keep my letter for a later return.") {
+				t.Fatalf("letter = %q %v", letter, err)
+			}
+			awaitClosed(app, string(wake.SessionID))
+			all, err := cli.CrewList(true)
+			if err != nil || len(all.Members) != 1 || all.Members[0].Key != created.Member.Key || !all.Members[0].Retired || all.Members[0].BindingSession != nil {
+				t.Fatalf("retired roster = %+v %v", all, err)
+			}
+		})
 	}
 }

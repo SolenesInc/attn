@@ -440,3 +440,17 @@ func TestCrewWakeWhileClearingKeepsTheSuccessor(t *testing.T) {
 		t.Fatalf("clear = %q", got)
 	}
 }
+
+func TestCrewLifecycleCommandsRefuseOutpostsBeforeResolvingProfiles(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	s.Start()
+	const home = "d-0123456789abcdef0123456789abcdef"
+	requireStdout(t, s.Attn("enrollment", "enroll", "--home", home))
+	for _, verb := range []string{"create", "retire", "restore"} {
+		result := s.Attn("crew", verb, "Keel", "--profile", "Missing")
+		if result.Code != 1 || !strings.Contains(result.Stderr, "outpost") || !strings.Contains(result.Stderr, "crew") || !strings.Contains(result.Stderr, home) {
+			t.Fatalf("crew %s on an outpost: %+v", verb, result)
+		}
+	}
+}

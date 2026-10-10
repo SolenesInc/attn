@@ -114,9 +114,12 @@ crew member             an agent with a permanent identity and memory
 chief                   the crew member that coordinates one profile
 asleep                  the member has no session, until something wakes them
 awake                   the member has a session
+retired                 the member is out of service; their identity and memory stay
 wake                    starts a session for the member
 nap                     ends the member's session and starts a new one from
                         their letters
+retire                  takes a member out of service
+restore                 returns a retired member to service
 ```
 
 ```text

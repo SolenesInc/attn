@@ -76,7 +76,7 @@ commands:
         Print your member identity, charter, letters and claimed seeds.
 
   list [--all] [--json]
-        Show active members and their sessions. --all includes retired members.
+        Show members in service and their sessions. --all includes retired members.
 
   wake <member> [--agent <name>] [--json]
         Start a session using the member's saved launch settings, on its chosen

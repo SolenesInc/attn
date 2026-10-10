@@ -86,6 +86,10 @@ func (d *Daemon) crewHandoffLocked(sessionID protocol.SessionID, note string, re
 	if !bound {
 		return nil, fmt.Errorf("this session is not living a crew member's day, so it has no day-line to close. A crew handoff is a member's own letter to its successor; the note you write for whoever tends a piece of work next is `attn seed note <id> -m \"…\" --handoff`")
 	}
+	identity, err := d.store.CrewIdentity(member.Key)
+	if err != nil {
+		return nil, err
+	}
 	var filedLetter string
 	defer func() {
 		current, _, readErr := d.crewMember(member.Key)
@@ -127,6 +131,10 @@ func (d *Daemon) crewHandoffLocked(sessionID protocol.SessionID, note string, re
 		close = protocol.CrewDayCloseNap
 	}
 	if member.Restart != nil && member.Restart.SessionID == sessionID && member.Restart.Withdrawn {
+		close = protocol.CrewDayCloseSleep
+	}
+
+	if identity.Retired {
 		close = protocol.CrewDayCloseSleep
 	}
 
