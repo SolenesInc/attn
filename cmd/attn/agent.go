@@ -222,7 +222,7 @@ func runAgentPeek(args []string) {
 	}
 	result, err := client.New("").WithRequester(parsed.profile, currentSessionOrExit()).AgentPeek(parsed.target)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "agent peek: %s\n", agentPeekErrorMessage(parsed.target, err))
+		fmt.Fprintf(os.Stderr, "agent peek: %s\n", err.Error())
 		os.Exit(1)
 	}
 	if parsed.json {
@@ -230,20 +230,6 @@ func runAgentPeek(args []string) {
 		return
 	}
 	printAgentPeek(os.Stdout, result)
-}
-
-func agentPeekErrorMessage(target string, err error) string {
-	message := strings.TrimSpace(err.Error())
-	switch strings.TrimSpace(strings.TrimPrefix(message, "daemon error: ")) {
-	case "session_not_found":
-		return fmt.Sprintf("no session or crew member matches %q; `attn agent list` names sessions and `attn crew list` names members", target)
-	case "ambiguous_session":
-		return fmt.Sprintf("%q matches more than one session; give more of the id (`attn agent list --json` carries full ids)", target)
-	case "crew_member_asleep":
-		member := strings.ToLower(strings.TrimSpace(target))
-		return fmt.Sprintf("%s is asleep; `attn agent peek` never wakes crew members. `attn crew wake %s` starts a day", crew.HolderName(member, ""), member)
-	}
-	return message
 }
 
 func printAgentPeek(w io.Writer, result *protocol.AgentPeekResult) {
@@ -367,7 +353,7 @@ func runAgentMsg(args []string) {
 	}
 	result, err := client.New("").AgentMsg(parsed.target, parsed.source, parsed.content)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "agent msg: %s\n", agentMsgErrorMessage(parsed, err))
+		fmt.Fprintf(os.Stderr, "agent msg: %s\n", err.Error())
 		os.Exit(1)
 	}
 	if parsed.json {
@@ -385,27 +371,6 @@ func agentMsgOutcomeLine(result *protocol.AgentMsgResult) string {
 		return fmt.Sprintf("%s: %s", result.Status, result.Detail)
 	}
 	return fmt.Sprintf("%s: %s (id %s)", result.Status, result.Detail, result.MessageID)
-}
-
-func agentMsgErrorMessage(parsed agentMsgArgs, err error) string {
-	message := strings.TrimSpace(err.Error())
-	code := client.ErrorCode(err)
-	if code == "" {
-		code = strings.TrimSpace(strings.TrimPrefix(message, "daemon error: "))
-	}
-	switch code {
-	case "session_or_crew_member_not_found":
-		return fmt.Sprintf("no session or crew member matches %q; `attn agent list` names sessions and `attn crew list` names members", parsed.target)
-	case "session_not_found":
-		return fmt.Sprintf("no session matches %q; `attn agent list` names the sessions on this daemon", parsed.target)
-	case "ambiguous_session":
-		return fmt.Sprintf("%q matches more than one session; give more of the id (`attn agent list --json` carries full ids)", parsed.target)
-	case "sender_session_not_found":
-		return fmt.Sprintf("the sender %q is not a session on this daemon", parsed.source)
-	case "sender_ambiguous_session":
-		return fmt.Sprintf("the sender %q matches more than one session; give more of the id", parsed.source)
-	}
-	return message
 }
 
 type agentCloseArgs struct {
@@ -462,7 +427,7 @@ func runAgentClose(args []string) {
 	}
 	result, err := client.New("").AgentClose(parsed.target, parsed.source, parsed.reason)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "agent close: %s\n", agentCloseErrorMessage(parsed, err))
+		fmt.Fprintf(os.Stderr, "agent close: %s\n", err.Error())
 		os.Exit(1)
 	}
 	if parsed.json {
@@ -478,21 +443,6 @@ func printAgentClose(w io.Writer, result *protocol.AgentCloseResult) {
 		fmt.Fprintf(w, "noted on %s, which it was tending\n", seedID)
 	}
 	fmt.Fprintf(w, "the session is kept: `attn session show %s` reads it back\n", agentShortID(string(result.TargetSessionID)))
-}
-
-func agentCloseErrorMessage(parsed agentCloseArgs, err error) string {
-	message := strings.TrimSpace(err.Error())
-	code := client.ErrorCode(err)
-	if code == "" {
-		code = strings.TrimSpace(strings.TrimPrefix(message, "daemon error: "))
-	}
-	switch code {
-	case "sender_session_not_found":
-		return fmt.Sprintf("the caller %q is not a session on this daemon", parsed.source)
-	case "sender_ambiguous_session":
-		return fmt.Sprintf("the caller %q matches more than one session; give more of the id", parsed.source)
-	}
-	return message
 }
 
 type agentMailboxArgs struct {

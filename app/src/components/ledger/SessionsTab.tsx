@@ -270,7 +270,6 @@ export function SessionsTab({
               live={isLive(selected)}
               usage={(!isClosed(selected) && liveSessionUsage?.get(selected.id)) || selected.usage}
               seed={seedForSession?.(selected.id) ?? null}
-              sessionLabel={sessionLabel}
               nameText={nameText}
               now={now()}
               copied={copied}
@@ -523,7 +522,6 @@ interface SessionInspectorProps {
   live: boolean;
   usage: SessionUsage | undefined;
   seed: SessionSeedLink | null;
-  sessionLabel: (id: string) => string;
   nameText: (text: string) => string;
   now: Date;
   copied: string | null;
@@ -568,8 +566,8 @@ function BranchField({ entry, verdict }: { entry: SessionLedgerEntry; verdict: R
   );
 }
 
-function InstantField({ entry, now, sessionLabel, nameText }: {
-  entry: SessionLedgerEntry; now: Date; sessionLabel: (id: string) => string; nameText: (text: string) => string;
+function InstantField({ entry, now, nameText }: {
+  entry: SessionLedgerEntry; now: Date; nameText: (text: string) => string;
 }) {
   const closed = isClosed(entry);
   return (
@@ -585,14 +583,14 @@ function InstantField({ entry, now, sessionLabel, nameText }: {
 }
 
 function SessionInspector({
-  entry, verdict, note, live, usage, seed, sessionLabel, nameText, now, copied, onCopy, onVerb, actionsAvailable, canKeepConversation,
+  entry, verdict, note, live, usage, seed, nameText, now, copied, onCopy, onVerb, actionsAvailable, canKeepConversation,
 }: SessionInspectorProps) {
   return (
     <Inspector title={entry.member_name ?? (entry.label || 'untitled session')} kicker={<SessionKicker entry={entry} live={live} />}>
       <Field label="Profile">{profileText(entry) || '—'}</Field>
       <DirectoryField entry={entry} verdict={verdict} copied={copied} onCopy={onCopy} />
       <BranchField entry={entry} verdict={verdict} />
-      <InstantField entry={entry} now={now} sessionLabel={sessionLabel} nameText={nameText} />
+      <InstantField entry={entry} now={now} nameText={nameText} />
       <UsageField usage={usage} sessionId={entry.id} />
       {seed && (
         <Field label="Seed">

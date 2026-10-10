@@ -10,6 +10,7 @@ import (
 func TestAPresentationRoundIsPinnedToTheCommitsItsRefsNamedWhenItOpened(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
+	registerSessions(t, w, cli, "presenter")
 	repo := newRepo(t, "shop")
 	base := strings.TrimSpace(runGit(t, repo, "rev-parse", "HEAD"))
 	runGit(t, repo, "checkout", "-b", "feature")

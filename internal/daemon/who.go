@@ -52,6 +52,9 @@ func (d *Daemon) sessionFacts(id protocol.SessionID) (string, bool) {
 func (d *Daemon) requestFromSession(id protocol.SessionID, b who.Bindings) (who.Requester, error) {
 	s, code := d.resolveSessionByIDOrPrefix(string(id), "")
 	if s == nil {
+		if code == "ambiguous_session" {
+			return who.Requester{}, &targetError{"sender_ambiguous_session", fmt.Sprintf("the caller %q matches more than one session; give more of the id", id)}
+		}
 		return who.Requester{}, &targetError{"sender_" + code, fmt.Sprintf("the caller %q is not a session on this daemon", id)}
 	}
 	r, ok := b.RequestFrom(s.ID)

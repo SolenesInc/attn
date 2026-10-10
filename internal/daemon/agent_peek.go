@@ -48,6 +48,11 @@ func (d *Daemon) resolveSessionByIDOrPrefix(target, profileID string) (*protocol
 	if session := d.store.Get(protocol.SessionID(target)); session != nil && (profileID == "" || session.ProfileID == profileID) {
 		return session, ""
 	}
+	if d.hubManager != nil {
+		if s := d.hubManager.RemoteSession(protocol.SessionID(target)); s != nil && (profileID == "" || s.ProfileID == profileID) {
+			return s, ""
+		}
+	}
 	var match *protocol.Session
 	for _, session := range d.agentCloseCandidates() {
 		if (profileID != "" && session.ProfileID != profileID) || !strings.HasPrefix(string(session.ID), target) {

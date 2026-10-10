@@ -17,6 +17,7 @@ import (
 func TestAPresentationGrowsRoundsOnlyForTheSessionThatOpenedIt(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
+	registerSessions(t, w, cli, "presenter", "someone-else")
 	repo := newRepo(t, "shop")
 
 	opened := openPresentation(t, cli, repo, "My Change", "")
@@ -51,6 +52,7 @@ func TestAPresentationGrowsRoundsOnlyForTheSessionThatOpenedIt(t *testing.T) {
 func TestAReviewRoundRefusesBadCommentsAndFeedbackReportsItsOutcome(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
+	registerSessions(t, w, cli, "presenter")
 	repo := newRepo(t, "shop")
 	checkout := openPresentation(t, cli, repo, "Checkout", "")
 
@@ -98,6 +100,7 @@ func TestAReviewRoundRefusesBadCommentsAndFeedbackReportsItsOutcome(t *testing.T
 func TestPresentationFeedbackQuotesEachCommentFromItsSideGroupedByFile(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
+	registerSessions(t, w, cli, "presenter")
 	repo := newRepo(t, "shop")
 	commitFile(t, repo, "a.txt", "line one\nline two\n")
 	commitFile(t, repo, "b.txt", "b1\nb2\n")
@@ -167,6 +170,7 @@ func inOrder(text string, parts ...string) bool {
 func TestPresentationAnchorsResolveToLinesWarnWhenAmbiguousAndRefuseWhenMissing(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
+	registerSessions(t, w, cli, "presenter")
 	repo := newRepo(t, "shop")
 	commitFile(t, repo, "a.txt", "package a\nfunc Foo() {\n  // TODO: fix\n  return\n}\n// TODO: also fix\n")
 	annotated := func(anchor, note string) string {
@@ -224,6 +228,7 @@ func TestPresentationAnchorsResolveToLinesWarnWhenAmbiguousAndRefuseWhenMissing(
 func TestAPresentationRoundDescribesTheChangeItFrames(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
+	registerSessions(t, w, cli, "presenter")
 	repo := newRepo(t, "shop")
 	write := func(name string, body []byte) {
 		if err := os.WriteFile(filepath.Join(repo, name), body, 0o644); err != nil {

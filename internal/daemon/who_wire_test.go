@@ -115,3 +115,19 @@ func TestCrewAutoModeProposalsRecordTheMember(t *testing.T) {
 		t.Fatalf("proposal actor: %+v", by)
 	}
 }
+
+func TestSessionsCarryTheirProfileOnTheWire(t *testing.T) {
+	w := newWorld(t)
+	cli := w.Client()
+	registerSessions(t, w, cli, "agent-a")
+	app := w.App()
+	for _, s := range app.Initial.Sessions {
+		if s.ID == "agent-a" {
+			if s.ProfileID != app.SelectedProfile() {
+				t.Fatalf("profile on wire: %+v", s)
+			}
+			return
+		}
+	}
+	t.Fatalf("agent-a absent: %+v", app.Initial.Sessions)
+}

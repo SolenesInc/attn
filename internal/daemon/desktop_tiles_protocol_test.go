@@ -270,22 +270,6 @@ func TestDockingATileValidatesItsParamsLikeAnUpdate(t *testing.T) {
 	w.apply(map[string]any{"cmd": protocol.CmdDesktopDockTile, "tile_id": "tile-md", "tile_kind": "markdown", "tile_params": notes, "edge": "left"})
 }
 
-func TestSessionsCarryTheirProfileOnTheWire(t *testing.T) {
-	w := newDesktopTilesWorld(t)
-	w.agent("agent-a", w.profileID)
-
-	_, initial := w.connect(w.profileID)
-	for _, session := range initial.Sessions {
-		if session.ID == "agent-a" {
-			if session.ProfileID != w.profileID {
-				t.Fatalf("agent-a reached the client with profile %q, want %q", session.ProfileID, w.profileID)
-			}
-			return
-		}
-	}
-	t.Fatalf("initial_state did not list agent-a: %+v", initial.Sessions)
-}
-
 func (w *desktopTilesWorld) dockMarkdown(tileID, content string) string {
 	w.t.Helper()
 	path := filepath.Join(w.t.TempDir(), tileID+".md")

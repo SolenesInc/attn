@@ -679,3 +679,40 @@ func TestANextDayWatchModeChangeClearsThePreviousReadiness(t *testing.T) {
 		}
 	})
 }
+
+func TestSessionPullRequestRefreshKeepsWatchingRecoverableSessions(t *testing.T) {
+	gh := serveRefreshedPullRequest(t)
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		agent := w.bubbleClaude(t, app, "watcher")
+		recordPullRequest(t, cli, agent.id, shopPull(71))
+		if err := cli.WatchSessionPullRequest(protocol.SessionID(agent.id), shopPull(71), protocol.PullRequestWatchModeGreen, ""); err != nil {
+			t.Fatal(err)
+		}
+		testworld.AwaitSession(app, agent.id, func(s protocol.Session) bool {
+			return len(s.PullRequests) == 1 && protocol.Deref(s.PullRequests[0].Watching)
+		})
+		term := w.terminal(agent.id)
+		w.stop()
+		term.Exit(1)
+		w.start()
+		app = w.App()
+		cli = w.Client()
+		recovered := false
+		for _, s := range app.Initial.Sessions {
+			if s.ID == protocol.SessionID(agent.id) && s.State == protocol.SessionStateRecoverable {
+				recovered = true
+			}
+		}
+		if !recovered {
+			testworld.AwaitSession(app, agent.id, func(s protocol.Session) bool { return s.State == protocol.SessionStateRecoverable })
+		}
+
+		gh.set(func(gh *refreshedPullRequest) { gh.title = "Still watched after recovery" })
+		w.advance(protocol.HeatHotInterval)
+		pr := onlyPullRequest(t, cli, agent.id)
+		if !protocol.Deref(pr.Watching) || protocol.Deref(pr.Title) != "Still watched after recovery" {
+			t.Fatalf("recoverable watch: %+v", pr)
+		}
+	})
+}

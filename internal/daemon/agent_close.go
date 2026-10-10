@@ -29,7 +29,11 @@ func (d *Daemon) handleAgentClose(conn net.Conn, msg *protocol.AgentCloseMessage
 		return
 	}
 	asking, _ := r.AskingSession()
-	caller := d.store.Get(asking)
+	caller, code := d.resolveSessionByIDOrPrefix(string(asking), r.ProfileID())
+	if caller == nil {
+		d.replyAgentMsgError(conn, "sender_"+code, "the caller’s session has ended")
+		return
+	}
 
 	reason := strings.TrimSpace(msg.Reason)
 	switch {

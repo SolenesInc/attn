@@ -124,7 +124,7 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 	requireLines(t, "agent list", agents, "MEMBER", "Use `attn agent peek <id>` to view a session")
 	requireLines(t, "trellis's agent row", crewRow(t, agents, string(day[:8])), " Trellis ")
 	requireStdout(t, s.Attn("agent", "peek", "trellis"), string("session "+day), "crew member: Trellis")
-	requireFailure(t, s.Attn("agent", "peek", "keel"), "agent peek: ", "Keel is asleep", "never wakes", "`attn crew wake keel`")
+	requireFailure(t, s.Attn("agent", "peek", "keel"), "agent peek: ", "Keel is asleep", "attn agent msg Keel")
 	requireStdout(t, s.Attn("crew", "wake", "trellis"), string("Trellis is already awake in session "+day[:8]+"."))
 
 	trellis.Exit(143)
@@ -320,7 +320,7 @@ func TestCrewCommandsResolveTheCallingTerminalsProfile(t *testing.T) {
 	caller := s.Spawn(sideApp, fakeagent.Claude, s.Path("side"))
 	terminal := sideApp.Terminal(caller)
 	for _, address := range []string{caller, caller[:8]} {
-		if result := s.Attn("agent", "peek", address, "--json"); result.Code != 0 {
+		if result := s.Run(testworld.Invocation{Args: []string{"agent", "peek", address, "--json"}, Terminal: terminal}); result.Code != 0 {
 			t.Fatalf("bare session peek %s with multiple profiles: %+v", address, result)
 		}
 	}

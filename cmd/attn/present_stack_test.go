@@ -42,6 +42,9 @@ func TestPresentWaitOutlivesADaemonRestartAndPrintsTheReviewOnce(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t)
 	s.Start()
+	if err := s.InjectSession("presenter", "Presenter", s.Path("presenter"), protocol.SessionAgentClaude); err != nil {
+		t.Fatal(err)
+	}
 	repo := s.Path("shop")
 	gitRepo(t, repo)
 

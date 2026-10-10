@@ -119,6 +119,19 @@ func (d *Daemon) handlePresentOpen(conn net.Conn, msg *protocol.PresentOpenMessa
 		return
 	}
 
+	b, err := d.bindings()
+	if err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
+	r, err := d.requestFromSession(sourceSessionID, b)
+	if err != nil {
+		d.replyTargetError(conn, err)
+		return
+	}
+	sourceSessionID, _ = r.AskingSession()
+	handback, _ := r.Party()
+
 	m, err := present.ParseManifest([]byte(msg.ManifestYaml))
 	if err != nil {
 		d.sendError(conn, "present open: "+err.Error())
@@ -175,16 +188,6 @@ func (d *Daemon) handlePresentOpen(conn net.Conn, msg *protocol.PresentOpenMessa
 		pres = existing
 	} else {
 
-		b, err := d.bindings()
-		if err != nil {
-			d.sendError(conn, err.Error())
-			return
-		}
-		handback, ok := b.PartyOf(sourceSessionID)
-		if !ok {
-			d.sendError(conn, fmt.Sprintf("session %s has ended", sourceSessionID))
-			return
-		}
 		created, err := d.store.CreatePresentation(sourceSessionID, handback, m.Title, m.Kind, m.Frame.Repo, now)
 		if err != nil {
 			d.sendError(conn, "present open: "+err.Error())
