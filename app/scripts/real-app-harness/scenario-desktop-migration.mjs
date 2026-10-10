@@ -18,6 +18,7 @@ const LEGACY_WORKSPACES = [
 ];
 const PAIRED = new Set([1, 5, 9]);
 const LAST_SCHEMA_BEFORE_CONVERSION = 158;
+const LAST_SCHEMA_REBUILT_BY_FIXTURE = 1791301168635041;
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -96,7 +97,7 @@ function legacyWorkspacesSql(fixtureDir) {
     statements.push(`INSERT INTO workspace_layouts (workspace_id, active_pane_id, layout_json, updated_at)
       VALUES ('mig-ws-${index}', 'pane-${agents[0]}', ${sql(JSON.stringify(layout))}, 'now');`);
   });
-  statements.push(`DELETE FROM schema_migrations WHERE version > ${LAST_SCHEMA_BEFORE_CONVERSION};`);
+  statements.push(`DELETE FROM schema_migrations WHERE version > ${LAST_SCHEMA_BEFORE_CONVERSION} AND version <= ${LAST_SCHEMA_REBUILT_BY_FIXTURE};`);
   return statements.join('\n');
 }
 
