@@ -74,7 +74,7 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 	})
 
 	s.Start()
-	requireStdout(t, s.Attn("crew", "list"), "No crew members are registered", "<name>/CHARTER.md")
+	requireStdout(t, s.Attn("crew", "list"), "Chief", "asleep")
 	s.Stop()
 	for _, name := range []string{"keel", "trellis"} {
 		writeCharter(t, s, name)
@@ -244,10 +244,16 @@ func TestAnInterruptedCrewLaunchIsTheLedgerRowWhenItsConversationSurvives(t *tes
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(roster.Members) != 1 || roster.Members[0].BindingSession == nil {
+			var binding *protocol.SessionID
+			for _, member := range roster.Members {
+				if member.Name == "Keel" {
+					binding = member.BindingSession
+				}
+			}
+			if binding == nil {
 				t.Fatalf("pending member launch: %+v", roster)
 			}
-			successor := *roster.Members[0].BindingSession
+			successor := *binding
 			run = s.Launched(string(successor))
 			run.Prompted()
 			run.Reply("The interrupted day has a conversation. <!-- attn:state=idle -->")
@@ -326,7 +332,7 @@ func TestCrewCommandsResolveTheCallingTerminalsProfile(t *testing.T) {
 	}
 	var roster []protocol.CrewMember
 	s.Run(testworld.Invocation{Args: []string{"crew", "list", "--json"}, Terminal: terminal}).JSON(t, &roster)
-	if len(roster) != 0 {
+	if len(roster) != 1 || !roster[0].Chief {
 		t.Fatalf("Side sees another profile's members: %+v", roster)
 	}
 	for _, args := range [][]string{{"crew", "sleep", "Keel"}, {"crew", "rename", "Keel", "Alfred"}, {"agent", "peek", "Keel"}} {
