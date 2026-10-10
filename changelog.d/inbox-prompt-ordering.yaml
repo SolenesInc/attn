@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Verify that a resumed seed tender receives both user input and its inbox ring in either order.

@@ -306,10 +306,13 @@ func TestADelegateThatClearsLeavesItsSeedAndMailWithItsClosedSession(t *testing.
 	}
 	back := w.Launched(string(delegate))
 	app.TypeLine(string(delegate), "where were we?")
-	back.Prompted()
+	first := back.Prompted()
 	back.Reply("On the tracked task. <!-- attn:state=idle -->")
-	if got := back.Prompted(); !strings.Contains(got, inboxDoorbell) {
-		t.Fatalf("the reopened tender was prompted with %q, want the inbox doorbell", got)
+	prompts := []string{first, back.Prompted()}
+	if !slices.Contains(prompts, "where were we?") || !slices.ContainsFunc(prompts, func(prompt string) bool {
+		return strings.Contains(prompt, inboxDoorbell)
+	}) {
+		t.Fatalf("the reopened tender was prompted with %q, want the user input and inbox doorbell in either order", prompts)
 	}
 	if mail := readInbox(t, cli, string(delegate), 0).Items; len(mail) != 1 || mail[0].Content != "the deployment is ready" {
 		t.Errorf("the reopened tender's inbox = %+v, want the mail that queued while it was closed", mail)
