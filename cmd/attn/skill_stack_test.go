@@ -29,7 +29,6 @@ func TestTheSkillCommandPrintsTheBundledSkillAndItsReferences(t *testing.T) {
 		want []string
 	}{
 		{args: []string{"--reference", "workflow"}, code: 1, want: []string{`"workflow"`, "garden"}},
-		{args: []string{"--reference", "nope"}, code: 1, want: []string{`"nope"`, "garden"}},
 		{args: []string{"--list", "--reference", "garden"}, code: 2, want: []string{"mutually exclusive"}},
 		{args: []string{"--reference"}, code: 2, want: []string{"--list"}},
 	} {

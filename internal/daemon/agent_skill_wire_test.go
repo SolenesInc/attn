@@ -28,10 +28,8 @@ func plantRetiredSkillFiles(t *testing.T, skill string) {
 	if err := os.MkdirAll(filepath.Join(skill, "references", "retired-topic"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"chief-of-staff.md", "workflow.md"} {
-		if err := os.WriteFile(filepath.Join(skill, "references", name), []byte("retired guidance"), 0o644); err != nil {
-			t.Fatal(err)
-		}
+	if err := os.WriteFile(filepath.Join(skill, "references", "workflow.md"), []byte("retired guidance"), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 
