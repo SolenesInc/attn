@@ -22,6 +22,20 @@ func Main(m *testing.M, env ...string) int {
 	defer os.RemoveAll(dir)
 	processDir = dir
 	config.ScopeTestEnvironment(filepath.Join(dir, "data"))
+	bin := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		panic("testworld.Main: " + err.Error())
+	}
+	if err := os.WriteFile(filepath.Join(bin, "tailscale"), []byte(`#!/bin/sh
+case "$*" in
+"status --json") printf '%s\n' '{"BackendState":"NoState"}' ;;
+"serve status --json") printf '%s\n' '{}' ;;
+*) printf 'unexpected tailscale %s\n' "$*" >&2; exit 2 ;;
+esac
+`), 0o755); err != nil {
+		panic("testworld.Main: " + err.Error())
+	}
+	_ = os.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	toolHome := filepath.Join(dir, "toolhome")
 	_ = os.Setenv(toolhome.EnvVar, toolHome)
 	_ = os.Setenv("CODEX_HOME", filepath.Join(toolHome, ".codex"))
