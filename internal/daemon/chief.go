@@ -83,10 +83,12 @@ func (d *Daemon) decorateChief(session *protocol.Session, chiefs map[string]prot
 	if session == nil {
 		return
 	}
-	if session.ProfileID != "" && chiefs[session.ProfileID] == session.ID {
-		session.Chief = protocol.Ptr(true)
-	} else {
-		session.Chief = nil
+	session.Chief = nil
+	for _, id := range chiefs {
+		if id == session.ID {
+			session.Chief = protocol.Ptr(true)
+			return
+		}
 	}
 }
 

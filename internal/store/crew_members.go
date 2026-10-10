@@ -372,7 +372,7 @@ func (s *Store) commitCrewBirth(m NewCrewMember, now time.Time, insert bool) (Do
 				return err
 			}
 		} else {
-			if _, err := scanCrewIdentity(tx.QueryRow("SELECT "+crewIdentityColumns+" FROM crew_members WHERE member_key = ? AND profile_id = ?", m.Identity.Key, m.Identity.ProfileID)); err != nil {
+			if _, err := scanCrewIdentity(tx.QueryRow("SELECT "+crewIdentityColumns+" FROM crew_members WHERE member_key = ?", m.Identity.Key)); err != nil {
 				return err
 			}
 		}
