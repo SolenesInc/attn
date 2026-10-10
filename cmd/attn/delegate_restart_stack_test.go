@@ -26,10 +26,12 @@ func TestADelegateWhoseAgentOutlivesARestartStillFailsWhenItExitsBeforeItsFirstT
 		Assignment: protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindNew, Brief: protocol.Ptr("Say hello")},
 	}
 	boot := s.HoldNextBoot()
-	if _, err := s.Client().StartDelegation(request); err != nil {
+	accepted, err := s.Client().StartDelegation(request)
+	if err != nil {
 		t.Fatal(err)
 	}
 	s.AwaitHeldBoot()
+	s.Terminal(string(accepted.SessionID))
 
 	s.Stop()
 	s.Start()
@@ -74,6 +76,7 @@ func TestAHandoverInterruptedByARestartFinishesOnTheSuccessorThatOutlivedIt(t *t
 		t.Fatal(err)
 	}
 	s.AwaitHeldBoot()
+	s.Terminal(string(accepted.SessionID))
 
 	s.Stop()
 	s.Start()
