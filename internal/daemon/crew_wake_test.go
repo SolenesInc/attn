@@ -148,6 +148,9 @@ func newCrewDaemon(t *testing.T) *Daemon {
 	writeCrewHomes(t, d.dataRoot)
 	d.ensureCrewCollections()
 	d.importCrewHomes()
+	if err := d.ensureChiefs(); err != nil {
+		t.Fatal(err)
+	}
 	return d
 }
 

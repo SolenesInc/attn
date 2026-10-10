@@ -25,6 +25,9 @@ func TestACrewNameResolvesOnlyInItsProfile(t *testing.T) {
 	plain := w.Spawn(app, fakeagent.Claude, w.Path("side"))
 	scoped := w.Client().WithRequester("", protocol.SessionID(plain))
 	roster, err := scoped.CrewList()
+	if roster != nil {
+		roster.Members = regularCrewMembers(roster.Members)
+	}
 	if err != nil || len(roster.Members) != 1 || roster.Members[0].Name != "Bob" {
 		t.Fatalf("Side roster: %+v %v", roster, err)
 	}
@@ -50,7 +53,7 @@ func TestACrewNameResolvesOnlyInItsProfile(t *testing.T) {
 			t.Fatalf("foreign charter: %+v", response)
 		}
 	}
-	if len(app.Initial.Crew) != 1 || app.Initial.Crew[0].Key != "bob" {
+	if len(regularCrewMembers(app.Initial.Crew)) != 1 || regularCrewMembers(app.Initial.Crew)[0].Key != "bob" {
 		t.Fatalf("app roster: %+v", app.Initial.Crew)
 	}
 	_, err = scoped.CrewRename("Bob", "Robert")
@@ -58,12 +61,13 @@ func TestACrewNameResolvesOnlyInItsProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 	update := testworld.Await(app, protocol.EventCrewUpdated, func(e protocol.CrewUpdatedMessage) bool {
-		return e.ProfileID == side.ID && len(e.Members) == 1 && e.Members[0].Name == "Robert"
+		members := regularCrewMembers(e.Members)
+		return e.ProfileID == side.ID && len(members) == 1 && members[0].Name == "Robert"
 	})
-	if update.Members[0].Key != "bob" {
+	if regularCrewMembers(update.Members)[0].Key != "bob" {
 		t.Fatalf("roster update: %+v", update)
 	}
-	if got := w.AppOn(home).Initial.Crew; len(got) != 3 {
+	if got := regularCrewMembers(w.AppOn(home).Initial.Crew); len(got) != 3 {
 		t.Fatalf("home roster: %+v", got)
 	}
 }
@@ -260,6 +264,9 @@ func TestACrewRequesterRefusesAConflictingProfile(t *testing.T) {
 	_, err := cli.WithRequester(side.ID, day.SessionID).CrewList()
 	crewErrorContains(t, err, "belongs to profile", `"Default"`, "not profile")
 	roster, err := cli.WithRequester("Default", day.SessionID).CrewList()
+	if roster != nil {
+		roster.Members = regularCrewMembers(roster.Members)
+	}
 	if err != nil || len(roster.Members) != 3 {
 		t.Fatalf("matching profile name: %+v %v", roster, err)
 	}
@@ -270,6 +277,9 @@ func TestAnIncompleteLegacyHomeDoesNotImportItsWorkingDirectories(t *testing.T) 
 	writeCrewHomeFile(t, w, filepath.Join("keel", "project"), crew.CharterFileName, "# A project document, not a member.\n")
 	w.restart()
 	roster, err := w.Client().CrewList()
+	if roster != nil {
+		roster.Members = regularCrewMembers(roster.Members)
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
