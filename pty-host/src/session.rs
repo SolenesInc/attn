@@ -1189,13 +1189,13 @@ impl Session {
             }
             pgid
         };
-        let observation = self
+        let observations = self
             .model
             .lock()
             .expect("model mutex poisoned")
             .signals
             .observe_shell_poll(self.child_pid, foreground);
-        if let Some(observation) = observation {
+        for observation in observations {
             self.publish_state(observation.claim, &observation.detail, observation.source);
         }
     }

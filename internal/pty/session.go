@@ -397,14 +397,14 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 					s.forceResync(resync)
 				}
 				s.deliveryMu.Unlock()
-				if s.programStatus != nil && s.onState != nil {
+				if s.onState != nil {
 					for _, obs := range s.programStatus.Observe(programReports, time.Now()) {
 						s.emitSignal(obs)
 					}
 				}
 				if s.harnessSignals != nil && s.onState != nil {
 					titleObservations := s.harnessSignals.Observe(data, time.Now())
-					if !s.programStatus.replacesTitles() {
+					if !s.programStatus.held() {
 						for _, obs := range titleObservations {
 							s.emitSignal(obs)
 						}
@@ -412,7 +412,7 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 				}
 				if s.shellSignals != nil && s.onState != nil {
 					for _, obs := range s.shellSignals.ObserveOutput(data, time.Now()) {
-						s.emitSignal(obs)
+						s.emitShellSignal(obs)
 					}
 				}
 			} else {

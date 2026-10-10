@@ -86,9 +86,6 @@ impl SignalObserver {
     }
 
     pub fn observe_program_status(&mut self, reports: &[ProgramStatus]) -> Vec<Observation> {
-        if self.kind == Kind::Shell {
-            return Vec::new();
-        }
         reports
             .iter()
             .map(|report| {
@@ -138,20 +135,17 @@ impl SignalObserver {
             self.pending.drain(..discard);
         }
 
-        let mut out = Vec::new();
-        for frame in frames {
-            if let Some(observation) = self.classify(&frame, now) {
-                out.push(observation);
-            }
-        }
-        out
+        frames
+            .iter()
+            .flat_map(|frame| self.classify(frame, now))
+            .collect()
     }
 
     pub fn observe_shell_poll(
         &mut self,
         shell_pgid: i32,
         foreground_pgid: i32,
-    ) -> Option<Observation> {
+    ) -> Vec<Observation> {
         self.observe_shell_poll_at(shell_pgid, foreground_pgid, Instant::now())
     }
 
@@ -160,46 +154,48 @@ impl SignalObserver {
         shell_pgid: i32,
         foreground_pgid: i32,
         now: Instant,
-    ) -> Option<Observation> {
+    ) -> Vec<Observation> {
         if self.kind != Kind::Shell || foreground_pgid <= 0 {
-            return None;
+            return Vec::new();
         }
         self.shell_pgid = shell_pgid;
         self.last_foreground_pgid = foreground_pgid;
         if foreground_pgid == shell_pgid {
             self.prompt_owner = None;
-            self.emit("not_busy", "shell at prompt".to_owned(), false, now)
+            self.emit_shell("not_busy", "shell at prompt".to_owned(), false, now)
         } else if self.prompt_owner == Some(foreground_pgid) {
-            self.emit("not_busy", "inner shell at prompt".to_owned(), false, now)
+            self.emit_shell("not_busy", "inner shell at prompt".to_owned(), false, now)
         } else {
             self.prompt_owner = None;
-            self.emit("busy", "foreground command running".to_owned(), false, now)
+            self.emit_shell("busy", "foreground command running".to_owned(), false, now)
         }
     }
 
-    fn classify(&mut self, frame: &str, now: Instant) -> Option<Observation> {
+    fn classify(&mut self, frame: &str, now: Instant) -> Vec<Observation> {
         let (code, payload) = frame.split_once(';').unwrap_or((frame, ""));
         if self.kind == Kind::Shell && code == "133" {
             return self.classify_shell_marker(payload, now);
         }
         if (code != "0" && code != "2") || self.program_status_reported {
-            return None;
+            return Vec::new();
         }
-        match self.kind {
-            Kind::Claude => classify_claude(payload)
-                .and_then(|(claim, detail)| self.emit(claim, detail, false, now)),
-            Kind::Codex => classify_codex(payload)
-                .and_then(|(claim, detail)| self.emit(claim, detail, false, now)),
+        let title_claim = match self.kind {
+            Kind::Claude => classify_claude(payload),
+            Kind::Codex => classify_codex(payload),
             Kind::Shell | Kind::None => None,
-        }
+        };
+        title_claim
+            .and_then(|(claim, detail)| self.emit(claim, detail, false, now))
+            .into_iter()
+            .collect()
     }
 
-    fn classify_shell_marker(&mut self, payload: &str, now: Instant) -> Option<Observation> {
+    fn classify_shell_marker(&mut self, payload: &str, now: Instant) -> Vec<Observation> {
         let marker = payload.split(';').next().unwrap_or_default();
         match marker {
             "A" => {
                 self.bind_prompt_owner();
-                self.emit("not_busy", "shell at prompt".to_owned(), false, now)
+                self.emit_shell("not_busy", "shell at prompt".to_owned(), false, now)
             }
             "C" => {
                 self.prompt_owner = None;
@@ -210,7 +206,7 @@ impl SignalObserver {
                         || "command started".to_owned(),
                         |command| format!("command started: {}", truncate(command, 80)),
                     );
-                self.emit("busy", detail, true, now)
+                self.emit_shell("busy", detail, true, now)
             }
             "D" => {
                 self.bind_prompt_owner();
@@ -222,9 +218,9 @@ impl SignalObserver {
                         || "command finished".to_owned(),
                         |code| format!("command exited {code}"),
                     );
-                self.emit("not_busy", detail, true, now)
+                self.emit_shell("not_busy", detail, true, now)
             }
-            _ => None,
+            _ => Vec::new(),
         }
     }
 
@@ -232,6 +228,29 @@ impl SignalObserver {
         self.prompt_owner = (self.last_foreground_pgid > 0
             && self.last_foreground_pgid != self.shell_pgid)
             .then_some(self.last_foreground_pgid);
+    }
+
+    fn emit_shell(
+        &mut self,
+        claim: &'static str,
+        detail: String,
+        edge: bool,
+        now: Instant,
+    ) -> Vec<Observation> {
+        if !self.program_status_reported {
+            return self.emit(claim, detail, edge, now).into_iter().collect();
+        }
+        let heartbeat = self.emit(claim, detail, true, now);
+        if claim == "busy" {
+            return Vec::new();
+        }
+        self.program_status_reported = false;
+        let cleared = Observation {
+            claim: PROGRAM_CLEAR,
+            detail: String::new(),
+            source: PROGRAM_STATUS,
+        };
+        std::iter::once(cleared).chain(heartbeat).collect()
     }
 
     fn emit(
@@ -423,7 +442,7 @@ mod tests {
         let mut observer = SignalObserver::new("shell");
         let at = Instant::now();
         assert_eq!(
-            observer.observe_shell_poll_at(100, 300, at).unwrap().claim,
+            observer.observe_shell_poll_at(100, 300, at)[0].claim,
             "busy"
         );
         let prompt_at = at + Duration::from_millis(100);
@@ -434,17 +453,18 @@ mod tests {
         assert!(
             observer
                 .observe_shell_poll_at(100, 300, at + Duration::from_millis(500))
-                .is_none()
+                .is_empty()
         );
         let keepalive = observer
             .observe_shell_poll_at(100, 300, prompt_at + KEEPALIVE)
+            .pop()
             .unwrap();
         assert_eq!(keepalive.claim, "not_busy");
         assert_eq!(keepalive.detail, "inner shell at prompt");
         assert!(
             observer
                 .observe_shell_poll_at(100, 300, prompt_at + KEEPALIVE * 3)
-                .is_none()
+                .is_empty()
         );
 
         let started_at = at + Duration::from_secs(3);
@@ -453,10 +473,7 @@ mod tests {
             "busy"
         );
         assert_eq!(
-            observer
-                .observe_shell_poll_at(100, 300, started_at + KEEPALIVE)
-                .unwrap()
-                .claim,
+            observer.observe_shell_poll_at(100, 300, started_at + KEEPALIVE)[0].claim,
             "busy"
         );
         let finished_at = at + Duration::from_secs(5);
@@ -465,31 +482,19 @@ mod tests {
             "not_busy"
         );
         assert_eq!(
-            observer
-                .observe_shell_poll_at(100, 300, finished_at + KEEPALIVE)
-                .unwrap()
-                .claim,
+            observer.observe_shell_poll_at(100, 300, finished_at + KEEPALIVE)[0].claim,
             "not_busy"
         );
         assert_eq!(
-            observer
-                .observe_shell_poll_at(100, 400, at + Duration::from_secs(7))
-                .unwrap()
-                .claim,
+            observer.observe_shell_poll_at(100, 400, at + Duration::from_secs(7))[0].claim,
             "busy"
         );
         assert_eq!(
-            observer
-                .observe_shell_poll_at(100, 100, at + Duration::from_secs(8))
-                .unwrap()
-                .claim,
+            observer.observe_shell_poll_at(100, 100, at + Duration::from_secs(8))[0].claim,
             "not_busy"
         );
         assert_eq!(
-            observer
-                .observe_shell_poll_at(100, 300, at + Duration::from_secs(9))
-                .unwrap()
-                .claim,
+            observer.observe_shell_poll_at(100, 300, at + Duration::from_secs(9))[0].claim,
             "busy"
         );
     }
@@ -498,14 +503,14 @@ mod tests {
     fn settled_shell_prompt_is_not_repeated() {
         let mut observer = SignalObserver::new("shell");
         let at = Instant::now();
-        let first = observer.observe_shell_poll_at(100, 100, at).unwrap();
+        let first = observer.observe_shell_poll_at(100, 100, at).pop().unwrap();
         assert_eq!(first.claim, "not_busy");
         assert_eq!(first.detail, "shell at prompt");
         for second in 1..10 {
             assert!(
                 observer
                     .observe_shell_poll_at(100, 100, at + KEEPALIVE * second)
-                    .is_none()
+                    .is_empty()
             );
         }
         assert!(
@@ -523,38 +528,30 @@ mod tests {
         assert!(
             observer
                 .observe_shell_poll_at(100, 100, finished_at)
-                .is_none()
+                .is_empty()
         );
         let prompt = observer
             .observe_shell_poll_at(100, 100, finished_at + KEEPALIVE)
+            .pop()
             .unwrap();
         assert_eq!(prompt.claim, "not_busy");
         assert_eq!(prompt.detail, "shell at prompt");
         assert!(
             observer
                 .observe_shell_poll_at(100, 100, finished_at + KEEPALIVE * 2)
-                .is_none()
+                .is_empty()
         );
         let busy_at = finished_at + KEEPALIVE * 3;
         assert_eq!(
-            observer
-                .observe_shell_poll_at(100, 300, busy_at)
-                .unwrap()
-                .claim,
+            observer.observe_shell_poll_at(100, 300, busy_at)[0].claim,
             "busy"
         );
         assert_eq!(
-            observer
-                .observe_shell_poll_at(100, 300, busy_at + KEEPALIVE)
-                .unwrap()
-                .claim,
+            observer.observe_shell_poll_at(100, 300, busy_at + KEEPALIVE)[0].claim,
             "busy"
         );
         assert_eq!(
-            observer
-                .observe_shell_poll_at(100, 100, busy_at + KEEPALIVE)
-                .unwrap()
-                .detail,
+            observer.observe_shell_poll_at(100, 100, busy_at + KEEPALIVE)[0].detail,
             "shell at prompt"
         );
     }
@@ -567,14 +564,11 @@ mod tests {
             observer.observe_shell_poll_at(100, 300, at);
             assert_eq!(observer.observe_at(marker, at)[0].claim, "not_busy");
             assert_eq!(
-                observer.observe_shell_poll_at(100, 400, at).unwrap().claim,
+                observer.observe_shell_poll_at(100, 400, at)[0].claim,
                 "busy"
             );
             assert_eq!(
-                observer
-                    .observe_shell_poll_at(100, 300, at + KEEPALIVE)
-                    .unwrap()
-                    .claim,
+                observer.observe_shell_poll_at(100, 300, at + KEEPALIVE)[0].claim,
                 "busy"
             );
         }
@@ -590,7 +584,7 @@ mod tests {
             }
             observer.observe_at(b"\x1b]133;A\x07", at);
             assert_eq!(
-                observer.observe_shell_poll_at(100, 300, at).unwrap().claim,
+                observer.observe_shell_poll_at(100, 300, at)[0].claim,
                 "busy"
             );
         }

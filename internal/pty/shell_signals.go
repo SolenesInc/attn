@@ -136,10 +136,22 @@ func (s *Session) runShellForegroundPoller(interval time.Duration) {
 				continue
 			}
 			if obs, ok := s.shellSignals.ObservePoll(fgPgid, time.Now()); ok {
-				s.emitSignal(obs)
+				s.emitShellSignal(obs)
 			}
 		}
 	}
+}
+
+func (s *Session) emitShellSignal(obs Observation) {
+	if obs.Claim == claimBusy && s.programStatus.held() {
+		return
+	}
+	if obs.Claim == claimNotBusy {
+		if cleared, ok := s.programStatus.release(obs.At); ok {
+			s.emitSignal(cleared)
+		}
+	}
+	s.emitSignal(obs)
 }
 
 func (s *Session) childProcessGroup() int {

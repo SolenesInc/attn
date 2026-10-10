@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/sessionstate"
 )
@@ -52,7 +53,7 @@ func recoveredHarnessEdge(existing *protocol.Session, info ptybackend.SessionInf
 	if !ok {
 		return nil, time.Time{}, false
 	}
-	if info.HasLastSignal && info.LastSignal.At.After(concludedAt) {
+	if info.HasLastSignal && (info.LastSignal.Source == pty.SourceProgramStatus || info.LastSignal.At.After(concludedAt)) {
 		return nil, time.Time{}, false
 	}
 	return func(e *sessionstate.Evidence) {
