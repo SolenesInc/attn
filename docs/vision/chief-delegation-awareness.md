@@ -18,6 +18,7 @@ no longer belongs to the seed's parties.
 
 The inbox rings an available agent at most three times per unread item, five
 minutes apart. Busy agents and agents awaiting approval spend no attempts. A
+resumed session can ring queued mail before the user's next prompt. A
 member's inbox can wake an asleep member, subject to the crew wake limit. The
 ring tells the agent to read `attn agent inbox`; item bodies stay in the durable
 inbox. Reading marks delivery and records which session read the item.
