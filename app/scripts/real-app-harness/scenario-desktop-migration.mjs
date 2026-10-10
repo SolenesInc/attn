@@ -118,6 +118,7 @@ function legacyWorkspacesSql(fixtureDir) {
   statements.push(`ALTER TABLE delegation_operations ADD COLUMN handover_tender_session TEXT NOT NULL DEFAULT '';`);
   statements.push(`ALTER TABLE delegation_operations ADD COLUMN handover_tender_member TEXT NOT NULL DEFAULT '';`);
   statements.push(`DELETE FROM schema_migrations WHERE version > ${LAST_SCHEMA_BEFORE_CONVERSION} AND version <= ${LAST_SCHEMA_REBUILT_BY_FIXTURE};`);
+  statements.push('DELETE FROM schema_migrations WHERE version IN (1791645298598165, 1791645298884411, 1791645299011252, 1791655856278261);');
   return statements.join('\n');
 }
 
