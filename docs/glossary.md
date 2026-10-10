@@ -3,7 +3,8 @@
 The glossary is attn's domain model, in the sense of domain-driven design.
 
 ```text
-profile                 a separate world for the user's work; like a tenant
+profile                 a separate world for the user's work; like a tenant.
+                        What belongs to a profile never moves to another
 ├─ desktop (1..n)
 ├─ flow (1)
 ├─ ledger (1)
