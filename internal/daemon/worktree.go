@@ -145,12 +145,12 @@ func (d *Daemon) registerCreatedWorktree(_ foregroundCleanupProtection, mainRepo
 	})
 }
 
-func (d *Daemon) discoverWorktree(protection foregroundCleanupProtection, path string) *store.Worktree {
+func (d *Daemon) readWorktreeFromGit(ctx context.Context, path string) *store.Worktree {
 	type discovery struct {
 		mainRepo string
 		entries  []git.WorktreeEntry
 	}
-	result, err := gitValue(protection.Context(), d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) (discovery, error) {
+	result, err := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) (discovery, error) {
 		root, rootErr := client.GetRepoRoot(ctx, path)
 		if rootErr != nil {
 			return discovery{}, rootErr
@@ -165,15 +165,12 @@ func (d *Daemon) discoverWorktree(protection foregroundCleanupProtection, path s
 
 	for _, gwt := range result.entries {
 		if gwt.Path == path {
-			wt := &store.Worktree{
-				Path:      gwt.Path,
-				Branch:    gwt.Branch,
-				MainRepo:  result.mainRepo,
-				CreatedAt: time.Now(),
+			d.logf("Found worktree in Git: %s (branch: %s, main: %s)", path, gwt.Branch, result.mainRepo)
+			return &store.Worktree{
+				Path:     gwt.Path,
+				Branch:   gwt.Branch,
+				MainRepo: result.mainRepo,
 			}
-			d.store.AddWorktree(wt)
-			d.logf("Discovered worktree not in registry: %s (branch: %s, main: %s)", path, gwt.Branch, result.mainRepo)
-			return wt
 		}
 	}
 
@@ -227,7 +224,7 @@ func (d *Daemon) doDeleteWorktreeProtected(protection foregroundCleanupProtectio
 
 	wt := d.store.GetWorktree(path)
 	if wt == nil {
-		wt = d.discoverWorktree(protection, path)
+		wt = d.readWorktreeFromGit(protection.Context(), path)
 		if wt == nil {
 			if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
 				d.logf("Worktree %s doesn't exist and not in registry, treating as already deleted", path)

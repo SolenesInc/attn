@@ -12,6 +12,23 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
+func TestAFailedDeleteDoesNotRegisterAnUnknownWorktree(t *testing.T) {
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	repo := newRepo(t, "shop")
+	path := filepath.Join(filepath.Dir(repo), "external")
+	runGit(t, repo, "worktree", "add", "-b", "external", path)
+	sweepDirty(t, path)
+	refused := testworld.Request(app, protocol.DeleteWorktreeMessage{Cmd: protocol.CmdDeleteWorktree, Path: path},
+		protocol.EventDeleteWorktreeResult, func(protocol.DeleteWorktreeResultMessage) bool { return true })
+	if refused.Success || refused.ReasonKind != "dirty_worktree" {
+		t.Fatalf("deleting an unknown dirty checkout = %+v, want a dirty refusal", refused)
+	}
+	if listed, err := cli.WorktreeList(repo, 0); err != nil || len(listed.Worktrees) != 0 {
+		t.Errorf("failed deletion registered the unknown checkout: %+v, %v", listed, err)
+	}
+}
+
 func TestDeletingADirtyWorktreeNeedsForceAndThenTakesItsSessionsAlong(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()

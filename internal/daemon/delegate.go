@@ -366,7 +366,7 @@ func (d *Daemon) createDelegationWorktree(protection foregroundCleanupProtection
 		if pathRepo, pathErr := d.resolveDelegationRepository(expectedPath, "--worktree-path"); pathErr == nil && git.CanonicalizePath(pathRepo) != git.CanonicalizePath(repo) {
 			return "", false, fmt.Errorf("repository placement conflict: selected repository resolves to %s, but --worktree-path resolves to %s; choose a worktree path from the selected repository or correct --repo/--cwd", repo, pathRepo)
 		}
-		wt := d.discoverWorktree(protection, expectedPath)
+		wt := d.readWorktreeFromGit(protection.Context(), expectedPath)
 		if wt == nil || strings.TrimSpace(wt.Branch) != branch {
 			return "", false, fmt.Errorf("worktree path already exists and is not branch %q: %s", branch, expectedPath)
 		}
