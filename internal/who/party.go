@@ -32,15 +32,26 @@ func PartyOfEndedSession(id protocol.SessionID) Party { return Party{ref{session
 func (p Party) Actor() Actor                          { return Actor{p.party} }
 func (p Party) Address() Address                      { return Address{p.party} }
 func (a Actor) Party() (Party, bool) {
-	return Party{a.actor}, a.actor.kind == session || a.actor.kind == member
+	if a.actor.kind == session || a.actor.kind == member {
+		return Party{a.actor}, true
+	}
+	return Party{}, false
 }
 func (p Party) Session() (protocol.SessionID, bool) {
-	return protocol.SessionID(p.party.id), p.party.kind == session
+	if p.party.kind == session {
+		return protocol.SessionID(p.party.id), true
+	}
+	return "", false
 }
-func (p Party) Member() (MemberKey, bool) { return MemberKey{p.party.id}, p.party.kind == member }
-func (p Party) IsZero() bool              { return p.party.kind == 0 }
-func (a Actor) IsZero() bool              { return a.actor.kind == 0 }
-func (a Address) IsZero() bool            { return a.address.kind == 0 }
+func (p Party) Member() (MemberKey, bool) {
+	if p.party.kind == member {
+		return MemberKey{p.party.id}, true
+	}
+	return MemberKey{}, false
+}
+func (p Party) IsZero() bool   { return p.party.kind == 0 }
+func (a Actor) IsZero() bool   { return a.actor.kind == 0 }
+func (a Address) IsZero() bool { return a.address.kind == 0 }
 func SwitchParty[T any](p Party, onSession func(protocol.SessionID) (T, error), onMember func(MemberKey) (T, error)) (T, error) {
 	switch p.party.kind {
 	case session:

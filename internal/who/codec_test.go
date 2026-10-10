@@ -65,6 +65,9 @@ func TestWhoCodecMatchesItsTextSpecification(t *testing.T) {
 			if err != nil || a != p.Actor() {
 				t.Fatalf("party to actor %q: %v", text, err)
 			}
+			if narrowed, ok := a.Party(); !ok || narrowed != p {
+				t.Fatalf("actor to party %q: %v, %v", text, narrowed, ok)
+			}
 			roundTrip(t, a, who.ParseActor)
 			address, err := who.ParseAddress(text)
 			if err != nil || address != p.Address() {
@@ -78,6 +81,9 @@ func TestWhoCodecMatchesItsTextSpecification(t *testing.T) {
 				t.Fatal(err)
 			}
 			roundTrip(t, a, who.ParseActor)
+			if p, ok := a.Party(); ok || !p.IsZero() {
+				t.Fatalf("%s narrowed to party %v, %v", text, p, ok)
+			}
 			if _, err := who.ParseParty(text); err == nil {
 				t.Fatalf("party accepted %q", text)
 			}
