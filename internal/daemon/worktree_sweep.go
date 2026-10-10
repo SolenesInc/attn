@@ -91,10 +91,7 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 	}
 
 	ctx := lease.Context()
-	repos, err := d.trackedRepositoriesContext(ctx)
-	if err != nil {
-		return 0, 0, 0, err
-	}
+	repos := d.store.MonitoredWorktreeRepositories()
 	candidatesByRepo := make(map[string][]worktreeSweepCandidate)
 	for _, repo := range repos {
 		if cause := context.Cause(ctx); cause != nil {

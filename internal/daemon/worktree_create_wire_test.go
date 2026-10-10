@@ -60,7 +60,7 @@ func TestAWorktreeBelongsToTheRepositoryItWasCreatedFrom(t *testing.T) {
 	}
 }
 
-func TestAWorktreeWhoseDirectoryVanishedLeavesTheListAndItsPlaceCanBeReused(t *testing.T) {
+func TestAVanishedWorktreeLeavesLiveQueriesAndItsPlaceCanBeReused(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
 	repo := newRepo(t, "shop")
@@ -77,8 +77,8 @@ func TestAWorktreeWhoseDirectoryVanishedLeavesTheListAndItsPlaceCanBeReused(t *t
 	if paths := worktreeCreatePaths(listed.Worktrees); len(paths) != 0 {
 		t.Errorf("list_worktrees after the directories vanished = %v; want neither", paths)
 	}
-	if surface, err := cli.WorktreeList(repo, 0); err != nil || len(surface.Worktrees) != 0 {
-		t.Errorf("the worktree surface after the directories vanished = %+v, %v; want neither", surface, err)
+	if surface, err := cli.WorktreeList(repo, 0); err != nil || !slices.Equal(worktreeCreatePaths(surface.Worktrees), []string{reused, vanished}) {
+		t.Errorf("the registry after a live query = %+v, %v; want both retained for the sweep", surface, err)
 	}
 
 	branches := testworld.Request(app, protocol.ListBranchesMessage{Cmd: protocol.CmdListBranches, MainRepo: repo},
@@ -120,6 +120,10 @@ func TestAWorktreeWhoseDirectoryVanishedLeavesTheListAndItsPlaceCanBeReused(t *t
 	if _, err := os.Stat(filepath.Join(reused, "README.md")); err != nil {
 		t.Errorf("the worktree was not recreated: %v", err)
 	}
+	refreshWorktrees(t, cli)
+	testworld.Await(app, protocol.EventWorktreeDeleted, func(e protocol.WebSocketEvent) bool {
+		return len(e.Worktrees) == 1 && e.Worktrees[0].Path == vanished
+	})
 	if surface, err := cli.WorktreeList(repo, 0); err != nil || !slices.Equal(worktreeCreatePaths(surface.Worktrees), []string{reused}) {
 		t.Errorf("the worktree surface after recreating = %+v, %v; want only %s", surface, err, reused)
 	}

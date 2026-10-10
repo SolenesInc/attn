@@ -1,0 +1,4 @@
+kind: fixed
+area: worktrees
+change: Keep monitoring repositories after their last worktree is removed, and discover later worktrees created outside attn.
+notes: Browsing a repository no longer enrolls it for monitoring or interrupts automatic cleanup.
