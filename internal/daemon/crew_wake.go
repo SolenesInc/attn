@@ -16,7 +16,6 @@ import (
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
-	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
@@ -293,7 +292,7 @@ func (d *Daemon) crewWakeWithChargeLocked(key who.MemberKey, agent string, auton
 	return d.crewWakeDayWithChargeLocked(key, agent, autonomous, nil, crewWakeRequest{})
 }
 func (d *Daemon) crewWakeDayWithChargeLocked(key who.MemberKey, agent string, autonomous bool, beforeWake func() error, request crewWakeRequest) (*protocol.CrewWakeResult, error) {
-	if err := d.mailRefusal(inbox.ToMember(key.String())); err != nil {
+	if err := d.mailRefusal(who.Member(key).Address()); err != nil {
 		return nil, fmt.Errorf("%w; `attn crew restore %s` brings it back", err, d.memberName(key))
 	}
 	member, _, err := d.crewMember(key)

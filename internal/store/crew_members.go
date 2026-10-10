@@ -361,7 +361,7 @@ func (s *Store) RetireCrewMember(key who.MemberKey, at time.Time) (int, error) {
 		if _, err := tx.Exec("UPDATE crew_members SET retired_at = ? WHERE member_key = ? AND retired_at = ''", at.UTC().Format(time.RFC3339Nano), key); err != nil {
 			return err
 		}
-		result, err := tx.Exec("DELETE FROM pull_request_watches WHERE address = ?", "member:"+key.String())
+		result, err := tx.Exec("DELETE FROM pull_request_watches WHERE watcher = ?", who.Member(key))
 		if err != nil {
 			return err
 		}

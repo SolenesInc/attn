@@ -516,8 +516,6 @@ function collectSessionUiState(
   const sidebarItem = document.querySelector(
     `[data-testid="sidebar-session-${session.id}"]`
   );
-  const sidebarDesktop = sidebarItem?.closest<HTMLElement>('[data-testid^="sidebar-desktop-"]') ?? null;
-  const sidebarSiblings = Array.from(sidebarDesktop?.querySelectorAll('[data-testid^="sidebar-session-"]') ?? []);
   const firstAgentPaneId = session.desktop.agents[0]?.id || '';
   const firstAgentPane = firstAgentPaneId
     ? document.querySelector(`[data-pane-session-id="${session.id}"][data-pane-id="${firstAgentPaneId}"]`)
@@ -543,11 +541,6 @@ function collectSessionUiState(
       ? {
           text: sidebarItem.textContent || '',
           bounds: rectSnapshot(sidebarItem),
-          desktop: sidebarDesktop ? {
-            id: (sidebarDesktop.getAttribute('data-testid') || '').slice('sidebar-desktop-'.length),
-            index: sidebarSiblings.indexOf(sidebarItem),
-            bounds: rectSnapshot(sidebarDesktop),
-          } : null,
           automation: readProvenance(sidebarItem),
           pullRequest: sidebarItem.querySelector('.sidebar-session-pr')?.textContent?.trim() || '',
           desktopId,

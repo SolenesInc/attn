@@ -38,7 +38,7 @@ func (d *Daemon) retireCrewMember(m store.CrewIdentity) (crewRetirement, error) 
 	if err != nil {
 		return result, err
 	}
-	sleep, err := d.crewSleep(requestFromApp(m.ProfileID), "member:"+m.Key.String())
+	sleep, err := d.crewSleep(who.RequestFromApp(m.ProfileID), "member:"+m.Key.String())
 	if err != nil {
 		return result, err
 	}
@@ -114,7 +114,12 @@ func (d *Daemon) handleCrewRetire(conn net.Conn, msg *protocol.CrewRetireMessage
 		d.sendCrewError(conn, "retire", err)
 		return
 	}
-	r, err := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID)
+	bindings, err := d.bindings()
+	if err != nil {
+		d.sendCrewError(conn, "retire", err)
+		return
+	}
+	r, err := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID, bindings)
 	if err != nil {
 		d.sendCrewError(conn, "retire", err)
 		return
@@ -142,7 +147,12 @@ func (d *Daemon) handleCrewRestore(conn net.Conn, msg *protocol.CrewRestoreMessa
 		d.sendCrewError(conn, "restore", err)
 		return
 	}
-	r, err := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID)
+	bindings, err := d.bindings()
+	if err != nil {
+		d.sendCrewError(conn, "restore", err)
+		return
+	}
+	r, err := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID, bindings)
 	if err != nil {
 		d.sendCrewError(conn, "restore", err)
 		return

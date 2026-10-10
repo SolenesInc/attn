@@ -98,7 +98,12 @@ func (d *Daemon) handleCrewCreate(conn net.Conn, msg *protocol.CrewCreateMessage
 		d.sendCrewError(conn, "create", err)
 		return
 	}
-	r, err := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID)
+	bindings, err := d.bindings()
+	if err != nil {
+		d.sendCrewError(conn, "create", err)
+		return
+	}
+	r, err := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID, bindings)
 	if err != nil {
 		d.sendCrewError(conn, "create", err)
 		return
