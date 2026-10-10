@@ -185,6 +185,15 @@ export class DaemonObserver {
     return this.waitFor(() => this.desktop(created.id), `arrangement with desktop ${created.id}`);
   }
 
+  async closeEmptyNumberedDesktops() {
+    const leftovers = this.desktops.filter((desktop) => desktop.shortcut_slot
+      && desktop.panes.length === 0 && desktop.id !== this.currentDesktopId());
+    for (const desktop of leftovers) {
+      await this.profileCommand('desktop_close', { desktop_id: desktop.id, expected_revision: desktop.revision });
+      await this.waitFor(() => !this.desktop(desktop.id), `arrangement without numbered desktop ${desktop.shortcut_slot}`);
+    }
+  }
+
   setCurrentDesktop(desktopId) {
     return this.profileCommand('desktop_set_current', { profile_id: this.profileId, desktop_id: desktopId });
   }

@@ -201,11 +201,12 @@ try {
   await runner.step('delegating_to_a_missing_numbered_desktop_keeps_the_callers_view_and_keyboard', async () => {
     await driver.pressKey('Escape');
     await client.request('select_session', { sessionId: builder });
+    await observer.closeEmptyNumberedDesktops();
     const before = await client.request('get_state');
     const sourcePane = before.activeLeaf.leafId;
-    const held = new Set(before.arrangement.desktops.map(desktop => desktop.slot).filter(Boolean));
+    const held = new Set(observer.desktops.map(desktop => desktop.shortcut_slot).filter(Boolean));
     const slot = [7, 1, 2, 3, 4, 5, 6, 8, 9].find(candidate => !held.has(candidate));
-    runner.assert(Boolean(slot), 'the fixture has a missing numbered desktop', before.arrangement);
+    runner.assert(Boolean(slot), 'the fixture has a missing numbered desktop', observer.desktops);
     const target = `${before.arrangement.selectedProfileId}/desktop_${slot}`;
     runner.assert((await client.request('get_pane_state', { sessionId: builder, paneId: sourcePane })).inputFocused,
       'the caller holds the keyboard before delegation');

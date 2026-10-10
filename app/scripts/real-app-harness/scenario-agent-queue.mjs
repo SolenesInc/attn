@@ -251,6 +251,7 @@ async function main() {
   try {
     await runner.step('launch_app_with_queue_mode', async () => {
       await launchFreshAppAndConnect(client, observer);
+      await observer.closeEmptyNumberedDesktops();
       await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
     });
 
