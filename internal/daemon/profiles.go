@@ -625,7 +625,7 @@ func (d *Daemon) projectProfilesChanged() {
 			d.logf("profiles snapshot: %v", err)
 			return
 		}
-		d.wsHub.SendValueToMatchingClients(protocol.ProfilesChangedMessage{Event: protocol.EventProfilesChanged, Profiles: live}, nil)
+		d.wsHub.BroadcastValue(protocol.ProfilesChangedMessage{Event: protocol.EventProfilesChanged, Profiles: live})
 	})
 }
 

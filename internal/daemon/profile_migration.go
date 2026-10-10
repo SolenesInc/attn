@@ -226,6 +226,6 @@ func (d *Daemon) projectMigrationChanged(ev bus.Event) {
 			d.logf("migration projection: %v", err)
 			return
 		}
-		d.wsHub.SendValueToMatchingClients(protocol.MigrationChangedMessage{Event: protocol.EventMigrationChanged, State: state}, nil)
+		d.wsHub.BroadcastValue(protocol.MigrationChangedMessage{Event: protocol.EventMigrationChanged, State: state})
 	})
 }

@@ -371,38 +371,21 @@ func (h *wsHub) Broadcast(event *protocol.WebSocketEvent) {
 		h.broadcastListener(event)
 	}
 
-	h.broadcastValue(event)
+	h.BroadcastValue(event)
 }
 
 func (h *wsHub) BroadcastValue(message interface{}) {
-	h.broadcastValue(message)
-}
-
-func (h *wsHub) SendValueToMatchingClients(message interface{}, match func(*wsClient) bool) {
 	data, err := json.Marshal(message)
 	if err != nil {
-		h.logf("WebSocket targeted send marshal error: %v", err)
+		h.logf("WebSocket broadcast marshal error: %v", err)
 		return
 	}
-	h.SendRawTextToMatchingClients(data, match)
-}
-
-func (h *wsHub) SendRawTextToMatchingClients(payload []byte, match func(*wsClient) bool) {
-	h.sendToMatchingClients(outboundMessage{kind: messageKindText, payload: payload}, match)
-}
-
-func (h *wsHub) sendToMatchingClients(message outboundMessage, match func(*wsClient) bool) {
-	if len(message.payload) == 0 {
-		return
-	}
-	message.payload = append([]byte(nil), message.payload...)
+	outbound := outboundMessage{kind: messageKindText, payload: data}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for client := range h.clients {
-		if match == nil || match(client) {
-			if _, evicted := h.deliver(client, message); evicted {
-				delete(h.clients, client)
-			}
+		if _, evicted := h.deliver(client, outbound); evicted {
+			delete(h.clients, client)
 		}
 	}
 }
@@ -482,15 +465,6 @@ func (h *wsHub) NewestClientMatching(match func(*wsClient) bool) *wsClient {
 		}
 	}
 	return newest
-}
-
-func (h *wsHub) broadcastValue(message interface{}) {
-	data, err := json.Marshal(message)
-	if err != nil {
-		h.logf("WebSocket broadcast marshal error: %v", err)
-		return
-	}
-	h.sendToMatchingClients(outboundMessage{kind: messageKindText, payload: data}, nil)
 }
 
 func (h *wsHub) ClientCount() int {

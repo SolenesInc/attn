@@ -587,7 +587,7 @@ commands:
   debug <command>                   probe debug artifacts (incidents, logs)
   db <command>                      database maintenance (restore from backup)
   bus <command>                     event bus: consumer cursors, lag, kill switch
-  enrollment <command>              this daemon's home: status, enroll, leave
+  enrollment <command>              this data folder's enrollment: status, leave
   seed <command>                    the garden: plant, tend, harvest, note, ls
   crew <command>                    the crew roster: who exists, who is awake
   handoff -m "<letter>"             file this crew member's letter; the day turns over
