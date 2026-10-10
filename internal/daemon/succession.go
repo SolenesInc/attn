@@ -78,8 +78,23 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 		}
 		if err := d.transferCrewBinding(memberKey, from.ID, sc.To); err != nil {
 			d.logf("crew: clear binding: %v", err)
-		} else if err := d.store.RecordMemberSession(memberKey, sc.To); err != nil {
-			d.logf("crew: record cleared member session: %v", err)
+		} else {
+			if err := d.store.RecordMemberSession(memberKey, sc.To); err != nil {
+				d.logf("crew: record cleared member session: %v", err)
+			}
+			d.life.Go("crew-retired-clear", func() {
+				identity, err := d.store.CrewIdentity(memberKey)
+				if err != nil {
+					d.logf("crew: read cleared member retirement: %v", err)
+					return
+				}
+				if !identity.Retired {
+					return
+				}
+				if _, err := d.crewSleep(requestFromApp(identity.ProfileID), "member:"+memberKey.String()); err != nil {
+					d.logf("crew: request sleep after retired clear: %v", err)
+				}
+			})
 		}
 	}
 

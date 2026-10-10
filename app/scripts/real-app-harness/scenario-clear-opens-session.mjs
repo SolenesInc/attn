@@ -98,10 +98,10 @@ async function main() {
       await poll(async () => !(await row(run.first)), 'the cleared session to leave the sidebar');
       const ui = await client.request('get_session_ui_state', { sessionId: run.next });
       runner.assert(ui.selected, 'the new session stays selected', { ui });
-      runner.assert(!after.text.includes(label) && after.desktopId === before.desktopId && after.rowIndex === before.rowIndex
-        && before.desktopBounds && after.desktopBounds
-        && Math.abs((after.bounds.y - after.desktopBounds.y) - (before.bounds.y - before.desktopBounds.y)) <= 1,
-        'the new session takes the cleared one\'s sidebar row', { before, after });
+      runner.assert(!after.text.includes(label) && before.desktop && after.desktop
+        && before.desktop.id === after.desktop.id && before.desktop.index === after.desktop.index
+        && Math.abs((after.bounds.y - after.desktop.bounds.y) - (before.bounds.y - before.desktop.bounds.y)) <= 1,
+        'the new session takes the cleared one\'s sidebar row within its desktop', { before, after });
       await waitForPaneInputFocus(client, run.next, run.paneId);
     });
 
