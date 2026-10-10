@@ -46,7 +46,7 @@ INSERT INTO presentations(id,session_id,address,title,kind,repo_path,created_at)
  ('chief-present','plain','chief:profile','title','change','/tmp/who',''),
  ('empty-present','old-day','','title','change','/tmp/who','');
 INSERT INTO automode_proposals(kind,value,proposed_by,created_at) VALUES
- ('host','same','old-day','2026-10-01T00:00:00Z'),('host','same','bound','2026-10-02T00:00:00Z'),('host','legacy','','2026-10-01T00:00:00Z');
+ ('host','same','old-day','2026-10-01T00:00:00Z'),('host','same','bound','2026-10-02T00:00:00Z'),('host','legacy','','2026-10-01T00:00:00Z'),('host','pi display','pi session Keel','2026-10-01T00:00:00Z');
 INSERT INTO kept_conversations(resume_id,agent,source_path,bytes,stored_bytes,copied_at,deleted_at,deleted_by) VALUES
  ('swept','claude','/tmp/source',0,0,'2026-10-01T00:00:00Z','2026-10-02T00:00:00Z','sweep'),
  ('forgotten','claude','/tmp/source',0,0,'2026-10-01T00:00:00Z','2026-10-02T00:00:00Z','user');
@@ -99,7 +99,7 @@ INSERT INTO kept_conversations(resume_id,agent,source_path,bytes,stored_bytes,co
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(proposals) != 2 || proposals[0].ProposedBy.String() != "member:keel" || !proposals[1].ProposedBy.IsZero() {
+			if len(proposals) != 3 || proposals[0].ProposedBy.String() != "member:keel" || !proposals[1].ProposedBy.IsZero() || !proposals[2].ProposedBy.IsZero() {
 				t.Fatalf("proposal collision: %+v", proposals)
 			}
 			for _, row := range []struct {

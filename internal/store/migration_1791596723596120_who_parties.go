@@ -184,7 +184,9 @@ func applyMigration1791596723596120(tx *sql.Tx) error {
 			return err
 		}
 		p.next = p.by
-		if p.by != "" {
+		if strings.HasPrefix(p.by, "pi session ") {
+			p.next = ""
+		} else if p.by != "" {
 			p.next = party(p.by)
 		}
 		key := [4]string{p.kind, p.target, p.value, p.next}

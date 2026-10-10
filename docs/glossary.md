@@ -62,6 +62,10 @@ forget                  deletes attn's copy of a conversation
 ```
 
 ```text
+party                   a session or crew member that sends mail or holds work;
+                        like an account
+actor                   a party, the user or attn that did something; like an
+                        audit identity
 address                 who an item is for: a session or a mailbox
 ├─ mailbox              crew member, chief or seed tender; like a shared
 │                       mailbox (support@) that whoever holds the job reads
