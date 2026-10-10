@@ -91,10 +91,30 @@ func (d *Daemon) furnishCrewMember(id store.CrewIdentity, b crewBirth) error {
 	if err := os.MkdirAll(home, 0o755); err != nil {
 		return crewHomeWriteError(id, home, err)
 	}
-	if err := os.WriteFile(member.CharterPath, []byte(b.Charter), 0o644); err != nil {
+	if err := writeCrewCharter(member.CharterPath, b.Charter); err != nil {
 		return crewHomeWriteError(id, home, err)
 	}
 	return nil
+}
+
+func writeCrewCharter(path, charter string) error {
+	file, err := os.CreateTemp(filepath.Dir(path), ".charter-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(file.Name())
+	if err := file.Chmod(0o644); err != nil {
+		file.Close()
+		return err
+	}
+	if _, err := file.WriteString(charter); err != nil {
+		file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	return os.Rename(file.Name(), path)
 }
 
 func crewHomeWriteError(id store.CrewIdentity, home string, err error) error {

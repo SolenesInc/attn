@@ -67,7 +67,7 @@ func TestAGardenReviewFreezesItsCandidatesAndRecipe(t *testing.T) {
 		t.Fatalf("after a restart the canceled review is %+v", after.Review)
 	}
 
-	chief := configureChiefOn(t, w, app, fakeagent.Claude, "sonnet")
+	configureChiefOn(t, w, app, fakeagent.Claude, "sonnet")
 
 	withChief := gardenReviewStart(t, cli)
 	if withChief.Run.ID == first.Run.ID || len(withChief.Items) != 2 {

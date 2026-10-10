@@ -23,7 +23,7 @@ export const RELEASE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 export const UPDATE_BANNER_DISMISSED_STORAGE_KEY = 'attn.update_banner.dismissed_version';
 
 export const CHIEF_OF_STAFF_CLOSE_HINT =
-  'Chief of staff is protected — unset the chief role to close it.';
+  'Chief is protected. Put Chief to sleep to close its session.';
 
 export function crewMemberCloseHint(memberId: string): string {
   const name = memberName(memberId);

@@ -20,7 +20,7 @@ func TestSettingsCLIEnforcesScopesAndExplainsItsKeys(t *testing.T) {
 	root := filepath.Join(s.Dir, "notes")
 	requireStdout(t, s.Attn("settings", "set", "notebook.root", root), "notebook.root = "+root)
 	requireStdout(t, s.Attn("settings", "get", "notebook.root"), root)
-	unset := s.Attn("settings", "get", "chief_context_window_cap")
+	unset := s.Attn("settings", "get", "headless_context_window_cap")
 	if unset.Code != 0 || strings.TrimSpace(unset.Stdout) != "" {
 		t.Fatalf("unset setting: %+v", unset)
 	}

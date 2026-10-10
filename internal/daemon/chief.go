@@ -2,10 +2,12 @@ package daemon
 
 import (
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/crew"
+	"github.com/victorarias/attn/internal/garden"
 
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/prompts"
@@ -164,7 +166,7 @@ func (d *Daemon) ensureChief(profile string, u *store.ChiefUpgrade) error {
 			return err
 		}
 		if _, err := os.Stat(member.CharterPath); os.IsNotExist(err) {
-			return os.WriteFile(member.CharterPath, []byte(prompts.RenderText("chief", "charter", nil)), 0o644)
+			return writeCrewCharter(member.CharterPath, prompts.RenderText("chief", "charter", nil))
 		} else {
 			return err
 		}
@@ -192,6 +194,39 @@ func (d *Daemon) queueChiefHandover(u store.ChiefUpgrade) error {
 	text := prompts.RenderText("chief", "handover", prompts.Values{"previous_session": string(u.Previous), "tended": tended, "watched": watched})
 	_, err = d.sendToInbox(inbox.Item{ID: "chief-handover/" + u.Chief.String(), To: who.Member(u.Chief).Address(), Kind: inbox.Notice, Source: "chief-upgrade", Text: text})
 	return err
+}
+
+func (d *Daemon) chiefHandoverSeeds(u store.ChiefUpgrade) (string, string, error) {
+	read, err := d.readGardenTo(0, u.ProfileID)
+	if err != nil {
+		return "", "", err
+	}
+	previous, found := read.bindings.PartyOf(u.Previous)
+	if !found {
+		previous = who.PartyOfEndedSession(u.Previous)
+	}
+	tended := []string{}
+	for _, seed := range garden.TendedBy(read.seeds, previous) {
+		tended = append(tended, seed.ID)
+	}
+	watches, err := d.store.GardenSeedWatches()
+	if err != nil {
+		return "", "", err
+	}
+	watched := []string{}
+	for _, watch := range watches {
+		if watch.Watcher == previous {
+			watched = append(watched, watch.SeedID)
+		}
+	}
+	snapshot := func(ids []string) string {
+		if len(ids) == 0 {
+			return "none"
+		}
+		sort.Strings(ids)
+		return strings.Join(ids, ", ")
+	}
+	return snapshot(tended), snapshot(watched), nil
 }
 
 func (d *Daemon) chiefWakeHeld(key who.MemberKey) string {

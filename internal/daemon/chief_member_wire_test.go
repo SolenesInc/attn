@@ -1,7 +1,12 @@
 package daemon_test
 
 import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -9,7 +14,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/crew"
+	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
@@ -35,7 +42,7 @@ func configureChiefOn(t *testing.T, w *world, app *testworld.Peer, h fakeagent.H
 	requestID := uuid.NewString()
 	result := testworld.Request(app, protocol.CrewSetMessage{Cmd: protocol.CmdCrewSet, RequestID: protocol.Ptr(requestID), Member: "chief", Agent: protocol.Ptr(string(h)), Model: protocol.Ptr(model)}, protocol.EventCrewSetResult, func(m protocol.CrewSetResultMessage) bool { return m.RequestID == requestID })
 	if !result.Success || result.WokeSessionID == nil {
-		t.Fatalf("configure Chief: %+v", result)
+		t.Fatalf("configure Chief: error=%s wake_error=%s %+v", protocol.Deref(result.Error), protocol.Deref(result.WakeError), result)
 	}
 	return string(*result.WokeSessionID)
 }
@@ -131,7 +138,7 @@ func TestAnUnconfiguredChiefWaitsForItsHarnessAndModel(t *testing.T) {
 
 func TestChiefMailWakesAfterSleepAndRename(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
-	app, cli := w.App(), w.Client()
+	cli := w.Client()
 	registerSessions(t, w, cli, "sender")
 	id := configureChief(t, w, fakeagent.Claude, "sonnet")
 	run := w.Launched(id)
@@ -226,10 +233,10 @@ func TestChiefNeverHeartbeatsOrAutoSleepsAndPlainHandoffNaps(t *testing.T) {
 		if err != nil || protocol.Deref(handoff.Outcome) != protocol.CrewDayCloseNap || handoff.SessionID == nil {
 			t.Fatalf("plain Chief handoff: %+v %v", handoff, err)
 		}
-	})
+	}, fakeagent.Claude)
 }
 
-func prepareChiefUpgrade(t *testing.T, missingCWD, emptyModel bool) *world {
+func prepareChiefUpgrade(t *testing.T, missingCWD, emptyModel bool, bound ...bool) *world {
 	t.Helper()
 	w := &world{World: prepareWorld(t, fakeagent.Codex)}
 	cwd := w.Path("old-chief")
@@ -255,7 +262,7 @@ func prepareChiefUpgrade(t *testing.T, missingCWD, emptyModel bool) *world {
 		sql  string
 		args []any
 	}{
-		{"INSERT INTO sessions(id,label,directory,state,state_since,state_updated_at,last_seen,agent,launch_intent,profile_id,launched_at) VALUES('previous-chief','Chief',?,'idle',?,?,?,'codex',?, ?,?)", []any{cwd, stamp, stamp, stamp, intent, profile, stamp}},
+		{"INSERT INTO sessions(id,label,directory,state,state_since,state_updated_at,last_seen,agent,agent_metadata,launch_intent,profile_id,launched_at) VALUES('previous-chief','Chief',?,'idle',?,?,?,'codex','recorded-conversation',?, ?,?)", []any{cwd, stamp, stamp, stamp, intent, profile, stamp}},
 		{"UPDATE profiles SET chief_session_id='previous-chief' WHERE id=?", []any{profile}},
 		{"INSERT INTO inbox_items(id,address,kind,text,created_at) VALUES('before-upgrade',?,'notice','Saved before the upgrade',?)", []any{"chief:" + profile, stamp}},
 	} {
@@ -263,6 +270,46 @@ func prepareChiefUpgrade(t *testing.T, missingCWD, emptyModel bool) *world {
 			db.Close()
 			t.Fatal(err)
 		}
+	}
+	previousParty := "session:previous-chief"
+	historicDocument := func(namespace, collection, id string, body map[string]any) {
+		t.Helper()
+		var collectionID int64
+		if err := db.QueryRow("INSERT INTO document_collections(namespace,collection,fields_json,updated_at) VALUES(?,?,'[]',?) ON CONFLICT(namespace,collection) DO UPDATE SET updated_at=excluded.updated_at RETURNING id", namespace, collection, stamp).Scan(&collectionID); err != nil {
+			t.Fatal(err)
+		}
+		table := docstore.TableName(collectionID)
+		if _, err := db.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s(id TEXT PRIMARY KEY,body TEXT NOT NULL,rev INTEGER NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL) WITHOUT ROWID", table)); err != nil {
+			t.Fatal(err)
+		}
+		encoded, err := json.Marshal(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec("INSERT INTO "+table+"(id,body,rev,created_at,updated_at) VALUES(?,?,1,?,?)", id, string(encoded), stamp, stamp); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(bound) > 0 && bound[0] {
+		previousParty = "member:keel"
+		home := filepath.Join(w.Dir, "crew", "keel")
+		if err := os.MkdirAll(home, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(home, "CHARTER.md"), []byte("# Keel\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec("INSERT INTO crew_members(member_key,profile_id,name) VALUES('keel',?,'Keel')", profile); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec("UPDATE sessions SET member_key='keel' WHERE id='previous-chief'"); err != nil {
+			t.Fatal(err)
+		}
+		historicDocument(crew.Namespace, crew.CollectionMembers, "keel", map[string]any{"home_dir": home, "charter_path": filepath.Join(home, "CHARTER.md"), "cwd": cwd, "agent": "codex", "binding_session": "previous-chief"})
+	}
+	historicDocument(garden.Namespace, garden.CollectionSeeds, "s-claim1", map[string]any{"id": "s-claim1", "profile_id": profile, "title": "Inherited work", "body": "Finish this work.", "status": "growing", "tender": previousParty, "state_changed_at": stamp})
+	if _, err := db.Exec("INSERT INTO garden_seed_watches(watcher,seed_id,created_at) VALUES(?, 's-claim1', ?)", previousParty, stamp); err != nil {
+		t.Fatal(err)
 	}
 	if !emptyModel {
 		if _, err := db.Exec("INSERT INTO settings(key,value) VALUES('chief_model_codex','gpt-6.1-sol')"); err != nil {
@@ -328,8 +375,29 @@ func TestUpgradeCreatesAnOnboardedChiefAndWaitsForTheUser(t *testing.T) {
 		}
 		content += item.Content
 	}
-	if !strings.Contains(content, "previous-chief") || !strings.Contains(content, "attn session transcript") || !strings.Contains(content, "Saved before the upgrade") {
+	if !strings.Contains(content, "Tended: s-claim1") || !strings.Contains(content, "Watched: s-claim1") || !strings.Contains(content, "previous-chief") || !strings.Contains(content, "attn session transcript") || !strings.Contains(content, "Saved before the upgrade") {
 		t.Fatalf("handover mail: %s", content)
+	}
+}
+
+func TestUpgradeHandoverIncludesTheOldChiefsMemberOwnedWork(t *testing.T) {
+	w := prepareChiefUpgrade(t, false, false, true)
+	app, cli := w.App(), w.Client()
+	app.Send(protocol.SetClientPresenceMessage{Cmd: protocol.CmdSetClientPresence, Visible: true, IdleSeconds: protocol.Ptr(0.0)})
+	awake := *testworld.Await(app, protocol.EventSessionRegistered, func(m protocol.WebSocketEvent) bool { return m.Session != nil && protocol.Deref(m.Session.Chief) }).Session
+	run := w.Launched(string(awake.ID))
+	run.Prompted()
+	run.Reply("Ready to take over. <!-- attn:state=idle -->")
+	run.Prompted()
+	items := readInbox(t, cli, string(awake.ID), 0)
+	var handover string
+	for _, item := range items.Items {
+		if strings.Contains(item.Content, "Take over from it") {
+			handover = item.Content
+		}
+	}
+	if !strings.Contains(handover, "Tended: s-claim1") || !strings.Contains(handover, "Watched: s-claim1") {
+		t.Fatalf("member-owned handover: %s", handover)
 	}
 }
 
@@ -422,5 +490,25 @@ func TestUpgradedChiefWithoutARecordedModelKeepsTheHarnessDefault(t *testing.T) 
 	run := w.Launched(string(awake.ID))
 	if model, _ := flagValue(run.Argv, "--model"); model != "" {
 		t.Fatalf("upgrade without a model picked %q instead of the harness default: %q", model, run.Argv)
+	}
+}
+
+func TestChiefConfigurationJSONReportsSavedSettingsAndFailedWake(t *testing.T) {
+	w := &world{World: prepareWorld(t, fakeagent.Claude), terms: testworld.NewTerminals()}
+	w.start()
+	w.terms.RefuseNextSpawn(errors.New("the terminal launcher is unavailable"))
+	cmd := exec.Command(testworld.AttnBinary(t), "crew", "set", "chief", "--agent", "claude", "--model", "sonnet", "--json")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	cmd.Env = append(append(os.Environ(), w.Vars...), "ATTN_TERMINAL_ID=", "ATTN_SESSION_ID=", "ATTN_INSIDE_APP=")
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("crew set: %v stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	var member protocol.CrewMember
+	if err := json.Unmarshal(stdout.Bytes(), &member); err != nil {
+		t.Fatalf("member JSON: %s: %v", stdout.String(), err)
+	}
+	if protocol.Deref(member.Agent) != "claude" || member.BindingSession != nil || !strings.Contains(stderr.String(), "settings saved; Chief did not start:") || !strings.Contains(stderr.String(), "terminal launcher is unavailable") {
+		t.Fatalf("configured Chief: %+v stderr=%s", member, stderr.String())
 	}
 }

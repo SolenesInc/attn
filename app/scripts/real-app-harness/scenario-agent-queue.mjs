@@ -226,6 +226,13 @@ async function main() {
   const dataDir = dataDirForInstance(instance);
   const daemonEnv = instanceCliEnv(instance);
   const createdSessionIds = [];
+  let chiefSessionId;
+  const sleepChief = () => {
+    if (!chiefSessionId) return;
+    execFileSync(attnBin, ['handoff', '--session', chiefSessionId, '--sleep', '-m', 'The queue scenario is over.'], { env: { ...daemonEnv, ATTN_WRAPPER_PATH: attnBin }, encoding: 'utf8' });
+    chiefSessionId = undefined;
+  };
+  runner.registerCleanup('sleep_chief', sleepChief);
 
   runner.log('run context', { runDir: runner.runDir, sessionDir: runner.sessionDir, instance });
 
@@ -655,11 +662,12 @@ async function main() {
       const env = { ...instanceCliEnv(currentHarnessInstance()), ATTN_WRAPPER_PATH: binary };
       const member = JSON.parse(execFileSync(binary, ['crew', 'set', 'chief', '--agent', 'claude', '--model', 'sonnet', '--cwd', cwd, '--json'], { env, encoding: 'utf8' }));
       const chiefId = member.binding_session || JSON.parse(execFileSync(binary, ['crew', 'wake', 'chief', '--json'], { env, encoding: 'utf8' })).session_id;
+      chiefSessionId = chiefId;
       runner.assert(Boolean(chiefId), 'configuring the chief woke it', { member });
       await observer.waitForSession({ id: chiefId });
       const queue = await waitForTurns(client, [beta.sessionId, alpha.sessionId], 'the chief stays outside the turn band', 20_000);
       runner.assert(queue.chief?.id === chiefId, 'the member occupies the chief slot', { chief: queue.chief });
-      execFileSync(binary, ['handoff', '--session', chiefId, '--sleep', '-m', 'The queue scenario checked the chief.'], { env, encoding: 'utf8' });
+      sleepChief();
     });
 
     await runner.step('toggling_the_arrangement_preserves_the_queue', async () => {
@@ -1026,6 +1034,7 @@ async function main() {
     console.error(result.error);
     process.exitCode = 1;
   } finally {
+    try { sleepChief(); } catch {}
     await client.request('set_setting', { key: 'queue_mode_enabled', value: 'false' }).catch(() => {});
     for (const sessionId of createdSessionIds.reverse()) {
       await client.request('close_session', { sessionId }).catch(() => {});

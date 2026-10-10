@@ -151,7 +151,7 @@ func TestAHandoverByACrewSessionRecordsTheMember(t *testing.T) {
 	}
 }
 
-func TestRetiredMembersCannotReclaimWorkThroughResumeOrChief(t *testing.T) {
+func TestRetiredMembersCannotReclaimWorkThroughResume(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		if _, err := cli.CrewCreate(protocol.CrewCreateMessage{Name: "Keel"}); err != nil {
@@ -159,9 +159,6 @@ func TestRetiredMembersCannotReclaimWorkThroughResumeOrChief(t *testing.T) {
 		}
 		first := wakeCrew(t, cli, "Keel", "").SessionID
 		w.bootBubbleClaude(t, string(first))
-		if made := setChiefOfStaff(app, string(first), true); !made.Success {
-			t.Fatal(protocol.Deref(made.Error))
-		}
 		w.advance(0)
 		seed := plantSeedAs(t, cli, string(first), "Leave this work released")
 		lifeMove(t, cli, string(first), seed, "tend", "", "")
@@ -172,8 +169,6 @@ func TestRetiredMembersCannotReclaimWorkThroughResumeOrChief(t *testing.T) {
 		if resumed := seedResumeRequest(app, seed); resumed.Success || !strings.Contains(protocol.Deref(resumed.Error), "Keel is retired") {
 			t.Fatalf("retired Resume: %+v", resumed)
 		}
-		_, err := cli.SeedSendToChief("", released, "")
-		lifeRefusal(t, "assigning to a retired Chief", err, "Keel is retired", "restore")
 		if shown := lifeShow(t, cli, seed).Seed; shown.Rev != released.Rev || shown.Claimed || shown.Tender != nil {
 			t.Fatalf("retired actions changed seed: %+v", shown)
 		}
@@ -183,14 +178,17 @@ func TestRetiredMembersCannotReclaimWorkThroughResumeOrChief(t *testing.T) {
 func TestSendToChiefNeedsOnlyTheRevision(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
-		created, err := cli.CrewCreate(protocol.CrewCreateMessage{Name: "Keel"})
+		chief := configureChiefOn(t, w, app, fakeagent.Claude, "sonnet")
+		w.bootBubbleClaude(t, chief)
+		roster, err := cli.CrewList()
 		if err != nil {
 			t.Fatal(err)
 		}
-		chief := wakeCrew(t, cli, "Keel", "").SessionID
-		w.bootBubbleClaude(t, string(chief))
-		if result := setChiefOfStaff(app, string(chief), true); !result.Success {
-			t.Fatal(protocol.Deref(result.Error))
+		var key string
+		for _, member := range roster.Members {
+			if member.Chief {
+				key = member.Key
+			}
 		}
 		w.advance(0)
 		seed := plantSeedAs(t, cli, "", "Let Keel choose the next context")
@@ -198,10 +196,10 @@ func TestSendToChiefNeedsOnlyTheRevision(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if sent.Chief.Ref != protocol.PartyRef("member:"+created.Member.Key) || sent.Seed.Tender == nil || sent.Seed.Tender.Ref != protocol.PartyRef("member:"+created.Member.Key) || !sent.Seed.Claimed {
+		if sent.Chief.Ref != protocol.PartyRef("member:"+key) || sent.Seed.Tender == nil || sent.Seed.Tender.Ref != protocol.PartyRef("member:"+key) || !sent.Seed.Claimed {
 			t.Fatalf("crew Chief assignment: %+v", sent)
 		}
-	})
+	}, fakeagent.Claude)
 }
 
 func TestSessionCloseAndReopenRefreshItsGardenClaim(t *testing.T) {
