@@ -98,6 +98,12 @@ func (c *wsClient) presenceReport() clientPresence {
 
 func (d *Daemon) handleSetClientPresence(client *wsClient, msg *protocol.SetClientPresenceMessage) {
 	client.setPresence(msg, time.Now())
+	d.presenceMu.RLock()
+	waiting := len(d.chiefsAwaitingUser) != 0
+	d.presenceMu.RUnlock()
+	if waiting && d.PresenceTier() >= PresencePresent {
+		d.wakeChiefsAwaitingUser()
+	}
 }
 
 func (d *Daemon) PresenceTier() PresenceTier {

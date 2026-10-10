@@ -76,7 +76,7 @@ interface GardenScript {
 }
 
 async function openGarden(shown: Review | undefined, { seeds = [reviewedSeed], documents = {}, candidates, chief = true }: GardenScript = {}) {
-  const sessions = [daemonSession('s1'), ...(chief ? [daemonSession('chief', { chief_of_staff: true })] : [])];
+  const sessions = [daemonSession('s1'), ...(chief ? [daemonSession('chief', { chief: true })] : [])];
   const garden = await renderGarden(seeds, { sessions });
   garden.documents = documents;
   const { daemon } = garden;

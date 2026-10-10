@@ -28,6 +28,15 @@ If a command reports an unknown subcommand or version, check `attn --version`
 and `which -a attn`; recover with `"$ATTN_WRAPPER_PATH"` when it is set.
 `attn skill` prints the bundled copy of this skill and its references.
 
+## Chief
+
+Every profile has one Chief, a crew member. `attn agent msg chief "…"` reaches
+that member, even after a rename, and wakes them after a manual sleep. Until
+a harness is chosen, their mail waits. Configure them with
+`attn crew set chief --agent <harness> --model <model>`; this wakes them at once.
+Change their charter or launch settings through `attn crew`. The Chief cannot
+be retired; use `attn crew sleep chief` to ask them to sleep.
+
 ## Delegation and reporting
 
 An Attn delegation creates a separate session the user can inspect and steer. A subagent is a native runtime subagent that reports to its calling agent.
@@ -51,7 +60,7 @@ For delegation mechanics and configured role selection, read [references/delegat
 - **Plant, tend, or report on work in the garden — seeds and plots, what makes
   a good seed body, artifacts:** read [references/garden.md](references/garden.md).
 - **Read or maintain the durable Notebook (journal + knowledge base), esp. as
-  chief of staff:** read [references/notebook.md](references/notebook.md).
+  Chief:** read [references/notebook.md](references/notebook.md).
 - **Run a durable, resumable multi-agent workflow — a script that runs headless
   workflow agents with fan-out/pipeline, journaled and observable via `attn workflow
   run`:** read [references/workflow.md](references/workflow.md).

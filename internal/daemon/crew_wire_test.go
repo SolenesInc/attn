@@ -341,8 +341,8 @@ func TestCrewSetRecordsAndClearsEachFieldIndependently(t *testing.T) {
 		t.Fatalf("switching harness left agent %q effort %q, want codex with its pins cleared", protocol.Deref(switched.Agent), protocol.Deref(switched.Effort))
 	}
 	cleared := setCrew(t, cli, "keel", protocol.CrewSetMessage{Agent: protocol.Ptr("")})
-	if cleared.Agent != nil || cleared.ResolvedAgent != crew.DefaultAgent {
-		t.Fatalf("clearing the agent left %v resolving to %q, want unset resolving to %q", cleared.Agent, cleared.ResolvedAgent, crew.DefaultAgent)
+	if cleared.Agent != nil || protocol.Deref(cleared.ResolvedAgent) != crew.DefaultAgent {
+		t.Fatalf("clearing the agent left %v resolving to %q, want unset resolving to %q", cleared.Agent, protocol.Deref(cleared.ResolvedAgent), crew.DefaultAgent)
 	}
 	if got := crewRosterMember(t, cli, "keel"); got.Agent != nil || protocol.Deref(got.Cwd) != workDir {
 		t.Fatalf("roster keel = agent %v cwd %q, want unset and %q", got.Agent, protocol.Deref(got.Cwd), workDir)

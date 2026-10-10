@@ -38,9 +38,7 @@ func TestMigration126RecomputesStoredSlugs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.PutDocument(*schema, "s-e5zefj", body, time.Now(), nil); err != nil {
-		t.Fatalf("plant the old-slug seed: %v", err)
-	}
+	migrationFixtureDocument(t, s, *schema, "s-e5zefj", body, time.Now())
 	before, _, err := s.GetDocument(*schema, "s-e5zefj")
 	if err != nil {
 		t.Fatalf("read the seed before the migration: %v", err)

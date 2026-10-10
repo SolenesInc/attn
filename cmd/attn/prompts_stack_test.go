@@ -104,7 +104,11 @@ func TestPromptsRenderShowsExactlyWhatAChiefACrewMemberAndAnOrdinarySessionRecei
 	s.Start()
 	app := s.App()
 
-	chief := s.Spawn(app, fakeagent.Claude, s.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
+	chiefSet, err := s.Client().CrewSet("chief", nil, protocol.Ptr("claude"), protocol.Ptr("sonnet"), nil, nil)
+	if err != nil || chiefSet.WokeSessionID == nil {
+		t.Fatalf("configure Chief=%+v %v", chiefSet, err)
+	}
+	chief := string(*chiefSet.WokeSessionID)
 	ordinary := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
 	guide, err := s.Client().NotebookGuide(protocol.SessionID(chief))
 	if err != nil || !guide.SessionIsChief || guide.Root == "" {

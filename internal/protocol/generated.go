@@ -99,7 +99,7 @@ type AgentCloseResult struct {
 
 type AgentCloseRule string
 
-const AgentCloseRuleChiefOfStaff AgentCloseRule = "chief_of_staff"
+const AgentCloseRuleChief AgentCloseRule = "chief"
 const AgentCloseRuleDispatcher AgentCloseRule = "dispatcher"
 const AgentCloseRuleSelf AgentCloseRule = "self"
 
@@ -1833,26 +1833,6 @@ type CancelCountdownMessage struct {
 	SessionID SessionID `json:"session_id"`
 }
 
-type ChiefOfStaffResultMessage struct {
-	// ChiefOfStaff corresponds to the JSON schema field "chief_of_staff".
-	ChiefOfStaff bool `json:"chief_of_staff"`
-
-	// Error corresponds to the JSON schema field "error".
-	Error *string `json:"error,omitempty,omitzero"`
-
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// PreviousSessionID corresponds to the JSON schema field "previous_session_id".
-	PreviousSessionID *SessionID `json:"previous_session_id,omitempty,omitzero"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID SessionID `json:"session_id"`
-
-	// Success corresponds to the JSON schema field "success".
-	Success bool `json:"success"`
-}
-
 type ClearSessionActivityMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -2333,6 +2313,9 @@ type CrewMember struct {
 	// CharterPath corresponds to the JSON schema field "charter_path".
 	CharterPath string `json:"charter_path"`
 
+	// Chief corresponds to the JSON schema field "chief".
+	Chief bool `json:"chief"`
+
 	// Cwd corresponds to the JSON schema field "cwd".
 	Cwd *string `json:"cwd,omitempty,omitzero"`
 
@@ -2361,7 +2344,7 @@ type CrewMember struct {
 	ProfileName *string `json:"profile_name,omitempty,omitzero"`
 
 	// ResolvedAgent corresponds to the JSON schema field "resolved_agent".
-	ResolvedAgent string `json:"resolved_agent"`
+	ResolvedAgent *string `json:"resolved_agent,omitempty,omitzero"`
 
 	// ResolvedEffort corresponds to the JSON schema field "resolved_effort".
 	ResolvedEffort *string `json:"resolved_effort,omitempty,omitzero"`
@@ -2626,6 +2609,12 @@ type CrewSetMessage struct {
 type CrewSetResult struct {
 	// Member corresponds to the JSON schema field "member".
 	Member CrewMember `json:"member"`
+
+	// WakeError corresponds to the JSON schema field "wake_error".
+	WakeError *string `json:"wake_error,omitempty,omitzero"`
+
+	// WokeSessionID corresponds to the JSON schema field "woke_session_id".
+	WokeSessionID *SessionID `json:"woke_session_id,omitempty,omitzero"`
 }
 
 type CrewSetResultMessage struct {
@@ -2646,6 +2635,12 @@ type CrewSetResultMessage struct {
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
+
+	// WakeError corresponds to the JSON schema field "wake_error".
+	WakeError *string `json:"wake_error,omitempty,omitzero"`
+
+	// WokeSessionID corresponds to the JSON schema field "woke_session_id".
+	WokeSessionID *SessionID `json:"woke_session_id,omitempty,omitzero"`
 }
 
 type CrewSleepMessage struct {
@@ -9862,8 +9857,8 @@ type Session struct {
 	// Branch corresponds to the JSON schema field "branch".
 	Branch *string `json:"branch,omitempty,omitzero"`
 
-	// ChiefOfStaff corresponds to the JSON schema field "chief_of_staff".
-	ChiefOfStaff *bool `json:"chief_of_staff,omitempty,omitzero"`
+	// Chief corresponds to the JSON schema field "chief".
+	Chief *bool `json:"chief,omitempty,omitzero"`
 
 	// ContextWindowCap corresponds to the JSON schema field "context_window_cap".
 	ContextWindowCap *int `json:"context_window_cap,omitempty,omitzero"`
@@ -10829,17 +10824,6 @@ type SessionsUpdatedMessage struct {
 	Sessions []Session `json:"sessions,omitempty,omitzero"`
 }
 
-type SetChiefOfStaffMessage struct {
-	// ChiefOfStaff corresponds to the JSON schema field "chief_of_staff".
-	ChiefOfStaff bool `json:"chief_of_staff"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID SessionID `json:"session_id"`
-}
-
 type SetClientPresenceMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -11056,9 +11040,6 @@ type SpawnSessionMessage struct {
 
 	// AutoMode corresponds to the JSON schema field "auto_mode".
 	AutoMode *bool `json:"auto_mode,omitempty,omitzero"`
-
-	// ChiefOfStaff corresponds to the JSON schema field "chief_of_staff".
-	ChiefOfStaff *bool `json:"chief_of_staff,omitempty,omitzero"`
 
 	// ClaudeExecutable corresponds to the JSON schema field "claude_executable".
 	ClaudeExecutable *string `json:"claude_executable,omitempty,omitzero"`
@@ -11594,9 +11575,6 @@ type WebSocketEvent struct {
 	// Branches corresponds to the JSON schema field "branches".
 	Branches []Branch `json:"branches,omitempty,omitzero"`
 
-	// ChiefOfStaff corresponds to the JSON schema field "chief_of_staff".
-	ChiefOfStaff *bool `json:"chief_of_staff,omitempty,omitzero"`
-
 	// Cloned corresponds to the JSON schema field "cloned".
 	Cloned *bool `json:"cloned,omitempty,omitzero"`
 
@@ -11672,9 +11650,6 @@ type WebSocketEvent struct {
 
 	// Plugins corresponds to the JSON schema field "plugins".
 	Plugins []PluginInfo `json:"plugins,omitempty,omitzero"`
-
-	// PreviousSessionID corresponds to the JSON schema field "previous_session_id".
-	PreviousSessionID *SessionID `json:"previous_session_id,omitempty,omitzero"`
 
 	// Priority corresponds to the JSON schema field "priority".
 	Priority *int `json:"priority,omitempty,omitzero"`

@@ -301,7 +301,7 @@ export function reconcileArrangement(
 
 export function sessionAttentionFields(session: DaemonSessionSnapshot | undefined) {
   return {
-    chiefOfStaff: session?.chief_of_staff ?? false,
+    chiefOfStaff: session?.chief ?? false,
     priority: session?.priority ?? false,
     turnOwed: session?.turn_owed ?? false,
     turnOpenedAt: session?.turn_opened_at,

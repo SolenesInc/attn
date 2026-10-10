@@ -21,7 +21,7 @@ async function launch({
   settings = QUEUE as Record<string, string>,
   crew = [] as ReturnType<typeof crewMember>[],
 } = {}) {
-  const sessions = ['s1', 's2'].map((id) => agent(id, { turn_owed: owed.includes(id), chief_of_staff: id === chief }));
+  const sessions = ['s1', 's2'].map((id) => agent(id, { turn_owed: owed.includes(id), chief: id === chief }));
   return renderApp({ initialState: { settings, sessions, desktops: sessions.map((session) => soloDesktop(session.id)), crew } });
 }
 
@@ -211,7 +211,7 @@ describe('acting on the queue sidebar row that holds focus', () => {
     await snooze(daemon);
     expect(snoozeMenu()).toBeNull();
 
-    daemon.emit({ event: 'sessions_updated', sessions: [agent('s1'), agent('s2', { chief_of_staff: true })] });
+    daemon.emit({ event: 'sessions_updated', sessions: [agent('s1'), agent('s2', { chief: true })] });
     (document.activeElement as HTMLElement | null)?.blur();
     await snooze(daemon);
     expect(snoozeMenu()).toBeNull();

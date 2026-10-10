@@ -72,7 +72,15 @@ func (d *Daemon) mayMoveSession(callerID protocol.SessionID, session *protocol.S
 	if dispatcher, ok := d.broadcastBindings().SessionOf(dispatcherParty); ok && dispatcher == callerID {
 		return nil
 	}
-	if d.isChiefOfStaffSession(callerID) && d.chiefOfProfile(session.ProfileID) == callerID {
+	b, err := d.bindings()
+	if err != nil {
+		return err
+	}
+	r, err := d.requestFromSession(callerID, b)
+	if err != nil {
+		return err
+	}
+	if d.requestedByChief(r) && r.ProfileID() == session.ProfileID {
 		return nil
 	}
 	return fmt.Errorf("session %s may move itself, the sessions it dispatched, or any session as its profile's chief; %s (%s) is none of those", callerID, session.ID, session.Label)

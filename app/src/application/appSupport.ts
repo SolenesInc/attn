@@ -32,7 +32,7 @@ export function crewMemberCloseHint(memberId: string): string {
 
 export function sessionCloseProtectionHint(sessions: DaemonSession[], id: string): string | null {
   const session = sessions.find((candidate) => candidate.id === id);
-  if (session?.chief_of_staff === true) {
+  if (session?.chief === true) {
     return CHIEF_OF_STAFF_CLOSE_HINT;
   }
   return session?.crew_member ? crewMemberCloseHint(session.crew_member) : null;

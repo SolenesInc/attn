@@ -16,11 +16,12 @@ func TestTheChiefAndCrewMembersCannotBeClosedButTheirNeighboursCan(t *testing.T)
 	cli := w.Client()
 	shared := w.Path("shared")
 
-	panes := spawnPanes(w, app, shared, shared, shared)
-	chief, worker, unregistered := panes[0], panes[1], panes[2]
-	if made := setChiefOfStaff(app, chief.session, true); !made.Success {
-		t.Fatalf("make %s the chief: %s", chief.session, protocol.Deref(made.Error))
-	}
+	chiefID := configureChiefOn(t, w, app, fakeagent.Claude, "sonnet")
+	w.Launched(chiefID)
+	chiefDesktop, chiefPane := placedPane(t, w, chiefID)
+	chief := sessionPane{session: chiefID, desktop: chiefDesktop.ID, pane: chiefPane}
+	panes := spawnPanes(w, app, shared, shared)
+	worker, unregistered := panes[0], panes[1]
 	woken := wakeCrew(t, cli, "trellis", "")
 	w.Launched(string(woken.SessionID))
 	crewPane := sessionPane{session: string(woken.SessionID)}
@@ -29,7 +30,7 @@ func TestTheChiefAndCrewMembersCannotBeClosedButTheirNeighboursCan(t *testing.T)
 		pane    sessionPane
 		refusal string
 	}{
-		{chief, "chief of staff is protected from closing; unset the chief role first"},
+		{chief, "Chief is protected from closing; put Chief to sleep first"},
 		{crewPane, "Trellis is protected from closing; put Trellis to sleep first"},
 	}
 	for _, p := range protected {
@@ -53,7 +54,7 @@ func TestTheChiefAndCrewMembersCannotBeClosedButTheirNeighboursCan(t *testing.T)
 	for _, s := range view.Sessions {
 		live[string(s.ID)] = s
 	}
-	if !protocol.Deref(live[chief.session].ChiefOfStaff) {
+	if !protocol.Deref(live[chief.session].Chief) {
 		t.Errorf("after the refused closes %s is no longer a live chief: %+v", chief.session, live[chief.session])
 	}
 	if got := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession); got != woken.SessionID {

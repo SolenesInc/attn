@@ -56,7 +56,7 @@ interface UseUiAutomationBridgeArgs {
   daemonReady?: boolean;
   connectionError?: string | null;
   getActivePaneIdForSession: (session: Session | undefined | null) => string;
-  createSession: (label: string, cwd: string, id?: string, agent?: SessionAgent, endpointId?: string, yoloMode?: boolean, options?: { chiefOfStaff?: boolean }) => Promise<string>;
+  createSession: (label: string, cwd: string, id?: string, agent?: SessionAgent, endpointId?: string, yoloMode?: boolean) => Promise<string>;
   selectSession: (sessionId: string) => void;
   selectDesktop: (desktopId: string) => void;
   moveDesktopLeaf: (move: {
@@ -2296,61 +2296,6 @@ export function useUiAutomationBridge({
             .map((group) => (group.getAttribute('data-testid') || '').slice('sidebar-desktop-'.length)),
         };
       }
-      case 'chief_of_staff_get_state':
-        return {
-          sessions: sessions.map((session) => {
-            const row = document.querySelector(`[data-testid="sidebar-session-${session.id}"]`);
-            const chiefOfStaff = Boolean(row?.querySelector('.chief-of-staff-badge'));
-            return {
-              id: session.id,
-              label: session.label,
-              chiefOfStaff,
-              sidebarBadge: chiefOfStaff,
-            };
-          }),
-          actionsOpen: Boolean(document.querySelector('.session-actions-popover')),
-          transferPrompt: document.querySelector('[data-testid="chief-transfer-prompt"]')?.textContent?.trim() || null,
-        };
-      case 'chief_of_staff_open_actions': {
-        const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : '';
-        if (!sessionId) {
-          throw new Error('chief_of_staff_open_actions requires sessionId');
-        }
-        const button = document.querySelector(`[data-testid="session-actions-${sessionId}"]`);
-        if (!(button instanceof HTMLElement)) {
-          throw new Error(`Session actions not found for ${sessionId}`);
-        }
-        clickElement(button);
-        await settleUi(2);
-        return { sessionId };
-      }
-      case 'chief_of_staff_toggle': {
-        const button = document.querySelector('[data-testid="chief-of-staff-session-action"]');
-        if (!(button instanceof HTMLElement)) {
-          throw new Error('Chief of staff action is not open');
-        }
-        clickElement(button);
-        await settleUi(2);
-        return { requested: true };
-      }
-      case 'chief_of_staff_confirm_transfer': {
-        const button = document.querySelector('[data-testid="chief-transfer-confirm"]');
-        if (!(button instanceof HTMLElement)) {
-          throw new Error('Chief of staff transfer prompt is not open');
-        }
-        clickElement(button);
-        await settleUi(2);
-        return { requested: true };
-      }
-      case 'chief_of_staff_cancel_transfer': {
-        const button = document.querySelector('[data-testid="chief-transfer-cancel"]');
-        if (!(button instanceof HTMLElement)) {
-          throw new Error('Chief of staff transfer prompt is not open');
-        }
-        clickElement(button);
-        await settleUi(2);
-        return { requested: true };
-      }
       case 'create_session': {
         const cwd = typeof payload.cwd === 'string' ? payload.cwd : '';
         const label = typeof payload.label === 'string' && payload.label.length > 0
@@ -2363,13 +2308,10 @@ export function useUiAutomationBridge({
         const endpointId = typeof payload.endpoint_id === 'string' && payload.endpoint_id.length > 0
           ? payload.endpoint_id
           : undefined;
-        const chiefOfStaff = payload.chief_of_staff === true;
         if (!cwd) {
           throw new Error('create_session requires cwd');
         }
-        const sessionId = await createSession(label, cwd, providedSessionId, agent, endpointId, undefined, {
-          chiefOfStaff,
-        });
+        const sessionId = await createSession(label, cwd, providedSessionId, agent, endpointId);
         await selectionShown({ kind: 'session', sessionId });
         await settleUi();
         window.setTimeout(() => {

@@ -197,7 +197,6 @@ export function SidebarPopovers() {
     onRenameDesktop,
     onTogglePriority,
     desktops,
-    onChangeChiefOfStaff,
     onCloseSession,
     onReloadSession,
     renameTarget,
@@ -235,7 +234,6 @@ export function SidebarPopovers() {
           sessionLabel={sessionActionsTarget.label}
           priority={actionsSession?.priority}
           onTogglePriority={onTogglePriority && actionsSession ? () => onTogglePriority(actionsSession) : undefined}
-          chiefOfStaff={sessionActionsTarget.chiefOfStaff}
           anchor={sessionActionsTarget.anchor}
           canRename={Boolean(onRenameSession)}
           onRename={() => {
@@ -246,9 +244,6 @@ export function SidebarPopovers() {
               anchor: sessionActionsTarget.anchor,
             });
           }}
-          onChangeChiefOfStaff={(enabled) =>
-            onChangeChiefOfStaff?.(sessionActionsTarget.id, enabled)
-          }
           onCloseSession={() => onCloseSession(sessionActionsTarget.id)}
           onReloadSession={() => onReloadSession(sessionActionsTarget.id)}
           onMemberDetails={

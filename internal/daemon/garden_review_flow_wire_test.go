@@ -67,11 +67,8 @@ func TestAGardenReviewFreezesItsCandidatesAndRecipe(t *testing.T) {
 		t.Fatalf("after a restart the canceled review is %+v", after.Review)
 	}
 
-	chief := spawnPanes(w, app, w.Path("chief"))[0].session
-	if made := testworld.Request(app, protocol.SetChiefOfStaffMessage{Cmd: protocol.CmdSetChiefOfStaff, SessionID: protocol.SessionID(chief), ChiefOfStaff: true},
-		protocol.EventChiefOfStaffResult, func(m protocol.ChiefOfStaffResultMessage) bool { return string(m.SessionID) == chief }); !made.Success {
-		t.Fatalf("make chief the chief of staff: %s", protocol.Deref(made.Error))
-	}
+	chief := configureChiefOn(t, w, app, fakeagent.Claude, "sonnet")
+
 	withChief := gardenReviewStart(t, cli)
 	if withChief.Run.ID == first.Run.ID || len(withChief.Items) != 2 {
 		t.Fatalf("a review after the cancel = %+v, want a new one over both abandoned seeds", withChief.Run)

@@ -129,6 +129,13 @@ func (d *Daemon) resolveMember(r who.Requester, text string) (store.CrewIdentity
 		return store.CrewIdentity{}, err
 	}
 	text = strings.TrimSpace(text)
+	if strings.EqualFold(text, "chief") {
+		key, err := d.chief(r.ProfileID())
+		if err != nil {
+			return store.CrewIdentity{}, err
+		}
+		return d.store.CrewIdentity(key)
+	}
 	var m store.CrewIdentity
 	var found bool
 	var err error
@@ -231,6 +238,13 @@ func targetNotFound(text string) error {
 }
 func (d *Daemon) resolveAddress(r who.Requester, b who.Bindings, text string) (who.Address, error) {
 	text = strings.TrimSpace(text)
+	if strings.EqualFold(text, "chief") {
+		if err := d.requireHome(crew.Surface); err != nil {
+			return who.Address{}, err
+		}
+		key, err := d.chief(r.ProfileID())
+		return who.Member(key).Address(), err
+	}
 	if key, ok := strings.CutPrefix(text, "member:"); ok {
 		if err := d.requireHome(crew.Surface); err != nil {
 			return who.Address{}, err
@@ -298,9 +312,6 @@ func (d *Daemon) resolveAddress(r who.Requester, b who.Bindings, text string) (w
 		}
 		return who.Address{}, targetNotFound(text)
 	}
-	if d.chiefOfProfile(s.ProfileID) == s.ID {
-		return who.ToChiefOf(s.ProfileID), nil
-	}
 	p, ok := b.PartyOf(s.ID)
 	if !ok {
 		return who.Address{}, targetNotFound(text)
@@ -346,12 +357,6 @@ func (d *Daemon) resolveSession(r who.Requester, b who.Bindings, text string) (*
 			return nil, &targetError{"seed_untended", fmt.Sprintf("nobody is tending %s; leave a note: attn seed note %s -m …", seedID, seedID)}
 		}
 		return who.SwitchParty(p, onSession, onMember)
-	}, func(chief who.ChiefMailbox) (*protocol.Session, error) {
-		id := d.chiefOfProfile(chief.ProfileID)
-		if id == "" {
-			return nil, &targetError{"chief_absent", "this profile has no Chief session"}
-		}
-		return onSession(id)
 	})
 }
 func (d *Daemon) mailboxesOf(id protocol.SessionID, b who.Bindings) ([]who.Address, error) {
@@ -359,9 +364,6 @@ func (d *Daemon) mailboxesOf(id protocol.SessionID, b who.Bindings) ([]who.Addre
 		return nil, err
 	}
 	a := b.AddressesOf(id)
-	if profile, lasts := d.sessionFacts(id); lasts && d.chiefOfProfile(profile) == id {
-		a = append(a, who.ToChiefOf(profile))
-	}
 	status, err := d.enrollmentStatus()
 	if err != nil {
 		return nil, err
@@ -439,7 +441,7 @@ func (d *Daemon) addressName(a who.Address, b who.Bindings) string {
 			return sessionDisplayName(s), nil
 		}
 		return shortSessionID(id), nil
-	}, func(k who.MemberKey) (string, error) { return d.memberName(k), nil }, func(id string) (string, error) { return id, nil }, func(who.ChiefMailbox) (string, error) { return "Chief", nil })
+	}, func(k who.MemberKey) (string, error) { return d.memberName(k), nil }, func(id string) (string, error) { return id, nil })
 	if err != nil {
 		return a.String()
 	}
@@ -467,14 +469,9 @@ func (d *Daemon) replyTargetError(conn net.Conn, err error) {
 	}
 }
 func seedAddressID(a who.Address) string {
-	id, _ := who.SwitchAddress(a, func(protocol.SessionID) (string, error) { return "", nil }, func(who.MemberKey) (string, error) { return "", nil }, func(id string) (string, error) { return id, nil }, func(who.ChiefMailbox) (string, error) { return "", nil })
+	id, _ := who.SwitchAddress(a, func(protocol.SessionID) (string, error) { return "", nil }, func(who.MemberKey) (string, error) { return "", nil }, func(id string) (string, error) { return id, nil })
 	return id
 }
-func isChiefAddress(a who.Address) bool {
-	ok, _ := who.SwitchAddress(a, func(protocol.SessionID) (bool, error) { return false, nil }, func(who.MemberKey) (bool, error) { return false, nil }, func(string) (bool, error) { return false, nil }, func(who.ChiefMailbox) (bool, error) { return true, nil })
-	return ok
-}
-
 func (d *Daemon) decorateLedgerActor(entry *protocol.SessionLedgerEntry) {
 	if entry.ClosedBy == nil {
 		return
@@ -508,7 +505,16 @@ func (d *Daemon) mailRefusal(to who.Address) error {
 			}
 			return struct{}{}, nil
 		},
-		func(string) (struct{}, error) { return struct{}{}, nil },
-		func(who.ChiefMailbox) (struct{}, error) { return struct{}{}, nil })
+		func(string) (struct{}, error) { return struct{}{}, nil })
 	return err
+}
+
+func (d *Daemon) sessionExists(sessionID protocol.SessionID) bool {
+	if d.store != nil && d.store.Get(sessionID) != nil {
+		return true
+	}
+	if d.store != nil && d.store.DelegationSessionReserved(sessionID) {
+		return true
+	}
+	return d.hubManager != nil && d.hubManager.RemoteSession(sessionID) != nil
 }

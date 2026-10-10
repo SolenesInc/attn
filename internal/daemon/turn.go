@@ -57,8 +57,8 @@ func (d *Daemon) decorateSessionWithTurn(session *protocol.Session) {
 
 func (d *Daemon) attentionInputFor(session *protocol.Session) attention.Input {
 	in := attention.Input{
-		IsShell:      session.Agent == protocol.AgentShellValue,
-		ChiefOfStaff: protocol.Deref(session.ChiefOfStaff),
+		IsShell: session.Agent == protocol.AgentShellValue,
+		Chief:   protocol.Deref(session.Chief),
 	}
 	return in
 }

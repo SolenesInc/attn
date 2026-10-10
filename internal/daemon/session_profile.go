@@ -200,3 +200,14 @@ func (d *Daemon) callerProfile(callerSessionID protocol.SessionID) (profiles.Pro
 	}
 	return d.liveLaunchProfile(profileID)
 }
+
+func (d *Daemon) profileForClient(client *wsClient) string {
+	if profileID := client.selectedProfile(); profileID != "" {
+		return profileID
+	}
+	profile, err := d.callerProfile("")
+	if err != nil {
+		return ""
+	}
+	return profile.ID
+}

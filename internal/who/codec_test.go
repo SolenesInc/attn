@@ -91,7 +91,7 @@ func TestWhoCodecMatchesItsTextSpecification(t *testing.T) {
 				t.Fatalf("address accepted %q", text)
 			}
 		}
-		for _, text := range []string{"seed:" + id, "chief:" + id} {
+		for _, text := range []string{"seed:" + id} {
 			a, err := who.ParseAddress(text)
 			if err != nil {
 				t.Fatal(err)
@@ -131,7 +131,7 @@ func TestNobodyCannotEncode(t *testing.T) {
 			t.Fatalf("%T JSON encoded: %v", x, err)
 		}
 	}
-	for _, text := range []string{"", "session:", "member:", "seed:", "chief:", "session:has space", "chief:\t", "member:UPPER", "session:has\nnewline"} {
+	for _, text := range []string{"", "session:", "member:", "seed:", "chief:", "chief:profile", "session:has space", "chief:\t", "member:UPPER", "session:has\nnewline"} {
 		if _, err := who.ParseParty(text); err == nil {
 			t.Fatalf("party accepted %q", text)
 		}

@@ -1492,8 +1492,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleBrowserControlResult(client, msg.(*protocol.BrowserControlResultMessage))
 	case protocol.CmdRenameSession:
 		d.handleRenameSession(client, msg.(*protocol.RenameSessionMessage))
-	case protocol.CmdSetChiefOfStaff:
-		d.handleSetChiefOfStaff(client, msg.(*protocol.SetChiefOfStaffMessage))
 	default:
 		d.sendCommandError(client, cmd, "unsupported command")
 	}

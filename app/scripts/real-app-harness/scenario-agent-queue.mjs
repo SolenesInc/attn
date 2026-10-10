@@ -648,20 +648,18 @@ async function main() {
     });
 
     await runner.step('the_chief_never_queues', async () => {
-      await client.request('chief_of_staff_open_actions', { sessionId: beta.sessionId });
-      await client.request('chief_of_staff_toggle');
-      const promoted = await waitForTurns(client, [alpha.sessionId], 'beta out of the band once it is chief', 20_000);
-      runner.assert(promoted.chief?.id === beta.sessionId, `beta occupies the chief slot: ${JSON.stringify(promoted.chief)}`);
-
-      await client.request('chief_of_staff_open_actions', { sessionId: beta.sessionId });
-      await client.request('chief_of_staff_toggle');
-      const demoted = await waitForTurns(
-        client,
-        [beta.sessionId, alpha.sessionId],
-        'beta back in the band, with its original turn age',
-        20_000,
-      );
-      runner.assert(demoted.chief === null, 'the chief slot is empty again');
+      const cwd = path.join(runner.sessionDir, 'chief');
+      fs.mkdirSync(cwd, { recursive: true });
+      writeQueueAgentFixture(cwd);
+      const binary = resolveAttnBin();
+      const env = { ...instanceCliEnv(currentHarnessInstance()), ATTN_WRAPPER_PATH: binary };
+      const member = JSON.parse(execFileSync(binary, ['crew', 'set', 'chief', '--agent', 'claude', '--model', 'sonnet', '--cwd', cwd, '--json'], { env, encoding: 'utf8' }));
+      const chiefId = member.binding_session || JSON.parse(execFileSync(binary, ['crew', 'wake', 'chief', '--json'], { env, encoding: 'utf8' })).session_id;
+      runner.assert(Boolean(chiefId), 'configuring the chief woke it', { member });
+      await observer.waitForSession({ id: chiefId });
+      const queue = await waitForTurns(client, [beta.sessionId, alpha.sessionId], 'the chief stays outside the turn band', 20_000);
+      runner.assert(queue.chief?.id === chiefId, 'the member occupies the chief slot', { chief: queue.chief });
+      execFileSync(binary, ['handoff', '--session', chiefId, '--sleep', '-m', 'The queue scenario checked the chief.'], { env, encoding: 'utf8' });
     });
 
     await runner.step('toggling_the_arrangement_preserves_the_queue', async () => {

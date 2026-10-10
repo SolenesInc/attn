@@ -72,7 +72,7 @@ type delivery struct {
 }
 
 func (r delivery) recipientOf(a who.Address) (recipient, error) {
-	return who.SwitchAddress(a, r.toSession, r.toMember, r.toTenderOf, r.toChiefOf)
+	return who.SwitchAddress(a, r.toSession, r.toMember, r.toTenderOf)
 }
 func (r delivery) toSession(id protocol.SessionID) (recipient, error) {
 	if err := r.bindings.CheckSession(id); err != nil {
@@ -101,6 +101,9 @@ func (r delivery) toMember(k who.MemberKey) (recipient, error) {
 	if err := r.d.mailRefusal(who.Member(k).Address()); err != nil {
 		return recipient{wait: fmt.Sprintf("%s; restore it: attn crew restore %s", err, r.d.memberName(k))}, nil
 	}
+	if reason := r.d.chiefWakeHeld(k); reason != "" {
+		return recipient{wait: reason}, nil
+	}
 	return recipient{wake: k}, nil
 }
 func (r delivery) toTenderOf(id string) (recipient, error) {
@@ -113,13 +116,6 @@ func (r delivery) toTenderOf(id string) (recipient, error) {
 		return recipient{wait: fmt.Sprintf("nobody tends %s; waits for its next tender", id)}, nil
 	}
 	return who.SwitchParty(p, r.toSession, r.toMember)
-}
-func (r delivery) toChiefOf(c who.ChiefMailbox) (recipient, error) {
-	id := r.d.chiefOfProfile(c.ProfileID)
-	if id == "" {
-		return recipient{wait: "no Chief session; waits for the next Chief"}, nil
-	}
-	return r.toSession(id)
 }
 
 // inboxWakeRequester names who a wake for this address answers: the oldest unread message's sender.
@@ -368,20 +364,8 @@ func (d *Daemon) kickSeedInboxes() {
 		}
 	}
 }
-func (d *Daemon) kickChiefInboxes() {
-	addresses, err := d.store.UnreadInboxAddresses()
-	if err != nil {
-		d.logf("inbox: chief holder change: %v", err)
-		return
-	}
-	for _, address := range addresses {
-		if isChiefAddress(address) {
-			d.kickInbox(address)
-		}
-	}
-}
 func (d *Daemon) subscribeInboxFacts() {
-	d.inboxUnsubscribe = d.eventBus.Subscribe(bus.Filter{FactCrewBound, FactCrewReleased, FactCrewUpdated, FactSessionChiefRoleChanged, FactSessionRegistered, FactSessionUnregistered, FactSessionClosed, FactSessionPTYExited,
+	d.inboxUnsubscribe = d.eventBus.Subscribe(bus.Filter{FactCrewBound, FactCrewReleased, FactCrewUpdated, FactSessionRegistered, FactSessionUnregistered, FactSessionClosed, FactSessionPTYExited,
 		seedEvents.NameTended, seedEvents.NameParked, seedEvents.NameHarvested, seedEvents.NameWithered, seedEvents.NameReplanted}, func(ev bus.Event) {
 		switch ev.Name {
 		case seedEvents.NameTended, seedEvents.NameParked, seedEvents.NameHarvested, seedEvents.NameWithered, seedEvents.NameReplanted:
@@ -394,13 +378,10 @@ func (d *Daemon) subscribeInboxFacts() {
 			}
 			d.kickInbox(a)
 			d.life.Go("inbox-seed-holder-change", func() { d.kickSeedInboxes() })
-		case FactSessionChiefRoleChanged:
-			d.life.Go("inbox-chief-change", func() { d.kickChiefInboxes() })
 		default:
 			// Holder resolution runs outside publishMu, through lifetime work.
 			d.life.Go("inbox-holder-change", func() {
 				d.kickSessionInboxAddresses(protocol.SessionID(ev.Subject))
-				d.kickChiefInboxes()
 				d.kickSeedInboxes()
 			})
 		}

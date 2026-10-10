@@ -12,7 +12,7 @@ scalar SessionID extends string;
 scalar PartyRef extends string;
 // Actor: Party text, user or attn.
 scalar ActorRef extends string;
-// Address: Party text, seed:<id> or chief:<profile> (until the chief is a member).
+// Address: Party text or seed:<id>.
 // Parsing accepts only canonical text; zero values cannot encode (ErrNobody).
 scalar AddressRef extends string;
 model PartyView { ref: PartyRef; name: string; session_id?: SessionID; }
@@ -204,9 +204,9 @@ model Session {
   state_updated_at: string;     // ISO timestamp, always set
   last_model_request_at?: string; // ISO timestamp of the newest positively observed model request. Unlike state_updated_at, evidence refreshes and classifications never move it.
   state_reason?: string;        // Why the resolver reached this state (e.g. "stuck", "classifier_verdict"); absent for states it does not own
-  chief_of_staff?: boolean;     // True when this session holds the instance-wide coordinator role
   crew_member?: string;         // The crew member whose active binding this session is — "this session is trellis today". Stamped by the daemon at launch, judged live at broadcast, absent for every unbound session.
   crew_member_name?: string;
+  chief?: boolean;
   delegated_from_chief?: boolean; // True when this session was delegated from the chief of staff (recorded by the Garden dispatch)
   seed_id?: string;             // The seed this session reports to: the crown a delegation was dispatched at, or the seed planted for it. Read from the session's dispatch record at broadcast, never stored on the session — the record is the single answer to what a session reports to. Absent for a session no delegation bound.
   dispatcher_session_id?: SessionID; // The live session for this session's dispatcher, resolved from its dispatch record at broadcast and never stored on the session. Absent when nothing resolves.
@@ -219,7 +219,7 @@ model Session {
   auto_settle_fires_at?: string; // ISO timestamp the auto-settle countdown will close this session's turn. Present only while the countdown is running, which is the whole contract: it is what the terminal tile animates against, and its absence is what says nothing is pending. Absent during the arm delay, when auto-settle is off, and after a cancel.
   auto_settle_held?: boolean;   // True while the auto-settle countdown is frozen because the user is typing or moving the pointer in this session. Mutually exclusive with auto_settle_fires_at by construction: a frozen countdown has no deadline to animate against, so the tile draws a full paused bar and waits. It clears on its own five quiet seconds after the last interaction, when a fresh deadline replaces it.
   auto_settle_dismiss_armed?: boolean; // True while a standing dismissal covers this session's next auto-settle, whether the user armed it during a countdown or ahead of one. Excludes the other two by construction: arming is what stops a pending timer. It is spent at the end of the `working` stretch it covers, and pressing the cancel-countdown shortcut again while nothing is counting down disarms it.
-  context_window_cap?: int32;   // Per-session context-window cap in tokens, set by the user on this one session. Absent means no pin — the launch falls back to the chief or per-agent default settings. A pin outranks both, and takes effect at the next launch of the agent (the daemon reloads a live session in place when the pin changes).
+  context_window_cap?: int32;   // Per-session context-window cap in tokens, set by the user on this one session. Absent means no pin — the launch falls back to the per-agent default settings. A pin outranks both, and takes effect at the next launch of the agent (the daemon reloads a live session in place when the pin changes).
   parent_session_id?: SessionID;   // The agent session a shell was split from. Spawn-time provenance resolved by the daemon, always an agent id and never another shell's, so there is no chain to walk. Whether the link is live is judged at read (parent present on the same desktop), so the field itself is never cleared.
   activity?: string;            // One short present-tense line saying what the agent is doing right now, generated from its transcript by a headless agent. Display only — it never feeds attention, the queue, or state classification. Absent when the feature is off or nothing has been generated for this session yet.
   activity_at?: string;         // ISO timestamp the activity line was generated. Present whenever activity is, so a client can age out a line the generator has stopped refreshing rather than showing it as current.
@@ -804,7 +804,7 @@ model AgentCloseMessage {
 enum AgentCloseRule {
   self,
   dispatcher,
-  chief_of_staff,
+  chief,
 }
 
 model AgentCloseResult {
@@ -2015,14 +2015,13 @@ model SpawnSessionMessage {
   // auto-mode config carries. Each may be given without the other.
   approval_policy?: string;
   sandbox_mode?: string;
-  chief_of_staff?: boolean;    // Launch this session already holding the chief role (guidance injected at first spawn)
   spawned_from?: SessionID;       // The session this one was split from. Consulted only for agent "shell": the daemon resolves it to the owning agent session and stores that as the satellite's parent.
   initial_prompt?: string;
   executable?: string;         // Generic executable override for selected agent
   claude_executable?: string;  // Backward compatibility
   codex_executable?: string;   // Backward compatibility
   copilot_executable?: string; // Backward compatibility
-  `model`?: string;            // Pin the launched agent's model; empty = agent default (chief launches fall back to chief_model_<agent>)
+  `model`?: string;            // Pin the launched agent's model; empty = agent default
   effort?: string;             // Pin the launched agent's reasoning effort; empty = agent default
 }
 
@@ -3209,7 +3208,7 @@ model RenameSessionMessage {
 }
 
 // Pin or clear a per-session context-window cap (tokens). cap > 0 pins; cap 0
-// clears the pin so the launch falls back to the chief or per-agent default
+// clears the pin so the launch falls back to the per-agent default
 // settings. A changed pin on a live claude/codex session reloads the agent in
 // place (resume-preserving) so the cap takes effect immediately.
 model SetSessionContextWindowCapMessage {
@@ -3218,13 +3217,6 @@ model SetSessionContextWindowCapMessage {
   cap: int32;
 }
 
-// Assign or remove the instance-wide chief-of-staff role. Assigning a new
-// session transfers the singleton role from the previous holder.
-model SetChiefOfStaffMessage {
-  cmd: "set_chief_of_staff";
-  session_id: SessionID;
-  chief_of_staff: boolean;
-}
 
 // ============================================================================
 // Result/Event Messages (Daemon → Client)
@@ -3352,14 +3344,6 @@ model SessionContextWindowCapResultMessage {
   error?: string;
 }
 
-model ChiefOfStaffResultMessage {
-  event: "chief_of_staff_result";
-  session_id: SessionID;
-  chief_of_staff: boolean;
-  previous_session_id?: SessionID;
-  success: boolean;
-  error?: string;
-}
 
 
 // GetPresentationsMessage reads the full list of presentations, the way the
@@ -6043,6 +6027,7 @@ model CrewListMessage {
 
 // One registered crew member. Paths point at the canonical files.
 model CrewMember {
+  chief: boolean;
   retired: boolean;
   profile_name?: string;
   launch_desktop?: LaunchDesktopSetting;
@@ -6061,7 +6046,7 @@ model CrewMember {
   // another harness.
   `model`?: string;
   effort?: string;
-  resolved_agent: string;
+  resolved_agent?: string;
   resolved_model?: string;
   resolved_effort?: string;
   // The places the member's charter is about.
@@ -6307,10 +6292,14 @@ model CrewSetMessage {
 }
 
 model CrewSetResult {
+  woke_session_id?: SessionID;
+  wake_error?: string;
   member: CrewMember;
 }
 
 model CrewSetResultMessage {
+  woke_session_id?: SessionID;
+  wake_error?: string;
   event: "crew_set_result";
   request_id: string;
   success: boolean;
@@ -7157,8 +7146,6 @@ model WebSocketEvent {
   content?: string;
   runtime_id?: TerminalID;
   session_id?: SessionID;
-  chief_of_staff?: boolean;
-  previous_session_id?: SessionID;
   session?: Session;
   sessions?: Session[];
   prs?: PR[];
@@ -7258,7 +7245,6 @@ alias DaemonEvent =
   | MigrationResultMessage
   | MigrationChangedMessage
   | RenameResultMessage
-  | ChiefOfStaffResultMessage
   | SessionContextWindowCapResultMessage
   | GardenSeedsUpdatedMessage
   | GardenReviewUpdatedMessage

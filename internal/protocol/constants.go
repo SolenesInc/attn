@@ -250,7 +250,6 @@ const (
 	CmdBrowserControl                = "browser_control"
 	CmdBrowserControlResult          = "browser_control_result"
 	CmdRenameSession                 = "rename_session"
-	CmdSetChiefOfStaff               = "set_chief_of_staff"
 	CmdSetSessionContextWindowCap    = "set_session_context_window_cap"
 )
 
@@ -346,7 +345,6 @@ const (
 	EventPullRequestWatchResult          = "pull_request_watch_result"
 	EventPullRequestUnwatchResult        = "pull_request_unwatch_result"
 	EventRenameResult                    = "rename_result"
-	EventChiefOfStaffResult              = "chief_of_staff_result"
 	EventSessionContextWindowCapResult   = "session_context_window_cap_result"
 	EventGardenSeedsUpdated              = "garden_seeds_updated"
 	EventGardenReviewUpdated             = "garden_review_updated"

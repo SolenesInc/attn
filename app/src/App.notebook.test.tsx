@@ -186,7 +186,7 @@ describe('App notebook reading', () => {
   });
 
   it('shows whether the chief is working, and nothing without a chief', async () => {
-    const chief = (state: DaemonSession['state']) => [daemonSession('chief', { chief_of_staff: true, state })];
+    const chief = (state: DaemonSession['state']) => [daemonSession('chief', { chief: true, state })];
     for (const [sessions, pulse] of [[chief('working'), 'chief: active'], [chief('idle'), 'chief: idle'], [[], null]] as const) {
       const view = await openVault({ sessions: [...sessions] });
       expect(notebook().queryByText(/chief:/)?.textContent ?? null).toBe(pulse);

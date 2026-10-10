@@ -1,0 +1,3 @@
+kind: removed
+area: crew
+change: The Make chief of staff action, new-session Chief toggle, and Chief model, effort and context-cap settings are removed. Configure the Chief through its crew settings.

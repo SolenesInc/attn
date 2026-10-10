@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
@@ -215,8 +216,16 @@ func setTestChief(d *Daemon, sessionID string) error {
 			return err
 		}
 	}
-	_, _, err = d.store.SetProfileChief(protocol.SessionID(sessionID))
-	return err
+	if err := d.ensureChiefs(); err != nil {
+		return err
+	}
+	if _, err := d.updateCrewMember(profile.Chief, func(m *crew.Member) (bool, error) { m.Agent = "claude"; m.Model = "sonnet"; return true, nil }); err != nil {
+		return err
+	}
+	if _, err := d.claimCrewBinding(profile.Chief, protocol.SessionID(sessionID)); err != nil {
+		return err
+	}
+	return d.store.RecordMemberSession(profile.Chief, protocol.SessionID(sessionID))
 }
 
 func TestSpawnBesideAFocusedTileDocksTheAgentBesideIt(t *testing.T) {
