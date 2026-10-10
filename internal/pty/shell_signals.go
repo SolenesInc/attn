@@ -135,9 +135,11 @@ func (s *Session) runShellForegroundPoller(interval time.Duration) {
 			if !ok {
 				continue
 			}
+			s.signalMu.Lock()
 			if obs, ok := s.shellSignals.ObservePoll(fgPgid, time.Now()); ok {
 				s.emitShellSignal(obs)
 			}
+			s.signalMu.Unlock()
 		}
 	}
 }

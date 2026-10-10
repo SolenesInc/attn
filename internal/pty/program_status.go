@@ -1,7 +1,6 @@
 package pty
 
 import (
-	"sync"
 	"time"
 
 	"github.com/victorarias/attn/internal/ghosttyvt"
@@ -20,7 +19,6 @@ const (
 )
 
 type programStatusObserver struct {
-	mu           sync.Mutex
 	rootReported bool
 }
 
@@ -31,8 +29,6 @@ func newProgramStatusObserver(last *Observation) *programStatusObserver {
 }
 
 func (o *programStatusObserver) Observe(reports []ghosttyvt.ProgramStatus, now time.Time) []Observation {
-	o.mu.Lock()
-	defer o.mu.Unlock()
 	var out []Observation
 	for _, report := range reports {
 		if report.ID != "" {
@@ -46,14 +42,10 @@ func (o *programStatusObserver) Observe(reports []ghosttyvt.ProgramStatus, now t
 }
 
 func (o *programStatusObserver) held() bool {
-	o.mu.Lock()
-	defer o.mu.Unlock()
 	return o.rootReported
 }
 
 func (o *programStatusObserver) release(now time.Time) (Observation, bool) {
-	o.mu.Lock()
-	defer o.mu.Unlock()
 	if !o.rootReported {
 		return Observation{}, false
 	}

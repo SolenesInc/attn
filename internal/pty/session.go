@@ -98,6 +98,7 @@ type Session struct {
 	reportedScheme     colorScheme
 	colorSchemeReports atomic.Bool
 
+	signalMu       sync.Mutex
 	harnessSignals *harnessSignalObserver
 	programStatus  *programStatusObserver
 	shellSignals   *shellSignalArbiter
@@ -397,24 +398,7 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 					s.forceResync(resync)
 				}
 				s.deliveryMu.Unlock()
-				if s.onState != nil {
-					for _, obs := range s.programStatus.Observe(programReports, time.Now()) {
-						s.emitSignal(obs)
-					}
-				}
-				if s.harnessSignals != nil && s.onState != nil {
-					titleObservations := s.harnessSignals.Observe(data, time.Now())
-					if !s.programStatus.held() {
-						for _, obs := range titleObservations {
-							s.emitSignal(obs)
-						}
-					}
-				}
-				if s.shellSignals != nil && s.onState != nil {
-					for _, obs := range s.shellSignals.ObserveOutput(data, time.Now()) {
-						s.emitShellSignal(obs)
-					}
-				}
+				s.observeSignals(programReports, data)
 			} else {
 				s.deliveryMu.Unlock()
 			}
@@ -470,6 +454,31 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 
 	if onExit != nil {
 		onExit(exitCode, signal)
+	}
+}
+
+func (s *Session) observeSignals(programReports []ghosttyvt.ProgramStatus, data []byte) {
+	if s.onState == nil {
+		return
+	}
+	s.signalMu.Lock()
+	defer s.signalMu.Unlock()
+	now := time.Now()
+	for _, obs := range s.programStatus.Observe(programReports, now) {
+		s.emitSignal(obs)
+	}
+	if s.harnessSignals != nil {
+		titleObservations := s.harnessSignals.Observe(data, now)
+		if !s.programStatus.held() {
+			for _, obs := range titleObservations {
+				s.emitSignal(obs)
+			}
+		}
+	}
+	if s.shellSignals != nil {
+		for _, obs := range s.shellSignals.ObserveOutput(data, now) {
+			s.emitShellSignal(obs)
+		}
 	}
 }
 
