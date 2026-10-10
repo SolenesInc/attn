@@ -326,19 +326,19 @@ func (s *Store) CommitDocumentWritesWithEvents(
 	return s.commitDocumentWrites(commits, events, now, false, nil)
 }
 
-func (s *Store) CommitGardenDispatchWrites(commits []DocumentCommit, watch GardenSeedWatch, now time.Time) ([]DocumentWriteResult, error) {
+func (s *Store) CommitGardenDispatchWrites(commits []DocumentCommit, watch GardenPartyWatch, now time.Time) ([]DocumentWriteResult, error) {
 	results, _, err := s.commitDocumentWrites(commits, nil, now, false, &watch)
 	return results, err
 }
 
 func (s *Store) CommitGardenDispatchWritesWithEvents(
-	commits []DocumentCommit, watch GardenSeedWatch, events []BusEvent, now time.Time,
+	commits []DocumentCommit, watch GardenPartyWatch, events []BusEvent, now time.Time,
 ) ([]DocumentWriteResult, []int64, error) {
 	return s.commitDocumentWrites(commits, events, now, false, &watch)
 }
 
 func (s *Store) commitDocumentWrites(
-	commits []DocumentCommit, events []BusEvent, now time.Time, single bool, watch *GardenSeedWatch,
+	commits []DocumentCommit, events []BusEvent, now time.Time, single bool, watch *GardenPartyWatch,
 ) ([]DocumentWriteResult, []int64, error) {
 	if len(commits) == 0 {
 		return []DocumentWriteResult{}, nil, nil
@@ -367,8 +367,8 @@ func (s *Store) commitDocumentWrites(
 	if err != nil {
 		return nil, nil, err
 	}
-	if watch != nil && watch.WatcherSessionID != "" && watch.SeedID != "" {
-		if _, err := tx.Exec(`INSERT OR IGNORE INTO garden_seed_watches(watcher_session_id, seed_id, created_at) VALUES (?, ?, ?)`, watch.WatcherSessionID, watch.SeedID, now.UTC().Format(sortableTimeFormat)); err != nil {
+	if watch != nil && !watch.Watcher.IsZero() && watch.SeedID != "" {
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO garden_seed_watches(watcher, seed_id, created_at) VALUES (?, ?, ?)`, watch.Watcher, watch.SeedID, now.UTC().Format(sortableTimeFormat)); err != nil {
 			return nil, nil, fmt.Errorf("subscribe delegation dispatcher: %w", err)
 		}
 		changed = true

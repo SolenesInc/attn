@@ -29,7 +29,7 @@ func TestSeedArtifactsFollowAttachAndDetachNotes(t *testing.T) {
 	}
 
 	for range garden.ShowNotes + 3 {
-		if _, err := cli.SeedNote(protocol.SessionID(author), seed, "another day of work", "", "", false, nil); err != nil {
+		if _, err := cli.SeedNote(protocol.SessionID(author), seed, "another day of work", "", false, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -67,7 +67,7 @@ func TestSeedNotesRefuseArtifactsThatSayNothing(t *testing.T) {
 		{"an unknown kind", "bookmark", "x", nil, "is not a kind of note"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := cli.SeedNote(protocol.SessionID(author), seed, tc.body, "", tc.kind, false, tc.artifact)
+			_, err := cli.SeedNote(protocol.SessionID(author), seed, tc.body, tc.kind, false, tc.artifact)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("the note = %v, want a refusal naming %q", err, tc.want)
 			}
@@ -84,7 +84,7 @@ func gardenArtifactMarkdown(path string) *protocol.SeedArtifactReference {
 
 func gardenArtifactNote(t *testing.T, cli *client.Client, session, seedID, kind, body string, artifact *protocol.SeedArtifactReference) protocol.SeedNote {
 	t.Helper()
-	result, err := cli.SeedNote(protocol.SessionID(session), seedID, body, "", kind, false, artifact)
+	result, err := cli.SeedNote(protocol.SessionID(session), seedID, body, kind, false, artifact)
 	if err != nil {
 		t.Fatalf("%s note on %s: %v", kind, seedID, err)
 	}

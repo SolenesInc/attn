@@ -33,13 +33,13 @@ const openedSeeds = (daemon: ScriptedDaemon) =>
   daemon.sentOf('open_seed').map(({ seed_id, session_id }) => ({ seed_id, session_id }));
 
 const tendingTwo = [
-  daemonSeed('s-a', { title: 'first', tender_session: 's1' }),
-  daemonSeed('s-b', { title: 'second', tender_session: 's1' }),
+  daemonSeed('s-a', { title: 'first', tender: { ref: 'session:s1', name: 's1', session_id: 's1' }, claimed: true }),
+  daemonSeed('s-b', { title: 'second', tender: { ref: 'session:s1', name: 's1', session_id: 's1' }, claimed: true }),
 ];
 
 describe('PaneSeedChip', () => {
   it('shows a tended seed and opens it beside the agent on click', async () => {
-    const daemon = await openAgent([daemonSeed('s-work11', { title: 'move the wire', tender_session: 's1' })]);
+    const daemon = await openAgent([daemonSeed('s-work11', { title: 'move the wire', tender: { ref: 'session:s1', name: 's1', session_id: 's1' }, claimed: true })]);
 
     expect(within(chip()).getByText('move the wire')).toBeInTheDocument();
     expect(within(chip()).getByText('Growing')).toBeInTheDocument();
@@ -63,8 +63,8 @@ describe('PaneSeedChip', () => {
         title: 'the arc',
         plot_progress: { done: 2, total: 5, ready: 1, growing: 1, blocked: 1, dormant: 0, withered: 0 },
       }),
-      daemonSeed('s-a', { title: 'first step', tender_session: 's1', edges: [{ kind: 'part-of', to: 's-plot11' }] }),
-      daemonSeed('s-b', { title: 'second step', tender_session: 's1', edges: [{ kind: 'part-of', to: 's-plot11' }] }),
+      daemonSeed('s-a', { title: 'first step', tender: { ref: 'session:s1', name: 's1', session_id: 's1' }, claimed: true, edges: [{ kind: 'part-of', to: 's-plot11' }] }),
+      daemonSeed('s-b', { title: 'second step', tender: { ref: 'session:s1', name: 's1', session_id: 's1' }, claimed: true, edges: [{ kind: 'part-of', to: 's-plot11' }] }),
     ]);
 
     expect(within(chip()).getByText('the arc')).toBeInTheDocument();
@@ -120,7 +120,7 @@ function documentResult(document: DaemonSeedDocument): Reply {
 function documentFor(value: DaemonSeed, body = 'Leaves look good at header size.'): DaemonSeedDocument {
   return seedDocument(value, {
     notes_total: 1,
-    notes: [{ id: 'n-1', seed_id: value.id, body, kind: 'note', author_member: '', author_session: '', created_at: value.updated_at }],
+    notes: [{ id: 'n-1', seed_id: value.id, body, kind: 'note', author: { ref: 'user', name: 'the user' },  created_at: value.updated_at }],
   });
 }
 
@@ -130,9 +130,9 @@ function pushSeeds(daemon: ScriptedDaemon, seeds: DaemonSeed[]) {
 
 describe('seed lifecycle and context', () => {
   it.each(['planted', 'dormant', 'harvested', 'withered'])('keeps %s visible when tending ends', async (status) => {
-    const value = daemonSeed('s-work11', { title: 'Garden icons', tender_session: 's1' });
+    const value = daemonSeed('s-work11', { title: 'Garden icons', tender: { ref: 'session:s1', name: 's1', session_id: 's1' }, claimed: true });
     const daemon = await openAgent([value], { seed_id: value.id });
-    pushSeeds(daemon, [{ ...value, status, tender_session: '' }]);
+    pushSeeds(daemon, [{ ...value, status, tender: undefined, claimed: false }]);
     await daemon.idle();
 
     const stateLabel = status[0].toUpperCase() + status.slice(1);
@@ -186,7 +186,7 @@ describe('seed lifecycle and context', () => {
   });
 
   it('keeps opening the seed available after a context fetch fails', async () => {
-    const value = daemonSeed('s-work11', { title: 'Garden icons', tender_session: 's1' });
+    const value = daemonSeed('s-work11', { title: 'Garden icons', tender: { ref: 'session:s1', name: 's1', session_id: 's1' }, claimed: true });
     const daemon = await openAgent([value]);
     daemon.on('seed_document_get', () => ({ event: 'seed_document_get_result', success: false, error: 'offline' }));
     await showSeeds(daemon);
@@ -197,7 +197,7 @@ describe('seed lifecycle and context', () => {
   });
 
   it('refreshes a visible note when a Garden snapshot arrives at the same seed revision', async () => {
-    const value = daemonSeed('s-work11', { title: 'Garden icons', tender_session: 's1' });
+    const value = daemonSeed('s-work11', { title: 'Garden icons', tender: { ref: 'session:s1', name: 's1', session_id: 's1' }, claimed: true });
     const notes = ['First note.', 'A new observation.'];
     const daemon = await openAgent([value]);
     daemon.on('seed_document_get', () => documentResult(documentFor(value, notes.shift())));
@@ -212,22 +212,22 @@ describe('seed lifecycle and context', () => {
 });
 
 describe('what the chip shows', () => {
-  const memberClaim = daemonSeed('s-member', { title: 'Member work', tender_member: 'fern' });
-  const sessionClaim = daemonSeed('s-session', { title: 'Session work', tender_session: 's1', tender_member: 'fern' });
-  const oldDayClaim = daemonSeed('s-oldday', { title: 'Old day work', tender_session: 'sess-old', tender_member: 'fern' });
-  const otherMember = daemonSeed('s-other', { title: 'Other work', tender_member: 'oak' });
+  const memberClaim = daemonSeed('s-member', { title: 'Member work', tender: { ref: 'member:fern', name:"Fern",session_id:"s1" },claimed: true });
+  const sessionClaim = daemonSeed('s-session', { title: 'Session work',  tender: { ref:'session:s1',name:'s1',session_id:'s1' }, claimed: true });
+  const oldDayClaim = daemonSeed('s-oldday', { title: 'Old day work',  tender: { ref:'session:sess-old',name:'sess-old',session_id:'sess-old' }, claimed: true });
+  const otherMember = daemonSeed('s-other', { title: 'Other work', tender: { ref: 'member:oak', name: "Oak" }, claimed: true });
 
   it.each<[string, DaemonSeed[], Partial<DaemonSession>, string, string]>([
     ['a crew day, its own claims and its member’s', [memberClaim, sessionClaim, otherMember], { crew_member: 'fern' }, 'multi', 'tending 2'],
     ['a new crew day, its member’s claims but not the last day’s', [memberClaim, oldDayClaim], { crew_member: 'fern' }, 'seed', 'Member work'],
-    ['an ordinary session, never a member’s claims', [memberClaim, sessionClaim], {}, 'seed', 'Session work'],
+    ['an ordinary session, never a member’s claims', [{...memberClaim,tender:{...memberClaim.tender!,session_id:undefined}},sessionClaim],{}, 'seed', 'Session work'],
     ['a tended seed as the plot when the rest sit under it', [
-      daemonSeed('s-plot11', { title: 'the arc', tender_session: 's1' }),
-      daemonSeed('s-a', { title: 'a', tender_session: 's1', edges: [{ kind: 'part-of', to: 's-plot11' }] }),
+      daemonSeed('s-plot11', { title: 'the arc', tender: { ref: 'session:s1', name: 's1', session_id: 's1' }, claimed: true }),
+      daemonSeed('s-a', { title: 'a', tender: { ref: 'session:s1', name: 's1', session_id: 's1' }, claimed: true, edges: [{ kind: 'part-of', to: 's-plot11' }] }),
     ], {}, 'plot', 'the arc'],
     ['a part-of cycle as a plot', [
-      daemonSeed('s-a', { title: 'a', tender_session: 's1', edges: [{ kind: 'part-of', to: 's-b' }] }),
-      daemonSeed('s-b', { title: 'b', tender_session: 's1', edges: [{ kind: 'part-of', to: 's-a' }] }),
+      daemonSeed('s-a', { title: 'a', tender: { ref: 'session:s1', name: 's1', session_id: 's1' }, claimed: true, edges: [{ kind: 'part-of', to: 's-b' }] }),
+      daemonSeed('s-b', { title: 'b', tender: { ref: 'session:s1', name: 's1', session_id: 's1' }, claimed: true, edges: [{ kind: 'part-of', to: 's-a' }] }),
     ], {}, 'plot', 'a'],
   ])('shows for %s', async (_, seeds, session, kind, text) => {
     await openAgent(seeds, session);
@@ -240,7 +240,7 @@ describe('what the chip shows', () => {
     const daemon = await openAgent([memberClaim], { crew_member: 'fern' });
     expect(chip()).toHaveTextContent('Member work');
 
-    pushSeeds(daemon, [{ ...memberClaim, status: 'harvested', tender_member: '' }]);
+    pushSeeds(daemon, [{ ...memberClaim, status: 'harvested', tender: undefined, claimed: false }]);
     await daemon.idle();
 
     expect(screen.queryByTestId('seed-chip-s1')).toBeNull();
@@ -251,8 +251,8 @@ describe('what the chip shows', () => {
     ['once, when it also tends it', 's-first', ['first', 'second']],
   ])('lists the seed the agent reports to %s', async (_, reportsTo, titles) => {
     const daemon = await openAgent([
-      daemonSeed('s-first', { title: 'first', tender_member: 'fern' }),
-      daemonSeed('s-second', { title: 'second', tender_member: 'fern' }),
+      daemonSeed('s-first', { title: 'first', tender: { ref: 'member:fern', name:"Fern",session_id:"s1" },claimed: true }),
+      daemonSeed('s-second', { title: 'second', tender: { ref: 'member:fern', name:"Fern",session_id:"s1" },claimed: true }),
       daemonSeed('s-crown1', { title: 'the plan', status: 'dormant' }),
     ], { crew_member: 'fern', seed_id: reportsTo });
 

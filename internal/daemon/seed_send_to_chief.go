@@ -79,9 +79,6 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, chiefSess
 	if err := d.requireHome(garden.Surface); err != nil {
 		return nil, err
 	}
-	if chiefSessionID == "" || d.store.Get(chiefSessionID) == nil {
-		return nil, fmt.Errorf("this profile has no Chief; make one of its agents the Chief first")
-	}
 	seedID := strings.TrimSpace(msg.SeedID)
 	guidance := strings.TrimSpace(protocol.Deref(msg.Guidance))
 	if len(guidance) > garden.MaxNoteBytes/2 {
@@ -100,64 +97,82 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, chiefSess
 		}
 	}
 
-	seed, doc, err := d.readSeed(seedID)
-	if err != nil {
-		return nil, err
-	}
-	if garden.Closed(seed.Status) {
-		return nil, fmt.Errorf("%s is %s; replant it before sending it to Chief", seed.ID, seed.Status)
-	}
-	if msg.ExpectedRev <= 0 || int(doc.Rev) != msg.ExpectedRev ||
-		seed.TenderSession != protocol.TrimID(msg.ExpectedTenderSession) ||
-		seed.TenderMember != strings.TrimSpace(msg.ExpectedTenderMember) {
-		return nil, fmt.Errorf("%s changed since you opened it; refresh it before sending it to Chief", seed.ID)
-	}
-	unclaimed := seed
-	unclaimed.TenderSession, unclaimed.TenderMember = "", ""
-	next, err := garden.Transition(unclaimed, garden.VerbTend, garden.Ask{
-		Actor: garden.Tender{Session: chiefSessionID},
-	}, d.sessionExists)
-	if err != nil {
-		return nil, err
-	}
-	if next.Status != seed.Status {
-		next.StateChangedAt = formatGardenTime(d.gardenTime())
-	}
-
-	noteBody := chiefSeedAssignmentNote(d.continuationForSeed(seed), reviewItem, guidance)
-	if err := garden.ValidateNote(noteBody); err != nil {
-		return nil, err
-	}
-	schema, err := d.seedsCollection()
-	if err != nil {
-		return nil, err
-	}
-	cause := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
-	tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, next.ID, cause, string(chiefSessionID))
-	if err != nil {
-		return nil, err
-	}
 	d.lockGardenRoles()
-	written, _, err := d.writeSeedMoveWithNotes(*schema, next, doc.Rev, []seedEvents.Occurrence{tended}, []garden.Note{{
-		Seed: next.ID, Kind: garden.NoteKindNote, Body: noteBody,
-		AuthorSession: cause,
-	}})
-	if err == nil {
-		err = d.discardAllIneligibleGardenSeedBellsLocked()
+	b, err := d.bindings()
+	if err != nil {
+		d.unlockGardenRoles()
+		return nil, err
 	}
+	r, err := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID, b)
+	if err != nil {
+		d.unlockGardenRoles()
+		return nil, err
+	}
+	chief, err := d.chiefParty(r.ProfileID(), b)
+	if err != nil {
+		d.unlockGardenRoles()
+		return nil, err
+	}
+	var written docstore.Document
+	var next garden.Seed
+	err = func() error {
+		seed, doc, err := d.readSeed(seedID)
+		if err != nil {
+			return err
+		}
+		if garden.Closed(seed.Status) {
+			return fmt.Errorf("%s is %s; replant it before sending it to Chief", seed.ID, seed.Status)
+		}
+		if msg.ExpectedRev <= 0 || int(doc.Rev) != msg.ExpectedRev {
+			return fmt.Errorf("%s changed since you opened it; refresh it before sending it to Chief", seed.ID)
+		}
+		next, err = garden.Assign(seed, chief)
+		if err != nil {
+			return err
+		}
+		if next.Status != seed.Status {
+			next.StateChangedAt = formatGardenTime(d.gardenTime())
+		}
+
+		noteBody := chiefSeedAssignmentNote(d.continuationForSeed(seed), reviewItem, guidance)
+		if err := garden.ValidateNote(noteBody); err != nil {
+			return err
+		}
+		schema, err := d.seedsCollection()
+		if err != nil {
+			return err
+		}
+		cause := r.Actor()
+		tended, err := lifecycleOccurrence(garden.VerbTend, next.ID, garden.Ask{By: cause, DirectlyNotified: chief})
+		if err != nil {
+			return err
+		}
+		written, _, err = d.writeSeedMoveWithNotes(*schema, next, doc.Rev, []seedEvents.Occurrence{tended}, []garden.Note{{
+			Seed: next.ID, Kind: garden.NoteKindNote, Body: noteBody,
+			Author: cause,
+		}})
+		if err == nil {
+			err = d.discardAllIneligibleGardenSeedBellsLocked()
+		}
+		if err != nil {
+			if docstore.IsConflict(err) {
+				return fmt.Errorf("%s changed while it was being sent to Chief; refresh the garden", seed.ID)
+			}
+			return err
+		}
+		return nil
+	}()
 	d.unlockGardenRoles()
 	if err != nil {
-		if docstore.IsConflict(err) {
-			return nil, fmt.Errorf("%s changed while it was being sent to Chief; refresh the garden", seed.ID)
-		}
 		return nil, err
 	}
+	seed := next
 	if err := d.resolveGardenReviewAction(msg.Review, seed.ID, "send_to_chief"); err != nil {
 		d.logf("Garden review: settle %s after Send to Chief: %v", seed.ID, err)
 	}
 	status, detail := d.deliverChiefSeedAssignment(chiefSessionID, seed.ID)
 
-	wire := seedToProtocol(next, written, false)
+	wire := d.seedWire(next, written, false)
 	d.decorateSeedContinuation(&wire, next)
 	if read, readErr := d.readGarden(seed.ProfileID); readErr == nil {
 		wire.Ready = read.ready[next.ID]
@@ -166,7 +181,7 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, chiefSess
 		}
 	}
 	return &protocol.SeedSendToChiefResult{
-		Seed: wire, ChiefSessionID: chiefSessionID, DeliveryStatus: status, Detail: detail,
+		Seed: wire, Chief: d.partyView(chief, b), DeliveryStatus: status, Detail: detail,
 	}, nil
 }
 
@@ -180,6 +195,8 @@ func (d *Daemon) handleSeedSendToChief(conn net.Conn, msg *protocol.SeedSendToCh
 }
 
 func (d *Daemon) handleSeedSendToChiefWS(client *wsClient, msg *protocol.SeedSendToChiefMessage) {
+	msg.SourceSessionID = nil
+	msg.ProfileID = protocol.Ptr(client.selectedProfile())
 	response := protocol.SeedSendToChiefResultMessage{
 		Event: protocol.EventSeedSendToChiefResult, RequestID: protocol.Deref(msg.RequestID),
 	}

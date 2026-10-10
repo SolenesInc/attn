@@ -6,7 +6,7 @@ import { gesture, pressShortcut } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
 function armedOn(number: number) {
-  return {
+  return { set_by: {ref:'user',name:'the user'},
     pull_request: `github.com:victorarias/attn#${number}`,
     url: `https://github.com/victorarias/attn/pull/${number}`,
     set_at: '2026-08-27T09:00:00Z',
@@ -17,7 +17,7 @@ const garden = [
   planted('s-ready1', 'pick this up', { ready: true }),
   planted('s-wait11', 'waiting on work'),
   plot('s-plot11', 'a plot in motion', '', { total: 3, done: 1, growing: 1, ready: 1 }, { ready: true }),
-  planted('s-work11', 'owned work', { status: 'growing', tender_member: 'trellis' }),
+  planted('s-work11', 'owned work', { status: 'growing', tender: { ref: 'member:trellis', name: "Trellis" }, claimed: true }),
   planted('s-park11', 'paused on purpose', { status: 'dormant' }),
   planted('s-armed1', 'waiting on the merge', { status: 'dormant', harvest_when: armedOn(42) }),
   planted('s-armrdy', 'armed but still pickable', { ready: true, harvest_when: armedOn(43) }),
@@ -78,7 +78,7 @@ describe('App garden board', () => {
   });
 
   it('takes a seed over from its live tender when harvesting it', async () => {
-    const held = planted('s-held11', 'held work', { status: 'growing', tender_session: 'live-tender' });
+    const held = planted('s-held11', 'held work', { status: 'growing', tender: { ref: 'session:live-tender', name: 'live-tender', session_id: 'live-tender' }, claimed: true });
     const daemon = await openBoard([held], [daemonSession('s1'), daemonSession('live-tender')]);
 
     await move(daemon, 'held work', /Harvest/, 'Harvest s-held11: what got done', 'the work is complete');
@@ -86,6 +86,20 @@ describe('App garden board', () => {
     expect(daemon.sentOf('seed_transition')).toEqual([expect.objectContaining({
       seed_id: 's-held11', verb: 'harvest', reason: 'the work is complete', force: true,
     })]);
+  });
+
+  it('asks before parking an asleep member’s claimed seed and sends force', async () => {
+    const value = planted('s-member', 'Keel work', { status: 'growing', claimed: true, tender: {ref:'member:keel',name:'Keel'} });
+    const daemon = await openBoard([value]);
+    fireEvent.focus(card('Keel work'));
+    fireEvent.click(theBoard().getByRole('button', {name:'Move Keel work'}));
+    fireEvent.click(screen.getByRole('menuitem', {name:/Park/}));
+    expect(screen.getByText("takes it from Keel")).toBeVisible();
+    expect(daemon.sentOf('seed_transition')).toEqual([]);
+    const field = screen.getByRole('textbox', {name:'Park s-member: what you are leaving it at'});
+    fireEvent.change(field,{target:{value:'Waiting on input'}});
+    await gesture(daemon,()=>fireEvent.keyDown(field,{key:'Enter'}));
+    expect(daemon.sentOf('seed_transition')).toEqual([expect.objectContaining({seed_id:'s-member',verb:'park',comment:'Waiting on input',force:true})]);
   });
 
   it('parks a seed with its comment in one move', async () => {

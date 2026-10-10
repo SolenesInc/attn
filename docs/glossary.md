@@ -63,7 +63,7 @@ forget                  deletes attn's copy of a conversation
 ```
 
 ```text
-party                   a session or crew member that sends mail or holds work;
+party                   a session or crew member that sends mail or claims work;
                         like an account
 actor                   a party, the user or attn that did something; like an
                         audit identity
@@ -95,9 +95,10 @@ garden                  a profile's issue tracker
 └─ seed (0..n)          a ticket
    ├─ state (1)         planted, growing, parked, harvested or withered
    ├─ seed (0..n)       a subtask
-   ├─ tender (at most 1)  the assignee: the session or crew member
+   ├─ claim (at most 1)   the assignment; its tender is a session or crew member
    ├─ note (0..n)       a comment in the ticket's log
    └─ edge (0..n)       blocks or discovered-from
+tender                  the party that claims a seed; like an assignee
 tend                    claim a seed; like assigning a ticket to yourself
 plot                    an epic: a seed with child seeds
 packet                  an epic template
@@ -139,7 +140,7 @@ delegation              one agent starts another agent to work on a seed
 ├─ seed (1)             the work
 ├─ role (at most 1)     a way of working for one type of work:
 │                       instructions, harness, model and effort
-├─ dispatcher (1)       the session that started the delegation
+├─ dispatcher (1)       the actor that started the delegation
 └─ delegate (1)         the session that does the work
 handover                a new session takes over a seed and its claim
 ```
@@ -223,12 +224,7 @@ Temporary debt. Read the old name as the new term. Never write the old name.
 ### Changes to make
 
 - Flow is one daemon-wide setting (`queue_mode_enabled`). Make it 1 per profile.
-- Named claims let any name tend a seed. Remove them, or define who can use
-  them.
 - The chief is not a crew member. Make it one.
-- Prompts say hold, held and holder for a claimed seed
-  (internal/prompts/content/garden.md, the delegation reference). Say claim and
-  tender.
 - The ledger may list every profile when a request has no profile. Check, and
   fix.
 - The Ledger button and action say Reopen. Rename them to Resume.

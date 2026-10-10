@@ -108,10 +108,7 @@ func (r delivery) toTenderOf(id string) (recipient, error) {
 	if err != nil {
 		return recipient{}, err
 	}
-	p, ok, err := r.d.seedTender(seed, r.bindings)
-	if err != nil {
-		return recipient{}, err
-	}
+	p, ok := seed.Claim.Lasts(r.bindings)
 	if !ok {
 		return recipient{wait: fmt.Sprintf("nobody tends %s; waits for its next tender", id)}, nil
 	}

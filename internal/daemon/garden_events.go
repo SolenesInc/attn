@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -12,7 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/inbox"
-	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
 )
@@ -132,27 +130,8 @@ func (d *Daemon) resolveCommittedGardenSeedBells() {
 	d.gardenBellsResolvedThrough = head
 }
 
-func firstString(values []string) string {
-	if len(values) == 0 {
-		return ""
-	}
-	return strings.TrimSpace(values[0])
-}
-
-func gardenSeedLifecycleOccurrence(verb garden.Verb, seedID string, causedBySessionID protocol.SessionID, directlyNotifiedSessionID ...string) (events.Occurrence, error) {
-	return gardenSeedLifecycleOccurrenceWithAttention(true, verb, seedID, causedBySessionID, directlyNotifiedSessionID...)
-}
-
-func quietGardenSeedLifecycleOccurrence(verb garden.Verb, seedID string, causedBySessionID protocol.SessionID, directlyNotifiedSessionID ...string) (events.Occurrence, error) {
-	return gardenSeedLifecycleOccurrenceWithAttention(false, verb, seedID, causedBySessionID, directlyNotifiedSessionID...)
-}
-
-func gardenSeedLifecycleOccurrenceWithAttention(attentionRequested bool, verb garden.Verb, seedID string, causedBySessionID protocol.SessionID, directlyNotifiedSessionID ...string) (events.Occurrence, error) {
-	payload := events.LifecyclePayload{
-		AttentionRequested:        attentionRequested,
-		CausedBySessionID:         protocol.TrimID(causedBySessionID),
-		DirectlyNotifiedSessionID: protocol.SessionID(firstString(directlyNotifiedSessionID)),
-	}
+func lifecycleOccurrence(verb garden.Verb, seedID string, ask garden.Ask) (events.Occurrence, error) {
+	payload := events.LifecyclePayload{AttentionRequested: !ask.SuppressNotification, CausedBy: ask.By.Ref(), DirectlyNotified: ask.DirectlyNotified.Ref()}
 	switch verb {
 	case garden.VerbTend:
 		return events.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.Tended, seedID, payload)
@@ -214,7 +193,7 @@ func (d *Daemon) handleGardenSeedEventWithoutRoleLock(_ context.Context, event b
 		return err
 	}
 
-	var recipients []string
+	var recipients []who.Party
 	if !decision.Quiet() {
 		resolver, err := d.readGardenEventRoles()
 		if err != nil {
@@ -227,11 +206,7 @@ func (d *Daemon) handleGardenSeedEventWithoutRoleLock(_ context.Context, event b
 	}
 	deliveries := make([]store.GardenSeedBellDelivery, len(recipients))
 	for i, recipient := range recipients {
-		address, err := who.ParseAddress(recipient)
-		if err != nil {
-			return err
-		}
-		deliveries[i] = store.GardenSeedBellDelivery{To: address, ItemID: uuid.NewString()}
+		deliveries[i] = store.GardenSeedBellDelivery{To: recipient.Address(), ItemID: uuid.NewString()}
 	}
 	created, _, err := d.store.HandleGardenSeedEvent(
 		event.Seq, event.Subject, strings.TrimPrefix(event.Name, "garden.seed."), decision.BellName(), deliveries, time.Now(),
@@ -252,6 +227,7 @@ func (d *Daemon) handleGardenSeedEventWithoutRoleLock(_ context.Context, event b
 type gardenEventRoles struct {
 	daemon        *Daemon
 	subscriptions gardenSubscriptions
+	bindings      who.Bindings
 }
 
 func (d *Daemon) readGardenEventRoles() (gardenEventRoles, error) {
@@ -259,10 +235,14 @@ func (d *Daemon) readGardenEventRoles() (gardenEventRoles, error) {
 	if err != nil {
 		return gardenEventRoles{}, err
 	}
-	return gardenEventRoles{daemon: d, subscriptions: subscriptions}, nil
+	b, err := d.bindings()
+	if err != nil {
+		return gardenEventRoles{}, err
+	}
+	return gardenEventRoles{daemon: d, subscriptions: subscriptions, bindings: b}, nil
 }
 
-func (r gardenEventRoles) ResolveSeedRole(seedID string, role events.Role) ([]string, error) {
+func (r gardenEventRoles) ResolveSeedRole(seedID string, role events.Role) ([]who.Party, error) {
 	if _, exists := r.subscriptions.seeds[seedID]; !exists {
 		schema, err := r.daemon.seedsCollection()
 		if err != nil {
@@ -286,36 +266,34 @@ func (r gardenEventRoles) ResolveSeedRole(seedID string, role events.Role) ([]st
 		if !exists {
 			return nil, nil
 		}
-		if seed.Tender().Member != "" {
-			member, found, err := r.daemon.seedTenderMember(seed)
-			if err != nil {
-				return nil, err
-			}
-			if !found {
-				return nil, nil
-			}
-			return []string{who.Member(member.Key).Address().String()}, nil
-		}
-		sessionID, err := r.daemon.localGardenTenderSession(seed)
-		if errors.Is(err, errRemoteGardenTender) {
+		tender, claimed := seed.Claim.Lasts(r.bindings)
+		if !claimed {
 			return nil, nil
 		}
-		if err != nil || sessionID == "" {
+		if err := r.bindings.Check(tender); err != nil {
 			return nil, err
 		}
-		return []string{who.ToSession(protocol.SessionID(sessionID)).String()}, nil
+		if key, member := tender.Member(); member {
+			if _, _, err := r.daemon.crewMember(key); err != nil {
+				return nil, err
+			}
+		}
+		if id, session := tender.Session(); session && r.daemon.store.Get(id) == nil && !r.daemon.store.DelegationSessionReserved(id) {
+			return nil, nil
+		}
+		return []who.Party{tender}, nil
 	case events.CoveringWatchers:
 		coverage, err := r.subscriptions.coverageChecked(seedID)
 		if err != nil {
 			return nil, err
 		}
-		sessions := make([]string, 0, len(coverage))
-		for sessionID := range coverage {
-			if r.daemon.store.Get(sessionID) != nil || r.daemon.store.DelegationSessionReserved(sessionID) {
-				sessions = append(sessions, who.ToSession(sessionID).String())
+		parties := make([]who.Party, 0, len(coverage))
+		for party := range coverage {
+			if r.bindings.Lasts(party) {
+				parties = append(parties, party)
 			}
 		}
-		return sessions, nil
+		return parties, nil
 	default:
 		return nil, fmt.Errorf("unsupported Garden seed audience role %d", role)
 	}
@@ -335,7 +313,7 @@ func (d *Daemon) discardIneligibleGardenSeedBellsLocked(to who.Address) error {
 	}
 	var discarded []string
 	for _, item := range items {
-		eligible, err := gardenSeedEventModel.RecipientEligible(item.BellName, item.SeedID, to.String(), resolver)
+		eligible, err := gardenSeedEventModel.RecipientEligible(item.BellName, item.SeedID, to, resolver)
 		if err != nil {
 			return err
 		}
@@ -378,18 +356,4 @@ func (d *Daemon) invalidateGardenSeedParties(reason string) {
 	if err != nil {
 		d.logf("Garden seed mailbox invalidation after %s: %v", reason, err)
 	}
-}
-
-func (r gardenEventRoles) AddressesOfSession(sessionID protocol.SessionID) []string {
-	b, err := r.daemon.bindings()
-	if err != nil {
-		r.daemon.logf("Garden address bindings: %v", err)
-		return nil
-	}
-	addresses := b.AddressesOf(sessionID)
-	values := make([]string, len(addresses))
-	for i, address := range addresses {
-		values[i] = address.String()
-	}
-	return values
 }

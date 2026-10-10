@@ -10,7 +10,7 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestTheAppsSeedEditsNeverRingTheirSource(t *testing.T) {
+func TestAppNotesActAsTheUserAndAgentNotesExcludeTheirParty(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		registerSessions(t, w, cli, "planter", "source", "watcher")
@@ -18,12 +18,9 @@ func TestTheAppsSeedEditsNeverRingTheirSource(t *testing.T) {
 		gardenNudgeWatch(t, cli, "source", seed, false)
 		gardenNudgeWatch(t, cli, "watcher", seed, false)
 
-		moved := testworld.Request(app, protocol.SeedTransitionMessage{
-			Cmd: protocol.CmdSeedTransition, RequestID: protocol.Ptr("move"),
-			SourceSessionID: protocol.Ptr(protocol.SessionID("source")), SeedID: seed, Verb: "tend",
-		}, protocol.EventSeedTransitionResult, func(m protocol.SeedTransitionResultMessage) bool { return m.RequestID == "move" })
-		if !moved.Success {
-			t.Fatalf("the app's tend: %s", protocol.Deref(moved.Error))
+		moved, err := cli.SeedTransition("source", seed, "tend", "", false, client.SeedTransitionOptions{})
+		if err != nil || moved.Seed.Tender == nil {
+			t.Fatalf("source tend: %+v %v", moved, err)
 		}
 		w.advance(0)
 		gardenNudgeInboxIsEmpty(t, cli, "source", "after the app tended for it")
@@ -37,7 +34,7 @@ func TestTheAppsSeedEditsNeverRingTheirSource(t *testing.T) {
 			t.Fatalf("the app's ringing note: %s", protocol.Deref(noted.Error))
 		}
 		w.advance(0)
-		gardenNudgeInboxIsEmpty(t, cli, "source", "after the app noted for it")
+		gardenNudgeOneBell(t, cli, "source", seed, "note.added")
 		gardenNudgeOneBell(t, cli, "watcher", seed, "note.added")
 
 		gardenNudgeMove(t, cli, "source", seed, "park")
@@ -222,7 +219,7 @@ func gardenNudgePlot(t *testing.T, cli *client.Client, planter string) (crown, c
 
 func gardenNudgePlant(t *testing.T, cli *client.Client, planter, title, partOf string) string {
 	t.Helper()
-	planted, err := cli.SeedPlant(protocol.SessionID(planter), title, "Work through "+title+".", partOf, "", "")
+	planted, err := cli.SeedPlant(protocol.SessionID(planter), title, "Work through "+title+".", partOf, "")
 	if err != nil {
 		t.Fatalf("plant %q under %s: %v", title, partOf, err)
 	}
@@ -244,7 +241,7 @@ func gardenNudgeMove(t *testing.T, cli *client.Client, session, seedID, verb str
 	if verb == "harvest" || verb == "wither" {
 		reason = "done"
 	}
-	result, err := cli.SeedTransition(protocol.SessionID(session), seedID, verb, reason, "", false, client.SeedTransitionOptions{})
+	result, err := cli.SeedTransition(protocol.SessionID(session), seedID, verb, reason, false, client.SeedTransitionOptions{})
 	if err != nil {
 		t.Fatalf("%s %s %s: %v", session, verb, seedID, err)
 	}
@@ -253,7 +250,7 @@ func gardenNudgeMove(t *testing.T, cli *client.Client, session, seedID, verb str
 
 func gardenNudgeNote(t *testing.T, cli *client.Client, session, seedID, body string, ring bool) {
 	t.Helper()
-	if _, err := cli.SeedNote(protocol.SessionID(session), seedID, body, "", "", ring, nil); err != nil {
+	if _, err := cli.SeedNote(protocol.SessionID(session), seedID, body, "", ring, nil); err != nil {
 		t.Fatalf("%s notes %q on %s: %v", session, body, seedID, err)
 	}
 }
@@ -280,7 +277,7 @@ func TestASeedBellWakesItsAsleepMemberTenderAndStaysWithTheMember(t *testing.T) 
 		cli := w.Client()
 		registerSessions(t, w, cli, "sender", "watcher")
 		seed := plantSeedAs(t, cli, "sender", "review the deployment")
-		if _, err := cli.SeedTransition("", seed, "tend", "", "trellis", false, client.SeedTransitionOptions{}); err != nil {
+		if _, err := cli.SeedTransition("", seed, "tend", "", false, client.SeedTransitionOptions{Assignee: "trellis"}); err != nil {
 			t.Fatal(err)
 		}
 		w.advance(0)
@@ -313,13 +310,13 @@ func TestASeedBellWakesItsAsleepMemberTenderAndStaysWithTheMember(t *testing.T) 
 	})
 }
 
-func TestAMemberTenderAndItsDayWatchKeepIndependentInboxItems(t *testing.T) {
+func TestAMemberThatTendsAndWatchesGetsOneSeedUpdate(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, day := crewDayInBubble(t, w, map[string]string{"crew.heartbeat_enabled": "false", "crew.autosleep_enabled": "false"})
 		cli := w.Client()
 		registerSessions(t, w, cli, "sender")
 		seed := plantSeedAs(t, cli, "sender", "review the deployment")
-		if _, err := cli.SeedTransition(protocol.SessionID(day.id), seed, "tend", "", "", false, client.SeedTransitionOptions{}); err != nil {
+		if _, err := cli.SeedTransition(protocol.SessionID(day.id), seed, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
 			t.Fatal(err)
 		}
 		gardenNudgeWatch(t, cli, day.id, seed, false)
@@ -330,15 +327,15 @@ func TestAMemberTenderAndItsDayWatchKeepIndependentInboxItems(t *testing.T) {
 		for _, item := range mail {
 			addresses[string(item.Address)] = true
 		}
-		if len(mail) != 2 || !addresses["member:trellis"] || !addresses["session:"+day.id] {
+		if len(mail) != 1 || !addresses["member:trellis"] {
 			t.Fatalf("overlapping subscriptions inbox=%+v", mail)
 		}
 		gardenNudgeNote(t, cli, "sender", seed, "keep the watcher informed", true)
-		if _, err := cli.SeedTransition(protocol.SessionID(day.id), seed, "park", "", "", false, client.SeedTransitionOptions{}); err != nil {
+		if _, err := cli.SeedTransition(protocol.SessionID(day.id), seed, "park", "", false, client.SeedTransitionOptions{}); err != nil {
 			t.Fatal(err)
 		}
 		watcherMail := readInbox(t, cli, day.id, 0).Items
-		if len(watcherMail) != 1 || watcherMail[0].Address != protocol.AddressRef("session:"+day.id) || !strings.Contains(watcherMail[0].Content, seed+" moved: note.added") {
+		if len(watcherMail) != 1 || watcherMail[0].Address != "member:trellis" || !strings.Contains(watcherMail[0].Content, seed+" moved: note.added") {
 			t.Fatalf("watcher inbox after tender parks=%+v", watcherMail)
 		}
 	})
@@ -350,7 +347,7 @@ func TestReadingAnEmptyInboxAcknowledgesAWithdrawnSeedRing(t *testing.T) {
 		cli := w.Client()
 		registerSessions(t, w, cli, "sender")
 		seed := plantSeedAs(t, cli, "sender", "review the deployment")
-		if _, err := cli.SeedTransition(protocol.SessionID(day.id), seed, "tend", "", "", false, client.SeedTransitionOptions{}); err != nil {
+		if _, err := cli.SeedTransition(protocol.SessionID(day.id), seed, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
 			t.Fatal(err)
 		}
 		gardenNudgeNote(t, cli, "sender", seed, "the deployment is ready", true)
@@ -359,7 +356,7 @@ func TestReadingAnEmptyInboxAcknowledgesAWithdrawnSeedRing(t *testing.T) {
 			t.Fatalf("seed rings=%d", got)
 		}
 		day.reply("Later. <!-- attn:state=idle -->")
-		if _, err := cli.SeedTransition(protocol.SessionID(day.id), seed, "park", "", "", false, client.SeedTransitionOptions{}); err != nil {
+		if _, err := cli.SeedTransition(protocol.SessionID(day.id), seed, "park", "", false, client.SeedTransitionOptions{}); err != nil {
 			t.Fatal(err)
 		}
 		if got := readInbox(t, cli, day.id, 0).Items; len(got) != 0 {

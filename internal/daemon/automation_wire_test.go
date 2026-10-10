@@ -496,7 +496,7 @@ location: {type: directory, path: %q}
 	if err != nil {
 		t.Fatal(err)
 	}
-	if seed.Seed.Title != "Nightly check" || seed.Seed.Body != "Report the message field." || seed.Seed.Status != "growing" || seed.Seed.TenderSession != session {
+	if seed.Seed.Title != "Nightly check" || seed.Seed.Body != "Report the message field." || seed.Seed.Status != "growing" || protocol.Deref(protocol.Deref(seed.Seed.Tender).SessionID) != session {
 		t.Errorf("the run's seed = %+v, want the trimmed name and prompt, growing and tended by %s", seed.Seed, session)
 	}
 

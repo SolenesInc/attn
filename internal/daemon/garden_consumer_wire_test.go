@@ -18,15 +18,16 @@ func TestAGardenBellRetriesAfterACrewRosterPathFailureIsRepaired(t *testing.T) {
 		cli := w.Client()
 		registerSessions(t, w, cli, "sender")
 		seed := plantSeedAs(t, cli, "sender", "review the build")
-		if _, err := cli.SeedTransition("", seed, "tend", "", "trellis", false, client.SeedTransitionOptions{}); err != nil {
-			t.Fatal(err)
-		}
+
 		writeCrewCharter(t, w, "trellis")
 		writeCrewCharter(t, w, "alder")
 		w.restart()
 		w.App() // Initial state waits for startup recovery, which drops injected sessions.
 		cli = w.Client()
 		registerSessions(t, w, cli, "sender")
+		if _, err := cli.SeedTransition("", seed, "tend", "", false, client.SeedTransitionOptions{Assignee: "trellis"}); err != nil {
+			t.Fatal(err)
+		}
 		home := filepath.Join(w.Dir, "crew", "trellis")
 		saved := home + "-saved"
 		if err := os.Rename(home, saved); err != nil {
@@ -35,7 +36,7 @@ func TestAGardenBellRetriesAfterACrewRosterPathFailureIsRepaired(t *testing.T) {
 		if err := os.Symlink(t.TempDir(), home); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := cli.SeedNote("sender", seed, "the deployment is ready", "", "", true, nil); err != nil {
+		if _, err := cli.SeedNote("sender", seed, "the deployment is ready", "", true, nil); err != nil {
 			t.Fatal(err)
 		}
 		w.advance(0)
@@ -67,7 +68,7 @@ func TestALateSeedBellRingsWhoeverTendsTheSeedNow(t *testing.T) {
 		seedBellsConsumerEnabled(t, app, false)
 		lifeMove(t, cli, "first", seed, "tend", "", "")
 		for _, taker := range []string{"second", "third"} {
-			if _, err := cli.SeedTransition(protocol.SessionID(taker), seed, "tend", "", "", true, client.SeedTransitionOptions{}); err != nil {
+			if _, err := cli.SeedTransition(protocol.SessionID(taker), seed, "tend", "", true, client.SeedTransitionOptions{}); err != nil {
 				t.Fatalf("%s takes the seed: %v", taker, err)
 			}
 		}
@@ -102,7 +103,7 @@ func TestEditingAWatchedSeedRingsNoOne(t *testing.T) {
 			t.Fatalf("a body edit rang the watcher with %q", inboxContents(items))
 		}
 
-		if _, err := cli.SeedNote("writer", seed, "please look", "", "", true, nil); err != nil {
+		if _, err := cli.SeedNote("writer", seed, "please look", "", true, nil); err != nil {
 			t.Fatal(err)
 		}
 		w.advance(0)

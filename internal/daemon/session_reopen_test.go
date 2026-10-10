@@ -117,7 +117,7 @@ func TestReopenVerdictRefusesEveryRemoteSessionWithTheReleaseReason(t *testing.T
 		t.Run(name, func(t *testing.T) {
 			verdict := &sessionReopenVerdict{
 				SessionID: "remote-one",
-				Execution: garden.Dispatch{HostKind: garden.HostRemote, EndpointID: tc.endpointID},
+				Execution: garden.Execution{HostKind: garden.HostRemote, EndpointID: tc.endpointID},
 			}
 			if decideReopenHost(verdict, endpoints) {
 				t.Fatal("a remote session went on being decided on this daemon")

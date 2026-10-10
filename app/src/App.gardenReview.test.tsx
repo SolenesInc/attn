@@ -26,7 +26,7 @@ const savedContext: Continuation = {
 const reviewedSeed = daemonSeed('s-review1', {
   title: 'Review this seed',
   body: 'The implementation is complete. Verify the packaged app.',
-  tender_session: 'sess-old',
+  tender: { ref: 'session:sess-old', name: 'sess-old', session_id: 'sess-old' }, claimed: true,
   rev: 4,
 });
 
@@ -287,8 +287,8 @@ describe('App garden review', () => {
             seed_id: 's-review1',
             kind: 'note',
             body: 'Reviewed the **live instance**.',
-            author_session: '',
-            author_member: 'alder',
+
+            author: { ref: "member:alder", name: "Alder" },
             created_at: '2026-08-30T09:01:00Z',
           }],
           notes_total: 1,
@@ -417,7 +417,7 @@ describe('App garden review', () => {
     daemon.on('seed_send_to_chief', () => ({
       event: 'seed_send_to_chief_result',
       success: true,
-      result: { seed: reviewedSeed, chief_session_id: 'chief', delivery_status: 'queued', detail: 'queued for Chief' },
+      result: { seed: reviewedSeed, chief: {ref:'session:' + ('chief'),name:'Chief',session_id:'chief'}, delivery_status: 'queued', detail: 'queued for Chief' },
     }));
 
     await click(daemon, 'Send to Chief');
@@ -432,8 +432,8 @@ describe('App garden review', () => {
       source_session_id: 's1',
       seed_id: 's-review1',
       expected_rev: 4,
-      expected_tender_session: 'sess-old',
-      expected_tender_member: '',
+
+
       guidance: 'Use branch feature/special under /tmp/special.',
       review: receipt,
     })]);

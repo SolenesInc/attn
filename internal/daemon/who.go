@@ -169,18 +169,51 @@ func (d *Daemon) storedMemberName(text string) string {
 	return d.memberName(key)
 }
 
-func (d *Daemon) tenderName(profileID string, t garden.Tender) string {
-	if t.Member != "" {
-		member, found, err := d.store.CrewKeyed(profileID, t.Member)
+func (d *Daemon) claimantFor(r who.Requester, assignee string) (who.Party, error) {
+	var party who.Party
+	if assignee != "" {
+		member, err := d.resolveMember(r, assignee)
 		if err != nil {
-			d.logf("crew: read tender name in %s: %v", profileID, err)
+			return who.Party{}, err
 		}
-		if found {
-			return member.Name
-		}
-		return t.Member
+		party = who.Member(member.Key)
+	} else if self, ok := r.Party(); ok {
+		party = self
+	} else {
+		return who.Party{}, errors.New("tending records who claims the seed, and the user claims nothing; name the crew member: attn seed tend <seed> --for <name>")
 	}
-	return string(t.Session)
+	if key, member := party.Member(); member {
+		identity, err := d.store.CrewIdentity(key)
+		if err != nil {
+			return who.Party{}, err
+		}
+		if identity.Retired {
+			return who.Party{}, fmt.Errorf("%s is retired; restore them with attn crew restore %s before assigning work", identity.Name, identity.Name)
+		}
+	}
+	return party, nil
+}
+
+func (d *Daemon) chiefParty(profileID string, b who.Bindings) (who.Party, error) {
+	chief, ok := b.PartyOf(d.chiefOfProfile(profileID))
+	if !ok {
+		return who.Party{}, errors.New("this profile has no Chief; make one of its agents the Chief first")
+	}
+	return chief, b.Check(chief)
+}
+func (d *Daemon) gardenRequester(source *protocol.SessionID, profile *string) (who.Requester, error) {
+	b, err := d.bindings()
+	if err != nil {
+		return who.Requester{}, err
+	}
+	return d.requestFromMessage(source, profile, b)
+}
+func (d *Daemon) seedMoveError(err error, b who.Bindings) error {
+	var refused *garden.TakeoverRefused
+	if !errors.As(err, &refused) {
+		return err
+	}
+	return fmt.Errorf("%s is being tended by %s, and attn seed %s takes it from them. Pass --force to act anyway; the log will record it. Or leave a note: attn seed note %s -m …", refused.SeedID, d.partyView(refused.Tender, b).Name, refused.Verb, refused.SeedID)
 }
 
 type targetError struct{ code, message string }
@@ -301,10 +334,7 @@ func (d *Daemon) resolveSession(r who.Requester, b who.Bindings, text string) (*
 		if err != nil {
 			return nil, err
 		}
-		p, ok, err := d.seedTender(seed, b)
-		if err != nil {
-			return nil, err
-		}
+		p, ok := seed.Claim.Lasts(b)
 		if !ok {
 			return nil, &targetError{"seed_untended", fmt.Sprintf("nobody is tending %s; leave a note: attn seed note %s -m …", seedID, seedID)}
 		}
@@ -316,20 +346,6 @@ func (d *Daemon) resolveSession(r who.Requester, b who.Bindings, text string) (*
 		}
 		return onSession(id)
 	})
-}
-func (d *Daemon) seedTender(seed garden.Seed, b who.Bindings) (who.Party, bool, error) {
-	if seed.TenderMember != "" {
-		m, found, err := d.seedTenderMember(seed)
-		if err != nil || !found {
-			return who.Party{}, false, err
-		}
-		return who.Member(m.Key), true, nil
-	}
-	if seed.TenderSession != "" {
-		p, lasts := b.PartyOf(seed.TenderSession)
-		return p, lasts, nil
-	}
-	return who.Party{}, false, nil
 }
 func (d *Daemon) mailboxesOf(id protocol.SessionID, b who.Bindings) ([]who.Address, error) {
 	if err := b.CheckSession(id); err != nil {

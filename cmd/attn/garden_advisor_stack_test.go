@@ -17,11 +17,11 @@ func TestGardenAdviceInterruptedByACrashResumesWithTheReviewsFrozenRecipe(t *tes
 	app, cli := s.App(), s.Client()
 	setSetting(t, app, "garden.advisor", `{"agent":"claude"}`)
 	register(t, s, "gardener", "gardener")
-	planted, err := cli.SeedPlant("gardener", "Finish checkout", "The checkout needs a discount field.", "", "", "")
+	planted, err := cli.SeedPlant("gardener", "Finish checkout", "The checkout needs a discount field.", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cli.SeedTransition("gardener", planted.Seed.ID, "tend", "", "", false, client.SeedTransitionOptions{}); err != nil {
+	if _, err := cli.SeedTransition("gardener", planted.Seed.ID, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := cli.Unregister("gardener"); err != nil {

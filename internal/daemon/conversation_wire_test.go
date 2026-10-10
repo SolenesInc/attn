@@ -317,7 +317,7 @@ func TestADelegateThatClearsLeavesItsSeedAndMailWithItsClosedSession(t *testing.
 
 	next := clearClaude(app, claude, string(delegate))
 	awaitClosed(app, string(delegate))
-	if tender := lifeShow(t, cli, seed).Seed.TenderSession; tender != delegate {
+	if tender := protocol.Deref(lifeShow(t, cli, seed).Seed.Tender).Ref; tender != protocol.PartyRef("session:"+string(delegate)) {
 		t.Errorf("after /clear seed %s is tended by %q, want the cleared %s", seed, tender, delegate)
 	}
 	if sent, err := cli.AgentMsg(string(delegate), next.ID, "are you still on it?"); err == nil {

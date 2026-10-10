@@ -53,7 +53,7 @@ func TestAMergeHarvestsTheSeedArmedOnItEvenAfterItsSessionsClosed(t *testing.T) 
 		recordPullRequest(t, cli, "reviewer", shopPull(7))
 		armWhenMerged(t, cli, "author", armed, shopPull(7))
 		armWhenMerged(t, cli, "author", cleared, shopPull(9))
-		if _, err := cli.SeedTransition("author", cleared, "harvest", "", "", false, client.SeedTransitionOptions{ClearHarvestWhen: true}); err != nil {
+		if _, err := cli.SeedTransition("author", cleared, "harvest", "", false, client.SeedTransitionOptions{ClearHarvestWhen: true}); err != nil {
 			t.Fatalf("clear the condition: %v", err)
 		}
 		if err := cli.ForgetSessionPullRequest("reviewer", shopPull(7)); err != nil {
@@ -95,7 +95,7 @@ func pullNumbers(s protocol.Session) []int {
 func armWhenMerged(t *testing.T, cli *client.Client, session, seed, url string) {
 	t.Helper()
 	opts := client.SeedTransitionOptions{WhenMerged: true, PullRequestURL: url}
-	if _, err := cli.SeedTransition(protocol.SessionID(session), seed, "harvest", "", "", false, opts); err != nil {
+	if _, err := cli.SeedTransition(protocol.SessionID(session), seed, "harvest", "", false, opts); err != nil {
 		t.Fatalf("arm %s on %s: %v", seed, url, err)
 	}
 }

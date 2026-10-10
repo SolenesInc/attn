@@ -149,7 +149,7 @@ func (d *Daemon) crewPriming(member crew.Member) (crew.Priming, error) {
 		CWD:           member.CWD,
 		AwarenessDirs: member.AwarenessDirs,
 	}
-	d.primeCrewGarden(&priming, member.Key.String())
+	d.primeCrewGarden(&priming, member.Key)
 	if charter, err := os.ReadFile(member.CharterPath); err == nil {
 		priming.Charter = string(charter)
 	} else if !os.IsNotExist(err) {
@@ -194,24 +194,24 @@ func (d *Daemon) crewPriming(member crew.Member) (crew.Priming, error) {
 	return priming, nil
 }
 
-func (d *Daemon) primeCrewGarden(priming *crew.Priming, memberID string) {
-	read, err := d.readGardenTo(0, d.crewProfileID(memberID))
+func (d *Daemon) primeCrewGarden(priming *crew.Priming, key who.MemberKey) {
+	read, err := d.readGardenTo(0, d.crewProfileID(key.String()))
 	if err != nil {
-		d.logf("crew: reading the garden to prime %s: %v", memberID, err)
+		d.logf("crew: reading the garden to prime %s: %v", key, err)
 		return
 	}
 	priming.GardenRead = true
-	held := garden.Held(read.seeds, memberID)
-	priming.HeldTotal = len(held)
-	if len(held) > crew.MaxHeldSeeds {
-		held = held[:crew.MaxHeldSeeds]
+	held := garden.TendedBy(read.seeds, who.Member(key))
+	priming.ClaimedTotal = len(held)
+	if len(held) > crew.MaxClaimedSeeds {
+		held = held[:crew.MaxClaimedSeeds]
 	}
 	for _, seed := range held {
-		entry := crew.HeldSeed{ID: seed.ID, Slug: seed.StepSlug, Title: seed.Title}
+		entry := crew.ClaimedSeed{ID: seed.ID, Slug: seed.StepSlug, Title: seed.Title}
 		if handoff := d.gardenHandoff(seed.ID); handoff != nil {
 			entry.Handoff = handoff.Body
 		}
-		priming.Held = append(priming.Held, entry)
+		priming.Claims = append(priming.Claims, entry)
 	}
 	for _, plot := range garden.PlotsOf(read.seeds, held) {
 		priming.Plots = append(priming.Plots, crew.PlotReady{
@@ -461,7 +461,7 @@ func (d *Daemon) crewPrimeForSession(sessionID protocol.SessionID) (crew.Member,
 		d.logf("crew: priming %s for session %s: %d bytes (charter %d, handoff %s %d, older %d, garden %d for %d of %d held and %d plots)",
 			d.storedMemberName(member.Key.String()), sessionID, len(block), len(priming.Charter),
 			handoff, len(priming.Handoff), len(priming.OlderHandoffs),
-			len(priming.GardenSection()), len(priming.Held), priming.HeldTotal, len(priming.Plots))
+			len(priming.GardenSection()), len(priming.Claims), priming.ClaimedTotal, len(priming.Plots))
 		return member, block, true, nil
 	}
 	return crew.Member{}, "", false, nil

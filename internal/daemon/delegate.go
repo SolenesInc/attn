@@ -449,7 +449,7 @@ func (d *Daemon) spawnDelegatedRuntimeProtected(protection foregroundCleanupProt
 		InitialPrompt: protocol.Ptr(initialPrompt),
 	}
 	if msg.Handover != nil {
-		if predecessor := d.store.SessionLedgerEntry(msg.PreviousTenderSession); predecessor != nil && protocol.Deref(predecessor.Priority) {
+		if predecessor := d.store.SessionLedgerEntry(msg.PredecessorSessionID); predecessor != nil && protocol.Deref(predecessor.Priority) {
 			spawnMsg.Priority = protocol.Ptr(true)
 		}
 	}
@@ -551,7 +551,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 		if msg.Assignment.Kind == protocol.DelegateAssignmentKindSeed {
 			if seed, _, readErr := d.readSeed(seedID); readErr != nil {
 				return nil, readErr
-			} else if sourceSessionID != "" && protocol.TrimID(seed.TenderSession) == sourceSessionID && d.sessionExists(sourceSessionID) {
+			} else if tender, claimed := seed.Claim.Lasts(d.broadcastBindings()); claimed && tender.Actor() == msg.Dispatcher {
 				return nil, fmt.Errorf("seed %s is tended by the source session; use --handover to transfer it to another worker", seedID)
 			}
 		}
@@ -581,7 +581,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 			seedID = bound
 		} else {
 			observed := d.observeGardenDispatchExecution(sessionID, existing.Directory, agent)
-			seedID, err = d.bindDelegationAssignmentProtected(protection, operationID, sessionID, sourceSessionID, msg.ParentSeedID, brief, cmp.Or(msg.SeedTitle, existing.Label), seedID, observed, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew, existing.ProfileID)
+			seedID, err = d.bindDelegationAssignmentProtected(protection, operationID, sessionID, msg.Dispatcher, msg.ParentSeedID, brief, cmp.Or(msg.SeedTitle, existing.Label), seedID, observed, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew, existing.ProfileID)
 			if err != nil {
 				return nil, err
 			}
@@ -609,8 +609,8 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 		}
 		result := d.completedDelegationResult(existing, worktreeOwned)
 		result.SeedID, result.Agent, result.Model, result.Effort = seedID, agent, model, effort
-		if handover != nil && protocol.TrimID(msg.PreviousTenderSession) != "" {
-			result.PredecessorSessionID = protocol.Ptr(protocol.TrimID(msg.PreviousTenderSession))
+		if handover != nil && protocol.TrimID(msg.PredecessorSessionID) != "" {
+			result.PredecessorSessionID = protocol.Ptr(protocol.TrimID(msg.PredecessorSessionID))
 		}
 		if resolved != nil {
 			result.Role = protocol.Ptr(resolved.RoleName)
@@ -713,7 +713,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 	}()
 	var predecessorID protocol.SessionID
 	if handover != nil {
-		predecessorID = protocol.TrimID(msg.PreviousTenderSession)
+		predecessorID = protocol.TrimID(msg.PredecessorSessionID)
 	}
 	if worktreeRoot, occupants := d.activeSessionInCheckout(directory, string(predecessorID), string(sessionID)); len(occupants) > 0 && !protocol.Deref(msg.AllowWorktreeReuse) {
 		rollback.abandon()
@@ -738,7 +738,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 		}
 	} else {
 		observed := d.observeGardenDispatchExecution(sessionID, directory, agent)
-		seedID, err = d.bindDelegationAssignmentProtected(protection, operationID, sessionID, sourceSessionID, msg.ParentSeedID, brief, seedTitle, seedID, observed, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew, profile.ID)
+		seedID, err = d.bindDelegationAssignmentProtected(protection, operationID, sessionID, msg.Dispatcher, msg.ParentSeedID, brief, seedTitle, seedID, observed, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew, profile.ID)
 		if err != nil {
 			return nil, err
 		}

@@ -8,7 +8,7 @@ const shipIt = plot('s-crown1', 'ship the search', '', { total: 3, done: 1, read
 const wiring = partOf('s-crown1', 's-wire01', 'wire the field', { body: 'the input is a line of type, not a box' });
 const ranking = partOf('s-crown1', 's-rank01', 'rank the answers', { ready: true });
 const shipped = partOf('s-crown1', 's-done01', 'draw the field', { status: 'harvested' });
-const elsewhere = planted('s-else01', 'unrelated field work', { tender_member: 'hazel' });
+const elsewhere = planted('s-else01', 'unrelated field work', { tender: { ref: 'member:hazel', name: "Hazel" }, claimed: true });
 const dropped = planted('s-drop01', 'a dropped idea', { status: 'withered' });
 const garden = [shipIt, wiring, ranking, shipped, elsewhere, dropped];
 

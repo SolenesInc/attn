@@ -1,13 +1,12 @@
 import type { Seed } from '../hooks/useDaemonSocket';
 import type { CrewMember } from '../types/generated';
-import { tendedSeeds } from './paneSeedDisplay';
 
 export type CrewSeedFilter = 'tending' | 'planted';
 
 export function seedsTendedByMember(seeds: Seed[], member: CrewMember): Seed[] {
-  return tendedSeeds(seeds, member.binding_session ?? '', member.key);
+  return seeds.filter((seed) => seed.claimed && seed.tender?.ref === `member:${member.key}`);
 }
 
 export function seedsPlantedByMember(seeds: Seed[], memberId: string): Seed[] {
-  return seeds.filter((seed) => seed.planter_member === memberId);
+  return seeds.filter((seed) => seed.planter.ref === `member:${memberId}`);
 }

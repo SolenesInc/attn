@@ -24,7 +24,7 @@ func TestArmingASeedParksItOnItsPullRequest(t *testing.T) {
 		cli := w.Client()
 		registerSessions(t, w, cli, "shipper")
 		url := github.open(71, "Ship the daemon")
-		planted, err := cli.SeedPlant("shipper", "ship the daemon", "", "", "", "")
+		planted, err := cli.SeedPlant("shipper", "ship the daemon", "", "", "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -32,15 +32,15 @@ func TestArmingASeedParksItOnItsPullRequest(t *testing.T) {
 		if planted.Seed.HarvestWhen != nil {
 			t.Fatalf("an unarmed seed carries a condition: %+v", planted.Seed.HarvestWhen)
 		}
-		lifeMove(t, cli, "shipper", seed, "tend", "", "trellis")
+		lifeMove(t, cli, "shipper", seed, "tend", "", "")
 
 		armedAt := time.Now()
 		armed := harvestArmAs(t, cli, "shipper", "trellis", seed, url).Seed
-		if armed.Status != "dormant" || armed.TenderSession != "" || armed.TenderMember != "" {
-			t.Errorf("arming a growing seed left it %s held by %q/%q, want it dormant and released", armed.Status, armed.TenderSession, armed.TenderMember)
+		if armed.Status != "dormant" || protocol.Deref(protocol.Deref(armed.Tender).SessionID) != "" || protocol.Deref(armed.Tender).Ref != "" {
+			t.Errorf("arming a growing seed left it %s held by %q/%q, want it dormant and released", armed.Status, protocol.Deref(protocol.Deref(armed.Tender).SessionID), protocol.Deref(armed.Tender).Ref)
 		}
 		condition := armed.HarvestWhen
-		if condition == nil || condition.PullRequest != "github.test:acme/shop#71" || condition.URL != url || protocol.Deref(condition.SetByMember) != "trellis" {
+		if condition == nil || condition.PullRequest != "github.test:acme/shop#71" || condition.URL != url || string(condition.SetBy.Ref) != "session:shipper" {
 			t.Fatalf("the armed seed waits on %+v, want PR 71 set by trellis", condition)
 		}
 		if at, err := time.Parse(time.RFC3339Nano, condition.SetAt); err != nil || !at.Equal(armedAt) {
@@ -62,7 +62,7 @@ func TestArmingASeedParksItOnItsPullRequest(t *testing.T) {
 				want = "dormant"
 			}
 			armed := harvestArm(t, cli, "shipper", other, url).Seed
-			if armed.Status != want || armed.HarvestWhen == nil || protocol.Deref(armed.HarvestWhen.SetBySession) != "shipper" {
+			if armed.Status != want || armed.HarvestWhen == nil || string(armed.HarvestWhen.SetBy.Ref) != "session:shipper" {
 				t.Errorf("arming a %s seed left it %s with condition %+v, want it unmoved and armed by shipper", want, armed.Status, armed.HarvestWhen)
 			}
 		}
@@ -96,7 +96,7 @@ func TestArmingWithoutAURLWaitsOnTheSessionsOnlyOpenPullRequest(t *testing.T) {
 		registerSessions(t, w, cli, "shipper")
 		seed := plantSeedAs(t, cli, "shipper", "infer it")
 		armWithoutURL := func() (*protocol.SeedTransitionResult, error) {
-			return cli.SeedTransition("shipper", seed, "harvest", "", "", false, client.SeedTransitionOptions{WhenMerged: true})
+			return cli.SeedTransition("shipper", seed, "harvest", "", false, client.SeedTransitionOptions{WhenMerged: true})
 		}
 
 		_, err := armWithoutURL()
@@ -146,7 +146,7 @@ func TestArmingRefusalsNameTheirReason(t *testing.T) {
 		{"arming with a reason", shipper, seed, "done enough", client.SeedTransitionOptions{WhenMerged: true}, "the merge writes the reason"},
 		{"clearing a seed that waits on nothing", shipper, seed, "", client.SeedTransitionOptions{WhenMerged: true, ClearHarvestWhen: true}, "has no harvest condition"},
 	} {
-		_, err := cli.SeedTransition(protocol.SessionID(refusal.session), refusal.seed, "harvest", refusal.reason, "", false, refusal.opts)
+		_, err := cli.SeedTransition(protocol.SessionID(refusal.session), refusal.seed, "harvest", refusal.reason, false, refusal.opts)
 		lifeRefusal(t, refusal.name, err, refusal.want)
 	}
 	if shown := lifeShow(t, cli, seed).Seed; shown.Status != "planted" || shown.HarvestWhen != nil {
@@ -200,7 +200,7 @@ func TestAMergedPullRequestHarvestsTheSeedArmedOnIt(t *testing.T) {
 		if n := utf8.RuneCountInString(reason); n > garden.MaxReasonChars || n < garden.MaxReasonChars-2 || !strings.HasPrefix(reason, "PR #71 merged: a very long") || !strings.HasSuffix(reason, "…") {
 			t.Errorf("the harvest reason is %d characters: %q, want the merge trimmed to fit %d with an ellipsis", n, reason, garden.MaxReasonChars)
 		}
-		if notes := lifeNoteBodies(t, cli, armed); !slices.Contains(notes, "attn forced `attn seed harvest "+armed+"`; holder held the seed.") {
+		if notes := lifeNoteBodies(t, cli, armed); !slices.Contains(notes, "attn forced attn seed harvest "+armed+"; holder claimed the seed.") {
 			t.Errorf("the log = %q, want the forced harvest over the holder recorded", notes)
 		}
 		if status := lifeShow(t, cli, untouched).Seed.Status; status != "planted" {
@@ -251,7 +251,7 @@ func TestAClearedOrEditedHarvestConditionMeetsTheMergeAsItStandsNow(t *testing.T
 		cleared := plantSeedAs(t, cli, "shipper", "changed my mind")
 		lifeMove(t, cli, "shipper", cleared, "tend", "", "")
 		harvestArm(t, cli, "shipper", cleared, github.open(71, "Harvest on merge"))
-		result, err := cli.SeedTransition("shipper", cleared, "harvest", "", "", false, client.SeedTransitionOptions{WhenMerged: true, ClearHarvestWhen: true})
+		result, err := cli.SeedTransition("shipper", cleared, "harvest", "", false, client.SeedTransitionOptions{WhenMerged: true, ClearHarvestWhen: true})
 		if err != nil {
 			t.Fatalf("clear: %v", err)
 		}
@@ -291,16 +291,16 @@ func TestArmingASeedSomebodyElseHoldsTakesForce(t *testing.T) {
 	lifeMove(t, cli, holder, seed, "tend", "", "")
 
 	options := client.SeedTransitionOptions{WhenMerged: true, PullRequestURL: url}
-	_, err := cli.SeedTransition(protocol.SessionID(shipper), seed, "harvest", "", "trellis", false, options)
+	_, err := cli.SeedTransition(protocol.SessionID(shipper), seed, "harvest", "", false, options)
 	lifeRefusal(t, "arming a seed another session tends", err, "is being tended by")
-	forced, err := cli.SeedTransition(protocol.SessionID(shipper), seed, "harvest", "", "trellis", true, options)
+	forced, err := cli.SeedTransition(protocol.SessionID(shipper), seed, "harvest", "", true, options)
 	if err != nil {
 		t.Fatalf("forced arm: %v", err)
 	}
 	if forced.Seed.Status != "dormant" {
 		t.Errorf("a forced arm left the seed %s, want it dormant", forced.Seed.Status)
 	}
-	if notes := lifeNoteBodies(t, cli, seed); !slices.Contains(notes, "Trellis forced `attn seed park "+seed+"`; "+holder+" held the seed.") {
+	if notes := lifeNoteBodies(t, cli, seed); !slices.Contains(notes, "shipper forced attn seed park "+seed+"; holder claimed the seed.") {
 		t.Errorf("the log = %q, want the takeover recorded", notes)
 	}
 }
@@ -312,7 +312,7 @@ func harvestArm(t *testing.T, cli *client.Client, session, seedID, url string) *
 
 func harvestArmAs(t *testing.T, cli *client.Client, session, member, seedID, url string) *protocol.SeedTransitionResult {
 	t.Helper()
-	armed, err := cli.SeedTransition(protocol.SessionID(session), seedID, "harvest", "", member, false, client.SeedTransitionOptions{WhenMerged: true, PullRequestURL: url})
+	armed, err := cli.SeedTransition(protocol.SessionID(session), seedID, "harvest", "", false, client.SeedTransitionOptions{Assignee: member, WhenMerged: true, PullRequestURL: url})
 	if err != nil {
 		t.Fatalf("arm %s on %s: %v", seedID, url, err)
 	}

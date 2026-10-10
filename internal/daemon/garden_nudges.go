@@ -1,20 +1,16 @@
 package daemon
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"sort"
 	"time"
 
-	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
 )
-
-var errRemoteGardenTender = errors.New("garden notifications are home-only")
 
 func (d *Daemon) seedUnblocked(seedID string) ([]garden.Seed, []protocol.Seed) {
 	if d.store == nil {
@@ -27,71 +23,6 @@ func (d *Daemon) seedUnblocked(seedID string) ([]garden.Seed, []protocol.Seed) {
 	}
 	unblocked := garden.Unblocks(read.seeds, seedID)
 	return unblocked, read.wire(unblocked)
-}
-
-func (d *Daemon) seedTenderMember(seed garden.Seed) (store.CrewIdentity, bool, error) {
-	text := seed.Tender().Member
-	identity, found, err := d.store.CrewKeyed(seed.ProfileID, text)
-	if err != nil {
-		return store.CrewIdentity{}, false, err
-	}
-	if !found {
-		identity, found, err = d.store.CrewNamed(seed.ProfileID, text)
-	}
-	if err != nil || !found {
-		return store.CrewIdentity{}, false, err
-	}
-	_, doc, err := d.crewMember(identity.Key)
-	if err != nil && doc.ID != "" {
-		if _, decodeErr := crew.Decode(doc.ID, doc.Body); decodeErr != nil {
-			return identity, true, nil
-		}
-	}
-	if err != nil {
-		return store.CrewIdentity{}, false, err
-	}
-	return identity, true, nil
-}
-
-func (d *Daemon) localGardenTenderSession(seed garden.Seed) (string, error) {
-	tender := seed.Tender()
-	sessionID := protocol.TrimID(tender.Session)
-	if sessionID == "" && tender.Member != "" {
-		member, found, err := d.seedTenderMember(seed)
-		if err != nil {
-			return "", err
-		}
-		if found {
-			b, err := d.bindings()
-			if err != nil {
-				return "", err
-			}
-			if err := b.Check(who.Member(member.Key)); err != nil {
-				return "", err
-			}
-			sessionID, _ = b.SessionOf(who.Member(member.Key))
-		}
-	}
-
-	if sessionID == "" {
-		return "", nil
-	}
-	if d.store != nil && (d.store.Get(sessionID) != nil || d.store.DelegationSessionReserved(sessionID)) {
-		profileID, err := d.store.GardenSessionProfileID(sessionID)
-		if err != nil {
-			return "", err
-		}
-		if profileID != seed.ProfileID {
-			return "", nil
-		}
-		return string(sessionID), nil
-	}
-	if d.hubManager != nil {
-		if endpointID, remote := d.hubManager.EndpointIDForSession(sessionID); remote {
-			return "", fmt.Errorf("%w; cannot notify tender session %s on outpost %s", errRemoteGardenTender, sessionID, endpointID)
-		}
-	}
-	return "", nil
 }
 
 func (d *Daemon) handleSeedWatch(conn net.Conn, msg *protocol.SeedWatchMessage) {
@@ -125,12 +56,39 @@ func (d *Daemon) handleSeedWatch(conn net.Conn, msg *protocol.SeedWatchMessage) 
 func (d *Daemon) setSeedWatch(sessionID protocol.SessionID, seedID string, watching bool) (*protocol.SeedWatchResult, error) {
 	d.lockGardenRoles()
 	defer d.unlockGardenRoles()
-	changed, err := d.store.SetGardenSeedWatch(sessionID, seedID, watching, time.Now())
+	b, err := d.bindings()
+	if err != nil {
+		return nil, err
+	}
+	r, err := d.requestFromSession(sessionID, b)
+	if err != nil {
+		return nil, err
+	}
+	party, _ := r.Party()
+	if watching {
+		if key, member := party.Member(); member {
+			identity, err := d.store.CrewIdentity(key)
+			if err != nil {
+				return nil, err
+			}
+			if identity.Retired {
+				return nil, fmt.Errorf("%s is retired; restore them with attn crew restore %s before watching work", identity.Name, identity.Name)
+			}
+		}
+	}
+	profile, err := d.store.PartyProfile(party)
+	if err != nil {
+		return nil, err
+	}
+	if err := d.requireSeedInProfile(seedID, profile, false); err != nil {
+		return nil, err
+	}
+	changed, err := d.store.SetGardenSeedWatch(party, seedID, watching, time.Now())
 	if err != nil {
 		return nil, err
 	}
 	if !watching {
-		if err := d.discardUncoveredSeedBells(sessionID); err != nil {
+		if err := d.discardIneligibleGardenSeedBellsLocked(party.Address()); err != nil {
 			return nil, fmt.Errorf("subscription removed, but queued updates could not be cleared; retry unwatch: %w", err)
 		}
 	}
@@ -144,14 +102,14 @@ func (d *Daemon) setSeedWatch(sessionID protocol.SessionID, seedID string, watch
 type gardenSubscriptions struct {
 	parents map[string]string
 	seeds   map[string]garden.Seed
-	watches map[string][]store.GardenSeedWatch
+	watches map[string][]store.GardenPartyWatch
 }
 
-func newGardenSubscriptions(seeds []garden.Seed, watches []store.GardenSeedWatch) gardenSubscriptions {
+func newGardenSubscriptions(seeds []garden.Seed, watches []store.GardenPartyWatch) gardenSubscriptions {
 	subscriptions := gardenSubscriptions{
 		parents: make(map[string]string, len(seeds)),
 		seeds:   make(map[string]garden.Seed, len(seeds)),
-		watches: map[string][]store.GardenSeedWatch{},
+		watches: map[string][]store.GardenPartyWatch{},
 	}
 	for _, seed := range seeds {
 		subscriptions.seeds[seed.ID] = seed
@@ -169,13 +127,13 @@ func newGardenSubscriptions(seeds []garden.Seed, watches []store.GardenSeedWatch
 	return subscriptions
 }
 
-func (s gardenSubscriptions) coverage(seedID string) map[protocol.SessionID][]string {
+func (s gardenSubscriptions) coverage(seedID string) map[who.Party][]string {
 	covered, _ := s.coverageChecked(seedID)
 	return covered
 }
 
-func (s gardenSubscriptions) coverageChecked(seedID string) (map[protocol.SessionID][]string, error) {
-	covered := map[protocol.SessionID][]string{}
+func (s gardenSubscriptions) coverageChecked(seedID string) (map[who.Party][]string, error) {
+	covered := map[who.Party][]string{}
 	seen := map[string]bool{}
 	for at := seedID; at != ""; {
 		if seen[at] {
@@ -187,7 +145,7 @@ func (s gardenSubscriptions) coverageChecked(seedID string) (map[protocol.Sessio
 		}
 		seen[at] = true
 		for _, watch := range s.watches[at] {
-			covered[watch.WatcherSessionID] = append(covered[watch.WatcherSessionID], at)
+			covered[watch.Watcher] = append(covered[watch.Watcher], at)
 		}
 		at = parent
 	}
@@ -206,25 +164,7 @@ func (d *Daemon) readGardenSubscriptions() (gardenSubscriptions, error) {
 	if err != nil {
 		return gardenSubscriptions{}, err
 	}
-	eligible := watches[:0]
-	for _, watch := range watches {
-		seed, ok := read.docs[watch.SeedID]
-		if !ok {
-			continue
-		}
-		owner, err := garden.Decode(seed.Body)
-		if err != nil {
-			return gardenSubscriptions{}, err
-		}
-		profileID, err := d.store.GardenSessionProfileID(watch.WatcherSessionID)
-		if err != nil {
-			return gardenSubscriptions{}, err
-		}
-		if profileID == owner.ProfileID {
-			eligible = append(eligible, watch)
-		}
-	}
-	return newGardenSubscriptions(read.seeds, eligible), nil
+	return newGardenSubscriptions(read.seeds, watches), nil
 }
 
 func (d *Daemon) seedWatchCoverage(sessionID protocol.SessionID, seedID string) ([]string, error) {
@@ -235,15 +175,20 @@ func (d *Daemon) seedWatchCoverage(sessionID protocol.SessionID, seedID string) 
 	if err != nil {
 		return nil, err
 	}
-	coverage := subscriptions.coverage(seedID)[sessionID]
+	b, err := d.bindings()
+	if err != nil {
+		return nil, err
+	}
+	r, err := d.requestFromSession(sessionID, b)
+	if err != nil {
+		return nil, err
+	}
+	party, _ := r.Party()
+	coverage := subscriptions.coverage(seedID)[party]
 	if coverage == nil {
 		coverage = []string{}
 	}
 	return coverage, nil
-}
-
-func (d *Daemon) discardUncoveredSeedBells(sessionID protocol.SessionID) error {
-	return d.discardIneligibleGardenSeedBellsLocked(who.ToSession(sessionID))
 }
 
 func (d *Daemon) consumeSeedBell(sessionID protocol.SessionID, seedID string) {

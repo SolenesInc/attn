@@ -13,7 +13,7 @@ const noop = () => {};
 const seed: Seed = {
   id: 's-header', title: 'Keep header controls aligned', body: 'Center the session identity beside its seed.',
   status: 'growing', state_changed_at: '2026-09-15T12:00:00Z', state_changed_at_exact: true, step_slug: 'header-alignment',
-  planter_session: '', planter_member: '', tender_session: 'agent', tender_member: '',
+   planter: { ref: 'user', name: 'the user' },  tender: { ref: 'session:agent', name: 'agent', session_id: 'agent' }, claimed: true,
   edges: [], ready: false, template: false, gate: false, vars: [], rev: 1,
   created_at: '2026-09-15T12:00:00Z', updated_at: '2026-09-15T12:00:00Z',
 };

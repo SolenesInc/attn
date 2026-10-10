@@ -21,7 +21,7 @@ interface TestSession {
   parentSessionId?: string;
   crewMember?: string;
   dispatcher_session_id?: string;
-  dispatcher_member?: string;
+  dispatcher?: import("../types/generated").ActorView;
   delegation_role?: SessionDelegationRole;
 }
 
@@ -226,7 +226,7 @@ describe('the queue sidebar', () => {
         state: 'working',
         desktopId: 'ws-b',
         dispatcher_session_id: 'root',
-        dispatcher_member: 'alder',
+        dispatcher: {ref:'member:' + ('alder'),name:"Alder"},
       },
     ];
     renderSidebar(linked, true, { onSelectSession, agentListOpen: true });
@@ -247,7 +247,7 @@ describe('the queue sidebar', () => {
       state: 'working',
       desktopId: 'ws-a',
       dispatcher_session_id: 'ended',
-      dispatcher_member: 'alder',
+      dispatcher: {ref:'member:' + ('alder'),name:"Alder"},
     }];
     renderSidebar(linked, true, { agentListOpen: true });
 

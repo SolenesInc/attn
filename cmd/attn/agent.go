@@ -13,7 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/prompts"
 
 	"github.com/victorarias/attn/internal/client"
-	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -87,14 +86,15 @@ func parseAgentListArgs(args []string) (agentListArgs, error) {
 }
 
 type agentListRow struct {
-	ID        string `json:"id"`
-	Label     string `json:"label"`
-	Agent     string `json:"agent"`
-	Profile   string `json:"profile"`
-	Directory string `json:"directory"`
-	State     string `json:"state"`
-	TurnOwed  bool   `json:"turn_owed"`
-	Member    string `json:"member"`
+	ID         string `json:"id"`
+	Label      string `json:"label"`
+	Agent      string `json:"agent"`
+	Profile    string `json:"profile"`
+	Directory  string `json:"directory"`
+	State      string `json:"state"`
+	TurnOwed   bool   `json:"turn_owed"`
+	Member     string `json:"member"`
+	MemberName string `json:"member_name,omitempty"`
 }
 
 func runAgentList(args []string) {
@@ -125,14 +125,15 @@ func agentListRows(result *client.ListResult) []agentListRow {
 	rows := make([]agentListRow, 0, len(result.Sessions))
 	for _, session := range result.Sessions {
 		rows = append(rows, agentListRow{
-			ID:        string(session.ID),
-			Label:     session.Label,
-			Agent:     session.Agent,
-			Profile:   profileNames[session.ProfileID],
-			Directory: session.Directory,
-			State:     string(session.State),
-			TurnOwed:  protocol.Deref(session.TurnOwed),
-			Member:    protocol.Deref(session.CrewMember),
+			ID:         string(session.ID),
+			Label:      session.Label,
+			Agent:      session.Agent,
+			Profile:    profileNames[session.ProfileID],
+			Directory:  session.Directory,
+			State:      string(session.State),
+			TurnOwed:   protocol.Deref(session.TurnOwed),
+			Member:     protocol.Deref(session.CrewMember),
+			MemberName: protocol.Deref(session.CrewMemberName),
 		})
 	}
 	sort.Slice(rows, func(i, j int) bool {
@@ -161,7 +162,7 @@ func printAgentList(w io.Writer, rows []agentListRow) {
 			agentShortIDLength, agentShortID(row.ID),
 			agentListCell(row.Label, 18),
 			agentListCell(row.Agent, 8),
-			agentListCell(crew.HolderName(row.Member, ""), 10),
+			agentListCell(row.MemberName, 10),
 			agentListCell(row.Profile, 20),
 			agentListCell(row.State, 16),
 			turn,
@@ -234,8 +235,8 @@ func runAgentPeek(args []string) {
 
 func printAgentPeek(w io.Writer, result *protocol.AgentPeekResult) {
 	fmt.Fprintf(w, "session %s (%s) — %s\n", result.SessionID, result.Agent, result.Label)
-	if member := strings.TrimSpace(protocol.Deref(result.CrewMember)); member != "" {
-		fmt.Fprintf(w, "crew member: %s\n", crew.HolderName(member, ""))
+	if member := strings.TrimSpace(protocol.Deref(result.CrewMemberName)); member != "" {
+		fmt.Fprintf(w, "crew member: %s\n", member)
 	}
 	if profile := strings.TrimSpace(protocol.Deref(result.ProfileName)); profile != "" {
 		fmt.Fprintf(w, "profile: %s\n", profile)

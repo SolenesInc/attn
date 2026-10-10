@@ -8,6 +8,7 @@ import (
 
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 const Surface = "the garden"
@@ -52,10 +53,8 @@ type Seed struct {
 	Body            string             `json:"body"`
 	Status          string             `json:"status"`
 	StepSlug        string             `json:"step_slug"`
-	PlanterSession  protocol.SessionID `json:"planter_session"`
-	PlanterMember   string             `json:"planter_member"`
-	TenderSession   protocol.SessionID `json:"tender_session"`
-	TenderMember    string             `json:"tender_member"`
+	Planter         who.Actor          `json:"planter"`
+	Claim           Claim              `json:"tender,omitzero"`
 	LastExecutionID protocol.SessionID `json:"last_execution_id,omitempty"`
 	StateChangedAt  string             `json:"state_changed_at,omitempty"`
 	Edges           []Edge             `json:"edges"`
@@ -69,11 +68,10 @@ type Seed struct {
 }
 
 type HarvestCondition struct {
-	PullRequest  string             `json:"pull_request"`
-	URL          string             `json:"url"`
-	SetAt        string             `json:"set_at"`
-	SetBySession protocol.SessionID `json:"set_by_session,omitempty"`
-	SetByMember  string             `json:"set_by_member,omitempty"`
+	PullRequest string    `json:"pull_request"`
+	URL         string    `json:"url"`
+	SetAt       string    `json:"set_at"`
+	SetBy       who.Actor `json:"set_by"`
 }
 
 func ValidateHarvestCondition(c HarvestCondition) error {
@@ -94,7 +92,7 @@ func SeedsSchema() docstore.CollectionSchema {
 			{Name: "profile_id", Type: docstore.FieldString},
 			{Name: "status", Type: docstore.FieldString},
 			{Name: "step_slug", Type: docstore.FieldString},
-			{Name: "tender_session", Type: docstore.FieldString},
+			{Name: "tender", Type: docstore.FieldString},
 			{Name: HarvestWhenPullRequestField, Type: docstore.FieldString},
 			{Name: "template", Type: docstore.FieldBool},
 			{Name: "gate", Type: docstore.FieldBool},
@@ -109,29 +107,27 @@ func NotesSchema() docstore.CollectionSchema {
 		Fields: []docstore.FieldSpec{
 			{Name: "seed", Type: docstore.FieldString},
 			{Name: "kind", Type: docstore.FieldString},
-			{Name: "author_session", Type: docstore.FieldString},
-			{Name: "author_member", Type: docstore.FieldString},
+			{Name: "author", Type: docstore.FieldString},
 		},
 	}
 }
 
-type Dispatch struct {
-	SessionID         protocol.SessionID `json:"session_id"`
-	Crown             string             `json:"crown"`
-	DispatcherSession protocol.SessionID `json:"dispatcher_session,omitempty"`
-	DispatcherMember  string             `json:"dispatcher_member,omitempty"`
-	Cwd               string             `json:"cwd,omitempty"`
-	Agent             string             `json:"agent,omitempty"`
-	HostKind          string             `json:"host_kind,omitempty"`
-	EndpointID        string             `json:"endpoint_id,omitempty"`
-	RepositoryRoot    string             `json:"repository_root,omitempty"`
-	RepositorySubdir  string             `json:"repository_subdir,omitempty"`
-	Branch            string             `json:"branch,omitempty"`
-	CapturedAt        string             `json:"captured_at,omitempty"`
-	SupersededBy      protocol.SessionID `json:"superseded_by,omitempty"`
-	OperationID       string             `json:"operation_id,omitempty"`
-	FromChief         bool               `json:"from_chief,omitempty"`
-	Resume            string             `json:"resume,omitempty"`
+type Execution struct {
+	SessionID        protocol.SessionID `json:"session_id"`
+	Crown            string             `json:"crown"`
+	Dispatcher       who.Actor          `json:"dispatcher,omitzero"`
+	Cwd              string             `json:"cwd,omitempty"`
+	Agent            string             `json:"agent,omitempty"`
+	HostKind         string             `json:"host_kind,omitempty"`
+	EndpointID       string             `json:"endpoint_id,omitempty"`
+	RepositoryRoot   string             `json:"repository_root,omitempty"`
+	RepositorySubdir string             `json:"repository_subdir,omitempty"`
+	Branch           string             `json:"branch,omitempty"`
+	CapturedAt       string             `json:"captured_at,omitempty"`
+	SupersededBy     protocol.SessionID `json:"superseded_by,omitempty"`
+	OperationID      string             `json:"operation_id,omitempty"`
+	FromChief        bool               `json:"from_chief,omitempty"`
+	Resume           string             `json:"resume,omitempty"`
 }
 
 const (
@@ -149,12 +145,12 @@ func DispatchesSchema() docstore.CollectionSchema {
 	}
 }
 
-func (d Dispatch) Encode() ([]byte, error) { return json.Marshal(d) }
+func (d Execution) Encode() ([]byte, error) { return json.Marshal(d) }
 
-func DecodeDispatch(body []byte) (Dispatch, error) {
-	var dispatch Dispatch
+func DecodeExecution(body []byte) (Execution, error) {
+	var dispatch Execution
 	if err := json.Unmarshal(body, &dispatch); err != nil {
-		return Dispatch{}, fmt.Errorf("this dispatch's stored body is not readable: %w", err)
+		return Execution{}, fmt.Errorf("this dispatch's stored body is not readable: %w", err)
 	}
 	return dispatch, nil
 }

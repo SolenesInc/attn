@@ -15,7 +15,6 @@ import (
 	"github.com/victorarias/attn/internal/automation"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/config"
-	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/prompts"
@@ -152,18 +151,18 @@ commands:
         saved folder, branch and placement problem are recorded automatically;
         -m adds an exception such as a special branch or directory.
 
-  tend <id> [--member <name>] [--force]
+  tend <id> [--for <name>] [--force]
         claim the seed and start growing it. One tender at a time: tending a
         seed somebody else still holds is refused, naming them, and takes
         --force to go through anyway. The freshest handoff prints on the
         claim, so picking a seed up primes you.
 
-  park <id> [-m "<where you left it>"] [--member <name>] [--force]
+  park <id> [-m "<where you left it>"] [--force]
         pause the seed deliberately — it goes dormant and lets go of its
         tender. An optional comment lands on the log in the same move. Tending
         it again picks it back up.
 
-  harvest <id> (-m "<what got done>" | --when-merged [<pr-url>] [--clear]) [--member <name>] [--force]
+  harvest <id> (-m "<what got done>" | --when-merged [<pr-url>] [--clear]) [--force]
         close the seed as done. The reason is the point of the record.
         --when-merged closes nothing now: attn harvests the seed itself, with
         its own reason, when the pull request merges. Reach for it only when
@@ -171,10 +170,10 @@ commands:
         open pull request; --when-merged --clear takes the arming back and
         leaves the state alone.
 
-  wither <id> [-m "<why>"] [--member <name>] [--force]
+  wither <id> [-m "<why>"] [--force]
         close the seed as abandoned. Nobody is picking this up.
 
-  replant <id> [--member <name>] [--force]
+  replant <id> [--force]
         put the seed back in the pool — planted, unclaimed, ready for whoever
         is free. Reopens a closed seed, un-parks a dormant one, and hands back
         one being grown.
@@ -237,8 +236,7 @@ flags:
   --reference        remove an old linked path association (detach)
   --force            act even though somebody else holds the seed; the log
                      records it (tend, park, harvest, wither, replant)
-  --member <name>    the crew member asking, recorded as planter, tender or
-                     note author
+  --for <name>       claim the seed for a crew member (tend only)
   --profile <name|id> required outside attn when several profiles exist
   --session <id>     the session asking (defaults to the current session)
   --limit <n>        how many log entries to read (notes), or how many hits to
@@ -273,7 +271,7 @@ func seedPrimeTailFromReady(ready *protocol.SeedReadyResult) string {
 	handoffs := freshestHandoffs(ready.Handoffs)
 	for _, seed := range ready.Seeds {
 		handoff := handoffs[seed.ID]
-		rows.WriteString(prompts.RenderText("session", "garden-row", prompts.Values{"seed_id": seed.ID, "slug": seed.StepSlug, "title": seed.Title, "handoff": handoff.Body, "author": crew.HolderName(handoff.AuthorMember, handoff.AuthorSession)}))
+		rows.WriteString(prompts.RenderText("session", "garden-row", prompts.Values{"seed_id": seed.ID, "slug": seed.StepSlug, "title": seed.Title, "handoff": handoff.Body, "author": handoff.Author.Name}))
 	}
 
 	values["rows"] = rows.String()
@@ -305,7 +303,7 @@ type seedFlags struct {
 	fs             *flag.FlagSet
 	profile        *string
 	session        *string
-	member         *string
+	assignee       *string
 	json           *bool
 	all            *bool
 	flat           *bool
@@ -336,11 +334,15 @@ type seedFlags struct {
 func newSeedFlags(verb string) *seedFlags {
 	fs := flag.NewFlagSet("seed "+verb, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
+	assignee := new(string)
+	if verb == "tend" {
+		assignee = fs.String("for", "", "claim the seed for this crew member")
+	}
 	return &seedFlags{
 		fs:             fs,
 		profile:        fs.String("profile", "", "profile name or id outside an attn session"),
 		session:        fs.String("session", "", "session id (defaults to the current session)"),
-		member:         fs.String("member", "", "crew member planting this seed"),
+		assignee:       assignee,
 		json:           fs.Bool("json", false, "print the result as JSON"),
 		all:            fs.Bool("all", false, "the whole garden, overriding a dispatched session's plot"),
 		flat:           fs.Bool("flat", false, "print seeds as one list without nesting"),
@@ -365,7 +367,7 @@ func newSeedFlags(verb string) *seedFlags {
 		reference:      fs.Bool("reference", false, "operate on an old linked path association"),
 		clear:          fs.Bool("clear", false, "remove the harvest condition"),
 		whenMerged:     fs.Bool("when-merged", false, "harvest the seed when its pull request merges"),
-		force:          fs.Bool("force", false, "act even though somebody else still holds the seed"),
+		force:          fs.Bool("force", false, "act even though somebody else claims the seed"),
 	}
 }
 
@@ -460,7 +462,7 @@ func runSeedPlant(args []string) {
 	if len(positionals) != 1 {
 		seedFail("plant", fmt.Errorf(`needs exactly one title, got %d: attn seed plant "what this is" [-m "the detail"]`, len(positionals)))
 	}
-	result, err := f.client().SeedPlant(f.sessionID(), positionals[0], f.text("plant"), strings.TrimSpace(*f.partOf), strings.TrimSpace(*f.discoveredFrom), strings.TrimSpace(*f.member))
+	result, err := f.client().SeedPlant(f.sessionID(), positionals[0], f.text("plant"), strings.TrimSpace(*f.partOf), strings.TrimSpace(*f.discoveredFrom))
 	if err != nil {
 		seedFail("plant", err)
 	}
@@ -559,7 +561,7 @@ func runSeedList(args []string) {
 	fmt.Fprintln(w, "ID\tSLUG\tSTATUS\tTENDER\tPLANTED\tTITLE")
 	for _, row := range seedRows(result.Seeds, *f.flat) {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s%s%s\n",
-			row.seed.ID, row.seed.StepSlug, row.seed.Status, orDash(crew.HolderName(row.seed.TenderMember, row.seed.TenderSession)),
+			row.seed.ID, row.seed.StepSlug, row.seed.Status, orDash(seedTenderName(row.seed)),
 			shortStamp(row.seed.CreatedAt), strings.Repeat("  ", row.depth), row.seed.Title, plotProgressSuffix(row.seed)+harvestWhenSuffix(row.seed))
 	}
 	w.Flush()
@@ -776,7 +778,7 @@ func runSeedPlot(args []string) {
 		}
 		msg.Children = append(msg.Children, wire)
 	}
-	result, err := f.client().SeedPlot(f.sessionID(), strings.TrimSpace(*f.member), msg)
+	result, err := f.client().SeedPlot(f.sessionID(), msg)
 	if err != nil {
 		seedFail("plot", err)
 	}
@@ -975,7 +977,7 @@ func fprintHandoff(w io.Writer, handoff *protocol.SeedNote) {
 		return
 	}
 	fmt.Fprintf(w, "handoff — %s, %s\n",
-		orDash(crew.HolderName(handoff.AuthorMember, handoff.AuthorSession)), shortStamp(handoff.CreatedAt))
+		orDash(handoff.Author.Name), shortStamp(handoff.CreatedAt))
 	for _, line := range strings.Split(strings.TrimRight(handoff.Body, "\n"), "\n") {
 		fmt.Fprintf(w, "  %s\n", line)
 	}
@@ -1080,7 +1082,7 @@ func fprintSeedReady(out io.Writer, result *protocol.SeedReadyResult) {
 			strings.Repeat("  ", row.depth), seed.Title, plotProgressSuffix(seed)+harvestWhenSuffix(seed))
 		if handoff, ok := handoffs[seed.ID]; ok {
 			fmt.Fprintf(w, "\t\t\t\t↳ %s: %s\n",
-				orDash(crew.HolderName(handoff.AuthorMember, handoff.AuthorSession)), firstLine(handoff.Body))
+				orDash(handoff.Author.Name), firstLine(handoff.Body))
 		}
 	}
 	w.Flush()
@@ -1114,8 +1116,8 @@ func fprintSeed(out io.Writer, seed protocol.Seed, watching ...bool) {
 	fmt.Fprintf(w, "%s\t%s\n", seed.ID, seed.Title)
 	fmt.Fprintf(w, "slug\t%s\n", seed.StepSlug)
 	fmt.Fprintf(w, "status\t%s\n", seed.Status)
-	fmt.Fprintf(w, "planted\t%s by %s\n", shortStamp(seed.CreatedAt), orDash(crew.HolderName(seed.PlanterMember, seed.PlanterSession)))
-	fmt.Fprintf(w, "tender\t%s\n", orDash(crew.HolderName(seed.TenderMember, seed.TenderSession)))
+	fmt.Fprintf(w, "planted\t%s by %s\n", shortStamp(seed.CreatedAt), orDash(seed.Planter.Name))
+	fmt.Fprintf(w, "tender\t%s\n", orDash(seedTenderName(seed)))
 	if p := seed.PlotProgress; p != nil {
 		fmt.Fprintf(w, "plot\t%d of %d done — %d growing, %d ready, %d blocked, %d dormant, %d withered\n",
 			p.Done, p.Total, p.Growing, p.Ready, p.Blocked, p.Dormant, p.Withered)
@@ -1164,7 +1166,8 @@ func runSeedTransition(verb string, args []string) {
 	if err != nil {
 		seedFail(verb, err)
 	}
-	result, err := f.client().SeedTransition(f.sessionID(), seedID, verb, f.text(verb), strings.TrimSpace(*f.member), *f.force, opts)
+	opts.Assignee = strings.TrimSpace(*f.assignee)
+	result, err := f.client().SeedTransition(f.sessionID(), seedID, verb, f.text(verb), *f.force, opts)
 	if err != nil {
 		seedFail(verb, err)
 	}
@@ -1235,7 +1238,7 @@ func fprintUnblocked(out io.Writer, seeds []protocol.Seed) {
 	free := false
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	for _, seed := range seeds {
-		tender := crew.HolderName(seed.TenderMember, seed.TenderSession)
+		tender := seedTenderName(seed)
 		held := ""
 		if tender == "" {
 			free = true
@@ -1268,7 +1271,7 @@ func openPlotSeeds(seed protocol.Seed) int {
 
 func transitionLine(seed protocol.Seed) string {
 	line := fmt.Sprintf("%s is %s", seedHandle(seed), seed.Status)
-	if tender := crew.HolderName(seed.TenderMember, seed.TenderSession); tender != "" {
+	if tender := seedTenderName(seed); tender != "" {
 		line += fmt.Sprintf(", tended by %s", tender)
 	}
 	if seed.Reason != nil && *seed.Reason != "" {
@@ -1283,7 +1286,7 @@ func runSeedNote(args []string) {
 	if len(positionals) != 1 {
 		seedFail("note", fmt.Errorf(`needs exactly one seed id, got %d: attn seed note s-7k3f9m -m "what happened"`, len(positionals)))
 	}
-	result, err := f.client().SeedNote(f.sessionID(), positionals[0], f.text("note"), strings.TrimSpace(*f.member), f.noteKind(), *f.ring, nil)
+	result, err := f.client().SeedNote(f.sessionID(), positionals[0], f.text("note"), f.noteKind(), *f.ring, nil)
 	if err != nil {
 		seedFail("note", err)
 	}
@@ -1385,7 +1388,7 @@ func runSeedArtifact(verb string, args []string) {
 	if verb == "detach" {
 		kind = garden.NoteKindDetach
 	}
-	result, err := f.client().SeedNote(f.sessionID(), seedID, f.text(verb), strings.TrimSpace(*f.member), kind, false, artifact)
+	result, err := f.client().SeedNote(f.sessionID(), seedID, f.text(verb), kind, false, artifact)
 	if err != nil {
 		seedFail(verb, err)
 	}
@@ -1423,8 +1426,8 @@ func (f *seedFlags) artifactTransferPlan(verb string) (*seedArtifactTransferPlan
 	if !managedAttach && !managedDetach && !localFlags {
 		return nil, false, nil
 	}
-	if f.wasSet("m") || strings.TrimSpace(*f.member) != "" {
-		return nil, true, fmt.Errorf("managed artifact transfers carry their own receipt; -m and --member apply to log associations")
+	if f.wasSet("m") {
+		return nil, true, fmt.Errorf("managed artifact transfers carry their own receipt; -m applies to log associations")
 	}
 	plan := &seedArtifactTransferPlan{}
 	switch verb {
@@ -1528,7 +1531,7 @@ func fprintNotes(w io.Writer, notes []protocol.SeedNote, seedID string, withheld
 			fmt.Fprintln(w)
 		}
 		fmt.Fprintf(w, "%s  %s%s\n", shortStamp(note.CreatedAt),
-			orDash(crew.HolderName(note.AuthorMember, note.AuthorSession)), noteKindSuffix(note.Kind))
+			orDash(note.Author.Name), noteKindSuffix(note.Kind))
 		fmt.Fprintf(w, "%s\n", strings.TrimRight(note.Body, "\n"))
 	}
 	if withheld > 0 {
@@ -1597,4 +1600,11 @@ func conversationDate(stamp string) string {
 		return at.Format("2006-01-02")
 	}
 	return stamp
+}
+
+func seedTenderName(seed protocol.Seed) string {
+	if seed.Tender == nil {
+		return ""
+	}
+	return seed.Tender.Name
 }

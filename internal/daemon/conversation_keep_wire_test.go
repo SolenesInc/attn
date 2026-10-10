@@ -90,7 +90,7 @@ func TestKeptConversationReleaseReplantAndDeletionAreVisible(t *testing.T) {
 	// Notes queue an unprotected pass; normal grace preserves release/replant checks.
 	keepPass := func() {
 		t.Helper()
-		if _, err := cli.SeedNote("", delegated.SeedID, "Record the abandoned work", "", "", false, nil); err != nil {
+		if _, err := cli.SeedNote("", delegated.SeedID, "Record the abandoned work", "", false, nil); err != nil {
 			t.Fatal(err)
 		}
 		testworld.AwaitTaskDone(app, "conversation_keep")
@@ -662,7 +662,7 @@ func TestConversationRetirementWaitsForAnActiveWorktreeSweep(t *testing.T) {
 	runGit(t, shop, "update-ref", "refs/remotes/origin/main", "main")
 	refreshWorktrees(t, cli)
 	answer := pulls.awaitSweepAsking(t)
-	if _, err := cli.SeedNote("", delegated.SeedID, "Record the completed work", "", "", false, nil); err != nil {
+	if _, err := cli.SeedNote("", delegated.SeedID, "Record the completed work", "", false, nil); err != nil {
 		t.Fatal(err)
 	}
 	testworld.AwaitTaskDone(app, "conversation_keep")

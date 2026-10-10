@@ -161,9 +161,9 @@ async function main() {
     seed = await runner.step('the_delegate_tends_a_seed', async () => {
       const listed = cli(daemonBinary, instance, 'seed', 'ls', '--json');
       const rows = JSON.parse(listed).seeds || [];
-      const mine = rows.filter((row) => row.tender_session === delegate);
+      const mine = rows.filter((row) => row.tender?.session_id === delegate);
       runner.assert(mine.length === 1, 'the delegation planted exactly one seed the delegate tends',
-        { delegate, tenders: rows.map((row) => ({ id: row.id, tender: row.tender_session })) });
+        { delegate, tenders: rows.map((row) => ({ id: row.id, tender: row.tender?.session_id })) });
       runner.writeText('seed-ls.json', `${listed}\n`);
       return mine[0].id;
     });

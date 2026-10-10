@@ -29,7 +29,7 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 				if count > 0 {
 					r.Handoffs = []protocol.SeedNote{{SeedID: r.Seeds[0].ID, Body: " Handoff {{literal}} "}}
 					if author > 0 {
-						r.Handoffs[0].AuthorMember = "keeper"
+						r.Handoffs[0].Author = protocol.ActorView{Ref: "member:keeper", Name: "Keeper"}
 					}
 				}
 				out[fmt.Sprintf("ready/%d/%d/%d", count, scope, author)] = seedPrimeFromReady(&r)

@@ -139,8 +139,6 @@ func Decode(id string, body []byte) (Member, error) {
 	return member, nil
 }
 
-const DaemonID = "attn"
-
 var namePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9-]{0,39}$`)
 var idNamePattern = regexp.MustCompile(`^[A-Za-z]-[A-Za-z0-9]{6}$`)
 var ErrNameReservedForChief = errors.New("chief is reserved for the profile's chief")
@@ -169,29 +167,13 @@ func ValidateName(name string) error {
 	return nil
 }
 func NameFromKey(k who.MemberKey) string {
-	name := KeyLabel(k)
+	id := k.String()
+	first, size := utf8.DecodeRuneInString(id)
+	name := string(unicode.ToUpper(first)) + id[size:]
 	if ValidateName(name) != nil {
 		return k.String() + "-crew"
 	}
 	return name
-}
-func KeyLabel(k who.MemberKey) string {
-	id := k.String()
-	if id == "" || id == DaemonID {
-		return id
-	}
-	first, size := utf8.DecodeRuneInString(id)
-	return string(unicode.ToUpper(first)) + id[size:]
-}
-func HolderName(member string, session protocol.SessionID) string {
-	if strings.TrimSpace(member) != "" {
-		k, err := who.ParseMemberKey(member)
-		if err != nil {
-			return strings.TrimSpace(member)
-		}
-		return KeyLabel(k)
-	}
-	return string(protocol.TrimID(session))
 }
 
 type Home struct {

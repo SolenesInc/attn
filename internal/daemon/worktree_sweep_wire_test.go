@@ -394,7 +394,7 @@ func TestRemovingASeedsWorktreeNotesItOnTheSeed(t *testing.T) {
 	}
 	finished := dispatch("Finish the checkout", "feat/finished")
 	open := dispatch("Keep the ledger going", "feat/open")
-	if _, err := cli.SeedTransition(finished.SessionID, finished.SeedID, "harvest", "done", "", false, client.SeedTransitionOptions{}); err != nil {
+	if _, err := cli.SeedTransition(finished.SessionID, finished.SeedID, "harvest", "done", false, client.SeedTransitionOptions{}); err != nil {
 		t.Fatalf("harvesting %s: %v", finished.SeedID, err)
 	}
 	for _, delegated := range []*protocol.DelegateResult{finished, open} {

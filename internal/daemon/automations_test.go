@@ -138,55 +138,6 @@ func TestWithdrawnBeforeLaunchReRequestCreatesFirstWorktree(t *testing.T) {
 	}
 }
 
-func TestReRequestCanStartReviewerWhenWithdrawnOriginNeverLaunched(t *testing.T) {
-	s := store.New()
-	now := time.Date(2026, 7, 19, 18, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition(0, "Review", `{}`, defaultProfileID(t, s), now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	const subject = "github.com/owner/repo#42"
-	const payload = `{"provider":"github","host":"github.com","owner":"owner","repository":"repo","number":42,"url":"https://github.com/owner/repo/pull/42","state":"open","head_sha":"0123456789abcdef0123456789abcdef01234567"}`
-	const snapshot = `{"prompt":"Review","launch":{},"location":{}}`
-	baselineGitHubReviewAutomation(t, s, def.ID, "github.com", now)
-	if _, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now); err != nil {
-		t.Fatal(err)
-	}
-	_, _, err = s.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, payload, snapshot, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	d := newHomeDaemonForTest(t, s)
-	d.ptyBackend = &fakeSpawnBackend{}
-	if _, err := d.reconcileAutomationReviewRequests(def.ID, "github.com", nil, now.Add(time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-	candidates, err := d.reconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now.Add(2*time.Minute))
-	if err != nil || len(candidates) != 1 {
-		t.Fatalf("re-request candidates=%#v err=%v", candidates, err)
-	}
-	second, _, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, candidates[0].Cycle, def.Revision, payload, snapshot, now.Add(2*time.Minute), store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	req := automation.WorkRequest{
-		RunID: second.ID, DefinitionID: def.ID, ContinuityKey: subject, Provider: "github", Prompt: "Review", Context: json.RawMessage(payload),
-		IDs: automation.DeliveryIDs{SeedID: second.SeedID, SessionID: second.SessionID},
-	}
-	if err := d.validateAutomationContinuation(req); err != nil {
-		t.Fatalf("withdrawn-before-launch re-request rejected: %v", err)
-	}
-}
-
-func newHomeDaemonForTest(t *testing.T, s *store.Store) *Daemon {
-	t.Helper()
-	d := &Daemon{store: s, wsHub: newWSHub(), dataRoot: t.TempDir()}
-	enrollHomeForTest(t, d)
-	return d
-}
-
 func enrollHomeForTest(t *testing.T, d *Daemon) {
 	t.Helper()
 	id, err := enrollment.EnsureDaemonID(d.dataRoot)

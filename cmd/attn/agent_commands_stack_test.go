@@ -127,7 +127,7 @@ func TestTheCommandsAnAgentRunsFromItsSessionActOnThatSession(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		planted, err := s.Client().SeedPlant("", "Add a discount field", "Checkout needs a field for discount codes.", "", "", "")
+		planted, err := s.Client().SeedPlant("", "Add a discount field", "Checkout needs a field for discount codes.", "", "")
 		if err != nil {
 			t.Fatal(err)
 		}

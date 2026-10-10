@@ -57,7 +57,7 @@ func (d *Daemon) handleSeedSearch(conn net.Conn, msg *protocol.SeedSearchMessage
 	}
 	for _, hit := range hits {
 		result.Hits = append(result.Hits, protocol.SeedSearchHit{
-			Seed:    seedToProtocol(hit.Seed, read.docs[hit.Seed.ID], read.ready[hit.Seed.ID]),
+			Seed:    d.seedWire(hit.Seed, read.docs[hit.Seed.ID], read.ready[hit.Seed.ID]),
 			Where:   hit.Where,
 			Snippet: hit.Snippet,
 		})

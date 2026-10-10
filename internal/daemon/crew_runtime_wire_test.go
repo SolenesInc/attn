@@ -88,7 +88,7 @@ func TestRetiringAndRestoringAMemberKeepsItsMailAndReleasesItsClaims(t *testing.
 		t.Fatalf("retirement = %+v", retired)
 	}
 	show := lifeShow(t, cli, seed)
-	if show.Seed.Status != "planted" || show.Seed.TenderMember != "" || show.Seed.TenderSession != "" {
+	if show.Seed.Status != "planted" || show.Seed.Tender != nil || show.Seed.Claimed {
 		t.Fatalf("released seed = %+v", show.Seed)
 	}
 	notes, err := cli.SeedNotes("", seed, 0)
@@ -97,7 +97,7 @@ func TestRetiringAndRestoringAMemberKeepsItsMailAndReleasesItsClaims(t *testing.
 	}
 	found := false
 	for _, note := range notes.Notes {
-		if note.AuthorMember == "attn" && note.Body == "Keel was retired; attn released its claim." {
+		if note.Author.Ref == "attn" && note.Body == "Keel was retired; attn released its claim." {
 			found = true
 		}
 	}
@@ -151,7 +151,7 @@ func TestRetiringAndRestoringAMemberKeepsItsMailAndReleasesItsClaims(t *testing.
 	if len(mail.Items) != 1 || mail.Items[0].Content != "keep this mail" {
 		t.Fatalf("kept mail = %+v", mail)
 	}
-	if crewRosterMember(t, cli, key).Name != "Keel" || lifeShow(t, cli, seed).Seed.TenderMember != "" {
+	if crewRosterMember(t, cli, key).Name != "Keel" || lifeShow(t, cli, seed).Seed.Tender != nil {
 		t.Fatal("restore changed name or reclaimed seed")
 	}
 }

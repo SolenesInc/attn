@@ -27,6 +27,7 @@ import (
 )
 
 type internalSpawnPolicy struct {
+	afterSessionRecorded  func() error
 	member                who.MemberKey
 	launchPlacement       *launchPlacement
 	unattendedLaunch      launchcontract.UnattendedLaunchSpec
@@ -464,7 +465,14 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		InitialPromptOwed: hasInitialPrompt && reportsTurnStarts(req.agent),
 		ReviewerInLoop:    plan.spawnOpts.ApprovalRoute.ReviewerInLoop(),
 	})
-	if err := d.spawnSessionRuntime(msg.ID, plan.spawnOpts); err != nil {
+	var spawnErr error
+	if req.policy.afterSessionRecorded != nil {
+		spawnErr = req.policy.afterSessionRecorded()
+	}
+	if spawnErr == nil {
+		spawnErr = d.spawnSessionRuntime(msg.ID, plan.spawnOpts)
+	}
+	if err := spawnErr; err != nil {
 		d.forgetSessionTitleInitialPrompt(msg.ID)
 		d.restoreExitScreen(msg.ID, priorExit)
 		if req.existingSession == nil {
