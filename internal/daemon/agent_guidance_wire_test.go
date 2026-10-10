@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
-	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -122,18 +121,6 @@ func TestAChiefIsGuidedAsTheChiefAndMarkedSoItsHooksAddNoAgentGuidance(t *testin
 				}
 			}
 		})
-	}
-}
-
-func TestCodexIsGivenTheWorkflowGuidanceOnlyWhileWorkflowsAreOn(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	app := w.App()
-	before := launchGuidance(t, w.Launched(w.Spawn(app, fakeagent.Codex, w.Path("before"))))
-	setSetting(t, app, "workflows_enabled", "true")
-	after := launchGuidance(t, w.Launched(w.Spawn(app, fakeagent.Codex, w.Path("after"))))
-	if strings.Contains(before, hooks.WorkflowTriggerGuidance()) || !strings.Contains(after, hooks.WorkflowTriggerGuidance()) {
-		t.Errorf("codex carried the workflow guidance before workflows were on: %t, after: %t",
-			strings.Contains(before, hooks.WorkflowTriggerGuidance()), strings.Contains(after, hooks.WorkflowTriggerGuidance()))
 	}
 }
 

@@ -1364,12 +1364,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handlePresentSubmitRound(client, msg.(*protocol.PresentSubmitRoundMessage))
 	case protocol.CmdPresentClose:
 		d.handlePresentClose(client, msg.(*protocol.PresentCloseMessage))
-	case protocol.CmdWorkflowRunGet:
-		d.handleWorkflowRunGetWS(client, msg.(*protocol.WorkflowRunGetMessage))
-	case protocol.CmdWorkflowRunList:
-		d.handleWorkflowRunListWS(client, msg.(*protocol.WorkflowRunListMessage))
-	case protocol.CmdWorkflowRunCancel:
-		d.handleWorkflowRunCancelWS(client, msg.(*protocol.WorkflowRunCancelMessage))
 	case protocol.CmdAutomationDefinitionsGet:
 		d.handleAutomationDefinitionsGetWS(client, msg.(*protocol.AutomationDefinitionsGetMessage))
 	case protocol.CmdAutomationDefinitionGet:

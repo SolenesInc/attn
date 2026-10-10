@@ -129,39 +129,16 @@ func (c *Codex) RunHeadlessTask(ctx context.Context, request HeadlessTaskRequest
 		return HeadlessTaskResult{}, err
 	}
 	defer removeSchema()
-	if request.usesNativeToolsPath() {
-		args := codexHeadlessArgs(request, window)
-		if request.DisableTools {
-			args = codexToolFreeHeadlessArgs(request, window)
-		}
-		args = addCodexOutputSchema(args, schemaPath)
-		result, stdout, err := runHeadlessCommand(ctx, request.Executable, args, request.WorkDir, "codex")
-		if err != nil {
-			return result, err
-		}
-		result.Text = parseCodexFinalText(stdout)
-		return result, nil
+	args := codexHeadlessArgs(request, window)
+	if request.DisableTools {
+		args = codexToolFreeHeadlessArgs(request, window)
 	}
-
-	lastMsgPath := ""
-	if f, err := os.CreateTemp(headlessTempDir(request.WorkDir), "codex-last-msg-*.txt"); err == nil {
-		lastMsgPath = f.Name()
-		f.Close()
-		defer os.Remove(lastMsgPath)
-	}
-
-	args := addCodexOutputSchema(buildCodexHeadlessArgs(request, lastMsgPath, window), schemaPath)
-
-	runDir := strings.TrimSpace(request.CWD)
-	if runDir == "" {
-		runDir = request.WorkDir
-	}
-
-	result, stdout, err := runHeadlessCommand(ctx, request.Executable, args, runDir, "codex")
+	args = addCodexOutputSchema(args, schemaPath)
+	result, stdout, err := runHeadlessCommand(ctx, request.Executable, args, request.WorkDir, "codex")
 	if err != nil {
 		return result, err
 	}
-	result.Text = codexFinalText(lastMsgPath, stdout)
+	result.Text = parseCodexFinalText(stdout)
 	return result, nil
 }
 
@@ -196,59 +173,6 @@ func addCodexOutputSchema(args []string, schemaPath string) []string {
 	return append(args, prompt)
 }
 
-func buildCodexHeadlessArgs(request HeadlessTaskRequest, lastMsgPath string, window int) []string {
-	serverName := strings.TrimSpace(request.MCPServerName)
-	if serverName == "" {
-		serverName = "attn_context"
-	}
-	toolNames := headlessToolNames(request.ToolName)
-
-	writable := request.Sandbox == "workspace-write"
-	sandboxMode := "read-only"
-	shellTool := "features.shell_tool=false"
-	if writable {
-		sandboxMode = "workspace-write"
-		shellTool = "features.shell_tool=true"
-	}
-
-	args := []string{
-		"exec",
-		"--json",
-		"--ephemeral",
-		"--ignore-user-config",
-		"--ignore-rules",
-		"--strict-config",
-		"--skip-git-repo-check",
-		"--sandbox", sandboxMode,
-	}
-	if model := strings.TrimSpace(request.Model); model != "" {
-		args = append(args, "-m", model)
-	}
-	if effort := strings.TrimSpace(request.ReasoningEffort); effort != "" {
-		args = append(args, "-c", `model_reasoning_effort="`+effort+`"`)
-	}
-	if lastMsgPath != "" {
-		args = append(args, "--output-last-message", lastMsgPath)
-	}
-	args = append(args,
-		"-c", `approval_policy="never"`,
-		"-c", shellTool,
-		"-c", "features.unified_exec=false",
-	)
-	args = append(args, codexFeatureLocks()...)
-	args = append(args, codexMCPServerArgs(serverName, request.MCPServerCommand, request.MCPServerArgs, toolNames)...)
-	for _, spec := range request.ExtraMCPServers {
-		name := strings.TrimSpace(spec.Name)
-		if name == "" {
-			continue
-		}
-		args = append(args, codexMCPServerArgs(name, spec.Command, spec.Args, spec.EnabledTools)...)
-	}
-	args = append(args, codexContextWindowCapArgs(window)...)
-	args = append(args, codexPrompt(request))
-	return args
-}
-
 func codexFeatureLocks() []string {
 	return []string{
 		"-c", "features.apps=false",
@@ -273,35 +197,6 @@ func codexContextWindowCapArgs(window int) []string {
 		return nil
 	}
 	return []string{"-c", "model_auto_compact_token_limit=" + strconv.Itoa(window)}
-}
-
-func codexMCPServerArgs(name, command string, cmdArgs, enabledTools []string) []string {
-	return []string{
-		"-c", fmt.Sprintf("mcp_servers.%s.command=%s", name, strconv.Quote(command)),
-		"-c", fmt.Sprintf("mcp_servers.%s.args=%s", name, tomlStringArray(cmdArgs)),
-		"-c", fmt.Sprintf("mcp_servers.%s.required=true", name),
-		"-c", fmt.Sprintf("mcp_servers.%s.enabled_tools=%s", name, tomlStringArray(enabledTools)),
-		"-c", fmt.Sprintf(`mcp_servers.%s.default_tools_approval_mode="approve"`, name),
-	}
-}
-
-func tomlStringArray(values []string) string {
-	quoted := make([]string, 0, len(values))
-	for _, value := range values {
-		quoted = append(quoted, strconv.Quote(value))
-	}
-	return "[" + strings.Join(quoted, ",") + "]"
-}
-
-func codexFinalText(lastMsgPath string, stdout []byte) string {
-	if lastMsgPath != "" {
-		if b, err := os.ReadFile(lastMsgPath); err == nil {
-			if text := strings.TrimSpace(string(b)); text != "" {
-				return text
-			}
-		}
-	}
-	return parseCodexFinalText(stdout)
 }
 
 func parseCodexFinalText(stdout []byte) string {

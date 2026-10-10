@@ -47,7 +47,6 @@ func (d *Daemon) preparePluginLaunchInstructions(sessionID protocol.SessionID, p
 	return &pluginLaunchInstructions{
 		Kind: pluginInstructionKindAgent,
 		Content: hooks.Launch{
-			InjectWorkflow:         parseBooleanSetting(d.store.GetSetting(SettingWorkflowsEnabled)),
 			Garden:                 gardenHome,
 			Crew:                   d.crewPrimeForLaunch(sessionID),
 			SelfReportPullRequests: selfReportPullRequests,

@@ -35,7 +35,6 @@ import type {
   AuthorState as GeneratedAuthorState,
   WebSocketEvent as GeneratedWebSocketEvent,
   RecentLocation as GeneratedRecentLocation,
-  WorkflowRun as GeneratedWorkflowRun,
   WarningElement as GeneratedWarning,
   Task as GeneratedTask,
   Notification as GeneratedNotification,
@@ -146,7 +145,6 @@ import {
 } from './daemonPendingRequests';
 import { BUILD_INSTANCE, daemonInstanceMatches, fetchDaemonHealthInstance, instanceMismatchMessage } from '../utils/buildInstance';
 import { controlBrowserHost, serializeBrowserControlResultMessage } from '../browser/host';
-import { useWorkflowRunsStore } from '../store/workflowRuns';
 import { useAutoModePushStore } from '../store/autoMode';
 import { useAutomationsStore } from '../store/automations';
 import { useWorktreeStore } from '../store/worktrees';
@@ -228,7 +226,6 @@ export type DaemonEndpoint = GeneratedEndpoint;
 export type RepoState = GeneratedRepoState;
 export type AuthorState = GeneratedAuthorState;
 export type RecentLocation = GeneratedRecentLocation;
-export type WorkflowRunState = GeneratedWorkflowRun;
 export type DaemonSettings = Record<string, string>;
 export type DaemonWarning = GeneratedWarning;
 export type DaemonSupportSnapshot = SupportSnapshotResultMessage;
@@ -2446,37 +2443,6 @@ export function useDaemonSocket({
             break;
           }
 
-          case 'workflow_run_updated': {
-            const run = (data as any).run;
-            if (run) useWorkflowRunsStore.getState().upsertWorkflowRun(run);
-            break;
-          }
-
-          case 'workflow_action_result': {
-            const action = (data as any).action || '';
-            const runId = (data as any).run_id || '';
-            const run = (data as any).run ?? null;
-            const runs = (data as any).runs ?? [];
-            if (run) useWorkflowRunsStore.getState().upsertWorkflowRun(run);
-            if (Array.isArray(runs) && runs.length > 0) useWorkflowRunsStore.getState().upsertWorkflowRuns(runs);
-            let key: string | null = null;
-            if (action === 'get') key = `workflow_run_get_${runId}`;
-            else if (action === 'list') key = 'workflow_run_list';
-            else if (action === 'cancel') key = `workflow_run_cancel_${runId}`;
-            if (key) {
-              const pending = pendingActionsRef.current.get(key);
-              if (pending) {
-                pendingActionsRef.current.delete(key);
-                if ((data as any).success) {
-                  pending.resolve({ success: true, run, runs });
-                } else {
-                  pending.reject(new Error((data as any).error || 'Workflow action failed'));
-                }
-              }
-            }
-            break;
-          }
-
           case 'automation_apply_result':
           case 'automation_validate_result':
           case 'automation_definitions_result':
@@ -4326,19 +4292,6 @@ export function useDaemonSocket({
     }, 'get_repo_info timeout', GIT_METADATA_TIMEOUT_MS);
   }, [sendKeyedRequest]);
 
-  const getWorkflowRun = useCallback((runId: string): Promise<{ success: boolean; run: WorkflowRunState | null }> => {
-    const key = `workflow_run_get_${runId}`;
-    return sendKeyedRequest<{ success: boolean; run: WorkflowRunState | null }>(key, { cmd: 'workflow_run_get', run_id: runId }, 'Get workflow run timed out');
-  }, [sendKeyedRequest]);
-
-  const listWorkflowRuns = useCallback((sessionId?: string): Promise<{ success: boolean; runs: WorkflowRunState[] }> => {
-    const key = 'workflow_run_list';
-    return sendKeyedRequest<{ success: boolean; runs: WorkflowRunState[] }>(key, {
-      cmd: 'workflow_run_list',
-      ...(sessionId ? { session_id: sessionId } : {}),
-    }, 'List workflow runs timed out');
-  }, [sendKeyedRequest]);
-
   const listKeptConversations = useCallback((includeDeleted: boolean): Promise<KeptConversationListResult> => (
     sendRequest('kept_conversation_list', { include_deleted: includeDeleted }, 'Listing conversations timed out')
   ), [sendRequest]);
@@ -5034,8 +4987,6 @@ export function useDaemonSocket({
     isRuntimeAttached,
     sendGetFileDiff,
     getRepoInfo,
-    getWorkflowRun,
-    listWorkflowRuns,
     listKeptConversations,
     setConversationKeep,
     forgetConversation,

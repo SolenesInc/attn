@@ -12,16 +12,16 @@ import (
 func TestLegacyPromptCompatibility(t *testing.T) {
 	out := map[string]string{}
 	t.Setenv("ATTN_CLAUDE_PEER_MESSAGING", "false")
-	for mask := 0; mask < 32; mask++ {
+	for mask := 0; mask < 16; mask++ {
 		for _, resume := range []bool{false, true} {
-			opts := SpawnOpts{TerminalID: "session-id", CWD: "/tmp/work", InitialPrompt: "Task λ {{literal}}\nsecond line", SettingsPath: "/tmp/settings.json", WrapperPath: "/tmp/attn", SocketPath: "/tmp/attn.sock", InjectWorkflowGuidance: mask&4 != 0, Garden: mask&8 != 0}
+			opts := SpawnOpts{TerminalID: "session-id", CWD: "/tmp/work", InitialPrompt: "Task λ {{literal}}\nsecond line", SettingsPath: "/tmp/settings.json", WrapperPath: "/tmp/attn", SocketPath: "/tmp/attn.sock", Garden: mask&4 != 0}
 			if mask&1 != 0 {
 				opts.NotebookRoot = "/tmp/book"
 			}
 			if mask&2 != 0 {
 				opts.SelfReportPullRequests = true
 			}
-			if mask&16 != 0 {
+			if mask&8 != 0 {
 				opts.CrewPriming = "Crew λ {{literal}}"
 			}
 			if resume {
@@ -42,7 +42,7 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 		}
 	}
 	for _, system := range []string{"", " System λ {{literal}} "} {
-		request := HeadlessTaskRequest{Prompt: "User message {{literal}}", SystemPrompt: system, WorkDir: "/tmp/run", CWD: "/tmp/work", Model: "model", DisableTools: true}
+		request := HeadlessTaskRequest{Prompt: "User message {{literal}}", SystemPrompt: system, WorkDir: "/tmp/run", Model: "model", DisableTools: true}
 		for name, args := range map[string][]string{"claude": claudeHeadlessArgs(request), "codex": codexToolFreeHeadlessArgs(request, 0), "copilot": copilotToolFreeHeadlessArgs(request)} {
 			raw, err := json.Marshal(args)
 			if err != nil {

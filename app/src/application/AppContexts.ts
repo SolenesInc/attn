@@ -66,9 +66,7 @@ export function useAttentionQueueContext() {
 export const LibrariesContext = createContext<
   ReturnType<typeof useAppController>['libraries'] | null
 >(null);
-export function useWorkflowPanelContext() {
-  return useRequiredContext(LibrariesContext).workflowPanel;
-}
+
 export function useAppGardenActionsContext() {
   return useRequiredContext(LibrariesContext).appGardenActions;
 }

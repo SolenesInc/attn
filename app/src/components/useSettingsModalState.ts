@@ -169,7 +169,6 @@ export function useSettingsModalState({
     tailscaleAuthURL,
     tailscaleError,
   } = settingsConnectionAndCapture(settings);
-  const workflowsEnabled = (settings.workflows_enabled || 'false') === 'true';
   const autoApproveEnabled = (settings.auto_approve_enabled || 'false') === 'true';
 
   const actualAgentExecutables = useMemo(() => getAgentExecutableSettings(settings), [settings]);
@@ -435,10 +434,6 @@ export function useSettingsModalState({
     onSetSetting(OPEN_SENT_FILES_ENABLED_SETTING, openSentFilesEnabled ? 'false' : 'true');
   }, [onSetSetting, openSentFilesEnabled]);
 
-  const handleToggleWorkflows = useCallback(() => {
-    onSetSetting('workflows_enabled', workflowsEnabled ? 'false' : 'true');
-  }, [onSetSetting, workflowsEnabled]);
-
   const handleToggleModelCapture = useCallback(() => {
     onSetSetting('model_capture.enabled', modelCaptureEnabled ? 'false' : 'true');
   }, [modelCaptureEnabled, onSetSetting]);
@@ -632,14 +627,6 @@ export function useSettingsModalState({
               'delegate roles pathfinder builder reviewer orchestrator prototyper fallback harness models effort preferences alternatives',
           },
           {
-            id: 'workflows',
-            label: 'Workflows',
-            title: 'Workflows',
-            description: 'Durable multi-agent workflows that managed agents can run when you opt in.',
-            count: workflowsEnabled ? 1 : 0,
-            keywords: 'workflows hypercode multi-agent orchestration attn workflow run',
-          },
-          {
             id: 'autoMode',
             label: 'Auto mode',
             title: 'Auto mode',
@@ -726,7 +713,6 @@ export function useSettingsModalState({
       plugins.length,
       autoModePolicy.pendingCount,
       delegationPolicy.preferences,
-      workflowsEnabled,
     ],
   );
 
@@ -802,8 +788,6 @@ export function useSettingsModalState({
     handleUninstallPlugin,
     handleRemovePlugin,
     commitPluginPriority,
-    handleToggleWorkflows,
-    workflowsEnabled,
     ptyBackendHint,
     ptyBackendMode,
     ptyBackendLabel,
