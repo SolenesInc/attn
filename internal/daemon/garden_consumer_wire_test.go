@@ -25,9 +25,12 @@ func TestAGardenBellRetriesAfterACrewRosterPathFailureIsRepaired(t *testing.T) {
 		w.App() // Initial state waits for startup recovery, which drops injected sessions.
 		cli = w.Client()
 		registerSessions(t, w, cli, "sender")
-		if _, err := cli.SeedTransition("", seed, "tend", "", false, client.SeedTransitionOptions{Assignee: "trellis"}); err != nil {
+		first := wakeCrew(t, cli, "trellis", "").SessionID
+		w.bootBubbleClaude(t, string(first))
+		if _, err := cli.SeedTransition(first, seed, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
 			t.Fatal(err)
 		}
+		crewHandoff(t, cli, string(first), "Wake when the build is ready.", false, protocol.CrewDayCloseSleep)
 		home := filepath.Join(w.Dir, "crew", "trellis")
 		saved := home + "-saved"
 		if err := os.Rename(home, saved); err != nil {

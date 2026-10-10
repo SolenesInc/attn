@@ -111,7 +111,10 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 			if err != nil {
 				return seedMoveAsk{}, err
 			}
-			party, _ := r.Party()
+			party, err := d.claimantFor(r, "")
+			if err != nil {
+				return seedMoveAsk{}, err
+			}
 			return seedMoveAsk{ask: garden.Ask{By: r.Actor()}, claimant: party, execution: sessionID}, nil
 		}, "", expectedRev); err != nil {
 			return nil, err
@@ -181,7 +184,10 @@ func (d *Daemon) bindResumedSeed(
 	if err != nil {
 		return err
 	}
-	party, _ := r.Party()
+	party, err := d.claimantFor(r, "")
+	if err != nil {
+		return err
+	}
 	next, err := garden.Tend(seed, party, garden.Ask{By: r.Actor()}, b)
 	if err != nil {
 		return fmt.Errorf("reclaim %s after resume: %w", seed.ID, err)

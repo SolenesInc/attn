@@ -42,7 +42,7 @@ async function main() {
   });
   const json = (args) => {
     const output = run(args);
-    return JSON.parse(output.slice(output.search(/[\[{]/)));
+    return JSON.parse(output.slice(output.search(/[[{]/)));
   };
   const settleSeeds = () => {
     for (const id of unsettledSeeds) {

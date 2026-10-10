@@ -182,16 +182,20 @@ func (d *Daemon) claimantFor(r who.Requester, assignee string) (who.Party, error
 	} else {
 		return who.Party{}, errors.New("tending records who claims the seed, and the user claims nothing; name the crew member: attn seed tend <seed> --for <name>")
 	}
+	return party, d.checkGardenClaimant(party)
+}
+
+func (d *Daemon) checkGardenClaimant(party who.Party) error {
 	if key, member := party.Member(); member {
 		identity, err := d.store.CrewIdentity(key)
 		if err != nil {
-			return who.Party{}, err
+			return err
 		}
 		if identity.Retired {
-			return who.Party{}, fmt.Errorf("%s is retired; restore them with attn crew restore %s before assigning work", identity.Name, identity.Name)
+			return fmt.Errorf("%s is retired; restore them with attn crew restore %s before assigning work", identity.Name, identity.Name)
 		}
 	}
-	return party, nil
+	return nil
 }
 
 func (d *Daemon) chiefParty(profileID string, b who.Bindings) (who.Party, error) {
@@ -199,7 +203,10 @@ func (d *Daemon) chiefParty(profileID string, b who.Bindings) (who.Party, error)
 	if !ok {
 		return who.Party{}, errors.New("this profile has no Chief; make one of its agents the Chief first")
 	}
-	return chief, b.Check(chief)
+	if err := b.Check(chief); err != nil {
+		return who.Party{}, err
+	}
+	return chief, d.checkGardenClaimant(chief)
 }
 func (d *Daemon) gardenRequester(source *protocol.SessionID, profile *string) (who.Requester, error) {
 	b, err := d.bindings()

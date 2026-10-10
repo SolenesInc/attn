@@ -156,7 +156,7 @@ func TestRetiringAndRestoringAMemberKeepsItsMailAndReleasesItsClaims(t *testing.
 	}
 }
 
-func TestRetiringAMemberRemovesItsPullRequestWatch(t *testing.T) {
+func TestRetiringAMemberRemovesItsGardenAndPullRequestWatches(t *testing.T) {
 	serveWatchedPullRequest(t, watchedPullRequestGitHub{state: "OPEN"})
 	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
@@ -164,8 +164,10 @@ func TestRetiringAMemberRemovesItsPullRequestWatch(t *testing.T) {
 	w.Launched(string(wake.SessionID)).Prompted()
 	watchPullRequestAs(t, cli, string(wake.SessionID), protocol.PullRequestWatchModeCodex, "")
 	awaitWatchedPullRequest(app, string(wake.SessionID), func(pr protocol.SessionPullRequest) bool { return protocol.Deref(pr.Watching) })
+	seed := plantSeedAs(t, cli, "", "Watch this work")
+	gardenNudgeWatch(t, cli, string(wake.SessionID), seed, false)
 	retired, err := cli.CrewRetire("Keel")
-	if err != nil || retired.RemovedWatches != 1 {
+	if err != nil || retired.RemovedWatches != 2 {
 		t.Fatalf("retire watches = %+v %v", retired, err)
 	}
 	session := queriedSession(t, cli, string(wake.SessionID))

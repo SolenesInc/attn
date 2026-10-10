@@ -145,6 +145,9 @@ func TestAMemberIsOneLedgerRow(t *testing.T) {
 	cli := w.Client()
 	app := w.App()
 	plain := w.Spawn(app, fakeagent.Claude, w.Path("plain"))
+	plainRun := w.Launched(plain)
+	plainRun.Reply("Keep this conversation. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, plain, func(s protocol.Session) bool { return s.State == protocol.StateIdle })
 	day := wakeCrew(t, cli, "Keel", "")
 	w.Launched(string(day.SessionID))
 	for range 2 {

@@ -144,3 +144,27 @@ func TestAHandoverByACrewSessionRecordsTheMember(t *testing.T) {
 		t.Fatalf("successor close: %v", err)
 	}
 }
+
+func TestRetiredMembersCannotReclaimWorkThroughResumeOrChief(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	first := wakeCrew(t, cli, "Keel", "").SessionID
+	w.Launched(string(first)).Prompted()
+	if made := setChiefOfStaff(app, string(first), true); !made.Success {
+		t.Fatal(protocol.Deref(made.Error))
+	}
+	seed := plantSeedAs(t, cli, string(first), "Leave this work released")
+	lifeMove(t, cli, string(first), seed, "tend", "", "")
+	if _, err := cli.CrewRetire("Keel"); err != nil {
+		t.Fatal(err)
+	}
+	released := lifeShow(t, cli, seed).Seed
+	if resumed := seedResumeRequest(app, seed); resumed.Success || !strings.Contains(protocol.Deref(resumed.Error), "Keel is retired") {
+		t.Fatalf("retired Resume: %+v", resumed)
+	}
+	_, err := cli.SeedSendToChief("", released, "")
+	lifeRefusal(t, "assigning to a retired Chief", err, "Keel is retired", "restore")
+	if shown := lifeShow(t, cli, seed).Seed; shown.Rev != released.Rev || shown.Claimed || shown.Tender != nil {
+		t.Fatalf("retired actions changed seed: %+v", shown)
+	}
+}

@@ -366,6 +366,9 @@ func (s *Store) RetireCrewMember(key who.MemberKey, at time.Time) (int, error) {
 			return err
 		}
 		count, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
 		removed = int(count)
 		result, err = tx.Exec("DELETE FROM garden_seed_watches WHERE watcher=?", who.Member(key))
 		if err != nil {

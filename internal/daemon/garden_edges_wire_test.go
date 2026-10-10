@@ -57,7 +57,9 @@ func TestBlockingEdgesGateReadiness(t *testing.T) {
 	edgeLink(t, cli, first, "blocks", second)
 	edgeLink(t, cli, second, "part-of", plot)
 	lifeMove(t, cli, worker, first, "tend", "", "trellis")
-	lifeMove(t, cli, worker, first, "harvest", "done", "trellis")
+	if _, err := cli.SeedTransition(protocol.SessionID(worker), first, "harvest", "done", true, client.SeedTransitionOptions{}); err != nil {
+		t.Fatal(err)
+	}
 	if got := lifeSeedIDs(edgeReady(t, cli, worker, "", false).Seeds); !slices.Equal(got, []string{second}) {
 		t.Errorf("after harvesting the blocker, ready = %v, want the dependent %s", got, second)
 	}
