@@ -23,10 +23,17 @@ func TestCrewIdentityMigrationPreservesKeysAndOpenBindings(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				for _, id := range []string{"keel", "chief"} {
+				for _, id := range []string{"keel", "chief", "chief-crew", "chief-crew-2", "s-7k3f9m", "s-7k3f9m-crew", "user"} {
 					if _, err := old.db.Exec("INSERT INTO crew_profiles(member_id,profile_id) VALUES(?,?)", id, p.ID); err != nil {
 						t.Fatal(err)
 					}
+				}
+				side, _, err := old.CreateProfile("Side")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := old.db.Exec("INSERT INTO crew_profiles(member_id,profile_id) VALUES('user-crew',?)", side.ID); err != nil {
+					t.Fatal(err)
 				}
 				if _, err := old.DefineDocumentCollection(crew.MembersSchema(), time.Now()); err != nil {
 					t.Fatal(err)
@@ -62,10 +69,13 @@ func TestCrewIdentityMigrationPreservesKeysAndOpenBindings(t *testing.T) {
 				}
 				return
 			}
-			for _, c := range []struct{ key, name, session string }{{"keel", "Keel", "open"}, {"chief", "chief-crew", ""}} {
+			for _, c := range []struct{ key, name, session string }{{"keel", "Keel", "open"}, {"chief", "chief-crew", ""}, {"chief-crew", "Chief-crew-3", ""}, {"chief-crew-2", "Chief-crew-2", ""}, {"s-7k3f9m", "s-7k3f9m-crew", ""}, {"s-7k3f9m-crew", "S-7k3f9m-crew-2", ""}, {"user", "user-crew", ""}, {"user-crew", "User-crew", ""}} {
 				var name, latest string
 				if err := upgraded.db.QueryRow("SELECT name,latest_session FROM crew_members WHERE member_key = ?", c.key).Scan(&name, &latest); err != nil {
 					t.Fatal(err)
+				}
+				if err := crew.ValidateName(name); err != nil {
+					t.Fatalf("%s migrated name %q: %v", c.key, name, err)
 				}
 				if name != c.name || latest != c.session {
 					t.Fatalf("%s: %s %s", c.key, name, latest)

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -22,18 +23,21 @@ func applyMigration1791587735379932(tx *sql.Tx) error {
  DROP TRIGGER launch_review_crew_profile;`); err != nil {
 		return err
 	}
-	rows, err := tx.Query("SELECT member_key FROM crew_members")
+	rows, err := tx.Query("SELECT member_key,profile_id FROM crew_members ORDER BY profile_id,member_key")
 	if err != nil {
 		return err
 	}
-	var keys []string
+	type member struct {
+		key, profile, name string
+	}
+	var members []member
 	for rows.Next() {
-		var key string
-		if err := rows.Scan(&key); err != nil {
+		var m member
+		if err := rows.Scan(&m.key, &m.profile); err != nil {
 			rows.Close()
 			return err
 		}
-		keys = append(keys, key)
+		members = append(members, m)
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
@@ -42,18 +46,47 @@ func applyMigration1791587735379932(tx *sql.Tx) error {
 	rows.Close()
 	namePattern := regexp.MustCompile(`^[A-Za-z][A-Za-z0-9-]{0,39}$`)
 	idPattern := regexp.MustCompile(`^[A-Za-z]-[A-Za-z0-9]{6}$`)
-	for _, key := range keys {
-		name := strings.ToUpper(key[:1]) + key[1:]
+	reservedNames := make(map[string]map[string]bool)
+	for i := range members {
+		m := &members[i]
+		m.name = strings.ToUpper(m.key[:1]) + m.key[1:]
 		reserved := false
-		switch strings.ToLower(name) {
+		switch strings.ToLower(m.name) {
 		case "chief", "attn", "user", "you":
 			reserved = true
 		}
-		if reserved || !namePattern.MatchString(name) || idPattern.MatchString(name) {
-			name = key + "-crew"
-			log.Printf("crew migration: member %s named %s", key, name)
+		if reserved || !namePattern.MatchString(m.name) || idPattern.MatchString(m.name) {
+			m.name = m.key + "-crew"
+			log.Printf("crew migration: member %s named %s", m.key, m.name)
 		}
-		if _, err := tx.Exec("UPDATE crew_members SET name = ? WHERE member_key = ?", name, key); err != nil {
+		if reservedNames[m.profile] == nil {
+			reservedNames[m.profile] = make(map[string]bool)
+		}
+		reservedNames[m.profile][strings.ToLower(m.name)] = true
+	}
+	assignedNames := make(map[string]map[string]bool)
+	for _, m := range members {
+		if assignedNames[m.profile] == nil {
+			assignedNames[m.profile] = make(map[string]bool)
+		}
+		name := m.name
+		if assignedNames[m.profile][strings.ToLower(name)] {
+			for number := 2; ; number++ {
+				suffix := "-" + strconv.Itoa(number)
+				stem := m.name
+				if len(stem)+len(suffix) > 40 {
+					stem = stem[:40-len(suffix)]
+				}
+				name = stem + suffix
+				if !reservedNames[m.profile][strings.ToLower(name)] {
+					break
+				}
+			}
+			log.Printf("crew migration: member %s named %s after a name collision", m.key, name)
+		}
+		assignedNames[m.profile][strings.ToLower(name)] = true
+		reservedNames[m.profile][strings.ToLower(name)] = true
+		if _, err := tx.Exec("UPDATE crew_members SET name = ? WHERE member_key = ?", name, m.key); err != nil {
 			return err
 		}
 	}
