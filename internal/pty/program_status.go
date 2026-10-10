@@ -45,12 +45,9 @@ func (o *programStatusObserver) held() bool {
 	return o.rootReported
 }
 
-func (o *programStatusObserver) release(now time.Time) (Observation, bool) {
-	if !o.rootReported {
-		return Observation{}, false
-	}
+func (o *programStatusObserver) release(now time.Time) Observation {
 	o.rootReported = false
-	return newObservation(SourceProgramStatus, ProgramClear, "", now), true
+	return newObservation(SourceProgramStatus, ProgramClear, "", now)
 }
 
 func programStatusClaim(report ghosttyvt.ProgramStatus) string {

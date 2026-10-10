@@ -137,21 +137,19 @@ func (s *Session) runShellForegroundPoller(interval time.Duration) {
 			}
 			s.signalMu.Lock()
 			if obs, ok := s.shellSignals.ObservePoll(fgPgid, time.Now()); ok {
-				s.emitShellSignal(obs)
+				s.emitShellSignal(obs, false)
 			}
 			s.signalMu.Unlock()
 		}
 	}
 }
 
-func (s *Session) emitShellSignal(obs Observation) {
-	if obs.Claim == claimBusy && s.programStatus.held() {
-		return
-	}
-	if obs.Claim == claimNotBusy {
-		if cleared, ok := s.programStatus.release(obs.At); ok {
-			s.emitSignal(cleared)
+func (s *Session) emitShellSignal(obs Observation, recordInSameOutput bool) {
+	if s.programStatus.held() {
+		if obs.Claim != claimNotBusy || recordInSameOutput {
+			return
 		}
+		s.emitSignal(s.programStatus.release(obs.At))
 	}
 	s.emitSignal(obs)
 }

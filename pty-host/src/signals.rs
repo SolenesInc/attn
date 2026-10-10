@@ -40,6 +40,7 @@ pub struct SignalObserver {
     last_foreground_pgid: i32,
     prompt_owner: Option<i32>,
     program_status_reported: bool,
+    record_in_output: bool,
 }
 
 impl SignalObserver {
@@ -60,6 +61,7 @@ impl SignalObserver {
             last_foreground_pgid: 0,
             prompt_owner: None,
             program_status_reported: false,
+            record_in_output: false,
         }
     }
 
@@ -86,6 +88,7 @@ impl SignalObserver {
     }
 
     pub fn observe_program_status(&mut self, reports: &[ProgramStatus]) -> Vec<Observation> {
+        self.record_in_output = !reports.is_empty();
         reports
             .iter()
             .map(|report| {
@@ -101,7 +104,9 @@ impl SignalObserver {
     }
 
     pub fn observe(&mut self, chunk: &[u8]) -> Vec<Observation> {
-        self.observe_at(chunk, Instant::now())
+        let observations = self.observe_at(chunk, Instant::now());
+        self.record_in_output = false;
+        observations
     }
 
     fn observe_at(&mut self, chunk: &[u8], now: Instant) -> Vec<Observation> {
@@ -241,7 +246,7 @@ impl SignalObserver {
             return self.emit(claim, detail, edge, now).into_iter().collect();
         }
         let heartbeat = self.emit(claim, detail, true, now);
-        if claim == "busy" {
+        if claim == "busy" || self.record_in_output {
             return Vec::new();
         }
         self.program_status_reported = false;
