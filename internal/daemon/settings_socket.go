@@ -80,7 +80,10 @@ func (d *Daemon) settingsList(msg *protocol.GetSettingsMessage) (*protocol.Setti
 		spec, _ := lookupSetting(key)
 		needProfile = needProfile || spec.scope == profileScope
 	}
-	if needProfile && d.requireHome("profile settings") == nil {
+	if needProfile {
+		if err := d.requireHome("profile settings"); err != nil {
+			return nil, nil, err
+		}
 		var err error
 		profile, err = d.settingsProfile(protocol.Deref(msg.SourceSessionID), protocol.Deref(msg.ProfileID))
 		if err != nil {
@@ -144,7 +147,7 @@ func (d *Daemon) profileSettingsOverlay(profileID string) map[string]interface{}
 		settings[k] = v
 	}
 	if profile, err := d.store.LiveProfile(profileID); err == nil {
-		if root, err := d.defaultNotebookRoot(profile.Name); err == nil {
+		if root, err := d.defaultNotebookRoot(profile.Name, d.profileSetting(profile.ID, settingNotebookRoot)); err == nil {
 			settings[string(settingNotebookRootDefault)] = root
 		}
 	}

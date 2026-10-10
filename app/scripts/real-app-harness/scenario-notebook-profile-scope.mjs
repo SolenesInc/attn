@@ -36,7 +36,7 @@ async function main() {
     });
     return stdout;
   };
-  const waitDom = (payload) => client.request('dom_wait', payload);
+  const waitDom = (payload) => client.request('dom_wait', { timeoutMs: 5_000, ...payload });
   const state = async () => (await client.request('get_state')).arrangement;
   const openSwitcher = async () => {
     await pressShortcutKeys(client, driver, 'profile.switch');

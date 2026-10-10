@@ -84,3 +84,20 @@ func TestSettingsCLIEnforcesScopesAndExplainsItsKeys(t *testing.T) {
 	}
 	prompttest.Equal(t, "settings-registry", map[string]string{"registry": registry.String()})
 }
+
+func TestSettingsCLIRefusesProfileRequestsAfterEnrollmentAsAnOutpost(t *testing.T) {
+	s := testworld.NewStack(t)
+	s.Start()
+	requireStdout(t, s.Attn("enrollment", "enroll", "--home", "d-0123456789abcdef0123456789abcdef"))
+	for _, args := range [][]string{
+		{"settings", "list", "--profile", "Default"},
+		{"settings", "get", "theme", "--profile", "Default"},
+		{"settings", "get", "notebook.root"},
+	} {
+		result := s.Attn(args...)
+		if result.Code != 1 || !strings.Contains(result.Stderr, "outpost") || !strings.Contains(result.Stderr, "profile settings") {
+			t.Fatalf("profile settings on an outpost: %+v", result)
+		}
+	}
+	requireStdout(t, s.Attn("settings", "get", "theme"))
+}

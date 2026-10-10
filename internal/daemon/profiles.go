@@ -362,7 +362,7 @@ func (d *Daemon) handleProfileCreate(client *wsClient, msg *protocol.ProfileCrea
 		}
 		d.notebookRootMu.Lock()
 		defer d.notebookRootMu.Unlock()
-		root, err := d.defaultNotebookRoot(name)
+		root, err := d.defaultNotebookRoot(name, "")
 		if err != nil {
 			return profileActionOutcome{}, err
 		}

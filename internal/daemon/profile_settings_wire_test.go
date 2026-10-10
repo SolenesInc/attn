@@ -149,6 +149,21 @@ func TestNewProfileNotebookDefaultsSurviveRenameAndAvoidCollisions(t *testing.T)
 	selectProfile(app, work.ID)
 	workRoot := filepath.Join(w.Dir, "notebook-work")
 	awaitNotebookRoot(app, workRoot)
+	if saved := notebookAskWrite(app, "knowledge/current.md", notebookNote("kept on reset"), ""); !saved.Success {
+		t.Fatal(saved)
+	}
+	if updated := notebookSetting(app, "notebook.root", ""); !protocol.Deref(updated.Success) {
+		t.Fatalf("default reset: %+v", updated)
+	}
+	app.Send(protocol.GetSettingsMessage{Cmd: protocol.CmdGetSettings})
+	awaitNotebookRoot(app, workRoot)
+	preview, err := w.Client().Settings("", work.ID, "notebook.root.default", false)
+	if err != nil || protocol.Deref(preview.Entries[0].Value) != workRoot {
+		t.Fatalf("default preview after reset: %+v (%v)", preview, err)
+	}
+	if read := notebookAskRead(app, "knowledge/current.md"); !read.Success || !strings.Contains(read.Result.Content, "kept on reset") {
+		t.Fatalf("notes after default reset: %+v", read)
+	}
 	id := uuid.NewString()
 	renamed := mustProfileRequest(app, protocol.ProfileRenameMessage{Cmd: protocol.CmdProfileRename, RequestID: id, ProfileID: work.ID, Name: "Office", ExpectedRevision: work.Revision}, id)
 	if renamed.Profile.Name != "Office" {

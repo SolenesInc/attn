@@ -7,12 +7,22 @@ import (
 	"os"
 )
 
-func (d *Daemon) defaultNotebookRoot(name string) (string, error) {
+func (d *Daemon) defaultNotebookRoot(name, currentRoot string) (string, error) {
 	base := config.HarnessNotebookRoot()
 	if base == "" {
 		base = notebook.DefaultRoot("~", config.Instance())
 	}
-	return notebook.ProfileDefaultRoot(base, name, d.notebookRootTaken)
+	current, _ := normalizeNotebookRoot(currentRoot)
+	return notebook.ProfileDefaultRoot(base, name, func(raw string) (bool, error) {
+		root, err := normalizeNotebookRoot(raw)
+		if err != nil {
+			return false, err
+		}
+		if currentRoot != "" && root == current {
+			return false, nil
+		}
+		return d.notebookRootTaken(raw)
+	})
 }
 
 func (d *Daemon) notebookRootTaken(raw string) (bool, error) {

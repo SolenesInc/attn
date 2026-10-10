@@ -75,7 +75,7 @@ func (d *Daemon) setSetting(msg *protocol.SetSettingMessage) (*protocol.SettingE
 		profileID = profile.ID
 		d.notebookRootMu.Lock()
 		if msg.Key == string(settingNotebookRoot) && strings.TrimSpace(msg.Value) == "" {
-			msg.Value, err = d.defaultNotebookRoot(profile.Name)
+			msg.Value, err = d.defaultNotebookRoot(profile.Name, d.profileSetting(profile.ID, settingNotebookRoot))
 			if err != nil {
 				d.notebookRootMu.Unlock()
 				return nil, err
