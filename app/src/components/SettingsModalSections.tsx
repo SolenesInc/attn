@@ -252,6 +252,7 @@ export function DesktopSettings({
   notebookRootDraft,
   effectiveNotebookRoot,
   defaultNotebookRoot,
+  notebookSettingsLoaded,
   handleBrowseNotebookRoot,
   handleToggleOpenSentFiles,
   openSentFilesEnabled,
@@ -266,6 +267,7 @@ export function DesktopSettings({
   | 'notebookRootDraft'
   | 'effectiveNotebookRoot'
   | 'defaultNotebookRoot'
+  | 'notebookSettingsLoaded'
   | 'handleBrowseNotebookRoot'
   | 'handleToggleOpenSentFiles'
   | 'openSentFilesEnabled'
@@ -383,7 +385,7 @@ export function DesktopSettings({
             <input
               data-testid="settings-notebook-root-input"
               type="text"
-              disabled={!effectiveNotebookRoot && !notebookRootDraft.value}
+              disabled={!notebookSettingsLoaded}
               value={notebookRootDraft.value}
               onChange={notebookRootDraft.onChange}
               onBlur={notebookRootDraft.commit}
@@ -395,7 +397,7 @@ export function DesktopSettings({
               spellCheck={false}
             />
             <SavedMark shown={savedFlash.saved('notebook.root')} testID="settings-notebook-root-saved" />
-            <button className="settings-action" disabled={!effectiveNotebookRoot && !notebookRootDraft.value} onClick={handleBrowseNotebookRoot}>
+            <button className="settings-action" disabled={!notebookSettingsLoaded} onClick={handleBrowseNotebookRoot}>
               Browse
             </button>
           </div>

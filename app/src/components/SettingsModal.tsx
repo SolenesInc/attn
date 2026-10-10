@@ -187,6 +187,7 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           notebookRootDraft={state.notebookRootDraft}
           effectiveNotebookRoot={state.effectiveNotebookRoot}
           defaultNotebookRoot={state.defaultNotebookRoot}
+          notebookSettingsLoaded={state.notebookSettingsLoaded}
           handleBrowseNotebookRoot={state.handleBrowseNotebookRoot}
           handleToggleOpenSentFiles={state.handleToggleOpenSentFiles}
           openSentFilesEnabled={state.openSentFilesEnabled}

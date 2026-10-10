@@ -157,6 +157,7 @@ export function useSettingsModalState({
   const actualNotebookRoot = settings['notebook.root'] || '';
   const effectiveNotebookRoot = settings['notebook.root.effective'] || '';
   const defaultNotebookRoot = settings['notebook.root.default'] || '';
+  const notebookSettingsLoaded = 'notebook.root' in settings || !!effectiveNotebookRoot;
   const {
     tailscaleEnabled,
     modelCaptureEnabled,
@@ -784,6 +785,7 @@ export function useSettingsModalState({
     notebookRootDraft,
     effectiveNotebookRoot,
     defaultNotebookRoot,
+    notebookSettingsLoaded,
     handleBrowseNotebookRoot,
     handleToggleOpenSentFiles,
     tailscaleURL,

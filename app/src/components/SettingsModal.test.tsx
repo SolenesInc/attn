@@ -326,6 +326,8 @@ describe('SettingsModal notebook folder', () => {
     const input = screen.getByTestId('settings-notebook-root-input');
     expect(input).toBeEnabled();
     expect(within(input.closest('section')!).getByRole('button', { name: 'Browse' })).toBeEnabled();
+    fireEvent.change(input, { target: { value: '' } });
+    expect(input).toBeEnabled();
     fireEvent.change(input, { target: { value: '/harness/notes' } });
     await gesture(daemon, () => fireEvent.blur(input));
     expect(savedSettings(daemon)).toEqual([['notebook.root', '/harness/notes']]);
