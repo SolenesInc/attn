@@ -102,11 +102,11 @@ func (d *Daemon) crewLaunchDir(member crew.Member) (string, error) {
 	if err := d.validateCrewAwarenessDirs(member); err != nil {
 		return "", err
 	}
+	if err := os.MkdirAll(member.HomeDir, 0o755); err != nil {
+		return "", err
+	}
 	dir := strings.TrimSpace(member.CWD)
 	if dir == "" {
-		if err := os.MkdirAll(member.HomeDir, 0o755); err != nil {
-			return "", err
-		}
 		return member.HomeDir, nil
 	}
 	info, err := os.Stat(dir)

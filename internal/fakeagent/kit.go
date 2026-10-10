@@ -97,6 +97,7 @@ func (k *Kit) Env() []string {
 	return []string{
 		"ATTN_TOOL_HOME=" + k.cfg.ToolHome,
 		"CODEX_HOME=" + k.cfg.CodexHome,
+		"CLAUDE_CONFIG_DIR=" + filepath.Join(k.cfg.ToolHome, ".claude"),
 		"PATH=" + k.cfg.Bin + string(os.PathListSeparator) + os.Getenv("PATH"),
 		"ATTN_CLAUDE_EXECUTABLE=" + filepath.Join(k.cfg.Bin, string(Claude)),
 		"ATTN_CODEX_EXECUTABLE=" + filepath.Join(k.cfg.Bin, string(Codex)),
