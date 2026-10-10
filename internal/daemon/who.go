@@ -96,9 +96,16 @@ func (d *Daemon) storedMemberName(text string) string {
 	return d.memberName(key)
 }
 
-func (d *Daemon) tenderName(t garden.Tender) string {
+func (d *Daemon) tenderName(profileID string, t garden.Tender) string {
 	if t.Member != "" {
-		return d.storedMemberName(t.Member)
+		member, found, err := d.store.CrewKeyed(profileID, t.Member)
+		if err != nil {
+			d.logf("crew: read tender name in %s: %v", profileID, err)
+		}
+		if found {
+			return member.Name
+		}
+		return t.Member
 	}
 	return string(t.Session)
 }

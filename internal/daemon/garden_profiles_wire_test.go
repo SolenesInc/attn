@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -86,6 +87,38 @@ func TestFreeTenderNamesStayInsideTheirSeedsProfile(t *testing.T) {
 		_, err := cli.SeedTransition("default-worker", fresh, "tend", "", "keel", false, client.SeedTransitionOptions{})
 		if err == nil || !strings.Contains(err.Error(), "Default") || !strings.Contains(err.Error(), "Side") {
 			t.Fatalf("registered foreign member claim must name both profiles: %v", err)
+		}
+
+		if _, err := cli.WithRequester(side.ID, "").CrewRename("Keel", "Alfred"); err != nil {
+			t.Fatal(err)
+		}
+		cwd := w.Path("delegation")
+		if err := os.MkdirAll(cwd, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		_, err = cli.Delegate(delegateAtSeed("default-worker", cwd, original))
+		if err == nil || !strings.Contains(err.Error(), "being tended by keel") || strings.Contains(err.Error(), "Alfred") {
+			t.Fatalf("dispatch refusal must preserve the free tender's name: %v", err)
+		}
+		registerSessions(t, w, cli, "default-takeover")
+		if _, err := cli.SeedTransition("default-takeover", original, "tend", "", "", true, client.SeedTransitionOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		notes, err := cli.SeedNotes("default-worker", original, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		foundAudit := false
+		for _, note := range notes.Notes {
+			if strings.Contains(note.Body, "forced `attn seed tend") {
+				foundAudit = true
+				if !strings.Contains(note.Body, "; keel held the seed.") || strings.Contains(note.Body, "Alfred") {
+					t.Fatalf("forced-move audit must preserve the free tender's name: %s", note.Body)
+				}
+			}
+		}
+		if !foundAudit {
+			t.Fatal("forced takeover wrote no audit note")
 		}
 
 	})

@@ -1145,7 +1145,7 @@ func (d *Daemon) validateDispatchCrown(crown string, sourceSessionID protocol.Se
 		return fmt.Errorf(
 			"%s is being tended by %s, and a seed has one tender at a time; dispatching here would hand it to a new agent.\n"+
 				"Wait for %s to harvest or park it, plant the work as its own seed, or say what you need on the log: attn seed note %s -m \"…\"",
-			crown, d.tenderName(held), d.tenderName(held), crown)
+			crown, d.tenderName(seed.ProfileID, held), d.tenderName(seed.ProfileID, held), crown)
 	}
 	return nil
 }
@@ -1596,7 +1596,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 				auditIndex = len(entries)
 				entries = append(entries, garden.Note{
 					Seed: next.ID, Kind: garden.NoteKindNote,
-					Body:          d.forcedSeedMoveBody(next.ID, verb, ask.Actor, *displaced),
+					Body:          d.forcedSeedMoveBody(next, verb, ask.Actor, *displaced),
 					AuthorSession: ask.Actor.Session, AuthorMember: ask.Actor.Member,
 				})
 			}
@@ -1638,13 +1638,13 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 		id, attempts, verb, id)
 }
 
-func (d *Daemon) forcedSeedMoveBody(seedID string, verb garden.Verb, actor, displaced garden.Tender) string {
-	forcedBy := d.tenderName(actor)
+func (d *Daemon) forcedSeedMoveBody(seed garden.Seed, verb garden.Verb, actor, displaced garden.Tender) string {
+	forcedBy := d.tenderName(seed.ProfileID, actor)
 	if forcedBy == "" {
 		forcedBy = "the attn app"
 	}
 	return fmt.Sprintf("%s forced `attn seed %s %s`; %s held the seed.",
-		forcedBy, verb, seedID, d.tenderName(displaced))
+		forcedBy, verb, seed.ID, d.tenderName(seed.ProfileID, displaced))
 }
 
 func (d *Daemon) writeSeedMoveWithNotes(
