@@ -1,0 +1,3 @@
+kind: internal
+area: tests
+change: A shared PTY host test now upgrades live terminals to a build that errors or panics while adopting them, and checks they come back on the old build with the same shell, screen and input, and that the daemon reports the handover as not taken effect.

@@ -12,6 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pty"
+	"github.com/victorarias/attn/internal/ptyhost"
 	"github.com/victorarias/attn/internal/ptyhost/ptyhosttest"
 )
 
@@ -139,6 +140,92 @@ func TestSharedHost_ABuildThatCannotAdoptNeverTouchesTheLiveHost(t *testing.T) {
 	waitForStreamText(t, stream, "kept-seven")
 }
 
+func TestSharedHost_ABuildThatFailsToAdoptHandsEveryTerminalBack(t *testing.T) {
+	if os.Getenv("ATTN_TEST_PTY_HOST") == "" {
+		t.Skip("set ATTN_TEST_PTY_HOST to run the shared PTY host integration tests")
+	}
+	for _, fault := range []string{"error", "panic"} {
+		t.Run(fault, func(t *testing.T) {
+			world := newHandoverWorld(t)
+			t.Setenv("ATTN_PTY_HOST_ADOPT_FAULT", fault)
+			oldBackend := world.backend(t, "fallback-old", ptyhosttest.BuildWithSnapshotFormat(t, "fallback-old"))
+			if err := oldBackend.Spawn(context.Background(), SpawnOptions{ID: "kept", CWD: t.TempDir(), Agent: "shell", Cols: 80, Rows: 24}); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Unsetenv("ATTN_PTY_HOST_ADOPT_FAULT"); err != nil {
+				t.Fatal(err)
+			}
+			hostPID := oldBackend.WorkerPIDs(context.Background())["kept"]
+			t.Cleanup(func() {
+				_ = syscall.Kill(hostPID, syscall.SIGTERM)
+				_ = waitForPIDsGone(3*time.Second, hostPID)
+			})
+			_, live, err := oldBackend.Attach(context.Background(), "kept", "before", AttachOptions{OmitReplay: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := oldBackend.Input(context.Background(), "kept", []byte("seq 1 30 | sed s/^/row-/; cat\n")); err != nil {
+				t.Fatal(err)
+			}
+			waitForStreamText(t, live, "row-30")
+			_ = live.Close()
+			before, err := oldBackend.ScreenSnapshot(context.Background(), "kept")
+			if err != nil {
+				t.Fatal(err)
+			}
+			child, err := oldBackend.SessionInfo(context.Background(), "kept")
+			if err != nil {
+				t.Fatal(err)
+			}
+			registryBefore := world.hostRegistry(t, hostPID)
+
+			newBackend := world.backend(t, "fallback-new", ptyhosttest.BuildWithAdoptFault(t, "fallback-new"))
+			if _, err := newBackend.Recover(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			err = newBackend.UpgradeWorker(context.Background(), "kept")
+			if err == nil || !strings.Contains(err.Error(), "did not take effect") {
+				t.Fatalf("UpgradeWorker = %v, want the live host's failed adopt reported as a handover that did not take effect", err)
+			}
+			if pids := newBackend.WorkerPIDs(context.Background()); pids["kept"] != hostPID {
+				t.Fatalf("host pid after the hand-back = %d, want %d", pids["kept"], hostPID)
+			}
+			if format, _ := newBackend.SessionTerminalBuild("kept"); format != "fallback-old" {
+				t.Fatalf("terminal format after the hand-back = %q, want fallback-old", format)
+			}
+			if registryAfter := world.hostRegistry(t, hostPID); registryAfter.ArtifactID != registryBefore.ArtifactID ||
+				registryAfter.Executable != registryBefore.Executable || registryAfter.SnapshotFormat != registryBefore.SnapshotFormat {
+				t.Fatalf("host registry after the hand-back names build %s (%s, format %s), want the old build %s (%s, format %s)",
+					registryAfter.ArtifactID, registryAfter.Executable, registryAfter.SnapshotFormat,
+					registryBefore.ArtifactID, registryBefore.Executable, registryBefore.SnapshotFormat)
+			}
+			back, err := newBackend.SessionInfo(context.Background(), "kept")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if back.PID != child.PID || !back.Running {
+				t.Fatalf("shell after the hand-back: pid=%d running=%t, want the same running shell pid %d", back.PID, back.Running, child.PID)
+			}
+			after, err := newBackend.ScreenSnapshot(context.Background(), "kept")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if after.Screen == nil || before.Screen == nil || after.Screen.Text != before.Screen.Text {
+				t.Fatalf("screen after the hand-back differs:\nbefore:\n%s\nafter:\n%s", screenText(before.Screen), screenText(after.Screen))
+			}
+			_, stream, err := newBackend.Attach(context.Background(), "kept", "after", AttachOptions{OmitReplay: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer stream.Close()
+			if err := newBackend.Input(context.Background(), "kept", []byte("\x04printf 'back-%s\\n' nine\n")); err != nil {
+				t.Fatal(err)
+			}
+			waitForStreamText(t, stream, "back-nine")
+		})
+	}
+}
+
 type handoverWorld struct {
 	root string
 }
@@ -169,6 +256,18 @@ func (w handoverWorld) backend(t *testing.T, format, binary string) *WorkerBacke
 		t.Fatal(err)
 	}
 	return backend
+}
+
+func (w handoverWorld) hostRegistry(t *testing.T, hostPID int) ptyhost.HostRegistry {
+	t.Helper()
+	paths, _ := filepath.Glob(filepath.Join(ptyhost.HostRegistryDir(w.root, "d-handover"), "*.json"))
+	for _, path := range paths {
+		if entry, err := ptyhost.ReadHostRegistry(path); err == nil && entry.HostPID == hostPID {
+			return entry
+		}
+	}
+	t.Fatalf("no host registry entry names pid %d among %v", hostPID, paths)
+	return ptyhost.HostRegistry{}
 }
 
 func screenText(screen *pty.ViewportSnapshot) string {
