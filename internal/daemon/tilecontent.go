@@ -183,7 +183,7 @@ func (d *Daemon) seedTileSession(tenderSessionID protocol.SessionID, location ag
 	if tenderSessionID == "" {
 		return location.sessionID
 	}
-	if tender := d.store.Get(tenderSessionID); tender != nil && tender.ProfileID == location.profileID {
+	if tender := d.store.Get(tenderSessionID); tender != nil {
 		return tenderSessionID
 	}
 	return location.sessionID

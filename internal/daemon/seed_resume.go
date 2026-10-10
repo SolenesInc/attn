@@ -99,11 +99,6 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 			return nil, d.seedMoveError(&garden.TakeoverRefused{SeedID: seedID, Verb: garden.VerbTend, Tender: tender}, b)
 		}
 	}
-	if existing := d.gardenSession(sessionID); existing != nil && existing.ProfileID != seed.ProfileID {
-		owner, _ := d.store.GetProfile(seed.ProfileID)
-		caller, _ := d.store.GetProfile(existing.ProfileID)
-		return nil, fmt.Errorf("seed %s belongs to profile %q; its previous agent now belongs to profile %q: hand the seed to a new agent in its own profile", seed.ID, owner.Name, caller.Name)
-	}
 	if existing := d.gardenSession(sessionID); existing != nil &&
 		(execution.HostKind == garden.HostRemote || d.sessionHasLiveWorker(sessionID)) {
 		if _, _, _, err := d.applySeedMoveProtected(protection, seedID, garden.VerbTend, func(b who.Bindings) (seedMoveAsk, error) {
@@ -139,11 +134,6 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 		return nil, fmt.Errorf("%s cannot resume: its profile was deleted", seedID)
 	}
 	profileID := recorded.ProfileID
-	if profileID != seed.ProfileID {
-		owner, _ := d.store.GetProfile(seed.ProfileID)
-		target, _ := d.store.GetProfile(profileID)
-		return nil, fmt.Errorf("seed %s belongs to profile %q; its conversation would reopen in profile %q: hand the seed to a new agent in its own profile", seed.ID, owner.Name, target.Name)
-	}
 	afterSpawn := func() error {
 		if _, err := d.validateGardenReviewAction(review, seedID, "resume"); err != nil {
 			return err

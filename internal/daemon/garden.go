@@ -1212,9 +1212,7 @@ func (d *Daemon) gardenDispatchCrown(sessionID protocol.SessionID) (string, bool
 	}
 	crown := activeDispatchCrown(dispatch)
 	if crown != "" {
-		seed, _, err := d.readSeed(crown)
-		profileID, profileErr := d.sessionProfileID(sessionID)
-		if err != nil || profileErr != nil || seed.ProfileID != profileID {
+		if _, _, err := d.readSeed(crown); err != nil {
 			return "", false
 		}
 	}
@@ -1371,7 +1369,7 @@ func (d *Daemon) decorateSessionSeed(session *protocol.Session, seedBySession ma
 		return
 	}
 	if seed := seedBySession[session.ID]; seed != "" {
-		if owned, _, err := d.readSeed(seed); err != nil || owned.ProfileID != session.ProfileID {
+		if _, _, err := d.readSeed(seed); err != nil {
 			session.SeedID = nil
 			return
 		}
