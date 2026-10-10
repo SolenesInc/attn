@@ -188,11 +188,11 @@ runner.registerCleanup('retire_crew', async () => {
   const observed = [...observer.sessionsById.values()]
     .filter((session) => [awake, asleep, history].includes(session.crew_member))
     .map((session) => session.id);
-  const days = [...new Set([successor, firstSession, ...observed].filter(Boolean))];
+  const crewSessions = [...new Set([successor, firstSession, ...observed].filter(Boolean))];
   for (const member of [awake, asleep, history]) runAttn(['doc', 'delete', 'core/crew', 'members', member]);
-  for (const id of days.filter((sessionId) => observer.sessionsById.has(sessionId))) observer.send({ cmd: 'unregister', id });
-  await observer.waitFor(() => days.every((sessionId) => !observer.sessionsById.has(sessionId)),
-    `crew days ${days.join(', ')} closed once their members are deleted`);
+  for (const id of crewSessions.filter((sessionId) => observer.sessionsById.has(sessionId))) observer.send({ cmd: 'unregister', id });
+  await observer.waitFor(() => crewSessions.every((sessionId) => !observer.sessionsById.has(sessionId)),
+    `crew sessions ${crewSessions.join(', ')} closed once their members are deleted`);
 });
 runner.registerCleanup('archive_crew_files', () => {
   if (fs.existsSync(historyHome)) fs.chmodSync(historyHome, 0o755);

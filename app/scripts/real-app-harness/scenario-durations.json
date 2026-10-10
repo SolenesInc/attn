@@ -52,7 +52,7 @@
         "recordedAt": "2026-10-10",
         "seconds": 55.269,
         "runnerClass": "Linux amd64 VM",
-        "note": "Green ATTN_VERDICT durationMs=55269 in a 57/57 green full matrix, including cleanup. Deletes its members before unregistering their days, then waits until they are gone."
+        "note": "Green ATTN_VERDICT durationMs=55269 in a 57/57 green full matrix, including cleanup. Deletes its members before unregistering their sessions, then waits until they are gone."
       },
       "desktop-splits": {
         "run": "workspace-switching-2026-09-15T21-17-34-309Z",
