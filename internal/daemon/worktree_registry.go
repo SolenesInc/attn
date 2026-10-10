@@ -30,7 +30,7 @@ type repositoryFacts struct {
 }
 
 func (d *Daemon) reconcileWorktreeRegistryContext(ctx context.Context, repo string, now time.Time) ([]git.WorktreeState, error) {
-	finish := d.beginGitOperation(protocol.GitOperationKindRefreshRepository, repo, nil)
+	finish := d.beginGitOperation(protocol.GitOperationKindRefreshRepository, repo)
 	states, err := d.listWorktreeStatesContext(ctx, repo)
 	finish(err)
 	if err != nil {
@@ -89,7 +89,7 @@ func (d *Daemon) repositoryFactsContext(ctx context.Context, repo string, now ti
 		stashes        map[string]int
 		treeErr        error
 	}
-	finish := d.beginGitOperation(protocol.GitOperationKindRefreshRepository, repo, nil)
+	finish := d.beginGitOperation(protocol.GitOperationKindRefreshRepository, repo)
 	observed, err := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitDeferred}, func(runCtx context.Context, client *git.Client) (gitFacts, error) {
 		integrationSHA, resolveErr := client.Output(runCtx, git.OpMetadata, repo, "rev-parse", facts.integrationBranch+"^{commit}")
 		if resolveErr != nil {

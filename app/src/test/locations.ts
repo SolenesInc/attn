@@ -81,17 +81,15 @@ export function serveMachine(daemon: ScriptedDaemon, { recent = [], directories 
     };
   });
   daemon.on('inspect_path', ({ path }) => inspection(path, { repoRoot: repoRootOf(path, repos) }));
-  daemon.on('create_worktree', ({ main_repo, branch, endpoint_id }) => ({
+  daemon.on('create_worktree', ({ main_repo, branch }) => ({
     event: 'create_worktree_result',
     success: true,
     path: `${main_repo}--${branch}`,
-    ...(endpoint_id ? { endpoint_id } : {}),
   }));
-  daemon.on('get_repo_info', ({ repo, endpoint_id }) => ({
+  daemon.on('get_repo_info', ({ repo }) => ({
     event: 'get_repo_info_result',
     success: true,
     info: repos.find((entry) => entry.repo === repo)!,
-    ...(endpoint_id ? { endpoint_id } : {}),
   }));
 }
 
@@ -138,18 +136,17 @@ export async function submitPath(daemon: ScriptedDaemon, path: string) {
 }
 
 export function launchedAt(daemon: ScriptedDaemon) {
-  return daemon.sentOf('spawn_session').map(({ cwd, agent, endpoint_id, yolo_mode, chief_of_staff, auto_mode }) => ({
+  return daemon.sentOf('spawn_session').map(({ cwd, agent, yolo_mode, chief_of_staff, auto_mode }) => ({
     cwd,
     agent,
-    ...(endpoint_id !== undefined ? { endpoint_id } : {}),
     ...(yolo_mode !== undefined ? { yolo_mode } : {}),
     ...(chief_of_staff !== undefined ? { chief_of_staff } : {}),
     ...(auto_mode !== undefined ? { auto_mode } : {}),
   }));
 }
 
-export function destinationMemory(repo: string, endpointId?: string) {
-  return endpointId ? `new_session_destination_endpoint_${endpointId}_${repo}` : `new_session_destination_local_${repo}`;
+export function destinationMemory(repo: string) {
+  return `new_session_destination_local_${repo}`;
 }
 
 export function chosenRow() {

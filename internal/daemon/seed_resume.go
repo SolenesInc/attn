@@ -73,8 +73,7 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 		caller, _ := d.store.GetProfile(existing.ProfileID)
 		return nil, fmt.Errorf("seed %s belongs to profile %q; its previous agent now belongs to profile %q: hand the seed to a new agent in its own profile", seed.ID, owner.Name, caller.Name)
 	}
-	if existing := d.store.Get(sessionID); existing != nil &&
-		(execution.HostKind == garden.HostRemote || d.sessionHasLiveWorker(sessionID)) {
+	if existing := d.store.Get(sessionID); existing != nil && d.sessionHasLiveWorker(sessionID) {
 		if _, _, _, err := d.applySeedTransitionDetailedAsAtRevisionProtected(protection,
 			seedID, garden.VerbTend, garden.Ask{Actor: actor}, "", d.sessionExists, expectedRev); err != nil {
 			return nil, err

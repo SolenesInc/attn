@@ -11,7 +11,6 @@ import { KeybindingsProvider } from './contexts/KeybindingsContext';
 import { SettingsProvider } from './contexts/SettingsContext';
 import {
   CriticalNotificationState,
-  DaemonEndpoint,
   DaemonPlugin,
   DaemonPluginIssue,
   DaemonWorktree,
@@ -28,7 +27,6 @@ import { seedPresentationNotices, upsertPresentationNotice } from './utils/prese
 function App() {
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [settingError, setSettingError] = useState<string | null>(null);
-  const [daemonEndpoints, setDaemonEndpoints] = useState<DaemonEndpoint[]>([]);
   const [daemonPlugins, setDaemonPlugins] = useState<DaemonPlugin[]>([]);
   const [daemonPluginIssues, setDaemonPluginIssues] = useState<DaemonPluginIssue[]>([]);
   const [daemonGitHubHosts, setDaemonGitHubHosts] = useState<string[]>([]);
@@ -116,7 +114,6 @@ function App() {
     onSeedsUpdate: setSeeds,
     onCrewUpdate: setCrew,
     onPRsUpdate: setPRs,
-    onEndpointsUpdate: setDaemonEndpoints,
     onPluginsUpdate: handlePluginsUpdate,
     onGitHubHostsUpdate: handleGitHubHostsUpdate,
     onReposUpdate: setRepoStates,
@@ -201,7 +198,6 @@ function App() {
             <AppContent
               daemonSessions={daemonSessions}
               prs={prs}
-              daemonEndpoints={daemonEndpoints}
               daemonPlugins={daemonPlugins}
               daemonPluginIssues={daemonPluginIssues}
               daemonGitHubHosts={daemonGitHubHosts}

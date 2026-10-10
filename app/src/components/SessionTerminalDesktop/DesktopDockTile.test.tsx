@@ -102,13 +102,12 @@ vi.mock('mermaid', () => ({
   },
 }));
 
-function renderMarkdown(content: string, allowLocalTargets = true) {
+function renderMarkdown(content: string) {
   return render(
     <DesktopDockTile
       tile={{ type: 'tile', tileId: 'tile-markdown', tileKind: 'markdown', tileParams: '/tmp/project/README.md' }}
       desktopId="desktop-1"
       content={{ path: '/tmp/project/README.md', content }}
-      allowLocalTargets={allowLocalTargets}
       dragging={false}
       onClose={vi.fn()}
       onHeaderPointerDown={vi.fn()}
@@ -163,18 +162,6 @@ describe('DesktopDockTile Markdown rendering', () => {
     });
 
     fireEvent.click(screen.getByRole('link', { name: 'site' }));
-    expect(opener.openUrl).toHaveBeenCalledWith('https://example.test/docs');
-  });
-
-  it('disables local targets for remote terminalState content', () => {
-    renderMarkdown('[guide](docs/setup.md) ![diagram](docs/diagram.png) [site](https://example.test/docs)', false);
-
-    expect(screen.queryByRole('link', { name: 'guide' })).toBeNull();
-    expect(screen.getByText('[blocked image: diagram]')).toBeInTheDocument();
-    expect(document.querySelector('img.md-reader-image')).toBeNull();
-
-    fireEvent.click(screen.getByRole('link', { name: 'site' }));
-    expect(invokeMock).not.toHaveBeenCalled();
     expect(opener.openUrl).toHaveBeenCalledWith('https://example.test/docs');
   });
 

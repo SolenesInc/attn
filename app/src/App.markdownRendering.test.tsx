@@ -155,7 +155,7 @@ describe('App markdown rendering', () => {
 });
 
 describe('App markdown rendering seed targets', () => {
-  it('resolves direct seed links and images through the owning daemon', async () => {
+  it('resolves direct seed links and images through the daemon', async () => {
     const { daemon, reader, targets } = await openSeed('[report](report.pdf)\n\n![cover](cover%20art.png)', {
       document: () => ({ artifacts: [artifact('cover art.png', 'cover%20art.png')] }),
     });

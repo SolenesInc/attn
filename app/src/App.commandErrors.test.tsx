@@ -7,7 +7,7 @@ import type { ScriptedDaemon } from './test/scriptedDaemon';
 import { openRoute, enterModel } from './test/harnessRoute';
 import { openSection } from './test/settings';
 
-const parked = 'endpoint gpu-box is parked: remote binary (abc1234) differs from this client (def5678) — click Sync to update';
+const sessionRefusal = 'session s1 is busy; try again once it settles';
 
 async function rename(daemon: ScriptedDaemon, dialog: string, value: string) {
   const input = within(screen.getByRole('dialog', { name: dialog })).getByRole('textbox');
@@ -57,17 +57,17 @@ describe('App command errors', () => {
     expect(settings.getAllByRole('alert')).toHaveLength(1);
   });
 
-  it('shows the parked endpoint reason when a session rename is refused', async () => {
+  it('shows the daemon error when a session rename is refused', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const { daemon } = await renderWorkspace();
-    daemon.on('rename_session', () => ({ event: 'command_error', success: false, cmd: 'rename_session', error: parked }));
+    daemon.on('rename_session', () => ({ event: 'command_error', success: false, cmd: 'rename_session', error: sessionRefusal }));
 
     fireEvent.click(screen.getByRole('button', { name: 'Actions for working' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Rename session' }));
     const dialog = await rename(daemon, 'Rename session', 'new name');
 
     expect(daemon.sentOf('rename_session')).toEqual([{ cmd: 'rename_session', session_id: 's1', label: 'new name' }]);
-    expect(dialog).toHaveTextContent(parked);
+    expect(dialog).toHaveTextContent(sessionRefusal);
   });
 
   it('shows the daemon error when a desktop rename is refused', async () => {

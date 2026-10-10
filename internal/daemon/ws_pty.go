@@ -246,11 +246,6 @@ func buildSpawnSessionRecord(msg *protocol.SpawnSessionMessage, agent, cwd, labe
 	if parentSessionID != "" {
 		session.ParentSessionID = protocol.Ptr(parentSessionID)
 	}
-	if id := strings.TrimSpace(protocol.Deref(msg.EndpointID)); id != "" {
-		session.EndpointID = protocol.Ptr(id)
-	} else if existing != nil {
-		session.EndpointID = existing.EndpointID
-	}
 	if branchInfo != nil {
 		if branchInfo.Branch != "" {
 			session.Branch = protocol.Ptr(branchInfo.Branch)

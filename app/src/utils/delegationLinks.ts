@@ -8,7 +8,6 @@ export interface DelegationSession {
   dispatcher_session_id?: string;
   dispatcher_member?: string;
   delegation_role?: SessionDelegationRole;
-  endpoint_id?: string;
 }
 
 export function hasDelegationChain(session: DelegationSession, hasDelegates = false): boolean {
@@ -21,9 +20,8 @@ export function delegationTree<TSession extends DelegationSession>(
 ): { rows: Array<{ session: TSession; depth: number }>; earlierDispatcher: string | null } {
   const current = sessions.find((session) => session.id === sessionId);
   if (!current) return { rows: [], earlierDispatcher: null };
-  const local = sessions.filter((session) => (session.endpoint_id ?? '') === (current.endpoint_id ?? ''));
-  const byId = new Map(local.map((session) => [session.id, session]));
-  const children = delegatesByDispatcher(local);
+  const byId = new Map(sessions.map((session) => [session.id, session]));
+  const children = delegatesByDispatcher(sessions);
   const ancestors = new Set<string>();
   let root = current;
   while (root.dispatcher_session_id && !ancestors.has(root.dispatcher_session_id)) {

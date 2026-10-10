@@ -163,7 +163,6 @@ func (d *Daemon) handleSupportSnapshot(client *wsClient, msg *protocol.SupportSn
 	d.sendToClient(client, &protocol.SupportSnapshotResultMessage{
 		Event:                 protocol.EventSupportSnapshotResult,
 		RequestID:             msg.RequestID,
-		EndpointID:            msg.EndpointID,
 		ProtocolVersion:       protocol.ProtocolVersion,
 		DaemonInstanceID:      d.daemonInstanceID,
 		DaemonStartedAtUnixMs: int(d.presentSince.UnixMilli()),

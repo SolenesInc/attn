@@ -542,7 +542,7 @@ func absoluteTransferPath(raw, label string) (string, error) {
 		return "", fmt.Errorf("%s is required", label)
 	}
 	if !filepath.IsAbs(raw) {
-		return "", fmt.Errorf("%s %q must be absolute so the owning daemon resolves the intended file", label, raw)
+		return "", fmt.Errorf("%s %q must be absolute so the daemon resolves the intended file", label, raw)
 	}
 	return filepath.Clean(raw), nil
 }

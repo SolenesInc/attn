@@ -121,11 +121,11 @@ func openSuccessorTx(tx *sql.Tx, sc Succession, at string) error {
 		return err
 	}
 	_, err = tx.Exec(`
-		INSERT INTO sessions (id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository,
+		INSERT INTO sessions (id, label, agent, directory, profile_id, branch, is_worktree, main_repo, repository,
 			state, state_since, state_updated_at, last_model_request_at, last_seen, launched_at, context_window_cap,
 			resume_session_id, transcript_path, launch_intent, session_cost_json, succeeds, priority,
 			agent_driver_plugin_name, agent_driver_run_id, agent_driver_report_seq, agent_driver_transcript_path)
-		SELECT ?, ?, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository,
+		SELECT ?, ?, agent, directory, profile_id, branch, is_worktree, main_repo, repository,
 			'idle', ?, ?, ?, ?, launched_at, context_window_cap,
 			?, ?, ?, ?, id, priority,
 			agent_driver_plugin_name, agent_driver_run_id, agent_driver_report_seq, agent_driver_transcript_path

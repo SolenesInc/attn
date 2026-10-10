@@ -36,7 +36,6 @@ export function DesktopTilePane({
     onUndockTile,
     onUpdateTile,
     tileContents,
-    allowLocalTileTargets,
     onRequestTileContent,
     renamePane,
     tileSessionOptions,
@@ -84,7 +83,6 @@ export function DesktopTilePane({
         tile={tileLeaf}
         desktopId={desktopId}
         content={tileContents?.[tileContentKey(desktopId, tileLeaf.tileId)]}
-        allowLocalTargets={allowLocalTileTargets}
         dragging={effectiveDraggingLeafId === tileLeaf.tileId}
         visible={
           isActiveSession &&

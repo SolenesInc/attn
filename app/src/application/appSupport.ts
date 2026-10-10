@@ -3,7 +3,6 @@ import { type SessionCreationPhase } from '../components/SessionCreationProgress
 import type { DockTarget } from '../components/SessionTerminalDesktop/dockTarget';
 import {
   CriticalNotificationState,
-  DaemonEndpoint,
   DaemonPlugin,
   DaemonPluginIssue,
   DaemonPR,
@@ -51,7 +50,6 @@ export function handleAppPointerDownCapture(event: { target: EventTarget | null 
 export interface SplitSessionOptions {
   baseSessionId?: string;
   cwd?: string;
-  endpointId?: string | null;
   label?: string;
   yoloMode?: boolean;
   autoMode?: boolean;
@@ -159,7 +157,6 @@ export type SessionCreationJob = {
 export interface AppContentProps {
   daemonSessions: DaemonSession[];
   prs: DaemonPR[];
-  daemonEndpoints: DaemonEndpoint[];
   daemonPlugins: DaemonPlugin[];
   daemonPluginIssues: DaemonPluginIssue[];
   daemonGitHubHosts: string[];

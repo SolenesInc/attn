@@ -120,8 +120,6 @@ type Dispatch struct {
 	DispatcherMember  string             `json:"dispatcher_member,omitempty"`
 	Cwd               string             `json:"cwd,omitempty"`
 	Agent             string             `json:"agent,omitempty"`
-	HostKind          string             `json:"host_kind,omitempty"`
-	EndpointID        string             `json:"endpoint_id,omitempty"`
 	RepositoryRoot    string             `json:"repository_root,omitempty"`
 	RepositorySubdir  string             `json:"repository_subdir,omitempty"`
 	Branch            string             `json:"branch,omitempty"`
@@ -131,11 +129,6 @@ type Dispatch struct {
 	FromChief         bool               `json:"from_chief,omitempty"`
 	Resume            string             `json:"resume,omitempty"`
 }
-
-const (
-	HostLocal  = "local"
-	HostRemote = "remote"
-)
 
 func DispatchesSchema() docstore.CollectionSchema {
 	return docstore.CollectionSchema{

@@ -30,7 +30,6 @@ import type {
   PluginInfo as GeneratedPluginInfo,
   PluginIssue as GeneratedPluginIssue,
   GitOperation as GeneratedGitOperation,
-  Endpoint as GeneratedEndpoint,
   RepoState as GeneratedRepoState,
   AuthorState as GeneratedAuthorState,
   WebSocketEvent as GeneratedWebSocketEvent,
@@ -216,7 +215,6 @@ export type DaemonWorktree = GeneratedWorktree;
 export type DaemonPlugin = GeneratedPluginInfo;
 export type DaemonPluginIssue = GeneratedPluginIssue;
 export type DaemonGitOperation = GeneratedGitOperation;
-export type DaemonEndpoint = GeneratedEndpoint;
 export type RepoState = GeneratedRepoState;
 export type AuthorState = GeneratedAuthorState;
 export type RecentLocation = GeneratedRecentLocation;
@@ -253,8 +251,6 @@ export { PRRole, HeatState };
 
 type WebSocketEvent = GeneratedWebSocketEvent & {
   id?: string;
-  endpoint?: GeneratedEndpoint;
-  endpoints?: GeneratedEndpoint[];
   leaf_id?: string;
   split_id?: string;
   tile_id?: string;
@@ -276,7 +272,6 @@ type WebSocketEvent = GeneratedWebSocketEvent & {
   path?: string;
   name?: string;
   priority?: number;
-  endpoint_id?: string;
   request_id?: string;
   selector?: string;
   home_path?: string;
@@ -334,7 +329,6 @@ interface FetchPRDetailsResult {
 interface WorktreeActionResult {
   success: boolean;
   path?: string;
-  endpoint_id?: string;
   error?: string;
   forceable?: boolean;
   reason_kind?: string;
@@ -363,7 +357,6 @@ export interface PluginListResult {
 interface RecentLocationsResult {
   success: boolean;
   locations: RecentLocation[];
-  endpoint_id?: string;
   home_path?: string;
   error?: string;
 }
@@ -373,7 +366,6 @@ export interface BrowseDirectoryResult {
   input_path: string;
   directory: string;
   entries: DirectoryEntry[];
-  endpoint_id?: string;
   home_path?: string;
   error?: string;
 }
@@ -381,7 +373,6 @@ export interface BrowseDirectoryResult {
 export interface InspectPathResult {
   success: boolean;
   inspection?: PathInspection;
-  endpoint_id?: string;
   error?: string;
 }
 
@@ -393,12 +384,6 @@ interface FetchRemotesResult {
 interface EnsureRepoResult {
   success: boolean;
   cloned?: boolean;
-  error?: string;
-}
-
-interface EndpointActionResult {
-  success: boolean;
-  endpoint_id?: string;
   error?: string;
 }
 
@@ -426,7 +411,6 @@ interface RepoInfo {
 interface RepoInfoResult {
   success: boolean;
   info?: RepoInfo;
-  endpoint_id?: string;
   error?: string;
 }
 
@@ -546,7 +530,6 @@ interface UseDaemonSocketOptions {
   onPresentationAdded?: (presentation: Presentation) => void;
   onPresentationUpdated?: (presentation: Presentation) => void;
   onPRsUpdate: (prs: DaemonPR[]) => void;
-  onEndpointsUpdate?: (endpoints: DaemonEndpoint[]) => void;
   onPluginsUpdate?: (plugins: DaemonPlugin[], issues: DaemonPluginIssue[]) => void;
   onGitHubHostsUpdate?: (hosts: string[], pollingOffReason: string | null) => void;
   onReposUpdate: (repos: RepoState[]) => void;
@@ -581,16 +564,6 @@ function upsertSessionByID(sessions: DaemonSession[], session: DaemonSession): D
   }
   const updated = [...sessions];
   updated[index] = session;
-  return updated;
-}
-
-function upsertEndpointByID(endpoints: DaemonEndpoint[], endpoint: DaemonEndpoint): DaemonEndpoint[] {
-  const index = endpoints.findIndex((entry) => entry.id === endpoint.id);
-  if (index === -1) {
-    return [...endpoints, endpoint];
-  }
-  const updated = [...endpoints];
-  updated[index] = endpoint;
   return updated;
 }
 
@@ -630,7 +603,7 @@ const GITHUB_REFRESH_TIMEOUT_MS = 5 * 60_000;
 const BROWSER_HOST_CAPABILITY = 'browser_host';
 const BINARY_PTY_OUTPUT_CAPABILITY = 'binary_pty_output';
 // "Describe images to me": gates the kitty_placements feed. Deliberately not the same bit as
-// binary_pty_output, which decides only how a blob TRAVELS — the hub relay takes its pixels as base64.
+// binary_pty_output, which decides only how a blob TRAVELS — a text-only client takes its pixels as base64.
 const KITTY_IMAGES_CAPABILITY = 'kitty_images';
 
 function isTransientAttachError(error: unknown): boolean {
@@ -688,7 +661,6 @@ export function useDaemonSocket({
   onPresentationAdded,
   onPresentationUpdated,
   onPRsUpdate,
-  onEndpointsUpdate,
   onPluginsUpdate,
   onGitHubHostsUpdate,
   onReposUpdate,
@@ -704,7 +676,6 @@ export function useDaemonSocket({
   const wsRef = useRef<WebSocket | null>(null);
   const sessionsRef = useRef<DaemonSession[]>([]);
   const prsRef = useRef<DaemonPR[]>([]);
-  const endpointsRef = useRef<DaemonEndpoint[]>([]);
   const reposRef = useRef<RepoState[]>([]);
   const authorsRef = useRef<AuthorState[]>([]);
   const settingsRef = useRef<DaemonSettings>({});
@@ -720,7 +691,6 @@ export function useDaemonSocket({
     onPresentationAdded,
     onPresentationUpdated,
     onPRsUpdate,
-    onEndpointsUpdate,
     onPluginsUpdate,
     onGitHubHostsUpdate,
     onReposUpdate,
@@ -741,7 +711,6 @@ export function useDaemonSocket({
     onPresentationAdded,
     onPresentationUpdated,
     onPRsUpdate,
-    onEndpointsUpdate,
     onPluginsUpdate,
     onGitHubHostsUpdate,
     onReposUpdate,
@@ -897,10 +866,10 @@ export function useDaemonSocket({
         rejectPendingByPredicate((key) => key.startsWith('inspect_path_'), error);
         return;
       case 'create_worktree':
-        rejectPendingByPredicate((key) => key.startsWith('worktree_create_worktree_result_'), error);
+        rejectPendingByPredicate((key) => key === 'worktree_create_worktree_result', error);
         return;
       case 'delete_worktree':
-        rejectPendingByPredicate((key) => key.startsWith('worktree_delete_worktree_result_'), error);
+        rejectPendingByPredicate((key) => key === 'worktree_delete_worktree_result', error);
         return;
       case 'delete_branch':
         rejectPendingByPredicate((key) => key.startsWith('delete_branch_'), error);
@@ -909,15 +878,6 @@ export function useDaemonSocket({
         rejectPendingByPredicate((key) => key === cmd || key.startsWith(`${cmd}:`), error);
     }
   }, [rejectPendingByPredicate]);
-
-  const hasPendingEndpointAction = useCallback(() => {
-    for (const key of pendingActionsRef.current.keys()) {
-      if (key.startsWith('endpoint_action:')) {
-        return true;
-      }
-    }
-    return false;
-  }, []);
 
   const ensureDaemonRunning = useCallback(async () => {
     if (!isTauri()) {
@@ -1213,10 +1173,6 @@ export function useDaemonSocket({
             const nextPRs = data.prs || [];
             prsRef.current = nextPRs;
             callbacksRef.current.onPRsUpdate(nextPRs);
-
-            const nextEndpoints = data.endpoints || [];
-            endpointsRef.current = nextEndpoints;
-            callbacksRef.current.onEndpointsUpdate?.(nextEndpoints);
 
             const nextRepos = data.repos || [];
             reposRef.current = nextRepos;
@@ -1736,45 +1692,6 @@ export function useDaemonSocket({
             break;
           }
 
-          case 'endpoint_status_changed':
-            if (data.endpoint) {
-              const nextEndpoints = upsertEndpointByID(endpointsRef.current, data.endpoint);
-              endpointsRef.current = nextEndpoints;
-              callbacksRef.current.onEndpointsUpdate?.(nextEndpoints);
-            }
-            break;
-
-          case 'endpoints_updated':
-            if (data.endpoints) {
-              endpointsRef.current = data.endpoints;
-              callbacksRef.current.onEndpointsUpdate?.(data.endpoints);
-            }
-            if (pendingActionsRef.current.has('list_endpoints')) {
-              const pending = pendingActionsRef.current.get('list_endpoints');
-              pendingActionsRef.current.delete('list_endpoints');
-              pending?.resolve(data.endpoints || []);
-            }
-            break;
-
-          case 'endpoint_action_result': {
-            const action = data.action || '';
-            const exactKey = data.endpoint_id ? `endpoint_action:${action}:${data.endpoint_id}` : '';
-            let pendingKey = exactKey;
-            if (!pendingKey || !pendingActionsRef.current.has(pendingKey)) {
-              pendingKey = Array.from(pendingActionsRef.current.keys()).find((key) => key.startsWith(`endpoint_action:${action}:`)) || '';
-            }
-            const pending = pendingKey ? pendingActionsRef.current.get(pendingKey) : undefined;
-            if (pending) {
-              pendingActionsRef.current.delete(pendingKey);
-              if (data.success) {
-                pending.resolve({ success: true, endpoint_id: data.endpoint_id });
-              } else {
-                pending.reject(new Error(data.error || 'Endpoint action failed'));
-              }
-            }
-            break;
-          }
-
           case 'reload_session_result': {
             if (data.id) {
               const key = `reload_session:${data.id}`;
@@ -2265,12 +2182,12 @@ export function useDaemonSocket({
 
           case 'create_worktree_result':
           case 'delete_worktree_result':
-            const actionKey = `worktree_${data.event}_${data.endpoint_id || 'local'}`;
+            const actionKey = `worktree_${data.event}`;
             const pendingAction = pendingActionsRef.current.get(actionKey);
             if (pendingAction) {
               pendingActionsRef.current.delete(actionKey);
               if (data.success) {
-                pendingAction.resolve({ success: true, path: data.path, endpoint_id: data.endpoint_id });
+                pendingAction.resolve({ success: true, path: data.path });
               } else {
                 const error = new Error(data.error || 'Worktree action failed') as WorktreeActionError;
                 error.forceable = data.forceable;
@@ -2297,9 +2214,7 @@ export function useDaemonSocket({
             break;
 
           case 'recent_locations_result': {
-            const key = data.request_id
-              ? `get_recent_locations_${data.request_id}`
-              : `get_recent_locations_${data.endpoint_id || 'local'}`;
+            const key = `get_recent_locations_${data.request_id}`;
             const pending = pendingActionsRef.current.get(key);
             if (pending) {
               pendingActionsRef.current.delete(key);
@@ -2307,7 +2222,6 @@ export function useDaemonSocket({
                 pending.resolve({
                   success: true,
                   locations: data.recent_locations || [],
-                  endpoint_id: data.endpoint_id,
                   home_path: data.home_path,
                 });
               } else {
@@ -2318,9 +2232,7 @@ export function useDaemonSocket({
           }
 
           case 'browse_directory_result': {
-            const key = data.request_id
-              ? `browse_directory_${data.request_id}`
-              : `browse_directory_${data.endpoint_id || 'local'}_${data.input_path || ''}`;
+            const key = `browse_directory_${data.request_id}`;
             const pending = pendingActionsRef.current.get(key);
             if (pending) {
               pendingActionsRef.current.delete(key);
@@ -2330,7 +2242,6 @@ export function useDaemonSocket({
                   input_path: data.input_path || '',
                   directory: data.directory || '',
                   entries: data.entries || [],
-                  endpoint_id: data.endpoint_id,
                   home_path: data.home_path,
                 });
               } else {
@@ -2342,9 +2253,7 @@ export function useDaemonSocket({
 
           case 'inspect_path_result': {
             const inspection = data.inspection;
-            const key = data.request_id
-              ? `inspect_path_${data.request_id}`
-              : `inspect_path_${data.endpoint_id || 'local'}_${inspection?.input_path || ''}`;
+            const key = `inspect_path_${data.request_id}`;
             const pending = pendingActionsRef.current.get(key);
             if (pending) {
               pendingActionsRef.current.delete(key);
@@ -2352,7 +2261,6 @@ export function useDaemonSocket({
                 pending.resolve({
                   success: true,
                   inspection,
-                  endpoint_id: data.endpoint_id,
                 });
               } else {
                 pending.reject(new Error(data.error || 'Failed to inspect path'));
@@ -2423,14 +2331,14 @@ export function useDaemonSocket({
 
           case 'get_repo_info_result': {
             const repoPath = (data as any).info?.repo || '';
-            const key = `repo_info_${data.endpoint_id || 'local'}_${repoPath}`;
+            const key = `repo_info_${repoPath}`;
             const pending = pendingActionsRef.current.get(key);
             if (pending) {
               pendingActionsRef.current.delete(key);
               if ((data as any).success) {
-                pending.resolve({ success: true, info: (data as any).info, endpoint_id: data.endpoint_id });
+                pending.resolve({ success: true, info: (data as any).info });
               } else {
-                pending.resolve({ success: false, error: (data as any).error, endpoint_id: data.endpoint_id });
+                pending.resolve({ success: false, error: (data as any).error });
               }
             }
             break;
@@ -2615,7 +2523,6 @@ export function useDaemonSocket({
       id: args.id,
       cwd: args.cwd,
       placement: args.placement ?? {},
-      ...(args.endpoint_id && { endpoint_id: args.endpoint_id }),
       agent: args.shell ? 'shell' : (args.agent || 'codex'),
       cols: args.cols,
       rows: args.rows,
@@ -2809,10 +2716,10 @@ export function useDaemonSocket({
     );
   }, [sendRequest]);
 
-  const sendSupportSnapshot = useCallback((endpointId?: string, runtimeIds?: string[]): Promise<SupportSnapshotResultMessage> => {
+  const sendSupportSnapshot = useCallback((runtimeIds?: string[]): Promise<SupportSnapshotResultMessage> => {
     return sendRequest<SupportSnapshotResultMessage>(
       'support_snapshot',
-      { ...(endpointId ? { endpoint_id: endpointId } : {}), ...(runtimeIds ? { runtime_ids: runtimeIds } : {}) },
+      runtimeIds ? { runtime_ids: runtimeIds } : {},
       'Reading diagnostic data timed out',
     );
   }, [sendRequest]);
@@ -3556,7 +3463,7 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'list_worktrees', main_repo: mainRepo }));
   }, []);
 
-  const sendCreateWorktree = useCallback((mainRepo: string, branch: string, path?: string, startingFrom?: string, endpointId?: string): Promise<WorktreeActionResult> => {
+  const sendCreateWorktree = useCallback((mainRepo: string, branch: string, path?: string, startingFrom?: string): Promise<WorktreeActionResult> => {
     return new Promise((resolve, reject) => {
       const ws = wsRef.current;
       if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -3564,7 +3471,7 @@ export function useDaemonSocket({
         return;
       }
 
-      const actionKey = `worktree_create_worktree_result_${endpointId || 'local'}`;
+      const actionKey = 'worktree_create_worktree_result';
       pendingActionsRef.current.set(actionKey, { resolve, reject });
 
       setTimeout(() => {
@@ -3579,13 +3486,12 @@ export function useDaemonSocket({
         main_repo: mainRepo,
         branch,
         ...(path && { path }),
-        ...(endpointId && { endpoint_id: endpointId }),
         ...(startingFrom && { starting_from: startingFrom }),
       }));
     });
   }, []);
 
-  const sendDeleteWorktree = useCallback((path: string, endpointId?: string, options: DeleteWorktreeOptions = {}): Promise<WorktreeActionResult> => {
+  const sendDeleteWorktree = useCallback((path: string, options: DeleteWorktreeOptions = {}): Promise<WorktreeActionResult> => {
     return new Promise((resolve, reject) => {
       const ws = wsRef.current;
       if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -3593,7 +3499,7 @@ export function useDaemonSocket({
         return;
       }
 
-      const actionKey = `worktree_delete_worktree_result_${endpointId || 'local'}`;
+      const actionKey = 'worktree_delete_worktree_result';
       pendingActionsRef.current.set(actionKey, { resolve, reject });
 
       setTimeout(() => {
@@ -3606,7 +3512,6 @@ export function useDaemonSocket({
       ws.send(JSON.stringify({
         cmd: 'delete_worktree',
         path,
-        ...(endpointId && { endpoint_id: endpointId }),
         ...(options.force && { force: true }),
       }));
     });
@@ -3660,57 +3565,6 @@ export function useDaemonSocket({
   const sendSetPluginPriority = useCallback((name: string, priority: number): Promise<PluginActionResult> => {
     const key = `plugin_action:set_priority:${name}`;
     return sendKeyedRequest<PluginActionResult>(key, { cmd: 'set_plugin_priority', name, priority }, 'Set plugin priority timed out', 30000);
-  }, [sendKeyedRequest]);
-
-  const sendRemoveEndpoint = useCallback((endpointId: string): Promise<EndpointActionResult> => {
-    return new Promise((resolve, reject) => {
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        reject(new Error('WebSocket not connected'));
-        return;
-      }
-      if (hasPendingEndpointAction()) {
-        reject(new Error('Another endpoint action is already in progress'));
-        return;
-      }
-      const key = `endpoint_action:remove:${endpointId}`;
-      pendingActionsRef.current.set(key, { resolve, reject });
-      ws.send(JSON.stringify({ cmd: 'remove_endpoint', endpoint_id: endpointId }));
-      setTimeout(() => {
-        if (pendingActionsRef.current.has(key)) {
-          pendingActionsRef.current.delete(key);
-          reject(new Error('Remove endpoint timed out'));
-        }
-      }, 30000);
-    });
-  }, [hasPendingEndpointAction]);
-
-  const sendBootstrapEndpoint = useCallback((endpointId: string): Promise<EndpointActionResult> => {
-    return new Promise((resolve, reject) => {
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        reject(new Error('WebSocket not connected'));
-        return;
-      }
-      if (hasPendingEndpointAction()) {
-        reject(new Error('Another endpoint action is already in progress'));
-        return;
-      }
-      const key = `endpoint_action:bootstrap:${endpointId}`;
-      pendingActionsRef.current.set(key, { resolve, reject });
-      ws.send(JSON.stringify({ cmd: 'bootstrap_endpoint', endpoint_id: endpointId }));
-      setTimeout(() => {
-        if (pendingActionsRef.current.has(key)) {
-          pendingActionsRef.current.delete(key);
-          reject(new Error('Bootstrap endpoint timed out'));
-        }
-      }, 60000);
-    });
-  }, [hasPendingEndpointAction]);
-
-  const sendListEndpoints = useCallback((): Promise<DaemonEndpoint[]> => {
-    const key = 'list_endpoints';
-    return sendKeyedRequest<DaemonEndpoint[]>(key, { cmd: 'list_endpoints' }, 'List endpoints timed out');
   }, [sendKeyedRequest]);
 
   const sendSessionMessagesGet = useCallback((sessionId: string): Promise<SessionMessageWindow> => {
@@ -4092,7 +3946,7 @@ export function useDaemonSocket({
     }, 'Recent files timed out');
   }, [nextRequestID, sendKeyedRequest]);
 
-  const sendGetRecentLocations = useCallback((endpointId?: string, limit?: number): Promise<RecentLocationsResult> => {
+  const sendGetRecentLocations = useCallback((limit?: number): Promise<RecentLocationsResult> => {
     return new Promise((resolve, reject) => {
       const ws = wsRef.current;
       if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -4106,7 +3960,6 @@ export function useDaemonSocket({
 
       ws.send(JSON.stringify({
         cmd: 'get_recent_locations',
-        ...(endpointId && { endpoint_id: endpointId }),
         ...(limit && { limit }),
         request_id: requestId,
       }));
@@ -4120,25 +3973,23 @@ export function useDaemonSocket({
     });
   }, [nextRequestID]);
 
-  const sendBrowseDirectory = useCallback((inputPath: string, endpointId?: string, extensions?: string[]): Promise<BrowseDirectoryResult> => {
+  const sendBrowseDirectory = useCallback((inputPath: string, extensions?: string[]): Promise<BrowseDirectoryResult> => {
     const requestId = nextRequestID('browse_directory');
     const key = `browse_directory_${requestId}`;
     return sendKeyedRequest<BrowseDirectoryResult>(key, {
       cmd: 'browse_directory',
       input_path: inputPath,
       ...(extensions && extensions.length > 0 ? { extensions } : {}),
-      ...(endpointId && { endpoint_id: endpointId }),
       request_id: requestId,
     }, 'Browse directory timed out', GIT_METADATA_TIMEOUT_MS);
   }, [nextRequestID, sendKeyedRequest]);
 
-  const sendInspectPath = useCallback((path: string, endpointId?: string): Promise<InspectPathResult> => {
+  const sendInspectPath = useCallback((path: string): Promise<InspectPathResult> => {
     const requestId = nextRequestID('inspect_path');
     const key = `inspect_path_${requestId}`;
     return sendKeyedRequest<InspectPathResult>(key, {
       cmd: 'inspect_path',
       path,
-      ...(endpointId && { endpoint_id: endpointId }),
       request_id: requestId,
     }, 'Inspect path timed out', GIT_METADATA_TIMEOUT_MS);
   }, [nextRequestID, sendKeyedRequest]);
@@ -4151,7 +4002,7 @@ export function useDaemonSocket({
         return;
       }
 
-      const actionKey = 'worktree_create_worktree_result_local';
+      const actionKey = 'worktree_create_worktree_result';
       pendingActionsRef.current.set(actionKey, { resolve, reject });
 
       setTimeout(() => {
@@ -4260,12 +4111,11 @@ export function useDaemonSocket({
     }, 'Get file diff timed out', GIT_DIFF_TIMEOUT_MS);
   }, [nextRequestID, sendKeyedRequest]);
 
-  const getRepoInfo = useCallback((repo: string, endpointId?: string): Promise<RepoInfoResult> => {
-    const key = `repo_info_${endpointId || 'local'}_${repo}`;
+  const getRepoInfo = useCallback((repo: string): Promise<RepoInfoResult> => {
+    const key = `repo_info_${repo}`;
     return sendKeyedRequest<RepoInfoResult>(key, {
       cmd: 'get_repo_info',
       repo,
-      ...(endpointId && { endpoint_id: endpointId }),
     }, 'get_repo_info timeout', GIT_METADATA_TIMEOUT_MS);
   }, [sendKeyedRequest]);
 
@@ -4862,9 +4712,6 @@ export function useDaemonSocket({
     sendUninstallPlugin,
     sendRemovePlugin,
     sendSetPluginPriority,
-    sendRemoveEndpoint,
-    sendBootstrapEndpoint,
-    sendListEndpoints,
     sendSessionMessagesGet,
     subscribeSessionMessagesChanged,
     sendSessionAnnotationsGet,

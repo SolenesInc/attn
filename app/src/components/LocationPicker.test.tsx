@@ -64,7 +64,6 @@ function renderPicker(
         isOpen
         onClose={onClose}
         onSelect={onSelect}
-        endpoints={[]}
         {...props}
       />
     </SettingsProvider>,
@@ -86,8 +85,7 @@ function renderClosablePicker(props?: Partial<LocationPickerProps>) {
           isOpen={isOpen}
           onClose={() => setIsOpen(false)}
           onSelect={onSelect}
-          endpoints={[]}
-          {...props}
+            {...props}
         />
       </SettingsProvider>
     );
@@ -124,69 +122,7 @@ describe('LocationPicker', () => {
     expect(useFilesystemSuggestionsMock).toHaveBeenCalled();
     const calls = useFilesystemSuggestionsMock.mock.calls;
     const lastCall = calls[calls.length - 1];
-    expect(lastCall?.[3]?.enabled).toBe(false);
-  });
-
-  it('spawns a remote session with an agent advertised only by that endpoint', async () => {
-    const onGetRecentLocations = vi.fn(async () => ({ locations: [], home_path: '/home/remote' }));
-    const onInspectPath = vi.fn(async () => ({
-      success: true,
-      inspection: {
-        input_path: '~/projects/remote-repo',
-        resolved_path: '/home/remote/projects/remote-repo',
-        home_path: '/home/remote',
-        exists: true,
-        is_directory: true,
-      },
-    }));
-    const onGetRepoInfo = vi.fn();
-    const { onSelect } = renderPicker({
-      onGetRecentLocations,
-      onGetRepoInfo,
-      onInspectPath,
-      endpoints: [{
-        id: 'ep-1',
-        name: 'gpu-box',
-        ssh_target: 'ai-sandbox',
-        status: 'connected',
-        enabled: true,
-        capabilities: {
-          protocol_version: '46',
-          agents_available: ['snipe'],
-          projects_directory: '/srv/projects',
-        },
-      }],
-    });
-
-    fireEvent.click(screen.getByRole('radio', { name: /gpu-box/i }));
-    await waitFor(() => {
-      expect(screen.getByRole('radio', { name: /snipe/i })).toHaveAttribute('aria-checked', 'true');
-    });
-    const input = screen.getByTestId('location-picker-path-input');
-    fireEvent.change(input, { target: { value: '~/projects/remote-repo' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-
-    await waitFor(() => {
-      expect(onInspectPath).toHaveBeenCalledWith('/home/remote/projects/remote-repo', 'ep-1');
-      expect(onSelect).toHaveBeenCalledWith('/home/remote/projects/remote-repo', 'snipe', 'ep-1', false, false, undefined);
-    });
-    expect(onGetRepoInfo).not.toHaveBeenCalled();
-  });
-
-  it('shows every saved endpoint, even one saved as disabled, as a disabled target that explains why', () => {
-    const reason = 'Remote endpoints are off in this release.';
-    renderPicker({
-      endpoints: [
-        { id: 'ep-1', name: 'gpu-box', ssh_target: 'ai-sandbox', status: 'unsupported', status_message: reason, enabled: true },
-        { id: 'ep-2', name: 'old-box', ssh_target: 'old-sandbox', status: 'unsupported', status_message: reason, enabled: false },
-      ],
-    });
-
-    for (const name of [/gpu-box/i, /old-box/i]) {
-      const target = screen.getByRole('radio', { name });
-      expect(target).toBeDisabled();
-      expect(target).toHaveAttribute('title', reason);
-    }
+    expect(lastCall?.[2]?.enabled).toBe(false);
   });
 
   it('arrow navigation keeps the input stable and Enter opens the highlighted row', async () => {
@@ -214,8 +150,8 @@ describe('LocationPicker', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
 
     await waitFor(() => {
-      expect(onInspectPath).toHaveBeenCalledWith('~/projects', undefined);
-      expect(onSelect).toHaveBeenCalledWith('/home/remote/projects', 'claude', undefined, false, false, undefined);
+      expect(onInspectPath).toHaveBeenCalledWith('~/projects');
+      expect(onSelect).toHaveBeenCalledWith('/home/remote/projects', 'claude', false, false, undefined);
     });
   });
 
@@ -237,8 +173,8 @@ describe('LocationPicker', () => {
     fireEvent.click(screen.getByTestId('location-picker-item-0'));
 
     await waitFor(() => {
-      expect(onInspectPath).toHaveBeenCalledWith('~/projects', undefined);
-      expect(onSelect).toHaveBeenCalledWith('/home/remote/projects', 'claude', undefined, false, false, undefined);
+      expect(onInspectPath).toHaveBeenCalledWith('~/projects');
+      expect(onSelect).toHaveBeenCalledWith('/home/remote/projects', 'claude', false, false, undefined);
     });
   });
 
@@ -369,8 +305,8 @@ describe('LocationPicker', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
 
     await waitFor(() => {
-      expect(onInspectPath).toHaveBeenCalledWith('/', undefined);
-      expect(onSelect).toHaveBeenCalledWith('/', 'claude', undefined, false, false, undefined);
+      expect(onInspectPath).toHaveBeenCalledWith('/');
+      expect(onSelect).toHaveBeenCalledWith('/', 'claude', false, false, undefined);
     });
   });
 
@@ -401,8 +337,8 @@ describe('LocationPicker', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
 
     await waitFor(() => {
-      expect(onInspectPath).toHaveBeenCalledWith('/tmp/project', undefined);
-      expect(onSelect).toHaveBeenCalledWith('/tmp/project', 'claude', undefined, false, false, undefined);
+      expect(onInspectPath).toHaveBeenCalledWith('/tmp/project');
+      expect(onSelect).toHaveBeenCalledWith('/tmp/project', 'claude', false, false, undefined);
     });
   });
 
@@ -444,8 +380,8 @@ describe('LocationPicker', () => {
     fireEvent.keyDown(screen.getByTestId('location-picker-path-input'), { key: 'Enter' });
 
     await waitFor(() => {
-      expect(onInspectPath).toHaveBeenCalledWith('/home/remote/projects/recent-repo', undefined);
-      expect(onSelect).toHaveBeenCalledWith('/home/remote/projects/recent-repo', 'claude', undefined, false, false, undefined);
+      expect(onInspectPath).toHaveBeenCalledWith('/home/remote/projects/recent-repo');
+      expect(onSelect).toHaveBeenCalledWith('/home/remote/projects/recent-repo', 'claude', false, false, undefined);
     });
   });
 
@@ -537,8 +473,8 @@ describe('LocationPicker', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
 
     await waitFor(() => {
-      expect(onInspectPath).toHaveBeenCalledWith('/tmp/other', undefined);
-      expect(onSelect).toHaveBeenCalledWith('/tmp/other', 'claude', undefined, false, false, undefined);
+      expect(onInspectPath).toHaveBeenCalledWith('/tmp/other');
+      expect(onSelect).toHaveBeenCalledWith('/tmp/other', 'claude', false, false, undefined);
     });
   });
 
@@ -609,9 +545,8 @@ describe('LocationPicker', () => {
         'feat-more',
         undefined,
         'feat-images',
-        undefined,
       );
-      expect(onSelect).toHaveBeenCalledWith('/home/remote/projects/exsin--feat-more', 'claude', undefined, false, false, undefined);
+      expect(onSelect).toHaveBeenCalledWith('/home/remote/projects/exsin--feat-more', 'claude', false, false, undefined);
     });
   });
 
@@ -650,7 +585,7 @@ describe('LocationPicker', () => {
       fireEvent.click(screen.getByTestId('repo-option-0'));
 
       expect(setSetting).toHaveBeenCalledWith(destinationKey, 'main_repo');
-      expect(onSelect).toHaveBeenCalledWith(repoRoot, 'claude', undefined, false, false, undefined);
+      expect(onSelect).toHaveBeenCalledWith(repoRoot, 'claude', false, false, undefined);
     });
 
     it('records a new worktree when one is created', async () => {
@@ -683,7 +618,7 @@ describe('LocationPicker', () => {
       fireEvent.click(screen.getByTestId('repo-option-1'));
 
       await waitFor(() => {
-        expect(onSelect).toHaveBeenCalledWith('/home/remote/projects/exsin--feat-images', 'claude', undefined, false, false, undefined);
+        expect(onSelect).toHaveBeenCalledWith('/home/remote/projects/exsin--feat-images', 'claude', false, false, undefined);
       });
       expect(setSetting).not.toHaveBeenCalled();
     });
@@ -712,57 +647,8 @@ describe('LocationPicker', () => {
       expect(screen.getByTestId('repo-option-0')).toHaveClass('selected');
       fireEvent.keyDown(screen.getByTestId('repo-options'), { key: 'Enter' });
 
-      expect(onSelect).toHaveBeenCalledWith(repoRoot, 'claude', undefined, false, false, undefined);
+      expect(onSelect).toHaveBeenCalledWith(repoRoot, 'claude', false, false, undefined);
       expect(onCreateWorktree).not.toHaveBeenCalled();
-    });
-
-    it('scopes the memory to the endpoint, so the same path on a remote is its own repo', async () => {
-      const setSetting = vi.fn();
-      renderPicker(
-        {
-          onInspectPath: vi.fn(async (inputPath: string, endpointId?: string) => ({
-            success: true,
-            inspection: {
-              input_path: inputPath,
-              resolved_path: repoRoot,
-              home_path: '/home/remote',
-              exists: true,
-              is_directory: true,
-              repo_root: repoRoot,
-            },
-            endpoint_id: endpointId,
-          })),
-          onGetRepoInfo: vi.fn(async (_repo: string, endpointId?: string) => ({
-            success: true,
-            info: buildRepoInfo(),
-            endpoint_id: endpointId,
-          })),
-          endpoints: [{
-            id: 'ep-1',
-            name: 'gpu-box',
-            ssh_target: 'ai-sandbox',
-            status: 'connected',
-            enabled: true,
-            capabilities: {
-              protocol_version: '46',
-              agents_available: ['codex'],
-              projects_directory: '/srv/projects',
-            },
-          }],
-        },
-        // Stored for the LOCAL checkout at the same path: the remote must not read
-        // it, and must write under its own key.
-        { settings: { [destinationKey]: 'main_repo' }, setSetting },
-      );
-
-      fireEvent.click(screen.getByRole('radio', { name: /gpu-box/i }));
-      await openChooser();
-
-      expect(screen.getByTestId('repo-new-worktree-input')).toHaveFocus();
-
-      fireEvent.click(screen.getByTestId('repo-option-0'));
-
-      expect(setSetting).toHaveBeenCalledWith(`new_session_destination_endpoint_ep-1_${repoRoot}`, 'main_repo');
     });
   });
 
@@ -819,8 +705,7 @@ describe('LocationPicker', () => {
           purpose="session"
           onClose={vi.fn()}
           onSelect={vi.fn()}
-          endpoints={[]}
-          agentAvailability={{ claude: true, codex: true, copilot: false }}
+            agentAvailability={{ claude: true, codex: true, copilot: false }}
         />
       </SettingsProvider>,
     );
@@ -845,38 +730,13 @@ describe('LocationPicker', () => {
           purpose="session"
           onClose={vi.fn()}
           onSelect={vi.fn()}
-          endpoints={[]}
-          agentAvailability={{ claude: true, codex: true, copilot: false }}
+            agentAvailability={{ claude: true, codex: true, copilot: false }}
         />
       </SettingsProvider>,
     );
 
     expect(screen.getByRole('radio', { name: /terminal/i })).toBeEnabled();
     expect(screen.getByText('⌥T')).toBeInTheDocument();
-  });
-
-  it('offers Terminal for remote targets even when the remote reports only agent CLIs', async () => {
-    renderPicker({
-      endpoints: [{
-        id: 'ep-1',
-        name: 'gpu-box',
-        ssh_target: 'ai-sandbox',
-        status: 'connected',
-        enabled: true,
-        capabilities: {
-          protocol_version: '46',
-          agents_available: ['codex'],
-          projects_directory: '/srv/projects',
-        },
-      }],
-    });
-
-    fireEvent.click(screen.getByRole('radio', { name: /gpu-box/i }));
-
-    await waitFor(() => {
-      expect(screen.getByRole('radio', { name: /terminal/i })).toBeEnabled();
-      expect(screen.getByRole('radio', { name: /codex/i })).toBeEnabled();
-    });
   });
 
   it('keeps adjacent worktree selection after deletion', async () => {
@@ -922,7 +782,7 @@ describe('LocationPicker', () => {
     fireEvent.keyDown(screen.getByTestId('repo-options'), { key: 'y' });
 
     await waitFor(() => {
-      expect(onDeleteWorktree).toHaveBeenCalledWith('/home/remote/projects/exsin--feat-b', undefined);
+      expect(onDeleteWorktree).toHaveBeenCalledWith('/home/remote/projects/exsin--feat-b');
       expect(screen.getByTestId('repo-option-1')).toHaveClass('selected');
     });
   });
@@ -964,138 +824,6 @@ describe('LocationPicker', () => {
       expect(onGetRepoInfo).toHaveBeenCalledTimes(2);
       expect(screen.getByTestId('repo-option-1')).toHaveClass('selected');
     });
-  });
-
-  it('applies the same exact-path worktree behavior on remote endpoints', async () => {
-    const onInspectPath = vi.fn(async (inputPath: string, endpointId?: string) => ({
-      success: true,
-      inspection: {
-        input_path: inputPath,
-        resolved_path: '/home/remote/projects/exsin--feat-images',
-        home_path: '/home/remote',
-        exists: true,
-        is_directory: true,
-        repo_root: '/home/remote/projects/exsin',
-      },
-      endpoint_id: endpointId,
-    }));
-    const onGetRepoInfo = vi.fn(async (_repo: string, endpointId?: string) => ({
-      success: true,
-      info: buildRepoInfo(),
-      endpoint_id: endpointId,
-    }));
-    renderPicker({
-      onInspectPath,
-      onGetRepoInfo,
-      endpoints: [{
-        id: 'ep-1',
-        name: 'gpu-box',
-        ssh_target: 'ai-sandbox',
-        status: 'connected',
-        enabled: true,
-        capabilities: {
-          protocol_version: '46',
-          agents_available: ['codex'],
-          projects_directory: '/srv/projects',
-        },
-      }],
-    });
-
-    fireEvent.click(screen.getByRole('radio', { name: /gpu-box/i }));
-    const input = screen.getByTestId('location-picker-path-input');
-    fireEvent.change(input, { target: { value: '~/projects/exsin--feat-images/' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-
-    await waitFor(() => {
-      expect(onInspectPath).toHaveBeenCalledWith('~/projects/exsin--feat-images', 'ep-1');
-      expect(onGetRepoInfo).toHaveBeenCalledWith('/home/remote/projects/exsin', 'ep-1');
-      expect(screen.getByTestId('repo-option-1')).toHaveClass('selected');
-    });
-  });
-
-  it('preserves root-path submission on remote endpoints too', async () => {
-    const onInspectPath = vi.fn(async (inputPath: string, endpointId?: string) => ({
-      success: true,
-      inspection: {
-        input_path: inputPath,
-        resolved_path: '/',
-        home_path: '/home/remote',
-        exists: true,
-        is_directory: true,
-      },
-      endpoint_id: endpointId,
-    }));
-    const { onSelect } = renderPicker({
-      onInspectPath,
-      endpoints: [{
-        id: 'ep-1',
-        name: 'gpu-box',
-        ssh_target: 'ai-sandbox',
-        status: 'connected',
-        enabled: true,
-        capabilities: {
-          protocol_version: '46',
-          agents_available: ['codex'],
-          projects_directory: '/srv/projects',
-        },
-      }],
-    });
-
-    fireEvent.click(screen.getByRole('radio', { name: /gpu-box/i }));
-    const input = screen.getByTestId('location-picker-path-input');
-    fireEvent.change(input, { target: { value: '/' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-
-    await waitFor(() => {
-      expect(onInspectPath).toHaveBeenCalledWith('/', 'ep-1');
-      expect(onSelect).toHaveBeenCalledWith('/', 'codex', 'ep-1', false, false, undefined);
-    });
-  });
-
-  it('ignores stale inspect responses after the target changes', async () => {
-    const inspectGate = deferred<Awaited<ReturnType<NonNullable<LocationPickerProps['onInspectPath']>>>>();
-    const onInspectPath = vi.fn(() => inspectGate.promise);
-    const onGetRepoInfo = vi.fn();
-    renderPicker({
-      onInspectPath,
-      onGetRepoInfo,
-      endpoints: [{
-        id: 'ep-1',
-        name: 'gpu-box',
-        ssh_target: 'ai-sandbox',
-        status: 'connected',
-        enabled: true,
-        capabilities: {
-          protocol_version: '46',
-          agents_available: ['codex'],
-          projects_directory: '/srv/projects',
-        },
-      }],
-    });
-
-    const input = screen.getByTestId('location-picker-path-input');
-    fireEvent.change(input, { target: { value: '~/projects/exsin' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-
-    fireEvent.click(screen.getByRole('radio', { name: /gpu-box/i }));
-    inspectGate.resolve({
-      success: true,
-      inspection: {
-        input_path: '~/projects/exsin',
-        resolved_path: '/home/remote/projects/exsin',
-        home_path: '/home/remote',
-        exists: true,
-        is_directory: true,
-        repo_root: '/home/remote/projects/exsin',
-      },
-    });
-
-    await waitFor(() => {
-      expect(screen.getByRole('radio', { name: /gpu-box/i })).toHaveAttribute('aria-checked', 'true');
-    });
-
-    expect(onGetRepoInfo).not.toHaveBeenCalled();
-    expect(screen.queryByTestId('repo-options')).not.toBeInTheDocument();
   });
 
   it('ignores stale inspect responses after the user changes the input', async () => {
@@ -1183,7 +911,7 @@ describe('LocationPicker', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
 
     await waitFor(() => {
-      expect(onGetRepoInfo).toHaveBeenCalledWith('/home/remote/projects/exsin', undefined);
+      expect(onGetRepoInfo).toHaveBeenCalledWith('/home/remote/projects/exsin');
     });
 
     fireEvent.keyDown(screen.getByTestId('location-picker-path-input'), { key: 'Escape' });
@@ -1224,7 +952,7 @@ describe('LocationPicker', () => {
     });
 
     await waitFor(() => {
-      expect(onSelect).toHaveBeenCalledWith('/home/remote/projects/exsin', 'claude', undefined, false, false, undefined);
+      expect(onSelect).toHaveBeenCalledWith('/home/remote/projects/exsin', 'claude', false, false, undefined);
     });
   });
 
@@ -1309,43 +1037,8 @@ describe('LocationPicker', () => {
 
     await waitFor(() => {
       expect(onError).toHaveBeenCalledWith('unborn HEAD');
-      expect(onSelect).toHaveBeenCalledWith('/home/remote/projects/exsin', 'claude', undefined, false, false, undefined);
+      expect(onSelect).toHaveBeenCalledWith('/home/remote/projects/exsin', 'claude', false, false, undefined);
     });
-  });
-
-  it('suppresses stale inspect errors after the picker state has changed', async () => {
-    const inspectGate = deferred<Awaited<ReturnType<NonNullable<LocationPickerProps['onInspectPath']>>>>();
-    const onInspectPath = vi.fn(() => inspectGate.promise);
-    const onError = vi.fn();
-    renderPicker({
-      onInspectPath,
-      onError,
-      endpoints: [{
-        id: 'ep-1',
-        name: 'gpu-box',
-        ssh_target: 'ai-sandbox',
-        status: 'connected',
-        enabled: true,
-        capabilities: {
-          protocol_version: '46',
-          agents_available: ['codex'],
-          projects_directory: '/srv/projects',
-        },
-      }],
-    });
-
-    const input = screen.getByTestId('location-picker-path-input');
-    fireEvent.change(input, { target: { value: '~/projects/exsin' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-
-    fireEvent.click(screen.getByRole('radio', { name: /gpu-box/i }));
-    inspectGate.reject(new Error('stale failure'));
-
-    await waitFor(() => {
-      expect(screen.getByRole('radio', { name: /gpu-box/i })).toHaveAttribute('aria-checked', 'true');
-    });
-
-    expect(onError).not.toHaveBeenCalled();
   });
 
   it('ignores stale worktree creation results after the picker closes', async () => {
@@ -1435,7 +1128,7 @@ describe('LocationPicker', () => {
     fireEvent.keyDown(screen.getByTestId('location-picker-path-input'), { key: 'Enter' });
 
     await waitFor(() => {
-      expect(onSelect).toHaveBeenCalledWith('/tmp/other', 'claude', undefined, false, false, undefined);
+      expect(onSelect).toHaveBeenCalledWith('/tmp/other', 'claude', false, false, undefined);
     });
 
     firstRepoInfoGate.resolve({
@@ -1469,143 +1162,6 @@ describe('LocationPicker', () => {
     await waitFor(() => {
       expect(screen.getByRole('radio', { name: /claude/i })).toHaveAttribute('aria-checked', 'true');
       expect(screen.getByRole('radio', { name: /copilot/i })).toHaveAttribute('aria-checked', 'false');
-    });
-  });
-
-  it('switches targets with alt key shortcuts in UI order', async () => {
-    renderPicker({
-      projectsDirectory: '/Users/victor/projects',
-      endpoints: [
-        {
-          id: 'ep-1',
-          name: 'gpu-box',
-          ssh_target: 'ai-sandbox',
-          status: 'connected',
-          enabled: true,
-          capabilities: {
-            protocol_version: '46',
-            agents_available: ['codex'],
-            projects_directory: '/srv/projects',
-          },
-        },
-        {
-          id: 'ep-2',
-          name: 'lab-box',
-          ssh_target: 'lab-box',
-          status: 'connected',
-          enabled: true,
-          capabilities: {
-            protocol_version: '46',
-            agents_available: ['codex'],
-            projects_directory: '/opt/work',
-          },
-        },
-      ],
-    });
-
-    const input = screen.getByTestId('location-picker-path-input') as HTMLInputElement;
-    expect(input.value).toBe('/Users/victor/projects/');
-
-    input.focus();
-    fireEvent.keyDown(input, { key: '∑', code: 'KeyW', altKey: true });
-
-    await waitFor(() => {
-      expect(input.value).toBe('/srv/projects/');
-      expect(screen.getByRole('radio', { name: /gpu-box/i })).toHaveAttribute('aria-checked', 'true');
-    });
-
-    fireEvent.keyDown(input, { key: '€', code: 'KeyE', altKey: true });
-
-    await waitFor(() => {
-      expect(input.value).toBe('/opt/work/');
-      expect(screen.getByRole('radio', { name: /lab-box/i })).toHaveAttribute('aria-checked', 'true');
-    });
-
-    fireEvent.keyDown(input, { key: 'œ', code: 'KeyQ', altKey: true });
-
-    await waitFor(() => {
-      expect(input.value).toBe('/Users/victor/projects/');
-      expect(screen.getByRole('radio', { name: /local/i })).toHaveAttribute('aria-checked', 'true');
-    });
-  });
-
-  it('does not advertise or apply shortcuts for disconnected endpoints', async () => {
-    renderPicker({
-      projectsDirectory: '/Users/victor/projects',
-      endpoints: [
-        {
-          id: 'ep-1',
-          name: 'gpu-box',
-          ssh_target: 'ai-sandbox',
-          status: 'disconnected',
-          enabled: true,
-          capabilities: {
-            protocol_version: '46',
-            agents_available: ['codex'],
-            projects_directory: '/srv/projects',
-          },
-        },
-      ],
-    });
-
-    const input = screen.getByTestId('location-picker-path-input') as HTMLInputElement;
-    expect(input.value).toBe('/Users/victor/projects/');
-    expect(screen.queryByText('⌥W')).not.toBeInTheDocument();
-
-    input.focus();
-    fireEvent.keyDown(input, { key: '∑', code: 'KeyW', altKey: true });
-
-    await waitFor(() => {
-      expect(input.value).toBe('/Users/victor/projects/');
-      expect(screen.getByRole('radio', { name: /local/i })).toHaveAttribute('aria-checked', 'true');
-      expect(screen.getByRole('radio', { name: /gpu-box/i })).toHaveAttribute('aria-checked', 'false');
-    });
-  });
-
-  it('persists yolo preference per remote daemon and launches with attn yolo enabled', async () => {
-    const onInspectPath = vi.fn(async () => ({
-      success: true,
-      inspection: {
-        input_path: '~/projects/remote-repo',
-        resolved_path: '/home/remote/projects/remote-repo',
-        home_path: '/home/remote',
-        exists: true,
-        is_directory: true,
-      },
-    }));
-    const { onSelect, setSetting } = renderPicker({
-      onInspectPath,
-      endpoints: [{
-        id: 'ep-1',
-        name: 'gpu-box',
-        ssh_target: 'ai-sandbox',
-        status: 'connected',
-        enabled: true,
-        capabilities: {
-          protocol_version: '47',
-          daemon_instance_id: 'daemon-remote-1',
-          agents_available: ['claude'],
-          projects_directory: '/srv/projects',
-        },
-      }],
-    }, {
-      settings: {
-        claude_cap_yolo: 'true',
-      },
-    });
-
-    const endpoint = screen.getByRole('radio', { name: /gpu-box/i });
-    fireEvent.click(endpoint);
-    fireEvent.click(endpoint);
-
-    expect(setSetting).toHaveBeenCalledWith('new_session_yolo_daemon_daemon-remote-1', 'true');
-
-    const input = screen.getByTestId('location-picker-path-input');
-    fireEvent.change(input, { target: { value: '~/projects/remote-repo' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-
-    await waitFor(() => {
-      expect(onSelect).toHaveBeenCalledWith('/home/remote/projects/remote-repo', 'claude', 'ep-1', true, false, undefined);
     });
   });
 
@@ -1652,7 +1208,7 @@ describe('LocationPicker', () => {
       fireEvent.keyDown(input, { key: 'Enter' });
 
       await waitFor(() => {
-        expect(onSelect).toHaveBeenCalledWith('/home/remote/projects', 'claude', undefined, false, true, undefined);
+        expect(onSelect).toHaveBeenCalledWith('/home/remote/projects', 'claude', false, true, undefined);
       });
     });
 
@@ -1665,7 +1221,7 @@ describe('LocationPicker', () => {
       fireEvent.keyDown(input, { key: 'Enter' });
 
       await waitFor(() => {
-        expect(onSelect).toHaveBeenCalledWith('/home/remote/projects', 'claude', undefined, false, false, undefined);
+        expect(onSelect).toHaveBeenCalledWith('/home/remote/projects', 'claude', false, false, undefined);
       });
     });
   });
@@ -1718,7 +1274,7 @@ describe('LocationPicker reopen purpose', () => {
     fireEvent.keyDown(screen.getByTestId('repo-options'), { key: 'Enter' });
 
     await waitFor(() => expect(onSelect).toHaveBeenCalledTimes(1));
-    expect(onCreateWorktree).toHaveBeenCalledWith('/home/u/repo', 'fresh', undefined, 'origin/main', undefined);
+    expect(onCreateWorktree).toHaveBeenCalledWith('/home/u/repo', 'fresh', undefined, 'origin/main');
     expect(onCreateWorktreeSession).not.toHaveBeenCalled();
     expect(onSelect.mock.calls[0][0]).toBe('/home/u/repo--fresh');
   });

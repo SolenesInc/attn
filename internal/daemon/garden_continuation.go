@@ -21,7 +21,6 @@ const (
 
 	directoryPresent     = "present"
 	directoryMissing     = "missing"
-	directoryRemote      = "remote"
 	directoryUnavailable = "unavailable"
 	directoryUnknown     = "unknown"
 
@@ -71,20 +70,15 @@ func snapshotGardenExecution(session *protocol.Session, resumeID string, now tim
 		Agent:          strings.TrimSpace(session.Agent),
 		Resume:         strings.TrimSpace(resumeID),
 		CapturedAt:     formatGardenTime(now),
-		HostKind:       garden.HostLocal,
 		Branch:         strings.TrimSpace(protocol.Deref(session.Branch)),
 		RepositoryRoot: strings.TrimSpace(protocol.Deref(session.MainRepo)),
-	}
-	if endpointID := strings.TrimSpace(protocol.Deref(session.EndpointID)); endpointID != "" {
-		execution.HostKind = garden.HostRemote
-		execution.EndpointID = endpointID
 	}
 	return execution
 }
 
 func (d *Daemon) observedGardenExecution(session *protocol.Session, resumeID string, now time.Time) garden.Dispatch {
 	execution := snapshotGardenExecution(session, resumeID, now)
-	if execution.HostKind != garden.HostLocal || execution.Cwd == "" {
+	if execution.Cwd == "" {
 		return execution
 	}
 	var checkoutRoot, mainRepo, branch string
@@ -132,12 +126,6 @@ func mergeGardenExecution(current, observed garden.Dispatch) garden.Dispatch {
 	}
 	if observed.Resume != "" {
 		next.Resume = observed.Resume
-	}
-	if observed.HostKind != "" {
-		next.HostKind = observed.HostKind
-	}
-	if observed.EndpointID != "" {
-		next.EndpointID = observed.EndpointID
 	}
 	if observed.RepositoryRoot != "" {
 		next.RepositoryRoot = observed.RepositoryRoot
@@ -365,13 +353,12 @@ func (d *Daemon) normalizedSeedContinuation(seed garden.Seed) (garden.Dispatch, 
 			if foreign {
 				return garden.Dispatch{SessionID: executionID}, continuationSourceExecution, true
 			}
-			localLedgerGone := entry == nil && execution.HostKind != garden.HostRemote
 			if entry != nil && entry.ProfileID == seed.ProfileID {
 				execution.SessionID = entry.ID
 				execution.Cwd = entry.Directory
 				execution.Agent = entry.Agent
 				execution.Resume = d.store.GetResumeSessionID(entry.ID)
-			} else if localLedgerGone {
+			} else if entry == nil {
 				execution.Resume = ""
 			}
 			return execution, continuationSourceExecution, true
@@ -381,26 +368,19 @@ func (d *Daemon) normalizedSeedContinuation(seed garden.Seed) (garden.Dispatch, 
 }
 
 func inspectContinuationDirectory(execution garden.Dispatch) string {
-	switch strings.TrimSpace(execution.HostKind) {
-	case garden.HostRemote:
-		return directoryRemote
-	case garden.HostLocal:
-		if strings.TrimSpace(execution.Cwd) == "" {
-			return directoryUnknown
-		}
-		info, err := os.Stat(execution.Cwd)
-		switch {
-		case err == nil && info.IsDir():
-			return directoryPresent
-		case err == nil:
-			return directoryUnavailable
-		case os.IsNotExist(err):
-			return directoryMissing
-		default:
-			return directoryUnavailable
-		}
-	default:
+	if strings.TrimSpace(execution.Cwd) == "" {
 		return directoryUnknown
+	}
+	info, err := os.Stat(execution.Cwd)
+	switch {
+	case err == nil && info.IsDir():
+		return directoryPresent
+	case err == nil:
+		return directoryUnavailable
+	case os.IsNotExist(err):
+		return directoryMissing
+	default:
+		return directoryUnavailable
 	}
 }
 
@@ -493,20 +473,14 @@ func (d *Daemon) continuationForSeedWithResumeCheck(seed garden.Seed, checkResum
 		DirectoryState:    inspectContinuationDirectory(execution),
 		HandoverPlacement: handoverNeedsPlacement,
 	}
-	if live := d.store.Get(protocol.TrimID(execution.SessionID)); live != nil &&
-		(strings.TrimSpace(protocol.Deref(live.EndpointID)) != "" || d.sessionHasLiveWorker(live.ID)) {
+	if live := d.store.Get(protocol.TrimID(execution.SessionID)); live != nil && d.sessionHasLiveWorker(live.ID) {
 		continuation.SessionLive = true
 		continuation.ResumeAvailable = true
-		if execution.HostKind == garden.HostLocal && continuation.DirectoryState == directoryPresent {
+		if continuation.DirectoryState == directoryPresent {
 			continuation.HandoverPlacement = handoverReuseCwd
 		} else {
 			continuation.PlacementReason = "choose a reachable place for the new agent"
 		}
-		return continuation
-	}
-	if execution.HostKind != garden.HostLocal {
-		continuation.ResumeReason = "the original host is not available here"
-		continuation.PlacementReason = "choose a reachable place for the new agent"
 		return continuation
 	}
 	if !continuation.LedgerAvailable {
@@ -576,19 +550,12 @@ func continuationToProtocol(continuation *seedContinuation) *protocol.SeedContin
 		SessionLive:       continuation.SessionLive,
 		Agent:             execution.Agent,
 		Cwd:               execution.Cwd,
-		HostKind:          execution.HostKind,
 		DirectoryState:    continuation.DirectoryState,
 		ResumeAvailable:   continuation.ResumeAvailable,
 		HandoverPlacement: continuation.HandoverPlacement,
 	}
-	if out.HostKind == "" {
-		out.HostKind = directoryUnknown
-	}
 	if value := strings.TrimSpace(execution.Resume); value != "" {
 		out.NativeConversationID = protocol.Ptr(value)
-	}
-	if value := strings.TrimSpace(execution.EndpointID); value != "" {
-		out.EndpointID = protocol.Ptr(value)
 	}
 	if value := strings.TrimSpace(execution.RepositoryRoot); value != "" {
 		out.RepositoryRoot = protocol.Ptr(value)

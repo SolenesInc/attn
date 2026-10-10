@@ -7,7 +7,7 @@ import { revealItemInDir } from '@tauri-apps/plugin-opener';
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { openActionMenu, openAttachedTerminals } from './test/appFixtures';
 import { pane, relayOut } from './test/desktopLayouts';
-import { daemonEndpoint, daemonSession, splitDesktop, type DaemonSession } from './test/daemonFixtures';
+import { daemonSession, splitDesktop, type DaemonSession } from './test/daemonFixtures';
 import { pressShortcut } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
@@ -15,11 +15,10 @@ const FIRST_OUTPUT = 'first pane says hi';
 const SECOND_OUTPUT = 'second pane output';
 
 function answerSnapshots(daemon: ScriptedDaemon) {
-  daemon.on('support_snapshot', ({ endpoint_id }) => ({
+  daemon.on('support_snapshot', () => ({
     event: 'support_snapshot_result',
-    ...(endpoint_id ? { endpoint_id } : {}),
     protocol_version: '1',
-    daemon_instance_id: `daemon-${endpoint_id ?? 'home'}`,
+    daemon_instance_id: 'daemon-home',
     daemon_started_at_unix_ms: 1,
     captured_at_unix_ms: 2,
     backend: 'embedded',
@@ -35,12 +34,9 @@ async function openTerminals({
   sessions = [daemonSession('s1', { state: 'idle' }), daemonSession('s2', { state: 'idle' })] as DaemonSession[],
   desktops = [splitDesktop('ws', ['s1', 's2'])],
 } = {}) {
-  const endpoints = [...new Set(sessions.flatMap((session) => session.endpoint_id ? [session.endpoint_id] : []))]
-    .map((id) => daemonEndpoint(id, { name: id }));
   return openAttachedTerminals({
     sessions,
     desktops,
-    initialState: endpoints.length ? { endpoints } : {},
     output: { s1: FIRST_OUTPUT, s2: SECOND_OUTPUT },
     script: answerSnapshots,
   });
@@ -165,7 +161,6 @@ describe('App diagnostic report', () => {
     expect(report.daemons).toEqual([]);
     expect(report.omissions).toEqual(expect.arrayContaining([
       { section: 'daemons', reason: 'snapshots_unavailable' },
-      { section: 'daemons:local', reason: 'snapshot_unavailable' },
       { section: 'nativeInput', reason: 'unsupported_or_unavailable' },
       { section: 'historicalInput', reason: 'no_persisted_samples' },
     ]));

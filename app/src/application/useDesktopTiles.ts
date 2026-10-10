@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
 import { OPENER_EXTENSIONS } from '../components/palette/MarkdownOpener';
-import { resolveMarkdownOpenerTarget } from '../components/palette/openerTarget';
 import { claimPaletteFocus } from '../components/palette/paletteClaim';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useProfilesStore } from '../store/profiles';
@@ -34,14 +33,13 @@ export function useDesktopTiles({ settings, sessions, contextSessionId, showErro
     setMarkdownOpenerOpen(true);
   }, []);
 
-  const markdownOpenerTarget = useMemo(
-    () =>
-      resolveMarkdownOpenerTarget(
-        sessions.find((session) => session.id === contextSessionId),
-        settings['notebook.root.effective'],
-      ),
-    [contextSessionId, sessions, settings],
-  );
+  const markdownOpenerTarget = useMemo(() => {
+    const session = sessions.find((entry) => entry.id === contextSessionId);
+    return {
+      root: session?.cwd || settings['notebook.root.effective'] || null,
+      sessionId: session?.id ?? '',
+    };
+  }, [contextSessionId, sessions, settings]);
   const loadOpenerRecents = useCallback(
     () =>
       sendRecentFiles(50, markdownOpenerTarget.root || undefined).then((files) =>
@@ -58,8 +56,7 @@ export function useDesktopTiles({ settings, sessions, contextSessionId, showErro
     const desktop = currentDesktop();
     if (!desktop) return;
     const activeSession = sessions.find((session) => session.id === contextSessionId);
-    const localDirectory = activeSession && !activeSession.endpointId ? activeSession.cwd : '';
-    const root = resolveEditorTileRoot(localDirectory, settings['notebook.root.effective'] || '');
+    const root = resolveEditorTileRoot(activeSession?.cwd ?? '', settings['notebook.root.effective'] || '');
     const tileId = `notebook-tile-${crypto.randomUUID()}`;
     const intent = useSessionStore.getState().beginIntent({ kind: 'leaf', desktopId: desktop.id, leafId: tileId });
     void sendDesktopDockTile({

@@ -12,7 +12,7 @@ export interface MarkdownOpenerProps {
   root: string | null;
   loadRecents: () => Promise<{ path: string; lastAt: string }[]>;
   loadIndex: (root: string) => Promise<{ files: string[]; truncated: boolean }>;
-  browseDirectory?: (inputPath: string, endpointId?: string, extensions?: string[]) => Promise<BrowseDirectoryResult>;
+  browseDirectory?: (inputPath: string, extensions?: string[]) => Promise<BrowseDirectoryResult>;
   onPick: (absPath: string) => void;
   onClose: () => void;
 }
@@ -65,7 +65,6 @@ export function MarkdownOpener({ root, loadRecents, loadIndex, browseDirectory, 
   const pathMode = isPathQuery(query);
   const { suggestions, loading: browseLoading, error: browseError } = useFilesystemSuggestions(
     browseInput || '',
-    undefined,
     browseDirectory,
     { enabled: pathMode && !!browseInput, extensions: OPENER_EXTENSIONS },
   );

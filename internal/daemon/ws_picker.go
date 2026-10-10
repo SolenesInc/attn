@@ -150,12 +150,11 @@ func inspectPickerPath(ctx context.Context, client *git.Client, input string) (*
 func (d *Daemon) handleBrowseDirectoryWS(client *wsClient, msg *protocol.BrowseDirectoryMessage) {
 	if len(msg.Extensions) > 0 && !client.isTrustedAppClient() {
 		d.sendToClient(client, &protocol.BrowseDirectoryResultMessage{
-			Event:      protocol.EventBrowseDirectoryResult,
-			InputPath:  msg.InputPath,
-			EndpointID: msg.EndpointID,
-			RequestID:  msg.RequestID,
-			Success:    false,
-			Error:      protocol.Ptr("listing files requires the authenticated attn app client"),
+			Event:     protocol.EventBrowseDirectoryResult,
+			InputPath: msg.InputPath,
+			RequestID: msg.RequestID,
+			Success:   false,
+			Error:     protocol.Ptr("listing files requires the authenticated attn app client"),
 		})
 		return
 	}
@@ -163,26 +162,24 @@ func (d *Daemon) handleBrowseDirectoryWS(client *wsClient, msg *protocol.BrowseD
 		dirToQuery, prefix, homePath, err := parseBrowseInput(msg.InputPath)
 		if err != nil {
 			d.sendToClient(client, &protocol.BrowseDirectoryResultMessage{
-				Event:      protocol.EventBrowseDirectoryResult,
-				InputPath:  msg.InputPath,
-				EndpointID: msg.EndpointID,
-				RequestID:  msg.RequestID,
-				Success:    false,
-				Error:      protocol.Ptr(err.Error()),
+				Event:     protocol.EventBrowseDirectoryResult,
+				InputPath: msg.InputPath,
+				RequestID: msg.RequestID,
+				Success:   false,
+				Error:     protocol.Ptr(err.Error()),
 			})
 			return
 		}
 
 		if dirToQuery == "" {
 			d.sendToClient(client, &protocol.BrowseDirectoryResultMessage{
-				Event:      protocol.EventBrowseDirectoryResult,
-				InputPath:  msg.InputPath,
-				Directory:  "",
-				Entries:    []protocol.DirectoryEntry{},
-				EndpointID: msg.EndpointID,
-				RequestID:  msg.RequestID,
-				HomePath:   protocol.Ptr(homePath),
-				Success:    true,
+				Event:     protocol.EventBrowseDirectoryResult,
+				InputPath: msg.InputPath,
+				Directory: "",
+				Entries:   []protocol.DirectoryEntry{},
+				RequestID: msg.RequestID,
+				HomePath:  protocol.Ptr(homePath),
+				Success:   true,
 			})
 			return
 		}
@@ -190,27 +187,25 @@ func (d *Daemon) handleBrowseDirectoryWS(client *wsClient, msg *protocol.BrowseD
 		entries, err := listDirectoryEntries(dirToQuery, prefix, msg.Extensions)
 		if err != nil {
 			d.sendToClient(client, &protocol.BrowseDirectoryResultMessage{
-				Event:      protocol.EventBrowseDirectoryResult,
-				InputPath:  msg.InputPath,
-				Directory:  dirToQuery,
-				EndpointID: msg.EndpointID,
-				RequestID:  msg.RequestID,
-				HomePath:   protocol.Ptr(homePath),
-				Success:    false,
-				Error:      protocol.Ptr(err.Error()),
+				Event:     protocol.EventBrowseDirectoryResult,
+				InputPath: msg.InputPath,
+				Directory: dirToQuery,
+				RequestID: msg.RequestID,
+				HomePath:  protocol.Ptr(homePath),
+				Success:   false,
+				Error:     protocol.Ptr(err.Error()),
 			})
 			return
 		}
 
 		d.sendToClient(client, &protocol.BrowseDirectoryResultMessage{
-			Event:      protocol.EventBrowseDirectoryResult,
-			InputPath:  msg.InputPath,
-			Directory:  dirToQuery,
-			Entries:    entries,
-			EndpointID: msg.EndpointID,
-			RequestID:  msg.RequestID,
-			HomePath:   protocol.Ptr(homePath),
-			Success:    true,
+			Event:     protocol.EventBrowseDirectoryResult,
+			InputPath: msg.InputPath,
+			Directory: dirToQuery,
+			Entries:   entries,
+			RequestID: msg.RequestID,
+			HomePath:  protocol.Ptr(homePath),
+			Success:   true,
 		})
 	})
 }
@@ -224,7 +219,6 @@ func (d *Daemon) handleInspectPathWS(client *wsClient, msg *protocol.InspectPath
 			d.sendToClient(client, &protocol.InspectPathResultMessage{
 				Event:      protocol.EventInspectPathResult,
 				Inspection: &protocol.PathInspection{InputPath: msg.Path},
-				EndpointID: msg.EndpointID,
 				RequestID:  msg.RequestID,
 				Success:    false,
 				Error:      protocol.Ptr(err.Error()),
@@ -235,7 +229,6 @@ func (d *Daemon) handleInspectPathWS(client *wsClient, msg *protocol.InspectPath
 		d.sendToClient(client, &protocol.InspectPathResultMessage{
 			Event:      protocol.EventInspectPathResult,
 			Inspection: inspection,
-			EndpointID: msg.EndpointID,
 			RequestID:  msg.RequestID,
 			Success:    true,
 		})

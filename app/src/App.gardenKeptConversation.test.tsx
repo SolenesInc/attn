@@ -9,7 +9,7 @@ const seed = daemonSeed('s-kept11', {
   title: 'Keep the parser conversation',
   continuation: {
     agent: 'claude', cwd: '/tmp/parser', directory_state: 'present',
-    execution_id: 'execution-1', host_kind: 'local', resume_available: true,
+    execution_id: 'execution-1', resume_available: true,
     session_live: false, source: 'last_execution', handover_placement: 'reuse_cwd',
     kept_conversation: kept,
   },

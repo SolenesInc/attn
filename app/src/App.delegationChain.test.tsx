@@ -82,20 +82,14 @@ describe('App delegation chain', () => {
     expect(chainRows().map(([label]) => label)).toEqual(['child', 'peer']);
   });
 
-  it('never crosses to another endpoint or loops around a dispatch cycle', async () => {
+  it('never loops around a dispatch cycle', async () => {
     await renderTeam([
       daemonSession('a', { label: 'first', dispatcher_session_id: 'b' }),
       daemonSession('b', { label: 'second', dispatcher_session_id: 'a' }),
-      daemonSession('remote', { label: 'remote dispatcher', endpoint_id: 'ep-1' }),
-      daemonSession('c', { label: 'local delegate', dispatcher_session_id: 'remote' }),
     ]);
 
     fireEvent.click(trigger('second'));
     expect(chainRows().map(([label]) => label).sort()).toEqual(['first', 'second']);
-
-    fireEvent.keyDown(window, { key: 'Escape' });
-    fireEvent.click(trigger('local delegate'));
-    expect(chainRows().map(([label]) => label)).toEqual(['local delegate']);
   });
 
   it('takes the user from a delegate to the dispatcher that is still running, and nowhere once it has ended', async () => {

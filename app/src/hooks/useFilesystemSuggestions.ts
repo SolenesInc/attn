@@ -29,8 +29,7 @@ export interface UseFilesystemSuggestionsOptions {
 
 export function useFilesystemSuggestions(
   inputPath: string,
-  endpointId: string | undefined,
-  browseDirectory?: (inputPath: string, endpointId?: string, extensions?: string[]) => Promise<BrowseDirectoryResult>,
+  browseDirectory?: (inputPath: string, extensions?: string[]) => Promise<BrowseDirectoryResult>,
   options: UseFilesystemSuggestionsOptions = {},
 ): UseFilesystemSuggestionsResult {
   const { homePath, onHomePathChange, enabled = true, extensions } = options;
@@ -41,12 +40,11 @@ export function useFilesystemSuggestions(
   const [resolvedHomePath, setResolvedHomePath] = useState(homePath || '');
   const debounceRef = useRef<number | null>(null);
   const requestIdRef = useRef(0);
-  const previousEndpointIdRef = useRef<string | undefined>(endpointId);
   // Identity-stable list so a caller can pass an inline array literal without
   // re-running the effect on every render.
   const extensionsKey = (extensions || []).join(',');
 
-  const fetchSuggestions = useCallback(async (path: string, targetEndpointId?: string) => {
+  const fetchSuggestions = useCallback(async (path: string) => {
     if (!enabled || !browseDirectory || !path || path.length < 1) {
       setSuggestions([]);
       setCurrentDir('');
@@ -61,7 +59,7 @@ export function useFilesystemSuggestions(
 
     try {
       const requested = extensionsKey ? extensionsKey.split(',') : undefined;
-      const result = await browseDirectory(path, targetEndpointId, requested);
+      const result = await browseDirectory(path, requested);
       if (requestIdRef.current !== requestId) {
         return;
       }
@@ -107,21 +105,8 @@ export function useFilesystemSuggestions(
       return;
     }
 
-    const endpointChanged = previousEndpointIdRef.current !== endpointId;
-    previousEndpointIdRef.current = endpointId;
-
-    if (endpointChanged) {
-      requestIdRef.current += 1;
-      setSuggestions([]);
-      setCurrentDir('');
-      setError(null);
-      setLoading(Boolean(browseDirectory && inputPath && inputPath.length >= 1));
-      void fetchSuggestions(inputPath, endpointId);
-      return;
-    }
-
     debounceRef.current = window.setTimeout(() => {
-      void fetchSuggestions(inputPath, endpointId);
+      void fetchSuggestions(inputPath);
     }, 150);
 
     return () => {
@@ -129,7 +114,7 @@ export function useFilesystemSuggestions(
         clearTimeout(debounceRef.current);
       }
     };
-  }, [enabled, endpointId, fetchSuggestions, inputPath]);
+  }, [enabled, fetchSuggestions, inputPath]);
 
   return { suggestions, loading, error, currentDir, homePath: resolvedHomePath };
 }

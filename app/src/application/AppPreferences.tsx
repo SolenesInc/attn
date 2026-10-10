@@ -30,7 +30,6 @@ export function AppPreferences() {
   const {
     daemonGitHubHosts,
     settings,
-    daemonEndpoints,
     daemonPlugins,
     daemonPluginIssues,
     notebookTaskChangeSignal,
@@ -38,7 +37,6 @@ export function AppPreferences() {
   const {
     sendMuteRepo,
     sendMuteAuthor,
-    sendRemoveEndpoint,
     sendListPlugins,
     sendInstallPlugin,
     sendInstallBundledPlugin,
@@ -81,10 +79,8 @@ export function AppPreferences() {
         mutedAuthors={mutedAuthors}
         onUnmuteAuthor={sendMuteAuthor}
         settings={settings}
-        endpoints={daemonEndpoints}
         plugins={daemonPlugins}
         pluginIssues={daemonPluginIssues}
-        onRemoveEndpoint={sendRemoveEndpoint}
         onListPlugins={sendListPlugins}
         onInstallPlugin={sendInstallPlugin}
         onInstallBundledPlugin={sendInstallBundledPlugin}

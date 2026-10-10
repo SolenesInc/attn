@@ -62,7 +62,6 @@ func TestTheDaemonAcceptsOnlyValidSettingValues(t *testing.T) {
 		{"default_effort_claude", "high", true},
 		{"default_effort_claude", "", true},
 		{"new_session_destination_local_/Users/v/projects/attn", "new_worktree", true},
-		{"new_session_destination_endpoint_ep-1_/srv/projects/attn", "main_repo", true},
 		{"new_session_destination_local_/Users/v/projects/attn", "", true},
 		{"new_session_destination_local_/Users/v/projects/attn", "somewhere_else", false},
 	} {

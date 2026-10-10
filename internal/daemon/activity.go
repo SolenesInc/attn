@@ -198,9 +198,6 @@ func sessionGeneratesActivity(session *protocol.Session) bool {
 	if session.ParentSessionID != nil && protocol.TrimID(*session.ParentSessionID) != "" {
 		return false
 	}
-	if session.EndpointID != nil && strings.TrimSpace(*session.EndpointID) != "" {
-		return false
-	}
 	driver := agentdriver.Get(session.Agent)
 	if driver == nil {
 		return false

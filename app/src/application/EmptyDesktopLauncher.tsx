@@ -23,7 +23,7 @@ export function EmptyDesktopLauncher({ desktopId, label, active }: { desktopId: 
   } = useDaemonApi();
   const { agentAvailability } = useAppShell();
   const { showError } = useAppErrorsContext();
-  const { settings, daemonEndpoints } = useAppInputs();
+  const { settings } = useAppInputs();
   const { hasChiefOfStaff } = useChiefOfStaffContext();
   const rootRef = useRef<HTMLDivElement>(null);
   const [launching, setLaunching] = useState<string | null>(null);
@@ -45,17 +45,17 @@ export function EmptyDesktopLauncher({ desktopId, label, active }: { desktopId: 
   }, [active, focusLauncher, launching]);
 
   const handleSelect = useCallback(
-    (path: string, agent: SessionAgent, endpointId?: string, yoloMode?: boolean, chiefOfStaff?: boolean, autoMode?: boolean) => {
+    (path: string, agent: SessionAgent, yoloMode?: boolean, chiefOfStaff?: boolean, autoMode?: boolean) => {
       setLaunching(path.split('/').pop() || path);
-      void launchLocation(path, agent, endpointId, yoloMode, chiefOfStaff, autoMode, desktopId)
+      void launchLocation(path, agent, yoloMode, chiefOfStaff, autoMode, desktopId)
         .finally(() => setLaunching(null));
     },
     [desktopId, launchLocation],
   );
   const handleCreateWorktree = useCallback(
     (...pick: Parameters<typeof handleCreateWorktreeSession>) => {
-      const [mainRepo, branch, startingFrom, endpointId, agent, yoloMode, autoMode, chiefOfStaff] = pick;
-      handleCreateWorktreeSession(mainRepo, branch, startingFrom, endpointId, agent, yoloMode, autoMode, chiefOfStaff, desktopId);
+      const [mainRepo, branch, startingFrom, agent, yoloMode, autoMode, chiefOfStaff] = pick;
+      handleCreateWorktreeSession(mainRepo, branch, startingFrom, agent, yoloMode, autoMode, chiefOfStaff, desktopId);
     },
     [desktopId, handleCreateWorktreeSession],
   );
@@ -85,7 +85,6 @@ export function EmptyDesktopLauncher({ desktopId, label, active }: { desktopId: 
           onError={showError}
           projectsDirectory={settings.projects_directory}
           agentAvailability={agentAvailability}
-          endpoints={daemonEndpoints}
           chiefExists={hasChiefOfStaff}
         />
       )}

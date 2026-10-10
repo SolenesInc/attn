@@ -95,9 +95,6 @@ func (d *Daemon) reopenExecutionFromLedger(entry *protocol.SessionLedgerEntry) g
 	if execution.RepositoryRoot == "" {
 		execution.RepositoryRoot = protocol.Deref(entry.MainRepo)
 	}
-	if execution.HostKind == "" {
-		execution.HostKind = garden.HostLocal
-	}
 	execution.Resume = d.store.GetResumeSessionID(entry.ID)
 	return execution
 }

@@ -58,7 +58,6 @@ export interface SessionTerminalDesktopProps {
     priority?: boolean;
     agent: SessionAgent;
     cwd: string;
-    endpointId?: string;
     state?: UISessionState;
     usage?: SessionUsage;
     autoSettleFiresAt?: string;
@@ -131,7 +130,6 @@ export interface SessionTerminalDesktopProps {
     tileSessionId?: string,
   ) => Promise<unknown> | void;
   tileContents?: Record<string, TileContentState>;
-  allowLocalTileTargets?: boolean;
   onRequestTileContent?: (desktopId: string, tileId: string) => void;
 }
 

@@ -124,7 +124,6 @@ type ReviewDirectoryState string
 const (
 	ReviewDirectoryPresent     ReviewDirectoryState = "present"
 	ReviewDirectoryMissing     ReviewDirectoryState = "missing"
-	ReviewDirectoryRemote      ReviewDirectoryState = "remote"
 	ReviewDirectoryUnavailable ReviewDirectoryState = "unavailable"
 	ReviewDirectoryUnknown     ReviewDirectoryState = "unknown"
 )
@@ -278,7 +277,7 @@ func reviewOldEnough(at time.Time, window time.Duration, now time.Time) bool {
 
 func normalizedReviewDirectoryState(state ReviewDirectoryState) ReviewDirectoryState {
 	switch state {
-	case ReviewDirectoryPresent, ReviewDirectoryMissing, ReviewDirectoryRemote, ReviewDirectoryUnavailable:
+	case ReviewDirectoryPresent, ReviewDirectoryMissing, ReviewDirectoryUnavailable:
 		return state
 	default:
 		return ReviewDirectoryUnknown

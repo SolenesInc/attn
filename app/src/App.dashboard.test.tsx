@@ -70,15 +70,12 @@ describe('App dashboard', () => {
             },
           },
         }),
-        agent('remote', { endpoint_id: 'ep-1' }),
       ],
-      { endpoints: [{ id: 'ep-1', name: 'gpu-box', ssh_target: 'user@gpu-box', status: 'connected', enabled: true }] },
     );
 
     expect(row('review-1')).toHaveTextContent('GPT Sol medium');
     expect(row('review-1')).toHaveTextContent('feed-nexus-web#101');
     expect(row('review-1')).toHaveTextContent('Fix validation race');
-    expect(row('remote')).toHaveTextContent('gpu-box');
   });
 
   it('marks the chief of staff and takes the user to it from its summary', async () => {

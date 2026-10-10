@@ -105,8 +105,7 @@ func (d *Daemon) conversationSeedReferences() (map[conversationKey][]protocol.Ke
 			if entry == nil {
 				continue
 			}
-			execution, local := d.gardenDispatch(entry.ID)
-			if !local || execution.HostKind != garden.HostLocal {
+			if _, dispatched := d.gardenDispatch(entry.ID); !dispatched {
 				continue
 			}
 			resumeID := d.store.GetResumeSessionID(entry.ID)

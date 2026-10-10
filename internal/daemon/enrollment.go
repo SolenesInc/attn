@@ -4,10 +4,6 @@ import (
 	"github.com/victorarias/attn/internal/enrollment"
 )
 
-func (d *Daemon) enrollmentStatus() (enrollment.Status, error) {
-	return enrollment.Load(d.dataRoot)
-}
-
 func (d *Daemon) ensureEnrollment() error {
 	status, err := enrollment.Ensure(d.dataRoot, d.daemonInstanceID)
 	if err != nil {

@@ -25,7 +25,6 @@ export interface Session {
   profileId: string;
   desktopId: string;
   agent: SessionAgent;
-  endpointId?: string;
   yoloMode?: boolean;
   chiefOfStaff?: boolean;
   autoMode?: boolean;
@@ -53,7 +52,6 @@ export interface DaemonSessionSnapshot {
   agent?: string;
   directory: string;
   profile_id?: string;
-  endpoint_id?: string;
   state: string;
   state_since?: string;
   branch?: string;
@@ -85,7 +83,6 @@ export interface SessionStore extends SessionNavigationState, SessionNavigationA
     cwd: string,
     id: string | undefined,
     agent: SessionAgent | undefined,
-    endpointId: string | undefined,
     yoloMode: boolean | undefined,
     chiefOfStaff?: boolean,
     autoMode?: boolean,
@@ -187,7 +184,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     cwd: string,
     providedId: string | undefined,
     agent: SessionAgent | undefined,
-    endpointId: string | undefined,
     yoloMode: boolean | undefined,
     chiefOfStaff?: boolean,
     autoMode?: boolean,
@@ -202,7 +198,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       profileId: '',
       desktopId: '',
       agent: resolvedAgent,
-      endpointId,
       yoloMode: yoloMode ?? false,
       chiefOfStaff: chiefOfStaff ?? false,
       autoMode,
@@ -244,7 +239,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     return {
       id,
       cwd: session.cwd,
-      ...(session.endpointId ? { endpoint_id: session.endpointId } : {}),
       intent: 'create',
       label: session.label,
       cols: resolvedCols,
@@ -298,7 +292,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         const nextProfileId = daemonSession.profile_id ?? '';
         const normalizedState = normalizeSessionState(daemonSession.state);
         const nextAgent: SessionAgent = normalizeSessionAgent(daemonSession.agent, existing?.agent ?? 'codex');
-        const nextEndpointId = daemonSession.endpoint_id ?? existing?.endpointId;
         const nextBranch = daemonSession.branch ?? existing?.branch;
         const nextIsWorktree = daemonSession.is_worktree ?? existing?.isWorktree;
 
@@ -310,7 +303,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           existing.cwd === daemonSession.directory &&
           existing.profileId === nextProfileId &&
           existing.desktopId === nextDesktopId &&
-          existing.endpointId === nextEndpointId &&
           existing.state === normalizedState &&
           existing.branch === nextBranch &&
           existing.isWorktree === nextIsWorktree &&
@@ -328,7 +320,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           profileId: nextProfileId,
           desktopId: nextDesktopId,
           agent: nextAgent,
-          endpointId: nextEndpointId,
           yoloMode: existing?.yoloMode,
           transcriptMatched: existing?.transcriptMatched ?? nextAgent !== 'codex',
           branch: nextBranch,

@@ -1,5 +1,4 @@
 import {
-  DaemonEndpoint,
   DaemonPlugin,
   DaemonPluginIssue,
   DaemonSettings,
@@ -43,10 +42,8 @@ export interface SettingsModalProps {
   mutedAuthors: string[];
   onUnmuteAuthor: (author: string) => void;
   settings: DaemonSettings;
-  endpoints: DaemonEndpoint[];
   plugins: DaemonPlugin[];
   pluginIssues: DaemonPluginIssue[];
-  onRemoveEndpoint: (endpointId: string) => Promise<{ success: boolean }>;
   onListPlugins: () => Promise<PluginListResult>;
   onInstallPlugin: (source: string) => Promise<{ success: boolean; name?: string }>;
   onInstallBundledPlugin?: (name: string) => Promise<{ success: boolean; name?: string }>;

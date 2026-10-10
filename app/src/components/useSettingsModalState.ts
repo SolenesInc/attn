@@ -40,7 +40,6 @@ import {
   SettingsSectionID,
   formatByteCount,
 } from './settingsModalShared';
-import { usePanelAction } from './settingsPanelAction';
 import { usePluginPanel } from './usePluginPanel';
 import { useSavedFlash } from './useSavedFlash';
 
@@ -54,10 +53,8 @@ export function useSettingsModalState({
   mutedAuthors,
   onUnmuteAuthor,
   settings,
-  endpoints,
   plugins,
   pluginIssues,
-  onRemoveEndpoint,
   onListPlugins,
   onInstallPlugin,
   onInstallBundledPlugin,
@@ -148,7 +145,6 @@ export function useSettingsModalState({
     sendDelegationPreferencesSave,
   );
   const [settingsSearch, setSettingsSearch] = useState('');
-  const endpointPanel = usePanelAction();
   const pluginPanel = usePluginPanel(onListPlugins);
   const agentAvailability = useMemo(() => getAgentAvailability(settings), [settings]);
   const hasAvailableAgents = useMemo(() => hasAnyAvailableAgents(agentAvailability), [agentAvailability]);
@@ -368,13 +364,11 @@ export function useSettingsModalState({
     trim: true,
   });
 
-  const { clearError: clearEndpointError } = endpointPanel;
   const { setSourcePath: setPluginSourcePath } = pluginPanel;
   useEffect(() => {
     if (!isOpen) return;
-    clearEndpointError();
     setPluginSourcePath('');
-  }, [isOpen, clearEndpointError, setPluginSourcePath]);
+  }, [isOpen, setPluginSourcePath]);
 
   useEscapeStack(closeSettings, isOpen);
 
@@ -464,15 +458,6 @@ export function useSettingsModalState({
   const handleToggleWorktreeSweep = useCallback(() => {
     onSetSetting('worktree_sweep_enabled', worktreeSweepEnabled ? 'false' : 'true');
   }, [worktreeSweepEnabled, onSetSetting]);
-
-  const handleRemoveEndpoint = useCallback(
-    async (endpointId: string) => {
-      await endpointPanel.run(endpointId, 'Failed to remove endpoint', async () => {
-        await onRemoveEndpoint(endpointId);
-      });
-    },
-    [endpointPanel, onRemoveEndpoint],
-  );
 
   const { refresh: refreshPlugins } = pluginPanel;
   useEffect(() => {
@@ -642,11 +627,11 @@ export function useSettingsModalState({
         items: [
           {
             id: 'connectivity',
-            label: 'Mobile, hosts, remotes',
-            title: 'Mobile web, hosts, and remote endpoints',
-            description: 'Controls for mobile browser access, GitHub host detection, and remote attn peers.',
-            count: Math.max(3, endpoints.length + githubHosts.length + 1),
-            keywords: 'tailscale mobile web github hosts ssh remote endpoint daemon',
+            label: 'Mobile and hosts',
+            title: 'Mobile web and hosts',
+            description: 'Controls for mobile browser access and GitHub host detection.',
+            count: Math.max(2, githubHosts.length + 1),
+            keywords: 'tailscale mobile web github hosts',
           },
         ],
       },
@@ -706,7 +691,6 @@ export function useSettingsModalState({
     ],
     [
       githubHosts.length,
-      endpoints.length,
       mutedItemCount,
       orderedAgentList.length,
       pluginIssues.length,
@@ -737,7 +721,6 @@ export function useSettingsModalState({
     delegationPolicy,
     tailscaleEnabled,
     tailscaleStatus,
-    endpoints,
     pluginProblemCount,
     activePluginCount,
     plugins,
@@ -777,8 +760,6 @@ export function useSettingsModalState({
     tailscaleError,
     githubPollingOffReason,
     githubHosts,
-    endpointPanel,
-    handleRemoveEndpoint,
     pluginPanel,
     setPluginSourcePath,
     handleBrowsePluginPath,

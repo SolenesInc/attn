@@ -6,7 +6,7 @@ export interface PanelAction {
   /** Refuse before doing anything — a required field left blank. */
   fail: (message: string) => void;
   clearError: () => void;
-  /** Which row is mid-flight: an endpoint or plugin id, or null. */
+  /** Which row is mid-flight: a plugin id, or null. */
   busyKey: string | null;
   busy: boolean;
   run: (key: string, fallbackMessage: string, action: () => Promise<void>) => Promise<void>;

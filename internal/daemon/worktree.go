@@ -206,14 +206,14 @@ func (e *deleteWorktreeError) Unwrap() error {
 	return e.err
 }
 
-func (d *Daemon) doDeleteWorktree(path string, endpointID *string, opts deleteWorktreeOptions) error {
+func (d *Daemon) doDeleteWorktree(path string, opts deleteWorktreeOptions) error {
 	return d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
-		return d.doDeleteWorktreeProtected(protection, path, endpointID, opts)
+		return d.doDeleteWorktreeProtected(protection, path, opts)
 	})
 }
 
-func (d *Daemon) doDeleteWorktreeProtected(protection foregroundCleanupProtection, path string, endpointID *string, opts deleteWorktreeOptions) (err error) {
-	finishOperation := d.beginGitOperation(protocol.GitOperationKindDeleteWorktree, path, endpointID)
+func (d *Daemon) doDeleteWorktreeProtected(protection foregroundCleanupProtection, path string, opts deleteWorktreeOptions) (err error) {
+	finishOperation := d.beginGitOperation(protocol.GitOperationKindDeleteWorktree, path)
 	defer func() {
 		finishOperation(err)
 	}()
@@ -421,7 +421,7 @@ func (d *Daemon) handleCreateWorktree(conn net.Conn, msg *protocol.CreateWorktre
 }
 
 func (d *Daemon) handleDeleteWorktree(conn net.Conn, msg *protocol.DeleteWorktreeMessage) {
-	if err := d.doDeleteWorktree(msg.Path, msg.EndpointID, deleteWorktreeOptions{
+	if err := d.doDeleteWorktree(msg.Path, deleteWorktreeOptions{
 		Force: protocol.Deref(msg.Force),
 	}); err != nil {
 		d.sendError(conn, err.Error())
@@ -442,10 +442,9 @@ func (d *Daemon) handleCreateWorktreeWS(client *wsClient, msg *protocol.CreateWo
 	d.life.Go("handleCreateWorktreeWS", func() {
 		path, err := d.doCreateWorktree(msg)
 		result := protocol.CreateWorktreeResultMessage{
-			Event:      protocol.EventCreateWorktreeResult,
-			Path:       protocol.Ptr(path),
-			EndpointID: msg.EndpointID,
-			Success:    err == nil,
+			Event:   protocol.EventCreateWorktreeResult,
+			Path:    protocol.Ptr(path),
+			Success: err == nil,
 		}
 		if err != nil {
 			result.Error = protocol.Ptr(err.Error())
@@ -461,14 +460,13 @@ func (d *Daemon) handleDeleteWorktreeWS(client *wsClient, msg *protocol.DeleteWo
 	d.life.Go("handleDeleteWorktreeWS", func() {
 		defer d.publishFact(FactWorktreeSessionsRemoved, msg.Path, nil)
 
-		err := d.doDeleteWorktree(msg.Path, msg.EndpointID, deleteWorktreeOptions{
+		err := d.doDeleteWorktree(msg.Path, deleteWorktreeOptions{
 			Force: protocol.Deref(msg.Force),
 		})
 		result := protocol.DeleteWorktreeResultMessage{
-			Event:      protocol.EventDeleteWorktreeResult,
-			Path:       msg.Path,
-			EndpointID: msg.EndpointID,
-			Success:    err == nil,
+			Event:   protocol.EventDeleteWorktreeResult,
+			Path:    msg.Path,
+			Success: err == nil,
 		}
 		if err != nil {
 			result.Error = protocol.Ptr(err.Error())

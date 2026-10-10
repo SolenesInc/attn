@@ -208,22 +208,6 @@ describe('SettingsModal', () => {
     expect(savedSettings(daemon)).toEqual([]);
   });
 
-  it('lists saved endpoints as off for this release and offers only removal', async () => {
-    const reason = 'Remote endpoints are off in this release.';
-    const { daemon } = await renderSettings({
-      endpoints: [{ id: 'ep-1', name: 'gpu-box', ssh_target: 'user@gpu-box', status: 'unsupported', status_message: reason, enabled: true }],
-    }, (scripted) => scripted.on('remove_endpoint', ({ endpoint_id }) => ({ event: 'endpoint_action_result', action: 'remove', endpoint_id, success: true })));
-
-    expect(screen.getByText('gpu-box')).toBeInTheDocument();
-    expect(screen.getByText(reason)).toBeInTheDocument();
-    for (const offered of ['Add Endpoint', 'Edit', 'Re-bootstrap', 'Enable Web', 'Disable']) {
-      expect(screen.queryByText(offered)).not.toBeInTheDocument();
-    }
-
-    await gesture(daemon, () => fireEvent.click(screen.getByText('Remove')));
-    expect(daemon.sentOf('remove_endpoint')).toEqual([expect.objectContaining({ endpoint_id: 'ep-1' })]);
-  });
-
   it('shows plugin agents without offering attn-owned executable overrides', async () => {
     await openSection('agents', { settings: { snipe_available: 'true', snipe_cap_resume: 'true' } });
 

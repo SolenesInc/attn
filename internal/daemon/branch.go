@@ -135,10 +135,9 @@ func (d *Daemon) handleGetRepoInfoWS(client *wsClient, msg *protocol.GetRepoInfo
 		})
 		if err != nil {
 			d.sendToClient(client, &protocol.GetRepoInfoResultMessage{
-				Event:      protocol.EventGetRepoInfoResult,
-				EndpointID: msg.EndpointID,
-				Success:    false,
-				Error:      protocol.Ptr(err.Error()),
+				Event:   protocol.EventGetRepoInfoResult,
+				Success: false,
+				Error:   protocol.Ptr(err.Error()),
 			})
 			return
 		}
@@ -154,8 +153,7 @@ func (d *Daemon) handleGetRepoInfoWS(client *wsClient, msg *protocol.GetRepoInfo
 			info.defaultBranch = "main"
 		}
 		d.sendToClient(client, &protocol.GetRepoInfoResultMessage{
-			Event:      protocol.EventGetRepoInfoResult,
-			EndpointID: msg.EndpointID,
+			Event: protocol.EventGetRepoInfoResult,
 			Info: &protocol.RepoInfo{
 				Repo:              repo,
 				CurrentBranch:     info.currentBranch,

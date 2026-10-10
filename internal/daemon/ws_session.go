@@ -59,7 +59,6 @@ func (d *Daemon) handleGetRecentLocationsWS(client *wsClient, msg *protocol.GetR
 	d.sendToClient(client, &protocol.RecentLocationsResultMessage{
 		Event:           protocol.EventRecentLocationsResult,
 		RecentLocations: protocol.RecentLocationsToValues(locations),
-		EndpointID:      msg.EndpointID,
 		RequestID:       msg.RequestID,
 		HomePath:        protocol.Ptr(homePath),
 		Success:         true,

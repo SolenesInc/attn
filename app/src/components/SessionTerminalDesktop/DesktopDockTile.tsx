@@ -51,7 +51,6 @@ interface DesktopDockTileProps {
   tile: TileLeaf;
   desktopId: string;
   content?: TileContentState;
-  allowLocalTargets?: boolean;
   dragging: boolean;
   visible?: boolean;
   desktopSessions?: DesktopTileSessionOption[];
@@ -75,7 +74,6 @@ export function DesktopDockTile({
   tile,
   desktopId,
   content,
-  allowLocalTargets = true,
   dragging,
   visible = true,
   desktopSessions = NO_DESKTOP_SESSIONS,
@@ -240,7 +238,6 @@ export function DesktopDockTile({
           tile={tile}
           desktopId={desktopId}
           content={content}
-          allowLocalTargets={allowLocalTargets}
           annotationsSendRef={annotationsSendRef}
           setAnnotationCount={setAnnotationCount}
           seedDocument={seedDocument}
@@ -277,13 +274,11 @@ function FocusDocumentIcon() {
 function MarkdownBody({
   content,
   source,
-  allowLocalTargets,
   onAnnotationsCountChange,
   annotationsSendRef,
 }: {
   content?: TileContentState;
   source: MarkdownDocumentSource;
-  allowLocalTargets: boolean;
   onAnnotationsCountChange: (count: number) => void;
   annotationsSendRef: RefObject<MarkdownAnnotationsSendHandle | null>;
 }) {
@@ -302,7 +297,6 @@ function MarkdownBody({
     <MarkdownReader
       content={content.content}
       source={source}
-      allowLocalTargets={allowLocalTargets}
       annotationsEnabled
       onAnnotationsCountChange={onAnnotationsCountChange}
       annotationsSendRef={annotationsSendRef}
@@ -357,7 +351,6 @@ interface ContentProps {
   tile: TileLeaf;
   desktopId: string;
   content?: TileContentState;
-  allowLocalTargets: boolean;
   annotationsSendRef: RefObject<MarkdownAnnotationsSendHandle | null>;
   setAnnotationCount: (count: number) => void;
   seedDocument: SeedDocument | null;
@@ -375,7 +368,6 @@ function DesktopTileContent({
   tile,
   desktopId,
   content,
-  allowLocalTargets,
   annotationsSendRef,
   setAnnotationCount,
   seedDocument,
@@ -394,7 +386,6 @@ function DesktopTileContent({
       <MarkdownBody
         content={content}
         source={documentSource}
-        allowLocalTargets={allowLocalTargets}
         onAnnotationsCountChange={setAnnotationCount}
         annotationsSendRef={annotationsSendRef}
       />

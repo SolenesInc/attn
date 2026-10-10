@@ -3935,13 +3935,6 @@ func (d *Daemon) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if routingPathError != "" {
 		health["routing_path_error"] = routingPathError
 	}
-	if status, err := d.enrollmentStatus(); err != nil {
-		health["enrollment"] = "unknown"
-		health["enrollment_error"] = err.Error()
-	} else {
-		health["enrollment"] = status.Describe()
-		health["home_daemon_id"] = status.HomeDaemonID
-	}
 
 	setNoStoreHeaders(w.Header())
 	w.Header().Set("Content-Type", "application/json")

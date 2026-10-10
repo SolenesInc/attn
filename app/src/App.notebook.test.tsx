@@ -2,7 +2,7 @@ import { act, fireEvent, screen, within } from '@testing-library/react';
 import { EditorView } from '@codemirror/view';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { stubTextLayout } from './test/appFixtures';
-import { soloDesktop, daemonEndpoint, daemonSession, type DaemonSession } from './test/daemonFixtures';
+import { soloDesktop, daemonSession, type DaemonSession } from './test/daemonFixtures';
 import { stubNavigatorPlatform } from './test/platformStub';
 import { pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
@@ -634,12 +634,10 @@ describe('App notebook tile root', () => {
     ['an agent whose directory is padded with spaces', { directory: '  /tmp/project  ' }, '{"root":"/tmp/project"}'],
     ['an agent in the notebook itself', { directory: NOTEBOOK_ROOT }, undefined],
     ['an agent without a directory', { directory: '' }, undefined],
-    ['an agent on a remote endpoint', { directory: '/srv/project', endpoint_id: 'ep-1' }, undefined],
   ])('roots a notebook tile opened beside %s', async (_, session, tileParams) => {
     const { daemon } = await renderApp({
       initialState: {
         settings: { 'notebook.root.effective': NOTEBOOK_ROOT },
-        endpoints: [daemonEndpoint('ep-1')],
         sessions: [daemonSession('s1', { state: 'idle', ...session })],
         desktops: [soloDesktop('s1')],
       },

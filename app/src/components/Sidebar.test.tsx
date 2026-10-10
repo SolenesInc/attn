@@ -14,9 +14,6 @@ interface TestSession {
   branch?: string;
   isWorktree?: boolean;
   cwd?: string;
-  endpointId?: string;
-  endpointName?: string;
-  endpointStatus?: string;
   chiefOfStaff?: boolean;
   delegatedFromChief?: boolean;
   dispatcher_session_id?: string;
@@ -124,13 +121,12 @@ describe('Sidebar', () => {
     expect(onSessionDragEnd).toHaveBeenCalledTimes(1);
   });
 
-  it('reorders a desktop whose first agent runs on a remote endpoint among every desktop', () => {
+  it('reorders a desktop among every desktop', () => {
     const sidebarData = buildSidebarData([
-      { id: 'a1', label: 'A1', state: 'idle', cwd: '/repo/a', endpointId: 'ep-1', endpointName: 'box' },
+      { id: 'a1', label: 'A1', state: 'idle', cwd: '/repo/a' },
       { id: 'b1', label: 'B1', state: 'idle', cwd: '/repo/b' },
       { id: 'c1', label: 'C1', state: 'idle', cwd: '/repo/c' },
     ]);
-    expect(sidebarData.desktops[0].sessions[0].endpointId).toBe('ep-1');
     const onDesktopReorder = vi.fn();
     render(<Sidebar {...baseProps} {...sidebarData} onDesktopReorder={onDesktopReorder} />);
 

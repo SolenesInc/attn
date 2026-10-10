@@ -640,10 +640,6 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *Daemon) sendInitialState(client *wsClient) {
-	homeDaemonID := ""
-	if status, err := d.enrollmentStatus(); err == nil {
-		homeDaemonID = status.HomeDaemonID
-	}
 	state := d.currentStateProjection(client.selectedProfile())
 	event := &protocol.InitialStateMessage{
 		TerminalBindings:       d.terminals().Bindings(),
@@ -651,7 +647,6 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		ProtocolVersion:        protocol.Ptr(protocol.ProtocolVersion),
 		SourceFingerprint:      protocol.Ptr(buildinfo.SourceFingerprint),
 		DaemonInstanceID:       protocol.Ptr(d.daemonInstanceID),
-		HomeDaemonID:           protocol.Ptr(homeDaemonID),
 		Sessions:               state.Sessions,
 		Prs:                    state.Prs,
 		Repos:                  state.Repos,

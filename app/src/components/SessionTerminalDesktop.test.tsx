@@ -1571,7 +1571,7 @@ describe('SessionTerminalDesktop', () => {
     render(
       <SessionTerminalDesktop
         desktopId="desktop-session-1"
-        desktopSessions={[{ id: "session-1", label: "Session 1", agent: "claude", cwd: "/tmp/repo", endpointId: "ep-remote" }]}
+        desktopSessions={[{ id: "session-1", label: "Session 1", agent: "claude", cwd: "/tmp/repo" }]}
         terminalState={{
           agents: [{ id: SESSION_PANE_ID, runtimeId: 'session-1', sessionId: 'session-1', title: 'Session 1' }, { id: 'pane-session-1', runtimeId: 'runtime-session-1', title: "Session", sessionId: 'session-1' }],
           layoutTree: {

@@ -24,7 +24,6 @@ import {
 } from './AppContexts';
 import { EmptyDesktopLauncher } from './EmptyDesktopLauncher';
 import { openThenShow } from './openThenShow';
-import { localDirectoryOf } from './useScreenSession';
 import { leafOn, sessionOfLeaf } from '../navigation/activeLeaf';
 
 export function AppDesktops() {
@@ -92,7 +91,7 @@ export function AppDesktops() {
     const isCurrent = desktop.id === currentDesktopId;
     const shownSessionId = terminalState.agents.find((pane) => pane.id === desktop.active_pane_id)?.sessionId ?? null;
     const leafSessionId = sessionOfLeaf(leafOn(desktop.profile_id, desktop, desktop.active_pane_id));
-    const desktopDirectory = localDirectoryOf(allSessions.find((session) => session.id === leafSessionId));
+    const desktopDirectory = allSessions.find((session) => session.id === leafSessionId)?.cwd;
     return (
       <div key={desktop.id} className={`terminal-wrapper ${isCurrent ? 'active' : ''}`}>
         <SessionTerminalDesktop
@@ -106,7 +105,6 @@ export function AppDesktops() {
             priority: entry.priority,
             agent: entry.agent,
             cwd: entry.cwd,
-            endpointId: entry.endpointId,
             state: entry.state,
             autoSettleFiresAt: entry.autoSettleFiresAt,
             autoSettleHeld: entry.autoSettleHeld,
@@ -204,7 +202,6 @@ export function AppDesktops() {
           onLeafDragEnd={handleLeafDragEnd}
           leafDragPreview={leafDragPreview}
           tileContents={desktopTileContents}
-          allowLocalTileTargets
         />
         {isCurrent && view === 'session' && !terminalState.layoutTree && (
           <EmptyDesktopLauncher desktopId={desktop.id} label={desktopLabel(desktop, desktops)} active={!windowCovered} />

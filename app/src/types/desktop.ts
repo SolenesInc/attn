@@ -445,11 +445,3 @@ export function resolveEditorTileRoot(
   }
   return trimmed;
 }
-
-// The active-desktop selection carries no endpoint identity, so when one id names both
-// a local and a remote twin this fails closed rather than adopting the local one.
-
-// Defaults to locked until locality is proven: no sendFs* call is endpoint-aware, so a
-// remote directory handed to one reads or writes the wrong machine's files.
-
-

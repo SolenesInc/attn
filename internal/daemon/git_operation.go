@@ -9,15 +9,14 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (d *Daemon) beginGitOperation(kind protocol.GitOperationKind, path string, endpointID *string) func(error) {
+func (d *Daemon) beginGitOperation(kind protocol.GitOperationKind, path string) func(error) {
 	startedAt := time.Now()
 	operation := protocol.GitOperation{
-		ID:         uuid.NewString(),
-		Kind:       kind,
-		Status:     protocol.GitOperationStatusRunning,
-		Path:       protocol.Ptr(path),
-		EndpointID: endpointID,
-		StartedAt:  startedAt.Format(time.RFC3339),
+		ID:        uuid.NewString(),
+		Kind:      kind,
+		Status:    protocol.GitOperationStatusRunning,
+		Path:      protocol.Ptr(path),
+		StartedAt: startedAt.Format(time.RFC3339),
 	}
 
 	d.publishFact(FactGitOperationStarted, operation.ID, operation)
