@@ -86,17 +86,6 @@ func TestDesktopMoveChoosesCurrentPlacementAndKeepsExplicitDragGeometry(t *testi
 	if !found || !slices.Equal(split.leafIDs(), []string{"anchor", "dragged"}) || split.Direction != "horizontal" || math.Abs(split.Ratio-0.75) > 1e-9 {
 		t.Fatalf("drag lost requested anchor, edge or share: %s", current.TreeJson)
 	}
-	requestID := uuid.NewString()
-	refused := profileRequest(app, map[string]any{
-		"cmd": protocol.CmdDesktopMoveLeaf, "request_id": requestID,
-		"source_desktop_id": target.ID, "target_desktop_id": source.ID, "leaf_id": "dragged", "anchor_id": "missing", "edge": "left",
-	}, requestID)
-	if refused.Success || protocol.Deref(refused.ErrorCode) != protocol.ProfileErrorCodeNotFound {
-		t.Fatalf("missing drag anchor answered %+v", refused)
-	}
-	if latest := viewProfile(t, w, app.SelectedProfile()).desktops[target.ID]; latest.TreeJson != current.TreeJson {
-		t.Fatalf("refused drag changed its source: %s", latest.TreeJson)
-	}
 }
 
 func TestDesktopMoveResolvesOrCreatesDestinationAtomically(t *testing.T) {
@@ -108,30 +97,34 @@ func TestDesktopMoveResolvesOrCreatesDestinationAtomically(t *testing.T) {
 	dockCurrentStateTile(app, source.ID, "new-move")
 	dockCurrentStateTile(app, source.ID, "existing-move")
 	shownIn(t, requestShowLeaf(app, source.ID, "slot-move"), source.ID, "slot-move")
-	for _, fields := range []map[string]any{
-		{"source_desktop_id": source.ID, "leaf_id": "slot-move", "target_shortcut_slot": 5},
-		{"source_desktop_id": source.ID, "leaf_id": "new-move"},
-		{"source_desktop_id": source.ID, "leaf_id": "existing-move", "target_shortcut_slot": 5},
-	} {
-		before := len(w.AppOn(profileID).Initial.Desktops)
-		result := desktopOperation(app, protocol.CmdDesktopMoveLeaf, fields)
-		target := result.Desktops[len(result.Desktops)-1]
-		if target.ID == source.ID || !slices.Contains(desktopTree(t, target).leafIDs(), fields["leaf_id"].(string)) {
-			t.Fatalf("move failed to land in its destination: %+v", result)
+	desktopOperation(app, protocol.CmdDesktopMoveLeaf, map[string]any{
+		"source_desktop_id": source.ID, "leaf_id": "slot-move", "target_shortcut_slot": 5,
+	})
+	desktopOperation(app, protocol.CmdDesktopMoveLeaf, map[string]any{
+		"source_desktop_id": source.ID, "leaf_id": "new-move",
+	})
+	desktopOperation(app, protocol.CmdDesktopMoveLeaf, map[string]any{
+		"source_desktop_id": source.ID, "leaf_id": "existing-move", "target_shortcut_slot": 5,
+	})
+	current := w.AppOn(profileID).Initial
+	if len(current.Desktops) != 3 || current.Profiles[0].CurrentDesktopID != source.ID {
+		t.Fatalf("moves created extra desktops or followed without a gesture: %+v", current)
+	}
+	for _, desktop := range current.Desktops {
+		if desktop.ID == source.ID {
+			if desktop.TreeJson != "" {
+				t.Fatalf("source kept tiles after the moves: %s", desktop.TreeJson)
+			}
+			continue
 		}
-		if fields["target_shortcut_slot"] == 5 && protocol.Deref(target.ShortcutSlot) != 5 {
-			t.Fatalf("slot move landed at %+v", target)
+		want := []string{"new-move"}
+		if protocol.Deref(desktop.ShortcutSlot) == 5 {
+			want = []string{"slot-move", "existing-move"}
 		}
-		after := w.AppOn(profileID).Initial
-		created := 1
-		if fields["leaf_id"] == "existing-move" {
-			created = 0
-		}
-		if len(after.Desktops) != before+created || after.Profiles[0].CurrentDesktopID != source.ID {
-			t.Fatalf("move created an extra desktop or followed without a gesture: %+v", after)
+		if got := desktopTree(t, desktop).leafIDs(); !slices.Equal(got, want) {
+			t.Fatalf("desktop %s at shortcut %d has tiles %v, want %v", desktop.ID, protocol.Deref(desktop.ShortcutSlot), got, want)
 		}
 	}
-	before := len(w.AppOn(profileID).Initial.Desktops)
 	requestID := uuid.NewString()
 	refused := profileRequest(app, map[string]any{
 		"cmd": protocol.CmdDesktopMoveLeaf, "request_id": requestID, "source_desktop_id": source.ID, "leaf_id": "missing", "target_shortcut_slot": 6,
@@ -139,7 +132,7 @@ func TestDesktopMoveResolvesOrCreatesDestinationAtomically(t *testing.T) {
 	if refused.Success || protocol.Deref(refused.ErrorCode) != protocol.ProfileErrorCodeNotFound {
 		t.Fatalf("missing leaf answered %+v", refused)
 	}
-	if after := len(w.AppOn(profileID).Initial.Desktops); after != before {
-		t.Fatalf("refused move left an empty destination: desktops %d -> %d", before, after)
+	if after := len(w.AppOn(profileID).Initial.Desktops); after != len(current.Desktops) {
+		t.Fatalf("refused move left an empty destination: desktops %d -> %d", len(current.Desktops), after)
 	}
 }

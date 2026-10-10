@@ -292,7 +292,7 @@ async function main() {
       const tileId = 'snooze-keyboard-notes';
       const notesPath = path.join(runner.sessionDir, 'snooze-notes.md');
       fs.writeFileSync(notesPath, '# Snooze keyboard notes\nKeep reading after snoozing another agent.\n');
-      await observer.profileCommand('desktop_dock_tile', { desktop_id: desktopId, expected_revision: observer.desktop(desktopId).revision, anchor_id: alpha.paneId, edge: 'right', tile_id: tileId, tile_kind: 'markdown', tile_params: notesPath });
+      await observer.profileCommand('desktop_dock_tile', { desktop_id: desktopId, anchor_id: alpha.paneId, edge: 'right', tile_id: tileId, tile_kind: 'markdown', tile_params: notesPath });
       const selector = `[data-pane-id="${tileId}"] .desktop-dock-tile-body`;
       await waitDom(selector, { textIncludes: 'Keep reading' });
       await client.request('dom_click', { selector });
@@ -310,7 +310,7 @@ async function main() {
       await observer.waitFor(() => observer.getSession(beta.sessionId)?.turn_snoozed_until, 'other agent snoozed while reading');
       await waitDom(`[data-testid="queue-snooze-${beta.sessionId}"]`, { absent: true });
       await waitDom(selector, { focused: true });
-      await observer.profileCommand('desktop_remove_leaf', { desktop_id: desktopId, expected_revision: observer.desktop(desktopId).revision, leaf_id: tileId });
+      await observer.profileCommand('desktop_remove_leaf', { desktop_id: desktopId, leaf_id: tileId });
       await waitDom(selector, { absent: true });
       await select(beta);
       await palette('wake');
