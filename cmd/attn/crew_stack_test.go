@@ -121,7 +121,7 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 	trellis.Prompted()
 	requireLines(t, "trellis's row", crewRow(t, s.Attn("crew", "list").Stdout, "Trellis"), " awake ", string(" "+day[:8]+" "))
 	agents := s.Attn("agent", "list").Stdout
-	requireLines(t, "agent list", agents, "MEMBER", "An ID or awake MEMBER here works with `attn agent peek <target>`")
+	requireLines(t, "agent list", agents, "MEMBER", "An ID works with `attn agent peek <target>`")
 	requireLines(t, "trellis's agent row", crewRow(t, agents, string(day[:8])), " Trellis ")
 	requireStdout(t, s.Attn("agent", "peek", "trellis"), string("session "+day), "crew member: this session is Trellis today")
 	requireFailure(t, s.Attn("agent", "peek", "keel"), "agent peek: ", "Keel is asleep", "never wakes", "`attn crew wake keel`")
