@@ -26,7 +26,9 @@ const savedContext: Continuation = {
 const reviewedSeed = daemonSeed('s-review1', {
   title: 'Review this seed',
   body: 'The implementation is complete. Verify the packaged app.',
-  tender: { ref: 'session:sess-old', name: 'sess-old', session_id: 'sess-old' }, claimed: true,
+  tender: { ref: 'session:sess-old', name: 'sess-old', session_id: 'sess-old' },
+  claimed: true,
+  resume_available: false,
   rev: 4,
 });
 

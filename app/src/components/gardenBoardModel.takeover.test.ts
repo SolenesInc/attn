@@ -19,7 +19,8 @@ function seed(status: string, tender: { session?: string; member?: string } = {}
     status,
     step_slug: '',
     template: false,
-    tender: { ref: 'member:' + (tender.member ?? ''), name: tender.member ?? '', session_id: tender.session ?? '' }, claimed: Boolean(tender.member ?? ''),
+    tender: { ref: 'member:' + (tender.member ?? ''), name: tender.member ?? '', session_id: tender.session ?? '' },
+    claimed: Boolean(tender.member ?? ''),
 
     title: 'a seed',
     updated_at: '',

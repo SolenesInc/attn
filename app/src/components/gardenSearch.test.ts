@@ -21,7 +21,9 @@ function seed(overrides: Partial<Seed> & { id: string; title: string }): Seed {
 
     planter: { ref: 'user', name: 'the user' },
 
-    tender: undefined, claimed: false,
+    tender: undefined,
+    claimed: false,
+    resume_available: false,
     edges: [],
     ready: false,
     template: false,
@@ -142,7 +144,9 @@ describe('matching', () => {
   const seeds = [
     seed({ id: 's-abc123', title: 'reconnect the socket', body: 'the daemon drops the socket' }),
     seed({ id: 's-def456', title: 'garden search', body: 'search over the pushed snapshot' }),
-    seed({ id: 's-ghi789', title: 'unrelated', body: 'nothing to do with any of it', tender: { ref: 'member:hazel', name: "Hazel" }, claimed: true }),
+    seed({ id: 's-ghi789', title: 'unrelated', body: 'nothing to do with any of it',
+    tender: { ref: 'member:hazel', name: "Hazel" },
+    claimed: true }),
   ];
 
   it('looks in the title, the body, the id, and the tender', () => {
@@ -160,7 +164,9 @@ describe('matching', () => {
   it('ranks an id over a title, a title over a tender, and a tender over a body', () => {
     const pool = [
       seed({ id: 's-body01', title: 'only in the body', body: 'a passing mention of hazel' }),
-      seed({ id: 's-tend01', title: 'nothing either', tender: { ref: 'member:hazel', name: "Hazel" }, claimed: true }),
+      seed({ id: 's-tend01', title: 'nothing either',
+      tender: { ref: 'member:hazel', name: "Hazel" },
+      claimed: true }),
       seed({ id: 's-titl01', title: 'hazel plants a thing' }),
       seed({ id: 's-hazel1', title: 'nothing at all' }),
     ];

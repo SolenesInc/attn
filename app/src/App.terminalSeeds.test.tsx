@@ -6,7 +6,9 @@ import { crewMember, soloDesktop, daemonSeed, daemonSession, dockTiles } from '.
 const SEED = daemonSeed('s-7k3f9m', {
   title: 'Make seed IDs navigable',
   body: 'Recognize **valid** ids and [preview](https://example.test) them.',
-  tender: { ref: 'member:trellis', name: "Trellis" }, claimed: true,
+  tender: { ref: 'member:trellis', name: "Trellis" },
+  claimed: true,
+  resume_available: false,
 });
 
 async function openTerminalShowing(output: string) {

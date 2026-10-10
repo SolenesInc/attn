@@ -103,7 +103,7 @@ func setupContinuationWorktree(t *testing.T) (*Daemon, automation.WorkRequest, s
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := d.recordGardenDispatch(origin.SessionID, origin.SeedID, "", prepared.Directory, "codex", false); err != nil {
+	if err := d.recordGardenDispatch(origin.SessionID, origin.SeedID, prepared.Directory, "codex", false); err != nil {
 		t.Fatal(err)
 	}
 	if err := markAutomationRunDeliveredForTest(d.store, origin.ID, string(prepared.Resolved), now); err != nil {

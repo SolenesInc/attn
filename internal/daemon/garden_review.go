@@ -92,13 +92,14 @@ func (d *Daemon) captureGardenReview(profileID ...string) (gardenReviewCapture, 
 			resumeAvailable = continuation.ResumeAvailable
 			handoverAvailable = continuation.HandoverPlacement != handoverNeedsPlacement
 		}
+		_, claimed := seed.Claim.Lasts(read.bindings)
 		observation := garden.ReviewObservation{
 			Seed:              seed,
 			LifecycleAt:       lifecycleAt,
 			LifecycleExact:    exact,
 			DocumentUpdatedAt: doc.UpdatedAt,
 			NewestNoteAt:      newestNotes[seed.ID],
-			TenderHolds:       d.seedWire(seed, read.docs[seed.ID], read.ready[seed.ID], read.bindings).Claimed,
+			TenderHolds:       claimed,
 			DirectoryState:    directoryState,
 			ResumeAvailable:   resumeAvailable,
 			HandoverAvailable: handoverAvailable,

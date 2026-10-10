@@ -9,7 +9,9 @@ import type { Reply, ScriptedDaemon } from './test/scriptedDaemon';
 const PARSER = daemonSeed('s-1', {
   title: 'fix the parser',
   status: 'tending',
-  tender: { ref: 'session:tender', name: 'tender', session_id: 'tender' }, claimed: true,
+  tender: { ref: 'session:tender', name: 'tender', session_id: 'tender' },
+  claimed: true,
+  resume_available: false,
   continuation: {
     agent: 'claude',
     cwd: '/tmp/repo',
@@ -117,7 +119,7 @@ describe('App garden continuation', () => {
   });
 
   it('offers Resume for a member claim with no saved continuation', async () => {
-    const seed = daemonSeed('s-member', {title:'Keel work',status:'growing',claimed:true,tender:{ref:'member:keel',name:'Keel'}});
+    const seed = daemonSeed('s-member', {title:'Keel work',status:'growing',resume_available:true,claimed:true,tender:{ref:'member:keel',name:'Keel'}});
     const {daemon} = await openSeedInGarden(seed);
     daemon.on('seed_resume',()=>({event:'seed_resume_result',success:true,session_id:'keel-new'}));
     await gesture(daemon,()=>fireEvent.click(screen.getByRole('button',{name:'Resume'})));
@@ -219,7 +221,9 @@ describe('App garden continuation', () => {
         crew: [KEEL],
         sessions: [daemonSession('s1')],
         desktops: [soloDesktop('s1')],
-        seeds: [daemonSeed('s-7k3f9m', { claimed: false,  title: 'crew seed', status: 'planted', planter: { ref: "member:keel", name: "Keel" } })],
+        seeds: [daemonSeed('s-7k3f9m', { claimed: false,
+        resume_available: false,  title: 'crew seed', status: 'planted',
+        planter: { ref: "member:keel", name: "Keel" } })],
       },
     });
     await gesture(daemon, () => fireEvent.click(screen.getByTestId('manage-crew')));

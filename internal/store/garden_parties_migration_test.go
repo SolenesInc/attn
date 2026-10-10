@@ -10,6 +10,7 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/garden/events"
+	"github.com/victorarias/attn/internal/inbox"
 )
 
 func TestGardenPartiesMigration(t *testing.T) {
@@ -51,6 +52,21 @@ func TestGardenPartiesMigration(t *testing.T) {
 				for _, row := range []struct{ id, member, session string }{{"s-named1", "Bob", ""}, {"s-named2", "Bob", "plain"}, {"s-member", "KeEl", "bound"}, {"s-7k3f9m", "", "bound"}, {"s-closed", "", "old-day"}, {"s-plain1", "", "plain"}} {
 					put(garden.CollectionSeeds, row.id, map[string]any{"id": row.id, "profile_id": profile.ID, "status": "growing", "tender_member": row.member, "tender_session": row.session, "planter_session": "bound", "harvest_when": map[string]any{"pull_request": "github.com:a/b#1", "url": "https://github.com/a/b/pull/1", "set_at": "now", "set_by_member": "attn"}})
 				}
+				if _, err := s.db.Exec(`INSERT INTO profiles(id,name,created_at) VALUES('side','Side','now')`); err != nil {
+					t.Fatal(err)
+				}
+				put(garden.CollectionSeeds, "s-side01", map[string]any{"id": "s-side01", "profile_id": "side", "status": "growing", "tender_member": "keel", "tender_session": "bound", "planter_member": "keel", "harvest_when": map[string]any{"pull_request": "github.com:a/b#1", "url": "https://github.com/a/b/pull/1", "set_at": "now", "set_by_member": "keel"}})
+				put(garden.CollectionSeeds, "s-user01", map[string]any{"id": "s-user01", "profile_id": profile.ID, "status": "planted"})
+				put(garden.CollectionNotes, "n-side01", map[string]any{"id": "n-side01", "seed": "s-side01", "kind": "note", "body": "Side history", "author_member": "KeEl"})
+				put(garden.CollectionNotes, "n-user01", map[string]any{"id": "n-user01", "seed": "s-user01", "kind": "note", "body": "User history"})
+				put(garden.CollectionDispatches, "no-dispatcher", map[string]any{"session_id": "no-dispatcher", "crown": "s-user01"})
+				if _, err := s.db.Exec(`INSERT INTO delegation_operations(request_id,operation_id,request_json,state,progress,session_id,created_at,updated_at,handover_tender_session,handover_tender_member) VALUES('side-req','side-op','{"profile_id":"side","source_session_id":"bound"}','accepted','','side-delegate','','','bound','keel')`); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := s.db.Exec(`INSERT INTO inbox_items(id,address,kind,source_id,coalesce_key,hint,created_at,attempts,read_at,notified_at) VALUES('old-bell','member:keel','seed_update','s-7k3f9m','s-7k3f9m','note.added','2026-10-01',?,'',''),('next-bell','session:bound','seed_update','s-7k3f9m','s-7k3f9m','unblocked','2026-10-02',0,'',''),('other-seed','session:old-day','seed_update','s-member','s-member','tended','2026-10-03',0,'',''),('plain-bell','session:plain','seed_update','s-plain1','s-plain1','tended','2026-10-04',0,'',''),('notice','session:bound','notice','','','notice','2026-10-05',0,'',''),('read-bell','session:bound','seed_update','s-closed','s-closed','tended','2026-10-06',1,'read','notified')`, inbox.MaxAttempts); err != nil {
+					t.Fatal(err)
+				}
+
 				put(garden.CollectionNotes, "n-legacy", map[string]any{"id": "n-legacy", "seed": "s-7k3f9m", "kind": "note", "body": "done", "author_member": "attn"})
 				put(garden.CollectionDispatches, "delegate", map[string]any{"session_id": "delegate", "crown": "s-7k3f9m", "dispatcher_session": "bound"})
 				if _, err := s.db.Exec(`INSERT INTO garden_seed_watches(watcher_session_id,seed_id,created_at) VALUES ('bound','s-7k3f9m','2026-10-01'),('old-day','s-7k3f9m','2026-10-02'),('plain','s-7k3f9m','2026-10-03'); INSERT INTO delegation_operations(request_id,operation_id,request_json,state,progress,session_id,created_at,updated_at,handover_tender_session,handover_tender_member) VALUES('req','op-req','{"source_session_id":"bound"}','accepted','','delegate','','','bound','keel'); INSERT INTO bus_events(name,subject,payload,created_at) VALUES('garden.seed.tended','s-7k3f9m','{"attention_requested":true,"caused_by_session_id":"bound","directly_notified_session_id":"plain"}','now'),('garden.seed.body.edited','s-7k3f9m','{}','now')`); err != nil {
@@ -98,12 +114,16 @@ func TestGardenPartiesMigration(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(read.Documents) != 3 {
+			if len(read.Documents) != 6 {
 				t.Fatalf("migration notes: %d", len(read.Documents))
 			}
 			for _, doc := range read.Documents {
 				note, err := garden.DecodeNote(doc.Body)
-				if err != nil || note.Author.String() != "attn" {
+				expected := "attn"
+				if doc.ID == "n-side01" || doc.ID == "n-user01" {
+					expected = "user"
+				}
+				if err != nil || note.Author.String() != expected {
 					t.Fatalf("note: %s %v", doc.Body, err)
 				}
 			}
@@ -119,6 +139,49 @@ func TestGardenPartiesMigration(t *testing.T) {
 			if err != nil || op.Dispatcher.String() != "member:keel" || op.HandoverTender.String() != "member:keel" {
 				t.Fatalf("operation: %+v %v", op, err)
 			}
+			for _, id := range []string{"s-side01", "s-user01"} {
+				doc, found, err := s.GetDocument(*seeds, id)
+				if err != nil || !found {
+					t.Fatal(err)
+				}
+				seed, err := garden.Decode(doc.Body)
+				if err != nil || !seed.Claim.IsZero() || seed.Planter.String() != "user" {
+					t.Fatalf("scoped seed: %+v %v", seed, err)
+				}
+				if seed.HarvestWhen != nil && seed.HarvestWhen.SetBy.String() != "user" {
+					t.Fatalf("scoped setter: %+v", seed.HarvestWhen)
+				}
+			}
+			side, err := s.GetDelegationOperation("side-req")
+			if err != nil || side.Dispatcher.String() != "user" || side.HandoverTender.String() != "" {
+				t.Fatalf("scoped operation: %+v %v", side, err)
+			}
+			dispatches, _, err := s.DocumentCollection(garden.Namespace, garden.CollectionDispatches)
+			if err != nil {
+				t.Fatal(err)
+			}
+			doc, _, err := s.GetDocument(*dispatches, "no-dispatcher")
+			if err != nil {
+				t.Fatal(err)
+			}
+			execution, err := garden.DecodeExecution(doc.Body)
+			if err != nil || execution.Dispatcher.String() != "" {
+				t.Fatalf("execution-only dispatch: %+v %v", execution, err)
+			}
+			var count, attempts int
+			var address, hint string
+			if err := s.db.QueryRow(`SELECT count(*) FROM inbox_items WHERE kind='seed_update' AND read_at=''`).Scan(&count); err != nil || count != 3 {
+				t.Fatalf("pending bells: %d %v", count, err)
+			}
+			if err := s.db.QueryRow(`SELECT address,hint,attempts FROM inbox_items WHERE id='old-bell'`).Scan(&address, &hint, &attempts); err != nil || address != "member:keel" || hint != "unblocked" || attempts != 0 {
+				t.Fatalf("coalesced bell: %s %s %d %v", address, hint, attempts, err)
+			}
+			for id, want := range map[string]string{"other-seed": "member:keel", "plain-bell": "session:plain", "notice": "session:bound", "read-bell": "session:bound"} {
+				if err := s.db.QueryRow(`SELECT address FROM inbox_items WHERE id=?`, id).Scan(&address); err != nil || address != want {
+					t.Fatalf("inbox %s: %s %v", id, address, err)
+				}
+			}
+
 			model, _, err := events.BuildGardenModel()
 			if err != nil {
 				t.Fatal(err)

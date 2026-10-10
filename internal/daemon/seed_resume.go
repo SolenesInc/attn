@@ -190,7 +190,7 @@ func (d *Daemon) bindResumedSeed(
 	}
 	next, err := garden.Tend(seed, party, garden.Ask{By: r.Actor()}, b)
 	if err != nil {
-		return fmt.Errorf("reclaim %s after resume: %w", seed.ID, err)
+		return fmt.Errorf("reclaim %s after resume: %w", seed.ID, d.seedMoveError(err, b))
 	}
 	if next.Status != seed.Status {
 		next.StateChangedAt = formatGardenTime(d.gardenTime())

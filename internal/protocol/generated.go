@@ -8696,6 +8696,9 @@ type Seed struct {
 	// Reason corresponds to the JSON schema field "reason".
 	Reason *string `json:"reason,omitempty,omitzero"`
 
+	// ResumeAvailable corresponds to the JSON schema field "resume_available".
+	ResumeAvailable bool `json:"resume_available"`
+
 	// Rev corresponds to the JSON schema field "rev".
 	Rev int `json:"rev"`
 

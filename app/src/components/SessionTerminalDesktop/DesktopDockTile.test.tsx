@@ -958,7 +958,9 @@ function seedFixture(overrides: Partial<Seed> = {}): Seed {
 
     planter: { ref: 'user', name: 'the user' },
 
-    tender: { ref: 'member:trellis', name: "Trellis", session_id: 'sess-a' }, claimed: true,
+    tender: { ref: 'member:trellis', name: "Trellis", session_id: 'sess-a' },
+    claimed: true,
+    resume_available: false,
     edges: [],
     template: false,
     gate: false,
@@ -1334,12 +1336,16 @@ describe('DesktopDockTile seed reader', () => {
     );
     await screen.findByRole('button', { name: 'Send 1' });
 
-    const parked = seedFixture({  tender: undefined, claimed: false, rev: 2 });
+    const parked = seedFixture({  tender: undefined,
+    claimed: false,
+    resume_available: false, rev: 2 });
     view.rerender(<DesktopDockTile {...props} gardenSeeds={[parked]} />);
     expect(screen.getByRole('button', { name: 'Note on seed 1' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'More annotation destinations' })).toBeNull();
 
-    const claimed = seedFixture({  tender: { ref: 'member:trellis', name: "Trellis", session_id: 'sess-b' }, claimed: true, rev: 3 });
+    const claimed = seedFixture({  tender: { ref: 'member:trellis', name: "Trellis", session_id: 'sess-b' },
+    claimed: true,
+    resume_available: false, rev: 3 });
     view.rerender(<DesktopDockTile {...props} gardenSeeds={[claimed]} />);
     const primary = screen.getByRole('button', { name: 'Send 1' });
     expect(screen.getByRole('button', { name: 'More annotation destinations' })).toBeInTheDocument();

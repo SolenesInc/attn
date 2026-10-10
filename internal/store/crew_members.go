@@ -84,6 +84,32 @@ func (s *Store) CrewIdentity(key who.MemberKey) (CrewIdentity, error) {
 	}
 	return m, err
 }
+func (s *Store) CrewNames() (map[who.MemberKey]string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	names := map[who.MemberKey]string{}
+	if s.db == nil {
+		for key, m := range s.crewMembers {
+			names[key] = m.Name
+		}
+		return names, nil
+	}
+	rows, err := s.db.Query(`SELECT member_key,name FROM crew_members`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var key who.MemberKey
+		var name string
+		if err := rows.Scan(&key, &name); err != nil {
+			return nil, err
+		}
+		names[key] = name
+	}
+	return names, rows.Err()
+}
+
 func (s *Store) CrewRoster(profileID string) ([]CrewIdentity, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

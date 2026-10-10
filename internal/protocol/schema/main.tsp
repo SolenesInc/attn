@@ -4593,6 +4593,7 @@ model Seed {
   "planter": ActorView;
   "tender"?: PartyView;
   "claimed": boolean;
+  "resume_available": boolean;
   // The most recent attn session that worked this seed. It survives Park and
   // session removal; the current claim is tender.
   "last_execution_id"?: SessionID;
@@ -4782,7 +4783,6 @@ model SeedPlantMessage {
   // A seed this work was discovered while tending. Refused before planting
   // when no such seed is planted.
   "discovered_from"?: string;
-  // The crew member planting, free-string until the crew primitive lands.
 
 }
 
@@ -4947,9 +4947,6 @@ model SeedDocumentGetMessage {
 
 model SeedDocument {
   "seed": Seed;
-  // Whether the stored tender currently holds this seed. A tender session may
-  // remain in the document after that session exits, so the ids alone cannot
-  // answer where feedback can be delivered.
   "children": Seed[];
   "notes": SeedNote[];
   "notes_total": int32;

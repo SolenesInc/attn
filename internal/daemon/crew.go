@@ -484,14 +484,22 @@ func (d *Daemon) crewMemberBoundTo(sessionID protocol.SessionID) string {
 	return ""
 }
 
-func (d *Daemon) decorateCrewMember(session *protocol.Session, bindings who.Bindings) {
+func (d *Daemon) crewNames() map[who.MemberKey]string {
+	names, err := d.store.CrewNames()
+	if err != nil {
+		d.logf("crew names: %v", err)
+	}
+	return names
+}
+
+func (d *Daemon) decorateCrewMember(session *protocol.Session, bindings who.Bindings, names map[who.MemberKey]string) {
 	if session == nil {
 		return
 	}
 	party, _ := bindings.PartyOf(session.ID)
 	if member, ok := party.Member(); ok && bindings.Check(party) == nil {
 		session.CrewMember = protocol.Ptr(member.String())
-		session.CrewMemberName = protocol.Ptr(d.memberName(member))
+		session.CrewMemberName = protocol.Ptr(names[member])
 		return
 	}
 	session.CrewMember = nil

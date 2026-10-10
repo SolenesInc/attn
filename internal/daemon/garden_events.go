@@ -270,6 +270,13 @@ func (r gardenEventRoles) ResolveSeedRole(seedID string, role events.Role) ([]wh
 		if !claimed {
 			return nil, nil
 		}
+		profile, err := r.daemon.store.PartyProfile(tender)
+		if err != nil {
+			return nil, err
+		}
+		if profile != seed.ProfileID {
+			return nil, fmt.Errorf("seed %s belongs to profile %s; tender %s belongs to profile %s", seed.ID, seed.ProfileID, tender, profile)
+		}
 		if err := r.bindings.Check(tender); err != nil {
 			return nil, err
 		}

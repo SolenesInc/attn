@@ -31,18 +31,21 @@ func applyMigration1791638944215407(tx *sql.Tx) error {
 		return err
 	}
 	rows.Close()
-	keys := map[string]string{}
-	rows, err = tx.Query(`SELECT member_key FROM crew_members`)
+	keys := map[[2]string]string{}
+	memberProfiles := map[string]string{}
+	sessionProfiles := map[string]string{}
+	rows, err = tx.Query(`SELECT member_key,profile_id FROM crew_members`)
 	if err != nil {
 		return err
 	}
 	for rows.Next() {
-		var key string
-		if err := rows.Scan(&key); err != nil {
+		var key, profile string
+		if err := rows.Scan(&key, &profile); err != nil {
 			rows.Close()
 			return err
 		}
-		keys[strings.ToLower(key)] = key
+		keys[[2]string{profile, strings.ToLower(key)}] = key
+		memberProfiles[key] = profile
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
@@ -50,17 +53,18 @@ func applyMigration1791638944215407(tx *sql.Tx) error {
 	}
 	rows.Close()
 	members := map[string]string{}
-	rows, err = tx.Query(`SELECT id,member_key FROM sessions WHERE member_key!=''`)
+	rows, err = tx.Query(`SELECT id,member_key,profile_id FROM sessions`)
 	if err != nil {
 		return err
 	}
 	for rows.Next() {
-		var id, key string
-		if err := rows.Scan(&id, &key); err != nil {
+		var id, key, profile string
+		if err := rows.Scan(&id, &key, &profile); err != nil {
 			rows.Close()
 			return err
 		}
 		members[id] = key
+		sessionProfiles[id] = profile
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
@@ -78,7 +82,9 @@ func applyMigration1791638944215407(tx *sql.Tx) error {
 				rows.Close()
 				return err
 			}
-			keys[strings.ToLower(key)] = key
+			if profile := memberProfiles[key]; profile != "" {
+				keys[[2]string{profile, strings.ToLower(key)}] = key
+			}
 			if id != "" {
 				members[id] = key
 			}
@@ -98,26 +104,58 @@ func applyMigration1791638944215407(tx *sql.Tx) error {
 		}
 		return "session:" + id
 	}
-	actor := func(m, id string) string {
-		if key := keys[strings.ToLower(m)]; key != "" {
+	actor := func(profile, m, id string) string {
+		if key := keys[[2]string{profile, strings.ToLower(m)}]; key != "" {
 			return "member:" + key
 		}
 		if m == "attn" {
 			return "attn"
 		}
 		if id != "" {
+			if owner := sessionProfiles[id]; owner != "" && owner != profile {
+				return "user"
+			}
+			if key := members[id]; key != "" && memberProfiles[key] != profile {
+				return "user"
+			}
 			return party(id)
 		}
 		return "user"
 	}
-	tender := func(m, id string) string {
-		if key := keys[strings.ToLower(m)]; key != "" {
+	tender := func(profile, m, id string) string {
+		if key := keys[[2]string{profile, strings.ToLower(m)}]; key != "" {
 			return "member:" + key
 		}
 		if m != "" {
 			return ""
 		}
+		if owner := sessionProfiles[id]; owner != "" && owner != profile {
+			return ""
+		}
+		if key := members[id]; key != "" && memberProfiles[key] != profile {
+			return ""
+		}
 		return party(id)
+	}
+	seedProfiles := map[string]string{}
+	if table := tables["seeds"]; table != "" {
+		rows, err = tx.Query(`SELECT id,coalesce(json_extract(body,'$.profile_id'),'') FROM ` + table)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			var id, profile string
+			if err := rows.Scan(&id, &profile); err != nil {
+				rows.Close()
+				return err
+			}
+			seedProfiles[id] = profile
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return err
+		}
+		rows.Close()
 	}
 	type document struct {
 		id      string
@@ -155,9 +193,19 @@ func applyMigration1791638944215407(tx *sql.Tx) error {
 				return err
 			}
 			text := func(field string) string { v, _ := body[field].(string); return v }
+			profile := seedProfiles[doc.id]
+			if collection == "notes" {
+				profile = seedProfiles[text("seed")]
+			}
+			if collection == "dispatches" {
+				profile = seedProfiles[text("crown")]
+				if profile == "" {
+					profile = sessionProfiles[text("session_id")]
+				}
+			}
 			switch collection {
 			case "seeds":
-				planter := actor(text("planter_member"), text("planter_session"))
+				planter := actor(profile, text("planter_member"), text("planter_session"))
 				if planter == "user" && text("planter_session") == "" && text("planter_member") == "" {
 					var automation bool
 					if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM automation_runs WHERE seed_id=?)`, doc.id).Scan(&automation); err != nil {
@@ -169,11 +217,11 @@ func applyMigration1791638944215407(tx *sql.Tx) error {
 				}
 				body["planter"] = planter
 				m, id := text("tender_member"), text("tender_session")
-				next := tender(m, id)
+				next := tender(profile, m, id)
 				if next != "" {
 					body["tender"] = next
 				}
-				if m != "" && keys[strings.ToLower(m)] == "" {
+				if (m != "" || id != "") && next == "" {
 					notes := tables["notes"]
 					if notes == "" {
 						return fmt.Errorf("drop named claim on %s: notes collection is missing", doc.id)
@@ -195,7 +243,7 @@ func applyMigration1791638944215407(tx *sql.Tx) error {
 							break
 						}
 					}
-					note := map[string]any{"id": "n-" + string(bytes), "seed": doc.id, "kind": "note", "author": "attn", "body": fmt.Sprintf("The named claim by %s was removed. Assign this seed to a crew member with attn seed tend %s --for <name>.", m, doc.id)}
+					note := map[string]any{"id": "n-" + string(bytes), "seed": doc.id, "kind": "note", "author": "attn", "body": fmt.Sprintf("The claim by %s was removed. Assign this seed to a crew member with attn seed tend %s --for <name>.", m, doc.id)}
 					encoded, err := json.Marshal(note)
 					if err != nil {
 						return err
@@ -207,7 +255,7 @@ func applyMigration1791638944215407(tx *sql.Tx) error {
 				if condition, ok := body["harvest_when"].(map[string]any); ok {
 					m, _ := condition["set_by_member"].(string)
 					id, _ := condition["set_by_session"].(string)
-					condition["set_by"] = actor(m, id)
+					condition["set_by"] = actor(profile, m, id)
 					delete(condition, "set_by_member")
 					delete(condition, "set_by_session")
 				}
@@ -218,12 +266,12 @@ func applyMigration1791638944215407(tx *sql.Tx) error {
 				if _, already := body["author"]; already {
 					continue
 				}
-				body["author"] = actor(text("author_member"), text("author_session"))
+				body["author"] = actor(profile, text("author_member"), text("author_session"))
 				delete(body, "author_member")
 				delete(body, "author_session")
 			case "dispatches":
 				if m, id := text("dispatcher_member"), text("dispatcher_session"); m != "" || id != "" {
-					body["dispatcher"] = actor(m, id)
+					body["dispatcher"] = actor(profile, m, id)
 				}
 				delete(body, "dispatcher_member")
 				delete(body, "dispatcher_session")
@@ -295,22 +343,27 @@ func applyMigration1791638944215407(tx *sql.Tx) error {
 			return err
 		}
 		source, _ := request["source_session_id"].(string)
-		if _, err := tx.Exec(`UPDATE delegation_operations SET dispatcher=?,handover_tender=? WHERE request_id=?`, actor("", source), tender(o.m, o.s), o.id); err != nil {
+		profile, _ := request["profile_id"].(string)
+		if profile == "" {
+			profile = sessionProfiles[source]
+		}
+		if _, err := tx.Exec(`UPDATE delegation_operations SET dispatcher=?,handover_tender=? WHERE request_id=?`, actor(profile, "", source), tender(profile, o.m, o.s), o.id); err != nil {
 			return err
 		}
 	}
 	type event struct {
 		seq     int64
+		subject string
 		payload string
 	}
-	rows, err = tx.Query(`SELECT seq,payload FROM bus_events WHERE name LIKE 'garden.seed.%'`)
+	rows, err = tx.Query(`SELECT seq,subject,payload FROM bus_events WHERE name LIKE 'garden.seed.%'`)
 	if err != nil {
 		return err
 	}
 	var events []event
 	for rows.Next() {
 		var e event
-		if err := rows.Scan(&e.seq, &e.payload); err != nil {
+		if err := rows.Scan(&e.seq, &e.subject, &e.payload); err != nil {
 			rows.Close()
 			return err
 		}
@@ -327,7 +380,7 @@ func applyMigration1791638944215407(tx *sql.Tx) error {
 			return err
 		}
 		id, _ := body["caused_by_session_id"].(string)
-		body["caused_by"] = actor("", id)
+		body["caused_by"] = actor(seedProfiles[e.subject], "", id)
 		delete(body, "caused_by_session_id")
 		if id, _ := body["directly_notified_session_id"].(string); id != "" {
 			body["directly_notified"] = party(id)
@@ -338,6 +391,53 @@ func applyMigration1791638944215407(tx *sql.Tx) error {
 			return err
 		}
 		if _, err := tx.Exec(`UPDATE bus_events SET payload=? WHERE seq=?`, string(encoded), e.seq); err != nil {
+			return err
+		}
+	}
+	type pendingBell struct {
+		id, address, key, hint string
+		attempts               int
+	}
+	rows, err = tx.Query(`SELECT id,address,coalesce_key,hint,attempts FROM inbox_items WHERE kind='seed_update' AND read_at='' ORDER BY created_at,id`)
+	if err != nil {
+		return err
+	}
+	winners := map[[2]string]*pendingBell{}
+	var pending []*pendingBell
+	var duplicates []string
+	for rows.Next() {
+		item := &pendingBell{}
+		if err := rows.Scan(&item.id, &item.address, &item.key, &item.hint, &item.attempts); err != nil {
+			rows.Close()
+			return err
+		}
+		if id, ok := strings.CutPrefix(item.address, "session:"); ok {
+			item.address = party(id)
+		}
+		key := [2]string{item.address, item.key}
+		if previous := winners[key]; item.key != "" && previous != nil {
+			duplicates = append(duplicates, item.id)
+			previous.attempts = min(previous.attempts, item.attempts)
+			if item.hint == "unblocked" {
+				previous.hint = item.hint
+			}
+		} else {
+			winners[key] = item
+			pending = append(pending, item)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	for _, id := range duplicates {
+		if _, err := tx.Exec(`DELETE FROM inbox_items WHERE id=?`, id); err != nil {
+			return err
+		}
+	}
+	for _, item := range pending {
+		if _, err := tx.Exec(`UPDATE inbox_items SET address=?,hint=?,attempts=? WHERE id=?`, item.address, item.hint, item.attempts, item.id); err != nil {
 			return err
 		}
 	}

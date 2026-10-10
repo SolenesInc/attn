@@ -20,7 +20,9 @@ import { initialState } from './test/scriptedDaemon';
 
 const layout = { sessions: [daemonSession('s1')], desktops: [soloDesktop('s1')] };
 
-const PLAN = daemonSeed('s-plan11', { title: 'The plan', body: '## Rendered plan\n\nRead **this**.', tender: { ref: 'member:trellis', name: "Trellis" }, claimed: true });
+const PLAN = daemonSeed('s-plan11', { title: 'The plan', body: '## Rendered plan\n\nRead **this**.',
+tender: { ref: 'member:trellis', name: "Trellis" },
+claimed: true });
 
 function tiledDesktop(tiles: Parameters<typeof dockTiles>[1]) {
   return daemonDesktop('ws', { root: dockTiles({ type: 'pane', pane_id: 'pane-s1' }, tiles), panes: [agentPane('s1', 'ws')] }, { name: 'ws' });
@@ -179,7 +181,10 @@ describe('App garden seeds', () => {
 
   it('says the harvest condition beside the state and opens the pull request', async () => {
     const url = 'https://github.com/victorarias/attn/pull/42';
-    await openSeedTile({ ...PLAN, status: 'dormant', tender: undefined, claimed: false, harvest_when: { set_by: {ref:'user',name:'the user'},  pull_request: 'github.com:victorarias/attn#42', url, set_at: '2026-09-02T10:00:00Z' } });
+    await openSeedTile({ ...PLAN, status: 'dormant',
+    tender: undefined,
+    claimed: false,
+    resume_available: false, harvest_when: { set_by: {ref:'user',name:'the user'},  pull_request: 'github.com:victorarias/attn#42', url, set_at: '2026-09-02T10:00:00Z' } });
 
     const link = within(seedDetails()).getByRole('link', { name: /harvests when victorarias\/attn#42 merges/ });
     expect(link).toHaveAttribute('href', url);

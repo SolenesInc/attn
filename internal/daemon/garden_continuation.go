@@ -628,4 +628,7 @@ func (d *Daemon) decorateSeedContinuation(wire *protocol.Seed, seed garden.Seed)
 		return
 	}
 	wire.Continuation = continuationToProtocol(d.continuationForSeed(seed))
+	if wire.Continuation != nil {
+		wire.ResumeAvailable = wire.ResumeAvailable || wire.Continuation.ResumeAvailable
+	}
 }

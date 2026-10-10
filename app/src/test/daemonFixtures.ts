@@ -130,7 +130,9 @@ export function daemonSeed(id: string, overrides: Partial<DaemonSeed> = {}): Dae
 
     planter: { ref: 'user', name: 'the user' },
 
-    tender: undefined, claimed: false,
+    tender: undefined,
+    claimed: false,
+    resume_available: false,
     edges: [],
     template: false,
     gate: false,

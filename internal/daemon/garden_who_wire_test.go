@@ -84,12 +84,17 @@ func TestTendingForAnUnknownNameIsRefused(t *testing.T) {
 	}
 	_, err = cli.SeedTransition("", seed, "tend", "", false, client.SeedTransitionOptions{})
 	lifeRefusal(t, "user claim without assignee", err, "--for")
+	day := wakeCrew(t, cli, "Keel", "").SessionID
+	w.Launched(string(day)).Prompted()
 	assigned, err := cli.SeedTransition("", seed, "tend", "", false, client.SeedTransitionOptions{Assignee: "Keel"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !assigned.Seed.Claimed || assigned.Seed.Tender == nil || assigned.Seed.Tender.Ref != "member:keel" {
 		t.Fatalf("assigned: %+v", assigned)
+	}
+	if items := readInbox(t, cli, string(day), 0).Items; len(items) != 1 || protocol.Deref(items[0].Hint) != "tended" {
+		t.Fatalf("user assignment excluded its tender: %+v", items)
 	}
 }
 
@@ -166,5 +171,23 @@ func TestRetiredMembersCannotReclaimWorkThroughResumeOrChief(t *testing.T) {
 	lifeRefusal(t, "assigning to a retired Chief", err, "Keel is retired", "restore")
 	if shown := lifeShow(t, cli, seed).Seed; shown.Rev != released.Rev || shown.Claimed || shown.Tender != nil {
 		t.Fatalf("retired actions changed seed: %+v", shown)
+	}
+}
+
+func TestSendToChiefNeedsOnlyTheRevision(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	chief := wakeCrew(t, cli, "Keel", "").SessionID
+	w.Launched(string(chief)).Prompted()
+	if result := setChiefOfStaff(app, string(chief), true); !result.Success {
+		t.Fatal(protocol.Deref(result.Error))
+	}
+	seed := plantSeedAs(t, cli, "", "Let Keel choose the next context")
+	sent, err := cli.SeedSendToChief("", lifeShow(t, cli, seed).Seed, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sent.Chief.Ref != "member:keel" || sent.Seed.Tender == nil || sent.Seed.Tender.Ref != "member:keel" || !sent.Seed.Claimed {
+		t.Fatalf("crew Chief assignment: %+v", sent)
 	}
 }

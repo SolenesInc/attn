@@ -21,12 +21,3 @@ func gardenCall(t *testing.T, run func(net.Conn)) protocol.Response {
 	}
 	return resp
 }
-func plant(t *testing.T, d *Daemon, msg protocol.SeedPlantMessage) protocol.Seed {
-	t.Helper()
-	msg.Cmd = protocol.CmdSeedPlant
-	resp := gardenCall(t, func(c net.Conn) { d.handleSeedPlant(c, &msg) })
-	if !resp.Ok {
-		t.Fatalf("plant %q: %v", msg.Title, protocol.Deref(resp.Error))
-	}
-	return resp.SeedPlantResult.Seed
-}

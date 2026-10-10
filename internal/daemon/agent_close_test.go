@@ -175,9 +175,8 @@ func TestAgentCloseWritesItsReceiptInTheOwningDaemonsLedger(t *testing.T) {
 	d := newAgentCloseDaemon(t)
 	addAgentCloseSession(t, d, "orchestrator", "Orchestrator")
 	outpost := startAgentCloseOutpost(t, d, remoteAgentCloseSession("remote-delegate", "Remote delegate"), remoteAgentCloseSession("remote-self", "Remote self"))
-	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Bench the kernel", Body: protocol.Ptr("sweep on the gpu box")})
-	if err := d.recordGardenDispatch("remote-delegate", seed.ID, "orchestrator", "/srv/remote-delegate", "claude", false); err != nil {
-		t.Fatalf("recordGardenDispatch: %v", err)
+	if err := setTestChief(d, "orchestrator"); err != nil {
+		t.Fatal(err)
 	}
 
 	const reason = "the sweep finished and its numbers are on the seed"

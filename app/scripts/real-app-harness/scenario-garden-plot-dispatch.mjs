@@ -308,8 +308,8 @@ async function main() {
       const known = new Set(observer.sessionsById.keys());
       const refusedCrown = await runInPane(client, pane,
         `attn delegate --agent shell --model none --source-session ${pane.sessionId} ` +
-          `--cwd ${pane.cwd} --seed ${crown} --name plotdel2`, 'one tender at a time');
-      runner.assert(saw(refusedCrown, `${crown} is being tended by ${delegated}`),
+          `--cwd ${pane.cwd} --seed ${crown} --name plotdel2`, '--handover');
+      runner.assert(saw(refusedCrown, `${crown} is being tended by plotdel1`),
         'dispatching at a tended crown is refused and names its tender', { refusedCrown });
       runner.assert(observer.sessionsById.size === known.size,
         'the refused dispatch started no session', { sessions: [...observer.sessionsById.keys()] });

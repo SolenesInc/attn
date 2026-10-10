@@ -4982,6 +4982,7 @@ export interface SeedElement {
     profile_id:             string;
     ready:                  boolean;
     reason?:                string;
+    resume_available:       boolean;
     rev:                    number;
     state_changed_at:       string;
     state_changed_at_exact: boolean;
@@ -8687,6 +8688,7 @@ export interface Seed {
     profile_id:             string;
     ready:                  boolean;
     reason?:                string;
+    resume_available:       boolean;
     rev:                    number;
     state_changed_at:       string;
     state_changed_at_exact: boolean;
@@ -19537,6 +19539,7 @@ const typeMap: any = {
         { json: "profile_id", js: "profile_id", typ: "" },
         { json: "ready", js: "ready", typ: true },
         { json: "reason", js: "reason", typ: u(undefined, "") },
+        { json: "resume_available", js: "resume_available", typ: true },
         { json: "rev", js: "rev", typ: 0 },
         { json: "state_changed_at", js: "state_changed_at", typ: "" },
         { json: "state_changed_at_exact", js: "state_changed_at_exact", typ: true },
@@ -21915,6 +21918,7 @@ const typeMap: any = {
         { json: "profile_id", js: "profile_id", typ: "" },
         { json: "ready", js: "ready", typ: true },
         { json: "reason", js: "reason", typ: u(undefined, "") },
+        { json: "resume_available", js: "resume_available", typ: true },
         { json: "rev", js: "rev", typ: 0 },
         { json: "state_changed_at", js: "state_changed_at", typ: "" },
         { json: "state_changed_at_exact", js: "state_changed_at_exact", typ: true },

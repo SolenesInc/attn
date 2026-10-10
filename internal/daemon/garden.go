@@ -191,6 +191,7 @@ type gardenRead struct {
 	seeds    []garden.Seed
 	docs     map[string]docstore.Document
 	ready    map[string]bool
+	views    map[who.Actor]protocol.ActorView
 }
 
 func (d *Daemon) readGarden(profileID ...string) (gardenRead, error) {
@@ -198,7 +199,7 @@ func (d *Daemon) readGarden(profileID ...string) (gardenRead, error) {
 }
 
 func (d *Daemon) readGardenTo(limit int, profileID ...string) (gardenRead, error) {
-	out := gardenRead{daemon: d, bindings: d.broadcastBindings(), docs: map[string]docstore.Document{}, ready: map[string]bool{}}
+	out := gardenRead{daemon: d, bindings: d.broadcastBindings(), views: map[who.Actor]protocol.ActorView{}, docs: map[string]docstore.Document{}, ready: map[string]bool{}}
 	page := limit
 	if page <= 0 {
 		page = docstore.MaxLimit
@@ -239,7 +240,7 @@ func (d *Daemon) readGardenTo(limit int, profileID ...string) (gardenRead, error
 func (g gardenRead) wire(seeds []garden.Seed) []protocol.Seed {
 	out := make([]protocol.Seed, 0, len(seeds))
 	for _, seed := range seeds {
-		wire := g.daemon.seedWire(seed, g.docs[seed.ID], g.ready[seed.ID], g.bindings)
+		wire := g.seedWire(seed, g.docs[seed.ID], g.ready[seed.ID])
 		if progress, ok := g.progress(seed.ID); ok {
 			wire.PlotProgress = progress
 		}
@@ -287,13 +288,21 @@ func (d *Daemon) countSeeds(profileID ...string) int {
 	return read.Count
 }
 
-func (d *Daemon) seedWire(seed garden.Seed, doc docstore.Document, ready bool, bindings ...who.Bindings) protocol.Seed {
-	var b who.Bindings
-	if len(bindings) > 0 {
-		b = bindings[0]
-	} else {
-		b = d.broadcastBindings()
+func (d *Daemon) seedWire(seed garden.Seed, doc docstore.Document, ready bool, b who.Bindings) protocol.Seed {
+	return (gardenRead{daemon: d, bindings: b, views: map[who.Actor]protocol.ActorView{}}).seedWire(seed, doc, ready)
+}
+
+func (g gardenRead) actorView(a who.Actor) protocol.ActorView {
+	if v, ok := g.views[a]; ok {
+		return v
 	}
+	v := g.daemon.actorView(a)
+	g.views[a] = v
+	return v
+}
+
+func (g gardenRead) seedWire(seed garden.Seed, doc docstore.Document, ready bool) protocol.Seed {
+	b := g.bindings
 	stateChangedAt := strings.TrimSpace(seed.StateChangedAt)
 	stateChangedAtExact := stateChangedAt != ""
 	if stateChangedAt == "" {
@@ -306,7 +315,7 @@ func (d *Daemon) seedWire(seed garden.Seed, doc docstore.Document, ready bool, b
 		Body:                seed.Body,
 		Status:              seed.Status,
 		StepSlug:            seed.StepSlug,
-		Planter:             d.actorView(seed.Planter),
+		Planter:             g.actorView(seed.Planter),
 		LastExecutionID:     protocol.Ptr(protocol.TrimID(seed.LastExecutionID)),
 		StateChangedAt:      stateChangedAt,
 		StateChangedAtExact: stateChangedAtExact,
@@ -320,9 +329,16 @@ func (d *Daemon) seedWire(seed garden.Seed, doc docstore.Document, ready bool, b
 		UpdatedAt:           doc.UpdatedAt.UTC().Format(time.RFC3339),
 	}
 	if tender, stored := seed.Claim.Tender(); stored {
-		out.Tender = protocol.Ptr(d.partyView(tender, b))
+		v := protocol.PartyView{Ref: tender.Ref(), Name: g.actorView(tender.Actor()).Name}
+		if id, ok := b.SessionOf(tender); ok {
+			v.SessionID = protocol.Ptr(id)
+		}
+		out.Tender = protocol.Ptr(v)
 	}
-	_, out.Claimed = seed.Claim.Lasts(b)
+	lasting, outClaimed := seed.Claim.Lasts(b)
+	out.Claimed = outClaimed
+	_, member := lasting.Member()
+	out.ResumeAvailable = outClaimed && member
 	if protocol.TrimID(seed.LastExecutionID) == "" {
 		out.LastExecutionID = nil
 	}
@@ -335,7 +351,7 @@ func (d *Daemon) seedWire(seed garden.Seed, doc docstore.Document, ready bool, b
 			URL:         seed.HarvestWhen.URL,
 			SetAt:       seed.HarvestWhen.SetAt,
 		}
-		condition.SetBy = d.actorView(seed.HarvestWhen.SetBy)
+		condition.SetBy = g.actorView(seed.HarvestWhen.SetBy)
 		out.HarvestWhen = &condition
 	}
 	for _, e := range seed.Edges {
@@ -363,8 +379,8 @@ func (d *Daemon) seedWire(seed garden.Seed, doc docstore.Document, ready bool, b
 	return out
 }
 
-func (d *Daemon) seedDetailsWire(seed garden.Seed, doc docstore.Document, ready bool) protocol.Seed {
-	wire := d.seedWire(seed, doc, ready)
+func (d *Daemon) seedDetailsWire(seed garden.Seed, doc docstore.Document, ready bool, b who.Bindings) protocol.Seed {
+	wire := d.seedWire(seed, doc, ready, b)
 	d.decorateSeedHarvestCheck(&wire)
 	d.decorateSeedContinuation(&wire, seed)
 	return wire
@@ -477,7 +493,7 @@ func (d *Daemon) handleSeedPlant(conn net.Conn, msg *protocol.SeedPlantMessage) 
 	}
 	d.sendGardenResponse(conn, protocol.Response{
 		Ok:              true,
-		SeedPlantResult: &protocol.SeedPlantResult{Seed: d.seedWire(seed, doc, d.gardenReady()[seed.ID])},
+		SeedPlantResult: &protocol.SeedPlantResult{Seed: d.seedWire(seed, doc, d.gardenReady()[seed.ID], d.broadcastBindings())},
 	})
 }
 
@@ -558,10 +574,14 @@ func (d *Daemon) handleSeedPlot(conn net.Conn, msg *protocol.SeedPlotMessage) {
 			childSeeds[i] = seed
 			docs = append(docs, doc)
 		}
-		ready := d.gardenReady()
-		result.Crown = d.seedWire(crown, crownDoc, ready[crown.ID])
+		read, err := d.readGarden(crown.ProfileID)
+		if err != nil {
+			plotErr = err
+			return
+		}
+		result.Crown = read.seedWire(crown, crownDoc, read.ready[crown.ID])
 		for i, seed := range childSeeds {
-			result.Children = append(result.Children, d.seedWire(seed, docs[i], ready[seed.ID]))
+			result.Children = append(result.Children, read.seedWire(seed, docs[i], read.ready[seed.ID]))
 		}
 	})
 	if plotErr != nil {
@@ -719,7 +739,7 @@ func (d *Daemon) handleSeedShow(conn net.Conn, msg *protocol.SeedShowMessage) {
 	if err != nil {
 		d.logf("garden: reading the garden around %s: %v", seed.ID, err)
 	}
-	wire := d.seedDetailsWire(seed, doc, read.ready[seed.ID])
+	wire := d.seedDetailsWire(seed, doc, read.ready[seed.ID], read.bindings)
 	if progress, ok := read.progress(seed.ID); ok {
 		wire.PlotProgress = progress
 	}
@@ -772,7 +792,7 @@ func (d *Daemon) handleSeedEdit(conn net.Conn, msg *protocol.SeedEditMessage) {
 	}
 	d.sendGardenResponse(conn, protocol.Response{
 		Ok:             true,
-		SeedEditResult: &protocol.SeedEditResult{Seed: d.seedWire(seed, doc, d.gardenReady()[seed.ID])},
+		SeedEditResult: &protocol.SeedEditResult{Seed: d.seedWire(seed, doc, d.gardenReady()[seed.ID], d.broadcastBindings())},
 	})
 }
 
@@ -844,7 +864,7 @@ func (d *Daemon) handleSeedDocumentGet(client *wsClient, msg *protocol.SeedDocum
 		fail(err)
 		return
 	}
-	wireSeed := d.seedDetailsWire(seed, doc, read.ready[seed.ID])
+	wireSeed := d.seedDetailsWire(seed, doc, read.ready[seed.ID], read.bindings)
 	if progress, ok := read.progress(seed.ID); ok {
 		wireSeed.PlotProgress = progress
 	}
@@ -935,7 +955,7 @@ func (d *Daemon) handleSeedLink(conn net.Conn, msg *protocol.SeedLinkMessage) {
 			d.sendGardenResponse(conn, protocol.Response{
 				Ok: true,
 				SeedLinkResult: &protocol.SeedLinkResult{
-					Seed: d.seedWire(next, read.docs[next.ID], read.ready[next.ID]), Changed: false,
+					Seed: read.seedWire(next, read.docs[next.ID], read.ready[next.ID]), Changed: false,
 				},
 			})
 			return
@@ -969,7 +989,7 @@ func (d *Daemon) handleSeedLink(conn net.Conn, msg *protocol.SeedLinkMessage) {
 		d.sendGardenResponse(conn, protocol.Response{
 			Ok: true,
 			SeedLinkResult: &protocol.SeedLinkResult{
-				Seed: d.seedWire(next, doc, d.gardenReady()[next.ID]), Changed: true,
+				Seed: d.seedWire(next, doc, d.gardenReady()[next.ID], d.broadcastBindings()), Changed: true,
 			},
 		})
 		return
@@ -1035,7 +1055,7 @@ func (d *Daemon) gardenReadyResult(crown string, profileID ...string) (*protocol
 		}
 		ready, result.Scope, result.ScopeID = scoped, "plot", crown
 		if crownSeed, crownDoc, err := d.readSeed(crown); err == nil {
-			wire := d.seedWire(crownSeed, crownDoc, read.ready[crown])
+			wire := read.seedWire(crownSeed, crownDoc, read.ready[crown])
 			if progress, ok := read.progress(crown); ok {
 				wire.PlotProgress = progress
 			}
@@ -1049,7 +1069,7 @@ func (d *Daemon) gardenReadyResult(crown string, profileID ...string) (*protocol
 		plots := garden.PlotHeaders(read.seeds, selected)
 		slices.Reverse(plots)
 		for _, plot := range plots {
-			wire := d.seedWire(plot, read.docs[plot.ID], read.ready[plot.ID])
+			wire := read.seedWire(plot, read.docs[plot.ID], read.ready[plot.ID])
 			if progress, ok := read.progress(plot.ID); ok {
 				wire.PlotProgress = progress
 			}
@@ -1075,15 +1095,15 @@ func (d *Daemon) dispatchesCollection() (*docstore.CollectionSchema, error) {
 	return d.collectionFor(garden.Namespace, garden.CollectionDispatches)
 }
 
-func (d *Daemon) recordGardenDispatch(sessionID protocol.SessionID, crown string, dispatcherSession protocol.SessionID, cwd string, agent string, fromChief bool) error {
+func (d *Daemon) recordGardenDispatch(sessionID protocol.SessionID, crown string, cwd string, agent string, fromChief bool) error {
 	observed := d.observeGardenDispatchExecution(sessionID, cwd, agent)
 	return d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
-		return d.recordGardenDispatchProtected(protection, sessionID, crown, dispatcherSession, fromChief, observed)
+		return d.recordGardenDispatchProtected(protection, sessionID, crown, fromChief, observed)
 	})
 }
 
-func (d *Daemon) recordGardenDispatchProtected(protection foregroundCleanupProtection, sessionID protocol.SessionID, crown string, dispatcherSession protocol.SessionID, fromChief bool, observed garden.Execution) error {
-	return d.recordGardenDispatchObservedProtected(protection, sessionID, crown, dispatcherSession, fromChief, observed)
+func (d *Daemon) recordGardenDispatchProtected(protection foregroundCleanupProtection, sessionID protocol.SessionID, crown string, fromChief bool, observed garden.Execution) error {
+	return d.recordGardenDispatchObservedProtected(protection, sessionID, crown, fromChief, observed)
 }
 
 func (d *Daemon) observeGardenDispatchExecution(sessionID protocol.SessionID, cwd string, agent string) garden.Execution {
@@ -1101,7 +1121,7 @@ func (d *Daemon) observeGardenDispatchExecution(sessionID protocol.SessionID, cw
 	return observed
 }
 
-func (d *Daemon) recordGardenDispatchObservedProtected(_ foregroundCleanupProtection, sessionID protocol.SessionID, crown string, dispatcherSession protocol.SessionID, fromChief bool, observed garden.Execution) error {
+func (d *Daemon) recordGardenDispatchObservedProtected(_ foregroundCleanupProtection, sessionID protocol.SessionID, crown string, fromChief bool, observed garden.Execution) error {
 	_, err := d.updateGardenDispatch(sessionID, func(current garden.Execution) (garden.Execution, bool, error) {
 		next := mergeGardenExecution(current, observed)
 		if wanted := strings.TrimSpace(crown); wanted != "" {
@@ -1110,13 +1130,6 @@ func (d *Daemon) recordGardenDispatchObservedProtected(_ foregroundCleanupProtec
 					"session %s was already superseded by %s while binding it to %s", sessionID, successor, wanted)
 			}
 			next.Crown = wanted
-		}
-		if dispatcher := protocol.SessionID(strings.TrimSpace(string(dispatcherSession))); dispatcher != "" {
-			r, err := d.gardenRequester(protocol.Ptr(dispatcher), nil)
-			if err != nil {
-				return garden.Execution{}, false, err
-			}
-			next.Dispatcher = r.Actor()
 		}
 		next.FromChief = fromChief
 		return next, true, nil
@@ -1474,7 +1487,7 @@ func (d *Daemon) seedMoveRequest(msg *protocol.SeedTransitionMessage, verb garde
 }
 
 func (d *Daemon) seedTransitionWire(seed garden.Seed, doc docstore.Document) protocol.Seed {
-	wire := d.seedWire(seed, doc, false)
+	wire := d.seedWire(seed, doc, false, d.broadcastBindings())
 	if read, err := d.readGarden(seed.ProfileID); err == nil {
 		wire.Ready = read.ready[seed.ID]
 		if progress, ok := read.progress(seed.ID); ok {

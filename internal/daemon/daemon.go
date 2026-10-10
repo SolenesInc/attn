@@ -3162,6 +3162,7 @@ func (d *Daemon) sessionForBroadcast(session *protocol.Session) *protocol.Sessio
 		b,
 		d.gardenDispatchSeedsBySession(),
 		d.gardenDispatchersBySession(),
+		d.crewNames(),
 	)
 	if decorated != nil {
 		decorated.DelegationRole = d.sessionDelegationRoles()[decorated.ID]
@@ -3178,6 +3179,7 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 	bindings who.Bindings,
 	seedBySession map[protocol.SessionID]string,
 	dispatcherBySession map[protocol.SessionID]who.Actor,
+	crewNames map[who.MemberKey]string,
 ) *protocol.Session {
 	clone := cloneSession(session)
 	if clone == nil {
@@ -3192,7 +3194,7 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 	d.decorateSessionWithSnooze(clone)
 	d.decorateChiefOfStaff(clone, chiefs)
 	d.decorateDelegatedFromChief(clone, delegatedFromChief)
-	d.decorateCrewMember(clone, bindings)
+	d.decorateCrewMember(clone, bindings, crewNames)
 	d.decorateSessionSeed(clone, seedBySession)
 	d.decorateSessionDispatcher(clone, dispatcherBySession)
 	if seedBySession[clone.ID] != "" && clone.SeedID == nil {
@@ -3214,13 +3216,14 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 	bindings := d.broadcastBindings()
 	seedBySession := d.gardenDispatchSeedsBySession()
 	dispatcherBySession := d.gardenDispatchersBySession()
+	crewNames := d.crewNames()
 	rolesBySession := d.sessionDelegationRoles()
 	bySession := d.latestAutomationProvenance()
 	pullRequestsBySession := d.store.ListSessionPullRequestsBySession()
 	pullRequestWatchesByPR := d.pullRequestWatchesByPR()
 	out := make([]protocol.Session, 0, len(sessions))
 	for _, session := range sessions {
-		if decorated := d.sessionForBroadcastWithChiefOfStaff(session, chiefs, delegatedFromChief, bindings, seedBySession, dispatcherBySession); decorated != nil {
+		if decorated := d.sessionForBroadcastWithChiefOfStaff(session, chiefs, delegatedFromChief, bindings, seedBySession, dispatcherBySession, crewNames); decorated != nil {
 			decorated.DelegationRole = rolesBySession[decorated.ID]
 			decorated.Automation = bySession[decorated.ID]
 			addresses := bindings.AddressesOf(decorated.ID)

@@ -202,7 +202,17 @@ func (d *Daemon) recordAutomationRunSeedOutcome(run *store.AutomationRun, body s
 		seen = seen || note.Body == body
 	}
 	if !seen {
-		if _, err := d.appendSeedNote(run.SeedID, body, who.Attn(), garden.NoteKindNote, nil, true); err != nil {
+		author := who.Attn()
+		if !continuation {
+			b, err := d.bindings()
+			if err != nil {
+				return err
+			}
+			if p, ok := b.PartyOf(run.SessionID); ok {
+				author = p.Actor()
+			}
+		}
+		if _, err := d.appendSeedNote(run.SeedID, body, author, garden.NoteKindNote, nil, true); err != nil {
 			return fmt.Errorf("record automation outcome: append note: %w", err)
 		}
 	}
@@ -515,7 +525,7 @@ func (d *Daemon) claimAutomationSeed(req automation.WorkRequest) error {
 	if tender != party || seed.Status != garden.StatusGrowing {
 		next, err := garden.Tend(seed, party, garden.Ask{By: who.Attn()}, b)
 		if err != nil {
-			return err
+			return d.seedMoveError(err, b)
 		}
 		if next.Status != seed.Status {
 			next.StateChangedAt = formatGardenTime(d.gardenTime())
@@ -708,7 +718,7 @@ func (d *Daemon) prepareAutomationLocation(ctx context.Context, req automation.W
 	return automation.PreparedLocation{Directory: worktree, Revision: pr.HeadSHA, Resolved: resolved}, nil
 }
 func (d *Daemon) bindAutomationSeedLocation(req automation.WorkRequest, location automation.PreparedLocation) error {
-	return d.recordGardenDispatch(req.IDs.SessionID, req.IDs.SeedID, "", location.Directory, req.Launch.Agent, false)
+	return d.recordGardenDispatch(req.IDs.SessionID, req.IDs.SeedID, location.Directory, req.Launch.Agent, false)
 }
 func (d *Daemon) ensureAutomationSession(ctx context.Context, req automation.WorkRequest, directory string) error {
 	if err := req.Launch.Validate(); err != nil {

@@ -11,7 +11,10 @@ const now = new Date().toISOString();
 const base: Seed = {
   id: 's-garden', title: 'Give the garden a little life', body: 'Make every lifecycle state recognizable at header size.',
   status: 'growing', state_changed_at: now, state_changed_at_exact: true, step_slug: 'garden-life',
-   planter: { ref: 'user', name: 'the user' },  tender: { ref: 'session:garden-agent', name: 'garden-agent', session_id: 'garden-agent' }, claimed: true,
+   planter: { ref: 'user', name: 'the user' },
+   tender: { ref: 'session:garden-agent', name: 'garden-agent', session_id: 'garden-agent' },
+   claimed: true,
+   resume_available: false,
   edges: [], ready: false, template: false, gate: false, vars: [], rev: 1, created_at: now, updated_at: now,
 };
 const plot = { ...base, id: 's-plot', title: 'Polish the Garden', plot_progress: { done: 3, total: 7, ready: 0, growing: 2, blocked: 0, dormant: 1, withered: 1 } };
@@ -28,7 +31,9 @@ export function SeedHeaderHarness({ onReady, setTriggerRerender }: HarnessProps)
   const [opened, setOpened] = useState('');
   const [terminalEscapes, setTerminalEscapes] = useState(0);
   useEffect(() => { onReady(); setTriggerRerender(() => () => {}); }, [onReady, setTriggerRerender]);
-  const seed = { ...base, id: `s-${status}`, status, tender: { ref: 'session:' + (status === 'growing' ? 'garden-agent' : ''), name: status === 'growing' ? 'garden-agent' : '', session_id: status === 'growing' ? 'garden-agent' : '' }, claimed: Boolean(status === 'growing' ? 'garden-agent' : '') };
+  const seed = { ...base, id: `s-${status}`, status,
+  tender: { ref: 'session:' + (status === 'growing' ? 'garden-agent' : ''), name: status === 'growing' ? 'garden-agent' : '', session_id: status === 'growing' ? 'garden-agent' : '' },
+  claimed: Boolean(status === 'growing' ? 'garden-agent' : '') };
   return (
     <DaemonApiProvider api={seedDocuments as DaemonApi}>
       <div style={{ padding: 28, color: 'var(--color-text-primary)', background: 'var(--color-bg-app)', minHeight: '100vh' }}>

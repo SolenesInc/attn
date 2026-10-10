@@ -153,7 +153,7 @@ commands:
 
   tend <id> [--for <name>] [--force]
         claim the seed and start growing it. One tender at a time: tending a
-        seed somebody else still holds is refused, naming them, and takes
+        seed somebody else still claims is refused, naming them, and takes
         --force to go through anyway. The freshest handoff prints on the
         claim, so picking a seed up primes you.
 
@@ -234,7 +234,7 @@ flags:
   --copy             snapshot a local source into seed ownership (attach)
   --to <path>        destination that receives a managed artifact (detach)
   --reference        remove an old linked path association (detach)
-  --force            act even though somebody else holds the seed; the log
+  --force            act even though somebody else claims the seed; the log
                      records it (tend, park, harvest, wither, replant)
   --for <name>       claim the seed for a crew member (tend only)
   --profile <name|id> required outside attn when several profiles exist

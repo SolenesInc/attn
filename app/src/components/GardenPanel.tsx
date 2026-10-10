@@ -902,7 +902,12 @@ export function GardenPanel({
   const continuationNotesAreCurrent = documentIsCurrent && seedDocument?.snapshot === seeds;
   const continuation = seedDoc?.seed.continuation;
   const seedIsOpen = seedDoc ? !isClosed(seedDoc.seed) : false;
-  const canResume = Boolean(documentIsCurrent && onResumeSeed && seedIsOpen && (continuation?.resume_available || (here?.claimed && here.tender?.ref.startsWith("member:"))));
+  const canResume = Boolean(
+    documentIsCurrent &&
+    onResumeSeed &&
+    seedIsOpen &&
+    (here?.resume_available || continuation?.resume_available)
+  );
   const canHandover = Boolean(
     documentIsCurrent && onHandoverSeed && seedIsOpen && continuation,
   );

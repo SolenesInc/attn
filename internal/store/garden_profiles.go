@@ -132,6 +132,21 @@ func checkSeedProfileWrite(q rowQuerier, schema docstore.CollectionSchema, table
 			return fmt.Errorf("seed %s belongs to profile %q; tender %s belongs to profile %s", id, owner.Name, tender, profileID)
 		}
 	}
+	for _, edge := range seed.Edges {
+		var profileID string
+		if err := q.QueryRow(`SELECT json_extract(body, '$.profile_id') FROM `+table+` WHERE id = ?`, edge.To).Scan(&profileID); err == sql.ErrNoRows {
+			continue
+		} else if err != nil {
+			return err
+		}
+		if profileID != seed.ProfileID {
+			target, err := loadProfile(q, profileID)
+			if err != nil {
+				return err
+			}
+			return fmt.Errorf("seed %s belongs to profile %q; edge target %s belongs to profile %q", id, owner.Name, edge.To, target.Name)
+		}
+	}
 	return nil
 }
 
