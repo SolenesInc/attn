@@ -144,23 +144,9 @@ func (c *Claude) BuildEnv(opts SpawnOpts) []string {
 var claudeNativeDefaultTools = []string{"Read", "Write", "Edit", "Grep", "Glob"}
 
 func (c *Claude) RunHeadlessTask(ctx context.Context, request HeadlessTaskRequest) (HeadlessTaskResult, error) {
-	var args []string
-	if request.usesNativeToolsPath() {
-		args = claudeHeadlessArgs(request)
-	} else {
-		built, err := buildClaudeHeadlessArgs(request)
-		if err != nil {
-			return HeadlessTaskResult{}, err
-		}
-		args = built
-	}
+	args := claudeHeadlessArgs(request)
 
-	runDir := strings.TrimSpace(request.CWD)
-	if runDir == "" {
-		runDir = request.WorkDir
-	}
-
-	result, stdout, err := runHeadlessCommand(ctx, request.Executable, args, runDir, "claude")
+	result, stdout, err := runHeadlessCommand(ctx, request.Executable, args, request.WorkDir, "claude")
 	if err != nil {
 		if text := parseClaudeFinalText(stdout); text != "" {
 			result.FailureOutput = strings.TrimSpace("result: " + text + "\n" + result.FailureOutput)
@@ -212,69 +198,6 @@ func parseClaudeResultMeta(stdout []byte) claudeResultMeta {
 	return claudeResultMeta{}
 }
 
-func buildClaudeHeadlessArgs(request HeadlessTaskRequest) ([]string, error) {
-	serverName := strings.TrimSpace(request.MCPServerName)
-	if serverName == "" {
-		serverName = "attn_context"
-	}
-
-	mcpServers := map[string]any{
-		serverName: map[string]any{
-			"type":    "stdio",
-			"command": request.MCPServerCommand,
-			"args":    request.MCPServerArgs,
-		},
-	}
-	for _, spec := range request.ExtraMCPServers {
-		name := strings.TrimSpace(spec.Name)
-		if name == "" {
-			continue
-		}
-		mcpServers[name] = map[string]any{
-			"type":    "stdio",
-			"command": spec.Command,
-			"args":    spec.Args,
-		}
-	}
-	config, err := json.Marshal(map[string]any{"mcpServers": mcpServers})
-	if err != nil {
-		return nil, fmt.Errorf("encode MCP config: %w", err)
-	}
-
-	prefixed := claudePrefixedTools(serverName, headlessToolNames(request.ToolName))
-	for _, spec := range request.ExtraMCPServers {
-		name := strings.TrimSpace(spec.Name)
-		if name == "" {
-			continue
-		}
-		prefixed = append(prefixed, claudePrefixedTools(name, spec.EnabledTools)...)
-	}
-
-	if request.Sandbox == "workspace-write" {
-		prefixed = append(prefixed, "Edit", "Write", "MultiEdit", "Bash")
-	}
-
-	tools := strings.Join(prefixed, ",")
-	args := []string{"--print"}
-	args = append(args, claudeHeadlessIsolationArgs()...)
-	if model := strings.TrimSpace(request.Model); model != "" {
-		args = append(args, "--model", model)
-	}
-	args = append(args,
-		"--no-session-persistence",
-		"--strict-mcp-config",
-		"--mcp-config", string(config),
-		"--disable-slash-commands",
-		"--no-chrome",
-		"--tools", tools,
-		"--allowedTools", tools,
-		"--permission-mode", "dontAsk",
-		"--output-format", "json",
-		request.Prompt,
-	)
-	return args, nil
-}
-
 func claudeHeadlessArgs(request HeadlessTaskRequest) []string {
 	tools := request.AllowedTools
 	if len(tools) == 0 && !request.DisableTools {
@@ -317,15 +240,6 @@ func claudeHeadlessArgs(request HeadlessTaskRequest) []string {
 		request.Prompt,
 	)
 	return args
-}
-
-func claudePrefixedTools(serverName string, names []string) []string {
-	prefix := "mcp__" + serverName + "__"
-	out := make([]string, len(names))
-	for i, n := range names {
-		out[i] = prefix + n
-	}
-	return out
 }
 
 func parseClaudeFinalText(stdout []byte) string {

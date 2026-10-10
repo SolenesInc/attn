@@ -294,10 +294,6 @@ type Daemon struct {
 	lastBackupMu sync.Mutex
 	lastBackupAt time.Time
 
-	workflowBroadcastMu    sync.Mutex
-	workflowDirty          map[string]bool
-	workflowEngineMu       sync.Mutex
-	workflowEngineConn     map[string]workflowEngineSink
 	gardenMintNoteID       func() (string, error)
 	gardenNow              func() time.Time
 	gitHubPollingOffLogged bool
@@ -543,8 +539,6 @@ func New(socketPath string) *Daemon {
 		debugLogging:        logger != nil && logger.DebugEnabled(),
 		ghRegistry:          github.NewClientRegistry(),
 		hubManager:          nil,
-		workflowDirty:       make(map[string]bool),
-		workflowEngineConn:  make(map[string]workflowEngineSink),
 		ptyBackend:          ptybackend.NewEmbedded(manager),
 		transcriptWatch:     make(map[protocol.SessionID]*transcriptWatcher),
 		pendingInitialWS:    make(map[*wsClient]struct{}),
@@ -593,8 +587,6 @@ func NewForTesting(socketPath string) *Daemon {
 		plugins:             newPluginRegistry(),
 		pluginDir:           pluginDirForSocket(socketPath),
 		bundledPluginDir:    bundledPluginDirForExecutable(),
-		workflowDirty:       make(map[string]bool),
-		workflowEngineConn:  make(map[string]workflowEngineSink),
 		spawnLocks:          make(map[protocol.SessionID]*spawnLock),
 		jobQueue:            jobs.New(jobs.Options{}),
 	}
@@ -826,8 +818,6 @@ func (d *Daemon) Start() error {
 	d.startInstalledPlugins()
 
 	d.wsHub.logf = d.logf
-
-	d.life.Go("startWorkflowBroadcastLoop", func() { d.startWorkflowBroadcastLoop(d.life.Context()) })
 
 	d.life.Go("runMarkdownContentWatcher", func() { d.runMarkdownContentWatcher(d.life.Done()) })
 
@@ -2719,16 +2709,6 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handlePullRequestWatch(conn, msg.(*protocol.PullRequestWatchMessage))
 	case protocol.CmdPullRequestUnwatch:
 		d.handlePullRequestUnwatch(conn, msg.(*protocol.PullRequestUnwatchMessage))
-	case protocol.CmdWorkflowRunUpsert:
-		d.handleWorkflowRunUpsert(conn, msg.(*protocol.WorkflowRunUpsertMessage))
-	case protocol.CmdWorkflowCallUpsert:
-		d.handleWorkflowCallUpsert(conn, msg.(*protocol.WorkflowCallUpsertMessage))
-	case protocol.CmdWorkflowRunGet:
-		d.handleWorkflowRunGet(conn, msg.(*protocol.WorkflowRunGetMessage))
-	case protocol.CmdWorkflowRunList:
-		d.handleWorkflowRunList(conn, msg.(*protocol.WorkflowRunListMessage))
-	case protocol.CmdWorkflowRunCancel:
-		d.handleWorkflowRunCancel(conn, msg.(*protocol.WorkflowRunCancelMessage))
 	case protocol.CmdQuery:
 		d.handleQuery(conn, msg.(*protocol.QueryMessage))
 	case protocol.CmdHeartbeat:

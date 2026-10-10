@@ -173,8 +173,6 @@ type SpawnOpts struct {
 
 	SettingsPath string
 
-	InjectWorkflowGuidance bool
-
 	NotebookRoot string
 
 	ConfigOverrides []string
@@ -205,7 +203,6 @@ func (o SpawnOpts) addDirArgs() []string {
 func (o SpawnOpts) launchSpec() hooks.Launch {
 	return hooks.Launch{
 		NotebookRoot:           o.NotebookRoot,
-		InjectWorkflow:         o.InjectWorkflowGuidance,
 		Garden:                 o.Garden,
 		Crew:                   o.CrewPriming,
 		SelfReportPullRequests: o.SelfReportPullRequests,
@@ -229,22 +226,11 @@ type InstructionsFileProvider interface {
 }
 
 type HeadlessTaskRequest struct {
-	Executable       string
-	Model            string
-	ReasoningEffort  string
-	Prompt           string
-	WorkDir          string
-	MCPServerName    string
-	MCPServerCommand string
-	MCPServerArgs    []string
-
-	ToolName   string
-	Schema     json.RawMessage
-	ResultPath string
-
-	Sandbox         string
-	CWD             string
-	ExtraMCPServers []MCPServerSpec
+	Executable      string
+	Model           string
+	ReasoningEffort string
+	Prompt          string
+	WorkDir         string
 
 	AllowedTools []string
 
@@ -257,21 +243,6 @@ type HeadlessTaskRequest struct {
 	OutputSchema json.RawMessage
 
 	SystemPrompt string
-}
-
-func (r HeadlessTaskRequest) usesNativeToolsPath() bool {
-	return strings.TrimSpace(r.MCPServerName) == "" &&
-		strings.TrimSpace(r.MCPServerCommand) == "" &&
-		len(r.ExtraMCPServers) == 0 &&
-		strings.TrimSpace(r.CWD) == "" &&
-		strings.TrimSpace(r.Sandbox) == ""
-}
-
-type MCPServerSpec struct {
-	Name         string
-	Command      string
-	Args         []string
-	EnabledTools []string
 }
 
 type HeadlessTaskResult struct {

@@ -40,7 +40,6 @@ const (
 	SettingTheme                         = "theme"
 	SettingReviewerModel                 = "reviewer_model"
 	SettingTailscaleEnabled              = "tailscale_enabled"
-	SettingWorkflowsEnabled              = "workflows_enabled"
 	SettingModelCaptureEnabled           = "model_capture.enabled"
 	SettingModelCaptureIntervalSeconds   = "model_capture.interval_seconds"
 	SettingModelCaptureMaxGB             = "model_capture.max_gb"
@@ -303,7 +302,6 @@ func (d *Daemon) settingsWithAgentAvailability() map[string]interface{} {
 		settings[SettingDBLastBackupAt] = lastBackupAt.Format(time.RFC3339)
 	}
 	settings[SettingTailscaleEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingTailscaleEnabled]))
-	settings[SettingWorkflowsEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingWorkflowsEnabled]))
 	settings[SettingModelCaptureEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingModelCaptureEnabled]))
 	settings[SettingModelCaptureIntervalSeconds] = strconv.Itoa(int(d.modelCaptureInterval() / time.Second))
 	settings[SettingModelCaptureMaxGB] = strconv.FormatInt(d.modelCaptureMaxBytes()>>30, 10)
@@ -509,7 +507,7 @@ func (d *Daemon) validateSetting(key, value string) error {
 		return validateTheme(value)
 	case SettingSharedPTYHostEnabled:
 		return validateBooleanSetting(value)
-	case SettingTailscaleEnabled, SettingWorkflowsEnabled, SettingAutoApproveEnabled, SettingQueueModeEnabled, SettingQueueCrewEnabled, SettingSidebarHarnessLogosEnabled, SettingAutoSettleEnabled, SettingModelCaptureEnabled, SettingActivityEnabled, SettingOpenSentFilesEnabled, SettingHeadlessTasksEnabled, settingWorktreeSweepEnabled:
+	case SettingTailscaleEnabled, SettingAutoApproveEnabled, SettingQueueModeEnabled, SettingQueueCrewEnabled, SettingSidebarHarnessLogosEnabled, SettingAutoSettleEnabled, SettingModelCaptureEnabled, SettingActivityEnabled, SettingOpenSentFilesEnabled, SettingHeadlessTasksEnabled, settingWorktreeSweepEnabled:
 		return validateBooleanSetting(value)
 	case SettingModelCaptureIntervalSeconds:
 		return validateModelCaptureInterval(value)

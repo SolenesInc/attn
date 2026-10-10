@@ -37,6 +37,13 @@ const installedPlugin = (overrides: Partial<Plugin> = {}): Plugin => ({
 const settingsModal = () => screen.queryByTestId('settings-modal');
 
 describe('SettingsModal', () => {
+  it('omits the retired workflow section when an old toggle is still present', async () => {
+    await renderSettings({ settings: { workflows_enabled: 'true' } });
+
+    expect(screen.queryByRole('button', { name: /^Workflows/ })).toBeNull();
+    expect(screen.getByTestId('settings-nav-delegation')).toBeInTheDocument();
+  });
+
   it('closes on escape', async () => {
     const { daemon } = await renderSettings();
     expect(screen.getByText('Mobile Web Client')).toBeInTheDocument();
@@ -199,18 +206,6 @@ describe('SettingsModal', () => {
     expect(screen.queryByTestId('settings-queue-toggle')).toBeNull();
     expect(screen.queryByText('Agent queue')).toBeNull();
     expect(savedSettings(daemon)).toEqual([]);
-  });
-
-  it('enables workflows when off and disables them when on', async () => {
-    const daemon = await openSection('workflows', { settings: { workflows_enabled: 'false' } });
-
-    expect(screen.getByTestId('settings-workflows-toggle')).toHaveTextContent('Enable');
-    await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-workflows-toggle')));
-
-    expect(screen.getByTestId('settings-workflows-toggle')).toHaveTextContent('Disable');
-    await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-workflows-toggle')));
-
-    expect(savedSettings(daemon)).toEqual([['workflows_enabled', 'true'], ['workflows_enabled', 'false']]);
   });
 
   it('lists saved endpoints as off for this release and offers only removal', async () => {

@@ -1,0 +1,3 @@
+kind: removed
+area: workflows
+change: Removed the JavaScript workflow engine, attn workflow commands, workflow run drawer, and Workflows setting. Delegation, Garden seeds, automations, and the attn-workflow process skill remain available.

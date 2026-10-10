@@ -142,21 +142,6 @@ export function persistDismissedUpdateVersion(version: string): void {
 }
 
 
-export function toneForDockPanel(
-  status?: string,
-): 'default' | 'idle' | 'running' | 'awaiting_user' | 'completed' | 'stopped' | 'error' {
-  switch (status) {
-    case 'running':
-    case 'awaiting_user':
-    case 'completed':
-    case 'stopped':
-    case 'error':
-      return status;
-    default:
-      return 'default';
-  }
-}
-
 export type OpenPRLauncherJob = {
   id: number;
   pr: DaemonPR;

@@ -33,7 +33,6 @@ import { useChiefOfStaff } from './useChiefOfStaff';
 import { usePRLauncher } from './usePRLauncher';
 import { useSessionLaunch } from './useSessionLaunch';
 import { useSessionLifecycle } from './useSessionLifecycle';
-import { useWorkflowPanel } from './useWorkflowPanel';
 import { useDesktopResidency } from './useDesktopResidency';
 import { useLeafDrag } from './useLeafDrag';
 import { useDesktopTiles } from './useDesktopTiles';
@@ -243,7 +242,6 @@ export function useAppController({
     sidebarCollapsed,
     toggleAgentList,
     closeAgentList,
-    workflowRunPanelOpen,
     gardenHoldsWindow,
     closeGarden,
     toggleGardenFrame,
@@ -312,8 +310,6 @@ export function useAppController({
     label: string;
     currentCap?: number;
   } | null>(null);
-
-  const workflowPanel = useWorkflowPanel({ contextSessionId, workflowRunPanelOpen });
 
   const [desktopOverviewOpen, setDesktopOverviewOpen] = useState(false);
   const [profileSwitcherOpen, setProfileSwitcherOpen] = useState(false);
@@ -711,7 +707,6 @@ export function useAppController({
       attentionQueue,
     },
     libraries: {
-      workflowPanel,
       appGardenActions,
       appNotebookSurface,
       crewPanel: crewPanelState,

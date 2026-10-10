@@ -13,7 +13,10 @@ func TestTheSkillCommandPrintsTheBundledSkillAndItsReferences(t *testing.T) {
 
 	requireStdout(t, s.Attn("skill"), "name: attn")
 	listed := s.Attn("skill", "--list")
-	requireStdout(t, listed, "garden\n", "delegation\n", "workflow\n")
+	requireStdout(t, listed, "garden\n", "delegation\n")
+	if strings.Contains(listed.Stdout, "workflow\n") {
+		t.Errorf("skill still advertises the removed engine reference: %s", listed.Stdout)
+	}
 	garden := s.Attn("skill", "--reference", "garden")
 	requireStdout(t, garden, "# The garden")
 	if withSuffix := s.Attn("skill", "--reference", "garden.md"); withSuffix.Code != 0 || withSuffix.Stdout != garden.Stdout {
@@ -25,6 +28,7 @@ func TestTheSkillCommandPrintsTheBundledSkillAndItsReferences(t *testing.T) {
 		code int
 		want []string
 	}{
+		{args: []string{"--reference", "workflow"}, code: 1, want: []string{`"workflow"`, "garden"}},
 		{args: []string{"--reference", "nope"}, code: 1, want: []string{`"nope"`, "garden"}},
 		{args: []string{"--list", "--reference", "garden"}, code: 2, want: []string{"mutually exclusive"}},
 		{args: []string{"--reference"}, code: 2, want: []string{"--list"}},

@@ -55,7 +55,6 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
 
   const openDockPanels = dockState.openPanels;
   const dockPanelStack = dockState.stack;
-  const workflowRunPanelOpen = openDockPanels.workflowRun;
   const attentionPanelOpen = openDockPanels.attention;
   const automationsPanelOpen = openDockPanels.automations;
   const gardenPanelOpen = openDockPanels.garden;
@@ -124,7 +123,6 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
     toggleAgentList,
     closeAgentList,
     dockPanelStack,
-    workflowRunPanelOpen,
     attentionPanelOpen,
     automationsPanelOpen,
     gardenPanelOpen,

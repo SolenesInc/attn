@@ -21,7 +21,6 @@ func flagValue(argv []string, flag string) (string, bool) {
 func TestLaunchChoicesReachTheAgentAsFlagsAndLeaveNoOneShotVariableBehind(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
-	setSetting(t, app, "workflows_enabled", "true")
 	setSetting(t, app, "auto_approve_enabled", "true")
 
 	yolo := w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
@@ -52,13 +51,10 @@ func TestLaunchChoicesReachTheAgentAsFlagsAndLeaveNoOneShotVariableBehind(t *tes
 	}
 
 	for _, run := range []*fakeagent.Run{yoloRun, reviewedRun} {
-		if instructions, _ := flagValue(run.Argv, "--append-system-prompt"); !strings.Contains(instructions, "attn workflow") {
-			t.Errorf("with workflows on, session %s launched without the workflow guidance:\n%s", run.SessionID, instructions)
-		}
 		for _, pair := range run.Env {
 			key, _, _ := strings.Cut(pair, "=")
 			switch key {
-			case "ATTN_MODEL", "ATTN_EFFORT", "ATTN_AUTO_APPROVE", "ATTN_TRUST_WORKING_DIRECTORY", "ATTN_WORKFLOW_GUIDANCE_ENABLED", "ATTN_AUTO_COMPACT_WINDOW":
+			case "ATTN_MODEL", "ATTN_EFFORT", "ATTN_AUTO_APPROVE", "ATTN_TRUST_WORKING_DIRECTORY", "ATTN_AUTO_COMPACT_WINDOW":
 				t.Errorf("claude for session %s inherited the one-shot launch variable %s", run.SessionID, pair)
 			}
 		}

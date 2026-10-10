@@ -52,40 +52,17 @@
                     ]
                   },
                   {
-                    "kind": "compose",
-                    "children": [
+                    "kind": "text",
+                    "id": "session.agent",
+                    "source": "content/agent.md",
+                    "bindings": [
                       {
-                        "kind": "text",
-                        "id": "session.agent",
-                        "source": "content/agent.md",
-                        "bindings": [
-                          {
-                            "name": "delegation_boundary",
-                            "node": {
-                              "kind": "text",
-                              "id": "delegation.boundary",
-                              "source": "content/delegation-boundary.md"
-                            }
-                          }
-                        ]
-                      },
-                      {
-                        "kind": "when",
-                        "condition": {
-                          "field": {
-                            "name": "workflow_enabled",
-                            "kind": "flag",
-                            "description": "Include opt-in workflow guidance for an ordinary session."
-                          },
-                          "test": "enabled"
-                        },
-                        "children": [
-                          {
-                            "kind": "text",
-                            "id": "session.workflow",
-                            "source": "content/workflow.md"
-                          }
-                        ]
+                        "name": "delegation_boundary",
+                        "node": {
+                          "kind": "text",
+                          "id": "delegation.boundary",
+                          "source": "content/delegation-boundary.md"
+                        }
                       }
                     ]
                   }
@@ -183,16 +160,6 @@
             "kind": "text",
             "id": "session.garden",
             "source": "content/garden.md"
-          }
-        },
-        {
-          "id": "workflow-guidance",
-          "delivery": "message_fragment",
-          "description": "Opt-in workflow instructions.",
-          "body": {
-            "kind": "text",
-            "id": "session.workflow",
-            "source": "content/workflow.md"
           }
         },
         {
@@ -3084,73 +3051,6 @@
       ]
     },
     {
-      "id": "workflow-agent",
-      "description": "Workflow agent",
-      "events": [
-        {
-          "id": "run",
-          "delivery": "headless_prompt",
-          "description": "User task followed by the structured-result contract or its retry.",
-          "body": {
-            "kind": "join",
-            "children": [
-              {
-                "kind": "input",
-                "field": {
-                  "name": "brief",
-                  "kind": "text",
-                  "description": "Configured task or delegation brief."
-                }
-              },
-              {
-                "kind": "choose",
-                "condition": {
-                  "field": {
-                    "name": "retry",
-                    "kind": "flag",
-                    "description": "A previous attempt produced no valid result."
-                  },
-                  "test": "enabled"
-                },
-                "children": [
-                  {
-                    "kind": "text",
-                    "id": "workflow-agent.retry-instruction",
-                    "source": "content/workflow-agent/retry-instruction.md"
-                  },
-                  {
-                    "kind": "text",
-                    "id": "workflow-agent.result-instruction",
-                    "source": "content/workflow-agent/result-instruction.md"
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": "result-instruction",
-          "delivery": "user_message",
-          "description": "internal/workflow/driveragent.go: schemaCallInstruction",
-          "body": {
-            "kind": "text",
-            "id": "workflow-agent.result-instruction",
-            "source": "content/workflow-agent/result-instruction.md"
-          }
-        },
-        {
-          "id": "retry-instruction",
-          "delivery": "user_message",
-          "description": "internal/workflow/driveragent.go: correctiveInstruction",
-          "body": {
-            "kind": "text",
-            "id": "workflow-agent.retry-instruction",
-            "source": "content/workflow-agent/retry-instruction.md"
-          }
-        }
-      ]
-    },
-    {
       "id": "attn-skill",
       "description": "Installed skill and references. Availability does not establish that the harness loaded them.",
       "events": [
@@ -3282,18 +3182,6 @@
             "kind": "text",
             "id": "attn-skill.showing",
             "source": "content/skills/attn/references/showing.md",
-            "verbatim": true,
-            "keep_final_newline": true
-          }
-        },
-        {
-          "id": "workflow",
-          "delivery": "reference",
-          "description": "Loaded on demand through attn skill show or the installed skill directory.",
-          "body": {
-            "kind": "text",
-            "id": "attn-skill.workflow",
-            "source": "content/skills/attn/references/workflow.md",
             "verbatim": true,
             "keep_final_newline": true
           }
@@ -4896,5 +4784,5 @@
       ]
     }
   ],
-  "definitions_hash": "faf5877519b2278d02629b54d7175042b64c2d893e34e3346f7ede7b3d6fe084"
+  "definitions_hash": "153118481691d4a097745fa14fae6fb9d4aaf7f36430cf2db07cc962bb8482be"
 }

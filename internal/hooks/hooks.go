@@ -38,11 +38,6 @@ var (
 	PullRequestSelfReportGuidance = prompts.RenderText("session", "pull-request-guidance", nil)
 )
 
-func WorkflowTriggerGuidance() string { return prompts.RenderText("session", "workflow-guidance", nil) }
-func AgentInstructions(injectWorkflow bool) string {
-	return (Launch{InjectWorkflow: injectWorkflow}).Instructions()
-}
-
 type Launch = prompts.Launch
 
 func SessionStartOutput(contexts ...string) string {
