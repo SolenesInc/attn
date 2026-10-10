@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { controlBrowserHost } from '../browser/host';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useAgentNavigation } from '../hooks/useAgentNavigation';
-import { withFreshDesktopRevisions } from '../hooks/desktopRevisions';
 import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 import { useProfilesStore, useSelectedTile } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
@@ -127,9 +126,7 @@ export function useAppNavigation({
       setCrewSeedTile((current) =>
         current?.desktopId === desktopId && current.tileId === tileId ? null : current,
       );
-      void withFreshDesktopRevisions([desktopId], (revisionOf) =>
-        sendDesktopRemoveLeaf(desktopId, tileId, revisionOf(desktopId)),
-      ).catch((error) => {
+      void sendDesktopRemoveLeaf(desktopId, tileId).catch((error) => {
         showError(`Could not close that tile: ${error instanceof Error ? error.message : String(error)}`);
       });
     },

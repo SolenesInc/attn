@@ -56,12 +56,6 @@ func TestArrangementInvariantsHoldUnderRandomOperations(t *testing.T) {
 			}
 			return desktop
 		}
-		revision := func(desktop profiles.Desktop) int64 {
-			if rapid.IntRange(0, 5).Draw(t, "stale") == 0 {
-				return desktop.Revision - 1
-			}
-			return desktop.Revision
-		}
 		leaves := func(desktop profiles.Desktop) []string {
 			return append(layouttree.PaneIDs(desktop.Tree), layouttree.TileIDs(desktop.Tree)...)
 		}
@@ -73,7 +67,7 @@ func TestArrangementInvariantsHoldUnderRandomOperations(t *testing.T) {
 			"place": func(t *rapid.T) {
 				desktop := draw("desktop")
 				_, _, err := s.PlaceSession(SessionPlacementRequest{
-					DesktopID: desktop.ID, ExpectedRevision: revision(desktop),
+					DesktopID: desktop.ID,
 					SessionID: protocol.SessionID(rapid.SampledFrom(sessionIDs).Draw(t, "session")),
 					Direction: rapid.SampledFrom(directions).Draw(t, "direction"), NewPaneShare: rapid.Float64Range(-0.5, 1.5).Draw(t, "share"),
 				})
@@ -87,7 +81,7 @@ func TestArrangementInvariantsHoldUnderRandomOperations(t *testing.T) {
 				}
 				tiles++
 				tileID := fmt.Sprintf("tile-%d", tiles)
-				_, err := s.UpdateDesktopArrangement(desktop.ID, revision(desktop), func(d profiles.Desktop) (profiles.Desktop, error) {
+				_, err := s.EditDesktopArrangement(desktop.ID, func(d profiles.Desktop) (profiles.Desktop, error) {
 					next, ok := layouttree.DockTile(d.Tree, rapid.SampledFrom(anchors).Draw(t, "anchor"), rapid.SampledFrom(directions).Draw(t, "direction"),
 						rapid.Bool().Draw(t, "before"), "split-"+tileID, tileID, string(layouttree.TileKindMarkdown), "{}", "", 0.4)
 					if !ok {
@@ -101,7 +95,7 @@ func TestArrangementInvariantsHoldUnderRandomOperations(t *testing.T) {
 			"remove": func(t *rapid.T) {
 				desktop := draw("desktop")
 				candidates := append(leaves(desktop), "missing-leaf")
-				_, err := s.RemoveLeaf(desktop.ID, rapid.SampledFrom(candidates).Draw(t, "leaf"), revision(desktop))
+				_, err := s.RemoveLeaf(desktop.ID, rapid.SampledFrom(candidates).Draw(t, "leaf"))
 				refusal(err)
 			},
 			"move": func(t *rapid.T) {
@@ -115,8 +109,7 @@ func TestArrangementInvariantsHoldUnderRandomOperations(t *testing.T) {
 				_, err := s.MoveLeaf(LeafMoveRequest{
 					SourceDesktopID: source.ID, TargetDesktopID: target.ID, LeafID: leaf, AnchorID: anchor,
 					Direction: rapid.SampledFrom(directions).Draw(t, "direction"), Before: rapid.Bool().Draw(t, "before"),
-					LeafShare:              rapid.Float64Range(-0.5, 1.5).Draw(t, "share"),
-					ExpectedSourceRevision: revision(source), ExpectedTargetRevision: revision(target),
+					LeafShare: rapid.Float64Range(-0.5, 1.5).Draw(t, "share"),
 				})
 				refusal(err)
 			},

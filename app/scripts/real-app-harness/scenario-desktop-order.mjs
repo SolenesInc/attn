@@ -52,7 +52,7 @@ async function main() {
       await driver.pressEnter();
       await wait(`[data-select-key="${one}/"]`);
       const create = async (slot, name = '') => (await observer.profileCommand('desktop_create', { profile_id: profile.id, shortcut_slot: slot, name })).desktops[0].id;
-      await observer.profileCommand('desktop_rename', { desktop_id: one, name: 'One', expected_revision: 1 });
+      await observer.profileCommand('desktop_rename', { desktop_id: one, name: 'One' });
       const six = await create(6, 'Six');
       const nine = await create(9, 'Nine');
       const named10 = await create(0, 'Review 10');

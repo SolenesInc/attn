@@ -122,14 +122,14 @@ async function main() {
     const holdDesktop = async (desktop) => {
       const tileId = `fixture-${desktop.id}`;
       await observer.profileCommand('desktop_dock_tile', {
-        desktop_id: desktop.id, expected_revision: observer.desktop(desktop.id).revision,
+        desktop_id: desktop.id,
         tile_id: tileId, tile_kind: 'markdown', tile_params: fixtureNotes, edge: 'right',
       });
       await observer.waitFor(() => observer.desktop(desktop.id)?.active_pane_id === tileId, 'fixture tile docked');
     };
     const releaseDesktop = async (desktop) => {
       await observer.profileCommand('desktop_remove_leaf', {
-        desktop_id: desktop.id, expected_revision: observer.desktop(desktop.id).revision,
+        desktop_id: desktop.id,
         leaf_id: `fixture-${desktop.id}`,
       });
     };

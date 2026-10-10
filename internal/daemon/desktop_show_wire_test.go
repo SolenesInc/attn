@@ -287,7 +287,7 @@ func TestShowingAnUnplacedAgentPlacesItOnTheCurrentDesktop(t *testing.T) {
 				_, paneA := view.paneOf(t, "a")
 				desktop, paneB := view.paneOf(t, "b")
 				id := uuid.NewString()
-				mustProfileRequest(app, protocol.DesktopRemoveLeafMessage{Cmd: protocol.CmdDesktopRemoveLeaf, RequestID: id, DesktopID: desktop.ID, LeafID: paneB, ExpectedRevision: desktop.Revision}, id)
+				mustProfileRequest(app, protocol.DesktopRemoveLeafMessage{Cmd: protocol.CmdDesktopRemoveLeaf, RequestID: id, DesktopID: desktop.ID, LeafID: paneB}, id)
 				current, anchor := tc.arrange(t, w, app, profileID, paneA)
 				revision := viewProfile(t, w, profileID).desktops[current].Revision
 				watcher := w.AppOn(profileID)
@@ -414,12 +414,11 @@ func TestAMoveTellsClientsWhereTheLeafWentEvenWhenItIsRenamed(t *testing.T) {
 
 		move := func(leafID string) (string, protocol.LeafMoved) {
 			t.Helper()
-			view := viewProfile(t, w, profileID)
 			counter := countArrangements(watcher)
 			id := uuid.NewString()
 			moved := mustProfileRequest(app, protocol.DesktopMoveLeafMessage{
-				Cmd: protocol.CmdDesktopMoveLeaf, RequestID: id, SourceDesktopID: source.ID, TargetDesktopID: target.ID, LeafID: leafID,
-				Edge: protocol.LayoutDockEdgeRight, ExpectedSourceRevision: view.desktops[source.ID].Revision, ExpectedTargetRevision: view.desktops[target.ID].Revision,
+				Cmd: protocol.CmdDesktopMoveLeaf, RequestID: id, SourceDesktopID: source.ID, TargetDesktopID: protocol.Ptr(target.ID), LeafID: leafID,
+				Edge: protocol.Ptr(protocol.LayoutDockEdgeRight),
 			}, id)
 			change := testworld.Await(watcher, protocol.EventProfileArrangementChanged, func(e protocol.ProfileArrangementChangedMessage) bool {
 				return e.MovedLeaf != nil && e.MovedLeaf.FromLeafID == leafID

@@ -100,9 +100,8 @@ func TestOpeningASeedDocksBesideItsCallerOrOnTheCurrentDesktop(t *testing.T) {
 		if again := seedReaderOpen(app, protocol.OpenSeedMessage{SeedID: first, Standalone: protocol.Ptr(true)}); protocol.Deref(again.TileID) != tileID {
 			t.Errorf("reopening = %+v, want tile %s again", again, tileID)
 		}
-		desktop := desktopOfDelegate(t, w, desktopID)
 		if navigated := desktopAction(app, protocol.DesktopUpdateTileMessage{
-			Cmd: protocol.CmdDesktopUpdateTile, DesktopID: desktopID, TileID: tileID, TileParams: protocol.Ptr(second), ExpectedRevision: desktop.Revision,
+			Cmd: protocol.CmdDesktopUpdateTile, DesktopID: desktopID, TileID: tileID, TileParams: protocol.Ptr(second),
 		}); !navigated.Success {
 			t.Fatalf("navigating the reader to %s: %s", second, protocol.Deref(navigated.Error))
 		}

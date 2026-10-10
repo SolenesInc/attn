@@ -30,7 +30,6 @@ export type IntentTarget =
   | { kind: 'desktop'; desktopId: string }
   | { kind: 'profile'; profileId: string }
   | { kind: 'open' }
-  // No targetDesktopId while the move waits for the desktop it creates.
   | { kind: 'move'; leafId: string; sourceDesktopId: string; targetDesktopId?: string }
   | { kind: 'answer'; requestId: string };
 

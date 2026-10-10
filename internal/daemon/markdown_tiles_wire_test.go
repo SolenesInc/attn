@@ -114,14 +114,14 @@ func TestEditsToAMarkdownFileReachItsTileAndStopWhenTheTileLeaves(t *testing.T) 
 
 		desktop := currentDesktop(t, w)
 		if updated := desktopAction(app, protocol.DesktopUpdateTileMessage{
-			Cmd: protocol.CmdDesktopUpdateTile, DesktopID: desktop.ID, TileID: "tile-watched", TileParams: protocol.Ptr(retargeted), ExpectedRevision: desktop.Revision,
+			Cmd: protocol.CmdDesktopUpdateTile, DesktopID: desktop.ID, TileID: "tile-watched", TileParams: protocol.Ptr(retargeted),
 		}); updated.Success || !strings.Contains(protocol.Deref(updated.Error), "keeps its file") {
 			t.Fatalf("pointing a markdown tile at another file = %+v, want it refused", updated)
 		}
 
 		desktop = currentDesktop(t, w)
 		if removed := desktopAction(app, protocol.DesktopRemoveLeafMessage{
-			Cmd: protocol.CmdDesktopRemoveLeaf, DesktopID: desktop.ID, LeafID: "tile-other", ExpectedRevision: desktop.Revision,
+			Cmd: protocol.CmdDesktopRemoveLeaf, DesktopID: desktop.ID, LeafID: "tile-other",
 		}); !removed.Success {
 			t.Fatalf("removing the tile failed: %s", protocol.Deref(removed.Error))
 		}
@@ -336,7 +336,7 @@ func desktopAction(app *testworld.Peer, cmd any) protocol.ProfileActionResultMes
 
 func dockOnDesktop(app *testworld.Peer, desktop protocol.Desktop, dock protocol.DesktopDockTileMessage) protocol.ProfileActionResultMessage {
 	app.T.Helper()
-	dock.Cmd, dock.DesktopID, dock.ExpectedRevision, dock.RequestID = protocol.CmdDesktopDockTile, desktop.ID, desktop.Revision, uuid.NewString()
+	dock.Cmd, dock.DesktopID, dock.RequestID = protocol.CmdDesktopDockTile, desktop.ID, uuid.NewString()
 	return testworld.Request(app, dock, protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == dock.RequestID })
 }
 

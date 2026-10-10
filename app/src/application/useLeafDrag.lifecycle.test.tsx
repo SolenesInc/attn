@@ -3,7 +3,7 @@ import { StrictMode, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DaemonApiProvider } from '../contexts/DaemonApiContext';
 import { useProfilesStore } from '../store/profiles';
-import { agentDesktop, arrangeDesktops, TEST_PROFILE_ID } from '../test/desktops';
+import { agentDesktop, arrangeDesktops } from '../test/desktops';
 import { createMockDaemonApi } from '../test/mocks/daemon';
 import { ProfileActionResultMessageEvent, type ProfileActionResultMessage } from '../types/generated';
 import { useLeafDrag } from './useLeafDrag';
@@ -17,7 +17,7 @@ const ok: ProfileActionResultMessage = {
 
 function setup() {
   const api = {
-    sendDesktopMoveLeaf: vi.fn(async (_move: unknown): Promise<ProfileActionResultMessage> => ok),
+    sendDesktopMoveLeaf: vi.fn(async (_move: unknown): Promise<ProfileActionResultMessage> => ({ ...ok, pane_id: 'pane-s2', desktops: [agentDesktop('d-new', null, [])] })),
     sendDesktopCreate: vi.fn(
       async (_profileId: string): Promise<ProfileActionResultMessage> => ({ ...ok, desktops: [agentDesktop('d-new', null, [])] }),
     ),
@@ -102,8 +102,6 @@ describe('dropping a leaf on a sidebar desktop', () => {
       leafId: 'pane-s2',
       edge: 'left',
       leafShare: 0.32,
-      expectedSourceRevision: 4,
-      expectedTargetRevision: 9,
     });
   });
 
@@ -136,11 +134,11 @@ describe('dropping a leaf on a sidebar desktop', () => {
 
     await act(async () => result.current.handleNewDesktopDrop());
 
-    expect(api.sendDesktopCreate).toHaveBeenCalledWith(TEST_PROFILE_ID);
+    expect(api.sendDesktopCreate).not.toHaveBeenCalled();
     expect(api.sendDesktopMoveLeaf).toHaveBeenCalledWith(
-      expect.objectContaining({ targetDesktopId: 'd-new', expectedTargetRevision: 1, expectedSourceRevision: 4 }),
+      expect.objectContaining({ sourceDesktopId: 'd1', leafId: 'pane-s2' }),
     );
-    expect(api.sendDesktopSetCurrent).toHaveBeenCalledWith(TEST_PROFILE_ID, 'd-new');
+    expect(api.sendDesktopSetCurrent).not.toHaveBeenCalled();
   });
 
   it('moves within the desktop a surface drop lands on', async () => {
@@ -151,7 +149,7 @@ describe('dropping a leaf on a sidebar desktop', () => {
 
     expect(api.sendDesktopMoveLeaf).toHaveBeenCalledWith({
       sourceDesktopId: 'd1', targetDesktopId: 'd1', leafId: 'pane-s2', anchorId: 'pane-s1', edge: 'top',
-      leafShare: 0.5, expectedSourceRevision: 4, expectedTargetRevision: 4,
+      leafShare: 0.5,
     });
   });
 
@@ -164,7 +162,7 @@ describe('dropping a leaf on a sidebar desktop', () => {
 
     expect(api.sendDesktopMoveLeaf).toHaveBeenCalledWith({
       sourceDesktopId: 'd1', targetDesktopId: 'd2', leafId: 'pane-s2', anchorId: 'pane-s3', edge: 'right',
-      leafShare: 0.4, expectedSourceRevision: 4, expectedTargetRevision: 9,
+      leafShare: 0.4,
     });
   });
 

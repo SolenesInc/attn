@@ -95,8 +95,8 @@ func TestANewDesktopChoiceExistsAtOnceAndItemsChoosingItShareIt(t *testing.T) {
 			t.Fatalf("arrival: %+v", arrival)
 		}
 	}
-	desktop := viewProfile(t, w, profile).desktops[slot5]
-	mustProfileRequest(app, protocol.DesktopRenameMessage{Cmd: protocol.CmdDesktopRename, RequestID: "rename", DesktopID: slot5, Name: "Renamed", ExpectedRevision: desktop.Revision}, "rename")
+
+	mustProfileRequest(app, protocol.DesktopRenameMessage{Cmd: protocol.CmdDesktopRename, RequestID: "rename", DesktopID: slot5, Name: "Renamed"}, "rename")
 	testworld.Await(app, protocol.EventCrewUpdated, func(e protocol.CrewUpdatedMessage) bool {
 		renamed := 0
 		for _, m := range e.Members {
@@ -316,14 +316,14 @@ func TestANamedDesktopIsNeverRemovedUntilItsNameIsCleared(t *testing.T) {
 		app := w.App()
 		profile := app.SelectedProfile()
 		named := createDesktop(app, profile)
-		mustProfileRequest(app, protocol.DesktopRenameMessage{Cmd: protocol.CmdDesktopRename, RequestID: "name", DesktopID: named.ID, Name: "Notes", ExpectedRevision: named.Revision}, "name")
+		mustProfileRequest(app, protocol.DesktopRenameMessage{Cmd: protocol.CmdDesktopRename, RequestID: "name", DesktopID: named.ID, Name: "Notes"}, "name")
 		createDesktop(app, profile)
 		w.advance(time.Hour)
-		kept, exists := viewProfile(t, w, profile).desktops[named.ID]
+		_, exists := viewProfile(t, w, profile).desktops[named.ID]
 		if !exists {
 			t.Fatal("an empty named desktop was removed")
 		}
-		mustProfileRequest(app, protocol.DesktopRenameMessage{Cmd: protocol.CmdDesktopRename, RequestID: "unname", DesktopID: named.ID, Name: "", ExpectedRevision: kept.Revision}, "unname")
+		mustProfileRequest(app, protocol.DesktopRenameMessage{Cmd: protocol.CmdDesktopRename, RequestID: "unname", DesktopID: named.ID, Name: ""}, "unname")
 		w.advance(29 * time.Second)
 		if _, exists := viewProfile(t, w, profile).desktops[named.ID]; !exists {
 			t.Fatal("a desktop unnamed 29s ago was removed")

@@ -60,7 +60,7 @@ func TestOpenMarkdownReusesATileAlreadyShowingTheFile(t *testing.T) {
 	if err := os.WriteFile(file, []byte("# Legacy"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := d.store.UpdateDesktopArrangement(desktop.ID, desktop.Revision, func(desktop profiles.Desktop) (profiles.Desktop, error) {
+	if _, err := d.store.EditDesktopArrangement(desktop.ID, func(desktop profiles.Desktop) (profiles.Desktop, error) {
 		return dockTileOnDesktop(desktop, desktopTileDock{tileID: "tile-markdown", tileKind: string(layouttree.TileKindMarkdown), params: file, edge: protocol.LayoutDockEdgeRight})
 	}); err != nil {
 		t.Fatalf("dock the existing tile: %v", err)

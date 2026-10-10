@@ -80,11 +80,7 @@ func TestReopeningASeedResetsItsTileNavigatedToAnotherSeed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open first seed: %v", err)
 	}
-	current, err := d.store.GetDesktop(desktop.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := d.store.UpdateDesktopArrangement(desktop.ID, current.Revision, func(desktop profiles.Desktop) (profiles.Desktop, error) {
+	if _, err := d.store.EditDesktopArrangement(desktop.ID, func(desktop profiles.Desktop) (profiles.Desktop, error) {
 		return applyDesktopTileUpdate(desktop, desktopTileUpdate{tileID: tileID, params: second.ID, hasParams: true})
 	}); err != nil {
 		t.Fatal(err)

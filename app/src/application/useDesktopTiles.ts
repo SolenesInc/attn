@@ -1,5 +1,4 @@
 import { useCallback, useMemo, useState } from 'react';
-import { withFreshDesktopRevisions } from '../hooks/desktopRevisions';
 import { OPENER_EXTENSIONS } from '../components/palette/MarkdownOpener';
 import { resolveMarkdownOpenerTarget } from '../components/palette/openerTarget';
 import { claimPaletteFocus } from '../components/palette/paletteClaim';
@@ -63,17 +62,14 @@ export function useDesktopTiles({ settings, sessions, contextSessionId, showErro
     const root = resolveEditorTileRoot(localDirectory, settings['notebook.root.effective'] || '');
     const tileId = `notebook-tile-${crypto.randomUUID()}`;
     const intent = useSessionStore.getState().beginIntent({ kind: 'leaf', desktopId: desktop.id, leafId: tileId });
-    void withFreshDesktopRevisions([desktop.id], (revisionOf) =>
-      sendDesktopDockTile({
-        desktopId: desktop.id,
-        expectedRevision: revisionOf(desktop.id),
-        tileId,
-        tileKind: 'notebook',
-        tileParams: root ? serializeNotebookTileParams({ root }) : undefined,
-        edge: 'right',
-        tileShare: 0.4,
-      }),
-    ).catch((error) => {
+    void sendDesktopDockTile({
+      desktopId: desktop.id,
+      tileId,
+      tileKind: 'notebook',
+      tileParams: root ? serializeNotebookTileParams({ root }) : undefined,
+      edge: 'right',
+      tileShare: 0.4,
+    }).catch((error) => {
       useSessionStore.getState().intentFailed(intent);
       showError(`Could not open the notebook: ${failureMessage(error)}`);
     });

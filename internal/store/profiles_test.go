@@ -60,12 +60,8 @@ func mustCreateProfile(t *testing.T, s *Store, name string) (profiles.Profile, p
 
 func mustPlace(t *testing.T, s *Store, desktopID, sessionID string) (profiles.Desktop, string) {
 	t.Helper()
-	desktop, err := s.GetDesktop(desktopID)
-	if err != nil {
-		t.Fatalf("GetDesktop(%s): %v", desktopID, err)
-	}
 	placed, paneID, err := s.PlaceSession(SessionPlacementRequest{
-		DesktopID: desktopID, ExpectedRevision: desktop.Revision, SessionID: protocol.SessionID(sessionID),
+		DesktopID: desktopID, SessionID: protocol.SessionID(sessionID),
 		Direction: layouttree.DirectionVertical, Title: sessionID,
 	})
 	if err != nil {
@@ -125,7 +121,7 @@ func TestProfileArrangementSurvivesRestart(t *testing.T) {
 	addProfileSession(t, s, "agent-b", profile.ID)
 	mustPlace(t, s, second.ID, "agent-a")
 	placed, paneB := mustPlace(t, s, second.ID, "agent-b")
-	ratioed, err := s.SetDesktopSplitRatio(second.ID, placed.Tree.SplitID, 0.3, placed.Revision)
+	ratioed, err := s.SetDesktopSplitRatio(second.ID, placed.Tree.SplitID, 0.3)
 	if err != nil {
 		t.Fatalf("SetDesktopSplitRatio: %v", err)
 	}
@@ -177,7 +173,7 @@ func TestSelectionDoesNotStaleAStructuralEdit(t *testing.T) {
 	profile, desktop := mustCreateProfile(t, s, "Main")
 	addProfileSession(t, s, "agent-a", profile.ID)
 	addProfileSession(t, s, "agent-b", profile.ID)
-	placed, paneA := mustPlace(t, s, desktop.ID, "agent-a")
+	_, paneA := mustPlace(t, s, desktop.ID, "agent-a")
 
 	if _, _, err := s.SetActivePane(desktop.ID, paneA); err != nil {
 		t.Fatalf("SetActivePane: %v", err)
@@ -196,7 +192,7 @@ func TestSelectionDoesNotStaleAStructuralEdit(t *testing.T) {
 		t.Fatal("a selection did not record last_used_at")
 	}
 	if _, _, err := s.PlaceSession(SessionPlacementRequest{
-		DesktopID: desktop.ID, ExpectedRevision: placed.Revision, SessionID: "agent-b", Direction: layouttree.DirectionVertical,
+		DesktopID: desktop.ID, SessionID: "agent-b", Direction: layouttree.DirectionVertical,
 	}); err != nil {
 		t.Fatalf("a split made against the revision seen before focusing was refused: %v", err)
 	}
@@ -241,14 +237,13 @@ func TestAnAgentHasAtMostOnePlacementAcrossTheDaemon(t *testing.T) {
 	}
 
 	target, _ := s.GetDesktop(second.ID)
-	_, _, err = s.PlaceSession(SessionPlacementRequest{DesktopID: second.ID, ExpectedRevision: target.Revision, SessionID: "agent-a", Direction: layouttree.DirectionVertical})
+	_, _, err = s.PlaceSession(SessionPlacementRequest{DesktopID: second.ID, SessionID: "agent-a", Direction: layouttree.DirectionVertical})
 	wantCode(t, err, profiles.CodeAlreadyPlaced)
 
-	source, _ := s.GetDesktop(first.ID)
-	_, _, err = s.PlaceSession(SessionPlacementRequest{DesktopID: first.ID, ExpectedRevision: source.Revision, SessionID: "agent-a", Direction: layouttree.DirectionVertical})
+	_, _, err = s.PlaceSession(SessionPlacementRequest{DesktopID: first.ID, SessionID: "agent-a", Direction: layouttree.DirectionVertical})
 	wantCode(t, err, profiles.CodeAlreadyPlaced)
 
-	_, _, err = s.PlaceSession(SessionPlacementRequest{DesktopID: second.ID, ExpectedRevision: target.Revision, SessionID: "ghost", Direction: layouttree.DirectionVertical})
+	_, _, err = s.PlaceSession(SessionPlacementRequest{DesktopID: second.ID, SessionID: "ghost", Direction: layouttree.DirectionVertical})
 	wantCode(t, err, profiles.CodeNotFound)
 
 	unchanged, _ := s.GetDesktop(second.ID)
@@ -265,14 +260,14 @@ func TestLayoutWritesNeverChangeMembership(t *testing.T) {
 	addProfileSession(t, s, "work-agent", work.ID)
 	addProfileSession(t, s, "home-agent", home.ID)
 	addProfileSession(t, s, "unowned-agent", "")
-	placedWork, workPane := mustPlace(t, s, workDesktop.ID, "work-agent")
+	_, workPane := mustPlace(t, s, workDesktop.ID, "work-agent")
 
-	_, _, err := s.PlaceSession(SessionPlacementRequest{DesktopID: workDesktop.ID, ExpectedRevision: placedWork.Revision, SessionID: "home-agent", Direction: layouttree.DirectionVertical})
+	_, _, err := s.PlaceSession(SessionPlacementRequest{DesktopID: workDesktop.ID, SessionID: "home-agent", Direction: layouttree.DirectionVertical})
 	wantCode(t, err, profiles.CodeCrossProfile)
-	_, _, err = s.PlaceSession(SessionPlacementRequest{DesktopID: workDesktop.ID, ExpectedRevision: placedWork.Revision, SessionID: "unowned-agent", Direction: layouttree.DirectionVertical})
+	_, _, err = s.PlaceSession(SessionPlacementRequest{DesktopID: workDesktop.ID, SessionID: "unowned-agent", Direction: layouttree.DirectionVertical})
 	wantCode(t, err, profiles.CodeCrossProfile)
 
-	_, err = s.UpdateDesktopArrangement(workDesktop.ID, placedWork.Revision, func(desktop profiles.Desktop) (profiles.Desktop, error) {
+	_, err = s.EditDesktopArrangement(workDesktop.ID, func(desktop profiles.Desktop) (profiles.Desktop, error) {
 		desktop.Panes[0].SessionID = "home-agent"
 		return desktop, nil
 	})
@@ -280,7 +275,7 @@ func TestLayoutWritesNeverChangeMembership(t *testing.T) {
 
 	_, err = s.MoveLeaf(LeafMoveRequest{
 		SourceDesktopID: workDesktop.ID, TargetDesktopID: homeDesktop.ID, LeafID: workPane,
-		Direction: layouttree.DirectionVertical, ExpectedSourceRevision: placedWork.Revision, ExpectedTargetRevision: homeDesktop.Revision,
+		Direction: layouttree.DirectionVertical,
 	})
 	wantCode(t, err, profiles.CodeCrossProfile)
 
@@ -318,7 +313,7 @@ func TestCorruptArrangementsAreRefusedNotNormalized(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := s.UpdateDesktopArrangement(desktop.ID, placed.Revision, func(d profiles.Desktop) (profiles.Desktop, error) {
+			_, err := s.EditDesktopArrangement(desktop.ID, func(d profiles.Desktop) (profiles.Desktop, error) {
 				return tc.corrupt(d), nil
 			})
 			wantCode(t, err, profiles.CodeInvalid)
@@ -347,14 +342,9 @@ func TestMoveBetweenDesktopsCommitsSourceAndTargetTogether(t *testing.T) {
 
 	_, err = s.MoveLeaf(LeafMoveRequest{
 		SourceDesktopID: first.ID, TargetDesktopID: second.ID, LeafID: paneB, AnchorID: "pane-that-is-not-there",
-		Direction: layouttree.DirectionHorizontal, ExpectedSourceRevision: source.Revision, ExpectedTargetRevision: target.Revision,
+		Direction: layouttree.DirectionHorizontal,
 	})
-	wantCode(t, err, profiles.CodeInvalid)
-	_, err = s.MoveLeaf(LeafMoveRequest{
-		SourceDesktopID: first.ID, TargetDesktopID: second.ID, LeafID: paneB, AnchorID: paneC,
-		Direction: layouttree.DirectionHorizontal, ExpectedSourceRevision: source.Revision, ExpectedTargetRevision: target.Revision - 1,
-	})
-	wantCode(t, err, profiles.CodeStaleRevision)
+	wantCode(t, err, profiles.CodeNotFound)
 	for _, want := range []profiles.Desktop{source, target} {
 		got, _ := s.GetDesktop(want.ID)
 		if !reflect.DeepEqual(got, want) {
@@ -364,7 +354,7 @@ func TestMoveBetweenDesktopsCommitsSourceAndTargetTogether(t *testing.T) {
 
 	moved, err := s.MoveLeaf(LeafMoveRequest{
 		SourceDesktopID: first.ID, TargetDesktopID: second.ID, LeafID: paneB, AnchorID: paneC,
-		Direction: layouttree.DirectionHorizontal, LeafShare: 0.25, ExpectedSourceRevision: source.Revision, ExpectedTargetRevision: target.Revision,
+		Direction: layouttree.DirectionHorizontal, LeafShare: 0.25,
 		Activate: true,
 	})
 	if err != nil {
@@ -397,32 +387,6 @@ func TestMoveBetweenDesktopsCommitsSourceAndTargetTogether(t *testing.T) {
 		t.Fatalf("session identity changed across the move: %+v", session)
 	}
 	assertStoredDesktopsHoldTheirInvariants(t, s, profile.ID)
-}
-
-func TestStaleRevisionFromASecondWriterIsRefused(t *testing.T) {
-	s, _ := openProfileStore(t)
-	profile, desktop := mustCreateProfile(t, s, "Main")
-	addProfileSession(t, s, "agent-a", profile.ID)
-	addProfileSession(t, s, "agent-b", profile.ID)
-	seenByBoth := desktop.Revision
-
-	winner, _, err := s.PlaceSession(SessionPlacementRequest{DesktopID: desktop.ID, ExpectedRevision: seenByBoth, SessionID: "agent-a", Direction: layouttree.DirectionVertical})
-	if err != nil {
-		t.Fatalf("first writer: %v", err)
-	}
-	_, _, err = s.PlaceSession(SessionPlacementRequest{DesktopID: desktop.ID, ExpectedRevision: seenByBoth, SessionID: "agent-b", Direction: layouttree.DirectionVertical})
-	stale := wantCode(t, err, profiles.CodeStaleRevision)
-	if want := profiles.Stale("desktop", desktop.ID, seenByBoth, winner.Revision).Message; stale.Message != want {
-		t.Fatalf("stale message = %q, want %q", stale.Message, want)
-	}
-	if _, _, err := s.PlaceSession(SessionPlacementRequest{DesktopID: desktop.ID, ExpectedRevision: winner.Revision, SessionID: "agent-b", Direction: layouttree.DirectionVertical}); err != nil {
-		t.Fatalf("the loser re-read revision %d and was still refused: %v", winner.Revision, err)
-	}
-
-	_, err = s.RenameProfile(profile.ID, "Renamed", profile.Revision+7)
-	wantCode(t, err, profiles.CodeStaleRevision)
-	_, err = s.RenameDesktop(desktop.ID, "Main", seenByBoth)
-	wantCode(t, err, profiles.CodeStaleRevision)
 }
 
 func TestProfileIDsSurviveRenameAndDeletedNamesAreReusable(t *testing.T) {

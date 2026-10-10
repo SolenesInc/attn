@@ -28,7 +28,7 @@ describe('moving with delegates', () => {
       expect(option).toHaveTextContent('Move with delegates to Target');
       await gesture(daemon, () => fireEvent.mouseDown(option));
       expect(daemon.sentOf('desktop_move_leaf')).toEqual([expect.objectContaining({
-        source_desktop_id: 'source', target_desktop_id: 'target', leaf_id: 'pane-root', with_delegates: true, edge: 'right',
+        source_desktop_id: 'source', target_desktop_id: 'target', leaf_id: 'pane-root', with_delegates: true,
       })]);
     });
   }

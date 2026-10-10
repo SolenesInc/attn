@@ -1,0 +1,4 @@
+kind: fixed
+area: desktops
+change: Desktop moves, renames, tile edits and split resizing use the current layout when another window changes it.
+notes: Keyboard moves use the destination's latest placement; dragging keeps the chosen drop target. A failed move to a new desktop no longer leaves an empty desktop behind.

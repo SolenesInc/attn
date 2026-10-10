@@ -291,10 +291,10 @@ func TestSelectionReachesTheOtherConnectionAndSurvivesARestart(t *testing.T) {
 	w.agent("agent-a", profileID)
 	w.agent("agent-b", profileID)
 	placedA := w.mustSend(first, map[string]any{
-		"cmd": protocol.CmdDesktopPlaceSession, "desktop_id": desktopTwo.ID, "expected_revision": desktopTwo.Revision, "session_id": "agent-a",
+		"cmd": protocol.CmdDesktopPlaceSession, "desktop_id": desktopTwo.ID, "session_id": "agent-a",
 	})
 	placedB := w.mustSend(first, map[string]any{
-		"cmd": protocol.CmdDesktopPlaceSession, "desktop_id": desktopTwo.ID, "expected_revision": placedA.Desktops[0].Revision,
+		"cmd": protocol.CmdDesktopPlaceSession, "desktop_id": desktopTwo.ID,
 		"session_id": "agent-b", "anchor_pane_id": protocol.Deref(placedA.PaneID),
 	})
 	paneB := protocol.Deref(placedB.PaneID)
@@ -357,36 +357,6 @@ func TestSelectionReachesTheOtherConnectionAndSurvivesARestart(t *testing.T) {
 	}
 }
 
-func TestSecondClientWithAStaleRevisionRereadsAndRetries(t *testing.T) {
-	w := newProfilesTestDaemon(t)
-	first, _ := w.connect("")
-	created := w.mustSend(first, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "attn"})
-	desktop := created.Desktops[0]
-	w.mustSend(first, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": created.Profile.ID})
-	second, initial := w.connect(created.Profile.ID)
-	secondsRevision := initial.Desktops[0].Revision
-	drainClientPayloads(t, first)
-
-	w.mustSend(first, map[string]any{
-		"cmd": protocol.CmdDesktopRename, "desktop_id": desktop.ID, "name": "review", "expected_revision": desktop.Revision,
-	})
-	stale := w.send(second, map[string]any{
-		"cmd": protocol.CmdDesktopRename, "desktop_id": desktop.ID, "name": "scratch", "expected_revision": secondsRevision,
-	})
-	wantErrorCode(t, stale, protocol.ProfileErrorCodeStaleRevision)
-
-	seen := arrangementChanges(t, second)
-	if len(seen) != 1 || seen[0].Desktops[0].Name != "review" {
-		t.Fatalf("the stale client was sent %+v, want the winning rename", seen)
-	}
-	retried := w.mustSend(second, map[string]any{
-		"cmd": protocol.CmdDesktopRename, "desktop_id": desktop.ID, "name": "scratch", "expected_revision": seen[0].Desktops[0].Revision,
-	})
-	if retried.Desktops[0].Name != "scratch" {
-		t.Fatalf("the retry left the desktop named %q", retried.Desktops[0].Name)
-	}
-}
-
 func TestMoveBetweenDesktopsArrivesAsOneMessageAndFailsWhole(t *testing.T) {
 	w := newProfilesTestDaemon(t)
 	client, _ := w.connect("")
@@ -396,7 +366,7 @@ func TestMoveBetweenDesktopsArrivesAsOneMessageAndFailsWhole(t *testing.T) {
 	watcher, _ := w.connect(profileID)
 	w.agent("agent-a", profileID)
 	placed := w.mustSend(client, map[string]any{
-		"cmd": protocol.CmdDesktopPlaceSession, "desktop_id": source.ID, "expected_revision": source.Revision, "session_id": "agent-a",
+		"cmd": protocol.CmdDesktopPlaceSession, "desktop_id": source.ID, "session_id": "agent-a",
 	})
 	paneID := protocol.Deref(placed.PaneID)
 	source = placed.Desktops[0]
@@ -406,9 +376,9 @@ func TestMoveBetweenDesktopsArrivesAsOneMessageAndFailsWhole(t *testing.T) {
 
 	stale := w.send(client, map[string]any{
 		"cmd": protocol.CmdDesktopMoveLeaf, "source_desktop_id": source.ID, "target_desktop_id": target.ID, "leaf_id": paneID,
-		"edge": "right", "expected_source_revision": source.Revision, "expected_target_revision": target.Revision + 7,
+		"edge": "right", "anchor_id": "missing-anchor",
 	})
-	wantErrorCode(t, stale, protocol.ProfileErrorCodeStaleRevision)
+	wantErrorCode(t, stale, protocol.ProfileErrorCodeNotFound)
 	if seen := arrangementChanges(t, watcher); len(seen) != 0 {
 		t.Fatalf("a refused move still sent %d arrangement changes", len(seen))
 	}
@@ -418,7 +388,7 @@ func TestMoveBetweenDesktopsArrivesAsOneMessageAndFailsWhole(t *testing.T) {
 
 	moved := w.mustSend(client, map[string]any{
 		"cmd": protocol.CmdDesktopMoveLeaf, "source_desktop_id": source.ID, "target_desktop_id": target.ID, "leaf_id": paneID,
-		"edge": "right", "expected_source_revision": source.Revision, "expected_target_revision": target.Revision,
+		"edge": "right",
 	})
 	if len(moved.Desktops) != 2 {
 		t.Fatalf("the move result carries %d desktops, want source and target", len(moved.Desktops))
@@ -450,22 +420,21 @@ func TestLayoutCommandsNeverChangeWhichProfileAnAgentBelongsTo(t *testing.T) {
 	w.agent("my-agent", mine.Profile.ID)
 
 	foreign := w.send(client, map[string]any{
-		"cmd": protocol.CmdDesktopPlaceSession, "desktop_id": mine.Desktops[0].ID, "expected_revision": mine.Desktops[0].Revision, "session_id": "their-agent",
+		"cmd": protocol.CmdDesktopPlaceSession, "desktop_id": mine.Desktops[0].ID, "session_id": "their-agent",
 	})
 	wantErrorCode(t, foreign, protocol.ProfileErrorCodeCrossProfile)
 
 	placed := w.mustSend(client, map[string]any{
-		"cmd": protocol.CmdDesktopPlaceSession, "desktop_id": mine.Desktops[0].ID, "expected_revision": mine.Desktops[0].Revision, "session_id": "my-agent",
+		"cmd": protocol.CmdDesktopPlaceSession, "desktop_id": mine.Desktops[0].ID, "session_id": "my-agent",
 	})
 	across := w.send(client, map[string]any{
 		"cmd": protocol.CmdDesktopMoveLeaf, "source_desktop_id": mine.Desktops[0].ID, "target_desktop_id": theirs.Desktops[0].ID,
 		"leaf_id": protocol.Deref(placed.PaneID), "edge": "left",
-		"expected_source_revision": placed.Desktops[0].Revision, "expected_target_revision": theirs.Desktops[0].Revision,
 	})
 	wantErrorCode(t, across, protocol.ProfileErrorCodeCrossProfile)
 
 	twice := w.send(client, map[string]any{
-		"cmd": protocol.CmdDesktopPlaceSession, "desktop_id": mine.Desktops[0].ID, "expected_revision": placed.Desktops[0].Revision, "session_id": "my-agent",
+		"cmd": protocol.CmdDesktopPlaceSession, "desktop_id": mine.Desktops[0].ID, "session_id": "my-agent",
 	})
 	wantErrorCode(t, twice, protocol.ProfileErrorCodeAlreadyPlaced)
 	if got, err := w.d.store.SessionProfileID("my-agent"); err != nil || got != mine.Profile.ID {
@@ -566,7 +535,7 @@ func TestDeletingAProfileSelectsTheMostRecentlyUsedRemainingProfile(t *testing.T
 	}
 
 	w.mustSend(deleter, map[string]any{
-		"cmd": protocol.CmdDesktopRename, "desktop_id": kept.Desktops[0].ID, "name": "after", "expected_revision": kept.Desktops[0].Revision,
+		"cmd": protocol.CmdDesktopRename, "desktop_id": kept.Desktops[0].ID, "name": "after",
 	})
 	if followed := arrangementChanges(t, bystander); len(followed) != 1 || followed[0].Desktops[0].Name != "after" {
 		t.Fatalf("after the delete the client was sent %+v, want changes to the destination", followed)

@@ -67,7 +67,7 @@ func TestDesktopFocusHistoryUpgradePreservesSelectionAndLeftFallback(t *testing.
 						t.Fatal(err)
 					}
 				}
-				removed, err := s.RemoveLeaf(desktop.ID, row.close, desktop.Revision)
+				removed, err := s.RemoveLeaf(desktop.ID, row.close)
 				if err != nil {
 					t.Fatal(err)
 				}

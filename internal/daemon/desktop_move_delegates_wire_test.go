@@ -36,14 +36,14 @@ func TestMovingAnAgentWithItsSameDesktopDelegates(t *testing.T) {
 			behindElsewhere := delegate(elsewhere, "behind-elsewhere")
 			source, _ := placedPane(t, w, string(unplaced))
 			_, unplacedPane := placedPane(t, w, string(unplaced))
-			mustProfileRequest(app, protocol.DesktopRemoveLeafMessage{Cmd: protocol.CmdDesktopRemoveLeaf, RequestID: "unplace", DesktopID: source.ID, LeafID: unplacedPane, ExpectedRevision: source.Revision}, "unplace")
+			mustProfileRequest(app, protocol.DesktopRemoveLeafMessage{Cmd: protocol.CmdDesktopRemoveLeaf, RequestID: "unplace", DesktopID: source.ID, LeafID: unplacedPane}, "unplace")
 			target := createDesktop(app, app.SelectedProfile())
 			move := func(session protocol.SessionID, target protocol.Desktop, flag bool, id string) protocol.ProfileActionResultMessage {
 				t.Helper()
 				source, pane := placedPane(t, w, string(session))
 				return mustProfileRequest(app, protocol.DesktopMoveLeafMessage{
-					Cmd: protocol.CmdDesktopMoveLeaf, RequestID: id, SourceDesktopID: source.ID, TargetDesktopID: target.ID,
-					LeafID: pane, Edge: protocol.LayoutDockEdgeRight, ExpectedSourceRevision: source.Revision, ExpectedTargetRevision: target.Revision,
+					Cmd: protocol.CmdDesktopMoveLeaf, RequestID: id, SourceDesktopID: source.ID, TargetDesktopID: protocol.Ptr(target.ID),
+					LeafID: pane, Edge: protocol.Ptr(protocol.LayoutDockEdgeRight),
 					WithDelegates: protocol.Ptr(flag),
 				}, id)
 			}

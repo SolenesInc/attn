@@ -5,7 +5,6 @@ import { useSessionStore } from '../store/sessions';
 import { useDaemonStore } from '../store/daemonSessions';
 import { useAgentOnScreen } from './useDesktopSelectionBridge';
 import type { Desktop } from '../types/generated';
-import { withFreshDesktopRevisions } from './desktopRevisions';
 import { actThenShow } from '../application/openThenShow';
 import { desktopInSlot } from '../utils/desktops';
 
@@ -94,50 +93,33 @@ export function useDesktopNavigation(showError: ShowError) {
     [report, sendDesktopCreate, sendDesktopSetCurrent, switchToDesktop],
   );
 
-  // A slot with no desktop gets one, created there for this move.
   const moveActiveLeaf = useCallback(
     async (to: { desktopId: string } | { slot: number }, follow: boolean, withDelegates = false): Promise<void> => {
       const state = useProfilesStore.getState();
       const source = currentDesktopOf(state);
-      const profileId = state.selectedProfileId;
-      const slot = 'slot' in to ? to.slot : undefined;
-      const existing = 'slot' in to
-        ? desktopInSlot(state.desktops, to.slot)
-        : state.desktops.find((desktop) => desktop.id === to.desktopId);
-      if (!source || !profileId || existing?.id === source.id || (slot === undefined && !existing)) return;
+      if (!source || !state.selectedProfileId) return;
+      if ('slot' in to ? source.shortcut_slot === to.slot : source.id === to.desktopId) return;
       const leafId = source.active_pane_id;
       if (!leafId) return;
-      const targetOf = async (): Promise<string> => {
-        if (existing) return existing.id;
-        const created = (await sendDesktopCreate(profileId, slot)).desktops?.[0];
-        if (!created) throw new Error('The daemon created no desktop to move to.');
-        return created.id;
-      };
       const move = async () => {
-        const targetId = await targetOf();
-        const result = await withFreshDesktopRevisions([source.id, targetId], (revisionOf) =>
-          sendDesktopMoveLeaf({
-            sourceDesktopId: source.id,
-            targetDesktopId: targetId,
-            leafId,
-            anchorId: existing?.active_pane_id || undefined,
-            edge: 'right',
-            ...(withDelegates ? { withDelegates: true } : {}),
-            expectedSourceRevision: revisionOf(source.id),
-            expectedTargetRevision: revisionOf(targetId),
-          }),
-        );
-        return { targetId, leafId: result.pane_id };
+        const result = await sendDesktopMoveLeaf({
+          sourceDesktopId: source.id,
+          ...('slot' in to ? { targetShortcutSlot: to.slot } : { targetDesktopId: to.desktopId }),
+          leafId,
+          ...(withDelegates ? { withDelegates: true } : {}),
+        });
+        const target = result.desktops?.find((desktop) => desktop.id !== source.id) ?? result.desktops?.[0];
+        return { targetId: target?.id, leafId: result.pane_id };
       };
       if (!follow) {
         useSessionStore.getState().cancelIntent();
         await move();
         return;
       }
-      await actThenShow({ kind: 'move', leafId, sourceDesktopId: source.id, targetDesktopId: existing?.id }, move, (moved) =>
-        moved.leafId ? { desktopId: moved.targetId, leafId: moved.leafId } : null);
+      await actThenShow({ kind: 'move', leafId, sourceDesktopId: source.id, targetDesktopId: 'desktopId' in to ? to.desktopId : undefined }, move, (moved) =>
+        moved.leafId && moved.targetId ? { desktopId: moved.targetId, leafId: moved.leafId } : null);
     },
-    [sendDesktopCreate, sendDesktopMoveLeaf],
+    [sendDesktopMoveLeaf],
   );
 
   const moveActiveLeafToDesktop = useCallback(
@@ -164,19 +146,13 @@ export function useDesktopNavigation(showError: ShowError) {
 
   const renameDesktop = useCallback(
     (desktopId: string, name: string) =>
-      withFreshDesktopRevisions([desktopId], (revisionOf) =>
-        sendDesktopRename(desktopId, name, revisionOf(desktopId)),
-      ).then(() => undefined),
+      sendDesktopRename(desktopId, name).then(() => undefined),
     [sendDesktopRename],
   );
 
   const reorderDesktop = useCallback(
     (move: { desktopId: string; previousDesktopId?: string; nextDesktopId?: string }) =>
-      report(
-        withFreshDesktopRevisions([move.desktopId], (revisionOf) =>
-          sendDesktopReorder({ ...move, expectedRevision: revisionOf(move.desktopId) }),
-        ),
-      ),
+      report(sendDesktopReorder(move)),
     [report, sendDesktopReorder],
   );
 

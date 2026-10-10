@@ -65,8 +65,6 @@ interface UseUiAutomationBridgeArgs {
     leafId: string;
     anchorId?: string;
     edge: 'left' | 'right' | 'top' | 'bottom';
-    expectedSourceRevision: number;
-    expectedTargetRevision: number;
   }) => Promise<unknown>;
   closeSession: (sessionId: string) => Promise<void>;
   reloadSession?: (sessionId: string, size?: { cols: number; rows: number }) => Promise<void>;
@@ -2984,12 +2982,6 @@ export function useUiAutomationBridge({
         if (!sourceDesktopId || !targetDesktopId || !leafId) {
           throw new Error('move_desktop_leaf requires sourceDesktopId, targetDesktopId, and leafId');
         }
-        const desktops = useProfilesStore.getState().desktops;
-        const revisionOf = (desktopId: string) => {
-          const desktop = desktops.find((entry) => entry.id === desktopId);
-          if (!desktop) throw new Error(`move_desktop_leaf: desktop ${desktopId} is not in the selected profile`);
-          return desktop.revision;
-        };
         const edge = payload.edge === 'right' || payload.edge === 'top' || payload.edge === 'bottom'
           ? payload.edge
           : 'left';
@@ -3000,8 +2992,6 @@ export function useUiAutomationBridge({
           leafId,
           anchorId,
           edge,
-          expectedSourceRevision: revisionOf(sourceDesktopId),
-          expectedTargetRevision: revisionOf(targetDesktopId),
         });
         await settleUi(4);
         return result;

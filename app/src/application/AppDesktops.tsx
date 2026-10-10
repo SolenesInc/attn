@@ -5,7 +5,6 @@ import { useDaemonStore } from '../store/daemonSessions';
 import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import type { Desktop } from '../types/generated';
-import { withFreshDesktopRevisions } from '../hooks/desktopRevisions';
 import { desktopLabel, desktopTerminalState, orderedDesktops } from '../utils/desktops';
 import {
   useAppAppearanceContext,
@@ -174,9 +173,7 @@ export function AppDesktops() {
           onRenameSession={sendRenameSession}
           onSelectSession={handleSelectSession}
           onResizeSplit={(splitId, ratio) =>
-            withFreshDesktopRevisions([desktop.id], (revisionOf) =>
-              sendDesktopSetSplitRatio(desktop.id, splitId, ratio, revisionOf(desktop.id)),
-            )
+            sendDesktopSetSplitRatio(desktop.id, splitId, ratio)
           }
           onFocusPane={(paneId) => {
             if (paneId !== desktop.active_pane_id || !isCurrent) selectLeaf(desktop.id, paneId);
@@ -192,15 +189,12 @@ export function AppDesktops() {
             handleCloseTile(desktop.id, tileId);
           }}
           onUpdateTile={(tileId, tileParams, tileSessionId) =>
-            withFreshDesktopRevisions([desktop.id], (revisionOf) =>
-              sendDesktopUpdateTile({
-                desktopId: desktop.id,
-                expectedRevision: revisionOf(desktop.id),
-                tileId,
-                tileParams,
-                tileSessionId,
-              }),
-            )
+            sendDesktopUpdateTile({
+              desktopId: desktop.id,
+              tileId,
+              tileParams,
+              tileSessionId,
+            })
           }
           onMoveLeaf={(leafId, anchorId, edge, ratio) => handleSurfaceLeafDrop(desktop.id, leafId, anchorId, edge, ratio)}
           getActiveLeafDropSnapshot={getActiveLeafDropSnapshot}

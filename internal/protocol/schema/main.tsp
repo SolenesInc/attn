@@ -2803,7 +2803,6 @@ model DesktopRenameMessage {
   request_id: string;
   desktop_id: string;
   name: string;
-  expected_revision: safeint;
 }
 
 // Places the desktop between two neighbours of the same profile; an absent
@@ -2814,7 +2813,6 @@ model DesktopReorderMessage {
   desktop_id: string;
   previous_desktop_id?: string;
   next_desktop_id?: string;
-  expected_revision: safeint;
 }
 
 model DesktopSetOrderMessage {
@@ -2888,7 +2886,6 @@ model DesktopPlaceSessionMessage {
   cmd: "desktop_place_session";
   request_id: string;
   desktop_id: string;
-  expected_revision: safeint;
   session_id: SessionID;
   anchor_pane_id?: string;
   direction?: LayoutSplitDirection;
@@ -2896,20 +2893,22 @@ model DesktopPlaceSessionMessage {
 }
 
 // Moves a pane or tile beside anchor_id, within one desktop or between two
-// desktops of one profile. An absent anchor_id docks against the target's root.
-// Both revisions are checked and both desktops change in one transaction.
+// desktops of one profile. A target shortcut slot is resolved or created; absent
+// both target fields, create a desktop in the lowest free shortcut slot.
+// An absent edge places beside the target's current active leaf. An explicit edge
+// keeps the requested anchor, or docks against the root when no anchor is given.
+// Destination creation and both layouts change in one transaction.
 model DesktopMoveLeafMessage {
   cmd: "desktop_move_leaf";
   request_id: string;
   source_desktop_id: string;
-  target_desktop_id: string;
+  target_desktop_id?: string;
+  target_shortcut_slot?: int32;
   leaf_id: string;
   with_delegates?: boolean;
   anchor_id?: string;
-  edge: LayoutDockEdge;
+  edge?: LayoutDockEdge;
   leaf_share?: float64;         // The moved leaf's share of the new split, in (0,1)
-  expected_source_revision: safeint;
-  expected_target_revision: safeint;
 }
 
 // Removes a placement or a tile. It never closes an agent.
@@ -2918,7 +2917,6 @@ model DesktopRemoveLeafMessage {
   request_id: string;
   desktop_id: string;
   leaf_id: string;
-  expected_revision: safeint;
 }
 
 model DesktopSetSplitRatioMessage {
@@ -2927,7 +2925,6 @@ model DesktopSetSplitRatioMessage {
   desktop_id: string;
   split_id: string;
   ratio: float64;
-  expected_revision: safeint;
 }
 
 // Docks a tile beside anchor_id or, absent, beside the active leaf. The tile
@@ -2936,7 +2933,6 @@ model DesktopDockTileMessage {
   cmd: "desktop_dock_tile";
   request_id: string;
   desktop_id: string;
-  expected_revision: safeint;
   tile_id: string;
   tile_kind: string;
   tile_params?: string;
@@ -2950,7 +2946,6 @@ model DesktopUpdateTileMessage {
   cmd: "desktop_update_tile";
   request_id: string;
   desktop_id: string;
-  expected_revision: safeint;
   tile_id: string;
   tile_params?: string;
   tile_session_id?: SessionID;

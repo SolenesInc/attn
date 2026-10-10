@@ -44,6 +44,7 @@ func TestClosingTilesWalksTheDesktopFocusHistory(t *testing.T) {
 					if result := closeFromApp(app, id); result.Error != nil {
 						t.Fatal(*result.Error)
 					}
+
 					view := viewProfile(t, w, profileID)
 					_, want := view.paneOf(t, row.wants[i])
 					if got := view.desktops[desktop.ID].ActivePaneID; got != want {
@@ -79,11 +80,11 @@ func TestDesktopFocusHistorySurvivesRestartAndTileMoves(t *testing.T) {
 		app = w.AppOn(profileID)
 		move := func(leaf string) string {
 			t.Helper()
-			view := viewProfile(t, w, profileID)
+
 			id := uuid.NewString()
 			result := mustProfileRequest(app, protocol.DesktopMoveLeafMessage{
-				Cmd: protocol.CmdDesktopMoveLeaf, RequestID: id, SourceDesktopID: source.ID, TargetDesktopID: target.ID, LeafID: leaf,
-				Edge: protocol.LayoutDockEdgeRight, ExpectedSourceRevision: view.desktops[source.ID].Revision, ExpectedTargetRevision: view.desktops[target.ID].Revision,
+				Cmd: protocol.CmdDesktopMoveLeaf, RequestID: id, SourceDesktopID: source.ID, TargetDesktopID: protocol.Ptr(target.ID), LeafID: leaf,
+				Edge: protocol.Ptr(protocol.LayoutDockEdgeRight),
 			}, id)
 			return protocol.Deref(result.PaneID)
 		}
@@ -101,9 +102,9 @@ func TestDesktopFocusHistorySurvivesRestartAndTileMoves(t *testing.T) {
 		for _, row := range []struct{ desktop, close, want string }{
 			{source.ID, "d", "b"}, {target.ID, renamed, "c"}, {target.ID, "c", "y"},
 		} {
-			current := viewProfile(t, w, profileID).desktops[row.desktop]
+
 			id := uuid.NewString()
-			result := mustProfileRequest(app, protocol.DesktopRemoveLeafMessage{Cmd: protocol.CmdDesktopRemoveLeaf, RequestID: id, DesktopID: row.desktop, LeafID: row.close, ExpectedRevision: current.Revision}, id)
+			result := mustProfileRequest(app, protocol.DesktopRemoveLeafMessage{Cmd: protocol.CmdDesktopRemoveLeaf, RequestID: id, DesktopID: row.desktop, LeafID: row.close}, id)
 			if got := result.Desktops[0].ActivePaneID; got != row.want {
 				t.Fatalf("closing %s on %s selected %s, want %s", row.close, row.desktop, got, row.want)
 			}
@@ -157,10 +158,10 @@ func TestUtilityTilesShareFocusHistoryWithAgentTiles(t *testing.T) {
 			shownIn(t, requestShowLeaf(app, desktop.ID, leaf), desktop.ID, leaf)
 		}
 		for _, row := range []struct{ close, want string }{{"notes", "reference"}, {"reference", paneB}} {
-			current := viewProfile(t, w, profileID).desktops[desktop.ID]
+
 			id := uuid.NewString()
 			removed := mustProfileRequest(app, protocol.DesktopRemoveLeafMessage{
-				Cmd: protocol.CmdDesktopRemoveLeaf, RequestID: id, DesktopID: desktop.ID, LeafID: row.close, ExpectedRevision: current.Revision,
+				Cmd: protocol.CmdDesktopRemoveLeaf, RequestID: id, DesktopID: desktop.ID, LeafID: row.close,
 			}, id)
 			if removed.Desktops[0].ActivePaneID != row.want {
 				t.Fatalf("close %s selected %s, want %s", row.close, removed.Desktops[0].ActivePaneID, row.want)

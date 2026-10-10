@@ -2,10 +2,10 @@ import { act, fireEvent, screen } from '@testing-library/react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { describe, expect, it, vi } from 'vitest';
 import { openActionMenu, openSession } from './test/appFixtures';
-import { emptyDesktop, soloDesktop, daemonSession } from './test/daemonFixtures';
+import { emptyDesktop, soloDesktop, daemonSession, daemonDesktop, defaultProfile } from './test/daemonFixtures';
 import { fakeRects } from './test/layout';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
-import type { Reply, ScriptedDaemon } from './test/scriptedDaemon';
+import type { ScriptedDaemon } from './test/scriptedDaemon';
 import { pane, relayOut, renderDesktop, split } from './test/desktopLayouts';
 import { serveLaunches } from './test/locations';
 
@@ -195,24 +195,9 @@ describe('App desktop layout', () => {
     expect(daemon.sentOf('desktop_show_session').filter((command) => command.session_id === spawn.id)).toEqual([]);
   });
 
-  it('puts the keyboard in a docked tile even when its dock had to retry a stale revision', async () => {
+  it('puts the keyboard in a tile opened after another window changed the desktop', async () => {
     const { daemon } = await openDesktop(pane('s1'), ['s1']);
-    let refusals = 1;
-    daemon.on('desktop_dock_tile', (command) => {
-      const reply = (success: boolean) => ({
-        event: 'profile_action_result', action: command.cmd, request_id: command.request_id ?? '', success,
-        ...(success ? {} : { error: 'desktop ws moved on', error_code: 'stale_revision' }),
-      }) as Reply;
-      const desktop = daemon.arrangement.desktop('ws')!;
-      if (refusals-- > 0) {
-        daemon.arrangement.replace(desktop);
-        return [reply(false), daemon.arrangement.changed()];
-      }
-      const tree = { type: 'split', split_id: `split-${command.tile_id}`, direction: 'vertical', ratio: 0.5, children: [JSON.parse(desktop.tree_json), { type: 'tile', tile_id: command.tile_id, tile_kind: command.tile_kind, tile_params: command.tile_params }] };
-      daemon.arrangement.replace({ ...desktop, tree_json: JSON.stringify(tree), active_pane_id: command.tile_id });
-      return [reply(true), daemon.arrangement.changed()];
-    });
-
+    daemon.arrangement.replace(daemon.arrangement.desktop('ws')!);
     act(() => screen.getByTestId('sidebar-home').focus());
     pressShortcut('notebook.openTile');
     await daemon.idle();
@@ -220,8 +205,9 @@ describe('App desktop layout', () => {
     await daemon.idle();
 
     const docks = daemon.sentOf('desktop_dock_tile');
-    expect(docks).toHaveLength(2);
-    expect(document.activeElement?.closest('[data-pane-id]')?.getAttribute('data-pane-id')).toBe(docks[1].tile_id);
+    expect(docks).toHaveLength(1);
+    expect(docks[0]).not.toHaveProperty('expected_revision');
+    expect(document.activeElement?.closest('[data-pane-id]')?.getAttribute('data-pane-id')).toBe(docks[0].tile_id);
   });
 
   it('places a split only through its spawn, whose placement shows it', async () => {
@@ -272,15 +258,6 @@ describe('App desktop layout', () => {
 
   it('moves a pane dropped on the sidebar onto a new desktop', async () => {
     const { daemon } = await openDesktop(SIDE_BY_SIDE, ['s1', 's2']);
-    daemon.on('desktop_create', (command) => {
-      const created = emptyDesktop('desktop-new', { order_key: 'z' });
-      daemon.arrangement.desktops = [...daemon.arrangement.desktops, created];
-      return [
-        { event: 'profile_action_result', action: command.cmd, request_id: command.request_id, success: true, desktops: [created] },
-        daemon.arrangement.changed(),
-      ];
-    });
-    daemon.on('desktop_move_leaf', (command) => ({ event: 'profile_action_result', action: command.cmd, request_id: command.request_id, success: true }));
 
     fireEvent.pointerDown(document.querySelector('[data-pane-id="pane-s2"] .desktop-pane-header')!, { button: 0, pointerId: 1, clientX: 100, clientY: 10 });
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 150, clientY: 60 });
@@ -292,9 +269,37 @@ describe('App desktop layout', () => {
 
     expect(daemon.sentOf('desktop_move_leaf')).toEqual([expect.objectContaining({
       source_desktop_id: 'ws',
-      target_desktop_id: 'desktop-new',
       leaf_id: 'pane-s2',
     })]);
+  });
+
+  it('keeps Home when a move to a new desktop answers after the user navigated there', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      profiles: [defaultProfile('ws')],
+      desktops: [daemonDesktop('ws', { root: { type: 'tile', tile_id: 'notes', tile_kind: 'markdown', tile_params: '/notes.md' } }, { shortcut_slot: 1, active_pane_id: 'notes' })],
+    } });
+    await gesture(daemon, () => pressShortcut('desktop.select1'));
+    await gesture(daemon, () => fireEvent.click(screen.getByTitle('Expand sidebar')));
+    const held: Array<Extract<(typeof daemon.sent)[number], { cmd: 'desktop_move_leaf' }>> = [];
+    daemon.on('desktop_move_leaf', (command) => { held.push(command); });
+
+    fireEvent.pointerDown(document.querySelector('[data-pane-id="notes"] .desktop-dock-tile-header')!, { button: 0, pointerId: 1, clientX: 100, clientY: 10 });
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 150, clientY: 60 });
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 200, clientY: 100 });
+    fireEvent.pointerUp(screen.getByTestId('new-desktop-dropzone'), { pointerId: 1 });
+    await daemon.idle();
+    expect(held).toHaveLength(1);
+    expect(daemon.sentOf('desktop_create')).toEqual([]);
+
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('sidebar-home')));
+    await gesture(daemon, () => daemon.replyTo(held[0], {
+      event: 'profile_action_result', action: held[0].cmd, request_id: held[0].request_id, success: true,
+      pane_id: 'notes', desktops: [emptyDesktop('new-destination')],
+    }));
+
+    expect(daemon.sentOf('desktop_show_leaf')).toEqual([]);
+    expect(daemon.sentOf('desktop_set_current').map((command) => command.desktop_id)).toEqual(['ws']);
+    expect(screen.getByTestId('sidebar-home').getAttribute('aria-current')).toBe('page');
   });
 
   it('keeps a later split resize the daemon accepted when an earlier one on the same split is refused', async () => {
