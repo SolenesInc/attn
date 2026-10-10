@@ -70,6 +70,28 @@ func TestResumingASeedRelaunchesItsTenderInItsOwnConversation(t *testing.T) {
 	if got := lifeShow(t, cli, seed).Seed; got.Status != "growing" || got.TenderSession != session || protocol.Deref(got.LastExecutionID) != session {
 		t.Errorf("the resumed parked seed = %+v, want it growing again under %s", got, session)
 	}
+
+	child, err := cli.SeedPlant(session, "Payments", "Implement payments.", seed, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sibling, err := cli.SeedPlant(session, "Receipts", "Implement receipts.", seed, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lifeMove(t, cli, string(session), child.Seed.ID, "tend", "", "")
+	closePane(app, sessionPane{session: string(session)})
+	if resumed := seedResumeRequest(app, child.Seed.ID); !resumed.Success || protocol.Deref(resumed.SessionID) != session {
+		t.Fatalf("resume from the child = %+v, want the same agent", resumed)
+	}
+	seedResumeContinues(t, w, first, string(session))
+	ready, err := cli.SeedReady(session, "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ready.ScopeID != seed || !slices.ContainsFunc(ready.Seeds, func(s protocol.Seed) bool { return s.ID == sibling.Seed.ID }) {
+		t.Errorf("ready after resuming a child = %+v, want the original project %s with sibling %s", ready, seed, sibling.Seed.ID)
+	}
 }
 
 func TestAResumeThatCannotReachItsConversationIsRefusedAndCreatesNothing(t *testing.T) {

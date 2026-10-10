@@ -1,3 +1,4 @@
 kind: fixed
 area: garden
 change: Resuming a seed's agent preserves edits and harvesting during launch. Failed launches leave the seed claimed so another agent can take it.
+notes: Resuming a task keeps the agent's original project assignment.
