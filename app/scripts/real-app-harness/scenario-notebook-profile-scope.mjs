@@ -109,12 +109,13 @@ async function main() {
         await waitDom({ selector: '[data-testid="settings-modal"]' });
         await client.request('dom_click', { selector: '[data-testid="settings-nav-desktop"]' });
         await waitDom({ selector: '[data-testid="settings-notebook-root-effective"]', textIncludes: entry.root });
+        await client.request('dom_scroll_into_view', { selector: '[data-testid="settings-notebook-root-input"]' });
         const description = await client.request('dom_text', { selector: '[data-testid="settings-notebook-root-input"]' });
         runner.writeJson(`${entry.label}-settings.json`, description);
         await captureFrontWindowScreenshot(path.join(runner.runDir, `${entry.label}-settings.png`), { client, driver });
         await client.request('dom_click', { selector: '[data-testid="settings-close"]' });
         await pressShortcutKeys(client, driver, 'notebook.openFullscreen');
-        await waitDom({ selector: '[role="dialog"][aria-label="Notebook"]' });
+        await waitDom({ selector: '.notebook-browser[role="dialog"]' });
         await client.request('dom_click', { selector: '[role="treeitem"][title="journal"]' });
         await waitDom({ selector: '[role="treeitem"][title="journal/2026-10-10.md"]' });
         await client.request('dom_click', { selector: '[role="treeitem"][title="journal/2026-10-10.md"]' });
@@ -123,8 +124,8 @@ async function main() {
         const other = entry.label === 'Work' ? 'Home' : 'Work';
         runner.assert(!document.text.includes(`${other} profile journal`), 'only this profile journal is shown', document);
         await captureFrontWindowScreenshot(path.join(runner.runDir, `${entry.label}-notebook.png`), { client, driver });
-        await client.request('dom_key', { selector: '[role="dialog"][aria-label="Notebook"]', key: 'Escape' });
-        await waitDom({ selector: '[role="dialog"][aria-label="Notebook"]', absent: true });
+        await client.request('dom_key', { selector: '.notebook-browser[role="dialog"]', key: 'Escape' });
+        await waitDom({ selector: '.notebook-browser[role="dialog"]', absent: true });
       });
     }
     console.log(JSON.stringify(await runner.finishSuccess({ profiles: owned.map((entry) => entry.profile.id) }), null, 2));
