@@ -1,0 +1,4 @@
+kind: removed
+area: remote
+change: Remote endpoints are gone. The Settings endpoints list, the session picker's target bar (YOLO is now its own row), endpoint badges, the Sync banner, `attn enrollment enroll`, `attn ws-relay` and `attn client-token` no longer exist.
+notes: A data folder that an older attn enrolled to another daemon still refuses to start until you run `attn enrollment leave`.

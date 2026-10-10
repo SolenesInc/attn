@@ -11,7 +11,7 @@ agents attn runs, the daemon's clients, or a later version of attn
 reading today's data. attn's promises include:
 
 - **Protocol**: the commands, responses, and events exchanged between the
-  daemon and its clients: the app, the CLI, and remote daemons.
+  daemon and its clients, the app and the CLI.
 - **Durability**: sessions, terminals, and the database survive app, daemon,
   and machine restarts, and upgrades between versions.
 - **CLI**: commands, output, and exit codes that users and agents rely on.

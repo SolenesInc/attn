@@ -1,18 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
-mode="${1:?fixtures or runner}"
 root="$(cd "$(dirname "$0")/../../../.." && pwd)"
 export PATH="$HOME/.local/bin:$HOME/.bun/bin:$HOME/.cargo/bin:/usr/local/go/bin:$PATH"
 if [[ "$(uname -s)" != Linux ]]; then
   echo 'Provisioning requires a Linux guest' >&2
   exit 1
 fi
-if [[ "$mode" == runner ]]; then
-  . /etc/os-release
-  if [[ "$ID" != ubuntu || "$VERSION_ID" != 24.04 ]]; then
-    echo 'The runner provisioner requires Ubuntu 24.04; use run on other preconfigured Linux guests' >&2
-    exit 1
-  fi
+. /etc/os-release
+if [[ "$ID" != ubuntu || "$VERSION_ID" != 24.04 ]]; then
+  echo 'The runner provisioner requires Ubuntu 24.04; use run on other preconfigured Linux guests' >&2
+  exit 1
 fi
 sudo env DEBIAN_FRONTEND=noninteractive apt-get update -qq
 sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git curl ca-certificates unzip python3 iproute2 nodejs npm
@@ -20,14 +17,6 @@ bun_version="$(awk '$1 == "bun" {print $2}' "$root/.tool-versions")"
 if [[ "$(bun --version 2>/dev/null || true)" != "$bun_version" ]]; then
   curl -fsSL https://bun.sh/install | bash -s -- "bun-v$bun_version"
 fi
-fixture="$HOME/.attn/real-app-harness/agent-fixtures/bin"
-mkdir -p "$fixture"
-install -m 0755 "$root/app/scripts/real-app-harness/mockAgent.mjs" "$fixture/attn-harness-mock-agent"
-for name in claude codex copilot pi; do
-  install -m 0755 "$root/app/scripts/real-app-harness/remote-agent-tripwire-shim.sh" "$fixture/$name"
-done
-[[ "$mode" == runner ]] || exit 0
-
 sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq software-properties-common
 sudo add-apt-repository -y ppa:fish-shell/release-4
 sudo env DEBIAN_FRONTEND=noninteractive apt-get update -qq

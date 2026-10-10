@@ -80,8 +80,7 @@ Actions:
   stop        Stop managed VM; preserves disk and caches
   connection  Print provider/SSH connection as JSON
   sync        Copy HEAD plus staged, unstaged and non-ignored new files
-  provision   Sync and install Ubuntu runner toolchains, sandbox and fixtures
-  fixtures    Sync and install only remote scenario tools and mock agents
+  provision   Sync and install Ubuntu runner toolchains and sandbox
   run         Run a command in the synced Linux checkout; preserve its exit code
   build       Sync and install the packaged app in the named guest instance
   test        Run the serial app matrix under Xvfb; collect artifacts even on failure
@@ -112,10 +111,10 @@ Examples:
     provider.up();
     return provider.ssh('uname -srmo');
   }
-  if (!['sync', 'provision', 'fixtures', 'run', 'build', 'test', 'artifacts', 'clean'].includes(options.action)) {
+  if (!['sync', 'provision', 'run', 'build', 'test', 'artifacts', 'clean'].includes(options.action)) {
     throw new Error(`Unknown action: ${options.action}`);
   }
-  if (['provision', 'fixtures'].includes(options.action)) {
+  if (options.action === 'provision') {
     provider.up();
     provider.ssh('bash -s', {
       input: fs.readFileSync(path.join(repo, 'app/scripts/real-app-harness/vm/bootstrap.sh')),
@@ -125,10 +124,10 @@ Examples:
   const root = guestRoot(provider);
   const destination = path.resolve(options.out || path.join(os.tmpdir(), 'attn-linux-artifacts', options.provider, key));
   const execute = (args) => provider.ssh(`bash -c ${quote(guestCommand(root, options.instance, args))}`);
-  if (['sync', 'provision', 'fixtures', 'build'].includes(options.action)) syncSource(provider, repo, root);
+  if (['sync', 'provision', 'build'].includes(options.action)) syncSource(provider, repo, root);
   if (options.action === 'sync') return;
-  if (['provision', 'fixtures'].includes(options.action)) {
-    return execute(['bash', 'app/scripts/real-app-harness/vm/provision.sh', options.action === 'fixtures' ? 'fixtures' : 'runner']);
+  if (options.action === 'provision') {
+    return execute(['bash', 'app/scripts/real-app-harness/vm/provision.sh']);
   }
   if (options.action === 'build') {
     return execute(['node', 'app/scripts/real-app-harness/vm/build.mjs']);

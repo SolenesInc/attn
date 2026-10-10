@@ -14,9 +14,6 @@ import {
   instanceForAppPath,
 } from './harnessInstance.mjs';
 
-export const DEFAULT_REMOTE_SSH_TARGET =
-  process.env.ATTN_HARNESS_REMOTE_SSH_TARGET || 'attn-remote@orb';
-
 export function shownAgentId(state) {
   return state?.view === 'session' && state.activeLeaf?.kind === 'agent' ? state.activeLeaf.sessionId : null;
 }
@@ -340,7 +337,7 @@ export async function openHarnessDesktop(client, observer) {
 
 export async function relaunchAppAndConnect(client, observer, { agentExecutables = {} } = {}) {
   await client.quitApp();
-  // Relaunch scenarios (e.g. tr205) depend on sessions surviving the
+  // Relaunch scenarios (e.g. tr201) depend on sessions surviving the
   // relaunch, so the stale-session sweep must not run here.
   await launchFreshAppAndConnect(client, observer, { sweepStaleSessions: false, agentExecutables });
 }
@@ -351,7 +348,6 @@ export async function createSessionAndWaitForInitialPane({
   cwd,
   label,
   agent,
-  endpointId = null,
   sessionWaitMs = 30_000,
   promptReadyFn = null,
   promptReadyTimeoutMs = 45_000,
@@ -368,7 +364,6 @@ export async function createSessionAndWaitForInitialPane({
     cwd,
     label,
     agent,
-    ...(endpointId ? { endpoint_id: endpointId } : {}),
   });
   await observer.waitForSession({ id: result.sessionId, timeoutMs: sessionWaitMs });
   if (typeof promptReadyFn === 'function') {

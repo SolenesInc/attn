@@ -81,21 +81,6 @@ pnpm --dir app real-app:linux stop
 `clean` removes only the selected installed instance using the guest CLI.
 `stop` preserves source and caches. `up` starts the VM again without provisioning.
 
-## Remote endpoint scenarios
-
-Remote endpoints are off in this release, so the catalog skips these scenarios on
-every platform until outpost integration returns.
-
-The `tr*` scenarios run the app locally and connect to a second machine. Install
-only their mock-agent fixtures with `real-app:linux fixtures`. Their
-`ATTN_HARNESS_REMOTE_SSH_TARGET` must be an alias that ordinary `ssh` can resolve,
-since the app's daemon also connects to it.
-
-For Lima, `real-app:linux connection` prints the generated SSH config path.
-Include that file in your SSH configuration and use `lima-attn-linux` as the
-target. The runner itself passes the config explicitly and needs no SSH config edit.
-The legacy `real-app:provision-remote` command still provisions `attn-remote@orb`.
-
 ## Extending providers
 
 Add an adapter to `app/scripts/real-app-harness/vm/providers.mjs` with `up`,

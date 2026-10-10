@@ -1,4 +1,3 @@
-const REMOTE_ENDPOINTS_OFF = 'remote endpoints are off in this release, so the app cannot reach a remote daemon';
 
 export const scenarioCatalog = [
   {
@@ -333,38 +332,6 @@ export const scenarioCatalog = [
     label: 'Block geometry through relaunch replay + split/close-split',
     command: ['pnpm', 'run', 'real-app:scenario-terminal-block-resize'],
     timeoutMs: 360_000,
-  },
-  {
-    id: 'tr205-probe-codex',
-    skipOn: { darwin: REMOTE_ENDPOINTS_OFF, linux: REMOTE_ENDPOINTS_OFF },
-    runnerId: 'TR-205',
-    label: 'TR-205 remote probe (codex vocabulary)',
-    command: ['pnpm', 'run', 'real-app:scenario-tr205', '--', '--remote-agent', 'probe:codex'],
-    freshWorldAfter: true,
-  },
-  {
-    id: 'tr205-probe-claude',
-    skipOn: { darwin: REMOTE_ENDPOINTS_OFF, linux: REMOTE_ENDPOINTS_OFF },
-    runnerId: 'TR-205',
-    label: 'TR-205 remote probe (claude vocabulary)',
-    command: ['pnpm', 'run', 'real-app:scenario-tr205', '--', '--remote-agent', 'probe:claude'],
-    freshWorldAfter: true,
-  },
-  {
-    id: 'tr502',
-    skipOn: { darwin: REMOTE_ENDPOINTS_OFF, linux: REMOTE_ENDPOINTS_OFF },
-    runnerId: 'TR-502',
-    label: 'TR-502 remote relaunch splits',
-    command: ['pnpm', 'run', 'real-app:scenario-tr502'],
-    freshWorldAfter: true,
-  },
-  {
-    id: 'tr504',
-    skipOn: { darwin: REMOTE_ENDPOINTS_OFF, linux: REMOTE_ENDPOINTS_OFF },
-    runnerId: 'TR-504',
-    label: 'TR-504 remote cleanup',
-    command: ['pnpm', 'run', 'real-app:scenario-tr504'],
-    freshWorldAfter: true,
   },
   {
     id: 'tr201-local-claude',

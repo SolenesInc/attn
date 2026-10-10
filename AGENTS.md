@@ -15,8 +15,8 @@ as a maintainer:
 - The queue mode sorts agents into "waiting for you" or "busy" and moves the
   user to the next one after every prompt. State classification and turn
   accounting exist to serve this.
-- Remote hosts. Everything the daemon does also works over SSH on a Linux box,
-  which is why `cmd/attn` and `internal/**` build on Linux.
+- Linux. The daemon and CLI run on a Linux box, which is why `cmd/attn` and
+  `internal/**` build on Linux.
 - The Garden is the work tracker: seeds planted, tended, harvested. It is the
   unit agents hand off, work upon, and help them stay organized.
 - Visible orchestration. Delegations are full sessions the user can open and
@@ -101,11 +101,6 @@ count.
   understood.
 - Align with the user before adding a bus event or changing an existing event's
   name, subject, payload, semantics, or compatibility behavior.
-- Remote outposts are temporarily incomplete: Garden and crew remain home-only
-  until the generic uplink exists, and other cross-daemon flows may be
-  unsupported. Do not absorb that remote debt into unrelated work; preserve
-  existing fences and fail loudly when an operation depends on an unsupported
-  remote path.
 - Product prompts address the user, never "Victor". Distinguish the agent
   changing attn from the agents it runs.
 
@@ -210,8 +205,6 @@ Follow [Testing](docs/testing.md). In short:
 - Stop drains running jobs and lifetime work before closing Git or shutting down
   PTYs. Handler and Git deadlines still apply; shutdown itself does not fence or
   cancel their results.
-- Garden/crew handlers call `Daemon.requireHome` (`internal/enrollment`).
-  Outposts own sessions; Garden/crew belong to their home.
 - Everything belongs to one profile for life, and anything in another profile is
   treated as if it doesn't exist (e.g. /resume of its conversation opens a new
   session here).
@@ -238,9 +231,8 @@ Never hand-edit `internal/protocol/generated.go` or
 ## Event bus
 
 - Publish entity ids as fact subjects; omit byte streams.
-- Only projections send wire traffic. The exceptions are the remote relay
-  (already published on the remote bus), per-watcher filesystem change bursts,
-  and tile content sent to its subscribers.
+- Only projections send wire traffic. The exceptions are per-watcher
+  filesystem change bursts and tile content sent to its subscribers.
 - Projections only write to the wire. A state change or nested publish inside
   one can deadlock.
 - Bulk changes publish one fact per entity inside `coalesceSnapshots`.
