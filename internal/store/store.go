@@ -1542,6 +1542,9 @@ func (s *Store) SetPRs(prs []*protocol.PR) error {
 		delete(existing, pr.ID)
 	}
 	for id := range existing {
+		if _, err := tx.Exec("DELETE FROM pr_poll_times WHERE pr_id = ?", id); err != nil {
+			return err
+		}
 		if _, err := tx.Exec("DELETE FROM prs WHERE id = ?", id); err != nil {
 			return err
 		}
