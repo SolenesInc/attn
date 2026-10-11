@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -22,14 +21,9 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
-const reloadStuckFlagGrace = 5 * time.Second
-
 type terminalExitIntent uint8
 
-const (
-	terminalExitReload terminalExitIntent = 1 << iota
-	terminalExitStop
-)
+const terminalExitStop terminalExitIntent = 1
 
 func (d *Daemon) markTerminalExitIntent(id harness.TerminalID, intent terminalExitIntent) {
 	d.terminalExitIntentMu.Lock()
@@ -38,10 +32,6 @@ func (d *Daemon) markTerminalExitIntent(id harness.TerminalID, intent terminalEx
 		d.terminalExitIntents = make(map[harness.TerminalID]terminalExitIntent)
 	}
 	d.terminalExitIntents[id] |= intent
-}
-
-func (d *Daemon) markReloading(id harness.TerminalID) {
-	d.markTerminalExitIntent(id, terminalExitReload)
 }
 
 func (d *Daemon) consumeTerminalExitIntent(id harness.TerminalID, intent terminalExitIntent) bool {
@@ -57,8 +47,43 @@ func (d *Daemon) consumeTerminalExitIntent(id harness.TerminalID, intent termina
 	return true
 }
 
-func (d *Daemon) clearReloading(id harness.TerminalID) {
-	d.clearTerminalExitIntent(id, terminalExitReload)
+func (d *Daemon) claimTerminalRuntime(opts *ptybackend.SpawnOptions) (undo func()) {
+	if opts.LifecycleID == "" {
+		opts.LifecycleID = uuid.NewString()
+	}
+	d.terminalExitIntentMu.Lock()
+	defer d.terminalExitIntentMu.Unlock()
+	if d.terminalRuntimes == nil {
+		d.terminalRuntimes = make(map[harness.TerminalID]string)
+	}
+	previous, claimed := d.terminalRuntimes[opts.ID]
+	d.terminalRuntimes[opts.ID] = opts.LifecycleID
+	return func() {
+		d.terminalExitIntentMu.Lock()
+		defer d.terminalExitIntentMu.Unlock()
+		if d.terminalRuntimes[opts.ID] != opts.LifecycleID {
+			return
+		}
+		if claimed {
+			d.terminalRuntimes[opts.ID] = previous
+		} else {
+			delete(d.terminalRuntimes, opts.ID)
+		}
+	}
+}
+
+func (d *Daemon) exitOfSupersededRuntime(info ptybackend.ExitInfo) bool {
+	d.terminalExitIntentMu.Lock()
+	defer d.terminalExitIntentMu.Unlock()
+	current, claimed := d.terminalRuntimes[info.ID]
+	if !claimed {
+		return false
+	}
+	if current != info.LifecycleID {
+		return true
+	}
+	delete(d.terminalRuntimes, info.ID)
+	return false
 }
 
 func (d *Daemon) clearTerminalExitIntent(id harness.TerminalID, intent terminalExitIntent) {
@@ -285,7 +310,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 	}
 	ctx := context.Background()
 	terminal := opts.ID
-	d.markReloading(terminal)
+	d.claimTerminalRuntime(&opts)
 	d.sessionInputs().fenceSession(sessionID)
 	unlockEnds := d.lockTerminalEnds(sessionID)
 
@@ -301,8 +326,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 	if spawnErr := d.ptyBackend.Spawn(ctx, opts); spawnErr != nil {
 		unlockEnds()
 		d.logf("reload: respawn failed for %s: %v; finalizing as exited", sessionID, spawnErr)
-		d.clearReloading(terminal)
-		d.handlePTYExit(ptybackend.ExitInfo{ID: terminal, ExitCode: 1})
+		d.handlePTYExit(ptybackend.ExitInfo{ID: terminal, ExitCode: 1, LifecycleID: opts.LifecycleID})
 		return fmt.Errorf("respawn failed for %s: %w", sessionID, spawnErr)
 	}
 	if pluginReload != nil {
@@ -311,9 +335,8 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 			_ = d.ptyBackend.Kill(ctx, terminal, syscall.SIGTERM)
 			_ = d.ptyBackend.Remove(ctx, terminal)
 			unlockEnds()
-			d.clearReloading(terminal)
 			d.closePluginDriverSession(sessionID, "reload_failed", nil, "")
-			d.handlePTYExit(ptybackend.ExitInfo{ID: terminal, ExitCode: 1})
+			d.handlePTYExit(ptybackend.ExitInfo{ID: terminal, ExitCode: 1, LifecycleID: opts.LifecycleID})
 			return fmt.Errorf("activate plugin run failed for %s: %w", sessionID, commitErr)
 		}
 	}
@@ -321,7 +344,6 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 	d.sessionInputs().forgetSession(sessionID)
 	d.recordPlacedInputOwed(sessionID, false)
 
-	d.life.AfterFunc("clearReloading", reloadStuckFlagGrace, func() { d.clearReloading(terminal) })
 	intent := launchIntentFromSpawnOptions(opts, d.isChiefOfStaffSession(sessionID))
 	if prior, ok := d.store.LaunchIntent(sessionID); ok {
 		intent.AutoMode = prior.AutoMode

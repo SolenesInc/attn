@@ -470,11 +470,14 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 
 func (d *Daemon) spawnSessionRuntime(sessionID protocol.SessionID, opts ptybackend.SpawnOptions) error {
 	opts.DaemonEnv = d.spawnRoutingEnv()
+	undoClaim := d.claimTerminalRuntime(&opts)
 	err := d.ptyBackend.Spawn(context.Background(), opts)
-	if err == nil {
-		d.sessionInputs().forgetSession(sessionID)
+	if err != nil {
+		undoClaim()
+		return err
 	}
-	return err
+	d.sessionInputs().forgetSession(sessionID)
+	return nil
 }
 
 // spawnTerminal picks the terminal a launch runs in before its worker starts: the one a pane already

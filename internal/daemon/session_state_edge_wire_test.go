@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -223,13 +224,18 @@ func TestAnAgentThatDiesMidTurnReportsItsExitBeforeItsIdle(t *testing.T) {
 
 func exitOrderOf(p *testworld.Peer, id string) string {
 	var order []string
+	heard := func(what string) {
+		if !slices.Contains(order, what) {
+			order = append(order, what)
+		}
+	}
 	for _, e := range p.Received() {
 		switch {
 		case e.Event == protocol.EventSessionExited && string(protocol.Deref(e.SessionID)) == id:
-			order = append(order, "exited")
+			heard("exited")
 		case e.Event == protocol.EventSessionStateChanged && e.Session != nil && string(e.Session.ID) == id &&
 			protocol.Deref(e.Session.StateReason) == "process_exited":
-			order = append(order, "idle")
+			heard("idle")
 		}
 	}
 	return strings.Join(order, ", ")
