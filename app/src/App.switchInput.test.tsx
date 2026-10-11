@@ -7,6 +7,25 @@ import { gesture, pressShortcut } from './test/renderApp';
 import type { CommandMessage } from './test/protocol';
 
 describe('typing while a selection is awaiting the daemon', () => {
+  it('allows the browser paste accelerator to produce a payload while the target attaches', async () => {
+    const { daemon } = await openAttachedTerminals({
+      sessions: ['s1', 's2'].map((id) => daemonSession(id, { state: 'idle' })),
+      desktops: ['s1', 's2'].map((id) => soloDesktop(id)),
+    });
+    const attaches: CommandMessage<'attach_session'>[] = [];
+    daemon.on('attach_session', (command) => { attaches.push(command); return undefined; });
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Open s2' })));
+    await gesture(daemon, () => {
+      const element = document.activeElement!;
+      if (fireEvent.keyDown(element, { key: 'v', code: 'KeyV', metaKey: true })) {
+        fireEvent.paste(element, { clipboardData: { getData: () => 'pasted', files: [] } });
+      }
+    });
+    expect(daemon.sentOf('pty_input')).toEqual([]);
+    await gesture(daemon, () => daemon.replyTo(attaches[0], { event: 'attach_result', id: 's2', success: true, cols: 80, rows: 24, running: true }));
+    expect(daemon.sentOf('pty_input')).toEqual([expect.objectContaining({ id: 's2', data: 'pasted' })]);
+  });
+
   it('retains input when a new pane arrives before its session registration', async () => {
     const { daemon } = await openAttachedTerminals({
       sessions: [daemonSession('s1', { state: 'idle' })],

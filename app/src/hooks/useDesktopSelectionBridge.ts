@@ -8,6 +8,7 @@ import { displayedArrangement } from '../navigation/sessionNavigation';
 import { arrangementOf } from '../store/sessionNavigationSlice';
 import { isRetainedTerminalEvent, retainTerminalEvent, usePendingTerminalInput } from '../store/pendingTerminalInput';
 import { removeCompositionTextNodes } from '../ghostty/input';
+import { terminalClipboardChord } from '../shortcuts/platform';
 
 export function activeLeafIn(state: Pick<ProfilesState, 'selectedProfileId' | 'currentDesktopId' | 'desktops'>): ActiveLeaf | null {
   return activeLeafOf({
@@ -96,6 +97,7 @@ export function useDesktopSelectionBridge(reportFailure: (message: string) => vo
       const navigation = useSessionStore.getState();
       const intent = navigation.intent;
       if (event.defaultPrevented || isRetainedTerminalEvent(event)) return;
+      if (event instanceof KeyboardEvent && terminalClipboardChord(event)) return;
       const target = event.target instanceof HTMLElement ? event.target : null;
       const terminal = target?.closest<HTMLElement>('.terminal-container');
       if (target?.closest('input, textarea, select, [contenteditable="true"]') && !terminal) return;
