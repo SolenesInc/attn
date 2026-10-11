@@ -102,7 +102,7 @@ func (d *Daemon) handleAskClose(conn net.Conn, msg *protocol.AskCloseMessage) {
 
 func (d *Daemon) handleAskAnswer(client *wsClient, msg *protocol.AskAnswerMessage) {
 	result := protocol.AskAnswerResultMessage{Event: protocol.EventAskAnswerResult, RequestID: msg.RequestID, AskID: msg.AskID}
-	if err := d.answerAsk(msg); err != nil {
+	if err := d.answerAsk(msg, client.selectedProfile()); err != nil {
 		result.Error = protocol.Ptr(err.Error())
 	} else {
 		result.Success = true
@@ -110,13 +110,13 @@ func (d *Daemon) handleAskAnswer(client *wsClient, msg *protocol.AskAnswerMessag
 	d.sendToClient(client, result)
 }
 
-func (d *Daemon) answerAsk(msg *protocol.AskAnswerMessage) error {
+func (d *Daemon) answerAsk(msg *protocol.AskAnswerMessage, profileID string) error {
 	stored, err := d.store.GetOpenAsk(strings.TrimSpace(msg.AskID))
-	if errors.Is(err, store.ErrAskNotOpen) {
-		return errors.New("this ask was already answered or withdrawn")
-	}
-	if err != nil {
+	if err != nil && !errors.Is(err, store.ErrAskNotOpen) {
 		return err
+	}
+	if err != nil || !askShownIn(profileID, d.askProfileID(stored)) {
+		return errors.New("this ask was already answered or withdrawn")
 	}
 	parts, err := ask.Parse(stored.Markdown)
 	if err != nil {
@@ -215,11 +215,15 @@ func (d *Daemon) projectAsks() {
 func asksSnapshot(profileID string, open []openAsk) *protocol.AsksUpdatedMessage {
 	message := &protocol.AsksUpdatedMessage{Event: protocol.EventAsksUpdated, ProfileID: profileID, Asks: []protocol.Ask{}}
 	for _, a := range open {
-		if profileID != "" && a.profileID == profileID {
+		if askShownIn(profileID, a.profileID) {
 			message.Asks = append(message.Asks, a.wire)
 		}
 	}
 	return message
+}
+
+func askShownIn(profileID, askProfileID string) bool {
+	return profileID != "" && askProfileID == profileID
 }
 
 func askToProto(a store.Ask, parts []protocol.AskPart) protocol.Ask {

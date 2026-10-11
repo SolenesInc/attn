@@ -13,6 +13,7 @@ interface AskQuestionCardProps {
 
 export function AskQuestionCard({ askId, index, question, answer, source, onChange }: AskQuestionCardProps) {
   const picked = answer?.picked ?? [];
+  const pickedLabels = new Set(picked);
   const other = answer?.other ?? '';
   const text = answer?.text ?? '';
   const name = `${askId}-${question.key}`;
@@ -22,7 +23,7 @@ export function AskQuestionCard({ askId, index, question, answer, source, onChan
       update({ picked: [label], other: '' });
       return;
     }
-    update({ picked: picked.includes(label) ? picked.filter((value) => value !== label) : [...picked, label] });
+    update({ picked: pickedLabels.has(label) ? picked.filter((value) => value !== label) : [...picked, label] });
   };
   return (
     <fieldset className="ask-question" data-testid={`ask-question-${question.key}`}>
@@ -54,11 +55,11 @@ export function AskQuestionCard({ askId, index, question, answer, source, onChan
       ) : (
         <div className="ask-choices" role={question.kind === 'one' ? 'radiogroup' : 'group'} aria-label={question.prompt}>
           {question.choices.map((choice) => (
-            <label key={choice.label} className={`ask-choice ${picked.includes(choice.label) ? 'ask-choice--picked' : ''}`.trim()}>
+            <label key={choice.label} className={`ask-choice ${pickedLabels.has(choice.label) ? 'ask-choice--picked' : ''}`.trim()}>
               <input
                 type={question.kind === 'one' ? 'radio' : 'checkbox'}
                 name={name}
-                checked={picked.includes(choice.label)}
+                checked={pickedLabels.has(choice.label)}
                 onChange={() => pick(choice.label)}
               />
               <span className="ask-choice-text">

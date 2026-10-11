@@ -211,6 +211,13 @@ func TestAsksBelongToTheAskingSessionsProfile(t *testing.T) {
 	testworld.Await(app, protocol.EventAsksUpdated, only(home, homeAsk.ID))
 	testworld.Await(sideApp, protocol.EventAsksUpdated, only(side.ID, sideAsk.ID))
 
+	crossed := testworld.Request(sideApp, protocol.AskAnswerMessage{
+		Cmd: protocol.CmdAskAnswer, RequestID: "across", AskID: homeAsk.ID, Answers: []protocol.AskAnswer{}, Note: protocol.Ptr("from the side"),
+	}, protocol.EventAskAnswerResult, func(r protocol.AskAnswerResultMessage) bool { return r.RequestID == "across" })
+	if crossed.Success {
+		t.Fatal("an app on another profile answered the ask")
+	}
+
 	selectProfile(app, side.ID)
 	testworld.Await(app, protocol.EventAsksUpdated, only(side.ID, sideAsk.ID))
 	if shown := w.AppOn(home).Initial.Asks; len(shown) != 1 || shown[0].ID != homeAsk.ID {

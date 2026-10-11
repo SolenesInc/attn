@@ -118,7 +118,7 @@ export function AsksDrawer({ sessions, onOpenAgent, onClose }: AsksDrawerProps) 
   };
 
   return (
-    <div className="asks-drawer" tabIndex={-1} onKeyDown={onKeyDown}>
+    <div className="asks-drawer" role="region" aria-label="Asks" tabIndex={-1} onKeyDown={onKeyDown}>
       <AsksHeader count={ordered.length} onClose={onClose} />
       <ol ref={listRef} className="asks-list" aria-label="Open asks">
         {ordered.map((item) => {
