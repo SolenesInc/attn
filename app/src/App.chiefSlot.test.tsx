@@ -11,6 +11,22 @@ const phase = () => screen.getByTestId('chief-slot').getAttribute('data-chief-ph
 
 for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : 'desktop'} flow`, () => {
   const settings = { ...available, queue_mode_enabled: String(queue) };
+  it.each([false, true])('keeps the configured model focused when its catalog arrives (awake=%s)', async awake => {
+    const current = member({ agent: 'claude', model: 'opus', binding_session: awake ? 'chief-day' : undefined });
+    const { daemon } = await renderApp({
+      initialState: { settings, crew: [current], sessions: awake ? [daemonSession('chief-day', { chief: true })] : [], desktops: awake ? [soloDesktop('chief-day')] : [] },
+      script: daemon => { daemon.on('harness_models', () => {}); },
+    });
+    await gesture(daemon, () => fireEvent.click(slot().getByRole('button', { name: 'Actions for Captain' })));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('menuitem', { name: 'Harness and model…' })));
+    expect(slot().getByRole('radio', { name: /opus/ })).toHaveFocus();
+    await gesture(daemon, () => {
+      for (const request of daemon.sentOf('harness_models').filter(command => command.harness === 'claude')) daemon.replyTo(request, {
+        event: 'harness_models_result', request_id: request.request_id, success: true, models: [reportedModel('claude', 'opus', 'Opus 5.5', 'deep')], tier_defaults: { deep: 'opus' }, detail: 'Reported by the test harness',
+      });
+    });
+    expect(slot().getByRole('radio', { name: /Opus 5.5/ })).toHaveFocus();
+  });
   it('keeps an explicit model step focused when a live agent arrives before its models', async () => {
     const { daemon } = await renderApp({
       initialState: { settings, crew: [member()] },

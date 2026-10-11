@@ -86,7 +86,7 @@ export function ChiefSetup({ chief, autoFocus, onSave, onClose, onReturnFocus, o
       <div role="radiogroup" aria-label="Chief model" onKeyDown={event => moveRadio(event, 'model')}>
         {models.map(({ model, stored, label }, index) => {
           const checked = stored || (value.model === model?.id && value.provider === model?.provider);
-          return <button type="button" role="radio" key={stored ? 'stored' : `${model?.provider}/${model?.id}`} aria-checked={checked} tabIndex={checked ? 0 : -1} disabled={busy} onClick={() => { if (model) setDraft(view.withModel(model)); }}>
+          return <button type="button" role="radio" key={`${model?.provider ?? value.provider}/${model?.id ?? value.model}`} aria-checked={checked} tabIndex={checked ? 0 : -1} disabled={busy} onClick={() => { if (model) setDraft(view.withModel(model)); }}>
             <span className="chief-radio-mark">{checked ? '●' : '○'}</span>
             <span>{label}{model === recommended && <small>recommended</small>}</span>
             <kbd>{index + 1}</kbd>
