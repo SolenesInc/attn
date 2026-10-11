@@ -1634,8 +1634,15 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 			return false
 		}
 	}
+	unlockEnds := d.lockTerminalEnds(sessionID)
+	if d.exitOfSupersededRuntime(info) {
+		unlockEnds()
+		d.logf("ignoring exit of a replaced runtime in terminal %s", info.ID)
+		return false
+	}
 	stopped := d.consumeTerminalExitIntent(info.ID, terminalExitStop)
 	if !d.endTerminal(sessionID, info.ID) {
+		unlockEnds()
 		d.logf("terminal %s exited; session %s runs on in its other terminals", info.ID, sessionID)
 		return true
 	}
@@ -1650,6 +1657,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 			d.logf("pty backend remove on exit failed for %s: %v", info.ID, err)
 		}
 	}
+	unlockEnds()
 	d.releaseExitedCrewBinding(sessionID)
 
 	d.publishFact(FactSessionPTYExited, string(sessionID), ptyExit{
@@ -1701,6 +1709,7 @@ func (d *Daemon) removePTYSession(terminal harness.TerminalID) error {
 	if d.ptyBackend == nil {
 		return nil
 	}
+	d.forgetTerminalRuntime(terminal)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	err := d.ptyBackend.Remove(ctx, terminal)

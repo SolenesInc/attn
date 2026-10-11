@@ -76,14 +76,13 @@ func (d *Daemon) exitOfSupersededRuntime(info ptybackend.ExitInfo) bool {
 	d.terminalExitIntentMu.Lock()
 	defer d.terminalExitIntentMu.Unlock()
 	current, claimed := d.terminalRuntimes[info.ID]
-	if !claimed {
-		return false
-	}
-	if current != info.LifecycleID {
-		return true
-	}
-	delete(d.terminalRuntimes, info.ID)
-	return false
+	return claimed && current != info.LifecycleID
+}
+
+func (d *Daemon) forgetTerminalRuntime(id harness.TerminalID) {
+	d.terminalExitIntentMu.Lock()
+	defer d.terminalExitIntentMu.Unlock()
+	delete(d.terminalRuntimes, id)
 }
 
 func (d *Daemon) clearTerminalExitIntent(id harness.TerminalID, intent terminalExitIntent) {
@@ -310,9 +309,9 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 	}
 	ctx := context.Background()
 	terminal := opts.ID
-	d.claimTerminalRuntime(&opts)
 	d.sessionInputs().fenceSession(sessionID)
 	unlockEnds := d.lockTerminalEnds(sessionID)
+	d.claimTerminalRuntime(&opts)
 
 	if killErr := d.ptyBackend.Kill(ctx, terminal, syscall.SIGTERM); killErr != nil {
 		d.logf("reload: kill returned error for %s (continuing): %v", sessionID, killErr)
