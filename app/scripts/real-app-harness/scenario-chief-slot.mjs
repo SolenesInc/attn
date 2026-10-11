@@ -46,9 +46,21 @@ const openChiefRoute = async () => {
   await driver.pressKey('Tab');
   await driver.pressEnter();
   await waitDom('[role="menu"] button:first-of-type', { textIncludes: 'Harness and model' });
-  await screenshot(`03-chief-actions-${(await state()).phase}`);
+  const phase = (await state()).phase;
+  await screenshot(`03-chief-actions-${phase}`);
   await click('[role="menu"] button:first-of-type');
-  await waitDom('[data-testid="chief-setup"] [aria-label="Chief model"] [aria-checked="true"]', { focused: true });
+  try {
+    await waitDom('[data-testid="chief-setup"] [aria-label="Chief model"] [aria-checked="true"]', { focused: true });
+  } catch (cause) {
+    runner.writeJson(`route-focus-failure-${phase}.json`, {
+      chief: await state(),
+      focus: await client.request('dom_active_element', { selector: '[data-testid="chief-setup"] [aria-label="Chief model"] [aria-checked="true"]' }),
+      setup: await client.request('dom_text', { selector: '[data-testid="chief-setup"]' }).catch(error => ({ error: String(error) })),
+      menu: await client.request('dom_text', { selector: '[role="menu"]' }).catch(error => ({ error: String(error) })),
+    });
+    await screenshot(`route-focus-failure-${phase}`);
+    throw cause;
+  }
 };
 const sampleIdle = async name => {
   const before = await snapshot(client.readManifest().pid, readLiveDaemonPid(instance), webkitBaseline);
