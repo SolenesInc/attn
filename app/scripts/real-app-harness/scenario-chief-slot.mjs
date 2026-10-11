@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys, queueDaemonSettingRestore } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -52,6 +52,7 @@ const sampleIdle = async name => {
 };
 const roster = () => JSON.parse(cli(['crew', 'list', '--profile', profile.id, '--json']));
 runner.registerCleanup('close_observer', () => observer.close());
+runner.registerCleanup('quit_app', () => client.quitApp());
 runner.registerCleanup('restore_profile', async () => {
   const binding = chief && roster().find(member => member.key === chief.key)?.binding_session;
   if (binding) {
@@ -74,6 +75,8 @@ try {
     const { logicalBounds } = await client.request('get_window_bounds');
     await client.request('set_window_bounds', { logicalBounds: { ...logicalBounds, x: 0, y: 0 } });
     await driver.activateApp();
+    queueDaemonSettingRestore(observer, 'queue_mode_enabled');
+    queueDaemonSettingRestore(observer, 'model_tier_overrides');
     await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
     previousProfile = (await client.request('get_state')).arrangement.selectedProfileId;
     profile = (await observer.profileCommand('profile_create', { name: `Chief slot ${runner.runId}` })).profile;
