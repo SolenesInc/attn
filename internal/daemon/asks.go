@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/ask"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
@@ -128,7 +129,7 @@ func (d *Daemon) answerAsk(msg *protocol.AskAnswerMessage, profileID string) err
 	if err != nil {
 		return err
 	}
-	answer := inbox.Item{ID: "ask-answer/" + stored.ID, To: stored.To, Kind: inbox.Notice, Source: stored.ID, Text: text}
+	answer := inbox.Item{ID: uuid.NewString(), To: stored.To, Kind: inbox.Notice, Source: stored.ID, Text: text}
 	err = d.store.AnswerAsk(stored.ID, answer, time.Now())
 	if errors.Is(err, store.ErrAskNotOpen) {
 		return errAskGone
