@@ -188,6 +188,10 @@ type ExitInfo struct {
 	LifecycleID string
 }
 
+type RuntimeLifecycleProvider interface {
+	RuntimeLifecycle(id harness.TerminalID) (lifecycleID string, running bool)
+}
+
 type Backend interface {
 	Spawn(ctx context.Context, opts SpawnOptions) error
 	Attach(ctx context.Context, id harness.TerminalID, subscriberID string, opts ...AttachOptions) (AttachInfo, Stream, error)

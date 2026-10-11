@@ -191,7 +191,7 @@ type Daemon struct {
 	recoveredLaunches                 map[protocol.SessionID]*launchWatch
 	terminalExitIntentMu              sync.Mutex
 	terminalExitIntents               map[harness.TerminalID]terminalExitIntent
-	terminalRuntimes                  map[harness.TerminalID]string
+	replacedRuntimes                  map[harness.TerminalID][]string
 	prepareSessionTeardownHook        func(string) error
 	teardownMu                        sync.Mutex
 	tearingDown                       map[protocol.SessionID]chan struct{}
@@ -1709,7 +1709,6 @@ func (d *Daemon) removePTYSession(terminal harness.TerminalID) error {
 	if d.ptyBackend == nil {
 		return nil
 	}
-	d.forgetTerminalRuntime(terminal)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	err := d.ptyBackend.Remove(ctx, terminal)

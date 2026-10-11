@@ -316,6 +316,14 @@ func (b *MigratingBackend) SessionLikelyAlive(ctx context.Context, id harness.Te
 	return false, errors.Join(probeErrs...)
 }
 
+func (b *MigratingBackend) RuntimeLifecycle(id harness.TerminalID) (string, bool) {
+	provider, err := sessionProvider[RuntimeLifecycleProvider](b, id)
+	if err != nil {
+		return "", false
+	}
+	return provider.RuntimeLifecycle(id)
+}
+
 func (b *MigratingBackend) WorkerPIDs(ctx context.Context) map[string]int {
 	result := make(map[string]int)
 	for _, backend := range []Backend{b.legacy, b.shared} {
@@ -367,5 +375,6 @@ var (
 	_ TerminalBuildProvider       = (*MigratingBackend)(nil)
 	_ WorkerUpgrader              = (*MigratingBackend)(nil)
 	_ SessionLivenessProber       = (*MigratingBackend)(nil)
+	_ RuntimeLifecycleProvider    = (*MigratingBackend)(nil)
 	_ RecoverableRuntime          = (*MigratingBackend)(nil)
 )

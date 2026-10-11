@@ -321,6 +321,7 @@ func (m *Manager) Spawn(opts SpawnOptions) error {
 }
 
 func (m *Manager) start(session *Session, lifecycleID string) {
+	session.lifecycleID = lifecycleID
 	m.mu.Lock()
 	m.sessions[session.id] = session
 	onExit := m.onExit
@@ -470,6 +471,14 @@ func (m *Manager) SessionInfo(sessionID string) (SessionInfo, error) {
 	}
 
 	return session.sessionInfo(), nil
+}
+
+func (m *Manager) LifecycleID(sessionID string) (string, bool) {
+	session, err := m.getSession(sessionID)
+	if err != nil {
+		return "", false
+	}
+	return session.lifecycleID, true
 }
 
 func (m *Manager) LastSignal(sessionID string) (Observation, bool) {

@@ -47,42 +47,52 @@ func (d *Daemon) consumeTerminalExitIntent(id harness.TerminalID, intent termina
 	return true
 }
 
-func (d *Daemon) claimTerminalRuntime(opts *ptybackend.SpawnOptions) (undo func()) {
+func withLifecycleID(opts ptybackend.SpawnOptions) ptybackend.SpawnOptions {
 	if opts.LifecycleID == "" {
 		opts.LifecycleID = uuid.NewString()
 	}
-	d.terminalExitIntentMu.Lock()
-	defer d.terminalExitIntentMu.Unlock()
-	if d.terminalRuntimes == nil {
-		d.terminalRuntimes = make(map[harness.TerminalID]string)
+	return opts
+}
+
+func (d *Daemon) runtimeLifecycle(t harness.TerminalID) (string, bool) {
+	provider, ok := d.ptyBackend.(ptybackend.RuntimeLifecycleProvider)
+	if !ok {
+		return "", false
 	}
-	previous, claimed := d.terminalRuntimes[opts.ID]
-	d.terminalRuntimes[opts.ID] = opts.LifecycleID
+	return provider.RuntimeLifecycle(t)
+}
+
+func (d *Daemon) replaceRuntime(sessionID protocol.SessionID, t harness.TerminalID) (done func()) {
+	unlockEnds := d.lockTerminalEnds(sessionID)
+	if current, running := d.runtimeLifecycle(t); running {
+		d.markReplaced(t, current)
+	}
 	return func() {
 		d.terminalExitIntentMu.Lock()
-		defer d.terminalExitIntentMu.Unlock()
-		if d.terminalRuntimes[opts.ID] != opts.LifecycleID {
-			return
-		}
-		if claimed {
-			d.terminalRuntimes[opts.ID] = previous
-		} else {
-			delete(d.terminalRuntimes, opts.ID)
-		}
+		delete(d.replacedRuntimes, t)
+		d.terminalExitIntentMu.Unlock()
+		unlockEnds()
 	}
+}
+
+func (d *Daemon) markReplaced(t harness.TerminalID, lifecycleID string) {
+	d.terminalExitIntentMu.Lock()
+	defer d.terminalExitIntentMu.Unlock()
+	if d.replacedRuntimes == nil {
+		d.replacedRuntimes = make(map[harness.TerminalID][]string)
+	}
+	d.replacedRuntimes[t] = append(d.replacedRuntimes[t], lifecycleID)
 }
 
 func (d *Daemon) exitOfSupersededRuntime(info ptybackend.ExitInfo) bool {
 	d.terminalExitIntentMu.Lock()
-	defer d.terminalExitIntentMu.Unlock()
-	current, claimed := d.terminalRuntimes[info.ID]
-	return claimed && current != info.LifecycleID
-}
-
-func (d *Daemon) forgetTerminalRuntime(id harness.TerminalID) {
-	d.terminalExitIntentMu.Lock()
-	defer d.terminalExitIntentMu.Unlock()
-	delete(d.terminalRuntimes, id)
+	replacing := slices.Contains(d.replacedRuntimes[info.ID], info.LifecycleID)
+	d.terminalExitIntentMu.Unlock()
+	if replacing {
+		return true
+	}
+	current, running := d.runtimeLifecycle(info.ID)
+	return running && current != info.LifecycleID
 }
 
 func (d *Daemon) clearTerminalExitIntent(id harness.TerminalID, intent terminalExitIntent) {
@@ -310,8 +320,8 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 	ctx := context.Background()
 	terminal := opts.ID
 	d.sessionInputs().fenceSession(sessionID)
-	unlockEnds := d.lockTerminalEnds(sessionID)
-	d.claimTerminalRuntime(&opts)
+	unlockEnds := d.replaceRuntime(sessionID, terminal)
+	opts = withLifecycleID(opts)
 
 	if killErr := d.ptyBackend.Kill(ctx, terminal, syscall.SIGTERM); killErr != nil {
 		d.logf("reload: kill returned error for %s (continuing): %v", sessionID, killErr)
@@ -331,6 +341,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 	if pluginReload != nil {
 		if commitErr := pluginReload.commit(); commitErr != nil {
 			d.logf("reload: activate plugin run failed for %s: %v; finalizing as exited", sessionID, commitErr)
+			d.markReplaced(terminal, opts.LifecycleID)
 			_ = d.ptyBackend.Kill(ctx, terminal, syscall.SIGTERM)
 			_ = d.ptyBackend.Remove(ctx, terminal)
 			unlockEnds()

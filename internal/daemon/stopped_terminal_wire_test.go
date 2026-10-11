@@ -198,6 +198,24 @@ func TestStoppingAReloadedAgentKeepsItsTileWhenTheOldExitArrivesLate(t *testing.
 	})
 }
 
+func TestTwoReloadsWhoseOldExitsArriveLateLeaveTheAgentRunning(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.App()
+		agent := w.bubbleClaude(t, app, "shop")
+		releaseFirstExit := agent.term.HoldExitDelivery()
+		var releaseSecondExit func()
+		w.terms.OnNextSpawn(func(term *testworld.Terminal) { releaseSecondExit = term.HoldExitDelivery() })
+		reloadRespawned(t, app, agent.id)
+		reloadRespawned(t, app, agent.id)
+		releaseFirstExit()
+		releaseSecondExit()
+		synctest.Wait()
+		if state := queriedSession(t, w.Client(), agent.id); state.TerminalExit != nil {
+			t.Fatalf("the replaced agents' exits ended the agent the second reload started: %+v", state.TerminalExit)
+		}
+	})
+}
+
 func TestACleanChiefQuitKeepsItsRoleAndStoppedTile(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()

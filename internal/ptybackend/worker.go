@@ -1024,6 +1024,16 @@ func (b *WorkerBackend) TerminalIDs(_ context.Context) []harness.TerminalID {
 
 var _ WorkerProcessProvider = (*WorkerBackend)(nil)
 
+func (b *WorkerBackend) RuntimeLifecycle(id harness.TerminalID) (string, bool) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	session := b.sessions[string(id)]
+	if session == nil {
+		return "", false
+	}
+	return session.LifecycleID, true
+}
+
 func (b *WorkerBackend) WorkerPIDs(_ context.Context) map[string]int {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
