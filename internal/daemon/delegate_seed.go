@@ -14,9 +14,6 @@ import (
 )
 
 func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection, operationID string, sessionID protocol.SessionID, plannerSessionID protocol.SessionID, parentSeedID string, brief string, name string, seedID string, observed garden.Dispatch, fromChief, createSeed bool, profileID ...string) (string, error) {
-	if err := d.requireHome(garden.Surface); err != nil {
-		return "", err
-	}
 	if dispatch, found := d.gardenDispatch(sessionID); found && activeDispatchCrown(dispatch) != "" {
 		bound := activeDispatchCrown(dispatch)
 		if err := d.requireSeedInProfile(bound, firstProfile(profileID), false); err != nil {

@@ -178,38 +178,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     unmount();
   });
 
-  it('serializes endpoint actions so concurrent removals do not collide', async () => {
-    const { result, unmount } = renderHook(() =>
-      useDaemonSocket({
-        onSessionsUpdate: vi.fn(),
-        onPRsUpdate: vi.fn(),
-        onEndpointsUpdate: vi.fn(),
-        onReposUpdate: vi.fn(),
-        onAuthorsUpdate: vi.fn(),
-        wsUrl: 'ws://localhost:9999/ws',
-      }),
-    );
-
-    const ws = await waitForOpenSocket();
-
-    const first = result.current.sendRemoveEndpoint('ep-1');
-    await expect(result.current.sendRemoveEndpoint('ep-2')).rejects.toThrow(
-      'Another endpoint action is already in progress',
-    );
-
-    act(() => {
-      ws.emit({
-        event: 'endpoint_action_result',
-        action: 'remove',
-        endpoint_id: 'ep-1',
-        success: true,
-      });
-    });
-
-    await expect(first).resolves.toMatchObject({ success: true, endpoint_id: 'ep-1' });
-    unmount();
-  });
-
   it('sends the requested cwd and agent when spawning a new agent session', async () => {
     const { unmount } = renderHook(() =>
       useDaemonSocket({

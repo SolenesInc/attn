@@ -154,9 +154,6 @@ func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 	runtime.ParentSeedID = strings.TrimSpace(parentSeedID)
 
 	if msg.Assignment.Kind == protocol.DelegateAssignmentKindNew {
-		if err := d.requireHome(garden.Surface); err != nil {
-			return nil, err
-		}
 		seedID := strings.TrimSpace(reservedSeedID)
 		if seedID == "" {
 			var err error

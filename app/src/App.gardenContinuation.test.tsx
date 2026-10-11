@@ -18,7 +18,6 @@ const PARSER = daemonSeed('s-1', {
     directory_state: 'present',
     execution_id: 'execution-1',
     handover_placement: 'reuse_cwd',
-    host_kind: 'local',
     resume_available: true,
     session_live: false,
     source: 'tender',

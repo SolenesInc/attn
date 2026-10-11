@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"encoding/json"
-	"fmt"
 	"net"
 	"path/filepath"
 	"strings"
@@ -22,31 +21,6 @@ func defaultProfileID(t testing.TB, s *store.Store) string {
 	return profile.ID
 }
 
-func registerTestSession(socketPath, id, label, dir string) error {
-	conn, err := net.Dial("unix", socketPath)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-	if err := json.NewEncoder(conn).Encode(protocol.InjectTestSessionMessage{
-		Cmd: protocol.CmdInjectTestSession,
-		Session: protocol.Session{
-			ID: protocol.SessionID(id), Label: label, Directory: dir, Agent: protocol.SessionAgentClaude,
-			State: protocol.SessionStateLaunching,
-		},
-	}); err != nil {
-		return err
-	}
-	var response protocol.Response
-	if err := json.NewDecoder(conn).Decode(&response); err != nil {
-		return err
-	}
-	if !response.Ok {
-		return fmt.Errorf("register test session %s: %s", id, protocol.Deref(response.Error))
-	}
-	return nil
-}
-
 func createTestProfile(t testing.TB, s *store.Store, name string) profiles.Profile {
 	t.Helper()
 	profile, _, err := s.CreateProfile(name)
@@ -62,7 +36,7 @@ func deleteTestProfile(t testing.TB, s *store.Store, profileID string) {
 	if err != nil {
 		t.Fatalf("read profile %s: %v", profileID, err)
 	}
-	if _, err := s.DeleteProfile(profileID, profile.Revision, 0, 0); err != nil {
+	if _, err := s.DeleteProfile(profileID, profile.Revision, 0); err != nil {
 		t.Fatalf("delete profile %s: %v", profileID, err)
 	}
 }
@@ -198,25 +172,6 @@ func TestAppWakeFromAnotherProfileIsRefused(t *testing.T) {
 	if spawnCount(backend) != 0 {
 		t.Fatal("a refused wake spawned a session")
 	}
-}
-
-func setTestChief(d *Daemon, sessionID string) error {
-	profile, err := d.store.MostRecentlyUsedProfile()
-	if err != nil {
-		return err
-	}
-	if d.store.Get(protocol.SessionID(sessionID)) == nil {
-		now := string(protocol.TimestampNow())
-		d.store.Add(&protocol.Session{ID: protocol.SessionID(sessionID), Label: sessionID, State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now})
-	}
-	if session := d.store.Get(protocol.SessionID(sessionID)); session.ProfileID == "" {
-		session.ProfileID = profile.ID
-		if err := d.store.AddChecked(session); err != nil {
-			return err
-		}
-	}
-	_, _, err = d.store.SetProfileChief(protocol.SessionID(sessionID))
-	return err
 }
 
 func TestSpawnBesideAFocusedTileDocksTheAgentBesideIt(t *testing.T) {

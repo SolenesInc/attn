@@ -30,15 +30,7 @@ export function AppNavigationMenus() {
           onClose={() => setMarkdownOpenerOpen(false)}
           onPick={(path) => {
             setMarkdownOpenerOpen(false);
-            const bindTo = markdownOpenerTarget.sessionId;
-            if (bindTo === null) {
-              // The selected session lives on another machine; docking a tile for this local file would bind it there.
-              void openPath(path).catch((openError) => {
-                console.error('[MarkdownOpener] OS open failed:', openError);
-              });
-              return;
-            }
-            void openThenShow(() => sendOpenMarkdown(path, bindTo))
+            void openThenShow(() => sendOpenMarkdown(path, markdownOpenerTarget.sessionId))
               .catch((error) => {
                 console.error(
                   '[MarkdownOpener] in-app open failed, falling back to OS open:',

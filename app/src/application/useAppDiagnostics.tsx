@@ -98,8 +98,6 @@ export function useAppDiagnostics({
         agent: session.agent,
         cwd: shortenDiagnosticPath(session.cwd),
         desktopId: session.desktopId,
-        endpoint: session.endpointId ? 'remote' : 'local',
-        ...(session.endpointId ? { endpointId: session.endpointId } : {}),
         active: session.id === context.activeSessionId,
       })),
       desktops: desktopSnapshots,

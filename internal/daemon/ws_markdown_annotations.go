@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -79,9 +78,6 @@ func (d *Daemon) resolveAnnotationDocumentSource(documentURI, kind string, path,
 		}
 		if source.path != "" {
 			return source, fmt.Errorf("path is not valid for seed source")
-		}
-		if err := d.requireHome(garden.Surface); err != nil {
-			return source, err
 		}
 		seed, _, err := d.readSeed(source.seedID)
 		if err != nil {

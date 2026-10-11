@@ -167,7 +167,6 @@ model Session {
   label: string;
   agent: string;                // Built-in ID or registered plugin driver ID
   directory: string;
-  endpoint_id?: string;         // Optional: owning endpoint for remote/session-aware routing
   profile_id: string;           // The profile this agent belongs to; set at creation for life
   branch?: string;              // Optional: might not be in git repo
   is_worktree?: boolean;        // Optional: false if not worktree
@@ -409,7 +408,6 @@ model GitOperation {
   kind: GitOperationKind;
   status: GitOperationStatus;
   path?: string;
-  endpoint_id?: string;
   started_at: string;   // ISO timestamp
   finished_at?: string; // ISO timestamp
   duration_ms?: int32;
@@ -535,32 +533,6 @@ model Desktop {
   revision: safeint;
 }
 
-model EndpointCapabilities {
-  protocol_version: string;
-  agents_available: string[];
-  projects_directory?: string;
-  pty_backend_mode?: string;
-  daemon_instance_id?: string;
-  tailscale_enabled?: boolean;
-  tailscale_status?: string;
-  tailscale_url?: string;
-  tailscale_domain?: string;
-  tailscale_auth_url?: string;
-  tailscale_error?: string;
-}
-
-model EndpointInfo {
-  id: string;
-  name: string;
-  ssh_target: string;
-  status: string;
-  enabled?: boolean;
-  instance?: string;
-  status_message?: string;
-  session_count?: int32;
-  capabilities?: EndpointCapabilities;
-}
-
 // ============================================================================
 // Command Messages (Client → Daemon)
 // ============================================================================
@@ -570,7 +542,7 @@ model EndpointInfo {
 //
 model ClientHelloMessage {
   cmd: "client_hello";
-  client_kind: string;          // e.g. "tauri-app", "remote-web"
+  client_kind: string;          // e.g. "tauri-app"
   version: string;              // free-form, used for diagnostics
   capabilities: string[];       // see capability docstrings above
   // Per-instance credential from <data-dir>/client-token, minted by the daemon.
@@ -865,28 +837,12 @@ model PullRequestWatchMessage {
   url: string;
   mode: PullRequestWatchMode;
   reviewer?: string;
-  request_id?: string;
-}
-
-model PullRequestWatchResultMessage {
-  event: "pull_request_watch_result";
-  request_id: string;
-  success: boolean;
-  error?: string;
 }
 
 model PullRequestUnwatchMessage {
   cmd: "pull_request_unwatch";
   id: SessionID;
   url: string;
-  request_id?: string;
-}
-
-model PullRequestUnwatchResultMessage {
-  event: "pull_request_unwatch_result";
-  request_id: string;
-  success: boolean;
-  error?: string;
 }
 
 model DelegationSelection {
@@ -1427,8 +1383,8 @@ model SetSessionPriorityMessage {
 // do not want handed back can be deferred before it finishes.
 //
 // `until` is an absolute ISO instant computed by the client, because "tomorrow"
-// and "Monday" are calendar questions that need the user's timezone — which a
-// remote endpoint's daemon does not share. Fire-and-forget.
+// and "Monday" are calendar questions that need the user's timezone, which the
+// daemon does not have. Fire-and-forget.
 model SnoozeTurnMessage {
   cmd: "snooze_turn";
   session_id: SessionID;
@@ -1511,14 +1467,12 @@ model CreateWorktreeMessage {
   main_repo: string;
   branch: string;
   path?: string;
-  endpoint_id?: string;
   starting_from?: string;  // Branch to create worktree from (default: current HEAD)
 }
 
 model DeleteWorktreeMessage {
   cmd: "delete_worktree";
   path: string;
-  endpoint_id?: string;
   force?: boolean;
 }
 
@@ -1623,42 +1577,6 @@ model SetPluginPriorityMessage {
   priority: int32;
 }
 
-model AddEndpointMessage {
-  cmd: "add_endpoint";
-  name: string;
-  ssh_target: string;
-  instance?: string;
-}
-
-model RemoveEndpointMessage {
-  cmd: "remove_endpoint";
-  endpoint_id: string;
-}
-
-model UpdateEndpointMessage {
-  cmd: "update_endpoint";
-  endpoint_id: string;
-  name?: string;
-  ssh_target?: string;
-  enabled?: boolean;
-  instance?: string;
-}
-
-model ListEndpointsMessage {
-  cmd: "list_endpoints";
-}
-
-model SetEndpointRemoteWebMessage {
-  cmd: "set_endpoint_remote_web";
-  endpoint_id: string;
-  enabled: boolean;
-}
-
-model BootstrapEndpointMessage {
-  cmd: "bootstrap_endpoint";
-  endpoint_id: string;
-}
-
 model ApprovePRMessage {
   cmd: "approve_pr";
   id: string;
@@ -1684,7 +1602,6 @@ model InjectTestSessionMessage {
 model GetRecentLocationsMessage {
   cmd: "get_recent_locations";
   limit?: int32;  // Default 20
-  endpoint_id?: string;
   request_id?: string;
 }
 
@@ -1729,14 +1646,12 @@ model BrowseDirectoryMessage {
   cmd: "browse_directory";
   input_path: string;
   extensions?: string[];
-  endpoint_id?: string;
   request_id?: string;
 }
 
 model InspectPathMessage {
   cmd: "inspect_path";
   path: string;
-  endpoint_id?: string;
   request_id?: string;
 }
 
@@ -1795,7 +1710,6 @@ model GetFileDiffMessage {
 model GetRepoInfoMessage {
   cmd: "get_repo_info";
   repo: string;
-  endpoint_id?: string;
 }
 
 // Dual-surface (unix-socket/CLI `attn automation apply` + WS, the app
@@ -1903,7 +1817,6 @@ model SpawnSessionMessage {
   cmd: "spawn_session";
   id: SessionID;
   cwd: string;
-  endpoint_id?: string;
   profile_id: string;       // The profile the session belongs to; empty over WebSocket means the connection's selected profile. Refused before any side effect when it resolves to nothing or to a deleted profile
   placement?: SessionPlacement; // Absent places a new session on its current desktop and keeps an existing placement
   agent: string;            // Built-in ID, "shell", or registered plugin driver ID
@@ -2005,7 +1918,6 @@ model PtyInputMessage {
 model SupportSnapshotMessage {
   cmd: "support_snapshot";
   request_id: string;
-  endpoint_id?: string;
   // Restricts the potentially expensive backend inspection to runtimes the
   // requesting app can actually describe in this report.
   runtime_ids?: TerminalID[];
@@ -2683,22 +2595,11 @@ model BrowserControlMessage {
   selector?: string;
   text?: string;
   session_id?: SessionID;
-  request_id?: string;
 }
 
 // Return a browser-host action result from the Tauri client to the daemon.
 model BrowserControlResultMessage {
   cmd: "browser_control_result";
-  request_id: string;
-  success: boolean;
-  data?: string;
-  error?: string;
-}
-
-// Return a remotely executed browser-control result to the hub daemon that
-// originated the request.
-model BrowserControlResponseMessage {
-  event: "browser_control_response";
   request_id: string;
   success: boolean;
   data?: string;
@@ -3151,15 +3052,8 @@ model InitialStateMessage {
   protocol_version?: string;
   source_fingerprint?: string;
   daemon_instance_id?: string;
-  /**
-   * The daemon id that owns this daemon's home-level state. Equal to
-   * daemon_instance_id on a home daemon; a different id means this daemon is an
-   * outpost of that home.
-   */
-  home_daemon_id?: string;
   sessions?: Session[];
   terminal_bindings?: TerminalBinding[];
-  endpoints?: EndpointInfo[];
   profiles?: Profile[];
   migration_phase?: MigrationPhase;
   // The profile this connection is scoped to, and its desktops.
@@ -3181,24 +3075,6 @@ model InitialStateMessage {
   // The crew roster, so the sidebar draws every member — awake or asleep — from
   // the first push rather than asking for one.
   crew?: CrewMember[];
-}
-
-model EndpointStatusChangedMessage {
-  event: "endpoint_status_changed";
-  endpoint: EndpointInfo;
-}
-
-model EndpointsUpdatedMessage {
-  event: "endpoints_updated";
-  endpoints: EndpointInfo[];
-}
-
-model EndpointActionResultMessage {
-  event: "endpoint_action_result";
-  action: string;
-  endpoint_id?: string;
-  success: boolean;
-  error?: string;
 }
 
 model SessionRegisteredMessage {
@@ -3456,7 +3332,6 @@ model WorktreesUpdatedMessage {
 model CreateWorktreeResultMessage {
   event: "create_worktree_result";
   path?: string;
-  endpoint_id?: string;
   success: boolean;
   error?: string;
 }
@@ -3464,7 +3339,6 @@ model CreateWorktreeResultMessage {
 model DeleteWorktreeResultMessage {
   event: "delete_worktree_result";
   path: string;
-  endpoint_id?: string;
   success: boolean;
   error?: string;
   forceable?: boolean;
@@ -3513,7 +3387,6 @@ model PluginActionResultMessage {
 model RecentLocationsResultMessage {
   event: "recent_locations_result";
   recent_locations: RecentLocation[];
-  endpoint_id?: string;
   request_id?: string;
   home_path?: string;
   success: boolean;
@@ -3525,7 +3398,6 @@ model BrowseDirectoryResultMessage {
   input_path: string;
   directory: string;
   entries: DirectoryEntry[];
-  endpoint_id?: string;
   request_id?: string;
   home_path?: string;
   success: boolean;
@@ -3535,7 +3407,6 @@ model BrowseDirectoryResultMessage {
 model InspectPathResultMessage {
   event: "inspect_path_result";
   inspection?: PathInspection;
-  endpoint_id?: string;
   request_id?: string;
   success: boolean;
   error?: string;
@@ -3614,7 +3485,6 @@ model RepoInfo {
 model GetRepoInfoResultMessage {
   event: "get_repo_info_result";
   info?: RepoInfo;
-  endpoint_id?: string;
   success: boolean;
   error?: string;
 }
@@ -3928,7 +3798,7 @@ model PtyOutputMessage {
 
 // A sampled input acknowledgement. The app measures the whole round trip on
 // its own monotonic clock; write_duration_us isolates the daemon write fence and
-// PTY backend portion without requiring synchronized clocks on remote hosts.
+// PTY backend portion without requiring the app and daemon clocks to agree.
 model PtyInputProbeResultMessage {
   event: "pty_input_probe_result";
   id: TerminalID;
@@ -3941,7 +3811,6 @@ model PtyInputProbeResultMessage {
 model SupportSnapshotResultMessage {
   event: "support_snapshot_result";
   request_id: string;
-  endpoint_id?: string;
   protocol_version: string;
   daemon_instance_id: string;
   daemon_started_at_unix_ms: safeint;
@@ -3992,8 +3861,7 @@ model KittyPlacementsMessage {
 // compressed form to pass through).
 //
 // This JSON form serves clients WITHOUT "binary_pty_output" — automation
-// clients and the hub's daemon-to-daemon relay, which is a text pipe — so they
-// can still assert on an image. Clients advertising it get the same pixels as
+// clients, which read text — so they can still assert on an image. Clients advertising it get the same pixels as
 // binary frame 0x02 instead, skipping base64. Note this is the transport bit,
 // not "kitty_images": whether a client is TOLD about images and whether it can
 // decode a frame are separate questions.
@@ -4052,14 +3920,14 @@ model CommandErrorMessage {
   error_code?: string;
 }
 
-// Sent once to a reconnecting client that the hub had hung up on for falling
-// behind, keyed on the client_id it sent with its hello. The close status that
-// explains an eviction travels the same TCP stream as the backlog that caused
-// it, so on the link where it matters it arrives long after the disconnect —
-// this is how the reason reaches the client instead.
+// Sent once to a reconnecting client that the daemon had hung up on for
+// falling behind, keyed on the client_id it sent with its hello. The close
+// status that explains an eviction travels the same TCP stream as the backlog
+// that caused it, so it can arrive long after the disconnect; this is how the
+// reason reaches the client instead.
 model ClientEvictionNoticeMessage {
   event: "client_eviction_notice";
-  evicted_at: string;          // RFC3339, when the hub dropped the connection
+  evicted_at: string;          // RFC3339, when the daemon dropped the connection
   reason: string;              // the close reason the client could not read, e.g. "client too slow"
   undelivered_messages: int32; // messages the daemon gave up on handing over
 }
@@ -4422,12 +4290,11 @@ model DocSubscriptionEndedMessage {
 //
 // A seed is the unit of work — one document, one id. Everything else in the
 // vocabulary is a seed too: a plot is a seed with children, its root is the
-// crown, a packet is a plot flagged as template. Seeds live in the home
-// daemon's document store under `core/garden`; an outpost refuses every command
-// here, naming its home, until the uplink carries the ask there.
+// crown, a packet is a plot flagged as template. Seeds live in the daemon's
+// document store under `core/garden`.
 
 // One seed as every read and every push carries it. The id is short, stable and
-// sayable, and unique within its hub; the fully qualified `<daemon-id>/<id>`
+// sayable, and unique within its daemon; the fully qualified `<daemon-id>/<id>`
 // form belongs to a future central server and is minted only where an id leaves
 // its daemon, so nothing on this wire carries it.
 //
@@ -4580,13 +4447,10 @@ model SeedContinuation {
   "native_conversation_id"?: string;
   "agent": string;
   "cwd": string;
-  // local | remote | unknown
-  "host_kind": string;
-  "endpoint_id"?: string;
   "repository_root"?: string;
   "repository_subdir"?: string;
   "branch"?: string;
-  // present | missing | remote | unavailable | unknown
+  // present | missing | unavailable | unknown
   "directory_state": string;
   "resume_available": boolean;
   "resume_reason"?: string;
@@ -4840,7 +4704,7 @@ model SeedArtifact {
 }
 
 // Move or copy a local file into seed ownership, or detach one to an explicit
-// destination. Source and destination paths are absolute so the owning daemon,
+// destination. Source and destination paths are absolute so the daemon,
 // never a caller's cwd, decides which file is mutated.
 model SeedArtifactTransferMessage {
   "profile_id"?: string;
@@ -4883,7 +4747,7 @@ model SeedArtifactTransferResultMessage {
   "result"?: SeedArtifactTransferResult;
 }
 
-// Resolve or read one seed-relative target through the owning daemon. `image`
+// Resolve or read one seed-relative target through the daemon. `image`
 // returns bounded bytes; `link` returns only safe document/image targets;
 // `artifact` accepts any regular managed file for explicit row actions.
 model SeedArtifactTargetMessage {
@@ -5893,8 +5757,7 @@ model AgentPeekResult {
 
 // Read the crew roster: every registered member, awake or asleep. The registry
 // serves the read; the member's home stays plain markdown on disk and is never
-// copied onto the wire. Home-only — an outpost is refused by the enrollment
-// fence.
+// copied onto the wire.
 model CrewListMessage {
   cmd: "crew_list";
 }
@@ -6414,7 +6277,7 @@ model SessionReopen {
   // Offered actions, best first. Empty means nothing here brings it back.
   actions: SessionReopenAction[];
   warning?: string;
-  // present | missing | unavailable | unknown | remote
+  // present | missing | unavailable | unknown
   directory_state: string;
   // local | remote_only | gone | merged | unknown
   branch_state?: string;
@@ -7070,9 +6933,6 @@ alias DaemonEvent =
   | CrewSleepResultMessage
   | CrewSetResultMessage
   | OpenSeedResultMessage
-  | BrowserControlResponseMessage
-  | PullRequestWatchResultMessage
-  | PullRequestUnwatchResultMessage
   | PRsUpdatedMessage
   | ReposUpdatedMessage
   | AuthorsUpdatedMessage

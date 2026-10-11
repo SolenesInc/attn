@@ -73,8 +73,6 @@ export interface DiagnosticSessionSnapshot {
   agent: string;
   cwd: string;
   desktopId: string;
-  endpoint: 'local' | 'remote';
-  endpointId?: string;
   active: boolean;
 }
 
@@ -107,7 +105,7 @@ export interface PendingDiagnosticCapture {
   terminalDiagnostics: BoundedDiagnosticSnapshot;
   uiDiagnostics: BoundedDiagnosticSnapshot;
   pty: unknown;
-  daemons: Promise<{ snapshots: DaemonSupportSnapshot[]; unavailableEndpoints: string[] }>;
+  daemons: Promise<DaemonSupportSnapshot[]>;
   nativeInput: Promise<NativeInputSnapshot>;
   historicalInput: Promise<BoundedDiagnosticSnapshot>;
 }
@@ -225,21 +223,15 @@ export function beginDiagnosticCapture(input: {
   sessions: DiagnosticSessionSnapshot[];
   desktops: DiagnosticDesktopSnapshot[];
   settings: DaemonSettings;
-  sendSupportSnapshot: (endpointId?: string, runtimeIds?: string[]) => Promise<DaemonSupportSnapshot>;
+  sendSupportSnapshot: (runtimeIds?: string[]) => Promise<DaemonSupportSnapshot>;
 }): PendingDiagnosticCapture {
-  const endpointIds = [...new Set(input.sessions.flatMap((session) => session.endpointId ? [session.endpointId] : []))];
-  const requestedEndpoints = [undefined, ...endpointIds];
-  const sessionEndpoint = new Map(input.sessions.map((session) => [session.id, session.endpointId]));
-  const daemonRequests = requestedEndpoints.map((endpointId) => {
-    const runtimeIds = input.panes.flatMap((pane) => sessionEndpoint.get(pane.sessionId) === endpointId ? [pane.runtimeId] : []);
-    const request = input.sendSupportSnapshot(endpointId, [...new Set(runtimeIds)]);
-    return new Promise<DaemonSupportSnapshot>((resolve, reject) => {
-      const timeout = window.setTimeout(
-        () => reject(new Error('Diagnostic snapshot collection exceeded its deadline')),
-        3_000,
-      );
-      void request.then(resolve, reject).finally(() => window.clearTimeout(timeout));
-    });
+  const request = input.sendSupportSnapshot([...new Set(input.panes.map((pane) => pane.runtimeId))]);
+  const daemonSnapshot = new Promise<DaemonSupportSnapshot>((resolve, reject) => {
+    const timeout = window.setTimeout(
+      () => reject(new Error('Diagnostic snapshot collection exceeded its deadline')),
+      3_000,
+    );
+    void request.then(resolve, reject).finally(() => window.clearTimeout(timeout));
   });
   return {
     context: { ...input.context },
@@ -252,12 +244,7 @@ export function beginDiagnosticCapture(input: {
     terminalDiagnostics: boundedDiagnostics(supportTerminalDiagnosticsSnapshot()),
     uiDiagnostics: boundedDiagnostics(supportUiDiagnosticsSnapshot()),
     pty: sanitizeSupportDiagnostics(getPtyPerfSnapshot()),
-    daemons: Promise.allSettled(daemonRequests).then((results) => ({
-      snapshots: results.flatMap((result) => result.status === 'fulfilled' ? [result.value] : []),
-      unavailableEndpoints: results.flatMap((result, index) => (
-        result.status === 'rejected' ? [requestedEndpoints[index] ?? 'local'] : []
-      )),
-    })),
+    daemons: daemonSnapshot.then((snapshot) => [snapshot], () => []),
     nativeInput: nativeInputSnapshot(),
     historicalInput: historicalInputSnapshot(),
   };
@@ -454,12 +441,11 @@ export async function createDiagnosticReport(
     const timeout = window.setTimeout(() => resolve(fallback), EVIDENCE_DEADLINE_MS);
     void promise.then(resolve, () => resolve(fallback)).finally(() => window.clearTimeout(timeout));
   });
-  const [daemonCapture, nativeInput, historicalInput] = await Promise.all([
-    withDeadline(capture.daemons, { snapshots: [], unavailableEndpoints: ['local'] }),
+  const [daemons, nativeInput, historicalInput] = await Promise.all([
+    withDeadline(capture.daemons, []),
     withDeadline(capture.nativeInput, unavailableNativeInput),
     withDeadline(capture.historicalInput, unavailableHistoricalInput),
   ]);
-  const daemons = daemonCapture.snapshots;
   const selected = new Set(selectedPaneIds);
   const paneContent = capture.panes.flatMap((pane) => {
     if (!selected.has(pane.paneId)) return [];
@@ -478,9 +464,6 @@ export async function createDiagnosticReport(
 
   const omissions: Array<{ section: string; reason: string; omittedBytes?: number; omittedCount?: number }> = [];
   if (daemons.length === 0) omissions.push({ section: 'daemons', reason: 'snapshots_unavailable' });
-  for (const endpoint of daemonCapture.unavailableEndpoints) {
-    omissions.push({ section: `daemons:${endpoint}`, reason: 'snapshot_unavailable' });
-  }
   if (!nativeInput.supported) omissions.push({ section: 'nativeInput', reason: 'unsupported_or_unavailable' });
   if (historicalInput.events.length === 0) omissions.push({ section: 'historicalInput', reason: 'no_persisted_samples' });
   if (capture.frontendInput.total > capture.frontendInput.events.length) {
@@ -500,7 +483,7 @@ export async function createDiagnosticReport(
   for (const daemon of daemons) {
     if (daemon.trace_total > daemon.input_traces.length) {
       omissions.push({
-        section: `daemonInput:${daemon.endpoint_id ?? 'local'}`,
+        section: 'daemonInput',
         reason: 'ring_entries_overwritten',
         omittedCount: daemon.trace_total - daemon.input_traces.length,
       });

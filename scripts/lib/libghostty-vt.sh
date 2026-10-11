@@ -58,7 +58,7 @@ vt_zig_target() {
 
 # Per-platform install locations. The archive+headers for each target live in
 # their own subdir so multiple tuples can coexist in one checkout (e.g. a Mac
-# hub cross-building a Linux daemon). The #cgo directives point at these paths.
+# cross-building a Linux daemon). The #cgo directives point at these paths.
 vt_output_dir_for() { printf '%s/third_party/ghostty-vt/%s' "$vt_repo_dir" "$1"; }
 vt_lib_for()        { printf '%s/lib/libghostty-vt.a' "$(vt_output_dir_for "$1")"; }
 

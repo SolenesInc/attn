@@ -8,7 +8,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"net"
 	"net/url"
 	"os"
 	"os/exec"
@@ -120,10 +119,6 @@ func main() {
 	case "daemon":
 		maybePrintInstanceBanner()
 		runDaemonCommand()
-	case "ws-relay":
-		runWSRelay()
-	case "client-token":
-		runClientToken()
 	case "pty-worker":
 		runPTYWorker()
 	case "automation":
@@ -523,33 +518,6 @@ func runDaemonStop() {
 	fmt.Printf("daemon %s\n", result.Note)
 }
 
-func runClientToken() {
-	token := config.ClientToken()
-	if token == "" {
-		fmt.Fprintf(os.Stderr, "no client token at %s — the daemon mints it at startup; start it first\n", config.ClientTokenPath())
-		os.Exit(1)
-	}
-	fmt.Println(token)
-}
-
-func runWSRelay() {
-	addr := net.JoinHostPort(config.WSBindAddress(), config.WSPort())
-	conn, err := net.Dial("tcp", addr)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "ws-relay connect %s: %v\n", addr, err)
-		os.Exit(1)
-	}
-	defer conn.Close()
-
-	go func() {
-		_, _ = io.Copy(conn, os.Stdin)
-		if tcpConn, ok := conn.(*net.TCPConn); ok {
-			_ = tcpConn.CloseWrite()
-		}
-	}()
-	_, _ = io.Copy(os.Stdout, conn)
-}
-
 func runList() {
 	warnIfDaemonVersionMismatch()
 	c := client.New("")
@@ -619,7 +587,7 @@ commands:
   debug <command>                   probe debug artifacts (incidents, logs)
   db <command>                      database maintenance (restore from backup)
   bus <command>                     event bus: consumer cursors, lag, kill switch
-  enrollment <command>              this daemon's home: status, enroll, leave
+  enrollment <command>              this data folder's enrollment: status, leave
   seed <command>                    the garden: plant, tend, harvest, note, ls
   crew <command>                    the crew roster: who exists, who is awake
   handoff -m "<letter>"             file this crew member's letter; the day turns over

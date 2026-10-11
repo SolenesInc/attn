@@ -11,8 +11,6 @@ export interface DesktopViewSession {
   label: string;
   cwd?: string;
   directory?: string;
-  endpointId?: string;
-  endpoint_id?: string;
   state?: string;
 }
 

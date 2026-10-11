@@ -2,7 +2,6 @@ import { Dashboard } from '../components/Dashboard';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { activityStaleMs } from '../utils/activitySettings';
 import {
-  useAppErrorsContext,
   useAppInputs,
   useAppSessionsContext,
   useAppPanelsContext,
@@ -15,11 +14,10 @@ import {
 export function AppDashboard() {
   const { profileSessions } = useAppSessionsContext();
   const { view, followNextTurn, setFollowNextTurn, handleSelectSession } = useNavigationContext();
-  const { prs, daemonEndpoints, settings } = useAppInputs();
+  const { prs, settings } = useAppInputs();
   const { hasReceivedInitialState, rateLimit, sendWakeTurn } = useDaemonApi();
 
   const { isRefreshingPRs, refreshError, handleRefreshPRs } = usePRLauncherContext();
-  const { handleRebootstrapEndpoint } = useAppErrorsContext();
   const { setSettingsOpen, whatsNew } = useAppPanelsContext();
   const { queueModeEnabled, crewQueueEnabled } = useAttentionQueueContext();
   const { handleNewSession } = useSessionLaunchContext();
@@ -34,8 +32,6 @@ export function AppDashboard() {
           isRefreshing={isRefreshingPRs}
           refreshError={refreshError}
           rateLimit={rateLimit}
-          endpoints={daemonEndpoints}
-          onRebootstrapEndpoint={handleRebootstrapEndpoint}
           queueModeEnabled={queueModeEnabled}
           crewQueueEnabled={crewQueueEnabled}
           activityStaleMs={activityStaleMs(settings)}

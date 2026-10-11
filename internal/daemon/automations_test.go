@@ -3,7 +3,6 @@ package daemon
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,7 +10,6 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/automation"
-	"github.com/victorarias/attn/internal/enrollment"
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/protocol"
@@ -70,9 +68,8 @@ func setupContinuationWorktree(t *testing.T) (*Daemon, automation.WorkRequest, s
 			"github.com/owner/repo": {Type: "local_clone", Path: repo},
 		},
 	}}
-	d := newEnrolledDaemon(t, "")
+	d := newDaemonForTest(t)
 	d.dataRoot = filepath.Join(root, "instance")
-	enrollHomeForTest(t, d)
 	now := time.Date(2026, 7, 20, 10, 0, 0, 0, time.UTC)
 	def, err := d.store.UpsertAutomationDefinition(0, "Review", `{}`, defaultProfileID(t, d.store), now)
 	if err != nil {
@@ -158,7 +155,7 @@ func TestReRequestCanStartReviewerWhenWithdrawnOriginNeverLaunched(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	d := newHomeDaemonForTest(t, s)
+	d := &Daemon{store: s, wsHub: newWSHub(), dataRoot: t.TempDir()}
 	d.ptyBackend = &fakeSpawnBackend{}
 	if _, err := d.reconcileAutomationReviewRequests(def.ID, "github.com", nil, now.Add(time.Minute)); err != nil {
 		t.Fatal(err)
@@ -180,25 +177,6 @@ func TestReRequestCanStartReviewerWhenWithdrawnOriginNeverLaunched(t *testing.T)
 	}
 }
 
-func newHomeDaemonForTest(t *testing.T, s *store.Store) *Daemon {
-	t.Helper()
-	d := &Daemon{store: s, wsHub: newWSHub(), dataRoot: t.TempDir()}
-	enrollHomeForTest(t, d)
-	return d
-}
-
-func enrollHomeForTest(t *testing.T, d *Daemon) {
-	t.Helper()
-	id, err := enrollment.EnsureDaemonID(d.dataRoot)
-	if err != nil {
-		t.Fatal(err)
-	}
-	d.daemonInstanceID = id
-	if err := d.ensureEnrollment(); err != nil {
-		t.Fatal(err)
-	}
-}
-
 const manualAutomationYAML = `api_version: attn.dev/automations/v1alpha1
 name: Manual check
 trigger: {type: manual}
@@ -206,31 +184,3 @@ prompt: Check locally.
 launch: {driver: codex}
 location: {type: directory, path: "%s"}
 `
-
-func TestAnOutpostRefusesToCreateOrRunAutomations(t *testing.T) {
-	const home = "d-cccccccccccccccccccccccccccccccc"
-	d := newEnrolledDaemon(t, home)
-	var fenced *enrollment.FencedError
-	if _, err := d.automationApplyWithGuards(context.Background(), "id: nightly\nname: Nightly\n", defaultProfileID(t, d.store), "", nil, nil, nil); !errors.As(err, &fenced) || !strings.Contains(err.Error(), home) {
-		t.Fatalf("apply on an outpost = %v, want a refusal naming the home %s", err, home)
-	}
-	if defs, err := d.store.ListAutomationDefinitions(); err != nil || len(defs) != 0 {
-		t.Fatalf("definitions after a refused apply = %v, %v; want none", defs, err)
-	}
-	def, err := d.store.UpsertAutomationDefinition(0, "Legacy", `{}`, defaultProfileID(t, d.store), time.Now())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := d.automationRun(context.Background(), def.ID, "request-1", "{}"); !errors.As(err, &fenced) {
-		t.Fatalf("run on an outpost = %v, want the home fence", err)
-	}
-	if _, err := d.automationSetEnabled(context.Background(), def.ID, true); !errors.As(err, &fenced) {
-		t.Fatalf("enable on an outpost = %v, want the home fence", err)
-	}
-	if _, err := d.automationSetEnabled(context.Background(), def.ID, false); err != nil {
-		t.Fatalf("disabling a leftover definition on an outpost: %v", err)
-	}
-	if err := d.automationDelete(context.Background(), def.ID); err != nil {
-		t.Fatalf("deleting a leftover definition on an outpost: %v", err)
-	}
-}

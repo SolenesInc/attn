@@ -318,20 +318,10 @@ describe('desktop surface', () => {
     expect(desktopCommands.sendDesktopSetActivePane).not.toHaveBeenCalled();
   });
 
-  it('offers the focused agent\'s directory as the desktop root only when it runs on this machine', async () => {
+  it('offers the focused agent\'s directory as the desktop root', async () => {
     render(<App />);
     await waitFor(() =>
       expect(screen.getByTestId(desktopTestId('d1')).getAttribute('data-desktop-directory')).toBe('/tmp/repo'),
-    );
-
-    act(() => {
-      useSessionStore.setState((state) => ({
-        sessions: state.sessions.map((entry) => (entry.id === 's1' ? { ...entry, endpointId: 'remote-box' } : entry)),
-      }));
-    });
-
-    await waitFor(() =>
-      expect(screen.getByTestId(desktopTestId('d1')).getAttribute('data-desktop-directory')).toBe(''),
     );
   });
 

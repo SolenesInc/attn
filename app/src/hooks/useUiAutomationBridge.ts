@@ -56,7 +56,7 @@ interface UseUiAutomationBridgeArgs {
   daemonReady?: boolean;
   connectionError?: string | null;
   getActivePaneIdForSession: (session: Session | undefined | null) => string;
-  createSession: (label: string, cwd: string, id?: string, agent?: SessionAgent, endpointId?: string, yoloMode?: boolean, options?: { chiefOfStaff?: boolean }) => Promise<string>;
+  createSession: (label: string, cwd: string, id?: string, agent?: SessionAgent, yoloMode?: boolean, options?: { chiefOfStaff?: boolean }) => Promise<string>;
   selectSession: (sessionId: string) => void;
   selectDesktop: (desktopId: string) => void;
   moveDesktopLeaf: (move: {
@@ -1698,9 +1698,7 @@ function collectLocationPickerUiState() {
       title: null,
       pathInputValue: '',
       currentDir: '',
-      selectedTarget: null,
       selectedAgent: null,
-      targets: [],
       agents: [],
       recents: [],
       directories: [],
@@ -1713,15 +1711,6 @@ function collectLocationPickerUiState() {
   const pathInput = root.querySelector('[data-testid="location-picker-path-input"]');
   const breadcrumb = root.querySelector('[data-testid="location-picker-breadcrumb-path"]');
   const empty = root.querySelector('[data-testid="location-picker-empty"]');
-  const targetButtons = Array.from(root.querySelectorAll('.picker-endpoint-controls button'))
-    .filter((button): button is HTMLButtonElement => button instanceof HTMLButtonElement)
-    .map((button) => ({
-      label: button.querySelector('.endpoint-option-name')?.textContent?.trim() || '',
-      meta: button.querySelector('.endpoint-option-meta')?.textContent?.trim() || '',
-      endpointId: button.dataset.endpointId || null,
-      active: button.classList.contains('active'),
-      disabled: button.disabled,
-    }));
   const agentButtons = Array.from(root.querySelectorAll('.agent-option'))
     .filter((button): button is HTMLButtonElement => button instanceof HTMLButtonElement)
     .map((button) => ({
@@ -1783,9 +1772,7 @@ function collectLocationPickerUiState() {
     title: title?.textContent?.trim() || '',
     pathInputValue: pathInput instanceof HTMLInputElement ? pathInput.value : '',
     currentDir: breadcrumb?.textContent?.trim() || '',
-    selectedTarget: targetButtons.find((button) => button.active)?.label || null,
     selectedAgent: agentButtons.find((button) => button.active)?.label || null,
-    targets: targetButtons,
     agents: agentButtons,
     recents: pickerItems.filter((item) => item.kind === 'recent'),
     directories: pickerItems.filter((item) => item.kind === 'directory'),
@@ -2350,14 +2337,11 @@ export function useUiAutomationBridge({
         const providedSessionId = typeof payload.sessionId === 'string' && payload.sessionId.length > 0
           ? payload.sessionId
           : undefined;
-        const endpointId = typeof payload.endpoint_id === 'string' && payload.endpoint_id.length > 0
-          ? payload.endpoint_id
-          : undefined;
         const chiefOfStaff = payload.chief_of_staff === true;
         if (!cwd) {
           throw new Error('create_session requires cwd');
         }
-        const sessionId = await createSession(label, cwd, providedSessionId, agent, endpointId, undefined, {
+        const sessionId = await createSession(label, cwd, providedSessionId, agent, undefined, {
           chiefOfStaff,
         });
         await selectionShown({ kind: 'session', sessionId });
@@ -2615,35 +2599,6 @@ export function useUiAutomationBridge({
           }));
           await settleUi(2);
         }
-        return collectLocationPickerUiState();
-      }
-      case 'location_picker_set_target': {
-        const root = getLocationPickerRoot();
-        if (!root) {
-          throw new Error('Location picker is not open');
-        }
-        const endpointId = typeof payload.endpointId === 'string' ? payload.endpointId : '';
-        const endpointName = typeof payload.endpointName === 'string' ? payload.endpointName : '';
-        const local = payload.local === true;
-        const buttons = Array.from(root.querySelectorAll('.picker-endpoint-controls button'))
-          .filter((button): button is HTMLButtonElement => button instanceof HTMLButtonElement);
-        const button = buttons.find((candidate) => {
-          if (local) {
-            return candidate.getAttribute('data-testid') === 'location-picker-target-local';
-          }
-          if (endpointId && candidate.dataset.endpointId === endpointId) {
-            return true;
-          }
-          if (endpointName) {
-            return candidate.querySelector('.endpoint-option-name')?.textContent?.trim() === endpointName;
-          }
-          return false;
-        });
-        if (!button) {
-          throw new Error('Requested location picker target not found');
-        }
-        clickElement(button);
-        await settleUi(2);
         return collectLocationPickerUiState();
       }
       case 'location_picker_set_path': {

@@ -25,7 +25,6 @@ export function SectionStatusPills({
   delegationPolicy,
   tailscaleEnabled,
   tailscaleStatus,
-  endpoints,
   pluginProblemCount,
   activePluginCount,
   plugins,
@@ -43,7 +42,6 @@ export function SectionStatusPills({
   | 'delegationPolicy'
   | 'tailscaleEnabled'
   | 'tailscaleStatus'
-  | 'endpoints'
   | 'pluginProblemCount'
   | 'activePluginCount'
   | 'plugins'
@@ -64,7 +62,6 @@ export function SectionStatusPills({
         <ConnectivityStatusPills
           tailscaleEnabled={tailscaleEnabled}
           tailscaleStatus={tailscaleStatus}
-          endpoints={endpoints}
         />
       );
     case 'plugins':
@@ -445,9 +442,6 @@ export function ConnectivitySettings({
   tailscaleError,
   githubPollingOffReason,
   githubHosts,
-  endpointPanel,
-  endpoints,
-  handleRemoveEndpoint,
 }: Pick<
   SettingsModalState,
   | 'tailscaleURL'
@@ -459,9 +453,6 @@ export function ConnectivitySettings({
   | 'tailscaleError'
   | 'githubPollingOffReason'
   | 'githubHosts'
-  | 'endpointPanel'
-  | 'endpoints'
-  | 'handleRemoveEndpoint'
 >) {
   return (
     <>
@@ -476,12 +467,6 @@ export function ConnectivitySettings({
       />
 
       <GitHubHostsSettings githubPollingOffReason={githubPollingOffReason} githubHosts={githubHosts} />
-
-      <RemoteEndpointsSettings
-        endpointPanel={endpointPanel}
-        endpoints={endpoints}
-        handleRemoveEndpoint={handleRemoveEndpoint}
-      />
     </>
   );
 }
@@ -567,7 +552,7 @@ export function PluginSettings({
                 <div key={plugin.name} className="plugin-card">
                   <div className="plugin-card-header">
                     <div className="plugin-card-title">
-                      <span className="endpoint-name">{plugin.name}</span>
+                      <span className="plugin-name">{plugin.name}</span>
                       <span className="settings-pill">v{plugin.version}</span>
                       {plugin.availability === 'bundled' && <span className="settings-pill">Bundled</span>}
                       {plugin.link_target && <span className="settings-pill">Linked</span>}
@@ -1486,82 +1471,14 @@ export function GitHubHostsSettings({
   );
 }
 
-export function RemoteEndpointsSettings({
-  endpointPanel,
-  endpoints,
-  handleRemoveEndpoint,
-}: Pick<SettingsModalState, 'endpointPanel' | 'endpoints' | 'handleRemoveEndpoint'>) {
-  return (
-    <section className="settings-block">
-      <div className="settings-block-intro">
-        <div className="settings-kicker">Remote</div>
-        <h3>Remote Endpoints</h3>
-        <p className="settings-description">
-          Remote endpoints are off in this release. attn keeps saved endpoints and never connects to, installs on or
-          restarts them; sessions on those hosts keep running there.
-        </p>
-      </div>
-      <div className="settings-block-body">
-        {endpointPanel.error && <div className="settings-warning">{endpointPanel.error}</div>}
-        {endpoints.length === 0 ? (
-          <p className="settings-empty">No saved remote endpoints.</p>
-        ) : (
-          <div className="endpoint-list">
-            {endpoints.map((endpoint) => (
-              <div key={endpoint.id} className={`endpoint-card status-${endpoint.status}`}>
-                <div className="endpoint-card-header">
-                  <div className="endpoint-card-title">
-                    <span className="endpoint-name">{endpoint.name}</span>
-                    <span className="settings-pill">{endpoint.instance || 'default'}</span>
-                    <span className={`endpoint-status-badge status-${endpoint.status}`}>{endpoint.status}</span>
-                  </div>
-                  <div className="endpoint-card-actions">
-                    <button
-                      className="settings-action danger"
-                      onClick={() => void handleRemoveEndpoint(endpoint.id)}
-                      disabled={endpointPanel.busy}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-                <div className="endpoint-summary">
-                  <div className="settings-meta-row">
-                    <span className="settings-meta-label">SSH</span>
-                    <code>{endpoint.ssh_target}</code>
-                  </div>
-                  {endpoint.status_message && (
-                    <div className="settings-meta-row">
-                      <span className="settings-meta-label">Status</span>
-                      <span>{endpoint.status_message}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
 export function ConnectivityStatusPills({
   tailscaleEnabled,
   tailscaleStatus,
-  endpoints,
-}: Pick<SettingsModalState, 'tailscaleEnabled' | 'tailscaleStatus' | 'endpoints'>) {
+}: Pick<SettingsModalState, 'tailscaleEnabled' | 'tailscaleStatus'>) {
   return (
-    <>
-      <span className={`settings-pill ${tailscaleEnabled && tailscaleStatus !== 'error' ? 'good' : ''}`}>
-        {tailscaleEnabled ? tailscaleStatus : 'mobile off'}
-      </span>
-      {endpoints.length > 0 && (
-        <span className="settings-pill">
-          {endpoints.length} {endpoints.length === 1 ? 'remote' : 'remotes'} off
-        </span>
-      )}
-    </>
+    <span className={`settings-pill ${tailscaleEnabled && tailscaleStatus !== 'error' ? 'good' : ''}`}>
+      {tailscaleEnabled ? tailscaleStatus : 'mobile off'}
+    </span>
   );
 }
 

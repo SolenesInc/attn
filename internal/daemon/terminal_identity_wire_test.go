@@ -29,7 +29,7 @@ func TestTerminalBindingsIncludeOtherProfilesAndTheirArrangementChanges(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	observer := w.Connect(protocol.ClientHelloMessage{Cmd: protocol.CmdClientHello, ClientKind: "hub", ClientToken: protocol.Ptr(strings.TrimSpace(string(token))), Version: "protocol-" + protocol.ProtocolVersion, ProfileID: protocol.Ptr(firstProfile)}, nil)
+	observer := w.Connect(protocol.ClientHelloMessage{Cmd: protocol.CmdClientHello, ClientKind: "observer", ClientToken: protocol.Ptr(strings.TrimSpace(string(token))), Version: "protocol-" + protocol.ProtocolVersion, ProfileID: protocol.Ptr(firstProfile)}, nil)
 	initial := testworld.Await[protocol.InitialStateMessage](observer, protocol.EventInitialState, nil)
 	bindings := map[protocol.TerminalID]protocol.SessionID{}
 	for _, binding := range initial.TerminalBindings {

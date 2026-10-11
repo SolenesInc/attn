@@ -3,10 +3,8 @@ package daemon
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
-	"github.com/victorarias/attn/internal/hub"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -79,26 +77,5 @@ func TestOpenBrowserDocksBesideTheTileOfAPanelessDesktop(t *testing.T) {
 	}
 	if !browserTileOn(updated.Tree) || !layouttree.HasTile(updated.Tree, markdownTileIDForPath(notes)) {
 		t.Fatalf("desktop tree = %+v, want the browser beside the notes tile", updated.Tree)
-	}
-}
-
-func TestBrowserForAnOutpostAgentRefusesByNamingTheFence(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	endpoint, err := d.store.AddEndpoint("gpu-box", "gpu", "")
-	if err != nil {
-		t.Fatalf("AddEndpoint: %v", err)
-	}
-	d.hubManager = hub.NewManager(d.store, nil, nil, nil, nil, nil)
-	if !d.hubManager.ReplaceRemoteSessions(endpoint.ID, []protocol.Session{{ID: "remote-agent", Label: "remote"}}) {
-		t.Fatal("the endpoint mirrored nothing")
-	}
-
-	resp := openBrowserFor(t, d, "remote-agent", "https://example.com")
-	if resp.Ok || !strings.Contains(protocol.Deref(resp.Error), hub.ErrOutpostsOff.Error()) {
-		t.Fatalf("open_browser for an outpost agent = %+v, want a refusal naming %q", resp, hub.ErrOutpostsOff)
-	}
-	result := d.runBrowserControl(&protocol.BrowserControlMessage{Cmd: protocol.CmdBrowserControl, Action: "get_title", SessionID: protocol.Ptr(protocol.SessionID("remote-agent"))})
-	if !strings.Contains(result.err, hub.ErrOutpostsOff.Error()) {
-		t.Fatalf("browser_control for an outpost agent = %+v, want a refusal naming %q", result, hub.ErrOutpostsOff)
 	}
 }

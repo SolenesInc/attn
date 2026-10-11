@@ -71,9 +71,6 @@ type crewWakeRequest struct {
 }
 
 func (d *Daemon) crewMember(name string) (crew.Member, docstore.Document, error) {
-	if err := d.requireHome(crew.Surface); err != nil {
-		return crew.Member{}, docstore.Document{}, err
-	}
 	members, docs, err := d.readCrewMembers()
 	if err != nil {
 		return crew.Member{}, docstore.Document{}, err
@@ -404,10 +401,6 @@ func (d *Daemon) crewSessionActuallyLive(sessionID protocol.SessionID) (bool, er
 
 func (d *Daemon) handleCrewPrime(conn net.Conn, msg *protocol.CrewPrimeMessage) {
 	sessionID := protocol.TrimID(msg.SessionID)
-	if err := d.requireHome(crew.Surface); err != nil {
-		d.sendCrewError(conn, "prime", err)
-		return
-	}
 	result := &protocol.CrewPrimeResult{AwarenessDirs: []string{}}
 	member, block, bound, err := d.crewPrimeForSession(sessionID)
 	if err != nil {
@@ -426,9 +419,6 @@ func (d *Daemon) handleCrewPrime(conn net.Conn, msg *protocol.CrewPrimeMessage) 
 func (d *Daemon) crewPrimeForSession(sessionID protocol.SessionID) (crew.Member, string, bool, error) {
 	if sessionID == "" || d.store == nil {
 		return crew.Member{}, "", false, nil
-	}
-	if err := d.requireHome(crew.Surface); err != nil {
-		return crew.Member{}, "", false, err
 	}
 	members, _, err := d.readCrewMembers()
 	if err != nil {
@@ -494,9 +484,6 @@ func (d *Daemon) handleCrewSetWS(client *wsClient, msg *protocol.CrewSetMessage)
 }
 
 func (d *Daemon) crewSet(msg *protocol.CrewSetMessage) (*protocol.CrewMember, bool, error) {
-	if err := d.requireHome(crew.Surface); err != nil {
-		return nil, false, err
-	}
 	schema, err := d.crewCollection()
 	if err != nil {
 		return nil, false, err

@@ -282,7 +282,7 @@ func (r *delegationRollback) abandon() {
 
 func (r *delegationRollback) onWorktreeCreated(path string) {
 	r.undo = append(r.undo, func(protection foregroundCleanupProtection) error {
-		if err := r.d.doDeleteWorktreeProtected(protection, path, nil, deleteWorktreeOptions{}); err != nil {
+		if err := r.d.doDeleteWorktreeProtected(protection, path, deleteWorktreeOptions{}); err != nil {
 			return fmt.Errorf("rollback worktree %s: %v", path, err)
 		}
 		return nil
@@ -501,7 +501,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 	var source *protocol.Session
 	existingSession := d.store.Get(sessionID)
 	if sourceSessionID != "" {
-		source = d.gardenSession(sourceSessionID)
+		source = d.store.Get(sourceSessionID)
 		if source == nil && existingSession == nil {
 			return nil, fmt.Errorf("source session %s was not found; omit --source-session for a standalone launch", sourceSessionID)
 		}
@@ -519,11 +519,6 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 	}
 	if source == nil && existingSession == nil && msg.Agent == nil {
 		return nil, fmt.Errorf("source inheritance is unavailable; choose an agent directly or through a configured role/fallback")
-	}
-	if source != nil {
-		if endpointID := strings.TrimSpace(protocol.Deref(source.EndpointID)); endpointID != "" {
-			return nil, fmt.Errorf("delegation from remote session %s on endpoint %s is not supported", sourceSessionID, endpointID)
-		}
 	}
 	sourceAgent := ""
 	if source != nil {

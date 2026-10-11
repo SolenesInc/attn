@@ -1,5 +1,5 @@
-// The client computes snooze instants: "tomorrow" needs the user's timezone, which a
-// remote daemon does not share. The wire carries an absolute instant.
+// The client computes snooze instants: "tomorrow" needs the user's timezone, which the
+// daemon does not have. The wire carries an absolute instant.
 
 export type SnoozeChoiceId = '30m' | '1h' | '2h' | '4h' | '8h' | 'tomorrow' | 'saturday' | 'monday';
 

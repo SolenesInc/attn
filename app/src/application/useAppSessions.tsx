@@ -7,37 +7,25 @@ import { sessionAttentionFields } from '../navigation/sessionNavigation';
 import { buildDesktopViewModels } from '../utils/desktopViewModels';
 import { AppContentProps } from './appSupport';
 interface Options {
-  daemonEndpoints: AppContentProps['daemonEndpoints'];
   sessions: ReturnType<typeof useSessionStore.getState>['sessions'];
   daemonSessions: AppContentProps['daemonSessions'];
   connect: ReturnType<typeof useSessionStore.getState>['connect'];
 }
 export function useAppSessions({
-  daemonEndpoints,
   sessions,
   daemonSessions,
   connect,
 }: Options) {
-  const endpointById = useMemo(
-    () => new Map(daemonEndpoints.map((endpoint) => [endpoint.id, endpoint])),
-    [daemonEndpoints],
-  );
-
   const enrichedLocalSessions = sessions.map((s) => {
     const daemonSession = daemonSessions.find((ds) => ds.id === s.id);
     const rawState = daemonSession?.state ?? s.state;
     const paneStatus = s.desktop.agents.find((pane) => pane.sessionId === s.id)?.status;
     const paneState =
       paneStatus === 'failed' ? 'unknown' : paneStatus === 'spawning' ? 'launching' : null;
-    const endpointId = daemonSession?.endpoint_id ?? s.endpointId;
-    const endpoint = endpointId ? endpointById.get(endpointId) : undefined;
     return {
       ...s,
       ...sessionAttentionFields(daemonSession),
       state: paneState || normalizeSessionState(rawState),
-      endpointId,
-      endpointName: endpoint?.name,
-      endpointStatus: endpoint?.status,
       branch: daemonSession?.branch ?? s.branch,
       isWorktree: daemonSession?.is_worktree ?? s.isWorktree,
       delegatedFromChief: daemonSession?.delegated_from_chief ?? false,
@@ -71,7 +59,6 @@ export function useAppSessions({
         dispatcher_session_id: session.dispatcher_session_id,
         dispatcher_member: session.dispatcher_member,
         delegation_role: session.delegation_role,
-        endpoint_id: session.endpoint_id,
       })),
     [daemonSessions],
   );
@@ -131,7 +118,6 @@ export function useAppSessions({
     gardenSessionLabels,
     worktreePanelSessions,
     enrichedLocalSessions,
-    endpointById,
     visibleEnrichedSessions,
     delegationSessions,
     notebookChiefActive,

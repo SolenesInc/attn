@@ -370,8 +370,6 @@ func reviewDirectoryEvidence(observation garden.ReviewObservation) string {
 		return "The saved local working directory is present."
 	case garden.ReviewDirectoryMissing:
 		return "The saved local working directory is confirmed missing."
-	case garden.ReviewDirectoryRemote:
-		return "The saved execution belongs to a remote host; its working directory was not inspected locally."
 	case garden.ReviewDirectoryUnavailable:
 		return "The saved local working directory could not be verified."
 	default:

@@ -4,10 +4,8 @@ import (
 	"encoding/json"
 	"net"
 	"path/filepath"
-	"strings"
 	"testing"
 
-	"github.com/victorarias/attn/internal/hub"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -51,33 +49,6 @@ func sessionPullRequests(t *testing.T, d *Daemon, sessionID string) []protocol.S
 		t.Fatalf("session %s missing from the store", sessionID)
 	}
 	return session.PullRequests
-}
-
-func TestPullRequestMutationsTravelToTheSessionOwner(t *testing.T) {
-	d := newPRDaemonForTest(t, "s1")
-	endpoint, err := d.store.AddEndpoint("remote", "remote.example.test", "")
-	if err != nil {
-		t.Fatalf("add endpoint: %v", err)
-	}
-	d.hubManager = hub.NewManager(d.store, nil, nil, nil, nil, nil)
-	d.hubManager.ReservePendingSessionRoute(endpoint.ID, "s-remote")
-
-	for _, msg := range []any{
-		protocol.PullRequestCreatedMessage{
-			Cmd: protocol.CmdPullRequestCreated, ID: "s-remote", URL: "https://github.com/victorarias/attn/pull/71",
-		},
-		protocol.PullRequestForgetMessage{
-			Cmd: protocol.CmdPullRequestForget, ID: "s-remote", URL: "https://github.com/victorarias/attn/pull/71",
-		},
-	} {
-		resp := sendPRCommand(t, d, msg)
-		if resp.Ok || !strings.Contains(protocol.Deref(resp.Error), "endpoint owning session s-remote") {
-			t.Fatalf("response = %+v, want it routed to the owning endpoint", resp)
-		}
-	}
-	if prs := sessionPullRequests(t, d, "s1"); len(prs) != 0 {
-		t.Fatalf("local pull requests = %+v, want the hub's own store untouched", prs)
-	}
 }
 
 func TestPullRequestReportedForARunThePluginDoesNotOwnIsRefused(t *testing.T) {

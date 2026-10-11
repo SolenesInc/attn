@@ -25,7 +25,6 @@ export class DaemonObserver {
     this.ws = null;
     this.sessionsById = new Map();
     this.terminalBindings = new Map();
-    this.endpointsById = new Map();
     this.settings = new Map();
     this.connected = false;
     this.initialStateReceived = false;
@@ -217,18 +216,6 @@ export class DaemonObserver {
     );
   }
 
-  addEndpoint(name, sshTarget) {
-    this.send({ cmd: 'add_endpoint', name, ssh_target: sshTarget });
-  }
-
-  updateEndpoint(endpointId, updates) {
-    this.send({ cmd: 'update_endpoint', endpoint_id: endpointId, ...updates });
-  }
-
-  removeEndpoint(endpointId) {
-    this.send({ cmd: 'remove_endpoint', endpoint_id: endpointId });
-  }
-
   unregisterSession(sessionId) {
     this.send({ cmd: 'unregister', id: sessionId });
   }
@@ -263,36 +250,6 @@ export class DaemonObserver {
       if (session === sessionId) return terminal;
     }
     throw new Error(`No terminal binding received for session ${sessionId}`);
-  }
-
-  getEndpoint(endpointId) {
-    return this.endpointsById.get(endpointId) || null;
-  }
-
-  findEndpointByName(name) {
-    for (const endpoint of this.endpointsById.values()) {
-      if (endpoint.name === name) {
-        return endpoint;
-      }
-    }
-    return null;
-  }
-
-  async waitForEndpoint({ id, name, sshTarget, status, timeoutMs = 20_000 } = {}) {
-    return this.waitFor(
-      () => {
-        for (const endpoint of this.endpointsById.values()) {
-          if (id && endpoint.id !== id) continue;
-          if (name && endpoint.name !== name) continue;
-          if (sshTarget && endpoint.ssh_target !== sshTarget) continue;
-          if (status && endpoint.status !== status) continue;
-          return endpoint;
-        }
-        return null;
-      },
-      `endpoint id=${id || '*'} name=${name || '*'} sshTarget=${sshTarget || '*'} status=${status || '*'}`,
-      timeoutMs
-    );
   }
 
   async waitForSession({ id, label, directory, timeoutMs = 20_000 } = {}) {
@@ -377,14 +334,7 @@ export class DaemonObserver {
       state: session.state,
       agent: session.agent,
     }));
-    const endpoints = [...this.endpointsById.values()].map((endpoint) => ({
-      id: endpoint.id,
-      name: endpoint.name,
-      sshTarget: endpoint.ssh_target,
-      status: endpoint.status,
-      sessionCount: endpoint.session_count,
-    }));
-    return JSON.stringify({ sessions, endpoints, arrangement: JSON.parse(this.describeArrangement()) }, null, 2);
+    return JSON.stringify({ sessions, arrangement: JSON.parse(this.describeArrangement()) }, null, 2);
   }
 
   #connectOnce() {
@@ -463,10 +413,6 @@ export class DaemonObserver {
         for (const session of data.sessions || []) {
           this.sessionsById.set(session.id, session);
         }
-        this.endpointsById.clear();
-        for (const endpoint of data.endpoints || []) {
-          this.endpointsById.set(endpoint.id, endpoint);
-        }
         this.#applySettings(data.settings);
         this.profileId = data.selected_profile_id ?? null;
         this.profile = (data.profiles || []).find((profile) => profile.id === this.profileId) ?? null;
@@ -498,17 +444,6 @@ export class DaemonObserver {
         this.sessionsById.clear();
         for (const session of data.sessions || []) {
           this.sessionsById.set(session.id, session);
-        }
-        break;
-      case 'endpoint_status_changed':
-        if (data.endpoint?.id) {
-          this.endpointsById.set(data.endpoint.id, data.endpoint);
-        }
-        break;
-      case 'endpoints_updated':
-        this.endpointsById.clear();
-        for (const endpoint of data.endpoints || []) {
-          this.endpointsById.set(endpoint.id, endpoint);
         }
         break;
       case 'session_registered':

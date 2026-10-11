@@ -1,11 +1,10 @@
 // To parse this data:
 //
-//   import { Convert, ActivityStatusMessage, ActivityStatusResult, ActivityStatusSession, AddEndpointMessage, AgentCloseMessage, AgentCloseResult, AgentCloseRule, AgentInboxBatchResult, AgentInboxItem, AgentInboxMessage, AgentMessageState, AgentMsgMessage, AgentMsgResult, AgentMsgStatus, AgentMsgStatusMessage, AgentPeekExit, AgentPeekMessage, AgentPeekResult, AgentPeekScreen, AgentPeerMessage, ApprovePRMessage, AttachBlock, AttachPolicy, AttachResultMessage, AttachSessionMessage, AttachSnapshot, AuthorState, AuthorsUpdatedMessage, AutoModeConfigInfo, AutoModeConfigResult, AutoModeConfigResultMessage, AutoModeDenialInfo, AutoModeDenialsMessage, AutoModeDenialsResult, AutoModeDiscardMessage, AutoModeDiscardResultMessage, AutoModeEnvNotesMessage, AutoModeEnvResult, AutoModeEnvSetResultMessage, AutoModeEnvSlotMessage, AutoModeEnvironmentInfo, AutoModeEnvironmentSlot, AutoModeEnvironmentSlotValue, AutoModeGetMessage, AutoModeHostAddMessage, AutoModeHostRemoveMessage, AutoModeLegacyDismissMessage, AutoModeNetworkInfo, AutoModePolicySetMessage, AutoModePresetInfo, AutoModePromoteMessage, AutoModePromoteResultMessage, AutoModeProposalInfo, AutoModeProposeMessage, AutoModeProposeResult, AutoModeRuleAddMessage, AutoModeRuleInfo, AutoModeRuleRemoveMessage, AutoModeShowMessage, AutoModeShowResult, AutoModeStateChangedMessage, AutoModeStateResultMessage, AutomationApplyMessage, AutomationApplyResultMessage, AutomationCleanupMessage, AutomationCleanupResultMessage, AutomationDefinitionGetMessage, AutomationDefinitionResultMessage, AutomationDefinitionSummary, AutomationDefinitionsGetMessage, AutomationDefinitionsResultMessage, AutomationDeleteMessage, AutomationDeleteResultMessage, AutomationProvenance, AutomationRunMessage, AutomationRunResultMessage, AutomationRunSummary, AutomationRunsGetMessage, AutomationRunsResultMessage, AutomationSetEnabledMessage, AutomationSetEnabledResultMessage, AutomationValidateMessage, AutomationValidateResultMessage, AutomationsChangedMessage, BackgroundLaunchMessage, BootstrapEndpointMessage, Branch, BranchChangedMessage, BranchesResultMessage, BrowseDirectoryMessage, BrowseDirectoryResultMessage, BrowserControlMessage, BrowserControlRequestMessage, BrowserControlResponseMessage, BrowserControlResultMessage, BuiltinDelegationRole, BusConsumerStatus, BusHealthEntry, BusProducerStatus, BusSetConsumerEnabledMessage, BusSetConsumerEnabledResultMessage, BusStatusGetMessage, BusStatusResultMessage, CancelCountdownMessage, ChiefOfStaffResultMessage, ClearSessionActivityMessage, ClearWarningsMessage, ClientEvictionNoticeMessage, ClientHelloMessage, CollapseRepoMessage, CommandErrorMessage, CommandUsage, CreateWorktreeFromBranchMessage, CreateWorktreeMessage, CreateWorktreeResultMessage, CrewCharterDocument, CrewCharterGetMessage, CrewCharterGetResult, CrewCharterGetResultMessage, CrewCharterSetMessage, CrewCharterSetResult, CrewCharterSetResultMessage, CrewDayClose, CrewHandoffDocument, CrewHandoffGetMessage, CrewHandoffGetResult, CrewHandoffGetResultMessage, CrewHandoffMessage, CrewHandoffResult, CrewHandoffSummary, CrewHandoffsGetMessage, CrewHandoffsGetResult, CrewHandoffsGetResultMessage, CrewListMessage, CrewListResult, CrewMember, CrewPrimeMessage, CrewPrimeResult, CrewSetMessage, CrewSetResult, CrewSetResultMessage, CrewSleepMessage, CrewSleepResult, CrewSleepResultMessage, CrewUpdatedMessage, CrewWakeMessage, CrewWakeResult, CrewWakeResultMessage, DaemonWarning, DelegateAssignment, DelegateAssignmentKind, DelegateCheckout, DelegateCheckoutKind, DelegateHandover, DelegateMessage, DelegateResult, DelegateResultMessage, DelegateStatusMessage, DelegateWorktreeRequest, DelegationChoice, DelegationFailure, DelegationFallback, DelegationOperation, DelegationOperationMessage, DelegationOperationState, DelegationPreferences, DelegationPreferencesChangedMessage, DelegationPreferencesCommitMessage, DelegationPreferencesGetMessage, DelegationPreferencesHistoryMessage, DelegationPreferencesHistoryResult, DelegationPreferencesOrigin, DelegationPreferencesResultMessage, DelegationPreferencesRevision, DelegationPreferencesRollbackMessage, DelegationPreferencesSaveMessage, DelegationPreferencesShowMessage, DelegationRole, DelegationRolesMessage, DelegationRolesResult, DelegationSelection, DeleteWorktreeMessage, DeleteWorktreeResultMessage, Desktop, DesktopCloseMessage, DesktopCreateMessage, DesktopDockTileMessage, DesktopMoveLeafMessage, DesktopMoveSessionMessage, DesktopMoveSessionResult, DesktopPane, DesktopPlaceSessionMessage, DesktopRemoveLeafMessage, DesktopRenameMessage, DesktopReorderMessage, DesktopSetActivePaneMessage, DesktopSetCurrentMessage, DesktopSetOrderMessage, DesktopSetSplitRatioMessage, DesktopShowLeafMessage, DesktopShowSessionMessage, DesktopTileContentMessage, DesktopUpdateTileMessage, DetachSessionMessage, DirectoryEntry, DocCollectionsMessage, DocCollectionsResult, DocCountMessage, DocCountResult, DocDefineMessage, DocDefineResult, DocDeleteMessage, DocDeleteResult, DocGetMessage, DocGetResult, DocPutMessage, DocPutResult, DocQueryMessage, DocQueryResult, DocSubscribeMessage, DocSubscribeResult, DocSubscriptionDeliveryMessage, DocSubscriptionEndedMessage, DocUndefineMessage, DocUndefineResult, DocUnsubscribeMessage, DocumentCollectionSchema, DocumentConflict, DocumentFieldSpec, DocumentFilter, DocumentQuery, DocumentRevision, DocumentSort, EndpointActionResultMessage, EndpointCapabilities, EndpointInfo, EndpointStatusChangedMessage, EndpointsUpdatedMessage, EnsureRepoMessage, EnsureRepoResultMessage, EvidenceExcerpt, FetchPRDetailsMessage, FetchPRDetailsResultMessage, FetchRemotesMessage, FetchRemotesResultMessage, FileActivity, FileDiffResultMessage, FilesEditedMessage, FSChangedMessage, FSDeleteMessage, FSDeleteResult, FSDeleteResultMessage, FSEntry, FSExistsMessage, FSExistsResult, FSExistsResultMessage, FSIndexMessage, FSIndexResultMessage, FSListMessage, FSListResultMessage, FSReadAssetMessage, FSReadAssetResult, FSReadAssetResultMessage, FSReadMessage, FSReadResult, FSReadResultMessage, FSRenameMessage, FSRenameResult, FSRenameResultMessage, FSUnwatchMessage, FSUnwatchResultMessage, FSWatchMessage, FSWatchResultMessage, FSWriteMessage, FSWriteResult, FSWriteResultMessage, GardenReview, GardenReviewEvidence, GardenReviewItem, GardenReviewRecipe, GardenReviewRun, GardenReviewUpdatedMessage, GardenSeedsUpdatedMessage, GetCommandUsageMessage, GetCommandUsageResultMessage, GetDefaultBranchMessage, GetDefaultBranchResultMessage, GetFileDiffMessage, GetKittyImageMessage, GetPresentationRoundMessage, GetPresentationRoundResultMessage, GetPresentationsMessage, GetPresentationsResultMessage, GetRecentLocationsMessage, GetRepoInfoMessage, GetRepoInfoResultMessage, GetScreenSnapshotMessage, GetScreenSnapshotResultMessage, GetSettingsMessage, GitFileChange, GitHubHostsUpdatedMessage, GitOperation, GitOperationFinishedMessage, GitOperationKind, GitOperationStartedMessage, GitOperationStatus, GitStatusUpdateMessage, GuardianSelection, Harness, HarnessModel, HarnessModelsMessage, HarnessModelsResultMessage, HeartbeatMessage, HeatState, HookCompactionMessage, HookNotificationMessage, HookStopFailureMessage, InitialStateMessage, InjectTestPRMessage, InjectTestSessionMessage, InspectPathMessage, InspectPathResultMessage, InstallBundledPluginMessage, InstallPluginMessage, JournalAppendMessage, JournalAppendResult, KeptConversation, KeptConversationDeletedBy, KeptConversationForgetMessage, KeptConversationForgetResultEvent, KeptConversationKeepMessage, KeptConversationKeepResultEvent, KeptConversationListMessage, KeptConversationListResult, KeptConversationListResultEvent, KeptConversationRow, KeptConversationSeed, KeptConversationsChangedEvent, KillSessionMessage, KittyImageResultMessage, KittyPlacement, KittyPlacementsMessage, LaunchDesktopGetMessage, LaunchDesktopItem, LaunchDesktopKind, LaunchDesktopResultMessage, LaunchDesktopSetMessage, LaunchDesktopSetting, LayoutDockEdge, LayoutPaneKind, LayoutPaneStatus, LayoutSplitDirection, LeafMoved, ListBranchesMessage, ListEndpointsMessage, ListPluginsMessage, ListRemoteBranchesMessage, ListRemoteBranchesResultMessage, ListWorktreesMessage, MarkdownAnnotation, MarkdownAnnotationAnchor, MarkdownAnnotationsClearMessage, MarkdownAnnotationsClearResultMessage, MarkdownAnnotationsGetMessage, MarkdownAnnotationsGetResultMessage, MarkdownAnnotationsSaveMessage, MarkdownAnnotationsSaveResultMessage, MarkdownAnnotationsSubmitMessage, MarkdownAnnotationsSubmitResultMessage, MergePRMessage, MigrationChangedMessage, MigrationDraftDesktop, MigrationFinishMessage, MigrationGetMessage, MigrationGroup, MigrationKeepMessage, MigrationMoveMessage, MigrationPhase, MigrationResultMessage, MigrationState, MigrationSuggestMessage, MigrationUndoMessage, ModelCapabilitySupport, ModelTier, ModelTierSource, MuteAuthorMessage, MutePRMessage, MuteRepoMessage, NotebookBacklinksMessage, NotebookBacklinksResultMessage, NotebookChangedMessage, NotebookEntry, NotebookGuideMessage, NotebookGuideResult, NotebookListMessage, NotebookListResultMessage, NotebookReadMessage, NotebookReadResult, NotebookReadResultMessage, NotebookSendToChiefMessage, NotebookSendToChiefResult, NotebookSendToChiefResultMessage, NotebookWriteMessage, NotebookWriteResult, NotebookWriteResultMessage, Notification, NotificationAction, NotificationListMessage, NotificationListResultMessage, NotificationMarkReadMessage, NotificationMarkReadResultMessage, NotificationSeverity, NotificationsUpdatedMessage, OpenBrowserMessage, OpenMarkdownMessage, OpenMarkdownResultMessage, OpenSeedMessage, OpenSeedResultMessage, OpenSentFilesMessage, PR, PRActionResultMessage, PRRole, PRVisitedMessage, PRsUpdatedMessage, PathInspection, PluginActionResultMessage, PluginInfo, PluginIssue, PluginsUpdatedMessage, PresentAnnotation, PresentCloseMessage, PresentCloseResultMessage, PresentCommentInput, PresentFeedbackMessage, PresentFeedbackResult, PresentFile, PresentManifestView, PresentOpenMessage, PresentOpenResult, PresentSubmitRoundMessage, PresentSubmitRoundResultMessage, Presentation, PresentationAddedMessage, PresentationComment, PresentationRound, PresentationUpdatedMessage, Profile, ProfileActionResultMessage, ProfileArrangementChangedMessage, ProfileCreateMessage, ProfileDeleteMessage, ProfileErrorCode, ProfileRenameMessage, ProfileSelectMessage, ProfilesChangedMessage, PtyDesyncMessage, PtyInputMessage, PtyInputProbeResultMessage, PtyOutputMessage, PtyResizeMessage, PtyResizedMessage, PullRequestCreatedMessage, PullRequestForgetMessage, PullRequestProvenance, PullRequestUnwatchMessage, PullRequestUnwatchResultMessage, PullRequestWatchMessage, PullRequestWatchMode, PullRequestWatchResultMessage, QueryAuthorsMessage, QueryMessage, QueryPRsMessage, QueryReposMessage, RateLimitedMessage, RecentFilesMessage, RecentFilesResultMessage, RecentLocation, RecentLocationsResultMessage, RecordCommandUsageMessage, RecordCommandUsageResultMessage, RefreshPRsMessage, RefreshPRsResultMessage, ReloadSessionMessage, ReloadSessionResultMessage, RemoveEndpointMessage, RemovePluginMessage, RenameResultMessage, RenameSessionMessage, RepoInfo, RepoState, ReposUpdatedMessage, Response, ReviewComment, RuntimeRespawnedMessage, Seed, SeedArtifact, SeedArtifactReference, SeedArtifactTargetMessage, SeedArtifactTargetResult, SeedArtifactTargetResultMessage, SeedArtifactTransferMessage, SeedArtifactTransferResult, SeedArtifactTransferResultMessage, SeedContinuation, SeedDocument, SeedDocumentGetMessage, SeedDocumentGetResultMessage, SeedEdge, SeedEditMessage, SeedEditResult, SeedHandoverRequest, SeedHarvestCondition, SeedHarvestWhenMerged, SeedLinkMessage, SeedLinkResult, SeedListMessage, SeedListResult, SeedNote, SeedNoteMessage, SeedNoteResult, SeedNoteResultMessage, SeedNotesMessage, SeedNotesResult, SeedPlantMessage, SeedPlantResult, SeedPlotChild, SeedPlotMessage, SeedPlotProgress, SeedPlotResult, SeedReadyMessage, SeedReadyResult, SeedRelation, SeedResumeMessage, SeedResumeResultMessage, SeedReviewActionContext, SeedReviewCancelMessage, SeedReviewDraftMessage, SeedReviewDraftResultMessage, SeedReviewKeepMessage, SeedReviewResult, SeedReviewResultMessage, SeedReviewRetryMessage, SeedReviewShowMessage, SeedReviewStartMessage, SeedSearchHit, SeedSearchMessage, SeedSearchResult, SeedSendToChiefMessage, SeedSendToChiefResult, SeedSendToChiefResultMessage, SeedShowMessage, SeedShowResult, SeedTransitionMessage, SeedTransitionResult, SeedTransitionResultMessage, SeedVar, SeedWatchMessage, SeedWatchResult, Session, SessionAnnotation, SessionAnnotationsClearMessage, SessionAnnotationsClearResultMessage, SessionAnnotationsGetMessage, SessionAnnotationsGetResultMessage, SessionAnnotationsSaveMessage, SessionAnnotationsSaveResultMessage, SessionAnnotationsSubmitMessage, SessionAnnotationsSubmitResultMessage, SessionCloseResultMessage, SessionClosedMessage, SessionContextWindowCapResultMessage, SessionDelegationRole, SessionExitedMessage, SessionInstructionsMessage, SessionInstructionsResult, SessionLedgerEntry, SessionLedgerFacet, SessionLedgerFacets, SessionLedgerProfileFacet, SessionListMessage, SessionListResult, SessionListResultMessage, SessionMessage, SessionMessageWindowStatus, SessionMessagesChangedMessage, SessionMessagesGetMessage, SessionMessagesGetResultMessage, SessionPlacement, SessionPullRequest, SessionRegisteredMessage, SessionReopen, SessionReopenAction, SessionReopenEntry, SessionReopenMessage, SessionReopenResult, SessionReopenResultMessage, SessionShowMessage, SessionShowResult, SessionShowResultMessage, SessionState, SessionStateChangedMessage, SessionTranscriptEvent, SessionTranscriptMessage, SessionTranscriptResult, SessionUnregisteredMessage, SessionUsage, SessionUsageModel, SessionsUpdatedMessage, SetChiefOfStaffMessage, SetClientPresenceMessage, SetEndpointRemoteWebMessage, SetPluginPriorityMessage, SetSessionContextWindowCapMessage, SetSessionPriorityMessage, SetSessionResumeIDMessage, SetSettingMessage, SetTerminalThemeMessage, SettingsUpdatedMessage, SettleTurnMessage, SnoozeTurnMessage, SpawnResultMessage, SpawnSessionMessage, StateExplainEntry, StateExplainMessage, StateExplainResult, StateMessage, StopBackgroundTask, StopMessage, StoredDocument, SubscribeGitStatusMessage, SupportInputTrace, SupportRuntimeEvidence, SupportSnapshotMessage, SupportSnapshotResultMessage, Task, TaskListMessage, TaskListResultMessage, TaskRetryMessage, TaskRetryResultMessage, TasksChangedMessage, TerminalBinding, TerminalBindingsUpdatedMessage, TerminalExit, TerminalPointerActivityMessage, TierDefaults, UninstallPluginMessage, UnregisterMessage, UnsubscribeGitStatusMessage, UpdateEndpointMessage, WakeTurnMessage, WebSocketEvent, Worktree, WorktreeCreatedEvent, WorktreeDeletedEvent, WorktreeKeepMessage, WorktreeKeepResult, WorktreeKeepResultEvent, WorktreeListMessage, WorktreeListResult, WorktreeListResultEvent, WorktreeRefreshMessage, WorktreeRefreshResult, WorktreeRefreshResultEvent, WorktreeRepository, WorktreeStateChangedEvent, WorktreeSweepEntry, WorktreeSweepLogMessage, WorktreeSweepLogResult, WorktreeSweepLogResultEvent, WorktreeSweptEvent, WorktreesUpdatedMessage } from "./generated";
+//   import { Convert, ActivityStatusMessage, ActivityStatusResult, ActivityStatusSession, AgentCloseMessage, AgentCloseResult, AgentCloseRule, AgentInboxBatchResult, AgentInboxItem, AgentInboxMessage, AgentMessageState, AgentMsgMessage, AgentMsgResult, AgentMsgStatus, AgentMsgStatusMessage, AgentPeekExit, AgentPeekMessage, AgentPeekResult, AgentPeekScreen, AgentPeerMessage, ApprovePRMessage, AttachBlock, AttachPolicy, AttachResultMessage, AttachSessionMessage, AttachSnapshot, AuthorState, AuthorsUpdatedMessage, AutoModeConfigInfo, AutoModeConfigResult, AutoModeConfigResultMessage, AutoModeDenialInfo, AutoModeDenialsMessage, AutoModeDenialsResult, AutoModeDiscardMessage, AutoModeDiscardResultMessage, AutoModeEnvNotesMessage, AutoModeEnvResult, AutoModeEnvSetResultMessage, AutoModeEnvSlotMessage, AutoModeEnvironmentInfo, AutoModeEnvironmentSlot, AutoModeEnvironmentSlotValue, AutoModeGetMessage, AutoModeHostAddMessage, AutoModeHostRemoveMessage, AutoModeLegacyDismissMessage, AutoModeNetworkInfo, AutoModePolicySetMessage, AutoModePresetInfo, AutoModePromoteMessage, AutoModePromoteResultMessage, AutoModeProposalInfo, AutoModeProposeMessage, AutoModeProposeResult, AutoModeRuleAddMessage, AutoModeRuleInfo, AutoModeRuleRemoveMessage, AutoModeShowMessage, AutoModeShowResult, AutoModeStateChangedMessage, AutoModeStateResultMessage, AutomationApplyMessage, AutomationApplyResultMessage, AutomationCleanupMessage, AutomationCleanupResultMessage, AutomationDefinitionGetMessage, AutomationDefinitionResultMessage, AutomationDefinitionSummary, AutomationDefinitionsGetMessage, AutomationDefinitionsResultMessage, AutomationDeleteMessage, AutomationDeleteResultMessage, AutomationProvenance, AutomationRunMessage, AutomationRunResultMessage, AutomationRunSummary, AutomationRunsGetMessage, AutomationRunsResultMessage, AutomationSetEnabledMessage, AutomationSetEnabledResultMessage, AutomationValidateMessage, AutomationValidateResultMessage, AutomationsChangedMessage, BackgroundLaunchMessage, Branch, BranchChangedMessage, BranchesResultMessage, BrowseDirectoryMessage, BrowseDirectoryResultMessage, BrowserControlMessage, BrowserControlRequestMessage, BrowserControlResultMessage, BuiltinDelegationRole, BusConsumerStatus, BusHealthEntry, BusProducerStatus, BusSetConsumerEnabledMessage, BusSetConsumerEnabledResultMessage, BusStatusGetMessage, BusStatusResultMessage, CancelCountdownMessage, ChiefOfStaffResultMessage, ClearSessionActivityMessage, ClearWarningsMessage, ClientEvictionNoticeMessage, ClientHelloMessage, CollapseRepoMessage, CommandErrorMessage, CommandUsage, CreateWorktreeFromBranchMessage, CreateWorktreeMessage, CreateWorktreeResultMessage, CrewCharterDocument, CrewCharterGetMessage, CrewCharterGetResult, CrewCharterGetResultMessage, CrewCharterSetMessage, CrewCharterSetResult, CrewCharterSetResultMessage, CrewDayClose, CrewHandoffDocument, CrewHandoffGetMessage, CrewHandoffGetResult, CrewHandoffGetResultMessage, CrewHandoffMessage, CrewHandoffResult, CrewHandoffSummary, CrewHandoffsGetMessage, CrewHandoffsGetResult, CrewHandoffsGetResultMessage, CrewListMessage, CrewListResult, CrewMember, CrewPrimeMessage, CrewPrimeResult, CrewSetMessage, CrewSetResult, CrewSetResultMessage, CrewSleepMessage, CrewSleepResult, CrewSleepResultMessage, CrewUpdatedMessage, CrewWakeMessage, CrewWakeResult, CrewWakeResultMessage, DaemonWarning, DelegateAssignment, DelegateAssignmentKind, DelegateCheckout, DelegateCheckoutKind, DelegateHandover, DelegateMessage, DelegateResult, DelegateResultMessage, DelegateStatusMessage, DelegateWorktreeRequest, DelegationChoice, DelegationFailure, DelegationFallback, DelegationOperation, DelegationOperationMessage, DelegationOperationState, DelegationPreferences, DelegationPreferencesChangedMessage, DelegationPreferencesCommitMessage, DelegationPreferencesGetMessage, DelegationPreferencesHistoryMessage, DelegationPreferencesHistoryResult, DelegationPreferencesOrigin, DelegationPreferencesResultMessage, DelegationPreferencesRevision, DelegationPreferencesRollbackMessage, DelegationPreferencesSaveMessage, DelegationPreferencesShowMessage, DelegationRole, DelegationRolesMessage, DelegationRolesResult, DelegationSelection, DeleteWorktreeMessage, DeleteWorktreeResultMessage, Desktop, DesktopCloseMessage, DesktopCreateMessage, DesktopDockTileMessage, DesktopMoveLeafMessage, DesktopMoveSessionMessage, DesktopMoveSessionResult, DesktopPane, DesktopPlaceSessionMessage, DesktopRemoveLeafMessage, DesktopRenameMessage, DesktopReorderMessage, DesktopSetActivePaneMessage, DesktopSetCurrentMessage, DesktopSetOrderMessage, DesktopSetSplitRatioMessage, DesktopShowLeafMessage, DesktopShowSessionMessage, DesktopTileContentMessage, DesktopUpdateTileMessage, DetachSessionMessage, DirectoryEntry, DocCollectionsMessage, DocCollectionsResult, DocCountMessage, DocCountResult, DocDefineMessage, DocDefineResult, DocDeleteMessage, DocDeleteResult, DocGetMessage, DocGetResult, DocPutMessage, DocPutResult, DocQueryMessage, DocQueryResult, DocSubscribeMessage, DocSubscribeResult, DocSubscriptionDeliveryMessage, DocSubscriptionEndedMessage, DocUndefineMessage, DocUndefineResult, DocUnsubscribeMessage, DocumentCollectionSchema, DocumentConflict, DocumentFieldSpec, DocumentFilter, DocumentQuery, DocumentRevision, DocumentSort, EnsureRepoMessage, EnsureRepoResultMessage, EvidenceExcerpt, FetchPRDetailsMessage, FetchPRDetailsResultMessage, FetchRemotesMessage, FetchRemotesResultMessage, FileActivity, FileDiffResultMessage, FilesEditedMessage, FSChangedMessage, FSDeleteMessage, FSDeleteResult, FSDeleteResultMessage, FSEntry, FSExistsMessage, FSExistsResult, FSExistsResultMessage, FSIndexMessage, FSIndexResultMessage, FSListMessage, FSListResultMessage, FSReadAssetMessage, FSReadAssetResult, FSReadAssetResultMessage, FSReadMessage, FSReadResult, FSReadResultMessage, FSRenameMessage, FSRenameResult, FSRenameResultMessage, FSUnwatchMessage, FSUnwatchResultMessage, FSWatchMessage, FSWatchResultMessage, FSWriteMessage, FSWriteResult, FSWriteResultMessage, GardenReview, GardenReviewEvidence, GardenReviewItem, GardenReviewRecipe, GardenReviewRun, GardenReviewUpdatedMessage, GardenSeedsUpdatedMessage, GetCommandUsageMessage, GetCommandUsageResultMessage, GetDefaultBranchMessage, GetDefaultBranchResultMessage, GetFileDiffMessage, GetKittyImageMessage, GetPresentationRoundMessage, GetPresentationRoundResultMessage, GetPresentationsMessage, GetPresentationsResultMessage, GetRecentLocationsMessage, GetRepoInfoMessage, GetRepoInfoResultMessage, GetScreenSnapshotMessage, GetScreenSnapshotResultMessage, GetSettingsMessage, GitFileChange, GitHubHostsUpdatedMessage, GitOperation, GitOperationFinishedMessage, GitOperationKind, GitOperationStartedMessage, GitOperationStatus, GitStatusUpdateMessage, GuardianSelection, Harness, HarnessModel, HarnessModelsMessage, HarnessModelsResultMessage, HeartbeatMessage, HeatState, HookCompactionMessage, HookNotificationMessage, HookStopFailureMessage, InitialStateMessage, InjectTestPRMessage, InjectTestSessionMessage, InspectPathMessage, InspectPathResultMessage, InstallBundledPluginMessage, InstallPluginMessage, JournalAppendMessage, JournalAppendResult, KeptConversation, KeptConversationDeletedBy, KeptConversationForgetMessage, KeptConversationForgetResultEvent, KeptConversationKeepMessage, KeptConversationKeepResultEvent, KeptConversationListMessage, KeptConversationListResult, KeptConversationListResultEvent, KeptConversationRow, KeptConversationSeed, KeptConversationsChangedEvent, KillSessionMessage, KittyImageResultMessage, KittyPlacement, KittyPlacementsMessage, LaunchDesktopGetMessage, LaunchDesktopItem, LaunchDesktopKind, LaunchDesktopResultMessage, LaunchDesktopSetMessage, LaunchDesktopSetting, LayoutDockEdge, LayoutPaneKind, LayoutPaneStatus, LayoutSplitDirection, LeafMoved, ListBranchesMessage, ListPluginsMessage, ListRemoteBranchesMessage, ListRemoteBranchesResultMessage, ListWorktreesMessage, MarkdownAnnotation, MarkdownAnnotationAnchor, MarkdownAnnotationsClearMessage, MarkdownAnnotationsClearResultMessage, MarkdownAnnotationsGetMessage, MarkdownAnnotationsGetResultMessage, MarkdownAnnotationsSaveMessage, MarkdownAnnotationsSaveResultMessage, MarkdownAnnotationsSubmitMessage, MarkdownAnnotationsSubmitResultMessage, MergePRMessage, MigrationChangedMessage, MigrationDraftDesktop, MigrationFinishMessage, MigrationGetMessage, MigrationGroup, MigrationKeepMessage, MigrationMoveMessage, MigrationPhase, MigrationResultMessage, MigrationState, MigrationSuggestMessage, MigrationUndoMessage, ModelCapabilitySupport, ModelTier, ModelTierSource, MuteAuthorMessage, MutePRMessage, MuteRepoMessage, NotebookBacklinksMessage, NotebookBacklinksResultMessage, NotebookChangedMessage, NotebookEntry, NotebookGuideMessage, NotebookGuideResult, NotebookListMessage, NotebookListResultMessage, NotebookReadMessage, NotebookReadResult, NotebookReadResultMessage, NotebookSendToChiefMessage, NotebookSendToChiefResult, NotebookSendToChiefResultMessage, NotebookWriteMessage, NotebookWriteResult, NotebookWriteResultMessage, Notification, NotificationAction, NotificationListMessage, NotificationListResultMessage, NotificationMarkReadMessage, NotificationMarkReadResultMessage, NotificationSeverity, NotificationsUpdatedMessage, OpenBrowserMessage, OpenMarkdownMessage, OpenMarkdownResultMessage, OpenSeedMessage, OpenSeedResultMessage, OpenSentFilesMessage, PR, PRActionResultMessage, PRRole, PRVisitedMessage, PRsUpdatedMessage, PathInspection, PluginActionResultMessage, PluginInfo, PluginIssue, PluginsUpdatedMessage, PresentAnnotation, PresentCloseMessage, PresentCloseResultMessage, PresentCommentInput, PresentFeedbackMessage, PresentFeedbackResult, PresentFile, PresentManifestView, PresentOpenMessage, PresentOpenResult, PresentSubmitRoundMessage, PresentSubmitRoundResultMessage, Presentation, PresentationAddedMessage, PresentationComment, PresentationRound, PresentationUpdatedMessage, Profile, ProfileActionResultMessage, ProfileArrangementChangedMessage, ProfileCreateMessage, ProfileDeleteMessage, ProfileErrorCode, ProfileRenameMessage, ProfileSelectMessage, ProfilesChangedMessage, PtyDesyncMessage, PtyInputMessage, PtyInputProbeResultMessage, PtyOutputMessage, PtyResizeMessage, PtyResizedMessage, PullRequestCreatedMessage, PullRequestForgetMessage, PullRequestProvenance, PullRequestUnwatchMessage, PullRequestWatchMessage, PullRequestWatchMode, QueryAuthorsMessage, QueryMessage, QueryPRsMessage, QueryReposMessage, RateLimitedMessage, RecentFilesMessage, RecentFilesResultMessage, RecentLocation, RecentLocationsResultMessage, RecordCommandUsageMessage, RecordCommandUsageResultMessage, RefreshPRsMessage, RefreshPRsResultMessage, ReloadSessionMessage, ReloadSessionResultMessage, RemovePluginMessage, RenameResultMessage, RenameSessionMessage, RepoInfo, RepoState, ReposUpdatedMessage, Response, ReviewComment, RuntimeRespawnedMessage, Seed, SeedArtifact, SeedArtifactReference, SeedArtifactTargetMessage, SeedArtifactTargetResult, SeedArtifactTargetResultMessage, SeedArtifactTransferMessage, SeedArtifactTransferResult, SeedArtifactTransferResultMessage, SeedContinuation, SeedDocument, SeedDocumentGetMessage, SeedDocumentGetResultMessage, SeedEdge, SeedEditMessage, SeedEditResult, SeedHandoverRequest, SeedHarvestCondition, SeedHarvestWhenMerged, SeedLinkMessage, SeedLinkResult, SeedListMessage, SeedListResult, SeedNote, SeedNoteMessage, SeedNoteResult, SeedNoteResultMessage, SeedNotesMessage, SeedNotesResult, SeedPlantMessage, SeedPlantResult, SeedPlotChild, SeedPlotMessage, SeedPlotProgress, SeedPlotResult, SeedReadyMessage, SeedReadyResult, SeedRelation, SeedResumeMessage, SeedResumeResultMessage, SeedReviewActionContext, SeedReviewCancelMessage, SeedReviewDraftMessage, SeedReviewDraftResultMessage, SeedReviewKeepMessage, SeedReviewResult, SeedReviewResultMessage, SeedReviewRetryMessage, SeedReviewShowMessage, SeedReviewStartMessage, SeedSearchHit, SeedSearchMessage, SeedSearchResult, SeedSendToChiefMessage, SeedSendToChiefResult, SeedSendToChiefResultMessage, SeedShowMessage, SeedShowResult, SeedTransitionMessage, SeedTransitionResult, SeedTransitionResultMessage, SeedVar, SeedWatchMessage, SeedWatchResult, Session, SessionAnnotation, SessionAnnotationsClearMessage, SessionAnnotationsClearResultMessage, SessionAnnotationsGetMessage, SessionAnnotationsGetResultMessage, SessionAnnotationsSaveMessage, SessionAnnotationsSaveResultMessage, SessionAnnotationsSubmitMessage, SessionAnnotationsSubmitResultMessage, SessionCloseResultMessage, SessionClosedMessage, SessionContextWindowCapResultMessage, SessionDelegationRole, SessionExitedMessage, SessionInstructionsMessage, SessionInstructionsResult, SessionLedgerEntry, SessionLedgerFacet, SessionLedgerFacets, SessionLedgerProfileFacet, SessionListMessage, SessionListResult, SessionListResultMessage, SessionMessage, SessionMessageWindowStatus, SessionMessagesChangedMessage, SessionMessagesGetMessage, SessionMessagesGetResultMessage, SessionPlacement, SessionPullRequest, SessionRegisteredMessage, SessionReopen, SessionReopenAction, SessionReopenEntry, SessionReopenMessage, SessionReopenResult, SessionReopenResultMessage, SessionShowMessage, SessionShowResult, SessionShowResultMessage, SessionState, SessionStateChangedMessage, SessionTranscriptEvent, SessionTranscriptMessage, SessionTranscriptResult, SessionUnregisteredMessage, SessionUsage, SessionUsageModel, SessionsUpdatedMessage, SetChiefOfStaffMessage, SetClientPresenceMessage, SetPluginPriorityMessage, SetSessionContextWindowCapMessage, SetSessionPriorityMessage, SetSessionResumeIDMessage, SetSettingMessage, SetTerminalThemeMessage, SettingsUpdatedMessage, SettleTurnMessage, SnoozeTurnMessage, SpawnResultMessage, SpawnSessionMessage, StateExplainEntry, StateExplainMessage, StateExplainResult, StateMessage, StopBackgroundTask, StopMessage, StoredDocument, SubscribeGitStatusMessage, SupportInputTrace, SupportRuntimeEvidence, SupportSnapshotMessage, SupportSnapshotResultMessage, Task, TaskListMessage, TaskListResultMessage, TaskRetryMessage, TaskRetryResultMessage, TasksChangedMessage, TerminalBinding, TerminalBindingsUpdatedMessage, TerminalExit, TerminalPointerActivityMessage, TierDefaults, UninstallPluginMessage, UnregisterMessage, UnsubscribeGitStatusMessage, WakeTurnMessage, WebSocketEvent, Worktree, WorktreeCreatedEvent, WorktreeDeletedEvent, WorktreeKeepMessage, WorktreeKeepResult, WorktreeKeepResultEvent, WorktreeListMessage, WorktreeListResult, WorktreeListResultEvent, WorktreeRefreshMessage, WorktreeRefreshResult, WorktreeRefreshResultEvent, WorktreeRepository, WorktreeStateChangedEvent, WorktreeSweepEntry, WorktreeSweepLogMessage, WorktreeSweepLogResult, WorktreeSweepLogResultEvent, WorktreeSweptEvent, WorktreesUpdatedMessage } from "./generated";
 //
 //   const activityStatusMessage = Convert.toActivityStatusMessage(json);
 //   const activityStatusResult = Convert.toActivityStatusResult(json);
 //   const activityStatusSession = Convert.toActivityStatusSession(json);
-//   const addEndpointMessage = Convert.toAddEndpointMessage(json);
 //   const agentCloseMessage = Convert.toAgentCloseMessage(json);
 //   const agentCloseResult = Convert.toAgentCloseResult(json);
 //   const agentCloseRule = Convert.toAgentCloseRule(json);
@@ -87,7 +86,6 @@
 //   const automationValidateResultMessage = Convert.toAutomationValidateResultMessage(json);
 //   const automationsChangedMessage = Convert.toAutomationsChangedMessage(json);
 //   const backgroundLaunchMessage = Convert.toBackgroundLaunchMessage(json);
-//   const bootstrapEndpointMessage = Convert.toBootstrapEndpointMessage(json);
 //   const branch = Convert.toBranch(json);
 //   const branchChangedMessage = Convert.toBranchChangedMessage(json);
 //   const branchesResultMessage = Convert.toBranchesResultMessage(json);
@@ -95,7 +93,6 @@
 //   const browseDirectoryResultMessage = Convert.toBrowseDirectoryResultMessage(json);
 //   const browserControlMessage = Convert.toBrowserControlMessage(json);
 //   const browserControlRequestMessage = Convert.toBrowserControlRequestMessage(json);
-//   const browserControlResponseMessage = Convert.toBrowserControlResponseMessage(json);
 //   const browserControlResultMessage = Convert.toBrowserControlResultMessage(json);
 //   const builtinDelegationRole = Convert.toBuiltinDelegationRole(json);
 //   const busConsumerStatus = Convert.toBusConsumerStatus(json);
@@ -235,11 +232,6 @@
 //   const documentQuery = Convert.toDocumentQuery(json);
 //   const documentRevision = Convert.toDocumentRevision(json);
 //   const documentSort = Convert.toDocumentSort(json);
-//   const endpointActionResultMessage = Convert.toEndpointActionResultMessage(json);
-//   const endpointCapabilities = Convert.toEndpointCapabilities(json);
-//   const endpointInfo = Convert.toEndpointInfo(json);
-//   const endpointStatusChangedMessage = Convert.toEndpointStatusChangedMessage(json);
-//   const endpointsUpdatedMessage = Convert.toEndpointsUpdatedMessage(json);
 //   const ensureRepoMessage = Convert.toEnsureRepoMessage(json);
 //   const ensureRepoResultMessage = Convert.toEnsureRepoResultMessage(json);
 //   const evidenceExcerpt = Convert.toEvidenceExcerpt(json);
@@ -356,7 +348,6 @@
 //   const layoutSplitDirection = Convert.toLayoutSplitDirection(json);
 //   const leafMoved = Convert.toLeafMoved(json);
 //   const listBranchesMessage = Convert.toListBranchesMessage(json);
-//   const listEndpointsMessage = Convert.toListEndpointsMessage(json);
 //   const listPluginsMessage = Convert.toListPluginsMessage(json);
 //   const listRemoteBranchesMessage = Convert.toListRemoteBranchesMessage(json);
 //   const listRemoteBranchesResultMessage = Convert.toListRemoteBranchesResultMessage(json);
@@ -467,10 +458,8 @@
 //   const pullRequestForgetMessage = Convert.toPullRequestForgetMessage(json);
 //   const pullRequestProvenance = Convert.toPullRequestProvenance(json);
 //   const pullRequestUnwatchMessage = Convert.toPullRequestUnwatchMessage(json);
-//   const pullRequestUnwatchResultMessage = Convert.toPullRequestUnwatchResultMessage(json);
 //   const pullRequestWatchMessage = Convert.toPullRequestWatchMessage(json);
 //   const pullRequestWatchMode = Convert.toPullRequestWatchMode(json);
-//   const pullRequestWatchResultMessage = Convert.toPullRequestWatchResultMessage(json);
 //   const queryAuthorsMessage = Convert.toQueryAuthorsMessage(json);
 //   const queryMessage = Convert.toQueryMessage(json);
 //   const queryPRsMessage = Convert.toQueryPRsMessage(json);
@@ -486,7 +475,6 @@
 //   const refreshPRsResultMessage = Convert.toRefreshPRsResultMessage(json);
 //   const reloadSessionMessage = Convert.toReloadSessionMessage(json);
 //   const reloadSessionResultMessage = Convert.toReloadSessionResultMessage(json);
-//   const removeEndpointMessage = Convert.toRemoveEndpointMessage(json);
 //   const removePluginMessage = Convert.toRemovePluginMessage(json);
 //   const renameResultMessage = Convert.toRenameResultMessage(json);
 //   const renameSessionMessage = Convert.toRenameSessionMessage(json);
@@ -612,7 +600,6 @@
 //   const sessionsUpdatedMessage = Convert.toSessionsUpdatedMessage(json);
 //   const setChiefOfStaffMessage = Convert.toSetChiefOfStaffMessage(json);
 //   const setClientPresenceMessage = Convert.toSetClientPresenceMessage(json);
-//   const setEndpointRemoteWebMessage = Convert.toSetEndpointRemoteWebMessage(json);
 //   const setPluginPriorityMessage = Convert.toSetPluginPriorityMessage(json);
 //   const setSessionContextWindowCapMessage = Convert.toSetSessionContextWindowCapMessage(json);
 //   const setSessionPriorityMessage = Convert.toSetSessionPriorityMessage(json);
@@ -650,7 +637,6 @@
 //   const uninstallPluginMessage = Convert.toUninstallPluginMessage(json);
 //   const unregisterMessage = Convert.toUnregisterMessage(json);
 //   const unsubscribeGitStatusMessage = Convert.toUnsubscribeGitStatusMessage(json);
-//   const updateEndpointMessage = Convert.toUpdateEndpointMessage(json);
 //   const wakeTurnMessage = Convert.toWakeTurnMessage(json);
 //   const webSocketEvent = Convert.toWebSocketEvent(json);
 //   const worktree = Convert.toWorktree(json);
@@ -710,18 +696,6 @@ export interface ActivityStatusSession {
     id:           string;
     label:        string;
     [property: string]: any;
-}
-
-export interface AddEndpointMessage {
-    cmd:        AddEndpointMessageCmd;
-    instance?:  string;
-    name:       string;
-    ssh_target: string;
-    [property: string]: any;
-}
-
-export enum AddEndpointMessageCmd {
-    AddEndpoint = "add_endpoint",
 }
 
 export interface AgentCloseMessage {
@@ -1895,16 +1869,6 @@ export enum LaunchDesktopKind {
     Crew = "crew",
 }
 
-export interface BootstrapEndpointMessage {
-    cmd:         BootstrapEndpointMessageCmd;
-    endpoint_id: string;
-    [property: string]: any;
-}
-
-export enum BootstrapEndpointMessageCmd {
-    BootstrapEndpoint = "bootstrap_endpoint",
-}
-
 export interface Branch {
     commit_hash?: string;
     commit_time?: string;
@@ -1940,7 +1904,6 @@ export interface SessionObject {
     directory:                  string;
     dispatcher_member?:         string;
     dispatcher_session_id?:     string;
-    endpoint_id?:               string;
     id:                         string;
     is_worktree?:               boolean;
     label:                      string;
@@ -2068,11 +2031,10 @@ export enum BranchesResultMessageEvent {
 }
 
 export interface BrowseDirectoryMessage {
-    cmd:          BrowseDirectoryMessageCmd;
-    endpoint_id?: string;
-    extensions?:  string[];
-    input_path:   string;
-    request_id?:  string;
+    cmd:         BrowseDirectoryMessageCmd;
+    extensions?: string[];
+    input_path:  string;
+    request_id?: string;
     [property: string]: any;
 }
 
@@ -2081,15 +2043,14 @@ export enum BrowseDirectoryMessageCmd {
 }
 
 export interface BrowseDirectoryResultMessage {
-    directory:    string;
-    endpoint_id?: string;
-    entries:      EntryElement[];
-    error?:       string;
-    event:        BrowseDirectoryResultMessageEvent;
-    home_path?:   string;
-    input_path:   string;
-    request_id?:  string;
-    success:      boolean;
+    directory:   string;
+    entries:     EntryElement[];
+    error?:      string;
+    event:       BrowseDirectoryResultMessageEvent;
+    home_path?:  string;
+    input_path:  string;
+    request_id?: string;
+    success:     boolean;
     [property: string]: any;
 }
 
@@ -2108,7 +2069,6 @@ export interface BrowserControlMessage {
     action:      string;
     cmd:         BrowserControlMessageCmd;
     params?:     string;
-    request_id?: string;
     selector?:   string;
     session_id?: string;
     text?:       string;
@@ -2133,19 +2093,6 @@ export interface BrowserControlRequestMessage {
 
 export enum BrowserControlRequestMessageEvent {
     BrowserControlRequest = "browser_control_request",
-}
-
-export interface BrowserControlResponseMessage {
-    data?:      string;
-    error?:     string;
-    event:      BrowserControlResponseMessageEvent;
-    request_id: string;
-    success:    boolean;
-    [property: string]: any;
-}
-
-export enum BrowserControlResponseMessageEvent {
-    BrowserControlResponse = "browser_control_response",
 }
 
 export interface BrowserControlResultMessage {
@@ -2418,7 +2365,6 @@ export enum CreateWorktreeFromBranchMessageCmd {
 export interface CreateWorktreeMessage {
     branch:         string;
     cmd:            CreateWorktreeMessageCmd;
-    endpoint_id?:   string;
     main_repo:      string;
     path?:          string;
     starting_from?: string;
@@ -2430,11 +2376,10 @@ export enum CreateWorktreeMessageCmd {
 }
 
 export interface CreateWorktreeResultMessage {
-    endpoint_id?: string;
-    error?:       string;
-    event:        CreateWorktreeResultMessageEvent;
-    path?:        string;
-    success:      boolean;
+    error?:  string;
+    event:   CreateWorktreeResultMessageEvent;
+    path?:   string;
+    success: boolean;
     [property: string]: any;
 }
 
@@ -3310,10 +3255,9 @@ export interface DelegationSelection {
 }
 
 export interface DeleteWorktreeMessage {
-    cmd:          DeleteWorktreeMessageCmd;
-    endpoint_id?: string;
-    force?:       boolean;
-    path:         string;
+    cmd:    DeleteWorktreeMessageCmd;
+    force?: boolean;
+    path:   string;
     [property: string]: any;
 }
 
@@ -3322,7 +3266,6 @@ export enum DeleteWorktreeMessageCmd {
 }
 
 export interface DeleteWorktreeResultMessage {
-    endpoint_id?: string;
     error?:       string;
     event:        DeleteWorktreeResultMessageEvent;
     forceable?:   boolean;
@@ -3955,95 +3898,6 @@ export interface DocumentSort {
     desc?: boolean;
     field: string;
     [property: string]: any;
-}
-
-export interface EndpointActionResultMessage {
-    action:       string;
-    endpoint_id?: string;
-    error?:       string;
-    event:        EndpointActionResultMessageEvent;
-    success:      boolean;
-    [property: string]: any;
-}
-
-export enum EndpointActionResultMessageEvent {
-    EndpointActionResult = "endpoint_action_result",
-}
-
-export interface EndpointCapabilities {
-    agents_available:    string[];
-    daemon_instance_id?: string;
-    projects_directory?: string;
-    protocol_version:    string;
-    pty_backend_mode?:   string;
-    tailscale_auth_url?: string;
-    tailscale_domain?:   string;
-    tailscale_enabled?:  boolean;
-    tailscale_error?:    string;
-    tailscale_status?:   string;
-    tailscale_url?:      string;
-    [property: string]: any;
-}
-
-export interface EndpointInfo {
-    capabilities?:   Capabilities;
-    enabled?:        boolean;
-    id:              string;
-    instance?:       string;
-    name:            string;
-    session_count?:  number;
-    ssh_target:      string;
-    status:          string;
-    status_message?: string;
-    [property: string]: any;
-}
-
-export interface Capabilities {
-    agents_available:    string[];
-    daemon_instance_id?: string;
-    projects_directory?: string;
-    protocol_version:    string;
-    pty_backend_mode?:   string;
-    tailscale_auth_url?: string;
-    tailscale_domain?:   string;
-    tailscale_enabled?:  boolean;
-    tailscale_error?:    string;
-    tailscale_status?:   string;
-    tailscale_url?:      string;
-    [property: string]: any;
-}
-
-export interface EndpointStatusChangedMessage {
-    endpoint: Endpoint;
-    event:    EndpointStatusChangedMessageEvent;
-    [property: string]: any;
-}
-
-export interface Endpoint {
-    capabilities?:   Capabilities;
-    enabled?:        boolean;
-    id:              string;
-    instance?:       string;
-    name:            string;
-    session_count?:  number;
-    ssh_target:      string;
-    status:          string;
-    status_message?: string;
-    [property: string]: any;
-}
-
-export enum EndpointStatusChangedMessageEvent {
-    EndpointStatusChanged = "endpoint_status_changed",
-}
-
-export interface EndpointsUpdatedMessage {
-    endpoints: Endpoint[];
-    event:     EndpointsUpdatedMessageEvent;
-    [property: string]: any;
-}
-
-export enum EndpointsUpdatedMessageEvent {
-    EndpointsUpdated = "endpoints_updated",
 }
 
 export interface EnsureRepoMessage {
@@ -4733,10 +4587,8 @@ export interface Continuation {
     branch?:                 string;
     cwd:                     string;
     directory_state:         string;
-    endpoint_id?:            string;
     execution_id:            string;
     handover_placement:      string;
-    host_kind:               string;
     kept_conversation?:      Kept;
     native_conversation_id?: string;
     placement_reason?:       string;
@@ -4993,10 +4845,9 @@ export enum GetPresentationsResultMessageEvent {
 }
 
 export interface GetRecentLocationsMessage {
-    cmd:          GetRecentLocationsMessageCmd;
-    endpoint_id?: string;
-    limit?:       number;
-    request_id?:  string;
+    cmd:         GetRecentLocationsMessageCmd;
+    limit?:      number;
+    request_id?: string;
     [property: string]: any;
 }
 
@@ -5005,9 +4856,8 @@ export enum GetRecentLocationsMessageCmd {
 }
 
 export interface GetRepoInfoMessage {
-    cmd:          GetRepoInfoMessageCmd;
-    endpoint_id?: string;
-    repo:         string;
+    cmd:  GetRepoInfoMessageCmd;
+    repo: string;
     [property: string]: any;
 }
 
@@ -5016,11 +4866,10 @@ export enum GetRepoInfoMessageCmd {
 }
 
 export interface GetRepoInfoResultMessage {
-    endpoint_id?: string;
-    error?:       string;
-    event:        GetRepoInfoResultMessageEvent;
-    info?:        Info;
-    success:      boolean;
+    error?:  string;
+    event:   GetRepoInfoResultMessageEvent;
+    info?:   Info;
+    success: boolean;
     [property: string]: any;
 }
 
@@ -5125,7 +4974,6 @@ export enum GitHubHostsUpdatedMessageEvent {
 
 export interface GitOperation {
     duration_ms?: number;
-    endpoint_id?: string;
     error?:       string;
     finished_at?: string;
     id:           string;
@@ -5161,7 +5009,6 @@ export enum GitOperationFinishedMessageEvent {
 
 export interface GitOperationFinishedMessageOperation {
     duration_ms?: number;
-    endpoint_id?: string;
     error?:       string;
     finished_at?: string;
     id:           string;
@@ -5362,29 +5209,22 @@ export interface InitialStateMessage {
     crew?:                      Member[];
     daemon_instance_id?:        string;
     desktops?:                  DesktopElement[];
-    endpoints?:                 Endpoint[];
     event:                      InitialStateMessageEvent;
     github_hosts?:              string[];
     github_polling_off_reason?: string;
-    /**
-     * The daemon id that owns this daemon's home-level state. Equal to
-     * daemon_instance_id on a home daemon; a different id means this daemon is an
-     * outpost of that home.
-     */
-    home_daemon_id?:      string;
-    migration_phase?:     MigrationPhase;
-    profiles?:            ProfileElement[];
-    protocol_version?:    string;
-    prs?:                 PRElement[];
-    repos?:               RepoElement[];
-    seeds?:               SeedElement[];
-    seeds_total?:         number;
-    selected_profile_id?: string;
-    sessions?:            SessionObject[];
-    settings?:            { [key: string]: string };
-    source_fingerprint?:  string;
-    terminal_bindings?:   TerminalBindingElement[];
-    warnings?:            WarningElement[];
+    migration_phase?:           MigrationPhase;
+    profiles?:                  ProfileElement[];
+    protocol_version?:          string;
+    prs?:                       PRElement[];
+    repos?:                     RepoElement[];
+    seeds?:                     SeedElement[];
+    seeds_total?:               number;
+    selected_profile_id?:       string;
+    sessions?:                  SessionObject[];
+    settings?:                  { [key: string]: string };
+    source_fingerprint?:        string;
+    terminal_bindings?:         TerminalBindingElement[];
+    warnings?:                  WarningElement[];
     [property: string]: any;
 }
 
@@ -5461,10 +5301,9 @@ export enum InjectTestSessionMessageCmd {
 }
 
 export interface InspectPathMessage {
-    cmd:          InspectPathMessageCmd;
-    endpoint_id?: string;
-    path:         string;
-    request_id?:  string;
+    cmd:         InspectPathMessageCmd;
+    path:        string;
+    request_id?: string;
     [property: string]: any;
 }
 
@@ -5473,12 +5312,11 @@ export enum InspectPathMessageCmd {
 }
 
 export interface InspectPathResultMessage {
-    endpoint_id?: string;
-    error?:       string;
-    event:        InspectPathResultMessageEvent;
-    inspection?:  Inspection;
-    request_id?:  string;
-    success:      boolean;
+    error?:      string;
+    event:       InspectPathResultMessageEvent;
+    inspection?: Inspection;
+    request_id?: string;
+    success:     boolean;
     [property: string]: any;
 }
 
@@ -5832,15 +5670,6 @@ export interface ListBranchesMessage {
 
 export enum ListBranchesMessageCmd {
     ListBranches = "list_branches",
-}
-
-export interface ListEndpointsMessage {
-    cmd: ListEndpointsMessageCmd;
-    [property: string]: any;
-}
-
-export enum ListEndpointsMessageCmd {
-    ListEndpoints = "list_endpoints",
 }
 
 export interface ListPluginsMessage {
@@ -7263,10 +7092,9 @@ export interface PullRequestProvenance {
 }
 
 export interface PullRequestUnwatchMessage {
-    cmd:         PullRequestUnwatchMessageCmd;
-    id:          string;
-    request_id?: string;
-    url:         string;
+    cmd: PullRequestUnwatchMessageCmd;
+    id:  string;
+    url: string;
     [property: string]: any;
 }
 
@@ -7274,42 +7102,17 @@ export enum PullRequestUnwatchMessageCmd {
     PullRequestUnwatch = "pull_request_unwatch",
 }
 
-export interface PullRequestUnwatchResultMessage {
-    error?:     string;
-    event:      PullRequestUnwatchResultMessageEvent;
-    request_id: string;
-    success:    boolean;
-    [property: string]: any;
-}
-
-export enum PullRequestUnwatchResultMessageEvent {
-    PullRequestUnwatchResult = "pull_request_unwatch_result",
-}
-
 export interface PullRequestWatchMessage {
-    cmd:         PullRequestWatchMessageCmd;
-    id:          string;
-    mode:        PullRequestWatchMode;
-    request_id?: string;
-    reviewer?:   string;
-    url:         string;
+    cmd:       PullRequestWatchMessageCmd;
+    id:        string;
+    mode:      PullRequestWatchMode;
+    reviewer?: string;
+    url:       string;
     [property: string]: any;
 }
 
 export enum PullRequestWatchMessageCmd {
     PullRequestWatch = "pull_request_watch",
-}
-
-export interface PullRequestWatchResultMessage {
-    error?:     string;
-    event:      PullRequestWatchResultMessageEvent;
-    request_id: string;
-    success:    boolean;
-    [property: string]: any;
-}
-
-export enum PullRequestWatchResultMessageEvent {
-    PullRequestWatchResult = "pull_request_watch_result",
 }
 
 export interface QueryAuthorsMessage {
@@ -7405,7 +7208,6 @@ export interface RecentLocation {
 }
 
 export interface RecentLocationsResultMessage {
-    endpoint_id?:     string;
     error?:           string;
     event:            RecentLocationsResultMessageEvent;
     home_path?:       string;
@@ -7492,16 +7294,6 @@ export interface ReloadSessionResultMessage {
 
 export enum ReloadSessionResultMessageEvent {
     ReloadSessionResult = "reload_session_result",
-}
-
-export interface RemoveEndpointMessage {
-    cmd:         RemoveEndpointMessageCmd;
-    endpoint_id: string;
-    [property: string]: any;
-}
-
-export enum RemoveEndpointMessageCmd {
-    RemoveEndpoint = "remove_endpoint",
 }
 
 export interface RemovePluginMessage {
@@ -8459,10 +8251,8 @@ export interface SeedContinuation {
     branch?:                 string;
     cwd:                     string;
     directory_state:         string;
-    endpoint_id?:            string;
     execution_id:            string;
     handover_placement:      string;
-    host_kind:               string;
     kept_conversation?:      Kept;
     native_conversation_id?: string;
     placement_reason?:       string;
@@ -9114,7 +8904,6 @@ export interface Session {
     directory:                  string;
     dispatcher_member?:         string;
     dispatcher_session_id?:     string;
-    endpoint_id?:               string;
     id:                         string;
     is_worktree?:               boolean;
     label:                      string;
@@ -9724,17 +9513,6 @@ export enum SetClientPresenceMessageCmd {
     SetClientPresence = "set_client_presence",
 }
 
-export interface SetEndpointRemoteWebMessage {
-    cmd:         SetEndpointRemoteWebMessageCmd;
-    enabled:     boolean;
-    endpoint_id: string;
-    [property: string]: any;
-}
-
-export enum SetEndpointRemoteWebMessageCmd {
-    SetEndpointRemoteWeb = "set_endpoint_remote_web",
-}
-
 export interface SetPluginPriorityMessage {
     cmd:      SetPluginPriorityMessageCmd;
     name:     string;
@@ -9866,7 +9644,6 @@ export interface SpawnSessionMessage {
     copilot_executable?: string;
     cwd:                 string;
     effort?:             string;
-    endpoint_id?:        string;
     executable?:         string;
     id:                  string;
     initial_prompt?:     string;
@@ -10020,7 +9797,6 @@ export interface SupportRuntimeEvidence {
 
 export interface SupportSnapshotMessage {
     cmd:          SupportSnapshotMessageCmd;
-    endpoint_id?: string;
     request_id:   string;
     runtime_ids?: string[];
     [property: string]: any;
@@ -10035,7 +9811,6 @@ export interface SupportSnapshotResultMessage {
     captured_at_unix_ms:       number;
     daemon_instance_id:        string;
     daemon_started_at_unix_ms: number;
-    endpoint_id?:              string;
     event:                     SupportSnapshotResultMessageEvent;
     input_traces:              InputTraceElement[];
     protocol_version:          string;
@@ -10233,20 +10008,6 @@ export interface UnsubscribeGitStatusMessage {
 
 export enum UnsubscribeGitStatusMessageCmd {
     UnsubscribeGitStatus = "unsubscribe_git_status",
-}
-
-export interface UpdateEndpointMessage {
-    cmd:         UpdateEndpointMessageCmd;
-    enabled?:    boolean;
-    endpoint_id: string;
-    instance?:   string;
-    name?:       string;
-    ssh_target?: string;
-    [property: string]: any;
-}
-
-export enum UpdateEndpointMessageCmd {
-    UpdateEndpoint = "update_endpoint",
 }
 
 export interface WakeTurnMessage {
@@ -10573,14 +10334,6 @@ export class Convert {
 
     public static activityStatusSessionToJson(value: ActivityStatusSession): string {
         return JSON.stringify(uncast(value, r("ActivityStatusSession")), null, 2);
-    }
-
-    public static toAddEndpointMessage(json: string): AddEndpointMessage {
-        return cast(JSON.parse(json), r("AddEndpointMessage"));
-    }
-
-    public static addEndpointMessageToJson(value: AddEndpointMessage): string {
-        return JSON.stringify(uncast(value, r("AddEndpointMessage")), null, 2);
     }
 
     public static toAgentCloseMessage(json: string): AgentCloseMessage {
@@ -11231,14 +10984,6 @@ export class Convert {
         return JSON.stringify(uncast(value, r("BackgroundLaunchMessage")), null, 2);
     }
 
-    public static toBootstrapEndpointMessage(json: string): BootstrapEndpointMessage {
-        return cast(JSON.parse(json), r("BootstrapEndpointMessage"));
-    }
-
-    public static bootstrapEndpointMessageToJson(value: BootstrapEndpointMessage): string {
-        return JSON.stringify(uncast(value, r("BootstrapEndpointMessage")), null, 2);
-    }
-
     public static toBranch(json: string): Branch {
         return cast(JSON.parse(json), r("Branch"));
     }
@@ -11293,14 +11038,6 @@ export class Convert {
 
     public static browserControlRequestMessageToJson(value: BrowserControlRequestMessage): string {
         return JSON.stringify(uncast(value, r("BrowserControlRequestMessage")), null, 2);
-    }
-
-    public static toBrowserControlResponseMessage(json: string): BrowserControlResponseMessage {
-        return cast(JSON.parse(json), r("BrowserControlResponseMessage"));
-    }
-
-    public static browserControlResponseMessageToJson(value: BrowserControlResponseMessage): string {
-        return JSON.stringify(uncast(value, r("BrowserControlResponseMessage")), null, 2);
     }
 
     public static toBrowserControlResultMessage(json: string): BrowserControlResultMessage {
@@ -12415,46 +12152,6 @@ export class Convert {
         return JSON.stringify(uncast(value, r("DocumentSort")), null, 2);
     }
 
-    public static toEndpointActionResultMessage(json: string): EndpointActionResultMessage {
-        return cast(JSON.parse(json), r("EndpointActionResultMessage"));
-    }
-
-    public static endpointActionResultMessageToJson(value: EndpointActionResultMessage): string {
-        return JSON.stringify(uncast(value, r("EndpointActionResultMessage")), null, 2);
-    }
-
-    public static toEndpointCapabilities(json: string): EndpointCapabilities {
-        return cast(JSON.parse(json), r("EndpointCapabilities"));
-    }
-
-    public static endpointCapabilitiesToJson(value: EndpointCapabilities): string {
-        return JSON.stringify(uncast(value, r("EndpointCapabilities")), null, 2);
-    }
-
-    public static toEndpointInfo(json: string): EndpointInfo {
-        return cast(JSON.parse(json), r("EndpointInfo"));
-    }
-
-    public static endpointInfoToJson(value: EndpointInfo): string {
-        return JSON.stringify(uncast(value, r("EndpointInfo")), null, 2);
-    }
-
-    public static toEndpointStatusChangedMessage(json: string): EndpointStatusChangedMessage {
-        return cast(JSON.parse(json), r("EndpointStatusChangedMessage"));
-    }
-
-    public static endpointStatusChangedMessageToJson(value: EndpointStatusChangedMessage): string {
-        return JSON.stringify(uncast(value, r("EndpointStatusChangedMessage")), null, 2);
-    }
-
-    public static toEndpointsUpdatedMessage(json: string): EndpointsUpdatedMessage {
-        return cast(JSON.parse(json), r("EndpointsUpdatedMessage"));
-    }
-
-    public static endpointsUpdatedMessageToJson(value: EndpointsUpdatedMessage): string {
-        return JSON.stringify(uncast(value, r("EndpointsUpdatedMessage")), null, 2);
-    }
-
     public static toEnsureRepoMessage(json: string): EnsureRepoMessage {
         return cast(JSON.parse(json), r("EnsureRepoMessage"));
     }
@@ -13383,14 +13080,6 @@ export class Convert {
         return JSON.stringify(uncast(value, r("ListBranchesMessage")), null, 2);
     }
 
-    public static toListEndpointsMessage(json: string): ListEndpointsMessage {
-        return cast(JSON.parse(json), r("ListEndpointsMessage"));
-    }
-
-    public static listEndpointsMessageToJson(value: ListEndpointsMessage): string {
-        return JSON.stringify(uncast(value, r("ListEndpointsMessage")), null, 2);
-    }
-
     public static toListPluginsMessage(json: string): ListPluginsMessage {
         return cast(JSON.parse(json), r("ListPluginsMessage"));
     }
@@ -14271,14 +13960,6 @@ export class Convert {
         return JSON.stringify(uncast(value, r("PullRequestUnwatchMessage")), null, 2);
     }
 
-    public static toPullRequestUnwatchResultMessage(json: string): PullRequestUnwatchResultMessage {
-        return cast(JSON.parse(json), r("PullRequestUnwatchResultMessage"));
-    }
-
-    public static pullRequestUnwatchResultMessageToJson(value: PullRequestUnwatchResultMessage): string {
-        return JSON.stringify(uncast(value, r("PullRequestUnwatchResultMessage")), null, 2);
-    }
-
     public static toPullRequestWatchMessage(json: string): PullRequestWatchMessage {
         return cast(JSON.parse(json), r("PullRequestWatchMessage"));
     }
@@ -14293,14 +13974,6 @@ export class Convert {
 
     public static pullRequestWatchModeToJson(value: PullRequestWatchMode): string {
         return JSON.stringify(uncast(value, r("PullRequestWatchMode")), null, 2);
-    }
-
-    public static toPullRequestWatchResultMessage(json: string): PullRequestWatchResultMessage {
-        return cast(JSON.parse(json), r("PullRequestWatchResultMessage"));
-    }
-
-    public static pullRequestWatchResultMessageToJson(value: PullRequestWatchResultMessage): string {
-        return JSON.stringify(uncast(value, r("PullRequestWatchResultMessage")), null, 2);
     }
 
     public static toQueryAuthorsMessage(json: string): QueryAuthorsMessage {
@@ -14421,14 +14094,6 @@ export class Convert {
 
     public static reloadSessionResultMessageToJson(value: ReloadSessionResultMessage): string {
         return JSON.stringify(uncast(value, r("ReloadSessionResultMessage")), null, 2);
-    }
-
-    public static toRemoveEndpointMessage(json: string): RemoveEndpointMessage {
-        return cast(JSON.parse(json), r("RemoveEndpointMessage"));
-    }
-
-    public static removeEndpointMessageToJson(value: RemoveEndpointMessage): string {
-        return JSON.stringify(uncast(value, r("RemoveEndpointMessage")), null, 2);
     }
 
     public static toRemovePluginMessage(json: string): RemovePluginMessage {
@@ -15431,14 +15096,6 @@ export class Convert {
         return JSON.stringify(uncast(value, r("SetClientPresenceMessage")), null, 2);
     }
 
-    public static toSetEndpointRemoteWebMessage(json: string): SetEndpointRemoteWebMessage {
-        return cast(JSON.parse(json), r("SetEndpointRemoteWebMessage"));
-    }
-
-    public static setEndpointRemoteWebMessageToJson(value: SetEndpointRemoteWebMessage): string {
-        return JSON.stringify(uncast(value, r("SetEndpointRemoteWebMessage")), null, 2);
-    }
-
     public static toSetPluginPriorityMessage(json: string): SetPluginPriorityMessage {
         return cast(JSON.parse(json), r("SetPluginPriorityMessage"));
     }
@@ -15733,14 +15390,6 @@ export class Convert {
 
     public static unsubscribeGitStatusMessageToJson(value: UnsubscribeGitStatusMessage): string {
         return JSON.stringify(uncast(value, r("UnsubscribeGitStatusMessage")), null, 2);
-    }
-
-    public static toUpdateEndpointMessage(json: string): UpdateEndpointMessage {
-        return cast(JSON.parse(json), r("UpdateEndpointMessage"));
-    }
-
-    public static updateEndpointMessageToJson(value: UpdateEndpointMessage): string {
-        return JSON.stringify(uncast(value, r("UpdateEndpointMessage")), null, 2);
     }
 
     public static toWakeTurnMessage(json: string): WakeTurnMessage {
@@ -16095,12 +15744,6 @@ const typeMap: any = {
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
         { json: "label", js: "label", typ: "" },
-    ], "any"),
-    "AddEndpointMessage": o([
-        { json: "cmd", js: "cmd", typ: r("AddEndpointMessageCmd") },
-        { json: "instance", js: "instance", typ: u(undefined, "") },
-        { json: "name", js: "name", typ: "" },
-        { json: "ssh_target", js: "ssh_target", typ: "" },
     ], "any"),
     "AgentCloseMessage": o([
         { json: "cmd", js: "cmd", typ: r("AgentCloseMessageCmd") },
@@ -16847,10 +16490,6 @@ const typeMap: any = {
         { json: "requested_by", js: "requested_by", typ: "" },
         { json: "session_id", js: "session_id", typ: "" },
     ], "any"),
-    "BootstrapEndpointMessage": o([
-        { json: "cmd", js: "cmd", typ: r("BootstrapEndpointMessageCmd") },
-        { json: "endpoint_id", js: "endpoint_id", typ: "" },
-    ], "any"),
     "Branch": o([
         { json: "commit_hash", js: "commit_hash", typ: u(undefined, "") },
         { json: "commit_time", js: "commit_time", typ: u(undefined, "") },
@@ -16878,7 +16517,6 @@ const typeMap: any = {
         { json: "directory", js: "directory", typ: "" },
         { json: "dispatcher_member", js: "dispatcher_member", typ: u(undefined, "") },
         { json: "dispatcher_session_id", js: "dispatcher_session_id", typ: u(undefined, "") },
-        { json: "endpoint_id", js: "endpoint_id", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
         { json: "is_worktree", js: "is_worktree", typ: u(undefined, true) },
         { json: "label", js: "label", typ: "" },
@@ -16964,14 +16602,12 @@ const typeMap: any = {
     ], "any"),
     "BrowseDirectoryMessage": o([
         { json: "cmd", js: "cmd", typ: r("BrowseDirectoryMessageCmd") },
-        { json: "endpoint_id", js: "endpoint_id", typ: u(undefined, "") },
         { json: "extensions", js: "extensions", typ: u(undefined, a("")) },
         { json: "input_path", js: "input_path", typ: "" },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
     ], "any"),
     "BrowseDirectoryResultMessage": o([
         { json: "directory", js: "directory", typ: "" },
-        { json: "endpoint_id", js: "endpoint_id", typ: u(undefined, "") },
         { json: "entries", js: "entries", typ: a(r("EntryElement")) },
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("BrowseDirectoryResultMessageEvent") },
@@ -16989,7 +16625,6 @@ const typeMap: any = {
         { json: "action", js: "action", typ: "" },
         { json: "cmd", js: "cmd", typ: r("BrowserControlMessageCmd") },
         { json: "params", js: "params", typ: u(undefined, "") },
-        { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "selector", js: "selector", typ: u(undefined, "") },
         { json: "session_id", js: "session_id", typ: u(undefined, "") },
         { json: "text", js: "text", typ: u(undefined, "") },
@@ -17003,13 +16638,6 @@ const typeMap: any = {
         { json: "selector", js: "selector", typ: u(undefined, "") },
         { json: "text", js: "text", typ: u(undefined, "") },
         { json: "tile_id", js: "tile_id", typ: "" },
-    ], "any"),
-    "BrowserControlResponseMessage": o([
-        { json: "data", js: "data", typ: u(undefined, "") },
-        { json: "error", js: "error", typ: u(undefined, "") },
-        { json: "event", js: "event", typ: r("BrowserControlResponseMessageEvent") },
-        { json: "request_id", js: "request_id", typ: "" },
-        { json: "success", js: "success", typ: true },
     ], "any"),
     "BrowserControlResultMessage": o([
         { json: "cmd", js: "cmd", typ: r("BrowserControlResultMessageCmd") },
@@ -17183,13 +16811,11 @@ const typeMap: any = {
     "CreateWorktreeMessage": o([
         { json: "branch", js: "branch", typ: "" },
         { json: "cmd", js: "cmd", typ: r("CreateWorktreeMessageCmd") },
-        { json: "endpoint_id", js: "endpoint_id", typ: u(undefined, "") },
         { json: "main_repo", js: "main_repo", typ: "" },
         { json: "path", js: "path", typ: u(undefined, "") },
         { json: "starting_from", js: "starting_from", typ: u(undefined, "") },
     ], "any"),
     "CreateWorktreeResultMessage": o([
-        { json: "endpoint_id", js: "endpoint_id", typ: u(undefined, "") },
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("CreateWorktreeResultMessageEvent") },
         { json: "path", js: "path", typ: u(undefined, "") },
@@ -17754,12 +17380,10 @@ const typeMap: any = {
     ], "any"),
     "DeleteWorktreeMessage": o([
         { json: "cmd", js: "cmd", typ: r("DeleteWorktreeMessageCmd") },
-        { json: "endpoint_id", js: "endpoint_id", typ: u(undefined, "") },
         { json: "force", js: "force", typ: u(undefined, true) },
         { json: "path", js: "path", typ: "" },
     ], "any"),
     "DeleteWorktreeResultMessage": o([
-        { json: "endpoint_id", js: "endpoint_id", typ: u(undefined, "") },
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("DeleteWorktreeResultMessageEvent") },
         { json: "forceable", js: "forceable", typ: u(undefined, true) },
@@ -18122,69 +17746,6 @@ const typeMap: any = {
     "DocumentSort": o([
         { json: "desc", js: "desc", typ: u(undefined, true) },
         { json: "field", js: "field", typ: "" },
-    ], "any"),
-    "EndpointActionResultMessage": o([
-        { json: "action", js: "action", typ: "" },
-        { json: "endpoint_id", js: "endpoint_id", typ: u(undefined, "") },
-        { json: "error", js: "error", typ: u(undefined, "") },
-        { json: "event", js: "event", typ: r("EndpointActionResultMessageEvent") },
-        { json: "success", js: "success", typ: true },
-    ], "any"),
-    "EndpointCapabilities": o([
-        { json: "agents_available", js: "agents_available", typ: a("") },
-        { json: "daemon_instance_id", js: "daemon_instance_id", typ: u(undefined, "") },
-        { json: "projects_directory", js: "projects_directory", typ: u(undefined, "") },
-        { json: "protocol_version", js: "protocol_version", typ: "" },
-        { json: "pty_backend_mode", js: "pty_backend_mode", typ: u(undefined, "") },
-        { json: "tailscale_auth_url", js: "tailscale_auth_url", typ: u(undefined, "") },
-        { json: "tailscale_domain", js: "tailscale_domain", typ: u(undefined, "") },
-        { json: "tailscale_enabled", js: "tailscale_enabled", typ: u(undefined, true) },
-        { json: "tailscale_error", js: "tailscale_error", typ: u(undefined, "") },
-        { json: "tailscale_status", js: "tailscale_status", typ: u(undefined, "") },
-        { json: "tailscale_url", js: "tailscale_url", typ: u(undefined, "") },
-    ], "any"),
-    "EndpointInfo": o([
-        { json: "capabilities", js: "capabilities", typ: u(undefined, r("Capabilities")) },
-        { json: "enabled", js: "enabled", typ: u(undefined, true) },
-        { json: "id", js: "id", typ: "" },
-        { json: "instance", js: "instance", typ: u(undefined, "") },
-        { json: "name", js: "name", typ: "" },
-        { json: "session_count", js: "session_count", typ: u(undefined, 0) },
-        { json: "ssh_target", js: "ssh_target", typ: "" },
-        { json: "status", js: "status", typ: "" },
-        { json: "status_message", js: "status_message", typ: u(undefined, "") },
-    ], "any"),
-    "Capabilities": o([
-        { json: "agents_available", js: "agents_available", typ: a("") },
-        { json: "daemon_instance_id", js: "daemon_instance_id", typ: u(undefined, "") },
-        { json: "projects_directory", js: "projects_directory", typ: u(undefined, "") },
-        { json: "protocol_version", js: "protocol_version", typ: "" },
-        { json: "pty_backend_mode", js: "pty_backend_mode", typ: u(undefined, "") },
-        { json: "tailscale_auth_url", js: "tailscale_auth_url", typ: u(undefined, "") },
-        { json: "tailscale_domain", js: "tailscale_domain", typ: u(undefined, "") },
-        { json: "tailscale_enabled", js: "tailscale_enabled", typ: u(undefined, true) },
-        { json: "tailscale_error", js: "tailscale_error", typ: u(undefined, "") },
-        { json: "tailscale_status", js: "tailscale_status", typ: u(undefined, "") },
-        { json: "tailscale_url", js: "tailscale_url", typ: u(undefined, "") },
-    ], "any"),
-    "EndpointStatusChangedMessage": o([
-        { json: "endpoint", js: "endpoint", typ: r("Endpoint") },
-        { json: "event", js: "event", typ: r("EndpointStatusChangedMessageEvent") },
-    ], "any"),
-    "Endpoint": o([
-        { json: "capabilities", js: "capabilities", typ: u(undefined, r("Capabilities")) },
-        { json: "enabled", js: "enabled", typ: u(undefined, true) },
-        { json: "id", js: "id", typ: "" },
-        { json: "instance", js: "instance", typ: u(undefined, "") },
-        { json: "name", js: "name", typ: "" },
-        { json: "session_count", js: "session_count", typ: u(undefined, 0) },
-        { json: "ssh_target", js: "ssh_target", typ: "" },
-        { json: "status", js: "status", typ: "" },
-        { json: "status_message", js: "status_message", typ: u(undefined, "") },
-    ], "any"),
-    "EndpointsUpdatedMessage": o([
-        { json: "endpoints", js: "endpoints", typ: a(r("Endpoint")) },
-        { json: "event", js: "event", typ: r("EndpointsUpdatedMessageEvent") },
     ], "any"),
     "EnsureRepoMessage": o([
         { json: "clone_url", js: "clone_url", typ: "" },
@@ -18620,10 +18181,8 @@ const typeMap: any = {
         { json: "branch", js: "branch", typ: u(undefined, "") },
         { json: "cwd", js: "cwd", typ: "" },
         { json: "directory_state", js: "directory_state", typ: "" },
-        { json: "endpoint_id", js: "endpoint_id", typ: u(undefined, "") },
         { json: "execution_id", js: "execution_id", typ: "" },
         { json: "handover_placement", js: "handover_placement", typ: "" },
-        { json: "host_kind", js: "host_kind", typ: "" },
         { json: "kept_conversation", js: "kept_conversation", typ: u(undefined, r("Kept")) },
         { json: "native_conversation_id", js: "native_conversation_id", typ: u(undefined, "") },
         { json: "placement_reason", js: "placement_reason", typ: u(undefined, "") },
@@ -18790,17 +18349,14 @@ const typeMap: any = {
     ], "any"),
     "GetRecentLocationsMessage": o([
         { json: "cmd", js: "cmd", typ: r("GetRecentLocationsMessageCmd") },
-        { json: "endpoint_id", js: "endpoint_id", typ: u(undefined, "") },
         { json: "limit", js: "limit", typ: u(undefined, 0) },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
     ], "any"),
     "GetRepoInfoMessage": o([
         { json: "cmd", js: "cmd", typ: r("GetRepoInfoMessageCmd") },
-        { json: "endpoint_id", js: "endpoint_id", typ: u(undefined, "") },
         { json: "repo", js: "repo", typ: "" },
     ], "any"),
     "GetRepoInfoResultMessage": o([
-        { json: "endpoint_id", js: "endpoint_id", typ: u(undefined, "") },
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("GetRepoInfoResultMessageEvent") },
         { json: "info", js: "info", typ: u(undefined, r("Info")) },
@@ -18873,7 +18429,6 @@ const typeMap: any = {
     ], "any"),
     "GitOperation": o([
         { json: "duration_ms", js: "duration_ms", typ: u(undefined, 0) },
-        { json: "endpoint_id", js: "endpoint_id", typ: u(undefined, "") },
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "finished_at", js: "finished_at", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
@@ -18888,7 +18443,6 @@ const typeMap: any = {
     ], "any"),
     "GitOperationFinishedMessageOperation": o([
         { json: "duration_ms", js: "duration_ms", typ: u(undefined, 0) },
-        { json: "endpoint_id", js: "endpoint_id", typ: u(undefined, "") },
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "finished_at", js: "finished_at", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
@@ -19008,11 +18562,9 @@ const typeMap: any = {
         { json: "crew", js: "crew", typ: u(undefined, a(r("Member"))) },
         { json: "daemon_instance_id", js: "daemon_instance_id", typ: u(undefined, "") },
         { json: "desktops", js: "desktops", typ: u(undefined, a(r("DesktopElement"))) },
-        { json: "endpoints", js: "endpoints", typ: u(undefined, a(r("Endpoint"))) },
         { json: "event", js: "event", typ: r("InitialStateMessageEvent") },
         { json: "github_hosts", js: "github_hosts", typ: u(undefined, a("")) },
         { json: "github_polling_off_reason", js: "github_polling_off_reason", typ: u(undefined, "") },
-        { json: "home_daemon_id", js: "home_daemon_id", typ: u(undefined, "") },
         { json: "migration_phase", js: "migration_phase", typ: u(undefined, r("MigrationPhase")) },
         { json: "profiles", js: "profiles", typ: u(undefined, a(r("ProfileElement"))) },
         { json: "protocol_version", js: "protocol_version", typ: u(undefined, "") },
@@ -19069,12 +18621,10 @@ const typeMap: any = {
     ], "any"),
     "InspectPathMessage": o([
         { json: "cmd", js: "cmd", typ: r("InspectPathMessageCmd") },
-        { json: "endpoint_id", js: "endpoint_id", typ: u(undefined, "") },
         { json: "path", js: "path", typ: "" },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
     ], "any"),
     "InspectPathResultMessage": o([
-        { json: "endpoint_id", js: "endpoint_id", typ: u(undefined, "") },
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("InspectPathResultMessageEvent") },
         { json: "inspection", js: "inspection", typ: u(undefined, r("Inspection")) },
@@ -19298,9 +18848,6 @@ const typeMap: any = {
     "ListBranchesMessage": o([
         { json: "cmd", js: "cmd", typ: r("ListBranchesMessageCmd") },
         { json: "main_repo", js: "main_repo", typ: "" },
-    ], "any"),
-    "ListEndpointsMessage": o([
-        { json: "cmd", js: "cmd", typ: r("ListEndpointsMessageCmd") },
     ], "any"),
     "ListPluginsMessage": o([
         { json: "cmd", js: "cmd", typ: r("ListPluginsMessageCmd") },
@@ -20168,28 +19715,14 @@ const typeMap: any = {
     "PullRequestUnwatchMessage": o([
         { json: "cmd", js: "cmd", typ: r("PullRequestUnwatchMessageCmd") },
         { json: "id", js: "id", typ: "" },
-        { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "url", js: "url", typ: "" },
-    ], "any"),
-    "PullRequestUnwatchResultMessage": o([
-        { json: "error", js: "error", typ: u(undefined, "") },
-        { json: "event", js: "event", typ: r("PullRequestUnwatchResultMessageEvent") },
-        { json: "request_id", js: "request_id", typ: "" },
-        { json: "success", js: "success", typ: true },
     ], "any"),
     "PullRequestWatchMessage": o([
         { json: "cmd", js: "cmd", typ: r("PullRequestWatchMessageCmd") },
         { json: "id", js: "id", typ: "" },
         { json: "mode", js: "mode", typ: r("PullRequestWatchMode") },
-        { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "reviewer", js: "reviewer", typ: u(undefined, "") },
         { json: "url", js: "url", typ: "" },
-    ], "any"),
-    "PullRequestWatchResultMessage": o([
-        { json: "error", js: "error", typ: u(undefined, "") },
-        { json: "event", js: "event", typ: r("PullRequestWatchResultMessageEvent") },
-        { json: "request_id", js: "request_id", typ: "" },
-        { json: "success", js: "success", typ: true },
     ], "any"),
     "QueryAuthorsMessage": o([
         { json: "cmd", js: "cmd", typ: r("QueryAuthorsMessageCmd") },
@@ -20238,7 +19771,6 @@ const typeMap: any = {
         { json: "use_count", js: "use_count", typ: 0 },
     ], "any"),
     "RecentLocationsResultMessage": o([
-        { json: "endpoint_id", js: "endpoint_id", typ: u(undefined, "") },
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("RecentLocationsResultMessageEvent") },
         { json: "home_path", js: "home_path", typ: u(undefined, "") },
@@ -20282,10 +19814,6 @@ const typeMap: any = {
         { json: "event", js: "event", typ: r("ReloadSessionResultMessageEvent") },
         { json: "id", js: "id", typ: "" },
         { json: "success", js: "success", typ: true },
-    ], "any"),
-    "RemoveEndpointMessage": o([
-        { json: "cmd", js: "cmd", typ: r("RemoveEndpointMessageCmd") },
-        { json: "endpoint_id", js: "endpoint_id", typ: "" },
     ], "any"),
     "RemovePluginMessage": o([
         { json: "cmd", js: "cmd", typ: r("RemovePluginMessageCmd") },
@@ -21001,10 +20529,8 @@ const typeMap: any = {
         { json: "branch", js: "branch", typ: u(undefined, "") },
         { json: "cwd", js: "cwd", typ: "" },
         { json: "directory_state", js: "directory_state", typ: "" },
-        { json: "endpoint_id", js: "endpoint_id", typ: u(undefined, "") },
         { json: "execution_id", js: "execution_id", typ: "" },
         { json: "handover_placement", js: "handover_placement", typ: "" },
-        { json: "host_kind", js: "host_kind", typ: "" },
         { json: "kept_conversation", js: "kept_conversation", typ: u(undefined, r("Kept")) },
         { json: "native_conversation_id", js: "native_conversation_id", typ: u(undefined, "") },
         { json: "placement_reason", js: "placement_reason", typ: u(undefined, "") },
@@ -21428,7 +20954,6 @@ const typeMap: any = {
         { json: "directory", js: "directory", typ: "" },
         { json: "dispatcher_member", js: "dispatcher_member", typ: u(undefined, "") },
         { json: "dispatcher_session_id", js: "dispatcher_session_id", typ: u(undefined, "") },
-        { json: "endpoint_id", js: "endpoint_id", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
         { json: "is_worktree", js: "is_worktree", typ: u(undefined, true) },
         { json: "label", js: "label", typ: "" },
@@ -21814,11 +21339,6 @@ const typeMap: any = {
         { json: "idle_seconds", js: "idle_seconds", typ: u(undefined, 3.14) },
         { json: "visible", js: "visible", typ: true },
     ], "any"),
-    "SetEndpointRemoteWebMessage": o([
-        { json: "cmd", js: "cmd", typ: r("SetEndpointRemoteWebMessageCmd") },
-        { json: "enabled", js: "enabled", typ: true },
-        { json: "endpoint_id", js: "endpoint_id", typ: "" },
-    ], "any"),
     "SetPluginPriorityMessage": o([
         { json: "cmd", js: "cmd", typ: r("SetPluginPriorityMessageCmd") },
         { json: "name", js: "name", typ: "" },
@@ -21890,7 +21410,6 @@ const typeMap: any = {
         { json: "copilot_executable", js: "copilot_executable", typ: u(undefined, "") },
         { json: "cwd", js: "cwd", typ: "" },
         { json: "effort", js: "effort", typ: u(undefined, "") },
-        { json: "endpoint_id", js: "endpoint_id", typ: u(undefined, "") },
         { json: "executable", js: "executable", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
         { json: "initial_prompt", js: "initial_prompt", typ: u(undefined, "") },
@@ -21998,7 +21517,6 @@ const typeMap: any = {
     ], "any"),
     "SupportSnapshotMessage": o([
         { json: "cmd", js: "cmd", typ: r("SupportSnapshotMessageCmd") },
-        { json: "endpoint_id", js: "endpoint_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "runtime_ids", js: "runtime_ids", typ: u(undefined, a("")) },
     ], "any"),
@@ -22007,7 +21525,6 @@ const typeMap: any = {
         { json: "captured_at_unix_ms", js: "captured_at_unix_ms", typ: 0 },
         { json: "daemon_instance_id", js: "daemon_instance_id", typ: "" },
         { json: "daemon_started_at_unix_ms", js: "daemon_started_at_unix_ms", typ: 0 },
-        { json: "endpoint_id", js: "endpoint_id", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("SupportSnapshotResultMessageEvent") },
         { json: "input_traces", js: "input_traces", typ: a(r("InputTraceElement")) },
         { json: "protocol_version", js: "protocol_version", typ: "" },
@@ -22126,14 +21643,6 @@ const typeMap: any = {
     ], "any"),
     "UnsubscribeGitStatusMessage": o([
         { json: "cmd", js: "cmd", typ: r("UnsubscribeGitStatusMessageCmd") },
-    ], "any"),
-    "UpdateEndpointMessage": o([
-        { json: "cmd", js: "cmd", typ: r("UpdateEndpointMessageCmd") },
-        { json: "enabled", js: "enabled", typ: u(undefined, true) },
-        { json: "endpoint_id", js: "endpoint_id", typ: "" },
-        { json: "instance", js: "instance", typ: u(undefined, "") },
-        { json: "name", js: "name", typ: u(undefined, "") },
-        { json: "ssh_target", js: "ssh_target", typ: u(undefined, "") },
     ], "any"),
     "WakeTurnMessage": o([
         { json: "cmd", js: "cmd", typ: r("WakeTurnMessageCmd") },
@@ -22337,9 +21846,6 @@ const typeMap: any = {
     "ActivityStatusMessageCmd": [
         "activity_status",
     ],
-    "AddEndpointMessageCmd": [
-        "add_endpoint",
-    ],
     "AgentCloseMessageCmd": [
         "agent_close",
     ],
@@ -22512,9 +22018,6 @@ const typeMap: any = {
         "automation",
         "crew",
     ],
-    "BootstrapEndpointMessageCmd": [
-        "bootstrap_endpoint",
-    ],
     "BranchChangedMessageEvent": [
         "branch_changed",
     ],
@@ -22554,9 +22057,6 @@ const typeMap: any = {
     ],
     "BrowserControlRequestMessageEvent": [
         "browser_control_request",
-    ],
-    "BrowserControlResponseMessageEvent": [
-        "browser_control_response",
     ],
     "BrowserControlResultMessageCmd": [
         "browser_control_result",
@@ -22842,15 +22342,6 @@ const typeMap: any = {
     "DocUnsubscribeMessageCmd": [
         "doc_unsubscribe",
     ],
-    "EndpointActionResultMessageEvent": [
-        "endpoint_action_result",
-    ],
-    "EndpointStatusChangedMessageEvent": [
-        "endpoint_status_changed",
-    ],
-    "EndpointsUpdatedMessageEvent": [
-        "endpoints_updated",
-    ],
     "EnsureRepoMessageCmd": [
         "ensure_repo",
     ],
@@ -23133,9 +22624,6 @@ const typeMap: any = {
     "ListBranchesMessageCmd": [
         "list_branches",
     ],
-    "ListEndpointsMessageCmd": [
-        "list_endpoints",
-    ],
     "ListPluginsMessageCmd": [
         "list_plugins",
     ],
@@ -23384,14 +22872,8 @@ const typeMap: any = {
     "PullRequestUnwatchMessageCmd": [
         "pull_request_unwatch",
     ],
-    "PullRequestUnwatchResultMessageEvent": [
-        "pull_request_unwatch_result",
-    ],
     "PullRequestWatchMessageCmd": [
         "pull_request_watch",
-    ],
-    "PullRequestWatchResultMessageEvent": [
-        "pull_request_watch_result",
     ],
     "QueryAuthorsMessageCmd": [
         "query_authors",
@@ -23434,9 +22916,6 @@ const typeMap: any = {
     ],
     "ReloadSessionResultMessageEvent": [
         "reload_session_result",
-    ],
-    "RemoveEndpointMessageCmd": [
-        "remove_endpoint",
     ],
     "RemovePluginMessageCmd": [
         "remove_plugin",
@@ -23649,9 +23128,6 @@ const typeMap: any = {
     "SetClientPresenceMessageCmd": [
         "set_client_presence",
     ],
-    "SetEndpointRemoteWebMessageCmd": [
-        "set_endpoint_remote_web",
-    ],
     "SetPluginPriorityMessageCmd": [
         "set_plugin_priority",
     ],
@@ -23732,9 +23208,6 @@ const typeMap: any = {
     ],
     "UnsubscribeGitStatusMessageCmd": [
         "unsubscribe_git_status",
-    ],
-    "UpdateEndpointMessageCmd": [
-        "update_endpoint",
     ],
     "WakeTurnMessageCmd": [
         "wake_turn",

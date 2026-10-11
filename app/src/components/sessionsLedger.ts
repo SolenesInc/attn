@@ -171,7 +171,6 @@ const DIRECTORY_STATE_LABELS: Record<string, string> = {
   missing: 'directory is gone',
   unavailable: 'directory cannot be opened',
   unknown: 'no directory saved',
-  remote: 'directory is on another host',
 };
 
 export function directoryStateLabel(state: string): string {

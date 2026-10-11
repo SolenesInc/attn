@@ -177,24 +177,12 @@ func (d *Daemon) resolveDesktopRef(profile profiles.Profile, ref string) (profil
 		elsewhere.ID, owner.Name, profile.Name, profiles.DesktopDirectory(profile, desktops))
 }
 
-func (d *Daemon) sessionProfileID(sessionID protocol.SessionID) (string, error) {
-	profileID, err := d.store.SessionProfileID(sessionID)
-	var missing *profiles.Error
-	if !errors.As(err, &missing) || missing.Code != profiles.CodeNotFound || d.hubManager == nil {
-		return profileID, err
-	}
-	if session := d.hubManager.RemoteSession(sessionID); session != nil {
-		return session.ProfileID, nil
-	}
-	return profileID, err
-}
-
 func (d *Daemon) callerProfile(callerSessionID protocol.SessionID) (profiles.Profile, error) {
 	callerSessionID = protocol.TrimID(callerSessionID)
 	if callerSessionID == "" {
 		return d.store.MostRecentlyUsedProfile()
 	}
-	profileID, err := d.sessionProfileID(callerSessionID)
+	profileID, err := d.store.SessionProfileID(callerSessionID)
 	if err != nil {
 		return profiles.Profile{}, fmt.Errorf("resolve the profile of calling session %s: %w", callerSessionID, err)
 	}

@@ -1086,54 +1086,11 @@ fn shell_escape_windows(arg: &str) -> String {
     format!("\"{}\"", arg.replace('"', "\\\""))
 }
 
-fn percent_encode_path(path: &str) -> String {
-    let mut encoded = String::with_capacity(path.len());
-    for byte in path.bytes() {
-        let ch = byte as char;
-        let is_unreserved = ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.' | '~' | '/');
-        if is_unreserved {
-            encoded.push(ch);
-        } else {
-            encoded.push_str(&format!("%{:02X}", byte));
-        }
-    }
-    encoded
-}
-
-fn looks_like_zed_editor(editor: &str) -> bool {
-    editor.to_ascii_lowercase().contains("zed")
-}
-
-fn build_remote_zed_target(remote_target: &str, cwd: &str, file_path: Option<&str>) -> String {
-    let resolved = if let Some(path) = file_path.filter(|value| !value.trim().is_empty()) {
-        let path_buf = Path::new(path);
-        if path_buf.is_absolute() {
-            path_buf.to_path_buf()
-        } else {
-            Path::new(cwd).join(path_buf)
-        }
-    } else {
-        PathBuf::from(cwd)
-    };
-    let normalized = resolved.to_string_lossy().replace('\\', "/");
-    let with_leading = if normalized.starts_with('/') {
-        normalized
-    } else {
-        format!("/{}", normalized)
-    };
-    format!(
-        "ssh://{}{}",
-        remote_target.trim(),
-        percent_encode_path(&with_leading)
-    )
-}
-
 #[tauri::command]
 fn open_in_editor(
     cwd: String,
     file_path: Option<String>,
     editor: Option<String>,
-    remote_target: Option<String>,
 ) -> Result<(), String> {
     let editor = editor
         .map(|value| value.trim().to_string())
@@ -1142,55 +1099,30 @@ fn open_in_editor(
         .or_else(|| env::var("VISUAL").ok())
         .ok_or_else(|| "EDITOR (or VISUAL) is not set".to_string())?;
 
-    let mut local_cwd: Option<PathBuf> = None;
-    let mut args: Vec<String> = Vec::new();
-    if let Some(remote_target) = remote_target
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-    {
-        if !looks_like_zed_editor(&editor) {
-            return Err("Remote open-in-editor currently requires Zed.".to_string());
-        }
-        args.push(build_remote_zed_target(
-            &remote_target,
-            &cwd,
-            file_path.as_deref(),
-        ));
-    } else {
-        let cwd_path = PathBuf::from(&cwd);
-        if !cwd_path.exists() {
-            return Err(format!("Directory does not exist: {}", cwd));
-        }
-        local_cwd = Some(cwd_path.clone());
+    let cwd_path = PathBuf::from(&cwd);
+    if !cwd_path.exists() {
+        return Err(format!("Directory does not exist: {}", cwd));
+    }
 
-        if let Some(path) = file_path {
+    let target = match file_path {
+        Some(path) => {
             let path_buf = Path::new(&path);
-            let resolved = if path_buf.is_absolute() {
+            if path_buf.is_absolute() {
                 path_buf.to_path_buf()
             } else {
                 cwd_path.join(path_buf)
-            };
-            args.push(resolved.to_string_lossy().to_string());
-        } else {
-            args.push(".".to_string());
+            }
+            .to_string_lossy()
+            .to_string()
         }
-    }
-
-    let command_line = if cfg!(windows) {
-        let mut cmd = editor.clone();
-        for arg in &args {
-            cmd.push(' ');
-            cmd.push_str(&shell_escape_windows(arg));
-        }
-        cmd
-    } else {
-        let mut cmd = editor.clone();
-        for arg in &args {
-            cmd.push(' ');
-            cmd.push_str(&shell_escape_unix(arg));
-        }
-        cmd
+        None => ".".to_string(),
     };
+    let escaped_target = if cfg!(windows) {
+        shell_escape_windows(&target)
+    } else {
+        shell_escape_unix(&target)
+    };
+    let command_line = format!("{} {}", editor, escaped_target);
 
     let mut command = if cfg!(windows) {
         let mut cmd = Command::new("cmd");
@@ -1202,9 +1134,7 @@ fn open_in_editor(
         cmd
     };
 
-    if let Some(cwd_path) = local_cwd {
-        command.current_dir(cwd_path);
-    }
+    command.current_dir(cwd_path);
 
     command
         .spawn()

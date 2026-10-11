@@ -6,7 +6,6 @@ import { describeSessionPullRequest, pickSessionPullRequest } from '../utils/ses
 import { deriveTileTitle, tileKindLabel } from '../utils/tilePresentation';
 import { useDaemonStore } from '../store/daemonSessions';
 import { ChiefOfStaffBadge } from './ChiefOfStaffBadge';
-import { useSidebarContext } from './SidebarContext';
 import { DelegatedFromChiefBadge } from './DelegatedFromChiefBadge';
 import { DelegationChainTrigger } from './DelegationChain';
 import { SessionLead } from './SessionLead';
@@ -83,10 +82,6 @@ export function TileSidebarRow({
   'data-select-key'?: string;
 }) {
   const seeds = useDaemonStore((state) => state.seeds);
-  const { desktops } = useSidebarContext();
-  const boundSession = tile.tileSessionId
-    ? desktops.flatMap((desktop) => desktop.sessions).find((session) => session.id === tile.tileSessionId)
-    : undefined;
   const title = deriveTileTitle(tile, content, (id) => seeds.find((seed) => seed.id === id)?.title);
   const kind = tileKindLabel(tile.tileKind);
   const tileIdentifier = tile.tileKind === 'notebook'
@@ -111,11 +106,6 @@ export function TileSidebarRow({
       <span className="session-label">{title}</span>
       <span className="session-trailing">
         <span className="desktop-tile-kind">{kind.word}</span>
-        {boundSession?.endpointName && (
-          <span className={`session-endpoint-badge status-${boundSession.endpointStatus || 'connected'}`}>
-            {boundSession.endpointName}
-          </span>
-        )}
       </span>
       <div className="session-actions">
         {tile.tileKind === 'browser' && (
@@ -154,11 +144,6 @@ export function TileSidebarRow({
 export function SidebarSessionBadges({ session }: { session: LocalSession }) {
   return (
     <>
-      {session.endpointName && (
-        <span className={`session-endpoint-badge status-${session.endpointStatus || 'connected'}`}>
-          {session.endpointName}
-        </span>
-      )}
       {session.state === 'recoverable' && <span className="session-recoverable">recoverable</span>}
       {session.chiefOfStaff && <ChiefOfStaffBadge compact />}
       {session.delegatedFromChief && <DelegatedFromChiefBadge />}

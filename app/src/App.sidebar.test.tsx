@@ -5,7 +5,6 @@ import {
   agentPane,
   soloDesktop,
   crewMember,
-  daemonEndpoint,
   daemonSession,
   daemonDesktop,
   splitDesktop,
@@ -184,21 +183,6 @@ describe('App sidebar', () => {
       expect(row('s2').queryByLabelText('Delegated from chief of staff')).toBeNull();
     });
 
-    it('shows a remote session’s endpoint, and offers close and reload for it', async () => {
-      const { daemon } = await renderApp({
-        initialState: {
-          endpoints: [daemonEndpoint('ep-1')],
-          sessions: [daemonSession('remote-1', { endpoint_id: 'ep-1' })],
-          desktops: [soloDesktop('remote-1')],
-        },
-      });
-
-      expect(row('remote-1').getByText('gpu-box')).toBeInTheDocument();
-      await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Actions for remote-1' })));
-      expect(screen.getByRole('menuitem', { name: /Close session/ })).toBeInTheDocument();
-      expect(screen.getByRole('menuitem', { name: /Reload session/ })).toBeInTheDocument();
-    });
-
     it('marks the chief and takes the role away from its menu', async () => {
       const { daemon } = await launch({ sessions: [daemonSession('chief', { chief_of_staff: true })] });
 
@@ -349,32 +333,6 @@ describe('App sidebar', () => {
 
       expect(daemon.sentOf('desktop_move_leaf')).toEqual([
         expect.objectContaining({ source_desktop_id: 'source', leaf_id: 'pane-s2', target_desktop_id: 'target' }),
-      ]);
-    });
-
-    it.each([
-      { source: 'remote', target: 'local' },
-      { source: 'local', target: 'remote' },
-    ])('sends one move from a $source pane to a desktop holding a $target pane', async ({ source, target }) => {
-      const { daemon } = await renderApp({ initialState: {
-        endpoints: [daemonEndpoint('ep-1')],
-        sessions: [daemonSession('remote', { endpoint_id: 'ep-1' }), daemonSession('local')],
-        desktops: [
-          splitDesktop('source', [source], { order_key: '0' }),
-          splitDesktop('target', [target], { order_key: '1' }),
-        ],
-      } });
-      daemon.on('desktop_move_leaf', (command) => ({ event: 'profile_action_result', action: command.cmd, request_id: command.request_id, success: true }));
-
-      pressRow(source);
-      fireEvent.pointerMove(window, { pointerId: 1, clientX: 10, clientY: 40 });
-      expect(desktopGroup('target')).toHaveClass('desktop-group--drag-target');
-      fireEvent.pointerEnter(desktopGroup('target'));
-      fireEvent.pointerUp(desktopGroup('target'), { pointerId: 1 });
-      await daemon.idle();
-
-      expect(daemon.sentOf('desktop_move_leaf')).toEqual([
-        expect.objectContaining({ source_desktop_id: 'source', leaf_id: `pane-${source}`, target_desktop_id: 'target' }),
       ]);
     });
 

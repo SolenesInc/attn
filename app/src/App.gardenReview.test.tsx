@@ -17,7 +17,6 @@ const savedContext: Continuation = {
   native_conversation_id: 'native-old',
   agent: 'codex',
   cwd: '/tmp/work',
-  host_kind: 'local',
   directory_state: 'present',
   resume_available: true,
   handover_placement: 'reuse_cwd',

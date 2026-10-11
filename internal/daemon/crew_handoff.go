@@ -74,9 +74,6 @@ func (d *Daemon) crewHandoff(sessionID protocol.SessionID, note string, retry bo
 }
 
 func (d *Daemon) crewHandoffLocked(sessionID protocol.SessionID, note string, retry bool, close protocol.CrewDayClose) (*protocol.CrewHandoffResult, error) {
-	if err := d.requireHome(crew.Surface); err != nil {
-		return nil, err
-	}
 	if sessionID == "" {
 		return nil, fmt.Errorf("a handoff is filed by the session living the day; none was named (run from its terminal or pass --session)")
 	}

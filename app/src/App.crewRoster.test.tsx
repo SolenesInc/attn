@@ -25,7 +25,7 @@ describe('App crew roster', () => {
     expect(manageCrew()).toHaveTextContent('manage');
   });
 
-  it('reads a crew-less daemon, such as an outpost, as an empty roster', async () => {
+  it('reads a reconnect whose initial state carries no crew as an empty roster', async () => {
     const { daemon } = await renderWithCrew([crewMember('keel')]);
     expect(manageCrew()).not.toBeNull();
 

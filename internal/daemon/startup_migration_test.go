@@ -89,7 +89,8 @@ func TestAnEnrolledOutpostRefusesToStartBeforeTheLockAndTheDatabase(t *testing.T
 	if _, err := enrollment.EnsureDaemonID(dir); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := enrollment.Enroll(dir, "d-0123456789abcdef0123456789abcdef"); err != nil {
+	record := `{"home_daemon_id": "d-0123456789abcdef0123456789abcdef"}` + "\n"
+	if err := os.WriteFile(filepath.Join(dir, enrollment.RecordFileName), []byte(record), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

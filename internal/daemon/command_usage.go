@@ -9,9 +9,6 @@ import (
 )
 
 func (d *Daemon) commandUsageScope(client *wsClient, requestID, profileID string) error {
-	if err := d.requireHome("command usage"); err != nil {
-		return err
-	}
 	if strings.TrimSpace(requestID) == "" {
 		return fmt.Errorf("command usage needs a request_id")
 	}

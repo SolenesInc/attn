@@ -35,7 +35,7 @@ export function AppSessionPrompts() {
   } = useDaemonApi();
   const { agentAvailability, contextCapPromptSession, setContextCapPromptSession } = useAppShell();
   const { showError } = useAppErrorsContext();
-  const { settings, daemonEndpoints } = useAppInputs();
+  const { settings } = useAppInputs();
   const {
     hasChiefOfStaff,
     chiefTransferTarget,
@@ -61,7 +61,6 @@ export function AppSessionPrompts() {
         onError={showError}
         projectsDirectory={settings.projects_directory}
         agentAvailability={agentAvailability}
-        endpoints={daemonEndpoints}
         chiefExists={hasChiefOfStaff}
       />
       <SessionCreationProgress

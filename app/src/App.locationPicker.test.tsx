@@ -1,9 +1,9 @@
 import { harnesses } from './test/harnessCatalogs';
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { CommandMessage, EventMessage } from './test/protocol';
+import type { CommandMessage } from './test/protocol';
 import { openSessionsLedger, page, pages, rows } from './components/ledger/testSupport';
-import { soloDesktop, daemonEndpoint, daemonSession, DEFAULT_PROFILE_ID } from './test/daemonFixtures';
+import { soloDesktop, daemonSession, DEFAULT_PROFILE_ID } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { Reply, ScriptedDaemon } from './test/scriptedDaemon';
 import { closedEntry, verdict } from './test/sessionLedgerFixtures';
@@ -25,14 +25,11 @@ import {
   typePath,
 } from './test/locations';
 
-type InitialState = Partial<EventMessage<'initial_state'>>;
 type HeldCommand = 'inspect_path' | 'get_repo_info' | 'create_worktree' | 'get_recent_locations' | 'browse_directory';
 
 const REPO = `${HOME}/projects/exsin`;
 const FEAT_IMAGES = `${REPO}--feat-images`;
 const EXSIN = repoInfo(REPO, [{ path: FEAT_IMAGES, branch: 'feat-images' }]);
-const REMOTE_CAPABILITIES = { protocol_version: '46', agents_available: ['codex'] };
-const GPU_BOX = daemonEndpoint('ep-1', { capabilities: { ...REMOTE_CAPABILITIES, projects_directory: '/srv/projects' } });
 
 function row(index: number) {
   return screen.getByTestId(`location-picker-item-${index}`);
@@ -51,7 +48,7 @@ function suggestions() {
 }
 
 function browsed(daemon: ScriptedDaemon) {
-  return daemon.sentOf('browse_directory').map(({ input_path, endpoint_id }) => (endpoint_id ? { input_path, endpoint_id } : { input_path }));
+  return daemon.sentOf('browse_directory').map(({ input_path }) => ({ input_path }));
 }
 
 function radio(name: RegExp) {
@@ -122,18 +119,8 @@ describe('App location picker', () => {
 
       await submitPath(daemon, '/');
 
-      expect(daemon.sentOf('inspect_path').map(({ path, endpoint_id }) => ({ path, endpoint_id }))).toEqual([{ path: '/', endpoint_id: undefined }]);
+      expect(daemon.sentOf('inspect_path').map(({ path }) => path)).toEqual(['/']);
       expect(launchedAt(daemon)).toEqual([{ cwd: '/', agent: 'claude' }]);
-    });
-
-    it('refuses a launch on a remote endpoint, saying remote endpoints are off', async () => {
-      const { daemon } = await openPicker({}, { endpoints: [GPU_BOX] });
-      await gesture(daemon, () => fireEvent.click(radio(/gpu-box/i)));
-
-      await submitPath(daemon, '/');
-
-      expect(launchedAt(daemon)).toEqual([]);
-      expect(screen.getByText(/remote endpoints are off/)).toBeInTheDocument();
     });
 
     it.each([
@@ -150,26 +137,12 @@ describe('App location picker', () => {
   });
 
   describe('browsing', () => {
-    it('asks the host the session will run on, and never shows another host’s directories', async () => {
-      const { daemon } = await openPicker({ directories: { [`${HOME}/projects`]: ['local-repo'] } }, { endpoints: [GPU_BOX] });
+    it('browses the daemon’s directories', async () => {
+      const { daemon } = await openPicker({ directories: { [`${HOME}/projects`]: ['local-repo'] } });
       await typePath(daemon, '~/projects/');
+
       expect(suggestions()).toEqual(['local-repo']);
-      holdAnswers(daemon, 'browse_directory');
-
-      await gesture(daemon, () => fireEvent.click(radio(/gpu-box/i)));
-      expect(suggestions()).toEqual([]);
-      expect(browsed(daemon)).toEqual([{ input_path: '~/projects/' }, { input_path: '/srv/projects/', endpoint_id: 'ep-1' }]);
-      const [, remote] = daemon.sentOf('browse_directory');
-
-      await answer(daemon, remote, {
-        event: 'browse_directory_result',
-        success: true,
-        input_path: remote.input_path,
-        directory: '/srv/projects',
-        home_path: '/home/remote',
-        entries: [{ name: 'remote-repo', path: '/srv/projects/remote-repo', is_dir: true }],
-      });
-      expect(suggestions()).toEqual(['remote-repo']);
+      expect(browsed(daemon)).toEqual([{ input_path: '~/projects/' }]);
     });
 
     it('asks once for the path the user settles on, not for every keystroke', async () => {
@@ -277,7 +250,7 @@ describe('App location picker', () => {
     });
   });
 
-  describe('agents and targets', () => {
+  describe('agents and YOLO', () => {
     const agentChosen = (name: RegExp) => radio(name).getAttribute('aria-checked') === 'true';
 
     it('launches an interactive plugin absent from the initial-prompt harness catalog', async () => {
@@ -320,15 +293,6 @@ describe('App location picker', () => {
       expect(launchedAt(daemon)).toEqual([{ cwd: '/tmp/catalog-unavailable', agent: 'aaa' }, { cwd: '/tmp/catalog-recovered', agent: 'codex' }]);
     });
 
-    it('offers Terminal on a remote endpoint that reports only agent CLIs', async () => {
-      const { daemon } = await openPicker({}, { endpoints: [GPU_BOX] });
-
-      await gesture(daemon, () => fireEvent.click(radio(/gpu-box/i)));
-
-      expect(radio(/terminal/i)).toBeEnabled();
-      expect(radio(/codex/i)).toBeEnabled();
-    });
-
     it('remembers the agent the user picks for the next time the picker opens', async () => {
       const { daemon } = await openPicker({}, { settings: { codex_available: 'true' } });
 
@@ -369,32 +333,43 @@ describe('App location picker', () => {
       expect(daemon.sentOf('set_setting').filter(({ key }) => key === 'new_session_agent')).toEqual([]);
     });
 
-    it('switches targets with ⌥ shortcuts in the order they are shown, starting each from its projects directory, and skips a disconnected one', async () => {
-      const { daemon } = await openPicker({}, {
-        settings: { projects_directory: '/Users/victor/projects' },
-        endpoints: [
-          GPU_BOX,
-          daemonEndpoint('ep-2', { name: 'lab-box', capabilities: { ...REMOTE_CAPABILITIES, projects_directory: '/opt/work' } }),
-          daemonEndpoint('ep-3', { name: 'dark-box', status: 'disconnected', capabilities: REMOTE_CAPABILITIES }),
-        ],
-      });
-      expect(pathInput()).toHaveValue('/Users/victor/projects/');
-      expect(within(radio(/dark-box/i)).queryByText(/⌥/)).toBeNull();
+    const yoloSwitch = () => screen.getByTestId('location-picker-yolo-toggle');
+    const yoloWrites = (daemon: ScriptedDaemon) => daemon.sentOf('set_setting').filter(({ key }) => key.startsWith('new_session_yolo'));
 
-      await press(daemon, '∑', { code: 'KeyW', altKey: true });
-      expect(pathInput()).toHaveValue('/srv/projects/');
-      expect(radio(/gpu-box/i)).toHaveAttribute('aria-checked', 'true');
-
-      await press(daemon, '€', { code: 'KeyE', altKey: true });
-      expect(pathInput()).toHaveValue('/opt/work/');
-      expect(radio(/lab-box/i)).toHaveAttribute('aria-checked', 'true');
-
-      await press(daemon, '®', { code: 'KeyR', altKey: true });
-      expect(radio(/lab-box/i)).toHaveAttribute('aria-checked', 'true');
+    it('turns YOLO on with ⌥Q or a click, remembers it for the next picker, and launches with it', async () => {
+      const { daemon } = await openPicker({}, { settings: { claude_cap_yolo: 'true' } });
+      expect(yoloSwitch()).toHaveAttribute('aria-checked', 'false');
+      expect(within(yoloSwitch()).getByText('⌥Q')).toBeInTheDocument();
 
       await press(daemon, 'œ', { code: 'KeyQ', altKey: true });
-      expect(pathInput()).toHaveValue('/Users/victor/projects/');
-      expect(radio(/local/i)).toHaveAttribute('aria-checked', 'true');
+      expect(yoloSwitch()).toHaveAttribute('aria-checked', 'true');
+      await submitPath(daemon, '/tmp/yolo');
+
+      await gesture(daemon, () => pressShortcut('session.new'));
+      expect(yoloSwitch()).toHaveAttribute('aria-checked', 'true');
+      await gesture(daemon, () => fireEvent.click(yoloSwitch()));
+      await submitPath(daemon, '/tmp/careful');
+
+      expect(yoloWrites(daemon)).toEqual([
+        { cmd: 'set_setting', key: 'new_session_yolo_local', value: 'true' },
+        { cmd: 'set_setting', key: 'new_session_yolo_local', value: 'false' },
+      ]);
+      expect(launchedAt(daemon)).toEqual([
+        { cwd: '/tmp/yolo', agent: 'claude', yolo_mode: true },
+        { cwd: '/tmp/careful', agent: 'claude' },
+      ]);
+    });
+
+    it('keeps YOLO off for an agent that does not support it, whatever was remembered', async () => {
+      const { daemon } = await openPicker({}, { settings: { new_session_yolo_local: 'true' } });
+      expect(yoloSwitch()).toBeDisabled();
+      expect(yoloSwitch()).toHaveAttribute('aria-checked', 'false');
+
+      await press(daemon, 'œ', { code: 'KeyQ', altKey: true });
+      await submitPath(daemon, '/tmp/plain');
+
+      expect(yoloWrites(daemon)).toEqual([]);
+      expect(launchedAt(daemon)).toEqual([{ cwd: '/tmp/plain', agent: 'claude' }]);
     });
   });
 
@@ -497,20 +472,11 @@ describe('App location picker', () => {
     const chooser = () => screen.queryByTestId('repo-options');
     const memoryWrites = (daemon: ScriptedDaemon) => daemon.sentOf('set_setting').filter(({ key }) => key.startsWith('new_session_destination_'));
 
-    async function openRepo(settings: Record<string, string> = {}, path = '~/projects/exsin', initialState: InitialState = {}) {
-      const view = await openPicker({ repos: [EXSIN] }, { settings, ...initialState });
-      if (initialState.endpoints) await gesture(view.daemon, () => fireEvent.click(radio(/gpu-box/i)));
+    async function openRepo(settings: Record<string, string> = {}, path = '~/projects/exsin') {
+      const view = await openPicker({ repos: [EXSIN] }, { settings });
       await submitPath(view.daemon, path);
       return view;
     }
-
-    it('preselects the worktree a remote path names, asking that endpoint for the repository', async () => {
-      const { daemon } = await openRepo({}, '~/projects/exsin--feat-images/', { endpoints: [GPU_BOX] });
-
-      expect(daemon.sentOf('inspect_path').map(({ path, endpoint_id }) => ({ path, endpoint_id }))).toEqual([{ path: FEAT_IMAGES, endpoint_id: 'ep-1' }]);
-      expect(daemon.sentOf('get_repo_info').map(({ repo, endpoint_id }) => ({ repo, endpoint_id }))).toEqual([{ repo: REPO, endpoint_id: 'ep-1' }]);
-      expect(chosenRow()).toBe(1);
-    });
 
     it('keeps the dialog’s ⌥ shortcuts while the chooser’s rows have the keyboard', async () => {
       const { daemon } = await openRepo({}, '~/projects/exsin--feat-images');
@@ -562,15 +528,6 @@ describe('App location picker', () => {
       expect(memoryWrites(daemon)).toEqual([{ cmd: 'set_setting', key: MEMORY, value: 'new_worktree' }]);
     });
 
-    it('keeps each endpoint’s memory apart, since the same path on a remote is another repository', async () => {
-      const { daemon } = await openRepo({ [MEMORY]: 'main_repo' }, '~/projects/exsin', { endpoints: [GPU_BOX] });
-      expect(screen.getByTestId('repo-new-worktree-input')).toHaveFocus();
-
-      await gesture(daemon, () => fireEvent.click(screen.getByTestId('repo-option-0')));
-
-      expect(memoryWrites(daemon)).toEqual([{ cmd: 'set_setting', key: destinationMemory(REPO, 'ep-1'), value: 'main_repo' }]);
-    });
-
     it('shows what it is waiting for while the path and then the repository are read', async () => {
       const { daemon } = await openPicker({ repos: [EXSIN] });
       const inspectRequest = holdAnswers(daemon, 'inspect_path');
@@ -601,14 +558,13 @@ describe('App location picker', () => {
 
   describe('answers that arrive too late', () => {
     it.each([
-      ['the user picked another target', async (daemon: ScriptedDaemon) => gesture(daemon, () => fireEvent.click(radio(/gpu-box/i)))],
       ['the user typed another path', async (daemon: ScriptedDaemon) => typePath(daemon, '/tmp/other')],
       ['the picker was closed and opened again', async (daemon: ScriptedDaemon) => {
         await gesture(daemon, () => fireEvent.click(screen.getByTestId('location-picker-overlay')));
         await gesture(daemon, () => pressShortcut('session.new'));
       }],
     ])('ignores a path inspection answered after %s, success or failure', async (_, moveOn) => {
-      const { daemon } = await openPicker({ repos: [EXSIN] }, { endpoints: [GPU_BOX] });
+      const { daemon } = await openPicker({ repos: [EXSIN] });
       const inspectRequest = holdAnswers(daemon, 'inspect_path');
       await submitPath(daemon, '~/projects/exsin');
       await submitPath(daemon, '~/projects/exsin');

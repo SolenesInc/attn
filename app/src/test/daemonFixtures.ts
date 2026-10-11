@@ -8,7 +8,6 @@ export type DaemonSeed = EventMessage<'garden_seeds_updated'>['seeds'][number];
 export type DaemonSeedDocument = NonNullable<EventMessage<'seed_document_get_result'>['document']>;
 export type DaemonCrewMember = EventMessage<'crew_updated'>['members'][number];
 export type DaemonPR = NonNullable<EventMessage<'prs_updated'>['prs']>[number];
-export type DaemonEndpoint = EventMessage<'endpoints_updated'>['endpoints'][number];
 
 export interface DaemonTile {
   tile_id: string;
@@ -82,11 +81,6 @@ export function splitDesktop(id: string, sessionIds: string[], overrides: Partia
     root: leaves.length === 1 ? leaves[0] : { type: 'split', split_id: `split-${id}`, direction: 'vertical', ratio: 0.5, children: leaves },
     panes: sessionIds.map((sessionId) => agentPane(sessionId, id)),
   }, overrides);
-}
-
-export function daemonEndpoint(id: string, overrides: Partial<DaemonEndpoint> = {}): DaemonEndpoint {
-  const name = overrides.name ?? 'gpu-box';
-  return { id, name, ssh_target: `me@${name}`, status: 'connected', enabled: true, ...overrides };
 }
 
 export function dockTiles(root: unknown, tiles: DaemonTile[]): unknown {

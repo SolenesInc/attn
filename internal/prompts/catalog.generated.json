@@ -74,7 +74,7 @@
                   "field": {
                     "name": "garden_available",
                     "kind": "flag",
-                    "description": "Include Garden guidance when the session has a home Garden."
+                    "description": "Include Garden guidance."
                   },
                   "test": "enabled"
                 },
@@ -155,7 +155,7 @@
         {
           "id": "garden-guidance",
           "delivery": "message_fragment",
-          "description": "Garden instructions when a home is available.",
+          "description": "Garden instructions.",
           "body": {
             "kind": "text",
             "id": "session.garden",
@@ -4774,5 +4774,5 @@
       ]
     }
   ],
-  "definitions_hash": "d9ebf7374593e6c44a95958419238df82c527ac14a100c30f4ff520888e60bdc"
+  "definitions_hash": "4a0f6326eeaccd4aff1f8ed5262e168a0350d17b1c712df7a2a0923a07d88f3d"
 }

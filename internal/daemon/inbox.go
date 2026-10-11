@@ -96,13 +96,6 @@ func (d *Daemon) inboxAddressesOf(sessionID protocol.SessionID) ([]inbox.Address
 	if chief, ok := d.chiefAddressOf(sessionID); ok {
 		addresses = append(addresses, chief)
 	}
-	status, err := d.enrollmentStatus()
-	if err != nil {
-		return nil, err
-	}
-	if !status.IsHome() {
-		return addresses, nil
-	}
 	members, _, err := d.readCrewMembers()
 	if err != nil {
 		return nil, err

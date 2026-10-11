@@ -14,7 +14,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 
 const LEGACY_WORKSPACES = [
   'Daemon lifecycle', 'attn zero', 'Garden & crew', 'Shell config', 'Session ledger', 'Release train',
-  'Side project', 'Plugin runtime', 'Research', 'SSH outpost', 'CLI polish', 'Browser control',
+  'Side project', 'Plugin runtime', 'Research', 'Docs sweep', 'CLI polish', 'Browser control',
 ];
 const PAIRED = new Set([1, 5, 9]);
 const LAST_SCHEMA_BEFORE_CONVERSION = 158;

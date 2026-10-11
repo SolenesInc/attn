@@ -38,23 +38,3 @@ func TestSeedContinuationResumesAPluginTenderByCapability(t *testing.T) {
 		t.Fatalf("continuation = %+v, want a resumable snipe-conv-3", continuation)
 	}
 }
-
-func TestSeedContinuationPreservesRemoteSessionWithoutLocalWorker(t *testing.T) {
-	d := newGardenDaemon(t)
-	d.store.Remove("sess-a")
-	d.store.Add(&protocol.Session{
-		ID: "sess-a", Directory: "/srv/work", Agent: protocol.SessionAgentClaude, ProfileID: defaultProfileID(t, d.store),
-		EndpointID: protocol.Ptr("outpost-a"), State: protocol.SessionStateIdle,
-	})
-	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Remote work"})
-	move(t, d, "sess-a", seed.ID, garden.VerbTend, "", "")
-
-	tended, _, err := d.readSeed(seed.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	continuation := d.continuationForSeed(tended)
-	if continuation == nil || !continuation.SessionLive || !continuation.ResumeAvailable {
-		t.Fatalf("continuation = %+v, want live remote session", continuation)
-	}
-}

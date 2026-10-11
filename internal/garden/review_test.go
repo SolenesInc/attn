@@ -45,11 +45,6 @@ func TestReviewCandidateTruthTable(t *testing.T) {
 			want:        true, why: ReviewReasonLifecycleStale,
 		},
 		{
-			name:        "remote directory uses the lifecycle clock",
-			observation: reviewObservation("s-a", old, ReviewDirectoryRemote),
-			want:        true, why: ReviewReasonLifecycleStale,
-		},
-		{
 			name: "tracked session protects its claim",
 			observation: func() ReviewObservation {
 				observation := reviewObservation("s-a", old, ReviewDirectoryMissing)

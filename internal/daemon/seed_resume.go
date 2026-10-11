@@ -37,9 +37,6 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 	if seedID == "" {
 		return nil, fmt.Errorf("seed_id is required")
 	}
-	if err := d.requireHome(garden.Surface); err != nil {
-		return nil, err
-	}
 	expectedRev := int64(0)
 	if review != nil {
 		item, err := d.validateGardenReviewAction(review, seedID, "resume")
@@ -71,13 +68,12 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 		return nil, fmt.Errorf("%s has no agent conversation to resume", seedID)
 	}
 	actor := garden.Tender{Session: sessionID}
-	if existing := d.gardenSession(sessionID); existing != nil && existing.ProfileID != seed.ProfileID {
+	if existing := d.store.Get(sessionID); existing != nil && existing.ProfileID != seed.ProfileID {
 		owner, _ := d.store.GetProfile(seed.ProfileID)
 		caller, _ := d.store.GetProfile(existing.ProfileID)
 		return nil, fmt.Errorf("seed %s belongs to profile %q; its previous agent now belongs to profile %q: hand the seed to a new agent in its own profile", seed.ID, owner.Name, caller.Name)
 	}
-	if existing := d.gardenSession(sessionID); existing != nil &&
-		(execution.HostKind == garden.HostRemote || d.sessionHasLiveWorker(sessionID)) {
+	if existing := d.store.Get(sessionID); existing != nil && d.sessionHasLiveWorker(sessionID) {
 		if _, _, _, err := d.applySeedTransitionDetailedAsAtRevisionProtected(protection,
 			seedID, garden.VerbTend, garden.Ask{Actor: actor}, "", d.sessionExists, expectedRev); err != nil {
 			return nil, err

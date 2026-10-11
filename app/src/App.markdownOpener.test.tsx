@@ -1,5 +1,4 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
-import { openPath } from '@tauri-apps/plugin-opener';
 import { describe, expect, it, vi } from 'vitest';
 import { agentPane, daemonSession, daemonDesktop, dockTiles, type DaemonSession } from './test/daemonFixtures';
 import { pressShortcut, renderApp } from './test/renderApp';
@@ -50,7 +49,6 @@ async function openOpener({ session = daemonSession('s1', { directory: '/repo' }
       settings: notebookRoot ? { 'notebook.root.effective': notebookRoot } : {},
       sessions: session ? [session] : [],
       desktops: session ? [desktopFor(session)] : [],
-      ...(session?.endpoint_id ? { endpoints: [{ id: session.endpoint_id, name: 'gpu-box', ssh_target: 'user@gpu-box', status: 'connected', enabled: true }] } : {}),
     },
   });
   serveOpener(view.daemon, index);
@@ -221,23 +219,6 @@ describe('App markdown opener target', () => {
 
     expect(daemon.sentOf('fs_index')).toEqual([expect.objectContaining({ root: NOTEBOOK_ROOT })]);
     expect(daemon.sentOf('open_markdown')).toEqual([expect.objectContaining({ session_id: 's1' })]);
-  });
-
-  it.each([
-    { notebook: 'the notebook', notebookRoot: NOTEBOOK_ROOT, indexed: [NOTEBOOK_ROOT] },
-    { notebook: 'no notebook', notebookRoot: '', indexed: [] },
-  ])('never indexes or opens into a remote session’s folder, falling back to $notebook', async ({ notebookRoot, indexed }) => {
-    const { daemon } = await openOpener({
-      session: daemonSession('s1', { directory: '/repo', endpoint_id: 'ep-1' }),
-      notebookRoot,
-    });
-    expect(daemon.sentOf('fs_index').map((index) => index.root)).toEqual(indexed);
-    expect(rows()).toHaveLength(2);
-
-    await press(daemon, 'Enter');
-
-    expect(daemon.sentOf('open_markdown')).toEqual([]);
-    expect(openPath).toHaveBeenCalledWith('/repo/docs/plan.md');
   });
 
   it('roots a notebook opened from a shown document tile in the folder of the agent the tile was opened for', async () => {

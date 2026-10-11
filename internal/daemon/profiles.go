@@ -10,7 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/crew"
 
 	"github.com/victorarias/attn/internal/bus"
-	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
@@ -194,9 +193,6 @@ func (d *Daemon) fillInitialProfileState(client *wsClient, event *protocol.Initi
 	}
 	event.SelectedProfileID = protocol.Ptr(selected)
 	event.Desktops = wire
-	if d.requireHome("profiles and desktops") != nil {
-		return nil, 0
-	}
 	return markdownTilesOnCurrentDesktop(profile, desktops), seq
 }
 
@@ -206,12 +202,9 @@ func (d *Daemon) runProfileAction(client *wsClient, action, requestID string, ru
 		result.Error = protocol.Ptr(err.Error())
 		code := protocol.ProfileErrorCodeInternal
 		var profileErr *profiles.Error
-		var fenced *enrollment.FencedError
 		switch {
 		case errors.As(err, &profileErr):
 			code = protocol.ProfileErrorCode(profileErr.Code)
-		case errors.As(err, &fenced):
-			code = protocol.ProfileErrorCodeUnavailable
 		default:
 			d.logf("%s failed: %v", action, err)
 		}
@@ -220,10 +213,6 @@ func (d *Daemon) runProfileAction(client *wsClient, action, requestID string, ru
 	}
 	if strings.TrimSpace(requestID) == "" {
 		fail(profiles.Errorf(profiles.CodeInvalid, "%s needs a request_id", action))
-		return
-	}
-	if err := d.requireHome("profiles and desktops"); err != nil {
-		fail(err)
 		return
 	}
 	previousProfile := client.selectedProfile()
@@ -375,10 +364,6 @@ func (d *Daemon) handleProfileRename(client *wsClient, msg *protocol.ProfileRena
 
 func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDeleteMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
-		remote, err := d.countRemoteProfileSessions(msg.ProfileID)
-		if err != nil {
-			return profileActionOutcome{}, err
-		}
 		homes, err := crew.ScanHomes(filepath.Join(d.dataRoot, crew.HomesDirName), d.logf)
 		if err != nil {
 			return profileActionOutcome{}, err
@@ -394,7 +379,7 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 			}
 		}
 		d.automationMu.Lock()
-		deleted, err := d.store.DeleteProfile(msg.ProfileID, int64(msg.ExpectedRevision), remote, members)
+		deleted, err := d.store.DeleteProfile(msg.ProfileID, int64(msg.ExpectedRevision), members)
 		d.automationMu.Unlock()
 		if err != nil {
 			return profileActionOutcome{}, err
@@ -414,27 +399,6 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 		})
 		return profileActionOutcome{arranges: true, publish: func() { d.publishFact(FactProfileDeleted, deleted.ID, nil) }}, nil
 	})
-}
-
-func (d *Daemon) countRemoteProfileSessions(profileID string) (int, error) {
-	if d.hubManager == nil {
-		return 0, nil
-	}
-	counted := map[protocol.SessionID]bool{}
-	for _, session := range d.hubManager.RemoteSessions() {
-		if d.store.Get(session.ID) != nil || counted[session.ID] {
-			continue
-		}
-		owner, err := d.sessionProfileID(session.ID)
-		if err != nil {
-			return 0, err
-		}
-		if owner != profileID {
-			continue
-		}
-		counted[session.ID] = true
-	}
-	return len(counted), nil
 }
 
 func (d *Daemon) handleProfileSelect(client *wsClient, msg *protocol.ProfileSelectMessage) {
@@ -661,7 +625,7 @@ func (d *Daemon) projectProfilesChanged() {
 			d.logf("profiles snapshot: %v", err)
 			return
 		}
-		d.wsHub.SendValueToMatchingClients(protocol.ProfilesChangedMessage{Event: protocol.EventProfilesChanged, Profiles: live}, nil)
+		d.wsHub.BroadcastValue(protocol.ProfilesChangedMessage{Event: protocol.EventProfilesChanged, Profiles: live})
 	})
 }
 

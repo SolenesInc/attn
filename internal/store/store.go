@@ -122,9 +122,6 @@ func cloneSession(session *protocol.Session) *protocol.Session {
 		return nil
 	}
 	cloned := *session
-	if session.EndpointID != nil {
-		cloned.EndpointID = protocol.Ptr(protocol.Deref(session.EndpointID))
-	}
 	if session.Branch != nil {
 		cloned.Branch = protocol.Ptr(protocol.Deref(session.Branch))
 	}
@@ -291,13 +288,12 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 	}
 	_, err := s.db.Exec(`
 		INSERT INTO sessions
-		(id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, parent_session_id, last_seen, priority)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		(id, label, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, parent_session_id, last_seen, priority)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			label = excluded.label,
 			agent = excluded.agent,
 			directory = excluded.directory,
-			endpoint_id = excluded.endpoint_id,
 			profile_id = CASE WHEN sessions.profile_id = '' THEN excluded.profile_id ELSE sessions.profile_id END,
 			branch = excluded.branch,
 			is_worktree = excluded.is_worktree,
@@ -316,7 +312,6 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 		session.Label,
 		session.Agent,
 		session.Directory,
-		protocol.Deref(session.EndpointID),
 		session.ProfileID,
 		protocol.Deref(session.Branch),
 		boolToInt(protocol.Deref(session.IsWorktree)),
@@ -376,16 +371,15 @@ func (s *Store) Get(id protocol.SessionID) *protocol.Session {
 	var turnOpenedAt, turnSettledAt, turnSnoozedUntil, succeeds string
 	var isWorktree, priority int
 	var contextWindowCap int
-	var endpointID, branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
+	var branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, succeeds, priority
+		SELECT id, label, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, succeeds, priority
 		FROM sessions WHERE id = ? AND closed_at = ''`, id).Scan(
 		&session.ID,
 		&session.Label,
 		&session.Agent,
 		&session.Directory,
-		&endpointID,
 		&session.ProfileID,
 		&branch,
 		&isWorktree,
@@ -429,9 +423,6 @@ func (s *Store) Get(id protocol.SessionID) *protocol.Session {
 	}
 	applyActivity(&session, activity.String, activityAt.String)
 
-	if endpointID.Valid && endpointID.String != "" {
-		session.EndpointID = protocol.Ptr(endpointID.String)
-	}
 	if branch.Valid && branch.String != "" {
 		session.Branch = protocol.Ptr(branch.String)
 	}
@@ -529,11 +520,11 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 
 	if stateFilter == "" {
 		rows, err = s.db.Query(`
-			SELECT id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, succeeds, priority
+			SELECT id, label, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, succeeds, priority
 			FROM sessions WHERE closed_at = '' ORDER BY label, id`)
 	} else {
 		rows, err = s.db.Query(`
-			SELECT id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, succeeds, priority
+			SELECT id, label, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, succeeds, priority
 			FROM sessions WHERE state = ? AND closed_at = '' ORDER BY label, id`, stateFilter)
 	}
 	if err != nil {
@@ -548,14 +539,13 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 		var turnOpenedAt, turnSettledAt, turnSnoozedUntil, succeeds string
 		var isWorktree, priority int
 		var contextWindowCap int
-		var endpointID, branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
+		var branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
 		err := rows.Scan(
 			&session.ID,
 			&session.Label,
 			&session.Agent,
 			&session.Directory,
-			&endpointID,
 			&session.ProfileID,
 			&branch,
 			&isWorktree,
@@ -599,9 +589,6 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 		}
 		applyActivity(&session, activity.String, activityAt.String)
 
-		if endpointID.Valid && endpointID.String != "" {
-			session.EndpointID = protocol.Ptr(endpointID.String)
-		}
 		if branch.Valid && branch.String != "" {
 			session.Branch = protocol.Ptr(branch.String)
 		}

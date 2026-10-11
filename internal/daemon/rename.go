@@ -1,8 +1,6 @@
 package daemon
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"strings"
@@ -15,19 +13,6 @@ func (d *Daemon) handleRenameSession(client *wsClient, msg *protocol.RenameSessi
 }
 
 func (d *Daemon) handleRenameSessionConn(conn net.Conn, msg *protocol.RenameSessionMessage) {
-	sessionID := protocol.TrimID(msg.SessionID)
-	if endpointID := d.sessionOwnerEndpoint(sessionID); endpointID != "" {
-		payload, err := json.Marshal(msg)
-		if err == nil {
-			err = d.hubManager.ForwardSessionRename(context.Background(), endpointID, sessionID, payload)
-		}
-		if err != nil {
-			d.sendError(conn, fmt.Sprintf("rename session %s on the endpoint owning it: %v", sessionID, err))
-			return
-		}
-		d.sendOK(conn)
-		return
-	}
 	if err := d.renameSession(msg); err != nil {
 		d.sendError(conn, err.Error())
 		return

@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -34,25 +33,6 @@ func writeCodexInteractiveRollout(t *testing.T, codexHome, nativeID, cwd string,
 		t.Fatalf("chtimes rollout: %v", err)
 	}
 	return path
-}
-
-func newEnrolledDaemon(t *testing.T, homeDaemonID string) *Daemon {
-	t.Helper()
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	id, err := enrollment.EnsureDaemonID(d.dataRoot)
-	if err != nil {
-		t.Fatalf("EnsureDaemonID: %v", err)
-	}
-	d.daemonInstanceID = id
-	if err := d.ensureEnrollment(); err != nil {
-		t.Fatalf("ensureEnrollment: %v", err)
-	}
-	if homeDaemonID != "" {
-		if _, err := enrollment.Enroll(d.dataRoot, homeDaemonID); err != nil {
-			t.Fatalf("Enroll: %v", err)
-		}
-	}
-	return d
 }
 
 func startPluginPipe(t *testing.T, d *Daemon, name string, surfaces []string) (net.Conn, <-chan struct{}) {
@@ -150,20 +130,6 @@ func TestMain(m *testing.M) {
 		"ATTN_MOCK_GH_URL=http://127.0.0.1:1",
 		"ATTN_MOCK_GH_TOKEN=",
 	))
-}
-
-func waitForSocket(t *testing.T, sockPath string, timeout time.Duration) {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		conn, err := net.DialTimeout("unix", sockPath, 10*time.Millisecond)
-		if err == nil {
-			conn.Close()
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatalf("socket %s not ready after %v", sockPath, timeout)
 }
 
 func shortTempDir(t *testing.T) string {

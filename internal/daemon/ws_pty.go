@@ -141,12 +141,6 @@ func (d *Daemon) detachSession(client *wsClient, terminalID protocol.TerminalID)
 	if hasStream {
 		delete(client.attachedStreams, terminalID)
 	}
-	if client.pendingRemote != nil {
-		delete(client.pendingRemote, terminalID)
-	}
-	if client.attachedRemote != nil {
-		delete(client.attachedRemote, terminalID)
-	}
 	client.attachMu.Unlock()
 	if hasStream {
 		_ = stream.Close()
@@ -160,8 +154,6 @@ func (d *Daemon) detachAllSessions(client *wsClient) {
 		streams = append(streams, stream)
 	}
 	client.attachedStreams = make(map[protocol.TerminalID]ptybackend.Stream)
-	client.pendingRemote = make(map[protocol.TerminalID]struct{})
-	client.attachedRemote = make(map[protocol.TerminalID]struct{})
 	client.attachMu.Unlock()
 	for _, stream := range streams {
 		_ = stream.Close()
@@ -253,11 +245,6 @@ func buildSpawnSessionRecord(msg *protocol.SpawnSessionMessage, agent, cwd, labe
 	}
 	if parentSessionID != "" {
 		session.ParentSessionID = protocol.Ptr(parentSessionID)
-	}
-	if id := strings.TrimSpace(protocol.Deref(msg.EndpointID)); id != "" {
-		session.EndpointID = protocol.Ptr(id)
-	} else if existing != nil {
-		session.EndpointID = existing.EndpointID
 	}
 	if branchInfo != nil {
 		if branchInfo.Branch != "" {

@@ -134,10 +134,6 @@ handover                a new session takes over a seed and its claim
 ```
 
 ```text
-home                    the daemon that keeps the profiles, gardens and crew;
-                        like a main server
-└─ outpost (0..n)       a daemon on another machine that runs sessions for
-                        the home; like a remote worker or build agent
 instance                a daemon, an app and a data folder under one name;
                         like a separate install. Production has no instance
                         name.

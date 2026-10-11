@@ -123,7 +123,6 @@ function SettingsModalContent(props: SettingsModalProps & { closeRef: ForwardedR
                     delegationPolicy={state.delegationPolicy}
                     tailscaleEnabled={state.tailscaleEnabled}
                     tailscaleStatus={state.tailscaleStatus}
-                    endpoints={state.endpoints}
                     pluginProblemCount={state.pluginProblemCount}
                     activePluginCount={state.activePluginCount}
                     plugins={state.plugins}
@@ -311,9 +310,6 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           tailscaleError={state.tailscaleError}
           githubPollingOffReason={state.githubPollingOffReason}
           githubHosts={state.githubHosts}
-          endpointPanel={state.endpointPanel}
-          endpoints={state.endpoints}
-          handleRemoveEndpoint={state.handleRemoveEndpoint}
         />
       );
   }

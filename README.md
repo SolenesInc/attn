@@ -25,9 +25,6 @@ agent brains, built as a harness augmenter. What it does today:
   "busy"; after every prompt attn moves you to the next one that needs you, so
   you don't waste cycles picking. Simple, very powerful. Trust me, you want to
   try it.
-- **Local and remote agents.** Point attn at any host you can SSH into and it
-  sets itself up there. A VM, a VPS, an old desktop you installed Linux on so
-  agents don't delete your home folder.
 - **The Garden.** attn's own task tracking. Work items are seeds you plant,
   agents tend them, and they get harvested. Like beads, but inside attn.
 - **Visible orchestration.** Agents delegate to other full-blown agents (not
@@ -88,10 +85,6 @@ dialog you use for agents, and move focus between panes with the keyboard.
 a path or URL to open it. When your shell marks commands (fish does by default),
 click a command's output to grab the whole block: copy the command with its
 output in one go, or filter a long block down to just the lines you want.
-
-**Remote daemons over SSH.** Keep sessions on a GPU box, Linux host, or local VM
-and manage them from the same app. Spawn new sessions remotely, browse remote
-repos, and open remote worktrees without juggling another terminal window.
 
 **PR dashboard.** Your PRs, your review requests, CI failures, merge conflicts,
 one place. Works across GitHub.com and GitHub Enterprise. Open a PR directly
@@ -169,8 +162,6 @@ Agents can use `attn session priority on|off [--session <id>]`, defaulting to
 their own session. `attn delegate --priority` starts a marked delegate.
 
 5. Press **Cmd+/** any time for the full shortcuts list.
-6. Optional: add an SSH endpoint in Settings and run remote or VM sessions from
-   the same picker.
 
 ## Session states
 
@@ -286,8 +277,7 @@ state or grants merge authority.
 
 Inspect with `attn pr status`; stop with `attn pr unwatch <url>`. Stopping clears
 that session's unread watch notifications. Closing or merging the PR ends the watch.
-Run commands on the session's owning daemon;
-remote watch forwarding is unsupported. For development instances, enable
+For development instances, enable
 [GitHub polling](docs/instances.md#github-polling).
 
 Prefer a blocking terminal workflow? Use `attn pr wait-ready <pr> --repo <owner/repo>

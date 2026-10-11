@@ -43,45 +43,7 @@ func (s Status) Describe() string {
 	if strings.TrimSpace(s.HomeDaemonID) == "" {
 		return "unknown"
 	}
-	return "outpost of " + s.HomeDaemonID
-}
-
-func (s Status) RequireHome(surface string) error {
-	if s.IsHome() {
-		return nil
-	}
-	return &FencedError{Surface: surface, DaemonID: s.DaemonID, HomeDaemonID: s.HomeDaemonID}
-}
-
-type FencedError struct {
-	Surface      string
-	DaemonID     string
-	HomeDaemonID string
-}
-
-func (e *FencedError) Error() string {
-	surface := strings.TrimSpace(e.Surface)
-	if surface == "" {
-		surface = "this state"
-	}
-	home := strings.TrimSpace(e.HomeDaemonID)
-	if home == "" {
-		return fmt.Sprintf(
-			"refused %s on this daemon: its enrollment record is unreadable, so attn cannot tell whether this is a home.\n"+
-				"  this daemon: %s\n"+
-				"Run `attn enrollment` here to see the record, then `attn enrollment leave` to declare this daemon its own home.",
-			surface, displayID(e.DaemonID),
-		)
-	}
-	return fmt.Sprintf(
-		"refused %s on this daemon: it is an outpost, and home-level state lives at its home.\n"+
-			"  this daemon: %s (outpost)\n"+
-			"  its home:    %s\n"+
-			"The garden and the crew have exactly one owner — the home daemon — and the uplink that would\n"+
-			"carry this ask home is not built yet.\n"+
-			"Do this on the home daemon (%s), or make this daemon its own home again with `attn enrollment leave`.",
-		surface, displayID(e.DaemonID), home, home,
-	)
+	return "enrolled to " + s.HomeDaemonID
 }
 
 func displayID(id string) string {
@@ -91,33 +53,12 @@ func displayID(id string) string {
 	return id
 }
 
-type ForeignHomeError struct {
-	DaemonID     string
-	CurrentHome  string
-	RequestedBy  string
-	DataRootHint string
-}
-
-func (e *ForeignHomeError) Error() string {
-	return fmt.Sprintf(
-		"this daemon (%s) is already an outpost of %s; %s asked to take it over.\n"+
-			"Enrollment is never overwritten silently: a daemon has exactly one home, and moving it moves its\n"+
-			"garden and crew asks with it.\n"+
-			"To move it, run `attn enrollment leave` here — that makes it a home again — then sync it from %s.",
-		displayID(e.DaemonID), e.CurrentHome, e.RequestedBy, e.RequestedBy,
-	)
-}
-
 type Result struct {
 	Status       string `json:"status"`
 	DaemonID     string `json:"daemon_id"`
 	HomeDaemonID string `json:"home_daemon_id"`
 	PreviousHome string `json:"previous_home_daemon_id,omitempty"`
 	Message      string `json:"message"`
-}
-
-func (r Result) Changed() bool {
-	return r.Status == "enrolled" || r.Status == "left"
 }
 
 func EnsureDaemonID(dataRoot string) (string, error) {
@@ -194,66 +135,6 @@ func Load(dataRoot string) (Status, error) {
 	return Status{DaemonID: daemonID, HomeDaemonID: record.HomeDaemonID}, nil
 }
 
-func Enroll(dataRoot, homeDaemonID string) (Result, error) {
-	if !ValidDaemonID(homeDaemonID) {
-		return Result{}, fmt.Errorf("invalid home daemon id %q (want d- followed by 32 hex characters)", homeDaemonID)
-	}
-	daemonID, err := ReadDaemonID(dataRoot)
-	if err != nil && !errors.Is(err, ErrNoDaemonID) {
-		return Result{}, err
-	}
-	if daemonID == homeDaemonID {
-		return Result{}, fmt.Errorf("a daemon cannot enroll to itself (%s)", homeDaemonID)
-	}
-
-	recordPath := filepath.Join(dataRoot, RecordFileName)
-	unlock, err := lockPath(recordPath)
-	if err != nil {
-		return Result{}, err
-	}
-	defer unlock()
-
-	record, err := readRecord(recordPath)
-	if err != nil && !errors.Is(err, ErrNoRecord) {
-		return Result{}, err
-	}
-	current := ""
-	if err == nil {
-		current = record.HomeDaemonID
-	}
-
-	switch current {
-	case homeDaemonID:
-		return Result{
-			Status:       "unchanged",
-			DaemonID:     daemonID,
-			HomeDaemonID: homeDaemonID,
-			Message:      fmt.Sprintf("already an outpost of %s", homeDaemonID),
-		}, nil
-	case "", daemonID:
-	default:
-		refusal := &ForeignHomeError{DaemonID: daemonID, CurrentHome: current, RequestedBy: homeDaemonID}
-		return Result{
-			Status:       "refused",
-			DaemonID:     daemonID,
-			HomeDaemonID: current,
-			PreviousHome: current,
-			Message:      refusal.Error(),
-		}, refusal
-	}
-
-	if err := writeRecord(recordPath, Record{HomeDaemonID: homeDaemonID, RecordedAt: nowStamp()}); err != nil {
-		return Result{}, err
-	}
-	return Result{
-		Status:       "enrolled",
-		DaemonID:     daemonID,
-		HomeDaemonID: homeDaemonID,
-		PreviousHome: current,
-		Message:      fmt.Sprintf("enrolled as an outpost of %s", homeDaemonID),
-	}, nil
-}
-
 func Leave(dataRoot string) (Result, error) {
 	daemonID, err := ReadDaemonID(dataRoot)
 	if err != nil {
@@ -280,7 +161,7 @@ func Leave(dataRoot string) (Result, error) {
 			Status:       "unchanged",
 			DaemonID:     daemonID,
 			HomeDaemonID: daemonID,
-			Message:      "already a home daemon",
+			Message:      "not enrolled to another daemon",
 		}, nil
 	}
 	if err := writeRecord(recordPath, Record{HomeDaemonID: daemonID, RecordedAt: nowStamp()}); err != nil {
@@ -291,7 +172,7 @@ func Leave(dataRoot string) (Result, error) {
 		DaemonID:     daemonID,
 		HomeDaemonID: daemonID,
 		PreviousHome: previous,
-		Message:      "now a home daemon; it owns its own garden and crew",
+		Message:      "no longer enrolled to another daemon",
 	}, nil
 }
 
@@ -310,10 +191,10 @@ func (e *OutpostError) Error() string {
 		)
 	}
 	return fmt.Sprintf(
-		"refused to run a daemon here: %s is enrolled as an outpost, and this attn runs home daemons only.\n"+
+		"refused to run a daemon here: %s was enrolled to another daemon by an older attn.\n"+
 			"  this daemon: %s\n"+
-			"  its home:    %s\n"+
-			"Nothing was opened or changed. Run `attn enrollment leave` to make this data directory its own home again.",
+			"  enrolled to: %s\n"+
+			"Nothing was opened or changed. Run `attn enrollment leave` to make this data directory its own again.",
 		e.DataRoot, displayID(e.DaemonID), e.HomeDaemonID,
 	)
 }
@@ -324,7 +205,7 @@ func RefuseOutpost(dataRoot string) error {
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("refused to run a daemon here: attn cannot tell whether %s is a home or an outpost: %w\nNothing was opened or changed. Repair %s, or move it aside and start again to make this data directory a new home", dataRoot, err, RecordFileName)
+		return fmt.Errorf("refused to run a daemon here: attn cannot tell whether %s was enrolled to another daemon by an older attn: %w\nNothing was opened or changed. Repair %s, or move it aside and start again", dataRoot, err, RecordFileName)
 	}
 	daemonID, err := ReadDaemonID(dataRoot)
 	if err != nil && !errors.Is(err, ErrNoDaemonID) {

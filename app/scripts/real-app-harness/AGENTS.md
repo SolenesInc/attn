@@ -15,7 +15,6 @@ and run commands from the repository root.
   `gh workflow run acceptance-soak.yml --ref next -f scenarios=<ids>`.
   `scripts/ci-flake-report.sh` ranks failing tests across CI history.
 - Linux VM: `pnpm --dir app real-app:linux provision` ([linux-runner](../../../docs/linux-runner.md)).
-  Remote scenarios need `ATTN_HARNESS_REMOTE_SSH_TARGET`.
 - Platform skips go in the catalog entry as `skipOn` with a reason. A product
   failure on Linux is a finding, not a skip.
 

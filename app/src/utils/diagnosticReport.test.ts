@@ -165,7 +165,7 @@ function pendingCapture(): PendingDiagnosticCapture {
     terminalDiagnostics: { capacity: 3_000, total: 0, capturedAtUnixMs: 1, events: [] },
     uiDiagnostics: { capacity: 300, total: 0, capturedAtUnixMs: 1, events: [] },
     pty: {},
-    daemons: Promise.resolve({ snapshots: [], unavailableEndpoints: [] }),
+    daemons: Promise.resolve([]),
     nativeInput: Promise.resolve({ supported: false, os: 'linux', arch: 'x86_64', capacity: 512, total: 0, capturedAtUnixMs: 1, observations: [] }),
     historicalInput: Promise.resolve({ capacity: 256, total: 0, capturedAtUnixMs: 1, events: [] }),
   };

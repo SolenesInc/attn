@@ -202,9 +202,6 @@ func (d *Daemon) crewLifecycleTick(now time.Time) {
 	if d.store == nil {
 		return
 	}
-	if err := d.requireHome(crew.Surface); err != nil {
-		return
-	}
 	members, _, err := d.readCrewMembers()
 	if err != nil {
 		if !docstore.IsUndeclaredCollection(err) {

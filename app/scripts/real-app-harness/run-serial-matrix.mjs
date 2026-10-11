@@ -92,7 +92,7 @@ function reportRealAgentAllowances(scenarios) {
 function printHelp() {
   console.log(`Usage:
   node scripts/real-app-harness/run-serial-matrix.mjs
-  node scripts/real-app-harness/run-serial-matrix.mjs --scenario tr205-probe-codex --scenario tr504
+  node scripts/real-app-harness/run-serial-matrix.mjs --scenario tr201-local-claude --scenario tr301-local-claude
   node scripts/real-app-harness/run-serial-matrix.mjs --fail-fast
   node scripts/real-app-harness/run-serial-matrix.mjs --timeout-ms 180000
   node scripts/real-app-harness/run-serial-matrix.mjs --failed-only

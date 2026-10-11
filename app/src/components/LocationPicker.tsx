@@ -7,7 +7,6 @@ import { PathInput } from './NewSessionDialog/PathInput';
 import { RepoOptions } from './NewSessionDialog/RepoOptions';
 import type {
   BrowseDirectoryResult,
-  DaemonEndpoint,
   InspectPathResult,
   RecentLocation,
 } from '../hooks/useDaemonSocket';
@@ -49,24 +48,6 @@ interface RepoInfo {
   worktrees: Array<{ path: string; branch: string }>;
 }
 
-interface PickerTarget {
-  id: string;
-  endpointId?: string;
-  name: string;
-  connected: boolean;
-  unavailableReason?: string;
-  metaLabel: string;
-  metaClassName?: string;
-  projectsDirectory?: string;
-  placeholder: string;
-  daemonInstanceId?: string;
-  agentsAvailable?: string[];
-}
-
-function endpointUnavailableReason(endpoint: DaemonEndpoint): string {
-  return endpoint.status_message || `${endpoint.name} is ${endpoint.status}`;
-}
-
 interface PathSelectableItem {
   kind: 'recent' | 'directory';
   key: string;
@@ -85,37 +66,32 @@ interface LocationPickerProps {
   onSelect: (
     path: string,
     agent: SessionAgent,
-    endpointId?: string,
     yoloMode?: boolean,
     chiefOfStaff?: boolean,
     autoMode?: boolean,
   ) => void;
-  onGetRecentLocations?: (endpointId?: string) => Promise<{ locations: RecentLocation[]; home_path?: string }>;
-  onBrowseDirectory?: (inputPath: string, endpointId?: string) => Promise<BrowseDirectoryResult>;
-  onInspectPath?: (path: string, endpointId?: string) => Promise<InspectPathResult>;
-  onGetRepoInfo?: (mainRepo: string, endpointId?: string) => Promise<{ success: boolean; info?: BackendRepoInfo; error?: string }>;
-  onCreateWorktree?: (mainRepo: string, branch: string, path?: string, startingFrom?: string, endpointId?: string) => Promise<{ success: boolean; path?: string; error?: string }>;
-  onCreateWorktreeSession?: (mainRepo: string, branch: string, startingFrom: string, endpointId: string | undefined, agent: SessionAgent, yoloMode: boolean, autoMode?: boolean, chiefOfStaff?: boolean) => void;
-  onDeleteWorktree?: (path: string, endpointId?: string, options?: { force?: boolean }) => Promise<{ success: boolean; error?: string }>;
+  onGetRecentLocations?: () => Promise<{ locations: RecentLocation[]; home_path?: string }>;
+  onBrowseDirectory?: (inputPath: string) => Promise<BrowseDirectoryResult>;
+  onInspectPath?: (path: string) => Promise<InspectPathResult>;
+  onGetRepoInfo?: (mainRepo: string) => Promise<{ success: boolean; info?: BackendRepoInfo; error?: string }>;
+  onCreateWorktree?: (mainRepo: string, branch: string, path?: string, startingFrom?: string) => Promise<{ success: boolean; path?: string; error?: string }>;
+  onCreateWorktreeSession?: (mainRepo: string, branch: string, startingFrom: string, agent: SessionAgent, yoloMode: boolean, autoMode?: boolean, chiefOfStaff?: boolean) => void;
+  onDeleteWorktree?: (path: string, options?: { force?: boolean }) => Promise<{ success: boolean; error?: string }>;
   onError?: (message: string) => void;
   projectsDirectory?: string;
   agentAvailability?: AgentAvailability;
-  endpoints?: DaemonEndpoint[];
   chiefExists?: boolean;
 }
 
 const MAX_RECENT_LOCATIONS = 10;
 const SESSION_AGENT_KEY = 'new_session_agent';
-const SESSION_YOLO_KEY = 'new_session_yolo';
+const SESSION_YOLO_KEYS = ['new_session_yolo_local', 'new_session_yolo'];
 const SESSION_DESTINATION_KEY = 'new_session_destination';
 // READ-ONLY, daemon-computed. The launcher always sends its answer explicitly,
 // so a default that moves later cannot move an already-launched session.
 const AUTOMODE_DEFAULT_KEY = 'automode_enabled_default';
 const AUTOMODE_CAPABILITY = 'auto_mode';
-const LOCAL_TARGET = '__local__';
 const TERMINAL_AGENT: SessionAgent = 'shell';
-const TARGET_SHORTCUT_KEYS = ['q', 'w', 'e', 'r', 'a', 's', 'd', 'f', 'g', 'z', 'x', 'c', 'v', 'b'];
-const TARGET_SHORTCUT_CODES = ['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyG', 'KeyZ', 'KeyX', 'KeyC', 'KeyV', 'KeyB'];
 
 const DEFAULT_AGENT_AVAILABILITY: AgentAvailability = {
   shell: true,
@@ -150,29 +126,10 @@ function parseBooleanSetting(value?: string): boolean | null {
   return null;
 }
 
-function yoloSettingKeys(targetId: string, daemonInstanceId?: string): string[] {
-  if (targetId === LOCAL_TARGET) {
-    return [`${SESSION_YOLO_KEY}_local`, SESSION_YOLO_KEY];
-  }
-  const keys: string[] = [];
-  const daemonID = daemonInstanceId?.trim();
-  if (daemonID) {
-    keys.push(`${SESSION_YOLO_KEY}_daemon_${daemonID}`);
-  }
-  if (targetId.trim()) {
-    keys.push(`${SESSION_YOLO_KEY}_endpoint_${targetId}`);
-  }
-  return keys;
-}
-
 type RepoDestination = 'new_worktree' | 'main_repo';
 
-// Scoped to the target as well as the path — the same path locally and on a
-// remote are different checkouts. Mirrors yoloSettingKeys.
-function repoDestinationSettingKey(repoRoot: string, endpointId?: string): string {
-  const endpoint = endpointId?.trim();
-  const scope = endpoint ? `endpoint_${endpoint}` : 'local';
-  return `${SESSION_DESTINATION_KEY}_${scope}_${repoRoot}`;
+function repoDestinationSettingKey(repoRoot: string): string {
+  return `${SESSION_DESTINATION_KEY}_local_${repoRoot}`;
 }
 
 function parseRepoDestination(value?: string): RepoDestination | undefined {
@@ -206,13 +163,6 @@ function resolvePickerAgent(
     : resolvePreferredAgent(preferred, availability, fallback);
 }
 
-function initialInputPathForTarget(target: PickerTarget): string | undefined {
-  if (target.projectsDirectory) {
-    return target.projectsDirectory;
-  }
-  return target.endpointId ? '~' : undefined;
-}
-
 function toChooserRepoInfo(info: BackendRepoInfo): RepoInfo {
   return {
     repo: info.repo,
@@ -244,24 +194,12 @@ export function LocationPicker({
   onError,
   projectsDirectory,
   agentAvailability,
-  endpoints = [],
   chiefExists = false,
 }: LocationPickerProps) {
   const { settings, setSetting } = useSettings();
-  const localAgentAvailability = agentAvailability || DEFAULT_AGENT_AVAILABILITY;
   const noAgentsMessage = 'No supported agent CLI found in PATH.';
   const pathOnly = purpose === 'reopen';
-  const copy = pathOnly
-    ? {
-        agentAria: 'Session agent',
-        targetAria: 'Session target',
-        title: 'Start fresh where?',
-      }
-    : {
-        agentAria: 'Session agent',
-        targetAria: 'Session target',
-        title,
-      };
+  const pickerTitle = pathOnly ? 'Start fresh where?' : title;
   const inline = variant === 'inline';
 
   const [mode, setMode] = useState<Mode>('path-input');
@@ -271,7 +209,6 @@ export function LocationPicker({
   const [recentLocations, setRecentLocations] = useState<RecentLocation[]>([]);
   const [homePath, setHomePath] = useState('');
   const [agent, setAgent] = useState<SessionAgent>('claude');
-  const [targetId, setTargetId] = useState(LOCAL_TARGET);
   const [yoloMode, setYoloMode] = useState(false);
   const [chiefOfStaff, setChiefOfStaff] = useState(false);
   const [autoMode, setAutoMode] = useState(true);
@@ -283,96 +220,26 @@ export function LocationPicker({
   const [hasSelectedSinceTab, setHasSelectedSinceTab] = useState(true);
   const [autoHighlight, setAutoHighlight] = useState(false);
   // Cached recents still render but must never drive the automatic highlight:
-  // bare Enter could launch a path from another target.
+  // bare Enter could launch a stale path.
   const [recentsFresh, setRecentsFresh] = useState(false);
   const autoHighlightDoneRef = useRef(false);
   const requestGenerationRef = useRef(0);
 
   const agentCapabilities = useMemo(() => getAgentCapabilities(settings), [settings]);
-  const selectableTargets = useMemo<PickerTarget[]>(
-    () => [
-      {
-        id: LOCAL_TARGET,
-        name: 'Local',
-        connected: true,
-        metaLabel: 'this machine',
-        projectsDirectory,
-        placeholder: 'Type path (e.g., ~/projects) or search...',
-      },
-      ...endpoints.map((endpoint) => ({
-        id: endpoint.id,
-        endpointId: endpoint.id,
-        name: endpoint.name,
-        connected: endpoint.status === 'connected',
-        unavailableReason: endpointUnavailableReason(endpoint),
-        metaLabel: endpoint.status,
-        metaClassName: `status-${endpoint.status}`,
-        projectsDirectory: endpoint.capabilities?.projects_directory,
-        placeholder: `Type path on ${endpoint.name} (e.g., ~/projects/repo)`,
-        daemonInstanceId: endpoint.capabilities?.daemon_instance_id,
-        agentsAvailable: endpoint.capabilities?.agents_available,
-      })),
-    ],
-    [endpoints, projectsDirectory],
+  const effectiveAgentAvailability = useMemo<AgentAvailability>(
+    () => ({ ...(agentAvailability || DEFAULT_AGENT_AVAILABILITY), [TERMINAL_AGENT]: true }),
+    [agentAvailability],
   );
-  const selectedTarget = useMemo(
-    () => selectableTargets.find((target) => target.id === targetId) || selectableTargets[0],
-    [selectableTargets, targetId],
-  );
-  const selectedEndpointId = selectedTarget?.endpointId;
-  const effectiveAgentAvailability = useMemo<AgentAvailability>(() => {
-    const withTerminal = (availability: AgentAvailability): AgentAvailability => ({
-      ...availability,
-      [TERMINAL_AGENT]: true,
-    });
-    if (!selectedEndpointId || !selectedTarget.agentsAvailable) {
-      return withTerminal(localAgentAvailability);
-    }
-    const endpointAvailability = selectedTarget.agentsAvailable.reduce<AgentAvailability>((availability, candidate) => {
-      const normalized = normalizeAgent(candidate);
-      if (normalized) {
-        availability[normalized] = true;
-      }
-      return availability;
-    }, {});
-    return withTerminal(endpointAvailability);
-  }, [localAgentAvailability, selectedEndpointId, selectedTarget.agentsAvailable]);
   const hasAvailableAgents = hasAnyAvailableAgents(effectiveAgentAvailability);
-  const yoloKeys = useMemo(
-    () => yoloSettingKeys(selectedTarget.id, selectedTarget.daemonInstanceId),
-    [selectedTarget.daemonInstanceId, selectedTarget.id],
-  );
-  const yoloSettingKey = yoloKeys[0];
   const savedYoloMode = useMemo(() => {
-    for (const key of yoloKeys) {
+    for (const key of SESSION_YOLO_KEYS) {
       const parsed = parseBooleanSetting(settings[key]);
       if (parsed != null) {
         return parsed;
       }
     }
     return false;
-  }, [settings, yoloKeys]);
-
-  const targetShortcutByID = useMemo(() => {
-    const shortcuts = new Map<string, string>();
-    selectableTargets.forEach((target, index) => {
-      const shortcutKey = TARGET_SHORTCUT_KEYS[index];
-      if (shortcutKey) {
-        shortcuts.set(target.id, shortcutKey);
-      }
-    });
-    return shortcuts;
-  }, [selectableTargets]);
-  const targetShortcutIDByCode = useMemo(() => {
-    const shortcuts = new Map<string, string>();
-    selectableTargets.forEach((target, index) => {
-      const shortcutCode = TARGET_SHORTCUT_CODES[index];
-      if (shortcutCode) {
-        shortcuts.set(shortcutCode, target.id);
-      }
-    });
-    return shortcuts;
-  }, [selectableTargets]);
+  }, [settings]);
 
   const handleHomePathChange = useCallback((nextHomePath: string) => {
     setHomePath((prev) => (prev === nextHomePath ? prev : nextHomePath));
@@ -380,28 +247,27 @@ export function LocationPicker({
 
   const { suggestions: fsSuggestions, currentDir } = useFilesystemSuggestions(
     inputValue,
-    selectedEndpointId,
     onBrowseDirectory,
     { homePath, onHomePathChange: handleHomePathChange, enabled: isOpen },
   );
 
   const daemonApi = useOptionalDaemonApi();
-  const { harnesses, hasCatalog, loading: harnessesLoading, error: harnessesError, retry: retryHarnesses } = useHarnesses(isOpen && !selectedEndpointId);
+  const { harnesses, hasCatalog, loading: harnessesLoading, error: harnessesError, retry: retryHarnesses } = useHarnesses(isOpen);
   const orderedAgentList = useMemo(() => {
     const reported = Object.keys(effectiveAgentAvailability) as SessionAgent[];
-    if (selectedEndpointId || !daemonApi) return [...new Set([TERMINAL_AGENT, ...reported])];
+    if (!daemonApi) return [...new Set([TERMINAL_AGENT, ...reported])];
     const discovered = harnesses.map(harness => harness.id);
     const interactive = hasCatalog || harnessesError ? reported.filter(candidate => !discovered.includes(candidate)).sort((a, b) => a.localeCompare(b)) : [];
     return [...new Set([TERMINAL_AGENT, ...discovered, ...interactive])];
-  }, [effectiveAgentAvailability, harnesses, hasCatalog, harnessesError, selectedEndpointId, daemonApi]);
+  }, [effectiveAgentAvailability, harnesses, hasCatalog, harnessesError, daemonApi]);
   const agentShortcutByName = useMemo(() => {
     const shortcuts = new Map<SessionAgent, number>();
-    if (!selectedEndpointId && daemonApi && !hasCatalog) return shortcuts;
+    if (daemonApi && !hasCatalog) return shortcuts;
     orderedAgentList.filter((candidate) => candidate !== TERMINAL_AGENT).forEach((candidate, index) => {
       shortcuts.set(candidate, index + 1);
     });
     return shortcuts;
-  }, [orderedAgentList, selectedEndpointId, daemonApi, hasCatalog]);
+  }, [orderedAgentList, daemonApi, hasCatalog]);
 
   const savedAgent = normalizeAgent(settings[SESSION_AGENT_KEY]);
   const yoloSupported = Boolean(agentCapabilities[agent]?.yolo);
@@ -424,13 +290,6 @@ export function LocationPicker({
     (requestGeneration: number) => requestGenerationRef.current === requestGeneration,
     [],
   );
-
-  useEffect(() => {
-    if (!selectedTarget) {
-      return;
-    }
-    setTargetId((prev) => (prev === selectedTarget.id ? prev : selectedTarget.id));
-  }, [selectedTarget]);
 
   useEffect(() => {
     if (!savedAgent) return;
@@ -472,7 +331,7 @@ export function LocationPicker({
       return;
     }
     setMode('path-input');
-    setInputValue(buildInitialPickerInput(initialInputPathForTarget(selectedTarget), homePath));
+    setInputValue(buildInitialPickerInput(projectsDirectory, homePath));
     setHighlightedItemKey(null);
     setAutoHighlight(false);
     autoHighlightDoneRef.current = false;
@@ -495,7 +354,7 @@ export function LocationPicker({
       return;
     }
 
-    onGetRecentLocations(selectedEndpointId)
+    onGetRecentLocations()
       .then((result) => {
         if (cancelled) {
           return;
@@ -518,7 +377,7 @@ export function LocationPicker({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, onGetRecentLocations, selectedEndpointId]);
+  }, [isOpen, onGetRecentLocations]);
 
   const expandedInput = expandDisplayPath(inputValue, homePath);
   const filteredRecent = useMemo(
@@ -595,7 +454,6 @@ export function LocationPicker({
     onSelect(
       path,
       selectedAgent,
-      selectedEndpointId,
       yoloMode && yoloSupported,
       chiefOfStaff && chiefToggleEligible,
       autoModeSupported ? autoMode : undefined,
@@ -610,7 +468,6 @@ export function LocationPicker({
     effectiveAgentAvailability,
     onClose,
     onSelect,
-    selectedEndpointId,
     yoloMode,
     yoloSupported,
   ]);
@@ -665,7 +522,7 @@ export function LocationPicker({
     setPickerOperation('Inspecting path');
 
     try {
-      const inspected = await onInspectPath(sanitizedPath, selectedEndpointId);
+      const inspected = await onInspectPath(sanitizedPath);
       if (!isRequestCurrent(requestGeneration)) {
         return;
       }
@@ -685,7 +542,7 @@ export function LocationPicker({
       const repoRoot = inspection.repo_root;
       if (repoRoot && onGetRepoInfo) {
         setPickerOperation('Loading repo options');
-        const result = await onGetRepoInfo(repoRoot, selectedEndpointId);
+        const result = await onGetRepoInfo(repoRoot);
         if (!isRequestCurrent(requestGeneration)) {
           return;
         }
@@ -723,7 +580,6 @@ export function LocationPicker({
     onError,
     onGetRepoInfo,
     onInspectPath,
-    selectedEndpointId,
     setSelectedPathFromPhysical,
   ]);
 
@@ -738,37 +594,14 @@ export function LocationPicker({
     setSetting(SESSION_AGENT_KEY, nextAgent);
   }, [effectiveAgentAvailability, setSetting]);
 
-  const handleTargetChange = useCallback((nextTargetId: string) => {
-    if (nextTargetId === selectedTarget.id) {
-      if (!yoloSupported || !yoloSettingKey) {
-        return;
-      }
-      const nextYoloMode = !yoloMode;
-      setSetting(yoloSettingKey, String(nextYoloMode));
-      setYoloMode(nextYoloMode);
+  const toggleYoloMode = useCallback(() => {
+    if (!yoloSupported) {
       return;
     }
-
-    const nextTarget = selectableTargets.find((target) => target.id === nextTargetId);
-    if (!nextTarget || !nextTarget.connected) {
-      return;
-    }
-
-    setTargetId(nextTargetId);
-    invalidateRequestGeneration();
-    setMode('path-input');
-    setInputValue(buildInitialPickerInput(initialInputPathForTarget(nextTarget), homePath));
-    setHighlightedItemKey(null);
-    setAutoHighlight(false);
-    setRecentsFresh(false);
-    autoHighlightDoneRef.current = false;
-    setSelectedPath('');
-    setRepoRootPath(null);
-    setRepoInfo(null);
-    setRecentLocations([]);
-    setRefreshing(false);
-    setPickerOperation(null);
-  }, [homePath, invalidateRequestGeneration, selectableTargets, selectedTarget.id, setSetting, yoloMode, yoloSettingKey, yoloSupported]);
+    const nextYoloMode = !yoloMode;
+    setSetting(SESSION_YOLO_KEYS[0], String(nextYoloMode));
+    setYoloMode(nextYoloMode);
+  }, [setSetting, yoloMode, yoloSupported]);
 
   const handlePathInputSubmit = useCallback(() => {
     const pathToOpen = highlightedItem?.path || inputValue;
@@ -779,8 +612,8 @@ export function LocationPicker({
   }, [handleSelectPath, highlightedItem, inputValue]);
 
   const repoDestinationKey = useMemo(
-    () => (repoRootPath ? repoDestinationSettingKey(repoRootPath, selectedEndpointId) : null),
-    [repoRootPath, selectedEndpointId],
+    () => (repoRootPath ? repoDestinationSettingKey(repoRootPath) : null),
+    [repoRootPath],
   );
   const rememberedDestination = repoDestinationKey
     ? parseRepoDestination(settings[repoDestinationKey])
@@ -829,7 +662,6 @@ export function LocationPicker({
         repoRootPath,
         branchName,
         startingFrom,
-        selectedEndpointId,
         selectedAgent,
         yoloMode && yoloSupported,
         autoModeSupported ? autoMode : undefined,
@@ -841,7 +673,7 @@ export function LocationPicker({
 
     const requestGeneration = beginRequestGeneration();
     try {
-      const result = await onCreateWorktree(repoRootPath, branchName, undefined, startingFrom, selectedEndpointId);
+      const result = await onCreateWorktree(repoRootPath, branchName, undefined, startingFrom);
       if (!isRequestCurrent(requestGeneration)) {
         return;
       }
@@ -876,7 +708,6 @@ export function LocationPicker({
     chiefOfStaff,
     chiefToggleEligible,
     effectiveAgentAvailability,
-    selectedEndpointId,
     setSelectedPathFromPhysical,
     yoloMode,
     yoloSupported,
@@ -890,7 +721,7 @@ export function LocationPicker({
     const requestGeneration = requestGenerationRef.current;
     setRefreshing(true);
     try {
-      const result = await onGetRepoInfo(repoRootPath, selectedEndpointId);
+      const result = await onGetRepoInfo(repoRootPath);
       if (isRequestCurrent(requestGeneration) && result.success && result.info) {
         setRepoInfo(toChooserRepoInfo(result.info));
       }
@@ -901,7 +732,7 @@ export function LocationPicker({
         setRefreshing(false);
       }
     }
-  }, [isRequestCurrent, onGetRepoInfo, refreshing, repoRootPath, selectedEndpointId]);
+  }, [isRequestCurrent, onGetRepoInfo, refreshing, repoRootPath]);
 
   const handleBack = useCallback(() => {
     invalidateRequestGeneration();
@@ -956,10 +787,9 @@ export function LocationPicker({
         return;
       }
 
-      const shortcutTargetId = targetShortcutIDByCode.get(e.code);
-      if (shortcutTargetId) {
+      if (e.code === 'KeyQ' && !pathOnly) {
         e.preventDefault();
-        handleTargetChange(shortcutTargetId);
+        toggleYoloMode();
         return;
       }
 
@@ -987,15 +817,15 @@ export function LocationPicker({
       movePathSelection('up');
     }
   }, [
+    agentShortcutByName,
     handleAgentChange,
-    handleTargetChange,
     mode,
     movePathSelection,
-    orderedAgentList,
-    targetShortcutIDByCode,
+    pathOnly,
+    toggleYoloMode,
   ]);
 
-  if (!isOpen || !selectedTarget) {
+  if (!isOpen) {
     return null;
   }
 
@@ -1005,9 +835,9 @@ export function LocationPicker({
       <div className="picker-agent-bar">
         <div className="picker-agent-label">SESSION AGENT</div>
         <div className="picker-agent-controls">
-          {!selectedEndpointId && harnessesLoading && <span role="status">Loading harnesses…</span>}
-          {!selectedEndpointId && harnessesError && <span role="alert">{harnessesError}<button type="button" onClick={retryHarnesses}>Retry</button></span>}
-          <div className="agent-toggle" role="radiogroup" aria-label={copy.agentAria}>
+          {harnessesLoading && <span role="status">Loading harnesses…</span>}
+          {harnessesError && <span role="alert">{harnessesError}<button type="button" onClick={retryHarnesses}>Retry</button></span>}
+          <div className="agent-toggle" role="radiogroup" aria-label="Session agent">
             {orderedAgentList.map((candidate) => {
               const available = isAgentAvailable(effectiveAgentAvailability, candidate);
               const shortcutNumber = agentShortcutByName.get(candidate);
@@ -1025,7 +855,7 @@ export function LocationPicker({
                   role="radio"
                   aria-checked={agent === candidate}
                   disabled={!available}
-                  title={!available ? `${label} is not available on ${selectedTarget.name}` : undefined}
+                  title={!available ? `${label} is not available on this machine` : undefined}
                 >
                   <span className="agent-option-name">{label}</span>
                   {available && shortcut && <kbd className="agent-shortcut">{shortcut}</kbd>}
@@ -1082,41 +912,29 @@ export function LocationPicker({
         </div>
       )}
       {!pathOnly && (
-      <div className="picker-endpoint-bar">
-        <div className="picker-endpoint-leading">
-          <div className="picker-endpoint-label">SESSION TARGET</div>
-        </div>
-        <div className="picker-endpoint-controls" role="radiogroup" aria-label={copy.targetAria}>
-          {selectableTargets.map((target) => {
-            const shortcutKey = targetShortcutByID.get(target.id);
-            const active = target.id === selectedTarget.id;
-            return (
+        <div className="picker-chief-bar">
+          <div className="picker-agent-label">YOLO</div>
+          <div className="picker-chief-controls">
+            <div className="agent-toggle">
               <button
-                key={target.id}
                 type="button"
-                className={`endpoint-option ${active ? 'active' : ''} ${active && yoloMode ? 'yolo-active' : ''}`}
-                data-testid={target.id === LOCAL_TARGET ? 'location-picker-target-local' : `location-picker-target-${target.id}`}
-                data-endpoint-id={target.endpointId}
+                className={`agent-option ${yoloMode ? 'active' : ''}`}
+                data-testid="location-picker-yolo-toggle"
+                role="switch"
+                aria-checked={yoloMode}
+                disabled={!yoloSupported}
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => handleTargetChange(target.id)}
-                role="radio"
-                aria-checked={active}
-                disabled={!target.connected}
-                title={!target.connected ? target.unavailableReason : undefined}
+                onClick={toggleYoloMode}
+                title={yoloSupported
+                  ? 'Run the agent without asking for permission'
+                  : `${agentLabel(agent)} does not support yolo mode`}
               >
-                <span className="endpoint-option-name">{target.name}</span>
-                {active && yoloMode && (
-                  <span className="endpoint-option-badge">YOLO</span>
-                )}
-                <div className="endpoint-option-footer">
-                  <span className={`endpoint-option-meta ${target.metaClassName || ''}`.trim()}>{target.metaLabel}</span>
-                  {target.connected && shortcutKey && <kbd className="agent-shortcut endpoint-shortcut">{keyCombo('alt', shortcutKey.toUpperCase())}</kbd>}
-                </div>
+                <span className="agent-option-name">{yoloMode ? 'On' : 'Off'}</span>
+                {yoloSupported && <kbd className="agent-shortcut">{keyCombo('alt', 'Q')}</kbd>}
               </button>
-            );
-          })}
+            </div>
+          </div>
         </div>
-      </div>
       )}
       {!hasAvailableAgents && !pathOnly && (
         <div className="picker-agent-warning">{noAgentsMessage}</div>
@@ -1126,16 +944,8 @@ export function LocationPicker({
           <div className="picker-header">
             <div className="picker-header-top">
               <div className="picker-title" data-testid="location-picker-title">
-                {copy.title}
+                {pickerTitle}
               </div>
-              {!pathOnly && (
-              <div
-                className={`picker-endpoint-hint ${!yoloSupported ? 'disabled' : ''}`}
-                title={!yoloSupported ? `${agentLabel(agent)} does not support yolo mode` : undefined}
-              >
-                {yoloSupported ? 'select the same target again for YOLO' : 'YOLO unavailable'}
-              </div>
-              )}
             </div>
             <PathInput
               value={inputValue}
@@ -1146,7 +956,7 @@ export function LocationPicker({
               ghostText={ghostText}
               completionValue={tabCompletionValue}
               hasSelectedSinceTab={hasSelectedSinceTab}
-              placeholder={selectedTarget.placeholder}
+              placeholder="Type path (e.g., ~/projects) or search..."
               autoFocus={active}
             />
             {currentDir && (
@@ -1251,13 +1061,13 @@ export function LocationPicker({
           onDeleteWorktree={onDeleteWorktree ? async (path, options) => {
             const requestGeneration = requestGenerationRef.current;
             const deleteResult = options
-              ? await onDeleteWorktree(path, selectedEndpointId, options)
-              : await onDeleteWorktree(path, selectedEndpointId);
+              ? await onDeleteWorktree(path, options)
+              : await onDeleteWorktree(path);
             if (!deleteResult.success) {
               throw new Error(deleteResult.error || 'Failed to delete worktree');
             }
             if (repoRootPath && onGetRepoInfo) {
-              const result = await onGetRepoInfo(repoRootPath, selectedEndpointId);
+              const result = await onGetRepoInfo(repoRootPath);
               if (isRequestCurrent(requestGeneration) && result.success && result.info) {
                 setRepoInfo(toChooserRepoInfo(result.info));
               } else if (isRequestCurrent(requestGeneration) && !result.success) {

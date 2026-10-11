@@ -40,7 +40,6 @@ func writeCrewHelp(w io.Writer) {
 Manage the Crew. Members' charters and handoffs persist across sessions
 in the active instance's crew directory. Every member belongs to a profile
 and wakes only there.
-Run crew commands on the home daemon; outposts report which home to use.
 
 commands:
   list [--json]

@@ -37,9 +37,8 @@ A retry is retrying a turnover, so it always starts the next day, whether or not
 the user is around — that is what it was asked to do. To end the day instead,
 say so: --retry --sleep.
 
-Only the session living a member's day can file one, and only on the home
-daemon. The note for whoever tends a piece of work next is the other axis:
-attn seed note <id> -m "…" --handoff.
+Only the session living a member's day can file one. The note for whoever tends
+a piece of work next is the other axis: attn seed note <id> -m "…" --handoff.
 
 flags:
   -m <text>          the letter; - reads it from stdin

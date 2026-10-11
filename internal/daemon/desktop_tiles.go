@@ -5,7 +5,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
@@ -180,9 +179,6 @@ func (d *Daemon) validatedTileParams(kind, params string) (string, error) {
 	case string(layouttree.TileKindNotebook):
 		return params, nil
 	case string(layouttree.TileKindSeed):
-		if err := d.requireHome(garden.Surface); err != nil {
-			return "", err
-		}
 		if _, _, err := d.readSeed(params); err != nil {
 			return "", profiles.Errorf(profiles.CodeNotFound, "%v", err)
 		}

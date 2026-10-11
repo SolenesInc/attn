@@ -42,7 +42,6 @@ import { focusLanded, selectionShown } from '../hooks/uiAutomationSelection';
 export function useAppController({
   daemonSessions,
   prs,
-  daemonEndpoints,
   daemonPlugins,
   daemonPluginIssues,
   daemonGitHubHosts,
@@ -138,7 +137,6 @@ export function useAppController({
   useDesktopSelectionBridge(showError);
 
   const appSessions = useAppSessions({
-    daemonEndpoints,
     sessions,
     daemonSessions,
     connect,
@@ -189,7 +187,6 @@ export function useAppController({
 
   const sessionLaunch = useSessionLaunch({
     settings,
-    daemonEndpoints,
     sessions,
     shownAgentId,
     selectCreatedSession,
@@ -391,7 +388,7 @@ export function useAppController({
   );
   const handleDeleteWorktreeFromPanel = useCallback(
     async (path: string, force: boolean) => {
-      const result = await sendDeleteWorktree(path, undefined, force ? { force: true } : {});
+      const result = await sendDeleteWorktree(path, force ? { force: true } : {});
       if (!result.success) {
         throw new Error(result.error || 'Deleting the worktree failed');
       }
@@ -666,7 +663,6 @@ export function useAppController({
     inputs: {
       daemonSessions,
       prs,
-      daemonEndpoints,
       daemonPlugins,
       daemonPluginIssues,
       daemonGitHubHosts,

@@ -10,7 +10,6 @@ interface Options {
     cwd: string,
     providedSessionId?: string,
     agent?: SessionAgent,
-    endpointId?: string,
     yoloMode?: boolean,
     options?: { chiefOfStaff?: boolean; autoMode?: boolean },
   ) => Promise<string>;

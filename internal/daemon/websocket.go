@@ -42,8 +42,6 @@ type wsClient struct {
 	bearerAuthorized         bool
 
 	attachedStreams map[protocol.TerminalID]ptybackend.Stream
-	attachedRemote  map[protocol.TerminalID]struct{}
-	pendingRemote   map[protocol.TerminalID]struct{}
 	attachMu        sync.Mutex
 
 	docSubscriptions clientDocSubscriptions
@@ -67,12 +65,11 @@ type wsClient struct {
 	presence   clientPresence
 	presenceMu sync.RWMutex
 
-	gitStatusDir        string
-	gitStatusStop       chan struct{}
-	gitStatusRefresh    chan gitStatusRefreshRequest
-	gitStatusHash       string
-	gitStatusEndpointID string
-	gitStatusMu         sync.Mutex
+	gitStatusDir     string
+	gitStatusStop    chan struct{}
+	gitStatusRefresh chan gitStatusRefreshRequest
+	gitStatusHash    string
+	gitStatusMu      sync.Mutex
 }
 
 func (c *wsClient) HasCapability(cap string) bool {
@@ -245,7 +242,6 @@ func (c *wsClient) stopGitStatusPoll() {
 	c.gitStatusRefresh = nil
 	c.gitStatusDir = ""
 	c.gitStatusHash = ""
-	c.gitStatusEndpointID = ""
 }
 
 func (c *wsClient) requestGitStatusRefresh(req gitStatusRefreshRequest) bool {
@@ -261,100 +257,6 @@ func (c *wsClient) requestGitStatusRefresh(req gitStatusRefreshRequest) bool {
 		return true
 	default:
 		return false
-	}
-}
-
-func (c *wsClient) setGitStatusEndpointID(endpointID string) {
-	c.gitStatusMu.Lock()
-	defer c.gitStatusMu.Unlock()
-	c.gitStatusEndpointID = strings.TrimSpace(endpointID)
-}
-
-func (c *wsClient) gitStatusEndpointIDValue() string {
-	c.gitStatusMu.Lock()
-	defer c.gitStatusMu.Unlock()
-	return c.gitStatusEndpointID
-}
-
-func (c *wsClient) notePendingRemoteAttach(sessionID protocol.TerminalID) {
-	if c == nil || protocol.TrimID(sessionID) == "" {
-		return
-	}
-	c.attachMu.Lock()
-	defer c.attachMu.Unlock()
-	if c.pendingRemote == nil {
-		c.pendingRemote = make(map[protocol.TerminalID]struct{})
-	}
-	c.pendingRemote[sessionID] = struct{}{}
-}
-
-func (c *wsClient) resolvePendingRemoteAttach(sessionID protocol.TerminalID, success bool) bool {
-	if c == nil || protocol.TrimID(sessionID) == "" {
-		return false
-	}
-	c.attachMu.Lock()
-	defer c.attachMu.Unlock()
-	if c.pendingRemote == nil {
-		return false
-	}
-	if _, ok := c.pendingRemote[sessionID]; !ok {
-		return false
-	}
-	delete(c.pendingRemote, sessionID)
-	if success {
-		if c.attachedRemote == nil {
-			c.attachedRemote = make(map[protocol.TerminalID]struct{})
-		}
-		c.attachedRemote[sessionID] = struct{}{}
-	} else if c.attachedRemote != nil {
-		delete(c.attachedRemote, sessionID)
-	}
-	return true
-}
-
-func (c *wsClient) hasRemoteAttach(sessionID protocol.TerminalID) bool {
-	if c == nil || protocol.TrimID(sessionID) == "" {
-		return false
-	}
-	c.attachMu.Lock()
-	defer c.attachMu.Unlock()
-	if c.attachedRemote == nil {
-		return false
-	}
-	_, ok := c.attachedRemote[sessionID]
-	return ok
-}
-
-func (c *wsClient) wantsRemoteAttachTraffic(sessionID protocol.TerminalID) bool {
-	if c == nil || protocol.TrimID(sessionID) == "" {
-		return false
-	}
-	c.attachMu.Lock()
-	defer c.attachMu.Unlock()
-	if c.pendingRemote != nil {
-		if _, ok := c.pendingRemote[sessionID]; ok {
-			return true
-		}
-	}
-	if c.attachedRemote != nil {
-		if _, ok := c.attachedRemote[sessionID]; ok {
-			return true
-		}
-	}
-	return false
-}
-
-func (c *wsClient) clearRemoteAttach(sessionID protocol.TerminalID) {
-	if c == nil || protocol.TrimID(sessionID) == "" {
-		return
-	}
-	c.attachMu.Lock()
-	defer c.attachMu.Unlock()
-	if c.pendingRemote != nil {
-		delete(c.pendingRemote, sessionID)
-	}
-	if c.attachedRemote != nil {
-		delete(c.attachedRemote, sessionID)
 	}
 }
 
@@ -469,42 +371,21 @@ func (h *wsHub) Broadcast(event *protocol.WebSocketEvent) {
 		h.broadcastListener(event)
 	}
 
-	h.broadcastValue(event)
+	h.BroadcastValue(event)
 }
 
 func (h *wsHub) BroadcastValue(message interface{}) {
-	h.broadcastValue(message)
-}
-
-func (h *wsHub) BroadcastRawText(payload []byte) {
-	h.SendRawTextToMatchingClients(payload, nil)
-}
-
-func (h *wsHub) SendValueToMatchingClients(message interface{}, match func(*wsClient) bool) {
 	data, err := json.Marshal(message)
 	if err != nil {
-		h.logf("WebSocket targeted send marshal error: %v", err)
+		h.logf("WebSocket broadcast marshal error: %v", err)
 		return
 	}
-	h.SendRawTextToMatchingClients(data, match)
-}
-
-func (h *wsHub) SendRawTextToMatchingClients(payload []byte, match func(*wsClient) bool) {
-	h.sendToMatchingClients(outboundMessage{kind: messageKindText, payload: payload}, match)
-}
-
-func (h *wsHub) sendToMatchingClients(message outboundMessage, match func(*wsClient) bool) {
-	if len(message.payload) == 0 {
-		return
-	}
-	message.payload = append([]byte(nil), message.payload...)
+	outbound := outboundMessage{kind: messageKindText, payload: data}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for client := range h.clients {
-		if match == nil || match(client) {
-			if _, evicted := h.deliver(client, message); evicted {
-				delete(h.clients, client)
-			}
+		if _, evicted := h.deliver(client, outbound); evicted {
+			delete(h.clients, client)
 		}
 	}
 }
@@ -520,24 +401,6 @@ func (h *wsHub) SendArrangementToMatchingClients(data []byte, match func(*wsClie
 		if h.deliverArrangement(client, outboundMessage{kind: messageKindText, payload: data}, delivery) {
 			h.forget(client)
 		}
-	}
-}
-
-func (h *wsHub) sendStreamToMatchingClients(payload []byte, match func(*wsClient) bool) {
-	message := outboundMessage{kind: messageKindText, payload: append([]byte(nil), payload...)}
-	var targets []*wsClient
-	h.ForEachClient(func(client *wsClient) {
-		if match(client) {
-			targets = append(targets, client)
-		}
-	})
-	for _, client := range targets {
-		if client.sendStream(message, ptyOutputSendWait) || client.conn == nil || client.sendChannelClosed() {
-			continue
-		}
-		h.logf("WebSocket client stopped draining relayed terminal output, disconnecting")
-		h.evict(client, slowClientCloseReason)
-		h.forget(client)
 	}
 }
 
@@ -602,15 +465,6 @@ func (h *wsHub) NewestClientMatching(match func(*wsClient) bool) *wsClient {
 		}
 	}
 	return newest
-}
-
-func (h *wsHub) broadcastValue(message interface{}) {
-	data, err := json.Marshal(message)
-	if err != nil {
-		h.logf("WebSocket broadcast marshal error: %v", err)
-		return
-	}
-	h.sendToMatchingClients(outboundMessage{kind: messageKindText, payload: data}, nil)
 }
 
 func (h *wsHub) ClientCount() int {
@@ -736,8 +590,6 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 		trustedTauriOrigin: isTrustedTauriOrigin(origin),
 		bearerAuthorized:   bearerAuthorized,
 		attachedStreams:    make(map[protocol.TerminalID]ptybackend.Stream),
-		attachedRemote:     make(map[protocol.TerminalID]struct{}),
-		pendingRemote:      make(map[protocol.TerminalID]struct{}),
 	}
 	release, held := d.life.Hold("handleWS")
 	if !held {
@@ -762,10 +614,6 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *Daemon) sendInitialState(client *wsClient) {
-	homeDaemonID := ""
-	if status, err := d.enrollmentStatus(); err == nil {
-		homeDaemonID = status.HomeDaemonID
-	}
 	state := d.currentStateProjection(client.selectedProfile())
 	event := &protocol.InitialStateMessage{
 		TerminalBindings:       d.terminals().Bindings(),
@@ -773,9 +621,7 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		ProtocolVersion:        protocol.Ptr(protocol.ProtocolVersion),
 		SourceFingerprint:      protocol.Ptr(buildinfo.SourceFingerprint),
 		DaemonInstanceID:       protocol.Ptr(d.daemonInstanceID),
-		HomeDaemonID:           protocol.Ptr(homeDaemonID),
 		Sessions:               state.Sessions,
-		Endpoints:              state.Endpoints,
 		Prs:                    state.Prs,
 		Repos:                  state.Repos,
 		Authors:                state.Authors,
@@ -937,7 +783,6 @@ func (d *Daemon) wsPingLoop(client *wsClient, done <-chan struct{}) {
 func (d *Daemon) wsReadPump(client *wsClient) {
 	defer func() {
 		d.dropPendingInitialState(client)
-		d.cleanupRemoteGitStatusSubscription(client)
 		d.dropFsWatchClient(client)
 		d.dropDocSubscriptions(client)
 		d.detachAllSessions(client)
@@ -961,24 +806,6 @@ func (d *Daemon) wsReadPump(client *wsClient) {
 			_ = client.conn.Close(websocket.StatusPolicyViolation, "command buffer overflow")
 			return
 		}
-	}
-}
-
-func (d *Daemon) cleanupRemoteGitStatusSubscription(client *wsClient) {
-	if d.hubManager == nil || client == nil {
-		return
-	}
-	endpointID := client.gitStatusEndpointIDValue()
-	if endpointID == "" {
-		return
-	}
-	client.setGitStatusEndpointID("")
-	payload, err := json.Marshal(protocol.UnsubscribeGitStatusMessage{Cmd: protocol.CmdUnsubscribeGitStatus})
-	if err != nil {
-		return
-	}
-	if err := d.hubManager.ForwardEndpointCommand(context.Background(), endpointID, payload); err != nil {
-		d.logf("remote git-status unsubscribe failed for endpoint %s: %v", endpointID, err)
 	}
 }
 
@@ -1014,9 +841,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	}
 	if err := d.scopeGardenRequest(cmd, msg, client.selectedProfile()); err != nil {
 		d.sendGardenScopeError(client, cmd, msg, err)
-		return
-	}
-	if d.tryHandleRemoteWSCommand(client, cmd, msg, data) {
 		return
 	}
 
@@ -1254,14 +1078,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleSnoozeTurn(msg.(*protocol.SnoozeTurnMessage))
 	case protocol.CmdWakeTurn:
 		d.handleWakeTurn(msg.(*protocol.WakeTurnMessage))
-	case protocol.CmdPullRequestCreated:
-		d.handlePullRequestCreatedWS(msg.(*protocol.PullRequestCreatedMessage))
-	case protocol.CmdPullRequestForget:
-		d.handlePullRequestForgetWS(msg.(*protocol.PullRequestForgetMessage))
-	case protocol.CmdPullRequestWatch:
-		d.handlePullRequestWatchWS(client, msg.(*protocol.PullRequestWatchMessage))
-	case protocol.CmdPullRequestUnwatch:
-		d.handlePullRequestUnwatchWS(client, msg.(*protocol.PullRequestUnwatchMessage))
 	case protocol.CmdCancelCountdown:
 		d.handleCancelCountdown(msg.(*protocol.CancelCountdownMessage))
 
@@ -1308,18 +1124,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleRemovePluginWS(client, msg.(*protocol.RemovePluginMessage))
 	case protocol.CmdSetPluginPriority:
 		d.handleSetPluginPriorityWS(client, msg.(*protocol.SetPluginPriorityMessage))
-	case protocol.CmdAddEndpoint:
-		d.handleAddEndpointWS(client, msg.(*protocol.AddEndpointMessage))
-	case protocol.CmdRemoveEndpoint:
-		d.handleRemoveEndpointWS(client, msg.(*protocol.RemoveEndpointMessage))
-	case protocol.CmdUpdateEndpoint:
-		d.handleUpdateEndpointWS(client, msg.(*protocol.UpdateEndpointMessage))
-	case protocol.CmdBootstrapEndpoint:
-		d.handleBootstrapEndpointWS(client, msg.(*protocol.BootstrapEndpointMessage))
-	case protocol.CmdListEndpoints:
-		d.handleListEndpointsWS(client)
-	case protocol.CmdSetEndpointRemoteWeb:
-		d.handleSetEndpointRemoteWebWS(client, msg.(*protocol.SetEndpointRemoteWebMessage))
 	case protocol.CmdUnregister:
 		d.handleUnregisterWS(client, msg.(*protocol.UnregisterMessage))
 	case protocol.CmdGetRecentLocations:
@@ -1468,8 +1272,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleMarkdownAnnotationsClear(client, msg.(*protocol.MarkdownAnnotationsClearMessage))
 	case protocol.CmdMarkdownAnnotationsSubmit:
 		d.handleMarkdownAnnotationsSubmit(client, msg.(*protocol.MarkdownAnnotationsSubmitMessage))
-	case protocol.CmdBrowserControl:
-		d.life.Go("handleRemoteBrowserControl", func() { d.handleRemoteBrowserControl(client, msg.(*protocol.BrowserControlMessage)) })
 	case protocol.CmdBrowserControlResult:
 		d.handleBrowserControlResult(client, msg.(*protocol.BrowserControlResultMessage))
 	case protocol.CmdRenameSession:
@@ -1479,310 +1281,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	default:
 		d.sendCommandError(client, cmd, "unsupported command")
 	}
-}
-
-func (d *Daemon) tryHandleRemoteWSCommand(client *wsClient, cmd string, msg interface{}, raw []byte) bool {
-	if endpointID := remoteCommandEndpointID(cmd, msg); endpointID != "" {
-		d.forwardEndpointScopedCommand(client, cmd, msg, raw, endpointID)
-		return true
-	}
-	if d.hubManager == nil {
-		return false
-	}
-
-	if ptyTargetID := remoteCommandPTYTargetID(cmd, msg); ptyTargetID != "" {
-		if _, ok := d.hubManager.EndpointIDForPTYTarget(ptyTargetID); !ok {
-			return false
-		}
-		switch cmd {
-		case protocol.CmdAttachSession:
-			client.notePendingRemoteAttach(ptyTargetID)
-		case protocol.CmdDetachSession:
-			client.clearRemoteAttach(ptyTargetID)
-		}
-		if err := d.hubManager.ForwardPTYCommand(context.Background(), ptyTargetID, raw); err != nil {
-			if cmd == protocol.CmdAttachSession {
-				client.clearRemoteAttach(ptyTargetID)
-			}
-			d.sendCommandError(client, cmd, err.Error())
-			return true
-		}
-		return true
-	}
-
-	sessionID := remoteCommandSessionID(cmd, msg)
-	if sessionID == "" {
-		if cmd == protocol.CmdUnsubscribeGitStatus {
-			endpointID := client.gitStatusEndpointIDValue()
-			if endpointID == "" {
-				return false
-			}
-			client.setGitStatusEndpointID("")
-			if err := d.hubManager.ForwardEndpointCommand(context.Background(), endpointID, raw); err != nil {
-				d.sendCommandError(client, cmd, err.Error())
-			}
-			return true
-		}
-
-		endpointID, ok := remoteCommandScopedEndpointID(msg, d.hubManager)
-		if !ok {
-			return false
-		}
-		if err := d.hubManager.ForwardEndpointCommand(context.Background(), endpointID, raw); err != nil {
-			d.sendCommandError(client, cmd, err.Error())
-			return true
-		}
-		if cmd == protocol.CmdSubscribeGitStatus {
-			client.setGitStatusEndpointID(endpointID)
-		}
-		return true
-	}
-	endpointID, ok := d.hubManager.EndpointIDForSession(sessionID)
-	if !ok {
-		return false
-	}
-	if cmd == protocol.CmdPullRequestWatch {
-		request := msg.(*protocol.PullRequestWatchMessage)
-		d.sendToClient(client, protocol.PullRequestWatchResultMessage{
-			Event: protocol.EventPullRequestWatchResult, RequestID: protocol.Deref(request.RequestID),
-			Success: false, Error: protocol.Ptr("remote pull request watches are unsupported; run this command on the owning daemon"),
-		})
-		return true
-	}
-	if cmd == protocol.CmdPullRequestUnwatch {
-		request := msg.(*protocol.PullRequestUnwatchMessage)
-		d.sendToClient(client, protocol.PullRequestUnwatchResultMessage{
-			Event: protocol.EventPullRequestUnwatchResult, RequestID: protocol.Deref(request.RequestID),
-			Success: false, Error: protocol.Ptr("remote pull request watches are unsupported; run this command on the owning daemon"),
-		})
-		return true
-	}
-	if err := d.hubManager.ForwardEndpointCommand(context.Background(), endpointID, raw); err != nil {
-		d.sendCommandError(client, cmd, err.Error())
-		return true
-	}
-	return true
-}
-
-func (d *Daemon) forwardEndpointScopedCommand(client *wsClient, cmd string, msg interface{}, raw []byte, endpointID string) {
-	if d.hubManager == nil {
-		d.sendCommandError(client, cmd, fmt.Sprintf("endpoint not found: %s", endpointID))
-		return
-	}
-	if err := d.hubManager.EndpointRefusal(endpointID); err != nil {
-		d.sendCommandError(client, cmd, err.Error())
-		return
-	}
-	if cmd == protocol.CmdSpawnSession {
-		if typed, ok := msg.(*protocol.SpawnSessionMessage); ok {
-			d.hubManager.ReservePendingSessionRoute(endpointID, typed.ID)
-		}
-	}
-	if err := d.hubManager.ForwardEndpointCommand(context.Background(), endpointID, raw); err != nil {
-		d.sendCommandError(client, cmd, err.Error())
-	}
-}
-
-func remoteCommandSessionID(cmd string, msg interface{}) protocol.SessionID {
-	switch cmd {
-	case protocol.CmdKillSession:
-		if typed, ok := msg.(*protocol.KillSessionMessage); ok {
-			return typed.ID
-		}
-	case protocol.CmdReloadSession:
-		if typed, ok := msg.(*protocol.ReloadSessionMessage); ok {
-			return typed.ID
-		}
-
-	case protocol.CmdRenameSession:
-		if typed, ok := msg.(*protocol.RenameSessionMessage); ok {
-			return typed.SessionID
-		}
-	case protocol.CmdOpenMarkdown:
-		if typed, ok := msg.(*protocol.OpenMarkdownMessage); ok {
-			return protocol.Deref(typed.SessionID)
-		}
-	case protocol.CmdMarkdownAnnotationsSubmit:
-		if typed, ok := msg.(*protocol.MarkdownAnnotationsSubmitMessage); ok {
-			return protocol.SessionID(protocol.Deref(typed.TargetSessionID))
-		}
-	case protocol.CmdSetSessionPriority:
-		if typed, ok := msg.(*protocol.SetSessionPriorityMessage); ok {
-			return typed.SessionID
-		}
-	case protocol.CmdSettleTurn:
-		if typed, ok := msg.(*protocol.SettleTurnMessage); ok {
-			return typed.SessionID
-		}
-	case protocol.CmdPullRequestCreated:
-		if typed, ok := msg.(*protocol.PullRequestCreatedMessage); ok {
-			return typed.ID
-		}
-	case protocol.CmdPullRequestForget:
-		if typed, ok := msg.(*protocol.PullRequestForgetMessage); ok {
-			return typed.ID
-		}
-	case protocol.CmdPullRequestWatch:
-		if typed, ok := msg.(*protocol.PullRequestWatchMessage); ok {
-			return typed.ID
-		}
-	case protocol.CmdPullRequestUnwatch:
-		if typed, ok := msg.(*protocol.PullRequestUnwatchMessage); ok {
-			return typed.ID
-		}
-	case protocol.CmdCancelCountdown:
-		if typed, ok := msg.(*protocol.CancelCountdownMessage); ok {
-			return typed.SessionID
-		}
-	case protocol.CmdSnoozeTurn:
-		if typed, ok := msg.(*protocol.SnoozeTurnMessage); ok {
-			return typed.SessionID
-		}
-	case protocol.CmdWakeTurn:
-		if typed, ok := msg.(*protocol.WakeTurnMessage); ok {
-			return typed.SessionID
-		}
-	case protocol.CmdSetSessionContextWindowCap:
-		if typed, ok := msg.(*protocol.SetSessionContextWindowCapMessage); ok {
-			return typed.SessionID
-		}
-	case protocol.CmdSessionMessagesGet:
-		if typed, ok := msg.(*protocol.SessionMessagesGetMessage); ok {
-			return typed.SessionID
-		}
-	case protocol.CmdSessionAnnotationsGet:
-		if typed, ok := msg.(*protocol.SessionAnnotationsGetMessage); ok {
-			return typed.SessionID
-		}
-	case protocol.CmdSessionAnnotationsSave:
-		if typed, ok := msg.(*protocol.SessionAnnotationsSaveMessage); ok {
-			return typed.SessionID
-		}
-	case protocol.CmdSessionAnnotationsClear:
-		if typed, ok := msg.(*protocol.SessionAnnotationsClearMessage); ok {
-			return typed.SessionID
-		}
-	case protocol.CmdSessionAnnotationsSubmit:
-		if typed, ok := msg.(*protocol.SessionAnnotationsSubmitMessage); ok {
-			return typed.SessionID
-		}
-	}
-	return ""
-}
-
-func remoteCommandEndpointID(cmd string, msg interface{}) string {
-	switch cmd {
-	case protocol.CmdSupportSnapshot:
-		if typed, ok := msg.(*protocol.SupportSnapshotMessage); ok {
-			return strings.TrimSpace(protocol.Deref(typed.EndpointID))
-		}
-	case protocol.CmdGetRecentLocations:
-		if typed, ok := msg.(*protocol.GetRecentLocationsMessage); ok {
-			return strings.TrimSpace(protocol.Deref(typed.EndpointID))
-		}
-	case protocol.CmdBrowseDirectory:
-		if typed, ok := msg.(*protocol.BrowseDirectoryMessage); ok {
-			return strings.TrimSpace(protocol.Deref(typed.EndpointID))
-		}
-	case protocol.CmdInspectPath:
-		if typed, ok := msg.(*protocol.InspectPathMessage); ok {
-			return strings.TrimSpace(protocol.Deref(typed.EndpointID))
-		}
-	case protocol.CmdSpawnSession:
-		if typed, ok := msg.(*protocol.SpawnSessionMessage); ok {
-			return strings.TrimSpace(protocol.Deref(typed.EndpointID))
-		}
-	case protocol.CmdCreateWorktree:
-		if typed, ok := msg.(*protocol.CreateWorktreeMessage); ok {
-			return strings.TrimSpace(protocol.Deref(typed.EndpointID))
-		}
-	case protocol.CmdDeleteWorktree:
-		if typed, ok := msg.(*protocol.DeleteWorktreeMessage); ok {
-			return strings.TrimSpace(protocol.Deref(typed.EndpointID))
-		}
-	case protocol.CmdGetRepoInfo:
-		if typed, ok := msg.(*protocol.GetRepoInfoMessage); ok {
-			return strings.TrimSpace(protocol.Deref(typed.EndpointID))
-		}
-	}
-	return ""
-}
-
-func remoteCommandPTYTargetID(cmd string, msg interface{}) protocol.TerminalID {
-	switch cmd {
-	case protocol.CmdSpawnSession:
-	case protocol.CmdAttachSession:
-		if typed, ok := msg.(*protocol.AttachSessionMessage); ok {
-			return typed.ID
-		}
-	case protocol.CmdDetachSession:
-		if typed, ok := msg.(*protocol.DetachSessionMessage); ok {
-			return typed.ID
-		}
-	case protocol.CmdGetKittyImage:
-		if typed, ok := msg.(*protocol.GetKittyImageMessage); ok {
-			return typed.ID
-		}
-	case protocol.CmdPtyInput:
-		if typed, ok := msg.(*protocol.PtyInputMessage); ok {
-			return typed.ID
-		}
-	case protocol.CmdTerminalPointerActivity:
-		if typed, ok := msg.(*protocol.TerminalPointerActivityMessage); ok {
-			return typed.ID
-		}
-	case protocol.CmdPtyResize:
-		if typed, ok := msg.(*protocol.PtyResizeMessage); ok {
-			return typed.ID
-		}
-	}
-	return ""
-}
-
-func remoteCommandScopedEndpointID(msg interface{}, manager interface {
-	EndpointIDForPath(path string) (string, bool)
-}) (string, bool) {
-	if manager == nil {
-		return "", false
-	}
-	if path := remoteCommandPath(msg); path != "" {
-		if endpointID, ok := manager.EndpointIDForPath(path); ok {
-			return endpointID, true
-		}
-	}
-	return "", false
-}
-
-func remoteCommandPath(msg interface{}) string {
-	switch typed := msg.(type) {
-	case *protocol.ListWorktreesMessage:
-		return typed.MainRepo
-	case *protocol.CreateWorktreeMessage:
-		return typed.MainRepo
-	case *protocol.DeleteWorktreeMessage:
-		return typed.Path
-	case *protocol.WorktreeKeepMessage:
-		return typed.Path
-	case *protocol.ListBranchesMessage:
-		return typed.MainRepo
-	case *protocol.CreateWorktreeFromBranchMessage:
-		return typed.MainRepo
-	case *protocol.GetDefaultBranchMessage:
-		return typed.Repo
-	case *protocol.FetchRemotesMessage:
-		return typed.Repo
-	case *protocol.ListRemoteBranchesMessage:
-		return typed.Repo
-	case *protocol.EnsureRepoMessage:
-		return typed.TargetPath
-	case *protocol.SubscribeGitStatusMessage:
-		return typed.Directory
-	case *protocol.GetFileDiffMessage:
-		return typed.Directory
-	case *protocol.GetRepoInfoMessage:
-		return typed.Repo
-	}
-	return ""
 }
 
 func (d *Daemon) sendCommandError(client *wsClient, cmd, errMsg string) {
@@ -1811,48 +1309,4 @@ func (d *Daemon) broadcastMessage(message interface{}) {
 		return
 	}
 	d.wsHub.BroadcastValue(message)
-}
-
-func (d *Daemon) broadcastRawWSMessage(payload []byte) {
-	if d.wsHub == nil {
-		return
-	}
-	var envelope struct {
-		Event   string `json:"event"`
-		ID      string `json:"id"`
-		Success bool   `json:"success"`
-	}
-	if err := json.Unmarshal(payload, &envelope); err != nil {
-		d.wsHub.BroadcastRawText(payload)
-		return
-	}
-
-	switch envelope.Event {
-	case protocol.EventAttachResult:
-		if strings.TrimSpace(envelope.ID) == "" {
-			d.wsHub.BroadcastRawText(payload)
-			return
-		}
-		d.wsHub.SendRawTextToMatchingClients(payload, func(client *wsClient) bool {
-			return client.resolvePendingRemoteAttach(protocol.TerminalID(envelope.ID), envelope.Success)
-		})
-		return
-	case protocol.EventPtyOutput, protocol.EventPtyResized, protocol.EventPtyInputProbeResult, protocol.EventPtyDesync, protocol.EventKittyPlacements, protocol.EventKittyImageResult:
-		if strings.TrimSpace(envelope.ID) == "" {
-			d.wsHub.BroadcastRawText(payload)
-			return
-		}
-		d.wsHub.sendStreamToMatchingClients(payload, func(client *wsClient) bool {
-			return client.wantsRemoteAttachTraffic(protocol.TerminalID(envelope.ID))
-		})
-		return
-	case protocol.EventSessionExited:
-		if strings.TrimSpace(envelope.ID) != "" {
-			d.wsHub.ForEachClient(func(client *wsClient) {
-				client.clearRemoteAttach(protocol.TerminalID(envelope.ID))
-			})
-		}
-	}
-
-	d.wsHub.BroadcastRawText(payload)
 }

@@ -19,9 +19,6 @@ export interface LocalSession {
   branch?: string;
   isWorktree?: boolean;
   cwd?: string;
-  endpointId?: string;
-  endpointName?: string;
-  endpointStatus?: string;
   chiefOfStaff?: boolean;
   delegatedFromChief?: boolean;
   autoSettleFiresAt?: string;

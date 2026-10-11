@@ -60,7 +60,7 @@ describe('sessions store', () => {
   });
 
   it('creates sessions with a default daemon-owned desktop view model', async () => {
-    const sessionId = await useSessionStore.getState().createSession('test', '/tmp/test', 'sess-test', 'codex', undefined, false);
+    const sessionId = await useSessionStore.getState().createSession('test', '/tmp/test', 'sess-test', 'codex', false);
     const session = useSessionStore.getState().sessions.find((entry) => entry.id === sessionId);
 
     expect(session?.desktop).toEqual({
@@ -122,7 +122,6 @@ describe('sessions store', () => {
         label: 'New Label',
         agent: 'claude',
         directory: '/tmp/new',
-        endpoint_id: 'ep-1',
         state: 'idle',
         branch: 'feature/desktop',
         is_worktree: true,
@@ -136,7 +135,6 @@ describe('sessions store', () => {
       cwd: '/tmp/new',
       state: 'idle',
       agent: 'claude',
-      endpointId: 'ep-1',
       branch: 'feature/desktop',
       isWorktree: true,
       daemonActivePaneId: 'pane-a',
@@ -347,7 +345,7 @@ describe('sessions store', () => {
     useSessionStore.getState().syncFromDaemonSessions([neighbour]);
 
     const sessionId = await useSessionStore.getState().createSession(
-      'Racey', '/tmp/racey', 'sess-racey', 'claude', undefined, false,
+      'Racey', '/tmp/racey', 'sess-racey', 'claude', false,
     );
 
     useSessionStore.getState().syncFromDaemonSessions([neighbour]);
@@ -362,7 +360,7 @@ describe('sessions store', () => {
 
   it('syncFromDaemonSessions prunes a created session once the daemon has reported it and dropped it', async () => {
     const sessionId = await useSessionStore.getState().createSession(
-      'Racey', '/tmp/racey', 'sess-racey', 'claude', undefined, false,
+      'Racey', '/tmp/racey', 'sess-racey', 'claude', false,
     );
 
     useSessionStore.getState().syncFromDaemonSessions([{
@@ -412,7 +410,7 @@ describe('sessions store', () => {
   });
 
   it('takeSessionSpawnArgs applies launcher overrides', async () => {
-    const sessionId = await useSessionStore.getState().createSession('Spawn Test', '/tmp/project', 'sess-spawn', 'claude', 'ep-1', true);
+    const sessionId = await useSessionStore.getState().createSession('Spawn Test', '/tmp/project', 'sess-spawn', 'claude', true);
     useSessionStore.getState().setLauncherConfig({
       executables: { claude: '/opt/bin/claude-custom' },
     });
@@ -422,7 +420,6 @@ describe('sessions store', () => {
     expect(first).toMatchObject({
       id: sessionId,
       cwd: '/tmp/project',
-      endpoint_id: 'ep-1',
       label: 'Spawn Test',
       cols: 120,
       rows: 40,
@@ -435,7 +432,7 @@ describe('sessions store', () => {
   });
 
   it('syncFromArrangement gives each session the desktop it is placed on and that desktop\'s active pane', async () => {
-    const sessionId = await useSessionStore.getState().createSession('Desktop', '/tmp/project', 'sess-desktop', 'codex', undefined, false);
+    const sessionId = await useSessionStore.getState().createSession('Desktop', '/tmp/project', 'sess-desktop', 'codex', false);
 
     useSessionStore.getState().syncFromArrangement('profile', null, [
       desktopWith(
@@ -481,7 +478,7 @@ describe('sessions store', () => {
   });
 
   it('syncFromArrangement keeps defaults on an invalid tree and falls back to the first pane', async () => {
-    const sessionId = await useSessionStore.getState().createSession('Desktop', '/tmp/project', 'sess-desktop', 'codex', undefined, false);
+    const sessionId = await useSessionStore.getState().createSession('Desktop', '/tmp/project', 'sess-desktop', 'codex', false);
 
     useSessionStore.getState().syncFromArrangement('profile', null, [
       desktopWith('desktop-1', '{not-json', 'missing-pane', [
@@ -527,15 +524,15 @@ describe('sessions store', () => {
   });
 
   it('reloadSession asks the daemon to reload with clamped geometry', async () => {
-    await useSessionStore.getState().createSession('Remote', '/srv/repo', 'sess-remote', 'codex', 'ep-remote', true);
+    await useSessionStore.getState().createSession('Reload', '/srv/repo', 'sess-reload', 'codex', true);
 
-    await useSessionStore.getState().reloadSession('sess-remote', { cols: 12, rows: 40 });
+    await useSessionStore.getState().reloadSession('sess-reload', { cols: 12, rows: 40 });
 
-    expect(mockPtyReload).toHaveBeenCalledWith({ id: 'sess-remote', cols: 80, rows: 24 });
+    expect(mockPtyReload).toHaveBeenCalledWith({ id: 'sess-reload', cols: 80, rows: 24 });
   });
 
   it('propagates a failed reload to its caller', async () => {
-    await useSessionStore.getState().createSession('Local', '/srv/repo', 'sess-reload-fail', 'codex', undefined, false);
+    await useSessionStore.getState().createSession('Local', '/srv/repo', 'sess-reload-fail', 'codex', false);
     mockPtyReload.mockRejectedValueOnce(new Error('reload failed'));
     await expect(useSessionStore.getState().reloadSession('sess-reload-fail', { cols: 120, rows: 40 })).rejects.toThrow('reload failed');
   });
