@@ -21,6 +21,7 @@ type pluginLaunchInstructions struct {
 }
 
 func (d *Daemon) preparePluginLaunchInstructions(sessionID protocol.SessionID, profileID string, isChief, selfReportPullRequests bool) (*pluginLaunchInstructions, error) {
+	asks := d.launchesWithAsks(sessionID)
 	if isChief {
 		root, _, err := d.ensureNotebookScaffold()
 		if err != nil {
@@ -34,6 +35,7 @@ func (d *Daemon) preparePluginLaunchInstructions(sessionID protocol.SessionID, p
 			Content: hooks.Launch{
 				NotebookRoot:           root,
 				Garden:                 true,
+				Asks:                   asks,
 				Crew:                   d.crewPrimeForLaunch(sessionID),
 				SelfReportPullRequests: selfReportPullRequests,
 			}.Instructions(),
@@ -46,6 +48,7 @@ func (d *Daemon) preparePluginLaunchInstructions(sessionID protocol.SessionID, p
 		Kind: pluginInstructionKindAgent,
 		Content: hooks.Launch{
 			Garden:                 true,
+			Asks:                   asks,
 			Crew:                   d.crewPrimeForLaunch(sessionID),
 			SelfReportPullRequests: selfReportPullRequests,
 		}.Instructions(),

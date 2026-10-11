@@ -440,6 +440,30 @@
   background: var(--color-bg-elevated);
 }
 
+.dashboard-ask-row {
+  width: 100%;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+}
+
+.dashboard-ask-glyph {
+  color: var(--color-accent);
+  font-weight: 700;
+  width: 8px;
+  text-align: center;
+}
+
+.dashboard-ask-subject {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+}
+
 .state-dot {
   width: 8px;
   height: 8px;

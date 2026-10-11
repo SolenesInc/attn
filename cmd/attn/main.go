@@ -194,6 +194,9 @@ func main() {
 	case "present":
 		maybePrintInstanceBanner()
 		runPresent()
+	case "ask":
+		maybePrintInstanceBanner()
+		runAsk()
 	case "conversation":
 		maybePrintInstanceBanner()
 		runConversation()
@@ -584,6 +587,7 @@ commands:
   conversation <command>            list, keep forever or forget attn's conversation copies
   worktree <command>                every tracked worktree, the sweep and the keep pin
   present <command>                 open a review presentation and read feedback
+  ask [list|close]                  ask the user something they answer from attn
   debug <command>                   probe debug artifacts (incidents, logs)
   db <command>                      database maintenance (restore from backup)
   bus <command>                     event bus: consumer cursors, lag, kill switch
@@ -2011,6 +2015,9 @@ func runAgentDirectly(requestedAgent string) {
 	}
 	if _, err := c.SeedReady(sessionID, "", false); err == nil {
 		opts.Garden = true
+	}
+	if asks, err := c.AskList(sessionID); err == nil {
+		opts.Asks = asks.Enabled
 	}
 	opts.SelfReportPullRequests = !caps.HasHooks
 	if prime, err := c.CrewPrime(sessionID); err == nil {

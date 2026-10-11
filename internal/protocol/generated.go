@@ -300,6 +300,177 @@ type ApprovePRMessage struct {
 	ID string `json:"id"`
 }
 
+type Ask struct {
+	// BaseDir corresponds to the JSON schema field "base_dir".
+	BaseDir string `json:"base_dir"`
+
+	// Chief corresponds to the JSON schema field "chief".
+	Chief *bool `json:"chief,omitempty,omitzero"`
+
+	// CreatedAt corresponds to the JSON schema field "created_at".
+	CreatedAt string `json:"created_at"`
+
+	// CrewMember corresponds to the JSON schema field "crew_member".
+	CrewMember *string `json:"crew_member,omitempty,omitzero"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Parts corresponds to the JSON schema field "parts".
+	Parts []AskPart `json:"parts"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+
+	// Subject corresponds to the JSON schema field "subject".
+	Subject string `json:"subject"`
+}
+
+type AskAnswer struct {
+	// Key corresponds to the JSON schema field "key".
+	Key string `json:"key"`
+
+	// Other corresponds to the JSON schema field "other".
+	Other *string `json:"other,omitempty,omitzero"`
+
+	// Picked corresponds to the JSON schema field "picked".
+	Picked []string `json:"picked"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text *string `json:"text,omitempty,omitzero"`
+}
+
+type AskAnswerMessage struct {
+	// Answers corresponds to the JSON schema field "answers".
+	Answers []AskAnswer `json:"answers"`
+
+	// AskID corresponds to the JSON schema field "ask_id".
+	AskID string `json:"ask_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Note corresponds to the JSON schema field "note".
+	Note *string `json:"note,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type AskAnswerResultMessage struct {
+	// AskID corresponds to the JSON schema field "ask_id".
+	AskID string `json:"ask_id"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type AskChoice struct {
+	// Description corresponds to the JSON schema field "description".
+	Description *string `json:"description,omitempty,omitzero"`
+
+	// Label corresponds to the JSON schema field "label".
+	Label string `json:"label"`
+}
+
+type AskCloseMessage struct {
+	// AskID corresponds to the JSON schema field "ask_id".
+	AskID string `json:"ask_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+}
+
+type AskListMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+}
+
+type AskListResult struct {
+	// Asks corresponds to the JSON schema field "asks".
+	Asks []Ask `json:"asks"`
+
+	// Enabled corresponds to the JSON schema field "enabled".
+	Enabled bool `json:"enabled"`
+}
+
+type AskOpenMessage struct {
+	// BaseDir corresponds to the JSON schema field "base_dir".
+	BaseDir string `json:"base_dir"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Markdown corresponds to the JSON schema field "markdown".
+	Markdown string `json:"markdown"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+
+	// Subject corresponds to the JSON schema field "subject".
+	Subject *string `json:"subject,omitempty,omitzero"`
+}
+
+type AskPart struct {
+	// Markdown corresponds to the JSON schema field "markdown".
+	Markdown *string `json:"markdown,omitempty,omitzero"`
+
+	// Question corresponds to the JSON schema field "question".
+	Question *AskQuestion `json:"question,omitempty,omitzero"`
+}
+
+type AskQuestion struct {
+	// Choices corresponds to the JSON schema field "choices".
+	Choices []AskChoice `json:"choices"`
+
+	// Context corresponds to the JSON schema field "context".
+	Context *string `json:"context,omitempty,omitzero"`
+
+	// Key corresponds to the JSON schema field "key".
+	Key string `json:"key"`
+
+	// Kind corresponds to the JSON schema field "kind".
+	Kind AskQuestionKind `json:"kind"`
+
+	// Prompt corresponds to the JSON schema field "prompt".
+	Prompt string `json:"prompt"`
+
+	// Recommended corresponds to the JSON schema field "recommended".
+	Recommended *string `json:"recommended,omitempty,omitzero"`
+}
+
+type AskQuestionKind string
+
+const AskQuestionKindAny AskQuestionKind = "any"
+const AskQuestionKindOne AskQuestionKind = "one"
+const AskQuestionKindText AskQuestionKind = "text"
+
+type AsksUpdatedMessage struct {
+	// Asks corresponds to the JSON schema field "asks".
+	Asks []Ask `json:"asks"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+}
+
 type AttachBlock struct {
 	// Command corresponds to the JSON schema field "command".
 	Command *string `json:"command,omitempty,omitzero"`
@@ -4907,6 +5078,9 @@ type HookStopFailureMessage struct {
 }
 
 type InitialStateMessage struct {
+	// Asks corresponds to the JSON schema field "asks".
+	Asks []Ask `json:"asks,omitempty,omitzero"`
+
 	// Authors corresponds to the JSON schema field "authors".
 	Authors []AuthorState `json:"authors,omitempty,omitzero"`
 
@@ -7645,6 +7819,12 @@ type Response struct {
 
 	// AgentPeekResult corresponds to the JSON schema field "agent_peek_result".
 	AgentPeekResult *AgentPeekResult `json:"agent_peek_result,omitempty,omitzero"`
+
+	// AskListResult corresponds to the JSON schema field "ask_list_result".
+	AskListResult *AskListResult `json:"ask_list_result,omitempty,omitzero"`
+
+	// AskOpenResult corresponds to the JSON schema field "ask_open_result".
+	AskOpenResult *Ask `json:"ask_open_result,omitempty,omitzero"`
 
 	// Authors corresponds to the JSON schema field "authors".
 	Authors []AuthorState `json:"authors,omitempty,omitzero"`

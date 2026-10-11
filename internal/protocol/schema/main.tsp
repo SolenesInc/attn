@@ -3075,6 +3075,8 @@ model InitialStateMessage {
   // The crew roster, so the sidebar draws every member — awake or asleep — from
   // the first push rather than asking for one.
   crew?: CrewMember[];
+  // The selected profile's open asks.
+  asks?: Ask[];
 }
 
 model SessionRegisteredMessage {
@@ -3227,6 +3229,109 @@ model PresentationAddedMessage {
 model PresentationUpdatedMessage {
   event: "presentation_updated";
   presentation: Presentation;
+}
+
+// ============================================================================
+// Asks: an agent's questions the user answers from one place
+// ============================================================================
+
+enum AskQuestionKind {
+  one,
+  any,
+  text,
+}
+
+model AskChoice {
+  label: string;
+  description?: string;
+}
+
+// One question of an ask. key is stable within its ask ("q1", "q2", ...).
+// recommended names a choice label; on a text question it is a suggested answer.
+model AskQuestion {
+  key: string;
+  kind: AskQuestionKind;
+  prompt: string;
+  context?: string;
+  choices: AskChoice[];
+  recommended?: string;
+}
+
+// An ask reads as its parts in order: markdown, or one question.
+model AskPart {
+  markdown?: string;
+  question?: AskQuestion;
+}
+
+// base_dir is where the agent asked from; relative image paths resolve there.
+// An ask for a crew member or the chief outlives the session that asked it:
+// its answer reaches whichever session holds that job.
+model Ask {
+  id: string;
+  session_id: SessionID;
+  crew_member?: string;
+  chief?: boolean;
+  subject: string;
+  parts: AskPart[];
+  base_dir: string;
+  created_at: string;
+}
+
+model AskOpenMessage {
+  cmd: "ask_open";
+  session_id: SessionID;
+  markdown: string;
+  subject?: string;
+  base_dir: string;
+}
+
+model AskListMessage {
+  cmd: "ask_list";
+  session_id: SessionID;
+}
+
+// enabled says whether the session launched with asks.
+model AskListResult {
+  enabled: boolean;
+  asks: Ask[];
+}
+
+model AskCloseMessage {
+  cmd: "ask_close";
+  session_id: SessionID;
+  ask_id: string;
+}
+
+// picked holds choice labels; other is the user's own choice on a one/any
+// question; text is the answer to a text question.
+model AskAnswer {
+  key: string;
+  picked: string[];
+  other?: string;
+  text?: string;
+}
+
+model AskAnswerMessage {
+  cmd: "ask_answer";
+  request_id: string;
+  ask_id: string;
+  answers: AskAnswer[];
+  note?: string;
+}
+
+model AskAnswerResultMessage {
+  event: "ask_answer_result";
+  request_id: string;
+  ask_id: string;
+  success: boolean;
+  error?: string;
+}
+
+// The profile's open asks, oldest first.
+model AsksUpdatedMessage {
+  event: "asks_updated";
+  profile_id: string;
+  asks: Ask[];
 }
 
 model PRsUpdatedMessage {
@@ -5627,6 +5732,8 @@ model Response {
   worktree_refresh_result?: WorktreeRefreshResult;
   present_open_result?: PresentOpenResult;
   present_feedback_result?: PresentFeedbackResult;
+  ask_open_result?: Ask;
+  ask_list_result?: AskListResult;
   session_instructions_result?: SessionInstructionsResult;
   session_transcript_result?: SessionTranscriptResult;
   session_list_result?: SessionListResult;
@@ -7035,6 +7142,8 @@ alias DaemonEvent =
   | PresentCloseResultMessage
   | PresentationAddedMessage
   | PresentationUpdatedMessage
+  | AskAnswerResultMessage
+  | AsksUpdatedMessage
   | OpenMarkdownResultMessage
   | MarkdownAnnotationsGetResultMessage
   | MarkdownAnnotationsSaveResultMessage

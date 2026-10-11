@@ -52,6 +52,7 @@ export const SHORTCUT_META: Record<ShortcutId, ShortcutMeta> = {
   'session.nextRun': { label: 'Next automation run needing you', category: 'sessions' },
   'sidebar.agentList': { label: 'All agents', category: 'sessions' },
   'session.settle': { label: 'Settle turn', category: 'sessions' },
+  'dock.asks': { label: 'Asks drawer', category: 'sessions', dockLabel: 'Asks' },
   'session.priority': { label: 'Toggle session priority', category: 'sessions' },
   'session.snooze': { label: 'Snooze this agent', category: 'sessions' },
   'session.cancelCountdown': { label: 'Stop the countdown, or keep the next turn', category: 'sessions', nativeDelivery: true },

@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useAsksAvailable } from '../store/asks';
 import { useToast } from '../components/Toast';
 import type { PaletteCommand } from '../components/palette/paletteCommands';
 import { EditorIcon, NotebookIcon } from '../components/Sidebar';
@@ -58,6 +59,7 @@ export function useAppCommands(): PaletteCommand[] {
     setUsagePopoverRequest,
   } = useAppPanelsContext();
   const { settings } = useAppInputs();
+  const asksAvailable = useAsksAvailable(settings);
   const { handleToggleSidebarHarnessLogos } = useAppAppearanceContext();
   const { handleOpenCrew } = useCrewPanelContext();
   const {
@@ -375,6 +377,17 @@ export function useAppCommands(): PaletteCommand[] {
         shortcut: [shortcutTokens('dock.attention')],
         run: () => openDockPanel('attention'),
       },
+      ...(asksAvailable
+        ? [{
+            id: 'asks',
+            title: 'Open asks',
+            description: 'Answer the questions your agents asked, one after another',
+            keywords: ['ask', 'asks', 'questions', 'answer', 'reply', 'inbox'],
+            icon: <AttentionActionIcon />,
+            shortcut: [shortcutTokens('dock.asks')],
+            run: () => openDockPanel('asks'),
+          }]
+        : []),
       {
         id: 'worktrees',
         title: 'Open worktrees',
@@ -485,6 +498,7 @@ export function useAppCommands(): PaletteCommand[] {
       openLedger,
       setShortcutEditorOpen,
       openDockPanel,
+      asksAvailable,
       handleOpenNotebookTile,
       toggleGardenFrame,
       gardenMode,

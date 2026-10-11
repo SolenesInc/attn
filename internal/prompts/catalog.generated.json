@@ -90,6 +90,24 @@
                 "kind": "when",
                 "condition": {
                   "field": {
+                    "name": "asks_enabled",
+                    "kind": "flag",
+                    "description": "Include ask guidance when the session launched with asks."
+                  },
+                  "test": "enabled"
+                },
+                "children": [
+                  {
+                    "kind": "text",
+                    "id": "ask.guidance",
+                    "source": "content/ask/guidance.md"
+                  }
+                ]
+              },
+              {
+                "kind": "when",
+                "condition": {
+                  "field": {
                     "name": "self_report_pull_requests",
                     "kind": "flag",
                     "description": "Ask the agent to record PRs when the harness cannot report them."
@@ -4062,6 +4080,289 @@
       ]
     },
     {
+      "id": "ask",
+      "description": "Asks: questions an agent asks the user through attn, and the answers that come back.",
+      "events": [
+        {
+          "id": "guidance",
+          "delivery": "message_fragment",
+          "description": "Launch guidance for a session that launched with asks.",
+          "body": {
+            "kind": "text",
+            "id": "ask.guidance",
+            "source": "content/ask/guidance.md"
+          }
+        },
+        {
+          "id": "answer",
+          "delivery": "inbox_content",
+          "description": "The user's answer, delivered to the asking session's inbox. The adapter validates answers against the ask.",
+          "body": {
+            "kind": "compose",
+            "children": [
+              {
+                "kind": "text",
+                "id": "ask.answer",
+                "source": "content/ask/answer.md",
+                "bindings": [
+                  {
+                    "name": "subject",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "subject",
+                        "kind": "text",
+                        "description": "Quoted ask subject."
+                      }
+                    }
+                  },
+                  {
+                    "name": "ask_id",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "ask_id",
+                        "kind": "text",
+                        "description": "Ask ID."
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "kind": "when",
+                "condition": {
+                  "field": {
+                    "name": "entries",
+                    "kind": "text",
+                    "description": "Each question's entry in order, joined by the adapter.",
+                    "from": "ask/entry"
+                  },
+                  "test": "present"
+                },
+                "children": [
+                  {
+                    "kind": "input",
+                    "field": {
+                      "name": "entries",
+                      "kind": "text",
+                      "description": "Each question's entry in order, joined by the adapter.",
+                      "from": "ask/entry"
+                    }
+                  }
+                ]
+              },
+              {
+                "kind": "when",
+                "condition": {
+                  "field": {
+                    "name": "note",
+                    "kind": "text",
+                    "description": "The user's note, quoted by the adapter."
+                  },
+                  "test": "present"
+                },
+                "children": [
+                  {
+                    "kind": "text",
+                    "id": "ask.note",
+                    "source": "content/ask/note.md",
+                    "bindings": [
+                      {
+                        "name": "note",
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "note",
+                            "kind": "text",
+                            "description": "The user's note, quoted by the adapter."
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "entry",
+          "delivery": "message_fragment",
+          "description": "One question and the user's answer to it.",
+          "body": {
+            "kind": "text",
+            "id": "ask.entry",
+            "source": "content/ask/entry.md",
+            "bindings": [
+              {
+                "name": "index",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "index",
+                    "kind": "text",
+                    "description": "The question's position, from 1."
+                  }
+                }
+              },
+              {
+                "name": "prompt",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "prompt",
+                    "kind": "text",
+                    "description": "The question as the agent asked it."
+                  }
+                }
+              },
+              {
+                "name": "answer",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "unanswered",
+                      "kind": "flag",
+                      "description": "The user left this question unanswered."
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "ask.entry-unanswered",
+                      "source": "content/ask/entry-unanswered.md"
+                    },
+                    {
+                      "kind": "compose",
+                      "children": [
+                        {
+                          "kind": "when",
+                          "condition": {
+                            "field": {
+                              "name": "picked",
+                              "kind": "text",
+                              "description": "The labels the user picked, comma separated."
+                            },
+                            "test": "present"
+                          },
+                          "children": [
+                            {
+                              "kind": "choose",
+                              "condition": {
+                                "field": {
+                                  "name": "recommended",
+                                  "kind": "flag",
+                                  "description": "The user picked the agent's recommendation alone."
+                                },
+                                "test": "enabled"
+                              },
+                              "children": [
+                                {
+                                  "kind": "text",
+                                  "id": "ask.entry-recommended",
+                                  "source": "content/ask/entry-recommended.md",
+                                  "bindings": [
+                                    {
+                                      "name": "picked",
+                                      "node": {
+                                        "kind": "input",
+                                        "field": {
+                                          "name": "picked",
+                                          "kind": "text",
+                                          "description": "The labels the user picked, comma separated."
+                                        }
+                                      }
+                                    }
+                                  ]
+                                },
+                                {
+                                  "kind": "text",
+                                  "id": "ask.entry-picked",
+                                  "source": "content/ask/entry-picked.md",
+                                  "bindings": [
+                                    {
+                                      "name": "picked",
+                                      "node": {
+                                        "kind": "input",
+                                        "field": {
+                                          "name": "picked",
+                                          "kind": "text",
+                                          "description": "The labels the user picked, comma separated."
+                                        }
+                                      }
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "when",
+                          "condition": {
+                            "field": {
+                              "name": "other",
+                              "kind": "text",
+                              "description": "The user's own answer to a choice question."
+                            },
+                            "test": "present"
+                          },
+                          "children": [
+                            {
+                              "kind": "text",
+                              "id": "ask.entry-other",
+                              "source": "content/ask/entry-other.md",
+                              "bindings": [
+                                {
+                                  "name": "other",
+                                  "node": {
+                                    "kind": "input",
+                                    "field": {
+                                      "name": "other",
+                                      "kind": "text",
+                                      "description": "The user's own answer to a choice question."
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "when",
+                          "condition": {
+                            "field": {
+                              "name": "text",
+                              "kind": "text",
+                              "description": "The user's written answer, quoted by the adapter."
+                            },
+                            "test": "present"
+                          },
+                          "children": [
+                            {
+                              "kind": "input",
+                              "field": {
+                                "name": "text",
+                                "kind": "text",
+                                "description": "The user's written answer, quoted by the adapter."
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
       "id": "annotation-markdown",
       "description": "Feedback sent from a Markdown document or seed to a session or seed log.",
       "events": [
@@ -4774,5 +5075,5 @@
       ]
     }
   ],
-  "definitions_hash": "4a0f6326eeaccd4aff1f8ed5262e168a0350d17b1c712df7a2a0923a07d88f3d"
+  "definitions_hash": "8c53baa3e50bab15d65f2ba92008e8f1a92e5966d6c43c7aeea69bb6d644eabb"
 }

@@ -632,6 +632,7 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		Seeds:                  state.Seeds,
 		SeedsTotal:             protocol.Ptr(d.countSeedsForBroadcast(client.selectedProfile())),
 		Crew:                   state.Crew,
+		Asks:                   d.asksForProfile(client.selectedProfile()),
 	}
 	d.fillInitialMigrationPhase(event)
 	d.sendInitialArrangement(client, event)
@@ -1166,6 +1167,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handlePresentSubmitRound(client, msg.(*protocol.PresentSubmitRoundMessage))
 	case protocol.CmdPresentClose:
 		d.handlePresentClose(client, msg.(*protocol.PresentCloseMessage))
+	case protocol.CmdAskAnswer:
+		d.handleAskAnswer(client, msg.(*protocol.AskAnswerMessage))
 	case protocol.CmdAutomationDefinitionsGet:
 		d.handleAutomationDefinitionsGetWS(client, msg.(*protocol.AutomationDefinitionsGetMessage))
 	case protocol.CmdAutomationDefinitionGet:

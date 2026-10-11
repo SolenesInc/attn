@@ -1,10 +1,12 @@
 import { AttentionDrawer } from '../components/AttentionDrawer';
+import { AsksDrawer } from '../components/Asks/AsksDrawer';
 import { AutomationsPanel } from '../components/AutomationsPanel';
 import { RightDock } from '../components/RightDock';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import {
   useAppInputs,
   useAppPanelsContext,
+  useAppSessionsContext,
   useAttentionQueueContext,
   useNavigationContext,
 } from './AppContexts';
@@ -15,6 +17,7 @@ export function AppDock() {
     dockPanelStack,
     closeDockPanel,
     attentionPanelOpen,
+    asksPanelOpen,
     automationsPanelOpen,
     gardenPanelOpen,
     gardenHoldsWindow,
@@ -24,6 +27,7 @@ export function AppDock() {
   const { waitingLocalSessions } = useAttentionQueueContext();
   const { prs } = useAppInputs();
   const { handleSelectSession } = useNavigationContext();
+  const { profileSessions } = useAppSessionsContext();
   const {
     listAutomationDefinitions,
     listAutomationRuns,
@@ -35,6 +39,7 @@ export function AppDock() {
   } = useDaemonApi();
   const openPanels = {
     attention: attentionPanelOpen,
+    asks: asksPanelOpen,
     automations: automationsPanelOpen,
     garden: gardenPanelOpen,
   };
@@ -59,6 +64,22 @@ export function AppDock() {
                 waitingSessions={waitingLocalSessions}
                 prs={prs}
                 onSelectSession={handleSelectSession}
+              />
+            ),
+          },
+          {
+            id: 'asks',
+            isOpen: openPanels.asks,
+            width: 'clamp(420px, 46vw, 720px)',
+            className: 'dock-panel dock-panel--asks',
+            children: dockPanelStack.includes('asks') && (
+              <AsksDrawer
+                sessions={profileSessions}
+                onClose={() => closeDockPanel('asks')}
+                onOpenAgent={(sessionId) => {
+                  closeDockPanel('asks');
+                  handleSelectSession(sessionId);
+                }}
               />
             ),
           },

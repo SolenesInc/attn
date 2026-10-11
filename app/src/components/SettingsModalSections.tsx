@@ -1152,6 +1152,8 @@ export function DataSettings({
 export function HygieneSettings({
   handleToggleAutoSettle,
   autoSettleEnabled,
+  handleToggleAsks,
+  asksEnabled,
   autoSettleArmDraft,
   savedFlash,
   autoSettleCountdownDraft,
@@ -1163,6 +1165,8 @@ export function HygieneSettings({
   SettingsModalState,
   | 'handleToggleAutoSettle'
   | 'autoSettleEnabled'
+  | 'handleToggleAsks'
+  | 'asksEnabled'
   | 'autoSettleArmDraft'
   | 'savedFlash'
   | 'autoSettleCountdownDraft'
@@ -1173,6 +1177,40 @@ export function HygieneSettings({
 >) {
   return (
     <>
+      <section className="settings-block">
+        <div className="settings-block-intro">
+          <div className="settings-kicker">Agents</div>
+          <h3>Asks (experimental)</h3>
+          <p className="settings-description">
+            Agents ask you what they cannot settle alone, and you answer every agent from one drawer without opening
+            their terminals. Off by default.
+          </p>
+        </div>
+        <div className="settings-block-body">
+          <div className="settings-row-card">
+            <div>
+              <p className="settings-row-title">Let agents ask you through attn</p>
+              <p className="settings-row-copy" id="settings-asks-description">
+                Agents launched while this is on learn <code>attn ask</code> and keep it for their whole life, reloads
+                included; agents launched while it is off never get it. Your answer reaches the agent's attn inbox and
+                settles its turn. Open the drawer with {formatShortcut('dock.asks')}.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-label="Asks (experimental)"
+              aria-checked={asksEnabled}
+              aria-describedby="settings-asks-description"
+              className="settings-action"
+              data-testid="settings-asks-toggle"
+              onClick={handleToggleAsks}
+            >
+              {asksEnabled ? 'Disable' : 'Enable'}
+            </button>
+          </div>
+        </div>
+      </section>
       <section className="settings-block">
         <div className="settings-block-intro">
           <div className="settings-kicker">Sidebar</div>

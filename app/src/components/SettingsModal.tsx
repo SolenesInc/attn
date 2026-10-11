@@ -269,6 +269,8 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
         <HygieneSettings
           handleToggleAutoSettle={state.handleToggleAutoSettle}
           autoSettleEnabled={state.autoSettleEnabled}
+          handleToggleAsks={state.handleToggleAsks}
+          asksEnabled={state.asksEnabled}
           autoSettleArmDraft={state.autoSettleArmDraft}
           savedFlash={state.savedFlash}
           autoSettleCountdownDraft={state.autoSettleCountdownDraft}

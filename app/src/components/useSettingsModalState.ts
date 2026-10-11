@@ -1,4 +1,5 @@
 import { open } from '@tauri-apps/plugin-dialog';
+import { ASKS_SETTING, isAsksEnabled } from '../utils/asks';
 import { useCallback, useEffect, useImperativeHandle, useMemo, useState, type ForwardedRef } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useGitHubPollingOffReason } from '../contexts/GitHubPollingContext';
@@ -174,6 +175,7 @@ export function useSettingsModalState({
   const actualChiefContextCap = settings.chief_context_window_cap || String(DEFAULT_CONTEXT_WINDOW_CAP);
   const actualHeadlessContextCap = settings.headless_context_window_cap || String(DEFAULT_CONTEXT_WINDOW_CAP);
   const autoSettleEnabled = isAutoSettleEnabled(settings);
+  const asksEnabled = isAsksEnabled(settings);
   const actualAutoSettleArm = String(autoSettleSeconds(settings, AUTO_SETTLE_ARM_SETTING));
   const actualAutoSettleCountdown = String(autoSettleSeconds(settings, AUTO_SETTLE_COUNTDOWN_SETTING));
   const resolvedDefaultAgent = resolvePreferredAgent(actualDefaultAgent, agentAvailability, 'codex');
@@ -423,6 +425,10 @@ export function useSettingsModalState({
     onSetSetting(AUTO_SETTLE_ENABLED_SETTING, autoSettleEnabled ? 'false' : 'true');
   }, [onSetSetting, autoSettleEnabled]);
 
+  const handleToggleAsks = useCallback(() => {
+    onSetSetting(ASKS_SETTING, asksEnabled ? 'false' : 'true');
+  }, [onSetSetting, asksEnabled]);
+
   const openSentFilesEnabled = (settings[OPEN_SENT_FILES_ENABLED_SETTING] || 'true') === 'true';
   const handleToggleOpenSentFiles = useCallback(() => {
     onSetSetting(OPEN_SENT_FILES_ENABLED_SETTING, openSentFilesEnabled ? 'false' : 'true');
@@ -573,9 +579,9 @@ export function useSettingsModalState({
             label: 'Attention queue',
             title: 'Attention queue',
             description: 'When a turn settles itself, and which repositories and authors never reach the queue at all.',
-            count: mutedItemCount + 1,
+            count: mutedItemCount + 2,
             keywords:
-              'muted repositories repos authors hide unmute hygiene auto-settle settle turn countdown sidebar attention queue',
+              'muted repositories repos authors hide unmute hygiene auto-settle settle turn countdown sidebar attention queue asks questions answer experimental',
           },
         ],
       },
@@ -728,6 +734,7 @@ export function useSettingsModalState({
     modelCaptureBytes,
     autoModePolicy,
     autoSettleEnabled,
+    asksEnabled,
     mutedRepos,
     mutedAuthors,
     hasProjectsDirChange,
@@ -804,6 +811,7 @@ export function useSettingsModalState({
     modelCaptureMaxGB,
     modelCapturePath,
     handleToggleAutoSettle,
+    handleToggleAsks,
     autoSettleArmDraft,
     autoSettleCountdownDraft,
     onUnmuteRepo,

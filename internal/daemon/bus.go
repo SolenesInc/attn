@@ -94,6 +94,9 @@ const (
 	FactPresentationAdded   = "presentation.added"
 	FactPresentationUpdated = "presentation.updated"
 
+	FactAskOpened = "ask.opened"
+	FactAskClosed = "ask.closed"
+
 	FactDocumentChanged              = "document.changed"
 	FactDocumentCollectionRemoved    = "document.collection.removed"
 	FactDocumentCollectionRedeclared = "document.collection.redeclared"
@@ -364,6 +367,10 @@ func buildWireProjections() []projection {
 			filter: bus.Filter{FactPresentationAdded, FactPresentationUpdated},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectPresentation(ev) },
 		},
+		{
+			filter: bus.Filter{FactAskOpened, FactAskClosed},
+			apply:  func(d *Daemon, _ bus.Event) { d.projectAsks() },
+		},
 	}
 }
 
@@ -384,6 +391,7 @@ func (d *Daemon) ensureEventBus() {
 	})
 	d.busUnsubscribe = d.eventBus.Subscribe(bus.All, d.projectToClients)
 	d.subscribeInboxFacts()
+	d.subscribeAskFacts()
 	d.subscribeDocumentFacts()
 	d.subscribeAgentConversationFacts()
 	d.subscribeSessionPullRequestFacts()
@@ -406,6 +414,10 @@ func (d *Daemon) startEventBus() error {
 }
 
 func (d *Daemon) stopEventBus() {
+	if d.asksUnsubscribe != nil {
+		d.asksUnsubscribe()
+		d.asksUnsubscribe = nil
+	}
 	if d.inboxUnsubscribe != nil {
 		d.inboxUnsubscribe()
 		d.inboxUnsubscribe = nil
@@ -508,6 +520,7 @@ func (d *Daemon) projectSnapshot(key string, push func()) {
 const (
 	snapshotSessions    = "sessions_updated"
 	snapshotGarden      = "garden_seeds_updated"
+	snapshotAsks        = "asks_updated"
 	snapshotCrew        = "crew_updated"
 	snapshotPRs         = "prs_updated"
 	snapshotRepos       = "repos_updated"

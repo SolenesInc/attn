@@ -81,6 +81,7 @@ type LaunchIntent struct {
 	Model            string                              `json:"model,omitempty"`
 	Effort           string                              `json:"effort,omitempty"`
 	ChiefOfStaff     bool                                `json:"chief_of_staff,omitempty"`
+	Asks             bool                                `json:"asks,omitempty"`
 	UnattendedLaunch launchcontract.UnattendedLaunchSpec `json:"unattended_launch,omitzero"`
 }
 

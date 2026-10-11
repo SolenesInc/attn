@@ -1,4 +1,7 @@
+import { useMemo } from 'react';
 import { Dashboard } from '../components/Dashboard';
+import { useAsksStore } from '../store/asks';
+import { askFrom, askHolder, orderAsks } from '../utils/asks';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { activityStaleMs } from '../utils/activitySettings';
 import {
@@ -18,7 +21,16 @@ export function AppDashboard() {
   const { hasReceivedInitialState, rateLimit, sendWakeTurn } = useDaemonApi();
 
   const { isRefreshingPRs, refreshError, handleRefreshPRs } = usePRLauncherContext();
-  const { setSettingsOpen, whatsNew } = useAppPanelsContext();
+  const { setSettingsOpen, whatsNew, openDockPanel } = useAppPanelsContext();
+  const openAsks = useAsksStore((state) => state.asks);
+  const asks = useMemo(
+    () => orderAsks(openAsks, profileSessions).map((ask) => ({
+      id: ask.id,
+      from: askFrom(ask, askHolder(ask, profileSessions)),
+      subject: ask.subject,
+    })),
+    [openAsks, profileSessions],
+  );
   const { queueModeEnabled, crewQueueEnabled } = useAttentionQueueContext();
   const { handleNewSession } = useSessionLaunchContext();
   const { handleOpenPR } = usePRLauncherContext();
@@ -43,6 +55,11 @@ export function AppDashboard() {
           onRefreshPRs={handleRefreshPRs}
           onOpenPR={handleOpenPR}
           onOpenSettings={() => setSettingsOpen(true)}
+          asks={asks}
+          onOpenAsk={(askId) => {
+            useAsksStore.getState().selectAsk(askId);
+            openDockPanel('asks');
+          }}
           introBanner={whatsNew.bannerVisible ? { onReplay: whatsNew.open, onDismiss: whatsNew.dismissBanner } : undefined}
         />
       </div>

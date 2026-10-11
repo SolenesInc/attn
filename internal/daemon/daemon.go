@@ -205,6 +205,7 @@ type Daemon struct {
 	inboxMu                           sync.Mutex
 	inboxStates                       map[inbox.Address]*inboxDeliveryState
 	inboxUnsubscribe                  func()
+	asksUnsubscribe                   func()
 	crewWakeMu                        sync.Mutex
 	crewExitedMu                      sync.Mutex
 	crewExitedSessions                map[string]string
@@ -2552,6 +2553,12 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handlePresentOpen(conn, msg.(*protocol.PresentOpenMessage))
 	case protocol.CmdPresentFeedback:
 		d.handlePresentFeedback(conn, msg.(*protocol.PresentFeedbackMessage))
+	case protocol.CmdAskOpen:
+		d.handleAskOpen(conn, msg.(*protocol.AskOpenMessage))
+	case protocol.CmdAskList:
+		d.handleAskList(conn, msg.(*protocol.AskListMessage))
+	case protocol.CmdAskClose:
+		d.handleAskClose(conn, msg.(*protocol.AskCloseMessage))
 
 	case protocol.CmdNotebookGuide:
 		d.handleNotebookGuide(conn, msg.(*protocol.NotebookGuideMessage))

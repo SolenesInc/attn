@@ -26,6 +26,7 @@ import { useCrewPanel } from './useCrewPanel';
 import { useAppNavigation } from './useAppNavigation';
 import { useAppNotebookSurface } from './useAppNotebookSurface';
 import { useAppPanels } from './useAppPanels';
+import { useAsksAvailable } from '../store/asks';
 import type { SidebarSurface } from '../components/sidebarTypes';
 import { useAppSessions } from './useAppSessions';
 import { useAttentionQueue } from './useAttentionQueue';
@@ -260,6 +261,7 @@ export function useAppController({
 
   const { seeds } = useDaemonStore();
   const agentAvailability = useMemo(() => getAgentAvailability(settings), [settings]);
+  const asksAvailable = useAsksAvailable(settings);
 
   useAppDeepLinks({ selectAgent, launchAgent });
 
@@ -621,6 +623,7 @@ export function useAppController({
     onShowAgentList: queueSidebarShown ? toggleAgentList : () => handleOpenPalette('agents'),
     onRefreshPRs: handleRefreshPRs,
     onToggleAttentionPanel: () => toggleDockPanel('attention'),
+    onToggleAsksPanel: asksAvailable ? () => toggleDockPanel('asks') : undefined,
     onOpenSettings: useCallback(() => {
       if (settingsOpen) void settingsModalRef.current?.close();
       else setSettingsOpen(true);

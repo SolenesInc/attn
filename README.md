@@ -193,6 +193,7 @@ their own session. `attn delegate --priority` starts a marked delegate.
 | Cmd+Shift+I | Mark or unmark the focused agent as priority |
 | Cmd+Shift+A | All agents: the list in the queue sidebar, the agent palette elsewhere |
 | Cmd+Shift+P | Attention drawer (who needs me?) |
+| Cmd+Shift+R | Asks drawer: answer what your agents asked |
 | Cmd+\` | Utility terminal |
 | Cmd+R | Refresh PRs |
 | Cmd+/ | All keyboard shortcuts |
@@ -283,6 +284,24 @@ For development instances, enable
 Prefer a blocking terminal workflow? Use `attn pr wait-ready <pr> --repo <owner/repo>
 --mode <green|codex|formal-review>`. Its `--help` explains reviewers, baselining,
 resume, and exit codes.
+
+### Asks (experimental)
+
+Turn on **Settings → Attention queue → Asks** to let agents ask you what they
+cannot settle alone without stopping to wait for you in their terminal. An agent
+pipes markdown to `attn ask`: prose, mermaid diagrams and screenshots, with
+question blocks for one choice (`:::question`), any number (`:::question-multi`)
+or a written answer (`:::question-text`). It keeps working on what does not
+depend on the answer.
+
+Press **Cmd+Shift+R** to answer every agent from one drawer, waiting agents first.
+Pick choices, write answers, add a note and send with **Cmd+Enter**; the drawer
+brings the next ask. The answer reaches the agent's attn inbox in your words and
+settles its turn. **Open agent** jumps to its terminal, and the queue, the sidebar
+and the home screen mark the agents that asked.
+
+Agents keep the setting they launched with, reloads included. An ask for a crew
+member or the Chief outlives a nap: the next session gets the answer.
 
 ### The Chief
 

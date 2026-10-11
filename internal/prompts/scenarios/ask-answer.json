@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "id": "ask-answer",
+  "description": "The user's answer to a two-question ask, with a note.",
+  "recipient": "ask",
+  "event": "answer",
+  "values": {
+    "subject": "\"Cache store\"",
+    "ask_id": "a-7k3f9m",
+    "entries": "## 1. Which store should keep the cache?\n\nAnswer: Postgres (your recommendation)\n\n## 2. What should the banner say?\n\n> Welcome back",
+    "note": "> Keep it boring."
+  }
+}

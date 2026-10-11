@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useReducer } from 'react';
 
-export type DockPanelId = 'attention' | 'automations' | 'garden';
+export type DockPanelId = 'attention' | 'asks' | 'automations' | 'garden';
 
 const DOCK_PANEL_EXIT_MS = 260;
 
@@ -43,11 +43,12 @@ function usePanelExit(
 
 export function useDockPanels() {
   const [dockState, dispatch] = useReducer(reduceDock, {
-    openPanels: { attention: false, automations: false, garden: false },
+    openPanels: { attention: false, asks: false, automations: false, garden: false },
     stack: [],
   });
   const remove = useCallback((panelId: DockPanelId) => dispatch({ type: 'remove', panelId }), []);
   usePanelExit('attention', dockState, remove);
+  usePanelExit('asks', dockState, remove);
   usePanelExit('automations', dockState, remove);
   usePanelExit('garden', dockState, remove);
 
