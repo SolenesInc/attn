@@ -5,7 +5,7 @@ import { parseNotebookTileParams, type TileContentState, type TileLeaf } from '.
 import { describeSessionPullRequest, pickSessionPullRequest } from '../utils/sessionPullRequest';
 import { deriveTileTitle, tileKindLabel } from '../utils/tilePresentation';
 import { useDaemonStore } from '../store/daemonSessions';
-import { ChiefOfStaffBadge } from './ChiefOfStaffBadge';
+import { ChiefBadge } from './ChiefBadge';
 import { useSidebarContext } from './SidebarContext';
 import { DelegatedFromChiefBadge } from './DelegatedFromChiefBadge';
 import { DelegationChainTrigger } from './DelegationChain';
@@ -160,7 +160,7 @@ export function SidebarSessionBadges({ session }: { session: LocalSession }) {
         </span>
       )}
       {session.state === 'recoverable' && <span className="session-recoverable">recoverable</span>}
-      {session.chiefOfStaff && <ChiefOfStaffBadge compact />}
+      {session.chief && <ChiefBadge compact />}
       {session.delegatedFromChief && <DelegatedFromChiefBadge />}
     </>
   );

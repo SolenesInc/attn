@@ -13,7 +13,7 @@ interface TestSession {
   label: string;
   state: 'working' | 'waiting_input' | 'idle';
   desktopId?: string;
-  chiefOfStaff?: boolean;
+  chief?: boolean;
   turnOwed?: boolean;
   turnOpenedAt?: string;
   turnSnoozedUntil?: string;
@@ -154,7 +154,7 @@ describe('the waiting pill', () => {
 
 describe('the waiting peek', () => {
   const crewAndBands: TestSession[] = [
-    { id: 'chief', label: 'chief', state: 'idle', desktopId: 'ws-a', chiefOfStaff: true },
+    { id: 'chief', label: 'chief', state: 'idle', desktopId: 'ws-a', chief: true },
     owed('newer', 11, 'ws-b'),
     owed('older', 9),
     { id: 'busy', label: 'busy', state: 'working', desktopId: 'ws-a' },

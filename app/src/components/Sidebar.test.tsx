@@ -17,7 +17,7 @@ interface TestSession {
   endpointId?: string;
   endpointName?: string;
   endpointStatus?: string;
-  chiefOfStaff?: boolean;
+  chief?: boolean;
   delegatedFromChief?: boolean;
   dispatcher_session_id?: string;
   dispatcher?: import("../types/generated").ActorView;

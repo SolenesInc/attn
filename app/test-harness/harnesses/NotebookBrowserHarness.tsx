@@ -212,7 +212,7 @@ export function NotebookBrowserHarness({ onReady, setTriggerRerender }: HarnessP
       sendToChief={sendToChief}
       listFiles={listFiles}
       changeSignal={changeSignal}
-      chiefActive
+      chief={{ name: 'Chief', presence: 'working' }}
     />
   );
 }

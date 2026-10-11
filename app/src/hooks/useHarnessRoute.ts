@@ -10,6 +10,7 @@ export interface HarnessRouteRules {
   allowNone?: boolean;
   fixedHarness?: boolean;
   requireAvailable?: boolean;
+  requireModel?: boolean;
   effort?: (harness: string) => boolean;
   tier?: ModelTier;
   defaultEffort?: string | ((harness: string) => string);
@@ -127,12 +128,15 @@ export function useHarnessRoute(input: HarnessRoute, rules: HarnessRouteRules, d
     return ordered.filter(option => terms.every(term => `${option.label} ${option.model?.id || value.model} ${option.model?.provider || value.provider}`.toLowerCase().includes(term)));
   };
   const withModel = (model: HarnessModel | undefined): HarnessRoute => {
+    if (!model && rules.requireModel) model = defaultModel;
     const nextModel = model?.id || '', provider = model?.provider || '';
     if (nextModel === value.model && provider === value.provider && harness?.effort_pin !== false) return value;
     const levels = model?.effort_levels || defaultModel?.effort_levels || [];
     const support = (model || defaultModel)?.effort_support;
     const keepsEffort = harness?.effort_pin !== false && support !== 'unsupported' && (!levels.length || levels.includes(value.effort));
-    return { ...value, model: nextModel, provider, effort: keepsEffort ? value.effort : '' };
+    const effort = keepsEffort ? value.effort : '';
+    const recommendedEffort = rules.requireModel && support !== 'unsupported' && surfaceEffort && (!levels.length || levels.includes(surfaceEffort)) ? surfaceEffort : '';
+    return { ...value, model: nextModel, provider, effort: effort || recommendedEffort };
   };
   return { ...models, value, rules, harness, pinsUnavailable, canPinModel, effectiveHarness, harnessName, harnessLabel, selected, tier, modelLabel, unsetLabel, missing, aboveTier, effortMode, effortLevels, defaultEffort, effortMissing: Boolean(value.effort && effortMode === 'levels' && !effortLevels.includes(value.effort)), options, withModel };
 }

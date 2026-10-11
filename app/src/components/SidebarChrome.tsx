@@ -1,3 +1,4 @@
+import { ChiefSlot } from './ChiefSlot';
 import { useRevealSelection } from './useRevealSelection';
 import { useRef } from 'react';
 import { formatShortcut } from '../shortcuts/formatShortcut';
@@ -163,10 +164,10 @@ export function SidebarFooter() {
   );
 }
 
-export function SidebarSleepingCrew() {
+export function SidebarCrew() {
   const { crew, onManageCrew, onWakeCrewMember, openCrewMemberActions } = useSidebarContext();
   if (!crew?.length) return null;
-  const sleeping = crew.filter((member) => !member.binding_session);
+  const sleeping = crew.filter((member) => !member.chief && !member.binding_session);
   return (
     <div className="sidebar-sleeping-crew">
       <div className="queue-section-rule queue-crew-rule">
@@ -174,6 +175,7 @@ export function SidebarSleepingCrew() {
         <span className="queue-rule-line" aria-hidden="true" />
         {onManageCrew && <button type="button" data-testid="manage-crew" onClick={onManageCrew}>manage</button>}
       </div>
+      <ChiefSlot />
       {sleeping.map((member) => (
         <CrewRowView
           key={member.key}
@@ -198,6 +200,7 @@ export function SidebarPopovers() {
     onTogglePriority,
     desktops,
     onCloseSession,
+    onSleepCrewMember,
     onReloadSession,
     renameTarget,
     setRenameTarget,
@@ -206,6 +209,8 @@ export function SidebarPopovers() {
     crewActionsTarget,
     setCrewActionsTarget,
     onOpenCrewMemberDetails,
+    chief,
+    chiefActions,
   } = useSidebarContext();
   const actionsSession = sessionActionsTarget
     ? desktops.flatMap((desktop) => desktop.sessions).find((session) => session.id === sessionActionsTarget.id)
@@ -232,6 +237,8 @@ export function SidebarPopovers() {
       {sessionActionsTarget && (
         <SessionActionsPopover
           sessionLabel={sessionActionsTarget.label}
+          onEditHarnessRoute={sessionActionsTarget.crewMember === chief?.key ? chiefActions?.edit : undefined}
+          memberDetailsLabel={sessionActionsTarget.crewMember === chief?.key ? 'Edit charter' : undefined}
           priority={actionsSession?.priority}
           onTogglePriority={onTogglePriority && actionsSession ? () => onTogglePriority(actionsSession) : undefined}
           anchor={sessionActionsTarget.anchor}
@@ -244,7 +251,9 @@ export function SidebarPopovers() {
               anchor: sessionActionsTarget.anchor,
             });
           }}
-          onCloseSession={() => onCloseSession(sessionActionsTarget.id)}
+          ending={sessionActionsTarget.crewMember
+            ? { kind: 'sleep', name: memberName(sessionActionsTarget.crewMember), run: () => onSleepCrewMember?.(sessionActionsTarget.crewMember!) }
+            : { kind: 'close', run: () => onCloseSession(sessionActionsTarget.id) }}
           onReloadSession={() => onReloadSession(sessionActionsTarget.id)}
           onMemberDetails={
             sessionActionsTarget.crewMember && onOpenCrewMemberDetails
@@ -252,6 +261,7 @@ export function SidebarPopovers() {
                   onOpenCrewMemberDetails(
                     sessionActionsTarget.crewMember!,
                     sessionActionsTarget.trigger,
+                    sessionActionsTarget.crewMember === chief?.key ? 'charter' : undefined,
                   )
               : undefined
           }
@@ -261,12 +271,15 @@ export function SidebarPopovers() {
       {crewActionsTarget && (
         <CrewMemberActionsPopover
           memberName={memberName(crewActionsTarget.member)}
+          memberDetailsLabel={crewActionsTarget.member === chief?.key ? 'Edit charter' : undefined}
+          onEditHarnessRoute={crewActionsTarget.member === chief?.key ? chiefActions?.edit : undefined}
+          onWake={crewActionsTarget.member === chief?.key ? chiefActions?.wake : undefined}
           desktopLabel={crew?.find((member) => member.key === crewActionsTarget.member)?.launch_desktop?.label}
           anchor={crewActionsTarget.anchor}
           onOpenDetails={() => {
             const target = crewActionsTarget;
             setCrewActionsTarget(null);
-            onOpenCrewMemberDetails?.(target.member, target.trigger);
+            onOpenCrewMemberDetails?.(target.member, target.trigger, target.member === chief?.key ? 'charter' : undefined);
           }}
           onClose={() => setCrewActionsTarget(null)}
         />

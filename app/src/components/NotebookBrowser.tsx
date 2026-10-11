@@ -14,8 +14,7 @@ interface NotebookBrowserProps {
   sendToChief: (selection: string, sourcePath?: string) => Promise<NotebookSendToChiefResult>;
   changeSignal?: number;
   listFiles: () => Promise<NotebookEntry[]>;
-  // true = a chief session is working, false = idle, undefined = no chief session at all.
-  chiefActive?: boolean;
+  chief?: { name: string; presence: 'working' | 'idle' | 'asleep' | 'unconfigured' };
 }
 
 export function NotebookBrowser({ isOpen, onClose, ...rest }: NotebookBrowserProps) {

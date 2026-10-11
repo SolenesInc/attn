@@ -40,10 +40,6 @@
   width: 14px;
 }
 
-.session-actions-popover .chief-of-staff-action {
-  color: #79b8ff;
-}
-
 .session-actions-divider {
   border-top: 1px solid var(--color-border-subtle);
   margin: 4px 3px;

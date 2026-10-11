@@ -45,7 +45,7 @@ export function CrewRoster({ members, visibleMembers, selectedId, filter, listRe
               <span className="crew-roster-identity">
                 <strong>{candidate.name}</strong>
                 <small>{candidate.launch_desktop?.label}</small>
-                <small><i className={awake ? 'is-awake' : ''} />{awake ? 'Awake' : 'Asleep'}</small>
+                <small><i className={awake ? 'is-awake' : ''} />{candidate.chief && !candidate.agent ? 'Not set up' : awake ? 'Awake' : 'Asleep'}</small>
               </span>
               {state !== 'saved' && <span className={`crew-roster-save is-${state}`} aria-label={state} />}
             </button>

@@ -41,7 +41,6 @@ interface GardenPanelProps {
   onResumeSeed?: (seedId: string) => Promise<unknown>;
   onHandoverSeed?: (options: Omit<SeedHandoverOptions, 'sourceSessionId'>) => Promise<unknown>;
   onSendSeedToChief?: (options: Omit<SeedSendToChiefOptions, 'sourceSessionId'>) => Promise<unknown>;
-  chiefAvailable?: boolean;
   checkArtifactPath?: (path: string) => Promise<boolean>;
   viewToggle?: React.ReactNode;
   frame?: 'dock' | 'full';
@@ -567,7 +566,6 @@ export function GardenPanel({
   onResumeSeed,
   onHandoverSeed,
   onSendSeedToChief,
-  chiefAvailable = false,
   checkArtifactPath,
   viewToggle,
   frame,
@@ -911,7 +909,7 @@ export function GardenPanel({
   const canHandover = Boolean(
     documentIsCurrent && onHandoverSeed && seedIsOpen && continuation,
   );
-  const canSendToChief = Boolean(documentIsCurrent && onSendSeedToChief && chiefAvailable && seedIsOpen);
+  const canSendToChief = Boolean(documentIsCurrent && onSendSeedToChief && seedIsOpen);
   const composingContinuation = continuationDraft?.seedId === here?.id;
   const submitContinuation = async () => {
     if (!seedDoc || !continuationDraft || continuationDraft.seedId !== seedDoc.seed.id) return;

@@ -10,7 +10,7 @@ function ModelList({ view, query, onChange }: { view: HarnessRouteView; query: s
   const options = view.options(query);
   let previous = '';
   return <div role="listbox" aria-label="Model" className="route-model-list">
-    {(!query || !view.canPinModel) && <button type="button" role="option" className="route-model-option is-default" disabled={view.pinsUnavailable} aria-selected={!view.value.model} data-model="" onClick={() => onChange(view.withModel(undefined))}>{view.unsetLabel}</button>}
+    {(!query || !view.canPinModel) && (!view.rules.requireModel || Boolean(view.rules.tier && view.catalog?.tier_defaults[view.rules.tier])) && <button type="button" role="option" className="route-model-option is-default" disabled={view.pinsUnavailable} aria-selected={!view.value.model} data-model="" onClick={() => onChange(view.withModel(undefined))}>{view.unsetLabel}</button>}
     {options.map(option => {
       const header = option.group && option.group !== previous ? option.group === 'no tier' ? 'No tier' : `${tierLabel(option.group)}${option.group === view.rules.tier ? ' recommended' : ''}` : '';
       previous = option.group;

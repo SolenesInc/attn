@@ -35,8 +35,8 @@ function launch({ sessions = team(), queue = true, crewInQueue = false, desktop 
   return renderApp({
     initialState: {
       settings: queue ? { ...QUEUE, ...(crewInQueue ? { queue_crew_enabled: 'true' } : {}) } : {},
-      sessions,
-      crew,
+      sessions: sessions.map(session => session.chief ? { ...session, crew_member: 'chief-member' } : session),
+      crew: [...crew, ...sessions.filter(session => session.chief).map(session => crewMember('chief-member', { chief: true, name: 'chief', agent: 'claude', model: 'opus', binding_session: session.id }))],
       desktops: sessions.map((session) => ({ ...soloDesktop(session.id), ...desktop(session) })),
     },
   });
@@ -194,7 +194,7 @@ describe('App queue', () => {
   it('replaces the desktop tree with the chief and the owed turns oldest first, and keeps the settled rest in the agent list', async () => {
     const { daemon } = await launch();
 
-    expect(bandRows()).toEqual(['queue-chief-chief', 'queue-turn-older', 'queue-turn-newer']);
+    expect(bandRows()).toEqual(['queue-crew-chief-member', 'queue-turn-older', 'queue-turn-newer']);
     expect(treeRows()).toEqual([]);
 
     await openAgentList(daemon);

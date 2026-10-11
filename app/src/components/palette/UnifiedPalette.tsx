@@ -241,7 +241,7 @@ export function UnifiedPalette<S extends PaletteSession>({
     }
     if (pressed(event, 'session.snooze')) {
       event.preventDefault();
-      if (agent && !agent.chiefOfStaff) {
+      if (agent && !agent.chief) {
         onStateChange({ mode: 'snooze', sessionId: agent.id, openedAt: new Date(), query: state.query });
       }
       return true;

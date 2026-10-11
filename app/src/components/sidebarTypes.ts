@@ -1,3 +1,4 @@
+import type { ChiefView, ChiefActions } from '../application/useChief';
 import type { ActorView } from '../types/generated';
 import type { MouseEvent as ReactMouseEvent, ReactNode } from 'react';
 import type { CriticalNotificationState } from '../hooks/useDaemonSocket';
@@ -23,7 +24,7 @@ export interface LocalSession {
   endpointId?: string;
   endpointName?: string;
   endpointStatus?: string;
-  chiefOfStaff?: boolean;
+  chief?: boolean;
   delegatedFromChief?: boolean;
   autoSettleFiresAt?: string;
   autoSettleHeld?: boolean;
@@ -50,6 +51,11 @@ export interface SelectedTile {
 export type SidebarSurface = 'queue-open' | 'queue-collapsed' | 'tree-open' | 'tree-collapsed' | 'hidden';
 
 export interface SidebarProps {
+  chief?: ChiefView | null;
+  chiefActions?: ChiefActions;
+  chiefSetupOpen?: boolean;
+  chiefSetupOpenedByUser?: boolean;
+  onChiefSettings?: () => void;
   desktops: SidebarDesktop[];
   visualIndexByDesktopId: Map<string, number>;
   selectedId: string | null;
@@ -71,7 +77,7 @@ export interface SidebarProps {
   onWakeCrewMember?: (member: string) => void;
   onSleepCrewMember?: (member: string) => void;
   onManageCrew?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
-  onOpenCrewMemberDetails?: (member: string, returnFocus: HTMLElement) => void;
+  onOpenCrewMemberDetails?: (member: string, returnFocus: HTMLElement, tab?: import('../hooks/useCrewNavigation').CrewTab) => void;
   onSettleTurn?: (id: string) => void;
   onWalkRuns?: () => void;
   onJumpToWaiting?: () => void;

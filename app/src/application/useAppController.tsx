@@ -29,7 +29,7 @@ import { useAppPanels } from './useAppPanels';
 import type { SidebarSurface } from '../components/sidebarTypes';
 import { useAppSessions } from './useAppSessions';
 import { useAttentionQueue } from './useAttentionQueue';
-import { useChiefOfStaff } from './useChiefOfStaff';
+import { useChief } from './useChief';
 import { usePRLauncher } from './usePRLauncher';
 import { useSessionLaunch } from './useSessionLaunch';
 import { useSessionLifecycle } from './useSessionLifecycle';
@@ -213,10 +213,8 @@ export function useAppController({
   const appAppearance = useAppAppearance({ settings });
   const { increaseScale, decreaseScale, resetScale } = appAppearance;
 
-  const agentSurfaceCount =
-    sessions.length +
-    desktopViews.filter((group) => group.hasUnresolvedAgentPanes).length;
-  const appPanels = useAppPanels({ agentSurfaceCount });
+  const chief = useChief({ liveSessionIds: appSessions.liveGardenSessions, selectSession: handleSelectSession, showError });
+  const appPanels = useAppPanels();
   const crewPanelState = useCrewPanel();
   const { crewPanel, closeCrewPanel } = crewPanelState;
   const {
@@ -302,7 +300,6 @@ export function useAppController({
   });
   const { diagnosticCapture, setDiagnosticCapture, paletteOriginRef } = appDiagnostics;
 
-  const chiefOfStaff = useChiefOfStaff();
 
   const [contextCapPromptSession, setContextCapPromptSession] = useState<{
     id: string;
@@ -698,7 +695,7 @@ export function useAppController({
       sessionLaunch,
       prLauncher,
       sessionLifecycle,
-      chiefOfStaff,
+      chief,
     },
     attention: {
       attentionQueue,

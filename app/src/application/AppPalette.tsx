@@ -12,6 +12,7 @@ import { deriveTileTitle } from '../utils/tilePresentation';
 import {
   useAppGardenActionsContext,
   useAppPanelsContext,
+  useChiefContext,
   useAttentionQueueContext,
   useNavigationContext,
 } from './AppContexts';
@@ -42,6 +43,8 @@ function OpenPalette({
   const crew = useDaemonStore((state) => state.crew);
   const seeds = useDaemonStore((state) => state.seeds);
   const commands = useAppCommands();
+  const chief = useChiefContext();
+  const { setSidebarCollapsed } = useAppPanelsContext();
   const [usage, setUsage] = useState<CommandUsage[] | null>(null);
   useEffect(() => {
     let current = true;
@@ -77,7 +80,7 @@ function OpenPalette({
     const now = Date.now();
     return {
       bands: buildQueueBands(desktopViews, { crewInQueue: crewQueueEnabled, now }),
-      crewRoster: crew.map((member) => member.key),
+      crew,
       desktops: desktopViews,
       tileTitle,
       now,
@@ -96,7 +99,11 @@ function OpenPalette({
       commandsLoading={usage === null}
       onCommandPick={recordCommand}
       onOpenAgent={(session) => handleSelectSession(session.id)}
-      onWakeMember={handleWakeCrewMember}
+      onWakeMember={member => {
+        if (member !== chief.view?.key) { handleWakeCrewMember(member); return; }
+        if (chief.view.phase === 'unconfigured') { setSidebarCollapsed(false); chief.actions.edit(); }
+        else chief.actions.wake();
+      }}
       onOpenTile={handleSelectTile}
       onSettle={(session) => void sendSettleTurn(session.id)}
       onPriority={(session) => sendSetSessionPriority(session.id, !session.priority)}

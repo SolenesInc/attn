@@ -28,28 +28,14 @@ describe('App queue rows', () => {
     expect(screen.getByText('Alder')).toHaveTextContent('Review');
   });
 
-  it('calls a labeled chief Chief in the crew block and restores its name when demoted', async () => {
-    const chief = daemonSession('coordinator', {
-      label: 'Profiles epic coordinator', state: 'idle', chief: true,
-    });
-    const { daemon } = await renderApp({
-      initialState: {
-        settings: { queue_mode_enabled: 'true' },
-        sessions: [chief],
-        desktops: [soloDesktop(chief.id)],
-      },
-    });
-
-    const row = screen.getByTestId('queue-chief-coordinator');
-    expect(within(row).getByText('Chief')).toBeInTheDocument();
-    expect(row).toHaveAttribute('title', 'Profiles epic coordinator');
-
-    daemon.emit({ event: 'sessions_updated', sessions: [{ ...chief, chief: false }] });
-    await daemon.idle();
-    fireEvent.click(screen.getByTestId('queue-agents-toggle'));
-
-    expect(screen.queryByTestId('queue-chief-coordinator')).toBeNull();
-    expect(within(screen.getByTestId('queue-settled-coordinator')).getByText('Profiles epic coordinator')).toBeInTheDocument();
+  it('names the chief from its member, even when its session has another label', async () => {
+    const chief = daemonSession('coordinator', { label: 'Profiles epic coordinator', state: 'idle', chief: true, crew_member: 'chief-member' });
+    await renderApp({ initialState: {
+      settings: { queue_mode_enabled: 'true' }, sessions: [chief], desktops: [soloDesktop(chief.id)],
+      crew: [crewMember('chief-member', { chief: true, name: 'Captain', agent: 'claude', model: 'opus', binding_session: chief.id })],
+    } });
+    expect(within(screen.getByTestId('chief-slot')).getByRole('button', { name: 'Open Captain' })).toBeInTheDocument();
+    expect(within(screen.getByTestId('chief-slot')).queryByText('Profiles epic coordinator')).toBeNull();
   });
 
   it('keeps a snoozed agent name beside its wake time', async () => {

@@ -44,7 +44,7 @@ function sidebarData(members = false) {
     [{ id: 'desktop', title: 'attn' }],
     sessions.map((session) => ({
       ...session,
-      chiefOfStaff: members && session.id === 'claude',
+      chief: members && session.id === 'claude',
       crewMember: members && session.id === 'pi' ? 'fern' : undefined,
     })),
   );
@@ -128,7 +128,9 @@ describe('sidebar harness identity', () => {
 
   it('keeps harness identity when switching between desktop and queue arrangements', () => {
     const data = sidebarData(true);
-    const props = { ...baseProps, ...data, crew: [{ key: 'fern', name: 'Fern' }, { key: 'sleeping', name: 'Sleeping' }] };
+    const props = {
+    chief: { ref: 'member:chief-member', key: 'chief-member', name: 'Chief', revision: 1, phase: 'awake' as const, requestPending: false, sessionId: 'claude', agent: 'claude' },
+    chiefActions: { setUp: async () => true, wake: () => {}, sleep: () => {}, edit: () => {}, dismiss: () => {} }, ...baseProps, ...data, crew: [{ key: 'fern', name: 'Fern' }, { key: 'sleeping', name: 'Sleeping' }] };
     const { rerender } = render(<Sidebar {...props} agentListOpen queue={buildQueueBands(data.desktops)} />);
     expect(within(screen.getByTestId('queue-crew-fern')).getByRole('img', { name: 'Pi · idle' })).toBeInTheDocument();
     expect(within(screen.getByTestId('queue-crew-sleeping')).getByRole('img', { name: 'Unknown harness · idle' })).toBeInTheDocument();

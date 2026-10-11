@@ -665,6 +665,7 @@ async function main() {
       chiefSessionId = chiefId;
       runner.assert(Boolean(chiefId), 'configuring the chief woke it', { member });
       await observer.waitForSession({ id: chiefId });
+      await client.request('dom_wait', { selector: `[data-testid="chief-slot"] [data-crew-state="awake"][data-session-id="${chiefId}"]`, timeoutMs: 15_000 });
       const queue = await waitForTurns(client, [beta.sessionId, alpha.sessionId], 'the chief stays outside the turn band', 20_000);
       runner.assert(queue.chief?.id === chiefId, 'the member occupies the chief slot', { chief: queue.chief });
       sleepChief();

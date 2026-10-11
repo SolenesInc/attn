@@ -7,6 +7,8 @@ export interface CrewMutationOutcome {
   error?: string;
   member?: CrewMember;
   restart?: CrewRestart;
+  woke_session_id?: string;
+  wake_error?: string;
 }
 
 interface CrewMutationEvent {
@@ -17,6 +19,8 @@ interface CrewMutationEvent {
   error?: string;
   member?: CrewMember;
   restart?: CrewRestart;
+  woke_session_id?: string;
+  wake_error?: string;
   charter?: CrewCharterDocument;
   handoffs?: CrewHandoffSummary[];
   handoff?: CrewHandoffDocument;
@@ -59,6 +63,8 @@ function settleCrewMutation(
     ...(event.error ? { error: event.error } : {}),
     ...(event.member ? { member: event.member } : {}),
     ...(event.restart ? { restart: event.restart } : {}),
+    ...(event.woke_session_id ? { woke_session_id: event.woke_session_id } : {}),
+    ...(event.wake_error ? { wake_error: event.wake_error } : {}),
   } satisfies CrewMutationOutcome);
 }
 

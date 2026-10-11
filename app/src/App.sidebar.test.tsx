@@ -180,8 +180,8 @@ describe('App sidebar', () => {
     it('shows the delegated-from-chief badge only on sessions the chief delegated', async () => {
       await launch({ sessions: [daemonSession('s1', { delegated_from_chief: true }), daemonSession('s2')] });
 
-      expect(row('s1').getByLabelText('Delegated from chief of staff')).toBeInTheDocument();
-      expect(row('s2').queryByLabelText('Delegated from chief of staff')).toBeNull();
+      expect(row('s1').getByLabelText('Delegated from Chief')).toBeInTheDocument();
+      expect(row('s2').queryByLabelText('Delegated from Chief')).toBeNull();
     });
 
     it('shows a remote session’s endpoint, and offers close and reload for it', async () => {
