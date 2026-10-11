@@ -931,7 +931,7 @@ export function useDaemonSocket({
     key: string,
     payload: Record<string, unknown>,
     timeoutMessage: string,
-    timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS,
+    timeoutMs: number | null = DEFAULT_REQUEST_TIMEOUT_MS,
     supersede = false,
   ): Promise<T> => {
     return new Promise<T>((resolve, reject) => {
@@ -946,7 +946,7 @@ export function useDaemonSocket({
       const waiter = { resolve: resolve as (value: unknown) => void, reject };
       pendingActionsRef.current.set(key, waiter);
       ws.send(JSON.stringify(payload));
-      setTimeout(() => {
+      if (timeoutMs !== null) setTimeout(() => {
         if (pendingActionsRef.current.get(key) === waiter) {
           pendingActionsRef.current.delete(key);
           reject(new Error(timeoutMessage));
@@ -4413,6 +4413,7 @@ export function useDaemonSocket({
         pendingRequestKey(cmd, requestId),
         { cmd, request_id: requestId, ...body },
         `The daemon did not answer ${cmd}`,
+        cmd === 'desktop_show_session' || cmd === 'desktop_show_leaf' || cmd === 'desktop_set_current' ? null : undefined,
       );
       if (intent !== null) {
         request.then(

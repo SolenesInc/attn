@@ -4,6 +4,10 @@ import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useProfilesStore, type ProfilesState } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { activeLeafOf, sameLeaf, sessionOfLeaf, type ActiveLeaf } from '../navigation/activeLeaf';
+import { displayedArrangement } from '../navigation/sessionNavigation';
+import { arrangementOf } from '../store/sessionNavigationSlice';
+import { isRetainedTerminalEvent, retainTerminalEvent, usePendingTerminalInput, type PendingInputTarget } from '../store/pendingTerminalInput';
+import { removeCompositionTextNodes } from '../ghostty/input';
 
 export function activeLeafIn(state: Pick<ProfilesState, 'selectedProfileId' | 'currentDesktopId' | 'desktops'>): ActiveLeaf | null {
   return activeLeafOf({
@@ -85,6 +89,41 @@ export function useDesktopSelectionBridge(reportFailure: (message: string) => vo
   const sent = useRef(0);
   const reportFailureRef = useRef(reportFailure);
   useEffect(() => {
+    const retain = (event: Event) => {
+      const intent = useSessionStore.getState().intent;
+      if (event.defaultPrevented || isRetainedTerminalEvent(event)) return;
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      const terminal = target?.closest<HTMLElement>('.terminal-container');
+      if (target?.closest('input, textarea, select, [contenteditable="true"]') && !terminal) return;
+      let recipient: PendingInputTarget | null = null;
+      if (intent?.target.kind === 'session' && !intent.focusRequested) {
+        recipient = { kind: 'agent', id: intent.target.sessionId };
+      } else if (terminal?.dataset.terminalInputReady === '0') {
+        const { terminalKind, terminalSessionId, terminalRuntimeId } = terminal.dataset;
+        if (terminalKind === 'agent' && terminalSessionId) recipient = { kind: 'agent', id: terminalSessionId };
+        else if (terminalRuntimeId) recipient = { kind: 'terminal', id: terminalRuntimeId, desktopId: terminal.closest<HTMLElement>('[data-desktop-id]')?.dataset.desktopId ?? '' };
+      }
+      if (!recipient) return;
+      usePendingTerminalInput.getState().append(recipient, intent?.id ?? 0, retainTerminalEvent(event));
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.type === 'compositionend' && target?.closest('.terminal-container')) removeCompositionTextNodes(target);
+    };
+    const events = ['keydown', 'keyup', 'paste', 'compositionstart', 'compositionupdate', 'compositionend'];
+    for (const event of events) document.addEventListener(event, retain, true);
+    return () => {
+      for (const event of events) document.removeEventListener(event, retain, true);
+    };
+  }, []);
+  useEffect(() => useSessionStore.subscribe((state, previous) => {
+    if (state.intent === previous.intent) return;
+    const arrangement = displayedArrangement(arrangementOf(state), state.intent);
+    const profiles = useProfilesStore.getState();
+    const profile = profiles.profiles.find((entry) => entry.id === arrangement.profileId);
+    if (!profile) return;
+    profiles.arrangementArrived({ ...profile, current_desktop_id: arrangement.currentDesktopId ?? '' }, arrangement.desktops);
+  }), []);
+  useEffect(() => {
     reportFailureRef.current = reportFailure;
   }, [reportFailure]);
 
@@ -103,9 +142,10 @@ export function useDesktopSelectionBridge(reportFailure: (message: string) => vo
       },
       (error: unknown) => {
         const store = useSessionStore.getState();
-        if (store.intent?.id !== id) return;
-        store.intentFailed(id);
-        reportFailureRef.current(`Could not show that ${target.kind === 'session' ? 'agent' : 'leaf'}: ${error instanceof Error ? error.message : String(error)}`);
+        const discarded = usePendingTerminalInput.getState().discard(id);
+        if (store.intent?.id !== id && !discarded) return;
+        if (store.intent?.id === id) store.intentFailed(id);
+        reportFailureRef.current(`Could not show that ${target.kind === 'session' ? 'agent' : 'leaf'}: ${error instanceof Error ? error.message : String(error)}${discarded ? '. Input typed while switching could not be delivered.' : ''}`);
       },
     );
   }, [intent, sendDesktopShowSession, sendDesktopShowLeaf]);

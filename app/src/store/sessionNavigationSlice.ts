@@ -12,6 +12,7 @@ import {
   endIntent,
   enterHome,
   focusClaimDelivered,
+  focusIntent,
   historyLanded,
   intentFailed,
   leafMoved,
@@ -86,13 +87,17 @@ export function reconcileSessionNavigation(
   const arrangement = arrangementOf(next);
   const reconciled = arrival ? reconcileArrangement(next, arrangement, arrangementOf(state), arrival) : next;
   const advanced = advanceQueue(reconciled, arrangement, state.navigationQueue, next.navigationQueue, focusOwner());
-  return { ...next, ...advanced };
+  return { ...next, ...focusIntent(advanced, arrangement) };
 }
 
 export function createSessionNavigationActions(
-  set: SetState,
+  write: SetState,
   get: () => SessionStore,
 ): SessionNavigationActions {
+  const set: SetState = (update) => write((state) => {
+    const next = { ...state, ...(typeof update === 'function' ? update(state) : update) };
+    return focusIntent(next, arrangementOf(next));
+  });
   return {
     selectAgent: (sessionId, owner = focusOwner(), announce = true) => {
       set((state) => selectAgent(state, state.navigationProfileId, sessionId, owner, announce));

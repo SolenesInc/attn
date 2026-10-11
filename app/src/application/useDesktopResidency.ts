@@ -1,8 +1,10 @@
 import { useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import type { AppView } from '../navigation/sessionNavigation';
 import { useProfilesStore } from '../store/profiles';
 import type { DesktopWithSessions } from '../utils/desktopViewModels';
 import { useAppSessions } from './useAppSessions';
+import { usePendingTerminalInput } from '../store/pendingTerminalInput';
 
 type EnrichedSession = ReturnType<typeof useAppSessions>['enrichedLocalSessions'][number];
 
@@ -14,13 +16,19 @@ interface Options {
 export function useDesktopResidency({ desktopViews, view, dragSourceDesktopId }: Options) {
   const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
   const previousDesktopId = useProfilesStore((state) => state.previousDesktopId);
+  const pendingTargets = usePendingTerminalInput(useShallow((state) => [...state.pending.values()].map((entry) => entry.target)));
   const mountedDesktopIds = useMemo(() => {
     const mounted = new Set<string>();
     if (currentDesktopId) mounted.add(currentDesktopId);
     if (previousDesktopId) mounted.add(previousDesktopId);
     if (dragSourceDesktopId) mounted.add(dragSourceDesktopId);
+    for (const desktop of desktopViews) {
+      if (pendingTargets.some((target) => target.kind === 'terminal'
+        ? target.desktopId === desktop.id
+        : desktop.sessions.some((session) => session.id === target.id))) mounted.add(desktop.id);
+    }
     return mounted;
-  }, [currentDesktopId, previousDesktopId, dragSourceDesktopId]);
+  }, [currentDesktopId, previousDesktopId, dragSourceDesktopId, desktopViews, pendingTargets]);
   const onScreenSessionIds = useMemo(() => {
     if (view !== 'session' || !currentDesktopId) return new Set<string>();
     const group = desktopViews.find((entry) => entry.id === currentDesktopId);

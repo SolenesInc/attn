@@ -39,12 +39,12 @@
         "note": "Green final fifteen-step scenario on39ca6273d with grid layout popover Escape ordering and corrected setup focus. ATTN_VERDICT durationMs=103844, including cleanup. Native macOS also passed all15 steps with recording (53828ms)."
       },
       "desktop-switching": {
-        "run": "desktop-switching-2026-09-23T23-14-11-901Z",
-        "job": "Local scenario run, pr2desk instance",
-        "recordedAt": "2026-09-23",
-        "seconds": 27.0,
+        "run": "desktop-switching-2026-10-11T17-36-35-110Z",
+        "job": "Local packaged scenario, switch-input isolated instance",
+        "recordedAt": "2026-10-11",
+        "seconds": 20.164,
         "runnerClass": "local macOS",
-        "note": "First green run: switch, send, bounce, overview and a second client. Remeasure on Linux CI."
+        "note": "Green ATTN_VERDICT durationMs=20164 including cleanup. Covers native desktop shortcut followed immediately by typing, outgoing-shell exclusion, bounce, overview, another client, and tile moves. Remeasure on Linux CI."
       },
       "crew-management": {
         "run": "crew-management-2026-10-10T21-35-13-264Z",
@@ -307,7 +307,7 @@
     "tr401-local-claude": 14.2,
     "desktop-close-one-session-keeps-selection": 68.7,
     "session-creation-shortcuts": 22.6,
-    "desktop-switching": 27.0,
+    "desktop-switching": 20.164,
     "desktop-splits": 45.7,
     "worktree-surface": 25.748,
     "crew-management": 55.269,
