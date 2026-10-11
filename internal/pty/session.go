@@ -59,9 +59,10 @@ type terminalQueries struct {
 }
 
 type Session struct {
-	id    string
-	cwd   string
-	agent string
+	id          string
+	lifecycleID string
+	cwd         string
+	agent       string
 
 	resizeMu     sync.Mutex
 	metaMu       sync.RWMutex

@@ -25,8 +25,8 @@ func (d *Daemon) othersRun(sessionID protocol.SessionID, t harness.TerminalID) b
 	return false
 }
 
+// Hold lockTerminalEnds.
 func (d *Daemon) endTerminal(sessionID protocol.SessionID, t harness.TerminalID) (last bool) {
-	defer d.lockTerminalEnds(sessionID)()
 	if !d.othersRun(sessionID, t) {
 		return true
 	}

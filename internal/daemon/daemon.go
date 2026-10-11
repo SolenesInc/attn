@@ -191,6 +191,7 @@ type Daemon struct {
 	recoveredLaunches                 map[protocol.SessionID]*launchWatch
 	terminalExitIntentMu              sync.Mutex
 	terminalExitIntents               map[harness.TerminalID]terminalExitIntent
+	replacedRuntimes                  map[harness.TerminalID][]string
 	prepareSessionTeardownHook        func(string) error
 	teardownMu                        sync.Mutex
 	tearingDown                       map[protocol.SessionID]chan struct{}
@@ -1601,8 +1602,8 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		return false
 	}
 	defer release()
-	if d.consumeTerminalExitIntent(info.ID, terminalExitReload) {
-		d.logf("suppressing exit for reloading terminal %s (runtime replaced in place)", info.ID)
+	if d.exitOfSupersededRuntime(info) {
+		d.logf("ignoring exit of a replaced runtime in terminal %s", info.ID)
 		return false
 	}
 	sessionID, shown := d.shownIn(info.ID)
@@ -1633,8 +1634,15 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 			return false
 		}
 	}
+	unlockEnds := d.lockTerminalEnds(sessionID)
+	if d.exitOfSupersededRuntime(info) {
+		unlockEnds()
+		d.logf("ignoring exit of a replaced runtime in terminal %s", info.ID)
+		return false
+	}
 	stopped := d.consumeTerminalExitIntent(info.ID, terminalExitStop)
 	if !d.endTerminal(sessionID, info.ID) {
+		unlockEnds()
 		d.logf("terminal %s exited; session %s runs on in its other terminals", info.ID, sessionID)
 		return true
 	}
@@ -1649,6 +1657,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 			d.logf("pty backend remove on exit failed for %s: %v", info.ID, err)
 		}
 	}
+	unlockEnds()
 	d.releaseExitedCrewBinding(sessionID)
 
 	d.publishFact(FactSessionPTYExited, string(sessionID), ptyExit{

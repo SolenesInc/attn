@@ -470,7 +470,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 
 func (d *Daemon) spawnSessionRuntime(sessionID protocol.SessionID, opts ptybackend.SpawnOptions) error {
 	opts.DaemonEnv = d.spawnRoutingEnv()
-	err := d.ptyBackend.Spawn(context.Background(), opts)
+	err := d.ptyBackend.Spawn(context.Background(), withLifecycleID(opts))
 	if err == nil {
 		d.sessionInputs().forgetSession(sessionID)
 	}

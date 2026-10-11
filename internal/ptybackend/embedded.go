@@ -153,6 +153,10 @@ func (b *EmbeddedBackend) Remove(_ context.Context, id harness.TerminalID) error
 	return nil
 }
 
+func (b *EmbeddedBackend) RuntimeLifecycle(id harness.TerminalID) (string, bool) {
+	return b.manager.LifecycleID(string(id))
+}
+
 func (b *EmbeddedBackend) TerminalIDs(_ context.Context) []harness.TerminalID {
 	return terminalIDs(b.manager.SessionIDs())
 }
