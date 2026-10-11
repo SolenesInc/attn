@@ -7,7 +7,7 @@ import { useEscapeStack } from '../hooks/useEscapeStack';
 import './ChiefSlot.css';
 
 export function ChiefSlot() {
-  const { chief, chiefActions, chiefSetupOpen, onChiefSettings, desktops, selectedId, onSelectSession, delegates, visualIndexOfDesktop, onOpenCrewMemberDetails } = useSidebarContext();
+  const { chief, chiefActions, chiefSetupOpen, chiefSetupOpenedByUser, onChiefSettings, desktops, selectedId, onSelectSession, delegates, visualIndexOfDesktop, onOpenCrewMemberDetails } = useSidebarContext();
   const [menuOpen, setMenuOpen] = useState(false);
   useEscapeStack(() => setMenuOpen(false), menuOpen);
   if (!chief || !chiefActions) return null;
@@ -33,6 +33,6 @@ export function ChiefSlot() {
       </div>
     </>}
     {!chiefSetupOpen && chief.restartError && <p className="chief-setup-error" role="alert">{chief.restartError}</p>}
-    {chiefSetupOpen && <ChiefSetup key={chief.key} chief={chief} onSave={chiefActions.setUp} onClose={chiefActions.dismiss} onOpenSettings={onChiefSettings} />}
+    {chiefSetupOpen && <ChiefSetup key={chief.key} chief={chief} autoFocus={Boolean(chiefSetupOpenedByUser || !desktops.some(desktop => desktop.sessions.length))} onSave={chiefActions.setUp} onClose={chiefActions.dismiss} onOpenSettings={onChiefSettings} />}
   </div>;
 }

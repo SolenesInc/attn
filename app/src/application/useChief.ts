@@ -106,5 +106,6 @@ export function useChief(input: { liveSessionIds: ReadonlySet<string>; selectSes
     restartError: restartFailed && notice?.tone === 'failed' ? notice.text : undefined,
   } : null;
   const setupOpen = Boolean(member && (editor?.key === member.key ? editor.open : !member.agent));
-  return { view, actions, setupOpen };
+  const setupOpenedByUser = Boolean(member && editor?.key === member.key && editor.open);
+  return { view, actions, setupOpen, setupOpenedByUser };
 }

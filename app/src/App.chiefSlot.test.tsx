@@ -1,7 +1,7 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { crewMember, daemonSession, soloDesktop, defaultProfile } from './test/daemonFixtures';
-import { gesture, pressShortcut, renderApp } from './test/renderApp';
+import { gesture, pressShortcut, renderApp, restartApp } from './test/renderApp';
 
 const member = (values = {}) => crewMember('chief-key', { chief: true, name: 'Captain', ...values });
 const available = { claude_available: 'true', codex_available: 'true', copilot_available: 'true', pi_available: 'true', claude_cap_launch_instructions: 'true', codex_cap_launch_instructions: 'true', copilot_cap_launch_instructions: 'false', pi_cap_launch_instructions: 'false', new_session_agent: 'claude' };
@@ -10,6 +10,28 @@ const phase = () => screen.getByTestId('chief-slot').getAttribute('data-chief-ph
 
 for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : 'desktop'} flow`, () => {
   const settings = { ...available, queue_mode_enabled: String(queue) };
+  it('keeps a live terminal focused when setup appears and catalogs refresh, but focuses an explicit setup request', async () => {
+    const desktop = soloDesktop('agent');
+    const options = { initialState: { settings, crew: [member()], sessions: [daemonSession('agent', { state: 'idle' })], profiles: [defaultProfile(desktop.id)], desktops: [desktop] } };
+    const running = await renderApp(options);
+    const { daemon } = running;
+    await daemon.idle();
+    const terminal = screen.getByRole('textbox', { name: 'Terminal input' });
+    expect(screen.getByTestId('chief-setup').contains(document.activeElement)).toBe(false);
+    terminal.focus();
+    await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { ...settings, claude_executable: '/updated-mock' } }));
+    expect(terminal).toHaveFocus();
+    await gesture(daemon, () => fireEvent.click(slot().getByRole('button', { name: 'Set up Captain' })));
+    expect(slot().getByRole('radio', { name: /Claude/ })).toHaveFocus();
+    await gesture(daemon, () => fireEvent.keyDown(slot().getByRole('radio', { name: /Claude/ }), { key: 'Enter' }));
+    expect(slot().getByRole('radio', { name: /Opus 5.5/ })).toHaveFocus();
+    terminal.focus();
+    await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { ...settings, claude_executable: '/updated-again' } }));
+    expect(terminal).toHaveFocus();
+    const reconnected = await restartApp(running, options);
+    await reconnected.daemon.idle();
+    expect(screen.getByTestId('chief-setup').contains(document.activeElement)).toBe(false);
+  });
   it('sets up with two Enters, sends one complete route and focuses the returned session', async () => {
     const current = member();
     const { daemon } = await renderApp({ initialState: { settings, crew: [current] } });

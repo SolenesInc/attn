@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys, queueDaemonSettingRestore } from './common.mjs';
+import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys, queueDaemonSettingRestore, relaunchAppAndConnect } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -25,6 +25,7 @@ let profile;
 let previousProfile;
 let chief;
 let firstDay;
+let liveAgent;
 let webkitBaseline;
 const state = () => client.request('chief_slot_get_state');
 const waitDom = (selector, extra = {}) => client.request('dom_wait', { selector, timeoutMs: 15_000, ...extra });
@@ -61,6 +62,7 @@ runner.registerCleanup('restore_profile', async () => {
     await driver.pressKey('d', { control: true });
     await waitDom('[data-testid="chief-slot"][data-chief-phase="asleep"]');
   }
+  if (liveAgent) await observer.unregisterMatchingSessions(session => session.id === liveAgent);
   if (previousProfile) await observer.profileCommand('profile_select', { profile_id: previousProfile });
   if (profile) {
     const current = (await client.request('get_state')).arrangement.profiles.find(candidate => candidate.id === profile.id);
@@ -105,6 +107,19 @@ try {
     await pressShortcutKeys(client, driver, 'session.toggleSidebar');
     await sampleIdle('collapsed-baseline');
     await pressShortcutKeys(client, driver, 'session.toggleSidebar');
+  });
+  await runner.step('restored_live_terminal_keeps_focus_with_automatic_setup', async () => {
+    const cwd = path.join(runner.sessionDir, 'live-agent');
+    fs.mkdirSync(cwd, { recursive: true });
+    writeMockAgentFixture(cwd, { version: 1, agent: 'claude', turns: [] });
+    liveAgent = await createSessionAndWaitForInitialPane({ client, observer, cwd, label: 'Chief focus witness', agent: 'claude' });
+    await client.request('select_session', { sessionId: liveAgent });
+    await waitDom('[data-session-visible="1"] [aria-label="Terminal input"]', { focused: true });
+    await relaunchAppAndConnect(client, observer);
+    await driver.activateApp();
+    await waitDom('[data-session-visible="1"] [aria-label="Terminal input"]', { focused: true });
+    await waitDom('[data-testid="chief-slot"][data-chief-phase="unconfigured"]');
+    runner.writeJson('restored-terminal-focus.json', { chief: await state(), focus: await client.request('dom_active_element') });
   });
   await runner.step('two_enters_wake_and_focus', async () => {
     await click('[data-testid="chief-setup"] [role="radiogroup"][aria-label="Chief harness"] [role="radio"]:first-child');

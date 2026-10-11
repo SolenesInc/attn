@@ -5,8 +5,9 @@ import { routeFromStored, useHarnessRoute, type HarnessRoute } from '../hooks/us
 import type { ChiefView } from '../application/useChief';
 import { chiefHarnesses, chiefRouteRules } from './chiefRoute';
 
-export function ChiefSetup({ chief, onSave, onClose, onOpenSettings }: {
+export function ChiefSetup({ chief, autoFocus, onSave, onClose, onOpenSettings }: {
   chief: ChiefView;
+  autoFocus: boolean;
   onSave: (route: HarnessRoute, restart?: boolean) => void;
   onClose: () => void;
   onOpenSettings?: () => void;
@@ -26,11 +27,16 @@ export function ChiefSetup({ chief, onSave, onClose, onOpenSettings }: {
   const models = view.options().filter(option => option.stored || (option.model && option.model.access !== 'unsupported'));
   const showHarness = step === 'harness' && harnesses.length > 1;
   const root = useRef<HTMLDivElement>(null);
+  const focusRequested = useRef(autoFocus);
+  useLayoutEffect(() => { focusRequested.current = autoFocus; }, [autoFocus]);
+  const changeStep = (next: 'harness' | 'model') => { focusRequested.current = true; setStep(next); };
   useLayoutEffect(() => {
-    const selected = root.current?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]');
-    const first = root.current?.querySelector<HTMLElement>('[role="radio"], .chief-setup-primary, .chief-setup-buttons button');
-    (selected || first)?.focus();
-  }, [showHarness, harnesses.length, view.catalog]);
+    if (!focusRequested.current && !root.current?.contains(document.activeElement)) return;
+    const selected = root.current?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]:not(:disabled)');
+    const first = root.current?.querySelector<HTMLElement>('[role="radio"]:not(:disabled), .chief-setup-primary:not(:disabled), .chief-setup-buttons button:not(:disabled)');
+    const target = selected || first;
+    if (target) { target.focus(); focusRequested.current = false; }
+  }, [autoFocus, step, showHarness, harnesses.length, view.catalog]);
   const busy = ['configuring', 'waking', 'sleeping'].includes(chief.phase);
   const canSave = !busy && Boolean(harness && value.model && !view.loading && !view.error);
   const submit = (restart = false) => { if (canSave) onSave(value, restart); };
@@ -45,7 +51,7 @@ export function ChiefSetup({ chief, onSave, onClose, onOpenSettings }: {
     if (next >= 0 && buttons[next]) { event.preventDefault(); buttons[next].click(); buttons[next].focus(); }
     if (event.key === 'Enter') {
       event.preventDefault();
-      if (kind === 'harness') setStep('model');
+      if (kind === 'harness') changeStep('model');
       else if (kind === 'model') submit();
     }
   };
@@ -68,9 +74,9 @@ export function ChiefSetup({ chief, onSave, onClose, onOpenSettings }: {
           <span className="chief-radio-mark">{harness?.id === candidate.id ? '●' : '○'}</span><span>{candidate.name}</span><kbd>{index + 1}</kbd>
         </button>)}
       </div>
-      <button type="button" className="chief-setup-primary" onClick={() => setStep('model')}>Continue <kbd>⏎</kbd></button>
+      <button type="button" className="chief-setup-primary" onClick={() => changeStep('model')}>Continue <kbd>⏎</kbd></button>
     </> : <>
-      <div className="chief-chosen-harness"><span>{harness.name}</span>{harnesses.length > 1 ? <button type="button" onClick={() => setStep('harness')}>change</button> : <small>the only one installed</small>}</div>
+      <div className="chief-chosen-harness"><span>{harness.name}</span>{harnesses.length > 1 ? <button type="button" onClick={() => changeStep('harness')}>change</button> : <small>the only one installed</small>}</div>
       <div role="radiogroup" aria-label="Chief model" onKeyDown={event => moveRadio(event, 'model')}>
         {models.map(({ model, stored, label }, index) => {
           const checked = stored || (value.model === model?.id && value.provider === model?.provider);

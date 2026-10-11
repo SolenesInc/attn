@@ -130,6 +130,7 @@ export function AppSidebar() {
       chief={chief.view}
       chiefActions={chief.actions}
       chiefSetupOpen={chief.setupOpen}
+      chiefSetupOpenedByUser={chief.setupOpenedByUser}
       onChiefSettings={() => { void settingsModalRef.current?.selectSection('agents'); setSettingsOpen(true); }}
       crew={crew}
       onWakeCrewMember={member => member === chief.view?.key ? chief.actions.wake() : handleWakeCrewMember(member)}

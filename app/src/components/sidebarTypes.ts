@@ -54,6 +54,7 @@ export interface SidebarProps {
   chief?: ChiefView | null;
   chiefActions?: ChiefActions;
   chiefSetupOpen?: boolean;
+  chiefSetupOpenedByUser?: boolean;
   onChiefSettings?: () => void;
   desktops: SidebarDesktop[];
   visualIndexByDesktopId: Map<string, number>;
