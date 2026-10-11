@@ -183,14 +183,16 @@ runner.registerCleanup('restore_queue_mode', () => (
 runner.registerCleanup('remove_member_homes', () => {
   for (const home of [awakeHome, asleepHome, historyHome]) fs.rmSync(home, { recursive: true, force: true });
 });
-runner.registerCleanup('delete_members_and_close_days', () => {
-  const days = [...observer.sessionsById.values()]
-    .filter((session) => [awake, asleep, history].includes(session.crew_member) || session.id === firstSession || session.id === successor)
-    .map((session) => session.id);
+runner.registerCleanup('delete_members_and_close_days', async () => {
+  const days = membersRegistered
+    ? json(['crew', 'list', '--json']).filter((member) => [awake, asleep, history].includes(member.key))
+      .map((member) => member.binding_session).filter(Boolean)
+    : [];
   if (membersRegistered) {
     for (const member of [awake, asleep, history]) runAttn(['doc', 'delete', 'core/crew', 'members', member]);
   }
-  return Promise.all(days.map((sessionId) => client.request('close_session', { sessionId })));
+  await Promise.all(days.map((sessionId) => client.request('close_session', { sessionId })));
+  runner.writeJson('cleanup-days.json', { closed: days, sessions: json(['session', 'list', '--json']) });
 });
 runner.registerCleanup('archive_crew_files', () => {
   if (fs.existsSync(historyHome)) fs.chmodSync(historyHome, 0o755);
