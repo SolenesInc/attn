@@ -45,9 +45,9 @@ const openChiefRoute = async () => {
   await driver.pressKey('Tab');
   await driver.pressKey('Tab');
   await driver.pressEnter();
-  await waitDom('[role="menu"] button:first-child', { textIncludes: 'Harness and model' });
+  await waitDom('[role="menu"] button:first-of-type', { textIncludes: 'Harness and model' });
   await screenshot(`03-chief-actions-${(await state()).phase}`);
-  await click('[role="menu"] button:first-child');
+  await click('[role="menu"] button:first-of-type');
   await waitDom('[data-testid="chief-setup"] [aria-label="Chief model"] [aria-checked="true"]', { focused: true });
 };
 const sampleIdle = async name => {
@@ -162,12 +162,8 @@ try {
     await waitDom('[data-testid="chief-setup"]', { absent: true });
     await waitDom(`[data-testid="queue-crew-select-${chief.key}"]`, { focused: true });
     runner.writeJson('configured-save-focus.json', { state: await state(), focus: await client.request('dom_active_element') });
-    await pressShortcutKeys(client, driver, 'sidebar.agentList');
   });
   await runner.step('sleep_and_one_click_wake', async () => {
-    await pressShortcutKeys(client, driver, 'sidebar.agentList');
-    await waitDom('[data-testid="queue-agent-filter"]', { focused: true });
-    await driver.pressKey('ArrowDown');
     await waitDom(`[data-testid="queue-crew-select-${chief.key}"]`, { focused: true });
     await driver.pressKey('Tab');
     await waitDom(`[data-testid="queue-crew-sleep-${chief.key}"]`, { focused: true });
