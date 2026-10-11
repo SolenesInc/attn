@@ -1,0 +1,3 @@
+kind: internal
+area: pull requests
+change: Avoid rewriting unchanged pull request content and watch cursors during background checks.

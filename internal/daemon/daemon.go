@@ -3443,7 +3443,10 @@ func (d *Daemon) storePRPoll(allPRs []*protocol.PR, skippedHosts map[string]bool
 	}
 
 	previousPRs := d.store.ListPRs("")
-	d.store.SetPRs(allPRs)
+	if err := d.store.SetPRs(allPRs); err != nil {
+		d.logf("PR poll: saving results: %v", err)
+		return
+	}
 
 	currentPRs := d.store.ListPRs("")
 	d.publishPRSetChanges(previousPRs, currentPRs)
@@ -3772,15 +3775,22 @@ func (d *Daemon) doRefreshPRsWithResult() error {
 
 	// The host loop stops early once stopping, so saving its set would drop the hosts it skipped.
 	var currentPRs []*protocol.PR
+	var saveErr error
 	if !d.life.Do("doRefreshPRs", func() {
 		previousPRs := d.store.ListPRs("")
-		d.store.SetPRs(allPRs)
+		saveErr = d.store.SetPRs(allPRs)
+		if saveErr != nil {
+			return
+		}
 		currentPRs = d.store.ListPRs("")
 		d.publishPRSetChanges(previousPRs, currentPRs)
 	}) {
 		return errDaemonStopping
 	}
 
+	if saveErr != nil {
+		return fmt.Errorf("saving PR refresh: %w", saveErr)
+	}
 	d.logf("PR refresh: %d PRs fetched", len(currentPRs))
 	for host, observation := range observedByHost {
 		d.observeGitHubReviewRequests(host, observation.prs, observation.observedAt)
