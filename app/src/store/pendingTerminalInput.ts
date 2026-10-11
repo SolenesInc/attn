@@ -1,53 +1,52 @@
 import { create } from 'zustand';
 
-export type PendingInputTarget =
-  | { kind: 'agent'; id: string }
-  | { kind: 'terminal'; id: string; desktopId: string };
-
 const retainedEvents = new WeakSet<Event>();
 export const isRetainedTerminalEvent = (event: Event): boolean => retainedEvents.has(event);
-const targetKey = (target: PendingInputTarget) => `${target.kind}:${target.id}`;
 
 interface PendingTerminalInput {
-  pending: Map<string, { target: PendingInputTarget; events: Array<{ intentId: number; event: Event }> }>;
+  pending: Map<string, Array<{ intentId: number; event: Event }>>;
   failure: { message: string } | null;
-  append: (target: PendingInputTarget, intentId: number, event: Event) => void;
+  append: (sessionId: string, intentId: number, event: Event) => void;
   discard: (intentId: number, reason?: string) => boolean;
-  deliver: (target: PendingInputTarget, element: HTMLElement) => void;
+  prune: (liveSessionIds: ReadonlySet<string>) => void;
+  deliver: (sessionId: string, element: HTMLElement) => void;
 }
 
 export const usePendingTerminalInput = create<PendingTerminalInput>((set, get) => ({
   pending: new Map(),
   failure: null,
-  append: (target, intentId, event) => {
-    const key = targetKey(target);
-    const entry = get().pending.get(key);
+  append: (sessionId, intentId, event) => {
+    const entry = get().pending.get(sessionId);
     if (entry) {
-      entry.events.push({ intentId, event });
+      entry.push({ intentId, event });
       return;
     }
-    set((state) => ({ pending: new Map(state.pending).set(key, { target, events: [{ intentId, event }] }) }));
+    set((state) => ({ pending: new Map(state.pending).set(sessionId, [{ intentId, event }]) }));
   },
   discard: (intentId, reason = 'The selection failed') => {
     let discarded = false;
     set((state) => {
       const pending = new Map([...state.pending].flatMap(([key, entry]) => {
-        const remaining = entry.events.filter((entry) => entry.intentId !== intentId);
-        if (remaining.length !== entry.events.length) discarded = true;
-        return remaining.length ? [[key, { ...entry, events: remaining }] as const] : [];
+        const remaining = entry.filter((entry) => entry.intentId !== intentId);
+        if (remaining.length !== entry.length) discarded = true;
+        return remaining.length ? [[key, remaining] as const] : [];
       }));
       return { pending, failure: discarded ? { message: `Input typed while switching could not be delivered: ${reason}` } : state.failure };
     });
     return discarded;
   },
-  deliver: (target, element) => {
-    const key = targetKey(target);
-    const entry = get().pending.get(key);
+  prune: (liveSessionIds) => set((state) => {
+    const pending = new Map([...state.pending].filter(([sessionId]) => liveSessionIds.has(sessionId)));
+    if (pending.size === state.pending.size) return state;
+    return { pending, failure: { message: 'Input typed while switching could not be delivered: Its terminal closed' } };
+  }),
+  deliver: (sessionId, element) => {
+    const entry = get().pending.get(sessionId);
     if (!entry) return;
-    for (const { event } of entry.events) element.dispatchEvent(event);
+    for (const { event } of entry) element.dispatchEvent(event);
     set((state) => {
       const pending = new Map(state.pending);
-      pending.delete(key);
+      pending.delete(sessionId);
       return { pending };
     });
   },

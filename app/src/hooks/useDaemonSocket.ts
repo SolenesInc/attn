@@ -99,6 +99,7 @@ import { resolveDaemonWebSocketURL, type DaemonEndpointInstance } from '../utils
 import { handleProfileDaemonEvent, syncNavigationFromProfiles, type MigrationResult, type ProfileActionResult } from './daemonProfileEvents';
 import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
+import { usePendingTerminalInput } from '../store/pendingTerminalInput';
 import type { Desktop } from '../types/generated';
 import { handleBusDaemonEvent, type BusStatus } from './daemonBusEvents';
 import {
@@ -810,6 +811,11 @@ export function useDaemonSocket({
   // A pane's terminal has its own id; panes from before terminal ids carry their session's.
   const pruneAttachedPtySessions = useCallback((sessions: DaemonSession[]) => {
     const attachableIDs = new Set<string>(sessions.map((session) => session.id));
+    const navigation = useSessionStore.getState();
+    if (navigation.intent?.target.kind === 'session' && !attachableIDs.has(navigation.intent.target.sessionId)) {
+      navigation.intentFailed(navigation.intent.id, 'Its terminal closed');
+    }
+    usePendingTerminalInput.getState().prune(attachableIDs);
     for (const desktop of useProfilesStore.getState().desktops) {
       for (const pane of desktop.panes) attachableIDs.add(pane.runtime_id);
     }

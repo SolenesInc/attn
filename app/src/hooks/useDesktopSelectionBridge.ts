@@ -6,7 +6,7 @@ import { useSessionStore } from '../store/sessions';
 import { activeLeafOf, sameLeaf, sessionOfLeaf, type ActiveLeaf } from '../navigation/activeLeaf';
 import { displayedArrangement } from '../navigation/sessionNavigation';
 import { arrangementOf } from '../store/sessionNavigationSlice';
-import { isRetainedTerminalEvent, retainTerminalEvent, usePendingTerminalInput, type PendingInputTarget } from '../store/pendingTerminalInput';
+import { isRetainedTerminalEvent, retainTerminalEvent, usePendingTerminalInput } from '../store/pendingTerminalInput';
 import { removeCompositionTextNodes } from '../ghostty/input';
 
 export function activeLeafIn(state: Pick<ProfilesState, 'selectedProfileId' | 'currentDesktopId' | 'desktops'>): ActiveLeaf | null {
@@ -93,22 +93,18 @@ export function useDesktopSelectionBridge(reportFailure: (message: string) => vo
   }), []);
   useEffect(() => {
     const retain = (event: Event) => {
-      const intent = useSessionStore.getState().intent;
+      const navigation = useSessionStore.getState();
+      const intent = navigation.intent;
       if (event.defaultPrevented || isRetainedTerminalEvent(event)) return;
       const target = event.target instanceof HTMLElement ? event.target : null;
       const terminal = target?.closest<HTMLElement>('.terminal-container');
       if (target?.closest('input, textarea, select, [contenteditable="true"]') && !terminal) return;
-      let recipient: PendingInputTarget | null = null;
-      if (intent?.target.kind === 'session' && !intent.focusRequested) {
-        recipient = { kind: 'agent', id: intent.target.sessionId };
-      } else if (terminal?.dataset.terminalInputReady === '0') {
-        const { terminalKind, terminalSessionId, terminalRuntimeId } = terminal.dataset;
-        if (terminalKind === 'agent' && terminalSessionId) recipient = { kind: 'agent', id: terminalSessionId };
-        else if (terminalRuntimeId) recipient = { kind: 'terminal', id: terminalRuntimeId, desktopId: terminal.closest<HTMLElement>('[data-desktop-id]')?.dataset.desktopId ?? '' };
-      }
-      if (!recipient) return;
+      const sessionId = intent?.target.kind === 'session' && !intent.focusRequested
+        ? intent.target.sessionId
+        : terminal?.dataset.terminalInputReady === '0' ? terminal.dataset.terminalSessionId : null;
+      if (!sessionId || !navigation.navigationSessions.some((session) => session.id === sessionId)) return;
       const selectionId = intent && ['session', 'leaf', 'desktop'].includes(intent.target.kind) ? intent.id : 0;
-      usePendingTerminalInput.getState().append(recipient, selectionId, retainTerminalEvent(event));
+      usePendingTerminalInput.getState().append(sessionId, selectionId, retainTerminalEvent(event));
       event.preventDefault();
       event.stopPropagation();
       if (event.type === 'compositionend' && target?.closest('.terminal-container')) removeCompositionTextNodes(target);

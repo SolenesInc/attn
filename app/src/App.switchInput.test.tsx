@@ -7,6 +7,28 @@ import { gesture, pressShortcut } from './test/renderApp';
 import type { CommandMessage } from './test/protocol';
 
 describe('typing while a selection is awaiting the daemon', () => {
+  it('releases a closed target’s retained input and desktop after its selection already succeeded', async () => {
+    const { daemon } = await openAttachedTerminals({
+      sessions: ['s1', 's2', 's3', 's4'].map((id) => daemonSession(id, { state: 'idle' })),
+      desktops: ['s1', 's2', 's3', 's4'].map((id) => soloDesktop(id)),
+    });
+    const attaches: CommandMessage<'attach_session'>[] = [];
+    daemon.on('attach_session', (command) => {
+      if (command.id === 's2') { attaches.push(command); return undefined; }
+      return { event: 'attach_result', id: command.id, success: true, cols: 80, rows: 24, running: true };
+    });
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Open s2' })));
+    await gesture(daemon, () => fireEvent.keyDown(document.activeElement!, { key: 'x', code: 'KeyX' }));
+    for (const id of ['s3', 's4']) await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: `Open ${id}` })));
+    expect(document.querySelector('[data-session-terminal-desktop="desktop-s2"]')).toBeInTheDocument();
+    await gesture(daemon, () => daemon.emit({ event: 'session_unregistered', session: daemonSession('s2', { state: 'idle' }) }));
+    expect(screen.getByText(/Input typed while switching could not be delivered: Its terminal closed/)).toBeInTheDocument();
+    expect(document.querySelector('[data-session-terminal-desktop="desktop-s2"]')).not.toBeInTheDocument();
+    await gesture(daemon, () => daemon.replyTo(attaches[0], { event: 'attach_result', id: 's2', success: true, cols: 80, rows: 24, running: true }));
+    expect(daemon.sentOf('pty_input')).toEqual([]);
+    expect(document.activeElement?.closest('[data-pane-id]')).toHaveAttribute('data-pane-id', 'pane-s4');
+  });
+
   it('discards a failed cold desktop selection’s input before its attachment finishes', async () => {
     const { daemon } = await openAttachedTerminals({
       sessions: ['s1', 's2'].map((id) => daemonSession(id, { state: 'idle' })),

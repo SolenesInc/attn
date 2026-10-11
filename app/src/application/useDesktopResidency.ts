@@ -16,19 +16,17 @@ interface Options {
 export function useDesktopResidency({ desktopViews, view, dragSourceDesktopId }: Options) {
   const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
   const previousDesktopId = useProfilesStore((state) => state.previousDesktopId);
-  const pendingTargets = usePendingTerminalInput(useShallow((state) => [...state.pending.values()].map((entry) => entry.target)));
+  const pendingSessionIds = usePendingTerminalInput(useShallow((state) => [...state.pending.keys()]));
   const mountedDesktopIds = useMemo(() => {
     const mounted = new Set<string>();
     if (currentDesktopId) mounted.add(currentDesktopId);
     if (previousDesktopId) mounted.add(previousDesktopId);
     if (dragSourceDesktopId) mounted.add(dragSourceDesktopId);
     for (const desktop of desktopViews) {
-      if (pendingTargets.some((target) => target.kind === 'terminal'
-        ? target.desktopId === desktop.id
-        : desktop.sessions.some((session) => session.id === target.id))) mounted.add(desktop.id);
+      if (desktop.sessions.some((session) => pendingSessionIds.includes(session.id))) mounted.add(desktop.id);
     }
     return mounted;
-  }, [currentDesktopId, previousDesktopId, dragSourceDesktopId, desktopViews, pendingTargets]);
+  }, [currentDesktopId, previousDesktopId, dragSourceDesktopId, desktopViews, pendingSessionIds]);
   const onScreenSessionIds = useMemo(() => {
     if (view !== 'session' || !currentDesktopId) return new Set<string>();
     const group = desktopViews.find((entry) => entry.id === currentDesktopId);

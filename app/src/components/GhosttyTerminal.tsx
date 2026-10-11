@@ -2275,12 +2275,8 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         if (!active || terminalRef.current !== terminal) return;
         inputReadyRef.current = true;
         container.dataset.terminalInputReady = '1';
-        const meta = runtimeMetaRef.current;
-        if (meta?.paneKind === 'agent' && meta.sessionId) {
-          usePendingTerminalInput.getState().deliver({ kind: 'agent', id: meta.sessionId }, container);
-        } else if (meta?.runtimeId) {
-          usePendingTerminalInput.getState().deliver({ kind: 'terminal', id: meta.runtimeId, desktopId: container.closest<HTMLElement>('[data-desktop-id]')?.dataset.desktopId ?? '' }, container);
-        }
+        const sessionId = runtimeMetaRef.current?.sessionId;
+        if (sessionId) usePendingTerminalInput.getState().deliver(sessionId, container);
         if (recoveredModelFault) {
           modelRecoveryPendingRef.current = false;
         }
@@ -3427,8 +3423,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         data-terminal-renderer="ghostty-webgl"
         data-terminal-input-ready={inputReadyRef.current ? '1' : '0'}
         data-terminal-session-id={runtimeLogMeta?.sessionId}
-        data-terminal-runtime-id={runtimeLogMeta?.runtimeId}
-        data-terminal-kind={runtimeLogMeta?.paneKind}
         tabIndex={0}
         contentEditable
         suppressContentEditableWarning
