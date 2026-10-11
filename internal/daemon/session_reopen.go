@@ -7,13 +7,11 @@ import (
 	"net"
 	"os"
 	"strings"
-	"syscall"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/garden"
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/store"
 )
 
 const (
@@ -129,7 +127,6 @@ func (d *Daemon) decideReopenPlace(
 	case directoryPresent:
 		if !conversation {
 			verdict.Reason = conversationReason
-			verdict.Actions = []protocol.SessionReopenAction{protocol.SessionReopenActionStartFreshSamePlace}
 			return nil
 		}
 		verdict.Reopenable = true
@@ -144,7 +141,6 @@ func (d *Daemon) decideReopenPlace(
 		return d.decideMissingDirectory(ctx, verdict, conversation, conversationReason, gitView)
 	case directoryUnknown:
 		verdict.Reason = fmt.Sprintf("session %s saved no directory to reopen in", verdict.SessionID)
-		verdict.Actions = []protocol.SessionReopenAction{protocol.SessionReopenActionStartFreshElsewhere}
 		return nil
 	default:
 		verdict.Reason = "its directory cannot be opened"
@@ -166,7 +162,6 @@ func (d *Daemon) decideMissingDirectory(
 
 	if repo == "" || branch == "" || !targetOK {
 		verdict.Reason = gone + ", and it was not a worktree attn can put back"
-		verdict.Actions = []protocol.SessionReopenAction{protocol.SessionReopenActionStartFreshElsewhere}
 		return nil
 	}
 	verdict.RecreatePath = target
@@ -184,12 +179,10 @@ func (d *Daemon) decideMissingDirectory(
 
 	if !conversation {
 		verdict.Reason = conversationReason + ", and " + gone
-		verdict.Actions = d.freshActionsForMissingDirectory(verdict, inspection)
 		return nil
 	}
 	if inspection.AlreadyCheckedOut {
 		verdict.Reason = fmt.Sprintf("%s, and branch %s is checked out somewhere else already", gone, branch)
-		verdict.Actions = []protocol.SessionReopenAction{protocol.SessionReopenActionStartFreshElsewhere}
 		return nil
 	}
 
@@ -203,25 +196,8 @@ func (d *Daemon) decideMissingDirectory(
 		verdict.Actions = []protocol.SessionReopenAction{protocol.SessionReopenActionFetchRecreateAndReopen}
 	default:
 		verdict.BranchState, verdict.Reason = d.goneBranchVerdict(verdict, gone, branch)
-		verdict.Actions = []protocol.SessionReopenAction{
-			protocol.SessionReopenActionStartFreshDefaultBranch,
-			protocol.SessionReopenActionStartFreshElsewhere,
-		}
 	}
 	return nil
-}
-
-func (d *Daemon) freshActionsForMissingDirectory(
-	verdict *sessionReopenVerdict, inspection branchInspection,
-) []protocol.SessionReopenAction {
-	if inspection.State == branchStateGone && !inspection.AlreadyCheckedOut {
-		verdict.BranchState, _ = d.goneBranchVerdict(verdict, "", strings.TrimSpace(verdict.Execution.Branch))
-		return []protocol.SessionReopenAction{
-			protocol.SessionReopenActionStartFreshDefaultBranch,
-			protocol.SessionReopenActionStartFreshElsewhere,
-		}
-	}
-	return []protocol.SessionReopenAction{protocol.SessionReopenActionStartFreshElsewhere}
 }
 
 func (d *Daemon) goneBranchVerdict(verdict *sessionReopenVerdict, gone, branch string) (string, string) {
@@ -314,19 +290,19 @@ type sessionReopenOutcome struct {
 }
 
 func (d *Daemon) reopenSession(
-	sessionID protocol.SessionID, action protocol.SessionReopenAction, directory string,
+	sessionID protocol.SessionID, action protocol.SessionReopenAction,
 ) (*sessionReopenOutcome, error) {
 	var outcome *sessionReopenOutcome
 	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 		var reopenErr error
-		outcome, reopenErr = d.reopenSessionProtected(protection, sessionID, action, directory)
+		outcome, reopenErr = d.reopenSessionProtected(protection, sessionID, action)
 		return reopenErr
 	})
 	return outcome, err
 }
 
 func (d *Daemon) reopenSessionProtected(
-	protection foregroundCleanupProtection, sessionID protocol.SessionID, action protocol.SessionReopenAction, directory string,
+	protection foregroundCleanupProtection, sessionID protocol.SessionID, action protocol.SessionReopenAction,
 ) (*sessionReopenOutcome, error) {
 	sessionID = protocol.TrimID(sessionID)
 	if sessionID == "" {
@@ -361,7 +337,7 @@ func (d *Daemon) reopenSessionProtected(
 	if !verdict.offers(action) {
 		return nil, &reopenRefusedError{verdict: &verdict, action: action}
 	}
-	return d.performReopenLocked(protection, &verdict, action, directory)
+	return d.performReopenLocked(protection, &verdict, action)
 }
 
 type reopenRefusedError struct {
@@ -389,7 +365,6 @@ func (d *Daemon) performReopenLocked(
 	protection foregroundCleanupProtection,
 	verdict *sessionReopenVerdict,
 	action protocol.SessionReopenAction,
-	directory string,
 ) (*sessionReopenOutcome, error) {
 	profileID := verdict.ProfileID
 	if _, err := d.liveLaunchProfile(profileID); err != nil {
@@ -401,48 +376,30 @@ func (d *Daemon) performReopenLocked(
 		Title:     verdict.Entry.Label,
 		ProfileID: profileID,
 	}
-	rollback := d.newDelegationRollback()
 	created := ""
 
 	switch action {
 	case protocol.SessionReopenActionReopen:
-	case protocol.SessionReopenActionStartFreshSamePlace:
-		plan.FreshConversation = true
-	case protocol.SessionReopenActionStartFreshElsewhere:
-		plan.FreshConversation = true
-		if strings.TrimSpace(directory) == "" {
-			return nil, fmt.Errorf("start_fresh_elsewhere needs a directory to start in; pass --cwd <path>")
-		}
-		chosen, err := validateDelegationDirectory(strings.TrimSpace(directory))
-		if err != nil {
-			return nil, fmt.Errorf("start_fresh_elsewhere needs a directory to start in: %w", err)
-		}
-		plan.Directory = chosen
 	case protocol.SessionReopenActionRecreateWorktreeAndReopen,
-		protocol.SessionReopenActionFetchRecreateAndReopen,
-		protocol.SessionReopenActionStartFreshDefaultBranch:
-		if action == protocol.SessionReopenActionStartFreshDefaultBranch {
-			plan.FreshConversation = true
-		}
+		protocol.SessionReopenActionFetchRecreateAndReopen:
 		path, err := d.recreateReopenWorktreeProtected(protection, verdict, action)
 		if err != nil {
 			return nil, err
 		}
 		created = path
-		rollback.onWorktreeCreated(path)
 		plan.Directory = reopenDirectoryInsideWorktree(path, verdict.Execution)
 	default:
 		return nil, fmt.Errorf("%q is not a reopen action", action)
 	}
 
-	if created != "" && !plan.FreshConversation {
+	if created != "" {
 		execution := verdict.Execution
 		execution.Cwd = plan.Directory
 		if available, reason := d.reopenConversation(execution, false); !available {
-			return nil, rollback.fail(protection, fmt.Errorf("cannot reopen after restoring the worktree: %s", reason))
+			return nil, fmt.Errorf("cannot reopen after restoring the worktree: %s", reason)
 		}
 	}
-	outcome, err := d.reopenSessionRuntimeProtected(protection, plan, rollback)
+	outcome, err := d.reopenSessionRuntimeProtected(protection, plan)
 	if err != nil {
 		return nil, err
 	}
@@ -451,6 +408,7 @@ func (d *Daemon) performReopenLocked(
 		ProfileID:       outcome.ProfileID,
 		Directory:       plan.Directory,
 		Action:          action,
+		AlreadyRunning:  outcome.AlreadyRunning,
 		WorktreeCreated: created,
 	}, nil
 }
@@ -472,7 +430,7 @@ func (d *Daemon) recreateReopenWorktreeProtected(
 	verdict *sessionReopenVerdict,
 	action protocol.SessionReopenAction,
 ) (string, error) {
-	plan, err := d.reopenWorktreeProviderPlan(protection.Context(), verdict, action)
+	plan, err := d.reopenWorktreeProviderPlan(verdict, action)
 	if err != nil {
 		return "", err
 	}
@@ -513,7 +471,6 @@ type reopenWorktreePlan struct {
 }
 
 func (d *Daemon) reopenWorktreeProviderPlan(
-	ctx context.Context,
 	verdict *sessionReopenVerdict,
 	action protocol.SessionReopenAction,
 ) (reopenWorktreePlan, error) {
@@ -530,16 +487,6 @@ func (d *Daemon) reopenWorktreeProviderPlan(
 			return reopenWorktreePlan{}, fmt.Errorf("no remote carries branch %s any more", plan.branch)
 		}
 		plan.startingFrom = verdict.Inspection.Remote + "/" + plan.branch
-	case protocol.SessionReopenActionStartFreshDefaultBranch:
-		base, err := gitValue(ctx, d.gitExecution(), gitTask{
-			Kind: gitTaskReopen, Lane: gitInteractive,
-		}, func(runCtx context.Context, client *attngit.Client) (string, error) {
-			return client.GetDefaultBranch(runCtx, plan.repository)
-		})
-		if err != nil || strings.TrimSpace(base) == "" {
-			return reopenWorktreePlan{}, fmt.Errorf("%s has no default branch to start from: %w", plan.repository, err)
-		}
-		plan.startingFrom = base
 	default:
 		return reopenWorktreePlan{}, fmt.Errorf("%q does not recreate a worktree", action)
 	}
@@ -563,20 +510,16 @@ func mutateReopenWorktreeAdmitted(
 		return plan.branch, client.CreateWorktreeFromBranch(ctx, plan.repository, plan.startingFrom, plan.path)
 	case protocol.SessionReopenActionFetchRecreateAndReopen:
 		return client.CreateWorktreeFromRemoteBranch(ctx, plan.repository, plan.startingFrom, plan.path)
-	case protocol.SessionReopenActionStartFreshDefaultBranch:
-		return plan.branch, client.CreateWorktreeFromPoint(ctx, plan.repository, plan.branch, plan.path, plan.startingFrom)
 	default:
 		return "", fmt.Errorf("%q does not recreate a worktree", action)
 	}
 }
 
 type sessionReopenPlan struct {
-	SessionID         protocol.SessionID
-	Directory         string
-	Title             string
-	ProfileID         string
-	InitialPrompt     string
-	FreshConversation bool
+	SessionID protocol.SessionID
+	Directory string
+	Title     string
+	ProfileID string
 }
 
 type sessionRuntimeReopened struct {
@@ -587,12 +530,11 @@ type sessionRuntimeReopened struct {
 
 func (d *Daemon) reopenSessionRuntime(
 	plan sessionReopenPlan,
-	rollback *delegationRollback,
 ) (*sessionRuntimeReopened, error) {
 	var outcome *sessionRuntimeReopened
 	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 		var reopenErr error
-		outcome, reopenErr = d.reopenSessionRuntimeWithProtection(protection, plan, rollback)
+		outcome, reopenErr = d.reopenSessionRuntimeWithProtection(protection, plan)
 		return reopenErr
 	})
 	return outcome, err
@@ -601,38 +543,30 @@ func (d *Daemon) reopenSessionRuntime(
 func (d *Daemon) reopenSessionRuntimeWithProtection(
 	protection foregroundCleanupProtection,
 	plan sessionReopenPlan,
-	rollback *delegationRollback,
 ) (*sessionRuntimeReopened, error) {
 	lifecycleLock := d.sessionLifecycleLockFor(plan.SessionID)
 	lifecycleLock.Lock()
 	defer lifecycleLock.Unlock()
-	return d.reopenSessionRuntimeProtected(protection, plan, rollback)
+	return d.reopenSessionRuntimeProtected(protection, plan)
 }
 
 func (d *Daemon) reopenSessionRuntimeProtected(
 	protection foregroundCleanupProtection,
 	plan sessionReopenPlan,
-	rollback *delegationRollback,
 ) (*sessionRuntimeReopened, error) {
-	fail := func(cause error) (*sessionRuntimeReopened, error) {
-		return nil, rollback.fail(protection, cause)
-	}
-
 	entry := d.store.SessionLedgerEntry(plan.SessionID)
 	if entry == nil {
-		return fail(fmt.Errorf("session %s is not in the ledger", plan.SessionID))
+		return nil, fmt.Errorf("session %s is not in the ledger", plan.SessionID)
 	}
 	priorSession := d.store.Get(plan.SessionID)
 	if priorSession != nil && d.sessionHasLiveWorker(plan.SessionID) {
-		rollback.abandon()
 		return &sessionRuntimeReopened{
 			SessionID: plan.SessionID, ProfileID: priorSession.ProfileID, AlreadyRunning: true,
 		}, nil
 	}
 	intent, ok := d.store.LaunchIntent(plan.SessionID)
-	priorIntent, hadPriorIntent := intent, ok
-	if !ok && !plan.FreshConversation {
-		return fail(fmt.Errorf("session %s has no stored launch intent", plan.SessionID))
+	if !ok {
+		return nil, fmt.Errorf("session %s has no stored launch intent", plan.SessionID)
 	}
 
 	if strings.TrimSpace(plan.Directory) == "" {
@@ -640,10 +574,10 @@ func (d *Daemon) reopenSessionRuntimeProtected(
 	}
 	directory, err := validateDelegationDirectory(plan.Directory)
 	if err != nil {
-		return fail(err)
+		return nil, err
 	}
 	if strings.TrimSpace(entry.Agent) == "" {
-		return fail(fmt.Errorf("session %s saved no agent to start", plan.SessionID))
+		return nil, fmt.Errorf("session %s saved no agent to start", plan.SessionID)
 	}
 	if strings.TrimSpace(plan.Title) == "" {
 		plan.Title = entry.Label
@@ -651,125 +585,45 @@ func (d *Daemon) reopenSessionRuntimeProtected(
 	profileID := strings.TrimSpace(plan.ProfileID)
 	if profileID == "" {
 		if profileID, err = d.store.SessionProfileID(plan.SessionID); err != nil {
-			return fail(err)
+			return nil, err
 		}
 	}
 	if _, err := d.liveLaunchProfile(profileID); err != nil {
-		return fail(fmt.Errorf("reopen %s: %w", plan.SessionID, err))
+		return nil, fmt.Errorf("reopen %s: %w", plan.SessionID, err)
 	}
 
 	d.waitForSessionTeardown(plan.SessionID)
 	d.store.ClearSessionIntentionalClose(plan.SessionID)
 
-	lifted, reopened, err := d.store.ReopenSession(plan.SessionID)
-	if err != nil {
-		return fail(err)
-	}
-	if reopened {
-		rollback.onSessionReopened(plan.SessionID, lifted)
+	if err := d.store.ReopenSession(plan.SessionID); err != nil {
+		return nil, err
 	}
 
-	if plan.FreshConversation {
-		prior := d.store.GetSessionConversation(plan.SessionID)
-		d.store.SetResumeSessionID(plan.SessionID, "")
-		d.forgetDispatchResume(plan.SessionID)
-		rollback.onConversationForgotten(plan.SessionID, prior)
+	session := d.store.Get(plan.SessionID)
+	session.Directory = directory
+	session.Label = plan.Title
+	if err := d.store.AddCheckedUnlessTeardown(session); err != nil {
+		return nil, err
 	}
-
-	session := &protocol.Session{
-		ID: plan.SessionID, Label: plan.Title, Agent: protocol.SessionAgent(entry.Agent),
-		Directory: directory, ProfileID: profileID,
+	if _, placed, err := d.store.SessionPlacement(session.ID); err != nil {
+		return nil, err
+	} else if !placed {
+		if placed := d.placeLaunchedSession(session, &launchPlacement{reopen: true}); placed.err != nil {
+			return nil, placed.err
+		}
 	}
-	spawn := &protocol.SpawnSessionMessage{
-		Cmd: protocol.CmdSpawnSession, ID: session.ID, Cwd: session.Directory,
-		ProfileID: session.ProfileID, Agent: session.Agent, Cols: 80, Rows: 24,
-		Label: protocol.Ptr(session.Label),
-	}
-	policy := internalSpawnPolicy{}
-	if ok {
-		spawn, policy = buildStoredIntentSpawn(session, intent, 80, 24)
-	}
-	if prompt := strings.TrimSpace(plan.InitialPrompt); prompt != "" {
-		spawn.InitialPrompt = protocol.Ptr(prompt)
-	}
-	if resumeID := strings.TrimSpace(d.store.GetResumeSessionID(plan.SessionID)); !plan.FreshConversation && resumeID != "" {
+	spawn, policy := buildStoredIntentSpawn(session, intent, 80, 24)
+	if resumeID := strings.TrimSpace(d.store.GetResumeSessionID(plan.SessionID)); resumeID != "" {
 		spawn.ResumeSessionID = protocol.Ptr(resumeID)
 	}
-	policy.launchPlacement = &launchPlacement{reopen: true}
-	spawnClient := newInternalWSClient()
-	d.handleSpawnSessionWithPolicyProtected(protection, spawnClient, spawn, policy)
-	if _, err := readInternalActionResult(spawnClient); err != nil {
-		return fail(fmt.Errorf("spawn reopened session: %w", err))
+	if _, rejection := d.runSpawnPipelineProtected(protection, spawn, policy); rejection != nil {
+		return nil, fmt.Errorf("spawn reopened session: %w", rejection.reason())
 	}
 	if session := d.store.Get(plan.SessionID); session == nil {
-		return fail(fmt.Errorf("reopened session was not persisted"))
+		return nil, fmt.Errorf("reopened session was not persisted")
 	}
-	if priorSession != nil {
-		rollback.onSessionRespawned(priorSession, priorIntent, hadPriorIntent)
-	} else if !reopened {
-		rollback.onSessionSpawned(plan.SessionID)
-	}
-
-	rollback.abandon()
 	d.logf("reopen: session %s is back in %s in profile %s", plan.SessionID, directory, profileID)
 	return &sessionRuntimeReopened{SessionID: plan.SessionID, ProfileID: profileID}, nil
-}
-
-func (r *delegationRollback) onSessionReopened(sessionID protocol.SessionID, closed store.SessionCloseRecord) {
-	r.undo = append(r.undo, func(foregroundCleanupProtection) error {
-		r.d.terminateSession(sessionID, syscall.SIGTERM)
-		r.d.restoreSessionClose(sessionID, closed)
-		return nil
-	})
-}
-
-func (r *delegationRollback) onSessionRespawned(
-	prior *protocol.Session,
-	priorIntent store.LaunchIntent,
-	hadPriorIntent bool,
-) {
-	r.undo = append(r.undo, func(foregroundCleanupProtection) error {
-		if err := r.d.terminateSessionRuntimeChecked(prior.ID, r.d.terminalsOf(prior.ID), syscall.SIGTERM); err != nil {
-			return err
-		}
-		r.d.closePluginDriverSession(prior.ID, "launch_failed", nil, "")
-		if err := r.d.store.AddCheckedUnlessTeardown(prior); err != nil {
-			return err
-		}
-		if hadPriorIntent {
-			r.d.store.SetLaunchIntent(prior.ID, priorIntent)
-		} else {
-			r.d.store.ClearLaunchIntent(prior.ID)
-		}
-		r.d.publishFact(FactSessionReregistered, string(prior.ID), nil)
-		return nil
-	})
-}
-
-func (r *delegationRollback) onConversationForgotten(sessionID protocol.SessionID, prior store.SessionConversation) {
-	r.undo = append(r.undo, func(foregroundCleanupProtection) error {
-		if strings.TrimSpace(prior.NativeID) == "" {
-			return nil
-		}
-		if strings.TrimSpace(prior.TranscriptPath) != "" {
-			_, err := r.d.store.TransitionSessionConversation(sessionID, prior.NativeID, prior.TranscriptPath)
-			return err
-		}
-		_, err := r.d.store.TransitionSessionResumeID(sessionID, prior.NativeID)
-		return err
-	})
-}
-
-func (d *Daemon) forgetDispatchResume(sessionID protocol.SessionID) {
-	if _, err := d.updateGardenDispatch(sessionID, func(current garden.Dispatch) (garden.Dispatch, bool, error) {
-		if strings.TrimSpace(current.Resume) == "" {
-			return current, false, nil
-		}
-		current.Resume = ""
-		return current, true, nil
-	}); err != nil {
-		d.logf("reopen: forgetting the resume id of session %s: %v", sessionID, err)
-	}
 }
 
 func (d *Daemon) handleSessionReopen(conn net.Conn, msg *protocol.SessionReopenMessage) {
@@ -777,7 +631,7 @@ func (d *Daemon) handleSessionReopen(conn net.Conn, msg *protocol.SessionReopenM
 	if msg.Action != nil {
 		action = *msg.Action
 	}
-	outcome, err := d.reopenSession(msg.SessionID, action, protocol.Deref(msg.Directory))
+	outcome, err := d.reopenSession(msg.SessionID, action)
 	if err != nil {
 		d.sendError(conn, err.Error())
 		return

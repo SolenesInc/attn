@@ -9828,9 +9828,6 @@ type SessionReopenAction string
 const SessionReopenActionFetchRecreateAndReopen SessionReopenAction = "fetch_recreate_and_reopen"
 const SessionReopenActionRecreateWorktreeAndReopen SessionReopenAction = "recreate_worktree_and_reopen"
 const SessionReopenActionReopen SessionReopenAction = "reopen"
-const SessionReopenActionStartFreshDefaultBranch SessionReopenAction = "start_fresh_default_branch"
-const SessionReopenActionStartFreshElsewhere SessionReopenAction = "start_fresh_elsewhere"
-const SessionReopenActionStartFreshSamePlace SessionReopenAction = "start_fresh_same_place"
 
 type SessionReopenEntry struct {
 	// Reopen corresponds to the JSON schema field "reopen".
@@ -9846,9 +9843,6 @@ type SessionReopenMessage struct {
 
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
-
-	// Directory corresponds to the JSON schema field "directory".
-	Directory *string `json:"directory,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`

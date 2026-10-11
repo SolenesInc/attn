@@ -177,7 +177,7 @@ func (d *Daemon) sendSessionReopenWSResult(client *wsClient, msg *protocol.Sessi
 		Event:     protocol.EventSessionReopenResult,
 		RequestID: protocol.Deref(msg.RequestID),
 	}
-	outcome, err := d.reopenSession(msg.SessionID, action, protocol.Deref(msg.Directory))
+	outcome, err := d.reopenSession(msg.SessionID, action)
 	var refused *reopenRefusedError
 	if errors.As(err, &refused) {
 		reply.Reopen = refused.verdict.toProtocol()

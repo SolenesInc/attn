@@ -15,7 +15,6 @@ import {
   useAppShell,
   useChiefOfStaffContext,
   useNavigationContext,
-  useSessionLaunchContext,
   useSessionLifecycleContext,
 } from './AppContexts';
 
@@ -84,7 +83,6 @@ export function AppLibrarySurfaces() {
     sendNotificationMarkRead,
     sendTaskRetry,
   } = useDaemonApi();
-  const { locationPickerOpen, locationPickerPurpose } = useSessionLaunchContext();
   const { handleSelectSession } = useNavigationContext();
   const {
     handleOpenSeedTile,
@@ -108,7 +106,6 @@ export function AppLibrarySurfaces() {
         tab={ledgerTab}
         onTabChange={setLedgerTab}
         onClose={() => setSessionsOpen(false)}
-        yieldsFocus={locationPickerOpen && locationPickerPurpose === 'reopen'}
         sessions={{
           connection: {
             list: sendSessionList,

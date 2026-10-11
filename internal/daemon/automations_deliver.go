@@ -713,7 +713,7 @@ func (d *Daemon) continueAutomationSessionForeground(req automation.WorkRequest,
 	_, err := d.reopenSessionRuntime(sessionReopenPlan{
 		SessionID: req.IDs.SessionID, Directory: directory, Title: label,
 		ProfileID: req.IDs.ProfileID,
-	}, d.newDelegationRollback())
+	})
 	if err != nil {
 		return err
 	}
@@ -755,11 +755,10 @@ func (d *Daemon) startAutomationSession(req automation.WorkRequest, directory, i
 	if err != nil {
 		return err
 	}
-	client := newInternalWSClient()
 	message := &protocol.SpawnSessionMessage{Cmd: protocol.CmdSpawnSession, ID: req.IDs.SessionID, Cwd: directory, ProfileID: req.IDs.ProfileID, Agent: req.Launch.Agent, Cols: 80, Rows: 24, Label: protocol.Ptr(label), InitialPrompt: protocol.Ptr(prompt), Model: protocol.Ptr(req.Launch.Model), Effort: protocol.Ptr(req.Launch.Effort), Executable: protocol.Ptr(req.Launch.Executable)}
-	d.handleSpawnSessionWithPolicy(client, message, internalSpawnPolicy{unattendedLaunch: req.Launch, launchPlacement: &launchPlacement{kind: "automation", itemID: strconv.Itoa(req.DefinitionID)}})
-	if _, err := readInternalActionResult(client); err != nil {
-		return err
+	_, rejection := d.runSpawnPipelineReporting(message, internalSpawnPolicy{unattendedLaunch: req.Launch, launchPlacement: &launchPlacement{kind: "automation", itemID: strconv.Itoa(req.DefinitionID)}})
+	if rejection != nil {
+		return rejection.reason()
 	}
 	if err := d.verifyUnattendedLaunch(req); err != nil {
 		return err

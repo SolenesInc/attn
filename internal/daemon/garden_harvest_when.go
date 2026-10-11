@@ -100,10 +100,10 @@ func (d *Daemon) armHarvestWhenMerged(
 		occurrences := []seedEvents.Occurrence{}
 		var displaced *garden.Tender
 		if seed.Status == garden.StatusGrowing {
-			if held := seed.Tender(); ask.Force && held.Holds(d.sessionExists) && !held.Is(ask.Actor) {
+			if held := seed.Tender(); ask.Force && held.Holds(d.sessionActive) && !held.Is(ask.Actor) {
 				displaced = &held
 			}
-			next, err = garden.Transition(next, garden.VerbPark, garden.Ask{Actor: ask.Actor, Force: ask.Force}, d.sessionExists)
+			next, err = garden.Transition(next, garden.VerbPark, garden.Ask{Actor: ask.Actor, Force: ask.Force}, d.sessionActive)
 			if err != nil {
 				return garden.Seed{}, docstore.Document{}, err
 			}
@@ -213,7 +213,7 @@ func (d *Daemon) fulfilHarvestWhen(
 			return garden.Seed{}, docstore.Document{}, err
 		}
 		harvested, doc, _, err = d.applySeedTransitionDetailedAsAtRevision(
-			current.ID, garden.VerbHarvest, ask, "", d.sessionExists, read.Rev)
+			current.ID, garden.VerbHarvest, ask, "", d.sessionActive, read.Rev)
 		if errors.Is(err, errSeedRevisionMoved) && attempt+1 < attempts {
 			continue
 		}

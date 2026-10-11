@@ -17,7 +17,6 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { assertFreshWorldTargetSafe } from './freshWorld.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
-import { captureScreenshotData } from './nativeWindowCapture.mjs';
 import { appDaemonInTree, createWindowDriver } from './platform.mjs';
 import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
 import { sleep } from './scenarioAssertions.mjs';
@@ -333,34 +332,20 @@ async function main() {
       runner.writeText('session-list-repository.txt', listed);
     });
 
-    await runner.step('start_fresh_elsewhere_accepts_typing_and_returns_focus_on_escape', async () => {
+    await runner.step('a_missing_directory_refuses_resume', async () => {
       await client.request('close_session', { sessionId: sessions.one });
       await waitForSessions(client, (s) => rowFor(s, sessions.one)?.state === 'closed', 'the remaining checkout session to close');
       fs.renameSync(repo, `${repo}-moved`);
       await client.request('sessions_row_action', { sessionId: sessions.two, action: 'Reopen' });
-      await waitForSessions(client, (s) => rowFor(s, sessions.two)?.actions.includes('Start fresh elsewhere'),
-        'the missing directory to offer a fresh start elsewhere');
-      await client.request('sessions_row_action', { sessionId: sessions.two, action: 'Start fresh elsewhere' });
-
+      const refused = await waitForSessions(client, (s) => rowFor(s, sessions.two)?.verdict.includes('directory'),
+        'the missing directory to refuse resume');
+      const row = rowFor(refused, sessions.two);
+      runner.assert(row.state === 'closed' && row.verdict.includes('directory'),
+        'the session stays closed with a reason', { row });
+      runner.assert(!row.actions.some((action) => action.startsWith('Start fresh')),
+        'the session offers no fresh conversation', { row });
       const picker = await client.request('location_picker_get_state');
-      runner.assert(picker.open && picker.title === 'Start fresh where?', 'the path chooser opens', { picker });
-      const focus = await client.request('dom_active_element');
-      runner.assert(focus.testId === 'location-picker-path-input', 'the path input owns focus', { focus });
-      runner.assert(focus.selectionStart === focus.valueLength, 'the caret starts at the end', { focus });
-      await driver.typeText('fresh-path');
-      const typed = await client.request('location_picker_get_state');
-      runner.assert(typed.pathInputValue === `${picker.pathInputValue}fresh-path`, 'typing reaches the path input', { picker, typed });
-      runner.writeJson('fresh-elsewhere-picker.json', { picker, focus, typed });
-      await captureScreenshotData(path.join(runner.runDir, 'fresh-elsewhere-picker.png'), { client });
-
-      await driver.pressKey('Escape');
-      const dismissed = await client.request('location_picker_get_state');
-      runner.assert(!dismissed.open, 'Escape closes the picker', { dismissed });
-      const returned = await client.request('dom_active_element', { selector: `.ledger-row[data-row-key="${sessions.two}"]` });
-      runner.assert(returned.matches, 'the ledger regains its selected row focus', { returned });
-      await driver.pressKey('ArrowUp');
-      const moved = await client.request('dom_active_element', { selector: `.ledger-row.is-selected:not([data-row-key="${sessions.two}"])` });
-      runner.assert(moved.matches, 'arrow navigation moves to another row after returning', { moved });
+      runner.assert(!picker.open, 'the refusal stays in the Ledger', { picker });
     });
 
     const summary = await runner.finishSuccess({ sessions, repo, other, openedRows: opened.rows.length });

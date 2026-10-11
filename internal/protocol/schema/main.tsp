@@ -680,15 +680,13 @@ model SessionShowMessage {
   session_id: SessionID;
 }
 
-// Brings a closed session back under its own id. Without an action it performs
+// Brings a closed or stopped session back under its own id. Without an action it performs
 // the plain reopen, and refuses naming what is offered instead.
 model SessionReopenMessage {
   cmd: "session_reopen";
   request_id?: string; // set by the WS frontend to correlate the result event
   session_id: SessionID;
   action?: SessionReopenAction;
-  // Where to start, for `start_fresh_elsewhere`.
-  directory?: string;
 
 }
 
@@ -6227,15 +6225,12 @@ model SessionShowResult {
   reopen?: SessionReopen;
 }
 
-// `reopen` resumes the saved conversation where it ran; `start_fresh_*` brings
-// the id back with a new one; the worktree actions write to the repository.
+// `reopen` resumes the saved conversation where it ran; the worktree actions
+// restore its checkout before resuming that conversation.
 enum SessionReopenAction {
   reopen,
   recreate_worktree_and_reopen,
   fetch_recreate_and_reopen,
-  start_fresh_same_place,
-  start_fresh_elsewhere,
-  start_fresh_default_branch,
 }
 
 // Whether a session in the ledger can be brought back, and what it would take.

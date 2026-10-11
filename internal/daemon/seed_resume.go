@@ -75,7 +75,7 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 	}
 	if existing := d.store.Get(sessionID); existing != nil && d.sessionHasLiveWorker(sessionID) {
 		if _, _, _, err := d.applySeedTransitionDetailedAsAtRevisionProtected(protection,
-			seedID, garden.VerbTend, garden.Ask{Actor: actor}, "", d.sessionExists, expectedRev); err != nil {
+			seedID, garden.VerbTend, garden.Ask{Actor: actor}, "", d.sessionActive, expectedRev); err != nil {
 			return nil, err
 		}
 		if err := d.resolveGardenReviewAction(review, seedID, "resume"); err != nil {
@@ -104,7 +104,7 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 		return nil, fmt.Errorf("seed %s belongs to profile %q; its conversation would reopen in profile %q: hand the seed to a new agent in its own profile", seed.ID, owner.Name, target.Name)
 	}
 	if _, _, _, err := d.applySeedTransitionDetailedAsAtRevisionProtected(protection,
-		seedID, garden.VerbTend, garden.Ask{Actor: actor}, "", d.sessionExists, expectedRev); err != nil {
+		seedID, garden.VerbTend, garden.Ask{Actor: actor}, "", d.sessionActive, expectedRev); err != nil {
 		return nil, err
 	}
 	if err := d.resolveGardenReviewAction(review, seedID, "resume"); err != nil {
@@ -115,7 +115,7 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 		Directory: execution.Cwd,
 		Title:     seed.Title,
 		ProfileID: profileID,
-	}, d.newDelegationRollback())
+	})
 	if err != nil {
 		return nil, err
 	}

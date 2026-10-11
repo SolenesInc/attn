@@ -7942,9 +7942,6 @@ export enum SessionReopenAction {
     FetchRecreateAndReopen = "fetch_recreate_and_reopen",
     RecreateWorktreeAndReopen = "recreate_worktree_and_reopen",
     Reopen = "reopen",
-    StartFreshDefaultBranch = "start_fresh_default_branch",
-    StartFreshElsewhere = "start_fresh_elsewhere",
-    StartFreshSamePlace = "start_fresh_same_place",
 }
 
 export interface SessionReopenResultObject {
@@ -9300,7 +9297,6 @@ export interface SessionReopenEntry {
 export interface SessionReopenMessage {
     action?:     SessionReopenAction;
     cmd:         SessionReopenMessageCmd;
-    directory?:  string;
     request_id?: string;
     session_id:  string;
     [property: string]: any;
@@ -21118,7 +21114,6 @@ const typeMap: any = {
     "SessionReopenMessage": o([
         { json: "action", js: "action", typ: u(undefined, r("SessionReopenAction")) },
         { json: "cmd", js: "cmd", typ: r("SessionReopenMessageCmd") },
-        { json: "directory", js: "directory", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "session_id", js: "session_id", typ: "" },
     ], "any"),
@@ -22800,9 +22795,6 @@ const typeMap: any = {
         "fetch_recreate_and_reopen",
         "recreate_worktree_and_reopen",
         "reopen",
-        "start_fresh_default_branch",
-        "start_fresh_elsewhere",
-        "start_fresh_same_place",
     ],
     "RuntimeRespawnedMessageEvent": [
         "runtime_respawned",

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useToast } from '../components/Toast';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { ptySpawn } from '../pty/bridge';
@@ -14,7 +14,6 @@ import {
 import { launchTarget } from '../utils/launchPlacement';
 import {
   AppContentProps,
-  LocationPickerPurpose,
   SessionCreationJob,
   SplitSessionOptions,
   TERMINAL_AGENT,
@@ -55,10 +54,7 @@ export function useSessionLaunch({
   const worktreeSessionCreatingRef = useRef(false);
 
   const [locationPickerOpen, setLocationPickerOpen] = useState(false);
-  const [locationPickerPurpose, setLocationPickerPurpose] =
-    useState<LocationPickerPurpose>('session');
   const locationPickerSessionDirection = useRef<TerminalSplitDirection>('vertical');
-  const reopenPickRef = useRef<{ settle: (path?: string) => void } | null>(null);
 
   const nextSplitSessionLabel = useCallback(
     (agent: SessionAgent) => {
@@ -85,7 +81,6 @@ export function useSessionLaunch({
       inlineLauncherFocusRef.current();
       return;
     }
-    setLocationPickerPurpose('session');
     locationPickerSessionDirection.current = direction;
     setLocationPickerOpen(true);
   }, []);
@@ -298,18 +293,6 @@ export function useSessionLaunch({
     [agentAvailability, hasAvailableAgents, launchPicked, showError],
   );
 
-  const handleLocationSelect = useCallback(
-    async (...pick: Parameters<typeof launchLocation>) => {
-      if (locationPickerPurpose === 'reopen') {
-        reopenPickRef.current?.settle(pick[0]);
-        reopenPickRef.current = null;
-        return;
-      }
-      await launchLocation(...pick);
-    },
-    [launchLocation, locationPickerPurpose],
-  );
-
   const handleCreateWorktreeSession = useCallback(
     (
       mainRepo: string,
@@ -390,27 +373,7 @@ export function useSessionLaunch({
 
   const closeLocationPicker = useCallback(() => {
     setLocationPickerOpen(false);
-    reopenPickRef.current?.settle(undefined);
-    reopenPickRef.current = null;
   }, []);
-
-  const chooseReopenDirectory = useCallback(
-    () =>
-      new Promise<string | undefined>((settle) => {
-        reopenPickRef.current?.settle(undefined);
-        reopenPickRef.current = { settle };
-        setLocationPickerPurpose('reopen');
-        setLocationPickerOpen(true);
-      }),
-    [],
-  );
-  useEffect(
-    () => () => {
-      reopenPickRef.current?.settle(undefined);
-    },
-    [],
-  );
-
 
   return {
     sessionCreationJob,
@@ -418,14 +381,11 @@ export function useSessionLaunch({
     launchAgent,
     createSessionForUiAutomation,
     locationPickerOpen,
-    locationPickerPurpose,
     closeLocationPicker,
-    handleLocationSelect,
     launchLocation,
     registerInlineLauncher,
     handleCreateWorktreeSession,
     handleNewSession,
     createSplitSession,
-    chooseReopenDirectory,
   };
 }

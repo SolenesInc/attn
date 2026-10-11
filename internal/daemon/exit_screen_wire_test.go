@@ -61,3 +61,23 @@ func peekExit(t *testing.T, cli *client.Client, session, showing string) (protoc
 	}
 	return *peek.Exit, peek.Screen.Text
 }
+
+func TestASpawnThatExitsImmediatelyKeepsItsNewScreenAcrossRestart(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.App()
+		w.terms.OnNextSpawn(func(term *testworld.Terminal) {
+			term.PaintScreen("Cannot start: missing credentials")
+			term.Exit(1)
+		})
+		session := w.Spawn(app, fakeagent.Claude, w.Path("quick-exit"))
+		for _, restart := range []bool{false, true} {
+			if restart {
+				w.restart()
+			}
+			exit, _ := peekExit(t, w.Client(), session, "missing credentials")
+			if exit.Code != 1 {
+				t.Errorf("quick exit after restart=%v = %+v", restart, exit)
+			}
+		}
+	})
+}

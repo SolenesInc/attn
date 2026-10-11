@@ -109,9 +109,6 @@ const REOPEN_ACTION_LABELS: Record<string, string> = {
   reopen: 'Reopen',
   recreate_worktree_and_reopen: 'Recreate the worktree',
   fetch_recreate_and_reopen: 'Fetch, recreate, reopen',
-  start_fresh_same_place: 'Start fresh here',
-  start_fresh_elsewhere: 'Start fresh elsewhere',
-  start_fresh_default_branch: 'Start fresh on the default branch',
 };
 
 export function reopenActionLabel(id: string): string {

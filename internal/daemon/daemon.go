@@ -1818,18 +1818,6 @@ func (d *Daemon) terminateSessionRuntimeChecked(sessionID protocol.SessionID, te
 	return nil
 }
 
-func (d *Daemon) unregisterSession(sessionID protocol.SessionID, sig syscall.Signal) *protocol.Session {
-	session := d.store.Get(sessionID)
-	if session != nil {
-		if _, err := d.captureGardenSessionSnapshot(session); err != nil {
-			d.logf("garden: preserving execution %s before session removal: %v", sessionID, err)
-		}
-	}
-	d.terminateSession(sessionID, sig)
-	d.removeReapedSession(sessionID)
-	return session
-}
-
 func (d *Daemon) prepareSessionTeardown(sessionID protocol.SessionID) (*sessionTeardown, error) {
 	lifecycleLock := d.sessionLifecycleLockFor(sessionID)
 	lifecycleLock.Lock()
@@ -1964,12 +1952,6 @@ func (d *Daemon) terminateSessionAsync(sessionID protocol.SessionID, sig syscall
 func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.SessionClose) {
 	d.recordSessionClose(sessionID, func() (bool, error) {
 		return d.store.CloseSession(sessionID, closed, time.Now())
-	})
-}
-
-func (d *Daemon) restoreSessionClose(sessionID protocol.SessionID, closed store.SessionCloseRecord) {
-	d.recordSessionClose(sessionID, func() (bool, error) {
-		return d.store.RestoreSessionClose(sessionID, closed)
 	})
 }
 

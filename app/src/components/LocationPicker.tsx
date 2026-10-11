@@ -56,7 +56,6 @@ interface PathSelectableItem {
 
 interface LocationPickerProps {
   isOpen: boolean;
-  purpose?: 'session' | 'reopen';
   // Inline lives on an empty desktop: no overlay, and Escape never dismisses it.
   variant?: 'dialog' | 'inline';
   // False while another surface holds the keyboard: no focus grab, no Escape handling.
@@ -178,7 +177,6 @@ type Mode = 'path-input' | 'repo-options';
 
 export function LocationPicker({
   isOpen,
-  purpose = 'session',
   variant = 'dialog',
   active = true,
   title = 'New Session Location',
@@ -198,8 +196,6 @@ export function LocationPicker({
 }: LocationPickerProps) {
   const { settings, setSetting } = useSettings();
   const noAgentsMessage = 'No supported agent CLI found in PATH.';
-  const pathOnly = purpose === 'reopen';
-  const pickerTitle = pathOnly ? 'Start fresh where?' : title;
   const inline = variant === 'inline';
 
   const [mode, setMode] = useState<Mode>('path-input');
@@ -274,7 +270,7 @@ export function LocationPicker({
   const autoModeSupported = Boolean(agentCapabilities[agent]?.[AUTOMODE_CAPABILITY]);
   const autoModeDefault = parseBooleanSetting(settings[AUTOMODE_DEFAULT_KEY]) ?? true;
   // The agent gate matches the daemon's agentSupportsChiefReload.
-  const chiefToggleEligible = !chiefExists && !pathOnly && (agent === 'claude' || agent === 'codex');
+  const chiefToggleEligible = !chiefExists && (agent === 'claude' || agent === 'codex');
 
   const invalidateRequestGeneration = useCallback(() => {
     requestGenerationRef.current += 1;
@@ -656,7 +652,7 @@ export function LocationPicker({
     }
     rememberRepoDestination('new_worktree');
 
-    if (onCreateWorktreeSession && !pathOnly) {
+    if (onCreateWorktreeSession) {
       const selectedAgent = resolvePickerAgent(agent, effectiveAgentAvailability, 'codex');
       onCreateWorktreeSession(
         repoRootPath,
@@ -699,7 +695,6 @@ export function LocationPicker({
     onCreateWorktree,
     onCreateWorktreeSession,
     onError,
-    pathOnly,
     rememberRepoDestination,
     repoRootPath,
     agent,
@@ -787,7 +782,7 @@ export function LocationPicker({
         return;
       }
 
-      if (e.code === 'KeyQ' && !pathOnly) {
+      if (e.code === 'KeyQ') {
         e.preventDefault();
         toggleYoloMode();
         return;
@@ -821,7 +816,6 @@ export function LocationPicker({
     handleAgentChange,
     mode,
     movePathSelection,
-    pathOnly,
     toggleYoloMode,
   ]);
 
@@ -830,8 +824,7 @@ export function LocationPicker({
   }
 
   return (
-    <PickerFrame inline={inline} purpose={purpose} onDismiss={handleClosePicker} onStepBack={stepBack} onKeyDown={handleDialogKeyDown}>
-      {!pathOnly && (
+    <PickerFrame inline={inline} onDismiss={handleClosePicker} onStepBack={stepBack} onKeyDown={handleDialogKeyDown}>
       <div className="picker-agent-bar">
         <div className="picker-agent-label">SESSION AGENT</div>
         <div className="picker-agent-controls">
@@ -865,8 +858,7 @@ export function LocationPicker({
           </div>
         </div>
       </div>
-      )}
-      {autoModeSupported && !pathOnly && (
+      {autoModeSupported && (
         <div className="picker-chief-bar">
           <div className="picker-agent-label">AUTO MODE</div>
           <div className="picker-chief-controls">
@@ -911,11 +903,10 @@ export function LocationPicker({
           </div>
         </div>
       )}
-      {!pathOnly && (
-        <div className="picker-chief-bar">
-          <div className="picker-agent-label">YOLO</div>
-          <div className="picker-chief-controls">
-            <div className="agent-toggle">
+      <div className="picker-chief-bar">
+        <div className="picker-agent-label">YOLO</div>
+        <div className="picker-chief-controls">
+          <div className="agent-toggle">
               <button
                 type="button"
                 className={`agent-option ${yoloMode ? 'active' : ''}`}
@@ -935,8 +926,7 @@ export function LocationPicker({
             </div>
           </div>
         </div>
-      )}
-      {!hasAvailableAgents && !pathOnly && (
+      {!hasAvailableAgents && (
         <div className="picker-agent-warning">{noAgentsMessage}</div>
       )}
       {mode === 'path-input' ? (
@@ -944,7 +934,7 @@ export function LocationPicker({
           <div className="picker-header">
             <div className="picker-header-top">
               <div className="picker-title" data-testid="location-picker-title">
-                {pickerTitle}
+                {title}
               </div>
             </div>
             <PathInput
@@ -1087,9 +1077,8 @@ export function LocationPicker({
 }
 
 // The dialog sits in a dismissable overlay; inline, the frame stands alone and Escape only steps back.
-function PickerFrame({ inline, purpose, onDismiss, onStepBack, onKeyDown, children }: {
+function PickerFrame({ inline, onDismiss, onStepBack, onKeyDown, children }: {
   inline: boolean;
-  purpose: 'session' | 'reopen';
   onDismiss: () => void;
   onStepBack: () => boolean;
   onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => void;
@@ -1120,7 +1109,7 @@ function PickerFrame({ inline, purpose, onDismiss, onStepBack, onKeyDown, childr
   );
   if (inline) return frame;
   return (
-    <div className="location-picker-overlay" data-testid="location-picker-overlay" data-purpose={purpose} onClick={onDismiss}>
+    <div className="location-picker-overlay" data-testid="location-picker-overlay" onClick={onDismiss}>
       {frame}
     </div>
   );

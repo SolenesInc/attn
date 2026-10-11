@@ -59,6 +59,7 @@ export interface SessionTerminalDesktopProps {
     agent: SessionAgent;
     cwd: string;
     state?: UISessionState;
+    state_reason?: string;
     usage?: SessionUsage;
     autoSettleFiresAt?: string;
     autoSettleHeld?: boolean;

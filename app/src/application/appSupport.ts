@@ -39,7 +39,6 @@ export function sessionCloseProtectionHint(sessions: DaemonSession[], id: string
 
 export const TERMINAL_AGENT: SessionAgent = 'shell';
 
-export type LocationPickerPurpose = 'session' | 'reopen';
 
 export function handleAppPointerDownCapture(event: { target: EventTarget | null }): void {
   if (!isBrowserHostOwnedTarget(event.target)) {

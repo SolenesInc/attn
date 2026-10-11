@@ -29,7 +29,7 @@ func (d *Daemon) resolveReopen(
 		SessionID: entry.ID,
 		Entry:     &entry,
 		Execution: d.reopenExecutionFromLedger(&entry),
-		Live:      protocol.Deref(entry.ClosedAt) == "",
+		Live:      protocol.Deref(entry.ClosedAt) == "" && d.sessionActive(entry.ID),
 	}
 	verdict.DirectoryState = inspectContinuationDirectory(verdict.Execution)
 	d.planReopenProfile(&verdict)

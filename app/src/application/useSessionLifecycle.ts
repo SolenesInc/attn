@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useToast } from '../components/Toast';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
+import { SessionReopenRefusal } from '../hooks/daemonSessionLedgerEvents';
 import type { useDesktopRuntimeController } from '../hooks/useDesktopRuntimeController';
 import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
@@ -19,7 +20,6 @@ interface Options {
   getPaneSize: ReturnType<typeof useDesktopRuntimeController>['getPaneSize'];
   handleSelectSession: (id: string) => boolean;
   showError: ReturnType<typeof useToast>['showError'];
-  chooseReopenDirectory: () => Promise<string | undefined>;
   onReopened: () => void;
 }
 export function useSessionLifecycle({
@@ -31,7 +31,6 @@ export function useSessionLifecycle({
   getPaneSize,
   handleSelectSession,
   showError,
-  chooseReopenDirectory,
   onReopened,
 }: Options) {
   const { sendUnregisterSession, sendSessionReopen, sendDesktopClose } = useDaemonApi();
@@ -116,18 +115,24 @@ export function useSessionLifecycle({
 
   const handleReopenSession = useCallback(
     async (sessionId: string, actionId: string): Promise<boolean> => {
-      let directory: string | undefined;
-      if (actionId === 'start_fresh_elsewhere') {
-        const chosen = await chooseReopenDirectory();
-        if (!chosen) return false;
-        directory = chosen;
+      let result;
+      try {
+        result = await sendSessionReopen(sessionId, actionId);
+      } catch (error) {
+        if (error instanceof SessionReopenRefusal) throw error;
+        showError(error instanceof Error ? error.message : String(error));
+        if (useProfilesStore.getState().desktops.some((desktop) => desktop.panes.some((pane) => pane.session_id === sessionId))) {
+          handleSelectSession(sessionId);
+          onReopened();
+          return false;
+        }
+        throw error;
       }
-      const result = await sendSessionReopen(sessionId, actionId, directory);
       handleSelectSession(result.session_id);
       onReopened();
       return true;
     },
-    [sendSessionReopen, chooseReopenDirectory, onReopened, handleSelectSession],
+    [sendSessionReopen, onReopened, handleSelectSession, showError],
   );
 
   const handleCloseCurrentSessionShortcut = useCallback(() => {

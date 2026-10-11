@@ -225,7 +225,7 @@ func (d *Daemon) readGardenTo(limit int, profileID ...string) (gardenRead, error
 		}
 		after = read.Documents[len(read.Documents)-1].ID
 	}
-	for _, seed := range garden.Ready(out.seeds, d.sessionExists) {
+	for _, seed := range garden.Ready(out.seeds, d.sessionActive) {
 		out.ready[seed.ID] = true
 	}
 	return out, nil
@@ -808,7 +808,7 @@ func (d *Daemon) handleSeedDocumentGet(client *wsClient, msg *protocol.SeedDocum
 	}
 	result.Document = &protocol.SeedDocument{
 		Seed:        wireSeed,
-		TenderHolds: seed.Tender().Holds(d.sessionExists),
+		TenderHolds: seed.Tender().Holds(d.sessionActive),
 		Children:    read.wire(children),
 		Notes:       notes,
 		NotesTotal:  notesTotal,
@@ -1094,7 +1094,7 @@ func (d *Daemon) validateDispatchCrown(crown string, sourceSessionID protocol.Se
 			crown, seed.Status, crown)
 	}
 	held := seed.Tender()
-	if held.Holds(d.sessionExists) && !held.Is(garden.Tender{Session: protocol.TrimID(sourceSessionID)}) {
+	if held.Holds(d.sessionActive) && !held.Is(garden.Tender{Session: protocol.TrimID(sourceSessionID)}) {
 		return fmt.Errorf(
 			"%s is being tended by %s, and a seed has one tender at a time; dispatching here would hand it to a new agent.\n"+
 				"Wait for %s to harvest or park it, plant the work as its own seed, or say what you need on the log: attn seed note %s -m \"…\"",
@@ -1361,7 +1361,7 @@ func (d *Daemon) seedTransitionWire(seed garden.Seed, doc docstore.Document) pro
 }
 
 func (d *Daemon) applySeedTransition(id string, verb garden.Verb, ask garden.Ask) (garden.Seed, docstore.Document, error) {
-	seed, doc, _, err := d.applySeedTransitionDetailedAs(id, verb, ask, "", d.sessionExists)
+	seed, doc, _, err := d.applySeedTransitionDetailedAs(id, verb, ask, "", d.sessionActive)
 	return seed, doc, err
 }
 
@@ -1379,7 +1379,7 @@ func (d *Daemon) applySeedTransitionDetailed(
 func (d *Daemon) applySeedTransitionDetailedAtRevision(
 	id string, verb garden.Verb, ask garden.Ask, comment string, expectedRev int64,
 ) (garden.Seed, docstore.Document, seedTransitionNotes, error) {
-	return d.applySeedTransitionDetailedAsAtRevision(id, verb, ask, comment, d.sessionExists, expectedRev)
+	return d.applySeedTransitionDetailedAsAtRevision(id, verb, ask, comment, d.sessionActive, expectedRev)
 }
 
 func (d *Daemon) applySeedTransitionDetailedAs(

@@ -82,11 +82,11 @@ func TestTheAppIsToldWhyAReopenIsRefusedAndWhatIsOffered(t *testing.T) {
 	}
 
 	refused := reopenOverTheWebSocket(app, session)
-	if refused.Success || !strings.Contains(protocol.Deref(refused.Error), "Offered instead: start_fresh_elsewhere") {
-		t.Errorf("reopening in a deleted directory = %+v, want a refusal naming the action offered instead", refused)
+	if refused.Success || !strings.Contains(protocol.Deref(refused.Error), "not a worktree attn can put back") {
+		t.Errorf("reopening in a deleted directory = %+v, want a concrete refusal", refused)
 	}
-	if refused.Reopen == nil || !slices.Equal(refused.Reopen.Actions, []protocol.SessionReopenAction{protocol.SessionReopenActionStartFreshElsewhere}) {
-		t.Errorf("reopen verdict = %+v, want it to offer start_fresh_elsewhere", refused.Reopen)
+	if refused.Reopen == nil || len(refused.Reopen.Actions) != 0 {
+		t.Errorf("reopen verdict = %+v, want no recovery action", refused.Reopen)
 	}
 
 	if unknown := reopenOverTheWebSocket(app, "never-ran"); unknown.Success || !strings.Contains(protocol.Deref(unknown.Error), "no ledger row") {

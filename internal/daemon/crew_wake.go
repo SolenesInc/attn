@@ -344,8 +344,7 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 	}
 
 	initialPrompt := crewWakePrompt
-	spawnClient := newInternalWSClient()
-	d.handleSpawnSessionWithPolicy(spawnClient, &protocol.SpawnSessionMessage{
+	_, rejection := d.runSpawnPipelineReporting(&protocol.SpawnSessionMessage{
 		Cmd:           protocol.CmdSpawnSession,
 		ID:            sessionID,
 		Cwd:           directory,
@@ -358,9 +357,9 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 		Label:         protocol.Ptr(crew.DisplayName(member.ID)),
 		InitialPrompt: protocol.Ptr(initialPrompt),
 	}, internalSpawnPolicy{launchPlacement: &launchPlacement{kind: "crew", itemID: member.ID}})
-	if _, err := readInternalActionResult(spawnClient); err != nil {
+	if rejection != nil {
 		d.releaseCrewBindingIfSession(sessionID)
-		return nil, fmt.Errorf("wake %s: %w", crew.DisplayName(member.ID), err)
+		return nil, fmt.Errorf("wake %s: %w", crew.DisplayName(member.ID), rejection.reason())
 	}
 	if !request.UserStarted {
 		requester := request.RequestedBy
