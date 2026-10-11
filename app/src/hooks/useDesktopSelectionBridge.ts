@@ -88,6 +88,9 @@ export function useDesktopSelectionBridge(reportFailure: (message: string) => vo
   const intent = useSessionStore((state) => state.intent);
   const sent = useRef(0);
   const reportFailureRef = useRef(reportFailure);
+  useEffect(() => usePendingTerminalInput.subscribe((state, previous) => {
+    if (state.failure && state.failure !== previous.failure) reportFailureRef.current(state.failure.message);
+  }), []);
   useEffect(() => {
     const retain = (event: Event) => {
       const intent = useSessionStore.getState().intent;
@@ -104,7 +107,8 @@ export function useDesktopSelectionBridge(reportFailure: (message: string) => vo
         else if (terminalRuntimeId) recipient = { kind: 'terminal', id: terminalRuntimeId, desktopId: terminal.closest<HTMLElement>('[data-desktop-id]')?.dataset.desktopId ?? '' };
       }
       if (!recipient) return;
-      usePendingTerminalInput.getState().append(recipient, intent?.id ?? 0, retainTerminalEvent(event));
+      const selectionId = intent && ['session', 'leaf', 'desktop'].includes(intent.target.kind) ? intent.id : 0;
+      usePendingTerminalInput.getState().append(recipient, selectionId, retainTerminalEvent(event));
       event.preventDefault();
       event.stopPropagation();
       if (event.type === 'compositionend' && target?.closest('.terminal-container')) removeCompositionTextNodes(target);
@@ -142,10 +146,11 @@ export function useDesktopSelectionBridge(reportFailure: (message: string) => vo
       },
       (error: unknown) => {
         const store = useSessionStore.getState();
-        const discarded = usePendingTerminalInput.getState().discard(id);
-        if (store.intent?.id !== id && !discarded) return;
-        if (store.intent?.id === id) store.intentFailed(id);
-        reportFailureRef.current(`Could not show that ${target.kind === 'session' ? 'agent' : 'leaf'}: ${error instanceof Error ? error.message : String(error)}${discarded ? '. Input typed while switching could not be delivered.' : ''}`);
+        const current = store.intent?.id === id;
+        const reason = error instanceof Error ? error.message : String(error);
+        const discarded = store.intentFailed(id, reason);
+        if (!current || discarded) return;
+        reportFailureRef.current(`Could not show that ${target.kind === 'session' ? 'agent' : 'leaf'}: ${reason}`);
       },
     );
   }, [intent, sendDesktopShowSession, sendDesktopShowLeaf]);

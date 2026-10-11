@@ -10,13 +10,15 @@ const targetKey = (target: PendingInputTarget) => `${target.kind}:${target.id}`;
 
 interface PendingTerminalInput {
   pending: Map<string, { target: PendingInputTarget; events: Array<{ intentId: number; event: Event }> }>;
+  failure: { message: string } | null;
   append: (target: PendingInputTarget, intentId: number, event: Event) => void;
-  discard: (intentId: number) => boolean;
+  discard: (intentId: number, reason?: string) => boolean;
   deliver: (target: PendingInputTarget, element: HTMLElement) => void;
 }
 
 export const usePendingTerminalInput = create<PendingTerminalInput>((set, get) => ({
   pending: new Map(),
+  failure: null,
   append: (target, intentId, event) => {
     const key = targetKey(target);
     const entry = get().pending.get(key);
@@ -26,13 +28,16 @@ export const usePendingTerminalInput = create<PendingTerminalInput>((set, get) =
     }
     set((state) => ({ pending: new Map(state.pending).set(key, { target, events: [{ intentId, event }] }) }));
   },
-  discard: (intentId) => {
+  discard: (intentId, reason = 'The selection failed') => {
     let discarded = false;
-    set((state) => ({ pending: new Map([...state.pending].flatMap(([key, entry]) => {
-      const remaining = entry.events.filter((entry) => entry.intentId !== intentId);
-      if (remaining.length !== entry.events.length) discarded = true;
-      return remaining.length ? [[key, { ...entry, events: remaining }] as const] : [];
-    })) }));
+    set((state) => {
+      const pending = new Map([...state.pending].flatMap(([key, entry]) => {
+        const remaining = entry.events.filter((entry) => entry.intentId !== intentId);
+        if (remaining.length !== entry.events.length) discarded = true;
+        return remaining.length ? [[key, { ...entry, events: remaining }] as const] : [];
+      }));
+      return { pending, failure: discarded ? { message: `Input typed while switching could not be delivered: ${reason}` } : state.failure };
+    });
     return discarded;
   },
   deliver: (target, element) => {

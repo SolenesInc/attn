@@ -589,6 +589,7 @@ const harnessRegistrySignature = (settings: DaemonSettings) => JSON.stringify(Ob
   .map(([key, value]) => [key, key.endsWith('_available') ? '' : value])
   .sort(([a], [b]) => a.localeCompare(b)));
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
+const SELECTION_COMMANDS = ['desktop_show_session', 'desktop_show_leaf', 'desktop_set_current'];
 const MODEL_DISCOVERY_TIMEOUT_MS = 70_000;
 const SESSION_REOPEN_TIMEOUT_MS = 120_000;
 // Bus status is one aggregate pass over the whole event log. Measured on a copy of production, 209ms
@@ -2438,6 +2439,7 @@ export function useDaemonSocket({
 
     ws.onclose = () => {
       wsRef.current = null;
+      rejectPendingByPredicate((key) => SELECTION_COMMANDS.some((command) => key.startsWith(`${command}:`)), new Error('The daemon disconnected before confirming the selection'));
       emitSessionLedger({ type: 'connection', connected: false });
       hasReceivedInitialStateRef.current = false;
       canceledAttachIdsRef.current.clear();
@@ -2475,7 +2477,7 @@ export function useDaemonSocket({
     };
 
     wsRef.current = ws;
-  }, [resolvedWsUrl, rejectPendingForCommand, ensureDaemonRunning, showRecoveringNoticeForCommand, flushQueuedCommands, pruneAttachedPtySessions, emitSessionLedger]);
+  }, [resolvedWsUrl, rejectPendingByPredicate, rejectPendingForCommand, ensureDaemonRunning, showRecoveringNoticeForCommand, flushQueuedCommands, pruneAttachedPtySessions, emitSessionLedger]);
 
   useEffect(() => {
     void connect();
@@ -4413,12 +4415,12 @@ export function useDaemonSocket({
         pendingRequestKey(cmd, requestId),
         { cmd, request_id: requestId, ...body },
         `The daemon did not answer ${cmd}`,
-        cmd === 'desktop_show_session' || cmd === 'desktop_show_leaf' || cmd === 'desktop_set_current' ? null : undefined,
+        SELECTION_COMMANDS.includes(cmd) ? null : undefined,
       );
       if (intent !== null) {
         request.then(
           () => useSessionStore.getState().commandSettled(requestId),
-          () => useSessionStore.getState().intentFailed(intent),
+          (error: unknown) => useSessionStore.getState().intentFailed(intent, error instanceof Error ? error.message : String(error)),
         );
       }
       return request;

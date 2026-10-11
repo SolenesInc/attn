@@ -7,6 +7,41 @@ import { gesture, pressShortcut } from './test/renderApp';
 import type { CommandMessage } from './test/protocol';
 
 describe('typing while a selection is awaiting the daemon', () => {
+  it('discards a failed cold desktop selection’s input before its attachment finishes', async () => {
+    const { daemon } = await openAttachedTerminals({
+      sessions: ['s1', 's2'].map((id) => daemonSession(id, { state: 'idle' })),
+      desktops: ['s1', 's2'].map((id, index) => soloDesktop(id, { shortcut_slot: index + 1 })),
+    });
+    const shows: CommandMessage<'desktop_set_current'>[] = [];
+    const attaches: CommandMessage<'attach_session'>[] = [];
+    daemon.on('desktop_set_current', (command) => { shows.push(command); return undefined; });
+    daemon.on('attach_session', (command) => { attaches.push(command); return undefined; });
+    await gesture(daemon, () => pressShortcut('desktop.select2'));
+    await gesture(daemon, () => fireEvent.keyDown(document.activeElement!, { key: 'x', code: 'KeyX' }));
+    await gesture(daemon, () => daemon.replyTo(shows[0], { event: 'profile_action_result', action: shows[0].cmd, request_id: shows[0].request_id, success: false, error: 'desktop closed', error_code: 'not_found' }));
+    expect(screen.getByText(/Input typed while switching could not be delivered/)).toBeInTheDocument();
+    await gesture(daemon, () => daemon.replyTo(attaches[0], { event: 'attach_result', id: 's2', success: true, cols: 80, rows: 24, running: true }));
+    expect(daemon.sentOf('pty_input')).toEqual([]);
+    expect(document.activeElement?.closest('[data-pane-id]')).toHaveAttribute('data-pane-id', 'pane-s1');
+  });
+
+  it('reports and discards unconfirmed input when the daemon disconnects', async () => {
+    const { daemon } = await openAttachedTerminals({
+      sessions: ['s1', 's2'].map((id) => daemonSession(id, { state: 'idle' })),
+      desktops: [soloDesktop('s1')],
+    });
+    daemon.on('desktop_show_session', () => undefined);
+    await gesture(daemon, () => act(() => vi.mocked(onOpenUrl).mock.lastCall![0](['attn://spawn?cwd=%2Ftmp%2Fs2'])));
+    await gesture(daemon, () => fireEvent.keyDown(document.activeElement!, { key: 'x', code: 'KeyX' }));
+    await gesture(daemon, () => daemon.disconnect());
+    expect(screen.getByText(/Input typed while switching could not be delivered: The daemon disconnected/)).toBeInTheDocument();
+    daemon.arrangement.place('s2', 'pane-s2');
+    daemon.arrangement.show('desktop-s1', 'pane-s2');
+    await daemon.reconnect();
+    await daemon.idle();
+    expect(daemon.sentOf('pty_input')).toEqual([]);
+  });
+
   it('encodes retained keys with the selected terminal’s restored keyboard mode', async () => {
     const { daemon } = await openAttachedTerminals({
       sessions: ['s1', 's2'].map((id) => daemonSession(id, { state: 'idle' })),
