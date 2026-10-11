@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
@@ -75,7 +76,31 @@ func (s *Store) CloseAsk(id string) error {
 	if s.db == nil {
 		return ErrAskNotOpen
 	}
-	result, err := s.db.Exec("DELETE FROM asks WHERE id = ?", id)
+	return closeAsk(s.db, id)
+}
+
+func (s *Store) AnswerAsk(id string, answer inbox.Item, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return ErrAskNotOpen
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := closeAsk(tx, id); err != nil {
+		return err
+	}
+	if err := putInbox(tx, answer, at); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func closeAsk(db execer, id string) error {
+	result, err := db.Exec("DELETE FROM asks WHERE id = ?", id)
 	if err != nil {
 		return err
 	}

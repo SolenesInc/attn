@@ -110,13 +110,15 @@ func (d *Daemon) handleAskAnswer(client *wsClient, msg *protocol.AskAnswerMessag
 	d.sendToClient(client, result)
 }
 
+var errAskGone = errors.New("this ask was already answered or withdrawn")
+
 func (d *Daemon) answerAsk(msg *protocol.AskAnswerMessage, profileID string) error {
 	stored, err := d.store.GetOpenAsk(strings.TrimSpace(msg.AskID))
 	if err != nil && !errors.Is(err, store.ErrAskNotOpen) {
 		return err
 	}
 	if err != nil || !askShownIn(profileID, d.askProfileID(stored)) {
-		return errors.New("this ask was already answered or withdrawn")
+		return errAskGone
 	}
 	parts, err := ask.Parse(stored.Markdown)
 	if err != nil {
@@ -126,12 +128,15 @@ func (d *Daemon) answerAsk(msg *protocol.AskAnswerMessage, profileID string) err
 	if err != nil {
 		return err
 	}
-	if _, err := d.sendToInbox(inbox.Item{ID: "ask-answer/" + stored.ID, To: stored.To, Kind: inbox.Notice, Source: stored.ID, Text: text}); err != nil {
-		return fmt.Errorf("deliver the answer: %w", err)
+	answer := inbox.Item{ID: "ask-answer/" + stored.ID, To: stored.To, Kind: inbox.Notice, Source: stored.ID, Text: text}
+	err = d.store.AnswerAsk(stored.ID, answer, time.Now())
+	if errors.Is(err, store.ErrAskNotOpen) {
+		return errAskGone
 	}
-	if err := d.store.CloseAsk(stored.ID); err != nil {
-		return errors.New("this ask was already answered or withdrawn")
+	if err != nil {
+		return fmt.Errorf("save the answer: %w", err)
 	}
+	d.kickInboxAfterCommit(stored.To)
 	d.publishFact(FactAskClosed, stored.ID, nil)
 	if holder := d.inboxHolder(stored.To); holder != nil && holder.State != protocol.SessionStatePendingApproval {
 		d.handleSettleTurn(&protocol.SettleTurnMessage{SessionID: holder.ID})
