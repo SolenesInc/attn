@@ -27,7 +27,7 @@ export interface Session {
   agent: SessionAgent;
   endpointId?: string;
   yoloMode?: boolean;
-  chiefOfStaff?: boolean;
+  chief?: boolean;
   autoMode?: boolean;
   transcriptMatched: boolean;
   creating?: boolean;

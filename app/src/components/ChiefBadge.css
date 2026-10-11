@@ -1,4 +1,4 @@
-.chief-of-staff-badge {
+.chief-badge {
   align-items: center;
   background: rgba(88, 166, 255, 0.12);
   border: 1px solid rgba(88, 166, 255, 0.36);
@@ -16,7 +16,7 @@
   text-transform: uppercase;
 }
 
-.chief-of-staff-badge.compact {
+.chief-badge.compact {
   border-radius: 999px;
   height: 18px;
   justify-content: center;

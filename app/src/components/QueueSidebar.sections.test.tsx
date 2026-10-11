@@ -14,7 +14,7 @@ interface TestSession {
   label: string;
   state: 'working' | 'waiting_input' | 'idle';
   desktopId: string;
-  chiefOfStaff?: boolean;
+  chief?: boolean;
   turnOwed?: boolean;
   turnOpenedAt?: string;
   turnSnoozedUntil?: string;
@@ -45,6 +45,11 @@ const fixtureDesktops = [
   { id: 'ws-b', title: 'beta' },
 ];
 
+const chiefProps = (sessions: TestSession[]) => {
+  const session = sessions.find(session => session.chief);
+  return { chief: session ? { ref: 'member:chief-member', key: 'chief-member', name: 'chief', agent: 'claude', revision: 1, phase: 'awake' as const, sessionId: session.id } : null, chiefActions: { setUp: () => {}, wake: () => {}, sleep: () => {}, edit: () => {}, dismiss: () => {} } };
+};
+
 function sidebarData(sessions: TestSession[]) {
   const desktops = desktopGroups(fixtureDesktops, sessions);
   return { desktops, visualIndexByDesktopId: new Map(fixtureDesktops.map((desktop, index) => [desktop.id, index])) };
@@ -60,6 +65,7 @@ function renderSidebar(
     <Sidebar
       {...baseProps}
       {...data}
+      {...chiefProps(sessions)}
       {...overrides}
       queue={queueMode ? buildQueueBands(data.desktops) : null}
     />
@@ -74,7 +80,7 @@ function ListToggling(props: ComponentProps<typeof Sidebar>) {
 function renderWithList(sessions: TestSession[], overrides: Partial<ComponentProps<typeof Sidebar>> = {}) {
   const { agentListOpen, ...rest } = overrides;
   const data = sidebarData(sessions);
-  const view = render(<ListToggling {...baseProps} {...data} {...rest} queue={buildQueueBands(data.desktops)} />);
+  const view = render(<ListToggling {...baseProps} {...data} {...chiefProps(sessions)} {...rest} queue={buildQueueBands(data.desktops)} />);
   if (agentListOpen) fireEvent.click(screen.getByTestId('queue-agents-toggle'));
   return view;
 }
@@ -85,7 +91,7 @@ function queueRowIds(container: HTMLElement) {
 }
 
 const sessions: TestSession[] = [
-  { id: 'chief', label: 'chief', state: 'idle', desktopId: 'ws-a', chiefOfStaff: true },
+  { id: 'chief', label: 'chief', state: 'idle', desktopId: 'ws-a', chief: true },
   { id: 'newer', label: 'newer', state: 'waiting_input', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T11:00:00Z' },
   { id: 'older', label: 'older', state: 'working', desktopId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
   { id: 'settled', label: 'settled', state: 'waiting_input', desktopId: 'ws-b' },
@@ -124,7 +130,7 @@ describe('the queue sidebar', () => {
 
   it('anchors the chief above the owed turns, oldest first, and keeps the rest behind the list', () => {
     const { container } = renderSidebar(sessions, true);
-    expect(queueRowIds(container)).toEqual(['queue-chief-chief', 'queue-turn-older', 'queue-turn-newer']);
+    expect(queueRowIds(container)).toEqual(['queue-crew-chief-member', 'queue-turn-older', 'queue-turn-newer']);
     expect(screen.getByTestId('queue-waiting-card')).toHaveAttribute('data-waiting', '2');
     expect(screen.getByTestId('queue-waiting-head')).toHaveTextContent('2 waiting');
   });
@@ -185,7 +191,7 @@ describe('the queue sidebar', () => {
     const { container } = renderSidebar([...sessions, later], true, { agentListOpen: true });
 
     expect(queueRowIds(container)).toEqual([
-      'queue-chief-chief', 'queue-turn-older', 'queue-turn-newer', 'queue-settled-settled', 'queue-snoozed-later',
+      'queue-crew-chief-member', 'queue-turn-older', 'queue-turn-newer', 'queue-settled-settled', 'queue-snoozed-later',
     ]);
     expect(screen.getByTestId('queue-snoozed-header')).toHaveTextContent('Snoozed 1');
   });
@@ -198,7 +204,7 @@ describe('the queue sidebar', () => {
     );
     fireEvent.change(screen.getByTestId('queue-agent-filter'), { target: { value: 'oth' } });
 
-    expect(queueRowIds(container)).toEqual(['queue-chief-chief', 'queue-turn-older', 'queue-turn-newer', 'queue-settled-other']);
+    expect(queueRowIds(container)).toEqual(['queue-crew-chief-member', 'queue-turn-older', 'queue-turn-newer', 'queue-settled-other']);
   });
 
   it('marks each row with the desktop slot it lives on', () => {
@@ -380,6 +386,7 @@ describe('the desktop strip', () => {
       <Sidebar
         {...baseProps}
         {...data}
+      {...chiefProps(sessions)}
         visualIndexByDesktopId={new Map([['ws-a', 0]])}
         selectedDesktopId="ws-b"
         onOpenOverview={onOpenOverview}
@@ -436,13 +443,13 @@ describe('walking the queue sidebar from the keyboard', () => {
 
     const walk = (key: string) => fireEvent.keyDown(document.activeElement!, { key });
     walk('ArrowDown');
-    expect(focusedTestId()).toBe('queue-select-chief');
+    expect(focusedTestId()).toBe('queue-crew-select-chief-member');
     walk('ArrowDown');
     walk('ArrowDown');
     walk('ArrowDown');
     expect(focusedTestId()).toBe('queue-select-settled');
     walk('ArrowDown');
-    expect(focusedTestId()).toBe('queue-select-chief');
+    expect(focusedTestId()).toBe('queue-crew-select-chief-member');
     walk('ArrowUp');
     expect(focusedTestId()).toBe('queue-select-settled');
     expect(focusedQueueRow()).toMatchObject({ kind: 'session', sessionId: 'settled' });
@@ -616,9 +623,9 @@ describe('the crew in the sidebar', () => {
     ]);
 
     const block = container.querySelector('[data-testid="queue-crew-block"]') as HTMLElement;
-    expect(queueRowIds(block.parentElement!).filter((id) => id?.startsWith('queue-crew-')))
+    expect(queueRowIds(block.parentElement!).filter((id) => id?.startsWith('queue-crew-') && id !== 'queue-crew-chief-member'))
       .toEqual(['queue-crew-alder', 'queue-crew-keel', 'queue-crew-trellis']);
-    expect(within(block).getByTestId('queue-chief-chief')).toBeInTheDocument();
+    expect(within(block).getByTestId('queue-crew-chief-member')).toBeInTheDocument();
 
     expect(screen.getByTestId('queue-crew-keel').getAttribute('data-crew-state')).toBe('awake');
     expect(screen.getByTestId('queue-crew-alder').getAttribute('data-crew-state')).toBe('asleep');
@@ -635,7 +642,7 @@ describe('the crew in the sidebar', () => {
 
     renderSidebar(chiefOnRoster, true, { crew: [{ key: 'alder', name: 'Alder' }, { key: 'keel', name: 'Keel' }] });
     expect(screen.queryByTestId('queue-crew-alder')).toBeNull();
-    expect(screen.getByTestId('queue-chief-chief')).toBeInTheDocument();
+    expect(screen.getByTestId('queue-crew-chief-member')).toBeInTheDocument();
     expect(moreAgents()).toBe(withoutChiefOnRoster);
   });
 
@@ -648,7 +655,7 @@ describe('the crew in the sidebar', () => {
     expect(focusedQueueRow()).toEqual({ kind: 'other' });
     within(screen.getByTestId('queue-crew-keel')).getAllByRole('button')[0].focus();
     expect(focusedQueueRow()).toMatchObject({ kind: 'session', sessionId: 'sess-keel' });
-    within(screen.getByTestId('queue-chief-chief')).getAllByRole('button')[0].focus();
+    within(screen.getByTestId('queue-crew-chief-member')).getAllByRole('button')[0].focus();
     expect(focusedQueueRow()).toMatchObject({ kind: 'session', sessionId: 'chief' });
   });
 
@@ -691,6 +698,7 @@ describe('the crew in the sidebar', () => {
       <Sidebar
         {...baseProps}
         {...data}
+      {...chiefProps(sessions)}
         crew={roster}
         queue={buildQueueBands(data.desktops, { crewInQueue: true })}
       />,
@@ -868,6 +876,7 @@ describe('the crew in the sidebar', () => {
           <Sidebar
             {...baseProps}
             {...data}
+      {...chiefProps(sessions)}
             crew={roster}
             onWakeCrewMember={onWakeCrewMember}
             queue={buildQueueBands(data.desktops)}

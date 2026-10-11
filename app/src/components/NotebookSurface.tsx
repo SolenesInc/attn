@@ -34,7 +34,7 @@ export interface NotebookSurfaceProps {
   sendToChief?: (selection: string, sourcePath?: string) => Promise<NotebookSendToChiefResult>;
   changeSignal?: number;
   listFiles?: () => Promise<NotebookEntry[]>;
-  chiefActive?: boolean;
+  chief?: { name: string; presence: 'working' | 'idle' | 'asleep' | 'unconfigured' };
 }
 
 const PREFERRED_FIRST = ['knowledge/index.md', 'index.md'];
@@ -64,7 +64,7 @@ export const NotebookSurface = forwardRef<NotebookSurfaceHandle, NotebookSurface
   sendToChief,
   changeSignal = 0,
   listFiles,
-  chiefActive,
+  chief,
 }: NotebookSurfaceProps, ref) {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [note, setNote] = useState<FsReadResult | null>(null);
@@ -846,13 +846,13 @@ export const NotebookSurface = forwardRef<NotebookSurfaceHandle, NotebookSurface
               </div>
             </div>
             <div className="notebook-browser-chrome">
-              {chiefActive !== undefined && (
+              {chief && (
                 <span
-                  className={`notebook-browser-chief-pulse${chiefActive ? ' is-active' : ''}`}
+                  className={`notebook-browser-chief-pulse${chief.presence === 'working' ? ' is-active' : ''}`}
                   role="status"
                 >
                   <span className="notebook-browser-chief-dot" aria-hidden="true" />
-                  chief: {chiefActive ? 'active' : 'idle'}
+                  {chief.name}: {chief.presence === 'unconfigured' ? 'not set up' : chief.presence}
                 </span>
               )}
               <button type="button" className="notebook-browser-close" onClick={() => void requestClose()}>

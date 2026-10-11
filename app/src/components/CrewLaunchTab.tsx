@@ -1,3 +1,4 @@
+import { chiefHarnesses, chiefRouteRules } from './chiefRoute';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { LaunchDesktopKind } from '../types/generated';
 import type { CrewLaunchEdit, CrewLaunchSelection, useCrewLaunchAutosave } from '../hooks/useCrewLaunchAutosave';
@@ -62,8 +63,9 @@ function LaunchFields({ member, selection, harnesses, effectiveAgent, catalogLoa
   const inherited = routeFromStored(effectiveAgent, member.model ? settings[`default_model_${effectiveAgent}`] || '' : member.resolved_model || '', member.effort ? settings[`default_effort_${effectiveAgent}`] || '' : member.resolved_effort || '');
   return <div className="crew-launch-fields">
     <LaunchDesktopSelect kind={LaunchDesktopKind.Crew} itemId={member.key} profileId={member.profile_id ?? ''} defaultName={member.name || member.key} value={selection.launchDesktop} onChange={launchDesktop => update({ launchDesktop })} disabled={catalogLoading} />
-    <HarnessRouteChip variant="field" aria-label="Crew launch model" data-testid="crew-route" value={value} rules={{ harnesses, requireAvailable: true, allowNone: true, noneLabel: 'Crew default', inherited }} disabled={catalogLoading} onChange={route => {
+    <HarnessRouteChip variant="field" aria-label="Crew launch model" data-testid="crew-route" value={value} rules={member.chief ? chiefRouteRules(chiefHarnesses(harnesses, settings)) : { harnesses, requireAvailable: true, allowNone: true, noneLabel: 'Crew default', inherited }} disabled={catalogLoading} onChange={route => {
       const model = storedRouteModel(route);
+      if (member.chief && !model) return;
       if (route.harness !== selection.agent) { update({ agent: route.harness, model, effort: route.effort }); return; }
       const patch: Partial<CrewLaunchSelection> = {};
       if (model !== selection.model) {
@@ -131,6 +133,7 @@ function RestartSection({ member, edit, restart, isConnected, onRestart }: {
   isConnected: boolean;
   onRestart: () => void;
 }) {
+  if (member.chief && !member.agent) return null;
   const busy = restartBusy(member, restart);
   const savesAcknowledged = edit.state === 'saved';
   const restartLabel = busy ? 'Restart in progress…' : member.binding_session ? 'Handoff and restart' : 'Wake';

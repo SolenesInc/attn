@@ -24,7 +24,7 @@ export interface QueueBandSessionView {
   label: string;
   state: UISessionState;
   state_reason?: string;
-  chiefOfStaff?: boolean;
+  chief?: boolean;
   priority?: boolean;
   turnOwed?: boolean;
   turnOpenedAt?: string;
@@ -42,6 +42,8 @@ export interface CrewMemberView {
   launch_desktop?: { label?: string };
   key: string;
   name: string;
+  chief?: boolean;
+  agent?: string;
   resolved_agent?: string;
   binding_session?: string;
 }
@@ -161,11 +163,10 @@ export function QueueRowView({
       data-session-id={session.id}
       data-state={session.state}
       data-desktop-id={row.desktopId}
-      title={session.chiefOfStaff ? session.label : undefined}
     >
       <QueueSessionSelection
-        label={session.chiefOfStaff ? 'Chief' : session.label}
-        title={[session.chiefOfStaff ? session.label : harnessLabel(session.agent), where?.title].filter(Boolean).join(' · ')}
+        label={session.label}
+        title={[harnessLabel(session.agent), where?.title].filter(Boolean).join(' · ')}
         testId={`queue-select-${session.id}`}
         onSelect={onSelect}
       />
@@ -178,7 +179,7 @@ export function QueueRowView({
       />
       <span className="sidebar-session-identity">
         <SessionLabel
-          label={session.chiefOfStaff ? 'Chief' : session.label}
+          label={session.label}
           session={session}
           hasDelegates={delegates.length > 0}
         />
@@ -186,7 +187,6 @@ export function QueueRowView({
       </span>
       <span className="session-trailing">
         <DelegationChainTrigger session={session} hasDelegates={delegates.length > 0} />
-        {session.chiefOfStaff && <span className="queue-chief-glyph" title="Chief of staff" aria-label="Chief of staff">⌁</span>}
         {age && <span className="queue-row-age">{age}</span>}
         {wake && <span className="queue-row-wake-at">{wake}</span>}
       </span>
@@ -210,6 +210,8 @@ export interface RowWhere {
 }
 
 interface CrewRowProps {
+  chief?: boolean;
+  sleeping?: boolean;
   name?: string;
   agent?: string;
   member: string;
@@ -229,6 +231,7 @@ export function CrewRowView(props: CrewRowProps) {
     <AwakeCrewRow {...props} row={props.row} />
   ) : (
     <SleepingCrewRow
+      chief={props.chief}
       member={props.member}
       name={props.name}
       agent={props.agent}
@@ -240,14 +243,15 @@ export function CrewRowView(props: CrewRowProps) {
 }
 
 function SleepingCrewRow({
+  chief,
   name: storedName,
   member,
   agent,
   selected,
   onWake,
   onOpenMemberActions,
-}: Pick<CrewRowProps, 'member' | 'name' | 'selected' | 'onWake' | 'onOpenMemberActions' | 'agent'>) {
-  const { phase, trigger, rowRef } = useWakeConfirm(onWake);
+}: Pick<CrewRowProps, 'chief' | 'member' | 'name' | 'selected' | 'onWake' | 'onOpenMemberActions' | 'agent'>) {
+  const { phase, trigger, rowRef } = useWakeConfirm(onWake, chief);
   const armed = phase === 'armed';
   const resolvedName = useMemberName(member);
   const name = storedName ?? resolvedName;
@@ -272,6 +276,8 @@ function SleepingCrewRow({
       <SessionLead agent={agent} state="idle" seed={member} />
       <SessionLabel label={name} />
       <span className="session-trailing">
+        {chief && <span className="queue-chief-glyph" title={name}>⌁</span>}
+        {chief && <span className="queue-row-age">asleep</span>}
         <button
           type="button"
           className="queue-crew-sun"
@@ -309,6 +315,8 @@ function SleepingCrewRow({
 }
 
 function AwakeCrewRow({
+  chief,
+  sleeping,
   name: storedName,
   member,
   row,
@@ -324,13 +332,13 @@ function AwakeCrewRow({
   const resolvedName = useMemberName(member);
   const name = storedName ?? resolvedName;
   const { session } = row;
-  const label = session.label || name;
+  const label = chief ? name : session.label || name;
   return (
     <div
       className={`session-item sidebar-leaf-row queue-row queue-row--crew ${selected ? 'selected' : ''}`.trim()}
       data-testid={`queue-crew-${member}`}
       data-crew-member={member}
-      data-crew-state="awake"
+      data-crew-state={sleeping ? 'sleeping' : 'awake'}
       data-session-id={session.id}
       data-state={session.state}
       data-desktop-id={row.desktopId}
@@ -350,6 +358,8 @@ function AwakeCrewRow({
       />
       <SessionLabel label={label} session={session} hasDelegates={delegates.length > 0} />
       <span className="session-trailing">
+        {chief && <span className="queue-chief-glyph" title={name}>⌁</span>}
+        {sleeping && <span className="queue-row-age">going to sleep</span>}
         <DelegationChainTrigger session={session} hasDelegates={delegates.length > 0} />
       </span>
       {(onSleep || onOpenActions) && (

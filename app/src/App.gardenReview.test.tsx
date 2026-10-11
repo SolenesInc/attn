@@ -429,11 +429,11 @@ describe('App garden review', () => {
     })]);
   });
 
-  it('offers Send to Chief only while the selected profile has a chief', async () => {
+  it('offers Send to Chief without depending on a session', async () => {
     await openReview({}, { chief: false });
 
     expect(screen.getByRole('button', { name: 'Park' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Send to Chief' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Send to Chief' })).toBeInTheDocument();
   });
 
   it.each(['asleep', 'unconfigured'] as const)('offers Send to Chief while its permanent member is %s', async (chiefState) => {

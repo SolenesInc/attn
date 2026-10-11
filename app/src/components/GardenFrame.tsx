@@ -73,7 +73,6 @@ export interface GardenFrameProps {
   onResumeSeed?: (seedId: string, review?: SeedReviewActionContext) => Promise<unknown>;
   onHandoverSeed?: (options: Omit<SeedHandoverOptions, 'sourceSessionId'>) => Promise<unknown>;
   onSendSeedToChief?: (options: Omit<SeedSendToChiefOptions, 'sourceSessionId'>) => Promise<unknown>;
-  chiefAvailable?: boolean;
   liveSessions?: Set<string>;
   loaded?: boolean;
   moveSeed?: (
@@ -108,7 +107,6 @@ export function GardenFrame({
   onResumeSeed,
   onHandoverSeed,
   onSendSeedToChief,
-  chiefAvailable = false,
   loaded = true,
   moveSeed,
   noteSeed,
@@ -254,7 +252,7 @@ export function GardenFrame({
                 onResumeSeed={(seedId, review) => onResumeSeed(seedId, review)}
                 onKeepSeed={keepReviewItem}
                 onHandoverSeed={onHandoverSeed}
-                onSendSeedToChief={chiefAvailable ? onSendSeedToChief : undefined}
+                onSendSeedToChief={onSendSeedToChief}
                 onRetry={retryReviewItem}
                 onDraft={draftReviewHandover}
                 onRefresh={showReview}
@@ -284,7 +282,6 @@ export function GardenFrame({
                 onResumeSeed={onResumeSeed}
                 onHandoverSeed={onHandoverSeed}
                 onSendSeedToChief={onSendSeedToChief}
-                chiefAvailable={chiefAvailable}
                 onClose={onClose}
                 viewToggle={viewToggle}
                 frame={mode === 'full' ? 'full' : 'dock'}

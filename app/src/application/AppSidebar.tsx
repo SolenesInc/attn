@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Sidebar } from '../components/Sidebar';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useDaemonStore } from '../store/daemonSessions';
@@ -10,6 +10,7 @@ import {
   useAppAppearanceContext,
   useAppGardenActionsContext,
   useAppInputs,
+  useChiefContext,
   useAppPanelsContext,
   useAppShell,
   useAttentionQueueContext,
@@ -61,6 +62,11 @@ export function AppSidebar() {
   const { handleOpenPalette, sidebarSurface, windowCovered, agentFocused } = useAppShell();
   const { keybindings } = useAppAppearanceContext();
   const { criticalNotifications, settings } = useAppInputs();
+  const chief = useChiefContext();
+  const { setSettingsOpen, settingsModalRef, setSidebarCollapsed } = useAppPanelsContext();
+  useEffect(() => {
+    if (chief.view?.phase === 'unconfigured') setSidebarCollapsed(false);
+  }, [chief.view?.key, chief.view?.phase, setSidebarCollapsed]);
   const allCrew = useDaemonStore((state) => state.crew);
   const profileName = useProfilesStore(
     (state) => state.profiles.find((profile) => profile.id === state.selectedProfileId)?.name,
@@ -121,9 +127,13 @@ export function AppSidebar() {
         })
       }
       onTogglePriority={togglePriority}
+      chief={chief.view}
+      chiefActions={chief.actions}
+      chiefSetupOpen={chief.setupOpen}
+      onChiefSettings={() => { void settingsModalRef.current?.selectSection('agents'); setSettingsOpen(true); }}
       crew={crew}
-      onWakeCrewMember={handleWakeCrewMember}
-      onSleepCrewMember={handleSleepCrewMember}
+      onWakeCrewMember={member => member === chief.view?.key ? chief.actions.wake() : handleWakeCrewMember(member)}
+      onSleepCrewMember={member => member === chief.view?.key ? chief.actions.sleep() : handleSleepCrewMember(member)}
       onManageCrew={(event) => handleOpenCrew(undefined, event.currentTarget)}
       onOpenCrewMemberDetails={handleOpenCrew}
       crewQueueEnabled={crewQueueEnabled}

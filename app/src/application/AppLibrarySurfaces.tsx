@@ -13,7 +13,7 @@ import {
   useAppPanelsContext,
   useAppSessionsContext,
   useAppShell,
-  useChiefOfStaffContext,
+  useChiefContext,
   useNavigationContext,
   useSessionLaunchContext,
   useSessionLifecycleContext,
@@ -92,10 +92,10 @@ export function AppLibrarySurfaces() {
   const { notebookSurfaceContextValue, notebookRootChangeSignal } = useAppNotebookSurfaceContext();
   const { effectiveNotebookRoot, makeDaemon } = notebookSurfaceContextValue;
   const browserDaemon = useMemo(() => makeDaemon(effectiveNotebookRoot), [makeDaemon, effectiveNotebookRoot]);
-  const { notebookChiefActive } = useAppSessionsContext();
   const seeds = useDaemonStore((state) => state.seeds);
   const seedsTotal = useDaemonStore((state) => state.seedsTotal);
-  const { hasChiefOfStaff } = useChiefOfStaffContext();
+  const { view: chief } = useChiefContext();
+  const notebookChief = chief ? { name: chief.name, presence: chief.phase === 'unconfigured' ? 'unconfigured' as const : chief.phase === 'asleep' ? 'asleep' as const : daemonSessions.find(session => session.id === chief.sessionId)?.state === 'working' ? 'working' as const : 'idle' as const } : undefined;
   return (
     <>
       <LedgerSurface
@@ -145,7 +145,7 @@ export function AppLibrarySurfaces() {
         onClose={() => setNotebookOpen(false)}
         {...browserDaemon}
         changeSignal={notebookRootChangeSignal}
-        chiefActive={notebookChiefActive}
+        chief={notebookChief}
       />
       <GardenFrame
         key={selectedProfileId}
@@ -169,7 +169,6 @@ export function AppLibrarySurfaces() {
         onResumeSeed={handleResumeSeed}
         onHandoverSeed={handleHandoverSeed}
         onSendSeedToChief={handleSendSeedToChief}
-        chiefAvailable={hasChiefOfStaff}
         reviewOverview={seedReviewOverview}
         showReview={sendSeedReviewShow}
         startReview={sendSeedReviewStart}

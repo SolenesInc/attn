@@ -42,7 +42,7 @@ export function autoSettleSeconds(
 }
 
 export interface QueueBandSession extends DesktopViewSession {
-  chiefOfStaff?: boolean;
+  chief?: boolean;
   priority?: boolean;
   turnOwed?: boolean;
   turnOpenedAt?: string;
@@ -75,10 +75,10 @@ export interface QueueActions {
 }
 
 export function queueActions(
-  session: Pick<QueueBandSession, 'automation' | 'crewMember' | 'chiefOfStaff' | 'turnOwed' | 'turnSnoozedUntil'>,
+  session: Pick<QueueBandSession, 'automation' | 'crewMember' | 'chief' | 'turnOwed' | 'turnSnoozedUntil'>,
   { queueMode, crewInQueue, now }: { queueMode: boolean; crewInQueue: boolean; now: number },
 ): QueueActions {
-  if (session.chiefOfStaff || isSnoozed(session.turnSnoozedUntil, now)) return { settle: false, snooze: false };
+  if (session.chief || isSnoozed(session.turnSnoozedUntil, now)) return { settle: false, snooze: false };
   const inQueue = queueMode && sessionParticipatesInQueue(session, crewInQueue);
   return { settle: Boolean(session.turnOwed) && (inQueue || Boolean(session.automation)), snooze: inQueue };
 }
@@ -165,7 +165,7 @@ export function buildQueueBands<TSession extends QueueBandSession>(
         desktopId: desktop.id,
         desktopTitle: desktop.title,
       };
-      if (session.chiefOfStaff) {
+      if (session.chief) {
         if (!chief) {
           chief = row;
         }
@@ -312,7 +312,7 @@ export function advanceAfterTurnClosed<TSession extends QueueBandSession>(
 }
 
 export function crewRows<TSession extends QueueBandSession>(
-  crew: readonly { key: string }[] | undefined,
+  crew: readonly { key: string; chief?: boolean }[] | undefined,
   bands: Pick<QueueBands<TSession>, 'chief' | 'crew'>,
 ): { member: string; row?: QueueRow<TSession> }[] {
   const byMember = new Map<string, QueueRow<TSession>>();
@@ -320,7 +320,7 @@ export function crewRows<TSession extends QueueBandSession>(
     const member = row.session.crewMember;
     if (member && !byMember.has(member)) byMember.set(member, row);
   }
-  const members = new Set<string>([...(crew ?? []).map((entry) => entry.key), ...byMember.keys()]);
+  const members = new Set<string>([...(crew ?? []).filter((entry) => !entry.chief).map((entry) => entry.key), ...byMember.keys()]);
   const chiefMember = bands.chief?.session.crewMember;
   if (chiefMember) members.delete(chiefMember);
   return [...members]

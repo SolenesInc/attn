@@ -25,6 +25,7 @@ interface CrewPanelProps {
   isOpen: boolean;
   visit: number;
   initialMember?: string;
+  initialTab?: CrewTab;
   members: CrewMember[];
   sessions: DaemonSession[];
   seeds: Seed[];
@@ -49,7 +50,7 @@ function MemberHeading({ member }: { member: CrewMember }) {
     <div className="crew-member-heading">
       <div className="crew-member-identity">
         <span className="crew-avatar is-large" aria-hidden="true">{name.slice(0, 1)}</span>
-        <div><h2>{name}</h2><span>{awake ? 'Awake' : 'Asleep'}</span></div>
+        <div><h2>{name}</h2><span>{member.chief && !member.agent ? 'Not set up' : awake ? 'Awake' : 'Asleep'}</span></div>
       </div>
       <span className={`crew-presence ${awake ? 'is-awake' : ''}`}>{awake ? 'Current day active' : 'Between days'}</span>
     </div>
@@ -160,6 +161,7 @@ export function CrewPanel({ visit, ...surface }: CrewPanelProps) {
 function CrewPanelSurface({
   isOpen,
   initialMember,
+  initialTab,
   members,
   sessions,
   seeds,
@@ -177,7 +179,7 @@ function CrewPanelSurface({
   const closeRef = useRef<HTMLButtonElement>(null);
   const rosterRef = useRef<HTMLDivElement>(null);
   const { selectedMember, tab, pending: navigationPending, navigate } = useCrewNavigation({
-    members, initialMember, rosterRef, charter: charterAutosave, onClose, onOpenSeed,
+    members, initialMember, initialTab, rosterRef, charter: charterAutosave, onClose, onOpenSeed,
   });
   const selectedMemberId = selectedMember?.key;
   const charterEdit = selectedMemberId ? charterAutosave.read(selectedMemberId) : undefined;

@@ -21,8 +21,8 @@ async function launch({
   settings = QUEUE as Record<string, string>,
   crew = [] as ReturnType<typeof crewMember>[],
 } = {}) {
-  const sessions = ['s1', 's2'].map((id) => agent(id, { turn_owed: owed.includes(id), chief: id === chief }));
-  return renderApp({ initialState: { settings, sessions, desktops: sessions.map((session) => soloDesktop(session.id)), crew } });
+  const sessions = ['s1', 's2'].map((id) => agent(id, { turn_owed: owed.includes(id), chief: id === chief, ...(id === chief ? { crew_member: 'chief-member' } : {}) }));
+  return renderApp({ initialState: { settings, sessions, desktops: sessions.map((session) => soloDesktop(session.id)), crew: [...crew, ...(chief ? [crewMember('chief-member', { chief: true, name: chief, agent: 'claude', model: 'opus', binding_session: chief })] : [])] } });
 }
 
 async function openS2(daemon: ScriptedDaemon) {
@@ -207,7 +207,7 @@ describe('acting on the queue sidebar row that holds focus', () => {
     const { daemon } = await launch({ chief: 's1' });
     await openS2(daemon);
 
-    screen.getByTestId('queue-select-s1').focus();
+    screen.getByTestId('queue-crew-select-chief-member').focus();
     await snooze(daemon);
     expect(snoozeMenu()).toBeNull();
 

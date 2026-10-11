@@ -441,54 +441,6 @@
   text-align: left;
 }
 
-.chief-session-block {
-  border-bottom: 1px solid var(--color-border);
-  margin: 0 4px 14px;
-  padding: 2px 4px 14px;
-}
-
-.chief-section-label {
-  color: var(--color-text-dimmed);
-  font-size: var(--font-size-xs);
-  letter-spacing: 0.08em;
-  margin-bottom: 8px;
-  text-transform: uppercase;
-}
-
-.chief-session-summary {
-  align-items: center;
-  background: transparent;
-  border: 0;
-  border-radius: 6px;
-  color: var(--color-text-primary);
-  cursor: pointer;
-  display: flex;
-  gap: 9px;
-  font: inherit;
-  padding: 7px 8px;
-  text-align: left;
-  width: 100%;
-}
-
-.chief-session-summary:hover {
-  background: var(--color-bg-elevated);
-}
-
-.chief-session-name {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chief-session-state {
-  color: var(--color-text-dimmed);
-  flex-shrink: 0;
-  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
-  font-size: var(--font-size-xs);
-  text-transform: lowercase;
-}
-
 .session-group {
   margin-bottom: 16px;
 }

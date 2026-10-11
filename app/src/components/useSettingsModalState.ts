@@ -129,7 +129,6 @@ export function useSettingsModalState({
     }
     if (await autosave.flush()) onClose();
   }, [autosave, onClose]);
-  useImperativeHandle(closeRef, () => ({ close: closeSettings }), [closeSettings]);
   const selectSection = useCallback(
     async (section: SettingsSectionID) => {
       if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
@@ -142,6 +141,7 @@ export function useSettingsModalState({
     [autosave],
   );
   const [selectedSection, setSelectedSection] = useState<SettingsSectionID>('connectivity');
+  useImperativeHandle(closeRef, () => ({ close: closeSettings, selectSection }), [closeSettings, selectSection]);
   const delegationPolicy = useDelegationPreferences(
     isOpen,
     sendDelegationPreferencesGet,

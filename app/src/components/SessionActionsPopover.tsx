@@ -9,7 +9,7 @@ interface SessionActionsPopoverProps {
   anchor: { top: number; left: number };
   canRename: boolean;
   onRename: () => void;
-  onCloseSession: () => void;
+  ending: { kind: 'close'; run: () => void } | { kind: 'sleep'; name: string; run: () => void };
   onReloadSession: () => void;
   onMemberDetails?: () => void;
   onClose: () => void;
@@ -24,7 +24,7 @@ export function SessionActionsPopover({
   anchor,
   canRename,
   onRename,
-  onCloseSession,
+  ending,
   onReloadSession,
   onMemberDetails,
   onClose,
@@ -100,9 +100,9 @@ export function SessionActionsPopover({
         <span aria-hidden="true">↻</span>
         Reload session
       </button>
-      <button type="button" role="menuitem" onClick={() => run(onCloseSession)}>
+      <button type="button" role="menuitem" onClick={() => run(ending.run)}>
         <span aria-hidden="true">×</span>
-        Close session
+        {ending.kind === 'sleep' ? `Sleep ${ending.name}` : 'Close session'}
       </button>
     </div>
   );

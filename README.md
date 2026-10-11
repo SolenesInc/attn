@@ -377,9 +377,11 @@ whether each setting applies to one profile or all profiles. Inside attn,
 `attn settings set notebook.root ~/notes/work` changes the session's profile.
 Outside attn, use `--profile <name|id>` when several profiles exist.
 
-Then: **Cmd+T**, pick a harness, select the `chief-of-staff` folder, turn
-**Chief of Staff** on (or pick **Make chief of staff** from an existing
-session's menu), and give it a mission:
+Set up your chief in the sidebar. Choose Claude Code or Codex, then a model
+and effort, and press **Wake Chief**. The deepest model at low effort is
+preselected. To choose its working folder, run
+`attn crew set chief --cwd ~/chief-of-staff`. Later, use the chief's **••• →
+Harness and model…** menu or **Manage crew → Launch settings**. Give it a mission:
 
 > We need to ship the new import flow this week. Help me understand what's
   already in flight, suggest how to break it down, and prepare delegation

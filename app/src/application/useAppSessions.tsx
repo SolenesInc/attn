@@ -82,14 +82,6 @@ export function useAppSessions({
     (session) => session.profileId === selectedProfileId,
   );
 
-  const selectedProfileChiefId = daemonSessions.find(
-    (session) => session.chief === true && session.profile_id === selectedProfileId,
-  )?.id;
-  const notebookChiefSession = enrichedLocalSessions.find((session) => session.id === selectedProfileChiefId);
-  const notebookChiefActive = notebookChiefSession
-    ? notebookChiefSession.state === 'working'
-    : undefined;
-
   useEffect(() => {
     void connect();
   }, [connect]);
@@ -134,6 +126,5 @@ export function useAppSessions({
     endpointById,
     visibleEnrichedSessions,
     delegationSessions,
-    notebookChiefActive,
   };
 }

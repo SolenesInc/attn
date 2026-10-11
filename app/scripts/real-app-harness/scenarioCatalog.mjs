@@ -2,6 +2,12 @@ const REMOTE_ENDPOINTS_OFF = 'remote endpoints are off in this release, so the a
 
 export const scenarioCatalog = [
   {
+    id: 'chief-slot',
+    runnerId: 'CHIEF-SLOT',
+    label: 'Chief setup through native keys, sleep and one-click wake in a fresh profile',
+    command: ['node', 'scripts/real-app-harness/scenario-chief-slot.mjs'],
+  },
+  {
     id: 'desktop-order',
     runnerId: 'DESKTOP-ORDER',
     label: 'Desktop Sort and Undo preserve arrangements; new numbered desktops follow the nearest lower number',

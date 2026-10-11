@@ -2016,6 +2016,17 @@ export function useUiAutomationBridge({
     if (domResult !== NOT_A_DOM_ACTION) return domResult;
 
     switch (request.action) {
+      case 'chief_slot_get_state': {
+        const slot = document.querySelector('[data-testid="chief-slot"]');
+        return {
+          present: Boolean(slot),
+          phase: slot?.getAttribute('data-chief-phase') || null,
+          member: slot?.getAttribute('data-chief-member') || null,
+          sessionId: slot?.getAttribute('data-chief-session') || null,
+          setupOpen: Boolean(slot?.querySelector('[data-testid="chief-setup"]')),
+          shownAgentId,
+        };
+      }
       case 'get_state':
         return {
           ...serializeSelection(),
@@ -2225,7 +2236,7 @@ export function useUiAutomationBridge({
               : null,
           };
         };
-        const chiefRow = band?.querySelector('[data-testid^="queue-chief-"]');
+        const chiefRow = band?.querySelector('[data-testid="chief-slot"] .queue-row[data-session-id]');
         const agentListToggle = band?.querySelector('[data-testid="queue-agents-toggle"]');
         const snoozedHeader = band?.querySelector('[data-testid="queue-snoozed-header"]');
         const automationGroups = Array.from(document.querySelectorAll('[data-automation-id]'));
@@ -2260,7 +2271,7 @@ export function useUiAutomationBridge({
           },
           present: Boolean(band),
           empty: Boolean(band?.querySelector('[data-testid="queue-empty"]')),
-          chief: chiefRow ? readRow(chiefRow, 'queue-chief-') : null,
+          chief: chiefRow ? { ...readRow(chiefRow, 'queue-crew-'), id: chiefRow.getAttribute('data-session-id') || '' } : null,
           turns: Array.from(band?.querySelectorAll('[data-testid^="queue-turn-"]') || [])
             .map((row) => readRow(row, 'queue-turn-')),
           settled: Array.from(band?.querySelectorAll('[data-testid^="queue-settled-"]') || [])

@@ -1,3 +1,4 @@
+import { ChiefSlot } from './ChiefSlot';
 import { useRevealSelection } from './useRevealSelection';
 import { useRef } from 'react';
 import { formatShortcut } from '../shortcuts/formatShortcut';
@@ -163,10 +164,10 @@ export function SidebarFooter() {
   );
 }
 
-export function SidebarSleepingCrew() {
+export function SidebarCrew() {
   const { crew, onManageCrew, onWakeCrewMember, openCrewMemberActions } = useSidebarContext();
   if (!crew?.length) return null;
-  const sleeping = crew.filter((member) => !member.binding_session);
+  const sleeping = crew.filter((member) => !member.chief && !member.binding_session);
   return (
     <div className="sidebar-sleeping-crew">
       <div className="queue-section-rule queue-crew-rule">
@@ -174,6 +175,7 @@ export function SidebarSleepingCrew() {
         <span className="queue-rule-line" aria-hidden="true" />
         {onManageCrew && <button type="button" data-testid="manage-crew" onClick={onManageCrew}>manage</button>}
       </div>
+      <ChiefSlot />
       {sleeping.map((member) => (
         <CrewRowView
           key={member.key}
@@ -198,6 +200,7 @@ export function SidebarPopovers() {
     onTogglePriority,
     desktops,
     onCloseSession,
+    onSleepCrewMember,
     onReloadSession,
     renameTarget,
     setRenameTarget,
@@ -244,7 +247,9 @@ export function SidebarPopovers() {
               anchor: sessionActionsTarget.anchor,
             });
           }}
-          onCloseSession={() => onCloseSession(sessionActionsTarget.id)}
+          ending={sessionActionsTarget.crewMember
+            ? { kind: 'sleep', name: memberName(sessionActionsTarget.crewMember), run: () => onSleepCrewMember?.(sessionActionsTarget.crewMember!) }
+            : { kind: 'close', run: () => onCloseSession(sessionActionsTarget.id) }}
           onReloadSession={() => onReloadSession(sessionActionsTarget.id)}
           onMemberDetails={
             sessionActionsTarget.crewMember && onOpenCrewMemberDetails

@@ -29,6 +29,10 @@ export function useSidebarState({
   dockCollapsed = false,
   onToggleDockCollapsed,
   queue = null,
+  chief,
+  chiefActions,
+  chiefSetupOpen,
+  onChiefSettings,
   crew,
   onWakeCrewMember,
   onSleepCrewMember,
@@ -95,7 +99,6 @@ export function useSidebarState({
   const [sessionActionsTarget, setSessionActionsTarget] = useState<{
     id: string;
     label: string;
-    chiefOfStaff: boolean;
     crewMember?: string;
     trigger: HTMLElement;
     anchor: { top: number; left: number };
@@ -129,7 +132,7 @@ export function useSidebarState({
     });
   };
   const openSessionActions = (
-    session: { id: string; label: string; chiefOfStaff?: boolean; crewMember?: string },
+    session: { id: string; label: string; chief?: boolean; crewMember?: string },
     event: ReactMouseEvent,
   ) => {
     event.stopPropagation();
@@ -137,7 +140,6 @@ export function useSidebarState({
     setSessionActionsTarget({
       id: session.id,
       label: session.label,
-      chiefOfStaff: Boolean(session.chiefOfStaff),
       crewMember: session.crewMember,
       trigger: event.currentTarget as HTMLElement,
       anchor: { top: rect.bottom + 4, left: rect.right - 190 },
@@ -246,6 +248,10 @@ export function useSidebarState({
     dockCollapsed,
     onToggleDockCollapsed,
     queue,
+    chief,
+    chiefActions,
+    chiefSetupOpen,
+    onChiefSettings,
     crew,
     onWakeCrewMember,
     onSleepCrewMember,

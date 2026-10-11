@@ -17,9 +17,10 @@ export interface CrewNavigationState {
   navigate: (intent: CrewNavigation) => void;
 }
 
-export function useCrewNavigation({ members, initialMember, rosterRef, charter, onClose, onOpenSeed }: {
+export function useCrewNavigation({ members, initialMember, initialTab, rosterRef, charter, onClose, onOpenSeed }: {
   members: CrewMember[];
   initialMember?: string;
+  initialTab?: CrewTab;
   rosterRef: RefObject<HTMLDivElement | null>;
   charter: CrewCharterAutosave;
   onClose: () => void;
@@ -28,7 +29,7 @@ export function useCrewNavigation({ members, initialMember, rosterRef, charter, 
   const [selectedId, setSelectedId] = useState(() => (
     initialMember && members.some((candidate) => candidate.key === initialMember) ? initialMember : members[0]?.key || ''
   ));
-  const [tab, setTab] = useState<CrewTab>('launch');
+  const [tab, setTab] = useState<CrewTab>(initialTab || 'launch');
   const [pending, setPending] = useState(false);
   const sequence = useRef(0);
   const handlers = useRef({ onClose, onOpenSeed });
