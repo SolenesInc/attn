@@ -112,11 +112,15 @@ try {
     const cwd = path.join(runner.sessionDir, 'live-agent');
     fs.mkdirSync(cwd, { recursive: true });
     writeMockAgentFixture(cwd, { version: 1, agent: 'claude', turns: [] });
-    liveAgent = await createSessionAndWaitForInitialPane({ client, observer, cwd, label: 'Chief focus witness', agent: 'claude' });
+    liveAgent = await createSessionAndWaitForInitialPane({ client, observer, cwd, label: 'Chief focus witness', agent: 'claude', ownDesktop: false });
     await client.request('select_session', { sessionId: liveAgent });
     await waitDom('[data-session-visible="1"] [aria-label="Terminal input"]', { focused: true });
     await relaunchAppAndConnect(client, observer);
+    const { logicalBounds } = await client.request('get_window_bounds');
+    await client.request('set_window_bounds', { logicalBounds: { ...logicalBounds, x: 0, y: 0 } });
     await driver.activateApp();
+    await client.request('select_session', { sessionId: liveAgent });
+    runner.writeJson('restored-view.json', { app: await client.request('get_state'), focus: await client.request('dom_active_element'), chief: await state() });
     await waitDom('[data-session-visible="1"] [aria-label="Terminal input"]', { focused: true });
     await waitDom('[data-testid="chief-slot"][data-chief-phase="unconfigured"]');
     runner.writeJson('restored-terminal-focus.json', { chief: await state(), focus: await client.request('dom_active_element') });
