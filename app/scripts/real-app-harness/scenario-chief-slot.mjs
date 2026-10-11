@@ -46,21 +46,9 @@ const openChiefRoute = async () => {
   await driver.pressKey('Tab');
   await driver.pressEnter();
   await waitDom('[role="menu"] button:first-of-type', { textIncludes: 'Harness and model' });
-  const phase = (await state()).phase;
-  await screenshot(`03-chief-actions-${phase}`);
+  await screenshot(`03-chief-actions-${(await state()).phase}`);
   await click('[role="menu"] button:first-of-type');
-  try {
-    await waitDom('[data-testid="chief-setup"] [aria-label="Chief model"] [aria-checked="true"]', { focused: true });
-  } catch (cause) {
-    runner.writeJson(`route-focus-failure-${phase}.json`, {
-      chief: await state(),
-      focus: await client.request('dom_active_element', { selector: '[data-testid="chief-setup"] [aria-label="Chief model"] [aria-checked="true"]' }),
-      setup: await client.request('dom_text', { selector: '[data-testid="chief-setup"]' }).catch(error => ({ error: String(error) })),
-      menu: await client.request('dom_text', { selector: '[role="menu"]' }).catch(error => ({ error: String(error) })),
-    });
-    await screenshot(`route-focus-failure-${phase}`);
-    throw cause;
-  }
+  await waitDom('[data-testid="chief-setup"] [aria-label="Chief model"] [aria-checked="true"]', { focused: true });
 };
 const sampleIdle = async name => {
   const before = await snapshot(client.readManifest().pid, readLiveDaemonPid(instance), webkitBaseline);
@@ -206,6 +194,19 @@ try {
   });
   console.log(JSON.stringify(await runner.finishSuccess({ profile: profile.id, chief: chief.key, firstDay }), null, 2));
 } catch (error) {
+  if (chief) {
+    try {
+      runner.writeJson('chief-slot-failure-state.json', {
+        chief: await state(),
+        focus: await client.request('dom_active_element', { selector: '[data-testid="chief-setup"] [aria-label="Chief model"] [aria-checked="true"]' }),
+        setup: await client.request('dom_text', { selector: '[data-testid="chief-setup"]' }).catch(error => ({ error: String(error) })),
+        menu: await client.request('dom_text', { selector: '[role="menu"]' }).catch(error => ({ error: String(error) })),
+      });
+      await screenshot('chief-slot-failure-state');
+    } catch (captureError) {
+      runner.writeJson('chief-slot-failure-capture-error.json', { error: String(captureError) });
+    }
+  }
   console.error(error);
   console.error(JSON.stringify(await runner.finishFailure(error, { profile: profile?.id, chief: chief?.key, firstDay }), null, 2));
   process.exitCode = 1;
