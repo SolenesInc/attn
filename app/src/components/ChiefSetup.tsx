@@ -28,15 +28,17 @@ export function ChiefSetup({ chief, autoFocus, onSave, onClose, onReturnFocus, o
   const models = view.options().filter(option => option.stored || (option.model && option.model.access !== 'unsupported'));
   const showHarness = step === 'harness' && harnesses.length > 1;
   const root = useRef<HTMLDivElement>(null);
-  const focusRequested = useRef(autoFocus);
-  useLayoutEffect(() => { focusRequested.current = autoFocus; }, [autoFocus]);
-  const changeStep = (next: 'harness' | 'model') => { focusRequested.current = true; setStep(next); };
+  const focusRequested = useRef<'automatic' | 'step' | null>(autoFocus ? 'automatic' : null);
+  useLayoutEffect(() => {
+    if (focusRequested.current !== 'step') focusRequested.current = autoFocus ? 'automatic' : null;
+  }, [autoFocus]);
+  const changeStep = (next: 'harness' | 'model') => { focusRequested.current = 'step'; setStep(next); };
   useLayoutEffect(() => {
     if (!focusRequested.current && !root.current?.contains(document.activeElement)) return;
     const selected = root.current?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]:not(:disabled)');
     const first = root.current?.querySelector<HTMLElement>('[role="radio"]:not(:disabled), .chief-setup-primary:not(:disabled), .chief-setup-buttons button:not(:disabled)');
     const target = selected || first;
-    if (target) { target.focus(); focusRequested.current = false; }
+    if (target) { target.focus(); focusRequested.current = null; }
   }, [autoFocus, step, showHarness, harnesses.length, view.catalog]);
   const busy = chief.requestPending;
   const canSave = !busy && Boolean(harness && value.model && !view.loading && !view.error);

@@ -2,6 +2,7 @@ import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { crewMember, daemonSession, soloDesktop, defaultProfile, emptyDesktop, DEFAULT_DESKTOP_ID } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp, restartApp } from './test/renderApp';
+import { reportedModel } from './test/harnessCatalogs';
 
 const member = (values = {}) => crewMember('chief-key', { chief: true, name: 'Captain', ...values });
 const available = { claude_available: 'true', codex_available: 'true', copilot_available: 'true', pi_available: 'true', claude_cap_launch_instructions: 'true', codex_cap_launch_instructions: 'true', copilot_cap_launch_instructions: 'false', pi_cap_launch_instructions: 'false', new_session_agent: 'claude' };
@@ -10,6 +11,24 @@ const phase = () => screen.getByTestId('chief-slot').getAttribute('data-chief-ph
 
 for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : 'desktop'} flow`, () => {
   const settings = { ...available, queue_mode_enabled: String(queue) };
+  it('keeps an explicit model step focused when a live agent arrives before its models', async () => {
+    const { daemon } = await renderApp({
+      initialState: { settings, crew: [member()] },
+      script: daemon => { daemon.on('harness_models', () => {}); },
+    });
+    await gesture(daemon, () => fireEvent.keyDown(slot().getByRole('radio', { name: /Claude/ }), { key: 'Enter' }));
+    const desktop = soloDesktop('agent');
+    await gesture(daemon, () => {
+      daemon.emit({ event: 'sessions_updated', sessions: [daemonSession('agent', { state: 'idle' })] });
+      daemon.emit({ event: 'profile_arrangement_changed', profile: defaultProfile(desktop.id), desktops: [desktop] });
+    });
+    await gesture(daemon, () => {
+      for (const request of daemon.sentOf('harness_models').filter(command => command.harness === 'claude')) daemon.replyTo(request, {
+        event: 'harness_models_result', request_id: request.request_id, success: true, models: [reportedModel('claude', 'opus', 'Opus 5.5', 'deep')], tier_defaults: { deep: 'opus' }, detail: 'Reported by the test harness',
+      });
+    });
+    expect(slot().getByRole('radio', { name: /Opus 5.5/ })).toHaveFocus();
+  });
   it('keeps a live terminal focused when setup appears and catalogs refresh, but focuses an explicit setup request', async () => {
     const desktop = soloDesktop('agent');
     const options = { initialState: { settings, crew: [member()], sessions: [daemonSession('agent', { state: 'idle' })], profiles: [defaultProfile(desktop.id)], desktops: [desktop] } };
