@@ -537,6 +537,7 @@ function collectSessionUiState(
       ? {
           text: sidebarItem.textContent || '',
           bounds: rectSnapshot(sidebarItem),
+          desktopGroupBounds: rectSnapshot(sidebarItem.closest('.desktop-row')),
           automation: readProvenance(sidebarItem),
           pullRequest: sidebarItem.querySelector('.sidebar-session-pr')?.textContent?.trim() || '',
         }

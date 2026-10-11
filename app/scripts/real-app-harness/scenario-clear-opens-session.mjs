@@ -96,7 +96,8 @@ async function main() {
       await poll(async () => !(await row(run.first)), 'the cleared session to leave the sidebar');
       const ui = await client.request('get_session_ui_state', { sessionId: run.next });
       runner.assert(ui.selected, 'the new session stays selected', { ui });
-      runner.assert(!after.text.includes(label) && Math.abs(after.bounds.y - before.bounds.y) <= 1,
+      const offsetInDesktop = (item) => item.bounds.y - item.desktopGroupBounds.y;
+      runner.assert(!after.text.includes(label) && Math.abs(offsetInDesktop(after) - offsetInDesktop(before)) <= 1,
         'the new session takes the cleared one\'s sidebar row', { before, after });
       await waitForPaneInputFocus(client, run.next, run.paneId);
     });
