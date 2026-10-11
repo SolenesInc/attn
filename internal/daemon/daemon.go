@@ -3445,19 +3445,18 @@ func (d *Daemon) storePRPoll(allPRs []*protocol.PR, skippedHosts map[string]bool
 	previousPRs := d.store.ListPRs("")
 	if err := d.store.SetPRs(allPRs); err != nil {
 		d.logf("PR poll: saving results: %v", err)
-		return
-	}
+	} else {
+		currentPRs := d.store.ListPRs("")
+		d.publishPRSetChanges(previousPRs, currentPRs)
 
-	currentPRs := d.store.ListPRs("")
-	d.publishPRSetChanges(previousPRs, currentPRs)
-
-	waiting := 0
-	for _, pr := range currentPRs {
-		if pr.State == protocol.PRStateWaiting && !pr.Muted {
-			waiting++
+		waiting := 0
+		for _, pr := range currentPRs {
+			if pr.State == protocol.PRStateWaiting && !pr.Muted {
+				waiting++
+			}
 		}
+		d.logf("PR poll: %d PRs (%d waiting)", len(currentPRs), waiting)
 	}
-	d.logf("PR poll: %d PRs (%d waiting)", len(currentPRs), waiting)
 
 	for host, observation := range observedByHost {
 		d.observeGitHubReviewRequests(host, observation.prs, observation.observedAt)
@@ -3788,13 +3787,16 @@ func (d *Daemon) doRefreshPRsWithResult() error {
 		return errDaemonStopping
 	}
 
-	if saveErr != nil {
-		return fmt.Errorf("saving PR refresh: %w", saveErr)
+	if saveErr == nil {
+		d.logf("PR refresh: %d PRs fetched", len(currentPRs))
 	}
-	d.logf("PR refresh: %d PRs fetched", len(currentPRs))
 	for host, observation := range observedByHost {
 		d.observeGitHubReviewRequests(host, observation.prs, observation.observedAt)
 	}
+	if saveErr != nil {
+		return fmt.Errorf("saving PR refresh: %w", saveErr)
+	}
+
 	if successCount == 0 && firstErr != nil {
 		return fmt.Errorf("failed to fetch PRs: %w", firstErr)
 	}
