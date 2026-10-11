@@ -809,8 +809,13 @@ export function useDaemonSocket({
   }, []);
 
   // A pane's terminal has its own id; panes from before terminal ids carry their session's.
-  const pruneAttachedPtySessions = useCallback((sessions: DaemonSession[]) => {
+  const pruneAttachedPtySessions = useCallback((sessions: DaemonSession[], closedSessionId?: string) => {
     const attachableIDs = new Set<string>(sessions.map((session) => session.id));
+    for (const desktop of useProfilesStore.getState().desktops) {
+      for (const pane of desktop.panes) {
+        if (pane.session_id !== closedSessionId) attachableIDs.add(pane.session_id);
+      }
+    }
     const navigation = useSessionStore.getState();
     if (navigation.intent?.target.kind === 'session' && !attachableIDs.has(navigation.intent.target.sessionId)) {
       navigation.intentFailed(navigation.intent.id, 'Its terminal closed');
@@ -1968,7 +1973,7 @@ export function useDaemonSocket({
                 (s) => s.id !== data.session!.id
               );
               callbacksRef.current.onSessionsUpdate(sessionsRef.current);
-              pruneAttachedPtySessions(sessionsRef.current);
+              pruneAttachedPtySessions(sessionsRef.current, data.session.id);
             }
             break;
 

@@ -7,6 +7,20 @@ import { gesture, pressShortcut } from './test/renderApp';
 import type { CommandMessage } from './test/protocol';
 
 describe('typing while a selection is awaiting the daemon', () => {
+  it('retains input when a new pane arrives before its session registration', async () => {
+    const { daemon } = await openAttachedTerminals({
+      sessions: [daemonSession('s1', { state: 'idle' })],
+      desktops: [soloDesktop('s1')],
+    });
+    await gesture(daemon, () => daemon.arrange((desktops) => [...desktops, soloDesktop('s2', { shortcut_slot: 2 })]));
+    await gesture(daemon, () => pressShortcut('desktop.select2'));
+    expect(screen.getByText(/Waiting for s2/)).toBeInTheDocument();
+    await gesture(daemon, () => fireEvent.keyDown(document.activeElement!, { key: 'x', code: 'KeyX' }));
+    await gesture(daemon, () => daemon.emit({ event: 'sessions_updated', sessions: [daemonSession('s1', { state: 'idle' })] }));
+    await gesture(daemon, () => daemon.emit({ event: 'session_registered', session: daemonSession('s2', { state: 'idle' }) }));
+    expect(daemon.sentOf('pty_input')).toEqual([expect.objectContaining({ id: 's2', data: 'x' })]);
+  });
+
   it('releases a closed target’s retained input and desktop after its selection already succeeded', async () => {
     const { daemon } = await openAttachedTerminals({
       sessions: ['s1', 's2', 's3', 's4'].map((id) => daemonSession(id, { state: 'idle' })),

@@ -99,10 +99,18 @@ export function useDesktopSelectionBridge(reportFailure: (message: string) => vo
       const target = event.target instanceof HTMLElement ? event.target : null;
       const terminal = target?.closest<HTMLElement>('.terminal-container');
       if (target?.closest('input, textarea, select, [contenteditable="true"]') && !terminal) return;
+      const claim = navigation.focusRequest;
+      const leaf = currentActiveLeaf();
+      const focused = document.activeElement;
+      const awaitingFocus = claim && leaf?.kind === 'agent'
+        && claim.desktopId === leaf.desktopId && claim.leafId === leaf.leafId
+        && (!focused || focused === document.body || focused === claim.focusOwner
+          || focused.matches('.app') || terminal);
       const sessionId = intent?.target.kind === 'session' && !intent.focusRequested
         ? intent.target.sessionId
-        : terminal?.dataset.terminalInputReady === '0' ? terminal.dataset.terminalSessionId : null;
-      if (!sessionId || !navigation.navigationSessions.some((session) => session.id === sessionId)) return;
+        : terminal?.dataset.terminalInputReady === '0' ? terminal.dataset.terminalSessionId
+          : awaitingFocus ? leaf.sessionId : null;
+      if (!sessionId) return;
       const selectionId = intent && ['session', 'leaf', 'desktop'].includes(intent.target.kind) ? intent.id : 0;
       usePendingTerminalInput.getState().append(sessionId, selectionId, retainTerminalEvent(event));
       event.preventDefault();
