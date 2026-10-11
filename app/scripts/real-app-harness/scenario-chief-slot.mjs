@@ -7,7 +7,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessInstance, instanceCliEnv, resolveHarnessResources } from './harnessInstance.mjs';
-import { writeMockAgentFixture } from './mockAgent.mjs';
+import { MOCK_AGENT_MODEL, writeMockAgentFixture } from './mockAgent.mjs';
 import { captureWebKitPids, readLiveDaemonPid, readProcessTable, snapshot } from './perfMeasure.mjs';
 import { createWindowDriver, delay } from './platform.mjs';
 
@@ -32,10 +32,12 @@ const click = async selector => {
   const [{ bounds }, { logicalBounds }, { innerWidth, innerHeight }] = await Promise.all([
     client.request('dom_bounds', { selector }), client.request('get_window_bounds'), client.request('get_terminal_context_menu_state'),
   ]);
-  await driver.clickWindow(
-    (Math.max(0, logicalBounds.width - innerWidth) / 2 + bounds.x + bounds.width / 2) / logicalBounds.width,
-    (Math.max(0, logicalBounds.height - innerHeight) + bounds.y + bounds.height / 2) / logicalBounds.height,
-  );
+  const x = (Math.max(0, logicalBounds.width - innerWidth) / 2 + bounds.x + bounds.width / 2) / logicalBounds.width;
+  const y = (Math.max(0, logicalBounds.height - innerHeight) + bounds.y + bounds.height / 2) / logicalBounds.height;
+  runner.writeJson(`pointer-${selector.replace(/[^a-zA-Z0-9]/g, '')}.json`, { selector, bounds, logicalBounds, innerWidth, innerHeight, x, y });
+  await driver.movePointerInWindow(x, y);
+  runner.writeJson(`focus-${selector.replace(/[^a-zA-Z0-9]/g, '')}.json`, await client.request('dom_active_element'));
+  await driver.clickWindow(x, y);
 };
 const screenshot = async name => driver.screenshot(path.join(runner.runDir, `${name}.png`), { windowId: await driver.mainWindowId() });
 const sampleIdle = async name => {
@@ -51,9 +53,12 @@ const sampleIdle = async name => {
 const roster = () => JSON.parse(cli(['crew', 'list', '--profile', profile.id, '--json']));
 runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('restore_profile', async () => {
-  if (chief) {
-    const current = roster().find(member => member.key === chief.key);
-    if (current?.binding_session) cli(['handoff', '--session', current.binding_session, '--sleep', '-m', 'The chief slot scenario is complete.']);
+  const binding = chief && roster().find(member => member.key === chief.key)?.binding_session;
+  if (binding) {
+    await client.request('select_session', { sessionId: binding });
+    await waitDom('[data-session-visible="1"] [aria-label="Terminal input"]', { focused: true });
+    await driver.pressKey('d', { control: true });
+    await waitDom('[data-testid="chief-slot"][data-chief-phase="asleep"]');
   }
   if (previousProfile) await observer.profileCommand('profile_select', { profile_id: previousProfile });
   if (profile) {
@@ -66,7 +71,10 @@ try {
   await runner.step('fresh_profile', async () => {
     webkitBaseline = await captureWebKitPids();
     await launchFreshAppAndConnect(client, observer);
+    const { logicalBounds } = await client.request('get_window_bounds');
+    await client.request('set_window_bounds', { logicalBounds: { ...logicalBounds, x: 0, y: 0 } });
     await driver.activateApp();
+    await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
     previousProfile = (await client.request('get_state')).arrangement.selectedProfileId;
     profile = (await observer.profileCommand('profile_create', { name: `Chief slot ${runner.runId}` })).profile;
     await observer.profileCommand('profile_select', { profile_id: profile.id });
@@ -75,6 +83,7 @@ try {
     await driver.typeText(`Switch to ${profile.name}`);
     await waitDom('.unified-palette-option[aria-selected="true"]', { textIncludes: `Switch to ${profile.name}` });
     await driver.pressEnter();
+    await client.request('set_setting', { key: 'model_tier_overrides', value: JSON.stringify([{ harness: 'claude', provider: '', model: MOCK_AGENT_MODEL, tier: 'deep' }]) });
     await waitDom('[data-testid="chief-slot"][data-chief-phase="unconfigured"]');
     chief = roster().find(member => member.chief);
     runner.assert(chief && !chief.agent, 'a new profile has an unconfigured chief', { chief });
@@ -109,12 +118,23 @@ try {
     runner.writeJson('first-wake.json', { state: awake, crew: roster() });
   });
   await runner.step('sleep_and_one_click_wake', async () => {
-    await click(`[data-testid="queue-crew-sleep-${chief.key}"]`);
+    await pressShortcutKeys(client, driver, 'sidebar.agentList');
+    await waitDom('[data-testid="queue-agent-filter"]', { focused: true });
+    await driver.pressKey('ArrowDown');
+    await waitDom(`[data-testid="queue-crew-select-${chief.key}"]`, { focused: true });
+    await driver.pressKey('Tab');
+    await waitDom(`[data-testid="queue-crew-sleep-${chief.key}"]`, { focused: true });
+    await driver.pressEnter();
+    runner.writeJson('sleep-after-activation.json', await state());
     await waitDom('[data-testid="chief-slot"][data-chief-phase="asleep"]');
     await screenshot('04-chief-asleep');
     await sampleIdle('asleep');
     runner.assert(!roster().find(member => member.chief)?.binding_session, 'sleep releases the chief binding');
-    await click(`[data-testid="queue-crew-select-${chief.key}"]`);
+    const wakeSelector = `[data-testid="queue-crew-select-${chief.key}"]`;
+    await client.request('arm_native_pointer_witness', { selector: wakeSelector });
+    await click(wakeSelector);
+    const receipt = await client.request('wait_native_pointer_witness');
+    runner.writeJson('wake-click-receipt.json', receipt);
     await waitDom('[data-testid="chief-slot"][data-chief-phase="awake"]');
     const awake = await state();
     runner.assert(awake.sessionId !== firstDay && awake.shownAgentId === awake.sessionId, 'one click wakes and shows a new day', { awake, firstDay });

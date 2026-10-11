@@ -31,7 +31,7 @@ export function ChiefSetup({ chief, onSave, onClose, onOpenSettings }: {
     const first = root.current?.querySelector<HTMLElement>('[role="radio"], .chief-setup-primary, .chief-setup-buttons button');
     (selected || first)?.focus();
   }, [showHarness, harnesses.length, view.catalog]);
-  const busy = chief.phase === 'configuring';
+  const busy = ['configuring', 'waking', 'sleeping'].includes(chief.phase);
   const canSave = !busy && Boolean(harness && value.model && !view.loading && !view.error);
   const submit = (restart = false) => { if (canSave) onSave(value, restart); };
   const moveRadio = (event: KeyboardEvent, kind: 'harness' | 'model' | 'effort') => {
@@ -74,7 +74,7 @@ export function ChiefSetup({ chief, onSave, onClose, onOpenSettings }: {
       <div role="radiogroup" aria-label="Chief model" onKeyDown={event => moveRadio(event, 'model')}>
         {models.map(({ model, stored, label }, index) => {
           const checked = stored || (value.model === model?.id && value.provider === model?.provider);
-          return <button type="button" role="radio" key={stored ? 'stored' : `${model?.provider}/${model?.id}`} aria-checked={checked} tabIndex={checked ? 0 : -1} disabled={busy} onClick={() => { if (model) setDraft({ ...view.withModel(model), effort: model.effort_support === 'unsupported' ? '' : 'low' }); }}>
+          return <button type="button" role="radio" key={stored ? 'stored' : `${model?.provider}/${model?.id}`} aria-checked={checked} tabIndex={checked ? 0 : -1} disabled={busy} onClick={() => { if (model) setDraft(view.withModel(model)); }}>
             <span className="chief-radio-mark">{checked ? '●' : '○'}</span>
             <span>{label}{model === recommended && <small>recommended</small>}</span>
             <kbd>{index + 1}</kbd>
@@ -90,8 +90,8 @@ export function ChiefSetup({ chief, onSave, onClose, onOpenSettings }: {
       {chief.agent && chief.sessionId ? <div className="chief-setup-buttons is-stacked">
         <button type="button" className="chief-setup-primary" disabled={!canSave} onClick={() => submit(true)}>Save and start a new day</button>
         <button type="button" disabled={!canSave} onClick={() => submit()}>Save for next day</button>
-      </div> : <button type="button" className="chief-setup-primary" disabled={!canSave} onClick={() => submit()}>{busy ? 'Saving…' : chief.agent ? 'Save' : `Wake ${chief.name}`}<kbd>⏎</kbd></button>}
+      </div> : <button type="button" className="chief-setup-primary" disabled={!canSave} onClick={() => submit()}>{chief.phase === 'configuring' ? 'Saving…' : chief.agent ? 'Save' : `Wake ${chief.name}`}<kbd>⏎</kbd></button>}
     </>}
-    {chief.setupError && <p className="chief-setup-error" role="alert">{chief.setupError}</p>}
+    {(chief.setupError || chief.restartError) && <p className="chief-setup-error" role="alert">{chief.setupError || chief.restartError}</p>}
   </div>;
 }

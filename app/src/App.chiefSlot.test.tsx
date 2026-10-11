@@ -82,17 +82,51 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
     await gesture(daemon, () => fireEvent.click(slot().getAllByRole('button', { name: 'Wake Captain' })[0]));
     expect(daemon.sentOf('crew_wake')).toHaveLength(2);
   });
+  it('shows new-day progress and a later restart failure from the roster', async () => {
+    const current = member({ agent: 'claude', model: 'opus', binding_session: 'chief-day' });
+    const saved = { ...current, model: 'sonnet', revision: 2 };
+    let request = '';
+    const { daemon } = await renderApp({ initialState: { settings, crew: [current], sessions: [daemonSession('chief-day', { chief: true, crew_member: current.key })], desktops: [soloDesktop('chief-day')] } });
+    daemon.on('crew_set', () => ({ event: 'crew_set_result', success: true, conflict: false, member: saved }));
+    daemon.on('crew_restart', ({ request_id }) => {
+      request = request_id;
+      const restarting = { ...saved, restart: { request_id, session_id: 'chief-day', state: 'requested' as const } };
+      return [{ event: 'crew_updated', profile_id: current.profile_id, members: [restarting] }, { event: 'crew_restart_result', success: true, conflict: false, member: restarting, restart: restarting.restart }];
+    });
+    await gesture(daemon, () => fireEvent.click(slot().getByRole('button', { name: 'Actions for Captain' })));
+    await gesture(daemon, () => fireEvent.click(slot().getByRole('menuitem', { name: 'Harness and model…' })));
+    await gesture(daemon, () => fireEvent.click(slot().getByRole('radio', { name: /Sonnet/ })));
+    await gesture(daemon, () => fireEvent.click(slot().getByRole('button', { name: 'Save and start a new day' })));
+    expect(phase()).toBe('sleeping');
+    expect(daemon.sentOf('crew_restart')).toEqual([expect.objectContaining({ expected_revision: 2, expected_session_id: 'chief-day' })]);
+    await gesture(daemon, () => daemon.emit({ event: 'crew_updated', profile_id: current.profile_id, members: [{ ...saved, revision: 3, restart: { request_id: request, session_id: 'chief-day', state: 'failed', error: 'The new day could not start' } }] }));
+    expect(phase()).toBe('awake');
+    expect(slot().getByRole('alert')).toHaveTextContent('The new day could not start');
+    expect(daemon.sentOf('crew_wake')).toEqual([]);
+  });
+
+  it('shows Save as unavailable while the chief is going to sleep', async () => {
+    const current = member({ agent: 'claude', model: 'opus', effort: 'low', binding_session: 'chief-day' });
+    const { daemon } = await renderApp({ initialState: { settings, crew: [current], sessions: [daemonSession('chief-day', { chief: true, crew_member: current.key })], desktops: [soloDesktop('chief-day')] } });
+    daemon.on('crew_sleep', () => undefined);
+    await gesture(daemon, () => fireEvent.click(slot().getByRole('button', { name: 'Ask Captain to sleep' })));
+    await gesture(daemon, () => fireEvent.click(slot().getByRole('button', { name: 'Actions for Captain' })));
+    await gesture(daemon, () => fireEvent.click(slot().getByRole('menuitem', { name: 'Harness and model…' })));
+    expect(slot().getByRole('button', { name: 'Save for next day' })).toBeDisabled();
+    expect(daemon.sentOf('crew_set')).toEqual([]);
+  });
+
   it('saves a changed route for the next wake without waking an asleep chief', async () => {
-    const current = member({ agent: 'claude', model: 'opus', effort: 'low' });
+    const current = member({ agent: 'claude', model: 'opus', effort: 'high' });
     const { daemon } = await renderApp({ initialState: { settings, crew: [current] } });
     await gesture(daemon, () => fireEvent.click(slot().getByRole('button', { name: 'Actions for Captain' })));
     expect(slot().getByRole('menu')).toHaveTextContent("The chief can't be closed or retired.");
     expect(slot().queryByRole('menuitem', { name: /Close session/ })).toBeNull();
     await gesture(daemon, () => fireEvent.click(slot().getByRole('menuitem', { name: 'Harness and model…' })));
     await gesture(daemon, () => fireEvent.click(slot().getByRole('radio', { name: /Sonnet/ })));
-    daemon.on('crew_set', () => ({ event: 'crew_set_result', success: true, conflict: false, member: member({ agent: 'claude', model: 'sonnet', effort: 'low', revision: 2 }) }));
+    daemon.on('crew_set', () => ({ event: 'crew_set_result', success: true, conflict: false, member: member({ agent: 'claude', model: 'sonnet', effort: 'high', revision: 2 }) }));
     await gesture(daemon, () => fireEvent.click(slot().getByRole('button', { name: /Save/ })));
-    expect(daemon.sentOf('crew_set')).toEqual([expect.objectContaining({ agent: 'claude', model: 'sonnet', effort: 'low' })]);
+    expect(daemon.sentOf('crew_set')).toEqual([expect.objectContaining({ agent: 'claude', model: 'sonnet', effort: 'high' })]);
     expect(daemon.sentOf('crew_wake')).toEqual([]);
     expect(daemon.sentOf('crew_restart')).toEqual([]);
     expect(slot().queryByTestId('chief-setup')).toBeNull();

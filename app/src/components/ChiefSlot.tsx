@@ -32,6 +32,7 @@ export function ChiefSlot() {
         <p>The chief can't be closed or retired.</p>
       </div>
     </>}
+    {!chiefSetupOpen && chief.restartError && <p className="chief-setup-error" role="alert">{chief.restartError}</p>}
     {chiefSetupOpen && <ChiefSetup key={chief.key} chief={chief} onSave={chiefActions.setUp} onClose={chiefActions.dismiss} onOpenSettings={onChiefSettings} />}
   </div>;
 }

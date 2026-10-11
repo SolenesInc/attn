@@ -1,3 +1,4 @@
+import { restartBusy, restartNotice } from '../components/crewLaunchPresentation';
 import { useEffect, useRef, useState } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useDaemonStore } from '../store/daemonSessions';
@@ -17,6 +18,7 @@ export interface ChiefView {
   phase: ChiefPhase;
   sessionId?: string;
   setupError?: string;
+  restartError?: string;
 }
 export interface ChiefActions {
   setUp(route: HarnessRoute, restart?: boolean): void;
@@ -32,6 +34,7 @@ function chiefPhase(member: CrewMember, live: ReadonlySet<string>, pending: Pend
   if (!member.agent) return 'unconfigured';
   if (!member.binding_session) return 'asleep';
   if (pending?.key === member.key && pending.phase === 'sleeping' && pending.sessionId === member.binding_session) return 'sleeping';
+  if (member.restart?.session_id === member.binding_session && restartBusy(member)) return 'sleeping';
   return live.has(member.binding_session) ? 'awake' : 'waking';
 }
 
@@ -93,11 +96,14 @@ export function useChief(input: { liveSessionIds: ReadonlySet<string>; selectSes
     edit() { if (member) { setError(null); setEditor({ key: member.key, open: true }); } },
     dismiss() { if (member) setEditor({ key: member.key, open: false }); },
   };
+  const notice = member ? restartNotice(member) : undefined;
+  const restartFailed = member?.restart?.state === 'failed' && (!member.binding_session || member.restart.session_id === member.binding_session);
   const view: ChiefView | null = member ? {
     ref: `member:${member.key}`, key: member.key, name: member.name, agent: member.agent,
     model: member.model, effort: member.effort, revision: member.revision,
     phase: chiefPhase(member, input.liveSessionIds, pending), sessionId: member.binding_session,
     setupError: error?.key === member.key ? error.message : undefined,
+    restartError: restartFailed && notice?.tone === 'failed' ? notice.text : undefined,
   } : null;
   const setupOpen = Boolean(member && (editor?.key === member.key ? editor.open : !member.agent));
   return { view, actions, setupOpen };
