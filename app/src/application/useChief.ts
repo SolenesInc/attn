@@ -1,5 +1,5 @@
 import { restartBusy, restartNotice } from '../components/crewLaunchPresentation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useDaemonStore } from '../store/daemonSessions';
 import { useProfilesStore } from '../store/profiles';
@@ -47,7 +47,7 @@ export function useChief(input: { liveSessionIds: ReadonlySet<string>; selectSes
   const [error, setError] = useState<{ key: string; message: string } | null>(null);
   const [editor, setEditor] = useState<{ key: string; open: boolean } | null>(null);
   const currentKey = useRef(member?.key);
-  currentKey.current = member?.key;
+  useLayoutEffect(() => { currentKey.current = member?.key; }, [member?.key]);
   const isCurrent = (key: string) => currentKey.current === key;
   useEffect(() => {
     if (pending?.phase === 'sleeping' && (pending.key !== member?.key || pending.sessionId !== member.binding_session)) setPending(null);
