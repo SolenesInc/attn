@@ -1899,6 +1899,10 @@ export function useDaemonSocket({
           case 'runtime_respawned':
             // The daemon replaced the runtime in place; restore its new stream and screen.
             if (data.id) {
+              if (
+                pendingActionsRef.current.has(`pty_attach_${data.id}`)
+                && ptyTransportRef.current.getAttachContext(data.id)?.policy === 'revive'
+              ) break;
               recordDiag({ kind: 'attach', session: data.id, reason: 'runtime_respawned' });
               emitPtyEvent({ event: 'reset', id: data.id, reason: 'respawn' });
               ptyTransportRef.current.clearRuntimeStream(data.id);

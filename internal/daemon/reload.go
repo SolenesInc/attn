@@ -274,7 +274,6 @@ func (d *Daemon) reloadSessionForClient(sessionID protocol.SessionID, cols, rows
 	if rejection := d.runSpawnPipeline(spawnMsg, policy); rejection != nil {
 		return rejection.reason()
 	}
-	d.publishFact(FactSessionRespawned, string(sessionID), ptyRespawn{Terminal: string(d.primaryTerminal(sessionID))})
 	return nil
 }
 

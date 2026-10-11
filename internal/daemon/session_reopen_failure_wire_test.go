@@ -118,3 +118,39 @@ func TestAFailedReopenKeepsItsAttemptAndRestoredWorktree(t *testing.T) {
 		t.Errorf("retry did not resume: %q", resumed.Argv)
 	}
 }
+
+func TestAnAppOpenedDuringResumeCanAttachWhenTheRuntimeReturns(t *testing.T) {
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"resume": true, "state_reporting": true})
+	awaitDriverAvailable(app, "snipe")
+	session, run := spawnDriven(w, app, driver, w.Path("resume"))
+	driver.mustReport("session.report_metadata", map[string]any{
+		"session_id": run.SessionID, "run_id": run.RunID, "seq": 1,
+		"resume_session_id": "saved-conversation",
+		"metadata":          map[string]string{"native_id": "saved-conversation"},
+	})
+	closeSession(t, cli, session, "done for now")
+	awaitClosed(app, session)
+	driver.mu.Lock()
+	driver.holdLaunch = true
+	driver.mu.Unlock()
+	app.Send(protocol.SessionReopenMessage{Cmd: protocol.CmdSessionReopen, SessionID: protocol.SessionID(session), RequestID: protocol.Ptr("resume")})
+	reply := driver.asked("driver.resume", nil)
+	observer := w.App()
+	terminal := observer.Terminal(session)
+	before := attachWithPolicy(observer, session, protocol.AttachPolicyFreshSpawn)
+	if before.Success && protocol.Deref(before.Running) {
+		t.Fatal("the held Resume already has a running terminal")
+	}
+	driver.answer(reply, map[string]any{"argv": []string{"/bin/cat"}})
+	if reopened := testworld.Await(app, protocol.EventSessionReopenResult, func(r protocol.SessionReopenResultMessage) bool { return r.RequestID == "resume" }); !reopened.Success {
+		t.Fatal(protocol.Deref(reopened.Error))
+	}
+	testworld.Await(observer, protocol.EventRuntimeRespawned, func(e protocol.WebSocketEvent) bool { return protocol.Deref(e.ID) == terminal })
+	if attached := attachWithPolicy(observer, session, protocol.AttachPolicyRelaunchRestore); !attached.Success || !protocol.Deref(attached.Running) {
+		t.Fatalf("attach after Resume = %+v, want the running terminal", attached)
+	}
+	observer.TypeLine(session, "after resume")
+	observer.AwaitScreen(session, "after resume")
+}

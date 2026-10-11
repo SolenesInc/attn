@@ -578,6 +578,9 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		launchedExit = d.finishPluginSessionLaunch(msg.ID, true)
 	}
 	plan.commit()
+	if req.existingSession != nil {
+		d.publishFact(FactSessionRespawned, string(session.ID), ptyRespawn{Terminal: string(plan.spawnOpts.ID)})
+	}
 	if launchedExit != nil {
 		d.life.Go("handlePTYExitAfterPluginLaunch", func() { d.handlePTYExit(*launchedExit) })
 	}
