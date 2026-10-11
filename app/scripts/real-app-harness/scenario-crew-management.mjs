@@ -180,26 +180,31 @@ runner.registerCleanup('quit_app', () => client.quitApp());
 runner.registerCleanup('restore_queue_mode', () => (
   client.request('set_setting', { key: 'queue_mode_enabled', value: 'false' }).catch(() => {})
 ));
-runner.registerCleanup('remove_member_homes', () => {
-  for (const home of [awakeHome, asleepHome, historyHome]) fs.rmSync(home, { recursive: true, force: true });
-});
-runner.registerCleanup('delete_members_and_close_days', async () => {
-  const days = membersRegistered
-    ? json(['crew', 'list', '--json']).filter((member) => [awake, asleep, history].includes(member.key))
-      .map((member) => member.binding_session).filter(Boolean)
-    : [];
-  if (membersRegistered) {
-    for (const member of [awake, asleep, history]) runAttn(['doc', 'delete', 'core/crew', 'members', member]);
-  }
-  await Promise.all(days.map((sessionId) => client.request('close_session', { sessionId })));
-  runner.writeJson('cleanup-days.json', { closed: days, sessions: json(['session', 'list', '--json']) });
+runner.registerCleanup('retire_members_and_close_days', async () => {
+  if (!membersRegistered) return;
+  const members = json(['crew', 'list', '--json']).filter((member) => [awake, asleep, history].includes(member.key));
+  const bound = members.filter((member) => member.binding_session);
+  const days = bound.map((member) => member.binding_session);
+  const released = bound.map((member) => waitForCrew(member.key, (current) => !current.binding_session, 'the fixture mock exits and releases its binding'));
+  for (const sessionId of days) observer.send({ cmd: 'pty_input', id: observer.terminalOf(sessionId), data: '\u0004', source: 'automation' });
+  await Promise.all(released);
+  for (const member of [awake, asleep, history]) runAttn(['crew', 'retire', member]);
+  await observer.unregisterMatchingSessions((session) => days.includes(session.id));
+  const sessions = json(['session', 'list', '--json']);
+  const activeCrew = json(['crew', 'list', '--json']);
+  const allCrew = json(['crew', 'list', '--all', '--json']);
+  runner.writeJson('cleanup-days.json', { closed: days, sessions, activeCrew, allCrew });
+  const remaining = sessions.entries.filter((session) => days.includes(session.id));
+  if (remaining.length) throw new Error(`Crew fixture sessions still live after unregister: ${remaining.map((session) => session.id).join(', ')}`);
+  if (activeCrew.some((member) => [awake, asleep, history].includes(member.key))) throw new Error('Retired crew fixtures are still in the active roster');
+  if (!activeCrew.some((member) => member.chief)) throw new Error('Chief missing from the active roster after fixture cleanup');
 });
 runner.registerCleanup('archive_crew_files', () => {
   if (fs.existsSync(historyHome)) fs.chmodSync(historyHome, 0o755);
   const handoffs = path.join(awakeHome, 'handoffs');
   if (!fs.existsSync(handoffs)) return;
   for (const name of fs.readdirSync(handoffs)) {
-    fs.renameSync(path.join(handoffs, name), path.join(runner.runDir, `restart-${name}`));
+    fs.copyFileSync(path.join(handoffs, name), path.join(runner.runDir, `restart-${name}`));
   }
 });
 runner.registerCleanup('settle_seeds', () => {
