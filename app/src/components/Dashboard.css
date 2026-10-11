@@ -448,7 +448,13 @@
   text-align: left;
 }
 
+.dashboard-ask-row:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
 .dashboard-ask-glyph {
+  flex-shrink: 0;
   color: var(--color-accent);
   font-weight: 700;
   width: 8px;

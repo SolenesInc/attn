@@ -8,11 +8,10 @@ interface AskQuestionCardProps {
   question: AskQuestion;
   answer: AskAnswer | undefined;
   source: MarkdownDocumentSource;
-  disabled: boolean;
   onChange: (answer: AskAnswer) => void;
 }
 
-export function AskQuestionCard({ askId, index, question, answer, source, disabled, onChange }: AskQuestionCardProps) {
+export function AskQuestionCard({ askId, index, question, answer, source, onChange }: AskQuestionCardProps) {
   const picked = answer?.picked ?? [];
   const other = answer?.other ?? '';
   const text = answer?.text ?? '';
@@ -26,7 +25,7 @@ export function AskQuestionCard({ askId, index, question, answer, source, disabl
     update({ picked: picked.includes(label) ? picked.filter((value) => value !== label) : [...picked, label] });
   };
   return (
-    <fieldset className="ask-question" data-testid={`ask-question-${question.key}`} disabled={disabled}>
+    <fieldset className="ask-question" data-testid={`ask-question-${question.key}`}>
       <legend className="ask-question-prompt">
         <span className="ask-question-index">{index}</span>
         {question.prompt}
@@ -48,7 +47,7 @@ export function AskQuestionCard({ askId, index, question, answer, source, disabl
           />
           {question.recommended && text.trim() === '' && (
             <button type="button" className="ask-use-suggestion" onClick={() => update({ text: question.recommended })}>
-              Use suggestion
+              Use the suggestion
             </button>
           )}
         </div>

@@ -5,9 +5,5 @@ CREATE TABLE asks (
     subject TEXT NOT NULL,
     markdown TEXT NOT NULL,
     base_dir TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    closed_at TEXT NOT NULL DEFAULT '',
-    close_reason TEXT NOT NULL DEFAULT ''
+    created_at TEXT NOT NULL
 );
-
-CREATE INDEX idx_asks_open ON asks(created_at) WHERE closed_at = '';

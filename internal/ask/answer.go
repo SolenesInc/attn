@@ -29,7 +29,7 @@ func Reply(ask protocol.Ask, answers []protocol.AskAnswer, note string) (string,
 		"subject": strconv.Quote(ask.Subject),
 		"ask_id":  ask.ID,
 		"entries": strings.Join(entries, "\n\n"),
-		"note":    quote(note),
+		"note":    blockquote(note),
 	})
 	if len(text) > MaxAnswerBytes {
 		return "", fmt.Errorf("an answer holds at most %d KiB", MaxAnswerBytes>>10)
@@ -79,7 +79,7 @@ func normalizeAnswer(question protocol.AskQuestion, answer protocol.AskAnswer) (
 		if text != "" {
 			return answer, fmt.Errorf("question %s takes a choice", question.Key)
 		}
-		if len(picked)+boolCount(other != "") > 1 {
+		if len(picked) > 1 || (len(picked) == 1 && other != "") {
 			return answer, fmt.Errorf("question %s takes one choice", question.Key)
 		}
 	default:
@@ -96,13 +96,24 @@ func renderEntry(index int, question protocol.AskQuestion, answer protocol.AskAn
 	values := prompts.Values{
 		"index":       strconv.Itoa(index),
 		"prompt":      question.Prompt,
-		"picked":      strings.Join(answer.Picked, ", "),
+		"picked":      pickedLabels(question, answer.Picked),
 		"recommended": strconv.FormatBool(recommendedPick(question, answer)),
 		"other":       protocol.Deref(answer.Other),
-		"text":        quote(protocol.Deref(answer.Text)),
+		"text":        blockquote(protocol.Deref(answer.Text)),
 		"unanswered":  strconv.FormatBool(!answered(answer)),
 	}
 	return prompts.RenderText("ask", "entry", values)
+}
+
+func pickedLabels(question protocol.AskQuestion, picked []string) string {
+	if question.Kind != protocol.AskQuestionKindAny {
+		return strings.Join(picked, ", ")
+	}
+	quoted := make([]string, len(picked))
+	for i, label := range picked {
+		quoted[i] = strconv.Quote(label)
+	}
+	return strings.Join(quoted, ", ")
 }
 
 func recommendedPick(question protocol.AskQuestion, answer protocol.AskAnswer) bool {
@@ -123,7 +134,7 @@ func answered(answer protocol.AskAnswer) bool {
 	return len(answer.Picked) > 0 || protocol.Deref(answer.Other) != "" || protocol.Deref(answer.Text) != ""
 }
 
-func quote(text string) string {
+func blockquote(text string) string {
 	if text == "" {
 		return ""
 	}
@@ -139,11 +150,4 @@ func optional(text string) *string {
 		return nil
 	}
 	return protocol.Ptr(text)
-}
-
-func boolCount(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
 }

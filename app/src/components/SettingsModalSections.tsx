@@ -1182,8 +1182,8 @@ export function HygieneSettings({
           <div className="settings-kicker">Agents</div>
           <h3>Asks (experimental)</h3>
           <p className="settings-description">
-            Agents ask you what they cannot settle alone, and you answer every agent from one drawer without opening
-            their terminals. Off by default.
+            Agents ask you what they cannot settle alone. You answer them all from one drawer, without opening their
+            terminals. Off by default.
           </p>
         </div>
         <div className="settings-block-body">
@@ -1191,9 +1191,9 @@ export function HygieneSettings({
             <div>
               <p className="settings-row-title">Let agents ask you through attn</p>
               <p className="settings-row-copy" id="settings-asks-description">
-                Agents launched while this is on learn <code>attn ask</code> and keep it for their whole life, reloads
-                included; agents launched while it is off never get it. Your answer reaches the agent's attn inbox and
-                settles its turn. Open the drawer with {formatShortcut('dock.asks')}.
+                Applies to agents launched from now on; each agent keeps the setting it launched with, reloads
+                included. Your answer lands in the agent's inbox and settles its turn. Open the drawer with{' '}
+                {formatShortcut('dock.asks')}.
               </p>
             </div>
             <button

@@ -4244,7 +4244,7 @@
                             "field": {
                               "name": "picked",
                               "kind": "text",
-                              "description": "The labels the user picked, comma separated."
+                              "description": "The labels the user picked; for a :::question-multi each is quoted, comma separated."
                             },
                             "test": "present"
                           },
@@ -4272,7 +4272,7 @@
                                         "field": {
                                           "name": "picked",
                                           "kind": "text",
-                                          "description": "The labels the user picked, comma separated."
+                                          "description": "The labels the user picked; for a :::question-multi each is quoted, comma separated."
                                         }
                                       }
                                     }
@@ -4290,7 +4290,7 @@
                                         "field": {
                                           "name": "picked",
                                           "kind": "text",
-                                          "description": "The labels the user picked, comma separated."
+                                          "description": "The labels the user picked; for a :::question-multi each is quoted, comma separated."
                                         }
                                       }
                                     }
@@ -5075,5 +5075,5 @@
       ]
     }
   ],
-  "definitions_hash": "8c53baa3e50bab15d65f2ba92008e8f1a92e5966d6c43c7aeea69bb6d644eabb"
+  "definitions_hash": "9ab2fbd6bf296c3bacea032b727f83a3c9d8d4f5a136c19a9356f773356b0a93"
 }

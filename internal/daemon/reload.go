@@ -323,8 +323,8 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 
 	d.life.AfterFunc("clearReloading", reloadStuckFlagGrace, func() { d.clearReloading(terminal) })
 	intent := launchIntentFromSpawnOptions(opts, d.isChiefOfStaffSession(sessionID))
+	intent.Asks = d.launchedWithAsks(sessionID)
 	if prior, ok := d.store.LaunchIntent(sessionID); ok {
-		intent.Asks = prior.Asks
 		intent.AutoMode = prior.AutoMode
 		intent.ApprovalPolicy, intent.SandboxMode = prior.ApprovalPolicy, prior.SandboxMode
 	}

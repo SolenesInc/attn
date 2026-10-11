@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/ask"
-	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
@@ -19,7 +18,7 @@ func (d *Daemon) asksSettingOn() bool {
 	return parseBooleanSetting(d.store.GetSetting(SettingAsksEnabled))
 }
 
-func (d *Daemon) launchesWithAsks(sessionID protocol.SessionID) bool {
+func (d *Daemon) launchedWithAsks(sessionID protocol.SessionID) bool {
 	if intent, ok := d.store.LaunchIntent(sessionID); ok {
 		return intent.Asks
 	}
@@ -28,7 +27,7 @@ func (d *Daemon) launchesWithAsks(sessionID protocol.SessionID) bool {
 
 func (d *Daemon) handleAskOpen(conn net.Conn, msg *protocol.AskOpenMessage) {
 	sessionID := protocol.TrimID(msg.SessionID)
-	if err := d.askingSession(sessionID); err != nil {
+	if err := d.requireAsks(sessionID); err != nil {
 		d.sendError(conn, err.Error())
 		return
 	}
@@ -60,11 +59,11 @@ func (d *Daemon) handleAskOpen(conn net.Conn, msg *protocol.AskOpenMessage) {
 	d.publishFact(FactAskOpened, id, nil)
 }
 
-func (d *Daemon) askingSession(sessionID protocol.SessionID) error {
+func (d *Daemon) requireAsks(sessionID protocol.SessionID) error {
 	if sessionID == "" || d.store.Get(sessionID) == nil {
 		return fmt.Errorf("session %q is not live in attn", sessionID)
 	}
-	if !d.launchesWithAsks(sessionID) {
+	if !d.launchedWithAsks(sessionID) {
 		return errors.New("asks are off for this session because it launched without them; ask in the conversation instead")
 	}
 	return nil
@@ -76,7 +75,7 @@ func (d *Daemon) handleAskList(conn net.Conn, msg *protocol.AskListMessage) {
 		d.sendError(conn, fmt.Sprintf("session %q is not live in attn", sessionID))
 		return
 	}
-	result := &protocol.AskListResult{Enabled: d.launchesWithAsks(sessionID), Asks: []protocol.Ask{}}
+	result := &protocol.AskListResult{Enabled: d.launchedWithAsks(sessionID), Asks: []protocol.Ask{}}
 	to := d.inboxAddressOf(sessionID)
 	for _, open := range d.openAsks() {
 		if open.stored.To == to {
@@ -93,7 +92,7 @@ func (d *Daemon) handleAskClose(conn net.Conn, msg *protocol.AskCloseMessage) {
 		d.sendError(conn, fmt.Sprintf("%s is not an open ask of this session", msg.AskID))
 		return
 	}
-	if err := d.store.CloseAsk(stored.ID, store.AskWithdrawn, time.Now()); err != nil {
+	if err := d.store.CloseAsk(stored.ID); err != nil {
 		d.sendError(conn, err.Error())
 		return
 	}
@@ -130,7 +129,7 @@ func (d *Daemon) answerAsk(msg *protocol.AskAnswerMessage) error {
 	if _, err := d.sendToInbox(inbox.Item{ID: "ask-answer/" + stored.ID, To: stored.To, Kind: inbox.Notice, Source: stored.ID, Text: text}); err != nil {
 		return fmt.Errorf("deliver the answer: %w", err)
 	}
-	if err := d.store.CloseAsk(stored.ID, store.AskAnswered, time.Now()); err != nil {
+	if err := d.store.CloseAsk(stored.ID); err != nil {
 		return errors.New("this ask was already answered or withdrawn")
 	}
 	d.publishFact(FactAskClosed, stored.ID, nil)
@@ -140,17 +139,15 @@ func (d *Daemon) answerAsk(msg *protocol.AskAnswerMessage) error {
 	return nil
 }
 
-func (d *Daemon) subscribeAskFacts() {
-	d.asksUnsubscribe = d.eventBus.Subscribe(bus.Filter{FactSessionClosed, FactSessionUnregistered}, func(ev bus.Event) {
-		d.life.Go("asks-session-closed", func() {
-			ids, err := d.store.CloseAsksTo(inbox.ToSession(protocol.SessionID(ev.Subject)), store.AskSessionClosed, time.Now())
-			if err != nil {
-				d.logf("asks: closing the asks of session %s: %v", ev.Subject, err)
-			}
-			for _, id := range ids {
-				d.publishFact(FactAskClosed, id, nil)
-			}
-		})
+func (d *Daemon) closeAsksOfSession(sessionID protocol.SessionID) {
+	ids, err := d.store.CloseAsksTo(inbox.ToSession(sessionID))
+	if err != nil {
+		d.logf("asks: closing the asks of session %s: %v", sessionID, err)
+	}
+	d.coalesceSnapshots(func() {
+		for _, id := range ids {
+			d.publishFact(FactAskClosed, id, nil)
+		}
 	})
 }
 
@@ -173,20 +170,22 @@ func (d *Daemon) openAsks() []openAsk {
 			d.logf("asks: ask %s no longer parses: %v", a.ID, err)
 			continue
 		}
-		profileID, _ := d.store.SessionProfileID(a.SessionID)
-		asks = append(asks, openAsk{stored: a, wire: askToProto(a, parts), profileID: profileID})
+		asks = append(asks, openAsk{stored: a, wire: askToProto(a, parts), profileID: d.askProfileID(a)})
 	}
 	return asks
 }
 
-func (d *Daemon) asksForProfile(profileID string) []protocol.Ask {
-	asks := []protocol.Ask{}
-	for _, open := range d.openAsks() {
-		if open.profileID == profileID {
-			asks = append(asks, open.wire)
-		}
+func (d *Daemon) askProfileID(a store.Ask) string {
+	if profileID := a.To.ChiefProfileID(); profileID != "" {
+		return profileID
 	}
-	return asks
+	if member := a.To.MemberID(); member != "" {
+		return d.crewProfileID(member)
+	}
+	if session := d.store.Get(a.SessionID); session != nil {
+		return session.ProfileID
+	}
+	return ""
 }
 
 func (d *Daemon) projectAsks() {

@@ -381,7 +381,7 @@ export function useAppCommands(): PaletteCommand[] {
         ? [{
             id: 'asks',
             title: 'Open asks',
-            description: 'Answer the questions your agents asked, one after another',
+            description: 'Answer what your agents asked, one ask after another',
             keywords: ['ask', 'asks', 'questions', 'answer', 'reply', 'inbox'],
             icon: <AttentionActionIcon />,
             shortcut: [shortcutTokens('dock.asks')],

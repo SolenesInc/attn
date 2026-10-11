@@ -8,7 +8,7 @@ func askRecipient() Recipient {
 	fragment := func(name string, fields ...Field) Node {
 		return template("ask."+name, "content/ask/"+name+".md", fields...)
 	}
-	picked := text("picked", "The labels the user picked, comma separated.")
+	picked := text("picked", "The labels the user picked; for a :::question-multi each is quoted, comma separated.")
 	other := text("other", "The user's own answer to a choice question.")
 	written := text("text", "The user's written answer, quoted by the adapter.")
 	choices := Choose(flag("recommended", "The user picked the agent's recommendation alone."),

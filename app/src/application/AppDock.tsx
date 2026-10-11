@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { AttentionDrawer } from '../components/AttentionDrawer';
 import { AsksDrawer } from '../components/Asks/AsksDrawer';
 import { AutomationsPanel } from '../components/AutomationsPanel';
@@ -11,6 +12,22 @@ import {
   useNavigationContext,
 } from './AppContexts';
 import { useEscapeStack } from '../hooks/useEscapeStack';
+import { useSessionStore } from '../store/sessions';
+
+function useTerminalFocusWhenClosed(open: boolean) {
+  const wasOpen = useRef(open);
+  useEffect(() => {
+    const closed = wasOpen.current && !open;
+    wasOpen.current = open;
+    if (!closed) return;
+    const frame = window.requestAnimationFrame(() => {
+      const stranded = document.activeElement;
+      if (stranded instanceof HTMLElement && stranded.closest('[inert]')) stranded.blur();
+      if (document.activeElement === document.body) useSessionStore.getState().requestTerminalFocus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [open]);
+}
 
 export function AppDock() {
   const {
@@ -44,6 +61,7 @@ export function AppDock() {
     garden: gardenPanelOpen,
   };
   const topPanel = dockPanelStack.slice().reverse().find((id) => openPanels[id]);
+  useTerminalFocusWhenClosed(asksPanelOpen);
   useEscapeStack(() => {
     if (gardenHoldsWindow || topPanel === 'garden') closeGarden();
     else if (topPanel) closeDockPanel(topPanel);

@@ -1,6 +1,8 @@
-import { fireEvent, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
-import { DEFAULT_PROFILE_ID, daemonSession, soloDesktop } from './test/daemonFixtures';
+import { act, fireEvent, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
+import { openSession } from './test/appFixtures';
+import { DEFAULT_PROFILE_ID, daemonSession, soloDesktop, type DaemonSession } from './test/daemonFixtures';
 import type { EventMessage } from './test/protocol';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
@@ -37,13 +39,12 @@ const releaseDay: Ask = {
   parts: [{ question: { key: 'q1', kind: 'any', prompt: 'Which platforms?', choices: [{ label: 'macOS' }, { label: 'Linux' }] } }],
 };
 
-async function renderAsks(asks: Ask[] = [cacheStore, releaseDay]) {
+const webWaiting = daemonSession('web', { state: 'waiting_input', turn_owed: true, turn_opened_at: '2026-01-01T00:06:00Z' });
+
+async function renderAsks(asks: Ask[] = [cacheStore, releaseDay], web: DaemonSession = webWaiting) {
   const view = await renderApp({
     initialState: {
-      sessions: [
-        daemonSession('api', { state: 'working' }),
-        daemonSession('web', { state: 'waiting_input', turn_owed: true, turn_opened_at: '2026-01-01T00:06:00Z' }),
-      ],
+      sessions: [daemonSession('api', { state: 'working' }), web],
       desktops: [soloDesktop('api'), soloDesktop('web')],
       asks,
     },
@@ -63,22 +64,62 @@ async function openDrawer(daemon: ScriptedDaemon) {
 }
 
 const openAsk = () => document.querySelector('[data-testid^="ask-a-"]')?.getAttribute('aria-label');
+const rows = (list: HTMLElement) => within(list).getAllByRole('button').map((row) => row.getAttribute('data-testid'));
+const terminalInput = () => document.querySelector<HTMLElement>('[data-session-visible="1"] [role="textbox"][aria-label="Terminal input"]');
 
 describe('App asks', () => {
   it('opens on the ask of the agent waiting on you first', async () => {
     const daemon = await renderAsks();
     const list = await openDrawer(daemon);
 
-    expect(within(list).getAllByRole('button').map((row) => row.getAttribute('data-testid'))).toEqual([
-      'asks-row-a-release',
-      'asks-row-a-cache1',
-    ]);
+    expect(rows(list)).toEqual(['asks-row-a-release', 'asks-row-a-cache1']);
     expect(openAsk()).toBe('Release day');
     expect(document.activeElement).toBe(screen.getByRole('checkbox', { name: 'macOS' }));
 
     await gesture(daemon, () => fireEvent.keyDown(document.activeElement ?? window, { key: 'j' }));
     expect(openAsk()).toBe('Cache store');
     expect(document.activeElement).toBe(screen.getByRole('radio', { name: /Postgres/ }));
+  });
+
+  it('keeps the shown ask and focus when another agent starts waiting', async () => {
+    const daemon = await renderAsks([cacheStore, releaseDay], daemonSession('web', { state: 'working' }));
+    const list = await openDrawer(daemon);
+    expect(openAsk()).toBe('Cache store');
+    const postgres = screen.getByRole('radio', { name: /Postgres/ });
+    expect(document.activeElement).toBe(postgres);
+
+    daemon.emit({ event: 'session_state_changed', session: webWaiting });
+    await daemon.idle();
+
+    expect(rows(list)).toEqual(['asks-row-a-release', 'asks-row-a-cache1']);
+    expect(openAsk()).toBe('Cache store');
+    expect(document.activeElement).toBe(postgres);
+  });
+
+  it('keeps its keys after a click on the ask itself', async () => {
+    const daemon = await renderAsks();
+    await openDrawer(daemon);
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('asks-row-a-cache1')));
+    const clicking = userEvent.setup({ delay: null }).click(screen.getByText('Deploys empty the cache.'));
+    await vi.advanceTimersByTimeAsync(5);
+    await clicking;
+    await gesture(daemon, () => fireEvent.keyDown(document.activeElement ?? window, { key: 'k' }));
+
+    expect(openAsk()).toBe('Release day');
+  });
+
+  it('gives focus back to the agent when it closes', async () => {
+    const daemon = await renderAsks();
+    await openSession(daemon, 'api');
+    await openDrawer(daemon);
+    expect(document.activeElement).toBe(screen.getByRole('checkbox', { name: 'macOS' }));
+
+    await gesture(daemon, () => fireEvent.keyDown(document.activeElement ?? window, { key: 'Escape' }));
+    await act(() => vi.advanceTimersToNextFrame());
+    await daemon.idle();
+
+    expect(terminalInput()).not.toBeNull();
+    expect(document.activeElement).toBe(terminalInput());
   });
 
   it('sends the picked answers and the note, then brings the next ask', async () => {

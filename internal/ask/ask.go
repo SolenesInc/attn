@@ -12,6 +12,7 @@ const (
 	MaxMarkdownBytes = 64 << 10
 	MaxQuestions     = 12
 	MaxChoices       = 20
+	maxSubjectRunes  = 120
 )
 
 const recommendedPrefix = "Recommended:"
@@ -49,7 +50,11 @@ func Parse(markdown string) ([]protocol.AskPart, error) {
 	questions := 0
 	for i := 0; i < len(lines); i++ {
 		line := lines[i]
-		kind, opens := openers[strings.TrimSpace(line)]
+		trimmed := strings.TrimSpace(line)
+		kind, opens := openers[trimmed]
+		if !fence.open() && !opens && isDirective(trimmed) {
+			return nil, strayDirective(trimmed, i+1)
+		}
 		if fence.open() || !opens {
 			fence.track(line)
 			prose = append(prose, line)
@@ -91,14 +96,21 @@ func Subject(explicit string, parts []protocol.AskPart) string {
 		return subject
 	}
 	if questions := Questions(parts); len(questions) > 0 {
-		return questions[0].Prompt
+		return truncate(questions[0].Prompt, maxSubjectRunes)
 	}
 	for _, part := range parts {
-		if part.Markdown != nil {
-			for _, line := range strings.Split(*part.Markdown, "\n") {
-				if text := strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(line), "#>*- ")); text != "" {
-					return truncate(text, 120)
-				}
+		if part.Markdown == nil {
+			continue
+		}
+		var fence codeFence
+		for _, line := range strings.Split(*part.Markdown, "\n") {
+			inCode := fence.open()
+			fence.track(line)
+			if inCode || fence.open() {
+				continue
+			}
+			if text := strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(line), "#>*- ")); text != "" {
+				return truncate(text, maxSubjectRunes)
 			}
 		}
 	}
@@ -108,12 +120,29 @@ func Subject(explicit string, parts []protocol.AskPart) string {
 func blockEnd(lines []string, open int) (int, error) {
 	var fence codeFence
 	for j := open + 1; j < len(lines); j++ {
-		if !fence.open() && strings.TrimSpace(lines[j]) == ":::" {
-			return j, nil
+		if !fence.open() {
+			trimmed := strings.TrimSpace(lines[j])
+			if trimmed == ":::" {
+				return j, nil
+			}
+			if _, opens := openers[trimmed]; opens {
+				break
+			}
 		}
 		fence.track(lines[j])
 	}
 	return 0, &LineError{Line: open + 1, Message: "question block has no closing :::"}
+}
+
+func isDirective(trimmed string) bool {
+	return strings.HasPrefix(trimmed, ":::")
+}
+
+func strayDirective(directive string, line int) *LineError {
+	if directive == ":::" {
+		return &LineError{Line: line, Message: "::: closes no question block"}
+	}
+	return &LineError{Line: line, Message: fmt.Sprintf("%q opens no question block; use :::question, :::question-multi or :::question-text", directive)}
 }
 
 func parseQuestion(kind protocol.AskQuestionKind, body []string, firstLineNumber int) (protocol.AskQuestion, error) {
@@ -127,6 +156,9 @@ func parseQuestion(kind protocol.AskQuestionKind, body []string, firstLineNumber
 			fence.track(line)
 			context = append(context, line)
 			continue
+		}
+		if isDirective(trimmed) {
+			return question, strayDirective(trimmed, firstLineNumber+offset)
 		}
 		choice, isChoice := parseChoice(trimmed)
 		recommendation, isRecommendation := strings.CutPrefix(trimmed, recommendedPrefix)
@@ -152,6 +184,9 @@ func parseQuestion(kind protocol.AskQuestionKind, body []string, firstLineNumber
 			continue
 		}
 		if isRecommendation {
+			if recommended != "" {
+				return question, &LineError{Line: firstLineNumber + offset, Message: "a question takes one Recommended: line"}
+			}
 			recommended = strings.TrimSpace(recommendation)
 			continue
 		}
@@ -174,7 +209,7 @@ func parseQuestion(kind protocol.AskQuestionKind, body []string, firstLineNumber
 		if question.Kind != protocol.AskQuestionKindText {
 			label, ok := choiceLabel(question.Choices, recommended)
 			if !ok {
-				return question, &LineError{Line: firstLineNumber - 1, Message: fmt.Sprintf("Recommended: %q names no choice", recommended)}
+				return question, &LineError{Line: firstLineNumber - 1, Message: fmt.Sprintf("Recommended: names one choice, and %q is none of them", recommended)}
 			}
 			recommended = label
 		}
@@ -259,7 +294,7 @@ func (f *codeFence) track(line string) {
 
 func firstLine(text string) string {
 	line, _, _ := strings.Cut(strings.TrimSpace(text), "\n")
-	return truncate(strings.TrimSpace(line), 120)
+	return truncate(strings.TrimSpace(line), maxSubjectRunes)
 }
 
 func truncate(text string, limit int) string {

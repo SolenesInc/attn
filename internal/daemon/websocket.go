@@ -632,7 +632,7 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		Seeds:                  state.Seeds,
 		SeedsTotal:             protocol.Ptr(d.countSeedsForBroadcast(client.selectedProfile())),
 		Crew:                   state.Crew,
-		Asks:                   d.asksForProfile(client.selectedProfile()),
+		Asks:                   asksSnapshot(client.selectedProfile(), d.openAsks()).Asks,
 	}
 	d.fillInitialMigrationPhase(event)
 	d.sendInitialArrangement(client, event)

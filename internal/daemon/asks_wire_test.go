@@ -126,12 +126,6 @@ func TestAnAgentKeepsTheAsksSettingItLaunchedWith(t *testing.T) {
 	if _, err := cli.AskOpen(protocol.SessionID(with), cacheAsk, "", w.Path("after")); err != nil {
 		t.Fatalf("an agent launched with asks lost them when the setting went off: %v", err)
 	}
-	testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 1 })
-
-	if closed := closeFromApp(app, with); !closed.Accepted {
-		t.Fatalf("close %s: %+v", with, closed)
-	}
-	testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 0 })
 }
 
 func TestAnAgentWithdrawsItsOwnAskOnly(t *testing.T) {
@@ -156,8 +150,71 @@ func TestAnAgentWithdrawsItsOwnAskOnly(t *testing.T) {
 		t.Fatalf("withdraw: %v", err)
 	}
 	testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 0 })
-	if _, err := cli.AskOpen(protocol.SessionID(asker), ":::question\nWhich?\n:::\n:::question-multi\nOnly prose\n:::", "", w.Path("shop")); err == nil || !strings.Contains(err.Error(), "line 4: :::question-multi needs choices") {
-		t.Fatalf("a malformed ask was not refused by line: %v", err)
+}
+
+func TestAnAskFollowsItsAddresseeNotTheSessionThatFiledIt(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "asks_enabled", "true")
+
+	plain := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	w.Launched(plain)
+	if _, err := cli.AskOpen(protocol.SessionID(plain), cacheAsk, "", w.Path("shop")); err != nil {
+		t.Fatalf("ask: %v", err)
+	}
+	testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 1 })
+	if closed := closeFromApp(app, plain); !closed.Accepted {
+		t.Fatalf("close %s: %+v", plain, closed)
+	}
+	testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 0 })
+
+	day := wakeCrew(t, cli, "trellis", "")
+	w.Launched(string(day.SessionID))
+	asked, err := cli.AskOpen(day.SessionID, cacheAsk, "", w.Path("trellis"))
+	if err != nil {
+		t.Fatalf("crew ask: %v", err)
+	}
+	successor := protocol.Deref(crewHandoff(t, cli, string(day.SessionID), "Still waiting on the cache answer.", false, protocol.CrewDayCloseNap).SessionID)
+	w.Launched(string(successor))
+	if shown := w.App().Initial.Asks; len(shown) != 1 || shown[0].ID != asked.ID || protocol.Deref(shown[0].CrewMember) != "trellis" {
+		t.Fatalf("after trellis napped the app shows %+v, want its open ask", shown)
+	}
+	if listed, err := cli.AskList(successor); err != nil || len(listed.Asks) != 1 || listed.Asks[0].ID != asked.ID {
+		t.Fatalf("trellis's next day lists %+v (%v), want the ask filed before the nap", listed, err)
+	}
+}
+
+func TestAsksBelongToTheAskingSessionsProfile(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "asks_enabled", "true")
+	home := app.SelectedProfile()
+	side := createProfile(app, "Side")
+	sideApp := w.AppOn(side.ID)
+	homeAsker := w.Spawn(app, fakeagent.Claude, w.Path("home"))
+	w.Launched(homeAsker)
+	sideAsker := w.Spawn(sideApp, fakeagent.Claude, w.Path("side"))
+	w.Launched(sideAsker)
+	homeAsk, err := cli.AskOpen(protocol.SessionID(homeAsker), cacheAsk, "", w.Path("home"))
+	if err != nil {
+		t.Fatalf("home ask: %v", err)
+	}
+	sideAsk, err := cli.AskOpen(protocol.SessionID(sideAsker), cacheAsk, "", w.Path("side"))
+	if err != nil {
+		t.Fatalf("side ask: %v", err)
+	}
+	only := func(profile, id string) func(protocol.AsksUpdatedMessage) bool {
+		return func(m protocol.AsksUpdatedMessage) bool {
+			return m.ProfileID == profile && len(m.Asks) == 1 && m.Asks[0].ID == id
+		}
+	}
+	testworld.Await(app, protocol.EventAsksUpdated, only(home, homeAsk.ID))
+	testworld.Await(sideApp, protocol.EventAsksUpdated, only(side.ID, sideAsk.ID))
+
+	selectProfile(app, side.ID)
+	testworld.Await(app, protocol.EventAsksUpdated, only(side.ID, sideAsk.ID))
+	if shown := w.AppOn(home).Initial.Asks; len(shown) != 1 || shown[0].ID != homeAsk.ID {
+		t.Fatalf("the home profile starts with %+v, want only its own ask", shown)
 	}
 }
 

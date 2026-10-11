@@ -10,7 +10,7 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestAnAgentAsksFromItsSessionListsAndWithdraws(t *testing.T) {
+func TestAnAgentAsksAndTheAskSurvivesADaemonRestartUntilWithdrawn(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Start()
@@ -36,10 +36,15 @@ func TestAnAgentAsksFromItsSessionListsAndWithdraws(t *testing.T) {
 	if listed := inSession("", "ask", "list"); listed.Code != 0 || listed.Stdout != id+"  Which store keeps the cache?\n" {
 		t.Errorf("attn ask list exited %d and printed %q", listed.Code, listed.Stdout)
 	}
+	s.Stop()
+	s.Start()
+	if listed := inSession("", "ask", "list"); listed.Code != 0 || listed.Stdout != id+"  Which store keeps the cache?\n" {
+		t.Errorf("after a daemon restart, attn ask list exited %d and printed %q, stderr %q", listed.Code, listed.Stdout, listed.Stderr)
+	}
 	refused(t, inSession(":::question\nWhich?\n", "ask"), 1, "ask: line 1: question block has no closing :::")
 	refused(t, inSession("", "ask"), 1, "ask: pipe the ask's markdown on stdin, or pass --file")
 
-	if withdrawn := inSession("", "ask", "close", id); withdrawn.Code != 0 || withdrawn.Stdout != "Withdrew "+id+".\n" {
+	if withdrawn := inSession("", "ask", "close", id, "--session", session); withdrawn.Code != 0 || withdrawn.Stdout != "Withdrew "+id+".\n" {
 		t.Errorf("attn ask close exited %d and printed %q, stderr %q", withdrawn.Code, withdrawn.Stdout, withdrawn.Stderr)
 	}
 	refused(t, inSession("", "ask", "close", id), 1, "ask close: "+id+" is not an open ask of this session")

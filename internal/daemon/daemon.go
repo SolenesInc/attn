@@ -205,7 +205,6 @@ type Daemon struct {
 	inboxMu                           sync.Mutex
 	inboxStates                       map[inbox.Address]*inboxDeliveryState
 	inboxUnsubscribe                  func()
-	asksUnsubscribe                   func()
 	crewWakeMu                        sync.Mutex
 	crewExitedMu                      sync.Mutex
 	crewExitedSessions                map[string]string
@@ -1980,6 +1979,7 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() 
 		d.logf("close session %s: %v", sessionID, err)
 	}
 	d.forgetSessionTrace(sessionID)
+	d.closeAsksOfSession(sessionID)
 	if recorded {
 		d.queueConversationKeep()
 		d.invalidateGardenSeedParties("session close")
@@ -2004,6 +2004,7 @@ func (d *Daemon) removeReapedSession(sessionID protocol.SessionID) {
 	d.forgetSessionRuntime(sessionID)
 	d.store.Remove(sessionID)
 	d.forgetSessionTrace(sessionID)
+	d.closeAsksOfSession(sessionID)
 	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)
 }

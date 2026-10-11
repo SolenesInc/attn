@@ -577,6 +577,17 @@ describe('SettingsModal sent files', () => {
   });
 });
 
+describe('SettingsModal asks', () => {
+  it('reads as off by default and turns asks on', async () => {
+    const daemon = await openSection('hygiene');
+    const toggle = screen.getByRole('switch', { name: 'Asks (experimental)' });
+
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    await gesture(daemon, () => fireEvent.click(toggle));
+    expect(savedSettings(daemon)).toEqual([['asks_enabled', 'true']]);
+  });
+});
+
 describe('SettingsModal delegation badge', () => {
   it('counts live roles as soon as Settings opens, before the section is visited', async () => {
     const selection = { harness: 'codex', provider: '', model: '', effort: '' };

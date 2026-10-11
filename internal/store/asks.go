@@ -4,19 +4,12 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
 var ErrAskNotOpen = errors.New("the ask is not open")
-
-const (
-	AskAnswered      = "answered"
-	AskWithdrawn     = "withdrawn"
-	AskSessionClosed = "session_closed"
-)
 
 type Ask struct {
 	ID        string
@@ -47,7 +40,7 @@ func (s *Store) OpenAsks() ([]Ask, error) {
 	if s.db == nil {
 		return nil, nil
 	}
-	rows, err := s.db.Query("SELECT " + askColumns + " FROM asks WHERE closed_at = '' ORDER BY created_at, id")
+	rows, err := s.db.Query("SELECT " + askColumns + " FROM asks ORDER BY created_at, id")
 	if err != nil {
 		return nil, err
 	}
@@ -69,20 +62,20 @@ func (s *Store) GetOpenAsk(id string) (Ask, error) {
 	if s.db == nil {
 		return Ask{}, ErrAskNotOpen
 	}
-	a, err := scanAsk(s.db.QueryRow("SELECT "+askColumns+" FROM asks WHERE id = ? AND closed_at = ''", id))
+	a, err := scanAsk(s.db.QueryRow("SELECT "+askColumns+" FROM asks WHERE id = ?", id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Ask{}, ErrAskNotOpen
 	}
 	return a, err
 }
 
-func (s *Store) CloseAsk(id, reason string, now time.Time) error {
+func (s *Store) CloseAsk(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
 		return ErrAskNotOpen
 	}
-	result, err := s.db.Exec("UPDATE asks SET closed_at = ?, close_reason = ? WHERE id = ? AND closed_at = ''", now.UTC().Format(time.RFC3339Nano), reason, id)
+	result, err := s.db.Exec("DELETE FROM asks WHERE id = ?", id)
 	if err != nil {
 		return err
 	}
@@ -92,13 +85,13 @@ func (s *Store) CloseAsk(id, reason string, now time.Time) error {
 	return nil
 }
 
-func (s *Store) CloseAsksTo(to inbox.Address, reason string, now time.Time) ([]string, error) {
+func (s *Store) CloseAsksTo(to inbox.Address) ([]string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
 		return nil, nil
 	}
-	rows, err := s.db.Query("UPDATE asks SET closed_at = ?, close_reason = ? WHERE address = ? AND closed_at = '' RETURNING id", now.UTC().Format(time.RFC3339Nano), reason, to.String())
+	rows, err := s.db.Query("DELETE FROM asks WHERE address = ? RETURNING id", to.String())
 	if err != nil {
 		return nil, err
 	}

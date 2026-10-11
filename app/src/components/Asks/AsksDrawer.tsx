@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { AskAnswer } from '../../types/generated';
 import { useDaemonApi } from '../../contexts/DaemonApiContext';
+import { TURN_AGE_TICK_MS, useNow } from '../../hooks/useNow';
+import { formatShortcut } from '../../shortcuts/formatShortcut';
 import { EMPTY_ASK_DRAFT, useAsksStore } from '../../store/asks';
 import type { UISessionState } from '../../types/sessionState';
 import { askFrom, askHolder, askQuestions, draftAnswers, draftSendable, orderAsks, type AskHolderSession } from '../../utils/asks';
 import { formatTurnAge } from '../../utils/queueBands';
-import { keyJoiner, modifierGlyphs } from '../../shortcuts/platform';
 import { fileMarkdownSource } from '../MarkdownReader/documentSource';
 import { MarkdownReader } from '../MarkdownReader';
 import { SessionLead } from '../SessionLead';
@@ -25,6 +26,8 @@ interface AsksDrawerProps {
   onClose: () => void;
 }
 
+const SEND_SHORTCUT = { key: 'Enter', meta: true };
+
 function isTyping(target: EventTarget): boolean {
   if (target instanceof HTMLInputElement) return !['radio', 'checkbox', 'button'].includes(target.type);
   return target instanceof HTMLElement && (target.isContentEditable || ['TEXTAREA', 'SELECT'].includes(target.tagName));
@@ -41,33 +44,49 @@ export function AsksDrawer({ sessions, onOpenAgent, onClose }: AsksDrawerProps) 
   const ordered = useMemo(() => orderAsks(asks, sessions), [asks, sessions]);
   const index = Math.max(0, ordered.findIndex((ask) => ask.id === selectedAskId));
   const ask = ordered[index];
+  const askId = ask?.id;
   const askRef = useRef<HTMLElement>(null);
-  const now = Date.now();
+  const listRef = useRef<HTMLOListElement>(null);
+  const now = useNow(TURN_AGE_TICK_MS);
+  const sourcePath = ask ? `${ask.base_dir}/${ask.id}.md` : '';
+  const source = useMemo(() => fileMarkdownSource(sourcePath), [sourcePath]);
 
+  useEffect(() => () => selectAsk(null), [selectAsk]);
   useEffect(() => {
-    askRef.current?.querySelector<HTMLElement>('input, textarea')?.focus({ preventScroll: true });
-  }, [ask?.id]);
+    if (!askId) return;
+    selectAsk(askId);
+    listRef.current?.querySelector<HTMLElement>('[aria-current="true"]')?.scrollIntoView?.({ block: 'nearest' });
+    const article = askRef.current;
+    if (!article) return;
+    article.scrollTop = 0;
+    article.querySelector<HTMLElement>('input:not(:disabled), textarea:not(:disabled)')?.focus({ preventScroll: true });
+  }, [askId, selectAsk]);
 
+  const show = (id: string) => {
+    selectAsk(id);
+    setError(null);
+  };
   const step = (delta: number) => {
     const next = ordered[index + delta];
-    if (next) {
-      selectAsk(next.id);
-      setError(null);
-    }
+    if (next) show(next.id);
   };
 
   if (!ask) {
     return (
       <div className="asks-drawer">
         <AsksHeader count={0} onClose={onClose} />
-        <div className="asks-empty">No agent is waiting on an answer.</div>
+        <div className="asks-empty">
+          <p>No open asks.</p>
+          <p className="asks-empty-hint">When an agent needs a decision from you, its ask lands here.</p>
+        </div>
       </div>
     );
   }
 
   const holder = askHolder(ask, sessions);
+  const from = askFrom(ask, holder);
+  const questions = askQuestions(ask);
   const draft = drafts[ask.id] ?? EMPTY_ASK_DRAFT;
-  const source = fileMarkdownSource(`${ask.base_dir}/${ask.id}.md`);
   const sendable = draftSendable(ask, draft) && !sending;
   const changeAnswer = (answer: AskAnswer) => setDraft(ask.id, { ...draft, answers: { ...draft.answers, [answer.key]: answer } });
   const send = async () => {
@@ -97,31 +116,28 @@ export function AsksDrawer({ sessions, onOpenAgent, onClose }: AsksDrawerProps) 
     else return;
     event.preventDefault();
   };
-  let questionNumber = 0;
 
   return (
-    <div className="asks-drawer" onKeyDown={onKeyDown}>
+    <div className="asks-drawer" tabIndex={-1} onKeyDown={onKeyDown}>
       <AsksHeader count={ordered.length} onClose={onClose} />
-      <ol className="asks-list" aria-label="Open asks">
+      <ol ref={listRef} className="asks-list" aria-label="Open asks">
         {ordered.map((item) => {
           const itemHolder = askHolder(item, sessions);
-          const questions = askQuestions(item).length;
+          const questionCount = askQuestions(item).length;
+          const selected = item.id === ask.id;
           return (
             <li key={item.id}>
               <button
                 type="button"
-                className={`asks-row ${item.id === ask.id ? 'asks-row--selected' : ''}`.trim()}
+                className={`asks-row ${selected ? 'asks-row--selected' : ''}`.trim()}
                 data-testid={`asks-row-${item.id}`}
-                aria-current={item.id === ask.id ? 'true' : undefined}
-                onClick={() => {
-                  selectAsk(item.id);
-                  setError(null);
-                }}
+                aria-current={selected ? 'true' : undefined}
+                onClick={() => show(item.id)}
               >
                 <span className="asks-row-from">{askFrom(item, itemHolder)}</span>
                 <span className="asks-row-subject">{item.subject}</span>
-                {questions > 1 && <span className="asks-row-count">{questions}</span>}
-                {itemHolder?.turnOwed && <span className="asks-row-waiting" title="Waiting on you">●</span>}
+                {questionCount > 1 && <span className="asks-row-count">{questionCount} questions</span>}
+                {itemHolder?.turnOwed && <span className="asks-row-waiting" role="img" aria-label="Waiting on you" title="Waiting on you" />}
                 <span className="asks-row-age">{formatTurnAge(item.created_at, now)}</span>
               </button>
             </li>
@@ -130,52 +146,50 @@ export function AsksDrawer({ sessions, onOpenAgent, onClose }: AsksDrawerProps) 
       </ol>
       <article ref={askRef} className="asks-ask" aria-label={ask.subject} data-testid={`ask-${ask.id}`}>
         <div className="asks-ask-from">
-          {holder ? <SessionLead agent={holder.agent} state={holder.state} reason={holder.state_reason} seed={holder.id} /> : null}
-          <span className="asks-ask-agent">{askFrom(ask, holder)}</span>
+          {holder && <SessionLead agent={holder.agent} state={holder.state} reason={holder.state_reason} seed={holder.id} />}
+          <span className="asks-ask-agent">{from}</span>
           {holder && (
-            <button type="button" className="asks-open-agent" onClick={() => onOpenAgent(holder.id)} title="Open the agent (o)">
+            <button type="button" className="asks-open-agent" onClick={() => onOpenAgent(holder.id)} title={`Open ${from} (o)`}>
               Open agent
             </button>
           )}
         </div>
         <h2 className="asks-ask-subject">{ask.subject}</h2>
-        {ask.parts.map((part, partIndex) => {
-          if (part.question) {
-            questionNumber += 1;
-            return (
-              <AskQuestionCard
-                key={part.question.key}
-                askId={ask.id}
-                index={questionNumber}
-                question={part.question}
-                answer={draft.answers[part.question.key]}
-                source={source}
-                disabled={sending}
-                onChange={changeAnswer}
-              />
-            );
-          }
-          return (
+        {ask.parts.map((part, partIndex) => (
+          part.question ? (
+            <AskQuestionCard
+              key={part.question.key}
+              askId={ask.id}
+              index={questions.indexOf(part.question) + 1}
+              question={part.question}
+              answer={draft.answers[part.question.key]}
+              source={source}
+              onChange={changeAnswer}
+            />
+          ) : (
             <div key={`markdown-${partIndex}`} className="asks-markdown">
               <MarkdownReader content={part.markdown ?? ''} source={source} />
             </div>
-          );
-        })}
+          )
+        ))}
         <textarea
           className="asks-note"
           aria-label="Note"
           rows={3}
           value={draft.note}
-          disabled={sending}
-          placeholder={`Anything else for ${askFrom(ask, holder)}?`}
+          placeholder={`Anything else for ${from}?`}
           onChange={(event) => setDraft(ask.id, { ...draft, note: event.target.value })}
         />
         {error && <div className="asks-error" role="alert">{error}</div>}
       </article>
       <div className="asks-footer">
-        <span className="asks-hint"><kbd>j</kbd><kbd>k</kbd> next · <kbd>o</kbd> open agent</span>
-        <button type="button" className="asks-send" disabled={!sendable} onClick={() => void send()}>
-          {sending ? 'Sending…' : 'Send'} <kbd>{`${modifierGlyphs().accel}${keyJoiner()}⏎`}</kbd>
+        <span className="asks-hints">
+          {ordered.length > 1 && <span className="asks-hint"><kbd>j</kbd><kbd>k</kbd> next · previous</span>}
+          {holder && <span className="asks-hint"><kbd>o</kbd> open agent</span>}
+          <span className="asks-hint"><kbd>esc</kbd> close</span>
+        </span>
+        <button type="button" className="asks-send" disabled={!sendable} aria-busy={sending || undefined} onClick={() => void send()}>
+          {sending ? 'Sending…' : 'Send'} <kbd>{formatShortcut(SEND_SHORTCUT)}</kbd>
         </button>
       </div>
     </div>
@@ -187,7 +201,7 @@ function AsksHeader({ count, onClose }: { count: number; onClose: () => void }) 
     <div className="asks-header">
       <span className="asks-title">Asks</span>
       {count > 0 && <span className="asks-count">{count}</span>}
-      <button type="button" className="asks-close" aria-label="Close asks" onClick={onClose}>×</button>
+      <button type="button" className="asks-close" aria-label="Close asks" title="Close (esc)" onClick={onClose}>×</button>
     </div>
   );
 }

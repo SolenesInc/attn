@@ -35,8 +35,13 @@ func executeAsk(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	asJSON := fs.Bool("json", false, "print the result as JSON")
 	subject := fs.String("subject", "", "the ask's subject")
 	file := fs.String("file", "", "read the ask from this markdown file instead of stdin")
-	if err := fs.Parse(args); err != nil {
+	positionals, err := parseInterspersedFlagArgs(fs, args)
+	if err != nil {
 		fmt.Fprintf(stderr, "ask: %v\n", err)
+		return 2
+	}
+	if usage := askUsageError(command, positionals); usage != "" {
+		fmt.Fprintln(stderr, usage)
 		return 2
 	}
 	sessionID := protocol.SessionID(strings.TrimSpace(*session))
@@ -48,26 +53,18 @@ func executeAsk(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 2
 	}
 	c := client.New(config.SocketPath())
-	var err error
 	switch command {
 	case "list":
 		err = listAsks(c, sessionID, *asJSON, stdout)
 	case "close":
-		if fs.NArg() != 1 {
-			fmt.Fprintln(stderr, "ask close: needs exactly one ask id")
-			return 2
-		}
-		if err = c.AskClose(sessionID, fs.Arg(0)); err == nil {
-			fmt.Fprintf(stdout, "Withdrew %s.\n", fs.Arg(0))
+		if err = c.AskClose(sessionID, positionals[0]); err == nil {
+			fmt.Fprintf(stdout, "Withdrew %s.\n", positionals[0])
 		}
 	default:
-		if fs.NArg() > 0 {
-			fmt.Fprintf(stderr, "ask: unexpected argument %q; pipe the ask on stdin or pass --file\n", fs.Arg(0))
-			return 2
-		}
 		err = openAsk(c, sessionID, *subject, *file, *asJSON, stdin, stdout)
 	}
-	if daemonErr := (*client.DaemonError)(nil); errors.As(err, &daemonErr) {
+	var daemonErr *client.DaemonError
+	if errors.As(err, &daemonErr) {
 		err = errors.New(daemonErr.Message)
 	}
 	if err != nil {
@@ -75,6 +72,18 @@ func executeAsk(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+func askUsageError(command string, positionals []string) string {
+	switch {
+	case command == "close" && len(positionals) != 1:
+		return "ask close: needs exactly one ask id"
+	case command == "list" && len(positionals) > 0:
+		return fmt.Sprintf("ask list: unexpected argument %q", positionals[0])
+	case command == "" && len(positionals) > 0:
+		return fmt.Sprintf("ask: unexpected argument %q; pipe the ask on stdin or pass --file", positionals[0])
+	}
+	return ""
 }
 
 func openAsk(c *client.Client, sessionID protocol.SessionID, subject, file string, asJSON bool, stdin io.Reader, stdout io.Writer) error {
@@ -143,16 +152,31 @@ func writeAskHelp(w io.Writer) {
        attn ask list
        attn ask close <id>
 
-Ask the user something they can answer from attn, without opening your terminal.
-The ask is markdown; question blocks inside it become choices the user picks:
+Ask the user what you cannot settle alone. They answer from attn, without
+opening your terminal, and the answer arrives in your attn inbox.
 
-  :::question          one choice     - [ ] label — why
-  :::question-multi    any number     Recommended: <label>
-  :::question-text     a written answer
+The ask is markdown with question blocks in it:
 
-The first line of a block is the question; its other lines are context.
-attn ask prints the ask's id and returns at once. The answer arrives in your
-attn inbox in the user's words.
+  :::question            pick one choice
+  :::question-multi      pick any number of choices
+  :::question-text       write an answer
+
+A block's first line is the question; the rest is context. Choices are
+"- [ ] label" or "- [ ] label — why"; "Recommended: <label>" marks yours.
+
+  attn ask --subject "Cache store" <<'ASK'
+  Deploys empty the cache, so the first requests after one are slow.
+
+  :::question
+  Which store should keep the cache?
+  - [ ] Postgres — already deployed
+  - [ ] Redis — faster, one more service
+  Recommended: Postgres
+  :::
+  ASK
+
+attn ask prints the ask's id and returns at once. Carry on with work that does
+not depend on the answer; attn tells you when it arrives.
 
 commands:
   (none)                 open an ask from stdin or --file
@@ -162,6 +186,7 @@ commands:
 flags:
   --subject <text>       the ask's subject (defaults to its first question)
   --file <path>          read the ask from a file; images resolve beside it
+                         instead of the working directory
   --session <id>         session id (defaults to the current session)
   --json                 print the result as JSON
 `)

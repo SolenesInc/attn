@@ -21,7 +21,12 @@ type pluginLaunchInstructions struct {
 }
 
 func (d *Daemon) preparePluginLaunchInstructions(sessionID protocol.SessionID, profileID string, isChief, selfReportPullRequests bool) (*pluginLaunchInstructions, error) {
-	asks := d.launchesWithAsks(sessionID)
+	launch := hooks.Launch{
+		Garden:                 true,
+		Asks:                   d.launchedWithAsks(sessionID),
+		Crew:                   d.crewPrimeForLaunch(sessionID),
+		SelfReportPullRequests: selfReportPullRequests,
+	}
 	if isChief {
 		root, _, err := d.ensureNotebookScaffold()
 		if err != nil {
@@ -30,28 +35,18 @@ func (d *Daemon) preparePluginLaunchInstructions(sessionID protocol.SessionID, p
 		if strings.TrimSpace(root) == "" {
 			return nil, fmt.Errorf("prepare chief guidance: notebook root is empty")
 		}
+		launch.NotebookRoot = root
 		return &pluginLaunchInstructions{
-			Kind: pluginInstructionKindChief,
-			Content: hooks.Launch{
-				NotebookRoot:           root,
-				Garden:                 true,
-				Asks:                   asks,
-				Crew:                   d.crewPrimeForLaunch(sessionID),
-				SelfReportPullRequests: selfReportPullRequests,
-			}.Instructions(),
+			Kind:         pluginInstructionKindChief,
+			Content:      launch.Instructions(),
 			ProfileID:    profileID,
 			NotebookRoot: root,
 		}, nil
 	}
 
 	return &pluginLaunchInstructions{
-		Kind: pluginInstructionKindAgent,
-		Content: hooks.Launch{
-			Garden:                 true,
-			Asks:                   asks,
-			Crew:                   d.crewPrimeForLaunch(sessionID),
-			SelfReportPullRequests: selfReportPullRequests,
-		}.Instructions(),
+		Kind:      pluginInstructionKindAgent,
+		Content:   launch.Instructions(),
 		ProfileID: profileID,
 	}, nil
 }
