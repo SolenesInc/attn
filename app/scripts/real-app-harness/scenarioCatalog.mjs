@@ -4,7 +4,7 @@ export const scenarioCatalog = [
   {
     id: 'chief-slot',
     runnerId: 'CHIEF-SLOT',
-    label: 'Chief setup, restored terminal focus, sleep and one-click wake in a fresh profile',
+    label: 'Chief setup, restored terminal and configured-save focus, sleep and one-click wake in a fresh profile',
     command: ['node', 'scripts/real-app-harness/scenario-chief-slot.mjs'],
   },
   {

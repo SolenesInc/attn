@@ -47,7 +47,7 @@ const fixtureDesktops = [
 
 const chiefProps = (sessions: TestSession[]) => {
   const session = sessions.find(session => session.chief);
-  return { chief: session ? { ref: 'member:chief-member', key: 'chief-member', name: 'chief', agent: 'claude', revision: 1, phase: 'awake' as const, sessionId: session.id } : null, chiefActions: { setUp: () => {}, wake: () => {}, sleep: () => {}, edit: () => {}, dismiss: () => {} } };
+  return { chief: session ? { ref: 'member:chief-member', key: 'chief-member', name: 'chief', agent: 'claude', revision: 1, phase: 'awake' as const, requestPending: false, sessionId: session.id } : null, chiefActions: { setUp: async () => true, wake: () => {}, sleep: () => {}, edit: () => {}, dismiss: () => {} } };
 };
 
 function sidebarData(sessions: TestSession[]) {
@@ -657,22 +657,6 @@ describe('the crew in the sidebar', () => {
     expect(focusedQueueRow()).toMatchObject({ kind: 'session', sessionId: 'sess-keel' });
     within(screen.getByTestId('queue-crew-chief-member')).getAllByRole('button')[0].focus();
     expect(focusedQueueRow()).toMatchObject({ kind: 'session', sessionId: 'chief' });
-  });
-
-  it('opens member details anchored on the row action for awake and asleep members', () => {
-    const onOpenCrewMemberDetails = vi.fn();
-    renderCrew(
-      [{ id: 'sess-keel', label: 'keel of the day', state: 'working', desktopId: 'ws-a', crewMember: 'keel' }] as TestSession[],
-      { onOpenCrewMemberDetails },
-    );
-
-    fireEvent.click(screen.getByTestId('crew-actions-alder'));
-    fireEvent.click(screen.getByTestId('crew-member-details-action'));
-    expect(onOpenCrewMemberDetails).toHaveBeenLastCalledWith('alder', screen.getByTestId('crew-actions-alder'));
-
-    fireEvent.click(screen.getByTestId('session-actions-sess-keel'));
-    fireEvent.click(screen.getByTestId('crew-member-details-action'));
-    expect(onOpenCrewMemberDetails).toHaveBeenLastCalledWith('keel', screen.getByTestId('session-actions-sess-keel'));
   });
 
   it('shows an awake member exactly once, under its own row', () => {

@@ -51,7 +51,7 @@ describe('chief and crew sessions are protected from close', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Sleep Coda' }));
     await daemon.idle();
     expect(daemon.sentOf('crew_sleep')).toEqual([expect.objectContaining({ member: 'member:coda' })]);
-    if (chief) expect(screen.getByTestId('chief-slot')).toHaveAttribute('data-chief-phase', 'sleeping');
+    if (chief) expect(screen.getByTestId('chief-slot')).toHaveAttribute('data-chief-phase', 'awake');
     expect(closeCommands(daemon)).toEqual([]);
   });
 

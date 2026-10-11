@@ -41,6 +41,15 @@ const click = async selector => {
   await driver.clickWindow(x, y);
 };
 const screenshot = async name => driver.screenshot(path.join(runner.runDir, `${name}.png`), { windowId: await driver.mainWindowId() });
+const openChiefRoute = async () => {
+  await driver.pressKey('Tab');
+  await driver.pressKey('Tab');
+  await driver.pressEnter();
+  await waitDom('[role="menu"] button:first-child', { textIncludes: 'Harness and model' });
+  await screenshot(`03-chief-actions-${(await state()).phase}`);
+  await click('[role="menu"] button:first-child');
+  await waitDom('[data-testid="chief-setup"] [aria-label="Chief model"] [aria-checked="true"]', { focused: true });
+};
 const sampleIdle = async name => {
   const before = await snapshot(client.readManifest().pid, readLiveDaemonPid(instance), webkitBaseline);
   const pids = new Set(Object.values(before.byClass).flatMap(group => group.pids.map(entry => entry.pid)));
@@ -139,6 +148,22 @@ try {
     await screenshot('03-chief-awake');
     runner.writeJson('first-wake.json', { state: awake, crew: roster() });
   });
+  await runner.step('configured_escape_and_save_return_row_focus', async () => {
+    await pressShortcutKeys(client, driver, 'sidebar.agentList');
+    await waitDom('[data-testid="queue-agent-filter"]', { focused: true });
+    await driver.pressKey('ArrowDown');
+    await waitDom(`[data-testid="queue-crew-select-${chief.key}"]`, { focused: true });
+    await openChiefRoute();
+    await driver.pressKey('Escape');
+    await waitDom(`[data-testid="queue-crew-select-${chief.key}"]`, { focused: true });
+    await openChiefRoute();
+    await screenshot('03-chief-route');
+    await driver.pressEnter();
+    await waitDom('[data-testid="chief-setup"]', { absent: true });
+    await waitDom(`[data-testid="queue-crew-select-${chief.key}"]`, { focused: true });
+    runner.writeJson('configured-save-focus.json', { state: await state(), focus: await client.request('dom_active_element') });
+    await pressShortcutKeys(client, driver, 'sidebar.agentList');
+  });
   await runner.step('sleep_and_one_click_wake', async () => {
     await pressShortcutKeys(client, driver, 'sidebar.agentList');
     await waitDom('[data-testid="queue-agent-filter"]', { focused: true });
@@ -152,6 +177,14 @@ try {
     await screenshot('04-chief-asleep');
     await sampleIdle('asleep');
     runner.assert(!roster().find(member => member.chief)?.binding_session, 'sleep releases the chief binding');
+    await click('[data-testid="queue-agent-filter"]');
+    await driver.pressKey('ArrowDown');
+    await waitDom(`[data-testid="queue-crew-select-${chief.key}"]`, { focused: true });
+    await openChiefRoute();
+    await driver.pressEnter();
+    await waitDom('[data-testid="chief-setup"]', { absent: true });
+    await waitDom(`[data-testid="queue-crew-select-${chief.key}"]`, { focused: true });
+    runner.writeJson('asleep-save-focus.json', { state: await state(), focus: await client.request('dom_active_element') });
     const wakeSelector = `[data-testid="queue-crew-select-${chief.key}"]`;
     await client.request('arm_native_pointer_witness', { selector: wakeSelector });
     await click(wakeSelector);

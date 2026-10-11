@@ -12,6 +12,8 @@ interface SessionActionsPopoverProps {
   ending: { kind: 'close'; run: () => void } | { kind: 'sleep'; name: string; run: () => void };
   onReloadSession: () => void;
   onMemberDetails?: () => void;
+  memberDetailsLabel?: string;
+  onEditHarnessRoute?: () => void;
   onClose: () => void;
 }
 
@@ -27,6 +29,8 @@ export function SessionActionsPopover({
   ending,
   onReloadSession,
   onMemberDetails,
+  memberDetailsLabel = 'Member details',
+  onEditHarnessRoute,
   onClose,
 }: SessionActionsPopoverProps) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -76,10 +80,15 @@ export function SessionActionsPopover({
       role="menu"
       aria-label={`Actions for ${sessionLabel}`}
     >
+      {onEditHarnessRoute && (
+        <button type="button" role="menuitem" onClick={() => run(onEditHarnessRoute)}>
+          Harness and model…
+        </button>
+      )}
       {onMemberDetails && (
         <button type="button" role="menuitem" data-testid="crew-member-details-action" onClick={() => run(onMemberDetails)}>
           <span aria-hidden="true">⌁</span>
-          Member details
+          {memberDetailsLabel}
         </button>
       )}
       {onMemberDetails && <div className="session-actions-divider" />}

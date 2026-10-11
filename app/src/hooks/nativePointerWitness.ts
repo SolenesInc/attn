@@ -1,14 +1,8 @@
-interface PointerSample {
+interface PointerReceipt {
   clientX: number;
   clientY: number;
   target: string;
   matches: boolean;
-}
-
-interface PointerReceipt extends PointerSample {
-  down?: PointerSample;
-  sameTarget?: boolean;
-  downTargetConnected?: boolean;
 }
 
 interface PointerWitness {
@@ -17,23 +11,12 @@ interface PointerWitness {
   resolve: ((receipt: PointerReceipt) => void) | null;
   reject: ((error: Error) => void) | null;
   observe: (event: MouseEvent) => void;
-  observeDown: (event: MouseEvent) => void;
 }
 
 let witness: PointerWitness | null = null;
 
-function sample(event: MouseEvent, selector: string): PointerSample {
-  const target = event.target instanceof Element ? event.target : null;
-  return {
-    clientX: event.clientX, clientY: event.clientY,
-    target: target ? `${target.tagName.toLowerCase()}.${Array.from(target.classList).join('.')}` : 'none',
-    matches: Boolean(target?.closest(selector)),
-  };
-}
-
 export function disarmNativePointerWitness(): void {
   if (!witness) return;
-  document.removeEventListener('mousedown', witness.observeDown, true);
   document.removeEventListener('mouseup', witness.observe, true);
   witness.reject?.(new Error(`Native pointer witness cancelled for ${witness.selector}`));
   witness = null;
@@ -42,22 +25,16 @@ export function disarmNativePointerWitness(): void {
 export function armNativePointerWitness(selector: string): void {
   if (!document.querySelector(selector)) throw new Error(`Native pointer target not found: ${selector}`);
   disarmNativePointerWitness();
-  let down: PointerSample | undefined;
-  let downTarget: EventTarget | null = null;
   const armed: PointerWitness = {
     selector, receipt: null, resolve: null, reject: null,
-    observeDown: event => {
-      if (!event.isTrusted) return;
-      down = sample(event, selector);
-      downTarget = event.target;
-    },
     observe: event => {
       if (!event.isTrusted) return;
+      const target = event.target instanceof Element ? event.target : null;
       armed.receipt = {
-        ...sample(event, selector),
-        ...(down ? { down, sameTarget: downTarget === event.target, downTargetConnected: downTarget instanceof Node && downTarget.isConnected } : {}),
+        clientX: event.clientX, clientY: event.clientY,
+        target: target ? `${target.tagName.toLowerCase()}.${Array.from(target.classList).join('.')}` : 'none',
+        matches: Boolean(target?.closest(selector)),
       };
-      document.removeEventListener('mousedown', armed.observeDown, true);
       document.removeEventListener('mouseup', armed.observe, true);
       armed.resolve?.(armed.receipt);
       armed.resolve = null;
@@ -65,7 +42,6 @@ export function armNativePointerWitness(selector: string): void {
     },
   };
   witness = armed;
-  document.addEventListener('mousedown', armed.observeDown, true);
   document.addEventListener('mouseup', armed.observe, true);
 }
 

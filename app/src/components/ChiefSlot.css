@@ -1,4 +1,3 @@
-.chief-slot { position: relative; }
 .chief-pending-row .session-trailing { color: var(--color-text-dimmed); font-size: 11px; }
 .chief-setup { margin: 2px 4px 10px; padding: 10px; border: 1px solid var(--color-border-subtle); border-radius: 6px; background: var(--color-bg-panel); font-size: 12px; }
 .chief-setup-heading, .chief-chosen-harness, .chief-install-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
@@ -13,7 +12,6 @@
 .chief-setup kbd { margin-left: auto; color: var(--color-text-dimmed); font-size: 10px; }
 .chief-setup .chief-effort { display: flex; gap: 2px; margin-top: 10px; }
 .chief-setup .chief-effort > button { justify-content: center; padding: 5px 2px; font-size: 11px; }
-.chief-recommendation { color: var(--color-text-dimmed); font-size: 10px; line-height: 1.5; }
 .chief-setup-primary { display: flex; justify-content: center; align-items: center; gap: 6px; width: 100%; border: 1px solid var(--color-border-subtle); border-radius: 4px; padding: 7px; background: var(--color-bg-elevated); }
 .chief-setup button:disabled { opacity: .5; cursor: default; }
 .chief-setup-buttons { display: flex; gap: 6px; }
@@ -22,8 +20,3 @@
 .chief-setup-error { color: var(--color-error); }
 .chief-install-row { margin-top: 8px; }
 .chief-install-row > span { font-size: 10px; color: var(--color-text-dimmed); }
-.chief-menu-dismiss { position: fixed; inset: 0; z-index: 49; border: 0; background: transparent; cursor: default; }
-.chief-menu { position: absolute; z-index: 50; top: 100%; left: 0; right: 0; padding: 5px; border: 1px solid var(--color-border-subtle); border-radius: 6px; background: var(--color-bg-panel); box-shadow: 0 4px 16px #0003; }
-.chief-menu > button { display: block; width: 100%; border: 0; background: transparent; color: var(--color-text-primary); padding: 8px; text-align: left; font: inherit; font-size: 12px; cursor: pointer; }
-.chief-menu > button:hover { background: var(--color-bg-elevated); }
-.chief-menu > p { margin: 6px 8px; color: var(--color-text-dimmed); font-size: 10px; }

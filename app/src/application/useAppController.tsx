@@ -213,11 +213,8 @@ export function useAppController({
   const appAppearance = useAppAppearance({ settings });
   const { increaseScale, decreaseScale, resetScale } = appAppearance;
 
-  const agentSurfaceCount =
-    sessions.length +
-    desktopViews.filter((group) => group.hasUnresolvedAgentPanes).length;
   const chief = useChief({ liveSessionIds: appSessions.liveGardenSessions, selectSession: handleSelectSession, showError });
-  const appPanels = useAppPanels({ agentSurfaceCount, hasChief: Boolean(chief.view) });
+  const appPanels = useAppPanels();
   const crewPanelState = useCrewPanel();
   const { crewPanel, closeCrewPanel } = crewPanelState;
   const {

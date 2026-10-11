@@ -5,11 +5,12 @@ import { routeFromStored, useHarnessRoute, type HarnessRoute } from '../hooks/us
 import type { ChiefView } from '../application/useChief';
 import { chiefHarnesses, chiefRouteRules } from './chiefRoute';
 
-export function ChiefSetup({ chief, autoFocus, onSave, onClose, onOpenSettings }: {
+export function ChiefSetup({ chief, autoFocus, onSave, onClose, onReturnFocus, onOpenSettings }: {
   chief: ChiefView;
   autoFocus: boolean;
-  onSave: (route: HarnessRoute, restart?: boolean) => void;
+  onSave: (route: HarnessRoute, restart?: boolean) => Promise<boolean>;
   onClose: () => void;
+  onReturnFocus: () => void;
   onOpenSettings?: () => void;
 }) {
   const { settings, sendGetSettings } = useDaemonApi();
@@ -37,9 +38,13 @@ export function ChiefSetup({ chief, autoFocus, onSave, onClose, onOpenSettings }
     const target = selected || first;
     if (target) { target.focus(); focusRequested.current = false; }
   }, [autoFocus, step, showHarness, harnesses.length, view.catalog]);
-  const busy = ['configuring', 'waking', 'sleeping'].includes(chief.phase);
+  const busy = chief.requestPending;
   const canSave = !busy && Boolean(harness && value.model && !view.loading && !view.error);
-  const submit = (restart = false) => { if (canSave) onSave(value, restart); };
+  const submit = (restart = false) => {
+    if (!canSave) return;
+    const returnFocus = Boolean(chief.agent && root.current?.contains(document.activeElement));
+    void onSave(value, restart).then(saved => { if (saved && returnFocus) onReturnFocus(); });
+  };
   const moveRadio = (event: KeyboardEvent, kind: 'harness' | 'model' | 'effort') => {
     const group = event.currentTarget;
     const buttons = Array.from(group.querySelectorAll<HTMLButtonElement>('button[role="radio"]:not(:disabled)'));
@@ -63,7 +68,6 @@ export function ChiefSetup({ chief, autoFocus, onSave, onClose, onOpenSettings }
       <p>No harness here can run the chief</p>
       <div className="chief-install-row">Claude Code <span>Not installed</span></div>
       <div className="chief-install-row">Codex <span>Not installed</span></div>
-      <p>Install one of these, then come back.</p>
       <div className="chief-setup-buttons">
         {onOpenSettings && <button type="button" onClick={onOpenSettings}>Settings › Agents</button>}
         <button type="button" onClick={() => { sendGetSettings(); catalog.retry(); }}>Check again</button>
@@ -92,7 +96,6 @@ export function ChiefSetup({ chief, autoFocus, onSave, onClose, onOpenSettings }
       {view.effortMode === 'levels' && <div className="chief-effort" role="radiogroup" aria-label="Chief effort" onKeyDown={event => moveRadio(event, 'effort')}>
         {view.effortLevels.map(effort => <button type="button" role="radio" key={effort} disabled={busy} aria-checked={value.effort === effort} tabIndex={value.effort === effort ? 0 : -1} onClick={() => setDraft({ ...value, effort })}>{effort}</button>)}
       </div>}
-      <p className="chief-recommendation">Recommended for the chief: the deepest model at low effort.</p>
       {chief.agent && chief.sessionId ? <div className="chief-setup-buttons is-stacked">
         <button type="button" className="chief-setup-primary" disabled={!canSave} onClick={() => submit(true)}>Save and start a new day</button>
         <button type="button" disabled={!canSave} onClick={() => submit()}>Save for next day</button>

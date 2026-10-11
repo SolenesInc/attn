@@ -65,8 +65,8 @@ export function QueueSidebarFitHarness({ onReady, setTriggerRerender }: HarnessP
           desktops={desktops}
           visualIndexByDesktopId={new Map([['desk-1', 0]])}
           queue={desktopFlow ? null : buildQueueBands(desktops)}
-          chief={{ ref: 'member:chief-member', key: 'chief-member', name: 'Chief', agent: 'claude', revision: 1, phase: 'awake', sessionId: 'chief' }}
-          chiefActions={{ setUp: noop, wake: noop, sleep: noop, edit: noop, dismiss: noop }}
+          chief={{ ref: 'member:chief-member', key: 'chief-member', name: 'Chief', agent: 'claude', revision: 1, phase: 'awake', requestPending: false, sessionId: 'chief' }}
+          chiefActions={{ setUp: async () => true, wake: noop, sleep: noop, edit: noop, dismiss: noop }}
           crew={crew}
           profileName="Harness"
           onSelectSession={noop}

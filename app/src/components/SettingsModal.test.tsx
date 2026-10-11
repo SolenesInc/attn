@@ -292,7 +292,7 @@ describe('SettingsModal notebook folder', () => {
       selected_profile_id: 'profile-work',
       settings: { 'notebook.root': '~/work-notes', 'notebook.root.effective': '/Users/me/work-notes' },
     });
-    expect(screen.getByText('Work', { selector: 'strong' })).toBeInTheDocument();
+    expect(within(screen.getByTestId('settings-modal')).getByText('Work', { selector: 'strong' })).toBeInTheDocument();
     const input = screen.getByTestId('settings-notebook-root-input');
     fireEvent.change(input, { target: { value: '~/notes/work' } });
     await gesture(daemon, () => fireEvent.blur(input));
