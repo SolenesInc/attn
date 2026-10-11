@@ -13,7 +13,6 @@ Install Lima with `brew install lima`, then run from the repository:
 ```sh
 pnpm --dir app real-app:linux provision
 pnpm --dir app real-app:linux run -- bash -c 'cd plugins/attn-pi && bun install --frozen-lockfile && bun test'
-pnpm --dir app real-app:linux build
 pnpm --dir app real-app:linux test -- --scenario automode-environment
 ```
 
@@ -53,14 +52,16 @@ The guest keeps a separate managed checkout per host checkout under
 Guest build caches excluded by the repository's ignore rules survive sync.
 A lock prevents sync and commands from changing the same checkout concurrently.
 
-`run` and `test` use the last synced source. Run `sync` after edits for unit tests,
-or `build` before packaged-app scenarios. The existing app build fingerprint check
-rejects stale installs. Commands run with a clean environment and the named
+`run` uses the last synced source; run `sync` after edits. `build` syncs and
+installs the packaged app. The existing app build fingerprint check rejects stale
+installs. Commands run with a clean environment and the named
 `linux-<checkout hash>` instance; `--instance` selects another non-production name.
 The guest receives no host routing variables or provider credentials.
 
-`test` runs the existing serial matrix under Xvfb and copies its artifacts even
-when a scenario fails. It preserves the failing command's exit status. Pass
+`test` syncs, removes the guest instance with `attn instance clean`, installs it
+again and runs the existing serial matrix under Xvfb, so every run starts from
+empty instance data, like CI. It copies the artifacts even when a scenario
+fails and preserves the failing command's exit status. Pass
 `--out <directory>` to choose where results land; by default they go under the
 host temporary directory in `attn-linux-artifacts/<provider>/<checkout hash>`.
 Xvfb uses `-noreset` so short-lived window probes cannot reset the display while

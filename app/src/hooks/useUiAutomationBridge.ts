@@ -444,6 +444,7 @@ function collectVisualSnapshot(
           ? {
               text: sidebarItem.textContent || '',
               bounds: rectSnapshot(sidebarItem),
+              desktopGroupBounds: rectSnapshot(sidebarItem.closest('.desktop-row')),
             }
           : null,
         desktopBounds: desktopDom.desktopRoot?.bounds ?? null,
