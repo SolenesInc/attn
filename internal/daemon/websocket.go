@@ -64,12 +64,6 @@ type wsClient struct {
 
 	presence   clientPresence
 	presenceMu sync.RWMutex
-
-	gitStatusDir     string
-	gitStatusStop    chan struct{}
-	gitStatusRefresh chan gitStatusRefreshRequest
-	gitStatusHash    string
-	gitStatusMu      sync.Mutex
 }
 
 func (c *wsClient) HasCapability(cap string) bool {
@@ -231,35 +225,6 @@ func (c *wsClient) push(message outboundMessage, slots chan struct{}) (queued, f
 	return false, full
 }
 
-func (c *wsClient) stopGitStatusPoll() {
-	c.gitStatusMu.Lock()
-	defer c.gitStatusMu.Unlock()
-
-	if c.gitStatusStop != nil {
-		close(c.gitStatusStop)
-		c.gitStatusStop = nil
-	}
-	c.gitStatusRefresh = nil
-	c.gitStatusDir = ""
-	c.gitStatusHash = ""
-}
-
-func (c *wsClient) requestGitStatusRefresh(req gitStatusRefreshRequest) bool {
-	c.gitStatusMu.Lock()
-	refresh := c.gitStatusRefresh
-	c.gitStatusMu.Unlock()
-
-	if refresh == nil {
-		return false
-	}
-	select {
-	case refresh <- req:
-		return true
-	default:
-		return false
-	}
-}
-
 type BroadcastListener func(event *protocol.WebSocketEvent)
 
 type messageKind int
@@ -329,7 +294,6 @@ func (h *wsHub) closeAll() {
 		delete(h.connections, client)
 		delete(h.clients, client)
 		client.closeSendChannel()
-		client.stopGitStatusPoll()
 		if client.conn != nil {
 			client.abortTransport()
 		}
@@ -362,7 +326,6 @@ func (h *wsHub) remove(client *wsClient) {
 	delete(h.connections, client)
 	delete(h.clients, client)
 	client.closeSendChannel()
-	client.stopGitStatusPoll()
 	h.mu.Unlock()
 }
 
@@ -1150,10 +1113,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleListRemoteBranchesWS(client, msg.(*protocol.ListRemoteBranchesMessage))
 	case protocol.CmdEnsureRepo:
 		d.handleEnsureRepoWS(client, msg.(*protocol.EnsureRepoMessage))
-	case protocol.CmdSubscribeGitStatus:
-		d.handleSubscribeGitStatus(client, msg.(*protocol.SubscribeGitStatusMessage))
-	case protocol.CmdUnsubscribeGitStatus:
-		d.handleUnsubscribeGitStatusWS(client)
 	case protocol.CmdGetFileDiff:
 		d.handleGetFileDiffWS(client, msg.(*protocol.GetFileDiffMessage))
 	case protocol.CmdGetRepoInfo:

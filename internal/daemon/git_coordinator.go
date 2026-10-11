@@ -4,26 +4,9 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"time"
 
 	attngit "github.com/victorarias/attn/internal/git"
-	"github.com/victorarias/attn/internal/protocol"
 )
-
-type gitStatusCacheKey struct {
-	directory string
-	mode      gitStatusMode
-}
-
-type gitStatusResult struct {
-	status   *protocol.GitStatusUpdateMessage
-	duration time.Duration
-}
-
-type gitStatusReader struct {
-	executor gitExecutor
-	calls    *sharedCalls[gitStatusCacheKey, gitStatusResult]
-}
 
 type fileDiffCacheKey struct {
 	directory string
@@ -43,26 +26,10 @@ type fileDiffReader struct {
 	calls    *sharedCalls[fileDiffCacheKey, fileDiffContent]
 }
 
-var (
-	getGitStatusForDaemon = getGitStatusForSubscription
-	readFileDiffForDaemon = readFileDiffCoordinated
-)
-
-func newGitStatusReader(executor gitExecutor, life *lifetime) *gitStatusReader {
-	return &gitStatusReader{executor: executor, calls: newSharedCalls[gitStatusCacheKey, gitStatusResult](life, "gitStatus")}
-}
+var readFileDiffForDaemon = readFileDiffCoordinated
 
 func newFileDiffReader(executor gitExecutor, life *lifetime) *fileDiffReader {
 	return &fileDiffReader{executor: executor, calls: newSharedCalls[fileDiffCacheKey, fileDiffContent](life, "fileDiff")}
-}
-
-func (d *Daemon) statusReader() *gitStatusReader {
-	d.gitReaderMu.Lock()
-	defer d.gitReaderMu.Unlock()
-	if d.gitStatus == nil {
-		d.gitStatus = newGitStatusReader(d.gitExecution(), &d.life)
-	}
-	return d.gitStatus
 }
 
 func (d *Daemon) diffReader() *fileDiffReader {
@@ -72,16 +39,6 @@ func (d *Daemon) diffReader() *fileDiffReader {
 		d.fileDiff = newFileDiffReader(d.gitExecution(), &d.life)
 	}
 	return d.fileDiff
-}
-
-func (r *gitStatusReader) Status(ctx context.Context, directory string, mode gitStatusMode) (*protocol.GitStatusUpdateMessage, time.Duration, error) {
-	key := gitStatusCacheKey{directory: directory, mode: mode}
-	result, err := r.calls.Do(ctx, key, func(callCtx context.Context) (gitStatusResult, error) {
-		started := time.Now()
-		status, runErr := getGitStatusForDaemon(callCtx, r.executor, directory, mode)
-		return gitStatusResult{status: status, duration: time.Since(started)}, runErr
-	})
-	return cloneGitStatusUpdate(result.status), result.duration, err
 }
 
 func (r *fileDiffReader) FileDiff(ctx context.Context, directory, path, baseRef, headRef string, staged bool) (fileDiffContent, error) {
@@ -126,24 +83,4 @@ func readFileDiffCoordinated(ctx context.Context, executor gitExecutor, key file
 	}
 	content.modified = string(modified)
 	return content, nil
-}
-
-func cloneGitStatusUpdate(status *protocol.GitStatusUpdateMessage) *protocol.GitStatusUpdateMessage {
-	if status == nil {
-		return nil
-	}
-	cloned := *status
-	cloned.Staged = cloneGitFileChanges(status.Staged)
-	cloned.Unstaged = cloneGitFileChanges(status.Unstaged)
-	cloned.Untracked = cloneGitFileChanges(status.Untracked)
-	return &cloned
-}
-
-func cloneGitFileChanges(files []protocol.GitFileChange) []protocol.GitFileChange {
-	if files == nil {
-		return nil
-	}
-	cloned := make([]protocol.GitFileChange, len(files))
-	copy(cloned, files)
-	return cloned
 }

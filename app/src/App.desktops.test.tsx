@@ -244,7 +244,6 @@ describe('desktop surface', () => {
       sendFetchRemotes: vi.fn(async () => ({ success: true })),
       sendFetchPRDetails: vi.fn(async () => ({ success: true })),
       sendEnsureRepo: vi.fn(async () => ({ success: true, path: '/tmp/repo' })),
-      sendSubscribeGitStatus: fn, sendUnsubscribeGitStatus: fn,
       ...desktopCommands,
       desktopTileContents: {},
       sendGetFileDiff: vi.fn(async () => ({ success: true, original: '', modified: '' })),

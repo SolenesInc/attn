@@ -1,6 +1,6 @@
 import type { DaemonApi } from '../../contexts/DaemonApiContext';
 
-import type { GitStatusUpdate, FileDiffResult } from '../../hooks/useDaemonSocket';
+import type { FileDiffResult } from '../../hooks/useDaemonSocket';
 
 interface Call {
   method: string;
@@ -110,29 +110,6 @@ export class MockDaemon {
 
 export function createMockDaemon(options?: MockDaemonOptions): MockDaemon {
   return new MockDaemon(options);
-}
-
-export function createGitStatus(files: string[], options?: {
-  staged?: boolean;
-  status?: string;
-  additions?: number;
-  deletions?: number;
-}): GitStatusUpdate {
-  const { staged = false, status = 'modified', additions = 10, deletions = 5 } = options || {};
-
-  const fileObjects = files.map(path => ({
-    path,
-    status,
-    additions,
-    deletions,
-  }));
-
-  return {
-    directory: '/test/repo',
-    staged: staged ? fileObjects : [],
-    unstaged: staged ? [] : fileObjects,
-    untracked: [],
-  };
 }
 
 export function createFileDiffResult(original: string, modified: string): FileDiffResult {
