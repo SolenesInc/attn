@@ -1,3 +1,4 @@
 kind: fixed
 area: opener
 change: ⌘P forgets recent files deleted from disk, so they disappear on the next open.
+notes: Files whose existence check stalls for 500ms are also forgotten, keeping the opener and daemon shutdown responsive.

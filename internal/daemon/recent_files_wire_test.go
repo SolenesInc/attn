@@ -5,7 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/google/uuid"
@@ -159,6 +161,52 @@ func TestRecentFilesKeepActivityWhenStatIsDenied(t *testing.T) {
 		if got := paths(recentFiles(app, 0, "")); !slices.Equal(got, []string{path}) {
 			t.Fatalf("recent files with permission denied = %v, want its activity preserved", got)
 		}
+	})
+}
+
+func TestRecentFilesForgetHungPathsAtTheDeadlineWithoutBlockingShutdown(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		placeSessions(t, w, app, cli, "agent")
+		live, hung := markdownFile(t, w, "live.md"), markdownFile(t, w, "hung.md")
+		editFiles(t, w, cli, "agent", live, hung)
+		entered, release := make(chan struct{}), make(chan struct{})
+		defer close(release)
+		var calls atomic.Int32
+		w.UseFileStat(func(path string) (os.FileInfo, error) {
+			if path == hung {
+				if calls.Add(1) == 1 {
+					close(entered)
+				}
+				<-release
+			}
+			return os.Stat(path)
+		})
+		answer := make(chan []protocol.FileActivity, 1)
+		startedAt := time.Now()
+		go func() { answer <- recentFiles(app, 0, "") }()
+		<-entered
+		synctest.Wait()
+		w.advance(499 * time.Millisecond)
+		select {
+		case <-answer:
+			t.Fatal("recent files answered before the filesystem deadline")
+		default:
+		}
+		w.advance(time.Millisecond)
+		if got := paths(<-answer); !slices.Equal(got, []string{live}) {
+			t.Fatalf("recent files with a hung stat = %v, want only the healthy path", got)
+		}
+		if elapsed := time.Since(startedAt); elapsed != 500*time.Millisecond {
+			t.Fatalf("recent files answered after %s, want the 500ms deadline", elapsed)
+		}
+		if got := paths(recentFiles(app, 0, "")); !slices.Equal(got, []string{live}) {
+			t.Fatalf("next recent files = %v, want the hung path forgotten", got)
+		}
+		if got := calls.Load(); got != 1 {
+			t.Fatalf("stat called %d times for the hung path, want it checked only once", got)
+		}
+		w.stop()
 	})
 }
 

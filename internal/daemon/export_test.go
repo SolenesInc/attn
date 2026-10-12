@@ -3,6 +3,7 @@ package daemon
 import (
 	"errors"
 	"net"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -45,6 +46,10 @@ func (w *WireDaemon) Stop() error {
 
 func (w *WireDaemon) RefuseDatabaseCommits() func() {
 	return w.d.store.RefuseCommits()
+}
+
+func (w *WireDaemon) UseFileStat(stat func(string) (os.FileInfo, error)) {
+	w.d.recentFileStat = stat
 }
 
 func UseShippedPasteGap(t testing.TB) {
