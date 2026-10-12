@@ -20,14 +20,13 @@ type PullRequestWatch struct {
 	Reviewer      string
 	CreatedAt     string
 	Cursor        prreadiness.Cursor
-	LastSuccessAt string
 	LastError     string
 	FeedbackError string
 	OutageActive  bool
 }
 
 const pullRequestWatchColumns = `address, session_id, pr_id, mode, reviewer, created_at,
-	cursor_json, last_success_at, last_error, feedback_error, outage_active`
+	cursor_json, last_error, feedback_error, outage_active`
 
 func PullRequestWatchCoalesceKey(prID string) string { return "pull-request-watch:" + prID }
 
@@ -80,7 +79,7 @@ func (s *Store) WatchPullRequest(rec SessionPullRequestRecord, to inbox.Address,
 		VALUES(?,?,?,?,?,?,?)
 		ON CONFLICT(address,pr_id) DO UPDATE SET
 			mode=excluded.mode, reviewer=excluded.reviewer, created_at=excluded.created_at,
-			cursor_json=excluded.cursor_json, last_success_at='', last_error='', feedback_error='', outage_active=0
+			cursor_json=excluded.cursor_json, last_error='', feedback_error='', outage_active=0
 	`, to.String(), rec.SessionID, rec.PRID, string(mode), strings.TrimSpace(reviewer), stamp, string(encoded)); err != nil {
 		return false, false, err
 	}
@@ -279,11 +278,13 @@ func (s *Store) ReconcilePullRequestWatch(update PullRequestWatchReconcile) ([]I
 		previousSettling != settling || previousHealth != update.Health || previousHealthError != update.HealthError
 	recovered := update.Health == "current"
 	if _, err := tx.Exec(`
-		UPDATE pull_request_watches SET cursor_json=?, last_success_at=?,
+		UPDATE pull_request_watches SET cursor_json=?,
 			last_error=CASE WHEN ? THEN '' ELSE last_error END,
 			feedback_error=?, outage_active=CASE WHEN ? THEN 0 ELSE outage_active END
 		WHERE address=? AND pr_id=?
-	`, string(encoded), stamp, recovered, update.FeedbackError, recovered, update.To.String(), update.PRID); err != nil {
+			AND (cursor_json IS NOT ? OR feedback_error IS NOT ? OR (? AND (last_error != '' OR outage_active != 0)))
+	`, string(encoded), recovered, update.FeedbackError, recovered, update.To.String(), update.PRID,
+		string(encoded), update.FeedbackError, recovered); err != nil {
 		return nil, false, err
 	}
 	if _, err := tx.Exec(`
@@ -347,7 +348,7 @@ func (s *Store) RecordPullRequestWatchFailure(to inbox.Address, sessionID protoc
 		return nil, sql.ErrNoRows
 	}
 	stamp := at.UTC().Format(sortableTimeFormat)
-	if _, err := tx.Exec(`UPDATE pull_request_watches SET last_error=?, outage_active=1 WHERE address=? AND pr_id=?`, message, to.String(), prID); err != nil {
+	if _, err := tx.Exec(`UPDATE pull_request_watches SET last_error=?, outage_active=1 WHERE address=? AND pr_id=? AND (last_error IS NOT ? OR outage_active != 1)`, message, to.String(), prID, message); err != nil {
 		return nil, err
 	}
 	if _, err := tx.Exec(`
@@ -376,7 +377,7 @@ func scanPullRequestWatch(row pullRequestWatchScanner) (PullRequestWatch, error)
 	var watch PullRequestWatch
 	var address, mode, cursorJSON string
 	if err := row.Scan(&address, &watch.SessionID, &watch.PRID, &mode, &watch.Reviewer, &watch.CreatedAt,
-		&cursorJSON, &watch.LastSuccessAt, &watch.LastError, &watch.FeedbackError, &watch.OutageActive); err != nil {
+		&cursorJSON, &watch.LastError, &watch.FeedbackError, &watch.OutageActive); err != nil {
 		return PullRequestWatch{}, err
 	}
 	var err error
