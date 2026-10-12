@@ -3,6 +3,7 @@ import type { CommandUsage } from '../types/generated';
 import { useToastStore } from '../store/toasts';
 import type { PaletteState } from '../components/palette/paletteState';
 import { UnifiedPalette } from '../components/palette/UnifiedPalette';
+import { RenamePopover } from '../components/RenamePopover';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useDaemonStore } from '../store/daemonSessions';
 import { useProfilesStore } from '../store/profiles';
@@ -19,19 +20,48 @@ import { useAppCommands } from './useAppCommands';
 
 export function AppPalette() {
   const profileId = useProfilesStore((state) => state.selectedProfileId);
+  return <ProfilePalette key={profileId} />;
+}
+
+function ProfilePalette() {
   const { palette, setPalette } = useAppPanelsContext();
-  if (palette === null) return null;
-  return <OpenPalette key={profileId} state={palette} onStateChange={setPalette} onClose={() => setPalette(null)} />;
+  const { sendRenameSession } = useDaemonApi();
+  const [renameTarget, setRenameTarget] = useState<{
+    sessionId: string;
+    name: string;
+    anchor: { top: number; left: number };
+    opener: HTMLElement | null;
+  } | null>(null);
+  const openRename = useCallback((sessionId: string, name: string, opener: HTMLElement | null) => {
+    const rect = (opener ?? document.body).getBoundingClientRect();
+    setRenameTarget({ sessionId, name, anchor: { top: rect.top, left: rect.left }, opener });
+  }, []);
+  return <>
+    {palette !== null && <OpenPalette state={palette} onStateChange={setPalette} onClose={() => setPalette(null)} onRename={openRename} />}
+    {renameTarget && <RenamePopover
+      key={renameTarget.sessionId}
+      initialValue={renameTarget.name}
+      label="Rename session"
+      anchor={renameTarget.anchor}
+      onSubmit={(value) => sendRenameSession(renameTarget.sessionId, value)}
+      onClose={() => {
+        setRenameTarget(null);
+        renameTarget.opener?.focus({ preventScroll: true });
+      }}
+    />}
+  </>;
 }
 
 function OpenPalette({
   state,
   onStateChange,
   onClose,
+  onRename,
 }: {
   state: PaletteState;
   onStateChange: (state: PaletteState) => void;
   onClose: () => void;
+  onRename: (sessionId: string, name: string, opener: HTMLElement | null) => void;
 }) {
   const { desktopViews, handleSelectSession, handleSelectTile } = useNavigationContext();
   const { crewQueueEnabled } = useAttentionQueueContext();
@@ -41,7 +71,7 @@ function OpenPalette({
   const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
   const crew = useDaemonStore((state) => state.crew);
   const seeds = useDaemonStore((state) => state.seeds);
-  const commands = useAppCommands();
+  const commands = useAppCommands(onRename);
   const [usage, setUsage] = useState<CommandUsage[] | null>(null);
   useEffect(() => {
     let current = true;
