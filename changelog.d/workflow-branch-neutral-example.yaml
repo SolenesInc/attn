@@ -1,0 +1,3 @@
+kind: internal
+area: agents
+change: Keep the shared planning example neutral about pull request base branches.
