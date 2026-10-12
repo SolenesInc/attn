@@ -202,6 +202,10 @@ Follow [Testing](docs/testing.md). In short:
 - Goroutines and timers in `internal/daemon` start through `d.life`
   (`lifetime.go`); `Daemon.stop` waits for them without cancelling.
   `goTransport` is only for peer I/O.
+- Recent-file stat probes are the exception: filesystem calls cannot be
+  cancelled, so their workers may outlive requests and shutdown. Workers receive
+  copied inputs and only send to a buffered answer channel; the lifetime-owned
+  handler alone changes daemon state and forgets paths unanswered after 500ms.
 - Stop drains running jobs and lifetime work before closing Git or shutting down
   PTYs. Handler and Git deadlines still apply; shutdown itself does not fence or
   cancel their results.

@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func TestTheDaemonStartsGoroutinesAndTimersOnlyThroughItsLifetime(t *testing.T) {
+func TestDaemonWorkUsesItsLifetimeExceptUncancellableRecentFileProbes(t *testing.T) {
 	paths, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatal(err)
@@ -37,6 +37,9 @@ func TestTheDaemonStartsGoroutinesAndTimersOnlyThroughItsLifetime(t *testing.T) 
 				var problem string
 				switch node := node.(type) {
 				case *ast.GoStmt:
+					if path == "ws_session.go" && name == "(*Daemon).forgetMissingRecentFiles" {
+						return true
+					}
 					problem = "bare go statement: start it with d.life.Go so Daemon.stop waits for it (goTransport only for I/O that ends with its peer)"
 				case *ast.CallExpr:
 					if isTimeAfterFunc(node) {
