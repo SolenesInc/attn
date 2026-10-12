@@ -1077,6 +1077,24 @@ func (c *Client) SetAutomationLaunchDesktop(id int, desktop string, name *string
 	return &result, nil
 }
 
+func (c *Client) SnoozeSession(callerID, sessionID protocol.SessionID, until time.Time) error {
+	msg := protocol.SnoozeTurnMessage{Cmd: protocol.CmdSnoozeTurn, SessionID: protocol.TrimID(sessionID), Until: until.UTC().Format(time.RFC3339Nano)}
+	if caller := protocol.TrimID(callerID); caller != "" {
+		msg.CallerSessionID = protocol.Ptr(caller)
+	}
+	_, err := c.send(msg)
+	return err
+}
+
+func (c *Client) UnsnoozeSession(callerID, sessionID protocol.SessionID) error {
+	msg := protocol.WakeTurnMessage{Cmd: protocol.CmdWakeTurn, SessionID: protocol.TrimID(sessionID)}
+	if caller := protocol.TrimID(callerID); caller != "" {
+		msg.CallerSessionID = protocol.Ptr(caller)
+	}
+	_, err := c.send(msg)
+	return err
+}
+
 func (c *Client) SetSessionPriority(sessionID protocol.SessionID, priority bool) error {
 	_, err := c.send(protocol.SetSessionPriorityMessage{Cmd: protocol.CmdSetSessionPriority, SessionID: protocol.TrimID(sessionID), Priority: priority})
 	return err

@@ -45,7 +45,7 @@ For delegation mechanics and configured role selection, read [references/delegat
 - **Report on an assigned delegation:** read
   [references/delegated-agent.md](references/delegated-agent.md).
 - **See what other sessions are running here, watch one without interrupting it,
-  send one a message, or close one you are done with — and know what a message
+  send one a message, snooze its turn, or close one you are done with — and know what a message
   you receive may ask of you:**
   read [references/converse-and-observe.md](references/converse-and-observe.md).
 - **Plant, tend, or report on work in the garden — seeds and plots, what makes

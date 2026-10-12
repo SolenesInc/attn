@@ -1376,6 +1376,7 @@ model SetSessionPriorityMessage {
 // daemon does not have. Fire-and-forget.
 model SnoozeTurnMessage {
   cmd: "snooze_turn";
+  caller_session_id?: SessionID;
   session_id: SessionID;
   until: string;
 }
@@ -1385,6 +1386,7 @@ model SnoozeTurnMessage {
 // daemon's call. Fire-and-forget.
 model WakeTurnMessage {
   cmd: "wake_turn";
+  caller_session_id?: SessionID;
   session_id: SessionID;
 }
 
@@ -6153,6 +6155,7 @@ model SessionTranscriptResult {
 // broadcast shape: this one outlives the runtime and carries how it ended.
 model SessionLedgerEntry {
   priority?: boolean;
+  turn_snoozed_until?: string;
   id: SessionID;
   conversation_pinned_at?: string;
   label: string;

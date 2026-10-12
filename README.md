@@ -161,6 +161,14 @@ on screen. Settling a turn advances to an owed priority turn first.
 Agents can use `attn session priority on|off [--session <id>]`, defaulting to
 their own session. `attn delegate --priority` starts a marked delegate.
 
+`attn session snooze <id>... --until 1h` puts off turns for one or several
+sessions, including working agents before they finish. `--until` also accepts
+an RFC3339 instant or tomorrow, saturday and monday at local 09:00 (for a
+custom time, quote `"tomorrow 09:00"`). `attn session unsnooze <id>...` ends
+the snooze early. Agents may act on themselves and their delegates; the chief
+may act on any session of its profile. `attn session list` and `show` display
+the snooze deadline. CLI snooze currently supports local sessions.
+
 5. Press **Cmd+/** any time for the full shortcuts list.
 
 ## Session states
