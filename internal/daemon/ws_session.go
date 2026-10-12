@@ -85,6 +85,8 @@ func (d *Daemon) handleRecentFilesWS(client *wsClient, msg *protocol.RecentFiles
 const recentFileStatDeadline = 500 * time.Millisecond
 
 func (d *Daemon) forgetMissingRecentFiles() {
+	d.recentFilePruneGate <- struct{}{}
+	defer func() { <-d.recentFilePruneGate }()
 	paths := d.store.FileActivityPaths()
 	if len(paths) == 0 {
 		return

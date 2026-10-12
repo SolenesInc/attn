@@ -98,7 +98,8 @@ const (
 var ErrAlreadyRunning = errors.New("daemon already running")
 
 type Daemon struct {
-	recentFileStat func(string) (os.FileInfo, error)
+	recentFileStat      func(string) (os.FileInfo, error)
+	recentFilePruneGate chan struct{}
 	// Nil in production; wire tests pause a profile action here, its broadcasts held, to land a change meanwhile.
 	heldActionRan    atomic.Pointer[func()]
 	socketPath       string
@@ -529,6 +530,7 @@ func New(socketPath string) *Daemon {
 
 	d := &Daemon{
 		recentFileStat:      os.Stat,
+		recentFilePruneGate: make(chan struct{}, 1),
 		socketPath:          socketPath,
 		pidPath:             pidPath,
 		dataRoot:            dataRoot,
@@ -565,6 +567,7 @@ func NewForTesting(socketPath string) *Daemon {
 	manager := pty.NewManager(nil)
 	d := &Daemon{
 		recentFileStat:      os.Stat,
+		recentFilePruneGate: make(chan struct{}, 1),
 		socketPath:          socketPath,
 		pidPath:             pidPath,
 		dataRoot:            dataRoot,

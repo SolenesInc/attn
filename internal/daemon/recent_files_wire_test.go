@@ -166,7 +166,7 @@ func TestRecentFilesKeepActivityWhenStatIsDenied(t *testing.T) {
 
 func TestRecentFilesForgetHungPathsAtTheDeadlineWithoutBlockingShutdown(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
-		app, cli := w.App(), w.Client()
+		app, secondApp, cli := w.App(), w.App(), w.Client()
 		placeSessions(t, w, app, cli, "agent")
 		live, hung := markdownFile(t, w, "live.md"), markdownFile(t, w, "hung.md")
 		editFiles(t, w, cli, "agent", live, hung)
@@ -182,20 +182,26 @@ func TestRecentFilesForgetHungPathsAtTheDeadlineWithoutBlockingShutdown(t *testi
 			}
 			return os.Stat(path)
 		})
-		answer := make(chan []protocol.FileActivity, 1)
+		answer, secondAnswer := make(chan []protocol.FileActivity, 1), make(chan []protocol.FileActivity, 1)
 		startedAt := time.Now()
 		go func() { answer <- recentFiles(app, 0, "") }()
 		<-entered
+		go func() { secondAnswer <- recentFiles(secondApp, 0, "") }()
 		synctest.Wait()
 		w.advance(499 * time.Millisecond)
 		select {
 		case <-answer:
 			t.Fatal("recent files answered before the filesystem deadline")
+		case <-secondAnswer:
+			t.Fatal("the overlapping request answered before the running pass finished")
 		default:
 		}
 		w.advance(time.Millisecond)
 		if got := paths(<-answer); !slices.Equal(got, []string{live}) {
 			t.Fatalf("recent files with a hung stat = %v, want only the healthy path", got)
+		}
+		if got := paths(<-secondAnswer); !slices.Equal(got, []string{live}) {
+			t.Fatalf("overlapping recent files = %v, want the hung path already forgotten", got)
 		}
 		if elapsed := time.Since(startedAt); elapsed != 500*time.Millisecond {
 			t.Fatalf("recent files answered after %s, want the 500ms deadline", elapsed)
