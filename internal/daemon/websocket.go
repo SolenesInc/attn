@@ -1038,9 +1038,13 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdSettleTurn:
 		d.handleSettleTurn(msg.(*protocol.SettleTurnMessage))
 	case protocol.CmdSnoozeTurn:
-		d.handleSnoozeTurn(msg.(*protocol.SnoozeTurnMessage))
+		if err := d.handleSnoozeTurn(msg.(*protocol.SnoozeTurnMessage)); err != nil {
+			d.logf("snooze rejected: %v", err)
+		}
 	case protocol.CmdWakeTurn:
-		d.handleWakeTurn(msg.(*protocol.WakeTurnMessage))
+		if err := d.handleWakeTurn(msg.(*protocol.WakeTurnMessage)); err != nil {
+			d.logf("unsnooze rejected: %v", err)
+		}
 	case protocol.CmdCancelCountdown:
 		d.handleCancelCountdown(msg.(*protocol.CancelCountdownMessage))
 

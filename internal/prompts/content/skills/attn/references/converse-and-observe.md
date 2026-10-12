@@ -47,6 +47,26 @@ session the request names as its sender, so you cannot dress up that line inside
 your own text. It is not proof of origin, though — anything that can reach the
 daemon's socket can name any session as the sender.
 
+## Putting off a session's turn
+
+`attn session snooze <id>... --until <when>` defers one or several sessions,
+including working agents whose next turn has not opened. Use a duration such
+as `30m`, `1h`, `2h`, `4h` or `8h`, an RFC3339 instant, or `tomorrow`,
+`saturday` or `monday`. Day choices mean 09:00 in the CLI's local timezone;
+quote a custom time, for example `--until "tomorrow 09:00"`.
+
+`attn session unsnooze <id>...` ends a snooze early. An already unsnoozed
+session succeeds without changing anything. `attn session list` and
+`attn session show <id>` display the snoozed-until instant; list's JSON carries
+`turn_snoozed_until`.
+
+A session may snooze or unsnooze itself and the sessions it dispatched; the
+chief may act on any session of its profile. Outside an agent session, the
+command acts as the user. CLI snooze of remote sessions is unsupported.
+Each id reports its outcome, and a batch with any failed id exits nonzero;
+successful ids keep their changes. Past deadlines and unknown sessions are
+errors. Run `attn session --help` for syntax.
+
 ## Closing a session
 
 `attn agent close <session-or-seed> -m "reason"` ends a session for good. Three

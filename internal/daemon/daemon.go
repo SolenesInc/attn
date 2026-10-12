@@ -2578,6 +2578,10 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		} else {
 			d.sendOK(conn)
 		}
+	case protocol.CmdSnoozeTurn:
+		d.handleSnoozeTurnConn(conn, msg.(*protocol.SnoozeTurnMessage))
+	case protocol.CmdWakeTurn:
+		d.handleWakeTurnConn(conn, msg.(*protocol.WakeTurnMessage))
 	case protocol.CmdRenameSession:
 		d.handleRenameSessionConn(conn, msg.(*protocol.RenameSessionMessage))
 	case protocol.CmdStateExplain:

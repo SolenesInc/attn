@@ -117,7 +117,7 @@ func TestSessionLedgerCommandsReadClosedSessionsAndBringThemBack(t *testing.T) {
 	}
 
 	live := s.Attn("session", "list").Stdout
-	if header, _, _ := strings.Cut(live, "\n"); strings.Join(strings.Fields(header), " ") != "ID AGENT STATE WHEN CLOSED BY LABEL" || rowOf(live, source) == "" || rowOf(live, worker.SessionID) != "" {
+	if header, _, _ := strings.Cut(live, "\n"); strings.Join(strings.Fields(header), " ") != "ID AGENT STATE SNOOZED UNTIL WHEN CLOSED BY LABEL" || rowOf(live, source) == "" || rowOf(live, worker.SessionID) != "" {
 		t.Errorf("session list printed:\n%s\nwant a table of the one live session", live)
 	}
 	closedTable := s.Attn("session", "list", "--closed").Stdout

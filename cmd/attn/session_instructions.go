@@ -79,6 +79,12 @@ func runSession() {
 			return
 		}
 		runSessionRename(os.Args[3:])
+	case "snooze", "unsnooze":
+		if hasHelpFlag(os.Args[3:]) {
+			writeSessionHelp(os.Stdout)
+			return
+		}
+		runSessionSnooze(os.Args[3:], os.Args[2] == "snooze")
 	case "move":
 		if hasHelpFlag(os.Args[3:]) {
 			writeSessionHelp(os.Stdout)
@@ -326,6 +332,15 @@ commands:
   priority on|off [--session <id>]
         mark a session so its owed turns go first, or clear that flag. Defaults
         to the session running this command. Any agent may mark any session.
+  snooze <id>... --until <when>
+        defer sessions until an RFC3339 instant, a positive duration (30m, 1h,
+        2h, 4h, 8h), or tomorrow, saturday or monday. Day choices use local
+        09:00; quote a custom time, e.g. "tomorrow 09:00".
+        A session may snooze itself and its delegates; the chief any session
+        of its profile. Each id reports success or error; failures exit 1.
+  unsnooze <id>...
+        end snoozes early, with the same permissions. Already unsnoozed is
+        a successful no-op. List and show include the snoozed-until instant.
   rename <name> [--session <id>]
         give a session the name a person reads in the sidebar and the ledger:
         a few plain words about the work, up to 48 characters. Defaults to the

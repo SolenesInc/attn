@@ -174,16 +174,17 @@ func fprintSessionList(w io.Writer, result *protocol.SessionListResult, args ses
 
 	verdicts := sessionReopenVerdictsByID(result.Reopen)
 	table := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	header := "ID\tAGENT\tSTATE\tWHEN\tCLOSED BY\tLABEL"
+	header := "ID\tAGENT\tSTATE\tSNOOZED UNTIL\tWHEN\tCLOSED BY\tLABEL"
 	if args.reopen {
-		header = "ID\tAGENT\tSTATE\tWHEN\tCLOSED BY\tREOPEN\tLABEL"
+		header = "ID\tAGENT\tSTATE\tSNOOZED UNTIL\tWHEN\tCLOSED BY\tREOPEN\tLABEL"
 	}
 	fmt.Fprintln(table, header)
 	for _, entry := range result.Entries {
-		fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\t",
+		fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\t%s\t",
 			entry.ID,
 			entry.Agent,
 			sessionLedgerState(entry),
+			orDash(protocol.Deref(entry.TurnSnoozedUntil)),
 			shortStamp(sessionLedgerWhen(entry)),
 			orDash(protocol.Deref(entry.ClosedBy)))
 		if args.reopen {
@@ -397,6 +398,9 @@ func fprintSessionShow(w io.Writer, result protocol.SessionShowResult) {
 	fmt.Fprintf(w, "state      %s\n", sessionLedgerState(entry))
 	if protocol.Deref(entry.Priority) {
 		fmt.Fprintln(w, "priority   on")
+	}
+	if until := protocol.Deref(entry.TurnSnoozedUntil); until != "" {
+		fmt.Fprintf(w, "snoozed until %s\n", until)
 	}
 	fmt.Fprintf(w, "directory  %s\n", entry.Directory)
 	if branch := protocol.Deref(entry.Branch); branch != "" {

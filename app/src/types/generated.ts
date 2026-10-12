@@ -7896,6 +7896,7 @@ export interface Entry {
     profile_name:            string;
     repository?:             string;
     state:                   SessionState;
+    turn_snoozed_until?:     string;
     usage?:                  Usage;
     [property: string]: any;
 }
@@ -9115,6 +9116,7 @@ export interface SessionLedgerEntry {
     profile_name:            string;
     repository?:             string;
     state:                   SessionState;
+    turn_snoozed_until?:     string;
     usage?:                  Usage;
     [property: string]: any;
 }
@@ -9564,9 +9566,10 @@ export enum SettleTurnMessageCmd {
 }
 
 export interface SnoozeTurnMessage {
-    cmd:        SnoozeTurnMessageCmd;
-    session_id: string;
-    until:      string;
+    caller_session_id?: string;
+    cmd:                SnoozeTurnMessageCmd;
+    session_id:         string;
+    until:              string;
     [property: string]: any;
 }
 
@@ -9948,8 +9951,9 @@ export enum UnregisterMessageCmd {
 }
 
 export interface WakeTurnMessage {
-    cmd:        WakeTurnMessageCmd;
-    session_id: string;
+    caller_session_id?: string;
+    cmd:                WakeTurnMessageCmd;
+    session_id:         string;
     [property: string]: any;
 }
 
@@ -20179,6 +20183,7 @@ const typeMap: any = {
         { json: "profile_name", js: "profile_name", typ: "" },
         { json: "repository", js: "repository", typ: u(undefined, "") },
         { json: "state", js: "state", typ: r("SessionState") },
+        { json: "turn_snoozed_until", js: "turn_snoozed_until", typ: u(undefined, "") },
         { json: "usage", js: "usage", typ: u(undefined, r("Usage")) },
     ], "any"),
     "Facets": o([
@@ -20996,6 +21001,7 @@ const typeMap: any = {
         { json: "profile_name", js: "profile_name", typ: "" },
         { json: "repository", js: "repository", typ: u(undefined, "") },
         { json: "state", js: "state", typ: r("SessionState") },
+        { json: "turn_snoozed_until", js: "turn_snoozed_until", typ: u(undefined, "") },
         { json: "usage", js: "usage", typ: u(undefined, r("Usage")) },
     ], "any"),
     "SessionLedgerFacet": o([
@@ -21261,6 +21267,7 @@ const typeMap: any = {
         { json: "session_id", js: "session_id", typ: "" },
     ], "any"),
     "SnoozeTurnMessage": o([
+        { json: "caller_session_id", js: "caller_session_id", typ: u(undefined, "") },
         { json: "cmd", js: "cmd", typ: r("SnoozeTurnMessageCmd") },
         { json: "session_id", js: "session_id", typ: "" },
         { json: "until", js: "until", typ: "" },
@@ -21513,6 +21520,7 @@ const typeMap: any = {
         { json: "id", js: "id", typ: "" },
     ], "any"),
     "WakeTurnMessage": o([
+        { json: "caller_session_id", js: "caller_session_id", typ: u(undefined, "") },
         { json: "cmd", js: "cmd", typ: r("WakeTurnMessageCmd") },
         { json: "session_id", js: "session_id", typ: "" },
     ], "any"),

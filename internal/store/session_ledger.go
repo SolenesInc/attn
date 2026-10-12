@@ -271,7 +271,7 @@ func (s *Store) SessionLedger(query SessionLedgerQuery) (SessionLedgerPage, erro
 const ledgerSelect = `SELECT id, label, agent, directory, profile_id, priority,
 	COALESCE((SELECT name FROM profiles WHERE profiles.id = sessions.profile_id), ''),
 	COALESCE((SELECT deleted_at FROM profiles WHERE profiles.id = sessions.profile_id), ''),
-	branch, is_worktree, main_repo, repository, state, last_seen, closed_at, closed_by, close_reason,
+	branch, is_worktree, main_repo, repository, state, last_seen, closed_at, closed_by, close_reason, turn_snoozed_until,
  COALESCE((SELECT pinned_at FROM kept_conversation_pins p WHERE p.agent=sessions.agent AND p.resume_id=sessions.resume_session_id), '')`
 
 const ledgerAt = `CASE WHEN closed_at <> '' THEN closed_at ELSE last_seen END`
@@ -456,8 +456,8 @@ func (q SessionLedgerQuery) withinWindow(entry protocol.SessionLedgerEntry) bool
 func (s *Store) sessionLedgerMemory(query SessionLedgerQuery, limit int) (SessionLedgerPage, error) {
 	scoped := make([]protocol.SessionLedgerEntry, 0, len(s.sessions)+len(s.sessionCloses))
 	if query.Scope != SessionLedgerClosed {
-		for _, session := range s.sessions {
-			scoped = append(scoped, ledgerEntryFromSession(session, sessionCloseMark{}))
+		for id := range s.sessions {
+			scoped = append(scoped, *s.ledgerEntryMemoryLocked(id))
 		}
 	}
 	if query.Scope == SessionLedgerClosed || query.Scope == SessionLedgerAll {
@@ -555,7 +555,9 @@ func (s *Store) ledgerEntryMemoryLocked(id protocol.SessionID) *protocol.Session
 	if session == nil {
 		return nil
 	}
-	entry := ledgerEntryFromSession(session, sessionCloseMark{})
+	live := *session
+	applyTurnStamps(&live, s.turnStampsLocked(id))
+	entry := ledgerEntryFromSession(&live, sessionCloseMark{})
 	return &entry
 }
 
@@ -596,6 +598,9 @@ func ledgerEntryFromSession(session *protocol.Session, mark sessionCloseMark) pr
 		State:      session.State,
 		LastSeen:   session.LastSeen,
 	}
+	if until, err := time.Parse(time.RFC3339Nano, protocol.Deref(session.TurnSnoozedUntil)); err == nil && until.After(time.Now()) && mark.At == "" {
+		entry.TurnSnoozedUntil = protocol.Ptr(until.UTC().Format(time.RFC3339Nano))
+	}
 	if mark.At != "" {
 		entry.ClosedAt = protocol.Ptr(mark.At)
 		entry.ClosedBy = protocol.Ptr(mark.By)
@@ -620,6 +625,7 @@ func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 		closedBy         string
 		closeReason      string
 		pinnedAt         string
+		snoozedUntil     string
 	)
 
 	err := row.Scan(
@@ -640,10 +646,14 @@ func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 		&closedAt,
 		&closedBy,
 		&closeReason,
+		&snoozedUntil,
 		&pinnedAt,
 	)
 	if err != nil {
 		return protocol.SessionLedgerEntry{}, err
+	}
+	if until, err := time.Parse(time.RFC3339Nano, snoozedUntil); err == nil && until.After(time.Now()) && closedAt == "" {
+		entry.TurnSnoozedUntil = protocol.Ptr(until.UTC().Format(time.RFC3339Nano))
 	}
 	if priority != 0 {
 		entry.Priority = protocol.Ptr(true)

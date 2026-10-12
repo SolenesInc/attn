@@ -9553,6 +9553,9 @@ type SessionLedgerEntry struct {
 	// State corresponds to the JSON schema field "state".
 	State SessionState `json:"state"`
 
+	// TurnSnoozedUntil corresponds to the JSON schema field "turn_snoozed_until".
+	TurnSnoozedUntil *string `json:"turn_snoozed_until,omitempty,omitzero"`
+
 	// Usage corresponds to the JSON schema field "usage".
 	Usage *SessionUsage `json:"usage,omitempty,omitzero"`
 }
@@ -10204,6 +10207,9 @@ type SettleTurnMessage struct {
 }
 
 type SnoozeTurnMessage struct {
+	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
+	CallerSessionID *SessionID `json:"caller_session_id,omitempty,omitzero"`
+
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
@@ -10716,6 +10722,9 @@ type UnregisterMessage struct {
 }
 
 type WakeTurnMessage struct {
+	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
+	CallerSessionID *SessionID `json:"caller_session_id,omitempty,omitzero"`
+
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 

@@ -28,7 +28,7 @@ func (d *Daemon) moveSessionToDesktop(callerID protocol.SessionID, sessionID pro
 	if session == nil {
 		return nil, fmt.Errorf("session %s is not a live session", sessionID)
 	}
-	if err := d.mayMoveSession(callerID, session); err != nil {
+	if err := d.mayManageSession(callerID, session, "move"); err != nil {
 		return nil, err
 	}
 	profile, err := d.liveLaunchProfile(session.ProfileID)
@@ -59,11 +59,16 @@ func (d *Daemon) moveSessionToDesktop(callerID protocol.SessionID, sessionID pro
 	return result, nil
 }
 
-// mayMoveSession lets a session move itself and its delegates, and the chief
-// move any session of its profile; no caller is the user.
-func (d *Daemon) mayMoveSession(callerID protocol.SessionID, session *protocol.Session) error {
+func (d *Daemon) mayManageSession(callerID protocol.SessionID, session *protocol.Session, action string) error {
 	if callerID == "" || callerID == session.ID {
 		return nil
+	}
+	callerProfileID, err := d.sessionProfileID(callerID)
+	if err != nil {
+		return err
+	}
+	if callerProfileID != session.ProfileID {
+		return fmt.Errorf("unknown live session %s", session.ID)
 	}
 	if dispatcher, ok := d.liveSessionForTender(d.gardenDispatchersBySession()[session.ID]); ok && dispatcher == callerID {
 		return nil
@@ -71,5 +76,5 @@ func (d *Daemon) mayMoveSession(callerID protocol.SessionID, session *protocol.S
 	if d.isChiefOfStaffSession(callerID) && d.chiefOfProfile(session.ProfileID) == callerID {
 		return nil
 	}
-	return fmt.Errorf("session %s may move itself, the sessions it dispatched, or any session as its profile's chief; %s (%s) is none of those", callerID, session.ID, session.Label)
+	return fmt.Errorf("session %s may %s itself, the sessions it dispatched, or any session as its profile's chief; %s (%s) is none of those", callerID, action, session.ID, session.Label)
 }
