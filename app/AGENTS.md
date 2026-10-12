@@ -11,7 +11,7 @@ Paths are relative to `app/src`.
 ## Tests
 
 - Name tests `Source.concern.test.tsx`.
-- Follow [Testing](../docs/testing.md). App wire tests render the real app
+- Follow [Testing](../docs/internal/testing.md). App wire tests render the real app
   with its real socket client against the scripted daemon in `src/test/`,
   which speaks the generated protocol types.
 - Assert the exact requests the app sends after render settles, to catch

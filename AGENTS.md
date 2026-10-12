@@ -1,6 +1,6 @@
 # attn
 
-Always read [docs/glossary.md](docs/glossary.md) to understand and change attn
+Always read [docs/internal/glossary.md](docs/internal/glossary.md) to understand and change attn
 internals. It is attn's domain model.
 
 attn stands for Attention: an interface friendly to both human and agent brains,
@@ -90,7 +90,7 @@ responsibilities to keep consistent. Moving complexity behind a helper does not
 count.
 
 - The daemon owns application state; the app owns rendering.
-- Follow [the database migration rules](docs/db-migrations.md) for schema
+- Follow [the database migration rules](docs/internal/db-migrations.md) for schema
   changes.
 - Diagnose before fixing. If the cause is unknown, propose instrumentation.
 - Do not commit spikes.
@@ -119,7 +119,7 @@ count.
   does, say what to remove, what replaces it, and why behavior stays the same.
   Fewer lines on their own are not a reason.
 - Ask for a test, validation, or fallback only when you can name the
-  requirement or [testing promise](docs/testing.md) it protects. Inputs that
+  requirement or [testing promise](docs/internal/testing.md) it protects. Inputs that
   cannot happen don't count, and neither does a unit test for behavior a wire
   test already covers.
 
@@ -149,17 +149,17 @@ count.
 - `pnpm --dir app run dev`: Runs the frontend/app dev server
 - `make lint`: Overall linter
 
-`make test` skips the Go suite when only `docs/`, root Markdown and `app/src`
+`make test` skips the Go suite when only `docs/internal/`, root Markdown and `app/src`
 changed since `origin/main`; `FORCE=1` runs it and `DIFF_BASE=<ref>` compares
 against another branch.
 
 Choose checks for affected CLI, daemon, app, protocol, and Linux paths using
-[verification requirements](docs/instances.md#verification-requirements).
+[verification requirements](docs/internal/instances.md#verification-requirements).
 Rendering changes must avoid continuous repainting.
 
 ## Writing tests
 
-Follow [Testing](docs/testing.md). In short:
+Follow [Testing](docs/internal/testing.md). In short:
 
 - Commit tests that guard a promise attn makes: behavior that users, the agents
   attn runs, clients, or later versions rely on. Check your own work by running
@@ -278,22 +278,22 @@ clearer.
 Read the relevant entry when the task touches its subject. When changing or
 working on:
 
-- Database schema or migrations => docs/db-migrations.md
-- Tests, before writing, changing, or deleting them => docs/testing.md
-- How a harness behaves, before relying on it => docs/harnesses.md; check new
+- Database schema or migrations => docs/internal/db-migrations.md
+- Tests, before writing, changing, or deleting them => docs/internal/testing.md
+- How a harness behaves, before relying on it => docs/internal/harnesses.md; check new
   claims in its source or with a probe and record them there
 - Agent-facing content in `internal/prompts/content/**`, its Go definitions, or
-  CLI help => docs/prompt-authoring.md
-- Branches, PRs, merges, or waiting on reviews => docs/pull-requests.md
-- Changelog fragments, releases, or hotfixes => docs/making-a-release.md
-- Installing, launching, or verifying instances => docs/instances.md
+  CLI help => docs/internal/prompt-authoring.md
+- Branches, PRs, merges, or waiting on reviews => docs/internal/pull-requests.md
+- Changelog fragments, releases, or hotfixes => docs/internal/making-a-release.md
+- Installing, launching, or verifying instances => docs/internal/instances.md
 - Frontend code or shortcuts => app/AGENTS.md
 - Packaged-app scenarios or recording/publishing evidence =>
   app/scripts/real-app-harness/AGENTS.md
 - Pi driver or auto-mode permissions => plugins/attn-pi/AGENTS.md
-- CPU, memory, or benchmarks => docs/perf-testing.md
-- Terminal input that stops working => docs/diagnosing-terminal-input.md
-- Shared Rust PTY host => docs/pty-host-verification.md
+- CPU, memory, or benchmarks => docs/internal/perf-testing.md
+- Terminal input that stops working => docs/internal/diagnosing-terminal-input.md
+- Shared Rust PTY host => docs/internal/pty-host-verification.md
 
 ## Diagnostics
 

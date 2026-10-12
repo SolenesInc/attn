@@ -5,7 +5,7 @@ description: Use when editing attn's glossary.
 
 # Glossary
 
-Every change to docs/glossary.md must be approved by the user, line by line.
+Every change to docs/internal/glossary.md must be approved by the user, line by line.
 
 ## Why
 

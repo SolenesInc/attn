@@ -1,0 +1,3 @@
+kind: internal
+area: docs
+change: Move maintainer docs to docs/internal and include user guide edits in Go test selection and build fingerprints.

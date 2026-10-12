@@ -14,7 +14,7 @@ deriving them. Tests scope with bare `ATTN_DATA_DIR`.
 
 ## Build and install
 
-Follow [production safety](../AGENTS.md#you-are-probably-running-inside-attn).
+Follow [production safety](../../AGENTS.md#you-are-probably-running-inside-attn).
 
 | Change | Dev | Named instance |
 | --- | --- | --- |
@@ -56,7 +56,7 @@ build first, not whatever `attn` is on `PATH`:
 "$(./attn instance resolve --field appDaemon)" preflight
 ```
 
-Before running scenarios, read the [harness guide](../app/scripts/real-app-harness/AGENTS.md).
+Before running scenarios, read the [harness guide](../../app/scripts/real-app-harness/AGENTS.md).
 
 ## Clean up
 
