@@ -1,0 +1,3 @@
+kind: added
+area: CLI
+change: Session list --tree shows live delegation chains with seed slugs and owed or snoozed turns.

@@ -325,6 +325,15 @@ commands:
         and are half-open, so --until excludes its own instant.
         --reopen adds what would bring each closed row back, judging the whole
         page in one call; show explains any one of those verdicts.
+  list --tree [--profile <id>]
+        show every live session nested under the session that dispatched it,
+        sorted by label within each profile and branch. Rows carry short ids,
+        agent, state, owed/snoozed turns and seed slugs. A delegate whose
+        dispatcher is closed or absent becomes a root. Shell split provenance
+        is labeled separately. Ledger filters, paging and --json do not apply;
+        use attn list --json for the live session data.
+        Inside attn, the tree is limited to your session's profile. Outside
+        attn it includes all profiles; --profile narrows either view.
   show <id>
         read one ledger row, live or closed, including who closed it and why.
         A closed row also carries the reopen verdict: whether it comes back,
