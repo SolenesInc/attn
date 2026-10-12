@@ -81,14 +81,13 @@ func applyApprovalRoute(opts *ptybackend.SpawnOptions, route launchcontract.Appr
 	return nil
 }
 
-func launchIntentFromSpawnOptions(opts ptybackend.SpawnOptions, chiefOfStaff bool) store.LaunchIntent {
+func launchIntentFromSpawnOptions(opts ptybackend.SpawnOptions) store.LaunchIntent {
 	return store.LaunchIntent{
 		YoloMode:         opts.YoloMode,
 		ApprovalRoute:    opts.ApprovalRoute,
 		Executable:       opts.Executable,
 		Model:            opts.Model,
 		Effort:           opts.Effort,
-		ChiefOfStaff:     chiefOfStaff,
 		UnattendedLaunch: opts.UnattendedLaunch,
 	}
 }

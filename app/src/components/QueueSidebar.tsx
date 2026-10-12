@@ -1,3 +1,4 @@
+import { ChiefSlot } from './ChiefSlot';
 import { useRef, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from 'react';
 import { TURN_AGE_TICK_MS, useNow } from '../hooks/useNow';
 import { formatShortcut } from '../shortcuts/formatShortcut';
@@ -14,7 +15,7 @@ import { HomeIcon } from './SidebarIcons';
 import { SidebarAutomationGroups, SidebarDesktopOverview } from './SidebarDesktops';
 import { useWaitingFit } from './useWaitingFit';
 
-const WALK_ROW_SELECTOR = '.queue-row-select, .sidebar-row-select';
+const WALK_ROW_SELECTOR = '.queue-row-select:not(:disabled), .sidebar-row-select, .chief-setup button:not(:disabled)';
 
 export function QueueSidebar() {
   const {
@@ -35,7 +36,7 @@ export function QueueSidebar() {
   const leadCount = useWaitingFit(bodyRef, leadRef, queue?.turns.length ?? 0, Boolean(agentListOpen));
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
     const root = rootRef.current;
     if (!root) return;
     const target = event.target as HTMLElement;
@@ -141,8 +142,6 @@ function CrewBlock() {
   const where = useRowWhere();
   if (!queue) return null;
   const members = crewRows(crew, queue);
-  if (!queue.chief && members.length === 0) return null;
-  const chief = queue.chief;
   return (
     <div className="queue-crew-block" data-testid="queue-crew-block">
       <div className="queue-section-rule queue-crew-rule">
@@ -150,22 +149,13 @@ function CrewBlock() {
         <span className="queue-rule-line" aria-hidden="true" />
         {onManageCrew && <button type="button" data-testid="manage-crew" onClick={onManageCrew}>manage</button>}
       </div>
-      {chief && (
-        <QueueRowView
-          row={chief}
-          selected={selectedId === chief.session.id}
-          where={where(chief)}
-          onSelect={() => onSelectSession(chief.session.id)}
-          onOpenActions={(event) => openSessionActions(chief.session, event)}
-          delegates={delegates.get(chief.session.id) ?? []}
-          testIdPrefix="queue-chief"
-        />
-      )}
+      <ChiefSlot />
       {members.map(({ member, row }) => (
         <CrewRowView
           key={member}
           member={member}
-          agent={crew?.find((candidate) => candidate.id === member)?.resolved_agent}
+          name={crew?.find((candidate) => candidate.key === member)?.name}
+          agent={crew?.find((candidate) => candidate.key === member)?.resolved_agent}
           row={row}
           where={row ? where(row) : undefined}
           selected={row ? selectedId === row.session.id : false}

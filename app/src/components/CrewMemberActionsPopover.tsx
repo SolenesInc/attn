@@ -7,6 +7,9 @@ interface CrewMemberActionsPopoverProps {
   desktopLabel?: string;
   anchor: { top: number; left: number };
   onOpenDetails: () => void;
+  memberDetailsLabel?: string;
+  onEditHarnessRoute?: () => void;
+  onWake?: () => void;
   onClose: () => void;
 }
 
@@ -17,6 +20,9 @@ export function CrewMemberActionsPopover({
   desktopLabel,
   anchor,
   onOpenDetails,
+  memberDetailsLabel = 'Member details',
+  onEditHarnessRoute,
+  onWake,
   onClose,
 }: CrewMemberActionsPopoverProps) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -55,10 +61,12 @@ export function CrewMemberActionsPopover({
       aria-label={`Actions for ${memberName}`}
     >
       {desktopLabel && <div className="crew-desktop-label">{desktopLabel}</div>}
+      {onEditHarnessRoute && <button type="button" role="menuitem" onClick={() => { onClose(); onEditHarnessRoute(); }}>Harness and model…</button>}
       <button type="button" role="menuitem" data-testid="crew-member-details-action" onClick={onOpenDetails}>
         <span aria-hidden="true">⌁</span>
-        Member details
+        {memberDetailsLabel}
       </button>
+      {onWake && <button type="button" role="menuitem" onClick={() => { onClose(); onWake(); }}>Wake {memberName}</button>}
     </div>
   );
 }

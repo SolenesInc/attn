@@ -8,6 +8,7 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 func (s *Store) GardenSessionProfileID(sessionID protocol.SessionID) (string, error) {
@@ -98,7 +99,7 @@ func countPendingProfileDelegations(tx *sql.Tx, profileID string) (int, error) {
 	return count, err
 }
 
-func checkSeedProfileWrite(q rowQuerier, schema docstore.CollectionSchema, table, id string, body []byte) error {
+func checkSeedProfileWrite(q rowQuerier, schema docstore.CollectionSchema, id string, body []byte) error {
 	if schema.Namespace != garden.Namespace || schema.Collection != garden.CollectionSeeds {
 		return nil
 	}
@@ -109,66 +110,29 @@ func checkSeedProfileWrite(q rowQuerier, schema docstore.CollectionSchema, table
 	if seed.ProfileID == "" {
 		return fmt.Errorf("seed %s needs profile_id: every seed belongs to one profile", id)
 	}
-	owner, err := loadLiveProfile(q, seed.ProfileID)
-	if err != nil {
-		return err
-	}
-	var previous, previousMember string
-	err = q.QueryRow(`SELECT json_extract(body, '$.profile_id'), coalesce(json_extract(body, '$.tender_member'), '') FROM `+table+` WHERE id = ?`, id).Scan(&previous, &previousMember)
-	if err != nil && err != sql.ErrNoRows {
-		return err
-	}
-	if err == nil && previous != seed.ProfileID {
-		return fmt.Errorf("seed %s belongs to profile %s for life; cannot move it to profile %q", id, previous, owner.Name)
-	}
-	for _, sessionID := range []protocol.SessionID{seed.TenderSession} {
-		if sessionID == "" {
-			continue
-		}
-		var profileID string
-		err := q.QueryRow(`SELECT profile_id FROM sessions WHERE id = ?`, sessionID).Scan(&profileID)
-		if err == sql.ErrNoRows {
-			continue
-		}
+	_, err = loadLiveProfile(q, seed.ProfileID)
+	return err
+}
+
+func (s *Store) PartyProfile(p who.Party) (string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return partyProfile(s.db, p)
+}
+func partyProfile(q rowQuerier, p who.Party) (string, error) {
+	return who.SwitchParty(p, func(id protocol.SessionID) (string, error) {
+		var profile string
+		err := q.QueryRow(`SELECT profile_id FROM sessions WHERE id=? UNION ALL SELECT coalesce(json_extract(request_json,'$.profile_id'),'') FROM delegation_operations WHERE session_id=? AND state IN (?,?) LIMIT 1`, id, id, string(protocol.DelegationOperationStateAccepted), string(protocol.DelegationOperationStatePreparing)).Scan(&profile)
 		if err != nil {
-			return err
+			return "", fmt.Errorf("read profile for %s: %w", p, err)
 		}
-		if profileID != seed.ProfileID {
-			caller, err := loadProfile(q, profileID)
-			if err != nil {
-				return err
-			}
-			return fmt.Errorf("seed %s belongs to profile %q; tender %s belongs to profile %q", id, owner.Name, sessionID, caller.Name)
+		return profile, nil
+	}, func(key who.MemberKey) (string, error) {
+		var profile string
+		err := q.QueryRow(`SELECT profile_id FROM crew_members WHERE member_key=?`, key).Scan(&profile)
+		if err != nil {
+			return "", fmt.Errorf("read profile for %s: %w", p, err)
 		}
-	}
-	if seed.TenderMember != "" && seed.TenderMember != previousMember {
-		var profileID string
-		err := q.QueryRow(`SELECT profile_id FROM crew_profiles WHERE member_id = ?`, seed.TenderMember).Scan(&profileID)
-		if err != nil && err != sql.ErrNoRows {
-			return err
-		}
-		if err == nil && profileID != seed.ProfileID {
-			caller, err := loadProfile(q, profileID)
-			if err != nil {
-				return err
-			}
-			return fmt.Errorf("seed %s belongs to profile %q; crew member %s belongs to profile %q", id, owner.Name, seed.TenderMember, caller.Name)
-		}
-	}
-	for _, edge := range seed.Edges {
-		var profileID string
-		if err := q.QueryRow(`SELECT json_extract(body, '$.profile_id') FROM `+table+` WHERE id = ?`, edge.To).Scan(&profileID); err == sql.ErrNoRows {
-			continue
-		} else if err != nil {
-			return err
-		}
-		if profileID != seed.ProfileID {
-			target, err := loadProfile(q, profileID)
-			if err != nil {
-				return err
-			}
-			return fmt.Errorf("seed %s belongs to profile %q; edge target %s belongs to profile %q", id, owner.Name, edge.To, target.Name)
-		}
-	}
-	return nil
+		return profile, nil
+	})
 }

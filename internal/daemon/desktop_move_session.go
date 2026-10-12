@@ -63,17 +63,22 @@ func (d *Daemon) mayManageSession(callerID protocol.SessionID, session *protocol
 	if callerID == "" || callerID == session.ID {
 		return nil
 	}
-	callerProfileID, err := d.store.SessionProfileID(callerID)
+	b, err := d.bindings()
 	if err != nil {
 		return err
 	}
-	if callerProfileID != session.ProfileID {
+	r, err := d.requestFromSession(callerID, b)
+	if err != nil {
+		return err
+	}
+	if r.ProfileID() != session.ProfileID {
 		return fmt.Errorf("unknown live session %s", session.ID)
 	}
-	if dispatcher, ok := d.liveSessionForTender(d.gardenDispatchersBySession()[session.ID]); ok && dispatcher == callerID {
+	dispatcherParty, _ := d.gardenDispatchersBySession()[session.ID].Party()
+	if dispatcher, ok := b.SessionOf(dispatcherParty); ok && dispatcher == callerID {
 		return nil
 	}
-	if d.isChiefOfStaffSession(callerID) && d.chiefOfProfile(session.ProfileID) == callerID {
+	if d.requestedByChief(r) && r.ProfileID() == session.ProfileID {
 		return nil
 	}
 	return fmt.Errorf("session %s may %s itself, the sessions it dispatched, or any session as its profile's chief; %s (%s) is none of those", callerID, action, session.ID, session.Label)

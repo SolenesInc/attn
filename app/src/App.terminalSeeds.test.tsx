@@ -1,19 +1,21 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { openAttachedTerminals } from './test/appFixtures';
-import { soloDesktop, daemonSeed, daemonSession, dockTiles } from './test/daemonFixtures';
+import { crewMember, soloDesktop, daemonSeed, daemonSession, dockTiles } from './test/daemonFixtures';
 
 const SEED = daemonSeed('s-7k3f9m', {
   title: 'Make seed IDs navigable',
   body: 'Recognize **valid** ids and [preview](https://example.test) them.',
-  tender_member: 'trellis',
+  tender: { ref: 'member:trellis', name: "Trellis" },
+  claimed: true,
+  resume_available: false,
 });
 
 async function openTerminalShowing(output: string) {
   const view = await openAttachedTerminals({
     sessions: [daemonSession('s1', { state: 'idle' })],
     desktops: [soloDesktop('s1')],
-    initialState: { seeds: [SEED] },
+    initialState: { seeds: [SEED], crew: [crewMember('trellis')] },
     output: { s1: output },
   });
   await act(() => vi.advanceTimersToNextFrame());

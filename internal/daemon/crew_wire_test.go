@@ -63,10 +63,20 @@ func crewRoster(t *testing.T, cli *client.Client) []protocol.CrewMember {
 	return roster.Members
 }
 
+func regularCrewMembers(members []protocol.CrewMember) []protocol.CrewMember {
+	regular := []protocol.CrewMember{}
+	for _, member := range members {
+		if !member.Chief {
+			regular = append(regular, member)
+		}
+	}
+	return regular
+}
+
 func crewRosterMember(t *testing.T, cli *client.Client, id string) protocol.CrewMember {
 	t.Helper()
 	members := crewRoster(t, cli)
-	index := slices.IndexFunc(members, func(m protocol.CrewMember) bool { return m.ID == id })
+	index := slices.IndexFunc(members, func(m protocol.CrewMember) bool { return m.Key == id })
 	if index < 0 {
 		t.Fatalf("no member %q in the roster", id)
 	}
@@ -141,7 +151,7 @@ func TestWakingAMemberStartsOneDayWhereItWorksAndBindsItOnTheRoster(t *testing.T
 	}
 	testworld.Await(app, protocol.EventCrewUpdated, func(e protocol.CrewUpdatedMessage) bool {
 		return slices.ContainsFunc(e.Members, func(m protocol.CrewMember) bool {
-			return m.ID == "trellis" && protocol.Deref(m.BindingSession) == woken.SessionID
+			return m.Key == "trellis" && protocol.Deref(m.BindingSession) == woken.SessionID
 		})
 	})
 	if got := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession); got != woken.SessionID {
@@ -169,16 +179,16 @@ func TestCrewHomesJoinTheRosterAsleepAndAClosedDayReleasesItsMember(t *testing.T
 	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
 
-	members := crewRoster(t, cli)
+	members := regularCrewMembers(crewRoster(t, cli))
 	if len(members) != 3 {
 		t.Fatalf("roster = %d members, want the 3 homes on disk", len(members))
 	}
 	for _, member := range members {
 		if member.BindingSession != nil {
-			t.Errorf("%s was imported awake in %s", member.ID, *member.BindingSession)
+			t.Errorf("%s was imported awake in %s", member.Key, *member.BindingSession)
 		}
 		if _, err := os.Stat(member.CharterPath); err != nil {
-			t.Errorf("%s's charter path does not point at its charter: %v", member.ID, err)
+			t.Errorf("%s's charter path does not point at its charter: %v", member.Key, err)
 		}
 	}
 
@@ -341,8 +351,8 @@ func TestCrewSetRecordsAndClearsEachFieldIndependently(t *testing.T) {
 		t.Fatalf("switching harness left agent %q effort %q, want codex with its pins cleared", protocol.Deref(switched.Agent), protocol.Deref(switched.Effort))
 	}
 	cleared := setCrew(t, cli, "keel", protocol.CrewSetMessage{Agent: protocol.Ptr("")})
-	if cleared.Agent != nil || cleared.ResolvedAgent != crew.DefaultAgent {
-		t.Fatalf("clearing the agent left %v resolving to %q, want unset resolving to %q", cleared.Agent, cleared.ResolvedAgent, crew.DefaultAgent)
+	if cleared.Agent != nil || protocol.Deref(cleared.ResolvedAgent) != crew.DefaultAgent {
+		t.Fatalf("clearing the agent left %v resolving to %q, want unset resolving to %q", cleared.Agent, protocol.Deref(cleared.ResolvedAgent), crew.DefaultAgent)
 	}
 	if got := crewRosterMember(t, cli, "keel"); got.Agent != nil || protocol.Deref(got.Cwd) != workDir {
 		t.Fatalf("roster keel = agent %v cwd %q, want unset and %q", got.Agent, protocol.Deref(got.Cwd), workDir)
@@ -436,7 +446,7 @@ func TestRegisteringAsAMemberBindsOneLiveSessionPerMember(t *testing.T) {
 	bindings := func() map[string]string {
 		out := map[string]string{}
 		for _, member := range crewRoster(t, cli) {
-			out[member.ID] = string(protocol.Deref(member.BindingSession))
+			out[member.Key] = string(protocol.Deref(member.BindingSession))
 		}
 		return out
 	}
@@ -444,7 +454,7 @@ func TestRegisteringAsAMemberBindsOneLiveSessionPerMember(t *testing.T) {
 	if err := register("sess-first", "keel"); err != nil {
 		t.Fatal(err)
 	}
-	crewErrorContains(t, register("sess-second", "Keel"), "Keel", "sess-fir")
+	crewErrorContains(t, register("sess-second", "keel"), "Keel", "sess-fir")
 	if err := register("sess-first", "keel"); err != nil {
 		t.Fatalf("a member's own session re-announcing itself was refused: %v", err)
 	}
@@ -476,7 +486,7 @@ func TestARestartReimportsCrewHomesWithoutRewritingTheRoster(t *testing.T) {
 
 	w.restart()
 	cli = w.Client()
-	if got := len(crewRoster(t, cli)); got != 3 {
+	if got := len(regularCrewMembers(crewRoster(t, cli))); got != 3 {
 		t.Fatalf("roster = %d members after a restart, want 3", got)
 	}
 	if got := protocol.Deref(crewRosterMember(t, cli, "keel").Cwd); got != workDir {
@@ -486,12 +496,12 @@ func TestARestartReimportsCrewHomesWithoutRewritingTheRoster(t *testing.T) {
 	writeCrewCharter(t, w, "sable")
 	writeCrewHomeFile(t, w, "scratch", "note.md", "not a member\n")
 	writeCrewHomeFile(t, w, "Not A Member", crew.CharterFileName, "# nope\n")
-	writeCrewHomeFile(t, w, crew.DaemonID, crew.CharterFileName, "# attn\n")
-	writeCrewHomeFile(t, w, strings.Repeat("a", crew.MaxIDChars+1), crew.CharterFileName, "# long\n")
+	writeCrewHomeFile(t, w, "attn", crew.CharterFileName, "# attn\n")
+	writeCrewHomeFile(t, w, strings.Repeat("a", 40+1), crew.CharterFileName, "# long\n")
 	w.restart()
 	cli = w.Client()
-	if got := len(crewRoster(t, cli)); got != 4 {
-		t.Fatalf("roster = %d members after a home and some non-homes were added by hand, want 4", got)
+	if got := len(regularCrewMembers(crewRoster(t, cli))); got != 5 {
+		t.Fatalf("roster = %d members after a home and some non-homes were added by hand, want 5", got)
 	}
 	crewRosterMember(t, cli, "sable")
 }
@@ -532,41 +542,22 @@ func TestSeedTendersResolveToTheMemberTheyName(t *testing.T) {
 		}
 	}
 	tend := func(session, seed, member string) (*protocol.SeedTransitionResult, error) {
-		return cli.SeedTransition(protocol.SessionID(session), seed, "tend", "", member, false, client.SeedTransitionOptions{})
+		return cli.SeedTransition(protocol.SessionID(session), seed, "tend", "", false, client.SeedTransitionOptions{Assignee: member})
 	}
 
 	byName := plantSeedAs(t, cli, "sess-a", "Named after a member")
-	if moved, err := tend("sess-a", byName, "Keel"); err != nil || moved.Seed.TenderMember != "keel" {
+	if moved, err := tend("sess-a", byName, "Keel"); err != nil || protocol.Deref(moved.Seed.Tender).Ref != "member:keel" {
 		t.Fatalf("tending as Keel = %+v, %v; want the member keel", moved, err)
 	}
 	bySession := plantSeedAs(t, cli, "sess-a", "Tended from a member's day")
-	if moved, err := tend("sess-keel", bySession, ""); err != nil || moved.Seed.TenderMember != "keel" {
+	if moved, err := tend("sess-keel", bySession, ""); err != nil || protocol.Deref(moved.Seed.Tender).Ref != "member:keel" {
 		t.Fatalf("tending from keel's day = %+v, %v; want the member keel", moved, err)
 	}
 
-	unbound := plantSeedAs(t, cli, "sess-a", "Picked up by a worker")
-	moved, err := tend("sess-a", unbound, "some-worker")
-	if err != nil || moved.Seed.TenderMember != "some-worker" || moved.Seed.TenderSession != "" {
-		t.Fatalf("tending as some-worker = %+v, %v; want the named worker holding it", moved, err)
-	}
-	_, err = tend("sess-b", unbound, "")
-	crewErrorContains(t, err, "Some-worker")
-	if _, err := cli.SeedTransition("sess-a", unbound, "harvest", "done", "some-worker", false, client.SeedTransitionOptions{}); err != nil {
-		t.Fatalf("the named worker could not harvest its seed: %v", err)
-	}
-	if peek, err := cli.AgentPeek("sess-a"); err != nil || peek.CrewMember != nil {
-		t.Fatalf("the worker's session peeks as crew member %v (%v), want none", peek, err)
-	}
+	unknown := plantSeedAs(t, cli, "sess-a", "Unknown member")
+	_, err := tend("sess-a", unknown, "some-worker")
+	crewErrorContains(t, err, "no crew member")
 
-	held := plantSeedAs(t, cli, "sess-a", "A member's work")
-	if _, err := tend("", held, "trellis"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := tend("", held, "Trellis"); err != nil {
-		t.Fatalf("trellis could not re-tend its seed as Trellis: %v", err)
-	}
-	_, err = tend("", held, "keel")
-	crewErrorContains(t, err, "Trellis")
 }
 
 func TestAWokenMemberIsPrimedWithItsCharterLettersAndGarden(t *testing.T) {
@@ -577,7 +568,7 @@ func TestAWokenMemberIsPrimedWithItsCharterLettersAndGarden(t *testing.T) {
 	}
 	plant := func(title, partOf string) string {
 		t.Helper()
-		planted, err := cli.SeedPlant("planter", title, "", partOf, "", "")
+		planted, err := cli.SeedPlant("planter", title, "", partOf, "")
 		if err != nil {
 			t.Fatalf("plant %q: %v", title, err)
 		}
@@ -585,7 +576,7 @@ func TestAWokenMemberIsPrimedWithItsCharterLettersAndGarden(t *testing.T) {
 	}
 	tendAs := func(seed, member string) {
 		t.Helper()
-		if _, err := cli.SeedTransition("", seed, "tend", "", member, false, client.SeedTransitionOptions{}); err != nil {
+		if _, err := cli.SeedTransition("", seed, "tend", "", false, client.SeedTransitionOptions{Assignee: member}); err != nil {
 			t.Fatalf("%s tends %s: %v", member, seed, err)
 		}
 	}
@@ -598,7 +589,7 @@ func TestAWokenMemberIsPrimedWithItsCharterLettersAndGarden(t *testing.T) {
 	tendAs(withNote, "trellis")
 	tendAs(quiet, "trellis")
 	tendAs(alders, "alder")
-	if _, err := cli.SeedNote("", withNote, "The tripwires are measured; the daemon adapter is next.", "trellis", "handoff", false, nil); err != nil {
+	if _, err := cli.SeedNote("", withNote, "The tripwires are measured; the daemon adapter is next.", "handoff", false, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -609,7 +600,7 @@ func TestAWokenMemberIsPrimedWithItsCharterLettersAndGarden(t *testing.T) {
 		"You are **Trellis**",
 		"Where I left off.",
 		crewHomeLetters["trellis"],
-		"## What you hold in the garden",
+		"## What you claim in the garden",
 		"`" + withNote + "` wake-priming-lists-seeds-member-holds — Wake priming lists the seeds a member holds",
 		"Freshest handoff: The tripwires are measured; the daemon adapter is next.",
 		"`" + quiet + "` closing-seed-says-what-unblocked — Closing a seed says what it unblocked",
@@ -645,25 +636,25 @@ func TestAWokenMemberIsPrimedWithItsCharterLettersAndGarden(t *testing.T) {
 		}
 	}
 	primed = crewPriming(t, cli, string(keel.SessionID))
-	for _, want := range []string{"You hold no seeds in the garden.", workDir, notes} {
+	for _, want := range []string{"You claim no seeds in the garden.", workDir, notes} {
 		if !strings.Contains(primed, want) {
 			t.Errorf("keel's priming after its directories moved does not carry %q:\n%s", want, primed)
 		}
 	}
 
-	claims := crew.MaxHeldSeeds + 3
+	claims := crew.MaxClaimedSeeds + 3
 	for i := range claims {
 		tendAs(plant(fmt.Sprintf("Held seed number %d", i), ""), "alder")
 	}
 	alder := wakeCrew(t, cli, "alder", "")
 	w.Launched(string(alder.SessionID))
 	primed = crewPriming(t, cli, string(alder.SessionID))
-	cut := fmt.Sprintf("You hold %d seeds and this block lists the %d you claimed most recently; `attn seed ls --flat` has them all.", claims+1, crew.MaxHeldSeeds)
+	cut := fmt.Sprintf("You claim %d seeds and this block lists the %d you claimed most recently; `attn seed ls --flat` has them all.", claims+1, crew.MaxClaimedSeeds)
 	if !strings.Contains(primed, cut) {
 		t.Errorf("alder's priming does not say %q:\n%s", cut, primed)
 	}
-	if got := strings.Count(primed, "Held seed number"); got != crew.MaxHeldSeeds {
-		t.Errorf("alder's priming lists %d held seeds, want the %d the tripwire allows", got, crew.MaxHeldSeeds)
+	if got := strings.Count(primed, "Held seed number"); got != crew.MaxClaimedSeeds {
+		t.Errorf("alder's priming lists %d held seeds, want the %d the tripwire allows", got, crew.MaxClaimedSeeds)
 	}
 
 	for _, session := range []string{"planter", ""} {
@@ -695,7 +686,7 @@ func TestADefaultModelOrEffortChangeReachesTheRoster(t *testing.T) {
 	} {
 		setSetting(t, app, change.key, change.value)
 		testworld.Await(app, protocol.EventCrewUpdated, func(e protocol.CrewUpdatedMessage) bool {
-			return slices.ContainsFunc(e.Members, func(m protocol.CrewMember) bool { return m.ID == "trellis" && change.resolved(m) == change.value })
+			return slices.ContainsFunc(e.Members, func(m protocol.CrewMember) bool { return m.Key == "trellis" && change.resolved(m) == change.value })
 		})
 	}
 }
@@ -750,7 +741,7 @@ func TestCrewEditsFromTheAppAreRevisionChecked(t *testing.T) {
 			t.Fatalf("after the refused nap alder is bound to %q, want alder-day", got)
 		}
 		testworld.Await(app, protocol.EventCrewUpdated, func(e protocol.CrewUpdatedMessage) bool {
-			return slices.ContainsFunc(e.Members, func(m protocol.CrewMember) bool { return m.ID == "alder" && m.Revision > awake })
+			return slices.ContainsFunc(e.Members, func(m protocol.CrewMember) bool { return m.Key == "alder" && m.Revision > awake })
 		})
 		if afterLetter := save("save-after-letter", awake, "low"); !afterLetter.Conflict {
 			t.Fatalf("a save carrying the revision from before the letter = %+v, want a conflict", afterLetter)

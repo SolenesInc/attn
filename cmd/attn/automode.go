@@ -493,8 +493,8 @@ func proposeAutoModeValue(verb, kind, target, value string, asJSON bool) {
 	fmt.Println("This changed nothing yet. Promote it in the attn app to put it in force.")
 }
 
-func autoModeProposer() string {
-	return string(currentSessionOrExit())
+func autoModeProposer() protocol.SessionID {
+	return currentSessionOrExit()
 }
 
 func runAutoModeDenials(args []string) {

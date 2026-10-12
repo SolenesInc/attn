@@ -16,12 +16,16 @@ import (
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type Store struct {
-	mu     sync.RWMutex
-	db     *sql.DB
-	dbPath string
+	crewMembers          map[who.MemberKey]CrewIdentity
+	memberSessions       map[protocol.SessionID]who.MemberKey
+	latestMemberSessions map[who.MemberKey]protocol.SessionID
+	mu                   sync.RWMutex
+	db                   *sql.DB
+	dbPath               string
 
 	durable bool
 
@@ -36,6 +40,7 @@ type Store struct {
 	agentMetadata          map[protocol.SessionID]string
 	recentLocations        map[string]*protocol.RecentLocation
 	settings               map[string]string
+	profileSettings        map[string]map[string]string
 	writes                 *tableWrites
 	sessionRows            sessionRows
 	touchedAt              map[protocol.SessionID]time.Time
@@ -80,7 +85,6 @@ type LaunchIntent struct {
 	Executable       string                              `json:"executable,omitempty"`
 	Model            string                              `json:"model,omitempty"`
 	Effort           string                              `json:"effort,omitempty"`
-	ChiefOfStaff     bool                                `json:"chief_of_staff,omitempty"`
 	UnattendedLaunch launchcontract.UnattendedLaunchSpec `json:"unattended_launch,omitzero"`
 }
 
@@ -102,7 +106,16 @@ func newDBStore(db *sql.DB, writes *tableWrites, dbPath string, durable bool) (*
 		db.Close()
 		return nil, err
 	}
-	return &Store{db: db, dbPath: dbPath, durable: durable, settings: settings, writes: writes}, nil
+	profileSettings, err := readProfileSettings(db)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+	return newDBStoreWithSettings(db, writes, dbPath, durable, settings, profileSettings), nil
+}
+
+func newDBStoreWithSettings(db *sql.DB, writes *tableWrites, dbPath string, durable bool, settings map[string]string, profileSettings map[string]map[string]string) *Store {
+	return &Store{db: db, dbPath: dbPath, durable: durable, settings: settings, profileSettings: profileSettings, writes: writes}
 }
 
 func newMapBackedStore() *Store {
@@ -484,8 +497,9 @@ func deleteSessionRows(db execer, id protocol.SessionID) error {
 	}
 	exec("terminal bindings", "DELETE FROM terminal_bindings WHERE session_id = ?", id)
 	exec("the session", "DELETE FROM sessions WHERE id = ?", id)
-	exec("session PRs", `DELETE FROM session_pull_requests WHERE session_id=? AND NOT EXISTS(SELECT 1 FROM pull_request_watches w WHERE w.session_id=session_pull_requests.session_id AND w.pr_id=session_pull_requests.pr_id AND w.address NOT LIKE 'session:%')`, id)
-	exec("session PR watches", `DELETE FROM pull_request_watches WHERE address=?`, "session:"+id)
+	exec("session PRs", `DELETE FROM session_pull_requests WHERE session_id=? AND NOT EXISTS(SELECT 1 FROM pull_request_watches w WHERE w.session_id=session_pull_requests.session_id AND w.pr_id=session_pull_requests.pr_id AND w.watcher NOT LIKE 'session:%')`, id)
+	exec("session seed watches", `DELETE FROM garden_seed_watches WHERE watcher=?`, who.PartyOfEndedSession(id))
+	exec("session PR watches", `DELETE FROM pull_request_watches WHERE watcher=?`, who.PartyOfEndedSession(id))
 	for _, table := range sessionOwnedTables {
 		exec(table, "DELETE FROM "+table+" WHERE session_id = ?", id)
 	}

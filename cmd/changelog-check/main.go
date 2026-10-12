@@ -93,7 +93,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "changelog-check:", err)
 	}
 	if len(errs) > 0 {
-		fmt.Fprintln(os.Stderr, "see docs/making-a-release.md for the fragment format")
+		fmt.Fprintln(os.Stderr, "see docs/internal/making-a-release.md for the fragment format")
 		os.Exit(1)
 	}
 }

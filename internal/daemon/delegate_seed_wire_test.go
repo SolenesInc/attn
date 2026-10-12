@@ -24,7 +24,7 @@ func registerDelegationCaller(t *testing.T, w *world, cli *client.Client, id str
 
 func plantDelegationSeed(t *testing.T, cli *client.Client, sessionID, title string) string {
 	t.Helper()
-	planted, err := cli.SeedPlant(protocol.SessionID(sessionID), title, "Work on "+strings.ToLower(title)+".", "", "", "")
+	planted, err := cli.SeedPlant(protocol.SessionID(sessionID), title, "Work on "+strings.ToLower(title)+".", "", "")
 	if err != nil {
 		t.Fatalf("plant %q: %v", title, err)
 	}
@@ -33,7 +33,7 @@ func plantDelegationSeed(t *testing.T, cli *client.Client, sessionID, title stri
 
 func moveDelegationSeed(t *testing.T, cli *client.Client, sessionID, seedID, verb, reason string) {
 	t.Helper()
-	if _, err := cli.SeedTransition(protocol.SessionID(sessionID), seedID, verb, reason, "", false, client.SeedTransitionOptions{}); err != nil {
+	if _, err := cli.SeedTransition(protocol.SessionID(sessionID), seedID, verb, reason, false, client.SeedTransitionOptions{}); err != nil {
 		t.Fatalf("%s moves %s to %s: %v", sessionID, seedID, verb, err)
 	}
 }
@@ -108,7 +108,7 @@ func TestDelegatingAtASeedHandsItToTheDelegate(t *testing.T) {
 			continue
 		}
 		shown, err := cli.SeedShow("", row.seed)
-		if err != nil || result.SeedID != row.seed || shown.Seed.TenderSession != result.SessionID {
+		if err != nil || result.SeedID != row.seed || protocol.Deref(protocol.Deref(shown.Seed.Tender).SessionID) != result.SessionID {
 			t.Errorf("%s: the delegation bound seed %s and left %+v, %v; want %s tended by %s", row.name, result.SeedID, shown, err, row.seed, result.SessionID)
 		}
 		if predecessor := protocol.Deref(result.PredecessorSessionID); string(predecessor) != row.predecessor {
@@ -145,15 +145,15 @@ func TestASeedBeingDelegatedRefusesOtherClaimsWhileItsDelegateBoots(t *testing.T
 	}
 	testworld.AwaitSession(app, string(accepted.SessionID), func(protocol.Session) bool { return true })
 
-	if _, err := cli.SeedTransition("contender", seed, "tend", "", "", false, client.SeedTransitionOptions{}); err == nil || !strings.Contains(err.Error(), string("being tended by "+accepted.SessionID)) {
+	if _, err := cli.SeedTransition("contender", seed, "tend", "", false, client.SeedTransitionOptions{}); err == nil || !strings.Contains(err.Error(), "being tended by Reserved work") {
 		t.Errorf("claiming the seed while its delegate boots = %v, want it refused naming the delegate", err)
 	}
 	boot()
 	if result, err := cli.Delegate(request); err != nil || result.SessionID != accepted.SessionID {
 		t.Fatalf("the delegation = %+v, %v; want it to finish as %s", result, err, accepted.SessionID)
 	}
-	if shown := lifeShow(t, cli, seed); shown.Seed.TenderSession != accepted.SessionID {
-		t.Errorf("the seed is tended by %q, want the delegate %s", shown.Seed.TenderSession, accepted.SessionID)
+	if shown := lifeShow(t, cli, seed); protocol.Deref(protocol.Deref(shown.Seed.Tender).SessionID) != accepted.SessionID {
+		t.Errorf("the seed is tended by %q, want the delegate %s", protocol.Deref(protocol.Deref(shown.Seed.Tender).SessionID), accepted.SessionID)
 	}
 }
 
@@ -172,7 +172,7 @@ func TestAMessageToASeedReachesItsCurrentOrNextTender(t *testing.T) {
 		t.Errorf("the seed's tender received %q; want the message sent to its seed", inbox)
 	}
 	sendAgentMessage(t, cli, "caller", untended, "anyone there?")
-	if _, err := cli.SeedTransition(delegated.SessionID, untended, "tend", "", "", false, client.SeedTransitionOptions{}); err != nil {
+	if _, err := cli.SeedTransition(delegated.SessionID, untended, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if mail := inboxContents(readInbox(t, cli, string(delegated.SessionID), 0).Items); !strings.Contains(mail, "anyone there?") {
@@ -207,7 +207,7 @@ func TestNestedDelegatesCarryTheirSeedAndDispatcher(t *testing.T) {
 	for _, edge := range shown.Seed.Edges {
 		partOfFirst = partOfFirst || edge.Kind == "part-of" && edge.To == first.SeedID
 	}
-	if !partOfFirst || shown.Seed.PlanterSession != first.SessionID || shown.Seed.TenderSession != nested.SessionID {
+	if !partOfFirst || shown.Seed.Planter.Ref != protocol.ActorRef("session:"+string(first.SessionID)) || protocol.Deref(protocol.Deref(shown.Seed.Tender).SessionID) != nested.SessionID {
 		t.Errorf("the nested delegation planted %+v; want it part of %s, planted by %s and tended by %s", shown.Seed, first.SeedID, first.SessionID, nested.SessionID)
 	}
 	for _, want := range []struct{ session, seed, dispatcher string }{

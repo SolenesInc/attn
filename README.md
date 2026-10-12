@@ -290,7 +290,7 @@ state or grants merge authority.
 Inspect with `attn pr status`; stop with `attn pr unwatch <url>`. Stopping clears
 that session's unread watch notifications. Closing or merging the PR ends the watch.
 For development instances, enable
-[GitHub polling](docs/instances.md#github-polling).
+[GitHub polling](docs/internal/instances.md#github-polling).
 
 Prefer a blocking terminal workflow? Use `attn pr wait-ready <pr> --repo <owner/repo>
 --mode <green|codex|formal-review>`. Its `--help` explains reviewers, baselining,
@@ -372,13 +372,23 @@ act as my thinking partner.
 ```
 
 To keep everything in one syncable folder, open **Settings → Notebook Folder**
-and point it at `chief-of-staff/notebook`. Add `notebook/.attn/` to
-`.gitignore`; it is machine state. Changing the Notebook Folder does not move
-existing notes.
+and set it to `chief-of-staff/notebook`. Each profile has its own Notebook folder.
+Upgrading keeps existing profiles' folders; new profiles get folders named after
+them. Choose the same path to share a Notebook across profiles. Leave the setting
+blank to use the profile's default folder. Changing it doesn't move existing
+notes; move or sync them yourself. Add `notebook/.attn/` to `.gitignore`; it holds
+machine state.
 
-Then: **Cmd+T**, pick a harness, select the `chief-of-staff` folder, turn
-**Chief of Staff** on (or pick **Make chief of staff** from an existing
-session's menu), and give it a mission:
+Use `attn settings list|get|set` to read and change settings. The list shows
+whether each setting applies to one profile or all profiles. Inside attn,
+`attn settings set notebook.root ~/notes/work` changes the session's profile.
+Outside attn, use `--profile <name|id>` when several profiles exist.
+
+Set up your chief in the sidebar. Choose Claude Code or Codex, then a model
+and effort, and press **Wake Chief**. The deepest model at low effort is
+preselected. To choose its working folder, run
+`attn crew set chief --cwd ~/chief-of-staff`. Later, use the chief's **••• →
+Harness and model…** menu or **Manage crew → Launch settings**. Give it a mission:
 
 > We need to ship the new import flow this week. Help me understand what's
   already in flight, suggest how to break it down, and prepare delegation
@@ -408,14 +418,14 @@ git clone https://github.com/victorarias/attn.git && cd attn
 Developing attn while running attn? `make dev` gives you a fully isolated dev
 sibling (own bundle, data dir, and port) so rebuilds never touch your live copy.
 The full dev-loop, instance, and harness targets live in
-**[docs/instances.md](docs/instances.md)** and [AGENTS.md](AGENTS.md).
+**[docs/internal/instances.md](docs/internal/instances.md)** and [AGENTS.md](AGENTS.md).
 
 ## Docs
 
 | | |
 |---|---|
-| [Instances](docs/instances.md) | Run multiple isolated attn worlds side by side |
-| [Release](docs/making-a-release.md) | Maintainer runbook |
+| [Instances](docs/internal/instances.md) | Run multiple isolated attn worlds side by side |
+| [Release](docs/internal/making-a-release.md) | Maintainer runbook |
 
 ## Status
 

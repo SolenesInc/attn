@@ -17,13 +17,17 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/layouttree"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/sessionstate"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type internalSpawnPolicy struct {
+	afterSessionRecorded  func() error
+	member                who.MemberKey
 	launchPlacement       *launchPlacement
 	unattendedLaunch      launchcontract.UnattendedLaunchSpec
 	approvalRoute         launchcontract.ApprovalRoute
@@ -60,9 +64,7 @@ type spawnPlan struct {
 	pluginRunID                  string
 	cleanupInitialPrompt         func()
 	cleanupInitialPromptOnReturn bool
-	chiefAssigned                bool
 	isChief                      bool
-	chiefAssignmentCommitted     bool
 	launchedConversation         string
 }
 
@@ -93,16 +95,9 @@ func (plan *spawnPlan) rollback(d *Daemon, sessionID protocol.SessionID) {
 	if plan.cleanupInitialPromptOnReturn {
 		plan.cleanupInitialPrompt()
 	}
-	if plan.chiefAssigned && !plan.chiefAssignmentCommitted {
-		d.clearChiefOfStaffIfSession(sessionID)
-	}
 	if plan.spawnOpts.ID != "" {
 		d.terminals().unexpect(plan.spawnOpts.ID)
 	}
-}
-
-func (plan *spawnPlan) commit() {
-	plan.chiefAssignmentCommitted = true
 }
 
 func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) (*spawnRequest, *spawnRejection) {
@@ -249,24 +244,18 @@ func (d *Daemon) resolveSpawnIntent(ctx context.Context, req *spawnRequest) (*sp
 		plan.cleanupInitialPromptOnReturn = initialPromptFile != ""
 		plan.spawnOpts.InitialPromptFile = initialPromptFile
 	}
-	plan.spawnOpts = ptybackend.SpawnOptions{CWD: req.cwd, Agent: req.agent, Label: req.label, Cols: uint16(msg.Cols), Rows: uint16(msg.Rows), ResumeSessionID: req.resumeSessionID, ResumePicker: protocol.Deref(msg.ResumePicker), YoloMode: protocol.Deref(msg.YoloMode), InitialPromptFile: plan.spawnOpts.InitialPromptFile, Theme: d.currentTerminalTheme(), Executable: strings.TrimSpace(configuredExecutable), ClaudeExecutable: protocol.Deref(msg.ClaudeExecutable), CodexExecutable: protocol.Deref(msg.CodexExecutable), CopilotExecutable: protocol.Deref(msg.CopilotExecutable), LoginShellEnv: d.cachedLoginShellEnv(), AutoApprove: parseBooleanSetting(d.store.GetSetting(SettingAutoApproveEnabled)), Model: strings.TrimSpace(protocol.Deref(msg.Model)), Effort: strings.TrimSpace(protocol.Deref(msg.Effort))}
-	requestedChief := protocol.Deref(msg.ChiefOfStaff)
-	if req.hasPluginDriver && requestedChief && !req.pluginDriver.Capabilities["launch_instructions"] {
-		plan.rollback(d, msg.ID)
-		return nil, &spawnRejection{err: fmt.Errorf("agent %q cannot be chief of staff without launch_instructions capability", req.agent)}
+	plan.spawnOpts = ptybackend.SpawnOptions{CWD: req.cwd, Agent: req.agent, Label: req.label, Cols: uint16(msg.Cols), Rows: uint16(msg.Rows), ResumeSessionID: req.resumeSessionID, ResumePicker: protocol.Deref(msg.ResumePicker), YoloMode: protocol.Deref(msg.YoloMode), InitialPromptFile: plan.spawnOpts.InitialPromptFile, Theme: d.currentTerminalTheme(), Executable: strings.TrimSpace(configuredExecutable), ClaudeExecutable: protocol.Deref(msg.ClaudeExecutable), CodexExecutable: protocol.Deref(msg.CodexExecutable), CopilotExecutable: protocol.Deref(msg.CopilotExecutable), LoginShellEnv: d.cachedLoginShellEnv(), AutoApprove: parseBooleanSetting(d.daemonSetting(settingAutoApproveEnabled)), Model: strings.TrimSpace(protocol.Deref(msg.Model)), Effort: strings.TrimSpace(protocol.Deref(msg.Effort))}
+	plan.isChief = d.sessionIsChief(msg.ID)
+	if !plan.isChief {
+		plan.spawnOpts.Model = d.resolveLaunchModel(req.agent, plan.spawnOpts.Model)
 	}
-	if req.hasPluginDriver && requestedChief && !req.pluginDriver.Capabilities["resume"] {
-		plan.rollback(d, msg.ID)
-		return nil, &spawnRejection{err: fmt.Errorf("agent %q cannot be chief of staff without resume capability", req.agent)}
-	}
-	plan.chiefAssigned = d.maybeAssignChiefOnSpawn(msg.ID, req.agent, req.profile.ID, requestedChief, req.existingSession)
-	plan.isChief = d.chiefOfProfile(req.profile.ID) == msg.ID
-	plan.spawnOpts.Model = d.resolveLaunchModel(ctx, req.agent, configuredExecutable, plan.isChief, plan.spawnOpts.Model)
 	if err := ctx.Err(); err != nil {
 		plan.rollback(d, msg.ID)
 		return nil, &spawnRejection{err: fmt.Errorf("resolve launch model: %w", err)}
 	}
-	plan.spawnOpts.Effort = d.resolveLaunchEffort(req.agent, plan.isChief, plan.spawnOpts.Effort)
+	if !plan.isChief {
+		plan.spawnOpts.Effort = d.resolveLaunchEffort(req.agent, plan.spawnOpts.Effort)
+	}
 	if launch := req.policy.unattendedLaunch; !launch.IsZero() {
 		if err := launch.Validate(); err != nil {
 			plan.rollback(d, msg.ID)
@@ -298,7 +287,27 @@ func (d *Daemon) resolveSpawnIntent(ctx context.Context, req *spawnRequest) (*sp
 	} else {
 		plan.spawnOpts.ApprovalRoute = launchcontract.ResolveApprovalRoute(plan.spawnOpts.YoloMode, plan.spawnOpts.AutoApprove, plan.spawnOpts.UnattendedLaunch)
 	}
-	plan.spawnOpts.ContextWindowCap = d.launchContextWindowCap(msg.ID, req.agent, plan.isChief)
+	plan.spawnOpts.ContextWindowCap = d.launchContextWindowCap(msg.ID, req.agent)
+	if !req.policy.member.IsZero() {
+		member, _, err := d.crewMember(req.policy.member)
+		if err != nil {
+			plan.rollback(d, msg.ID)
+			return nil, &spawnRejection{err: err}
+		}
+		home, err := filepath.EvalSymlinks(member.HomeDir)
+		if err != nil {
+			plan.rollback(d, msg.ID)
+			return nil, &spawnRejection{err: err}
+		}
+		cwd, err := filepath.EvalSymlinks(req.cwd)
+		plan.spawnOpts.TrustWorkingDirectory = err == nil && cwd == home
+		if plan.spawnOpts.TrustWorkingDirectory && req.agent == "claude" {
+			if err := d.trustClaudeCrewHome(home, plan.spawnOpts.LoginShellEnv); err != nil {
+				plan.rollback(d, msg.ID)
+				return nil, &spawnRejection{err: err}
+			}
+		}
+	}
 
 	return plan, nil
 }
@@ -394,13 +403,15 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		if req.hasPluginDriver {
 			d.abortPluginSessionLaunch(msg.ID, "launch_failed")
 		}
-		if plan.chiefAssigned {
-			d.clearChiefOfStaffIfSession(msg.ID)
-		}
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{err: fmt.Errorf("persist session launch intent: %w", err)}
 	}
-	intent := launchIntentFromSpawnOptions(plan.spawnOpts, plan.isChief)
+	if !req.policy.member.IsZero() {
+		if err := d.store.RecordMemberLaunchIntent(req.policy.member, session.ID); err != nil {
+			d.logf("crew: record member session %s: %v", session.ID, err)
+		}
+	}
+	intent := launchIntentFromSpawnOptions(plan.spawnOpts)
 	intent.AutoMode = msg.AutoMode
 	if req.autoModeDriver {
 		intent.ApprovalPolicy, intent.SandboxMode = effectiveSpawnPolicyPair(msg)
@@ -422,7 +433,14 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{err: fmt.Errorf("initialize plugin driver run cursor")}
 	}
-	if err := d.spawnSessionRuntime(msg.ID, plan.spawnOpts); err != nil {
+	var spawnErr error
+	if req.policy.afterSessionRecorded != nil {
+		spawnErr = req.policy.afterSessionRecorded()
+	}
+	if spawnErr == nil {
+		spawnErr = d.spawnSessionRuntime(msg.ID, plan.spawnOpts)
+	}
+	if err := spawnErr; err != nil {
 		d.forgetSessionTitleInitialPrompt(msg.ID)
 		if req.existingSession == nil {
 			d.store.Remove(msg.ID)
@@ -431,9 +449,6 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		if req.hasPluginDriver {
 			d.store.EndAgentDriverRun(msg.ID)
 			d.abortPluginSessionLaunch(msg.ID, "launch_failed")
-		}
-		if plan.chiefAssigned {
-			d.clearChiefOfStaffIfSession(msg.ID)
 		}
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{err: err}
@@ -520,9 +535,6 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		if req.hasPluginDriver {
 			d.abortPluginSessionLaunch(msg.ID, "launch_failed")
 		}
-		if plan.chiefAssigned {
-			d.clearChiefOfStaffIfSession(msg.ID)
-		}
 		killErr := d.killSessionRuntime(plan.spawnOpts.ID)
 		removeErr := d.removeSessionRuntime(plan.spawnOpts.ID)
 		persistErr := fmt.Errorf("spawned session %s is no longer open", session.ID)
@@ -564,7 +576,11 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		d.rememberDispatchResume(session.ID, plan.launchedConversation)
 	}
 
-	d.store.SetSessionLaunchedAt(session.ID, req.spawnStartedAt)
+	if !req.policy.member.IsZero() {
+		pausepoint.At(pausepoint.MemberLaunchCommit)
+		crashAt(crashBeforeMemberLaunchCommit)
+	}
+	d.store.SetSessionLaunchedAt(session.ID, req.spawnStartedAt, req.policy.member)
 	if !req.isShell {
 		d.startTranscriptWatcher(session.ID, session.Agent, session.Directory, req.spawnStartedAt)
 	}
@@ -577,7 +593,6 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 	if req.hasPluginDriver {
 		launchedExit = d.finishPluginSessionLaunch(msg.ID, true)
 	}
-	plan.commit()
 	if req.existingSession != nil {
 		d.publishFact(FactSessionRespawned, string(session.ID), ptyRespawn{Terminal: string(plan.spawnOpts.ID)})
 	}

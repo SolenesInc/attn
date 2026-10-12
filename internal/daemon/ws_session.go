@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/store"
 )
 
 func (d *Daemon) handleClearWarningsWS() {
@@ -13,20 +12,15 @@ func (d *Daemon) handleClearWarningsWS() {
 	d.clearWarnings()
 }
 
-func unregisterSessionClose(msg *protocol.UnregisterMessage) store.SessionClose {
-	closed := store.SessionClose{
-		By:     protocol.TrimID(protocol.Deref(msg.ClosedBy)),
-		Reason: strings.TrimSpace(protocol.Deref(msg.CloseReason)),
-	}
-	if closed.By == "" {
-		closed.By = store.SessionClosedByUser
-	}
-	return closed
-}
-
 func (d *Daemon) handleUnregisterWS(client *wsClient, msg *protocol.UnregisterMessage) {
 	d.logf("Unregistering session %s via WebSocket", msg.ID)
-	closing, err := d.beginSessionCloseAsUser(msg.ID, unregisterSessionClose(msg), client)
+	closed, err := d.unregisterSessionClose(msg)
+	if err != nil {
+		d.sendCommandError(client, protocol.CmdUnregister, err.Error())
+		d.answerSessionClose(client, msg.ID, err)
+		return
+	}
+	closing, err := d.beginSessionCloseAsUser(msg.ID, closed, client)
 	if err != nil {
 		d.sendCommandError(client, protocol.CmdUnregister, err.Error())
 		d.answerSessionClose(client, msg.ID, err)

@@ -53,7 +53,7 @@ async function setEffort(daemon: ScriptedDaemon, effort: string) {
 }
 
 async function roster(daemon: ScriptedDaemon, members: CrewMember[]) {
-  await gesture(daemon, () => daemon.emit({ event: 'crew_updated', members }));
+  await gesture(daemon, () => daemon.emit({ event: 'crew_updated', profile_id: 'profile-default', members }));
 }
 
 async function answer(daemon: ScriptedDaemon, save: CommandMessage<'crew_set'>, reply: Reply) {
@@ -61,6 +61,18 @@ async function answer(daemon: ScriptedDaemon, save: CommandMessage<'crew_set'>, 
 }
 
 describe('App crew launch settings', () => {
+  it('offers only chief-capable harnesses and pins the Deep default in chief launch settings', async () => {
+    const current = member('chief-member', 1, { chief: true, name: 'Captain' });
+    const daemon = await openLaunchSettings([current], [saved({ ...current, agent: 'claude', model: 'opus', effort: 'low', revision: 2 })], { claude_cap_launch_instructions: 'true', codex_cap_launch_instructions: 'true' });
+    daemon.on('harness_models', ({ harness }) => ({ event: 'harness_models_result', success: true, detail: '', tier_defaults: { deep: 'opus' }, models: [{ ...codexModel('opus'), harness, name: 'Opus', tier: 'deep', tier_source: 'shipped', effort_levels: ['low', 'high'] }] }));
+    await openRoute(daemon, 'Crew launch model');
+    expect(routeDialog().queryByRole('option', { name: 'Crew default' })).toBeNull();
+    expect(panel().queryByTestId('crew-wake')).toBeNull();
+    expect(routeDialog().getByRole('option', { name: /Deep default/ })).toBeInTheDocument();
+    await pickModel(daemon, /Deep default/);
+    expect(crewSets(daemon)).toEqual([{ expected_revision: 1, agent: 'claude', model: 'opus', effort: 'low' }]);
+  });
+
   it('disables unavailable alternatives and observes availability changes without rereading the harness list', async () => {
     const daemon = await openLaunchSettings([member('trellis', 1, { agent: 'codex', resolved_agent: 'codex' })], [], { claude_available: 'false' });
     await openRoute(daemon, 'Crew launch model');

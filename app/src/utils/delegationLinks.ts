@@ -1,4 +1,4 @@
-import { crewDisplayName } from './crewName';
+import type { ActorView } from '../types/generated';
 import type { SessionDelegationRole } from '../types/generated';
 
 export interface DelegationSession {
@@ -6,12 +6,12 @@ export interface DelegationSession {
   label: string;
   priority?: boolean;
   dispatcher_session_id?: string;
-  dispatcher_member?: string;
+  dispatcher?: ActorView;
   delegation_role?: SessionDelegationRole;
 }
 
 export function hasDelegationChain(session: DelegationSession, hasDelegates = false): boolean {
-  return Boolean(session.delegation_role || session.dispatcher_session_id || session.dispatcher_member || hasDelegates);
+  return Boolean(session.delegation_role || session.dispatcher_session_id || session.dispatcher || hasDelegates);
 }
 
 export function delegationTree<TSession extends DelegationSession>(
@@ -31,8 +31,8 @@ export function delegationTree<TSession extends DelegationSession>(
     root = parent;
   }
   const missingParent = root.dispatcher_session_id && !byId.has(root.dispatcher_session_id);
-  const earlierDispatcher = missingParent || (!root.dispatcher_session_id && root.dispatcher_member)
-    ? (root.dispatcher_member ? crewDisplayName(root.dispatcher_member) : 'Earlier session')
+  const earlierDispatcher = missingParent || (!root.dispatcher_session_id && root.dispatcher)
+    ? (root.dispatcher ? root.dispatcher.name : 'Earlier session')
     : null;
   const roots = missingParent ? children.get(root.dispatcher_session_id!) ?? [root] : [root];
   const pending = roots.map((session) => ({ session, depth: 0 })).reverse();

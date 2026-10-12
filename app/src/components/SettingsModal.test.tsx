@@ -1,9 +1,10 @@
-import { openRoute, pickModel, pickEffort, enterModel, routeDialog } from '../test/harnessRoute';
+import { openRoute, pickModel, pickEffort, routeDialog } from '../test/harnessRoute';
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { gesture, renderApp } from '../test/renderApp';
 import type { EventMessage } from '../test/protocol';
 import type { ScriptedDaemon } from '../test/scriptedDaemon';
+import { defaultProfile } from '../test/daemonFixtures';
 import { openSection, renderSettings, savedSettings } from '../test/settings';
 import { getSettingsAutomationHandle } from './settingsAutomation';
 
@@ -269,6 +270,21 @@ describe('SettingsModal model data capture', () => {
 });
 
 describe('SettingsModal notebook folder', () => {
+  it('names the selected profile and saves its Notebook folder with that profile', async () => {
+    const daemon = await openSection('desktop', {
+      profiles: [defaultProfile('desktop-work', { id: 'profile-work', name: 'Work' })],
+      selected_profile_id: 'profile-work',
+      settings: { 'notebook.root': '~/work-notes', 'notebook.root.effective': '/Users/me/work-notes' },
+    });
+    expect(within(screen.getByTestId('settings-modal')).getByText('Work', { selector: 'strong' })).toBeInTheDocument();
+    const input = screen.getByTestId('settings-notebook-root-input');
+    fireEvent.change(input, { target: { value: '~/notes/work' } });
+    await gesture(daemon, () => fireEvent.blur(input));
+    expect(daemon.sentOf('set_setting')).toEqual([{
+      cmd: 'set_setting', request_id: expect.any(String), key: 'notebook.root', value: '~/notes/work', profile_id: 'profile-work',
+    }]);
+  });
+
   it('shows the override value and the daemon-resolved effective folder', async () => {
     await openSection('desktop', { settings: { 'notebook.root': '~/my-notes', 'notebook.root.effective': '/Users/me/my-notes' } });
 
@@ -276,12 +292,24 @@ describe('SettingsModal notebook folder', () => {
     expect(screen.getByTestId('settings-notebook-root-effective')).toHaveTextContent('Currently: /Users/me/my-notes');
   });
 
-  it('falls back to the effective default as placeholder when no override is set', async () => {
-    await openSection('desktop', { settings: { 'notebook.root.effective': '/Users/me/attn-notebook' } });
-
+  it('shows the selected profile default as the placeholder when clearing its override', async () => {
+    await openSection('desktop', { settings: { 'notebook.root': '~/custom', 'notebook.root.effective': '/Users/me/custom', 'notebook.root.default': '~/attn-notebook-default-2' } });
     const input = screen.getByTestId('settings-notebook-root-input');
+    fireEvent.change(input, { target: { value: '' } });
     expect(input).toHaveValue('');
-    expect(input).toHaveAttribute('placeholder', '/Users/me/attn-notebook');
+    expect(input).toHaveAttribute('placeholder', '~/attn-notebook-default-2');
+  });
+
+  it('keeps an invalid stored folder editable so the user can repair it', async () => {
+    const daemon = await openSection('desktop', { settings: { 'notebook.root': '/outside-harness', 'notebook.root.default': '/harness/notebook-default' } });
+    const input = screen.getByTestId('settings-notebook-root-input');
+    expect(input).toBeEnabled();
+    expect(within(input.closest('section')!).getByRole('button', { name: 'Browse' })).toBeEnabled();
+    fireEvent.change(input, { target: { value: '' } });
+    expect(input).toBeEnabled();
+    fireEvent.change(input, { target: { value: '/harness/notes' } });
+    await gesture(daemon, () => fireEvent.blur(input));
+    expect(savedSettings(daemon)).toEqual([['notebook.root', '/harness/notes']]);
   });
 
   it('persists a new folder on blur and an empty value to restore the default', async () => {
@@ -297,7 +325,7 @@ describe('SettingsModal notebook folder', () => {
   });
 });
 
-describe('SettingsModal chief settings', () => {
+describe('SettingsModal agent defaults and compaction', () => {
   const agentSection = (section: string, settings: Record<string, string>) =>
     openSection(section, { settings: { claude_available: 'true', codex_available: 'true', ...settings } });
 
@@ -323,9 +351,9 @@ describe('SettingsModal chief settings', () => {
     expect(savedSettings(daemon)).toEqual([['auto_approve_enabled', 'false']]);
   });
 
-  it.each(['chief', 'default'] as const)('uses discovered %s model and effort controls with a fixed harness', async (kind) => {
-    const daemon = await agentSection(kind === 'chief' ? 'backgroundAgents' : 'agents', {});
-    const label = kind === 'chief' ? 'Claude Chief model' : 'Claude default model';
+  it.each(['default'] as const)('uses discovered %s model and effort controls with a fixed harness', async (kind) => {
+    const daemon = await agentSection('agents', {});
+    const label = 'Claude default model';
     const field = within(screen.getByRole('button', { name: label }));
     expect(field.getByText('Harness')).toBeInTheDocument();
     expect(field.getByText('Claude')).toBeInTheDocument();
@@ -336,51 +364,37 @@ describe('SettingsModal chief settings', () => {
     expect(savedSettings(daemon)).toEqual([[`${kind}_model_claude`, 'opus'], [`${kind}_effort_claude`, 'high']]);
   });
 
-  it.each(['chief', 'default'] as const)('keeps a missing stored %s model visible and does not write on open', async (kind) => {
-    const daemon = await agentSection(kind === 'chief' ? 'backgroundAgents' : 'agents', { [`${kind}_model_claude`]: 'retired-model', [`${kind}_effort_claude`]: 'future-effort' });
-    const label = kind === 'chief' ? 'Claude Chief model' : 'Claude default model';
+  it.each(['default'] as const)('keeps a missing stored %s model visible and does not write on open', async (kind) => {
+    const daemon = await agentSection('agents', { [`${kind}_model_claude`]: 'retired-model', [`${kind}_effort_claude`]: 'future-effort' });
+    const label = 'Claude default model';
     await openRoute(daemon, label);
     expect(routeDialog().getByRole('option', { name: /retired-model/ })).toHaveAttribute('aria-selected', 'true');
     expect(routeDialog().getByRole('textbox', { name: 'Effort' })).toHaveValue('future-effort');
     expect(savedSettings(daemon)).toEqual([]);
   });
 
-  it.each(['chief', 'default'] as const)('clears a %s model override through its default row', async (kind) => {
-    const daemon = await agentSection(kind === 'chief' ? 'backgroundAgents' : 'agents', { [`${kind}_model_claude`]: 'opus' });
-    await openRoute(daemon, kind === 'chief' ? 'Claude Chief model' : 'Claude default model');
-    await pickModel(daemon, kind === 'chief' ? 'Deep default → Opus 5.5' : 'Claude default');
+  it.each(['default'] as const)('clears a %s model override through its default row', async (kind) => {
+    const daemon = await agentSection('agents', { [`${kind}_model_claude`]: 'opus' });
+    await openRoute(daemon, 'Claude default model');
+    await pickModel(daemon, 'Claude default');
     expect(savedSettings(daemon)).toEqual([[`${kind}_model_claude`, '']]);
   });
 
-  it('shows deep at low as the unset Chief route and can pin a manual model ID', async () => {
-    const daemon = await agentSection('backgroundAgents', {});
-    expect(screen.getByTestId('settings-chief-route-codex')).toHaveTextContent('Deep default → gpt-6.1-sol');
-    expect(screen.getByTestId('settings-chief-route-codex')).toHaveTextContent('low');
-    await openRoute(daemon, 'Codex Chief model');
-    await enterModel(daemon, 'custom-model');
-    expect(savedSettings(daemon)).toEqual([['chief_model_codex', 'custom-model']]);
-  });
+
 
   it('shows the effective context-window caps', async () => {
-    await agentSection('backgroundAgents', { chief_context_window_cap: '120000', headless_context_window_cap: '90000' });
+    await agentSection('backgroundAgents', { headless_context_window_cap: '90000' });
 
-    expect(screen.getByTestId('settings-chief-context-cap')).toHaveValue(120000);
     expect(screen.getByTestId('settings-headless-context-cap')).toHaveValue(90000);
   });
 
-  it('defaults both context-window caps to 128000 when unset', async () => {
+  it('defaults the headless context-window cap to 128000 when unset', async () => {
     await agentSection('backgroundAgents', {});
 
-    expect(screen.getByTestId('settings-chief-context-cap')).toHaveValue(128000);
     expect(screen.getByTestId('settings-headless-context-cap')).toHaveValue(128000);
   });
 
-  it('commits a changed chief context-window cap on blur', async () => {
-    const daemon = await agentSection('backgroundAgents', { chief_context_window_cap: '128000' });
 
-    await commitField(daemon, 'settings-chief-context-cap', '100000');
-    expect(savedSettings(daemon)).toEqual([['chief_context_window_cap', '100000']]);
-  });
 
   it('commits a changed headless context-window cap on blur', async () => {
     const daemon = await agentSection('backgroundAgents', { headless_context_window_cap: '128000' });
@@ -390,9 +404,9 @@ describe('SettingsModal chief settings', () => {
   });
 
   it('does not re-commit an unchanged context-window cap on blur', async () => {
-    const daemon = await agentSection('backgroundAgents', { chief_context_window_cap: '128000' });
+    const daemon = await agentSection('backgroundAgents', {});
 
-    await commitField(daemon, 'settings-chief-context-cap');
+    await commitField(daemon, 'settings-headless-context-cap');
     expect(savedSettings(daemon)).toEqual([]);
   });
 

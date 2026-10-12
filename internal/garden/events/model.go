@@ -35,8 +35,8 @@ func (a AudienceDef) Includes(role Role) AudienceDef {
 type Exclusion uint8
 
 const (
-	SessionThatCausedTheEvent Exclusion = iota + 1
-	SessionNotifiedDirectly
+	PartyThatCausedTheEvent Exclusion = iota + 1
+	PartyNotifiedDirectly
 )
 
 type Membership struct{ audience AudienceDef }
@@ -265,9 +265,9 @@ func payloadFields(payload reflect.Type) (map[string]field, error) {
 		}
 		fields[name] = field{kind: declared.Type.Kind(), required: required}
 	}
-	cause, exists := fields["caused_by_session_id"]
+	cause, exists := fields["caused_by"]
 	if !exists || cause.kind != reflect.String || cause.required {
-		return nil, fmt.Errorf("payload requires optional string caused_by_session_id")
+		return nil, fmt.Errorf("payload requires optional string caused_by")
 	}
 	return fields, nil
 }
@@ -294,7 +294,7 @@ func (m *Model) validateDecision(event *compiledEvent, decision Decision) error 
 		}
 		for _, exclusion := range decision.bell.exclusions {
 			fieldName := exclusionField(exclusion)
-			if fieldName == "caused_by_session_id" {
+			if fieldName == "caused_by" {
 				continue
 			}
 			if declared, exists := event.fields[fieldName]; exists && (declared.kind != reflect.String || declared.required) {
@@ -369,8 +369,8 @@ func validateBell(bell BellDef) error {
 		return fmt.Errorf("bell %q: seed parties must include current tender and covering watchers", bell.name)
 	}
 	want := map[Exclusion]bool{
-		SessionThatCausedTheEvent: true,
-		SessionNotifiedDirectly:   true,
+		PartyThatCausedTheEvent: true,
+		PartyNotifiedDirectly:   true,
 	}
 	for _, exclusion := range bell.exclusions {
 		if !want[exclusion] {
@@ -379,17 +379,17 @@ func validateBell(bell BellDef) error {
 		delete(want, exclusion)
 	}
 	if len(want) != 0 || len(bell.exclusions) != 2 {
-		return fmt.Errorf("bell %q must exclude SessionThatCausedTheEvent and SessionNotifiedDirectly exactly once", bell.name)
+		return fmt.Errorf("bell %q must exclude PartyThatCausedTheEvent and PartyNotifiedDirectly exactly once", bell.name)
 	}
 	return nil
 }
 
 func exclusionField(exclusion Exclusion) string {
 	switch exclusion {
-	case SessionThatCausedTheEvent:
-		return "caused_by_session_id"
-	case SessionNotifiedDirectly:
-		return "directly_notified_session_id"
+	case PartyThatCausedTheEvent:
+		return "caused_by"
+	case PartyNotifiedDirectly:
+		return "directly_notified"
 	default:
 		return ""
 	}

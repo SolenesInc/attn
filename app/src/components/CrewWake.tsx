@@ -15,7 +15,7 @@ interface WakeConfirm {
   rowRef: RefObject<HTMLDivElement | null>;
 }
 
-export function useWakeConfirm(onWake: (() => void) | undefined): WakeConfirm {
+export function useWakeConfirm(onWake: (() => void) | undefined, oneClick = false): WakeConfirm {
   const [phase, setPhase] = useState<WakePhase>('rest');
   const rowRef = useRef<HTMLDivElement | null>(null);
 
@@ -57,13 +57,13 @@ export function useWakeConfirm(onWake: (() => void) | undefined): WakeConfirm {
     if (!onWake) return;
     // The flare is not a target: a click landing in it would re-arm a row whose wake is already sent.
     if (phase === 'breaking') return;
-    if (phase !== 'armed') {
+    if (!oneClick && phase !== 'armed') {
       setPhase('armed');
       return;
     }
     setPhase('breaking');
     onWake();
-  }, [onWake, phase]);
+  }, [onWake, phase, oneClick]);
 
   return { phase, trigger, rowRef };
 }

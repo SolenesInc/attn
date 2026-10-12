@@ -20,6 +20,6 @@ func (d *Daemon) currentStateProjection(profileID ...string) currentStateProject
 		Authors:     protocol.AuthorStatesToValues(d.store.ListAuthorStates()),
 		GithubHosts: d.gitHubHosts(),
 		Seeds:       d.seedsForBroadcast(profileID...),
-		Crew:        d.crewForBroadcast(),
+		Crew:        nil,
 	}
 }

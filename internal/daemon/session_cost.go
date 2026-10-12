@@ -25,6 +25,7 @@ func (d *Daemon) decorateSessionWithCost(session *protocol.Session) {
 func (d *Daemon) decorateLedgerEntriesWithUsage(entries []protocol.SessionLedgerEntry) {
 	ids := make([]protocol.SessionID, len(entries))
 	for i, entry := range entries {
+		d.decorateLedgerActor(&entries[i])
 		ids[i] = entry.ID
 	}
 	costs, err := d.store.SessionCostUsages(ids)
@@ -42,6 +43,7 @@ func (d *Daemon) decorateLedgerEntryWithUsage(entry *protocol.SessionLedgerEntry
 	if entry == nil {
 		return
 	}
+	d.decorateLedgerActor(entry)
 	costs, err := d.store.SessionCostUsages([]protocol.SessionID{entry.ID})
 	if err != nil {
 		d.logf("session ledger: read usage for %s: %v", entry.ID, err)

@@ -214,7 +214,7 @@ func TestAnAgentThatDiesMidTurnReportsItsExitBeforeItsIdle(t *testing.T) {
 	run.Exit(1)
 
 	testworld.Await(app, protocol.EventSessionStateChanged, func(e protocol.WebSocketEvent) bool {
-		return e.Session != nil && string(e.Session.ID) == session && protocol.Deref(e.Session.StateReason) == "process_exited"
+		return e.Session != nil && string(e.Session.ID) == session && e.Session.State == protocol.SessionStateIdle && protocol.Deref(e.Session.StateReason) == "process_exited"
 	})
 	testworld.Await(app, protocol.EventSessionExited, func(e protocol.WebSocketEvent) bool { return string(protocol.Deref(e.SessionID)) == session })
 	if order := exitOrderOf(app, session); order != "exited, idle" {

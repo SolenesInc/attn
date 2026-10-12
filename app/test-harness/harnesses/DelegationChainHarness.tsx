@@ -21,7 +21,7 @@ const agents: ChainSession[] = [
 
 const NO_AGENTS: AgentPaletteInput<PaletteSession> = {
   bands: { chief: null, turns: [], settled: [], crew: [], snoozed: [] },
-  crewRoster: [],
+  crew: [],
   desktops: [],
   tileTitle: () => '',
   now: 0,

@@ -7,6 +7,7 @@ import (
 
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 const (
@@ -33,7 +34,7 @@ type Profile struct {
 	LastUsedAt       string
 	Revision         int64
 	DeletedAt        string
-	ChiefSessionID   protocol.SessionID
+	Chief            who.MemberKey
 }
 
 func (s Profile) Deleted() bool { return s.DeletedAt != "" }

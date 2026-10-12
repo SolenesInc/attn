@@ -93,7 +93,7 @@ func TestAuthoringContextIncludesSharedConsumersProducersAndGaps(t *testing.T) {
 	if !slices.Contains(report.Sources["content/preamble.md"].Uses, usage{Event: "session/start", Via: "producer/preamble"}) {
 		t.Fatal("producer use not explained")
 	}
-	if !strings.Contains(report.Workflow, "before adding instructions") || report.Guide != "docs/prompt-authoring.md" || len(report.Limits) == 0 {
+	if !strings.Contains(report.Workflow, "before adding instructions") || report.Guide != "docs/internal/prompt-authoring.md" || len(report.Limits) == 0 {
 		t.Fatal("authoring context omitted its workflow or limits")
 	}
 	if gitTest(t, e, "status", "--porcelain") != beforeStatus || gitTest(t, e, "rev-parse", "HEAD") != base {

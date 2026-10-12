@@ -13,6 +13,7 @@ import (
 func TestAPresentationMovesThroughItsReviewRounds(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
+		registerSessions(t, w, cli, "presenter")
 		repo := newRepo(t, "shop")
 
 		checkout := openPresentation(t, cli, repo, "Checkout", "")

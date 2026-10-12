@@ -9,7 +9,9 @@ import type { Reply, ScriptedDaemon } from './test/scriptedDaemon';
 const PARSER = daemonSeed('s-1', {
   title: 'fix the parser',
   status: 'tending',
-  tender_session: 'tender',
+  tender: { ref: 'session:tender', name: 'tender', session_id: 'tender' },
+  claimed: true,
+  resume_available: false,
   continuation: {
     agent: 'claude',
     cwd: '/tmp/repo',
@@ -30,8 +32,8 @@ type Seed = typeof PARSER;
 
 async function openSeedInGarden(seed: Seed = PARSER, { chief = false } = {}) {
   const sessions = [daemonSession('s1', { state: 'idle' }), daemonSession('tender', { state: 'idle' })];
-  if (chief) sessions.push(daemonSession('chief', { chief_of_staff: true }));
-  const garden = await renderGarden([seed], { sessions });
+  if (chief) sessions.push(daemonSession('chief', { chief: true }));
+  const garden = await renderGarden([seed], { sessions, initial: { crew: chief ? [crewMember('chief-key', { name: 'Chief', chief: true, binding_session: 'chief' })] : [] } });
   const { daemon } = garden;
   let heldFrom = 0;
   fireEvent.click(screen.getByRole('button', { name: 'Open s1' }));
@@ -113,6 +115,15 @@ describe('App garden continuation', () => {
 
     expect(selectedSessions(daemon).slice(-1)).toEqual(['reopened-late']);
     expect(document.querySelector('[data-session-visible="1"]')?.getAttribute('data-active-leaf-id')).toBe('pane-reopened-late');
+  });
+
+  it('offers Resume for a member claim with no saved continuation', async () => {
+    const seed = daemonSeed('s-member', {title:'Keel work',status:'growing',resume_available:true,claimed:true,tender:{ref:'member:keel',name:'Keel'}});
+    const {daemon} = await openSeedInGarden(seed);
+    daemon.on('seed_resume',()=>({event:'seed_resume_result',success:true,session_id:'keel-new'}));
+    await gesture(daemon,()=>fireEvent.click(screen.getByRole('button',{name:'Resume'})));
+    expect(daemon.sentOf('seed_resume')).toEqual([expect.objectContaining({seed_id:'s-member'})]);
+    expect(selectedSessions(daemon).pop()).toBe('keel-new');
   });
 
   it('resumes a seed’s agent and goes to the session the daemon reopened', async () => {
@@ -209,7 +220,9 @@ describe('App garden continuation', () => {
         crew: [KEEL],
         sessions: [daemonSession('s1')],
         desktops: [soloDesktop('s1')],
-        seeds: [daemonSeed('s-7k3f9m', { title: 'crew seed', status: 'planted', planter_member: 'keel' })],
+        seeds: [daemonSeed('s-7k3f9m', { claimed: false,
+        resume_available: false,  title: 'crew seed', status: 'planted',
+        planter: { ref: "member:keel", name: "Keel" } })],
       },
     });
     await gesture(daemon, () => fireEvent.click(screen.getByTestId('manage-crew')));
@@ -256,7 +269,7 @@ describe('App garden continuation', () => {
     daemon.on('seed_send_to_chief', () => ({
       event: 'seed_send_to_chief_result',
       success: true,
-      result: { seed: PARSER, chief_session_id: 'chief', delivery_status: 'queued', detail: 'queued for Chief' },
+      result: { seed: PARSER, chief: {ref:'session:' + ('chief'),name:'Chief',session_id:'chief'}, delivery_status: 'queued', detail: 'queued for Chief' },
     }));
 
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Handover' })));
@@ -286,8 +299,8 @@ describe('App garden continuation', () => {
     expect(daemon.sentOf('seed_send_to_chief')).toEqual([expect.objectContaining({
       seed_id: 's-1',
       expected_rev: 1,
-      expected_tender_session: 'tender',
-      expected_tender_member: '',
+
+
       guidance: 'Use feature/special in /tmp/new-home.',
     })]);
   });

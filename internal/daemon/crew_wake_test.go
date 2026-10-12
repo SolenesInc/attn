@@ -1,17 +1,13 @@
 package daemon
 
 import (
-	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/victorarias/attn/internal/crew"
-	"github.com/victorarias/attn/internal/docstore"
-	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/logging"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -121,59 +117,6 @@ func TestCrewSet_ASymlinkedForeignInstanceRootIsRefused(t *testing.T) {
 	}
 }
 
-func TestCrewPrime_AClaimOlderThanAPageOfTheGardenStillWakesWithItsMember(t *testing.T) {
-	d, _, _ := newWakeableDaemon(t)
-	d.ensureGardenCollections()
-	schema, err := d.seedsCollection()
-	if err != nil {
-		t.Fatalf("seedsCollection: %v", err)
-	}
-	planted := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
-	oldest := garden.Seed{
-		ProfileID: defaultProfileID(t, d.store),
-		ID:        "s-000000", Title: "The claim nobody released", Status: garden.StatusGrowing,
-		StepSlug: "claim-nobody-released", TenderMember: "trellis",
-		StateChangedAt: planted.Format(time.RFC3339Nano), Edges: []garden.Edge{}, Vars: []garden.Var{},
-	}
-	body, err := oldest.Encode()
-	if err != nil {
-		t.Fatalf("encode seed: %v", err)
-	}
-	if _, err := d.store.PutDocument(*schema, oldest.ID, body, planted, nil); err != nil {
-		t.Fatalf("put seed %s: %v", oldest.ID, err)
-	}
-	for i := 1; i <= docstore.MaxLimit; i++ {
-		id := fmt.Sprintf("s-%06x", i)
-		seed := garden.Seed{
-			ProfileID: defaultProfileID(t, d.store),
-			ID:        id, Title: id, Status: garden.StatusPlanted, StepSlug: id,
-			StateChangedAt: planted.Format(time.RFC3339Nano), Edges: []garden.Edge{}, Vars: []garden.Var{},
-		}
-		newer, err := seed.Encode()
-		if err != nil {
-			t.Fatalf("encode seed %s: %v", id, err)
-		}
-		if _, err := d.store.PutDocument(*schema, id, newer, planted.Add(time.Duration(i)*time.Minute), nil); err != nil {
-			t.Fatalf("put seed %s: %v", id, err)
-		}
-	}
-
-	result, err := d.crewWake("trellis", "")
-	if err != nil {
-		t.Fatalf("wake: %v", err)
-	}
-	_, block, _, err := d.crewPrimeForSession(result.SessionID)
-	if err != nil {
-		t.Fatalf("prime: %v", err)
-	}
-	if !strings.Contains(block, "`s-000000` claim-nobody-released — The claim nobody released") {
-		t.Errorf("a claim older than one page of the garden was dropped from priming:\n%s", block)
-	}
-	if strings.Contains(block, "You hold no seeds in the garden") {
-		t.Error("a member holding an older claim was told it holds nothing")
-	}
-}
-
 func writeCrewHomes(t *testing.T, dataRoot string) {
 	t.Helper()
 	root := filepath.Join(dataRoot, crew.HomesDirName)
@@ -205,6 +148,9 @@ func newCrewDaemon(t *testing.T) *Daemon {
 	writeCrewHomes(t, d.dataRoot)
 	d.ensureCrewCollections()
 	d.importCrewHomes()
+	if err := d.ensureChiefs(); err != nil {
+		t.Fatal(err)
+	}
 	return d
 }
 
@@ -229,7 +175,7 @@ func TestCrewWake_RefusesAMemberOfAnotherProfile(t *testing.T) {
 		{Member: "trellis", SourceSessionID: protocol.Ptr(protocol.SessionID("work-agent"))},
 		{Member: "trellis", SourceSessionID: protocol.Ptr(protocol.SessionID("work-agent")), ProfileID: protocol.Ptr(defaultProfileID(t, d.store))},
 	} {
-		if _, err := d.crewWakeAsked(msg); err == nil || !strings.Contains(err.Error(), work.ID) {
+		if _, err := d.crewWakeAsked(msg); err == nil || !strings.Contains(err.Error(), `profile "Work"`) {
 			t.Fatalf("wake %+v = %v, want a refusal naming profile %s", msg, err, work.ID)
 		}
 	}

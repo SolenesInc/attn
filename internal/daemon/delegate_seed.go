@@ -11,9 +11,10 @@ import (
 
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
-func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection, operationID string, sessionID protocol.SessionID, plannerSessionID protocol.SessionID, parentSeedID string, brief string, name string, seedID string, observed garden.Dispatch, fromChief, createSeed bool, profileID ...string) (string, error) {
+func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection, operationID string, sessionID protocol.SessionID, dispatcher who.Actor, parentSeedID string, brief string, name string, seedID string, observed garden.Execution, fromChief, createSeed bool, profileID ...string) (string, error) {
 	if dispatch, found := d.gardenDispatch(sessionID); found && activeDispatchCrown(dispatch) != "" {
 		bound := activeDispatchCrown(dispatch)
 		if err := d.requireSeedInProfile(bound, firstProfile(profileID), false); err != nil {
@@ -33,6 +34,16 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 		return "", err
 	}
 
+	d.lockGardenRoles()
+	defer d.unlockGardenRoles()
+	b, err := d.bindings()
+	if err != nil {
+		return "", err
+	}
+	delegate, ok := b.PartyOf(sessionID)
+	if !ok {
+		return "", fmt.Errorf("delegation session %s is not reserved", sessionID)
+	}
 	var seed garden.Seed
 	var seedExpected int64
 	if createSeed {
@@ -47,7 +58,7 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 		if strings.TrimSpace(seedID) == "" {
 			return "", fmt.Errorf("new delegation seed identity was not reserved")
 		}
-		seed = garden.Seed{ProfileID: firstProfile(profileID), ID: seedID, Title: title, Body: body, Status: garden.StatusPlanted, StepSlug: garden.StepSlug(title), PlanterSession: plannerSessionID, PlanterMember: d.resolveTenderMember("", plannerSessionID), Edges: []garden.Edge{}, Vars: []garden.Var{}}
+		seed = garden.Seed{ProfileID: firstProfile(profileID), ID: seedID, Title: title, Body: body, Status: garden.StatusPlanted, StepSlug: garden.StepSlug(title), Planter: dispatcher, Edges: []garden.Edge{}, Vars: []garden.Var{}}
 		if parent := strings.TrimSpace(parentSeedID); parent != "" {
 			seed.Edges = append(seed.Edges, garden.Edge{Kind: garden.EdgePartOf, To: parent})
 		}
@@ -61,8 +72,8 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 		if garden.Closed(seed.Status) {
 			return "", fmt.Errorf("%s is %s; replant it before delegating", seed.ID, seed.Status)
 		}
-		if holder := seed.Tender(); holder.Holds(d.sessionActive) {
-			return "", fmt.Errorf("seed %s has active holder %s; use --handover to transfer it", seed.ID, holder.DisplayName())
+		if holder, claimed := seed.Claim.Holds(b); claimed {
+			return "", fmt.Errorf("seed %s is claimed by %s; use --handover to transfer it", seed.ID, d.partyView(holder, b).Name)
 		}
 		seedExpected = doc.Rev
 	}
@@ -72,7 +83,7 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 		return "", profileErr
 	}
 	previousStatus := seed.Status
-	seed, err = garden.Transition(seed, garden.VerbTend, garden.Ask{Actor: garden.Tender{Session: sessionID}}, func(protocol.SessionID) bool { return false })
+	seed, err = garden.Assign(seed, delegate)
 	if err != nil {
 		return "", err
 	}
@@ -86,8 +97,7 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 	}
 	dispatch := observed
 	dispatch.Crown = seed.ID
-	dispatch.DispatcherSession = protocol.TrimID(plannerSessionID)
-	dispatch.DispatcherMember = d.crewMembersBySession()[dispatch.DispatcherSession]
+	dispatch.Dispatcher = dispatcher
 	dispatch.FromChief = fromChief
 	dispatch.OperationID = strings.TrimSpace(operationID)
 	dispatchBody, err := dispatch.Encode()
@@ -103,7 +113,7 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 	if createSeed {
 		planted, eventErr := seedEvents.Occur(
 			gardenSeedEventModel, gardenSeedEventVocabulary.Planted, seed.ID,
-			seedEvents.CausePayload{CausedBySessionID: plannerSessionID},
+			seedEvents.CausePayload{CausedBy: dispatcher.Ref()},
 		)
 		if eventErr != nil {
 			return "", eventErr
@@ -114,7 +124,7 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 				gardenSeedEventModel, gardenSeedEventVocabulary.EdgeLinked, seed.ID,
 				seedEvents.EdgePayload{
 					EdgeKind: edge.Kind, TargetSeedID: edge.To,
-					CausedBySessionID: plannerSessionID,
+					CausedBy: dispatcher.Ref(),
 				},
 			)
 			if eventErr != nil {
@@ -123,7 +133,7 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 			occurrences = append(occurrences, linked)
 		}
 	}
-	tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, seed.ID, plannerSessionID, string(sessionID))
+	tended, err := lifecycleOccurrence(garden.VerbTend, seed.ID, garden.Ask{By: dispatcher, DirectlyNotified: delegate})
 	if err != nil {
 		return "", err
 	}
@@ -132,14 +142,12 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 	if err != nil {
 		return "", err
 	}
-	d.lockGardenRoles()
 	written, eventSeqs, err := d.store.CommitGardenDispatchWritesWithEvents(
-		commits, store.GardenSeedWatch{WatcherSessionID: sessionID, SeedID: seed.ID}, events, d.gardenTime(),
+		commits, store.GardenPartyWatch{Watcher: delegate, SeedID: seed.ID}, events, d.gardenTime(),
 	)
 	if err == nil {
 		err = d.discardAllIneligibleGardenSeedBellsLocked()
 	}
-	d.unlockGardenRoles()
 	if err != nil {
 		var conflict *docstore.ConflictError
 		if errors.As(err, &conflict) {

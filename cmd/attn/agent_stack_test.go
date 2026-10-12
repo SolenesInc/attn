@@ -167,11 +167,11 @@ func TestAgentMessagesCarryTheSenderAndTheDaemonsVerdict(t *testing.T) {
 	if read := s.Run(testworld.Invocation{Args: []string{"agent", "inbox", messageID}, Session: recipient}); read.Code != 0 {
 		t.Errorf("the recipient reading its message exited %d: %s", read.Code, read.Stderr)
 	} else {
-		requireLines(t, "the recipient's read", read.Stdout, "rev-1111 (reviewer)", "the discount is applied after tax")
+		requireLines(t, "the recipient's read", read.Stdout, "from reviewer:", "the discount is applied after tax")
 	}
 	var reread protocol.AgentPeerMessage
 	s.Run(testworld.Invocation{Args: []string{"agent", "inbox", "--json", messageID}, Session: recipient}).JSON(t, &reread)
-	if reread.MessageID != messageID || reread.SenderSessionID != reviewer || reread.Content != "the discount is applied after tax" {
+	if reread.MessageID != messageID || reread.Sender.Ref != protocol.PartyRef("session:"+reviewer) || reread.Content != "the discount is applied after tax" {
 		t.Errorf("a read by id with --json first = %+v", reread)
 	}
 	duplicate := s.Run(testworld.Invocation{Args: []string{"agent", "msg", recipient, "the discount is applied after tax"}, Session: reviewer})
@@ -189,12 +189,12 @@ func TestAgentMessagesCarryTheSenderAndTheDaemonsVerdict(t *testing.T) {
 		t.Errorf("a message exactly at the limit exited %d: %s", long.Code, long.Stderr)
 	}
 
-	if status := s.Run(testworld.Invocation{Args: []string{"agent", "msg-status", queued.MessageID}, Session: reviewer}); status.Stdout != "queued: message "+queued.MessageID+" to session desk-333\n" {
+	if status := s.Run(testworld.Invocation{Args: []string{"agent", "msg-status", queued.MessageID}, Session: reviewer}); status.Stdout != "queued: message "+queued.MessageID+" to desk (session:"+desk+")\n" {
 		t.Errorf("msg-status exited %d and printed %q", status.Code, status.Stdout)
 	}
 	var status protocol.AgentPeerMessage
 	s.Attn("agent", "msg-status", queued.MessageID, "--session", reviewer, "--json").JSON(t, &status)
-	if status.MessageID != queued.MessageID || status.SenderSessionID != reviewer || status.TargetSessionID != desk || status.State != protocol.AgentMessageStateQueued {
+	if status.MessageID != queued.MessageID || status.Sender.Ref != protocol.PartyRef("session:"+reviewer) || status.To != protocol.AddressRef("session:"+desk) || status.State != protocol.AgentMessageStateQueued {
 		t.Errorf("msg-status --session %s --json = %+v", reviewer, status)
 	}
 	requireFailure(t, s.Run(testworld.Invocation{Args: []string{"agent", "msg-status", queued.MessageID}, Session: bystander}),
@@ -204,18 +204,18 @@ func TestAgentMessagesCarryTheSenderAndTheDaemonsVerdict(t *testing.T) {
 
 	var batch protocol.AgentInboxBatchResult
 	s.Run(testworld.Invocation{Args: []string{"agent", "inbox", "--session", desk, "--limit", "1", "--json"}, Session: bystander}).JSON(t, &batch)
-	if len(batch.Items) != 1 || batch.Items[0].Content != "-hello" || protocol.Deref(batch.Items[0].SenderSessionID) != reviewer || batch.Remaining != 1 {
+	if len(batch.Items) != 1 || batch.Items[0].Content != "-hello" || protocol.Deref(batch.Items[0].Sender).Ref != protocol.PartyRef("session:"+reviewer) || batch.Remaining != 1 {
 		t.Fatalf("the first of two unread = %+v", batch)
 	}
 	s.Run(testworld.Invocation{Args: []string{"agent", "inbox", "--json"}, Session: desk}).JSON(t, &batch)
-	if len(batch.Items) != 1 || protocol.Deref(batch.Items[0].SenderSessionID) != bystander || len(batch.Items[0].Content) != protocol.AgentMessageMaxChars {
+	if len(batch.Items) != 1 || protocol.Deref(batch.Items[0].Sender).Ref != protocol.PartyRef("session:"+bystander) || len(batch.Items[0].Content) != protocol.AgentMessageMaxChars {
 		t.Fatalf("the message sent with --source-session = %+v, want it attributed to %s", batch.Items, bystander)
 	}
 
 	requireFailure(t, s.Run(testworld.Invocation{Args: []string{"agent", "msg", "nobody", "hi"}, Session: reviewer}),
 		"agent msg: ", `"nobody"`, "attn agent list", "attn crew list")
 	requireFailure(t, s.Run(testworld.Invocation{Args: []string{"agent", "msg", desk, "hi", "--source-session", "ghost"}, Session: reviewer}),
-		"agent msg: ", `the sender "ghost"`)
+		"agent msg: ", `the caller "ghost"`)
 
 	var seed protocol.Seed
 	s.Run(testworld.Invocation{Args: []string{"seed", "plant", "sweep the stale branches", "--json"}, Session: desk}).JSON(t, &seed)

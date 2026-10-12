@@ -11,7 +11,7 @@ interface Options {
     providedSessionId?: string,
     agent?: SessionAgent,
     yoloMode?: boolean,
-    options?: { chiefOfStaff?: boolean; autoMode?: boolean },
+    options?: { autoMode?: boolean },
   ) => Promise<string>;
 }
 export function useAppDeepLinks({

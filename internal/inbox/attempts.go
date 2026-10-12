@@ -1,6 +1,10 @@
 package inbox
 
-import "time"
+import (
+	"time"
+
+	"github.com/victorarias/attn/internal/protocol"
+)
 
 const (
 	AttemptDelay = 5 * time.Minute // F1: healthy agents read p99.5 60s after a ring.
@@ -9,6 +13,7 @@ const (
 
 type Receipt struct {
 	ItemID      string
+	SessionID   protocol.SessionID
 	Rang        bool
 	Outstanding bool
 	Detail      string

@@ -2,7 +2,7 @@ attn keeps work as seeds in your profile's garden. A seed belongs to its plantin
 
 Write every seed body as a work prompt for an agent starting without this conversation, including work you plan to do yourself. State the task and outcome, starting context and constraints, and how to verify completion.
 
-A plot is a seed with children: its body holds the shared plan, and each child has its own work prompt. Keep shared decisions in the parent; tell each child which parent section, sibling result or artifact to read and why. Related bodies are not included automatically in a delegation. Children are parallel unless a `blocks` edge orders them. Read `attn seed guide` before writing a plot. Any seed can be a plot. Seed packets are templates for plots; the attn skill explains them.
+A plot is a seed with children: its body records the shared plan, and each child has its own work prompt. Keep shared decisions in the parent; tell each child which parent section, sibling result or artifact to read and why. Related bodies are not included automatically in a delegation. Children are parallel unless a `blocks` edge orders them. Read `attn seed guide` before writing a plot. Any seed can be a plot. Seed packets are templates for plots; the attn skill explains them.
 
 Garden words have Jira-style equivalents: seed = ticket, ready = todo, plot = epic, harvested = done. Use the Garden word by default. When the user uses one of those Jira words, mirror it for that concept for the rest of the exchange; do not correct them, and do not switch the other concepts unless they do.
 
@@ -12,11 +12,11 @@ A new delegation stores its brief as the seed body. A delegation at an existing 
 
 The loop:
 
-    attn seed ready                  what you can pick up now: open, not parked, not blocked, nobody holding it
+    attn seed ready                  what you can pick up now: open, not parked, not blocked, nobody claiming it
                                      inside your plot when you report to one. A plot itself is never ready; only its children can be
     attn seed ready --all            the same across your profile's garden; use it to look past your plot
     attn seed show <id>              body, state, tender, edges, children, freshest handoff
-    attn seed tend <id>              claim it; one tender at a time, a held seed refuses you by name
+    attn seed tend <id>              claim it; one tender at a time, a claimed seed refuses you by name
     attn seed note <id> -m "…"       what happened and what you learned, tending it or not; --handoff addresses the next tender
                                      --ring tells watchers to look
     attn seed harvest <id> -m "…"    done; the reason is required and fits in 400 characters, the long version goes in a note
@@ -29,9 +29,9 @@ The loop:
                                      matched prints under each hit. Run it before you plant
     attn seed plant "<title>" -m "…" [--part-of <plot>] [--discovered-from <seed>]    a new seed; prints the id
 
-`attn seed tend`, `attn seed park`, `attn seed harvest`, `attn seed wither` and `attn seed replant` all check who holds the seed. If a live session or crew member holds it, the command refuses it by naming the holder. `--force` performs the move anyway, and the log records who forced it. A seed whose session ended is not held. `--member <name>` on any of these commands acts as a crew member instead of this session, and a member's claim never expires.
+`attn seed tend`, `attn seed park`, `attn seed harvest`, `attn seed wither` and `attn seed replant` all check who claims the seed. If a live session or crew member claims it, the command refuses and names the tender. `--force` performs the move anyway, and the log records who forced it. A session's claim ends with its session; a crew member's claim lasts across its sessions. `attn seed tend <id> --for <name>` assigns the seed to a crew member in your profile. The user never claims a seed.
 
-Harvest and wither print the seeds the close set free — the ones it was the last blocker of — and ring whoever holds one.
+Harvest and wither print the seeds the close set free — the ones it was the last blocker of — and ring the tender of each one.
 
 Plans:
 
@@ -41,7 +41,7 @@ Plans:
     attn seed link <a> blocks <b>    b waits until a closes; unlink removes the edge
     attn seed link <a> part-of <b>   a joins b's plot; a seed sits in one plot at a time
     attn seed link <a> discovered-from <b>    a was discovered while working on b; the link records that origin but never orders or blocks anything
-    attn seed ls [--flat]            everything planted and who holds it, children nested under their plot; --flat for one list
+    attn seed ls [--flat]            everything planted and who tends it, children nested under their plot; --flat for one list
     attn seed edit <id> -m "…"       replace the body; say what changed in a note
 
 Keeping up:

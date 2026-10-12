@@ -27,18 +27,18 @@ path = %q
 `, piPluginName, piVersion, piPluginAPIVersion, piPluginName)
 
 type Kit struct {
-	t        testing.TB
-	cfg      config
-	control  net.Listener
-	mu       sync.Mutex
-	launches map[string]chan *Run
-	nextBoot chan struct{}
-	bootAsk  chan struct{}
-	fakes    []*fake
-	failures []string
-	headless chan *HeadlessTask
-	nextExit *bootingResult
-	answerer func(*HeadlessTask)
+	t              testing.TB
+	cfg            config
+	control        net.Listener
+	mu             sync.Mutex
+	launches       map[string]chan *Run
+	nextBoot       chan struct{}
+	bootAsk        chan struct{}
+	fakes          []*fake
+	failures       []string
+	headless       chan *HeadlessTask
+	nextBootResult *bootingResult
+	answerer       func(*HeadlessTask)
 }
 
 type fake struct {
@@ -94,15 +94,20 @@ func Install(t testing.TB, dir string, harnesses []Harness, wrapper string) *Kit
 }
 
 func (k *Kit) Env() []string {
-	return []string{
+	toolEnv := []string{
 		"ATTN_TOOL_HOME=" + k.cfg.ToolHome,
 		"CODEX_HOME=" + k.cfg.CodexHome,
+		"CLAUDE_CONFIG_DIR=" + filepath.Join(k.cfg.ToolHome, ".claude"),
+	}
+	shellEnv, _ := json.Marshal(toolEnv)
+	return append(toolEnv, []string{
+		"ATTN_CACHED_SHELL_ENV=" + string(shellEnv),
 		"PATH=" + k.cfg.Bin + string(os.PathListSeparator) + os.Getenv("PATH"),
 		"ATTN_CLAUDE_EXECUTABLE=" + filepath.Join(k.cfg.Bin, string(Claude)),
 		"ATTN_CODEX_EXECUTABLE=" + filepath.Join(k.cfg.Bin, string(Codex)),
 		"ATTN_COPILOT_EXECUTABLE=" + filepath.Join(k.cfg.Bin, string(Copilot)),
 		"ATTN_WRAPPER_PATH=" + filepath.Join(k.cfg.Bin, wrapperName),
-	}
+	}...)
 }
 
 func mustInstall(t testing.TB, dir string, links, files map[string]string) {

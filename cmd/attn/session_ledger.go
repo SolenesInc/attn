@@ -207,7 +207,7 @@ func fprintSessionList(w io.Writer, result *protocol.SessionListResult, args ses
 			sessionLedgerState(entry),
 			orDash(protocol.Deref(entry.TurnSnoozedUntil)),
 			shortStamp(sessionLedgerWhen(entry)),
-			orDash(protocol.Deref(entry.ClosedBy)))
+			orDash(protocol.Deref(entry.ClosedBy).Name))
 		if args.reopen {
 			fmt.Fprintf(table, "%s\t", sessionReopenColumn(verdicts[entry.ID]))
 		}
@@ -439,7 +439,7 @@ func fprintSessionShow(w io.Writer, result protocol.SessionShowResult) {
 		fmt.Fprintf(w, "usage      %s\n", sessionUsageText(*entry.Usage))
 	}
 	if closedAt := protocol.Deref(entry.ClosedAt); closedAt != "" {
-		fmt.Fprintf(w, "closed     %s by %s\n", shortStamp(closedAt), orDash(protocol.Deref(entry.ClosedBy)))
+		fmt.Fprintf(w, "closed     %s by %s\n", shortStamp(closedAt), orDash(protocol.Deref(entry.ClosedBy).Name))
 		if reason := strings.TrimSpace(protocol.Deref(entry.CloseReason)); reason != "" {
 			fmt.Fprintf(w, "because    %s\n", reason)
 		}

@@ -128,6 +128,10 @@ const (
 	CmdCrewWake                      = "crew_wake"
 	CmdCrewSleep                     = "crew_sleep"
 	CmdCrewSet                       = "crew_set"
+	CmdCrewCreate                    = "crew_create"
+	CmdCrewRetire                    = "crew_retire"
+	CmdCrewRestore                   = "crew_restore"
+	CmdCrewRename                    = "crew_rename"
 	CmdCrewPrime                     = "crew_prime"
 	CmdCrewHandoff                   = "crew_handoff"
 	CmdStop                          = "stop"
@@ -232,7 +236,6 @@ const (
 	CmdBrowserControl                = "browser_control"
 	CmdBrowserControlResult          = "browser_control_result"
 	CmdRenameSession                 = "rename_session"
-	CmdSetChiefOfStaff               = "set_chief_of_staff"
 	CmdSetSessionContextWindowCap    = "set_session_context_window_cap"
 )
 
@@ -326,7 +329,6 @@ const (
 	EventTerminalBindingsUpdated         = "terminal_bindings_updated"
 	EventSessionsUpdated                 = "sessions_updated"
 	EventRenameResult                    = "rename_result"
-	EventChiefOfStaffResult              = "chief_of_staff_result"
 	EventSessionContextWindowCapResult   = "session_context_window_cap_result"
 	EventGardenSeedsUpdated              = "garden_seeds_updated"
 	EventGardenReviewUpdated             = "garden_review_updated"

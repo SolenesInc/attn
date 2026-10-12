@@ -29,7 +29,7 @@ func TestASeedRemembersWhereAndHowItsClosedOrReapedTenderRan(t *testing.T) {
 		run.Reply("Fixed. <!-- attn:state=idle -->")
 		testworld.AwaitSession(app, string(spawned.ID), func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 		seed := plantSeedAs(t, cli, string(spawned.ID), "fix the "+name+" checkout")
-		if _, err := cli.SeedTransition(spawned.ID, seed, "tend", "", "", false, client.SeedTransitionOptions{}); err != nil {
+		if _, err := cli.SeedTransition(spawned.ID, seed, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
 			t.Fatalf("%s tends %s: %v", spawned.ID, seed, err)
 		}
 		tenders[name] = &tender{repo: repo, cwd: cwd, seed: seed, pane: sessionPane{session: string(spawned.ID), desktop: workspace, pane: pane}, run: run}

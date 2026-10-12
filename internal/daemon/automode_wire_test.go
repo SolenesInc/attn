@@ -102,8 +102,8 @@ func TestAutoModeProposalWaitsForTheUserAndPromotesOnce(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
 
-	rule := proposeAmendment(t, cli, automode.KindRule, ruleValue(t, automode.DecisionPrompt, "", "git", "push"), "session-1")
-	host := proposeAmendment(t, cli, automode.KindHost, hostValue(t, "github.com", automode.HostAllow), "")
+	rule := proposeAmendment(t, w, cli, automode.KindRule, ruleValue(t, automode.DecisionPrompt, "", "git", "push"), "session-1")
+	host := proposeAmendment(t, w, cli, automode.KindHost, hostValue(t, "github.com", automode.HostAllow), "")
 
 	pending := autoModeShow(t, cli)
 	if got := userRuleLines(t, pending.Config); len(got) != 0 {
@@ -115,7 +115,7 @@ func TestAutoModeProposalWaitsForTheUserAndPromotesOnce(t *testing.T) {
 	if len(pending.Proposals) != 2 {
 		t.Fatalf("pending proposals = %+v, want both", pending.Proposals)
 	}
-	if proposer := proposalByID(pending.Proposals, rule.ID).ProposedBy; proposer != "session-1" {
+	if proposer := proposalByID(pending.Proposals, rule.ID).ProposedBy; proposer == nil || proposer.Ref != "session:session-1" {
 		t.Errorf("the rule proposal credits %q, want session-1", proposer)
 	}
 
@@ -148,7 +148,7 @@ func TestAutoModeProposalWaitsForTheUserAndPromotesOnce(t *testing.T) {
 func TestAutoModeDiscardLeavesTheConfigAlone(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
-	proposal := proposeAmendment(t, cli, automode.KindRule, ruleValue(t, automode.DecisionAllow, "", "curl"), "")
+	proposal := proposeAmendment(t, w, cli, automode.KindRule, ruleValue(t, automode.DecisionAllow, "", "curl"), "")
 
 	discarded := testworld.Request(app, protocol.AutoModeDiscardMessage{
 		Cmd: protocol.CmdAutoModeDiscard, ID: proposal.ID, RequestID: uuid.NewString(),
@@ -169,12 +169,12 @@ func TestAutoModeRepeatedAsksDedupePerAskerAndOnePromotionAnswersThemAll(t *test
 	app, cli := w.App(), w.Client()
 	value := ruleValue(t, automode.DecisionAllow, "", "git", "push")
 
-	first := proposeAmendment(t, cli, automode.KindRule, value, "session-a")
-	if again := proposeAmendment(t, cli, automode.KindRule, value, "session-a"); again.ID != first.ID {
+	first := proposeAmendment(t, w, cli, automode.KindRule, value, "session-a")
+	if again := proposeAmendment(t, w, cli, automode.KindRule, value, "session-a"); again.ID != first.ID {
 		t.Errorf("the same ask while pending recorded %d, want the existing %d", again.ID, first.ID)
 	}
-	other := proposeAmendment(t, cli, automode.KindRule, value, "session-b")
-	if other.ID == first.ID || other.ProposedBy != "session-b" {
+	other := proposeAmendment(t, w, cli, automode.KindRule, value, "session-b")
+	if other.ID == first.ID || other.ProposedBy == nil || other.ProposedBy.Ref != "session:session-b" {
 		t.Fatalf("session-b's ask = %+v, want its own proposal", other)
 	}
 	if got := len(autoModeShow(t, cli).Proposals); got != 2 {
@@ -188,11 +188,11 @@ func TestAutoModeRepeatedAsksDedupePerAskerAndOnePromotionAnswersThemAll(t *test
 		t.Errorf("pending = %+v, want the sibling ask answered by the promotion", pending)
 	}
 
-	retracted := proposeAmendment(t, cli, automode.KindRule, ruleValue(t, automode.DecisionPrompt, "", "ssh", "prod"), "session-a")
+	retracted := proposeAmendment(t, w, cli, automode.KindRule, ruleValue(t, automode.DecisionPrompt, "", "ssh", "prod"), "session-a")
 	testworld.Request(app, protocol.AutoModeDiscardMessage{
 		Cmd: protocol.CmdAutoModeDiscard, ID: retracted.ID, RequestID: uuid.NewString(),
 	}, protocol.EventAutoModeDiscardResult, func(protocol.AutoModeDiscardResultMessage) bool { return true })
-	anew := proposeAmendment(t, cli, automode.KindRule, ruleValue(t, automode.DecisionPrompt, "", "ssh", "prod"), "session-a")
+	anew := proposeAmendment(t, w, cli, automode.KindRule, ruleValue(t, automode.DecisionPrompt, "", "ssh", "prod"), "session-a")
 	if anew.ID == retracted.ID {
 		t.Error("asking again after a discard reused the discarded proposal")
 	}
@@ -203,7 +203,7 @@ func TestAutoModeProposalCapNamesTheProposerTheLimitAndTheAsk(t *testing.T) {
 	app, cli := w.App(), w.Client()
 	var ids []int
 	for i := range automode.MaxPendingProposalsPerProposer {
-		ids = append(ids, proposeAmendment(t, cli, automode.KindRule,
+		ids = append(ids, proposeAmendment(t, w, cli, automode.KindRule,
 			ruleValue(t, automode.DecisionAllow, "", "curl", fmt.Sprintf("https://example.com/%d", i)), "session-a").ID)
 	}
 	last := ruleValue(t, automode.DecisionAllow, "", "curl", "https://example.com/last")
@@ -216,12 +216,12 @@ func TestAutoModeProposalCapNamesTheProposerTheLimitAndTheAsk(t *testing.T) {
 			t.Errorf("the refusal %q does not name %q", err, want)
 		}
 	}
-	proposeAmendment(t, cli, automode.KindRule, last, "session-b")
+	proposeAmendment(t, w, cli, automode.KindRule, last, "session-b")
 
 	testworld.Request(app, protocol.AutoModeDiscardMessage{
 		Cmd: protocol.CmdAutoModeDiscard, ID: ids[0], RequestID: uuid.NewString(),
 	}, protocol.EventAutoModeDiscardResult, func(protocol.AutoModeDiscardResultMessage) bool { return true })
-	proposeAmendment(t, cli, automode.KindRule, ruleValue(t, automode.DecisionAllow, "", "curl", "https://example.com/after"), "session-a")
+	proposeAmendment(t, w, cli, automode.KindRule, ruleValue(t, automode.DecisionAllow, "", "curl", "https://example.com/after"), "session-a")
 }
 
 func TestPromotingEveryAmendmentKindMovesTheConfig(t *testing.T) {
@@ -229,7 +229,7 @@ func TestPromotingEveryAmendmentKindMovesTheConfig(t *testing.T) {
 	app, cli := w.App(), w.Client()
 	promoteValue := func(kind, value string) protocol.AutoModeConfigInfo {
 		t.Helper()
-		result := promoteProposal(app, proposeAmendment(t, cli, kind, value, "session-a").ID)
+		result := promoteProposal(app, proposeAmendment(t, w, cli, kind, value, "session-a").ID)
 		if !result.Success {
 			t.Fatalf("promote %s %s: %s", kind, value, protocol.Deref(result.Error))
 		}
@@ -279,7 +279,7 @@ func TestAutoModeShippedEntriesStayAheadOfUserRulesAndCannotBeTakenAway(t *testi
 	app, cli := w.App(), w.Client()
 	shipped := automode.ShippedRules()[0]
 
-	if !promoteProposal(app, proposeAmendment(t, cli, automode.KindRule, ruleValue(t, automode.DecisionPrompt, "", "ssh", "prod"), "").ID).Success {
+	if !promoteProposal(app, proposeAmendment(t, w, cli, automode.KindRule, ruleValue(t, automode.DecisionPrompt, "", "ssh", "prod"), "").ID).Success {
 		t.Fatal("promoting a user rule failed")
 	}
 	cfg := autoModeConfig(t, cli)
@@ -327,6 +327,7 @@ func TestAutoModeShippedEntriesStayAheadOfUserRulesAndCannotBeTakenAway(t *testi
 		automode.KindHostRemove: hostValue(t, shippedHost, automode.HostDeny),
 	}
 	for kind, value := range overrides {
+		registerSessions(t, w, cli, "session-a")
 		if _, err := cli.AutoModePropose(kind, "", value, "session-a"); err == nil {
 			t.Errorf("a %s proposal over a shipped entry was recorded", kind)
 		}
@@ -381,7 +382,7 @@ func TestAutoModeRuleEditsReplaceInPlaceAndRemoveOnlyTheNamedRule(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !promoteProposal(app, proposeAmendment(t, cli, automode.KindRule, alternatives, "").ID).Success {
+	if !promoteProposal(app, proposeAmendment(t, w, cli, automode.KindRule, alternatives, "").ID).Success {
 		t.Fatal("promoting the rule with alternatives failed")
 	}
 	removed := remove([]string{"git"}, []string{"push", "pull"})
@@ -596,7 +597,7 @@ func TestAutoModeAsksFromASessionOnlyProposeAndReadAsTheReviewerSeesThem(t *test
 		{automode.KindHostRemove, `{"host":"crates.io","decision":"allow"}`, "remove allow crates.io"},
 		{automode.KindPolicy, `{"approval_policy":"never"}`, "approval never"},
 	} {
-		proposal := proposeAmendment(t, cli, tc.kind, tc.value, "session-a")
+		proposal := proposeAmendment(t, w, cli, tc.kind, tc.value, "session-a")
 		if proposal.State != automode.StatePending || proposal.Summary != tc.summary {
 			t.Errorf("%s proposal = %q (%s), want pending %q", tc.kind, proposal.Summary, proposal.State, tc.summary)
 		}
@@ -619,6 +620,7 @@ func TestAutoModeRefusesWhatItCouldNeverApplyNamingTheAsk(t *testing.T) {
 		{automode.KindRule, `{"pattern":["git push"],"decision":"allow"}`, "one command token per entry"},
 		{automode.KindHost, `{"host":"github.com","decision":"prompt"}`, `unknown host decision "prompt"`},
 	} {
+		registerSessions(t, w, cli, "session-a")
 		if _, err := cli.AutoModePropose(tc.kind, "", tc.value, "session-a"); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("proposing %s %s = %v, want a refusal naming %q", tc.kind, tc.value, err, tc.want)
 		}
@@ -689,7 +691,7 @@ func TestNoAutoModeWriteIsReachableOverTheCLISocket(t *testing.T) {
 	}); !seeded.Success {
 		t.Fatalf("adding a rule from the app: %s", protocol.Deref(seeded.Error))
 	}
-	proposal := proposeAmendment(t, cli, automode.KindHost, hostValue(t, "crates.io", automode.HostAllow), "session-a")
+	proposal := proposeAmendment(t, w, cli, automode.KindHost, hostValue(t, "crates.io", automode.HostAllow), "session-a")
 	before := autoModeShow(t, cli)
 
 	for _, payload := range []string{
@@ -813,9 +815,13 @@ func userRuleLines(t *testing.T, cfg protocol.AutoModeConfigInfo) []string {
 	return lines
 }
 
-func proposeAmendment(t *testing.T, cli *client.Client, kind, value, proposedBy string) protocol.AutoModeProposalInfo {
+func proposeAmendment(t *testing.T, w *world, cli *client.Client, kind, value, proposedBy string) protocol.AutoModeProposalInfo {
 	t.Helper()
-	result, err := cli.AutoModePropose(kind, "", value, proposedBy)
+	if proposedBy == "" {
+		proposedBy = "proposer"
+	}
+	registerSessions(t, w, cli, proposedBy)
+	result, err := cli.AutoModePropose(kind, "", value, protocol.SessionID(proposedBy))
 	if err != nil {
 		t.Fatalf("propose %s %s: %v", kind, value, err)
 	}

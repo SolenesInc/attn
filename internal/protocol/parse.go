@@ -104,6 +104,10 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdCrewCharterSet:                decodeInto[CrewCharterSetMessage],
 	CmdCrewHandoffsGet:               decodeInto[CrewHandoffsGetMessage],
 	CmdCrewHandoffGet:                decodeInto[CrewHandoffGetMessage],
+	CmdCrewCreate:                    decodeInto[CrewCreateMessage],
+	CmdCrewRetire:                    decodeInto[CrewRetireMessage],
+	CmdCrewRestore:                   decodeInto[CrewRestoreMessage],
+	CmdCrewRename:                    decodeInto[CrewRenameMessage],
 	CmdSeedPlant:                     decodeInto[SeedPlantMessage],
 	CmdSeedPlot:                      decodeInto[SeedPlotMessage],
 	CmdSeedList:                      decodeInto[SeedListMessage],
@@ -257,7 +261,6 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdDesktopDockTile:               decodeInto[DesktopDockTileMessage],
 	CmdDesktopUpdateTile:             decodeInto[DesktopUpdateTileMessage],
 	CmdDesktopSetSplitRatio:          decodeInto[DesktopSetSplitRatioMessage],
-	CmdSetChiefOfStaff:               decodeInto[SetChiefOfStaffMessage],
 	CmdSetSessionContextWindowCap:    decodeInto[SetSessionContextWindowCapMessage],
 }
 

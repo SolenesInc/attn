@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
+import { useProfilesStore } from '../../store/profiles';
 import { useNotebookSurfaceContext } from '../../contexts/NotebookSurfaceContext';
 import { NotebookSurface, type NotebookSurfaceHandle } from '../NotebookSurface';
 
@@ -15,6 +16,7 @@ export const NotebookTile = forwardRef<NotebookSurfaceHandle, {
 }, ref) {
   const { makeDaemon, changeSignalFor, effectiveNotebookRoot, sendFsWatch, sendFsUnwatch, connectionGeneration } = useNotebookSurfaceContext();
 
+  const profileId = useProfilesStore((state) => state.selectedProfileId);
   const offRoot = !!root && root !== effectiveNotebookRoot;
 
   // fs_changed carries the resolved root (/tmp -> /private/tmp); using the raw one
@@ -64,9 +66,7 @@ export const NotebookTile = forwardRef<NotebookSurfaceHandle, {
 
   return (
     <NotebookSurface
-      // Remount on root change or the old draft autosaves under the NEW root. Keys on
-      // the raw prop: a normalization must not remount.
-      key={root ?? ''}
+      key={root ?? `${profileId}:${effectiveNotebookRoot}`}
       ref={ref}
       variant="tile"
       active

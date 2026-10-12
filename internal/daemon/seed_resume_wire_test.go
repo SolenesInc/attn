@@ -55,16 +55,16 @@ func TestResumingASeedPreservesItsConversationAndProjectAssignment(t *testing.T)
 	if reopened := showSession(t, cli, string(session)); protocol.Deref(reopened.ClosedAt) != "" {
 		t.Errorf("the ledger still shows %s closed at %s after the resume", session, protocol.Deref(reopened.ClosedAt))
 	}
-	if after := lifeShow(t, cli, seed); after.Seed.Status != before.Seed.Status || after.Seed.TenderSession != before.Seed.TenderSession || after.NotesTotal != before.NotesTotal {
+	if after := lifeShow(t, cli, seed); after.Seed.Status != before.Seed.Status || protocol.Deref(protocol.Deref(after.Seed.Tender).SessionID) != protocol.Deref(protocol.Deref(before.Seed.Tender).SessionID) || after.NotesTotal != before.NotesTotal {
 		t.Errorf("the resume moved the seed from %s under %s with %d notes to %s under %s with %d notes",
-			before.Seed.Status, before.Seed.TenderSession, before.NotesTotal, after.Seed.Status, after.Seed.TenderSession, after.NotesTotal)
+			before.Seed.Status, protocol.Deref(protocol.Deref(before.Seed.Tender).SessionID), before.NotesTotal, after.Seed.Status, protocol.Deref(protocol.Deref(after.Seed.Tender).SessionID), after.NotesTotal)
 	}
 
-	child, err := cli.SeedPlant(session, "Payments", "Implement payments.", seed, "", "")
+	child, err := cli.SeedPlant(session, "Payments", "Implement payments.", seed, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	sibling, err := cli.SeedPlant(session, "Receipts", "Implement receipts.", seed, "", "")
+	sibling, err := cli.SeedPlant(session, "Receipts", "Implement receipts.", seed, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestResumingASeedPreservesItsConversationAndProjectAssignment(t *testing.T)
 		t.Fatalf("resuming the parked child = %+v, want %s relaunched", reclaimed, session)
 	}
 	seedResumeContinues(t, w, first, string(session))
-	if got := lifeShow(t, cli, child.Seed.ID).Seed; got.Status != "growing" || got.TenderSession != session || protocol.Deref(got.LastExecutionID) != session {
+	if got := lifeShow(t, cli, child.Seed.ID).Seed; got.Status != "growing" || protocol.Deref(protocol.Deref(got.Tender).SessionID) != session || protocol.Deref(got.LastExecutionID) != session {
 		t.Errorf("the resumed parked child = %+v, want it growing again under %s", got, session)
 	}
 	ready, err := cli.SeedReady(session, "", false)
@@ -215,8 +215,8 @@ func TestAResumeWhoseAgentCannotStartKeepsItsPaneAndReleasesItsClaim(t *testing.
 	if after := paneSessions(w); len(after) != len(before)+1 || !slices.Contains(after, string(delegated.SessionID)) {
 		t.Errorf("failed resume panes = %q, want retained attempt", after)
 	}
-	if after := lifeShow(t, cli, delegated.SeedID).Seed; after.TenderSession != delegated.SessionID || after.Status != "growing" {
-		t.Errorf("the failed resume left the seed %s under %q, want growing under %s", after.Status, after.TenderSession, delegated.SessionID)
+	if after := lifeShow(t, cli, delegated.SeedID).Seed; protocol.Deref(after.Tender).Ref != protocol.PartyRef("session:"+string(delegated.SessionID)) || after.Status != "growing" {
+		t.Errorf("the failed resume left the seed %s under %q, want growing under %s", after.Status, protocol.Deref(after.Tender).Ref, delegated.SessionID)
 	}
 	w.restart()
 	cli = w.Client()

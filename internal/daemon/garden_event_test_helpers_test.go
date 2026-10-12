@@ -1,10 +1,9 @@
 package daemon
 
 import (
-	"time"
-
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/store"
+	"time"
 )
 
 func markAutomationRunDeliveredForTest(s *store.Store, runID, resolved string, now time.Time) error {

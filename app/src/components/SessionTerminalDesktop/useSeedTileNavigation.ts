@@ -113,15 +113,9 @@ function useLiveSeedDocument(seedId: string, gardenSeeds: Seed[], enabled: boole
     // it, so never paint the old seed while the new one's document is in flight.
     if (!document || document.seed.id !== seedId) return null;
     if (!liveSeed || liveSeed.rev < document.seed.rev) return document;
-    const tenderChanged =
-      liveSeed.tender_session !== document.seed.tender_session ||
-      liveSeed.tender_member !== document.seed.tender_member;
     return {
       ...document,
       seed: liveSeed.rev === document.seed.rev ? { ...liveSeed, continuation: document.seed.continuation } : liveSeed,
-      tender_holds: tenderChanged
-        ? Boolean(liveSeed.tender_session || liveSeed.tender_member)
-        : document.tender_holds,
     };
   }, [document, liveSeed, seedId]);
 
@@ -145,15 +139,9 @@ function useLiveSeedDocument(seedId: string, gardenSeeds: Seed[], enabled: boole
       .then((next) => {
         if (ignore) return;
         if (liveSeed && liveSeed.rev >= next.seed.rev) {
-          const tenderChanged =
-            liveSeed.tender_session !== next.seed.tender_session ||
-            liveSeed.tender_member !== next.seed.tender_member;
           setDocument({
             ...next,
             seed: liveSeed.rev === next.seed.rev ? { ...liveSeed, continuation: next.seed.continuation } : liveSeed,
-            tender_holds: tenderChanged
-              ? Boolean(liveSeed.tender_session || liveSeed.tender_member)
-              : next.tender_holds,
           });
         } else {
           setDocument(next);

@@ -83,7 +83,7 @@ try {
     ? JSON.parse(fs.readFileSync(process.env.ATTN_SETTINGS_FIXTURE, 'utf8'))
     : { 'activity.config': '{"agent":"codex","model":"gpt-5.6-luna","effort":"low"}', 'activity.intervals': '{"watching":120,"present":300}' };
   await Promise.all(Object.entries(fixture).map(([key, value]) => set(key, value)));
-  await Promise.all(Object.entries({ default_model_codex: '', default_effort_codex: '', default_context_window_cap_codex: '', 'session_cost.price.settings-check-model': '', chief_model_claude: '', 'garden.advisor': '{"agent":"codex","model":"gpt-5.6-luna","effort":"xhigh"}', new_session_agent: 'codex' }).map(([key, value]) => set(key, value)));
+  await Promise.all(Object.entries({ default_model_codex: '', default_effort_codex: '', default_context_window_cap_codex: '', 'session_cost.price.settings-check-model': '', 'garden.advisor': '{"agent":"codex","model":"gpt-5.6-luna","effort":"xhigh"}', new_session_agent: 'codex' }).map(([key, value]) => set(key, value)));
   await client.request('dismiss_whats_new');
   await client.request('dispatch_shortcut', { shortcutId: 'ui.openSettings' });
   await runner.step('agent_sections_and_keyboard_save', async () => {
@@ -124,9 +124,6 @@ try {
     await openRoute('settings-activity-route');
     await click(`${popover} [data-harness="claude"]`);
     await saved('activity.config', '{"agent":"claude"}', () => click(`${popover} [data-model=""]`));
-    await openRoute('settings-chief-route-claude');
-    await saved('chief_model_claude', 'sonnet', () => manualModel('sonnet'));
-    await client.request('dom_key', { selector: popover, key: 'Escape' });
     await section('backgroundAgents');
     await screenshot('03-background-agents.png');
   });
