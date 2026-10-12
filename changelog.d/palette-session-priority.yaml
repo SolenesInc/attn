@@ -1,0 +1,3 @@
+kind: added
+area: palette
+change: Mark the current session as priority or clear its priority from the command palette.
