@@ -198,12 +198,12 @@
         "note": "Green matrix-digest.txt reports 68.7s (last-matrix.json durationMs=68706) on 1183db93b. Covers native close shortcuts, both focus-history sequences, background close and repeated closes with keyboard focus."
       },
       "palette-order": {
-        "run": "palette-order-2026-10-04T22-15-43-603Z",
+        "run": "palette-order-2026-10-12T13-38-55-805Z",
         "job": "Local packaged scenario, palette-order isolated instance",
-        "recordedAt": "2026-10-04",
-        "seconds": 55.41,
+        "recordedAt": "2026-10-12",
+        "seconds": 16.376,
         "runnerClass": "local macOS",
-        "note": "Green ATTN_VERDICT durationMs=55410, including cleanup. Native command selection, learned ordering, pins, both palette entry paths and terminal focus restoration. Screenshot and summary attached to seed s-e4azmr. Remeasure on Linux CI."
+        "note": "Green ATTN_VERDICT durationMs=16376, including cleanup, in the isolated palette-priority instance. Native command selection, learned ordering, pins, both palette entry paths, priority mark/clear with sidebar flags, and terminal focus restoration. Screenshots and summary attached to seed s-3rrxey. Remeasure on Linux CI."
       },
       "autoclose-on-exit": {
         "run": "autoclose-on-exit-2026-10-07T10-41-39-541Z",
@@ -316,7 +316,7 @@
     "profile-lifecycle": 18.5,
     "garden-profile-scope": 29.9,
     "launch-desktops": 26.739,
-    "palette-order": 55.41,
+    "palette-order": 16.376,
     "move-with-delegates": 27.874,
     "desktop-order": 23.413,
     "close-desktop": 33.297
