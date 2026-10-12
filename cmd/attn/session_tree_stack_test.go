@@ -136,3 +136,97 @@ func TestSessionTreeShowsDelegationChainsAndKeepsChildrenOfClosedDispatchers(t *
 	app.TypeLine(shell, "exit")
 	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == shell })
 }
+
+func TestSessionTreeKeepsAgentReadsInTheirProfileWithoutConsumingSeedNotifications(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s.Start()
+	app := s.App()
+	homeProfile := app.SelectedProfile()
+	created := testworld.Request(app, protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, RequestID: "side", Name: "Side"},
+		protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "side" })
+	if !created.Success {
+		t.Fatalf("create Side: %+v", created)
+	}
+	sideProfile := created.Profile.ID
+	sideApp := s.AppOn(sideProfile)
+	cwd := s.Path("profiles")
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	delegate := func(peer *testworld.Peer, name string) (delegated, *fakeagent.Run) {
+		t.Helper()
+		source := s.Spawn(peer, fakeagent.Claude, cwd, labelled(name+" planner"))
+		s.Launched(source)
+		started := s.Run(testworld.Invocation{Session: source, Args: []string{
+			"delegate", "--brief", "Work in this profile", "--cwd", cwd, "--name", name + " delegate", "--model", "default",
+		}})
+		if started.Code != 0 {
+			t.Fatalf("delegate %s: %s", name, started.Stderr)
+		}
+		var result delegated
+		started.JSON(t, &result)
+		run := s.Launched(result.SessionID)
+		run.Prompted()
+		run.Reply("Ready. <!-- attn:state=waiting_input -->")
+		testworld.AwaitSession(peer, result.SessionID, func(x protocol.Session) bool {
+			return x.State == protocol.SessionStateWaitingInput && protocol.Deref(x.TurnOwed)
+		})
+		return result, run
+	}
+	home, homeAgent := delegate(app, "home")
+	side, _ := delegate(sideApp, "side")
+	tree := func(caller string, args ...string) string {
+		t.Helper()
+		result := s.Run(testworld.Invocation{Session: caller, Args: append([]string{"session", "list", "--tree"}, args...)})
+		if result.Code != 0 {
+			t.Fatalf("tree for %s with %q: %s", caller, args, result.Stderr)
+		}
+		return result.Stdout
+	}
+	user := tree("")
+	for _, slug := range []string{"home-delegate", "side-delegate"} {
+		if !strings.Contains(user, slug) {
+			t.Errorf("user tree is missing %s:\n%s", slug, user)
+		}
+	}
+	for _, tc := range []struct {
+		caller, profile, own, foreign string
+	}{
+		{"", homeProfile, "home-delegate", "side-delegate"},
+		{"", sideProfile, "side-delegate", "home-delegate"},
+		{home.SessionID, "", "home-delegate", "side-delegate"},
+		{side.SessionID, "", "side-delegate", "home-delegate"},
+		{home.SessionID, homeProfile, "home-delegate", "side-delegate"},
+	} {
+		var args []string
+		if tc.profile != "" {
+			args = []string{"--profile", tc.profile}
+		}
+		shown := tree(tc.caller, args...)
+		if !strings.Contains(shown, tc.own) || strings.Contains(shown, tc.foreign) {
+			t.Errorf("tree for %s with %q crosses profile scope:\n%s", tc.caller, args, shown)
+		}
+	}
+	foreign := tree(home.SessionID, "--profile", sideProfile)
+	missing := tree(home.SessionID, "--profile", "missing-profile")
+	if foreign != missing || !strings.Contains(foreign, "no sessions match those filters") {
+		t.Errorf("foreign profile %q and missing profile %q should both be empty", foreign, missing)
+	}
+	note := s.Attn("seed", "note", home.SeedID, "--profile", homeProfile, "-m", "Review the result", "--ring")
+	if note.Code != 0 {
+		t.Fatalf("ring home delegate: %s", note.Stderr)
+	}
+	homeAgent.Prompted()
+	if shown := tree(home.SessionID); !strings.Contains(shown, "home-delegate") || strings.Contains(shown, "side-delegate") {
+		t.Errorf("notified agent's tree crosses profile scope:\n%s", shown)
+	}
+	var inbox protocol.AgentInboxBatchResult
+	s.Run(testworld.Invocation{Session: home.SessionID, Args: []string{"agent", "inbox", "--json"}}).JSON(t, &inbox)
+	for _, item := range inbox.Items {
+		if strings.Contains(item.Content, home.SeedID) {
+			return
+		}
+	}
+	t.Fatalf("tree consumed the pending seed notification: %+v", inbox.Items)
+}

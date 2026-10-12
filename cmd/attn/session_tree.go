@@ -17,9 +17,25 @@ type sessionTreeNode struct {
 }
 
 func runSessionTree(w io.Writer, cli *client.Client, profileID string) error {
+	caller, err := currentSession(cli)
+	if err != nil {
+		return err
+	}
 	listed, err := cli.List("")
 	if err != nil {
 		return err
+	}
+	callerProfileID := ""
+	if caller != "" {
+		for _, session := range listed.Sessions {
+			if session.ID == caller {
+				callerProfileID = session.ProfileID
+				break
+			}
+		}
+		if callerProfileID == "" {
+			return fmt.Errorf("caller session %s is not in the live list", caller)
+		}
 	}
 	profiles := make(map[string]string, len(listed.Profiles))
 	for _, profile := range listed.Profiles {
@@ -29,6 +45,9 @@ func runSessionTree(w io.Writer, cli *client.Client, profileID string) error {
 	byID := make(map[protocol.SessionID]*sessionTreeNode, len(listed.Sessions))
 	slugsByProfile := map[string]map[string]string{}
 	for _, session := range listed.Sessions {
+		if callerProfileID != "" && session.ProfileID != callerProfileID {
+			continue
+		}
 		if profileID != "" && session.ProfileID != profileID {
 			continue
 		}
