@@ -64,6 +64,7 @@ export function useAppCommands(): PaletteCommand[] {
     handleToggleQueueMode,
     activeGroupForCommands,
     activeSessionForCommands,
+    togglePriority,
     handleSnoozeActiveSession,
     handleWakeActiveSession,
   } = useAttentionQueueContext();
@@ -477,6 +478,18 @@ export function useAppCommands(): PaletteCommand[] {
     const group = activeGroupForCommands;
     if (!group) return actionMenuItems;
     const activeSession = activeSessionForCommands;
+    const sessionPriorityItems: PaletteCommand[] = activeSession
+      ? [{
+          id: 'toggle-session-priority',
+          pinned: true,
+          title: activeSession.priority ? 'Clear priority' : 'Mark as priority',
+          description: activeSession.label,
+          keywords: ['priority', 'session', 'agent', activeSession.label],
+          icon: <AttentionActionIcon />,
+          shortcut: [shortcutTokens('session.priority')],
+          run: () => togglePriority(activeSession),
+        }]
+      : [];
     const delegationItems: PaletteCommand[] = activeSession
       ? [
           {
@@ -564,6 +577,7 @@ export function useAppCommands(): PaletteCommand[] {
         : [];
     return [
       ...actionMenuItems,
+      ...sessionPriorityItems,
       ...delegationItems,
       ...sessionSeedItems,
       ...sessionUsageItems,
@@ -577,6 +591,7 @@ export function useAppCommands(): PaletteCommand[] {
     actionMenuItems,
     activeGroupForCommands,
     activeSessionForCommands,
+    togglePriority,
     seeds,
   ]);
 

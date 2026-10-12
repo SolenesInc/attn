@@ -4,7 +4,7 @@ export const scenarioCatalog = [
   {
     id: 'palette-order',
     runnerId: 'PALETTE-ORDER',
-    label: 'Command palette learns selections, preserves pins, and restores native input focus',
+    label: 'Command palette learns selections, preserves pins, toggles session priority, and restores native input focus',
     command: ['node', 'scripts/real-app-harness/scenario-palette-order.mjs'],
   },
   {

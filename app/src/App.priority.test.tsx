@@ -2,6 +2,7 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { daemonSession, soloDesktop, type DaemonSession } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
+import { openActionMenu, openSession } from './test/appFixtures';
 
 const queueRows = () => [...screen.getByTestId('sidebar-queue').querySelectorAll('[data-testid^="queue-turn-"]')].map((row) => row.getAttribute('data-session-id'));
 
@@ -23,6 +24,41 @@ function launch(sessions = team()) {
 }
 
 describe('Priority sessions', () => {
+  it.each(['true', 'false'])('searches and toggles current-session priority both ways with queue mode %s', async (queueMode) => {
+    const sessions = team();
+    const { daemon } = await renderApp({ initialState: {
+      settings: { queue_mode_enabled: queueMode }, sessions,
+      desktops: sessions.map((session) => soloDesktop(session.id)),
+    } });
+    await openSession(daemon, 'old');
+
+    for (const priority of [true, false]) {
+      const search = await openActionMenu(daemon);
+      await gesture(daemon, () => fireEvent.change(search, { target: { value: '>priority old' } }));
+      expect(screen.getByRole('option')).toHaveTextContent(priority ? 'Mark as priority' : 'Clear priority');
+      await gesture(daemon, () => fireEvent.keyDown(search, { key: 'Enter' }));
+      expect(daemon.sentOf('set_session_priority')).toEqual(priority
+        ? [{ cmd: 'set_session_priority', session_id: 'old', priority: true }]
+        : [
+            { cmd: 'set_session_priority', session_id: 'old', priority: true },
+            { cmd: 'set_session_priority', session_id: 'old', priority: false },
+          ]);
+      expect(screen.queryByRole('dialog', { name: 'Commands' })).toBeNull();
+      daemon.emit({ event: 'sessions_updated', sessions: sessions.map((session) => session.id === 'old' ? { ...session, priority } : session) });
+      await daemon.idle();
+      const row = screen.getByTestId(queueMode === 'true' ? 'queue-turn-old' : 'sidebar-session-old');
+      expect(within(row).queryByRole('img', { name: 'Priority' }) !== null).toBe(priority);
+    }
+  });
+
+  it('offers no current-session priority command on home', async () => {
+    const { daemon } = await launch();
+    const search = await openActionMenu(daemon);
+    await gesture(daemon, () => fireEvent.change(search, { target: { value: '>priority' } }));
+    expect(screen.queryByRole('option')).toBeNull();
+    expect(daemon.sentOf('set_session_priority')).toEqual([]);
+  });
+
   it('orders owed priority turns first on home, the sidebar, the queue bar and jump to waiting', async () => {
     const { daemon } = await launch();
     expect(queueRows()).toEqual(['urgent', 'old', 'middle']);
