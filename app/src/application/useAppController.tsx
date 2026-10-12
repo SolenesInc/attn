@@ -311,13 +311,14 @@ export function useAppController({
   const { setSnoozeMenu } = attentionQueue;
   const { isOpen: whatsNewOpen, dismiss: dismissWhatsNew } = whatsNew;
   useEffect(() => useSessionStore.subscribe((state, previous) => {
-    if (previous.intent?.target.kind !== 'session' || state.view !== 'session' || !state.focusRequest || state.focusRequest.id === previous.focusRequest?.id) return;
+    const intent = state.intent ?? previous.intent;
+    if (intent?.target.kind !== 'session' || state.view !== 'session' || !state.focusRequest || state.focusRequest.id === previous.focusRequest?.id) return;
     closeCrewPanel();
     setNotebookOpen(false);
     setSessionsOpen(false);
     setPalette(null);
     if (gardenHoldsWindow) closeGarden();
-    if (!previous.intent.focusOwner?.closest('.toast')) return;
+    if (!intent.focusOwner?.closest('.toast')) return;
     if (settingsOpen) void settingsModalRef.current?.close();
     setShortcutsOpen(false);
     setShortcutEditorOpen(false);

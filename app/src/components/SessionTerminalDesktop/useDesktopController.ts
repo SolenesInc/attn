@@ -426,6 +426,10 @@ export function useDesktopController(
   const prevPaneGeometryRef = useRef(paneGeometry);
   const sessionVisibleRef = useRef(false);
   const sessionVisible = enabled && isActiveSession && isSessionViewVisible;
+  useLayoutEffect(() => {
+    const focused = document.activeElement;
+    if (!sessionVisible && focused instanceof HTMLElement && panesContainerRef.current?.contains(focused)) focused.blur();
+  }, [sessionVisible]);
 
   useImperativeHandle(
     ref,
@@ -537,7 +541,7 @@ export function useDesktopController(
     };
   }, [renderedPaneIdsKey]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!focusClaim || !sessionVisible || focusClaim.leafId !== activeLeafId) return;
     const active = document.activeElement;
     const userMovedOn = active && active !== focusClaim.focusOwner && !focusIsFree(panesContainerRef.current);
@@ -795,8 +799,9 @@ export function useDesktopController(
 
   const handleGhosttyTerminalReady = useCallback(
     (paneId: string) => (terminal: GhosttyTerminalHandle) => {
-      void runtime.handleTerminalReady(paneId)(terminal);
+      const ready = runtime.handleTerminalReady(paneId)(terminal);
       requestFocusForReadyPane(paneId);
+      return ready;
     },
     [requestFocusForReadyPane, runtime],
   );

@@ -1,6 +1,6 @@
 import type { DaemonSessionSnapshot } from '../store/sessions';
 import type { Desktop, LeafMoved } from '../types/generated';
-import { activeLeafOf, leafShows, sameLeaf, type ActiveLeaf, type Arrangement, type ShowTarget } from './activeLeaf';
+import { activeLeafOf, leafOn, leafShows, sameLeaf, type ActiveLeaf, type Arrangement, type ShowTarget } from './activeLeaf';
 import {
   createLeafHistory,
   moveLeafHistory,
@@ -43,6 +43,8 @@ export interface Intent {
   announce: boolean;
   historyCursor: number | null;
   focusOwner: Element | null;
+  previousView: AppView;
+  focusRequested: boolean;
 }
 
 export type Arrival =
@@ -102,7 +104,7 @@ export function beginIntent(
   return {
     ...state,
     followNextTurn: false,
-    intent: { id, profileId, target, sendsShow, announce, historyCursor, focusOwner },
+    intent: { id, profileId, target, sendsShow, announce, historyCursor, focusOwner, previousView: state.intent?.previousView ?? state.view, focusRequested: false },
     focusRequest: null,
     intentSequence: id,
   };
@@ -189,7 +191,45 @@ export function endIntent(state: SessionNavigationState): SessionNavigationState
 }
 
 export function intentFailed(state: SessionNavigationState, id: number): SessionNavigationState {
-  return state.intent?.id === id ? endIntent(state) : state;
+  return state.intent?.id === id ? { ...endIntent(state), view: state.intent.previousView } : state;
+}
+
+function intentLeaf(arrangement: Arrangement, intent: Intent | null): ActiveLeaf | null {
+  if (!intent || intent.profileId !== arrangement.profileId) return null;
+  const target = intent.target;
+  if (target.kind === 'session') {
+    for (const desktop of arrangement.desktops) {
+      const pane = desktop.panes.find((entry) => entry.session_id === target.sessionId);
+      if (pane) return leafOn(arrangement.profileId, desktop, pane.pane_id);
+    }
+  }
+  if (target.kind === 'leaf') {
+    const desktop = arrangement.desktops.find((entry) => entry.id === target.desktopId);
+    if (desktop) return leafOn(arrangement.profileId, desktop, target.leafId);
+  }
+  if (target.kind === 'desktop') return activeLeafOf({ ...arrangement, currentDesktopId: target.desktopId });
+  return null;
+}
+
+export function displayedArrangement(arrangement: Arrangement, intent: Intent | null): Arrangement {
+  const leaf = intentLeaf(arrangement, intent);
+  const desktopId = leaf?.desktopId ?? (intent?.profileId === arrangement.profileId && intent.target.kind === 'desktop' ? intent.target.desktopId : null);
+  if (!desktopId || !arrangement.desktops.some((desktop) => desktop.id === desktopId)) return arrangement;
+  return {
+    ...arrangement,
+    currentDesktopId: desktopId,
+    desktops: leaf ? arrangement.desktops.map((desktop) => desktop.id === leaf.desktopId && desktop.active_pane_id !== leaf.leafId
+      ? { ...desktop, active_pane_id: leaf.leafId }
+      : desktop) : arrangement.desktops,
+  };
+}
+
+export function focusIntent(state: SessionNavigationState, arrangement: Arrangement): SessionNavigationState {
+  const intent = state.intent;
+  if (!intent || intent.focusRequested) return state;
+  const leaf = intentLeaf(arrangement, intent);
+  if (!leaf) return state;
+  return claimFocus({ ...state, view: 'session', intent: { ...intent, focusRequested: true } }, leaf, intent.focusOwner, intent.announce);
 }
 
 // A history step that landed moves the cursor even when a later step superseded it.
@@ -287,7 +327,7 @@ export function reconcileArrangement(
     } else {
       next = recordVisit(next, arrangement);
     }
-    if (next.view === 'session' && leaf) {
+    if (next.view === 'session' && leaf && !intent.focusRequested) {
       next = claimFocus(next, { desktopId: leaf.desktopId, leafId: leaf.leafId }, intent.focusOwner, intent.announce);
     }
     return next;

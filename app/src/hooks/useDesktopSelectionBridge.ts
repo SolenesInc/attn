@@ -4,6 +4,11 @@ import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useProfilesStore, type ProfilesState } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { activeLeafOf, sameLeaf, sessionOfLeaf, type ActiveLeaf } from '../navigation/activeLeaf';
+import { displayedArrangement } from '../navigation/sessionNavigation';
+import { arrangementOf } from '../store/sessionNavigationSlice';
+import { isRetainedTerminalEvent, retainTerminalEvent, usePendingTerminalInput } from '../store/pendingTerminalInput';
+import { removeCompositionTextNodes } from '../ghostty/input';
+import { terminalClipboardChord } from '../shortcuts/platform';
 
 export function activeLeafIn(state: Pick<ProfilesState, 'selectedProfileId' | 'currentDesktopId' | 'desktops'>): ActiveLeaf | null {
   return activeLeafOf({
@@ -84,6 +89,50 @@ export function useDesktopSelectionBridge(reportFailure: (message: string) => vo
   const intent = useSessionStore((state) => state.intent);
   const sent = useRef(0);
   const reportFailureRef = useRef(reportFailure);
+  useEffect(() => usePendingTerminalInput.subscribe((state, previous) => {
+    if (state.failure && state.failure !== previous.failure) reportFailureRef.current(state.failure.message);
+  }), []);
+  useEffect(() => {
+    const retain = (event: Event) => {
+      const navigation = useSessionStore.getState();
+      const intent = navigation.intent;
+      if (event.defaultPrevented || isRetainedTerminalEvent(event)) return;
+      if (event instanceof KeyboardEvent && terminalClipboardChord(event)) return;
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      const terminal = target?.closest<HTMLElement>('.terminal-container');
+      if (target?.closest('input, textarea, select, [contenteditable="true"]') && !terminal) return;
+      const claim = navigation.focusRequest;
+      const leaf = currentActiveLeaf();
+      const focused = document.activeElement;
+      const awaitingFocus = claim && leaf?.kind === 'agent'
+        && claim.desktopId === leaf.desktopId && claim.leafId === leaf.leafId
+        && (!focused || focused === document.body || focused === claim.focusOwner
+          || focused.matches('.app') || terminal);
+      const sessionId = intent?.target.kind === 'session' && !intent.focusRequested
+        ? intent.target.sessionId
+        : terminal?.dataset.terminalInputReady === '0' ? terminal.dataset.terminalSessionId
+          : awaitingFocus ? leaf.sessionId : null;
+      if (!sessionId) return;
+      const selectionId = intent && ['session', 'leaf', 'desktop'].includes(intent.target.kind) ? intent.id : 0;
+      usePendingTerminalInput.getState().append(sessionId, selectionId, retainTerminalEvent(event));
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.type === 'compositionend' && target?.closest('.terminal-container')) removeCompositionTextNodes(target);
+    };
+    const events = ['keydown', 'keyup', 'paste', 'compositionstart', 'compositionupdate', 'compositionend'];
+    for (const event of events) document.addEventListener(event, retain, true);
+    return () => {
+      for (const event of events) document.removeEventListener(event, retain, true);
+    };
+  }, []);
+  useEffect(() => useSessionStore.subscribe((state, previous) => {
+    if (state.intent === previous.intent) return;
+    const arrangement = displayedArrangement(arrangementOf(state), state.intent);
+    const profiles = useProfilesStore.getState();
+    const profile = profiles.profiles.find((entry) => entry.id === arrangement.profileId);
+    if (!profile) return;
+    profiles.arrangementArrived({ ...profile, current_desktop_id: arrangement.currentDesktopId ?? '' }, arrangement.desktops);
+  }), []);
   useEffect(() => {
     reportFailureRef.current = reportFailure;
   }, [reportFailure]);
@@ -103,9 +152,11 @@ export function useDesktopSelectionBridge(reportFailure: (message: string) => vo
       },
       (error: unknown) => {
         const store = useSessionStore.getState();
-        if (store.intent?.id !== id) return;
-        store.intentFailed(id);
-        reportFailureRef.current(`Could not show that ${target.kind === 'session' ? 'agent' : 'leaf'}: ${error instanceof Error ? error.message : String(error)}`);
+        const current = store.intent?.id === id;
+        const reason = error instanceof Error ? error.message : String(error);
+        const discarded = store.intentFailed(id, reason);
+        if (!current || discarded) return;
+        reportFailureRef.current(`Could not show that ${target.kind === 'session' ? 'agent' : 'leaf'}: ${reason}`);
       },
     );
   }, [intent, sendDesktopShowSession, sendDesktopShowLeaf]);

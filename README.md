@@ -200,6 +200,10 @@ their own session. `attn delegate --priority` starts a marked delegate.
 Every binding is customizable. Press **Cmd+/** in the app for the full,
 always-current list, and "Edit shortcuts" there to remap any of them.
 
+Picking an agent, tile or desktop gives it the keyboard immediately. You can
+start typing while the daemon confirms the selection; an agent still getting
+its terminal retains that input until it is ready.
+
 In desktop flow, keyboard jumps, palette selections, and clicks on panes smoothly
 center the selection in the expanded sidebar or collapsed desktop rail. Clicking
 inside either list keeps its scroll position. Reduced motion makes these jumps

@@ -308,7 +308,7 @@ function consumeBrowserEvent(event: Event): void {
   event.stopPropagation();
 }
 
-function removeCompositionTextNodes(element: HTMLElement): void {
+export function removeCompositionTextNodes(element: HTMLElement): void {
   for (let i = element.childNodes.length - 1; i >= 0; i -= 1) {
     const child = element.childNodes[i];
     if (child.nodeType === 3) element.removeChild(child);
@@ -452,6 +452,11 @@ export function attachTerminalInput(options: TerminalInputOptions): () => void {
   const paste = (event: ClipboardEvent) => {
     if (disposed || event.defaultPrevented) return;
     const traceId = inputTraceId(event);
+    if (Array.from(event.clipboardData?.items ?? []).some((item) => item.kind === 'file' && item.type.startsWith('image/'))) {
+      consumeBrowserEvent(event);
+      send('\x16', traceId);
+      return;
+    }
     const text = event.clipboardData?.getData('text/plain') ?? '';
     if (!text) {
       diagnose('paste', 'empty', undefined, traceId);

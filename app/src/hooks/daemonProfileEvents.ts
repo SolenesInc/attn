@@ -10,7 +10,8 @@ import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { useDaemonStore } from '../store/daemonSessions';
 import { useGardenWalk, gardenScrollMemory } from '../store/gardenWalk';
-import type { Arrival } from '../navigation/sessionNavigation';
+import { displayedArrangement, type Arrival } from '../navigation/sessionNavigation';
+import { arrangementOf } from '../store/sessionNavigationSlice';
 import { parseLayoutJSON } from '../types/desktop';
 import { recordLayout } from '../utils/terminalDiagnosticsLog';
 import { collectDesktopLayoutDiagnostics } from '../utils/desktopDiagnostics';
@@ -78,8 +79,10 @@ export function handleProfileDaemonEvent(data: ProfileEvent, pending: PendingReq
         recordLayout(desktop.id, layout.panes.map((pane) => pane.paneId), layout.splitCount);
       }
       if (message.moved_leaf) useSessionStore.getState().leafMoved(message.profile.id, message.moved_leaf);
-      useProfilesStore.getState().arrangementArrived(message.profile, message.desktops ?? []);
-      syncNavigationFromProfiles(message.request_id ? { kind: 'own', requestId: message.request_id } : { kind: 'broadcast' });
+      useSessionStore.getState().syncFromArrangement(message.profile.id, message.profile.current_desktop_id || null, message.desktops ?? [], message.request_id ? { kind: 'own', requestId: message.request_id } : { kind: 'broadcast' });
+      const navigation = useSessionStore.getState();
+      const display = displayedArrangement(arrangementOf(navigation), navigation.intent);
+      useProfilesStore.getState().arrangementArrived({ ...message.profile, current_desktop_id: display.currentDesktopId ?? '' }, display.desktops);
       return true;
     }
     case 'migration_changed':

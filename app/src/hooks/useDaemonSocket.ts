@@ -99,6 +99,7 @@ import { resolveDaemonWebSocketURL, type DaemonEndpointInstance } from '../utils
 import { handleProfileDaemonEvent, syncNavigationFromProfiles, type MigrationResult, type ProfileActionResult } from './daemonProfileEvents';
 import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
+import { usePendingTerminalInput } from '../store/pendingTerminalInput';
 import type { Desktop } from '../types/generated';
 import { handleBusDaemonEvent, type BusStatus } from './daemonBusEvents';
 import {
@@ -568,6 +569,7 @@ const harnessRegistrySignature = (settings: DaemonSettings) => JSON.stringify(Ob
   .map(([key, value]) => [key, key.endsWith('_available') ? '' : value])
   .sort(([a], [b]) => a.localeCompare(b)));
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
+const SELECTION_COMMANDS = ['desktop_show_session', 'desktop_show_leaf', 'desktop_set_current'];
 const MODEL_DISCOVERY_TIMEOUT_MS = 70_000;
 const SESSION_REOPEN_TIMEOUT_MS = 120_000;
 // Bus status is one aggregate pass over the whole event log. Measured on a copy of production, 209ms
@@ -782,8 +784,18 @@ export function useDaemonSocket({
   }, []);
 
   // A pane's terminal has its own id; panes from before terminal ids carry their session's.
-  const pruneAttachedPtySessions = useCallback((sessions: DaemonSession[]) => {
+  const pruneAttachedPtySessions = useCallback((sessions: DaemonSession[], closedSessionId?: string) => {
     const attachableIDs = new Set<string>(sessions.map((session) => session.id));
+    for (const desktop of useProfilesStore.getState().desktops) {
+      for (const pane of desktop.panes) {
+        if (pane.session_id !== closedSessionId) attachableIDs.add(pane.session_id);
+      }
+    }
+    const navigation = useSessionStore.getState();
+    if (navigation.intent?.target.kind === 'session' && !attachableIDs.has(navigation.intent.target.sessionId)) {
+      navigation.intentFailed(navigation.intent.id, 'Its terminal closed');
+    }
+    usePendingTerminalInput.getState().prune(attachableIDs);
     for (const desktop of useProfilesStore.getState().desktops) {
       for (const pane of desktop.panes) attachableIDs.add(pane.runtime_id);
     }
@@ -906,7 +918,7 @@ export function useDaemonSocket({
     key: string,
     payload: Record<string, unknown>,
     timeoutMessage: string,
-    timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS,
+    timeoutMs: number | null = DEFAULT_REQUEST_TIMEOUT_MS,
     supersede = false,
   ): Promise<T> => {
     return new Promise<T>((resolve, reject) => {
@@ -921,7 +933,7 @@ export function useDaemonSocket({
       const waiter = { resolve: resolve as (value: unknown) => void, reject };
       pendingActionsRef.current.set(key, waiter);
       ws.send(JSON.stringify(payload));
-      setTimeout(() => {
+      if (timeoutMs !== null) setTimeout(() => {
         if (pendingActionsRef.current.get(key) === waiter) {
           pendingActionsRef.current.delete(key);
           reject(new Error(timeoutMessage));
@@ -1936,7 +1948,7 @@ export function useDaemonSocket({
                 (s) => s.id !== data.session!.id
               );
               callbacksRef.current.onSessionsUpdate(sessionsRef.current);
-              pruneAttachedPtySessions(sessionsRef.current);
+              pruneAttachedPtySessions(sessionsRef.current, data.session.id);
             }
             break;
 
@@ -2397,6 +2409,7 @@ export function useDaemonSocket({
 
     ws.onclose = () => {
       wsRef.current = null;
+      rejectPendingByPredicate((key) => SELECTION_COMMANDS.some((command) => key.startsWith(`${command}:`)), new Error('The daemon disconnected before confirming the selection'));
       emitSessionLedger({ type: 'connection', connected: false });
       hasReceivedInitialStateRef.current = false;
       canceledAttachIdsRef.current.clear();
@@ -2434,7 +2447,7 @@ export function useDaemonSocket({
     };
 
     wsRef.current = ws;
-  }, [resolvedWsUrl, rejectPendingForCommand, ensureDaemonRunning, showRecoveringNoticeForCommand, flushQueuedCommands, pruneAttachedPtySessions, emitSessionLedger]);
+  }, [resolvedWsUrl, rejectPendingByPredicate, rejectPendingForCommand, ensureDaemonRunning, showRecoveringNoticeForCommand, flushQueuedCommands, pruneAttachedPtySessions, emitSessionLedger]);
 
   useEffect(() => {
     void connect();
@@ -4344,11 +4357,12 @@ export function useDaemonSocket({
         pendingRequestKey(cmd, requestId),
         { cmd, request_id: requestId, ...body },
         `The daemon did not answer ${cmd}`,
+        SELECTION_COMMANDS.includes(cmd) ? null : undefined,
       );
       if (intent !== null) {
         request.then(
           () => useSessionStore.getState().commandSettled(requestId),
-          () => useSessionStore.getState().intentFailed(intent),
+          (error: unknown) => useSessionStore.getState().intentFailed(intent, error instanceof Error ? error.message : String(error)),
         );
       }
       return request;

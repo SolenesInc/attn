@@ -15,6 +15,7 @@ import {
   type SnapshotHistoryDecoder,
 } from '../ghostty';
 import { loadGhostty } from '../ghostty/wasm';
+import { usePendingTerminalInput } from '../store/pendingTerminalInput';
 import { openPath, openUrl } from '@tauri-apps/plugin-opener';
 import { exists } from '@tauri-apps/plugin-fs';
 import { homeDir } from '@tauri-apps/api/path';
@@ -186,7 +187,7 @@ export interface GhosttyTerminalProps {
   onOpenMarkdown?: (path: string, sessionId: string) => void;
   gardenSeeds?: readonly Seed[];
   onOpenSeed?: (seedId: string) => void;
-  onReady: (terminal: GhosttyTerminalHandle) => void;
+  onReady: (terminal: GhosttyTerminalHandle) => void | Promise<void>;
   onResize: (cols: number, rows: number, options?: { reason?: string; xpixel?: number; ypixel?: number }) => void;
   annotations?: TerminalAnnotationStore;
   annotationsVersion?: number;
@@ -523,6 +524,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     const rendererRef = useRef<WebGlTerminalRenderer | null>(null);
     const surfaceReleasedRef = useRef(false);
     const inputRef = useRef<(() => void) | null>(null);
+    const inputReadyRef = useRef(false);
     const modelSizeRef = useRef({ cols: 80, rows: 24 });
     const hasMeasuredSizeRef = useRef(false);
     const viewportOffsetRef = useRef(0);
@@ -2015,6 +2017,56 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       drain: () => writeChainRef.current,
     }), [applyPlacements, fit, getBlockState, getPlacementState, getText, getVisibleContent, getVisibleStyleSummary, openFind, renderSurface, resizeLocal, restoreSnapshot, seedBlocks, seedPlacements, setSurfaceReleased, write]);
 
+    useLayoutEffect(() => {
+      const container = containerRef.current;
+      if (!container) return;
+      const inputDiagnostics = observeTerminalInput(container, () => ({
+        runtimeId: runtimeMetaRef.current?.runtimeId,
+        sessionId: runtimeMetaRef.current?.sessionId,
+        paneId: runtimeMetaRef.current?.paneId,
+        active: Boolean(runtimeMetaRef.current?.isActiveSession && runtimeMetaRef.current?.isActivePane),
+        ready: readyRef.current,
+        model: terminalRef.current !== null,
+        surfaceReleased: surfaceReleasedRef.current,
+        findOpen: findOpenRef.current,
+        filterOpen: filterInputRef.current !== null,
+        lastWriteAt: lastWriteAtRef.current,
+        lastPaintAt: lastRenderAtRef.current,
+      }));
+      let interceptedTraceId: string | undefined;
+      const interceptKey = createTerminalKeyInterceptor((data) => onInputRef.current(data, 'user', interceptedTraceId));
+      inputRef.current = attachTerminalInput({
+        element: container,
+        onDiagnostic: inputDiagnostics.record,
+        terminal: () => inputReadyRef.current ? terminalRef.current : null,
+        send: (data, traceId) => onInputRef.current(data, 'user', traceId),
+        interceptKey: (event, traceId) => {
+          interceptedTraceId = traceId;
+          const meta = runtimeMetaRef.current;
+          if (event.type === 'keydown' && meta) {
+            noteTerminalKeyEvent(event, {
+              runtimeId: meta.runtimeId,
+              sessionId: meta.sessionId,
+              paneId: meta.paneId,
+            });
+          }
+          try {
+            return interceptKey(event);
+          } finally {
+            interceptedTraceId = undefined;
+          }
+        },
+        onError: (operation, reason) => {
+          recoverFromModelFault(`input.${operation}`, reason);
+        },
+      });
+      return () => {
+        inputRef.current?.();
+        inputRef.current = null;
+        inputDiagnostics.dispose();
+      };
+    }, [recoverFromModelFault]);
+
     useEffect(() => {
       let active = true;
       const container = containerRef.current;
@@ -2061,19 +2113,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           else unlisten();
         });
       }
-      const inputDiagnostics = observeTerminalInput(container, () => ({
-        runtimeId: runtimeMetaRef.current?.runtimeId,
-        sessionId: runtimeMetaRef.current?.sessionId,
-        paneId: runtimeMetaRef.current?.paneId,
-        active: Boolean(runtimeMetaRef.current?.isActiveSession && runtimeMetaRef.current?.isActivePane),
-        ready: readyRef.current,
-        model: terminalRef.current !== null,
-        surfaceReleased: surfaceReleasedRef.current,
-        findOpen: findOpenRef.current,
-        filterOpen: filterInputRef.current !== null,
-        lastWriteAt: lastWriteAtRef.current,
-        lastPaintAt: lastRenderAtRef.current,
-      }));
       const perfId = `ghostty-${debugNameRef.current}`;
       const resources = createRendererEffectResources();
 
@@ -2095,7 +2134,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           setRendererEpoch((value) => value + 1);
         }, delay);
       };
-      void loadGhostty().then((ghostty) => {
+      void loadGhostty().then(async (ghostty) => {
         if (!active) return;
         const theme = getTerminalTheme(resolvedTheme);
         const initialSize = modelSizeRef.current;
@@ -2176,33 +2215,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         }, () => {
           fitRef.current();
         });
-        let interceptedTraceId: string | undefined;
-        const interceptKey = createTerminalKeyInterceptor((data) => onInputRef.current(data, 'user', interceptedTraceId));
-        inputRef.current = attachTerminalInput({
-          element: container,
-          onDiagnostic: inputDiagnostics.record,
-          terminal: () => terminalRef.current,
-          send: (data, traceId) => onInputRef.current(data, 'user', traceId),
-          interceptKey: (event, traceId) => {
-            interceptedTraceId = traceId;
-            const meta = runtimeMetaRef.current;
-            if (event.type === 'keydown' && meta) {
-              noteTerminalKeyEvent(event, {
-                runtimeId: meta.runtimeId,
-                sessionId: meta.sessionId,
-                paneId: meta.paneId,
-              });
-            }
-            try {
-              return interceptKey(event);
-            } finally {
-              interceptedTraceId = undefined;
-            }
-          },
-          onError: (operation, reason) => {
-            recoverFromModelFault(`input.${operation}`, reason);
-          },
-        });
         fit();
         // fit() contains WASM traps and schedules a fresh epoch: do not mark this model
         // ready if its initial fit faulted.
@@ -2221,7 +2233,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         startupRef.current.firstReadyRows = terminal.rows;
         // The desktop observer projects collapse/restore before the next frame.
         resources.observeResize(container, scheduleCoalescedRefit);
-        onReadyRef.current({
+        await onReadyRef.current({
           fit,
           openFind,
           focus: () => {
@@ -2259,6 +2271,12 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           getPlacementState,
           drain: () => writeChainRef.current,
         });
+        await writeChainRef.current;
+        if (!active || terminalRef.current !== terminal) return;
+        inputReadyRef.current = true;
+        container.dataset.terminalInputReady = '1';
+        const sessionId = runtimeMetaRef.current?.sessionId;
+        if (sessionId) usePendingTerminalInput.getState().deliver(sessionId, container);
         if (recoveredModelFault) {
           modelRecoveryPendingRef.current = false;
         }
@@ -2337,10 +2355,11 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       });
       return () => {
         active = false;
+        inputReadyRef.current = false;
+        container.dataset.terminalInputReady = '0';
         document.removeEventListener('visibilitychange', onVisibilityChange);
         window.removeEventListener('focus', onFocus);
         unlistenWake?.();
-        inputDiagnostics.dispose();
         resources.dispose();
         recordDiag({
           kind: 'pane_unmount',
@@ -2361,7 +2380,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         fitResizeCoalescerRef.current?.cancel();
         fitResizeCoalescerRef.current = null;
         try {
-          inputRef.current?.();
           rendererRef.current?.dispose();
           terminalRef.current?.free();
         } catch (reason) {
@@ -2374,7 +2392,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
             stack: reason instanceof Error ? reason.stack : undefined,
           });
         }
-        inputRef.current = null;
         rendererRef.current = null;
         terminalRef.current = null;
         modelOpRingRef.current.clear();
@@ -3404,6 +3421,8 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         ref={containerRef}
         className={`terminal-container ghostty-terminal${linkCursorActive ? ' ghostty-terminal-link-hover' : ''}${annotationCursorActive ? ' ghostty-terminal-annotation-hover' : ''}`}
         data-terminal-renderer="ghostty-webgl"
+        data-terminal-input-ready={inputReadyRef.current ? '1' : '0'}
+        data-terminal-session-id={runtimeLogMeta?.sessionId}
         tabIndex={0}
         contentEditable
         suppressContentEditableWarning
@@ -3412,16 +3431,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         aria-multiline="true"
         spellCheck={false}
         onBeforeInput={(event) => event.preventDefault()}
-        onPasteCapture={(event) => {
-          const hasImage = Array.from(event.clipboardData.items).some((item) => (
-            item.kind === 'file' && item.type.startsWith('image/')
-          ));
-          if (!hasImage) return;
-          // Paste events cannot send image bytes through a PTY; both TUIs read the native clipboard on Ctrl+V.
-          event.preventDefault();
-          event.stopPropagation();
-          onInputRef.current('\x16');
-        }}
         onWheel={(event) => {
           if (isDesktopResizeActive(containerRef.current)) {
             event.preventDefault();
