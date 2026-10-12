@@ -46,26 +46,12 @@ func (d *Daemon) handleWakeTurnConn(conn net.Conn, msg *protocol.WakeTurnMessage
 }
 
 func (d *Daemon) authorizeSnooze(callerID, sessionID protocol.SessionID, action string) error {
-	if err := d.requireHome("CLI session snooze permissions"); err != nil {
-		return err
-	}
 	sessionID = protocol.TrimID(sessionID)
 	session := d.store.Get(sessionID)
-	remote := false
-	if session == nil && d.hubManager != nil {
-		session = d.hubManager.RemoteSession(sessionID)
-		remote = session != nil
-	}
 	if session == nil {
 		return fmt.Errorf("unknown live session %s", sessionID)
 	}
-	if err := d.mayManageSession(protocol.TrimID(callerID), session, action); err != nil {
-		return err
-	}
-	if remote {
-		return fmt.Errorf("CLI session %s of remote sessions is unsupported", action)
-	}
-	return nil
+	return d.mayManageSession(protocol.TrimID(callerID), session, action)
 }
 
 func (d *Daemon) handleSnoozeTurn(msg *protocol.SnoozeTurnMessage) error {

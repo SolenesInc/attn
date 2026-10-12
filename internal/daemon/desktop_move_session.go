@@ -63,7 +63,7 @@ func (d *Daemon) mayManageSession(callerID protocol.SessionID, session *protocol
 	if callerID == "" || callerID == session.ID {
 		return nil
 	}
-	callerProfileID, err := d.sessionProfileID(callerID)
+	callerProfileID, err := d.store.SessionProfileID(callerID)
 	if err != nil {
 		return err
 	}
