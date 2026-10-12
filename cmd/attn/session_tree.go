@@ -27,23 +27,33 @@ func runSessionTree(w io.Writer, cli *client.Client, profileID string) error {
 	}
 	var nodes []*sessionTreeNode
 	byID := make(map[protocol.SessionID]*sessionTreeNode, len(listed.Sessions))
-	type seedAddress struct{ profile, id string }
-	slugs := map[seedAddress]string{}
+	slugsByProfile := map[string]map[string]string{}
 	for _, session := range listed.Sessions {
 		if profileID != "" && session.ProfileID != profileID {
 			continue
 		}
 		node := &sessionTreeNode{session: session}
 		if seedID := protocol.Deref(session.SeedID); seedID != "" {
-			address := seedAddress{session.ProfileID, seedID}
-			slug, known := slugs[address]
+			slugs := slugsByProfile[session.ProfileID]
+			if slugs == nil {
+				seeds, err := cli.WithGardenProfile(session.ProfileID, "").SeedList("", false, 0)
+				if err != nil {
+					return fmt.Errorf("read seeds in profile %s: %w", session.ProfileID, err)
+				}
+				slugs = make(map[string]string, len(seeds.Seeds))
+				for _, seed := range seeds.Seeds {
+					slugs[seed.ID] = seed.StepSlug
+				}
+				slugsByProfile[session.ProfileID] = slugs
+			}
+			slug, known := slugs[seedID]
 			if !known {
 				shown, err := cli.WithGardenProfile(session.ProfileID, "").SeedShow("", seedID)
 				if err != nil {
 					return fmt.Errorf("read seed %s in profile %s: %w", seedID, session.ProfileID, err)
 				}
 				slug = shown.Seed.StepSlug
-				slugs[address] = slug
+				slugs[seedID] = slug
 			}
 			node.seedSlug = slug
 		}
