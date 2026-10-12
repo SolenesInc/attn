@@ -11,6 +11,15 @@ ends one. Run `attn agent --help` for the exact flags; this file is the rules.
 unique prefix works, and `--json` carries the full ids and the machine shape.
 An awake crew member's stable name also addresses `peek` and `msg`.
 
+`attn session list --tree` shows every live session under its dispatcher, with
+short ids, labels, harnesses, states, owed/snoozed turns and seed slugs. Use it
+to see which agents belong to the same delegation chain before acting on them.
+A delegate whose dispatcher is closed or absent appears at the root and says
+so. Shells stay at the root with their split provenance labeled. A crew
+dispatcher follows the member's current session. `--profile <id>` selects one
+profile; ledger filters and paging do not apply to the tree. For machine data,
+`attn list --json` carries the live sessions and their dispatcher links.
+
 ## Watching costs the watched nothing
 
 `attn agent peek <session-or-member>` reads a session's state, last assistant

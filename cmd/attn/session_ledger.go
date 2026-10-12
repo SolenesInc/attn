@@ -26,6 +26,7 @@ type sessionListArgs struct {
 	until      string
 	reopen     bool
 	json       bool
+	tree       bool
 }
 
 var sessionListPresets = map[string]int{"today": 0, "yesterday": 1, "7d": 6, "30d": 29}
@@ -89,11 +90,23 @@ func parseSessionListArgs(args []string) (sessionListArgs, error) {
 	until := fs.String("until", "", "only sessions before this date or RFC3339 instant")
 	reopen := fs.Bool("reopen", false, "judge every closed row and print what would bring it back")
 	jsonOut := fs.Bool("json", false, "print the page as JSON")
+	tree := fs.Bool("tree", false, "show every live session nested under its dispatcher")
 	if err := fs.Parse(args); err != nil {
 		return sessionListArgs{}, err
 	}
 	if fs.NArg() != 0 {
 		return sessionListArgs{}, errors.New("session list takes no positional arguments")
+	}
+	if *tree {
+		var incompatible string
+		fs.Visit(func(f *flag.Flag) {
+			if incompatible == "" && f.Name != "tree" && f.Name != "profile" {
+				incompatible = f.Name
+			}
+		})
+		if incompatible != "" {
+			return sessionListArgs{}, fmt.Errorf("--tree supports only --profile; omit --%s to see complete live delegation chains", incompatible)
+		}
 	}
 	if *closed && *all {
 		return sessionListArgs{}, errors.New("--closed and --all ask for different lists; pass one")
@@ -111,6 +124,7 @@ func parseSessionListArgs(args []string) (sessionListArgs, error) {
 		repository: strings.TrimSpace(*repository),
 		reopen:     *reopen,
 		json:       *jsonOut,
+		tree:       *tree,
 	}
 
 	now := time.Now()
@@ -142,6 +156,13 @@ func runSessionList(args []string) {
 		fmt.Fprintf(os.Stderr, "session list: %v\n", err)
 		writeSessionHelp(os.Stderr)
 		os.Exit(2)
+	}
+	if parsed.tree {
+		if err := runSessionTree(os.Stdout, client.New(""), parsed.profile); err != nil {
+			fmt.Fprintf(os.Stderr, "session list --tree: %v\n", err)
+			os.Exit(1)
+		}
+		return
 	}
 
 	result, err := client.New("").SessionList(client.SessionListOptions{
