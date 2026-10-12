@@ -42,7 +42,7 @@ import {
 import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 import { useOpenInEditor } from './useOpenInEditor';
 
-export function useAppCommands(): PaletteCommand[] {
+export function useAppCommands(onRename: (sessionId: string, name: string, opener: HTMLElement | null) => void): PaletteCommand[] {
   const seeds = useDaemonStore((state) => state.seeds);
   const { setMarkdownOpenerOpen, handleOpenNotebookTile } =
     useDesktopTilesContext();
@@ -605,6 +605,15 @@ export function useAppCommands(): PaletteCommand[] {
     return [
       ...actionMenuItems,
       ...sessionPriorityItems,
+      ...(activeSession ? [{
+        id: 'rename-active-session',
+        pinned: true,
+        title: 'Rename this session…',
+        description: 'Change its name in the sidebar and tile',
+        keywords: ['rename', 'name', 'label', 'agent', 'session', 'tile'],
+        icon: <ContextActionIcon />,
+        run: (opener: HTMLElement | null) => onRename(activeSession.id, activeSession.label, opener),
+      }] : []),
       ...delegationItems,
       ...sessionSeedItems,
       ...sessionUsageItems,
@@ -619,6 +628,7 @@ export function useAppCommands(): PaletteCommand[] {
     activeGroupForCommands,
     activeSessionForCommands,
     togglePriority,
+    onRename,
     seeds,
   ]);
 
