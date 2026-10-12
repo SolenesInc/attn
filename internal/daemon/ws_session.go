@@ -1,6 +1,8 @@
 package daemon
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"strings"
 
@@ -66,6 +68,14 @@ func (d *Daemon) handleGetRecentLocationsWS(client *wsClient, msg *protocol.GetR
 }
 
 func (d *Daemon) handleRecentFilesWS(client *wsClient, msg *protocol.RecentFilesMessage) {
+	var missing []string
+	for _, path := range d.store.FileActivityPaths() {
+		if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
+			missing = append(missing, path)
+		}
+	}
+	d.store.DeleteFileActivity(missing...)
+
 	limit := 20
 	if msg.Limit != nil {
 		limit = int(*msg.Limit)

@@ -1100,7 +1100,9 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdRecordCommandUsage:
 		d.handleRecordCommandUsage(client, msg.(*protocol.RecordCommandUsageMessage))
 	case protocol.CmdRecentFiles:
-		d.handleRecentFilesWS(client, msg.(*protocol.RecentFilesMessage))
+		d.life.Go("handleRecentFiles", func() {
+			d.handleRecentFilesWS(client, msg.(*protocol.RecentFilesMessage))
+		})
 	case protocol.CmdBrowseDirectory:
 		d.handleBrowseDirectoryWS(client, msg.(*protocol.BrowseDirectoryMessage))
 	case protocol.CmdInspectPath:

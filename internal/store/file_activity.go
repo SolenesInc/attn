@@ -1,6 +1,7 @@
 package store
 
 import (
+	"encoding/json"
 	"sort"
 	"strings"
 	"time"
@@ -132,11 +133,38 @@ func rootPrefix(root string) string {
 	return strings.TrimSuffix(root, "/") + "/"
 }
 
-func (s *Store) DeleteFileActivity(path string) {
+func (s *Store) FileActivityPaths() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return nil
+	}
+	rows, err := s.db.Query("SELECT DISTINCT path FROM file_activity")
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	var paths []string
+	for rows.Next() {
+		var path string
+		if err := rows.Scan(&path); err != nil {
+			continue
+		}
+		paths = append(paths, path)
+	}
+	return paths
+}
+
+func (s *Store) DeleteFileActivity(paths ...string) {
+	if len(paths) == 0 {
+		return
+	}
+	encodedPaths, _ := json.Marshal(paths)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
 		return
 	}
-	s.execLog("DELETE FROM file_activity WHERE path = ?", path)
+	s.execLog("DELETE FROM file_activity WHERE path IN (SELECT value FROM json_each(?))", string(encodedPaths))
 }
