@@ -95,11 +95,6 @@ func TestTheDashboardKeepsWhatTheUserDidAcrossRefreshesAndRestarts(t *testing.T)
 
 	w.restart()
 	cli = w.Client()
-	restoredCheckout := prNumbered(t, queryPRs(t, cli, ""), 1)
-	if restoredCheckout.LastUpdated != refreshedCheckout.LastUpdated || restoredCheckout.LastPolled != refreshedCheckout.LastPolled {
-		t.Errorf("poll timestamps after restart = %q/%q, want %q/%q", restoredCheckout.LastUpdated, restoredCheckout.LastPolled,
-			refreshedCheckout.LastUpdated, refreshedCheckout.LastPolled)
-	}
 	repos, err := cli.QueryRepos()
 	if err != nil {
 		t.Fatalf("query repos: %v", err)
@@ -134,10 +129,16 @@ func TestTheDashboardKeepsWhatTheUserDidAcrossRefreshesAndRestarts(t *testing.T)
 	testworld.Await(app, protocol.EventPRsUpdated, func(e protocol.WebSocketEvent) bool {
 		return len(e.Prs) == 1 && e.Prs[0].ID == checkout.ID && e.Prs[0].Title == "Checkout is ready"
 	})
+	gh.Close()
+	beforeRestart := prNumbered(t, queryPRs(t, w.Client(), ""), 1)
 	w.restart()
 	remaining := queryPRs(t, w.Client(), "")
 	if len(remaining) != 1 || remaining[0].ID != checkout.ID || remaining[0].Title != "Checkout is ready" {
 		t.Fatalf("dashboard after removal and restart = %+v, want only the renamed checkout PR", remaining)
+	}
+	if remaining[0].LastUpdated != beforeRestart.LastUpdated || remaining[0].LastPolled != beforeRestart.LastPolled {
+		t.Errorf("offline restart changed poll timestamps: got %q/%q, want %q/%q", remaining[0].LastUpdated, remaining[0].LastPolled,
+			beforeRestart.LastUpdated, beforeRestart.LastPolled)
 	}
 }
 
