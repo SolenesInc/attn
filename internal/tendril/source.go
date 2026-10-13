@@ -88,10 +88,11 @@ func (e *Env) bindSource(p *Package, pkg *types.Package) error {
 		if err != nil {
 			return fmt.Errorf("%s: %w", key, err)
 		}
-		if !types.Identical(sig, fn.Signature()) {
-			return fmt.Errorf("%s is declared as %s but bound to %s", key, fn.Signature(), sig)
+		want := receiverFirst(fn.Signature())
+		if !types.Identical(sig, want) {
+			return fmt.Errorf("%s is declared as %s but bound to %s", key, want, sig)
 		}
-		e.funcs[fn] = &hostFunc{name: p.path + "." + key, fn: rv, sig: fn.Signature(), ctx: wantsCtx, journaled: p.journaled, concurrent: p.concurrent}
+		e.funcs[fn] = &hostFunc{name: p.path + "." + key, fn: rv, sig: want, ctx: wantsCtx, journaled: p.journaled, concurrent: p.concurrent}
 		return nil
 	}
 	names := scope.Names()
@@ -171,4 +172,16 @@ func (e *Env) matchType(named *types.Named, rt reflect.Type) error {
 	}
 	e.fieldIdx[st] = idx
 	return nil
+}
+
+func receiverFirst(sig *types.Signature) *types.Signature {
+	recv := sig.Recv()
+	if recv == nil {
+		return sig
+	}
+	params := []*types.Var{types.NewParam(recv.Pos(), recv.Pkg(), recv.Name(), recv.Type())}
+	for v := range sig.Params().Variables() {
+		params = append(params, v)
+	}
+	return types.NewSignatureType(nil, nil, nil, types.NewTuple(params...), sig.Results(), sig.Variadic())
 }

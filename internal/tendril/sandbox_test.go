@@ -83,10 +83,10 @@ func TestDeadlineStopsAScriptWithUnlimitedFuel(t *testing.T) {
 func TestCompileRejectsEscapes(t *testing.T) {
 	env := mustEnv(t)
 	cases := map[string]string{
-		"import \"os\"\nfunc Run() { os.Exit(1) }":             `package "os" is not available`,
+		"import \"os\"\nfunc Run() { os.Remove(\"/\") }":       "undefined: os.Remove",
+		"import \"io\"\nvar _ io.Reader":                       `package "io" is not available`,
 		"import \"unsafe\"\nvar _ = unsafe.Sizeof(1)":          `package "unsafe" is not available`,
 		"import \"net/http\"\nvar _ = http.Get":                `package "net/http" is not available`,
-		`func Run() { print("hi") }`:                           "print writes to the host's stderr",
 		"func Run() {\nL:\n\tgoto L\n}":                        "goto is not supported",
 		`func Run() { var a [1 << 30]byte; _ = a }`:            "arrays larger than 1<<20 elements are not supported",
 		`func Run() int { return "x" }`:                        `cannot use "x"`,
@@ -211,5 +211,32 @@ func Run(it host.Item, xs []int) host.Item {
 	got := out[0].(Item)
 	if got.Name != "changed" || strings.Join(got.Tags, ",") != "changed,added" {
 		t.Fatalf("result: %+v", got)
+	}
+}
+
+func TestMainWritesOutputAndExits(t *testing.T) {
+	env := mustEnv(t)
+	cases := []struct {
+		src, stdout, stderr string
+		code                int
+	}{
+		{"package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfmt.Println(\"hello\", 42)\n\tfmt.Printf(\"%05.1f|\", 3.14159)\n\tfmt.Print(\"x\", \"y\")\n}", "hello 42\n003.1|xy", "", 0},
+		{"package main\n\nimport \"log\"\n\nfunc main() {\n\tprintln(\"to stderr\")\n\tlog.Fatalf(\"bad %d\", 7)\n\tprintln(\"unreachable\")\n}", "", "to stderr\nbad 7\n", 1},
+		{"package main\n\nimport \"os\"\n\nfunc main() {\n\tdefer println(\"defers do not run on exit\")\n\tos.Exit(3)\n}", "", "", 3},
+		{"package main\n\nimport \"os\"\n\nfunc main() { os.Exit(0) }", "", "", 0},
+	}
+	for _, tc := range cases {
+		var stdout, stderr strings.Builder
+		_, err := mustCompile(t, env, tc.src).Main(context.Background(), DefaultLimits, &stdout, &stderr)
+		code := 0
+		var exit *ExitError
+		if errors.As(err, &exit) {
+			code = exit.Code
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		if stdout.String() != tc.stdout || stderr.String() != tc.stderr || code != tc.code {
+			t.Errorf("got stdout %q stderr %q code %d\nwant stdout %q stderr %q code %d", stdout.String(), stderr.String(), code, tc.stdout, tc.stderr, tc.code)
+		}
 	}
 }

@@ -1,6 +1,7 @@
 package tendril
 
 import (
+	"fmt"
 	"go/ast"
 	"go/token"
 	"go/types"
@@ -180,6 +181,13 @@ func (s *scope) methodCall(e *ast.CallExpr, f *ast.SelectorExpr, sel *types.Sele
 			return fr.m.callMethod(v.(iface), name, args.eval(fr))
 		}
 	}
+	if hf, ok := s.c.prog.env.funcs[fn]; ok {
+		_, ptrRecv := fn.Signature().Recv().Type().(*types.Pointer)
+		recv := s.receiver(f.X, sel.Recv(), ptrRecv)
+		return func(fr *frame) Value {
+			return hf.call(fr.m, append([]Value{recv(fr)}, args.eval(fr)...))
+		}
+	}
 	if nf, ok := s.c.prog.env.natives[fn]; ok {
 		_, ptrRecv := fn.Signature().Recv().Type().(*types.Pointer)
 		recv := s.receiver(f.X, sel.Recv(), ptrRecv)
@@ -321,6 +329,24 @@ func (s *scope) builtin(e *ast.CallExpr) expr {
 		return func(fr *frame) Value {
 			if mv := x(fr).(*mapVal); mv != nil {
 				clear(mv.m)
+			}
+			return nil
+		}
+	case "print", "println":
+		args := make([]expr, len(e.Args))
+		for i, a := range e.Args {
+			args[i] = s.convertTo(anyType, a)
+		}
+		line := id.Name == "println"
+		return func(fr *frame) Value {
+			vals := make([]any, len(args))
+			for i, a := range args {
+				vals[i] = fr.m.toGo(a(fr), anyType, anyRType).Interface()
+			}
+			if line {
+				fr.m.write(fr.m.stderr, fmt.Sprintln(vals...))
+			} else {
+				fr.m.write(fr.m.stderr, fmt.Sprint(vals...))
 			}
 			return nil
 		}

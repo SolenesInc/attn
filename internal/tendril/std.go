@@ -12,10 +12,11 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func Std() []*Package {
-	return []*Package{stdStrings(), stdStrconv(), stdFmt(), stdErrors(), stdRegexp(), stdPath(), stdMath(), stdSlices(), stdSync(), stdErrgroup()}
+	return []*Package{stdStrings(), stdStrconv(), stdFmt(), stdErrors(), stdRegexp(), stdPath(), stdMath(), stdSlices(), stdSync(), stdErrgroup(), stdLog(), stdOs(), stdTime()}
 }
 
 func chargeProduct(ctx context.Context, a, b int) {
@@ -77,8 +78,25 @@ func stdStrconv() *Package {
 		Func("Quote", strconv.Quote)
 }
 
+func stdout(ctx context.Context, s string) {
+	m := machineFrom(ctx)
+	m.write(m.stdout, s)
+}
+
+func stderr(ctx context.Context, s string) {
+	m := machineFrom(ctx)
+	m.write(m.stderr, s)
+}
+
 func stdFmt() *Package {
 	return NewPackage("fmt").
+		Func("Print", func(ctx context.Context, a ...any) { stdout(ctx, fmt.Sprint(a...)) }).
+		Func("Println", func(ctx context.Context, a ...any) { stdout(ctx, fmt.Sprintln(a...)) }).
+		Func("Printf", func(ctx context.Context, format string, a ...any) {
+			Charge(ctx, paddingBound(format, a))
+			stdout(ctx, fmt.Sprintf(format, a...))
+		}).
+		Func("Sprintln", func(ctx context.Context, a ...any) string { return fmt.Sprintln(a...) }).
 		Func("Sprint", func(ctx context.Context, a ...any) string { return fmt.Sprint(a...) }).
 		Func("Sprintf", func(ctx context.Context, format string, a ...any) string {
 			Charge(ctx, paddingBound(format, a))
@@ -228,4 +246,76 @@ func bitsLen(n int) int {
 		b++
 	}
 	return b
+}
+
+func exit(ctx context.Context, code int) {
+	machineFrom(ctx).stop(&ExitError{Code: code})
+}
+
+func stdLog() *Package {
+	line := func(s string) string {
+		if strings.HasSuffix(s, "\n") {
+			return s
+		}
+		return s + "\n"
+	}
+	return NewPackage("log").
+		Func("Print", func(ctx context.Context, a ...any) { stderr(ctx, line(fmt.Sprint(a...))) }).
+		Func("Println", func(ctx context.Context, a ...any) { stderr(ctx, fmt.Sprintln(a...)) }).
+		Func("Printf", func(ctx context.Context, format string, a ...any) { stderr(ctx, line(fmt.Sprintf(format, a...))) }).
+		Func("Fatal", func(ctx context.Context, a ...any) {
+			stderr(ctx, line(fmt.Sprint(a...)))
+			exit(ctx, 1)
+		}).
+		Func("Fatalf", func(ctx context.Context, format string, a ...any) {
+			stderr(ctx, line(fmt.Sprintf(format, a...)))
+			exit(ctx, 1)
+		}).
+		Func("Fatalln", func(ctx context.Context, a ...any) {
+			stderr(ctx, fmt.Sprintln(a...))
+			exit(ctx, 1)
+		})
+}
+
+func stdOs() *Package {
+	return NewPackage("os").Func("Exit", exit)
+}
+
+const timeSource = `package time
+
+// A Duration represents the elapsed time between two instants as an int64
+// nanosecond count.
+type Duration int64
+
+const (
+	Nanosecond  Duration = 1
+	Microsecond          = 1000 * Nanosecond
+	Millisecond          = 1000 * Microsecond
+	Second               = 1000 * Millisecond
+	Minute               = 60 * Second
+	Hour                 = 60 * Minute
+)
+
+// Sleep pauses the current goroutine for at least the duration d.
+func Sleep(d Duration)
+
+func (d Duration) String() string
+func (d Duration) Seconds() float64
+func (d Duration) Milliseconds() int64
+`
+
+func stdTime() *Package {
+	return NewPackage("time").Source(timeSource).Concurrent().
+		Type("Duration", time.Duration(0)).
+		Func("Sleep", func(ctx context.Context, d time.Duration) {
+			t := time.NewTimer(d)
+			defer t.Stop()
+			select {
+			case <-t.C:
+			case <-ctx.Done():
+			}
+		}).
+		Func("Duration.String", time.Duration.String).
+		Func("Duration.Seconds", time.Duration.Seconds).
+		Func("Duration.Milliseconds", time.Duration.Milliseconds)
 }

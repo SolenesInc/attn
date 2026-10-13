@@ -94,6 +94,7 @@ var (
 	contextRType = reflect.TypeFor[context.Context]()
 	errorType    = types.Universe.Lookup("error").Type()
 	anyType      = types.Universe.Lookup("any").Type()
+	anyRType     = reflect.TypeFor[any]()
 )
 
 func NewEnv(pkgs ...*Package) (*Env, error) {

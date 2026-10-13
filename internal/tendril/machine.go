@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"go/token"
 	"go/types"
+	"io"
 	"runtime"
 )
 
@@ -67,6 +68,24 @@ type machine struct {
 	exited     bool
 	selectSeq  int
 	haltedBy   *gor
+	stdout     io.Writer
+	stderr     io.Writer
+}
+
+type ExitError struct{ Code int }
+
+func (e *ExitError) Error() string { return fmt.Sprintf("exit status %d", e.Code) }
+
+func machineFrom(ctx context.Context) *machine {
+	m, _ := ctx.Value(machineKey{}).(*machine)
+	return m
+}
+
+func (m *machine) write(w io.Writer, s string) {
+	m.alloc(int64(len(s)))
+	if w != nil {
+		_, _ = io.WriteString(w, s)
+	}
 }
 
 func newMachine(ctx context.Context, p *Program, lim Limits) *machine {

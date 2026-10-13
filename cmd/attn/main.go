@@ -187,6 +187,8 @@ func main() {
 	case "seed":
 		maybePrintInstanceBanner()
 		runSeed()
+	case "code":
+		runCode(os.Args[2:])
 	case "crew":
 		maybePrintInstanceBanner()
 		runCrew()
@@ -637,6 +639,7 @@ func writeHelp(w io.Writer) {
 
 commands:
   presence                          check whether the current shell runs inside attn
+  code [file.go]                    run a Go program that calls attn's tools (attn code --help)
   agent list                        name every session running here
   agent peek <session-or-member>    read a session without interrupting it
   agent msg <target> "text"            notify a live session, crew member or seed's tender

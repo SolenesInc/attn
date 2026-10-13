@@ -8,6 +8,7 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
+	"io"
 	"reflect"
 )
 
@@ -123,6 +124,25 @@ func (p *Program) call(ctx context.Context, lim Limits, j *Journal, name string,
 		}
 	}
 	return results, m.stats(), nil
+}
+
+func (p *Program) Main(ctx context.Context, lim Limits, stdout, stderr io.Writer) (Stats, error) {
+	code, ok := p.funcs["main"]
+	if !ok || p.sigs["main"].Params().Len() != 0 || p.sigs["main"].Results().Len() != 0 {
+		return Stats{}, errors.New("script has no func main()")
+	}
+	m := newMachine(ctx, p, lim)
+	m.stdout, m.stderr = stdout, stderr
+	err := m.run(func() {
+		m.initGlobals()
+		m.exec(code, m.newFrame(code, nil))
+	})
+	m.shutdown()
+	var exit *ExitError
+	if errors.As(err, &exit) && exit.Code == 0 {
+		err = nil
+	}
+	return m.stats(), err
 }
 
 func (e *Env) checkArg(a any, want types.Type) error {

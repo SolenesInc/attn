@@ -11,8 +11,6 @@ import (
 )
 
 var forbiddenBuiltins = map[string]string{
-	"print":   "print writes to the host's stderr; return values instead",
-	"println": "println writes to the host's stderr; return values instead",
 	"complex": "complex numbers are not supported",
 	"real":    "complex numbers are not supported",
 	"imag":    "complex numbers are not supported",
