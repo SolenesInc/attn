@@ -13,8 +13,6 @@ import (
 var forbiddenBuiltins = map[string]string{
 	"print":   "print writes to the host's stderr; return values instead",
 	"println": "println writes to the host's stderr; return values instead",
-	"recover": "recover is not available; runtime errors end the run",
-	"close":   "channels are not available in scripts",
 	"complex": "complex numbers are not supported",
 	"real":    "complex numbers are not supported",
 	"imag":    "complex numbers are not supported",
@@ -51,21 +49,9 @@ func checkSyntax(fset *token.FileSet, f *ast.File) error {
 			if path, _ := strconv.Unquote(n.Path.Value); path == "unsafe" {
 				g.add(n.Pos(), `package "unsafe" is not available to scripts`)
 			}
-		case *ast.GoStmt:
-			g.add(n.Pos(), "go statements are not available in scripts")
-		case *ast.SelectStmt, *ast.SendStmt, *ast.ChanType:
-			g.add(n.Pos(), "channels are not available in scripts")
-		case *ast.DeferStmt:
-			g.add(n.Pos(), "defer is not supported")
-		case *ast.LabeledStmt:
-			g.add(n.Pos(), "labels are not supported")
 		case *ast.BranchStmt:
-			if n.Label != nil || n.Tok == token.GOTO || n.Tok == token.FALLTHROUGH {
-				g.add(n.Pos(), n.Tok.String()+" with labels, goto and fallthrough are not supported")
-			}
-		case *ast.ArrayType:
-			if n.Len != nil {
-				g.add(n.Pos(), "arrays are not supported; use slices")
+			if n.Tok == token.GOTO {
+				g.add(n.Pos(), "goto is not supported")
 			}
 		case *ast.FuncDecl:
 			if n.Type.TypeParams != nil {
@@ -80,15 +66,6 @@ func checkSyntax(fset *token.FileSet, f *ast.File) error {
 				if len(field.Names) == 0 {
 					g.add(field.Pos(), "embedded fields are not supported")
 				}
-			}
-		case *ast.UnaryExpr:
-			switch n.Op {
-			case token.AND:
-				if _, ok := ast.Unparen(n.X).(*ast.CompositeLit); !ok {
-					g.add(n.Pos(), "& is only supported on composite literals")
-				}
-			case token.ARROW:
-				g.add(n.Pos(), "channels are not available in scripts")
 			}
 		}
 		return true
@@ -109,15 +86,6 @@ func checkTypes(fset *token.FileSet, info *types.Info) error {
 		}
 		if msg := unsupportedType(obj.Type()); msg != "" {
 			g.add(id.Pos(), msg)
-		}
-		if fn, ok := obj.(*types.Func); ok {
-			if recv := fn.Type().(*types.Signature).Recv(); recv != nil {
-				if ptr, ok := recv.Type().(*types.Pointer); ok {
-					if _, isStruct := ptr.Elem().Underlying().(*types.Struct); !isStruct {
-						g.add(id.Pos(), "pointer receivers are only supported on struct types")
-					}
-				}
-			}
 		}
 	}
 	for id, obj := range info.Uses {
@@ -151,14 +119,14 @@ func unsupportedType(t types.Type) string {
 				msg = "unsafe pointers are not supported"
 			}
 		case *types.Chan:
-			msg = "channels are not available in scripts"
+			walk(u.Elem(), depth+1)
 		case *types.Array:
-			msg = "arrays are not supported; use slices"
-		case *types.Pointer:
-			if _, ok := u.Elem().Underlying().(*types.Struct); !ok {
-				msg = "pointers are only supported to struct types"
+			if elems := flatLen(u); elems > maxAggregateSlots {
+				msg = "arrays larger than 1<<20 elements are not supported"
 				return
 			}
+			walk(u.Elem(), depth+1)
+		case *types.Pointer:
 			walk(u.Elem(), depth+1)
 		case *types.Slice:
 			walk(u.Elem(), depth+1)
@@ -187,4 +155,24 @@ func unsupportedType(t types.Type) string {
 	}
 	walk(t, 0)
 	return msg
+}
+
+const maxAggregateSlots = 1 << 20
+
+func flatLen(t types.Type) int64 {
+	switch u := t.Underlying().(type) {
+	case *types.Array:
+		n := flatLen(u.Elem())
+		if u.Len() > 0 && n > maxAggregateSlots/u.Len() {
+			return maxAggregateSlots + 1
+		}
+		return u.Len() * n
+	case *types.Struct:
+		var n int64
+		for i := range u.NumFields() {
+			n += flatLen(u.Field(i).Type())
+		}
+		return n
+	}
+	return 1
 }

@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"slices"
 )
 
 func (s *scope) block(list []ast.Stmt) stmtFn {
@@ -61,12 +62,47 @@ func (s *scope) stmt(st ast.Stmt) stmtFn {
 	case *ast.TypeSwitchStmt:
 		return s.typeSwitchStmt(st)
 	case *ast.BranchStmt:
-		switch st.Tok {
-		case token.BREAK:
-			return func(*frame) flow { return flowBreak }
-		case token.CONTINUE:
-			return func(*frame) flow { return flowContinue }
+		var label *types.Label
+		if st.Label != nil {
+			label = s.c.info.Uses[st.Label].(*types.Label)
 		}
+		switch {
+		case st.Tok == token.FALLTHROUGH:
+			return func(*frame) flow { return flowFallthrough }
+		case st.Tok == token.BREAK && label == nil:
+			return func(*frame) flow { return flowBreak }
+		case st.Tok == token.CONTINUE && label == nil:
+			return func(*frame) flow { return flowContinue }
+		case st.Tok == token.BREAK:
+			return func(fr *frame) flow {
+				fr.m.label = label
+				return flowBreakLabel
+			}
+		case st.Tok == token.CONTINUE:
+			return func(fr *frame) flow {
+				fr.m.label = label
+				return flowContinueLabel
+			}
+		}
+	case *ast.LabeledStmt:
+		s.label = s.c.info.Defs[st.Label].(*types.Label)
+		inner := s.stmt(st.Stmt)
+		s.label = nil
+		return inner
+	case *ast.DeferStmt:
+		return s.deferStmt(st)
+	case *ast.GoStmt:
+		return s.goStmt(st)
+	case *ast.SendStmt:
+		ch := s.expr(st.Chan)
+		v := s.convertTo(s.typeOf(st.Chan).Underlying().(*types.Chan).Elem(), st.Value)
+		return func(fr *frame) flow {
+			c := ch(fr).(*chanVal)
+			fr.m.send(c, v(fr))
+			return flowNext
+		}
+	case *ast.SelectStmt:
+		return s.selectStmt(st)
 	case *ast.EmptyStmt:
 		return func(*frame) flow { return flowNext }
 	}
@@ -95,16 +131,27 @@ func (s *scope) object(id *ast.Ident) types.Object {
 }
 
 func (s *scope) lvalue(e ast.Expr, define bool) lvalue {
+	lv, inPlace := s.lvalueOf(e, define)
+	if inPlace && isAggregate(s.typeOf(e)) {
+		load := lv.load
+		lv.store = func(fr *frame, obj, key, v Value) {
+			assignAgg(load(fr, obj, key).(*structVal), v.(*structVal))
+		}
+	}
+	return lv
+}
+
+func (s *scope) lvalueOf(e ast.Expr, define bool) (lvalue, bool) {
 	switch e := ast.Unparen(e).(type) {
 	case *ast.Ident:
 		if e.Name == "_" {
-			return lvalue{store: func(*frame, Value, Value, Value) {}}
+			return lvalue{store: func(*frame, Value, Value, Value) {}}, false
 		}
 		v := s.object(e).(*types.Var)
 		if define && s.c.info.Defs[e] != nil {
-			return s.declLvalue(v)
+			return s.declLvalue(v), false
 		}
-		return s.varLvalue(v, e.Pos())
+		return s.varLvalue(v, e.Pos()), true
 	case *ast.IndexExpr:
 		x := s.expr(e.X)
 		switch xt := s.typeOf(e.X).Underlying().(type) {
@@ -114,7 +161,14 @@ func (s *scope) lvalue(e ast.Expr, define bool) lvalue {
 				prep:  func(fr *frame) (Value, Value) { return x(fr), idx(fr) },
 				load:  func(_ *frame, obj, key Value) Value { return obj.([]Value)[key.(int)] },
 				store: func(_ *frame, obj, key, v Value) { obj.([]Value)[key.(int)] = v },
-			}
+			}, true
+		case *types.Array, *types.Pointer:
+			idx := s.intExpr(e.Index)
+			return lvalue{
+				prep:  func(fr *frame) (Value, Value) { return derefBox(x(fr)), idx(fr) },
+				load:  func(_ *frame, obj, key Value) Value { return obj.(*structVal).f[key.(int)] },
+				store: func(_ *frame, obj, key, v Value) { obj.(*structVal).f[key.(int)] = v },
+			}, true
 		case *types.Map:
 			k := s.convertTo(xt.Key(), e.Index)
 			zero := s.c.prog.zero(xt.Elem())
@@ -127,7 +181,7 @@ func (s *scope) lvalue(e ast.Expr, define bool) lvalue {
 					return zero()
 				},
 				store: func(fr *frame, obj, key, v Value) { obj.(*mapVal).set(fr.m, key, v) },
-			}
+			}, false
 		}
 	case *ast.SelectorExpr:
 		base, i := s.fieldBase(e)
@@ -135,20 +189,39 @@ func (s *scope) lvalue(e ast.Expr, define bool) lvalue {
 			prep:  func(fr *frame) (Value, Value) { return base(fr), nil },
 			load:  func(_ *frame, obj, _ Value) Value { return obj.(*structVal).f[i] },
 			store: func(_ *frame, obj, _, v Value) { obj.(*structVal).f[i] = v },
-		}
+		}, true
 	case *ast.StarExpr:
 		p := s.expr(e.X)
-		return lvalue{
-			prep: func(fr *frame) (Value, Value) { return p(fr), nil },
-			load: func(_ *frame, obj, _ Value) Value { return obj },
-			store: func(_ *frame, obj, _, v Value) {
-				dst := obj.(*structVal)
-				copy(dst.f, v.(*structVal).f)
-			},
+		if isAggregate(s.typeOf(e)) {
+			return lvalue{
+				prep: func(fr *frame) (Value, Value) { return derefBox(p(fr)), nil },
+				load: func(_ *frame, obj, _ Value) Value { return obj },
+			}, true
 		}
+		return lvalue{
+			prep:  func(fr *frame) (Value, Value) { return derefSlot(p(fr)), nil },
+			load:  func(_ *frame, obj, _ Value) Value { return *obj.(*Value) },
+			store: func(_ *frame, obj, _, v Value) { *obj.(*Value) = v },
+		}, false
 	}
 	s.c.fail(e.Pos(), "cannot assign to %T", e)
-	return lvalue{}
+	return lvalue{}, false
+}
+
+func derefBox(v Value) *structVal {
+	sv := v.(*structVal)
+	if sv == nil {
+		throw("invalid memory address or nil pointer dereference")
+	}
+	return sv
+}
+
+func derefSlot(v Value) *Value {
+	p := v.(*Value)
+	if p == nil {
+		throw("invalid memory address or nil pointer dereference")
+	}
+	return p
 }
 
 func (s *scope) declLvalue(v types.Object) lvalue {
@@ -272,6 +345,15 @@ func (s *scope) multiValue(rhs ast.Expr) (expr, []types.Type) {
 		}
 	case *ast.TypeAssertExpr:
 		return s.typeAssert(r, true), []types.Type{s.typeOf(r.Type), types.Typ[types.Bool]}
+	case *ast.UnaryExpr:
+		if r.Op == token.ARROW {
+			elem := s.typeOf(r.X).Underlying().(*types.Chan).Elem()
+			ch, zero := s.expr(r.X), s.c.prog.zero(elem)
+			return func(fr *frame) Value {
+				v, ok := fr.m.recv(ch(fr).(*chanVal), zero)
+				return tuple{v, ok}
+			}, []types.Type{elem, types.Typ[types.Bool]}
+		}
 	}
 	tup := s.typeOf(rhs).(*types.Tuple)
 	ts := make([]types.Type, tup.Len())
@@ -337,8 +419,13 @@ func (s *scope) declStmt(st *ast.DeclStmt) stmtFn {
 			}
 			v := s.c.info.Defs[n]
 			zero := s.c.prog.zero(v.Type())
+			size := int64(0)
+			if isAggregate(v.Type()) {
+				size = sizeOf(v.Type())
+			}
 			lv := s.declLvalue(v)
 			parts = append(parts, func(fr *frame) flow {
+				fr.m.alloc(size)
 				lv.store(fr, nil, nil, zero())
 				return flowNext
 			})
@@ -354,6 +441,18 @@ func (s *scope) declStmt(st *ast.DeclStmt) stmtFn {
 
 func (s *scope) returnStmt(st *ast.ReturnStmt) stmtFn {
 	res := s.sig.Results()
+	if len(st.Results) > 0 && len(s.code.results) > 0 && containsDeferIn(s) {
+		lhs := make([]ast.Expr, res.Len())
+		for i := range lhs {
+			lhs[i] = &ast.Ident{Name: res.At(i).Name(), NamePos: st.Pos()}
+			s.c.info.Uses[lhs[i].(*ast.Ident)] = res.At(i)
+		}
+		assign := s.assign(&ast.AssignStmt{Lhs: lhs, Tok: token.ASSIGN, TokPos: st.Pos(), Rhs: st.Results})
+		return func(fr *frame) flow {
+			assign(fr)
+			return flowReturn
+		}
+	}
 	switch {
 	case len(st.Results) == 0 && len(s.code.results) > 0:
 		loads := make([]expr, len(s.code.results))
@@ -440,6 +539,7 @@ func (s *scope) ifStmt(st *ast.IfStmt) stmtFn {
 }
 
 func (s *scope) forStmt(st *ast.ForStmt) stmtFn {
+	label := s.takeLabel()
 	init := s.optStmt(st.Init)
 	var perIteration []int
 	if a, ok := st.Init.(*ast.AssignStmt); ok && a.Tok == token.DEFINE {
@@ -464,11 +564,8 @@ func (s *scope) forStmt(st *ast.ForStmt) stmtFn {
 			if cond != nil && !cond(fr).(bool) {
 				return flowNext
 			}
-			switch body(fr) {
-			case flowBreak:
-				return flowNext
-			case flowReturn:
-				return flowReturn
+			if exit, fl := loopFlow(m, body(fr), label); exit {
+				return fl
 			}
 			m.burn(1)
 			for _, slot := range perIteration {
@@ -501,31 +598,60 @@ func (lv *lvalue) set(fr *frame, v Value) {
 }
 
 func (s *scope) rangeStmt(st *ast.RangeStmt) stmtFn {
+	label := s.takeLabel()
 	define := st.Tok == token.DEFINE
 	x := s.expr(st.X)
 	key := s.rangeVar(st.Key, define)
 	val := s.rangeVar(st.Value, define)
 	body := s.block(st.Body.List)
 	iterate := func(fr *frame) (stop bool, fl flow) {
-		switch fl := body(fr); fl {
-		case flowBreak:
-			return true, flowNext
-		case flowReturn:
-			return true, flowReturn
+		if exit, fl := loopFlow(fr.m, body(fr), label); exit {
+			return true, fl
 		}
 		fr.m.burn(1)
 		return false, flowNext
 	}
-	switch xt := s.typeOf(st.X).Underlying().(type) {
-	case *types.Slice:
-		_, structElem := xt.Elem().Underlying().(*types.Struct)
+	rangeT := s.typeOf(st.X).Underlying()
+	if p, ok := rangeT.(*types.Pointer); ok {
+		rangeT = p.Elem().Underlying()
+	}
+	switch xt := rangeT.(type) {
+	case *types.Chan:
+		zero := s.c.prog.zero(xt.Elem())
 		return func(fr *frame) flow {
-			sl := x(fr).([]Value)
+			c := x(fr).(*chanVal)
+			for {
+				v, ok := fr.m.recv(c, zero)
+				if !ok {
+					return flowNext
+				}
+				key.set(fr, v)
+				if stop, fl := iterate(fr); stop {
+					return fl
+				}
+			}
+		}
+	case *types.Slice, *types.Array:
+		var elemT types.Type
+		elems := func(v Value) []Value { return v.([]Value) }
+		if at, ok := xt.(*types.Array); ok {
+			elemT = at.Elem()
+			_, viaPointer := s.typeOf(st.X).Underlying().(*types.Pointer)
+			elems = func(v Value) []Value { return derefBox(v).f }
+			if val != nil && !viaPointer {
+				elems = func(v Value) []Value { return slices.Clone(v.(*structVal).f) }
+			}
+		} else {
+			elemT = xt.(*types.Slice).Elem()
+		}
+		aggElem := isAggregate(elemT)
+		return func(fr *frame) flow {
+			sl := elems(x(fr))
 			for i := range len(sl) {
 				key.set(fr, i)
 				if val != nil {
 					v := sl[i]
-					if structElem {
+					if aggElem {
 						v = v.(*structVal).clone(fr.m)
 					}
 					val.set(fr, v)
@@ -593,6 +719,7 @@ type switchClause struct {
 }
 
 func (s *scope) switchStmt(st *ast.SwitchStmt) stmtFn {
+	label := s.takeLabel()
 	init := s.optStmt(st.Init)
 	var tag expr
 	var eq func(a, b Value) bool
@@ -640,10 +767,12 @@ func (s *scope) switchStmt(st *ast.SwitchStmt) stmtFn {
 		if chosen < 0 {
 			return flowNext
 		}
-		if fl := clauses[chosen].body(fr); fl != flowBreak {
-			return fl
+		fl := clauses[chosen].body(fr)
+		for fl == flowFallthrough && chosen+1 < len(clauses) {
+			chosen++
+			fl = clauses[chosen].body(fr)
 		}
-		return flowNext
+		return switchFlow(fr.m, fl, label)
 	}
 }
 
@@ -680,6 +809,7 @@ func (s *scope) typeCaseOf(e ast.Expr) typeCase {
 }
 
 func (s *scope) typeSwitchStmt(st *ast.TypeSwitchStmt) stmtFn {
+	label := s.takeLabel()
 	init := s.optStmt(st.Init)
 	var subject ast.Expr
 	bound := false
@@ -712,7 +842,7 @@ func (s *scope) typeSwitchStmt(st *ast.TypeSwitchStmt) stmtFn {
 			clauses[i].bind = &lv
 			if len(cc.List) == 1 && !clauses[i].cases[0].nilCase && clauses[i].cases[0].iface == nil {
 				clauses[i].unwrap = true
-				_, clauses[i].clone = obj.Type().Underlying().(*types.Struct)
+				clauses[i].clone = isAggregate(obj.Type())
 			}
 		}
 		clauses[i].body = s.block(cc.Body)
@@ -746,9 +876,150 @@ func (s *scope) typeSwitchStmt(st *ast.TypeSwitchStmt) stmtFn {
 			}
 			cl.bind.set(fr, bv)
 		}
-		if fl := cl.body(fr); fl != flowBreak {
-			return fl
+		return switchFlow(fr.m, cl.body(fr), label)
+	}
+}
+
+func containsDeferIn(s *scope) bool { return s.code.hasDefer }
+
+func (s *scope) prepareCall(call *ast.CallExpr) (func(*frame) []Value, expr) {
+	var captured []ast.Expr
+	var evals []expr
+	capture := func(e ast.Expr, eval expr) {
+		captured = append(captured, e)
+		evals = append(evals, eval)
+	}
+	ftv := s.c.info.Types[call.Fun]
+	if !ftv.IsType() && !ftv.IsBuiltin() {
+		switch f := ast.Unparen(call.Fun).(type) {
+		case *ast.SelectorExpr:
+			if sel, ok := s.c.info.Selections[f]; ok {
+				switch {
+				case sel.Kind() == types.FieldVal:
+					capture(call.Fun, s.value(call.Fun))
+				case methodTakesAddress(sel):
+					capture(f.X, s.addressOf(f.X))
+				default:
+					capture(f.X, s.value(f.X))
+				}
+			}
+		case *ast.Ident:
+			if _, isVar := s.c.info.Uses[f].(*types.Var); isVar {
+				capture(call.Fun, s.value(call.Fun))
+			}
+		default:
+			capture(call.Fun, s.value(call.Fun))
 		}
+	}
+	for _, a := range call.Args {
+		capture(a, s.value(a))
+	}
+	if s.overrides == nil {
+		s.overrides = map[ast.Expr]expr{}
+	}
+	for i, e := range captured {
+		s.overrides[e] = func(fr *frame) Value { return fr.deferArgs[i] }
+	}
+	run := s.expr(call)
+	for _, e := range captured {
+		delete(s.overrides, e)
+	}
+	return func(fr *frame) []Value {
+		args := make([]Value, len(evals))
+		for i, ev := range evals {
+			args[i] = ev(fr)
+		}
+		return args
+	}, run
+}
+
+func (s *scope) deferStmt(st *ast.DeferStmt) stmtFn {
+	args, run := s.prepareCall(st.Call)
+	return func(fr *frame) flow {
+		fr.defers = append(fr.defers, deferred{call: run, args: args(fr)})
 		return flowNext
 	}
+}
+
+func (s *scope) goStmt(st *ast.GoStmt) stmtFn {
+	args, run := s.prepareCall(st.Call)
+	return func(fr *frame) flow {
+		captured := args(fr)
+		fr.m.spawn(func(gfr *frame) {
+			gfr.deferArgs = captured
+			run(gfr)
+		})
+		return flowNext
+	}
+}
+
+func (s *scope) selectStmt(st *ast.SelectStmt) stmtFn {
+	label := s.takeLabel()
+	type clause struct {
+		ch     expr
+		send   bool
+		val    expr
+		zero   func() Value
+		assign []*lvalue
+		body   stmtFn
+	}
+	var clauses []clause
+	var def stmtFn
+	for _, c := range st.Body.List {
+		cc := c.(*ast.CommClause)
+		var cl clause
+		var recv *ast.UnaryExpr
+		switch comm := cc.Comm.(type) {
+		case nil:
+			def = s.block(cc.Body)
+			continue
+		case *ast.SendStmt:
+			cl.ch, cl.send = s.expr(comm.Chan), true
+			cl.val = s.convertTo(s.typeOf(comm.Chan).Underlying().(*types.Chan).Elem(), comm.Value)
+		case *ast.ExprStmt:
+			recv = ast.Unparen(comm.X).(*ast.UnaryExpr)
+		case *ast.AssignStmt:
+			recv = ast.Unparen(comm.Rhs[0]).(*ast.UnaryExpr)
+			for _, l := range comm.Lhs {
+				cl.assign = append(cl.assign, s.rangeVar(l, comm.Tok == token.DEFINE))
+			}
+		}
+		if recv != nil {
+			cl.ch = s.expr(recv.X)
+			cl.zero = s.c.prog.zero(s.typeOf(recv.X).Underlying().(*types.Chan).Elem())
+		}
+		cl.body = s.block(cc.Body)
+		clauses = append(clauses, cl)
+	}
+	return func(fr *frame) flow {
+		cases := make([]selectCase, len(clauses))
+		for i, cl := range clauses {
+			cases[i] = selectCase{ch: cl.ch(fr).(*chanVal), send: cl.send, zero: cl.zero}
+			if cl.send {
+				cases[i].val = cl.val(fr)
+			}
+		}
+		i, v, ok := fr.m.selectOp(cases, def != nil)
+		if i < 0 {
+			return switchFlow(fr.m, def(fr), label)
+		}
+		cl := clauses[i]
+		if len(cl.assign) > 0 {
+			cl.assign[0].set(fr, v)
+		}
+		if len(cl.assign) > 1 {
+			cl.assign[1].set(fr, ok)
+		}
+		return switchFlow(fr.m, cl.body(fr), label)
+	}
+}
+
+func methodTakesAddress(sel *types.Selection) bool {
+	recv := sel.Obj().(*types.Func).Signature().Recv()
+	if recv == nil {
+		return false
+	}
+	_, ptrRecv := recv.Type().(*types.Pointer)
+	_, xPtr := sel.Recv().Underlying().(*types.Pointer)
+	return ptrRecv && !xPtr
 }

@@ -1,6 +1,7 @@
 package tendril
 
 import (
+	"fmt"
 	"go/ast"
 	"go/constant"
 	"go/token"
@@ -35,6 +36,9 @@ func defaultType(t types.Type) types.Type {
 }
 
 func (s *scope) expr(e ast.Expr) expr {
+	if ov, ok := s.overrides[e]; ok {
+		return ov
+	}
 	if tv := s.c.info.Types[e]; tv.Value != nil {
 		v := constValue(tv.Value, defaultType(tv.Type))
 		return func(*frame) Value { return v }
@@ -64,13 +68,10 @@ func (s *scope) expr(e ast.Expr) expr {
 		return s.typeAssert(e, false)
 	case *ast.StarExpr:
 		p := s.expr(e.X)
-		return func(fr *frame) Value {
-			sv := p(fr).(*structVal)
-			if sv == nil {
-				throw("invalid memory address or nil pointer dereference")
-			}
-			return sv
+		if isAggregate(s.typeOf(e)) {
+			return func(fr *frame) Value { return derefBox(p(fr)) }
 		}
+		return func(fr *frame) Value { return *derefSlot(p(fr)) }
 	}
 	s.c.fail(e.Pos(), "unsupported expression %T", e)
 	return nil
@@ -177,6 +178,9 @@ func (s *scope) index(e *ast.IndexExpr) expr {
 		return func(fr *frame) Value { return x(fr).(string)[idx(fr).(int)] }
 	case *types.Map:
 		return s.mapIndex(e, false)
+	case *types.Array, *types.Pointer:
+		idx := s.intExpr(e.Index)
+		return func(fr *frame) Value { return derefBox(x(fr)).f[idx(fr).(int)] }
 	default:
 		s.c.fail(e.Pos(), "cannot index %s", xt)
 	}
@@ -188,7 +192,7 @@ func (s *scope) mapIndex(e *ast.IndexExpr, commaOK bool) expr {
 	x := s.expr(e.X)
 	k := s.convertTo(mt.Key(), e.Index)
 	zero := s.c.prog.zero(mt.Elem())
-	_, structElem := mt.Elem().Underlying().(*types.Struct)
+	structElem := isAggregate(mt.Elem())
 	if !commaOK {
 		return func(fr *frame) Value {
 			if v, ok := x(fr).(*mapVal).get(k(fr)); ok {
@@ -252,8 +256,13 @@ func (s *scope) sliceExpr(e *ast.SliceExpr) expr {
 			return str[bound(fr, lo, 0):bound(fr, hi, len(str))]
 		}
 	}
+	asSlice := func(v Value) []Value { return v.([]Value) }
+	switch s.typeOf(e.X).Underlying().(type) {
+	case *types.Array, *types.Pointer:
+		asSlice = func(v Value) []Value { return derefBox(v).f }
+	}
 	return func(fr *frame) Value {
-		sl := x(fr).([]Value)
+		sl := asSlice(x(fr))
 		l, h := bound(fr, lo, 0), bound(fr, hi, len(sl))
 		if max != nil {
 			return sl[l:h:max(fr).(int)]
@@ -297,20 +306,33 @@ func (s *scope) composite(e *ast.CompositeLit) expr {
 			}
 			return sv
 		}
-	case *types.Slice:
-		elems := make([]expr, len(e.Elts))
-		for i, el := range e.Elts {
-			if _, ok := el.(*ast.KeyValueExpr); ok {
-				s.c.fail(el.Pos(), "indexed slice literals are not supported")
-			}
-			elems[i] = s.convertTo(u.Elem(), el)
-		}
-		size := int64(headerBytes + slotBytes*len(elems))
+	case *types.Array:
+		idx, elems, _ := s.indexedElems(e, u.Elem())
+		zero := s.c.prog.zero(t)
+		size := int64(headerBytes + slotBytes*u.Len())
 		return func(fr *frame) Value {
 			fr.m.alloc(size)
-			out := make([]Value, len(elems))
+			box := zero().(*structVal)
 			for i, el := range elems {
-				out[i] = el(fr)
+				box.f[idx[i]] = el(fr)
+			}
+			return box
+		}
+	case *types.Slice:
+		idx, elems, n := s.indexedElems(e, u.Elem())
+		elemZero := s.c.prog.zero(u.Elem())
+		size := int64(headerBytes + slotBytes*n)
+		dense := n == len(elems)
+		return func(fr *frame) Value {
+			fr.m.alloc(size)
+			out := make([]Value, n)
+			if !dense {
+				for i := range out {
+					out[i] = elemZero()
+				}
+			}
+			for i, el := range elems {
+				out[idx[i]] = el(fr)
 			}
 			return out
 		}
@@ -333,6 +355,24 @@ func (s *scope) composite(e *ast.CompositeLit) expr {
 	}
 	s.c.fail(e.Pos(), "unsupported composite literal of type %s", t)
 	return nil
+}
+
+func (s *scope) indexedElems(e *ast.CompositeLit, elemT types.Type) ([]int, []expr, int) {
+	idx := make([]int, len(e.Elts))
+	elems := make([]expr, len(e.Elts))
+	next, n := 0, 0
+	for i, el := range e.Elts {
+		if kv, ok := el.(*ast.KeyValueExpr); ok {
+			k, _ := constant.Int64Val(s.c.info.Types[kv.Key].Value)
+			next = int(k)
+			el = kv.Value
+		}
+		idx[i] = next
+		elems[i] = s.convertTo(elemT, el)
+		next++
+		n = max(n, next)
+	}
+	return idx, elems, n
 }
 
 func (s *scope) funcLit(e *ast.FuncLit) expr {
@@ -366,7 +406,7 @@ func (s *scope) funcLit(e *ast.FuncLit) expr {
 
 func (s *scope) unary(e *ast.UnaryExpr) expr {
 	if e.Op == token.AND {
-		return s.composite(ast.Unparen(e.X).(*ast.CompositeLit))
+		return s.addressOf(e.X)
 	}
 	x := s.expr(e.X)
 	switch e.Op {
@@ -374,6 +414,12 @@ func (s *scope) unary(e *ast.UnaryExpr) expr {
 		return x
 	case token.NOT:
 		return func(fr *frame) Value { return !x(fr).(bool) }
+	case token.ARROW:
+		zero := s.c.prog.zero(s.typeOf(e))
+		return func(fr *frame) Value {
+			v, _ := fr.m.recv(x(fr).(*chanVal), zero)
+			return v
+		}
 	case token.SUB, token.XOR:
 		op := unaryOp(e.Op, s.typeOf(e).Underlying().(*types.Basic).Kind())
 		return func(fr *frame) Value { return op(x(fr)) }
@@ -458,7 +504,9 @@ func nilCheck(t types.Type) func(Value) bool {
 	case *types.Map:
 		return func(v Value) bool { return v.(*mapVal) == nil }
 	case *types.Pointer:
-		return func(v Value) bool { return v.(*structVal) == nil }
+		return isNilPointer
+	case *types.Chan:
+		return func(v Value) bool { return v.(*chanVal) == nil }
 	case *types.Signature:
 		return func(v Value) bool {
 			switch f := v.(type) {
@@ -484,7 +532,7 @@ func (s *scope) typeAssert(e *ast.TypeAssertExpr, commaOK bool) expr {
 	x := s.expr(e.X)
 	t := s.typeOf(e.Type)
 	ti, toIface := t.Underlying().(*types.Interface)
-	_, structT := t.Underlying().(*types.Struct)
+	structT := isAggregate(t)
 	zero := s.c.prog.zero(t)
 	srcT := s.typeOf(e.X)
 	return func(fr *frame) Value {
@@ -528,7 +576,7 @@ func isFresh(e ast.Expr) bool {
 
 func (s *scope) value(e ast.Expr) expr {
 	x := s.expr(e)
-	if _, ok := s.typeOf(e).Underlying().(*types.Struct); ok && !isFresh(e) {
+	if isAggregate(s.typeOf(e)) && !isFresh(e) {
 		return func(fr *frame) Value { return x(fr).(*structVal).clone(fr.m) }
 	}
 	return x
@@ -559,6 +607,27 @@ func (s *scope) conversion(to types.Type, arg ast.Expr) expr {
 		return s.convertTo(to, arg)
 	}
 	x := s.value(arg)
+	if _, fromSlice := s.typeOf(arg).Underlying().(*types.Slice); fromSlice {
+		target := to.Underlying()
+		viaPointer := false
+		if p, ok := target.(*types.Pointer); ok {
+			target, viaPointer = p.Elem().Underlying(), true
+		}
+		if at, ok := target.(*types.Array); ok {
+			n := int(at.Len())
+			info := s.c.prog.structInfo(at)
+			return func(fr *frame) Value {
+				sl := x(fr).([]Value)
+				if len(sl) < n {
+					throw(fmt.Sprintf("cannot convert slice with length %d to array or pointer to array with length %d", len(sl), n))
+				}
+				if viaPointer {
+					return &structVal{info: info, f: sl[:n:n]}
+				}
+				return (&structVal{info: info, f: sl[:n:n]}).clone(fr.m)
+			}
+		}
+	}
 	fb, fok := s.typeOf(arg).Underlying().(*types.Basic)
 	tb, tok := to.Underlying().(*types.Basic)
 	switch {
@@ -611,4 +680,67 @@ func (s *scope) conversion(to types.Type, arg ast.Expr) expr {
 		}
 	}
 	return x
+}
+
+func (s *scope) addressOf(e ast.Expr) expr {
+	if ov, ok := s.overrides[e]; ok {
+		return ov
+	}
+	t := s.typeOf(e)
+	agg := isAggregate(t)
+	switch x := ast.Unparen(e).(type) {
+	case *ast.CompositeLit:
+		v := s.composite(x)
+		if agg {
+			return v
+		}
+		return func(fr *frame) Value {
+			fr.m.alloc(slotBytes)
+			c := &cell{v(fr)}
+			return &c.v
+		}
+	case *ast.Ident:
+		v := s.object(x).(*types.Var)
+		if agg {
+			return s.varLoad(v, x.Pos())
+		}
+		return s.varAddr(v, x.Pos())
+	case *ast.SelectorExpr:
+		if sel, ok := s.c.info.Selections[x]; ok && sel.Kind() == types.FieldVal {
+			base, i := s.fieldBase(x)
+			if agg {
+				return func(fr *frame) Value { return base(fr).(*structVal).f[i] }
+			}
+			return func(fr *frame) Value { return &base(fr).(*structVal).f[i] }
+		}
+	case *ast.IndexExpr:
+		col := s.expr(x.X)
+		idx := s.intExpr(x.Index)
+		elems := func(v Value) []Value { return derefBox(v).f }
+		if _, ok := s.typeOf(x.X).Underlying().(*types.Slice); ok {
+			elems = func(v Value) []Value { return v.([]Value) }
+		}
+		if agg {
+			return func(fr *frame) Value { return elems(col(fr))[idx(fr).(int)] }
+		}
+		return func(fr *frame) Value { return &elems(col(fr))[idx(fr).(int)] }
+	case *ast.StarExpr:
+		return s.expr(x.X)
+	}
+	s.c.fail(e.Pos(), "cannot take the address of %T", e)
+	return nil
+}
+
+func (s *scope) varAddr(v *types.Var, pos token.Pos) expr {
+	if g, ok := s.c.globals[v]; ok {
+		return func(fr *frame) Value { return &fr.m.globals[g] }
+	}
+	if i, ok := s.free[v]; ok {
+		return func(fr *frame) Value { return &fr.free[i].v }
+	}
+	slot, ok := s.locals[v]
+	if !ok || !s.captured[v] {
+		s.c.fail(pos, "internal: address of %s was not escape-analyzed", v.Name())
+	}
+	return func(fr *frame) Value { return &fr.slots[slot].(*cell).v }
 }

@@ -44,7 +44,11 @@ func TestConformanceWithGo(t *testing.T) {
 }
 
 func runWithGo(t *testing.T, src string) string {
-	dir := t.TempDir()
+	dir, err := os.MkdirTemp("testdata", "_run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
 	main := src + "\nfunc main() { fmt.Print(Run()) }\n"
 	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte(main), 0o644); err != nil {
 		t.Fatal(err)

@@ -111,6 +111,7 @@ func (p *Program) call(ctx context.Context, lim Limits, j *Journal, name string,
 		out = m.exec(code, nf)
 		results = m.exportResults(out, sig.Results())
 	})
+	m.shutdown()
 	if err != nil {
 		return nil, m.stats(), err
 	}
@@ -203,10 +204,20 @@ func (m *machine) export(v Value, t types.Type, depth int) any {
 		}
 		return out
 	case *types.Pointer:
-		if v.(*structVal) == nil {
+		if isNilPointer(v) {
 			return nil
 		}
+		if p, ok := v.(*Value); ok {
+			return m.export(*p, u.Elem(), depth+1)
+		}
 		return m.export(v, u.Elem(), depth+1)
+	case *types.Array:
+		sv := v.(*structVal)
+		out := make([]any, len(sv.f))
+		for i, e := range sv.f {
+			out[i] = m.export(e, u.Elem(), depth+1)
+		}
+		return out
 	case *types.Slice:
 		sl := v.([]Value)
 		if sl == nil {

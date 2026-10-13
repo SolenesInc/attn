@@ -20,14 +20,57 @@ const (
 	flowBreak
 	flowContinue
 	flowReturn
+	flowBreakLabel
+	flowContinueLabel
+	flowFallthrough
 )
 
+func loopFlow(m *machine, fl flow, label *types.Label) (exit bool, result flow) {
+	switch fl {
+	case flowNext, flowContinue:
+		return false, flowNext
+	case flowBreak:
+		return true, flowNext
+	case flowBreakLabel:
+		if label != nil && m.label == label {
+			return true, flowNext
+		}
+	case flowContinueLabel:
+		if label != nil && m.label == label {
+			return false, flowNext
+		}
+	}
+	return true, fl
+}
+
+func switchFlow(m *machine, fl flow, label *types.Label) flow {
+	if fl == flowBreak || (fl == flowBreakLabel && label != nil && m.label == label) {
+		return flowNext
+	}
+	return fl
+}
+
 type frame struct {
-	m     *machine
-	slots []Value
-	free  []*cell
-	ret   Value
-	store [8]Value
+	m         *machine
+	slots     []Value
+	free      []*cell
+	ret       Value
+	defers    []deferred
+	deferArgs []Value
+	store     [8]Value
+}
+
+type deferred struct {
+	call func(*frame) Value
+	args []Value
+}
+
+type panicState struct {
+	raw       any
+	value     Value
+	pos       token.Pos
+	recovered bool
+	depth     int
 }
 
 type funcCode struct {
@@ -39,6 +82,8 @@ type funcCode struct {
 	resultCapt  []bool
 	resultZeros []func() Value
 	ptrRecv     bool
+	hasDefer    bool
+	zeroRet     func() Value
 	body        stmtFn
 }
 
@@ -72,12 +117,14 @@ type compiler struct {
 }
 
 type scope struct {
-	c        *compiler
-	code     *funcCode
-	locals   map[types.Object]int
-	free     map[types.Object]int
-	captured map[types.Object]bool
-	sig      *types.Signature
+	c         *compiler
+	code      *funcCode
+	locals    map[types.Object]int
+	free      map[types.Object]int
+	captured  map[types.Object]bool
+	sig       *types.Signature
+	label     *types.Label
+	overrides map[ast.Expr]expr
 }
 
 type unsupported struct {
@@ -155,13 +202,14 @@ func (c *compiler) compileFile(f *ast.File) error {
 	}
 	initScope := c.newScope(&funcCode{name: "init"}, map[types.Object]bool{})
 	for _, ini := range c.info.InitOrder {
+		c.capturedIn(ini.Rhs, initScope.captured)
 		c.guard(func() { p.init = append(p.init, initScope.globalInit(ini)) })
 	}
 	for _, fd := range decls {
 		c.guard(func() {
 			obj := c.info.Defs[fd.Name].(*types.Func)
 			code := c.funcs[obj]
-			s := c.newScope(code, c.capturedIn(fd.Body))
+			s := c.newScope(code, c.capturedIn(fd.Body, map[types.Object]bool{}))
 			s.compileFunc(obj.Type().(*types.Signature), fd.Body)
 			if fd.Name.Name == "init" && fd.Recv == nil {
 				p.init = append(p.init, func(fr *frame) flow {
@@ -202,12 +250,33 @@ func (s *scope) globalInit(ini *types.Initializer) stmtFn {
 	}
 }
 
-func (c *compiler) capturedIn(body ast.Node) map[types.Object]bool {
-	captured := map[types.Object]bool{}
-	ast.Inspect(body, func(n ast.Node) bool {
-		if lit, ok := n.(*ast.FuncLit); ok {
-			for _, v := range c.freeVars(lit) {
+func (c *compiler) capturedIn(body ast.Node, captured map[types.Object]bool) map[types.Object]bool {
+	addressed := func(e ast.Expr) {
+		if id, ok := ast.Unparen(e).(*ast.Ident); ok {
+			if v, ok := c.info.Uses[id].(*types.Var); ok && !isAggregate(v.Type()) {
 				captured[v] = true
+			}
+		}
+	}
+	ast.Inspect(body, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.FuncLit:
+			for _, v := range c.freeVars(n) {
+				captured[v] = true
+			}
+		case *ast.UnaryExpr:
+			if n.Op == token.AND {
+				addressed(n.X)
+			}
+		case *ast.SelectorExpr:
+			if sel, ok := c.info.Selections[n]; ok && sel.Kind() != types.FieldVal {
+				if recv := sel.Obj().(*types.Func).Signature().Recv(); recv != nil {
+					if _, ptr := recv.Type().(*types.Pointer); ptr {
+						if _, xPtr := sel.Recv().Underlying().(*types.Pointer); !xPtr {
+							addressed(n.X)
+						}
+					}
+				}
 			}
 		}
 		return true
@@ -263,7 +332,45 @@ func (s *scope) compileFunc(sig *types.Signature, body *ast.BlockStmt) {
 			code.resultZeros = append(code.resultZeros, s.c.prog.zero(v.Type()))
 		}
 	}
+	code.hasDefer = containsDefer(body)
+	zeros := make([]func() Value, sig.Results().Len())
+	for i := range zeros {
+		zeros[i] = s.c.prog.zero(sig.Results().At(i).Type())
+	}
+	code.zeroRet = func() Value {
+		switch len(zeros) {
+		case 0:
+			return nil
+		case 1:
+			return zeros[0]()
+		}
+		t := make(tuple, len(zeros))
+		for i, z := range zeros {
+			t[i] = z()
+		}
+		return t
+	}
 	code.body = s.block(body.List)
+}
+
+func containsDefer(body *ast.BlockStmt) bool {
+	found := false
+	ast.Inspect(body, func(n ast.Node) bool {
+		switch n.(type) {
+		case *ast.DeferStmt:
+			found = true
+		case *ast.FuncLit:
+			return false
+		}
+		return !found
+	})
+	return found
+}
+
+func (s *scope) takeLabel() *types.Label {
+	l := s.label
+	s.label = nil
+	return l
 }
 
 func (m *machine) newFrame(fn *funcCode, free []*cell) *frame {
@@ -288,7 +395,7 @@ func (m *machine) newFrame(fn *funcCode, free []*cell) *frame {
 
 func (m *machine) release(fr *frame) {
 	clear(fr.slots)
-	fr.ret, fr.free = nil, nil
+	fr.ret, fr.free, fr.defers, fr.deferArgs = nil, nil, fr.defers[:0], nil
 	m.frames = append(m.frames, fr)
 }
 
@@ -310,7 +417,11 @@ func (m *machine) exec(fn *funcCode, fr *frame) Value {
 			fr.slots[fn.results[i]] = z()
 		}
 	}
-	fn.body(fr)
+	if fn.hasDefer {
+		m.execDeferring(fn, fr)
+	} else {
+		fn.body(fr)
+	}
 	ret := fr.ret
 	m.release(fr)
 	m.depth--
@@ -339,11 +450,16 @@ func (m *machine) callMethod(recv iface, name string, args []Value) Value {
 		panic(fmt.Errorf("no method %s on %s", name, recv.t))
 	}
 	r := recv.v
-	if sv, isStruct := r.(*structVal); isStruct && !fn.ptrRecv {
-		if isPtr && sv == nil {
-			panic(fmt.Errorf("value method %s called using nil pointer", fn.name))
+	if !fn.ptrRecv {
+		if isPtr && isNilPointer(r) {
+			throw("invalid memory address or nil pointer dereference")
 		}
-		r = sv.clone(m)
+		switch v := r.(type) {
+		case *structVal:
+			r = v.clone(m)
+		case *Value:
+			r = *v
+		}
 	}
 	fr := m.newFrame(fn, nil)
 	fr.param(fn, 0, r)
@@ -367,16 +483,23 @@ func (p *Program) structInfoLocked(t types.Type) *structInfo {
 	if info, ok := p.structs[t]; ok {
 		return info
 	}
-	st := t.Underlying().(*types.Struct)
 	info := &structInfo{typ: t}
 	p.structs[t] = info
-	for i := range st.NumFields() {
-		f := st.Field(i)
-		info.names = append(info.names, f.Name())
-		if _, ok := f.Type().Underlying().(*types.Struct); ok {
-			info.valueStructs = append(info.valueStructs, i)
+	switch u := t.Underlying().(type) {
+	case *types.Array:
+		info.array, info.n = true, int(u.Len())
+		info.hasAgg = isAggregate(u.Elem())
+		info.elemZero = p.zeroLocked(u.Elem())
+	case *types.Struct:
+		info.n = u.NumFields()
+		for i := range u.NumFields() {
+			f := u.Field(i)
+			info.names = append(info.names, f.Name())
+			agg := isAggregate(f.Type())
+			info.agg = append(info.agg, agg)
+			info.hasAgg = info.hasAgg || agg
+			info.zeros = append(info.zeros, p.zeroLocked(f.Type()))
 		}
-		info.zeros = append(info.zeros, p.zeroLocked(f.Type()))
 	}
 	return info
 }
@@ -392,21 +515,20 @@ func (p *Program) zeroLocked(t types.Type) func() Value {
 	case *types.Basic:
 		z := basicZero(u.Kind())
 		return func() Value { return z }
-	case *types.Struct:
+	case *types.Struct, *types.Array:
 		info := p.structInfoLocked(t)
-		return func() Value {
-			f := make([]Value, len(info.zeros))
-			for i, z := range info.zeros {
-				f[i] = z()
-			}
-			return &structVal{info: info, f: f}
-		}
+		return func() Value { return info.newZero() }
 	case *types.Slice:
 		return func() Value { return []Value(nil) }
 	case *types.Map:
 		return func() Value { return (*mapVal)(nil) }
+	case *types.Chan:
+		return func() Value { return (*chanVal)(nil) }
 	case *types.Pointer:
-		return func() Value { return (*structVal)(nil) }
+		if isAggregate(u.Elem()) {
+			return func() Value { return (*structVal)(nil) }
+		}
+		return func() Value { return (*Value)(nil) }
 	default:
 		return func() Value { return nil }
 	}
@@ -446,4 +568,111 @@ func basicZero(k types.BasicKind) Value {
 		return ""
 	}
 	return nil
+}
+
+func sizeOf(t types.Type) int64 {
+	switch u := t.Underlying().(type) {
+	case *types.Struct:
+		n := int64(headerBytes)
+		for i := range u.NumFields() {
+			n += sizeOf(u.Field(i).Type())
+		}
+		return n
+	case *types.Array:
+		return headerBytes + u.Len()*sizeOf(u.Elem())
+	}
+	return slotBytes
+}
+
+func (m *machine) execDeferring(fn *funcCode, fr *frame) {
+	depth := m.depth
+	var ps *panicState
+	if r := m.protect(func() { fn.body(fr) }); r != nil {
+		ps = m.newPanic(r)
+	}
+	for len(fr.defers) > 0 {
+		d := fr.defers[len(fr.defers)-1]
+		fr.defers = fr.defers[:len(fr.defers)-1]
+		m.depth = depth
+		saved, outer := fr.deferArgs, m.panicking
+		fr.deferArgs, m.panicking = d.args, ps
+		if ps != nil {
+			ps.depth = depth + 1
+		}
+		r := m.protect(func() { d.call(fr) })
+		fr.deferArgs, m.panicking = saved, outer
+		if r != nil {
+			ps = m.newPanic(r)
+		}
+	}
+	m.depth = depth
+	if ps != nil && !ps.recovered {
+		m.pos = ps.pos
+		panic(ps.raw)
+	}
+	if len(fn.results) > 0 {
+		fr.ret = fr.resultValues(fn)
+	} else if ps != nil {
+		fr.ret = fr.zeroResults(fn)
+	}
+}
+
+func (m *machine) protect(f func()) (r any) {
+	defer func() {
+		if r = recover(); r != nil {
+			if h, isHalt := r.(halt); isHalt {
+				panic(h)
+			}
+		}
+	}()
+	f()
+	return nil
+}
+
+func (m *machine) newPanic(r any) *panicState {
+	ps := &panicState{raw: r, pos: m.pos}
+	switch v := r.(type) {
+	case scriptPanic:
+		ps.value = v.v
+	case runtimeFault:
+		ps.value = iface{t: m.prog.env.hostErr, v: runtimeError(v)}
+	case error:
+		ps.value = iface{t: m.prog.env.hostErr, v: v}
+	default:
+		ps.value = iface{t: m.prog.env.hostErr, v: fmt.Errorf("%v", v)}
+	}
+	return ps
+}
+
+type runtimeError string
+
+func (e runtimeError) Error() string { return "runtime error: " + string(e) }
+func (e runtimeError) RuntimeError() {}
+
+func (m *machine) recoverPanic() Value {
+	ps := m.panicking
+	if ps == nil || ps.recovered || ps.depth != m.depth {
+		return nil
+	}
+	ps.recovered = true
+	return ps.value
+}
+
+func (fr *frame) resultValues(fn *funcCode) Value {
+	vals := make(tuple, len(fn.results))
+	for i, slot := range fn.results {
+		v := fr.slots[slot]
+		if fn.resultCapt[i] {
+			v = v.(*cell).v
+		}
+		vals[i] = v
+	}
+	if len(vals) == 1 {
+		return vals[0]
+	}
+	return vals
+}
+
+func (fr *frame) zeroResults(fn *funcCode) Value {
+	return fn.zeroRet()
 }

@@ -180,6 +180,15 @@ func (s *scope) methodCall(e *ast.CallExpr, f *ast.SelectorExpr, sel *types.Sele
 			return fr.m.callMethod(v.(iface), name, args.eval(fr))
 		}
 	}
+	if nf, ok := s.c.prog.env.natives[fn]; ok {
+		_, ptrRecv := fn.Signature().Recv().Type().(*types.Pointer)
+		recv := s.receiver(f.X, sel.Recv(), ptrRecv)
+		return func(fr *frame) Value {
+			r := recv(fr)
+			fr.m.burn(1)
+			return nf.impl(fr.m, nil, append([]Value{r}, args.eval(fr)...))
+		}
+	}
 	code, ok := s.c.funcs[fn]
 	if !ok {
 		s.c.fail(f.Pos(), "methods of host types are not supported")
@@ -187,23 +196,7 @@ func (s *scope) methodCall(e *ast.CallExpr, f *ast.SelectorExpr, sel *types.Sele
 	if len(sel.Index()) > 1 {
 		s.c.fail(f.Pos(), "promoted methods are not supported")
 	}
-	_, xIsPtr := sel.Recv().Underlying().(*types.Pointer)
-	var recv expr
-	switch {
-	case code.ptrRecv:
-		recv = s.expr(f.X)
-	case xIsPtr:
-		x := s.expr(f.X)
-		recv = func(fr *frame) Value {
-			sv := x(fr).(*structVal)
-			if sv == nil {
-				throw("invalid memory address or nil pointer dereference")
-			}
-			return sv.clone(fr.m)
-		}
-	default:
-		recv = s.value(f.X)
-	}
+	recv := s.receiver(f.X, sel.Recv(), code.ptrRecv)
 	list := args.args
 	if args.spread != nil {
 		return func(fr *frame) Value {
@@ -237,26 +230,53 @@ func (s *scope) builtin(e *ast.CallExpr) expr {
 			return func(fr *frame) Value { return len(x(fr).([]Value)) }
 		case *types.Map:
 			return func(fr *frame) Value { return x(fr).(*mapVal).len() }
+		case *types.Array, *types.Pointer:
+			return func(fr *frame) Value { return len(derefBox(x(fr)).f) }
+		case *types.Chan:
+			return func(fr *frame) Value {
+				if c := x(fr).(*chanVal); c != nil {
+					return len(c.buf)
+				}
+				return 0
+			}
 		default:
 			s.c.fail(e.Pos(), "len of %s is not supported", u)
 		}
 	case "cap":
 		x := s.expr(e.Args[0])
+		if _, ok := s.typeOf(e.Args[0]).Underlying().(*types.Chan); ok {
+			return func(fr *frame) Value {
+				if c := x(fr).(*chanVal); c != nil {
+					return c.size
+				}
+				return 0
+			}
+		}
 		return func(fr *frame) Value { return cap(x(fr).([]Value)) }
+	case "close":
+		x := s.expr(e.Args[0])
+		return func(fr *frame) Value {
+			fr.m.closeChan(x(fr).(*chanVal))
+			return nil
+		}
 	case "append":
 		return s.appendCall(e)
 	case "make":
 		return s.makeCall(e)
 	case "new":
 		t := s.typeOf(e.Args[0])
-		if _, ok := t.Underlying().(*types.Struct); !ok {
-			s.c.fail(e.Pos(), "new is only supported for struct types")
-		}
 		zero := s.c.prog.zero(t)
-		size := int64(headerBytes + slotBytes*t.Underlying().(*types.Struct).NumFields())
+		size := sizeOf(t)
+		if isAggregate(t) {
+			return func(fr *frame) Value {
+				fr.m.alloc(size)
+				return zero()
+			}
+		}
 		return func(fr *frame) Value {
 			fr.m.alloc(size)
-			return zero()
+			c := &cell{zero()}
+			return &c.v
 		}
 	case "delete":
 		mt := s.typeOf(e.Args[0]).Underlying().(*types.Map)
@@ -304,6 +324,8 @@ func (s *scope) builtin(e *ast.CallExpr) expr {
 			}
 			return nil
 		}
+	case "recover":
+		return func(fr *frame) Value { return fr.m.recoverPanic() }
 	case "panic":
 		v := s.convertTo(anyType, e.Args[0])
 		return func(fr *frame) Value { panic(scriptPanic{v(fr)}) }
@@ -407,6 +429,22 @@ func growCap(old, need int) int {
 func (s *scope) makeCall(e *ast.CallExpr) expr {
 	t := s.typeOf(e.Args[0])
 	switch u := t.Underlying().(type) {
+	case *types.Chan:
+		var size expr
+		if len(e.Args) > 1 {
+			size = s.intExpr(e.Args[1])
+		}
+		return func(fr *frame) Value {
+			n := 0
+			if size != nil {
+				n = size(fr).(int)
+			}
+			if n < 0 {
+				throw("makechan: size out of range")
+			}
+			fr.m.alloc(headerBytes + slotBytes*int64(n))
+			return &chanVal{size: n}
+		}
 	case *types.Map:
 		return func(fr *frame) Value {
 			fr.m.alloc(headerBytes)
@@ -414,6 +452,7 @@ func (s *scope) makeCall(e *ast.CallExpr) expr {
 		}
 	case *types.Slice:
 		zero := s.c.prog.zero(u.Elem())
+		elemSize := sizeOf(u.Elem())
 		n := s.intExpr(e.Args[1])
 		c := n
 		if len(e.Args) > 2 {
@@ -424,7 +463,7 @@ func (s *scope) makeCall(e *ast.CallExpr) expr {
 			if ln < 0 || ln > cp {
 				throw("makeslice: len out of range")
 			}
-			fr.m.alloc(headerBytes + slotBytes*int64(cp))
+			fr.m.alloc(headerBytes + elemSize*int64(cp))
 			fr.m.burn(int64(cp / 8))
 			out := make([]Value, ln, cp)
 			full := out[:cp]
@@ -436,4 +475,21 @@ func (s *scope) makeCall(e *ast.CallExpr) expr {
 	}
 	s.c.fail(e.Pos(), "make of %s is not supported", t)
 	return nil
+}
+
+func (s *scope) receiver(x ast.Expr, xT types.Type, ptrRecv bool) expr {
+	_, xIsPtr := xT.Underlying().(*types.Pointer)
+	switch {
+	case ptrRecv && xIsPtr:
+		return s.expr(x)
+	case ptrRecv:
+		return s.addressOf(x)
+	case xIsPtr && pointsToAggregate(xT):
+		p := s.expr(x)
+		return func(fr *frame) Value { return derefBox(p(fr)).clone(fr.m) }
+	case xIsPtr:
+		p := s.expr(x)
+		return func(fr *frame) Value { return *derefSlot(p(fr)) }
+	}
+	return s.value(x)
 }

@@ -16,10 +16,46 @@ type cell struct{ v Value }
 type tuple []Value
 
 type structInfo struct {
-	typ          types.Type
-	names        []string
-	valueStructs []int
-	zeros        []func() Value
+	typ      types.Type
+	names    []string
+	agg      []bool
+	hasAgg   bool
+	zeros    []func() Value
+	array    bool
+	n        int
+	elemZero func() Value
+}
+
+func (si *structInfo) aggAt(i int) bool {
+	if si.array {
+		return si.hasAgg
+	}
+	return si.agg[i]
+}
+
+func (si *structInfo) newZero() *structVal {
+	f := make([]Value, si.n)
+	for i := range f {
+		if si.array {
+			f[i] = si.elemZero()
+		} else {
+			f[i] = si.zeros[i]()
+		}
+	}
+	return &structVal{info: si, f: f}
+}
+
+func isAggregate(t types.Type) bool {
+	switch t.Underlying().(type) {
+	case *types.Struct, *types.Array:
+		return true
+	}
+	return false
+}
+
+func pointsToAggregate(t types.Type) bool {
+	p, ok := t.Underlying().(*types.Pointer)
+	return ok && isAggregate(p.Elem())
 }
 
 type structVal struct {
@@ -37,10 +73,31 @@ func (s *structVal) clone(m *machine) *structVal {
 	m.alloc(headerBytes + slotBytes*int64(len(s.f)))
 	f := make([]Value, len(s.f))
 	copy(f, s.f)
-	for _, i := range s.info.valueStructs {
-		f[i] = f[i].(*structVal).clone(m)
+	if s.info.hasAgg {
+		for i := range f {
+			if s.info.aggAt(i) {
+				f[i] = f[i].(*structVal).clone(m)
+			}
+		}
 	}
 	return &structVal{info: s.info, f: f}
+}
+
+func assignAgg(dst, src *structVal) {
+	if dst == src {
+		return
+	}
+	if !dst.info.hasAgg {
+		copy(dst.f, src.f)
+		return
+	}
+	for i := range dst.f {
+		if dst.info.aggAt(i) {
+			assignAgg(dst.f[i].(*structVal), src.f[i].(*structVal))
+		} else {
+			dst.f[i] = src.f[i]
+		}
+	}
 }
 
 type mapVal struct {
@@ -152,7 +209,7 @@ func (m *machine) writeTyped(b *strings.Builder, directive string, verb rune, t 
 		return
 	}
 	if !isInterface(t) && strings.ContainsRune("vsqxX", verb) {
-		if sv, ok := v.(*structVal); ok && sv == nil {
+		if _, isPtr := t.Underlying().(*types.Pointer); isPtr && isNilPointer(v) {
 			b.WriteString("<nil>")
 			return
 		}
@@ -180,13 +237,26 @@ func (m *machine) writeTyped(b *strings.Builder, directive string, verb rune, t 
 		}
 		m.writeTyped(b, directive, verb, iv.t, iv.v, depth)
 	case *types.Pointer:
-		sv := v.(*structVal)
-		if sv == nil {
+		if isNilPointer(v) {
 			b.WriteString("<nil>")
 			return
 		}
 		b.WriteByte('&')
-		m.writeTyped(b, directive, verb, u.Elem(), sv, depth+1)
+		if p, ok := v.(*Value); ok {
+			m.writeTyped(b, directive, verb, u.Elem(), *p, depth+1)
+			return
+		}
+		m.writeTyped(b, directive, verb, u.Elem(), v, depth+1)
+	case *types.Array:
+		sv := v.(*structVal)
+		b.WriteByte('[')
+		for i, e := range sv.f {
+			if i > 0 {
+				b.WriteByte(' ')
+			}
+			m.writeTyped(b, directive, verb, u.Elem(), e, depth+1)
+		}
+		b.WriteByte(']')
 	case *types.Struct:
 		sv := v.(*structVal)
 		b.WriteByte('{')
@@ -239,6 +309,8 @@ func (m *machine) writeTyped(b *strings.Builder, directive string, verb rune, t 
 			return
 		}
 		b.WriteString("func")
+	case *types.Chan:
+		b.WriteString("chan")
 	default:
 		fmt.Fprintf(b, directive, v)
 	}
@@ -262,7 +334,15 @@ func (m *machine) formatPanic(v Value) (s string) {
 func equalAt(t types.Type, a, b Value) bool {
 	switch u := t.Underlying().(type) {
 	case *types.Pointer:
-		return a.(*structVal) == b.(*structVal)
+		return a == b
+	case *types.Array:
+		as, bs := a.(*structVal), b.(*structVal)
+		for i := range as.f {
+			if !equalAt(u.Elem(), as.f[i], bs.f[i]) {
+				return false
+			}
+		}
+		return true
 	case *types.Struct:
 		as, bs := a.(*structVal), b.(*structVal)
 		for i := range as.f {
@@ -286,4 +366,14 @@ func equalAt(t types.Type, a, b Value) bool {
 	default:
 		return a == b
 	}
+}
+
+func isNilPointer(v Value) bool {
+	switch p := v.(type) {
+	case *structVal:
+		return p == nil
+	case *Value:
+		return p == nil
+	}
+	return v == nil
 }

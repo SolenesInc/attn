@@ -11,12 +11,15 @@ import (
 )
 
 type Package struct {
-	path      string
-	journaled bool
-	types     []namedDecl
-	funcs     []namedDecl
-	consts    []namedDecl
-	native    []nativeDecl
+	path       string
+	source     string
+	bound      map[string]nativeImpl
+	journaled  bool
+	concurrent bool
+	types      []namedDecl
+	funcs      []namedDecl
+	consts     []namedDecl
+	native     []nativeDecl
 }
 
 type namedDecl struct {
@@ -33,6 +36,11 @@ type nativeDecl struct {
 type nativeImpl func(m *machine, typeArgs []types.Type, args []Value) Value
 
 func NewPackage(path string) *Package { return &Package{path: path} }
+
+func (p *Package) Concurrent() *Package {
+	p.concurrent = true
+	return p
+}
 
 func (p *Package) Func(name string, fn any) *Package {
 	p.funcs = append(p.funcs, namedDecl{name, fn})
@@ -55,11 +63,12 @@ func (p *Package) nativeFunc(name string, sig func(*types.Package) *types.Signat
 }
 
 type hostFunc struct {
-	name      string
-	fn        reflect.Value
-	sig       *types.Signature
-	ctx       bool
-	journaled bool
+	name       string
+	fn         reflect.Value
+	sig        *types.Signature
+	ctx        bool
+	journaled  bool
+	concurrent bool
 }
 
 type nativeFunc struct {
@@ -69,6 +78,8 @@ type nativeFunc struct {
 
 type Env struct {
 	mu        sync.Mutex
+	pending   map[string]*Package
+	sources   map[string]*sourceFile
 	pkgs      map[string]*types.Package
 	funcs     map[*types.Func]*hostFunc
 	natives   map[*types.Func]*nativeFunc
@@ -101,11 +112,21 @@ func NewEnv(pkgs ...*Package) (*Env, error) {
 	hostErr.AddMethod(types.NewFunc(token.NoPos, nil, "Error", errorMethod))
 	e.hostErr = hostErr
 
-	tpkgs := make([]*types.Package, len(pkgs))
-	for i, p := range pkgs {
-		if _, dup := e.pkgs[p.path]; dup {
+	e.pending = map[string]*Package{}
+	var reflected []*Package
+	for _, p := range pkgs {
+		if _, dup := e.pending[p.path]; dup {
 			return nil, fmt.Errorf("package %q declared twice", p.path)
 		}
+		e.pending[p.path] = p
+		if p.source == "" {
+			reflected = append(reflected, p)
+		}
+	}
+	pkgs = reflected
+	tpkgs := make([]*types.Package, len(pkgs))
+	for i, p := range pkgs {
+		delete(e.pending, p.path)
 		tpkgs[i] = types.NewPackage(p.path, lastElem(p.path))
 		e.pkgs[p.path] = tpkgs[i]
 		for _, d := range p.types {
@@ -138,7 +159,7 @@ func NewEnv(pkgs ...*Package) (*Env, error) {
 			}
 			fn := types.NewFunc(token.NoPos, tpkgs[i], d.name, sig)
 			tpkgs[i].Scope().Insert(fn)
-			e.funcs[fn] = &hostFunc{name: p.path + "." + d.name, fn: rv, sig: sig, ctx: wantsCtx, journaled: p.journaled}
+			e.funcs[fn] = &hostFunc{name: p.path + "." + d.name, fn: rv, sig: sig, ctx: wantsCtx, journaled: p.journaled, concurrent: p.concurrent}
 		}
 		for _, d := range p.native {
 			fn := types.NewFunc(token.NoPos, tpkgs[i], d.name, d.sig(tpkgs[i]))
@@ -153,6 +174,14 @@ func NewEnv(pkgs ...*Package) (*Env, error) {
 			tpkgs[i].Scope().Insert(types.NewConst(token.NoPos, tpkgs[i], d.name, t, constant.Make(reflect.ValueOf(d.value).Convert(basicRType(t)).Interface())))
 		}
 		tpkgs[i].MarkComplete()
+	}
+	for len(e.pending) > 0 {
+		for path := range e.pending {
+			if _, err := e.Import(path); err != nil {
+				return nil, err
+			}
+			break
+		}
 	}
 	return e, nil
 }
@@ -169,6 +198,10 @@ func lastElem(path string) string {
 func (e *Env) Import(path string) (*types.Package, error) {
 	if p, ok := e.pkgs[path]; ok {
 		return p, nil
+	}
+	if p, ok := e.pending[path]; ok {
+		delete(e.pending, path)
+		return e.checkSource(p)
 	}
 	return nil, fmt.Errorf("package %q is not available to scripts", path)
 }
@@ -576,19 +609,41 @@ func (h *hostFunc) call(m *machine, args []Value) (result Value) {
 }
 
 func (m *machine) invokeHost(h *hostFunc, in []reflect.Value, out *[]reflect.Value) {
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				if hl, ok := r.(halt); ok {
-					panic(hl)
-				}
-				panic(hostPanic{fn: h.name, v: r})
+	if h.concurrent && m.sched != nil {
+		self := m.g
+		if h.ctx {
+			in[0] = reflect.ValueOf(m.ctx)
+		}
+		m.releaseForHost()
+		failure := callGo(h, in, out)
+		m.reacquire(self)
+		if m.halted != nil {
+			panic(halt{m.halted})
+		}
+		if failure != nil {
+			panic(failure)
+		}
+		return
+	}
+	if failure := callGo(h, in, out); failure != nil {
+		panic(failure)
+	}
+}
+
+func callGo(h *hostFunc, in []reflect.Value, out *[]reflect.Value) (failure any) {
+	defer func() {
+		if r := recover(); r != nil {
+			if hl, ok := r.(halt); ok {
+				failure = hl
+				return
 			}
-		}()
-		if h.sig.Variadic() {
-			*out = h.fn.CallSlice(in)
-		} else {
-			*out = h.fn.Call(in)
+			failure = hostPanic{fn: h.name, v: r}
 		}
 	}()
+	if h.sig.Variadic() {
+		*out = h.fn.CallSlice(in)
+	} else {
+		*out = h.fn.Call(in)
+	}
+	return nil
 }

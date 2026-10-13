@@ -5,16 +5,18 @@ import (
 	"errors"
 	"fmt"
 	"go/token"
+	"go/types"
 	"runtime"
 )
 
 type Limits struct {
-	Fuel   int64
-	Memory int64
-	Depth  int
+	Fuel       int64
+	Memory     int64
+	Depth      int
+	Goroutines int
 }
 
-var DefaultLimits = Limits{Fuel: 10_000_000, Memory: 64 << 20, Depth: 512}
+var DefaultLimits = Limits{Fuel: 10_000_000, Memory: 64 << 20, Depth: 512, Goroutines: 256}
 
 type Stats struct {
 	Fuel   int64
@@ -57,6 +59,14 @@ type machine struct {
 	frames     []*frame
 	journal    *Journal
 	replayed   int
+	label      *types.Label
+	panicking  *panicState
+	sched      *scheduler
+	main       *gor
+	g          *gor
+	exited     bool
+	selectSeq  int
+	haltedBy   *gor
 }
 
 func newMachine(ctx context.Context, p *Program, lim Limits) *machine {
@@ -74,7 +84,7 @@ func (m *machine) burn(n int64) {
 }
 
 func (m *machine) stop(err error) {
-	m.halted = err
+	m.halted, m.haltedBy = err, m.g
 	panic(halt{err})
 }
 
@@ -87,6 +97,14 @@ func (m *machine) checkpointReached() {
 		m.stop(err)
 	}
 	m.checkpoint = m.fuel - ctxCheckInterval
+	if s := m.sched; s != nil {
+		s.mu.Lock()
+		waiting := len(s.runq) > 0
+		s.mu.Unlock()
+		if waiting {
+			m.yield()
+		}
+	}
 }
 
 func (m *machine) alloc(bytes int64) {
@@ -118,7 +136,11 @@ func (m *machine) run(f func()) (err error) {
 		pos := m.prog.fset.Position(m.pos)
 		switch r := r.(type) {
 		case halt:
-			err = &RuntimeError{Pos: pos, Err: r.err}
+			if re, ok := r.err.(*RuntimeError); ok {
+				err = re
+			} else {
+				err = &RuntimeError{Pos: pos, Err: r.err}
+			}
 		case scriptPanic:
 			err = &RuntimeError{Pos: pos, Err: fmt.Errorf("panic: %s", m.formatPanic(r.v))}
 		case runtimeFault:
