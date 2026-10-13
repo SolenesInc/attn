@@ -171,6 +171,8 @@ func (m *machine) callValue(fv Value, args []Value) Value {
 		}
 	case *boundMethod:
 		return fn.call(m, args)
+	case *nativeFn:
+		return fn.fn(m, args)
 	}
 	throw("invalid memory address or nil pointer dereference")
 	return nil

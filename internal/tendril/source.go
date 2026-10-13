@@ -20,6 +20,14 @@ func (p *Package) Source(src string) *Package {
 	return p
 }
 
+func (p *Package) nativeVar(name string, init func(*machine) Value) *Package {
+	if p.vars == nil {
+		p.vars = map[string]func(*machine) Value{}
+	}
+	p.vars[name] = init
+	return p
+}
+
 func (p *Package) Native(name string, impl nativeImpl) *Package {
 	if p.bound == nil {
 		p.bound = map[string]nativeImpl{}
@@ -122,7 +130,11 @@ func (e *Env) bindSource(p *Package, pkg *types.Package) error {
 				}
 			}
 		case *types.Var:
-			return fmt.Errorf("package variable %s is not supported; declare a function", name)
+			init, ok := p.vars[name]
+			if !ok {
+				return fmt.Errorf("package variable %s is declared but not bound", name)
+			}
+			e.vars[obj] = init
 		}
 	}
 	for key := range goFuncs {

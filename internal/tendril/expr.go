@@ -117,7 +117,7 @@ func (s *scope) ident(e *ast.Ident) expr {
 }
 
 func (s *scope) varLoad(v *types.Var, pos token.Pos) expr {
-	if g, ok := s.c.globals[v]; ok {
+	if g, ok := s.c.global(v); ok {
 		return func(fr *frame) Value { return fr.m.globals[g] }
 	}
 	if i, ok := s.free[v]; ok {
@@ -724,7 +724,7 @@ func (s *scope) addressOf(e ast.Expr) expr {
 }
 
 func (s *scope) varAddr(v *types.Var, pos token.Pos) expr {
-	if g, ok := s.c.globals[v]; ok {
+	if g, ok := s.c.global(v); ok {
 		return func(fr *frame) Value { return &fr.m.globals[g] }
 	}
 	if i, ok := s.free[v]; ok {

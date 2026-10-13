@@ -19,18 +19,12 @@ type Package struct {
 	types      []namedDecl
 	funcs      []namedDecl
 	consts     []namedDecl
-	native     []nativeDecl
+	vars       map[string]func(*machine) Value
 }
 
 type namedDecl struct {
 	name  string
 	value any
-}
-
-type nativeDecl struct {
-	name string
-	sig  func(*types.Package) *types.Signature
-	impl nativeImpl
 }
 
 type nativeImpl func(m *machine, typeArgs []types.Type, args []Value) Value
@@ -57,11 +51,6 @@ func (p *Package) Const(name string, v any) *Package {
 	return p
 }
 
-func (p *Package) nativeFunc(name string, sig func(*types.Package) *types.Signature, impl nativeImpl) *Package {
-	p.native = append(p.native, nativeDecl{name, sig, impl})
-	return p
-}
-
 type hostFunc struct {
 	name       string
 	fn         reflect.Value
@@ -85,6 +74,7 @@ type Env struct {
 	natives   map[*types.Func]*nativeFunc
 	toTypes   map[reflect.Type]types.Type
 	toReflect map[types.Type]reflect.Type
+	vars      map[*types.Var]func(*machine) Value
 	fieldIdx  map[*types.Struct][]int
 	hostErr   types.Type
 }
@@ -102,6 +92,7 @@ func NewEnv(pkgs ...*Package) (*Env, error) {
 		pkgs:      map[string]*types.Package{},
 		funcs:     map[*types.Func]*hostFunc{},
 		natives:   map[*types.Func]*nativeFunc{},
+		vars:      map[*types.Var]func(*machine) Value{},
 		toTypes:   map[reflect.Type]types.Type{},
 		toReflect: map[types.Type]reflect.Type{},
 		fieldIdx:  map[*types.Struct][]int{},
@@ -161,11 +152,6 @@ func NewEnv(pkgs ...*Package) (*Env, error) {
 			fn := types.NewFunc(token.NoPos, tpkgs[i], d.name, sig)
 			tpkgs[i].Scope().Insert(fn)
 			e.funcs[fn] = &hostFunc{name: p.path + "." + d.name, fn: rv, sig: sig, ctx: wantsCtx, journaled: p.journaled, concurrent: p.concurrent}
-		}
-		for _, d := range p.native {
-			fn := types.NewFunc(token.NoPos, tpkgs[i], d.name, d.sig(tpkgs[i]))
-			tpkgs[i].Scope().Insert(fn)
-			e.natives[fn] = &nativeFunc{name: p.path + "." + d.name, impl: d.impl}
 		}
 		for _, d := range p.consts {
 			t, err := e.typeOf(reflect.TypeOf(d.value))

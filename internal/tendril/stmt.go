@@ -233,7 +233,7 @@ func (s *scope) declLvalue(v types.Object) lvalue {
 }
 
 func (s *scope) varLvalue(v *types.Var, pos token.Pos) lvalue {
-	if g, ok := s.c.globals[v]; ok {
+	if g, ok := s.c.global(v); ok {
 		return lvalue{
 			load:  func(fr *frame, _, _ Value) Value { return fr.m.globals[g] },
 			store: func(fr *frame, _, _, val Value) { fr.m.globals[g] = val },
@@ -617,6 +617,30 @@ func (s *scope) rangeStmt(st *ast.RangeStmt) stmtFn {
 		rangeT = p.Elem().Underlying()
 	}
 	switch xt := rangeT.(type) {
+	case *types.Signature:
+		return func(fr *frame) flow {
+			result, done := flowNext, false
+			yield := &nativeFn{fn: func(m *machine, args []Value) Value {
+				if done {
+					throw("range function continued iteration after function for loop body returned false")
+				}
+				if len(args) > 0 {
+					key.set(fr, args[0])
+				}
+				if len(args) > 1 {
+					val.set(fr, args[1])
+				}
+				if exit, fl := loopFlow(m, body(fr), label); exit {
+					done, result = true, fl
+					return false
+				}
+				m.burn(1)
+				return true
+			}}
+			fr.m.callValue(x(fr), []Value{yield})
+			done = true
+			return result
+		}
 	case *types.Chan:
 		zero := s.c.prog.zero(xt.Elem())
 		return func(fr *frame) flow {

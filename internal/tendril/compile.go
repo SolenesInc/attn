@@ -100,6 +100,7 @@ type Program struct {
 	zeros      []func() Value
 	init       []stmtFn
 	initCode   *funcCode
+	hostInits  []hostInit
 
 	mu      sync.Mutex
 	structs map[types.Type]*structInfo
@@ -666,4 +667,26 @@ func (fr *frame) resultValues(fn *funcCode) Value {
 
 func (fr *frame) zeroResults(fn *funcCode) Value {
 	return fn.zeroRet()
+}
+
+type hostInit struct {
+	slot int
+	init func(*machine) Value
+}
+
+func (c *compiler) global(v *types.Var) (int, bool) {
+	if g, ok := c.globals[v]; ok {
+		return g, true
+	}
+	init, ok := c.prog.env.vars[v]
+	if !ok {
+		return 0, false
+	}
+	p := c.prog
+	g := p.nglobals
+	p.nglobals++
+	p.zeros = append(p.zeros, func() Value { return nil })
+	p.hostInits = append(p.hostInits, hostInit{g, init})
+	c.globals[v] = g
+	return g, true
 }

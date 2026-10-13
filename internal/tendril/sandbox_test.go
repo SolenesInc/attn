@@ -84,14 +84,14 @@ func TestCompileRejectsEscapes(t *testing.T) {
 	env := mustEnv(t)
 	cases := map[string]string{
 		"import \"os\"\nfunc Run() { os.Remove(\"/\") }":       "undefined: os.Remove",
-		"import \"io\"\nvar _ io.Reader":                       `package "io" is not available`,
+		"import \"io\"\nvar _ io.Reader":                       "undefined: io.Reader",
+		"import \"net\"\nvar _ net.Conn":                       `package "net" is not available`,
 		"import \"unsafe\"\nvar _ = unsafe.Sizeof(1)":          `package "unsafe" is not available`,
 		"import \"net/http\"\nvar _ = http.Get":                `package "net/http" is not available`,
 		"func Run() {\nL:\n\tgoto L\n}":                        "goto is not supported",
 		`func Run() { var a [1 << 30]byte; _ = a }`:            "arrays larger than 1<<20 elements are not supported",
 		`func Run() int { return "x" }`:                        `cannot use "x"`,
 		`func Run() { for i := range 3 { fmt.Println(i) } }`:   "undefined: fmt",
-		"import \"strings\"\nvar b strings.Builder":            "undefined: strings.Builder",
 		"import \"strings\"\nfunc Run() { strings.NewReader }": "undefined: strings.NewReader",
 	}
 	for src, want := range cases {

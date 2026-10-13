@@ -172,6 +172,9 @@ func (m *machine) initGlobals() {
 	for i, z := range p.zeros {
 		m.globals[i] = z()
 	}
+	for _, h := range p.hostInits {
+		m.globals[h.slot] = h.init(m)
+	}
 	if len(p.init) == 0 {
 		return
 	}
