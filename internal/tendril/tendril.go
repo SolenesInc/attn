@@ -57,10 +57,12 @@ func (e *Env) Compile(filename, src string) (*Program, error) {
 		funcs:      map[string]*funcCode{},
 		sigs:       map[string]*types.Signature{},
 		methods:    map[*types.Func]*funcCode{},
+		instances:  map[instKey]*funcCode{},
 		dispatched: map[dispatchKey]*dispatchEntry{},
 		structs:    map[types.Type]*structInfo{},
 	}
-	c := &compiler{prog: p, info: info, funcs: map[*types.Func]*funcCode{}, globals: map[*types.Var]int{}}
+	c := &compiler{prog: p, info: info, funcs: map[*types.Func]*funcCode{}, globals: map[*types.Var]int{},
+		generic: map[*types.Func]*ast.FuncDecl{}, tctx: types.NewContext()}
 	if err := c.compileFile(f); err != nil {
 		return nil, err
 	}
@@ -255,8 +257,8 @@ func (m *machine) export(v Value, t types.Type, depth int) any {
 			return map[any]any(nil)
 		}
 		out := make(map[any]any, len(mv.m))
-		for k, e := range mv.m {
-			out[k] = m.export(e, u.Elem(), depth+1)
+		for _, kv := range mv.entries() {
+			out[m.export(kv[0], u.Key(), depth+1)] = m.export(kv[1], u.Elem(), depth+1)
 		}
 		return out
 	case *types.Basic:

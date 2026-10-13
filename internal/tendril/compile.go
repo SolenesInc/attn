@@ -94,6 +94,7 @@ type Program struct {
 	funcs      map[string]*funcCode
 	sigs       map[string]*types.Signature
 	methods    map[*types.Func]*funcCode
+	instances  map[instKey]*funcCode
 	dispatched map[dispatchKey]*dispatchEntry
 	nglobals   int
 	zeros      []func() Value
@@ -110,6 +111,8 @@ type compiler struct {
 	errs    []error
 	funcs   map[*types.Func]*funcCode
 	globals map[*types.Var]int
+	generic map[*types.Func]*ast.FuncDecl
+	tctx    *types.Context
 }
 
 type scope struct {
@@ -121,6 +124,7 @@ type scope struct {
 	sig       *types.Signature
 	label     *types.Label
 	overrides map[ast.Expr]expr
+	tmap      map[*types.TypeParam]types.Type
 }
 
 type unsupported struct {
@@ -161,6 +165,10 @@ func (c *compiler) compileFile(f *ast.File) error {
 			continue
 		}
 		obj := c.info.Defs[fd.Name].(*types.Func)
+		if isGeneric(obj) {
+			c.generic[obj] = fd
+			continue
+		}
 		code := &funcCode{name: fd.Name.Name}
 		c.funcs[obj] = code
 		decls = append(decls, fd)
@@ -221,6 +229,12 @@ func (c *compiler) compileFile(f *ast.File) error {
 
 func (c *compiler) newScope(code *funcCode, captured map[types.Object]bool) *scope {
 	return &scope{c: c, code: code, locals: map[types.Object]int{}, free: map[types.Object]int{}, captured: captured}
+}
+
+func (s *scope) child(code *funcCode) *scope {
+	c := s.c.newScope(code, s.captured)
+	c.tmap = s.tmap
+	return c
 }
 
 func (s *scope) globalInit(ini *types.Initializer) stmtFn {
@@ -325,13 +339,13 @@ func (s *scope) compileFunc(sig *types.Signature, body *ast.BlockStmt) {
 		for v := range res.Variables() {
 			code.results = append(code.results, s.declare(v))
 			code.resultCapt = append(code.resultCapt, s.captured[v])
-			code.resultZeros = append(code.resultZeros, s.c.prog.zero(v.Type()))
+			code.resultZeros = append(code.resultZeros, s.c.prog.zero(s.subst(v.Type())))
 		}
 	}
 	code.hasDefer = containsDefer(body)
 	zeros := make([]func() Value, sig.Results().Len())
 	for i := range zeros {
-		zeros[i] = s.c.prog.zero(sig.Results().At(i).Type())
+		zeros[i] = s.c.prog.zero(s.subst(sig.Results().At(i).Type()))
 	}
 	code.zeroRet = func() Value {
 		switch len(zeros) {

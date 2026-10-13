@@ -418,10 +418,11 @@ func (s *scope) declStmt(st *ast.DeclStmt) stmtFn {
 				continue
 			}
 			v := s.c.info.Defs[n]
-			zero := s.c.prog.zero(v.Type())
+			vt := s.subst(v.Type())
+			zero := s.c.prog.zero(vt)
 			size := int64(0)
-			if isAggregate(v.Type()) {
-				size = sizeOf(v.Type())
+			if isAggregate(vt) {
+				size = sizeOf(vt)
 			}
 			lv := s.declLvalue(v)
 			parts = append(parts, func(fr *frame) flow {
@@ -474,7 +475,7 @@ func (s *scope) returnStmt(st *ast.ReturnStmt) stmtFn {
 	case len(st.Results) == 0:
 		return func(fr *frame) flow { return flowReturn }
 	case len(st.Results) == 1 && res.Len() == 1:
-		v := s.convertTo(res.At(0).Type(), st.Results[0])
+		v := s.convertTo(s.subst(res.At(0).Type()), st.Results[0])
 		return func(fr *frame) flow {
 			fr.ret = v(fr)
 			return flowReturn
@@ -483,7 +484,7 @@ func (s *scope) returnStmt(st *ast.ReturnStmt) stmtFn {
 		src, elemTypes := s.multiValue(st.Results[0])
 		convs := make([]func(*machine, Value) Value, res.Len())
 		for i := range convs {
-			convs[i] = s.conv(res.At(i).Type(), elemTypes[i])
+			convs[i] = s.conv(s.subst(res.At(i).Type()), elemTypes[i])
 		}
 		return func(fr *frame) flow {
 			t := src(fr).(tuple)
@@ -500,7 +501,7 @@ func (s *scope) returnStmt(st *ast.ReturnStmt) stmtFn {
 	}
 	vals := make([]expr, len(st.Results))
 	for i, r := range st.Results {
-		vals[i] = s.convertTo(res.At(i).Type(), r)
+		vals[i] = s.convertTo(s.subst(res.At(i).Type()), r)
 	}
 	return func(fr *frame) flow {
 		t := make(tuple, len(vals))
@@ -668,10 +669,11 @@ func (s *scope) rangeStmt(st *ast.RangeStmt) stmtFn {
 			if mv == nil {
 				return flowNext
 			}
-			keys := mv.sortedKeys()
-			fr.m.burn(int64(len(keys)))
-			for _, k := range keys {
-				v, ok := mv.m[k]
+			entries := mv.entries()
+			fr.m.burn(int64(len(entries)))
+			for _, kv := range entries {
+				k := kv[0]
+				v, ok := mv.get(k)
 				if !ok {
 					continue
 				}
@@ -842,7 +844,7 @@ func (s *scope) typeSwitchStmt(st *ast.TypeSwitchStmt) stmtFn {
 			clauses[i].bind = &lv
 			if len(cc.List) == 1 && !clauses[i].cases[0].nilCase && clauses[i].cases[0].iface == nil {
 				clauses[i].unwrap = true
-				clauses[i].clone = isAggregate(obj.Type())
+				clauses[i].clone = isAggregate(s.subst(obj.Type()))
 			}
 		}
 		clauses[i].body = s.block(cc.Body)

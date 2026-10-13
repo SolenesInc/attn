@@ -13,7 +13,7 @@ type runtimeFault string
 
 func throw(msg string) { panic(runtimeFault(msg)) }
 
-func (s *scope) typeOf(e ast.Expr) types.Type { return s.c.info.TypeOf(e) }
+func (s *scope) typeOf(e ast.Expr) types.Type { return s.subst(s.c.info.TypeOf(e)) }
 
 func defaultType(t types.Type) types.Type {
 	b, ok := t.(*types.Basic)
@@ -40,7 +40,7 @@ func (s *scope) expr(e ast.Expr) expr {
 		return ov
 	}
 	if tv := s.c.info.Types[e]; tv.Value != nil {
-		v := constValue(tv.Value, defaultType(tv.Type))
+		v := constValue(tv.Value, defaultType(s.subst(tv.Type)))
 		return func(*frame) Value { return v }
 	}
 	switch e := e.(type) {
@@ -58,6 +58,10 @@ func (s *scope) expr(e ast.Expr) expr {
 		return s.selector(e)
 	case *ast.IndexExpr:
 		return s.index(e)
+	case *ast.IndexListExpr:
+		if id := s.instantiated(e); id != nil {
+			return s.ident(id)
+		}
 	case *ast.SliceExpr:
 		return s.sliceExpr(e)
 	case *ast.CompositeLit:
@@ -102,6 +106,10 @@ func (s *scope) ident(e *ast.Ident) expr {
 	case *types.Nil:
 		return func(*frame) Value { return nil }
 	case *types.Func:
+		if code, ok := s.genericCallee(obj, e); ok {
+			cl := &closure{fn: code}
+			return func(*frame) Value { return cl }
+		}
 		return s.funcValue(obj, e.Pos())
 	}
 	s.c.fail(e.Pos(), "unsupported identifier %s", e.Name)
@@ -168,6 +176,9 @@ func (s *scope) intExpr(e ast.Expr) expr {
 }
 
 func (s *scope) index(e *ast.IndexExpr) expr {
+	if id := s.instantiated(e); id != nil {
+		return s.ident(id)
+	}
 	x := s.expr(e.X)
 	switch xt := s.typeOf(e.X).Underlying().(type) {
 	case *types.Slice:
@@ -211,28 +222,6 @@ func (s *scope) mapIndex(e *ast.IndexExpr, commaOK bool) expr {
 		}
 		return tuple{v, ok}
 	}
-}
-
-func (mv *mapVal) get(k Value) (Value, bool) {
-	if mv == nil {
-		return nil, false
-	}
-	v, ok := mv.m[k]
-	return v, ok
-}
-
-func (mv *mapVal) set(m *machine, k, v Value) {
-	if mv == nil {
-		throw("assignment to entry in nil map")
-	}
-	if _, exists := mv.m[k]; !exists {
-		size := int64(entryBytes)
-		if str, ok := k.(string); ok {
-			size += int64(len(str))
-		}
-		m.alloc(size)
-	}
-	mv.m[k] = v
 }
 
 func (s *scope) sliceExpr(e *ast.SliceExpr) expr {
@@ -346,7 +335,7 @@ func (s *scope) composite(e *ast.CompositeLit) expr {
 		}
 		return func(fr *frame) Value {
 			fr.m.alloc(headerBytes)
-			mv := &mapVal{m: make(map[Value]Value, len(keys))}
+			mv := newMap(u.Key(), len(keys))
 			for i, k := range keys {
 				mv.set(fr.m, k(fr), vals[i](fr))
 			}
@@ -376,9 +365,9 @@ func (s *scope) indexedElems(e *ast.CompositeLit, elemT types.Type) ([]int, []ex
 }
 
 func (s *scope) funcLit(e *ast.FuncLit) expr {
-	sig := s.typeOf(e).(*types.Signature)
+	sig := s.c.info.TypeOf(e).(*types.Signature)
 	free := s.c.freeVars(e)
-	child := s.c.newScope(&funcCode{name: "func literal"}, s.captured)
+	child := s.child(&funcCode{name: "func literal"})
 	for i, v := range free {
 		child.free[v] = i
 	}
@@ -599,6 +588,7 @@ func (s *scope) convertTo(target types.Type, e ast.Expr) expr {
 func (s *scope) conv(target, src types.Type) func(*machine, Value) Value {
 	if isInterface(target) && !isInterface(src) {
 		dyn := defaultType(src)
+		s.ensureMethods(dyn)
 		return func(_ *machine, v Value) Value { return iface{t: dyn, v: v} }
 	}
 	return nil
@@ -745,4 +735,29 @@ func (s *scope) varAddr(v *types.Var, pos token.Pos) expr {
 		s.c.fail(pos, "internal: address of %s was not escape-analyzed", v.Name())
 	}
 	return func(fr *frame) Value { return &fr.slots[slot].(*cell).v }
+}
+
+func (s *scope) instantiated(e ast.Expr) *ast.Ident {
+	var x ast.Expr
+	switch e := ast.Unparen(e).(type) {
+	case *ast.IndexExpr:
+		x = e.X
+	case *ast.IndexListExpr:
+		x = e.X
+	default:
+		return nil
+	}
+	var id *ast.Ident
+	switch x := ast.Unparen(x).(type) {
+	case *ast.Ident:
+		id = x
+	case *ast.SelectorExpr:
+		id = x.Sel
+	default:
+		return nil
+	}
+	if _, ok := s.c.info.Instances[id]; !ok {
+		return nil
+	}
+	return id
 }

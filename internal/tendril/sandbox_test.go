@@ -90,7 +90,6 @@ func TestCompileRejectsEscapes(t *testing.T) {
 		"func Run() {\nL:\n\tgoto L\n}":                        "goto is not supported",
 		`func Run() { var a [1 << 30]byte; _ = a }`:            "arrays larger than 1<<20 elements are not supported",
 		`func Run() int { return "x" }`:                        `cannot use "x"`,
-		`type K struct{ A int }; var m map[K]int`:              "map keys must be strings, numbers or booleans",
 		`func Run() { for i := range 3 { fmt.Println(i) } }`:   "undefined: fmt",
 		"import \"strings\"\nvar b strings.Builder":            "undefined: strings.Builder",
 		"import \"strings\"\nfunc Run() { strings.NewReader }": "undefined: strings.NewReader",
@@ -112,6 +111,7 @@ func TestRuntimeErrorsCarryScriptPositions(t *testing.T) {
 		{"type T struct{ X int }\nfunc Run() int {\n\tvar p *T\n\treturn p.X\n}", "script.go:4:2: runtime error: invalid memory address or nil pointer dereference"},
 		{"func Run() int {\n\tvar x any = \"s\"\n\treturn x.(int)\n}", "script.go:3:2: runtime error: interface conversion: any is string, not int"},
 		{"func Run() {\n\tpanic(\"boom\")\n}", "script.go:2:2: panic: boom"},
+		{"func Run() {\n\tm := map[any]int{}\n\tm[[]int{1}] = 1\n}", "script.go:3:2: runtime error: hash of unhashable type []int"},
 		{"import \"errors\"\nfunc Run() {\n\tpanic(errors.New(\"wrapped boom\"))\n}", "script.go:3:2: panic: wrapped boom"},
 		{"func helper(s []int) int {\n\treturn s[9]\n}\nfunc Run() int {\n\treturn helper(nil) + 1\n}", "script.go:2:2: runtime error: index out of range [9] with length 0"},
 	}

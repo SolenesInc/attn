@@ -412,10 +412,10 @@ func (m *machine) fromGo(rv reflect.Value, t types.Type) Value {
 			return (*mapVal)(nil)
 		}
 		m.alloc(headerBytes + entryBytes*int64(rv.Len()))
-		mv := &mapVal{m: make(map[Value]Value, rv.Len())}
+		mv := newMap(u.Key(), rv.Len())
 		it := rv.MapRange()
 		for it.Next() {
-			mv.m[m.fromGo(it.Key(), u.Key())] = m.fromGo(it.Value(), u.Elem())
+			mv.set(m, m.fromGo(it.Key(), u.Key()), m.fromGo(it.Value(), u.Elem()))
 		}
 		return mv
 	case *types.Struct:
@@ -535,8 +535,8 @@ func (m *machine) toGo(v Value, t types.Type, rt reflect.Type) reflect.Value {
 		}
 		mt := t.Underlying().(*types.Map)
 		out := reflect.MakeMapWithSize(rt, len(mv.m))
-		for k, e := range mv.m {
-			out.SetMapIndex(m.toGo(k, mt.Key(), rt.Key()), m.toGo(e, mt.Elem(), rt.Elem()))
+		for _, kv := range mv.entries() {
+			out.SetMapIndex(m.toGo(kv[0], mt.Key(), rt.Key()), m.toGo(kv[1], mt.Elem(), rt.Elem()))
 		}
 		return out
 	case reflect.Struct:

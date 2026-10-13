@@ -101,7 +101,9 @@ func assignAgg(dst, src *structVal) {
 }
 
 type mapVal struct {
-	m map[Value]Value
+	m     map[Value]Value
+	orig  map[Value]Value
+	canon func(Value) Value
 }
 
 func (mv *mapVal) len() int {
@@ -111,13 +113,17 @@ func (mv *mapVal) len() int {
 	return len(mv.m)
 }
 
-func (mv *mapVal) sortedKeys() []Value {
-	keys := make([]Value, 0, len(mv.m))
-	for k := range mv.m {
-		keys = append(keys, k)
+func sortKeys(keys []Value) {
+	if len(keys) > 0 {
+		switch keys[0].(type) {
+		case *structVal, *Value, *chanVal:
+			return
+		case mapKey:
+			slices.SortFunc(keys, func(a, b Value) int { return strings.Compare(string(a.(mapKey)), string(b.(mapKey))) })
+			return
+		}
 	}
 	slices.SortFunc(keys, compareKeys)
-	return keys
 }
 
 func compareKeys(a, b Value) int {
@@ -292,15 +298,13 @@ func (m *machine) writeTyped(b *strings.Builder, directive string, verb rune, t 
 	case *types.Map:
 		mv := v.(*mapVal)
 		b.WriteString("map[")
-		if mv != nil {
-			for i, k := range mv.sortedKeys() {
-				if i > 0 {
-					b.WriteByte(' ')
-				}
-				m.writeTyped(b, directive, verb, u.Key(), k, depth+1)
-				b.WriteByte(':')
-				m.writeTyped(b, directive, verb, u.Elem(), mv.m[k], depth+1)
+		for i, kv := range mv.entries() {
+			if i > 0 {
+				b.WriteByte(' ')
 			}
+			m.writeTyped(b, directive, verb, u.Key(), kv[0], depth+1)
+			b.WriteByte(':')
+			m.writeTyped(b, directive, verb, u.Elem(), kv[1], depth+1)
 		}
 		b.WriteByte(']')
 	case *types.Signature:

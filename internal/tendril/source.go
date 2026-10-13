@@ -34,6 +34,14 @@ func (e *Env) checkSource(p *Package) (*types.Package, error) {
 	if err != nil {
 		return nil, fmt.Errorf("package %s: %w", p.path, err)
 	}
+	for _, d := range f.Decls {
+		if fd, ok := d.(*ast.FuncDecl); ok && fd.Body == nil && fd.Type.TypeParams != nil {
+			fd.Body = &ast.BlockStmt{List: []ast.Stmt{&ast.ExprStmt{X: &ast.CallExpr{
+				Fun:  ast.NewIdent("panic"),
+				Args: []ast.Expr{&ast.BasicLit{Kind: token.STRING, Value: `"native"`}},
+			}}}}
+		}
+	}
 	conf := types.Config{Importer: importerFunc(e.Import), GoVersion: "go1.24"}
 	pkg, err := conf.Check(p.path, fset, []*ast.File{f}, nil)
 	if err != nil {

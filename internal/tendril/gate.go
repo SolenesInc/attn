@@ -51,14 +51,6 @@ func checkSyntax(fset *token.FileSet, f *ast.File) error {
 			if n.Tok == token.GOTO {
 				g.add(n.Pos(), "goto is not supported")
 			}
-		case *ast.FuncDecl:
-			if n.Type.TypeParams != nil {
-				g.add(n.Pos(), "generic functions are not supported")
-			}
-		case *ast.TypeSpec:
-			if n.TypeParams != nil {
-				g.add(n.Pos(), "generic types are not supported")
-			}
 		}
 		return true
 	})
@@ -123,10 +115,7 @@ func unsupportedType(t types.Type) string {
 		case *types.Slice:
 			walk(u.Elem(), depth+1)
 		case *types.Map:
-			if b, ok := u.Key().Underlying().(*types.Basic); !ok || b.Info()&types.IsOrdered == 0 && b.Kind() != types.Bool {
-				msg = "map keys must be strings, numbers or booleans"
-				return
-			}
+			walk(u.Key(), depth+1)
 			walk(u.Elem(), depth+1)
 		case *types.Struct:
 			for i := range u.NumFields() {

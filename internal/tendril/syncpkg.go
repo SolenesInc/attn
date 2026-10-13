@@ -369,3 +369,27 @@ func stdSort() *Package {
 			return sort.Search(a[0].(int), func(i int) bool { return m.callValue(a[1], []Value{i}).(bool) })
 		})
 }
+
+const cmpSource = `package cmp
+
+// Ordered is a constraint that permits any ordered type.
+type Ordered interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 |
+		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr |
+		~float32 | ~float64 |
+		~string
+}
+
+// Compare returns -1 if x is less than y, 0 if x equals y, and +1 if x is
+// greater than y.
+func Compare[T Ordered](x, y T) int
+
+// Less reports whether x is less than y.
+func Less[T Ordered](x, y T) bool
+`
+
+func stdCmp() *Package {
+	return NewPackage("cmp").Source(cmpSource).
+		Native("Compare", func(m *machine, _ []types.Type, a []Value) Value { return compareKeys(a[0], a[1]) }).
+		Native("Less", func(m *machine, _ []types.Type, a []Value) Value { return compareKeys(a[0], a[1]) < 0 })
+}

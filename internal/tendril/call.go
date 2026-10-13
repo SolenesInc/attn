@@ -81,7 +81,7 @@ func (s *scope) args(sig *types.Signature, e *ast.CallExpr) argList {
 func (s *scope) call(e *ast.CallExpr) expr {
 	ftv := s.c.info.Types[e.Fun]
 	if ftv.IsType() {
-		return s.conversion(ftv.Type, e.Args[0])
+		return s.conversion(s.subst(ftv.Type), e.Args[0])
 	}
 	if ftv.IsBuiltin() {
 		return s.builtin(e)
@@ -90,6 +90,10 @@ func (s *scope) call(e *ast.CallExpr) expr {
 	var callee types.Object
 	var calleeIdent *ast.Ident
 	switch f := ast.Unparen(e.Fun).(type) {
+	case *ast.IndexExpr, *ast.IndexListExpr:
+		if id := s.instantiated(f); id != nil {
+			callee, calleeIdent = s.c.info.Uses[id], id
+		}
 	case *ast.Ident:
 		callee, calleeIdent = s.c.info.Uses[f], f
 	case *ast.SelectorExpr:
@@ -102,6 +106,9 @@ func (s *scope) call(e *ast.CallExpr) expr {
 		}
 	}
 	if fn, ok := callee.(*types.Func); ok {
+		if code, ok := s.genericCallee(fn, calleeIdent); ok {
+			return s.staticCall(code, s.args(sig, e))
+		}
 		if code, ok := s.c.funcs[fn]; ok {
 			return s.staticCall(code, s.args(sig, e))
 		}
@@ -113,7 +120,7 @@ func (s *scope) call(e *ast.CallExpr) expr {
 			targs := s.c.info.Instances[calleeIdent].TypeArgs
 			typeArgs := make([]types.Type, targs.Len())
 			for i := range typeArgs {
-				typeArgs[i] = targs.At(i)
+				typeArgs[i] = s.subst(targs.At(i))
 			}
 			args := s.args(sig, e)
 			return func(fr *frame) Value {
@@ -234,7 +241,7 @@ func (s *scope) builtin(e *ast.CallExpr) expr {
 		x, k := s.expr(e.Args[0]), s.convertTo(mt.Key(), e.Args[1])
 		return func(fr *frame) Value {
 			if mv := x(fr).(*mapVal); mv != nil {
-				delete(mv.m, k(fr))
+				mv.del(k(fr))
 			}
 			return nil
 		}
@@ -271,7 +278,7 @@ func (s *scope) builtin(e *ast.CallExpr) expr {
 		}
 		return func(fr *frame) Value {
 			if mv := x(fr).(*mapVal); mv != nil {
-				clear(mv.m)
+				mv.clear()
 			}
 			return nil
 		}
@@ -415,9 +422,10 @@ func (s *scope) makeCall(e *ast.CallExpr) expr {
 			return &chanVal{size: n}
 		}
 	case *types.Map:
+		key := u.Key()
 		return func(fr *frame) Value {
 			fr.m.alloc(headerBytes)
-			return &mapVal{m: map[Value]Value{}}
+			return newMap(key, 0)
 		}
 	case *types.Slice:
 		zero := s.c.prog.zero(u.Elem())

@@ -47,6 +47,17 @@ func (p *Program) targetOf(fn *types.Func, recvType types.Type) (methodTarget, b
 		t.code = code
 		return t, true
 	}
+	if origin := fn.Origin(); origin != fn {
+		if named, ok := derefType(recvType).(*types.Named); ok {
+			p.mu.Lock()
+			code, ok := p.instances[instKey{origin, argsKey(typeListOf(named.TypeArgs()))}]
+			p.mu.Unlock()
+			if ok {
+				t.code = code
+				return t, true
+			}
+		}
+	}
 	if nf, ok := p.env.natives[fn]; ok {
 		t.native = nf
 		return t, true
@@ -108,10 +119,10 @@ func (s *scope) methodRecv(f *ast.SelectorExpr, sel *types.Selection, target met
 		if target.code == nil && target.native == nil && target.host == nil {
 			return s.expr(f.X)
 		}
-		return s.receiver(f.X, sel.Recv(), target.ptrRecv)
+		return s.receiver(f.X, s.subst(sel.Recv()), target.ptrRecv)
 	}
 	x := s.expr(f.X)
-	recvT := sel.Recv()
+	recvT := s.subst(sel.Recv())
 	fields := path[:len(path)-1]
 	return func(fr *frame) Value {
 		v, t := embeddedField(fr.m, x(fr), recvT, fields, target.ptrRecv)
@@ -122,7 +133,7 @@ func (s *scope) methodRecv(f *ast.SelectorExpr, sel *types.Selection, target met
 func (s *scope) methodCall(e *ast.CallExpr, f *ast.SelectorExpr, sel *types.Selection, sig *types.Signature) expr {
 	fn := sel.Obj().(*types.Func)
 	args := s.args(sig, e)
-	target, ok := s.c.prog.targetOf(fn, s.embeddedRecvType(sel))
+	target, ok := s.target(fn, s.embeddedRecvType(sel))
 	if !ok {
 		s.c.fail(f.Pos(), "method %s has no implementation", fn.FullName())
 	}
@@ -134,7 +145,7 @@ func (s *scope) methodCall(e *ast.CallExpr, f *ast.SelectorExpr, sel *types.Sele
 }
 
 func (s *scope) embeddedRecvType(sel *types.Selection) types.Type {
-	t := sel.Recv()
+	t := s.subst(sel.Recv())
 	path := sel.Index()
 	for _, i := range path[:len(path)-1] {
 		t = derefType(t).Underlying().(*types.Struct).Field(i).Type()
@@ -158,7 +169,7 @@ func (b *boundMethod) call(m *machine, args []Value) Value {
 
 func (s *scope) methodValue(f *ast.SelectorExpr, sel *types.Selection) expr {
 	fn := sel.Obj().(*types.Func)
-	target, ok := s.c.prog.targetOf(fn, s.embeddedRecvType(sel))
+	target, ok := s.target(fn, s.embeddedRecvType(sel))
 	if !ok {
 		s.c.fail(f.Pos(), "method %s has no implementation", fn.FullName())
 	}
@@ -166,7 +177,7 @@ func (s *scope) methodValue(f *ast.SelectorExpr, sel *types.Selection) expr {
 		if len(sel.Index()) > 1 {
 			s.c.fail(f.Pos(), "method expressions of promoted methods are not supported")
 		}
-		bm := &boundMethod{target: target, expr: true, recvT: sel.Recv()}
+		bm := &boundMethod{target: target, expr: true, recvT: s.subst(sel.Recv())}
 		return func(*frame) Value { return bm }
 	}
 	recv := s.methodRecv(f, sel, target)
