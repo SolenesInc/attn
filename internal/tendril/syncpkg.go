@@ -1,6 +1,10 @@
 package tendril
 
-import "go/types"
+import (
+	"go/types"
+	"slices"
+	"sort"
+)
 
 const syncSource = `package sync
 
@@ -294,5 +298,74 @@ func stdErrgroup() *Package {
 		Native("Group.SetLimit", func(m *machine, _ []types.Type, a []Value) Value {
 			nativeState[group](a[0]).limit = a[1].(int)
 			return nil
+		})
+}
+
+const sortSource = `package sort
+
+// Strings sorts a slice of strings in increasing order.
+func Strings(x []string)
+
+// Ints sorts a slice of ints in increasing order.
+func Ints(x []int)
+
+// Float64s sorts a slice of float64s in increasing order.
+func Float64s(x []float64)
+
+// Slice sorts the slice x given the provided less function.
+func Slice(x any, less func(i, j int) bool)
+
+// SliceStable sorts x keeping the original order of equal elements.
+func SliceStable(x any, less func(i, j int) bool)
+
+// Search returns the smallest index i in [0, n) at which f(i) is true.
+func Search(n int, f func(int) bool) int
+`
+
+type scriptSort struct {
+	m    *machine
+	s    []Value
+	less Value
+}
+
+func (x scriptSort) Len() int      { return len(x.s) }
+func (x scriptSort) Swap(i, j int) { x.s[i], x.s[j] = x.s[j], x.s[i] }
+func (x scriptSort) Less(i, j int) bool {
+	return x.m.callValue(x.less, []Value{i, j}).(bool)
+}
+
+func sortValues(m *machine, _ []types.Type, a []Value) Value {
+	s := a[0].([]Value)
+	m.burn(int64(len(s)) * int64(1+bitsLen(len(s))) / 4)
+	slices.SortStableFunc(s, compareKeys)
+	return nil
+}
+
+func stdSort() *Package {
+	byLess := func(stable bool) nativeImpl {
+		return func(m *machine, _ []types.Type, a []Value) Value {
+			if a[0] == nil {
+				return nil
+			}
+			s, ok := a[0].(iface).v.([]Value)
+			if !ok {
+				throw("sort: Slice called with a non-slice value")
+			}
+			if stable {
+				sort.Stable(scriptSort{m: m, s: s, less: a[1]})
+			} else {
+				sort.Sort(scriptSort{m: m, s: s, less: a[1]})
+			}
+			return nil
+		}
+	}
+	return NewPackage("sort").Source(sortSource).
+		Native("Strings", sortValues).
+		Native("Ints", sortValues).
+		Native("Float64s", sortValues).
+		Native("Slice", byLess(false)).
+		Native("SliceStable", byLess(true)).
+		Native("Search", func(m *machine, _ []types.Type, a []Value) Value {
+			return sort.Search(a[0].(int), func(i int) bool { return m.callValue(a[1], []Value{i}).(bool) })
 		})
 }

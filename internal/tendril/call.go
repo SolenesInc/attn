@@ -162,68 +162,11 @@ func (m *machine) callValue(fv Value, args []Value) Value {
 		if fn != nil {
 			return fn.call(m, args)
 		}
+	case *boundMethod:
+		return fn.call(m, args)
 	}
 	throw("invalid memory address or nil pointer dereference")
 	return nil
-}
-
-func (s *scope) methodCall(e *ast.CallExpr, f *ast.SelectorExpr, sel *types.Selection, sig *types.Signature) expr {
-	fn := sel.Obj().(*types.Func)
-	args := s.args(sig, e)
-	if isInterface(sel.Recv()) {
-		x := s.expr(f.X)
-		name := fn.Name()
-		return func(fr *frame) Value {
-			v := x(fr)
-			if v == nil {
-				throw("invalid memory address or nil pointer dereference")
-			}
-			return fr.m.callMethod(v.(iface), name, args.eval(fr))
-		}
-	}
-	if hf, ok := s.c.prog.env.funcs[fn]; ok {
-		_, ptrRecv := fn.Signature().Recv().Type().(*types.Pointer)
-		recv := s.receiver(f.X, sel.Recv(), ptrRecv)
-		return func(fr *frame) Value {
-			return hf.call(fr.m, append([]Value{recv(fr)}, args.eval(fr)...))
-		}
-	}
-	if nf, ok := s.c.prog.env.natives[fn]; ok {
-		_, ptrRecv := fn.Signature().Recv().Type().(*types.Pointer)
-		recv := s.receiver(f.X, sel.Recv(), ptrRecv)
-		return func(fr *frame) Value {
-			r := recv(fr)
-			fr.m.burn(1)
-			return nf.impl(fr.m, nil, append([]Value{r}, args.eval(fr)...))
-		}
-	}
-	code, ok := s.c.funcs[fn]
-	if !ok {
-		s.c.fail(f.Pos(), "methods of host types are not supported")
-	}
-	if len(sel.Index()) > 1 {
-		s.c.fail(f.Pos(), "promoted methods are not supported")
-	}
-	recv := s.receiver(f.X, sel.Recv(), code.ptrRecv)
-	list := args.args
-	if args.spread != nil {
-		return func(fr *frame) Value {
-			nf := fr.m.newFrame(code, nil)
-			nf.param(code, 0, recv(fr))
-			for i, v := range args.spread(fr) {
-				nf.param(code, i+1, v)
-			}
-			return fr.m.exec(code, nf)
-		}
-	}
-	return func(fr *frame) Value {
-		nf := fr.m.newFrame(code, nil)
-		nf.param(code, 0, recv(fr))
-		for i, a := range list {
-			nf.param(code, i+1, a(fr))
-		}
-		return fr.m.exec(code, nf)
-	}
 }
 
 func (s *scope) builtin(e *ast.CallExpr) expr {

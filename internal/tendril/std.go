@@ -16,7 +16,7 @@ import (
 )
 
 func Std() []*Package {
-	return []*Package{stdStrings(), stdStrconv(), stdFmt(), stdErrors(), stdRegexp(), stdPath(), stdMath(), stdSlices(), stdSync(), stdErrgroup(), stdLog(), stdOs(), stdTime()}
+	return []*Package{stdStrings(), stdStrconv(), stdFmt(), stdErrors(), stdRegexp(), stdPath(), stdMath(), stdSlices(), stdSync(), stdErrgroup(), stdLog(), stdOs(), stdTime(), stdSort()}
 }
 
 func chargeProduct(ctx context.Context, a, b int) {

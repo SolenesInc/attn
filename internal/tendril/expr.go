@@ -143,7 +143,7 @@ func (s *scope) selector(e *ast.SelectorExpr) expr {
 		return s.ident(e.Sel)
 	}
 	if sel.Kind() != types.FieldVal {
-		s.c.fail(e.Pos(), "method values are not supported; call the method or wrap it in a func literal")
+		return s.methodValue(e, sel)
 	}
 	base, i := s.fieldBase(e)
 	return func(fr *frame) Value { return base(fr).(*structVal).f[i] }
@@ -513,6 +513,8 @@ func nilCheck(t types.Type) func(Value) bool {
 			case *closure:
 				return f == nil
 			case *hostFunc:
+				return f == nil
+			case *boundMethod:
 				return f == nil
 			}
 			return v == nil

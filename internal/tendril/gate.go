@@ -59,12 +59,6 @@ func checkSyntax(fset *token.FileSet, f *ast.File) error {
 			if n.TypeParams != nil {
 				g.add(n.Pos(), "generic types are not supported")
 			}
-		case *ast.StructType:
-			for _, field := range n.Fields.List {
-				if len(field.Names) == 0 {
-					g.add(field.Pos(), "embedded fields are not supported")
-				}
-			}
 		}
 		return true
 	})

@@ -51,13 +51,14 @@ func (e *Env) Compile(filename, src string) (*Program, error) {
 		return nil, err
 	}
 	p := &Program{
-		env:     e,
-		fset:    fset,
-		pkg:     pkg,
-		funcs:   map[string]*funcCode{},
-		sigs:    map[string]*types.Signature{},
-		methods: map[methodKey]*funcCode{},
-		structs: map[types.Type]*structInfo{},
+		env:        e,
+		fset:       fset,
+		pkg:        pkg,
+		funcs:      map[string]*funcCode{},
+		sigs:       map[string]*types.Signature{},
+		methods:    map[*types.Func]*funcCode{},
+		dispatched: map[dispatchKey]*dispatchEntry{},
+		structs:    map[types.Type]*structInfo{},
 	}
 	c := &compiler{prog: p, info: info, funcs: map[*types.Func]*funcCode{}, globals: map[*types.Var]int{}}
 	if err := c.compileFile(f); err != nil {

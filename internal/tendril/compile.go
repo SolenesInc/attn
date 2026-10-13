@@ -87,22 +87,18 @@ type funcCode struct {
 	body        stmtFn
 }
 
-type methodKey struct {
-	recv *types.TypeName
-	name string
-}
-
 type Program struct {
-	env      *Env
-	fset     *token.FileSet
-	pkg      *types.Package
-	funcs    map[string]*funcCode
-	sigs     map[string]*types.Signature
-	methods  map[methodKey]*funcCode
-	nglobals int
-	zeros    []func() Value
-	init     []stmtFn
-	initCode *funcCode
+	env        *Env
+	fset       *token.FileSet
+	pkg        *types.Package
+	funcs      map[string]*funcCode
+	sigs       map[string]*types.Signature
+	methods    map[*types.Func]*funcCode
+	dispatched map[dispatchKey]*dispatchEntry
+	nglobals   int
+	zeros      []func() Value
+	init       []stmtFn
+	initCode   *funcCode
 
 	mu      sync.Mutex
 	structs map[types.Type]*structInfo
@@ -176,7 +172,7 @@ func (c *compiler) compileFile(f *ast.File) error {
 				code.ptrRecv = true
 			}
 			named := rt.(*types.Named)
-			p.methods[methodKey{named.Obj(), obj.Name()}] = code
+			p.methods[obj] = code
 			code.name = named.Obj().Name() + "." + obj.Name()
 		} else if fd.Name.Name != "init" {
 			p.funcs[obj.Name()] = code
@@ -430,43 +426,24 @@ func (m *machine) exec(fn *funcCode, fr *frame) Value {
 }
 
 func (m *machine) callMethod(recv iface, name string, args []Value) Value {
-	t := recv.t
-	isPtr := false
-	if p, ok := t.(*types.Pointer); ok {
-		t, isPtr = p.Elem(), true
+	if gerr, ok := recv.v.(error); ok && recv.t == m.prog.env.hostErr && name == "Error" {
+		return gerr.Error()
 	}
-	named, ok := t.(*types.Named)
-	if !ok {
-		if gerr, ok := recv.v.(error); ok && name == "Error" {
-			return gerr.Error()
+	entry, err := m.prog.dispatch(recv.t, name)
+	if err != nil {
+		panic(err)
+	}
+	t := entry.target
+	if len(entry.fields) == 0 {
+		if !t.ptrRecv {
+			if _, isPtr := recv.t.Underlying().(*types.Pointer); isPtr && isNilPointer(recv.v) {
+				throw("invalid memory address or nil pointer dereference")
+			}
 		}
-		panic(fmt.Errorf("no method %s on %s", name, recv.t))
+		return t.invoke(m, adjustRecv(m, recv.v, recv.t, t.ptrRecv), args)
 	}
-	fn, ok := m.prog.methods[methodKey{named.Obj(), name}]
-	if !ok {
-		if gerr, ok := recv.v.(error); ok && name == "Error" {
-			return gerr.Error()
-		}
-		panic(fmt.Errorf("no method %s on %s", name, recv.t))
-	}
-	r := recv.v
-	if !fn.ptrRecv {
-		if isPtr && isNilPointer(r) {
-			throw("invalid memory address or nil pointer dereference")
-		}
-		switch v := r.(type) {
-		case *structVal:
-			r = v.clone(m)
-		case *Value:
-			r = *v
-		}
-	}
-	fr := m.newFrame(fn, nil)
-	fr.param(fn, 0, r)
-	for i, a := range args {
-		fr.param(fn, i+1, a)
-	}
-	return m.exec(fn, fr)
+	v, vt := embeddedField(m, recv.v, recv.t, entry.fields, t.ptrRecv)
+	return t.invoke(m, adjustRecv(m, v, vt, t.ptrRecv), args)
 }
 
 func (p *Program) structInfo(t types.Type) *structInfo {
