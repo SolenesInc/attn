@@ -104,7 +104,7 @@ For direct delegation, choose the model explicitly. Available harnesses, models 
 
 ## Follow progress and recover
 
-Successful launch output identifies the seed, session, folder/branch and operation. It means the agent launched, not that its work is done. Each new delegation creates an ordinary watch on its seed and descendants. Use the garden reference for watch/unwatch behavior; recovery does not recreate a watch you removed.
+Successful launch output identifies the seed, session, folder/branch and operation. It means the agent launched, not that its work is done. Each new delegation, including a handover, gives you and the delegate an ordinary watch on its seed and descendants. If you are a crew member, your watch belongs to the member and carries across naps. Use the garden reference for watch/unwatch behavior; recovery does not recreate a watch you removed.
 
 Read work with `attn seed show <seed-id>` and reach its current or next tender with `attn agent msg <seed-id> "…"`. To speak to the previous session after handover, use its session identity with the messaging syntax in `attn agent --help`. Follow the reporting reference in the delegated session. Use incoming completion, progress and advice requests to decide when to respond; do not shadow every edit.
 

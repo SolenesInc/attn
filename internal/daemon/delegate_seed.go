@@ -143,7 +143,7 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 		return "", err
 	}
 	written, eventSeqs, err := d.store.CommitGardenDispatchWritesWithEvents(
-		commits, store.GardenPartyWatch{Watcher: delegate, SeedID: seed.ID}, events, d.gardenTime(),
+		commits, delegationSeedWatches(seed.ID, delegate, dispatcher), events, d.gardenTime(),
 	)
 	if err == nil {
 		err = d.discardAllIneligibleGardenSeedBellsLocked()
@@ -161,4 +161,12 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 	announceGardenSeedEvents(d, eventSeqs)
 	d.rememberDispatchProjection(sessionID, dispatch, written[1].Rev)
 	return seed.ID, nil
+}
+
+func delegationSeedWatches(seedID string, delegate who.Party, dispatcher who.Actor) []store.GardenPartyWatch {
+	watches := []store.GardenPartyWatch{{Watcher: delegate, SeedID: seedID}}
+	if party, ok := dispatcher.Party(); ok {
+		watches = append(watches, store.GardenPartyWatch{Watcher: party, SeedID: seedID})
+	}
+	return watches
 }
