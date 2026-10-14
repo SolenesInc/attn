@@ -29,13 +29,8 @@ func (d *Daemon) handleGetFileDiffForeground(ctx context.Context, client *wsClie
 		baseRef = *msg.BaseRef
 	}
 
-	headRef := ""
-	if msg.HeadRef != nil {
-		headRef = *msg.HeadRef
-	}
-
 	staged := msg.Staged != nil && *msg.Staged
-	content, err := d.diffReader().FileDiff(ctx, msg.Directory, msg.Path, baseRef, headRef, staged)
+	content, err := d.diffReader().FileDiff(ctx, msg.Directory, msg.Path, baseRef, staged)
 	if err != nil {
 		result.Error = protocol.Ptr("Failed to read file diff: " + err.Error())
 		d.sendToClient(client, result)

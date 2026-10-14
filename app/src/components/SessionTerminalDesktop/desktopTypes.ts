@@ -2,7 +2,6 @@ import type { Seed } from '../../hooks/useDaemonSocket';
 import type { FocusClaim } from '../../navigation/sessionNavigation';
 import type {
   AutomationProvenance as AutomationProvenanceValue,
-  Presentation,
   SessionPullRequest,
   SessionUsage,
 } from '../../types/generated';
@@ -67,7 +66,6 @@ export interface SessionTerminalDesktopProps {
     terminalBuildStale?: boolean;
     terminalExit?: import('../../types/generated').TerminalExit;
     isActive?: boolean;
-    presentation?: Presentation;
     seedId?: string;
     crewMember?: string;
     automation?: AutomationProvenanceValue;
@@ -104,7 +102,6 @@ export interface SessionTerminalDesktopProps {
   onSelectSession?: (sessionId: string) => void;
   onCancelCountdown?: (sessionId: string) => void;
   onTerminalPointerActivity?: (runtimeId: string) => void;
-  onOpenPresentation?: (presentationId: string) => void;
   // Empty sessionId lets the daemon use the selected session.
   onOpenMarkdown?: (path: string, sessionId: string) => void;
   zoomActive?: boolean;

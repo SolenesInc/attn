@@ -248,7 +248,6 @@ describe('desktop surface', () => {
       desktopTileContents: {},
       sendGetFileDiff: vi.fn(async () => ({ success: true, original: '', modified: '' })),
       getRepoInfo: vi.fn(async () => ({ success: true, is_git_repo: true, branch: 'main' })),
-      getPresentations: vi.fn(async () => []),
       connectionError: null,
       hasReceivedInitialState: true,
       sendNotificationList: vi.fn(async () => ({ notifications: [], unreadCount: 0, critical: { count: 0, title: '' } })),

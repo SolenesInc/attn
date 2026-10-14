@@ -10,7 +10,6 @@ import { MermaidDiagramHarness } from './MermaidDiagramHarness';
 import { NotebookBrowserHarness } from './NotebookBrowserHarness';
 import { NotebookTileHarness } from './NotebookTileHarness';
 import { PaneFocusRingHarness } from './PaneFocusRingHarness';
-import { PresentTourHarness } from './PresentTourHarness';
 import { QueueBarHarness } from './QueueBarHarness';
 import { QueueSidebarFitHarness } from './QueueSidebarFitHarness';
 import { TileHeaderHarness } from './TileHeaderHarness';
@@ -32,7 +31,6 @@ export const harnesses: Record<string, React.ComponentType<HarnessProps>> = {
   NotebookBrowser: NotebookBrowserHarness,
   NotebookTile: NotebookTileHarness,
   PaneFocusRing: PaneFocusRingHarness,
-  PresentTour: PresentTourHarness,
   TileHeader: TileHeaderHarness,
   SeedHeader: SeedHeaderHarness,
   TerminalAnnotations: TerminalAnnotationsHarness,

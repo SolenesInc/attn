@@ -12,7 +12,7 @@ describe('shared sidebar header', () => {
       sessions: [daemonSession('s1')], desktops: [soloDesktop('s1')],
     } });
     await daemon.idle();
-    expect(daemon.sent.map(({ cmd }) => cmd)).toEqual(['client_hello', 'set_terminal_theme', 'set_client_presence', 'notification_list', 'get_presentations']);
+    expect(daemon.sent.map(({ cmd }) => cmd)).toEqual(['client_hello', 'set_terminal_theme', 'set_client_presence', 'notification_list']);
     const header = document.querySelector('.sidebar-header')!;
     const panels = within(header.querySelector('.sidebar-header-panels') as HTMLElement).getAllByRole('button');
     expect(panels.map((button) => button.title)).toEqual([

@@ -1,9 +1,6 @@
 package prompts
 
 func feedbackEvents() []Event {
-	approved := FlagField("approved", "The user approved the review round.")
-	fields := []Field{TextField("round", "Review round number."), TextField("title", "Quoted presentation title."), TextField("presentation_id", "Presentation ID.")}
-	notice := Choose(Enabled(approved), template("session.present-approved", "content/session/present-approved.md", fields...), template("session.present-submitted", "content/session/present-submitted.md", fields...))
 	return []Event{
 		On("inbox-notification", "user_message", "Generic notification directing the recipient to the durable inbox.", Use("session.inbox-notification", "content/session/inbox-notification.md")),
 		On("inbox-empty", "cli_output", "No unread items remain.", Use("session.inbox-empty", "content/session/inbox-empty.md")),
@@ -11,8 +8,6 @@ func feedbackEvents() []Event {
 		On("inbox-item", "cli_output", "An inbox item other than a peer message or maintenance prompt.", template("session.inbox-item", "content/session/inbox-item.md", TextField("content", "Rendered inbox item."))),
 		On("peer-message", "cli_output", "Attributed peer message, including the trust boundary and reply command.",
 			template("session.peer-message", "content/session/peer-message.md", TextField("origin", "Sender identity."), TextField("message", "Literal peer message."), TextField("sender_id", "Reply target."))),
-		On("present-feedback", "seed_note", "Review notice appended to the reporting seed.", notice),
-		On("present-handback", "user_message", "Review notice delivered to an unbound session.", Use("session.present-handback", "content/session/present-handback.md", Bind("notice", notice))),
 	}
 }
 

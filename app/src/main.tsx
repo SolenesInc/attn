@@ -9,21 +9,10 @@ dbg('main.tsx: imports resolved');
 installVerbatimTextEntryGuard(document);
 installUiDiagnostics();
 
-const isPresentWindow = new URLSearchParams(window.location.search).get('window') === 'present';
-
 async function boot() {
   dbg('boot: loading ReactDOM');
   const ReactDOM = await import("react-dom/client");
   const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
-
-  if (isPresentWindow) {
-    dbg('boot: loading PresentRoot');
-    const { PresentRoot } = await import("./components/PresentRoot");
-    dbg('boot: createRoot (present)');
-    root.render(<PresentRoot />);
-    dbg('boot: render called (present)');
-    return;
-  }
 
   dbg('boot: loading App');
   const { default: App } = await import("./App");

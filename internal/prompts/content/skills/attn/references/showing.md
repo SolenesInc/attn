@@ -79,9 +79,8 @@ sequenceDiagram
   target shape.
 
 - For something too dense for these forms — a layout, a visual
-  comparison — write a markdown document or a Present manifest instead
-  of forcing it into a comment: see [markdown.md](markdown.md) and
-  [present.md](present.md).
+  comparison — write a markdown document instead of forcing it into a
+  comment: see [markdown.md](markdown.md).
 
 Place each visual next to the short text it supports. Keep only the
 calls, files, states, and boundaries needed to answer the reader's

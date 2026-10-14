@@ -15,11 +15,10 @@ describe('App startup requests', () => {
       'set_terminal_theme',
       'set_client_presence',
       'notification_list',
-      'get_presentations',
     ]);
 
     await daemon.idle();
-    expect(daemon.sent).toHaveLength(5);
+    expect(daemon.sent).toHaveLength(4);
     expect(daemon.connections).toHaveLength(1);
   });
 

@@ -91,9 +91,6 @@ const (
 
 	FactNotebookFileChanged = "notebook.file.changed"
 
-	FactPresentationAdded   = "presentation.added"
-	FactPresentationUpdated = "presentation.updated"
-
 	FactDocumentChanged              = "document.changed"
 	FactDocumentCollectionRemoved    = "document.collection.removed"
 	FactDocumentCollectionRedeclared = "document.collection.redeclared"
@@ -359,10 +356,6 @@ func buildWireProjections() []projection {
 		{
 			filter: bus.Filter{FactNotebookFileChanged},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectNotebookChanged(ev) },
-		},
-		{
-			filter: bus.Filter{FactPresentationAdded, FactPresentationUpdated},
-			apply:  func(d *Daemon, ev bus.Event) { d.projectPresentation(ev) },
 		},
 	}
 }

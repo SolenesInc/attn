@@ -46,10 +46,6 @@ import type {
   SeedDocument as GeneratedSeedDocument,
   CrewMember as GeneratedCrewMember,
   MarkdownAnnotation,
-  Presentation,
-  PresentationRound,
-  PresentationComment,
-  PresentCommentInput,
   PRRole,
   HeatState,
   AutomationDefinitionSummary,
@@ -508,8 +504,6 @@ interface UseDaemonSocketOptions {
   onFsChanged?: (origin: string, paths: string[], root: string) => void;
   onSeedsUpdate?: (seeds: Seed[], total: number) => void;
   onCrewUpdate?: (members: CrewMember[]) => void;
-  onPresentationAdded?: (presentation: Presentation) => void;
-  onPresentationUpdated?: (presentation: Presentation) => void;
   onPRsUpdate: (prs: DaemonPR[]) => void;
   onPluginsUpdate?: (plugins: DaemonPlugin[], issues: DaemonPluginIssue[]) => void;
   onGitHubHostsUpdate?: (hosts: string[], pollingOffReason: string | null) => void;
@@ -639,8 +633,6 @@ export function useDaemonSocket({
   onFsChanged,
   onSeedsUpdate,
   onCrewUpdate,
-  onPresentationAdded,
-  onPresentationUpdated,
   onPRsUpdate,
   onPluginsUpdate,
   onGitHubHostsUpdate,
@@ -668,8 +660,6 @@ export function useDaemonSocket({
     onFsChanged,
     onSeedsUpdate,
     onCrewUpdate,
-    onPresentationAdded,
-    onPresentationUpdated,
     onPRsUpdate,
     onPluginsUpdate,
     onGitHubHostsUpdate,
@@ -687,8 +677,6 @@ export function useDaemonSocket({
     onFsChanged,
     onSeedsUpdate,
     onCrewUpdate,
-    onPresentationAdded,
-    onPresentationUpdated,
     onPRsUpdate,
     onPluginsUpdate,
     onGitHubHostsUpdate,
@@ -1313,18 +1301,6 @@ export function useDaemonSocket({
             break;
           }
 
-
-          case 'presentation_added':
-            if (data.presentation) {
-              callbacksRef.current.onPresentationAdded?.(data.presentation);
-            }
-            break;
-
-          case 'presentation_updated':
-            if (data.presentation) {
-              callbacksRef.current.onPresentationUpdated?.(data.presentation);
-            }
-            break;
 
           case 'desktop_tile_content': {
             if (typeof data.desktop_id === 'string' && typeof data.tile_id === 'string') {
@@ -2062,63 +2038,6 @@ export function useDaemonSocket({
               }
             }
             break;
-
-          case 'get_presentations_result': {
-            const pending = pendingActionsRef.current.get('get_presentations');
-            if (pending) {
-              pendingActionsRef.current.delete('get_presentations');
-              if (data.success) {
-                pending.resolve(data.presentations || []);
-              } else {
-                pending.reject(new Error(data.error || 'Failed to load presentations'));
-              }
-            }
-            break;
-          }
-
-          case 'get_presentation_round_result': {
-            const pending = pendingActionsRef.current.get('get_presentation_round');
-            if (pending) {
-              pendingActionsRef.current.delete('get_presentation_round');
-              if (data.success) {
-                pending.resolve({
-                  presentation: data.presentation,
-                  round: data.round,
-                  comments: data.comments || [],
-                  repoHeadSha: data.repo_head_sha,
-                });
-              } else {
-                pending.reject(new Error(data.error || 'Failed to load presentation round'));
-              }
-            }
-            break;
-          }
-
-          case 'present_submit_round_result': {
-            const pending = pendingActionsRef.current.get('present_submit_round');
-            if (pending) {
-              pendingActionsRef.current.delete('present_submit_round');
-              if (data.success) {
-                pending.resolve({ roundId: data.round_id });
-              } else {
-                pending.reject(new Error(data.error || 'Failed to submit presentation round'));
-              }
-            }
-            break;
-          }
-
-          case 'present_close_result': {
-            const pending = pendingActionsRef.current.get('present_close');
-            if (pending) {
-              pendingActionsRef.current.delete('present_close');
-              if (data.success) {
-                pending.resolve({ presentationId: data.presentation_id });
-              } else {
-                pending.reject(new Error(data.error || 'Failed to close presentation'));
-              }
-            }
-            break;
-          }
 
           case 'refresh_prs_result': {
             const pending = pendingActionsRef.current.get('refresh_prs');
@@ -4038,9 +3957,9 @@ export function useDaemonSocket({
   const sendGetFileDiff = useCallback((
     directory: string,
     path: string,
-    options?: { staged?: boolean; baseRef?: string; headRef?: string }
+    options?: { staged?: boolean; baseRef?: string }
   ): Promise<FileDiffResult> => {
-    // Key by request id, not path: a stale round's late reply racing a new round's request must not
+    // Key by request id, not path: a late reply racing a newer request for the same path must not
     // clobber the pending promise.
     const requestId = nextRequestID('get_file_diff');
     const key = `get_file_diff_${requestId}`;
@@ -4051,7 +3970,6 @@ export function useDaemonSocket({
       request_id: requestId,
       ...(options?.staged !== undefined && { staged: options.staged }),
       ...(options?.baseRef && { base_ref: options.baseRef }),
-      ...(options?.headRef && { head_ref: options.headRef }),
     }, 'Get file diff timed out', GIT_DIFF_TIMEOUT_MS);
   }, [nextRequestID, sendKeyedRequest]);
 
@@ -4301,44 +4219,6 @@ export function useDaemonSocket({
     },
     [nextRequestID],
   );
-
-  const getPresentations = useCallback((): Promise<Presentation[]> => {
-    const key = 'get_presentations';
-    return sendKeyedRequest<Presentation[]>(key, { cmd: 'get_presentations' }, 'Get presentations timed out', 30000);
-  }, [sendKeyedRequest]);
-
-  const getPresentationRound = useCallback((
-    presentationId: string,
-    seq?: number,
-  ): Promise<{ presentation: Presentation; round: PresentationRound; comments: PresentationComment[]; repoHeadSha?: string }> => {
-    const key = 'get_presentation_round';
-    return sendKeyedRequest<{ presentation: Presentation; round: PresentationRound; comments: PresentationComment[]; repoHeadSha?: string }>(key, {
-      cmd: 'get_presentation_round',
-      presentation_id: presentationId,
-      ...(seq !== undefined && { seq }),
-    }, 'Get presentation round timed out', 30000);
-  }, [sendKeyedRequest]);
-
-  const submitPresentationRound = useCallback((input: {
-    roundId: string;
-    verdict: 'approved' | 'feedback';
-    comments: PresentCommentInput[];
-    handback: boolean;
-  }): Promise<{ roundId: string }> => {
-    const key = 'present_submit_round';
-    return sendKeyedRequest<{ roundId: string }>(key, {
-      cmd: 'present_submit_round',
-      round_id: input.roundId,
-      verdict: input.verdict,
-      comments: input.comments,
-      handback: input.handback,
-    }, 'Submit presentation round timed out', 30000);
-  }, [sendKeyedRequest]);
-
-  const closePresentation = useCallback((presentationId: string): Promise<{ presentationId: string }> => {
-    const key = 'present_close';
-    return sendKeyedRequest<{ presentationId: string }>(key, { cmd: 'present_close', presentation_id: presentationId, }, 'Close presentation timed out', 30000);
-  }, [sendKeyedRequest]);
 
   const clearWarnings = useCallback(() => {
     setWarnings([]);
@@ -4760,9 +4640,5 @@ export function useDaemonSocket({
     getAutomationDefinition,
     applyAutomationDefinition,
     deleteAutomationDefinition,
-    getPresentations,
-    getPresentationRound,
-    submitPresentationRound,
-    closePresentation,
   };
 }

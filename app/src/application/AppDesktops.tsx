@@ -46,9 +46,7 @@ export function AppDesktops() {
   const focusRequest = useSessionStore((state) => state.focusRequest);
   const { selectLeaf } = useSessionStore.getState();
   const {
-    presentationBySessionId,
     annotationApi,
-    handleOpenPresentationWindow,
     blockingOverlayOpen,
     windowCovered,
     zoomModeBySessionId,
@@ -114,7 +112,6 @@ export function AppDesktops() {
             terminalBuildStale: entry.terminalBuildStale,
             usage: entry.usage,
             isActive: isCurrent && entry.id === shownSessionId,
-            presentation: presentationBySessionId.get(entry.id),
             seedId: entry.seedId,
             crewMember: entry.crewMember,
             automation: entry.automation,
@@ -138,7 +135,6 @@ export function AppDesktops() {
           annotationApi={annotationApi}
           onCancelCountdown={sendCancelCountdown}
           onTerminalPointerActivity={sendTerminalPointerActivity}
-          onOpenPresentation={handleOpenPresentationWindow}
           onOpenMarkdown={(path, sessionId) => {
             void openThenShow(() => sendOpenMarkdown(path, sessionId))
               .catch((error) => {

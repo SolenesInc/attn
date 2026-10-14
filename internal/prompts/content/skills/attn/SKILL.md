@@ -1,6 +1,6 @@
 ---
 name: attn
-description: "Operate attn capabilities from an agent, including user-steered delegations and the user's delegation roles, the garden, the Notebook, Present reviews, markdown, and the in-app browser. Use when the user explicitly asks for an attn capability or delegation, or when acting as attn's chief of staff. Do not use merely because a task could benefit from delegation, parallel agents, or a background terminal."
+description: "Operate attn capabilities from an agent, including user-steered delegations and the user's delegation roles, the garden, the Notebook, markdown, and the in-app browser. Use when the user explicitly asks for an attn capability or delegation, or when acting as attn's chief of staff. Do not use merely because a task could benefit from delegation, parallel agents, or a background terminal."
 ---
 
 # attn
@@ -54,9 +54,6 @@ For delegation mechanics and configured role selection, read [references/delegat
   chief of staff:** read [references/notebook.md](references/notebook.md).
 - **Show the user a markdown document:** read
   [references/markdown.md](references/markdown.md).
-- **Present a change for a guided review — author a manifest, open it, or
-  read back reviewer feedback:** read
-  [references/present.md](references/present.md).
 - **Operate attn's persistent browser tile:** read
   [references/browser.md](references/browser.md).
 

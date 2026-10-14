@@ -2,7 +2,6 @@ import { useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useSessionStore, type Session } from '../store/sessions';
 import { currentActiveLeaf } from './useDesktopSelectionBridge';
-import type { Presentation } from '../types/generated';
 import type { SessionAgent } from '../types/sessionAgent';
 import type { TerminalSplitDirection } from '../types/desktop';
 import { SHORTCUTS, type ShortcutId, type Combo, isChord } from '../shortcuts/registry';
@@ -88,7 +87,6 @@ interface UseUiAutomationBridgeArgs {
   isRuntimeAttached: (runtimeId: string) => boolean;
   openAutomationsPanel?: () => void;
   openWorktreesPanel?: () => void;
-  presentationNotices?: Presentation[];
   resetSessionPaneTerminal: (sessionId: string, paneId: string) => boolean;
   injectSessionPaneBytes: (sessionId: string, paneId: string, bytes: Uint8Array) => Promise<boolean>;
   injectSessionPaneBase64: (sessionId: string, paneId: string, payload: string) => Promise<boolean>;
@@ -1983,7 +1981,6 @@ export function useUiAutomationBridge({
   isRuntimeAttached,
   openAutomationsPanel,
   openWorktreesPanel,
-  presentationNotices,
   resetSessionPaneTerminal,
   injectSessionPaneBytes,
   injectSessionPaneBase64,
@@ -3673,38 +3670,6 @@ export function useUiAutomationBridge({
           },
         };
       }
-      case 'present_get_state': {
-        const notices = (presentationNotices || []).map((presentation) => ({
-          id: presentation.id,
-          sessionId: presentation.session_id,
-          title: presentation.title,
-          status: presentation.status,
-          latestRoundSeq: presentation.latest_round_seq,
-          latestRoundSubmitted: presentation.latest_round_submitted,
-        }));
-        const chips = Array.from(document.querySelectorAll('.presentation-chip')).map((element) => ({
-          presentationId: element.getAttribute('data-presentation-id') || '',
-          sessionId: element.getAttribute('data-session-id') || '',
-          title: element.getAttribute('title') || '',
-        }));
-        return { notices, chips };
-      }
-      case 'present_click_chip': {
-        const presentationId = typeof payload.presentationId === 'string' ? payload.presentationId : '';
-        const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : '';
-        if (!presentationId && !sessionId) {
-          throw new Error('present_click_chip requires presentationId or sessionId');
-        }
-        const selector = presentationId
-          ? `.presentation-chip[data-presentation-id="${presentationId}"]`
-          : `.presentation-chip[data-session-id="${sessionId}"]`;
-        const chip = document.querySelector<HTMLElement>(selector);
-        if (!chip) {
-          throw new Error(`present_click_chip: no chip found for ${selector}`);
-        }
-        chip.click();
-        return { clicked: true, presentationId: chip.getAttribute('data-presentation-id') || '' };
-      }
       default:
         throw new Error(`Unknown automation action: ${request.action}`);
     }
@@ -3734,7 +3699,6 @@ export function useUiAutomationBridge({
     openDockPanel,
     openShortcutEditor,
     openWorktreesPanel,
-    presentationNotices,
     reloadSession,
     resetSessionPaneTerminal,
     drainSessionPaneTerminal,

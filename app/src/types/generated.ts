@@ -1,6 +1,6 @@
 // To parse this data:
 //
-//   import { Convert, ActivityStatusMessage, ActivityStatusResult, ActivityStatusSession, AgentCloseMessage, AgentCloseResult, AgentCloseRule, AgentInboxBatchResult, AgentInboxItem, AgentInboxMessage, AgentMessageState, AgentMsgMessage, AgentMsgResult, AgentMsgStatus, AgentMsgStatusMessage, AgentPeekExit, AgentPeekMessage, AgentPeekResult, AgentPeekScreen, AgentPeerMessage, ApprovePRMessage, AttachBlock, AttachPolicy, AttachResultMessage, AttachSessionMessage, AttachSnapshot, AuthorState, AuthorsUpdatedMessage, AutoModeConfigInfo, AutoModeConfigResult, AutoModeConfigResultMessage, AutoModeDenialInfo, AutoModeDenialsMessage, AutoModeDenialsResult, AutoModeDiscardMessage, AutoModeDiscardResultMessage, AutoModeEnvNotesMessage, AutoModeEnvResult, AutoModeEnvSetResultMessage, AutoModeEnvSlotMessage, AutoModeEnvironmentInfo, AutoModeEnvironmentSlot, AutoModeEnvironmentSlotValue, AutoModeGetMessage, AutoModeHostAddMessage, AutoModeHostRemoveMessage, AutoModeLegacyDismissMessage, AutoModeNetworkInfo, AutoModePolicySetMessage, AutoModePresetInfo, AutoModePromoteMessage, AutoModePromoteResultMessage, AutoModeProposalInfo, AutoModeProposeMessage, AutoModeProposeResult, AutoModeRuleAddMessage, AutoModeRuleInfo, AutoModeRuleRemoveMessage, AutoModeShowMessage, AutoModeShowResult, AutoModeStateChangedMessage, AutoModeStateResultMessage, AutomationApplyMessage, AutomationApplyResultMessage, AutomationCleanupMessage, AutomationCleanupResultMessage, AutomationDefinitionGetMessage, AutomationDefinitionResultMessage, AutomationDefinitionSummary, AutomationDefinitionsGetMessage, AutomationDefinitionsResultMessage, AutomationDeleteMessage, AutomationDeleteResultMessage, AutomationProvenance, AutomationRunMessage, AutomationRunResultMessage, AutomationRunSummary, AutomationRunsGetMessage, AutomationRunsResultMessage, AutomationSetEnabledMessage, AutomationSetEnabledResultMessage, AutomationValidateMessage, AutomationValidateResultMessage, AutomationsChangedMessage, BackgroundLaunchMessage, Branch, BranchChangedMessage, BranchesResultMessage, BrowseDirectoryMessage, BrowseDirectoryResultMessage, BrowserControlMessage, BrowserControlRequestMessage, BrowserControlResultMessage, BuiltinDelegationRole, BusConsumerStatus, BusHealthEntry, BusProducerStatus, BusSetConsumerEnabledMessage, BusSetConsumerEnabledResultMessage, BusStatusGetMessage, BusStatusResultMessage, CancelCountdownMessage, ChiefOfStaffResultMessage, ClearSessionActivityMessage, ClearWarningsMessage, ClientEvictionNoticeMessage, ClientHelloMessage, CollapseRepoMessage, CommandErrorMessage, CommandUsage, CreateWorktreeFromBranchMessage, CreateWorktreeMessage, CreateWorktreeResultMessage, CrewCharterDocument, CrewCharterGetMessage, CrewCharterGetResult, CrewCharterGetResultMessage, CrewCharterSetMessage, CrewCharterSetResult, CrewCharterSetResultMessage, CrewDayClose, CrewHandoffDocument, CrewHandoffGetMessage, CrewHandoffGetResult, CrewHandoffGetResultMessage, CrewHandoffMessage, CrewHandoffResult, CrewHandoffSummary, CrewHandoffsGetMessage, CrewHandoffsGetResult, CrewHandoffsGetResultMessage, CrewListMessage, CrewListResult, CrewMember, CrewPrimeMessage, CrewPrimeResult, CrewSetMessage, CrewSetResult, CrewSetResultMessage, CrewSleepMessage, CrewSleepResult, CrewSleepResultMessage, CrewUpdatedMessage, CrewWakeMessage, CrewWakeResult, CrewWakeResultMessage, DaemonWarning, DelegateAssignment, DelegateAssignmentKind, DelegateCheckout, DelegateCheckoutKind, DelegateHandover, DelegateMessage, DelegateResult, DelegateResultMessage, DelegateStatusMessage, DelegateWorktreeRequest, DelegationChoice, DelegationFailure, DelegationFallback, DelegationOperation, DelegationOperationMessage, DelegationOperationState, DelegationPreferences, DelegationPreferencesChangedMessage, DelegationPreferencesCommitMessage, DelegationPreferencesGetMessage, DelegationPreferencesHistoryMessage, DelegationPreferencesHistoryResult, DelegationPreferencesOrigin, DelegationPreferencesResultMessage, DelegationPreferencesRevision, DelegationPreferencesRollbackMessage, DelegationPreferencesSaveMessage, DelegationPreferencesShowMessage, DelegationRole, DelegationRolesMessage, DelegationRolesResult, DelegationSelection, DeleteWorktreeMessage, DeleteWorktreeResultMessage, Desktop, DesktopCloseMessage, DesktopCreateMessage, DesktopDockTileMessage, DesktopMoveLeafMessage, DesktopMoveSessionMessage, DesktopMoveSessionResult, DesktopPane, DesktopPlaceSessionMessage, DesktopRemoveLeafMessage, DesktopRenameMessage, DesktopReorderMessage, DesktopSetActivePaneMessage, DesktopSetCurrentMessage, DesktopSetOrderMessage, DesktopSetSplitRatioMessage, DesktopShowLeafMessage, DesktopShowSessionMessage, DesktopTileContentMessage, DesktopUpdateTileMessage, DetachSessionMessage, DirectoryEntry, DocCollectionsMessage, DocCollectionsResult, DocCountMessage, DocCountResult, DocDefineMessage, DocDefineResult, DocDeleteMessage, DocDeleteResult, DocGetMessage, DocGetResult, DocPutMessage, DocPutResult, DocQueryMessage, DocQueryResult, DocSubscribeMessage, DocSubscribeResult, DocSubscriptionDeliveryMessage, DocSubscriptionEndedMessage, DocUndefineMessage, DocUndefineResult, DocUnsubscribeMessage, DocumentCollectionSchema, DocumentConflict, DocumentFieldSpec, DocumentFilter, DocumentQuery, DocumentRevision, DocumentSort, EnsureRepoMessage, EnsureRepoResultMessage, EvidenceExcerpt, FetchPRDetailsMessage, FetchPRDetailsResultMessage, FetchRemotesMessage, FetchRemotesResultMessage, FileActivity, FileDiffResultMessage, FilesEditedMessage, FSChangedMessage, FSDeleteMessage, FSDeleteResult, FSDeleteResultMessage, FSEntry, FSExistsMessage, FSExistsResult, FSExistsResultMessage, FSIndexMessage, FSIndexResultMessage, FSListMessage, FSListResultMessage, FSReadAssetMessage, FSReadAssetResult, FSReadAssetResultMessage, FSReadMessage, FSReadResult, FSReadResultMessage, FSRenameMessage, FSRenameResult, FSRenameResultMessage, FSUnwatchMessage, FSUnwatchResultMessage, FSWatchMessage, FSWatchResultMessage, FSWriteMessage, FSWriteResult, FSWriteResultMessage, GardenReview, GardenReviewEvidence, GardenReviewItem, GardenReviewRecipe, GardenReviewRun, GardenReviewUpdatedMessage, GardenSeedsUpdatedMessage, GetCommandUsageMessage, GetCommandUsageResultMessage, GetDefaultBranchMessage, GetDefaultBranchResultMessage, GetFileDiffMessage, GetKittyImageMessage, GetPresentationRoundMessage, GetPresentationRoundResultMessage, GetPresentationsMessage, GetPresentationsResultMessage, GetRecentLocationsMessage, GetRepoInfoMessage, GetRepoInfoResultMessage, GetScreenSnapshotMessage, GetScreenSnapshotResultMessage, GetSettingsMessage, GitHubHostsUpdatedMessage, GitOperation, GitOperationFinishedMessage, GitOperationKind, GitOperationStartedMessage, GitOperationStatus, GuardianSelection, Harness, HarnessModel, HarnessModelsMessage, HarnessModelsResultMessage, HeartbeatMessage, HeatState, HookCompactionMessage, HookNotificationMessage, HookStopFailureMessage, InitialStateMessage, InjectTestPRMessage, InjectTestSessionMessage, InspectPathMessage, InspectPathResultMessage, InstallBundledPluginMessage, InstallPluginMessage, JournalAppendMessage, JournalAppendResult, KeptConversation, KeptConversationDeletedBy, KeptConversationForgetMessage, KeptConversationForgetResultEvent, KeptConversationKeepMessage, KeptConversationKeepResultEvent, KeptConversationListMessage, KeptConversationListResult, KeptConversationListResultEvent, KeptConversationRow, KeptConversationSeed, KeptConversationsChangedEvent, KillSessionMessage, KittyImageResultMessage, KittyPlacement, KittyPlacementsMessage, LaunchDesktopGetMessage, LaunchDesktopItem, LaunchDesktopKind, LaunchDesktopResultMessage, LaunchDesktopSetMessage, LaunchDesktopSetting, LayoutDockEdge, LayoutPaneKind, LayoutPaneStatus, LayoutSplitDirection, LeafMoved, ListBranchesMessage, ListPluginsMessage, ListRemoteBranchesMessage, ListRemoteBranchesResultMessage, ListWorktreesMessage, MarkdownAnnotation, MarkdownAnnotationAnchor, MarkdownAnnotationsClearMessage, MarkdownAnnotationsClearResultMessage, MarkdownAnnotationsGetMessage, MarkdownAnnotationsGetResultMessage, MarkdownAnnotationsSaveMessage, MarkdownAnnotationsSaveResultMessage, MarkdownAnnotationsSubmitMessage, MarkdownAnnotationsSubmitResultMessage, MergePRMessage, MigrationChangedMessage, MigrationDraftDesktop, MigrationFinishMessage, MigrationGetMessage, MigrationGroup, MigrationKeepMessage, MigrationMoveMessage, MigrationPhase, MigrationResultMessage, MigrationState, MigrationSuggestMessage, MigrationUndoMessage, ModelCapabilitySupport, ModelTier, ModelTierSource, MuteAuthorMessage, MutePRMessage, MuteRepoMessage, NotebookBacklinksMessage, NotebookBacklinksResultMessage, NotebookChangedMessage, NotebookEntry, NotebookGuideMessage, NotebookGuideResult, NotebookListMessage, NotebookListResultMessage, NotebookReadMessage, NotebookReadResult, NotebookReadResultMessage, NotebookSendToChiefMessage, NotebookSendToChiefResult, NotebookSendToChiefResultMessage, NotebookWriteMessage, NotebookWriteResult, NotebookWriteResultMessage, Notification, NotificationAction, NotificationListMessage, NotificationListResultMessage, NotificationMarkReadMessage, NotificationMarkReadResultMessage, NotificationSeverity, NotificationsUpdatedMessage, OpenBrowserMessage, OpenMarkdownMessage, OpenMarkdownResultMessage, OpenSeedMessage, OpenSeedResultMessage, OpenSentFilesMessage, PR, PRActionResultMessage, PRRole, PRVisitedMessage, PRsUpdatedMessage, PathInspection, PluginActionResultMessage, PluginInfo, PluginIssue, PluginsUpdatedMessage, PresentAnnotation, PresentCloseMessage, PresentCloseResultMessage, PresentCommentInput, PresentFeedbackMessage, PresentFeedbackResult, PresentFile, PresentManifestView, PresentOpenMessage, PresentOpenResult, PresentSubmitRoundMessage, PresentSubmitRoundResultMessage, Presentation, PresentationAddedMessage, PresentationComment, PresentationRound, PresentationUpdatedMessage, Profile, ProfileActionResultMessage, ProfileArrangementChangedMessage, ProfileCreateMessage, ProfileDeleteMessage, ProfileErrorCode, ProfileRenameMessage, ProfileSelectMessage, ProfilesChangedMessage, PtyDesyncMessage, PtyInputMessage, PtyInputProbeResultMessage, PtyOutputMessage, PtyResizeMessage, PtyResizedMessage, PullRequestCreatedMessage, PullRequestForgetMessage, PullRequestProvenance, PullRequestUnwatchMessage, PullRequestWatchMessage, PullRequestWatchMode, QueryAuthorsMessage, QueryMessage, QueryPRsMessage, QueryReposMessage, RateLimitedMessage, RecentFilesMessage, RecentFilesResultMessage, RecentLocation, RecentLocationsResultMessage, RecordCommandUsageMessage, RecordCommandUsageResultMessage, RefreshPRsMessage, RefreshPRsResultMessage, ReloadSessionMessage, ReloadSessionResultMessage, RemovePluginMessage, RenameResultMessage, RenameSessionMessage, RepoInfo, RepoState, ReposUpdatedMessage, Response, ReviewComment, RuntimeRespawnedMessage, Seed, SeedArtifact, SeedArtifactReference, SeedArtifactTargetMessage, SeedArtifactTargetResult, SeedArtifactTargetResultMessage, SeedArtifactTransferMessage, SeedArtifactTransferResult, SeedArtifactTransferResultMessage, SeedContinuation, SeedDocument, SeedDocumentGetMessage, SeedDocumentGetResultMessage, SeedEdge, SeedEditMessage, SeedEditResult, SeedHandoverRequest, SeedHarvestCondition, SeedHarvestWhenMerged, SeedLinkMessage, SeedLinkResult, SeedListMessage, SeedListResult, SeedNote, SeedNoteMessage, SeedNoteResult, SeedNoteResultMessage, SeedNotesMessage, SeedNotesResult, SeedPlantMessage, SeedPlantResult, SeedPlotChild, SeedPlotMessage, SeedPlotProgress, SeedPlotResult, SeedReadyMessage, SeedReadyResult, SeedRelation, SeedResumeMessage, SeedResumeResultMessage, SeedReviewActionContext, SeedReviewCancelMessage, SeedReviewDraftMessage, SeedReviewDraftResultMessage, SeedReviewKeepMessage, SeedReviewResult, SeedReviewResultMessage, SeedReviewRetryMessage, SeedReviewShowMessage, SeedReviewStartMessage, SeedSearchHit, SeedSearchMessage, SeedSearchResult, SeedSendToChiefMessage, SeedSendToChiefResult, SeedSendToChiefResultMessage, SeedShowMessage, SeedShowResult, SeedTransitionMessage, SeedTransitionResult, SeedTransitionResultMessage, SeedVar, SeedWatchMessage, SeedWatchResult, Session, SessionAnnotation, SessionAnnotationsClearMessage, SessionAnnotationsClearResultMessage, SessionAnnotationsGetMessage, SessionAnnotationsGetResultMessage, SessionAnnotationsSaveMessage, SessionAnnotationsSaveResultMessage, SessionAnnotationsSubmitMessage, SessionAnnotationsSubmitResultMessage, SessionCloseResultMessage, SessionClosedMessage, SessionContextWindowCapResultMessage, SessionDelegationRole, SessionExitedMessage, SessionInstructionsMessage, SessionInstructionsResult, SessionLedgerEntry, SessionLedgerFacet, SessionLedgerFacets, SessionLedgerProfileFacet, SessionListMessage, SessionListResult, SessionListResultMessage, SessionMessage, SessionMessageWindowStatus, SessionMessagesChangedMessage, SessionMessagesGetMessage, SessionMessagesGetResultMessage, SessionPlacement, SessionPullRequest, SessionRegisteredMessage, SessionReopen, SessionReopenAction, SessionReopenEntry, SessionReopenMessage, SessionReopenResult, SessionReopenResultMessage, SessionShowMessage, SessionShowResult, SessionShowResultMessage, SessionState, SessionStateChangedMessage, SessionTranscriptEvent, SessionTranscriptMessage, SessionTranscriptResult, SessionUnregisteredMessage, SessionUsage, SessionUsageModel, SessionsUpdatedMessage, SetChiefOfStaffMessage, SetClientPresenceMessage, SetPluginPriorityMessage, SetSessionContextWindowCapMessage, SetSessionPriorityMessage, SetSessionResumeIDMessage, SetSettingMessage, SetTerminalThemeMessage, SettingsUpdatedMessage, SettleTurnMessage, SnoozeTurnMessage, SpawnResultMessage, SpawnSessionMessage, StateExplainEntry, StateExplainMessage, StateExplainResult, StateMessage, StopBackgroundTask, StopMessage, StoredDocument, SupportInputTrace, SupportRuntimeEvidence, SupportSnapshotMessage, SupportSnapshotResultMessage, Task, TaskListMessage, TaskListResultMessage, TaskRetryMessage, TaskRetryResultMessage, TasksChangedMessage, TerminalBinding, TerminalBindingsUpdatedMessage, TerminalExit, TerminalPointerActivityMessage, TierDefaults, UninstallPluginMessage, UnregisterMessage, WakeTurnMessage, WebSocketEvent, Worktree, WorktreeCreatedEvent, WorktreeDeletedEvent, WorktreeKeepMessage, WorktreeKeepResult, WorktreeKeepResultEvent, WorktreeListMessage, WorktreeListResult, WorktreeListResultEvent, WorktreeRefreshMessage, WorktreeRefreshResult, WorktreeRefreshResultEvent, WorktreeRepository, WorktreeStateChangedEvent, WorktreeSweepEntry, WorktreeSweepLogMessage, WorktreeSweepLogResult, WorktreeSweepLogResultEvent, WorktreeSweptEvent, WorktreesUpdatedMessage } from "./generated";
+//   import { Convert, ActivityStatusMessage, ActivityStatusResult, ActivityStatusSession, AgentCloseMessage, AgentCloseResult, AgentCloseRule, AgentInboxBatchResult, AgentInboxItem, AgentInboxMessage, AgentMessageState, AgentMsgMessage, AgentMsgResult, AgentMsgStatus, AgentMsgStatusMessage, AgentPeekExit, AgentPeekMessage, AgentPeekResult, AgentPeekScreen, AgentPeerMessage, ApprovePRMessage, AttachBlock, AttachPolicy, AttachResultMessage, AttachSessionMessage, AttachSnapshot, AuthorState, AuthorsUpdatedMessage, AutoModeConfigInfo, AutoModeConfigResult, AutoModeConfigResultMessage, AutoModeDenialInfo, AutoModeDenialsMessage, AutoModeDenialsResult, AutoModeDiscardMessage, AutoModeDiscardResultMessage, AutoModeEnvNotesMessage, AutoModeEnvResult, AutoModeEnvSetResultMessage, AutoModeEnvSlotMessage, AutoModeEnvironmentInfo, AutoModeEnvironmentSlot, AutoModeEnvironmentSlotValue, AutoModeGetMessage, AutoModeHostAddMessage, AutoModeHostRemoveMessage, AutoModeLegacyDismissMessage, AutoModeNetworkInfo, AutoModePolicySetMessage, AutoModePresetInfo, AutoModePromoteMessage, AutoModePromoteResultMessage, AutoModeProposalInfo, AutoModeProposeMessage, AutoModeProposeResult, AutoModeRuleAddMessage, AutoModeRuleInfo, AutoModeRuleRemoveMessage, AutoModeShowMessage, AutoModeShowResult, AutoModeStateChangedMessage, AutoModeStateResultMessage, AutomationApplyMessage, AutomationApplyResultMessage, AutomationCleanupMessage, AutomationCleanupResultMessage, AutomationDefinitionGetMessage, AutomationDefinitionResultMessage, AutomationDefinitionSummary, AutomationDefinitionsGetMessage, AutomationDefinitionsResultMessage, AutomationDeleteMessage, AutomationDeleteResultMessage, AutomationProvenance, AutomationRunMessage, AutomationRunResultMessage, AutomationRunSummary, AutomationRunsGetMessage, AutomationRunsResultMessage, AutomationSetEnabledMessage, AutomationSetEnabledResultMessage, AutomationValidateMessage, AutomationValidateResultMessage, AutomationsChangedMessage, BackgroundLaunchMessage, Branch, BranchChangedMessage, BranchesResultMessage, BrowseDirectoryMessage, BrowseDirectoryResultMessage, BrowserControlMessage, BrowserControlRequestMessage, BrowserControlResultMessage, BuiltinDelegationRole, BusConsumerStatus, BusHealthEntry, BusProducerStatus, BusSetConsumerEnabledMessage, BusSetConsumerEnabledResultMessage, BusStatusGetMessage, BusStatusResultMessage, CancelCountdownMessage, ChiefOfStaffResultMessage, ClearSessionActivityMessage, ClearWarningsMessage, ClientEvictionNoticeMessage, ClientHelloMessage, CollapseRepoMessage, CommandErrorMessage, CommandUsage, CreateWorktreeFromBranchMessage, CreateWorktreeMessage, CreateWorktreeResultMessage, CrewCharterDocument, CrewCharterGetMessage, CrewCharterGetResult, CrewCharterGetResultMessage, CrewCharterSetMessage, CrewCharterSetResult, CrewCharterSetResultMessage, CrewDayClose, CrewHandoffDocument, CrewHandoffGetMessage, CrewHandoffGetResult, CrewHandoffGetResultMessage, CrewHandoffMessage, CrewHandoffResult, CrewHandoffSummary, CrewHandoffsGetMessage, CrewHandoffsGetResult, CrewHandoffsGetResultMessage, CrewListMessage, CrewListResult, CrewMember, CrewPrimeMessage, CrewPrimeResult, CrewSetMessage, CrewSetResult, CrewSetResultMessage, CrewSleepMessage, CrewSleepResult, CrewSleepResultMessage, CrewUpdatedMessage, CrewWakeMessage, CrewWakeResult, CrewWakeResultMessage, DaemonWarning, DelegateAssignment, DelegateAssignmentKind, DelegateCheckout, DelegateCheckoutKind, DelegateHandover, DelegateMessage, DelegateResult, DelegateResultMessage, DelegateStatusMessage, DelegateWorktreeRequest, DelegationChoice, DelegationFailure, DelegationFallback, DelegationOperation, DelegationOperationMessage, DelegationOperationState, DelegationPreferences, DelegationPreferencesChangedMessage, DelegationPreferencesCommitMessage, DelegationPreferencesGetMessage, DelegationPreferencesHistoryMessage, DelegationPreferencesHistoryResult, DelegationPreferencesOrigin, DelegationPreferencesResultMessage, DelegationPreferencesRevision, DelegationPreferencesRollbackMessage, DelegationPreferencesSaveMessage, DelegationPreferencesShowMessage, DelegationRole, DelegationRolesMessage, DelegationRolesResult, DelegationSelection, DeleteWorktreeMessage, DeleteWorktreeResultMessage, Desktop, DesktopCloseMessage, DesktopCreateMessage, DesktopDockTileMessage, DesktopMoveLeafMessage, DesktopMoveSessionMessage, DesktopMoveSessionResult, DesktopPane, DesktopPlaceSessionMessage, DesktopRemoveLeafMessage, DesktopRenameMessage, DesktopReorderMessage, DesktopSetActivePaneMessage, DesktopSetCurrentMessage, DesktopSetOrderMessage, DesktopSetSplitRatioMessage, DesktopShowLeafMessage, DesktopShowSessionMessage, DesktopTileContentMessage, DesktopUpdateTileMessage, DetachSessionMessage, DirectoryEntry, DocCollectionsMessage, DocCollectionsResult, DocCountMessage, DocCountResult, DocDefineMessage, DocDefineResult, DocDeleteMessage, DocDeleteResult, DocGetMessage, DocGetResult, DocPutMessage, DocPutResult, DocQueryMessage, DocQueryResult, DocSubscribeMessage, DocSubscribeResult, DocSubscriptionDeliveryMessage, DocSubscriptionEndedMessage, DocUndefineMessage, DocUndefineResult, DocUnsubscribeMessage, DocumentCollectionSchema, DocumentConflict, DocumentFieldSpec, DocumentFilter, DocumentQuery, DocumentRevision, DocumentSort, EnsureRepoMessage, EnsureRepoResultMessage, EvidenceExcerpt, FetchPRDetailsMessage, FetchPRDetailsResultMessage, FetchRemotesMessage, FetchRemotesResultMessage, FileActivity, FileDiffResultMessage, FilesEditedMessage, FSChangedMessage, FSDeleteMessage, FSDeleteResult, FSDeleteResultMessage, FSEntry, FSExistsMessage, FSExistsResult, FSExistsResultMessage, FSIndexMessage, FSIndexResultMessage, FSListMessage, FSListResultMessage, FSReadAssetMessage, FSReadAssetResult, FSReadAssetResultMessage, FSReadMessage, FSReadResult, FSReadResultMessage, FSRenameMessage, FSRenameResult, FSRenameResultMessage, FSUnwatchMessage, FSUnwatchResultMessage, FSWatchMessage, FSWatchResultMessage, FSWriteMessage, FSWriteResult, FSWriteResultMessage, GardenReview, GardenReviewEvidence, GardenReviewItem, GardenReviewRecipe, GardenReviewRun, GardenReviewUpdatedMessage, GardenSeedsUpdatedMessage, GetCommandUsageMessage, GetCommandUsageResultMessage, GetDefaultBranchMessage, GetDefaultBranchResultMessage, GetFileDiffMessage, GetKittyImageMessage, GetRecentLocationsMessage, GetRepoInfoMessage, GetRepoInfoResultMessage, GetScreenSnapshotMessage, GetScreenSnapshotResultMessage, GetSettingsMessage, GitHubHostsUpdatedMessage, GitOperation, GitOperationFinishedMessage, GitOperationKind, GitOperationStartedMessage, GitOperationStatus, GuardianSelection, Harness, HarnessModel, HarnessModelsMessage, HarnessModelsResultMessage, HeartbeatMessage, HeatState, HookCompactionMessage, HookNotificationMessage, HookStopFailureMessage, InitialStateMessage, InjectTestPRMessage, InjectTestSessionMessage, InspectPathMessage, InspectPathResultMessage, InstallBundledPluginMessage, InstallPluginMessage, JournalAppendMessage, JournalAppendResult, KeptConversation, KeptConversationDeletedBy, KeptConversationForgetMessage, KeptConversationForgetResultEvent, KeptConversationKeepMessage, KeptConversationKeepResultEvent, KeptConversationListMessage, KeptConversationListResult, KeptConversationListResultEvent, KeptConversationRow, KeptConversationSeed, KeptConversationsChangedEvent, KillSessionMessage, KittyImageResultMessage, KittyPlacement, KittyPlacementsMessage, LaunchDesktopGetMessage, LaunchDesktopItem, LaunchDesktopKind, LaunchDesktopResultMessage, LaunchDesktopSetMessage, LaunchDesktopSetting, LayoutDockEdge, LayoutPaneKind, LayoutPaneStatus, LayoutSplitDirection, LeafMoved, ListBranchesMessage, ListPluginsMessage, ListRemoteBranchesMessage, ListRemoteBranchesResultMessage, ListWorktreesMessage, MarkdownAnnotation, MarkdownAnnotationAnchor, MarkdownAnnotationsClearMessage, MarkdownAnnotationsClearResultMessage, MarkdownAnnotationsGetMessage, MarkdownAnnotationsGetResultMessage, MarkdownAnnotationsSaveMessage, MarkdownAnnotationsSaveResultMessage, MarkdownAnnotationsSubmitMessage, MarkdownAnnotationsSubmitResultMessage, MergePRMessage, MigrationChangedMessage, MigrationDraftDesktop, MigrationFinishMessage, MigrationGetMessage, MigrationGroup, MigrationKeepMessage, MigrationMoveMessage, MigrationPhase, MigrationResultMessage, MigrationState, MigrationSuggestMessage, MigrationUndoMessage, ModelCapabilitySupport, ModelTier, ModelTierSource, MuteAuthorMessage, MutePRMessage, MuteRepoMessage, NotebookBacklinksMessage, NotebookBacklinksResultMessage, NotebookChangedMessage, NotebookEntry, NotebookGuideMessage, NotebookGuideResult, NotebookListMessage, NotebookListResultMessage, NotebookReadMessage, NotebookReadResult, NotebookReadResultMessage, NotebookSendToChiefMessage, NotebookSendToChiefResult, NotebookSendToChiefResultMessage, NotebookWriteMessage, NotebookWriteResult, NotebookWriteResultMessage, Notification, NotificationAction, NotificationListMessage, NotificationListResultMessage, NotificationMarkReadMessage, NotificationMarkReadResultMessage, NotificationSeverity, NotificationsUpdatedMessage, OpenBrowserMessage, OpenMarkdownMessage, OpenMarkdownResultMessage, OpenSeedMessage, OpenSeedResultMessage, OpenSentFilesMessage, PR, PRActionResultMessage, PRRole, PRVisitedMessage, PRsUpdatedMessage, PathInspection, PluginActionResultMessage, PluginInfo, PluginIssue, PluginsUpdatedMessage, Profile, ProfileActionResultMessage, ProfileArrangementChangedMessage, ProfileCreateMessage, ProfileDeleteMessage, ProfileErrorCode, ProfileRenameMessage, ProfileSelectMessage, ProfilesChangedMessage, PtyDesyncMessage, PtyInputMessage, PtyInputProbeResultMessage, PtyOutputMessage, PtyResizeMessage, PtyResizedMessage, PullRequestCreatedMessage, PullRequestForgetMessage, PullRequestProvenance, PullRequestUnwatchMessage, PullRequestWatchMessage, PullRequestWatchMode, QueryAuthorsMessage, QueryMessage, QueryPRsMessage, QueryReposMessage, RateLimitedMessage, RecentFilesMessage, RecentFilesResultMessage, RecentLocation, RecentLocationsResultMessage, RecordCommandUsageMessage, RecordCommandUsageResultMessage, RefreshPRsMessage, RefreshPRsResultMessage, ReloadSessionMessage, ReloadSessionResultMessage, RemovePluginMessage, RenameResultMessage, RenameSessionMessage, RepoInfo, RepoState, ReposUpdatedMessage, Response, ReviewComment, RuntimeRespawnedMessage, Seed, SeedArtifact, SeedArtifactReference, SeedArtifactTargetMessage, SeedArtifactTargetResult, SeedArtifactTargetResultMessage, SeedArtifactTransferMessage, SeedArtifactTransferResult, SeedArtifactTransferResultMessage, SeedContinuation, SeedDocument, SeedDocumentGetMessage, SeedDocumentGetResultMessage, SeedEdge, SeedEditMessage, SeedEditResult, SeedHandoverRequest, SeedHarvestCondition, SeedHarvestWhenMerged, SeedLinkMessage, SeedLinkResult, SeedListMessage, SeedListResult, SeedNote, SeedNoteMessage, SeedNoteResult, SeedNoteResultMessage, SeedNotesMessage, SeedNotesResult, SeedPlantMessage, SeedPlantResult, SeedPlotChild, SeedPlotMessage, SeedPlotProgress, SeedPlotResult, SeedReadyMessage, SeedReadyResult, SeedRelation, SeedResumeMessage, SeedResumeResultMessage, SeedReviewActionContext, SeedReviewCancelMessage, SeedReviewDraftMessage, SeedReviewDraftResultMessage, SeedReviewKeepMessage, SeedReviewResult, SeedReviewResultMessage, SeedReviewRetryMessage, SeedReviewShowMessage, SeedReviewStartMessage, SeedSearchHit, SeedSearchMessage, SeedSearchResult, SeedSendToChiefMessage, SeedSendToChiefResult, SeedSendToChiefResultMessage, SeedShowMessage, SeedShowResult, SeedTransitionMessage, SeedTransitionResult, SeedTransitionResultMessage, SeedVar, SeedWatchMessage, SeedWatchResult, Session, SessionAnnotation, SessionAnnotationsClearMessage, SessionAnnotationsClearResultMessage, SessionAnnotationsGetMessage, SessionAnnotationsGetResultMessage, SessionAnnotationsSaveMessage, SessionAnnotationsSaveResultMessage, SessionAnnotationsSubmitMessage, SessionAnnotationsSubmitResultMessage, SessionCloseResultMessage, SessionClosedMessage, SessionContextWindowCapResultMessage, SessionDelegationRole, SessionExitedMessage, SessionInstructionsMessage, SessionInstructionsResult, SessionLedgerEntry, SessionLedgerFacet, SessionLedgerFacets, SessionLedgerProfileFacet, SessionListMessage, SessionListResult, SessionListResultMessage, SessionMessage, SessionMessageWindowStatus, SessionMessagesChangedMessage, SessionMessagesGetMessage, SessionMessagesGetResultMessage, SessionPlacement, SessionPullRequest, SessionRegisteredMessage, SessionReopen, SessionReopenAction, SessionReopenEntry, SessionReopenMessage, SessionReopenResult, SessionReopenResultMessage, SessionShowMessage, SessionShowResult, SessionShowResultMessage, SessionState, SessionStateChangedMessage, SessionTranscriptEvent, SessionTranscriptMessage, SessionTranscriptResult, SessionUnregisteredMessage, SessionUsage, SessionUsageModel, SessionsUpdatedMessage, SetChiefOfStaffMessage, SetClientPresenceMessage, SetPluginPriorityMessage, SetSessionContextWindowCapMessage, SetSessionPriorityMessage, SetSessionResumeIDMessage, SetSettingMessage, SetTerminalThemeMessage, SettingsUpdatedMessage, SettleTurnMessage, SnoozeTurnMessage, SpawnResultMessage, SpawnSessionMessage, StateExplainEntry, StateExplainMessage, StateExplainResult, StateMessage, StopBackgroundTask, StopMessage, StoredDocument, SupportInputTrace, SupportRuntimeEvidence, SupportSnapshotMessage, SupportSnapshotResultMessage, Task, TaskListMessage, TaskListResultMessage, TaskRetryMessage, TaskRetryResultMessage, TasksChangedMessage, TerminalBinding, TerminalBindingsUpdatedMessage, TerminalExit, TerminalPointerActivityMessage, TierDefaults, UninstallPluginMessage, UnregisterMessage, WakeTurnMessage, WebSocketEvent, Worktree, WorktreeCreatedEvent, WorktreeDeletedEvent, WorktreeKeepMessage, WorktreeKeepResult, WorktreeKeepResultEvent, WorktreeListMessage, WorktreeListResult, WorktreeListResultEvent, WorktreeRefreshMessage, WorktreeRefreshResult, WorktreeRefreshResultEvent, WorktreeRepository, WorktreeStateChangedEvent, WorktreeSweepEntry, WorktreeSweepLogMessage, WorktreeSweepLogResult, WorktreeSweepLogResultEvent, WorktreeSweptEvent, WorktreesUpdatedMessage } from "./generated";
 //
 //   const activityStatusMessage = Convert.toActivityStatusMessage(json);
 //   const activityStatusResult = Convert.toActivityStatusResult(json);
@@ -283,10 +283,6 @@
 //   const getDefaultBranchResultMessage = Convert.toGetDefaultBranchResultMessage(json);
 //   const getFileDiffMessage = Convert.toGetFileDiffMessage(json);
 //   const getKittyImageMessage = Convert.toGetKittyImageMessage(json);
-//   const getPresentationRoundMessage = Convert.toGetPresentationRoundMessage(json);
-//   const getPresentationRoundResultMessage = Convert.toGetPresentationRoundResultMessage(json);
-//   const getPresentationsMessage = Convert.toGetPresentationsMessage(json);
-//   const getPresentationsResultMessage = Convert.toGetPresentationsResultMessage(json);
 //   const getRecentLocationsMessage = Convert.toGetRecentLocationsMessage(json);
 //   const getRepoInfoMessage = Convert.toGetRepoInfoMessage(json);
 //   const getRepoInfoResultMessage = Convert.toGetRepoInfoResultMessage(json);
@@ -420,23 +416,6 @@
 //   const pluginInfo = Convert.toPluginInfo(json);
 //   const pluginIssue = Convert.toPluginIssue(json);
 //   const pluginsUpdatedMessage = Convert.toPluginsUpdatedMessage(json);
-//   const presentAnnotation = Convert.toPresentAnnotation(json);
-//   const presentCloseMessage = Convert.toPresentCloseMessage(json);
-//   const presentCloseResultMessage = Convert.toPresentCloseResultMessage(json);
-//   const presentCommentInput = Convert.toPresentCommentInput(json);
-//   const presentFeedbackMessage = Convert.toPresentFeedbackMessage(json);
-//   const presentFeedbackResult = Convert.toPresentFeedbackResult(json);
-//   const presentFile = Convert.toPresentFile(json);
-//   const presentManifestView = Convert.toPresentManifestView(json);
-//   const presentOpenMessage = Convert.toPresentOpenMessage(json);
-//   const presentOpenResult = Convert.toPresentOpenResult(json);
-//   const presentSubmitRoundMessage = Convert.toPresentSubmitRoundMessage(json);
-//   const presentSubmitRoundResultMessage = Convert.toPresentSubmitRoundResultMessage(json);
-//   const presentation = Convert.toPresentation(json);
-//   const presentationAddedMessage = Convert.toPresentationAddedMessage(json);
-//   const presentationComment = Convert.toPresentationComment(json);
-//   const presentationRound = Convert.toPresentationRound(json);
-//   const presentationUpdatedMessage = Convert.toPresentationUpdatedMessage(json);
 //   const profile = Convert.toProfile(json);
 //   const profileActionResultMessage = Convert.toProfileActionResultMessage(json);
 //   const profileArrangementChangedMessage = Convert.toProfileArrangementChangedMessage(json);
@@ -4707,7 +4686,6 @@ export interface GetFileDiffMessage {
     base_ref?:   string;
     cmd:         GetFileDiffMessageCmd;
     directory:   string;
-    head_ref?:   string;
     path:        string;
     request_id?: string;
     staged?:     boolean;
@@ -4727,117 +4705,6 @@ export interface GetKittyImageMessage {
 
 export enum GetKittyImageMessageCmd {
     GetKittyImage = "get_kitty_image",
-}
-
-export interface GetPresentationRoundMessage {
-    cmd:             GetPresentationRoundMessageCmd;
-    presentation_id: string;
-    seq?:            number;
-    [property: string]: any;
-}
-
-export enum GetPresentationRoundMessageCmd {
-    GetPresentationRound = "get_presentation_round",
-}
-
-export interface GetPresentationRoundResultMessage {
-    comments?:      CommentElement[];
-    error?:         string;
-    event:          GetPresentationRoundResultMessageEvent;
-    presentation?:  PresentationElement;
-    repo_head_sha?: string;
-    round?:         Round;
-    success:        boolean;
-    [property: string]: any;
-}
-
-export interface CommentElement {
-    author:     string;
-    content:    string;
-    created_at: string;
-    filepath:   string;
-    id:         string;
-    line_end:   number;
-    line_start: number;
-    round_id:   string;
-    side:       string;
-    [property: string]: any;
-}
-
-export enum GetPresentationRoundResultMessageEvent {
-    GetPresentationRoundResult = "get_presentation_round_result",
-}
-
-export interface PresentationElement {
-    created_at:             string;
-    id:                     string;
-    kind:                   string;
-    latest_round_seq:       number;
-    latest_round_submitted: boolean;
-    repo_path:              string;
-    session_id:             string;
-    status:                 string;
-    title:                  string;
-    [property: string]: any;
-}
-
-export interface Round {
-    base_sha:        string;
-    changed_files?:  FileElement[];
-    created_at:      string;
-    head_sha:        string;
-    id:              string;
-    manifest:        Manifest;
-    presentation_id: string;
-    seq:             number;
-    submitted_at?:   string;
-    verdict?:        string;
-    [property: string]: any;
-}
-
-export interface FileElement {
-    additions?:   number;
-    annotations?: AnnotationElement[];
-    deletions?:   number;
-    note?:        string;
-    path:         string;
-    [property: string]: any;
-}
-
-export interface AnnotationElement {
-    comments:   string[];
-    line_end:   number;
-    line_start: number;
-    [property: string]: any;
-}
-
-export interface Manifest {
-    files:    FileElement[];
-    skip:     string[];
-    summary?: string;
-    title:    string;
-    [property: string]: any;
-}
-
-export interface GetPresentationsMessage {
-    cmd: GetPresentationsMessageCmd;
-    [property: string]: any;
-}
-
-export enum GetPresentationsMessageCmd {
-    GetPresentations = "get_presentations",
-}
-
-export interface GetPresentationsResultMessage {
-    error?:        string;
-    event:         GetPresentationsResultMessageEvent;
-    presentations: PresentationElement[];
-    success:       boolean;
-    [property: string]: any;
-}
-
-export enum GetPresentationsResultMessageEvent {
-    GetPresentationsResult = "get_presentations_result",
 }
 
 export interface GetRecentLocationsMessage {
@@ -5758,7 +5625,7 @@ export enum MarkdownAnnotationsGetMessageCmd {
 }
 
 export interface MarkdownAnnotationsGetResultMessage {
-    annotations:  AnnotationObject[];
+    annotations:  AnnotationElement[];
     document_uri: string;
     error?:       string;
     event:        MarkdownAnnotationsGetResultMessageEvent;
@@ -5771,7 +5638,7 @@ export interface MarkdownAnnotationsGetResultMessage {
     [property: string]: any;
 }
 
-export interface AnnotationObject {
+export interface AnnotationElement {
     anchor?:           Anchor;
     created_at:        number;
     id:                string;
@@ -5788,7 +5655,7 @@ export enum MarkdownAnnotationsGetResultMessageEvent {
 }
 
 export interface MarkdownAnnotationsSaveMessage {
-    annotations:  AnnotationObject[];
+    annotations:  AnnotationElement[];
     cmd:          MarkdownAnnotationsSaveMessageCmd;
     document_uri: string;
     generation:   number;
@@ -6644,198 +6511,6 @@ export interface PluginElement {
     [property: string]: any;
 }
 
-export interface PresentAnnotation {
-    comments:   string[];
-    line_end:   number;
-    line_start: number;
-    [property: string]: any;
-}
-
-export interface PresentCloseMessage {
-    cmd:             PresentCloseMessageCmd;
-    presentation_id: string;
-    [property: string]: any;
-}
-
-export enum PresentCloseMessageCmd {
-    PresentClose = "present_close",
-}
-
-export interface PresentCloseResultMessage {
-    error?:          string;
-    event:           PresentCloseResultMessageEvent;
-    presentation_id: string;
-    success:         boolean;
-    [property: string]: any;
-}
-
-export enum PresentCloseResultMessageEvent {
-    PresentCloseResult = "present_close_result",
-}
-
-export interface PresentCommentInput {
-    content:    string;
-    filepath:   string;
-    line_end:   number;
-    line_start: number;
-    side:       string;
-    [property: string]: any;
-}
-
-export interface PresentFeedbackMessage {
-    cmd:             PresentFeedbackMessageCmd;
-    presentation_id: string;
-    seq?:            number;
-    [property: string]: any;
-}
-
-export enum PresentFeedbackMessageCmd {
-    PresentFeedback = "present_feedback",
-}
-
-export interface PresentFeedbackResult {
-    markdown:            string;
-    presentation_status: string;
-    seq:                 number;
-    submitted:           boolean;
-    verdict?:            string;
-    [property: string]: any;
-}
-
-export interface PresentFile {
-    additions?:   number;
-    annotations?: AnnotationElement[];
-    deletions?:   number;
-    note?:        string;
-    path:         string;
-    [property: string]: any;
-}
-
-export interface PresentManifestView {
-    files:    FileElement[];
-    skip:     string[];
-    summary?: string;
-    title:    string;
-    [property: string]: any;
-}
-
-export interface PresentOpenMessage {
-    cmd:               PresentOpenMessageCmd;
-    manifest_yaml:     string;
-    presentation_id?:  string;
-    source_session_id: string;
-    [property: string]: any;
-}
-
-export enum PresentOpenMessageCmd {
-    PresentOpen = "present_open",
-}
-
-export interface PresentOpenResult {
-    base_sha:        string;
-    head_sha:        string;
-    presentation_id: string;
-    round_id:        string;
-    seq:             number;
-    title:           string;
-    warnings?:       string[];
-    [property: string]: any;
-}
-
-export interface PresentSubmitRoundMessage {
-    cmd:      PresentSubmitRoundMessageCmd;
-    comments: CommentObject[];
-    handback: boolean;
-    round_id: string;
-    verdict:  string;
-    [property: string]: any;
-}
-
-export enum PresentSubmitRoundMessageCmd {
-    PresentSubmitRound = "present_submit_round",
-}
-
-export interface CommentObject {
-    content:    string;
-    filepath:   string;
-    line_end:   number;
-    line_start: number;
-    side:       string;
-    [property: string]: any;
-}
-
-export interface PresentSubmitRoundResultMessage {
-    error?:   string;
-    event:    PresentSubmitRoundResultMessageEvent;
-    round_id: string;
-    success:  boolean;
-    [property: string]: any;
-}
-
-export enum PresentSubmitRoundResultMessageEvent {
-    PresentSubmitRoundResult = "present_submit_round_result",
-}
-
-export interface Presentation {
-    created_at:             string;
-    id:                     string;
-    kind:                   string;
-    latest_round_seq:       number;
-    latest_round_submitted: boolean;
-    repo_path:              string;
-    session_id:             string;
-    status:                 string;
-    title:                  string;
-    [property: string]: any;
-}
-
-export interface PresentationAddedMessage {
-    event:        PresentationAddedMessageEvent;
-    presentation: PresentationElement;
-    [property: string]: any;
-}
-
-export enum PresentationAddedMessageEvent {
-    PresentationAdded = "presentation_added",
-}
-
-export interface PresentationComment {
-    author:     string;
-    content:    string;
-    created_at: string;
-    filepath:   string;
-    id:         string;
-    line_end:   number;
-    line_start: number;
-    round_id:   string;
-    side:       string;
-    [property: string]: any;
-}
-
-export interface PresentationRound {
-    base_sha:        string;
-    changed_files?:  FileElement[];
-    created_at:      string;
-    head_sha:        string;
-    id:              string;
-    manifest:        Manifest;
-    presentation_id: string;
-    seq:             number;
-    submitted_at?:   string;
-    verdict?:        string;
-    [property: string]: any;
-}
-
-export interface PresentationUpdatedMessage {
-    event:        PresentationUpdatedMessageEvent;
-    presentation: PresentationElement;
-    [property: string]: any;
-}
-
-export enum PresentationUpdatedMessageEvent {
-    PresentationUpdated = "presentation_updated",
-}
-
 export interface Profile {
     current_desktop_id: string;
     id:                 string;
@@ -7141,7 +6816,7 @@ export enum RecentFilesMessageCmd {
 export interface RecentFilesResultMessage {
     error?:     string;
     event:      RecentFilesResultMessageEvent;
-    files:      FileObject[];
+    files:      FileElement[];
     request_id: string;
     success:    boolean;
     [property: string]: any;
@@ -7151,7 +6826,7 @@ export enum RecentFilesResultMessageEvent {
     RecentFilesResult = "recent_files_result",
 }
 
-export interface FileObject {
+export interface FileElement {
     count:       number;
     last_at:     string;
     path:        string;
@@ -7370,8 +7045,6 @@ export interface Response {
     notebook_read?:                   NotebookReadObject;
     notebook_write?:                  NotebookWriteObject;
     ok:                               boolean;
-    present_feedback_result?:         PresentFeedbackResultObject;
-    present_open_result?:             PresentOpenResultObject;
     profiles?:                        ProfileElement[];
     prs?:                             PRElement[];
     repos?:                           RepoElement[];
@@ -7670,26 +7343,6 @@ export interface NotebookGuide {
     guidance:         string;
     root:             string;
     session_is_chief: boolean;
-    [property: string]: any;
-}
-
-export interface PresentFeedbackResultObject {
-    markdown:            string;
-    presentation_status: string;
-    seq:                 number;
-    submitted:           boolean;
-    verdict?:            string;
-    [property: string]: any;
-}
-
-export interface PresentOpenResultObject {
-    base_sha:        string;
-    head_sha:        string;
-    presentation_id: string;
-    round_id:        string;
-    seq:             number;
-    title:           string;
-    warnings?:       string[];
     [property: string]: any;
 }
 
@@ -8938,7 +8591,7 @@ export enum SessionAnnotationsGetMessageCmd {
 }
 
 export interface SessionAnnotationsGetResultMessage {
-    annotations: SessionAnnotationsGetResultMessageAnnotation[];
+    annotations: AnnotationObject[];
     error?:      string;
     event:       SessionAnnotationsGetResultMessageEvent;
     generation:  number;
@@ -8949,7 +8602,7 @@ export interface SessionAnnotationsGetResultMessage {
     [property: string]: any;
 }
 
-export interface SessionAnnotationsGetResultMessageAnnotation {
+export interface AnnotationObject {
     comment:         string;
     emoji?:          string;
     end:             number;
@@ -8966,7 +8619,7 @@ export enum SessionAnnotationsGetResultMessageEvent {
 }
 
 export interface SessionAnnotationsSaveMessage {
-    annotations: SessionAnnotationsGetResultMessageAnnotation[];
+    annotations: AnnotationObject[];
     cmd:         SessionAnnotationsSaveMessageCmd;
     generation:  number;
     note?:       string;
@@ -12498,38 +12151,6 @@ export class Convert {
         return JSON.stringify(uncast(value, r("GetKittyImageMessage")), null, 2);
     }
 
-    public static toGetPresentationRoundMessage(json: string): GetPresentationRoundMessage {
-        return cast(JSON.parse(json), r("GetPresentationRoundMessage"));
-    }
-
-    public static getPresentationRoundMessageToJson(value: GetPresentationRoundMessage): string {
-        return JSON.stringify(uncast(value, r("GetPresentationRoundMessage")), null, 2);
-    }
-
-    public static toGetPresentationRoundResultMessage(json: string): GetPresentationRoundResultMessage {
-        return cast(JSON.parse(json), r("GetPresentationRoundResultMessage"));
-    }
-
-    public static getPresentationRoundResultMessageToJson(value: GetPresentationRoundResultMessage): string {
-        return JSON.stringify(uncast(value, r("GetPresentationRoundResultMessage")), null, 2);
-    }
-
-    public static toGetPresentationsMessage(json: string): GetPresentationsMessage {
-        return cast(JSON.parse(json), r("GetPresentationsMessage"));
-    }
-
-    public static getPresentationsMessageToJson(value: GetPresentationsMessage): string {
-        return JSON.stringify(uncast(value, r("GetPresentationsMessage")), null, 2);
-    }
-
-    public static toGetPresentationsResultMessage(json: string): GetPresentationsResultMessage {
-        return cast(JSON.parse(json), r("GetPresentationsResultMessage"));
-    }
-
-    public static getPresentationsResultMessageToJson(value: GetPresentationsResultMessage): string {
-        return JSON.stringify(uncast(value, r("GetPresentationsResultMessage")), null, 2);
-    }
-
     public static toGetRecentLocationsMessage(json: string): GetRecentLocationsMessage {
         return cast(JSON.parse(json), r("GetRecentLocationsMessage"));
     }
@@ -13592,142 +13213,6 @@ export class Convert {
 
     public static pluginsUpdatedMessageToJson(value: PluginsUpdatedMessage): string {
         return JSON.stringify(uncast(value, r("PluginsUpdatedMessage")), null, 2);
-    }
-
-    public static toPresentAnnotation(json: string): PresentAnnotation {
-        return cast(JSON.parse(json), r("PresentAnnotation"));
-    }
-
-    public static presentAnnotationToJson(value: PresentAnnotation): string {
-        return JSON.stringify(uncast(value, r("PresentAnnotation")), null, 2);
-    }
-
-    public static toPresentCloseMessage(json: string): PresentCloseMessage {
-        return cast(JSON.parse(json), r("PresentCloseMessage"));
-    }
-
-    public static presentCloseMessageToJson(value: PresentCloseMessage): string {
-        return JSON.stringify(uncast(value, r("PresentCloseMessage")), null, 2);
-    }
-
-    public static toPresentCloseResultMessage(json: string): PresentCloseResultMessage {
-        return cast(JSON.parse(json), r("PresentCloseResultMessage"));
-    }
-
-    public static presentCloseResultMessageToJson(value: PresentCloseResultMessage): string {
-        return JSON.stringify(uncast(value, r("PresentCloseResultMessage")), null, 2);
-    }
-
-    public static toPresentCommentInput(json: string): PresentCommentInput {
-        return cast(JSON.parse(json), r("PresentCommentInput"));
-    }
-
-    public static presentCommentInputToJson(value: PresentCommentInput): string {
-        return JSON.stringify(uncast(value, r("PresentCommentInput")), null, 2);
-    }
-
-    public static toPresentFeedbackMessage(json: string): PresentFeedbackMessage {
-        return cast(JSON.parse(json), r("PresentFeedbackMessage"));
-    }
-
-    public static presentFeedbackMessageToJson(value: PresentFeedbackMessage): string {
-        return JSON.stringify(uncast(value, r("PresentFeedbackMessage")), null, 2);
-    }
-
-    public static toPresentFeedbackResult(json: string): PresentFeedbackResult {
-        return cast(JSON.parse(json), r("PresentFeedbackResult"));
-    }
-
-    public static presentFeedbackResultToJson(value: PresentFeedbackResult): string {
-        return JSON.stringify(uncast(value, r("PresentFeedbackResult")), null, 2);
-    }
-
-    public static toPresentFile(json: string): PresentFile {
-        return cast(JSON.parse(json), r("PresentFile"));
-    }
-
-    public static presentFileToJson(value: PresentFile): string {
-        return JSON.stringify(uncast(value, r("PresentFile")), null, 2);
-    }
-
-    public static toPresentManifestView(json: string): PresentManifestView {
-        return cast(JSON.parse(json), r("PresentManifestView"));
-    }
-
-    public static presentManifestViewToJson(value: PresentManifestView): string {
-        return JSON.stringify(uncast(value, r("PresentManifestView")), null, 2);
-    }
-
-    public static toPresentOpenMessage(json: string): PresentOpenMessage {
-        return cast(JSON.parse(json), r("PresentOpenMessage"));
-    }
-
-    public static presentOpenMessageToJson(value: PresentOpenMessage): string {
-        return JSON.stringify(uncast(value, r("PresentOpenMessage")), null, 2);
-    }
-
-    public static toPresentOpenResult(json: string): PresentOpenResult {
-        return cast(JSON.parse(json), r("PresentOpenResult"));
-    }
-
-    public static presentOpenResultToJson(value: PresentOpenResult): string {
-        return JSON.stringify(uncast(value, r("PresentOpenResult")), null, 2);
-    }
-
-    public static toPresentSubmitRoundMessage(json: string): PresentSubmitRoundMessage {
-        return cast(JSON.parse(json), r("PresentSubmitRoundMessage"));
-    }
-
-    public static presentSubmitRoundMessageToJson(value: PresentSubmitRoundMessage): string {
-        return JSON.stringify(uncast(value, r("PresentSubmitRoundMessage")), null, 2);
-    }
-
-    public static toPresentSubmitRoundResultMessage(json: string): PresentSubmitRoundResultMessage {
-        return cast(JSON.parse(json), r("PresentSubmitRoundResultMessage"));
-    }
-
-    public static presentSubmitRoundResultMessageToJson(value: PresentSubmitRoundResultMessage): string {
-        return JSON.stringify(uncast(value, r("PresentSubmitRoundResultMessage")), null, 2);
-    }
-
-    public static toPresentation(json: string): Presentation {
-        return cast(JSON.parse(json), r("Presentation"));
-    }
-
-    public static presentationToJson(value: Presentation): string {
-        return JSON.stringify(uncast(value, r("Presentation")), null, 2);
-    }
-
-    public static toPresentationAddedMessage(json: string): PresentationAddedMessage {
-        return cast(JSON.parse(json), r("PresentationAddedMessage"));
-    }
-
-    public static presentationAddedMessageToJson(value: PresentationAddedMessage): string {
-        return JSON.stringify(uncast(value, r("PresentationAddedMessage")), null, 2);
-    }
-
-    public static toPresentationComment(json: string): PresentationComment {
-        return cast(JSON.parse(json), r("PresentationComment"));
-    }
-
-    public static presentationCommentToJson(value: PresentationComment): string {
-        return JSON.stringify(uncast(value, r("PresentationComment")), null, 2);
-    }
-
-    public static toPresentationRound(json: string): PresentationRound {
-        return cast(JSON.parse(json), r("PresentationRound"));
-    }
-
-    public static presentationRoundToJson(value: PresentationRound): string {
-        return JSON.stringify(uncast(value, r("PresentationRound")), null, 2);
-    }
-
-    public static toPresentationUpdatedMessage(json: string): PresentationUpdatedMessage {
-        return cast(JSON.parse(json), r("PresentationUpdatedMessage"));
-    }
-
-    public static presentationUpdatedMessageToJson(value: PresentationUpdatedMessage): string {
-        return JSON.stringify(uncast(value, r("PresentationUpdatedMessage")), null, 2);
     }
 
     public static toProfile(json: string): Profile {
@@ -18168,7 +17653,6 @@ const typeMap: any = {
         { json: "base_ref", js: "base_ref", typ: u(undefined, "") },
         { json: "cmd", js: "cmd", typ: r("GetFileDiffMessageCmd") },
         { json: "directory", js: "directory", typ: "" },
-        { json: "head_ref", js: "head_ref", typ: u(undefined, "") },
         { json: "path", js: "path", typ: "" },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "staged", js: "staged", typ: u(undefined, true) },
@@ -18177,81 +17661,6 @@ const typeMap: any = {
         { json: "cmd", js: "cmd", typ: r("GetKittyImageMessageCmd") },
         { json: "id", js: "id", typ: "" },
         { json: "image_id", js: "image_id", typ: 0 },
-    ], "any"),
-    "GetPresentationRoundMessage": o([
-        { json: "cmd", js: "cmd", typ: r("GetPresentationRoundMessageCmd") },
-        { json: "presentation_id", js: "presentation_id", typ: "" },
-        { json: "seq", js: "seq", typ: u(undefined, 0) },
-    ], "any"),
-    "GetPresentationRoundResultMessage": o([
-        { json: "comments", js: "comments", typ: u(undefined, a(r("CommentElement"))) },
-        { json: "error", js: "error", typ: u(undefined, "") },
-        { json: "event", js: "event", typ: r("GetPresentationRoundResultMessageEvent") },
-        { json: "presentation", js: "presentation", typ: u(undefined, r("PresentationElement")) },
-        { json: "repo_head_sha", js: "repo_head_sha", typ: u(undefined, "") },
-        { json: "round", js: "round", typ: u(undefined, r("Round")) },
-        { json: "success", js: "success", typ: true },
-    ], "any"),
-    "CommentElement": o([
-        { json: "author", js: "author", typ: "" },
-        { json: "content", js: "content", typ: "" },
-        { json: "created_at", js: "created_at", typ: "" },
-        { json: "filepath", js: "filepath", typ: "" },
-        { json: "id", js: "id", typ: "" },
-        { json: "line_end", js: "line_end", typ: 0 },
-        { json: "line_start", js: "line_start", typ: 0 },
-        { json: "round_id", js: "round_id", typ: "" },
-        { json: "side", js: "side", typ: "" },
-    ], "any"),
-    "PresentationElement": o([
-        { json: "created_at", js: "created_at", typ: "" },
-        { json: "id", js: "id", typ: "" },
-        { json: "kind", js: "kind", typ: "" },
-        { json: "latest_round_seq", js: "latest_round_seq", typ: 0 },
-        { json: "latest_round_submitted", js: "latest_round_submitted", typ: true },
-        { json: "repo_path", js: "repo_path", typ: "" },
-        { json: "session_id", js: "session_id", typ: "" },
-        { json: "status", js: "status", typ: "" },
-        { json: "title", js: "title", typ: "" },
-    ], "any"),
-    "Round": o([
-        { json: "base_sha", js: "base_sha", typ: "" },
-        { json: "changed_files", js: "changed_files", typ: u(undefined, a(r("FileElement"))) },
-        { json: "created_at", js: "created_at", typ: "" },
-        { json: "head_sha", js: "head_sha", typ: "" },
-        { json: "id", js: "id", typ: "" },
-        { json: "manifest", js: "manifest", typ: r("Manifest") },
-        { json: "presentation_id", js: "presentation_id", typ: "" },
-        { json: "seq", js: "seq", typ: 0 },
-        { json: "submitted_at", js: "submitted_at", typ: u(undefined, "") },
-        { json: "verdict", js: "verdict", typ: u(undefined, "") },
-    ], "any"),
-    "FileElement": o([
-        { json: "additions", js: "additions", typ: u(undefined, 0) },
-        { json: "annotations", js: "annotations", typ: u(undefined, a(r("AnnotationElement"))) },
-        { json: "deletions", js: "deletions", typ: u(undefined, 0) },
-        { json: "note", js: "note", typ: u(undefined, "") },
-        { json: "path", js: "path", typ: "" },
-    ], "any"),
-    "AnnotationElement": o([
-        { json: "comments", js: "comments", typ: a("") },
-        { json: "line_end", js: "line_end", typ: 0 },
-        { json: "line_start", js: "line_start", typ: 0 },
-    ], "any"),
-    "Manifest": o([
-        { json: "files", js: "files", typ: a(r("FileElement")) },
-        { json: "skip", js: "skip", typ: a("") },
-        { json: "summary", js: "summary", typ: u(undefined, "") },
-        { json: "title", js: "title", typ: "" },
-    ], "any"),
-    "GetPresentationsMessage": o([
-        { json: "cmd", js: "cmd", typ: r("GetPresentationsMessageCmd") },
-    ], "any"),
-    "GetPresentationsResultMessage": o([
-        { json: "error", js: "error", typ: u(undefined, "") },
-        { json: "event", js: "event", typ: r("GetPresentationsResultMessageEvent") },
-        { json: "presentations", js: "presentations", typ: a(r("PresentationElement")) },
-        { json: "success", js: "success", typ: true },
     ], "any"),
     "GetRecentLocationsMessage": o([
         { json: "cmd", js: "cmd", typ: r("GetRecentLocationsMessageCmd") },
@@ -18807,7 +18216,7 @@ const typeMap: any = {
         { json: "source_kind", js: "source_kind", typ: "" },
     ], "any"),
     "MarkdownAnnotationsGetResultMessage": o([
-        { json: "annotations", js: "annotations", typ: a(r("AnnotationObject")) },
+        { json: "annotations", js: "annotations", typ: a(r("AnnotationElement")) },
         { json: "document_uri", js: "document_uri", typ: "" },
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("MarkdownAnnotationsGetResultMessageEvent") },
@@ -18818,7 +18227,7 @@ const typeMap: any = {
         { json: "source_kind", js: "source_kind", typ: "" },
         { json: "success", js: "success", typ: true },
     ], "any"),
-    "AnnotationObject": o([
+    "AnnotationElement": o([
         { json: "anchor", js: "anchor", typ: u(undefined, r("Anchor")) },
         { json: "created_at", js: "created_at", typ: 0 },
         { json: "id", js: "id", typ: "" },
@@ -18829,7 +18238,7 @@ const typeMap: any = {
         { json: "type", js: "type", typ: "" },
     ], "any"),
     "MarkdownAnnotationsSaveMessage": o([
-        { json: "annotations", js: "annotations", typ: a(r("AnnotationObject")) },
+        { json: "annotations", js: "annotations", typ: a(r("AnnotationElement")) },
         { json: "cmd", js: "cmd", typ: r("MarkdownAnnotationsSaveMessageCmd") },
         { json: "document_uri", js: "document_uri", typ: "" },
         { json: "generation", js: "generation", typ: 0 },
@@ -19349,130 +18758,6 @@ const typeMap: any = {
         { json: "runtime_state", js: "runtime_state", typ: "" },
         { json: "version", js: "version", typ: "" },
     ], "any"),
-    "PresentAnnotation": o([
-        { json: "comments", js: "comments", typ: a("") },
-        { json: "line_end", js: "line_end", typ: 0 },
-        { json: "line_start", js: "line_start", typ: 0 },
-    ], "any"),
-    "PresentCloseMessage": o([
-        { json: "cmd", js: "cmd", typ: r("PresentCloseMessageCmd") },
-        { json: "presentation_id", js: "presentation_id", typ: "" },
-    ], "any"),
-    "PresentCloseResultMessage": o([
-        { json: "error", js: "error", typ: u(undefined, "") },
-        { json: "event", js: "event", typ: r("PresentCloseResultMessageEvent") },
-        { json: "presentation_id", js: "presentation_id", typ: "" },
-        { json: "success", js: "success", typ: true },
-    ], "any"),
-    "PresentCommentInput": o([
-        { json: "content", js: "content", typ: "" },
-        { json: "filepath", js: "filepath", typ: "" },
-        { json: "line_end", js: "line_end", typ: 0 },
-        { json: "line_start", js: "line_start", typ: 0 },
-        { json: "side", js: "side", typ: "" },
-    ], "any"),
-    "PresentFeedbackMessage": o([
-        { json: "cmd", js: "cmd", typ: r("PresentFeedbackMessageCmd") },
-        { json: "presentation_id", js: "presentation_id", typ: "" },
-        { json: "seq", js: "seq", typ: u(undefined, 0) },
-    ], "any"),
-    "PresentFeedbackResult": o([
-        { json: "markdown", js: "markdown", typ: "" },
-        { json: "presentation_status", js: "presentation_status", typ: "" },
-        { json: "seq", js: "seq", typ: 0 },
-        { json: "submitted", js: "submitted", typ: true },
-        { json: "verdict", js: "verdict", typ: u(undefined, "") },
-    ], "any"),
-    "PresentFile": o([
-        { json: "additions", js: "additions", typ: u(undefined, 0) },
-        { json: "annotations", js: "annotations", typ: u(undefined, a(r("AnnotationElement"))) },
-        { json: "deletions", js: "deletions", typ: u(undefined, 0) },
-        { json: "note", js: "note", typ: u(undefined, "") },
-        { json: "path", js: "path", typ: "" },
-    ], "any"),
-    "PresentManifestView": o([
-        { json: "files", js: "files", typ: a(r("FileElement")) },
-        { json: "skip", js: "skip", typ: a("") },
-        { json: "summary", js: "summary", typ: u(undefined, "") },
-        { json: "title", js: "title", typ: "" },
-    ], "any"),
-    "PresentOpenMessage": o([
-        { json: "cmd", js: "cmd", typ: r("PresentOpenMessageCmd") },
-        { json: "manifest_yaml", js: "manifest_yaml", typ: "" },
-        { json: "presentation_id", js: "presentation_id", typ: u(undefined, "") },
-        { json: "source_session_id", js: "source_session_id", typ: "" },
-    ], "any"),
-    "PresentOpenResult": o([
-        { json: "base_sha", js: "base_sha", typ: "" },
-        { json: "head_sha", js: "head_sha", typ: "" },
-        { json: "presentation_id", js: "presentation_id", typ: "" },
-        { json: "round_id", js: "round_id", typ: "" },
-        { json: "seq", js: "seq", typ: 0 },
-        { json: "title", js: "title", typ: "" },
-        { json: "warnings", js: "warnings", typ: u(undefined, a("")) },
-    ], "any"),
-    "PresentSubmitRoundMessage": o([
-        { json: "cmd", js: "cmd", typ: r("PresentSubmitRoundMessageCmd") },
-        { json: "comments", js: "comments", typ: a(r("CommentObject")) },
-        { json: "handback", js: "handback", typ: true },
-        { json: "round_id", js: "round_id", typ: "" },
-        { json: "verdict", js: "verdict", typ: "" },
-    ], "any"),
-    "CommentObject": o([
-        { json: "content", js: "content", typ: "" },
-        { json: "filepath", js: "filepath", typ: "" },
-        { json: "line_end", js: "line_end", typ: 0 },
-        { json: "line_start", js: "line_start", typ: 0 },
-        { json: "side", js: "side", typ: "" },
-    ], "any"),
-    "PresentSubmitRoundResultMessage": o([
-        { json: "error", js: "error", typ: u(undefined, "") },
-        { json: "event", js: "event", typ: r("PresentSubmitRoundResultMessageEvent") },
-        { json: "round_id", js: "round_id", typ: "" },
-        { json: "success", js: "success", typ: true },
-    ], "any"),
-    "Presentation": o([
-        { json: "created_at", js: "created_at", typ: "" },
-        { json: "id", js: "id", typ: "" },
-        { json: "kind", js: "kind", typ: "" },
-        { json: "latest_round_seq", js: "latest_round_seq", typ: 0 },
-        { json: "latest_round_submitted", js: "latest_round_submitted", typ: true },
-        { json: "repo_path", js: "repo_path", typ: "" },
-        { json: "session_id", js: "session_id", typ: "" },
-        { json: "status", js: "status", typ: "" },
-        { json: "title", js: "title", typ: "" },
-    ], "any"),
-    "PresentationAddedMessage": o([
-        { json: "event", js: "event", typ: r("PresentationAddedMessageEvent") },
-        { json: "presentation", js: "presentation", typ: r("PresentationElement") },
-    ], "any"),
-    "PresentationComment": o([
-        { json: "author", js: "author", typ: "" },
-        { json: "content", js: "content", typ: "" },
-        { json: "created_at", js: "created_at", typ: "" },
-        { json: "filepath", js: "filepath", typ: "" },
-        { json: "id", js: "id", typ: "" },
-        { json: "line_end", js: "line_end", typ: 0 },
-        { json: "line_start", js: "line_start", typ: 0 },
-        { json: "round_id", js: "round_id", typ: "" },
-        { json: "side", js: "side", typ: "" },
-    ], "any"),
-    "PresentationRound": o([
-        { json: "base_sha", js: "base_sha", typ: "" },
-        { json: "changed_files", js: "changed_files", typ: u(undefined, a(r("FileElement"))) },
-        { json: "created_at", js: "created_at", typ: "" },
-        { json: "head_sha", js: "head_sha", typ: "" },
-        { json: "id", js: "id", typ: "" },
-        { json: "manifest", js: "manifest", typ: r("Manifest") },
-        { json: "presentation_id", js: "presentation_id", typ: "" },
-        { json: "seq", js: "seq", typ: 0 },
-        { json: "submitted_at", js: "submitted_at", typ: u(undefined, "") },
-        { json: "verdict", js: "verdict", typ: u(undefined, "") },
-    ], "any"),
-    "PresentationUpdatedMessage": o([
-        { json: "event", js: "event", typ: r("PresentationUpdatedMessageEvent") },
-        { json: "presentation", js: "presentation", typ: r("PresentationElement") },
-    ], "any"),
     "Profile": o([
         { json: "current_desktop_id", js: "current_desktop_id", typ: "" },
         { json: "id", js: "id", typ: "" },
@@ -19634,11 +18919,11 @@ const typeMap: any = {
     "RecentFilesResultMessage": o([
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("RecentFilesResultMessageEvent") },
-        { json: "files", js: "files", typ: a(r("FileObject")) },
+        { json: "files", js: "files", typ: a(r("FileElement")) },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "success", js: "success", typ: true },
     ], "any"),
-    "FileObject": o([
+    "FileElement": o([
         { json: "count", js: "count", typ: 0 },
         { json: "last_at", js: "last_at", typ: "" },
         { json: "path", js: "path", typ: "" },
@@ -19781,8 +19066,6 @@ const typeMap: any = {
         { json: "notebook_read", js: "notebook_read", typ: u(undefined, r("NotebookReadObject")) },
         { json: "notebook_write", js: "notebook_write", typ: u(undefined, r("NotebookWriteObject")) },
         { json: "ok", js: "ok", typ: true },
-        { json: "present_feedback_result", js: "present_feedback_result", typ: u(undefined, r("PresentFeedbackResultObject")) },
-        { json: "present_open_result", js: "present_open_result", typ: u(undefined, r("PresentOpenResultObject")) },
         { json: "profiles", js: "profiles", typ: u(undefined, a(r("ProfileElement"))) },
         { json: "prs", js: "prs", typ: u(undefined, a(r("PRElement"))) },
         { json: "repos", js: "repos", typ: u(undefined, a(r("RepoElement"))) },
@@ -20009,22 +19292,6 @@ const typeMap: any = {
         { json: "guidance", js: "guidance", typ: "" },
         { json: "root", js: "root", typ: "" },
         { json: "session_is_chief", js: "session_is_chief", typ: true },
-    ], "any"),
-    "PresentFeedbackResultObject": o([
-        { json: "markdown", js: "markdown", typ: "" },
-        { json: "presentation_status", js: "presentation_status", typ: "" },
-        { json: "seq", js: "seq", typ: 0 },
-        { json: "submitted", js: "submitted", typ: true },
-        { json: "verdict", js: "verdict", typ: u(undefined, "") },
-    ], "any"),
-    "PresentOpenResultObject": o([
-        { json: "base_sha", js: "base_sha", typ: "" },
-        { json: "head_sha", js: "head_sha", typ: "" },
-        { json: "presentation_id", js: "presentation_id", typ: "" },
-        { json: "round_id", js: "round_id", typ: "" },
-        { json: "seq", js: "seq", typ: 0 },
-        { json: "title", js: "title", typ: "" },
-        { json: "warnings", js: "warnings", typ: u(undefined, a("")) },
     ], "any"),
     "SeedArtifactTransferResultObject": o([
         { json: "artifact", js: "artifact", typ: u(undefined, r("SeedArtifactTransferResultArtifact")) },
@@ -20889,7 +20156,7 @@ const typeMap: any = {
         { json: "session_id", js: "session_id", typ: "" },
     ], "any"),
     "SessionAnnotationsGetResultMessage": o([
-        { json: "annotations", js: "annotations", typ: a(r("SessionAnnotationsGetResultMessageAnnotation")) },
+        { json: "annotations", js: "annotations", typ: a(r("AnnotationObject")) },
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("SessionAnnotationsGetResultMessageEvent") },
         { json: "generation", js: "generation", typ: 0 },
@@ -20898,7 +20165,7 @@ const typeMap: any = {
         { json: "session_id", js: "session_id", typ: "" },
         { json: "success", js: "success", typ: true },
     ], "any"),
-    "SessionAnnotationsGetResultMessageAnnotation": o([
+    "AnnotationObject": o([
         { json: "comment", js: "comment", typ: "" },
         { json: "emoji", js: "emoji", typ: u(undefined, "") },
         { json: "end", js: "end", typ: 0 },
@@ -20909,7 +20176,7 @@ const typeMap: any = {
         { json: "start", js: "start", typ: 0 },
     ], "any"),
     "SessionAnnotationsSaveMessage": o([
-        { json: "annotations", js: "annotations", typ: a(r("SessionAnnotationsGetResultMessageAnnotation")) },
+        { json: "annotations", js: "annotations", typ: a(r("AnnotationObject")) },
         { json: "cmd", js: "cmd", typ: r("SessionAnnotationsSaveMessageCmd") },
         { json: "generation", js: "generation", typ: 0 },
         { json: "note", js: "note", typ: u(undefined, "") },
@@ -22339,18 +21606,6 @@ const typeMap: any = {
     "GetKittyImageMessageCmd": [
         "get_kitty_image",
     ],
-    "GetPresentationRoundMessageCmd": [
-        "get_presentation_round",
-    ],
-    "GetPresentationRoundResultMessageEvent": [
-        "get_presentation_round_result",
-    ],
-    "GetPresentationsMessageCmd": [
-        "get_presentations",
-    ],
-    "GetPresentationsResultMessageEvent": [
-        "get_presentations_result",
-    ],
     "GetRecentLocationsMessageCmd": [
         "get_recent_locations",
     ],
@@ -22669,30 +21924,6 @@ const typeMap: any = {
     ],
     "PluginsUpdatedMessageEvent": [
         "plugins_updated",
-    ],
-    "PresentCloseMessageCmd": [
-        "present_close",
-    ],
-    "PresentCloseResultMessageEvent": [
-        "present_close_result",
-    ],
-    "PresentFeedbackMessageCmd": [
-        "present_feedback",
-    ],
-    "PresentOpenMessageCmd": [
-        "present_open",
-    ],
-    "PresentSubmitRoundMessageCmd": [
-        "present_submit_round",
-    ],
-    "PresentSubmitRoundResultMessageEvent": [
-        "present_submit_round_result",
-    ],
-    "PresentationAddedMessageEvent": [
-        "presentation_added",
-    ],
-    "PresentationUpdatedMessageEvent": [
-        "presentation_updated",
     ],
     "ProfileActionResultMessageEvent": [
         "profile_action_result",

@@ -186,8 +186,8 @@ func browserHostPeer(w *world, origin, token string) *testworld.Peer {
 
 func browserPeerCaughtUp(p *testworld.Peer) {
 	p.T.Helper()
-	testworld.Request(p, protocol.GetPresentationsMessage{Cmd: protocol.CmdGetPresentations}, protocol.EventGetPresentationsResult,
-		func(protocol.GetPresentationsResultMessage) bool { return true })
+	testworld.Request(p, protocol.GetSettingsMessage{Cmd: protocol.CmdGetSettings}, protocol.EventSettingsUpdated,
+		func(m protocol.SettingsUpdatedMessage) bool { return m.RequestID == nil && m.ChangedKey == nil })
 }
 
 func awaitBrowserTile(t *testing.T, app *testworld.Peer, desktopID, url string) map[string]layoutNode {

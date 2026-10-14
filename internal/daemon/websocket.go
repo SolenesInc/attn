@@ -1123,14 +1123,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleGetFileDiffWS(client, msg.(*protocol.GetFileDiffMessage))
 	case protocol.CmdGetRepoInfo:
 		d.handleGetRepoInfoWS(client, msg.(*protocol.GetRepoInfoMessage))
-	case protocol.CmdGetPresentations:
-		d.handleGetPresentations(client, msg.(*protocol.GetPresentationsMessage))
-	case protocol.CmdGetPresentationRound:
-		d.handleGetPresentationRound(client, msg.(*protocol.GetPresentationRoundMessage))
-	case protocol.CmdPresentSubmitRound:
-		d.handlePresentSubmitRound(client, msg.(*protocol.PresentSubmitRoundMessage))
-	case protocol.CmdPresentClose:
-		d.handlePresentClose(client, msg.(*protocol.PresentCloseMessage))
 	case protocol.CmdAutomationDefinitionsGet:
 		d.handleAutomationDefinitionsGetWS(client, msg.(*protocol.AutomationDefinitionsGetMessage))
 	case protocol.CmdAutomationDefinitionGet:

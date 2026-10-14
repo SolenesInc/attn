@@ -2544,11 +2544,6 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 	case protocol.CmdAutoModeDenials:
 		d.handleAutoModeDenials(conn, msg.(*protocol.AutoModeDenialsMessage))
 
-	case protocol.CmdPresentOpen:
-		d.handlePresentOpen(conn, msg.(*protocol.PresentOpenMessage))
-	case protocol.CmdPresentFeedback:
-		d.handlePresentFeedback(conn, msg.(*protocol.PresentFeedbackMessage))
-
 	case protocol.CmdNotebookGuide:
 		d.handleNotebookGuide(conn, msg.(*protocol.NotebookGuideMessage))
 	case protocol.CmdJournalAppend:

@@ -12,7 +12,6 @@ type fileDiffCacheKey struct {
 	directory string
 	path      string
 	baseRef   string
-	headRef   string
 	staged    bool
 }
 
@@ -41,8 +40,8 @@ func (d *Daemon) diffReader() *fileDiffReader {
 	return d.fileDiff
 }
 
-func (r *fileDiffReader) FileDiff(ctx context.Context, directory, path, baseRef, headRef string, staged bool) (fileDiffContent, error) {
-	key := fileDiffCacheKey{directory: directory, path: path, baseRef: baseRef, headRef: headRef, staged: staged}
+func (r *fileDiffReader) FileDiff(ctx context.Context, directory, path, baseRef string, staged bool) (fileDiffContent, error) {
+	key := fileDiffCacheKey{directory: directory, path: path, baseRef: baseRef, staged: staged}
 	return r.calls.Do(ctx, key, func(callCtx context.Context) (fileDiffContent, error) {
 		return readFileDiffForDaemon(callCtx, r.executor, key)
 	})
@@ -55,13 +54,6 @@ func readFileDiffCoordinated(ctx context.Context, executor gitExecutor, key file
 		if origErr == nil {
 			content.original = string(origOutput)
 		}
-		if key.headRef != "" {
-			headOutput, headErr := client.Output(runCtx, attngit.OpDiff, key.directory, "show", key.headRef+":"+key.path)
-			if headErr == nil {
-				content.modified = string(headOutput)
-			}
-			return content, nil
-		}
 		if key.staged {
 			stagedOutput, stagedErr := client.Output(runCtx, attngit.OpDiff, key.directory, "show", ":"+key.path)
 			if stagedErr != nil {
@@ -71,7 +63,7 @@ func readFileDiffCoordinated(ctx context.Context, executor gitExecutor, key file
 		}
 		return content, nil
 	})
-	if err != nil || key.headRef != "" || key.staged {
+	if err != nil || key.staged {
 		return content, err
 	}
 	modified, err := os.ReadFile(filepath.Join(key.directory, key.path))

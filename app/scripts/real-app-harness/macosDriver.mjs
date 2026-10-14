@@ -34,8 +34,8 @@ export function describeInputDriverFailure(stderr = '') {
   return 'macOS automation failed.';
 }
 
-// A secondary Tauri window (e.g. "attn — present") is never enumerated by
-// Accessibility; --window-title targets it instead.
+// A secondary Tauri window is never enumerated by Accessibility;
+// --window-title targets it instead.
 export function withWindowTitleArgs(args, opts = {}) {
   if (!opts.windowTitle) {
     return args;
