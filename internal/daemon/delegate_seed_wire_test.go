@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -209,6 +210,15 @@ func TestNestedDelegatesCarryTheirSeedAndDispatcher(t *testing.T) {
 	}
 	if !partOfFirst || shown.Seed.Planter.Ref != protocol.ActorRef("session:"+string(first.SessionID)) || protocol.Deref(protocol.Deref(shown.Seed.Tender).SessionID) != nested.SessionID {
 		t.Errorf("the nested delegation planted %+v; want it part of %s, planted by %s and tended by %s", shown.Seed, first.SeedID, first.SessionID, nested.SessionID)
+	}
+	if watched, err := cli.SeedShow(first.SessionID, nested.SeedID); err != nil || !slices.Contains(watched.WatchingVia, first.SeedID) || !slices.Contains(watched.WatchingVia, nested.SeedID) {
+		t.Fatalf("nested delegation coverage = %+v, %v; want both parent and direct watches", watched, err)
+	}
+	if _, err := cli.SeedWatch(first.SessionID, first.SeedID, true); err != nil {
+		t.Fatal(err)
+	}
+	if watched, err := cli.SeedShow(first.SessionID, nested.SeedID); err != nil || !watched.Watching || !slices.Equal(watched.WatchingVia, []string{nested.SeedID}) {
+		t.Fatalf("after parent unwatch, coverage = %+v, %v; want the direct child watch", watched, err)
 	}
 	for _, want := range []struct{ session, seed, dispatcher string }{
 		{string(first.SessionID), first.SeedID, "caller"},

@@ -330,7 +330,7 @@ async function main() {
         `${JSON.stringify(transcriptMessages(transcript), null, 2)}\n`);
     });
 
-    await runner.step('new_delegation_watches_for_successor_only', async () => {
+    await runner.step('new_delegation_watches_for_successor_and_delegator', async () => {
       cli(['seed', 'unwatch', seed, '--session', watcher.sessionId]);
       const known = new Set(observer.sessionsById.keys());
       await submitPrompt(client, watcher.sessionId, watcher.paneId, DISPATCH_PROMPT);
@@ -343,8 +343,8 @@ async function main() {
       runner.assert(successorView.watching_via.includes(seed),
         'a new delegation gives the successor an ordinary watch', { via: successorView.watching_via });
       const predecessorView = JSON.parse(cli(['seed', 'show', seed, '--session', watcher.sessionId, '--json']));
-      runner.assert(!predecessorView.watching && predecessorView.watching_via.length === 0,
-        'delegation does not restore a watch the predecessor removed', { via: predecessorView.watching_via });
+      runner.assert(predecessorView.watching && predecessorView.watching_via.includes(seed),
+        'a new delegation starts a fresh watch for its delegator', { via: predecessorView.watching_via });
     });
 
     let keptChild;

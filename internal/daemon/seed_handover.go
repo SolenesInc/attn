@@ -183,7 +183,7 @@ func (d *Daemon) bindSeedHandoverProtected(
 		commits = append(commits, *noteCommit)
 	}
 	written, eventSeqs, err := d.store.CommitGardenDispatchWritesWithEvents(
-		commits, store.GardenPartyWatch{Watcher: delegate, SeedID: seed.ID}, events, d.gardenTime(),
+		commits, delegationSeedWatches(seed.ID, delegate, msg.Dispatcher), events, d.gardenTime(),
 	)
 	if err == nil {
 		err = d.discardAllIneligibleGardenSeedBellsLocked()
