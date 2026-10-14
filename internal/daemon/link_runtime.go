@@ -2,14 +2,11 @@ package daemon
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"syscall"
 
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
@@ -27,7 +24,6 @@ type linkRuntime interface {
 	resolveCaller(t protocol.TerminalID) (session protocol.SessionID, view harness.TerminalID, ours bool)
 	shownConversation(t harness.TerminalID) string
 	runsLink(t harness.TerminalID) bool
-	keepsLoaded(session *protocol.Session) bool
 
 	renamed(sessionID protocol.SessionID, label string)
 	closed(sessionID protocol.SessionID)
@@ -109,11 +105,6 @@ func (d *Daemon) hidden(sessionID protocol.SessionID) bool {
 
 func (d *Daemon) keepsWhenLeft(sessionID protocol.SessionID) bool {
 	return d.linkConversation(sessionID) != ""
-}
-
-func (d *Daemon) linkKeepsLive(session *protocol.Session) bool {
-	l := d.linkOf(session.ID)
-	return l != nil && (l.keepsLoaded(session) || d.hidden(session.ID))
 }
 
 func (d *Daemon) movedOn(sessionID protocol.SessionID, t harness.TerminalID) bool {
@@ -205,17 +196,4 @@ func (d *Daemon) showHidden(sessionID protocol.SessionID) error {
 		return fmt.Errorf("show session %s: %w", sessionID, rejection.reason())
 	}
 	return nil
-}
-
-func (d *Daemon) hide(sessionID protocol.SessionID, t harness.TerminalID) {
-	lifecycle := d.sessionLifecycleLockFor(sessionID)
-	lifecycle.Lock()
-	unlock := d.lockTerminalEnds(sessionID)
-	if err := d.ptyBackend.Kill(context.Background(), t, syscall.SIGTERM); err != nil && !errors.Is(err, pty.ErrSessionNotFound) {
-		d.logf("stopping terminal %s: %v", t, err)
-	}
-	d.dropTerminal(t)
-	unlock()
-	lifecycle.Unlock()
-	d.publishFact(FactSessionReregistered, string(sessionID), nil)
 }

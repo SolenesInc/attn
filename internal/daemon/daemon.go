@@ -951,7 +951,7 @@ func (d *Daemon) pruneSessionsWithoutPTY(previousRunSessions map[protocol.Sessio
 		if _, fromPreviousRun := previousRunSessions[session.ID]; !fromPreviousRun {
 			continue
 		}
-		if _, ok := liveIDs[session.ID]; ok || d.linkKeepsLive(session) {
+		if _, ok := liveIDs[session.ID]; ok || d.hidden(session.ID) {
 			continue
 		}
 		if sessionUpdatedAfter(session, recoveryStartedAt) {
@@ -1366,7 +1366,7 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 		if _, fromPreviousRun := previousRunSessions[session.ID]; !fromPreviousRun {
 			continue
 		}
-		if _, ok := liveIDs[session.ID]; ok || d.linkKeepsLive(session) {
+		if _, ok := liveIDs[session.ID]; ok || d.hidden(session.ID) {
 			continue
 		}
 		if sessionUpdatedAfter(session, recoveryStartedAt) {
@@ -1615,6 +1615,14 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 	defer release()
 	if d.exitOfSupersededRuntime(info) {
 		d.logf("ignoring exit of a replaced runtime in terminal %s", info.ID)
+		return false
+	}
+	if sessionID, shown := d.shownIn(info.ID); shown && d.movedOn(sessionID, info.ID) {
+		unlockEnds := d.lockTerminalEnds(sessionID)
+		d.dropTerminal(info.ID)
+		unlockEnds()
+		d.publishFact(FactSessionReregistered, string(sessionID), nil)
+		d.logf("terminal %s exited after its agent moved on from session %s, which runs on over its link", info.ID, sessionID)
 		return false
 	}
 	d.linkTerminalExited(info.ID)

@@ -740,7 +740,8 @@ export function ExperimentalSettings({
             <p className="settings-row-title">Shared Codex</p>
             <p className="settings-row-copy" id="shared-codex-description">
               Off by default. New Codex terminals share one app-server per profile. Switching conversations keeps the
-              old one live as a hidden session. Applies to new Codex terminals only.
+              old one live as a hidden session. Applies to new Codex terminals and to sessions you reopen from the
+              ledger.
             </p>
           </div>
           <button

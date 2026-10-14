@@ -64,6 +64,38 @@ func TestASharedCodexToolSpeaksAsItsConversationsSessionAfterItsTerminalMovesOn(
 	}
 }
 
+func TestClosingATileWhoseCodexMovedOnKeepsTheSessionItShowedHiddenAndWaiting(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
+	conversation := codex.ConversationID
+	typeInto(app, terminal, "/new\r")
+	codex.Prompted()
+
+	desktop, tile := tileOf(t, w, app, terminal)
+	if closed := closeTileFromApp(app, desktop, tile); !closed.Success {
+		t.Fatalf("close the tile: %s", protocol.Deref(closed.Error))
+	}
+	hidden := testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return protocol.Deref(s.Hidden) })
+	if hidden.State != protocol.SessionStateWaitingInput || hidden.TerminalExit != nil {
+		t.Fatalf("the session the tile showed is %s (exit=%+v), want it hidden, still waiting and without the terminal's exit", hidden.State, hidden.TerminalExit)
+	}
+	for _, desktop := range viewProfile(t, w, app.SelectedProfile()).desktops {
+		for _, pane := range desktop.Panes {
+			if string(pane.RuntimeID) == terminal {
+				t.Errorf("tile %s still holds terminal %s after its close", pane.PaneID, terminal)
+			}
+		}
+	}
+	if got := submitSessionAnnotationFeedback(app, checkout, sessionAnnotationFeedback); !got.success {
+		t.Fatalf("feedback to the hidden session = %+v", got)
+	}
+	if got := w.CodexServer().Prompted(conversation); got != sessionAnnotationFeedback {
+		t.Fatalf("the hidden conversation took %q, want the feedback", got)
+	}
+}
+
 func TestWithSharedCodexOffNewClosesTheSessionItLeft(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()

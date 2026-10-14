@@ -46,6 +46,9 @@ conversation's session, and the session you left stays open and **hidden**:
 
 Several terminals can show the same conversation. They show one session.
 
+Closing a tile after `/new` or `/resume` but before the next prompt ends only
+that terminal; the session the tile showed stays open and hidden.
+
 ## Hidden sessions in the queue
 
 Hidden sessions queue like any other, so a hidden session that needs an answer

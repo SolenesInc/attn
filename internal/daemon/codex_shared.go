@@ -406,44 +406,11 @@ func (r *codexShared) lost(s *codexServer, conversation string) {
 	again := s.held[conversation]
 	s.mu.Unlock()
 	sessionID := r.holder(s.profile, conversation)
-	session := r.d.store.Get(sessionID)
-	if again || session == nil {
+	if again || r.d.store.Get(sessionID) == nil {
 		return
 	}
 	r.d.drainTranscriptWatcher(sessionID)()
 	r.observe(sessionID, pty.ProgramIdle)
-	if session.State == protocol.SessionStateRecoverable || session.State == protocol.SessionStateIdle ||
-		r.d.sessionLive(context.Background(), sessionID) || r.d.hidden(sessionID) {
-		return
-	}
-	if !r.d.canReviveSession(session) {
-		return
-	}
-	r.d.applyState(sessionStateChange{
-		sessionID: sessionID,
-		state:     string(protocol.SessionStateRecoverable),
-		cause:     hostExitRecovery{},
-		origin:    stateOrigin{source: "codex", detail: "the shared app-server let its conversation go"},
-	})
-}
-
-func (r *codexShared) keepsLoaded(session *protocol.Session) bool {
-	if session == nil || !r.launchedShared(session.ID) {
-		return false
-	}
-	native := r.d.store.GetSessionConversation(session.ID).NativeID
-	if native == "" {
-		return false
-	}
-	r.mu.Lock()
-	s := r.servers[session.ProfileID]
-	r.mu.Unlock()
-	if s == nil {
-		return false
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.control != nil && s.held[native]
 }
 
 func (r *codexShared) openView(t harness.TerminalID, profile string) (string, error) {
