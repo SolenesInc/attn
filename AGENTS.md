@@ -173,7 +173,7 @@ Follow [Testing](docs/testing.md). In short:
 - When a behavior-preserving change breaks a test, delete or replace the test;
   do not repair it.
 - Do not test script helpers or test helpers, copy production code into tests,
-  or test compile-time guarantees.
+  assert only on your own fakes, or test compile-time guarantees.
 
 ## Test safety
 
@@ -268,6 +268,10 @@ use, run and test attn. Keep the glossary to short definitions.
 Do not write implementation notes anywhere. The code must explain how it works.
 If it needs a prose explanation of its wiring or control flow, make the code
 clearer.
+
+Edit text as a whole. Before you change a doc, skill, prompt or CLI help, read
+all of it and the other places that cover the same subject. Rewrite, merge or
+remove what is there before you add to it, so the result reads as one text.
 
 ## Task-specific guidance
 
