@@ -171,7 +171,7 @@ type SpawnOpts struct {
 
 	WrapperPath string
 
-	SettingsPath string
+	HookSettings string
 
 	NotebookRoot string
 

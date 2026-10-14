@@ -19,23 +19,6 @@ func DefaultLabel() string {
 	return filepath.Base(dir)
 }
 
-func WriteSettingsConfig(tmpDir, sessionID, content string) (string, error) {
-	settingsDir := filepath.Join(tmpDir, "attn-hooks-"+sessionID)
-	if err := os.MkdirAll(settingsDir, 0700); err != nil {
-		return "", err
-	}
-	configPath := filepath.Join(settingsDir, "settings.json")
-	if err := os.WriteFile(configPath, []byte(content), 0600); err != nil {
-		return "", err
-	}
-	return configPath, nil
-}
-
-func CleanupHooksConfig(configPath string) {
-	os.Remove(configPath)
-	os.Remove(filepath.Dir(configPath))
-}
-
 func WriteInstructionsDir(tmpDir, sessionID, name, content string) (string, error) {
 	dir := filepath.Join(tmpDir, "attn-instructions-"+sessionID)
 	if err := os.MkdirAll(dir, 0700); err != nil {

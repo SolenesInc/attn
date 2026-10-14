@@ -1713,16 +1713,8 @@ func runAgentDirectly(requestedAgent string) {
 		opts.ConfigOverrides = cp.GenerateConfigOverrides(opts)
 	}
 	if hp, ok := agentdriver.GetHookProvider(driver); ok {
-		content := hp.GenerateHooksConfig(opts)
-		settingsPath, err := wrapper.WriteSettingsConfig(os.TempDir(), string(terminalID), content)
-		if err != nil {
-			cleanup()
-			fmt.Fprintf(os.Stderr, "error writing hooks config: %v\n", err)
-			os.Exit(1)
-		}
-		opts.SettingsPath = settingsPath
+		opts.HookSettings = hp.GenerateHooksConfig(opts)
 		hasHooks = true
-		cleanupFns = append(cleanupFns, func() { wrapper.CleanupHooksConfig(settingsPath) })
 	}
 	if ip, ok := agentdriver.GetInstructionsFileProvider(driver); ok {
 		name, content := ip.GenerateInstructionsFile(opts)

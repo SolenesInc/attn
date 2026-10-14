@@ -46,6 +46,13 @@ Probed on 2.1.288 with a mock API.
 - The transcript is `<config>/projects/<cwd-slug>/<id>.jsonl`; attn reads the
   conversation id from that name.
 
+### Inline hook settings
+
+Probed on Claude Code 2.1.296 on macOS and Linux. `--settings <JSON>`
+accepts hook settings inline. SessionStart, UserPromptSubmit and Stop fire
+with the same conversation id as `--session-id`, including when launched
+through a fish login shell with settings passed as a positional argument.
+
 ### Program status (OSC 7501)
 
 Probed on 2.1.295 under a scratch PTY, and read in its bundled source.
