@@ -7,10 +7,14 @@ import (
 	"sync"
 )
 
+type deadlock struct{}
+
+func (deadlock) Error() string { return "all goroutines are asleep - deadlock!" }
+
 var (
-	ErrDeadlock   = errors.New("all goroutines are asleep - deadlock!")
-	ErrGoroutines = errors.New("too many goroutines")
-	errExited     = errors.New("main returned")
+	ErrDeadlock   error = deadlock{}
+	ErrGoroutines       = errors.New("too many goroutines")
+	errExited           = errors.New("main returned")
 )
 
 const goroutineBytes = 4096

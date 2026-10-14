@@ -11,11 +11,11 @@ import (
 )
 
 type Task struct {
-	ID       int               `json:"id"`
-	Title    string            `json:"title"`
-	Tags     []string          `json:"tags,omitempty"`
-	Owner    *string           `json:"owner"`
-	Meta     map[string]int    `json:"meta,omitempty"`
+	ID       int            `json:"id"`
+	Title    string         `json:"title"`
+	Tags     []string       `json:"tags,omitempty"`
+	Owner    *string        `json:"owner"`
+	Meta     map[string]int `json:"meta,omitempty"`
 	internal string
 	Skip     bool              `json:"-"`
 	Extra    map[string]string `json:"extra"`

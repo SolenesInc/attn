@@ -171,13 +171,11 @@ func (m *machine) selectOp(cases []selectCase, hasDefault bool) (int, Value, boo
 		return -1, nil, false
 	}
 	sel := &selection{}
-	var waiters []*waiter
 	for i, c := range cases {
 		if c.ch == nil {
 			continue
 		}
 		w := &waiter{g: m.g, sel: sel, which: i, val: c.val}
-		waiters = append(waiters, w)
 		if c.send {
 			c.ch.sendq = append(c.ch.sendq, w)
 		} else {
