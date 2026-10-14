@@ -313,8 +313,8 @@ jobs:
       - name: Vet
         run: go vet ./...
 
-      - name: Staticcheck
-        run: go tool staticcheck ./...
+      - name: Lint
+        run: make lint-go
 
       - name: Test
         run: ./scripts/test-go.sh

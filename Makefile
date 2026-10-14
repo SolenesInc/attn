@@ -214,6 +214,7 @@ lint: lint-go lint-frontend
 
 lint-go: $(NATIVE_VT_DEP)
 	go tool staticcheck ./...
+	go run ./scripts/lifetimelint
 	@deps=$$(go list -deps ./cmd/...) || exit 1; \
 	if printf '%s\n' "$$deps" | grep -E '/internal/(testworld|fakeagent)$$'; then \
 		echo "the shipped binaries must not import the test worlds listed above" >&2; exit 1; \
