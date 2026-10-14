@@ -91,7 +91,7 @@ export function useDesktopController(
     usagePopoverRequest,
     annotationApi,
     terminalState,
-    desktopSelectionStyle = 'rail',
+    desktopSelectionStyle = 'spotlight',
     activePaneId,
     selectedSessionId,
     fontSize,

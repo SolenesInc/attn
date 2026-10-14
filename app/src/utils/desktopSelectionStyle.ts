@@ -5,9 +5,9 @@ export const DESKTOP_SELECTION_STYLE_STORAGE_KEY = 'attn.workspace.selectionStyl
 export function readDesktopSelectionStyle(): DesktopSelectionStyle {
   try {
     const stored = window.localStorage.getItem(DESKTOP_SELECTION_STYLE_STORAGE_KEY);
-    return stored === 'dim' || stored === 'spotlight' ? stored : 'rail';
+    return stored === 'dim' || stored === 'rail' ? stored : 'spotlight';
   } catch {
-    return 'rail';
+    return 'spotlight';
   }
 }
 
