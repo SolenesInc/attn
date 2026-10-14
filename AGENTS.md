@@ -270,8 +270,9 @@ If it needs a prose explanation of its wiring or control flow, make the code
 clearer.
 
 Edit text as a whole. Before you change a doc, skill, prompt or CLI help, read
-all of it and the other places that cover the same subject. Rewrite, merge or
-remove what is there before you add to it, so the result reads as one text.
+all of it and the other places that cover the same subject. Decide what to
+keep, rewrite, merge or remove before you add anything, so the result reads as
+one text.
 
 ## Task-specific guidance
 
