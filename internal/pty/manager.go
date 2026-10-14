@@ -581,17 +581,30 @@ func buildSpawnCommand(opts SpawnOptions, agent, shellPath, attnPath string, env
 		args = append(args, "--initial-prompt-file", opts.InitialPromptFile)
 	}
 
-	return exec.Command(shellPath, "-l", "-c", postLoginExecCommand(env, args))
+	return loginShellCommand(shellPath, args, pathOverlay(env))
 }
 
-func postLoginExecCommand(env []string, args []string) string {
-	cmdline := "exec " + shellJoin(args)
+func pathOverlay(env []string) []string {
 	for _, entry := range env {
 		if strings.HasPrefix(entry, "PATH=") {
-			return "export PATH=" + shellQuote(strings.TrimPrefix(entry, "PATH=")) + "; " + cmdline
+			return []string{entry}
 		}
 	}
-	return cmdline
+	return nil
+}
+
+func loginShellCommand(shellPath string, argv, overlay []string) *exec.Cmd {
+	args := []string{"-l", "-c"}
+	if filepath.Base(shellPath) == "fish" {
+		args = append(args, "exec $argv")
+	} else {
+		args = append(args, `exec "$@"`, "attn-agent")
+	}
+	args = append(args, "/usr/bin/env")
+	args = append(args, overlay...)
+	args = append(args, "/bin/sh", "-c", `exec "$@"`, "attn-agent")
+	args = append(args, argv...)
+	return exec.Command(shellPath, args...)
 }
 
 func resolveExternalCommandPath(command string, env []string) (string, bool) {
@@ -871,14 +884,6 @@ func shouldFallbackShell(err error) bool {
 		errors.Is(err, syscall.EACCES) ||
 		errors.Is(err, syscall.ENOENT) ||
 		errors.Is(err, exec.ErrNotFound)
-}
-
-func shellJoin(args []string) string {
-	quoted := make([]string, 0, len(args))
-	for _, arg := range args {
-		quoted = append(quoted, shellQuote(arg))
-	}
-	return strings.Join(quoted, " ")
 }
 
 func shellQuote(value string) string {
