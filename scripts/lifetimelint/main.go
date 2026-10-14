@@ -1,29 +1,48 @@
-package daemon
+package main
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-	"testing"
 )
 
-func TestDaemonWorkUsesItsLifetimeExceptUncancellableRecentFileProbes(t *testing.T) {
-	paths, err := filepath.Glob("*.go")
+const daemonDir = "internal/daemon"
+
+func main() {
+	violations, err := lifetimeViolations()
 	if err != nil {
-		t.Fatal(err)
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if len(violations) > 0 {
+		fmt.Fprintf(os.Stderr, "goroutines and timers outside the daemon lifetime (%s/lifetime.go):\n%s\n", daemonDir, strings.Join(violations, "\n"))
+		os.Exit(1)
+	}
+}
+
+func lifetimeViolations() ([]string, error) {
+	paths, err := filepath.Glob(filepath.Join(daemonDir, "*.go"))
+	if err != nil {
+		return nil, err
+	}
+	if len(paths) == 0 {
+		return nil, fmt.Errorf("no Go files in %s; run from the repository root", daemonDir)
 	}
 	fset := token.NewFileSet()
 	var violations []string
 	for _, path := range paths {
-		if strings.HasSuffix(path, "_test.go") || path == "lifetime.go" {
+		base := filepath.Base(path)
+		if strings.HasSuffix(base, "_test.go") || base == "lifetime.go" {
 			continue
 		}
 		file, err := parser.ParseFile(fset, path, nil, 0)
 		if err != nil {
-			t.Fatalf("parse %s: %v", path, err)
+			return nil, fmt.Errorf("parse %s: %w", path, err)
 		}
 		for _, decl := range file.Decls {
 			name, body := "package-level declaration", ast.Node(decl)
@@ -37,7 +56,7 @@ func TestDaemonWorkUsesItsLifetimeExceptUncancellableRecentFileProbes(t *testing
 				var problem string
 				switch node := node.(type) {
 				case *ast.GoStmt:
-					if path == "ws_session.go" && name == "(*Daemon).forgetMissingRecentFiles" {
+					if base == "ws_session.go" && name == "(*Daemon).forgetMissingRecentFiles" {
 						return true
 					}
 					problem = "bare go statement: start it with d.life.Go so Daemon.stop waits for it (goTransport only for I/O that ends with its peer)"
@@ -57,9 +76,7 @@ func TestDaemonWorkUsesItsLifetimeExceptUncancellableRecentFileProbes(t *testing
 		}
 	}
 	sort.Strings(violations)
-	if len(violations) > 0 {
-		t.Fatalf("goroutines and timers outside the daemon lifetime (lifetime.go):\n%s", strings.Join(violations, "\n"))
-	}
+	return violations, nil
 }
 
 func isUnownedGoCall(call *ast.CallExpr) bool {
