@@ -164,7 +164,7 @@ func TestTauriConfigOverlayInheritsTheBaseWindow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	overlay := tauriConfigOverlay(resolveInstance("probe"), window)
+	overlay := tauriConfigOverlay(resolveInstance("probe"), window, false)
 	got := overlay["app"].(map[string]any)["windows"].([]any)[0].(map[string]any)
 	if got["width"] != float64(1200) || got["height"] != float64(800) || got["minWidth"] != float64(800) {
 		t.Fatalf("base window geometry dropped: %v", got)
@@ -174,6 +174,10 @@ func TestTauriConfigOverlayInheritsTheBaseWindow(t *testing.T) {
 	}
 	if window["title"] != "attn" {
 		t.Fatalf("overlay mutated the base window: %v", window)
+	}
+	demo := tauriConfigOverlay(resolveInstance("probe"), window, true)
+	if title := demo["app"].(map[string]any)["windows"].([]any)[0].(map[string]any)["title"]; title != "attn" {
+		t.Fatalf("demo window title = %v, want attn", title)
 	}
 	if _, err := baseMainWindow([]byte(`{"app":{}}`)); err == nil {
 		t.Fatal("a base without windows must be rejected")

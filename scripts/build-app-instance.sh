@@ -13,6 +13,7 @@
 #   VERSION SOURCE_FINGERPRINT GIT_COMMIT BUILD_TIME   build-identity stamp
 #   SOURCE_DIRTY_PATHS_BASE64  NUL-separated relevant dirty paths, base64 encoded
 #   MACOS_CODESIGN_IDENTITY  optional; else discovered, else ad-hoc ("-")
+#   ATTN_BUILD_DEMO          optional; 1 builds a named instance for recordings
 #   ATTN_APP_CARGO_PROFILE   cargo profile for a named instance (default: fast);
 #                            the default/prod bundle always builds with release
 #
@@ -25,6 +26,11 @@ set -eo pipefail
 
 instance="${INSTANCE:-}"
 harness_default="${ATTN_BUILD_DEFAULT_INSTANCE_HARNESS:-}"
+demo="${ATTN_BUILD_DEMO:-}"
+if [ -n "$demo" ] && [ -z "$instance" ]; then
+  echo "DEMO=1 needs a named instance (make install INSTANCE=demo DEMO=1)" >&2
+  exit 1
+fi
 attn="${ATTN_BIN:?ATTN_BIN (path to built attn binary) is required}"
 pty_host="${ATTN_PTY_HOST_BIN:?ATTN_PTY_HOST_BIN is required}"
 : "${VERSION:?VERSION is required}"
@@ -84,7 +90,7 @@ if [ -n "$instance" ]; then
   # Named instance: generate the bundle-metadata overlay from the authority and
   # bake the resolved port + bundle id so the Rust runtime view can never drift.
   gen_rel="src-tauri/${app_name}.gen.conf.json"
-  "$attn" instance tauri-config --instance "$instance" --base src-tauri/tauri.conf.json > "$gen_rel"
+  "$attn" instance tauri-config --instance "$instance" ${demo:+--demo} --base src-tauri/tauri.conf.json > "$gen_rel"
   echo ">>> Generated Tauri overlay $gen_rel"
   if [ -n "$harness_default" ]; then
     echo ">>> Logical runtime instance: default, isolated by ATTN_HARNESS_DATA_DIR"
@@ -104,6 +110,7 @@ if [ -n "$instance" ]; then
   else
     ATTN_BUILD_INSTANCE="$instance" \
     VITE_ATTN_BUILD_INSTANCE="$instance" \
+    VITE_ATTN_BUILD_DEMO="$demo" \
     ATTN_BUILD_WS_PORT="$ws_port" \
     ATTN_BUILD_BUNDLE_ID="$bundle_id" \
     VITE_DAEMON_PORT="$ws_port" \
@@ -133,8 +140,8 @@ staged_dir="app/src-tauri/target/staged"
 bundle_dir="${staged_dir}/${app_name}.app"
 
 write_build_identity() {
-  printf '{\n  "version": "%s",\n  "sourceFingerprint": "%s",\n  "gitCommit": "%s",\n  "buildTime": "%s"\n}\n' \
-    "$VERSION" "$SOURCE_FINGERPRINT" "$GIT_COMMIT" "$BUILD_TIME" > "$1"
+  printf '{\n  "version": "%s",\n  "sourceFingerprint": "%s",\n  "gitCommit": "%s",\n  "buildTime": "%s",\n  "demo": %s\n}\n' \
+    "$VERSION" "$SOURCE_FINGERPRINT" "$GIT_COMMIT" "$BUILD_TIME" "$([ -n "$demo" ] && echo true || echo false)" > "$1"
 }
 
 if [ "$(uname -s)" != "Darwin" ]; then
