@@ -357,13 +357,13 @@ func TestAConversationResumedInAnotherProfileIsThatProfilesOwnSharedCodexSession
 	}
 }
 
-func TestAReopenedSharedCodexSessionNamesItsConversationAgainAfterAnotherProfileRenamedIt(t *testing.T) {
+func TestAResumedSharedCodexSessionNamesItsConversationAgainAfterAnotherProfileRenamedIt(t *testing.T) {
 	for _, way := range []string{"ledger", "/resume"} {
-		t.Run(way, func(t *testing.T) { reopenRenamedSharedCodexSession(t, way) })
+		t.Run(way, func(t *testing.T) { resumeRenamedSharedCodexSession(t, way) })
 	}
 }
 
-func reopenRenamedSharedCodexSession(t *testing.T, way string) {
+func resumeRenamedSharedCodexSession(t *testing.T, way string) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
 	setSetting(t, app, "codex_shared_enabled", "true")
@@ -396,7 +396,7 @@ func reopenRenamedSharedCodexSession(t *testing.T, way string) {
 			}
 		}
 		if reopened := reopenOverTheWebSocket(sideApp, elsewhere); !reopened.Success {
-			t.Fatalf("reopen %s: %s", elsewhere, protocol.Deref(reopened.Error))
+			t.Fatalf("resume %s from the ledger: %s", elsewhere, protocol.Deref(reopened.Error))
 		}
 	} else {
 		if closed := closeFromApp(sideApp, elsewhere); !closed.Accepted {
@@ -455,7 +455,7 @@ func TestAClosedPlainCodexSessionResumedInASharedTerminalComesBackThereAsShared(
 	testworld.AwaitSession(app, plain, func(s protocol.Session) bool { return protocol.Deref(s.Hidden) })
 }
 
-func TestAClosedSharedCodexSessionReopensAsPlainCodexWhileSharedCodexIsOff(t *testing.T) {
+func TestAClosedSharedCodexSessionResumesFromTheLedgerAsPlainCodexWhileSharedCodexIsOff(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
 	setSetting(t, app, "codex_shared_enabled", "true")
@@ -470,15 +470,16 @@ func TestAClosedSharedCodexSessionReopensAsPlainCodexWhileSharedCodexIsOff(t *te
 	setSetting(t, app, "codex_shared_enabled", "false")
 
 	if reopened := reopenOverTheWebSocket(app, checkout); !reopened.Success {
-		t.Fatalf("reopen %s: %s", checkout, protocol.Deref(reopened.Error))
+		t.Fatalf("resume %s from the ledger: %s", checkout, protocol.Deref(reopened.Error))
 	}
 	resumed := w.Launched(checkout)
 	if !resumed.Resumed || resumed.ConversationID != conversation {
-		t.Fatalf("the reopened Codex shows %s (resumed=%v), want conversation %s", resumed.ConversationID, resumed.Resumed, conversation)
+		t.Fatalf("the resumed Codex shows %s (resumed=%v), want conversation %s", resumed.ConversationID, resumed.Resumed, conversation)
 	}
 	if archivedInCodex(t, w, conversation) {
-		t.Errorf("conversation %s is still archived after its session reopened", conversation)
+		t.Errorf("conversation %s is still archived after its session resumed", conversation)
 	}
+	w.CodexServer().AwaitStopped()
 	moveOn(t, app, resumed, app.Terminal(checkout), "/new", "write the notes")
 	testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool {
 		return e.Session != nil && string(e.Session.ID) == checkout

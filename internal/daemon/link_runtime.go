@@ -59,7 +59,7 @@ func (d *Daemon) linkOf(sessionID protocol.SessionID) linkRuntime {
 }
 
 func (d *Daemon) launchLink(req *spawnRequest) linkRuntime {
-	if req.existingSession != nil && !req.policy.reopening {
+	if req.existingSession != nil && !req.policy.fromLedger {
 		if l := d.linkOf(req.msg.ID); l != nil && l.canRun(req) {
 			return l
 		}

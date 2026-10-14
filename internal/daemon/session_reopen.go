@@ -596,16 +596,17 @@ func (d *Daemon) reopenSessionRuntimeProtected(
 	}
 
 	d.waitForSessionTeardown(plan.SessionID)
-	resumeID := strings.TrimSpace(d.store.GetResumeSessionID(plan.SessionID))
-	if l := d.linkOf(plan.SessionID); l != nil && resumeID != "" {
-		if err := l.restore(profileID, resumeID); err != nil {
-			return nil, err
-		}
-	}
 	d.store.ClearSessionIntentionalClose(plan.SessionID)
 
 	if err := d.store.ReopenSession(plan.SessionID); err != nil {
 		return nil, err
+	}
+	resumeID := strings.TrimSpace(d.store.GetResumeSessionID(plan.SessionID))
+	if l := d.linkOf(plan.SessionID); l != nil && resumeID != "" {
+		defer d.life.Go("linkReleasedAfterResume", func() { l.profileReleased(profileID) })
+		if err := l.restore(profileID, resumeID); err != nil {
+			return nil, err
+		}
 	}
 
 	session := d.store.Get(plan.SessionID)
@@ -622,7 +623,7 @@ func (d *Daemon) reopenSessionRuntimeProtected(
 		}
 	}
 	spawn, policy := buildStoredIntentSpawn(session, intent, 80, 24)
-	policy.reopening = true
+	policy.fromLedger = true
 	if resumeID != "" {
 		spawn.ResumeSessionID = protocol.Ptr(resumeID)
 	}

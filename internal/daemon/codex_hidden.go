@@ -329,7 +329,6 @@ func (r *codexShared) restore(profile, conversation string) error {
 	if err != nil {
 		return err
 	}
-	defer r.idleSoon(profile)
 	callCtx, cancelCall := context.WithTimeout(ctx, codexServerCallLimit)
 	defer cancelCall()
 	if _, err := client.Call(callCtx, "thread/unarchive", map[string]any{"threadId": conversation}); err != nil {

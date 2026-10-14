@@ -3,11 +3,21 @@ package fakeagent
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 type CodexServer struct {
 	t    testing.TB
 	fake *fake
+}
+
+func (s *CodexServer) AwaitStopped() {
+	s.t.Helper()
+	select {
+	case <-s.fake.peer.done:
+	case <-time.After(HangGuard):
+		s.t.Fatalf("Codex app-server (pid %d) still runs %s after nothing needs it", s.fake.Pid, HangGuard)
+	}
 }
 
 func (s *CodexServer) Prompted(conversation string) string {

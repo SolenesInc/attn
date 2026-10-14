@@ -29,7 +29,7 @@ type internalSpawnPolicy struct {
 	approvalRoute         launchcontract.ApprovalRoute
 	preserveApprovalRoute bool
 	userStarted           bool
-	reopening             bool
+	fromLedger            bool
 	// The client that asked; it gets the placement as its own answer before any broadcast of it.
 	requester *wsClient
 }
@@ -443,9 +443,6 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	}
 	if err != nil {
 		d.forgetSessionTitleInitialPrompt(msg.ID)
-		if req.link != nil {
-			req.link.launchFailed(plan.spawnOpts.ID, req.profile.ID)
-		}
 		if req.existingSession == nil {
 			d.store.Remove(msg.ID)
 			d.forgetSessionTrace(msg.ID)
@@ -458,6 +455,9 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 			d.clearChiefOfStaffIfSession(msg.ID)
 		}
 		plan.rollback(d, msg.ID)
+		if req.link != nil {
+			req.link.launchFailed(plan.spawnOpts.ID, req.profile.ID)
+		}
 		return &spawnOutcome{err: err}
 	}
 	if err := d.store.DeleteSessionExitScreenBefore(msg.ID, req.spawnStartedAt); err != nil {
