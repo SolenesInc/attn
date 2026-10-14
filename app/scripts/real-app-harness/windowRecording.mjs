@@ -21,7 +21,7 @@ export async function ensureWindowRecorder(options) {
 // recorder that will never finalize, and then SIGKILL abandons the file.
 const FINALIZE_TRIPWIRE_MS = 10_000;
 
-export function startWindowRecording({ windowId, outputPath, command, spawnFn = spawn }) {
+export function startWindowRecording({ windowId, outputPath, command, fps = 15, showCursor = true, spawnFn = spawn }) {
   const launch = typeof command === 'string'
     ? { command, argsPrefix: [], captureLaunchedStderr: false, stopWithFile: false }
     : command;
@@ -31,8 +31,8 @@ export function startWindowRecording({ windowId, outputPath, command, spawnFn = 
   if (launchedStderrPath) fs.rmSync(launchedStderrPath, { force: true });
   const args = [...launch.argsPrefix];
   if (launchedStderrPath) args.push('--stderr', launchedStderrPath, '--args');
-  args.push(String(windowId), outputPath);
-  if (stopFilePath) args.push('15', stopFilePath);
+  args.push(String(windowId), outputPath, String(fps), stopFilePath ?? '');
+  if (!showCursor) args.push('hide-cursor');
   const child = spawnFn(launch.command, args, {
     stdio: ['ignore', 'ignore', 'pipe'],
   });
