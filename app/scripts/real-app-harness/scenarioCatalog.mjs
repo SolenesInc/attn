@@ -364,13 +364,6 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-ghostty-scroll'],
   },
   {
-    id: 'present-submit-closes-window',
-    runnerId: 'PRESENT-SUBMIT-CLOSES-WINDOW',
-    label: 'Present: a waiting CLI opens it, the chip opens the real window, submitting from the window hides it and the CLI returns',
-    command: ['pnpm', 'run', 'real-app:scenario-present-submit-closes-window'],
-    timeoutMs: 240_000,
-  },
-  {
     id: 'automode-environment',
     runnerId: 'AutoModeEnvironment',
     label: 'Auto mode: independent rule controls, environment writes, and unset slots',

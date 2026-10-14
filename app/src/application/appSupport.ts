@@ -10,7 +10,6 @@ import {
 } from '../hooks/useDaemonSocket';
 import { type OpenPRProgress } from '../hooks/useOpenPR';
 import { type TerminalDesktopState } from '../store/sessions';
-import type { Presentation } from '../types/generated';
 import { type SessionAgent } from '../types/sessionAgent';
 import { crewDisplayName } from '../utils/crewName';
 export const RELEASES_LATEST_API = 'https://api.github.com/repos/victorarias/attn/releases/latest';
@@ -164,7 +163,6 @@ export interface AppContentProps {
   updateAvailableVersion: string | null;
   onOpenLatestRelease: () => Promise<void>;
   onDismissLatestRelease: () => void;
-  presentationNotices: Presentation[];
   settingError: string | null;
   clearSettingError: () => void;
   notificationsUnread: number;

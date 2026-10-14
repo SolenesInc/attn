@@ -74,7 +74,11 @@ function legacyWorkspacesSql(fixtureDir) {
     'UPDATE prs SET last_updated = (SELECT last_updated FROM pr_poll_times WHERE pr_id = prs.id), last_polled = (SELECT last_polled FROM pr_poll_times WHERE pr_id = prs.id);',
     'DROP TABLE pr_poll_times;',
     'DELETE FROM schema_migrations WHERE version = 1791738052340741;',
-    'ALTER TABLE presentations DROP COLUMN address;',
+    // It still has the Present tables, without the address column 168 adds.
+    "CREATE TABLE presentations (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, ticket_id TEXT, title TEXT NOT NULL, kind TEXT NOT NULL, repo_path TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', created_at TEXT NOT NULL);",
+    'CREATE TABLE presentation_rounds (id TEXT PRIMARY KEY, presentation_id TEXT NOT NULL REFERENCES presentations(id) ON DELETE CASCADE, seq INTEGER NOT NULL, manifest_yaml TEXT NOT NULL, base_sha TEXT NOT NULL, head_sha TEXT NOT NULL, created_at TEXT NOT NULL, submitted_at TEXT, verdict TEXT, UNIQUE(presentation_id, seq));',
+    "CREATE TABLE presentation_comments (id TEXT PRIMARY KEY, round_id TEXT NOT NULL REFERENCES presentation_rounds(id) ON DELETE CASCADE, filepath TEXT NOT NULL, line_start INTEGER NOT NULL, line_end INTEGER NOT NULL, side TEXT NOT NULL, content TEXT NOT NULL, author TEXT NOT NULL DEFAULT 'user', created_at TEXT NOT NULL);",
+    'DELETE FROM schema_migrations WHERE version = 1792015000484696;',
     // It also predates successions (169), which add sessions.succeeds.
     'DROP INDEX idx_sessions_succeeds;',
     'ALTER TABLE sessions DROP COLUMN succeeds;',

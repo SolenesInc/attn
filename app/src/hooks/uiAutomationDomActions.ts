@@ -2,7 +2,6 @@ import { useEffect, useLayoutEffect, useRef } from 'react';
 import { emit, listen } from '@tauri-apps/api/event';
 import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { isPresentWindowAction } from './usePresentAutomationBridge';
 import { waitForAutomationDom } from './uiAutomationDom';
 import {
   armNativePointerWitness,
@@ -540,11 +539,6 @@ export function useAutomationRequestListener(handleAutomationRequest: (request: 
     void emit(UI_AUTOMATION_READY_EVENT, { ready: true });
     const unlistenPromise = listen<AutomationRequest>(UI_AUTOMATION_REQUEST_EVENT, async (event) => {
       const request = event.payload;
-      // The automation server broadcasts to ALL webview windows and resolves on the first response,
-      // so exactly one listener answers; present_window_* belongs to usePresentAutomationBridge.
-      if (isPresentWindowAction(request.action)) {
-        return;
-      }
       let response: AutomationResponse;
       try {
         // Settle before reading the ref: the wait spans renders, so a handler picked

@@ -46,10 +46,6 @@ import type {
   SeedDocument as GeneratedSeedDocument,
   CrewMember as GeneratedCrewMember,
   MarkdownAnnotation,
-  Presentation,
-  PresentationRound,
-  PresentationComment,
-  PresentCommentInput,
   PRRole,
   HeatState,
   AutomationDefinitionSummary,
@@ -415,13 +411,6 @@ interface RepoInfoResult {
   error?: string;
 }
 
-export interface FileDiffResult {
-  success: boolean;
-  original: string;
-  modified: string;
-  error?: string;
-}
-
 export interface NotebookEntry {
   path: string;
   type?: string;
@@ -508,8 +497,6 @@ interface UseDaemonSocketOptions {
   onFsChanged?: (origin: string, paths: string[], root: string) => void;
   onSeedsUpdate?: (seeds: Seed[], total: number) => void;
   onCrewUpdate?: (members: CrewMember[]) => void;
-  onPresentationAdded?: (presentation: Presentation) => void;
-  onPresentationUpdated?: (presentation: Presentation) => void;
   onPRsUpdate: (prs: DaemonPR[]) => void;
   onPluginsUpdate?: (plugins: DaemonPlugin[], issues: DaemonPluginIssue[]) => void;
   onGitHubHostsUpdate?: (hosts: string[], pollingOffReason: string | null) => void;
@@ -576,7 +563,6 @@ const SESSION_REOPEN_TIMEOUT_MS = 120_000;
 // at 945k rows — so 30s is roughly a hundred times the worst real log.
 const BUS_STATUS_TIMEOUT_MS = 30_000;
 const GIT_METADATA_TIMEOUT_MS = 30 * 60_000;
-const GIT_DIFF_TIMEOUT_MS = 10 * 60_000;
 const GIT_WORKTREE_TIMEOUT_MS = 30 * 60_000;
 const GIT_NETWORK_TIMEOUT_MS = 30 * 60_000;
 const GIT_CLONE_TIMEOUT_MS = 90 * 60_000;
@@ -639,8 +625,6 @@ export function useDaemonSocket({
   onFsChanged,
   onSeedsUpdate,
   onCrewUpdate,
-  onPresentationAdded,
-  onPresentationUpdated,
   onPRsUpdate,
   onPluginsUpdate,
   onGitHubHostsUpdate,
@@ -668,8 +652,6 @@ export function useDaemonSocket({
     onFsChanged,
     onSeedsUpdate,
     onCrewUpdate,
-    onPresentationAdded,
-    onPresentationUpdated,
     onPRsUpdate,
     onPluginsUpdate,
     onGitHubHostsUpdate,
@@ -687,8 +669,6 @@ export function useDaemonSocket({
     onFsChanged,
     onSeedsUpdate,
     onCrewUpdate,
-    onPresentationAdded,
-    onPresentationUpdated,
     onPRsUpdate,
     onPluginsUpdate,
     onGitHubHostsUpdate,
@@ -833,9 +813,6 @@ export function useDaemonSocket({
         return;
       case 'merge_pr':
         rejectPendingByPredicate((key) => key.endsWith(':merge'), error);
-        return;
-      case 'get_file_diff':
-        rejectPendingByPredicate((key) => key.startsWith('get_file_diff_'), error);
         return;
       case 'get_branch_diff_files':
         rejectPendingByPredicate((key) => key.startsWith('get_branch_diff_files_'), error);
@@ -1313,18 +1290,6 @@ export function useDaemonSocket({
             break;
           }
 
-
-          case 'presentation_added':
-            if (data.presentation) {
-              callbacksRef.current.onPresentationAdded?.(data.presentation);
-            }
-            break;
-
-          case 'presentation_updated':
-            if (data.presentation) {
-              callbacksRef.current.onPresentationUpdated?.(data.presentation);
-            }
-            break;
 
           case 'desktop_tile_content': {
             if (typeof data.desktop_id === 'string' && typeof data.tile_id === 'string') {
@@ -2063,63 +2028,6 @@ export function useDaemonSocket({
             }
             break;
 
-          case 'get_presentations_result': {
-            const pending = pendingActionsRef.current.get('get_presentations');
-            if (pending) {
-              pendingActionsRef.current.delete('get_presentations');
-              if (data.success) {
-                pending.resolve(data.presentations || []);
-              } else {
-                pending.reject(new Error(data.error || 'Failed to load presentations'));
-              }
-            }
-            break;
-          }
-
-          case 'get_presentation_round_result': {
-            const pending = pendingActionsRef.current.get('get_presentation_round');
-            if (pending) {
-              pendingActionsRef.current.delete('get_presentation_round');
-              if (data.success) {
-                pending.resolve({
-                  presentation: data.presentation,
-                  round: data.round,
-                  comments: data.comments || [],
-                  repoHeadSha: data.repo_head_sha,
-                });
-              } else {
-                pending.reject(new Error(data.error || 'Failed to load presentation round'));
-              }
-            }
-            break;
-          }
-
-          case 'present_submit_round_result': {
-            const pending = pendingActionsRef.current.get('present_submit_round');
-            if (pending) {
-              pendingActionsRef.current.delete('present_submit_round');
-              if (data.success) {
-                pending.resolve({ roundId: data.round_id });
-              } else {
-                pending.reject(new Error(data.error || 'Failed to submit presentation round'));
-              }
-            }
-            break;
-          }
-
-          case 'present_close_result': {
-            const pending = pendingActionsRef.current.get('present_close');
-            if (pending) {
-              pendingActionsRef.current.delete('present_close');
-              if (data.success) {
-                pending.resolve({ presentationId: data.presentation_id });
-              } else {
-                pending.reject(new Error(data.error || 'Failed to close presentation'));
-              }
-            }
-            break;
-          }
-
           case 'refresh_prs_result': {
             const pending = pendingActionsRef.current.get('refresh_prs');
             if (pending) {
@@ -2277,24 +2185,6 @@ export function useDaemonSocket({
                 pending.resolve({ success: true, cloned: data.cloned });
               } else {
                 pending.reject(new Error(data.error || 'Failed to ensure repo'));
-              }
-            }
-            break;
-          }
-
-          case 'file_diff_result': {
-            const key = `get_file_diff_${data.request_id}`;
-            const pending = pendingActionsRef.current.get(key);
-            if (pending) {
-              pendingActionsRef.current.delete(key);
-              if (data.success) {
-                pending.resolve({
-                  success: true,
-                  original: data.original || '',
-                  modified: data.modified || '',
-                });
-              } else {
-                pending.reject(new Error(data.error || 'Failed to get diff'));
               }
             }
             break;
@@ -4035,26 +3925,6 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'cancel_countdown', session_id: sessionId }));
   }, []);
 
-  const sendGetFileDiff = useCallback((
-    directory: string,
-    path: string,
-    options?: { staged?: boolean; baseRef?: string; headRef?: string }
-  ): Promise<FileDiffResult> => {
-    // Key by request id, not path: a stale round's late reply racing a new round's request must not
-    // clobber the pending promise.
-    const requestId = nextRequestID('get_file_diff');
-    const key = `get_file_diff_${requestId}`;
-    return sendKeyedRequest<FileDiffResult>(key, {
-      cmd: 'get_file_diff',
-      directory,
-      path,
-      request_id: requestId,
-      ...(options?.staged !== undefined && { staged: options.staged }),
-      ...(options?.baseRef && { base_ref: options.baseRef }),
-      ...(options?.headRef && { head_ref: options.headRef }),
-    }, 'Get file diff timed out', GIT_DIFF_TIMEOUT_MS);
-  }, [nextRequestID, sendKeyedRequest]);
-
   const getRepoInfo = useCallback((repo: string): Promise<RepoInfoResult> => {
     const key = `repo_info_${repo}`;
     return sendKeyedRequest<RepoInfoResult>(key, {
@@ -4301,44 +4171,6 @@ export function useDaemonSocket({
     },
     [nextRequestID],
   );
-
-  const getPresentations = useCallback((): Promise<Presentation[]> => {
-    const key = 'get_presentations';
-    return sendKeyedRequest<Presentation[]>(key, { cmd: 'get_presentations' }, 'Get presentations timed out', 30000);
-  }, [sendKeyedRequest]);
-
-  const getPresentationRound = useCallback((
-    presentationId: string,
-    seq?: number,
-  ): Promise<{ presentation: Presentation; round: PresentationRound; comments: PresentationComment[]; repoHeadSha?: string }> => {
-    const key = 'get_presentation_round';
-    return sendKeyedRequest<{ presentation: Presentation; round: PresentationRound; comments: PresentationComment[]; repoHeadSha?: string }>(key, {
-      cmd: 'get_presentation_round',
-      presentation_id: presentationId,
-      ...(seq !== undefined && { seq }),
-    }, 'Get presentation round timed out', 30000);
-  }, [sendKeyedRequest]);
-
-  const submitPresentationRound = useCallback((input: {
-    roundId: string;
-    verdict: 'approved' | 'feedback';
-    comments: PresentCommentInput[];
-    handback: boolean;
-  }): Promise<{ roundId: string }> => {
-    const key = 'present_submit_round';
-    return sendKeyedRequest<{ roundId: string }>(key, {
-      cmd: 'present_submit_round',
-      round_id: input.roundId,
-      verdict: input.verdict,
-      comments: input.comments,
-      handback: input.handback,
-    }, 'Submit presentation round timed out', 30000);
-  }, [sendKeyedRequest]);
-
-  const closePresentation = useCallback((presentationId: string): Promise<{ presentationId: string }> => {
-    const key = 'present_close';
-    return sendKeyedRequest<{ presentationId: string }>(key, { cmd: 'present_close', presentation_id: presentationId, }, 'Close presentation timed out', 30000);
-  }, [sendKeyedRequest]);
 
   const clearWarnings = useCallback(() => {
     setWarnings([]);
@@ -4743,7 +4575,6 @@ export function useDaemonSocket({
     sendSetTerminalTheme,
     subscribeDocuments,
     isRuntimeAttached,
-    sendGetFileDiff,
     getRepoInfo,
     listKeptConversations,
     setConversationKeep,
@@ -4760,9 +4591,5 @@ export function useDaemonSocket({
     getAutomationDefinition,
     applyAutomationDefinition,
     deleteAutomationDefinition,
-    getPresentations,
-    getPresentationRound,
-    submitPresentationRound,
-    closePresentation,
   };
 }

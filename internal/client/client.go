@@ -715,43 +715,6 @@ func (c *Client) Delegate(request protocol.DelegateMessage) (*protocol.DelegateR
 	return op.Result, nil
 }
 
-func (c *Client) PresentOpen(sourceSessionID protocol.SessionID, manifestYAML string, presentationID string) (*protocol.PresentOpenResult, error) {
-	msg := protocol.PresentOpenMessage{
-		Cmd:             protocol.CmdPresentOpen,
-		SourceSessionID: sourceSessionID,
-		ManifestYaml:    manifestYAML,
-	}
-	if value := strings.TrimSpace(presentationID); value != "" {
-		msg.PresentationID = protocol.Ptr(value)
-	}
-	resp, err := c.send(msg)
-	if err != nil {
-		return nil, err
-	}
-	if resp.PresentOpenResult == nil {
-		return nil, errors.New("daemon returned no present open result")
-	}
-	return resp.PresentOpenResult, nil
-}
-
-func (c *Client) PresentFeedback(presentationID string, seq int) (*protocol.PresentFeedbackResult, error) {
-	msg := protocol.PresentFeedbackMessage{
-		Cmd:            protocol.CmdPresentFeedback,
-		PresentationID: presentationID,
-	}
-	if seq > 0 {
-		msg.Seq = protocol.Ptr(seq)
-	}
-	resp, err := c.send(msg)
-	if err != nil {
-		return nil, err
-	}
-	if resp.PresentFeedbackResult == nil {
-		return nil, errors.New("daemon returned no present feedback result")
-	}
-	return resp.PresentFeedbackResult, nil
-}
-
 func (c *Client) NotebookGuide(sessionID protocol.SessionID) (*protocol.NotebookGuideResult, error) {
 	msg := protocol.NotebookGuideMessage{Cmd: protocol.CmdNotebookGuide}
 	if sessionID != "" {

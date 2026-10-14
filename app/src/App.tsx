@@ -19,10 +19,8 @@ import {
 import { useReleaseUpdates } from './hooks/useReleaseUpdates';
 import { useSessionStore } from './store/sessions';
 import { useDaemonStore } from './store/daemonSessions';
-import type { Presentation } from './types/generated';
 import { hideBootSplash } from './utils/bootSplash';
 import { bumpFsChangeSignal } from './utils/fsChangeSignals';
-import { seedPresentationNotices, upsertPresentationNotice } from './utils/presentationNotices';
 
 function App() {
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -52,7 +50,6 @@ function App() {
   const { updateAvailableVersion, handleOpenLatestRelease, handleDismissLatestRelease } =
     useReleaseUpdates();
 
-  const [presentationNotices, setPresentationNotices] = useState<Presentation[]>([]);
   const {
     daemonSessions,
     setDaemonSessions,
@@ -97,9 +94,6 @@ function App() {
       useSessionStore.getState().syncFromDaemonSessions(sessions);
       setDaemonSessions(sessions);
     },
-    onPresentationAdded: (p) => setPresentationNotices((prev) => upsertPresentationNotice(prev, p)),
-    onPresentationUpdated: (p) =>
-      setPresentationNotices((prev) => upsertPresentationNotice(prev, p)),
     onFsChanged: (_origin, _paths, root) => {
       setFsChangeSignals((prev) =>
         bumpFsChangeSignal(prev, root, settings['notebook.root.effective'] || ''),
@@ -133,7 +127,6 @@ function App() {
     submitMarkdownAnnotations,
     sendSetSetting,
     sendNotificationList,
-    getPresentations,
     hasReceivedInitialState,
   } = daemon;
 
@@ -171,21 +164,6 @@ function App() {
     };
   }, [hasReceivedInitialState, sendNotificationList, setCriticalNotifications]);
 
-  useEffect(() => {
-    if (!hasReceivedInitialState) return;
-    let cancelled = false;
-    getPresentations()
-      .then((all) => {
-        if (!cancelled) setPresentationNotices(seedPresentationNotices(all));
-      })
-      .catch(() => {
-        /* transient (not connected / timeout); the next broadcast reseeds */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [hasReceivedInitialState, getPresentations]);
-
   if (daemon.migrationFailure) {
     return <MigrationFailureScreen failure={daemon.migrationFailure} />;
   }
@@ -206,7 +184,6 @@ function App() {
               updateAvailableVersion={updateAvailableVersion}
               onOpenLatestRelease={handleOpenLatestRelease}
               onDismissLatestRelease={handleDismissLatestRelease}
-              presentationNotices={presentationNotices}
               settingError={settingError}
               clearSettingError={() => setSettingError(null)}
               notificationsUnread={notificationsUnread}

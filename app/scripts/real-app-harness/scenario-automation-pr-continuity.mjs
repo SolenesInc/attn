@@ -11,13 +11,13 @@ import { parseCommonArgs, printCommonHelp, launchFreshAppAndConnect } from './co
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
-import { readFrontendProtocolVersion } from './presentDaemon.mjs';
 import {
   currentHarnessInstance,
   dataDirForInstance,
   harnessClientHello,
   resolveHarnessResources,
   instanceCliEnv as instanceEnv,
+  readFrontendProtocolVersion,
 } from './harnessInstance.mjs';
 import { appDaemonInTree } from './platform.mjs';
 

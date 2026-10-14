@@ -204,91 +204,6 @@ model Session {
   last_seen: string;            // ISO timestamp, always set
 }
 
-// PresentAnnotation is an author-pinned note or thread, resolved at query
-// time by the daemon from the manifest's annotation entries against the
-// pinned head SHA. Comments are ordered; author is always the presenting
-// agent.
-model PresentAnnotation {
-  line_start: int32; // resolved head-side line range
-  line_end: int32;
-  comments: string[];
-}
-
-// PresentFile is one file entry in a present manifest, as authored by the agent.
-model PresentFile {
-  path: string;
-  note?: string;
-  // Line stats for this file across the round's pinned base..head diff,
-  // from git numstat. Absent when unknown (binary file, or stats lookup failed).
-  additions?: int32;
-  deletions?: int32;
-  // Author-pinned notes/threads, resolved against the pinned head SHA.
-  // Omitted when the file has none, or when resolution failed.
-  annotations?: PresentAnnotation[];
-}
-
-// PresentManifestView is the parsed, daemon-pinned view of a present manifest —
-// the title/summary/file list an agent wrote, plus the skip list it declined to
-// walk through.
-model PresentManifestView {
-  title: string;
-  summary?: string;
-  files: PresentFile[];
-  skip: string[];
-}
-
-// Presentation is a review session an agent opened over a set of changes.
-// kind is "changes" for now (reserved for future presentation kinds).
-model Presentation {
-  id: string;
-  session_id: SessionID;
-  title: string;
-  kind: string;
-  repo_path: string;
-  status: string;
-  created_at: string;
-  latest_round_seq: int32;
-  latest_round_submitted: boolean;
-}
-
-// PresentationRound is one iteration of a presentation, pinned to a base/head
-// SHA pair at the moment it was opened.
-model PresentationRound {
-  id: string;
-  presentation_id: string;
-  seq: int32;
-  base_sha: string;
-  head_sha: string;
-  created_at: string;
-  submitted_at?: string;
-  // "approved" | "feedback", set once the round is submitted. Plain string,
-  // not an enum, to avoid the quicktype identical-enum merge trap (see side
-  // on PresentationComment below).
-  verdict?: string;
-  manifest: PresentManifestView;
-  // All files changed between base_sha and head_sha, computed at query time
-  // by the daemon from `git diff` (destination path for renames);
-  // additions/deletions filled from numstat when available (binary/rename
-  // entries have them absent). Not persisted with the round — omitted
-  // entirely when the diff cannot be computed.
-  changed_files?: PresentFile[];
-}
-
-// PresentationComment is a reviewer note anchored to a line range within one
-// round's diff. side is "new" | "old" — plain string, not an enum, to avoid the
-// quicktype identical-enum merge trap.
-model PresentationComment {
-  id: string;
-  round_id: string;
-  filepath: string;
-  line_start: int32;
-  line_end: int32;
-  side: string;
-  content: string;
-  author: string;
-  created_at: string;
-}
-
 model PR {
   // Core identity - always present
   // ID format: "host:owner/repo#number" (e.g. github.com:acme/widget#42)
@@ -1086,51 +1001,6 @@ model DelegateStatusMessage {
   id: string; // Request id or daemon-issued operation id
 }
 
-model PresentOpenMessage {
-  cmd: "present_open";
-  source_session_id: SessionID;
-  manifest_yaml: string;
-  presentation_id?: string;
-}
-
-// PresentOpenResult echoes the round the daemon created, so the caller can
-// report where the presentation now lives.
-model PresentOpenResult {
-  presentation_id: string;
-  round_id: string;
-  seq: int32;
-  base_sha: string;
-  head_sha: string;
-  title: string;
-  // Anchor warnings from resolving the manifest's annotations (e.g. an
-  // ambiguous anchor), formatted "path[index]: message". Absent when there
-  // were none. An error-severity issue fails the open instead of appearing here.
-  warnings?: string[];
-}
-
-// PresentFeedbackMessage reads reviewer feedback for a round back to the
-// authoring agent as markdown. seq omitted/0 means the latest round.
-model PresentFeedbackMessage {
-  cmd: "present_feedback";
-  presentation_id: string;
-  seq?: int32;
-}
-
-// PresentFeedbackResult carries the rendered feedback markdown for the
-// resolved round, plus whether that round has been submitted yet. verdict is
-// the submitted round's verdict ("approved" | "feedback"), absent until
-// submitted. presentation_status is the presentation's current status
-// ("open" | "approved" | "closed") — a poller uses it to detect a reviewer
-// closing the presentation instead of submitting a round.
-model PresentFeedbackResult {
-  markdown: string;
-  seq: int32;
-  submitted: boolean;
-  verdict?: string;
-  presentation_status: string;
-}
-
-
 model NotebookListMessage {
   cmd: "notebook_list";
   prefix?: string;
@@ -1677,16 +1547,6 @@ model EnsureRepoMessage {
   cmd: "ensure_repo";
   target_path: string;   // Where to clone (e.g., /Users/victor/projects/dashboards-go)
   clone_url: string;     // Git clone URL (e.g., https://github.com/owner/repo.git)
-}
-
-model GetFileDiffMessage {
-  cmd: "get_file_diff";
-  directory: string;
-  path: string;
-  staged?: boolean;  // DEPRECATED: If true, show staged diff instead of working tree
-  base_ref?: string; // If provided, compare against this ref instead of HEAD (for PR-like diffs)
-  head_ref?: string; // If set, the modified side is pinned to `git show <head_ref>:<path>` instead of the working tree (used by the presentation reader for base_sha->head_sha diffs)
-  request_id?: string; // Client-chosen correlation id, echoed verbatim in the result
 }
 
 model GetRepoInfoMessage {
@@ -2237,9 +2097,8 @@ model MarkdownAnnotationAnchor {
 // "comment" carrying quick_label_id (+ tip snapshotted at creation).
 model MarkdownAnnotation {
   id: string;
-  // "comment" | "deletion" | "global". Plain string, like PresentationRound's
-  // verdict, so codegen yields string on both sides (a literal union becomes
-  // anyOf -> Go interface{}).
+  // "comment" | "deletion" | "global". Plain string so codegen yields string
+  // on both sides (a literal union becomes anyOf -> Go interface{}).
   `type`: string;
   text?: string;
   anchor?: MarkdownAnnotationAnchor;
@@ -3126,91 +2985,6 @@ model ChiefOfStaffResultMessage {
 }
 
 
-// GetPresentationsMessage reads the full list of presentations, the way the
-// app renders the present surface.
-model GetPresentationsMessage {
-  cmd: "get_presentations";
-}
-
-model GetPresentationsResultMessage {
-  event: "get_presentations_result";
-  success: boolean;
-  error?: string;
-  presentations: Presentation[];
-}
-
-// GetPresentationRoundMessage fetches one round of a presentation — the round
-// record plus its comments — for the detail view. seq omitted/0 means the
-// latest round.
-model GetPresentationRoundMessage {
-  cmd: "get_presentation_round";
-  presentation_id: string;
-  seq?: int32;
-}
-
-model GetPresentationRoundResultMessage {
-  event: "get_presentation_round_result";
-  success: boolean;
-  error?: string;
-  presentation?: Presentation;
-  round?: PresentationRound;
-  comments?: PresentationComment[];
-  repo_head_sha?: string; // Current `git rev-parse HEAD` of the presentation's repo_path at query time, for drift detection; omitted if the rev-parse fails (e.g. repo gone)
-}
-
-// PresentCommentInput is a reviewer comment as submitted from the app, before
-// the daemon assigns it an id and author.
-model PresentCommentInput {
-  filepath: string;
-  line_start: int32;
-  line_end: int32;
-  side: string;
-  content: string;
-}
-
-// PresentSubmitRoundMessage hands a round's review back to the authoring
-// agent. handback marks the round submitted, closing the loop for that round.
-// verdict is "approved" | "feedback" — plain string, see PresentationComment.side.
-model PresentSubmitRoundMessage {
-  cmd: "present_submit_round";
-  round_id: string;
-  verdict: string;
-  comments: PresentCommentInput[];
-  handback: boolean;
-}
-
-model PresentSubmitRoundResultMessage {
-  event: "present_submit_round_result";
-  success: boolean;
-  error?: string;
-  round_id: string;
-}
-
-// PresentCloseMessage dismisses a presentation without a review: the
-// presentation's status moves straight to "closed", with no round submission
-// and no handback to the authoring agent.
-model PresentCloseMessage {
-  cmd: "present_close";
-  presentation_id: string;
-}
-
-model PresentCloseResultMessage {
-  event: "present_close_result";
-  success: boolean;
-  error?: string;
-  presentation_id: string;
-}
-
-model PresentationAddedMessage {
-  event: "presentation_added";
-  presentation: Presentation;
-}
-
-model PresentationUpdatedMessage {
-  event: "presentation_updated";
-  presentation: Presentation;
-}
-
 model PRsUpdatedMessage {
   event: "prs_updated";
   prs?: PR[];
@@ -3429,17 +3203,6 @@ model EnsureRepoResultMessage {
   error?: string;
 }
 
-model FileDiffResultMessage {
-  event: "file_diff_result";
-  directory: string;
-  path: string;
-  original: string;
-  modified: string;
-  success: boolean;
-  error?: string;
-  request_id?: string; // Client-chosen correlation id, echoed verbatim from the request
-}
-
 model RepoInfo {
   repo: string;
   current_branch: string;
@@ -3456,20 +3219,6 @@ model GetRepoInfoResultMessage {
   info?: RepoInfo;
   success: boolean;
   error?: string;
-}
-
-model ReviewComment {
-  id: string;
-  review_id: string;
-  filepath: string;
-  line_start: int32;
-  line_end: int32;
-  content: string;
-  author: string;  // "user" or "agent"
-  resolved: boolean;
-  resolved_by?: string;  // "user" or "agent" (empty if not resolved)
-  resolved_at?: string;  // ISO timestamp (empty if not resolved)
-  created_at: string;    // ISO timestamp
 }
 
 // Compact automations summaries for the WS surface. Canonical state (full
@@ -5594,8 +5343,6 @@ model Response {
   worktree_keep_result?: WorktreeKeepResult;
   worktree_sweep_log_result?: WorktreeSweepLogResult;
   worktree_refresh_result?: WorktreeRefreshResult;
-  present_open_result?: PresentOpenResult;
-  present_feedback_result?: PresentFeedbackResult;
   session_instructions_result?: SessionInstructionsResult;
   session_transcript_result?: SessionTranscriptResult;
   session_list_result?: SessionListResult;
@@ -6935,7 +6682,6 @@ alias DaemonEvent =
   | FetchRemotesResultMessage
   | ListRemoteBranchesResultMessage
   | EnsureRepoResultMessage
-  | FileDiffResultMessage
   | GetRepoInfoResultMessage
   | AutomationApplyResultMessage
   | AutomationValidateResultMessage
@@ -6992,12 +6738,6 @@ alias DaemonEvent =
   | BrowserControlRequestMessage
   | CommandErrorMessage
   | ClientEvictionNoticeMessage
-  | GetPresentationsResultMessage
-  | GetPresentationRoundResultMessage
-  | PresentSubmitRoundResultMessage
-  | PresentCloseResultMessage
-  | PresentationAddedMessage
-  | PresentationUpdatedMessage
   | OpenMarkdownResultMessage
   | MarkdownAnnotationsGetResultMessage
   | MarkdownAnnotationsSaveResultMessage

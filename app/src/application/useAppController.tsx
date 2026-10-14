@@ -14,7 +14,6 @@ import { useDesktopFocus } from '../store/desktopFocus';
 import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { getAgentAvailability } from '../utils/agentAvailability';
-import { latestPresentationBySessionId } from '../utils/presentationNotices';
 import { appOverlayPolicy } from './appOverlayPolicy';
 import { AppContentProps, diagnosticFocusKind } from './appSupport';
 import { useAppAppearance } from './useAppAppearance';
@@ -50,7 +49,6 @@ export function useAppController({
   updateAvailableVersion,
   onOpenLatestRelease,
   onDismissLatestRelease,
-  presentationNotices,
   settingError,
   clearSettingError,
   notificationsUnread,
@@ -97,16 +95,6 @@ export function useAppController({
     sendCrewSleep,
     sendSupportSnapshot,
   } = useDaemonApi();
-
-  const presentationBySessionId = useMemo(
-    () => latestPresentationBySessionId(presentationNotices),
-    [presentationNotices],
-  );
-  const handleOpenPresentationWindow = useCallback((presentationId: string) => {
-    void invoke('open_presentation_window', { presentationId }).catch((err) => {
-      console.error('[App] Failed to open presentation window:', err);
-    });
-  }, []);
 
   const { connect, sessions, reloadSession, selectLeaf } = useSessionStore();
   const shownAgentId = useAgentOnScreen();
@@ -503,7 +491,6 @@ export function useAppController({
     isRuntimeAttached,
     openAutomationsPanel: () => openDockPanel('automations'),
     openWorktreesPanel: () => openLedger('worktrees'),
-    presentationNotices,
     resetSessionPaneTerminal,
     injectSessionPaneBytes,
     injectSessionPaneBase64,
@@ -670,7 +657,6 @@ export function useAppController({
       updateAvailableVersion,
       onOpenLatestRelease,
       onDismissLatestRelease,
-      presentationNotices,
       settingError,
       clearSettingError,
       notificationsUnread,
@@ -708,9 +694,7 @@ export function useAppController({
     },
     shell: {
       surface: {
-        presentationBySessionId,
         annotationApi,
-        handleOpenPresentationWindow,
         blockingOverlayOpen,
         windowCovered,
         zoomModeBySessionId,

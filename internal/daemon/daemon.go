@@ -146,8 +146,6 @@ type Daemon struct {
 	reopenGitMu                       sync.Mutex
 	reopenBranches                    *sharedCalls[reopenBranchKey, branchInspection]
 	reopenInspect                     func(context.Context, *git.Client, string, string) (branchInspection, error)
-	gitReaderMu                       sync.Mutex
-	fileDiff                          *fileDiffReader
 	gitExec                           gitExecutor
 	worktreeMaintenance               worktreeMaintenanceCoordinator
 	warnings                          []protocol.DaemonWarning
@@ -2543,11 +2541,6 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleAutoModePropose(conn, msg.(*protocol.AutoModeProposeMessage))
 	case protocol.CmdAutoModeDenials:
 		d.handleAutoModeDenials(conn, msg.(*protocol.AutoModeDenialsMessage))
-
-	case protocol.CmdPresentOpen:
-		d.handlePresentOpen(conn, msg.(*protocol.PresentOpenMessage))
-	case protocol.CmdPresentFeedback:
-		d.handlePresentFeedback(conn, msg.(*protocol.PresentFeedbackMessage))
 
 	case protocol.CmdNotebookGuide:
 		d.handleNotebookGuide(conn, msg.(*protocol.NotebookGuideMessage))
