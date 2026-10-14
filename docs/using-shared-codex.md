@@ -9,15 +9,13 @@ hidden session instead of closing.
 It runs the stock `codex` you already use, with your Codex account, model,
 settings and conversations. attn was checked against Codex 0.160.0.
 
-## Turn it on
+## Turn it on or off
 
-Open Settings → Experimental and enable **Shared Codex**. It is off by default
-and applies to new Codex terminals, and to sessions you reopen from the
-ledger. A running session stays shared or plain until you move its
-conversation yourself, for example with `/resume` in a terminal of the other
-kind.
-
-Automations don't use shared Codex yet; they keep launching a plain Codex.
+**Shared Codex** in Settings → Experimental is off by default. It decides how
+new Codex terminals, and sessions you resume from the Sessions ledger, launch.
+A running session, hidden ones included, stays shared or plain until it closes
+or you move its conversation yourself, for example with `/resume` in a Codex of
+the other kind.
 
 ## One conversation, one session
 
@@ -46,9 +44,6 @@ conversation's session, and the session you left stays open and **hidden**:
 
 Several terminals can show the same conversation. They show one session.
 
-Closing a tile after `/new` or `/resume` but before the next prompt ends only
-that terminal; the session the tile showed stays open and hidden.
-
 ## Hidden sessions in the queue
 
 Hidden sessions queue like any other, so a hidden session that needs an answer
@@ -67,27 +62,20 @@ name wins.
 
 ## Closing and resuming
 
-Closing a tile (⌘W on macOS) ends only that terminal while another tile shows
-the same session. Closing the last tile of a session archives its conversation
-in Codex, settles its usage and closes the session into the ledger. A hidden
-session closes the same way.
+Closing a tile ends only its terminal in two cases: another tile shows the same
+session, or its Codex switched with `/new` or `/resume` and you have not sent
+the next prompt. The session stays open, and is hidden if no tile shows it.
+Closing the last tile of a session archives its conversation in Codex, settles
+its usage and closes the session into the ledger. A hidden session closes the
+same way.
 
-To pick it up again, reopen the session from the Sessions ledger. attn
-unarchives the conversation and resumes it in a new tile: shared while
-**Shared Codex** is on, plain while it is off.
-
-## Turn it off
-
-Disable **Shared Codex** in Settings → Experimental. New Codex terminals, and
-sessions you reopen from the ledger, launch a plain Codex again. Sessions that
-already run shared, hidden ones included, stay shared until they close or you
-resume their conversation in a plain Codex.
+To pick it up again, resume the session from the Sessions ledger. attn
+unarchives the conversation and resumes it in a new tile, shared or plain as
+the setting says.
 
 ## Limits
 
 - Automations launch a plain Codex; they don't use shared Codex yet.
-- The app-server stops when nothing uses it, and the next shared terminal
-  starts it again.
 - Codex lets one process write a conversation at a time. While the app-server
   holds a conversation, `/resume` of it in a plain Codex fails with `already
   has an active writer`. It works once the app-server lets the conversation

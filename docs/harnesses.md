@@ -14,12 +14,16 @@ read the source or probe the binary first, then record it here.
 same identity under `ATTN_SESSION_ID`. A terminal can change conversations with
 `/clear` or `/resume`. CLI commands address the conversation shown when the
 command starts; hooks apply to the conversation shown when the report arrives.
-Native harness conversation ids remain separate text values.
+Under shared Codex, hooks and commands run in the app-server and name their
+conversation instead: a hook by the `session_id` on its stdin, a command by
+`CODEX_THREAD_ID`. Native harness conversation ids remain separate text values.
 
 Removing a placement keeps the terminal addressable, including after daemon
 restart. Closing a session ends its terminal associations. A session is shown
 in at most one terminal: when another terminal resumes its conversation, that
-terminal takes the session over and the previous one stops showing it.
+terminal takes the session over and the previous one stops showing it. Shared
+Codex is the exception: several terminals can show one conversation, and so one
+session.
 
 Plugin driver payloads retain the `session_id` wire spelling for the terminal.
 Close notifications, including those completed after restart, use the original
