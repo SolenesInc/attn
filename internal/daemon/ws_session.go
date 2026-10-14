@@ -1,8 +1,11 @@
 package daemon
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
@@ -66,6 +69,7 @@ func (d *Daemon) handleGetRecentLocationsWS(client *wsClient, msg *protocol.GetR
 }
 
 func (d *Daemon) handleRecentFilesWS(client *wsClient, msg *protocol.RecentFilesMessage) {
+	d.forgetMissingRecentFiles()
 	limit := 20
 	if msg.Limit != nil {
 		limit = int(*msg.Limit)
@@ -76,4 +80,49 @@ func (d *Daemon) handleRecentFilesWS(client *wsClient, msg *protocol.RecentFiles
 		RequestID: strings.TrimSpace(protocol.Deref(msg.RequestID)),
 		Success:   true,
 	})
+}
+
+const recentFileStatDeadline = 500 * time.Millisecond
+
+func (d *Daemon) forgetMissingRecentFiles() {
+	d.recentFilePruneGate <- struct{}{}
+	defer func() { <-d.recentFilePruneGate }()
+	paths := d.store.FileActivityPaths()
+	if len(paths) == 0 {
+		return
+	}
+	type statAnswer struct {
+		path string
+		err  error
+	}
+	answers := make(chan statAnswer, len(paths))
+	pending := make(map[string]struct{}, len(paths))
+	stat := d.recentFileStat
+	deadline := time.NewTimer(recentFileStatDeadline)
+	defer deadline.Stop()
+	for _, path := range paths {
+		pending[path] = struct{}{}
+		go func() {
+			_, err := stat(path)
+			answers <- statAnswer{path: path, err: err}
+		}()
+	}
+	var missing []string
+collect:
+	for len(pending) > 0 {
+		select {
+		case answer := <-answers:
+			delete(pending, answer.path)
+			if errors.Is(answer.err, fs.ErrNotExist) {
+				missing = append(missing, answer.path)
+			}
+		case <-deadline.C:
+			for path := range pending {
+				d.logf("recent_files: stat %q exceeded deadline=%s; forgotten", path, recentFileStatDeadline)
+				missing = append(missing, path)
+			}
+			break collect
+		}
+	}
+	d.store.DeleteFileActivity(missing...)
 }
