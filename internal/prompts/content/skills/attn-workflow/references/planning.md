@@ -160,7 +160,7 @@ State:
 
 ## Execution
 
-<Three children, each its own pull request against next, in this order: the
+<Three children, each its own pull request, in this order: the
 daemon and protocol (presets, wire fields, launch intent), then pi (/permissions
 and the file-tool guard), then the app picker. The pi child blocks nothing; the
 app child waits for the daemon child's wire fields.>
