@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"fmt"
 	"os"
 	"slices"
 	"testing"
@@ -52,6 +53,34 @@ func TestADelegateShowsItsDispatcherAcrossTheDispatchersLife(t *testing.T) {
 	closePane(app, sessionPane{session: string(plain.ID), desktop: workspace, pane: pane})
 	awaitClosed(app, string(plain.ID))
 	shows("once its plain dispatcher closed", fromPlain, "", "")
+}
+
+func TestADelegateKeepsItsDispatcherAcrossARestartAfterManySessionsClosed(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Codex)
+	cli := w.Client()
+	cwd := w.Path("dispatch")
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	alder := wakeCrew(t, cli, "alder", string(fakeagent.Codex)).SessionID
+	w.Launched(string(alder))
+	delegate := gardenDispatchDelegate(t, w, cli, string(alder), cwd, "Map the checkout")
+	for i := range 100 {
+		earlier := fmt.Sprintf("00000000-0000-0000-0000-%012d", i)
+		if err := w.InjectSession(earlier, earlier, w.Path("earlier"), protocol.SessionAgentClaude); err != nil {
+			t.Fatalf("register earlier session %d: %v", i, err)
+		}
+		if err := cli.Unregister(protocol.SessionID(earlier)); err != nil {
+			t.Fatalf("close earlier session %d: %v", i, err)
+		}
+	}
+
+	w.restart()
+
+	shown := sessionOfDelegate(t, w, delegate)
+	if protocol.Deref(shown.DispatcherMember) != "alder" || protocol.Deref(shown.SeedID) == "" {
+		t.Errorf("after a restart the delegate shows dispatcher member %q and seed %q, want alder and its seed", protocol.Deref(shown.DispatcherMember), protocol.Deref(shown.SeedID))
+	}
 }
 
 func gardenDispatchDelegate(t *testing.T, w *world, cli *client.Client, dispatcher, cwd, brief string) string {
