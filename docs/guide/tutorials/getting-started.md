@@ -100,8 +100,8 @@ journals the day in the Notebook, so you can check back later on what you did.
 
 You don't have to use the Chief to create agents. Cmd+N (Ctrl+Shift+N on Linux)
 starts one yourself: pick a harness or a plain shell, pick a directory, go. It
-opens on the desktop you're on. Cmd+Shift+N (Ctrl+Alt+N on Linux) opens it
-beside the agent you're looking at instead.
+opens on the desktop you're on, beside the agent you're looking at. Cmd+Shift+N
+(Ctrl+Alt+N on Linux) opens it below instead.
 
 ## Know who needs you
 

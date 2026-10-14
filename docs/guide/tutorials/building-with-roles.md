@@ -9,8 +9,9 @@ Attn comes bundled with its own opinionated workflow: attn-workflow. Think of
 integrated into Attn.
 
 It is designed to be the best process to create software or infrastructure with
-agents. Use it as is, or ask your agents to customize it, and the delegation
-roles, to your own needs.
+agents. Use it as is, or ask your agents to customize the delegation roles to
+your own needs. Attn keeps the attn-workflow skill itself up to date, so change
+the roles, not the skill's files.
 
 You can also use attn-workflow without delegations: ask the agent you're talking
 to to work as a Pathfinder, and it takes the role right there.

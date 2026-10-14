@@ -23,8 +23,9 @@ We've seen this way of working increase throughput a lot.
 ## Turning it on
 
 Open the command palette with Cmd+Shift+K (Ctrl+Alt+K on Linux) and run "Turn on
-the agent queue". The same command turns it off. The sidebar changes shape: the
-agents waiting for you come first, oldest on top.
+the agent queue", or click the flow toggle at the top of the sidebar. Either one
+turns it off again. The sidebar changes shape: the agents waiting for you come
+first, oldest on top.
 
 ## Turns
 
@@ -43,8 +44,9 @@ You can settle an agent:
   sidebar.
 - Automatically, with auto-settle. It's off by default; turn it on in Settings
   ("Settle a turn once you have steered the agent"). You set how long after your
-  prompt it arms and how long the countdown runs; the row shows the countdown,
-  and Cmd+. (Ctrl+Shift+. on Linux) stops it.
+  prompt it arms and how long the countdown runs; the agent's tile header shows
+  the countdown (its sidebar row does when the agent isn't on screen), and
+  Cmd+. (Ctrl+Shift+. on Linux) stops it.
 - With a snooze.
 
 ![Turns: it is the agent's turn until it finishes or asks you something, then it is your turn until you settle it](../diagrams/turns.svg)
@@ -56,9 +58,10 @@ queue.
 A snooze settles an agent for a period of time. Use it when you don't want to
 close the agent but can't make a decision yet. Cmd+Shift+S (Ctrl+Alt+S on Linux)
 or the row offers the choices: 30 minutes to 8 hours, or tomorrow, Saturday or
-Monday at 9:00. Snoozed agents appear at the bottom of the sidebar, and their
-Wake button unsnoozes them whenever you want. A snooze ends early if the agent's
-process exits or Attn loses track of its state.
+Monday at 9:00. Snoozed agents wait at the end of the full agent list ("N more
+agents" in the sidebar, or Cmd+Shift+A, Ctrl+Alt+A on Linux). You can unsnooze
+them by clicking on the wake action in the sidebar. A snooze ends early if the
+agent's process exits or Attn loses track of its state.
 
 ## Priority
 

@@ -55,7 +55,8 @@ it waits here.
 Resume brings a closed session back as itself, in a tile, with its conversation.
 
 Attn keeps its own copy of conversations a harness would delete. Keep one
-forever, or forget it, from the ledger's Conversations tab.
+forever with "Keep conversation" on its session in the ledger, and forget it from
+the Conversations tab.
 
 ## Details
 

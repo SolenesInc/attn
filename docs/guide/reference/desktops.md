@@ -12,7 +12,8 @@ Think of desktops as macOS Spaces you use to organize your work.
 ## Turning it on
 
 Desktop flow is the default. If you turned on the queue, run "Turn off the agent
-queue" from the command palette (Cmd+Shift+K, Ctrl+Alt+K on Linux).
+queue" from the command palette (Cmd+Shift+K, Ctrl+Alt+K on Linux), or click the
+flow toggle at the top of the sidebar.
 
 ## Desktops
 
@@ -31,8 +32,8 @@ all appear in a tile.
 
 Cmd+N (Ctrl+Shift+N on Linux) opens a new agent or shell on the current desktop.
 To open a shell next to the agent you're looking at, split it: Cmd+D
-(Ctrl+Shift+D on Linux) opens one below, Cmd+Shift+D (Ctrl+Alt+D on Linux) opens
-one beside it.
+(Ctrl+Shift+D on Linux) opens one beside it, Cmd+Shift+D (Ctrl+Alt+D on Linux)
+opens one below.
 
 Drag a tile to rearrange it on the desktop. Drag it over a desktop in the
 sidebar to switch to that desktop and drop it there.
