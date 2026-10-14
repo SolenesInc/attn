@@ -1,16 +1,17 @@
 package daemon_test
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
-	"time"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
+
+const literalInitialPrompt = "list \"quoted\" checkout tests, 'single', \\\\path\n$HOME $(id) `ticks` and λ"
 
 func TestEachAgentStartsOnItsInitialPromptAndShowsItsReply(t *testing.T) {
 	for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex, fakeagent.Copilot, fakeagent.Pi} {
@@ -22,10 +23,10 @@ func TestEachAgentStartsOnItsInitialPromptAndShowsItsReply(t *testing.T) {
 			}
 
 			session := w.Spawn(app, h, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
-				m.InitialPrompt = protocol.Ptr("list the checkout tests")
+				m.InitialPrompt = protocol.Ptr(literalInitialPrompt)
 			})
 			run := w.Launched(session)
-			if got := run.Prompted(); got != "list the checkout tests" {
+			if got := run.Prompted(); got != literalInitialPrompt {
 				t.Fatalf("%s received %q", h, got)
 			}
 			run.Reply("Found 14 checkout tests. <!-- attn:state=idle -->")
@@ -51,30 +52,24 @@ func awaitAgentAvailable(p *testworld.Peer, agent string) {
 	testworld.Await(p, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings[key] == "true" })
 }
 
-func TestARestartRemovesInitialPromptFilesTheLastDaemonLeftUnread(t *testing.T) {
-	w := newWorld(t)
-	prompts := filepath.Join(filepath.Dir(w.Socket), "runtime", "prompts")
-	if err := os.MkdirAll(prompts, 0o700); err != nil {
+func TestARefusedLaunchPreparationReportsTheErrorAndCanBeRetried(t *testing.T) {
+	w := newWorld(t, fakeagent.Copilot)
+	app := w.App()
+	setSetting(t, app, "direct_agent_launch_enabled", "true")
+	runtime := filepath.Join(w.Dir, "runtime")
+	if err := os.MkdirAll(runtime, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	stale := filepath.Join(prompts, "left-by-a-stopped-daemon.md")
-	fresh := filepath.Join(prompts, "a-wrapper-is-about-to-read.md")
-	for _, path := range []string{stale, fresh} {
-		if err := os.WriteFile(path, []byte("a plaintext prompt"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	anHourAgo := time.Now().Add(-time.Hour)
-	if err := os.Chtimes(stale, anHourAgo, anHourAgo); err != nil {
+	blocked := filepath.Join(runtime, "launch")
+	if err := os.WriteFile(blocked, []byte("cannot hold instructions"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-
-	w.restart()
-
-	if _, err := os.Stat(stale); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("the prompt file from an hour ago survived the restart (stat err %v)", err)
+	result, _, _ := w.RequestSpawn(app, fakeagent.Copilot, w.Path("shop"))
+	if result.Success || !strings.Contains(protocol.Deref(result.Error), "create launch instructions directory") {
+		t.Fatalf("preparation failure returned %+v", result)
 	}
-	if _, err := os.Stat(fresh); err != nil {
-		t.Errorf("the restart removed a prompt file a launching wrapper may still read: %v", err)
+	if err := os.Remove(blocked); err != nil {
+		t.Fatal(err)
 	}
+	w.Launched(w.Spawn(app, fakeagent.Copilot, w.Path("shop")))
 }

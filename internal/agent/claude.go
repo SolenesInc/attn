@@ -342,9 +342,6 @@ func claudeHasBareModeAuthentication() bool {
 }
 
 func (c *Claude) PrepareLaunch(opts SpawnOpts) error {
-	if _, err := EnsureClaudeSkillInstalled(); err != nil {
-		return err
-	}
 	if strings.TrimSpace(opts.ResumeSessionID) == "" {
 		return nil
 	}

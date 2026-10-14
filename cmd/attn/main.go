@@ -10,16 +10,13 @@ import (
 	"io"
 	"net/url"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/google/uuid"
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/config"
@@ -28,11 +25,9 @@ import (
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/launchcontract"
-	"github.com/victorarias/attn/internal/pathutil"
 	"github.com/victorarias/attn/internal/probetui"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptyworker"
-	"github.com/victorarias/attn/internal/wrapper"
 	"golang.org/x/sys/unix"
 )
 
@@ -312,12 +307,13 @@ func runPTYWorker() {
 	fs.StringVar(&cfg.CWD, "cwd", "", "working directory")
 	fs.IntVar(&cols, "cols", 80, "terminal cols")
 	fs.IntVar(&rows, "rows", 24, "terminal rows")
+	fs.StringVar(&cfg.Model, "model", "", "recorded agent model")
+	fs.StringVar(&cfg.Effort, "effort", "", "recorded reasoning effort")
 	fs.StringVar(&cfg.Label, "label", "", "session label")
 	fs.StringVar(&cfg.ResumeSessionID, "resume-session-id", "", "resume session id")
 	fs.BoolVar(&cfg.ResumePicker, "resume-picker", false, "resume picker")
 	fs.BoolVar(&cfg.YoloMode, "yolo-mode", false, "launch agent in yolo mode")
 	fs.StringVar(&approvalRoute, "approval-route", "", "effective approval route recorded for daemon recovery")
-	fs.StringVar(&cfg.InitialPromptFile, "initial-prompt-file", "", "file containing the initial agent prompt")
 	fs.StringVar(&cfg.ThemeForeground, "theme-foreground", "", "terminal foreground color seeded for OSC 10/11/12 queries")
 	fs.StringVar(&cfg.ThemeBackground, "theme-background", "", "terminal background color seeded for OSC 10/11/12 queries")
 	fs.StringVar(&cfg.ThemeCursor, "theme-cursor", "", "terminal cursor color seeded for OSC 10/11/12 queries")
@@ -327,9 +323,10 @@ func runPTYWorker() {
 	fs.StringVar(&cfg.ClaudeExecutable, "claude-executable", "", "claude executable override")
 	fs.StringVar(&cfg.CodexExecutable, "codex-executable", "", "codex executable override")
 	fs.StringVar(&cfg.CopilotExecutable, "copilot-executable", "", "copilot executable override")
-	var externalCommandJSON string
 	var unattendedLaunchJSON string
-	fs.StringVar(&externalCommandJSON, "external-command-json", "", "external plugin driver argv as JSON")
+	fs.BoolVar(&cfg.AgentLoginShell, "agent-login-shell", false, "run the prepared agent through a login shell")
+	fs.Func("agent-arg", "prepared agent argument (repeat for each argument)", func(value string) error { cfg.AgentArgv = append(cfg.AgentArgv, value); return nil })
+	fs.Func("agent-env", "prepared agent environment entry (repeat for each entry)", func(value string) error { cfg.AgentEnv = append(cfg.AgentEnv, value); return nil })
 	fs.StringVar(&unattendedLaunchJSON, "unattended-launch-json", "", "immutable unattended launch contract as JSON")
 	fs.StringVar(&cfg.ExternalCWD, "external-cwd", "", "external plugin driver working directory")
 	fs.StringVar(&cfg.AdoptHandoff, "adopt-handoff", "", "handoff file left by the worker image this one replaces")
@@ -356,12 +353,7 @@ func runPTYWorker() {
 			os.Exit(1)
 		}
 	}
-	if externalCommandJSON != "" {
-		if err := json.Unmarshal([]byte(externalCommandJSON), &cfg.ExternalCommand); err != nil {
-			fmt.Fprintf(os.Stderr, "pty-worker error: invalid --external-command-json: %v\n", err)
-			os.Exit(1)
-		}
-	}
+
 	if unattendedLaunchJSON != "" {
 		if err := json.Unmarshal([]byte(unattendedLaunchJSON), &cfg.UnattendedLaunch); err != nil {
 			fmt.Fprintf(os.Stderr, "pty-worker error: invalid --unattended-launch-json: %v\n", err)
@@ -372,12 +364,7 @@ func runPTYWorker() {
 			os.Exit(1)
 		}
 	}
-	if externalEnvJSON := os.Getenv("ATTN_PTY_EXTERNAL_ENV"); externalEnvJSON != "" {
-		if err := json.Unmarshal([]byte(externalEnvJSON), &cfg.ExternalEnv); err != nil {
-			fmt.Fprintf(os.Stderr, "pty-worker error: invalid ATTN_PTY_EXTERNAL_ENV: %v\n", err)
-			os.Exit(1)
-		}
-	}
+
 	if daemonEnvJSON := os.Getenv("ATTN_PTY_DAEMON_ENV"); daemonEnvJSON != "" {
 		if err := json.Unmarshal([]byte(daemonEnvJSON), &cfg.DaemonEnv); err != nil {
 			fmt.Fprintf(os.Stderr, "pty-worker error: invalid ATTN_PTY_DAEMON_ENV: %v\n", err)
@@ -848,18 +835,6 @@ commands:
 
 The session defaults to the current session.
 `)
-}
-
-type notebookGuideClient interface {
-	NotebookGuide(sessionID protocol.SessionID) (*protocol.NotebookGuideResult, error)
-}
-
-func resolveChiefNotebookRoot(c notebookGuideClient, sessionID protocol.SessionID) string {
-	guide, err := c.NotebookGuide(sessionID)
-	if err != nil || guide == nil || !guide.SessionIsChief {
-		return ""
-	}
-	return guide.Root
 }
 
 type delegateCLIArgs struct {
@@ -1529,276 +1504,6 @@ func runWrapper() {
 	}
 
 	openAppWithDeepLink()
-}
-
-type directLaunchArgs struct {
-	label             string
-	resumeID          string
-	resumePicker      bool
-	yoloMode          bool
-	initialPromptFile string
-}
-
-func readInitialPromptFile(path string) (string, error) {
-	content, err := os.ReadFile(path)
-	_ = os.Remove(path)
-	if err != nil {
-		return "", err
-	}
-	return string(content), nil
-}
-
-func parseDirectLaunchArgs(args []string) (directLaunchArgs, error) {
-	parsed := directLaunchArgs{}
-	label := ""
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		switch arg {
-		case "-s":
-			if i+1 >= len(args) {
-				return directLaunchArgs{}, fmt.Errorf("flag -s needs a value")
-			}
-			label = args[i+1]
-			i++
-		case "--resume":
-			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
-				parsed.resumeID = args[i+1]
-				i++
-			} else {
-				parsed.resumePicker = true
-			}
-		case "--yolo":
-			parsed.yoloMode = true
-		case "--initial-prompt-file":
-			if i+1 >= len(args) {
-				return directLaunchArgs{}, fmt.Errorf("flag --initial-prompt-file needs a value")
-			}
-			parsed.initialPromptFile = args[i+1]
-			i++
-		default:
-			return directLaunchArgs{}, fmt.Errorf("unknown flag %q", arg)
-		}
-	}
-	if label == "" {
-		label = wrapper.DefaultLabel()
-	}
-	parsed.label = label
-	return parsed, nil
-}
-
-func mergeEnv(base []string, extra []string) []string {
-	if len(extra) == 0 {
-		return base
-	}
-	idx := map[string]int{}
-	merged := make([]string, 0, len(base)+len(extra))
-	add := func(entry string) {
-		key := entry
-		if split := strings.Index(entry, "="); split >= 0 {
-			key = entry[:split]
-		}
-		if pos, ok := idx[key]; ok {
-			merged[pos] = entry
-			return
-		}
-		idx[key] = len(merged)
-		merged = append(merged, entry)
-	}
-	for _, entry := range base {
-		add(entry)
-	}
-	for _, entry := range extra {
-		add(entry)
-	}
-	return merged
-}
-
-func runAgentDirectly(requestedAgent string) {
-	parsed, err := parseDirectLaunchArgs(os.Args[1:])
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "attn: %v\n\n", err)
-		writeHelp(os.Stderr)
-		os.Exit(1)
-	}
-
-	pathutil.EnsureGUIPath()
-
-	driver := agentdriver.Get(requestedAgent)
-	if driver == nil {
-		fmt.Fprintf(os.Stderr, "warning: unknown ATTN_AGENT %q, defaulting to codex\n", requestedAgent)
-		driver = agentdriver.MustGet("codex")
-	}
-	caps := agentdriver.EffectiveCapabilities(driver)
-
-	if !caps.HasResume && (parsed.resumeID != "" || parsed.resumePicker) {
-		fmt.Fprintf(os.Stderr, "warning: %s resume not supported yet (ignoring --resume)\n", driver.Name())
-		parsed.resumeID = ""
-		parsed.resumePicker = false
-	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error getting cwd: %v\n", err)
-		os.Exit(1)
-	}
-	initialPrompt := ""
-	if parsed.initialPromptFile != "" {
-		content, readErr := readInitialPromptFile(parsed.initialPromptFile)
-		if readErr != nil {
-			fmt.Fprintf(os.Stderr, "error reading initial prompt: %v\n", readErr)
-			os.Exit(1)
-		}
-		initialPrompt = content
-	}
-
-	c := client.New("")
-	terminalID := ownTerminalID()
-	sessionID := currentSessionOrExit()
-	if terminalID == "" {
-		fmt.Fprintf(os.Stderr, "attn: a daemon-managed launch needs ATTN_TERMINAL_ID; the daemon sets it for every agent it starts\n")
-		os.Exit(1)
-	}
-
-	opts := agentdriver.SpawnOpts{
-		TerminalID:      terminalID,
-		CWD:             cwd,
-		Label:           parsed.label,
-		InitialPrompt:   initialPrompt,
-		ResumeSessionID: parsed.resumeID,
-		ResumePicker:    parsed.resumePicker,
-		YoloMode:        parsed.yoloMode,
-		Executable:      driver.ResolveExecutable(""),
-		SocketPath:      config.SocketPath(),
-		WrapperPath:     resolveWrapperPath(),
-	}
-
-	if preparer, ok := driver.(agentdriver.LaunchPreparer); ok {
-		if err := preparer.PrepareLaunch(opts); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: launch preparation failed for %s: %v\n", driver.Name(), err)
-		}
-	}
-
-	cleanupFns := []func(){}
-	cleanup := func() {
-		for i := len(cleanupFns) - 1; i >= 0; i-- {
-			cleanupFns[i]()
-		}
-	}
-
-	hasHooks := false
-	if agentdriver.EffectiveCapabilities(driver).HasLaunchInstructions {
-		opts.NotebookRoot = resolveChiefNotebookRoot(c, sessionID)
-	}
-	if _, err := c.SeedReady(sessionID, "", false); err == nil {
-		opts.Garden = true
-	}
-	opts.SelfReportPullRequests = !caps.HasHooks
-	if prime, err := c.CrewPrime(sessionID); err == nil {
-		opts.CrewPriming = protocol.Deref(prime.Guidance)
-		opts.AwarenessDirs = prime.AwarenessDirs
-	}
-	opts.AutoApprove = consumeOneShotBoolEnv("ATTN_AUTO_APPROVE")
-	opts.TrustWorkingDirectory = consumeOneShotBoolEnv("ATTN_TRUST_WORKING_DIRECTORY")
-	opts.Model = consumeOneShotEnv("ATTN_MODEL")
-	opts.Effort = consumeOneShotEnv("ATTN_EFFORT")
-	window := consumeOneShotEnv("ATTN_AUTO_COMPACT_WINDOW")
-	if window == "" {
-		window = consumeOneShotEnv("ATTN_CHIEF_AUTO_COMPACT_WINDOW")
-	}
-	if window != "" {
-		if n, err := strconv.Atoi(window); err == nil && n > 0 {
-			opts.AutoCompactWindow = n
-		}
-	}
-	if cp, ok := agentdriver.GetConfigOverrideProvider(driver); ok {
-		opts.ConfigOverrides = cp.GenerateConfigOverrides(opts)
-	}
-	if hp, ok := agentdriver.GetHookProvider(driver); ok {
-		opts.HookSettings = hp.GenerateHooksConfig(opts)
-		hasHooks = true
-	}
-	if ip, ok := agentdriver.GetInstructionsFileProvider(driver); ok {
-		name, content := ip.GenerateInstructionsFile(opts)
-		if strings.TrimSpace(content) != "" {
-			dir, err := wrapper.WriteInstructionsDir(os.TempDir(), string(terminalID), name, content)
-			if err != nil {
-				cleanup()
-				fmt.Fprintf(os.Stderr, "error writing launch instructions: %v\n", err)
-				os.Exit(1)
-			}
-			opts.InstructionsDir = dir
-			cleanupFns = append(cleanupFns, func() { wrapper.CleanupInstructionsDir(dir) })
-		}
-	}
-
-	cmd := driver.BuildCommand(opts)
-	cmd.Dir = cwd
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	config.ScrubAgentSessionIdentityEnv()
-	cmd.Env = mergeEnv(os.Environ(), driver.BuildEnv(opts))
-
-	startedAt := time.Now()
-	if err := cmd.Start(); err != nil {
-		cleanup()
-		fmt.Fprintf(os.Stderr, "error starting %s: %v\n", driver.Name(), err)
-		os.Exit(1)
-	}
-
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
-	go func() {
-		<-sigChan
-		if cmd.Process != nil {
-			_ = cmd.Process.Signal(syscall.SIGTERM)
-		}
-	}()
-
-	err = cmd.Wait()
-
-	if !hasHooks {
-		transcriptPath := ""
-		if tf, ok := agentdriver.GetTranscriptFinder(driver); ok {
-			if opts.ResumeSessionID != "" {
-				transcriptPath = tf.FindTranscriptForResume(opts.ResumeSessionID)
-			}
-			if transcriptPath == "" {
-				transcriptPath = tf.FindTranscript(string(terminalID), cwd, startedAt)
-			}
-		}
-		if sendErr := c.SendStop(terminalID, transcriptPath, client.StopFacts{}); sendErr != nil {
-			fmt.Fprintf(os.Stderr, "warning: could not send stop: %v\n", sendErr)
-		}
-	}
-
-	cleanup()
-
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			os.Exit(exitErr.ExitCode())
-		}
-		os.Exit(1)
-	}
-}
-
-func consumeOneShotBoolEnv(key string) bool {
-	return consumeOneShotEnv(key) == "1"
-}
-
-func consumeOneShotEnv(key string) string {
-	value := strings.TrimSpace(os.Getenv(key))
-	_ = os.Unsetenv(key)
-	return value
-}
-
-func resolveWrapperPath() string {
-	if value := strings.TrimSpace(os.Getenv("ATTN_WRAPPER_PATH")); value != "" {
-		return value
-	}
-	if exePath, err := os.Executable(); err == nil && strings.TrimSpace(exePath) != "" {
-		return exePath
-	}
-	return "attn"
 }
 
 func openAppWithDeepLink() {

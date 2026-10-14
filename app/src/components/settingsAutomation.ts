@@ -8,6 +8,7 @@ const SETTINGS_SECTION_IDS = [
   'models',
   'backgroundAgents',
   'terminal',
+  'experimental',
   'autoMode',
   'delegation',
   'connectivity',

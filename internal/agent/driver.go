@@ -187,7 +187,8 @@ type SpawnOpts struct {
 
 	SelfReportPullRequests bool
 
-	InstructionsDir string
+	InheritedInstructionsDirs string
+	InstructionsDir           string
 }
 
 func (o SpawnOpts) addDirArgs() []string {

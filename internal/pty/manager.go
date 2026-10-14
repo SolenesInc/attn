@@ -10,7 +10,6 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -18,8 +17,8 @@ import (
 
 	creackpty "github.com/creack/pty"
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/ghosttyvt"
-	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/launchenv"
 	"github.com/victorarias/attn/internal/pausepoint"
 )
@@ -37,35 +36,18 @@ type SpawnOptions struct {
 	ID    string
 	CWD   string
 	Agent string
-	Label string
 
 	Cols uint16
 	Rows uint16
 
-	ResumeSessionID   string
-	ResumePicker      bool
-	YoloMode          bool
-	InitialPromptFile string
-
-	Executable string
-
-	ClaudeExecutable  string
-	CodexExecutable   string
-	CopilotExecutable string
-	ExternalCommand   []string
-	ExternalEnv       []string
-	ExternalCWD       string
-	DaemonEnv         []string
-	LifecycleID       string
+	AgentLoginShell bool
+	AgentArgv       []string
+	AgentEnv        []string
+	ExternalCWD     string
+	DaemonEnv       []string
+	LifecycleID     string
 
 	LoginShellEnv []string
-
-	AutoApprove           bool
-	TrustWorkingDirectory bool
-	Model                 string
-	Effort                string
-	ContextWindowCap      int
-	UnattendedLaunch      launchcontract.UnattendedLaunchSpec
 
 	Theme TerminalTheme
 }
@@ -179,18 +161,7 @@ func (m *Manager) Spawn(opts SpawnOptions) error {
 	if opts.CWD == "" {
 		return errors.New("missing cwd")
 	}
-	if !opts.UnattendedLaunch.IsZero() {
-		if err := opts.UnattendedLaunch.Validate(); err != nil {
-			return err
-		}
-		if strings.TrimSpace(strings.ToLower(opts.Agent)) != strings.TrimSpace(strings.ToLower(opts.UnattendedLaunch.Agent)) {
-			return fmt.Errorf("unattended launch agent %q does not match spawn agent %q", opts.UnattendedLaunch.Agent, opts.Agent)
-		}
-		if opts.AutoApprove || opts.TrustWorkingDirectory || strings.TrimSpace(opts.Model) != "" ||
-			strings.TrimSpace(opts.Effort) != "" || strings.TrimSpace(opts.Executable) != "" {
-			return errors.New("unattended launch policy must not be duplicated in spawn options")
-		}
-	}
+
 	if opts.Cols == 0 {
 		opts.Cols = 80
 	}
@@ -553,35 +524,19 @@ func normalizeAgent(agent string, external bool) string {
 	return "codex"
 }
 
-func buildSpawnCommand(opts SpawnOptions, agent, shellPath, attnPath string, env []string) *exec.Cmd {
+func buildSpawnCommand(opts SpawnOptions, agent, shellPath string, env []string) *exec.Cmd {
 	if agent == "shell" {
 		return exec.Command(shellPath, "-l")
 	}
-	if len(opts.ExternalCommand) > 0 {
-		command := opts.ExternalCommand[0]
-		if resolved, ok := resolveExternalCommandPath(command, env); ok {
-			command = resolved
-		}
-		return exec.Command(command, opts.ExternalCommand[1:]...)
+	if opts.AgentLoginShell {
+		overlay := MergeEnvironment(pathOverlay(env), opts.AgentEnv)
+		return loginShellCommand(shellPath, opts.AgentArgv, overlay)
 	}
-
-	args := []string{attnPath}
-	if opts.Label != "" {
-		args = append(args, "-s", opts.Label)
+	command := opts.AgentArgv[0]
+	if resolved, ok := resolveAgentArgvPath(command, env); ok {
+		command = resolved
 	}
-	if opts.ResumeSessionID != "" {
-		args = append(args, "--resume", opts.ResumeSessionID)
-	} else if opts.ResumePicker {
-		args = append(args, "--resume")
-	}
-	if opts.YoloMode {
-		args = append(args, "--yolo")
-	}
-	if opts.InitialPromptFile != "" {
-		args = append(args, "--initial-prompt-file", opts.InitialPromptFile)
-	}
-
-	return loginShellCommand(shellPath, args, pathOverlay(env))
+	return exec.Command(command, opts.AgentArgv[1:]...)
 }
 
 func pathOverlay(env []string) []string {
@@ -607,7 +562,7 @@ func loginShellCommand(shellPath string, argv, overlay []string) *exec.Cmd {
 	return exec.Command(shellPath, args...)
 }
 
-func resolveExternalCommandPath(command string, env []string) (string, bool) {
+func resolveAgentArgvPath(command string, env []string) (string, bool) {
 	command = strings.TrimSpace(command)
 	if command == "" || strings.ContainsRune(command, filepath.Separator) {
 		return "", false
@@ -643,52 +598,6 @@ func readCachedShellEnvFromProcess() []string {
 
 func buildSpawnEnv(loginShell string, opts SpawnOptions, agent, wrapperPath string, logf LogFunc) []string {
 	env := os.Environ()
-	launchEnv := []string(nil)
-	launchKeys := []string{
-		"ATTN_AUTO_APPROVE",
-		"ATTN_TRUST_WORKING_DIRECTORY",
-		"ATTN_MODEL",
-		"ATTN_EFFORT",
-		"ATTN_AUTO_COMPACT_WINDOW",
-	}
-	if os.Getenv("ATTN_PTY_WORKER") == "1" {
-		inheritedKeys := launchKeys
-		if !opts.UnattendedLaunch.IsZero() {
-			inheritedKeys = []string{"ATTN_AUTO_COMPACT_WINDOW"}
-		}
-		for _, key := range inheritedKeys {
-			if value, ok := os.LookupEnv(key); ok {
-				launchEnv = append(launchEnv, key+"="+value)
-			}
-		}
-	}
-	if opts.AutoApprove {
-		launchEnv = append(launchEnv, "ATTN_AUTO_APPROVE=1")
-	}
-	if opts.TrustWorkingDirectory {
-		launchEnv = append(launchEnv, "ATTN_TRUST_WORKING_DIRECTORY=1")
-	}
-	if model := strings.TrimSpace(opts.Model); model != "" {
-		launchEnv = append(launchEnv, "ATTN_MODEL="+model)
-	}
-	if effort := strings.TrimSpace(opts.Effort); effort != "" {
-		launchEnv = append(launchEnv, "ATTN_EFFORT="+effort)
-	}
-	if opts.ContextWindowCap > 0 {
-		launchEnv = append(launchEnv, "ATTN_AUTO_COMPACT_WINDOW="+strconv.Itoa(opts.ContextWindowCap))
-	}
-	if launch := opts.UnattendedLaunch; !launch.IsZero() {
-		launchEnv = append(launchEnv,
-			"ATTN_AUTO_APPROVE=1",
-			"ATTN_TRUST_WORKING_DIRECTORY=1",
-		)
-		if model := strings.TrimSpace(launch.Model); model != "" {
-			launchEnv = append(launchEnv, "ATTN_MODEL="+model)
-		}
-		if effort := strings.TrimSpace(launch.Effort); effort != "" {
-			launchEnv = append(launchEnv, "ATTN_EFFORT="+effort)
-		}
-	}
 
 	shellEnv := opts.LoginShellEnv
 	if len(shellEnv) == 0 {
@@ -703,12 +612,10 @@ func buildSpawnEnv(loginShell string, opts SpawnOptions, agent, wrapperPath stri
 			logf("pty spawn: failed to capture login shell env from %s: %v", loginShell, err)
 		}
 	}
-	env = filterEnvKeys(env, launchKeys...)
-	env = MergeEnvironment(env, launchEnv)
-	env = filterEnvKeys(env, "ATTN_PTY_WORKER", "ATTN_CACHED_SHELL_ENV", "ATTN_PTY_EXTERNAL_ENV", "ATTN_PTY_DAEMON_ENV",
+	env = filterEnvKeys(env, "ATTN_DAEMON_MANAGED", "ATTN_AUTO_APPROVE", "ATTN_TRUST_WORKING_DIRECTORY", "ATTN_MODEL", "ATTN_EFFORT", "ATTN_AUTO_COMPACT_WINDOW", "ATTN_CHIEF_AUTO_COMPACT_WINDOW", "ATTN_PTY_WORKER", "ATTN_CACHED_SHELL_ENV", "ATTN_PTY_DAEMON_ENV",
 		pausepoint.EnvPoints, pausepoint.EnvSocket)
 
-	env = filterEnvKeys(env, "CLAUDECODE")
+	env = config.WithoutAgentSessionIdentityEnv(env)
 
 	env = filterEnvKeys(env, "NO_COLOR")
 
@@ -719,58 +626,20 @@ func buildSpawnEnv(loginShell string, opts SpawnOptions, agent, wrapperPath stri
 	if agent != "shell" {
 		env = MergeEnvironment(env, []string{
 			"ATTN_INSIDE_APP=1",
-			"ATTN_DAEMON_MANAGED=1",
 			"ATTN_TERMINAL_ID=" + opts.ID,
 			"ATTN_AGENT=" + agent,
 		})
 		if wrapperPath != "" {
 			env = MergeEnvironment(env, []string{"ATTN_WRAPPER_PATH=" + wrapperPath})
 		}
-
-		executable := configuredExecutableForAgent(opts, agent)
-		if d := agentdriver.Get(agent); d != nil {
-			envKey := strings.TrimSpace(d.ExecutableEnvVar())
-			if envKey != "" && executable != "" && executable != d.DefaultExecutable() {
-				env = MergeEnvironment(env, []string{envKey + "=" + executable})
-			}
-		} else {
-			if opts.ClaudeExecutable != "" && opts.ClaudeExecutable != "claude" {
-				env = MergeEnvironment(env, []string{"ATTN_CLAUDE_EXECUTABLE=" + opts.ClaudeExecutable})
-			}
-			if opts.CodexExecutable != "" && opts.CodexExecutable != "codex" {
-				env = MergeEnvironment(env, []string{"ATTN_CODEX_EXECUTABLE=" + opts.CodexExecutable})
-			}
-			if opts.CopilotExecutable != "" && opts.CopilotExecutable != "copilot" {
-				env = MergeEnvironment(env, []string{"ATTN_COPILOT_EXECUTABLE=" + opts.CopilotExecutable})
-			}
-		}
 	}
-	if len(opts.ExternalEnv) > 0 {
-		env = MergeEnvironment(env, opts.ExternalEnv)
+	if len(opts.AgentEnv) > 0 {
+		env = MergeEnvironment(env, opts.AgentEnv)
 	}
-	env = filterEnvKeys(env, "ATTN_PTY_WORKER", "ATTN_CACHED_SHELL_ENV", "ATTN_PTY_EXTERNAL_ENV", "ATTN_PTY_DAEMON_ENV",
+	env = filterEnvKeys(env, "ATTN_DAEMON_MANAGED", "ATTN_AUTO_APPROVE", "ATTN_TRUST_WORKING_DIRECTORY", "ATTN_MODEL", "ATTN_EFFORT", "ATTN_AUTO_COMPACT_WINDOW", "ATTN_CHIEF_AUTO_COMPACT_WINDOW", "ATTN_PTY_WORKER", "ATTN_CACHED_SHELL_ENV", "ATTN_PTY_DAEMON_ENV",
 		pausepoint.EnvPoints, pausepoint.EnvSocket)
 	env = MergeEnvironment(env, opts.DaemonEnv)
 	return env
-}
-
-func configuredExecutableForAgent(opts SpawnOptions, agent string) string {
-	if !opts.UnattendedLaunch.IsZero() {
-		return strings.TrimSpace(opts.UnattendedLaunch.Executable)
-	}
-	if strings.TrimSpace(opts.Executable) != "" {
-		return strings.TrimSpace(opts.Executable)
-	}
-	switch agent {
-	case "claude":
-		return strings.TrimSpace(opts.ClaudeExecutable)
-	case "codex":
-		return strings.TrimSpace(opts.CodexExecutable)
-	case "copilot":
-		return strings.TrimSpace(opts.CopilotExecutable)
-	default:
-		return ""
-	}
 }
 
 func ReadLoginShellEnv(shellPath string) ([]string, error) {

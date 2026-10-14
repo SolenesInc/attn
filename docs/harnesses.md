@@ -45,13 +45,9 @@ Probed on 2.1.288 with a mock API.
   `clear`, then a turn and Stop on the new id with no UserPromptSubmit.
 - The transcript is `<config>/projects/<cwd-slug>/<id>.jsonl`; attn reads the
   conversation id from that name.
-
-### Inline hook settings
-
-Probed on Claude Code 2.1.296 on macOS and Linux. `--settings <JSON>`
-accepts hook settings inline. SessionStart, UserPromptSubmit and Stop fire
-with the same conversation id as `--session-id`, including when launched
-through a fish login shell with settings passed as a positional argument.
+- `--settings <JSON>` accepts inline hook settings (probed on 2.1.296 on
+  macOS and Linux). SessionStart, UserPromptSubmit and Stop use the
+  `--session-id` conversation id.
 
 ### Program status (OSC 7501)
 

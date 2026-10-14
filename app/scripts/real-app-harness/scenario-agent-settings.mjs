@@ -86,6 +86,16 @@ try {
   await Promise.all(Object.entries({ default_model_codex: '', default_effort_codex: '', default_context_window_cap_codex: '', 'session_cost.price.settings-check-model': '', chief_model_claude: '', 'garden.advisor': '{"agent":"codex","model":"gpt-5.6-luna","effort":"xhigh"}', new_session_agent: 'codex' }).map(([key, value]) => set(key, value)));
   await client.request('dismiss_whats_new');
   await client.request('dispatch_shortcut', { shortcutId: 'ui.openSettings' });
+  await runner.step('experimental_direct_launch_switch', async () => {
+    await section('experimental');
+    runner.assert((await text('.settings-content-head h1')) === 'Experimental', 'Experimental has its own settings section');
+    const toggle = '[data-testid="settings-direct-agent-launch-toggle"]';
+    runner.assert((await text(toggle)).trim() === 'Enable', 'direct agent launches are off by default');
+    await saved('direct_agent_launch_enabled', 'true', () => click(toggle));
+    await screenshot('00-experimental.png');
+    await saved('direct_agent_launch_enabled', 'false', () => click(toggle));
+    await set('direct_agent_launch_enabled', 'true');
+  });
   await runner.step('agent_sections_and_keyboard_save', async () => {
     await section('agents');
     runner.assert((await text('.settings-content-head h1')) === 'Agents and models', 'navigation and page agree');

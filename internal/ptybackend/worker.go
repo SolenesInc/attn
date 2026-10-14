@@ -509,11 +509,14 @@ func (b *WorkerBackend) spawnArgs(opts SpawnOptions, session *workerSession) ([]
 	if opts.YoloMode {
 		args = append(args, "--yolo-mode")
 	}
+	if opts.Model != "" {
+		args = append(args, "--model", opts.Model)
+	}
+	if opts.Effort != "" {
+		args = append(args, "--effort", opts.Effort)
+	}
 	if opts.ApprovalRoute != "" {
 		args = append(args, "--approval-route", string(opts.ApprovalRoute))
-	}
-	if opts.InitialPromptFile != "" {
-		args = append(args, "--initial-prompt-file", opts.InitialPromptFile)
 	}
 	if opts.Theme.Foreground != "" {
 		args = append(args, "--theme-foreground", opts.Theme.Foreground)
@@ -543,12 +546,14 @@ func (b *WorkerBackend) spawnArgs(opts SpawnOptions, session *workerSession) ([]
 	if opts.CopilotExecutable != "" {
 		args = append(args, "--copilot-executable", opts.CopilotExecutable)
 	}
-	if len(opts.ExternalCommand) > 0 {
-		encoded, err := json.Marshal(opts.ExternalCommand)
-		if err != nil {
-			return nil, fmt.Errorf("encode external command: %w", err)
-		}
-		args = append(args, "--external-command-json", string(encoded))
+	if opts.AgentLoginShell {
+		args = append(args, "--agent-login-shell")
+	}
+	for _, arg := range opts.AgentArgv {
+		args = append(args, "--agent-arg", arg)
+	}
+	for _, entry := range opts.AgentEnv {
+		args = append(args, "--agent-env", entry)
 	}
 	args, err := appendUnattendedLaunchArgs(args, opts.UnattendedLaunch)
 	if err != nil {
@@ -647,36 +652,13 @@ func (b *WorkerBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 		"ATTN_EFFORT",
 		"ATTN_AUTO_COMPACT_WINDOW",
 		"ATTN_CACHED_SHELL_ENV",
-		"ATTN_PTY_EXTERNAL_ENV",
 		"ATTN_PTY_DAEMON_ENV",
 	)
 	workerEnv = append(workerEnv, "ATTN_PTY_WORKER=1")
-	if opts.AutoApprove {
-		workerEnv = append(workerEnv, "ATTN_AUTO_APPROVE=1")
-	}
-	if opts.TrustWorkingDirectory {
-		workerEnv = append(workerEnv, "ATTN_TRUST_WORKING_DIRECTORY=1")
-	}
-	if model := strings.TrimSpace(opts.Model); model != "" {
-		workerEnv = append(workerEnv, "ATTN_MODEL="+model)
-	}
-	if effort := strings.TrimSpace(opts.Effort); effort != "" {
-		workerEnv = append(workerEnv, "ATTN_EFFORT="+effort)
-	}
-	if opts.ContextWindowCap > 0 {
-		workerEnv = append(workerEnv, "ATTN_AUTO_COMPACT_WINDOW="+strconv.Itoa(opts.ContextWindowCap))
-	}
 	if len(opts.LoginShellEnv) > 0 {
 		if envJSON, err := json.Marshal(opts.LoginShellEnv); err == nil {
 			workerEnv = append(workerEnv, "ATTN_CACHED_SHELL_ENV="+string(envJSON))
 		}
-	}
-	if len(opts.ExternalEnv) > 0 {
-		envJSON, err := json.Marshal(opts.ExternalEnv)
-		if err != nil {
-			return fmt.Errorf("encode external environment: %w", err)
-		}
-		workerEnv = append(workerEnv, "ATTN_PTY_EXTERNAL_ENV="+string(envJSON))
 	}
 	if len(opts.DaemonEnv) > 0 {
 		envJSON, err := json.Marshal(opts.DaemonEnv)
