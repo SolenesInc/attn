@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/victorarias/attn/internal/crew"
 
 	"github.com/victorarias/attn/internal/bus"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
@@ -440,19 +442,18 @@ func (d *Daemon) handleDesktopClose(client *wsClient, msg *protocol.DesktopClose
 			if len(protected) > 0 {
 				return profileActionOutcome{}, profiles.Errorf(profiles.CodeInvalid, "Cannot close desktop: move these protected sessions first: %s", strings.Join(protected, "; "))
 			}
-			profile, sessions, err := d.store.CloseDesktop(msg.DesktopID, int64(msg.ExpectedRevision))
+			profile, err := d.store.CloseDesktop(msg.DesktopID, int64(msg.ExpectedRevision))
 			if err != nil {
 				return profileActionOutcome{}, err
 			}
 			var failures []string
-			for _, id := range sessions {
-				name := d.desktopSessionName(id)
-				closing, err := d.beginSessionCloseAsUser(id, store.SessionClose{By: store.SessionClosedByUser}, nil)
-				if err != nil {
-					failures = append(failures, name+": "+err.Error())
+			for _, tile := range desktop.Panes {
+				if tile.SessionID == "" {
 					continue
 				}
-				d.finishSessionClose(id, closing)
+				if err := d.closeTile(client, tile); err != nil {
+					failures = append(failures, d.desktopSessionName(tile.SessionID)+": "+err.Error())
+				}
 			}
 			d.publishArrangementChanged(profile.ID)
 			if len(failures) > 0 {
@@ -516,6 +517,11 @@ func (d *Daemon) leafShown(client *wsClient, profile profiles.Profile, desktop p
 
 func (d *Daemon) handleDesktopShowSession(client *wsClient, msg *protocol.DesktopShowSessionMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
+		if d.hidden(msg.SessionID) {
+			if err := d.showHidden(msg.SessionID); err != nil {
+				return profileActionOutcome{}, err
+			}
+		}
 		profile, desktop, leafID, err := d.store.ShowSession(msg.SessionID)
 		if err != nil {
 			return profileActionOutcome{}, err
@@ -609,6 +615,43 @@ func (d *Daemon) handleDesktopRemoveLeaf(client *wsClient, msg *protocol.Desktop
 		desktop, err := d.store.RemoveLeaf(msg.DesktopID, msg.LeafID)
 		return d.desktopChanged(desktop), err
 	})
+}
+
+func (d *Daemon) handleDesktopCloseTile(client *wsClient, msg *protocol.DesktopCloseTileMessage) {
+	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
+		desktop, err := d.store.GetDesktop(msg.DesktopID)
+		if err != nil {
+			return profileActionOutcome{}, err
+		}
+		i := slices.IndexFunc(desktop.Panes, func(pane profiles.Pane) bool { return pane.PaneID == msg.TileID })
+		if i < 0 {
+			return profileActionOutcome{}, profiles.Errorf(profiles.CodeNotFound, "desktop %s has no terminal tile %s", msg.DesktopID, msg.TileID)
+		}
+		if err := d.closeTile(client, desktop.Panes[i]); err != nil {
+			return profileActionOutcome{}, err
+		}
+		desktop, err = d.store.GetDesktop(msg.DesktopID)
+		return profileActionOutcome{desktops: []profiles.Desktop{desktop}, arranges: true}, err
+	})
+}
+
+func (d *Daemon) closeTile(client *wsClient, tile profiles.Pane) error {
+	t := harness.TerminalID(tile.RuntimeID)
+	if d.movedOn(tile.SessionID, t) {
+		d.hide(tile.SessionID, t)
+		d.detachSession(client, tile.RuntimeID)
+		return nil
+	}
+	if !d.closeTerminal(tile.SessionID, t) {
+		d.detachSession(client, tile.RuntimeID)
+		return nil
+	}
+	closing, err := d.beginSessionCloseAsUser(tile.SessionID, store.SessionClose{By: store.SessionClosedByUser}, client)
+	if err != nil {
+		return err
+	}
+	d.finishSessionClose(tile.SessionID, closing)
+	return nil
 }
 
 func (d *Daemon) handleDesktopSetSplitRatio(client *wsClient, msg *protocol.DesktopSetSplitRatioMessage) {

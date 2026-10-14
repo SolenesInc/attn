@@ -173,6 +173,16 @@
           }
         },
         {
+          "id": "codex-opened",
+          "delivery": "instructions",
+          "description": "Developer note appended to each new shared Codex conversation. It writes the conversation to disk at once; Codex resumes only conversations on disk, so a terminal reconnecting after a restart keeps it.",
+          "body": {
+            "kind": "text",
+            "id": "session.codex-opened",
+            "source": "content/session/codex-opened.md"
+          }
+        },
+        {
           "id": "garden-ready",
           "delivery": "hook_context",
           "description": "Garden readiness appended by session-start hooks and attn seed prime.",
@@ -4556,5 +4566,5 @@
       ]
     }
   ],
-  "definitions_hash": "a0e94b80d4612d7d054fa2903c3ae3162c2e41b671638d31f1d23766635dcc41"
+  "definitions_hash": "ce9779ccf9718c38493ad28c3fa59b2f404a0f35e7bcc76df2df66269aa4db2b"
 }

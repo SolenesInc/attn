@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/victorarias/attn/internal/sessioncost"
 )
@@ -67,14 +68,28 @@ func (r *claudeUsageSourceResolver) Discover() ([]UsageSource, error) {
 
 func NewCodexUsageSourceResolver(rootPath string) UsageSourceResolver {
 	return &codexUsageSourceResolver{
-		rootPath: filepath.Clean(rootPath),
+		rootPath: codexUsageSourceIdentity(filepath.Clean(rootPath)),
 		cache:    make(map[string]codexUsageCandidate),
 	}
 }
 
+func ResolveCodexRolloutPath(path string) string {
+	path = codexUsageSourceIdentity(filepath.Clean(path))
+	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
+		if sessionsDir := codexSessionsRoot(path); sessionsDir != "" {
+			return filepath.Join(filepath.Dir(sessionsDir), "archived_sessions", filepath.Base(path))
+		}
+	}
+	return path
+}
+
 type codexUsageSourceResolver struct {
-	rootPath string
-	cache    map[string]codexUsageCandidate
+	rootPath       string
+	cache          map[string]codexUsageCandidate
+	archiveInfo    os.FileInfo
+	archiveLoaded  bool
+	archived       map[string]codexUsageCandidate
+	archiveLineage map[string]struct{}
 }
 
 type codexUsageCandidate struct {
@@ -86,16 +101,17 @@ type codexUsageCandidate struct {
 }
 
 func (r *codexUsageSourceResolver) Discover() ([]UsageSource, error) {
-	rootMeta, err := r.candidate(r.rootPath)
+	rootPath := ResolveCodexRolloutPath(r.rootPath)
+	sessionsDir := codexSessionsRoot(r.rootPath)
+	rootMeta, err := r.candidate(rootPath)
 	if err != nil {
 		return nil, err
 	}
 	if !rootMeta.complete || rootMeta.id == "" {
-		return []UsageSource{{ID: r.rootPath, Path: r.rootPath, Root: true}}, nil
+		return []UsageSource{{ID: r.rootPath, Path: rootPath, Root: true}}, nil
 	}
-	sessionsDir := codexSessionsRoot(r.rootPath)
 	if sessionsDir == "" {
-		return []UsageSource{{ID: r.rootPath, Path: r.rootPath, Root: true}}, nil
+		return []UsageSource{{ID: r.rootPath, Path: rootPath, Root: true}}, nil
 	}
 
 	paths := make([]string, 0)
@@ -103,7 +119,7 @@ func (r *codexUsageSourceResolver) Discover() ([]UsageSource, error) {
 		if walkErr != nil {
 			return nil
 		}
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".jsonl" || path == r.rootPath {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".jsonl" || path == rootPath {
 			return nil
 		}
 		paths = append(paths, path)
@@ -123,9 +139,104 @@ func (r *codexUsageSourceResolver) Discover() ([]UsageSource, error) {
 		candidates[path] = candidate
 	}
 
-	lineage := map[string]struct{}{rootMeta.id: {}}
-	sources := []UsageSource{{ID: r.rootPath, Path: r.rootPath, Root: true}}
-	remaining := candidates
+	archiveDir := filepath.Join(filepath.Dir(sessionsDir), "archived_sessions")
+	archiveInfo, statErr := os.Stat(archiveDir)
+	if statErr != nil && !errors.Is(statErr, fs.ErrNotExist) {
+		return nil, statErr
+	}
+	refresh := !r.archiveLoaded || !sameUsageDirectory(r.archiveInfo, archiveInfo)
+	for path, candidate := range r.archived {
+		if !candidate.complete {
+			if next, candidateErr := r.candidate(path); candidateErr == nil {
+				candidate = next
+				refresh = refresh || next.complete
+			}
+		}
+		candidates[path] = candidate
+	}
+	root := UsageSource{ID: r.rootPath, Path: rootPath, Root: true}
+	sources, lineage := codexUsageLineage(rootMeta.id, root, candidates)
+	for id := range lineage {
+		if _, known := r.archiveLineage[id]; !known {
+			refresh = true
+		}
+	}
+	if !refresh {
+		return sources, nil
+	}
+
+	for path := range r.archived {
+		delete(candidates, path)
+	}
+	archivePaths := make([]string, 0)
+	entries, readErr := os.ReadDir(archiveDir)
+	if readErr != nil && !errors.Is(readErr, fs.ErrNotExist) {
+		return nil, readErr
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".jsonl" {
+			continue
+		}
+		path := filepath.Join(archiveDir, entry.Name())
+		if path == rootPath {
+			continue
+		}
+		archivePaths = append(archivePaths, path)
+		candidate, candidateErr := codexUsageCandidateAt(path, nil)
+		if errors.Is(candidateErr, fs.ErrNotExist) {
+			continue
+		}
+		if candidateErr != nil {
+			return nil, candidateErr
+		}
+		candidates[path] = candidate
+	}
+	sources, lineage = codexUsageLineage(rootMeta.id, root, candidates)
+	matched := make(map[string]struct{}, len(sources))
+	for _, source := range sources {
+		matched[source.Path] = struct{}{}
+	}
+	r.archived = make(map[string]codexUsageCandidate)
+	for _, path := range archivePaths {
+		candidate, exists := candidates[path]
+		_, belongs := matched[path]
+		if exists && (belongs || !candidate.complete) {
+			r.archived[path] = candidate
+			r.cache[path] = candidate
+		} else {
+			delete(r.cache, path)
+		}
+	}
+	for path := range r.cache {
+		if filepath.Dir(path) == archiveDir && path != rootPath {
+			if _, retained := r.archived[path]; !retained {
+				delete(r.cache, path)
+			}
+		}
+	}
+	r.archiveInfo, r.archiveLoaded, r.archiveLineage = archiveInfo, true, lineage
+	return sources, nil
+}
+
+func sameUsageDirectory(a, b os.FileInfo) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return os.SameFile(a, b) && a.ModTime() == b.ModTime() && a.Size() == b.Size()
+}
+
+func codexUsageLineage(rootID string, root UsageSource, candidates map[string]codexUsageCandidate) ([]UsageSource, map[string]struct{}) {
+	paths := make([]string, 0, len(candidates))
+	remaining := make(map[string]codexUsageCandidate, len(candidates))
+	for path, candidate := range candidates {
+		if candidate.complete && candidate.id != "" && candidate.parentID != "" {
+			paths = append(paths, path)
+			remaining[path] = candidate
+		}
+	}
+	sort.Strings(paths)
+	lineage := map[string]struct{}{rootID: {}}
+	sources := []UsageSource{root}
 	for len(remaining) > 0 {
 		added := false
 		for _, path := range paths {
@@ -145,15 +256,19 @@ func (r *codexUsageSourceResolver) Discover() ([]UsageSource, error) {
 			break
 		}
 	}
-	return sources, nil
+	return sources, lineage
 }
 
 func (r *codexUsageSourceResolver) candidate(path string) (codexUsageCandidate, error) {
+	return codexUsageCandidateAt(path, r.cache)
+}
+
+func codexUsageCandidateAt(path string, cache map[string]codexUsageCandidate) (codexUsageCandidate, error) {
 	info, err := os.Stat(path)
 	if err != nil {
 		return codexUsageCandidate{}, err
 	}
-	if cached, ok := r.cache[path]; ok && (cached.complete || cached.size == info.Size()) {
+	if cached, ok := cache[path]; ok && (cached.complete || cached.size == info.Size()) {
 		return cached, nil
 	}
 	candidate := codexUsageCandidate{size: info.Size()}
@@ -162,7 +277,9 @@ func (r *codexUsageSourceResolver) candidate(path string) (codexUsageCandidate, 
 		return codexUsageCandidate{}, err
 	}
 	if !complete {
-		r.cache[path] = candidate
+		if cache != nil {
+			cache[path] = candidate
+		}
 		return candidate, nil
 	}
 	var envelope struct {
@@ -182,7 +299,9 @@ func (r *codexUsageSourceResolver) candidate(path string) (codexUsageCandidate, 
 			candidate.purpose = sessioncost.PurposeGuardian
 		}
 	}
-	r.cache[path] = candidate
+	if cache != nil {
+		cache[path] = candidate
+	}
 	return candidate, nil
 }
 
@@ -230,8 +349,23 @@ func codexSessionsRoot(path string) string {
 		if filepath.Base(dir) == "sessions" {
 			return dir
 		}
+		if filepath.Base(dir) == "archived_sessions" {
+			return filepath.Join(filepath.Dir(dir), "sessions")
+		}
 	}
 	return ""
+}
+
+func codexUsageSourceIdentity(path string) string {
+	if filepath.Base(filepath.Dir(path)) != "archived_sessions" {
+		return path
+	}
+	stamp, _, _ := strings.Cut(strings.TrimPrefix(filepath.Base(path), "rollout-"), "T")
+	date, err := time.Parse("2006-01-02", stamp)
+	if err != nil {
+		return path
+	}
+	return filepath.Join(filepath.Dir(filepath.Dir(path)), "sessions", date.Format("2006/01/02"), filepath.Base(path))
 }
 
 func NewReportedUsageSourceResolver(rootPath string) UsageSourceResolver {

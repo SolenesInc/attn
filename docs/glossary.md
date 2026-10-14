@@ -28,6 +28,9 @@ harness                 the agent CLI: Claude Code, Codex, pi, Copilot
 model                   the AI model a harness runs
 ├─ tier (at most 1)      the intelligence a task needs: light, standard or deep
 └─ effort (at most 1)    how much reasoning the model uses
+link                    a way attn reaches a harness besides its terminal,
+                        such as the shared Codex app-server; a session runs
+                        over the link its conversation runs on now
 agent                   a harness that runs in a terminal; the user talks to
                         them; like a coding agent
 ├─ session (1 at a time)
@@ -51,6 +54,8 @@ session                 attn's record of one conversation; like one chat in a
 ledger (1 per profile)  every session, live and closed; like a history
 ├─ session (0..n)
 │  ├─ live              its agent runs in a terminal
+│  │  └─ hidden         live over its link, but no tile shows it; like a
+│  │                    minimized window
 │  └─ closed            ended; the history stays
 └─ kept conversation (0..n)  attn's own copy of a conversation that its
                              harness would delete; like an archive

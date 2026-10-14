@@ -188,6 +188,8 @@ type SpawnOpts struct {
 	SelfReportPullRequests bool
 
 	InstructionsDir string
+
+	CodexRemote string
 }
 
 func (o SpawnOpts) addDirArgs() []string {

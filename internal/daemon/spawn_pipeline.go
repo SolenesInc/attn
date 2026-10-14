@@ -29,6 +29,7 @@ type internalSpawnPolicy struct {
 	approvalRoute         launchcontract.ApprovalRoute
 	preserveApprovalRoute bool
 	userStarted           bool
+	reopening             bool
 	// The client that asked; it gets the placement as its own answer before any broadcast of it.
 	requester *wsClient
 }
@@ -52,6 +53,7 @@ type spawnRequest struct {
 	resumeSessionID string
 	parentSessionID protocol.SessionID
 	autoModeDriver  bool
+	link            linkRuntime
 }
 
 type spawnPlan struct {
@@ -299,6 +301,13 @@ func (d *Daemon) resolveSpawnIntent(ctx context.Context, req *spawnRequest) (*sp
 		plan.spawnOpts.ApprovalRoute = launchcontract.ResolveApprovalRoute(plan.spawnOpts.YoloMode, plan.spawnOpts.AutoApprove, plan.spawnOpts.UnattendedLaunch)
 	}
 	plan.spawnOpts.ContextWindowCap = d.launchContextWindowCap(msg.ID, req.agent, plan.isChief)
+	req.link = d.launchLink(req)
+	if req.link != nil {
+		if err := req.link.admit(req.profile.ID, req.resumeSessionID); err != nil {
+			plan.rollback(d, msg.ID)
+			return nil, &spawnRejection{err: err}
+		}
+	}
 
 	return plan, nil
 }
@@ -406,6 +415,9 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		intent.ApprovalPolicy, intent.SandboxMode = effectiveSpawnPolicyPair(msg)
 	}
 	d.store.SetLaunchIntent(session.ID, intent)
+	if err := d.store.SetSessionLink(session.ID, linkKind(req.link)); err != nil {
+		d.logf("spawn: %v", err)
+	}
 	d.persistLaunchedConversation(req, plan)
 	d.rememberSessionTitleInitialPrompt(msg.ID, req.initialPrompt)
 	hasInitialPrompt := strings.TrimSpace(req.initialPrompt) != ""
@@ -422,8 +434,18 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{err: fmt.Errorf("initialize plugin driver run cursor")}
 	}
-	if err := d.spawnSessionRuntime(msg.ID, plan.spawnOpts); err != nil {
+	var err error
+	if req.link != nil {
+		err = req.link.prepareLaunch(&plan.spawnOpts, req.profile.ID)
+	}
+	if err == nil {
+		err = d.spawnSessionRuntime(msg.ID, plan.spawnOpts)
+	}
+	if err != nil {
 		d.forgetSessionTitleInitialPrompt(msg.ID)
+		if req.link != nil {
+			req.link.launchFailed(plan.spawnOpts.ID, req.profile.ID)
+		}
 		if req.existingSession == nil {
 			d.store.Remove(msg.ID)
 			d.forgetSessionTrace(msg.ID)

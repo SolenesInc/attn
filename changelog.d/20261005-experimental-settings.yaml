@@ -1,0 +1,5 @@
+kind: added
+area: settings
+change: >
+  Settings has an Experimental section, with the Shared Codex switch and the
+  choice to show hidden sessions in the queue.

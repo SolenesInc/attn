@@ -330,6 +330,9 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 	}
 
 	d.persistReloadedConversation(sessionID, opts)
+	if l := d.linkOf(sessionID); l != nil {
+		opts.ExternalEnv = append(opts.ExternalEnv, l.respawnEnv(terminal)...)
+	}
 	opts.DaemonEnv = d.spawnRoutingEnv()
 	if spawnErr := d.ptyBackend.Spawn(ctx, opts); spawnErr != nil {
 		unlockEnds()

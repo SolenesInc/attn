@@ -222,6 +222,15 @@ func (w *World) HeadlessTask() *fakeagent.HeadlessTask {
 	return w.kit.HeadlessTask()
 }
 
+func (w *World) CodexServers() []int {
+	return w.kit.CodexServers()
+}
+
+func (w *World) CodexServer() *fakeagent.CodexServer {
+	w.T.Helper()
+	return w.kit.CodexServer()
+}
+
 func (w *World) HoldNextBoot() (boot func()) {
 	return w.kit.HoldNextBoot()
 }

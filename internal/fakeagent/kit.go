@@ -35,6 +35,7 @@ type Kit struct {
 	nextBoot chan struct{}
 	bootAsk  chan struct{}
 	fakes    []*fake
+	servers  []*fake
 	failures []string
 	headless chan *HeadlessTask
 	nextExit *bootingResult
@@ -136,6 +137,26 @@ func (k *Kit) Launched(sessionID string) *Run {
 	}
 }
 
+func (k *Kit) CodexServers() []int {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	pids := make([]int, 0, len(k.servers))
+	for _, f := range k.servers {
+		pids = append(pids, f.Pid)
+	}
+	return pids
+}
+
+func (k *Kit) CodexServer() *CodexServer {
+	k.t.Helper()
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if len(k.servers) == 0 {
+		k.t.Fatal("no Codex app-server was launched")
+	}
+	return &CodexServer{t: k.t, fake: k.servers[len(k.servers)-1]}
+}
+
 func (k *Kit) HoldNextBoot() (boot func()) {
 	cue := make(chan struct{})
 	k.mu.Lock()
@@ -203,6 +224,11 @@ func (k *Kit) handle(f *fake, method string, params json.RawMessage) error {
 		k.mu.Unlock()
 		if f.Error != "" {
 			k.fail(fmt.Sprintf("fake %s for session %q failed to launch: %s (argv %q)", f.Harness, f.AttnSessionID, f.Error, f.Argv))
+		}
+		if f.Role == roleCodexServer {
+			k.mu.Lock()
+			k.servers = append(k.servers, f)
+			k.mu.Unlock()
 		}
 		if f.Role == roleAgent {
 			k.launchesFor(f.AttnSessionID) <- &Run{
@@ -286,5 +312,20 @@ func (k *Kit) verify() {
 	defer k.mu.Unlock()
 	for _, failure := range k.failures {
 		k.t.Errorf("fakeagent: %s", failure)
+	}
+}
+
+func (k *Kit) AwaitExited() {
+	k.t.Helper()
+	k.mu.Lock()
+	fakes := slices.Clone(k.fakes)
+	k.mu.Unlock()
+	deadline := time.After(HangGuard)
+	for _, f := range fakes {
+		select {
+		case <-f.peer.done:
+		case <-deadline:
+			k.t.Fatalf("fake %s %s (pid %d) still runs %s after its host went down", f.Harness, f.Role, f.Pid, HangGuard)
+		}
 	}
 }

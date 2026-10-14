@@ -115,9 +115,10 @@ function HomeRow() {
   );
 }
 
-function useRowWhere(): (row: QueueRow<QueueBandSessionView>) => RowWhere {
+function useRowWhere(): (row: QueueRow<QueueBandSessionView>) => RowWhere | undefined {
   const { visualIndexOfDesktop } = useSidebarContext();
   return (row) => {
+    if (!row.desktopId) return undefined;
     const index = visualIndexOfDesktop(row.desktopId);
     return index >= 0
       ? { slot: String(index + 1), title: row.desktopTitle }

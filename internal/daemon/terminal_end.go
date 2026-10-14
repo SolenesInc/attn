@@ -2,9 +2,12 @@ package daemon
 
 import (
 	"context"
+	"errors"
+	"syscall"
 
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/pty"
 )
 
 // Take after the session's lifecycle lock.
@@ -30,14 +33,34 @@ func (d *Daemon) endTerminal(sessionID protocol.SessionID, t harness.TerminalID)
 	if !d.othersRun(sessionID, t) {
 		return true
 	}
+	d.dropTerminal(t)
+	return false
+}
+
+func (d *Daemon) closeTerminal(sessionID protocol.SessionID, t harness.TerminalID) (last bool) {
+	lifecycle := d.sessionLifecycleLockFor(sessionID)
+	lifecycle.Lock()
+	defer lifecycle.Unlock()
+	defer d.lockTerminalEnds(sessionID)()
+	if !d.othersRun(sessionID, t) {
+		return true
+	}
+	if err := d.ptyBackend.Kill(context.Background(), t, syscall.SIGTERM); err != nil && !errors.Is(err, pty.ErrSessionNotFound) {
+		d.logf("stopping terminal %s: %v", t, err)
+	}
+	d.dropTerminal(t)
+	return false
+}
+
+func (d *Daemon) dropTerminal(t harness.TerminalID) {
+	d.linkTerminalDropped(t)
 	if err := d.removePTYSession(t); err != nil {
 		d.logf("removing the runtime of terminal %s: %v", t, err)
 	}
-	_, _, err := d.store.RemoveTerminalTile(t)
+	desktop, removed, err := d.store.RemoveTerminalTile(t)
 	if err != nil {
 		d.logf("removing the tile of terminal %s: %v", t, err)
-	} else if session := d.store.Get(sessionID); session != nil {
-		d.publishArrangementChanged(session.ProfileID)
+	} else if removed {
+		d.publishArrangementChanged(desktop.ProfileID)
 	}
-	return false
 }
