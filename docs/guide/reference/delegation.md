@@ -100,6 +100,12 @@ It keeps running with its seed, and you can still open, steer and close it. Its 
 </details>
 
 <details>
+<summary>How does the agent that started a delegate hear how it's going?</summary>
+
+Through the garden. When an agent delegates, it watches the delegate's seed, and a watch covers every seed under it, including ones planted later. When a crew member such as the Chief delegates, the member holds the watch, so the updates still reach it after it naps. It hears when a note or a move on one of those seeds is marked to ring, and when blocked work there becomes ready; plain notes stay quiet, and nobody hears about their own moves. Several updates on one seed collapse into one until the agent reads it, and Attn rings the agent once it's at its prompt. `attn seed unwatch <id>` removes the watch, and restarts and resumes don't bring it back, while a new delegation starts a fresh one. A watch on a seed above it can still cover it.
+</details>
+
+<details>
 <summary>Does a delegate see my conversation with the agent that started it?</summary>
 
 No. Its first prompt names its seed and tells it to read it with `attn seed show`, then adds its role's name, instructions and stopping point (or your Anything else instructions, if you wrote any). The brief the delegating agent writes lives in the seed, so anything the delegate needs from your conversation has to be written there.
