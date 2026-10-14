@@ -1,5 +1,5 @@
 /** Test harness entry point: loads component harnesses from ?component=.
- * Usage: /test-harness/?component=DiffView */
+ * Usage: /test-harness/?component=MermaidDiagram */
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { installVerbatimTextEntryGuard } from '../src/utils/verbatimTextEntry';

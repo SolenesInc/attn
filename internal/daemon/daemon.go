@@ -146,8 +146,6 @@ type Daemon struct {
 	reopenGitMu                       sync.Mutex
 	reopenBranches                    *sharedCalls[reopenBranchKey, branchInspection]
 	reopenInspect                     func(context.Context, *git.Client, string, string) (branchInspection, error)
-	gitReaderMu                       sync.Mutex
-	fileDiff                          *fileDiffReader
 	gitExec                           gitExecutor
 	worktreeMaintenance               worktreeMaintenanceCoordinator
 	warnings                          []protocol.DaemonWarning

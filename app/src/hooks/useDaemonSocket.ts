@@ -411,13 +411,6 @@ interface RepoInfoResult {
   error?: string;
 }
 
-export interface FileDiffResult {
-  success: boolean;
-  original: string;
-  modified: string;
-  error?: string;
-}
-
 export interface NotebookEntry {
   path: string;
   type?: string;
@@ -570,7 +563,6 @@ const SESSION_REOPEN_TIMEOUT_MS = 120_000;
 // at 945k rows — so 30s is roughly a hundred times the worst real log.
 const BUS_STATUS_TIMEOUT_MS = 30_000;
 const GIT_METADATA_TIMEOUT_MS = 30 * 60_000;
-const GIT_DIFF_TIMEOUT_MS = 10 * 60_000;
 const GIT_WORKTREE_TIMEOUT_MS = 30 * 60_000;
 const GIT_NETWORK_TIMEOUT_MS = 30 * 60_000;
 const GIT_CLONE_TIMEOUT_MS = 90 * 60_000;
@@ -821,9 +813,6 @@ export function useDaemonSocket({
         return;
       case 'merge_pr':
         rejectPendingByPredicate((key) => key.endsWith(':merge'), error);
-        return;
-      case 'get_file_diff':
-        rejectPendingByPredicate((key) => key.startsWith('get_file_diff_'), error);
         return;
       case 'get_branch_diff_files':
         rejectPendingByPredicate((key) => key.startsWith('get_branch_diff_files_'), error);
@@ -2196,24 +2185,6 @@ export function useDaemonSocket({
                 pending.resolve({ success: true, cloned: data.cloned });
               } else {
                 pending.reject(new Error(data.error || 'Failed to ensure repo'));
-              }
-            }
-            break;
-          }
-
-          case 'file_diff_result': {
-            const key = `get_file_diff_${data.request_id}`;
-            const pending = pendingActionsRef.current.get(key);
-            if (pending) {
-              pendingActionsRef.current.delete(key);
-              if (data.success) {
-                pending.resolve({
-                  success: true,
-                  original: data.original || '',
-                  modified: data.modified || '',
-                });
-              } else {
-                pending.reject(new Error(data.error || 'Failed to get diff'));
               }
             }
             break;
@@ -3954,25 +3925,6 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'cancel_countdown', session_id: sessionId }));
   }, []);
 
-  const sendGetFileDiff = useCallback((
-    directory: string,
-    path: string,
-    options?: { staged?: boolean; baseRef?: string }
-  ): Promise<FileDiffResult> => {
-    // Key by request id, not path: a late reply racing a newer request for the same path must not
-    // clobber the pending promise.
-    const requestId = nextRequestID('get_file_diff');
-    const key = `get_file_diff_${requestId}`;
-    return sendKeyedRequest<FileDiffResult>(key, {
-      cmd: 'get_file_diff',
-      directory,
-      path,
-      request_id: requestId,
-      ...(options?.staged !== undefined && { staged: options.staged }),
-      ...(options?.baseRef && { base_ref: options.baseRef }),
-    }, 'Get file diff timed out', GIT_DIFF_TIMEOUT_MS);
-  }, [nextRequestID, sendKeyedRequest]);
-
   const getRepoInfo = useCallback((repo: string): Promise<RepoInfoResult> => {
     const key = `repo_info_${repo}`;
     return sendKeyedRequest<RepoInfoResult>(key, {
@@ -4623,7 +4575,6 @@ export function useDaemonSocket({
     sendSetTerminalTheme,
     subscribeDocuments,
     isRuntimeAttached,
-    sendGetFileDiff,
     getRepoInfo,
     listKeptConversations,
     setConversationKeep,

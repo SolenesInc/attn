@@ -1119,8 +1119,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleListRemoteBranchesWS(client, msg.(*protocol.ListRemoteBranchesMessage))
 	case protocol.CmdEnsureRepo:
 		d.handleEnsureRepoWS(client, msg.(*protocol.EnsureRepoMessage))
-	case protocol.CmdGetFileDiff:
-		d.handleGetFileDiffWS(client, msg.(*protocol.GetFileDiffMessage))
 	case protocol.CmdGetRepoInfo:
 		d.handleGetRepoInfoWS(client, msg.(*protocol.GetRepoInfoMessage))
 	case protocol.CmdAutomationDefinitionsGet:

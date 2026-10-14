@@ -1549,15 +1549,6 @@ model EnsureRepoMessage {
   clone_url: string;     // Git clone URL (e.g., https://github.com/owner/repo.git)
 }
 
-model GetFileDiffMessage {
-  cmd: "get_file_diff";
-  directory: string;
-  path: string;
-  staged?: boolean;  // DEPRECATED: If true, show staged diff instead of working tree
-  base_ref?: string; // If provided, compare against this ref instead of HEAD (for PR-like diffs)
-  request_id?: string; // Client-chosen correlation id, echoed verbatim in the result
-}
-
 model GetRepoInfoMessage {
   cmd: "get_repo_info";
   repo: string;
@@ -3212,17 +3203,6 @@ model EnsureRepoResultMessage {
   error?: string;
 }
 
-model FileDiffResultMessage {
-  event: "file_diff_result";
-  directory: string;
-  path: string;
-  original: string;
-  modified: string;
-  success: boolean;
-  error?: string;
-  request_id?: string; // Client-chosen correlation id, echoed verbatim from the request
-}
-
 model RepoInfo {
   repo: string;
   current_branch: string;
@@ -3239,20 +3219,6 @@ model GetRepoInfoResultMessage {
   info?: RepoInfo;
   success: boolean;
   error?: string;
-}
-
-model ReviewComment {
-  id: string;
-  review_id: string;
-  filepath: string;
-  line_start: int32;
-  line_end: int32;
-  content: string;
-  author: string;  // "user" or "agent"
-  resolved: boolean;
-  resolved_by?: string;  // "user" or "agent" (empty if not resolved)
-  resolved_at?: string;  // ISO timestamp (empty if not resolved)
-  created_at: string;    // ISO timestamp
 }
 
 // Compact automations summaries for the WS surface. Canonical state (full
@@ -6716,7 +6682,6 @@ alias DaemonEvent =
   | FetchRemotesResultMessage
   | ListRemoteBranchesResultMessage
   | EnsureRepoResultMessage
-  | FileDiffResultMessage
   | GetRepoInfoResultMessage
   | AutomationApplyResultMessage
   | AutomationValidateResultMessage

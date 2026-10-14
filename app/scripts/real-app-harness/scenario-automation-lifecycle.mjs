@@ -16,11 +16,11 @@ import {
   harnessClientHello,
   resolveHarnessResources,
   instanceCliEnv as instanceEnv,
+  readFrontendProtocolVersion,
 } from './harnessInstance.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { captureScreenshotData } from './nativeWindowCapture.mjs';
-import { readFrontendProtocolVersion } from './presentDaemon.mjs';
 import { appDaemonInTree } from './platform.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));

@@ -179,7 +179,6 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdFetchRemotes:                  decodeInto[FetchRemotesMessage],
 	CmdListRemoteBranches:            decodeInto[ListRemoteBranchesMessage],
 	CmdEnsureRepo:                    decodeInto[EnsureRepoMessage],
-	CmdGetFileDiff:                   decodeInto[GetFileDiffMessage],
 	CmdGetRepoInfo:                   decodeInto[GetRepoInfoMessage],
 	CmdSpawnSession:                  decodeInto[SpawnSessionMessage],
 	CmdAttachSession:                 decodeInto[AttachSessionMessage],

@@ -246,7 +246,6 @@ describe('desktop surface', () => {
       sendEnsureRepo: vi.fn(async () => ({ success: true, path: '/tmp/repo' })),
       ...desktopCommands,
       desktopTileContents: {},
-      sendGetFileDiff: vi.fn(async () => ({ success: true, original: '', modified: '' })),
       getRepoInfo: vi.fn(async () => ({ success: true, is_git_repo: true, branch: 'main' })),
       connectionError: null,
       hasReceivedInitialState: true,

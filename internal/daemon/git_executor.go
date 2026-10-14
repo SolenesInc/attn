@@ -22,8 +22,6 @@ const (
 	gitTaskPicker           gitTaskKind = "picker"
 	gitTaskRepositoryInfo   gitTaskKind = "repository_info"
 	gitTaskBranch           gitTaskKind = "branch"
-	gitTaskFileDiff         gitTaskKind = "file_diff"
-	gitTaskPresent          gitTaskKind = "present"
 	gitTaskSessionIdentity  gitTaskKind = "session_identity"
 	gitTaskWorktreeObserve  gitTaskKind = "worktree_observe"
 	gitTaskWorktreeMutation gitTaskKind = "worktree_mutation"

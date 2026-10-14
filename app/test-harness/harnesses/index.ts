@@ -1,7 +1,6 @@
 import { SidebarTreeHarness } from './SidebarTreeHarness';
 import type { HarnessProps } from '../types';
 import { BrokenLinksHarness } from './BrokenLinksHarness';
-import { DiffViewHarness } from './DiffViewHarness';
 import { FileTreeHarness } from './FileTreeHarness';
 import { FrontmatterCardHarness } from './FrontmatterCardHarness';
 import { LiveMarkdownEditorHarness } from './LiveMarkdownEditorHarness';
@@ -22,7 +21,6 @@ import { SidebarRailHarness } from './SidebarRailHarness';
 export const harnesses: Record<string, React.ComponentType<HarnessProps>> = {
   AgentHeader: AgentHeaderHarness,
   BrokenLinks: BrokenLinksHarness,
-  DiffView: DiffViewHarness,
   FileTree: FileTreeHarness,
   FrontmatterCard: FrontmatterCardHarness,
   LiveMarkdownEditor: LiveMarkdownEditorHarness,

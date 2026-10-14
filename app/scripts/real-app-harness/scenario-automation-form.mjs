@@ -5,11 +5,10 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { parseCommonArgs, printCommonHelp, launchFreshAppAndConnect } from './common.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
-import { currentHarnessInstance, resolveHarnessResources, instanceCliEnv as instanceEnv } from './harnessInstance.mjs';
+import { currentHarnessInstance, resolveHarnessResources, instanceCliEnv as instanceEnv, readFrontendProtocolVersion } from './harnessInstance.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { captureScreenshotData } from './nativeWindowCapture.mjs';
-import { readFrontendProtocolVersion } from './presentDaemon.mjs';
 import { appDaemonInTree } from './platform.mjs';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

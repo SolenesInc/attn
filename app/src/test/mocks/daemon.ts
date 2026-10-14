@@ -1,7 +1,5 @@
 import type { DaemonApi } from '../../contexts/DaemonApiContext';
 
-import type { FileDiffResult } from '../../hooks/useDaemonSocket';
-
 interface Call {
   method: string;
   args: unknown[];
@@ -93,13 +91,6 @@ export class MockDaemon {
     };
   }
 
-  createFetchDiff(): (path: string, options?: { staged?: boolean; baseRef?: string }) => Promise<FileDiffResult> {
-    return async (path: string, options?: { staged?: boolean; baseRef?: string }): Promise<FileDiffResult> => {
-      this.recordCall('fetchDiff', [path, options]);
-      return this.getResponse<FileDiffResult>('fetchDiff', [path, options]);
-    };
-  }
-
   createFetchRemotes(): (repo: string) => Promise<{ success: boolean; error?: string }> {
     return async (repo: string): Promise<{ success: boolean; error?: string }> => {
       this.recordCall('fetchRemotes', [repo]);
@@ -110,14 +101,6 @@ export class MockDaemon {
 
 export function createMockDaemon(options?: MockDaemonOptions): MockDaemon {
   return new MockDaemon(options);
-}
-
-export function createFileDiffResult(original: string, modified: string): FileDiffResult {
-  return {
-    success: true,
-    original,
-    modified,
-  };
 }
 
 export async function waitForCalls(

@@ -3814,32 +3814,6 @@ type FileActivity struct {
 	Source string `json:"source"`
 }
 
-type FileDiffResultMessage struct {
-	// Directory corresponds to the JSON schema field "directory".
-	Directory string `json:"directory"`
-
-	// Error corresponds to the JSON schema field "error".
-	Error *string `json:"error,omitempty,omitzero"`
-
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// Modified corresponds to the JSON schema field "modified".
-	Modified string `json:"modified"`
-
-	// Original corresponds to the JSON schema field "original".
-	Original string `json:"original"`
-
-	// Path corresponds to the JSON schema field "path".
-	Path string `json:"path"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID *string `json:"request_id,omitempty,omitzero"`
-
-	// Success corresponds to the JSON schema field "success".
-	Success bool `json:"success"`
-}
-
 type FilesEditedMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -4458,26 +4432,6 @@ type GetDefaultBranchResultMessage struct {
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
-}
-
-type GetFileDiffMessage struct {
-	// BaseRef corresponds to the JSON schema field "base_ref".
-	BaseRef *string `json:"base_ref,omitempty,omitzero"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Directory corresponds to the JSON schema field "directory".
-	Directory string `json:"directory"`
-
-	// Path corresponds to the JSON schema field "path".
-	Path string `json:"path"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID *string `json:"request_id,omitempty,omitzero"`
-
-	// Staged corresponds to the JSON schema field "staged".
-	Staged *bool `json:"staged,omitempty,omitzero"`
 }
 
 type GetKittyImageMessage struct {
@@ -7494,41 +7448,6 @@ type Response struct {
 	// WorktreeSweepLogResult corresponds to the JSON schema field
 	// "worktree_sweep_log_result".
 	WorktreeSweepLogResult *WorktreeSweepLogResult `json:"worktree_sweep_log_result,omitempty,omitzero"`
-}
-
-type ReviewComment struct {
-	// Author corresponds to the JSON schema field "author".
-	Author string `json:"author"`
-
-	// Content corresponds to the JSON schema field "content".
-	Content string `json:"content"`
-
-	// CreatedAt corresponds to the JSON schema field "created_at".
-	CreatedAt string `json:"created_at"`
-
-	// Filepath corresponds to the JSON schema field "filepath".
-	Filepath string `json:"filepath"`
-
-	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
-
-	// LineEnd corresponds to the JSON schema field "line_end".
-	LineEnd int `json:"line_end"`
-
-	// LineStart corresponds to the JSON schema field "line_start".
-	LineStart int `json:"line_start"`
-
-	// Resolved corresponds to the JSON schema field "resolved".
-	Resolved bool `json:"resolved"`
-
-	// ResolvedAt corresponds to the JSON schema field "resolved_at".
-	ResolvedAt *string `json:"resolved_at,omitempty,omitzero"`
-
-	// ResolvedBy corresponds to the JSON schema field "resolved_by".
-	ResolvedBy *string `json:"resolved_by,omitempty,omitzero"`
-
-	// ReviewID corresponds to the JSON schema field "review_id".
-	ReviewID string `json:"review_id"`
 }
 
 type RuntimeRespawnedMessage struct {
