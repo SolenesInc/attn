@@ -656,13 +656,13 @@ func (d *Daemon) resyncEndedStream(client *wsClient, terminalID protocol.Termina
 		return
 	}
 	terminal := harness.TerminalID(terminalID)
-	upgrading := d.workerUpgradeRunning(terminal)
+	if sessionID, shown := d.shownIn(terminal); shown && d.store.GetSessionExit(sessionID) != nil {
+		return
+	}
 	ctx, cancel := context.WithTimeout(d.life.Context(), endedStreamProbeTimeout)
 	defer cancel()
 	info, err := provider.SessionInfo(ctx, terminal)
-	running := err == nil && info.Running
-	unreachableMidUpgrade := upgrading && err != nil && !errors.Is(err, pty.ErrSessionNotFound)
-	if !running && !unreachableMidUpgrade {
+	if errors.Is(err, pty.ErrSessionNotFound) || err == nil && !info.Running {
 		return
 	}
 	d.logf("pty stream ended while its terminal runs: id=%s; asking the app to reattach", terminalID)
