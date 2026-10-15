@@ -659,15 +659,15 @@ export function useSettingsModalState({
             title: 'Terminal',
             description: 'How terminal sessions are hosted.',
             count: 1,
-            keywords: 'pty backend shared rust host workers experimental terminal one-screen new-session launcher one screen new session project path',
+            keywords: 'pty backend shared rust host workers experimental terminal',
           },
           {
             id: 'experimental',
             label: 'Experimental',
             title: 'Experimental',
             description: 'Opt in to features that are still being developed.',
-            count: 1,
-            keywords: 'experimental direct agent launch launcher memory claude codex copilot',
+            count: 2,
+            keywords: 'experimental direct agent launch launcher memory claude codex copilot one-screen new-session one screen new session project path',
           },
           {
             id: 'backgroundTasks',

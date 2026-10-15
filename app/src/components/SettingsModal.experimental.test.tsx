@@ -20,3 +20,19 @@ describe('Experimental settings for direct agent launches', () => {
     ]);
   });
 });
+
+describe('Experimental settings for the one-screen launcher', () => {
+  it('saves the launcher opt-in in both directions', async () => {
+    const daemon = await openSection('experimental');
+    const launcher = () => screen.getByRole('switch', { name: 'One-screen new-session launcher (experimental)' });
+    expect(launcher()).toHaveAttribute('aria-checked', 'false');
+    await gesture(daemon, () => fireEvent.click(launcher()));
+    expect(launcher()).toHaveAttribute('aria-checked', 'true');
+    await gesture(daemon, () => fireEvent.click(launcher()));
+    expect(launcher()).toHaveAttribute('aria-checked', 'false');
+    expect(savedSettings(daemon)).toEqual([
+      ['new_session_launcher_enabled', 'true'],
+      ['new_session_launcher_enabled', 'false'],
+    ]);
+  });
+});

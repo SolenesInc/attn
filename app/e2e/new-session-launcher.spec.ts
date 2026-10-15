@@ -27,7 +27,7 @@ for (const terminal of [false, true]) {
       await page.getByRole('searchbox', { name: /search settings/i }).fill('one-screen');
       await page
         .getByRole('navigation', { name: 'Settings sections' })
-        .getByRole('button', { name: /^Terminal/ })
+        .getByRole('button', { name: /^Experimental/ })
         .click();
       await page
         .getByRole('switch', {
