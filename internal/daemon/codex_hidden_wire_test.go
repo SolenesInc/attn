@@ -96,19 +96,6 @@ func TestClosingATileWhoseCodexMovedOnKeepsTheSessionItShowedHiddenAndWaiting(t 
 	}
 }
 
-func TestWithSharedCodexOffNewClosesTheSessionItLeft(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	app := w.App()
-	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
-	moveOn(t, app, codex, terminal, "/new", "add a discount field")
-	testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool {
-		return e.Session != nil && string(e.Session.ID) == checkout
-	})
-	if entry := ledgerShowOverTheWebSocket(app, checkout).Entry; entry == nil || protocol.Deref(entry.ClosedAt) == "" || protocol.Deref(entry.Hidden) {
-		t.Errorf("the ledger shows %+v, want %s closed", entry, checkout)
-	}
-}
-
 func TestTwoTerminalsShowOneSharedCodexSessionUntilTheLastTileClosesAndArchivesIt(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()

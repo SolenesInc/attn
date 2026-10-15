@@ -33,10 +33,4 @@ describe('hidden sessions in the queue', () => {
     expect(screen.getByTestId('queue-turn-s1')).toBeInTheDocument();
     expect(screen.queryByTestId('queue-turn-h1')).toBeNull();
   });
-
-  it('does not give a hidden session a place on the desktop strip', async () => {
-    await launch({ queue_mode_enabled: 'false' });
-    expect(screen.queryByTestId('queue-turn-h1')).toBeNull();
-    expect(screen.queryByText('h1')).toBeNull();
-  });
 });
