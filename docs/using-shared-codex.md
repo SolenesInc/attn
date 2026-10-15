@@ -22,7 +22,8 @@ An automation that starts shared Codex runs with its own model, effort and
 auto-approval, as a plain one does. It doesn't stop at Codex's question whether
 to trust the folder: if you haven't answered it for that folder, attn saves the
 folder as trusted in your Codex config, as answering "Trust and continue"
-would. A folder you marked untrusted stays untrusted.
+would. A folder you marked untrusted, and any folder inside it, stays
+untrusted.
 
 ## One conversation, one session
 

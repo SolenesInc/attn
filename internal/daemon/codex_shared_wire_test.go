@@ -132,8 +132,12 @@ func TestASharedCodexLaunchThatCannotBePlacedLetsItsAppServerStop(t *testing.T) 
 }
 
 func TestWithSharedCodexOnAnAutomationRunsSharedCodexUnderItsLaunchContract(t *testing.T) {
-	for _, saved := range []string{"", "untrusted"} {
-		t.Run("saved trust "+strconv.Quote(saved), func(t *testing.T) {
+	for _, saved := range []struct{ name, folder, level, want string }{
+		{name: "no saved trust", want: "trusted"},
+		{name: "folder saved untrusted", folder: "check", level: "untrusted", want: "untrusted"},
+		{name: "parent saved untrusted", folder: ".", level: "untrusted", want: ""},
+	} {
+		t.Run(saved.name, func(t *testing.T) {
 			w := newWorld(t, fakeagent.Codex)
 			app, cli := w.App(), w.Client()
 			setSetting(t, app, "codex_shared_enabled", "true")
@@ -141,8 +145,8 @@ func TestWithSharedCodexOnAnAutomationRunsSharedCodexUnderItsLaunchContract(t *t
 			if err := os.MkdirAll(folder, 0o755); err != nil {
 				t.Fatal(err)
 			}
-			if saved != "" {
-				w.SetCodexFolderTrust(folder, saved)
+			if saved.folder != "" {
+				w.SetCodexFolderTrust(w.Path(saved.folder), saved.level)
 			}
 			applyAutomation(t, cli, fmt.Sprintf(`api_version: attn.dev/automations/v1alpha1
 name: Nightly check
@@ -169,12 +173,13 @@ location: {type: directory, path: %q}
 			if servers := w.CodexServers(); len(servers) != 1 {
 				t.Errorf("app-servers launched = %v, want one", servers)
 			}
-			want := saved
-			if want == "" {
-				want = "trusted"
+			if got := w.CodexFolderTrust(folder); got != saved.want {
+				t.Errorf("Codex saves %s as %q, want %q", folder, got, saved.want)
 			}
-			if got := w.CodexFolderTrust(folder); got != want {
-				t.Errorf("Codex trusts %s as %q, want %q", folder, got, want)
+			if saved.folder != "" {
+				if got := w.CodexFolderTrust(w.Path(saved.folder)); got != saved.level {
+					t.Errorf("Codex saves %s as %q, want the user's %q", w.Path(saved.folder), got, saved.level)
+				}
 			}
 		})
 	}

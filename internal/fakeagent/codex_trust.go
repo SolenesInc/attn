@@ -28,6 +28,16 @@ func codexFolderTrust(config map[string]any, dir string) string {
 	return level
 }
 
+func codexUnderUntrusted(config map[string]any, dir string) bool {
+	for dir != filepath.Dir(dir) {
+		dir = filepath.Dir(dir)
+		if codexFolderTrust(config, dir) == "untrusted" {
+			return true
+		}
+	}
+	return false
+}
+
 func setCodexFolderTrust(codexHome, dir, level string) error {
 	config, err := readCodexConfig(codexHome)
 	if err != nil {

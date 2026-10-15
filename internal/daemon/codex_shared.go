@@ -182,8 +182,15 @@ func (r *codexShared) trustFolder(s *codexServer, cwd string) error {
 	if err := json.Unmarshal(raw, &read); err != nil {
 		return err
 	}
-	if read.Config.Projects[cwd].TrustLevel != "" {
+	projects := read.Config.Projects
+	if projects[cwd].TrustLevel != "" {
 		return nil
+	}
+	for dir := cwd; dir != filepath.Dir(dir); {
+		dir = filepath.Dir(dir)
+		if projects[dir].TrustLevel == "untrusted" {
+			return nil
+		}
 	}
 	_, err = client.Call(ctx, "config/batchWrite", map[string]any{
 		"edits":            []any{map[string]any{"keyPath": agentdriver.CodexTrustKey(cwd), "value": "trusted", "mergeStrategy": "replace"}},

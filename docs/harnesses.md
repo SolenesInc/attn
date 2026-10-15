@@ -155,7 +155,8 @@ Read in the source at openai/codex rust-v0.160.0:
   `-C` asks the server whether that folder is trusted with `config/read`, so
   `-c projects."<folder>".trust_level` given to the TUI does not count. It
   asks the trust question when the server's config has no trust level saved
-  under that exact folder, and not for one saved untrusted. Answering it writes
+  under that exact folder, and not for one saved untrusted or inside a folder
+  saved untrusted. Answering it writes
   `projects."<folder>".trust_level = "trusted"` with `config/batchWrite`
   (`tui/src/onboarding/directory_trust.rs`, `tui/src/config_update.rs`).
 - `thread/start` in a folder with no saved trust level saves it as trusted when
