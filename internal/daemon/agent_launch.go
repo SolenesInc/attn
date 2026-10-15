@@ -47,6 +47,7 @@ func (d *Daemon) prepareAgentLaunch(sessionID protocol.SessionID, terminal harne
 		NotebookRoot: launch.NotebookRoot, Garden: launch.Garden,
 		CrewPriming: launch.Crew, AwarenessDirs: awareness,
 		SelfReportPullRequests: launch.SelfReportPullRequests,
+		CodexRemote:            opts.CodexRemote,
 	}
 	if unattended := opts.UnattendedLaunch; !unattended.IsZero() {
 		spawn.AutoApprove, spawn.TrustWorkingDirectory = true, true
@@ -148,6 +149,9 @@ func prepareLauncherLaunch(driver agentdriver.Driver, opts *ptybackend.SpawnOpti
 	}
 	if executable != "" {
 		opts.AgentEnv = append(opts.AgentEnv, driver.ExecutableEnvVar()+"="+executable)
+	}
+	if opts.CodexRemote != "" {
+		opts.AgentEnv = append(opts.AgentEnv, "ATTN_CODEX_REMOTE="+opts.CodexRemote)
 	}
 	opts.AgentLoginShell = true
 }

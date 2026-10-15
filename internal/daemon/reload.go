@@ -533,6 +533,9 @@ func pluginReloadCapabilityError(reg pluginDriverRegistration, isChief bool) err
 func (d *Daemon) prepareSessionReload(session *protocol.Session, opts *ptybackend.SpawnOptions, isChief bool) (*preparedPluginReload, error) {
 	reg, ok := d.ensurePluginRegistry().driver(session.Agent)
 	if !ok {
+		if l := d.linkOf(session.ID); l != nil {
+			l.relaunch(opts)
+		}
 		if opts.Agent != "shell" {
 			if err := d.prepareAgentLaunch(session.ID, opts.ID, isChief, opts, ""); err != nil {
 				d.removeAgentLaunchDir(opts.ID)

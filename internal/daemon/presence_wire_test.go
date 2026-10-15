@@ -96,6 +96,51 @@ func TestAnAppShowingASessionIsPresentWhileItsInputIsRecentAndAHiddenAppIsAway(t
 	}
 }
 
+func TestAwayTimeStartsAtTheLastPresentReportRegardlessOfPresenceReads(t *testing.T) {
+	for _, readWhilePresent := range []bool{false, true} {
+		name := "without reading presence"
+		if readWhilePresent {
+			name = "after reading presence"
+		}
+		t.Run(name, func(t *testing.T) {
+			inBubbleWithAgents(t, func(t *testing.T, w *world) {
+				for _, member := range []string{"trellis", "alder"} {
+					writeCrewCharter(t, w, member)
+				}
+				w.restart()
+				app, cli := w.App(), w.Client()
+				for key, value := range map[string]string{"crew.away_seconds": "60", "crew.wake_limit": "0", "crew.heartbeat_enabled": "false", "crew.autosleep_enabled": "false"} {
+					setSetting(t, app, key, value)
+				}
+				days := make(map[string]string)
+				for _, member := range []string{"trellis", "alder"} {
+					day := w.bootBubbleClaude(t, string(wakeCrew(t, cli, member, "").SessionID))
+					day.reply("Ready. <!-- attn:state=idle -->")
+					days[member] = day.id
+				}
+				w.advance(4 * time.Minute)
+				presenceReport(app, protocol.SetClientPresenceMessage{Visible: true, IdleSeconds: protocol.Ptr(0.0)})
+				w.advance(30 * time.Second)
+				if readWhilePresent {
+					presenceTierIs(t, cli, "while the report is fresh", "present")
+				}
+				app.Close()
+				w.advance(29 * time.Second)
+				presenceTierIs(t, cli, "after the app disconnected", "away")
+				early := crewHandoff(t, cli, days["trellis"], "The last presence is still recent.", false, "")
+				if protocol.Deref(early.Outcome) != protocol.CrewDayCloseNap || early.NapError != nil {
+					t.Fatalf("59 seconds after the last report the handoff = %+v, want a nap", early)
+				}
+				w.advance(time.Second)
+				ended := crewHandoff(t, cli, days["alder"], "The user has been away for a minute.", false, "")
+				if protocol.Deref(ended.Outcome) != protocol.CrewDayCloseSleep || ended.NapError != nil {
+					t.Fatalf("60 seconds after the last report the handoff = %+v, want sleep", ended)
+				}
+			})
+		})
+	}
+}
+
 type presenceCheck struct {
 	at   time.Duration
 	tier string

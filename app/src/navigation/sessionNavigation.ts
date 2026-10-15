@@ -16,6 +16,7 @@ import {
   buildQueueBands,
   headOfQueue,
   isCrewQueueEnabled,
+  isHiddenInQueue,
   isQueueModeEnabled,
   type QueueBands,
   type QueueBandSession,
@@ -348,6 +349,7 @@ export function sessionAttentionFields(session: DaemonSessionSnapshot | undefine
     stateSince: session?.state_since,
     crewMember: session?.crew_member,
     parentSessionId: session?.parent_session_id,
+    hidden: session?.hidden ?? false,
   };
 }
 
@@ -365,7 +367,10 @@ export function navigationQueue(
       ...sessionAttentionFields(session),
     }));
   const views = buildDesktopViewModels(desktops, queueSessions);
-  return buildQueueBands(views, { crewInQueue: isCrewQueueEnabled(settings) });
+  return buildQueueBands(views, {
+    crewInQueue: isCrewQueueEnabled(settings),
+    hidden: isHiddenInQueue(settings) ? queueSessions.filter((session) => session.hidden) : [],
+  });
 }
 
 export function advanceQueue(

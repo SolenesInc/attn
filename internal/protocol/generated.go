@@ -3045,6 +3045,20 @@ type DesktopCloseMessage struct {
 	RequestID string `json:"request_id"`
 }
 
+type DesktopCloseTileMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID string `json:"desktop_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// TileID corresponds to the JSON schema field "tile_id".
+	TileID string `json:"tile_id"`
+}
+
 type DesktopCreateMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -8750,6 +8764,9 @@ type Session struct {
 	// "dispatcher_session_id".
 	DispatcherSessionID *SessionID `json:"dispatcher_session_id,omitempty,omitzero"`
 
+	// Hidden corresponds to the JSON schema field "hidden".
+	Hidden *bool `json:"hidden,omitempty,omitzero"`
+
 	// ID corresponds to the JSON schema field "id".
 	ID SessionID `json:"id"`
 
@@ -9121,6 +9138,9 @@ type SessionLedgerEntry struct {
 
 	// Directory corresponds to the JSON schema field "directory".
 	Directory string `json:"directory"`
+
+	// Hidden corresponds to the JSON schema field "hidden".
+	Hidden *bool `json:"hidden,omitempty,omitzero"`
 
 	// ID corresponds to the JSON schema field "id".
 	ID SessionID `json:"id"`

@@ -41,6 +41,7 @@ type SpawnOptions struct {
 	ClaudeExecutable  string
 	CodexExecutable   string
 	CopilotExecutable string
+	CodexRemote       string
 	AgentLoginShell   bool
 	AgentArgv         []string
 	AgentEnv          []string

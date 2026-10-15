@@ -77,6 +77,11 @@ with Review 2 before Review 10). Unnamed desktops come last in their current ord
 Undo in the toast restores your previous order; you can still drag desktops after
 sorting.
 
+**Presence.** Apps are the only source of user presence. If no app reports for
+90 seconds, attn treats you as away. Away time counts from the last report
+showing you present, or from daemon startup if there has been none. Crew
+turnover and activity generation use that same presence reading.
+
 **Panes, splits, and first-class shells.** A desktop can hold several sessions
 side by side. Split a pane, open a plain shell as its own session from the same
 dialog you use for agents, and move focus between panes with the keyboard.
@@ -415,6 +420,7 @@ The full dev-loop, instance, and harness targets live in
 | | |
 |---|---|
 | [Instances](docs/instances.md) | Run multiple isolated attn worlds side by side |
+| [Shared Codex](docs/using-shared-codex.md) | Experimental: Codex terminals sharing one app-server, with hidden sessions |
 | [Release](docs/making-a-release.md) | Maintainer runbook |
 
 ## Status

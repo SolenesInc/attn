@@ -189,6 +189,8 @@ type SpawnOpts struct {
 
 	InheritedInstructionsDirs string
 	InstructionsDir           string
+
+	CodexRemote string
 }
 
 func (o SpawnOpts) addDirArgs() []string {

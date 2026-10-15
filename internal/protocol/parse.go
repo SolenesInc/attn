@@ -247,6 +247,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdDesktopShowLeaf:               decodeInto[DesktopShowLeafMessage],
 	CmdDesktopMoveLeaf:               decodeInto[DesktopMoveLeafMessage],
 	CmdDesktopRemoveLeaf:             decodeInto[DesktopRemoveLeafMessage],
+	CmdDesktopCloseTile:              decodeInto[DesktopCloseTileMessage],
 	CmdDesktopDockTile:               decodeInto[DesktopDockTileMessage],
 	CmdDesktopUpdateTile:             decodeInto[DesktopUpdateTileMessage],
 	CmdDesktopSetSplitRatio:          decodeInto[DesktopSetSplitRatioMessage],

@@ -41,6 +41,7 @@ async function openWorkspace({
 function closedPanes(daemon: Awaited<ReturnType<typeof openWorkspace>>['daemon']) {
   return daemon.sent.flatMap((command) => {
     if (command.cmd === 'unregister') return [`pane-${command.id}`];
+    if (command.cmd === 'desktop_close_tile') return [command.tile_id];
     if (command.cmd === 'desktop_remove_leaf') return [command.leaf_id];
     return [];
   });

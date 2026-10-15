@@ -64,7 +64,7 @@ function OpenPalette({
   onRename: (sessionId: string, name: string, opener: HTMLElement | null) => void;
 }) {
   const { desktopViews, handleSelectSession, handleSelectTile } = useNavigationContext();
-  const { crewQueueEnabled } = useAttentionQueueContext();
+  const { crewQueueEnabled, queueHidden } = useAttentionQueueContext();
   const { handleWakeCrewMember } = useAppGardenActionsContext();
   const { desktopTileContents, sendSettleTurn, sendSnoozeTurn, sendSetSessionPriority, sendGetCommandUsage, sendRecordCommandUsage } = useDaemonApi();
   const desktops = useProfilesStore((state) => state.desktops);
@@ -106,13 +106,13 @@ function OpenPalette({
   const agents = useMemo(() => {
     const now = Date.now();
     return {
-      bands: buildQueueBands(desktopViews, { crewInQueue: crewQueueEnabled, now }),
+      bands: buildQueueBands(desktopViews, { crewInQueue: crewQueueEnabled, now, hidden: queueHidden }),
       crewRoster: crew.filter((member) => member.profile_id === selectedProfileId).map((member) => member.id),
       desktops: desktopViews,
       tileTitle,
       now,
     };
-  }, [crew, crewQueueEnabled, desktopViews, selectedProfileId, tileTitle]);
+  }, [crew, crewQueueEnabled, desktopViews, queueHidden, selectedProfileId, tileTitle]);
 
   return (
     <UnifiedPalette

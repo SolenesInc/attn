@@ -724,9 +724,11 @@ export function TerminalSettings({
 
 export function ExperimentalSettings({
   newSessionLauncherEnabled,
+  codexSharedEnabled,
+  queueShowHiddenSessions,
   directAgentLaunchEnabled,
   onSetSetting,
-}: Pick<SettingsModalState, 'newSessionLauncherEnabled' | 'directAgentLaunchEnabled' | 'onSetSetting'>) {
+}: Pick<SettingsModalState, 'newSessionLauncherEnabled' | 'codexSharedEnabled' | 'queueShowHiddenSessions' | 'directAgentLaunchEnabled' | 'onSetSetting'>) {
   return (
     <section className="settings-block">
       <div className="settings-block-intro">
@@ -765,6 +767,48 @@ export function ExperimentalSettings({
             onClick={() => onSetSetting('direct_agent_launch_enabled', directAgentLaunchEnabled ? 'false' : 'true')}
           >
             {directAgentLaunchEnabled ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+        <div className="settings-row-card">
+          <div>
+            <p className="settings-row-title">Shared Codex</p>
+            <p className="settings-row-copy" id="shared-codex-description">
+              Off by default. New Codex terminals share one app-server per profile. Switching conversations keeps the
+              old one live as a hidden session. Applies to new Codex terminals and to sessions you resume from the
+              ledger.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-label="Shared Codex"
+            aria-checked={codexSharedEnabled}
+            aria-describedby="shared-codex-description"
+            className="settings-action"
+            data-testid="settings-shared-codex-toggle"
+            onClick={() => onSetSetting('codex_shared_enabled', codexSharedEnabled ? 'false' : 'true')}
+          >
+            {codexSharedEnabled ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+        <div className="settings-row-card">
+          <div>
+            <p className="settings-row-title">Show hidden sessions in the queue</p>
+            <p className="settings-row-copy" id="queue-hidden-sessions-description">
+              On by default. Hidden sessions queue like any other; choosing one opens it in a terminal.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-label="Show hidden sessions in the queue"
+            aria-checked={queueShowHiddenSessions}
+            aria-describedby="queue-hidden-sessions-description"
+            className="settings-action"
+            data-testid="settings-queue-hidden-sessions-toggle"
+            onClick={() => onSetSetting('queue_show_hidden_sessions', queueShowHiddenSessions ? 'false' : 'true')}
+          >
+            {queueShowHiddenSessions ? 'Disable' : 'Enable'}
           </button>
         </div>
       </div>

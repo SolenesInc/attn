@@ -15,7 +15,7 @@ func TestAHandoffWhileTheUserIsAwayEndsTheDayUnlessItAsksForANap(t *testing.T) {
 		}
 		w.restart()
 		app, cli := w.App(), w.Client()
-		for key, value := range map[string]string{"crew.away_seconds": "60", "crew.wake_limit": "0", "crew.heartbeat_enabled": "false", "crew.autosleep_enabled": "false"} {
+		for key, value := range map[string]string{"crew.wake_limit": "0", "crew.heartbeat_enabled": "false", "crew.autosleep_enabled": "false"} {
 			setSetting(t, app, key, value)
 		}
 		for _, member := range []string{"trellis", "alder"} {
@@ -23,7 +23,9 @@ func TestAHandoffWhileTheUserIsAwayEndsTheDayUnlessItAsksForANap(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		w.advance(2 * time.Minute)
+		app.Close()
+		w.advance(150 * time.Minute)
+		presenceTierIs(t, cli, "with no app since startup", "away")
 
 		ended := crewHandoff(t, cli, "trellis-day", "Nobody is around; resting.", false, "")
 		if protocol.Deref(ended.Outcome) != protocol.CrewDayCloseSleep || ended.SessionID != nil || ended.NapError != nil {
@@ -42,6 +44,32 @@ func TestAHandoffWhileTheUserIsAwayEndsTheDayUnlessItAsksForANap(t *testing.T) {
 		}
 		if got := protocol.Deref(crewRosterMember(t, cli, "alder").BindingSession); got != "alder-day" {
 			t.Fatalf("after the refused nap alder is bound to %q, want its running day", got)
+		}
+	})
+}
+
+func TestNapsWithoutAnAppUseTheAutonomousWakeBudget(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		writeCrewCharter(t, w, "trellis")
+		w.restart()
+		app, cli := w.App(), w.Client()
+		for key, value := range map[string]string{"crew.wake_limit": "1", "crew.heartbeat_enabled": "false", "crew.autosleep_enabled": "false"} {
+			setSetting(t, app, key, value)
+		}
+		app.Close()
+		day := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "trellis", "").SessionID))
+		day.reply("Ready. <!-- attn:state=idle -->")
+		w.advance(150 * time.Minute)
+		napped := crewHandoff(t, cli, day.id, "Carry on without the user.", false, protocol.CrewDayCloseNap)
+		if protocol.Deref(napped.Outcome) != protocol.CrewDayCloseNap || napped.NapError != nil || napped.SessionID == nil {
+			t.Fatalf("the first unattended nap = %+v, want a successor", napped)
+		}
+		next := w.bootBubbleClaude(t, string(*napped.SessionID))
+		next.reply("Ready again. <!-- attn:state=idle -->")
+		w.advance(time.Minute)
+		limited := crewHandoff(t, cli, next.id, "Try another successor.", false, protocol.CrewDayCloseNap)
+		if limited.SessionID != nil || !strings.Contains(protocol.Deref(limited.NapError), "crew.wake_limit=1") {
+			t.Fatalf("the second unattended nap = %+v, want the used wake budget to refuse it", limited)
 		}
 	})
 }

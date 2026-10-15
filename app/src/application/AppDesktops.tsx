@@ -69,7 +69,7 @@ export function AppDesktops() {
     desktopTileContents,
   } = useDaemonApi();
   const { createSplitSession } = useSessionLaunchContext();
-  const { handleCloseSession } = useSessionLifecycleContext();
+  const { handleCloseTerminalTile } = useSessionLifecycleContext();
   const {
     getActiveLeafDropSnapshot,
     handleLeafDragStart,
@@ -161,9 +161,7 @@ export function AppDesktops() {
           }}
           onClosePane={(paneId) => {
             const paneSessionId = terminalState.agents.find((pane) => pane.id === paneId)?.sessionId;
-            if (paneSessionId) {
-              void handleCloseSession(paneSessionId).catch(console.error);
-            }
+            if (paneSessionId) handleCloseTerminalTile(desktop.id, paneId, paneSessionId);
           }}
           onRenameSession={sendRenameSession}
           onSelectSession={handleSelectSession}

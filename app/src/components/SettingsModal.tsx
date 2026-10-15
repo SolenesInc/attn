@@ -246,6 +246,8 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
       return (
         <ExperimentalSettings
           newSessionLauncherEnabled={state.newSessionLauncherEnabled}
+          codexSharedEnabled={state.codexSharedEnabled}
+          queueShowHiddenSessions={state.queueShowHiddenSessions}
           directAgentLaunchEnabled={state.directAgentLaunchEnabled}
           onSetSetting={state.onSetSetting}
         />

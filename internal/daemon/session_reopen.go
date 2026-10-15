@@ -118,6 +118,9 @@ func (d *Daemon) decideReopenPlace(
 	gitView reopenGit,
 ) error {
 	conversation, conversationReason := d.reopenConversation(verdict.Execution, verdict.DirectoryState == directoryMissing)
+	if l := d.linkOf(verdict.SessionID); !conversation && l != nil && l.setAsideAtClose(verdict.SessionID, strings.TrimSpace(verdict.Execution.Resume)) {
+		conversation, conversationReason = true, ""
+	}
 	if !hasLaunchIntent {
 		conversation = false
 		conversationReason = fmt.Sprintf("session %s has no saved launch contract, so its exact agent configuration cannot be restored", verdict.SessionID)
@@ -613,6 +616,7 @@ func (d *Daemon) reopenSessionRuntimeProtected(
 		}
 	}
 	spawn, policy := buildStoredIntentSpawn(session, intent, 80, 24)
+	policy.fromLedger = true
 	if resumeID := strings.TrimSpace(d.store.GetResumeSessionID(plan.SessionID)); resumeID != "" {
 		spawn.ResumeSessionID = protocol.Ptr(resumeID)
 	}

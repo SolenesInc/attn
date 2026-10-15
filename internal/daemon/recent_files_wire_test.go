@@ -22,6 +22,9 @@ func TestRecentFilesMergeActivityAndForgetDeletedFilesOnRequest(t *testing.T) {
 		app, cli := w.App(), w.Client()
 		placeSessions(t, w, app, cli, "first", "second")
 		plan, notes, agent, gone := markdownFile(t, w, "plan.md"), markdownFile(t, w, "notes.md"), markdownFile(t, w, "agent.md"), markdownFile(t, w, "gone.md")
+		if err := os.WriteFile(w.Path("docs", "script.sh"), []byte("#!/bin/sh\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 
 		openMarkdown(t, app, "first", plan)
 		openMarkdown(t, app, "second", plan)
@@ -140,7 +143,7 @@ func TestRecentFilesForgetDeletedFilesBelowTheRequestedLimit(t *testing.T) {
 	})
 }
 
-func TestRecentFilesKeepActivityWhenStatIsDenied(t *testing.T) {
+func TestRecentFilesForgetActivityWhenStatIsDenied(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		placeSessions(t, w, app, cli, "agent")
@@ -155,11 +158,21 @@ func TestRecentFilesKeepActivityWhenStatIsDenied(t *testing.T) {
 				t.Error(err)
 			}
 		})
-		if _, err := os.Stat(path); !os.IsPermission(err) {
-			t.Skipf("filesystem does not deny stat: %v", err)
+		_, statErr := os.Stat(path)
+		if !os.IsPermission(statErr) {
+			t.Skipf("filesystem does not deny stat: %v", statErr)
 		}
-		if got := paths(recentFiles(app, 0, "")); !slices.Equal(got, []string{path}) {
-			t.Fatalf("recent files with permission denied = %v, want its activity preserved", got)
+		if got := paths(recentFiles(app, 0, "")); len(got) != 0 {
+			t.Fatalf("recent files with permission denied = %v, want its activity forgotten", got)
+		}
+		if refused := requestOpenMarkdown(app, "agent", path); refused.Success || protocol.Deref(refused.Error) != statErr.Error() {
+			t.Errorf("opening a denied file answered %+v, want %q", refused, statErr)
+		}
+		if err := os.Chmod(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if got := paths(recentFiles(app, 0, "")); len(got) != 0 {
+			t.Fatalf("recent files after restoring permission = %v, want its old activity forgotten", got)
 		}
 	})
 }

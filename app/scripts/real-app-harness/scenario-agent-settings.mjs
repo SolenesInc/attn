@@ -160,6 +160,8 @@ try {
     await section('terminal');
     runner.assert((await text('[data-testid="settings-section-terminal"]')).includes('PTY Backend'), 'terminal hosting is under System');
     runner.assert(!(await text('.settings-nav')).includes('Workflows'), 'workflow engine settings are retired');
+    await section('experimental');
+    runner.assert((await text('[data-testid="settings-section-experimental"]')).includes('Shared Codex'), 'shared Codex is under Experimental');
     await section('agents');
     await screenshot('04-finished.png');
   });
