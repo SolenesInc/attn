@@ -55,7 +55,7 @@ interface UseUiAutomationBridgeArgs {
   daemonReady?: boolean;
   connectionError?: string | null;
   getActivePaneIdForSession: (session: Session | undefined | null) => string;
-  createSession: (label: string, cwd: string, id?: string, agent?: SessionAgent, yoloMode?: boolean, options?: { chiefOfStaff?: boolean }) => Promise<string>;
+  createSession: (label: string, cwd: string, id?: string, agent?: SessionAgent, yoloMode?: boolean) => Promise<string>;
   selectSession: (sessionId: string) => void;
   selectDesktop: (desktopId: string) => void;
   moveDesktopLeaf: (move: {
@@ -522,6 +522,8 @@ function collectSessionUiState(
   const desktopDom = collectDesktopShellMetrics(desktopId);
   const desktopView = collectDesktopViewState(desktopId);
   const desktopModel = serializeDesktopModel(session, getActivePaneIdForSession);
+  const sidebarDesktop = sidebarItem?.closest('.desktop-group');
+  const sidebarList = sidebarItem?.closest('.session-list');
 
   return {
     sessionId,
@@ -538,6 +540,12 @@ function collectSessionUiState(
           desktopGroupBounds: rectSnapshot(sidebarItem.closest('.desktop-row')),
           automation: readProvenance(sidebarItem),
           pullRequest: sidebarItem.querySelector('.sidebar-session-pr')?.textContent?.trim() || '',
+          desktopId,
+          desktopBounds: rectSnapshot(sidebarDesktop ?? null),
+          rowIndex: Array.from(sidebarDesktop?.querySelectorAll('[data-testid^="sidebar-session-"]') || []).indexOf(sidebarItem),
+          scrollTop: sidebarList instanceof HTMLElement ? sidebarList.scrollTop : null,
+          desktopIds: Array.from(sidebarList?.querySelectorAll('.desktop-group') || [])
+            .map((group) => (group.getAttribute('data-testid') || '').slice('sidebar-desktop-'.length)),
         }
       : null,
     desktopBounds: desktopDom.desktopRoot?.bounds ?? null,
@@ -1993,6 +2001,17 @@ export function useUiAutomationBridge({
     if (domResult !== NOT_A_DOM_ACTION) return domResult;
 
     switch (request.action) {
+      case 'chief_slot_get_state': {
+        const slot = document.querySelector('[data-testid="chief-slot"]');
+        return {
+          present: Boolean(slot),
+          phase: slot?.getAttribute('data-chief-phase') || null,
+          member: slot?.getAttribute('data-chief-member') || null,
+          sessionId: slot?.getAttribute('data-chief-session') || null,
+          setupOpen: Boolean(slot?.querySelector('[data-testid="chief-setup"]')),
+          shownAgentId,
+        };
+      }
       case 'get_state':
         return {
           ...serializeSelection(),
@@ -2202,7 +2221,7 @@ export function useUiAutomationBridge({
               : null,
           };
         };
-        const chiefRow = band?.querySelector('[data-testid^="queue-chief-"]');
+        const chiefRow = band?.querySelector('[data-testid="chief-slot"] .queue-row[data-session-id]');
         const agentListToggle = band?.querySelector('[data-testid="queue-agents-toggle"]');
         const snoozedHeader = band?.querySelector('[data-testid="queue-snoozed-header"]');
         const automationGroups = Array.from(document.querySelectorAll('[data-automation-id]'));
@@ -2237,7 +2256,7 @@ export function useUiAutomationBridge({
           },
           present: Boolean(band),
           empty: Boolean(band?.querySelector('[data-testid="queue-empty"]')),
-          chief: chiefRow ? readRow(chiefRow, 'queue-chief-') : null,
+          chief: chiefRow ? { ...readRow(chiefRow, 'queue-crew-'), id: chiefRow.getAttribute('data-session-id') || '' } : null,
           turns: Array.from(band?.querySelectorAll('[data-testid^="queue-turn-"]') || [])
             .map((row) => readRow(row, 'queue-turn-')),
           settled: Array.from(band?.querySelectorAll('[data-testid^="queue-settled-"]') || [])
@@ -2271,61 +2290,6 @@ export function useUiAutomationBridge({
             .map((group) => (group.getAttribute('data-testid') || '').slice('sidebar-desktop-'.length)),
         };
       }
-      case 'chief_of_staff_get_state':
-        return {
-          sessions: sessions.map((session) => {
-            const row = document.querySelector(`[data-testid="sidebar-session-${session.id}"]`);
-            const chiefOfStaff = Boolean(row?.querySelector('.chief-of-staff-badge'));
-            return {
-              id: session.id,
-              label: session.label,
-              chiefOfStaff,
-              sidebarBadge: chiefOfStaff,
-            };
-          }),
-          actionsOpen: Boolean(document.querySelector('.session-actions-popover')),
-          transferPrompt: document.querySelector('[data-testid="chief-transfer-prompt"]')?.textContent?.trim() || null,
-        };
-      case 'chief_of_staff_open_actions': {
-        const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : '';
-        if (!sessionId) {
-          throw new Error('chief_of_staff_open_actions requires sessionId');
-        }
-        const button = document.querySelector(`[data-testid="session-actions-${sessionId}"]`);
-        if (!(button instanceof HTMLElement)) {
-          throw new Error(`Session actions not found for ${sessionId}`);
-        }
-        clickElement(button);
-        await settleUi(2);
-        return { sessionId };
-      }
-      case 'chief_of_staff_toggle': {
-        const button = document.querySelector('[data-testid="chief-of-staff-session-action"]');
-        if (!(button instanceof HTMLElement)) {
-          throw new Error('Chief of staff action is not open');
-        }
-        clickElement(button);
-        await settleUi(2);
-        return { requested: true };
-      }
-      case 'chief_of_staff_confirm_transfer': {
-        const button = document.querySelector('[data-testid="chief-transfer-confirm"]');
-        if (!(button instanceof HTMLElement)) {
-          throw new Error('Chief of staff transfer prompt is not open');
-        }
-        clickElement(button);
-        await settleUi(2);
-        return { requested: true };
-      }
-      case 'chief_of_staff_cancel_transfer': {
-        const button = document.querySelector('[data-testid="chief-transfer-cancel"]');
-        if (!(button instanceof HTMLElement)) {
-          throw new Error('Chief of staff transfer prompt is not open');
-        }
-        clickElement(button);
-        await settleUi(2);
-        return { requested: true };
-      }
       case 'create_session': {
         const cwd = typeof payload.cwd === 'string' ? payload.cwd : '';
         const label = typeof payload.label === 'string' && payload.label.length > 0
@@ -2335,13 +2299,10 @@ export function useUiAutomationBridge({
         const providedSessionId = typeof payload.sessionId === 'string' && payload.sessionId.length > 0
           ? payload.sessionId
           : undefined;
-        const chiefOfStaff = payload.chief_of_staff === true;
         if (!cwd) {
           throw new Error('create_session requires cwd');
         }
-        const sessionId = await createSession(label, cwd, providedSessionId, agent, undefined, {
-          chiefOfStaff,
-        });
+        const sessionId = await createSession(label, cwd, providedSessionId, agent);
         await selectionShown({ kind: 'session', sessionId });
         await settleUi();
         window.setTimeout(() => {

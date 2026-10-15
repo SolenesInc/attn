@@ -43,7 +43,7 @@ function rows(
   return agentPaletteRows(
     {
       bands: buildQueueBands(desktops, { crewInQueue, now: NOW }),
-      crewRoster,
+      crew: crewRoster.map(key => ({ key, name: key })),
       desktops,
       tileTitle: (_desktopId, leaf) => leaf.tileParams ?? '',
       now: NOW,
@@ -71,7 +71,7 @@ const fixture = [
   desktop(
     'd1',
     [
-      session('chief', { chiefOfStaff: true, state: 'working' }),
+      session('chief', { chief: true, state: 'working' }),
       session('figgy-day', { label: 'figgy', crewMember: 'figgy', turnOwed: true, turnOpenedAt: minutesAgo(1) }),
       session('settled-agent'),
       session('newer-turn', { turnOwed: true, turnOpenedAt: minutesAgo(2) }),

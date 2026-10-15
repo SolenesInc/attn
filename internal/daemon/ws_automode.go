@@ -50,7 +50,7 @@ func (d *Daemon) autoModeSnapshot() (protocol.AutoModeStateChangedMessage, error
 		return snapshot, err
 	}
 	snapshot.Config = autoModeConfigInfo(cfg)
-	snapshot.Proposals = autoModeProposalInfos(proposals)
+	snapshot.Proposals = d.autoModeProposalInfos(proposals)
 	snapshot.Denials = autoModeDenialInfos(denials)
 	snapshot.EnvironmentSlots = autoModeEnvironmentSlots()
 	return snapshot, nil
@@ -89,7 +89,7 @@ func (d *Daemon) handleAutoModePromote(client *wsClient, msg *protocol.AutoModeP
 	d.logf("automode: promoted proposal %d (%s)", proposal.ID,
 		automode.DescribeProposal(proposal.Kind, proposal.Value))
 	d.announceAutoModeConfig(cfg)
-	info := autoModeProposalInfo(proposal)
+	info := d.autoModeProposalInfo(proposal)
 	config := autoModeConfigInfo(cfg)
 	result.Proposal = &info
 	result.Config = &config
@@ -113,7 +113,7 @@ func (d *Daemon) handleAutoModeDiscard(client *wsClient, msg *protocol.AutoModeD
 		d.sendToClient(client, result)
 		return
 	}
-	info := autoModeProposalInfo(proposal)
+	info := d.autoModeProposalInfo(proposal)
 	result.Proposal = &info
 	result.Success = true
 	d.publishFact(FactAutoModeConfigChanged, AutoModeConfigSubject, nil)

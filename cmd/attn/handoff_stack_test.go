@@ -77,7 +77,7 @@ func TestAHandoffFilesTheLetterAndTurnsTheDayOverAsAsked(t *testing.T) {
 		t.Fatalf("a nap that could not wake a successor exited %d: %s", stuck.Code, stuck.Stderr)
 	}
 	requireLines(t, "stdout", stuck.Stdout, "Trellis's letter is filed at ")
-	requireLines(t, "stderr", stuck.Stderr, "handoff: no successor was woken: ", "`attn handoff --retry`")
+	requireLines(t, "stderr", stuck.Stderr, "handoff: could not wake a successor: ", "`attn handoff --retry`")
 	path := filedLetter(t, stuck.Stdout, "Trellis")
 	if day := protocol.Deref(crewRoster(t, s)["trellis"].BindingSession); string(day) != trellis {
 		t.Fatalf("after the failed nap trellis is bound to %q, want its day %s", day, trellis)
@@ -87,9 +87,9 @@ func TestAHandoffFilesTheLetterAndTurnsTheDayOverAsAsked(t *testing.T) {
 		t.Fatal(err)
 	}
 	retried := s.Run(testworld.Invocation{Args: []string{"handoff", "--retry"}, Session: trellis})
-	requireStdout(t, retried, "Trellis's letter was already filed at "+path+".\n", "Trellis's next day is session ")
+	requireStdout(t, retried, "Trellis's letter was already filed at "+path+".\n", "Trellis is waking in session ")
 	next := protocol.Deref(crewRoster(t, s)["trellis"].BindingSession)
-	if next == "" || string(next) == trellis || !strings.Contains(retried.Stdout, string("session "+next[:8]+", waking now")) {
+	if next == "" || string(next) == trellis || !strings.Contains(retried.Stdout, string("session "+next[:8]+". This session is ending.")) {
 		t.Fatalf("the retry woke %q:\n%s", next, retried.Stdout)
 	}
 	s.Launched(string(next)).Prompted()

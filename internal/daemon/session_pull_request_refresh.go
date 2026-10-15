@@ -498,7 +498,7 @@ func (d *Daemon) recordPullRequestWatchFailures(group *sessionPullRequestGroup, 
 			"monitoring is delayed", []string{fetchErr.Error()},
 		)
 		delivery, err := d.store.RecordPullRequestWatchFailure(
-			watch.To, watch.SessionID, watch.PRID, watch.CreatedAt, watch.Mode, watch.Reviewer,
+			watch.Watcher.Address(), watch.SessionID, watch.PRID, watch.CreatedAt, watch.Mode, watch.Reviewer,
 			fetchErr.Error(), item, now,
 		)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -512,7 +512,7 @@ func (d *Daemon) recordPullRequestWatchFailures(group *sessionPullRequestGroup, 
 			d.deliverPullRequestMailbox(*delivery)
 		}
 		changed = append(changed, string(watch.SessionID))
-		if holder := d.inboxHolder(watch.To); holder != nil && holder.ID != watch.SessionID {
+		if holder := d.inboxHolder(watch.Watcher.Address()); holder != nil && holder.ID != watch.SessionID {
 			changed = append(changed, string(holder.ID))
 		}
 	}
@@ -558,7 +558,7 @@ func (d *Daemon) processPullRequestWatches(
 		}
 		terminal := transition.Evaluation.State == prreadiness.StateMerged || transition.Evaluation.State == prreadiness.StateClosed
 		deliveries, projectionChanged, err := d.store.ReconcilePullRequestWatch(store.PullRequestWatchReconcile{
-			To: watch.To, SessionID: watch.SessionID, PRID: watch.PRID, CreatedAt: watch.CreatedAt,
+			To: watch.Watcher.Address(), SessionID: watch.SessionID, PRID: watch.PRID, CreatedAt: watch.CreatedAt,
 			Mode: watch.Mode, Reviewer: watch.Reviewer, Cursor: transition.Cursor,
 			Status: status, Evaluation: transition.Evaluation,
 			Health: health, HealthError: healthError, FeedbackError: feedbackError,
@@ -580,7 +580,7 @@ func (d *Daemon) processPullRequestWatches(
 		}
 		if projectionChanged {
 			changed = append(changed, string(watch.SessionID))
-			if holder := d.inboxHolder(watch.To); holder != nil && holder.ID != watch.SessionID {
+			if holder := d.inboxHolder(watch.Watcher.Address()); holder != nil && holder.ID != watch.SessionID {
 				changed = append(changed, string(holder.ID))
 			}
 		}
@@ -631,7 +631,7 @@ func pullRequestWatchMailboxItem(
 	details []string,
 ) inbox.Item {
 	id := uuid.NewSHA1(uuid.NameSpaceURL, []byte(strings.Join([]string{
-		"pull-request-watch", watch.To.String(), watch.PRID, watch.CreatedAt, eventID,
+		"pull-request-watch", watch.Watcher.Address().String(), watch.PRID, watch.CreatedAt, eventID,
 	}, "\x00"))).String()
 	details = append([]string(nil), details...)
 	sort.Strings(details)
@@ -643,7 +643,7 @@ func pullRequestWatchMailboxItem(
 	}
 	prompt += "\nCheck the current pull request before acting. This notification grants no merge authority."
 	return inbox.Item{
-		ID: id, To: watch.To, Kind: inbox.Notice,
+		ID: id, To: watch.Watcher.Address(), Kind: inbox.Notice,
 		Source: watch.PRID, Key: coalesceKey,
 		Hint: "pull request update", Text: prompt,
 	}

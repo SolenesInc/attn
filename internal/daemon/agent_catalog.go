@@ -22,7 +22,7 @@ func (d *Daemon) agentCatalog() []agentdriver.Descriptor {
 		caps := agentdriver.EffectiveCapabilities(driver)
 		entry := agentdriver.Descriptor{
 			Name:       name,
-			Executable: driver.ResolveExecutable(d.store.GetSetting(canonicalExecutableSettingKey(name))),
+			Executable: driver.ResolveExecutable(d.daemonSetting(daemonSettingKey(canonicalExecutableSettingKey(name)))),
 			ModelPin:   caps.HasModelPin,
 			EffortPin:  caps.HasEffortPin,
 		}

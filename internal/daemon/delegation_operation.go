@@ -94,9 +94,9 @@ func (d *Daemon) startDelegationForeground(msg *protocol.DelegateMessage) (*prot
 		}
 		resolvedJSON = string(raw)
 	}
-	var chiefSessionID protocol.SessionID
-	if d.isChiefOfStaffSession(protocol.Deref(msg.SourceSessionID)) {
-		chiefSessionID = protocol.TrimID(protocol.Deref(msg.SourceSessionID))
+	r, err := d.gardenRequester(msg.SourceSessionID, msg.ProfileID)
+	if err != nil {
+		return nil, err
 	}
 	seedID := ""
 	parentSeedID := ""
@@ -111,9 +111,8 @@ func (d *Daemon) startDelegationForeground(msg *protocol.DelegateMessage) (*prot
 			if garden.Closed(seed.Status) {
 				return nil, fmt.Errorf("seed %s is %s; replant it before delegating", seedID, seed.Status)
 			}
-			handoverSnapshot = store.DelegationHandoverSnapshot{
-				SeedRev: int(doc.Rev), TenderSession: seed.TenderSession, TenderMember: seed.TenderMember,
-			}
+			tender, _ := seed.Claim.Tender()
+			handoverSnapshot = store.DelegationHandoverSnapshot{SeedRev: int(doc.Rev), Tender: tender}
 		}
 	}
 	if msg.Assignment.Kind == protocol.DelegateAssignmentKindNew {
@@ -125,7 +124,7 @@ func (d *Daemon) startDelegationForeground(msg *protocol.DelegateMessage) (*prot
 	if err != nil {
 		return nil, err
 	}
-	record, claimed, err := d.store.ClaimDelegationOperationWithHandoverSnapshot(requestID, "op-"+uuid.NewString(), protocol.SessionID(uuid.NewString()), chiefSessionID, seedID, string(encoded), resolvedJSON, baseCommit, parentSeedID, handoverSnapshot, time.Now())
+	record, claimed, err := d.store.ClaimDelegationOperationWithHandoverSnapshot(requestID, "op-"+uuid.NewString(), protocol.SessionID(uuid.NewString()), r.Actor(), seedID, string(encoded), resolvedJSON, baseCommit, parentSeedID, handoverSnapshot, time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -202,12 +201,13 @@ func (d *Daemon) runDelegationOperationProtected(protection foregroundCleanupPro
 	runtime, err := d.resolveDelegateRuntimeWithHandoverSnapshot(
 		&msg, protocol.Deref(record.Operation.SeedID), record.BaseCommit, record.HandoffNoteID,
 		record.Operation.SessionID, protocol.Deref(record.Operation.WorktreePath), record.WorktreeOwned,
-		record.HandoverSeedRev, record.HandoverTenderSession, record.HandoverTenderMember, id, record.ParentSeedID,
+		record.HandoverSeedRev, record.HandoverTender, id, record.ParentSeedID,
 	)
 	if err != nil {
 		d.finishDelegationFailure(id, err)
 		return
 	}
+	runtime.Dispatcher = record.Dispatcher
 	resolvedSeedID := strings.TrimSpace(protocol.Deref(runtime.Plot))
 	if runtime.Handover != nil {
 		resolvedSeedID = strings.TrimSpace(runtime.Handover.SeedID)
@@ -227,7 +227,7 @@ func (d *Daemon) runDelegationOperationProtected(protection foregroundCleanupPro
 		d.finishDelegationFailure(id, fmt.Errorf("record resolved delegation: %w", err))
 		return
 	}
-	result, launchErr := d.delegateOperationProtected(protection, runtime, id, record.Operation.SessionID, protocol.Deref(record.Operation.WorktreePath), record.WorktreeOwned, record.WorktreeToken, record.ChiefSessionID, resolved)
+	result, launchErr := d.delegateOperationProtected(protection, runtime, id, record.Operation.SessionID, protocol.Deref(record.Operation.WorktreePath), record.WorktreeOwned, record.WorktreeToken, resolved)
 	if errors.Is(launchErr, errDelegationInterrupted) {
 		return
 	}
@@ -308,11 +308,14 @@ func (d *Daemon) delegationOperation(id string) (*protocol.DelegationOperation, 
 	}
 	if seedID := strings.TrimSpace(protocol.Deref(operation.SeedID)); seedID != "" {
 		if seed, _, seedErr := d.readSeed(seedID); seedErr == nil {
-			holder := seed.Tender().DisplayName()
+			holder := ""
+			if party, claimed := seed.Claim.Tender(); claimed {
+				holder = d.partyView(party, d.broadcastBindings()).Name
+			}
 			if holder == "" {
 				holder = "nobody"
 			}
-			facts = append(facts, fmt.Sprintf("seed %s is held by %s", seedID, holder))
+			facts = append(facts, fmt.Sprintf("seed %s is claimed by %s", seedID, holder))
 		} else {
 			facts = append(facts, fmt.Sprintf("seed %s state is unknown", seedID))
 		}

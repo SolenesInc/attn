@@ -131,9 +131,9 @@ function WaitingPeek() {
       deriveTileTitle(tile, tileContents[tileContentKey(desktopId, tile.tileId)],
         (id) => seeds.find((seed) => seed.id === id)?.title);
     return agentPaletteRows<LocalSession>(
-      { bands: queue, crewRoster: (crew ?? []).map((member) => member.id), desktops, tileTitle, now },
+      { bands: queue, crew: crew ?? [], desktops, tileTitle, now },
       '',
-    ).filter((row) => !(row.kind === 'agent' && row.session.automation));
+    ).filter((row) => !((row.kind === 'agent' && row.session.automation) || (row.kind === 'member' && row.unconfigured)));
   }, [crew, now, queue, tileContents, desktops, seeds]);
 
   const shown: AgentPaletteRow<LocalSession>[] = [];

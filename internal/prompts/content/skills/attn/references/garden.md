@@ -59,16 +59,18 @@ tender.
 
 ## Rings and watches
 
-Lifecycle moves ring the seed's current tender and watching sessions. Harvesting
+Lifecycle moves ring the seed's current tender and watching parties. Harvesting
 or withering a blocker also rings the tender and watchers of each seed it set
 free. Notes stay quiet unless you add `--ring`. A successful action never rings
-the session that caused it. Automation acceptance is quiet; its bell waits until
+the party that caused it. Automation acceptance is quiet; its bell waits until
 the work is ready or the attempt needs attention. `attn seed watch <id>`
-subscribes this session to the seed and its descendants, including children
-planted later. A new delegation starts the same watch on the seed it binds.
+subscribes your party to the seed and its descendants, including children
+planted later. Each new delegation, including a handover, starts that watch for
+both the delegate and the delegating party. Crew watches belong to the member
+and carry across naps.
 
 `attn seed unwatch <id>` removes that subscription and drops a queued update only
-when the session is neither the tender nor covered by another watch. Separate
+when the party is neither the tender nor covered by another watch. Separate
 child watches remain. An ancestor watch can still cover the seed; `attn seed
 show <id>` and `unwatch` name those subscriptions and the commands to remove
 them. `watch` restores a subscription; a new delegation starts it again.

@@ -5,7 +5,7 @@ test('queue rows share the tree geometry and reveal actions on hover', async ({ 
   await page.waitForFunction(() => window.__HARNESS__?.ready === true);
 
   const sidebar = page.getByTestId('queue-sidebar');
-  const chief = page.getByTestId('queue-chief-chief');
+  const chief = page.getByTestId('queue-crew-chief-member');
   const awakeCrew = page.getByTestId('queue-crew-alder');
   const turn = page.getByTestId('queue-turn-owed-1');
   const sun = page.getByTestId('queue-crew-wake-birch');

@@ -158,13 +158,15 @@ func (d *Daemon) openSeedTile(seedID string, callerSessionID protocol.SessionID,
 			return "", "", err
 		}
 	}
+	tender, _ := seed.Claim.Tender()
+	tenderSession, _ := d.broadcastBindings().SessionOf(tender)
 	d.openTileMu.Lock()
 	defer d.openTileMu.Unlock()
 	desktop, tileID, err := d.openAgentTile(location, agentTile{
 		tileID:    seedTileIDForID(seed.ID),
 		tileKind:  string(layouttree.TileKindSeed),
 		params:    seed.ID,
-		sessionID: d.seedTileSession(seed.TenderSession, location),
+		sessionID: d.seedTileSession(tenderSession, location),
 	})
 	if err != nil {
 		return "", "", err
@@ -177,7 +179,7 @@ func (d *Daemon) seedTileSession(tenderSessionID protocol.SessionID, location ag
 	if tenderSessionID == "" {
 		return location.sessionID
 	}
-	if tender := d.store.Get(tenderSessionID); tender != nil && tender.ProfileID == location.profileID {
+	if tender := d.store.Get(tenderSessionID); tender != nil {
 		return tenderSessionID
 	}
 	return location.sessionID
@@ -207,7 +209,7 @@ func (d *Daemon) openSentFilesEnabled() bool {
 	if d.store == nil {
 		return true
 	}
-	raw := strings.TrimSpace(d.store.GetSetting(SettingOpenSentFilesEnabled))
+	raw := strings.TrimSpace(d.daemonSetting(settingOpenSentFilesEnabled))
 	if raw == "" {
 		return true
 	}

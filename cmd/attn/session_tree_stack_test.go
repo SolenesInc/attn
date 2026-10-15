@@ -24,7 +24,7 @@ func TestSessionTreeShowsDelegationChainsAndKeepsChildrenOfClosedDispatchers(t *
 		t.Fatal(err)
 	}
 	source := s.Spawn(app, fakeagent.Claude, cwd, labelled("orchestrator"))
-	s.Launched(source)
+	sourceRun := s.Launched(source)
 	settle(app, source)
 	delegate := func(dispatcher, label, brief string) delegated {
 		t.Helper()
@@ -115,6 +115,13 @@ func TestSessionTreeShowsDelegationChainsAndKeepsChildrenOfClosedDispatchers(t *
 		if refused.Code != 2 || refused.Stdout != "" || !strings.Contains(refused.Stderr, "--tree supports only --profile") {
 			t.Errorf("tree with %q exited %d: %s%s", args, refused.Code, refused.Stdout, refused.Stderr)
 		}
+	}
+	sourceRun.Exit(143)
+	testworld.AwaitSession(app, source, func(x protocol.Session) bool {
+		return protocol.Deref(x.StateReason) == "process_exited"
+	})
+	if stopped := tree(); !strings.Contains(stopped, "\n├─ "+child.SessionID[:8]+"  builder") || !strings.Contains(stopped, source[:8]+"  orchestrator") {
+		t.Fatalf("stopping the dispatcher detached its live delegates:\n%s", stopped)
 	}
 	closed := s.Run(testworld.Invocation{Session: source, Args: []string{"agent", "close", source, "-m", "Delegation underway"}})
 	if closed.Code != 0 {
@@ -229,4 +236,64 @@ func TestSessionTreeKeepsAgentReadsInTheirProfileWithoutConsumingSeedNotificatio
 		}
 	}
 	t.Fatalf("tree consumed the pending seed notification: %+v", inbox.Items)
+}
+
+func TestSessionTreeFollowsMemberDispatcherAcrossClearSleepAndWake(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s.Start()
+	app := s.App()
+	var member protocol.CrewCreateResult
+	s.Attn("crew", "create", "Keel", "--agent", "claude", "--json").JSON(t, &member)
+	var wake protocol.CrewWakeResult
+	s.Attn("crew", "wake", "Keel", "--json").JSON(t, &wake)
+	day := s.Launched(string(wake.SessionID))
+	day.Prompted()
+	day.Reply("Ready. <!-- attn:state=idle -->")
+	var child delegated
+	s.Run(testworld.Invocation{Session: string(wake.SessionID), Args: []string{
+		"delegate", "--brief", "Build the member's work", "--cwd", member.Member.HomeDir,
+		"--name", "builder", "--model", "default",
+	}}).JSON(t, &child)
+	s.Launched(child.SessionID).Prompted()
+	assertTree := func(parent protocol.SessionID, absent bool) {
+		t.Helper()
+		result := s.Attn("session", "list", "--tree")
+		if result.Code != 0 {
+			t.Fatalf("tree: %+v", result)
+		}
+		row := "└─ " + child.SessionID[:8] + "  builder"
+		if absent {
+			row = child.SessionID[:8] + "  builder (dispatcher Keel closed or absent)"
+		} else if !strings.Contains(result.Stdout, string(parent[:8])+"  Keel") {
+			t.Fatalf("member's current session absent from tree:\n%s", result.Stdout)
+		}
+		if !strings.Contains(result.Stdout, "\n"+row) {
+			t.Fatalf("member delegate absent from tree:\n%s", result.Stdout)
+		}
+	}
+	assertTree(wake.SessionID, false)
+	app.TypeLine(string(wake.SessionID), "/clear")
+	if got := day.Prompted(); got != "/clear" {
+		t.Fatalf("clear = %q", got)
+	}
+	next := *testworld.Await(app, protocol.EventSessionRegistered, func(e protocol.WebSocketEvent) bool {
+		return e.Session != nil && protocol.Deref(e.Session.Succeeds) == wake.SessionID
+	}).Session
+	testworld.Await(app, protocol.EventCrewUpdated, func(e protocol.CrewUpdatedMessage) bool {
+		for _, m := range e.Members {
+			if m.Key == member.Member.Key && protocol.Deref(m.BindingSession) == next.ID {
+				return true
+			}
+		}
+		return false
+	})
+	assertTree(next.ID, false)
+	if _, err := s.Client().CrewHandoff(next.ID, "The work is delegated.", false, protocol.CrewDayCloseSleep); err != nil {
+		t.Fatal(err)
+	}
+	assertTree("", true)
+	s.Attn("crew", "wake", "Keel", "--json").JSON(t, &wake)
+	s.Launched(string(wake.SessionID)).Prompted()
+	assertTree(wake.SessionID, false)
 }

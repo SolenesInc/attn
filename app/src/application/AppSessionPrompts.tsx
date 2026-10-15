@@ -1,5 +1,4 @@
 import { DesktopClosePrompt } from '../components/DesktopClosePrompt';
-import { ChiefOfStaffTransferPrompt } from '../components/ChiefOfStaffTransferPrompt';
 import { LocationPicker } from '../components/LocationPicker';
 import { SessionContextCapPrompt } from '../components/SessionContextCapPrompt';
 import { SessionCreationProgress } from '../components/SessionCreationProgress';
@@ -8,7 +7,6 @@ import {
   useAppErrorsContext,
   useAppInputs,
   useAppShell,
-  useChiefOfStaffContext,
   useSessionLaunchContext,
   useSessionLifecycleContext,
 } from './AppContexts';
@@ -35,13 +33,6 @@ export function AppSessionPrompts() {
   const { agentAvailability, contextCapPromptSession, setContextCapPromptSession } = useAppShell();
   const { showError } = useAppErrorsContext();
   const { settings } = useAppInputs();
-  const {
-    hasChiefOfStaff,
-    chiefTransferTarget,
-    chiefTransferSaving,
-    handleConfirmChiefTransfer,
-    setChiefTransferTarget,
-  } = useChiefOfStaffContext();
   return (
     <>
       {desktopClosePrompt && <DesktopClosePrompt label={desktopClosePrompt.label} onConfirm={confirmCloseDesktop} onCancel={cancelCloseDesktop} />}
@@ -59,7 +50,6 @@ export function AppSessionPrompts() {
         onError={showError}
         projectsDirectory={settings.projects_directory}
         agentAvailability={agentAvailability}
-        chiefExists={hasChiefOfStaff}
       />
       <SessionCreationProgress
         isVisible={sessionCreationJob !== null}
@@ -68,18 +58,6 @@ export function AppSessionPrompts() {
         phase={sessionCreationJob?.phase || 'starting_session'}
         error={sessionCreationJob?.error}
         onDismiss={() => setSessionCreationJob(null)}
-      />
-      <ChiefOfStaffTransferPrompt
-        isVisible={chiefTransferTarget !== null}
-        currentLabel={chiefTransferTarget?.currentLabel ?? ''}
-        targetLabel={chiefTransferTarget?.targetLabel ?? ''}
-        isSaving={chiefTransferSaving}
-        onConfirm={() => void handleConfirmChiefTransfer()}
-        onCancel={() => {
-          if (!chiefTransferSaving) {
-            setChiefTransferTarget(null);
-          }
-        }}
       />
       {contextCapPromptSession && (
         <SessionContextCapPrompt

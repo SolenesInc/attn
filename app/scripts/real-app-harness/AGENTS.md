@@ -1,6 +1,6 @@
 # Real-app harness
 
-Packaged-app scenarios. Set up an instance per [instances](../../../docs/instances.md)
+Packaged-app scenarios. Set up an instance per [instances](../../../docs/internal/instances.md)
 and run commands from the repository root.
 
 ## Running
@@ -14,7 +14,7 @@ and run commands from the repository root.
 - Hunt CI flakes with
   `gh workflow run acceptance-soak.yml --ref next -f scenarios=<ids>`.
   `scripts/ci-flake-report.sh` ranks failing tests across CI history.
-- Linux VM: `pnpm --dir app real-app:linux provision` ([linux-runner](../../../docs/linux-runner.md)).
+- Linux VM: `pnpm --dir app real-app:linux provision` ([linux-runner](../../../docs/internal/linux-runner.md)).
 - Platform skips go in the catalog entry as `skipOn` with a reason. A product
   failure on Linux is a finding, not a skip.
 
@@ -45,7 +45,7 @@ and run commands from the repository root.
   may launch real providers; read one before running it.
 - Build child environments with `instanceCliEnv`, never `{ ...process.env }`.
 - Take verdicts from the screen, the protocol, or the CLI, not the daemon DB;
-  see [Testing](../../../docs/testing.md#scenario). Read the DB, when a scenario
+  see [Testing](../../../docs/internal/testing.md#scenario). Read the DB, when a scenario
   must, through `queryDaemonDb`. Resolve pane ids from app state.
 - Signal only PIDs from the automation manifest or spawned processes. Keep
   OS-specific behavior in `platform.mjs`.

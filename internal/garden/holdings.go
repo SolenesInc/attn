@@ -1,13 +1,12 @@
 package garden
 
 import (
+	"github.com/victorarias/attn/internal/who"
 	"sort"
-	"strings"
 )
 
-func Held(seeds []Seed, member string) []Seed {
-	member = strings.TrimSpace(member)
-	if member == "" {
+func TendedBy(seeds []Seed, party who.Party) []Seed {
+	if party.IsZero() {
 		return nil
 	}
 	out := []Seed{}
@@ -15,7 +14,7 @@ func Held(seeds []Seed, member string) []Seed {
 		if Closed(seed.Status) {
 			continue
 		}
-		if strings.EqualFold(strings.TrimSpace(seed.TenderMember), member) {
+		if seed.Claim.tender == party {
 			out = append(out, seed)
 		}
 	}
@@ -28,11 +27,11 @@ func Held(seeds []Seed, member string) []Seed {
 	return out
 }
 
-func PlotsOf(seeds []Seed, held []Seed) []Seed {
+func PlotsOf(seeds []Seed, tended []Seed) []Seed {
 	index := byID(seeds)
-	seen := make(map[string]bool, len(held))
+	seen := make(map[string]bool, len(tended))
 	out := []Seed{}
-	for _, seed := range held {
+	for _, seed := range tended {
 		parent, ok := parentOf(seed)
 		if !ok || seen[parent] {
 			continue

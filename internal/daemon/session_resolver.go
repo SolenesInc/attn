@@ -113,11 +113,11 @@ func (d *Daemon) runSessionResolver() {
 func (d *Daemon) resolveDue(now time.Time) {
 	resolver := d.sessionResolver()
 	for _, sessionID := range resolver.takeDue(now) {
-		resolver.after(protocol.SessionID(sessionID), d.resolveSession(protocol.SessionID(sessionID), now))
+		resolver.after(protocol.SessionID(sessionID), d.resolveSessionState(protocol.SessionID(sessionID), now))
 	}
 }
 
-func (d *Daemon) resolveSession(sessionID protocol.SessionID, now time.Time) time.Time {
+func (d *Daemon) resolveSessionState(sessionID protocol.SessionID, now time.Time) time.Time {
 	session := d.store.Get(sessionID)
 	if session == nil {
 		d.forgetSessionTrace(sessionID)

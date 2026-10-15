@@ -11,9 +11,8 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
-
-const SessionClosedByUser = "user"
 
 const SessionLedgerDefaultLimit = 20
 
@@ -22,7 +21,7 @@ const SessionLedgerMaxLimit = 1000
 var ErrSessionClosed = errors.New("session is closed")
 
 type SessionClose struct {
-	By     string
+	By     who.Actor
 	Reason string
 }
 
@@ -69,9 +68,9 @@ func (s *Store) CloseSession(id protocol.SessionID, closed SessionClose, now tim
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	by := strings.TrimSpace(closed.By)
-	if by == "" {
-		by = SessionClosedByUser
+	by := closed.By
+	if by.IsZero() {
+		by = who.User()
 	}
 	at := now.UTC().Format(time.RFC3339Nano)
 	delete(s.touchedAt, id)
@@ -268,7 +267,7 @@ func (s *Store) SessionLedger(query SessionLedgerQuery) (SessionLedgerPage, erro
 	return s.sessionLedgerDB(query, limit)
 }
 
-const ledgerSelect = `SELECT id, label, agent, directory, profile_id, priority,
+const ledgerSelect = `SELECT member_key, COALESCE((SELECT name FROM crew_members WHERE crew_members.member_key = sessions.member_key), ''), id, label, agent, directory, profile_id, priority,
 	COALESCE((SELECT name FROM profiles WHERE profiles.id = sessions.profile_id), ''),
 	COALESCE((SELECT deleted_at FROM profiles WHERE profiles.id = sessions.profile_id), ''),
 	branch, is_worktree, main_repo, repository, state, last_seen, closed_at, closed_by, close_reason, turn_snoozed_until,
@@ -277,7 +276,7 @@ const ledgerSelect = `SELECT id, label, agent, directory, profile_id, priority,
 const ledgerAt = `CASE WHEN closed_at <> '' THEN closed_at ELSE last_seen END`
 
 func (q SessionLedgerQuery) scopeAndWindow() ([]string, []any) {
-	var where []string
+	where := []string{"(sessions.member_key = '' OR sessions.closed_at = '' OR sessions.id = (SELECT latest_session FROM crew_members WHERE crew_members.member_key = sessions.member_key))"}
 	var args []any
 	switch q.Scope {
 	case SessionLedgerClosed:
@@ -468,6 +467,13 @@ func (s *Store) sessionLedgerMemory(query SessionLedgerQuery, limit int) (Sessio
 
 	windowed := scoped[:0]
 	for _, entry := range scoped {
+		if key := s.memberSessions[entry.ID]; !key.IsZero() {
+			if s.latestMemberSessions[key] != entry.ID && protocol.Deref(entry.ClosedAt) != "" {
+				continue
+			}
+			entry.MemberKey = protocol.Ptr(key.String())
+			entry.MemberName = protocol.Ptr(s.crewMembers[key].Name)
+		}
 		if query.withinWindow(entry) {
 			windowed = append(windowed, entry)
 		}
@@ -549,6 +555,7 @@ func (s *Store) sessionIsLiveLocked(id protocol.SessionID) bool {
 func (s *Store) ledgerEntryMemoryLocked(id protocol.SessionID) *protocol.SessionLedgerEntry {
 	if mark, closed := s.sessionCloses[id]; closed {
 		entry := ledgerEntryFromSession(mark.session, mark)
+		s.decorateLedgerMemberLocked(&entry)
 		return &entry
 	}
 	session := s.sessions[id]
@@ -558,6 +565,7 @@ func (s *Store) ledgerEntryMemoryLocked(id protocol.SessionID) *protocol.Session
 	live := *session
 	applyTurnStamps(&live, s.turnStampsLocked(id))
 	entry := ledgerEntryFromSession(&live, sessionCloseMark{})
+	s.decorateLedgerMemberLocked(&entry)
 	return &entry
 }
 
@@ -578,7 +586,7 @@ func ledgerInstant(entry protocol.SessionLedgerEntry) string {
 
 type sessionCloseMark struct {
 	At      string
-	By      string
+	By      who.Actor
 	Reason  string
 	session *protocol.Session
 }
@@ -603,7 +611,9 @@ func ledgerEntryFromSession(session *protocol.Session, mark sessionCloseMark) pr
 	}
 	if mark.At != "" {
 		entry.ClosedAt = protocol.Ptr(mark.At)
-		entry.ClosedBy = protocol.Ptr(mark.By)
+		if !mark.By.IsZero() {
+			entry.ClosedBy = protocol.Ptr(protocol.ActorView{Ref: mark.By.Ref(), Name: mark.By.String()})
+		}
 		if mark.Reason != "" {
 			entry.CloseReason = protocol.Ptr(mark.Reason)
 		}
@@ -622,13 +632,15 @@ func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 	var (
 		profileDeletedAt string
 		closedAt         string
-		closedBy         string
+		closedBy         who.Actor
 		closeReason      string
 		pinnedAt         string
 		snoozedUntil     string
 	)
 
+	var memberKey, memberName string
 	err := row.Scan(
+		&memberKey, &memberName,
 		&entry.ID,
 		&entry.Label,
 		&entry.Agent,
@@ -651,6 +663,10 @@ func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 	)
 	if err != nil {
 		return protocol.SessionLedgerEntry{}, err
+	}
+	if memberKey != "" {
+		entry.MemberKey = protocol.Ptr(memberKey)
+		entry.MemberName = protocol.Ptr(memberName)
 	}
 	if until, err := time.Parse(time.RFC3339Nano, snoozedUntil); err == nil && until.After(time.Now()) && closedAt == "" {
 		entry.TurnSnoozedUntil = protocol.Ptr(until.UTC().Format(time.RFC3339Nano))
@@ -678,7 +694,9 @@ func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 	}
 	if closedAt != "" {
 		entry.ClosedAt = protocol.Ptr(closedAt)
-		entry.ClosedBy = protocol.Ptr(closedBy)
+		if !closedBy.IsZero() {
+			entry.ClosedBy = protocol.Ptr(protocol.ActorView{Ref: closedBy.Ref(), Name: closedBy.String()})
+		}
 		if closeReason != "" {
 			entry.CloseReason = protocol.Ptr(closeReason)
 		}
@@ -697,4 +715,11 @@ func unplaceClosingSession(tx *sql.Tx, now string, id protocol.SessionID) error 
 	}
 	_, err := tx.Exec(`RELEASE unplace_closing_session`)
 	return err
+}
+
+func (s *Store) decorateLedgerMemberLocked(entry *protocol.SessionLedgerEntry) {
+	if key := s.memberSessions[entry.ID]; !key.IsZero() {
+		entry.MemberKey = protocol.Ptr(key.String())
+		entry.MemberName = protocol.Ptr(s.crewMembers[key].Name)
+	}
 }

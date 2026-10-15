@@ -19,8 +19,11 @@ import { type Answer, answerInTurn, HOLD, type Reply, type ScriptedDaemon } from
 
 function member(id: string, revision: number, values: Partial<CrewMember> = {}): CrewMember {
   return {
-    id,
+    key: id,
+    name: id[0].toUpperCase()+id.slice(1),
     revision,
+    retired: false,
+    chief: false,
     charter_path: `/crew/${id}/CHARTER.md`,
     home_dir: `/crew/${id}`,
     awareness_dirs: [],
@@ -100,7 +103,7 @@ async function renderPanel({
   const openCrew = () => gesture(daemon, () => fireEvent.click(screen.getByTestId('manage-crew')));
   if (isOpen) await openCrew();
   const pushMembers = async (next: CrewMember[]) => {
-    daemon.emit({ event: 'crew_updated', members: next });
+    daemon.emit({ event: 'crew_updated', profile_id: 'profile-default', members: next });
     await daemon.idle();
   };
   const closeWithEscape = () => gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
@@ -132,7 +135,9 @@ describe('CrewPanel', () => {
   });
 
   it('keeps member, tab, seed filter and search when a desktop seed returns to Crew', async () => {
-    const planted = daemonSeed('s-g9yxwv', { title: 'Artifact presence comes from the daemon', status: 'planted', planter_member: 'keel' });
+    const planted = daemonSeed('s-g9yxwv', { claimed: false,
+    resume_available: false,  title: 'Artifact presence comes from the daemon', status: 'planted',
+    planter: { ref: "member:keel", name: "Keel" } });
     const members = [member('alder', 2), member('keel', 3, { binding_session: 'session-keel' })];
     const { daemon } = await renderPanel({ members, seeds: [planted], sessions: [daemonSession('session-keel')] });
     daemon.on('open_seed', ({ seed_id }) => ({
@@ -197,7 +202,7 @@ it('saves a full atomic selection, leaves Sleep available while saving, and clea
     const { daemon, answer } = await renderPanel({ script: { crew_set: [HOLD] }, members: [member('alder', 7, { binding_session: 'session-alder', agent: 'codex', model: 'gpt-6-astra', effort: 'high', resolved_agent: 'codex', resolved_model: 'gpt-6-astra', resolved_effort: 'high' })] });
     await openRoute(daemon, 'Crew launch model');
     await gesture(daemon, () => fireEvent.click(routeDialog().getByRole('option', { name: 'Crew default' })));
-    expect(crewSets(daemon)).toEqual([{ member: 'alder', expected_revision: 7, agent: '', model: '', effort: '' }]);
+    expect(crewSets(daemon)).toEqual([{ member: 'member:alder', expected_revision: 7, agent: '', model: '', effort: '' }]);
     expect(panel().getByRole('button', { name: 'Sleep' })).toBeEnabled();
     await answer(daemon.sentOf('crew_set')[0], saved({ member: member('alder', 8, { binding_session: 'session-alder', resolved_agent: 'claude' }) }));
     expect(panel().getByRole('button', { name: 'Sleep' })).toBeEnabled();
@@ -228,7 +233,7 @@ it('keeps a failed member edit through roster navigation and retries it', async 
     }));
 
     await click(daemon, 'Sleep');
-    expect(daemon.sentOf('crew_sleep')).toEqual([expect.objectContaining({ member: 'trellis' })]);
+    expect(daemon.sentOf('crew_sleep')).toEqual([expect.objectContaining({ member: 'member:trellis' })]);
     expect(daemon.sentOf('crew_wake')).toEqual([]);
     expect(screen.getByTestId('crew-panel').querySelector('.crew-member-heading')).toHaveTextContent('Awake');
   });
@@ -239,7 +244,7 @@ it('keeps a failed member edit through roster navigation and retries it', async 
       sessions: [daemonSession('session-keel')],
     });
     daemon.on('crew_wake', () => ({
-      event: 'crew_wake_result', success: true, member: 'keel', session_id: 'session-keel',
+      event: 'crew_wake_result', success: true, member: 'member:keel', session_id: 'session-keel',
     }));
 
     await closeWithEscape();
@@ -247,7 +252,7 @@ it('keeps a failed member edit through roster navigation and retries it', async 
 
     await openCrew();
     await click(daemon, 'Wake');
-    expect(daemon.sentOf('crew_wake')).toEqual([expect.objectContaining({ member: 'keel' })]);
+    expect(daemon.sentOf('crew_wake')).toEqual([expect.objectContaining({ member: 'member:keel' })]);
     expect(isPanelOpen()).toBe(false);
     expect(document.querySelector('.session-terminal-desktop[data-session-visible="1"]'))
       .toHaveAttribute('data-desktop-id', 'desktop-session-keel');
@@ -273,7 +278,7 @@ it('allows model and effort pins while the harness follows the crew default', as
     await openRoute(daemon, 'Crew launch model');
     await pickModel(daemon, 'Astra');
     await pickEffort(daemon, 'high');
-    expect(crewSets(daemon)).toEqual([{ member: 'keel', expected_revision: 5, agent: '', model: 'openai/gpt-6-astra', effort: '' }, { member: 'keel', expected_revision: 6, agent: '', model: 'openai/gpt-6-astra', effort: 'high' }]);
+    expect(crewSets(daemon)).toEqual([{ member: 'member:keel', expected_revision: 5, agent: '', model: 'openai/gpt-6-astra', effort: '' }, { member: 'member:keel', expected_revision: 6, agent: '', model: 'openai/gpt-6-astra', effort: 'high' }]);
     expect(panel().getByRole('button', { name: 'Crew launch model' })).toHaveTextContent('Astra');
   });
 
@@ -286,7 +291,7 @@ it('commits a typed model id on Enter as one write and keeps the draft over rost
     expect(field).toHaveValue('gpt-7');
     expect(daemon.sentOf('crew_set')).toEqual([]);
     await gesture(daemon, () => fireEvent.keyDown(field, { key: 'Enter' }));
-    expect(crewSets(daemon)).toEqual([{ member: 'keel', expected_revision: 7, agent: '', model: 'gpt-7', effort: '' }]);
+    expect(crewSets(daemon)).toEqual([{ member: 'member:keel', expected_revision: 7, agent: '', model: 'gpt-7', effort: '' }]);
   });
 
 it('keeps dependent controls pending while an explicit harness pin clears', async () => {
@@ -314,7 +319,7 @@ it('keeps dependent controls pending while an explicit harness pin clears', asyn
     await openRoute(daemon, 'Crew launch model');
     await pickModel(daemon, 'Shared two');
 
-    expect(crewSets(daemon)).toEqual([{ member: 'keel', expected_revision: 5, agent: 'codex', model: 'second/shared', effort: '' }]);
+    expect(crewSets(daemon)).toEqual([{ member: 'member:keel', expected_revision: 5, agent: 'codex', model: 'second/shared', effort: '' }]);
     expect(panel().getByRole('button', { name: 'Crew launch model' })).toHaveTextContent('Shared two');
   });
 
@@ -337,7 +342,7 @@ it('keeps dependent controls pending while an explicit harness pin clears', asyn
     expect(panel().getByText('Not saved')).toBeInTheDocument();
     await click(daemon, 'Retry');
 
-    expect(crewSets(daemon)[1]).toEqual({ member: 'keel', expected_revision: 6, agent: 'codex', model: 'local/fixed', effort: '' });
+    expect(crewSets(daemon)[1]).toEqual({ member: 'member:keel', expected_revision: 6, agent: 'codex', model: 'local/fixed', effort: '' });
     await answer(daemon.sentOf('crew_set')[1], saved({ member: member('keel', 7, { agent: 'codex', model: 'local/fixed', resolved_agent: 'codex', resolved_model: 'local/fixed' }) }));
     expect(panel().getByText('Saved')).toBeInTheDocument();
   });
@@ -359,13 +364,13 @@ it('keeps dependent controls pending while an explicit harness pin clears', asyn
     await click(daemon, 'Handoffs');
     expect(panel().getByTestId('crew-charter-editor')).toBeInTheDocument();
     expect(daemon.sentOf('crew_charter_set')).toEqual([expect.objectContaining({
-      member: 'trellis', content: '# Trellis\n\nChanged while the idea is hot.\n', expected_token: 'charter-old',
+      member: 'member:trellis', content: '# Trellis\n\nChanged while the idea is hot.\n', expected_token: 'charter-old',
     })]);
     expect(panel().getByRole('status')).toHaveTextContent('Saving');
 
     await answer(daemon.sentOf('crew_charter_set')[0], charterSaved('# Trellis\n\nChanged while the idea is hot.\n', 'charter-new'));
     expect(panel().getByText('No handoffs recorded.')).toBeInTheDocument();
-    expect(daemon.sentOf('crew_handoffs_get').map((command) => command.member)).toEqual(['trellis']);
+    expect(daemon.sentOf('crew_handoffs_get').map((command) => command.member)).toEqual(['member:trellis']);
   });
 
   it('uses only the latest navigation intent while one charter flush is pending', async () => {
@@ -495,7 +500,7 @@ it('commits a launch field on the inner Escape, then closes Crew on the next Esc
     await closeWithEscape();
     expect(isPanelOpen()).toBe(true);
     expect(daemon.sentOf('crew_set')).toHaveLength(before + 1);
-    expect(crewSets(daemon).slice(-1)[0]).toMatchObject({ member: 'keel', effort: 'high' });
+    expect(crewSets(daemon).slice(-1)[0]).toMatchObject({ member: 'member:keel', effort: 'high' });
     await closeWithEscape();
     expect(isPanelOpen()).toBe(false);
   });
@@ -536,7 +541,7 @@ it('commits a launch field on the inner Escape, then closes Crew on the next Esc
     });
     await click(daemon, 'Handoffs');
     expect(panel().getByRole('heading', { name: 'Full handoff' })).toBeInTheDocument();
-    expect(daemon.sentOf('crew_handoff_get').map(({ member: id, filename }) => [id, filename])).toEqual([['trellis', '2026-09-01T21-37Z-trellis.md']]);
+    expect(daemon.sentOf('crew_handoff_get').map(({ member: id, filename }) => [id, filename])).toEqual([['member:trellis', '2026-09-01T21-37Z-trellis.md']]);
     expect(panel().getByText('A paragraph at the end that must not be truncated.')).toBeInTheDocument();
     expect(panel().getAllByText(/Sep 1, 2026/)).toHaveLength(2);
     await click(daemon, 'Open the seed');
@@ -578,7 +583,7 @@ it('commits a launch field on the inner Escape, then closes Crew on the next Esc
     await act(() => vi.advanceTimersByTimeAsync(60_000));
     await daemon.idle();
     expect(panel().getByRole('heading', { name: 'Newer reconnect result' })).toBeInTheDocument();
-    expect(daemon.sentOf('crew_handoff_get').map(({ member: id, filename }) => [id, filename])).toEqual([['trellis', '2026-09-02T09-00Z-trellis.md']]);
+    expect(daemon.sentOf('crew_handoff_get').map(({ member: id, filename }) => [id, filename])).toEqual([['member:trellis', '2026-09-02T09-00Z-trellis.md']]);
   });
 
   it('reads one letter at a time and retries a failed letter without reloading the history', async () => {
@@ -634,10 +639,11 @@ describe('CrewPanel seeds', () => {
       title: 'Garden follow-up work',
       plot_progress: { total: 5, done: 2, withered: 0, growing: 1, dormant: 1, ready: 1, blocked: 0 },
     });
-    const child = daemonSeed('s-g9yxwv', {
+    const child = daemonSeed('s-g9yxwv', { claimed: false,
+    resume_available: false,
       title: 'Artifact presence comes from the daemon',
       status: 'planted',
-      planter_member: 'trellis',
+      planter: { ref: "member:trellis", name: "Trellis" },
       edges: [{ kind: 'part-of', to: plot.id }],
     });
     const { daemon } = await showSeeds([member('trellis', 4)], [child, plot], /Trellis/, /Planted/);
@@ -651,19 +657,23 @@ describe('CrewPanel seeds', () => {
   });
 
   it('follows what a member tends as Garden broadcasts replace the seeds, its day’s claims and its own alike', async () => {
-    const claimed = daemonSeed('s-live', { title: 'Live claim', tender_session: 'day-current' });
-    const memberClaim = daemonSeed('s-member', { title: 'Member claim', tender_member: 'alder' });
+    const claimed = daemonSeed('s-live', { title: 'Live claim',
+    tender: { ref:'member:alder',name:'Alder', session_id: 'day-current' },
+    claimed: true });
+    const memberClaim = daemonSeed('s-member', { title: 'Member claim',
+    tender: { ref: 'member:alder', name: "Alder" },
+    claimed: true });
     const alder = member('alder', 1, { binding_session: 'day-current' });
     const { daemon } = await showSeeds([alder], [claimed, memberClaim], /Alder/, /Tending/);
 
     expect(panel().getByRole('button', { name: /Live claim/ })).toBeInTheDocument();
     expect(panel().getByRole('button', { name: /Member claim/ })).toBeInTheDocument();
 
-    await pushSeeds(daemon, [{ ...claimed, status: 'dormant', tender_session: '' }, { ...memberClaim, status: 'harvested', tender_member: '' }]);
+    await pushSeeds(daemon, [{ ...claimed, status: 'dormant', tender: undefined, claimed: false }, { ...memberClaim, status: 'harvested', tender: undefined, claimed: false }]);
     expect(panel().getByText("Alder isn't tending a seed.")).toBeInTheDocument();
 
     fireEvent.click(panel().getByRole('button', { name: /Planted/ }));
-    await pushSeeds(daemon, [{ ...claimed, status: 'planted', planter_member: 'alder' }]);
+    await pushSeeds(daemon, [{ ...claimed, status: 'planted', planter: { ref: "member:alder", name: "Alder" } }]);
     expect(panel().getByRole('button', { name: /Live claim/ })).toBeInTheDocument();
   });
 
@@ -671,7 +681,9 @@ describe('CrewPanel seeds', () => {
     const { daemon } = await showSeeds([member('keel', 1)], [], /Keel/, /Planted/);
     expect(panel().getByText('No seeds were explicitly planted by Keel.')).toBeInTheDocument();
 
-    await pushSeeds(daemon, ['a', 'b', 'c', 'd'].map((id) => daemonSeed(`s-${id}`, { planter_member: 'alder' })), 481);
+    await pushSeeds(daemon, ['a', 'b', 'c', 'd'].map((id) => daemonSeed(`s-${id}`, { claimed: false,
+    resume_available: false,
+    planter: { ref: "member:alder", name: "Alder" } })), 481);
 
     expect(panel().getByText('Showing matches in the newest 4 of 481 seeds.')).toBeInTheDocument();
     expect(panel().getByText('No seeds in this Garden snapshot are explicitly planted by Keel.')).toBeInTheDocument();

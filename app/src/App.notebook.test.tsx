@@ -2,7 +2,7 @@ import { act, fireEvent, screen, within } from '@testing-library/react';
 import { EditorView } from '@codemirror/view';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { stubTextLayout } from './test/appFixtures';
-import { soloDesktop, daemonSession, type DaemonSession } from './test/daemonFixtures';
+import { crewMember, soloDesktop, daemonSession, type DaemonSession } from './test/daemonFixtures';
 import { stubNavigatorPlatform } from './test/platformStub';
 import { pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
@@ -64,11 +64,12 @@ function serveVault(daemon: ScriptedDaemon, vault: Vault) {
   daemon.on('fs_index', ({ root }) => ({ event: 'fs_index_result', success: true, root: root ?? NOTEBOOK_ROOT, files: Object.keys(vault.files), truncated: false }));
 }
 
-async function openVault({ vault = freshVault(), sessions = [] as DaemonSession[] } = {}) {
+async function openVault({ vault = freshVault(), sessions = [] as DaemonSession[], crew = [] as ReturnType<typeof crewMember>[] } = {}) {
   const view = await renderApp({
     initialState: {
       settings: { 'notebook.root.effective': NOTEBOOK_ROOT },
       sessions,
+      crew,
       desktops: sessions.map((session) => soloDesktop(session.id)),
     },
   });
@@ -185,14 +186,12 @@ describe('App notebook reading', () => {
     expect(screen.getByRole('dialog', { name: 'Notebook' })).toHaveFocus();
   });
 
-  it('shows whether the chief is working, and nothing without a chief', async () => {
-    const chief = (state: DaemonSession['state']) => [daemonSession('chief', { chief_of_staff: true, state })];
-    for (const [sessions, pulse] of [[chief('working'), 'chief: active'], [chief('idle'), 'chief: idle'], [[], null]] as const) {
-      const view = await openVault({ sessions: [...sessions] });
-      expect(notebook().queryByText(/chief:/)?.textContent ?? null).toBe(pulse);
-      view.unmount();
-    }
+  it.each(['working', 'idle', 'asleep', 'unconfigured'] as const)('shows the chief member presence while %s', async (presence) => {
+    const sessions = presence === 'working' || presence === 'idle' ? [daemonSession('chief-day', { chief: true, crew_member: 'chief-member', state: presence })] : [];
+    await openVault({ sessions, crew: [crewMember('chief-member', { chief: true, name: 'Captain', ...(presence !== 'unconfigured' ? { agent: 'claude', model: 'opus' } : {}), binding_session: sessions[0]?.id })] });
+    expect(notebook().getByText(`Captain: ${presence === 'unconfigured' ? 'not set up' : presence}`)).toBeInTheDocument();
   });
+
 });
 
 describe('App notebook tree', () => {
@@ -227,6 +226,19 @@ describe('App notebook tree', () => {
 });
 
 describe('App notebook on-disk changes', () => {
+  it('reloads the tree from the selected profile effective root', async () => {
+    const { daemon } = await openVault();
+    const before = daemon.sent.length;
+    daemon.emit({ event: 'settings_updated', settings: { 'notebook.root.effective': '/work-notes' } });
+    await daemon.idle();
+    const scope = { profile_id: 'profile-default', expected_notebook_root: '/work-notes' };
+    expect(daemon.sent.slice(before).filter((message) => message.cmd.startsWith('fs_'))).toEqual([
+      { cmd: 'fs_list', request_id: expect.any(String), ...scope },
+      { cmd: 'fs_read', request_id: expect.any(String), path: 'knowledge/index.md', ...scope },
+      { cmd: 'fs_index', request_id: expect.any(String), ...scope },
+    ]);
+  });
+
   it.each([
     { event: 'the notebook root', root: NOTEBOOK_ROOT },
     { event: 'an empty root', root: '' },

@@ -103,19 +103,21 @@ func TestCloseDesktopRefusesProtectedSessionsBeforeClosingAnything(t *testing.T)
 			createDesktop(app, profile)
 			ordinary := w.Spawn(app, fakeagent.Claude, w.Path("ordinary"))
 			w.Launched(ordinary)
-			protected := w.Spawn(app, fakeagent.Claude, w.Path("protected"))
-			w.Launched(protected)
+			var protected string
 			desktop, _ := viewProfile(t, w, profile).paneOf(t, ordinary)
 			if protection == "chief" {
-				if made := setChiefOfStaff(app, protected, true); !made.Success {
-					t.Fatal(protocol.Deref(made.Error))
+				roster := crewRoster(t, w.Client())
+				for _, member := range roster {
+					if member.Chief {
+						writeLaunchChoice(app, "crew", member.Key, protocol.LaunchDesktopSetting{DesktopID: protocol.Ptr(desktop.ID)})
+					}
 				}
+				protected = configureChiefOn(t, w, app, fakeagent.Claude, "sonnet")
 			} else {
 				writeLaunchChoice(app, "crew", "alder", protocol.LaunchDesktopSetting{DesktopID: protocol.Ptr(desktop.ID)})
-				wake := wakeCrew(t, w.Client(), "alder", "")
-				protected = string(wake.SessionID)
-				w.Launched(protected)
+				protected = string(wakeCrew(t, w.Client(), "alder", "").SessionID)
 			}
+			w.Launched(protected)
 			before := viewProfile(t, w, profile)
 			result := requestCloseDesktop(app, before.desktops[desktop.ID])
 			if result.Success || !strings.Contains(protocol.Deref(result.Error), protected) {
@@ -170,7 +172,7 @@ func TestCrewWakeRecreatesItsClosedLaunchDesktop(t *testing.T) {
 			if numbered && desktop.ID != old {
 				t.Fatalf("numbered launch on %s, want %s", desktop.ID, old)
 			}
-			if !numbered && (desktop.ID == old || desktop.Name != "alder") {
+			if !numbered && (desktop.ID == old || desktop.Name != "Alder") {
 				t.Fatalf("named launch: %+v", desktop)
 			}
 			rebound := readLaunchSetting(app, "crew", "alder")

@@ -21,13 +21,13 @@ func TestAClosedSessionLeavesEveryLiveViewAndKeepsItsFirstClose(t *testing.T) {
 
 	closeSession(t, cli, gone, "work finished")
 	closed := awaitClosed(app, gone)
-	if protocol.Deref(closed.ClosedBy) != gone || protocol.Deref(closed.CloseReason) != "work finished" {
+	if protocol.Deref(closed.ClosedBy).Ref != protocol.ActorRef("session:"+gone) || protocol.Deref(closed.CloseReason) != "work finished" {
 		t.Errorf("closed row = %+v, want %s closing itself because the work finished", closed, gone)
 	}
 	if err := cli.Unregister(protocol.SessionID(gone)); err != nil {
 		t.Fatalf("a second close: %v", err)
 	}
-	if again := showSession(t, cli, gone); protocol.Deref(again.ClosedBy) != gone || protocol.Deref(again.CloseReason) != "work finished" ||
+	if again := showSession(t, cli, gone); protocol.Deref(again.ClosedBy).Ref != protocol.ActorRef("session:"+gone) || protocol.Deref(again.CloseReason) != "work finished" ||
 		protocol.Deref(again.ClosedAt) != protocol.Deref(closed.ClosedAt) {
 		t.Errorf("after a second close the row = %+v, want the first close kept", again)
 	}

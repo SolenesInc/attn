@@ -40,7 +40,7 @@ func TestEverySeedMoveReachesTheAppAsOneGardenPush(t *testing.T) {
 		if push := pushed("planting"); len(push.Seeds) != 1 || push.Seeds[0].ID != plot || protocol.Deref(push.Total) != 1 {
 			t.Fatalf("the planting pushed %d seeds of %d, want the new seed alone", len(push.Seeds), protocol.Deref(push.Total))
 		}
-		planted, err := cli.SeedPlant("gardener", "live a life", "", plot, "", "")
+		planted, err := cli.SeedPlant("gardener", "live a life", "", plot, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -64,23 +64,23 @@ func TestEverySeedMoveReachesTheAppAsOneGardenPush(t *testing.T) {
 		}
 		record("planting inside the plot")
 
-		if tended := lifeMove(t, cli, "gardener", seed, "tend", "", "trellis"); tended.TenderMember != "trellis" || tended.TenderSession != "" {
+		if tended := lifeMove(t, cli, "gardener", seed, "tend", "", ""); protocol.Deref(tended.Tender).Ref != "session:gardener" || protocol.Deref(protocol.Deref(tended.Tender).SessionID) != "gardener" {
 			t.Fatalf("tend did not claim the seed for the member: %+v", tended)
 		}
 		record("tend")
-		if _, err := cli.SeedNote("gardener", seed, "found the seam in internal/daemon", "trellis", "", false, nil); err != nil {
+		if _, err := cli.SeedNote("gardener", seed, "found the seam in internal/daemon", "", false, nil); err != nil {
 			t.Fatal(err)
 		}
 		record("note")
-		lifeMove(t, cli, "gardener", seed, "harvest", "shipped it", "trellis")
-		if harvested := record("harvest"); protocol.Deref(harvested.Reason) != "shipped it" || harvested.TenderSession != "" || harvested.TenderMember != "" {
+		lifeMove(t, cli, "gardener", seed, "harvest", "shipped it", "")
+		if harvested := record("harvest"); protocol.Deref(harvested.Reason) != "shipped it" || protocol.Deref(protocol.Deref(harvested.Tender).SessionID) != "" || protocol.Deref(harvested.Tender).Ref != "" {
 			t.Fatalf("the harvest reached the app as %+v, want the reason recorded and the claim released", harvested)
 		}
-		lifeMove(t, cli, "gardener", seed, "replant", "", "trellis")
+		lifeMove(t, cli, "gardener", seed, "replant", "", "")
 		if replanted := record("replant"); replanted.Reason != nil {
 			t.Fatalf("the replant reached the app still carrying reason %q", protocol.Deref(replanted.Reason))
 		}
-		lifeMove(t, cli, "gardener", seed, "wither", "nobody is picking this up", "trellis")
+		lifeMove(t, cli, "gardener", seed, "wither", "nobody is picking this up", "")
 		record("wither")
 
 		if want := []string{"planted", "growing", "growing", "harvested", "planted", "withered"}; !slices.Equal(statuses, want) {
@@ -101,18 +101,20 @@ func TestALiveSeedClaimRefusesOthersUntilForcedOrParked(t *testing.T) {
 	first, second, departing := panes[0].session, panes[1].session, panes[2]
 
 	t.Run("a member's claim is refused to a second session until it is parked", func(t *testing.T) {
+		memberDay := wakeCrew(t, cli, "trellis", "").SessionID
+		w.Launched(string(memberDay))
 		seed := plantSeedAs(t, cli, first, "contended")
 		lifeMove(t, cli, first, seed, "tend", "", "trellis")
 		if _, err := cli.SeedEdit(seed, "edited body"); err != nil {
 			t.Fatal(err)
 		}
-		_, err := cli.SeedTransition(protocol.SessionID(second), seed, "tend", "", "alder", false, client.SeedTransitionOptions{})
+		_, err := cli.SeedTransition(protocol.SessionID(second), seed, "tend", "", false, client.SeedTransitionOptions{Assignee: "alder"})
 		lifeRefusal(t, "a second tend", err, seed, "Trellis", "attn seed note")
-		if still := lifeShow(t, cli, seed).Seed; still.TenderSession != "" || still.TenderMember != "trellis" {
+		if still := lifeShow(t, cli, seed).Seed; protocol.Deref(still.Tender).Ref != "member:trellis" {
 			t.Fatalf("the refused claim changed the tender: %+v", still)
 		}
-		lifeMove(t, cli, first, seed, "park", "", "trellis")
-		if taken := lifeMove(t, cli, second, seed, "tend", "", "alder"); taken.TenderSession != "" || taken.TenderMember != "alder" {
+		lifeMove(t, cli, string(memberDay), seed, "park", "", "")
+		if taken := lifeMove(t, cli, second, seed, "tend", "", "alder"); protocol.Deref(taken.Tender).Ref != "member:alder" {
 			t.Fatalf("a parked seed did not hand over: %+v", taken)
 		}
 	})
@@ -130,7 +132,7 @@ func TestALiveSeedClaimRefusesOthersUntilForcedOrParked(t *testing.T) {
 			racer := w.Client()
 			go func() {
 				start.Wait()
-				result, err := racer.SeedTransition(protocol.SessionID(session), seed, "tend", "", "", false, client.SeedTransitionOptions{})
+				result, err := racer.SeedTransition(protocol.SessionID(session), seed, "tend", "", false, client.SeedTransitionOptions{})
 				outcomes <- outcome{result, err}
 			}()
 		}
@@ -142,33 +144,34 @@ func TestALiveSeedClaimRefusesOthersUntilForcedOrParked(t *testing.T) {
 				refusals = append(refusals, got.err.Error())
 				continue
 			}
-			winners = append(winners, string(got.result.Seed.TenderSession))
+			winners = append(winners, string(protocol.Deref(protocol.Deref(got.result.Seed.Tender).SessionID)))
 		}
 		if len(winners) != 1 || len(refusals) != 1 {
 			t.Fatalf("two simultaneous tends produced winners %v and refusals %q, want one of each", winners, refusals)
 		}
-		if !strings.Contains(refusals[0], winners[0]) {
+		winner := queriedSession(t, cli, winners[0])
+		if !strings.Contains(refusals[0], winner.Label) {
 			t.Errorf("the loser was not told %s won:\n%s", winners[0], refusals[0])
 		}
-		if held := lifeShow(t, cli, seed).Seed.TenderSession; string(held) != winners[0] {
+		if held := protocol.Deref(protocol.Deref(lifeShow(t, cli, seed).Seed.Tender).SessionID); string(held) != winners[0] {
 			t.Errorf("seed show says %q tends it, but %q was told it won", held, winners[0])
 		}
 	})
 
 	t.Run("a member's claim outlives the session that made it until forced", func(t *testing.T) {
 		seed := plantSeedAs(t, cli, first, "member work")
-		if claimed := lifeMove(t, cli, departing.session, seed, "tend", "", "alder"); claimed.TenderMember != "alder" || claimed.TenderSession != "" {
-			t.Fatalf("a member claim = member %q session %q", claimed.TenderMember, claimed.TenderSession)
+		if claimed := lifeMove(t, cli, departing.session, seed, "tend", "", "alder"); protocol.Deref(claimed.Tender).Ref != "member:alder" {
+			t.Fatalf("a member claim = member %q session %q", protocol.Deref(claimed.Tender).Ref, protocol.Deref(protocol.Deref(claimed.Tender).SessionID))
 		}
 		closePane(app, departing)
-		_, err := cli.SeedTransition(protocol.SessionID(second), seed, "tend", "", "", false, client.SeedTransitionOptions{})
+		_, err := cli.SeedTransition(protocol.SessionID(second), seed, "tend", "", false, client.SeedTransitionOptions{})
 		lifeRefusal(t, "a tend after the claiming session ended", err, "Alder")
-		forced, err := cli.SeedTransition(protocol.SessionID(second), seed, "tend", "", "", true, client.SeedTransitionOptions{})
+		forced, err := cli.SeedTransition(protocol.SessionID(second), seed, "tend", "", true, client.SeedTransitionOptions{})
 		if err != nil {
 			t.Fatalf("a forced takeover of the member's claim: %v", err)
 		}
-		if got := forced.Seed; string(got.TenderSession) != second || got.TenderMember != "" {
-			t.Errorf("the forced claim = member %q session %q, want the second session", got.TenderMember, got.TenderSession)
+		if got := forced.Seed; string(protocol.Deref(protocol.Deref(got.Tender).SessionID)) != second || protocol.Deref(got.Tender).Ref != protocol.PartyRef("session:"+second) {
+			t.Errorf("the forced claim = member %q session %q, want the second session", protocol.Deref(got.Tender).Ref, protocol.Deref(protocol.Deref(got.Tender).SessionID))
 		}
 	})
 
@@ -181,18 +184,18 @@ func TestALiveSeedClaimRefusesOthersUntilForcedOrParked(t *testing.T) {
 				reason = "done"
 			}
 			if verb == "wither" {
-				_, err := cli.SeedTransition(protocol.SessionID(second), seed, verb, reason, "", false, client.SeedTransitionOptions{})
+				_, err := cli.SeedTransition(protocol.SessionID(second), seed, verb, reason, false, client.SeedTransitionOptions{})
 				lifeRefusal(t, "an unforced wither of a live claim", err, "--force")
 			}
-			forced, err := cli.SeedTransition(protocol.SessionID(second), seed, verb, reason, "", true, client.SeedTransitionOptions{})
+			forced, err := cli.SeedTransition(protocol.SessionID(second), seed, verb, reason, true, client.SeedTransitionOptions{})
 			if err != nil {
 				t.Fatalf("forced %s: %v", verb, err)
 			}
-			if verb == "wither" && (forced.Seed.Status != "withered" || forced.Seed.TenderSession != "") {
-				t.Errorf("the forced wither left %s tended by %q, want it withered and released", forced.Seed.Status, forced.Seed.TenderSession)
+			if verb == "wither" && (forced.Seed.Status != "withered" || protocol.Deref(protocol.Deref(forced.Seed.Tender).SessionID) != "") {
+				t.Errorf("the forced wither left %s tended by %q, want it withered and released", forced.Seed.Status, protocol.Deref(protocol.Deref(forced.Seed.Tender).SessionID))
 			}
 			notes := lifeNoteBodies(t, cli, seed)
-			if len(notes) != 1 || !strings.Contains(notes[0], second+" forced") || !strings.Contains(notes[0], first+" held") {
+			if len(notes) != 1 || !strings.Contains(notes[0], "forced attn seed") || !strings.Contains(notes[0], "claimed the seed") {
 				t.Errorf("the log after a forced %s = %q, want one note naming who forced and who held", verb, notes)
 			}
 		})
@@ -206,7 +209,7 @@ func TestASeedLogReadsNewestFirstAndSaysWhatItWithheld(t *testing.T) {
 	seed := plantSeedAs(t, cli, writer, "with a log")
 	bodies := []string{"first", "second", "third", "fourth", "fifth", "sixth", "seventh"}
 	for _, body := range bodies {
-		if _, err := cli.SeedNote(protocol.SessionID(writer), seed, body, "trellis", "", false, nil); err != nil {
+		if _, err := cli.SeedNote(protocol.SessionID(writer), seed, body, "", false, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -215,7 +218,7 @@ func TestASeedLogReadsNewestFirstAndSaysWhatItWithheld(t *testing.T) {
 	if shown.NotesTotal != len(bodies) || len(shown.Notes) != garden.ShowNotes {
 		t.Fatalf("show carries %d notes inline of %d, want %d of %d", len(shown.Notes), shown.NotesTotal, garden.ShowNotes, len(bodies))
 	}
-	if newest := shown.Notes[0]; newest.Body != "seventh" || newest.AuthorMember != "trellis" || string(newest.AuthorSession) != writer {
+	if newest := shown.Notes[0]; newest.Body != "seventh" || newest.Author.Ref != protocol.ActorRef("session:"+writer) {
 		t.Errorf("the log leads with %+v, want the newest note and who wrote it", newest)
 	}
 	all, err := cli.SeedNotes("", seed, 0)
@@ -244,35 +247,35 @@ func TestSeedRefusalsNameWhatIsWrongAndChangeNothing(t *testing.T) {
 		wants []string
 	}{
 		{"an unknown verb", func() error {
-			_, err := cli.SeedTransition(protocol.SessionID(gardener), seed, "compost", "", "trellis", false, client.SeedTransitionOptions{})
+			_, err := cli.SeedTransition(protocol.SessionID(gardener), seed, "compost", "", false, client.SeedTransitionOptions{})
 			return err
 		}, []string{"harvest"}},
 		{"a wordless harvest", func() error {
-			_, err := cli.SeedTransition(protocol.SessionID(gardener), seed, "harvest", "", "trellis", false, client.SeedTransitionOptions{})
+			_, err := cli.SeedTransition(protocol.SessionID(gardener), seed, "harvest", "", false, client.SeedTransitionOptions{})
 			return err
 		}, []string{"-m"}},
 		{"a move on an unplanted seed", func() error {
-			_, err := cli.SeedTransition(protocol.SessionID(gardener), "s-zzzzzz", "tend", "", "trellis", false, client.SeedTransitionOptions{})
+			_, err := cli.SeedTransition(protocol.SessionID(gardener), "s-zzzzzz", "tend", "", false, client.SeedTransitionOptions{})
 			return err
 		}, []string{"s-zzzzzz"}},
 		{"an empty note", func() error {
-			_, err := cli.SeedNote("", seed, "  ", "", "", false, nil)
+			_, err := cli.SeedNote("", seed, "  ", "", false, nil)
 			return err
 		}, []string{"attn seed note"}},
 		{"a note on an unplanted seed", func() error {
-			_, err := cli.SeedNote("", "s-zzzzzz", "into the void", "", "", false, nil)
+			_, err := cli.SeedNote("", "s-zzzzzz", "into the void", "", false, nil)
 			return err
 		}, []string{"s-zzzzzz"}},
 		{"an empty title", func() error {
-			_, err := cli.SeedPlant("", "   ", "", "", "", "")
+			_, err := cli.SeedPlant("", "   ", "", "", "")
 			return err
 		}, []string{"attn seed plant"}},
 		{"an over-long title", func() error {
-			_, err := cli.SeedPlant("", strings.Repeat("x", garden.MaxTitleChars+1), "", "", "", "")
+			_, err := cli.SeedPlant("", strings.Repeat("x", garden.MaxTitleChars+1), "", "", "")
 			return err
 		}, []string{"401", "400"}},
 		{"a note past the limit", func() error {
-			_, err := cli.SeedNote("", seed, strings.Repeat("x", garden.MaxNoteBytes+1), "", "", false, nil)
+			_, err := cli.SeedNote("", seed, strings.Repeat("x", garden.MaxNoteBytes+1), "", false, nil)
 			return err
 		}, []string{strconv.Itoa(garden.MaxNoteBytes + 1)}},
 		{"a malformed id", func() error {
@@ -304,11 +307,11 @@ func TestEditingASeedChangesOnlyItsBody(t *testing.T) {
 	app, cli := w.App(), w.Client()
 	editor := spawnPanes(w, app, w.Path("editor"))[0].session
 	crown := plantSeedAs(t, cli, "", "Crown")
-	planted, err := cli.SeedPlant(protocol.SessionID(editor), "Editable", "old body", crown, "", "")
+	planted, err := cli.SeedPlant(protocol.SessionID(editor), "Editable", "old body", crown, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	before := lifeMove(t, cli, editor, planted.Seed.ID, "tend", "", "trellis")
+	before := lifeMove(t, cli, editor, planted.Seed.ID, "tend", "", "")
 
 	edited, err := cli.SeedEdit(before.ID, "# New body\n\nStill the same seed.")
 	if err != nil {
@@ -319,7 +322,7 @@ func TestEditingASeedChangesOnlyItsBody(t *testing.T) {
 		t.Fatalf("edited body/revision = %q/%d, want the new body at revision %d", after.Body, after.Rev, before.Rev+1)
 	}
 	if after.ID != before.ID || after.Title != before.Title || after.Status != before.Status ||
-		after.TenderSession != before.TenderSession || after.TenderMember != before.TenderMember ||
+		protocol.Deref(protocol.Deref(after.Tender).SessionID) != protocol.Deref(protocol.Deref(before.Tender).SessionID) || protocol.Deref(after.Tender).Ref != protocol.Deref(before.Tender).Ref ||
 		!reflect.DeepEqual(after.Edges, before.Edges) || !reflect.DeepEqual(after.Vars, before.Vars) {
 		t.Fatalf("the edit changed the seed's identity or lifecycle: before %+v, after %+v", before, after)
 	}
@@ -338,7 +341,7 @@ func TestAPlantedSeedRoundTripsThroughListAndShow(t *testing.T) {
 	app, cli := w.App(), w.Client()
 	planter := spawnPanes(w, app, w.Path("planter"))[0].session
 
-	result, err := cli.SeedPlant(protocol.SessionID(planter), "Plant and see", "# slice 1\n\nthe first vertical", "", "", "trellis")
+	result, err := cli.SeedPlant(protocol.SessionID(planter), "Plant and see", "# slice 1\n\nthe first vertical", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -346,7 +349,7 @@ func TestAPlantedSeedRoundTripsThroughListAndShow(t *testing.T) {
 	if err := garden.ValidateID(planted.ID); err != nil {
 		t.Fatalf("plant returned an id that is not a seed id: %v", err)
 	}
-	if planted.Status != "planted" || planted.StepSlug != "plant-see" || string(planted.PlanterSession) != planter || planted.PlanterMember != "trellis" {
+	if planted.Status != "planted" || planted.StepSlug != "plant-see" || planted.Planter.Ref != protocol.ActorRef("session:"+planter) {
 		t.Fatalf("the planted seed = %+v, want planted, slug plant-see, and its planter", planted)
 	}
 	sessionless := plantSeedAs(t, cli, "", "planted with no session at all")
@@ -369,14 +372,14 @@ func TestAPlantedSeedRoundTripsThroughListAndShow(t *testing.T) {
 		t.Errorf("the schema is not whole on a fresh seed: %+v", shown)
 	}
 
-	found, err := cli.SeedPlant("", "the follow-up", "", "", planted.ID, "")
+	found, err := cli.SeedPlant("", "the follow-up", "", "", planted.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if edges := found.Seed.Edges; len(edges) != 1 || edges[0].Kind != "discovered-from" || edges[0].To != planted.ID {
 		t.Errorf("a seed planted discovered from another has edges %+v", edges)
 	}
-	_, err = cli.SeedPlant("", "must not land", "", "", "s-miss11", "")
+	_, err = cli.SeedPlant("", "must not land", "", "", "s-miss11")
 	lifeRefusal(t, "planting from an unknown origin", err, "s-miss11")
 	if listed, err := cli.SeedList("", false, 0); err != nil || listed.Total != 3 {
 		t.Errorf("after the refused planting the garden holds %+v (%v), want 3 seeds", listed, err)
@@ -394,14 +397,14 @@ func TestParkingASeedKeepsItsExecutionAndItsComment(t *testing.T) {
 	}
 
 	parked := lifeMove(t, cli, worker, seed, "park", "Waiting for the upstream API.", "")
-	if parked.Status != "dormant" || parked.TenderSession != "" || protocol.Deref(parked.LastExecutionID) != execution {
+	if parked.Status != "dormant" || protocol.Deref(protocol.Deref(parked.Tender).SessionID) != "" || protocol.Deref(parked.LastExecutionID) != execution {
 		t.Errorf("the parked seed = %+v, want dormant, unclaimed, execution %s", parked, execution)
 	}
 	notes, err := cli.SeedNotes("", seed, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(notes.Notes) != 1 || notes.Notes[0].Body != "Waiting for the upstream API." || string(notes.Notes[0].AuthorSession) != worker {
+	if len(notes.Notes) != 1 || notes.Notes[0].Body != "Waiting for the upstream API." || notes.Notes[0].Author.Ref != protocol.ActorRef("session:"+worker) {
 		t.Errorf("the log after parking = %+v, want the comment by the parker", notes.Notes)
 	}
 }
@@ -412,7 +415,7 @@ func TestEverySeedASessionTendsRemembersWhereItRan(t *testing.T) {
 	cwd := w.Path("shop")
 	worker := w.Spawn(app, fakeagent.Claude, cwd)
 	w.Launched(worker)
-	plot, err := cli.SeedPlot("", "", protocol.SeedPlotMessage{
+	plot, err := cli.SeedPlot("", protocol.SeedPlotMessage{
 		Title: "the plot", Children: []protocol.SeedPlotChild{{Title: "first"}, {Title: "second"}},
 	})
 	if err != nil {
@@ -436,7 +439,7 @@ func TestASeedsStateClockMovesOnlyWithItsLifecycle(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		cli := w.Client()
 		registerSessions(t, w, cli, "worker")
-		planted, err := cli.SeedPlant("", "clocked work", "first body", "", "", "")
+		planted, err := cli.SeedPlant("", "clocked work", "first body", "", "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -515,7 +518,11 @@ func lifeGardenPushes(app *testworld.Peer) []protocol.WebSocketEvent {
 
 func lifeMove(t *testing.T, cli *client.Client, session, seedID, verb, reason, member string) protocol.Seed {
 	t.Helper()
-	moved, err := cli.SeedTransition(protocol.SessionID(session), seedID, verb, reason, member, false, client.SeedTransitionOptions{})
+	options := client.SeedTransitionOptions{}
+	if verb == "tend" {
+		options.Assignee = member
+	}
+	moved, err := cli.SeedTransition(protocol.SessionID(session), seedID, verb, reason, false, options)
 	if err != nil {
 		t.Fatalf("%s %s as %q: %v", verb, seedID, session, err)
 	}

@@ -32,8 +32,8 @@ func TestADelegateShowsItsDispatcherAcrossTheDispatchersLife(t *testing.T) {
 	shows := func(when, delegate, session, member string) {
 		t.Helper()
 		shown := sessionOfDelegate(t, w, delegate)
-		if string(protocol.Deref(shown.DispatcherSessionID)) != session || protocol.Deref(shown.DispatcherMember) != member {
-			t.Errorf("%s the delegate %s shows dispatcher session %q and member %q, want %q and %q", when, delegate, protocol.Deref(shown.DispatcherSessionID), protocol.Deref(shown.DispatcherMember), session, member)
+		if string(protocol.Deref(shown.DispatcherSessionID)) != session || (member != "" && protocol.Deref(shown.Dispatcher).Ref != protocol.ActorRef("member:"+member)) {
+			t.Errorf("%s the delegate %s shows dispatcher session %q and member %q, want %q and %q", when, delegate, protocol.Deref(shown.DispatcherSessionID), protocol.Deref(shown.Dispatcher).Ref, session, member)
 		}
 	}
 	shows("while its dispatchers live", fromAlder, string(firstDay), "alder")
@@ -42,7 +42,7 @@ func TestADelegateShowsItsDispatcherAcrossTheDispatchersLife(t *testing.T) {
 	watching := w.App()
 	firstDayRun.Exit(0)
 	testworld.Await(watching, protocol.EventCrewUpdated, func(e protocol.CrewUpdatedMessage) bool {
-		return slices.ContainsFunc(e.Members, func(m protocol.CrewMember) bool { return m.ID == "alder" && m.BindingSession == nil })
+		return slices.ContainsFunc(e.Members, func(m protocol.CrewMember) bool { return m.Key == "alder" && m.BindingSession == nil })
 	})
 	shows("once alder's day ended and alder sleeps", fromAlder, "", "alder")
 
@@ -78,8 +78,8 @@ func TestADelegateKeepsItsDispatcherAcrossARestartAfterManySessionsClosed(t *tes
 	w.restart()
 
 	shown := sessionOfDelegate(t, w, delegate)
-	if protocol.Deref(shown.DispatcherMember) != "alder" || protocol.Deref(shown.SeedID) == "" {
-		t.Errorf("after a restart the delegate shows dispatcher member %q and seed %q, want alder and its seed", protocol.Deref(shown.DispatcherMember), protocol.Deref(shown.SeedID))
+	if protocol.Deref(shown.Dispatcher).Ref != "member:alder" || protocol.Deref(shown.SeedID) == "" {
+		t.Errorf("after a restart the delegate shows dispatcher member %q and seed %q, want alder and its seed", protocol.Deref(shown.Dispatcher).Ref, protocol.Deref(shown.SeedID))
 	}
 }
 

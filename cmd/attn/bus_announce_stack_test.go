@@ -14,6 +14,8 @@ import (
 func TestASeedPlantedWhileAnotherUpdateOvertakesItsAnnouncementStillReachesTheApp(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t)
+	s.Start()
+	s.Stop()
 	announce := s.PauseAt(pausepoint.BusAnnounce)
 	s.Start()
 	app := s.App()

@@ -66,7 +66,6 @@ interface LocationPickerProps {
     path: string,
     agent: SessionAgent,
     yoloMode?: boolean,
-    chiefOfStaff?: boolean,
     autoMode?: boolean,
   ) => void;
   onGetRecentLocations?: () => Promise<{ locations: RecentLocation[]; home_path?: string }>;
@@ -74,12 +73,11 @@ interface LocationPickerProps {
   onInspectPath?: (path: string) => Promise<InspectPathResult>;
   onGetRepoInfo?: (mainRepo: string) => Promise<{ success: boolean; info?: BackendRepoInfo; error?: string }>;
   onCreateWorktree?: (mainRepo: string, branch: string, path?: string, startingFrom?: string) => Promise<{ success: boolean; path?: string; error?: string }>;
-  onCreateWorktreeSession?: (mainRepo: string, branch: string, startingFrom: string, agent: SessionAgent, yoloMode: boolean, autoMode?: boolean, chiefOfStaff?: boolean) => void;
+  onCreateWorktreeSession?: (mainRepo: string, branch: string, startingFrom: string, agent: SessionAgent, yoloMode: boolean, autoMode?: boolean) => void;
   onDeleteWorktree?: (path: string, options?: { force?: boolean }) => Promise<{ success: boolean; error?: string }>;
   onError?: (message: string) => void;
   projectsDirectory?: string;
   agentAvailability?: AgentAvailability;
-  chiefExists?: boolean;
 }
 
 const MAX_RECENT_LOCATIONS = 10;
@@ -192,7 +190,6 @@ export function LocationPicker({
   onError,
   projectsDirectory,
   agentAvailability,
-  chiefExists = false,
 }: LocationPickerProps) {
   const { settings, setSetting } = useSettings();
   const noAgentsMessage = 'No supported agent CLI found in PATH.';
@@ -206,7 +203,6 @@ export function LocationPicker({
   const [homePath, setHomePath] = useState('');
   const [agent, setAgent] = useState<SessionAgent>('claude');
   const [yoloMode, setYoloMode] = useState(false);
-  const [chiefOfStaff, setChiefOfStaff] = useState(false);
   const [autoMode, setAutoMode] = useState(true);
   const autoModeTouchedRef = useRef(false);
   const [repoRootPath, setRepoRootPath] = useState<string | null>(null);
@@ -270,7 +266,6 @@ export function LocationPicker({
   const autoModeSupported = Boolean(agentCapabilities[agent]?.[AUTOMODE_CAPABILITY]);
   const autoModeDefault = parseBooleanSetting(settings[AUTOMODE_DEFAULT_KEY]) ?? true;
   // The agent gate matches the daemon's agentSupportsChiefReload.
-  const chiefToggleEligible = !chiefExists && (agent === 'claude' || agent === 'codex');
 
   const invalidateRequestGeneration = useCallback(() => {
     requestGenerationRef.current += 1;
@@ -309,12 +304,6 @@ export function LocationPicker({
       setYoloMode(false);
     }
   }, [yoloSupported]);
-
-  useEffect(() => {
-    if (!chiefToggleEligible) {
-      setChiefOfStaff(false);
-    }
-  }, [chiefToggleEligible]);
 
   useEffect(() => {
     if (autoModeTouchedRef.current) return;
@@ -451,7 +440,6 @@ export function LocationPicker({
       path,
       selectedAgent,
       yoloMode && yoloSupported,
-      chiefOfStaff && chiefToggleEligible,
       autoModeSupported ? autoMode : undefined,
     );
     onClose();
@@ -459,8 +447,6 @@ export function LocationPicker({
     agent,
     autoMode,
     autoModeSupported,
-    chiefOfStaff,
-    chiefToggleEligible,
     effectiveAgentAvailability,
     onClose,
     onSelect,
@@ -661,7 +647,6 @@ export function LocationPicker({
         selectedAgent,
         yoloMode && yoloSupported,
         autoModeSupported ? autoMode : undefined,
-        chiefOfStaff && chiefToggleEligible,
       );
       onClose();
       return;
@@ -700,8 +685,6 @@ export function LocationPicker({
     agent,
     autoMode,
     autoModeSupported,
-    chiefOfStaff,
-    chiefToggleEligible,
     effectiveAgentAvailability,
     setSelectedPathFromPhysical,
     yoloMode,
@@ -882,31 +865,10 @@ export function LocationPicker({
           </div>
         </div>
       )}
-      {chiefToggleEligible && (
         <div className="picker-chief-bar">
-          <div className="picker-agent-label">CHIEF OF STAFF</div>
+          <div className="picker-agent-label">YOLO</div>
           <div className="picker-chief-controls">
             <div className="agent-toggle">
-              <button
-                type="button"
-                className={`agent-option ${chiefOfStaff ? 'active' : ''}`}
-                data-testid="location-picker-chief-toggle"
-                role="switch"
-                aria-checked={chiefOfStaff}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setChiefOfStaff((prev) => !prev)}
-                title="Launch this session as the chief of staff — it runs the notebook and delegates work to other sessions"
-              >
-                <span className="agent-option-name">{chiefOfStaff ? 'On' : 'Off'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      <div className="picker-chief-bar">
-        <div className="picker-agent-label">YOLO</div>
-        <div className="picker-chief-controls">
-          <div className="agent-toggle">
               <button
                 type="button"
                 className={`agent-option ${yoloMode ? 'active' : ''}`}

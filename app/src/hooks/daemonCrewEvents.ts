@@ -4,6 +4,8 @@ import { pendingRequestKey, settlePendingRequest, type PendingRequests } from '.
 export interface CrewMutationOutcome {
   success: boolean;
   conflict: boolean;
+  woke_session_id?: string;
+  wake_error?: string;
   error?: string;
   member?: CrewMember;
 }
@@ -13,6 +15,8 @@ interface CrewMutationEvent {
   request_id?: unknown;
   success?: boolean;
   conflict?: boolean;
+  woke_session_id?: string;
+  wake_error?: string;
   error?: string;
   member?: CrewMember;
   charter?: CrewCharterDocument;
@@ -56,6 +60,8 @@ function settleCrewMutation(
     conflict: event.conflict === true,
     ...(event.error ? { error: event.error } : {}),
     ...(event.member ? { member: event.member } : {}),
+    ...(event.woke_session_id ? { woke_session_id: event.woke_session_id } : {}),
+    ...(event.wake_error ? { wake_error: event.wake_error } : {}),
   } satisfies CrewMutationOutcome);
 }
 

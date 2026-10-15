@@ -52,8 +52,8 @@ export function usePRLauncherContext() {
 export function useSessionLifecycleContext() {
   return useRequiredContext(SessionsContext).sessionLifecycle;
 }
-export function useChiefOfStaffContext() {
-  return useRequiredContext(SessionsContext).chiefOfStaff;
+export function useChiefContext() {
+  return useRequiredContext(SessionsContext).chief;
 }
 
 export const AttentionContext = createContext<

@@ -95,7 +95,7 @@ func (d *Daemon) validateGardenAdvisorSetting(raw string) error {
 	driver := agentdriver.Get(config.Agent)
 	configured := ""
 	if d.store != nil {
-		configured = d.store.GetSetting(canonicalExecutableSettingKey(config.Agent))
+		configured = d.daemonSetting(daemonSettingKey(canonicalExecutableSettingKey(config.Agent)))
 	}
 	if _, err := exec.LookPath(driver.ResolveExecutable(configured)); err != nil {
 		return fmt.Errorf("garden advisor executable for %s was not found: %w", config.Agent, err)
@@ -107,7 +107,7 @@ func (d *Daemon) gardenAdvisorConfig(ctx context.Context) (gardenAdvisorConfig, 
 	if d.store == nil {
 		return gardenAdvisorConfig{}, errors.New("garden advisor settings unavailable")
 	}
-	config, err := parseGardenAdvisorConfig(d.store.GetSetting(SettingGardenAdvisor))
+	config, err := parseGardenAdvisorConfig(d.daemonSetting(settingGardenAdvisor))
 	if err != nil {
 		return gardenAdvisorConfig{}, err
 	}
@@ -145,7 +145,7 @@ func (d *Daemon) resolveGardenAdvisor(
 	if !ok {
 		return nil, "", fmt.Errorf("agent %s does not support headless tasks", config.Agent)
 	}
-	configured := d.store.GetSetting(canonicalExecutableSettingKey(config.Agent))
+	configured := d.daemonSetting(daemonSettingKey(canonicalExecutableSettingKey(config.Agent)))
 	executable, err := exec.LookPath(driver.ResolveExecutable(configured))
 	if err != nil {
 		return nil, "", fmt.Errorf("resolve %s executable: %w", config.Agent, err)

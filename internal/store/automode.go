@@ -10,6 +10,7 @@ import (
 	"github.com/victorarias/attn/internal/automode"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type AutoModeProposal struct {
@@ -17,7 +18,7 @@ type AutoModeProposal struct {
 	Kind       string
 	Target     string
 	Value      string
-	ProposedBy string
+	ProposedBy who.Actor
 	State      string
 	CreatedAt  time.Time
 	ResolvedAt time.Time
@@ -398,7 +399,7 @@ func applyAutoModeAmendment(cfg *automode.Config, kind, value string) error {
 	}
 }
 
-func (s *Store) CreateAutoModeProposal(kind, target, value, proposedBy string, now time.Time) (AutoModeProposal, error) {
+func (s *Store) CreateAutoModeProposal(kind, target, value string, proposedBy who.Actor, now time.Time) (AutoModeProposal, error) {
 	if err := automode.ValidateProposal(kind, target, value, config.WSPort()); err != nil {
 		return AutoModeProposal{}, err
 	}
@@ -415,7 +416,7 @@ func (s *Store) insertAutoModeProposal(
 		rowQuerier
 		execer
 	},
-	kind, target, value, proposedBy string, now time.Time,
+	kind, target, value string, proposedBy who.Actor, now time.Time,
 ) (AutoModeProposal, error) {
 	findPending := func() (AutoModeProposal, error) {
 		return scanAutoModeProposal(q.QueryRow(`
@@ -533,7 +534,7 @@ func (s *Store) PromoteAutoModeProposal(id int64, now time.Time) (AutoModePropos
 	return proposal, cfg, nil
 }
 
-func (s *Store) PromoteReportedAmendment(kind, value, proposedBy string, now time.Time) (AutoModeProposal, automode.Config, error) {
+func (s *Store) PromoteReportedAmendment(kind, value string, proposedBy who.Actor, now time.Time) (AutoModeProposal, automode.Config, error) {
 	if err := automode.ValidateProposal(kind, "", value, config.WSPort()); err != nil {
 		return AutoModeProposal{}, automode.Config{}, err
 	}
@@ -782,11 +783,11 @@ func scanAutoModeProposal(row interface{ Scan(...any) error }) (AutoModeProposal
 	return p, nil
 }
 
-func describeProposer(proposedBy string) string {
-	if proposedBy == "" {
+func describeProposer(proposedBy who.Actor) string {
+	if proposedBy.IsZero() {
 		return "this caller"
 	}
-	return proposedBy
+	return proposedBy.String()
 }
 
 func parseStoredTime(value string) time.Time {

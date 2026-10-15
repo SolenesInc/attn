@@ -39,7 +39,7 @@ export class SessionReopenRefusal extends Error {
   }
 }
 
-export type SessionLedgerUpdate = { type: 'closed'; entry: SessionLedgerEntry };
+export type SessionLedgerUpdate = { type: 'closed'; entry: SessionLedgerEntry } | { type: 'crew' };
 
 export type SessionLedgerConnectionEvent =
   | { type: 'connection'; connected: boolean; connectionGeneration: number }

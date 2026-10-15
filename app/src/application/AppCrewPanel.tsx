@@ -1,8 +1,9 @@
 import { CrewPanel } from '../components/CrewPanel';
 import { useDaemonStore } from '../store/daemonSessions';
-import { useAppGardenActionsContext, useAppInputs, useCrewPanelContext } from './AppContexts';
+import { useAppGardenActionsContext, useAppInputs, useChiefContext, useCrewPanelContext } from './AppContexts';
 
 export function AppCrewPanel() {
+  const chief = useChiefContext();
   const { daemonSessions } = useAppInputs();
   const crew = useDaemonStore((state) => state.crew);
   const seeds = useDaemonStore((state) => state.seeds);
@@ -14,13 +15,14 @@ export function AppCrewPanel() {
       visit={crewPanel.visit}
       isOpen={crewPanel.open}
       initialMember={crewPanel.member}
-      members={crew}
+      initialTab={crewPanel.tab}
+      members={[...crew].sort((a, b) => Number(b.chief) - Number(a.chief))}
       sessions={daemonSessions}
       seeds={seeds}
       seedsTotal={seedsTotal}
       onClose={handleCloseCrew}
-      onWakeMember={handleWakeCrewMember}
-      onSleepMember={handleSleepCrewMember}
+      onWakeMember={member => member === chief.view?.key ? chief.actions.wake() : handleWakeCrewMember(member)}
+      onSleepMember={member => member === chief.view?.key ? chief.actions.sleep() : handleSleepCrewMember(member)}
       onOpenSeed={handleOpenSeedFromCrew}
     />
   );

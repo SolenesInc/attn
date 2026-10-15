@@ -12,6 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/garden"
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 const (
@@ -32,7 +33,7 @@ type branchInspection struct {
 type sessionReopenVerdict struct {
 	SessionID      protocol.SessionID
 	Entry          *protocol.SessionLedgerEntry
-	Execution      garden.Dispatch
+	Execution      garden.Execution
 	Live           bool
 	Reopenable     bool
 	Reason         string
@@ -78,7 +79,7 @@ func (v *sessionReopenVerdict) toProtocol() *protocol.SessionReopen {
 	return out
 }
 
-func (d *Daemon) reopenExecutionFromLedger(entry *protocol.SessionLedgerEntry) garden.Dispatch {
+func (d *Daemon) reopenExecutionFromLedger(entry *protocol.SessionLedgerEntry) garden.Execution {
 	execution, _ := d.gardenDispatch(entry.ID)
 	execution.SessionID = entry.ID
 	if execution.Cwd == "" {
@@ -226,7 +227,7 @@ func (d *Daemon) branchMerged(sessionID protocol.SessionID, branch string) bool 
 	return false
 }
 
-func (d *Daemon) reopenConversation(execution garden.Dispatch, directoryMissing bool) (bool, string) {
+func (d *Daemon) reopenConversation(execution garden.Execution, directoryMissing bool) (bool, string) {
 	resumeID := strings.TrimSpace(execution.Resume)
 	if resumeID == "" {
 		return false, "no conversation id was saved for this session, so there is nothing to resume"
@@ -254,7 +255,7 @@ func (d *Daemon) conversationResumable(agentName, resumeID, cwd string) (bool, s
 	if !d.conversationKnown(driver, resumeID) {
 		reason := fmt.Sprintf("conversation %s is no longer in %s's storage", resumeID, agentName)
 		if kept, ok := d.store.KeptConversation(agentName, resumeID); ok && !kept.DeletedAt.IsZero() {
-			if kept.DeletedBy == "user" {
+			if kept.DeletedBy == who.User() {
 				reason += fmt.Sprintf("; you deleted attn's copy of conversation %s on %s", resumeID, kept.DeletedAt.UTC().Format("2006-01-02"))
 			} else {
 				reason += fmt.Sprintf("; attn deleted its copy of conversation %s on %s, %d days after no open seed pointed at it", resumeID, kept.DeletedAt.UTC().Format("2006-01-02"), int(conversationKeepGrace().Hours()/24))
@@ -265,7 +266,7 @@ func (d *Daemon) conversationResumable(agentName, resumeID, cwd string) (bool, s
 	return true, ""
 }
 
-func reopenBranchWarning(ctx context.Context, gitView reopenGit, execution garden.Dispatch) (string, error) {
+func reopenBranchWarning(ctx context.Context, gitView reopenGit, execution garden.Execution) (string, error) {
 	saved := strings.TrimSpace(execution.Branch)
 	if saved == "" {
 		return "", nil
@@ -413,7 +414,7 @@ func (d *Daemon) performReopenLocked(
 	}, nil
 }
 
-func reopenDirectoryInsideWorktree(worktree string, execution garden.Dispatch) string {
+func reopenDirectoryInsideWorktree(worktree string, execution garden.Execution) string {
 	subdir := strings.TrimSpace(execution.RepositorySubdir)
 	if subdir == "" || subdir == "." {
 		return worktree
@@ -516,10 +517,11 @@ func mutateReopenWorktreeAdmitted(
 }
 
 type sessionReopenPlan struct {
-	SessionID protocol.SessionID
-	Directory string
-	Title     string
-	ProfileID string
+	afterSessionRecorded func() error
+	SessionID            protocol.SessionID
+	Directory            string
+	Title                string
+	ProfileID            string
 }
 
 type sessionRuntimeReopened struct {
@@ -613,6 +615,7 @@ func (d *Daemon) reopenSessionRuntimeProtected(
 		}
 	}
 	spawn, policy := buildStoredIntentSpawn(session, intent, 80, 24)
+	policy.afterSessionRecorded = plan.afterSessionRecorded
 	if resumeID := strings.TrimSpace(d.store.GetResumeSessionID(plan.SessionID)); resumeID != "" {
 		spawn.ResumeSessionID = protocol.Ptr(resumeID)
 	}

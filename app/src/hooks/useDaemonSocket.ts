@@ -14,9 +14,10 @@ import {
   type CrewMutationOutcome,
 } from './daemonCrewEvents';
 import { useDelegationPreferencesPush } from '../store/delegationPreferences';
-import type { DelegationPreferences } from '../types/generated';
+import type { DelegationPreferences, NotebookScope } from '../types/generated';
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import type { NotebookSurfaceHandle } from '../components/NotebookSurface';
 import { isTauri } from '@tauri-apps/api/core';
 import { readMigrationFailureMarker, type MigrationFailure } from '../utils/migrationFailure';
 import type {
@@ -85,7 +86,7 @@ import { createPtyTransportState } from '../pty/transportState';
 import { enqueuePerKey } from '../pty/attachQueue';
 import { tileContentKey, tileIdsFromLayoutJSON, type TileContentState } from '../types/desktop';
 import { isSuspiciousTerminalSize } from '../utils/terminalDebug';
-import { crewDisplayName } from '../utils/crewName';
+import { memberName } from '../store/daemonSessions';
 import { recordDiag } from '../utils/terminalDiagnosticsLog';
 import { recordPtyCommand, recordWsBinaryPtyOutput, recordWsJsonParse } from '../utils/ptyPerf';
 import { completeTerminalInputProbe, maybeStartTerminalInputProbe } from '../utils/terminalInputLatency';
@@ -174,8 +175,6 @@ export type SeedHandoverResult = GeneratedDelegateResult;
 export interface SeedSendToChiefOptions {
   seedId: string;
   expectedRev: number;
-  expectedTenderSession: string;
-  expectedTenderMember: string;
   sourceSessionId?: string;
   guidance?: string;
   review?: SeedReviewActionContext;
@@ -681,6 +680,17 @@ export function useDaemonSocket({
   const reconnectTimeoutRef = useRef<number | null>(null);
   const reconnectDelayRef = useRef<number>(1000);
   const pendingActionsRef = useRef<PendingRequests>(new Map());
+  const notebookEditorsRef = useRef(new Set<NotebookSurfaceHandle>());
+  const registerNotebookEditor = useCallback((editor: NotebookSurfaceHandle) => {
+    notebookEditorsRef.current.add(editor);
+    return () => { notebookEditorsRef.current.delete(editor); };
+  }, []);
+  const flushNotebookEditors = useCallback(async () => {
+    const outcomes = await Promise.all([...notebookEditorsRef.current].map((editor) => editor.flushPendingSave()));
+    if (outcomes.some((outcome) => outcome === 'conflict' || outcome === 'error')) {
+      throw new Error('Save your Notebook edits before changing profile or folder.');
+    }
+  }, []);
   const mdAnnotationsPendingRef = useRef<PendingKeyedRequests>(new Map());
   const sessionMessageListenersRef = useRef<Map<string, Set<() => void>>>(new Map());
   const sessionLedgerListenersRef = useRef<Set<(event: SessionLedgerConnectionEvent) => void>>(new Set());
@@ -1193,21 +1203,6 @@ export function useDaemonSocket({
             break;
           }
 
-          case 'chief_of_staff_result': {
-            if (typeof data.session_id === 'string') {
-              const key = `chief_of_staff:${data.session_id}`;
-              const pending = pendingActionsRef.current.get(key);
-              if (pending) {
-                pendingActionsRef.current.delete(key);
-                if (data.success) {
-                  pending.resolve(undefined);
-                } else {
-                  pending.reject(new Error(data.error || 'Chief of staff update failed'));
-                }
-              }
-            }
-            break;
-          }
 
           case 'session_context_window_cap_result': {
             if (typeof data.session_id === 'string') {
@@ -1226,7 +1221,9 @@ export function useDaemonSocket({
           }
 
           case 'crew_updated':
+            if (data.profile_id !== useProfilesStore.getState().selectedProfileId) break;
             callbacksRef.current.onCrewUpdate?.(data.members || []);
+            emitSessionLedger({ type: 'crew' });
             break;
 
           case 'garden_seeds_updated':
@@ -1956,7 +1953,7 @@ export function useDaemonSocket({
 
           case 'settings_updated':
             settlePendingRequest(pendingActionsRef.current, 'set_setting', data, () => true, 'Could not save setting');
-            if (data.settings) {
+            if (data.settings && (!data.profile_id || data.profile_id === useProfilesStore.getState().selectedProfileId)) {
               if (harnessRegistrySignature(settingsRef.current) !== harnessRegistrySignature(data.settings)) {
                 clearHarnesses();
                 clearHarnessModelCatalogs();
@@ -2280,7 +2277,17 @@ export function useDaemonSocket({
             if (docSubscriptions.handleEvent(data)) break;
             if (handleDelegationDaemonEvent(data, pending)) break;
             if (handleCrewDaemonEvent(data, pending)) break;
-            if (handleProfileDaemonEvent(data, pending)) break;
+            const previousProfileId = useProfilesStore.getState().selectedProfileId;
+            if (handleProfileDaemonEvent(data, pending)) {
+              if (useProfilesStore.getState().selectedProfileId !== previousProfileId) {
+                const nextSettings = { ...settingsRef.current };
+                delete nextSettings['notebook.root'];
+                delete nextSettings['notebook.root.effective'];
+                settingsRef.current = nextSettings;
+                callbacksRef.current.onSettingsUpdate?.(nextSettings);
+              }
+              break;
+            }
             if (handleLaunchDesktopEvent(data, pending)) break;
             if (handleCommandUsageEvent(data, pending)) break;
             if (handleAutoModeDaemonEvent(data, pending)) break;
@@ -2393,13 +2400,12 @@ export function useDaemonSocket({
       ...(args.resume_picker && { resume_picker: args.resume_picker }),
       ...(args.yolo_mode && { yolo_mode: args.yolo_mode }),
       ...(args.auto_mode !== undefined && { auto_mode: args.auto_mode }),
-      ...(args.chief_of_staff && { chief_of_staff: args.chief_of_staff }),
       ...(args.spawned_from && { spawned_from: args.spawned_from }),
       ...(args.executable && { executable: args.executable }),
       ...(args.claude_executable && { claude_executable: args.claude_executable }),
       ...(args.codex_executable && { codex_executable: args.codex_executable }),
       ...(args.copilot_executable && { copilot_executable: args.copilot_executable }),
-    }, 'Spawn session timed out', args.chief_of_staff ? MODEL_DISCOVERY_TIMEOUT_MS : 30000);
+    }, 'Spawn session timed out', 30000);
   }, [sendKeyedRequest]);
 
   const sendReloadSession = useCallback((id: string, cols: number, rows: number): Promise<void> => {
@@ -3234,33 +3240,6 @@ export function useDaemonSocket({
   }, [sendOrQueueCommand]);
 
 
-  const sendSetChiefOfStaff = useCallback((sessionId: string, chiefOfStaff: boolean): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      if (!sessionId) {
-        reject(new Error('Session is required'));
-        return;
-      }
-      const ws = wsRef.current;
-      if (!hasReceivedInitialStateRef.current || !ws || ws.readyState !== WebSocket.OPEN) {
-        reject(new Error('WebSocket not connected'));
-        return;
-      }
-      const key = `chief_of_staff:${sessionId}`;
-      pendingActionsRef.current.set(key, { resolve: () => resolve(), reject });
-      ws.send(JSON.stringify({
-        cmd: 'set_chief_of_staff',
-        session_id: sessionId,
-        chief_of_staff: chiefOfStaff,
-      }));
-      window.setTimeout(() => {
-        if (!pendingActionsRef.current.has(key)) {
-          return;
-        }
-        pendingActionsRef.current.delete(key);
-        reject(new Error(`Chief of staff update timed out for session ${sessionId}`));
-      }, 10_000);
-    });
-  }, []);
 
   const sendSetSessionContextWindowCap = useCallback((sessionId: string, cap: number): Promise<void> => {
     if (!sessionId) {
@@ -3384,12 +3363,13 @@ export function useDaemonSocket({
     settingsRef.current = { ...settingsRef.current, [key]: value };
     callbacksRef.current.onSettingsUpdate?.(settingsRef.current);
 
-    ws.send(JSON.stringify({ cmd: 'set_setting', key, value }));
+    ws.send(JSON.stringify({ cmd: 'set_setting', key, value, ...(key === 'notebook.root' ? { profile_id: useProfilesStore.getState().selectedProfileId } : {}) }));
   }, []);
 
-  const sendSaveSetting = useCallback(async (key: string, value: string): Promise<void> => {
-    await sendRequest<boolean>('set_setting', { key, value }, 'Saving the setting timed out');
-  }, [sendRequest]);
+  const sendSaveSetting = useCallback(async (key: string, value: string, profileId = useProfilesStore.getState().selectedProfileId): Promise<void> => {
+    if (key === 'notebook.root' && notebookEditorsRef.current.size > 0) await flushNotebookEditors();
+    await sendRequest<boolean>('set_setting', { key, value, ...(key === 'notebook.root' ? { profile_id: profileId } : {}) }, 'Saving the setting timed out');
+  }, [sendRequest, flushNotebookEditors]);
 
   const sendGetSettings = useCallback(() => {
     const ws = wsRef.current;
@@ -3527,8 +3507,6 @@ export function useDaemonSocket({
         source_session_id: options.sourceSessionId ?? '',
         seed_id: options.seedId,
         expected_rev: options.expectedRev,
-        expected_tender_session: options.expectedTenderSession,
-        expected_tender_member: options.expectedTenderMember,
         ...(options.guidance?.trim() ? { guidance: options.guidance.trim() } : {}),
         ...(options.review ? {
           review: {
@@ -3630,11 +3608,11 @@ export function useDaemonSocket({
         const requestId = nextRequestID('crew_wake');
         const key = `crew_wake:${requestId}`;
         pendingActionsRef.current.set(key, { resolve, reject });
-        ws.send(JSON.stringify({ cmd: 'crew_wake', request_id: requestId, member }));
+        ws.send(JSON.stringify({ cmd: 'crew_wake', request_id: requestId, member: `member:${member}` }));
         setTimeout(() => {
           if (pendingActionsRef.current.has(key)) {
             pendingActionsRef.current.delete(key);
-            reject(new Error(`Waking ${crewDisplayName(member)} timed out`));
+            reject(new Error(`Waking ${memberName(member)} timed out`));
           }
         }, 10000);
       });
@@ -3645,8 +3623,8 @@ export function useDaemonSocket({
   const sendCrewSleep = useCallback(
     (member: string): Promise<CrewSleepResult> => sendRequest(
       'crew_sleep',
-      { member },
-      `Asking ${crewDisplayName(member)} to sleep timed out`,
+      { member: `member:${member}` },
+      `Asking ${memberName(member)} to sleep timed out`,
     ),
     [sendRequest],
   );
@@ -3655,14 +3633,14 @@ export function useDaemonSocket({
     sendRequest(
       'crew_set',
       {
-        member: options.member,
+        member: `member:${options.member}`,
         expected_revision: options.expectedRevision,
         agent: options.agent,
         model: options.model,
         effort: options.effort,
         ...(options.launchDesktop ? { launch_desktop_setting: options.launchDesktop } : {}),
       },
-      `Saving ${crewDisplayName(options.member)}'s launch settings timed out`,
+      `Saving ${memberName(options.member)}'s launch settings timed out`,
       MODEL_DISCOVERY_TIMEOUT_MS,
     )
   ), [sendRequest]);
@@ -3670,8 +3648,8 @@ export function useDaemonSocket({
   const sendCrewCharterGet = useCallback((member: string): Promise<CrewCharterGetOutcome> => (
     sendRequest(
       'crew_charter_get',
-      { member },
-      `Reading ${crewDisplayName(member)}'s charter timed out`,
+      { member: `member:${member}` },
+      `Reading ${memberName(member)}'s charter timed out`,
     )
   ), [sendRequest]);
 
@@ -3682,24 +3660,24 @@ export function useDaemonSocket({
   ): Promise<CrewCharterSetOutcome> => (
     sendRequest(
       'crew_charter_set',
-      { member, content, expected_token: expectedToken },
-      `Saving ${crewDisplayName(member)}'s charter timed out`,
+      { member: `member:${member}`, content, expected_token: expectedToken },
+      `Saving ${memberName(member)}'s charter timed out`,
     )
   ), [sendRequest]);
 
   const sendCrewHandoffsGet = useCallback((member: string): Promise<CrewHandoffsGetOutcome> => (
     sendRequest(
       'crew_handoffs_get',
-      { member },
-      `Reading ${crewDisplayName(member)}'s handoffs timed out`,
+      { member: `member:${member}` },
+      `Reading ${memberName(member)}'s handoffs timed out`,
     )
   ), [sendRequest]);
 
   const sendCrewHandoffGet = useCallback((member: string, filename: string): Promise<CrewHandoffGetOutcome> => (
     sendRequest(
       'crew_handoff_get',
-      { member, filename },
-      `Reading ${crewDisplayName(member)}'s handoff ${filename} timed out`,
+      { member: `member:${member}`, filename },
+      `Reading ${memberName(member)}'s handoff ${filename} timed out`,
     )
   ), [sendRequest]);
 
@@ -3759,35 +3737,35 @@ export function useDaemonSocket({
     });
   }, [nextRequestID]);
 
-  const sendNotebookBacklinks = useCallback((path: string): Promise<NotebookEntry[]> =>
-    sendRequest<NotebookEntry[]>('notebook_backlinks', { path }, 'Notebook backlinks timed out'), [sendRequest]);
+  const sendNotebookBacklinks = useCallback((path: string, scope?: NotebookScope): Promise<NotebookEntry[]> =>
+    sendRequest<NotebookEntry[]>('notebook_backlinks', { path, ...scope }, 'Notebook backlinks timed out'), [sendRequest]);
 
-  const sendNotebookToChief = useCallback((selection: string, sourcePath?: string): Promise<NotebookSendToChiefResult> =>
-    sendRequest<NotebookSendToChiefResult>('notebook_send_to_chief', { selection, ...(sourcePath ? { source_path: sourcePath } : {}) }, 'Send to chief timed out'), [sendRequest]);
+  const sendNotebookToChief = useCallback((selection: string, sourcePath?: string, scope?: NotebookScope): Promise<NotebookSendToChiefResult> =>
+    sendRequest<NotebookSendToChiefResult>('notebook_send_to_chief', { ...scope, selection, ...(sourcePath ? { source_path: sourcePath } : {}) }, 'Send to chief timed out'), [sendRequest]);
 
-  const sendFsList = useCallback((path?: string, root?: string): Promise<FsEntry[]> =>
-    sendRequest<FsEntry[]>('fs_list', { ...(path ? { path } : {}), ...(root ? { root } : {}) }, 'Filesystem list timed out'), [sendRequest]);
+  const sendFsList = useCallback((path?: string, root?: string, scope?: NotebookScope): Promise<FsEntry[]> =>
+    sendRequest<FsEntry[]>('fs_list', { ...scope, ...(path ? { path } : {}), ...(root ? { root } : {}) }, 'Filesystem list timed out'), [sendRequest]);
 
-  const sendFsRead = useCallback((path: string, root?: string): Promise<FsReadResult> =>
-    sendRequest<FsReadResult>('fs_read', { path, ...(root ? { root } : {}) }, 'Filesystem read timed out'), [sendRequest]);
+  const sendFsRead = useCallback((path: string, root?: string, scope?: NotebookScope): Promise<FsReadResult> =>
+    sendRequest<FsReadResult>('fs_read', { ...scope, path, ...(root ? { root } : {}) }, 'Filesystem read timed out'), [sendRequest]);
 
-  const sendFsReadAsset = useCallback((path: string, root?: string): Promise<FsReadAssetResult> =>
-    sendRequest<FsReadAssetResult>('fs_read_asset', { path, ...(root ? { root } : {}) }, 'Filesystem asset read timed out'), [sendRequest]);
+  const sendFsReadAsset = useCallback((path: string, root?: string, scope?: NotebookScope): Promise<FsReadAssetResult> =>
+    sendRequest<FsReadAssetResult>('fs_read_asset', { ...scope, path, ...(root ? { root } : {}) }, 'Filesystem asset read timed out'), [sendRequest]);
 
-  const sendFsWrite = useCallback((path: string, content: string, baseHash?: string, root?: string): Promise<FsWriteResult> =>
-    sendRequest<FsWriteResult>('fs_write', { path, content, ...(baseHash ? { base_hash: baseHash } : {}), ...(root ? { root } : {}) }, 'Filesystem save timed out'), [sendRequest]);
+  const sendFsWrite = useCallback((path: string, content: string, baseHash?: string, root?: string, scope?: NotebookScope): Promise<FsWriteResult> =>
+    sendRequest<FsWriteResult>('fs_write', { ...scope, path, content, ...(baseHash ? { base_hash: baseHash } : {}), ...(root ? { root } : {}) }, 'Filesystem save timed out'), [sendRequest]);
 
-  const sendFsExists = useCallback((path: string, root?: string): Promise<FsExistsResult> =>
-    sendRequest<FsExistsResult>('fs_exists', { path, ...(root ? { root } : {}) }, 'Filesystem exists check timed out'), [sendRequest]);
+  const sendFsExists = useCallback((path: string, root?: string, scope?: NotebookScope): Promise<FsExistsResult> =>
+    sendRequest<FsExistsResult>('fs_exists', { ...scope, path, ...(root ? { root } : {}) }, 'Filesystem exists check timed out'), [sendRequest]);
 
-  const sendFsWatch = useCallback((root?: string): Promise<FsWatchResult> =>
-    sendRequest<FsWatchResult>('fs_watch', root ? { root } : {}, 'Filesystem watch timed out'), [sendRequest]);
+  const sendFsWatch = useCallback((root?: string, scope?: NotebookScope): Promise<FsWatchResult> =>
+    sendRequest<FsWatchResult>('fs_watch', { ...scope, ...(root ? { root } : {}) }, 'Filesystem watch timed out'), [sendRequest]);
 
-  const sendFsUnwatch = useCallback((root?: string): Promise<FsWatchResult> =>
-    sendRequest<FsWatchResult>('fs_unwatch', root ? { root } : {}, 'Filesystem unwatch timed out'), [sendRequest]);
+  const sendFsUnwatch = useCallback((root?: string, scope?: NotebookScope): Promise<FsWatchResult> =>
+    sendRequest<FsWatchResult>('fs_unwatch', { ...scope, ...(root ? { root } : {}) }, 'Filesystem unwatch timed out'), [sendRequest]);
 
-  const sendFsIndex = useCallback((root?: string, extensions?: string[]): Promise<FsIndexResult> =>
-    sendRequest<FsIndexResult>('fs_index', { ...(root ? { root } : {}), ...(extensions && extensions.length > 0 ? { extensions } : {}) }, 'Filesystem index timed out'), [sendRequest]);
+  const sendFsIndex = useCallback((root?: string, extensions?: string[], scope?: NotebookScope): Promise<FsIndexResult> =>
+    sendRequest<FsIndexResult>('fs_index', { ...scope, ...(root ? { root } : {}), ...(extensions && extensions.length > 0 ? { extensions } : {}) }, 'Filesystem index timed out'), [sendRequest]);
 
   const sendGetCommandUsage = useCallback((profileId: string): Promise<CommandUsage[]> =>
     sendRequest('get_command_usage', { profile_id: profileId }, 'Reading command history timed out'), [sendRequest]);
@@ -4182,7 +4160,10 @@ export function useDaemonSocket({
   }, []);
 
   const sendProfileCommand = useCallback(
-    (cmd: string, body: Record<string, unknown>) => {
+    async (cmd: string, body: Record<string, unknown>) => {
+      if (notebookEditorsRef.current.size > 0 && (cmd === 'profile_select' || cmd === 'profile_delete' && body.profile_id === useProfilesStore.getState().selectedProfileId)) {
+        await flushNotebookEditors();
+      }
       const requestId = nextRequestID(cmd);
       const intent = useSessionStore.getState().commandSent(cmd, body, requestId);
       const request = sendKeyedRequest<ProfileActionResult>(
@@ -4199,7 +4180,7 @@ export function useDaemonSocket({
       }
       return request;
     },
-    [nextRequestID, sendKeyedRequest],
+    [nextRequestID, sendKeyedRequest, flushNotebookEditors],
   );
 
   const sendProfileSelect = useCallback(
@@ -4474,12 +4455,12 @@ export function useDaemonSocket({
     sendFetchPRDetails,
     sendUnregisterSession,
     sendRenameSession,
-    sendSetChiefOfStaff,
     sendSetSessionContextWindowCap,
     sendPRVisited,
     sendListWorktrees,
     sendCreateWorktree,
     sendDeleteWorktree,
+    registerNotebookEditor,
     sendSetSetting,
     sendSaveSetting,
     sendGetSettings,

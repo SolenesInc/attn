@@ -30,7 +30,7 @@ func TestTheGardenIsReadWholePastOnePageOfSeedsAndNotes(t *testing.T) {
 		for i := range children {
 			children[i].Title = fmt.Sprintf("row %d", i)
 		}
-		if _, err := cli.SeedPlot("", "", protocol.SeedPlotMessage{Title: "a page of seeds", Children: children}); err != nil {
+		if _, err := cli.SeedPlot("", protocol.SeedPlotMessage{Title: "a page of seeds", Children: children}); err != nil {
 			t.Fatal(err)
 		}
 		w.advance(time.Second)
@@ -53,7 +53,7 @@ func TestTheGardenIsReadWholePastOnePageOfSeedsAndNotes(t *testing.T) {
 			t.Errorf("a page of notes after plan.md was attached the seed references %+v, want plan.md", shown.References)
 		}
 
-		moved, err := cli.SeedTransition("closer", closing, "harvest", "laid", "", false, client.SeedTransitionOptions{})
+		moved, err := cli.SeedTransition("closer", closing, "harvest", "laid", false, client.SeedTransitionOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import type { Seed } from '../hooks/useDaemonSocket';
 import type { CrewMember } from '../types/generated';
-import { crewDisplayName } from '../utils/crewName';
 import { seedsPlantedByMember, seedsTendedByMember, type CrewSeedFilter } from './crewSeedOwnership';
 import { SeedPlotIcon, SeedStateIcon } from './SeedStateIcon';
 import { seedStateLabel } from './seedStatePresentation';
@@ -150,7 +149,7 @@ export function CrewSeeds({
   onOpenSeed,
 }: CrewSeedsProps) {
   const tended = useMemo(() => seedsTendedByMember(seeds, member), [member, seeds]);
-  const planted = useMemo(() => seedsPlantedByMember(seeds, member.id), [member.id, seeds]);
+  const planted = useMemo(() => seedsPlantedByMember(seeds, member.key), [member.key, seeds]);
   const rows = filter === 'tending' ? tended : planted;
   const byId = useMemo(() => new Map(seeds.map((seed) => [seed.id, seed])), [seeds]);
   const capped = seedsTotal > seeds.length;
@@ -173,7 +172,7 @@ export function CrewSeeds({
         <CrewSeedList rows={rows} filter={filter} query={query} byId={byId} onQueryChange={onQueryChange} onOpenSeed={onOpenSeed} />
       ) : (
         <div className="crew-seed-empty">
-          <p>{emptySeedsCopy(crewDisplayName(member.id), filter, capped)}</p>
+          <p>{emptySeedsCopy(member.name, filter, capped)}</p>
           {filter === 'tending' && planted.length > 0 && (
             <button type="button" onClick={() => onFilterChange('planted')}>See planted seeds</button>
           )}

@@ -33,7 +33,7 @@ function pinned(row: KeptConversationRow): boolean {
 
 function retention(row: KeptConversationRow): string {
   const kept = row.kept;
-  if (kept?.deleted_at) return `${kept.deleted_by === 'user' ? 'You deleted attn’s copy' : 'attn deleted its copy'} on ${date(kept.deleted_at)}`;
+  if (kept?.deleted_at) return `${kept.deleted_by?.ref === 'user' ? 'You deleted attn’s copy' : 'attn deleted its copy'} on ${date(kept.deleted_at)}`;
   const pin = row.pinned_at || kept?.pinned_at;
   if (pin) return `Forever · pinned ${date(pin)}`;
   if (row.seeds.length) return `Open: ${row.seeds.map((seed) => seed.slug || seed.title).join(', ')}`;

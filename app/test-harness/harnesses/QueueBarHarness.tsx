@@ -14,7 +14,7 @@ const popupNames = params.has('popupNames');
 const desktopIds = Array.from({ length: params.has('oneDesktop') ? 1 : 11 }, (_, index) => `desk-${index + 1}`);
 
 const sessions = popupNames ? [
-  { id: 'chief', label: 'Chief', state: 'idle' as const, chiefOfStaff: true, desktopId: desktopIds[0] },
+  { id: 'chief', label: 'Chief', state: 'idle' as const, chief: true, desktopId: desktopIds[0] },
   ...[
     'sidebar-scroll', 'fam-v1', 'Sidebar header', 'palette-order-0095', 'priority-queue',
     'sidebar-scroll-01b9', 'tile-close-focus', 'capture-orch', 'typed-ids', 'fam-backup',
@@ -99,7 +99,7 @@ export function QueueBarHarness({ onReady, setTriggerRerender }: HarnessProps) {
           desktops={desktops}
           visualIndexByDesktopId={new Map(desktopIds.slice(0, 9).map((id, index) => [id, index]))}
           queue={buildQueueBands(desktops)}
-          crew={popupNames ? [{ id: 'alder' }, { id: 'keel' }, { id: 'trellis' }] : []}
+          crew={popupNames ? [{ key: 'alder', name: 'Alder' }, { key: 'keel', name: 'Keel' }, { key: 'trellis', name: 'Trellis' }] : []}
           instance="harness"
           profileName={popupNames ? 'Default' : long('A-very-long-profile-name-typed-without-spaces').repeat(params.has('oneDesktop') ? 6 : 1)}
           criticalNotifications={{ count: 3, title: long('a-critical-notification-title') }}

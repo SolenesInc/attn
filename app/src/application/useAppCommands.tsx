@@ -20,6 +20,7 @@ import {
   useAppAppearanceContext,
   useAppDiagnosticsContext,
   useAppInputs,
+  useChiefContext,
   useAppPanelsContext,
   useAppShell,
   useAttentionQueueContext,
@@ -43,6 +44,8 @@ import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 import { useOpenInEditor } from './useOpenInEditor';
 
 export function useAppCommands(onRename: (sessionId: string, name: string, opener: HTMLElement | null) => void): PaletteCommand[] {
+  const chief = useChiefContext();
+  const { setSidebarCollapsed } = useAppPanelsContext();
   const seeds = useDaemonStore((state) => state.seeds);
   const { setMarkdownOpenerOpen, handleOpenNotebookTile } =
     useDesktopTilesContext();
@@ -533,7 +536,7 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
       : [];
     const sessionSeedItems: PaletteCommand[] =
       activeSession &&
-      (activeSession.seedId || seeds.some((seed) => seed.tender_session === activeSession.id))
+      (activeSession.seedId || seeds.some((seed) => seed.claimed && seed.tender?.session_id === activeSession.id))
         ? [
             {
               id: 'show-tended-seeds',
@@ -659,8 +662,13 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
     return actionMenuItemsWithDesktopActions;
   }, [actionMenuItemsWithDesktopActions, handleWakeActiveSession, handleSnoozeActiveSession]);
 
-  return useMemo(
-    () => [...navigationCommands, ...actionMenuItemsWithQueueActions],
-    [navigationCommands, actionMenuItemsWithQueueActions],
-  );
+  const chiefCommands: PaletteCommand[] = [];
+  if (chief.view) {
+    const openSetup = () => { setSidebarCollapsed(false); chief.actions.edit(); };
+    if (chief.view.phase === 'unconfigured') chiefCommands.push({ id: 'chief-setup', title: 'Set up the chief', keywords: ['chief', 'harness', 'model'], icon: '⌁', run: openSetup });
+    if (chief.view.phase === 'asleep') chiefCommands.push({ id: 'chief-wake', title: 'Wake the chief', keywords: ['chief', 'wake'], icon: '☀', run: chief.actions.wake });
+    if (chief.view.phase === 'awake') chiefCommands.push({ id: 'chief-sleep', title: 'Put the chief to sleep', keywords: ['chief', 'sleep'], icon: '☾', run: chief.actions.sleep });
+    if (chief.view.agent) chiefCommands.push({ id: 'chief-route', title: "Change the chief's harness and model", keywords: ['chief', 'harness', 'model', 'effort'], icon: '⌁', run: openSetup });
+  }
+  return [...chiefCommands, ...navigationCommands, ...actionMenuItemsWithQueueActions];
 }

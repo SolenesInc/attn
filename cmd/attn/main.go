@@ -185,6 +185,9 @@ func main() {
 	case "automode":
 		maybePrintInstanceBanner()
 		runAutoMode()
+	case "settings":
+		maybePrintInstanceBanner()
+		runSettings()
 	case "journal":
 		maybePrintInstanceBanner()
 		runJournal()
@@ -569,6 +572,7 @@ commands:
   state explain <id>                replay why a session's state is what it is
   delegate --brief-file <path> --cwd <path>    start another agent on a new seed
   delegate --seed <id> --cwd <path>            start another agent on an existing seed
+  settings list|get|set            read and change daemon or profile settings
   journal append --entry <text>     serialized append to the daily notebook journal
   open <file.md|seed-id> [--session <id>]   show a document in attn
   browser <command>                 open and control the in-app browser
@@ -629,7 +633,7 @@ func runDelegate() {
 		os.Exit(2)
 	}
 	warnIfDaemonVersionMismatch()
-	c := client.New("").WithGardenProfile(protocol.Deref(args.request.ProfileID), protocol.Deref(args.request.SourceSessionID))
+	c := client.New("").WithRequester(protocol.Deref(args.request.ProfileID), protocol.Deref(args.request.SourceSessionID))
 	fmt.Fprintf(os.Stderr, "delegation request: request_id=%s\n", args.request.RequestID)
 	operation, err := c.StartDelegation(args.request)
 	if err != nil {
@@ -1160,7 +1164,7 @@ func runOpen() {
 
 	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
 	if isSeedOpenTarget(rawPath) {
-		if err := c.WithGardenProfile(profileFlag, "").OpenSeed(rawPath, resolvedSession); err != nil {
+		if err := c.WithRequester(profileFlag, "").OpenSeed(rawPath, resolvedSession); err != nil {
 			fmt.Fprintf(os.Stderr, "open: %v\n", err)
 			os.Exit(1)
 		}

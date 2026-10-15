@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import type { CrewHandoffHistory, CrewHandoffLetter, CrewHandoffLoad } from '../hooks/useCrewHandoffs';
 import type { CrewMember } from '../types/generated';
-import { crewDisplayName } from '../utils/crewName';
 import { MarkdownReader } from './MarkdownReader';
 import { seedMarkdownSource } from './MarkdownReader/documentSource';
 
@@ -23,7 +22,7 @@ function HandoffLetterReader({ member, letter, onRetry, onOpenSeed }: {
   onRetry: () => void;
   onOpenSeed: (seedId: string) => void;
 }) {
-  const source = useMemo(() => seedMarkdownSource(`crew-handoff-${member.id}-${letter?.filename ?? ''}`), [letter?.filename, member.id]);
+  const source = useMemo(() => seedMarkdownSource(`crew-handoff-${member.key}-${letter?.filename ?? ''}`), [letter?.filename, member.key]);
   if (!letter || letter.state === 'loading') return <div className="crew-document-state">Loading letter…</div>;
   if (letter.state === 'error' || !letter.document) {
     return (
@@ -45,7 +44,7 @@ function HandoffHistory({ member, load, history, onOpenSeed }: {
   const handoff = load.handoffs.find((candidate) => candidate.filename === load.selected) ?? load.handoffs[0];
   return (
     <div className="crew-handoff-layout">
-      <nav className="crew-handoff-index" aria-label={`${crewDisplayName(member.id)} handoffs`}>
+      <nav className="crew-handoff-index" aria-label={`${member.name} handoffs`}>
         <span>{load.handoffs.length} {load.handoffs.length === 1 ? 'letter' : 'letters'}</span>
         {load.handoffs.map((candidate, index) => (
           <button
@@ -53,7 +52,7 @@ function HandoffHistory({ member, load, history, onOpenSeed }: {
             type="button"
             data-testid={`crew-handoff-${index}`}
             aria-current={candidate.filename === handoff.filename ? 'page' : undefined}
-            onClick={() => history.select(member.id, candidate.filename)}
+            onClick={() => history.select(member.key, candidate.filename)}
           >
             <strong>{indexDayFormat.format(new Date(candidate.occurred_at))}</strong>
             <small>{index === 0 ? 'Latest · ' : ''}{indexTimeFormat.format(new Date(candidate.occurred_at))} UTC</small>
@@ -65,7 +64,7 @@ function HandoffHistory({ member, load, history, onOpenSeed }: {
         <HandoffLetterReader
           member={member}
           letter={load.letter?.filename === handoff.filename ? load.letter : undefined}
-          onRetry={() => history.loadLetter(member.id, handoff.filename)}
+          onRetry={() => history.loadLetter(member.key, handoff.filename)}
           onOpenSeed={onOpenSeed}
         />
       </article>
@@ -78,13 +77,13 @@ export function CrewHandoffsTab({ member, history, onOpenSeed }: {
   history: CrewHandoffHistory;
   onOpenSeed: (seedId: string) => void;
 }) {
-  const load = history.read(member.id);
+  const load = history.read(member.key);
   if (!load || load.state === 'loading') return <div className="crew-document-state">Loading handoffs…</div>;
   if (load.state === 'error') {
     return (
       <div className="crew-document-state is-error" role="alert">
         <span>{load.error}</span>
-        <button type="button" data-testid="crew-handoffs-retry" onClick={() => history.load(member.id, true)}>Retry</button>
+        <button type="button" data-testid="crew-handoffs-retry" onClick={() => history.load(member.key, true)}>Retry</button>
       </div>
     );
   }
@@ -94,7 +93,7 @@ export function CrewHandoffsTab({ member, history, onOpenSeed }: {
         <h3>Handoffs</h3>
         <div className="crew-handoff-actions">
           {load.handoffs.length > 0 && <span>Read only</span>}
-          <button type="button" data-testid="crew-handoffs-refresh" onClick={() => history.load(member.id, true)}>Refresh</button>
+          <button type="button" data-testid="crew-handoffs-refresh" onClick={() => history.load(member.key, true)}>Refresh</button>
         </div>
       </div>
       {load.handoffs.length === 0

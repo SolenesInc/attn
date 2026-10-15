@@ -1,4 +1,4 @@
-//! Build-instance awareness for the Tauri shell. See docs/instances.md.
+//! Build-instance awareness for the Tauri shell. See docs/internal/instances.md.
 
 use std::env;
 use std::fs::{self, File, OpenOptions};

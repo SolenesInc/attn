@@ -22,7 +22,7 @@ type pluginLaunchInstructions struct {
 
 func (d *Daemon) preparePluginLaunchInstructions(sessionID protocol.SessionID, profileID string, isChief, selfReportPullRequests bool) (*pluginLaunchInstructions, error) {
 	if isChief {
-		root, _, err := d.ensureNotebookScaffold()
+		root, _, err := d.ensureNotebookScaffold(profileID)
 		if err != nil {
 			return nil, fmt.Errorf("prepare chief notebook: %w", err)
 		}
