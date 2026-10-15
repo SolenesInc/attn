@@ -1,12 +1,14 @@
 package main_test
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/ghosttyvt"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptyhost/ptyhosttest"
 	"github.com/victorarias/attn/internal/testworld"
@@ -354,6 +356,19 @@ func TestTerminalTextSurvivesAnUpgrade(t *testing.T) {
 					format = protocol.Deref(attached.Snapshot.Format)
 				}
 				t.Fatalf("worker snapshot format = %s, want terminal-text-next", format)
+			}
+			payload, err := base64.StdEncoding.DecodeString(attached.Snapshot.SnapshotB64)
+			if err != nil {
+				t.Fatal(err)
+			}
+			restored, err := ghosttyvt.Restore(payload, ghosttyvt.Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer restored.Close()
+			restored.Write([]byte("\x1b[1;1H" + strings.Repeat("x", 81)))
+			if _, row := restored.CursorPos(); row != 0 {
+				t.Fatalf("the adopted terminal wraps onto row %d; wraparound was disabled before upgrade", row)
 			}
 			got = s.Run(testworld.Invocation{Binary: next, Session: caller, Args: []string{"terminal", "read", string(opened.SessionID), "--last"}})
 			if got.Code != 0 || strings.TrimSpace(got.Stdout) != output {

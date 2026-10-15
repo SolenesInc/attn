@@ -268,6 +268,14 @@
         "seconds": 22.491,
         "runnerClass": "local macOS",
         "note": "Green ATTN_VERDICT durationMs=22491 including cleanup and recording. Covers automation open/close/reopen, AppKit CmdT/CmdEnter, Terminal Tab, back, both starting branches, destination memory, existing worktrees and delete cancel/clean/force. Remeasure on Linux CI."
+      },
+      "agent-terminals": {
+        "run": "agent-terminals-2026-10-15T23-45-47-426Z",
+        "job": "Local packaged scenario, terminal-cli isolated instance",
+        "recordedAt": "2026-10-16",
+        "seconds": 6.524,
+        "runnerClass": "local macOS",
+        "note": "Green ATTN_VERDICT durationMs=6524, including cleanup and recording. Covers native caller input focus, both arrival pulses, and right-column stacking. Remeasure on Linux CI."
       }
     }
   },
@@ -328,6 +336,7 @@
     "move-with-delegates": 27.874,
     "desktop-order": 23.413,
     "close-desktop": 33.297,
-    "new-session-launcher": 22.491
+    "new-session-launcher": 22.491,
+    "agent-terminals": 6.524
   }
 }

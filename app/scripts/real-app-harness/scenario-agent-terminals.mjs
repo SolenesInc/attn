@@ -24,6 +24,8 @@ runner.registerCleanup('close_sessions', () => closeScenarioSessions(client, cre
 
 try {
   await launchFreshAppAndConnect(client, observer);
+  const window = await client.request('get_window_bounds');
+  await client.request('set_window_bounds', { logicalBounds: { ...window.logicalBounds, x: 0, y: 0 } });
   await driver.activateApp();
   await client.request('dismiss_whats_new');
   fs.mkdirSync(runner.sessionDir, { recursive: true });
