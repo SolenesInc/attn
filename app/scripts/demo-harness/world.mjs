@@ -21,6 +21,7 @@ import { writeAgentHome } from './agentHome.mjs';
 import { createTurnRouter } from './turns.mjs';
 
 const DEMO_DIR = path.dirname(fileURLToPath(import.meta.url));
+export const DEMO_INSTANCE = 'demo';
 export const REPOS_ROOT = path.join(os.homedir(), 'projects', 'attn-demo');
 export const WINDOW = { x: 80, y: 60, width: 1200, height: 800 };
 const STREAM_PACE = { chars: 12, ms: 25 };
@@ -83,7 +84,9 @@ async function createWorktrees(daemon, repos) {
   }
 }
 
-export async function startWorld({ instance, repos, log }) {
+export async function startWorld({ repos, log }) {
+  const instance = DEMO_INSTANCE;
+  process.env.ATTN_HARNESS_INSTANCE = instance;
   const appPath = preflight(instance);
   const cleanups = [];
   let stopping = null;
