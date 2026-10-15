@@ -255,7 +255,7 @@ describe('one-screen launcher', () => {
     );
     await press(daemon, 'Backspace', { metaKey: true });
     expect(screen.getByRole('option', { selected: true })).toHaveTextContent(
-      `Delete feature?${TREE} (y/n)`,
+      `Delete feature?${TREE.replace(HOME, '~')} (y/n)`,
     );
     expect(screen.queryByText('terminal here')).toBeNull();
     await press(daemon, 'y');

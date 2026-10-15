@@ -1,4 +1,9 @@
 .new-session-launcher {
+  --color-bg-selected: #25252c;
+  --color-bg-input: #0a0a0b;
+  --color-text-dimmed: #5f5f69;
+  --color-border-focus: #44444c;
+  --launcher-worktree-color: var(--launcher-worktree-color);
   width: 760px;
   background: var(--color-bg-app);
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
@@ -27,7 +32,7 @@
   background: var(--color-bg-input);
 }
 .new-session-launcher .path-input-field:focus-within {
-  border-color: #44444c;
+  border-color: var(--color-border-focus);
 }
 .new-session-launcher .path-input {
   padding: 0;
@@ -98,7 +103,7 @@
 }
 .launcher-worktree,
 .launcher-branch {
-  color: #9be7a8;
+  color: var(--launcher-worktree-color);
 }
 .launcher-worktree {
   border-color: rgba(63, 185, 80, 0.35);
@@ -116,7 +121,8 @@
   white-space: nowrap;
   text-align: right;
 }
-.launcher-branch {
+.launcher-branch,
+.launcher-section-hint {
   text-transform: none;
   letter-spacing: normal;
 }
@@ -195,7 +201,7 @@
   font-size: calc(11.5px * var(--ui-scale));
 }
 .launcher-controls .agent-option.active {
-  background: #25252c;
+  background: var(--color-bg-selected);
   color: var(--color-text-primary);
   box-shadow: none;
 }
@@ -209,4 +215,45 @@
 }
 .launcher-controls .picker-agent-controls {
   flex-wrap: wrap;
+}
+
+.launcher-toggle-group {
+  display: inline-flex;
+  gap: 6px;
+}
+.launcher-toggle-group .agent-toggle {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.launcher-toggle-group .agent-option {
+  padding: 3px 9px;
+  border: 1px solid var(--color-border);
+  font-size: calc(11px * var(--ui-scale));
+  color: var(--color-text-dimmed);
+}
+.launcher-toggle-group .agent-option.active {
+  color: var(--color-text-primary);
+  border-color: #3a3a44;
+}
+.launcher-toggle-group [data-testid='location-picker-yolo-toggle'].active {
+  color: #ff6b35;
+  border-color: rgba(255, 107, 53, 0.4);
+}
+
+[data-theme="light"] .new-session-launcher {
+  --color-bg-selected: inherit;
+  --color-bg-input: inherit;
+  --color-text-dimmed: inherit;
+  --color-border-focus: inherit;
+  --launcher-worktree-color: var(--color-success);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .new-session-launcher {
+    --color-bg-selected: inherit;
+    --color-bg-input: inherit;
+    --color-text-dimmed: inherit;
+    --color-border-focus: inherit;
+    --launcher-worktree-color: var(--color-success);
+  }
 }

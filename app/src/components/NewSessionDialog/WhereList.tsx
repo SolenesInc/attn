@@ -20,6 +20,7 @@ export function WhereList({
   name,
   typed,
   repo,
+  displayPath,
   remembered,
   onPick,
   deletion,
@@ -30,6 +31,7 @@ export function WhereList({
   name: string;
   typed: boolean;
   repo: string;
+  displayPath: (path: string) => string;
   remembered: 'main_repo' | 'new_worktree';
   onPick: (index: number) => void;
 }) {
@@ -42,7 +44,7 @@ export function WhereList({
               {row.kind === 'new' ? (
                 <>
                   New worktree · <span className="launcher-branch">{name}</span>
-                  {!typed && ' · type to rename'}
+                  {!typed && <span className="launcher-section-hint"> · type to rename</span>}
                 </>
               ) : (
                 'Open existing'
@@ -86,14 +88,14 @@ export function WhereList({
                 {row.kind === 'existing' && deletion?.path === row.path
                   ? deletion.force
                     ? 'Force delete local worktree and branch? (y/n)'
-                    : `${row.path} (y/n)`
+                    : `${displayPath(row.path)} (y/n)`
                   : row.kind === 'new'
                     ? row.from === 'default'
                       ? 'the default branch'
                       : 'the branch the main checkout is on'
                     : row.kind === 'main'
-                      ? `${repo} · on ${row.branch}`
-                      : row.path}
+                      ? `${displayPath(repo)} · on ${row.branch}`
+                      : displayPath(row.path)}
               </div>
             </div>
             {((row.kind === 'main' && remembered === 'main_repo') ||

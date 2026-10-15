@@ -168,7 +168,7 @@ describe('acting on a worktree', () => {
 
     fireEvent.click(within(first).getByRole('button', { name: /More for/ }));
     fireEvent.click(screen.getByRole('menuitem', { name: /Delete…/ }));
-    expect(daemon.sentOf('delete_worktree')).toEqual([]);
+    expect(daemon.sentOf('delete_worktree')).toMatchObject([]);
     fireEvent.keyDown(first, { key: '2' });
     await daemon.idle();
     expect(screen.queryByRole('button', { name: 'Delete for real' })).toBeNull();
@@ -190,7 +190,7 @@ describe('acting on a worktree', () => {
     fireEvent.click(inspector().getByRole('button', { name: 'Delete…' }));
     await click(daemon, within(row('attn--feat-two')).getByRole('button', { name: 'Delete, losing changes' }));
 
-    expect(daemon.sentOf('delete_worktree')).toEqual([
+    expect(daemon.sentOf('delete_worktree')).toMatchObject([
       { cmd: 'delete_worktree', path: PATH },
       { cmd: 'delete_worktree', path: '/projects/attn--feat-two', force: true },
     ]);

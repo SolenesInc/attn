@@ -565,6 +565,7 @@ export function NewSessionLauncher({
             rows={whereRows}
             highlight={highlight}
             repo={where.repo}
+            displayPath={display}
             name={name}
             typed={Boolean(branch.trim())}
             remembered={memory}

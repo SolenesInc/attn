@@ -147,7 +147,11 @@ export function useSessionControls({
 
   useEffect(() => {
     if (!savedAgent || initialAgent) return;
-    const resolvedSavedAgent = resolvePickerAgent(savedAgent, effectiveAgentAvailability, 'codex');
+    const resolvedSavedAgent = resolvePickerAgent(
+      savedAgent,
+      effectiveAgentAvailability,
+      'codex',
+    );
     setAgent((prev) => (prev === resolvedSavedAgent ? prev : resolvedSavedAgent));
   }, [effectiveAgentAvailability, savedAgent, initialAgent]);
 
@@ -283,52 +287,8 @@ export function SessionControls({
     setChiefOfStaff,
   } = controls;
   const noAgentsMessage = 'No supported agent CLI found in PATH.';
-  return (
+  const toggles = (
     <>
-      {' '}
-      <div className="picker-agent-bar">
-        <div className="picker-agent-label">SESSION AGENT</div>
-        <div className="picker-agent-controls">
-          {harnessesLoading && <span role="status">Loading harnesses…</span>}
-          {harnessesError && (
-            <span role="alert">
-              {harnessesError}
-              <button type="button" onClick={retryHarnesses}>
-                Retry
-              </button>
-            </span>
-          )}
-          <div className="agent-toggle" role="radiogroup" aria-label="Session agent">
-            {orderedAgentList.map((candidate) => {
-              const available = isAgentAvailable(effectiveAgentAvailability, candidate);
-              const shortcutNumber = agentShortcutByName.get(candidate);
-              const shortcut =
-                candidate === TERMINAL_AGENT
-                  ? keyCombo('alt', 'T')
-                  : shortcutNumber && shortcutNumber <= 9
-                    ? keyCombo('alt', String(shortcutNumber))
-                    : null;
-              const label = pickerAgentLabel(candidate);
-              return (
-                <button
-                  key={candidate}
-                  type="button"
-                  className={`agent-option ${agent === candidate ? 'active' : ''}`}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => handleAgentChange(candidate)}
-                  role="radio"
-                  aria-checked={agent === candidate}
-                  disabled={!available}
-                  title={!available ? `${label} is not available on this machine` : undefined}
-                >
-                  <span className="agent-option-name">{label}</span>
-                  {available && shortcut && <kbd className="agent-shortcut">{shortcut}</kbd>}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
       {autoModeSupported && (
         <div className="picker-chief-bar">
           <div className="picker-agent-label">AUTO MODE</div>
@@ -376,33 +336,84 @@ export function SessionControls({
           </div>
         </div>
       )}
-      <div className="picker-chief-bar">
-        <div className="picker-agent-label">YOLO</div>
-        <div className="picker-chief-controls">
-          <div className="agent-toggle">
-            <button
-              type="button"
-              className={`agent-option ${yoloMode ? 'active' : ''}`}
-              data-testid="location-picker-yolo-toggle"
-              role="switch"
-              aria-checked={yoloMode}
-              disabled={!yoloSupported}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={toggleYoloMode}
-              title={
-                yoloSupported
-                  ? 'Run the agent without asking for permission'
-                  : `${agentLabel(agent)} does not support yolo mode`
-              }
-            >
-              <span className="agent-option-name">
-                {compact ? 'YOLO' : yoloMode ? 'On' : 'Off'}
-              </span>
-              {yoloSupported && <kbd className="agent-shortcut">{keyCombo('alt', 'Q')}</kbd>}
-            </button>
+      {(!compact || agent !== TERMINAL_AGENT) && (
+        <div className="picker-chief-bar">
+          <div className="picker-agent-label">YOLO</div>
+          <div className="picker-chief-controls">
+            <div className="agent-toggle">
+              <button
+                type="button"
+                className={`agent-option ${yoloMode ? 'active' : ''}`}
+                data-testid="location-picker-yolo-toggle"
+                role="switch"
+                aria-checked={yoloMode}
+                disabled={!yoloSupported}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={toggleYoloMode}
+                title={
+                  yoloSupported
+                    ? 'Run the agent without asking for permission'
+                    : `${agentLabel(agent)} does not support yolo mode`
+                }
+              >
+                <span className="agent-option-name">
+                  {compact ? 'YOLO' : yoloMode ? 'On' : 'Off'}
+                </span>
+                {yoloSupported && <kbd className="agent-shortcut">{keyCombo('alt', 'Q')}</kbd>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+  return (
+    <>
+      {' '}
+      <div className="picker-agent-bar">
+        <div className="picker-agent-label">SESSION AGENT</div>
+        <div className="picker-agent-controls">
+          {harnessesLoading && <span role="status">Loading harnesses…</span>}
+          {harnessesError && (
+            <span role="alert">
+              {harnessesError}
+              <button type="button" onClick={retryHarnesses}>
+                Retry
+              </button>
+            </span>
+          )}
+          <div className="agent-toggle" role="radiogroup" aria-label="Session agent">
+            {orderedAgentList.map((candidate) => {
+              const available = isAgentAvailable(effectiveAgentAvailability, candidate);
+              const shortcutNumber = agentShortcutByName.get(candidate);
+              const shortcut =
+                candidate === TERMINAL_AGENT
+                  ? keyCombo('alt', 'T')
+                  : shortcutNumber && shortcutNumber <= 9
+                    ? keyCombo('alt', String(shortcutNumber))
+                    : null;
+              const label = pickerAgentLabel(candidate);
+              return (
+                <button
+                  key={candidate}
+                  type="button"
+                  className={`agent-option ${agent === candidate ? 'active' : ''}`}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => handleAgentChange(candidate)}
+                  role="radio"
+                  aria-checked={agent === candidate}
+                  disabled={!available}
+                  title={!available ? `${label} is not available on this machine` : undefined}
+                >
+                  <span className="agent-option-name">{label}</span>
+                  {available && shortcut && <kbd className="agent-shortcut">{shortcut}</kbd>}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
+      {compact ? <div className="launcher-toggle-group">{toggles}</div> : toggles}
       {!hasAvailableAgents && <div className="picker-agent-warning">{noAgentsMessage}</div>}
     </>
   );
