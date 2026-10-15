@@ -139,8 +139,7 @@ Probed on 0.160.0 with a mock model. Shared Codex relies on these.
   `thread/name/set` from any connection renames it in every TUI.
 - A conversation's shell tools get `CODEX_THREAD_ID` (the conversation id) and
   the server's `-c shell_environment_policy.set.*` values, in every
-  conversation, including ones another client resumed; hooks run in the
-  server's own environment instead.
+  conversation, including ones another client resumed.
 - One process writes a conversation at a time: while an app-server holds it
   loaded, another app-server or a plain `codex resume` fails with `already has
   an active writer`. Either can take it once the holder unloads it.

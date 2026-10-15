@@ -63,7 +63,7 @@ name wins.
 ## Closing and resuming
 
 Closing a tile ends only its terminal in two cases: another tile shows the same
-session, or its Codex switched with `/new` or `/resume` and you have not sent
+session, or its Codex switched to another conversation and you have not sent
 the next prompt. The session stays open, and is hidden if no tile shows it.
 Closing the last tile of a session archives its conversation in Codex, settles
 its usage and closes the session into the ledger. A hidden session closes the
