@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"errors"
+	"slices"
 	"syscall"
 
 	"github.com/victorarias/attn/internal/harness"
@@ -18,10 +19,10 @@ func (d *Daemon) lockTerminalEnds(sessionID protocol.SessionID) (unlock func()) 
 }
 
 // Hold lockTerminalEnds.
-func (d *Daemon) othersRun(sessionID protocol.SessionID, t harness.TerminalID) bool {
+func (d *Daemon) othersRun(sessionID protocol.SessionID, closing ...harness.TerminalID) bool {
 	live := d.liveTerminals(context.Background())
 	for _, id := range d.terminals().Of(harness.SessionID(sessionID)) {
-		if _, running := live[id]; running && id != t {
+		if _, running := live[id]; running && !slices.Contains(closing, id) {
 			return true
 		}
 	}

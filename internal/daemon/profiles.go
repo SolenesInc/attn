@@ -432,12 +432,9 @@ func (d *Daemon) handleDesktopClose(client *wsClient, msg *protocol.DesktopClose
 				return profileActionOutcome{}, err
 			}
 			var protected []string
-			for _, pane := range desktop.Panes {
-				if pane.SessionID == "" {
-					continue
-				}
-				if err := d.sessionCloseError(pane.SessionID); err != nil {
-					protected = append(protected, d.desktopSessionName(pane.SessionID)+": "+err.Error())
+			for _, id := range d.sessionsEndedWith(desktop) {
+				if err := d.sessionCloseError(id); err != nil {
+					protected = append(protected, d.desktopSessionName(id)+": "+err.Error())
 				}
 			}
 			if len(protected) > 0 {
@@ -463,6 +460,22 @@ func (d *Daemon) handleDesktopClose(client *wsClient, msg *protocol.DesktopClose
 			return profileActionOutcome{profile: &profile, arranges: true}, nil
 		})
 	})
+}
+
+func (d *Daemon) sessionsEndedWith(desktop profiles.Desktop) []protocol.SessionID {
+	var shown []protocol.SessionID
+	closing := map[protocol.SessionID][]harness.TerminalID{}
+	for _, pane := range desktop.Panes {
+		t := harness.TerminalID(pane.RuntimeID)
+		if pane.SessionID == "" || d.movedOn(pane.SessionID, t) {
+			continue
+		}
+		if _, seen := closing[pane.SessionID]; !seen {
+			shown = append(shown, pane.SessionID)
+		}
+		closing[pane.SessionID] = append(closing[pane.SessionID], t)
+	}
+	return slices.DeleteFunc(shown, func(id protocol.SessionID) bool { return d.othersRun(id, closing[id]...) })
 }
 
 func (d *Daemon) desktopSessionName(id protocol.SessionID) string {

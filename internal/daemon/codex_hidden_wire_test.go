@@ -196,6 +196,43 @@ func TestClosingADesktopEndsOnlyItsTileOfASharedCodexSessionAnotherDesktopShows(
 	}
 }
 
+func TestClosingADesktopRefusesToEndTheChiefOnlyWhereItHoldsTheChiefsLastTile(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	profile := app.SelectedProfile()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	spawned, home, _ := w.RequestSpawn(app, fakeagent.Codex, w.Path("chief"), func(m *protocol.SpawnSessionMessage) {
+		m.ChiefOfStaff = protocol.Ptr(true)
+	})
+	if !spawned.Success {
+		t.Fatalf("spawn the chief: %s", protocol.Deref(spawned.Error))
+	}
+	chief := string(spawned.ID)
+	codex := w.Launched(chief)
+	app.TypeLine(chief, "plan the week")
+	codex.Prompted()
+	codex.Reply("Planned. <!-- attn:state=idle -->")
+	elsewhere := createDesktop(app, profile)
+	switchDesktop(app, profile, elsewhere.ID)
+	other := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
+	second := w.Launched(other)
+	secondTerminal := app.Terminal(other)
+	moveOn(t, app, second, secondTerminal, "/resume "+codex.ConversationID, "review the plan")
+	if shown := sessionShownIn(t, w, app, secondTerminal); shown != chief {
+		t.Fatalf("the second terminal shows session %s, want the chief %s", shown, chief)
+	}
+
+	if result := requestCloseDesktop(app, viewProfile(t, w, profile).desktops[elsewhere.ID]); !result.Success {
+		t.Fatalf("closing a desktop with one of the chief's two tiles: %s", protocol.Deref(result.Error))
+	}
+	if result := requestCloseDesktop(app, viewProfile(t, w, profile).desktops[home]); result.Success || !strings.Contains(protocol.Deref(result.Error), "protected") {
+		t.Fatalf("closing the desktop with the chief's last tile = %+v, want it refused as protected", result)
+	}
+	if entry := ledgerShowOverTheWebSocket(app, chief).Entry; entry == nil || protocol.Deref(entry.ClosedAt) != "" {
+		t.Fatalf("the chief after both desktop closes = %+v, want it live", entry)
+	}
+}
+
 func TestInputReachesAHiddenSharedCodexSessionWithoutTouchingAnotherTerminalsDraft(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
