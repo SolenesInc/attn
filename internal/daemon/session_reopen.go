@@ -601,13 +601,6 @@ func (d *Daemon) reopenSessionRuntimeProtected(
 	if err := d.store.ReopenSession(plan.SessionID); err != nil {
 		return nil, err
 	}
-	resumeID := strings.TrimSpace(d.store.GetResumeSessionID(plan.SessionID))
-	if l := d.linkOf(plan.SessionID); l != nil && resumeID != "" {
-		defer d.life.Go("linkReleasedAfterResume", func() { l.profileReleased(profileID) })
-		if err := l.restore(profileID, resumeID); err != nil {
-			return nil, err
-		}
-	}
 
 	session := d.store.Get(plan.SessionID)
 	session.Directory = directory
@@ -624,7 +617,7 @@ func (d *Daemon) reopenSessionRuntimeProtected(
 	}
 	spawn, policy := buildStoredIntentSpawn(session, intent, 80, 24)
 	policy.fromLedger = true
-	if resumeID != "" {
+	if resumeID := strings.TrimSpace(d.store.GetResumeSessionID(plan.SessionID)); resumeID != "" {
 		spawn.ResumeSessionID = protocol.Ptr(resumeID)
 	}
 	if _, rejection := d.runSpawnPipelineProtected(protection, spawn, policy); rejection != nil {

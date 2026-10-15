@@ -233,6 +233,11 @@ func (d *Daemon) resolveSpawnIntent(ctx context.Context, req *spawnRequest) (*sp
 		}
 	}
 	if !req.hasPluginDriver && req.resumeSessionID != "" {
+		if l := d.linkOf(msg.ID); l != nil {
+			if err := l.restore(req.profile.ID, req.resumeSessionID); err != nil {
+				return nil, &spawnRejection{err: err}
+			}
+		}
 		if !d.conversationReady(req.driver, req.resumeSessionID) {
 			return nil, &spawnRejection{err: fmt.Errorf("conversation %s could not be prepared for resume; check the daemon log", req.resumeSessionID)}
 		}
@@ -415,6 +420,9 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		intent.ApprovalPolicy, intent.SandboxMode = effectiveSpawnPolicyPair(msg)
 	}
 	d.store.SetLaunchIntent(session.ID, intent)
+	if prior := d.linkOf(session.ID); prior != nil && prior != req.link {
+		defer d.life.Go("linkReleasedAfterLaunch", func() { prior.profileReleased(req.profile.ID) })
+	}
 	if err := d.store.SetSessionLink(session.ID, linkKind(req.link)); err != nil {
 		d.logf("spawn: %v", err)
 	}
