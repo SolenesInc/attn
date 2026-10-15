@@ -86,7 +86,6 @@ try {
     }));
     for (const key of [
       'new_session_agent',
-      'projects_directory',
       'keybindings_config',
     ])
       queueDaemonSettingRestore(observer, key);
@@ -97,10 +96,6 @@ try {
     await client.request('set_setting', {
       key: 'new_session_agent',
       value: 'codex',
-    });
-    await client.request('set_setting', {
-      key: 'projects_directory',
-      value: runner.sessionDir,
     });
     await client.request('set_setting', {
       key: 'keybindings_config',
