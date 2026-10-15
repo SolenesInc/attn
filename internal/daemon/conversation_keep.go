@@ -208,6 +208,20 @@ func (d *Daemon) keepConversations(now time.Time) {
 	changed := make(map[conversationKey]bool)
 	for key := range referenced {
 		kept, exists := d.store.KeptConversation(key.agent, key.resumeID)
+		if !exists {
+			archived, err := ReadKeptConversationArchive(key.agent, key.resumeID)
+			if err == nil {
+				if err := d.store.PutKeptConversation(archived); err != nil {
+					d.logf("conversation keep: register %s/%s archive: %v", key.agent, key.resumeID, err)
+					continue
+				}
+				kept, exists = archived, true
+				changed[key] = true
+			} else if !os.IsNotExist(err) {
+				d.logf("conversation keep: read %s/%s archive: %v", key.agent, key.resumeID, err)
+				continue
+			}
+		}
 		if exists && kept.DeletedAt.IsZero() && d.store.RetainKeptConversation(key.agent, key.resumeID) {
 			changed[key] = true
 		}

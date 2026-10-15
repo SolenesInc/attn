@@ -50,8 +50,8 @@ commands:
         Conversation archives stay on disk. Archives known to the restored
         database are pinned again, including copies it records as deleted or
         released. Use attn conversation unkeep or attn conversation forget
-        to release them again. Archives absent from the snapshot stay on disk
-        without being added to the conversation list.
+        to release them again. Unreferenced archives absent from the snapshot
+        stay on disk without being added to the conversation list.
 
         path defaults to "latest": the newest rotating attn-<timestamp>.db
         snapshot in the instance's backups directory. Pass an explicit path to

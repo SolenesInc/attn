@@ -30,7 +30,7 @@ func TestDatabaseRestorePreservesConversationArchivesFromAfterTheSnapshot(t *tes
 		original, partial              []byte
 	}
 	var conversations []conversation
-	for _, state := range []string{"missing", "deleted", "released"} {
+	for _, state := range []string{"missing", "deleted", "released", "missing-partial"} {
 		id := s.Spawn(app, fakeagent.Claude, s.Path(state))
 		run := s.Launched(id)
 		app.TypeLine(id, "Remember this conversation")
@@ -40,7 +40,7 @@ func TestDatabaseRestorePreservesConversationArchivesFromAfterTheSnapshot(t *tes
 			t.Fatalf("close: %+v", closed)
 		}
 		testworld.AwaitTaskDone(app, "conversation_keep")
-		if state != "missing" {
+		if state != "missing" && state != "missing-partial" {
 			if err := s.Client().KeptConversationKeep(run.ConversationID, true); err != nil {
 				t.Fatal(err)
 			}
@@ -109,7 +109,7 @@ func TestDatabaseRestorePreservesConversationArchivesFromAfterTheSnapshot(t *tes
 		t.Fatalf("restore did not explain archive retention: %+v", restored)
 	}
 	for _, c := range conversations {
-		if c.state == "released" {
+		if c.state == "released" || c.state == "missing-partial" {
 			if err := os.WriteFile(c.source, c.partial, 0600); err != nil {
 				t.Fatal(err)
 			}
@@ -128,8 +128,20 @@ func TestDatabaseRestorePreservesConversationArchivesFromAfterTheSnapshot(t *tes
 			t.Errorf("%s archive after restore and sweep: %d bytes, %v; want original %d bytes", c.state, len(got), err, len(c.original))
 		}
 	}
+	for _, c := range conversations {
+		if c.state != "missing-partial" {
+			continue
+		}
+		if err := s.Client().KeptConversationKeep(c.native, true); err != nil {
+			t.Fatal(err)
+		}
+		testworld.AwaitTaskDone(app, "conversation_keep")
+		if got, err := os.ReadFile(c.archive); err != nil || !bytes.Equal(got, c.original) {
+			t.Fatalf("re-keeping orphan archive replaced full history: %d bytes, %v; want original %d bytes", len(got), err, len(c.original))
+		}
+	}
 	rows, err := s.Client().KeptConversationList(false)
-	if err != nil || len(rows.Rows) != 2 {
+	if err != nil || len(rows.Rows) != 3 {
 		t.Fatalf("restored conversation list: %+v, %v", rows, err)
 	}
 	for _, row := range rows.Rows {
