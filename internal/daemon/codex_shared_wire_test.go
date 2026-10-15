@@ -56,6 +56,23 @@ func TestASharedCodexLaunchIsOneSessionThatWorksWaitsAndCountsItsUsage(t *testin
 	}
 }
 
+func TestSharedCodexRunsInADataDirAtTheSocketPathLimit(t *testing.T) {
+	w := newWorldInLongestDataDir(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
+	codex := w.Launched(session)
+	if !slices.Contains(codex.Argv, "--remote") {
+		t.Fatalf("the shared launch ran %q, want Codex connected to an app-server", codex.Argv)
+	}
+	app.TypeLine(session, "find the flaky checkout test")
+	if got := codex.Prompted(); got != "find the flaky checkout test" {
+		t.Fatalf("codex received %q", got)
+	}
+	codex.Reply("Found it. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+}
+
 func TestWithSharedCodexOffCodexRunsAloneInItsTerminal(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
