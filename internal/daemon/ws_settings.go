@@ -35,6 +35,7 @@ const (
 	SettingCodexAvailable                = "codex_available"
 	SettingCopilotAvailable              = "copilot_available"
 	SettingPTYBackendMode                = "pty_backend_mode"
+	SettingNewSessionLauncherEnabled     = "new_session_launcher_enabled"
 	SettingDirectAgentLaunchEnabled      = "direct_agent_launch_enabled"
 	SettingSharedPTYHostEnabled          = "pty_shared_host_enabled"
 	SettingSharedPTYHostActive           = "pty_shared_host_active"
@@ -496,7 +497,7 @@ func (d *Daemon) validateSetting(key, value string) error {
 		return d.validateNewSessionAgent(value)
 	case SettingTheme:
 		return validateTheme(value)
-	case SettingSharedPTYHostEnabled, SettingDirectAgentLaunchEnabled:
+	case SettingNewSessionLauncherEnabled, SettingSharedPTYHostEnabled, SettingDirectAgentLaunchEnabled:
 		return validateBooleanSetting(value)
 	case SettingCodexSharedEnabled, SettingQueueShowHiddenSessions:
 		return validateBooleanSetting(value)

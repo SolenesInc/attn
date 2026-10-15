@@ -2181,20 +2181,25 @@ func readSettings(db *sql.DB) (map[string]string, error) {
 	return settings, rows.Err()
 }
 
-func resolveRecentLocationPath(path string) string {
+func recentLocationTarget(path string) (string, string) {
 	for dir := filepath.Clean(path); ; {
 		if _, err := os.Lstat(filepath.Join(dir, ".git")); err == nil {
 			if mainRepo := git.GetMainRepoFromWorktree(dir); mainRepo != "" {
-				return mainRepo
+				return mainRepo, mainRepo
 			}
-			return path
+			return path, dir
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return path
+			return path, ""
 		}
 		dir = parent
 	}
+}
+
+func resolveRecentLocationPath(path string) string {
+	resolved, _ := recentLocationTarget(path)
+	return resolved
 }
 
 func frecencyScore(useCount int, lastSeen string, now time.Time) float64 {
@@ -2287,7 +2292,10 @@ func (s *Store) GetRecentLocations(limit int) []*protocol.RecentLocation {
 			toDelete = append(toDelete, loc.Path)
 			continue
 		}
-		resolved := resolveRecentLocationPath(loc.Path)
+		resolved, repoRoot := recentLocationTarget(loc.Path)
+		if repoRoot != "" {
+			loc.RepoRoot = protocol.Ptr(repoRoot)
+		}
 		if existing := merged[resolved]; existing != nil {
 			existing.UseCount += loc.UseCount
 			if loc.LastSeen > existing.LastSeen {

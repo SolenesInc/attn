@@ -50,3 +50,6 @@
   white-space: pre;
   opacity: 0.7;
 }
+
+.path-input-field { display: flex; align-items: center; gap: 10px; }
+.path-input-field > .path-input-container { flex: 1; min-width: 0; }

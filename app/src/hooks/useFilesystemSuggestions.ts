@@ -9,6 +9,7 @@ export interface FilesystemSuggestion {
   /** The path as the daemon resolved it, for callers that must open it. */
   absPath: string;
   isDir: boolean;
+  isRepo: boolean;
 }
 
 interface UseFilesystemSuggestionsResult {
@@ -75,6 +76,7 @@ export function useFilesystemSuggestions(
         path: toDisplayPath(entry.path, nextHomePath),
         absPath: entry.path,
         isDir: entry.is_dir,
+        isRepo: entry.is_repo === true,
       })));
     } catch (e) {
       if (requestIdRef.current !== requestId) {

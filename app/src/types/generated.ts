@@ -2029,9 +2029,10 @@ export interface BrowseDirectoryResultMessage {
 }
 
 export interface EntryElement {
-    is_dir: boolean;
-    name:   string;
-    path:   string;
+    is_dir:   boolean;
+    is_repo?: boolean;
+    name:     string;
+    path:     string;
     [property: string]: any;
 }
 
@@ -2325,10 +2326,11 @@ export interface CommandUsage {
 }
 
 export interface CreateWorktreeFromBranchMessage {
-    branch:    string;
-    cmd:       CreateWorktreeFromBranchMessageCmd;
-    main_repo: string;
-    path?:     string;
+    branch:      string;
+    cmd:         CreateWorktreeFromBranchMessageCmd;
+    main_repo:   string;
+    path?:       string;
+    request_id?: string;
     [property: string]: any;
 }
 
@@ -2341,6 +2343,7 @@ export interface CreateWorktreeMessage {
     cmd:            CreateWorktreeMessageCmd;
     main_repo:      string;
     path?:          string;
+    request_id?:    string;
     starting_from?: string;
     [property: string]: any;
 }
@@ -2350,10 +2353,11 @@ export enum CreateWorktreeMessageCmd {
 }
 
 export interface CreateWorktreeResultMessage {
-    error?:  string;
-    event:   CreateWorktreeResultMessageEvent;
-    path?:   string;
-    success: boolean;
+    error?:      string;
+    event:       CreateWorktreeResultMessageEvent;
+    path?:       string;
+    request_id?: string;
+    success:     boolean;
     [property: string]: any;
 }
 
@@ -3229,9 +3233,10 @@ export interface DelegationSelection {
 }
 
 export interface DeleteWorktreeMessage {
-    cmd:    DeleteWorktreeMessageCmd;
-    force?: boolean;
-    path:   string;
+    cmd:         DeleteWorktreeMessageCmd;
+    force?:      boolean;
+    path:        string;
+    request_id?: string;
     [property: string]: any;
 }
 
@@ -3245,6 +3250,7 @@ export interface DeleteWorktreeResultMessage {
     forceable?:   boolean;
     path:         string;
     reason_kind?: ReasonKind;
+    request_id?:  string;
     success:      boolean;
     [property: string]: any;
 }
@@ -3578,9 +3584,10 @@ export enum DetachSessionMessageCmd {
 }
 
 export interface DirectoryEntry {
-    is_dir: boolean;
-    name:   string;
-    path:   string;
+    is_dir:   boolean;
+    is_repo?: boolean;
+    name:     string;
+    path:     string;
     [property: string]: any;
 }
 
@@ -4701,8 +4708,9 @@ export enum GetRecentLocationsMessageCmd {
 }
 
 export interface GetRepoInfoMessage {
-    cmd:  GetRepoInfoMessageCmd;
-    repo: string;
+    cmd:         GetRepoInfoMessageCmd;
+    repo:        string;
+    request_id?: string;
     [property: string]: any;
 }
 
@@ -4711,10 +4719,11 @@ export enum GetRepoInfoMessageCmd {
 }
 
 export interface GetRepoInfoResultMessage {
-    error?:  string;
-    event:   GetRepoInfoResultMessageEvent;
-    info?:   Info;
-    success: boolean;
+    error?:      string;
+    event:       GetRepoInfoResultMessageEvent;
+    info?:       Info;
+    request_id?: string;
+    success:     boolean;
     [property: string]: any;
 }
 
@@ -6818,9 +6827,10 @@ export interface FileElement {
 }
 
 export interface RecentLocation {
-    last_seen: string;
-    path:      string;
-    use_count: number;
+    last_seen:  string;
+    path:       string;
+    repo_root?: string;
+    use_count:  number;
     [property: string]: any;
 }
 
@@ -6839,9 +6849,10 @@ export enum RecentLocationsResultMessageEvent {
 }
 
 export interface RecentLocationElement {
-    last_seen: string;
-    path:      string;
-    use_count: number;
+    last_seen:  string;
+    path:       string;
+    repo_root?: string;
+    use_count:  number;
     [property: string]: any;
 }
 
@@ -15965,6 +15976,7 @@ const typeMap: any = {
     ], "any"),
     "EntryElement": o([
         { json: "is_dir", js: "is_dir", typ: true },
+        { json: "is_repo", js: "is_repo", typ: u(undefined, true) },
         { json: "name", js: "name", typ: "" },
         { json: "path", js: "path", typ: "" },
     ], "any"),
@@ -16154,18 +16166,21 @@ const typeMap: any = {
         { json: "cmd", js: "cmd", typ: r("CreateWorktreeFromBranchMessageCmd") },
         { json: "main_repo", js: "main_repo", typ: "" },
         { json: "path", js: "path", typ: u(undefined, "") },
+        { json: "request_id", js: "request_id", typ: u(undefined, "") },
     ], "any"),
     "CreateWorktreeMessage": o([
         { json: "branch", js: "branch", typ: "" },
         { json: "cmd", js: "cmd", typ: r("CreateWorktreeMessageCmd") },
         { json: "main_repo", js: "main_repo", typ: "" },
         { json: "path", js: "path", typ: u(undefined, "") },
+        { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "starting_from", js: "starting_from", typ: u(undefined, "") },
     ], "any"),
     "CreateWorktreeResultMessage": o([
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("CreateWorktreeResultMessageEvent") },
         { json: "path", js: "path", typ: u(undefined, "") },
+        { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "success", js: "success", typ: true },
     ], "any"),
     "CrewCharterDocument": o([
@@ -16729,6 +16744,7 @@ const typeMap: any = {
         { json: "cmd", js: "cmd", typ: r("DeleteWorktreeMessageCmd") },
         { json: "force", js: "force", typ: u(undefined, true) },
         { json: "path", js: "path", typ: "" },
+        { json: "request_id", js: "request_id", typ: u(undefined, "") },
     ], "any"),
     "DeleteWorktreeResultMessage": o([
         { json: "error", js: "error", typ: u(undefined, "") },
@@ -16736,6 +16752,7 @@ const typeMap: any = {
         { json: "forceable", js: "forceable", typ: u(undefined, true) },
         { json: "path", js: "path", typ: "" },
         { json: "reason_kind", js: "reason_kind", typ: u(undefined, r("ReasonKind")) },
+        { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "success", js: "success", typ: true },
     ], "any"),
     "Desktop": o([
@@ -16913,6 +16930,7 @@ const typeMap: any = {
     ], "any"),
     "DirectoryEntry": o([
         { json: "is_dir", js: "is_dir", typ: true },
+        { json: "is_repo", js: "is_repo", typ: u(undefined, true) },
         { json: "name", js: "name", typ: "" },
         { json: "path", js: "path", typ: "" },
     ], "any"),
@@ -17615,11 +17633,13 @@ const typeMap: any = {
     "GetRepoInfoMessage": o([
         { json: "cmd", js: "cmd", typ: r("GetRepoInfoMessageCmd") },
         { json: "repo", js: "repo", typ: "" },
+        { json: "request_id", js: "request_id", typ: u(undefined, "") },
     ], "any"),
     "GetRepoInfoResultMessage": o([
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("GetRepoInfoResultMessageEvent") },
         { json: "info", js: "info", typ: u(undefined, r("Info")) },
+        { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "success", js: "success", typ: true },
     ], "any"),
     "Info": o([
@@ -18878,6 +18898,7 @@ const typeMap: any = {
     "RecentLocation": o([
         { json: "last_seen", js: "last_seen", typ: "" },
         { json: "path", js: "path", typ: "" },
+        { json: "repo_root", js: "repo_root", typ: u(undefined, "") },
         { json: "use_count", js: "use_count", typ: 0 },
     ], "any"),
     "RecentLocationsResultMessage": o([
@@ -18891,6 +18912,7 @@ const typeMap: any = {
     "RecentLocationElement": o([
         { json: "last_seen", js: "last_seen", typ: "" },
         { json: "path", js: "path", typ: "" },
+        { json: "repo_root", js: "repo_root", typ: u(undefined, "") },
         { json: "use_count", js: "use_count", typ: 0 },
     ], "any"),
     "RecordCommandUsageMessage": o([

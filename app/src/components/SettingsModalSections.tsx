@@ -723,11 +723,12 @@ export function TerminalSettings({
 }
 
 export function ExperimentalSettings({
+  newSessionLauncherEnabled,
   codexSharedEnabled,
   queueShowHiddenSessions,
   directAgentLaunchEnabled,
   onSetSetting,
-}: Pick<SettingsModalState, 'codexSharedEnabled' | 'queueShowHiddenSessions' | 'directAgentLaunchEnabled' | 'onSetSetting'>) {
+}: Pick<SettingsModalState, 'newSessionLauncherEnabled' | 'codexSharedEnabled' | 'queueShowHiddenSessions' | 'directAgentLaunchEnabled' | 'onSetSetting'>) {
   return (
     <section className="settings-block">
       <div className="settings-block-intro">
@@ -736,6 +737,17 @@ export function ExperimentalSettings({
         <p className="settings-description">Try features that are still being developed.</p>
       </div>
       <div className="settings-block-body">
+        <div className="settings-row-card">
+          <div>
+            <p className="settings-row-title">One-screen new-session launcher (experimental)</p>
+            <p className="settings-row-copy" id="new-session-launcher-description">Search a project or path, then use Tab to choose where to start.</p>
+          </div>
+          <button type="button" role="switch" aria-label="One-screen new-session launcher (experimental)"
+            aria-checked={newSessionLauncherEnabled} aria-describedby="new-session-launcher-description"
+            className="settings-action" onClick={() => onSetSetting('new_session_launcher_enabled', newSessionLauncherEnabled ? 'false' : 'true')}>
+            {newSessionLauncherEnabled ? 'Disable' : 'Enable'}
+          </button>
+        </div>
         <div className="settings-row-card">
           <div>
             <p className="settings-row-title">Direct agent launches</p>

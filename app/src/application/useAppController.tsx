@@ -454,6 +454,7 @@ export function useAppController({
     connectionError,
     getActivePaneIdForSession,
     createSession: createSessionForUiAutomation,
+    openNewSession: handleNewSession,
     selectSession: handleSelectSession,
     selectDesktop: handleSelectDesktop,
     moveDesktopLeaf: sendDesktopMoveLeaf,
@@ -580,6 +581,7 @@ export function useAppController({
 
   useKeyboardShortcuts({
     onNewSession: () => handleNewSession('vertical'),
+    onNewTerminal: () => handleNewSession('vertical', 'shell'),
     onNewSessionHorizontal: () => handleNewSession('horizontal'),
     onCloseSession: handleCloseCurrentSessionShortcut,
     onOpenPalette: handleOpenPalette,

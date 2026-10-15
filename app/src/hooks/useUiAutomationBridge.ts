@@ -55,6 +55,7 @@ interface UseUiAutomationBridgeArgs {
   daemonReady?: boolean;
   connectionError?: string | null;
   getActivePaneIdForSession: (session: Session | undefined | null) => string;
+  openNewSession: () => void;
   createSession: (label: string, cwd: string, id?: string, agent?: SessionAgent, yoloMode?: boolean, options?: { chiefOfStaff?: boolean }) => Promise<string>;
   selectSession: (sessionId: string) => void;
   selectDesktop: (desktopId: string) => void;
@@ -1595,7 +1596,8 @@ function collectAutoModeUiState() {
 }
 
 function getLocationPickerRoot() {
-  const root = document.querySelector('[data-testid="location-picker"]');
+  const root = document.querySelector('[data-testid="location-picker"]')
+    || document.querySelector('[data-testid="location-picker-inline"]');
   return root instanceof HTMLElement ? root : null;
 }
 
@@ -1731,6 +1733,7 @@ function collectLocationPickerUiState() {
     }))
     .sort((left, right) => left.index - right.index);
 
+  const whereList = root.querySelector('[role="listbox"][aria-label="Where"]');
   const repoOptionsRoot = root.querySelector('[data-testid="repo-options"]');
   const repoOptions = repoOptionsRoot instanceof HTMLElement
     ? {
@@ -1767,7 +1770,7 @@ function collectLocationPickerUiState() {
 
   return {
     open: true,
-    mode: repoOptions ? 'repo-options' : 'path-input',
+    mode: whereList ? 'where-list' : repoOptions ? 'repo-options' : 'path-input',
     title: title?.textContent?.trim() || '',
     pathInputValue: pathInput instanceof HTMLInputElement ? pathInput.value : '',
     currentDir: breadcrumb?.textContent?.trim() || '',
@@ -1777,6 +1780,14 @@ function collectLocationPickerUiState() {
     directories: pickerItems.filter((item) => item.kind === 'directory'),
     emptyText: empty?.textContent?.trim() || '',
     repoOptions,
+    whereList: whereList ? Array.from(whereList.querySelectorAll('[role="option"]')).map(item => ({
+      index: Number(item.getAttribute('data-index')),
+      kind: item.getAttribute('data-kind') || '',
+      path: item.getAttribute('data-path') || '',
+      name: item.querySelector('.picker-name')?.textContent?.trim() || '',
+      detail: item.querySelector('.picker-path')?.textContent?.trim() || '',
+      selected: item.getAttribute('aria-selected') === 'true',
+    })) : null,
   };
 }
 
@@ -1956,6 +1967,7 @@ export function useUiAutomationBridge({
   connectionError = null,
   getActivePaneIdForSession,
   createSession,
+  openNewSession,
   selectSession,
   selectDesktop,
   moveDesktopLeaf,
@@ -2577,13 +2589,7 @@ export function useUiAutomationBridge({
       case 'location_picker_get_state':
         return collectLocationPickerUiState();
       case 'location_picker_open': {
-        if (!getLocationPickerRoot()) {
-          const button = document.querySelector('[aria-label="New Session"]');
-          if (!(button instanceof HTMLElement)) {
-            throw new Error('New Session button not found');
-          }
-          clickElement(button);
-        }
+        if (!getLocationPickerRoot()) openNewSession();
         await settleUi(2);
         return collectLocationPickerUiState();
       }
@@ -2600,7 +2606,7 @@ export function useUiAutomationBridge({
         return collectLocationPickerUiState();
       }
       case 'location_picker_set_path': {
-        const input = document.querySelector('[data-testid="location-picker-path-input"]');
+        const input = getLocationPickerRoot()?.querySelector('[data-testid="location-picker-path-input"]');
         if (!(input instanceof HTMLInputElement)) {
           throw new Error('Location picker path input not found');
         }
@@ -2611,7 +2617,7 @@ export function useUiAutomationBridge({
         return collectLocationPickerUiState();
       }
       case 'location_picker_submit_path': {
-        const input = document.querySelector('[data-testid="location-picker-path-input"]');
+        const input = getLocationPickerRoot()?.querySelector('[data-testid="location-picker-path-input"]');
         if (!(input instanceof HTMLInputElement)) {
           throw new Error('Location picker path input not found');
         }
@@ -2629,7 +2635,7 @@ export function useUiAutomationBridge({
         if (!Number.isFinite(index)) {
           throw new Error('location_picker_select_path_item requires index');
         }
-        const item = document.querySelector(`[data-testid="location-picker-item-${Math.floor(index)}"]`);
+        const item = getLocationPickerRoot()?.querySelector(`[data-testid="location-picker-item-${Math.floor(index)}"]`);
         if (!(item instanceof HTMLElement)) {
           throw new Error(`Location picker item ${index} not found`);
         }
@@ -2642,7 +2648,7 @@ export function useUiAutomationBridge({
         if (!Number.isFinite(index)) {
           throw new Error('location_picker_select_repo_option requires index');
         }
-        const option = document.querySelector(`[data-testid="repo-option-${Math.floor(index)}"]`);
+        const option = getLocationPickerRoot()?.querySelector(`[data-testid="repo-option-${Math.floor(index)}"]`);
         if (!(option instanceof HTMLElement)) {
           throw new Error(`Repo option ${index} not found`);
         }
@@ -2651,7 +2657,7 @@ export function useUiAutomationBridge({
         return collectLocationPickerUiState();
       }
       case 'location_picker_set_new_worktree_name': {
-        const input = document.querySelector('[data-testid="repo-new-worktree-input"]');
+        const input = getLocationPickerRoot()?.querySelector('[data-testid="repo-new-worktree-input"]');
         if (!(input instanceof HTMLInputElement)) {
           throw new Error('New worktree input not found');
         }
@@ -2666,7 +2672,7 @@ export function useUiAutomationBridge({
         const selector = mode === 'default'
           ? '[data-testid="repo-new-worktree-start-default"]'
           : '[data-testid="repo-new-worktree-start-current"]';
-        const radio = document.querySelector(selector);
+        const radio = getLocationPickerRoot()?.querySelector(selector);
         if (!(radio instanceof HTMLInputElement)) {
           throw new Error(`New worktree ${mode} radio not found`);
         }
@@ -2675,7 +2681,7 @@ export function useUiAutomationBridge({
         return collectLocationPickerUiState();
       }
       case 'location_picker_submit_new_worktree': {
-        const input = document.querySelector('[data-testid="repo-new-worktree-input"]');
+        const input = getLocationPickerRoot()?.querySelector('[data-testid="repo-new-worktree-input"]');
         if (!(input instanceof HTMLInputElement)) {
           throw new Error('New worktree input not found');
         }
@@ -3698,6 +3704,7 @@ export function useUiAutomationBridge({
     openAutomationsPanel,
     openDockPanel,
     openShortcutEditor,
+    openNewSession,
     openWorktreesPanel,
     reloadSession,
     resetSessionPaneTerminal,

@@ -343,6 +343,7 @@ model AuthorState {
 
 model RecentLocation {
   path: string;
+  repo_root?: string;
   last_seen: string;    // ISO timestamp
   use_count: int32;
 }
@@ -362,6 +363,7 @@ model FileActivity {
 }
 
 model DirectoryEntry {
+  is_repo?: boolean;
   name: string;
   path: string;
   is_dir: boolean;
@@ -1330,12 +1332,14 @@ model CreateWorktreeMessage {
   branch: string;
   path?: string;
   starting_from?: string;  // Branch to create worktree from (default: current HEAD)
+  request_id?: string;
 }
 
 model DeleteWorktreeMessage {
   cmd: "delete_worktree";
   path: string;
   force?: boolean;
+  request_id?: string;
 }
 
 // The Worktrees surface: every worktree of every repository attn tracks, read
@@ -1527,6 +1531,7 @@ model CreateWorktreeFromBranchMessage {
   main_repo: string;
   branch: string;
   path?: string;
+  request_id?: string;
 }
 
 model GetDefaultBranchMessage {
@@ -1553,6 +1558,7 @@ model EnsureRepoMessage {
 model GetRepoInfoMessage {
   cmd: "get_repo_info";
   repo: string;
+  request_id?: string;
 }
 
 // Dual-surface (unix-socket/CLI `attn automation apply` + WS, the app
@@ -3102,6 +3108,7 @@ model CreateWorktreeResultMessage {
   path?: string;
   success: boolean;
   error?: string;
+  request_id?: string;
 }
 
 model DeleteWorktreeResultMessage {
@@ -3111,6 +3118,7 @@ model DeleteWorktreeResultMessage {
   error?: string;
   forceable?: boolean;
   reason_kind?: "dirty_worktree" | "provider_error" | "not_found" | "git_error";
+  request_id?: string;
 }
 
 model GitOperationStartedMessage {
@@ -3231,6 +3239,7 @@ model GetRepoInfoResultMessage {
   info?: RepoInfo;
   success: boolean;
   error?: string;
+  request_id?: string;
 }
 
 // Compact automations summaries for the WS surface. Canonical state (full

@@ -66,7 +66,7 @@ describe('App worktrees', () => {
 
     await press('y');
 
-    expect(daemon.sentOf('delete_worktree')).toEqual([
+    expect(daemon.sentOf('delete_worktree')).toMatchObject([
       { cmd: 'delete_worktree', path: WORKTREE },
       { cmd: 'delete_worktree', path: WORKTREE, force: true },
     ]);

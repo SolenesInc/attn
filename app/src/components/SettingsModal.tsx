@@ -245,6 +245,7 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
     case 'experimental':
       return (
         <ExperimentalSettings
+          newSessionLauncherEnabled={state.newSessionLauncherEnabled}
           codexSharedEnabled={state.codexSharedEnabled}
           queueShowHiddenSessions={state.queueShowHiddenSessions}
           directAgentLaunchEnabled={state.directAgentLaunchEnabled}

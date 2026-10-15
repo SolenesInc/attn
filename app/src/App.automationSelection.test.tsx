@@ -3,6 +3,8 @@ import { isTauri } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import { describe, expect, it, vi } from 'vitest';
 import { daemonSession, soloDesktop, splitDesktop } from './test/daemonFixtures';
+import { serveMachine } from './test/locations';
+import { harnesses, serveHarnessCatalogs } from './test/harnessCatalogs';
 import { renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
@@ -13,7 +15,7 @@ interface AutomationResponse {
   error?: string;
 }
 
-async function renderAutomatedApp(desktops = [soloDesktop('s1'), soloDesktop('s2')]) {
+async function renderAutomatedApp(desktops = [soloDesktop('s1'), soloDesktop('s2')], settings: Record<string, string> = {}) {
   vi.mocked(isTauri).mockReturnValue(true);
   (window as { __ATTN_AUTOMATION_ENABLED?: boolean }).__ATTN_AUTOMATION_ENABLED = true;
   const listeners = new Set<(event: { payload: unknown }) => void>();
@@ -26,6 +28,7 @@ async function renderAutomatedApp(desktops = [soloDesktop('s1'), soloDesktop('s2
   const view = await renderApp({ initialState: {
     sessions: [daemonSession('s1'), daemonSession('s2')],
     desktops,
+    settings,
   } });
   const request = (event: { payload: unknown }) => [...listeners].forEach((handler) => handler(event));
   const responses = () => vi.mocked(emit).mock.calls
@@ -49,6 +52,22 @@ function holdShows(daemon: ScriptedDaemon) {
   });
   return held;
 }
+
+describe('automation location picker', () => {
+  it.each(['true', 'false'])('opens, closes and reopens with the experiment %s', async (enabled) => {
+    const { daemon, ask } = await renderAutomatedApp(undefined, { new_session_launcher_enabled: enabled });
+    serveMachine(daemon);
+    serveHarnessCatalogs(daemon, harnesses);
+    expect(screen.queryByTestId('location-picker')).toBeNull();
+    for (const action of ['location_picker_open', 'location_picker_close', 'location_picker_open']) {
+      const answer = await ask(action, {});
+      await daemon.idle();
+      expect(answer()).toMatchObject({ ok: true });
+      expect(Boolean(screen.queryByTestId('location-picker'))).toBe(action === 'location_picker_open');
+    }
+    expect(screen.getByTestId('location-picker').getAttribute('data-launcher')).toBe(enabled === 'true' ? 'one-screen' : null);
+  });
+});
 
 describe('automation select_session', () => {
   it('answers once the daemon made the session’s pane the active leaf', async () => {

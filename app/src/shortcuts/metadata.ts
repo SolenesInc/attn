@@ -38,6 +38,7 @@ export const SHORTCUT_CATEGORY_ORDER: ShortcutCategory[] = [
 
 export const SHORTCUT_META: Record<ShortcutId, ShortcutMeta> = {
   'session.new': { label: 'New session on this desktop', category: 'sessions' },
+  'session.newTerminal': { label: 'New terminal on this desktop', category: 'sessions', dockLabel: 'terminal' },
   'session.newHorizontal': { label: 'New session, split sideways', category: 'sessions', dockLabel: 'session h' },
   'session.close': { label: 'Close session, focused pane or empty desktop', category: 'sessions' },
   'session.prev': { label: 'Previous desktop (queue mode: previous agent in the queue)', category: 'sessions' },

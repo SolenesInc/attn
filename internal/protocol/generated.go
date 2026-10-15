@@ -1883,6 +1883,9 @@ type CreateWorktreeFromBranchMessage struct {
 
 	// Path corresponds to the JSON schema field "path".
 	Path *string `json:"path,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
 }
 
 type CreateWorktreeMessage struct {
@@ -1898,6 +1901,9 @@ type CreateWorktreeMessage struct {
 	// Path corresponds to the JSON schema field "path".
 	Path *string `json:"path,omitempty,omitzero"`
 
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
 	// StartingFrom corresponds to the JSON schema field "starting_from".
 	StartingFrom *string `json:"starting_from,omitempty,omitzero"`
 }
@@ -1911,6 +1917,9 @@ type CreateWorktreeResultMessage struct {
 
 	// Path corresponds to the JSON schema field "path".
 	Path *string `json:"path,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
@@ -2965,6 +2974,9 @@ type DeleteWorktreeMessage struct {
 
 	// Path corresponds to the JSON schema field "path".
 	Path string `json:"path"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
 }
 
 type DeleteWorktreeResultMessage struct {
@@ -2982,6 +2994,9 @@ type DeleteWorktreeResultMessage struct {
 
 	// ReasonKind corresponds to the JSON schema field "reason_kind".
 	ReasonKind interface{} `json:"reason_kind,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
@@ -3391,6 +3406,9 @@ type DetachSessionMessage struct {
 type DirectoryEntry struct {
 	// IsDir corresponds to the JSON schema field "is_dir".
 	IsDir bool `json:"is_dir"`
+
+	// IsRepo corresponds to the JSON schema field "is_repo".
+	IsRepo *bool `json:"is_repo,omitempty,omitzero"`
 
 	// Name corresponds to the JSON schema field "name".
 	Name string `json:"name"`
@@ -4479,6 +4497,9 @@ type GetRepoInfoMessage struct {
 
 	// Repo corresponds to the JSON schema field "repo".
 	Repo string `json:"repo"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
 }
 
 type GetRepoInfoResultMessage struct {
@@ -4490,6 +4511,9 @@ type GetRepoInfoResultMessage struct {
 
 	// Info corresponds to the JSON schema field "info".
 	Info *RepoInfo `json:"info,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
@@ -7023,6 +7047,9 @@ type RecentLocation struct {
 
 	// Path corresponds to the JSON schema field "path".
 	Path string `json:"path"`
+
+	// RepoRoot corresponds to the JSON schema field "repo_root".
+	RepoRoot *string `json:"repo_root,omitempty,omitzero"`
 
 	// UseCount corresponds to the JSON schema field "use_count".
 	UseCount int `json:"use_count"`
