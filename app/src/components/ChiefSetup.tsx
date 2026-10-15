@@ -47,7 +47,10 @@ export function ChiefSetup({ chief, autoFocus, onSave, onClose, onReturnFocus, o
   useLayoutEffect(() => {
     if (!focusRequested.current) return;
     const cancel = () => { focusRequested.current = null; };
-    const focusMoved = () => { if (focusRequested.current !== 'automatic') cancel(); };
+    const focusMoved = (event: FocusEvent) => {
+      const automaticShellFocus = focusRequested.current === 'automatic' && event.target === root.current?.closest('.app');
+      if (!automaticShellFocus) cancel();
+    };
     document.addEventListener('focusin', focusMoved, true);
     document.addEventListener('pointerdown', cancel, true);
     return () => {

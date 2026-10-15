@@ -68,6 +68,43 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
     await reconnected.daemon.idle();
     expect(screen.getByTestId('chief-setup').contains(document.activeElement)).toBe(false);
   });
+  it('focuses initial setup after the empty app shell takes focus while the registry loads', async () => {
+    const { daemon } = await renderApp({
+      initialState: { settings, crew: [member()] },
+      script: daemon => { daemon.on('delegation_preferences_get', () => {}); },
+    });
+    expect(document.activeElement).toBe(screen.getByTestId('chief-slot').closest('.app'));
+    await gesture(daemon, () => {
+      const request = daemon.sentOf('delegation_preferences_get').slice(-1)[0]!;
+      daemon.replyTo(request, { event: 'delegation_preferences_result', request_id: request.request_id, success: true,
+        preferences: { enabled: false, revision: 0, workflow_skill_enabled: false, roles: [], fallback: { selection: { harness: '', provider: '', model: '', effort: '' }, instructions: '' } },
+        harnesses, templates: [], expanded_roles: [],
+      });
+    });
+    expect(slot().getByRole('radio', { name: /Claude/ })).toHaveFocus();
+  });
+  it('cancels pending setup focus when the user returns to a terminal before the registry arrives', async () => {
+    const desktop = soloDesktop('agent');
+    const { daemon } = await renderApp({
+      initialState: { settings, crew: [member()], sessions: [daemonSession('agent')], desktops: [desktop], profiles: [defaultProfile(desktop.id)] },
+      script: daemon => { daemon.on('delegation_preferences_get', () => {}); },
+    });
+    const open = slot().getByRole('button', { name: 'Set up Captain' });
+    await gesture(daemon, () => { open.focus(); fireEvent.click(open); });
+    expect(slot().getByRole('status')).toHaveTextContent('Checking harnesses');
+    const terminal = screen.getByRole('textbox', { name: 'Terminal input' });
+    await gesture(daemon, () => terminal.focus());
+    expect(terminal).toHaveFocus();
+    await gesture(daemon, () => {
+      const request = daemon.sentOf('delegation_preferences_get').slice(-1)[0]!;
+      daemon.replyTo(request, { event: 'delegation_preferences_result', request_id: request.request_id, success: true,
+        preferences: { enabled: false, revision: 0, workflow_skill_enabled: false, roles: [], fallback: { selection: { harness: '', provider: '', model: '', effort: '' }, instructions: '' } },
+        harnesses, templates: [], expanded_roles: [],
+      });
+    });
+    expect(slot().getByRole('radio', { name: /Claude/ })).toBeInTheDocument();
+    expect(terminal).toHaveFocus();
+  });
   it.each(['setup', 'terminal', 'outside', 'close', 'focus-away-and-back'])('keeps the chosen surface focused through catalog replacement (%s)', async surface => {
     const desktop = soloDesktop('agent');
     const { daemon } = await renderApp({ initialState: {
