@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	sqlite3 "github.com/mattn/go-sqlite3"
 )
 
 func TestTimestampedMigrationsApplyInEitherArrivalOrder(t *testing.T) {
@@ -149,9 +151,104 @@ func TestFailedTimestampedUpgradeRollsBackAllPendingWork(t *testing.T) {
 	}
 }
 
+func databaseWithHotJournal(t *testing.T, path string) string {
+	t.Helper()
+	u := &url.URL{Scheme: "file", Path: path}
+	db, err := sql.Open("sqlite3", u.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(1)
+	for _, statement := range []string{
+		`PRAGMA journal_mode=DELETE`,
+		`PRAGMA cache_size=1`,
+		`PRAGMA cache_spill=1`,
+		`INSERT INTO settings(key, value) VALUES ('crash_recovery', 'committed')`,
+	} {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var pageSize, pageCount int
+	if err := db.QueryRow(`PRAGMA page_size`).Scan(&pageSize); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`PRAGMA page_count`).Scan(&pageCount); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`DELETE FROM schema_migrations`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`INSERT INTO schema_migrations(version, applied_at) VALUES (?, datetime('now'))`, LatestSchemaVersion()+2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`UPDATE settings SET value=zeroblob(?) WHERE key='crash_recovery'`, pageSize*pageCount); err != nil {
+		t.Fatal(err)
+	}
+	crashed := filepath.Join(t.TempDir(), "attn.db")
+	for _, suffix := range []string{"", "-journal"} {
+		data, err := os.ReadFile(path + suffix)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(crashed+suffix, data, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	u.Path = crashed
+	u.RawQuery = "mode=ro"
+	inspection, err := sql.Open("sqlite3", u.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	err = inspection.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count)
+	inspection.Close()
+	var sqliteError sqlite3.Error
+	if !errors.As(err, &sqliteError) || sqliteError.ExtendedCode != sqlite3.ErrReadonlyRollback {
+		t.Fatalf("crash fixture is not awaiting rollback recovery: %v", err)
+	}
+	return crashed
+}
+
+func TestSupportedDatabasesRecoverHotJournalsBeforeOpening(t *testing.T) {
+	for _, version := range []int{lastLegacyVersion, LatestSchemaVersion()} {
+		t.Run(fmt.Sprint(version), func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "attn.db")
+			db, err := OpenDBAtSchemaVersion(path, version)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := db.Close(); err != nil {
+				t.Fatal(err)
+			}
+			path = databaseWithHotJournal(t, path)
+			var s *Store
+			if version == LatestSchemaVersion() {
+				s, err = OpenCurrent(path)
+			} else {
+				s, _, err = Open(path)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer s.Close()
+			if value := s.GetSetting("crash_recovery"); value != "committed" {
+				t.Fatalf("recovered setting = %q, want committed", value)
+			}
+		})
+	}
+}
+
 func TestAnOlderBuildRefusesNewerDatabasesWithoutChangingThem(t *testing.T) {
 	for _, placement := range []string{"above_latest", "below_latest"} {
-		for _, journal := range []string{"DELETE", "WAL"} {
+		for _, journal := range []string{"DELETE", "WAL", "closed_WAL", "hot_DELETE"} {
 			for _, missingKnown := range []bool{false, true} {
 				t.Run(fmt.Sprintf("%s/%s/missing_known=%t", placement, journal, missingKnown), func(t *testing.T) {
 					path := filepath.Join(t.TempDir(), "attn ?#.db")
@@ -169,7 +266,11 @@ func TestAnOlderBuildRefusesNewerDatabasesWithoutChangingThem(t *testing.T) {
 					}
 					db.SetMaxOpenConns(1)
 					t.Cleanup(func() { db.Close() })
-					if _, err := db.Exec("PRAGMA journal_mode=" + journal); err != nil {
+					mode := "DELETE"
+					if strings.HasSuffix(journal, "WAL") {
+						mode = "WAL"
+					}
+					if _, err := db.Exec("PRAGMA journal_mode=" + mode); err != nil {
 						t.Fatal(err)
 					}
 					unknown := LatestSchemaVersion() + 1
@@ -196,13 +297,16 @@ func TestAnOlderBuildRefusesNewerDatabasesWithoutChangingThem(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					if journal == "DELETE" {
+					if journal != "WAL" {
 						if err := db.Close(); err != nil {
 							t.Fatal(err)
 						}
 					}
+					if journal == "hot_DELETE" {
+						path = databaseWithHotJournal(t, path)
+					}
 					before := make(map[string][]byte)
-					for _, suffix := range []string{"", "-wal"} {
+					for _, suffix := range []string{"", "-wal", "-journal"} {
 						data, err := os.ReadFile(path + suffix)
 						if os.IsNotExist(err) {
 							continue
@@ -261,7 +365,26 @@ func TestAnOlderBuildRefusesNewerDatabasesWithoutChangingThem(t *testing.T) {
 								}
 							}
 							afterEntries, err := os.ReadDir(filepath.Dir(path))
-							if err != nil || !reflect.DeepEqual(entries, afterEntries) {
+							if err != nil {
+								t.Fatal(err)
+							}
+							if journal == "closed_WAL" {
+								kept := afterEntries[:0]
+								for _, entry := range afterEntries {
+									if entry.Name() == filepath.Base(path)+"-wal" {
+										data, err := os.ReadFile(path + "-wal")
+										if err != nil || len(data) != 0 {
+											t.Fatalf("refused open wrote WAL content: %v", err)
+										}
+										continue
+									}
+									if entry.Name() != filepath.Base(path)+"-shm" {
+										kept = append(kept, entry)
+									}
+								}
+								afterEntries = kept
+							}
+							if !reflect.DeepEqual(entries, afterEntries) {
 								t.Fatalf("refused open changed directory entries: %v", err)
 							}
 						})

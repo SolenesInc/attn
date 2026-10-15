@@ -3,7 +3,9 @@ package store
 import (
 	"database/sql"
 	"embed"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/url"
 	"os"
@@ -14,6 +16,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	sqlite3 "github.com/mattn/go-sqlite3"
 )
 
 const lastLegacyVersion = 171
@@ -148,8 +152,12 @@ func refuseUnsupportedSchema(dbPath string) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
 	history, err := readMigrationHistory(db)
+	db.Close()
+	var sqliteError sqlite3.Error
+	if errors.As(err, &sqliteError) && sqliteError.ExtendedCode == sqlite3.ErrReadonlyRollback {
+		history, err = readRecoveredMigrationHistory(dbPath)
+	}
 	if err != nil {
 		return fmt.Errorf("reading the schema version of %s: %w", dbPath, err)
 	}
@@ -168,6 +176,38 @@ func refuseUnsupportedSchema(dbPath string) error {
 		return fmt.Errorf("the database at %s contains migration %d, which this attn build does not support (newest database schema version: %d; newest build schema version: %d); install an attn build supporting this database's migrations, or restore a backup taken before the upgrade (`attn db restore`)", dbPath, unsupported, history.recorded, latest)
 	}
 	return nil
+}
+
+func readRecoveredMigrationHistory(dbPath string) (migrationHistory, error) {
+	var history migrationHistory
+	dir, err := os.MkdirTemp("", "attn-schema-check-")
+	if err != nil {
+		return history, err
+	}
+	defer os.RemoveAll(dir)
+	recoveredPath := filepath.Join(dir, "attn.db")
+	for _, suffix := range []string{"", "-journal"} {
+		source, err := os.Open(dbPath + suffix)
+		if err != nil {
+			return history, err
+		}
+		target, err := os.OpenFile(recoveredPath+suffix, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+		if err != nil {
+			source.Close()
+			return history, err
+		}
+		_, err = io.Copy(target, source)
+		if err := errors.Join(err, target.Close(), source.Close()); err != nil {
+			return history, err
+		}
+	}
+	u := &url.URL{Scheme: "file", Path: recoveredPath, RawQuery: "mode=rw"}
+	db, err := sql.Open("sqlite3", u.String())
+	if err != nil {
+		return history, err
+	}
+	defer db.Close()
+	return readMigrationHistory(db)
 }
 
 type migrationHistory struct {
