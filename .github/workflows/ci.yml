@@ -753,9 +753,14 @@ jobs:
         continue-on-error: true
         env:
           ATTN_REAL_APP_ARTIFACTS_DIR: ${{ runner.temp }}/attn-real-app-harness
-        run: >-
-          xvfb-run -a -s '-noreset -screen 0 1600x1000x24'
-          pnpm --dir app run real-app:serial-matrix -- --shard ${{ matrix.shard }}/4
+        run: |
+          xvfb-run -a -s '-noreset -screen 0 1600x1000x24' \
+            pnpm --dir app run real-app:serial-matrix -- --shard ${{ matrix.shard }}/4
+          if [ "${{ github.run_attempt }}" = 1 ] && [ "${{ matrix.shard }}" = 2 ]; then
+            node -e 'const fs = require("fs"); const f = process.argv[1]; const m = JSON.parse(fs.readFileSync(f, "utf8")); m.results[0].code = 1; m.results[0].outputTail = "THROWAWAY: forced attempt-1 failure"; fs.writeFileSync(f, JSON.stringify(m));' "$ATTN_REAL_APP_ARTIFACTS_DIR/last-matrix.json"
+            echo "THROWAWAY: forced failure of shard 2 on attempt 1" >&2
+            exit 1
+          fi
 
       - name: Collect daemon and worker logs
         if: always()
