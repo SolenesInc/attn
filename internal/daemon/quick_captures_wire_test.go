@@ -337,12 +337,12 @@ func TestQuickCaptureDeliveryWakeIsChargedOnce(t *testing.T) {
 			t.Fatalf("wake requested_by=%q", arrival.RequestedBy)
 		}
 		second := sendQuickCapture(t, app, mailbox, "second user request")
-		day := w.bootBubbleClaude(t, dayID)
+		day := w.bootBubbleClaude(t, string(dayID))
 		day.reply("Ready. <!-- attn:state=idle -->")
 		if got := day.promptsContaining(inboxDoorbell); got != 1 {
 			t.Fatalf("wake rings=%d, want one", got)
 		}
-		items := readInbox(t, cli, dayID, 0).Items
+		items := readInbox(t, cli, string(dayID), 0).Items
 		if len(items) != 2 || !((items[0].ItemID == first.CaptureID && items[1].ItemID == second.CaptureID) || (items[0].ItemID == second.CaptureID && items[1].ItemID == first.CaptureID)) {
 			t.Fatalf("quick capture inbox: %+v", items)
 		}

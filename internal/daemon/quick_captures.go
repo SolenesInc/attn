@@ -44,7 +44,7 @@ func (d *Daemon) validateQuickCaptureMailbox(profileID string, mailbox protocol.
 
 type quickCaptureScope struct {
 	profileID       string
-	sourceSessionID string
+	sourceSessionID protocol.SessionID
 	requestID       string
 }
 
@@ -66,9 +66,6 @@ func quickCaptureRequestScope(msg any) quickCaptureScope {
 	return quickCaptureScope{}
 }
 func (d *Daemon) quickCaptureRequest(profileID string, msg any, transportBytes int) (*protocol.QuickCaptureResult, error) {
-	if err := d.requireHome("Quick captures"); err != nil {
-		return nil, err
-	}
 	switch m := msg.(type) {
 	case *protocol.QuickCaptureSendMessage:
 		if err := requireCanonicalUUID(m.CaptureID); err != nil {

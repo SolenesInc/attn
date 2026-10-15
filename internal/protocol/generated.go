@@ -7015,7 +7015,7 @@ type QuickCaptureAttachmentGetMessage struct {
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type QuickCaptureAttachmentGetResult struct {

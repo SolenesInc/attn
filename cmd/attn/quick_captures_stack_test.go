@@ -24,7 +24,7 @@ func quickCaptureCall(t *testing.T, cli *testworld.Peer, msg any) *protocol.Quic
 	}
 	return r
 }
-func quickCaptureSetChief(t *testing.T, app *testworld.Peer, id string) {
+func quickCaptureSetChief(t *testing.T, app *testworld.Peer, id protocol.SessionID) {
 	t.Helper()
 	r := testworld.Request(app, protocol.SetChiefOfStaffMessage{Cmd: protocol.CmdSetChiefOfStaff, SessionID: id, ChiefOfStaff: true}, protocol.EventChiefOfStaffResult, func(r protocol.ChiefOfStaffResultMessage) bool { return r.SessionID == id })
 	if !r.Success {

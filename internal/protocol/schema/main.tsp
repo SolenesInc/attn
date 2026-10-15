@@ -733,7 +733,7 @@ model QuickCaptureAttachmentPutMessage {
   final: boolean;
 }
 model QuickCaptureAttachmentGetMessage {
-  source_session_id?: string;
+  source_session_id?: SessionID;
   profile_id?: string;
   cmd: "quick_capture_attachment_get";
   request_id?: string;

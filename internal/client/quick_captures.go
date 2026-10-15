@@ -17,7 +17,7 @@ func (c *Client) QuickCapture(msg any) (*protocol.QuickCaptureResult, error) {
 	return response.QuickCaptureResult, nil
 }
 
-func (c *Client) AgentInboxEntry(id, sessionID string) (*protocol.AgentPeerMessage, *protocol.AgentInboxItem, error) {
+func (c *Client) AgentInboxEntry(id string, sessionID protocol.SessionID) (*protocol.AgentPeerMessage, *protocol.AgentInboxItem, error) {
 	response, err := c.send(protocol.AgentInboxMessage{Cmd: protocol.CmdAgentInbox, MessageID: protocol.Ptr(id), RecipientSessionID: sessionID})
 	if err != nil {
 		return nil, nil, err

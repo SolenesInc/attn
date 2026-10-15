@@ -73,7 +73,7 @@ func runAgentAttachment(args []string) {
 		fmt.Fprintln(os.Stderr, "agent attachment: --out <path> is required")
 		os.Exit(2)
 	}
-	if err := retrieveAgentAttachment(client.New("").WithGardenProfile(strings.TrimSpace(*profile), strings.TrimSpace(os.Getenv("ATTN_SESSION_ID"))), args[0], args[1], *out); err != nil {
+	if err := retrieveAgentAttachment(client.New("").WithGardenProfile(strings.TrimSpace(*profile), currentSessionOrExit()), args[0], args[1], *out); err != nil {
 		fmt.Fprintf(os.Stderr, "agent attachment: %v\n", err)
 		os.Exit(1)
 	}

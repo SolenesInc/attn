@@ -133,8 +133,11 @@ func buildWireProjections() []projection {
 				d.logf("quick capture projection: %v", err)
 				return
 			}
-			d.wsHub.SendValueToMatchingClients(protocol.QuickCaptureReadMessage{ProfileID: scope.ProfileID, Event: protocol.EventQuickCaptureRead, CaptureID: ev.Subject, ReadAt: scope.ReadAt}, func(client *wsClient) bool {
-				return client.isTrustedAppClient() && client.selectedProfile() == scope.ProfileID
+			message := protocol.QuickCaptureReadMessage{ProfileID: scope.ProfileID, Event: protocol.EventQuickCaptureRead, CaptureID: ev.Subject, ReadAt: scope.ReadAt}
+			d.wsHub.ForEachClient(func(client *wsClient) {
+				if client.isTrustedAppClient() && client.selectedProfile() == scope.ProfileID {
+					d.sendToClient(client, message)
+				}
 			})
 		}},
 		{

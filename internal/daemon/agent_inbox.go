@@ -38,7 +38,7 @@ func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage
 		return
 	}
 	if found && storedItem.Kind == inbox.QuickCapture {
-		item, readNow, err := d.store.ReadInboxItem(messageID, recipient.ID, addresses, time.Now())
+		item, readNow, err := d.store.ReadInboxItem(messageID, string(recipient.ID), addresses, time.Now())
 		if err != nil {
 			d.replyAgentMsgError(conn, "message_not_found", err.Error())
 			return
