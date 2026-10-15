@@ -276,6 +276,14 @@
         "seconds": 6.524,
         "runnerClass": "local macOS",
         "note": "Green ATTN_VERDICT durationMs=6524, including cleanup and recording. Covers native caller input focus, both arrival pulses, and right-column stacking. Remeasure on Linux CI."
+      },
+      "shell-titles": {
+        "run": "shell-titles-2026-10-15T23-45-55-759Z",
+        "job": "Local packaged scenario, shell-titles isolated instance",
+        "recordedAt": "2026-10-16",
+        "seconds": 14.058,
+        "runnerClass": "local macOS",
+        "note": "Green ATTN_VERDICT durationMs=14058, including cleanup. Native input drives zsh and fish through cd, nvim title, and return to prompt; sidebar and tile header are asserted and four native screenshots captured. Remeasure on Linux CI."
       }
     }
   },
@@ -337,6 +345,7 @@
     "desktop-order": 23.413,
     "close-desktop": 33.297,
     "new-session-launcher": 22.491,
-    "agent-terminals": 6.524
+    "agent-terminals": 6.524,
+    "shell-titles": 14.058
   }
 }

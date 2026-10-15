@@ -8,6 +8,9 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { appDaemonInTree, appPlatform, createWindowDriver } from './platform.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
+import { getFrontWindowBounds, setFrontWindowBounds } from './nativeWindowCapture.mjs';
+
+process.env.ATTN_HARNESS_PARK_VISIBLE_PX = '0';
 
 const options = parseCommonArgs(process.argv.slice(2));
 if (options.help) { printCommonHelp('scripts/real-app-harness/scenario-shell-titles.mjs'); process.exit(0); }
@@ -68,6 +71,8 @@ try {
       }) });
       observer = new DaemonObserver({ wsUrl: options.wsUrl });
       await launchFreshAppAndConnect(client, observer);
+      const bounds = await getFrontWindowBounds(client.bundleId, { client });
+      await setFrontWindowBounds({ ...bounds, x: 0 }, { client });
     });
     let sessionId;
     await runner.step(`${shell}_folder`, async () => {
@@ -87,8 +92,8 @@ try {
       await client.request('capture_native_window_screenshot', { path: path.join(runner.runDir, `${shell}-prompt.png`) });
     });
     await runner.step(`${shell}_nvim`, async () => {
-      const title = titleAfter(sessionId, (value) => value?.includes('title-proof.md') && value.includes('Nvim'));
-      await driver.typeText("nvim -u NONE -i NONE --cmd 'set title' +'redraw' title-proof.md");
+      const title = titleAfter(sessionId, (value) => value === 'title-proof.md - Nvim');
+      await driver.typeText("nvim -u NONE -i NONE --cmd 'set title titlelen=0 titlestring=%t\\ -\\ Nvim' +'redraw' title-proof.md");
       await driver.pressEnter();
       await display(sessionId, await title);
       await client.request('capture_native_window_screenshot', { path: path.join(runner.runDir, `${shell}-nvim.png`) });
@@ -101,6 +106,17 @@ try {
   }
   await runner.finishSuccess({ sessionIds: sessions });
 } catch (error) {
+  runner.writeJson('sessions-at-failure.json', [...(observer?.sessionsById.values() ?? [])]);
+  for (const sessionId of sessions) {
+    try {
+      const desktop = await client.request('get_desktop', { sessionId });
+      for (const pane of desktop.panes) {
+        const text = await client.request('read_pane_text', { sessionId, paneId: pane.paneId });
+        runner.writeJson(`${sessionId}-pane-text.json`, text);
+      }
+      await client.request('capture_native_window_screenshot', { path: path.join(runner.runDir, 'failure.png') });
+    } catch {}
+  }
   await runner.finishFailure(error);
   process.exitCode = 1;
 }
