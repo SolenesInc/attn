@@ -207,7 +207,11 @@ func TestEachMarkdownFileGetsOneTileThatFollowsItsLatestOpener(t *testing.T) {
 			t.Errorf("opening %s used tile %s, want %s", spelling, got, firstTile)
 		}
 	}
-	for _, c := range []struct{ session, path string }{{"s1", "docs/first.md"}, {"session-nobody-spawned", first}} {
+	removed := markdownFile(t, w, "removed.md")
+	if err := os.Remove(removed); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ session, path string }{{"s1", "docs/first.md"}, {"session-nobody-spawned", first}, {"s1", removed}} {
 		if refused := requestOpenMarkdown(app, c.session, c.path); refused.Success || refused.Error == nil {
 			t.Errorf("opening %s from %s answered %+v, want a failure", c.path, c.session, refused)
 		}

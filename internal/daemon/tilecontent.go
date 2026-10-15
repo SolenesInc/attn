@@ -106,8 +106,7 @@ func (d *Daemon) openMarkdownTile(path string, callerSessionID protocol.SessionI
 	}
 	path = filepath.Clean(path)
 	if _, statErr := os.Stat(path); statErr != nil {
-		d.store.DeleteFileActivity(path)
-		return "", "", fmt.Errorf("file not found: %s", path)
+		return "", "", statErr
 	}
 	location, err := d.currentAgent(callerSessionID)
 	if err != nil {
