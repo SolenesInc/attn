@@ -104,6 +104,10 @@ func TestConversationPinCopiesUnreferencedClosedSessionAndUnkeepExpires(t *testi
 	testworld.AwaitTaskDone(app, "conversation_keep")
 	awaitConversationsChanged(pinEvents)
 	pinned := conversationRows(t, cli, false)
+	archive := filepath.Join(w.Dir, "conversations", "claude", first.ConversationID+".tar.zst")
+	if _, err := os.Stat(archive); err != nil {
+		t.Fatalf("pinned archive: %v", err)
+	}
 	if len(pinned.Rows) != 1 || pinned.Rows[0].Kept.PinnedAt == nil || len(pinned.Rows[0].Seeds) != 0 || pinned.Rows[0].Kept.DeleteAfter != nil {
 		t.Fatalf("pinned copy: %+v", pinned)
 	}
@@ -128,6 +132,9 @@ func TestConversationPinCopiesUnreferencedClosedSessionAndUnkeepExpires(t *testi
 	deleted := conversationRows(t, cli, true)
 	if len(deleted.Rows) != 1 || protocol.Deref(deleted.Rows[0].Kept.DeletedBy) != protocol.KeptConversationDeletedBySweep {
 		t.Fatalf("sweep tombstone: %+v", deleted)
+	}
+	if _, err := os.Stat(archive); !os.IsNotExist(err) {
+		t.Fatalf("released archive survived sweep: %v", err)
 	}
 }
 

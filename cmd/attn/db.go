@@ -46,6 +46,12 @@ commands:
         deleted) as attn.db.pre-restore-<UTC timestamp> before the backup is
         copied into place.
 
+        Conversation archives stay on disk. Archives known to the restored
+        database are pinned again, including copies it records as deleted or
+        released. Use attn conversation unkeep or attn conversation forget
+        to release them again. Unreferenced archives absent from the snapshot
+        stay on disk without being added to the conversation list.
+
         path defaults to "latest": the newest rotating attn-<timestamp>.db
         snapshot in the instance's backups directory. Pass an explicit path to
         restore from any snapshot, including a pre-migration one
@@ -75,6 +81,7 @@ func runDBRestore(args []string) {
 	} else {
 		fmt.Println("no previous attn.db existed to preserve")
 	}
+	fmt.Println("conversation archives preserved; known archives are pinned until you unkeep or forget them")
 	fmt.Println("start the daemon when ready (e.g. `attn daemon ensure`, or reopen the app)")
 }
 
@@ -121,6 +128,9 @@ func restoreDatabase(dbPath, backupsDir, source, pidPath string) (restoredFrom, 
 			_ = os.Remove(stagedPath)
 		}
 	}()
+	if err := pinRestoredConversationArchives(stagedPath); err != nil {
+		return "", "", fmt.Errorf("preserve conversation archives: %w", err)
+	}
 
 	if dstExists {
 		preservedAs, err = preserveExistingDB(dbPath)
@@ -145,6 +155,51 @@ func restoreDatabase(dbPath, backupsDir, source, pidPath string) (restoredFrom, 
 	stagedNeedsCleanup = false
 
 	return srcPath, preservedAs, nil
+}
+
+func pinRestoredConversationArchives(dbPath string) (err error) {
+	if _, err := os.Stat(config.ConversationsDir()); os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	s, err := store.NewWithDB(dbPath)
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, s.Close()) }()
+	kept, err := s.KeptConversations()
+	if err != nil {
+		return err
+	}
+	pins, err := s.ConversationPins()
+	if err != nil {
+		return err
+	}
+	for _, previous := range kept {
+		_, err := os.Stat(filepath.Join(config.ConversationsDir(), previous.Agent, previous.ResumeID+".tar.zst"))
+		if os.IsNotExist(err) {
+			continue
+		}
+		copy := previous
+		copy.DeletedAt, copy.ReleasedAt, copy.DeletedBy = time.Time{}, time.Time{}, ""
+		if err := s.PutKeptConversation(copy); err != nil {
+			return err
+		}
+		pinned := false
+		for _, pin := range pins {
+			if pin.Agent == copy.Agent && pin.ResumeID == copy.ResumeID {
+				pinned = true
+				break
+			}
+		}
+		if !pinned {
+			if err := s.PinConversation(copy.Agent, copy.ResumeID, "", time.Now()); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func preserveExistingDB(dbPath string) (preservedAs string, err error) {
