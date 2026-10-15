@@ -30,6 +30,7 @@ let overridesValue: string | undefined;
 const emit = () => { version++; for (const listener of listeners) listener(); };
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 export function clearHarnessModelCatalogs() { generation++; catalogs.clear(); overridesValue = undefined; emit(); }
+export function invalidateHarnessModelCatalogs() { generation++; emit(); }
 export const knownHarnessModel = (harness: string, provider: string, id: string) => catalogs.get(harness)?.catalog?.models.find(model => model.id === id && model.provider === provider);
 export function useKnownModelName(harness: string, provider: string, id: string) {
   useSyncExternalStore(subscribe, () => version);
@@ -67,7 +68,7 @@ export function useHarnessModels(harness: RouteHarness | undefined, load: (id: s
   const discover = (refresh = false) => { if (isConnected) discoverModels(harness, load, refresh, executable); };
   const cached = catalogs.get(harness?.id || '');
   const entry = harness?.discovery !== false && cached?.executable === executable ? cached : undefined;
-  return { catalog: entry?.catalog, loading: Boolean(entry?.request), error: entry?.error || '', discover };
+  return { catalog: entry?.catalog, loading: Boolean(entry && (entry.request || entry.generation !== generation)), error: entry?.error || '', discover };
 }
 
 const tierRank = (tier: string | undefined) => ['light', 'standard', 'deep'].indexOf(tier || '');

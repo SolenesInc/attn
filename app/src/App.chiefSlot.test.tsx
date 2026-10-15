@@ -6,6 +6,7 @@ import { harnesses, reportedModel } from './test/harnessCatalogs';
 
 const member = (values = {}) => crewMember('chief-key', { chief: true, name: 'Captain', ...values });
 const available = { claude_available: 'true', codex_available: 'true', copilot_available: 'true', pi_available: 'true', claude_cap_launch_instructions: 'true', codex_cap_launch_instructions: 'true', copilot_cap_launch_instructions: 'false', pi_cap_launch_instructions: 'false', new_session_agent: 'claude' };
+const plugin = { name: 'attn-pi', dir: '/test/attn-pi', version: '1', availability: 'available', connected: true, running: true, installation_state: 'installed', runtime_state: 'running', health_status: 'healthy', can_install: false, can_uninstall: true, priority: 0 } as const;
 const slot = () => within(screen.getByTestId('chief-slot'));
 const phase = () => screen.getByTestId('chief-slot').getAttribute('data-chief-phase');
 
@@ -102,12 +103,16 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
     await gesture(daemon, () => fireEvent.keyDown(slot().getByRole('radio', { name: /Claude/ }), { key: 'Enter' }));
     expect(slot().getByRole('radio', { name: /Opus 5.5/ })).toHaveFocus();
     daemon.on('delegation_preferences_get', () => {});
-    await gesture(daemon, () => daemon.emit({ event: 'plugins_updated', plugins: [{ name: 'attn-pi', dir: '/test/attn-pi', version: '1', availability: 'available', connected: true, running: true, installation_state: 'installed', runtime_state: 'running', health_status: 'healthy', can_install: false, can_uninstall: true, priority: 0 }], issues: [] }));
-    expect(slot().queryByRole('radiogroup', { name: 'Chief model' })).toBeNull();
+    await gesture(daemon, () => daemon.emit({ event: 'plugins_updated', plugins: [plugin], issues: [] }));
+    expect(slot().getByRole('radio', { name: /Opus 5.5/ })).toHaveFocus();
+    const wake = slot().getByRole('button', { name: /Wake Captain/ });
+    expect(wake).toBeDisabled();
+    await gesture(daemon, () => fireEvent.keyDown(document.activeElement!, { key: 'Enter' }));
+    expect(daemon.sentOf('crew_set')).toEqual([]);
     const terminal = screen.getByRole('textbox', { name: 'Terminal input' });
     await gesture(daemon, () => {
       if (surface === 'terminal') terminal.focus();
-      if (surface === 'outside') fireEvent.pointerDown(document.body);
+      if (surface === 'outside') { fireEvent.pointerDown(document.body); (document.activeElement as HTMLElement).blur(); }
     });
     await gesture(daemon, () => {
       const request = daemon.sentOf('delegation_preferences_get').slice(-1)[0]!;
@@ -118,6 +123,35 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
     });
     const model = slot().getByRole('radio', { name: /Opus 5.5/ });
     expect(document.activeElement).toBe(surface === 'setup' ? model : surface === 'terminal' ? terminal : document.body);
+  });
+  it('keeps the harness focused when plugin discovery arrives before the first Enter', async () => {
+    const desktop = soloDesktop('agent');
+    const { daemon } = await renderApp({ initialState: {
+      settings, crew: [member()], sessions: [daemonSession('agent')], desktops: [desktop], profiles: [defaultProfile(desktop.id)],
+    } });
+    const harness = slot().getByRole('radio', { name: /Claude/ });
+    harness.focus();
+    await gesture(daemon, () => fireEvent.click(harness));
+    await gesture(daemon, () => daemon.emit({ event: 'plugins_updated', plugins: [plugin], issues: [] }));
+    expect(harness).toHaveFocus();
+    await gesture(daemon, () => fireEvent.keyDown(document.activeElement!, { key: 'Enter' }));
+    expect(slot().getByRole('radio', { name: /Opus 5.5/ })).toHaveFocus();
+  });
+  it('shows a registry refresh error and retries before permitting Wake', async () => {
+    const { daemon } = await renderApp({ initialState: { settings, crew: [member()] } });
+    await gesture(daemon, () => fireEvent.keyDown(slot().getByRole('radio', { name: /Claude/ }), { key: 'Enter' }));
+    daemon.on('delegation_preferences_get', () => ({ event: 'delegation_preferences_result', success: false, error: 'Harness lookup failed' }));
+    await gesture(daemon, () => daemon.emit({ event: 'plugins_updated', plugins: [plugin], issues: [] }));
+    expect(slot().getByRole('alert')).toHaveTextContent('Harness lookup failed');
+    expect(slot().getByRole('button', { name: /Wake Captain/ })).toBeDisabled();
+    daemon.on('delegation_preferences_get', () => ({ event: 'delegation_preferences_result', success: true,
+      preferences: { enabled: false, revision: 0, workflow_skill_enabled: false, roles: [], fallback: { selection: { harness: '', provider: '', model: '', effort: '' }, instructions: '' } },
+      harnesses, templates: [], expanded_roles: [],
+    }));
+    await gesture(daemon, () => fireEvent.click(slot().getByRole('button', { name: 'Check again' })));
+    expect(slot().queryByRole('alert')).toBeNull();
+    expect(slot().getByRole('button', { name: /Wake Captain/ })).toBeEnabled();
+    expect(daemon.sentOf('crew_set')).toEqual([]);
   });
   it.each(['terminal', 'outside', 'close'])('cancels a model-step request when the user chooses %s before discovery', async surface => {
     const desktop = soloDesktop('agent');

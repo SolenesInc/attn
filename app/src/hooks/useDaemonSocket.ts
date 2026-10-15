@@ -1,5 +1,5 @@
-import { clearHarnesses } from './useHarnesses';
-import { clearHarnessModelCatalogs } from './useHarnessRoute';
+import { clearHarnesses, invalidateHarnesses } from './useHarnesses';
+import { clearHarnessModelCatalogs, invalidateHarnessModelCatalogs } from './useHarnessRoute';
 import { PROTOCOL_VERSION } from '../types/protocolVersion';
 export { PROTOCOL_VERSION } from '../types/protocolVersion';
 import { handleCommandUsageEvent } from './daemonCommandUsageEvents';
@@ -1955,8 +1955,8 @@ export function useDaemonSocket({
             settlePendingRequest(pendingActionsRef.current, 'set_setting', data, () => true, 'Could not save setting');
             if (data.settings && (!data.profile_id || data.profile_id === useProfilesStore.getState().selectedProfileId)) {
               if (harnessRegistrySignature(settingsRef.current) !== harnessRegistrySignature(data.settings)) {
-                clearHarnesses();
-                clearHarnessModelCatalogs();
+                invalidateHarnesses();
+                invalidateHarnessModelCatalogs();
               }
               settingsRef.current = data.settings;
               callbacksRef.current.onSettingsUpdate?.(data.settings);
@@ -1976,8 +1976,8 @@ export function useDaemonSocket({
             const signature = JSON.stringify(plugins.map(plugin => [plugin.name, plugin.dir, plugin.link_target, plugin.version, plugin.installation_state, plugin.connected, plugin.availability, plugin.runtime_state, plugin.health_status]));
             if (signature !== harnessPluginSignatureRef.current) {
               harnessPluginSignatureRef.current = signature;
-              clearHarnesses();
-              clearHarnessModelCatalogs();
+              invalidateHarnesses();
+              invalidateHarnessModelCatalogs();
             }
             callbacksRef.current.onPluginsUpdate?.(plugins, issues);
             const pending = pendingActionsRef.current.get('list_plugins');

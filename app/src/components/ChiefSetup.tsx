@@ -56,7 +56,7 @@ export function ChiefSetup({ chief, autoFocus, onSave, onClose, onReturnFocus, o
     };
   });
   const busy = chief.requestPending;
-  const canSave = !busy && Boolean(harness && value.model && !view.loading && !view.error);
+  const canSave = !busy && Boolean(harness && value.model && !catalog.loading && !catalog.error && !view.loading && !view.error);
   const submit = () => {
     if (!canSave) return;
     const returnFocus = Boolean(chief.agent && root.current?.contains(document.activeElement));
@@ -91,7 +91,7 @@ export function ChiefSetup({ chief, autoFocus, onSave, onClose, onReturnFocus, o
       </div>
     </> : showHarness ? <>
       <div role="radiogroup" aria-label="Chief harness" onKeyDown={event => moveRadio(event, 'harness')}>
-        {harnesses.map((candidate, index) => <button type="button" role="radio" aria-checked={harness?.id === candidate.id} tabIndex={harness?.id === candidate.id ? 0 : -1} key={candidate.id} onClick={() => setDraft({ harness: candidate.id, model: '', provider: '', effort: 'low' })}>
+        {harnesses.map((candidate, index) => <button ref={retainFocus} type="button" role="radio" aria-checked={harness?.id === candidate.id} tabIndex={harness?.id === candidate.id ? 0 : -1} key={candidate.id} onClick={() => setDraft({ harness: candidate.id, model: '', provider: '', effort: 'low' })}>
           <span className="chief-radio-mark">{harness?.id === candidate.id ? '●' : '○'}</span><span>{candidate.name}</span><kbd>{index + 1}</kbd>
         </button>)}
       </div>
@@ -115,6 +115,7 @@ export function ChiefSetup({ chief, autoFocus, onSave, onClose, onReturnFocus, o
       </div>}
       <button type="button" className="chief-setup-primary" disabled={!canSave} onClick={() => submit()}>{chief.phase === 'configuring' ? 'Saving…' : chief.agent ? chief.sessionId ? 'Save for next wake' : 'Save' : `Wake ${chief.name}`}{!chief.agent && <kbd>⏎</kbd>}</button>
     </>}
+    {catalog.error && <div role="alert">{catalog.error}<button ref={retainFocus} type="button" onClick={catalog.retry}>Check again</button></div>}
     {chief.setupError && <p className="chief-setup-error" role="alert">{chief.setupError}</p>}
   </div>;
 }
