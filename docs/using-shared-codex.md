@@ -23,7 +23,8 @@ auto-approval, as a plain one does. It doesn't stop at Codex's question whether
 to trust the folder: if you haven't answered it for that folder, attn saves the
 folder as trusted in your Codex config, as answering "Trust and continue"
 would. A folder you marked untrusted, and any folder inside it, stays
-untrusted.
+untrusted. An automation that names its own Codex executable runs a plain
+Codex, since the app-server runs one Codex for the whole profile.
 
 ## One conversation, one session
 

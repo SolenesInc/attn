@@ -129,7 +129,7 @@ func (s *codexServer) client() *codexshared.Client {
 func (r *codexShared) kind() string { return codexLinkKind }
 
 func (r *codexShared) canRun(req *spawnRequest) bool {
-	return req.agent == string(protocol.SessionAgentCodex) && !req.hasPluginDriver && !req.isShell
+	return req.agent == string(protocol.SessionAgentCodex) && !req.hasPluginDriver && !req.isShell && req.policy.unattendedLaunch.Executable == ""
 }
 
 func (r *codexShared) enabledForNewLaunches() bool {
