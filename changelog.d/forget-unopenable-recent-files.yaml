@@ -1,0 +1,3 @@
+kind: fixed
+area: files
+change: The recent-files palette forgets files whose metadata cannot be read, including permission-denied paths. Opening these files reports the actual filesystem error.
