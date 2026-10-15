@@ -547,6 +547,12 @@ func TestAHiddenSharedCodexSessionWaitingForTheUserKeepsWaitingThroughItsAppServ
 	codex.Reply("Added. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return protocol.Deref(s.Hidden) })
 	watcher := w.App()
+	var states []protocol.SessionState
+	for _, s := range watcher.Initial.Sessions {
+		if string(s.ID) == checkout {
+			states = append(states, s.State)
+		}
+	}
 
 	codex.CrashAppServer()
 	typeInto(app, terminal, "round the total\r")
@@ -555,7 +561,6 @@ func TestAHiddenSharedCodexSessionWaitingForTheUserKeepsWaitingThroughItsAppServ
 		t.Fatalf("feedback to the hidden session = %+v", got)
 	}
 	w.CodexServer().Prompted(conversation)
-	var states []protocol.SessionState
 	testworld.AwaitSession(watcher, checkout, func(s protocol.Session) bool {
 		states = append(states, s.State)
 		return s.State == protocol.SessionStateWorking

@@ -66,6 +66,7 @@ type spawnPlan struct {
 	isChief                      bool
 	chiefAssignmentCommitted     bool
 	launchedConversation         string
+	abandonLink                  func()
 }
 
 type spawnRejection struct {
@@ -100,6 +101,9 @@ func (plan *spawnPlan) rollback(d *Daemon, sessionID protocol.SessionID) {
 	}
 	if plan.spawnOpts.ID != "" {
 		d.terminals().unexpect(plan.spawnOpts.ID)
+	}
+	if plan.abandonLink != nil {
+		plan.abandonLink()
 	}
 }
 
@@ -444,6 +448,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	}
 	var err error
 	if req.link != nil {
+		plan.abandonLink = func() { req.link.launchFailed(plan.spawnOpts.ID, req.profile.ID) }
 		err = req.link.prepareLaunch(&plan.spawnOpts, req.profile.ID)
 	}
 	if err == nil {
@@ -463,9 +468,6 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 			d.clearChiefOfStaffIfSession(msg.ID)
 		}
 		plan.rollback(d, msg.ID)
-		if req.link != nil {
-			req.link.launchFailed(plan.spawnOpts.ID, req.profile.ID)
-		}
 		return &spawnOutcome{err: err}
 	}
 	if err := d.store.DeleteSessionExitScreenBefore(msg.ID, req.spawnStartedAt); err != nil {

@@ -21,6 +21,7 @@ import (
 	"nhooyr.io/websocket"
 
 	"github.com/victorarias/attn/internal/codexshared"
+	"github.com/victorarias/attn/internal/harness"
 )
 
 const (
@@ -95,17 +96,24 @@ func runCodexAppServer(cfg config) int {
 		named:   make(chan struct{}),
 		listed:  make(chan struct{}),
 	}
-	listener, err := net.Listen("unix", path)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: app-server control socket is already in use at %s: %v\n", path, err)
-		return 1
-	}
 	control, err := dialControl(cfg, s.handleKit)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "fake codex app-server: %v\n", err)
 		return 1
 	}
 	control.start()
+	var boot bootingResult
+	if err := control.call(context.Background(), methodBooting, bootingParams{AttnSessionID: string(harness.TerminalFromEnv())}, &boot); err != nil {
+		return 1
+	}
+	if boot.Exit {
+		return boot.Code
+	}
+	listener, err := net.Listen("unix", path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: app-server control socket is already in use at %s: %v\n", path, err)
+		return 1
+	}
 	report := launch{Role: roleCodexServer, Harness: Codex, Pid: os.Getpid(), Argv: os.Args, Env: os.Environ()}
 	if err := control.call(context.Background(), methodLaunched, report, nil); err != nil {
 		return 1
