@@ -1,0 +1,9 @@
+kind: changed
+area: codex
+change: >
+  With Shared Codex on, automations that start Codex run it as shared Codex,
+  with their own model, effort and auto-approval. attn saves the automation's
+  folder as trusted in your Codex config when you haven't answered Codex's
+  trust question for it; a folder you marked untrusted, and any folder inside
+  it, stays untrusted. An automation that names its own Codex executable still
+  runs a plain Codex.
