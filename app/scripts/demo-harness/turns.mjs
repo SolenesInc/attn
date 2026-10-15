@@ -45,9 +45,11 @@ export function turn() {
       return builder.end(text, VERDICTS.done);
     },
     hold() {
+      if (current.say != null) {
+        throw new Error('hold() right after say() would end the turn first; put a read(), edit() or run() between them');
+      }
       held = true;
-      current.held = true;
-      close();
+      steps.push({ held: true });
       return builder;
     },
     end(text, endVerdict) {
@@ -109,7 +111,6 @@ function isAttnClassifier(request) {
 
 export function createTurnRouter({ thinkMs }) {
   const turns = [];
-  const releases = new Map();
   let nextToolId = 0;
 
   const scripted = (request) => turns.findLast((entry) => request.prompt === entry.prompt);
@@ -145,7 +146,7 @@ export function createTurnRouter({ thinkMs }) {
       return { say: `The scripted turn for "${entry.prompt}" has ${entry.spec.steps.length} steps; the agent asked for step ${index + 1}.` };
     }
     if (step.held) {
-      await new Promise((resolve) => releases.set(entry.prompt, resolve));
+      await new Promise(() => {});
     }
     const answer = { holdMs: thinkMs };
     if (step.say != null) answer.say = step.say;
@@ -159,10 +160,6 @@ export function createTurnRouter({ thinkMs }) {
       const spec = builder.build();
       turns.push({ prompt, spec, cwd });
       return spec;
-    },
-    release(prompt) {
-      releases.get(prompt)?.();
-      releases.delete(prompt);
     },
   };
 }

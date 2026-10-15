@@ -86,24 +86,33 @@ async function createWorktrees(daemon, repos) {
 export async function startWorld({ instance, repos, log }) {
   const appPath = preflight(instance);
   const cleanups = [];
+  let stopping = null;
   const world = {
     instance,
     appPath,
     repoPath: (repo, worktree) => fs.realpathSync(path.join(REPOS_ROOT, worktree ? `${repo}--${worktree}` : repo)),
-    async stop() {
-      for (const cleanup of cleanups.reverse()) {
-        try {
-          await cleanup();
-        } catch (error) {
-          log(`cleanup failed: ${error?.message ?? error}`);
+    stop() {
+      stopping ??= (async () => {
+        for (const cleanup of cleanups.reverse()) {
+          try {
+            await cleanup();
+          } catch (error) {
+            log(`cleanup failed: ${error?.message ?? error}`);
+          }
         }
-      }
+      })();
+      return stopping;
     },
   };
+  for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143], ['SIGHUP', 129]]) {
+    process.once(signal, () => {
+      log(`${signal}: cleaning up`);
+      world.stop().finally(() => process.exit(code));
+    });
+  }
   try {
     await ensureFreshWorld({ instance, appPath, log });
     scrubInstanceData(instance);
-    cleanups.push(() => ensureFreshWorld({ instance, appPath, log }));
 
     cleanups.push(() => fs.rmSync(REPOS_ROOT, { recursive: true, force: true }));
     const trustedFolders = createRepos(repos);
@@ -124,6 +133,7 @@ export async function startWorld({ instance, repos, log }) {
     ensureMockGitHubServer({ instance, appPath, env: launchEnv, log });
     cleanups.push(() => stopMockGitHubServer({ instance, appPath, log }));
 
+    cleanups.push(() => ensureFreshWorld({ instance, appPath, log }));
     process.env.ATTN_HARNESS_PARK_VISIBLE_PX = '0';
     const client = new UiAutomationClient({ appPath, launchEnv });
     await client.launchFreshApp();

@@ -21,6 +21,10 @@ export default {
       .say('Checking the conversion table first.')
       .read('src/convert.js')
       .say('Butter and tablespoons are both missing; adding them and a test.')
+      .edit('src/convert.js', {
+        from: '  stock: 240,\n};',
+        to: '  stock: 240,\n  butter: 227,\n};',
+      })
       .hold());
 
     const repo = await demo.session({ repo: 'recipes' });

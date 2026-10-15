@@ -67,7 +67,8 @@ export default {
 - `prompt` types like a person, and the stub plays the turn. The same turn
   works for both agents: `read`, `edit` and `run` become each agent's own
   tools. A turn ends with `ask` (the session waits for you), `done` (it goes
-  idle) or `hold` (it keeps working until the scene ends). `prompt` returns
+  idle) or `hold` after a `read`, `edit` or `run` (it keeps working until
+  the scene ends). `prompt` returns
   once the session reaches that state.
 - `demo.ui(action, payload)` calls the app's automation bridge
   (`app/src/hooks/useUiAutomationBridge.ts`).

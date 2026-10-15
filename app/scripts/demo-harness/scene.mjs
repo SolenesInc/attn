@@ -88,9 +88,6 @@ export function createDemo({ world, outDir, log }) {
           note('turn_settled', { sessionId, state: await sessionState(sessionId) });
           return session;
         },
-        release(text) {
-          router.release(text);
-        },
       };
       return session;
     },
