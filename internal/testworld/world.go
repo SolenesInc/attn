@@ -182,6 +182,9 @@ func (w *World) RequestSpawn(p *Peer, h fakeagent.Harness, cwd string, opts ...f
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		w.T.Fatal(err)
 	}
+	if h == fakeagent.Codex {
+		w.SetCodexFolderTrust(cwd, "trusted")
+	}
 	msg := protocol.SpawnSessionMessage{
 		Cmd:       protocol.CmdSpawnSession,
 		ID:        protocol.SessionID(uuid.NewString()),
@@ -220,6 +223,16 @@ func (w *World) LaunchedCarrying(id string) *fakeagent.Run {
 func (w *World) HeadlessTask() *fakeagent.HeadlessTask {
 	w.T.Helper()
 	return w.kit.HeadlessTask()
+}
+
+func (w *World) SetCodexFolderTrust(dir, level string) {
+	w.T.Helper()
+	w.kit.SetCodexFolderTrust(dir, level)
+}
+
+func (w *World) CodexFolderTrust(dir string) string {
+	w.T.Helper()
+	return w.kit.CodexFolderTrust(dir)
 }
 
 func (w *World) CodexServers() []int {

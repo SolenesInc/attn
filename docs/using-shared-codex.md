@@ -13,9 +13,16 @@ settings and conversations. attn was checked against Codex 0.160.0.
 
 **Shared Codex** in Settings → Experimental is off by default. It decides how
 new Codex terminals, and sessions you resume from the Sessions ledger, launch.
-A running session, hidden ones included, stays shared or plain until it closes
-or you move its conversation yourself, for example with `/resume` in a Codex of
-the other kind.
+That includes the Codex sessions automations and delegations start. A running
+session, hidden ones included, stays shared or plain until it closes or you
+move its conversation yourself, for example with `/resume` in a Codex of the
+other kind.
+
+An automation that starts shared Codex runs with its own model, effort and
+auto-approval, as a plain one does. It doesn't stop at Codex's question whether
+to trust the folder: if you haven't answered it for that folder, attn saves the
+folder as trusted in your Codex config, as answering "Trust and continue"
+would. A folder you marked untrusted stays untrusted.
 
 ## One conversation, one session
 
@@ -75,7 +82,6 @@ the setting says.
 
 ## Limits
 
-- Automations launch a plain Codex; they don't use shared Codex yet.
 - Codex lets one process write a conversation at a time. While the app-server
   holds a conversation, `/resume` of it in a plain Codex fails with `already
   has an active writer`. It works once the app-server lets the conversation

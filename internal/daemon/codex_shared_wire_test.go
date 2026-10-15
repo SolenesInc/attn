@@ -1,9 +1,11 @@
 package daemon_test
 
 import (
+	"fmt"
 	"os"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -109,6 +111,7 @@ func TestASharedCodexLaunchThatCannotBePlacedLetsItsAppServerStop(t *testing.T) 
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	w.SetCodexFolderTrust(cwd, "trusted")
 	shop := protocol.SpawnSessionMessage{
 		Cmd: protocol.CmdSpawnSession, ID: protocol.SessionID(uuid.NewString()), Agent: string(fakeagent.Codex),
 		Cwd: cwd, ProfileID: app.SelectedProfile(), Cols: 100, Rows: 30,
@@ -126,4 +129,53 @@ func TestASharedCodexLaunchThatCannotBePlacedLetsItsAppServerStop(t *testing.T) 
 		t.Fatalf("a shared Codex launch beside a tile that closed under it was placed")
 	}
 	w.CodexServer().AwaitStopped()
+}
+
+func TestWithSharedCodexOnAnAutomationRunsSharedCodexUnderItsLaunchContract(t *testing.T) {
+	for _, saved := range []string{"", "untrusted"} {
+		t.Run("saved trust "+strconv.Quote(saved), func(t *testing.T) {
+			w := newWorld(t, fakeagent.Codex)
+			app, cli := w.App(), w.Client()
+			setSetting(t, app, "codex_shared_enabled", "true")
+			folder := w.Path("check")
+			if err := os.MkdirAll(folder, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if saved != "" {
+				w.SetCodexFolderTrust(folder, saved)
+			}
+			applyAutomation(t, cli, fmt.Sprintf(`api_version: attn.dev/automations/v1alpha1
+name: Nightly check
+trigger: {type: manual}
+prompt: Report the flaky tests.
+launch: {driver: codex, model: gpt-5.5, effort: high}
+location: {type: directory, path: %q}
+`, folder))
+			awaitAutomationChanged(app, 1)
+			run := testworld.Request(app, protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "now"},
+				protocol.EventAutomationRunResult, automationAnswer[protocol.AutomationRunResultMessage]("now"))
+			if !run.Success || protocol.Deref(run.Run.SessionID) == "" {
+				t.Fatalf("automation_run = %+v, want a delivered run with a session", run)
+			}
+			codex := w.Launched(string(protocol.Deref(run.Run.SessionID)))
+			for _, flag := range [][]string{{"--remote", ""}, {"--model", "gpt-5.5"}, {"-c", `model_reasoning_effort="high"`}, {"-c", `approval_policy="on-request"`}, {"-c", `approvals_reviewer="auto_review"`}} {
+				if !slices.Contains(codex.Argv, flag[0]) || flag[1] != "" && !containsAutomationFlag(codex.Argv, flag[0], flag[1]) {
+					t.Errorf("the automation ran %q, want shared Codex with %s %s", codex.Argv, flag[0], flag[1])
+				}
+			}
+			if got := codex.Prompted(); !strings.Contains(got, "Report the flaky tests.") {
+				t.Errorf("codex received %q, want the automation's prompt", got)
+			}
+			if servers := w.CodexServers(); len(servers) != 1 {
+				t.Errorf("app-servers launched = %v, want one", servers)
+			}
+			want := saved
+			if want == "" {
+				want = "trusted"
+			}
+			if got := w.CodexFolderTrust(folder); got != want {
+				t.Errorf("Codex trusts %s as %q, want %q", folder, got, want)
+			}
+		})
+	}
 }
