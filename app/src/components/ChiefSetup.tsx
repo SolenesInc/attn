@@ -81,7 +81,7 @@ export function ChiefSetup({ chief, autoFocus, onSave, onClose, onReturnFocus, o
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onClose(); }
   }}>
     <div className="chief-setup-heading"><h3>{chief.agent ? 'Harness and model' : 'Set up your chief'}</h3><button type="button" aria-label="Close chief setup" onClick={onClose}>×</button></div>
-    {catalog.loading && !catalog.hasCatalog ? <p role="status">Checking harnesses…</p> : !harnesses.length ? <>
+    {catalog.loading && !catalog.hasCatalog ? <p role="status">Checking harnesses…</p> : catalog.error && !harnesses.length ? null : !harnesses.length ? <>
       <p>No harness here can run the chief</p>
       <div className="chief-install-row">Claude Code <span>Not installed</span></div>
       <div className="chief-install-row">Codex <span>Not installed</span></div>

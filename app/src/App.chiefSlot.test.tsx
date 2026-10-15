@@ -137,6 +137,21 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
     await gesture(daemon, () => fireEvent.keyDown(document.activeElement!, { key: 'Enter' }));
     expect(slot().getByRole('radio', { name: /Opus 5.5/ })).toHaveFocus();
   });
+  it('shows a failed initial registry lookup with one retry action', async () => {
+    const { daemon } = await renderApp({ initialState: { settings, crew: [member()] },
+      script: daemon => { daemon.on('delegation_preferences_get', () => ({ event: 'delegation_preferences_result', success: false, error: 'Harness lookup failed' })); },
+    });
+    expect(slot().getByRole('alert')).toHaveTextContent('Harness lookup failed');
+    expect(slot().getAllByRole('button', { name: 'Check again' })).toHaveLength(1);
+    expect(slot().queryByText('No harness here can run the chief')).toBeNull();
+    daemon.on('delegation_preferences_get', () => ({ event: 'delegation_preferences_result', success: true,
+      preferences: { enabled: false, revision: 0, workflow_skill_enabled: false, roles: [], fallback: { selection: { harness: '', provider: '', model: '', effort: '' }, instructions: '' } },
+      harnesses, templates: [], expanded_roles: [],
+    }));
+    await gesture(daemon, () => fireEvent.click(slot().getByRole('button', { name: 'Check again' })));
+    expect(slot().queryByRole('alert')).toBeNull();
+    expect(slot().getByRole('radio', { name: /Claude/ })).toHaveFocus();
+  });
   it('shows a registry refresh error and retries before permitting Wake', async () => {
     const { daemon } = await renderApp({ initialState: { settings, crew: [member()] } });
     await gesture(daemon, () => fireEvent.keyDown(slot().getByRole('radio', { name: /Claude/ }), { key: 'Enter' }));
