@@ -17,6 +17,8 @@ APP_BINARY=$(APP_BUNDLE)/Contents/MacOS/attn
 # com.attn.manager.agent7 with its own data dir + port. `make dev` ==
 # `make install INSTANCE=dev`. See docs/instances.md.
 INSTANCE ?=
+# DEMO=1 builds a named instance for recordings: no instance chip, window titled attn.
+DEMO ?=
 # An explicitly empty command-line INSTANCE indicates failed shell instance selection.
 # Fail during parsing before any target can silently fall back to the prod bundle.
 ifeq ($(origin INSTANCE),command line)
@@ -464,6 +466,7 @@ build-app: ensure-codesign-identity build build-pty-host
 		SOURCE_DIRTY_PATHS_BASE64='$(SOURCE_DIRTY_PATHS_BASE64)' \
 		GIT_COMMIT='$(GIT_COMMIT)' BUILD_TIME='$(BUILD_TIME)' \
 		MACOS_CODESIGN_IDENTITY='$(MACOS_CODESIGN_IDENTITY)' \
+		ATTN_BUILD_DEMO='$(DEMO)' \
 		bash ./scripts/build-app-instance.sh
 
 # A uniquely identified packaged app whose logical runtime instance is still the

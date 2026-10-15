@@ -1,5 +1,5 @@
 // Records one window to an H.264 mp4 until SIGINT/SIGTERM, then finalizes and
-// exits 0. Usage: WindowRecorder <windowId> <outputPath> [fps]
+// exits 0. Usage: WindowRecorder <windowId> <outputPath> [fps] [stopFilePath] [hide-cursor]
 //
 // ScreenCaptureKit's desktop-independent window filter composites the window's
 // own content wherever the window is — parked almost fully off-screen (the
@@ -33,12 +33,13 @@ if !CGPreflightScreenCaptureAccess() {
 }
 
 guard CommandLine.arguments.count >= 3, let windowIdArg = UInt32(CommandLine.arguments[1]) else {
-    fail("usage: WindowRecorder <windowId> <outputPath> [fps] [stopFilePath]", code: 2)
+    fail("usage: WindowRecorder <windowId> <outputPath> [fps] [stopFilePath] [hide-cursor]", code: 2)
 }
 let targetWindowId = CGWindowID(windowIdArg)
 let outputURL = URL(fileURLWithPath: CommandLine.arguments[2])
 let fps = CommandLine.arguments.count > 3 ? Int32(CommandLine.arguments[3]) ?? 15 : 15
-let stopFilePath = CommandLine.arguments.count > 4 ? CommandLine.arguments[4] : nil
+let stopFilePath = CommandLine.arguments.count > 4 && !CommandLine.arguments[4].isEmpty ? CommandLine.arguments[4] : nil
+let showsCursor = !(CommandLine.arguments.count > 5 && CommandLine.arguments[5] == "hide-cursor")
 
 final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate {
     private var stream: SCStream?
@@ -84,7 +85,7 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate {
         config.height = height
         config.minimumFrameInterval = CMTime(value: 1, timescale: fps)
         config.queueDepth = 8
-        config.showsCursor = true
+        config.showsCursor = showsCursor
 
         let stream = SCStream(filter: filter, configuration: config, delegate: self)
         try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: queue)

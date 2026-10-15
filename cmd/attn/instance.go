@@ -224,8 +224,11 @@ func runInstanceResolve(args []string) {
 func runInstanceTauriConfig(args []string) {
 	instance := config.Instance()
 	basePath := ""
+	demo := false
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
+		case "--demo":
+			demo = true
 		case "--base":
 			if i+1 >= len(args) {
 				instanceFatal("--base requires a value")
@@ -261,19 +264,22 @@ func runInstanceTauriConfig(args []string) {
 			instanceFatal(fmt.Sprintf("%s: %v", basePath, err))
 		}
 	}
-	b, err := json.MarshalIndent(tauriConfigOverlay(resolveInstance(instance), window), "", "  ")
+	b, err := json.MarshalIndent(tauriConfigOverlay(resolveInstance(instance), window, demo), "", "  ")
 	if err != nil {
 		instanceFatal(err.Error())
 	}
 	fmt.Println(string(b))
 }
 
-func tauriConfigOverlay(r instanceResolved, baseWindow map[string]any) map[string]any {
+func tauriConfigOverlay(r instanceResolved, baseWindow map[string]any, demo bool) map[string]any {
 	window := map[string]any{}
 	for k, v := range baseWindow {
 		window[k] = v
 	}
 	window["title"] = r.AppName
+	if demo {
+		window["title"] = "attn"
+	}
 	window["backgroundThrottling"] = "disabled"
 	return map[string]any{
 		"$schema":     "https://schema.tauri.app/config/2",
@@ -926,7 +932,7 @@ Usage:
   attn instance resolve         resolved resources as JSON
   attn instance resolve --field wsPort      print one resolved value
   attn instance resolve --instance agent7   resolve a different instance
-  attn instance tauri-config    Tauri --config overlay for the instance's build
+  attn instance tauri-config    Tauri --config overlay for the instance's build (--demo: titled attn)
   attn instance register-scheme Linux only: claim <scheme>:// for this instance's app in the desktop database
   attn instance clean <name>    reap workers + plugin drivers, stop daemon, quit app, remove its app, app local data, data dir, and scheme handler
   attn instance stop-app        quit the active instance's app (--instance <name> for another)

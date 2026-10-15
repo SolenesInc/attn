@@ -200,8 +200,8 @@
 }
 
 /* The selected-leaf treatment applies only when there is another visible leaf
-   to disambiguate. Edge rail is the default: one strong edge without boxing in
-   terminal or document content. The overlay sits above pane-local overlays but
+   to disambiguate. Edge rail draws one strong edge without boxing in terminal
+   or document content. The overlay sits above pane-local overlays but
    never takes pointer input. */
 .session-terminal-desktop.desktop-selection--rail.multi-leaf .desktop-pane.active::after {
   content: '';

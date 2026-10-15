@@ -1,7 +1,6 @@
 // Agent and classifier are told apart by the system prompt: the classifier's
 // opens with a line no coding agent's does.
 import fs from 'node:fs';
-import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
@@ -9,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { instanceCliEnv, socketPathForInstance } from './harnessInstance.mjs';
 import { queueDaemonSettingRestore } from './common.mjs';
 import { appDaemonInTree } from './platform.mjs';
+import { startStubModel } from './stubModel.mjs';
 
 const CLASSIFIER_MARKER = 'You are a security monitor for an autonomous coding agent';
 
@@ -27,132 +27,38 @@ function severityAnswer(verdict, pass) {
 }
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export const stubProviderName = 'attn-harness';
 export const stubAgentModel = `${stubProviderName}/stub-agent`;
 export const stubJudgeModel = `${stubProviderName}/stub-judge`;
 
-function textOf(content) {
-  if (typeof content === 'string') return content;
-  if (!Array.isArray(content)) return content == null ? '' : JSON.stringify(content);
-  return content.map((part) => (typeof part === 'string' ? part : (part?.text ?? ''))).join('');
-}
-
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-function sse(res, payload) {
-  res.write(`data: ${JSON.stringify(payload)}\n\n`);
-}
-
-function chunk(delta, finishReason = null) {
-  return {
-    id: 'attn-harness-stub',
-    object: 'chat.completion.chunk',
-    created: 1,
-    model: 'stub',
-    choices: [{ index: 0, delta, finish_reason: finishReason }],
-  };
-}
-
-function writeText(res, text) {
-  sse(res, chunk({ role: 'assistant', content: text }));
-  sse(res, { ...chunk({}, 'stop'), usage: { prompt_tokens: 8, completion_tokens: 4, total_tokens: 12 } });
-}
-
-function writeToolCall(res, { id, name, args }) {
-  sse(res, chunk({
-    tool_calls: [{ index: 0, id, type: 'function', function: { name, arguments: '' } }],
-  }));
-  sse(res, chunk({
-    tool_calls: [{ index: 0, function: { arguments: JSON.stringify(args) } }],
-  }));
-  sse(res, { ...chunk({}, 'tool_calls'), usage: { prompt_tokens: 8, completion_tokens: 6, total_tokens: 14 } });
-}
-
-export function startPiStubProvider({ agent, judge }) {
+export async function startPiStubProvider({ agent, judge }) {
   const calls = { agent: [], judge: [] };
   let held;
-  const server = http.createServer((req, res) => {
-    if (!req.url.endsWith('/chat/completions')) {
-      res.writeHead(200, { 'Content-Type': 'text/plain' }).end('STUB-OK\n');
-      return;
-    }
-    let raw = '';
-    req.on('data', (piece) => { raw += piece; });
-    req.on('end', async () => {
-      let body;
-      try {
-        body = JSON.parse(raw);
-      } catch (error) {
-        res.writeHead(400).end(String(error));
-        return;
-      }
-      const messages = body.messages ?? [];
-      const systemPrompt = messages
-        .filter((m) => m.role === 'system' || m.role === 'developer')
+  const route = async (parsed) => {
+    const role = parsed.systemPrompt.includes(CLASSIFIER_MARKER) ? 'judge' : 'agent';
+    const request = { ...parsed, turn: calls[role].length };
+    calls[role].push(request);
+    if (role === 'judge') {
+      const userText = parsed.messages
+        .filter((m) => m.role === 'user')
         .map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content)))
         .join('\n');
-      const role = systemPrompt.includes(CLASSIFIER_MARKER) ? 'judge' : 'agent';
-      const lastUser = messages.findLastIndex((m) => m.role === 'user');
-      const prompts = messages.filter((m) => m.role === 'user').map((m) => textOf(m.content));
-      const toolResults = messages.slice(lastUser + 1).filter((m) => m.role === 'tool').map((m) => textOf(m.content));
-      const request = { body, messages, systemPrompt, turn: calls[role].length, prompt: prompts.at(-1) ?? '', prompts, toolResults };
-      calls[role].push(request);
-
-      const stream = () => res.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        Connection: 'keep-alive',
-      });
-      try {
-        if (role === 'judge') {
-          const userText = messages
-            .filter((m) => m.role === 'user')
-            .map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content)))
-            .join('\n');
-          const pass = userText.includes(PASS_ONE) ? 1 : 2;
-          if (pass === 1) held = judge(request);
-          const verdict = held ?? { verdict: 'deny', reason: 'the stub had no scripted verdict' };
-          if (verdict.error) {
-            res.writeHead(400, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: { message: verdict.error, code: verdict.error } }));
-            return;
-          }
-          stream();
-          writeText(res, severityAnswer(verdict, pass));
-        } else {
-          const answer = await agent(request);
-          stream();
-          if (answer.holdMs) await delay(answer.holdMs);
-          if (answer.tool) {
-            writeToolCall(res, {
-              id: answer.tool.id ?? `call-${calls.agent.length}`,
-              name: answer.tool.name,
-              args: answer.tool.args,
-            });
-          } else {
-            writeText(res, answer.text ?? '');
-          }
-        }
-      } catch (error) {
-        if (!res.headersSent) stream();
-        writeText(res, `stub provider failed: ${error?.message ?? error}`);
-      }
-      res.write('data: [DONE]\n\n');
-      res.end();
-    });
-  });
-
-  return new Promise((resolve) => {
-    server.listen(0, '127.0.0.1', () => {
-      const { port } = server.address();
-      resolve({
-        port,
-        baseUrl: `http://127.0.0.1:${port}/v1`,
-        calls,
-        close: () => new Promise((done) => server.close(() => done())),
-      });
-    });
-  });
+      const pass = userText.includes(PASS_ONE) ? 1 : 2;
+      if (pass === 1) held = judge(request);
+      const verdict = held ?? { verdict: 'deny', reason: 'the stub had no scripted verdict' };
+      if (verdict.error) return { error: verdict.error };
+      return { say: severityAnswer(verdict, pass) };
+    }
+    const answer = await agent(request);
+    if (answer.tool) {
+      return { tool: { ...answer.tool, id: answer.tool.id ?? `call-${calls.agent.length}` }, holdMs: answer.holdMs };
+    }
+    return { say: answer.text ?? '', holdMs: answer.holdMs };
+  };
+  const stub = await startStubModel(route);
+  return { port: stub.port, baseUrl: `${stub.origin}/v1`, calls, close: stub.close };
 }
 
 export function writeStubAgentDir(dir, baseUrl) {
