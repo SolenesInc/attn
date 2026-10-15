@@ -43,7 +43,7 @@ export function ChiefSetup({ chief, autoFocus, onSave, onClose, onReturnFocus, o
     const first = root.current?.querySelector<HTMLElement>('[role="radio"]:not(:disabled), .chief-setup-primary:not(:disabled), .chief-setup-buttons button:not(:disabled)');
     const target = selected || first;
     if (target) { target.focus(); focusRequested.current = null; }
-  }, [autoFocus, step, showHarness, harnesses.length, view.catalog]);
+  });
   useLayoutEffect(() => {
     if (!focusRequested.current) return;
     const cancel = () => { focusRequested.current = null; };

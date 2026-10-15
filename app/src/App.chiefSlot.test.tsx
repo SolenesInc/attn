@@ -200,8 +200,10 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
       preferences: { enabled: false, revision: 0, workflow_skill_enabled: false, roles: [], fallback: { selection: { harness: '', provider: '', model: '', effort: '' }, instructions: '' } },
       harnesses, templates: [], expanded_roles: [],
     }));
-    await gesture(daemon, () => fireEvent.click(slot().getByRole('button', { name: 'Check again' })));
+    const retry = slot().getByRole('button', { name: 'Check again' });
+    await gesture(daemon, () => { retry.focus(); fireEvent.click(retry); });
     expect(slot().queryByRole('alert')).toBeNull();
+    expect(slot().getByRole('radio', { name: /Opus 5.5/ })).toHaveFocus();
     expect(slot().getByRole('button', { name: /Wake Captain/ })).toBeEnabled();
     expect(daemon.sentOf('crew_set')).toEqual([]);
   });
