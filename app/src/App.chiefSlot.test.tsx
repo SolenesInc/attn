@@ -2,7 +2,7 @@ import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { crewMember, daemonSession, soloDesktop, defaultProfile, emptyDesktop, DEFAULT_DESKTOP_ID } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp, restartApp } from './test/renderApp';
-import { reportedModel } from './test/harnessCatalogs';
+import { harnesses, reportedModel } from './test/harnessCatalogs';
 
 const member = (values = {}) => crewMember('chief-key', { chief: true, name: 'Captain', ...values });
 const available = { claude_available: 'true', codex_available: 'true', copilot_available: 'true', pi_available: 'true', claude_cap_launch_instructions: 'true', codex_cap_launch_instructions: 'true', copilot_cap_launch_instructions: 'false', pi_cap_launch_instructions: 'false', new_session_agent: 'claude' };
@@ -93,6 +93,31 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
     const model = slot().getByRole('radio', { name: /New deep model/ });
     const expected = surface === 'setup' ? model : surface === 'terminal' ? terminal : surface === 'close' ? slot().getByRole('button', { name: 'Close chief setup' }) : document.body;
     expect(document.activeElement).toBe(expected);
+  });
+  it.each(['setup', 'terminal', 'outside'])('keeps the chosen focus when a plugin update reloads all harnesses (%s)', async surface => {
+    const desktop = soloDesktop('agent');
+    const { daemon } = await renderApp({ initialState: {
+      settings, crew: [member()], sessions: [daemonSession('agent')], desktops: [desktop], profiles: [defaultProfile(desktop.id)],
+    } });
+    await gesture(daemon, () => fireEvent.keyDown(slot().getByRole('radio', { name: /Claude/ }), { key: 'Enter' }));
+    expect(slot().getByRole('radio', { name: /Opus 5.5/ })).toHaveFocus();
+    daemon.on('delegation_preferences_get', () => {});
+    await gesture(daemon, () => daemon.emit({ event: 'plugins_updated', plugins: [{ name: 'attn-pi', dir: '/test/attn-pi', version: '1', availability: 'available', connected: true, running: true, installation_state: 'installed', runtime_state: 'running', health_status: 'healthy', can_install: false, can_uninstall: true, priority: 0 }], issues: [] }));
+    expect(slot().queryByRole('radiogroup', { name: 'Chief model' })).toBeNull();
+    const terminal = screen.getByRole('textbox', { name: 'Terminal input' });
+    await gesture(daemon, () => {
+      if (surface === 'terminal') terminal.focus();
+      if (surface === 'outside') fireEvent.pointerDown(document.body);
+    });
+    await gesture(daemon, () => {
+      const request = daemon.sentOf('delegation_preferences_get').slice(-1)[0]!;
+      daemon.replyTo(request, { event: 'delegation_preferences_result', request_id: request.request_id, success: true,
+        preferences: { enabled: false, revision: 0, workflow_skill_enabled: false, roles: [], fallback: { selection: { harness: '', provider: '', model: '', effort: '' }, instructions: '' } },
+        harnesses, templates: [], expanded_roles: [],
+      });
+    });
+    const model = slot().getByRole('radio', { name: /Opus 5.5/ });
+    expect(document.activeElement).toBe(surface === 'setup' ? model : surface === 'terminal' ? terminal : document.body);
   });
   it.each(['terminal', 'outside', 'close'])('cancels a model-step request when the user chooses %s before discovery', async surface => {
     const desktop = soloDesktop('agent');
