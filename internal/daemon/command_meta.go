@@ -15,6 +15,12 @@ func commandMetadata(blocksDuringRecovery bool, log bool) CommandMetadata {
 }
 
 var CommandMeta = map[string]CommandMetadata{
+	protocol.CmdQuickCaptureSend:              commandMetadata(false, false),
+	protocol.CmdQuickCaptureGet:               commandMetadata(false, false),
+	protocol.CmdQuickCaptureList:              commandMetadata(false, false),
+	protocol.CmdQuickCaptureAttachmentPut:     commandMetadata(false, false),
+	protocol.CmdQuickCaptureAttachmentGet:     commandMetadata(false, false),
+	protocol.CmdQuickCaptureAttachmentDiscard: commandMetadata(false, false),
 	protocol.CmdDelegationPreferencesGet:      commandMetadata(false, false),
 	protocol.CmdDelegationPreferencesSave:     commandMetadata(false, false),
 	protocol.CmdHarnessModels:                 commandMetadata(false, false),

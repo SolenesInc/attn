@@ -98,6 +98,9 @@ func (d *Daemon) inboxWakeRequester(a inbox.Address) string {
 	if err != nil || len(deliveries) == 0 {
 		return ""
 	}
+	if deliveries[0].Item.Kind == inbox.QuickCapture {
+		return "a quick capture"
+	}
 	if peer := deliveries[0].Peer; peer != nil {
 		return d.launchRequester(peer.SenderSessionID, "another agent")
 	}

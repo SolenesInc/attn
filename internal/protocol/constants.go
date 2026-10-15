@@ -3,6 +3,7 @@ package protocol
 import "time"
 
 const (
+	ErrorCodeQuickCaptureNotFound = "quick_capture_not_found"
 	ErrorCodeConflict             = "conflict"
 	ErrorCodeUndeclaredCollection = "undeclared_collection"
 	ErrorCodeInvalidQuery         = "invalid_query"
@@ -32,6 +33,12 @@ const (
 )
 
 const (
+	CmdQuickCaptureAttachmentDiscard = "quick_capture_attachment_discard"
+	CmdQuickCaptureAttachmentGet     = "quick_capture_attachment_get"
+	CmdQuickCaptureAttachmentPut     = "quick_capture_attachment_put"
+	CmdQuickCaptureList              = "quick_capture_list"
+	CmdQuickCaptureGet               = "quick_capture_get"
+	CmdQuickCaptureSend              = "quick_capture_send"
 	CmdClientHello                   = "client_hello"
 	CmdDelegate                      = "delegate"
 	CmdDelegationPreferencesGet      = "delegation_preferences_get"
@@ -311,6 +318,8 @@ const (
 const EventAutomationsChanged = "automations_changed"
 
 const (
+	EventQuickCaptureResult              = "quick_capture_result"
+	EventQuickCaptureRead                = "quick_capture_read"
 	EventSessionRegistered               = "session_registered"
 	EventSessionUnregistered             = "session_unregistered"
 	EventSessionCloseResult              = "session_close_result"
