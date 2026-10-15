@@ -3314,12 +3314,7 @@ type successfulPRObservation struct {
 }
 
 func (d *Daemon) pollPRs() {
-	if !d.githubAvailable() {
-		d.log("GitHub client not available, PR polling disabled")
-		return
-	}
-
-	d.log("PR polling started (90s interval)")
+	d.log("PR polling loop started (90s interval)")
 
 	d.doPRPoll()
 
