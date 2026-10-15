@@ -22,6 +22,7 @@ import { useKeybindings } from '../contexts/KeybindingsContext';
 import { KeyCaptureInput } from './KeyCaptureInput';
 import './ShortcutEditorModal.css';
 import { QuickCaptureShortcutEditor } from './QuickCaptureShortcutEditor';
+import { setShortcutCaptureSuspended } from '../shortcuts/useShortcut';
 
 interface ShortcutEditorModalProps {
   isOpen: boolean;
@@ -65,12 +66,18 @@ export function ShortcutEditorModal({ isOpen, onClose }: ShortcutEditorModalProp
   const kb = useKeybindings();
   const groups = useMemo(groupedByCategory, []);
 
-  const [recordingId, setRecordingId] = useState<ShortcutId | null>(null);
+  const [recordingId, setRecordingId] = useState<ShortcutId | 'quickCapture' | null>(null);
   const [recordingMode, setRecordingMode] = useState<'combo' | 'chord'>('combo');
   const [pending, setPending] = useState<PendingReassign | null>(null);
   const [rowError, setRowError] = useState<{ id: ShortcutId; message: string } | null>(null);
   const [query, setQuery] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
+  const recording = isOpen && recordingId !== null;
+
+  useEffect(() => {
+    setShortcutCaptureSuspended(recording);
+    return () => setShortcutCaptureSuspended(false);
+  }, [recording]);
 
   useEscapeStack(onClose, isOpen && recordingId === null && pending === null);
 
@@ -188,7 +195,16 @@ export function ShortcutEditorModal({ isOpen, onClose }: ShortcutEditorModalProp
           </div>
 
           <div className="shortcut-editor-body">
-            {(q === '' || 'quick capture system-wide'.includes(q)) && <QuickCaptureShortcutEditor />}
+            {(q === '' || 'quick capture system-wide'.includes(q)) && (
+              <QuickCaptureShortcutEditor
+                recording={recordingId === 'quickCapture'}
+                onStart={() => {
+                  clearTransient();
+                  setRecordingId('quickCapture');
+                }}
+                onCancel={() => setRecordingId(null)}
+              />
+            )}
             {q === '' && (
             <section className="shortcut-editor-category shortcut-editor-dock">
               <h3 className="shortcut-editor-category-title">Dock</h3>
