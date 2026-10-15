@@ -36,6 +36,7 @@ const (
 	SettingCopilotAvailable              = "copilot_available"
 	SettingPTYBackendMode                = "pty_backend_mode"
 	SettingNewSessionLauncherEnabled     = "new_session_launcher_enabled"
+	SettingDirectAgentLaunchEnabled      = "direct_agent_launch_enabled"
 	SettingSharedPTYHostEnabled          = "pty_shared_host_enabled"
 	SettingSharedPTYHostActive           = "pty_shared_host_active"
 	SettingTheme                         = "theme"
@@ -224,25 +225,10 @@ func (d *Daemon) settingsWithAgentAvailability() map[string]interface{} {
 		available := isAgentExecutableAvailable(configured, driver.DefaultExecutable())
 		settings[availabilitySettingKey(name)] = strconv.FormatBool(available)
 		if available {
-			switch name {
-			case string(protocol.SessionAgentClaude):
-				if synced, err := agentdriver.EnsureClaudeSkillInstalled(); err != nil {
-					d.logf("failed to ensure Claude attn skill: %v", err)
-				} else if !synced {
-					d.logf("skipping user-global Claude attn skill sync for instance %q", config.InstanceLabel())
-				}
-			case string(protocol.SessionAgentCodex):
-				if synced, err := agentdriver.EnsureAgentsSkillInstalled(); err != nil {
-					d.logf("failed to ensure ~/.agents attn skill: %v", err)
-				} else if !synced {
-					d.logf("skipping user-global ~/.agents attn skill sync for instance %q", config.InstanceLabel())
-				}
-			case string(protocol.SessionAgentCopilot):
-				if synced, err := agentdriver.EnsureCopilotSkillInstalled(); err != nil {
-					d.logf("failed to ensure Copilot attn skill: %v", err)
-				} else if !synced {
-					d.logf("skipping user-global Copilot attn skill sync for instance %q", config.InstanceLabel())
-				}
+			if synced, err := agentdriver.EnsureAttnSkillInstalled(name); err != nil {
+				d.logf("failed to ensure %s attn skill: %v", name, err)
+			} else if !synced {
+				d.logf("skipping user-global %s attn skill sync for instance %q", name, config.InstanceLabel())
 			}
 		}
 
@@ -314,6 +300,7 @@ func (d *Daemon) settingsWithAgentAvailability() map[string]interface{} {
 		settings[SettingModelCaptureBytes] = "0"
 	}
 	settings[SettingQueueModeEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingQueueModeEnabled]))
+	settings[SettingDirectAgentLaunchEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingDirectAgentLaunchEnabled]))
 	settings[SettingQueueCrewEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingQueueCrewEnabled]))
 	settings[SettingSidebarHarnessLogosEnabled] = strconv.FormatBool(defaultOnBooleanSetting(stored[SettingSidebarHarnessLogosEnabled]))
 	settings[SettingAutoApproveEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingAutoApproveEnabled]))
@@ -506,7 +493,7 @@ func (d *Daemon) validateSetting(key, value string) error {
 		return d.validateNewSessionAgent(value)
 	case SettingTheme:
 		return validateTheme(value)
-	case SettingNewSessionLauncherEnabled, SettingSharedPTYHostEnabled:
+	case SettingNewSessionLauncherEnabled, SettingSharedPTYHostEnabled, SettingDirectAgentLaunchEnabled:
 		return validateBooleanSetting(value)
 	case SettingTailscaleEnabled, SettingAutoApproveEnabled, SettingQueueModeEnabled, SettingQueueCrewEnabled, SettingSidebarHarnessLogosEnabled, SettingAutoSettleEnabled, SettingModelCaptureEnabled, SettingActivityEnabled, SettingOpenSentFilesEnabled, SettingHeadlessTasksEnabled, settingWorktreeSweepEnabled:
 		return validateBooleanSetting(value)

@@ -735,6 +735,44 @@ export function TerminalSettings({
   );
 }
 
+export function ExperimentalSettings({
+  directAgentLaunchEnabled,
+  onSetSetting,
+}: Pick<SettingsModalState, 'directAgentLaunchEnabled' | 'onSetSetting'>) {
+  return (
+    <section className="settings-block">
+      <div className="settings-block-intro">
+        <div className="settings-kicker">Experimental</div>
+        <h3>Experimental features</h3>
+        <p className="settings-description">Try features that are still being developed.</p>
+      </div>
+      <div className="settings-block-body">
+        <div className="settings-row-card">
+          <div>
+            <p className="settings-row-title">Direct agent launches</p>
+            <p className="settings-row-copy" id="direct-agent-launch-description">
+              Off by default. Launch Claude, Codex and Copilot without a separate attn launcher process to reduce memory use.
+              Changes apply to new or explicitly reloaded agents. Running agents stay untouched.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-label="Direct agent launches"
+            aria-checked={directAgentLaunchEnabled}
+            aria-describedby="direct-agent-launch-description"
+            className="settings-action"
+            data-testid="settings-direct-agent-launch-toggle"
+            onClick={() => onSetSetting('direct_agent_launch_enabled', directAgentLaunchEnabled ? 'false' : 'true')}
+          >
+            {directAgentLaunchEnabled ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function BackgroundAgentSettings({
   settings,
   activityAgents,

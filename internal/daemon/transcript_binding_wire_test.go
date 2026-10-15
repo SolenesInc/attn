@@ -1,6 +1,8 @@
 package daemon_test
 
 import (
+	"github.com/victorarias/attn/internal/client"
+	"strconv"
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
@@ -116,4 +118,32 @@ func messageWindow(app *testworld.Peer, session string) protocol.SessionMessages
 	return testworld.Request(app, protocol.SessionMessagesGetMessage{
 		Cmd: protocol.CmdSessionMessagesGet, RequestID: "window-" + session, SessionID: protocol.SessionID(session),
 	}, protocol.EventSessionMessagesGetResult, func(r protocol.SessionMessagesGetResultMessage) bool { return r.RequestID == "window-"+session })
+}
+
+func TestCopilotNormalExitKeepsItsConversationForResume(t *testing.T) {
+	for _, direct := range []bool{false, true} {
+		t.Run(strconv.FormatBool(direct), func(t *testing.T) {
+
+			w := newWorld(t, fakeagent.Copilot)
+			app := w.App()
+			if direct {
+				setSetting(t, app, "direct_agent_launch_enabled", "true")
+			}
+			cwd := w.Path("shop")
+			session := w.Spawn(app, fakeagent.Copilot, cwd, func(m *protocol.SpawnSessionMessage) { m.InitialPrompt = protocol.Ptr("rename the checkout module") })
+			first := w.Launched(session)
+			first.Prompted()
+			first.Exit(0)
+			testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
+			awaitClosed(app, session)
+			if _, err := w.Client().SessionReopen(client.SessionReopenOptions{SessionID: protocol.SessionID(session)}); err != nil {
+				t.Fatalf("resume normally exited Copilot: %v", err)
+			}
+			resumed := w.Launched(session)
+			if !resumed.Resumed || resumed.ConversationID != first.ConversationID {
+				t.Fatalf("after normal exit Copilot resumed %q, want %s", resumed.Argv, first.ConversationID)
+			}
+
+		})
+	}
 }

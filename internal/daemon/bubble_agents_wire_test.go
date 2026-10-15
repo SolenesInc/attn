@@ -70,13 +70,13 @@ func (w *world) bootBubbleClaude(t *testing.T, id string) *bubbleClaude {
 		t.Fatalf("session start of %s: %v", id, err)
 	}
 	term.Heartbeat("not_busy", "Claude Code")
-	if path := term.Options.InitialPromptFile; path != "" {
-		prompt, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read the initial prompt of %s: %v", id, err)
+	for i, arg := range term.Options.AgentArgv {
+		if (arg == "--" || arg == "--initial-prompt") && i+1 < len(term.Options.AgentArgv) {
+			agent.take(term.Options.AgentArgv[i+1])
+			break
 		}
-		agent.take(string(prompt))
 	}
+
 	synctest.Wait()
 	return agent
 }

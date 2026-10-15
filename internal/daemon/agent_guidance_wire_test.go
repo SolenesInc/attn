@@ -53,36 +53,45 @@ func launchGuidance(t *testing.T, run *fakeagent.Run) string {
 }
 
 func TestEachHarnessReadsAttnsGuidanceAndOnlyTheHooklessOneRecordsItsOwnPullRequests(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude, fakeagent.Codex, fakeagent.Copilot)
-	t.Setenv("COPILOT_CUSTOM_INSTRUCTIONS_DIRS", "/home/me/instructions")
-	app := w.App()
-	yolo := map[fakeagent.Harness]string{
-		fakeagent.Claude:  "--dangerously-skip-permissions",
-		fakeagent.Codex:   "--dangerously-bypass-approvals-and-sandbox",
-		fakeagent.Copilot: "--yolo",
-	}
-	for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex, fakeagent.Copilot} {
-		run := w.Launched(w.Spawn(app, h, w.Path(string(h)), func(m *protocol.SpawnSessionMessage) {
-			m.YoloMode = protocol.Ptr(true)
-		}))
-		if !slices.Contains(run.Argv, yolo[h]) {
-			t.Errorf("a yolo %s launched without %s: %q", h, yolo[h], run.Argv)
-		}
-		guidance := launchGuidance(t, run)
-		if !strings.Contains(guidance, agentGuidanceLead) {
-			t.Errorf("%s launched without attn's agent guidance:\n%s", h, guidance)
-		}
-		if recordsPRs := strings.Contains(guidance, "attn pr record"); recordsPRs != (h == fakeagent.Copilot) {
-			t.Errorf("%s is told to record its own pull requests: %t, want only the hookless copilot", h, recordsPRs)
-		}
-		if h == fakeagent.Copilot {
-			if dirs, _ := envEntry(run.Env, "COPILOT_CUSTOM_INSTRUCTIONS_DIRS"); !strings.HasPrefix(dirs, "/home/me/instructions,") {
-				t.Errorf("copilot's instructions dirs are %q, want the user's own kept ahead of attn's", dirs)
+	for _, direct := range []bool{false, true} {
+		t.Run(strconv.FormatBool(direct), func(t *testing.T) {
+
+			t.Setenv("COPILOT_CUSTOM_INSTRUCTIONS_DIRS", "/home/me/instructions")
+			w := newWorld(t, fakeagent.Claude, fakeagent.Codex, fakeagent.Copilot)
+			app := w.App()
+			if direct {
+				setSetting(t, app, "direct_agent_launch_enabled", "true")
 			}
-			if strings.HasPrefix(strings.TrimSpace(guidance), "---") {
-				t.Errorf("copilot's attn instructions open with frontmatter, which scopes them away:\n%s", guidance)
+			yolo := map[fakeagent.Harness]string{
+				fakeagent.Claude:  "--dangerously-skip-permissions",
+				fakeagent.Codex:   "--dangerously-bypass-approvals-and-sandbox",
+				fakeagent.Copilot: "--yolo",
 			}
-		}
+			for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex, fakeagent.Copilot} {
+				run := w.Launched(w.Spawn(app, h, w.Path(string(h)), func(m *protocol.SpawnSessionMessage) {
+					m.YoloMode = protocol.Ptr(true)
+				}))
+				if !slices.Contains(run.Argv, yolo[h]) {
+					t.Errorf("a yolo %s launched without %s: %q", h, yolo[h], run.Argv)
+				}
+				guidance := launchGuidance(t, run)
+				if !strings.Contains(guidance, agentGuidanceLead) {
+					t.Errorf("%s launched without attn's agent guidance:\n%s", h, guidance)
+				}
+				if recordsPRs := strings.Contains(guidance, "attn pr record"); recordsPRs != (h == fakeagent.Copilot) {
+					t.Errorf("%s is told to record its own pull requests: %t, want only the hookless copilot", h, recordsPRs)
+				}
+				if h == fakeagent.Copilot {
+					if dirs, _ := envEntry(run.Env, "COPILOT_CUSTOM_INSTRUCTIONS_DIRS"); !strings.HasPrefix(dirs, "/home/me/instructions,") {
+						t.Errorf("copilot's instructions dirs are %q, want the user's own kept ahead of attn's", dirs)
+					}
+					if strings.HasPrefix(strings.TrimSpace(guidance), "---") {
+						t.Errorf("copilot's attn instructions open with frontmatter, which scopes them away:\n%s", guidance)
+					}
+				}
+			}
+
+		})
 	}
 }
 

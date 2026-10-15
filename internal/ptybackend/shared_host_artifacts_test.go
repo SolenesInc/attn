@@ -119,7 +119,7 @@ func TestRejectedCandidateIsNotLaunchedWithoutAFallback(t *testing.T) {
 		t.Fatalf("rejections = %+v, want one without a fallback", rejections)
 	}
 	err = backend.Spawn(context.Background(), SpawnOptions{
-		ID: "after-rejection", CWD: root, Agent: "lifecycle-probe", ExternalCommand: []string{"/bin/cat"},
+		ID: "after-rejection", CWD: root, Agent: "lifecycle-probe", AgentArgv: []string{"/bin/cat"},
 	})
 	if err == nil || !strings.Contains(err.Error(), "was rejected") {
 		t.Fatalf("spawn with only a rejected build = %v, want a refusal", err)

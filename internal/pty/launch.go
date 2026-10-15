@@ -28,14 +28,17 @@ func PrepareLaunch(opts SpawnOptions, logf LogFunc) (PreparedLaunch, error) {
 	if logf == nil {
 		logf = func(string, ...interface{}) {}
 	}
-	agent := normalizeAgent(opts.Agent, len(opts.ExternalCommand) > 0)
+	agent := normalizeAgent(opts.Agent, len(opts.AgentArgv) > 0)
+	if agent != "shell" && len(opts.AgentArgv) == 0 {
+		return PreparedLaunch{}, errors.New("missing prepared agent command")
+	}
 	attnPath := launchenv.ActiveAttnExecutable()
 	loginShell := GetUserLoginShell()
 	cmdEnv := buildSpawnEnv(loginShell, opts, agent, attnPath, logf)
 
 	prepared := PreparedLaunch{Agent: agent}
 	shellCandidates := preferredShellCandidates(loginShell)
-	if len(opts.ExternalCommand) > 0 && len(shellCandidates) > 1 {
+	if agent != "shell" && !opts.AgentLoginShell && len(shellCandidates) > 1 {
 		shellCandidates = shellCandidates[:1]
 	}
 	var preparationFailures []string
@@ -56,7 +59,7 @@ func PrepareLaunch(opts SpawnOptions, logf LogFunc) (PreparedLaunch, error) {
 			attemptEnv = launch.env
 			cleanupDir = launch.overlayDir
 		} else {
-			cmd = buildSpawnCommand(opts, agent, shellPath, attnPath, cmdEnv)
+			cmd = buildSpawnCommand(opts, agent, shellPath, cmdEnv)
 		}
 
 		prepared.Attempts = append(prepared.Attempts, PreparedLaunchAttempt{

@@ -282,6 +282,7 @@ export function useSettingsModalState({
     : 'unknown';
   const { label: ptyBackendLabel, hint: ptyBackendHint } = PTY_BACKENDS[ptyBackendMode];
   const newSessionLauncherEnabled = settings.new_session_launcher_enabled === 'true';
+  const directAgentLaunchEnabled = settings.direct_agent_launch_enabled === 'true';
   const sharedPtyHostEnabled = settings.pty_shared_host_enabled === 'true';
   const sharedPtyHostActive = settings.pty_shared_host_active === 'true';
 
@@ -661,6 +662,14 @@ export function useSettingsModalState({
             keywords: 'pty backend shared rust host workers experimental terminal one-screen new-session launcher one screen new session project path',
           },
           {
+            id: 'experimental',
+            label: 'Experimental',
+            title: 'Experimental',
+            description: 'Opt in to features that are still being developed.',
+            count: 1,
+            keywords: 'experimental direct agent launch launcher memory claude codex copilot',
+          },
+          {
             id: 'backgroundTasks',
             label: 'Task runner',
             title: 'Background tasks',
@@ -776,6 +785,7 @@ export function useSettingsModalState({
     sharedPtyHostActive,
     sharedPtyHostEnabled,
     newSessionLauncherEnabled,
+    directAgentLaunchEnabled,
     onSetSetting,
     settings,
     activityAgents,
