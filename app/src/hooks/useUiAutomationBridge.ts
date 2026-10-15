@@ -55,6 +55,7 @@ interface UseUiAutomationBridgeArgs {
   daemonReady?: boolean;
   connectionError?: string | null;
   getActivePaneIdForSession: (session: Session | undefined | null) => string;
+  openNewSession: () => void;
   createSession: (label: string, cwd: string, id?: string, agent?: SessionAgent, yoloMode?: boolean, options?: { chiefOfStaff?: boolean }) => Promise<string>;
   selectSession: (sessionId: string) => void;
   selectDesktop: (desktopId: string) => void;
@@ -1966,6 +1967,7 @@ export function useUiAutomationBridge({
   connectionError = null,
   getActivePaneIdForSession,
   createSession,
+  openNewSession,
   selectSession,
   selectDesktop,
   moveDesktopLeaf,
@@ -2587,13 +2589,7 @@ export function useUiAutomationBridge({
       case 'location_picker_get_state':
         return collectLocationPickerUiState();
       case 'location_picker_open': {
-        if (!getLocationPickerRoot()) {
-          const button = getLocationPickerRoot()?.querySelector('[aria-label="New Session"]');
-          if (!(button instanceof HTMLElement)) {
-            throw new Error('New Session button not found');
-          }
-          clickElement(button);
-        }
+        if (!getLocationPickerRoot()) openNewSession();
         await settleUi(2);
         return collectLocationPickerUiState();
       }
@@ -3708,6 +3704,7 @@ export function useUiAutomationBridge({
     openAutomationsPanel,
     openDockPanel,
     openShortcutEditor,
+    openNewSession,
     openWorktreesPanel,
     reloadSession,
     resetSessionPaneTerminal,

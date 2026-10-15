@@ -112,6 +112,13 @@ try {
     });
     sessionIds.push(id);
   });
+  await runner.step('automation_opens_the_closed_launcher', async () => {
+    const state = await client.request('location_picker_open');
+    runner.assert(state.open && state.mode === 'path-input', 'automation must open the closed launcher');
+    runner.assert(!(await client.request('location_picker_close')).open, 'automation must close the launcher');
+    runner.assert((await client.request('location_picker_open')).open, 'automation must reopen the launcher');
+    await client.request('location_picker_close');
+  });
   await runner.step('cmd_t_is_terminal_for_one_opening', async () => {
     await open('session.newTerminal');
     runner.assert(
@@ -301,6 +308,8 @@ try {
       'CmdT must also select Terminal in the old dialog',
     );
     await driver.pressKey('Escape');
+    runner.assert((await client.request('location_picker_open')).open, 'automation must also open the old dialog');
+    await client.request('location_picker_close');
   });
   console.log(JSON.stringify(await runner.finishSuccess({ sessionIds }), null, 2));
 } catch (error) {

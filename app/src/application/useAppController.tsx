@@ -454,6 +454,7 @@ export function useAppController({
     connectionError,
     getActivePaneIdForSession,
     createSession: createSessionForUiAutomation,
+    openNewSession: handleNewSession,
     selectSession: handleSelectSession,
     selectDesktop: handleSelectDesktop,
     moveDesktopLeaf: sendDesktopMoveLeaf,
