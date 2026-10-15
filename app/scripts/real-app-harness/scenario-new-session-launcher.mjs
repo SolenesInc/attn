@@ -80,8 +80,11 @@ try {
       'keep until force',
     );
     await launchFreshAppAndConnect(client, observer);
+    const previousLauncherEnabled = observer.getSetting('new_session_launcher_enabled') || 'false';
+    runner.registerCleanup('launcher_setting', () => client.request('set_setting', {
+      key: 'new_session_launcher_enabled', value: previousLauncherEnabled,
+    }));
     for (const key of [
-      'new_session_launcher_enabled',
       'new_session_agent',
       'projects_directory',
       'keybindings_config',
@@ -153,9 +156,12 @@ try {
     await driver.pressKey('Tab');
     await visible('[role="listbox"][aria-label="Where"]');
     await driver.pressKey('Backspace');
+    await visible('[data-testid="location-picker-item-0"]');
+    const restored = await picker();
     runner.assert(
-      (await picker()).pathInputValue === 'launcher-project',
+      restored.pathInputValue === 'launcher-project',
       'Back must restore the query',
+      restored,
     );
     await driver.pressKey('Escape');
     await driver.pressKey('Escape');

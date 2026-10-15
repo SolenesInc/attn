@@ -73,6 +73,7 @@ export function linuxKeyName(key, modifiers = {}) {
     '[': 'bracketleft',
     ']': 'bracketright',
     Enter: 'Return',
+    Backspace: 'BackSpace',
     ArrowLeft: 'Left',
     ArrowRight: 'Right',
     ArrowDown: 'Down',
