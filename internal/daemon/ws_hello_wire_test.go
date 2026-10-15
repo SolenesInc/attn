@@ -1,7 +1,6 @@
 package daemon_test
 
 import (
-	"net/http"
 	"slices"
 	"strings"
 	"testing"
@@ -53,17 +52,6 @@ func TestClientHelloWithAnotherInstancesTokenIsRefused(t *testing.T) {
 		t.Fatalf("error_code = %q, want %q", got, protocol.ErrorCodeUnauthorizedClient)
 	}
 	expectRefusalClose(t, neighbour)
-}
-
-func TestBearerAuthorizedClientNeedsNoClientToken(t *testing.T) {
-	t.Setenv("ATTN_WS_AUTH_TOKEN", "operator-bearer")
-	w := newWorld(t)
-
-	remote := w.Connect(helloWithToken(nil), http.Header{"Authorization": {"Bearer operator-bearer"}})
-
-	testworld.Await[protocol.InitialStateMessage](remote, protocol.EventInitialState, nil)
-	testworld.Request(remote, protocol.GetSettingsMessage{Cmd: protocol.CmdGetSettings}, protocol.EventSettingsUpdated,
-		func(protocol.WebSocketEvent) bool { return true })
 }
 
 func helloWithToken(token *string) protocol.ClientHelloMessage {

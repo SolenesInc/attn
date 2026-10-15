@@ -3,7 +3,6 @@ package daemon
 import (
 	"context"
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -39,7 +38,6 @@ type wsClient struct {
 
 	trustedTauriOrigin       bool
 	browserHostAuthenticated bool
-	bearerAuthorized         bool
 
 	attachedStreams map[protocol.TerminalID]ptybackend.Stream
 	attachMu        sync.Mutex
@@ -520,19 +518,6 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden origin", http.StatusForbidden)
 		return
 	}
-	bearerAuthorized := false
-	if required := config.WSAuthToken(); required != "" {
-		provided := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
-		if provided == "" {
-			provided = strings.TrimSpace(r.URL.Query().Get("token"))
-		}
-		if subtle.ConstantTimeCompare([]byte(required), []byte(provided)) != 1 {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		bearerAuthorized = true
-	}
-
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		OriginPatterns: websocketOriginPatternsForRequest(r),
 	})
@@ -551,7 +536,6 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 		recv:               make(chan []byte, 256),
 		connectedAt:        time.Now(),
 		trustedTauriOrigin: isTrustedTauriOrigin(origin),
-		bearerAuthorized:   bearerAuthorized,
 		attachedStreams:    make(map[protocol.TerminalID]ptybackend.Stream),
 	}
 	release, held := d.life.Hold("handleWS")
