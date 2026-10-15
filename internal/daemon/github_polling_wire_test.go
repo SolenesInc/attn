@@ -43,3 +43,16 @@ func TestNamedInstancesPollGitHubOnlyWhenOptedIn(t *testing.T) {
 		})
 	}
 }
+
+func TestNamedInstancesPollTheMockGitHub(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("ATTN_INSTANCE", "dev")
+	t.Setenv("ATTN_GITHUB_POLLING", "")
+	t.Setenv("ATTN_MOCK_GH_URL", "http://127.0.0.1:1")
+	inBubble(t, func(t *testing.T, w *world) {
+		w.finishStartupWork()
+		if offReason := protocol.Deref(w.App().Initial.GithubPollingOffReason); offReason != "" {
+			t.Errorf("the app is told polling is off because %q; want the mock GitHub polled", offReason)
+		}
+	})
+}

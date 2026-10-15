@@ -2,6 +2,9 @@
  * shell's ATTN_BUILD_INSTANCE. A daemon reporting a different instance is refused. */
 export const BUILD_INSTANCE: string = (import.meta.env.VITE_ATTN_BUILD_INSTANCE ?? '').trim();
 
+/** A demo build records guide footage, so it looks like a production install. */
+export const BUILD_DEMO: boolean = (import.meta.env.VITE_ATTN_BUILD_DEMO ?? '').trim() !== '';
+
 export const BUILD_INSTANCE_LABEL: string = BUILD_INSTANCE === '' ? 'default' : BUILD_INSTANCE;
 
 /** Whether the daemon's reported instance matches this build; empty means "default". */

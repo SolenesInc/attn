@@ -10,14 +10,14 @@ describe('desktop selection style preference', () => {
     localStorage.clear();
   });
 
-  it('defaults missing and unknown values to the edge rail', () => {
-    expect(readDesktopSelectionStyle()).toBe('rail');
+  it('defaults missing and unknown values to the spotlight', () => {
+    expect(readDesktopSelectionStyle()).toBe('spotlight');
 
     localStorage.setItem(DESKTOP_SELECTION_STYLE_STORAGE_KEY, 'unknown');
-    expect(readDesktopSelectionStyle()).toBe('rail');
+    expect(readDesktopSelectionStyle()).toBe('spotlight');
   });
 
-  it.each(['dim', 'spotlight'] as const)('persists and restores the %s style', (style) => {
+  it.each(['dim', 'rail'] as const)('persists and restores the %s style', (style) => {
     persistDesktopSelectionStyle(style);
 
     expect(localStorage.getItem(DESKTOP_SELECTION_STYLE_STORAGE_KEY)).toBe(style);

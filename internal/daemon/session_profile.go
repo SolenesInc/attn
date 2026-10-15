@@ -68,13 +68,7 @@ func (d *Daemon) checkLaunchPlacement(profile profiles.Profile, placement *launc
 		return nil
 	}
 	desktop, err := d.store.LaunchDesktop(profile.ID, placement.desktopID)
-	var missing *profiles.Error
-	if placement.desktopID != "" && errors.As(err, &missing) && missing.Code == profiles.CodeNotFound {
-		target := ""
-		if profiles.IsNumberedDesktopID(profile.ID, placement.desktopID) {
-			target = placement.desktopID
-		}
-		*placement = launchPlacement{desktopID: target, direction: placement.direction}
+	if placement.desktopID != "" && profiles.IsNotFound(err) {
 		return nil
 	}
 	if err != nil {
@@ -175,6 +169,16 @@ func (d *Daemon) resolveDesktopRef(profile profiles.Profile, ref string) (profil
 	}
 	return profiles.Desktop{}, profiles.Errorf(profiles.CodeCrossProfile, "desktop %s belongs to profile %q, not profile %q; %s",
 		elsewhere.ID, owner.Name, profile.Name, profiles.DesktopDirectory(profile, desktops))
+}
+
+// resolveDesktopTarget names the desktop a ref addresses, including a numbered
+// desktop the store will create when it is missing.
+func (d *Daemon) resolveDesktopTarget(profile profiles.Profile, ref string) (string, error) {
+	desktop, err := d.resolveDesktopRef(profile, ref)
+	if numbered := profiles.NumberedDesktopRef(profile.ID, ref); numbered != "" && profiles.IsNotFound(err) {
+		return numbered, nil
+	}
+	return desktop.ID, err
 }
 
 func (d *Daemon) callerProfile(callerSessionID protocol.SessionID) (profiles.Profile, error) {

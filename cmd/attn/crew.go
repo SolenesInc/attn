@@ -61,7 +61,7 @@ commands:
   set <member> [--cwd <dir>] [--agent <name>] [--model <name>] [--effort <level>]
                [--launch-desktop <own|desktop>] [--awareness-dir <dir>]...
         Save launch settings without changing the member's markdown files.
-        --launch-desktop selects own, an empty slot (5–9), or a desktop digit, name or id.
+        --launch-desktop selects own, a desktop digit (an empty slot gets a new desktop), name or id.
         --cwd sets the working directory; --model selects the model.
         --agent accepts claude, codex, or an installed plugin driver.
         --agent "" restores the crew default; --model "" the harness default.
@@ -268,7 +268,7 @@ func parseCrewSetArgs(args []string) (crewSetArgs, error) {
 	model := fs.String("model", "", "the model the member's days run on; empty goes back to the configured default")
 	effort := fs.String("effort", "", "the effort the member's days run on; empty goes back to the harness default")
 	desktopName := fs.String("desktop-name", "", "name for the new desktop of own or an empty slot (defaults to the member name)")
-	desktop := fs.String("launch-desktop", "", "own, an empty slot (5–9), or a desktop digit, name or id in this member profile")
+	desktop := fs.String("launch-desktop", "", "own, a desktop digit (an empty slot gets a new desktop), name or id in this member profile")
 	var dirs crewDirList
 	fs.Var(&dirs, "awareness-dir", "a directory the member's charter is about; repeat for several")
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")

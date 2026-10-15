@@ -2254,8 +2254,7 @@ func (d *Daemon) refreshGitHubHosts() error {
 	}
 	hostsBefore := d.gitHubHosts()
 
-	mockURL := strings.TrimSpace(os.Getenv("ATTN_MOCK_GH_URL"))
-	if mockURL != "" {
+	if mockURL := mockGitHubURL(); mockURL != "" {
 		if err := d.registerMockClient(mockURL); err != nil {
 			d.logf("Mock GitHub client not available: %v", err)
 		}

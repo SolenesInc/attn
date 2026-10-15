@@ -3140,6 +3140,9 @@ type DesktopMoveSessionMessage struct {
 }
 
 type DesktopMoveSessionResult struct {
+	// DesktopCreated corresponds to the JSON schema field "desktop_created".
+	DesktopCreated *bool `json:"desktop_created,omitempty,omitzero"`
+
 	// DesktopID corresponds to the JSON schema field "desktop_id".
 	DesktopID string `json:"desktop_id"`
 
