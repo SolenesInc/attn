@@ -15,56 +15,132 @@ import (
 func TestDatabaseRestorePreservesConversationArchivesFromAfterTheSnapshot(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Start()
-	s.Stop()
-	database, err := os.ReadFile(filepath.Join(s.Dir, "attn.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	snapshot := filepath.Join(s.Dir, "before-keep.db")
-	if err := os.WriteFile(snapshot, database, 0600); err != nil {
-		t.Fatal(err)
-	}
-	s.Start()
 	app := s.App()
-	id := s.Spawn(app, fakeagent.Claude, s.Path("api"))
-	run := s.Launched(id)
-	app.TypeLine(id, "Remember this conversation")
-	run.Prompted()
-	run.Reply("history written after the backup <!-- attn:state=waiting_input -->")
-	if closed := s.Attn("agent", "close", id, "-m", "finished", "--source-session", id); closed.Code != 0 {
-		t.Fatalf("close: %+v", closed)
+	awaitBackup := func(app *testworld.Peer) {
+		t.Helper()
+		if backedUpAt, _ := app.Initial.Settings["db.last_backup_at"].(string); backedUpAt == "" {
+			testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+				backedUpAt, _ := m.Settings["db.last_backup_at"].(string)
+				return backedUpAt != ""
+			})
+		}
 	}
-	testworld.AwaitTaskDone(app, "conversation_keep")
-	if err := s.Client().KeptConversationKeep(run.ConversationID, true); err != nil {
-		t.Fatal(err)
+	type conversation struct {
+		state, native, source, archive string
+		original                       []byte
 	}
-	testworld.AwaitTaskDone(app, "conversation_keep")
-	archive := filepath.Join(s.Dir, "conversations", "claude", run.ConversationID+".tar.zst")
-	original, err := os.ReadFile(archive)
-	if err != nil || len(original) == 0 {
-		t.Fatalf("kept archive: %d bytes, %v", len(original), err)
+	var conversations []conversation
+	for _, state := range []string{"missing", "deleted", "released"} {
+		id := s.Spawn(app, fakeagent.Claude, s.Path(state))
+		run := s.Launched(id)
+		app.TypeLine(id, "Remember this conversation")
+		run.Prompted()
+		run.Reply("history before the backup <!-- attn:state=waiting_input -->")
+		if closed := s.Attn("agent", "close", id, "-m", "finished", "--source-session", id); closed.Code != 0 {
+			t.Fatalf("close: %+v", closed)
+		}
+		testworld.AwaitTaskDone(app, "conversation_keep")
+		if state != "missing" {
+			if err := s.Client().KeptConversationKeep(run.ConversationID, true); err != nil {
+				t.Fatal(err)
+			}
+			testworld.AwaitTaskDone(app, "conversation_keep")
+			if state == "deleted" {
+				if err := s.Client().KeptConversationForget(run.ConversationID); err != nil {
+					t.Fatal(err)
+				}
+			} else if err := s.Client().KeptConversationKeep(run.ConversationID, false); err != nil {
+				t.Fatal(err)
+			}
+			testworld.AwaitTaskDone(app, "conversation_keep")
+		}
+		paths, err := filepath.Glob(filepath.Join(s.Dir, "toolhome", ".claude", "projects", "*", run.ConversationID+".jsonl"))
+		if err != nil || len(paths) != 1 {
+			t.Fatalf("native transcript: %v, %v", paths, err)
+		}
+		conversations = append(conversations, conversation{state: state, native: run.ConversationID, source: paths[0], archive: filepath.Join(s.Dir, "conversations", "claude", run.ConversationID+".tar.zst")})
 	}
+	snapshotRows, err := s.Client().KeptConversationList(true)
+	if err != nil || len(snapshotRows.Rows) != 2 {
+		t.Fatalf("snapshot conversation rows: %+v, %v", snapshotRows, err)
+	}
+	awaitBackup(app)
 	s.Stop()
-	if restored := s.Attn("db", "restore", snapshot); restored.Code != 0 {
-		t.Fatalf("restore: %+v", restored)
-	}
-	paths, err := filepath.Glob(filepath.Join(s.Dir, "toolhome", ".claude", "projects", "*", run.ConversationID+".jsonl"))
-	if err != nil || len(paths) != 1 {
-		t.Fatalf("native transcript: %v, %v", paths, err)
-	}
-	if err := os.Remove(paths[0]); err != nil {
+	if err := os.Rename(filepath.Join(s.Dir, "backups"), filepath.Join(s.Dir, "earlier-backups")); err != nil {
 		t.Fatal(err)
 	}
 	s.Start()
 	app = s.App()
-	rows, err := s.Client().KeptConversationList(true)
-	if err != nil || len(rows.Rows) != 0 {
-		t.Fatalf("restore should rewind kept rows: %+v, %v", rows, err)
+	awaitBackup(app)
+	backups, err := filepath.Glob(filepath.Join(s.Dir, "backups", "attn-*.db"))
+	if err != nil || len(backups) != 1 {
+		t.Fatalf("database backup before re-keep: %v, %v", backups, err)
 	}
-	plant(t, s, "Trigger the conversation keep sweep after restore")
+	snapshot := backups[0]
+	for i := range conversations {
+		c := &conversations[i]
+		file, err := os.OpenFile(c.source, os.O_APPEND|os.O_WRONLY, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, writeErr := file.WriteString("{\"type\":\"summary\",\"summary\":\"history written after the backup\"}\n")
+		closeErr := file.Close()
+		if writeErr != nil || closeErr != nil {
+			t.Fatalf("extend native transcript: %v, %v", writeErr, closeErr)
+		}
+		if err := s.Client().KeptConversationKeep(c.native, true); err != nil {
+			t.Fatal(err)
+		}
+		testworld.AwaitTaskDone(app, "conversation_keep")
+		c.original, err = os.ReadFile(c.archive)
+		if err != nil || len(c.original) == 0 {
+			t.Fatalf("%s kept archive: %d bytes, %v", c.state, len(c.original), err)
+		}
+	}
+	s.Stop()
+	if restored := s.Attn("db", "restore", snapshot); restored.Code != 0 {
+		t.Fatalf("restore: %+v", restored)
+	} else if !strings.Contains(restored.Stdout, "known archives are pinned until you unkeep or forget them") {
+		t.Fatalf("restore did not explain archive retention: %+v", restored)
+	}
+	for _, c := range conversations {
+		if err := os.Remove(c.source); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.StartWith("ATTN_CONVERSATION_KEEP_GRACE_DAYS=0")
+	app = s.App()
+	for _, pass := range []string{"first", "second"} {
+		plant(t, s, pass+" conversation keep sweep after restore")
+		testworld.AwaitTaskDone(app, "conversation_keep")
+	}
+	for _, c := range conversations {
+		if got, err := os.ReadFile(c.archive); err != nil || !bytes.Equal(got, c.original) {
+			t.Errorf("%s archive after restore and sweep: %d bytes, %v; want original %d bytes", c.state, len(got), err, len(c.original))
+		}
+	}
+	rows, err := s.Client().KeptConversationList(false)
+	if err != nil || len(rows.Rows) != 2 {
+		t.Fatalf("restored conversation list: %+v, %v", rows, err)
+	}
+	for _, row := range rows.Rows {
+		if row.Kept == nil || row.Kept.PinnedAt == nil || row.Kept.DeletedAt != nil || row.Kept.DeleteAfter != nil {
+			t.Fatalf("restored archive must stay pinned: %+v", row)
+		}
+		if err := s.Client().KeptConversationKeep(row.ResumeID, false); err != nil {
+			t.Fatal(err)
+		}
+		testworld.AwaitTaskDone(app, "conversation_keep")
+	}
+	plant(t, s, "expire archives explicitly released after restore")
 	testworld.AwaitTaskDone(app, "conversation_keep")
-	if got, err := os.ReadFile(archive); err != nil || !bytes.Equal(got, original) {
-		t.Fatalf("archive after restore and sweep: %d bytes, %v; want original %d bytes", len(got), err, len(original))
+	for _, c := range conversations {
+		if c.state == "missing" {
+			continue
+		}
+		if _, err := os.Stat(c.archive); !os.IsNotExist(err) {
+			t.Errorf("%s archive survived explicit release: %v", c.state, err)
+		}
 	}
 }
 
