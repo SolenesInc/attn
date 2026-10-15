@@ -64,7 +64,7 @@ export function serveMachine(daemon: ScriptedDaemon, { recent = [], directories 
     event: 'recent_locations_result',
     success: true,
     home_path: HOME,
-    recent_locations: recent.map((path) => ({ path, last_seen: AT, use_count: 1 })),
+    recent_locations: recent.map((path) => ({ path, last_seen: AT, use_count: 1, repo_root: repoRootOf(path, repos) })),
   }));
   daemon.on('browse_directory', ({ input_path }) => {
     const slash = input_path.lastIndexOf('/');
@@ -77,7 +77,7 @@ export function serveMachine(daemon: ScriptedDaemon, { recent = [], directories 
       input_path,
       home_path: HOME,
       directory: absolute(directory),
-      entries: names.map((name) => ({ name, path: `${absolute(directory)}/${name}`, is_dir: true })),
+      entries: names.map((name) => ({ name, path: `${absolute(directory)}/${name}`, is_dir: true, is_repo: repos.some(repo => repo.repo === `${absolute(directory)}/${name}`) })),
     };
   });
   daemon.on('inspect_path', ({ path }) => inspection(path, { repoRoot: repoRootOf(path, repos) }));

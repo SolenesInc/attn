@@ -1,0 +1,96 @@
+.new-session-launcher {
+  width: 760px;
+}
+.new-session-launcher .picker-title {
+  margin-bottom: 12px;
+}
+.new-session-launcher .picker-results {
+  min-height: 80px;
+}
+.new-session-launcher .picker-item {
+  gap: 12px;
+  cursor: pointer;
+}
+.new-session-launcher .picker-item:hover:not(.selected) {
+  background: transparent;
+}
+.launcher-icon {
+  width: 20px;
+  color: var(--color-text-dimmed);
+  text-align: center;
+}
+.launcher-badge,
+.launcher-repo-chip {
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 3px 7px;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+.launcher-repo-chip {
+  color: var(--color-text-primary);
+}
+.launcher-age {
+  color: var(--color-text-dimmed);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+.launcher-branch {
+  color: var(--color-text-primary);
+  text-transform: none;
+  letter-spacing: normal;
+}
+.launcher-error,
+.launcher-confirm,
+.launcher-progress {
+  padding: 10px 16px;
+  font-size: var(--font-size-sm);
+}
+.launcher-error {
+  color: var(--color-error, #f08080);
+}
+.new-session-launcher .picker-footer {
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+
+.launcher-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.launcher-controls .picker-agent-bar,
+.launcher-controls .picker-chief-bar {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  gap: 6px;
+}
+.launcher-controls .picker-agent-bar {
+  flex: 1;
+}
+.launcher-controls .picker-agent-bar > .picker-agent-label {
+  display: none;
+}
+.launcher-controls .picker-agent-label {
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.06em;
+}
+.launcher-controls .agent-option {
+  padding: 4px 8px;
+}
+.launcher-controls .picker-agent-controls {
+  flex-wrap: wrap;
+}
+
+.launcher-controls .picker-chief-bar > .picker-agent-label {
+  display: none;
+}
+.launcher-controls .agent-option {
+  font-size: var(--font-size-xs);
+}

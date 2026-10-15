@@ -83,6 +83,17 @@ test.describe('Keyboard Shortcuts', () => {
       await expect(page.locator('.terminal-wrapper.active [data-pane-kind="agent"]')).toHaveCount(1);
     });
 
+    test('⌘T opens a Terminal dialog and leaves the preferred harness for the next opening', async ({ page, daemon }) => {
+      await daemon.start();
+      await page.goto('/');
+      await page.waitForSelector('.dashboard');
+      await page.keyboard.press('Meta+t');
+      await expect(page.getByRole('radio', { name: /Terminal/ })).toHaveAttribute('aria-checked', 'true');
+      await page.keyboard.press('Escape');
+      await page.keyboard.press('Meta+n');
+      await expect(page.getByRole('radio', { name: /Terminal/ })).toHaveAttribute('aria-checked', 'false');
+    });
+
     test('⌘⇧Z zooms toward the active pane without hiding the others', async ({ page, daemon }) => {
       await daemon.start();
       await page.goto('/');

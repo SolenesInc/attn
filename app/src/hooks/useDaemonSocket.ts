@@ -230,6 +230,7 @@ export interface SessionAnnotationSet {
   generation: number;
 }
 export interface DirectoryEntry {
+  is_repo?: boolean;
   name: string;
   path: string;
   is_dir: boolean;
@@ -2197,7 +2198,8 @@ export function useDaemonSocket({
             if (pending) {
               pendingActionsRef.current.delete(key);
               if ((data as any).success) {
-                pending.resolve({ success: true, info: (data as any).info });
+                const info = (data as any).info;
+                pending.resolve({ success: true, info: { ...info, worktrees: info.worktrees || [] } });
               } else {
                 pending.resolve({ success: false, error: (data as any).error });
               }

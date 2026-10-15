@@ -244,6 +244,7 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
     case 'terminal':
       return (
         <TerminalSettings
+          newSessionLauncherEnabled={state.newSessionLauncherEnabled}
           ptyBackendHint={state.ptyBackendHint}
           ptyBackendMode={state.ptyBackendMode}
           ptyBackendLabel={state.ptyBackendLabel}

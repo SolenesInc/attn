@@ -73,6 +73,42 @@ func TestRecentLocationsCollapseWorktreesIntoTheirMainRepo(t *testing.T) {
 	}
 }
 
+func TestLauncherRepositoryMetadata(t *testing.T) {
+	w := newWorld(t)
+	app := pickerApp(w)
+	repo := newRepo(t, "launcher-repo")
+	worktree := filepath.Join(filepath.Dir(repo), "launcher-worktree")
+	runGit(t, repo, "worktree", "add", "-b", "launcher-feature", worktree)
+	listing := browseForPicker(app, filepath.Dir(repo)+"/", nil)
+	if !listing.Success {
+		t.Fatal(protocol.Deref(listing.Error))
+	}
+	for _, path := range []string{repo, worktree} {
+		index := slices.IndexFunc(listing.Entries, func(entry protocol.DirectoryEntry) bool { return entry.Path == path })
+		if index < 0 {
+			t.Fatalf("listing missing %s: %+v", path, listing.Entries)
+		}
+		if got := protocol.Deref(listing.Entries[index].IsRepo); got != (path == repo) {
+			t.Errorf("is_repo(%s) = %v", path, got)
+		}
+	}
+	workIn(t, w, app, worktree)
+	locations := recentLocations(app, 0)
+	if len(locations) != 1 || locations[0].Path != repo || protocol.Deref(locations[0].RepoRoot) != repo {
+		t.Fatalf("worktree recent = %+v, want main checkout with repo_root", locations)
+	}
+}
+
+func TestLauncherRepositoryLookupFailureIdentifiesItsTarget(t *testing.T) {
+	w := newWorld(t)
+	app := pickerApp(w)
+	missing := w.Path("not-a-repository")
+	result := testworld.Request(app, protocol.GetRepoInfoMessage{Cmd: protocol.CmdGetRepoInfo, Repo: missing}, protocol.EventGetRepoInfoResult, func(r protocol.GetRepoInfoResultMessage) bool { return !r.Success })
+	if result.Info == nil || result.Info.Repo != missing || protocol.Deref(result.Error) == "" {
+		t.Fatalf("unidentified repository failure: %+v", result)
+	}
+}
+
 func workIn(t *testing.T, w *world, app *testworld.Peer, dir string) {
 	t.Helper()
 	w.Spawn(app, shellHarness, dir)

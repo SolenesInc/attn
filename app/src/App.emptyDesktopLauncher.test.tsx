@@ -2,7 +2,7 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { openActionMenu, openSession } from './test/appFixtures';
 import { daemonSession, emptyDesktop, soloDesktop } from './test/daemonFixtures';
-import { inspection, launchedAt, pathInput, repoInfo, serveLaunches, serveMachine, submitPath } from './test/locations';
+import { inspection, launchedAt, pathInput, repoInfo, serveLaunches, serveMachine, submitPath, press } from './test/locations';
 import type { CommandMessage } from './test/protocol';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 
@@ -227,6 +227,26 @@ describe('App empty desktop launcher', () => {
     await gesture(daemon, () => fireEvent.keyDown(filter, { key: 'Escape' }));
 
     expect(filter).toHaveValue('');
+  });
+
+  it('uses the experimental where list inline, keeps focus and never dismisses on Escape', async () => {
+    const { daemon } = await onAgentBesideEmptyDesktop();
+    await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { new_session_launcher_enabled: 'true' } }));
+    await gesture(daemon, () => pressShortcut('desktop.select2'));
+    await gesture(daemon, () => fireEvent.change(pathInput(), { target: { value: '/home/me/projects/repo' } }));
+    await press(daemon, 'Tab');
+    expect(screen.getByRole('listbox', { name: 'Where' })).toBeInTheDocument();
+    expect(daemon.sentOf('get_repo_info').map(({ repo }) => repo)).toEqual(['/home/me/projects/repo']);
+    pathInput().blur();
+    await gesture(daemon, () => pressShortcut('session.new'));
+    expect(pathInput()).toHaveFocus();
+    expect(screen.queryByTestId('location-picker-overlay')).toBeNull();
+    await press(daemon, 'Escape');
+    expect(pathInput()).toHaveValue('/home/me/projects/repo');
+    await press(daemon, 'Escape');
+    await press(daemon, 'Escape');
+    expect(launcher()).toBeInTheDocument();
+    expect(pathInput()).toHaveFocus();
   });
 
   it('stays off Home', async () => {

@@ -3378,6 +3378,9 @@ type DirectoryEntry struct {
 	// IsDir corresponds to the JSON schema field "is_dir".
 	IsDir bool `json:"is_dir"`
 
+	// IsRepo corresponds to the JSON schema field "is_repo".
+	IsRepo *bool `json:"is_repo,omitempty,omitzero"`
+
 	// Name corresponds to the JSON schema field "name".
 	Name string `json:"name"`
 
@@ -7009,6 +7012,9 @@ type RecentLocation struct {
 
 	// Path corresponds to the JSON schema field "path".
 	Path string `json:"path"`
+
+	// RepoRoot corresponds to the JSON schema field "repo_root".
+	RepoRoot *string `json:"repo_root,omitempty,omitzero"`
 
 	// UseCount corresponds to the JSON schema field "use_count".
 	UseCount int `json:"use_count"`

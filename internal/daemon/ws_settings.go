@@ -35,6 +35,7 @@ const (
 	SettingCodexAvailable                = "codex_available"
 	SettingCopilotAvailable              = "copilot_available"
 	SettingPTYBackendMode                = "pty_backend_mode"
+	SettingNewSessionLauncherEnabled     = "new_session_launcher_enabled"
 	SettingSharedPTYHostEnabled          = "pty_shared_host_enabled"
 	SettingSharedPTYHostActive           = "pty_shared_host_active"
 	SettingTheme                         = "theme"
@@ -505,7 +506,7 @@ func (d *Daemon) validateSetting(key, value string) error {
 		return d.validateNewSessionAgent(value)
 	case SettingTheme:
 		return validateTheme(value)
-	case SettingSharedPTYHostEnabled:
+	case SettingNewSessionLauncherEnabled, SettingSharedPTYHostEnabled:
 		return validateBooleanSetting(value)
 	case SettingTailscaleEnabled, SettingAutoApproveEnabled, SettingQueueModeEnabled, SettingQueueCrewEnabled, SettingSidebarHarnessLogosEnabled, SettingAutoSettleEnabled, SettingModelCaptureEnabled, SettingActivityEnabled, SettingOpenSentFilesEnabled, SettingHeadlessTasksEnabled, settingWorktreeSweepEnabled:
 		return validateBooleanSetting(value)

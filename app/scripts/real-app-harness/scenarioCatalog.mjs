@@ -39,6 +39,12 @@ export const scenarioCatalog = [
     timeoutMs: 240_000,
   },
   {
+    id: 'new-session-launcher',
+    runnerId: 'NEW-SESSION-LAUNCHER',
+    label: 'One-screen launcher and terminal shortcuts',
+    command: ['node', 'scripts/real-app-harness/scenario-new-session-launcher.mjs'],
+  },
+  {
     id: 'session-creation-shortcuts',
     runnerId: 'SESSION-CREATION-SHORTCUTS',
     label: 'Session creation shortcuts',

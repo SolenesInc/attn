@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { NewSessionLauncher } from '../components/NewSessionLauncher';
 import { LocationPicker } from '../components/LocationPicker';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import type { SessionAgent } from '../types/sessionAgent';
@@ -11,8 +12,22 @@ import {
 } from './AppContexts';
 import './EmptyDesktopLauncher.css';
 
-export function EmptyDesktopLauncher({ desktopId, label, active }: { desktopId: string; label: string; active: boolean }) {
-  const { launchLocation, handleCreateWorktreeSession, registerInlineLauncher } = useSessionLaunchContext();
+export function EmptyDesktopLauncher({
+  desktopId,
+  label,
+  active,
+}: {
+  desktopId: string;
+  label: string;
+  active: boolean;
+}) {
+  const {
+    launchLocation,
+    handleCreateWorktreeSession,
+    registerInlineLauncher,
+    startLocation,
+    startWorktreeSession,
+  } = useSessionLaunchContext();
   const {
     sendGetRecentLocations,
     sendBrowseDirectory,
@@ -24,6 +39,7 @@ export function EmptyDesktopLauncher({ desktopId, label, active }: { desktopId: 
   const { agentAvailability } = useAppShell();
   const { showError } = useAppErrorsContext();
   const { settings } = useAppInputs();
+  const experimental = settings.new_session_launcher_enabled === 'true';
   const { hasChiefOfStaff } = useChiefOfStaffContext();
   const rootRef = useRef<HTMLDivElement>(null);
   const [launching, setLaunching] = useState<string | null>(null);
@@ -31,7 +47,11 @@ export function EmptyDesktopLauncher({ desktopId, label, active }: { desktopId: 
   const [pickerGeneration, setPickerGeneration] = useState(0);
 
   const focusLauncher = useCallback(() => {
-    rootRef.current?.querySelector<HTMLElement>('[data-testid="location-picker-path-input"], [data-testid="repo-options"]')?.focus();
+    rootRef.current
+      ?.querySelector<HTMLElement>(
+        '[data-testid="location-picker-path-input"], [data-testid="repo-options"]',
+      )
+      ?.focus();
   }, []);
   // Registered even while covered (New Session from the palette closes it and lands here);
   // a covered launcher takes focus when the cover lifts, below.
@@ -45,24 +65,63 @@ export function EmptyDesktopLauncher({ desktopId, label, active }: { desktopId: 
   }, [active, focusLauncher, launching]);
 
   const handleSelect = useCallback(
-    (path: string, agent: SessionAgent, yoloMode?: boolean, chiefOfStaff?: boolean, autoMode?: boolean) => {
+    (
+      path: string,
+      agent: SessionAgent,
+      yoloMode?: boolean,
+      chiefOfStaff?: boolean,
+      autoMode?: boolean,
+    ) => {
       setLaunching(path.split('/').pop() || path);
-      void launchLocation(path, agent, yoloMode, chiefOfStaff, autoMode, desktopId)
-        .finally(() => setLaunching(null));
+      void launchLocation(path, agent, yoloMode, chiefOfStaff, autoMode, desktopId).finally(() =>
+        setLaunching(null),
+      );
     },
     [desktopId, launchLocation],
   );
   const handleCreateWorktree = useCallback(
     (...pick: Parameters<typeof handleCreateWorktreeSession>) => {
       const [mainRepo, branch, startingFrom, agent, yoloMode, autoMode, chiefOfStaff] = pick;
-      handleCreateWorktreeSession(mainRepo, branch, startingFrom, agent, yoloMode, autoMode, chiefOfStaff, desktopId);
+      handleCreateWorktreeSession(
+        mainRepo,
+        branch,
+        startingFrom,
+        agent,
+        yoloMode,
+        autoMode,
+        chiefOfStaff,
+        desktopId,
+      );
     },
     [desktopId, handleCreateWorktreeSession],
   );
 
   return (
     <div className="empty-desktop-launcher" data-testid="empty-desktop-launcher" ref={rootRef}>
-      {launching ? (
+      {experimental ? (
+        <NewSessionLauncher
+          key={pickerGeneration}
+          isOpen
+          variant="inline"
+          active={active}
+          title={`New agent on ${label}`}
+          onClose={() => setPickerGeneration((generation) => generation + 1)}
+          onSelect={(path, agent, yolo, chief, auto) =>
+            startLocation(path, agent, yolo, chief, auto, desktopId)
+          }
+          onCreateWorktreeSession={(repo, branch, from, agent, yolo, auto, chief, onCreated) =>
+            startWorktreeSession(repo, branch, from, agent, yolo, auto, chief, desktopId, onCreated)
+          }
+          onGetRecentLocations={sendGetRecentLocations}
+          onBrowseDirectory={sendBrowseDirectory}
+          onInspectPath={sendInspectPath}
+          onGetRepoInfo={getRepoInfo}
+          onDeleteWorktree={sendDeleteWorktree}
+          projectsDirectory={settings.projects_directory}
+          agentAvailability={agentAvailability}
+          chiefExists={hasChiefOfStaff}
+        />
+      ) : launching ? (
         <div className="empty-desktop-launcher-starting" role="status">
           Starting {launching}…
         </div>

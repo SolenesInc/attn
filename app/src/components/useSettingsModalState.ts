@@ -281,6 +281,7 @@ export function useSettingsModalState({
     ? rawPtyBackendMode
     : 'unknown';
   const { label: ptyBackendLabel, hint: ptyBackendHint } = PTY_BACKENDS[ptyBackendMode];
+  const newSessionLauncherEnabled = settings.new_session_launcher_enabled === 'true';
   const sharedPtyHostEnabled = settings.pty_shared_host_enabled === 'true';
   const sharedPtyHostActive = settings.pty_shared_host_active === 'true';
 
@@ -657,7 +658,7 @@ export function useSettingsModalState({
             title: 'Terminal',
             description: 'How terminal sessions are hosted.',
             count: 1,
-            keywords: 'pty backend shared rust host workers experimental terminal',
+            keywords: 'pty backend shared rust host workers experimental terminal one-screen new-session launcher one screen new session project path',
           },
           {
             id: 'backgroundTasks',
@@ -774,6 +775,7 @@ export function useSettingsModalState({
     ptyBackendLabel,
     sharedPtyHostActive,
     sharedPtyHostEnabled,
+    newSessionLauncherEnabled,
     onSetSetting,
     settings,
     activityAgents,

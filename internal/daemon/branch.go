@@ -136,6 +136,7 @@ func (d *Daemon) handleGetRepoInfoWS(client *wsClient, msg *protocol.GetRepoInfo
 		if err != nil {
 			d.sendToClient(client, &protocol.GetRepoInfoResultMessage{
 				Event:   protocol.EventGetRepoInfoResult,
+				Info:    &protocol.RepoInfo{Repo: repo},
 				Success: false,
 				Error:   protocol.Ptr(err.Error()),
 			})

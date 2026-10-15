@@ -20,6 +20,7 @@ const TERMINAL_INTERCEPTS: ShortcutId[] = [
   'app.quit',
   'ui.showShortcuts',
   'session.newHorizontal',
+  'session.newTerminal',
   'terminal.find',
   'terminal.splitVertical',
   'terminal.splitHorizontal',

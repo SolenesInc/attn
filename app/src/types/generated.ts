@@ -2027,9 +2027,10 @@ export interface BrowseDirectoryResultMessage {
 }
 
 export interface EntryElement {
-    is_dir: boolean;
-    name:   string;
-    path:   string;
+    is_dir:   boolean;
+    is_repo?: boolean;
+    name:     string;
+    path:     string;
     [property: string]: any;
 }
 
@@ -3564,9 +3565,10 @@ export enum DetachSessionMessageCmd {
 }
 
 export interface DirectoryEntry {
-    is_dir: boolean;
-    name:   string;
-    path:   string;
+    is_dir:   boolean;
+    is_repo?: boolean;
+    name:     string;
+    path:     string;
     [property: string]: any;
 }
 
@@ -6804,9 +6806,10 @@ export interface FileElement {
 }
 
 export interface RecentLocation {
-    last_seen: string;
-    path:      string;
-    use_count: number;
+    last_seen:  string;
+    path:       string;
+    repo_root?: string;
+    use_count:  number;
     [property: string]: any;
 }
 
@@ -6825,9 +6828,10 @@ export enum RecentLocationsResultMessageEvent {
 }
 
 export interface RecentLocationElement {
-    last_seen: string;
-    path:      string;
-    use_count: number;
+    last_seen:  string;
+    path:       string;
+    repo_root?: string;
+    use_count:  number;
     [property: string]: any;
 }
 
@@ -15939,6 +15943,7 @@ const typeMap: any = {
     ], "any"),
     "EntryElement": o([
         { json: "is_dir", js: "is_dir", typ: true },
+        { json: "is_repo", js: "is_repo", typ: u(undefined, true) },
         { json: "name", js: "name", typ: "" },
         { json: "path", js: "path", typ: "" },
     ], "any"),
@@ -16881,6 +16886,7 @@ const typeMap: any = {
     ], "any"),
     "DirectoryEntry": o([
         { json: "is_dir", js: "is_dir", typ: true },
+        { json: "is_repo", js: "is_repo", typ: u(undefined, true) },
         { json: "name", js: "name", typ: "" },
         { json: "path", js: "path", typ: "" },
     ], "any"),
@@ -18846,6 +18852,7 @@ const typeMap: any = {
     "RecentLocation": o([
         { json: "last_seen", js: "last_seen", typ: "" },
         { json: "path", js: "path", typ: "" },
+        { json: "repo_root", js: "repo_root", typ: u(undefined, "") },
         { json: "use_count", js: "use_count", typ: 0 },
     ], "any"),
     "RecentLocationsResultMessage": o([
@@ -18859,6 +18866,7 @@ const typeMap: any = {
     "RecentLocationElement": o([
         { json: "last_seen", js: "last_seen", typ: "" },
         { json: "path", js: "path", typ: "" },
+        { json: "repo_root", js: "repo_root", typ: u(undefined, "") },
         { json: "use_count", js: "use_count", typ: 0 },
     ], "any"),
     "RecordCommandUsageMessage": o([

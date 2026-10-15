@@ -342,6 +342,7 @@ model AuthorState {
 
 model RecentLocation {
   path: string;
+  repo_root?: string;
   last_seen: string;    // ISO timestamp
   use_count: int32;
 }
@@ -361,6 +362,7 @@ model FileActivity {
 }
 
 model DirectoryEntry {
+  is_repo?: boolean;
   name: string;
   path: string;
   is_dir: boolean;

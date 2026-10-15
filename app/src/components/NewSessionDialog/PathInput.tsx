@@ -2,6 +2,8 @@ import { useRef, useCallback, useState, useLayoutEffect } from 'react';
 import './PathInput.css';
 
 interface PathInputProps {
+  leading?: React.ReactNode;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   value: string;
   onChange: (value: string) => void;
   onTabComplete: (value: string) => void;
@@ -16,6 +18,8 @@ interface PathInputProps {
 
 export function PathInput({
   value,
+  leading,
+  onKeyDown,
   onChange,
   onTabComplete,
   onSelect,
@@ -64,6 +68,8 @@ export function PathInput({
     : '';
 
   return (
+    <div className="path-input-field">
+      {leading}
     <div className="path-input-container">
       {/* Hidden span to measure typed text width */}
       <span ref={measureRef} className="path-input-measure" aria-hidden="true">
@@ -76,7 +82,7 @@ export function PathInput({
         data-testid="location-picker-path-input"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        onKeyDown={handleKeyDown}
+        onKeyDown={onKeyDown || handleKeyDown}
         placeholder={placeholder}
         spellCheck={false}
         autoComplete="off"
@@ -89,6 +95,7 @@ export function PathInput({
           {visibleGhost}
         </span>
       )}
+    </div>
     </div>
   );
 }
