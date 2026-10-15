@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -91,6 +92,42 @@ func TestEveryHarnessAttnRunsFindsTheShippedAttnSkillAndNothingRetired(t *testin
 		assertShippedAttnSkill(t, h, installedAttnSkill(toolHome, h))
 	}
 	assertShippedAttnSkill(t, fakeagent.Copilot, installedAttnSkill(toolHome, fakeagent.Copilot))
+}
+
+func TestAgentsStillLaunchWhenTheirOptionalAttnSkillCannotBeUpdated(t *testing.T) {
+	for _, direct := range []bool{false, true} {
+		t.Run(strconv.FormatBool(direct), func(t *testing.T) {
+
+			t.Setenv("ATTN_INSTANCE", "")
+			w := &world{World: prepareWorld(t, fakeagent.Claude, fakeagent.Codex, fakeagent.Copilot)}
+			for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex, fakeagent.Copilot} {
+				skill := installedAttnSkill(os.Getenv("ATTN_TOOL_HOME"), h)
+				if err := os.RemoveAll(skill); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.MkdirAll(filepath.Dir(skill), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(skill, []byte("user-owned file"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			w.start()
+			app := w.App()
+			if direct {
+				setSetting(t, app, "direct_agent_launch_enabled", "true")
+			}
+			for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex, fakeagent.Copilot} {
+				session := w.Spawn(app, h, w.Path(string(h)), func(m *protocol.SpawnSessionMessage) {
+					m.InitialPrompt = protocol.Ptr("continue despite optional skill sync failure")
+				})
+				if prompt := w.Launched(session).Prompted(); prompt != "continue despite optional skill sync failure" {
+					t.Fatalf("%s received prompt %q", h, prompt)
+				}
+			}
+
+		})
+	}
 }
 
 func TestAVerificationInstanceLeavesTheUsersSkillsAloneUnlessItsHarnessOwnsTheToolHome(t *testing.T) {

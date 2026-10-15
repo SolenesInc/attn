@@ -96,7 +96,6 @@ function readBinaryBuildInfoSync(binaryPath) {
       env: {
         ...process.env,
         ATTN_INSIDE_APP: '1',
-        ATTN_DAEMON_MANAGED: '1',
         ATTN_AGENT: 'codex',
         PATH: MINIMAL_SYSTEM_PATH,
       },

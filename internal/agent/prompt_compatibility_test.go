@@ -14,7 +14,7 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 	t.Setenv("ATTN_CLAUDE_PEER_MESSAGING", "false")
 	for mask := 0; mask < 16; mask++ {
 		for _, resume := range []bool{false, true} {
-			opts := SpawnOpts{TerminalID: "session-id", CWD: "/tmp/work", InitialPrompt: "Task λ {{literal}}\nsecond line", SettingsPath: "/tmp/settings.json", WrapperPath: "/tmp/attn", SocketPath: "/tmp/attn.sock", Garden: mask&4 != 0}
+			opts := SpawnOpts{TerminalID: "session-id", CWD: "/tmp/work", InitialPrompt: "Task λ {{literal}}\nsecond line", HookSettings: "{}", WrapperPath: "/tmp/attn", SocketPath: "/tmp/attn.sock", Garden: mask&4 != 0}
 			if mask&1 != 0 {
 				opts.NotebookRoot = "/tmp/book"
 			}

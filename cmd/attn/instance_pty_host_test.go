@@ -60,7 +60,7 @@ func TestInstanceCleanStopsSharedHostGenerationsAndChildren(t *testing.T) {
 		}
 		for i := 0; i < 2; i++ {
 			id := fmt.Sprintf("session-%d-%d", generation, i)
-			if err := backend.Spawn(context.Background(), ptybackend.SpawnOptions{ID: harness.TerminalID(id), Agent: "cleanup-fixture", CWD: root, Cols: 80, Rows: 24, ExternalCommand: []string{"/bin/cat"}}); err != nil {
+			if err := backend.Spawn(context.Background(), ptybackend.SpawnOptions{ID: harness.TerminalID(id), Agent: "cleanup-fixture", CWD: root, Cols: 80, Rows: 24, AgentArgv: []string{"/bin/cat"}}); err != nil {
 				t.Fatal(err)
 			}
 			pids[backend.WorkerPIDs(context.Background())[id]] = true
@@ -210,7 +210,7 @@ func TestInstanceCleanWaitsForWorkerChildResistingTermination(t *testing.T) {
 	const id = "resistant-child"
 	if err := backend.Spawn(context.Background(), ptybackend.SpawnOptions{
 		ID: id, CWD: r.AppLocalData, Agent: "cleanup-probe", Cols: 80, Rows: 24,
-		ExternalCommand: []string{"/bin/sh", "-c", `trap '' TERM HUP; exec 3>"$1"; printf 'ready\n' >&3; while :; do read hold || true; done`, "cleanup-probe", readyPath},
+		AgentArgv: []string{"/bin/sh", "-c", `trap '' TERM HUP; exec 3>"$1"; printf 'ready\n' >&3; while :; do read hold || true; done`, "cleanup-probe", readyPath},
 	}); err != nil {
 		t.Fatal(err)
 	}

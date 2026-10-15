@@ -30,10 +30,9 @@ type SpawnOptions struct {
 	Cols uint16
 	Rows uint16
 
-	ResumeSessionID   string
-	ResumePicker      bool
-	YoloMode          bool
-	InitialPromptFile string
+	ResumeSessionID string
+	ResumePicker    bool
+	YoloMode        bool
 
 	Theme pty.TerminalTheme
 
@@ -42,8 +41,9 @@ type SpawnOptions struct {
 	ClaudeExecutable  string
 	CodexExecutable   string
 	CopilotExecutable string
-	ExternalCommand   []string
-	ExternalEnv       []string
+	AgentLoginShell   bool
+	AgentArgv         []string
+	AgentEnv          []string
 	ExternalCWD       string
 	DaemonEnv         []string
 	LifecycleID       string

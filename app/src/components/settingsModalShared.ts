@@ -75,6 +75,7 @@ export type SettingsSectionID =
   | 'models'
   | 'backgroundAgents'
   | 'terminal'
+  | 'experimental'
   | 'autoMode'
   | 'delegation'
   | 'connectivity'

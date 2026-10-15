@@ -8,6 +8,7 @@ import (
 )
 
 type Run struct {
+	PID            int
 	Harness        Harness
 	SessionID      string
 	ConversationID string
