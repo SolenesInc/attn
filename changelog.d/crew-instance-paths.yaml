@@ -1,0 +1,3 @@
+kind: fixed
+area: crew
+change: Copied or moved data folders keep their crew roster usable, and a member's missing files no longer block closing other sessions.

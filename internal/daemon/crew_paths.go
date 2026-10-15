@@ -25,31 +25,27 @@ func (d *Daemon) resolvedCrewRoot() (string, error) {
 	return root, nil
 }
 
-func (d *Daemon) validateCrewMemberPaths(member crew.Member) error {
+func (d *Daemon) requireCrewFiles(member crew.Member) error {
 	root, err := d.resolvedCrewRoot()
 	if err != nil {
 		return err
 	}
-	for _, candidate := range []struct{ label, stored string }{
-		{"home", member.HomeDir},
-		{"charter", member.CharterPath},
-	} {
-		label, stored := candidate.label, candidate.stored
+	for _, stored := range []string{member.HomeDir(d.dataRoot), member.CharterPath(d.dataRoot)} {
 		resolved, err := config.CanonicalRuntimePath(stored)
 		if err != nil {
-			return fmt.Errorf("refusing crew member %s: resolve stored %s path %q: %w", crew.DisplayName(member.ID), label, stored, err)
+			return fmt.Errorf("resolve %s's crew file %q: %w", crew.DisplayName(member.ID), stored, err)
 		}
-		if stored == "" || !filepath.IsAbs(stored) || !pathWithin(root, resolved) {
-			return fmt.Errorf("refusing crew member %s: stored %s path %q is outside this daemon's crew root %q; the likely cause is an attn.db copied from another instance", crew.DisplayName(member.ID), label, stored, root)
+		if !pathWithin(root, resolved) {
+			return fmt.Errorf("refusing crew member %s: %q resolves outside this daemon's crew root %q through a symlink", crew.DisplayName(member.ID), stored, root)
+		}
+		if _, err := os.Stat(stored); err != nil {
+			return fmt.Errorf("%s's crew file %s is unavailable: %w", crew.DisplayName(member.ID), stored, err)
 		}
 	}
 	return nil
 }
 
-func (d *Daemon) validateCrewLetterPath(member crew.Member, stored string) error {
-	if err := d.validateCrewMemberPaths(member); err != nil {
-		return err
-	}
+func (d *Daemon) validateCrewLetterPath(member crew.Member, letterPath string) error {
 	handoffsDir, err := d.validateCrewHandoffsDir(member)
 	if err != nil {
 		return err
@@ -58,31 +54,31 @@ func (d *Daemon) validateCrewLetterPath(member crew.Member, stored string) error
 	if err != nil {
 		return fmt.Errorf("resolve %s's handoffs root %q: %w", crew.DisplayName(member.ID), handoffsDir, err)
 	}
-	letter, err := config.CanonicalRuntimePath(stored)
+	letter, err := config.CanonicalRuntimePath(letterPath)
 	if err != nil {
-		return fmt.Errorf("resolve %s's stored handoff path %q: %w", crew.DisplayName(member.ID), stored, err)
+		return fmt.Errorf("resolve %s's letter path %q: %w", crew.DisplayName(member.ID), letterPath, err)
 	}
-	if stored == "" || !filepath.IsAbs(stored) || !pathWithin(expectedRoot, letter) {
-		return fmt.Errorf("refusing crew member %s: stored handoff path %q is outside this member's handoffs root %q; the likely cause is a copied attn.db or a symlink leaving the member home", crew.DisplayName(member.ID), stored, expectedRoot)
+	if letterPath == "" || !filepath.IsAbs(letterPath) || !pathWithin(expectedRoot, letter) {
+		return fmt.Errorf("refusing crew member %s: letter path %q is outside this member's handoffs root %q; a symlink leaves the member home", crew.DisplayName(member.ID), letterPath, expectedRoot)
 	}
 	return nil
 }
 
 func (d *Daemon) validateCrewHandoffsDir(member crew.Member) (string, error) {
-	if err := d.validateCrewMemberPaths(member); err != nil {
+	if err := d.requireCrewFiles(member); err != nil {
 		return "", err
 	}
-	home, err := config.CanonicalRuntimePath(member.HomeDir)
+	home, err := config.CanonicalRuntimePath(member.HomeDir(d.dataRoot))
 	if err != nil {
-		return "", fmt.Errorf("resolve %s's home %q: %w", crew.DisplayName(member.ID), member.HomeDir, err)
+		return "", fmt.Errorf("resolve %s's home %q: %w", crew.DisplayName(member.ID), member.HomeDir(d.dataRoot), err)
 	}
-	stored := filepath.Join(member.HomeDir, crew.HandoffsDirName)
+	stored := filepath.Join(member.HomeDir(d.dataRoot), crew.HandoffsDirName)
 	resolved, err := config.CanonicalRuntimePath(stored)
 	if err != nil {
 		return "", fmt.Errorf("resolve %s's handoffs directory %q: %w", crew.DisplayName(member.ID), stored, err)
 	}
 	if !pathWithin(home, resolved) {
-		return "", fmt.Errorf("refusing crew member %s: handoffs directory %q resolves outside this member's home %q; the likely cause is a copied attn.db or a symlink leaving the member home", crew.DisplayName(member.ID), stored, home)
+		return "", fmt.Errorf("refusing crew member %s: handoffs directory %q resolves outside this member's home %q; a symlink leaves the member home", crew.DisplayName(member.ID), stored, home)
 	}
 	return stored, nil
 }

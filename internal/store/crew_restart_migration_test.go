@@ -55,7 +55,7 @@ func TestCrewRestartRemovalPreservesMemberAndOrdinaryInbox(t *testing.T) {
 		t.Fatal(err)
 	}
 	doc, found, err := s.GetDocument(*members, "trellis")
-	want := `{"id":"trellis","binding_session":"day","letter_path":"handoffs/letter.md","letter_session":"day"}`
+	want := `{"id":"trellis","binding_session":"day","letter_session":"day","letter_file":"letter.md"}`
 	if err != nil || !found || string(doc.Body) != want {
 		t.Fatalf("member after upgrade = %s, found=%t err=%v", doc.Body, found, err)
 	}

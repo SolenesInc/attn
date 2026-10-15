@@ -22,14 +22,14 @@ func (d *Daemon) crewDocumentMember(name string) (crew.Member, error) {
 	if !ok {
 		return crew.Member{}, fmt.Errorf("no crew member %q is registered", name)
 	}
-	if err := d.validateCrewMemberPaths(member); err != nil {
+	if err := d.requireCrewFiles(member); err != nil {
 		return crew.Member{}, err
 	}
 	return member, nil
 }
 
-func crewCharterRead(member crew.Member) (protocol.CrewCharterDocument, error) {
-	content, hash, err := fsdoc.NewStore(member.HomeDir).Read(crew.CharterFileName)
+func (d *Daemon) crewCharterRead(member crew.Member) (protocol.CrewCharterDocument, error) {
+	content, hash, err := fsdoc.NewStore(member.HomeDir(d.dataRoot)).Read(crew.CharterFileName)
 	if err != nil {
 		return protocol.CrewCharterDocument{}, fmt.Errorf("reading %s's charter: %w", crew.DisplayName(member.ID), err)
 	}
@@ -41,7 +41,7 @@ func (d *Daemon) crewCharterGet(name string) (*protocol.CrewCharterGetResult, er
 	if err != nil {
 		return nil, err
 	}
-	charter, err := crewCharterRead(member)
+	charter, err := d.crewCharterRead(member)
 	if err != nil {
 		return nil, err
 	}
@@ -60,12 +60,12 @@ func (d *Daemon) crewCharterSet(name, content, expectedToken string) (*protocol.
 	if expectedToken == "" {
 		return nil, fmt.Errorf("saving %s's charter requires the content token that was read", crew.DisplayName(member.ID))
 	}
-	hash, conflict, err := fsdoc.NewStore(member.HomeDir).Write(crew.CharterFileName, []byte(content), expectedToken)
+	hash, conflict, err := fsdoc.NewStore(member.HomeDir(d.dataRoot)).Write(crew.CharterFileName, []byte(content), expectedToken)
 	if err != nil {
 		return nil, fmt.Errorf("saving %s's charter: %w", crew.DisplayName(member.ID), err)
 	}
 	if conflict != nil {
-		current, err := crewCharterRead(member)
+		current, err := d.crewCharterRead(member)
 		if err != nil {
 			return nil, err
 		}
