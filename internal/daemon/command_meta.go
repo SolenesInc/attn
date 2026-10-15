@@ -166,6 +166,7 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdDesktopMoveLeaf:               commandMetadata(false, true),
 	protocol.CmdDesktopMoveSession:            commandMetadata(false, true),
 	protocol.CmdDesktopRemoveLeaf:             commandMetadata(false, true),
+	protocol.CmdDesktopCloseTile:              commandMetadata(true, true),
 	protocol.CmdDesktopSetSplitRatio:          commandMetadata(false, true),
 	protocol.CmdDesktopDockTile:               commandMetadata(false, true),
 	protocol.CmdDesktopUpdateTile:             commandMetadata(false, true),

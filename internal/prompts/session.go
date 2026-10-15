@@ -44,6 +44,9 @@ var session = Recipient{
 		On("agent-guidance", "message_fragment", "Non-chief trust and delegation guidance.", agentGuidance),
 		On("garden-guidance", "message_fragment", "Garden instructions.", gardenGuidance),
 		On("pull-request-guidance", "message_fragment", "Self-report instructions for harnesses without automatic PR reporting.", pullRequestGuidance),
+		On("codex-opened", "instructions",
+			"Developer note appended to each new shared Codex conversation. It writes the conversation to disk at once; Codex resumes only conversations on disk, so a terminal reconnecting after a restart keeps it.",
+			Use("session.codex-opened", "content/session/codex-opened.md")),
 	},
 }
 

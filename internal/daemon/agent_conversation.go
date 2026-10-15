@@ -37,6 +37,14 @@ func (d *Daemon) handleObserveAgentConversation(conn net.Conn, msg *protocol.Set
 		d.sendOK(conn)
 		return
 	}
+	if _, view, ours := d.linkCaller(terminal); ours {
+		if view == "" {
+			d.logf("agent conversation: no terminal shows the conversation of %s", terminal)
+			d.sendOK(conn)
+			return
+		}
+		terminal = view
+	}
 	d.conversationIn(terminal, observation)
 	d.sendOK(conn)
 }
@@ -76,7 +84,7 @@ func (d *Daemon) conversationIn(t harness.TerminalID, observation agentConversat
 		d.observeAgentConversation(observation)
 	case owner == "":
 		err = d.opened(t, session, observation)
-	case d.ownerLive(owner):
+	case d.ownerLive(owner) && d.linkOf(session.ID) == nil:
 		// A live owner keeps its terminal, so this session takes the conversation over in place.
 		d.observeAgentConversation(observation)
 	default:
@@ -151,6 +159,7 @@ func (d *Daemon) applyAgentConversation(observation agentConversationObservation
 	d.rememberDispatchResume(observation.SessionID, observation.NativeID)
 	d.resetSessionActivityRuntime(observation.SessionID)
 	d.publishFact(FactSessionConversationChanged, string(observation.SessionID), observation)
+	d.mirrorLabel(observation.SessionID)
 	return true
 }
 

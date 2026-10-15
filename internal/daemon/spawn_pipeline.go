@@ -29,6 +29,7 @@ type internalSpawnPolicy struct {
 	approvalRoute         launchcontract.ApprovalRoute
 	preserveApprovalRoute bool
 	userStarted           bool
+	fromLedger            bool
 	// The client that asked; it gets the placement as its own answer before any broadcast of it.
 	requester *wsClient
 }
@@ -52,6 +53,7 @@ type spawnRequest struct {
 	resumeSessionID string
 	parentSessionID protocol.SessionID
 	autoModeDriver  bool
+	link            linkRuntime
 }
 
 type spawnPlan struct {
@@ -62,6 +64,7 @@ type spawnPlan struct {
 	isChief                  bool
 	chiefAssignmentCommitted bool
 	launchedConversation     string
+	abandonLink              func()
 }
 
 type spawnRejection struct {
@@ -94,6 +97,9 @@ func (plan *spawnPlan) rollback(d *Daemon, sessionID protocol.SessionID) {
 	if plan.spawnOpts.ID != "" {
 		d.terminals().unexpect(plan.spawnOpts.ID)
 		d.removeAgentLaunchDir(plan.spawnOpts.ID)
+	}
+	if plan.abandonLink != nil {
+		plan.abandonLink()
 	}
 }
 
@@ -227,6 +233,11 @@ func (d *Daemon) resolveSpawnIntent(ctx context.Context, req *spawnRequest) (*sp
 		}
 	}
 	if !req.hasPluginDriver && req.resumeSessionID != "" {
+		if l := d.linkOf(msg.ID); l != nil {
+			if err := l.restore(req.profile.ID, req.resumeSessionID); err != nil {
+				return nil, &spawnRejection{err: err}
+			}
+		}
 		if !d.conversationReady(req.driver, req.resumeSessionID) {
 			return nil, &spawnRejection{err: fmt.Errorf("conversation %s could not be prepared for resume; check the daemon log", req.resumeSessionID)}
 		}
@@ -286,6 +297,13 @@ func (d *Daemon) resolveSpawnIntent(ctx context.Context, req *spawnRequest) (*sp
 		plan.spawnOpts.ApprovalRoute = launchcontract.ResolveApprovalRoute(plan.spawnOpts.YoloMode, plan.spawnOpts.AutoApprove, plan.spawnOpts.UnattendedLaunch)
 	}
 	plan.spawnOpts.ContextWindowCap = d.launchContextWindowCap(msg.ID, req.agent, plan.isChief)
+	req.link = d.launchLink(req)
+	if req.link != nil {
+		if err := req.link.admit(req.profile.ID, req.resumeSessionID); err != nil {
+			plan.rollback(d, msg.ID)
+			return nil, &spawnRejection{err: err}
+		}
+	}
 
 	return plan, nil
 }
@@ -374,6 +392,13 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		}
 	}
 
+	if req.link != nil {
+		plan.abandonLink = func() { req.link.launchFailed(plan.spawnOpts.ID, req.profile.ID) }
+		if err := req.link.prepareLaunch(&plan.spawnOpts, req.profile.ID); err != nil {
+			plan.rollback(d, msg.ID)
+			return &spawnOutcome{err: err}
+		}
+	}
 	if !req.isShell && !req.hasPluginDriver {
 		if err := d.prepareAgentLaunch(msg.ID, terminal, plan.isChief, &plan.spawnOpts, req.initialPrompt); err != nil {
 			plan.rollback(d, msg.ID)
@@ -400,6 +425,12 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		intent.ApprovalPolicy, intent.SandboxMode = effectiveSpawnPolicyPair(msg)
 	}
 	d.store.SetLaunchIntent(session.ID, intent)
+	if prior := d.linkOf(session.ID); prior != nil && prior != req.link {
+		defer d.life.Go("linkReleasedAfterLaunch", func() { prior.profileReleased(req.profile.ID) })
+	}
+	if err := d.store.SetSessionLink(session.ID, linkKind(req.link)); err != nil {
+		d.logf("spawn: %v", err)
+	}
 	d.persistLaunchedConversation(req, plan)
 	d.rememberSessionTitleInitialPrompt(msg.ID, req.initialPrompt)
 	hasInitialPrompt := strings.TrimSpace(req.initialPrompt) != ""
