@@ -103,9 +103,36 @@ func TestLauncherRepositoryLookupFailureIdentifiesItsTarget(t *testing.T) {
 	w := newWorld(t)
 	app := pickerApp(w)
 	missing := w.Path("not-a-repository")
-	result := testworld.Request(app, protocol.GetRepoInfoMessage{Cmd: protocol.CmdGetRepoInfo, Repo: missing}, protocol.EventGetRepoInfoResult, func(r protocol.GetRepoInfoResultMessage) bool { return !r.Success })
-	if result.Info == nil || result.Info.Repo != missing || protocol.Deref(result.Error) == "" {
+	result := testworld.Request(app, protocol.GetRepoInfoMessage{Cmd: protocol.CmdGetRepoInfo, Repo: missing, RequestID: protocol.Ptr("missing-repo")}, protocol.EventGetRepoInfoResult, func(r protocol.GetRepoInfoResultMessage) bool { return !r.Success })
+	if protocol.Deref(result.RequestID) != "missing-repo" || protocol.Deref(result.Error) == "" {
 		t.Fatalf("unidentified repository failure: %+v", result)
+	}
+}
+
+func TestWorktreeActionsEchoTheirRequestIDs(t *testing.T) {
+	w := newWorld(t)
+	app := pickerApp(w)
+	repo := newRepo(t, "request-ids")
+	runGit(t, repo, "branch", "already-there")
+	for _, row := range []struct {
+		id  string
+		cmd any
+	}{
+		{"new", protocol.CreateWorktreeMessage{Cmd: protocol.CmdCreateWorktree, MainRepo: repo, Branch: "fresh", RequestID: protocol.Ptr("new")}},
+		{"existing", protocol.CreateWorktreeFromBranchMessage{Cmd: protocol.CmdCreateWorktreeFromBranch, MainRepo: repo, Branch: "already-there", RequestID: protocol.Ptr("existing")}},
+	} {
+		result := testworld.Request(app, row.cmd, protocol.EventCreateWorktreeResult, func(protocol.CreateWorktreeResultMessage) bool { return true })
+		if !result.Success || protocol.Deref(result.RequestID) != row.id {
+			t.Fatalf("create %s: %+v", row.id, result)
+		}
+		deleted := testworld.Request(app, protocol.DeleteWorktreeMessage{Cmd: protocol.CmdDeleteWorktree, Path: protocol.Deref(result.Path), RequestID: protocol.Ptr(row.id)}, protocol.EventDeleteWorktreeResult, func(protocol.DeleteWorktreeResultMessage) bool { return true })
+		if !deleted.Success || protocol.Deref(deleted.RequestID) != row.id {
+			t.Fatalf("delete %s: %+v", row.id, deleted)
+		}
+	}
+	info := testworld.Request(app, protocol.GetRepoInfoMessage{Cmd: protocol.CmdGetRepoInfo, Repo: repo, RequestID: protocol.Ptr("info")}, protocol.EventGetRepoInfoResult, func(protocol.GetRepoInfoResultMessage) bool { return true })
+	if !info.Success || protocol.Deref(info.RequestID) != "info" {
+		t.Fatalf("repo info: %+v", info)
 	}
 }
 

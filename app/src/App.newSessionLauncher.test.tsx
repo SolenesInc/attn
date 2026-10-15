@@ -16,7 +16,9 @@ import type { ScriptedDaemon } from './test/scriptedDaemon';
 
 const REPO = `${HOME}/projects/shop`;
 const TREE = `${REPO}--feature`;
-const INFO = repoInfo(REPO, [{ path: TREE, branch: 'feature' }], { current_branch: 'topic' });
+const INFO = repoInfo(REPO, [{ path: TREE, branch: 'feature' }], {
+  current_branch: 'topic',
+});
 const settings = {
   new_session_launcher_enabled: 'true',
   new_session_agent: 'claude',
@@ -70,18 +72,42 @@ describe('one-screen launcher', () => {
     },
   );
 
-  it('searches recents and folders of the projects directory once per opening', async () => {
+  it('searches recents without listing the projects directory', async () => {
     const { daemon } = await open();
-    const before = daemon.sentOf('browse_directory').length;
+    expect(daemon.sentOf('browse_directory')).toEqual([]);
+    await typePath(daemon, 'never');
+    expect(screen.queryByRole('option')).toBeNull();
+    expect(
+      screen.getByText('No recent project matches. Type ~/ to browse folders.'),
+    ).toBeInTheDocument();
     await typePath(daemon, 'SHOp');
     expect(screen.getAllByRole('option')).toHaveLength(1);
-    await typePath(daemon, 'never');
-    expect(screen.getByRole('option')).toHaveTextContent('never-opened/');
-    expect(daemon.sentOf('browse_directory')).toHaveLength(before);
+    expect(daemon.sentOf('browse_directory')).toEqual([]);
     await press(daemon, 'Enter');
-    expect(launchedAt(daemon)).toEqual([{ cwd: `${HOME}/projects/never-opened`, agent: 'claude' }]);
+    expect(launchedAt(daemon)).toEqual([{ cwd: REPO, agent: 'claude' }]);
     expect(daemon.sentOf('inspect_path')).toEqual([]);
   });
+
+  it.each(['', REPO, `${REPO}/`])(
+    'Terminal Tab browses the repo as a folder from %s',
+    async (query) => {
+      const { daemon } = await open('new_worktree');
+      await press(daemon, 't', { altKey: true, code: 'KeyT' });
+      if (query) await typePath(daemon, query);
+      expect(screen.queryByText('⎇ new worktree')).toBeNull();
+      expect(screen.getByText('open terminal')).toBeInTheDocument();
+      expect(screen.queryByText('terminal here')).toBeNull();
+      await press(daemon, 'Tab');
+      expect(screen.queryByRole('listbox', { name: 'Where' })).toBeNull();
+      expect(daemon.sentOf('get_repo_info')).toEqual([]);
+      if (!query) expect(pathInput()).toHaveValue('~/projects/shop/');
+      await typePath(daemon, REPO);
+      await press(daemon, 'Enter');
+      expect(launchedAt(daemon)).toEqual([{ cwd: REPO, agent: 'shell' }]);
+      expect(daemon.sentOf('create_worktree')).toEqual([]);
+      expect(memoryWrites(daemon)).toEqual([]);
+    },
+  );
 
   it.each([REPO, `${REPO}/`])('opens where for a typed checkout %s', async (path) => {
     const { daemon } = await open();
@@ -105,9 +131,11 @@ describe('one-screen launcher', () => {
     if (from === 'current') await press(daemon, 'ArrowDown');
     await press(daemon, 'Enter');
     expect(
-      daemon
-        .sentOf('create_worktree')
-        .map(({ main_repo, branch, starting_from }) => ({ main_repo, branch, starting_from })),
+      daemon.sentOf('create_worktree').map(({ main_repo, branch, starting_from }) => ({
+        main_repo,
+        branch,
+        starting_from,
+      })),
     ).toEqual([{ main_repo: REPO, branch: 'fix-login', starting_from: ref }]);
     expect(launchedAt(daemon)).toEqual([{ cwd: `${REPO}--fix-login`, agent: 'claude' }]);
     expect(memoryWrites(daemon).map(({ key, value }) => ({ key, value }))).toEqual([
@@ -152,7 +180,12 @@ describe('one-screen launcher', () => {
     async (enabled) => {
       const { daemon } = await openPicker(
         {},
-        { settings: { new_session_launcher_enabled: enabled, new_session_agent: 'claude' } },
+        {
+          settings: {
+            new_session_launcher_enabled: enabled,
+            new_session_agent: 'claude',
+          },
+        },
       );
       await press(daemon, 'Escape');
       await gesture(daemon, () => pressShortcut('session.newTerminal'));
@@ -162,7 +195,10 @@ describe('one-screen launcher', () => {
       );
       await press(daemon, 'Escape');
       await gesture(daemon, () => pressShortcut('session.new'));
-      expect(screen.getByRole('radio', { name: /Claude/ })).toHaveAttribute('aria-checked', 'true');
+      expect(screen.getByRole('radio', { name: /Claude/ })).toHaveAttribute(
+        'aria-checked',
+        'true',
+      );
       expect(daemon.sentOf('set_setting')).toEqual([]);
     },
   );
@@ -218,17 +254,56 @@ describe('one-screen launcher', () => {
           },
     );
     await press(daemon, 'Backspace', { metaKey: true });
-    expect(screen.getByRole('alert')).toHaveTextContent('Delete feature?');
+    expect(screen.getByRole('option', { selected: true })).toHaveTextContent(
+      `Delete feature?${TREE} (y/n)`,
+    );
+    expect(screen.queryByText('terminal here')).toBeNull();
     await press(daemon, 'y');
-    expect(screen.getByText('Force delete local worktree and branch? (y/n)')).toBeInTheDocument();
+    expect(
+      screen.getByText('Force delete local worktree and branch? (y/n)'),
+    ).toBeInTheDocument();
     await press(daemon, 'y');
-    expect(daemon.sentOf('delete_worktree').map(({ path, force }) => ({ path, force }))).toEqual([
+    expect(
+      daemon.sentOf('delete_worktree').map(({ path, force }) => ({ path, force })),
+    ).toEqual([
       { path: TREE, force: undefined },
       { path: TREE, force: true },
     ]);
     expect(screen.getAllByRole('option')).toHaveLength(3);
     expect(screen.getByRole('option', { selected: true })).toHaveTextContent('main checkout');
   });
+
+  it('keeps the worktree after n and ignores other keys during confirmation', async () => {
+    const { daemon } = await open();
+    await where(daemon);
+    await typePath(daemon, 'feature');
+    await press(daemon, 'Backspace', { metaKey: true });
+    for (const key of ['ArrowDown', 'Enter', 'Tab', 'a']) await press(daemon, key);
+    expect(pathInput()).toHaveValue('feature');
+    expect(screen.getByRole('option', { selected: true })).toHaveTextContent(
+      'Delete feature?',
+    );
+    expect(launchedAt(daemon)).toEqual([]);
+    await press(daemon, 'n');
+    expect(screen.getByRole('option', { selected: true })).toHaveTextContent('feature');
+    expect(screen.queryByText('Delete feature?')).toBeNull();
+    expect(daemon.sentOf('delete_worktree')).toEqual([]);
+  });
+
+  it.each(['Escape', 'Backspace'])(
+    'returns to the first row of the previous query with %s',
+    async (key) => {
+      const { daemon } = await openPicker(
+        { recent: [`${HOME}/projects/other`, REPO], repos: [INFO] },
+        { settings },
+      );
+      await press(daemon, 'ArrowDown');
+      await where(daemon);
+      await press(daemon, key);
+      expect(pathInput()).toHaveValue('');
+      expect(screen.getByRole('option', { selected: true })).toHaveTextContent('other');
+    },
+  );
 
   it('keeps a failed repository lookup in the where list until Escape', async () => {
     const { daemon } = await open();

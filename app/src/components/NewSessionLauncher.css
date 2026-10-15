@@ -1,21 +1,85 @@
 .new-session-launcher {
   width: 760px;
+  background: var(--color-bg-app);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
 }
 .new-session-launcher .picker-title {
-  margin-bottom: 12px;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.new-session-launcher .picker-header {
+  padding: 12px 14px 6px;
+  border: 0;
+  background: transparent;
+}
+.new-session-launcher .picker-breadcrumb-path {
+  display: none;
+}
+.new-session-launcher .path-input-field {
+  gap: 8px;
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg-input);
+}
+.new-session-launcher .path-input-field:focus-within {
+  border-color: #44444c;
+}
+.new-session-launcher .path-input {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  caret-color: var(--color-text-primary);
+  height: 40px;
+}
+.new-session-launcher .path-input-container {
+  --path-input-text-inset: 0px;
 }
 .new-session-launcher .picker-results {
-  min-height: 80px;
+  padding: 4px 6px 8px;
+}
+.new-session-launcher .picker-section-title {
+  padding: 10px 10px 4px;
+  font-size: calc(10px * var(--ui-scale));
+  letter-spacing: 0.14em;
+  font-weight: 400;
 }
 .new-session-launcher .picker-item {
-  gap: 12px;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
   cursor: pointer;
+  transition: none;
 }
 .new-session-launcher .picker-item:hover:not(.selected) {
   background: transparent;
 }
+.new-session-launcher .picker-item.selected {
+  background: var(--color-bg-selected, #25252c);
+}
+.new-session-launcher .picker-name {
+  font-size: calc(13.5px * var(--ui-scale));
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.new-session-launcher .picker-path {
+  font-size: calc(11px * var(--ui-scale));
+  color: var(--color-text-dimmed);
+  margin-top: 1px;
+}
 .launcher-icon {
-  width: 20px;
+  width: 16px;
+  flex: none;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: calc(12px * var(--ui-scale));
   color: var(--color-text-dimmed);
   text-align: center;
 }
@@ -23,46 +87,91 @@
 .launcher-repo-chip {
   border: 1px solid var(--color-border);
   border-radius: 4px;
-  padding: 3px 7px;
+  padding: 1px 6px;
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
-  font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
+  font-size: calc(10.5px * var(--ui-scale));
+  color: var(--color-text-tertiary);
   white-space: nowrap;
 }
+.launcher-destination {
+  color: var(--color-text-secondary);
+}
+.launcher-worktree,
+.launcher-branch {
+  color: #9be7a8;
+}
+.launcher-worktree {
+  border-color: rgba(63, 185, 80, 0.35);
+}
 .launcher-repo-chip {
-  color: var(--color-text-primary);
+  padding: 3px 8px;
+  font-size: calc(12px * var(--ui-scale));
+  background: var(--color-bg-panel);
+  color: var(--color-text-secondary);
 }
 .launcher-age {
   color: var(--color-text-dimmed);
-  font-size: var(--font-size-xs);
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: calc(10.5px * var(--ui-scale));
   white-space: nowrap;
+  text-align: right;
 }
 .launcher-branch {
-  color: var(--color-text-primary);
   text-transform: none;
   letter-spacing: normal;
 }
-.launcher-error,
-.launcher-confirm,
+.launcher-error {
+  margin: 0 14px 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.1);
+  color: #ffb4b4;
+  font-size: calc(12.5px * var(--ui-scale));
+  line-height: 1.45;
+}
 .launcher-progress {
-  padding: 10px 16px;
+  padding: 10px 14px;
   font-size: var(--font-size-sm);
 }
-.launcher-error {
-  color: var(--color-error, #f08080);
+.new-session-launcher .picker-empty {
+  padding: 14px 12px;
+  text-align: left;
+  font-family: inherit;
+  font-size: calc(12.5px * var(--ui-scale));
 }
 .new-session-launcher .picker-footer {
   flex-wrap: wrap;
-  gap: 8px 14px;
+  gap: 6px 14px;
+  padding: 9px 14px;
+  background: transparent;
+  color: var(--color-text-dimmed);
+  font-size: calc(11.5px * var(--ui-scale));
 }
-
+.new-session-launcher .picker-footer > span {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+}
+.new-session-launcher .picker-footer kbd {
+  padding: 0 5px;
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  min-width: 0;
+  font-size: calc(10.5px * var(--ui-scale));
+}
+.launcher-footer-back {
+  margin-left: auto;
+}
 .launcher-controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 12px;
+  gap: 8px 14px;
   align-items: center;
-  padding: 12px 16px;
+  justify-content: space-between;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--color-border-subtle);
+  background: rgba(255, 255, 255, 0.02);
 }
 .launcher-controls .picker-agent-bar,
 .launcher-controls .picker-chief-bar {
@@ -71,26 +180,33 @@
   background: transparent;
   gap: 6px;
 }
-.launcher-controls .picker-agent-bar {
-  flex: 1;
-}
-.launcher-controls .picker-agent-bar > .picker-agent-label {
-  display: none;
-}
-.launcher-controls .picker-agent-label {
-  font-size: var(--font-size-xs);
-  letter-spacing: 0.06em;
-}
-.launcher-controls .agent-option {
-  padding: 4px 8px;
-}
-.launcher-controls .picker-agent-controls {
-  flex-wrap: wrap;
-}
-
+.launcher-controls .picker-agent-bar > .picker-agent-label,
 .launcher-controls .picker-chief-bar > .picker-agent-label {
   display: none;
 }
+.launcher-controls .agent-toggle {
+  flex-wrap: wrap;
+  gap: 3px;
+  box-shadow: none;
+}
 .launcher-controls .agent-option {
-  font-size: var(--font-size-xs);
+  padding: 4px 10px;
+  gap: 6px;
+  font-size: calc(11.5px * var(--ui-scale));
+}
+.launcher-controls .agent-option.active {
+  background: #25252c;
+  color: var(--color-text-primary);
+  box-shadow: none;
+}
+.launcher-controls .agent-shortcut,
+.launcher-controls .agent-option.active .agent-shortcut {
+  padding: 0 4px;
+  font-size: calc(9.5px * var(--ui-scale));
+  border-color: var(--color-border);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-panel);
+}
+.launcher-controls .picker-agent-controls {
+  flex-wrap: wrap;
 }

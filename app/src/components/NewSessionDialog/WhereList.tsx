@@ -19,7 +19,9 @@ export function WhereList({
   repo,
   remembered,
   onPick,
+  deletion,
 }: {
+  deletion: { path: string; branch: string; force: boolean } | null;
   rows: WhereRow[];
   highlight: number;
   name: string;
@@ -57,33 +59,52 @@ export function WhereList({
             onClick={() => onPick(index)}
           >
             <span className="launcher-icon">
-              {row.kind === 'new' ? '⎇' : row.kind === 'main' ? '●' : '◎'}
+              {row.kind === 'existing' && deletion?.path === row.path
+                ? '⌫'
+                : row.kind === 'new'
+                  ? '⎇'
+                  : row.kind === 'main'
+                    ? '●'
+                    : '◎'}
             </span>
             <div className="picker-info">
               <div className="picker-name">
-                {row.kind === 'new'
-                  ? `from ${row.branch}`
-                  : row.kind === 'main'
-                    ? 'main checkout'
-                    : row.branch}
+                {row.kind === 'existing' && deletion?.path === row.path
+                  ? deletion.force
+                    ? `${row.branch} has uncommitted changes`
+                    : `Delete ${row.branch}?`
+                  : row.kind === 'new'
+                    ? `from ${row.branch}`
+                    : row.kind === 'main'
+                      ? 'main checkout'
+                      : row.branch}
               </div>
               <div className="picker-path">
-                {row.kind === 'new'
-                  ? row.from === 'default'
-                    ? 'the default branch'
-                    : 'the branch the main checkout is on'
-                  : row.kind === 'main'
-                    ? `${repo} · on ${row.branch}`
-                    : row.path}
+                {row.kind === 'existing' && deletion?.path === row.path
+                  ? deletion.force
+                    ? 'Force delete local worktree and branch? (y/n)'
+                    : `${row.path} (y/n)`
+                  : row.kind === 'new'
+                    ? row.from === 'default'
+                      ? 'the default branch'
+                      : 'the branch the main checkout is on'
+                    : row.kind === 'main'
+                      ? `${repo} · on ${row.branch}`
+                      : row.path}
               </div>
             </div>
             {((row.kind === 'main' && remembered === 'main_repo') ||
-              (row.kind === 'new' && row.from === 'default' && remembered === 'new_worktree')) && (
+              (row.kind === 'new' &&
+                row.from === 'default' &&
+                remembered === 'new_worktree')) && (
               <span className="launcher-badge">last used</span>
             )}
-            {row.kind === 'existing' && (
-              <span className="launcher-age">{locationAge(row.createdAt)}</span>
-            )}
+            {row.kind === 'existing' &&
+              (deletion?.path === row.path ? (
+                <span className="launcher-badge">y / n</span>
+              ) : (
+                <span className="launcher-age">{locationAge(row.createdAt)}</span>
+              ))}
           </div>
         </Fragment>
       ))}

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import {
   createSessionAndWaitForInitialPane,
@@ -39,7 +40,9 @@ const visible = (selector) => client.request('dom_wait', { selector });
 const picker = () => client.request('location_picker_get_state');
 async function open(shortcut = 'session.new') {
   await pressShortcutKeys(client, driver, shortcut);
-  await visible('[data-launcher="one-screen"] [data-testid="location-picker-path-input"]');
+  await visible(
+    '[data-launcher="one-screen"] [data-testid="location-picker-item-0"][aria-selected="true"]',
+  );
 }
 async function startAt(directory, terminal = false) {
   const registered = observer.waitForMessage((message) => {
@@ -69,6 +72,12 @@ try {
     git('checkout', '-b', 'topic');
     git('commit', '--allow-empty', '-m', 'topic work');
     git('worktree', 'add', '-b', 'existing', tree);
+    git('worktree', 'add', '-b', 'delete-clean', `${repo}--delete-clean`);
+    git('worktree', 'add', '-b', 'delete-dirty', `${repo}--delete-dirty`);
+    fs.writeFileSync(
+      path.join(`${repo}--delete-dirty`, 'uncommitted.txt'),
+      'keep until force',
+    );
     await launchFreshAppAndConnect(client, observer);
     for (const key of [
       'new_session_launcher_enabled',
@@ -77,10 +86,22 @@ try {
       'keybindings_config',
     ])
       queueDaemonSettingRestore(observer, key);
-    await client.request('set_setting', { key: 'new_session_launcher_enabled', value: 'true' });
-    await client.request('set_setting', { key: 'new_session_agent', value: 'codex' });
-    await client.request('set_setting', { key: 'projects_directory', value: runner.sessionDir });
-    await client.request('set_setting', { key: 'keybindings_config', value: '' });
+    await client.request('set_setting', {
+      key: 'new_session_launcher_enabled',
+      value: 'true',
+    });
+    await client.request('set_setting', {
+      key: 'new_session_agent',
+      value: 'codex',
+    });
+    await client.request('set_setting', {
+      key: 'projects_directory',
+      value: runner.sessionDir,
+    });
+    await client.request('set_setting', {
+      key: 'keybindings_config',
+      value: '',
+    });
     const id = await createSessionAndWaitForInitialPane({
       client,
       observer,
@@ -92,13 +113,43 @@ try {
   });
   await runner.step('cmd_t_is_terminal_for_one_opening', async () => {
     await open('session.newTerminal');
-    runner.assert((await picker()).selectedAgent === 'Terminal', 'CmdT should select Terminal');
+    runner.assert(
+      (await picker()).selectedAgent === 'Terminal',
+      'CmdT should select Terminal',
+    );
     await driver.pressKey('Escape');
     await open();
     runner.assert(
       (await picker()).selectedAgent !== 'Terminal',
       'CmdN should use the preferred harness',
     );
+    await driver.pressKey('Escape');
+  });
+  await runner.step('terminal_tab_browses_repo_and_back_restores_query', async () => {
+    await open('session.newTerminal');
+    await driver.pressKey('Tab');
+    await visible('[data-testid="location-picker-path-input"]');
+    const state = await picker();
+    runner.assert(state.mode === 'path-input', 'Terminal Tab must stay in the folder list');
+    const displayedRepo = repo.startsWith(`${os.homedir()}/`)
+      ? `~${repo.slice(os.homedir().length)}`
+      : repo;
+    runner.assert(
+      state.pathInputValue === `${displayedRepo}/`,
+      'Terminal Tab must complete the repo path',
+    );
+    await driver.pressKey('Escape');
+    await driver.pressKey('Escape');
+    await open();
+    await driver.typeText('launcher-project');
+    await driver.pressKey('Tab');
+    await visible('[role="listbox"][aria-label="Where"]');
+    await driver.pressKey('Backspace');
+    runner.assert(
+      (await picker()).pathInputValue === 'launcher-project',
+      'Back must restore the query',
+    );
+    await driver.pressKey('Escape');
     await driver.pressKey('Escape');
   });
   await runner.step('project_search_and_cmd_enter_terminal', async () => {
@@ -167,13 +218,62 @@ try {
     });
   });
   await runner.step('existing_worktree_and_native_terminal', async () => {
-    await open('session.newTerminal');
+    await open();
     await driver.pressKey('Tab');
     await visible('[role="listbox"][aria-label="Where"]');
     await driver.typeText('existing');
     await visible('[data-kind="existing"][aria-selected="true"]');
-    const session = await startAt(tree);
-    runner.assert(session.agent === 'shell', 'Terminal mode should open the existing worktree');
+    const session = await startAt(tree, true);
+    runner.assert(
+      session.agent === 'shell',
+      'Terminal mode should open the existing worktree',
+    );
+  });
+  await runner.step('main_checkout_updates_destination_memory', async () => {
+    await open();
+    await driver.pressKey('Tab');
+    await visible('[role="listbox"][aria-label="Where"]');
+    await driver.pressKey('ArrowDown');
+    await driver.pressKey('ArrowDown');
+    await visible('[data-kind="main"][aria-selected="true"]');
+    await startAt(repo);
+    await open();
+    await visible(`[data-path="${repo}"] .launcher-destination:not(.launcher-worktree)`);
+    await driver.pressKey('Escape');
+  });
+  await runner.step('worktree_delete_cancel_clean_and_force', async () => {
+    for (const branch of ['delete-clean', 'delete-dirty']) {
+      await open();
+      await driver.pressKey('Tab');
+      await visible('[role="listbox"][aria-label="Where"]');
+      await driver.typeText(branch);
+      await visible('[data-kind="existing"][aria-selected="true"]');
+      await driver.pressKey('Backspace', { command: true });
+      await visible('[data-kind="existing"][aria-selected="true"] .launcher-badge');
+      await driver.pressKey('n');
+      await visible('[data-kind="existing"][aria-selected="true"] .launcher-age');
+      runner.assert(fs.existsSync(`${repo}--${branch}`), 'n must keep the worktree');
+      await driver.pressKey('Backspace', { command: true });
+      await driver.pressKey('y');
+      if (branch === 'delete-dirty') {
+        await visible('[role="alert"]');
+        runner.assert(
+          fs.existsSync(`${repo}--${branch}`),
+          'dirty worktree must wait for force confirmation',
+        );
+        await driver.pressKey('y');
+      }
+      await client.request('dom_wait', {
+        selector: '[data-kind="existing"][aria-selected="true"]',
+        absent: true,
+      });
+      runner.assert(
+        !fs.existsSync(`${repo}--${branch}`),
+        'confirmed delete must remove the worktree',
+      );
+      await driver.pressKey('Escape');
+      await driver.pressKey('Escape');
+    }
   });
   await runner.step('cmd_enter_creates_terminal_worktree', async () => {
     await open();
@@ -187,7 +287,10 @@ try {
     );
   });
   await runner.step('old_dialog_cmd_t', async () => {
-    await client.request('set_setting', { key: 'new_session_launcher_enabled', value: 'false' });
+    await client.request('set_setting', {
+      key: 'new_session_launcher_enabled',
+      value: 'false',
+    });
     await pressShortcutKeys(client, driver, 'session.newTerminal');
     await visible('[data-testid="location-picker"]:not([data-launcher])');
     runner.assert(

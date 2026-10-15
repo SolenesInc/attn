@@ -30,7 +30,9 @@ for (const terminal of [false, true]) {
         .getByRole('button', { name: /^Terminal/ })
         .click();
       await page
-        .getByRole('switch', { name: 'One-screen new-session launcher (experimental)' })
+        .getByRole('switch', {
+          name: 'One-screen new-session launcher (experimental)',
+        })
         .click();
       await page.keyboard.press('Escape');
       await page.keyboard.press(terminal ? 'Meta+t' : 'Meta+n');
@@ -39,9 +41,14 @@ for (const terminal of [false, true]) {
       await expect(page.locator('[data-launcher="one-screen"]')).toBeVisible();
       await input.fill(repo);
       await page.keyboard.press('Tab');
-      await expect(page.getByRole('listbox', { name: 'Where' })).toBeVisible();
-      await input.fill('feature');
-      await expect(page.getByRole('option', { selected: true })).toContainText('feature');
+      if (terminal) {
+        await expect(page.getByRole('listbox', { name: 'Where' })).not.toBeVisible();
+        await input.fill(worktree);
+      } else {
+        await expect(page.getByRole('listbox', { name: 'Where' })).toBeVisible();
+        await input.fill('feature');
+        await expect(page.getByRole('option', { selected: true })).toContainText('feature');
+      }
       await page.keyboard.press('Enter');
       await expect(page.locator('[data-testid="location-picker-overlay"]')).not.toBeVisible();
       await expect(page.locator('.terminal-wrapper.active')).toBeVisible();

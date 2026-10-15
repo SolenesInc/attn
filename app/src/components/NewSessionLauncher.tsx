@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LocationPickerProps } from './LocationPicker';
-import type { RecentLocation, BrowseDirectoryResult } from '../hooks/useDaemonSocket';
+import type { RecentLocation } from '../hooks/useDaemonSocket';
 import type { SessionAgent } from '../types/sessionAgent';
 import { useSettings } from '../contexts/SettingsContext';
 import { useFilesystemSuggestions } from '../hooks/useFilesystemSuggestions';
@@ -34,8 +34,10 @@ type Row = {
   repoRoot?: string;
   lastSeen?: string;
 };
-export interface NewSessionLauncherProps
-  extends Omit<LocationPickerProps, 'onSelect' | 'onCreateWorktreeSession'> {
+export interface NewSessionLauncherProps extends Omit<
+  LocationPickerProps,
+  'onSelect' | 'onCreateWorktreeSession' | 'projectsDirectory'
+> {
   onSelect: (
     path: string,
     agent: SessionAgent,
@@ -54,7 +56,7 @@ export interface NewSessionLauncherProps
     onCreated?: (path: string) => void,
   ) => Promise<unknown>;
 }
-type Where = { repo: string; previousQuery: string; previousHighlight: number; info?: RepoInfo };
+type Where = { repo: string; info?: RepoInfo };
 
 export function NewSessionLauncher({
   isOpen,
@@ -70,7 +72,6 @@ export function NewSessionLauncher({
   onGetRepoInfo,
   onCreateWorktreeSession,
   onDeleteWorktree,
-  projectsDirectory,
   agentAvailability,
   chiefExists,
 }: NewSessionLauncherProps) {
@@ -88,21 +89,21 @@ export function NewSessionLauncher({
   const [recents, setRecents] = useState<RecentLocation[]>([]);
   const [fresh, setFresh] = useState(false);
   const [home, setHome] = useState('');
-  const [projects, setProjects] = useState<BrowseDirectoryResult | null>(null);
   const [where, setWhere] = useState<Where | null>(null);
   const [branch, setBranch] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [deletion, setDeletion] = useState<{ path: string; branch: string; force: boolean } | null>(
-    null,
-  );
+  const [deletion, setDeletion] = useState<{
+    path: string;
+    branch: string;
+    force: boolean;
+  } | null>(null);
   const generation = useRef(0);
-  const restoredHighlight = useRef(false);
   const generated = useRef(new Map<string, string>());
   const created = useRef(new Map<string, string>());
   const folders = useRef(new Map<string, boolean>());
   const root = useRef<HTMLDivElement>(null);
-  const pathMode = query.startsWith('~') || query.startsWith('/');
+  const pathMode = query.trim().startsWith('~') || query.trim().startsWith('/');
   const remember = (repo: string) =>
     parseRepoDestination(settings[repoDestinationSettingKey(repo)]) || 'main_repo';
   const display = (path: string) => toDisplayPath(path, home);
@@ -118,9 +119,13 @@ export function NewSessionLauncher({
     [onBrowseDirectory],
   );
   const { suggestions, currentDir } = useFilesystemSuggestions(
-    pathMode && !where ? query : '',
+    pathMode && !where ? query.trim() : '',
     browse,
-    { homePath: home, onHomePathChange: setHome, enabled: isOpen && pathMode && !where },
+    {
+      homePath: home,
+      onHomePathChange: setHome,
+      enabled: isOpen && pathMode && !where,
+    },
   );
 
   useEffect(() => {
@@ -137,37 +142,27 @@ export function NewSessionLauncher({
     generated.current.clear();
     created.current.clear();
     folders.current.clear();
-    setProjects(null);
     let cancelled = false;
     onGetRecentLocations?.()
       .then((reply) => {
         if (cancelled) return;
-        setRecents([...reply.locations].sort((a, b) => b.last_seen.localeCompare(a.last_seen)));
+        setRecents(
+          [...reply.locations].sort((a, b) => b.last_seen.localeCompare(a.last_seen)),
+        );
         if (reply.home_path) setHome(reply.home_path);
         setFresh(true);
       })
       .catch((reason) => {
         if (!cancelled) setError(String(reason));
       });
-    if (projectsDirectory)
-      void browse(`${projectsDirectory.replace(/\/+$/, '')}/`)
-        .then((reply) => {
-          if (!cancelled) {
-            setProjects(reply);
-            if (reply.home_path) setHome(reply.home_path);
-          }
-        })
-        .catch((reason) => {
-          if (!cancelled) setError(String(reason));
-        });
     return () => {
       cancelled = true;
       generation.current++;
     };
-  }, [isOpen, onGetRecentLocations, projectsDirectory, browse]);
+  }, [isOpen, onGetRecentLocations]);
 
   const rows = useMemo<Row[]>(() => {
-    const needle = expandDisplayPath(query, home).toLowerCase();
+    const needle = expandDisplayPath(query.trim(), home).toLowerCase();
     const recent = recents.filter((item) =>
       pathMode
         ? item.path.toLowerCase().startsWith(needle) &&
@@ -190,33 +185,17 @@ export function NewSessionLauncher({
             name: item.name,
             repoRoot: item.isRepo ? item.absPath : undefined,
           }))
-      : (projects?.entries || [])
-          .filter(
-            (item) =>
-              item.is_dir &&
-              item.name.toLowerCase().includes(query.toLowerCase()) &&
-              !recent.some((location) => location.path === item.path),
-          )
-          .map((item) => ({
-            kind: 'folder',
-            path: item.path,
-            name: item.name,
-            repoRoot: item.is_repo ? item.path : undefined,
-          }));
+      : [];
     return [...recentRows, ...directoryRows];
-  }, [query, home, recents, pathMode, projects, suggestions]);
+  }, [query, home, recents, pathMode, suggestions]);
   useEffect(() => {
-    if (restoredHighlight.current) {
-      restoredHighlight.current = false;
-      return;
-    }
     if (!where && !pathMode) setHighlight(fresh && rows.length ? 0 : -1);
   }, [query, fresh, rows, where, pathMode]);
   useEffect(() => {
     root.current
       ?.querySelector(`[data-index="${highlight}"]`)
       ?.scrollIntoView({ block: 'nearest' });
-  }, [highlight]);
+  }, [highlight, query, branch, where?.info]);
 
   const name = where ? branch.trim() || generated.current.get(where.repo) || '' : '';
   const whereRows = useMemo<WhereRow[]>(() => {
@@ -225,13 +204,20 @@ export function NewSessionLauncher({
     return [
       { kind: 'new', from: 'default', branch: info.default_branch } as const,
       ...(info.current_branch !== info.default_branch
-        ? [{ kind: 'new', from: 'current', branch: info.current_branch } as const]
+        ? [
+            {
+              kind: 'new',
+              from: 'current',
+              branch: info.current_branch,
+            } as const,
+          ]
         : []),
       { kind: 'main', branch: info.current_branch } as const,
       ...info.worktrees
         .filter(
           (item) =>
-            item.path !== where.repo && item.branch.toLowerCase().includes(branch.toLowerCase()),
+            item.path !== where.repo &&
+            item.branch.toLowerCase().includes(branch.trim().toLowerCase()),
         )
         .map((item) => ({
           kind: 'existing' as const,
@@ -245,7 +231,7 @@ export function NewSessionLauncher({
   useEffect(() => {
     if (!where?.info) return;
     const exact = branch
-      ? whereRows.findIndex((row) => row.kind === 'existing' && row.branch === branch)
+      ? whereRows.findIndex((row) => row.kind === 'existing' && row.branch === branch.trim())
       : -1;
     setHighlight(
       branch
@@ -271,9 +257,7 @@ export function NewSessionLauncher({
     }
     generation.current++;
     if (where) {
-      restoredHighlight.current = true;
-      setQuery(where.previousQuery);
-      setHighlight(where.previousHighlight);
+      setHighlight(0);
       setWhere(null);
       setBranch('');
     } else if (query) {
@@ -285,7 +269,7 @@ export function NewSessionLauncher({
 
   async function openWhere(repo: string) {
     const request = ++generation.current;
-    setWhere({ repo, previousQuery: query, previousHighlight: highlight });
+    setWhere({ repo });
     setBranch('');
     setHighlight(-1);
     setError('');
@@ -311,7 +295,8 @@ export function NewSessionLauncher({
     const agent = terminal ? 'shell' : controls.agent;
     const yolo = agent !== 'shell' && controls.yoloMode && controls.yoloSupported;
     const chief = agent !== 'shell' && controls.chiefOfStaff && controls.chiefToggleEligible;
-    const auto = agent !== 'shell' && controls.autoModeSupported ? controls.autoMode : undefined;
+    const auto =
+      agent !== 'shell' && controls.autoModeSupported ? controls.autoMode : undefined;
     const request = generation.current;
     setBusy(true);
     setError('');
@@ -391,11 +376,11 @@ export function NewSessionLauncher({
   async function tab() {
     if (where || busy) return;
     const row = rows[highlight];
-    if (row?.repoRoot) {
+    if (controls.agent !== 'shell' && row?.repoRoot) {
       await openWhere(row.repoRoot);
       return;
     }
-    if (!row && pathMode) {
+    if (controls.agent !== 'shell' && !row && pathMode) {
       const path = normalizePickerPath(query, home);
       const known = folders.current.get(path);
       if (known === true) {
@@ -467,7 +452,10 @@ export function NewSessionLauncher({
       event.preventDefault();
       event.stopPropagation();
       if (event.key.toLowerCase() === 'y') void deleteWorktree();
-      else if (event.key.toLowerCase() === 'n' || event.key === 'Escape') setDeletion(null);
+      else if (event.key.toLowerCase() === 'n' || event.key === 'Escape') {
+        setDeletion(null);
+        setError('');
+      }
       return;
     }
     if (controls.handleControlKey(event)) return;
@@ -503,6 +491,7 @@ export function NewSessionLauncher({
       stepBack();
     } else if (where && isAccelKeyPressed(event) && event.key === 'Backspace') {
       event.preventDefault();
+      setError('');
       const row = whereRows[highlight];
       if (row?.kind === 'existing')
         setDeletion({ path: row.path, branch: row.branch, force: false });
@@ -517,7 +506,10 @@ export function NewSessionLauncher({
       : suggestions[0]?.absPath
     : '';
   const ghost = ghostPath ? `${display(ghostPath).replace(/\/+$/, '')}/` : '';
-  const typedRepo = pathMode && folders.current.get(normalizePickerPath(query, home)) === true;
+  const typedRepo =
+    highlight < 0 &&
+    pathMode &&
+    folders.current.get(normalizePickerPath(query, home)) === true;
   const frame = (
     <div
       ref={root}
@@ -559,7 +551,10 @@ export function NewSessionLauncher({
           autoFocus={active}
         />
         {!where && pathMode && currentDir && (
-          <span className="picker-breadcrumb-path" data-testid="location-picker-breadcrumb-path">
+          <span
+            className="picker-breadcrumb-path"
+            data-testid="location-picker-breadcrumb-path"
+          >
             {currentDir}
           </span>
         )}
@@ -571,9 +566,11 @@ export function NewSessionLauncher({
             highlight={highlight}
             repo={where.repo}
             name={name}
-            typed={Boolean(branch)}
+            typed={Boolean(branch.trim())}
             remembered={memory}
+            deletion={deletion}
             onPick={(index) => {
+              if (busy || deletion) return;
               setHighlight(index);
               void launch(undefined, false, whereRows[index]);
             }}
@@ -591,9 +588,7 @@ export function NewSessionLauncher({
                 <div className="picker-section-title">
                   {row.kind === 'recent'
                     ? 'Recent'
-                    : pathMode
-                      ? `Folders in ${currentDir.replace(/\/$/, '')}/`
-                      : `In ${display(projects?.directory || projectsDirectory || '').replace(/\/$/, '')}/`}
+                    : `Folders in ${currentDir.replace(/\/$/, '')}/`}
                 </div>
               )}
               <div
@@ -618,17 +613,26 @@ export function NewSessionLauncher({
                     {row.name}
                     {row.kind === 'folder' && '/'}
                   </div>
-                  {row.kind === 'recent' && <div className="picker-path">{display(row.path)}</div>}
+                  {row.kind === 'recent' && (
+                    <div className="picker-path">{display(row.path)}</div>
+                  )}
                 </div>
                 {row.repoRoot &&
-                  (controls.agent !== 'shell' && (row.kind === 'recent' || highlight === index) ? (
-                    <span className="launcher-badge">
-                      {remember(row.repoRoot) === 'new_worktree' ? 'new worktree' : 'main checkout'}
+                  (controls.agent !== 'shell' &&
+                  (row.kind === 'recent' || highlight === index) ? (
+                    <span
+                      className={`launcher-badge launcher-destination${remember(row.repoRoot) === 'new_worktree' ? ' launcher-worktree' : ''}`}
+                    >
+                      {remember(row.repoRoot) === 'new_worktree'
+                        ? '⎇ new worktree'
+                        : 'main checkout'}
                     </span>
                   ) : (
                     row.kind === 'folder' && <span className="launcher-badge">repo</span>
                   ))}
-                {row.lastSeen && <span className="launcher-age">{locationAge(row.lastSeen)}</span>}
+                {row.lastSeen && (
+                  <span className="launcher-age">{locationAge(row.lastSeen)}</span>
+                )}
               </div>
             </Fragment>
           ))}
@@ -646,30 +650,54 @@ export function NewSessionLauncher({
           {error}
         </div>
       )}
-      {deletion && (
-        <div className="launcher-confirm" role="alert">
-          {deletion.force
-            ? 'Force delete local worktree and branch? (y/n)'
-            : `Delete ${deletion.branch}? (y/n)`}
-        </div>
-      )}
       {busy && (
         <div className="launcher-progress" role="status">
           Starting…
         </div>
       )}
       <div className="picker-footer">
-        {where && <span>type to name it</span>}
-        <span>↑↓ {where ? 'choose' : 'move'}</span>
-        <span>Enter {controls.agent === 'shell' ? 'open terminal' : 'start'}</span>
-        {!where && <span>Tab {selected?.repoRoot || typedRepo ? 'where…' : 'complete'}</span>}
-        {(controls.agent !== 'shell' || where) && (
-          <span>{keyCombo('accel', 'Enter')} terminal here</span>
+        {deletion ? (
+          <>
+            <span>
+              <kbd>y</kbd> delete
+            </span>
+            <span>
+              <kbd>n</kbd> or <kbd>Esc</kbd> keep it
+            </span>
+          </>
+        ) : (
+          <>
+            {where && <span>type to name it</span>}
+            <span>
+              <kbd>↑↓</kbd> {where ? 'choose' : 'move'}
+            </span>
+            <span>
+              <kbd>Enter</kbd>{' '}
+              {where ? 'start' : controls.agent === 'shell' ? 'open terminal' : 'start'}
+            </span>
+            {!where && (
+              <span>
+                <kbd>Tab</kbd>{' '}
+                {controls.agent !== 'shell' && (selected?.repoRoot || typedRepo)
+                  ? 'where…'
+                  : 'complete'}
+              </span>
+            )}
+            {(where || controls.agent !== 'shell') && (
+              <span>
+                <kbd>{keyCombo('accel', 'Enter')}</kbd> terminal here
+              </span>
+            )}
+            {where && whereRows[highlight]?.kind === 'existing' && (
+              <span>
+                <kbd>{keyCombo('accel', '⌫')}</kbd> delete
+              </span>
+            )}
+            <span className="launcher-footer-back">
+              <kbd>Esc</kbd> {where ? 'back' : 'close'}
+            </span>
+          </>
         )}
-        {whereRows[highlight]?.kind === 'existing' && where && (
-          <span>{keyCombo('accel', '⌫')} delete</span>
-        )}
-        <span>Esc {where ? 'back' : 'close'}</span>
       </div>
     </div>
   );

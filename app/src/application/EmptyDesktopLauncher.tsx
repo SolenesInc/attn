@@ -117,7 +117,6 @@ export function EmptyDesktopLauncher({
           onInspectPath={sendInspectPath}
           onGetRepoInfo={getRepoInfo}
           onDeleteWorktree={sendDeleteWorktree}
-          projectsDirectory={settings.projects_directory}
           agentAvailability={agentAvailability}
           chiefExists={hasChiefOfStaff}
         />
