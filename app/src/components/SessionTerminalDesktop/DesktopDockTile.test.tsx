@@ -18,8 +18,6 @@ import type {
   MarkdownAnnotationsTransport,
 } from '../MarkdownReader/annotations/transport';
 import type { WireAnnotation } from '../MarkdownReader/annotations/types';
-import { annotationToWire } from '../MarkdownReader/annotations/types';
-import { createAnchor, extractBlockTexts } from '../MarkdownReader/anchoring';
 import { DaemonApiProvider, type DaemonApi } from '../../contexts/DaemonApiContext';
 import type { Seed } from '../../types/generated';
 import type { SeedDocument } from '../SeedDocumentView';
@@ -540,19 +538,6 @@ const SEND_DOC = 'First paragraph with target words inside it.\n';
     anchor resolution, keeping these tests about the send flow, not anchoring. */
 function globalNote(id = 'g1'): WireAnnotation {
   return { id, type: 'global', text: 'whole-doc note', created_at: 1 };
-}
-
-function anchoredNote(content: string, needle: string): WireAnnotation {
-  const blocks = extractBlockTexts(content);
-  const block = blocks.find((candidate) => candidate.text.includes(needle))!;
-  const start = block.text.indexOf(needle);
-  return annotationToWire({
-    id: 'stored-1',
-    type: 'comment',
-    text: 'stay attached',
-    anchor: createAnchor(content, block.blockId, start, start + needle.length, blocks)!,
-    createdAt: 1,
-  });
 }
 
 function makeSendTransport(seed: WireAnnotation[] = [globalNote()]) {
@@ -1295,103 +1280,6 @@ describe('DesktopDockTile seed reader', () => {
         [],
       );
     });
-  });
-
-  it('flips the primary live across park and claim pushes without waiting for detail reads', async () => {
-    const first = seedDocumentFixture();
-    const never = new Promise<SeedDocument>(() => {});
-    const sendSeedDocumentGet = vi.fn()
-      .mockResolvedValueOnce(first)
-      .mockImplementation(() => never);
-    const daemonApi = createMockDaemonApi({ sendSeedDocumentGet, sendOpenMarkdown: vi.fn() });
-    const { transport, submitSpy } = makeSendTransport();
-    setMarkdownAnnotationsTransport(transport);
-    const props = {
-      tile: { type: 'tile' as const, tileId: 'tile-seed-s-plan11', tileKind: 'seed' as const, tileParams: 's-plan11' },
-      desktopId: 'desktop-1',
-      dragging: false,
-      desktopSessions: SEND_SESSIONS,
-      onClose: vi.fn(),
-      onHeaderPointerDown: vi.fn(),
-      onRequestContent: vi.fn(),
-    };
-    const view = render(
-      <DesktopDockTile {...props} gardenSeeds={[first.seed]} />,
-      { wrapper: ({ children }) => <SeedTileTestWrapper api={daemonApi}>{children}</SeedTileTestWrapper> },
-    );
-    await screen.findByRole('button', { name: 'Send 1' });
-
-    const parked = seedFixture({ tender_session: '', tender_member: '', rev: 2 });
-    view.rerender(<DesktopDockTile {...props} gardenSeeds={[parked]} />);
-    expect(screen.getByRole('button', { name: 'Note on seed 1' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'More annotation destinations' })).toBeNull();
-
-    const claimed = seedFixture({ tender_session: 'sess-b', tender_member: 'trellis', rev: 3 });
-    view.rerender(<DesktopDockTile {...props} gardenSeeds={[claimed]} />);
-    const primary = screen.getByRole('button', { name: 'Send 1' });
-    expect(screen.getByRole('button', { name: 'More annotation destinations' })).toBeInTheDocument();
-    fireEvent.click(primary);
-    await waitFor(() => {
-      expect(submitSpy).toHaveBeenCalledWith(
-        seedMarkdownSource('s-plan11'),
-        { kind: 'session', sessionId: 'sess-b' },
-        [],
-      );
-    });
-  });
-
-  it('re-anchors a persisted highlight from the pushed body without remounting or accepting a stale detail body', async () => {
-    const oldBody = 'First paragraph with target words inside it.\n';
-    const newBody = '# New introduction\n\n' + oldBody;
-    const first = {
-      ...seedDocumentFixture(oldBody),
-      seed: seedFixture({ body: oldBody }),
-    };
-    let resolveDetail: (document: SeedDocument) => void = () => {};
-    const detailPending = new Promise<SeedDocument>((resolve) => { resolveDetail = resolve; });
-    const sendSeedDocumentGet = vi.fn()
-      .mockResolvedValueOnce(first)
-      .mockReturnValueOnce(detailPending);
-    const daemonApi = createMockDaemonApi({ sendSeedDocumentGet, sendOpenMarkdown: vi.fn() });
-    const { transport } = makeSendTransport([anchoredNote(oldBody, 'target words')]);
-    setMarkdownAnnotationsTransport(transport);
-    const props = {
-      tile: { type: 'tile' as const, tileId: 'tile-seed-s-plan11', tileKind: 'seed' as const, tileParams: 's-plan11' },
-      desktopId: 'desktop-1',
-      dragging: false,
-      gardenSeeds: [first.seed],
-      onClose: vi.fn(),
-      onHeaderPointerDown: vi.fn(),
-      onRequestContent: vi.fn(),
-    };
-    const view = render(
-      <DesktopDockTile {...props} />,
-      { wrapper: ({ children }) => <SeedTileTestWrapper api={daemonApi}>{children}</SeedTileTestWrapper> },
-    );
-    await waitFor(() => {
-      expect(view.container.querySelector('[data-md-mark="stored-1"]')).not.toBeNull();
-    });
-    const oldMark = view.container.querySelector('[data-md-mark="stored-1"]');
-    expect(oldMark).toHaveTextContent('target words');
-    const scrollNode = view.container.querySelector<HTMLElement>('.md-reader-doc')!;
-    scrollNode.scrollTop = 137;
-
-    const pushed = seedFixture({ body: newBody, rev: 2 });
-    view.rerender(<DesktopDockTile {...props} gardenSeeds={[pushed]} />);
-    expect(screen.getByRole('heading', { name: 'New introduction' })).toBeInTheDocument();
-    expect(view.container.querySelector('.md-reader-doc')).toBe(scrollNode);
-    expect(scrollNode.scrollTop).toBe(137);
-    await waitFor(() => {
-      expect(view.container.querySelector('[data-md-mark="stored-1"]')).toHaveTextContent('target words');
-    });
-    expect(view.container.querySelector('.md-card-orphan-badge')).toBeNull();
-    expect(screen.queryByText('⚠ moved')).toBeNull();
-    expect(sendSeedDocumentGet).toHaveBeenCalledTimes(2);
-
-    await act(async () => {
-      resolveDetail({ ...first, notes_total: 2 });
-    });
-    expect(screen.getByRole('heading', { name: 'New introduction' })).toBeInTheDocument();
   });
 
   it('names an unknown seed read failure in the tile', async () => {

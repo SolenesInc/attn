@@ -125,7 +125,7 @@ describe('App garden seeds', () => {
     expect(screen.getByText('1 more entry on the log.')).toBeInTheDocument();
   });
 
-  it('refreshes a shown seed tile once per conversation snapshot and ignores an older detail response', async () => {
+  it('refreshes a seed tile on garden changes and reconnect and ignores obsolete responses', async () => {
     const daemon = await openSeedTile(PLAN, { notes: [note('n-before', { body: 'Before the keep pass' })], notes_total: 1 });
     fireEvent.click(screen.getByText('Log').closest('summary')!);
     daemon.on('seed_document_get', () => undefined);
@@ -146,6 +146,14 @@ describe('App garden seeds', () => {
     expect(daemon.sentOf('seed_document_get')).toEqual(Array.from({ length: 3 }, () => ({
       cmd: 'seed_document_get', seed_id: PLAN.id, request_id: expect.any(String),
     })));
+
+    daemon.on('seed_document_get', () => ({ event: 'seed_document_get_result', success: true,
+      document: seedDocument(PLAN, { notes: [note('n-reconnected', { body: 'After reconnect' })], notes_total: 1 }) }));
+    await daemon.reconnect();
+    expect(screen.getByText('After reconnect')).toBeInTheDocument();
+    expect(daemon.sentOf('seed_document_get').slice(3)).toEqual([
+      { cmd: 'seed_document_get', seed_id: PLAN.id, request_id: expect.any(String) },
+    ]);
   });
 
   it('lists only the daemon’s current artifacts and opens a markdown one', async () => {
