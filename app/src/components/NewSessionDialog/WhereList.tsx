@@ -7,8 +7,11 @@ export type WhereRow =
 
 export function locationAge(timestamp?: string) {
   if (!timestamp) return '';
-  const days = Math.max(0, Math.floor((Date.now() - Date.parse(timestamp)) / 86400000));
-  return days === 0 ? 'today' : days === 1 ? 'yesterday' : `${days}d ago`;
+  const minutes = Math.max(0, Math.floor((Date.now() - Date.parse(timestamp)) / 60000));
+  if (minutes < 1) return 'now';
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  return hours < 24 ? `${hours}h` : `${Math.floor(hours / 24)}d`;
 }
 
 export function WhereList({

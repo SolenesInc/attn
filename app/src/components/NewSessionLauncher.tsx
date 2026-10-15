@@ -230,11 +230,11 @@ export function NewSessionLauncher({
   const memory = where ? remember(where.repo) : 'main_repo';
   useEffect(() => {
     if (!where?.info) return;
-    const exact = branch
+    const exact = branch.trim()
       ? whereRows.findIndex((row) => row.kind === 'existing' && row.branch === branch.trim())
       : -1;
     setHighlight(
-      branch
+      branch.trim()
         ? Math.max(0, exact)
         : memory === 'new_worktree'
           ? 0
@@ -245,7 +245,7 @@ export function NewSessionLauncher({
   const changeQuery = (value: string) => {
     generation.current++;
     setQuery(value);
-    setHighlight(value.startsWith('~') || value.startsWith('/') ? -1 : 0);
+    setHighlight(value.trim().startsWith('~') || value.trim().startsWith('/') ? -1 : 0);
     setError('');
   };
   const stepBack = () => {
