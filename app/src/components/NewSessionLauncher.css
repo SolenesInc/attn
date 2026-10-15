@@ -3,7 +3,7 @@
   --color-bg-input: #0a0a0b;
   --color-text-dimmed: #5f5f69;
   --color-border-focus: #44444c;
-  --launcher-worktree-color: var(--launcher-worktree-color);
+  --launcher-worktree-color: #9be7a8;
   width: 760px;
   background: var(--color-bg-app);
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
@@ -46,6 +46,7 @@
   --path-input-text-inset: 0px;
 }
 .new-session-launcher .picker-results {
+  margin-top: 18px;
   padding: 4px 6px 8px;
 }
 .new-session-launcher .picker-section-title {
@@ -115,6 +116,8 @@
   color: var(--color-text-secondary);
 }
 .launcher-age {
+  width: 30px;
+  flex: none;
   color: var(--color-text-dimmed);
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
   font-size: calc(10.5px * var(--ui-scale));
@@ -241,7 +244,7 @@
   border-color: rgba(255, 107, 53, 0.4);
 }
 
-[data-theme="light"] .new-session-launcher {
+[data-theme='light'] .new-session-launcher {
   --color-bg-selected: inherit;
   --color-bg-input: inherit;
   --color-text-dimmed: inherit;

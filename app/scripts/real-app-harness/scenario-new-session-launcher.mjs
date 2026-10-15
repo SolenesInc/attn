@@ -36,7 +36,7 @@ runner.registerCleanup('sessions', async () => {
   for (const sessionId of sessionIds.reverse())
     await client.request('close_session', { sessionId });
 });
-const visible = (selector) => client.request('dom_wait', { selector });
+const visible = (selector) => client.request('dom_wait', { timeoutMs: 10_000, selector });
 const picker = () => client.request('location_picker_get_state');
 async function open(shortcut = 'session.new') {
   await pressShortcutKeys(client, driver, shortcut);
@@ -55,6 +55,7 @@ async function startAt(directory, terminal = false) {
   const session = await registered;
   sessionIds.push(session.id);
   await client.request('dom_wait', {
+    timeoutMs: 10_000,
     selector: '[data-testid="location-picker-overlay"]',
     absent: true,
   });
@@ -213,6 +214,7 @@ try {
       'bare Enter should create a new worktree',
     );
     await client.request('dom_wait', {
+      timeoutMs: 10_000,
       selector: '[data-testid="location-picker-overlay"]',
       absent: true,
     });
@@ -264,6 +266,7 @@ try {
         await driver.pressKey('y');
       }
       await client.request('dom_wait', {
+        timeoutMs: 10_000,
         selector: '[data-kind="existing"][aria-selected="true"]',
         absent: true,
       });

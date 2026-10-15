@@ -175,6 +175,26 @@ describe('one-screen launcher', () => {
     expect(memoryWrites(daemon)).toEqual([]);
   });
 
+  it('toggles auto mode with AltA and sends the selected value on launch', async () => {
+    const { daemon } = await openPicker(
+      { recent: [REPO] },
+      {
+        settings: {
+          ...settings,
+          claude_cap_auto_mode: 'true',
+          automode_enabled_default: 'true',
+        },
+      },
+    );
+    await press(daemon, 'a', { altKey: true, code: 'KeyA' });
+    expect(screen.getByRole('switch', { name: /auto mode/i })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    );
+    await press(daemon, 'Enter');
+    expect(launchedAt(daemon)).toEqual([{ cwd: REPO, agent: 'claude', auto_mode: false }]);
+  });
+
   it.each(['true', 'false'])(
     'CmdT selects Terminal for one opening with the experiment %s',
     async (enabled) => {
