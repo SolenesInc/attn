@@ -5,7 +5,7 @@ use std::os::fd::{AsRawFd, FromRawFd, RawFd};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, Weak};
 use std::thread;
@@ -827,6 +827,7 @@ struct Connection {
     authed: bool,
     close_action: CloseAction,
     pending_sessions: Vec<Arc<Session>>,
+    text_waits: Vec<(Arc<Session>, Arc<AtomicBool>)>,
 }
 
 impl Connection {
@@ -888,6 +889,7 @@ fn handle_connection(host: Arc<Host>, stream: UnixStream, id: u64) {
         authed: false,
         close_action: CloseAction::Detach,
         pending_sessions: Vec::new(),
+        text_waits: Vec::new(),
     };
     let mut reader = BufReader::new(stream);
     let mut line = String::new();
@@ -918,6 +920,9 @@ fn handle_connection(host: Arc<Host>, stream: UnixStream, id: u64) {
         }
     }
 
+    for (session, cancelled) in &connection.text_waits {
+        session.cancel_text_wait(cancelled);
+    }
     if let Some(session) = connection.selected.as_ref() {
         if !connection.subscriber_id.is_empty() {
             session.detach(&connection.subscriber_id, &connection.id);
@@ -1028,6 +1033,41 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
             connection.send(response(&request.id, host.host_info()))
         }
         "info" => with_session(host, connection, &request, Session::info),
+        "read_text" => {
+            let session = match connection.session(host, &request) {
+                Ok(s) => s,
+                Err(e) => return connection.send(e),
+            };
+            let mode = request.params["mode"].as_str().unwrap_or_default();
+            let lines = usize::try_from(request.params["lines"].as_u64().unwrap_or(0))
+                .unwrap_or(usize::MAX);
+            match session.read_text(mode, lines) {
+                Ok(result) => connection.send(response(&request.id, result)),
+                Err(message) => connection.fail(&request.id, ERR_BAD_REQUEST, message),
+            }
+        }
+        "wait_block" => {
+            if !connection.text_waits.is_empty() {
+                return connection.fail(&request.id, ERR_BAD_REQUEST, "one wait per connection");
+            }
+            let session = match connection.session(host, &request) {
+                Ok(s) => s,
+                Err(e) => return connection.send(e),
+            };
+            let cancelled = Arc::new(AtomicBool::new(false));
+            connection
+                .text_waits
+                .push((Arc::clone(&session), Arc::clone(&cancelled)));
+            let sender = connection.sender.clone();
+            thread::spawn(move || {
+                let result = match session.wait_block(&request.params, &cancelled) {
+                    Ok(result) => response(&request.id, result),
+                    Err(message) => error(&request.id, ERR_BAD_REQUEST, message),
+                };
+                let _ = sender.send(result);
+            });
+            true
+        }
         "snapshot" => with_session(host, connection, &request, Session::screen_snapshot),
         "attach" => {
             if connection.selected.is_none() {

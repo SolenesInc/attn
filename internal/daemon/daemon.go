@@ -2616,6 +2616,18 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleSessionShow(conn, msg.(*protocol.SessionShowMessage))
 	case protocol.CmdSessionReopen:
 		d.handleSessionReopen(conn, msg.(*protocol.SessionReopenMessage))
+	case protocol.CmdTerminalList:
+		d.handleTerminalList(conn, msg.(*protocol.TerminalListMessage))
+	case protocol.CmdTerminalOpen:
+		d.handleTerminalOpen(conn, msg.(*protocol.TerminalOpenMessage))
+	case protocol.CmdTerminalInput:
+		d.handleTerminalInput(conn, msg.(*protocol.TerminalInputMessage))
+	case protocol.CmdTerminalRead:
+		d.handleTerminalRead(conn, msg.(*protocol.TerminalReadMessage))
+	case protocol.CmdTerminalWait:
+		d.handleTerminalWait(conn, msg.(*protocol.TerminalWaitMessage))
+	case protocol.CmdTerminalClose:
+		d.handleTerminalClose(conn, msg.(*protocol.TerminalCloseMessage))
 	case protocol.CmdDesktopMoveSession:
 		d.handleDesktopMoveSession(conn, msg.(*protocol.DesktopMoveSessionMessage))
 	case protocol.CmdSetSessionPriority:

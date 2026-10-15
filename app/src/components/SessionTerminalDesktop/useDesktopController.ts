@@ -527,6 +527,21 @@ export function useDesktopController(
     pane.classList.add('leaf-arrival');
   }, [activeLeafId, desktopId, focusClaim, paneReadyFocusRequest, renderedPaneIdsKey, sessionVisible]);
 
+  const previousLeaves = useRef({ desktopId, ids: new Set(leafIds), visible: sessionVisible });
+  useLayoutEffect(() => {
+    const previous = previousLeaves.current;
+    previousLeaves.current = { desktopId, ids: new Set(leafIds), visible: sessionVisible };
+    if (!sessionVisible || !previous.visible || previous.desktopId !== desktopId) return;
+    const container = panesContainerRef.current;
+    if (!container || useSessionStore.getState().intent) return;
+    for (const id of leafIds) {
+      if (previous.ids.has(id) || focusClaim?.leafId === id) continue;
+      const pane = Array.from(container.querySelectorAll<HTMLElement>('[data-pane-id]'))
+        .find((element) => element.dataset.paneId === id);
+      if (pane) pane.classList.add('leaf-arrival');
+    }
+  }, [desktopId, focusClaim, leafIds, sessionVisible]);
+
   useEffect(() => {
     const container = panesContainerRef.current;
     if (!container) return;

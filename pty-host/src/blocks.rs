@@ -36,6 +36,12 @@ pub struct AttachBlock {
     pub output_start_row: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub end_row: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_start_col: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_col: Option<i32>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub end_inclusive: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -53,6 +59,7 @@ struct TrackedBlock {
     input: Option<Arc<TrackedRef>>,
     output: Option<Arc<TrackedRef>>,
     end: Option<Arc<TrackedRef>>,
+    end_inclusive: bool,
     command: Option<String>,
     exit_code: Option<i32>,
     has_command: bool,
@@ -63,6 +70,9 @@ pub struct BlockTable {
     completed: VecDeque<TrackedBlock>,
     pending: Option<TrackedBlock>,
     next_id: u64,
+    integration_seen: bool,
+    at_prompt: bool,
+    last_completed_id: u64,
 }
 
 impl BlockTable {
@@ -71,10 +81,15 @@ impl BlockTable {
             completed: VecDeque::new(),
             pending: None,
             next_id: 1,
+            integration_seen: false,
+            at_prompt: false,
+            last_completed_id: 0,
         }
     }
 
     pub fn apply(&mut self, marker: Marker, terminal: &Terminal) {
+        self.integration_seen = true;
+        self.at_prompt = marker.kind != MarkerKind::PreExec;
         let current = terminal.track_cursor().map(Arc::new);
         if self.pending.as_ref().is_some_and(|block| block.has_command)
             && matches!(
@@ -84,6 +99,7 @@ impl BlockTable {
             && let Some(mut pending) = self.pending.take()
         {
             pending.end.clone_from(&current);
+            pending.end_inclusive = terminal.cursor_pending_wrap();
             self.complete(pending);
         }
 
@@ -110,12 +126,14 @@ impl BlockTable {
                 }
             }
             MarkerKind::CommandEnd => {
-                if let Some(mut pending) = self.pending.take()
-                    && pending.has_command
-                {
-                    pending.end = current;
-                    pending.exit_code = marker.exit_code;
-                    self.complete(pending);
+                if let Some(mut pending) = self.pending.take() {
+                    self.last_completed_id = pending.id;
+                    if pending.has_command {
+                        pending.end = current;
+                        pending.end_inclusive = terminal.cursor_pending_wrap();
+                        pending.exit_code = marker.exit_code;
+                        self.complete(pending);
+                    }
                 }
             }
         }
@@ -131,14 +149,20 @@ impl BlockTable {
             completed: VecDeque::new(),
             pending: None,
             next_id,
+            integration_seen: !blocks.is_empty(),
+            at_prompt: blocks
+                .last()
+                .is_some_and(|b| b.pending && b.command.is_none()),
+            last_completed_id: 0,
         };
         for block in blocks {
             let tracked = TrackedBlock {
                 id: block.id,
                 prompt: pin(None, Some(block.prompt_row)),
                 input: pin(block.input_col, block.input_row),
-                output: pin(None, block.output_start_row),
-                end: pin(None, block.end_row),
+                output: pin(block.output_start_col, block.output_start_row),
+                end: pin(block.end_col, block.end_row),
+                end_inclusive: block.end_inclusive,
                 command: block.command.clone(),
                 exit_code: block.exit_code,
                 has_command: block.command.is_some(),
@@ -155,6 +179,35 @@ impl BlockTable {
 
     pub fn next_id(&self) -> u64 {
         self.next_id
+    }
+
+    pub fn read_state(&self) -> serde_json::Value {
+        serde_json::json!({"integration_seen": self.integration_seen, "at_prompt": self.at_prompt, "last_block_id": self.last_completed_id})
+    }
+
+    pub fn read_block(
+        &self,
+        terminal: &Terminal,
+        cols: u16,
+        after: Option<u64>,
+    ) -> Result<serde_json::Value, String> {
+        let block = match after {
+            Some(id) => self.completed.iter().find(|b| b.id > id),
+            None => self.completed.back(),
+        }
+        .ok_or_else(|| "no completed command block is available (OSC 133 command-start marks are required to read output)".to_owned())?;
+        let start = point(block.output.as_ref());
+        let end = point(block.end.as_ref());
+        let (Some(start), Some(end)) = (start, end) else {
+            return Err(format!(
+                "command block {} output is no longer in scrollback",
+                block.id
+            ));
+        };
+        let output = terminal.text_range(cols, start, end, block.end_inclusive)?;
+        Ok(
+            serde_json::json!({"id": block.id, "command": block.command, "exit_code": block.exit_code, "output": output}),
+        )
     }
 
     pub fn snapshot(&self) -> Vec<AttachBlock> {
@@ -176,6 +229,7 @@ impl BlockTable {
             input: None,
             output: None,
             end: None,
+            end_inclusive: false,
             command: None,
             exit_code: None,
             has_command: false,
@@ -186,6 +240,7 @@ impl BlockTable {
     }
 
     fn complete(&mut self, block: TrackedBlock) {
+        self.last_completed_id = block.id;
         self.completed.push_back(block);
         while self.completed.len() > MAX_BLOCKS {
             self.completed.pop_front();
@@ -218,6 +273,9 @@ fn resolve(block: &TrackedBlock, pending: bool) -> Option<AttachBlock> {
         input_row: input.map(|(_, row)| row),
         input_col: input.map(|(col, _)| col),
         output_start_row,
+        output_start_col: point(block.output.as_ref()).map(|(col, _)| col),
+        end_col: point(block.end.as_ref()).map(|(col, _)| col),
+        end_inclusive: block.end_inclusive,
         end_row,
         command: block
             .has_command

@@ -51,10 +51,15 @@ func (d *Daemon) handleAgentClose(conn net.Conn, msg *protocol.AgentCloseMessage
 		}
 	}
 
-	rule, err := d.agentCloseRule(caller, target)
-	if err != nil {
+	if err := d.mayActOnSession(caller.ID, target, "close"); err != nil {
 		d.replyAgentMsgError(conn, "close_not_authorized", err.Error())
 		return
+	}
+	rule := protocol.AgentCloseRuleDispatcher
+	if caller.ID == target.ID {
+		rule = protocol.AgentCloseRuleSelf
+	} else if d.chiefOfProfile(target.ProfileID) == caller.ID {
+		rule = protocol.AgentCloseRuleChiefOfStaff
 	}
 	if protectErr := d.sessionCloseError(target.ID); protectErr != nil {
 		d.replyAgentMsgError(conn, "session_close_protected", protectErr.Error())
@@ -142,29 +147,6 @@ func (d *Daemon) resolveAgentCloseSession(reference protocol.SessionID) (*protoc
 		return nil, "session_not_found"
 	}
 	return match, ""
-}
-
-func (d *Daemon) agentCloseRule(caller, target *protocol.Session) (protocol.AgentCloseRule, error) {
-	if caller.ID == target.ID {
-		return protocol.AgentCloseRuleSelf, nil
-	}
-	if d.chiefOfProfile(target.ProfileID) == caller.ID || (target.ProfileID == "" && d.isChiefOfStaffSession(caller.ID)) {
-		return protocol.AgentCloseRuleChiefOfStaff, nil
-	}
-	var dispatcher protocol.SessionID
-	if dispatch, ok := d.gardenDispatch(target.ID); ok {
-		dispatcher = protocol.TrimID(dispatch.DispatcherSession)
-	}
-	if dispatcher != "" && dispatcher == caller.ID {
-		return protocol.AgentCloseRuleDispatcher, nil
-	}
-	const rules = "a session may close itself and the sessions it dispatched, and a profile's chief of staff may close any agent of that profile"
-	if dispatcher == "" {
-		return "", fmt.Errorf("%s. Session %s was not dispatched by anyone, so only it and the chief of staff can close it",
-			rules, shortSessionID(target.ID))
-	}
-	return "", fmt.Errorf("%s. Session %s was dispatched by session %s, not by you",
-		rules, shortSessionID(target.ID), shortSessionID(dispatcher))
 }
 
 func (d *Daemon) noteCloseOnTendedSeeds(

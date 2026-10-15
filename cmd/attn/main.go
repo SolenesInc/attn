@@ -148,6 +148,9 @@ func main() {
 	case "session":
 		maybePrintInstanceBanner()
 		runSession()
+	case "terminal":
+		maybePrintInstanceBanner()
+		runTerminal()
 	case "agent":
 		maybePrintInstanceBanner()
 		runAgent()
@@ -553,6 +556,7 @@ commands:
   agent msg <target> "text"            notify a live session, crew member or seed's tender
   agent inbox [message-id]              read durable agent notifications
   agent msg-status <message-id>         inspect a sent peer message
+  terminal <command>                open, read, type into, wait on and close terminals
   session <command>                 read the session ledger and a session's conversation
   state explain <id>                replay why a session's state is what it is
   delegate --brief-file <path> --cwd <path>    start another agent on a new seed

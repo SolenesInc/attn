@@ -638,7 +638,7 @@ func (d *Daemon) handlePtyInput(client *wsClient, msg *protocol.PtyInputMessage)
 			d.holdAutoSettle(sessionID)
 		}
 	}
-	writeErr := d.writeTerminalPTY(terminal, []byte(msg.Data), source)
+	writeErr := d.writeTerminalPTY(context.Background(), terminal, []byte(msg.Data), source)
 	d.recordSupportInputTrace(msg, receivedAt, time.Since(receivedAt), writeErr)
 	if writeErr != nil {
 		if shouldLogPtyCommandError(writeErr) {

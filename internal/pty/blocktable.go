@@ -37,15 +37,16 @@ func (s *sharedRef) point() (x, y int, ok bool) {
 }
 
 type trackedBlock struct {
-	id         uint64
-	promptRef  *sharedRef
-	inputRef   *sharedRef
-	outputRef  *sharedRef
-	endRef     *sharedRef
-	command    *string
-	exitCode   *int32
-	hasCommand bool
-	altScreen  bool
+	id           uint64
+	promptRef    *sharedRef
+	inputRef     *sharedRef
+	outputRef    *sharedRef
+	endRef       *sharedRef
+	endInclusive bool
+	command      *string
+	exitCode     *int32
+	hasCommand   bool
+	altScreen    bool
 }
 
 func (b *trackedBlock) release() {
@@ -57,21 +58,31 @@ func (b *trackedBlock) release() {
 }
 
 type blockTable struct {
-	completed []*trackedBlock
-	pending   *trackedBlock
-	nextID    uint64
+	completed       []*trackedBlock
+	pending         *trackedBlock
+	nextID          uint64
+	integrationSeen bool
+	atPrompt        bool
+	lastCompletedID uint64
 }
 
 func newBlockTable() *blockTable {
 	return &blockTable{nextID: 1}
 }
 
-func (bt *blockTable) ApplyMarker(m osc133Marker, ref blockRef, altScreen bool) {
+func (bt *blockTable) ApplyMarker(m osc133Marker, ref blockRef, altScreen bool, pendingWrap bool) {
+	bt.integrationSeen = true
+	switch m.Kind {
+	case osc133PromptStart, osc133InputStart, osc133CommandEnd:
+		bt.atPrompt = true
+	case osc133PreExec:
+		bt.atPrompt = false
+	}
 	cur := newSharedRef(ref)
 
 	if bt.pending != nil && bt.pending.hasCommand &&
 		(m.Kind == osc133PromptStart || m.Kind == osc133InputStart || m.Kind == osc133PreExec) {
-		bt.complete(bt.pending, cur, nil)
+		bt.complete(bt.pending, cur, nil, pendingWrap)
 		bt.pending = nil
 	}
 
@@ -105,8 +116,9 @@ func (bt *blockTable) ApplyMarker(m osc133Marker, ref blockRef, altScreen bool) 
 		bt.pending = nil
 		switch {
 		case p != nil && p.hasCommand:
-			bt.complete(p, cur, m.ExitCode)
+			bt.complete(p, cur, m.ExitCode, pendingWrap)
 		case p != nil:
+			bt.lastCompletedID = p.id
 			p.release()
 		}
 	}
@@ -121,14 +133,16 @@ func (bt *blockTable) openPending(promptRef *sharedRef, altScreen bool) *tracked
 	return b
 }
 
-func (bt *blockTable) complete(p *trackedBlock, endRef *sharedRef, exitCode *int32) {
+func (bt *blockTable) complete(p *trackedBlock, endRef *sharedRef, exitCode *int32, inclusive bool) {
 	p.endRef = endRef
+	p.endInclusive = inclusive
 	endRef.acquire()
 	p.exitCode = exitCode
 	bt.appendCompleted(p)
 }
 
 func (bt *blockTable) appendCompleted(b *trackedBlock) {
+	bt.lastCompletedID = b.id
 	bt.completed = append(bt.completed, b)
 	if len(bt.completed) > maxBlocks {
 		evicted := bt.completed[:len(bt.completed)-maxBlocks]
@@ -168,6 +182,8 @@ func pinAnchor(pin func(x, y int) blockRef, row *int32, col int) *sharedRef {
 
 func (bt *blockTable) Restore(blocks []AttachBlockData, pin func(x, y int) blockRef) {
 	for _, d := range blocks {
+		bt.integrationSeen = true
+		bt.atPrompt = d.Pending && d.Command == nil
 		promptRef := pinShared(pin, 0, int(d.PromptRow))
 		if promptRef == nil {
 			continue
@@ -179,8 +195,17 @@ func (bt *blockTable) Restore(blocks []AttachBlockData, pin func(x, y int) block
 			inputCol = int(*d.InputCol)
 		}
 		b.inputRef = pinAnchor(pin, d.InputRow, inputCol)
-		b.outputRef = pinAnchor(pin, d.OutputStartRow, 0)
-		b.endRef = pinAnchor(pin, d.EndRow, 0)
+		outputCol := int32(0)
+		if d.OutputStartCol != nil {
+			outputCol = *d.OutputStartCol
+		}
+		b.outputRef = pinAnchor(pin, d.OutputStartRow, int(outputCol))
+		endCol := int32(0)
+		if d.EndCol != nil {
+			endCol = *d.EndCol
+		}
+		b.endRef = pinAnchor(pin, d.EndRow, int(endCol))
+		b.endInclusive = d.EndInclusive
 		if d.Command != nil {
 			cmd := *d.Command
 			b.command = &cmd
@@ -237,17 +262,19 @@ func (b *trackedBlock) resolve(pending bool) (AttachBlockData, bool) {
 		d.InputRow = &row
 		d.InputCol = &col
 	}
-	if _, y, ok := b.outputRef.point(); ok {
-		row := int32(y)
-		d.OutputStartRow = &row
+	if x, y, ok := b.outputRef.point(); ok {
+		row, col := int32(y), int32(x)
+		d.OutputStartRow, d.OutputStartCol = &row, &col
 	}
 	if !pending {
-		_, y, ok := b.endRef.point()
+		x, y, ok := b.endRef.point()
 		if !ok {
 			return AttachBlockData{}, false
 		}
 		row := int32(y)
 		d.EndRow = &row
+		col := int32(x)
+		d.EndCol, d.EndInclusive = &col, b.endInclusive
 	}
 	if b.hasCommand {
 		cmd := ""

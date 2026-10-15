@@ -234,6 +234,30 @@ static GhosttyResult ghosttyvt_format_viewport(
 	ghostty_formatter_free(formatter);
 	return rc;
 }
+static GhosttyResult ghosttyvt_text_range(GhosttyTerminal t, uint16_t cols,
+    uint16_t sx, uint32_t sy, uint16_t ex, uint32_t ey, bool inclusive, uint8_t** ptr, size_t* len) {
+    if (!inclusive) { if (ex == 0) { if (ey == 0) return GHOSTTY_INVALID_VALUE; ey--; ex = cols - 1; } else ex--; }
+    GhosttyPoint a = ghosttyvt_viewport_point(sx, sy);
+    GhosttyPoint b = ghosttyvt_viewport_point(ex, ey);
+    a.tag = b.tag = GHOSTTY_POINT_TAG_SCREEN;
+    GhosttySelection selection;
+    memset(&selection, 0, sizeof(selection));
+    selection.size = sizeof(selection);
+    GhosttyResult rc = ghostty_terminal_grid_ref(t, a, &selection.start);
+    if (rc != GHOSTTY_SUCCESS) return rc;
+    rc = ghostty_terminal_grid_ref(t, b, &selection.end);
+    if (rc != GHOSTTY_SUCCESS) return rc;
+    GhosttyFormatterTerminalOptions opts = ghosttyvt_make_opts(GHOSTTY_FORMATTER_FORMAT_PLAIN);
+    opts.unwrap = true;
+    opts.selection = &selection;
+    GhosttyFormatter formatter;
+    rc = ghostty_formatter_terminal_new(NULL, &formatter, t, opts);
+    if (rc != GHOSTTY_SUCCESS) return rc;
+    rc = ghostty_formatter_format_alloc(formatter, NULL, ptr, len);
+    ghostty_formatter_free(formatter);
+    return rc;
+}
+
 */
 import "C"
 
@@ -561,6 +585,11 @@ func (t *Terminal) HandoffVT() Snapshot {
 }
 
 func (t *Terminal) dumpActiveLocked() []byte {
+	wrap := bool(C.ghosttyvt_wraparound(t.term))
+	if !wrap {
+		t.writeLocked([]byte("\x1b[?7h"))
+		defer t.writeLocked([]byte("\x1b[?7l"))
+	}
 	dump := t.format(C.GHOSTTY_FORMATTER_FORMAT_VT)
 	if dump == nil {
 		return nil
@@ -571,7 +600,11 @@ func (t *Terminal) dumpActiveLocked() []byte {
 		dump = append(dump, strings.Repeat("\r\n", deficit)...)
 	}
 
-	return t.appendCursorLocked(dump)
+	dump = t.appendCursorLocked(dump)
+	if !wrap {
+		dump = append(dump, "\x1b[?7l"...)
+	}
+	return dump
 }
 
 func (t *Terminal) replayDeficitLocked(dump []byte) int {
@@ -644,6 +677,7 @@ func (t *Terminal) AltScreenActive() bool {
 func (t *Terminal) format(emit C.GhosttyFormatterFormat) []byte {
 	var f C.GhosttyFormatter
 	opts := C.ghosttyvt_make_opts(emit)
+	opts.unwrap = C.bool(emit == C.GHOSTTY_FORMATTER_FORMAT_VT)
 	if rc := C.ghostty_formatter_terminal_new(nil, &f, t.term, opts); rc != C.GHOSTTY_SUCCESS {
 		return nil
 	}
@@ -710,4 +744,35 @@ func (t *Terminal) Close() {
 
 func (t *Terminal) finalize() {
 	t.Close()
+}
+
+func (t *Terminal) TextRange(sx, sy, ex, ey int, inclusive bool) (string, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.closed {
+		return "", errors.New("terminal is closed")
+	}
+	if sy == ey && sx == ex && !inclusive {
+		return "", nil
+	}
+	if sy < 0 || ey < sy || (sy == ey && ex < sx) {
+		return "", errors.New("command output range is unavailable")
+	}
+	var ptr *C.uint8_t
+	var n C.size_t
+	if rc := C.ghosttyvt_text_range(t.term, C.uint16_t(t.cols), C.uint16_t(sx), C.uint32_t(sy), C.uint16_t(ex), C.uint32_t(ey), C.bool(inclusive), &ptr, &n); rc != C.GHOSTTY_SUCCESS {
+		return "", fmt.Errorf("format command output: %d", rc)
+	}
+	defer C.ghostty_free(nil, ptr, n)
+	return string(C.GoBytes(unsafe.Pointer(ptr), C.int(n))), nil
+}
+
+func (t *Terminal) CursorPendingWrap() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.closed {
+		return false
+	}
+	var pending C.bool
+	return C.ghostty_terminal_get(t.term, C.GHOSTTY_TERMINAL_DATA_CURSOR_PENDING_WRAP, unsafe.Pointer(&pending)) == C.GHOSTTY_SUCCESS && bool(pending)
 }

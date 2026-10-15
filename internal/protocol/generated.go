@@ -7479,6 +7479,22 @@ type Response struct {
 	// StateExplainResult corresponds to the JSON schema field "state_explain_result".
 	StateExplainResult *StateExplainResult `json:"state_explain_result,omitempty,omitzero"`
 
+	// TerminalEntries corresponds to the JSON schema field "terminal_entries".
+	TerminalEntries []TerminalEntry `json:"terminal_entries,omitempty,omitzero"`
+
+	// TerminalInputResult corresponds to the JSON schema field
+	// "terminal_input_result".
+	TerminalInputResult *TerminalInputResult `json:"terminal_input_result,omitempty,omitzero"`
+
+	// TerminalOpenResult corresponds to the JSON schema field "terminal_open_result".
+	TerminalOpenResult *TerminalOpenResult `json:"terminal_open_result,omitempty,omitzero"`
+
+	// TerminalReadResult corresponds to the JSON schema field "terminal_read_result".
+	TerminalReadResult *TerminalReadResult `json:"terminal_read_result,omitempty,omitzero"`
+
+	// TerminalWaitResult corresponds to the JSON schema field "terminal_wait_result".
+	TerminalWaitResult *TerminalWaitResult `json:"terminal_wait_result,omitempty,omitzero"`
+
 	// WorktreeKeepResult corresponds to the JSON schema field "worktree_keep_result".
 	WorktreeKeepResult *WorktreeKeepResult `json:"worktree_keep_result,omitempty,omitzero"`
 
@@ -10289,6 +10305,68 @@ type TerminalBindingsUpdatedMessage struct {
 	TerminalBindings []TerminalBinding `json:"terminal_bindings"`
 }
 
+type TerminalBlock struct {
+	// Command corresponds to the JSON schema field "command".
+	Command *string `json:"command,omitempty,omitzero"`
+
+	// ExitCode corresponds to the JSON schema field "exit_code".
+	ExitCode *int `json:"exit_code,omitempty,omitzero"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Output corresponds to the JSON schema field "output".
+	Output string `json:"output"`
+}
+
+type TerminalCloseMessage struct {
+	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
+	CallerSessionID SessionID `json:"caller_session_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Desktop corresponds to the JSON schema field "desktop".
+	Desktop *string `json:"desktop,omitempty,omitzero"`
+
+	// Target corresponds to the JSON schema field "target".
+	Target string `json:"target"`
+}
+
+type TerminalDirection string
+
+const TerminalDirectionDown TerminalDirection = "down"
+const TerminalDirectionRight TerminalDirection = "right"
+
+type TerminalEntry struct {
+	// Agent corresponds to the JSON schema field "agent".
+	Agent string `json:"agent"`
+
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID string `json:"desktop_id"`
+
+	// DesktopLabel corresponds to the JSON schema field "desktop_label".
+	DesktopLabel string `json:"desktop_label"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// OpenedBy corresponds to the JSON schema field "opened_by".
+	OpenedBy *SessionID `json:"opened_by,omitempty,omitzero"`
+
+	// Position corresponds to the JSON schema field "position".
+	Position *string `json:"position,omitempty,omitzero"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+
+	// ShortID corresponds to the JSON schema field "short_id".
+	ShortID string `json:"short_id"`
+
+	// State corresponds to the JSON schema field "state".
+	State SessionState `json:"state"`
+}
+
 type TerminalExit struct {
 	// At corresponds to the JSON schema field "at".
 	At string `json:"at"`
@@ -10302,6 +10380,79 @@ type TerminalExit struct {
 
 type TerminalID string
 
+type TerminalInputMessage struct {
+	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
+	CallerSessionID SessionID `json:"caller_session_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Data corresponds to the JSON schema field "data".
+	Data string `json:"data"`
+
+	// Desktop corresponds to the JSON schema field "desktop".
+	Desktop *string `json:"desktop,omitempty,omitzero"`
+
+	// Run corresponds to the JSON schema field "run".
+	Run *bool `json:"run,omitempty,omitzero"`
+
+	// Target corresponds to the JSON schema field "target".
+	Target string `json:"target"`
+
+	// Wait corresponds to the JSON schema field "wait".
+	Wait *bool `json:"wait,omitempty,omitzero"`
+}
+
+type TerminalInputResult struct {
+	// LastBlockID corresponds to the JSON schema field "last_block_id".
+	LastBlockID *string `json:"last_block_id,omitempty,omitzero"`
+}
+
+type TerminalListMessage struct {
+	// All corresponds to the JSON schema field "all".
+	All *bool `json:"all,omitempty,omitzero"`
+
+	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
+	CallerSessionID SessionID `json:"caller_session_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Desktop corresponds to the JSON schema field "desktop".
+	Desktop *string `json:"desktop,omitempty,omitzero"`
+}
+
+type TerminalOpenMessage struct {
+	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
+	CallerSessionID SessionID `json:"caller_session_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Command corresponds to the JSON schema field "command".
+	Command *string `json:"command,omitempty,omitzero"`
+
+	// Cwd corresponds to the JSON schema field "cwd".
+	Cwd *string `json:"cwd,omitempty,omitzero"`
+
+	// Desktop corresponds to the JSON schema field "desktop".
+	Desktop *string `json:"desktop,omitempty,omitzero"`
+
+	// Direction corresponds to the JSON schema field "direction".
+	Direction *TerminalDirection `json:"direction,omitempty,omitzero"`
+}
+
+type TerminalOpenResult struct {
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID string `json:"desktop_id"`
+
+	// PaneID corresponds to the JSON schema field "pane_id".
+	PaneID string `json:"pane_id"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+}
+
 type TerminalPointerActivityMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -10309,6 +10460,70 @@ type TerminalPointerActivityMessage struct {
 	// ID corresponds to the JSON schema field "id".
 	ID TerminalID `json:"id"`
 }
+
+type TerminalReadMessage struct {
+	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
+	CallerSessionID SessionID `json:"caller_session_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Lines corresponds to the JSON schema field "lines".
+	Lines *int `json:"lines,omitempty,omitzero"`
+
+	// Mode corresponds to the JSON schema field "mode".
+	Mode TerminalReadMode `json:"mode"`
+
+	// Target corresponds to the JSON schema field "target".
+	Target string `json:"target"`
+}
+
+type TerminalReadMode string
+
+const TerminalReadModeLast TerminalReadMode = "last"
+const TerminalReadModeScreen TerminalReadMode = "screen"
+const TerminalReadModeScrollback TerminalReadMode = "scrollback"
+
+type TerminalReadResult struct {
+	// Block corresponds to the JSON schema field "block".
+	Block *TerminalBlock `json:"block,omitempty,omitzero"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text string `json:"text"`
+}
+
+type TerminalWaitMessage struct {
+	// AfterBlockID corresponds to the JSON schema field "after_block_id".
+	AfterBlockID *string `json:"after_block_id,omitempty,omitzero"`
+
+	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
+	CallerSessionID SessionID `json:"caller_session_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Target corresponds to the JSON schema field "target".
+	Target string `json:"target"`
+
+	// Until corresponds to the JSON schema field "until".
+	Until TerminalWaitUntil `json:"until"`
+}
+
+type TerminalWaitResult struct {
+	// Block corresponds to the JSON schema field "block".
+	Block *TerminalBlock `json:"block,omitempty,omitzero"`
+
+	// ExitCode corresponds to the JSON schema field "exit_code".
+	ExitCode *int `json:"exit_code,omitempty,omitzero"`
+
+	// Exited corresponds to the JSON schema field "exited".
+	Exited *bool `json:"exited,omitempty,omitzero"`
+}
+
+type TerminalWaitUntil string
+
+const TerminalWaitUntilExit TerminalWaitUntil = "exit"
+const TerminalWaitUntilPrompt TerminalWaitUntil = "prompt"
 
 type TierDefaults struct {
 	// Deep corresponds to the JSON schema field "deep".

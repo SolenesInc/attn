@@ -1,5 +1,11 @@
 export const scenarioCatalog = [
   {
+    id: 'agent-terminals',
+    runnerId: 'AGENT-TERMINALS',
+    label: 'Agent-opened terminals pulse and stack without taking native input focus',
+    command: ['node', 'scripts/real-app-harness/scenario-agent-terminals.mjs'],
+  },
+  {
     id: 'desktop-order',
     runnerId: 'DESKTOP-ORDER',
     label: 'Desktop Sort and Undo preserve arrangements; new numbered desktops follow the nearest lower number',

@@ -51,6 +51,9 @@ func attachBlocksToWire(blocks []pty.AttachBlockData) []AttachBlock {
 			InputCol:       b.InputCol,
 			OutputStartRow: b.OutputStartRow,
 			EndRow:         b.EndRow,
+			OutputStartCol: b.OutputStartCol,
+			EndCol:         b.EndCol,
+			EndInclusive:   b.EndInclusive,
 			Command:        b.Command,
 			ExitCode:       b.ExitCode,
 		}
@@ -642,6 +645,8 @@ func (r *Runtime) broadcastLifecycle(evt EventEnvelope) {
 }
 
 type connCtx struct {
+	waitCtx      context.Context
+	waiting      bool
 	runtime      *Runtime
 	conn         net.Conn
 	enc          *json.Encoder
@@ -673,6 +678,9 @@ func (r *Runtime) handleConn(conn net.Conn) {
 		sendDone:    make(chan struct{}),
 		connID:      strconv.FormatUint(r.connSeq.Add(1), 10),
 	}
+	waitCtx, cancelWait := context.WithCancel(context.Background())
+	ctx.waitCtx = waitCtx
+	defer cancelWait()
 	go ctx.writeLoop()
 	defer func() {
 		if ctx.subID != "" {
@@ -724,7 +732,7 @@ func (c *connCtx) nextReadTimeout() (time.Duration, bool) {
 	if !c.authed {
 		return connHelloTimeout, true
 	}
-	if c.subID != "" || c.watching {
+	if c.subID != "" || c.watching || c.waiting {
 		return 0, false
 	}
 	return connIdleReadTimeout, true
@@ -876,6 +884,37 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 			return
 		}
 		c.sendResult(req.ID, info)
+	case MethodReadText:
+		var params ReadTextParams
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			c.sendError(req.ID, ErrBadRequest, err.Error())
+			return
+		}
+		info, err := c.runtime.manager.ReadText(c.runtime.cfg.SessionID, params.Mode, params.Lines)
+		if err != nil {
+			c.sendError(req.ID, ErrBadRequest, err.Error())
+			return
+		}
+		c.sendResult(req.ID, info)
+	case MethodWaitBlock:
+		if c.waiting {
+			c.sendError(req.ID, ErrBadRequest, "one wait per connection")
+			return
+		}
+		var params pty.WaitBlockParams
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			c.sendError(req.ID, ErrBadRequest, err.Error())
+			return
+		}
+		c.waiting = true
+		go func() {
+			result, err := c.runtime.manager.WaitBlock(c.waitCtx, c.runtime.cfg.SessionID, params)
+			if err != nil {
+				c.sendError(req.ID, ErrBadRequest, err.Error())
+				return
+			}
+			c.sendResult(req.ID, result)
+		}()
 	case MethodScreenSnapshot:
 		info, err := c.runtime.manager.ScreenSnapshot(c.runtime.cfg.SessionID)
 		if err != nil {

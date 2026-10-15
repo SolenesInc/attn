@@ -124,15 +124,15 @@ func (d *Daemon) writeSessionPTY(sessionID protocol.SessionID, data []byte, sour
 	return d.sessionInputs().writePTY(context.Background(), d.primaryTerminal(sessionID), sessionID, data, strings.TrimSpace(source))
 }
 
-func (d *Daemon) writeTerminalPTY(terminal harness.TerminalID, data []byte, source string) error {
+func (d *Daemon) writeTerminalPTY(ctx context.Context, terminal harness.TerminalID, data []byte, source string) error {
 	sessionID, shown := d.shownIn(terminal)
 	if !shown {
 		if d.ptyBackend == nil {
 			return errors.New("session has no PTY backend")
 		}
-		return d.ptyBackend.Input(context.Background(), terminal, data)
+		return d.ptyBackend.Input(ctx, terminal, data)
 	}
-	return d.sessionInputs().writePTY(context.Background(), terminal, sessionID, data, strings.TrimSpace(source))
+	return d.sessionInputs().writePTY(ctx, terminal, sessionID, data, strings.TrimSpace(source))
 }
 
 // A held Enter still counts as custody: the paste already sits in the harness's composer.

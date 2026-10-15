@@ -345,7 +345,8 @@ commands:
         defer sessions until an RFC3339 instant, a positive duration (30m, 1h,
         2h, 4h, 8h), or tomorrow, saturday or monday. Day choices use local
         09:00; quote a custom time, e.g. "tomorrow 09:00".
-        A session may snooze itself and its delegates; the chief any session
+        A session may snooze itself and agents below it in its delegation
+        chain, including delegates of delegates; the chief any session
         of its profile. Each id reports success or error; failures exit 1.
   unsnooze <id>...
         end snoozes early, with the same permissions. Already unsnoozed is
@@ -361,7 +362,8 @@ commands:
         shortcut digit (1-9), the name as shown (case-insensitive) or the id.
         A missing numbered desktop is created on its shortcut slot.
         Defaults to the session running this command; a session may also move
-        the sessions it dispatched, and the chief any. What the user sees
+        agents below it in its delegation chain, including delegates’
+        delegates, and the chief any session of its profile. What the user sees
         stays put unless the moved pane was the one shown on its desktop.
   reopen <id> [--action <name>] [--json]
         bring a closed or stopped session back under its own id, on its last or

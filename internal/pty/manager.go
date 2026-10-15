@@ -240,20 +240,21 @@ func (m *Manager) Spawn(opts SpawnOptions) error {
 	}
 
 	session := &Session{
-		id:          opts.ID,
-		cwd:         opts.CWD,
-		agent:       prepared.Agent,
-		cols:        opts.Cols,
-		rows:        opts.Rows,
-		ptmx:        ptmx,
-		child:       &childProcess{cmd: cmd, pid: cmd.Process.Pid},
-		subscribers: make(map[string]*sessionSubscriber),
-		running:     true,
-		exited:      make(chan struct{}),
-		quiesced:    make(chan struct{}),
-		startedAt:   time.Now(),
-		theme:       opts.Theme,
-		cleanupDir:  overlayDir,
+		id:             opts.ID,
+		promptExpected: ShellIntegrationExpected(usedShell, cmd.Env),
+		cwd:            opts.CWD,
+		agent:          prepared.Agent,
+		cols:           opts.Cols,
+		rows:           opts.Rows,
+		ptmx:           ptmx,
+		child:          &childProcess{cmd: cmd, pid: cmd.Process.Pid},
+		subscribers:    make(map[string]*sessionSubscriber),
+		running:        true,
+		exited:         make(chan struct{}),
+		quiesced:       make(chan struct{}),
+		startedAt:      time.Now(),
+		theme:          opts.Theme,
+		cleanupDir:     overlayDir,
 	}
 	kittyLimit := kittyStorageLimit(m.logf)
 	gt, err := ghosttyvt.New(int(opts.Cols), int(opts.Rows), ghosttyvt.Options{

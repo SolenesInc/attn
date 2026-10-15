@@ -851,6 +851,9 @@ func attachBlocksFromWire(blocks []ptyworker.AttachBlock) []pty.AttachBlockData 
 			InputCol:       b.InputCol,
 			OutputStartRow: b.OutputStartRow,
 			EndRow:         b.EndRow,
+			OutputStartCol: b.OutputStartCol,
+			EndCol:         b.EndCol,
+			EndInclusive:   b.EndInclusive,
 			Command:        b.Command,
 			ExitCode:       b.ExitCode,
 		}
@@ -2936,4 +2939,55 @@ func validateSessionID(sessionID string) error {
 		}
 	}
 	return nil
+}
+
+func (b *WorkerBackend) terminalTextRPC(ctx context.Context, id harness.TerminalID, method string, params, result any) error {
+	if method != ptyworker.MethodWaitBlock {
+		var cancel context.CancelFunc
+		ctx, cancel = withDefaultRPCTimeout(ctx)
+		defer cancel()
+	}
+	session, err := b.getSession(string(id))
+	if err != nil {
+		return err
+	}
+	handshakeCtx, cancelHandshake := withDefaultRPCTimeout(ctx)
+	conn, enc, dec, err := b.connectAuthed(handshakeCtx, session)
+	cancelHandshake()
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stop()
+	if err := applyConnDeadline(conn, ctx); err != nil {
+		return err
+	}
+	reqID := b.nextReqID(method)
+	if err := writeRequest(enc, reqID, method, params); err != nil {
+		return err
+	}
+	for {
+		kind, res, _, err := readFrame(dec)
+		if err != nil {
+			return err
+		}
+		if kind != "res" || res.ID != reqID {
+			continue
+		}
+		if !res.OK {
+			return b.rpcError(session.SessionID, res.Error)
+		}
+		return json.Unmarshal(res.Result, result)
+	}
+}
+func (b *WorkerBackend) ReadText(ctx context.Context, id harness.TerminalID, mode string, lines int) (pty.ReadTextInfo, error) {
+	var result pty.ReadTextInfo
+	err := b.terminalTextRPC(ctx, id, ptyworker.MethodReadText, ptyworker.ReadTextParams{Mode: mode, Lines: lines}, &result)
+	return result, err
+}
+func (b *WorkerBackend) WaitBlock(ctx context.Context, id harness.TerminalID, params pty.WaitBlockParams) (pty.WaitBlockResult, error) {
+	var result pty.WaitBlockResult
+	err := b.terminalTextRPC(ctx, id, ptyworker.MethodWaitBlock, params, &result)
+	return result, err
 }

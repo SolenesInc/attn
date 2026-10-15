@@ -84,6 +84,8 @@ type Session struct {
 	seqCounter atomic.Uint32
 
 	replayMu            sync.Mutex
+	textChanged         chan struct{}
+	promptExpected      bool
 	lastReplaySeq       uint32
 	deliveryMu          sync.Mutex
 	deliveryAdmissionMu sync.Mutex
@@ -366,6 +368,7 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 					placements, placementsMoved = s.wireFeed.changedPlacements()
 				}
 				s.lastReplaySeq = seq
+				s.textChangedLocked()
 				s.replayMu.Unlock()
 				if readLoopAppliedHook != nil {
 					readLoopAppliedHook(data)
@@ -432,6 +435,7 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 			placements, placementsMoved = s.wireFeed.changedPlacements()
 		}
 		s.lastReplaySeq = seq
+		s.textChangedLocked()
 		s.replayMu.Unlock()
 		s.drainGhosttyResponses(logf)
 		if len(wire) > 0 {

@@ -385,3 +385,16 @@ func boolEnvValue(value bool) string {
 	}
 	return "0"
 }
+
+func ShellIntegrationExpected(path string, env []string) bool {
+	if disabled, _ := lookupEnv(env, "ATTN_NO_SHELL_INTEGRATION"); disabled != "" {
+		return false
+	}
+	for _, name := range shellNames(path) {
+		switch name {
+		case "fish", "zsh", "bash":
+			return true
+		}
+	}
+	return false
+}
