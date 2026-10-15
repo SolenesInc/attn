@@ -27,7 +27,7 @@ func TestDatabaseRestorePreservesConversationArchivesFromAfterTheSnapshot(t *tes
 	}
 	type conversation struct {
 		state, native, source, archive string
-		original                       []byte
+		original, partial              []byte
 	}
 	var conversations []conversation
 	for _, state := range []string{"missing", "deleted", "released"} {
@@ -79,6 +79,11 @@ func TestDatabaseRestorePreservesConversationArchivesFromAfterTheSnapshot(t *tes
 	snapshot := backups[0]
 	for i := range conversations {
 		c := &conversations[i]
+		before, err := os.ReadFile(c.source)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c.partial = append(before, []byte("{\"type\":\"summary\",\"summary\":\"partial\"}\n")...)
 		file, err := os.OpenFile(c.source, os.O_APPEND|os.O_WRONLY, 0)
 		if err != nil {
 			t.Fatal(err)
@@ -104,7 +109,11 @@ func TestDatabaseRestorePreservesConversationArchivesFromAfterTheSnapshot(t *tes
 		t.Fatalf("restore did not explain archive retention: %+v", restored)
 	}
 	for _, c := range conversations {
-		if err := os.Remove(c.source); err != nil {
+		if c.state == "released" {
+			if err := os.WriteFile(c.source, c.partial, 0600); err != nil {
+				t.Fatal(err)
+			}
+		} else if err := os.Remove(c.source); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -85,6 +85,45 @@ func conversationArchive(agent, resumeID string) string {
 	return filepath.Join(config.ConversationsDir(), agent, resumeID+".tar.zst")
 }
 
+func ReadKeptConversationArchive(agent, resumeID string) (store.KeptConversation, error) {
+	path := conversationArchive(agent, resumeID)
+	src, err := os.Open(path)
+	if err != nil {
+		return store.KeptConversation{}, err
+	}
+	defer src.Close()
+	info, err := src.Stat()
+	if err != nil {
+		return store.KeptConversation{}, err
+	}
+	decoder, err := zstd.NewReader(src, zstd.WithDecoderConcurrency(1))
+	if err != nil {
+		return store.KeptConversation{}, err
+	}
+	defer decoder.Close()
+	home, err := toolhome.Dir()
+	if err != nil {
+		return store.KeptConversation{}, err
+	}
+	kept := store.KeptConversation{Agent: agent, ResumeID: resumeID, StoredBytes: info.Size(), CopiedAt: info.ModTime()}
+	archive := tar.NewReader(decoder)
+	for {
+		header, err := archive.Next()
+		if err == io.EOF {
+			if kept.SourcePath == "" {
+				return store.KeptConversation{}, fmt.Errorf("archive %s has no main conversation file", path)
+			}
+			return kept, nil
+		}
+		if err != nil {
+			return store.KeptConversation{}, err
+		}
+		if header.Typeflag == tar.TypeReg && conversationMainFile(agent, resumeID, header.Name) && (kept.SourcePath == "" || header.Size > kept.Bytes) {
+			kept.SourcePath, kept.Bytes = filepath.Join(home, filepath.FromSlash(header.Name)), header.Size
+		}
+	}
+}
+
 func (d *Daemon) conversationSeedReferences() (map[conversationKey][]protocol.KeptConversationSeed, error) {
 	referenced := make(map[conversationKey][]protocol.KeptConversationSeed)
 	after := ""
@@ -451,8 +490,7 @@ func appendMissingConversationEntries(dst *tar.Writer, path, agent, resumeID str
 		if !conversationFileAllowed(agent, resumeID, header.Name) {
 			return fmt.Errorf("invalid %s archive path: %s", agent, header.Name)
 		}
-		parts := strings.Split(header.Name, "/")
-		if len(parts) == 4 && parts[1] == "projects" && parts[3] == resumeID+".jsonl" {
+		if conversationMainFile(agent, resumeID, header.Name) {
 			continue
 		}
 		if err := dst.WriteHeader(header); err != nil {
