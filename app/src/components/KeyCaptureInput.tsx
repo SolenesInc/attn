@@ -1,11 +1,7 @@
-// While recording, the global shortcut dispatcher is suspended across every step,
-// so capturing a combo never fires its action.
-
 import { useEffect, useRef, useState } from 'react';
 import { Binding, Combo, Chord } from '../shortcuts/registry';
 import { formatShortcut, shortcutTokens } from '../shortcuts/formatShortcut';
 import { eventToBinding, isRiskyBinding } from '../shortcuts/resolver';
-import { setShortcutCaptureSuspended } from '../shortcuts/useShortcut';
 import { KeyCombo } from './Keycap';
 import './KeyCaptureInput.css';
 import { modifierGlyphs } from '../shortcuts/platform';
@@ -54,7 +50,6 @@ export function KeyCaptureInput({
       setLeader(null);
       return;
     }
-    setShortcutCaptureSuspended(true);
     const handle = (e: KeyboardEvent) => {
       e.preventDefault();
       e.stopPropagation();
@@ -86,7 +81,6 @@ export function KeyCaptureInput({
     window.addEventListener('keydown', handle, true);
     return () => {
       window.removeEventListener('keydown', handle, true);
-      setShortcutCaptureSuspended(false);
     };
   }, [recording]);
 
