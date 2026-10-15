@@ -22,7 +22,7 @@ sudo add-apt-repository -y ppa:fish-shell/release-4
 sudo env DEBIAN_FRONTEND=noninteractive apt-get update -qq
 sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq build-essential pkg-config bash coreutils desktop-file-utils fish \
   gh imagemagick libayatana-appindicator3-dev librsvg2-dev libssl-dev libwebkit2gtk-4.1-dev \
-  libxdo-dev sqlite3 xauth xclip xdg-utils xdotool xvfb zsh dbus-x11
+  libxdo-dev neovim sqlite3 xauth xclip xdg-utils xdotool xvfb zsh dbus-x11
 bash "$root/scripts/setup-linux-sandbox.sh"
 case "$(uname -m)" in
   aarch64) go_arch=arm64; node_arch=arm64 ;;

@@ -56,7 +56,7 @@ and run commands from the repository root.
   print one); `summary.json` has the rest.
 - Check pane text and native screenshots before diagnosing. WebGL terminals need
   native window captures.
-- Linux needs `xvfb-run`, `xdotool`, `xclip`, `sqlite3`, `fish`, `bash`, `zsh`,
+- Linux needs `xvfb-run`, `xdotool`, `xclip`, `sqlite3`, `fish`, `bash`, `zsh`, `nvim`,
   and `pi`, plus `attn plugin install-bundled attn-pi`.
 
 ## Recordings

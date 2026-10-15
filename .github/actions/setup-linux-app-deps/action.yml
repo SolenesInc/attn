@@ -23,7 +23,7 @@ runs:
             ./scripts/ci-retry.sh -- sudo add-apt-repository -y ppa:fish-shell/release-4
             packages="bash coreutils curl desktop-file-utils fish imagemagick
               libayatana-appindicator3-dev librsvg2-dev libssl-dev libwebkit2gtk-4.1-dev
-              libxdo-dev sqlite3 xauth xclip xdg-utils xdotool xvfb zsh"
+              libxdo-dev neovim sqlite3 xauth xclip xdg-utils xdotool xvfb zsh"
             ;;
           *)
             echo "unknown role '$ROLE': expected build or run" >&2
