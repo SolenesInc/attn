@@ -24,8 +24,8 @@ var (
 	agentGuidance = Use("session.agent", "content/agent.md",
 		Bind("delegation_boundary", delegationBoundary))
 	quickCaptureGuidance = Use("session.quick-capture-guidance", "content/session/quick-capture.md")
-	gardenGuidance      = Use("session.garden", "content/garden.md")
-	pullRequestGuidance = Use("session.pull-request-guidance", "content/session/pull-request-guidance.md")
+	gardenGuidance       = Use("session.garden", "content/garden.md")
+	pullRequestGuidance  = Use("session.pull-request-guidance", "content/session/pull-request-guidance.md")
 )
 
 var session = Recipient{
