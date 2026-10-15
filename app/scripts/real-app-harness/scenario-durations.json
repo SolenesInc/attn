@@ -262,12 +262,12 @@
         "note": "Green ATTN_VERDICT durationMs=132293 in a 57/57 green full matrix, including cleanup. Closes empty numbered desktops left by earlier scenarios before its agents launch."
       },
       "new-session-launcher": {
-        "run": "new-session-launcher-2026-10-15T21-32-21-869Z",
+        "run": "new-session-launcher-2026-10-15T21-44-27-103Z",
         "job": "Local packaged scenario, launcher isolated instance",
         "recordedAt": "2026-10-15",
-        "seconds": 24.919,
+        "seconds": 22.491,
         "runnerClass": "local macOS",
-        "note": "Green ATTN_VERDICT durationMs=24919 including cleanup and recording. Covers AppKit CmdT/CmdEnter, Terminal Tab, back, both starting branches, destination memory, existing worktrees and delete cancel/clean/force. Remeasure on Linux CI."
+        "note": "Green ATTN_VERDICT durationMs=22491 including cleanup and recording. Covers automation open/close/reopen, AppKit CmdT/CmdEnter, Terminal Tab, back, both starting branches, destination memory, existing worktrees and delete cancel/clean/force. Remeasure on Linux CI."
       }
     }
   },
@@ -327,6 +327,6 @@
     "move-with-delegates": 27.874,
     "desktop-order": 23.413,
     "close-desktop": 33.297,
-    "new-session-launcher": 24.919
+    "new-session-launcher": 22.491
   }
 }
