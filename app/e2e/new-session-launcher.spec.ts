@@ -24,7 +24,11 @@ for (const terminal of [false, true]) {
       await page.goto('/');
       await page.waitForSelector('.dashboard');
       await page.keyboard.press('Meta+,');
-      await page.getByRole('textbox', { name: /search settings/i }).fill('one-screen');
+      await page.getByRole('searchbox', { name: /search settings/i }).fill('one-screen');
+      await page
+        .getByRole('navigation', { name: 'Settings sections' })
+        .getByRole('button', { name: /^Terminal/ })
+        .click();
       await page
         .getByRole('switch', { name: 'One-screen new-session launcher (experimental)' })
         .click();
