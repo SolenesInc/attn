@@ -214,6 +214,7 @@ describe('one-screen launcher', () => {
             success: false,
             forceable: true,
             error: 'dirty worktree',
+            path,
           },
     );
     await press(daemon, 'Backspace', { metaKey: true });
