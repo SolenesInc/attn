@@ -76,6 +76,14 @@ func TestAWorkingSessionsActivityLineIsWrittenOnlyForNewOutputAndAtMostOncePerIn
 			return asked
 		}
 
+		app.Close()
+		w.advance(time.Minute)
+		transcript.Answer("Working while the app is closed.")
+		w.advance(time.Minute)
+		presenceTierIs(t, cli, "with no app connected", "away")
+		expect("with new output and no app connected", 0)
+
+		app = w.App()
 		watchActivity(w, app, true, time.Minute)
 		expect("for the output written before attn first looked", 0)
 		write := func(text string) {

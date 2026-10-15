@@ -129,7 +129,8 @@ type Daemon struct {
 	diagServer                        *diag.Server
 	harnessWSListenerFD               string
 	wsHub                             *wsHub
-	presentSince                      time.Time
+	startedAt                         time.Time
+	lastPresentAt                     time.Time
 	presenceMu                        sync.RWMutex
 	crewLifecycleState                *crewLifecycleMemo
 	crewMemoOnce                      sync.Once
@@ -533,7 +534,7 @@ func New(socketPath string) *Daemon {
 		pidPath:             pidPath,
 		dataRoot:            dataRoot,
 		wsHub:               newWSHub(),
-		presentSince:        time.Now(),
+		startedAt:           time.Now(),
 		desktopTiles:        newDesktopTileDelivery(),
 		logger:              logger,
 		debugLogging:        logger != nil && logger.DebugEnabled(),
@@ -571,7 +572,7 @@ func NewForTesting(socketPath string) *Daemon {
 		dataRoot:            dataRoot,
 		store:               store.New(),
 		wsHub:               newWSHub(),
-		presentSince:        time.Now(),
+		startedAt:           time.Now(),
 		desktopTiles:        newDesktopTileDelivery(),
 		logger:              nil,
 		ghRegistry:          github.NewClientRegistry(),
