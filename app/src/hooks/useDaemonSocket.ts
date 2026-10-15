@@ -3212,8 +3212,8 @@ export function useDaemonSocket({
   const sendRenameSession = useCallback((sessionId: string, label: string): Promise<void> => {
     return new Promise((resolve, reject) => {
       const trimmed = label.trim();
-      if (!sessionId || !trimmed) {
-        reject(new Error('Session name cannot be empty'));
+      if (!sessionId) {
+        reject(new Error('Session id is required'));
         return;
       }
       const key = `rename_session:${sessionId}`;

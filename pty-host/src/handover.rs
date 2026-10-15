@@ -65,6 +65,8 @@ pub struct SessionHandoff {
     pub next_block_id: u64,
     pub program_status_reported: bool,
     pub shell: ShellState,
+    #[serde(default)]
+    pub title: crate::title::ShellTitle,
     pub running: bool,
     pub state: String,
     pub state_detail: String,

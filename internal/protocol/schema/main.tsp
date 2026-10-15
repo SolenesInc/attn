@@ -163,6 +163,7 @@ model SessionDelegationRole {
 }
 
 model Session {
+  title?: string;
   id: SessionID;
   label: string;
   agent: string;                // Built-in ID or registered plugin driver ID

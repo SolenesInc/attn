@@ -1,3 +1,4 @@
+import { sessionDisplayName } from '../../utils/sessionDisplayName';
 import { SessionPriority } from '../SessionPriority';
 import { useDaemonStore } from '../../store/daemonSessions';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
@@ -73,7 +74,7 @@ export function AgentSessionRow({
     <div className="unified-palette-row" data-testid={`palette-agent-${session.id}`}>
       <span className={`unified-palette-dot is-${status}`} />
       <span className="unified-palette-name">
-        <SessionPriority priority={session.priority} />{session.label}
+        <SessionPriority priority={session.priority} />{sessionDisplayName(session)}
         {showCrewDetails && session.crewMember && !session.chiefOfStaff && <span className="unified-palette-muted"> · crew</span>}
       </span>
       <kbd className="unified-palette-slot">{slot}</kbd>

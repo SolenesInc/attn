@@ -1,5 +1,7 @@
 package pty
 
+import "strings"
+
 func indexOfByte(b []byte, target byte) int {
 	for i, c := range b {
 		if c == target {
@@ -107,12 +109,15 @@ const (
 	feedSegPlain feedSegKind = iota
 	feedSegKittyAPC
 	feedSegOSC133
+	feedSegTitle
 )
 
 type feedSegment struct {
-	Kind   feedSegKind
-	Bytes  []byte
-	Marker *osc133Marker
+	Kind     feedSegKind
+	Bytes    []byte
+	Marker   *osc133Marker
+	OSCCode  string
+	OSCValue string
 }
 
 type feedSegmenter struct {
@@ -249,11 +254,19 @@ scan:
 			i++
 
 		case kittySegOSC133Prefix:
-			if b == osc133Prefix[i-holdStart] {
-				i++
-				if i-holdStart == len(osc133Prefix) {
-					s.mode = kittySegOSC133Body
+			prefix := string(buffer[holdStart+2 : i+1])
+			matched := false
+			for _, code := range []string{"133;", "0;", "2;", "7;"} {
+				if strings.HasPrefix(code, prefix) {
+					matched = true
+					if prefix == code {
+						s.mode = kittySegOSC133Body
+					}
+					break
 				}
+			}
+			if matched {
+				i++
 				continue
 			}
 			holdStart = -1
@@ -388,11 +401,13 @@ func emitMarker(emit func(feedSegment), raw []byte) {
 	if raw[len(raw)-1] != oscBEL {
 		payloadEnd--
 	}
-	emit(feedSegment{
-		Kind:   feedSegOSC133,
-		Bytes:  raw,
-		Marker: osc133MarkerFromPayload(string(raw[len(osc133Prefix):payloadEnd])),
-	})
+	code, value, _ := strings.Cut(string(raw[2:payloadEnd]), ";")
+	seg := feedSegment{Kind: feedSegTitle, Bytes: raw, OSCCode: code, OSCValue: value}
+	if code == "133" {
+		seg.Kind = feedSegOSC133
+		seg.Marker = osc133MarkerFromPayload(value)
+	}
+	emit(seg)
 }
 
 func (s *feedSegmenter) hold(buffer []byte, carried bool, from, resumeAt int) {

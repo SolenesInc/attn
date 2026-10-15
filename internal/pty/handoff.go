@@ -42,6 +42,7 @@ type HandoffState struct {
 	SchemeReportsEnabled bool
 
 	LastSignal *Observation
+	ShellTitle *ShellTitleState
 
 	StartedAt  time.Time
 	CleanupDir string
@@ -129,6 +130,14 @@ func (s *Session) handoff() (HandoffState, error) {
 		state.LastSignal = &obs
 	}
 
+	s.signalMu.Lock()
+	if s.shellSignals != nil {
+		s.shellSignals.mu.Lock()
+		title := s.shellSignals.title
+		state.ShellTitle = &title
+		s.shellSignals.mu.Unlock()
+	}
+	s.signalMu.Unlock()
 	s.replayMu.Lock()
 	if s.ghostty != nil {
 		dump := s.ghostty.HandoffVT()
@@ -219,6 +228,10 @@ func (m *Manager) Adopt(st HandoffState) error {
 		session.lastSignal = &obs
 	}
 
+	if st.ShellTitle != nil {
+		session.shellSignals = newShellSignalArbiter(session.childProcessGroup())
+		session.shellSignals.title = *st.ShellTitle
+	}
 	kittyLimit := kittyStorageLimit(m.logf)
 	gt, err := ghosttyvt.New(int(st.Cols), int(st.Rows), ghosttyvt.Options{
 		KittyImageStorageLimit: kittyLimit,

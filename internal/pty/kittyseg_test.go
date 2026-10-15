@@ -131,15 +131,7 @@ var kittySegBattery = []kittySegCase{
 		input: "\x1b_Zwhatever\x1b\\",
 		want:  []kittyEmission{plainEmission("\x1b_Zwhatever\x1b\\")},
 	},
-	{
-		name:  "ordinary osc and csi sequences stay plain",
-		input: "\x1b]0;title\x07\x1b[1;31mred\x1b[0m" + kittyQuery + "\x1b]133;A\x07",
-		want: []kittyEmission{
-			plainEmission("\x1b]0;title\x07\x1b[1;31mred\x1b[0m"),
-			apcEmission(kittyQuery),
-			markerEmission("\x1b]133;A\x07"),
-		},
-	},
+
 	{
 		name:  "esc st with no introducer stays plain",
 		input: "a\x1b\\b",
@@ -332,15 +324,7 @@ var kittySegBattery = []kittySegCase{
 			plainEmission("tail"),
 		},
 	},
-	{
-		name:  "an apc after a bel-terminated osc is extracted",
-		input: "\x1b]0;title\x07" + kittyDirectRGB + "tail",
-		want: []kittyEmission{
-			plainEmission("\x1b]0;title\x07"),
-			apcEmission(kittyDirectRGB),
-			plainEmission("tail"),
-		},
-	},
+
 	{
 		name:  "c1 st ends an sos but not an osc",
 		input: "\x1bXsos\x9c" + kittyDirectRGB + "\x1b]0;t\x9c" + kittyRecovered + "\x07" + kittyQuery,

@@ -152,6 +152,8 @@ type Daemon struct {
 	warnings                          []protocol.DaemonWarning
 	warningsMu                        sync.RWMutex
 	ptyBackend                        ptybackend.Backend
+	terminalTitlesMu                  sync.RWMutex
+	terminalTitles                    map[harness.TerminalID]string
 	ptySettingsMu                     sync.Mutex
 	ptySettingsChangeMu               sync.Mutex
 	sharedPTYHost                     *ptybackend.WorkerBackend
@@ -820,6 +822,9 @@ func (d *Daemon) Start() error {
 		hooks.SetExitHandler(func(info ptybackend.ExitInfo) { d.handlePTYExit(info) })
 		hooks.SetStateHandler(d.handlePTYState)
 	}
+	if hooks, ok := d.ptyBackend.(ptybackend.TitleHooks); ok {
+		hooks.SetTitleHandler(d.handlePTYTitle)
+	}
 
 	d.initHTTPServer()
 	if err := d.listenHTTP(); err != nil {
@@ -1245,6 +1250,7 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 		if infoProvider != nil {
 			fetched, err := infoProvider.SessionInfo(ctx, terminalID)
 			if err == nil {
+				d.handlePTYTitle(terminalID, fetched.Title)
 				info = fetched
 				haveInfo = true
 			}
@@ -1628,6 +1634,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		d.logf("terminal %s exited after its agent moved on from session %s, which runs on over its link", info.ID, sessionID)
 		return false
 	}
+	d.forgetTerminalTitle(info.ID)
 	d.linkTerminalExited(info.ID)
 	if d.linkProcess(info.ID) {
 		return false
@@ -3149,6 +3156,7 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 		clone.DelegatedFromChief = nil
 	}
 	d.decorateSessionWithCost(clone)
+	d.decorateSessionWithTitle(clone)
 	d.decorateSessionWithTerminalBuild(clone)
 	d.decorateSessionWithTurn(clone)
 	d.decorateSessionHidden(clone)

@@ -8841,6 +8841,9 @@ type Session struct {
 	// TerminalExit corresponds to the JSON schema field "terminal_exit".
 	TerminalExit *TerminalExit `json:"terminal_exit,omitempty,omitzero"`
 
+	// Title corresponds to the JSON schema field "title".
+	Title *string `json:"title,omitempty,omitzero"`
+
 	// TurnOpenedAt corresponds to the JSON schema field "turn_opened_at".
 	TurnOpenedAt *string `json:"turn_opened_at,omitempty,omitzero"`
 

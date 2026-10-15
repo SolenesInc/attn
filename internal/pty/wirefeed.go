@@ -83,7 +83,7 @@ func (f *wireFeeder) feed(data []byte) ([]byte, string) {
 	first := true
 	f.seg.Feed(data, func(seg feedSegment) {
 		switch seg.Kind {
-		case feedSegPlain:
+		case feedSegPlain, feedSegTitle:
 			f.blocks.write(seg.Bytes)
 			if first && len(seg.Bytes) == len(data) && &seg.Bytes[0] == &data[0] {
 				whole = true

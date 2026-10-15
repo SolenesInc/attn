@@ -195,7 +195,7 @@ func (d *Daemon) normalizeSpawnRequest(req *spawnRequest) *spawnRejection {
 	req.existingSession = d.store.Get(req.msg.ID)
 	req.cwd = resolveSpawnCWD(req.msg.Cwd)
 	req.label = protocol.Deref(req.msg.Label)
-	if req.label == "" {
+	if req.label == "" && !req.isShell {
 		req.label = filepath.Base(req.cwd)
 	}
 	if req.existingSession != nil && strings.TrimSpace(req.existingSession.Label) != "" {

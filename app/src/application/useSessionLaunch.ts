@@ -62,7 +62,8 @@ export function useSessionLaunch({
   const nextSplitSessionLabel = useCallback(
     (agent: SessionAgent) => {
       const normalizedAgent = normalizeSessionAgent(agent, 'codex');
-      const base = normalizedAgent === 'shell' ? 'shell' : normalizedAgent;
+      if (normalizedAgent === 'shell') return '';
+      const base = normalizedAgent;
       const onDesktop = new Set(currentDesktop?.panes.map((pane) => pane.session_id));
       const matchingCount = sessions.filter(
         (session) =>

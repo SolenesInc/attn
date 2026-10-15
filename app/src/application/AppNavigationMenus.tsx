@@ -1,3 +1,4 @@
+import { sessionDisplayName } from '../utils/sessionDisplayName';
 import { openPath } from '@tauri-apps/plugin-opener';
 import { SnoozeMenu } from '../components/SnoozeMenu';
 import { MarkdownOpener } from '../components/palette/MarkdownOpener';
@@ -45,7 +46,7 @@ export function AppNavigationMenus() {
       )}
       {snoozeMenu && (
         <SnoozeMenu
-          sessionLabel={snoozeMenu.session.label}
+          sessionLabel={sessionDisplayName(snoozeMenu.session)}
           placement={snoozeMenu.placement}
           onSnooze={(until) => sendSnoozeTurn(snoozeMenu.session.id, until)}
           onClose={() => setSnoozeMenu(null)}

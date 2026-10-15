@@ -242,7 +242,8 @@ export function SidebarPopovers() {
             setRenameTarget({
               kind: 'session',
               id: sessionActionsTarget.id,
-              name: sessionActionsTarget.label,
+              name: actionsSession?.label ?? sessionActionsTarget.label,
+              defaultName: actionsSession?.agent === 'shell' ? sessionActionsTarget.label : undefined,
               anchor: sessionActionsTarget.anchor,
             });
           }}

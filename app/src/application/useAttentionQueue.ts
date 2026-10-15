@@ -1,3 +1,4 @@
+import { sessionDisplayName } from '../utils/sessionDisplayName';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { SnoozePlacement } from '../components/SnoozeMenu';
@@ -122,7 +123,7 @@ export function useAttentionQueue({
     const rect = row?.getBoundingClientRect();
     const pane = document.querySelector<HTMLElement>(`.terminal-wrapper.active [data-pane-session-id="${session.id}"]`);
     setSnoozeMenu({
-      session: { id: session.id, label: session.label },
+      session: { id: session.id, label: sessionDisplayName(session) },
       placement: rect ? { kind: 'anchor', top: rect.bottom + 4, left: rect.left } : { kind: 'center', pane },
       origin,
       leaf: currentActiveLeaf(),

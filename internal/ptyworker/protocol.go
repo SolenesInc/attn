@@ -12,7 +12,7 @@ import (
 
 const (
 	RPCMajor = 1
-	RPCMinor = 1
+	RPCMinor = 2
 )
 
 const MinCompatibleRPCMinor = 0
@@ -41,6 +41,7 @@ const (
 const (
 	EventOutput            = "output"
 	EventDesync            = "desync"
+	EventTitleChanged      = "title_changed"
 	EventStateChanged      = "state_changed"
 	EventExit              = "exit"
 	EventTeardownEscalated = "teardown_escalated"
@@ -91,6 +92,7 @@ type EventEnvelope struct {
 	Rows       *uint16 `json:"rows,omitempty"`
 	XPixel     *uint16 `json:"xpixel,omitempty"`
 	YPixel     *uint16 `json:"ypixel,omitempty"`
+	Title      *string `json:"title,omitempty"`
 	State      *string `json:"state,omitempty"`
 	ExitCode   *int    `json:"exit_code,omitempty"`
 	ExitSignal *string `json:"exit_signal,omitempty"`
@@ -196,6 +198,7 @@ type HelloResult struct {
 }
 
 type InfoResult struct {
+	Title     string `json:"title"`
 	Running   bool   `json:"running"`
 	Agent     string `json:"agent"`
 	CWD       string `json:"cwd"`

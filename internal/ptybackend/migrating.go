@@ -86,6 +86,14 @@ func (b *MigratingBackend) SetStateHandler(handler func(id harness.TerminalID, o
 	}
 }
 
+func (b *MigratingBackend) SetTitleHandler(handler func(id harness.TerminalID, title string)) {
+	for _, backend := range []Backend{b.legacy, b.shared} {
+		if hooks, ok := backend.(TitleHooks); ok {
+			hooks.SetTitleHandler(handler)
+		}
+	}
+}
+
 func (b *MigratingBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 	if opts.ID == "" {
 		return errors.New("missing session id")

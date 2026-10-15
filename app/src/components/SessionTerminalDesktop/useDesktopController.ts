@@ -133,6 +133,7 @@ export function useDesktopController(
   const [renamePane, setRenamePane] = useState<{
     sessionId: string;
     name: string;
+    defaultName?: string;
     anchor: { top: number; left: number };
   } | null>(null);
   const [pendingRatioOverrides, setPendingRatioOverrides] = useState<Map<string, number>>(

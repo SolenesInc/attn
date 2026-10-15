@@ -1,3 +1,4 @@
+import { sessionDisplayName } from '../utils/sessionDisplayName';
 import { useRef, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from 'react';
 import { TURN_AGE_TICK_MS, useNow } from '../hooks/useNow';
 import { formatShortcut } from '../shortcuts/formatShortcut';
@@ -208,7 +209,7 @@ function WaitingCard({ leadRef, leadCount }: { leadRef: RefObject<HTMLDivElement
   const hidden = turns.length - lead.length;
   const pinnedCrew = new Set(queue.crew.map((row) => row.session.id));
   const matches = (row: QueueRow<QueueBandSessionView>) =>
-    !agentFilter || row.session.label.toLowerCase().includes(agentFilter.toLowerCase());
+    !agentFilter || sessionDisplayName(row.session).toLowerCase().includes(agentFilter.toLowerCase());
   const hiddenWaiting = turns.slice(leadCount).filter((row) => !pinnedCrew.has(row.session.id)).length;
   const hiddenWorking = queue.settled.filter((row) => !pinnedCrew.has(row.session.id)).length;
   const hiddenSnoozed = queue.snoozed.filter((row) => !pinnedCrew.has(row.session.id)).length;

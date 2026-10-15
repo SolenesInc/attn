@@ -463,7 +463,7 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 }
 
 func (s *Session) observeSignals(programReports []ghosttyvt.ProgramStatus, data []byte) {
-	if s.onState == nil {
+	if s.onState == nil && s.shellSignals == nil {
 		return
 	}
 	s.signalMu.Lock()
@@ -636,7 +636,9 @@ func (s *Session) emitSignal(obs Observation) {
 	stored := obs
 	s.lastSignal = &stored
 	s.lastSignalMu.Unlock()
-	s.onState(obs)
+	if s.onState != nil {
+		s.onState(obs)
+	}
 }
 
 func (s *Session) LastSignal() (Observation, bool) {

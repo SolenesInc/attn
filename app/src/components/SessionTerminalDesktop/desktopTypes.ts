@@ -54,6 +54,7 @@ export interface SessionTerminalDesktopProps {
   desktopSessions?: Array<{
     id: string;
     label: string;
+    title?: string;
     priority?: boolean;
     agent: SessionAgent;
     cwd: string;
