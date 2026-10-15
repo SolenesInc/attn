@@ -1,5 +1,10 @@
 # Database migrations
 
+attn refuses to open a database containing an applied migration the build
+does not support. This applies to daemon startup and CLI commands that open
+the database directly. Install a build supporting the database's migrations or
+restore a backup taken before the upgrade with `attn db restore`.
+
 - Create a SQL migration from the repository root:
 
   ```sh
