@@ -1607,6 +1607,9 @@ type SchemaUpgrade struct {
 }
 
 func openSQLite(dbPath string) (*sql.DB, *tableWrites, error) {
+	if err := refuseNewerSchema(dbPath); err != nil {
+		return nil, nil, err
+	}
 	dir := filepath.Dir(dbPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, nil, err

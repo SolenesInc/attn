@@ -5,8 +5,10 @@ import (
 	"embed"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -126,6 +128,36 @@ func LatestSchemaVersion() int {
 		return 0
 	}
 	return all[len(all)-1].version
+}
+
+func refuseNewerSchema(dbPath string) error {
+	if dbPath == ":memory:" {
+		return nil
+	}
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("checking the database at %s: %w", dbPath, err)
+	}
+	absolute, err := filepath.Abs(dbPath)
+	if err != nil {
+		return err
+	}
+	u := &url.URL{Scheme: "file", Path: absolute, RawQuery: "mode=ro"}
+	db, err := sql.Open("sqlite3", u.String())
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	history, err := readMigrationHistory(db)
+	if err != nil {
+		return fmt.Errorf("reading the schema version of %s: %w", dbPath, err)
+	}
+	latest := LatestSchemaVersion()
+	if history.recorded > latest {
+		return fmt.Errorf("the database at %s has schema version %d, newer than this attn build's newest schema version %d; install an attn build supporting schema version %d or later, or restore a backup taken before the upgrade (`attn db restore`)", dbPath, history.recorded, latest, history.recorded)
+	}
+	return nil
 }
 
 type migrationHistory struct {

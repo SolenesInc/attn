@@ -1,9 +1,11 @@
 package store
 
 import (
+	"bytes"
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -147,44 +149,112 @@ func TestFailedTimestampedUpgradeRollsBackAllPendingWork(t *testing.T) {
 	}
 }
 
-func TestAnOlderBuildAcceptsUnknownNewerMigrations(t *testing.T) {
-	original := timestampedMigrations
-	defer func() { timestampedMigrations = original }()
-	timestampedMigrations = nil
-	known := migration{version: 20261005210400, desc: "known column", sql: `ALTER TABLE sessions ADD COLUMN known_column TEXT`}
-	registerMigration(known)
-	registerMigration(migration{version: 20271005210400, desc: "future data migration", apply: func(tx *sql.Tx) error {
-		_, err := tx.Exec(`INSERT INTO settings(key, value) VALUES ('future_backfill', 'preserved')`)
-		return err
-	}})
-	path := filepath.Join(t.TempDir(), "attn.db")
-	s, _, err := Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	s.Close()
-	timestampedMigrations = []migration{known}
-	s, err = OpenCurrent(path)
-	if err != nil {
-		t.Fatalf("older build refused newer database: %v", err)
-	}
-	s.Close()
-	s, upgrade, err := Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	s.Close()
-	if upgrade.BackupPath != "" {
-		t.Fatalf("no pending work wrote backup %s", upgrade.BackupPath)
-	}
-	db, err := OpenDB(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	var value string
-	if err := db.QueryRow(`SELECT value FROM settings WHERE key = 'future_backfill'`).Scan(&value); err != nil || value != "preserved" {
-		t.Fatalf("Go migration value = %q (%v)", value, err)
+func TestAnOlderBuildRefusesNewerDatabasesWithoutChangingThem(t *testing.T) {
+	for _, journal := range []string{"DELETE", "WAL"} {
+		for _, missingKnown := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/missing_known=%t", journal, missingKnown), func(t *testing.T) {
+				path := filepath.Join(t.TempDir(), "attn ?#.db")
+				db, err := OpenDB(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := db.Close(); err != nil {
+					t.Fatal(err)
+				}
+				u := &url.URL{Scheme: "file", Path: path}
+				db, err = sql.Open("sqlite3", u.String())
+				if err != nil {
+					t.Fatal(err)
+				}
+				db.SetMaxOpenConns(1)
+				t.Cleanup(func() { db.Close() })
+				if _, err := db.Exec("PRAGMA journal_mode=" + journal); err != nil {
+					t.Fatal(err)
+				}
+				newest := LatestSchemaVersion() + 1
+				if _, err := db.Exec(`INSERT INTO schema_migrations(version, applied_at) VALUES (?, datetime('now'))`, newest); err != nil {
+					t.Fatal(err)
+				}
+				if missingKnown {
+					if _, err := db.Exec(`DELETE FROM schema_migrations WHERE version = ?`, LatestSchemaVersion()); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if _, err := db.Exec(`INSERT INTO settings(key, value) VALUES ('future_backfill', 'preserved')`); err != nil {
+					t.Fatal(err)
+				}
+				if journal == "DELETE" {
+					if err := db.Close(); err != nil {
+						t.Fatal(err)
+					}
+				}
+				before := make(map[string][]byte)
+				for _, suffix := range []string{"", "-wal"} {
+					data, err := os.ReadFile(path + suffix)
+					if os.IsNotExist(err) {
+						continue
+					}
+					if err != nil {
+						t.Fatal(err)
+					}
+					before[path+suffix] = data
+				}
+				entries, err := os.ReadDir(filepath.Dir(path))
+				if err != nil {
+					t.Fatal(err)
+				}
+				want := fmt.Sprintf("the database at %s has schema version %d, newer than this attn build's newest schema version %d; install an attn build supporting schema version %d or later, or restore a backup taken before the upgrade (`attn db restore`)", path, newest, LatestSchemaVersion(), newest)
+				for _, opener := range []struct {
+					name string
+					open func() error
+				}{
+					{"OpenCurrent", func() error {
+						s, err := OpenCurrent(path)
+						if s != nil {
+							s.Close()
+						}
+						return err
+					}},
+					{"Open", func() error {
+						s, _, err := Open(path)
+						if s != nil {
+							s.Close()
+						}
+						return err
+					}},
+					{"OpenDB", func() error {
+						d, err := OpenDB(path)
+						if d != nil {
+							d.Close()
+						}
+						return err
+					}},
+					{"OpenDBAtSchemaVersion", func() error {
+						d, err := OpenDBAtSchemaVersion(path, LatestSchemaVersion())
+						if d != nil {
+							d.Close()
+						}
+						return err
+					}},
+				} {
+					t.Run(opener.name, func(t *testing.T) {
+						if err := opener.open(); err == nil || err.Error() != want {
+							t.Fatalf("open = %v, want %s", err, want)
+						}
+						for file, data := range before {
+							after, err := os.ReadFile(file)
+							if err != nil || !bytes.Equal(data, after) {
+								t.Fatalf("refused open changed %s: %v", file, err)
+							}
+						}
+						afterEntries, err := os.ReadDir(filepath.Dir(path))
+						if err != nil || !reflect.DeepEqual(entries, afterEntries) {
+							t.Fatalf("refused open changed directory entries: %v", err)
+						}
+					})
+				}
+			})
+		}
 	}
 }
 
