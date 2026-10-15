@@ -2,10 +2,11 @@ import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { crewMember, daemonSession, soloDesktop, defaultProfile, emptyDesktop, DEFAULT_DESKTOP_ID } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp, restartApp } from './test/renderApp';
-import { reportedModel } from './test/harnessCatalogs';
+import { harnesses, reportedModel } from './test/harnessCatalogs';
 
 const member = (values = {}) => crewMember('chief-key', { chief: true, name: 'Captain', ...values });
 const available = { claude_available: 'true', codex_available: 'true', copilot_available: 'true', pi_available: 'true', claude_cap_launch_instructions: 'true', codex_cap_launch_instructions: 'true', copilot_cap_launch_instructions: 'false', pi_cap_launch_instructions: 'false', new_session_agent: 'claude' };
+const plugin = { name: 'attn-pi', dir: '/test/attn-pi', version: '1', availability: 'available', connected: true, running: true, installation_state: 'installed', runtime_state: 'running', health_status: 'healthy', can_install: false, can_uninstall: true, priority: 0 } as const;
 const slot = () => within(screen.getByTestId('chief-slot'));
 const phase = () => screen.getByTestId('chief-slot').getAttribute('data-chief-phase');
 
@@ -66,6 +67,176 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
     const reconnected = await restartApp(running, options);
     await reconnected.daemon.idle();
     expect(screen.getByTestId('chief-setup').contains(document.activeElement)).toBe(false);
+  });
+  it('focuses initial setup after the empty app shell takes focus while the registry loads', async () => {
+    const { daemon } = await renderApp({
+      initialState: { settings, crew: [member()] },
+      script: daemon => { daemon.on('delegation_preferences_get', () => {}); },
+    });
+    expect(document.activeElement).toBe(screen.getByTestId('chief-slot').closest('.app'));
+    await gesture(daemon, () => {
+      const request = daemon.sentOf('delegation_preferences_get').slice(-1)[0]!;
+      daemon.replyTo(request, { event: 'delegation_preferences_result', request_id: request.request_id, success: true,
+        preferences: { enabled: false, revision: 0, workflow_skill_enabled: false, roles: [], fallback: { selection: { harness: '', provider: '', model: '', effort: '' }, instructions: '' } },
+        harnesses, templates: [], expanded_roles: [],
+      });
+    });
+    expect(slot().getByRole('radio', { name: /Claude/ })).toHaveFocus();
+  });
+  it('cancels pending setup focus when the user returns to a terminal before the registry arrives', async () => {
+    const desktop = soloDesktop('agent');
+    const { daemon } = await renderApp({
+      initialState: { settings, crew: [member()], sessions: [daemonSession('agent')], desktops: [desktop], profiles: [defaultProfile(desktop.id)] },
+      script: daemon => { daemon.on('delegation_preferences_get', () => {}); },
+    });
+    const open = slot().getByRole('button', { name: 'Set up Captain' });
+    await gesture(daemon, () => { open.focus(); fireEvent.click(open); });
+    expect(slot().getByRole('status')).toHaveTextContent('Checking harnesses');
+    const terminal = screen.getByRole('textbox', { name: 'Terminal input' });
+    await gesture(daemon, () => terminal.focus());
+    expect(terminal).toHaveFocus();
+    await gesture(daemon, () => {
+      const request = daemon.sentOf('delegation_preferences_get').slice(-1)[0]!;
+      daemon.replyTo(request, { event: 'delegation_preferences_result', request_id: request.request_id, success: true,
+        preferences: { enabled: false, revision: 0, workflow_skill_enabled: false, roles: [], fallback: { selection: { harness: '', provider: '', model: '', effort: '' }, instructions: '' } },
+        harnesses, templates: [], expanded_roles: [],
+      });
+    });
+    expect(slot().getByRole('radio', { name: /Claude/ })).toBeInTheDocument();
+    expect(terminal).toHaveFocus();
+  });
+  it.each(['setup', 'terminal', 'outside', 'close', 'focus-away-and-back'])('keeps the chosen surface focused through catalog replacement (%s)', async surface => {
+    const desktop = soloDesktop('agent');
+    const { daemon } = await renderApp({ initialState: {
+      settings, crew: [member()], sessions: [daemonSession('agent', { state: 'idle' })], desktops: [desktop], profiles: [defaultProfile(desktop.id)],
+    } });
+    await gesture(daemon, () => fireEvent.click(slot().getByRole('button', { name: 'Set up Captain' })));
+    await gesture(daemon, () => fireEvent.keyDown(slot().getByRole('radio', { name: /Claude/ }), { key: 'Enter' }));
+    expect(slot().getByRole('radio', { name: /Opus 5.5/ })).toHaveFocus();
+    daemon.on('harness_models', () => {});
+    await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { ...settings, claude_executable: '/refreshed-harness' } }));
+    const terminal = screen.getByRole('textbox', { name: 'Terminal input' });
+    await gesture(daemon, () => {
+      if (surface === 'terminal') terminal.focus();
+      if (surface === 'outside') fireEvent.pointerDown(document.body);
+      if (surface === 'close') slot().getByRole('button', { name: 'Close chief setup' }).focus();
+      if (surface === 'focus-away-and-back') { terminal.focus(); terminal.blur(); }
+    });
+    await gesture(daemon, () => {
+      for (const request of daemon.sentOf('harness_models').filter(command => command.harness === 'claude')) daemon.replyTo(request, {
+        event: 'harness_models_result', request_id: request.request_id, success: true,
+        models: [reportedModel('claude', 'new-deep-model', 'New deep model', 'deep')], tier_defaults: { deep: 'new-deep-model' }, detail: 'Refreshed harness catalog',
+      });
+    });
+    const model = slot().getByRole('radio', { name: /New deep model/ });
+    const expected = surface === 'setup' ? model : surface === 'terminal' ? terminal : surface === 'close' ? slot().getByRole('button', { name: 'Close chief setup' }) : document.body;
+    expect(document.activeElement).toBe(expected);
+  });
+  it.each(['setup', 'terminal', 'outside'])('keeps the chosen focus when a plugin update reloads all harnesses (%s)', async surface => {
+    const desktop = soloDesktop('agent');
+    const { daemon } = await renderApp({ initialState: {
+      settings, crew: [member()], sessions: [daemonSession('agent')], desktops: [desktop], profiles: [defaultProfile(desktop.id)],
+    } });
+    await gesture(daemon, () => fireEvent.keyDown(slot().getByRole('radio', { name: /Claude/ }), { key: 'Enter' }));
+    expect(slot().getByRole('radio', { name: /Opus 5.5/ })).toHaveFocus();
+    daemon.on('delegation_preferences_get', () => {});
+    await gesture(daemon, () => daemon.emit({ event: 'plugins_updated', plugins: [plugin], issues: [] }));
+    expect(slot().getByRole('radio', { name: /Opus 5.5/ })).toHaveFocus();
+    const wake = slot().getByRole('button', { name: /Wake Captain/ });
+    expect(wake).toBeDisabled();
+    await gesture(daemon, () => fireEvent.keyDown(document.activeElement!, { key: 'Enter' }));
+    expect(daemon.sentOf('crew_set')).toEqual([]);
+    const terminal = screen.getByRole('textbox', { name: 'Terminal input' });
+    await gesture(daemon, () => {
+      if (surface === 'terminal') terminal.focus();
+      if (surface === 'outside') { fireEvent.pointerDown(document.body); (document.activeElement as HTMLElement).blur(); }
+    });
+    await gesture(daemon, () => {
+      const request = daemon.sentOf('delegation_preferences_get').slice(-1)[0]!;
+      daemon.replyTo(request, { event: 'delegation_preferences_result', request_id: request.request_id, success: true,
+        preferences: { enabled: false, revision: 0, workflow_skill_enabled: false, roles: [], fallback: { selection: { harness: '', provider: '', model: '', effort: '' }, instructions: '' } },
+        harnesses, templates: [], expanded_roles: [],
+      });
+    });
+    const model = slot().getByRole('radio', { name: /Opus 5.5/ });
+    expect(document.activeElement).toBe(surface === 'setup' ? model : surface === 'terminal' ? terminal : document.body);
+  });
+  it('keeps the harness focused when plugin discovery arrives before the first Enter', async () => {
+    const desktop = soloDesktop('agent');
+    const { daemon } = await renderApp({ initialState: {
+      settings, crew: [member()], sessions: [daemonSession('agent')], desktops: [desktop], profiles: [defaultProfile(desktop.id)],
+    } });
+    const harness = slot().getByRole('radio', { name: /Claude/ });
+    harness.focus();
+    await gesture(daemon, () => fireEvent.click(harness));
+    await gesture(daemon, () => daemon.emit({ event: 'plugins_updated', plugins: [plugin], issues: [] }));
+    expect(harness).toHaveFocus();
+    await gesture(daemon, () => fireEvent.keyDown(document.activeElement!, { key: 'Enter' }));
+    expect(slot().getByRole('radio', { name: /Opus 5.5/ })).toHaveFocus();
+  });
+  it('shows a failed initial registry lookup with one retry action', async () => {
+    const { daemon } = await renderApp({ initialState: { settings, crew: [member()] },
+      script: daemon => { daemon.on('delegation_preferences_get', () => ({ event: 'delegation_preferences_result', success: false, error: 'Harness lookup failed' })); },
+    });
+    expect(slot().getByRole('alert')).toHaveTextContent('Harness lookup failed');
+    expect(slot().getAllByRole('button', { name: 'Check again' })).toHaveLength(1);
+    expect(slot().queryByText('No harness here can run the chief')).toBeNull();
+    daemon.on('delegation_preferences_get', () => ({ event: 'delegation_preferences_result', success: true,
+      preferences: { enabled: false, revision: 0, workflow_skill_enabled: false, roles: [], fallback: { selection: { harness: '', provider: '', model: '', effort: '' }, instructions: '' } },
+      harnesses, templates: [], expanded_roles: [],
+    }));
+    await gesture(daemon, () => fireEvent.click(slot().getByRole('button', { name: 'Check again' })));
+    expect(slot().queryByRole('alert')).toBeNull();
+    expect(slot().getByRole('radio', { name: /Claude/ })).toHaveFocus();
+  });
+  it('shows a registry refresh error and retries before permitting Wake', async () => {
+    const { daemon } = await renderApp({ initialState: { settings, crew: [member()] } });
+    await gesture(daemon, () => fireEvent.keyDown(slot().getByRole('radio', { name: /Claude/ }), { key: 'Enter' }));
+    daemon.on('delegation_preferences_get', () => ({ event: 'delegation_preferences_result', success: false, error: 'Harness lookup failed' }));
+    await gesture(daemon, () => daemon.emit({ event: 'plugins_updated', plugins: [plugin], issues: [] }));
+    expect(slot().getByRole('alert')).toHaveTextContent('Harness lookup failed');
+    expect(slot().getByRole('button', { name: /Wake Captain/ })).toBeDisabled();
+    daemon.on('delegation_preferences_get', () => ({ event: 'delegation_preferences_result', success: true,
+      preferences: { enabled: false, revision: 0, workflow_skill_enabled: false, roles: [], fallback: { selection: { harness: '', provider: '', model: '', effort: '' }, instructions: '' } },
+      harnesses, templates: [], expanded_roles: [],
+    }));
+    const retry = slot().getByRole('button', { name: 'Check again' });
+    await gesture(daemon, () => { retry.focus(); fireEvent.click(retry); });
+    expect(slot().queryByRole('alert')).toBeNull();
+    expect(slot().getByRole('radio', { name: /Opus 5.5/ })).toHaveFocus();
+    expect(slot().getByRole('button', { name: /Wake Captain/ })).toBeEnabled();
+    expect(daemon.sentOf('crew_set')).toEqual([]);
+  });
+  it.each(['terminal', 'outside', 'close'])('cancels a model-step request when the user chooses %s before discovery', async surface => {
+    const desktop = soloDesktop('agent');
+    const { daemon } = await renderApp({
+      initialState: { settings, crew: [member()], sessions: [daemonSession('agent')], desktops: [desktop], profiles: [defaultProfile(desktop.id)] },
+      script: daemon => { daemon.on('harness_models', () => {}); },
+    });
+    await gesture(daemon, () => fireEvent.click(slot().getByRole('button', { name: 'Set up Captain' })));
+    await gesture(daemon, () => fireEvent.keyDown(slot().getByRole('radio', { name: /Claude/ }), { key: 'Enter' }));
+    const terminal = screen.getByRole('textbox', { name: 'Terminal input' });
+    const close = slot().getByRole('button', { name: 'Close chief setup' });
+    await gesture(daemon, () => {
+      if (surface === 'terminal') terminal.focus();
+      if (surface === 'outside') fireEvent.pointerDown(document.body);
+      if (surface === 'close') close.focus();
+    });
+    await gesture(daemon, () => {
+      for (const request of daemon.sentOf('harness_models').filter(command => command.harness === 'claude')) daemon.replyTo(request, {
+        event: 'harness_models_result', request_id: request.request_id, success: true,
+        models: [reportedModel('claude', 'opus', 'Opus', 'deep')], tier_defaults: { deep: 'opus' }, detail: 'Delayed catalog',
+      });
+    });
+    expect(document.activeElement).toBe(surface === 'terminal' ? terminal : surface === 'close' ? close : document.body);
+  });
+  it('keeps a chosen effort control focused when the catalog refreshes', async () => {
+    const { daemon } = await renderApp({ initialState: { settings, crew: [member()] } });
+    await gesture(daemon, () => fireEvent.keyDown(slot().getByRole('radio', { name: /Claude/ }), { key: 'Enter' }));
+    const effort = slot().getByRole('radio', { name: 'low' });
+    effort.focus();
+    await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { ...settings, model_tier_overrides: '[]' } }));
+    expect(effort).toHaveFocus();
   });
   it('sets up with two Enters, sends one complete route and focuses the returned session', async () => {
     const current = member();
