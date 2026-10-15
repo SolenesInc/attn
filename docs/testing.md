@@ -170,7 +170,10 @@ Timers:
 - `inBubbleWithAgents` gives the world fake terminals, `w.terms`. A
   terminal's `Stall(alive, err)` makes its worker stop answering until the
   test calls the returned function: recovery waits out its deadline and counts
-  it missing, and the liveness probe answers `alive, err`.
+  it missing, and the liveness probe answers `alive, err`. Its
+  `HoldRemoval()` stops the next removal halfway until the test calls the
+  returned function: its streams have ended and its worker no longer answers,
+  but the backend has not forgotten the terminal yet.
 
 ### Stack
 
