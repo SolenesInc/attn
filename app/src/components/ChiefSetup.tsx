@@ -28,15 +28,15 @@ export function ChiefSetup({ chief, autoFocus, onSave, onClose, onReturnFocus, o
   const models = view.options().filter(option => option.stored || (option.model && option.model.access !== 'unsupported'));
   const showHarness = step === 'harness' && harnesses.length > 1;
   const root = useRef<HTMLDivElement>(null);
-  const focusRequested = useRef<'automatic' | 'step' | 'restore' | null>(autoFocus ? 'automatic' : null);
+  const focusRequested = useRef<'automatic' | 'explicit' | null>(autoFocus ? 'automatic' : null);
   const retainFocus = useCallback((element: HTMLButtonElement | null) => {
     if (!element) return;
-    return () => { if (document.activeElement === element) focusRequested.current = 'restore'; };
+    return () => { if (document.activeElement === element) focusRequested.current = 'explicit'; };
   }, []);
   useLayoutEffect(() => {
-    if (focusRequested.current === 'automatic' || !focusRequested.current) focusRequested.current = autoFocus ? 'automatic' : null;
+    if (focusRequested.current !== 'explicit') focusRequested.current = autoFocus ? 'automatic' : null;
   }, [autoFocus]);
-  const changeStep = (next: 'harness' | 'model') => { focusRequested.current = 'step'; setStep(next); };
+  const changeStep = (next: 'harness' | 'model') => { focusRequested.current = 'explicit'; setStep(next); };
   useLayoutEffect(() => {
     if (!focusRequested.current) return;
     const selected = root.current?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]:not(:disabled)');
