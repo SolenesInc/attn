@@ -74,12 +74,7 @@ export function useSessionLifecycle({
   }, [desktopClosePrompt, closeDesktop]);
 
   const closeWith = useCallback(
-    async (id: string, close: () => Promise<unknown>, closesSession = true) => {
-      const closeProtection = closesSession ? sessionCloseProtectionHint(daemonSessions, id) : null;
-      if (closeProtection) {
-        showError(closeProtection);
-        return;
-      }
+    async (id: string, close: () => Promise<unknown>) => {
       const session = enrichedLocalSessions.find((s) => s.id === id);
 
       const localDaemonSession = daemonSessions.find((ds) => ds.id === session?.id);
@@ -89,16 +84,22 @@ export function useSessionLifecycle({
         closeSession(id);
       }
     },
-    [closeSession, daemonSessions, enrichedLocalSessions, showError],
+    [closeSession, daemonSessions, enrichedLocalSessions],
   );
   const handleCloseSession = useCallback(
-    (id: string) => closeWith(id, () => sendUnregisterSession(id)),
-    [closeWith, sendUnregisterSession],
+    async (id: string) => {
+      const closeProtection = sessionCloseProtectionHint(daemonSessions, id);
+      if (closeProtection) {
+        showError(closeProtection);
+        return;
+      }
+      await closeWith(id, () => sendUnregisterSession(id));
+    },
+    [closeWith, daemonSessions, sendUnregisterSession, showError],
   );
   const handleCloseTerminalTile = useCallback(
     (desktopId: string, tileId: string, sessionId: string) => {
-      const tiles = useProfilesStore.getState().desktops.flatMap((desktop) => desktop.panes).filter((pane) => pane.session_id === sessionId);
-      void closeWith(sessionId, () => sendDesktopCloseTile(desktopId, tileId), tiles.length <= 1).catch((error) => {
+      void closeWith(sessionId, () => sendDesktopCloseTile(desktopId, tileId)).catch((error) => {
         showError(`Could not close that tile: ${error instanceof Error ? error.message : String(error)}`);
       });
     },

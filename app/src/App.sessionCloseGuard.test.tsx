@@ -2,7 +2,7 @@ import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { openSession } from './test/appFixtures';
 import { agentPane, daemonDesktop, soloDesktop, daemonSession, type DaemonSession } from './test/daemonFixtures';
-import { laidOutDesktop, pane } from './test/desktopLayouts';
+import { laidOutDesktop, pane, split } from './test/desktopLayouts';
 import { pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
@@ -83,6 +83,31 @@ describe('chief and crew sessions are protected from close', () => {
       { cmd: 'desktop_close_tile', request_id: expect.any(String), desktop_id: 'ws', tile_id: 'pane-a' },
     ]);
     expect(toast()).toBeNull();
+  });
+
+  it('asks the daemon whether closing the chief\'s only tile ends it, and shows its refusal', async () => {
+    const { daemon } = await renderApp({
+      initialState: {
+        sessions: [daemonSession('a', { state: 'idle', chief_of_staff: true }), daemonSession('b', { state: 'idle' })],
+        desktops: [laidOutDesktop(split('ab', 'vertical', [pane('a'), pane('b')]), ['a', 'b'])],
+      },
+      script: (d) => {
+        d.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true, last_seq: 0 }));
+        d.on('desktop_close_tile', (command) => ({
+          event: 'profile_action_result', action: command.cmd, success: false, error_code: 'invalid',
+          error: 'chief of staff is protected from closing; unset the chief role first', request_id: command.request_id ?? '',
+        }));
+      },
+    });
+    for (const id of ['b', 'a']) await openSession(daemon, id);
+
+    pressShortcut('terminal.close', document.querySelector('[data-pane-id="pane-a"] .terminal-container')!);
+    await daemon.idle();
+
+    expect(daemon.sentOf('desktop_close_tile')).toEqual([
+      { cmd: 'desktop_close_tile', request_id: expect.any(String), desktop_id: 'ws', tile_id: 'pane-a' },
+    ]);
+    expect(toast()).toHaveTextContent('chief of staff is protected from closing');
   });
 
   it('closes an ordinary session normally and shows no hint', async () => {
