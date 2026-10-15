@@ -30,7 +30,7 @@ func TestDatabaseRestorePreservesConversationArchivesFromAfterTheSnapshot(t *tes
 		original, partial              []byte
 	}
 	var conversations []conversation
-	for _, state := range []string{"missing", "deleted", "released", "missing-partial"} {
+	for _, state := range []string{"missing", "deleted", "released", "missing-partial", "damaged"} {
 		id := s.Spawn(app, fakeagent.Claude, s.Path(state))
 		run := s.Launched(id)
 		app.TypeLine(id, "Remember this conversation")
@@ -45,7 +45,7 @@ func TestDatabaseRestorePreservesConversationArchivesFromAfterTheSnapshot(t *tes
 				t.Fatal(err)
 			}
 			testworld.AwaitTaskDone(app, "conversation_keep")
-			if state == "deleted" {
+			if state == "deleted" || state == "damaged" {
 				if err := s.Client().KeptConversationForget(run.ConversationID); err != nil {
 					t.Fatal(err)
 				}
@@ -61,7 +61,7 @@ func TestDatabaseRestorePreservesConversationArchivesFromAfterTheSnapshot(t *tes
 		conversations = append(conversations, conversation{state: state, native: run.ConversationID, source: paths[0], archive: filepath.Join(s.Dir, "conversations", "claude", run.ConversationID+".tar.zst")})
 	}
 	snapshotRows, err := s.Client().KeptConversationList(true)
-	if err != nil || len(snapshotRows.Rows) != 2 {
+	if err != nil || len(snapshotRows.Rows) != 3 {
 		t.Fatalf("snapshot conversation rows: %+v, %v", snapshotRows, err)
 	}
 	awaitBackup(app)
@@ -103,13 +103,22 @@ func TestDatabaseRestorePreservesConversationArchivesFromAfterTheSnapshot(t *tes
 		}
 	}
 	s.Stop()
+	for i := range conversations {
+		c := &conversations[i]
+		if c.state == "damaged" {
+			c.original = c.original[:len(c.original)/2]
+			if err := os.WriteFile(c.archive, c.original, 0600); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
 	if restored := s.Attn("db", "restore", snapshot); restored.Code != 0 {
 		t.Fatalf("restore: %+v", restored)
 	} else if !strings.Contains(restored.Stdout, "known archives are pinned until you unkeep or forget them") {
 		t.Fatalf("restore did not explain archive retention: %+v", restored)
 	}
 	for _, c := range conversations {
-		if c.state == "released" || c.state == "missing-partial" {
+		if c.state == "released" || c.state == "missing-partial" || c.state == "damaged" {
 			if err := os.WriteFile(c.source, c.partial, 0600); err != nil {
 				t.Fatal(err)
 			}
@@ -141,7 +150,7 @@ func TestDatabaseRestorePreservesConversationArchivesFromAfterTheSnapshot(t *tes
 		}
 	}
 	rows, err := s.Client().KeptConversationList(false)
-	if err != nil || len(rows.Rows) != 3 {
+	if err != nil || len(rows.Rows) != 4 {
 		t.Fatalf("restored conversation list: %+v, %v", rows, err)
 	}
 	for _, row := range rows.Rows {

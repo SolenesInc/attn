@@ -85,7 +85,7 @@ func conversationArchive(agent, resumeID string) string {
 	return filepath.Join(config.ConversationsDir(), agent, resumeID+".tar.zst")
 }
 
-func ReadKeptConversationArchive(agent, resumeID string) (store.KeptConversation, error) {
+func readKeptConversationArchive(agent, resumeID string) (store.KeptConversation, error) {
 	path := conversationArchive(agent, resumeID)
 	src, err := os.Open(path)
 	if err != nil {
@@ -209,7 +209,7 @@ func (d *Daemon) keepConversations(now time.Time) {
 	for key := range referenced {
 		kept, exists := d.store.KeptConversation(key.agent, key.resumeID)
 		if !exists {
-			archived, err := ReadKeptConversationArchive(key.agent, key.resumeID)
+			archived, err := readKeptConversationArchive(key.agent, key.resumeID)
 			if err == nil {
 				if err := d.store.PutKeptConversation(archived); err != nil {
 					d.logf("conversation keep: register %s/%s archive: %v", key.agent, key.resumeID, err)
@@ -241,6 +241,20 @@ func (d *Daemon) keepConversations(now time.Time) {
 			if _, err := os.Stat(conversationArchive(key.agent, key.resumeID)); err == nil {
 				continue
 			}
+		}
+		archived, err := readKeptConversationArchive(key.agent, key.resumeID)
+		if err == nil {
+			if bestInfo.Size() <= archived.Bytes {
+				if err := d.store.PutKeptConversation(archived); err != nil {
+					d.logf("conversation keep: refresh %s/%s archive metadata: %v", key.agent, key.resumeID, err)
+				} else {
+					changed[key] = true
+				}
+				continue
+			}
+		} else if !os.IsNotExist(err) {
+			d.logf("conversation keep: read %s/%s archive before replacing: %v", key.agent, key.resumeID, err)
+			continue
 		}
 		if err := d.copyConversation(key.agent, best, files, bestInfo.Size(), now); err != nil {
 			d.logf("conversation keep: copy %s/%s: %v", key.agent, key.resumeID, err)

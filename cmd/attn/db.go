@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/config"
-	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/daemonctl"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -178,13 +177,12 @@ func pinRestoredConversationArchives(dbPath string) (err error) {
 		return err
 	}
 	for _, previous := range kept {
-		copy, err := daemon.ReadKeptConversationArchive(previous.Agent, previous.ResumeID)
+		_, err := os.Stat(filepath.Join(config.ConversationsDir(), previous.Agent, previous.ResumeID+".tar.zst"))
 		if os.IsNotExist(err) {
 			continue
 		}
-		if err != nil {
-			return fmt.Errorf("read %s/%s archive: %w", previous.Agent, previous.ResumeID, err)
-		}
+		copy := previous
+		copy.DeletedAt, copy.ReleasedAt, copy.DeletedBy = time.Time{}, time.Time{}, ""
 		if err := s.PutKeptConversation(copy); err != nil {
 			return err
 		}
