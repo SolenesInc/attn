@@ -157,6 +157,7 @@ describe('one-screen launcher', () => {
     const { daemon } = await open('new_worktree');
     await press(daemon, 'Enter', { metaKey: true });
     expect(launchedAt(daemon)).toEqual([{ cwd: REPO, agent: 'shell' }]);
+    expect(daemon.sentOf('spawn_session')[0].label ?? '').toBe('');
     expect(daemon.sentOf('create_worktree')).toEqual([]);
     expect(memoryWrites(daemon)).toEqual([]);
   });
@@ -172,6 +173,7 @@ describe('one-screen launcher', () => {
         .map(({ branch, starting_from }) => ({ branch, starting_from })),
     ).toEqual([{ branch: 'terminal-work', starting_from: 'origin/main' }]);
     expect(launchedAt(daemon)).toEqual([{ cwd: `${REPO}--terminal-work`, agent: 'shell' }]);
+    expect(daemon.sentOf('spawn_session')[0].label ?? '').toBe('');
     expect(memoryWrites(daemon)).toEqual([]);
   });
 

@@ -284,7 +284,7 @@ export function useSessionLaunch({
       const selectedAgent =
         agent === TERMINAL_AGENT ? agent : resolvePreferredAgent(agent, agentAvailability, 'codex');
       return launchPicked({
-        label: path.split('/').pop() || 'session',
+        label: selectedAgent === TERMINAL_AGENT ? '' : path.split('/').pop() || 'session',
         cwd: path,
         agent: selectedAgent,
         yoloMode,
@@ -317,7 +317,7 @@ export function useSessionLaunch({
           : resolvePreferredAgent(agent, agentAvailability, 'codex');
       const folderName = path.split('/').pop() || 'session';
       const pick = {
-        label: folderName,
+        label: selectedAgent === TERMINAL_AGENT ? '' : folderName,
         cwd: path,
         agent: selectedAgent,
         yoloMode,
