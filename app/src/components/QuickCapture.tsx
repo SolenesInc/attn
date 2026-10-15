@@ -224,16 +224,17 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
     if (uncertain) { setError('Resolve this submission before discarding it. Use Retry to check whether it was saved.'); return; }
     sending.current = true; setSubmitting(true);
     try {
-      const previousId = identity.current.id;
-      const retained = { ...draft(), id: crypto.randomUUID() };
-      const next = await cache.current.discard(retained, async () => {
-        identity.current = retained; stagedFiles.current.clear();
-        await client.current!.discard(previousId, retained.files.map(file => file.id));
-      });
+      const discarded = draft();
+      const next = newQuickCaptureDraft();
       identity.current = next;
-      if (!mounted.current) return;
-      draftGeneration.current++; ownedFiles.current.clear(); stagedFiles.current.clear(); setFiles([]); setText(''); setMailbox('chief');
-    } catch (error) { stagedFiles.current.clear(); if (mounted.current) setError(String(error)); }
+      stagedFiles.current.clear();
+      await cache.current.save(next);
+      draftGeneration.current++; ownedFiles.current.clear();
+      if (mounted.current) { setFiles([]); setText(''); setMailbox('chief'); setError(''); }
+      void client.current!.discard(discarded.id, discarded.files.map(file => file.id)).catch(() => {
+        if (mounted.current) setError('Draft discarded. Uploaded files could not be cleaned up.');
+      });
+    } catch (error) { if (mounted.current) setError(`Cannot clear draft: ${error}`); }
     finally { sending.current = false; if (mounted.current) setSubmitting(false); }
   }
 
@@ -253,7 +254,10 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
   useEffect(() => { if (restored && uncertain && !submitting && host.connected) void resolveSubmission(); }, [restored, uncertain, submitting, host.connected]);
   useEffect(() => {
     if (!restored || !host.connected || uncertain || submitting || !files.length || files.some(file => !file.ready)) return;
-    void stageDraft(draft()).catch(error => setError(`File upload: ${error}`));
+    const staged = draft();
+    void stageDraft(staged).catch(error => {
+      if (mounted.current && identity.current.id === staged.id) setError(`File upload: ${error}`);
+    });
   }, [files, restored, host.connected, uncertain, submitting]);
   useEffect(() => {
     if (!restored || sending.current) return;
