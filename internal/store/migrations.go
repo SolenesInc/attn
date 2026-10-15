@@ -130,7 +130,7 @@ func LatestSchemaVersion() int {
 	return all[len(all)-1].version
 }
 
-func refuseNewerSchema(dbPath string) error {
+func refuseUnsupportedSchema(dbPath string) error {
 	if dbPath == ":memory:" {
 		return nil
 	}
@@ -154,8 +154,18 @@ func refuseNewerSchema(dbPath string) error {
 		return fmt.Errorf("reading the schema version of %s: %w", dbPath, err)
 	}
 	latest := LatestSchemaVersion()
-	if history.recorded > latest {
-		return fmt.Errorf("the database at %s has schema version %d, newer than this attn build's newest schema version %d; install an attn build supporting schema version %d or later, or restore a backup taken before the upgrade (`attn db restore`)", dbPath, history.recorded, latest, history.recorded)
+	known := make(map[int]bool)
+	for _, m := range allMigrations() {
+		known[m.version] = true
+	}
+	var unsupported int
+	for version := range history.applied {
+		if version > latest || (version > lastLegacyVersion && !known[version]) {
+			unsupported = max(unsupported, version)
+		}
+	}
+	if unsupported != 0 {
+		return fmt.Errorf("the database at %s contains migration %d, which this attn build does not support (newest database schema version: %d; newest build schema version: %d); install an attn build supporting this database's migrations, or restore a backup taken before the upgrade (`attn db restore`)", dbPath, unsupported, history.recorded, latest)
 	}
 	return nil
 }
