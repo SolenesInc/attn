@@ -1,6 +1,7 @@
 package main_test
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,62 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
+
+func TestDatabaseRestorePreservesConversationArchivesFromAfterTheSnapshot(t *testing.T) {
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s.Start()
+	s.Stop()
+	database, err := os.ReadFile(filepath.Join(s.Dir, "attn.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := filepath.Join(s.Dir, "before-keep.db")
+	if err := os.WriteFile(snapshot, database, 0600); err != nil {
+		t.Fatal(err)
+	}
+	s.Start()
+	app := s.App()
+	id := s.Spawn(app, fakeagent.Claude, s.Path("api"))
+	run := s.Launched(id)
+	app.TypeLine(id, "Remember this conversation")
+	run.Prompted()
+	run.Reply("history written after the backup <!-- attn:state=waiting_input -->")
+	if closed := s.Attn("agent", "close", id, "-m", "finished", "--source-session", id); closed.Code != 0 {
+		t.Fatalf("close: %+v", closed)
+	}
+	testworld.AwaitTaskDone(app, "conversation_keep")
+	if err := s.Client().KeptConversationKeep(run.ConversationID, true); err != nil {
+		t.Fatal(err)
+	}
+	testworld.AwaitTaskDone(app, "conversation_keep")
+	archive := filepath.Join(s.Dir, "conversations", "claude", run.ConversationID+".tar.zst")
+	original, err := os.ReadFile(archive)
+	if err != nil || len(original) == 0 {
+		t.Fatalf("kept archive: %d bytes, %v", len(original), err)
+	}
+	s.Stop()
+	if restored := s.Attn("db", "restore", snapshot); restored.Code != 0 {
+		t.Fatalf("restore: %+v", restored)
+	}
+	paths, err := filepath.Glob(filepath.Join(s.Dir, "toolhome", ".claude", "projects", "*", run.ConversationID+".jsonl"))
+	if err != nil || len(paths) != 1 {
+		t.Fatalf("native transcript: %v, %v", paths, err)
+	}
+	if err := os.Remove(paths[0]); err != nil {
+		t.Fatal(err)
+	}
+	s.Start()
+	app = s.App()
+	rows, err := s.Client().KeptConversationList(true)
+	if err != nil || len(rows.Rows) != 0 {
+		t.Fatalf("restore should rewind kept rows: %+v, %v", rows, err)
+	}
+	plant(t, s, "Trigger the conversation keep sweep after restore")
+	testworld.AwaitTaskDone(app, "conversation_keep")
+	if got, err := os.ReadFile(archive); err != nil || !bytes.Equal(got, original) {
+		t.Fatalf("archive after restore and sweep: %d bytes, %v; want original %d bytes", len(got), err, len(original))
+	}
+}
 
 func TestKeptConversationSurvivesDaemonRestartAndResumeRestoresIt(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))

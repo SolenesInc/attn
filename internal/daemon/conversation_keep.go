@@ -200,31 +200,15 @@ func (d *Daemon) keepConversations(now time.Time) {
 		d.logf("conversation keep: read kept rows: %v", err)
 		return
 	}
-	liveFiles := make(map[string]bool)
 	for _, kept := range all {
-		if !kept.DeletedAt.IsZero() {
+		if kept.DeletedAt.IsZero() {
 			continue
 		}
-		key := conversationKey{kept.Agent, kept.ResumeID}
-		path := conversationArchive(key.agent, key.resumeID)
-		liveFiles[path] = true
+		if err := os.Remove(conversationArchive(kept.Agent, kept.ResumeID)); err != nil && !os.IsNotExist(err) {
+			d.logf("conversation keep: delete %s/%s: %v", kept.Agent, kept.ResumeID, err)
+		}
 	}
-	d.retireConversations(all, liveFiles, changed, now)
-	err = filepath.WalkDir(config.ConversationsDir(), func(path string, entry fs.DirEntry, err error) error {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		if !entry.IsDir() && !liveFiles[path] {
-			return os.Remove(path)
-		}
-		return nil
-	})
-	if err != nil {
-		d.logf("conversation keep: remove leftovers: %v", err)
-	}
+	d.retireConversations(all, changed, now)
 	d.coalesceSnapshots(func() {
 		for key := range changed {
 			d.publishFact(factConversationKeptChanged, key.resumeID, nil)
@@ -232,7 +216,7 @@ func (d *Daemon) keepConversations(now time.Time) {
 	})
 }
 
-func (d *Daemon) retireConversations(all []store.KeptConversation, liveFiles map[string]bool, changed map[conversationKey]bool, now time.Time) {
+func (d *Daemon) retireConversations(all []store.KeptConversation, changed map[conversationKey]bool, now time.Time) {
 	if len(all) == 0 {
 		return
 	}
@@ -272,7 +256,6 @@ func (d *Daemon) retireConversations(all []store.KeptConversation, liveFiles map
 			}
 			if err := d.store.TombstoneKeptConversation(key.agent, key.resumeID, now, "sweep"); err == nil {
 				changed[key] = true
-				delete(liveFiles, path)
 			} else {
 				d.logf("conversation keep: tombstone %s/%s: %v", key.agent, key.resumeID, err)
 			}

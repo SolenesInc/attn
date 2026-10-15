@@ -1,0 +1,3 @@
+kind: fixed
+area: conversations
+change: Conversation archives survive database restores even when the restored snapshot predates their creation.
