@@ -67,6 +67,64 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
     await reconnected.daemon.idle();
     expect(screen.getByTestId('chief-setup').contains(document.activeElement)).toBe(false);
   });
+  it.each(['setup', 'terminal', 'outside', 'close', 'focus-away-and-back'])('keeps the chosen surface focused through catalog replacement (%s)', async surface => {
+    const desktop = soloDesktop('agent');
+    const { daemon } = await renderApp({ initialState: {
+      settings, crew: [member()], sessions: [daemonSession('agent', { state: 'idle' })], desktops: [desktop], profiles: [defaultProfile(desktop.id)],
+    } });
+    await gesture(daemon, () => fireEvent.click(slot().getByRole('button', { name: 'Set up Captain' })));
+    await gesture(daemon, () => fireEvent.keyDown(slot().getByRole('radio', { name: /Claude/ }), { key: 'Enter' }));
+    expect(slot().getByRole('radio', { name: /Opus 5.5/ })).toHaveFocus();
+    daemon.on('harness_models', () => {});
+    await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { ...settings, claude_executable: '/refreshed-harness' } }));
+    const terminal = screen.getByRole('textbox', { name: 'Terminal input' });
+    await gesture(daemon, () => {
+      if (surface === 'terminal') terminal.focus();
+      if (surface === 'outside') fireEvent.pointerDown(document.body);
+      if (surface === 'close') slot().getByRole('button', { name: 'Close chief setup' }).focus();
+      if (surface === 'focus-away-and-back') { terminal.focus(); terminal.blur(); }
+    });
+    await gesture(daemon, () => {
+      for (const request of daemon.sentOf('harness_models').filter(command => command.harness === 'claude')) daemon.replyTo(request, {
+        event: 'harness_models_result', request_id: request.request_id, success: true,
+        models: [reportedModel('claude', 'new-deep-model', 'New deep model', 'deep')], tier_defaults: { deep: 'new-deep-model' }, detail: 'Refreshed harness catalog',
+      });
+    });
+    const model = slot().getByRole('radio', { name: /New deep model/ });
+    const expected = surface === 'setup' ? model : surface === 'terminal' ? terminal : surface === 'close' ? slot().getByRole('button', { name: 'Close chief setup' }) : document.body;
+    expect(document.activeElement).toBe(expected);
+  });
+  it.each(['terminal', 'outside', 'close'])('cancels a model-step request when the user chooses %s before discovery', async surface => {
+    const desktop = soloDesktop('agent');
+    const { daemon } = await renderApp({
+      initialState: { settings, crew: [member()], sessions: [daemonSession('agent')], desktops: [desktop], profiles: [defaultProfile(desktop.id)] },
+      script: daemon => { daemon.on('harness_models', () => {}); },
+    });
+    await gesture(daemon, () => fireEvent.click(slot().getByRole('button', { name: 'Set up Captain' })));
+    await gesture(daemon, () => fireEvent.keyDown(slot().getByRole('radio', { name: /Claude/ }), { key: 'Enter' }));
+    const terminal = screen.getByRole('textbox', { name: 'Terminal input' });
+    const close = slot().getByRole('button', { name: 'Close chief setup' });
+    await gesture(daemon, () => {
+      if (surface === 'terminal') terminal.focus();
+      if (surface === 'outside') fireEvent.pointerDown(document.body);
+      if (surface === 'close') close.focus();
+    });
+    await gesture(daemon, () => {
+      for (const request of daemon.sentOf('harness_models').filter(command => command.harness === 'claude')) daemon.replyTo(request, {
+        event: 'harness_models_result', request_id: request.request_id, success: true,
+        models: [reportedModel('claude', 'opus', 'Opus', 'deep')], tier_defaults: { deep: 'opus' }, detail: 'Delayed catalog',
+      });
+    });
+    expect(document.activeElement).toBe(surface === 'terminal' ? terminal : surface === 'close' ? close : document.body);
+  });
+  it('keeps a chosen effort control focused when the catalog refreshes', async () => {
+    const { daemon } = await renderApp({ initialState: { settings, crew: [member()] } });
+    await gesture(daemon, () => fireEvent.keyDown(slot().getByRole('radio', { name: /Claude/ }), { key: 'Enter' }));
+    const effort = slot().getByRole('radio', { name: 'low' });
+    effort.focus();
+    await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { ...settings, model_tier_overrides: '[]' } }));
+    expect(effort).toHaveFocus();
+  });
   it('sets up with two Enters, sends one complete route and focuses the returned session', async () => {
     const current = member();
     const { daemon } = await renderApp({ initialState: { settings, crew: [current] } });

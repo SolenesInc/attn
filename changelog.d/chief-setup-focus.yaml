@@ -1,0 +1,3 @@
+kind: fixed
+area: crew
+change: Chief setup keeps model focus when its catalog refreshes and respects focus moved to another control.
