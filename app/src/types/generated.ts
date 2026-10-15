@@ -3374,6 +3374,7 @@ export enum DesktopMoveSessionMessageCmd {
 }
 
 export interface DesktopMoveSessionResult {
+    desktop_created?: boolean;
     desktop_id:       string;
     from_desktop_id?: string;
     pane_id:          string;
@@ -7219,6 +7220,7 @@ export interface DelegationRoles {
 }
 
 export interface DesktopMoveSessionResultObject {
+    desktop_created?: boolean;
     desktop_id:       string;
     from_desktop_id?: string;
     pane_id:          string;
@@ -16775,6 +16777,7 @@ const typeMap: any = {
         { json: "session_id", js: "session_id", typ: "" },
     ], "any"),
     "DesktopMoveSessionResult": o([
+        { json: "desktop_created", js: "desktop_created", typ: u(undefined, true) },
         { json: "desktop_id", js: "desktop_id", typ: "" },
         { json: "from_desktop_id", js: "from_desktop_id", typ: u(undefined, "") },
         { json: "pane_id", js: "pane_id", typ: "" },
@@ -19135,6 +19138,7 @@ const typeMap: any = {
         { json: "roles", js: "roles", typ: a(r("RoleElement")) },
     ], "any"),
     "DesktopMoveSessionResultObject": o([
+        { json: "desktop_created", js: "desktop_created", typ: u(undefined, true) },
         { json: "desktop_id", js: "desktop_id", typ: "" },
         { json: "from_desktop_id", js: "from_desktop_id", typ: u(undefined, "") },
         { json: "pane_id", js: "pane_id", typ: "" },

@@ -391,6 +391,8 @@ func runSessionMove(args []string) {
 		printJSON(result)
 	case protocol.Deref(result.Unchanged):
 		fmt.Printf("%s already is on desktop %s\n", result.SessionID, result.DesktopID)
+	case protocol.Deref(result.DesktopCreated):
+		fmt.Printf("%s moved to new desktop %s (pane %s)\n", result.SessionID, result.DesktopID, result.PaneID)
 	default:
 		fmt.Printf("%s moved to desktop %s (pane %s)\n", result.SessionID, result.DesktopID, result.PaneID)
 	}

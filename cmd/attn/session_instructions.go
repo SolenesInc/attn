@@ -359,6 +359,7 @@ commands:
         move a session's pane to another desktop of its profile, beside that
         desktop's active pane (its first pane when empty). <desktop> is the
         shortcut digit (1-9), the name as shown (case-insensitive) or the id.
+        A missing numbered desktop is created on its shortcut slot.
         Defaults to the session running this command; a session may also move
         the sessions it dispatched, and the chief any. What the user sees
         stays put unless the moved pane was the one shown on its desktop.

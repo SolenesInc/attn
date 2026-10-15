@@ -55,15 +55,15 @@ describe('launch desktop ledger keyboard', () => {
   it('gives the selected agent a new desktop on an empty slot by that slot\'s desktop id, created on finish', async () => {
     const daemon = await openLedger();
 
-    await gesture(daemon, () => fireEvent.keyDown(document.activeElement!, { key: '5' }));
+    await gesture(daemon, () => fireEvent.keyDown(document.activeElement!, { key: '3' }));
     const dialog = screen.getByRole('dialog', { name: 'A new desktop' });
-    expect(dialog).toHaveTextContent('On ⌘5.');
+    expect(dialog).toHaveTextContent('On ⌘3.');
     await gesture(daemon, () => fireEvent.click(within(dialog).getByRole('button', { name: 'Use this name' })));
     expect(daemon.sentOf('launch_desktop_set')).toEqual([]);
     await gesture(daemon, () => fireEvent.keyDown(document.activeElement!, { key: 'Enter', metaKey: true }));
 
     expect(daemon.sentOf('launch_desktop_set').map(({ item_id, setting }) => ({ item_id, setting }))).toEqual([
-      { item_id: 'Alder', setting: { desktop_name: 'Alder', desktop_id: 'default/desktop_5' } },
+      { item_id: 'Alder', setting: { desktop_name: 'Alder', desktop_id: 'default/desktop_3' } },
     ]);
     expect(daemon.sentOf('migration_finish').map(({ expected_revision }) => expected_revision)).toEqual([10]);
   });

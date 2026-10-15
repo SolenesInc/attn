@@ -4,13 +4,11 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -57,8 +55,7 @@ func (d *Daemon) desktopLabelTaken(name string, placement *launchPlacement) (boo
 		return false, nil
 	}
 	desktop, err := d.store.GetDesktop(placement.desktopID)
-	var missing *profiles.Error
-	if errors.As(err, &missing) && missing.Code == profiles.CodeNotFound {
+	if profiles.IsNotFound(err) {
 		return false, nil
 	}
 	if err != nil {
@@ -753,24 +750,14 @@ func (d *Daemon) delegationDestination(source *protocol.Session, desktopRef stri
 		}
 		return profile, beside, nil
 	}
-	desktopRef = strings.TrimSpace(desktopRef)
-	if slot, err := strconv.Atoi(desktopRef); err == nil && slot >= profiles.FirstShortcutSlot && slot <= profiles.LastShortcutSlot {
-		desktopRef = profiles.NumberedDesktopID(profile.ID, slot)
-	}
-	desktop, err := d.resolveDesktopRef(profile, desktopRef)
-	var missing *profiles.Error
-	if errors.As(err, &missing) && missing.Code == profiles.CodeNotFound {
-		if slot := profiles.DesktopSlot(desktopRef); slot >= profiles.FirstShortcutSlot && slot <= profiles.LastShortcutSlot && profiles.IsNumberedDesktopID(profile.ID, desktopRef) {
-			desktop, err = profiles.Desktop{ID: desktopRef}, nil
-		}
-	}
+	desktopID, err := d.resolveDesktopTarget(profile, desktopRef)
 	if err != nil {
 		return profiles.Profile{}, nil, fmt.Errorf("--desktop: %w", err)
 	}
-	if beside != nil && beside.desktopID == desktop.ID {
+	if beside != nil && beside.desktopID == desktopID {
 		return profile, beside, nil
 	}
-	return profile, &launchPlacement{desktopID: desktop.ID, direction: layouttree.DirectionVertical}, nil
+	return profile, &launchPlacement{desktopID: desktopID, direction: layouttree.DirectionVertical}, nil
 }
 
 func (d *Daemon) confirmDelegatedLaunch(operationID string, sessionID protocol.SessionID, agent string, watch *launchWatch, result *protocol.DelegateResult) error {

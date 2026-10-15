@@ -2571,6 +2571,7 @@ model DesktopMoveSessionResult {
   pane_id: string;
   from_desktop_id?: string; // absent when unchanged
   unchanged?: boolean; // the session already was on that desktop
+  desktop_created?: boolean; // the move created the numbered desktop
 }
 
 // Shows an existing leaf, an agent pane or a tile, like desktop_show_session.

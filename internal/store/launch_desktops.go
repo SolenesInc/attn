@@ -118,8 +118,7 @@ func loadLaunchItem(tx *sql.Tx, kind, id string) (LaunchDesktopItem, error) {
 
 func loadCurrentLaunchItem(tx *sql.Tx, kind, id string) (LaunchDesktopItem, error) {
 	item, err := loadLaunchItem(tx, kind, id)
-	var missing *profiles.Error
-	if item.DesktopID != "" && errors.As(err, &missing) && missing.Code == profiles.CodeNotFound {
+	if item.DesktopID != "" && profiles.IsNotFound(err) {
 		item.Label = launchDesktopLabel(item.Name, profiles.DesktopSlot(item.DesktopID))
 		return item, nil
 	}
@@ -292,35 +291,33 @@ func launchItemDesktop(tx *sql.Tx, now string, profile profiles.Profile, kind, i
 	if desktopID == "" {
 		return loadLaunchDesktop(tx, profile, "")
 	}
-	desktop, found, err := findDesktop(tx, desktopID)
-	if err != nil {
+	desktop, created, err := loadOrCreateNumberedDesktop(tx, now, profile.ID, desktopID)
+	switch {
+	case profiles.IsNotFound(err):
+		if desktop, err = insertNamedLaunchDesktop(tx, now, profile.ID, kind, id, desktopID); err != nil {
+			return desktop, err
+		}
+	case err != nil:
 		return desktop, err
-	}
-	if found {
+	case !created:
 		return loadLaunchDesktop(tx, profile, desktopID)
-	}
-	if profiles.IsNumberedDesktopID(profile.ID, desktopID) {
-		desktop, _, err = findOrRecreateNumberedDesktop(tx, now, profile, desktopID)
-		if err != nil {
-			return desktop, err
-		}
-	} else {
-		item, err := loadCurrentLaunchItem(tx, kind, id)
-		if err != nil {
-			return desktop, err
-		}
-		desktop, err = insertDesktop(tx, now, profile.ID, item.Name, 0)
-		if err != nil {
-			return desktop, err
-		}
-		if err := rebindLaunchDesktop(tx, desktopID, desktop.ID); err != nil {
-			return desktop, err
-		}
 	}
 	if err := bumpProfile(tx, &profile); err != nil {
 		return desktop, err
 	}
 	return desktop, appendLaunchDesktopFacts(tx, desktop.ID)
+}
+
+func insertNamedLaunchDesktop(tx *sql.Tx, now, profileID, kind, id, missingDesktopID string) (profiles.Desktop, error) {
+	item, err := loadCurrentLaunchItem(tx, kind, id)
+	if err != nil {
+		return profiles.Desktop{}, err
+	}
+	desktop, err := insertDesktop(tx, now, profileID, item.Name, 0)
+	if err != nil {
+		return desktop, err
+	}
+	return desktop, rebindLaunchDesktop(tx, missingDesktopID, desktop.ID)
 }
 
 func rebindLaunchDesktop(tx *sql.Tx, oldID, newID string) error {
@@ -356,26 +353,14 @@ func rebindLaunchDesktop(tx *sql.Tx, oldID, newID string) error {
 	return err
 }
 
-// findDesktop reports a missing desktop as not found; a reopened session's last desktop may be gone.
-func findDesktop(tx *sql.Tx, id string) (profiles.Desktop, bool, error) {
+// loadOrCreateNumberedDesktop loads a desktop, creating a missing numbered one
+// on its shortcut slot; any other missing desktop is not found.
+func loadOrCreateNumberedDesktop(tx *sql.Tx, now, profileID, id string) (profiles.Desktop, bool, error) {
 	desktop, err := loadDesktop(tx, id)
-	var missing *profiles.Error
-	if errors.As(err, &missing) && missing.Code == profiles.CodeNotFound {
-		return desktop, false, nil
+	if !profiles.IsNotFound(err) || !profiles.IsNumberedDesktopID(profileID, id) {
+		return desktop, false, err
 	}
-	return desktop, err == nil, err
-}
-
-func findOrRecreateNumberedDesktop(tx *sql.Tx, now string, profile profiles.Profile, id string) (profiles.Desktop, bool, error) {
-	desktop, found, err := findDesktop(tx, id)
-	if err != nil || found {
-		return desktop, found, err
-	}
-	slot := profiles.DesktopSlot(id)
-	if !profiles.IsNumberedDesktopID(profile.ID, id) {
-		return desktop, false, nil
-	}
-	desktop, err = insertDesktop(tx, now, profile.ID, "", slot)
+	desktop, err = insertDesktop(tx, now, profileID, "", profiles.DesktopSlot(id))
 	return desktop, err == nil, err
 }
 
@@ -396,11 +381,8 @@ func (s *Store) PlaceBackgroundSession(sessionID protocol.SessionID, runtimeID p
 			if err := tx.QueryRow(`SELECT last_desktop_id FROM sessions WHERE id = ?`, sessionID).Scan(&last); err != nil {
 				return err
 			}
-			var found bool
-			desktop, found, err = findOrRecreateNumberedDesktop(tx, now, profile, last)
-			switch {
-			case err != nil:
-			case !found || desktop.ProfileID != profile.ID:
+			desktop, _, err = loadOrCreateNumberedDesktop(tx, now, profile.ID, last)
+			if profiles.IsNotFound(err) || err == nil && desktop.ProfileID != profile.ID {
 				desktop, err = loadLaunchDesktop(tx, profile, "")
 			}
 		} else {
