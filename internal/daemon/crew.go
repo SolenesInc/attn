@@ -55,18 +55,8 @@ func (d *Daemon) registerCrewHomes() {
 		d.logf("crew: importing homes: %v", err)
 		return
 	}
-	registered, _, err := d.readCrewMembersRaw()
-	if err != nil && !docstore.IsUndeclaredCollection(err) {
-		d.logf("crew: checking registered homes before import: %v", err)
-		return
-	}
-	for _, member := range registered {
-		if err := d.validateCrewMemberPaths(member); err != nil {
-			d.logf("crew: import refused stored member %s: %v", crew.DisplayName(member.ID), err)
-		}
-	}
 	for _, member := range members {
-		if err := d.validateCrewMemberPaths(member); err != nil {
+		if err := d.requireCrewFiles(member); err != nil {
 			d.logf("crew: import refused member %s: %v", crew.DisplayName(member.ID), err)
 			continue
 		}
@@ -78,7 +68,7 @@ func (d *Daemon) registerCrewHomes() {
 			continue
 		}
 		d.publishFact(FactCrewRegistered, member.ID, nil)
-		d.logf("crew: imported member %s from %s", crew.DisplayName(member.ID), member.HomeDir)
+		d.logf("crew: imported member %s from %s", crew.DisplayName(member.ID), member.HomeDir(d.dataRoot))
 	}
 }
 
@@ -86,7 +76,7 @@ func (d *Daemon) assignCrewProfiles() {
 	if d.store == nil {
 		return
 	}
-	members, _, err := d.readCrewMembersRaw()
+	members, _, err := d.readCrewMembers()
 	if err != nil {
 		if !docstore.IsUndeclaredCollection(err) {
 			d.logf("crew: reading members to give them a profile: %v", err)
@@ -128,9 +118,6 @@ func (d *Daemon) writeCrewMember(schema docstore.CollectionSchema, member crew.M
 }
 
 func (d *Daemon) writeCrewMemberWithLaunch(schema docstore.CollectionSchema, member crew.Member, expected int64, setting *store.LaunchDesktopSetting) (int64, error) {
-	if err := d.validateCrewMemberPaths(member); err != nil {
-		return 0, err
-	}
 	body, err := member.Encode()
 	if err != nil {
 		return 0, err
@@ -154,19 +141,6 @@ func (d *Daemon) writeCrewMemberWithLaunch(schema docstore.CollectionSchema, mem
 	return written.Rev, nil
 }
 
-func (d *Daemon) readCrewMembers() ([]crew.Member, map[string]docstore.Document, error) {
-	members, docs, err := d.readCrewMembersRaw()
-	if err != nil {
-		return nil, nil, err
-	}
-	for _, member := range members {
-		if err := d.validateCrewMemberPaths(member); err != nil {
-			return nil, nil, err
-		}
-	}
-	return members, docs, nil
-}
-
 func (d *Daemon) resolveCrewMember(address string) (crew.Member, bool, error) {
 	members, _, err := d.readCrewMembers()
 	if err != nil {
@@ -176,7 +150,7 @@ func (d *Daemon) resolveCrewMember(address string) (crew.Member, bool, error) {
 	return member, ok, nil
 }
 
-func (d *Daemon) readCrewMembersRaw() ([]crew.Member, map[string]docstore.Document, error) {
+func (d *Daemon) readCrewMembers() ([]crew.Member, map[string]docstore.Document, error) {
 	read, _, err := d.runDocQuery(docstore.Query{
 		Namespace:  crew.Namespace,
 		Collection: crew.CollectionMembers,
@@ -192,6 +166,10 @@ func (d *Daemon) readCrewMembersRaw() ([]crew.Member, map[string]docstore.Docume
 		member, err := crew.Decode(doc.Body)
 		if err != nil {
 			d.logf("crew: member %s has an unreadable record: %v", doc.ID, err)
+			continue
+		}
+		if err := crew.ValidateID(member.ID); err != nil || member.ID != doc.ID {
+			d.logf("crew: member %s has an invalid identity %q: %v", doc.ID, member.ID, err)
 			continue
 		}
 		members = append(members, member)
@@ -479,8 +457,8 @@ func (d *Daemon) crewMemberWire(member crew.Member, revision int64) protocol.Cre
 		ID:            member.ID,
 		ProfileID:     d.crewProfileID(member.ID),
 		Revision:      int(revision),
-		CharterPath:   member.CharterPath,
-		HomeDir:       member.HomeDir,
+		CharterPath:   member.CharterPath(d.dataRoot),
+		HomeDir:       member.HomeDir(d.dataRoot),
 		ResolvedAgent: member.LaunchAgent(),
 	}
 	if item, err := d.store.LaunchDesktopItem("crew", member.ID); err == nil {

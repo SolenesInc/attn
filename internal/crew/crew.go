@@ -28,8 +28,6 @@ const DefaultAgent = "claude"
 
 type Member struct {
 	ID             string             `json:"id"`
-	CharterPath    string             `json:"charter_path"`
-	HomeDir        string             `json:"home_dir"`
 	CWD            string             `json:"cwd"`
 	Agent          string             `json:"agent"`
 	Model          string             `json:"model"`
@@ -37,9 +35,17 @@ type Member struct {
 	AwarenessDirs  []string           `json:"awareness_dirs"`
 	BindingSession protocol.SessionID `json:"binding_session"`
 
-	LetterPath      string             `json:"letter_path"`
+	LetterFile      string             `json:"letter_file"`
 	LetterSession   protocol.SessionID `json:"letter_session"`
 	AutonomousWakes []string           `json:"autonomous_wakes"`
+}
+
+func (m Member) HomeDir(dataRoot string) string {
+	return filepath.Join(dataRoot, HomesDirName, m.ID)
+}
+
+func (m Member) CharterPath(dataRoot string) string {
+	return filepath.Join(m.HomeDir(dataRoot), CharterFileName)
 }
 
 func (m Member) LaunchAgent() string {
@@ -50,10 +56,10 @@ func (m Member) LaunchAgent() string {
 }
 
 func (m Member) FiledLetterFor(sessionID protocol.SessionID) (string, bool) {
-	if sessionID == "" || m.LetterPath == "" || m.LetterSession != sessionID {
+	if sessionID == "" || m.LetterFile == "" || m.LetterSession != sessionID {
 		return "", false
 	}
-	return m.LetterPath, true
+	return m.LetterFile, true
 }
 
 func MembersSchema() docstore.CollectionSchema {
@@ -166,8 +172,6 @@ func ScanHomes(dir string, warn func(format string, args ...any)) ([]Member, err
 		}
 		members = append(members, Member{
 			ID:            id,
-			CharterPath:   charter,
-			HomeDir:       home,
 			AwarenessDirs: []string{},
 		})
 	}
