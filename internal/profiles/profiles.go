@@ -1,6 +1,7 @@
 package profiles
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -102,6 +103,11 @@ type Error struct {
 
 func (e *Error) Error() string { return e.Message }
 
+func IsNotFound(err error) bool {
+	var profileErr *Error
+	return errors.As(err, &profileErr) && profileErr.Code == CodeNotFound
+}
+
 func Errorf(code Code, format string, args ...any) *Error {
 	return &Error{Code: code, Message: fmt.Sprintf(format, args...)}
 }
@@ -148,6 +154,19 @@ func DesktopSlot(id string) int {
 func IsNumberedDesktopID(profileID, id string) bool {
 	slot := DesktopSlot(id)
 	return slot != 0 && id == NumberedDesktopID(profileID, slot)
+}
+
+// NumberedDesktopRef is the numbered desktop id a ⌘ digit or a numbered id
+// names, whether or not that desktop exists; "" for any other ref.
+func NumberedDesktopRef(profileID, ref string) string {
+	ref = strings.TrimSpace(ref)
+	if slot, err := strconv.Atoi(ref); err == nil && slot >= FirstShortcutSlot && slot <= LastShortcutSlot {
+		return NumberedDesktopID(profileID, slot)
+	}
+	if IsNumberedDesktopID(profileID, ref) {
+		return ref
+	}
+	return ""
 }
 
 func checkPaneRows(desktop Desktop, inTree map[string]struct{}) (map[string]struct{}, error) {

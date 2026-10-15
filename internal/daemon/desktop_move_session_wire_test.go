@@ -2,12 +2,14 @@ package daemon_test
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -148,4 +150,50 @@ func TestASessionMovesItselfAndItsDelegatesBetweenDesktops(t *testing.T) {
 		}
 		return true
 	})
+}
+
+func TestASessionMoveCreatesTheMissingNumberedDesktop(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	profile := app.SelectedProfile()
+	cwd := w.Path("notes")
+	s, home, _ := w.RequestSpawn(app, fakeagent.Codex, cwd)
+	other, _, _ := w.RequestSpawn(app, fakeagent.Codex, cwd, func(m *protocol.SpawnSessionMessage) {
+		m.Label = protocol.Ptr("second")
+		m.Placement = &protocol.SessionPlacement{DesktopID: protocol.Ptr(home)}
+	})
+
+	for _, c := range []struct {
+		name    string
+		session protocol.SessionID
+		ref     string
+		slot    int
+		created bool
+	}{
+		{name: "by a missing shortcut digit", session: s.ID, ref: "5", slot: 5, created: true},
+		{name: "by a missing numbered desktop id", session: other.ID, ref: profiles.NumberedDesktopID(profile, 6), slot: 6, created: true},
+		{name: "by the digit of the desktop it just created", session: other.ID, ref: "5", slot: 5},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			result, err := cli.MoveSessionToDesktop(c.session, c.session, c.ref)
+			if err != nil {
+				t.Fatalf("moving %s to %q: %v", c.session, c.ref, err)
+			}
+			want := profiles.NumberedDesktopID(profile, c.slot)
+			if result.DesktopID != want || protocol.Deref(result.DesktopCreated) != c.created {
+				t.Errorf("the move reports desktop %s, created %v; want %s, created %v", result.DesktopID, protocol.Deref(result.DesktopCreated), want, c.created)
+			}
+			got := testworld.Await(app, protocol.EventProfileArrangementChanged, func(e protocol.ProfileArrangementChangedMessage) bool {
+				for _, desktop := range e.Desktops {
+					if desktop.ID == want && protocol.Deref(desktop.ShortcutSlot) == c.slot && slices.ContainsFunc(desktop.Panes, func(p protocol.DesktopPane) bool { return p.SessionID == c.session }) {
+						return true
+					}
+				}
+				return false
+			})
+			if got.Profile.CurrentDesktopID != home {
+				t.Errorf("the profile now shows desktop %s; want %s, where the user was", got.Profile.CurrentDesktopID, home)
+			}
+		})
+	}
 }

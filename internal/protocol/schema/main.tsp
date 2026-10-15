@@ -1564,7 +1564,7 @@ model GetRepoInfoMessage {
 // Both are absent/zero when creating. request_id is optional, used only by
 // WS for correlation, like automation_delete's below.
 model AutomationApplyMessage {
-  launch_desktop?: string; // own, an empty slot 5–9, or a desktop ref of the item's profile
+  launch_desktop?: string; // own, an empty slot, or a desktop ref of the item's profile
   cmd: "automation_apply";
   definition_yaml: string;
   request_id?: string;
@@ -2571,6 +2571,7 @@ model DesktopMoveSessionResult {
   pane_id: string;
   from_desktop_id?: string; // absent when unchanged
   unchanged?: boolean; // the session already was on that desktop
+  desktop_created?: boolean; // the move created the numbered desktop
 }
 
 // Shows an existing leaf, an agent pane or a tile, like desktop_show_session.
@@ -5703,7 +5704,7 @@ model CrewSleepResult {
 // about. Registry state, not prose: the home's markdown is never rewritten, and
 // an omitted field is left as it was.
 model CrewSetMessage {
-  launch_desktop?: string; // own, an empty slot 5–9, or a desktop ref of the item's profile
+  launch_desktop?: string; // own, an empty slot, or a desktop ref of the item's profile
   cmd: "crew_set";
   member: string;
   cwd?: string;

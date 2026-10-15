@@ -26,6 +26,7 @@ func TestLaunchDesktopsAreInstallSettingsVisibleThroughTheCLI(t *testing.T) {
 	if err != nil || string(charter) != "# alder\n" {
 		t.Fatalf("launch setting changed charter: %q %v", charter, err)
 	}
+	requireStdout(t, s.Attn("crew", "set", "alder", "--launch-desktop", "3"), "launch desktop: 3 · alder")
 	dir := s.Path("check")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)

@@ -1353,12 +1353,10 @@ func (s *Store) PlaceLaunchedSession(request SessionPlacementRequest) (profiles.
 			return err
 		}
 		current, err := loadLaunchDesktop(tx, profile, request.DesktopID)
-		var missing *profiles.Error
-		if request.DesktopID != "" && errors.As(err, &missing) && missing.Code == profiles.CodeNotFound {
+		if request.DesktopID != "" && profiles.IsNotFound(err) {
 			request.AnchorPaneID, request.Focus = "", false
-			var found bool
-			current, found, err = findOrRecreateNumberedDesktop(tx, now, profile, request.DesktopID)
-			if err == nil && !found {
+			current, _, err = loadOrCreateNumberedDesktop(tx, now, profile.ID, request.DesktopID)
+			if profiles.IsNotFound(err) {
 				current, err = loadLaunchDesktop(tx, profile, "")
 			}
 		}
@@ -1441,33 +1439,24 @@ func loadMoveEnds(tx *sql.Tx, now string, request LeafMoveRequest) (profiles.Des
 }
 
 func moveDestination(tx *sql.Tx, now, profileID string, request LeafMoveRequest) (profiles.Desktop, error) {
-	if request.TargetDesktopID != "" {
-		if request.TargetShortcutSlot != 0 {
-			return profiles.Desktop{}, profiles.Errorf(profiles.CodeInvalid, "a move needs a target desktop or shortcut slot, not both")
-		}
-		return loadDesktop(tx, request.TargetDesktopID)
-	}
-	if err := profiles.ValidateShortcutSlot(request.TargetShortcutSlot); err != nil {
-		return profiles.Desktop{}, err
-	}
-	slot := request.TargetShortcutSlot
-	if slot != 0 {
-		desktops, err := listDesktops(tx, profileID)
+	targetID, slot := request.TargetDesktopID, request.TargetShortcutSlot
+	switch {
+	case targetID != "" && slot != 0:
+		return profiles.Desktop{}, profiles.Errorf(profiles.CodeInvalid, "a move needs a target desktop or shortcut slot, not both")
+	case targetID == "" && slot == 0:
+		slot, err := lowestFreeShortcutSlot(tx, profileID)
 		if err != nil {
 			return profiles.Desktop{}, err
 		}
-		for _, desktop := range desktops {
-			if desktop.ShortcutSlot == slot {
-				return desktop, nil
-			}
-		}
-	} else {
-		var err error
-		if slot, err = lowestFreeShortcutSlot(tx, profileID); err != nil {
+		return insertDesktop(tx, now, profileID, "", slot)
+	case targetID == "":
+		if err := profiles.ValidateShortcutSlot(slot); err != nil {
 			return profiles.Desktop{}, err
 		}
+		targetID = profiles.NumberedDesktopID(profileID, slot)
 	}
-	return insertDesktop(tx, now, profileID, "", slot)
+	desktop, _, err := loadOrCreateNumberedDesktop(tx, now, profileID, targetID)
+	return desktop, err
 }
 
 func handOverPane(source, target *profiles.Desktop, leafID, finalLeafID string) {
@@ -1595,6 +1584,7 @@ type SessionDesktopMove struct {
 	Move       LeafMove
 	FromLeafID string
 	Placed     bool
+	Created    bool
 }
 
 // MoveSessionToDesktop puts a session's newest tile beside another desktop's active leaf;
@@ -1606,7 +1596,7 @@ func (s *Store) MoveSessionToDesktop(sessionID protocol.SessionID, targetDesktop
 		if err != nil {
 			return err
 		}
-		target, err := loadDesktop(tx, targetDesktopID)
+		target, created, err := loadOrCreateNumberedDesktop(tx, now, profileID, targetDesktopID)
 		if err != nil {
 			return err
 		}
@@ -1630,7 +1620,7 @@ func (s *Store) MoveSessionToDesktop(sessionID protocol.SessionID, targetDesktop
 			if err := writeCurrentDesktopArrangement(tx, now, &desktop); err != nil {
 				return err
 			}
-			result = SessionDesktopMove{Move: LeafMove{Target: desktop, FinalLeafID: paneID}, Placed: true}
+			result = SessionDesktopMove{Move: LeafMove{Target: desktop, FinalLeafID: paneID}, Placed: true, Created: created}
 			return nil
 		}
 		tile := tiles[0]
@@ -1646,7 +1636,7 @@ func (s *Store) MoveSessionToDesktop(sessionID protocol.SessionID, targetDesktop
 			LeafID: tile.tileID, AnchorID: target.ActivePaneID, Direction: layouttree.DirectionVertical,
 			Activate: source.ActivePaneID == tile.tileID && target.ID != profile.CurrentDesktopID,
 		}, nil)
-		result = SessionDesktopMove{Move: move, FromLeafID: tile.tileID}
+		result = SessionDesktopMove{Move: move, FromLeafID: tile.tileID, Created: created}
 		return err
 	})
 	return result, err
