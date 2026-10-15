@@ -40,7 +40,7 @@ export function useSeedTileNavigation({
   const path = isSeed && pendingSeedID ? pendingSeedID : persistedPath;
   const seedNavigationError =
     seedNavigationFailure?.path === path ? seedNavigationFailure.message : '';
-  const { document: seedDocument, error: seedDocumentError } = useLiveSeedDocument(
+  const { document: seedDocument, error: seedDocumentError, reload: reloadSeedDocument } = useLiveSeedDocument(
     path,
     gardenSeeds,
     isSeed,
@@ -91,6 +91,7 @@ export function useSeedTileNavigation({
     seedNavigationError,
     seedDocument,
     seedDocumentError,
+    reloadSeedDocument,
     title,
     parentSeed,
     seedLocationTitle,
@@ -104,6 +105,8 @@ function useLiveSeedDocument(seedId: string, gardenSeeds: Seed[], enabled: boole
   const connectionGeneration = api?.connectionGeneration ?? 0;
   const [document, setDocument] = useState<SeedDocument | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reloadRequest, setReloadRequest] = useState(0);
+  const reload = useCallback(() => setReloadRequest((request) => request + 1), []);
   // Every garden fact re-pushes the seeds snapshot, and notes or child changes need not
   // touch this seed's own revision, so the array identity is the live invalidation signal.
   useEffect(() => {
@@ -132,7 +135,7 @@ function useLiveSeedDocument(seedId: string, gardenSeeds: Seed[], enabled: boole
     return () => {
       ignore = true;
     };
-  }, [enabled, gardenSeeds, seedId, sendSeedDocumentGet, connectionGeneration]);
+  }, [enabled, gardenSeeds, seedId, sendSeedDocumentGet, connectionGeneration, reloadRequest]);
 
-  return { document: document?.seed.id === seedId ? document : null, error };
+  return { document: document?.seed.id === seedId ? document : null, error, reload };
 }

@@ -161,7 +161,7 @@ async function typeComment(daemon: ScriptedDaemon, key: string) {
 }
 
 describe('App markdown annotations', () => {
-  it('keeps the complete seed document until refresh and uses the daemon’s tender decision', async () => {
+  it('keeps the displayed seed usable after an update fails and reloads the complete document', async () => {
     const { daemon } = await openSeedPlan();
     await addOverallNote(daemon, 'Check the plan.');
     await gesture(daemon, () => answerSave(daemon, daemon.sentOf('markdown_annotations_save')[0], { success: true }));
@@ -176,16 +176,25 @@ describe('App markdown annotations', () => {
 
     const read = daemon.sentOf('seed_document_get')[1];
     await gesture(daemon, () => daemon.replyTo(read, {
-      event: 'seed_document_get_result', request_id: read.request_id, success: true,
+      event: 'seed_document_get_result', request_id: read.request_id, success: false,
+      error: 'Could not read seed artifacts',
+    }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Update failedReload');
+    expect(screen.getByRole('heading', { name: 'Plan' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Note on seed 1' })).toBeEnabled();
+    daemon.on('seed_document_get', () => ({
+      event: 'seed_document_get_result', success: true,
       document: seedDocument({ ...listed, body: '# Complete body', tender_session: 'stopped-agent' }, { tender_holds: false }),
     }));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Reload' })));
+    expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.getByRole('heading', { name: 'Complete body' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Listed body' })).toBeNull();
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Note on seed 1' })));
     expect(daemon.sentOf('markdown_annotations_submit')).toEqual([
       expect.objectContaining({ seed_id: PLAN.id, target_seed_id: PLAN.id }),
     ]);
-    expect(daemon.sentOf('seed_document_get')).toEqual(Array.from({ length: 2 }, () => ({
+    expect(daemon.sentOf('seed_document_get')).toEqual(Array.from({ length: 3 }, () => ({
       cmd: 'seed_document_get', seed_id: PLAN.id, request_id: expect.any(String),
     })));
   });
