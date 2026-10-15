@@ -26,17 +26,8 @@ import (
 	"nhooyr.io/websocket"
 )
 
-func TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations(t *testing.T) {
-	oldBinary, hostBinary := os.Getenv("ATTN_UPGRADE_OLD_BIN"), os.Getenv("ATTN_TEST_PTY_HOST")
-	if oldBinary == "" || hostBinary == "" {
-		t.Skip("run scripts/test-pty-upgrade.sh for the two-binary upgrade test")
-	}
-	root, err := os.MkdirTemp("/tmp", "attn-upgrade-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(root) })
-	newBinary := testworld.AttnBinary(t)
+func writeUpgradeCodexFixture(t *testing.T, root string) string {
+	t.Helper()
 	fixture := filepath.Join(root, "fixture-codex")
 	script := `#!/bin/sh
 set -eu
@@ -47,12 +38,17 @@ mkdir -p "$ATTN_TOOL_HOME/.codex/sessions"
 printf '{"type":"session_meta","payload":{"id":"native-%s","cwd":"%s"}}\n' "$terminal_id" "$PWD" > "$transcript"
 printf '{"session_id":"native-%s","transcript_path":"%s"}' "$terminal_id" "$transcript" | "$ATTN_WRAPPER_PATH" _hook-session-start
 while IFS= read -r line; do
-  printf '__ACK_%s_%s_%s__\n' "$terminal_id" "$line" "$$"
-  previous=''; resume=''
+  previous=''; resume=''; model=''; effort=''
   for arg in "$@"; do
     if [ "$previous" = resume ]; then resume="$arg"; fi
+    if [ "$previous" = --model ]; then model="$arg"; fi
+    if [ "$previous" = -c ]; then
+      case "$arg" in model_reasoning_effort=*) effort="$arg";; esac
+    fi
     previous="$arg"
   done
+  printf '__MODEL_%s__\n__EFFORT_%s__\n' "$model" "$effort"
+  printf '__ACK_%s_%s_%s__\n' "$terminal_id" "$line" "$$"
   printf '__RESUME_%s__\n' "$resume"
 done
 `
@@ -68,6 +64,74 @@ done
 	if err := os.WriteFile(filepath.Join(root, "bin", "dscl"), []byte("#!/bin/sh\nprintf 'UserShell: /bin/sh\\n'\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	return fixture
+}
+
+func TestAnUpgradedLegacyWorkerKeepsItsModelAndEffortOnReload(t *testing.T) {
+	oldBinary := os.Getenv("ATTN_UPGRADE_OLD_BIN")
+	if oldBinary == "" {
+		t.Skip("run scripts/test-pty-upgrade.sh for the two-binary upgrade test")
+	}
+	root, err := os.MkdirTemp("/tmp", "attn-model-upgrade-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	fixture := writeUpgradeCodexFixture(t, root)
+	workers := make(map[int]bool)
+	agentPIDs := make(map[string]int)
+	terminals := make(map[string]string)
+	t.Cleanup(func() {
+		for pid := range workers {
+			process, _ := os.FindProcess(pid)
+			_ = process.Kill()
+		}
+	})
+	start := func(binary string) *upgradeDaemon {
+		d := startUpgradeDaemon(t, root, binary, "")
+		d.workers, d.agentPIDs, d.terminals = workers, agentPIDs, terminals
+		return d
+	}
+	assertPins := func(output string) {
+		t.Helper()
+		models := regexp.MustCompile(`__MODEL_([^\r\n]*)__`).FindAllStringSubmatch(output, -1)
+		efforts := regexp.MustCompile(`__EFFORT_([^\r\n]*)__`).FindAllStringSubmatch(output, -1)
+		if len(models) == 0 || len(efforts) == 0 || models[len(models)-1][1] != "upgrade-model" || efforts[len(efforts)-1][1] != `model_reasoning_effort="high"` {
+			t.Fatalf("agent arguments lost the selected model or effort: %q", output)
+		}
+	}
+	old := start(oldBinary)
+	old.command(map[string]any{"cmd": "register_workspace", "id": "upgrade", "title": "upgrade", "directory": root}, "workspace_registered", "")
+	old.spawn("pinned-agent", "codex", fixture, func(spawn map[string]any) {
+		spawn["model"], spawn["effort"] = "upgrade-model", "high"
+	})
+	identity := old.identity("pinned-agent", false)
+	assertPins(old.probe("pinned-agent", identity.ChildPID, "before-upgrade"))
+	old.stop()
+
+	current := start(testworld.AttnBinaryWithSnapshotFormat(t, "upgrade-model-pins"))
+	current.waitForLog("worker swapped in place", nil)
+	current.assertIdentity("pinned-agent", false, identity)
+	assertPins(current.probe("pinned-agent", identity.ChildPID, "after-upgrade"))
+	current.command(map[string]any{"cmd": "reload_session", "id": "pinned-agent", "cols": 80, "rows": 24}, "reload_session_result", "pinned-agent")
+	reloaded := current.identity("pinned-agent", false)
+	delete(agentPIDs, "pinned-agent")
+	assertPins(current.probe("pinned-agent", reloaded.ChildPID, "after-reload"))
+	current.command(map[string]any{"cmd": "unregister", "id": "pinned-agent"}, "session_unregistered", "")
+}
+
+func TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations(t *testing.T) {
+	oldBinary, hostBinary := os.Getenv("ATTN_UPGRADE_OLD_BIN"), os.Getenv("ATTN_TEST_PTY_HOST")
+	if oldBinary == "" || hostBinary == "" {
+		t.Skip("run scripts/test-pty-upgrade.sh for the two-binary upgrade test")
+	}
+	root, err := os.MkdirTemp("/tmp", "attn-upgrade-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	newBinary := testworld.AttnBinary(t)
+	fixture := writeUpgradeCodexFixture(t, root)
 	var workers = make(map[int]bool)
 	agentPIDs := make(map[string]int)
 	terminals := make(map[string]string)
@@ -536,9 +600,12 @@ func (d *upgradeDaemon) setSharedSetting(enabled bool) {
 	d.assertSharedSetting(enabled, enabled)
 }
 
-func (d *upgradeDaemon) spawn(id, agent, executable string) {
+func (d *upgradeDaemon) spawn(id, agent, executable string, options ...func(map[string]any)) {
 	d.t.Helper()
 	spawn := map[string]any{"cmd": "spawn_session", "id": id, "cwd": d.root, "agent": agent, "codex_executable": executable, "cols": 80, "rows": 24}
+	for _, option := range options {
+		option(spawn)
+	}
 	if d.profileID == "" {
 		d.command(map[string]any{"cmd": "workspace_layout_add_session_pane", "workspace_id": "upgrade", "session_id": id, "pane_id": "pane-" + id}, "workspace_layout_action_result", "")
 		spawn["workspace_id"] = "upgrade"

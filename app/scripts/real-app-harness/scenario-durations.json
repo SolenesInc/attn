@@ -230,12 +230,12 @@
         "note": "Green ATTN_VERDICT durationMs=27874, including cleanup and recording. Native palette moves a dispatcher, two delegates and a nested delegate against a production DB copy. No overview changes. Final recording and screenshots attached to seed s-4z9ah9. Remeasure on Linux CI."
       },
       "agent-settings": {
-        "run": "https://github.com/SolenesInc/attn/actions/runs/37878771307",
-        "job": "App acceptance shard 1/4",
-        "recordedAt": "2026-10-09",
-        "seconds": 33.189,
+        "run": "https://github.com/SolenesInc/attn/actions/runs/38650741637",
+        "job": "App acceptance shard 2/4",
+        "recordedAt": "2026-10-14",
+        "seconds": 33.006,
         "runnerClass": "github-hosted Linux",
-        "note": "Green shared harness/model/effort picker scenario at 67889c737. Matrix elapsed 33.189s; ATTN_VERDICT agent-settings-2026-10-09T03-27-01-108Z durationMs=32625, including cleanup."
+        "note": "Green settings scenario at 0d5f106fe0391f8d51b9fa9e28c6ec61931f7adb, including Experimental direct-launch default, toggles and cleanup. Matrix elapsed 33.006s; run agent-settings-2026-10-14T23-04-06-641Z."
       },
       "desktop-order": {
         "run": "desktop-order-2026-10-08T21-40-27-696Z",
@@ -268,7 +268,7 @@
     "snooze-keyboard": 103.8,
     "agent-close": 8.2,
     "agent-queue": 132.293,
-    "agent-settings": 33.189,
+    "agent-settings": 33.006,
     "autoclose-on-exit": 72.591,
     "automation-form": 67.473,
     "automation-lifecycle": 71.804,

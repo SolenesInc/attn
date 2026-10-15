@@ -80,16 +80,12 @@ type claudeSettings struct {
 	Env   map[string]string      `json:"env"`
 }
 
-func claudeHooks(settingsPath, cwd string) (hookSet, error) {
-	if strings.TrimSpace(settingsPath) == "" {
+func claudeHooks(raw, cwd string) (hookSet, error) {
+	if strings.TrimSpace(raw) == "" {
 		return hookSet{}, errors.New("claude launched without --settings")
 	}
-	data, err := os.ReadFile(settingsPath)
-	if err != nil {
-		return hookSet{}, fmt.Errorf("read --settings: %w", err)
-	}
 	var settings claudeSettings
-	if err := json.Unmarshal(data, &settings); err != nil {
+	if err := json.Unmarshal([]byte(raw), &settings); err != nil {
 		return hookSet{}, fmt.Errorf("decode --settings: %w", err)
 	}
 	env := os.Environ()

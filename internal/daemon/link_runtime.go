@@ -19,7 +19,7 @@ type linkRuntime interface {
 	admit(profile, conversation string) error
 	prepareLaunch(opts *ptybackend.SpawnOptions, profile string) error
 	launchFailed(t harness.TerminalID, profile string)
-	respawnEnv(t harness.TerminalID) []string
+	relaunch(opts *ptybackend.SpawnOptions)
 
 	resolveCaller(t protocol.TerminalID) (session protocol.SessionID, view harness.TerminalID, ours bool)
 	shownConversation(t harness.TerminalID) string

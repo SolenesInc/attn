@@ -57,16 +57,14 @@ type spawnRequest struct {
 }
 
 type spawnPlan struct {
-	spawnOpts                    ptybackend.SpawnOptions
-	launchSession                *protocol.Session
-	pluginRunID                  string
-	cleanupInitialPrompt         func()
-	cleanupInitialPromptOnReturn bool
-	chiefAssigned                bool
-	isChief                      bool
-	chiefAssignmentCommitted     bool
-	launchedConversation         string
-	abandonLink                  func()
+	spawnOpts                ptybackend.SpawnOptions
+	launchSession            *protocol.Session
+	pluginRunID              string
+	chiefAssigned            bool
+	isChief                  bool
+	chiefAssignmentCommitted bool
+	launchedConversation     string
+	abandonLink              func()
 }
 
 type spawnRejection struct {
@@ -93,14 +91,12 @@ type spawnOutcome struct {
 }
 
 func (plan *spawnPlan) rollback(d *Daemon, sessionID protocol.SessionID) {
-	if plan.cleanupInitialPromptOnReturn {
-		plan.cleanupInitialPrompt()
-	}
 	if plan.chiefAssigned && !plan.chiefAssignmentCommitted {
 		d.clearChiefOfStaffIfSession(sessionID)
 	}
 	if plan.spawnOpts.ID != "" {
 		d.terminals().unexpect(plan.spawnOpts.ID)
+		d.removeAgentLaunchDir(plan.spawnOpts.ID)
 	}
 	if plan.abandonLink != nil {
 		plan.abandonLink()
@@ -250,17 +246,8 @@ func (d *Daemon) resolveSpawnIntent(ctx context.Context, req *spawnRequest) (*sp
 	if configuredExecutable == "" {
 		configuredExecutable = legacyExecutableFromSpawnMessage(msg, req.agent)
 	}
-	plan := &spawnPlan{cleanupInitialPrompt: func() {}}
-	if !req.hasPluginDriver {
-		initialPromptFile, cleanup, err := d.writeInitialPromptFile(msg.ID, req.initialPrompt)
-		if err != nil {
-			return nil, &spawnRejection{err: err}
-		}
-		plan.cleanupInitialPrompt = cleanup
-		plan.cleanupInitialPromptOnReturn = initialPromptFile != ""
-		plan.spawnOpts.InitialPromptFile = initialPromptFile
-	}
-	plan.spawnOpts = ptybackend.SpawnOptions{CWD: req.cwd, Agent: req.agent, Label: req.label, Cols: uint16(msg.Cols), Rows: uint16(msg.Rows), ResumeSessionID: req.resumeSessionID, ResumePicker: protocol.Deref(msg.ResumePicker), YoloMode: protocol.Deref(msg.YoloMode), InitialPromptFile: plan.spawnOpts.InitialPromptFile, Theme: d.currentTerminalTheme(), Executable: strings.TrimSpace(configuredExecutable), ClaudeExecutable: protocol.Deref(msg.ClaudeExecutable), CodexExecutable: protocol.Deref(msg.CodexExecutable), CopilotExecutable: protocol.Deref(msg.CopilotExecutable), LoginShellEnv: d.cachedLoginShellEnv(), AutoApprove: parseBooleanSetting(d.store.GetSetting(SettingAutoApproveEnabled)), Model: strings.TrimSpace(protocol.Deref(msg.Model)), Effort: strings.TrimSpace(protocol.Deref(msg.Effort))}
+	plan := &spawnPlan{}
+	plan.spawnOpts = ptybackend.SpawnOptions{CWD: req.cwd, Agent: req.agent, Label: req.label, Cols: uint16(msg.Cols), Rows: uint16(msg.Rows), ResumeSessionID: req.resumeSessionID, ResumePicker: protocol.Deref(msg.ResumePicker), YoloMode: protocol.Deref(msg.YoloMode), Theme: d.currentTerminalTheme(), Executable: strings.TrimSpace(configuredExecutable), ClaudeExecutable: protocol.Deref(msg.ClaudeExecutable), CodexExecutable: protocol.Deref(msg.CodexExecutable), CopilotExecutable: protocol.Deref(msg.CopilotExecutable), LoginShellEnv: d.cachedLoginShellEnv(), AutoApprove: parseBooleanSetting(d.store.GetSetting(SettingAutoApproveEnabled)), Model: strings.TrimSpace(protocol.Deref(msg.Model)), Effort: strings.TrimSpace(protocol.Deref(msg.Effort))}
 	requestedChief := protocol.Deref(msg.ChiefOfStaff)
 	if req.hasPluginDriver && requestedChief && !req.pluginDriver.Capabilities["launch_instructions"] {
 		plan.rollback(d, msg.ID)
@@ -391,8 +378,8 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 			plan.rollback(d, msg.ID)
 			return &spawnOutcome{err: err}
 		}
-		plan.spawnOpts.ExternalCommand = append([]string(nil), result.Argv...)
-		plan.spawnOpts.ExternalEnv = commandEnv
+		plan.spawnOpts.AgentArgv = append([]string(nil), result.Argv...)
+		plan.spawnOpts.AgentEnv = commandEnv
 		plan.spawnOpts.ExternalCWD = strings.TrimSpace(result.CWD)
 		if plan.spawnOpts.ExternalCWD != "" {
 			resolved, err := d.validateCrewBoundLaunchDir(msg.ID, plan.spawnOpts.ExternalCWD)
@@ -402,6 +389,20 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 				return &spawnOutcome{err: err}
 			}
 			plan.spawnOpts.ExternalCWD = resolved
+		}
+	}
+
+	if req.link != nil {
+		plan.abandonLink = func() { req.link.launchFailed(plan.spawnOpts.ID, req.profile.ID) }
+		if err := req.link.prepareLaunch(&plan.spawnOpts, req.profile.ID); err != nil {
+			plan.rollback(d, msg.ID)
+			return &spawnOutcome{err: err}
+		}
+	}
+	if !req.isShell && !req.hasPluginDriver {
+		if err := d.prepareAgentLaunch(msg.ID, terminal, plan.isChief, &plan.spawnOpts, req.initialPrompt); err != nil {
+			plan.rollback(d, msg.ID)
+			return &spawnOutcome{err: fmt.Errorf("prepare %s launch: %w", req.agent, err)}
 		}
 	}
 
@@ -446,15 +447,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{err: fmt.Errorf("initialize plugin driver run cursor")}
 	}
-	var err error
-	if req.link != nil {
-		plan.abandonLink = func() { req.link.launchFailed(plan.spawnOpts.ID, req.profile.ID) }
-		err = req.link.prepareLaunch(&plan.spawnOpts, req.profile.ID)
-	}
-	if err == nil {
-		err = d.spawnSessionRuntime(msg.ID, plan.spawnOpts)
-	}
-	if err != nil {
+	if err := d.spawnSessionRuntime(msg.ID, plan.spawnOpts); err != nil {
 		d.forgetSessionTitleInitialPrompt(msg.ID)
 		if req.existingSession == nil {
 			d.store.Remove(msg.ID)
@@ -475,10 +468,6 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	}
 	if hasInitialPrompt {
 		d.maybeGenerateSessionTitleFromPrompt(msg.ID, req.initialPrompt, sessionInputOrigin{})
-	}
-	if plan.spawnOpts.InitialPromptFile != "" {
-		plan.cleanupInitialPromptOnReturn = false
-		d.life.AfterFunc("cleanupInitialPrompt", initialPromptCleanupAfter, plan.cleanupInitialPrompt)
 	}
 	return &spawnOutcome{}
 }

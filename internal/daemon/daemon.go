@@ -243,6 +243,7 @@ type Daemon struct {
 	notebookMu          sync.Mutex
 	notebookStore       *notebook.Store
 	notebookWatcherMu   sync.Mutex
+	notebookWatch       func(string, func([]string)) (*notebook.Watcher, error)
 	notebookWatcher     *notebook.Watcher
 	notebookWatchedRoot string
 	fsMu                sync.Mutex
@@ -530,6 +531,7 @@ func New(socketPath string) *Daemon {
 
 	d := &Daemon{
 		recentFileStat:      os.Stat,
+		notebookWatch:       openNotebookWatch,
 		recentFilePruneGate: make(chan struct{}, 1),
 		socketPath:          socketPath,
 		pidPath:             pidPath,
@@ -567,6 +569,7 @@ func NewForTesting(socketPath string) *Daemon {
 	manager := pty.NewManager(nil)
 	d := &Daemon{
 		recentFileStat:      os.Stat,
+		notebookWatch:       openNotebookWatch,
 		recentFilePruneGate: make(chan struct{}, 1),
 		socketPath:          socketPath,
 		pidPath:             pidPath,
@@ -787,7 +790,6 @@ func (d *Daemon) Start() error {
 		)
 	}
 
-	d.sweepStaleInitialPrompts(time.Now())
 	d.life.Go("warmLoginShellEnvCache", d.warmLoginShellEnvCache)
 
 	d.setRecovering(true)
@@ -1663,6 +1665,18 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		d.logf("ignoring exit of a replaced runtime in terminal %s", info.ID)
 		return false
 	}
+	if session := d.store.Get(sessionID); session != nil {
+		driver := agentdriver.Get(session.Agent)
+		if driver != nil && !agentdriver.EffectiveCapabilities(driver).HasHooks {
+			if finder, ok := agentdriver.GetTranscriptFinder(driver); ok {
+				path := finder.FindTranscriptForResume(d.store.GetResumeSessionID(sessionID))
+				if path == "" {
+					path = finder.FindTranscript(string(info.ID), session.Directory, d.store.SessionLaunchedAt(sessionID))
+				}
+				d.observeStoppedConversation(sessionID, d.resolveStopTranscriptPath(session, path))
+			}
+		}
+	}
 	stopped := d.consumeTerminalExitIntent(info.ID, terminalExitStop)
 	if !d.endTerminal(sessionID, info.ID) {
 		unlockEnds()
@@ -1736,6 +1750,7 @@ func (d *Daemon) removePTYSession(terminal harness.TerminalID) error {
 	defer cancel()
 	err := d.ptyBackend.Remove(ctx, terminal)
 	if err == nil || errors.Is(err, pty.ErrSessionNotFound) || errors.Is(err, os.ErrNotExist) {
+		d.removeAgentLaunchDir(terminal)
 		return nil
 	}
 	d.life.Go("removePTYSession", func() {
@@ -1750,6 +1765,7 @@ func (d *Daemon) removePTYSession(terminal harness.TerminalID) error {
 			retryErr := d.ptyBackend.Remove(ctx, terminal)
 			cancel()
 			if retryErr == nil || errors.Is(retryErr, pty.ErrSessionNotFound) || errors.Is(retryErr, os.ErrNotExist) {
+				d.removeAgentLaunchDir(terminal)
 				return
 			}
 			backoff *= 2
@@ -2879,19 +2895,7 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 
 	d.recordTurnEndedEvidence(sessionID, classifies)
 
-	if session := d.store.Get(sessionID); session != nil {
-		driver := agentdriver.Get(session.Agent)
-		resumeSessionID := agentdriver.ResumeSessionIDFromTranscriptPath(driver, msg.TranscriptPath)
-		observation := agentConversationObservation{SessionID: sessionID, NativeID: resumeSessionID, TranscriptPath: msg.TranscriptPath}
-		switch {
-		case resumeSessionID == "":
-		case agentdriver.EffectiveCapabilities(driver).HasHooks:
-			d.observeAgentConversation(observation)
-			d.rememberDispatchResume(sessionID, resumeSessionID)
-		case d.claimAgentConversation(observation):
-			d.rememberDispatchResume(sessionID, resumeSessionID)
-		}
-	}
+	d.observeStoppedConversation(sessionID, msg.TranscriptPath)
 	d.store.Touch(sessionID)
 	d.sendOK(conn)
 
@@ -2902,6 +2906,22 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 
 	d.life.Go("classifySessionState", func() { d.classifySessionState(sessionID, msg.TranscriptPath) })
 	d.life.Go("maybeGenerateSessionTitle", func() { d.maybeGenerateSessionTitle(sessionID, msg.TranscriptPath) })
+}
+
+func (d *Daemon) observeStoppedConversation(sessionID protocol.SessionID, transcriptPath string) {
+	if session := d.store.Get(sessionID); session != nil {
+		driver := agentdriver.Get(session.Agent)
+		resumeSessionID := agentdriver.ResumeSessionIDFromTranscriptPath(driver, transcriptPath)
+		observation := agentConversationObservation{SessionID: sessionID, NativeID: resumeSessionID, TranscriptPath: transcriptPath}
+		switch {
+		case resumeSessionID == "":
+		case agentdriver.EffectiveCapabilities(driver).HasHooks:
+			d.observeAgentConversation(observation)
+			d.rememberDispatchResume(sessionID, resumeSessionID)
+		case d.claimAgentConversation(observation):
+			d.rememberDispatchResume(sessionID, resumeSessionID)
+		}
+	}
 }
 
 func (d *Daemon) resolveStopTranscriptPath(session *protocol.Session, reported string) string {
@@ -3347,12 +3367,7 @@ type successfulPRObservation struct {
 }
 
 func (d *Daemon) pollPRs() {
-	if !d.githubAvailable() {
-		d.log("GitHub client not available, PR polling disabled")
-		return
-	}
-
-	d.log("PR polling started (90s interval)")
+	d.log("PR polling loop started (90s interval)")
 
 	d.doPRPoll()
 

@@ -139,25 +139,20 @@ func userGlobalSkillSyncEnabled() bool {
 	return os.Getenv("ATTN_AUTOMATION") == "1" && os.Getenv(harnessSkillSyncEnv) == "1" && strings.TrimSpace(os.Getenv(toolhome.EnvVar)) != ""
 }
 
-func EnsureClaudeSkillInstalled() (bool, error) {
+func EnsureAttnSkillInstalled(harness string) (bool, error) {
 	if !userGlobalSkillSyncEnabled() {
 		return false, nil
 	}
-	return true, ensureAttnClaudeSkillInstalled()
-}
-
-func EnsureAgentsSkillInstalled() (bool, error) {
-	if !userGlobalSkillSyncEnabled() {
+	switch harness {
+	case "claude":
+		return true, ensureAttnClaudeSkillInstalled()
+	case "codex":
+		return true, ensureAttnAgentsSkillInstalled()
+	case "copilot":
+		return true, ensureAttnCopilotSkillInstalled()
+	default:
 		return false, nil
 	}
-	return true, ensureAttnAgentsSkillInstalled()
-}
-
-func EnsureCopilotSkillInstalled() (bool, error) {
-	if !userGlobalSkillSyncEnabled() {
-		return false, nil
-	}
-	return true, ensureAttnCopilotSkillInstalled()
 }
 
 func EnsureWorkflowSkillsInstalled(harnesses []string) ([]string, bool, error) {

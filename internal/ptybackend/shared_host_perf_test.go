@@ -86,8 +86,8 @@ func TestSharedHostResourceExperiment(t *testing.T) {
 		}()
 		if err := backend.Spawn(ctx, SpawnOptions{
 			ID: harness.TerminalID(id), CWD: root, Agent: "perf", Cols: 80, Rows: 24,
-			ExternalCommand: []string{probe, "--child", listener.Addr().String(), id},
-			LoginShellEnv:   []string{"PATH=/usr/bin:/bin"},
+			AgentArgv:     []string{probe, "--child", listener.Addr().String(), id},
+			LoginShellEnv: []string{"PATH=/usr/bin:/bin"},
 		}); err != nil {
 			t.Fatal(err)
 		}

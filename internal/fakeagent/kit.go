@@ -232,6 +232,7 @@ func (k *Kit) handle(f *fake, method string, params json.RawMessage) error {
 		}
 		if f.Role == roleAgent {
 			k.launchesFor(f.AttnSessionID) <- &Run{
+				PID:            f.Pid,
 				Harness:        f.Harness,
 				SessionID:      f.AttnSessionID,
 				ConversationID: f.ConversationID,

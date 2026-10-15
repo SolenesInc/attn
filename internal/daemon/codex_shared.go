@@ -155,7 +155,7 @@ func (r *codexShared) prepareLaunch(opts *ptybackend.SpawnOptions, profile strin
 	if _, err := r.ensureServer(r.d.life.Context(), profile, executable); err != nil {
 		return err
 	}
-	opts.ExternalEnv = append(opts.ExternalEnv, "ATTN_CODEX_REMOTE="+remote)
+	opts.CodexRemote = remote
 	return nil
 }
 
@@ -217,10 +217,10 @@ func (r *codexShared) startServer(ctx context.Context, s *codexServer, executabl
 	command = append(command, "--listen", "unix://"+s.socket)
 	opts := ptybackend.SpawnOptions{
 		ID: s.terminal, Agent: codexServerAgent, Label: "Codex app-server", CWD: r.dir(), Cols: 80, Rows: 24,
-		ExternalCommand: command,
-		ExternalEnv:     []string{"ATTN_TERMINAL_ID=", "ATTN_SESSION_ID=", "ATTN_AGENT="},
-		LoginShellEnv:   r.d.cachedLoginShellEnv(),
-		DaemonEnv:       r.d.spawnRoutingEnv(),
+		AgentArgv:     command,
+		AgentEnv:      []string{"ATTN_TERMINAL_ID=", "ATTN_SESSION_ID=", "ATTN_AGENT="},
+		LoginShellEnv: r.d.cachedLoginShellEnv(),
+		DaemonEnv:     r.d.spawnRoutingEnv(),
 	}
 	if err := r.d.ptyBackend.Spawn(ctx, withLifecycleID(opts)); err != nil {
 		return fmt.Errorf("start the shared Codex app-server: %w", err)
@@ -649,13 +649,12 @@ func (r *codexShared) terminalShowing(profile, conversation string) (harness.Ter
 	return found.terminal, true
 }
 
-func (r *codexShared) respawnEnv(t harness.TerminalID) []string {
+func (r *codexShared) relaunch(opts *ptybackend.SpawnOptions) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if v := r.views[t]; v != nil {
-		return []string{"ATTN_CODEX_REMOTE=unix://" + v.socket}
+	if v := r.views[opts.ID]; v != nil {
+		opts.CodexRemote = "unix://" + v.socket
 	}
-	return nil
 }
 
 func (r *codexShared) terminalExited(t harness.TerminalID) {

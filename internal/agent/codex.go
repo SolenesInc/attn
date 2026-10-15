@@ -26,7 +26,6 @@ var _ RecoveredStatePolicyProvider = (*Codex)(nil)
 var _ ExecutableClassifierProvider = (*Codex)(nil)
 var _ ConfigOverrideProvider = (*Codex)(nil)
 var _ ResumePolicyProvider = (*Codex)(nil)
-var _ LaunchPreparer = (*Codex)(nil)
 var _ HeadlessTaskProvider = (*Codex)(nil)
 
 func init() {
@@ -118,11 +117,6 @@ func (c *Codex) BuildEnv(opts SpawnOpts) []string {
 		env = append(env, c.ExecutableEnvVar()+"="+opts.Executable)
 	}
 	return env
-}
-
-func (c *Codex) PrepareLaunch(opts SpawnOpts) error {
-	_, err := EnsureAgentsSkillInstalled()
-	return err
 }
 
 func (c *Codex) RunHeadlessTask(ctx context.Context, request HeadlessTaskRequest) (HeadlessTaskResult, error) {

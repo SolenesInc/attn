@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"os"
 	"slices"
+	"strconv"
 	"testing"
 
 	"github.com/google/uuid"
@@ -13,38 +14,45 @@ import (
 )
 
 func TestASharedCodexLaunchIsOneSessionThatWorksWaitsAndCountsItsUsage(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
-	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
-	codex := w.Launched(session)
-	if !slices.Contains(codex.Argv, "--remote") {
-		t.Fatalf("the shared launch ran %q, want Codex connected to an app-server", codex.Argv)
-	}
+	for _, direct := range []bool{false, true} {
+		t.Run(strconv.FormatBool(direct), func(t *testing.T) {
+			w := newWorld(t, fakeagent.Codex)
+			app := w.App()
+			setSetting(t, app, "codex_shared_enabled", "true")
+			if direct {
+				setSetting(t, app, "direct_agent_launch_enabled", "true")
+			}
+			session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
+			codex := w.Launched(session)
+			if !slices.Contains(codex.Argv, "--remote") {
+				t.Fatalf("the shared launch ran %q, want Codex connected to an app-server", codex.Argv)
+			}
 
-	app.TypeLine(session, "find the flaky checkout test")
-	if got := codex.Prompted(); got != "find the flaky checkout test" {
-		t.Fatalf("codex received %q", got)
-	}
-	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
-	question := "It races the tax lookup. Add a lock? <!-- attn:state=waiting_input -->"
-	codex.Reply(question)
-	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
-	if usage := awaitUsageTokens(app, session, claudeTokens(question)); usage.MeasurementIncomplete != nil {
-		t.Errorf("usage = %+v, want it complete", usage)
-	}
+			app.TypeLine(session, "find the flaky checkout test")
+			if got := codex.Prompted(); got != "find the flaky checkout test" {
+				t.Fatalf("codex received %q", got)
+			}
+			testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+			question := "It races the tax lookup. Add a lock? <!-- attn:state=waiting_input -->"
+			codex.Reply(question)
+			testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+			if usage := awaitUsageTokens(app, session, claudeTokens(question)); usage.MeasurementIncomplete != nil {
+				t.Errorf("usage = %+v, want it complete", usage)
+			}
 
-	var codexSessions []string
-	for _, s := range w.App().Initial.Sessions {
-		if s.Agent == protocol.SessionAgentCodex {
-			codexSessions = append(codexSessions, string(s.ID))
-		}
-	}
-	if !slices.Equal(codexSessions, []string{session}) {
-		t.Errorf("Codex sessions = %v, want only %s", codexSessions, session)
-	}
-	if servers := w.CodexServers(); len(servers) != 1 {
-		t.Errorf("app-servers launched = %v, want one", servers)
+			var codexSessions []string
+			for _, s := range w.App().Initial.Sessions {
+				if s.Agent == protocol.SessionAgentCodex {
+					codexSessions = append(codexSessions, string(s.ID))
+				}
+			}
+			if !slices.Equal(codexSessions, []string{session}) {
+				t.Errorf("Codex sessions = %v, want only %s", codexSessions, session)
+			}
+			if servers := w.CodexServers(); len(servers) != 1 {
+				t.Errorf("app-servers launched = %v, want one", servers)
+			}
+		})
 	}
 }
 
