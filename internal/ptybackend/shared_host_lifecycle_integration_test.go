@@ -83,7 +83,7 @@ func copyExecutable(t *testing.T, from, to string, suffix []byte) {
 func spawnCat(t *testing.T, backend *WorkerBackend, id, cwd string) {
 	t.Helper()
 	if err := backend.Spawn(context.Background(), SpawnOptions{
-		ID: harness.TerminalID(id), CWD: cwd, Agent: "lifecycle-probe", ExternalCommand: []string{"/bin/cat"}, Cols: 80, Rows: 24,
+		ID: harness.TerminalID(id), CWD: cwd, Agent: "lifecycle-probe", AgentArgv: []string{"/bin/cat"}, Cols: 80, Rows: 24,
 	}); err != nil {
 		t.Fatalf("Spawn(%s): %v", id, err)
 	}
@@ -162,7 +162,7 @@ func TestSharedHost_DaemonStaysPinnedWhenTheBundleIsReplaced(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := backend.Spawn(context.Background(), SpawnOptions{
-		ID: "replaced-before-pin", CWD: root, Agent: "lifecycle-probe", ExternalCommand: []string{"/bin/cat"},
+		ID: "replaced-before-pin", CWD: root, Agent: "lifecycle-probe", AgentArgv: []string{"/bin/cat"},
 	}); err == nil || !strings.Contains(err.Error(), ptyhost.ErrArtifactChanged.Error()) {
 		t.Fatalf("spawn after the bundle changed = %v, want the startup artifact refused", err)
 	}
@@ -357,7 +357,7 @@ func TestSharedHost_KeystrokesReachTheChildAcrossDaemonReplacement(t *testing.T)
 	}
 	if err := first.Spawn(context.Background(), SpawnOptions{
 		ID: "typist", CWD: root, Agent: "lifecycle-probe", Cols: 80, Rows: 24,
-		ExternalCommand: []string{"/bin/sh", "-c", "stty raw -echo && head -c 1 >/dev/null && printf __TYPIST_READY__ && exec cat"},
+		AgentArgv: []string{"/bin/sh", "-c", "stty raw -echo && head -c 1 >/dev/null && printf __TYPIST_READY__ && exec cat"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -692,7 +692,7 @@ func TestSharedHost_ProbeChildThatExitsRejectsTheBuildWithoutReportingTheProbe(t
 	}
 
 	if err := backend.Spawn(context.Background(), SpawnOptions{
-		ID: "exits-at-once", CWD: root, Agent: "lifecycle-probe", ExternalCommand: []string{"/bin/sh", "-c", "exit 0"}, Cols: 80, Rows: 24,
+		ID: "exits-at-once", CWD: root, Agent: "lifecycle-probe", AgentArgv: []string{"/bin/sh", "-c", "exit 0"}, Cols: 80, Rows: 24,
 	}); err != nil {
 		t.Fatal(err)
 	}

@@ -124,7 +124,7 @@ func TestSharedHost_InnerShellPromptSurvivesForegroundPolling(t *testing.T) {
 	const id = "inner-shell"
 	if err := backend.Spawn(context.Background(), SpawnOptions{
 		ID: id, CWD: root, Agent: "shell", Cols: 80, Rows: 24,
-		ExternalCommand: []string{"/bin/bash", "--noprofile", "--norc", "-i"},
+		AgentArgv: []string{"/bin/bash", "--noprofile", "--norc", "-i"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +190,7 @@ func TestSharedHost_ReplacedSubscriberCannotDetachReplacement(t *testing.T) {
 	}
 	if err := backend.Spawn(context.Background(), SpawnOptions{
 		ID: "reattach", CWD: root, Agent: "reattach-probe",
-		ExternalCommand: []string{"/bin/cat"}, Cols: 80, Rows: 24,
+		AgentArgv: []string{"/bin/cat"}, Cols: 80, Rows: 24,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -250,7 +250,7 @@ func TestMigratingHost_RecoversLegacyAndSharedSessionsWithoutMovingEither(t *tes
 		t.Helper()
 		if err := backend.Spawn(context.Background(), SpawnOptions{
 			ID: harness.TerminalID(id), CWD: root, Agent: "mixed-recovery-probe",
-			ExternalCommand: []string{"/bin/cat"}, Cols: 80, Rows: 24,
+			AgentArgv: []string{"/bin/cat"}, Cols: 80, Rows: 24,
 		}); err != nil {
 			t.Fatalf("Spawn(%s): %v", id, err)
 		}
@@ -342,9 +342,9 @@ func TestSharedHost_OneLifecycleStreamCoversMultipleSessions(t *testing.T) {
 	for _, id := range ids {
 		if err := backend.Spawn(context.Background(), SpawnOptions{
 			ID: harness.TerminalID(id), CWD: root, Agent: "lifecycle-probe",
-			ExternalCommand: []string{"/bin/sh", "-c", "read release"},
-			Cols:            80,
-			Rows:            24,
+			AgentArgv: []string{"/bin/sh", "-c", "read release"},
+			Cols:      80,
+			Rows:      24,
 		}); err != nil {
 			t.Fatalf("Spawn(%s): %v", id, err)
 		}
@@ -469,7 +469,7 @@ func TestSharedHost_CrashEvictsEverySessionAndRestartsCleanly(t *testing.T) {
 		"running-at-crash":    {"/bin/cat"},
 	} {
 		if err := backend.Spawn(context.Background(), SpawnOptions{
-			ID: harness.TerminalID(id), CWD: root, Agent: "crash-probe", ExternalCommand: command, Cols: 80, Rows: 24,
+			ID: harness.TerminalID(id), CWD: root, Agent: "crash-probe", AgentArgv: command, Cols: 80, Rows: 24,
 		}); err != nil {
 			t.Fatalf("Spawn(%s): %v", id, err)
 		}
@@ -507,7 +507,7 @@ func TestSharedHost_CrashEvictsEverySessionAndRestartsCleanly(t *testing.T) {
 
 	if err := backend.Spawn(context.Background(), SpawnOptions{
 		ID: "after-crash", CWD: root, Agent: "crash-probe",
-		ExternalCommand: []string{"/bin/cat"}, Cols: 80, Rows: 24,
+		AgentArgv: []string{"/bin/cat"}, Cols: 80, Rows: 24,
 	}); err != nil {
 		t.Fatalf("Spawn(after-crash): %v", err)
 	}
@@ -551,7 +551,7 @@ func TestSharedHost_FailedExecLeavesOtherSessionsHealthy(t *testing.T) {
 	}
 	if err := backend.Spawn(context.Background(), SpawnOptions{
 		ID: "healthy-before-failure", CWD: root, Agent: "exec-failure-probe",
-		ExternalCommand: []string{"/bin/cat"}, Cols: 80, Rows: 24,
+		AgentArgv: []string{"/bin/cat"}, Cols: 80, Rows: 24,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -564,7 +564,7 @@ func TestSharedHost_FailedExecLeavesOtherSessionsHealthy(t *testing.T) {
 
 	err = backend.Spawn(context.Background(), SpawnOptions{
 		ID: "failed-exec", CWD: root, Agent: "exec-failure-probe",
-		ExternalCommand: []string{"/definitely/missing/attn-pty-host-test"}, Cols: 80, Rows: 24,
+		AgentArgv: []string{"/definitely/missing/attn-pty-host-test"}, Cols: 80, Rows: 24,
 	})
 	if err == nil {
 		t.Fatal("Spawn(failed-exec) succeeded")
@@ -613,15 +613,15 @@ func TestSharedHost_BlockedTerminationDoesNotBlockAnotherSession(t *testing.T) {
 	}
 	if err := backend.Spawn(context.Background(), SpawnOptions{
 		ID: "slow-stop", CWD: root, Agent: "fairness-probe",
-		ExternalCommand: []string{"/bin/sh", "-c", `trap 'printf "__TERM_RECEIVED__\n"; trap "" TERM HUP; while :; do read hold || true; done' TERM; read start; printf "__READY__\n"; while :; do read hold || true; done`},
-		Cols:            80,
-		Rows:            24,
+		AgentArgv: []string{"/bin/sh", "-c", `trap 'printf "__TERM_RECEIVED__\n"; trap "" TERM HUP; while :; do read hold || true; done' TERM; read start; printf "__READY__\n"; while :; do read hold || true; done`},
+		Cols:      80,
+		Rows:      24,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := backend.Spawn(context.Background(), SpawnOptions{
 		ID: "responsive", CWD: root, Agent: "fairness-probe",
-		ExternalCommand: []string{"/bin/cat"}, Cols: 80, Rows: 24,
+		AgentArgv: []string{"/bin/cat"}, Cols: 80, Rows: 24,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -764,12 +764,12 @@ func TestSharedHost_KittyPlacementsAndImagePull(t *testing.T) {
 	}
 	payload := kittyPayloadFile(t, "\x1b[3;1H"+kittyPlaceRGB(90, 16, 32))
 	if err := backend.Spawn(context.Background(), SpawnOptions{
-		ID:              "shared-kitty",
-		CWD:             t.TempDir(),
-		Agent:           "probe-kitty",
-		ExternalCommand: []string{"/bin/sh", "-c", "read release; cat " + payload},
-		Cols:            40,
-		Rows:            12,
+		ID:        "shared-kitty",
+		CWD:       t.TempDir(),
+		Agent:     "probe-kitty",
+		AgentArgv: []string{"/bin/sh", "-c", "read release; cat " + payload},
+		Cols:      40,
+		Rows:      12,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -831,12 +831,12 @@ func TestSharedHost_TerminalQueriesUseTheHostModel(t *testing.T) {
 		ID:    "shared-query",
 		CWD:   t.TempDir(),
 		Agent: "probe-query",
-		ExternalCommand: []string{
+		AgentArgv: []string{
 			"/bin/sh", "-c", "stty raw -echo; exec \"$1\" -test.run=TestSharedHost_TerminalQueriesUseTheHostModel", "query-helper", os.Args[0],
 		},
-		ExternalEnv: []string{"ATTN_SHARED_QUERY_HELPER=1"},
-		Cols:        40,
-		Rows:        12,
+		AgentEnv: []string{"ATTN_SHARED_QUERY_HELPER=1"},
+		Cols:     40,
+		Rows:     12,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -873,12 +873,12 @@ func TestSharedHost_AttachCarriesCommandBlocks(t *testing.T) {
 	payload := "\x1b]133;A\x07$ \x1b]133;B\x07echo hi\x1b]133;C;cmdline_url=echo%20hi\x07\r\nhi\r\n\x1b]133;D;0\x07__BLOCK_DONE__"
 	path := kittyPayloadFile(t, payload)
 	if err := backend.Spawn(context.Background(), SpawnOptions{
-		ID:              "shared-blocks",
-		CWD:             t.TempDir(),
-		Agent:           "probe-blocks",
-		ExternalCommand: []string{"/bin/sh", "-c", "read release; cat " + path + "; read hold"},
-		Cols:            40,
-		Rows:            12,
+		ID:        "shared-blocks",
+		CWD:       t.TempDir(),
+		Agent:     "probe-blocks",
+		AgentArgv: []string{"/bin/sh", "-c", "read release; cat " + path + "; read hold"},
+		Cols:      40,
+		Rows:      12,
 	}); err != nil {
 		t.Fatal(err)
 	}

@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"errors"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -79,7 +78,7 @@ func (c *Copilot) BuildEnv(opts SpawnOpts) []string {
 	if opts.Executable != "" && opts.Executable != c.DefaultExecutable() {
 		env = append(env, c.ExecutableEnvVar()+"="+opts.Executable)
 	}
-	if dirs := copilotInstructionsDirs(os.Getenv(copilotInstructionsDirsEnv), opts.InstructionsDir); dirs != "" {
+	if dirs := copilotInstructionsDirs(opts.InheritedInstructionsDirs, opts.InstructionsDir); dirs != "" {
 		env = append(env, copilotInstructionsDirsEnv+"="+dirs)
 	}
 	return env
