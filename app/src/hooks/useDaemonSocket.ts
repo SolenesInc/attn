@@ -2192,9 +2192,14 @@ export function useDaemonSocket({
           }
 
           case 'get_repo_info_result': {
-            settlePendingRequest(pendingActionsRef.current, 'get_repo_info', data,
-              (event) => event.info && ({ success: true, info: { ...event.info, worktrees: event.info.worktrees || [] } }),
-              'Failed to read repository');
+            if (typeof data.request_id !== 'string') break;
+            const key = pendingRequestKey('get_repo_info', data.request_id);
+            const pending = pendingActionsRef.current.get(key);
+            if (!pending) break;
+            pendingActionsRef.current.delete(key);
+            pending.resolve(data.success && data.info
+              ? { success: true, info: { ...data.info, worktrees: data.info.worktrees || [] } }
+              : { success: false, error: data.error });
             break;
           }
 
