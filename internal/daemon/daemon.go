@@ -1634,9 +1634,9 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		d.logf("terminal %s exited after its agent moved on from session %s, which runs on over its link", info.ID, sessionID)
 		return false
 	}
-	d.forgetTerminalTitle(info.ID)
 	d.linkTerminalExited(info.ID)
 	if d.linkProcess(info.ID) {
+		d.forgetTerminalTitle(info.ID)
 		return false
 	}
 	sessionID, shown := d.shownIn(info.ID)
@@ -1644,6 +1644,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		sessionID, shown = ended, true
 	}
 	if !shown {
+		d.forgetTerminalTitle(info.ID)
 		d.clearTerminalExitIntent(info.ID, terminalExitStop)
 		d.logf("pty exit of terminal %s, which no session shows; removing its runtime", info.ID)
 		if err := d.removePTYSession(info.ID); err != nil {
@@ -2007,6 +2008,13 @@ func (d *Daemon) terminateSessionAsync(sessionID protocol.SessionID, sig syscall
 }
 
 func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.SessionClose) {
+	if session := d.store.Get(sessionID); session != nil && session.Agent == protocol.AgentShellValue {
+		d.decorateSessionWithTitle(session)
+		closed.FallbackLabel = protocol.Deref(session.Title)
+		if closed.FallbackLabel == "" {
+			closed.FallbackLabel = defaultSessionLabel(session.Directory, sessionID)
+		}
+	}
 	if l := d.linkOf(sessionID); l != nil {
 		l.closed(sessionID)
 	}
@@ -2016,6 +2024,7 @@ func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.Session
 }
 
 func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() (bool, error)) {
+	terminals := d.terminalsOf(sessionID)
 	defer d.announceUnplacement(sessionID)()
 	if session := d.store.Get(sessionID); session != nil {
 		if _, err := d.captureGardenSessionSnapshot(session); err != nil {
@@ -2030,6 +2039,9 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() 
 	}
 	d.forgetSessionTrace(sessionID)
 	if recorded {
+		for _, terminal := range terminals {
+			d.forgetTerminalTitle(terminal)
+		}
 		d.queueConversationKeep()
 		d.invalidateGardenSeedParties("session close")
 		entry := d.store.SessionLedgerEntry(sessionID)
@@ -2044,6 +2056,7 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() 
 }
 
 func (d *Daemon) removeReapedSession(sessionID protocol.SessionID) {
+	terminals := d.terminalsOf(sessionID)
 	defer d.announceUnplacement(sessionID)()
 	if session := d.store.Get(sessionID); session != nil {
 		if _, err := d.captureGardenSessionExecution(session); err != nil {
@@ -2052,6 +2065,9 @@ func (d *Daemon) removeReapedSession(sessionID protocol.SessionID) {
 	}
 	d.forgetSessionRuntime(sessionID)
 	d.store.Remove(sessionID)
+	for _, terminal := range terminals {
+		d.forgetTerminalTitle(terminal)
+	}
 	d.forgetSessionTrace(sessionID)
 	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)

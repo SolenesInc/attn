@@ -22,8 +22,9 @@ const SessionLedgerMaxLimit = 1000
 var ErrSessionClosed = errors.New("session is closed")
 
 type SessionClose struct {
-	By     string
-	Reason string
+	By            string
+	Reason        string
+	FallbackLabel string
 }
 
 type SessionLedgerScope string
@@ -87,6 +88,9 @@ func (s *Store) CloseSession(id protocol.SessionID, closed SessionClose, now tim
 		if _, already := s.sessionCloses[id]; already {
 			return false, nil
 		}
+		if session.Agent == protocol.AgentShellValue && session.Label == "" {
+			session.Label = closed.FallbackLabel
+		}
 		delete(s.sessions, id)
 		s.sessionCloses[id] = sessionCloseMark{At: at, By: by, Reason: strings.TrimSpace(closed.Reason), session: session}
 		if cost, tracked := s.sessionCosts[id]; tracked {
@@ -101,7 +105,8 @@ func (s *Store) CloseSession(id protocol.SessionID, closed SessionClose, now tim
 		return false, fmt.Errorf("close session %s: %w", id, err)
 	}
 	defer tx.Rollback()
-	closedNow, emptied, err := s.closeSessionTx(tx, id, SessionClose{By: by, Reason: closed.Reason}, at)
+	closed.By = by
+	closedNow, emptied, err := s.closeSessionTx(tx, id, closed, at)
 	if err != nil || !closedNow {
 		return false, err
 	}
@@ -119,8 +124,9 @@ func (s *Store) CloseSession(id protocol.SessionID, closed SessionClose, now tim
 // closeSessionTx closes an open session's row, unplaces it and finalizes its cost; the caller forgets
 // the cost and announces an emptied desktop after commit.
 func (s *Store) closeSessionTx(tx *sql.Tx, id protocol.SessionID, closed SessionClose, at string) (bool, bool, error) {
-	result, err := tx.Exec(`UPDATE sessions SET closed_at = ?, closed_by = ?, close_reason = ?
-		WHERE id = ? AND closed_at = ''`, at, closed.By, strings.TrimSpace(closed.Reason), id)
+	result, err := tx.Exec(`UPDATE sessions SET closed_at = ?, closed_by = ?, close_reason = ?,
+		label = CASE WHEN agent = 'shell' AND label = '' THEN ? ELSE label END
+		WHERE id = ? AND closed_at = ''`, at, closed.By, strings.TrimSpace(closed.Reason), closed.FallbackLabel, id)
 	if err != nil {
 		return false, false, fmt.Errorf("close session %s: %w", id, err)
 	}

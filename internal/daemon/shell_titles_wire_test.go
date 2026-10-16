@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -46,4 +47,66 @@ func TestEmbeddedShellPublishesItsTitleAndKeepsDeliveringOutput(t *testing.T) {
 		t.Fatal(err)
 	}
 	listedName("embedded prompt")
+}
+
+func TestClosedShellsKeepTheirLastDisplayNameInHistory(t *testing.T) {
+	w := newWorld(t)
+	app := w.App()
+	cli := w.Client()
+	closedNames := make(map[string]string)
+	for _, mode := range []string{"normal exit", "app close", "CLI close", "failed exit", "custom name"} {
+		shell := w.Spawn(app, shellHarness, w.Path("shop"))
+		testworld.AwaitSession(app, shell, func(s protocol.Session) bool { return protocol.Deref(s.Title) == "shop" })
+		app.TypeLine(shell, `printf '\033]0;saved shell name\007'`)
+		testworld.AwaitSession(app, shell, func(s protocol.Session) bool { return protocol.Deref(s.Title) == "saved shell name" })
+		want := "saved shell name"
+		switch mode {
+		case "normal exit":
+			app.TypeLine(shell, "exit 0")
+		case "failed exit":
+			app.TypeLine(shell, "exit 7")
+			testworld.AwaitSession(app, shell, func(s protocol.Session) bool { return s.TerminalExit != nil && s.TerminalExit.Code == 7 })
+			if got := protocol.Deref(queriedSession(t, cli, shell).Title); got != want {
+				t.Errorf("failed shell title = %q, want %q", got, want)
+			}
+			fallthrough
+		case "app close":
+			if result := closeFromApp(app, shell); !result.Accepted {
+				t.Fatalf("%s refused: %+v", mode, result)
+			}
+		case "custom name":
+			want = "my server"
+			if err := cli.RenameSession(protocol.SessionID(shell), want); err != nil {
+				t.Fatal(err)
+			}
+			fallthrough
+		case "CLI close":
+			if err := cli.Unregister(protocol.SessionID(shell)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if got := awaitClosed(app, shell).Label; got != want {
+			t.Errorf("%s closed name = %q, want %q", mode, got, want)
+		}
+		if err := cli.Unregister(protocol.SessionID(shell)); err != nil {
+			t.Fatal(err)
+		}
+		closedNames[shell] = want
+	}
+	w.restart()
+	cli = w.Client()
+	for id, want := range closedNames {
+		if got := showSession(t, cli, id).Label; got != want {
+			t.Errorf("closed shell %s after restart = %q, want %q", id, got, want)
+		}
+	}
+	entries := ledger(t, cli, client.SessionListOptions{Closed: true}).Entries
+	if len(entries) != len(closedNames) {
+		t.Fatalf("closed ledger has %d shells, want %d", len(entries), len(closedNames))
+	}
+	for _, entry := range entries {
+		if want := closedNames[string(entry.ID)]; entry.Label != want {
+			t.Errorf("listed shell %s = %q, want %q", entry.ID, entry.Label, want)
+		}
+	}
 }
