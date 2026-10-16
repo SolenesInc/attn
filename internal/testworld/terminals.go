@@ -48,6 +48,8 @@ type Terminal struct {
 	onKill    func(syscall.Signal)
 	exitHold  <-chan struct{}
 	stall     *terminalStall
+	removal   <-chan struct{}
+	gone      bool
 }
 
 type terminalStall struct {
@@ -92,6 +94,9 @@ func (b *Terminals) lookup(id harness.TerminalID) (*Terminal, error) {
 	term := b.terminals[id]
 	if term == nil {
 		return nil, fmt.Errorf("%w: %s", pty.ErrSessionNotFound, id)
+	}
+	if term.gone {
+		return nil, fmt.Errorf("the worker of %s no longer answers", id)
 	}
 	return term, nil
 }
@@ -200,9 +205,9 @@ func (b *Terminals) Kill(_ context.Context, id harness.TerminalID, sig syscall.S
 
 func (b *Terminals) Remove(_ context.Context, id harness.TerminalID) error {
 	b.mu.Lock()
-	defer b.mu.Unlock()
 	term := b.terminals[id]
 	if term == nil {
+		b.mu.Unlock()
 		return nil
 	}
 	for _, events := range term.streams {
@@ -210,7 +215,20 @@ func (b *Terminals) Remove(_ context.Context, id harness.TerminalID) error {
 	}
 	term.streams = nil
 	term.running = false
-	delete(b.terminals, id)
+	held := term.removal
+	if held == nil {
+		delete(b.terminals, id)
+		b.mu.Unlock()
+		return nil
+	}
+	term.removal, term.gone = nil, true
+	b.mu.Unlock()
+	<-held
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.terminals[id] == term {
+		delete(b.terminals, id)
+	}
 	return nil
 }
 
@@ -329,6 +347,14 @@ func (t *Terminal) Stall(alive bool, probeErr error) (answer func()) {
 		defer t.owner.mu.Unlock()
 		t.stall = nil
 	}
+}
+
+func (t *Terminal) HoldRemoval() (release func()) {
+	t.owner.mu.Lock()
+	defer t.owner.mu.Unlock()
+	held := make(chan struct{})
+	t.removal = held
+	return func() { close(held) }
 }
 
 func (t *Terminal) Submitted() []string {
