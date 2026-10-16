@@ -100,6 +100,8 @@ The world:
 
 - `newWorld(t)` runs a production daemon in its own data directory.
   `w.restart()` replaces it with a new daemon over the same data.
+  `newWorldInLongestDataDir(t)` does the same in a data directory as long as
+  the world's own sockets allow, for promises about socket paths.
 - `w.App()` connects as the app. `w.Client()` returns a CLI client.
 - `testworld.Await`, `testworld.Request` and `testworld.AwaitSession` read what
   the daemon sends.

@@ -77,9 +77,13 @@ type codexServerThread struct {
 
 var codexServerFlags = flagSpec{values: map[string]bool{"-c": true, "--listen": true}}
 
+func codexListenPath(argv []string) string {
+	return strings.TrimPrefix(codexServerFlags.parse(argv[2:]).value("--listen"), "unix://")
+}
+
 func runCodexAppServer(cfg config) int {
 	args := codexServerFlags.parse(os.Args[2:])
-	path := strings.TrimPrefix(args.value("--listen"), "unix://")
+	path := codexListenPath(os.Args)
 	configured, err := codexHooks(args.values["-c"], "")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "fake codex app-server: %v\n", err)

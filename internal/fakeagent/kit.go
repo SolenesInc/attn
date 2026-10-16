@@ -15,7 +15,10 @@ import (
 	"time"
 )
 
-const HangGuard = 10 * time.Second
+const (
+	HangGuard     = 10 * time.Second
+	ControlSocket = "fakeagent.sock"
+)
 
 var piManifest = fmt.Sprintf(`name = %q
 version = %q
@@ -57,7 +60,7 @@ func Install(t testing.TB, dir string, harnesses []Harness, wrapper string) *Kit
 	}
 	toolHome := filepath.Join(dir, "toolhome")
 	cfg := config{
-		Control:   filepath.Join(dir, "fakeagent.sock"),
+		Control:   filepath.Join(dir, ControlSocket),
 		Bin:       filepath.Join(dir, "bin"),
 		ToolHome:  toolHome,
 		CodexHome: filepath.Join(toolHome, ".codex"),
@@ -302,6 +305,11 @@ func (k *Kit) verify() {
 		case <-ctx.Done():
 			k.fail(fmt.Sprintf("fake %s %s (pid %d) was still running after the daemon stopped", f.Harness, f.Role, f.Pid))
 			_ = syscall.Kill(f.Pid, syscall.SIGKILL)
+		}
+	}
+	for _, f := range fakes {
+		if f.Role == roleCodexServer {
+			_ = os.RemoveAll(filepath.Dir(codexListenPath(f.Argv)))
 		}
 	}
 	k.failUnansweredHeadlessTasks()

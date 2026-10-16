@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -35,6 +36,25 @@ type World struct {
 
 func Prepare(t testing.TB, wrapper string, harnesses ...fakeagent.Harness) *World {
 	t.Helper()
+	return prepareIn(t, worldDir(t), wrapper, harnesses)
+}
+
+func PrepareInLongestDataDir(t testing.TB, wrapper string, harnesses ...fakeagent.Harness) *World {
+	t.Helper()
+	limit := 104
+	if runtime.GOOS == "linux" {
+		limit = 108
+	}
+	dir := worldDir(t)
+	dir = filepath.Join(dir, strings.Repeat("d", limit-1-len(dir+"/")-len("/"+fakeagent.ControlSocket)))
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return prepareIn(t, dir, wrapper, harnesses)
+}
+
+func worldDir(t testing.TB) string {
+	t.Helper()
 	created, err := os.MkdirTemp("/tmp", "attn-w-")
 	if err != nil {
 		t.Fatal(err)
@@ -44,6 +64,11 @@ func Prepare(t testing.TB, wrapper string, harnesses ...fakeagent.Harness) *Worl
 	if err != nil {
 		t.Fatal(err)
 	}
+	return dir
+}
+
+func prepareIn(t testing.TB, dir, wrapper string, harnesses []fakeagent.Harness) *World {
+	t.Helper()
 	production, err := config.CanonicalRuntimePath(config.DataDirForInstance(""))
 	if err != nil {
 		t.Fatal(err)
