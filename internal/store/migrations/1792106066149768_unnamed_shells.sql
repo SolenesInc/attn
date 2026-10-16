@@ -1,5 +1,5 @@
 UPDATE sessions SET label = ''
-WHERE agent = 'shell' AND (
+WHERE agent = 'shell' AND closed_at = '' AND (
     label = 'shell'
     OR (label GLOB 'shell [0-9]*' AND substr(label, 7) NOT GLOB '*[^0-9]*')
     OR (label <> '' AND instr(label, '/') = 0
