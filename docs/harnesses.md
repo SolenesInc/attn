@@ -146,6 +146,17 @@ Probed on 0.160.0 with a mock model. Shared Codex relies on these.
 - `thread/archive` moves the rollout to `archived_sessions/` (flat, no dated
   directories) and refuses later resumes; `thread/unarchive` moves it back.
 
+Probed on 0.163.0 with a real model:
+
+- A `--remote` TUI refuses `--add-dir` and exits at once. Extra writable
+  directories come from `runtimeWorkspaceRoots` (experimental) on
+  `thread/start`, which replaces the default `[cwd]`. With `workspace-write`, a
+  conversation started with `[cwd, dir]` writes in `dir`; one started without
+  it cannot. `/tmp` stays writable either way. A `thread/resume` without
+  `runtimeWorkspaceRoots` restores the ones the conversation saved; this one
+  is read in the source at 6ae8b8aa7c, not probed
+  (`app-server/src/request_processors/thread_processor.rs`).
+
 Read in the source at openai/codex 1ffa95e:
 
 - `active` carries `waitingOnUserInput` while a turn waits on the user's

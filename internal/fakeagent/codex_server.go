@@ -35,6 +35,7 @@ const (
 	methodAskQuestion    = "ask_question"
 	methodInstructions   = "instructions"
 	methodCompactLimit   = "compact_limit"
+	methodWorkspaceRoots = "workspace_roots"
 	methodDropControl    = "drop_control"
 	methodRunTool        = "run_tool"
 	codexApprovalRequest = "item/commandExecution/requestApproval"
@@ -73,6 +74,7 @@ type codexServerThread struct {
 	question       bool
 	instructions   string
 	compactLimit   string
+	workspaceRoots []string
 }
 
 var codexServerFlags = flagSpec{values: map[string]bool{"-c": true, "--listen": true}}
@@ -247,6 +249,7 @@ type codexServerParams struct {
 	Text           string            `json:"text"`
 	Items          []json.RawMessage `json:"items"`
 	DevInstruction string            `json:"developerInstructions"`
+	WorkspaceRoots []string          `json:"runtimeWorkspaceRoots"`
 	Config         map[string]any    `json:"config"`
 	Input          []struct {
 		Text string `json:"text"`
@@ -386,7 +389,7 @@ func (s *codexAppServer) start(conn *codexServerConn, p codexServerParams) (any,
 	if p.Ephemeral {
 		return map[string]any{"thread": map[string]any{"id": id.String(), "ephemeral": true}}, nil, nil
 	}
-	t.instructions, t.compactLimit = p.DevInstruction, p.compactLimit()
+	t.instructions, t.compactLimit, t.workspaceRoots = p.DevInstruction, p.compactLimit(), p.WorkspaceRoots
 	s.mu.Lock()
 	s.threads[t.c.conversation] = t
 	s.mu.Unlock()
@@ -820,6 +823,13 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 		case <-time.After(HangGuard):
 			return nil, fmt.Errorf("no control connection came back within %s", HangGuard)
 		}
+	case methodWorkspaceRoots:
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if t := s.threads[p.ThreadID]; t != nil {
+			return workspaceRootsResult{Roots: t.workspaceRoots}, nil
+		}
+		return nil, fmt.Errorf("conversation %s is not loaded here", p.ThreadID)
 	case methodCompactLimit:
 		s.mu.Lock()
 		defer s.mu.Unlock()
