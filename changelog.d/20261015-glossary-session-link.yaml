@@ -1,0 +1,3 @@
+kind: internal
+area: docs
+change: The glossary puts a session's link under the session, and says a live session's agent runs in a terminal or over its link.
