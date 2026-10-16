@@ -28,11 +28,24 @@ func (d *Daemon) decorateSessionWithTitle(session *protocol.Session) {
 	if session.Agent != protocol.AgentShellValue {
 		return
 	}
-	terminal := d.primaryTerminal(session.ID)
-	d.terminalTitlesMu.RLock()
-	title := d.terminalTitles[terminal]
-	d.terminalTitlesMu.RUnlock()
-	if title != "" {
+	if title := d.sessionTerminalTitle(session.ID); title != "" {
 		session.Title = protocol.Ptr(title)
+	}
+}
+
+func (d *Daemon) sessionTerminalTitle(sessionID protocol.SessionID) string {
+	terminal := d.primaryTerminal(sessionID)
+	d.terminalTitlesMu.RLock()
+	defer d.terminalTitlesMu.RUnlock()
+	return d.terminalTitles[terminal]
+}
+
+func (d *Daemon) decorateLedgerEntryWithTitle(entry *protocol.SessionLedgerEntry) {
+	if entry.Agent != protocol.AgentShellValue || entry.Label != "" || protocol.Deref(entry.ClosedAt) != "" {
+		return
+	}
+	entry.Label = d.sessionTerminalTitle(entry.ID)
+	if entry.Label == "" {
+		entry.Label = defaultSessionLabel(entry.Directory, entry.ID)
 	}
 }

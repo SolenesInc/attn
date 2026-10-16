@@ -40,6 +40,7 @@ export interface SessionsTabProps {
   profileMembership: string;
   liveSessionIds?: Set<string>;
   liveSessionUsage?: ReadonlyMap<string, SessionUsage>;
+  liveSessionNames?: ReadonlyMap<string, string>;
   seedForSession?: (sessionId: string) => SessionSeedLink | null;
   onFocusSession?: (sessionId: string) => void;
   onOpenSeed?: (seedId: string) => void;
@@ -68,6 +69,7 @@ export function SessionsTab({
   profileMembership,
   liveSessionIds,
   liveSessionUsage,
+  liveSessionNames,
   seedForSession,
   onFocusSession,
   onOpenSeed,
@@ -93,7 +95,11 @@ export function SessionsTab({
     initialFilters: restoredFilters,
     onFiltersChange: rememberFilters,
   });
-  const { filters, setFilters, entries, reload } = ledger;
+  const { filters, setFilters, entries: storedEntries, reload } = ledger;
+  const entries = useMemo(() => storedEntries.map((entry) => {
+    const name = entry.agent === 'shell' && !isClosed(entry) ? liveSessionNames?.get(entry.id) : undefined;
+    return name !== undefined && name !== entry.label ? { ...entry, label: name } : entry;
+  }), [storedEntries, liveSessionNames]);
   const { keepNotices, runKeepVerb, clearKeepNotice } = useConversationPins(setConversationKeep, conversationChangeSignal, reload);
 
   const { text, setText, parsed } = useLedgerQueryText({

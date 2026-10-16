@@ -110,3 +110,46 @@ func TestClosedShellsKeepTheirLastDisplayNameInHistory(t *testing.T) {
 		}
 	}
 }
+
+func TestLiveShellNamesAppearInEveryLedgerRead(t *testing.T) {
+	w := newWorld(t)
+	app := w.App()
+	cli := w.Client()
+	shell := w.Spawn(app, shellHarness, w.Path("shop"))
+	testworld.AwaitSession(app, shell, func(s protocol.Session) bool { return protocol.Deref(s.Title) == "shop" })
+	assertName := func(want string) {
+		t.Helper()
+		for _, all := range []bool{false, true} {
+			page := ledger(t, cli, client.SessionListOptions{All: all})
+			if len(page.Entries) != 1 || page.Entries[0].Label != want {
+				t.Errorf("CLI ledger all=%v: %+v, want name %q", all, page.Entries, want)
+			}
+			pageWS := ledgerListOverTheWebSocket(app, "live-shell-name", protocol.SessionListMessage{All: protocol.Ptr(all)})
+			if !pageWS.Success || pageWS.Result == nil || len(pageWS.Result.Entries) != 1 || pageWS.Result.Entries[0].Label != want {
+				t.Errorf("app ledger all=%v: %+v, want name %q", all, pageWS.Result, want)
+			}
+		}
+		if got := showSession(t, cli, shell).Label; got != want {
+			t.Errorf("CLI show name = %q, want %q", got, want)
+		}
+		shown := ledgerShowOverTheWebSocket(app, shell)
+		if !shown.Success || shown.Entry == nil || shown.Entry.Label != want {
+			t.Errorf("app show = %+v, want name %q", shown.Entry, want)
+		}
+	}
+	assertName("shop")
+	app.TypeLine(shell, `printf '\033]0;live program\007'`)
+	testworld.AwaitSession(app, shell, func(s protocol.Session) bool { return protocol.Deref(s.Title) == "live program" })
+	assertName("live program")
+	if err := cli.RenameSession(protocol.SessionID(shell), "my server"); err != nil {
+		t.Fatal(err)
+	}
+	assertName("my server")
+	if err := cli.RenameSession(protocol.SessionID(shell), ""); err != nil {
+		t.Fatal(err)
+	}
+	assertName("live program")
+	if got := queriedSession(t, cli, shell).Label; got != "" {
+		t.Errorf("reading the ledger fixed the automatic shell name: label=%q", got)
+	}
+}
