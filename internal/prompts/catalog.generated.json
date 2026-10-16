@@ -3608,6 +3608,18 @@
           }
         },
         {
+          "id": "perf",
+          "delivery": "reference",
+          "description": "Loaded on demand through the installed attn-workflow skill.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.perf",
+            "source": "content/skills/attn-workflow/references/perf.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
           "id": "planning",
           "delivery": "reference",
           "description": "Loaded on demand through the installed attn-workflow skill.",

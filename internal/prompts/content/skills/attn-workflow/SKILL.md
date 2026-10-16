@@ -27,6 +27,7 @@ When the user asks you to work as one of these roles in the current conversation
 | Write a substantial implementation plan in the garden and arrange its handoff | [Planning](references/planning.md) |
 | Implement an agreed brief or plan and address review findings | [Implementation](references/implementation.md) |
 | Change structure or shape while preserving behavior | [Refactoring](references/refactoring.md) |
+| Make something measurably faster, smaller or quieter, once or against a target | [Perf](references/perf.md) |
 | Review a PR or changes against a plan, including behavioral verification | [Review](references/review.md) |
 | Delegate agreed work, advise implementers, and judge completion | [Orchestration](references/orchestration.md) |
 
