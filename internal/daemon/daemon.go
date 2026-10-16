@@ -1640,11 +1640,13 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		return false
 	}
 	sessionID, shown := d.shownIn(info.ID)
+	if !shown {
+		d.forgetTerminalTitle(info.ID)
+	}
 	if ended, ending := d.terminals().takeEnding(info.ID); ending && !shown {
 		sessionID, shown = ended, true
 	}
 	if !shown {
-		d.forgetTerminalTitle(info.ID)
 		d.clearTerminalExitIntent(info.ID, terminalExitStop)
 		d.logf("pty exit of terminal %s, which no session shows; removing its runtime", info.ID)
 		if err := d.removePTYSession(info.ID); err != nil {
