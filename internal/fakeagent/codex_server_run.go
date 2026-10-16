@@ -78,6 +78,17 @@ func (s *CodexServer) CompactLimit(conversation string) string {
 	return loaded.Text
 }
 
+type workspaceRootsResult struct {
+	Roots []string `json:"roots"`
+}
+
+func (s *CodexServer) WorkspaceRoots(conversation string) []string {
+	s.t.Helper()
+	var loaded workspaceRootsResult
+	s.call(methodWorkspaceRoots, serverThreadParams{ThreadID: conversation}, &loaded)
+	return loaded.Roots
+}
+
 func (s *CodexServer) call(method string, params, result any) {
 	s.t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), HangGuard)

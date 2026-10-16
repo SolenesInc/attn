@@ -129,7 +129,7 @@ func TestASharedCodexLaunchThatCannotBePlacedLetsItsAppServerStop(t *testing.T) 
 	w.CodexServer().AwaitStopped()
 }
 
-func TestASharedCodexCrewMemberWithAwarenessDirsWakes(t *testing.T) {
+func TestASharedCodexCrewMemberWakesWithItsAwarenessDirsAsWorkspaceRoots(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Codex)
 	app := w.App()
 	cli := w.Client()
@@ -148,5 +148,8 @@ func TestASharedCodexCrewMemberWithAwarenessDirsWakes(t *testing.T) {
 	}
 	if got := codex.Prompted(); !strings.Contains(got, "You have been woken") {
 		t.Fatalf("keel's codex received %q, want its wake prompt", got)
+	}
+	if roots := w.CodexServer().WorkspaceRoots(codex.ConversationID); !slices.Equal(roots, []string{workDir, notes}) {
+		t.Errorf("keel's conversation has workspace roots %q, want its cwd and awareness dir", roots)
 	}
 }

@@ -545,6 +545,10 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 				params["cwd"] = session.Directory
 			}
 		}
+		if member, ok := r.d.crewMemberForSession(sessionID); ok && len(member.AwarenessDirs) > 0 {
+			cwd, _ := params["cwd"].(string)
+			params["runtimeWorkspaceRoots"] = append([]string{cwd}, member.AwarenessDirs...)
+		}
 	}
 	params["config"] = config
 	raw, err := json.Marshal(params)
