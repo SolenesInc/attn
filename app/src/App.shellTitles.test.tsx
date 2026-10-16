@@ -10,9 +10,11 @@ describe('Shell display names', () => {
     const { daemon } = await renderApp({ initialState: { sessions: [shell], desktops: [soloDesktop(shell.id)] } });
     await openSession(daemon, 'shop');
     const header = () => within(document.querySelector<HTMLElement>('[data-pane-id="pane-shell"] .desktop-pane-header')!);
+    await gesture(daemon, () => fireEvent.click(header().getByRole('button', { name: 'Focus agent shop' })));
     const expectName = (name: string) => {
       expect(screen.getByRole('button', { name: new RegExp(`^Open ${name}`) })).toBeInTheDocument();
       expect(header().getByText(name)).toBeInTheDocument();
+      expect(document.querySelector('.desktop-focus-title')).toHaveTextContent(name);
     };
     expectName('shop');
     await gesture(daemon, () => daemon.emit({ event: 'session_state_changed', session: { ...shell, title: 'title-corpus.md - Nvim' } }));

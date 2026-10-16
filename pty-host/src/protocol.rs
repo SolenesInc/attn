@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 use crate::ghostty::{KittyPlacement, Theme};
 
 pub const RPC_MAJOR: u16 = 1;
-pub const RPC_MINOR: u16 = 2;
+pub const RPC_MINOR: u16 = 1;
 
 // Methods are additive within a major. Old hosts accept newer daemons so they
 // can keep serving their existing sessions after an app update.

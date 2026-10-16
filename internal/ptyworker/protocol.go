@@ -12,7 +12,7 @@ import (
 
 const (
 	RPCMajor = 1
-	RPCMinor = 2
+	RPCMinor = 1
 )
 
 const MinCompatibleRPCMinor = 0
