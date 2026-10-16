@@ -1303,7 +1303,9 @@ impl Session {
         let master = self.master.lock().expect("master mutex poisoned");
         let file = master.as_ref()?;
         let mut pgid: libc::pid_t = 0;
-        if unsafe { libc::ioctl(file.as_raw_fd(), libc::TIOCGPGRP, &raw mut pgid) } != 0 || pgid <= 0 {
+        if unsafe { libc::ioctl(file.as_raw_fd(), libc::TIOCGPGRP, &raw mut pgid) } != 0
+            || pgid <= 0
+        {
             return None;
         }
         Some(pgid)
