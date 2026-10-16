@@ -27,8 +27,10 @@ func writeTerminalHelp(w io.Writer) {
   wait <terminal> --until prompt|exit [--timeout <seconds>]
   close <terminal> [--desktop <ref>]
 
-Run inside an attn agent. A target is a full session id, unique id prefix,
-or awake crew member's name. All targets belong to the caller's profile.
+Run inside an attn agent. A target is a terminal id or unique terminal-id
+prefix printed by ls. A session id/prefix or awake crew name also works when
+that session shows in exactly one terminal; otherwise choose a terminal id.
+All targets belong to the caller's profile.
 Reads reach every desktop; actions on another desktop require --desktop.
 Shells accept input from any agent. Typing into agents requires self, a
 transitive delegation chain, or the profile's chief. Close agents with
@@ -310,7 +312,7 @@ func executeTerminal(ctx context.Context, cli *client.Client, caller protocol.Se
 		if response.TerminalInputResult == nil || response.TerminalInputResult.LastBlockID == nil {
 			return 1, errors.New("daemon omitted last_block_id for run --wait")
 		}
-		response, err = cli.TerminalCommand(ctx, protocol.TerminalWaitMessage{Cmd: protocol.CmdTerminalWait, CallerSessionID: caller, Target: target, Until: protocol.TerminalWaitUntilPrompt, AfterBlockID: response.TerminalInputResult.LastBlockID})
+		response, err = cli.TerminalCommand(ctx, protocol.TerminalWaitMessage{Cmd: protocol.CmdTerminalWait, CallerSessionID: caller, Target: string(response.TerminalInputResult.TerminalID), Until: protocol.TerminalWaitUntilPrompt, AfterBlockID: response.TerminalInputResult.LastBlockID})
 		if err != nil {
 			return 1, err
 		}
@@ -349,7 +351,7 @@ func executeTerminal(ctx context.Context, cli *client.Client, caller protocol.Se
 			if response.TerminalOpenResult == nil {
 				return 1, errors.New("daemon omitted terminal_open_result")
 			}
-			fmt.Println(response.TerminalOpenResult.SessionID)
+			fmt.Println(response.TerminalOpenResult.TerminalID)
 		case "read":
 			if response.TerminalReadResult == nil {
 				return 1, errors.New("daemon omitted terminal_read_result")

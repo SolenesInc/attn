@@ -7683,18 +7683,21 @@ export interface TerminalEntryElement {
     session_id:    string;
     short_id:      string;
     state:         SessionState;
+    terminal_id:   string;
     [property: string]: any;
 }
 
 export interface TerminalInputResultObject {
     last_block_id?: string;
+    terminal_id:    string;
     [property: string]: any;
 }
 
 export interface TerminalOpenResultObject {
-    desktop_id: string;
-    pane_id:    string;
-    session_id: string;
+    desktop_id:  string;
+    pane_id:     string;
+    session_id:  string;
+    terminal_id: string;
     [property: string]: any;
 }
 
@@ -9635,6 +9638,7 @@ export interface TerminalEntry {
     session_id:    string;
     short_id:      string;
     state:         SessionState;
+    terminal_id:   string;
     [property: string]: any;
 }
 
@@ -9662,6 +9666,7 @@ export enum TerminalInputMessageCmd {
 
 export interface TerminalInputResult {
     last_block_id?: string;
+    terminal_id:    string;
     [property: string]: any;
 }
 
@@ -9697,9 +9702,10 @@ export enum TerminalDirection {
 }
 
 export interface TerminalOpenResult {
-    desktop_id: string;
-    pane_id:    string;
-    session_id: string;
+    desktop_id:  string;
+    pane_id:     string;
+    session_id:  string;
+    terminal_id: string;
     [property: string]: any;
 }
 
@@ -19840,14 +19846,17 @@ const typeMap: any = {
         { json: "session_id", js: "session_id", typ: "" },
         { json: "short_id", js: "short_id", typ: "" },
         { json: "state", js: "state", typ: r("SessionState") },
+        { json: "terminal_id", js: "terminal_id", typ: "" },
     ], "any"),
     "TerminalInputResultObject": o([
         { json: "last_block_id", js: "last_block_id", typ: u(undefined, "") },
+        { json: "terminal_id", js: "terminal_id", typ: "" },
     ], "any"),
     "TerminalOpenResultObject": o([
         { json: "desktop_id", js: "desktop_id", typ: "" },
         { json: "pane_id", js: "pane_id", typ: "" },
         { json: "session_id", js: "session_id", typ: "" },
+        { json: "terminal_id", js: "terminal_id", typ: "" },
     ], "any"),
     "TerminalReadResultObject": o([
         { json: "block", js: "block", typ: u(undefined, r("Block")) },
@@ -21108,6 +21117,7 @@ const typeMap: any = {
         { json: "session_id", js: "session_id", typ: "" },
         { json: "short_id", js: "short_id", typ: "" },
         { json: "state", js: "state", typ: r("SessionState") },
+        { json: "terminal_id", js: "terminal_id", typ: "" },
     ], "any"),
     "TerminalExit": o([
         { json: "at", js: "at", typ: "" },
@@ -21125,6 +21135,7 @@ const typeMap: any = {
     ], "any"),
     "TerminalInputResult": o([
         { json: "last_block_id", js: "last_block_id", typ: u(undefined, "") },
+        { json: "terminal_id", js: "terminal_id", typ: "" },
     ], "any"),
     "TerminalListMessage": o([
         { json: "all", js: "all", typ: u(undefined, true) },
@@ -21144,6 +21155,7 @@ const typeMap: any = {
         { json: "desktop_id", js: "desktop_id", typ: "" },
         { json: "pane_id", js: "pane_id", typ: "" },
         { json: "session_id", js: "session_id", typ: "" },
+        { json: "terminal_id", js: "terminal_id", typ: "" },
     ], "any"),
     "TerminalPointerActivityMessage": o([
         { json: "cmd", js: "cmd", typ: r("TerminalPointerActivityMessageCmd") },

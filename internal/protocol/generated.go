@@ -10365,6 +10365,9 @@ type TerminalEntry struct {
 
 	// State corresponds to the JSON schema field "state".
 	State SessionState `json:"state"`
+
+	// TerminalID corresponds to the JSON schema field "terminal_id".
+	TerminalID TerminalID `json:"terminal_id"`
 }
 
 type TerminalExit struct {
@@ -10406,6 +10409,9 @@ type TerminalInputMessage struct {
 type TerminalInputResult struct {
 	// LastBlockID corresponds to the JSON schema field "last_block_id".
 	LastBlockID *string `json:"last_block_id,omitempty,omitzero"`
+
+	// TerminalID corresponds to the JSON schema field "terminal_id".
+	TerminalID TerminalID `json:"terminal_id"`
 }
 
 type TerminalListMessage struct {
@@ -10451,6 +10457,9 @@ type TerminalOpenResult struct {
 
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID SessionID `json:"session_id"`
+
+	// TerminalID corresponds to the JSON schema field "terminal_id".
+	TerminalID TerminalID `json:"terminal_id"`
 }
 
 type TerminalPointerActivityMessage struct {

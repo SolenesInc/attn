@@ -289,10 +289,14 @@ func (p *Peer) TypeLine(sessionID, text string) {
 
 func (p *Peer) AwaitScreen(sessionID, text string) {
 	p.T.Helper()
-	terminal := p.Terminal(sessionID)
+	p.AwaitTerminalScreen(p.Terminal(sessionID), text)
+}
+
+func (p *Peer) AwaitTerminalScreen(terminal, text string) {
+	p.T.Helper()
 	p.attach(terminal)
 	p.until(func() string {
-		return "the screen of " + sessionID + " to show " + text + "; it shows " + strconv.Quote(string(p.screens[terminal]))
+		return "the screen of terminal " + terminal + " to show " + text + "; it shows " + strconv.Quote(string(p.screens[terminal]))
 	}, func() (bool, error) {
 		return bytes.Contains(p.screens[terminal], []byte(text)), nil
 	})

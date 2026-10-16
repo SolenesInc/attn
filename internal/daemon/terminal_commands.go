@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
@@ -33,36 +34,74 @@ func (d *Daemon) terminalCaller(id protocol.SessionID) (*protocol.Session, error
 	return caller, nil
 }
 
-func (d *Daemon) terminalTarget(caller *protocol.Session, ref string) (*protocol.Session, error) {
+type selectedTerminal struct {
+	*protocol.Session
+	terminal harness.TerminalID
+}
+
+func (d *Daemon) terminalTarget(caller *protocol.Session, ref string) (*selectedTerminal, error) {
 	ref = strings.TrimSpace(ref)
+	var terminalMatch *selectedTerminal
+	var terminalMatches []string
+	for _, binding := range d.terminals().Bindings() {
+		session := d.store.Get(binding.SessionID)
+		if session == nil || session.ProfileID != caller.ProfileID {
+			continue
+		}
+		target := &selectedTerminal{Session: session, terminal: binding.TerminalID}
+		if string(binding.TerminalID) == ref {
+			return target, nil
+		}
+		if ref != "" && strings.HasPrefix(string(binding.TerminalID), ref) {
+			terminalMatch = target
+			terminalMatches = append(terminalMatches, string(binding.TerminalID))
+		}
+	}
+	if len(terminalMatches) > 1 {
+		return nil, fmt.Errorf("target rule: %q matches terminals %s; use a longer terminal id", ref, strings.Join(terminalMatches, ", "))
+	}
+	if terminalMatch != nil {
+		return terminalMatch, nil
+	}
 	var match *protocol.Session
 	for _, session := range d.store.List("") {
 		if session.ProfileID != caller.ProfileID {
 			continue
 		}
 		if string(session.ID) == ref {
-			return session, nil
+			match = session
+			break
 		}
 		if ref != "" && strings.HasPrefix(string(session.ID), ref) {
 			if match != nil {
-				return nil, fmt.Errorf("target rule: %q matches multiple terminals; use a longer id", ref)
+				return nil, fmt.Errorf("target rule: %q matches multiple sessions; use a terminal id from attn terminal ls --all", ref)
 			}
 			match = session
 		}
 	}
-	if match != nil {
-		return match, nil
-	}
-	member, found, err := d.resolveCrewMember(ref)
-	if err != nil {
-		return nil, err
-	}
-	if found && d.crewProfileID(member.ID) == caller.ProfileID {
-		if session := d.store.Get(member.BindingSession); session != nil && session.ProfileID == caller.ProfileID {
-			return session, nil
+	if match == nil {
+		member, found, err := d.resolveCrewMember(ref)
+		if err != nil {
+			return nil, err
+		}
+		if found && d.crewProfileID(member.ID) == caller.ProfileID {
+			if session := d.store.Get(member.BindingSession); session != nil && session.ProfileID == caller.ProfileID {
+				match = session
+			}
 		}
 	}
-	return nil, fmt.Errorf("target rule: terminal %q not found in the caller's profile; attn terminal ls --all lists its terminals", ref)
+	if match == nil {
+		return nil, fmt.Errorf("target rule: terminal %q not found in the caller's profile; attn terminal ls --all lists its terminals", ref)
+	}
+	ids := d.terminalsOf(match.ID)
+	if len(ids) != 1 {
+		terminals := make([]string, len(ids))
+		for i, id := range ids {
+			terminals[i] = string(id)
+		}
+		return nil, fmt.Errorf("target rule: session %s shows in %d terminals (%s); pass one terminal id from attn terminal ls --all", match.ID, len(ids), strings.Join(terminals, ", "))
+	}
+	return &selectedTerminal{Session: match, terminal: ids[0]}, nil
 }
 
 func (d *Daemon) terminalDesktop(caller *protocol.Session, ref string) (profiles.Desktop, error) {
@@ -73,33 +112,49 @@ func (d *Daemon) terminalDesktop(caller *protocol.Session, ref string) (profiles
 	if ref != "" {
 		return profiles.ResolveDesktopRef(profile, desktops, ref)
 	}
-	placement, placed, err := d.store.SessionPlacement(caller.ID)
-	if err != nil {
-		return profiles.Desktop{}, err
+	var found profiles.Desktop
+	for _, desktop := range desktops {
+		for _, pane := range desktop.Panes {
+			if pane.SessionID != caller.ID {
+				continue
+			}
+			if found.ID != "" && found.ID != desktop.ID {
+				return profiles.Desktop{}, fmt.Errorf("desktop rule: caller has terminals on several desktops; pass --desktop <ref>")
+			}
+			found = desktop
+		}
 	}
-	if !placed {
+	if found.ID == "" {
 		return profiles.Desktop{}, fmt.Errorf("desktop rule: caller has no tile; pass --desktop <ref>")
 	}
-	return d.store.GetDesktop(placement.DesktopID)
+	return found, nil
 }
 
-func (d *Daemon) terminalAct(caller, target *protocol.Session, desktopRef string) error {
-	placement, placed, err := d.store.SessionPlacement(target.ID)
+func (d *Daemon) terminalAct(caller *protocol.Session, target *selectedTerminal, desktopRef string) error {
+	_, desktops, err := d.store.ProfileArrangement(caller.ProfileID)
 	if err != nil {
 		return err
 	}
-	if !placed {
-		return fmt.Errorf("terminal rule: session %s has no terminal tile", target.ID)
+	placed := ""
+	for _, desktop := range desktops {
+		for _, pane := range desktop.Panes {
+			if pane.RuntimeID == target.terminal {
+				placed = desktop.ID
+			}
+		}
+	}
+	if placed == "" {
+		return fmt.Errorf("terminal rule: terminal %s has no tile", target.terminal)
 	}
 	desktop, err := d.terminalDesktop(caller, desktopRef)
 	if err != nil {
 		return err
 	}
-	if desktop.ID != placement.DesktopID {
-		return fmt.Errorf("desktop rule: terminal %s is on another desktop; pass --desktop %s to act there", target.ID, placement.DesktopID)
+	if desktop.ID != placed {
+		return fmt.Errorf("desktop rule: terminal %s is on another desktop; pass --desktop %s to act there", target.terminal, placed)
 	}
 	if target.Agent != protocol.AgentShellValue {
-		return d.mayActOnSession(caller.ID, target, "type into")
+		return d.mayActOnSession(caller.ID, target.Session, "type into")
 	}
 	return nil
 }
@@ -152,7 +207,7 @@ func (d *Daemon) handleTerminalList(conn net.Conn, msg *protocol.TerminalListMes
 			}
 			decorated := d.sessionForBroadcast(session)
 			name := sessionDisplayName(decorated)
-			entries = append(entries, protocol.TerminalEntry{SessionID: session.ID, ShortID: shortSessionID(session.ID), Agent: session.Agent, Name: name, State: decorated.State, DesktopID: desktop.ID, DesktopLabel: desktop.Name, Position: protocol.Ptr(positions[pane.PaneID]), OpenedBy: session.ParentSessionID})
+			entries = append(entries, protocol.TerminalEntry{TerminalID: pane.RuntimeID, SessionID: session.ID, ShortID: shortSessionID(protocol.SessionID(pane.RuntimeID)), Agent: session.Agent, Name: name, State: decorated.State, DesktopID: desktop.ID, DesktopLabel: desktop.Name, Position: protocol.Ptr(positions[pane.PaneID]), OpenedBy: session.ParentSessionID})
 		}
 	}
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, TerminalEntries: entries})
@@ -203,13 +258,16 @@ func (d *Daemon) handleTerminalOpen(conn net.Conn, msg *protocol.TerminalOpenMes
 	}
 	anchor := desktop.ActivePaneID
 	if protocol.Deref(msg.Desktop) == "" {
-		placement, placed, err := d.store.SessionPlacement(caller.ID)
-		if err != nil {
-			d.sendError(conn, err.Error())
-			return
-		}
-		if placed {
-			anchor = placement.PaneID
+		callerPanes := 0
+		for _, pane := range desktop.Panes {
+			if pane.SessionID == caller.ID {
+				callerPanes++
+				if callerPanes > 1 {
+					d.sendError(conn, "placement rule: caller has several terminal tiles; pass --desktop <ref> to open beside its active tile")
+					return
+				}
+				anchor = pane.PaneID
+			}
 		}
 	}
 	type opened struct {
@@ -238,6 +296,7 @@ func (d *Daemon) handleTerminalOpen(conn net.Conn, msg *protocol.TerminalOpenMes
 		d.sendError(conn, rejection.reason().Error())
 		return
 	}
+	terminal := d.primaryTerminal(id)
 	if command := protocol.Deref(msg.Command); command != "" {
 		connectionCtx, cancelConnection := d.terminalContext(conn)
 		defer cancelConnection()
@@ -246,13 +305,13 @@ func (d *Daemon) handleTerminalOpen(conn net.Conn, msg *protocol.TerminalOpenMes
 		provider, err := d.terminalText()
 		if err == nil {
 			var result pty.WaitBlockResult
-			result, err = provider.WaitBlock(ctx, d.primaryTerminal(id), pty.WaitBlockParams{Until: "prompt", FirstPrompt: true})
+			result, err = provider.WaitBlock(ctx, terminal, pty.WaitBlockParams{Until: "prompt", FirstPrompt: true})
 			if err == nil && result.Exited {
 				err = fmt.Errorf("terminal %s exited before its first prompt (exit code %v)", id, protocol.Deref(result.ExitCode))
 			}
 		}
 		if err == nil && ctx.Err() == nil {
-			err = d.writeTerminalPTY(ctx, d.primaryTerminal(id), []byte(command+"\r"), "agent")
+			err = d.writeTerminalPTY(ctx, terminal, []byte(command+"\r"), "agent")
 		}
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			d.sendError(conn, fmt.Sprintf("first prompt wait exceeded limit=%s; %s. Terminal %s stays open; nothing was typed. Use attn terminal send %s to continue", terminalFirstPromptTripwire, terminalFirstPromptReceipt, id, id))
@@ -266,7 +325,7 @@ func (d *Daemon) handleTerminalOpen(conn net.Conn, msg *protocol.TerminalOpenMes
 			return
 		}
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, TerminalOpenResult: &protocol.TerminalOpenResult{SessionID: id, DesktopID: placed.desktopID, PaneID: placed.paneID}})
+	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, TerminalOpenResult: &protocol.TerminalOpenResult{TerminalID: terminal, SessionID: id, DesktopID: placed.desktopID, PaneID: placed.paneID}})
 }
 
 func (d *Daemon) handleTerminalInput(conn net.Conn, msg *protocol.TerminalInputMessage) {
@@ -283,7 +342,7 @@ func (d *Daemon) handleTerminalInput(conn net.Conn, msg *protocol.TerminalInputM
 		d.sendError(conn, err.Error())
 		return
 	}
-	result := &protocol.TerminalInputResult{}
+	result := &protocol.TerminalInputResult{TerminalID: target.terminal}
 	if protocol.Deref(msg.Run) {
 		if target.Agent != protocol.AgentShellValue {
 			d.sendError(conn, "run rule: run requires a shell; use send to type into an agent")
@@ -294,7 +353,7 @@ func (d *Daemon) handleTerminalInput(conn net.Conn, msg *protocol.TerminalInputM
 			d.sendError(conn, err.Error())
 			return
 		}
-		state, err := provider.ReadText(context.Background(), d.primaryTerminal(target.ID), "screen", 0)
+		state, err := provider.ReadText(context.Background(), target.terminal, "screen", 0)
 		if err != nil {
 			d.sendError(conn, err.Error())
 			return
@@ -309,7 +368,7 @@ func (d *Daemon) handleTerminalInput(conn net.Conn, msg *protocol.TerminalInputM
 		}
 		result.LastBlockID = protocol.Ptr(strconv.FormatUint(state.LastBlockID, 10))
 	}
-	if err := d.writeTerminalPTY(context.Background(), d.primaryTerminal(target.ID), []byte(msg.Data), "agent"); err != nil {
+	if err := d.writeTerminalPTY(context.Background(), target.terminal, []byte(msg.Data), "agent"); err != nil {
 		d.sendError(conn, err.Error())
 		return
 	}
@@ -347,7 +406,7 @@ func (d *Daemon) handleTerminalRead(conn net.Conn, msg *protocol.TerminalReadMes
 		d.sendError(conn, "lines rule: --lines must be positive")
 		return
 	}
-	info, err := provider.ReadText(context.Background(), d.primaryTerminal(target.ID), string(msg.Mode), protocol.Deref(msg.Lines))
+	info, err := provider.ReadText(context.Background(), target.terminal, string(msg.Mode), protocol.Deref(msg.Lines))
 	if err != nil {
 		d.sendError(conn, err.Error())
 		return
@@ -386,10 +445,12 @@ func (d *Daemon) handleTerminalWait(conn net.Conn, msg *protocol.TerminalWaitMes
 	}
 	ctx, cancel := d.terminalContext(conn)
 	defer cancel()
-	result, err := provider.WaitBlock(ctx, d.primaryTerminal(target.ID), params)
+	result, err := provider.WaitBlock(ctx, target.terminal, params)
 	if err != nil && ctx.Err() == nil {
-		if exit := d.store.GetSessionExit(target.ID); exit != nil {
-			result, err = pty.WaitBlockResult{Exited: true, ExitCode: protocol.Ptr(exit.Code)}, nil
+		if terminals := d.terminalsOf(target.ID); len(terminals) == 1 && terminals[0] == target.terminal {
+			if exit := d.store.GetSessionExit(target.ID); exit != nil {
+				result, err = pty.WaitBlockResult{Exited: true, ExitCode: protocol.Ptr(exit.Code)}, nil
+			}
 		}
 	}
 	if err != nil {

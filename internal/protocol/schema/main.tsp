@@ -2579,6 +2579,7 @@ model TerminalListMessage {
   all?: boolean;
 }
 model TerminalEntry {
+  terminal_id: TerminalID;
   session_id: SessionID;
   short_id: string;
   agent: string;
@@ -2598,6 +2599,7 @@ model TerminalOpenMessage {
   command?: string;
 }
 model TerminalOpenResult {
+  terminal_id: TerminalID;
   session_id: SessionID;
   desktop_id: string;
   pane_id: string;
@@ -2612,6 +2614,7 @@ model TerminalInputMessage {
   wait?: boolean;
 }
 model TerminalInputResult {
+  terminal_id: TerminalID;
   last_block_id?: int64;
 }
 model TerminalReadMessage {

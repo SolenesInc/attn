@@ -36,9 +36,16 @@ continues running after your session closes. Close it when its work is done.
 
 ## Reach
 
-A target is a session id, a unique prefix printed by `ls`, or an awake crew
-member's name. Every target belongs to your profile. Crew names follow their
-current session and never wake a sleeping member.
+A target is a terminal id or unique terminal-id prefix printed by `ls`.
+`open` prints the new terminal id. A session id/prefix or awake crew member's
+name also works when that session shows in exactly one terminal. Shared Codex
+can show one session in several tiles; choose a terminal id when it does.
+Every target belongs to your profile. Crew names follow their current session
+and never wake a sleeping member.
+
+If your session has tiles on several desktops, pass `--desktop` for listing
+and actions. If it has several tiles on one desktop, `open` also needs
+`--desktop` to select that desktop's active tile as the anchor.
 
 - `ls` shows your desktop; `--all` shows all desktops in your profile.
 - `read` and `wait` can inspect any terminal in your profile.

@@ -107,7 +107,7 @@ type workerSession struct {
 	controlDec          *json.Decoder
 	lastState           string
 	lastStateSentAt     time.Time
-	exitNotified        bool
+	exitObserved        *ExitInfo
 	evictionStarted     bool
 	unreachable         bool
 	unreachableAt       time.Time
@@ -422,11 +422,19 @@ func (b *WorkerBackend) reportState(session *workerSession, observation pty.Obse
 }
 
 func (b *WorkerBackend) reportExit(session *workerSession, exitCode int, signal string) {
+	info := ExitInfo{ID: harness.TerminalID(session.SessionID), ExitCode: exitCode, Signal: signal, LifecycleID: session.LifecycleID}
+	session.mu.Lock()
+	if session.exitObserved != nil {
+		session.mu.Unlock()
+		return
+	}
+	session.exitObserved = &info
+	session.mu.Unlock()
 	b.hooksMu.RLock()
 	onExit := b.onExit
 	b.hooksMu.RUnlock()
 	if onExit != nil {
-		go onExit(ExitInfo{ID: harness.TerminalID(session.SessionID), ExitCode: exitCode, Signal: signal, LifecycleID: session.LifecycleID})
+		go onExit(info)
 	}
 }
 
@@ -2297,9 +2305,8 @@ func (b *WorkerBackend) startPoller(session *workerSession) {
 					session.lastStateSentAt = now
 					newState = info.State
 				}
-				exitNow = !info.Running && !session.exitNotified
+				exitNow = !info.Running && session.exitObserved == nil
 				if exitNow {
-					session.exitNotified = true
 					if info.ExitCode != nil {
 						exitCode = *info.ExitCode
 					}
@@ -2484,14 +2491,6 @@ func (b *WorkerBackend) handleLifecycleEvent(session *workerSession, evt ptywork
 
 		b.reportState(session, observation)
 	case ptyworker.EventExit:
-		session.mu.Lock()
-		if session.exitNotified {
-			session.mu.Unlock()
-			return
-		}
-		session.exitNotified = true
-		session.mu.Unlock()
-
 		exitCode := 0
 		if evt.ExitCode != nil {
 			exitCode = *evt.ExitCode
@@ -2941,53 +2940,65 @@ func validateSessionID(sessionID string) error {
 	return nil
 }
 
-func (b *WorkerBackend) terminalTextRPC(ctx context.Context, id harness.TerminalID, method string, params, result any) error {
+func (b *WorkerBackend) terminalTextRPC(ctx context.Context, session *workerSession, method string, params, result any) (bool, error) {
 	if method != ptyworker.MethodWaitBlock {
 		var cancel context.CancelFunc
 		ctx, cancel = withDefaultRPCTimeout(ctx)
 		defer cancel()
 	}
-	session, err := b.getSession(string(id))
-	if err != nil {
-		return err
-	}
 	handshakeCtx, cancelHandshake := withDefaultRPCTimeout(ctx)
 	conn, enc, dec, err := b.connectAuthed(handshakeCtx, session)
 	cancelHandshake()
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer conn.Close()
 	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
 	defer stop()
 	if err := applyConnDeadline(conn, ctx); err != nil {
-		return err
+		return false, err
 	}
 	reqID := b.nextReqID(method)
 	if err := writeRequest(enc, reqID, method, params); err != nil {
-		return err
+		return false, err
 	}
 	for {
 		kind, res, _, err := readFrame(dec)
 		if err != nil {
-			return err
+			return false, err
 		}
 		if kind != "res" || res.ID != reqID {
 			continue
 		}
 		if !res.OK {
-			return b.rpcError(session.SessionID, res.Error)
+			return true, b.rpcError(session.SessionID, res.Error)
 		}
-		return json.Unmarshal(res.Result, result)
+		return true, json.Unmarshal(res.Result, result)
 	}
 }
 func (b *WorkerBackend) ReadText(ctx context.Context, id harness.TerminalID, mode string, lines int) (pty.ReadTextInfo, error) {
+	session, err := b.getSession(string(id))
+	if err != nil {
+		return pty.ReadTextInfo{}, err
+	}
 	var result pty.ReadTextInfo
-	err := b.terminalTextRPC(ctx, id, ptyworker.MethodReadText, ptyworker.ReadTextParams{Mode: mode, Lines: lines}, &result)
+	_, err = b.terminalTextRPC(ctx, session, ptyworker.MethodReadText, ptyworker.ReadTextParams{Mode: mode, Lines: lines}, &result)
 	return result, err
 }
 func (b *WorkerBackend) WaitBlock(ctx context.Context, id harness.TerminalID, params pty.WaitBlockParams) (pty.WaitBlockResult, error) {
+	session, err := b.getSession(string(id))
+	if err != nil {
+		return pty.WaitBlockResult{}, err
+	}
 	var result pty.WaitBlockResult
-	err := b.terminalTextRPC(ctx, id, ptyworker.MethodWaitBlock, params, &result)
+	answered, err := b.terminalTextRPC(ctx, session, ptyworker.MethodWaitBlock, params, &result)
+	if !answered && err != nil && ctx.Err() == nil {
+		session.mu.Lock()
+		exit := session.exitObserved
+		session.mu.Unlock()
+		if exit != nil && exit.Signal != "worker_unreachable" {
+			return pty.WaitBlockResult{Exited: true, ExitCode: &exit.ExitCode}, nil
+		}
+	}
 	return result, err
 }
