@@ -2559,6 +2559,100 @@ model DesktopShowSessionMessage {
   session_id: SessionID;
 }
 
+enum TerminalDirection {
+  right,
+  down
+}
+enum TerminalReadMode {
+  screen,
+  scrollback,
+  last
+}
+enum TerminalWaitUntil {
+  prompt,
+  exit
+}
+model TerminalListMessage {
+  cmd: "terminal_list";
+  caller_session_id: SessionID;
+  desktop?: string;
+  all?: boolean;
+}
+model TerminalEntry {
+  terminal_id: TerminalID;
+  session_id: SessionID;
+  short_id: string;
+  agent: string;
+  name: string;
+  state: SessionState;
+  desktop_id: string;
+  desktop_label: string;
+  position?: string;
+  opened_by?: SessionID;
+}
+model TerminalOpenMessage {
+  cmd: "terminal_open";
+  caller_session_id: SessionID;
+  desktop?: string;
+  direction?: TerminalDirection;
+  cwd?: string;
+  command?: string;
+}
+model TerminalOpenResult {
+  terminal_id: TerminalID;
+  session_id: SessionID;
+  desktop_id: string;
+  pane_id: string;
+}
+model TerminalInputMessage {
+  cmd: "terminal_input";
+  caller_session_id: SessionID;
+  target: string;
+  desktop?: string;
+  data: string;
+  run?: boolean;
+  wait?: boolean;
+}
+model TerminalInputResult {
+  terminal_id: TerminalID;
+  last_block_id?: int64;
+}
+model TerminalReadMessage {
+  cmd: "terminal_read";
+  caller_session_id: SessionID;
+  target: string;
+  mode: TerminalReadMode;
+  lines?: int32;
+}
+model TerminalReadResult {
+  text: string;
+  block?: TerminalBlock;
+}
+model TerminalWaitMessage {
+  cmd: "terminal_wait";
+  caller_session_id: SessionID;
+  target: string;
+  until: TerminalWaitUntil;
+  after_block_id?: int64;
+}
+model TerminalBlock {
+  id: int64;
+  command?: string;
+  exit_code?: int32;
+  output: string;
+}
+model TerminalWaitResult {
+  block?: TerminalBlock;
+  exited?: boolean;
+  exit_code?: int32;
+}
+model TerminalCloseMessage {
+  cmd: "terminal_close";
+  caller_session_id: SessionID;
+  target: string;
+  desktop?: string;
+}
+
 // Moves a session's pane to another desktop of its profile, beside that
 // desktop's active leaf. `desktop` is a desktop ref: shortcut digit, label as shown (case-insensitive) or id. A
 // session may move itself and the sessions it dispatched; its profile's chief
@@ -5369,6 +5463,11 @@ model Response {
   session_list_result?: SessionListResult;
   session_show_result?: SessionShowResult;
   session_reopen_result?: SessionReopenResult;
+  terminal_entries?: TerminalEntry[];
+  terminal_open_result?: TerminalOpenResult;
+  terminal_input_result?: TerminalInputResult;
+  terminal_read_result?: TerminalReadResult;
+  terminal_wait_result?: TerminalWaitResult;
   desktop_move_session_result?: DesktopMoveSessionResult;
   state_explain_result?: StateExplainResult;
   agent_peek_result?: AgentPeekResult;

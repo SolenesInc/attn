@@ -39,6 +39,8 @@ pub struct Fallback {
 #[derive(Deserialize, Serialize)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct SessionHandoff {
+    #[serde(default)]
+    pub prompt_expected: bool,
     pub id: String,
     pub agent: String,
     pub cwd: String,

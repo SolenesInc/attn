@@ -24,6 +24,7 @@ import (
 )
 
 type internalSpawnPolicy struct {
+	parentSessionID       protocol.SessionID
 	launchPlacement       *launchPlacement
 	unattendedLaunch      launchcontract.UnattendedLaunchSpec
 	approvalRoute         launchcontract.ApprovalRoute
@@ -209,6 +210,9 @@ func (d *Daemon) normalizeSpawnRequest(req *spawnRequest) *spawnRejection {
 		return rejection
 	}
 	req.parentSessionID = protocol.SessionID(d.resolveSpawnParent(string(protocol.Deref(req.msg.SpawnedFrom)), req.profile, req.placement, req.isShell))
+	if req.policy.parentSessionID != "" && req.isShell {
+		req.parentSessionID = req.policy.parentSessionID
+	}
 	if req.parentSessionID == "" && req.existingSession != nil {
 		req.parentSessionID = protocol.TrimID(protocol.Deref(req.existingSession.ParentSessionID))
 	}

@@ -273,3 +273,8 @@ func terminalIDs(ids []string) []harness.TerminalID {
 	}
 	return terminals
 }
+
+type TerminalTextProvider interface {
+	ReadText(ctx context.Context, id harness.TerminalID, mode string, lines int) (pty.ReadTextInfo, error)
+	WaitBlock(ctx context.Context, id harness.TerminalID, params pty.WaitBlockParams) (pty.WaitBlockResult, error)
+}

@@ -549,17 +549,13 @@ func (b *WorkerBackend) notifySharedHostLost(inc hostIncarnation) {
 
 func (b *WorkerBackend) notifySharedHostSessionLost(session *workerSession) {
 	session.mu.Lock()
-	notifyExit := !session.exitNotified
-	session.exitNotified = true
 	if session.evictionStarted {
 		session.mu.Unlock()
 		return
 	}
 	session.evictionStarted = true
 	session.mu.Unlock()
-	if notifyExit {
-		b.reportExit(session, 1, "worker_unreachable")
-	}
+	b.reportExit(session, 1, "worker_unreachable")
 	go b.forceSessionEviction(session)
 }
 

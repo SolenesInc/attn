@@ -23,6 +23,8 @@ const (
 	MethodHello          = "hello"
 	MethodInfo           = "info"
 	MethodScreenSnapshot = "snapshot"
+	MethodReadText       = "read_text"
+	MethodWaitBlock      = "wait_block"
 	MethodAttach         = "attach"
 	MethodWatch          = "watch"
 	MethodDetach         = "detach"
@@ -259,6 +261,9 @@ type AttachBlock struct {
 	InputCol       *int32  `json:"input_col,omitempty"`
 	OutputStartRow *int32  `json:"output_start_row,omitempty"`
 	EndRow         *int32  `json:"end_row,omitempty"`
+	OutputStartCol *int32  `json:"output_start_col,omitempty"`
+	EndCol         *int32  `json:"end_col,omitempty"`
+	EndInclusive   bool    `json:"end_inclusive,omitempty"`
 	Command        *string `json:"command,omitempty"`
 	ExitCode       *int32  `json:"exit_code,omitempty"`
 }
@@ -420,4 +425,9 @@ func ObservationFromEvent(evt EventEnvelope, claim string, fallbackAt time.Time)
 		}
 	}
 	return obs
+}
+
+type ReadTextParams struct {
+	Mode  string `json:"mode"`
+	Lines int    `json:"lines,omitempty"`
 }

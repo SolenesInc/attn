@@ -236,3 +236,10 @@ func (s *embeddedStream) publish(evt OutputEvent) (ok bool) {
 		return false
 	}
 }
+
+func (b *EmbeddedBackend) ReadText(_ context.Context, id harness.TerminalID, mode string, lines int) (pty.ReadTextInfo, error) {
+	return b.manager.ReadText(string(id), mode, lines)
+}
+func (b *EmbeddedBackend) WaitBlock(ctx context.Context, id harness.TerminalID, params pty.WaitBlockParams) (pty.WaitBlockResult, error) {
+	return b.manager.WaitBlock(ctx, string(id), params)
+}

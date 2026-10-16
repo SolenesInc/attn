@@ -198,6 +198,13 @@ impl WireFeeder {
         &mut self.terminal
     }
 
+    pub fn read_state(&self) -> serde_json::Value {
+        self.blocks.read_state()
+    }
+    pub fn read_block(&self, cols: u16, after: Option<u64>) -> Result<serde_json::Value, String> {
+        self.blocks.read_block(&self.terminal, cols, after)
+    }
+
     pub fn snapshot_blocks(&self) -> Vec<crate::blocks::AttachBlock> {
         self.blocks.snapshot()
     }

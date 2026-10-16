@@ -378,3 +378,18 @@ var (
 	_ RuntimeLifecycleProvider    = (*MigratingBackend)(nil)
 	_ RecoverableRuntime          = (*MigratingBackend)(nil)
 )
+
+func (b *MigratingBackend) ReadText(ctx context.Context, id harness.TerminalID, mode string, lines int) (pty.ReadTextInfo, error) {
+	provider, err := sessionProvider[TerminalTextProvider](b, id)
+	if err != nil {
+		return pty.ReadTextInfo{}, err
+	}
+	return provider.ReadText(ctx, id, mode, lines)
+}
+func (b *MigratingBackend) WaitBlock(ctx context.Context, id harness.TerminalID, params pty.WaitBlockParams) (pty.WaitBlockResult, error) {
+	provider, err := sessionProvider[TerminalTextProvider](b, id)
+	if err != nil {
+		return pty.WaitBlockResult{}, err
+	}
+	return provider.WaitBlock(ctx, id, params)
+}

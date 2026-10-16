@@ -103,6 +103,31 @@ describe('App arrival pulse', () => {
     expect(daemon.sentOf('desktop_show_leaf')).toHaveLength(2);
   });
 
+  it('pulses background terminals on the shown desktop while focus stays on the agent', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      sessions: [daemonSession('s1')],
+      profiles: [defaultProfile('d1')],
+      desktops: [soloDesktop('s1', { id: 'd1' })],
+    } });
+    await pick(daemon, 's1');
+    fireEvent.animationEnd(visiblePane('pane-s1')!, { animationName: 'leaf-arrival-pulse' });
+    const focused = document.activeElement;
+    for (const id of ['shell-one', 'shell-two', 'delegate']) {
+      await gesture(daemon, () => {
+        daemon.emit({ event: 'session_registered', session: daemonSession(id, { agent: id === 'delegate' ? 'claude' : 'shell' }) });
+        daemon.arrangement.place(id, `pane-${id}`, 'd1');
+        daemon.arrangement.show('d1', 'pane-s1');
+        daemon.emit(daemon.arrangement.changed());
+      });
+      expect(visiblePane(`pane-${id}`)).toHaveClass('leaf-arrival');
+      expect(document.activeElement).toBe(focused);
+      fireEvent.animationEnd(visiblePane(`pane-${id}`)!, { animationName: 'leaf-arrival-pulse' });
+      expect(visiblePane(`pane-${id}`)).not.toHaveClass('leaf-arrival');
+    }
+    expect(daemon.sentOf('desktop_show_session')).toHaveLength(1);
+    expect(daemon.sentOf('desktop_show_leaf')).toEqual([]);
+  });
+
   it('does not announce a session created with ⌘N', async () => {
     const { daemon } = await openPicker({}, {
       sessions: [daemonSession('s1')],

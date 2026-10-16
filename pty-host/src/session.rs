@@ -151,6 +151,7 @@ fn is_false(value: &bool) -> bool {
 }
 
 struct Model {
+    prompt_expected: bool,
     wire: WireFeeder,
     signals: SignalObserver,
     queries: TerminalQueryStream,
@@ -243,6 +244,7 @@ pub struct Session {
 
     master: Mutex<Option<File>>,
     model: Mutex<Model>,
+    text_changed: Condvar,
     // Admission hands an already-read chunk to delivery before resize can cross
     // the subscriber boundary.
     delivery: DeliveryGate,
@@ -335,6 +337,7 @@ impl Session {
                 master: Some(master),
                 model: Model {
                     wire: WireFeeder::new(terminal, mint_epoch()),
+                    prompt_expected: integration_expected(&params.attempts[attempt_index]),
                     signals: SignalObserver::new(&params.agent),
                     queries: TerminalQueryStream::default(),
                     theme,
@@ -412,6 +415,7 @@ impl Session {
             registry_path: parts.registry_path,
             master: Mutex::new(parts.master),
             model: Mutex::new(parts.model),
+            text_changed: Condvar::new(),
             delivery: DeliveryGate::new(),
             lifecycle: Mutex::new(parts.lifecycle),
             lifecycle_changed: Condvar::new(),
@@ -496,6 +500,7 @@ impl Session {
             theme: model.theme.clone(),
             color_scheme_reports: model.color_scheme_reports,
             blocks: model.wire.snapshot_blocks(),
+            prompt_expected: model.prompt_expected,
             next_block_id: model.wire.next_block_id(),
             program_status_reported: model.signals.program_status_reported(),
             shell: model.signals.shell_state(),
@@ -543,6 +548,7 @@ impl Session {
                 master: None,
                 model: Model {
                     wire,
+                    prompt_expected: handoff.prompt_expected,
                     signals,
                     queries: TerminalQueryStream::default(),
                     reported_scheme: theme_color_scheme(&handoff.theme),
@@ -849,6 +855,75 @@ impl Session {
         Ok(())
     }
 
+    pub fn read_text(&self, mode: &str, lines: usize) -> Result<Value, String> {
+        let model = self.model.lock().expect("model mutex poisoned");
+        let mut result = model.wire.read_state();
+        result["prompt_expected"] = json!(model.prompt_expected);
+        if result["integration_seen"] == false {
+            result["at_prompt"] = json!(self.foreground_group() == Some(self.child_pid));
+        }
+        let mut text = match mode {
+            "screen" => model.wire.terminal().viewport_text(model.rows),
+            "scrollback" => model.wire.terminal().plain_text(),
+            "last" => {
+                let block = model.wire.read_block(model.cols, None)?;
+                let text = block["output"].as_str().unwrap_or_default().to_owned();
+                result["block"] = block;
+                text
+            }
+            _ => return Err(format!("unknown terminal read mode {mode:?}")),
+        };
+        if mode == "scrollback" && lines > 0 {
+            let parts: Vec<_> = text.trim_end_matches('\n').split('\n').collect();
+            if parts.len() > lines {
+                text = parts[parts.len() - lines..].join("\n");
+            }
+        }
+        result["text"] = json!(text);
+        Ok(result)
+    }
+
+    pub fn cancel_text_wait(&self, cancelled: &AtomicBool) {
+        let _model = self.model.lock().expect("model mutex poisoned");
+        cancelled.store(true, Ordering::Release);
+        self.text_changed.notify_all();
+    }
+
+    pub fn wait_block(&self, params: &Value, cancelled: &AtomicBool) -> Result<Value, String> {
+        let until = params["until"].as_str().unwrap_or_default();
+        if until != "prompt" && until != "exit" {
+            return Err(format!("unknown wait condition {until:?}"));
+        }
+        let after = params["after_block_id"].as_u64();
+        let first = params["first_prompt"].as_bool().unwrap_or(false);
+        let mut model = self.model.lock().expect("model mutex poisoned");
+        loop {
+            if cancelled.load(Ordering::Acquire) {
+                return Err("wait cancelled".to_owned());
+            }
+            let state = model.wire.read_state();
+            if until == "prompt" {
+                if (!first || !model.prompt_expected) && state["integration_seen"] == false {
+                    return Err("OSC 133 rule: this shell has no command marks; run --wait and wait --until prompt cannot work here; use send or run without --wait".to_owned());
+                }
+                if let Some(id) = after {
+                    if state["last_block_id"].as_u64().unwrap_or(0) > id {
+                        return Ok(json!({"block": model.wire.read_block(model.cols, after)?}));
+                    }
+                } else if state["at_prompt"] == true {
+                    return Ok(json!({}));
+                }
+            }
+            {
+                let lifecycle = self.lifecycle.lock().expect("lifecycle mutex poisoned");
+                if !lifecycle.running {
+                    return Ok(json!({"exited": true, "exit_code": lifecycle.exit_code}));
+                }
+            }
+            model = self.text_changed.wait(model).expect("model mutex poisoned");
+        }
+    }
+
     pub fn screen_snapshot(&self) -> Value {
         let model = self.model.lock().expect("model mutex poisoned");
         let lifecycle = self.lifecycle.lock().expect("lifecycle mutex poisoned");
@@ -1018,6 +1093,7 @@ impl Session {
             track_color_scheme_reports(&complete_queries, &mut model.color_scheme_reports);
             let mut responses = queries.replies_before_feed(&model.theme);
             let feed = model.wire.feed(data);
+            self.text_changed.notify_all();
             let drained = model.wire.terminal_mut().drain_responses();
             responses.extend(queries.replies_after_feed(model.wire.terminal(), &drained));
             let reports = model.wire.terminal_mut().drain_program_status();
@@ -1136,6 +1212,10 @@ impl Session {
             lifecycle.exit_signal.clone_from(&signal);
         }
         self.lifecycle_changed.notify_all();
+        {
+            let _model = self.model.lock().expect("model mutex poisoned");
+            self.text_changed.notify_all();
+        }
         let event = exit_event(&self.id, exit_code, signal.as_deref());
         self.broadcast_watch(event.clone());
         self.publish(event);
@@ -1184,17 +1264,17 @@ impl Session {
         self.agent.eq_ignore_ascii_case("shell")
     }
 
+    fn foreground_group(&self) -> Option<libc::pid_t> {
+        let master = self.master.lock().expect("master mutex poisoned");
+        let file = master.as_ref()?;
+        let mut pgid: libc::pid_t = 0;
+        (unsafe { libc::ioctl(file.as_raw_fd(), libc::TIOCGPGRP, &raw mut pgid) } == 0)
+            .then_some(pgid)
+    }
+
     pub(crate) fn poll_shell_foreground(&self) {
-        let foreground = {
-            let master = self.master.lock().expect("master mutex poisoned");
-            let Some(file) = master.as_ref() else {
-                return;
-            };
-            let mut pgid: libc::pid_t = 0;
-            if unsafe { libc::ioctl(file.as_raw_fd(), libc::TIOCGPGRP, &mut pgid) } != 0 {
-                return;
-            }
-            pgid
+        let Some(foreground) = self.foreground_group() else {
+            return;
         };
         let _signal_order = self
             .signal_order
@@ -1536,6 +1616,19 @@ fn unix_timestamp() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
+}
+
+fn integration_expected(attempt: &crate::protocol::PreparedLaunchAttempt) -> bool {
+    let disabled = attempt.env.iter().any(|entry| {
+        entry
+            .strip_prefix("ATTN_NO_SHELL_INTEGRATION=")
+            .is_some_and(|value| !value.is_empty())
+    });
+    let name = std::path::Path::new(&attempt.shell_path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default();
+    !disabled && matches!(name, "fish" | "zsh" | "bash")
 }
 
 #[cfg(test)]

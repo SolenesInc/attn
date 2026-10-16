@@ -15,6 +15,13 @@ func commandMetadata(blocksDuringRecovery bool, log bool) CommandMetadata {
 }
 
 var CommandMeta = map[string]CommandMetadata{
+	protocol.CmdTerminalList:  commandMetadata(false, true),
+	protocol.CmdTerminalOpen:  commandMetadata(true, true),
+	protocol.CmdTerminalInput: commandMetadata(true, true),
+	protocol.CmdTerminalRead:  commandMetadata(false, true),
+	protocol.CmdTerminalWait:  commandMetadata(false, true),
+	protocol.CmdTerminalClose: commandMetadata(true, true),
+
 	protocol.CmdDelegationPreferencesGet:      commandMetadata(false, false),
 	protocol.CmdDelegationPreferencesSave:     commandMetadata(false, false),
 	protocol.CmdHarnessModels:                 commandMetadata(false, false),

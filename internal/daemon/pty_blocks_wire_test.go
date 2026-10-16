@@ -43,6 +43,9 @@ func TestEveryAttachDuringABlockBurstGetsBlocksThatPointAtTheirOwnPrompts(t *tes
 	for i, attached := range append(attaches, settled) {
 		lines := restoredSnapshotLines(t, attached)
 		for _, block := range attached.Snapshot.Blocks {
+			if block.Pending {
+				continue
+			}
 			if block.PromptRow < 0 || block.PromptRow >= len(lines) || !strings.HasPrefix(lines[block.PromptRow], "MARK-") {
 				t.Fatalf("attach %d: block %d points at row %d of a %d-row snapshot, want a MARK line", i, block.ID, block.PromptRow, len(lines))
 			}
