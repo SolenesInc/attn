@@ -18,7 +18,9 @@ impl ShellTitle {
                 match payload.split(';').next().unwrap_or_default() {
                     "C" => {
                         self.in_command = true;
-                        self.command = command_line(payload).unwrap_or_default();
+                        self.command = command_line(payload)
+                            .map(|command| bounded_title(&command))
+                            .unwrap_or_default();
                         self.program_title.clear();
                     }
                     "A" | "D" => {
@@ -31,9 +33,9 @@ impl ShellTitle {
             }
             "0" | "2" => {
                 if self.in_command {
-                    payload.clone_into(&mut self.program_title);
+                    self.program_title = bounded_title(payload);
                 } else {
-                    payload.clone_into(&mut self.prompt_title);
+                    self.prompt_title = bounded_title(payload);
                 }
             }
             "7" => {
@@ -41,7 +43,11 @@ impl ShellTitle {
                     && let Some(start) = rest.find('/')
                     && let Some(path) = percent_decode(&rest[start..])
                 {
-                    self.folder = path;
+                    let folder = Path::new(&path)
+                        .file_name()
+                        .and_then(|part| part.to_str())
+                        .unwrap_or(&path);
+                    self.folder = bounded_title(folder);
                 }
             }
             _ => {}
@@ -59,12 +65,12 @@ impl ShellTitle {
             }
             self.in_command = foreign;
             self.command = if foreign {
-                process_name.to_owned()
+                bounded_title(process_name)
             } else {
                 String::new()
             };
         } else if self.in_command && self.command.is_empty() {
-            process_name.clone_into(&mut self.command);
+            self.command = bounded_title(process_name);
         }
     }
 
@@ -83,8 +89,12 @@ impl ShellTitle {
         } else {
             &self.prompt_title
         };
-        title.chars().take(256).collect()
+        bounded_title(title)
     }
+}
+
+fn bounded_title(title: &str) -> String {
+    title.chars().take(256).collect()
 }
 
 pub fn command_line(payload: &str) -> Option<String> {
@@ -203,6 +213,18 @@ mod tests {
             let mut state = ShellTitle::default();
             state.apply("0", &title);
             assert_eq!(state.title(), "🦊".repeat(size.min(256)));
+            assert_eq!(state.prompt_title, "🦊".repeat(size.min(256)));
+            state.apply("133", &format!("C;cmdline={title}"));
+            assert_eq!(state.command, "🦊".repeat(size.min(256)));
+            state.apply("2", &title);
+            assert_eq!(state.program_title, "🦊".repeat(size.min(256)));
+            state = ShellTitle::default();
+            state.poll(true, &title);
+            assert_eq!(state.command, "🦊".repeat(size.min(256)));
+            if size > 0 {
+                state.apply("7", &format!("file:///tmp/{title}"));
+                assert_eq!(state.folder, "🦊".repeat(size.min(256)));
+            }
         }
     }
 }

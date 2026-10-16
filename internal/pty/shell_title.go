@@ -3,6 +3,7 @@ package pty
 import (
 	"net/url"
 	"path/filepath"
+	"strings"
 )
 
 const shellTitleRuneLimit = 256
@@ -24,7 +25,7 @@ func (s *ShellTitleState) apply(seg feedSegment) {
 			s.InCommand = true
 			s.Command = ""
 			if m.Cmdline != nil {
-				s.Command = *m.Cmdline
+				s.Command = boundedShellTitle(*m.Cmdline)
 			}
 			s.ProgramTitle = ""
 		case osc133PromptStart, osc133CommandEnd:
@@ -35,13 +36,13 @@ func (s *ShellTitleState) apply(seg feedSegment) {
 	switch seg.OSCCode {
 	case "0", "2":
 		if s.InCommand {
-			s.ProgramTitle = seg.OSCValue
+			s.ProgramTitle = boundedShellTitle(seg.OSCValue)
 		} else {
-			s.ShellTitle = seg.OSCValue
+			s.ShellTitle = boundedShellTitle(seg.OSCValue)
 		}
 	case "7":
 		if u, err := url.Parse(seg.OSCValue); err == nil && u.Scheme == "file" && u.Path != "" {
-			s.Folder = u.Path
+			s.Folder = boundedShellTitle(filepath.Base(u.Path))
 		}
 	}
 }
@@ -55,10 +56,10 @@ func (s *ShellTitleState) poll(foreign bool, processName string) {
 		if !foreign {
 			s.Command = ""
 		} else {
-			s.Command = processName
+			s.Command = boundedShellTitle(processName)
 		}
 	} else if s.InCommand && s.Command == "" {
-		s.Command = processName
+		s.Command = boundedShellTitle(processName)
 	}
 }
 
@@ -75,9 +76,18 @@ func (s ShellTitleState) Title() string {
 			title = filepath.Base(s.Folder)
 		}
 	}
-	runes := []rune(title)
-	if len(runes) > shellTitleRuneLimit {
-		return string(runes[:shellTitleRuneLimit])
+	return boundedShellTitle(title)
+}
+
+func boundedShellTitle(title string) string {
+	var result strings.Builder
+	count := 0
+	for _, r := range title {
+		if count == shellTitleRuneLimit {
+			break
+		}
+		result.WriteRune(r)
+		count++
 	}
-	return title
+	return result.String()
 }

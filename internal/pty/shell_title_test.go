@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -17,6 +18,35 @@ type titleCorpus struct {
 		Process string `json:"process"`
 	} `json:"events"`
 	Titles []string `json:"titles"`
+}
+
+func TestShellTitleValuesRetainOnlyTheirVisibleUnicodePrefix(t *testing.T) {
+	for _, size := range []int{0, 1, 255, 256, 257, 1024} {
+		title := strings.Repeat("🦊", size)
+		want := strings.Repeat("🦊", min(size, 256))
+		state := ShellTitleState{}
+		state.apply(feedSegment{OSCCode: "0", OSCValue: title})
+		if state.ShellTitle != want || state.Title() != want {
+			t.Fatalf("prompt title size %d was not bounded", size)
+		}
+		state.apply(feedSegment{Marker: &osc133Marker{Kind: osc133PreExec, Cmdline: &title}})
+		if state.Command != want || state.Title() != want {
+			t.Fatalf("command title size %d was not bounded", size)
+		}
+		state.apply(feedSegment{OSCCode: "2", OSCValue: title})
+		if state.ProgramTitle != want || state.Title() != want {
+			t.Fatalf("program title size %d was not bounded", size)
+		}
+		state = ShellTitleState{}
+		state.poll(true, title)
+		if state.Command != want || state.Title() != want {
+			t.Fatalf("foreground title size %d was not bounded", size)
+		}
+		state.apply(feedSegment{OSCCode: "7", OSCValue: "file:///tmp/" + title})
+		if size > 0 && state.Folder != want {
+			t.Fatalf("folder title size %d was not bounded", size)
+		}
+	}
 }
 
 func TestShellTitleCorpus(t *testing.T) {
