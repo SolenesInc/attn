@@ -76,7 +76,14 @@ func (s ShellTitleState) Title() string {
 			title = filepath.Base(s.Folder)
 		}
 	}
-	return boundedShellTitle(title)
+	count := 0
+	for i := range title {
+		if count == shellTitleRuneLimit {
+			return boundedShellTitle(title[:i])
+		}
+		count++
+	}
+	return title
 }
 
 func boundedShellTitle(title string) string {
