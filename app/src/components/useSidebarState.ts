@@ -1,3 +1,4 @@
+import { sessionDisplayName } from '../utils/sessionDisplayName';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { isAttentionSessionState } from '../types/sessionState';
@@ -143,14 +144,14 @@ export function useSidebarState({
     });
   };
   const openSessionActions = (
-    session: { id: string; label: string; chiefOfStaff?: boolean; crewMember?: string },
+    session: { id: string; label: string; title?: string; agent?: string; chiefOfStaff?: boolean; crewMember?: string },
     event: ReactMouseEvent,
   ) => {
     event.stopPropagation();
     const rect = event.currentTarget.getBoundingClientRect();
     setSessionActionsTarget({
       id: session.id,
-      label: session.label,
+      label: sessionDisplayName(session),
       chiefOfStaff: Boolean(session.chiefOfStaff),
       crewMember: session.crewMember,
       trigger: event.currentTarget as HTMLElement,

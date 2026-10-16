@@ -31,6 +31,8 @@ pub struct ShellState {
 }
 
 pub struct SignalObserver {
+    pub title: crate::title::ShellTitle,
+    title_changes: Vec<String>,
     kind: Kind,
     pending: Vec<u8>,
     last_claim: String,
@@ -44,7 +46,7 @@ pub struct SignalObserver {
 }
 
 impl SignalObserver {
-    pub fn new(agent: &str) -> Self {
+    pub fn new(agent: &str, folder: &str) -> Self {
         let kind = match agent.trim().to_ascii_lowercase().as_str() {
             "claude" | "claude-code" => Kind::Claude,
             "codex" => Kind::Codex,
@@ -52,6 +54,15 @@ impl SignalObserver {
             _ => Kind::None,
         };
         Self {
+            title: crate::title::ShellTitle {
+                folder: if kind == Kind::Shell {
+                    folder.to_owned()
+                } else {
+                    String::new()
+                },
+                ..Default::default()
+            },
+            title_changes: Vec::new(),
             kind,
             pending: Vec::new(),
             last_claim: String::new(),
@@ -103,11 +114,25 @@ impl SignalObserver {
             .collect()
     }
 
-    pub fn observe(&mut self, chunk: &[u8]) -> Vec<Observation> {
-        self.observe_at(chunk, Instant::now())
+    pub fn observe(
+        &mut self,
+        chunk: &[u8],
+        foreground: impl Fn() -> Option<(bool, String)>,
+    ) -> Vec<Observation> {
+        self.observe_with_foreground(chunk, Instant::now(), foreground)
     }
 
+    #[cfg(test)]
     fn observe_at(&mut self, chunk: &[u8], now: Instant) -> Vec<Observation> {
+        self.observe_with_foreground(chunk, now, || None)
+    }
+
+    fn observe_with_foreground(
+        &mut self,
+        chunk: &[u8],
+        now: Instant,
+        foreground: impl Fn() -> Option<(bool, String)>,
+    ) -> Vec<Observation> {
         if self.kind == Kind::None || chunk.is_empty() {
             return Vec::new();
         }
@@ -140,11 +165,29 @@ impl SignalObserver {
 
         let mut out = Vec::new();
         for frame in frames {
+            let before = self.title.title();
+            if self.kind == Kind::Shell
+                && !self.title.saw_marker
+                && (frame.starts_with("0;") || frame.starts_with("2;"))
+                && let Some((foreign, name)) = foreground()
+            {
+                self.title.poll(foreign, &name);
+            }
             if let Some(observation) = self.classify(&frame, now) {
                 out.push(observation);
             }
+            if self.kind == Kind::Shell {
+                let title = self.title.title();
+                if title != before {
+                    self.title_changes.push(title);
+                }
+            }
         }
         out
+    }
+
+    pub fn take_title_changes(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.title_changes)
     }
 
     pub fn follow_foreground(
@@ -202,6 +245,9 @@ impl SignalObserver {
 
     fn classify(&mut self, frame: &str, now: Instant) -> Option<Observation> {
         let (code, payload) = frame.split_once(';').unwrap_or((frame, ""));
+        if self.kind == Kind::Shell {
+            self.title.apply(code, payload);
+        }
         if self.kind == Kind::Shell && code == "133" {
             return self.classify_shell_marker(payload, now);
         }
@@ -226,13 +272,10 @@ impl SignalObserver {
             }
             "C" => {
                 self.prompt_owner = None;
-                let detail = payload
-                    .split(';')
-                    .find_map(|part| part.strip_prefix("cmdline_url="))
-                    .map_or_else(
-                        || "command started".to_owned(),
-                        |command| format!("command started: {}", truncate(command, 80)),
-                    );
+                let detail = crate::title::command_line(payload).map_or_else(
+                    || "command started".to_owned(),
+                    |command| format!("command started: {}", truncate(&command, 80)),
+                );
                 self.emit("busy", detail, true, now)
             }
             "D" => {
@@ -395,7 +438,7 @@ mod tests {
     #[test]
     fn root_program_status_replaces_title_claims_until_cleared() {
         let mut terminal = Terminal::new(80, 24).expect("terminal");
-        let mut observer = SignalObserver::new("claude");
+        let mut observer = SignalObserver::new("claude", "");
         let busy_title = "\x1b]0;\u{2736} Claude Code\x07".as_bytes();
 
         terminal.write(b"\x1b]7501;state=working:id=agent-1:app=claude-code\x1b\\");
@@ -416,29 +459,30 @@ mod tests {
             ),
             ("blocked_permission", "Allow?", PROGRAM_STATUS)
         );
-        assert!(observer.observe(busy_title).is_empty());
+        assert!(observer.observe(busy_title, || None).is_empty());
 
         terminal.write(b"\x1b]7501;state=clear\x1b\\");
         assert_eq!(
             observer.observe_program_status(&terminal.drain_program_status())[0].claim,
             "clear"
         );
-        assert_eq!(observer.observe(busy_title)[0].claim, "busy");
+        assert_eq!(observer.observe(busy_title, || None)[0].claim, "busy");
     }
 
     #[test]
     fn observes_split_codex_title() {
-        let mut observer = SignalObserver::new("codex");
-        assert!(observer.observe(b"\x1b]0;\xe2\xa0").is_empty());
-        let observations = observer.observe(b"\x90 working\x07");
+        let mut observer = SignalObserver::new("codex", "");
+        assert!(observer.observe(b"\x1b]0;\xe2\xa0", || None).is_empty());
+        let observations = observer.observe(b"\x90 working\x07", || None);
         assert_eq!(observations.len(), 1);
         assert_eq!(observations[0].claim, "busy");
     }
 
     #[test]
     fn shell_markers_are_edges() {
-        let mut observer = SignalObserver::new("shell");
-        let observations = observer.observe(b"\x1b]133;C;cmdline_url=make\x07\x1b]133;D;0\x07");
+        let mut observer = SignalObserver::new("shell", "");
+        let observations =
+            observer.observe(b"\x1b]133;C;cmdline_url=make\x07\x1b]133;D;0\x07", || None);
         assert_eq!(observations.len(), 2);
         assert_eq!(observations[0].claim, "busy");
         assert_eq!(observations[1].claim, "not_busy");
@@ -446,7 +490,7 @@ mod tests {
 
     #[test]
     fn inner_shell_prompt_owns_claim_while_its_program_holds_foreground() {
-        let mut observer = SignalObserver::new("shell");
+        let mut observer = SignalObserver::new("shell", "");
         let at = Instant::now();
         assert_eq!(
             observer.observe_shell_poll_at(100, 300, at).unwrap().claim,
@@ -522,7 +566,7 @@ mod tests {
 
     #[test]
     fn settled_shell_prompt_is_not_repeated() {
-        let mut observer = SignalObserver::new("shell");
+        let mut observer = SignalObserver::new("shell", "");
         let at = Instant::now();
         let first = observer.observe_shell_poll_at(100, 100, at).unwrap();
         assert_eq!(first.claim, "not_busy");
@@ -588,7 +632,7 @@ mod tests {
     #[test]
     fn prompt_owner_does_not_leak_to_another_foreground_program() {
         for marker in [b"\x1b]133;A\x07".as_slice(), b"\x1b]133;D;0\x07"] {
-            let mut observer = SignalObserver::new("shell");
+            let mut observer = SignalObserver::new("shell", "");
             let at = Instant::now();
             observer.observe_shell_poll_at(100, 300, at);
             assert_eq!(observer.observe_at(marker, at)[0].claim, "not_busy");
@@ -609,7 +653,7 @@ mod tests {
     #[test]
     fn prompt_without_an_inner_foreground_owner_does_not_hide_a_command() {
         for prior_poll in [None, Some(100)] {
-            let mut observer = SignalObserver::new("shell");
+            let mut observer = SignalObserver::new("shell", "");
             let at = Instant::now();
             if let Some(foreground) = prior_poll {
                 observer.observe_shell_poll_at(100, foreground, at);

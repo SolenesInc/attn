@@ -1,3 +1,4 @@
+import { sessionDisplayName } from '../../utils/sessionDisplayName';
 import { SuspendedDesktopPane } from './SuspendedDesktopPane';
 import type { CSSProperties } from 'react';
 import type { NormalizedPaneBounds, TerminalDesktopState } from '../../types/desktop';
@@ -27,7 +28,7 @@ export function DesktopAgentPane({
   } = useDesktopContext();
 
   const paneSession = sessionById.get(agentPane.sessionId);
-  const paneTitle = paneSession?.label || agentPane.title || 'Session';
+  const paneTitle = paneSession ? sessionDisplayName(paneSession) : agentPane.title || 'Session';
   if (suspendedLeafIds.has(agentPane.id) && !effectivePaneId) {
     return (
       <SuspendedDesktopPane

@@ -13,6 +13,7 @@ import { deriveTileTitle } from '../utils/tilePresentation';
 import {
   useAppGardenActionsContext,
   useAppPanelsContext,
+  useAppInputs,
   useAttentionQueueContext,
   useNavigationContext,
 } from './AppContexts';
@@ -26,6 +27,7 @@ export function AppPalette() {
 function ProfilePalette() {
   const { palette, setPalette } = useAppPanelsContext();
   const { sendRenameSession } = useDaemonApi();
+  const { daemonSessions: sessions } = useAppInputs();
   const [renameTarget, setRenameTarget] = useState<{
     sessionId: string;
     name: string;
@@ -41,6 +43,7 @@ function ProfilePalette() {
     {renameTarget && <RenamePopover
       key={renameTarget.sessionId}
       initialValue={renameTarget.name}
+      defaultName={sessions.find((session) => session.id === renameTarget.sessionId)?.agent === 'shell' ? 'Automatic title' : undefined}
       label="Rename session"
       anchor={renameTarget.anchor}
       onSubmit={(value) => sendRenameSession(renameTarget.sessionId, value)}

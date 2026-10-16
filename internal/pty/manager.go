@@ -120,6 +120,7 @@ type Manager struct {
 	logf          LogFunc
 	onExit        func(ExitInfo)
 	onState       func(sessionID string, obs Observation)
+	onTitle       func(sessionID, title string)
 
 	testHookAfterSpawnReserve func()
 }
@@ -145,6 +146,27 @@ func (m *Manager) SetStateHandler(handler func(sessionID string, obs Observation
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.onState = handler
+}
+
+func (m *Manager) SetTitleHandler(handler func(sessionID, title string)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.onTitle = handler
+}
+
+func (m *Manager) Title(sessionID string) string {
+	s, err := m.getSession(sessionID)
+	if err != nil {
+		return ""
+	}
+	s.signalMu.Lock()
+	defer s.signalMu.Unlock()
+	if s.shellSignals == nil {
+		return ""
+	}
+	s.shellSignals.mu.Lock()
+	defer s.shellSignals.mu.Unlock()
+	return s.shellSignals.title.Title()
 }
 
 func agentHarnessSignals(agent string) agentdriver.HarnessSignalKind {
@@ -298,6 +320,7 @@ func (m *Manager) start(session *Session, lifecycleID string) {
 	m.sessions[session.id] = session
 	onExit := m.onExit
 	onState := m.onState
+	onTitle := m.onTitle
 	m.mu.Unlock()
 
 	session.harnessSignals = newHarnessSignalObserver(agentHarnessSignals(session.agent))
@@ -309,8 +332,16 @@ func (m *Manager) start(session *Session, lifecycleID string) {
 			onState(id, obs)
 		}
 	}
-	if isShellPane && session.onState != nil {
-		session.shellSignals = newShellSignalArbiter(session.childProcessGroup())
+	if isShellPane {
+		if session.shellSignals == nil {
+			session.shellSignals = newShellSignalArbiter(session.childProcessGroup())
+			session.shellSignals.title.Folder = session.cwd
+		}
+		session.shellSignals.foreground = session.foregroundProcessGroup
+		if onTitle != nil {
+			session.shellSignals.onTitle = func(title string) { onTitle(session.id, title) }
+			onTitle(session.id, session.shellSignals.title.Title())
+		}
 		go session.runShellForegroundPoller(shellForegroundPollInterval)
 	}
 

@@ -139,6 +139,7 @@ type WorkerBackend struct {
 	hooksMu sync.RWMutex
 	onExit  func(ExitInfo)
 	onState func(id harness.TerminalID, obs pty.Observation)
+	onTitle func(id harness.TerminalID, title string)
 
 	reqSeq atomic.Uint64
 
@@ -410,6 +411,21 @@ func (b *WorkerBackend) SetStateHandler(handler func(id harness.TerminalID, obs 
 	b.hooksMu.Lock()
 	defer b.hooksMu.Unlock()
 	b.onState = handler
+}
+
+func (b *WorkerBackend) SetTitleHandler(handler func(id harness.TerminalID, title string)) {
+	b.hooksMu.Lock()
+	defer b.hooksMu.Unlock()
+	b.onTitle = handler
+}
+
+func (b *WorkerBackend) reportTitle(session *workerSession, title string) {
+	b.hooksMu.RLock()
+	handler := b.onTitle
+	b.hooksMu.RUnlock()
+	if handler != nil {
+		handler(harness.TerminalID(session.SessionID), title)
+	}
 }
 
 func (b *WorkerBackend) reportState(session *workerSession, observation pty.Observation) {
@@ -1200,6 +1216,7 @@ func (b *WorkerBackend) SessionInfo(ctx context.Context, id harness.TerminalID) 
 		CWD:        info.CWD,
 		Running:    info.Running,
 		State:      info.State,
+		Title:      info.Title,
 		Cols:       info.Cols,
 		Rows:       info.Rows,
 		PID:        info.ChildPID,
@@ -2478,6 +2495,10 @@ func (b *WorkerBackend) runLifecycleMonitor(session *workerSession, stopCh <-cha
 
 func (b *WorkerBackend) handleLifecycleEvent(session *workerSession, evt ptyworker.EventEnvelope) {
 	switch evt.Event {
+	case ptyworker.EventTitleChanged:
+		if evt.Title != nil {
+			b.reportTitle(session, *evt.Title)
+		}
 	case ptyworker.EventStateChanged:
 		if evt.State == nil {
 			return

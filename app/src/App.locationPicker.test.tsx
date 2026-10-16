@@ -327,6 +327,7 @@ describe('App location picker', () => {
       await submitPath(daemon, '/tmp/shell-here');
 
       expect(launchedAt(daemon).map(({ agent, cwd }) => ({ agent, cwd }))).toEqual([{ agent: 'shell', cwd: '/tmp/shell-here' }]);
+      expect(daemon.sentOf('spawn_session')[0].label ?? '').toBe('');
       expect(daemon.sentOf('set_setting').filter(({ key }) => key === 'new_session_agent')).toEqual([]);
     });
 

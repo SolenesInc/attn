@@ -26,15 +26,15 @@ func (d *Daemon) renameSession(msg *protocol.RenameSessionMessage) error {
 	if sessionID == "" {
 		return fmt.Errorf("missing session_id")
 	}
-	if label == "" {
-		return fmt.Errorf("name cannot be empty")
-	}
 	if n := len([]rune(label)); n > maxSessionNameRunes {
 		return fmt.Errorf("name %q is %d characters, over the %d-character limit", label, n, maxSessionNameRunes)
 	}
 	session := d.store.Get(sessionID)
 	if session == nil {
 		return fmt.Errorf("session not found: %s", sessionID)
+	}
+	if label == "" && session.Agent != protocol.AgentShellValue {
+		return fmt.Errorf("name cannot be empty for an agent; only shell terminals have automatic titles")
 	}
 	d.store.UpdateSessionLabel(sessionID, label)
 	session.Label = label

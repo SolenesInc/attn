@@ -1,3 +1,4 @@
+import { sessionDisplayName } from '../../utils/sessionDisplayName';
 import { SessionPriority } from '../SessionPriority';
 import { useTileAnnotations } from './useTileAnnotations';
 import type { DesktopTileSessionOption } from './DesktopDockTile';
@@ -283,7 +284,7 @@ function SessionDestinationMenu({
           <span className="desktop-dock-tile-destination-check" aria-hidden="true">
             {session.sessionId === targetSessionId ? '✓' : ''}
           </span>
-          <span className="desktop-dock-tile-destination-label"><SessionPriority priority={session.priority} />{session.label}</span>
+          <span className="desktop-dock-tile-destination-label"><SessionPriority priority={session.priority} />{sessionDisplayName(session)}</span>
           {session.state === 'pending_approval' ? (
             <span className="desktop-dock-tile-destination-state">approval</span>
           ) : null}

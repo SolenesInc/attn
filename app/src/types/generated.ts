@@ -1912,6 +1912,7 @@ export interface SessionObject {
     succeeds?:                  string;
     terminal_build_stale?:      boolean;
     terminal_exit?:             TerminalExitObject;
+    title?:                     string;
     turn_opened_at?:            string;
     turn_owed?:                 boolean;
     turn_snoozed_until?:        string;
@@ -8584,6 +8585,7 @@ export interface Session {
     succeeds?:                  string;
     terminal_build_stale?:      boolean;
     terminal_exit?:             TerminalExitObject;
+    title?:                     string;
     turn_opened_at?:            string;
     turn_owed?:                 boolean;
     turn_snoozed_until?:        string;
@@ -16227,6 +16229,7 @@ const typeMap: any = {
         { json: "succeeds", js: "succeeds", typ: u(undefined, "") },
         { json: "terminal_build_stale", js: "terminal_build_stale", typ: u(undefined, true) },
         { json: "terminal_exit", js: "terminal_exit", typ: u(undefined, r("TerminalExitObject")) },
+        { json: "title", js: "title", typ: u(undefined, "") },
         { json: "turn_opened_at", js: "turn_opened_at", typ: u(undefined, "") },
         { json: "turn_owed", js: "turn_owed", typ: u(undefined, true) },
         { json: "turn_snoozed_until", js: "turn_snoozed_until", typ: u(undefined, "") },
@@ -20453,6 +20456,7 @@ const typeMap: any = {
         { json: "succeeds", js: "succeeds", typ: u(undefined, "") },
         { json: "terminal_build_stale", js: "terminal_build_stale", typ: u(undefined, true) },
         { json: "terminal_exit", js: "terminal_exit", typ: u(undefined, r("TerminalExitObject")) },
+        { json: "title", js: "title", typ: u(undefined, "") },
         { json: "turn_opened_at", js: "turn_opened_at", typ: u(undefined, "") },
         { json: "turn_owed", js: "turn_owed", typ: u(undefined, true) },
         { json: "turn_snoozed_until", js: "turn_snoozed_until", typ: u(undefined, "") },

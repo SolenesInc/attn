@@ -1,3 +1,4 @@
+import { sessionDisplayName } from '../utils/sessionDisplayName';
 import { openPath } from '@tauri-apps/plugin-opener';
 import { SessionTerminalDesktop } from '../components/SessionTerminalDesktop';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
@@ -100,6 +101,7 @@ export function AppDesktops() {
           desktopSessions={desktopSessions.map((entry) => ({
             id: entry.id,
             label: entry.label,
+            title: entry.title,
             priority: entry.priority,
             agent: entry.agent,
             cwd: entry.cwd,
@@ -121,7 +123,7 @@ export function AppDesktops() {
           selectedSessionId={isCurrent ? shownSessionId : null}
           seedTargetSessions={daemonSessions.map((session) => ({
             sessionId: session.id,
-            label: session.label || session.id,
+            label: sessionDisplayName(session),
             priority: session.priority,
             state: session.state,
           }))}

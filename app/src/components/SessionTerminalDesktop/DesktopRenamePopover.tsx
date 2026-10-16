@@ -9,6 +9,7 @@ export function DesktopRenamePopover() {
         <RenamePopover
           key={renamePane.sessionId}
           initialValue={renamePane.name}
+          defaultName={renamePane.defaultName}
           label="Rename session"
           anchor={renamePane.anchor}
           onSubmit={(value) => onRenameSession(renamePane.sessionId, value)}

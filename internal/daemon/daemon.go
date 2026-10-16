@@ -152,6 +152,8 @@ type Daemon struct {
 	warnings                          []protocol.DaemonWarning
 	warningsMu                        sync.RWMutex
 	ptyBackend                        ptybackend.Backend
+	terminalTitlesMu                  sync.RWMutex
+	terminalTitles                    map[harness.TerminalID]string
 	ptySettingsMu                     sync.Mutex
 	ptySettingsChangeMu               sync.Mutex
 	sharedPTYHost                     *ptybackend.WorkerBackend
@@ -820,6 +822,9 @@ func (d *Daemon) Start() error {
 		hooks.SetExitHandler(func(info ptybackend.ExitInfo) { d.handlePTYExit(info) })
 		hooks.SetStateHandler(d.handlePTYState)
 	}
+	if hooks, ok := d.ptyBackend.(ptybackend.TitleHooks); ok {
+		hooks.SetTitleHandler(d.handlePTYTitle)
+	}
 
 	d.initHTTPServer()
 	if err := d.listenHTTP(); err != nil {
@@ -1245,6 +1250,7 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 		if infoProvider != nil {
 			fetched, err := infoProvider.SessionInfo(ctx, terminalID)
 			if err == nil {
+				d.handlePTYTitle(terminalID, fetched.Title)
 				info = fetched
 				haveInfo = true
 			}
@@ -1630,9 +1636,13 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 	}
 	d.linkTerminalExited(info.ID)
 	if d.linkProcess(info.ID) {
+		d.forgetTerminalTitle(info.ID)
 		return false
 	}
 	sessionID, shown := d.shownIn(info.ID)
+	if !shown {
+		d.forgetTerminalTitle(info.ID)
+	}
 	if ended, ending := d.terminals().takeEnding(info.ID); ending && !shown {
 		sessionID, shown = ended, true
 	}
@@ -2000,6 +2010,13 @@ func (d *Daemon) terminateSessionAsync(sessionID protocol.SessionID, sig syscall
 }
 
 func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.SessionClose) {
+	if session := d.store.Get(sessionID); session != nil && session.Agent == protocol.AgentShellValue {
+		d.decorateSessionWithTitle(session)
+		closed.FallbackLabel = protocol.Deref(session.Title)
+		if closed.FallbackLabel == "" {
+			closed.FallbackLabel = defaultSessionLabel(session.Directory, sessionID)
+		}
+	}
 	if l := d.linkOf(sessionID); l != nil {
 		l.closed(sessionID)
 	}
@@ -2009,6 +2026,7 @@ func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.Session
 }
 
 func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() (bool, error)) {
+	terminals := d.terminalsOf(sessionID)
 	defer d.announceUnplacement(sessionID)()
 	if session := d.store.Get(sessionID); session != nil {
 		if _, err := d.captureGardenSessionSnapshot(session); err != nil {
@@ -2023,6 +2041,9 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() 
 	}
 	d.forgetSessionTrace(sessionID)
 	if recorded {
+		for _, terminal := range terminals {
+			d.forgetTerminalTitle(terminal)
+		}
 		d.queueConversationKeep()
 		d.invalidateGardenSeedParties("session close")
 		entry := d.store.SessionLedgerEntry(sessionID)
@@ -2037,6 +2058,7 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() 
 }
 
 func (d *Daemon) removeReapedSession(sessionID protocol.SessionID) {
+	terminals := d.terminalsOf(sessionID)
 	defer d.announceUnplacement(sessionID)()
 	if session := d.store.Get(sessionID); session != nil {
 		if _, err := d.captureGardenSessionExecution(session); err != nil {
@@ -2045,6 +2067,9 @@ func (d *Daemon) removeReapedSession(sessionID protocol.SessionID) {
 	}
 	d.forgetSessionRuntime(sessionID)
 	d.store.Remove(sessionID)
+	for _, terminal := range terminals {
+		d.forgetTerminalTitle(terminal)
+	}
 	d.forgetSessionTrace(sessionID)
 	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)
@@ -3149,6 +3174,7 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 		clone.DelegatedFromChief = nil
 	}
 	d.decorateSessionWithCost(clone)
+	d.decorateSessionWithTitle(clone)
 	d.decorateSessionWithTerminalBuild(clone)
 	d.decorateSessionWithTurn(clone)
 	d.decorateSessionHidden(clone)

@@ -193,6 +193,9 @@ func sessionDisplayName(session *protocol.Session) string {
 	if label := strings.TrimSpace(session.Label); label != "" {
 		return label
 	}
+	if title := protocol.Deref(session.Title); title != "" {
+		return title
+	}
 	return shortSessionID(session.ID)
 }
 

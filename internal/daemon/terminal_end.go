@@ -54,6 +54,7 @@ func (d *Daemon) closeTerminal(sessionID protocol.SessionID, t harness.TerminalI
 }
 
 func (d *Daemon) dropTerminal(t harness.TerminalID) {
+	d.forgetTerminalTitle(t)
 	d.linkTerminalDropped(t)
 	if err := d.removePTYSession(t); err != nil {
 		d.logf("removing the runtime of terminal %s: %v", t, err)

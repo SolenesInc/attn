@@ -49,8 +49,10 @@ func TestAnExitWaitKeepsItsTerminalResultWhenTheWorkerReplyIsLost(t *testing.T) 
 					t.Fatal(err)
 				}
 				defer func() {
-					if err := backend.Remove(context.Background(), terminal); err != nil && !errors.Is(err, pty.ErrSessionNotFound) {
-						t.Error(err)
+					for _, remaining := range backend.TerminalIDs(context.Background()) {
+						if err := backend.Remove(context.Background(), remaining); err != nil && !errors.Is(err, pty.ErrSessionNotFound) {
+							t.Error(err)
+						}
 					}
 				}()
 				removed := make(chan error, 1)
@@ -113,14 +115,19 @@ func TestAnExitWaitKeepsItsTerminalResultWhenTheWorkerReplyIsLost(t *testing.T) 
 func interceptTerminalWait(t *testing.T, socket string) (<-chan struct{}, func()) {
 	t.Helper()
 	upstream := filepath.Join(filepath.Dir(socket), "wait-upstream.sock")
-	if err := os.Rename(socket, upstream); err != nil {
+	if err := os.Link(socket, upstream); err != nil {
 		t.Fatal(err)
 	}
-	listener, err := net.Listen("unix", socket)
+	proxy := filepath.Join(filepath.Dir(socket), "wait-proxy.sock")
+	listener, err := net.ListenUnix("unix", &net.UnixAddr{Net: "unix", Name: proxy})
 	if err != nil {
 		t.Fatal(err)
 	}
+	listener.SetUnlinkOnClose(false)
 	t.Cleanup(func() { _ = listener.Close() })
+	if err := os.Rename(proxy, socket); err != nil {
+		t.Fatal(err)
+	}
 	armed, dropped := make(chan struct{}), make(chan struct{})
 	var once sync.Once
 	drop := func() { once.Do(func() { close(dropped) }) }
@@ -138,7 +145,10 @@ func interceptTerminalWait(t *testing.T, socket string) (<-chan struct{}, func()
 					return
 				}
 				defer peer.Close()
-				go func() { _, _ = io.Copy(conn, peer) }()
+				go func() {
+					defer conn.Close()
+					_, _ = io.Copy(conn, peer)
+				}()
 				reader := bufio.NewReader(conn)
 				for {
 					line, err := reader.ReadBytes('\n')

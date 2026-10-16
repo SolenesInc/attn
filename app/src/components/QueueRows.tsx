@@ -1,3 +1,4 @@
+import { sessionDisplayName } from '../utils/sessionDisplayName';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { SessionLabel } from './SessionLabel';
 import { harnessLabel } from './harnessLabel';
@@ -67,7 +68,7 @@ function QueueRowControls({
           className="queue-row-wake"
           data-testid={`queue-wake-${session.id}`}
           title="Wake now — bring it back to the queue"
-          aria-label={`Wake ${session.label}`}
+          aria-label={`Wake ${sessionDisplayName(session)}`}
           onClick={(event) => {
             event.stopPropagation();
             onWake();
@@ -82,7 +83,7 @@ function QueueRowControls({
           className="queue-row-snooze"
           data-testid={`queue-snooze-${session.id}`}
           title={`Snooze this agent (${formatShortcut('session.snooze')})`}
-          aria-label={`Snooze ${session.label}`}
+          aria-label={`Snooze ${sessionDisplayName(session)}`}
           onClick={(event) => {
             event.stopPropagation();
             onSnooze(event);
@@ -98,7 +99,7 @@ function QueueRowControls({
           data-testid={`session-actions-${session.id}`}
           onClick={onOpenActions}
           title="Session actions"
-          aria-label={`Actions for ${session.label}`}
+          aria-label={`Actions for ${sessionDisplayName(session)}`}
         >
           •••
         </button>
@@ -109,7 +110,7 @@ function QueueRowControls({
           className="queue-row-settle"
           data-testid={`queue-settle-${session.id}`}
           title={`Settle this turn (${formatShortcut('session.settle')})`}
-          aria-label={`Settle ${session.label}`}
+          aria-label={`Settle ${sessionDisplayName(session)}`}
           onClick={(event) => {
             event.stopPropagation();
             onSettle();
@@ -159,11 +160,11 @@ export function QueueRowView({
       data-session-id={session.id}
       data-state={session.state}
       data-desktop-id={row.desktopId}
-      title={session.chiefOfStaff ? session.label : undefined}
+      title={session.chiefOfStaff ? sessionDisplayName(session) : undefined}
     >
       <QueueSessionSelection
-        label={session.chiefOfStaff ? 'Chief' : session.label}
-        title={[session.chiefOfStaff ? session.label : harnessLabel(session.agent), where?.title].filter(Boolean).join(' · ')}
+        label={session.chiefOfStaff ? 'Chief' : sessionDisplayName(session)}
+        title={[session.chiefOfStaff ? sessionDisplayName(session) : harnessLabel(session.agent), where?.title].filter(Boolean).join(' · ')}
         testId={`queue-select-${session.id}`}
         onSelect={onSelect}
       />
@@ -176,7 +177,7 @@ export function QueueRowView({
       />
       <span className="sidebar-session-identity">
         <SessionLabel
-          label={session.chiefOfStaff ? 'Chief' : session.label}
+          label={session.chiefOfStaff ? 'Chief' : sessionDisplayName(session)}
           session={session}
           hasDelegates={delegates.length > 0}
         />
@@ -316,7 +317,7 @@ function AwakeCrewRow({
 }) {
   const name = crewDisplayName(member);
   const { session } = row;
-  const label = session.label || name;
+  const label = sessionDisplayName(session) || name;
   return (
     <div
       className={`session-item sidebar-leaf-row queue-row queue-row--crew ${selected ? 'selected' : ''}`.trim()}

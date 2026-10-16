@@ -20,7 +20,10 @@ type shellSignalArbiter struct {
 
 	shellPgid int
 
-	seg feedSegmenter
+	seg        feedSegmenter
+	title      ShellTitleState
+	onTitle    func(string)
+	foreground func() (int, bool)
 
 	markerAtPrompt   bool
 	ownerPgid        int
@@ -67,6 +70,18 @@ func (a *shellSignalArbiter) ObserveOutput(chunk []byte, now time.Time) []Observ
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.seg.Feed(chunk, func(seg feedSegment) {
+		before := a.title.Title()
+		if !a.title.SawMarker && (seg.OSCCode == "0" || seg.OSCCode == "2") && a.foreground != nil {
+			if fg, ok := a.foreground(); ok {
+				name := ""
+				if fg != a.shellPgid {
+					name = foregroundProcessName(fg)
+				}
+				a.title.poll(fg != a.shellPgid, name)
+			}
+		}
+		a.title.apply(seg)
+		a.emitTitle(before)
 		if seg.Marker == nil {
 			return
 		}
@@ -75,6 +90,24 @@ func (a *shellSignalArbiter) ObserveOutput(chunk []byte, now time.Time) []Observ
 		}
 	})
 	return out
+}
+
+func (a *shellSignalArbiter) emitTitle(before string) {
+	if title := a.title.Title(); title != before && a.onTitle != nil {
+		a.onTitle(title)
+	}
+}
+
+func (a *shellSignalArbiter) observeTitlePoll(fgPgid int) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	before := a.title.Title()
+	name := ""
+	if fgPgid != a.shellPgid && (!a.title.SawMarker || (a.title.InCommand && a.title.Command == "")) {
+		name = foregroundProcessName(fgPgid)
+	}
+	a.title.poll(fgPgid != a.shellPgid, name)
+	a.emitTitle(before)
 }
 
 func (a *shellSignalArbiter) observeMarker(m *osc133Marker, now time.Time) (Observation, bool) {
@@ -150,6 +183,7 @@ func (s *Session) observeForeground(fgPgid int) {
 	s.signalMu.Lock()
 	defer s.signalMu.Unlock()
 	now := time.Now()
+	s.shellSignals.observeTitlePoll(fgPgid)
 	cleared, dropped := s.programStatus.followForeground(fgPgid, s.shellSignals.shellPgid, now)
 	if dropped {
 		s.emitSignal(cleared)

@@ -62,7 +62,8 @@ export function useSessionLaunch({
   const nextSplitSessionLabel = useCallback(
     (agent: SessionAgent) => {
       const normalizedAgent = normalizeSessionAgent(agent, 'codex');
-      const base = normalizedAgent === 'shell' ? 'shell' : normalizedAgent;
+      if (normalizedAgent === 'shell') return '';
+      const base = normalizedAgent;
       const onDesktop = new Set(currentDesktop?.panes.map((pane) => pane.session_id));
       const matchingCount = sessions.filter(
         (session) =>
@@ -283,7 +284,7 @@ export function useSessionLaunch({
       const selectedAgent =
         agent === TERMINAL_AGENT ? agent : resolvePreferredAgent(agent, agentAvailability, 'codex');
       return launchPicked({
-        label: path.split('/').pop() || 'session',
+        label: selectedAgent === TERMINAL_AGENT ? '' : path.split('/').pop() || 'session',
         cwd: path,
         agent: selectedAgent,
         yoloMode,
@@ -316,7 +317,7 @@ export function useSessionLaunch({
           : resolvePreferredAgent(agent, agentAvailability, 'codex');
       const folderName = path.split('/').pop() || 'session';
       const pick = {
-        label: folderName,
+        label: selectedAgent === TERMINAL_AGENT ? '' : folderName,
         cwd: path,
         agent: selectedAgent,
         yoloMode,

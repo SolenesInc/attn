@@ -1,3 +1,4 @@
+import { sessionDisplayName } from '../utils/sessionDisplayName';
 import { useCallback, useState } from 'react';
 import { useToast } from '../components/Toast';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
@@ -42,7 +43,7 @@ export function useSessionLifecycle({
     const protectedNames = desktop.panes.flatMap((pane) => {
       if (!sessionCloseProtectionHint(daemonSessions, pane.session_id)) return [];
       const session = daemonSessions.find((entry) => entry.id === pane.session_id);
-      return [session?.label || pane.title || pane.session_id];
+      return [session ? sessionDisplayName(session) : pane.title || pane.session_id];
     });
     if (!protectedNames.length) return false;
     showError(`Cannot close desktop: move these protected sessions first: ${protectedNames.join(', ')}.`);

@@ -6,6 +6,12 @@ export const scenarioCatalog = [
     command: ['node', 'scripts/real-app-harness/scenario-agent-terminals.mjs'],
   },
   {
+    id: 'shell-titles',
+    runnerId: 'SHELL-TITLES',
+    label: 'Shell sidebar and tile names follow zsh and fish programs and folders',
+    command: ['node', 'scripts/real-app-harness/scenario-shell-titles.mjs'],
+  },
+  {
     id: 'desktop-order',
     runnerId: 'DESKTOP-ORDER',
     label: 'Desktop Sort and Undo preserve arrangements; new numbered desktops follow the nearest lower number',

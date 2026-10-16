@@ -43,6 +43,14 @@ func (b *EmbeddedBackend) SetStateHandler(handler func(id harness.TerminalID, ob
 	b.manager.SetStateHandler(func(id string, obs pty.Observation) { handler(harness.TerminalID(id), obs) })
 }
 
+func (b *EmbeddedBackend) SetTitleHandler(handler func(id harness.TerminalID, title string)) {
+	if handler == nil {
+		b.manager.SetTitleHandler(nil)
+		return
+	}
+	b.manager.SetTitleHandler(func(id, title string) { handler(harness.TerminalID(id), title) })
+}
+
 func (b *EmbeddedBackend) Spawn(_ context.Context, opts SpawnOptions) error {
 	if err := validateSpawnOptions(opts); err != nil {
 		return err
@@ -180,6 +188,7 @@ func (b *EmbeddedBackend) SessionInfo(_ context.Context, id harness.TerminalID) 
 		SessionID:  info.SessionID,
 		Agent:      info.Agent,
 		CWD:        info.CWD,
+		Title:      b.manager.Title(sessionID),
 		Running:    info.Running,
 		Cols:       info.Cols,
 		Rows:       info.Rows,

@@ -65,7 +65,7 @@ export function RenamePopover({ initialValue, label, anchor, defaultName, onSubm
   const handleSubmit = async () => {
     const trimmed = value.trim();
     if (!trimmed && defaultName === undefined) {
-      setError('Name cannot be empty');
+      setError('An agent name cannot be empty; only shell terminals have automatic titles');
       return;
     }
     if (trimmed === initialValue.trim()) {

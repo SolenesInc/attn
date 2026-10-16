@@ -2340,10 +2340,10 @@ export function useUiAutomationBridge({
       }
       case 'create_session': {
         const cwd = typeof payload.cwd === 'string' ? payload.cwd : '';
-        const label = typeof payload.label === 'string' && payload.label.length > 0
-          ? payload.label
-          : (cwd.split('/').pop() || 'session');
         const agent = typeof payload.agent === 'string' ? payload.agent : undefined;
+        const label = typeof payload.label === 'string'
+          ? payload.label
+          : agent === 'shell' ? '' : (cwd.split('/').pop() || 'session');
         const providedSessionId = typeof payload.sessionId === 'string' && payload.sessionId.length > 0
           ? payload.sessionId
           : undefined;

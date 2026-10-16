@@ -1,3 +1,4 @@
+import { sessionDisplayName } from '../../utils/sessionDisplayName';
 import type { TileLeaf } from '../../types/desktop';
 import type { UISessionState } from '../../types/sessionState';
 import { headOfQueue, type QueueBandSession, type QueueBands } from '../../utils/queueBands';
@@ -67,7 +68,7 @@ export function agentPaletteRows<S extends PaletteSession>(
     return [{ kind: 'agent', key: `agent:${session.id}`, session, anchored, queueHead: session.id === headId }];
   };
   const bandRow = (session: S, anchored: boolean) =>
-    agentRow(session, anchored, matches(terms, session.label, session.crewMember, session.automation?.definition_name));
+    agentRow(session, anchored, matches(terms, sessionDisplayName(session), session.crewMember, session.automation?.definition_name));
 
   const anchored: AgentPaletteRow<S>[] = bands.chief ? bandRow(bands.chief.session, true) : [];
   const awakeByMember = new Map<string, typeof bands.crew>();

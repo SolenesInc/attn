@@ -3,6 +3,7 @@
 package pty
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -513,7 +514,7 @@ func TestKittyWireRewriteCorpus(t *testing.T) {
 				return
 			}
 
-			client := replayKittyWire(t, want)
+			client := replayKittyWire(t, recorded[i])
 			if got := client.PlainText(); got != want.WorkerPlainText {
 				t.Errorf("replayed history diverged from the worker\nworker:\n%s\nclient:\n%s", want.WorkerPlainText, got)
 			}
@@ -535,7 +536,20 @@ func assertKittyCorpusEntryEqual(t *testing.T, want, got kittyCorpusEntry) {
 			want.Name, want.Cols, want.Rows, got.Name, got.Cols, got.Rows, rerun)
 	}
 	assertBase64SliceEqual(t, "chunks", want.Chunks, got.Chunks, rerun)
-	assertBase64SliceEqual(t, "wire", want.Wire, got.Wire, rerun)
+	wireBytes := func(chunks []string) []byte {
+		var stream []byte
+		for _, chunk := range chunks {
+			decoded, err := base64.StdEncoding.DecodeString(chunk)
+			if err != nil {
+				t.Fatal(err)
+			}
+			stream = append(stream, decoded...)
+		}
+		return stream
+	}
+	if !bytes.Equal(wireBytes(want.Wire), wireBytes(got.Wire)) {
+		t.Errorf("wire bytes changed: %s", rerun)
+	}
 	if strings.Join(want.Resync, "|") != strings.Join(got.Resync, "|") {
 		t.Errorf("resync reasons = %q, stored %q: %s", got.Resync, want.Resync, rerun)
 	}

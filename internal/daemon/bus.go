@@ -15,6 +15,7 @@ const (
 	FactSessionReregistered           = "session.reregistered"
 	FactSessionStateChanged           = "session.state.changed"
 	FactSessionModelRequestStarted    = "session.model_request.started"
+	FactSessionTitleChanged           = "session.title.changed"
 	FactSessionRenamed                = "session.renamed"
 	FactSessionUnregistered           = "session.unregistered"
 	FactSessionClosed                 = "session.closed"
@@ -104,7 +105,7 @@ const (
 	FactBackgroundLaunch = "session.background.launch"
 )
 
-var CompactableFacts = []string{FactDocumentChanged, FactDocumentCollectionRemoved, FactDocumentCollectionRedeclared, FactSessionAssistantWindowChanged}
+var CompactableFacts = []string{FactSessionTitleChanged, FactDocumentChanged, FactDocumentCollectionRemoved, FactDocumentCollectionRedeclared, FactSessionAssistantWindowChanged}
 
 type projection struct {
 	filter bus.Filter
@@ -124,7 +125,7 @@ func wireProjections() []projection {
 func buildWireProjections() []projection {
 	return []projection{
 		{
-			filter: bus.Filter{FactSessionStateChanged},
+			filter: bus.Filter{FactSessionStateChanged, FactSessionTitleChanged},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(protocol.SessionID(ev.Subject)) },
 		},
 		{

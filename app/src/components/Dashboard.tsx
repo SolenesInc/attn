@@ -1,3 +1,4 @@
+import { sessionDisplayName } from '../utils/sessionDisplayName';
 import { SessionPriority } from './SessionPriority';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { DaemonPR, RateLimitState } from '../hooks/useDaemonSocket';
@@ -203,7 +204,7 @@ export function Dashboard({
     >
       <StateIndicator state={s.state} size="sm" seed={s.id} />
       <div className="session-row-main">
-        <span className="session-name"><SessionPriority priority={s.priority} />{s.label}</span>
+        <span className="session-name"><SessionPriority priority={s.priority} />{sessionDisplayName(s)}</span>
         <SessionProvenance automation={s.automation} interactive />
         {renderActivityLine(s)}
       </div>
@@ -216,7 +217,7 @@ export function Dashboard({
           className="session-wake-btn"
           data-testid={`session-wake-${s.id}`}
           title="Wake now — bring it back to the queue"
-          aria-label={`Wake ${s.label}`}
+          aria-label={`Wake ${sessionDisplayName(s)}`}
           onClick={(event) => {
             event.stopPropagation();
             onWakeTurn(s.id);
@@ -505,7 +506,7 @@ export function Dashboard({
                   onClick={() => onSelectSession(chiefSession.id)}
                 >
                   <StateIndicator state={chiefSession.state} size="sm" seed={chiefSession.id} />
-                  <span className="chief-session-name"><SessionPriority priority={chiefSession.priority} />{chiefSession.label}</span>
+                  <span className="chief-session-name"><SessionPriority priority={chiefSession.priority} />{sessionDisplayName(chiefSession)}</span>
                   <ChiefOfStaffBadge compact />
                   <span className="chief-session-state">
                     Session: {chiefSession.state.replace('_', ' ')}

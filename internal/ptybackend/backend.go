@@ -157,6 +157,7 @@ type SessionInfo struct {
 
 	Running bool
 	State   string
+	Title   string
 
 	LastSignal    pty.Observation
 	HasLastSignal bool
@@ -209,6 +210,10 @@ type Backend interface {
 type LifecycleHooks interface {
 	SetExitHandler(func(ExitInfo))
 	SetStateHandler(func(id harness.TerminalID, obs pty.Observation))
+}
+
+type TitleHooks interface {
+	SetTitleHandler(func(id harness.TerminalID, title string))
 }
 
 type SessionInfoProvider interface {

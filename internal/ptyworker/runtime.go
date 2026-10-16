@@ -137,6 +137,7 @@ type Runtime struct {
 
 	stateMu      sync.RWMutex
 	state        string
+	title        string
 	exitCode     *int
 	exitSignal   *string
 	lastEvidence *pty.Observation
@@ -221,6 +222,14 @@ func (r *Runtime) run(ctx context.Context) error {
 	}
 
 	r.manager = pty.NewManager(r.logf)
+	r.manager.SetTitleHandler(func(_ string, title string) {
+		r.deliverMu.Lock()
+		defer r.deliverMu.Unlock()
+		r.stateMu.Lock()
+		r.title = title
+		r.stateMu.Unlock()
+		r.broadcastLifecycle(EventEnvelope{Type: "evt", Event: EventTitleChanged, SessionID: r.cfg.SessionID, Title: &title})
+	})
 	r.manager.SetStateHandler(func(_ string, obs pty.Observation) { r.observeState(obs) })
 	r.manager.SetExitHandler(func(info pty.ExitInfo) {
 		r.stateMu.Lock()
@@ -1244,6 +1253,7 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 		exitCode := c.runtime.exitCode
 		exitSignal := c.runtime.exitSignal
 		lastEvidence := c.runtime.lastEvidence
+		title := c.runtime.title
 		c.runtime.stateMu.RUnlock()
 		if lastEvidence != nil {
 			pausepoint.At(pausepoint.PtyWatchReplay)
@@ -1262,6 +1272,7 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 			Detail: "watch subscribe replay",
 			At:     time.Now(),
 		}))
+		_ = c.sendEvent(EventEnvelope{Type: "evt", Event: EventTitleChanged, SessionID: c.runtime.cfg.SessionID, Title: &title})
 		if lastEvidence != nil {
 			_ = c.sendEvent(stateChangedEvent(c.runtime.cfg.SessionID, *lastEvidence))
 		}
@@ -1338,6 +1349,7 @@ func (r *Runtime) infoResult() (InfoResult, error) {
 	r.stateMu.RUnlock()
 
 	result := InfoResult{
+		Title:     r.manager.Title(r.cfg.SessionID),
 		Running:   info.Running,
 		Agent:     r.cfg.Agent,
 		CWD:       r.cfg.CWD,

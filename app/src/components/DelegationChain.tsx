@@ -1,3 +1,4 @@
+import { sessionDisplayName } from '../utils/sessionDisplayName';
 import { SessionPriority } from './SessionPriority';
 import {
   forwardRef, useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect,
@@ -20,6 +21,7 @@ import './DelegationChain.css';
 export { useDelegationChainControl } from './delegationChainContext';
 
 export interface ChainSession extends DelegationSession {
+  title?: string;
   agent?: string;
   state: UISessionState;
 }
@@ -46,7 +48,7 @@ export function DelegationChainTrigger({ session, hasDelegates = false, variant 
   const trigger = useDelegationChainTrigger(session.id, 'badge', onOpen);
   if (!hasDelegationChain(session, hasDelegates)) return null;
   const role = session.delegation_role;
-  const label = `${role ? `${role.name} · ` : ''}Show delegation chain for ${session.label}`;
+  const label = `${role ? `${role.name} · ` : ''}Show delegation chain for ${sessionDisplayName(session)}`;
   return (
     <button
       ref={trigger.ref}
@@ -102,6 +104,7 @@ function DelegationChainPopover({ open, sessions, controller, onSelectSession }:
 }) {
   const card = useRef<HTMLDivElement>(null);
   const titleId = useId();
+  const currentSession = sessions.find((session) => session.id === open.sessionId);
   const tree = useMemo(() => delegationTree(open.sessionId, sessions), [open.sessionId, sessions]);
   const initialFocus = useCallback(() => card.current?.querySelector<HTMLElement>('[aria-current="true"]') ?? card.current!, []);
   const setCard = useCallback((element: HTMLDivElement | null) => {
@@ -140,7 +143,7 @@ function DelegationChainPopover({ open, sessions, controller, onSelectSession }:
         }}
       >
         <div className="delegation-chain-heading">
-          <strong>{sessions.find((session) => session.id === open.sessionId)?.label}</strong>
+          <strong>{currentSession ? sessionDisplayName(currentSession) : undefined}</strong>
           <button type="button" aria-label="Close delegation chain" onClick={() => controller.dismiss()}>×</button>
         </div>
         <p id={titleId}>Delegation chain</p>
@@ -156,7 +159,7 @@ function DelegationChainPopover({ open, sessions, controller, onSelectSession }:
               >
                 <span className="delegation-chain-branch" aria-hidden="true">{depth > 0 ? '↳' : ''}</span>
                 <span className="delegation-chain-role-icon" data-role={session.delegation_role?.builtin}><SessionRoleIcon role={session.delegation_role} /></span>
-                <span className="delegation-chain-agent"><span><SessionPriority priority={session.priority} />{session.label}</span><small>{session.delegation_role?.name ?? harnessLabel(session.agent)}</small></span>
+                <span className="delegation-chain-agent"><span><SessionPriority priority={session.priority} />{sessionDisplayName(session)}</span><small>{session.delegation_role?.name ?? harnessLabel(session.agent)}</small></span>
                 {session.id === open.sessionId && <span className="delegation-chain-current">current</span>}
                 <StateIndicator state={session.state} size="sm" seed={session.id} />
               </button>

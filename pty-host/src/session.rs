@@ -338,7 +338,7 @@ impl Session {
                 model: Model {
                     wire: WireFeeder::new(terminal, mint_epoch()),
                     prompt_expected: integration_expected(&params.attempts[attempt_index]),
-                    signals: SignalObserver::new(&params.agent),
+                    signals: SignalObserver::new(&params.agent, &params.cwd),
                     queries: TerminalQueryStream::default(),
                     theme,
                     reported_scheme,
@@ -504,6 +504,7 @@ impl Session {
             next_block_id: model.wire.next_block_id(),
             program_status_reported: model.signals.program_status_reported(),
             shell: model.signals.shell_state(),
+            title: model.signals.title.clone(),
             running: lifecycle.running,
             state: lifecycle.state.clone(),
             state_detail: lifecycle.state_detail.clone(),
@@ -527,9 +528,10 @@ impl Session {
             &handoff.blocks,
             handoff.next_block_id,
         )?;
-        let mut signals = SignalObserver::new(&handoff.agent);
+        let mut signals = SignalObserver::new(&handoff.agent, &handoff.cwd);
         signals.restore_program_status(handoff.program_status_reported);
         signals.restore_shell_state(handoff.shell);
+        signals.title = handoff.title.clone();
         let SessionRuntime {
             cleanup,
             broadcast,
@@ -638,6 +640,7 @@ impl Session {
             "running": lifecycle.running,
             "agent": self.agent,
             "cwd": self.cwd,
+            "title": model.signals.title.title(),
             "cols": model.cols,
             "rows": model.rows,
             "worker_pid": std::process::id(),
@@ -712,11 +715,13 @@ impl Session {
 
     #[allow(clippy::needless_pass_by_value)]
     pub fn watch(&self, watcher_id: String, sender: SyncSender<Value>) -> Value {
+        let model = self.model.lock().expect("model mutex poisoned");
         self.watchers
             .lock()
             .expect("watchers mutex poisoned")
             .insert(watcher_id, sender.clone());
         let lifecycle = self.lifecycle.lock().expect("lifecycle mutex poisoned");
+        let _ = sender.try_send(self.title_event(&model.signals.title.title()));
         let _ = sender.try_send(state_event(
             &self.id,
             &lifecycle.state,
@@ -741,13 +746,17 @@ impl Session {
     }
 
     pub fn lifecycle_events(&self) -> Vec<Value> {
+        let model = self.model.lock().expect("model mutex poisoned");
         let lifecycle = self.lifecycle.lock().expect("lifecycle mutex poisoned");
-        let mut events = vec![state_event(
-            &self.id,
-            &lifecycle.state,
-            &lifecycle.state_detail,
-            lifecycle.replayed_source(),
-        )];
+        let mut events = vec![
+            self.title_event(&model.signals.title.title()),
+            state_event(
+                &self.id,
+                &lifecycle.state,
+                &lifecycle.state_detail,
+                lifecycle.replayed_source(),
+            ),
+        ];
         if !lifecycle.running {
             events.push(exit_event(
                 &self.id,
@@ -1087,7 +1096,7 @@ impl Session {
             .signal_order
             .lock()
             .expect("signal order mutex poisoned");
-        let (seq, wire, placements, resync, responses, observations) = {
+        let (seq, wire, placements, resync, responses, observations, titles) = {
             let mut model = self.model.lock().expect("model mutex poisoned");
             let (queries, complete_queries) = model.queries.scan(data);
             track_color_scheme_reports(&complete_queries, &mut model.color_scheme_reports);
@@ -1098,7 +1107,19 @@ impl Session {
             responses.extend(queries.replies_after_feed(model.wire.terminal(), &drained));
             let reports = model.wire.terminal_mut().drain_program_status();
             let mut observations = model.signals.observe_program_status(&reports);
-            observations.extend(model.signals.observe(data));
+            observations.extend(model.signals.observe(data, || {
+                self.foreground_group().map(|pgid| {
+                    let foreign = pgid != self.child_pid;
+                    (
+                        foreign,
+                        if foreign {
+                            crate::title::process_name(pgid)
+                        } else {
+                            String::new()
+                        },
+                    )
+                })
+            }));
             model.seq = model.seq.wrapping_add(1);
             (
                 model.seq,
@@ -1107,10 +1128,14 @@ impl Session {
                 feed.resync,
                 responses,
                 observations,
+                model.signals.take_title_changes(),
             )
         };
         for observation in observations {
             self.publish_state(observation.claim, &observation.detail, observation.source);
+        }
+        for title in titles {
+            self.publish_title(&title);
         }
         drop(signal_order);
         if !responses.is_empty() {
@@ -1184,6 +1209,16 @@ impl Session {
             .expect("model mutex poisoned")
             .wire
             .kitty_image(image_id)
+    }
+
+    fn title_event(&self, title: &str) -> Value {
+        json!({"type": "evt", "event": "title_changed", "session_id": self.id, "title": title})
+    }
+
+    fn publish_title(&self, title: &str) {
+        let event = self.title_event(title);
+        self.broadcast_watch(event.clone());
+        self.publish(event);
     }
 
     fn publish_state(&self, claim: &str, detail: &str, source: &'static str) {
@@ -1268,8 +1303,12 @@ impl Session {
         let master = self.master.lock().expect("master mutex poisoned");
         let file = master.as_ref()?;
         let mut pgid: libc::pid_t = 0;
-        (unsafe { libc::ioctl(file.as_raw_fd(), libc::TIOCGPGRP, &raw mut pgid) } == 0)
-            .then_some(pgid)
+        if unsafe { libc::ioctl(file.as_raw_fd(), libc::TIOCGPGRP, &raw mut pgid) } != 0
+            || pgid <= 0
+        {
+            return None;
+        }
+        Some(pgid)
     }
 
     pub(crate) fn poll_shell_foreground(&self) {
@@ -1280,14 +1319,32 @@ impl Session {
             .signal_order
             .lock()
             .expect("signal order mutex poisoned");
-        let observations = {
+        let (observations, title) = {
             let mut model = self.model.lock().expect("model mutex poisoned");
+            let before = model.signals.title.title();
+            let name = if foreground != self.child_pid && model.signals.title.needs_process_name() {
+                crate::title::process_name(foreground)
+            } else {
+                String::new()
+            };
+            model
+                .signals
+                .title
+                .poll(foreground != self.child_pid, &name);
+            let title = model.signals.title.title();
+            let title = (title != before).then_some(title);
             let cleared = model.signals.follow_foreground(self.child_pid, foreground);
             let heartbeat = model.signals.observe_shell_poll(self.child_pid, foreground);
-            cleared.into_iter().chain(heartbeat).collect::<Vec<_>>()
+            (
+                cleared.into_iter().chain(heartbeat).collect::<Vec<_>>(),
+                title,
+            )
         };
         for observation in observations {
             self.publish_state(observation.claim, &observation.detail, observation.source);
+        }
+        if let Some(title) = title {
+            self.publish_title(&title);
         }
     }
 }

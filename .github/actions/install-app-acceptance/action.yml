@@ -25,7 +25,7 @@ runs:
     - name: Install macOS shell dependencies
       if: runner.os == 'macOS'
       shell: bash
-      run: brew install fish
+      run: brew install fish neovim
 
     - name: Set up Go and Node.js
       uses: ./.github/actions/setup-toolchains

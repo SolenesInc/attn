@@ -45,6 +45,7 @@ import type {
   SessionTerminalDesktopProps,
 } from './desktopTypes';
 import { useSessionStore } from '../../store/sessions';
+import { sessionDisplayName } from '../../utils/sessionDisplayName';
 
 const RESIZE_MOUSE_SUPPRESSION_MS = 1_500;
 
@@ -133,6 +134,7 @@ export function useDesktopController(
   const [renamePane, setRenamePane] = useState<{
     sessionId: string;
     name: string;
+    defaultName?: string;
     anchor: { top: number; left: number };
   } | null>(null);
   const [pendingRatioOverrides, setPendingRatioOverrides] = useState<Map<string, number>>(
@@ -879,7 +881,8 @@ export function useDesktopController(
     }
     const agentPane = agentPaneById.get(effectivePaneId);
     if (agentPane) {
-      return sessionById.get(agentPane.sessionId)?.label || agentPane.title || 'Session';
+      const session = sessionById.get(agentPane.sessionId);
+      return session ? sessionDisplayName(session) : agentPane.title || 'Session';
     }
     const tile = tileLeafById.get(effectivePaneId);
     if (tile) {
@@ -903,7 +906,8 @@ export function useDesktopController(
     }
     const agentPane = agentPaneById.get(effectiveDraggingLeafId);
     if (agentPane) {
-      return sessionById.get(agentPane.sessionId)?.label || agentPane.title || 'Pane';
+      const session = sessionById.get(agentPane.sessionId);
+      return session ? sessionDisplayName(session) : agentPane.title || 'Pane';
     }
     const tile = tileLeafById.get(effectiveDraggingLeafId);
     if (tile) {
