@@ -59,7 +59,11 @@ func runCodex(cfg config) int {
 		}
 		return codexModelDiscovery()
 	}
-	if codexFlags.parse(os.Args[1:]).value("--remote") != "" {
+	if args := codexFlags.parse(os.Args[1:]); args.value("--remote") != "" {
+		if args.value("--add-dir") != "" {
+			fmt.Fprintln(os.Stderr, "Error: --add-dir is not supported with --remote. Configure additional workspace roots on the server.")
+			return 1
+		}
 		return serve(cfg, codexComposer, &codexRemote{cfg: cfg})
 	}
 	if len(os.Args) > 1 && os.Args[1] == "exec" {
