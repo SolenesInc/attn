@@ -8,7 +8,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { appDaemonInTree, appPlatform, createWindowDriver } from './platform.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
-import { getFrontWindowBounds, setFrontWindowBounds } from './nativeWindowCapture.mjs';
+import { captureFrontWindowScreenshot, getFrontWindowBounds, setFrontWindowBounds } from './nativeWindowCapture.mjs';
 
 process.env.ATTN_HARNESS_PARK_VISIBLE_PX = '0';
 
@@ -60,6 +60,7 @@ try {
       const bin = path.join(config, 'bin');
       fs.mkdirSync(bin, { recursive: true });
       fs.mkdirSync(path.join(config, 'fish'), { recursive: true });
+      fs.writeFileSync(path.join(config, '.zshenv'), 'unsetopt GLOBAL_RCS\n');
       fs.writeFileSync(path.join(config, '.zshrc'), "PS1='%~ %# '\n");
       fs.writeFileSync(path.join(config, 'fish/config.fish'), 'function fish_title; end\n');
       if (appPlatform.os === 'darwin') {
@@ -89,14 +90,14 @@ try {
       await driver.typeText(`cd '${destination}'`);
       await driver.pressEnter();
       await display(sessionId, await changed);
-      await client.request('capture_native_window_screenshot', { path: path.join(runner.runDir, `${shell}-prompt.png`) });
+      await captureFrontWindowScreenshot(path.join(runner.runDir, `${shell}-prompt.png`), { client, driver });
     });
     await runner.step(`${shell}_nvim`, async () => {
       const title = titleAfter(sessionId, (value) => value === 'title-proof.md - Nvim');
       await driver.typeText("nvim -u NONE -i NONE --cmd 'set title titlelen=0 titlestring=%t\\ -\\ Nvim' +'redraw' title-proof.md");
       await driver.pressEnter();
       await display(sessionId, await title);
-      await client.request('capture_native_window_screenshot', { path: path.join(runner.runDir, `${shell}-nvim.png`) });
+      await captureFrontWindowScreenshot(path.join(runner.runDir, `${shell}-nvim.png`), { client, driver });
       const prompt = titleAfter(sessionId, (value) => value === `${shell}-warehouse`);
       await driver.typeText(':qa!');
       await driver.pressEnter();
@@ -114,7 +115,7 @@ try {
         const text = await client.request('read_pane_text', { sessionId, paneId: pane.paneId });
         runner.writeJson(`${sessionId}-pane-text.json`, text);
       }
-      await client.request('capture_native_window_screenshot', { path: path.join(runner.runDir, 'failure.png') });
+      await captureFrontWindowScreenshot(path.join(runner.runDir, 'failure.png'), { client, driver });
     } catch {}
   }
   await runner.finishFailure(error);
