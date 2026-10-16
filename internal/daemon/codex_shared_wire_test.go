@@ -4,6 +4,7 @@ import (
 	"os"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -126,4 +127,26 @@ func TestASharedCodexLaunchThatCannotBePlacedLetsItsAppServerStop(t *testing.T) 
 		t.Fatalf("a shared Codex launch beside a tile that closed under it was placed")
 	}
 	w.CodexServer().AwaitStopped()
+}
+
+func TestASharedCodexCrewMemberWithAwarenessDirsWakes(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Codex)
+	app := w.App()
+	cli := w.Client()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	workDir, notes := w.Path("keel-work"), w.Path("keel-notes")
+	for _, dir := range []string{workDir, notes} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	setCrew(t, cli, "keel", protocol.CrewSetMessage{Cwd: protocol.Ptr(workDir), Agent: protocol.Ptr("codex"), AwarenessDirs: []string{notes}})
+	keel := string(wakeCrew(t, cli, "keel", "").SessionID)
+	codex := w.Launched(keel)
+	if !slices.Contains(codex.Argv, "--remote") {
+		t.Fatalf("keel ran %q, want Codex connected to an app-server", codex.Argv)
+	}
+	if got := codex.Prompted(); !strings.Contains(got, "You have been woken") {
+		t.Fatalf("keel's codex received %q, want its wake prompt", got)
+	}
 }

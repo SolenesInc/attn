@@ -77,7 +77,9 @@ func (c *Codex) BuildCommand(opts SpawnOpts) *exec.Cmd {
 	}
 
 	args = append(args, "-C", opts.CWD)
-	args = append(args, opts.addDirArgs()...)
+	if opts.CodexRemote == "" {
+		args = append(args, opts.addDirArgs()...)
+	}
 	if model := strings.TrimSpace(opts.Model); model != "" {
 		args = append(args, "--model", model)
 	}
