@@ -22,7 +22,7 @@ When the assignment calls for exercising the running product, use realistic, iso
 
 ## Return findings
 
-Prioritize actionable findings by severity. For each finding, explain the affected behavior, the conditions that expose it, and its consequence. Include a file location or reproducible steps and supporting evidence. Separate confirmed defects from unresolved questions and optional improvements.
+Prioritize actionable findings by severity. For each finding, explain the affected behavior, the conditions that expose it, and its consequence. Include a file location or reproducible steps and supporting evidence, and say whether the finding was observed in a run, inferred from the code, or suspected. Separate confirmed defects from unresolved questions and optional improvements.
 
 Summarize what you checked, the reviewed revision, coverage gaps, and your recommendation. If no actionable findings remain, say so and state any material limits on the review.
 
