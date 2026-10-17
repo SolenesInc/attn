@@ -2,7 +2,8 @@ import { act, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { openSession } from './test/appFixtures';
-import { DEFAULT_PROFILE_ID, daemonSession, soloDesktop, type DaemonSession } from './test/daemonFixtures';
+import { DEFAULT_PROFILE_ID, daemonSeed, daemonSession, seedDocument, soloDesktop, type DaemonSeed, type DaemonSession } from './test/daemonFixtures';
+import { seedHeading } from './test/garden';
 import type { EventMessage } from './test/protocol';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
@@ -39,14 +40,30 @@ const releaseDay: Ask = {
   parts: [{ question: { key: 'q1', kind: 'any', prompt: 'Which platforms?', choices: [{ label: 'macOS' }, { label: 'Linux' }] } }],
 };
 
+const migration = daemonSeed('s-cache1', { title: 'Cache store migration', tender_session: 'successor' });
+
+const landingWeek: Ask = {
+  id: 'a-landing',
+  session_id: 'delegate',
+  seed_id: migration.id,
+  seed_title: migration.title,
+  seed_slug: 'cache-migration',
+  subject: 'Landing week',
+  base_dir: '/tmp/delegate',
+  created_at: '2026-01-01T00:10:00Z',
+  parts: [{ question: { key: 'q1', kind: 'text', prompt: 'Which week should the migration land?', choices: [] } }],
+};
+
+const apiWorking = daemonSession('api', { state: 'working' });
 const webWaiting = daemonSession('web', { state: 'waiting_input', turn_owed: true, turn_opened_at: '2026-01-01T00:06:00Z' });
 
-async function renderAsks(asks: Ask[] = [cacheStore, releaseDay], web: DaemonSession = webWaiting) {
+async function renderAsks(asks: Ask[] = [cacheStore, releaseDay], sessions: DaemonSession[] = [apiWorking, webWaiting], seeds: DaemonSeed[] = []) {
   const view = await renderApp({
     initialState: {
-      sessions: [daemonSession('api', { state: 'working' }), web],
-      desktops: [soloDesktop('api'), soloDesktop('web')],
+      sessions,
+      desktops: sessions.map((session) => soloDesktop(session.id)),
       asks,
+      seeds,
     },
   });
   view.daemon.on('ask_answer', (command) => ({
@@ -82,7 +99,7 @@ describe('App asks', () => {
   });
 
   it('keeps the shown ask and focus when another agent starts waiting', async () => {
-    const daemon = await renderAsks([cacheStore, releaseDay], daemonSession('web', { state: 'working' }));
+    const daemon = await renderAsks([cacheStore, releaseDay], [apiWorking, daemonSession('web', { state: 'working' })]);
     const list = await openDrawer(daemon);
     expect(openAsk()).toBe('Cache store');
     const postgres = screen.getByRole('radio', { name: /Postgres/ });
@@ -178,6 +195,64 @@ describe('App asks', () => {
 
     expect(daemon.sentOf('desktop_show_session').map(({ session_id }) => session_id).slice(-1)).toEqual(['web']);
     expect(screen.queryByRole('list', { name: 'Open asks' })).toBeNull();
+  });
+
+  it('holds an ask about a seed on the agent whose stake it is and names the seed', async () => {
+    const daemon = await renderAsks([cacheStore, landingWeek], [apiWorking, daemonSession('successor', { seed_id: migration.id })]);
+
+    expect(screen.getByTestId('ask-marker-successor')).toBeInTheDocument();
+    await openDrawer(daemon);
+    expect(openAsk()).toBe('Cache store');
+    expect(screen.queryByRole('button', { name: 'Open in Garden' })).toBeNull();
+
+    await gesture(daemon, () => fireEvent.keyDown(document.activeElement ?? window, { key: 'j' }));
+    const ask = screen.getByTestId('ask-a-landing');
+    expect(within(ask).getByText('successor')).toBeInTheDocument();
+    expect(within(ask).getByText('cache-migration')).toBeInTheDocument();
+    expect(within(ask).getByText('Cache store migration')).toBeInTheDocument();
+    await gesture(daemon, () => fireEvent.click(within(ask).getByRole('button', { name: 'Open agent' })));
+
+    expect(daemon.sentOf('desktop_show_session').map(({ session_id }) => session_id).slice(-1)).toEqual(['successor']);
+  });
+
+  it('holds an ask about a seed on whoever the garden says tends it', async () => {
+    const daemon = await renderAsks([landingWeek], [daemonSession('delegate', { seed_id: migration.id }), daemonSession('successor')], [migration]);
+
+    expect(screen.getByTestId('ask-marker-successor')).toBeInTheDocument();
+    expect(screen.queryByTestId('ask-marker-delegate')).toBeNull();
+    await openDrawer(daemon);
+    expect(within(screen.getByTestId('ask-a-landing')).getByText('successor')).toBeInTheDocument();
+  });
+
+  it('waits for the next tender when no live agent tends the seed', async () => {
+    const daemon = await renderAsks([landingWeek], [apiWorking], [{ ...migration, tender_session: 'delegate' }]);
+
+    expect(screen.queryByTestId('ask-marker-api')).toBeNull();
+    await openDrawer(daemon);
+    const ask = screen.getByTestId('ask-a-landing');
+    expect(within(ask).getByText('waiting for the next tender of Cache store migration')).toBeInTheDocument();
+    expect(within(ask).queryByRole('button', { name: 'Open agent' })).toBeNull();
+    expect(within(ask).getByRole('textbox', { name: 'Note' })).toHaveAttribute('placeholder', 'Anything else for its next tender?');
+  });
+
+  it('opens the seed in the Garden beside the drawer', async () => {
+    const daemon = await renderAsks([landingWeek], [daemonSession('successor')], [migration]);
+    daemon.on('seed_document_get', () => ({ event: 'seed_document_get_result', success: true, document: seedDocument(migration) }));
+    await openDrawer(daemon);
+
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Open in Garden' })));
+    expect(seedHeading()).toBe('Cache store migration');
+    expect(daemon.sentOf('seed_document_get').map(({ seed_id }) => seed_id)).toContain(migration.id);
+    expect(openAsk()).toBe('Landing week');
+
+    await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
+    await act(() => vi.advanceTimersToNextFrame());
+    expect(screen.queryByRole('region', { name: 'The garden' })).toBeNull();
+    expect(openAsk()).toBe('Landing week');
+    expect(screen.getByRole('region', { name: 'Asks' })).toHaveFocus();
+
+    await gesture(daemon, () => fireEvent.keyDown(document.activeElement ?? window, { key: 'g' }));
+    expect(seedHeading()).toBe('Cache store migration');
   });
 
   it('lists asks on the home screen and opens the one picked', async () => {

@@ -4,6 +4,7 @@ import { useDaemonApi } from '../../contexts/DaemonApiContext';
 import { TURN_AGE_TICK_MS, useNow } from '../../hooks/useNow';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
 import { EMPTY_ASK_DRAFT, useAsksStore } from '../../store/asks';
+import { useDaemonStore } from '../../store/daemonSessions';
 import type { UISessionState } from '../../types/sessionState';
 import { askFrom, askHolder, askQuestions, draftAnswers, draftSendable, orderAsks, type AskHolderSession } from '../../utils/asks';
 import { formatTurnAge } from '../../utils/queueBands';
@@ -22,7 +23,9 @@ export interface AskDrawerSession extends AskHolderSession {
 
 interface AsksDrawerProps {
   sessions: readonly AskDrawerSession[];
+  onTop: boolean;
   onOpenAgent: (sessionId: string) => void;
+  onOpenSeed: (seedId: string) => void;
   onClose: () => void;
 }
 
@@ -33,18 +36,20 @@ function isTyping(target: EventTarget): boolean {
   return target instanceof HTMLElement && (target.isContentEditable || ['TEXTAREA', 'SELECT'].includes(target.tagName));
 }
 
-export function AsksDrawer({ sessions, onOpenAgent, onClose }: AsksDrawerProps) {
+export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }: AsksDrawerProps) {
   const asks = useAsksStore((state) => state.asks);
+  const seeds = useDaemonStore((state) => state.seeds);
   const drafts = useAsksStore((state) => state.drafts);
   const selectedAskId = useAsksStore((state) => state.selectedAskId);
   const { selectAsk, setDraft } = useAsksStore.getState();
   const { sendAskAnswer } = useDaemonApi();
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const ordered = useMemo(() => orderAsks(asks, sessions), [asks, sessions]);
+  const ordered = useMemo(() => orderAsks(asks, sessions, seeds), [asks, sessions, seeds]);
   const index = Math.max(0, ordered.findIndex((ask) => ask.id === selectedAskId));
   const ask = ordered[index];
   const askId = ask?.id;
+  const drawerRef = useRef<HTMLDivElement>(null);
   const askRef = useRef<HTMLElement>(null);
   const listRef = useRef<HTMLOListElement>(null);
   const now = useNow(TURN_AGE_TICK_MS);
@@ -52,6 +57,14 @@ export function AsksDrawer({ sessions, onOpenAgent, onClose }: AsksDrawerProps) 
   const source = useMemo(() => fileMarkdownSource(sourcePath), [sourcePath]);
 
   useEffect(() => () => selectAsk(null), [selectAsk]);
+  useEffect(() => {
+    if (!onTop) return;
+    const frame = window.requestAnimationFrame(() => {
+      const focused = document.activeElement;
+      if (focused === document.body || (focused instanceof HTMLElement && focused.closest('[inert]'))) drawerRef.current?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [onTop]);
   useEffect(() => {
     if (!askId) return;
     selectAsk(askId);
@@ -83,8 +96,9 @@ export function AsksDrawer({ sessions, onOpenAgent, onClose }: AsksDrawerProps) 
     );
   }
 
-  const holder = askHolder(ask, sessions);
+  const holder = askHolder(ask, sessions, seeds);
   const from = askFrom(ask, holder);
+  const seedId = ask.seed_id;
   const questions = askQuestions(ask);
   const draft = drafts[ask.id] ?? EMPTY_ASK_DRAFT;
   const sendable = draftSendable(ask, draft) && !sending;
@@ -113,16 +127,17 @@ export function AsksDrawer({ sessions, onOpenAgent, onClose }: AsksDrawerProps) 
     if (event.key === 'j') step(1);
     else if (event.key === 'k') step(-1);
     else if (event.key === 'o' && holder) onOpenAgent(holder.id);
+    else if (event.key === 'g' && seedId) onOpenSeed(seedId);
     else return;
     event.preventDefault();
   };
 
   return (
-    <div className="asks-drawer" role="region" aria-label="Asks" tabIndex={-1} onKeyDown={onKeyDown}>
+    <div ref={drawerRef} className="asks-drawer" role="region" aria-label="Asks" tabIndex={-1} onKeyDown={onKeyDown}>
       <AsksHeader count={ordered.length} onClose={onClose} />
       <ol ref={listRef} className="asks-list" aria-label="Open asks">
         {ordered.map((item) => {
-          const itemHolder = askHolder(item, sessions);
+          const itemHolder = askHolder(item, sessions, seeds);
           const questionCount = askQuestions(item).length;
           const selected = item.id === ask.id;
           return (
@@ -149,11 +164,20 @@ export function AsksDrawer({ sessions, onOpenAgent, onClose }: AsksDrawerProps) 
           {holder && <SessionLead agent={holder.agent} state={holder.state} reason={holder.state_reason} seed={holder.id} />}
           <span className="asks-ask-agent">{from}</span>
           {holder && (
-            <button type="button" className="asks-open-agent" onClick={() => onOpenAgent(holder.id)} title={`Open ${from} (o)`}>
+            <button type="button" className="asks-ask-open" onClick={() => onOpenAgent(holder.id)} title={`Open ${from} (o)`}>
               Open agent
             </button>
           )}
         </div>
+        {seedId && (
+          <div className="asks-ask-seed">
+            <span className="asks-ask-seed-slug">{ask.seed_slug ?? seedId}</span>
+            <span className="asks-ask-seed-title">{ask.seed_title}</span>
+            <button type="button" className="asks-ask-open" onClick={() => onOpenSeed(seedId)} title={`Open ${ask.seed_title} in the Garden (g)`}>
+              Open in Garden
+            </button>
+          </div>
+        )}
         <h2 className="asks-ask-subject">{ask.subject}</h2>
         {ask.parts.map((part, partIndex) => (
           part.question ? (
@@ -177,7 +201,7 @@ export function AsksDrawer({ sessions, onOpenAgent, onClose }: AsksDrawerProps) 
           aria-label="Note"
           rows={3}
           value={draft.note}
-          placeholder={`Anything else for ${from}?`}
+          placeholder={holder || !seedId ? `Anything else for ${from}?` : 'Anything else for its next tender?'}
           onChange={(event) => setDraft(ask.id, { ...draft, note: event.target.value })}
         />
         {error && <div className="asks-error" role="alert">{error}</div>}
@@ -186,6 +210,7 @@ export function AsksDrawer({ sessions, onOpenAgent, onClose }: AsksDrawerProps) 
         <span className="asks-hints">
           {ordered.length > 1 && <span className="asks-hint"><kbd>j</kbd><kbd>k</kbd> next · previous</span>}
           {holder && <span className="asks-hint"><kbd>o</kbd> open agent</span>}
+          {seedId && <span className="asks-hint"><kbd>g</kbd> open in Garden</span>}
           <span className="asks-hint"><kbd>esc</kbd> close</span>
         </span>
         <button type="button" className="asks-send" disabled={!sendable} aria-busy={sending || undefined} onClick={() => void send()}>

@@ -5,6 +5,7 @@ import { AutomationsPanel } from '../components/AutomationsPanel';
 import { RightDock } from '../components/RightDock';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import {
+  useAppGardenActionsContext,
   useAppInputs,
   useAppPanelsContext,
   useAppSessionsContext,
@@ -44,6 +45,7 @@ export function AppDock() {
   const { waitingLocalSessions } = useAttentionQueueContext();
   const { prs } = useAppInputs();
   const { handleSelectSession } = useNavigationContext();
+  const { handleRevealSeedInGarden } = useAppGardenActionsContext();
   const { profileSessions } = useAppSessionsContext();
   const {
     listAutomationDefinitions,
@@ -93,11 +95,13 @@ export function AppDock() {
             children: dockPanelStack.includes('asks') && (
               <AsksDrawer
                 sessions={profileSessions}
+                onTop={topPanel === 'asks' && !gardenHoldsWindow}
                 onClose={() => closeDockPanel('asks')}
                 onOpenAgent={(sessionId) => {
                   closeDockPanel('asks');
                   handleSelectSession(sessionId);
                 }}
+                onOpenSeed={handleRevealSeedInGarden}
               />
             ),
           },

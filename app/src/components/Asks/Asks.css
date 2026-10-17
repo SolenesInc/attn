@@ -189,7 +189,31 @@
   color: var(--color-text-primary);
 }
 
-.asks-open-agent {
+.asks-ask-seed {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.asks-ask-seed-slug {
+  flex-shrink: 0;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+}
+
+.asks-ask-seed-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asks-ask-open {
+  flex-shrink: 0;
   margin-left: auto;
   background: var(--color-bg-button);
   border: 1px solid var(--color-border);
@@ -201,7 +225,7 @@
   cursor: pointer;
 }
 
-.asks-open-agent:hover {
+.asks-ask-open:hover {
   color: var(--color-text-primary);
   border-color: var(--color-border-hover);
 }
