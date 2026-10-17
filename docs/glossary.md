@@ -46,8 +46,10 @@ agent                   a harness that runs in a terminal; the user talks to
 session                 attn's record of one conversation; like one chat in a
                         chat app's history
 ├─ conversation (1)     the harness's chat history
-└─ worktree (at most 1) the git worktree the agent works in; several
-                        sessions can share one
+├─ worktree (at most 1) the git worktree the agent works in; several
+│                       sessions can share one
+└─ stake (at most 1)    the seed assigned to the session by its delegation;
+                        it tends it and reports there; like an assignment
 ```
 
 ```text
@@ -68,11 +70,20 @@ forget                  deletes attn's copy of a conversation
 address                 who an item is for: a session or a mailbox
 ├─ mailbox              crew member, chief or seed tender; like a shared
 │                       mailbox (support@) that whoever holds the job reads
-└─ inbox (1)
-   └─ item (0..n)       peer message, seed update, user message,
-                        PR watch update or notice
+├─ inbox (1)
+│  └─ item (0..n)       peer message, seed update, user message,
+│                       PR watch update or notice
+└─ ask* (0..n)          a question an agent sends the user, who answers in
+                        their own time; like a decision request
+   ├─ seed (at most 1)  the work the ask is about; the ask is addressed to
+   │                    the seed's tender
+   ├─ question (0..n)   pick one, pick any, or write an answer
+   └─ answer (at most 1) the user's reply: a note on the seed, or a user
+                        message in the inbox when there is no seed
 ring                    one prompt that tells an agent that they have unread
                         items; like a push notification
+
+* experimental
 ```
 
 ```text
@@ -86,13 +97,6 @@ queue                     agents in order of the attention they are owed
 └─ turn (at most 1 per agent)  attention that an agent is owed
 snooze                    puts off a turn until a set time
 unsnooze                  ends a snooze early
-ask* (0..n per agent)     a message in which an agent asks the user what
-                          they cannot settle alone; like a form in an email
-├─ question (0..n)        pick one, pick any, or write an answer
-└─ answer (at most 1)     the user's reply; a user message in the agent's
-                          inbox
-
-* experimental
 ```
 
 ```text
@@ -216,6 +220,7 @@ Temporary debt. Read the old name as the new term. Never write the old name.
 - waiting_input → waiting
 - pending_approval → needs approval
 - reopen → resume
+- reporting seed → stake
 
 ### Changes to make
 
