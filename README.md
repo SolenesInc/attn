@@ -304,7 +304,7 @@ resume, and exit codes.
 
 ### Asks (experimental)
 
-Turn on **Settings → Attention queue → Asks** to let agents ask you what they
+Turn on **Settings → Experimental → Asks** to let agents ask you what they
 cannot settle alone without stopping to wait for you in their terminal. An agent
 pipes markdown to `attn ask`: prose, mermaid diagrams and screenshots, with
 question blocks for one choice (`:::question`), any number (`:::question-multi`)

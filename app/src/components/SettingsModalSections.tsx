@@ -6,6 +6,7 @@ import { ModelTier } from '../types/generated';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import { agentCapabilityLabel, agentLabel, isAgentAvailable } from '../utils/agentAvailability';
 import { AUTO_SETTLE_ARM_SETTING, AUTO_SETTLE_COUNTDOWN_SETTING } from '../utils/queueBands';
+import { ASKS_SETTING } from '../utils/asks';
 import { BackgroundTasksSettings } from './BackgroundTasksSettings';
 import { DelegationSwitch } from './DelegationSettings';
 import { EventBusSettings } from './EventBusSettings';
@@ -727,8 +728,9 @@ export function ExperimentalSettings({
   codexSharedEnabled,
   queueShowHiddenSessions,
   directAgentLaunchEnabled,
+  asksEnabled,
   onSetSetting,
-}: Pick<SettingsModalState, 'newSessionLauncherEnabled' | 'codexSharedEnabled' | 'queueShowHiddenSessions' | 'directAgentLaunchEnabled' | 'onSetSetting'>) {
+}: Pick<SettingsModalState, 'newSessionLauncherEnabled' | 'codexSharedEnabled' | 'queueShowHiddenSessions' | 'directAgentLaunchEnabled' | 'asksEnabled' | 'onSetSetting'>) {
   return (
     <section className="settings-block">
       <div className="settings-block-intro">
@@ -809,6 +811,30 @@ export function ExperimentalSettings({
             onClick={() => onSetSetting('queue_show_hidden_sessions', queueShowHiddenSessions ? 'false' : 'true')}
           >
             {queueShowHiddenSessions ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+        <div className="settings-row-card">
+          <div>
+            <p className="settings-row-title">Asks (experimental)</p>
+            <p className="settings-row-copy" id="settings-asks-description">
+              Off by default. Agents ask you what they cannot settle alone, and you answer them all from one drawer
+              without opening their terminals. Applies to agents launched from now on; each agent keeps the setting it
+              launched with, reloads included. Your answer becomes a note on the seed the ask is about, or lands in the
+              agent's inbox when there is no seed, and settles its turn. Open the drawer with{' '}
+              {formatShortcut('dock.asks')}.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-label="Asks (experimental)"
+            aria-checked={asksEnabled}
+            aria-describedby="settings-asks-description"
+            className="settings-action"
+            data-testid="settings-asks-toggle"
+            onClick={() => onSetSetting(ASKS_SETTING, asksEnabled ? 'false' : 'true')}
+          >
+            {asksEnabled ? 'Disable' : 'Enable'}
           </button>
         </div>
       </div>
@@ -1246,8 +1272,6 @@ export function DataSettings({
 export function HygieneSettings({
   handleToggleAutoSettle,
   autoSettleEnabled,
-  handleToggleAsks,
-  asksEnabled,
   autoSettleArmDraft,
   savedFlash,
   autoSettleCountdownDraft,
@@ -1259,8 +1283,6 @@ export function HygieneSettings({
   SettingsModalState,
   | 'handleToggleAutoSettle'
   | 'autoSettleEnabled'
-  | 'handleToggleAsks'
-  | 'asksEnabled'
   | 'autoSettleArmDraft'
   | 'savedFlash'
   | 'autoSettleCountdownDraft'
@@ -1271,41 +1293,6 @@ export function HygieneSettings({
 >) {
   return (
     <>
-      <section className="settings-block">
-        <div className="settings-block-intro">
-          <div className="settings-kicker">Agents</div>
-          <h3>Asks (experimental)</h3>
-          <p className="settings-description">
-            Agents ask you what they cannot settle alone. You answer them all from one drawer, without opening their
-            terminals. Off by default.
-          </p>
-        </div>
-        <div className="settings-block-body">
-          <div className="settings-row-card">
-            <div>
-              <p className="settings-row-title">Let agents ask you through attn</p>
-              <p className="settings-row-copy" id="settings-asks-description">
-                Applies to agents launched from now on; each agent keeps the setting it launched with, reloads
-                included. Your answer becomes a note on the seed the ask is about, or lands in the agent's inbox when
-                there is no seed, and settles its turn. Open the drawer with{' '}
-                {formatShortcut('dock.asks')}.
-              </p>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-label="Asks (experimental)"
-              aria-checked={asksEnabled}
-              aria-describedby="settings-asks-description"
-              className="settings-action"
-              data-testid="settings-asks-toggle"
-              onClick={handleToggleAsks}
-            >
-              {asksEnabled ? 'Disable' : 'Enable'}
-            </button>
-          </div>
-        </div>
-      </section>
       <section className="settings-block">
         <div className="settings-block-intro">
           <div className="settings-kicker">Sidebar</div>

@@ -94,7 +94,7 @@ test.describe('Asks', () => {
       await page.keyboard.press('Meta+,');
       await page
         .getByRole('navigation', { name: 'Settings sections' })
-        .getByRole('button', { name: /^Attention queue/ })
+        .getByRole('button', { name: /^Experimental/ })
         .click();
       const asksSwitch = page.getByRole('switch', { name: 'Asks (experimental)' });
       await pause(page, 600);

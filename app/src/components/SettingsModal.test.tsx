@@ -578,8 +578,10 @@ describe('SettingsModal sent files', () => {
 });
 
 describe('SettingsModal asks', () => {
-  it('reads as off by default and turns asks on', async () => {
-    const daemon = await openSection('hygiene');
+  it('finds asks on the Experimental page, off by default, and turns them on', async () => {
+    const { daemon } = await renderSettings();
+    fireEvent.change(screen.getByLabelText('Search settings'), { target: { value: 'asks' } });
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-experimental')));
     const toggle = screen.getByRole('switch', { name: 'Asks (experimental)' });
 
     expect(toggle).toHaveAttribute('aria-checked', 'false');

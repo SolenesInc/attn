@@ -1,5 +1,5 @@
 import { open } from '@tauri-apps/plugin-dialog';
-import { ASKS_SETTING, isAsksEnabled } from '../utils/asks';
+import { isAsksEnabled } from '../utils/asks';
 import { useCallback, useEffect, useImperativeHandle, useMemo, useState, type ForwardedRef } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useGitHubPollingOffReason } from '../contexts/GitHubPollingContext';
@@ -429,10 +429,6 @@ export function useSettingsModalState({
     onSetSetting(AUTO_SETTLE_ENABLED_SETTING, autoSettleEnabled ? 'false' : 'true');
   }, [onSetSetting, autoSettleEnabled]);
 
-  const handleToggleAsks = useCallback(() => {
-    onSetSetting(ASKS_SETTING, asksEnabled ? 'false' : 'true');
-  }, [onSetSetting, asksEnabled]);
-
   const openSentFilesEnabled = (settings[OPEN_SENT_FILES_ENABLED_SETTING] || 'true') === 'true';
   const handleToggleOpenSentFiles = useCallback(() => {
     onSetSetting(OPEN_SENT_FILES_ENABLED_SETTING, openSentFilesEnabled ? 'false' : 'true');
@@ -583,9 +579,9 @@ export function useSettingsModalState({
             label: 'Attention queue',
             title: 'Attention queue',
             description: 'When a turn settles itself, and which repositories and authors never reach the queue at all.',
-            count: mutedItemCount + 2,
+            count: mutedItemCount + 1,
             keywords:
-              'muted repositories repos authors hide unmute hygiene auto-settle settle turn countdown sidebar attention queue asks questions answer experimental',
+              'muted repositories repos authors hide unmute hygiene auto-settle settle turn countdown sidebar attention queue',
           },
         ],
       },
@@ -674,8 +670,8 @@ export function useSettingsModalState({
             label: 'Experimental',
             title: 'Experimental',
             description: 'Opt in to features that are still being developed.',
-            count: 4,
-            keywords: 'experimental codex shared hidden sessions queue direct agent launch launcher memory claude copilot one-screen new-session one screen new session project path',
+            count: 5,
+            keywords: 'experimental codex shared hidden sessions queue direct agent launch launcher memory claude copilot one-screen new-session one screen new session project path asks questions answer decisions drawer',
           },
           {
             id: 'backgroundTasks',
@@ -827,7 +823,6 @@ export function useSettingsModalState({
     modelCaptureMaxGB,
     modelCapturePath,
     handleToggleAutoSettle,
-    handleToggleAsks,
     autoSettleArmDraft,
     autoSettleCountdownDraft,
     onUnmuteRepo,
