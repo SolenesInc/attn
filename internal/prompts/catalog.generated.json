@@ -217,7 +217,7 @@
                     "field": {
                       "name": "has_crown",
                       "kind": "flag",
-                      "description": "This session reports to a seed."
+                      "description": "This session has a stake."
                     },
                     "test": "enabled"
                   },
@@ -228,7 +228,7 @@
                         "field": {
                           "name": "is_plot",
                           "kind": "flag",
-                          "description": "The reporting seed is a plot."
+                          "description": "The stake is a plot."
                         },
                         "test": "enabled"
                       },
@@ -256,7 +256,7 @@
                                     "field": {
                                       "name": "seed_id",
                                       "kind": "text",
-                                      "description": "Reporting seed, if one is bound to the session."
+                                      "description": "The session's stake, if it has one."
                                     }
                                   }
                                 },
@@ -267,7 +267,7 @@
                                     "field": {
                                       "name": "title",
                                       "kind": "text",
-                                      "description": "Quoted reporting seed title."
+                                      "description": "Quoted stake title."
                                     }
                                   }
                                 },
@@ -297,7 +297,7 @@
                                     "field": {
                                       "name": "seed_id",
                                       "kind": "text",
-                                      "description": "Reporting seed, if one is bound to the session."
+                                      "description": "The session's stake, if it has one."
                                     }
                                   }
                                 }
@@ -317,7 +317,7 @@
                                 "field": {
                                   "name": "seed_id",
                                   "kind": "text",
-                                  "description": "Reporting seed, if one is bound to the session."
+                                  "description": "The session's stake, if it has one."
                                 }
                               }
                             },
@@ -328,7 +328,7 @@
                                 "field": {
                                   "name": "title",
                                   "kind": "text",
-                                  "description": "Quoted reporting seed title."
+                                  "description": "Quoted stake title."
                                 }
                               }
                             }
@@ -412,7 +412,7 @@
                   "field": {
                     "name": "seed_id",
                     "kind": "text",
-                    "description": "Reporting seed, if one is bound to the session."
+                    "description": "The session's stake, if it has one."
                   }
                 }
               },
@@ -633,7 +633,7 @@
                   "field": {
                     "name": "seed_id",
                     "kind": "text",
-                    "description": "Reporting seed, if one is bound to the session."
+                    "description": "The session's stake, if it has one."
                   }
                 }
               },
@@ -1291,7 +1291,7 @@
                   "field": {
                     "name": "seed_id",
                     "kind": "text",
-                    "description": "Reporting seed, if one is bound to the session."
+                    "description": "The session's stake, if it has one."
                   }
                 }
               }
@@ -1361,7 +1361,7 @@
                             "field": {
                               "name": "seed_id",
                               "kind": "text",
-                              "description": "Reporting seed, if one is bound to the session."
+                              "description": "The session's stake, if it has one."
                             }
                           }
                         },
@@ -1372,7 +1372,7 @@
                             "field": {
                               "name": "seed_title",
                               "kind": "text",
-                              "description": "Title of the reporting seed."
+                              "description": "Title of the session's stake."
                             }
                           }
                         }
@@ -1400,7 +1400,7 @@
                   "field": {
                     "name": "seed_id",
                     "kind": "text",
-                    "description": "Reporting seed, if one is bound to the session."
+                    "description": "The session's stake, if it has one."
                   }
                 }
               },
@@ -1411,7 +1411,7 @@
                   "field": {
                     "name": "seed_title",
                     "kind": "text",
-                    "description": "Title of the reporting seed."
+                    "description": "Title of the session's stake."
                   }
                 }
               }
@@ -1452,7 +1452,7 @@
                             "field": {
                               "name": "seed_id",
                               "kind": "text",
-                              "description": "Reporting seed, if one is bound to the session."
+                              "description": "The session's stake, if it has one."
                             }
                           }
                         },
@@ -1463,7 +1463,7 @@
                             "field": {
                               "name": "seed_title",
                               "kind": "text",
-                              "description": "Title of the reporting seed."
+                              "description": "Title of the session's stake."
                             }
                           }
                         }
@@ -1491,7 +1491,7 @@
                   "field": {
                     "name": "seed_id",
                     "kind": "text",
-                    "description": "Reporting seed, if one is bound to the session."
+                    "description": "The session's stake, if it has one."
                   }
                 }
               },
@@ -1502,7 +1502,7 @@
                   "field": {
                     "name": "seed_title",
                     "kind": "text",
-                    "description": "Title of the reporting seed."
+                    "description": "Title of the session's stake."
                   }
                 }
               }
@@ -1554,7 +1554,7 @@
         {
           "id": "opening",
           "delivery": "opening_message",
-          "description": "Configured task, local-review restriction, reporting seed and occurrence input.",
+          "description": "Configured task, local-review restriction, stake and occurrence input.",
           "body": {
             "kind": "text",
             "id": "delegation.opening",
@@ -1621,7 +1621,7 @@
                                 "field": {
                                   "name": "seed_id",
                                   "kind": "text",
-                                  "description": "Reporting seed, if one is bound to the session."
+                                  "description": "The session's stake, if it has one."
                                 },
                                 "test": "present"
                               },
@@ -1638,7 +1638,7 @@
                                         "field": {
                                           "name": "seed_id",
                                           "kind": "text",
-                                          "description": "Reporting seed, if one is bound to the session."
+                                          "description": "The session's stake, if it has one."
                                         }
                                       }
                                     },
@@ -1649,7 +1649,7 @@
                                         "field": {
                                           "name": "seed_title",
                                           "kind": "text",
-                                          "description": "Title of the reporting seed."
+                                          "description": "Title of the session's stake."
                                         }
                                       }
                                     }
@@ -4204,7 +4204,7 @@
                             "field": {
                               "name": "seed_id",
                               "kind": "text",
-                              "description": "Reporting seed, if one is bound to the session."
+                              "description": "The session's stake, if it has one."
                             }
                           }
                         },
@@ -4879,5 +4879,5 @@
       ]
     }
   ],
-  "definitions_hash": "e2d7a497607e7eaaf80a0634faef4a49d8984cb903d0f1d53dd4cbaa596e9064"
+  "definitions_hash": "489454ad4c42feb389f344bf6db09e7e454c6617ba457a06dd3748d4d0baeabd"
 }
