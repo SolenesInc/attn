@@ -72,6 +72,7 @@ export interface QueueRow<TSession extends QueueBandSession> {
   session: TSession;
   workspaceId: string;
   workspaceTitle: string;
+  paneId?: string;
 }
 
 /** How long a turn has been outstanding, in the coarsest unit that still reads as an
@@ -97,7 +98,7 @@ export function compareTurnOrder(a: QueueBandSession, b: QueueBandSession): numb
   if (openedA !== openedB) {
     return openedA < openedB ? -1 : 1;
   }
-  return a.id < b.id ? -1 : 1;
+  return a.id === b.id ? 0 : a.id < b.id ? -1 : 1;
 }
 
 /** The jump-to-waiting (⌘J) target, in queue order rather than list order. `wants` is
@@ -117,8 +118,8 @@ export function oldestWantedTurn<TSession extends QueueBandSession>(
 }
 
 export interface QueueBands<TSession extends QueueBandSession> {
-  /** The chief's anchored slot. It never queues, so it is always its own row. */
-  chief: QueueRow<TSession> | null;
+  /** The chief's terminal views stay anchored above the queue. */
+  chiefs: QueueRow<TSession>[];
   turns: QueueRow<TSession>[];
   settled: QueueRow<TSession>[];
   /** Sessions pinned out of the queue, in pin order — not state order, so a row never
@@ -139,27 +140,26 @@ export function buildQueueBands<TSession extends QueueBandSession>(
 ): QueueBands<TSession> {
   const options = typeof optionsOrNow === 'number' ? { now: optionsOrNow } : optionsOrNow;
   const now = options.now ?? Date.now();
-  let chief: QueueRow<TSession> | null = null;
+  const chiefs: QueueRow<TSession>[] = [];
   const turns: QueueRow<TSession>[] = [];
   const settled: QueueRow<TSession>[] = [];
   const pinned: QueueRow<TSession>[] = [];
   const snoozed: QueueRow<TSession>[] = [];
   const crew: QueueRow<TSession>[] = [];
-  const workspaceBySessionId = queueWorkspaceIds(workspaces);
 
   for (const workspace of workspaces) {
     const presentSessionIds = new Set(workspace.sessions.map(session => session.id));
-    for (const session of workspace.sessions) {
-      if (workspaceBySessionId.get(session.id) !== workspace.id) continue;
+    for (const child of workspace.children) {
+      if (child.kind !== 'session') continue;
+      const { session, paneId } = child;
       const row: QueueRow<TSession> = {
         session,
+        paneId,
         workspaceId: workspace.id,
         workspaceTitle: workspace.title,
       };
       if (session.chiefOfStaff) {
-        if (!chief) {
-          chief = row;
-        }
+        chiefs.push(row);
         continue;
       }
       if (session.automation) {
@@ -198,20 +198,7 @@ export function buildQueueBands<TSession extends QueueBandSession>(
   snoozed.sort((a, b) => compareWakeOrder(a.session, b.session));
   crew.sort((a, b) => compareCrewOrder(a.session, b.session));
 
-  return { chief, turns, settled, pinned, snoozed, crew };
-}
-
-/** Queue rows represent owners. Prefer the saved workspace when it is in this list. */
-function queueWorkspaceIds(workspaces: WorkspaceWithSessions<QueueBandSession>[]): Map<string, string> {
-  const byId = new Map<string, string>();
-  for (const workspace of workspaces) {
-    for (const session of workspace.sessions) {
-      if (!byId.has(session.id) || workspace.id === (session.workspaceId || session.workspace_id)) {
-        byId.set(session.id, workspace.id);
-      }
-    }
-  }
-  return byId;
+  return { chiefs, turns, settled, pinned, snoozed, crew };
 }
 
 /** Member order: by name, so a member's row is where it was yesterday. */
@@ -242,7 +229,7 @@ export function compareWakeOrder(a: QueueBandSession, b: QueueBandSession): numb
   if (untilA !== untilB) {
     return untilA < untilB ? -1 : 1;
   }
-  return a.id < b.id ? -1 : 1;
+  return a.id === b.id ? 0 : a.id < b.id ? -1 : 1;
 }
 
 /** The row after `settledSessionId` in queue order, wrapping, that is still owed.

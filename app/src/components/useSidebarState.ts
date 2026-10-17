@@ -17,6 +17,7 @@ export function useSidebarState({
   visualOrder,
   visualIndexByWorkspaceId,
   selectedId,
+  selectedPaneId,
   selectedWorkspaceId,
   selectedTile = null,
   tileContents = EMPTY_TILE_CONTENTS,
@@ -102,6 +103,7 @@ export function useSidebarState({
     id: string;
     label: string;
     chiefOfStaff: boolean;
+    paneId?: string;
     crewMember?: string;
     trigger: HTMLElement;
     anchor: { top: number; left: number };
@@ -125,11 +127,13 @@ export function useSidebarState({
   const openSessionActions = (
     session: { id: string; label: string; chiefOfStaff?: boolean; crewMember?: string },
     event: ReactMouseEvent,
+    paneId?: string,
   ) => {
     event.stopPropagation();
     const rect = event.currentTarget.getBoundingClientRect();
     setSessionActionsTarget({
       id: session.id,
+      paneId,
       label: session.label,
       chiefOfStaff: Boolean(session.chiefOfStaff),
       crewMember: session.crewMember,
@@ -267,6 +271,7 @@ export function useSidebarState({
 
   return {
     selectedId,
+    selectedPaneId,
     selectedWorkspaceId,
     selectedTile,
     tileContents,

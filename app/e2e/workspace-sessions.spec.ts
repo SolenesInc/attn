@@ -182,6 +182,7 @@ test.describe('Workspace Sessions', () => {
     ]);
     const first = page.getByTestId('sidebar-session-keyboard-one');
     const second = page.getByTestId('sidebar-session-keyboard-two');
+    await expect(first.getByRole('img', { name: 'Shell' })).toBeVisible();
     const icon = await first.getByRole('img', { name: 'Shell' }).boundingBox();
     expect(icon).not.toBeNull();
     await page.mouse.click(icon!.x + icon!.width / 2, icon!.y + icon!.height / 2);

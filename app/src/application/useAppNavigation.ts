@@ -7,7 +7,7 @@ import type { useSessionWorkspaceController } from '../hooks/useSessionWorkspace
 import { useSessionStore, type TerminalWorkspaceState } from '../store/sessions';
 import { hasLeaf, workspaceSnapshotFromDaemonWorkspace } from '../types/workspace';
 import { dispatcherOf } from '../utils/delegationLinks';
-import { oldestWantedTurn } from '../utils/queueBands';
+import { headOfQueue, oldestWantedTurn } from '../utils/queueBands';
 import { probeUiAfterSwitch } from '../utils/uiDiagnosticsLog';
 import {
   persistWorkspaceSelectionStyle,
@@ -16,6 +16,7 @@ import {
 } from '../utils/workspaceSelectionStyle';
 import {
   AppContentProps,
+  paneIdForSession,
   persistShowSessionlessWorkspaces,
   readShowSessionlessWorkspaces,
 } from './appSupport';
@@ -23,24 +24,22 @@ import { useAppSessions } from './useAppSessions';
 import type { useAttentionQueue } from './useAttentionQueue';
 
 interface Options {
-  showError: (message: string) => void;
   activeSessionId: string | null;
   daemonSessions: AppContentProps['daemonSessions'];
   daemonWorkspaces: AppContentProps['daemonWorkspaces'];
   workspaceViews: ReturnType<typeof useAppSessions>['workspaceViews'];
-  unmutedEnrichedSessions: ReturnType<typeof useAppSessions>['unmutedEnrichedSessions'];
   attentionQueue: ReturnType<typeof useAttentionQueue>;
   focusWorkspaceLeaf: ReturnType<typeof useSessionWorkspaceController>['focusWorkspaceLeaf'];
+  showError: (message: string) => void;
 }
 export function useAppNavigation({
-  showError,
   activeSessionId,
   daemonSessions,
   daemonWorkspaces,
   workspaceViews,
-  unmutedEnrichedSessions,
   attentionQueue,
   focusWorkspaceLeaf,
+  showError,
 }: Options) {
   const {
     view,
@@ -55,7 +54,6 @@ export function useAppNavigation({
     requestTerminalFocus,
     goToDashboard,
     goHomeAwaitingNextTurn,
-    pendingSelection,
   } = useSessionStore();
   const {
     sendSessionSelected,
@@ -74,33 +72,22 @@ export function useAppNavigation({
     forward: navigateAgentHistoryForward,
   } = useAgentNavigation();
 
-  const handleSelectSession = selectAgent;
-  const selectCreatedSession = selectAgent;
-
-  const attachingOwner = useRef<string | null>(null);
-  useEffect(() => {
-    const id = pendingSelection?.sessionId;
-    if (!id || attachingOwner.current === id || !daemonSessions.some(session => session.id === id && session.codex_mode === 'shared')) return;
-    const panes = daemonWorkspaces.flatMap(workspace => workspace.layout?.panes ?? []);
-    if (panes.some(pane => pane.session_id === id && pane.codex_resolution === 'resolved')) return;
-    const existingView = panes.find(pane =>
-      pane.codex_launch_owner_id === id && pane.codex_resolution !== 'resolved');
-    if (existingView) {
-      selectAgentPane(id, existingView.pane_id);
-      return;
-    }
-    attachingOwner.current = id;
-    void sendSessionReopen(id).then(result => {
-      if (useSessionStore.getState().pendingSelection?.sessionId !== id) return;
-      if (result.pane_id) selectAgentPane(id, result.pane_id);
-      else selectAgent(id);
-    }).catch((error: unknown) => {
-      if (useSessionStore.getState().pendingSelection?.sessionId === id) cancelPendingSelection();
-      showError(`Could not open the agent: ${error instanceof Error ? error.message : String(error)}`);
-    }).finally(() => {
-      if (attachingOwner.current === id) attachingOwner.current = null;
-    });
-  }, [pendingSelection?.sessionId, daemonSessions, daemonWorkspaces, sendSessionReopen, selectAgentPane, selectAgent, cancelPendingSelection, showError]);
+  const handleSelectSession = useCallback((sessionId: string) => {
+    const state = useSessionStore.getState();
+    const shared = daemonSessions.some(session => session.id === sessionId && session.codex_mode === 'shared');
+    const displayed = Object.values(state.daemonWorkspaceLayouts).some(snapshot =>
+      snapshot.workspace.agents.some(pane => pane.sessionId === sessionId));
+    if (!shared || displayed) return selectAgent(sessionId);
+    void sendSessionReopen(sessionId, 'reopen').then(result => {
+      if (result.pane_id) selectAgentPane(result.session_id, result.pane_id);
+      else selectAgent(result.session_id);
+    }).catch(error => showError(`Could not open the agent: ${String(error)}`));
+    return false;
+  }, [daemonSessions, selectAgent, selectAgentPane, sendSessionReopen, showError]);
+  const selectCreatedSession = useCallback(
+    (sessionId: string) => selectAgentPane(sessionId, paneIdForSession(sessionId)),
+    [selectAgentPane],
+  );
 
   useEffect(() => {
     if (view === 'session' && activeSessionId) {
@@ -108,14 +95,18 @@ export function useAppNavigation({
     }
   }, [activeSessionId, sendSessionSelected, view]);
 
-  const { wantsAttention } = attentionQueue;
+  const { wantsAttention, queueModeEnabled, queueBands, waitingLocalSessions } = attentionQueue;
 
   const handleJumpToWaiting = useCallback(() => {
-    const waiting = oldestWantedTurn(unmutedEnrichedSessions, wantsAttention);
-    if (waiting) {
-      handleSelectSession(waiting.id);
+    if (queueModeEnabled) {
+      const waiting = headOfQueue(queueBands);
+      if (waiting?.paneId) selectAgentPane(waiting.session.id, waiting.paneId);
+      else if (waiting) handleSelectSession(waiting.session.id);
+      return;
     }
-  }, [unmutedEnrichedSessions, handleSelectSession, wantsAttention]);
+    const waiting = oldestWantedTurn(waitingLocalSessions, wantsAttention);
+    if (waiting) handleSelectSession(waiting.id);
+  }, [queueModeEnabled, queueBands, selectAgentPane, waitingLocalSessions, handleSelectSession, wantsAttention]);
 
   const toggleGridMode = useCallback(() => {
     setView((prev) => (prev === 'grid' ? (activeSessionId ? 'session' : 'dashboard') : 'grid'));
@@ -349,7 +340,6 @@ export function useAppNavigation({
     setFollowNextTurn,
     utilityFocusRequestToken,
     requestTerminalFocus,
-    selectAgent,
     selectAgentPane,
     cancelPendingSelection,
     navigateAgentHistoryBack,

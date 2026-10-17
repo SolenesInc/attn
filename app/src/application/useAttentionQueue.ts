@@ -82,7 +82,10 @@ export function useAttentionQueue({
     [queueModeEnabled, crewQueueEnabled],
   );
 
-  const waitingLocalSessions = unmutedEnrichedSessions.filter(wantsAttention);
+  const displayedSessionIds = new Set(workspaceViews.flatMap(workspace =>
+    workspace.children.flatMap(child => child.kind === 'session' ? [child.session.id] : [])));
+  const waitingLocalSessions = unmutedEnrichedSessions.filter(session =>
+    (session.codexMode !== 'shared' || displayedSessionIds.has(session.id)) && wantsAttention(session));
 
   const handleSettleActiveTurn = useMemo(
     () =>

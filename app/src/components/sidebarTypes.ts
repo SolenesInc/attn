@@ -53,6 +53,7 @@ export interface SidebarProps {
   visualOrder: SidebarWorkspace[];
   visualIndexByWorkspaceId: Map<string, number>;
   selectedId: string | null;
+  selectedPaneId?: string | null;
   selectedWorkspaceId: string | null;
   selectedTile?: SelectedTile | null;
   tileContents?: Record<string, TileContentState>;
@@ -116,14 +117,14 @@ export interface SidebarProps {
     prevWorkspaceId?: string;
     nextWorkspaceId?: string;
   }) => void;
-  onSelectSession: (id: string) => void;
+  onSelectSession: (id: string, paneId?: string) => void;
   onTriggerNudge?: (id: string) => void;
   onSelectWorkspace: (id: string) => void;
   onSelectTile?: (workspaceId: string, tileId: string) => void;
   onCloseTile?: (workspaceId: string, tileId: string) => void;
   onReloadTile?: (workspaceId: string, tileId: string) => void;
   onNewSession: () => void;
-  onCloseSession: (id: string) => void;
+  onCloseSession: (id: string, paneId?: string) => void;
   onReloadSession: (id: string) => void;
   onGoToDashboard: () => void;
   homeActive?: boolean;

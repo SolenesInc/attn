@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { GardenFrame } from '../components/GardenFrame';
 import { NotebookBrowser } from '../components/NotebookBrowser';
 import { NotificationsPanel } from '../components/NotificationsPanel';
@@ -75,7 +76,9 @@ export function AppLibrarySurfaces() {
     handleSendSeedToChief,
   } = useAppGardenActionsContext();
   const { handleReopenSession } = useSessionLifecycleContext();
-  const { notificationsChangeSignal } = useAppInputs();
+  const { notificationsChangeSignal, daemonWorkspaces } = useAppInputs();
+  const displayedSessionIds = useMemo(() => new Set(daemonWorkspaces.flatMap(workspace =>
+    (workspace.layout?.panes ?? []).flatMap(pane => pane.session_id ? [pane.session_id] : []))), [daemonWorkspaces]);
   const { notebookBrowserListFiles, notebookRootChangeSignal } = useAppNotebookSurfaceContext();
   const { notebookChiefActive } = useAppSessionsContext();
   const seeds = useDaemonStore((state) => state.seeds);
@@ -96,6 +99,7 @@ export function AppLibrarySurfaces() {
           },
           workspaceNames: workspaceNamesById,
           liveSessionIds: liveGardenSessions,
+          displayedSessionIds,
           seedForSession,
           onFocusSession: handleSelectSession,
           onOpenSeed: handleOpenSeedTile,

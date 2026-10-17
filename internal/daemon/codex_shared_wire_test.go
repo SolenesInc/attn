@@ -378,8 +378,8 @@ func TestSharedCodexClosingAFailedBlankAttachmentLeavesTheOriginalOwnerLive(t *t
 		if protocol.Deref(pane.RuntimeID) == a {
 			continue
 		}
-		if protocol.Deref(pane.CodexLaunchOwnerID) != a || protocol.Deref(pane.SessionID) != "" {
-			t.Fatalf("failed attachment lost launch identity or retained input ownership: %+v", pane)
+		if protocol.Deref(pane.SessionID) != "" {
+			t.Fatalf("failed attachment retained input ownership: %+v", pane)
 		}
 		result := workspaceLayoutAction(app, protocol.WorkspaceLayoutClosePaneMessage{Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: failed.WorkspaceLayout.WorkspaceID, PaneID: pane.PaneID}, protocol.CmdWorkspaceLayoutClosePane, failed.WorkspaceLayout.WorkspaceID)
 		if !result.Success {

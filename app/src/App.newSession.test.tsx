@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { agentWorkspace, daemonSession } from './test/daemonFixtures';
+import { agentPane, agentWorkspace, daemonSession, daemonWorkspace } from './test/daemonFixtures';
 import { chosenRow, destinationMemory, HOME, launchedAt, openPicker, pathInput, press, repoInfo, submitPath, serveMachine, serveLaunches } from './test/locations';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
@@ -54,6 +54,24 @@ describe('App new session', () => {
     const { daemon } = await openPicker({}, { settings: { new_session_agent: 'codex', codex_shared_enabled: 'true' } });
     await submitPath(daemon, '/tmp/plain');
     expect(daemon.sentOf('spawn_session')).toEqual([expect.objectContaining({ agent: 'codex', label: 'plain', label_is_explicit: false })]);
+  });
+
+  it.each(['unresolved', 'disconnected'] as const)('shows the newly launched %s shared pane before an owner resolves', async (resolution) => {
+    const { daemon } = await openPicker({}, { settings: { new_session_agent: 'codex', codex_shared_enabled: 'true' } });
+    daemon.on('spawn_session', ({ id, workspace_id }) => [
+      { event: 'spawn_result', id, success: true },
+      { event: 'session_registered', session: daemonSession(id, { agent: 'codex', codex_mode: 'shared', workspace_id, state: 'launching' }) },
+      { event: 'workspace_layout_updated', workspace_layout: daemonWorkspace(workspace_id!, {
+        root: { type: 'pane', pane_id: `pane-${id}` },
+        panes: [{ ...agentPane(id, workspace_id!), session_id: undefined, runtime_id: id, codex_resolution: resolution, codex_revision: '1' }],
+      }).layout! },
+    ]);
+    await submitPath(daemon, '/tmp/plain');
+    const [spawn] = daemon.sentOf('spawn_session');
+    const pane = document.querySelector(`[data-workspace-id="${spawn.workspace_id}"][data-session-visible="1"]`);
+    expect(pane).toBeInTheDocument();
+    expect(pane).toHaveAttribute('data-active-pane-id', `pane-${spawn.id}`);
+    expect(screen.queryByRole('button', { name: 'Open plain' })).toBeNull();
   });
 
   it.each(['unresolved', 'disconnected'] as const)('splits the selected workspace from a %s shared pane', async (resolution) => {

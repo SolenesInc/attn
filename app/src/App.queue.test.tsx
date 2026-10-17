@@ -61,87 +61,102 @@ async function press(daemon: ScriptedDaemon, name: string) {
 }
 
 describe('App queue', () => {
-  it('focuses a new shared launch pane before its first native title without attaching again', async () => {
-    const a = agent('a', { agent: 'codex', codex_mode: 'shared', state: 'launching', turn_owed: true });
-    const source = agentWorkspace('a');
-    source.layout!.panes[0] = { ...source.layout!.panes[0], session_id: '', codex_resolution: 'unresolved', codex_revision: '0', codex_launch_owner_id: 'a' };
-    const { daemon } = await renderApp({ initialState: { settings: QUEUE, sessions: [a], workspaces: [source] } });
-    await press(daemon, 'Open a');
-    expect(daemon.sentOf('session_reopen')).toEqual([]);
-    expect(document.querySelector('[data-pane-id="pane-a"].active')).toBeInTheDocument();
-    expect(screen.queryByRole('alert')).toBeNull();
-    const layout = source.layout!;
-    daemon.emit({ event: 'workspace_layout_updated', workspace_layout: { ...layout, panes: [{ ...layout.panes[0], session_id: 'a', codex_resolution: 'resolved', codex_revision: '1' }] } });
-    await daemon.idle();
-    expect(daemon.sentOf('session_reopen')).toEqual([]);
-    expect(document.querySelector('[data-pane-id="pane-a"].active')).toBeInTheDocument();
-  });
-
-  it.each([[true, 'a'], [true, 'extra-view'], [false, 'a'], [false, 'extra-view']] as const)('focuses a failed shared view (queue %s, runtime %s) on repeated sidebar selections', async (queueOn, runtimeId) => {
+  it.each([false, true])('native New replaces its row without keeping the hidden owner (queue=%s)', async (queueOn) => {
     const a = agent('a', { agent: 'codex', codex_mode: 'shared', turn_owed: true });
+    const b = agent('b', { agent: 'codex', codex_mode: 'shared', workspace_id: a.workspace_id });
     const source = agentWorkspace('a');
-    source.layout!.panes[0] = {
-      ...source.layout!.panes[0], runtime_id: runtimeId, session_id: '',
-      codex_resolution: 'unresolved', codex_revision: '0', codex_launch_owner_id: 'a',
-    };
+    source.layout!.panes[0] = { ...source.layout!.panes[0], codex_resolution: 'resolved', codex_revision: '1' };
     const { daemon } = await renderApp({ initialState: { settings: queueOn ? QUEUE : {}, sessions: [a], workspaces: [source] } });
-    const layout = source.layout!;
-    daemon.emit({ event: 'workspace_layout_updated', workspace_layout: {
-      ...layout, panes: [{ ...layout.panes[0], codex_resolution: 'disconnected', codex_revision: '1' }],
-    } });
-    await daemon.idle();
     await press(daemon, 'Open a');
-    await press(daemon, 'Open a');
-    expect(daemon.sentOf('session_reopen')).toEqual([]);
-    expect(daemon.sentOf('session_selected')).toEqual([]);
+    await daemon.emit({ event: 'sessions_updated', sessions: [a, b] });
+    await daemon.emit({ event: 'workspace_layout_updated', workspace_layout: { ...source.layout!, panes: [{ ...source.layout!.panes[0], session_id: 'b', codex_revision: '2' }] } });
+    expect(screen.queryByRole('button', { name: 'Open a' })).toBeNull();
+    await press(daemon, 'Open b');
     expect(document.querySelector('[data-pane-id="pane-a"].active')).toBeInTheDocument();
-    expect(shownWorkspaces()).toEqual([source.id]);
-  });
-
-  it('prefers a resolved view over a disconnected launch-owner view', async () => {
-    const a = agent('a', { agent: 'codex', codex_mode: 'shared', turn_owed: true });
-    const source = splitWorkspace('workspace-a', ['failed', 'live']);
-    source.layout!.panes = source.layout!.panes.map((pane, i) => ({
-      ...pane, session_id: i === 0 ? '' : 'a', codex_launch_owner_id: 'a',
-      codex_resolution: i === 0 ? 'disconnected' : 'resolved', codex_revision: '1',
-    }));
-    const { daemon } = await renderApp({ initialState: { settings: QUEUE, sessions: [a], workspaces: [source] } });
-    await press(daemon, 'Open a');
     expect(daemon.sentOf('session_reopen')).toEqual([]);
-    expect(document.querySelector('[data-pane-id="pane-live"].active')).toBeInTheDocument();
-    expect(daemon.sentOf('session_selected')).toEqual([{ cmd: 'session_selected', id: 'a' }]);
-  });
-
-  it('exposes a hidden shared owner and attaches a view when its approval row is selected', async () => {
-    const a = agent('a', { agent: 'codex', codex_mode: 'shared', state: 'pending_approval', turn_owed: true, turn_opened_at: ago(HOUR) });
-    const b = agent('b', { agent: 'codex', codex_mode: 'shared' });
-    const source = agentWorkspace('a');
-    source.layout!.panes[0] = { ...source.layout!.panes[0], session_id: 'b', codex_resolution: 'resolved', codex_revision: '2', codex_launch_owner_id: 'a' };
-    const { daemon } = await renderApp({ initialState: { settings: QUEUE, sessions: [a, b], workspaces: [source, agentWorkspace('b')] } });
-    daemon.on('session_reopen', ({ session_id }) => {
-      const layout = source.layout!;
-      const pane = { ...layout.panes[0], pane_id: 'pane-attached-a', runtime_id: 'view-a', session_id: 'a', codex_resolution: 'resolved' as const, codex_revision: '1' };
-      daemon.emit({ event: 'workspace_layout_updated', workspace_layout: { ...layout, layout_json: JSON.stringify({ type: 'split', split_id: 'two', direction: 'vertical', ratio: 0.5, children: [{ type: 'pane', pane_id: 'pane-a' }, { type: 'pane', pane_id: pane.pane_id }] }), panes: [layout.panes[0], pane] } });
-      return { event: 'session_reopen_result', session_id, success: true, workspace_id: source.id, pane_id: pane.pane_id };
-    });
-    expect(bandRows()).toEqual(['queue-turn-a', 'queue-settled-b']);
-    await press(daemon, 'Open a');
-    expect(daemon.sentOf('session_reopen')).toEqual([expect.objectContaining({ session_id: 'a' })]);
-    expect(document.querySelector('[data-pane-id="pane-attached-a"].active')).toBeInTheDocument();
-  });
-
-  it('reports a failed hidden-owner attachment and does not retry on unrelated snapshots', async () => {
-    const a = agent('a', { agent: 'codex', codex_mode: 'shared', turn_owed: true });
-    const source = agentWorkspace('a');
-    source.layout!.panes = [];
-    source.layout!.layout_json = '';
-    const { daemon } = await renderApp({ initialState: { settings: QUEUE, sessions: [a], workspaces: [source] } });
-    daemon.on('session_reopen', ({ session_id }) => ({ event: 'session_reopen_result', session_id, success: false, error: 'native connection unavailable' }));
-    await press(daemon, 'Open a');
-    expect(screen.getByRole('alert')).toHaveTextContent('native connection unavailable');
-    daemon.emit({ event: 'sessions_updated', sessions: [a] });
+    await daemon.emit({ event: 'session_state_changed', session: { ...a, state: 'pending_approval' } });
+    expect(screen.queryByRole('button', { name: 'Open a' })).toBeNull();
+    pressShortcut('dock.attention');
     await daemon.idle();
-    expect(daemon.sentOf('session_reopen')).toHaveLength(1);
+    expect(screen.queryByTestId('attention-session-a')).toBeNull();
+  });
+
+  it('Command-J finds a shared agent displayed outside its original workspace', async () => {
+    const a = agent('a', { agent: 'codex', codex_mode: 'shared', state: 'waiting_input', turn_owed: true });
+    const b = agent('b', { agent: 'codex', codex_mode: 'shared' });
+    const original = agentWorkspace('a');
+    original.layout!.panes[0] = { ...original.layout!.panes[0], session_id: 'b', codex_resolution: 'resolved' };
+    const other = agentWorkspace('b');
+    other.layout!.panes[0] = { ...other.layout!.panes[0], session_id: 'a', codex_resolution: 'resolved' };
+    const { daemon } = await renderApp({ initialState: { sessions: [a, b], workspaces: [original, other] } });
+    await gesture(daemon, () => pressShortcut('session.jumpToWaiting'));
+    expect(document.querySelector('[data-pane-id="pane-b"].workspace-pane.active')).toBeInTheDocument();
+    expect(shownWorkspaces()).toEqual([other.id]);
+  });
+
+  it.each(['jump', 'handoff', 'arrival'] as const)('keeps the queue row pane during %s with rearranged duplicate views', async (action) => {
+    const a = agent('a', { turn_owed: action !== 'jump', turn_opened_at: ago(2 * HOUR) });
+    const b = agent('b', { agent: 'codex', codex_mode: 'shared', workspace_id: 'workspace-pair', turn_owed: action !== 'arrival', turn_opened_at: ago(HOUR) });
+    const source = splitWorkspace('workspace-pair', ['b', 'replica']);
+    source.layout!.panes = source.layout!.panes.map(pane => ({ ...pane, session_id: 'b', codex_resolution: 'resolved' }));
+    const root = JSON.parse(source.layout!.layout_json);
+    root.children.reverse();
+    source.layout!.layout_json = JSON.stringify(root);
+    const { daemon } = await renderApp({ initialState: { settings: QUEUE, sessions: [a, b], workspaces: [agentWorkspace('a'), source] } });
+    if (action === 'jump') {
+      pressShortcut('session.jumpToWaiting');
+      await daemon.idle();
+    } else {
+      await press(daemon, 'Open a');
+      await daemon.emit({ event: 'session_state_changed', session: { ...a, turn_owed: false } });
+      if (action === 'arrival') await daemon.emit({ event: 'session_state_changed', session: { ...b, turn_owed: true } });
+    }
+    expect(document.querySelector('[data-pane-id="pane-replica"].workspace-pane.active')).toBeInTheDocument();
+    expect(document.querySelector('[data-testid="queue-turn-b"][data-view-pane-id="pane-replica"]')).toHaveClass('selected');
+  });
+
+  it.each(['chief', 'crew', 'automation'] as const)('keeps duplicate %s views selectable and closes the clicked pane', async (role) => {
+    const metadata = role === 'chief' ? { chief_of_staff: true }
+      : role === 'crew' ? { crew_member: 'alder' }
+      : { automation: { definition_id: 'review', definition_name: 'Review', run_id: 'run', trigger_type: 'manual' } };
+    const a = agent('a', { agent: 'codex', codex_mode: 'shared', workspace_id: 'workspace-pair', ...metadata });
+    const source = splitWorkspace('workspace-pair', ['a', 'replica']);
+    source.layout!.panes = source.layout!.panes.map(pane => ({ ...pane, session_id: 'a', codex_resolution: 'resolved', codex_revision: '1' }));
+    const { daemon } = await renderApp({ initialState: { settings: QUEUE, sessions: [a], workspaces: [source] } });
+    if (role === 'automation') await gesture(daemon, () => fireEvent.click(screen.getByTestId('sidebar-automation-header-review')));
+    for (const paneId of ['pane-a', 'pane-replica']) {
+      const row = document.querySelector<HTMLElement>(`[data-view-pane-id="${paneId}"]`)!;
+      await gesture(daemon, () => fireEvent.click(within(row).getByRole('button', { name: 'Open a' })));
+      expect(row).toHaveClass('selected');
+      expect(document.querySelector(`[data-pane-id="${paneId}"].workspace-pane.active`)).toBeInTheDocument();
+    }
+    const row = document.querySelector<HTMLElement>('[data-view-pane-id="pane-a"]')!;
+    await gesture(daemon, () => fireEvent.click(within(row).getByRole('button', { name: 'Actions for a' })));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('menuitem', { name: 'Close session' })));
+    expect(daemon.sentOf('workspace_layout_close_pane')).toEqual([expect.objectContaining({ pane_id: 'pane-a' })]);
+  });
+
+  it.each([false, true])('native switching keeps two separately navigable rows for the same agent (queue=%s)', async (queueOn) => {
+    const a = agent('a', { agent: 'codex', codex_mode: 'shared', workspace_id: 'workspace-pair', turn_owed: true });
+    const b = agent('b', { agent: 'codex', codex_mode: 'shared', workspace_id: 'workspace-pair' });
+    const source = splitWorkspace('workspace-pair', ['a', 'b']);
+    source.layout!.panes = source.layout!.panes.map(pane => ({ ...pane, codex_resolution: 'resolved', codex_revision: '1' }));
+    const { daemon } = await renderApp({ initialState: { settings: queueOn ? QUEUE : {}, sessions: [a, b], workspaces: [source] } });
+    await press(daemon, 'Open b');
+    await daemon.emit({ event: 'workspace_layout_updated', workspace_layout: { ...source.layout!, panes: source.layout!.panes.map(pane => ({ ...pane, session_id: 'a', codex_revision: '2' })) } });
+    expect(screen.queryByRole('button', { name: 'Open b' })).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Open a' })).toHaveLength(2);
+    const prefix = queueOn ? 'queue-turn' : 'sidebar-session';
+    for (const paneId of ['pane-a', 'pane-b']) {
+      const row = document.querySelector<HTMLElement>(`[data-testid="${prefix}-a"][data-view-pane-id="${paneId}"]`)!;
+      await gesture(daemon, () => fireEvent.click(within(row).getByRole('button', { name: 'Open a' })));
+      expect(row).toHaveClass('selected');
+      expect(document.querySelector(`[data-pane-id="${paneId}"].workspace-pane.active`)).toBeInTheDocument();
+    }
+    expect(daemon.sentOf('session_reopen')).toEqual([]);
+    await gesture(daemon, () => fireEvent.click(within(document.querySelector<HTMLElement>(`[data-testid="${prefix}-a"][data-view-pane-id="pane-a"]`)!).getByRole('button', { name: 'Actions for a' })));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('menuitem', { name: 'Close session' })));
+    expect(daemon.sentOf('workspace_layout_close_pane')).toEqual([expect.objectContaining({ workspace_id: source.id, pane_id: 'pane-a' })]);
   });
 
   it('replaces the workspace tree with the chief, the owed turns oldest first, then the settled rest', async () => {
@@ -193,7 +208,7 @@ describe('App queue', () => {
     expect(shownWorkspaces()).toEqual(['workspace-older']);
   });
 
-  it('queues one shared owner with views in two workspaces and retains both workspace rows', async () => {
+  it('queues each shared view in its workspace and retains both workspace rows', async () => {
     const owner = agent('shared', { agent: 'codex', turn_owed: true, turn_opened_at: ago(HOUR) });
     const home = agentWorkspace(owner.id);
     home.layout!.panes[0] = { ...home.layout!.panes[0], codex_resolution: 'resolved', codex_revision: '1' };
@@ -204,9 +219,9 @@ describe('App queue', () => {
     };
     const { daemon } = await renderApp({ initialState: { settings: QUEUE, sessions: [owner, satellite], workspaces: [other, home] } });
 
-    expect(bandRows()).toEqual(['queue-turn-shared']);
-    expect(within(screen.getByTestId('queue-turn-shared')).getByText('shared')).toBeInTheDocument();
-    await press(daemon, 'Open shared');
+    expect(bandRows()).toEqual(['queue-turn-shared', 'queue-turn-shared']);
+    const homeRow = screen.getAllByTestId('queue-turn-shared').find(row => row.dataset.workspaceId === home.id)!;
+    await gesture(daemon, () => fireEvent.click(within(homeRow).getByRole('button', { name: 'Open shared' })));
     expect(shownWorkspaces()).toEqual([home.id]);
     expect(daemon.sentOf('session_selected')).toEqual([{ cmd: 'session_selected', id: owner.id }]);
 

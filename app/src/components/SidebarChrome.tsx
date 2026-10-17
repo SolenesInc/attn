@@ -206,7 +206,7 @@ export function SidebarPopovers() {
           onChangeChiefOfStaff={(enabled) =>
             onChangeChiefOfStaff?.(sessionActionsTarget.id, enabled)
           }
-          onCloseSession={() => onCloseSession(sessionActionsTarget.id)}
+          onCloseSession={() => onCloseSession(sessionActionsTarget.id, sessionActionsTarget.paneId)}
           onReloadSession={() => onReloadSession(sessionActionsTarget.id)}
           onMemberDetails={
             sessionActionsTarget.crewMember && onOpenCrewMemberDetails

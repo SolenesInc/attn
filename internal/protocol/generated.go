@@ -11159,10 +11159,6 @@ type WorkspaceLayoutMoveLeafToWorkspaceMessage struct {
 }
 
 type WorkspaceLayoutPane struct {
-	// CodexLaunchOwnerID corresponds to the JSON schema field
-	// "codex_launch_owner_id".
-	CodexLaunchOwnerID *string `json:"codex_launch_owner_id,omitempty,omitzero"`
-
 	// CodexResolution corresponds to the JSON schema field "codex_resolution".
 	CodexResolution *CodexViewResolution `json:"codex_resolution,omitempty,omitzero"`
 

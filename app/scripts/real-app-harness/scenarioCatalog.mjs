@@ -2,7 +2,7 @@ export const scenarioCatalog = [
   {
     id: 'codex-shared',
     runnerId: 'CODEX-SHARED',
-    label: 'Shared Codex: owner switches, hidden approvals, queue attachment, annotation recipient and native New',
+    label: 'Shared Codex: owner switches, duplicate terminal rows, ledger attachment, annotation recipient and native New',
     command: ['node', 'scripts/real-app-harness/scenario-codex-shared.mjs'],
   },
   {
