@@ -181,7 +181,7 @@ func TestBlockTableCorpus(t *testing.T) {
 			for _, s := range steps {
 				created++
 				ref := &fakeBlockRef{x: s.Col, y: s.Row, freed: &freed}
-				bt.ApplyMarker(stepToMarker(s), ref, false)
+				bt.ApplyMarker(stepToMarker(s), ref, false, false)
 			}
 
 			snap := bt.SnapshotBlocks()
@@ -291,7 +291,7 @@ func TestBlockTableFreesEveryPinnedRefExactlyOnceWhateverTheMarkers(t *testing.T
 		refs := make([]*countedBlockRef, len(steps))
 		for i, step := range steps {
 			refs[i] = &countedBlockRef{row: i}
-			bt.ApplyMarker(markers[step], refs[i], false)
+			bt.ApplyMarker(markers[step], refs[i], false, false)
 		}
 		bt.Close()
 		for i, ref := range refs {

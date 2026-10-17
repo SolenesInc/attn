@@ -58,7 +58,6 @@ let renderCounter = 0;
 
 interface MermaidDiagramProps {
   code: string;
-  onLayoutChange?: () => void;
   presentation?: 'static' | 'reader';
 }
 
@@ -123,7 +122,6 @@ export function MermaidDiagram(props: MermaidDiagramProps) {
 
 function RenderedMermaidDiagram({
   code,
-  onLayoutChange,
   presentation = 'static',
   theme,
 }: RenderedMermaidDiagramProps) {
@@ -159,17 +157,6 @@ function RenderedMermaidDiagram({
       cancelled = true;
     };
   }, [code, theme]);
-
-  // Kept in a ref, not an effect dep, so a fresh callback identity never
-  // re-fires this; only a real svg/error transition does.
-  const onLayoutChangeRef = useRef(onLayoutChange);
-  onLayoutChangeRef.current = onLayoutChange;
-
-  useEffect(() => {
-    if (svg || error) {
-      onLayoutChangeRef.current?.();
-    }
-  }, [svg, error]);
 
   const measure = useCallback(() => {
     const viewport = viewportRef.current;

@@ -198,7 +198,7 @@ func seedResumeDesktops(w *world) []string {
 	return ids
 }
 
-func TestAResumeWhoseAgentCannotStartLeavesNoPaneBehind(t *testing.T) {
+func TestAResumeWhoseAgentCannotStartKeepsItsPaneAndReleasesItsClaim(t *testing.T) {
 	w := newWorld(t, fakeagent.Pi)
 	app, cli := w.App(), w.Client()
 	pluginDriverSettings(app, "pi")
@@ -212,12 +212,14 @@ func TestAResumeWhoseAgentCannotStartLeavesNoPaneBehind(t *testing.T) {
 	if resumed := seedResumeRequest(app, delegated.SeedID); resumed.Success || !strings.Contains(protocol.Deref(resumed.Error), "provider is unreachable") {
 		t.Fatalf("resuming a seed whose agent cannot start = %+v, want the launch failure", resumed)
 	}
-	if after := paneSessions(w); !slices.Equal(after, before) {
-		t.Errorf("the failed resume left panes for %q, want only %q", after, before)
+	if after := paneSessions(w); len(after) != len(before)+1 || !slices.Contains(after, string(delegated.SessionID)) {
+		t.Errorf("failed resume panes = %q, want retained attempt", after)
 	}
 	if after := lifeShow(t, cli, delegated.SeedID).Seed; after.TenderSession != delegated.SessionID || after.Status != "growing" {
 		t.Errorf("the failed resume left the seed %s under %q, want growing under %s", after.Status, after.TenderSession, delegated.SessionID)
 	}
+	w.restart()
+	cli = w.Client()
 	registerSessions(t, w, cli, "next-tender")
 	lifeMove(t, cli, "next-tender", delegated.SeedID, "tend", "", "")
 }
@@ -337,8 +339,8 @@ func TestPiResumeAndReopenRequireTheSavedConversation(t *testing.T) {
 		t.Fatalf("Pi seed after its file was deleted = %+v, want unavailable with storage reason", got)
 	}
 	verdict := reopenVerdict(t, cli, string(delegated.SessionID))
-	if verdict.Reopenable || !slices.Equal(verdict.Actions, []protocol.SessionReopenAction{protocol.SessionReopenActionStartFreshSamePlace}) {
-		t.Fatalf("Pi reopen after deletion = %+v, want only an explicit fresh start", verdict)
+	if verdict.Reopenable || len(verdict.Actions) != 0 {
+		t.Fatalf("Pi reopen after deletion = %+v, want no resume action", verdict)
 	}
 	desktops := seedResumeDesktops(w)
 	panes := paneSessions(w)

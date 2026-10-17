@@ -5,6 +5,7 @@ import { isAccelKeyPressed, isMacLikePlatform } from '../shortcuts/platform';
 
 interface KeyboardShortcutsConfig {
   onNewSession: () => void;
+  onNewTerminal?: () => void;
   onNewSessionHorizontal?: () => void;
   onCloseSession: () => void;
   onOpenPalette: (mode: PaletteMode) => void;
@@ -50,6 +51,7 @@ interface KeyboardShortcutsConfig {
 export function useKeyboardShortcuts({
   onNewSession,
   onNewSessionHorizontal,
+  onNewTerminal,
   onCloseSession,
   onOpenPalette,
   onGoToDashboard,
@@ -92,6 +94,7 @@ export function useKeyboardShortcuts({
   useShortcut('app.quit', onQuit ?? (() => {}), !blocked && !!onQuit);
 
   useShortcut('session.new', onNewSession, enabled);
+  useShortcut('session.newTerminal', onNewTerminal ?? (() => {}), enabled && !!onNewTerminal);
   useShortcut('session.newHorizontal', onNewSessionHorizontal ?? (() => {}), enabled && !!onNewSessionHorizontal);
   useShortcut('session.close', onCloseSession, enabled);
   useShortcut('session.prev', onPrevSession, enabled);

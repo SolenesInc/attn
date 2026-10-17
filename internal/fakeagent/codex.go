@@ -17,7 +17,7 @@ const codexBusyGlyph = "⠋ "
 var codexComposer = composer{prompt: "› "}
 
 var codexFlags = flagSpec{
-	values: map[string]bool{"-c": true, "-C": true, "--cd": true, "--add-dir": true, "--model": true, "-m": true},
+	values: map[string]bool{"-c": true, "-C": true, "--cd": true, "--add-dir": true, "--model": true, "-m": true, "--remote": true},
 }
 
 type codex struct {
@@ -54,7 +54,17 @@ var codexExecFlags = flagSpec{
 
 func runCodex(cfg config) int {
 	if len(os.Args) > 1 && os.Args[1] == "app-server" {
+		if codexServerFlags.parse(os.Args[2:]).value("--listen") != "" {
+			return runCodexAppServer(cfg)
+		}
 		return codexModelDiscovery()
+	}
+	if args := codexFlags.parse(os.Args[1:]); args.value("--remote") != "" {
+		if args.value("--add-dir") != "" {
+			fmt.Fprintln(os.Stderr, "Error: --add-dir is not supported with --remote. Configure additional workspace roots on the server.")
+			return 1
+		}
+		return serve(cfg, codexComposer, &codexRemote{cfg: cfg})
 	}
 	if len(os.Args) > 1 && os.Args[1] == "exec" {
 		return codexExec(codexExecFlags.parse(os.Args[2:])).serve(cfg)
@@ -152,20 +162,28 @@ func (c *codex) startRollout() error {
 	}
 	c.conversation = id.String()
 	started := time.Now().UTC()
-	c.transcript = filepath.Join(c.sessionsDir(), started.Format("2006/01/02"),
-		"rollout-"+started.Format("2006-01-02T15-04-05")+"-"+c.conversation+".jsonl")
+	c.transcript = codexRolloutPath(c.sessionsDir(), c.conversation, started)
+	return appendLines(c.transcript, codexSessionMeta(c.conversation, c.cwd, "codex_cli_rs", started))
+}
+
+func codexRolloutPath(sessions, conversation string, started time.Time) string {
+	return filepath.Join(sessions, started.Format("2006/01/02"),
+		"rollout-"+started.Format("2006-01-02T15-04-05")+"-"+conversation+".jsonl")
+}
+
+func codexSessionMeta(conversation, cwd, originator string, started time.Time) map[string]any {
 	stamp := started.Format(time.RFC3339Nano)
-	return appendLines(c.transcript, map[string]any{
+	return map[string]any{
 		"timestamp": stamp,
 		"type":      "session_meta",
 		"payload": map[string]any{
-			"id":         c.conversation,
+			"id":         conversation,
 			"timestamp":  stamp,
-			"cwd":        c.cwd,
-			"originator": "codex_cli_rs",
+			"cwd":        cwd,
+			"originator": originator,
 			"source":     "cli",
 		},
-	})
+	}
 }
 
 func (c *codex) findRollout() string {

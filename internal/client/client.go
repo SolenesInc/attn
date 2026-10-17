@@ -440,7 +440,6 @@ func (c *Client) MoveSessionToDesktop(callerSessionID protocol.SessionID, sessio
 type SessionReopenOptions struct {
 	SessionID protocol.SessionID
 	Action    string
-	Directory string
 }
 
 func (c *Client) SessionReopen(opts SessionReopenOptions) (*protocol.SessionReopenResult, error) {
@@ -450,9 +449,6 @@ func (c *Client) SessionReopen(opts SessionReopenOptions) (*protocol.SessionReop
 	}
 	if action := strings.TrimSpace(opts.Action); action != "" {
 		msg.Action = protocol.Ptr(protocol.SessionReopenAction(action))
-	}
-	if directory := strings.TrimSpace(opts.Directory); directory != "" {
-		msg.Directory = protocol.Ptr(directory)
 	}
 	resp, err := c.send(msg)
 	if err != nil {
@@ -748,43 +744,6 @@ func (c *Client) AskList(sessionID protocol.SessionID) (*protocol.AskListResult,
 func (c *Client) AskClose(sessionID protocol.SessionID, askID string) error {
 	_, err := c.send(protocol.AskCloseMessage{Cmd: protocol.CmdAskClose, SessionID: sessionID, AskID: askID})
 	return err
-}
-
-func (c *Client) PresentOpen(sourceSessionID protocol.SessionID, manifestYAML string, presentationID string) (*protocol.PresentOpenResult, error) {
-	msg := protocol.PresentOpenMessage{
-		Cmd:             protocol.CmdPresentOpen,
-		SourceSessionID: sourceSessionID,
-		ManifestYaml:    manifestYAML,
-	}
-	if value := strings.TrimSpace(presentationID); value != "" {
-		msg.PresentationID = protocol.Ptr(value)
-	}
-	resp, err := c.send(msg)
-	if err != nil {
-		return nil, err
-	}
-	if resp.PresentOpenResult == nil {
-		return nil, errors.New("daemon returned no present open result")
-	}
-	return resp.PresentOpenResult, nil
-}
-
-func (c *Client) PresentFeedback(presentationID string, seq int) (*protocol.PresentFeedbackResult, error) {
-	msg := protocol.PresentFeedbackMessage{
-		Cmd:            protocol.CmdPresentFeedback,
-		PresentationID: presentationID,
-	}
-	if seq > 0 {
-		msg.Seq = protocol.Ptr(seq)
-	}
-	resp, err := c.send(msg)
-	if err != nil {
-		return nil, err
-	}
-	if resp.PresentFeedbackResult == nil {
-		return nil, errors.New("daemon returned no present feedback result")
-	}
-	return resp.PresentFeedbackResult, nil
 }
 
 func (c *Client) NotebookGuide(sessionID protocol.SessionID) (*protocol.NotebookGuideResult, error) {
@@ -1110,6 +1069,24 @@ func (c *Client) SetAutomationLaunchDesktop(id int, desktop string, name *string
 		return nil, err
 	}
 	return &result, nil
+}
+
+func (c *Client) SnoozeSession(callerID, sessionID protocol.SessionID, until time.Time) error {
+	msg := protocol.SnoozeTurnMessage{Cmd: protocol.CmdSnoozeTurn, SessionID: protocol.TrimID(sessionID), Until: until.UTC().Format(time.RFC3339Nano)}
+	if caller := protocol.TrimID(callerID); caller != "" {
+		msg.CallerSessionID = protocol.Ptr(caller)
+	}
+	_, err := c.send(msg)
+	return err
+}
+
+func (c *Client) UnsnoozeSession(callerID, sessionID protocol.SessionID) error {
+	msg := protocol.WakeTurnMessage{Cmd: protocol.CmdWakeTurn, SessionID: protocol.TrimID(sessionID)}
+	if caller := protocol.TrimID(callerID); caller != "" {
+		msg.CallerSessionID = protocol.Ptr(caller)
+	}
+	_, err := c.send(msg)
+	return err
 }
 
 func (c *Client) SetSessionPriority(sessionID protocol.SessionID, priority bool) error {

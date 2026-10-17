@@ -11,6 +11,7 @@ mod quiesce;
 mod segmenter;
 mod session;
 mod signals;
+mod title;
 mod wire;
 
 use std::collections::HashMap;

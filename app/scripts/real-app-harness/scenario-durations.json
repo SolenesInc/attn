@@ -39,12 +39,12 @@
         "note": "Green final fifteen-step scenario on39ca6273d with grid layout popover Escape ordering and corrected setup focus. ATTN_VERDICT durationMs=103844, including cleanup. Native macOS also passed all15 steps with recording (53828ms)."
       },
       "desktop-switching": {
-        "run": "desktop-switching-2026-09-23T23-14-11-901Z",
-        "job": "Local scenario run, pr2desk instance",
-        "recordedAt": "2026-09-23",
-        "seconds": 27.0,
+        "run": "desktop-switching-2026-10-11T17-36-35-110Z",
+        "job": "Local packaged scenario, switch-input isolated instance",
+        "recordedAt": "2026-10-11",
+        "seconds": 20.164,
         "runnerClass": "local macOS",
-        "note": "First green run: switch, send, bounce, overview and a second client. Remeasure on Linux CI."
+        "note": "Green ATTN_VERDICT durationMs=20164 including cleanup. Covers native desktop shortcut followed immediately by typing, outgoing-shell exclusion, bounce, overview, another client, and tile moves. Remeasure on Linux CI."
       },
       "crew-management": {
         "run": "crew-management-2026-10-10T21-35-13-264Z",
@@ -198,12 +198,12 @@
         "note": "Green matrix-digest.txt reports 68.7s (last-matrix.json durationMs=68706) on 1183db93b. Covers native close shortcuts, both focus-history sequences, background close and repeated closes with keyboard focus."
       },
       "palette-order": {
-        "run": "palette-order-2026-10-04T22-15-43-603Z",
-        "job": "Local packaged scenario, palette-order isolated instance",
-        "recordedAt": "2026-10-04",
-        "seconds": 55.41,
+        "run": "palette-order-2026-10-12T21-16-50-434Z",
+        "job": "Local packaged scenario, palette-rename isolated instance",
+        "recordedAt": "2026-10-12",
+        "seconds": 28.204,
         "runnerClass": "local macOS",
-        "note": "Green ATTN_VERDICT durationMs=55410, including cleanup. Native command selection, learned ordering, pins, both palette entry paths and terminal focus restoration. Screenshot and summary attached to seed s-e4azmr. Remeasure on Linux CI."
+        "note": "Green ATTN_VERDICT durationMs=28204, including cleanup. Native command selection, learned ordering, pins, both palette entry paths, priority mark/clear with sidebar flags, session rename, Escape cancellation, 48-character limit and terminal focus restoration. Screenshot and summary attached to seed s-0qgww8. Remeasure on Linux CI."
       },
       "autoclose-on-exit": {
         "run": "autoclose-on-exit-2026-10-07T10-41-39-541Z",
@@ -230,12 +230,12 @@
         "note": "Green ATTN_VERDICT durationMs=27874, including cleanup and recording. Native palette moves a dispatcher, two delegates and a nested delegate against a production DB copy. No overview changes. Final recording and screenshots attached to seed s-4z9ah9. Remeasure on Linux CI."
       },
       "agent-settings": {
-        "run": "https://github.com/SolenesInc/attn/actions/runs/37878771307",
-        "job": "App acceptance shard 1/4",
-        "recordedAt": "2026-10-09",
-        "seconds": 33.189,
+        "run": "https://github.com/SolenesInc/attn/actions/runs/38650741637",
+        "job": "App acceptance shard 2/4",
+        "recordedAt": "2026-10-14",
+        "seconds": 33.006,
         "runnerClass": "github-hosted Linux",
-        "note": "Green shared harness/model/effort picker scenario at 67889c737. Matrix elapsed 33.189s; ATTN_VERDICT agent-settings-2026-10-09T03-27-01-108Z durationMs=32625, including cleanup."
+        "note": "Green settings scenario at 0d5f106fe0391f8d51b9fa9e28c6ec61931f7adb, including Experimental direct-launch default, toggles and cleanup. Matrix elapsed 33.006s; run agent-settings-2026-10-14T23-04-06-641Z."
       },
       "desktop-order": {
         "run": "desktop-order-2026-10-08T21-40-27-696Z",
@@ -260,6 +260,30 @@
         "seconds": 132.293,
         "runnerClass": "Linux amd64 VM",
         "note": "Green ATTN_VERDICT durationMs=132293 in a 57/57 green full matrix, including cleanup. Closes empty numbered desktops left by earlier scenarios before its agents launch."
+      },
+      "new-session-launcher": {
+        "run": "new-session-launcher-2026-10-15T21-44-27-103Z",
+        "job": "Local packaged scenario, launcher isolated instance",
+        "recordedAt": "2026-10-15",
+        "seconds": 22.491,
+        "runnerClass": "local macOS",
+        "note": "Green ATTN_VERDICT durationMs=22491 including cleanup and recording. Covers automation open/close/reopen, AppKit CmdT/CmdEnter, Terminal Tab, back, both starting branches, destination memory, existing worktrees and delete cancel/clean/force. Remeasure on Linux CI."
+      },
+      "agent-terminals": {
+        "run": "agent-terminals-2026-10-15T23-45-47-426Z",
+        "job": "Local packaged scenario, terminal-cli isolated instance",
+        "recordedAt": "2026-10-16",
+        "seconds": 6.524,
+        "runnerClass": "local macOS",
+        "note": "Green ATTN_VERDICT durationMs=6524, including cleanup and recording. Covers native caller input focus, both arrival pulses, and right-column stacking. Remeasure on Linux CI."
+      },
+      "shell-titles": {
+        "run": "shell-titles-2026-10-15T23-45-55-759Z",
+        "job": "Local packaged scenario, shell-titles isolated instance",
+        "recordedAt": "2026-10-16",
+        "seconds": 14.058,
+        "runnerClass": "local macOS",
+        "note": "Green ATTN_VERDICT durationMs=14058, including cleanup. Native input drives zsh and fish through cd, nvim title, and return to prompt; sidebar and tile header are asserted and four native screenshots captured. Remeasure on Linux CI."
       }
     }
   },
@@ -268,7 +292,7 @@
     "snooze-keyboard": 103.8,
     "agent-close": 8.2,
     "agent-queue": 132.293,
-    "agent-settings": 33.189,
+    "agent-settings": 33.006,
     "autoclose-on-exit": 72.591,
     "automation-form": 67.473,
     "automation-lifecycle": 71.804,
@@ -290,8 +314,8 @@
     "home-dock": 15.337,
     "markdown-opener": 20.3,
     "notebook-editor-undo": 32.8,
-    "present-submit-closes-window": 10.7,
     "prompt-composition": 19,
+    "codex-shared": 25,
     "pty-host-setting": 8.3,
     "session-close-ledger": 9.9,
     "session-reopen": 6.2,
@@ -307,7 +331,7 @@
     "tr401-local-claude": 14.2,
     "desktop-close-one-session-keeps-selection": 68.7,
     "session-creation-shortcuts": 22.6,
-    "desktop-switching": 27.0,
+    "desktop-switching": 20.164,
     "desktop-splits": 45.7,
     "worktree-surface": 25.748,
     "crew-management": 55.269,
@@ -316,9 +340,12 @@
     "profile-lifecycle": 18.5,
     "garden-profile-scope": 29.9,
     "launch-desktops": 26.739,
-    "palette-order": 55.41,
+    "palette-order": 28.204,
     "move-with-delegates": 27.874,
     "desktop-order": 23.413,
-    "close-desktop": 33.297
+    "close-desktop": 33.297,
+    "new-session-launcher": 22.491,
+    "agent-terminals": 6.524,
+    "shell-titles": 14.058
   }
 }

@@ -60,6 +60,24 @@ func TestAStoppedAgentKeepsItsScreenAcrossReconnectAndRestartUntilResumed(t *tes
 	}
 }
 
+func TestClosingAStoppedAgentsTileClosesTheSession(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	run := w.Launched(session)
+	terminal := app.Terminal(session)
+	run.Exit(143)
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
+
+	desktop, tile := tileOf(t, w, app, terminal)
+	if closed := closeTileFromApp(app, desktop, tile); !closed.Success {
+		t.Fatalf("close the stopped agent's tile: %s", protocol.Deref(closed.Error))
+	}
+	if entry := ledgerShowOverTheWebSocket(app, session).Entry; entry == nil || protocol.Deref(entry.ClosedAt) == "" {
+		t.Errorf("closing the stopped agent's tile left %+v, want %s closed", entry, session)
+	}
+}
+
 func TestACleanAgentQuitClosesWithoutAnAppRequest(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
@@ -194,6 +212,24 @@ func TestStoppingAReloadedAgentKeepsItsTileWhenTheOldExitArrivesLate(t *testing.
 		state := queriedSession(t, w.Client(), agent.id)
 		if state.TerminalExit == nil || state.TerminalExit.Code != 0 {
 			t.Fatalf("late old exit removed the stopped replacement: %+v", state)
+		}
+	})
+}
+
+func TestTwoReloadsWhoseOldExitsArriveLateLeaveTheAgentRunning(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.App()
+		agent := w.bubbleClaude(t, app, "shop")
+		releaseFirstExit := agent.term.HoldExitDelivery()
+		var releaseSecondExit func()
+		w.terms.OnNextSpawn(func(term *testworld.Terminal) { releaseSecondExit = term.HoldExitDelivery() })
+		reloadRespawned(t, app, agent.id)
+		reloadRespawned(t, app, agent.id)
+		releaseFirstExit()
+		releaseSecondExit()
+		synctest.Wait()
+		if state := queriedSession(t, w.Client(), agent.id); state.TerminalExit != nil {
+			t.Fatalf("the replaced agents' exits ended the agent the second reload started: %+v", state.TerminalExit)
 		}
 	})
 }

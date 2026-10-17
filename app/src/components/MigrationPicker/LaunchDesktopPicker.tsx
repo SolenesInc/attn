@@ -132,7 +132,7 @@ export function LaunchDesktopPicker() {
     const draft = draftList(item.profile_id).find((candidate) => desktopIdSlot(candidate.desktop_id) === slot);
     if (desktop) void choose(item, desktop.id);
     else if (draft) setDraft(item, draft);
-    else if (slot >= 5) own(item, slot);
+    else own(item, slot);
   };
   const focusRow = (index: number) => {
     const next = Math.max(0, Math.min(items.length - 1, index));
@@ -351,8 +351,8 @@ export function LaunchDesktopPicker() {
           </footer>
           <div className="mp-launch-keys">
             <kbd>↑</kbd>
-            <kbd>↓</kbd> choose · <kbd>N</kbd> a new desktop… · <kbd>1</kbd>–<kbd>4</kbd> that desktop · <kbd>5</kbd>–
-            <kbd>9</kbd> a new desktop in that empty slot · <kbd>D</kbd> new desktops of other agents · <kbd>⌘↵</kbd>{' '}
+            <kbd>↓</kbd> choose · <kbd>N</kbd> a new desktop… · <kbd>1</kbd>–<kbd>9</kbd> that desktop, or a
+            new one in an empty slot · <kbd>D</kbd> new desktops of other agents · <kbd>⌘↵</kbd>{' '}
             finish
           </div>
           {naming && (

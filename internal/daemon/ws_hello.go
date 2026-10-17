@@ -49,9 +49,6 @@ func (d *Daemon) admitClient(client *wsClient) {
 }
 
 func (d *Daemon) authorizeClientHello(client *wsClient, msg *protocol.ClientHelloMessage) bool {
-	if client.bearerAuthorized {
-		return true
-	}
 	provided := strings.TrimSpace(protocol.Deref(msg.ClientToken))
 	if d.clientToken != "" && subtle.ConstantTimeCompare([]byte(d.clientToken), []byte(provided)) == 1 {
 		return true

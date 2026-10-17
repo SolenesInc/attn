@@ -4,7 +4,7 @@ import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useDaemonStore } from '../store/daemonSessions';
 import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
-import { BUILD_INSTANCE } from '../utils/buildInstance';
+import { BUILD_DEMO, BUILD_INSTANCE } from '../utils/buildInstance';
 import { areSidebarHarnessLogosEnabled } from '../utils/sidebarHarnessLogos';
 import {
   useAppAppearanceContext,
@@ -76,6 +76,7 @@ export function AppSidebar() {
   const { handleOpenCrew } = useCrewPanelContext();
   const {
     crewQueueEnabled,
+    handleToggleQueueMode,
     queueBands,
     openSnoozeMenu,
     togglePriority,
@@ -106,7 +107,7 @@ export function AppSidebar() {
       tileContents={desktopTileContents}
       collapsed={sidebarCollapsed}
       surface={sidebarSurface}
-      instance={BUILD_INSTANCE}
+      instance={BUILD_DEMO ? '' : BUILD_INSTANCE}
       headerActions={sidebarHeaderActions}
       criticalNotifications={criticalNotifications}
       onOpenNotifications={openNotificationsPanel}
@@ -147,6 +148,7 @@ export function AppSidebar() {
       profileName={profileName}
       onSwitchProfile={() => setProfileSwitcherOpen(true)}
       onOpenCommands={() => handleOpenPalette('commands')}
+      onToggleFlow={handleToggleQueueMode}
       onOpenAgents={() => handleOpenPalette('agents')}
       peeksSilenced={windowCovered || agentFocused}
       agentListOpen={agentListOpen}

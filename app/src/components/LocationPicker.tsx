@@ -1,5 +1,3 @@
-import { useOptionalDaemonApi } from '../contexts/DaemonApiContext';
-import { useHarnesses } from '../hooks/useHarnesses';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { useFilesystemSuggestions } from '../hooks/useFilesystemSuggestions';
@@ -12,14 +10,9 @@ import type {
 } from '../hooks/useDaemonSocket';
 import type { SessionAgent } from '../types/sessionAgent';
 import { useSettings } from '../contexts/SettingsContext';
-import {
-  agentLabel,
-  type AgentAvailability,
-  getAgentCapabilities,
-  hasAnyAvailableAgents,
-  isAgentAvailable,
-  resolvePreferredAgent,
-} from '../utils/agentAvailability';
+import type { AgentAvailability } from '../utils/agentAvailability';
+import { useSessionControls, SessionControls, resolvePickerAgent } from './NewSessionDialog/SessionControls';
+import { repoDestinationSettingKey, parseRepoDestination, type RepoDestination } from './NewSessionDialog/destinationMemory';
 import {
   buildInitialPickerInput,
   expandDisplayPath,
@@ -28,7 +21,6 @@ import {
   toDisplayPath,
 } from '../utils/locationPickerPaths';
 import './LocationPicker.css';
-import { keyCombo } from '../shortcuts/formatShortcut';
 
 interface BackendRepoInfo {
   repo: string;
@@ -36,7 +28,7 @@ interface BackendRepoInfo {
   current_commit_hash: string;
   current_commit_time: string;
   default_branch: string;
-  worktrees: Array<{ path: string; branch: string }>;
+  worktrees: Array<{ path: string; branch: string; created_at?: string }>;
 }
 
 interface RepoInfo {
@@ -54,9 +46,9 @@ interface PathSelectableItem {
   path: string;
 }
 
-interface LocationPickerProps {
+export interface LocationPickerProps {
+  initialAgent?: SessionAgent;
   isOpen: boolean;
-  purpose?: 'session' | 'reopen';
   // Inline lives on an empty desktop: no overlay, and Escape never dismisses it.
   variant?: 'dialog' | 'inline';
   // False while another surface holds the keyboard: no focus grab, no Escape handling.
@@ -84,83 +76,10 @@ interface LocationPickerProps {
 }
 
 const MAX_RECENT_LOCATIONS = 10;
-const SESSION_AGENT_KEY = 'new_session_agent';
-const SESSION_YOLO_KEYS = ['new_session_yolo_local', 'new_session_yolo'];
-const SESSION_DESTINATION_KEY = 'new_session_destination';
-// READ-ONLY, daemon-computed. The launcher always sends its answer explicitly,
-// so a default that moves later cannot move an already-launched session.
-const AUTOMODE_DEFAULT_KEY = 'automode_enabled_default';
-const AUTOMODE_CAPABILITY = 'auto_mode';
-const TERMINAL_AGENT: SessionAgent = 'shell';
-
-const DEFAULT_AGENT_AVAILABILITY: AgentAvailability = {
-  shell: true,
-  codex: true,
-  claude: true,
-  copilot: true,
-};
-
-const normalizeAgent = (value?: string): SessionAgent | null => {
-  if (!value) return null;
-  const lower = value.toLowerCase().trim();
-  return lower || null;
-};
-
 function pathStartsWith(candidate: string, input: string): boolean {
   const normalizedCandidate = candidate.toLowerCase();
   const normalizedInput = input.toLowerCase();
   return normalizedCandidate.startsWith(normalizedInput);
-}
-
-function parseBooleanSetting(value?: string): boolean | null {
-  if (typeof value !== 'string') {
-    return null;
-  }
-  const normalized = value.trim().toLowerCase();
-  if (normalized === 'true') {
-    return true;
-  }
-  if (normalized === 'false') {
-    return false;
-  }
-  return null;
-}
-
-type RepoDestination = 'new_worktree' | 'main_repo';
-
-function repoDestinationSettingKey(repoRoot: string): string {
-  return `${SESSION_DESTINATION_KEY}_local_${repoRoot}`;
-}
-
-function parseRepoDestination(value?: string): RepoDestination | undefined {
-  const normalized = value?.trim();
-  return normalized === 'new_worktree' || normalized === 'main_repo' ? normalized : undefined;
-}
-
-function pickerAgentLabel(agent: SessionAgent): string {
-  return agent === TERMINAL_AGENT ? 'Terminal' : agentLabel(agent);
-}
-
-function withoutTerminalAgent(availability: AgentAvailability): AgentAvailability {
-  const { [TERMINAL_AGENT]: _terminal, ...rest } = availability;
-  return rest;
-}
-
-function resolvePickerAgent(
-  preferred: SessionAgent | undefined,
-  availability: AgentAvailability,
-  fallback: SessionAgent = 'codex',
-): SessionAgent {
-  if (preferred === TERMINAL_AGENT && availability[TERMINAL_AGENT]) {
-    return TERMINAL_AGENT;
-  }
-  const nonTerminalAvailability = withoutTerminalAgent(availability);
-  if (hasAnyAvailableAgents(nonTerminalAvailability)) {
-    return resolvePreferredAgent(preferred, nonTerminalAvailability, fallback);
-  }
-  return availability[TERMINAL_AGENT]
-    ? TERMINAL_AGENT
-    : resolvePreferredAgent(preferred, availability, fallback);
 }
 
 function toChooserRepoInfo(info: BackendRepoInfo): RepoInfo {
@@ -178,7 +97,7 @@ type Mode = 'path-input' | 'repo-options';
 
 export function LocationPicker({
   isOpen,
-  purpose = 'session',
+  initialAgent,
   variant = 'dialog',
   active = true,
   title = 'New Session Location',
@@ -198,8 +117,8 @@ export function LocationPicker({
 }: LocationPickerProps) {
   const { settings, setSetting } = useSettings();
   const noAgentsMessage = 'No supported agent CLI found in PATH.';
-  const pathOnly = purpose === 'reopen';
-  const pickerTitle = pathOnly ? 'Start fresh where?' : title;
+  const controls = useSessionControls({ isOpen, initialAgent, agentAvailability, chiefExists });
+  const { agent, yoloMode, chiefOfStaff, autoMode, yoloSupported, autoModeSupported, chiefToggleEligible, effectiveAgentAvailability, hasAvailableAgents, agentShortcutByName, handleAgentChange, toggleYoloMode } = controls;
   const inline = variant === 'inline';
 
   const [mode, setMode] = useState<Mode>('path-input');
@@ -208,11 +127,6 @@ export function LocationPicker({
   const [selectedPath, setSelectedPath] = useState('');
   const [recentLocations, setRecentLocations] = useState<RecentLocation[]>([]);
   const [homePath, setHomePath] = useState('');
-  const [agent, setAgent] = useState<SessionAgent>('claude');
-  const [yoloMode, setYoloMode] = useState(false);
-  const [chiefOfStaff, setChiefOfStaff] = useState(false);
-  const [autoMode, setAutoMode] = useState(true);
-  const autoModeTouchedRef = useRef(false);
   const [repoRootPath, setRepoRootPath] = useState<string | null>(null);
   const [repoInfo, setRepoInfo] = useState<RepoInfo | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -225,22 +139,6 @@ export function LocationPicker({
   const autoHighlightDoneRef = useRef(false);
   const requestGenerationRef = useRef(0);
 
-  const agentCapabilities = useMemo(() => getAgentCapabilities(settings), [settings]);
-  const effectiveAgentAvailability = useMemo<AgentAvailability>(
-    () => ({ ...(agentAvailability || DEFAULT_AGENT_AVAILABILITY), [TERMINAL_AGENT]: true }),
-    [agentAvailability],
-  );
-  const hasAvailableAgents = hasAnyAvailableAgents(effectiveAgentAvailability);
-  const savedYoloMode = useMemo(() => {
-    for (const key of SESSION_YOLO_KEYS) {
-      const parsed = parseBooleanSetting(settings[key]);
-      if (parsed != null) {
-        return parsed;
-      }
-    }
-    return false;
-  }, [settings]);
-
   const handleHomePathChange = useCallback((nextHomePath: string) => {
     setHomePath((prev) => (prev === nextHomePath ? prev : nextHomePath));
   }, []);
@@ -250,31 +148,6 @@ export function LocationPicker({
     onBrowseDirectory,
     { homePath, onHomePathChange: handleHomePathChange, enabled: isOpen },
   );
-
-  const daemonApi = useOptionalDaemonApi();
-  const { harnesses, hasCatalog, loading: harnessesLoading, error: harnessesError, retry: retryHarnesses } = useHarnesses(isOpen);
-  const orderedAgentList = useMemo(() => {
-    const reported = Object.keys(effectiveAgentAvailability) as SessionAgent[];
-    if (!daemonApi) return [...new Set([TERMINAL_AGENT, ...reported])];
-    const discovered = harnesses.map(harness => harness.id);
-    const interactive = hasCatalog || harnessesError ? reported.filter(candidate => !discovered.includes(candidate)).sort((a, b) => a.localeCompare(b)) : [];
-    return [...new Set([TERMINAL_AGENT, ...discovered, ...interactive])];
-  }, [effectiveAgentAvailability, harnesses, hasCatalog, harnessesError, daemonApi]);
-  const agentShortcutByName = useMemo(() => {
-    const shortcuts = new Map<SessionAgent, number>();
-    if (daemonApi && !hasCatalog) return shortcuts;
-    orderedAgentList.filter((candidate) => candidate !== TERMINAL_AGENT).forEach((candidate, index) => {
-      shortcuts.set(candidate, index + 1);
-    });
-    return shortcuts;
-  }, [orderedAgentList, daemonApi, hasCatalog]);
-
-  const savedAgent = normalizeAgent(settings[SESSION_AGENT_KEY]);
-  const yoloSupported = Boolean(agentCapabilities[agent]?.yolo);
-  const autoModeSupported = Boolean(agentCapabilities[agent]?.[AUTOMODE_CAPABILITY]);
-  const autoModeDefault = parseBooleanSetting(settings[AUTOMODE_DEFAULT_KEY]) ?? true;
-  // The agent gate matches the daemon's agentSupportsChiefReload.
-  const chiefToggleEligible = !chiefExists && !pathOnly && (agent === 'claude' || agent === 'codex');
 
   const invalidateRequestGeneration = useCallback(() => {
     requestGenerationRef.current += 1;
@@ -290,40 +163,6 @@ export function LocationPicker({
     (requestGeneration: number) => requestGenerationRef.current === requestGeneration,
     [],
   );
-
-  useEffect(() => {
-    if (!savedAgent) return;
-    const resolvedSavedAgent = resolvePickerAgent(savedAgent, effectiveAgentAvailability, 'codex');
-    setAgent((prev) => (prev === resolvedSavedAgent ? prev : resolvedSavedAgent));
-  }, [effectiveAgentAvailability, savedAgent]);
-
-  useEffect(() => {
-    const resolvedAgent = resolvePickerAgent(agent, effectiveAgentAvailability, 'codex');
-    if (resolvedAgent !== agent) {
-      setAgent(resolvedAgent);
-    }
-  }, [agent, effectiveAgentAvailability]);
-
-  useEffect(() => {
-    setYoloMode((prev) => (prev === savedYoloMode ? prev : savedYoloMode));
-  }, [savedYoloMode]);
-
-  useEffect(() => {
-    if (!yoloSupported) {
-      setYoloMode(false);
-    }
-  }, [yoloSupported]);
-
-  useEffect(() => {
-    if (!chiefToggleEligible) {
-      setChiefOfStaff(false);
-    }
-  }, [chiefToggleEligible]);
-
-  useEffect(() => {
-    if (autoModeTouchedRef.current) return;
-    setAutoMode((prev) => (prev === autoModeDefault ? prev : autoModeDefault));
-  }, [autoModeDefault]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -583,26 +422,6 @@ export function LocationPicker({
     setSelectedPathFromPhysical,
   ]);
 
-  const handleAgentChange = useCallback((nextAgent: SessionAgent) => {
-    if (!isAgentAvailable(effectiveAgentAvailability, nextAgent)) {
-      return;
-    }
-    setAgent(nextAgent);
-    if (nextAgent === TERMINAL_AGENT) {
-      return;
-    }
-    setSetting(SESSION_AGENT_KEY, nextAgent);
-  }, [effectiveAgentAvailability, setSetting]);
-
-  const toggleYoloMode = useCallback(() => {
-    if (!yoloSupported) {
-      return;
-    }
-    const nextYoloMode = !yoloMode;
-    setSetting(SESSION_YOLO_KEYS[0], String(nextYoloMode));
-    setYoloMode(nextYoloMode);
-  }, [setSetting, yoloMode, yoloSupported]);
-
   const handlePathInputSubmit = useCallback(() => {
     const pathToOpen = highlightedItem?.path || inputValue;
     if (!pathToOpen.trim()) {
@@ -656,7 +475,7 @@ export function LocationPicker({
     }
     rememberRepoDestination('new_worktree');
 
-    if (onCreateWorktreeSession && !pathOnly) {
+    if (onCreateWorktreeSession) {
       const selectedAgent = resolvePickerAgent(agent, effectiveAgentAvailability, 'codex');
       onCreateWorktreeSession(
         repoRootPath,
@@ -699,7 +518,6 @@ export function LocationPicker({
     onCreateWorktree,
     onCreateWorktreeSession,
     onError,
-    pathOnly,
     rememberRepoDestination,
     repoRootPath,
     agent,
@@ -783,11 +601,11 @@ export function LocationPicker({
     if (e.altKey && !e.metaKey && !e.ctrlKey) {
       if (e.code === 'KeyT') {
         e.preventDefault();
-        handleAgentChange(TERMINAL_AGENT);
+        handleAgentChange('shell');
         return;
       }
 
-      if (e.code === 'KeyQ' && !pathOnly) {
+      if (e.code === 'KeyQ') {
         e.preventDefault();
         toggleYoloMode();
         return;
@@ -821,7 +639,6 @@ export function LocationPicker({
     handleAgentChange,
     mode,
     movePathSelection,
-    pathOnly,
     toggleYoloMode,
   ]);
 
@@ -830,121 +647,14 @@ export function LocationPicker({
   }
 
   return (
-    <PickerFrame inline={inline} purpose={purpose} onDismiss={handleClosePicker} onStepBack={stepBack} onKeyDown={handleDialogKeyDown}>
-      {!pathOnly && (
-      <div className="picker-agent-bar">
-        <div className="picker-agent-label">SESSION AGENT</div>
-        <div className="picker-agent-controls">
-          {harnessesLoading && <span role="status">Loading harnesses…</span>}
-          {harnessesError && <span role="alert">{harnessesError}<button type="button" onClick={retryHarnesses}>Retry</button></span>}
-          <div className="agent-toggle" role="radiogroup" aria-label="Session agent">
-            {orderedAgentList.map((candidate) => {
-              const available = isAgentAvailable(effectiveAgentAvailability, candidate);
-              const shortcutNumber = agentShortcutByName.get(candidate);
-              const shortcut = candidate === TERMINAL_AGENT
-                ? keyCombo('alt', 'T')
-                : shortcutNumber && shortcutNumber <= 9 ? keyCombo('alt', String(shortcutNumber)) : null;
-              const label = pickerAgentLabel(candidate);
-              return (
-                <button
-                  key={candidate}
-                  type="button"
-                  className={`agent-option ${agent === candidate ? 'active' : ''}`}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => handleAgentChange(candidate)}
-                  role="radio"
-                  aria-checked={agent === candidate}
-                  disabled={!available}
-                  title={!available ? `${label} is not available on this machine` : undefined}
-                >
-                  <span className="agent-option-name">{label}</span>
-                  {available && shortcut && <kbd className="agent-shortcut">{shortcut}</kbd>}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-      )}
-      {autoModeSupported && !pathOnly && (
-        <div className="picker-chief-bar">
-          <div className="picker-agent-label">AUTO MODE</div>
-          <div className="picker-chief-controls">
-            <div className="agent-toggle">
-              <button
-                type="button"
-                className={`agent-option ${autoMode ? 'active' : ''}`}
-                data-testid="location-picker-automode-toggle"
-                role="switch"
-                aria-checked={autoMode}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  autoModeTouchedRef.current = true;
-                  setAutoMode((prev) => !prev);
-                }}
-                title="Judge calls that reach outside this session's directory against what the conversation asked for, instead of running everything"
-              >
-                <span className="agent-option-name">{autoMode ? 'On' : 'Off'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {chiefToggleEligible && (
-        <div className="picker-chief-bar">
-          <div className="picker-agent-label">CHIEF OF STAFF</div>
-          <div className="picker-chief-controls">
-            <div className="agent-toggle">
-              <button
-                type="button"
-                className={`agent-option ${chiefOfStaff ? 'active' : ''}`}
-                data-testid="location-picker-chief-toggle"
-                role="switch"
-                aria-checked={chiefOfStaff}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setChiefOfStaff((prev) => !prev)}
-                title="Launch this session as the chief of staff — it runs the notebook and delegates work to other sessions"
-              >
-                <span className="agent-option-name">{chiefOfStaff ? 'On' : 'Off'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {!pathOnly && (
-        <div className="picker-chief-bar">
-          <div className="picker-agent-label">YOLO</div>
-          <div className="picker-chief-controls">
-            <div className="agent-toggle">
-              <button
-                type="button"
-                className={`agent-option ${yoloMode ? 'active' : ''}`}
-                data-testid="location-picker-yolo-toggle"
-                role="switch"
-                aria-checked={yoloMode}
-                disabled={!yoloSupported}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={toggleYoloMode}
-                title={yoloSupported
-                  ? 'Run the agent without asking for permission'
-                  : `${agentLabel(agent)} does not support yolo mode`}
-              >
-                <span className="agent-option-name">{yoloMode ? 'On' : 'Off'}</span>
-                {yoloSupported && <kbd className="agent-shortcut">{keyCombo('alt', 'Q')}</kbd>}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {!hasAvailableAgents && !pathOnly && (
-        <div className="picker-agent-warning">{noAgentsMessage}</div>
-      )}
+    <PickerFrame inline={inline} onDismiss={handleClosePicker} onStepBack={stepBack} onKeyDown={handleDialogKeyDown}>
+      <SessionControls controls={controls} />
       {mode === 'path-input' ? (
         <>
           <div className="picker-header">
             <div className="picker-header-top">
               <div className="picker-title" data-testid="location-picker-title">
-                {pickerTitle}
+                {title}
               </div>
             </div>
             <PathInput
@@ -1087,9 +797,8 @@ export function LocationPicker({
 }
 
 // The dialog sits in a dismissable overlay; inline, the frame stands alone and Escape only steps back.
-function PickerFrame({ inline, purpose, onDismiss, onStepBack, onKeyDown, children }: {
+function PickerFrame({ inline, onDismiss, onStepBack, onKeyDown, children }: {
   inline: boolean;
-  purpose: 'session' | 'reopen';
   onDismiss: () => void;
   onStepBack: () => boolean;
   onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => void;
@@ -1120,7 +829,7 @@ function PickerFrame({ inline, purpose, onDismiss, onStepBack, onKeyDown, childr
   );
   if (inline) return frame;
   return (
-    <div className="location-picker-overlay" data-testid="location-picker-overlay" data-purpose={purpose} onClick={onDismiss}>
+    <div className="location-picker-overlay" data-testid="location-picker-overlay" onClick={onDismiss}>
       {frame}
     </div>
   );

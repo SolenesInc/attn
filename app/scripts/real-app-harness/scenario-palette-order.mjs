@@ -82,6 +82,56 @@ async function main() {
       await wait('[role="dialog"][aria-labelledby="shortcuts-modal-title"]', { absent: true });
       await waitForPaneInputFocus(client, agent.sessionId, agent.paneId);
     });
+    await runner.step('searchable_priority_command_marks_and_clears_the_sidebar_flag', async () => {
+      const marker = `[data-testid="sidebar-session-${agent.sessionId}"] [aria-label="Priority"]`;
+      for (const priority of [true, false]) {
+        await pressShortcutKeys(client, driver, 'ui.actionMenu');
+        await wait('[role="combobox"][aria-label="Agents"]', { focused: true });
+        await driver.typeText('>priority');
+        await wait(input, { focused: true });
+        await wait(selected, { textIncludes: priority ? 'Mark as priority' : 'Clear priority' });
+        await driver.pressEnter();
+        await wait('[role="dialog"][aria-label="Commands"]', { absent: true });
+        await observer.waitFor(() => Boolean(observer.getSession(agent.sessionId)?.priority) === priority,
+          `current session priority is ${priority}`, observer.connectTimeoutMs);
+        await wait(marker, { absent: !priority });
+        await waitForPaneInputFocus(client, agent.sessionId, agent.paneId);
+        await captureScreenshotData(path.join(runner.runDir, priority ? 'priority-marked.png' : 'priority-cleared.png'), { client });
+      }
+    });
+    await runner.step('rename_active_session_and_cancel', async () => {
+      const renameInput = '.rename-popover-input[aria-label="Rename session"]';
+      const header = `[data-pane-id="${agent.paneId}"] .desktop-pane-header`;
+      const openRename = async () => {
+        await pressShortcutKeys(client, driver, 'ui.actionMenu');
+        await wait('[role="combobox"][aria-label="Agents"]', { focused: true });
+        await driver.typeText('>rename');
+        await wait(selected, { textIncludes: 'Rename this session' });
+        await driver.pressEnter();
+        await wait(renameInput, { focused: true });
+      };
+      await openRename();
+      await driver.typeText('Renamed palette agent');
+      await driver.pressEnter();
+      await wait('.rename-popover', { absent: true });
+      await wait(header, { textIncludes: 'Renamed palette agent' });
+      await wait('[aria-label="Open Renamed palette agent"]');
+      await waitForPaneInputFocus(client, agent.sessionId, agent.paneId);
+      await captureScreenshotData(path.join(runner.runDir, 'renamed-session.png'), { client });
+      await openRename();
+      await driver.typeText('Cancelled palette name');
+      await driver.pressKey('Escape');
+      await wait('.rename-popover', { absent: true });
+      await wait(header, { textIncludes: 'Renamed palette agent' });
+      await wait('[aria-label="Open Renamed palette agent"]');
+      await waitForPaneInputFocus(client, agent.sessionId, agent.paneId);
+      await openRename();
+      await driver.typeText('x'.repeat(49));
+      await driver.pressEnter();
+      await wait('.rename-popover-error', { textIncludes: '48-character limit' });
+      await driver.pressKey('Escape');
+      await wait('.rename-popover', { absent: true });
+    });
     console.log(JSON.stringify(await runner.finishSuccess({ agent }), null, 2));
   } catch (error) {
     await captureScreenshotData(path.join(runner.runDir, 'failure.png'), { client }).catch(() => {});

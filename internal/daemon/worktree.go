@@ -390,11 +390,10 @@ func isDirtyWorktreeDeleteError(err error) bool {
 }
 
 func (d *Daemon) worktreeHasLocalChanges(path string) bool {
-	status, _, err := d.statusReader().Status(context.Background(), path, gitStatusModeFull)
-	if err != nil || status == nil || status.Error != nil {
-		return false
-	}
-	return len(status.Staged) > 0 || len(status.Unstaged) > 0 || len(status.Untracked) > 0
+	dirtyFiles, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) (int, error) {
+		return client.WorktreeDirtyCount(ctx, path)
+	})
+	return err == nil && dirtyFiles > 0
 }
 
 type worktreeNotFoundError struct {
@@ -442,9 +441,10 @@ func (d *Daemon) handleCreateWorktreeWS(client *wsClient, msg *protocol.CreateWo
 	d.life.Go("handleCreateWorktreeWS", func() {
 		path, err := d.doCreateWorktree(msg)
 		result := protocol.CreateWorktreeResultMessage{
-			Event:   protocol.EventCreateWorktreeResult,
-			Path:    protocol.Ptr(path),
-			Success: err == nil,
+			Event:     protocol.EventCreateWorktreeResult,
+			RequestID: msg.RequestID,
+			Path:      protocol.Ptr(path),
+			Success:   err == nil,
 		}
 		if err != nil {
 			result.Error = protocol.Ptr(err.Error())
@@ -464,9 +464,10 @@ func (d *Daemon) handleDeleteWorktreeWS(client *wsClient, msg *protocol.DeleteWo
 			Force: protocol.Deref(msg.Force),
 		})
 		result := protocol.DeleteWorktreeResultMessage{
-			Event:   protocol.EventDeleteWorktreeResult,
-			Path:    msg.Path,
-			Success: err == nil,
+			Event:     protocol.EventDeleteWorktreeResult,
+			RequestID: msg.RequestID,
+			Path:      msg.Path,
+			Success:   err == nil,
 		}
 		if err != nil {
 			result.Error = protocol.Ptr(err.Error())

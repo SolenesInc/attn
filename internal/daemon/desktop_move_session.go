@@ -28,22 +28,25 @@ func (d *Daemon) moveSessionToDesktop(callerID protocol.SessionID, sessionID pro
 	if session == nil {
 		return nil, fmt.Errorf("session %s is not a live session", sessionID)
 	}
-	if err := d.mayMoveSession(callerID, session); err != nil {
+	if err := d.mayActOnSession(callerID, session, "move"); err != nil {
 		return nil, err
 	}
 	profile, err := d.liveLaunchProfile(session.ProfileID)
 	if err != nil {
 		return nil, fmt.Errorf("session %s: %w", sessionID, err)
 	}
-	desktop, err := d.resolveDesktopRef(profile, ref)
+	desktopID, err := d.resolveDesktopTarget(profile, ref)
 	if err != nil {
 		return nil, err
 	}
-	moved, err := d.store.MoveSessionToDesktop(sessionID, desktop.ID, session.Label)
+	moved, err := d.store.MoveSessionToDesktop(sessionID, desktopID, session.Label)
 	if err != nil {
 		return nil, err
 	}
 	result := &protocol.DesktopMoveSessionResult{SessionID: sessionID, DesktopID: moved.Move.Target.ID, PaneID: moved.Move.FinalLeafID}
+	if moved.Created {
+		result.DesktopCreated = protocol.Ptr(true)
+	}
 	switch {
 	case moved.Placed:
 		d.publishArrangementChanged(profile.ID)
@@ -57,19 +60,4 @@ func (d *Daemon) moveSessionToDesktop(callerID protocol.SessionID, sessionID pro
 		})
 	}
 	return result, nil
-}
-
-// mayMoveSession lets a session move itself and its delegates, and the chief
-// move any session of its profile; no caller is the user.
-func (d *Daemon) mayMoveSession(callerID protocol.SessionID, session *protocol.Session) error {
-	if callerID == "" || callerID == session.ID {
-		return nil
-	}
-	if dispatcher, ok := d.liveSessionForTender(d.gardenDispatchersBySession()[session.ID]); ok && dispatcher == callerID {
-		return nil
-	}
-	if d.isChiefOfStaffSession(callerID) && d.chiefOfProfile(session.ProfileID) == callerID {
-		return nil
-	}
-	return fmt.Errorf("session %s may move itself, the sessions it dispatched, or any session as its profile's chief; %s (%s) is none of those", callerID, session.ID, session.Label)
 }

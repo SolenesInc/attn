@@ -1,0 +1,3 @@
+kind: added
+area: cli
+change: Snooze or unsnooze several sessions from the CLI, and see their snooze deadlines in session list and show.

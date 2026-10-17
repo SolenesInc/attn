@@ -1,5 +1,4 @@
 import { PaneSeedChip } from '../PaneSeedChip';
-import { HeaderPresentationChip } from '../PresentationChip';
 import { HeaderSettleKeptChip, HeaderSettlingIndicator } from '../SettlingIndicator';
 import { derivePaneSeedDisplay } from '../paneSeedDisplay';
 import { useDesktopContext } from './DesktopContext';
@@ -9,7 +8,6 @@ export function DesktopAgentSignals({ agentPane, paneSession }: DesktopAgentProp
     gardenSeeds,
     onOpenSeed,
     onCancelCountdown,
-    onOpenPresentation,
     pinnedSeedPopover,
     dismissSeedPopover,
   } = useDesktopContext();
@@ -26,12 +24,6 @@ export function DesktopAgentSignals({ agentPane, paneSession }: DesktopAgentProp
   return (
     <>
       {' '}
-      {paneSession?.presentation ? (
-        <HeaderPresentationChip
-          presentation={paneSession.presentation}
-          onOpen={(presentationId) => onOpenPresentation?.(presentationId)}
-        />
-      ) : null}
       {autoSettleFiresAt || autoSettleHeld ? (
         <HeaderSettlingIndicator
           firesAt={autoSettleFiresAt}

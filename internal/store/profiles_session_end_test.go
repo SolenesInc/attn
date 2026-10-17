@@ -177,17 +177,3 @@ func TestShortcutSlotsOutsideOneToNineAreRefusedByName(t *testing.T) {
 		}
 	}
 }
-
-func TestRestoringASessionsCloseTakesItsPaneOff(t *testing.T) {
-	s, _ := openProfileStore(t)
-	profile, desktop := mustCreateProfile(t, s, "Main")
-	addProfileSession(t, s, "kept", profile.ID)
-	addProfileSession(t, s, "rolled-back", profile.ID)
-	_, keptPane := mustPlace(t, s, desktop.ID, "kept")
-	mustPlace(t, s, desktop.ID, "rolled-back")
-
-	if restored, err := s.RestoreSessionClose("rolled-back", SessionCloseRecord{At: "2026-10-01T00:00:00Z", By: SessionClosedByUser}); err != nil || !restored {
-		t.Fatalf("RestoreSessionClose = %v, %v", restored, err)
-	}
-	wantOnlyPane(t, s, desktop.ID, keptPane)
-}

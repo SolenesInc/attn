@@ -1,3 +1,4 @@
+import { sessionDisplayName } from '../utils/sessionDisplayName';
 import type { ComponentProps, ReactNode } from 'react';
 import type { SidebarDesktop } from './sidebarTypes';
 import type { TileLeaf } from '../types/desktop';
@@ -160,7 +161,7 @@ export function SidebarDesktopList() {
                               desktopView,
                               paneId,
                               session.id,
-                              session.label,
+                              sessionDisplayName(session),
                               event,
                             )
                         : undefined

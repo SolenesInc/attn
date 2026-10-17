@@ -1,5 +1,6 @@
 import { DesktopClosePrompt } from '../components/DesktopClosePrompt';
 import { ChiefOfStaffTransferPrompt } from '../components/ChiefOfStaffTransferPrompt';
+import { NewSessionLauncher } from '../components/NewSessionLauncher';
 import { LocationPicker } from '../components/LocationPicker';
 import { SessionContextCapPrompt } from '../components/SessionContextCapPrompt';
 import { SessionCreationProgress } from '../components/SessionCreationProgress';
@@ -14,12 +15,15 @@ import {
 } from './AppContexts';
 
 export function AppSessionPrompts() {
-  const { desktopClosePrompt, confirmCloseDesktop, cancelCloseDesktop } = useSessionLifecycleContext();
+  const { desktopClosePrompt, confirmCloseDesktop, cancelCloseDesktop } =
+    useSessionLifecycleContext();
   const {
     locationPickerOpen,
-    locationPickerPurpose,
+    locationPickerInitialAgent,
+    startLocation,
+    startWorktreeSession,
     closeLocationPicker,
-    handleLocationSelect,
+    launchLocation,
     handleCreateWorktreeSession,
     sessionCreationJob,
     setSessionCreationJob,
@@ -43,26 +47,46 @@ export function AppSessionPrompts() {
     handleConfirmChiefTransfer,
     setChiefTransferTarget,
   } = useChiefOfStaffContext();
+  const experimental = settings.new_session_launcher_enabled === 'true';
+  const pickerProps = {
+    initialAgent: locationPickerInitialAgent,
+    isOpen: locationPickerOpen,
+    onClose: closeLocationPicker,
+    onGetRecentLocations: sendGetRecentLocations,
+    onBrowseDirectory: sendBrowseDirectory,
+    onInspectPath: sendInspectPath,
+    onGetRepoInfo: getRepoInfo,
+    onCreateWorktree: sendCreateWorktree,
+    onDeleteWorktree: sendDeleteWorktree,
+    onError: showError,
+    projectsDirectory: settings.projects_directory,
+    agentAvailability,
+    chiefExists: hasChiefOfStaff,
+  };
   return (
     <>
-      {desktopClosePrompt && <DesktopClosePrompt label={desktopClosePrompt.label} onConfirm={confirmCloseDesktop} onCancel={cancelCloseDesktop} />}
-      <LocationPicker
-        isOpen={locationPickerOpen}
-        purpose={locationPickerPurpose}
-        onClose={closeLocationPicker}
-        onSelect={handleLocationSelect}
-        onGetRecentLocations={sendGetRecentLocations}
-        onBrowseDirectory={sendBrowseDirectory}
-        onInspectPath={sendInspectPath}
-        onGetRepoInfo={getRepoInfo}
-        onCreateWorktree={sendCreateWorktree}
-        onCreateWorktreeSession={handleCreateWorktreeSession}
-        onDeleteWorktree={sendDeleteWorktree}
-        onError={showError}
-        projectsDirectory={settings.projects_directory}
-        agentAvailability={agentAvailability}
-        chiefExists={hasChiefOfStaff}
-      />
+      {desktopClosePrompt && (
+        <DesktopClosePrompt
+          label={desktopClosePrompt.label}
+          onConfirm={confirmCloseDesktop}
+          onCancel={cancelCloseDesktop}
+        />
+      )}
+      {experimental ? (
+        <NewSessionLauncher
+          {...pickerProps}
+          onSelect={startLocation}
+          onCreateWorktreeSession={(repo, branch, from, agent, yolo, auto, chief, onCreated) =>
+            startWorktreeSession(repo, branch, from, agent, yolo, auto, chief, undefined, onCreated)
+          }
+        />
+      ) : (
+        <LocationPicker
+          {...pickerProps}
+          onSelect={launchLocation}
+          onCreateWorktreeSession={handleCreateWorktreeSession}
+        />
+      )}
       <SessionCreationProgress
         isVisible={sessionCreationJob !== null}
         label={sessionCreationJob?.label || ''}

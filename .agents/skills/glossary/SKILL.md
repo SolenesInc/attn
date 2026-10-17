@@ -42,8 +42,7 @@ domain concepts with the user.
    that already names the same thing.
 8. No tables.
 9. Use they/them for agents and crew members, not it.
-10. When editing the glossary, always consider the change holistically.
-11. Each coined name's definition maps it to the established term that carries
+10. Each coined name's definition maps it to the established term that carries
     its meaning (seed → ticket, plot → epic). Choose established terms with care:
     they bring all their associations with them.
 

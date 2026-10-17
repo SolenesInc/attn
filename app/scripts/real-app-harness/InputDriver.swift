@@ -176,17 +176,15 @@ func parseOptions() throws -> Options {
                   [--delta-x 0] [--steps 4] [--window-title <substring>]
 
             --window-title matches windows owned by --bundle-id whose title CONTAINS the given
-            substring (case-insensitive). It targets secondary Tauri windows (e.g. "attn — present")
-            that Accessibility never enumerates; without it, the largest layer-0 onscreen window is
-            used, as before.
+            substring (case-insensitive). It targets secondary Tauri windows that Accessibility
+            never enumerates; without it, the largest layer-0 onscreen window is used, as before.
 
             scroll positions the cursor at (--relative-x, --relative-y) inside the resolved window
             (same 0..1 window-relative semantics as click), then posts a pixel-unit scroll wheel
             event split into --steps events (~16ms apart). Positive --delta-y scrolls content UP
             (wheel up); negative --delta-y scrolls content DOWN, matching CGEvent conventions.
             Example — scroll content down by 240px in 4 steps:
-              InputDriver.swift scroll --relative-x 0.5 --relative-y 0.5 --delta-y -240 --steps 4 \\
-                  --window-title "present"
+              InputDriver.swift scroll --relative-x 0.5 --relative-y 0.5 --delta-y -240 --steps 4
             """)
         default:
             throw DriverError.invalidArgument("Unknown argument: \(arg)")
@@ -382,10 +380,9 @@ func ensureAccessibility(prompt: Bool) throws {
 // windows are preferred, then the largest by area — same ordering the driver
 // has always used to pick "the" window when there is no title filter.
 //
-// AppleScript/Accessibility never enumerate attn's secondary Tauri windows
-// (e.g. the "attn — present" window) at all, even while they are visibly
-// onscreen, so CGWindowList plus a title filter is the only way to target
-// them.
+// AppleScript/Accessibility never enumerate attn's secondary Tauri windows at
+// all, even while they are visibly onscreen, so CGWindowList plus a title
+// filter is the only way to target them.
 func resolveWindow(bundleId: String, titleSubstring: String? = nil) throws -> (CGWindowID, CGRect) {
     let pid = try runningPID(bundleId: bundleId)
     let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
@@ -448,7 +445,7 @@ func mainWindowID(bundleId: String, titleSubstring: String? = nil) throws -> CGW
 
 // Enumerate every onscreen window owned by the bundle (not just the largest
 // layer-0 one, unlike mainWindowID). Used by callers that need to find a
-// specific window by title, such as attn's second "present" window.
+// specific window by title.
 //
 // kCGWindowName is only populated when this process has Screen Recording
 // permission; without it the name is empty for every window. That is

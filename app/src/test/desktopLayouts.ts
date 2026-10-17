@@ -1,5 +1,7 @@
 import { agentPane, daemonDesktop, daemonSession, soloDesktop, type DaemonDesktop } from './daemonFixtures';
+import type { CommandMessage } from './protocol';
 import { renderApp } from './renderApp';
+import type { Reply, ScriptedDaemon } from './scriptedDaemon';
 
 export function pane(sessionId: string) {
   return { type: 'pane', pane_id: `pane-${sessionId}` };
@@ -40,4 +42,20 @@ export function relayOut(
     const kept = active ?? (JSON.stringify(root).includes(`"${desktop.active_pane_id}"`) ? desktop.active_pane_id : next.active_pane_id);
     return { ...next, active_pane_id: kept, revision: desktop.revision + 1 };
   }));
+}
+
+export function closeTileAnswer(
+  daemon: ScriptedDaemon,
+  command: CommandMessage<'desktop_close_tile'>,
+  closedSessionId: string,
+  root: unknown,
+  sessionIds: string[],
+  options: { id?: string; active?: string } = {},
+): Reply[] {
+  relayOut({ arrange: (change) => { daemon.arrangement.desktops = change(daemon.arrangement.desktops); } }, root, sessionIds, options);
+  return [
+    { event: 'session_unregistered', session: daemonSession(closedSessionId) },
+    daemon.arrangement.answer(command),
+    { event: 'profile_action_result', action: command.cmd, success: true },
+  ];
 }

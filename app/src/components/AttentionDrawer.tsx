@@ -1,3 +1,4 @@
+import { sessionDisplayName } from '../utils/sessionDisplayName';
 // app/src/components/AttentionDrawer.tsx
 import { DaemonPR } from '../hooks/useDaemonSocket';
 import { usePRsNeedingAttention } from '../hooks/usePRsNeedingAttention';
@@ -56,7 +57,7 @@ export function AttentionDrawer({
                   onClick={() => onSelectSession(s.id)}
                 >
                   <StateIndicator state={s.state} size="sm" kind="session" seed={s.id} reason={s.state_reason} />
-                  <span className="item-name">{s.label}</span>
+                  <span className="item-name">{sessionDisplayName(s)}</span>
                 </div>
               );
             })}

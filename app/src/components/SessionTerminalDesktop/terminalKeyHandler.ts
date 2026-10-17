@@ -4,6 +4,7 @@ import { matchesShortcut, ShortcutId, isChord } from '../../shortcuts/registry';
 import { resolveBinding } from '../../shortcuts/resolver';
 import { enterLeader, resolvePendingThen } from '../../shortcuts/chordState';
 import { matchChordLeader } from '../../shortcuts/chordDispatch';
+import { isRetainedTerminalEvent } from '../../store/pendingTerminalInput';
 
 const TERMINAL_INTERCEPTS: ShortcutId[] = [
   'desktop.select1', 'desktop.select2', 'desktop.select3',
@@ -19,6 +20,7 @@ const TERMINAL_INTERCEPTS: ShortcutId[] = [
   'app.quit',
   'ui.showShortcuts',
   'session.newHorizontal',
+  'session.newTerminal',
   'terminal.find',
   'terminal.splitVertical',
   'terminal.splitHorizontal',
@@ -35,7 +37,7 @@ export function createTerminalKeyInterceptor(sendToPty: (data: string) => void) 
   return (event: KeyboardEvent) => {
     // A pending leader owns the next keystroke; resolve it before any PTY
     // control-sequence handling so the follow key is never emitted as input.
-    if (event.type === 'keydown') {
+    if (event.type === 'keydown' && !isRetainedTerminalEvent(event)) {
       const pendingThen = resolvePendingThen(event);
       if (pendingThen.kind !== 'none') {
         if (pendingThen.kind === 'fired') triggerShortcut(pendingThen.id);
@@ -70,7 +72,7 @@ export function createTerminalKeyInterceptor(sendToPty: (data: string) => void) 
       return true;
     }
 
-    if (event.type === 'keydown') {
+    if (event.type === 'keydown' && !isRetainedTerminalEvent(event)) {
       for (const id of TERMINAL_INTERCEPTS) {
         if (matchesBinding(event, id)) {
           return triggerShortcut(id);

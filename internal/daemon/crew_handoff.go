@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -123,10 +124,11 @@ func (d *Daemon) crewDayEndsHere(close protocol.CrewDayClose, now time.Time) boo
 }
 
 func (d *Daemon) crewLetterForHandoff(member crew.Member, sessionID protocol.SessionID, note string, retry bool) (string, error) {
-	if err := d.validateCrewMemberPaths(member); err != nil {
+	if err := d.requireCrewFiles(member); err != nil {
 		return "", err
 	}
-	filed, hasFiled := member.FiledLetterFor(sessionID)
+	filedName, hasFiled := member.FiledLetterFor(sessionID)
+	filed := filepath.Join(member.HomeDir(d.dataRoot), crew.HandoffsDirName, filedName)
 	if retry {
 		if !hasFiled {
 			return "", fmt.Errorf("%s's day has filed no letter yet, so there is no turnover to retry — write one with `attn handoff -m \"<your letter>\"`", crew.DisplayName(member.ID))
@@ -146,7 +148,7 @@ func (d *Daemon) crewLetterForHandoff(member crew.Member, sessionID protocol.Ses
 	if _, err := d.validateCrewHandoffsDir(member); err != nil {
 		return "", err
 	}
-	path, err := crew.FileHandoff(member.HomeDir, member.ID, note, time.Now())
+	path, err := crew.FileHandoff(member.HomeDir(d.dataRoot), member.ID, note, time.Now())
 	if err != nil {
 		if errors.Is(err, crew.ErrHandoffExists) && hasFiled {
 			return "", fmt.Errorf("%s's letter for this minute is already filed at %s — if the turnover is what failed, `attn handoff --retry` runs it against that letter; if this is a correction, file it as its own letter a minute from now", crew.DisplayName(member.ID), filed)
@@ -163,7 +165,7 @@ func (d *Daemon) recordCrewLetter(memberID string, sessionID protocol.SessionID,
 		if member.BindingSession != sessionID {
 			return false, nil
 		}
-		member.LetterPath = path
+		member.LetterFile = filepath.Base(path)
 		member.LetterSession = sessionID
 		return true, nil
 	}); err != nil {
@@ -178,7 +180,7 @@ func (d *Daemon) crewNap(member crew.Member, oldSessionID protocol.SessionID, te
 			d.cancelSessionTeardown(oldSessionID, teardown)
 		}
 	}()
-	if err := d.validateCrewMemberPaths(member); err != nil {
+	if err := d.requireCrewFiles(member); err != nil {
 		return "", err
 	}
 	if err := d.validateCrewWorkDirs(member); err != nil {
@@ -270,7 +272,7 @@ func (d *Daemon) crewNapSpawn(member crew.Member, session *protocol.Session) (*p
 		policy.launchPlacement = &launchPlacement{kind: "crew", itemID: member.ID}
 	}
 	if strings.TrimSpace(spawnMsg.Cwd) == "" {
-		spawnMsg.Cwd = member.HomeDir
+		spawnMsg.Cwd = member.HomeDir(d.dataRoot)
 	}
 	return spawnMsg, policy
 }

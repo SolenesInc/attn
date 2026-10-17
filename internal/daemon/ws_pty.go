@@ -26,75 +26,7 @@ import (
 
 var wsSubscriberCounter atomic.Int64
 
-const maxInitialPromptBytes = 1 << 20
-
-// The wrapper reads its initial prompt as it launches; a file older than this was never going to be read.
-const initialPromptCleanupAfter = 5 * time.Minute
-
 const endedStreamProbeTimeout = 10 * time.Second
-
-func (d *Daemon) writeInitialPromptFile(sessionID protocol.SessionID, prompt string) (string, func(), error) {
-	if strings.TrimSpace(prompt) == "" {
-		return "", func() {}, nil
-	}
-	if len(prompt) > maxInitialPromptBytes {
-		return "", func() {}, fmt.Errorf("initial prompt exceeds %d bytes", maxInitialPromptBytes)
-	}
-	dir := d.initialPromptDir()
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", func() {}, fmt.Errorf("create initial prompt directory: %w", err)
-	}
-	file, err := os.CreateTemp(dir, string(sessionID)+"-*.md")
-	if err != nil {
-		return "", func() {}, fmt.Errorf("create initial prompt file: %w", err)
-	}
-	path := file.Name()
-	cleanup := func() { _ = os.Remove(path) }
-	if err := file.Chmod(0o600); err != nil {
-		_ = file.Close()
-		cleanup()
-		return "", func() {}, fmt.Errorf("secure initial prompt file: %w", err)
-	}
-	if _, err := file.WriteString(prompt); err != nil {
-		_ = file.Close()
-		cleanup()
-		return "", func() {}, fmt.Errorf("write initial prompt file: %w", err)
-	}
-	if err := file.Close(); err != nil {
-		cleanup()
-		return "", func() {}, fmt.Errorf("close initial prompt file: %w", err)
-	}
-	return path, cleanup, nil
-}
-
-func (d *Daemon) initialPromptDir() string {
-	dataRoot := strings.TrimSpace(d.dataRoot)
-	if dataRoot == "" {
-		dataRoot = filepath.Dir(d.socketPath)
-	}
-	return filepath.Join(dataRoot, "runtime", "prompts")
-}
-
-// A prompt the wrapper never read outlives a daemon that stopped before its cleanup timer fired.
-func (d *Daemon) sweepStaleInitialPrompts(now time.Time) {
-	entries, err := os.ReadDir(d.initialPromptDir())
-	if err != nil {
-		return
-	}
-	for _, entry := range entries {
-		info, err := entry.Info()
-		if err != nil || !info.Mode().IsRegular() {
-			continue
-		}
-		path := filepath.Join(d.initialPromptDir(), entry.Name())
-		remove := func() { _ = os.Remove(path) }
-		if left := initialPromptCleanupAfter - now.Sub(info.ModTime()); left > 0 {
-			d.life.AfterFunc("cleanupInitialPrompt", left, remove)
-			continue
-		}
-		remove()
-	}
-}
 
 func wsSubscriberID(client *wsClient, terminalID protocol.TerminalID) string {
 	n := wsSubscriberCounter.Add(1)
@@ -264,16 +196,7 @@ func buildSpawnSessionRecord(msg *protocol.SpawnSessionMessage, agent, cwd, labe
 }
 
 func (d *Daemon) handleSpawnSession(client *wsClient, msg *protocol.SpawnSessionMessage) {
-	d.handleSpawnSessionWithPolicy(client, msg, internalSpawnPolicy{userStarted: true, requester: client})
-}
-
-func (d *Daemon) handleSpawnSessionWithPolicy(client *wsClient, msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) {
-	placed, rejection := d.runSpawnPipelineReporting(msg, policy)
-	d.answerSpawn(client, msg.ID, placed, rejection)
-}
-
-func (d *Daemon) handleSpawnSessionWithPolicyProtected(protection foregroundCleanupProtection, client *wsClient, msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) {
-	placed, rejection := d.runSpawnPipelineProtected(protection, msg, policy)
+	placed, rejection := d.runSpawnPipelineReporting(msg, internalSpawnPolicy{userStarted: true, requester: client})
 	d.answerSpawn(client, msg.ID, placed, rejection)
 }
 
@@ -715,7 +638,7 @@ func (d *Daemon) handlePtyInput(client *wsClient, msg *protocol.PtyInputMessage)
 			d.holdAutoSettle(sessionID)
 		}
 	}
-	writeErr := d.writeTerminalPTY(terminal, []byte(msg.Data), source)
+	writeErr := d.writeTerminalPTY(context.Background(), terminal, []byte(msg.Data), source)
 	d.recordSupportInputTrace(msg, receivedAt, time.Since(receivedAt), writeErr)
 	if writeErr != nil {
 		if shouldLogPtyCommandError(writeErr) {

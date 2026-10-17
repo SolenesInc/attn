@@ -2,13 +2,10 @@ import { harnesses } from './test/harnessCatalogs';
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { CommandMessage } from './test/protocol';
-import { openSessionsLedger, page, pages, rows } from './components/ledger/testSupport';
-import { soloDesktop, daemonSession, DEFAULT_PROFILE_ID } from './test/daemonFixtures';
+import { soloDesktop, daemonSession } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { Reply, ScriptedDaemon } from './test/scriptedDaemon';
-import { closedEntry, verdict } from './test/sessionLedgerFixtures';
 import { serveSettings } from './test/settings';
-import { SessionReopenAction } from './types/generated';
 import {
   HOME,
   inspection,
@@ -330,6 +327,7 @@ describe('App location picker', () => {
       await submitPath(daemon, '/tmp/shell-here');
 
       expect(launchedAt(daemon).map(({ agent, cwd }) => ({ agent, cwd }))).toEqual([{ agent: 'shell', cwd: '/tmp/shell-here' }]);
+      expect(daemon.sentOf('spawn_session')[0].label ?? '').toBe('');
       expect(daemon.sentOf('set_setting').filter(({ key }) => key === 'new_session_agent')).toEqual([]);
     });
 
@@ -478,6 +476,21 @@ describe('App location picker', () => {
       return view;
     }
 
+    it('starts in the inspected folder when repository options cannot be read', async () => {
+      const { daemon } = await openPicker({ repos: [EXSIN] });
+      daemon.on('get_repo_info', () => ({
+        event: 'get_repo_info_result', success: false, error: 'Git metadata unavailable',
+      }));
+
+      await submitPath(daemon, '~/projects/exsin');
+
+      expect(daemon.sentOf('get_repo_info')).toEqual([
+        { cmd: 'get_repo_info', repo: REPO, request_id: expect.any(String) },
+      ]);
+      expect(launchedAt(daemon)).toEqual([{ cwd: REPO, agent: 'claude' }]);
+      expect(pickerOpen()).toBe(false);
+    });
+
     it('keeps the dialog’s ⌥ shortcuts while the chooser’s rows have the keyboard', async () => {
       const { daemon } = await openRepo({}, '~/projects/exsin--feat-images');
 
@@ -605,94 +618,4 @@ describe('App location picker', () => {
     });
   });
 
-  describe('choosing where to start a closed session afresh', () => {
-    const PROJECTS = '/home/u/projects';
-    const FRESH_REPO = '/home/u/repo';
-
-    async function openReopenPicker() {
-      const view = await openSessionsLedger(pages([page({ entries: [closedEntry('s1')] })]), {
-        initialState: { settings: { projects_directory: PROJECTS } },
-      });
-      const { daemon } = view;
-      serveMachine(daemon, { repos: [repoInfo(FRESH_REPO)] });
-      serveLaunches(daemon);
-      daemon.on('session_reopen', ({ session_id, action, directory }) => (
-        action === SessionReopenAction.StartFreshElsewhere
-          ? { event: 'session_reopen_result', success: true, result: { action, directory: directory!, session_id, profile_id: DEFAULT_PROFILE_ID } }
-          : {
-            event: 'session_reopen_result',
-            success: false,
-            error: `${session_id} cannot be reopened with reopen: the directory is gone. Offered instead: start_fresh_elsewhere`,
-            reopen: verdict({ reopenable: false, reason: 'the directory is gone', directory_state: 'missing', actions: [SessionReopenAction.StartFreshElsewhere] }),
-          }
-      ));
-      const closedRow = () => rows().getByText('run s1').closest<HTMLElement>('.ledger-row')!;
-      await gesture(daemon, () => fireEvent.click(within(closedRow()).getByRole('button', { name: 'Reopen' })));
-      await gesture(daemon, () => fireEvent.click(within(closedRow()).getByRole('button', { name: 'Start fresh elsewhere' })));
-      return view;
-    }
-
-    const freshStarts = (daemon: ScriptedDaemon) => daemon.sentOf('session_reopen')
-      .filter(({ action }) => action === SessionReopenAction.StartFreshElsewhere)
-      .map(({ directory }) => directory);
-
-    async function createWorktree(daemon: ScriptedDaemon, name: string) {
-      await submitPath(daemon, FRESH_REPO);
-      await press(daemon, 'ArrowUp', {}, screen.getByTestId('repo-options'));
-      fireEvent.change(screen.getByTestId('repo-new-worktree-input'), { target: { value: name } });
-      await press(daemon, 'Enter', {}, screen.getByTestId('repo-options'));
-    }
-
-    it('asks only for a path, starting from the projects directory with the caret at its end, and starts there', async () => {
-      const { daemon } = await openReopenPicker();
-
-      expect(screen.getByTestId('location-picker-title')).toHaveTextContent('Start fresh where?');
-      expect(screen.queryByRole('radiogroup', { name: 'Session agent' })).toBeNull();
-      expect(screen.queryByRole('radiogroup', { name: 'Session target' })).toBeNull();
-      expect(pathInput()).toHaveValue(`${PROJECTS}/`);
-      expect(pathInput()).toHaveFocus();
-      expect(pathInput().selectionStart).toBe(`${PROJECTS}/`.length);
-
-      await submitPath(daemon, '/home/u/wt/fresh');
-
-      expect(freshStarts(daemon)).toEqual(['/home/u/wt/fresh']);
-      expect(pickerOpen()).toBe(false);
-    });
-
-    it('creates a new worktree itself from the default branch and starts there, without launching a session of its own', async () => {
-      const { daemon } = await openReopenPicker();
-
-      await createWorktree(daemon, 'fresh');
-
-      expect(daemon.sentOf('create_worktree')).toEqual([{ cmd: 'create_worktree', main_repo: FRESH_REPO, branch: 'fresh', starting_from: 'origin/main' }]);
-      expect(freshStarts(daemon)).toEqual([`${FRESH_REPO}--fresh`]);
-      expect(launchedAt(daemon)).toEqual([]);
-    });
-
-    it('shows the worktree being created in its form, and ignores another Enter meanwhile', async () => {
-      const { daemon } = await openReopenPicker();
-      const createRequest = holdAnswers(daemon, 'create_worktree');
-
-      await createWorktree(daemon, 'fresh');
-      expect(screen.getByText('Creating worktree...')).toBeInTheDocument();
-      expect(screen.getByTestId('repo-new-worktree-input')).toBeDisabled();
-      await press(daemon, 'Enter', {}, screen.getByTestId('repo-options'));
-      expect(daemon.sentOf('create_worktree')).toHaveLength(1);
-
-      await answer(daemon, createRequest(), { event: 'create_worktree_result', success: true, path: `${FRESH_REPO}--fresh` });
-      expect(freshStarts(daemon)).toEqual([`${FRESH_REPO}--fresh`]);
-    });
-
-    it('starts nothing from a worktree created after the picker closed', async () => {
-      const { daemon } = await openReopenPicker();
-      const createRequest = holdAnswers(daemon, 'create_worktree');
-      await createWorktree(daemon, 'fresh');
-
-      await gesture(daemon, () => fireEvent.click(screen.getByTestId('location-picker-overlay')));
-      await answer(daemon, createRequest(), { event: 'create_worktree_result', success: true, path: `${FRESH_REPO}--fresh` });
-
-      expect(pickerOpen()).toBe(false);
-      expect(freshStarts(daemon)).toEqual([]);
-    });
-  });
 });

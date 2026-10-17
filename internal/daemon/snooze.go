@@ -3,6 +3,8 @@ package daemon
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -19,58 +21,90 @@ type snoozeWakePayload struct {
 	Deadline time.Time `json:"deadline"`
 }
 
-func (d *Daemon) handleSnoozeTurn(msg *protocol.SnoozeTurnMessage) {
-	if d == nil || d.store == nil || msg == nil {
+func (d *Daemon) handleSnoozeTurnConn(conn net.Conn, msg *protocol.SnoozeTurnMessage) {
+	if err := d.authorizeSnooze(protocol.Deref(msg.CallerSessionID), msg.SessionID, "snooze"); err != nil {
+		d.sendError(conn, err.Error())
 		return
 	}
-	sessionID := protocol.TrimID(msg.SessionID)
-	if sessionID == "" {
+	if err := d.handleSnoozeTurn(msg); err != nil {
+		d.sendError(conn, err.Error())
 		return
+	}
+	d.sendOK(conn)
+}
+
+func (d *Daemon) handleWakeTurnConn(conn net.Conn, msg *protocol.WakeTurnMessage) {
+	if err := d.authorizeSnooze(protocol.Deref(msg.CallerSessionID), msg.SessionID, "unsnooze"); err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
+	if err := d.handleWakeTurn(msg); err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
+	d.sendOK(conn)
+}
+
+func (d *Daemon) authorizeSnooze(callerID, sessionID protocol.SessionID, action string) error {
+	sessionID = protocol.TrimID(sessionID)
+	session := d.store.Get(sessionID)
+	if session == nil {
+		return fmt.Errorf("unknown live session %s", sessionID)
+	}
+	return d.mayActOnSession(protocol.TrimID(callerID), session, action)
+}
+
+func (d *Daemon) handleSnoozeTurn(msg *protocol.SnoozeTurnMessage) error {
+	sessionID := protocol.TrimID(msg.SessionID)
+	if d.store.Get(sessionID) == nil {
+		return fmt.Errorf("unknown live session %s", sessionID)
 	}
 	until, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(msg.Until))
 	if err != nil {
-		d.logf("snooze rejected: session=%s bad until=%q: %v", sessionID, msg.Until, err)
-		return
+		return fmt.Errorf("session %s: until %q is not an RFC3339 instant", sessionID, msg.Until)
 	}
 	d.snoozeMu.Lock()
 	defer d.snoozeMu.Unlock()
-	if !d.store.SnoozeTurn(sessionID, until, time.Now()) {
-		return
+	now := time.Now()
+	if !until.After(now) {
+		return fmt.Errorf("session %s: until %s is in the past; choose a future instant", sessionID, msg.Until)
+	}
+	if !d.store.SnoozeTurn(sessionID, until, now) {
+		return fmt.Errorf("session %s: could not save snooze", sessionID)
 	}
 	d.cancelAutoSettle(sessionID, "snoozed")
 	d.traceSettle(sessionID)
 	if !d.scheduleSnoozeWake(sessionID, until) {
-		return
+		return fmt.Errorf("session %s: could not schedule unsnooze; snooze ended", sessionID)
 	}
 	d.broadcastSessionStateChanged(sessionID)
+	return nil
 }
 
-func (d *Daemon) handleWakeTurn(msg *protocol.WakeTurnMessage) {
-	if d == nil || msg == nil {
-		return
-	}
+func (d *Daemon) handleWakeTurn(msg *protocol.WakeTurnMessage) error {
 	sessionID := protocol.TrimID(msg.SessionID)
-	if sessionID == "" {
-		return
+	if d.store.Get(sessionID) == nil {
+		return fmt.Errorf("unknown live session %s", sessionID)
 	}
-	d.wakeSnooze(sessionID, time.Now(), "user")
+	return d.wakeSnooze(sessionID, time.Now(), "user")
 }
 
-func (d *Daemon) wakeSnooze(sessionID protocol.SessionID, at time.Time, cause string) {
-	if d == nil || d.store == nil || sessionID == "" {
-		return
-	}
+func (d *Daemon) wakeSnooze(sessionID protocol.SessionID, at time.Time, cause string) error {
 	d.snoozeMu.Lock()
 	defer d.snoozeMu.Unlock()
 	deadline := d.store.TurnStamps(sessionID).SnoozedUntil
 	if deadline.IsZero() {
-		return
+		return nil
+	}
+	if !d.applySnoozeWakeAt(sessionID, deadline, at) {
+		if !d.store.TurnStamps(sessionID).SnoozedUntil.IsZero() {
+			return fmt.Errorf("session %s: could not save unsnooze", sessionID)
+		}
+		return nil
 	}
 	d.removeSnoozeWake(sessionID)
-	if !d.applySnoozeWakeAt(sessionID, deadline, at) {
-		return
-	}
 	d.finishSnoozeWake(sessionID, at, cause)
+	return nil
 }
 
 func (d *Daemon) applySnoozeWakeAt(sessionID protocol.SessionID, deadline, at time.Time) bool {

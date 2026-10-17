@@ -38,6 +38,10 @@ func (d *Daemon) notebookStoreFor() (*notebook.Store, error) {
 	return store, nil
 }
 
+func openNotebookWatch(root string, changed func([]string)) (*notebook.Watcher, error) {
+	return notebook.NewWatcherWithCleaner(root, notebook.DefaultWatchDebounce, fsdoc.CleanPath, changed)
+}
+
 func (d *Daemon) ensureNotebookWatcher(root string) {
 	select {
 	case <-d.life.Done():
@@ -57,7 +61,7 @@ func (d *Daemon) ensureNotebookWatcher(root string) {
 		d.notebookWatcher = nil
 		d.notebookWatchedRoot = ""
 	}
-	w, err := notebook.NewWatcherWithCleaner(root, notebook.DefaultWatchDebounce, fsdoc.CleanPath, func(paths []string) {
+	w, err := d.notebookWatch(root, func(paths []string) {
 		d.broadcastFsChanged(root, originExternal, paths...)
 		var mdPaths []string
 		artifactSeeds := map[string]struct{}{}

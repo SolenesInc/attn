@@ -5,9 +5,6 @@ import remarkGfm from 'remark-gfm';
 import { MermaidDiagram } from './MermaidDiagram';
 import { useShikiHighlight } from './shiki';
 
-// A context rather than a per-render closure: it keeps CodeRenderer's identity
-// stable, so a fresh callback never remounts an in-flight MermaidDiagram.
-const DiagramLayoutChangeContext = createContext<(() => void) | undefined>(undefined);
 const MarkdownPresentationContext = createContext<'static' | 'reader'>('static');
 
 export function ReaderPresentation({ children }: { children: ReactNode }) {
@@ -28,7 +25,6 @@ function highlightableLanguage(className: string | undefined): string | undefine
 // react-markdown v10's `code` component gets no `inline` flag; a fenced block
 // carries a `language-*` className, inline code carries none.
 export const CodeRenderer: Components['code'] = ({ className, children, ...props }) => {
-  const onDiagramLayoutChange = useContext(DiagramLayoutChangeContext);
   const presentation = useContext(MarkdownPresentationContext);
   const language = highlightableLanguage(className);
   const code = language ? String(children) : '';
@@ -37,7 +33,6 @@ export const CodeRenderer: Components['code'] = ({ className, children, ...props
     return (
       <MermaidDiagram
         code={String(children).trimEnd()}
-        onLayoutChange={onDiagramLayoutChange}
         presentation={presentation}
       />
     );
@@ -82,16 +77,13 @@ interface MarkdownProps {
   children: string;
   className?: string;
   breaks?: boolean;
-  onDiagramLayoutChange?: () => void;
 }
 
-export function Markdown({ children, className, breaks, onDiagramLayoutChange }: MarkdownProps) {
+export function Markdown({ children, className, breaks }: MarkdownProps) {
   const remarkPlugins = useMemo(() => (breaks ? [remarkGfm, remarkBreaks] : [remarkGfm]), [breaks]);
   return (
     <div className={className}>
-      <DiagramLayoutChangeContext.Provider value={onDiagramLayoutChange}>
-        <MarkdownDocument source={children} remarkPlugins={remarkPlugins} components={defaultComponents} />
-      </DiagramLayoutChangeContext.Provider>
+      <MarkdownDocument source={children} remarkPlugins={remarkPlugins} components={defaultComponents} />
     </div>
   );
 }

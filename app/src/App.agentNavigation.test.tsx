@@ -171,13 +171,13 @@ describe('agent selection', () => {
     expect(selectedAgent()).toBe('s2');
   });
 
-  it('keeps showing the current leaf until the daemon shows the one asked for', async () => {
+  it('shows the picked leaf before the daemon confirms it', async () => {
     const { daemon } = await renderAgents();
     await open(daemon, 's1');
     const hold = holdShows(daemon);
 
     await open(daemon, 's2');
-    expect(selectedAgent()).toBe('s1');
+    expect(selectedAgent()).toBe('s2');
 
     await hold.release();
     expect(selectedAgent()).toBe('s2');
@@ -234,7 +234,7 @@ describe('agent selection', () => {
     const hold = holdShows(daemon);
 
     await open(daemon, 's2');
-    expect(selectedAgent()).toBe('s1');
+    expect(selectedAgent()).toBe('s2');
     await gesture(daemon, keys.home);
     await hold.release();
 
@@ -242,12 +242,14 @@ describe('agent selection', () => {
     expect(focusedPane()).not.toBe('pane-s2');
   });
 
-  it('keeps Home until the daemon shows the agent picked there, then shows it with the keyboard in it', async () => {
+  it('leaves Home for the picked agent with the keyboard in it before confirmation', async () => {
     const { daemon } = await renderAgents();
     const hold = holdShows(daemon);
 
     await open(daemon, 's2');
-    expect(isHome()).toBe(true);
+    expect(isHome()).toBe(false);
+    expect(selectedAgent()).toBe('s2');
+    expect(focusedPane()).toBe('pane-s2');
     await hold.release();
     await settleFocus(daemon);
 
@@ -256,12 +258,12 @@ describe('agent selection', () => {
     expect(focusedPane()).toBe('pane-s2');
   });
 
-  it('stays on Home when the daemon refuses a show asked for from there', async () => {
+  it('returns to Home when the daemon refuses a show asked for from there', async () => {
     const { daemon } = await renderAgents();
     const hold = holdShows(daemon);
 
     await open(daemon, 's2');
-    expect(isHome()).toBe(true);
+    expect(isHome()).toBe(false);
     await hold.refuse();
 
     expect(isHome()).toBe(true);

@@ -85,6 +85,45 @@ func conversationArchive(agent, resumeID string) string {
 	return filepath.Join(config.ConversationsDir(), agent, resumeID+".tar.zst")
 }
 
+func readKeptConversationArchive(agent, resumeID string) (store.KeptConversation, error) {
+	path := conversationArchive(agent, resumeID)
+	src, err := os.Open(path)
+	if err != nil {
+		return store.KeptConversation{}, err
+	}
+	defer src.Close()
+	info, err := src.Stat()
+	if err != nil {
+		return store.KeptConversation{}, err
+	}
+	decoder, err := zstd.NewReader(src, zstd.WithDecoderConcurrency(1))
+	if err != nil {
+		return store.KeptConversation{}, err
+	}
+	defer decoder.Close()
+	home, err := toolhome.Dir()
+	if err != nil {
+		return store.KeptConversation{}, err
+	}
+	kept := store.KeptConversation{Agent: agent, ResumeID: resumeID, StoredBytes: info.Size(), CopiedAt: info.ModTime()}
+	archive := tar.NewReader(decoder)
+	for {
+		header, err := archive.Next()
+		if err == io.EOF {
+			if kept.SourcePath == "" {
+				return store.KeptConversation{}, fmt.Errorf("archive %s has no main conversation file", path)
+			}
+			return kept, nil
+		}
+		if err != nil {
+			return store.KeptConversation{}, err
+		}
+		if header.Typeflag == tar.TypeReg && conversationMainFile(agent, resumeID, header.Name) && (kept.SourcePath == "" || header.Size > kept.Bytes) {
+			kept.SourcePath, kept.Bytes = filepath.Join(home, filepath.FromSlash(header.Name)), header.Size
+		}
+	}
+}
+
 func (d *Daemon) conversationSeedReferences() (map[conversationKey][]protocol.KeptConversationSeed, error) {
 	referenced := make(map[conversationKey][]protocol.KeptConversationSeed)
 	after := ""
@@ -169,6 +208,20 @@ func (d *Daemon) keepConversations(now time.Time) {
 	changed := make(map[conversationKey]bool)
 	for key := range referenced {
 		kept, exists := d.store.KeptConversation(key.agent, key.resumeID)
+		if !exists {
+			archived, err := readKeptConversationArchive(key.agent, key.resumeID)
+			if err == nil {
+				if err := d.store.PutKeptConversation(archived); err != nil {
+					d.logf("conversation keep: register %s/%s archive: %v", key.agent, key.resumeID, err)
+					continue
+				}
+				kept, exists = archived, true
+				changed[key] = true
+			} else if !os.IsNotExist(err) {
+				d.logf("conversation keep: read %s/%s archive: %v", key.agent, key.resumeID, err)
+				continue
+			}
+		}
 		if exists && kept.DeletedAt.IsZero() && d.store.RetainKeptConversation(key.agent, key.resumeID) {
 			changed[key] = true
 		}
@@ -189,6 +242,20 @@ func (d *Daemon) keepConversations(now time.Time) {
 				continue
 			}
 		}
+		archived, err := readKeptConversationArchive(key.agent, key.resumeID)
+		if err == nil {
+			if bestInfo.Size() <= archived.Bytes {
+				if err := d.store.PutKeptConversation(archived); err != nil {
+					d.logf("conversation keep: refresh %s/%s archive metadata: %v", key.agent, key.resumeID, err)
+				} else {
+					changed[key] = true
+				}
+				continue
+			}
+		} else if !os.IsNotExist(err) {
+			d.logf("conversation keep: read %s/%s archive before replacing: %v", key.agent, key.resumeID, err)
+			continue
+		}
 		if err := d.copyConversation(key.agent, best, files, bestInfo.Size(), now); err != nil {
 			d.logf("conversation keep: copy %s/%s: %v", key.agent, key.resumeID, err)
 		} else {
@@ -200,31 +267,15 @@ func (d *Daemon) keepConversations(now time.Time) {
 		d.logf("conversation keep: read kept rows: %v", err)
 		return
 	}
-	liveFiles := make(map[string]bool)
 	for _, kept := range all {
-		if !kept.DeletedAt.IsZero() {
+		if kept.DeletedAt.IsZero() {
 			continue
 		}
-		key := conversationKey{kept.Agent, kept.ResumeID}
-		path := conversationArchive(key.agent, key.resumeID)
-		liveFiles[path] = true
+		if err := os.Remove(conversationArchive(kept.Agent, kept.ResumeID)); err != nil && !os.IsNotExist(err) {
+			d.logf("conversation keep: delete %s/%s: %v", kept.Agent, kept.ResumeID, err)
+		}
 	}
-	d.retireConversations(all, liveFiles, changed, now)
-	err = filepath.WalkDir(config.ConversationsDir(), func(path string, entry fs.DirEntry, err error) error {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		if !entry.IsDir() && !liveFiles[path] {
-			return os.Remove(path)
-		}
-		return nil
-	})
-	if err != nil {
-		d.logf("conversation keep: remove leftovers: %v", err)
-	}
+	d.retireConversations(all, changed, now)
 	d.coalesceSnapshots(func() {
 		for key := range changed {
 			d.publishFact(factConversationKeptChanged, key.resumeID, nil)
@@ -232,7 +283,7 @@ func (d *Daemon) keepConversations(now time.Time) {
 	})
 }
 
-func (d *Daemon) retireConversations(all []store.KeptConversation, liveFiles map[string]bool, changed map[conversationKey]bool, now time.Time) {
+func (d *Daemon) retireConversations(all []store.KeptConversation, changed map[conversationKey]bool, now time.Time) {
 	if len(all) == 0 {
 		return
 	}
@@ -272,7 +323,6 @@ func (d *Daemon) retireConversations(all []store.KeptConversation, liveFiles map
 			}
 			if err := d.store.TombstoneKeptConversation(key.agent, key.resumeID, now, "sweep"); err == nil {
 				changed[key] = true
-				delete(liveFiles, path)
 			} else {
 				d.logf("conversation keep: tombstone %s/%s: %v", key.agent, key.resumeID, err)
 			}
@@ -468,8 +518,7 @@ func appendMissingConversationEntries(dst *tar.Writer, path, agent, resumeID str
 		if !conversationFileAllowed(agent, resumeID, header.Name) {
 			return fmt.Errorf("invalid %s archive path: %s", agent, header.Name)
 		}
-		parts := strings.Split(header.Name, "/")
-		if len(parts) == 4 && parts[1] == "projects" && parts[3] == resumeID+".jsonl" {
+		if conversationMainFile(agent, resumeID, header.Name) {
 			continue
 		}
 		if err := dst.WriteHeader(header); err != nil {

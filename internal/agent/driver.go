@@ -171,7 +171,7 @@ type SpawnOpts struct {
 
 	WrapperPath string
 
-	SettingsPath string
+	HookSettings string
 
 	NotebookRoot string
 
@@ -189,7 +189,10 @@ type SpawnOpts struct {
 
 	SelfReportPullRequests bool
 
-	InstructionsDir string
+	InheritedInstructionsDirs string
+	InstructionsDir           string
+
+	CodexRemote string
 }
 
 func (o SpawnOpts) addDirArgs() []string {

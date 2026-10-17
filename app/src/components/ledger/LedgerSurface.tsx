@@ -18,7 +18,6 @@ export interface LedgerSurfaceProps {
   tab: LedgerTab;
   onTabChange: (tab: LedgerTab) => void;
   onClose: () => void;
-  yieldsFocus?: boolean;
   now?: () => Date;
   sessions: TabProps<Omit<SessionsTabProps, 'onShowWorktree' | 'requestedDir'>>;
   conversations: Omit<ConversationsTabProps, 'queryRef' | 'statusTarget'>;
@@ -39,7 +38,7 @@ export function LedgerSurface(props: LedgerSurfaceProps) {
 }
 
 function OpenLedgerSurface({
-  tab, onTabChange, onClose, yieldsFocus = false, now = systemNow, sessions, worktrees, conversations,
+  tab, onTabChange, onClose, now = systemNow, sessions, worktrees, conversations,
 }: LedgerSurfaceProps) {
   const [conversationStatusTarget, setConversationStatusTarget] = useState<HTMLDivElement | null>(null);
   const [status, setStatus] = useState<ReactNode>(null);
@@ -97,15 +96,9 @@ function OpenLedgerSurface({
 
   return (
     <div className="ledger-shell" ref={shellRef} onKeyDown={onKeyDown}>
-      <FocusTrap paused={yieldsFocus} focusTrapOptions={{
+      <FocusTrap focusTrapOptions={{
         escapeDeactivates: false,
         initialFocus: false,
-        onPostUnpause: () => {
-          const target = shellRef.current?.querySelector<HTMLElement>('.ledger-row.is-selected')
-            ?? shellRef.current?.querySelector<HTMLElement>('.ledger-row')
-            ?? queryRef.current;
-          target?.focus({ preventScroll: true });
-        },
       }}>
         <div className="ledger-panel" role="dialog" aria-modal="true" aria-label="Sessions, worktrees and conversations">
           <header className="ledger-header">

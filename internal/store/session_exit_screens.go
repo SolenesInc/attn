@@ -57,13 +57,28 @@ func (s *Store) GetSessionExitScreen(sessionID protocol.SessionID) *SessionExitS
 	return &rec
 }
 
-func (s *Store) DeleteSessionExitScreen(sessionID protocol.SessionID) error {
+func (s *Store) DeleteSessionExitScreenBefore(sessionID protocol.SessionID, before time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
 		return nil
 	}
-	_, err := s.db.Exec(`DELETE FROM session_exit_screens WHERE session_id = ?`, sessionID)
+	var stamp string
+	err := s.db.QueryRow(`SELECT exited_at FROM session_exit_screens WHERE session_id = ?`, sessionID).Scan(&stamp)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	exitedAt, err := time.Parse(time.RFC3339Nano, stamp)
+	if err != nil {
+		return err
+	}
+	if !exitedAt.Before(before) {
+		return nil
+	}
+	_, err = s.db.Exec(`DELETE FROM session_exit_screens WHERE session_id = ?`, sessionID)
 	return err
 }
 

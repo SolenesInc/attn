@@ -4,6 +4,7 @@ import { resolvedShortcutEntries } from './resolver';
 import { isShellCtrlLetter } from './platform';
 import { enterLeader, resolvePendingThen } from './chordState';
 import { matchChordLeader } from './chordDispatch';
+import { isRetainedTerminalEvent } from '../store/pendingTerminalInput';
 
 type Handler = () => void;
 const NATIVE_SHORTCUT_EVENT = 'attn:native-shortcut';
@@ -41,7 +42,7 @@ function installGlobalListener() {
   listenerInstalled = true;
 
   window.addEventListener('keydown', (e: KeyboardEvent) => {
-    if (captureSuspended) return;
+    if (captureSuspended || isRetainedTerminalEvent(e)) return;
 
     // A pending leader owns the next keystroke entirely: always consume, so it can't fall through
     // to a single combo or leak into the terminal PTY.

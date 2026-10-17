@@ -45,6 +45,7 @@ import type {
   SessionTerminalDesktopProps,
 } from './desktopTypes';
 import { useSessionStore } from '../../store/sessions';
+import { sessionDisplayName } from '../../utils/sessionDisplayName';
 
 const RESIZE_MOUSE_SUPPRESSION_MS = 1_500;
 
@@ -91,7 +92,7 @@ export function useDesktopController(
     usagePopoverRequest,
     annotationApi,
     terminalState,
-    desktopSelectionStyle = 'rail',
+    desktopSelectionStyle = 'spotlight',
     activePaneId,
     selectedSessionId,
     fontSize,
@@ -110,7 +111,6 @@ export function useDesktopController(
     onRenameSession,
     onCancelCountdown,
     onTerminalPointerActivity,
-    onOpenPresentation,
     onOpenMarkdown,
     zoomActive = false,
     onSetZoomActive,
@@ -134,6 +134,7 @@ export function useDesktopController(
   const [renamePane, setRenamePane] = useState<{
     sessionId: string;
     name: string;
+    defaultName?: string;
     anchor: { top: number; left: number };
   } | null>(null);
   const [pendingRatioOverrides, setPendingRatioOverrides] = useState<Map<string, number>>(
@@ -207,6 +208,7 @@ export function useDesktopController(
         sessionId: pane.sessionId,
         testSessionId: pane.sessionId,
         state: paneSession?.state,
+        state_reason: paneSession?.state_reason,
         terminalExit: paneSession?.terminalExit,
       });
     }
@@ -425,6 +427,10 @@ export function useDesktopController(
   const prevPaneGeometryRef = useRef(paneGeometry);
   const sessionVisibleRef = useRef(false);
   const sessionVisible = enabled && isActiveSession && isSessionViewVisible;
+  useLayoutEffect(() => {
+    const focused = document.activeElement;
+    if (!sessionVisible && focused instanceof HTMLElement && panesContainerRef.current?.contains(focused)) focused.blur();
+  }, [sessionVisible]);
 
   useImperativeHandle(
     ref,
@@ -523,6 +529,21 @@ export function useDesktopController(
     pane.classList.add('leaf-arrival');
   }, [activeLeafId, desktopId, focusClaim, paneReadyFocusRequest, renderedPaneIdsKey, sessionVisible]);
 
+  const previousLeaves = useRef({ desktopId, ids: new Set(leafIds), visible: sessionVisible });
+  useLayoutEffect(() => {
+    const previous = previousLeaves.current;
+    previousLeaves.current = { desktopId, ids: new Set(leafIds), visible: sessionVisible };
+    if (!sessionVisible || !previous.visible || previous.desktopId !== desktopId) return;
+    const container = panesContainerRef.current;
+    if (!container || useSessionStore.getState().intent) return;
+    for (const id of leafIds) {
+      if (previous.ids.has(id) || focusClaim?.leafId === id) continue;
+      const pane = Array.from(container.querySelectorAll<HTMLElement>('[data-pane-id]'))
+        .find((element) => element.dataset.paneId === id);
+      if (pane) pane.classList.add('leaf-arrival');
+    }
+  }, [desktopId, focusClaim, leafIds, sessionVisible]);
+
   useEffect(() => {
     const container = panesContainerRef.current;
     if (!container) return;
@@ -536,7 +557,7 @@ export function useDesktopController(
     };
   }, [renderedPaneIdsKey]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!focusClaim || !sessionVisible || focusClaim.leafId !== activeLeafId) return;
     const active = document.activeElement;
     const userMovedOn = active && active !== focusClaim.focusOwner && !focusIsFree(panesContainerRef.current);
@@ -794,8 +815,9 @@ export function useDesktopController(
 
   const handleGhosttyTerminalReady = useCallback(
     (paneId: string) => (terminal: GhosttyTerminalHandle) => {
-      void runtime.handleTerminalReady(paneId)(terminal);
+      const ready = runtime.handleTerminalReady(paneId)(terminal);
       requestFocusForReadyPane(paneId);
+      return ready;
     },
     [requestFocusForReadyPane, runtime],
   );
@@ -859,7 +881,8 @@ export function useDesktopController(
     }
     const agentPane = agentPaneById.get(effectivePaneId);
     if (agentPane) {
-      return sessionById.get(agentPane.sessionId)?.label || agentPane.title || 'Session';
+      const session = sessionById.get(agentPane.sessionId);
+      return session ? sessionDisplayName(session) : agentPane.title || 'Session';
     }
     const tile = tileLeafById.get(effectivePaneId);
     if (tile) {
@@ -883,7 +906,8 @@ export function useDesktopController(
     }
     const agentPane = agentPaneById.get(effectiveDraggingLeafId);
     if (agentPane) {
-      return sessionById.get(agentPane.sessionId)?.label || agentPane.title || 'Pane';
+      const session = sessionById.get(agentPane.sessionId);
+      return session ? sessionDisplayName(session) : agentPane.title || 'Pane';
     }
     const tile = tileLeafById.get(effectiveDraggingLeafId);
     if (tile) {
@@ -1127,7 +1151,6 @@ export function useDesktopController(
     terminalsLive,
     onCancelCountdown,
     onTerminalPointerActivity,
-    onOpenPresentation,
     onOpenMarkdown,
     onSetZoomActive,
     onUndockTile,

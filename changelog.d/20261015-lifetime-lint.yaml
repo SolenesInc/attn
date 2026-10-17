@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: The daemon lifetime ownership check runs as a lint instead of a test, and CI now runs make lint-go, so the shipped binaries' test-world import check also gates PRs.

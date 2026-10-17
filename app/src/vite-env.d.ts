@@ -13,6 +13,7 @@ interface ImportMetaEnv {
   readonly VITE_ATTN_GIT_COMMIT?: string;
   readonly VITE_ATTN_BUILD_TIME?: string;
   readonly VITE_ATTN_BUILD_INSTANCE?: string;
+  readonly VITE_ATTN_BUILD_DEMO?: string;
   // Only for a bundle running outside Tauri; vite.config.ts fills it in from the
   // instance's client-token file.
   readonly VITE_CLIENT_TOKEN?: string;

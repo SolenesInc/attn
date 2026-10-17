@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -22,14 +21,9 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
-const reloadStuckFlagGrace = 5 * time.Second
-
 type terminalExitIntent uint8
 
-const (
-	terminalExitReload terminalExitIntent = 1 << iota
-	terminalExitStop
-)
+const terminalExitStop terminalExitIntent = 1
 
 func (d *Daemon) markTerminalExitIntent(id harness.TerminalID, intent terminalExitIntent) {
 	d.terminalExitIntentMu.Lock()
@@ -38,10 +32,6 @@ func (d *Daemon) markTerminalExitIntent(id harness.TerminalID, intent terminalEx
 		d.terminalExitIntents = make(map[harness.TerminalID]terminalExitIntent)
 	}
 	d.terminalExitIntents[id] |= intent
-}
-
-func (d *Daemon) markReloading(id harness.TerminalID) {
-	d.markTerminalExitIntent(id, terminalExitReload)
 }
 
 func (d *Daemon) consumeTerminalExitIntent(id harness.TerminalID, intent terminalExitIntent) bool {
@@ -57,8 +47,52 @@ func (d *Daemon) consumeTerminalExitIntent(id harness.TerminalID, intent termina
 	return true
 }
 
-func (d *Daemon) clearReloading(id harness.TerminalID) {
-	d.clearTerminalExitIntent(id, terminalExitReload)
+func withLifecycleID(opts ptybackend.SpawnOptions) ptybackend.SpawnOptions {
+	if opts.LifecycleID == "" {
+		opts.LifecycleID = uuid.NewString()
+	}
+	return opts
+}
+
+func (d *Daemon) runtimeLifecycle(t harness.TerminalID) (string, bool) {
+	provider, ok := d.ptyBackend.(ptybackend.RuntimeLifecycleProvider)
+	if !ok {
+		return "", false
+	}
+	return provider.RuntimeLifecycle(t)
+}
+
+func (d *Daemon) replaceRuntime(sessionID protocol.SessionID, t harness.TerminalID) (done func()) {
+	unlockEnds := d.lockTerminalEnds(sessionID)
+	if current, running := d.runtimeLifecycle(t); running {
+		d.markReplaced(t, current)
+	}
+	return func() {
+		d.terminalExitIntentMu.Lock()
+		delete(d.replacedRuntimes, t)
+		d.terminalExitIntentMu.Unlock()
+		unlockEnds()
+	}
+}
+
+func (d *Daemon) markReplaced(t harness.TerminalID, lifecycleID string) {
+	d.terminalExitIntentMu.Lock()
+	defer d.terminalExitIntentMu.Unlock()
+	if d.replacedRuntimes == nil {
+		d.replacedRuntimes = make(map[harness.TerminalID][]string)
+	}
+	d.replacedRuntimes[t] = append(d.replacedRuntimes[t], lifecycleID)
+}
+
+func (d *Daemon) exitOfSupersededRuntime(info ptybackend.ExitInfo) bool {
+	d.terminalExitIntentMu.Lock()
+	replacing := slices.Contains(d.replacedRuntimes[info.ID], info.LifecycleID)
+	d.terminalExitIntentMu.Unlock()
+	if replacing {
+		return true
+	}
+	current, running := d.runtimeLifecycle(info.ID)
+	return running && current != info.LifecycleID
 }
 
 func (d *Daemon) clearTerminalExitIntent(id harness.TerminalID, intent terminalExitIntent) {
@@ -190,7 +224,7 @@ func (d *Daemon) reloadSessionAgent(sessionID protocol.SessionID) {
 		d.logf("reload: cannot reconstruct launch params for %s: %v; aborting (live worker preserved)", sessionID, err)
 		return
 	}
-	pluginReload, err := d.preparePluginReload(session, &opts, d.isChiefOfStaffSession(sessionID))
+	pluginReload, err := d.prepareSessionReload(session, &opts, d.isChiefOfStaffSession(sessionID))
 	if err != nil {
 		d.logf("reload: cannot reconstruct plugin launch for %s: %v; aborting (live worker preserved)", sessionID, err)
 		return
@@ -222,7 +256,7 @@ func (d *Daemon) reloadSessionForClient(sessionID protocol.SessionID, cols, rows
 		if err != nil {
 			return err
 		}
-		pluginReload, err := d.preparePluginReload(session, &opts, d.isChiefOfStaffSession(sessionID))
+		pluginReload, err := d.prepareSessionReload(session, &opts, d.isChiefOfStaffSession(sessionID))
 		if err != nil {
 			return err
 		}
@@ -240,7 +274,6 @@ func (d *Daemon) reloadSessionForClient(sessionID protocol.SessionID, cols, rows
 	if rejection := d.runSpawnPipeline(spawnMsg, policy); rejection != nil {
 		return rejection.reason()
 	}
-	d.publishFact(FactSessionRespawned, string(sessionID), ptyRespawn{Terminal: string(d.primaryTerminal(sessionID))})
 	return nil
 }
 
@@ -285,9 +318,9 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 	}
 	ctx := context.Background()
 	terminal := opts.ID
-	d.markReloading(terminal)
 	d.sessionInputs().fenceSession(sessionID)
-	unlockEnds := d.lockTerminalEnds(sessionID)
+	unlockEnds := d.replaceRuntime(sessionID, terminal)
+	opts = withLifecycleID(opts)
 
 	if killErr := d.ptyBackend.Kill(ctx, terminal, syscall.SIGTERM); killErr != nil {
 		d.logf("reload: kill returned error for %s (continuing): %v", sessionID, killErr)
@@ -301,19 +334,18 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 	if spawnErr := d.ptyBackend.Spawn(ctx, opts); spawnErr != nil {
 		unlockEnds()
 		d.logf("reload: respawn failed for %s: %v; finalizing as exited", sessionID, spawnErr)
-		d.clearReloading(terminal)
-		d.handlePTYExit(ptybackend.ExitInfo{ID: terminal, ExitCode: 1})
+		d.handlePTYExit(ptybackend.ExitInfo{ID: terminal, ExitCode: 1, LifecycleID: opts.LifecycleID})
 		return fmt.Errorf("respawn failed for %s: %w", sessionID, spawnErr)
 	}
 	if pluginReload != nil {
 		if commitErr := pluginReload.commit(); commitErr != nil {
 			d.logf("reload: activate plugin run failed for %s: %v; finalizing as exited", sessionID, commitErr)
+			d.markReplaced(terminal, opts.LifecycleID)
 			_ = d.ptyBackend.Kill(ctx, terminal, syscall.SIGTERM)
 			_ = d.ptyBackend.Remove(ctx, terminal)
 			unlockEnds()
-			d.clearReloading(terminal)
 			d.closePluginDriverSession(sessionID, "reload_failed", nil, "")
-			d.handlePTYExit(ptybackend.ExitInfo{ID: terminal, ExitCode: 1})
+			d.handlePTYExit(ptybackend.ExitInfo{ID: terminal, ExitCode: 1, LifecycleID: opts.LifecycleID})
 			return fmt.Errorf("activate plugin run failed for %s: %w", sessionID, commitErr)
 		}
 	}
@@ -321,7 +353,6 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 	d.sessionInputs().forgetSession(sessionID)
 	d.recordPlacedInputOwed(sessionID, false)
 
-	d.life.AfterFunc("clearReloading", reloadStuckFlagGrace, func() { d.clearReloading(terminal) })
 	intent := launchIntentFromSpawnOptions(opts, d.isChiefOfStaffSession(sessionID))
 	intent.Asks = d.launchedWithAsks(sessionID)
 	if prior, ok := d.store.LaunchIntent(sessionID); ok {
@@ -500,9 +531,18 @@ func pluginReloadCapabilityError(reg pluginDriverRegistration, isChief bool) err
 	return nil
 }
 
-func (d *Daemon) preparePluginReload(session *protocol.Session, opts *ptybackend.SpawnOptions, isChief bool) (*preparedPluginReload, error) {
+func (d *Daemon) prepareSessionReload(session *protocol.Session, opts *ptybackend.SpawnOptions, isChief bool) (*preparedPluginReload, error) {
 	reg, ok := d.ensurePluginRegistry().driver(session.Agent)
 	if !ok {
+		if l := d.linkOf(session.ID); l != nil {
+			l.relaunch(opts)
+		}
+		if opts.Agent != "shell" {
+			if err := d.prepareAgentLaunch(session.ID, opts.ID, isChief, opts, ""); err != nil {
+				d.removeAgentLaunchDir(opts.ID)
+				return nil, err
+			}
+		}
 		return nil, nil
 	}
 	if err := pluginReloadCapabilityError(reg, isChief); err != nil {
@@ -575,8 +615,8 @@ func (d *Daemon) preparePluginReload(session *protocol.Session, opts *ptybackend
 	opts.Agent = reg.Agent
 	opts.ResumeSessionID = ""
 	opts.LifecycleID = runID
-	opts.ExternalCommand = append([]string(nil), result.Argv...)
-	opts.ExternalEnv = commandEnv
+	opts.AgentArgv = append([]string(nil), result.Argv...)
+	opts.AgentEnv = commandEnv
 	opts.ExternalCWD = externalCWD
 	return prepared, nil
 }
@@ -646,7 +686,7 @@ func (d *Daemon) preparePluginRoleReload(sessionID protocol.SessionID, desiredCh
 		return nil, true, err
 	}
 	opts.ContextWindowCap = d.launchContextWindowCap(sessionID, session.Agent, desiredChief)
-	pluginReload, err := d.preparePluginReload(session, &opts, desiredChief)
+	pluginReload, err := d.prepareSessionReload(session, &opts, desiredChief)
 	if err != nil {
 		lock.Unlock()
 		return nil, true, err

@@ -546,6 +546,19 @@
   color: var(--color-text-primary);
 }
 
+.desktop-dock-tile-update-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+  gap: 8px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+  color: var(--color-status-warning);
+  font-size: 12px;
+}
+
 .desktop-dock-tile-body {
   flex: 1;
   min-height: 0;

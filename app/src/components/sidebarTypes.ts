@@ -14,6 +14,7 @@ import { type CrewMemberView } from './QueueRows';
 export interface LocalSession {
   id: string;
   label: string;
+  title?: string;
   state: UISessionState;
   agent?: string;
   branch?: string;
@@ -74,6 +75,7 @@ export interface SidebarProps {
   profileName?: string;
   onSwitchProfile?: () => void;
   onOpenCommands?: () => void;
+  onToggleFlow?: () => void;
   onOpenAgents?: () => void;
   peeksSilenced?: boolean;
   agentListOpen?: boolean;

@@ -409,8 +409,8 @@ func TestRecreatingAWorktreeChecksPluginStorageAfterProjectSettingsReturn(t *tes
 				if err == nil || !strings.Contains(err.Error(), "saved conversation missing") {
 					t.Fatalf("missing conversation reopened: %v", err)
 				}
-				if _, err := os.Stat(worktree); !os.IsNotExist(err) {
-					t.Fatalf("refusal left recreated worktree: %v", err)
+				if info, err := os.Stat(worktree); err != nil || !info.IsDir() {
+					t.Fatalf("refusal removed recreated worktree: %v", err)
 				}
 				if row := showSession(t, cli, session); protocol.Deref(row.ClosedAt) == "" {
 					t.Fatal("refusal reopened ledger row")

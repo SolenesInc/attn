@@ -67,15 +67,25 @@ function legacyWorkspacesSql(fixtureDir) {
     "CREATE TABLE agent_mailbox_items (id TEXT PRIMARY KEY, recipient_session_id TEXT NOT NULL, kind TEXT NOT NULL, source_id TEXT NOT NULL DEFAULT '', coalesce_key TEXT NOT NULL DEFAULT '', hint TEXT NOT NULL DEFAULT '', prompt TEXT NOT NULL DEFAULT '', bell_name TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, notified_at TEXT NOT NULL DEFAULT '', read_at TEXT NOT NULL DEFAULT '');",
     'ALTER TABLE pull_request_watches RENAME TO addressed_pull_request_watches;',
     "CREATE TABLE pull_request_watches (session_id TEXT NOT NULL, pr_id TEXT NOT NULL, mode TEXT NOT NULL, reviewer TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, cursor_json TEXT NOT NULL DEFAULT '{}', last_success_at TEXT NOT NULL DEFAULT '', last_error TEXT NOT NULL DEFAULT '', feedback_error TEXT NOT NULL DEFAULT '', outage_active INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (session_id, pr_id));",
-    'INSERT INTO pull_request_watches SELECT session_id, pr_id, mode, reviewer, created_at, cursor_json, last_success_at, last_error, feedback_error, outage_active FROM addressed_pull_request_watches;',
+    "INSERT INTO pull_request_watches SELECT session_id, pr_id, mode, reviewer, created_at, cursor_json, '', last_error, feedback_error, outage_active FROM addressed_pull_request_watches;",
     'DROP TABLE addressed_pull_request_watches;',
-    'ALTER TABLE presentations DROP COLUMN address;',
+    "ALTER TABLE prs ADD COLUMN last_updated TEXT NOT NULL DEFAULT '';",
+    "ALTER TABLE prs ADD COLUMN last_polled TEXT NOT NULL DEFAULT '';",
+    'UPDATE prs SET last_updated = (SELECT last_updated FROM pr_poll_times WHERE pr_id = prs.id), last_polled = (SELECT last_polled FROM pr_poll_times WHERE pr_id = prs.id);',
+    'DROP TABLE pr_poll_times;',
+    'DELETE FROM schema_migrations WHERE version = 1791738052340741;',
+    // It still has the Present tables, without the address column 168 adds.
+    "CREATE TABLE presentations (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, ticket_id TEXT, title TEXT NOT NULL, kind TEXT NOT NULL, repo_path TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', created_at TEXT NOT NULL);",
+    'CREATE TABLE presentation_rounds (id TEXT PRIMARY KEY, presentation_id TEXT NOT NULL REFERENCES presentations(id) ON DELETE CASCADE, seq INTEGER NOT NULL, manifest_yaml TEXT NOT NULL, base_sha TEXT NOT NULL, head_sha TEXT NOT NULL, created_at TEXT NOT NULL, submitted_at TEXT, verdict TEXT, UNIQUE(presentation_id, seq));',
+    "CREATE TABLE presentation_comments (id TEXT PRIMARY KEY, round_id TEXT NOT NULL REFERENCES presentation_rounds(id) ON DELETE CASCADE, filepath TEXT NOT NULL, line_start INTEGER NOT NULL, line_end INTEGER NOT NULL, side TEXT NOT NULL, content TEXT NOT NULL, author TEXT NOT NULL DEFAULT 'user', created_at TEXT NOT NULL);",
+    'DELETE FROM schema_migrations WHERE version = 1792015000484696;',
     // It also predates successions (169), which add sessions.succeeds.
     'DROP INDEX idx_sessions_succeeds;',
     'ALTER TABLE sessions DROP COLUMN succeeds;',
     'ALTER TABLE sessions DROP COLUMN priority;',
     'ALTER TABLE session_teardown_tombstones DROP COLUMN driver_terminal_id;',
     'DROP TABLE terminal_bindings;',
+    'DROP TABLE terminal_views;',
     `DELETE FROM sessions WHERE id IN (${LEGACY_WORKSPACES.flatMap((_, offset) => agentsOf(offset + 1)).map(sql).join(', ')});`,
   ];
   LEGACY_WORKSPACES.forEach((title, offset) => {

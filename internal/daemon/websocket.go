@@ -3,7 +3,6 @@ package daemon
 import (
 	"context"
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -39,7 +38,6 @@ type wsClient struct {
 
 	trustedTauriOrigin       bool
 	browserHostAuthenticated bool
-	bearerAuthorized         bool
 
 	attachedStreams map[protocol.TerminalID]ptybackend.Stream
 	attachMu        sync.Mutex
@@ -64,12 +62,6 @@ type wsClient struct {
 
 	presence   clientPresence
 	presenceMu sync.RWMutex
-
-	gitStatusDir     string
-	gitStatusStop    chan struct{}
-	gitStatusRefresh chan gitStatusRefreshRequest
-	gitStatusHash    string
-	gitStatusMu      sync.Mutex
 }
 
 func (c *wsClient) HasCapability(cap string) bool {
@@ -231,35 +223,6 @@ func (c *wsClient) push(message outboundMessage, slots chan struct{}) (queued, f
 	return false, full
 }
 
-func (c *wsClient) stopGitStatusPoll() {
-	c.gitStatusMu.Lock()
-	defer c.gitStatusMu.Unlock()
-
-	if c.gitStatusStop != nil {
-		close(c.gitStatusStop)
-		c.gitStatusStop = nil
-	}
-	c.gitStatusRefresh = nil
-	c.gitStatusDir = ""
-	c.gitStatusHash = ""
-}
-
-func (c *wsClient) requestGitStatusRefresh(req gitStatusRefreshRequest) bool {
-	c.gitStatusMu.Lock()
-	refresh := c.gitStatusRefresh
-	c.gitStatusMu.Unlock()
-
-	if refresh == nil {
-		return false
-	}
-	select {
-	case refresh <- req:
-		return true
-	default:
-		return false
-	}
-}
-
 type BroadcastListener func(event *protocol.WebSocketEvent)
 
 type messageKind int
@@ -329,7 +292,6 @@ func (h *wsHub) closeAll() {
 		delete(h.connections, client)
 		delete(h.clients, client)
 		client.closeSendChannel()
-		client.stopGitStatusPoll()
 		if client.conn != nil {
 			client.abortTransport()
 		}
@@ -362,7 +324,6 @@ func (h *wsHub) remove(client *wsClient) {
 	delete(h.connections, client)
 	delete(h.clients, client)
 	client.closeSendChannel()
-	client.stopGitStatusPoll()
 	h.mu.Unlock()
 }
 
@@ -557,19 +518,6 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden origin", http.StatusForbidden)
 		return
 	}
-	bearerAuthorized := false
-	if required := config.WSAuthToken(); required != "" {
-		provided := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
-		if provided == "" {
-			provided = strings.TrimSpace(r.URL.Query().Get("token"))
-		}
-		if subtle.ConstantTimeCompare([]byte(required), []byte(provided)) != 1 {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		bearerAuthorized = true
-	}
-
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		OriginPatterns: websocketOriginPatternsForRequest(r),
 	})
@@ -588,7 +536,6 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 		recv:               make(chan []byte, 256),
 		connectedAt:        time.Now(),
 		trustedTauriOrigin: isTrustedTauriOrigin(origin),
-		bearerAuthorized:   bearerAuthorized,
 		attachedStreams:    make(map[protocol.TerminalID]ptybackend.Stream),
 	}
 	release, held := d.life.Hold("handleWS")
@@ -894,6 +841,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleDesktopMoveLeaf(client, msg.(*protocol.DesktopMoveLeafMessage))
 	case protocol.CmdDesktopRemoveLeaf:
 		d.handleDesktopRemoveLeaf(client, msg.(*protocol.DesktopRemoveLeafMessage))
+	case protocol.CmdDesktopCloseTile:
+		d.handleDesktopCloseTile(client, msg.(*protocol.DesktopCloseTileMessage))
 	case protocol.CmdDesktopSetSplitRatio:
 		d.handleDesktopSetSplitRatio(client, msg.(*protocol.DesktopSetSplitRatioMessage))
 	case protocol.CmdDesktopDockTile:
@@ -1076,9 +1025,13 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdSettleTurn:
 		d.handleSettleTurn(msg.(*protocol.SettleTurnMessage))
 	case protocol.CmdSnoozeTurn:
-		d.handleSnoozeTurn(msg.(*protocol.SnoozeTurnMessage))
+		if err := d.handleSnoozeTurn(msg.(*protocol.SnoozeTurnMessage)); err != nil {
+			d.logf("snooze rejected: %v", err)
+		}
 	case protocol.CmdWakeTurn:
-		d.handleWakeTurn(msg.(*protocol.WakeTurnMessage))
+		if err := d.handleWakeTurn(msg.(*protocol.WakeTurnMessage)); err != nil {
+			d.logf("unsnooze rejected: %v", err)
+		}
 	case protocol.CmdCancelCountdown:
 		d.handleCancelCountdown(msg.(*protocol.CancelCountdownMessage))
 
@@ -1134,7 +1087,9 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdRecordCommandUsage:
 		d.handleRecordCommandUsage(client, msg.(*protocol.RecordCommandUsageMessage))
 	case protocol.CmdRecentFiles:
-		d.handleRecentFilesWS(client, msg.(*protocol.RecentFilesMessage))
+		d.life.Go("handleRecentFiles", func() {
+			d.handleRecentFilesWS(client, msg.(*protocol.RecentFilesMessage))
+		})
 	case protocol.CmdBrowseDirectory:
 		d.handleBrowseDirectoryWS(client, msg.(*protocol.BrowseDirectoryMessage))
 	case protocol.CmdInspectPath:
@@ -1151,22 +1106,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleListRemoteBranchesWS(client, msg.(*protocol.ListRemoteBranchesMessage))
 	case protocol.CmdEnsureRepo:
 		d.handleEnsureRepoWS(client, msg.(*protocol.EnsureRepoMessage))
-	case protocol.CmdSubscribeGitStatus:
-		d.handleSubscribeGitStatus(client, msg.(*protocol.SubscribeGitStatusMessage))
-	case protocol.CmdUnsubscribeGitStatus:
-		d.handleUnsubscribeGitStatusWS(client)
-	case protocol.CmdGetFileDiff:
-		d.handleGetFileDiffWS(client, msg.(*protocol.GetFileDiffMessage))
 	case protocol.CmdGetRepoInfo:
 		d.handleGetRepoInfoWS(client, msg.(*protocol.GetRepoInfoMessage))
-	case protocol.CmdGetPresentations:
-		d.handleGetPresentations(client, msg.(*protocol.GetPresentationsMessage))
-	case protocol.CmdGetPresentationRound:
-		d.handleGetPresentationRound(client, msg.(*protocol.GetPresentationRoundMessage))
-	case protocol.CmdPresentSubmitRound:
-		d.handlePresentSubmitRound(client, msg.(*protocol.PresentSubmitRoundMessage))
-	case protocol.CmdPresentClose:
-		d.handlePresentClose(client, msg.(*protocol.PresentCloseMessage))
 	case protocol.CmdAskAnswer:
 		d.handleAskAnswer(client, msg.(*protocol.AskAnswerMessage))
 	case protocol.CmdAutomationDefinitionsGet:

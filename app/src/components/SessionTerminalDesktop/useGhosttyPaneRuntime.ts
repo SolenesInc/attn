@@ -22,6 +22,7 @@ export interface PaneRuntimeSpec {
   sessionId?: string;
   testSessionId?: string;
   state?: string;
+  state_reason?: string;
   terminalExit?: import('../../types/generated').TerminalExit;
 }
 
@@ -281,7 +282,7 @@ export function useGhosttyPaneRuntime(
     }
     const modelSize = terminal.getSize();
     if (!modelSize || !terminalIsCurrent()) return;
-    const stopped = Boolean(pane.terminalExit);
+    const stopped = Boolean(pane.terminalExit) || pane.state_reason === 'process_exited';
     const attachPolicy = stopped
       ? 'same_app_remount'
       : pane.state === 'recoverable'

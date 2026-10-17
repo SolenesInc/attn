@@ -6,10 +6,25 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
+
+func TestPresenceReportsAndReadsKeepTheSupportSnapshotsDaemonStartFixed(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		before, _ := supportSnapshotRequest(app, "before-presence", nil)
+		w.advance(time.Minute)
+		presenceReport(app, protocol.SetClientPresenceMessage{Visible: true, IdleSeconds: protocol.Ptr(0.0)})
+		presenceTierIs(t, cli, "after the app reported presence", "present")
+		after, _ := supportSnapshotRequest(app, "after-presence", nil)
+		if after.DaemonStartedAtUnixMs != before.DaemonStartedAtUnixMs {
+			t.Fatalf("daemon startup changed from %d to %d after presence", before.DaemonStartedAtUnixMs, after.DaemonStartedAtUnixMs)
+		}
+	})
+}
 
 func TestASupportSnapshotCarriesBoundedEvidenceWithoutInputOrWarningText(t *testing.T) {
 	t.Setenv("ATTN_PTY_BACKEND", "not-a-backend")

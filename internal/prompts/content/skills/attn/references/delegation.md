@@ -75,7 +75,7 @@ The new agent opens beside you on your desktop without changing what the user se
 attn delegate --seed s-example --role builder --cwd /notes --desktop ops
 ```
 
-To move a pane later, run `attn session move <desktop>` for yourself, or add `--session <id>` for a delegate you dispatched. The user's view stays put unless the moved pane was the one shown on its desktop.
+To move a pane later, run `attn session move <desktop>` for yourself, or add `--session <id>` for an agent below you in the delegation chain, including delegates of delegates. A missing numbered desktop, such as `5`, is created. The user's view stays put unless the moved pane was the one shown on its desktop.
 
 ## Choose the role and model
 

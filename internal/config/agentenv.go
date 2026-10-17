@@ -1,6 +1,10 @@
 package config
 
-import "os"
+import (
+	"os"
+	"slices"
+	"strings"
+)
 
 var agentSessionIdentityEnvKeys = []string{
 	"CLAUDECODE",
@@ -20,8 +24,15 @@ var agentSessionTuningEnvKeys = []string{
 	"CLAUDE_EFFORT",
 }
 
-func ScrubAgentSessionIdentityEnv() []string {
-	return scrubEnvKeys(agentSessionIdentityEnvKeys)
+func WithoutAgentSessionIdentityEnv(env []string) []string {
+	filtered := make([]string, 0, len(env))
+	for _, entry := range env {
+		key, _, _ := strings.Cut(entry, "=")
+		if !slices.Contains(agentSessionIdentityEnvKeys, key) {
+			filtered = append(filtered, entry)
+		}
+	}
+	return filtered
 }
 
 func ScrubInheritedAgentSessionEnv() []string {

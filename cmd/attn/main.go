@@ -10,30 +10,25 @@ import (
 	"io"
 	"net/url"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/google/uuid"
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/daemonctl"
 	"github.com/victorarias/attn/internal/git"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/launchcontract"
-	"github.com/victorarias/attn/internal/pathutil"
-	"github.com/victorarias/attn/internal/present"
 	"github.com/victorarias/attn/internal/probetui"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptyworker"
-	"github.com/victorarias/attn/internal/wrapper"
 	"golang.org/x/sys/unix"
 )
 
@@ -153,6 +148,9 @@ func main() {
 	case "session":
 		maybePrintInstanceBanner()
 		runSession()
+	case "terminal":
+		maybePrintInstanceBanner()
+		runTerminal()
 	case "agent":
 		maybePrintInstanceBanner()
 		runAgent()
@@ -191,9 +189,6 @@ func main() {
 		runJournal()
 	case "vision-check":
 		runVisionCheck()
-	case "present":
-		maybePrintInstanceBanner()
-		runPresent()
 	case "ask":
 		maybePrintInstanceBanner()
 		runAsk()
@@ -319,12 +314,13 @@ func runPTYWorker() {
 	fs.StringVar(&cfg.CWD, "cwd", "", "working directory")
 	fs.IntVar(&cols, "cols", 80, "terminal cols")
 	fs.IntVar(&rows, "rows", 24, "terminal rows")
+	fs.StringVar(&cfg.Model, "model", "", "recorded agent model")
+	fs.StringVar(&cfg.Effort, "effort", "", "recorded reasoning effort")
 	fs.StringVar(&cfg.Label, "label", "", "session label")
 	fs.StringVar(&cfg.ResumeSessionID, "resume-session-id", "", "resume session id")
 	fs.BoolVar(&cfg.ResumePicker, "resume-picker", false, "resume picker")
 	fs.BoolVar(&cfg.YoloMode, "yolo-mode", false, "launch agent in yolo mode")
 	fs.StringVar(&approvalRoute, "approval-route", "", "effective approval route recorded for daemon recovery")
-	fs.StringVar(&cfg.InitialPromptFile, "initial-prompt-file", "", "file containing the initial agent prompt")
 	fs.StringVar(&cfg.ThemeForeground, "theme-foreground", "", "terminal foreground color seeded for OSC 10/11/12 queries")
 	fs.StringVar(&cfg.ThemeBackground, "theme-background", "", "terminal background color seeded for OSC 10/11/12 queries")
 	fs.StringVar(&cfg.ThemeCursor, "theme-cursor", "", "terminal cursor color seeded for OSC 10/11/12 queries")
@@ -334,9 +330,10 @@ func runPTYWorker() {
 	fs.StringVar(&cfg.ClaudeExecutable, "claude-executable", "", "claude executable override")
 	fs.StringVar(&cfg.CodexExecutable, "codex-executable", "", "codex executable override")
 	fs.StringVar(&cfg.CopilotExecutable, "copilot-executable", "", "copilot executable override")
-	var externalCommandJSON string
 	var unattendedLaunchJSON string
-	fs.StringVar(&externalCommandJSON, "external-command-json", "", "external plugin driver argv as JSON")
+	fs.BoolVar(&cfg.AgentLoginShell, "agent-login-shell", false, "run the prepared agent through a login shell")
+	fs.Func("agent-arg", "prepared agent argument (repeat for each argument)", func(value string) error { cfg.AgentArgv = append(cfg.AgentArgv, value); return nil })
+	fs.Func("agent-env", "prepared agent environment entry (repeat for each entry)", func(value string) error { cfg.AgentEnv = append(cfg.AgentEnv, value); return nil })
 	fs.StringVar(&unattendedLaunchJSON, "unattended-launch-json", "", "immutable unattended launch contract as JSON")
 	fs.StringVar(&cfg.ExternalCWD, "external-cwd", "", "external plugin driver working directory")
 	fs.StringVar(&cfg.AdoptHandoff, "adopt-handoff", "", "handoff file left by the worker image this one replaces")
@@ -363,12 +360,7 @@ func runPTYWorker() {
 			os.Exit(1)
 		}
 	}
-	if externalCommandJSON != "" {
-		if err := json.Unmarshal([]byte(externalCommandJSON), &cfg.ExternalCommand); err != nil {
-			fmt.Fprintf(os.Stderr, "pty-worker error: invalid --external-command-json: %v\n", err)
-			os.Exit(1)
-		}
-	}
+
 	if unattendedLaunchJSON != "" {
 		if err := json.Unmarshal([]byte(unattendedLaunchJSON), &cfg.UnattendedLaunch); err != nil {
 			fmt.Fprintf(os.Stderr, "pty-worker error: invalid --unattended-launch-json: %v\n", err)
@@ -379,12 +371,7 @@ func runPTYWorker() {
 			os.Exit(1)
 		}
 	}
-	if externalEnvJSON := os.Getenv("ATTN_PTY_EXTERNAL_ENV"); externalEnvJSON != "" {
-		if err := json.Unmarshal([]byte(externalEnvJSON), &cfg.ExternalEnv); err != nil {
-			fmt.Fprintf(os.Stderr, "pty-worker error: invalid ATTN_PTY_EXTERNAL_ENV: %v\n", err)
-			os.Exit(1)
-		}
-	}
+
 	if daemonEnvJSON := os.Getenv("ATTN_PTY_DAEMON_ENV"); daemonEnvJSON != "" {
 		if err := json.Unmarshal([]byte(daemonEnvJSON), &cfg.DaemonEnv); err != nil {
 			fmt.Fprintf(os.Stderr, "pty-worker error: invalid ATTN_PTY_DAEMON_ENV: %v\n", err)
@@ -572,6 +559,7 @@ commands:
   agent msg <target> "text"            notify a live session, crew member or seed's tender
   agent inbox [message-id]              read durable agent notifications
   agent msg-status <message-id>         inspect a sent peer message
+  terminal <command>                open, read, type into, wait on and close terminals
   session <command>                 read the session ledger and a session's conversation
   state explain <id>                replay why a session's state is what it is
   delegate --brief-file <path> --cwd <path>    start another agent on a new seed
@@ -586,7 +574,6 @@ commands:
   activity [clear <id>]             what each agent is doing right now
   conversation <command>            list, keep forever or forget attn's conversation copies
   worktree <command>                every tracked worktree, the sweep and the keep pin
-  present <command>                 open a review presentation and read feedback
   ask [list|close]                  ask the user something they answer from attn
   debug <command>                   probe debug artifacts (incidents, logs)
   db <command>                      database maintenance (restore from backup)
@@ -857,334 +844,6 @@ commands:
 
 The session defaults to the current session.
 `)
-}
-
-func runPresent() {
-	if len(os.Args) >= 3 {
-		switch os.Args[2] {
-		case "-h", "--help":
-			writePresentHelp(os.Stdout)
-			return
-		case "validate":
-			if hasHelpFlag(os.Args[3:]) {
-				writePresentHelp(os.Stdout)
-				return
-			}
-			runPresentValidate(os.Args[3:])
-			return
-		case "feedback":
-			if hasHelpFlag(os.Args[3:]) {
-				writePresentHelp(os.Stdout)
-				return
-			}
-			runPresentFeedback(os.Args[3:])
-			return
-		}
-	}
-	warnIfDaemonVersionMismatch()
-	runPresentOpen(os.Args[2:])
-}
-
-type presentOpenArgs struct {
-	Manifest       string
-	PresentationID string
-	Session        string
-	JSON           bool
-	Wait           bool
-}
-
-func parsePresentOpenArgs(args []string) (presentOpenArgs, error) {
-	var result presentOpenArgs
-	fs := flag.NewFlagSet("present", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-	manifest := fs.String("manifest", ".present.yml", "path to the present manifest")
-	presentationID := fs.String("presentation", "", "existing presentation id to add a new round to")
-	session := fs.String("session", "", "session id (defaults to the current session)")
-	jsonOutput := fs.Bool("json", false, "print the result as JSON")
-	wait := fs.Bool("wait", false, "block until the reviewer submits this round or closes the presentation, then print its feedback")
-	if err := fs.Parse(args); err != nil {
-		return result, err
-	}
-	if rest := fs.Args(); len(rest) > 0 {
-		return result, fmt.Errorf("unexpected argument %q", rest[0])
-	}
-	result.Manifest = *manifest
-	result.PresentationID = *presentationID
-	result.Session = *session
-	result.JSON = *jsonOutput
-	result.Wait = *wait
-	return result, nil
-}
-
-func runPresentOpen(args []string) {
-	parsed, err := parsePresentOpenArgs(args)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "present: %v\n", err)
-		writePresentHelp(os.Stderr)
-		os.Exit(2)
-	}
-	if _, err := present.ParseManifestFile(parsed.Manifest); err != nil {
-		fmt.Fprintf(os.Stderr, "present: %v\n", err)
-		os.Exit(1)
-	}
-	manifestYAML, err := os.ReadFile(parsed.Manifest)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "present: %v\n", err)
-		os.Exit(1)
-	}
-	source, err := resolveDispatchSession(parsed.Session)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "present: %v\n", err)
-		os.Exit(2)
-	}
-	result, err := client.New("").PresentOpen(protocol.SessionID(source), string(manifestYAML), parsed.PresentationID)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "present: %v\n", err)
-		os.Exit(1)
-	}
-	for _, w := range result.Warnings {
-		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
-	}
-	if parsed.Wait {
-		runPresentOpenWait(result, parsed.JSON)
-		return
-	}
-	if parsed.JSON {
-		printJSON(result)
-		return
-	}
-	fmt.Printf("presentation %s round %d pinned %s..%s\n",
-		shortenID(result.PresentationID), result.Seq, shortenID(result.BaseSHA), shortenID(result.HeadSHA))
-	fmt.Printf("feedback will arrive via: attn present feedback %s\n", result.PresentationID)
-}
-
-const presentWaitInterval = 3 * time.Second
-
-func runPresentOpenWait(result *protocol.PresentOpenResult, jsonOutput bool) {
-	fmt.Fprintf(os.Stderr, "waiting for review of round %d of %q...\n", result.Seq, result.Title)
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-	c := client.New("")
-	ticker := time.NewTicker(presentWaitInterval)
-	defer ticker.Stop()
-	err := waitForPresentFeedback(ctx, ticker.C, func() (*protocol.PresentFeedbackResult, error) {
-		return c.PresentFeedback(result.PresentationID, result.Seq)
-	}, os.Stdout, jsonOutput)
-	if err != nil {
-		if ctx.Err() != nil {
-			return
-		}
-		fmt.Fprintf(os.Stderr, "present --wait: %v\n", err)
-		os.Exit(1)
-	}
-}
-
-func waitForPresentFeedback(
-	ctx context.Context,
-	tick <-chan time.Time,
-	fetch func() (*protocol.PresentFeedbackResult, error),
-	out io.Writer,
-	jsonOutput bool,
-) error {
-	var lastErr string
-	for {
-		result, err := fetch()
-		if err != nil {
-			if msg := err.Error(); msg != lastErr {
-				fmt.Fprintf(os.Stderr, "present --wait: %s\n", msg)
-				lastErr = msg
-			}
-		} else {
-			lastErr = ""
-			if result != nil && result.Submitted {
-				if jsonOutput {
-					return fprintJSON(out, result)
-				}
-				fmt.Fprint(out, result.Markdown)
-				return nil
-			}
-			if result != nil && result.PresentationStatus == "closed" {
-				if jsonOutput {
-					return fprintJSON(out, result)
-				}
-				fmt.Fprintln(out, "presentation closed by the reviewer without feedback — drafts were discarded; open a new round to re-present")
-				return nil
-			}
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-tick:
-		}
-	}
-}
-
-func runPresentValidate(args []string) {
-	fs := flag.NewFlagSet("present validate", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-	manifest := fs.String("manifest", ".present.yml", "path to the present manifest")
-	if err := fs.Parse(args); err != nil {
-		fmt.Fprintf(os.Stderr, "present validate: %v\n", err)
-		os.Exit(2)
-	}
-	m, err := present.ParseManifestFile(*manifest)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "present validate: %v\n", err)
-		os.Exit(1)
-	}
-
-	if !hasAnyAnnotations(m) {
-		fmt.Printf("manifest ok: %s\n", m.Title)
-		return
-	}
-
-	_, headSHA, err := present.Pin(m)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "present validate: could not resolve refs to check annotations: %v\n", err)
-		os.Exit(1)
-	}
-	_, issues := present.ResolveAnnotations(m, m.Frame.Repo, headSHA)
-	hasError := false
-	for _, issue := range issues {
-		level := "error"
-		if issue.Warning {
-			level = "warning"
-		} else {
-			hasError = true
-		}
-		if issue.Index < 0 {
-			fmt.Fprintf(os.Stderr, "%s: %s: %s\n", level, issue.Path, issue.Message)
-		} else {
-			fmt.Fprintf(os.Stderr, "%s: %s[%d]: %s\n", level, issue.Path, issue.Index, issue.Message)
-		}
-	}
-	if hasError {
-		os.Exit(1)
-	}
-	fmt.Printf("manifest ok: %s\n", m.Title)
-}
-
-func hasAnyAnnotations(m *present.Manifest) bool {
-	for _, f := range m.Files {
-		if len(f.Annotations) > 0 {
-			return true
-		}
-	}
-	return false
-}
-
-type presentFeedbackArgs struct {
-	PresentationID string
-	Round          int
-	JSON           bool
-}
-
-func parsePresentFeedbackArgs(args []string) (presentFeedbackArgs, error) {
-	var result presentFeedbackArgs
-	fs := flag.NewFlagSet("present feedback", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-	round := fs.Int("round", 0, "round seq (defaults to the latest round)")
-	jsonOutput := fs.Bool("json", false, "print the result as JSON")
-
-	var positionals []string
-	rest := args
-	for {
-		if err := fs.Parse(rest); err != nil {
-			return result, err
-		}
-		rest = fs.Args()
-		if len(rest) == 0 {
-			break
-		}
-		positionals = append(positionals, rest[0])
-		rest = rest[1:]
-	}
-	if len(positionals) != 1 {
-		return result, fmt.Errorf("expected exactly one presentation id argument, got %d", len(positionals))
-	}
-	result.PresentationID = positionals[0]
-	result.Round = *round
-	result.JSON = *jsonOutput
-	return result, nil
-}
-
-func runPresentFeedback(args []string) {
-	parsed, err := parsePresentFeedbackArgs(args)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "present feedback: %v\n", err)
-		writePresentHelp(os.Stderr)
-		os.Exit(2)
-	}
-	result, err := client.New("").PresentFeedback(parsed.PresentationID, parsed.Round)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "present feedback: %v\n", err)
-		os.Exit(1)
-	}
-	if parsed.JSON {
-		printJSON(result)
-		return
-	}
-	fmt.Print(result.Markdown)
-}
-
-func shortenID(id string) string {
-	if len(id) > 7 {
-		return id[:7]
-	}
-	return id
-}
-
-func writePresentHelp(w io.Writer) {
-	fmt.Fprint(w, `usage: attn present [command] [flags]
-
-commands:
-  (none)                            open a presentation (or a new round) from a
-                                     manifest and pin it to its current git refs
-  validate                          parse and validate a manifest locally, with
-                                     no daemon call
-  feedback <presentation-id>        print a round's reviewer feedback as markdown
-
-flags for the default (open) form:
-  --manifest <path>                 manifest path (default .present.yml)
-  --presentation <id>               add a new round to an existing presentation
-  --session <id>                    session id (defaults to the current session)
-  --json                            print the result as JSON
-  --wait                            block until the round is reviewed or the
-                                     presentation is closed, then print the
-                                     outcome to stdout instead of the
-                                     "pinned"/"feedback will arrive via" hint
-                                     lines
-
-flags for validate:
-  --manifest <path>                 manifest path (default .present.yml)
-
-flags for feedback:
-  --round <n>                       round seq (defaults to the latest round)
-  --json                            print the result as JSON
-`)
-}
-
-func resolveDispatchSession(value string) (string, error) {
-	source := strings.TrimSpace(value)
-	if source == "" {
-		source = string(currentSessionOrExit())
-	}
-	if source == "" {
-		return "", errors.New("no session; run inside attn or pass --session")
-	}
-	return source, nil
-}
-
-type notebookGuideClient interface {
-	NotebookGuide(sessionID protocol.SessionID) (*protocol.NotebookGuideResult, error)
-}
-
-func resolveChiefNotebookRoot(c notebookGuideClient, sessionID protocol.SessionID) string {
-	guide, err := c.NotebookGuide(sessionID)
-	if err != nil || guide == nil || !guide.SessionIsChief {
-		return ""
-	}
-	return guide.Root
 }
 
 type delegateCLIArgs struct {
@@ -1856,287 +1515,6 @@ func runWrapper() {
 	openAppWithDeepLink()
 }
 
-type directLaunchArgs struct {
-	label             string
-	resumeID          string
-	resumePicker      bool
-	yoloMode          bool
-	initialPromptFile string
-}
-
-func readInitialPromptFile(path string) (string, error) {
-	content, err := os.ReadFile(path)
-	_ = os.Remove(path)
-	if err != nil {
-		return "", err
-	}
-	return string(content), nil
-}
-
-func parseDirectLaunchArgs(args []string) (directLaunchArgs, error) {
-	parsed := directLaunchArgs{}
-	label := ""
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		switch arg {
-		case "-s":
-			if i+1 >= len(args) {
-				return directLaunchArgs{}, fmt.Errorf("flag -s needs a value")
-			}
-			label = args[i+1]
-			i++
-		case "--resume":
-			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
-				parsed.resumeID = args[i+1]
-				i++
-			} else {
-				parsed.resumePicker = true
-			}
-		case "--yolo":
-			parsed.yoloMode = true
-		case "--initial-prompt-file":
-			if i+1 >= len(args) {
-				return directLaunchArgs{}, fmt.Errorf("flag --initial-prompt-file needs a value")
-			}
-			parsed.initialPromptFile = args[i+1]
-			i++
-		default:
-			return directLaunchArgs{}, fmt.Errorf("unknown flag %q", arg)
-		}
-	}
-	if label == "" {
-		label = wrapper.DefaultLabel()
-	}
-	parsed.label = label
-	return parsed, nil
-}
-
-func mergeEnv(base []string, extra []string) []string {
-	if len(extra) == 0 {
-		return base
-	}
-	idx := map[string]int{}
-	merged := make([]string, 0, len(base)+len(extra))
-	add := func(entry string) {
-		key := entry
-		if split := strings.Index(entry, "="); split >= 0 {
-			key = entry[:split]
-		}
-		if pos, ok := idx[key]; ok {
-			merged[pos] = entry
-			return
-		}
-		idx[key] = len(merged)
-		merged = append(merged, entry)
-	}
-	for _, entry := range base {
-		add(entry)
-	}
-	for _, entry := range extra {
-		add(entry)
-	}
-	return merged
-}
-
-func runAgentDirectly(requestedAgent string) {
-	parsed, err := parseDirectLaunchArgs(os.Args[1:])
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "attn: %v\n\n", err)
-		writeHelp(os.Stderr)
-		os.Exit(1)
-	}
-
-	pathutil.EnsureGUIPath()
-
-	driver := agentdriver.Get(requestedAgent)
-	if driver == nil {
-		fmt.Fprintf(os.Stderr, "warning: unknown ATTN_AGENT %q, defaulting to codex\n", requestedAgent)
-		driver = agentdriver.MustGet("codex")
-	}
-	caps := agentdriver.EffectiveCapabilities(driver)
-
-	if !caps.HasResume && (parsed.resumeID != "" || parsed.resumePicker) {
-		fmt.Fprintf(os.Stderr, "warning: %s resume not supported yet (ignoring --resume)\n", driver.Name())
-		parsed.resumeID = ""
-		parsed.resumePicker = false
-	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error getting cwd: %v\n", err)
-		os.Exit(1)
-	}
-	initialPrompt := ""
-	if parsed.initialPromptFile != "" {
-		content, readErr := readInitialPromptFile(parsed.initialPromptFile)
-		if readErr != nil {
-			fmt.Fprintf(os.Stderr, "error reading initial prompt: %v\n", readErr)
-			os.Exit(1)
-		}
-		initialPrompt = content
-	}
-
-	c := client.New("")
-	terminalID := ownTerminalID()
-	sessionID := currentSessionOrExit()
-	if terminalID == "" {
-		fmt.Fprintf(os.Stderr, "attn: a daemon-managed launch needs ATTN_TERMINAL_ID; the daemon sets it for every agent it starts\n")
-		os.Exit(1)
-	}
-
-	opts := agentdriver.SpawnOpts{
-		TerminalID:      terminalID,
-		CWD:             cwd,
-		Label:           parsed.label,
-		InitialPrompt:   initialPrompt,
-		ResumeSessionID: parsed.resumeID,
-		ResumePicker:    parsed.resumePicker,
-		YoloMode:        parsed.yoloMode,
-		Executable:      driver.ResolveExecutable(""),
-		SocketPath:      config.SocketPath(),
-		WrapperPath:     resolveWrapperPath(),
-	}
-
-	if preparer, ok := driver.(agentdriver.LaunchPreparer); ok {
-		if err := preparer.PrepareLaunch(opts); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: launch preparation failed for %s: %v\n", driver.Name(), err)
-		}
-	}
-
-	cleanupFns := []func(){}
-	cleanup := func() {
-		for i := len(cleanupFns) - 1; i >= 0; i-- {
-			cleanupFns[i]()
-		}
-	}
-
-	hasHooks := false
-	if agentdriver.EffectiveCapabilities(driver).HasLaunchInstructions {
-		opts.NotebookRoot = resolveChiefNotebookRoot(c, sessionID)
-	}
-	if _, err := c.SeedReady(sessionID, "", false); err == nil {
-		opts.Garden = true
-	}
-	if asks, err := c.AskList(sessionID); err == nil {
-		opts.Asks = asks.Enabled
-	}
-	opts.SelfReportPullRequests = !caps.HasHooks
-	if prime, err := c.CrewPrime(sessionID); err == nil {
-		opts.CrewPriming = protocol.Deref(prime.Guidance)
-		opts.AwarenessDirs = prime.AwarenessDirs
-	}
-	opts.AutoApprove = consumeOneShotBoolEnv("ATTN_AUTO_APPROVE")
-	opts.TrustWorkingDirectory = consumeOneShotBoolEnv("ATTN_TRUST_WORKING_DIRECTORY")
-	opts.Model = consumeOneShotEnv("ATTN_MODEL")
-	opts.Effort = consumeOneShotEnv("ATTN_EFFORT")
-	window := consumeOneShotEnv("ATTN_AUTO_COMPACT_WINDOW")
-	if window == "" {
-		window = consumeOneShotEnv("ATTN_CHIEF_AUTO_COMPACT_WINDOW")
-	}
-	if window != "" {
-		if n, err := strconv.Atoi(window); err == nil && n > 0 {
-			opts.AutoCompactWindow = n
-		}
-	}
-	if cp, ok := agentdriver.GetConfigOverrideProvider(driver); ok {
-		opts.ConfigOverrides = cp.GenerateConfigOverrides(opts)
-	}
-	if hp, ok := agentdriver.GetHookProvider(driver); ok {
-		content := hp.GenerateHooksConfig(opts)
-		settingsPath, err := wrapper.WriteSettingsConfig(os.TempDir(), string(terminalID), content)
-		if err != nil {
-			cleanup()
-			fmt.Fprintf(os.Stderr, "error writing hooks config: %v\n", err)
-			os.Exit(1)
-		}
-		opts.SettingsPath = settingsPath
-		hasHooks = true
-		cleanupFns = append(cleanupFns, func() { wrapper.CleanupHooksConfig(settingsPath) })
-	}
-	if ip, ok := agentdriver.GetInstructionsFileProvider(driver); ok {
-		name, content := ip.GenerateInstructionsFile(opts)
-		if strings.TrimSpace(content) != "" {
-			dir, err := wrapper.WriteInstructionsDir(os.TempDir(), string(terminalID), name, content)
-			if err != nil {
-				cleanup()
-				fmt.Fprintf(os.Stderr, "error writing launch instructions: %v\n", err)
-				os.Exit(1)
-			}
-			opts.InstructionsDir = dir
-			cleanupFns = append(cleanupFns, func() { wrapper.CleanupInstructionsDir(dir) })
-		}
-	}
-
-	cmd := driver.BuildCommand(opts)
-	cmd.Dir = cwd
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	config.ScrubAgentSessionIdentityEnv()
-	cmd.Env = mergeEnv(os.Environ(), driver.BuildEnv(opts))
-
-	startedAt := time.Now()
-	if err := cmd.Start(); err != nil {
-		cleanup()
-		fmt.Fprintf(os.Stderr, "error starting %s: %v\n", driver.Name(), err)
-		os.Exit(1)
-	}
-
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
-	go func() {
-		<-sigChan
-		if cmd.Process != nil {
-			_ = cmd.Process.Signal(syscall.SIGTERM)
-		}
-	}()
-
-	err = cmd.Wait()
-
-	if !hasHooks {
-		transcriptPath := ""
-		if tf, ok := agentdriver.GetTranscriptFinder(driver); ok {
-			if opts.ResumeSessionID != "" {
-				transcriptPath = tf.FindTranscriptForResume(opts.ResumeSessionID)
-			}
-			if transcriptPath == "" {
-				transcriptPath = tf.FindTranscript(string(terminalID), cwd, startedAt)
-			}
-		}
-		if sendErr := c.SendStop(terminalID, transcriptPath, client.StopFacts{}); sendErr != nil {
-			fmt.Fprintf(os.Stderr, "warning: could not send stop: %v\n", sendErr)
-		}
-	}
-
-	cleanup()
-
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			os.Exit(exitErr.ExitCode())
-		}
-		os.Exit(1)
-	}
-}
-
-func consumeOneShotBoolEnv(key string) bool {
-	return consumeOneShotEnv(key) == "1"
-}
-
-func consumeOneShotEnv(key string) string {
-	value := strings.TrimSpace(os.Getenv(key))
-	_ = os.Unsetenv(key)
-	return value
-}
-
-func resolveWrapperPath() string {
-	if value := strings.TrimSpace(os.Getenv("ATTN_WRAPPER_PATH")); value != "" {
-		return value
-	}
-	if exePath, err := os.Executable(); err == nil && strings.TrimSpace(exePath) != "" {
-		return exePath
-	}
-	return "attn"
-}
-
 func openAppWithDeepLink() {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -2168,16 +1546,15 @@ func openAppWithDeepLink() {
 }
 
 func runHookStop() {
-	sessionID := hookTerminalIDFromArgOrEnv(2)
-	if sessionID == "" {
-		fmt.Fprintf(os.Stderr, "usage: attn _hook-stop [session_id]\n")
-		os.Exit(1)
-	}
-
 	var input hookInput
 	transcriptPath := ""
 	if err := json.NewDecoder(os.Stdin).Decode(&input); err == nil {
 		transcriptPath = input.TranscriptPath
+	}
+	sessionID := hookCaller(hookTerminalIDFromArgOrEnv(2), input)
+	if sessionID == "" {
+		fmt.Fprintf(os.Stderr, "usage: attn _hook-stop [session_id]\n")
+		os.Exit(1)
 	}
 
 	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
@@ -2200,28 +1577,27 @@ func stopFacts(input hookInput) client.StopFacts {
 }
 
 func runHookSessionStart() {
-	sessionID := hookTerminalIDFromArgOrEnv(2)
+	var input hookInput
+	_ = json.NewDecoder(os.Stdin).Decode(&input)
+	sessionID := hookCaller(hookTerminalIDFromArgOrEnv(2), input)
 	if sessionID == "" {
 		fmt.Fprintf(os.Stderr, "usage: attn _hook-session-start [session_id]\n")
 		os.Exit(1)
 	}
-
-	var input hookInput
-	_ = json.NewDecoder(os.Stdin).Decode(&input)
 
 	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
 	observeAgentConversation(c, sessionID, input.SessionID, input.TranscriptPath)
 }
 
 func runHookState() {
+	var input hookInput
+	_ = json.NewDecoder(os.Stdin).Decode(&input)
 	sessionID, state, hookEvent := parseHookStateArgs()
+	sessionID = hookCaller(sessionID, input)
 	if sessionID == "" || state == "" {
 		fmt.Fprintf(os.Stderr, "usage: attn _hook-state [session_id] <state>\n")
 		os.Exit(1)
 	}
-
-	var input hookInput
-	_ = json.NewDecoder(os.Stdin).Decode(&input)
 
 	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
 	observePromptConversation(c, sessionID, hookEvent, input)
@@ -2291,14 +1667,13 @@ func runHookCompact() {
 }
 
 func runHookToolUse() {
-	sessionID := hookTerminalIDFromArgOrEnv(2)
+	var input hookInput
+	_ = json.NewDecoder(os.Stdin).Decode(&input)
+	sessionID := hookCaller(hookTerminalIDFromArgOrEnv(2), input)
 	if sessionID == "" {
 		fmt.Fprintf(os.Stderr, "usage: attn _hook-tool-use [session_id]\n")
 		os.Exit(1)
 	}
-
-	var input hookInput
-	_ = json.NewDecoder(os.Stdin).Decode(&input)
 
 	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
 	if strings.TrimSpace(input.AgentID) == "" {
@@ -2366,6 +1741,14 @@ func runProbeTUI() {
 		fmt.Fprintf(os.Stderr, "attn _probe-tui: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func hookCaller(id protocol.TerminalID, input hookInput) protocol.TerminalID {
+	profile, shared := os.LookupEnv(harness.CodexSharedProfileEnv)
+	if !shared {
+		return id
+	}
+	return harness.CodexThreadTerminal(profile, input.SessionID)
 }
 
 func hookTerminalIDFromArgOrEnv(index int) protocol.TerminalID {

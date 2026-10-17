@@ -1,3 +1,4 @@
+import { sessionDisplayName } from '../utils/sessionDisplayName';
 import { openPath } from '@tauri-apps/plugin-opener';
 import { SessionTerminalDesktop } from '../components/SessionTerminalDesktop';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
@@ -46,9 +47,7 @@ export function AppDesktops() {
   const focusRequest = useSessionStore((state) => state.focusRequest);
   const { selectLeaf } = useSessionStore.getState();
   const {
-    presentationBySessionId,
     annotationApi,
-    handleOpenPresentationWindow,
     blockingOverlayOpen,
     windowCovered,
     zoomModeBySessionId,
@@ -71,7 +70,7 @@ export function AppDesktops() {
     desktopTileContents,
   } = useDaemonApi();
   const { createSplitSession } = useSessionLaunchContext();
-  const { handleCloseSession } = useSessionLifecycleContext();
+  const { handleCloseTerminalTile } = useSessionLifecycleContext();
   const {
     getActiveLeafDropSnapshot,
     handleLeafDragStart,
@@ -102,6 +101,7 @@ export function AppDesktops() {
           desktopSessions={desktopSessions.map((entry) => ({
             id: entry.id,
             label: entry.label,
+            title: entry.title,
             priority: entry.priority,
             agent: entry.agent,
             cwd: entry.cwd,
@@ -110,10 +110,10 @@ export function AppDesktops() {
             autoSettleHeld: entry.autoSettleHeld,
             autoSettleDismissArmed: entry.autoSettleDismissArmed,
             terminalExit: entry.terminalExit,
+            state_reason: entry.state_reason,
             terminalBuildStale: entry.terminalBuildStale,
             usage: entry.usage,
             isActive: isCurrent && entry.id === shownSessionId,
-            presentation: presentationBySessionId.get(entry.id),
             seedId: entry.seedId,
             crewMember: entry.crewMember,
             automation: entry.automation,
@@ -123,7 +123,7 @@ export function AppDesktops() {
           selectedSessionId={isCurrent ? shownSessionId : null}
           seedTargetSessions={daemonSessions.map((session) => ({
             sessionId: session.id,
-            label: session.label || session.id,
+            label: sessionDisplayName(session),
             priority: session.priority,
             state: session.state,
           }))}
@@ -137,7 +137,6 @@ export function AppDesktops() {
           annotationApi={annotationApi}
           onCancelCountdown={sendCancelCountdown}
           onTerminalPointerActivity={sendTerminalPointerActivity}
-          onOpenPresentation={handleOpenPresentationWindow}
           onOpenMarkdown={(path, sessionId) => {
             void openThenShow(() => sendOpenMarkdown(path, sessionId))
               .catch((error) => {
@@ -164,9 +163,7 @@ export function AppDesktops() {
           }}
           onClosePane={(paneId) => {
             const paneSessionId = terminalState.agents.find((pane) => pane.id === paneId)?.sessionId;
-            if (paneSessionId) {
-              void handleCloseSession(paneSessionId).catch(console.error);
-            }
+            if (paneSessionId) handleCloseTerminalTile(desktop.id, paneId, paneSessionId);
           }}
           onRenameSession={sendRenameSession}
           onSelectSession={handleSelectSession}

@@ -6,7 +6,6 @@ import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { activityStaleMs } from '../utils/activitySettings';
 import {
   useAppInputs,
-  useAppSessionsContext,
   useAppPanelsContext,
   useAttentionQueueContext,
   useNavigationContext,
@@ -15,30 +14,29 @@ import {
 } from './AppContexts';
 
 export function AppDashboard() {
-  const { profileSessions } = useAppSessionsContext();
   const { view, followNextTurn, setFollowNextTurn, handleSelectSession } = useNavigationContext();
   const { prs, settings } = useAppInputs();
   const { hasReceivedInitialState, rateLimit, sendWakeTurn } = useDaemonApi();
 
   const { isRefreshingPRs, refreshError, handleRefreshPRs } = usePRLauncherContext();
   const { setSettingsOpen, whatsNew, openDockPanel } = useAppPanelsContext();
+  const { queueModeEnabled, crewQueueEnabled, queueSessions } = useAttentionQueueContext();
   const openAsks = useAsksStore((state) => state.asks);
   const asks = useMemo(
-    () => orderAsks(openAsks, profileSessions).map((ask) => ({
+    () => orderAsks(openAsks, queueSessions).map((ask) => ({
       id: ask.id,
-      from: askFrom(ask, askHolder(ask, profileSessions)),
+      from: askFrom(ask, askHolder(ask, queueSessions)),
       subject: ask.subject,
     })),
-    [openAsks, profileSessions],
+    [openAsks, queueSessions],
   );
-  const { queueModeEnabled, crewQueueEnabled } = useAttentionQueueContext();
   const { handleNewSession } = useSessionLaunchContext();
   const { handleOpenPR } = usePRLauncherContext();
   return (
     <>
       <div className={`view-container ${view === 'dashboard' ? 'visible' : 'hidden'}`}>
         <Dashboard
-          sessions={profileSessions}
+          sessions={queueSessions}
           prs={prs}
           isLoading={!hasReceivedInitialState}
           isRefreshing={isRefreshingPRs}

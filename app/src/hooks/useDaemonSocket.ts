@@ -49,10 +49,6 @@ import type {
   SeedDocument as GeneratedSeedDocument,
   CrewMember as GeneratedCrewMember,
   MarkdownAnnotation,
-  Presentation,
-  PresentationRound,
-  PresentationComment,
-  PresentCommentInput,
   PRRole,
   HeatState,
   AutomationDefinitionSummary,
@@ -102,6 +98,7 @@ import { resolveDaemonWebSocketURL, type DaemonEndpointInstance } from '../utils
 import { handleProfileDaemonEvent, syncNavigationFromProfiles, type MigrationResult, type ProfileActionResult } from './daemonProfileEvents';
 import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
+import { usePendingTerminalInput } from '../store/pendingTerminalInput';
 import type { Desktop } from '../types/generated';
 import { handleBusDaemonEvent, type BusStatus } from './daemonBusEvents';
 import {
@@ -236,6 +233,7 @@ export interface SessionAnnotationSet {
   generation: number;
 }
 export interface DirectoryEntry {
+  is_repo?: boolean;
   name: string;
   path: string;
   is_dir: boolean;
@@ -417,33 +415,6 @@ interface RepoInfoResult {
   error?: string;
 }
 
-interface GitFileChange {
-  path: string;
-  status: string;
-  additions?: number;
-  deletions?: number;
-  old_path?: string;
-}
-
-export interface GitStatusUpdate {
-  directory: string;
-  staged: GitFileChange[];
-  unstaged: GitFileChange[];
-  untracked: GitFileChange[];
-  error?: string;
-  mode?: string;
-  limited?: boolean;
-  limited_reason?: string;
-  duration_ms?: number;
-}
-
-export interface FileDiffResult {
-  success: boolean;
-  original: string;
-  modified: string;
-  error?: string;
-}
-
 export interface NotebookEntry {
   path: string;
   type?: string;
@@ -530,8 +501,6 @@ interface UseDaemonSocketOptions {
   onFsChanged?: (origin: string, paths: string[], root: string) => void;
   onSeedsUpdate?: (seeds: Seed[], total: number) => void;
   onCrewUpdate?: (members: CrewMember[]) => void;
-  onPresentationAdded?: (presentation: Presentation) => void;
-  onPresentationUpdated?: (presentation: Presentation) => void;
   onPRsUpdate: (prs: DaemonPR[]) => void;
   onPluginsUpdate?: (plugins: DaemonPlugin[], issues: DaemonPluginIssue[]) => void;
   onGitHubHostsUpdate?: (hosts: string[], pollingOffReason: string | null) => void;
@@ -540,7 +509,6 @@ interface UseDaemonSocketOptions {
   onWorktreesUpdate?: (worktrees: DaemonWorktree[]) => void;
   onSettingsUpdate?: (settings: DaemonSettings) => void;
   onSettingError?: (message: string) => void;
-  onGitStatusUpdate?: (status: GitStatusUpdate) => void;
   endpoint?: DaemonEndpointInstance;
   wsUrl?: string;
 }
@@ -592,13 +560,13 @@ const harnessRegistrySignature = (settings: DaemonSettings) => JSON.stringify(Ob
   .map(([key, value]) => [key, key.endsWith('_available') ? '' : value])
   .sort(([a], [b]) => a.localeCompare(b)));
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
+const SELECTION_COMMANDS = ['desktop_show_session', 'desktop_show_leaf', 'desktop_set_current'];
 const MODEL_DISCOVERY_TIMEOUT_MS = 70_000;
 const SESSION_REOPEN_TIMEOUT_MS = 120_000;
 // Bus status is one aggregate pass over the whole event log. Measured on a copy of production, 209ms
 // at 945k rows — so 30s is roughly a hundred times the worst real log.
 const BUS_STATUS_TIMEOUT_MS = 30_000;
 const GIT_METADATA_TIMEOUT_MS = 30 * 60_000;
-const GIT_DIFF_TIMEOUT_MS = 10 * 60_000;
 const GIT_WORKTREE_TIMEOUT_MS = 30 * 60_000;
 const GIT_NETWORK_TIMEOUT_MS = 30 * 60_000;
 const GIT_CLONE_TIMEOUT_MS = 90 * 60_000;
@@ -661,8 +629,6 @@ export function useDaemonSocket({
   onFsChanged,
   onSeedsUpdate,
   onCrewUpdate,
-  onPresentationAdded,
-  onPresentationUpdated,
   onPRsUpdate,
   onPluginsUpdate,
   onGitHubHostsUpdate,
@@ -671,7 +637,6 @@ export function useDaemonSocket({
   onWorktreesUpdate,
   onSettingsUpdate,
   onSettingError,
-  onGitStatusUpdate,
   endpoint,
   wsUrl,
 }: UseDaemonSocketOptions) {
@@ -691,8 +656,6 @@ export function useDaemonSocket({
     onFsChanged,
     onSeedsUpdate,
     onCrewUpdate,
-    onPresentationAdded,
-    onPresentationUpdated,
     onPRsUpdate,
     onPluginsUpdate,
     onGitHubHostsUpdate,
@@ -701,7 +664,6 @@ export function useDaemonSocket({
     onWorktreesUpdate,
     onSettingsUpdate,
     onSettingError,
-    onGitStatusUpdate,
   });
   callbacksRef.current = {
     onSessionsUpdate,
@@ -711,8 +673,6 @@ export function useDaemonSocket({
     onFsChanged,
     onSeedsUpdate,
     onCrewUpdate,
-    onPresentationAdded,
-    onPresentationUpdated,
     onPRsUpdate,
     onPluginsUpdate,
     onGitHubHostsUpdate,
@@ -721,7 +681,6 @@ export function useDaemonSocket({
     onWorktreesUpdate,
     onSettingsUpdate,
     onSettingError,
-    onGitStatusUpdate,
   };
   const reconnectTimeoutRef = useRef<number | null>(null);
   const reconnectDelayRef = useRef<number>(1000);
@@ -736,7 +695,6 @@ export function useDaemonSocket({
   const requestSequenceRef = useRef(0);
   const pendingOutboundCommandsRef = useRef<string[]>([]);
   const recoveryNoticeTimeoutRef = useRef<number | null>(null);
-  const gitStatusSubscriptionRef = useRef<string | null>(null);
   const docSubscriptionsRef = useRef<DocumentSubscriptions | null>(null);
   const docSubscriptions = (docSubscriptionsRef.current ??= new DocumentSubscriptions());
   const ptyTransportRef = useRef(createPtyTransportState<AttachRequestContext>());
@@ -794,6 +752,7 @@ export function useDaemonSocket({
       'pty_resize',
       'kill_session',
       'unregister',
+      'desktop_close_tile',
     ]);
     if (!needsNotice.has(cmd)) {
       return;
@@ -810,8 +769,18 @@ export function useDaemonSocket({
   }, []);
 
   // A pane's terminal has its own id; panes from before terminal ids carry their session's.
-  const pruneAttachedPtySessions = useCallback((sessions: DaemonSession[]) => {
+  const pruneAttachedPtySessions = useCallback((sessions: DaemonSession[], closedSessionId?: string) => {
     const attachableIDs = new Set<string>(sessions.map((session) => session.id));
+    for (const desktop of useProfilesStore.getState().desktops) {
+      for (const pane of desktop.panes) {
+        if (pane.session_id !== closedSessionId) attachableIDs.add(pane.session_id);
+      }
+    }
+    const navigation = useSessionStore.getState();
+    if (navigation.intent?.target.kind === 'session' && !attachableIDs.has(navigation.intent.target.sessionId)) {
+      navigation.intentFailed(navigation.intent.id, 'Its terminal closed');
+    }
+    usePendingTerminalInput.getState().prune(attachableIDs);
     for (const desktop of useProfilesStore.getState().desktops) {
       for (const pane of desktop.panes) attachableIDs.add(pane.runtime_id);
     }
@@ -850,14 +819,11 @@ export function useDaemonSocket({
       case 'merge_pr':
         rejectPendingByPredicate((key) => key.endsWith(':merge'), error);
         return;
-      case 'get_file_diff':
-        rejectPendingByPredicate((key) => key.startsWith('get_file_diff_'), error);
-        return;
       case 'get_branch_diff_files':
         rejectPendingByPredicate((key) => key.startsWith('get_branch_diff_files_'), error);
         return;
       case 'get_repo_info':
-        rejectPendingByPredicate((key) => key.startsWith('repo_info_'), error);
+        rejectPendingByPredicate((key) => key.startsWith('get_repo_info:'), error);
         return;
       case 'get_recent_locations':
         rejectPendingByPredicate((key) => key.startsWith('get_recent_locations_'), error);
@@ -868,11 +834,14 @@ export function useDaemonSocket({
       case 'inspect_path':
         rejectPendingByPredicate((key) => key.startsWith('inspect_path_'), error);
         return;
+      case 'create_worktree_from_branch':
+        rejectPendingByPredicate((key) => key.startsWith('create_worktree_from_branch:'), error);
+        return;
       case 'create_worktree':
-        rejectPendingByPredicate((key) => key === 'worktree_create_worktree_result', error);
+        rejectPendingByPredicate((key) => key.startsWith('create_worktree:'), error);
         return;
       case 'delete_worktree':
-        rejectPendingByPredicate((key) => key === 'worktree_delete_worktree_result', error);
+        rejectPendingByPredicate((key) => key.startsWith('delete_worktree:'), error);
         return;
       case 'delete_branch':
         rejectPendingByPredicate((key) => key.startsWith('delete_branch_'), error);
@@ -934,7 +903,7 @@ export function useDaemonSocket({
     key: string,
     payload: Record<string, unknown>,
     timeoutMessage: string,
-    timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS,
+    timeoutMs: number | null = DEFAULT_REQUEST_TIMEOUT_MS,
     supersede = false,
   ): Promise<T> => {
     return new Promise<T>((resolve, reject) => {
@@ -949,7 +918,7 @@ export function useDaemonSocket({
       const waiter = { resolve: resolve as (value: unknown) => void, reject };
       pendingActionsRef.current.set(key, waiter);
       ws.send(JSON.stringify(payload));
-      setTimeout(() => {
+      if (timeoutMs !== null) setTimeout(() => {
         if (pendingActionsRef.current.get(key) === waiter) {
           pendingActionsRef.current.delete(key);
           reject(new Error(timeoutMessage));
@@ -1083,10 +1052,6 @@ export function useDaemonSocket({
         ws.send(JSON.stringify({ cmd: 'get_kitty_image', id: sessionId, image_id: imageId }));
         return true;
       });
-
-      if (gitStatusSubscriptionRef.current) {
-        ws.send(JSON.stringify({ cmd: 'subscribe_git_status', directory: gitStatusSubscriptionRef.current }));
-      }
 
       docSubscriptions.resubscribeAll((payload) => ws.send(JSON.stringify(payload)));
 
@@ -1334,18 +1299,6 @@ export function useDaemonSocket({
             break;
           }
 
-
-          case 'presentation_added':
-            if (data.presentation) {
-              callbacksRef.current.onPresentationAdded?.(data.presentation);
-            }
-            break;
-
-          case 'presentation_updated':
-            if (data.presentation) {
-              callbacksRef.current.onPresentationUpdated?.(data.presentation);
-            }
-            break;
 
           case 'desktop_tile_content': {
             if (typeof data.desktop_id === 'string' && typeof data.tile_id === 'string') {
@@ -1932,6 +1885,10 @@ export function useDaemonSocket({
           case 'runtime_respawned':
             // The daemon replaced the runtime in place; restore its new stream and screen.
             if (data.id) {
+              if (
+                pendingActionsRef.current.has(`pty_attach_${data.id}`)
+                && ptyTransportRef.current.getAttachContext(data.id)?.policy === 'revive'
+              ) break;
               recordDiag({ kind: 'attach', session: data.id, reason: 'runtime_respawned' });
               emitPtyEvent({ event: 'reset', id: data.id, reason: 'respawn' });
               ptyTransportRef.current.clearRuntimeStream(data.id);
@@ -1965,7 +1922,7 @@ export function useDaemonSocket({
                 (s) => s.id !== data.session!.id
               );
               callbacksRef.current.onSessionsUpdate(sessionsRef.current);
-              pruneAttachedPtySessions(sessionsRef.current);
+              pruneAttachedPtySessions(sessionsRef.current, data.session.id);
             }
             break;
 
@@ -2080,63 +2037,6 @@ export function useDaemonSocket({
             }
             break;
 
-          case 'get_presentations_result': {
-            const pending = pendingActionsRef.current.get('get_presentations');
-            if (pending) {
-              pendingActionsRef.current.delete('get_presentations');
-              if (data.success) {
-                pending.resolve(data.presentations || []);
-              } else {
-                pending.reject(new Error(data.error || 'Failed to load presentations'));
-              }
-            }
-            break;
-          }
-
-          case 'get_presentation_round_result': {
-            const pending = pendingActionsRef.current.get('get_presentation_round');
-            if (pending) {
-              pendingActionsRef.current.delete('get_presentation_round');
-              if (data.success) {
-                pending.resolve({
-                  presentation: data.presentation,
-                  round: data.round,
-                  comments: data.comments || [],
-                  repoHeadSha: data.repo_head_sha,
-                });
-              } else {
-                pending.reject(new Error(data.error || 'Failed to load presentation round'));
-              }
-            }
-            break;
-          }
-
-          case 'present_submit_round_result': {
-            const pending = pendingActionsRef.current.get('present_submit_round');
-            if (pending) {
-              pendingActionsRef.current.delete('present_submit_round');
-              if (data.success) {
-                pending.resolve({ roundId: data.round_id });
-              } else {
-                pending.reject(new Error(data.error || 'Failed to submit presentation round'));
-              }
-            }
-            break;
-          }
-
-          case 'present_close_result': {
-            const pending = pendingActionsRef.current.get('present_close');
-            if (pending) {
-              pendingActionsRef.current.delete('present_close');
-              if (data.success) {
-                pending.resolve({ presentationId: data.presentation_id });
-              } else {
-                pending.reject(new Error(data.error || 'Failed to close presentation'));
-              }
-            }
-            break;
-          }
-
           case 'refresh_prs_result': {
             const pending = pendingActionsRef.current.get('refresh_prs');
             if (pending) {
@@ -2185,21 +2085,18 @@ export function useDaemonSocket({
           }
 
           case 'create_worktree_result':
-          case 'delete_worktree_result':
-            const actionKey = `worktree_${data.event}`;
-            const pendingAction = pendingActionsRef.current.get(actionKey);
-            if (pendingAction) {
-              pendingActionsRef.current.delete(actionKey);
-              if (data.success) {
-                pendingAction.resolve({ success: true, path: data.path });
-              } else {
-                const error = new Error(data.error || 'Worktree action failed') as WorktreeActionError;
-                error.forceable = data.forceable;
-                error.reason_kind = data.reason_kind;
-                pendingAction.reject(error);
-              }
-            }
+          case 'delete_worktree_result': {
+            const error = new Error(data.error || 'Worktree action failed') as WorktreeActionError;
+            error.forceable = data.forceable;
+            error.reason_kind = data.reason_kind;
+            const kinds = data.event === 'create_worktree_result'
+              ? ['create_worktree', 'create_worktree_from_branch']
+              : ['delete_worktree'];
+            for (const kind of kinds)
+              if (settlePendingRequest(pendingActionsRef.current, kind, data,
+                (event) => ({ success: true, path: event.path }), 'Worktree action failed', error)) break;
             break;
+          }
 
           case 'rate_limited':
             if (data.rate_limit_resource && data.rate_limit_reset_at) {
@@ -2299,52 +2196,15 @@ export function useDaemonSocket({
             break;
           }
 
-          case 'git_status_update':
-            if (data.directory) {
-              callbacksRef.current.onGitStatusUpdate?.({
-                directory: data.directory,
-                staged: data.staged || [],
-                unstaged: data.unstaged || [],
-                untracked: data.untracked || [],
-                error: data.error,
-                mode: data.mode,
-                limited: data.limited,
-                limited_reason: data.limited_reason,
-                duration_ms: data.duration_ms,
-              });
-            }
-            break;
-
-          case 'file_diff_result': {
-            const key = `get_file_diff_${data.request_id}`;
-            const pending = pendingActionsRef.current.get(key);
-            if (pending) {
-              pendingActionsRef.current.delete(key);
-              if (data.success) {
-                pending.resolve({
-                  success: true,
-                  original: data.original || '',
-                  modified: data.modified || '',
-                });
-              } else {
-                pending.reject(new Error(data.error || 'Failed to get diff'));
-              }
-            }
-            break;
-          }
-
           case 'get_repo_info_result': {
-            const repoPath = (data as any).info?.repo || '';
-            const key = `repo_info_${repoPath}`;
+            if (typeof data.request_id !== 'string') break;
+            const key = pendingRequestKey('get_repo_info', data.request_id);
             const pending = pendingActionsRef.current.get(key);
-            if (pending) {
-              pendingActionsRef.current.delete(key);
-              if ((data as any).success) {
-                pending.resolve({ success: true, info: (data as any).info });
-              } else {
-                pending.resolve({ success: false, error: (data as any).error });
-              }
-            }
+            if (!pending) break;
+            pendingActionsRef.current.delete(key);
+            pending.resolve(data.success && data.info
+              ? { success: true, info: { ...data.info, worktrees: data.info.worktrees || [] } }
+              : { success: false, error: data.error });
             break;
           }
 
@@ -2443,6 +2303,7 @@ export function useDaemonSocket({
 
     ws.onclose = () => {
       wsRef.current = null;
+      rejectPendingByPredicate((key) => SELECTION_COMMANDS.some((command) => key.startsWith(`${command}:`)), new Error('The daemon disconnected before confirming the selection'));
       emitSessionLedger({ type: 'connection', connected: false });
       hasReceivedInitialStateRef.current = false;
       canceledAttachIdsRef.current.clear();
@@ -2480,7 +2341,7 @@ export function useDaemonSocket({
     };
 
     wsRef.current = ws;
-  }, [resolvedWsUrl, rejectPendingForCommand, ensureDaemonRunning, showRecoveringNoticeForCommand, flushQueuedCommands, pruneAttachedPtySessions, emitSessionLedger]);
+  }, [resolvedWsUrl, rejectPendingByPredicate, rejectPendingForCommand, ensureDaemonRunning, showRecoveringNoticeForCommand, flushQueuedCommands, pruneAttachedPtySessions, emitSessionLedger]);
 
   useEffect(() => {
     void connect();
@@ -2704,11 +2565,9 @@ export function useDaemonSocket({
   const sendSessionReopen = useCallback((
     sessionId: string,
     action?: string,
-    directory?: string,
   ): Promise<SessionReopenResult> => {
     const body: Record<string, unknown> = { session_id: sessionId };
     if (action) body.action = action;
-    if (directory) body.directory = directory;
     return sendRequest<SessionReopenResult>('session_reopen', body, 'Reopening the session timed out', SESSION_REOPEN_TIMEOUT_MS);
   }, [sendRequest]);
 
@@ -3358,8 +3217,8 @@ export function useDaemonSocket({
   const sendRenameSession = useCallback((sessionId: string, label: string): Promise<void> => {
     return new Promise((resolve, reject) => {
       const trimmed = label.trim();
-      if (!sessionId || !trimmed) {
-        reject(new Error('Session name cannot be empty'));
+      if (!sessionId) {
+        reject(new Error('Session id is required'));
         return;
       }
       const key = `rename_session:${sessionId}`;
@@ -3468,59 +3327,18 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'list_worktrees', main_repo: mainRepo }));
   }, []);
 
-  const sendCreateWorktree = useCallback((mainRepo: string, branch: string, path?: string, startingFrom?: string): Promise<WorktreeActionResult> => {
-    return new Promise((resolve, reject) => {
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        reject(new Error('WebSocket not connected'));
-        return;
-      }
+  const sendCreateWorktree = useCallback((mainRepo: string, branch: string, path?: string, startingFrom?: string): Promise<WorktreeActionResult> => (
+    sendRequest('create_worktree', {
+      main_repo: mainRepo, branch,
+      ...(path && { path }),
+      ...(startingFrom && { starting_from: startingFrom }),
+    }, 'Create worktree timed out', GIT_WORKTREE_TIMEOUT_MS)
+  ), [sendRequest]);
 
-      const actionKey = 'worktree_create_worktree_result';
-      pendingActionsRef.current.set(actionKey, { resolve, reject });
-
-      setTimeout(() => {
-        if (pendingActionsRef.current.has(actionKey)) {
-          pendingActionsRef.current.delete(actionKey);
-          reject(new Error('Create worktree timed out'));
-        }
-      }, GIT_WORKTREE_TIMEOUT_MS);
-
-      ws.send(JSON.stringify({
-        cmd: 'create_worktree',
-        main_repo: mainRepo,
-        branch,
-        ...(path && { path }),
-        ...(startingFrom && { starting_from: startingFrom }),
-      }));
-    });
-  }, []);
-
-  const sendDeleteWorktree = useCallback((path: string, options: DeleteWorktreeOptions = {}): Promise<WorktreeActionResult> => {
-    return new Promise((resolve, reject) => {
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        reject(new Error('WebSocket not connected'));
-        return;
-      }
-
-      const actionKey = 'worktree_delete_worktree_result';
-      pendingActionsRef.current.set(actionKey, { resolve, reject });
-
-      setTimeout(() => {
-        if (pendingActionsRef.current.has(actionKey)) {
-          pendingActionsRef.current.delete(actionKey);
-          reject(new Error('Delete worktree timed out'));
-        }
-      }, GIT_WORKTREE_TIMEOUT_MS);
-
-      ws.send(JSON.stringify({
-        cmd: 'delete_worktree',
-        path,
-        ...(options.force && { force: true }),
-      }));
-    });
-  }, []);
+  const sendDeleteWorktree = useCallback((path: string, options: DeleteWorktreeOptions = {}): Promise<WorktreeActionResult> => (
+    sendRequest('delete_worktree', { path, ...(options.force && { force: true }) },
+      'Delete worktree timed out', GIT_WORKTREE_TIMEOUT_MS)
+  ), [sendRequest]);
 
   const sendSetSetting = useCallback((key: string, value: string) => {
     const ws = wsRef.current;
@@ -4002,32 +3820,10 @@ export function useDaemonSocket({
     }, 'Inspect path timed out', GIT_METADATA_TIMEOUT_MS);
   }, [nextRequestID, sendKeyedRequest]);
 
-  const sendCreateWorktreeFromBranch = useCallback((mainRepo: string, branch: string, path?: string): Promise<WorktreeActionResult> => {
-    return new Promise((resolve, reject) => {
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        reject(new Error('WebSocket not connected'));
-        return;
-      }
-
-      const actionKey = 'worktree_create_worktree_result';
-      pendingActionsRef.current.set(actionKey, { resolve, reject });
-
-      setTimeout(() => {
-        if (pendingActionsRef.current.has(actionKey)) {
-          pendingActionsRef.current.delete(actionKey);
-          reject(new Error('Create worktree from branch timed out'));
-        }
-      }, GIT_WORKTREE_TIMEOUT_MS);
-
-      ws.send(JSON.stringify({
-        cmd: 'create_worktree_from_branch',
-        main_repo: mainRepo,
-        branch,
-        ...(path && { path }),
-      }));
-    });
-  }, []);
+  const sendCreateWorktreeFromBranch = useCallback((mainRepo: string, branch: string, path?: string): Promise<WorktreeActionResult> => (
+    sendRequest('create_worktree_from_branch', { main_repo: mainRepo, branch, ...(path && { path }) },
+      'Create worktree from branch timed out', GIT_WORKTREE_TIMEOUT_MS)
+  ), [sendRequest]);
 
   const sendFetchRemotes = useCallback((repo: string): Promise<FetchRemotesResult> => {
     const key = 'fetch_remotes';
@@ -4042,32 +3838,6 @@ export function useDaemonSocket({
       clone_url: cloneUrl,
     }, 'Ensure repo timed out', GIT_CLONE_TIMEOUT_MS);
   }, [sendKeyedRequest]);
-
-  const sendSubscribeGitStatus = useCallback((directory: string) => {
-    const previousDirectory = gitStatusSubscriptionRef.current;
-    if (previousDirectory === directory) return;
-
-    gitStatusSubscriptionRef.current = directory;
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-
-    if (previousDirectory) {
-      ws.send(JSON.stringify({ cmd: 'unsubscribe_git_status' }));
-    }
-    ws.send(JSON.stringify({ cmd: 'subscribe_git_status', directory }));
-  }, []);
-
-  const sendUnsubscribeGitStatus = useCallback(() => {
-    const hadSubscription = gitStatusSubscriptionRef.current;
-    gitStatusSubscriptionRef.current = null;
-    if (!hadSubscription) return;
-
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-
-    ws.send(JSON.stringify({ cmd: 'unsubscribe_git_status' }));
-  }, []);
-
 
   const sendSettleTurn = useCallback((sessionId: string) => {
     const ws = wsRef.current;
@@ -4099,33 +3869,9 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'cancel_countdown', session_id: sessionId }));
   }, []);
 
-  const sendGetFileDiff = useCallback((
-    directory: string,
-    path: string,
-    options?: { staged?: boolean; baseRef?: string; headRef?: string }
-  ): Promise<FileDiffResult> => {
-    // Key by request id, not path: a stale round's late reply racing a new round's request must not
-    // clobber the pending promise.
-    const requestId = nextRequestID('get_file_diff');
-    const key = `get_file_diff_${requestId}`;
-    return sendKeyedRequest<FileDiffResult>(key, {
-      cmd: 'get_file_diff',
-      directory,
-      path,
-      request_id: requestId,
-      ...(options?.staged !== undefined && { staged: options.staged }),
-      ...(options?.baseRef && { base_ref: options.baseRef }),
-      ...(options?.headRef && { head_ref: options.headRef }),
-    }, 'Get file diff timed out', GIT_DIFF_TIMEOUT_MS);
-  }, [nextRequestID, sendKeyedRequest]);
-
-  const getRepoInfo = useCallback((repo: string): Promise<RepoInfoResult> => {
-    const key = `repo_info_${repo}`;
-    return sendKeyedRequest<RepoInfoResult>(key, {
-      cmd: 'get_repo_info',
-      repo,
-    }, 'get_repo_info timeout', GIT_METADATA_TIMEOUT_MS);
-  }, [sendKeyedRequest]);
+  const getRepoInfo = useCallback((repo: string): Promise<RepoInfoResult> => (
+    sendRequest('get_repo_info', { repo }, 'get_repo_info timeout', GIT_METADATA_TIMEOUT_MS)
+  ), [sendRequest]);
 
   const listKeptConversations = useCallback((includeDeleted: boolean): Promise<KeptConversationListResult> => (
     sendRequest('kept_conversation_list', { include_deleted: includeDeleted }, 'Listing conversations timed out')
@@ -4366,44 +4112,6 @@ export function useDaemonSocket({
     [nextRequestID],
   );
 
-  const getPresentations = useCallback((): Promise<Presentation[]> => {
-    const key = 'get_presentations';
-    return sendKeyedRequest<Presentation[]>(key, { cmd: 'get_presentations' }, 'Get presentations timed out', 30000);
-  }, [sendKeyedRequest]);
-
-  const getPresentationRound = useCallback((
-    presentationId: string,
-    seq?: number,
-  ): Promise<{ presentation: Presentation; round: PresentationRound; comments: PresentationComment[]; repoHeadSha?: string }> => {
-    const key = 'get_presentation_round';
-    return sendKeyedRequest<{ presentation: Presentation; round: PresentationRound; comments: PresentationComment[]; repoHeadSha?: string }>(key, {
-      cmd: 'get_presentation_round',
-      presentation_id: presentationId,
-      ...(seq !== undefined && { seq }),
-    }, 'Get presentation round timed out', 30000);
-  }, [sendKeyedRequest]);
-
-  const submitPresentationRound = useCallback((input: {
-    roundId: string;
-    verdict: 'approved' | 'feedback';
-    comments: PresentCommentInput[];
-    handback: boolean;
-  }): Promise<{ roundId: string }> => {
-    const key = 'present_submit_round';
-    return sendKeyedRequest<{ roundId: string }>(key, {
-      cmd: 'present_submit_round',
-      round_id: input.roundId,
-      verdict: input.verdict,
-      comments: input.comments,
-      handback: input.handback,
-    }, 'Submit presentation round timed out', 30000);
-  }, [sendKeyedRequest]);
-
-  const closePresentation = useCallback((presentationId: string): Promise<{ presentationId: string }> => {
-    const key = 'present_close';
-    return sendKeyedRequest<{ presentationId: string }>(key, { cmd: 'present_close', presentation_id: presentationId, }, 'Close presentation timed out', 30000);
-  }, [sendKeyedRequest]);
-
   const clearWarnings = useCallback(() => {
     setWarnings([]);
     const ws = wsRef.current;
@@ -4421,11 +4129,12 @@ export function useDaemonSocket({
         pendingRequestKey(cmd, requestId),
         { cmd, request_id: requestId, ...body },
         `The daemon did not answer ${cmd}`,
+        SELECTION_COMMANDS.includes(cmd) ? null : undefined,
       );
       if (intent !== null) {
         request.then(
           () => useSessionStore.getState().commandSettled(requestId),
-          () => useSessionStore.getState().intentFailed(intent),
+          (error: unknown) => useSessionStore.getState().intentFailed(intent, error instanceof Error ? error.message : String(error)),
         );
       }
       return request;
@@ -4653,6 +4362,12 @@ export function useDaemonSocket({
     [sendProfileCommand],
   );
 
+  const sendDesktopCloseTile = useCallback(
+    (desktopId: string, tileId: string) =>
+      sendProfileCommand('desktop_close_tile', { desktop_id: desktopId, tile_id: tileId }),
+    [sendProfileCommand],
+  );
+
 
   return {
     isConnected: wsRef.current?.readyState === WebSocket.OPEN,
@@ -4676,6 +4391,7 @@ export function useDaemonSocket({
     sendDesktopDockTile,
     sendDesktopUpdateTile,
     sendDesktopRemoveLeaf,
+    sendDesktopCloseTile,
     sendDesktopSetSplitRatio,
     sendMigrationGet,
     sendLaunchDesktopGet,
@@ -4766,8 +4482,6 @@ export function useDaemonSocket({
     sendCreateWorktreeFromBranch,
     sendFetchRemotes,
     sendEnsureRepo,
-    sendSubscribeGitStatus,
-    sendUnsubscribeGitStatus,
     sendSessionList,
     subscribeSessionLedger,
     sendSessionShow,
@@ -4809,7 +4523,6 @@ export function useDaemonSocket({
     sendSetTerminalTheme,
     subscribeDocuments,
     isRuntimeAttached,
-    sendGetFileDiff,
     getRepoInfo,
     listKeptConversations,
     setConversationKeep,
@@ -4826,9 +4539,5 @@ export function useDaemonSocket({
     getAutomationDefinition,
     applyAutomationDefinition,
     deleteAutomationDefinition,
-    getPresentations,
-    getPresentationRound,
-    submitPresentationRound,
-    closePresentation,
   };
 }

@@ -1,3 +1,4 @@
+import { sessionDisplayName } from '../utils/sessionDisplayName';
 import { useMemo } from 'react';
 import { useAsksAvailable } from '../store/asks';
 import { useToast } from '../components/Toast';
@@ -43,7 +44,7 @@ import {
 import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 import { useOpenInEditor } from './useOpenInEditor';
 
-export function useAppCommands(): PaletteCommand[] {
+export function useAppCommands(onRename: (sessionId: string, name: string, opener: HTMLElement | null) => void): PaletteCommand[] {
   const seeds = useDaemonStore((state) => state.seeds);
   const { setMarkdownOpenerOpen, handleOpenNotebookTile } =
     useDesktopTilesContext();
@@ -67,6 +68,7 @@ export function useAppCommands(): PaletteCommand[] {
     handleToggleQueueMode,
     activeGroupForCommands,
     activeSessionForCommands,
+    togglePriority,
     handleSnoozeActiveSession,
     handleWakeActiveSession,
   } = useAttentionQueueContext();
@@ -518,6 +520,18 @@ export function useAppCommands(): PaletteCommand[] {
     const group = activeGroupForCommands;
     if (!group) return actionMenuItems;
     const activeSession = activeSessionForCommands;
+    const sessionPriorityItems: PaletteCommand[] = activeSession
+      ? [{
+          id: 'toggle-session-priority',
+          pinned: true,
+          title: activeSession.priority ? 'Clear priority' : 'Mark as priority',
+          description: sessionDisplayName(activeSession),
+          keywords: ['priority', 'session', 'agent', sessionDisplayName(activeSession)],
+          icon: <AttentionActionIcon />,
+          shortcut: [shortcutTokens('session.priority')],
+          run: () => togglePriority(activeSession),
+        }]
+      : [];
     const delegationItems: PaletteCommand[] = activeSession
       ? [
           {
@@ -539,7 +553,7 @@ export function useAppCommands(): PaletteCommand[] {
             {
               id: 'show-tended-seeds',
               pinned: true,
-              title: `Show ${activeSession.label}'s seeds`,
+              title: `Show ${sessionDisplayName(activeSession)}'s seeds`,
               description: 'The seeds this agent is tending, and what it reports to',
               keywords: ['seed', 'seeds', 'tend', 'tending', 'garden', 'plot', 'agent', 'session'],
               icon: <GardenIcon />,
@@ -559,7 +573,7 @@ export function useAppCommands(): PaletteCommand[] {
             {
               id: 'show-session-usage',
               pinned: true,
-              title: `Show ${activeSession.label}'s usage`,
+              title: `Show ${sessionDisplayName(activeSession)}'s usage`,
               description: 'Token and cost totals for each model in this session',
               keywords: ['usage', 'tokens', 'cost', 'models', 'agent', 'session'],
               icon: <ContextActionIcon />,
@@ -578,8 +592,8 @@ export function useAppCommands(): PaletteCommand[] {
               id: 'set-session-context-cap',
               pinned: true,
               title: activeSession.contextWindowCap
-                ? `Change ${activeSession.label}'s context window cap`
-                : `Cap ${activeSession.label}'s context window`,
+                ? `Change ${sessionDisplayName(activeSession)}'s context window cap`
+                : `Cap ${sessionDisplayName(activeSession)}'s context window`,
               description: activeSession.contextWindowCap
                 ? `Compacts at ${activeSession.contextWindowCap.toLocaleString()} tokens — change or clear the cap`
                 : 'Make this agent compact at a token budget you choose',
@@ -597,7 +611,7 @@ export function useAppCommands(): PaletteCommand[] {
               run: () =>
                 setContextCapPromptSession({
                   id: activeSession.id,
-                  label: activeSession.label,
+                  label: sessionDisplayName(activeSession),
                   currentCap: activeSession.contextWindowCap,
                 }),
             },
@@ -605,6 +619,16 @@ export function useAppCommands(): PaletteCommand[] {
         : [];
     return [
       ...actionMenuItems,
+      ...sessionPriorityItems,
+      ...(activeSession ? [{
+        id: 'rename-active-session',
+        pinned: true,
+        title: 'Rename this session…',
+        description: 'Change its name in the sidebar and tile',
+        keywords: ['rename', 'name', 'label', 'agent', 'session', 'tile'],
+        icon: <ContextActionIcon />,
+        run: (opener: HTMLElement | null) => onRename(activeSession.id, activeSession.label, opener),
+      }] : []),
       ...delegationItems,
       ...sessionSeedItems,
       ...sessionUsageItems,
@@ -618,6 +642,8 @@ export function useAppCommands(): PaletteCommand[] {
     actionMenuItems,
     activeGroupForCommands,
     activeSessionForCommands,
+    togglePriority,
+    onRename,
     seeds,
   ]);
 

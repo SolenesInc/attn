@@ -79,6 +79,12 @@ func runSession() {
 			return
 		}
 		runSessionRename(os.Args[3:])
+	case "snooze", "unsnooze":
+		if hasHelpFlag(os.Args[3:]) {
+			writeSessionHelp(os.Stdout)
+			return
+		}
+		runSessionSnooze(os.Args[3:], os.Args[2] == "snooze")
 	case "move":
 		if hasHelpFlag(os.Args[3:]) {
 			writeSessionHelp(os.Stdout)
@@ -319,6 +325,15 @@ commands:
         and are half-open, so --until excludes its own instant.
         --reopen adds what would bring each closed row back, judging the whole
         page in one call; show explains any one of those verdicts.
+  list --tree [--profile <id>]
+        show every live session nested under the session that dispatched it,
+        sorted by label within each profile and branch. Rows carry short ids,
+        agent, state, owed/snoozed turns and seed slugs. A delegate whose
+        dispatcher is closed or absent becomes a root. Shell split provenance
+        is labeled separately. Ledger filters, paging and --json do not apply;
+        use attn list --json for the live session data.
+        Inside attn, the tree is limited to your session's profile. Outside
+        attn it includes all profiles; --profile narrows either view.
   show <id>
         read one ledger row, live or closed, including who closed it and why.
         A closed row also carries the reopen verdict: whether it comes back,
@@ -326,6 +341,16 @@ commands:
   priority on|off [--session <id>]
         mark a session so its owed turns go first, or clear that flag. Defaults
         to the session running this command. Any agent may mark any session.
+  snooze <id>... --until <when>
+        defer sessions until an RFC3339 instant, a positive duration (30m, 1h,
+        2h, 4h, 8h), or tomorrow, saturday or monday. Day choices use local
+        09:00; quote a custom time, e.g. "tomorrow 09:00".
+        A session may snooze itself and agents below it in its delegation
+        chain, including delegates of delegates; the chief any session
+        of its profile. Each id reports success or error; failures exit 1.
+  unsnooze <id>...
+        end snoozes early, with the same permissions. Already unsnoozed is
+        a successful no-op. List and show include the snoozed-until instant.
   rename <name> [--session <id>]
         give a session the name a person reads in the sidebar and the ledger:
         a few plain words about the work, up to 48 characters. Defaults to the
@@ -335,16 +360,17 @@ commands:
         move a session's pane to another desktop of its profile, beside that
         desktop's active pane (its first pane when empty). <desktop> is the
         shortcut digit (1-9), the name as shown (case-insensitive) or the id.
+        A missing numbered desktop is created on its shortcut slot.
         Defaults to the session running this command; a session may also move
-        the sessions it dispatched, and the chief any. What the user sees
+        agents below it in its delegation chain, including delegates’
+        delegates, and the chief any session of its profile. What the user sees
         stays put unless the moved pane was the one shown on its desktop.
-  reopen <id> [--action <name>] [--cwd <path>] [--json]
-        bring a closed session back under its own id, on its last or
+  reopen <id> [--action <name>] [--json]
+        bring a closed or stopped session back under its own id, on its last or
         current desktop in its profile. Without --action it performs the plain reopen and refuses,
         naming what is offered, when the verdict does not allow one. Actions
         that recreate a worktree or fetch a branch write to the repository and
         only ever run when named here.
-        --cwd is where start_fresh_elsewhere starts.
         Sessions whose profile was deleted cannot reopen.
 `)
 }

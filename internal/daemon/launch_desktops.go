@@ -134,7 +134,7 @@ func storeLaunchSetting(setting *protocol.LaunchDesktopSetting) *store.LaunchDes
 	return &store.LaunchDesktopSetting{DesktopID: protocol.Deref(setting.DesktopID), DesktopName: protocol.Deref(setting.DesktopName)}
 }
 
-// launchDesktopFromRef reads the CLI's --launch-desktop: "own" or an empty slot 5–9 is a new desktop
+// launchDesktopFromRef reads the CLI's --launch-desktop: "own" or an empty slot is a new desktop
 // named --desktop-name, else the item's name; anything else names an existing desktop.
 func (d *Daemon) launchDesktopFromRef(profileID, itemName, ref string, name *string) (store.LaunchDesktopSetting, error) {
 	newName := itemName
@@ -150,13 +150,13 @@ func (d *Daemon) launchDesktopFromRef(profileID, itemName, ref string, name *str
 	}
 	desktop, err := d.resolveDesktopRef(profile, ref)
 	if err == nil && name != nil {
-		return store.LaunchDesktopSetting{}, fmt.Errorf("--desktop-name needs --launch-desktop own or an empty slot 5–9")
+		return store.LaunchDesktopSetting{}, fmt.Errorf("--desktop-name needs --launch-desktop own or an empty slot")
 	}
 	if err == nil {
 		return store.LaunchDesktopSetting{DesktopID: desktop.ID}, nil
 	}
-	if len(ref) == 1 && ref[0] >= '5' && ref[0] <= '9' {
-		return store.LaunchDesktopSetting{DesktopID: profiles.NumberedDesktopID(profileID, int(ref[0]-'0')), DesktopName: newName}, nil
+	if numbered := profiles.NumberedDesktopRef(profileID, ref); numbered != "" && profiles.IsNotFound(err) {
+		return store.LaunchDesktopSetting{DesktopID: numbered, DesktopName: newName}, nil
 	}
 	return store.LaunchDesktopSetting{}, err
 }

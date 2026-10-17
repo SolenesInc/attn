@@ -298,7 +298,7 @@ describe('App new session', () => {
 
       expect(screen.getByRole('status', { name: 'Deleting repo--feature' })).toBeInTheDocument();
       expect(deletePrompt()).toBeNull();
-      expect(daemon.sentOf('delete_worktree')).toEqual([{ cmd: 'delete_worktree', path: FEATURE }]);
+      expect(daemon.sentOf('delete_worktree')).toMatchObject([{ cmd: 'delete_worktree', path: FEATURE }]);
     });
   });
 });

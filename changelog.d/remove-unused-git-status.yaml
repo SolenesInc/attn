@@ -1,0 +1,3 @@
+kind: internal
+area: git
+change: Remove unused Git status subscriptions while preserving worktree dirty checks and file diffs.

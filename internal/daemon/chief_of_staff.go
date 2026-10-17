@@ -100,6 +100,16 @@ func (d *Daemon) sessionExists(sessionID protocol.SessionID) bool {
 	return d.store != nil && d.store.DelegationSessionReserved(sessionID)
 }
 
+func (d *Daemon) sessionActive(sessionID protocol.SessionID) bool {
+	if !d.sessionExists(sessionID) {
+		return false
+	}
+	if _, hasLaunchIntent := d.store.LaunchIntent(sessionID); hasLaunchIntent {
+		return d.sessionHasLiveWorker(sessionID) || d.store.DelegationSessionReserved(sessionID)
+	}
+	return true
+}
+
 func (d *Daemon) clearChiefOfStaffIfSession(sessionID protocol.SessionID) {
 	if d.store == nil || protocol.TrimID(sessionID) == "" {
 		return

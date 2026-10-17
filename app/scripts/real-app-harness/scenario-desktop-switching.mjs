@@ -231,6 +231,17 @@ async function main() {
       await waitForPaneText(client, first.sessionId, first.paneId, (text) => text.includes(tokens.first), 'first shell kept its scrollback', 15_000);
     });
 
+    await runner.step('typing_immediately_after_the_native_switch_reaches_the_picked_shell', async () => {
+      const immediate = createWindowDriver({ appPath: options.appPath, client, actionDelayMs: 0 });
+      const marker = `SWITCH_INPUT_${runner.runId}`;
+      await pressShortcutKeys(client, immediate, `desktop.select${desktopB.shortcut_slot}`);
+      await immediate.typeText(`# ${marker}`);
+      await immediate.pressEnter();
+      await waitForPaneText(client, split.sessionId, split.paneId, (text) => text.replace(/\r?\n/g, '').includes(marker), 'immediate input reached the shell on desktop B');
+      const outgoing = await client.request('read_pane_text', { sessionId: first.sessionId, paneId: first.paneId });
+      runner.assert(!outgoing.text.replace(/\r?\n/g, '').includes(marker), 'the outgoing shell received no input meant for desktop B', outgoing);
+    });
+
     await runner.step('the_overview_switches_desktops', async () => {
       await pressShortcutKeys(client, driver, 'desktop.overview');
       await client.request('dom_wait', { selector: '.desktop-overview', timeoutMs: 5_000 });

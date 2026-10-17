@@ -3,7 +3,7 @@ import { useOptionalDaemonApi } from '../contexts/DaemonApiContext';
 import { useProfilesStore } from '../store/profiles';
 import type { Desktop, LaunchDesktopKind, LaunchDesktopSetting } from '../types/generated';
 import { ModalDialog } from './MigrationPicker/ModalDialog';
-import { numberedDesktopId } from '../utils/desktops';
+import { numberedDesktopId, SHORTCUT_SLOTS } from '../utils/desktops';
 import './LaunchDesktopSelect.css';
 
 export interface DesktopNameRequest {
@@ -129,7 +129,7 @@ export function LaunchDesktopSelect({
               {desktop.name || `Desktop ${desktop.shortcut_slot ?? ''}`}
             </option>
           ))}
-          {[5, 6, 7, 8, 9]
+          {SHORTCUT_SLOTS
             .filter((slot) => !occupied.has(slot))
             .map((slot) => (
               <option key={slot} value={`slot:${slot}`}>

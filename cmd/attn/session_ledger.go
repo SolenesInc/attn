@@ -26,6 +26,7 @@ type sessionListArgs struct {
 	until      string
 	reopen     bool
 	json       bool
+	tree       bool
 }
 
 var sessionListPresets = map[string]int{"today": 0, "yesterday": 1, "7d": 6, "30d": 29}
@@ -89,11 +90,23 @@ func parseSessionListArgs(args []string) (sessionListArgs, error) {
 	until := fs.String("until", "", "only sessions before this date or RFC3339 instant")
 	reopen := fs.Bool("reopen", false, "judge every closed row and print what would bring it back")
 	jsonOut := fs.Bool("json", false, "print the page as JSON")
+	tree := fs.Bool("tree", false, "show every live session nested under its dispatcher")
 	if err := fs.Parse(args); err != nil {
 		return sessionListArgs{}, err
 	}
 	if fs.NArg() != 0 {
 		return sessionListArgs{}, errors.New("session list takes no positional arguments")
+	}
+	if *tree {
+		var incompatible string
+		fs.Visit(func(f *flag.Flag) {
+			if incompatible == "" && f.Name != "tree" && f.Name != "profile" {
+				incompatible = f.Name
+			}
+		})
+		if incompatible != "" {
+			return sessionListArgs{}, fmt.Errorf("--tree supports only --profile; omit --%s to see complete live delegation chains", incompatible)
+		}
 	}
 	if *closed && *all {
 		return sessionListArgs{}, errors.New("--closed and --all ask for different lists; pass one")
@@ -111,6 +124,7 @@ func parseSessionListArgs(args []string) (sessionListArgs, error) {
 		repository: strings.TrimSpace(*repository),
 		reopen:     *reopen,
 		json:       *jsonOut,
+		tree:       *tree,
 	}
 
 	now := time.Now()
@@ -143,6 +157,13 @@ func runSessionList(args []string) {
 		writeSessionHelp(os.Stderr)
 		os.Exit(2)
 	}
+	if parsed.tree {
+		if err := runSessionTree(os.Stdout, client.New(""), parsed.profile); err != nil {
+			fmt.Fprintf(os.Stderr, "session list --tree: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	result, err := client.New("").SessionList(client.SessionListOptions{
 		Closed:     parsed.closed,
@@ -174,16 +195,17 @@ func fprintSessionList(w io.Writer, result *protocol.SessionListResult, args ses
 
 	verdicts := sessionReopenVerdictsByID(result.Reopen)
 	table := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	header := "ID\tAGENT\tSTATE\tWHEN\tCLOSED BY\tLABEL"
+	header := "ID\tAGENT\tSTATE\tSNOOZED UNTIL\tWHEN\tCLOSED BY\tLABEL"
 	if args.reopen {
-		header = "ID\tAGENT\tSTATE\tWHEN\tCLOSED BY\tREOPEN\tLABEL"
+		header = "ID\tAGENT\tSTATE\tSNOOZED UNTIL\tWHEN\tCLOSED BY\tREOPEN\tLABEL"
 	}
 	fmt.Fprintln(table, header)
 	for _, entry := range result.Entries {
-		fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\t",
+		fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\t%s\t",
 			entry.ID,
 			entry.Agent,
 			sessionLedgerState(entry),
+			orDash(protocol.Deref(entry.TurnSnoozedUntil)),
 			shortStamp(sessionLedgerWhen(entry)),
 			orDash(protocol.Deref(entry.ClosedBy)))
 		if args.reopen {
@@ -247,6 +269,9 @@ func sessionLedgerState(entry protocol.SessionLedgerEntry) string {
 	if protocol.Deref(entry.ClosedAt) != "" {
 		return "closed"
 	}
+	if protocol.Deref(entry.Hidden) {
+		return string(entry.State) + " (hidden)"
+	}
 	return string(entry.State)
 }
 
@@ -293,9 +318,6 @@ func parseSessionRenameArgs(args []string, ownSessionID func() protocol.SessionI
 		return sessionRenameArgs{}, errors.New("exactly one name is required; quote it when it has spaces")
 	}
 	parsed.name = strings.TrimSpace(positional[0])
-	if parsed.name == "" {
-		return sessionRenameArgs{}, errors.New("the name cannot be empty")
-	}
 	if parsed.sessionID == "" {
 		parsed.sessionID = protocol.TrimID(ownSessionID())
 	}
@@ -369,6 +391,8 @@ func runSessionMove(args []string) {
 		printJSON(result)
 	case protocol.Deref(result.Unchanged):
 		fmt.Printf("%s already is on desktop %s\n", result.SessionID, result.DesktopID)
+	case protocol.Deref(result.DesktopCreated):
+		fmt.Printf("%s moved to new desktop %s (pane %s)\n", result.SessionID, result.DesktopID, result.PaneID)
 	default:
 		fmt.Printf("%s moved to desktop %s (pane %s)\n", result.SessionID, result.DesktopID, result.PaneID)
 	}
@@ -397,6 +421,9 @@ func fprintSessionShow(w io.Writer, result protocol.SessionShowResult) {
 	fmt.Fprintf(w, "state      %s\n", sessionLedgerState(entry))
 	if protocol.Deref(entry.Priority) {
 		fmt.Fprintln(w, "priority   on")
+	}
+	if until := protocol.Deref(entry.TurnSnoozedUntil); until != "" {
+		fmt.Fprintf(w, "snoozed until %s\n", until)
 	}
 	fmt.Fprintf(w, "directory  %s\n", entry.Directory)
 	if branch := protocol.Deref(entry.Branch); branch != "" {

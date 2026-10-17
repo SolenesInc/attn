@@ -846,9 +846,8 @@ func (s *Store) SetDesktopOrder(profileID string, ids []string) ([]profiles.Desk
 	return ordered, err
 }
 
-func (s *Store) CloseDesktop(id string, expectedRevision int64) (profiles.Profile, []protocol.SessionID, error) {
+func (s *Store) CloseDesktop(id string, expectedRevision int64) (profiles.Profile, error) {
 	var profile profiles.Profile
-	var sessions []protocol.SessionID
 	err := s.profilesTx(func(tx *sql.Tx, now string) error {
 		desktop, err := loadDesktop(tx, id)
 		if err != nil {
@@ -877,11 +876,6 @@ func (s *Store) CloseDesktop(id string, expectedRevision int64) (profiles.Profil
 				profile.CurrentDesktopID = desktops[neighbour].ID
 			}
 		}
-		for _, pane := range desktop.Panes {
-			if pane.SessionID != "" {
-				sessions = append(sessions, pane.SessionID)
-			}
-		}
 		if err := appendLaunchDesktopFacts(tx, id); err != nil {
 			return err
 		}
@@ -890,7 +884,7 @@ func (s *Store) CloseDesktop(id string, expectedRevision int64) (profiles.Profil
 		}
 		return bumpProfile(tx, &profile)
 	})
-	return profile, sessions, err
+	return profile, err
 }
 
 func deleteDesktop(tx *sql.Tx, id string) error {
@@ -1353,12 +1347,10 @@ func (s *Store) PlaceLaunchedSession(request SessionPlacementRequest) (profiles.
 			return err
 		}
 		current, err := loadLaunchDesktop(tx, profile, request.DesktopID)
-		var missing *profiles.Error
-		if request.DesktopID != "" && errors.As(err, &missing) && missing.Code == profiles.CodeNotFound {
+		if request.DesktopID != "" && profiles.IsNotFound(err) {
 			request.AnchorPaneID, request.Focus = "", false
-			var found bool
-			current, found, err = findOrRecreateNumberedDesktop(tx, now, profile, request.DesktopID)
-			if err == nil && !found {
+			current, _, err = loadOrCreateNumberedDesktop(tx, now, profile.ID, request.DesktopID)
+			if profiles.IsNotFound(err) {
 				current, err = loadLaunchDesktop(tx, profile, "")
 			}
 		}
@@ -1441,33 +1433,24 @@ func loadMoveEnds(tx *sql.Tx, now string, request LeafMoveRequest) (profiles.Des
 }
 
 func moveDestination(tx *sql.Tx, now, profileID string, request LeafMoveRequest) (profiles.Desktop, error) {
-	if request.TargetDesktopID != "" {
-		if request.TargetShortcutSlot != 0 {
-			return profiles.Desktop{}, profiles.Errorf(profiles.CodeInvalid, "a move needs a target desktop or shortcut slot, not both")
-		}
-		return loadDesktop(tx, request.TargetDesktopID)
-	}
-	if err := profiles.ValidateShortcutSlot(request.TargetShortcutSlot); err != nil {
-		return profiles.Desktop{}, err
-	}
-	slot := request.TargetShortcutSlot
-	if slot != 0 {
-		desktops, err := listDesktops(tx, profileID)
+	targetID, slot := request.TargetDesktopID, request.TargetShortcutSlot
+	switch {
+	case targetID != "" && slot != 0:
+		return profiles.Desktop{}, profiles.Errorf(profiles.CodeInvalid, "a move needs a target desktop or shortcut slot, not both")
+	case targetID == "" && slot == 0:
+		slot, err := lowestFreeShortcutSlot(tx, profileID)
 		if err != nil {
 			return profiles.Desktop{}, err
 		}
-		for _, desktop := range desktops {
-			if desktop.ShortcutSlot == slot {
-				return desktop, nil
-			}
-		}
-	} else {
-		var err error
-		if slot, err = lowestFreeShortcutSlot(tx, profileID); err != nil {
+		return insertDesktop(tx, now, profileID, "", slot)
+	case targetID == "":
+		if err := profiles.ValidateShortcutSlot(slot); err != nil {
 			return profiles.Desktop{}, err
 		}
+		targetID = profiles.NumberedDesktopID(profileID, slot)
 	}
-	return insertDesktop(tx, now, profileID, "", slot)
+	desktop, _, err := loadOrCreateNumberedDesktop(tx, now, profileID, targetID)
+	return desktop, err
 }
 
 func handOverPane(source, target *profiles.Desktop, leafID, finalLeafID string) {
@@ -1595,6 +1578,7 @@ type SessionDesktopMove struct {
 	Move       LeafMove
 	FromLeafID string
 	Placed     bool
+	Created    bool
 }
 
 // MoveSessionToDesktop puts a session's newest tile beside another desktop's active leaf;
@@ -1606,7 +1590,7 @@ func (s *Store) MoveSessionToDesktop(sessionID protocol.SessionID, targetDesktop
 		if err != nil {
 			return err
 		}
-		target, err := loadDesktop(tx, targetDesktopID)
+		target, created, err := loadOrCreateNumberedDesktop(tx, now, profileID, targetDesktopID)
 		if err != nil {
 			return err
 		}
@@ -1630,7 +1614,7 @@ func (s *Store) MoveSessionToDesktop(sessionID protocol.SessionID, targetDesktop
 			if err := writeCurrentDesktopArrangement(tx, now, &desktop); err != nil {
 				return err
 			}
-			result = SessionDesktopMove{Move: LeafMove{Target: desktop, FinalLeafID: paneID}, Placed: true}
+			result = SessionDesktopMove{Move: LeafMove{Target: desktop, FinalLeafID: paneID}, Placed: true, Created: created}
 			return nil
 		}
 		tile := tiles[0]
@@ -1646,7 +1630,7 @@ func (s *Store) MoveSessionToDesktop(sessionID protocol.SessionID, targetDesktop
 			LeafID: tile.tileID, AnchorID: target.ActivePaneID, Direction: layouttree.DirectionVertical,
 			Activate: source.ActivePaneID == tile.tileID && target.ID != profile.CurrentDesktopID,
 		}, nil)
-		result = SessionDesktopMove{Move: move, FromLeafID: tile.tileID}
+		result = SessionDesktopMove{Move: move, FromLeafID: tile.tileID, Created: created}
 		return err
 	})
 	return result, err
@@ -1697,11 +1681,11 @@ func (s *Store) SessionPlacement(sessionID protocol.SessionID) (profiles.Placeme
 }
 
 type sessionTile struct {
-	desktopID, tileID string
+	desktopID, tileID, terminal string
 }
 
 func sessionTiles(tx *sql.Tx, sessionID protocol.SessionID) ([]sessionTile, error) {
-	rows, err := tx.Query(`SELECT desktop_id, pane_id FROM desktop_panes WHERE session_id = ? ORDER BY created_at DESC, pane_id DESC`, sessionID)
+	rows, err := tx.Query(`SELECT desktop_id, pane_id, runtime_id FROM desktop_panes WHERE session_id = ? ORDER BY created_at DESC, pane_id DESC`, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -1709,7 +1693,7 @@ func sessionTiles(tx *sql.Tx, sessionID protocol.SessionID) ([]sessionTile, erro
 	var tiles []sessionTile
 	for rows.Next() {
 		var tile sessionTile
-		if err := rows.Scan(&tile.desktopID, &tile.tileID); err != nil {
+		if err := rows.Scan(&tile.desktopID, &tile.tileID, &tile.terminal); err != nil {
 			return nil, err
 		}
 		tiles = append(tiles, tile)
@@ -1718,12 +1702,19 @@ func sessionTiles(tx *sql.Tx, sessionID protocol.SessionID) ([]sessionTile, erro
 }
 
 func removeSessionPlacement(tx *sql.Tx, now string, sessionID protocol.SessionID) ([]profiles.Desktop, error) {
+	return removeSessionTiles(tx, now, sessionID, nil)
+}
+
+func removeSessionTiles(tx *sql.Tx, now string, sessionID protocol.SessionID, keep map[string]bool) ([]profiles.Desktop, error) {
 	tiles, err := sessionTiles(tx, sessionID)
 	if err != nil {
 		return nil, err
 	}
 	var changed []profiles.Desktop
 	for _, tile := range tiles {
+		if keep[tile.terminal] {
+			continue
+		}
 		desktop, err := removeTile(tx, now, tile)
 		if err != nil {
 			return nil, err

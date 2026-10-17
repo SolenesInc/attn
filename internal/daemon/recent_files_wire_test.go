@@ -5,7 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,11 +17,14 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestRecentFilesMergeWhatUsersOpenAndAgentsEditUntilAFileIsGone(t *testing.T) {
+func TestRecentFilesMergeActivityAndForgetDeletedFilesOnRequest(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		placeSessions(t, w, app, cli, "first", "second")
-		plan, notes, agent, gone := markdownFile(t, w, "plan.md"), markdownFile(t, w, "notes.md"), w.Path("docs", "agent.md"), markdownFile(t, w, "gone.md")
+		plan, notes, agent, gone := markdownFile(t, w, "plan.md"), markdownFile(t, w, "notes.md"), markdownFile(t, w, "agent.md"), markdownFile(t, w, "gone.md")
+		if err := os.WriteFile(w.Path("docs", "script.sh"), []byte("#!/bin/sh\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 
 		openMarkdown(t, app, "first", plan)
 		openMarkdown(t, app, "second", plan)
@@ -44,14 +49,21 @@ func TestRecentFilesMergeWhatUsersOpenAndAgentsEditUntilAFileIsGone(t *testing.T
 		if err := os.Remove(gone); err != nil {
 			t.Fatal(err)
 		}
-		if !slices.Contains(paths(recentFiles(app, 0, "")), gone) {
-			t.Fatal("a file that went missing left recent files before anyone tried to open it")
-		}
-		if opened := requestOpenMarkdown(app, "first", gone); opened.Success {
-			t.Fatalf("opening a deleted file = %+v, want it refused", opened)
-		}
 		if got := paths(recentFiles(app, 0, "")); !slices.Equal(got, []string{plan, notes, agent}) {
-			t.Errorf("recent files after the missing file failed to open = %v, want it forgotten under every source", got)
+			t.Fatalf("recent files after deletion = %v, want the missing file forgotten under every source", got)
+		}
+		markdownFile(t, w, "gone.md")
+		if got := paths(recentFiles(app, 0, "")); !slices.Equal(got, []string{plan, notes, agent}) {
+			t.Fatalf("recent files after recreating the file = %v, want its old activity forgotten", got)
+		}
+		openMarkdown(t, app, "first", gone)
+		files = recentFiles(app, 0, "")
+		index := slices.Index(paths(files), gone)
+		if index < 0 {
+			t.Fatal("reopened file missing from recent files")
+		}
+		if files[index].Count != 1 || files[index].Source != "opened" {
+			t.Errorf("reopened file = %+v, want only the new open recorded", files[index])
 		}
 	})
 }
@@ -60,7 +72,7 @@ func TestRecentFilesRankByFrecencyBeforeApplyingTheLimit(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		placeSessions(t, w, app, cli, "agent")
-		frequentOld, staleOnce, recentTwice := w.Path("docs", "frequent-old.md"), w.Path("docs", "stale-once.md"), w.Path("docs", "recent-twice.md")
+		frequentOld, staleOnce, recentTwice := markdownFile(t, w, "frequent-old.md"), markdownFile(t, w, "stale-once.md"), markdownFile(t, w, "recent-twice.md")
 
 		for range 5 {
 			editFiles(t, w, cli, "agent", frequentOld)
@@ -75,7 +87,7 @@ func TestRecentFilesRankByFrecencyBeforeApplyingTheLimit(t *testing.T) {
 
 		var fresh []string
 		for i := range 6 {
-			fresh = append(fresh, w.Path("docs", fmt.Sprintf("fresh-%d.md", i)))
+			fresh = append(fresh, markdownFile(t, w, fmt.Sprintf("fresh-%d.md", i)))
 		}
 		editFiles(t, w, cli, "agent", fresh...)
 		want := append(append([]string{frequentOld, recentTwice}, fresh...), staleOnce)
@@ -93,6 +105,9 @@ func TestRecentFilesPreferTheCallersWorkspace(t *testing.T) {
 		app, cli := w.App(), w.Client()
 		placeSessions(t, w, app, cli, "agent")
 		here, there, sibling := w.Path("repo", "docs", "here.md"), w.Path("elsewhere", "there.md"), w.Path("repo-other", "near.md")
+		for _, path := range []string{here, there, sibling} {
+			writeMarkdownFile(t, path)
+		}
 		editFiles(t, w, cli, "agent", here, there, sibling)
 
 		if got := paths(recentFiles(app, 0, "")); len(got) != 3 || !slices.Contains(got, here) || !slices.Contains(got, there) || !slices.Contains(got, sibling) {
@@ -101,6 +116,116 @@ func TestRecentFilesPreferTheCallersWorkspace(t *testing.T) {
 		if got := paths(recentFiles(app, 0, w.Path("repo"))); !slices.Equal(got, []string{here, there, sibling}) {
 			t.Errorf("recent files for %s = %v, want its own file first and the sibling directory unboosted", w.Path("repo"), got)
 		}
+	})
+}
+
+func TestRecentFilesForgetDeletedFilesBelowTheRequestedLimit(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		placeSessions(t, w, app, cli, "agent")
+		live, gone := markdownFile(t, w, "live.md"), markdownFile(t, w, "gone.md")
+		openMarkdown(t, app, "agent", live)
+		editFiles(t, w, cli, "agent", gone)
+		if err := os.Remove(gone); err != nil {
+			t.Fatal(err)
+		}
+		if got := paths(recentFiles(app, 1, "")); !slices.Equal(got, []string{live}) {
+			t.Fatalf("limited recent files = %v, want the live file", got)
+		}
+		markdownFile(t, w, "gone.md")
+		if got := paths(recentFiles(app, 0, "")); !slices.Equal(got, []string{live}) {
+			t.Fatal("the deleted file below the requested limit kept its old activity")
+		}
+		editFiles(t, w, cli, "agent", gone)
+		if got := paths(recentFiles(app, 0, "")); !slices.Equal(got, []string{live, gone}) {
+			t.Fatalf("recent files after a new edit = %v, want the file recorded again", got)
+		}
+	})
+}
+
+func TestRecentFilesForgetActivityWhenStatIsDenied(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		placeSessions(t, w, app, cli, "agent")
+		path := markdownFile(t, w, "protected.md")
+		editFiles(t, w, cli, "agent", path)
+		dir := filepath.Dir(path)
+		if err := os.Chmod(dir, 0); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			if err := os.Chmod(dir, 0o755); err != nil {
+				t.Error(err)
+			}
+		})
+		_, statErr := os.Stat(path)
+		if !os.IsPermission(statErr) {
+			t.Skipf("filesystem does not deny stat: %v", statErr)
+		}
+		if got := paths(recentFiles(app, 0, "")); len(got) != 0 {
+			t.Fatalf("recent files with permission denied = %v, want its activity forgotten", got)
+		}
+		if refused := requestOpenMarkdown(app, "agent", path); refused.Success || protocol.Deref(refused.Error) != statErr.Error() {
+			t.Errorf("opening a denied file answered %+v, want %q", refused, statErr)
+		}
+		if err := os.Chmod(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if got := paths(recentFiles(app, 0, "")); len(got) != 0 {
+			t.Fatalf("recent files after restoring permission = %v, want its old activity forgotten", got)
+		}
+	})
+}
+
+func TestRecentFilesForgetHungPathsAtTheDeadlineWithoutBlockingShutdown(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		app, secondApp, cli := w.App(), w.App(), w.Client()
+		placeSessions(t, w, app, cli, "agent")
+		live, hung := markdownFile(t, w, "live.md"), markdownFile(t, w, "hung.md")
+		editFiles(t, w, cli, "agent", live, hung)
+		entered, release := make(chan struct{}), make(chan struct{})
+		defer close(release)
+		var calls atomic.Int32
+		w.UseFileStat(func(path string) (os.FileInfo, error) {
+			if path == hung {
+				if calls.Add(1) == 1 {
+					close(entered)
+				}
+				<-release
+			}
+			return os.Stat(path)
+		})
+		answer, secondAnswer := make(chan []protocol.FileActivity, 1), make(chan []protocol.FileActivity, 1)
+		startedAt := time.Now()
+		go func() { answer <- recentFiles(app, 0, "") }()
+		<-entered
+		go func() { secondAnswer <- recentFiles(secondApp, 0, "") }()
+		synctest.Wait()
+		w.advance(499 * time.Millisecond)
+		select {
+		case <-answer:
+			t.Fatal("recent files answered before the filesystem deadline")
+		case <-secondAnswer:
+			t.Fatal("the overlapping request answered before the running pass finished")
+		default:
+		}
+		w.advance(time.Millisecond)
+		if got := paths(<-answer); !slices.Equal(got, []string{live}) {
+			t.Fatalf("recent files with a hung stat = %v, want only the healthy path", got)
+		}
+		if got := paths(<-secondAnswer); !slices.Equal(got, []string{live}) {
+			t.Fatalf("overlapping recent files = %v, want the hung path already forgotten", got)
+		}
+		if elapsed := time.Since(startedAt); elapsed != 500*time.Millisecond {
+			t.Fatalf("recent files answered after %s, want the 500ms deadline", elapsed)
+		}
+		if got := paths(recentFiles(app, 0, "")); !slices.Equal(got, []string{live}) {
+			t.Fatalf("next recent files = %v, want the hung path forgotten", got)
+		}
+		if got := calls.Load(); got != 1 {
+			t.Fatalf("stat called %d times for the hung path, want it checked only once", got)
+		}
+		w.stop()
 	})
 }
 
@@ -120,13 +245,18 @@ func placeSessions(t *testing.T, w *world, app *testworld.Peer, cli *client.Clie
 func markdownFile(t *testing.T, w *world, name string) string {
 	t.Helper()
 	path := w.Path("docs", name)
+	writeMarkdownFile(t, path)
+	return path
+}
+
+func writeMarkdownFile(t *testing.T, path string) {
+	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte("# "+name+"\n"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte("# "+filepath.Base(path)+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	return path
 }
 
 func openMarkdown(t *testing.T, app *testworld.Peer, sessionID, path string) {

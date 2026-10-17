@@ -83,7 +83,8 @@ Actions:
   provision   Sync and install Ubuntu runner toolchains and sandbox
   run         Run a command in the synced Linux checkout; preserve its exit code
   build       Sync and install the packaged app in the named guest instance
-  test        Run the serial app matrix under Xvfb; collect artifacts even on failure
+  test        Sync, reinstall a fresh guest instance and run the serial app matrix under Xvfb;
+              collect artifacts even on failure
   artifacts   Copy the guest artifacts directory to --out
   clean       Remove the installed guest instance using its own CLI
 
@@ -98,7 +99,6 @@ Options:
 Examples:
   pnpm --dir app real-app:linux provision
   pnpm --dir app real-app:linux run -- bun test --cwd plugins/attn-pi
-  pnpm --dir app real-app:linux build
   pnpm --dir app real-app:linux test -- --scenario automode-environment
   pnpm --dir app real-app:linux provision --provider ssh --target tester@linux
 `);
@@ -124,17 +124,18 @@ Examples:
   const root = guestRoot(provider);
   const destination = path.resolve(options.out || path.join(os.tmpdir(), 'attn-linux-artifacts', options.provider, key));
   const execute = (args) => provider.ssh(`bash -c ${quote(guestCommand(root, options.instance, args))}`);
-  if (['sync', 'provision', 'build'].includes(options.action)) syncSource(provider, repo, root);
+  if (['sync', 'provision', 'build', 'test'].includes(options.action)) syncSource(provider, repo, root);
   if (options.action === 'sync') return;
   if (options.action === 'provision') {
     return execute(['bash', 'app/scripts/real-app-harness/vm/provision.sh']);
   }
-  if (options.action === 'build') {
-    return execute(['node', 'app/scripts/real-app-harness/vm/build.mjs']);
-  }
+  const build = () => execute(['node', 'app/scripts/real-app-harness/vm/build.mjs']);
+  if (options.action === 'build') return build();
   if (options.action === 'run') return execute(options.commandArgs);
   if (options.action === 'clean') return execute(['./attn', 'instance', 'clean', options.instance]);
   if (options.action === 'artifacts') return collect(provider, root, destination);
+  execute(['bash', '-c', '[[ ! -x ./attn ]] || ./attn instance clean "$ATTN_INSTANCE"']);
+  build();
   let testError;
   try {
     // Window probes must not reset Xvfb while GTK connects during app startup.

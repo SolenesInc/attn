@@ -21,41 +21,36 @@ type pluginLaunchInstructions struct {
 }
 
 func (d *Daemon) preparePluginLaunchInstructions(sessionID protocol.SessionID, profileID string, isChief, selfReportPullRequests bool) (*pluginLaunchInstructions, error) {
-	launch := hooks.Launch{
-		Garden:                 true,
-		Asks:                   d.launchedWithAsks(sessionID),
-		Crew:                   d.crewPrimeForLaunch(sessionID),
-		SelfReportPullRequests: selfReportPullRequests,
+	launch, _, err := d.prepareLaunchContext(sessionID, isChief, selfReportPullRequests)
+	if err != nil {
+		return nil, err
 	}
+	kind := pluginInstructionKindAgent
 	if isChief {
-		root, _, err := d.ensureNotebookScaffold()
-		if err != nil {
-			return nil, fmt.Errorf("prepare chief notebook: %w", err)
-		}
-		if strings.TrimSpace(root) == "" {
-			return nil, fmt.Errorf("prepare chief guidance: notebook root is empty")
-		}
-		launch.NotebookRoot = root
-		return &pluginLaunchInstructions{
-			Kind:         pluginInstructionKindChief,
-			Content:      launch.Instructions(),
-			ProfileID:    profileID,
-			NotebookRoot: root,
-		}, nil
+		kind = pluginInstructionKindChief
 	}
-
 	return &pluginLaunchInstructions{
-		Kind:      pluginInstructionKindAgent,
-		Content:   launch.Instructions(),
-		ProfileID: profileID,
+		Kind: kind, Content: launch.Instructions(), ProfileID: profileID, NotebookRoot: launch.NotebookRoot,
 	}, nil
 }
 
-func (d *Daemon) crewPrimeForLaunch(sessionID protocol.SessionID) string {
-	_, block, _, err := d.crewPrimeForSession(sessionID)
+func (d *Daemon) prepareLaunchContext(sessionID protocol.SessionID, isChief, selfReportPullRequests bool) (hooks.Launch, []string, error) {
+	launch := hooks.Launch{Garden: true, Asks: d.launchedWithAsks(sessionID), SelfReportPullRequests: selfReportPullRequests}
+	if isChief {
+		root, _, err := d.ensureNotebookScaffold()
+		if err != nil {
+			return hooks.Launch{}, nil, fmt.Errorf("prepare chief notebook: %w", err)
+		}
+		if strings.TrimSpace(root) == "" {
+			return hooks.Launch{}, nil, fmt.Errorf("prepare chief guidance: notebook root is empty")
+		}
+		launch.NotebookRoot = root
+	}
+	member, block, _, err := d.crewPrimeForSession(sessionID)
 	if err != nil {
 		d.logf("crew: refusing launch priming for session %s: %v", sessionID, err)
-		return ""
+		return launch, nil, nil
 	}
-	return block
+	launch.Crew = block
+	return launch, member.AwarenessDirs, nil
 }

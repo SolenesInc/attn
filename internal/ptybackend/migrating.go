@@ -86,6 +86,14 @@ func (b *MigratingBackend) SetStateHandler(handler func(id harness.TerminalID, o
 	}
 }
 
+func (b *MigratingBackend) SetTitleHandler(handler func(id harness.TerminalID, title string)) {
+	for _, backend := range []Backend{b.legacy, b.shared} {
+		if hooks, ok := backend.(TitleHooks); ok {
+			hooks.SetTitleHandler(handler)
+		}
+	}
+}
+
 func (b *MigratingBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 	if opts.ID == "" {
 		return errors.New("missing session id")
@@ -316,6 +324,14 @@ func (b *MigratingBackend) SessionLikelyAlive(ctx context.Context, id harness.Te
 	return false, errors.Join(probeErrs...)
 }
 
+func (b *MigratingBackend) RuntimeLifecycle(id harness.TerminalID) (string, bool) {
+	provider, err := sessionProvider[RuntimeLifecycleProvider](b, id)
+	if err != nil {
+		return "", false
+	}
+	return provider.RuntimeLifecycle(id)
+}
+
 func (b *MigratingBackend) WorkerPIDs(ctx context.Context) map[string]int {
 	result := make(map[string]int)
 	for _, backend := range []Backend{b.legacy, b.shared} {
@@ -367,5 +383,21 @@ var (
 	_ TerminalBuildProvider       = (*MigratingBackend)(nil)
 	_ WorkerUpgrader              = (*MigratingBackend)(nil)
 	_ SessionLivenessProber       = (*MigratingBackend)(nil)
+	_ RuntimeLifecycleProvider    = (*MigratingBackend)(nil)
 	_ RecoverableRuntime          = (*MigratingBackend)(nil)
 )
+
+func (b *MigratingBackend) ReadText(ctx context.Context, id harness.TerminalID, mode string, lines int) (pty.ReadTextInfo, error) {
+	provider, err := sessionProvider[TerminalTextProvider](b, id)
+	if err != nil {
+		return pty.ReadTextInfo{}, err
+	}
+	return provider.ReadText(ctx, id, mode, lines)
+}
+func (b *MigratingBackend) WaitBlock(ctx context.Context, id harness.TerminalID, params pty.WaitBlockParams) (pty.WaitBlockResult, error) {
+	provider, err := sessionProvider[TerminalTextProvider](b, id)
+	if err != nil {
+		return pty.WaitBlockResult{}, err
+	}
+	return provider.WaitBlock(ctx, id, params)
+}

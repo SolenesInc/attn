@@ -1,5 +1,17 @@
 export const scenarioCatalog = [
   {
+    id: 'agent-terminals',
+    runnerId: 'AGENT-TERMINALS',
+    label: 'Agent-opened terminals pulse and stack without taking native input focus',
+    command: ['node', 'scripts/real-app-harness/scenario-agent-terminals.mjs'],
+  },
+  {
+    id: 'shell-titles',
+    runnerId: 'SHELL-TITLES',
+    label: 'Shell sidebar and tile names follow zsh and fish programs and folders',
+    command: ['node', 'scripts/real-app-harness/scenario-shell-titles.mjs'],
+  },
+  {
     id: 'desktop-order',
     runnerId: 'DESKTOP-ORDER',
     label: 'Desktop Sort and Undo preserve arrangements; new numbered desktops follow the nearest lower number',
@@ -8,7 +20,7 @@ export const scenarioCatalog = [
   {
     id: 'palette-order',
     runnerId: 'PALETTE-ORDER',
-    label: 'Command palette learns selections, preserves pins, and restores native input focus',
+    label: 'Command palette learns selections, preserves pins, toggles session priority, and restores native input focus',
     command: ['node', 'scripts/real-app-harness/scenario-palette-order.mjs'],
   },
   {
@@ -37,6 +49,12 @@ export const scenarioCatalog = [
     label: 'Prompt delivery: ordinary/chief channels, peer attribution, crew wake/sleep and successor',
     command: ['node', 'scripts/real-app-harness/scenario-prompt-composition.mjs'],
     timeoutMs: 240_000,
+  },
+  {
+    id: 'new-session-launcher',
+    runnerId: 'NEW-SESSION-LAUNCHER',
+    label: 'One-screen launcher and terminal shortcuts',
+    command: ['node', 'scripts/real-app-harness/scenario-new-session-launcher.mjs'],
   },
   {
     id: 'session-creation-shortcuts',
@@ -314,6 +332,13 @@ export const scenarioCatalog = [
     freshWorldAfter: true,
   },
   {
+    id: 'codex-shared',
+    runnerId: 'CODEX-SHARED',
+    label: 'Shared Codex: Settings switch, hidden sessions in the queue, focus after a conversation switch, hidden approval answered in a tile, last tile closes into the ledger',
+    command: ['node', 'scripts/real-app-harness/scenario-codex-shared.mjs'],
+    freshWorldAfter: true,
+  },
+  {
     id: 'terminal-md-link',
     runnerId: 'TERMINAL-MD-LINK',
     label: 'Markdown path Cmd+click docks a session-bound markdown tile',
@@ -362,13 +387,6 @@ export const scenarioCatalog = [
     runnerId: 'GHOSTTY-SCROLLBACK-ANCHOR',
     label: 'Ghostty scrollback anchoring while output streams',
     command: ['pnpm', 'run', 'real-app:scenario-ghostty-scroll'],
-  },
-  {
-    id: 'present-submit-closes-window',
-    runnerId: 'PRESENT-SUBMIT-CLOSES-WINDOW',
-    label: 'Present: a waiting CLI opens it, the chip opens the real window, submitting from the window hides it and the CLI returns',
-    command: ['pnpm', 'run', 'real-app:scenario-present-submit-closes-window'],
-    timeoutMs: 240_000,
   },
   {
     id: 'automode-environment',

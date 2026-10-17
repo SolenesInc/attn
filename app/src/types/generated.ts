@@ -1,6 +1,6 @@
 // To parse this data:
 //
-//   import { Convert, ActivityStatusMessage, ActivityStatusResult, ActivityStatusSession, AgentCloseMessage, AgentCloseResult, AgentCloseRule, AgentInboxBatchResult, AgentInboxItem, AgentInboxMessage, AgentMessageState, AgentMsgMessage, AgentMsgResult, AgentMsgStatus, AgentMsgStatusMessage, AgentPeekExit, AgentPeekMessage, AgentPeekResult, AgentPeekScreen, AgentPeerMessage, ApprovePRMessage, Ask, AskAnswer, AskAnswerMessage, AskAnswerResultMessage, AskChoice, AskCloseMessage, AskListMessage, AskListResult, AskOpenMessage, AskPart, AskQuestion, AskQuestionKind, AsksUpdatedMessage, AttachBlock, AttachPolicy, AttachResultMessage, AttachSessionMessage, AttachSnapshot, AuthorState, AuthorsUpdatedMessage, AutoModeConfigInfo, AutoModeConfigResult, AutoModeConfigResultMessage, AutoModeDenialInfo, AutoModeDenialsMessage, AutoModeDenialsResult, AutoModeDiscardMessage, AutoModeDiscardResultMessage, AutoModeEnvNotesMessage, AutoModeEnvResult, AutoModeEnvSetResultMessage, AutoModeEnvSlotMessage, AutoModeEnvironmentInfo, AutoModeEnvironmentSlot, AutoModeEnvironmentSlotValue, AutoModeGetMessage, AutoModeHostAddMessage, AutoModeHostRemoveMessage, AutoModeLegacyDismissMessage, AutoModeNetworkInfo, AutoModePolicySetMessage, AutoModePresetInfo, AutoModePromoteMessage, AutoModePromoteResultMessage, AutoModeProposalInfo, AutoModeProposeMessage, AutoModeProposeResult, AutoModeRuleAddMessage, AutoModeRuleInfo, AutoModeRuleRemoveMessage, AutoModeShowMessage, AutoModeShowResult, AutoModeStateChangedMessage, AutoModeStateResultMessage, AutomationApplyMessage, AutomationApplyResultMessage, AutomationCleanupMessage, AutomationCleanupResultMessage, AutomationDefinitionGetMessage, AutomationDefinitionResultMessage, AutomationDefinitionSummary, AutomationDefinitionsGetMessage, AutomationDefinitionsResultMessage, AutomationDeleteMessage, AutomationDeleteResultMessage, AutomationProvenance, AutomationRunMessage, AutomationRunResultMessage, AutomationRunSummary, AutomationRunsGetMessage, AutomationRunsResultMessage, AutomationSetEnabledMessage, AutomationSetEnabledResultMessage, AutomationValidateMessage, AutomationValidateResultMessage, AutomationsChangedMessage, BackgroundLaunchMessage, Branch, BranchChangedMessage, BranchesResultMessage, BrowseDirectoryMessage, BrowseDirectoryResultMessage, BrowserControlMessage, BrowserControlRequestMessage, BrowserControlResultMessage, BuiltinDelegationRole, BusConsumerStatus, BusHealthEntry, BusProducerStatus, BusSetConsumerEnabledMessage, BusSetConsumerEnabledResultMessage, BusStatusGetMessage, BusStatusResultMessage, CancelCountdownMessage, ChiefOfStaffResultMessage, ClearSessionActivityMessage, ClearWarningsMessage, ClientEvictionNoticeMessage, ClientHelloMessage, CollapseRepoMessage, CommandErrorMessage, CommandUsage, CreateWorktreeFromBranchMessage, CreateWorktreeMessage, CreateWorktreeResultMessage, CrewCharterDocument, CrewCharterGetMessage, CrewCharterGetResult, CrewCharterGetResultMessage, CrewCharterSetMessage, CrewCharterSetResult, CrewCharterSetResultMessage, CrewDayClose, CrewHandoffDocument, CrewHandoffGetMessage, CrewHandoffGetResult, CrewHandoffGetResultMessage, CrewHandoffMessage, CrewHandoffResult, CrewHandoffSummary, CrewHandoffsGetMessage, CrewHandoffsGetResult, CrewHandoffsGetResultMessage, CrewListMessage, CrewListResult, CrewMember, CrewPrimeMessage, CrewPrimeResult, CrewSetMessage, CrewSetResult, CrewSetResultMessage, CrewSleepMessage, CrewSleepResult, CrewSleepResultMessage, CrewUpdatedMessage, CrewWakeMessage, CrewWakeResult, CrewWakeResultMessage, DaemonWarning, DelegateAssignment, DelegateAssignmentKind, DelegateCheckout, DelegateCheckoutKind, DelegateHandover, DelegateMessage, DelegateResult, DelegateResultMessage, DelegateStatusMessage, DelegateWorktreeRequest, DelegationChoice, DelegationFailure, DelegationFallback, DelegationOperation, DelegationOperationMessage, DelegationOperationState, DelegationPreferences, DelegationPreferencesChangedMessage, DelegationPreferencesCommitMessage, DelegationPreferencesGetMessage, DelegationPreferencesHistoryMessage, DelegationPreferencesHistoryResult, DelegationPreferencesOrigin, DelegationPreferencesResultMessage, DelegationPreferencesRevision, DelegationPreferencesRollbackMessage, DelegationPreferencesSaveMessage, DelegationPreferencesShowMessage, DelegationRole, DelegationRolesMessage, DelegationRolesResult, DelegationSelection, DeleteWorktreeMessage, DeleteWorktreeResultMessage, Desktop, DesktopCloseMessage, DesktopCreateMessage, DesktopDockTileMessage, DesktopMoveLeafMessage, DesktopMoveSessionMessage, DesktopMoveSessionResult, DesktopPane, DesktopPlaceSessionMessage, DesktopRemoveLeafMessage, DesktopRenameMessage, DesktopReorderMessage, DesktopSetActivePaneMessage, DesktopSetCurrentMessage, DesktopSetOrderMessage, DesktopSetSplitRatioMessage, DesktopShowLeafMessage, DesktopShowSessionMessage, DesktopTileContentMessage, DesktopUpdateTileMessage, DetachSessionMessage, DirectoryEntry, DocCollectionsMessage, DocCollectionsResult, DocCountMessage, DocCountResult, DocDefineMessage, DocDefineResult, DocDeleteMessage, DocDeleteResult, DocGetMessage, DocGetResult, DocPutMessage, DocPutResult, DocQueryMessage, DocQueryResult, DocSubscribeMessage, DocSubscribeResult, DocSubscriptionDeliveryMessage, DocSubscriptionEndedMessage, DocUndefineMessage, DocUndefineResult, DocUnsubscribeMessage, DocumentCollectionSchema, DocumentConflict, DocumentFieldSpec, DocumentFilter, DocumentQuery, DocumentRevision, DocumentSort, EnsureRepoMessage, EnsureRepoResultMessage, EvidenceExcerpt, FetchPRDetailsMessage, FetchPRDetailsResultMessage, FetchRemotesMessage, FetchRemotesResultMessage, FileActivity, FileDiffResultMessage, FilesEditedMessage, FSChangedMessage, FSDeleteMessage, FSDeleteResult, FSDeleteResultMessage, FSEntry, FSExistsMessage, FSExistsResult, FSExistsResultMessage, FSIndexMessage, FSIndexResultMessage, FSListMessage, FSListResultMessage, FSReadAssetMessage, FSReadAssetResult, FSReadAssetResultMessage, FSReadMessage, FSReadResult, FSReadResultMessage, FSRenameMessage, FSRenameResult, FSRenameResultMessage, FSUnwatchMessage, FSUnwatchResultMessage, FSWatchMessage, FSWatchResultMessage, FSWriteMessage, FSWriteResult, FSWriteResultMessage, GardenReview, GardenReviewEvidence, GardenReviewItem, GardenReviewRecipe, GardenReviewRun, GardenReviewUpdatedMessage, GardenSeedsUpdatedMessage, GetCommandUsageMessage, GetCommandUsageResultMessage, GetDefaultBranchMessage, GetDefaultBranchResultMessage, GetFileDiffMessage, GetKittyImageMessage, GetPresentationRoundMessage, GetPresentationRoundResultMessage, GetPresentationsMessage, GetPresentationsResultMessage, GetRecentLocationsMessage, GetRepoInfoMessage, GetRepoInfoResultMessage, GetScreenSnapshotMessage, GetScreenSnapshotResultMessage, GetSettingsMessage, GitFileChange, GitHubHostsUpdatedMessage, GitOperation, GitOperationFinishedMessage, GitOperationKind, GitOperationStartedMessage, GitOperationStatus, GitStatusUpdateMessage, GuardianSelection, Harness, HarnessModel, HarnessModelsMessage, HarnessModelsResultMessage, HeartbeatMessage, HeatState, HookCompactionMessage, HookNotificationMessage, HookStopFailureMessage, InitialStateMessage, InjectTestPRMessage, InjectTestSessionMessage, InspectPathMessage, InspectPathResultMessage, InstallBundledPluginMessage, InstallPluginMessage, JournalAppendMessage, JournalAppendResult, KeptConversation, KeptConversationDeletedBy, KeptConversationForgetMessage, KeptConversationForgetResultEvent, KeptConversationKeepMessage, KeptConversationKeepResultEvent, KeptConversationListMessage, KeptConversationListResult, KeptConversationListResultEvent, KeptConversationRow, KeptConversationSeed, KeptConversationsChangedEvent, KillSessionMessage, KittyImageResultMessage, KittyPlacement, KittyPlacementsMessage, LaunchDesktopGetMessage, LaunchDesktopItem, LaunchDesktopKind, LaunchDesktopResultMessage, LaunchDesktopSetMessage, LaunchDesktopSetting, LayoutDockEdge, LayoutPaneKind, LayoutPaneStatus, LayoutSplitDirection, LeafMoved, ListBranchesMessage, ListPluginsMessage, ListRemoteBranchesMessage, ListRemoteBranchesResultMessage, ListWorktreesMessage, MarkdownAnnotation, MarkdownAnnotationAnchor, MarkdownAnnotationsClearMessage, MarkdownAnnotationsClearResultMessage, MarkdownAnnotationsGetMessage, MarkdownAnnotationsGetResultMessage, MarkdownAnnotationsSaveMessage, MarkdownAnnotationsSaveResultMessage, MarkdownAnnotationsSubmitMessage, MarkdownAnnotationsSubmitResultMessage, MergePRMessage, MigrationChangedMessage, MigrationDraftDesktop, MigrationFinishMessage, MigrationGetMessage, MigrationGroup, MigrationKeepMessage, MigrationMoveMessage, MigrationPhase, MigrationResultMessage, MigrationState, MigrationSuggestMessage, MigrationUndoMessage, ModelCapabilitySupport, ModelTier, ModelTierSource, MuteAuthorMessage, MutePRMessage, MuteRepoMessage, NotebookBacklinksMessage, NotebookBacklinksResultMessage, NotebookChangedMessage, NotebookEntry, NotebookGuideMessage, NotebookGuideResult, NotebookListMessage, NotebookListResultMessage, NotebookReadMessage, NotebookReadResult, NotebookReadResultMessage, NotebookSendToChiefMessage, NotebookSendToChiefResult, NotebookSendToChiefResultMessage, NotebookWriteMessage, NotebookWriteResult, NotebookWriteResultMessage, Notification, NotificationAction, NotificationListMessage, NotificationListResultMessage, NotificationMarkReadMessage, NotificationMarkReadResultMessage, NotificationSeverity, NotificationsUpdatedMessage, OpenBrowserMessage, OpenMarkdownMessage, OpenMarkdownResultMessage, OpenSeedMessage, OpenSeedResultMessage, OpenSentFilesMessage, PR, PRActionResultMessage, PRRole, PRVisitedMessage, PRsUpdatedMessage, PathInspection, PluginActionResultMessage, PluginInfo, PluginIssue, PluginsUpdatedMessage, PresentAnnotation, PresentCloseMessage, PresentCloseResultMessage, PresentCommentInput, PresentFeedbackMessage, PresentFeedbackResult, PresentFile, PresentManifestView, PresentOpenMessage, PresentOpenResult, PresentSubmitRoundMessage, PresentSubmitRoundResultMessage, Presentation, PresentationAddedMessage, PresentationComment, PresentationRound, PresentationUpdatedMessage, Profile, ProfileActionResultMessage, ProfileArrangementChangedMessage, ProfileCreateMessage, ProfileDeleteMessage, ProfileErrorCode, ProfileRenameMessage, ProfileSelectMessage, ProfilesChangedMessage, PtyDesyncMessage, PtyInputMessage, PtyInputProbeResultMessage, PtyOutputMessage, PtyResizeMessage, PtyResizedMessage, PullRequestCreatedMessage, PullRequestForgetMessage, PullRequestProvenance, PullRequestUnwatchMessage, PullRequestWatchMessage, PullRequestWatchMode, QueryAuthorsMessage, QueryMessage, QueryPRsMessage, QueryReposMessage, RateLimitedMessage, RecentFilesMessage, RecentFilesResultMessage, RecentLocation, RecentLocationsResultMessage, RecordCommandUsageMessage, RecordCommandUsageResultMessage, RefreshPRsMessage, RefreshPRsResultMessage, ReloadSessionMessage, ReloadSessionResultMessage, RemovePluginMessage, RenameResultMessage, RenameSessionMessage, RepoInfo, RepoState, ReposUpdatedMessage, Response, ReviewComment, RuntimeRespawnedMessage, Seed, SeedArtifact, SeedArtifactReference, SeedArtifactTargetMessage, SeedArtifactTargetResult, SeedArtifactTargetResultMessage, SeedArtifactTransferMessage, SeedArtifactTransferResult, SeedArtifactTransferResultMessage, SeedContinuation, SeedDocument, SeedDocumentGetMessage, SeedDocumentGetResultMessage, SeedEdge, SeedEditMessage, SeedEditResult, SeedHandoverRequest, SeedHarvestCondition, SeedHarvestWhenMerged, SeedLinkMessage, SeedLinkResult, SeedListMessage, SeedListResult, SeedNote, SeedNoteMessage, SeedNoteResult, SeedNoteResultMessage, SeedNotesMessage, SeedNotesResult, SeedPlantMessage, SeedPlantResult, SeedPlotChild, SeedPlotMessage, SeedPlotProgress, SeedPlotResult, SeedReadyMessage, SeedReadyResult, SeedRelation, SeedResumeMessage, SeedResumeResultMessage, SeedReviewActionContext, SeedReviewCancelMessage, SeedReviewDraftMessage, SeedReviewDraftResultMessage, SeedReviewKeepMessage, SeedReviewResult, SeedReviewResultMessage, SeedReviewRetryMessage, SeedReviewShowMessage, SeedReviewStartMessage, SeedSearchHit, SeedSearchMessage, SeedSearchResult, SeedSendToChiefMessage, SeedSendToChiefResult, SeedSendToChiefResultMessage, SeedShowMessage, SeedShowResult, SeedTransitionMessage, SeedTransitionResult, SeedTransitionResultMessage, SeedVar, SeedWatchMessage, SeedWatchResult, Session, SessionAnnotation, SessionAnnotationsClearMessage, SessionAnnotationsClearResultMessage, SessionAnnotationsGetMessage, SessionAnnotationsGetResultMessage, SessionAnnotationsSaveMessage, SessionAnnotationsSaveResultMessage, SessionAnnotationsSubmitMessage, SessionAnnotationsSubmitResultMessage, SessionCloseResultMessage, SessionClosedMessage, SessionContextWindowCapResultMessage, SessionDelegationRole, SessionExitedMessage, SessionInstructionsMessage, SessionInstructionsResult, SessionLedgerEntry, SessionLedgerFacet, SessionLedgerFacets, SessionLedgerProfileFacet, SessionListMessage, SessionListResult, SessionListResultMessage, SessionMessage, SessionMessageWindowStatus, SessionMessagesChangedMessage, SessionMessagesGetMessage, SessionMessagesGetResultMessage, SessionPlacement, SessionPullRequest, SessionRegisteredMessage, SessionReopen, SessionReopenAction, SessionReopenEntry, SessionReopenMessage, SessionReopenResult, SessionReopenResultMessage, SessionShowMessage, SessionShowResult, SessionShowResultMessage, SessionState, SessionStateChangedMessage, SessionTranscriptEvent, SessionTranscriptMessage, SessionTranscriptResult, SessionUnregisteredMessage, SessionUsage, SessionUsageModel, SessionsUpdatedMessage, SetChiefOfStaffMessage, SetClientPresenceMessage, SetPluginPriorityMessage, SetSessionContextWindowCapMessage, SetSessionPriorityMessage, SetSessionResumeIDMessage, SetSettingMessage, SetTerminalThemeMessage, SettingsUpdatedMessage, SettleTurnMessage, SnoozeTurnMessage, SpawnResultMessage, SpawnSessionMessage, StateExplainEntry, StateExplainMessage, StateExplainResult, StateMessage, StopBackgroundTask, StopMessage, StoredDocument, SubscribeGitStatusMessage, SupportInputTrace, SupportRuntimeEvidence, SupportSnapshotMessage, SupportSnapshotResultMessage, Task, TaskListMessage, TaskListResultMessage, TaskRetryMessage, TaskRetryResultMessage, TasksChangedMessage, TerminalBinding, TerminalBindingsUpdatedMessage, TerminalExit, TerminalPointerActivityMessage, TierDefaults, UninstallPluginMessage, UnregisterMessage, UnsubscribeGitStatusMessage, WakeTurnMessage, WebSocketEvent, Worktree, WorktreeCreatedEvent, WorktreeDeletedEvent, WorktreeKeepMessage, WorktreeKeepResult, WorktreeKeepResultEvent, WorktreeListMessage, WorktreeListResult, WorktreeListResultEvent, WorktreeRefreshMessage, WorktreeRefreshResult, WorktreeRefreshResultEvent, WorktreeRepository, WorktreeStateChangedEvent, WorktreeSweepEntry, WorktreeSweepLogMessage, WorktreeSweepLogResult, WorktreeSweepLogResultEvent, WorktreeSweptEvent, WorktreesUpdatedMessage } from "./generated";
+//   import { Convert, ActivityStatusMessage, ActivityStatusResult, ActivityStatusSession, AgentCloseMessage, AgentCloseResult, AgentCloseRule, AgentInboxBatchResult, AgentInboxItem, AgentInboxMessage, AgentMessageState, AgentMsgMessage, AgentMsgResult, AgentMsgStatus, AgentMsgStatusMessage, AgentPeekExit, AgentPeekMessage, AgentPeekResult, AgentPeekScreen, AgentPeerMessage, ApprovePRMessage, Ask, AskAnswer, AskAnswerMessage, AskAnswerResultMessage, AskChoice, AskCloseMessage, AskListMessage, AskListResult, AskOpenMessage, AskPart, AskQuestion, AskQuestionKind, AsksUpdatedMessage, AttachBlock, AttachPolicy, AttachResultMessage, AttachSessionMessage, AttachSnapshot, AuthorState, AuthorsUpdatedMessage, AutoModeConfigInfo, AutoModeConfigResult, AutoModeConfigResultMessage, AutoModeDenialInfo, AutoModeDenialsMessage, AutoModeDenialsResult, AutoModeDiscardMessage, AutoModeDiscardResultMessage, AutoModeEnvNotesMessage, AutoModeEnvResult, AutoModeEnvSetResultMessage, AutoModeEnvSlotMessage, AutoModeEnvironmentInfo, AutoModeEnvironmentSlot, AutoModeEnvironmentSlotValue, AutoModeGetMessage, AutoModeHostAddMessage, AutoModeHostRemoveMessage, AutoModeLegacyDismissMessage, AutoModeNetworkInfo, AutoModePolicySetMessage, AutoModePresetInfo, AutoModePromoteMessage, AutoModePromoteResultMessage, AutoModeProposalInfo, AutoModeProposeMessage, AutoModeProposeResult, AutoModeRuleAddMessage, AutoModeRuleInfo, AutoModeRuleRemoveMessage, AutoModeShowMessage, AutoModeShowResult, AutoModeStateChangedMessage, AutoModeStateResultMessage, AutomationApplyMessage, AutomationApplyResultMessage, AutomationCleanupMessage, AutomationCleanupResultMessage, AutomationDefinitionGetMessage, AutomationDefinitionResultMessage, AutomationDefinitionSummary, AutomationDefinitionsGetMessage, AutomationDefinitionsResultMessage, AutomationDeleteMessage, AutomationDeleteResultMessage, AutomationProvenance, AutomationRunMessage, AutomationRunResultMessage, AutomationRunSummary, AutomationRunsGetMessage, AutomationRunsResultMessage, AutomationSetEnabledMessage, AutomationSetEnabledResultMessage, AutomationValidateMessage, AutomationValidateResultMessage, AutomationsChangedMessage, BackgroundLaunchMessage, Branch, BranchChangedMessage, BranchesResultMessage, BrowseDirectoryMessage, BrowseDirectoryResultMessage, BrowserControlMessage, BrowserControlRequestMessage, BrowserControlResultMessage, BuiltinDelegationRole, BusConsumerStatus, BusHealthEntry, BusProducerStatus, BusSetConsumerEnabledMessage, BusSetConsumerEnabledResultMessage, BusStatusGetMessage, BusStatusResultMessage, CancelCountdownMessage, ChiefOfStaffResultMessage, ClearSessionActivityMessage, ClearWarningsMessage, ClientEvictionNoticeMessage, ClientHelloMessage, CollapseRepoMessage, CommandErrorMessage, CommandUsage, CreateWorktreeFromBranchMessage, CreateWorktreeMessage, CreateWorktreeResultMessage, CrewCharterDocument, CrewCharterGetMessage, CrewCharterGetResult, CrewCharterGetResultMessage, CrewCharterSetMessage, CrewCharterSetResult, CrewCharterSetResultMessage, CrewDayClose, CrewHandoffDocument, CrewHandoffGetMessage, CrewHandoffGetResult, CrewHandoffGetResultMessage, CrewHandoffMessage, CrewHandoffResult, CrewHandoffSummary, CrewHandoffsGetMessage, CrewHandoffsGetResult, CrewHandoffsGetResultMessage, CrewListMessage, CrewListResult, CrewMember, CrewPrimeMessage, CrewPrimeResult, CrewSetMessage, CrewSetResult, CrewSetResultMessage, CrewSleepMessage, CrewSleepResult, CrewSleepResultMessage, CrewUpdatedMessage, CrewWakeMessage, CrewWakeResult, CrewWakeResultMessage, DaemonWarning, DelegateAssignment, DelegateAssignmentKind, DelegateCheckout, DelegateCheckoutKind, DelegateHandover, DelegateMessage, DelegateResult, DelegateResultMessage, DelegateStatusMessage, DelegateWorktreeRequest, DelegationChoice, DelegationFailure, DelegationFallback, DelegationOperation, DelegationOperationMessage, DelegationOperationState, DelegationPreferences, DelegationPreferencesChangedMessage, DelegationPreferencesCommitMessage, DelegationPreferencesGetMessage, DelegationPreferencesHistoryMessage, DelegationPreferencesHistoryResult, DelegationPreferencesOrigin, DelegationPreferencesResultMessage, DelegationPreferencesRevision, DelegationPreferencesRollbackMessage, DelegationPreferencesSaveMessage, DelegationPreferencesShowMessage, DelegationRole, DelegationRolesMessage, DelegationRolesResult, DelegationSelection, DeleteWorktreeMessage, DeleteWorktreeResultMessage, Desktop, DesktopCloseMessage, DesktopCloseTileMessage, DesktopCreateMessage, DesktopDockTileMessage, DesktopMoveLeafMessage, DesktopMoveSessionMessage, DesktopMoveSessionResult, DesktopPane, DesktopPlaceSessionMessage, DesktopRemoveLeafMessage, DesktopRenameMessage, DesktopReorderMessage, DesktopSetActivePaneMessage, DesktopSetCurrentMessage, DesktopSetOrderMessage, DesktopSetSplitRatioMessage, DesktopShowLeafMessage, DesktopShowSessionMessage, DesktopTileContentMessage, DesktopUpdateTileMessage, DetachSessionMessage, DirectoryEntry, DocCollectionsMessage, DocCollectionsResult, DocCountMessage, DocCountResult, DocDefineMessage, DocDefineResult, DocDeleteMessage, DocDeleteResult, DocGetMessage, DocGetResult, DocPutMessage, DocPutResult, DocQueryMessage, DocQueryResult, DocSubscribeMessage, DocSubscribeResult, DocSubscriptionDeliveryMessage, DocSubscriptionEndedMessage, DocUndefineMessage, DocUndefineResult, DocUnsubscribeMessage, DocumentCollectionSchema, DocumentConflict, DocumentFieldSpec, DocumentFilter, DocumentQuery, DocumentRevision, DocumentSort, EnsureRepoMessage, EnsureRepoResultMessage, EvidenceExcerpt, FetchPRDetailsMessage, FetchPRDetailsResultMessage, FetchRemotesMessage, FetchRemotesResultMessage, FileActivity, FilesEditedMessage, FSChangedMessage, FSDeleteMessage, FSDeleteResult, FSDeleteResultMessage, FSEntry, FSExistsMessage, FSExistsResult, FSExistsResultMessage, FSIndexMessage, FSIndexResultMessage, FSListMessage, FSListResultMessage, FSReadAssetMessage, FSReadAssetResult, FSReadAssetResultMessage, FSReadMessage, FSReadResult, FSReadResultMessage, FSRenameMessage, FSRenameResult, FSRenameResultMessage, FSUnwatchMessage, FSUnwatchResultMessage, FSWatchMessage, FSWatchResultMessage, FSWriteMessage, FSWriteResult, FSWriteResultMessage, GardenReview, GardenReviewEvidence, GardenReviewItem, GardenReviewRecipe, GardenReviewRun, GardenReviewUpdatedMessage, GardenSeedsUpdatedMessage, GetCommandUsageMessage, GetCommandUsageResultMessage, GetDefaultBranchMessage, GetDefaultBranchResultMessage, GetKittyImageMessage, GetRecentLocationsMessage, GetRepoInfoMessage, GetRepoInfoResultMessage, GetScreenSnapshotMessage, GetScreenSnapshotResultMessage, GetSettingsMessage, GitHubHostsUpdatedMessage, GitOperation, GitOperationFinishedMessage, GitOperationKind, GitOperationStartedMessage, GitOperationStatus, GuardianSelection, Harness, HarnessModel, HarnessModelsMessage, HarnessModelsResultMessage, HeartbeatMessage, HeatState, HookCompactionMessage, HookNotificationMessage, HookStopFailureMessage, InitialStateMessage, InjectTestPRMessage, InjectTestSessionMessage, InspectPathMessage, InspectPathResultMessage, InstallBundledPluginMessage, InstallPluginMessage, JournalAppendMessage, JournalAppendResult, KeptConversation, KeptConversationDeletedBy, KeptConversationForgetMessage, KeptConversationForgetResultEvent, KeptConversationKeepMessage, KeptConversationKeepResultEvent, KeptConversationListMessage, KeptConversationListResult, KeptConversationListResultEvent, KeptConversationRow, KeptConversationSeed, KeptConversationsChangedEvent, KillSessionMessage, KittyImageResultMessage, KittyPlacement, KittyPlacementsMessage, LaunchDesktopGetMessage, LaunchDesktopItem, LaunchDesktopKind, LaunchDesktopResultMessage, LaunchDesktopSetMessage, LaunchDesktopSetting, LayoutDockEdge, LayoutPaneKind, LayoutPaneStatus, LayoutSplitDirection, LeafMoved, ListBranchesMessage, ListPluginsMessage, ListRemoteBranchesMessage, ListRemoteBranchesResultMessage, ListWorktreesMessage, MarkdownAnnotation, MarkdownAnnotationAnchor, MarkdownAnnotationsClearMessage, MarkdownAnnotationsClearResultMessage, MarkdownAnnotationsGetMessage, MarkdownAnnotationsGetResultMessage, MarkdownAnnotationsSaveMessage, MarkdownAnnotationsSaveResultMessage, MarkdownAnnotationsSubmitMessage, MarkdownAnnotationsSubmitResultMessage, MergePRMessage, MigrationChangedMessage, MigrationDraftDesktop, MigrationFinishMessage, MigrationGetMessage, MigrationGroup, MigrationKeepMessage, MigrationMoveMessage, MigrationPhase, MigrationResultMessage, MigrationState, MigrationSuggestMessage, MigrationUndoMessage, ModelCapabilitySupport, ModelTier, ModelTierSource, MuteAuthorMessage, MutePRMessage, MuteRepoMessage, NotebookBacklinksMessage, NotebookBacklinksResultMessage, NotebookChangedMessage, NotebookEntry, NotebookGuideMessage, NotebookGuideResult, NotebookListMessage, NotebookListResultMessage, NotebookReadMessage, NotebookReadResult, NotebookReadResultMessage, NotebookSendToChiefMessage, NotebookSendToChiefResult, NotebookSendToChiefResultMessage, NotebookWriteMessage, NotebookWriteResult, NotebookWriteResultMessage, Notification, NotificationAction, NotificationListMessage, NotificationListResultMessage, NotificationMarkReadMessage, NotificationMarkReadResultMessage, NotificationSeverity, NotificationsUpdatedMessage, OpenBrowserMessage, OpenMarkdownMessage, OpenMarkdownResultMessage, OpenSeedMessage, OpenSeedResultMessage, OpenSentFilesMessage, PR, PRActionResultMessage, PRRole, PRVisitedMessage, PRsUpdatedMessage, PathInspection, PluginActionResultMessage, PluginInfo, PluginIssue, PluginsUpdatedMessage, Profile, ProfileActionResultMessage, ProfileArrangementChangedMessage, ProfileCreateMessage, ProfileDeleteMessage, ProfileErrorCode, ProfileRenameMessage, ProfileSelectMessage, ProfilesChangedMessage, PtyDesyncMessage, PtyInputMessage, PtyInputProbeResultMessage, PtyOutputMessage, PtyResizeMessage, PtyResizedMessage, PullRequestCreatedMessage, PullRequestForgetMessage, PullRequestProvenance, PullRequestUnwatchMessage, PullRequestWatchMessage, PullRequestWatchMode, QueryAuthorsMessage, QueryMessage, QueryPRsMessage, QueryReposMessage, RateLimitedMessage, RecentFilesMessage, RecentFilesResultMessage, RecentLocation, RecentLocationsResultMessage, RecordCommandUsageMessage, RecordCommandUsageResultMessage, RefreshPRsMessage, RefreshPRsResultMessage, ReloadSessionMessage, ReloadSessionResultMessage, RemovePluginMessage, RenameResultMessage, RenameSessionMessage, RepoInfo, RepoState, ReposUpdatedMessage, Response, RuntimeRespawnedMessage, Seed, SeedArtifact, SeedArtifactReference, SeedArtifactTargetMessage, SeedArtifactTargetResult, SeedArtifactTargetResultMessage, SeedArtifactTransferMessage, SeedArtifactTransferResult, SeedArtifactTransferResultMessage, SeedContinuation, SeedDocument, SeedDocumentGetMessage, SeedDocumentGetResultMessage, SeedEdge, SeedEditMessage, SeedEditResult, SeedHandoverRequest, SeedHarvestCondition, SeedHarvestWhenMerged, SeedLinkMessage, SeedLinkResult, SeedListMessage, SeedListResult, SeedNote, SeedNoteMessage, SeedNoteResult, SeedNoteResultMessage, SeedNotesMessage, SeedNotesResult, SeedPlantMessage, SeedPlantResult, SeedPlotChild, SeedPlotMessage, SeedPlotProgress, SeedPlotResult, SeedReadyMessage, SeedReadyResult, SeedRelation, SeedResumeMessage, SeedResumeResultMessage, SeedReviewActionContext, SeedReviewCancelMessage, SeedReviewDraftMessage, SeedReviewDraftResultMessage, SeedReviewKeepMessage, SeedReviewResult, SeedReviewResultMessage, SeedReviewRetryMessage, SeedReviewShowMessage, SeedReviewStartMessage, SeedSearchHit, SeedSearchMessage, SeedSearchResult, SeedSendToChiefMessage, SeedSendToChiefResult, SeedSendToChiefResultMessage, SeedShowMessage, SeedShowResult, SeedTransitionMessage, SeedTransitionResult, SeedTransitionResultMessage, SeedVar, SeedWatchMessage, SeedWatchResult, Session, SessionAnnotation, SessionAnnotationsClearMessage, SessionAnnotationsClearResultMessage, SessionAnnotationsGetMessage, SessionAnnotationsGetResultMessage, SessionAnnotationsSaveMessage, SessionAnnotationsSaveResultMessage, SessionAnnotationsSubmitMessage, SessionAnnotationsSubmitResultMessage, SessionCloseResultMessage, SessionClosedMessage, SessionContextWindowCapResultMessage, SessionDelegationRole, SessionExitedMessage, SessionInstructionsMessage, SessionInstructionsResult, SessionLedgerEntry, SessionLedgerFacet, SessionLedgerFacets, SessionLedgerProfileFacet, SessionListMessage, SessionListResult, SessionListResultMessage, SessionMessage, SessionMessageWindowStatus, SessionMessagesChangedMessage, SessionMessagesGetMessage, SessionMessagesGetResultMessage, SessionPlacement, SessionPullRequest, SessionRegisteredMessage, SessionReopen, SessionReopenAction, SessionReopenEntry, SessionReopenMessage, SessionReopenResult, SessionReopenResultMessage, SessionShowMessage, SessionShowResult, SessionShowResultMessage, SessionState, SessionStateChangedMessage, SessionTranscriptEvent, SessionTranscriptMessage, SessionTranscriptResult, SessionUnregisteredMessage, SessionUsage, SessionUsageModel, SessionsUpdatedMessage, SetChiefOfStaffMessage, SetClientPresenceMessage, SetPluginPriorityMessage, SetSessionContextWindowCapMessage, SetSessionPriorityMessage, SetSessionResumeIDMessage, SetSettingMessage, SetTerminalThemeMessage, SettingsUpdatedMessage, SettleTurnMessage, SnoozeTurnMessage, SpawnResultMessage, SpawnSessionMessage, StateExplainEntry, StateExplainMessage, StateExplainResult, StateMessage, StopBackgroundTask, StopMessage, StoredDocument, SupportInputTrace, SupportRuntimeEvidence, SupportSnapshotMessage, SupportSnapshotResultMessage, Task, TaskListMessage, TaskListResultMessage, TaskRetryMessage, TaskRetryResultMessage, TasksChangedMessage, TerminalBinding, TerminalBindingsUpdatedMessage, TerminalBlock, TerminalCloseMessage, TerminalDirection, TerminalEntry, TerminalExit, TerminalInputMessage, TerminalInputResult, TerminalListMessage, TerminalOpenMessage, TerminalOpenResult, TerminalPointerActivityMessage, TerminalReadMessage, TerminalReadMode, TerminalReadResult, TerminalWaitMessage, TerminalWaitResult, TerminalWaitUntil, TierDefaults, UninstallPluginMessage, UnregisterMessage, WakeTurnMessage, WebSocketEvent, Worktree, WorktreeCreatedEvent, WorktreeDeletedEvent, WorktreeKeepMessage, WorktreeKeepResult, WorktreeKeepResultEvent, WorktreeListMessage, WorktreeListResult, WorktreeListResultEvent, WorktreeRefreshMessage, WorktreeRefreshResult, WorktreeRefreshResultEvent, WorktreeRepository, WorktreeStateChangedEvent, WorktreeSweepEntry, WorktreeSweepLogMessage, WorktreeSweepLogResult, WorktreeSweepLogResultEvent, WorktreeSweptEvent, WorktreesUpdatedMessage } from "./generated";
 //
 //   const activityStatusMessage = Convert.toActivityStatusMessage(json);
 //   const activityStatusResult = Convert.toActivityStatusResult(json);
@@ -197,6 +197,7 @@
 //   const deleteWorktreeResultMessage = Convert.toDeleteWorktreeResultMessage(json);
 //   const desktop = Convert.toDesktop(json);
 //   const desktopCloseMessage = Convert.toDesktopCloseMessage(json);
+//   const desktopCloseTileMessage = Convert.toDesktopCloseTileMessage(json);
 //   const desktopCreateMessage = Convert.toDesktopCreateMessage(json);
 //   const desktopDockTileMessage = Convert.toDesktopDockTileMessage(json);
 //   const desktopMoveLeafMessage = Convert.toDesktopMoveLeafMessage(json);
@@ -253,7 +254,6 @@
 //   const fetchRemotesMessage = Convert.toFetchRemotesMessage(json);
 //   const fetchRemotesResultMessage = Convert.toFetchRemotesResultMessage(json);
 //   const fileActivity = Convert.toFileActivity(json);
-//   const fileDiffResultMessage = Convert.toFileDiffResultMessage(json);
 //   const filesEditedMessage = Convert.toFilesEditedMessage(json);
 //   const fSChangedMessage = Convert.toFSChangedMessage(json);
 //   const fSDeleteMessage = Convert.toFSDeleteMessage(json);
@@ -294,26 +294,19 @@
 //   const getCommandUsageResultMessage = Convert.toGetCommandUsageResultMessage(json);
 //   const getDefaultBranchMessage = Convert.toGetDefaultBranchMessage(json);
 //   const getDefaultBranchResultMessage = Convert.toGetDefaultBranchResultMessage(json);
-//   const getFileDiffMessage = Convert.toGetFileDiffMessage(json);
 //   const getKittyImageMessage = Convert.toGetKittyImageMessage(json);
-//   const getPresentationRoundMessage = Convert.toGetPresentationRoundMessage(json);
-//   const getPresentationRoundResultMessage = Convert.toGetPresentationRoundResultMessage(json);
-//   const getPresentationsMessage = Convert.toGetPresentationsMessage(json);
-//   const getPresentationsResultMessage = Convert.toGetPresentationsResultMessage(json);
 //   const getRecentLocationsMessage = Convert.toGetRecentLocationsMessage(json);
 //   const getRepoInfoMessage = Convert.toGetRepoInfoMessage(json);
 //   const getRepoInfoResultMessage = Convert.toGetRepoInfoResultMessage(json);
 //   const getScreenSnapshotMessage = Convert.toGetScreenSnapshotMessage(json);
 //   const getScreenSnapshotResultMessage = Convert.toGetScreenSnapshotResultMessage(json);
 //   const getSettingsMessage = Convert.toGetSettingsMessage(json);
-//   const gitFileChange = Convert.toGitFileChange(json);
 //   const gitHubHostsUpdatedMessage = Convert.toGitHubHostsUpdatedMessage(json);
 //   const gitOperation = Convert.toGitOperation(json);
 //   const gitOperationFinishedMessage = Convert.toGitOperationFinishedMessage(json);
 //   const gitOperationKind = Convert.toGitOperationKind(json);
 //   const gitOperationStartedMessage = Convert.toGitOperationStartedMessage(json);
 //   const gitOperationStatus = Convert.toGitOperationStatus(json);
-//   const gitStatusUpdateMessage = Convert.toGitStatusUpdateMessage(json);
 //   const guardianSelection = Convert.toGuardianSelection(json);
 //   const harness = Convert.toHarness(json);
 //   const harnessModel = Convert.toHarnessModel(json);
@@ -435,23 +428,6 @@
 //   const pluginInfo = Convert.toPluginInfo(json);
 //   const pluginIssue = Convert.toPluginIssue(json);
 //   const pluginsUpdatedMessage = Convert.toPluginsUpdatedMessage(json);
-//   const presentAnnotation = Convert.toPresentAnnotation(json);
-//   const presentCloseMessage = Convert.toPresentCloseMessage(json);
-//   const presentCloseResultMessage = Convert.toPresentCloseResultMessage(json);
-//   const presentCommentInput = Convert.toPresentCommentInput(json);
-//   const presentFeedbackMessage = Convert.toPresentFeedbackMessage(json);
-//   const presentFeedbackResult = Convert.toPresentFeedbackResult(json);
-//   const presentFile = Convert.toPresentFile(json);
-//   const presentManifestView = Convert.toPresentManifestView(json);
-//   const presentOpenMessage = Convert.toPresentOpenMessage(json);
-//   const presentOpenResult = Convert.toPresentOpenResult(json);
-//   const presentSubmitRoundMessage = Convert.toPresentSubmitRoundMessage(json);
-//   const presentSubmitRoundResultMessage = Convert.toPresentSubmitRoundResultMessage(json);
-//   const presentation = Convert.toPresentation(json);
-//   const presentationAddedMessage = Convert.toPresentationAddedMessage(json);
-//   const presentationComment = Convert.toPresentationComment(json);
-//   const presentationRound = Convert.toPresentationRound(json);
-//   const presentationUpdatedMessage = Convert.toPresentationUpdatedMessage(json);
 //   const profile = Convert.toProfile(json);
 //   const profileActionResultMessage = Convert.toProfileActionResultMessage(json);
 //   const profileArrangementChangedMessage = Convert.toProfileArrangementChangedMessage(json);
@@ -495,7 +471,6 @@
 //   const repoState = Convert.toRepoState(json);
 //   const reposUpdatedMessage = Convert.toReposUpdatedMessage(json);
 //   const response = Convert.toResponse(json);
-//   const reviewComment = Convert.toReviewComment(json);
 //   const runtimeRespawnedMessage = Convert.toRuntimeRespawnedMessage(json);
 //   const seed = Convert.toSeed(json);
 //   const seedArtifact = Convert.toSeedArtifact(json);
@@ -631,7 +606,6 @@
 //   const stopBackgroundTask = Convert.toStopBackgroundTask(json);
 //   const stopMessage = Convert.toStopMessage(json);
 //   const storedDocument = Convert.toStoredDocument(json);
-//   const subscribeGitStatusMessage = Convert.toSubscribeGitStatusMessage(json);
 //   const supportInputTrace = Convert.toSupportInputTrace(json);
 //   const supportRuntimeEvidence = Convert.toSupportRuntimeEvidence(json);
 //   const supportSnapshotMessage = Convert.toSupportSnapshotMessage(json);
@@ -644,12 +618,26 @@
 //   const tasksChangedMessage = Convert.toTasksChangedMessage(json);
 //   const terminalBinding = Convert.toTerminalBinding(json);
 //   const terminalBindingsUpdatedMessage = Convert.toTerminalBindingsUpdatedMessage(json);
+//   const terminalBlock = Convert.toTerminalBlock(json);
+//   const terminalCloseMessage = Convert.toTerminalCloseMessage(json);
+//   const terminalDirection = Convert.toTerminalDirection(json);
+//   const terminalEntry = Convert.toTerminalEntry(json);
 //   const terminalExit = Convert.toTerminalExit(json);
+//   const terminalInputMessage = Convert.toTerminalInputMessage(json);
+//   const terminalInputResult = Convert.toTerminalInputResult(json);
+//   const terminalListMessage = Convert.toTerminalListMessage(json);
+//   const terminalOpenMessage = Convert.toTerminalOpenMessage(json);
+//   const terminalOpenResult = Convert.toTerminalOpenResult(json);
 //   const terminalPointerActivityMessage = Convert.toTerminalPointerActivityMessage(json);
+//   const terminalReadMessage = Convert.toTerminalReadMessage(json);
+//   const terminalReadMode = Convert.toTerminalReadMode(json);
+//   const terminalReadResult = Convert.toTerminalReadResult(json);
+//   const terminalWaitMessage = Convert.toTerminalWaitMessage(json);
+//   const terminalWaitResult = Convert.toTerminalWaitResult(json);
+//   const terminalWaitUntil = Convert.toTerminalWaitUntil(json);
 //   const tierDefaults = Convert.toTierDefaults(json);
 //   const uninstallPluginMessage = Convert.toUninstallPluginMessage(json);
 //   const unregisterMessage = Convert.toUnregisterMessage(json);
-//   const unsubscribeGitStatusMessage = Convert.toUnsubscribeGitStatusMessage(json);
 //   const wakeTurnMessage = Convert.toWakeTurnMessage(json);
 //   const webSocketEvent = Convert.toWebSocketEvent(json);
 //   const worktree = Convert.toWorktree(json);
@@ -2084,6 +2072,7 @@ export interface SessionObject {
     directory:                  string;
     dispatcher_member?:         string;
     dispatcher_session_id?:     string;
+    hidden?:                    boolean;
     id:                         string;
     is_worktree?:               boolean;
     label:                      string;
@@ -2103,6 +2092,7 @@ export interface SessionObject {
     succeeds?:                  string;
     terminal_build_stale?:      boolean;
     terminal_exit?:             TerminalExitObject;
+    title?:                     string;
     turn_opened_at?:            string;
     turn_owed?:                 boolean;
     turn_snoozed_until?:        string;
@@ -2235,9 +2225,10 @@ export interface BrowseDirectoryResultMessage {
 }
 
 export interface EntryElement {
-    is_dir: boolean;
-    name:   string;
-    path:   string;
+    is_dir:   boolean;
+    is_repo?: boolean;
+    name:     string;
+    path:     string;
     [property: string]: any;
 }
 
@@ -2531,10 +2522,11 @@ export interface CommandUsage {
 }
 
 export interface CreateWorktreeFromBranchMessage {
-    branch:    string;
-    cmd:       CreateWorktreeFromBranchMessageCmd;
-    main_repo: string;
-    path?:     string;
+    branch:      string;
+    cmd:         CreateWorktreeFromBranchMessageCmd;
+    main_repo:   string;
+    path?:       string;
+    request_id?: string;
     [property: string]: any;
 }
 
@@ -2547,6 +2539,7 @@ export interface CreateWorktreeMessage {
     cmd:            CreateWorktreeMessageCmd;
     main_repo:      string;
     path?:          string;
+    request_id?:    string;
     starting_from?: string;
     [property: string]: any;
 }
@@ -2556,10 +2549,11 @@ export enum CreateWorktreeMessageCmd {
 }
 
 export interface CreateWorktreeResultMessage {
-    error?:  string;
-    event:   CreateWorktreeResultMessageEvent;
-    path?:   string;
-    success: boolean;
+    error?:      string;
+    event:       CreateWorktreeResultMessageEvent;
+    path?:       string;
+    request_id?: string;
+    success:     boolean;
     [property: string]: any;
 }
 
@@ -3435,9 +3429,10 @@ export interface DelegationSelection {
 }
 
 export interface DeleteWorktreeMessage {
-    cmd:    DeleteWorktreeMessageCmd;
-    force?: boolean;
-    path:   string;
+    cmd:         DeleteWorktreeMessageCmd;
+    force?:      boolean;
+    path:        string;
+    request_id?: string;
     [property: string]: any;
 }
 
@@ -3451,6 +3446,7 @@ export interface DeleteWorktreeResultMessage {
     forceable?:   boolean;
     path:         string;
     reason_kind?: ReasonKind;
+    request_id?:  string;
     success:      boolean;
     [property: string]: any;
 }
@@ -3511,6 +3507,18 @@ export interface DesktopCloseMessage {
 
 export enum DesktopCloseMessageCmd {
     DesktopClose = "desktop_close",
+}
+
+export interface DesktopCloseTileMessage {
+    cmd:        DesktopCloseTileMessageCmd;
+    desktop_id: string;
+    request_id: string;
+    tile_id:    string;
+    [property: string]: any;
+}
+
+export enum DesktopCloseTileMessageCmd {
+    DesktopCloseTile = "desktop_close_tile",
 }
 
 export interface DesktopCreateMessage {
@@ -3582,6 +3590,7 @@ export enum DesktopMoveSessionMessageCmd {
 }
 
 export interface DesktopMoveSessionResult {
+    desktop_created?: boolean;
     desktop_id:       string;
     from_desktop_id?: string;
     pane_id:          string;
@@ -3771,9 +3780,10 @@ export enum DetachSessionMessageCmd {
 }
 
 export interface DirectoryEntry {
-    is_dir: boolean;
-    name:   string;
-    path:   string;
+    is_dir:   boolean;
+    is_repo?: boolean;
+    name:     string;
+    path:     string;
     [property: string]: any;
 }
 
@@ -4203,22 +4213,6 @@ export interface FileActivity {
     session_id?: string;
     source:      string;
     [property: string]: any;
-}
-
-export interface FileDiffResultMessage {
-    directory:   string;
-    error?:      string;
-    event:       FileDiffResultMessageEvent;
-    modified:    string;
-    original:    string;
-    path:        string;
-    request_id?: string;
-    success:     boolean;
-    [property: string]: any;
-}
-
-export enum FileDiffResultMessageEvent {
-    FileDiffResult = "file_diff_result",
 }
 
 export interface FilesEditedMessage {
@@ -4887,21 +4881,6 @@ export enum GetDefaultBranchResultMessageEvent {
     GetDefaultBranchResult = "get_default_branch_result",
 }
 
-export interface GetFileDiffMessage {
-    base_ref?:   string;
-    cmd:         GetFileDiffMessageCmd;
-    directory:   string;
-    head_ref?:   string;
-    path:        string;
-    request_id?: string;
-    staged?:     boolean;
-    [property: string]: any;
-}
-
-export enum GetFileDiffMessageCmd {
-    GetFileDiff = "get_file_diff",
-}
-
 export interface GetKittyImageMessage {
     cmd:      GetKittyImageMessageCmd;
     id:       string;
@@ -4911,117 +4890,6 @@ export interface GetKittyImageMessage {
 
 export enum GetKittyImageMessageCmd {
     GetKittyImage = "get_kitty_image",
-}
-
-export interface GetPresentationRoundMessage {
-    cmd:             GetPresentationRoundMessageCmd;
-    presentation_id: string;
-    seq?:            number;
-    [property: string]: any;
-}
-
-export enum GetPresentationRoundMessageCmd {
-    GetPresentationRound = "get_presentation_round",
-}
-
-export interface GetPresentationRoundResultMessage {
-    comments?:      CommentElement[];
-    error?:         string;
-    event:          GetPresentationRoundResultMessageEvent;
-    presentation?:  PresentationElement;
-    repo_head_sha?: string;
-    round?:         Round;
-    success:        boolean;
-    [property: string]: any;
-}
-
-export interface CommentElement {
-    author:     string;
-    content:    string;
-    created_at: string;
-    filepath:   string;
-    id:         string;
-    line_end:   number;
-    line_start: number;
-    round_id:   string;
-    side:       string;
-    [property: string]: any;
-}
-
-export enum GetPresentationRoundResultMessageEvent {
-    GetPresentationRoundResult = "get_presentation_round_result",
-}
-
-export interface PresentationElement {
-    created_at:             string;
-    id:                     string;
-    kind:                   string;
-    latest_round_seq:       number;
-    latest_round_submitted: boolean;
-    repo_path:              string;
-    session_id:             string;
-    status:                 string;
-    title:                  string;
-    [property: string]: any;
-}
-
-export interface Round {
-    base_sha:        string;
-    changed_files?:  FileElement[];
-    created_at:      string;
-    head_sha:        string;
-    id:              string;
-    manifest:        Manifest;
-    presentation_id: string;
-    seq:             number;
-    submitted_at?:   string;
-    verdict?:        string;
-    [property: string]: any;
-}
-
-export interface FileElement {
-    additions?:   number;
-    annotations?: AnnotationElement[];
-    deletions?:   number;
-    note?:        string;
-    path:         string;
-    [property: string]: any;
-}
-
-export interface AnnotationElement {
-    comments:   string[];
-    line_end:   number;
-    line_start: number;
-    [property: string]: any;
-}
-
-export interface Manifest {
-    files:    FileElement[];
-    skip:     string[];
-    summary?: string;
-    title:    string;
-    [property: string]: any;
-}
-
-export interface GetPresentationsMessage {
-    cmd: GetPresentationsMessageCmd;
-    [property: string]: any;
-}
-
-export enum GetPresentationsMessageCmd {
-    GetPresentations = "get_presentations",
-}
-
-export interface GetPresentationsResultMessage {
-    error?:        string;
-    event:         GetPresentationsResultMessageEvent;
-    presentations: PresentationElement[];
-    success:       boolean;
-    [property: string]: any;
-}
-
-export enum GetPresentationsResultMessageEvent {
-    GetPresentationsResult = "get_presentations_result",
 }
 
 export interface GetRecentLocationsMessage {
@@ -5036,8 +4904,9 @@ export enum GetRecentLocationsMessageCmd {
 }
 
 export interface GetRepoInfoMessage {
-    cmd:  GetRepoInfoMessageCmd;
-    repo: string;
+    cmd:         GetRepoInfoMessageCmd;
+    repo:        string;
+    request_id?: string;
     [property: string]: any;
 }
 
@@ -5046,10 +4915,11 @@ export enum GetRepoInfoMessageCmd {
 }
 
 export interface GetRepoInfoResultMessage {
-    error?:  string;
-    event:   GetRepoInfoResultMessageEvent;
-    info?:   Info;
-    success: boolean;
+    error?:      string;
+    event:       GetRepoInfoResultMessageEvent;
+    info?:       Info;
+    request_id?: string;
+    success:     boolean;
     [property: string]: any;
 }
 
@@ -5132,15 +5002,6 @@ export enum GetSettingsMessageCmd {
     GetSettings = "get_settings",
 }
 
-export interface GitFileChange {
-    additions?: number;
-    deletions?: number;
-    old_path?:  string;
-    path:       string;
-    status:     string;
-    [property: string]: any;
-}
-
 export interface GitHubHostsUpdatedMessage {
     event:                      GitHubHostsUpdatedMessageEvent;
     github_hosts:               string[];
@@ -5207,33 +5068,6 @@ export interface GitOperationStartedMessage {
 
 export enum GitOperationStartedMessageEvent {
     GitOperationStarted = "git_operation_started",
-}
-
-export interface GitStatusUpdateMessage {
-    directory:       string;
-    duration_ms?:    number;
-    error?:          string;
-    event:           GitStatusUpdateMessageEvent;
-    limited?:        boolean;
-    limited_reason?: string;
-    mode?:           string;
-    staged:          StagedElement[];
-    unstaged:        StagedElement[];
-    untracked:       StagedElement[];
-    [property: string]: any;
-}
-
-export enum GitStatusUpdateMessageEvent {
-    GitStatusUpdate = "git_status_update",
-}
-
-export interface StagedElement {
-    additions?: number;
-    deletions?: number;
-    old_path?:  string;
-    path:       string;
-    status:     string;
-    [property: string]: any;
 }
 
 export interface GuardianSelection {
@@ -5979,7 +5813,7 @@ export enum MarkdownAnnotationsGetMessageCmd {
 }
 
 export interface MarkdownAnnotationsGetResultMessage {
-    annotations:  AnnotationObject[];
+    annotations:  AnnotationElement[];
     document_uri: string;
     error?:       string;
     event:        MarkdownAnnotationsGetResultMessageEvent;
@@ -5992,7 +5826,7 @@ export interface MarkdownAnnotationsGetResultMessage {
     [property: string]: any;
 }
 
-export interface AnnotationObject {
+export interface AnnotationElement {
     anchor?:           Anchor;
     created_at:        number;
     id:                string;
@@ -6009,7 +5843,7 @@ export enum MarkdownAnnotationsGetResultMessageEvent {
 }
 
 export interface MarkdownAnnotationsSaveMessage {
-    annotations:  AnnotationObject[];
+    annotations:  AnnotationElement[];
     cmd:          MarkdownAnnotationsSaveMessageCmd;
     document_uri: string;
     generation:   number;
@@ -6865,198 +6699,6 @@ export interface PluginElement {
     [property: string]: any;
 }
 
-export interface PresentAnnotation {
-    comments:   string[];
-    line_end:   number;
-    line_start: number;
-    [property: string]: any;
-}
-
-export interface PresentCloseMessage {
-    cmd:             PresentCloseMessageCmd;
-    presentation_id: string;
-    [property: string]: any;
-}
-
-export enum PresentCloseMessageCmd {
-    PresentClose = "present_close",
-}
-
-export interface PresentCloseResultMessage {
-    error?:          string;
-    event:           PresentCloseResultMessageEvent;
-    presentation_id: string;
-    success:         boolean;
-    [property: string]: any;
-}
-
-export enum PresentCloseResultMessageEvent {
-    PresentCloseResult = "present_close_result",
-}
-
-export interface PresentCommentInput {
-    content:    string;
-    filepath:   string;
-    line_end:   number;
-    line_start: number;
-    side:       string;
-    [property: string]: any;
-}
-
-export interface PresentFeedbackMessage {
-    cmd:             PresentFeedbackMessageCmd;
-    presentation_id: string;
-    seq?:            number;
-    [property: string]: any;
-}
-
-export enum PresentFeedbackMessageCmd {
-    PresentFeedback = "present_feedback",
-}
-
-export interface PresentFeedbackResult {
-    markdown:            string;
-    presentation_status: string;
-    seq:                 number;
-    submitted:           boolean;
-    verdict?:            string;
-    [property: string]: any;
-}
-
-export interface PresentFile {
-    additions?:   number;
-    annotations?: AnnotationElement[];
-    deletions?:   number;
-    note?:        string;
-    path:         string;
-    [property: string]: any;
-}
-
-export interface PresentManifestView {
-    files:    FileElement[];
-    skip:     string[];
-    summary?: string;
-    title:    string;
-    [property: string]: any;
-}
-
-export interface PresentOpenMessage {
-    cmd:               PresentOpenMessageCmd;
-    manifest_yaml:     string;
-    presentation_id?:  string;
-    source_session_id: string;
-    [property: string]: any;
-}
-
-export enum PresentOpenMessageCmd {
-    PresentOpen = "present_open",
-}
-
-export interface PresentOpenResult {
-    base_sha:        string;
-    head_sha:        string;
-    presentation_id: string;
-    round_id:        string;
-    seq:             number;
-    title:           string;
-    warnings?:       string[];
-    [property: string]: any;
-}
-
-export interface PresentSubmitRoundMessage {
-    cmd:      PresentSubmitRoundMessageCmd;
-    comments: CommentObject[];
-    handback: boolean;
-    round_id: string;
-    verdict:  string;
-    [property: string]: any;
-}
-
-export enum PresentSubmitRoundMessageCmd {
-    PresentSubmitRound = "present_submit_round",
-}
-
-export interface CommentObject {
-    content:    string;
-    filepath:   string;
-    line_end:   number;
-    line_start: number;
-    side:       string;
-    [property: string]: any;
-}
-
-export interface PresentSubmitRoundResultMessage {
-    error?:   string;
-    event:    PresentSubmitRoundResultMessageEvent;
-    round_id: string;
-    success:  boolean;
-    [property: string]: any;
-}
-
-export enum PresentSubmitRoundResultMessageEvent {
-    PresentSubmitRoundResult = "present_submit_round_result",
-}
-
-export interface Presentation {
-    created_at:             string;
-    id:                     string;
-    kind:                   string;
-    latest_round_seq:       number;
-    latest_round_submitted: boolean;
-    repo_path:              string;
-    session_id:             string;
-    status:                 string;
-    title:                  string;
-    [property: string]: any;
-}
-
-export interface PresentationAddedMessage {
-    event:        PresentationAddedMessageEvent;
-    presentation: PresentationElement;
-    [property: string]: any;
-}
-
-export enum PresentationAddedMessageEvent {
-    PresentationAdded = "presentation_added",
-}
-
-export interface PresentationComment {
-    author:     string;
-    content:    string;
-    created_at: string;
-    filepath:   string;
-    id:         string;
-    line_end:   number;
-    line_start: number;
-    round_id:   string;
-    side:       string;
-    [property: string]: any;
-}
-
-export interface PresentationRound {
-    base_sha:        string;
-    changed_files?:  FileElement[];
-    created_at:      string;
-    head_sha:        string;
-    id:              string;
-    manifest:        Manifest;
-    presentation_id: string;
-    seq:             number;
-    submitted_at?:   string;
-    verdict?:        string;
-    [property: string]: any;
-}
-
-export interface PresentationUpdatedMessage {
-    event:        PresentationUpdatedMessageEvent;
-    presentation: PresentationElement;
-    [property: string]: any;
-}
-
-export enum PresentationUpdatedMessageEvent {
-    PresentationUpdated = "presentation_updated",
-}
-
 export interface Profile {
     current_desktop_id: string;
     id:                 string;
@@ -7362,7 +7004,7 @@ export enum RecentFilesMessageCmd {
 export interface RecentFilesResultMessage {
     error?:     string;
     event:      RecentFilesResultMessageEvent;
-    files:      FileObject[];
+    files:      FileElement[];
     request_id: string;
     success:    boolean;
     [property: string]: any;
@@ -7372,7 +7014,7 @@ export enum RecentFilesResultMessageEvent {
     RecentFilesResult = "recent_files_result",
 }
 
-export interface FileObject {
+export interface FileElement {
     count:       number;
     last_at:     string;
     path:        string;
@@ -7382,9 +7024,10 @@ export interface FileObject {
 }
 
 export interface RecentLocation {
-    last_seen: string;
-    path:      string;
-    use_count: number;
+    last_seen:  string;
+    path:       string;
+    repo_root?: string;
+    use_count:  number;
     [property: string]: any;
 }
 
@@ -7403,9 +7046,10 @@ export enum RecentLocationsResultMessageEvent {
 }
 
 export interface RecentLocationElement {
-    last_seen: string;
-    path:      string;
-    use_count: number;
+    last_seen:  string;
+    path:       string;
+    repo_root?: string;
+    use_count:  number;
     [property: string]: any;
 }
 
@@ -7593,8 +7237,6 @@ export interface Response {
     notebook_read?:                   NotebookReadObject;
     notebook_write?:                  NotebookWriteObject;
     ok:                               boolean;
-    present_feedback_result?:         PresentFeedbackResultObject;
-    present_open_result?:             PresentOpenResultObject;
     profiles?:                        ProfileElement[];
     prs?:                             PRElement[];
     repos?:                           RepoElement[];
@@ -7620,6 +7262,11 @@ export interface Response {
     session_transcript_result?:       SessionTranscriptResultObject;
     sessions?:                        SessionObject[];
     state_explain_result?:            StateExplainResultObject;
+    terminal_entries?:                TerminalEntryElement[];
+    terminal_input_result?:           TerminalInputResultObject;
+    terminal_open_result?:            TerminalOpenResultObject;
+    terminal_read_result?:            TerminalReadResultObject;
+    terminal_wait_result?:            TerminalWaitResultObject;
     worktree_keep_result?:            WorktreeKeepResultObject;
     worktree_list_result?:            WorktreeListResultObject;
     worktree_refresh_result?:         WorktreeRefreshResultObject;
@@ -7808,6 +7455,7 @@ export interface DelegationRoles {
 }
 
 export interface DesktopMoveSessionResultObject {
+    desktop_created?: boolean;
     desktop_id:       string;
     from_desktop_id?: string;
     pane_id:          string;
@@ -7899,26 +7547,6 @@ export interface NotebookGuide {
     guidance:         string;
     root:             string;
     session_is_chief: boolean;
-    [property: string]: any;
-}
-
-export interface PresentFeedbackResultObject {
-    markdown:            string;
-    presentation_status: string;
-    seq:                 number;
-    submitted:           boolean;
-    verdict?:            string;
-    [property: string]: any;
-}
-
-export interface PresentOpenResultObject {
-    base_sha:        string;
-    head_sha:        string;
-    presentation_id: string;
-    round_id:        string;
-    seq:             number;
-    title:           string;
-    warnings?:       string[];
     [property: string]: any;
 }
 
@@ -8114,6 +7742,7 @@ export interface Entry {
     closed_by?:              string;
     conversation_pinned_at?: string;
     directory:               string;
+    hidden?:                 boolean;
     id:                      string;
     is_worktree?:            boolean;
     label:                   string;
@@ -8125,6 +7754,7 @@ export interface Entry {
     profile_name:            string;
     repository?:             string;
     state:                   SessionState;
+    turn_snoozed_until?:     string;
     usage?:                  Usage;
     [property: string]: any;
 }
@@ -8171,9 +7801,6 @@ export enum SessionReopenAction {
     FetchRecreateAndReopen = "fetch_recreate_and_reopen",
     RecreateWorktreeAndReopen = "recreate_worktree_and_reopen",
     Reopen = "reopen",
-    StartFreshDefaultBranch = "start_fresh_default_branch",
-    StartFreshElsewhere = "start_fresh_elsewhere",
-    StartFreshSamePlace = "start_fresh_same_place",
 }
 
 export interface SessionReopenResultObject {
@@ -8236,6 +7863,55 @@ export interface ObservationElement {
     [property: string]: any;
 }
 
+export interface TerminalEntryElement {
+    agent:         string;
+    desktop_id:    string;
+    desktop_label: string;
+    name:          string;
+    opened_by?:    string;
+    position?:     string;
+    session_id:    string;
+    short_id:      string;
+    state:         SessionState;
+    terminal_id:   string;
+    [property: string]: any;
+}
+
+export interface TerminalInputResultObject {
+    last_block_id?: string;
+    terminal_id:    string;
+    [property: string]: any;
+}
+
+export interface TerminalOpenResultObject {
+    desktop_id:  string;
+    pane_id:     string;
+    session_id:  string;
+    terminal_id: string;
+    [property: string]: any;
+}
+
+export interface TerminalReadResultObject {
+    block?: Block;
+    text:   string;
+    [property: string]: any;
+}
+
+export interface Block {
+    command?:   string;
+    exit_code?: number;
+    id:         string;
+    output:     string;
+    [property: string]: any;
+}
+
+export interface TerminalWaitResultObject {
+    block?:     Block;
+    exit_code?: number;
+    exited?:    boolean;
+    [property: string]: any;
+}
+
 export interface WorktreeKeepResultObject {
     worktree: WorktreeElement;
     [property: string]: any;
@@ -8274,21 +7950,6 @@ export interface SweepEntry {
     main_repo: string;
     path:      string;
     reason?:   string;
-    [property: string]: any;
-}
-
-export interface ReviewComment {
-    author:       string;
-    content:      string;
-    created_at:   string;
-    filepath:     string;
-    id:           string;
-    line_end:     number;
-    line_start:   number;
-    resolved:     boolean;
-    resolved_at?: string;
-    resolved_by?: string;
-    review_id:    string;
     [property: string]: any;
 }
 
@@ -9093,6 +8754,7 @@ export interface Session {
     directory:                  string;
     dispatcher_member?:         string;
     dispatcher_session_id?:     string;
+    hidden?:                    boolean;
     id:                         string;
     is_worktree?:               boolean;
     label:                      string;
@@ -9112,6 +8774,7 @@ export interface Session {
     succeeds?:                  string;
     terminal_build_stale?:      boolean;
     terminal_exit?:             TerminalExitObject;
+    title?:                     string;
     turn_opened_at?:            string;
     turn_owed?:                 boolean;
     turn_snoozed_until?:        string;
@@ -9169,7 +8832,7 @@ export enum SessionAnnotationsGetMessageCmd {
 }
 
 export interface SessionAnnotationsGetResultMessage {
-    annotations: SessionAnnotationsGetResultMessageAnnotation[];
+    annotations: AnnotationObject[];
     error?:      string;
     event:       SessionAnnotationsGetResultMessageEvent;
     generation:  number;
@@ -9180,7 +8843,7 @@ export interface SessionAnnotationsGetResultMessage {
     [property: string]: any;
 }
 
-export interface SessionAnnotationsGetResultMessageAnnotation {
+export interface AnnotationObject {
     comment:         string;
     emoji?:          string;
     end:             number;
@@ -9197,7 +8860,7 @@ export enum SessionAnnotationsGetResultMessageEvent {
 }
 
 export interface SessionAnnotationsSaveMessage {
-    annotations: SessionAnnotationsGetResultMessageAnnotation[];
+    annotations: AnnotationObject[];
     cmd:         SessionAnnotationsSaveMessageCmd;
     generation:  number;
     note?:       string;
@@ -9336,6 +8999,7 @@ export interface SessionLedgerEntry {
     closed_by?:              string;
     conversation_pinned_at?: string;
     directory:               string;
+    hidden?:                 boolean;
     id:                      string;
     is_worktree?:            boolean;
     label:                   string;
@@ -9347,6 +9011,7 @@ export interface SessionLedgerEntry {
     profile_name:            string;
     repository?:             string;
     state:                   SessionState;
+    turn_snoozed_until?:     string;
     usage?:                  Usage;
     [property: string]: any;
 }
@@ -9529,7 +9194,6 @@ export interface SessionReopenEntry {
 export interface SessionReopenMessage {
     action?:     SessionReopenAction;
     cmd:         SessionReopenMessageCmd;
-    directory?:  string;
     request_id?: string;
     session_id:  string;
     [property: string]: any;
@@ -9797,9 +9461,10 @@ export enum SettleTurnMessageCmd {
 }
 
 export interface SnoozeTurnMessage {
-    cmd:        SnoozeTurnMessageCmd;
-    session_id: string;
-    until:      string;
+    caller_session_id?: string;
+    cmd:                SnoozeTurnMessageCmd;
+    session_id:         string;
+    until:              string;
     [property: string]: any;
 }
 
@@ -9943,16 +9608,6 @@ export interface StoredDocument {
     rev:        number;
     updated_at: string;
     [property: string]: any;
-}
-
-export interface SubscribeGitStatusMessage {
-    cmd:       SubscribeGitStatusMessageCmd;
-    directory: string;
-    [property: string]: any;
-}
-
-export enum SubscribeGitStatusMessageCmd {
-    SubscribeGitStatus = "subscribe_git_status",
 }
 
 export interface SupportInputTrace {
@@ -10144,10 +9799,104 @@ export enum TerminalBindingsUpdatedMessageEvent {
     TerminalBindingsUpdated = "terminal_bindings_updated",
 }
 
+export interface TerminalBlock {
+    command?:   string;
+    exit_code?: number;
+    id:         string;
+    output:     string;
+    [property: string]: any;
+}
+
+export interface TerminalCloseMessage {
+    caller_session_id: string;
+    cmd:               TerminalCloseMessageCmd;
+    desktop?:          string;
+    target:            string;
+    [property: string]: any;
+}
+
+export enum TerminalCloseMessageCmd {
+    TerminalClose = "terminal_close",
+}
+
+export interface TerminalEntry {
+    agent:         string;
+    desktop_id:    string;
+    desktop_label: string;
+    name:          string;
+    opened_by?:    string;
+    position?:     string;
+    session_id:    string;
+    short_id:      string;
+    state:         SessionState;
+    terminal_id:   string;
+    [property: string]: any;
+}
+
 export interface TerminalExit {
     at:      string;
     code:    number;
     signal?: string;
+    [property: string]: any;
+}
+
+export interface TerminalInputMessage {
+    caller_session_id: string;
+    cmd:               TerminalInputMessageCmd;
+    data:              string;
+    desktop?:          string;
+    run?:              boolean;
+    target:            string;
+    wait?:             boolean;
+    [property: string]: any;
+}
+
+export enum TerminalInputMessageCmd {
+    TerminalInput = "terminal_input",
+}
+
+export interface TerminalInputResult {
+    last_block_id?: string;
+    terminal_id:    string;
+    [property: string]: any;
+}
+
+export interface TerminalListMessage {
+    all?:              boolean;
+    caller_session_id: string;
+    cmd:               TerminalListMessageCmd;
+    desktop?:          string;
+    [property: string]: any;
+}
+
+export enum TerminalListMessageCmd {
+    TerminalList = "terminal_list",
+}
+
+export interface TerminalOpenMessage {
+    caller_session_id: string;
+    cmd:               TerminalOpenMessageCmd;
+    command?:          string;
+    cwd?:              string;
+    desktop?:          string;
+    direction?:        TerminalDirection;
+    [property: string]: any;
+}
+
+export enum TerminalOpenMessageCmd {
+    TerminalOpen = "terminal_open",
+}
+
+export enum TerminalDirection {
+    Down = "down",
+    Right = "right",
+}
+
+export interface TerminalOpenResult {
+    desktop_id:  string;
+    pane_id:     string;
+    session_id:  string;
+    terminal_id: string;
     [property: string]: any;
 }
 
@@ -10159,6 +9908,56 @@ export interface TerminalPointerActivityMessage {
 
 export enum TerminalPointerActivityMessageCmd {
     TerminalPointerActivity = "terminal_pointer_activity",
+}
+
+export interface TerminalReadMessage {
+    caller_session_id: string;
+    cmd:               TerminalReadMessageCmd;
+    lines?:            number;
+    mode:              TerminalReadMode;
+    target:            string;
+    [property: string]: any;
+}
+
+export enum TerminalReadMessageCmd {
+    TerminalRead = "terminal_read",
+}
+
+export enum TerminalReadMode {
+    Last = "last",
+    Screen = "screen",
+    Scrollback = "scrollback",
+}
+
+export interface TerminalReadResult {
+    block?: Block;
+    text:   string;
+    [property: string]: any;
+}
+
+export interface TerminalWaitMessage {
+    after_block_id?:   string;
+    caller_session_id: string;
+    cmd:               TerminalWaitMessageCmd;
+    target:            string;
+    until:             TerminalWaitUntil;
+    [property: string]: any;
+}
+
+export enum TerminalWaitMessageCmd {
+    TerminalWait = "terminal_wait",
+}
+
+export enum TerminalWaitUntil {
+    Exit = "exit",
+    Prompt = "prompt",
+}
+
+export interface TerminalWaitResult {
+    block?:     Block;
+    exit_code?: number;
+    exited?:    boolean;
+    [property: string]: any;
 }
 
 export interface TierDefaults {
@@ -10190,18 +9989,10 @@ export enum UnregisterMessageCmd {
     Unregister = "unregister",
 }
 
-export interface UnsubscribeGitStatusMessage {
-    cmd: UnsubscribeGitStatusMessageCmd;
-    [property: string]: any;
-}
-
-export enum UnsubscribeGitStatusMessageCmd {
-    UnsubscribeGitStatus = "unsubscribe_git_status",
-}
-
 export interface WakeTurnMessage {
-    cmd:        WakeTurnMessageCmd;
-    session_id: string;
+    caller_session_id?: string;
+    cmd:                WakeTurnMessageCmd;
+    session_id:         string;
     [property: string]: any;
 }
 
@@ -10268,7 +10059,6 @@ export interface WebSocketEvent {
     settings?:                      { [key: string]: string };
     signal?:                        string;
     split_id?:                      string;
-    staged?:                        StagedElement[];
     stash_ref?:                     string;
     success?:                       boolean;
     sweep_entry?:                   SweepEntry;
@@ -10276,8 +10066,6 @@ export interface WebSocketEvent {
     tile_id?:                       string;
     tile_kind?:                     string;
     total?:                         number;
-    unstaged?:                      StagedElement[];
-    untracked?:                     StagedElement[];
     warnings?:                      WarningElement[];
     worktree_list_result?:          WorktreeListResultObject;
     worktree_sweep_log_result?:     WorktreeSweepLogResultObject;
@@ -12061,6 +11849,14 @@ export class Convert {
         return JSON.stringify(uncast(value, r("DesktopCloseMessage")), null, 2);
     }
 
+    public static toDesktopCloseTileMessage(json: string): DesktopCloseTileMessage {
+        return cast(JSON.parse(json), r("DesktopCloseTileMessage"));
+    }
+
+    public static desktopCloseTileMessageToJson(value: DesktopCloseTileMessage): string {
+        return JSON.stringify(uncast(value, r("DesktopCloseTileMessage")), null, 2);
+    }
+
     public static toDesktopCreateMessage(json: string): DesktopCreateMessage {
         return cast(JSON.parse(json), r("DesktopCreateMessage"));
     }
@@ -12509,14 +12305,6 @@ export class Convert {
         return JSON.stringify(uncast(value, r("FileActivity")), null, 2);
     }
 
-    public static toFileDiffResultMessage(json: string): FileDiffResultMessage {
-        return cast(JSON.parse(json), r("FileDiffResultMessage"));
-    }
-
-    public static fileDiffResultMessageToJson(value: FileDiffResultMessage): string {
-        return JSON.stringify(uncast(value, r("FileDiffResultMessage")), null, 2);
-    }
-
     public static toFilesEditedMessage(json: string): FilesEditedMessage {
         return cast(JSON.parse(json), r("FilesEditedMessage"));
     }
@@ -12837,52 +12625,12 @@ export class Convert {
         return JSON.stringify(uncast(value, r("GetDefaultBranchResultMessage")), null, 2);
     }
 
-    public static toGetFileDiffMessage(json: string): GetFileDiffMessage {
-        return cast(JSON.parse(json), r("GetFileDiffMessage"));
-    }
-
-    public static getFileDiffMessageToJson(value: GetFileDiffMessage): string {
-        return JSON.stringify(uncast(value, r("GetFileDiffMessage")), null, 2);
-    }
-
     public static toGetKittyImageMessage(json: string): GetKittyImageMessage {
         return cast(JSON.parse(json), r("GetKittyImageMessage"));
     }
 
     public static getKittyImageMessageToJson(value: GetKittyImageMessage): string {
         return JSON.stringify(uncast(value, r("GetKittyImageMessage")), null, 2);
-    }
-
-    public static toGetPresentationRoundMessage(json: string): GetPresentationRoundMessage {
-        return cast(JSON.parse(json), r("GetPresentationRoundMessage"));
-    }
-
-    public static getPresentationRoundMessageToJson(value: GetPresentationRoundMessage): string {
-        return JSON.stringify(uncast(value, r("GetPresentationRoundMessage")), null, 2);
-    }
-
-    public static toGetPresentationRoundResultMessage(json: string): GetPresentationRoundResultMessage {
-        return cast(JSON.parse(json), r("GetPresentationRoundResultMessage"));
-    }
-
-    public static getPresentationRoundResultMessageToJson(value: GetPresentationRoundResultMessage): string {
-        return JSON.stringify(uncast(value, r("GetPresentationRoundResultMessage")), null, 2);
-    }
-
-    public static toGetPresentationsMessage(json: string): GetPresentationsMessage {
-        return cast(JSON.parse(json), r("GetPresentationsMessage"));
-    }
-
-    public static getPresentationsMessageToJson(value: GetPresentationsMessage): string {
-        return JSON.stringify(uncast(value, r("GetPresentationsMessage")), null, 2);
-    }
-
-    public static toGetPresentationsResultMessage(json: string): GetPresentationsResultMessage {
-        return cast(JSON.parse(json), r("GetPresentationsResultMessage"));
-    }
-
-    public static getPresentationsResultMessageToJson(value: GetPresentationsResultMessage): string {
-        return JSON.stringify(uncast(value, r("GetPresentationsResultMessage")), null, 2);
     }
 
     public static toGetRecentLocationsMessage(json: string): GetRecentLocationsMessage {
@@ -12933,14 +12681,6 @@ export class Convert {
         return JSON.stringify(uncast(value, r("GetSettingsMessage")), null, 2);
     }
 
-    public static toGitFileChange(json: string): GitFileChange {
-        return cast(JSON.parse(json), r("GitFileChange"));
-    }
-
-    public static gitFileChangeToJson(value: GitFileChange): string {
-        return JSON.stringify(uncast(value, r("GitFileChange")), null, 2);
-    }
-
     public static toGitHubHostsUpdatedMessage(json: string): GitHubHostsUpdatedMessage {
         return cast(JSON.parse(json), r("GitHubHostsUpdatedMessage"));
     }
@@ -12987,14 +12727,6 @@ export class Convert {
 
     public static gitOperationStatusToJson(value: GitOperationStatus): string {
         return JSON.stringify(uncast(value, r("GitOperationStatus")), null, 2);
-    }
-
-    public static toGitStatusUpdateMessage(json: string): GitStatusUpdateMessage {
-        return cast(JSON.parse(json), r("GitStatusUpdateMessage"));
-    }
-
-    public static gitStatusUpdateMessageToJson(value: GitStatusUpdateMessage): string {
-        return JSON.stringify(uncast(value, r("GitStatusUpdateMessage")), null, 2);
     }
 
     public static toGuardianSelection(json: string): GuardianSelection {
@@ -13965,142 +13697,6 @@ export class Convert {
         return JSON.stringify(uncast(value, r("PluginsUpdatedMessage")), null, 2);
     }
 
-    public static toPresentAnnotation(json: string): PresentAnnotation {
-        return cast(JSON.parse(json), r("PresentAnnotation"));
-    }
-
-    public static presentAnnotationToJson(value: PresentAnnotation): string {
-        return JSON.stringify(uncast(value, r("PresentAnnotation")), null, 2);
-    }
-
-    public static toPresentCloseMessage(json: string): PresentCloseMessage {
-        return cast(JSON.parse(json), r("PresentCloseMessage"));
-    }
-
-    public static presentCloseMessageToJson(value: PresentCloseMessage): string {
-        return JSON.stringify(uncast(value, r("PresentCloseMessage")), null, 2);
-    }
-
-    public static toPresentCloseResultMessage(json: string): PresentCloseResultMessage {
-        return cast(JSON.parse(json), r("PresentCloseResultMessage"));
-    }
-
-    public static presentCloseResultMessageToJson(value: PresentCloseResultMessage): string {
-        return JSON.stringify(uncast(value, r("PresentCloseResultMessage")), null, 2);
-    }
-
-    public static toPresentCommentInput(json: string): PresentCommentInput {
-        return cast(JSON.parse(json), r("PresentCommentInput"));
-    }
-
-    public static presentCommentInputToJson(value: PresentCommentInput): string {
-        return JSON.stringify(uncast(value, r("PresentCommentInput")), null, 2);
-    }
-
-    public static toPresentFeedbackMessage(json: string): PresentFeedbackMessage {
-        return cast(JSON.parse(json), r("PresentFeedbackMessage"));
-    }
-
-    public static presentFeedbackMessageToJson(value: PresentFeedbackMessage): string {
-        return JSON.stringify(uncast(value, r("PresentFeedbackMessage")), null, 2);
-    }
-
-    public static toPresentFeedbackResult(json: string): PresentFeedbackResult {
-        return cast(JSON.parse(json), r("PresentFeedbackResult"));
-    }
-
-    public static presentFeedbackResultToJson(value: PresentFeedbackResult): string {
-        return JSON.stringify(uncast(value, r("PresentFeedbackResult")), null, 2);
-    }
-
-    public static toPresentFile(json: string): PresentFile {
-        return cast(JSON.parse(json), r("PresentFile"));
-    }
-
-    public static presentFileToJson(value: PresentFile): string {
-        return JSON.stringify(uncast(value, r("PresentFile")), null, 2);
-    }
-
-    public static toPresentManifestView(json: string): PresentManifestView {
-        return cast(JSON.parse(json), r("PresentManifestView"));
-    }
-
-    public static presentManifestViewToJson(value: PresentManifestView): string {
-        return JSON.stringify(uncast(value, r("PresentManifestView")), null, 2);
-    }
-
-    public static toPresentOpenMessage(json: string): PresentOpenMessage {
-        return cast(JSON.parse(json), r("PresentOpenMessage"));
-    }
-
-    public static presentOpenMessageToJson(value: PresentOpenMessage): string {
-        return JSON.stringify(uncast(value, r("PresentOpenMessage")), null, 2);
-    }
-
-    public static toPresentOpenResult(json: string): PresentOpenResult {
-        return cast(JSON.parse(json), r("PresentOpenResult"));
-    }
-
-    public static presentOpenResultToJson(value: PresentOpenResult): string {
-        return JSON.stringify(uncast(value, r("PresentOpenResult")), null, 2);
-    }
-
-    public static toPresentSubmitRoundMessage(json: string): PresentSubmitRoundMessage {
-        return cast(JSON.parse(json), r("PresentSubmitRoundMessage"));
-    }
-
-    public static presentSubmitRoundMessageToJson(value: PresentSubmitRoundMessage): string {
-        return JSON.stringify(uncast(value, r("PresentSubmitRoundMessage")), null, 2);
-    }
-
-    public static toPresentSubmitRoundResultMessage(json: string): PresentSubmitRoundResultMessage {
-        return cast(JSON.parse(json), r("PresentSubmitRoundResultMessage"));
-    }
-
-    public static presentSubmitRoundResultMessageToJson(value: PresentSubmitRoundResultMessage): string {
-        return JSON.stringify(uncast(value, r("PresentSubmitRoundResultMessage")), null, 2);
-    }
-
-    public static toPresentation(json: string): Presentation {
-        return cast(JSON.parse(json), r("Presentation"));
-    }
-
-    public static presentationToJson(value: Presentation): string {
-        return JSON.stringify(uncast(value, r("Presentation")), null, 2);
-    }
-
-    public static toPresentationAddedMessage(json: string): PresentationAddedMessage {
-        return cast(JSON.parse(json), r("PresentationAddedMessage"));
-    }
-
-    public static presentationAddedMessageToJson(value: PresentationAddedMessage): string {
-        return JSON.stringify(uncast(value, r("PresentationAddedMessage")), null, 2);
-    }
-
-    public static toPresentationComment(json: string): PresentationComment {
-        return cast(JSON.parse(json), r("PresentationComment"));
-    }
-
-    public static presentationCommentToJson(value: PresentationComment): string {
-        return JSON.stringify(uncast(value, r("PresentationComment")), null, 2);
-    }
-
-    public static toPresentationRound(json: string): PresentationRound {
-        return cast(JSON.parse(json), r("PresentationRound"));
-    }
-
-    public static presentationRoundToJson(value: PresentationRound): string {
-        return JSON.stringify(uncast(value, r("PresentationRound")), null, 2);
-    }
-
-    public static toPresentationUpdatedMessage(json: string): PresentationUpdatedMessage {
-        return cast(JSON.parse(json), r("PresentationUpdatedMessage"));
-    }
-
-    public static presentationUpdatedMessageToJson(value: PresentationUpdatedMessage): string {
-        return JSON.stringify(uncast(value, r("PresentationUpdatedMessage")), null, 2);
-    }
-
     public static toProfile(json: string): Profile {
         return cast(JSON.parse(json), r("Profile"));
     }
@@ -14443,14 +14039,6 @@ export class Convert {
 
     public static responseToJson(value: Response): string {
         return JSON.stringify(uncast(value, r("Response")), null, 2);
-    }
-
-    public static toReviewComment(json: string): ReviewComment {
-        return cast(JSON.parse(json), r("ReviewComment"));
-    }
-
-    public static reviewCommentToJson(value: ReviewComment): string {
-        return JSON.stringify(uncast(value, r("ReviewComment")), null, 2);
     }
 
     public static toRuntimeRespawnedMessage(json: string): RuntimeRespawnedMessage {
@@ -15533,14 +15121,6 @@ export class Convert {
         return JSON.stringify(uncast(value, r("StoredDocument")), null, 2);
     }
 
-    public static toSubscribeGitStatusMessage(json: string): SubscribeGitStatusMessage {
-        return cast(JSON.parse(json), r("SubscribeGitStatusMessage"));
-    }
-
-    public static subscribeGitStatusMessageToJson(value: SubscribeGitStatusMessage): string {
-        return JSON.stringify(uncast(value, r("SubscribeGitStatusMessage")), null, 2);
-    }
-
     public static toSupportInputTrace(json: string): SupportInputTrace {
         return cast(JSON.parse(json), r("SupportInputTrace"));
     }
@@ -15637,6 +15217,38 @@ export class Convert {
         return JSON.stringify(uncast(value, r("TerminalBindingsUpdatedMessage")), null, 2);
     }
 
+    public static toTerminalBlock(json: string): TerminalBlock {
+        return cast(JSON.parse(json), r("TerminalBlock"));
+    }
+
+    public static terminalBlockToJson(value: TerminalBlock): string {
+        return JSON.stringify(uncast(value, r("TerminalBlock")), null, 2);
+    }
+
+    public static toTerminalCloseMessage(json: string): TerminalCloseMessage {
+        return cast(JSON.parse(json), r("TerminalCloseMessage"));
+    }
+
+    public static terminalCloseMessageToJson(value: TerminalCloseMessage): string {
+        return JSON.stringify(uncast(value, r("TerminalCloseMessage")), null, 2);
+    }
+
+    public static toTerminalDirection(json: string): TerminalDirection {
+        return cast(JSON.parse(json), r("TerminalDirection"));
+    }
+
+    public static terminalDirectionToJson(value: TerminalDirection): string {
+        return JSON.stringify(uncast(value, r("TerminalDirection")), null, 2);
+    }
+
+    public static toTerminalEntry(json: string): TerminalEntry {
+        return cast(JSON.parse(json), r("TerminalEntry"));
+    }
+
+    public static terminalEntryToJson(value: TerminalEntry): string {
+        return JSON.stringify(uncast(value, r("TerminalEntry")), null, 2);
+    }
+
     public static toTerminalExit(json: string): TerminalExit {
         return cast(JSON.parse(json), r("TerminalExit"));
     }
@@ -15645,12 +15257,100 @@ export class Convert {
         return JSON.stringify(uncast(value, r("TerminalExit")), null, 2);
     }
 
+    public static toTerminalInputMessage(json: string): TerminalInputMessage {
+        return cast(JSON.parse(json), r("TerminalInputMessage"));
+    }
+
+    public static terminalInputMessageToJson(value: TerminalInputMessage): string {
+        return JSON.stringify(uncast(value, r("TerminalInputMessage")), null, 2);
+    }
+
+    public static toTerminalInputResult(json: string): TerminalInputResult {
+        return cast(JSON.parse(json), r("TerminalInputResult"));
+    }
+
+    public static terminalInputResultToJson(value: TerminalInputResult): string {
+        return JSON.stringify(uncast(value, r("TerminalInputResult")), null, 2);
+    }
+
+    public static toTerminalListMessage(json: string): TerminalListMessage {
+        return cast(JSON.parse(json), r("TerminalListMessage"));
+    }
+
+    public static terminalListMessageToJson(value: TerminalListMessage): string {
+        return JSON.stringify(uncast(value, r("TerminalListMessage")), null, 2);
+    }
+
+    public static toTerminalOpenMessage(json: string): TerminalOpenMessage {
+        return cast(JSON.parse(json), r("TerminalOpenMessage"));
+    }
+
+    public static terminalOpenMessageToJson(value: TerminalOpenMessage): string {
+        return JSON.stringify(uncast(value, r("TerminalOpenMessage")), null, 2);
+    }
+
+    public static toTerminalOpenResult(json: string): TerminalOpenResult {
+        return cast(JSON.parse(json), r("TerminalOpenResult"));
+    }
+
+    public static terminalOpenResultToJson(value: TerminalOpenResult): string {
+        return JSON.stringify(uncast(value, r("TerminalOpenResult")), null, 2);
+    }
+
     public static toTerminalPointerActivityMessage(json: string): TerminalPointerActivityMessage {
         return cast(JSON.parse(json), r("TerminalPointerActivityMessage"));
     }
 
     public static terminalPointerActivityMessageToJson(value: TerminalPointerActivityMessage): string {
         return JSON.stringify(uncast(value, r("TerminalPointerActivityMessage")), null, 2);
+    }
+
+    public static toTerminalReadMessage(json: string): TerminalReadMessage {
+        return cast(JSON.parse(json), r("TerminalReadMessage"));
+    }
+
+    public static terminalReadMessageToJson(value: TerminalReadMessage): string {
+        return JSON.stringify(uncast(value, r("TerminalReadMessage")), null, 2);
+    }
+
+    public static toTerminalReadMode(json: string): TerminalReadMode {
+        return cast(JSON.parse(json), r("TerminalReadMode"));
+    }
+
+    public static terminalReadModeToJson(value: TerminalReadMode): string {
+        return JSON.stringify(uncast(value, r("TerminalReadMode")), null, 2);
+    }
+
+    public static toTerminalReadResult(json: string): TerminalReadResult {
+        return cast(JSON.parse(json), r("TerminalReadResult"));
+    }
+
+    public static terminalReadResultToJson(value: TerminalReadResult): string {
+        return JSON.stringify(uncast(value, r("TerminalReadResult")), null, 2);
+    }
+
+    public static toTerminalWaitMessage(json: string): TerminalWaitMessage {
+        return cast(JSON.parse(json), r("TerminalWaitMessage"));
+    }
+
+    public static terminalWaitMessageToJson(value: TerminalWaitMessage): string {
+        return JSON.stringify(uncast(value, r("TerminalWaitMessage")), null, 2);
+    }
+
+    public static toTerminalWaitResult(json: string): TerminalWaitResult {
+        return cast(JSON.parse(json), r("TerminalWaitResult"));
+    }
+
+    public static terminalWaitResultToJson(value: TerminalWaitResult): string {
+        return JSON.stringify(uncast(value, r("TerminalWaitResult")), null, 2);
+    }
+
+    public static toTerminalWaitUntil(json: string): TerminalWaitUntil {
+        return cast(JSON.parse(json), r("TerminalWaitUntil"));
+    }
+
+    public static terminalWaitUntilToJson(value: TerminalWaitUntil): string {
+        return JSON.stringify(uncast(value, r("TerminalWaitUntil")), null, 2);
     }
 
     public static toTierDefaults(json: string): TierDefaults {
@@ -15675,14 +15375,6 @@ export class Convert {
 
     public static unregisterMessageToJson(value: UnregisterMessage): string {
         return JSON.stringify(uncast(value, r("UnregisterMessage")), null, 2);
-    }
-
-    public static toUnsubscribeGitStatusMessage(json: string): UnsubscribeGitStatusMessage {
-        return cast(JSON.parse(json), r("UnsubscribeGitStatusMessage"));
-    }
-
-    public static unsubscribeGitStatusMessageToJson(value: UnsubscribeGitStatusMessage): string {
-        return JSON.stringify(uncast(value, r("UnsubscribeGitStatusMessage")), null, 2);
     }
 
     public static toWakeTurnMessage(json: string): WakeTurnMessage {
@@ -16913,6 +16605,7 @@ const typeMap: any = {
         { json: "directory", js: "directory", typ: "" },
         { json: "dispatcher_member", js: "dispatcher_member", typ: u(undefined, "") },
         { json: "dispatcher_session_id", js: "dispatcher_session_id", typ: u(undefined, "") },
+        { json: "hidden", js: "hidden", typ: u(undefined, true) },
         { json: "id", js: "id", typ: "" },
         { json: "is_worktree", js: "is_worktree", typ: u(undefined, true) },
         { json: "label", js: "label", typ: "" },
@@ -16932,6 +16625,7 @@ const typeMap: any = {
         { json: "succeeds", js: "succeeds", typ: u(undefined, "") },
         { json: "terminal_build_stale", js: "terminal_build_stale", typ: u(undefined, true) },
         { json: "terminal_exit", js: "terminal_exit", typ: u(undefined, r("TerminalExitObject")) },
+        { json: "title", js: "title", typ: u(undefined, "") },
         { json: "turn_opened_at", js: "turn_opened_at", typ: u(undefined, "") },
         { json: "turn_owed", js: "turn_owed", typ: u(undefined, true) },
         { json: "turn_snoozed_until", js: "turn_snoozed_until", typ: u(undefined, "") },
@@ -17014,6 +16708,7 @@ const typeMap: any = {
     ], "any"),
     "EntryElement": o([
         { json: "is_dir", js: "is_dir", typ: true },
+        { json: "is_repo", js: "is_repo", typ: u(undefined, true) },
         { json: "name", js: "name", typ: "" },
         { json: "path", js: "path", typ: "" },
     ], "any"),
@@ -17203,18 +16898,21 @@ const typeMap: any = {
         { json: "cmd", js: "cmd", typ: r("CreateWorktreeFromBranchMessageCmd") },
         { json: "main_repo", js: "main_repo", typ: "" },
         { json: "path", js: "path", typ: u(undefined, "") },
+        { json: "request_id", js: "request_id", typ: u(undefined, "") },
     ], "any"),
     "CreateWorktreeMessage": o([
         { json: "branch", js: "branch", typ: "" },
         { json: "cmd", js: "cmd", typ: r("CreateWorktreeMessageCmd") },
         { json: "main_repo", js: "main_repo", typ: "" },
         { json: "path", js: "path", typ: u(undefined, "") },
+        { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "starting_from", js: "starting_from", typ: u(undefined, "") },
     ], "any"),
     "CreateWorktreeResultMessage": o([
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("CreateWorktreeResultMessageEvent") },
         { json: "path", js: "path", typ: u(undefined, "") },
+        { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "success", js: "success", typ: true },
     ], "any"),
     "CrewCharterDocument": o([
@@ -17778,6 +17476,7 @@ const typeMap: any = {
         { json: "cmd", js: "cmd", typ: r("DeleteWorktreeMessageCmd") },
         { json: "force", js: "force", typ: u(undefined, true) },
         { json: "path", js: "path", typ: "" },
+        { json: "request_id", js: "request_id", typ: u(undefined, "") },
     ], "any"),
     "DeleteWorktreeResultMessage": o([
         { json: "error", js: "error", typ: u(undefined, "") },
@@ -17785,6 +17484,7 @@ const typeMap: any = {
         { json: "forceable", js: "forceable", typ: u(undefined, true) },
         { json: "path", js: "path", typ: "" },
         { json: "reason_kind", js: "reason_kind", typ: u(undefined, r("ReasonKind")) },
+        { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "success", js: "success", typ: true },
     ], "any"),
     "Desktop": o([
@@ -17813,6 +17513,12 @@ const typeMap: any = {
         { json: "desktop_id", js: "desktop_id", typ: "" },
         { json: "expected_revision", js: "expected_revision", typ: 0 },
         { json: "request_id", js: "request_id", typ: "" },
+    ], "any"),
+    "DesktopCloseTileMessage": o([
+        { json: "cmd", js: "cmd", typ: r("DesktopCloseTileMessageCmd") },
+        { json: "desktop_id", js: "desktop_id", typ: "" },
+        { json: "request_id", js: "request_id", typ: "" },
+        { json: "tile_id", js: "tile_id", typ: "" },
     ], "any"),
     "DesktopCreateMessage": o([
         { json: "cmd", js: "cmd", typ: r("DesktopCreateMessageCmd") },
@@ -17852,6 +17558,7 @@ const typeMap: any = {
         { json: "session_id", js: "session_id", typ: "" },
     ], "any"),
     "DesktopMoveSessionResult": o([
+        { json: "desktop_created", js: "desktop_created", typ: u(undefined, true) },
         { json: "desktop_id", js: "desktop_id", typ: "" },
         { json: "from_desktop_id", js: "from_desktop_id", typ: u(undefined, "") },
         { json: "pane_id", js: "pane_id", typ: "" },
@@ -17955,6 +17662,7 @@ const typeMap: any = {
     ], "any"),
     "DirectoryEntry": o([
         { json: "is_dir", js: "is_dir", typ: true },
+        { json: "is_repo", js: "is_repo", typ: u(undefined, true) },
         { json: "name", js: "name", typ: "" },
         { json: "path", js: "path", typ: "" },
     ], "any"),
@@ -18214,16 +17922,6 @@ const typeMap: any = {
         { json: "path", js: "path", typ: "" },
         { json: "session_id", js: "session_id", typ: u(undefined, "") },
         { json: "source", js: "source", typ: "" },
-    ], "any"),
-    "FileDiffResultMessage": o([
-        { json: "directory", js: "directory", typ: "" },
-        { json: "error", js: "error", typ: u(undefined, "") },
-        { json: "event", js: "event", typ: r("FileDiffResultMessageEvent") },
-        { json: "modified", js: "modified", typ: "" },
-        { json: "original", js: "original", typ: "" },
-        { json: "path", js: "path", typ: "" },
-        { json: "request_id", js: "request_id", typ: u(undefined, "") },
-        { json: "success", js: "success", typ: true },
     ], "any"),
     "FilesEditedMessage": o([
         { json: "cmd", js: "cmd", typ: r("FilesEditedMessageCmd") },
@@ -18654,94 +18352,10 @@ const typeMap: any = {
         { json: "event", js: "event", typ: r("GetDefaultBranchResultMessageEvent") },
         { json: "success", js: "success", typ: true },
     ], "any"),
-    "GetFileDiffMessage": o([
-        { json: "base_ref", js: "base_ref", typ: u(undefined, "") },
-        { json: "cmd", js: "cmd", typ: r("GetFileDiffMessageCmd") },
-        { json: "directory", js: "directory", typ: "" },
-        { json: "head_ref", js: "head_ref", typ: u(undefined, "") },
-        { json: "path", js: "path", typ: "" },
-        { json: "request_id", js: "request_id", typ: u(undefined, "") },
-        { json: "staged", js: "staged", typ: u(undefined, true) },
-    ], "any"),
     "GetKittyImageMessage": o([
         { json: "cmd", js: "cmd", typ: r("GetKittyImageMessageCmd") },
         { json: "id", js: "id", typ: "" },
         { json: "image_id", js: "image_id", typ: 0 },
-    ], "any"),
-    "GetPresentationRoundMessage": o([
-        { json: "cmd", js: "cmd", typ: r("GetPresentationRoundMessageCmd") },
-        { json: "presentation_id", js: "presentation_id", typ: "" },
-        { json: "seq", js: "seq", typ: u(undefined, 0) },
-    ], "any"),
-    "GetPresentationRoundResultMessage": o([
-        { json: "comments", js: "comments", typ: u(undefined, a(r("CommentElement"))) },
-        { json: "error", js: "error", typ: u(undefined, "") },
-        { json: "event", js: "event", typ: r("GetPresentationRoundResultMessageEvent") },
-        { json: "presentation", js: "presentation", typ: u(undefined, r("PresentationElement")) },
-        { json: "repo_head_sha", js: "repo_head_sha", typ: u(undefined, "") },
-        { json: "round", js: "round", typ: u(undefined, r("Round")) },
-        { json: "success", js: "success", typ: true },
-    ], "any"),
-    "CommentElement": o([
-        { json: "author", js: "author", typ: "" },
-        { json: "content", js: "content", typ: "" },
-        { json: "created_at", js: "created_at", typ: "" },
-        { json: "filepath", js: "filepath", typ: "" },
-        { json: "id", js: "id", typ: "" },
-        { json: "line_end", js: "line_end", typ: 0 },
-        { json: "line_start", js: "line_start", typ: 0 },
-        { json: "round_id", js: "round_id", typ: "" },
-        { json: "side", js: "side", typ: "" },
-    ], "any"),
-    "PresentationElement": o([
-        { json: "created_at", js: "created_at", typ: "" },
-        { json: "id", js: "id", typ: "" },
-        { json: "kind", js: "kind", typ: "" },
-        { json: "latest_round_seq", js: "latest_round_seq", typ: 0 },
-        { json: "latest_round_submitted", js: "latest_round_submitted", typ: true },
-        { json: "repo_path", js: "repo_path", typ: "" },
-        { json: "session_id", js: "session_id", typ: "" },
-        { json: "status", js: "status", typ: "" },
-        { json: "title", js: "title", typ: "" },
-    ], "any"),
-    "Round": o([
-        { json: "base_sha", js: "base_sha", typ: "" },
-        { json: "changed_files", js: "changed_files", typ: u(undefined, a(r("FileElement"))) },
-        { json: "created_at", js: "created_at", typ: "" },
-        { json: "head_sha", js: "head_sha", typ: "" },
-        { json: "id", js: "id", typ: "" },
-        { json: "manifest", js: "manifest", typ: r("Manifest") },
-        { json: "presentation_id", js: "presentation_id", typ: "" },
-        { json: "seq", js: "seq", typ: 0 },
-        { json: "submitted_at", js: "submitted_at", typ: u(undefined, "") },
-        { json: "verdict", js: "verdict", typ: u(undefined, "") },
-    ], "any"),
-    "FileElement": o([
-        { json: "additions", js: "additions", typ: u(undefined, 0) },
-        { json: "annotations", js: "annotations", typ: u(undefined, a(r("AnnotationElement"))) },
-        { json: "deletions", js: "deletions", typ: u(undefined, 0) },
-        { json: "note", js: "note", typ: u(undefined, "") },
-        { json: "path", js: "path", typ: "" },
-    ], "any"),
-    "AnnotationElement": o([
-        { json: "comments", js: "comments", typ: a("") },
-        { json: "line_end", js: "line_end", typ: 0 },
-        { json: "line_start", js: "line_start", typ: 0 },
-    ], "any"),
-    "Manifest": o([
-        { json: "files", js: "files", typ: a(r("FileElement")) },
-        { json: "skip", js: "skip", typ: a("") },
-        { json: "summary", js: "summary", typ: u(undefined, "") },
-        { json: "title", js: "title", typ: "" },
-    ], "any"),
-    "GetPresentationsMessage": o([
-        { json: "cmd", js: "cmd", typ: r("GetPresentationsMessageCmd") },
-    ], "any"),
-    "GetPresentationsResultMessage": o([
-        { json: "error", js: "error", typ: u(undefined, "") },
-        { json: "event", js: "event", typ: r("GetPresentationsResultMessageEvent") },
-        { json: "presentations", js: "presentations", typ: a(r("PresentationElement")) },
-        { json: "success", js: "success", typ: true },
     ], "any"),
     "GetRecentLocationsMessage": o([
         { json: "cmd", js: "cmd", typ: r("GetRecentLocationsMessageCmd") },
@@ -18751,11 +18365,13 @@ const typeMap: any = {
     "GetRepoInfoMessage": o([
         { json: "cmd", js: "cmd", typ: r("GetRepoInfoMessageCmd") },
         { json: "repo", js: "repo", typ: "" },
+        { json: "request_id", js: "request_id", typ: u(undefined, "") },
     ], "any"),
     "GetRepoInfoResultMessage": o([
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("GetRepoInfoResultMessageEvent") },
         { json: "info", js: "info", typ: u(undefined, r("Info")) },
+        { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "success", js: "success", typ: true },
     ], "any"),
     "Info": o([
@@ -18811,13 +18427,6 @@ const typeMap: any = {
     "GetSettingsMessage": o([
         { json: "cmd", js: "cmd", typ: r("GetSettingsMessageCmd") },
     ], "any"),
-    "GitFileChange": o([
-        { json: "additions", js: "additions", typ: u(undefined, 0) },
-        { json: "deletions", js: "deletions", typ: u(undefined, 0) },
-        { json: "old_path", js: "old_path", typ: u(undefined, "") },
-        { json: "path", js: "path", typ: "" },
-        { json: "status", js: "status", typ: "" },
-    ], "any"),
     "GitHubHostsUpdatedMessage": o([
         { json: "event", js: "event", typ: r("GitHubHostsUpdatedMessageEvent") },
         { json: "github_hosts", js: "github_hosts", typ: a("") },
@@ -18850,25 +18459,6 @@ const typeMap: any = {
     "GitOperationStartedMessage": o([
         { json: "event", js: "event", typ: r("GitOperationStartedMessageEvent") },
         { json: "operation", js: "operation", typ: r("GitOperationFinishedMessageOperation") },
-    ], "any"),
-    "GitStatusUpdateMessage": o([
-        { json: "directory", js: "directory", typ: "" },
-        { json: "duration_ms", js: "duration_ms", typ: u(undefined, 0) },
-        { json: "error", js: "error", typ: u(undefined, "") },
-        { json: "event", js: "event", typ: r("GitStatusUpdateMessageEvent") },
-        { json: "limited", js: "limited", typ: u(undefined, true) },
-        { json: "limited_reason", js: "limited_reason", typ: u(undefined, "") },
-        { json: "mode", js: "mode", typ: u(undefined, "") },
-        { json: "staged", js: "staged", typ: a(r("StagedElement")) },
-        { json: "unstaged", js: "unstaged", typ: a(r("StagedElement")) },
-        { json: "untracked", js: "untracked", typ: a(r("StagedElement")) },
-    ], "any"),
-    "StagedElement": o([
-        { json: "additions", js: "additions", typ: u(undefined, 0) },
-        { json: "deletions", js: "deletions", typ: u(undefined, 0) },
-        { json: "old_path", js: "old_path", typ: u(undefined, "") },
-        { json: "path", js: "path", typ: "" },
-        { json: "status", js: "status", typ: "" },
     ], "any"),
     "GuardianSelection": o([
         { json: "effort", js: "effort", typ: u(undefined, "") },
@@ -19324,7 +18914,7 @@ const typeMap: any = {
         { json: "source_kind", js: "source_kind", typ: "" },
     ], "any"),
     "MarkdownAnnotationsGetResultMessage": o([
-        { json: "annotations", js: "annotations", typ: a(r("AnnotationObject")) },
+        { json: "annotations", js: "annotations", typ: a(r("AnnotationElement")) },
         { json: "document_uri", js: "document_uri", typ: "" },
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("MarkdownAnnotationsGetResultMessageEvent") },
@@ -19335,7 +18925,7 @@ const typeMap: any = {
         { json: "source_kind", js: "source_kind", typ: "" },
         { json: "success", js: "success", typ: true },
     ], "any"),
-    "AnnotationObject": o([
+    "AnnotationElement": o([
         { json: "anchor", js: "anchor", typ: u(undefined, r("Anchor")) },
         { json: "created_at", js: "created_at", typ: 0 },
         { json: "id", js: "id", typ: "" },
@@ -19346,7 +18936,7 @@ const typeMap: any = {
         { json: "type", js: "type", typ: "" },
     ], "any"),
     "MarkdownAnnotationsSaveMessage": o([
-        { json: "annotations", js: "annotations", typ: a(r("AnnotationObject")) },
+        { json: "annotations", js: "annotations", typ: a(r("AnnotationElement")) },
         { json: "cmd", js: "cmd", typ: r("MarkdownAnnotationsSaveMessageCmd") },
         { json: "document_uri", js: "document_uri", typ: "" },
         { json: "generation", js: "generation", typ: 0 },
@@ -19866,130 +19456,6 @@ const typeMap: any = {
         { json: "runtime_state", js: "runtime_state", typ: "" },
         { json: "version", js: "version", typ: "" },
     ], "any"),
-    "PresentAnnotation": o([
-        { json: "comments", js: "comments", typ: a("") },
-        { json: "line_end", js: "line_end", typ: 0 },
-        { json: "line_start", js: "line_start", typ: 0 },
-    ], "any"),
-    "PresentCloseMessage": o([
-        { json: "cmd", js: "cmd", typ: r("PresentCloseMessageCmd") },
-        { json: "presentation_id", js: "presentation_id", typ: "" },
-    ], "any"),
-    "PresentCloseResultMessage": o([
-        { json: "error", js: "error", typ: u(undefined, "") },
-        { json: "event", js: "event", typ: r("PresentCloseResultMessageEvent") },
-        { json: "presentation_id", js: "presentation_id", typ: "" },
-        { json: "success", js: "success", typ: true },
-    ], "any"),
-    "PresentCommentInput": o([
-        { json: "content", js: "content", typ: "" },
-        { json: "filepath", js: "filepath", typ: "" },
-        { json: "line_end", js: "line_end", typ: 0 },
-        { json: "line_start", js: "line_start", typ: 0 },
-        { json: "side", js: "side", typ: "" },
-    ], "any"),
-    "PresentFeedbackMessage": o([
-        { json: "cmd", js: "cmd", typ: r("PresentFeedbackMessageCmd") },
-        { json: "presentation_id", js: "presentation_id", typ: "" },
-        { json: "seq", js: "seq", typ: u(undefined, 0) },
-    ], "any"),
-    "PresentFeedbackResult": o([
-        { json: "markdown", js: "markdown", typ: "" },
-        { json: "presentation_status", js: "presentation_status", typ: "" },
-        { json: "seq", js: "seq", typ: 0 },
-        { json: "submitted", js: "submitted", typ: true },
-        { json: "verdict", js: "verdict", typ: u(undefined, "") },
-    ], "any"),
-    "PresentFile": o([
-        { json: "additions", js: "additions", typ: u(undefined, 0) },
-        { json: "annotations", js: "annotations", typ: u(undefined, a(r("AnnotationElement"))) },
-        { json: "deletions", js: "deletions", typ: u(undefined, 0) },
-        { json: "note", js: "note", typ: u(undefined, "") },
-        { json: "path", js: "path", typ: "" },
-    ], "any"),
-    "PresentManifestView": o([
-        { json: "files", js: "files", typ: a(r("FileElement")) },
-        { json: "skip", js: "skip", typ: a("") },
-        { json: "summary", js: "summary", typ: u(undefined, "") },
-        { json: "title", js: "title", typ: "" },
-    ], "any"),
-    "PresentOpenMessage": o([
-        { json: "cmd", js: "cmd", typ: r("PresentOpenMessageCmd") },
-        { json: "manifest_yaml", js: "manifest_yaml", typ: "" },
-        { json: "presentation_id", js: "presentation_id", typ: u(undefined, "") },
-        { json: "source_session_id", js: "source_session_id", typ: "" },
-    ], "any"),
-    "PresentOpenResult": o([
-        { json: "base_sha", js: "base_sha", typ: "" },
-        { json: "head_sha", js: "head_sha", typ: "" },
-        { json: "presentation_id", js: "presentation_id", typ: "" },
-        { json: "round_id", js: "round_id", typ: "" },
-        { json: "seq", js: "seq", typ: 0 },
-        { json: "title", js: "title", typ: "" },
-        { json: "warnings", js: "warnings", typ: u(undefined, a("")) },
-    ], "any"),
-    "PresentSubmitRoundMessage": o([
-        { json: "cmd", js: "cmd", typ: r("PresentSubmitRoundMessageCmd") },
-        { json: "comments", js: "comments", typ: a(r("CommentObject")) },
-        { json: "handback", js: "handback", typ: true },
-        { json: "round_id", js: "round_id", typ: "" },
-        { json: "verdict", js: "verdict", typ: "" },
-    ], "any"),
-    "CommentObject": o([
-        { json: "content", js: "content", typ: "" },
-        { json: "filepath", js: "filepath", typ: "" },
-        { json: "line_end", js: "line_end", typ: 0 },
-        { json: "line_start", js: "line_start", typ: 0 },
-        { json: "side", js: "side", typ: "" },
-    ], "any"),
-    "PresentSubmitRoundResultMessage": o([
-        { json: "error", js: "error", typ: u(undefined, "") },
-        { json: "event", js: "event", typ: r("PresentSubmitRoundResultMessageEvent") },
-        { json: "round_id", js: "round_id", typ: "" },
-        { json: "success", js: "success", typ: true },
-    ], "any"),
-    "Presentation": o([
-        { json: "created_at", js: "created_at", typ: "" },
-        { json: "id", js: "id", typ: "" },
-        { json: "kind", js: "kind", typ: "" },
-        { json: "latest_round_seq", js: "latest_round_seq", typ: 0 },
-        { json: "latest_round_submitted", js: "latest_round_submitted", typ: true },
-        { json: "repo_path", js: "repo_path", typ: "" },
-        { json: "session_id", js: "session_id", typ: "" },
-        { json: "status", js: "status", typ: "" },
-        { json: "title", js: "title", typ: "" },
-    ], "any"),
-    "PresentationAddedMessage": o([
-        { json: "event", js: "event", typ: r("PresentationAddedMessageEvent") },
-        { json: "presentation", js: "presentation", typ: r("PresentationElement") },
-    ], "any"),
-    "PresentationComment": o([
-        { json: "author", js: "author", typ: "" },
-        { json: "content", js: "content", typ: "" },
-        { json: "created_at", js: "created_at", typ: "" },
-        { json: "filepath", js: "filepath", typ: "" },
-        { json: "id", js: "id", typ: "" },
-        { json: "line_end", js: "line_end", typ: 0 },
-        { json: "line_start", js: "line_start", typ: 0 },
-        { json: "round_id", js: "round_id", typ: "" },
-        { json: "side", js: "side", typ: "" },
-    ], "any"),
-    "PresentationRound": o([
-        { json: "base_sha", js: "base_sha", typ: "" },
-        { json: "changed_files", js: "changed_files", typ: u(undefined, a(r("FileElement"))) },
-        { json: "created_at", js: "created_at", typ: "" },
-        { json: "head_sha", js: "head_sha", typ: "" },
-        { json: "id", js: "id", typ: "" },
-        { json: "manifest", js: "manifest", typ: r("Manifest") },
-        { json: "presentation_id", js: "presentation_id", typ: "" },
-        { json: "seq", js: "seq", typ: 0 },
-        { json: "submitted_at", js: "submitted_at", typ: u(undefined, "") },
-        { json: "verdict", js: "verdict", typ: u(undefined, "") },
-    ], "any"),
-    "PresentationUpdatedMessage": o([
-        { json: "event", js: "event", typ: r("PresentationUpdatedMessageEvent") },
-        { json: "presentation", js: "presentation", typ: r("PresentationElement") },
-    ], "any"),
     "Profile": o([
         { json: "current_desktop_id", js: "current_desktop_id", typ: "" },
         { json: "id", js: "id", typ: "" },
@@ -20151,11 +19617,11 @@ const typeMap: any = {
     "RecentFilesResultMessage": o([
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("RecentFilesResultMessageEvent") },
-        { json: "files", js: "files", typ: a(r("FileObject")) },
+        { json: "files", js: "files", typ: a(r("FileElement")) },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "success", js: "success", typ: true },
     ], "any"),
-    "FileObject": o([
+    "FileElement": o([
         { json: "count", js: "count", typ: 0 },
         { json: "last_at", js: "last_at", typ: "" },
         { json: "path", js: "path", typ: "" },
@@ -20165,6 +19631,7 @@ const typeMap: any = {
     "RecentLocation": o([
         { json: "last_seen", js: "last_seen", typ: "" },
         { json: "path", js: "path", typ: "" },
+        { json: "repo_root", js: "repo_root", typ: u(undefined, "") },
         { json: "use_count", js: "use_count", typ: 0 },
     ], "any"),
     "RecentLocationsResultMessage": o([
@@ -20178,6 +19645,7 @@ const typeMap: any = {
     "RecentLocationElement": o([
         { json: "last_seen", js: "last_seen", typ: "" },
         { json: "path", js: "path", typ: "" },
+        { json: "repo_root", js: "repo_root", typ: u(undefined, "") },
         { json: "use_count", js: "use_count", typ: 0 },
     ], "any"),
     "RecordCommandUsageMessage": o([
@@ -20300,8 +19768,6 @@ const typeMap: any = {
         { json: "notebook_read", js: "notebook_read", typ: u(undefined, r("NotebookReadObject")) },
         { json: "notebook_write", js: "notebook_write", typ: u(undefined, r("NotebookWriteObject")) },
         { json: "ok", js: "ok", typ: true },
-        { json: "present_feedback_result", js: "present_feedback_result", typ: u(undefined, r("PresentFeedbackResultObject")) },
-        { json: "present_open_result", js: "present_open_result", typ: u(undefined, r("PresentOpenResultObject")) },
         { json: "profiles", js: "profiles", typ: u(undefined, a(r("ProfileElement"))) },
         { json: "prs", js: "prs", typ: u(undefined, a(r("PRElement"))) },
         { json: "repos", js: "repos", typ: u(undefined, a(r("RepoElement"))) },
@@ -20327,6 +19793,11 @@ const typeMap: any = {
         { json: "session_transcript_result", js: "session_transcript_result", typ: u(undefined, r("SessionTranscriptResultObject")) },
         { json: "sessions", js: "sessions", typ: u(undefined, a(r("SessionObject"))) },
         { json: "state_explain_result", js: "state_explain_result", typ: u(undefined, r("StateExplainResultObject")) },
+        { json: "terminal_entries", js: "terminal_entries", typ: u(undefined, a(r("TerminalEntryElement"))) },
+        { json: "terminal_input_result", js: "terminal_input_result", typ: u(undefined, r("TerminalInputResultObject")) },
+        { json: "terminal_open_result", js: "terminal_open_result", typ: u(undefined, r("TerminalOpenResultObject")) },
+        { json: "terminal_read_result", js: "terminal_read_result", typ: u(undefined, r("TerminalReadResultObject")) },
+        { json: "terminal_wait_result", js: "terminal_wait_result", typ: u(undefined, r("TerminalWaitResultObject")) },
         { json: "worktree_keep_result", js: "worktree_keep_result", typ: u(undefined, r("WorktreeKeepResultObject")) },
         { json: "worktree_list_result", js: "worktree_list_result", typ: u(undefined, r("WorktreeListResultObject")) },
         { json: "worktree_refresh_result", js: "worktree_refresh_result", typ: u(undefined, r("WorktreeRefreshResultObject")) },
@@ -20465,6 +19936,7 @@ const typeMap: any = {
         { json: "roles", js: "roles", typ: a(r("RoleElement")) },
     ], "any"),
     "DesktopMoveSessionResultObject": o([
+        { json: "desktop_created", js: "desktop_created", typ: u(undefined, true) },
         { json: "desktop_id", js: "desktop_id", typ: "" },
         { json: "from_desktop_id", js: "from_desktop_id", typ: u(undefined, "") },
         { json: "pane_id", js: "pane_id", typ: "" },
@@ -20532,22 +20004,6 @@ const typeMap: any = {
         { json: "guidance", js: "guidance", typ: "" },
         { json: "root", js: "root", typ: "" },
         { json: "session_is_chief", js: "session_is_chief", typ: true },
-    ], "any"),
-    "PresentFeedbackResultObject": o([
-        { json: "markdown", js: "markdown", typ: "" },
-        { json: "presentation_status", js: "presentation_status", typ: "" },
-        { json: "seq", js: "seq", typ: 0 },
-        { json: "submitted", js: "submitted", typ: true },
-        { json: "verdict", js: "verdict", typ: u(undefined, "") },
-    ], "any"),
-    "PresentOpenResultObject": o([
-        { json: "base_sha", js: "base_sha", typ: "" },
-        { json: "head_sha", js: "head_sha", typ: "" },
-        { json: "presentation_id", js: "presentation_id", typ: "" },
-        { json: "round_id", js: "round_id", typ: "" },
-        { json: "seq", js: "seq", typ: 0 },
-        { json: "title", js: "title", typ: "" },
-        { json: "warnings", js: "warnings", typ: u(undefined, a("")) },
     ], "any"),
     "SeedArtifactTransferResultObject": o([
         { json: "artifact", js: "artifact", typ: u(undefined, r("SeedArtifactTransferResultArtifact")) },
@@ -20695,6 +20151,7 @@ const typeMap: any = {
         { json: "closed_by", js: "closed_by", typ: u(undefined, "") },
         { json: "conversation_pinned_at", js: "conversation_pinned_at", typ: u(undefined, "") },
         { json: "directory", js: "directory", typ: "" },
+        { json: "hidden", js: "hidden", typ: u(undefined, true) },
         { json: "id", js: "id", typ: "" },
         { json: "is_worktree", js: "is_worktree", typ: u(undefined, true) },
         { json: "label", js: "label", typ: "" },
@@ -20706,6 +20163,7 @@ const typeMap: any = {
         { json: "profile_name", js: "profile_name", typ: "" },
         { json: "repository", js: "repository", typ: u(undefined, "") },
         { json: "state", js: "state", typ: r("SessionState") },
+        { json: "turn_snoozed_until", js: "turn_snoozed_until", typ: u(undefined, "") },
         { json: "usage", js: "usage", typ: u(undefined, r("Usage")) },
     ], "any"),
     "Facets": o([
@@ -20784,6 +20242,43 @@ const typeMap: any = {
         { json: "repeats", js: "repeats", typ: u(undefined, 0) },
         { json: "source", js: "source", typ: "" },
     ], "any"),
+    "TerminalEntryElement": o([
+        { json: "agent", js: "agent", typ: "" },
+        { json: "desktop_id", js: "desktop_id", typ: "" },
+        { json: "desktop_label", js: "desktop_label", typ: "" },
+        { json: "name", js: "name", typ: "" },
+        { json: "opened_by", js: "opened_by", typ: u(undefined, "") },
+        { json: "position", js: "position", typ: u(undefined, "") },
+        { json: "session_id", js: "session_id", typ: "" },
+        { json: "short_id", js: "short_id", typ: "" },
+        { json: "state", js: "state", typ: r("SessionState") },
+        { json: "terminal_id", js: "terminal_id", typ: "" },
+    ], "any"),
+    "TerminalInputResultObject": o([
+        { json: "last_block_id", js: "last_block_id", typ: u(undefined, "") },
+        { json: "terminal_id", js: "terminal_id", typ: "" },
+    ], "any"),
+    "TerminalOpenResultObject": o([
+        { json: "desktop_id", js: "desktop_id", typ: "" },
+        { json: "pane_id", js: "pane_id", typ: "" },
+        { json: "session_id", js: "session_id", typ: "" },
+        { json: "terminal_id", js: "terminal_id", typ: "" },
+    ], "any"),
+    "TerminalReadResultObject": o([
+        { json: "block", js: "block", typ: u(undefined, r("Block")) },
+        { json: "text", js: "text", typ: "" },
+    ], "any"),
+    "Block": o([
+        { json: "command", js: "command", typ: u(undefined, "") },
+        { json: "exit_code", js: "exit_code", typ: u(undefined, 0) },
+        { json: "id", js: "id", typ: "" },
+        { json: "output", js: "output", typ: "" },
+    ], "any"),
+    "TerminalWaitResultObject": o([
+        { json: "block", js: "block", typ: u(undefined, r("Block")) },
+        { json: "exit_code", js: "exit_code", typ: u(undefined, 0) },
+        { json: "exited", js: "exited", typ: u(undefined, true) },
+    ], "any"),
     "WorktreeKeepResultObject": o([
         { json: "worktree", js: "worktree", typ: r("WorktreeElement") },
     ], "any"),
@@ -20812,19 +20307,6 @@ const typeMap: any = {
         { json: "main_repo", js: "main_repo", typ: "" },
         { json: "path", js: "path", typ: "" },
         { json: "reason", js: "reason", typ: u(undefined, "") },
-    ], "any"),
-    "ReviewComment": o([
-        { json: "author", js: "author", typ: "" },
-        { json: "content", js: "content", typ: "" },
-        { json: "created_at", js: "created_at", typ: "" },
-        { json: "filepath", js: "filepath", typ: "" },
-        { json: "id", js: "id", typ: "" },
-        { json: "line_end", js: "line_end", typ: 0 },
-        { json: "line_start", js: "line_start", typ: 0 },
-        { json: "resolved", js: "resolved", typ: true },
-        { json: "resolved_at", js: "resolved_at", typ: u(undefined, "") },
-        { json: "resolved_by", js: "resolved_by", typ: u(undefined, "") },
-        { json: "review_id", js: "review_id", typ: "" },
     ], "any"),
     "RuntimeRespawnedMessage": o([
         { json: "event", js: "event", typ: r("RuntimeRespawnedMessageEvent") },
@@ -21357,6 +20839,7 @@ const typeMap: any = {
         { json: "directory", js: "directory", typ: "" },
         { json: "dispatcher_member", js: "dispatcher_member", typ: u(undefined, "") },
         { json: "dispatcher_session_id", js: "dispatcher_session_id", typ: u(undefined, "") },
+        { json: "hidden", js: "hidden", typ: u(undefined, true) },
         { json: "id", js: "id", typ: "" },
         { json: "is_worktree", js: "is_worktree", typ: u(undefined, true) },
         { json: "label", js: "label", typ: "" },
@@ -21376,6 +20859,7 @@ const typeMap: any = {
         { json: "succeeds", js: "succeeds", typ: u(undefined, "") },
         { json: "terminal_build_stale", js: "terminal_build_stale", typ: u(undefined, true) },
         { json: "terminal_exit", js: "terminal_exit", typ: u(undefined, r("TerminalExitObject")) },
+        { json: "title", js: "title", typ: u(undefined, "") },
         { json: "turn_opened_at", js: "turn_opened_at", typ: u(undefined, "") },
         { json: "turn_owed", js: "turn_owed", typ: u(undefined, true) },
         { json: "turn_snoozed_until", js: "turn_snoozed_until", typ: u(undefined, "") },
@@ -21411,7 +20895,7 @@ const typeMap: any = {
         { json: "session_id", js: "session_id", typ: "" },
     ], "any"),
     "SessionAnnotationsGetResultMessage": o([
-        { json: "annotations", js: "annotations", typ: a(r("SessionAnnotationsGetResultMessageAnnotation")) },
+        { json: "annotations", js: "annotations", typ: a(r("AnnotationObject")) },
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("SessionAnnotationsGetResultMessageEvent") },
         { json: "generation", js: "generation", typ: 0 },
@@ -21420,7 +20904,7 @@ const typeMap: any = {
         { json: "session_id", js: "session_id", typ: "" },
         { json: "success", js: "success", typ: true },
     ], "any"),
-    "SessionAnnotationsGetResultMessageAnnotation": o([
+    "AnnotationObject": o([
         { json: "comment", js: "comment", typ: "" },
         { json: "emoji", js: "emoji", typ: u(undefined, "") },
         { json: "end", js: "end", typ: 0 },
@@ -21431,7 +20915,7 @@ const typeMap: any = {
         { json: "start", js: "start", typ: 0 },
     ], "any"),
     "SessionAnnotationsSaveMessage": o([
-        { json: "annotations", js: "annotations", typ: a(r("SessionAnnotationsGetResultMessageAnnotation")) },
+        { json: "annotations", js: "annotations", typ: a(r("AnnotationObject")) },
         { json: "cmd", js: "cmd", typ: r("SessionAnnotationsSaveMessageCmd") },
         { json: "generation", js: "generation", typ: 0 },
         { json: "note", js: "note", typ: u(undefined, "") },
@@ -21512,6 +20996,7 @@ const typeMap: any = {
         { json: "closed_by", js: "closed_by", typ: u(undefined, "") },
         { json: "conversation_pinned_at", js: "conversation_pinned_at", typ: u(undefined, "") },
         { json: "directory", js: "directory", typ: "" },
+        { json: "hidden", js: "hidden", typ: u(undefined, true) },
         { json: "id", js: "id", typ: "" },
         { json: "is_worktree", js: "is_worktree", typ: u(undefined, true) },
         { json: "label", js: "label", typ: "" },
@@ -21523,6 +21008,7 @@ const typeMap: any = {
         { json: "profile_name", js: "profile_name", typ: "" },
         { json: "repository", js: "repository", typ: u(undefined, "") },
         { json: "state", js: "state", typ: r("SessionState") },
+        { json: "turn_snoozed_until", js: "turn_snoozed_until", typ: u(undefined, "") },
         { json: "usage", js: "usage", typ: u(undefined, r("Usage")) },
     ], "any"),
     "SessionLedgerFacet": o([
@@ -21641,7 +21127,6 @@ const typeMap: any = {
     "SessionReopenMessage": o([
         { json: "action", js: "action", typ: u(undefined, r("SessionReopenAction")) },
         { json: "cmd", js: "cmd", typ: r("SessionReopenMessageCmd") },
-        { json: "directory", js: "directory", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "session_id", js: "session_id", typ: "" },
     ], "any"),
@@ -21789,6 +21274,7 @@ const typeMap: any = {
         { json: "session_id", js: "session_id", typ: "" },
     ], "any"),
     "SnoozeTurnMessage": o([
+        { json: "caller_session_id", js: "caller_session_id", typ: u(undefined, "") },
         { json: "cmd", js: "cmd", typ: r("SnoozeTurnMessageCmd") },
         { json: "session_id", js: "session_id", typ: "" },
         { json: "until", js: "until", typ: "" },
@@ -21888,10 +21374,6 @@ const typeMap: any = {
         { json: "id", js: "id", typ: "" },
         { json: "rev", js: "rev", typ: 0 },
         { json: "updated_at", js: "updated_at", typ: "" },
-    ], "any"),
-    "SubscribeGitStatusMessage": o([
-        { json: "cmd", js: "cmd", typ: r("SubscribeGitStatusMessageCmd") },
-        { json: "directory", js: "directory", typ: "" },
     ], "any"),
     "SupportInputTrace": o([
         { json: "byte_count", js: "byte_count", typ: 0 },
@@ -22020,14 +21502,94 @@ const typeMap: any = {
         { json: "event", js: "event", typ: r("TerminalBindingsUpdatedMessageEvent") },
         { json: "terminal_bindings", js: "terminal_bindings", typ: a(r("TerminalBindingElement")) },
     ], "any"),
+    "TerminalBlock": o([
+        { json: "command", js: "command", typ: u(undefined, "") },
+        { json: "exit_code", js: "exit_code", typ: u(undefined, 0) },
+        { json: "id", js: "id", typ: "" },
+        { json: "output", js: "output", typ: "" },
+    ], "any"),
+    "TerminalCloseMessage": o([
+        { json: "caller_session_id", js: "caller_session_id", typ: "" },
+        { json: "cmd", js: "cmd", typ: r("TerminalCloseMessageCmd") },
+        { json: "desktop", js: "desktop", typ: u(undefined, "") },
+        { json: "target", js: "target", typ: "" },
+    ], "any"),
+    "TerminalEntry": o([
+        { json: "agent", js: "agent", typ: "" },
+        { json: "desktop_id", js: "desktop_id", typ: "" },
+        { json: "desktop_label", js: "desktop_label", typ: "" },
+        { json: "name", js: "name", typ: "" },
+        { json: "opened_by", js: "opened_by", typ: u(undefined, "") },
+        { json: "position", js: "position", typ: u(undefined, "") },
+        { json: "session_id", js: "session_id", typ: "" },
+        { json: "short_id", js: "short_id", typ: "" },
+        { json: "state", js: "state", typ: r("SessionState") },
+        { json: "terminal_id", js: "terminal_id", typ: "" },
+    ], "any"),
     "TerminalExit": o([
         { json: "at", js: "at", typ: "" },
         { json: "code", js: "code", typ: 0 },
         { json: "signal", js: "signal", typ: u(undefined, "") },
     ], "any"),
+    "TerminalInputMessage": o([
+        { json: "caller_session_id", js: "caller_session_id", typ: "" },
+        { json: "cmd", js: "cmd", typ: r("TerminalInputMessageCmd") },
+        { json: "data", js: "data", typ: "" },
+        { json: "desktop", js: "desktop", typ: u(undefined, "") },
+        { json: "run", js: "run", typ: u(undefined, true) },
+        { json: "target", js: "target", typ: "" },
+        { json: "wait", js: "wait", typ: u(undefined, true) },
+    ], "any"),
+    "TerminalInputResult": o([
+        { json: "last_block_id", js: "last_block_id", typ: u(undefined, "") },
+        { json: "terminal_id", js: "terminal_id", typ: "" },
+    ], "any"),
+    "TerminalListMessage": o([
+        { json: "all", js: "all", typ: u(undefined, true) },
+        { json: "caller_session_id", js: "caller_session_id", typ: "" },
+        { json: "cmd", js: "cmd", typ: r("TerminalListMessageCmd") },
+        { json: "desktop", js: "desktop", typ: u(undefined, "") },
+    ], "any"),
+    "TerminalOpenMessage": o([
+        { json: "caller_session_id", js: "caller_session_id", typ: "" },
+        { json: "cmd", js: "cmd", typ: r("TerminalOpenMessageCmd") },
+        { json: "command", js: "command", typ: u(undefined, "") },
+        { json: "cwd", js: "cwd", typ: u(undefined, "") },
+        { json: "desktop", js: "desktop", typ: u(undefined, "") },
+        { json: "direction", js: "direction", typ: u(undefined, r("TerminalDirection")) },
+    ], "any"),
+    "TerminalOpenResult": o([
+        { json: "desktop_id", js: "desktop_id", typ: "" },
+        { json: "pane_id", js: "pane_id", typ: "" },
+        { json: "session_id", js: "session_id", typ: "" },
+        { json: "terminal_id", js: "terminal_id", typ: "" },
+    ], "any"),
     "TerminalPointerActivityMessage": o([
         { json: "cmd", js: "cmd", typ: r("TerminalPointerActivityMessageCmd") },
         { json: "id", js: "id", typ: "" },
+    ], "any"),
+    "TerminalReadMessage": o([
+        { json: "caller_session_id", js: "caller_session_id", typ: "" },
+        { json: "cmd", js: "cmd", typ: r("TerminalReadMessageCmd") },
+        { json: "lines", js: "lines", typ: u(undefined, 0) },
+        { json: "mode", js: "mode", typ: r("TerminalReadMode") },
+        { json: "target", js: "target", typ: "" },
+    ], "any"),
+    "TerminalReadResult": o([
+        { json: "block", js: "block", typ: u(undefined, r("Block")) },
+        { json: "text", js: "text", typ: "" },
+    ], "any"),
+    "TerminalWaitMessage": o([
+        { json: "after_block_id", js: "after_block_id", typ: u(undefined, "") },
+        { json: "caller_session_id", js: "caller_session_id", typ: "" },
+        { json: "cmd", js: "cmd", typ: r("TerminalWaitMessageCmd") },
+        { json: "target", js: "target", typ: "" },
+        { json: "until", js: "until", typ: r("TerminalWaitUntil") },
+    ], "any"),
+    "TerminalWaitResult": o([
+        { json: "block", js: "block", typ: u(undefined, r("Block")) },
+        { json: "exit_code", js: "exit_code", typ: u(undefined, 0) },
+        { json: "exited", js: "exited", typ: u(undefined, true) },
     ], "any"),
     "TierDefaults": o([
         { json: "deep", js: "deep", typ: u(undefined, "") },
@@ -22044,10 +21606,8 @@ const typeMap: any = {
         { json: "cmd", js: "cmd", typ: r("UnregisterMessageCmd") },
         { json: "id", js: "id", typ: "" },
     ], "any"),
-    "UnsubscribeGitStatusMessage": o([
-        { json: "cmd", js: "cmd", typ: r("UnsubscribeGitStatusMessageCmd") },
-    ], "any"),
     "WakeTurnMessage": o([
+        { json: "caller_session_id", js: "caller_session_id", typ: u(undefined, "") },
         { json: "cmd", js: "cmd", typ: r("WakeTurnMessageCmd") },
         { json: "session_id", js: "session_id", typ: "" },
     ], "any"),
@@ -22110,7 +21670,6 @@ const typeMap: any = {
         { json: "settings", js: "settings", typ: u(undefined, m("")) },
         { json: "signal", js: "signal", typ: u(undefined, "") },
         { json: "split_id", js: "split_id", typ: u(undefined, "") },
-        { json: "staged", js: "staged", typ: u(undefined, a(r("StagedElement"))) },
         { json: "stash_ref", js: "stash_ref", typ: u(undefined, "") },
         { json: "success", js: "success", typ: u(undefined, true) },
         { json: "sweep_entry", js: "sweep_entry", typ: u(undefined, r("SweepEntry")) },
@@ -22118,8 +21677,6 @@ const typeMap: any = {
         { json: "tile_id", js: "tile_id", typ: u(undefined, "") },
         { json: "tile_kind", js: "tile_kind", typ: u(undefined, "") },
         { json: "total", js: "total", typ: u(undefined, 0) },
-        { json: "unstaged", js: "unstaged", typ: u(undefined, a(r("StagedElement"))) },
-        { json: "untracked", js: "untracked", typ: u(undefined, a(r("StagedElement"))) },
         { json: "warnings", js: "warnings", typ: u(undefined, a(r("WarningElement"))) },
         { json: "worktree_list_result", js: "worktree_list_result", typ: u(undefined, r("WorktreeListResultObject")) },
         { json: "worktree_sweep_log_result", js: "worktree_sweep_log_result", typ: u(undefined, r("WorktreeSweepLogResultObject")) },
@@ -22671,6 +22228,9 @@ const typeMap: any = {
     "DesktopCloseMessageCmd": [
         "desktop_close",
     ],
+    "DesktopCloseTileMessageCmd": [
+        "desktop_close_tile",
+    ],
     "DesktopCreateMessageCmd": [
         "desktop_create",
     ],
@@ -22795,9 +22355,6 @@ const typeMap: any = {
     "FetchRemotesResultMessageEvent": [
         "fetch_remotes_result",
     ],
-    "FileDiffResultMessageEvent": [
-        "file_diff_result",
-    ],
     "FilesEditedMessageCmd": [
         "files_edited",
     ],
@@ -22886,23 +22443,8 @@ const typeMap: any = {
     "GetDefaultBranchResultMessageEvent": [
         "get_default_branch_result",
     ],
-    "GetFileDiffMessageCmd": [
-        "get_file_diff",
-    ],
     "GetKittyImageMessageCmd": [
         "get_kitty_image",
-    ],
-    "GetPresentationRoundMessageCmd": [
-        "get_presentation_round",
-    ],
-    "GetPresentationRoundResultMessageEvent": [
-        "get_presentation_round_result",
-    ],
-    "GetPresentationsMessageCmd": [
-        "get_presentations",
-    ],
-    "GetPresentationsResultMessageEvent": [
-        "get_presentations_result",
     ],
     "GetRecentLocationsMessageCmd": [
         "get_recent_locations",
@@ -22941,9 +22483,6 @@ const typeMap: any = {
     ],
     "GitOperationStartedMessageEvent": [
         "git_operation_started",
-    ],
-    "GitStatusUpdateMessageEvent": [
-        "git_status_update",
     ],
     "ModelCapabilitySupport": [
         "supported",
@@ -23226,30 +22765,6 @@ const typeMap: any = {
     "PluginsUpdatedMessageEvent": [
         "plugins_updated",
     ],
-    "PresentCloseMessageCmd": [
-        "present_close",
-    ],
-    "PresentCloseResultMessageEvent": [
-        "present_close_result",
-    ],
-    "PresentFeedbackMessageCmd": [
-        "present_feedback",
-    ],
-    "PresentOpenMessageCmd": [
-        "present_open",
-    ],
-    "PresentSubmitRoundMessageCmd": [
-        "present_submit_round",
-    ],
-    "PresentSubmitRoundResultMessageEvent": [
-        "present_submit_round_result",
-    ],
-    "PresentationAddedMessageEvent": [
-        "presentation_added",
-    ],
-    "PresentationUpdatedMessageEvent": [
-        "presentation_updated",
-    ],
     "ProfileActionResultMessageEvent": [
         "profile_action_result",
     ],
@@ -23359,9 +22874,6 @@ const typeMap: any = {
         "fetch_recreate_and_reopen",
         "recreate_worktree_and_reopen",
         "reopen",
-        "start_fresh_default_branch",
-        "start_fresh_elsewhere",
-        "start_fresh_same_place",
     ],
     "RuntimeRespawnedMessageEvent": [
         "runtime_respawned",
@@ -23596,9 +23108,6 @@ const typeMap: any = {
     "StopMessageCmd": [
         "stop",
     ],
-    "SubscribeGitStatusMessageCmd": [
-        "subscribe_git_status",
-    ],
     "SupportSnapshotMessageCmd": [
         "support_snapshot",
     ],
@@ -23623,17 +23132,45 @@ const typeMap: any = {
     "TerminalBindingsUpdatedMessageEvent": [
         "terminal_bindings_updated",
     ],
+    "TerminalCloseMessageCmd": [
+        "terminal_close",
+    ],
+    "TerminalInputMessageCmd": [
+        "terminal_input",
+    ],
+    "TerminalListMessageCmd": [
+        "terminal_list",
+    ],
+    "TerminalOpenMessageCmd": [
+        "terminal_open",
+    ],
+    "TerminalDirection": [
+        "down",
+        "right",
+    ],
     "TerminalPointerActivityMessageCmd": [
         "terminal_pointer_activity",
+    ],
+    "TerminalReadMessageCmd": [
+        "terminal_read",
+    ],
+    "TerminalReadMode": [
+        "last",
+        "screen",
+        "scrollback",
+    ],
+    "TerminalWaitMessageCmd": [
+        "terminal_wait",
+    ],
+    "TerminalWaitUntil": [
+        "exit",
+        "prompt",
     ],
     "UninstallPluginMessageCmd": [
         "uninstall_plugin",
     ],
     "UnregisterMessageCmd": [
         "unregister",
-    ],
-    "UnsubscribeGitStatusMessageCmd": [
-        "unsubscribe_git_status",
     ],
     "WakeTurnMessageCmd": [
         "wake_turn",

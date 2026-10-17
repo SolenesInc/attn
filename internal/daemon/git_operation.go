@@ -32,7 +32,6 @@ func (d *Daemon) beginGitOperation(kind protocol.GitOperationKind, path string) 
 		operation.DurationMs = protocol.Ptr(int(finishedAt.Sub(startedAt).Milliseconds()))
 
 		d.publishFact(FactGitOperationFinished, operation.ID, operation)
-		d.refreshGitStatusSubscribersForPath(path)
 	}
 }
 

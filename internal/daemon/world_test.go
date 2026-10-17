@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"context"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -222,4 +223,8 @@ func (pipeAddr) String() string  { return "pipe" }
 
 func (w *world) RefuseDatabaseCommits() func() {
 	return w.daemon.RefuseDatabaseCommits()
+}
+
+func (w *world) UseFileStat(stat func(string) (os.FileInfo, error)) {
+	w.daemon.UseFileStat(stat)
 }

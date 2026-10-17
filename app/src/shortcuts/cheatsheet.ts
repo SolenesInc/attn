@@ -22,6 +22,7 @@ export function buildCheatsheet(): CheatsheetCategory[] {
     {
       title: 'Desktops & Sessions',
       rows: [
+        { label: 'New terminal on this desktop', combos: [fromId('session.newTerminal')] },
         { label: 'New session on this desktop', combos: [fromId('session.new')] },
         { label: 'New session, split sideways', combos: [fromId('session.newHorizontal')] },
         { label: 'Close session, focused pane or empty desktop', combos: [fromId('session.close')] },

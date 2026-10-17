@@ -61,7 +61,7 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 		if garden.Closed(seed.Status) {
 			return "", fmt.Errorf("%s is %s; replant it before delegating", seed.ID, seed.Status)
 		}
-		if holder := seed.Tender(); holder.Holds(d.sessionExists) {
+		if holder := seed.Tender(); holder.Holds(d.sessionActive) {
 			return "", fmt.Errorf("seed %s has active holder %s; use --handover to transfer it", seed.ID, holder.DisplayName())
 		}
 		seedExpected = doc.Rev

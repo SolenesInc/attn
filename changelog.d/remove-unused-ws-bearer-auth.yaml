@@ -1,0 +1,3 @@
+kind: removed
+area: daemon
+change: Remove ATTN_WS_AUTH_TOKEN authentication after the hub removal. WebSocket clients authenticate with client_token in client_hello.

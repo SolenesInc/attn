@@ -30,10 +30,9 @@ type SpawnOptions struct {
 	Cols uint16
 	Rows uint16
 
-	ResumeSessionID   string
-	ResumePicker      bool
-	YoloMode          bool
-	InitialPromptFile string
+	ResumeSessionID string
+	ResumePicker    bool
+	YoloMode        bool
 
 	Theme pty.TerminalTheme
 
@@ -42,8 +41,10 @@ type SpawnOptions struct {
 	ClaudeExecutable  string
 	CodexExecutable   string
 	CopilotExecutable string
-	ExternalCommand   []string
-	ExternalEnv       []string
+	CodexRemote       string
+	AgentLoginShell   bool
+	AgentArgv         []string
+	AgentEnv          []string
 	ExternalCWD       string
 	DaemonEnv         []string
 	LifecycleID       string
@@ -156,6 +157,7 @@ type SessionInfo struct {
 
 	Running bool
 	State   string
+	Title   string
 
 	LastSignal    pty.Observation
 	HasLastSignal bool
@@ -188,6 +190,10 @@ type ExitInfo struct {
 	LifecycleID string
 }
 
+type RuntimeLifecycleProvider interface {
+	RuntimeLifecycle(id harness.TerminalID) (lifecycleID string, running bool)
+}
+
 type Backend interface {
 	Spawn(ctx context.Context, opts SpawnOptions) error
 	Attach(ctx context.Context, id harness.TerminalID, subscriberID string, opts ...AttachOptions) (AttachInfo, Stream, error)
@@ -204,6 +210,10 @@ type Backend interface {
 type LifecycleHooks interface {
 	SetExitHandler(func(ExitInfo))
 	SetStateHandler(func(id harness.TerminalID, obs pty.Observation))
+}
+
+type TitleHooks interface {
+	SetTitleHandler(func(id harness.TerminalID, title string))
 }
 
 type SessionInfoProvider interface {
@@ -267,4 +277,9 @@ func terminalIDs(ids []string) []harness.TerminalID {
 		terminals[i] = harness.TerminalID(id)
 	}
 	return terminals
+}
+
+type TerminalTextProvider interface {
+	ReadText(ctx context.Context, id harness.TerminalID, mode string, lines int) (pty.ReadTextInfo, error)
+	WaitBlock(ctx context.Context, id harness.TerminalID, params pty.WaitBlockParams) (pty.WaitBlockResult, error)
 }

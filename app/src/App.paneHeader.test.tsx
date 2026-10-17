@@ -58,7 +58,7 @@ describe('App pane header', () => {
     expect(inHeader().getByText('ledger sweep')).toBeInTheDocument();
   });
 
-  it('falls back to the pane title when the session carries no label', async () => {
+  it('falls back to the harness name when the session carries no label', async () => {
     const workspace = daemonDesktop('desktop-s1', {
       root: { type: 'pane', pane_id: 'pane-s1' },
       panes: [{ ...agentPane('s1', 'desktop-s1'), title: 'shell' }],
@@ -67,7 +67,7 @@ describe('App pane header', () => {
 
     await update(daemon, daemonSession('s1', { label: '', state: 'idle' }));
 
-    expect(inHeader().getByText('shell')).toBeInTheDocument();
+    expect(inHeader().getByText('Claude')).toBeInTheDocument();
     expect(inHeader().queryByText('ledger sweep')).toBeNull();
   });
 
@@ -111,7 +111,7 @@ describe('App pane header', () => {
     const dialog = rename();
     fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: '   ' } });
     await gesture(daemon, () => fireEvent.keyDown(dialog, { key: 'Enter' }));
-    expect(within(dialog).getByText('Name cannot be empty')).toBeInTheDocument();
+    expect(within(dialog).getByText('An agent name cannot be empty; only shell terminals have automatic titles')).toBeInTheDocument();
 
     expect(daemon.sentOf('rename_session')).toEqual([]);
   });

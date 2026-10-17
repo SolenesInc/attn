@@ -1555,31 +1555,6 @@ mod tests {
         assert!(capability.get("remote").is_none());
     }
 
-    #[test]
-    fn present_capability_has_a_minimal_permission_surface() {
-        let capability: serde_json::Value =
-            serde_json::from_str(include_str!("../../capabilities/present.json"))
-                .expect("parse present capability");
-        assert_eq!(capability["windows"], json!(["present"]));
-        assert_eq!(capability["webviews"], json!(["present"]));
-
-        let permissions = capability["permissions"]
-            .as_array()
-            .expect("present capability permissions is an array");
-        for permission in permissions {
-            let identifier = permission
-                .as_str()
-                .or_else(|| permission["identifier"].as_str())
-                .expect("permission entry has a string or identifier field");
-            assert!(
-                !identifier.starts_with("fs:")
-                    && !identifier.starts_with("shell:")
-                    && !identifier.starts_with("dialog:"),
-                "present capability must not grant fs/shell/dialog permissions, found {identifier}"
-            );
-        }
-    }
-
     fn isolated_script() -> String {
         set_browser_runtime_js("/* browser runtime bundle stands in for tests */");
         isolated_initialization_script()

@@ -354,9 +354,38 @@ describe('App terminal runtime', () => {
     open('s1');
     await daemon.idle();
 
+    daemon.emit({ event: 'runtime_respawned', id: 's1' });
+    await daemon.idle();
+
     expect(daemon.sent.filter((command) => command.cmd === 'pty_resize' || command.cmd === 'attach_session')).toEqual([
       { cmd: 'attach_session', id: 's1', attach_policy: 'revive', cols: 100, rows: 28 },
     ]);
+
+    daemon.emit({ event: 'attach_result', id: 's1', success: true, cols: 100, rows: 28, running: true, revived: true, last_seq: 0 });
+    daemon.emit({ event: 'pty_output', id: 's1', seq: 1, data: btoa('revived terminal') });
+    await daemon.idle();
+    expect(visibleText('s1')).toContain('revived terminal');
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Terminal input' }), { key: 'x', code: 'KeyX' });
+    await daemon.idle();
+    expect(daemon.sentOf('pty_input').map(({ id, data }) => ({ id, data }))).toEqual([{ id: 's1', data: 'x' }]);
+  });
+
+  it('reattaches an ordinary pending attach when its runtime is replaced', async () => {
+    const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }));
+    open('s1');
+    await daemon.idle();
+    expect(daemon.sentOf('attach_session')).toEqual([{ cmd: 'attach_session', id: 's1', attach_policy: 'same_app_remount' }]);
+
+    daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true, last_seq: 0 }));
+    daemon.emit({ event: 'runtime_respawned', id: 's1' });
+    await daemon.idle();
+    expect(daemon.sentOf('attach_session')).toEqual([
+      { cmd: 'attach_session', id: 's1', attach_policy: 'same_app_remount' },
+      { cmd: 'attach_session', id: 's1', attach_policy: 'relaunch_restore' },
+    ]);
+    daemon.emit({ event: 'pty_output', id: 's1', seq: 1, data: btoa('replacement terminal') });
+    await daemon.idle();
+    expect(visibleText('s1')).toContain('replacement terminal');
   });
 
   it('drops an attach answered after the user left, and attaches afresh on return', async () => {

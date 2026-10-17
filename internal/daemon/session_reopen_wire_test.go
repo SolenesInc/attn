@@ -39,7 +39,7 @@ func TestReopeningALiveOrUnknownSessionChangesNothing(t *testing.T) {
 	}
 }
 
-func TestAClosedSessionWhoseConversationIsGoneOffersOnlyAFreshStart(t *testing.T) {
+func TestAClosedSessionWhoseConversationIsGoneRefusesResume(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
 
@@ -62,8 +62,8 @@ func TestAClosedSessionWhoseConversationIsGoneOffersOnlyAFreshStart(t *testing.T
 		vanished: "no longer in codex's storage",
 	} {
 		verdict := reopenVerdict(t, cli, session)
-		if verdict.Reopenable || !slices.Equal(verdict.Actions, []protocol.SessionReopenAction{protocol.SessionReopenActionStartFreshSamePlace}) {
-			t.Errorf("the verdict on %s = %+v, want only a fresh start in place", session, verdict)
+		if verdict.Reopenable || len(verdict.Actions) != 0 {
+			t.Errorf("the verdict on %s = %+v, want no resume action", session, verdict)
 		}
 		if !strings.Contains(protocol.Deref(verdict.Reason), reason) {
 			t.Errorf("the reason %s cannot resume is %q, want it to mention %q", session, protocol.Deref(verdict.Reason), reason)
@@ -105,7 +105,7 @@ func TestTheReopenVerdictReadsWhatBecameOfTheDirectory(t *testing.T) {
 		"present":    {true, []protocol.SessionReopenAction{protocol.SessionReopenActionReopen}, "", ""},
 		"switched":   {true, []protocol.SessionReopenAction{protocol.SessionReopenActionReopen}, "", "feat/somewhere-else"},
 		"unreadable": {false, nil, "cannot be opened", ""},
-		"plain":      {false, []protocol.SessionReopenAction{protocol.SessionReopenActionStartFreshElsewhere}, "not a worktree attn can put back", ""},
+		"plain":      {false, nil, "not a worktree attn can put back", ""},
 		"orphaned":   {false, nil, "repository is gone", ""},
 	} {
 		verdict := reopenVerdict(t, cli, sessions[name])
@@ -146,12 +146,18 @@ func TestTheReopenVerdictFollowsWhatBecameOfTheBranch(t *testing.T) {
 	}{
 		"local":  {"local", []protocol.SessionReopenAction{protocol.SessionReopenActionRecreateWorktreeAndReopen}, ""},
 		"remote": {"remote_only", []protocol.SessionReopenAction{protocol.SessionReopenActionFetchRecreateAndReopen}, "origin"},
-		"gone":   {"gone", []protocol.SessionReopenAction{protocol.SessionReopenActionStartFreshDefaultBranch, protocol.SessionReopenActionStartFreshElsewhere}, ""},
+		"gone":   {"gone", nil, ""},
 	} {
 		verdict := reopenVerdict(t, cli, sessions[name])
 		if protocol.Deref(verdict.BranchState) != want.state || !slices.Equal(verdict.Actions, want.actions) || !strings.Contains(protocol.Deref(verdict.Reason), want.reason) {
 			t.Errorf("%s: branch %q offering %v (%q), want %q offering %v and naming %q", name,
 				protocol.Deref(verdict.BranchState), verdict.Actions, protocol.Deref(verdict.Reason), want.state, want.actions, want.reason)
+		}
+	}
+
+	for _, action := range []string{"start_fresh_same_place", "start_fresh_elsewhere", "start_fresh_default_branch"} {
+		if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: protocol.SessionID(sessions["gone"]), Action: action}); err == nil {
+			t.Errorf("removed action %s was accepted", action)
 		}
 	}
 
@@ -161,80 +167,35 @@ func TestTheReopenVerdictFollowsWhatBecameOfTheBranch(t *testing.T) {
 	}
 }
 
-func TestEachReopenActionPutsTheWorkBackAsOffered(t *testing.T) {
+func TestReopenFetchesTheBranchAndResumesTheSavedConversation(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
 	repo := reopenRepoWithOrigin(t)
-	type closed struct {
-		session, dir, conversation string
-	}
-	closedIn := func(dir string) closed {
-		session := w.Spawn(app, fakeagent.Codex, dir)
-		run := w.Launched(session)
-		takeTurn(app, run, session)
-		closeSession(t, cli, session, "done for now")
-		awaitClosed(app, session)
-		return closed{session, dir, run.ConversationID}
-	}
-	fetched := closedIn(reopenWorktree(t, repo, "feat/fetched"))
-	runGit(t, fetched.dir, "push", "-q", "-u", "origin", "feat/fetched")
-	defaulted := closedIn(reopenWorktree(t, repo, "feat/defaulted"))
-	for _, dir := range []string{fetched.dir, defaulted.dir} {
-		if err := os.RemoveAll(dir); err != nil {
-			t.Fatal(err)
-		}
+	dir := reopenWorktree(t, repo, "feat/fetched")
+	session := w.Spawn(app, fakeagent.Codex, dir)
+	run := w.Launched(session)
+	takeTurn(app, run, session)
+	conversation := run.ConversationID
+	closeSession(t, cli, session, "done for now")
+	awaitClosed(app, session)
+	runGit(t, dir, "push", "-q", "-u", "origin", "feat/fetched")
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
 	}
 	runGit(t, repo, "worktree", "prune")
-	runGit(t, repo, "branch", "-q", "-D", "feat/fetched", "feat/defaulted")
-	samePlace := closedIn(w.Path("same-place"))
-	removeReopenRollout(t, w, samePlace.conversation)
-	elsewhere := closedIn(w.Path("elsewhere"))
-	if err := os.RemoveAll(elsewhere.dir); err != nil {
+	runGit(t, repo, "branch", "-q", "-D", "feat/fetched")
+	reopened, err := cli.SessionReopen(client.SessionReopenOptions{
+		SessionID: protocol.SessionID(session), Action: string(protocol.SessionReopenActionFetchRecreateAndReopen),
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
-
-	if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: protocol.SessionID(elsewhere.session), Action: string(protocol.SessionReopenActionStartFreshElsewhere)}); err == nil {
-		t.Error("starting fresh elsewhere without a directory was accepted")
+	resumed := w.Launched(session)
+	if reopened.Directory != dir || !resumed.Resumed || resumed.ConversationID != conversation {
+		t.Errorf("reopened in %q running %q, want %s resuming %s", reopened.Directory, resumed.Argv, dir, conversation)
 	}
-	if closedAt := protocol.Deref(showSession(t, cli, elsewhere.session).ClosedAt); closedAt == "" {
-		t.Error("the refused fresh start reopened the session")
-	}
-
-	chosen := w.Path("chosen")
-	if err := os.MkdirAll(chosen, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	for _, c := range []struct {
-		name      string
-		closed    closed
-		action    protocol.SessionReopenAction
-		directory string
-		resumed   bool
-		branch    string
-	}{
-		{"fetched from the remote", fetched, protocol.SessionReopenActionFetchRecreateAndReopen, fetched.dir, true, "feat/fetched"},
-		{"fresh on the default branch", defaulted, protocol.SessionReopenActionStartFreshDefaultBranch, defaulted.dir, false, "feat/defaulted"},
-		{"fresh in the same place", samePlace, protocol.SessionReopenActionStartFreshSamePlace, samePlace.dir, false, ""},
-		{"fresh elsewhere", elsewhere, protocol.SessionReopenActionStartFreshElsewhere, chosen, false, ""},
-	} {
-		opts := client.SessionReopenOptions{SessionID: protocol.SessionID(c.closed.session), Action: string(c.action)}
-		if c.action == protocol.SessionReopenActionStartFreshElsewhere {
-			opts.Directory = chosen
-		}
-		reopened, err := cli.SessionReopen(opts)
-		if err != nil {
-			t.Errorf("%s: reopen: %v", c.name, err)
-			continue
-		}
-		run := w.Launched(c.closed.session)
-		if reopened.Directory != c.directory || run.Resumed != c.resumed || (c.resumed && run.ConversationID != c.closed.conversation) {
-			t.Errorf("%s: reopened in %q running codex %q, want %q resumed=%v", c.name, reopened.Directory, run.Argv, c.directory, c.resumed)
-		}
-		if c.branch != "" {
-			if branch := strings.TrimSpace(runGit(t, c.directory, "branch", "--show-current")); branch != c.branch {
-				t.Errorf("%s: the recreated worktree is on %q, want %q", c.name, branch, c.branch)
-			}
-		}
+	if branch := strings.TrimSpace(runGit(t, dir, "branch", "--show-current")); branch != "feat/fetched" {
+		t.Errorf("recreated worktree branch = %q", branch)
 	}
 }
 
@@ -462,7 +423,7 @@ func reopenWorktree(t *testing.T, repo, branch string) string {
 	return worktree
 }
 
-func TestADeletedProfilesSessionOffersNoReopenOrFreshStart(t *testing.T) {
+func TestADeletedProfilesSessionCannotReopen(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
 	side := createProfile(app, "Archived")
@@ -484,8 +445,8 @@ func TestADeletedProfilesSessionOffersNoReopenOrFreshStart(t *testing.T) {
 	if verdict.Reopenable || len(verdict.Actions) != 0 || verdict.ProfileID != side.ID || !verdict.ProfileDeleted {
 		t.Fatalf("deleted profile verdict: %+v", verdict)
 	}
-	for _, action := range []string{"reopen", "start_fresh_same_place", "start_fresh_elsewhere"} {
-		if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: protocol.SessionID(session), Action: action, Directory: w.Path("fresh")}); err == nil {
+	for _, action := range []string{"reopen"} {
+		if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: protocol.SessionID(session), Action: action}); err == nil {
 			t.Fatalf("deleted profile accepted %s", action)
 		}
 	}

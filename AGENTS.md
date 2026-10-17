@@ -173,7 +173,7 @@ Follow [Testing](docs/testing.md). In short:
 - When a behavior-preserving change breaks a test, delete or replace the test;
   do not repair it.
 - Do not test script helpers or test helpers, copy production code into tests,
-  or test compile-time guarantees.
+  assert only on your own fakes, or test compile-time guarantees.
 
 ## Test safety
 
@@ -202,14 +202,18 @@ Follow [Testing](docs/testing.md). In short:
 - Goroutines and timers in `internal/daemon` start through `d.life`
   (`lifetime.go`); `Daemon.stop` waits for them without cancelling.
   `goTransport` is only for peer I/O.
+- Recent-file stat probes are the exception: filesystem calls cannot be
+  cancelled, so their workers may outlive requests and shutdown. Workers receive
+  copied inputs and only send to a buffered answer channel; the lifetime-owned
+  handler alone changes daemon state and forgets paths unanswered after 500ms.
 - Stop drains running jobs and lifetime work before closing Git or shutting down
   PTYs. Handler and Git deadlines still apply; shutdown itself does not fence or
   cancel their results.
 - Everything belongs to one profile for life, and anything in another profile is
   treated as if it doesn't exist (e.g. /resume of its conversation opens a new
   session here).
-- Crew files are authoritative; the registry records paths. One active session
-  binding per member (`internal/daemon/crew.go`).
+- Crew files are authoritative and live under this instance's crew root. One
+  active session binding per member (`internal/daemon/crew.go`).
 - `internal/docstore` compiles SQL; `internal/store/documents.go` executes it.
   SQL identifiers come from integers or validated field names, never caller
   text.
@@ -264,6 +268,11 @@ use, run and test attn. Keep the glossary to short definitions.
 Do not write implementation notes anywhere. The code must explain how it works.
 If it needs a prose explanation of its wiring or control flow, make the code
 clearer.
+
+Edit text as a whole. Before you change a doc, skill, prompt or CLI help, read
+all of it and the other places that cover the same subject. Decide what to
+keep, rewrite, merge or remove before you add anything, so the result reads as
+one text.
 
 ## Task-specific guidance
 

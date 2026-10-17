@@ -1,7 +1,5 @@
 import type { DaemonApi } from '../../contexts/DaemonApiContext';
 
-import type { GitStatusUpdate, FileDiffResult } from '../../hooks/useDaemonSocket';
-
 interface Call {
   method: string;
   args: unknown[];
@@ -93,13 +91,6 @@ export class MockDaemon {
     };
   }
 
-  createFetchDiff(): (path: string, options?: { staged?: boolean; baseRef?: string }) => Promise<FileDiffResult> {
-    return async (path: string, options?: { staged?: boolean; baseRef?: string }): Promise<FileDiffResult> => {
-      this.recordCall('fetchDiff', [path, options]);
-      return this.getResponse<FileDiffResult>('fetchDiff', [path, options]);
-    };
-  }
-
   createFetchRemotes(): (repo: string) => Promise<{ success: boolean; error?: string }> {
     return async (repo: string): Promise<{ success: boolean; error?: string }> => {
       this.recordCall('fetchRemotes', [repo]);
@@ -110,37 +101,6 @@ export class MockDaemon {
 
 export function createMockDaemon(options?: MockDaemonOptions): MockDaemon {
   return new MockDaemon(options);
-}
-
-export function createGitStatus(files: string[], options?: {
-  staged?: boolean;
-  status?: string;
-  additions?: number;
-  deletions?: number;
-}): GitStatusUpdate {
-  const { staged = false, status = 'modified', additions = 10, deletions = 5 } = options || {};
-
-  const fileObjects = files.map(path => ({
-    path,
-    status,
-    additions,
-    deletions,
-  }));
-
-  return {
-    directory: '/test/repo',
-    staged: staged ? fileObjects : [],
-    unstaged: staged ? [] : fileObjects,
-    untracked: [],
-  };
-}
-
-export function createFileDiffResult(original: string, modified: string): FileDiffResult {
-  return {
-    success: true,
-    original,
-    modified,
-  };
 }
 
 export async function waitForCalls(

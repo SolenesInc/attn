@@ -1,5 +1,6 @@
+import { sessionDisplayName } from '../utils/sessionDisplayName';
 import type { MouseEvent as ReactMouseEvent } from 'react';
-import { useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { isAttentionSessionState } from '../types/sessionState';
 import { type TileContentState } from '../types/desktop';
 import { delegatesByDispatcher } from '../utils/delegationLinks';
@@ -40,6 +41,7 @@ export function useSidebarState({
   profileName,
   onSwitchProfile,
   onOpenCommands,
+  onToggleFlow,
   onOpenAgents,
   peeksSilenced = false,
   agentListOpen = false,
@@ -76,6 +78,18 @@ export function useSidebarState({
   homeActive = false,
   onToggleCollapse,
 }: SidebarProps) {
+  const flowButtonRef = useRef<HTMLButtonElement>(null);
+  const restoreFlowFocus = useRef(false);
+  const queueFlow = queue !== null;
+  useLayoutEffect(() => {
+    if (!restoreFlowFocus.current) return;
+    restoreFlowFocus.current = false;
+    flowButtonRef.current?.focus({ preventScroll: true });
+  }, [queueFlow]);
+  const toggleFlow = () => {
+    restoreFlowFocus.current = document.activeElement === flowButtonRef.current;
+    onToggleFlow?.();
+  };
   const sessionWantsAttention = (session: LocalSession) =>
     queue
       ? sessionParticipatesInQueue(session, crewQueueEnabled) && Boolean(session.turnOwed)
@@ -130,14 +144,14 @@ export function useSidebarState({
     });
   };
   const openSessionActions = (
-    session: { id: string; label: string; chiefOfStaff?: boolean; crewMember?: string },
+    session: { id: string; label: string; title?: string; agent?: string; chiefOfStaff?: boolean; crewMember?: string },
     event: ReactMouseEvent,
   ) => {
     event.stopPropagation();
     const rect = event.currentTarget.getBoundingClientRect();
     setSessionActionsTarget({
       id: session.id,
-      label: session.label,
+      label: sessionDisplayName(session),
       chiefOfStaff: Boolean(session.chiefOfStaff),
       crewMember: session.crewMember,
       trigger: event.currentTarget as HTMLElement,
@@ -258,6 +272,8 @@ export function useSidebarState({
     profileName,
     onSwitchProfile,
     onOpenCommands,
+    onToggleFlow: onToggleFlow ? toggleFlow : undefined,
+    flowButtonRef,
     onOpenAgents,
     peeksSilenced,
     agentListOpen,

@@ -12,6 +12,7 @@ import {
   endIntent,
   enterHome,
   focusClaimDelivered,
+  focusIntent,
   historyLanded,
   intentFailed,
   leafMoved,
@@ -29,6 +30,7 @@ import {
 } from '../navigation/sessionNavigation';
 import type { LeafRef } from '../navigation/leafHistory';
 import { getAgentExecutableSettings } from '../utils/agentAvailability';
+import { usePendingTerminalInput } from './pendingTerminalInput';
 
 export interface SessionNavigationActions {
   selectAgent: (sessionId: string, focusOwner?: Element | null, announce?: boolean) => boolean;
@@ -37,7 +39,7 @@ export interface SessionNavigationActions {
   commandSent: (cmd: string, body: Record<string, unknown>, requestId: string) => number | null;
   commandSettled: (requestId: string) => void;
   cancelIntent: () => void;
-  intentFailed: (id: number) => void;
+  intentFailed: (id: number, reason?: string) => boolean;
   historyLanded: (profileId: string, cursor: number, leaf: LeafRef) => void;
   focusClaimDelivered: (id: number) => void;
   transferFocus: (leaf: ActiveLeaf) => void;
@@ -86,13 +88,17 @@ export function reconcileSessionNavigation(
   const arrangement = arrangementOf(next);
   const reconciled = arrival ? reconcileArrangement(next, arrangement, arrangementOf(state), arrival) : next;
   const advanced = advanceQueue(reconciled, arrangement, state.navigationQueue, next.navigationQueue, focusOwner());
-  return { ...next, ...advanced };
+  return { ...next, ...focusIntent(advanced, arrangement) };
 }
 
 export function createSessionNavigationActions(
-  set: SetState,
+  write: SetState,
   get: () => SessionStore,
 ): SessionNavigationActions {
+  const set: SetState = (update) => write((state) => {
+    const next = { ...state, ...(typeof update === 'function' ? update(state) : update) };
+    return focusIntent(next, arrangementOf(next));
+  });
   return {
     selectAgent: (sessionId, owner = focusOwner(), announce = true) => {
       set((state) => selectAgent(state, state.navigationProfileId, sessionId, owner, announce));
@@ -112,7 +118,11 @@ export function createSessionNavigationActions(
     },
     commandSettled: (requestId) => set((state) => commandSettled(state, requestId)),
     cancelIntent: () => set((state) => endIntent(state)),
-    intentFailed: (id) => set((state) => intentFailed(state, id)),
+    intentFailed: (id, reason) => {
+      const discarded = usePendingTerminalInput.getState().discard(id, reason);
+      set((state) => intentFailed(state, id));
+      return discarded;
+    },
     historyLanded: (profileId, cursor, leaf) => set((state) => historyLanded(state, profileId, cursor, leaf)),
     focusClaimDelivered: (id) => set((state) => focusClaimDelivered(state, id)),
     transferFocus: (leaf) => set((state) => claimFocus(state, leaf, focusOwner(), false)),

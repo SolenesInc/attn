@@ -722,6 +722,100 @@ export function TerminalSettings({
   );
 }
 
+export function ExperimentalSettings({
+  newSessionLauncherEnabled,
+  codexSharedEnabled,
+  queueShowHiddenSessions,
+  directAgentLaunchEnabled,
+  onSetSetting,
+}: Pick<SettingsModalState, 'newSessionLauncherEnabled' | 'codexSharedEnabled' | 'queueShowHiddenSessions' | 'directAgentLaunchEnabled' | 'onSetSetting'>) {
+  return (
+    <section className="settings-block">
+      <div className="settings-block-intro">
+        <div className="settings-kicker">Experimental</div>
+        <h3>Experimental features</h3>
+        <p className="settings-description">Try features that are still being developed.</p>
+      </div>
+      <div className="settings-block-body">
+        <div className="settings-row-card">
+          <div>
+            <p className="settings-row-title">One-screen new-session launcher (experimental)</p>
+            <p className="settings-row-copy" id="new-session-launcher-description">Search a project or path, then use Tab to choose where to start.</p>
+          </div>
+          <button type="button" role="switch" aria-label="One-screen new-session launcher (experimental)"
+            aria-checked={newSessionLauncherEnabled} aria-describedby="new-session-launcher-description"
+            className="settings-action" onClick={() => onSetSetting('new_session_launcher_enabled', newSessionLauncherEnabled ? 'false' : 'true')}>
+            {newSessionLauncherEnabled ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+        <div className="settings-row-card">
+          <div>
+            <p className="settings-row-title">Direct agent launches</p>
+            <p className="settings-row-copy" id="direct-agent-launch-description">
+              Off by default. Launch Claude, Codex and Copilot without a separate attn launcher process to reduce memory use.
+              Changes apply to new or explicitly reloaded agents. Running agents stay untouched.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-label="Direct agent launches"
+            aria-checked={directAgentLaunchEnabled}
+            aria-describedby="direct-agent-launch-description"
+            className="settings-action"
+            data-testid="settings-direct-agent-launch-toggle"
+            onClick={() => onSetSetting('direct_agent_launch_enabled', directAgentLaunchEnabled ? 'false' : 'true')}
+          >
+            {directAgentLaunchEnabled ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+        <div className="settings-row-card">
+          <div>
+            <p className="settings-row-title">Shared Codex</p>
+            <p className="settings-row-copy" id="shared-codex-description">
+              Off by default. New Codex terminals share one app-server per profile. Switching conversations keeps the
+              old one live as a hidden session. Applies to new Codex terminals and to sessions you resume from the
+              ledger.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-label="Shared Codex"
+            aria-checked={codexSharedEnabled}
+            aria-describedby="shared-codex-description"
+            className="settings-action"
+            data-testid="settings-shared-codex-toggle"
+            onClick={() => onSetSetting('codex_shared_enabled', codexSharedEnabled ? 'false' : 'true')}
+          >
+            {codexSharedEnabled ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+        <div className="settings-row-card">
+          <div>
+            <p className="settings-row-title">Show hidden sessions in the queue</p>
+            <p className="settings-row-copy" id="queue-hidden-sessions-description">
+              On by default. Hidden sessions queue like any other; choosing one opens it in a terminal.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-label="Show hidden sessions in the queue"
+            aria-checked={queueShowHiddenSessions}
+            aria-describedby="queue-hidden-sessions-description"
+            className="settings-action"
+            data-testid="settings-queue-hidden-sessions-toggle"
+            onClick={() => onSetSetting('queue_show_hidden_sessions', queueShowHiddenSessions ? 'false' : 'true')}
+          >
+            {queueShowHiddenSessions ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function BackgroundAgentSettings({
   settings,
   activityAgents,

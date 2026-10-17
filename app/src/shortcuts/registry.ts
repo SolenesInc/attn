@@ -49,6 +49,7 @@ export const MAC_SHORTCUTS = {
   'terminal.find': { key: 'f', meta: true, editableTarget: 'native' },
 
   'session.new': { key: 'n', meta: true },
+  'session.newTerminal': { key: 't', meta: true },
   'session.newHorizontal': { key: 'n', meta: true, shift: true },
   'session.close': { key: 'w', meta: true },
   'session.prev': { key: 'ArrowUp', meta: true, editableTarget: 'native' },
@@ -157,6 +158,7 @@ export const LINUX_SHORTCUTS = {
   'terminal.find': { key: 'f', meta: true, shift: true, editableTarget: 'native' },
 
   'session.new': { key: 'n', meta: true, shift: true },
+  'session.newTerminal': { key: 't', meta: true, shift: true },
   'session.newHorizontal': { key: 'n', meta: true, alt: true },
   'session.close': { key: 'w', meta: true, shift: true },
   'session.prev': { key: 'PageUp', meta: true, shift: true, editableTarget: 'native' },

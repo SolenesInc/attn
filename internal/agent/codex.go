@@ -26,7 +26,6 @@ var _ RecoveredStatePolicyProvider = (*Codex)(nil)
 var _ ExecutableClassifierProvider = (*Codex)(nil)
 var _ ConfigOverrideProvider = (*Codex)(nil)
 var _ ResumePolicyProvider = (*Codex)(nil)
-var _ LaunchPreparer = (*Codex)(nil)
 var _ HeadlessTaskProvider = (*Codex)(nil)
 
 func init() {
@@ -66,6 +65,9 @@ func (c *Codex) BuildCommand(opts SpawnOpts) *exec.Cmd {
 	} else if opts.ResumePicker {
 		args = append(args, "resume")
 	}
+	if opts.CodexRemote != "" {
+		args = append(args, "--remote", opts.CodexRemote)
+	}
 
 	for _, override := range opts.ConfigOverrides {
 		if strings.TrimSpace(override) == "" {
@@ -75,7 +77,9 @@ func (c *Codex) BuildCommand(opts SpawnOpts) *exec.Cmd {
 	}
 
 	args = append(args, "-C", opts.CWD)
-	args = append(args, opts.addDirArgs()...)
+	if opts.CodexRemote == "" {
+		args = append(args, opts.addDirArgs()...)
+	}
 	if model := strings.TrimSpace(opts.Model); model != "" {
 		args = append(args, "--model", model)
 	}
@@ -115,11 +119,6 @@ func (c *Codex) BuildEnv(opts SpawnOpts) []string {
 		env = append(env, c.ExecutableEnvVar()+"="+opts.Executable)
 	}
 	return env
-}
-
-func (c *Codex) PrepareLaunch(opts SpawnOpts) error {
-	_, err := EnsureAgentsSkillInstalled()
-	return err
 }
 
 func (c *Codex) RunHeadlessTask(ctx context.Context, request HeadlessTaskRequest) (HeadlessTaskResult, error) {
@@ -288,12 +287,10 @@ func codexToolFreeHeadlessArgs(request HeadlessTaskRequest, window int) []string
 }
 
 func (c *Codex) GenerateConfigOverrides(opts SpawnOpts) []string {
-	overrides := hooks.GenerateCodexConfigOverrides(
-		string(opts.TerminalID),
-		opts.SocketPath,
-		opts.WrapperPath,
-		opts.launchSpec(),
-	)
+	var overrides []string
+	if opts.CodexRemote == "" {
+		overrides = hooks.GenerateCodexConfigOverrides(string(opts.TerminalID), opts.SocketPath, opts.WrapperPath, opts.launchSpec())
+	}
 	if opts.TrustWorkingDirectory {
 		overrides = append(overrides, fmt.Sprintf(`projects.%s.trust_level="trusted"`, strconv.Quote(opts.CWD)))
 	}

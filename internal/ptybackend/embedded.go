@@ -43,6 +43,14 @@ func (b *EmbeddedBackend) SetStateHandler(handler func(id harness.TerminalID, ob
 	b.manager.SetStateHandler(func(id string, obs pty.Observation) { handler(harness.TerminalID(id), obs) })
 }
 
+func (b *EmbeddedBackend) SetTitleHandler(handler func(id harness.TerminalID, title string)) {
+	if handler == nil {
+		b.manager.SetTitleHandler(nil)
+		return
+	}
+	b.manager.SetTitleHandler(func(id, title string) { handler(harness.TerminalID(id), title) })
+}
+
 func (b *EmbeddedBackend) Spawn(_ context.Context, opts SpawnOptions) error {
 	if err := validateSpawnOptions(opts); err != nil {
 		return err
@@ -153,6 +161,10 @@ func (b *EmbeddedBackend) Remove(_ context.Context, id harness.TerminalID) error
 	return nil
 }
 
+func (b *EmbeddedBackend) RuntimeLifecycle(id harness.TerminalID) (string, bool) {
+	return b.manager.LifecycleID(string(id))
+}
+
 func (b *EmbeddedBackend) TerminalIDs(_ context.Context) []harness.TerminalID {
 	return terminalIDs(b.manager.SessionIDs())
 }
@@ -176,6 +188,7 @@ func (b *EmbeddedBackend) SessionInfo(_ context.Context, id harness.TerminalID) 
 		SessionID:  info.SessionID,
 		Agent:      info.Agent,
 		CWD:        info.CWD,
+		Title:      b.manager.Title(sessionID),
 		Running:    info.Running,
 		Cols:       info.Cols,
 		Rows:       info.Rows,
@@ -231,4 +244,11 @@ func (s *embeddedStream) publish(evt OutputEvent) (ok bool) {
 	default:
 		return false
 	}
+}
+
+func (b *EmbeddedBackend) ReadText(_ context.Context, id harness.TerminalID, mode string, lines int) (pty.ReadTextInfo, error) {
+	return b.manager.ReadText(string(id), mode, lines)
+}
+func (b *EmbeddedBackend) WaitBlock(ctx context.Context, id harness.TerminalID, params pty.WaitBlockParams) (pty.WaitBlockResult, error) {
+	return b.manager.WaitBlock(ctx, string(id), params)
 }

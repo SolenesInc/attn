@@ -97,7 +97,6 @@ describe('useSessionLaunch placement', () => {
 
     expect(vi.mocked(ptySpawn)).not.toHaveBeenCalled();
     expect(result.current.locationPickerOpen).toBe(true);
-    expect(result.current.locationPickerPurpose).toBe('session');
   });
 });
 
@@ -116,7 +115,7 @@ describe('useSessionLaunch from the new-session picker', () => {
     const { result } = renderLaunch();
 
     await act(async () => {
-      await result.current.handleLocationSelect('/repo/picked', 'shell');
+      await result.current.launchLocation('/repo/picked', 'shell');
     });
 
     const { args } = vi.mocked(ptySpawn).mock.calls[0][0];
@@ -142,7 +141,7 @@ describe('useSessionLaunch from the new-session picker', () => {
     const { result } = renderLaunch();
 
     await act(async () => {
-      await result.current.handleLocationSelect('/repo/chief', 'shell', false, true);
+      await result.current.launchLocation('/repo/chief', 'shell', false, true);
     });
 
     const { args } = vi.mocked(ptySpawn).mock.calls[0][0];

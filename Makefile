@@ -17,6 +17,8 @@ APP_BINARY=$(APP_BUNDLE)/Contents/MacOS/attn
 # com.attn.manager.agent7 with its own data dir + port. `make dev` ==
 # `make install INSTANCE=dev`. See docs/instances.md.
 INSTANCE ?=
+# DEMO=1 builds a named instance for recordings: no instance chip, window titled attn.
+DEMO ?=
 # An explicitly empty command-line INSTANCE indicates failed shell instance selection.
 # Fail during parsing before any target can silently fall back to the prod bundle.
 ifeq ($(origin INSTANCE),command line)
@@ -214,6 +216,7 @@ lint: lint-go lint-frontend
 
 lint-go: $(NATIVE_VT_DEP)
 	go tool staticcheck ./...
+	go run ./scripts/lifetimelint
 	@deps=$$(go list -deps ./cmd/...) || exit 1; \
 	if printf '%s\n' "$$deps" | grep -E '/internal/(testworld|fakeagent)$$'; then \
 		echo "the shipped binaries must not import the test worlds listed above" >&2; exit 1; \
@@ -224,15 +227,6 @@ lint-frontend: $(APP_NODE_MODULES)
 	app/node_modules/.bin/oxlint --deny-warnings cmd/prompt-editor/web cmd/prompt-editor/test
 
 test-e2e: $(APP_NODE_MODULES)
-	@# Ensure stale Vite test server is not running
-	@if [ "$(UNAME_S)" = "Darwin" ] && command -v lsof >/dev/null 2>&1; then \
-		lsof -ti tcp:1421 | xargs -r kill 2>/dev/null || true; \
-	elif command -v fuser >/dev/null 2>&1; then \
-		fuser -k 1421/tcp 2>/dev/null || true; \
-	elif command -v lsof >/dev/null 2>&1; then \
-		lsof -ti tcp:1421 | xargs -r kill 2>/dev/null || true; \
-	fi
-	-pkill -f "vite.*1421" 2>/dev/null || true
 	cd app && pnpm run e2e
 
 # Installing the PROD bundle while ATTN_INSTANCE is set is almost always
@@ -463,6 +457,7 @@ build-app: ensure-codesign-identity build build-pty-host
 		SOURCE_DIRTY_PATHS_BASE64='$(SOURCE_DIRTY_PATHS_BASE64)' \
 		GIT_COMMIT='$(GIT_COMMIT)' BUILD_TIME='$(BUILD_TIME)' \
 		MACOS_CODESIGN_IDENTITY='$(MACOS_CODESIGN_IDENTITY)' \
+		ATTN_BUILD_DEMO='$(DEMO)' \
 		bash ./scripts/build-app-instance.sh
 
 # A uniquely identified packaged app whose logical runtime instance is still the

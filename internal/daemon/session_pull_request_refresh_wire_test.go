@@ -373,8 +373,13 @@ func TestAnUnchangedWatchedPullRequestSendsTheAppNothing(t *testing.T) {
 		watchPullRequestOn(t, cli, "s1", protocol.PullRequestWatchModeGreen)
 		w.advance(protocol.HeatHotInterval)
 
+		first := onlyPullRequest(t, cli, "s1")
 		shown := len(sessionUpdatesOf(app, "s1"))
 		w.advance(3 * protocol.HeatHotInterval)
+		latest := onlyPullRequest(t, cli, "s1")
+		if protocol.Deref(latest.WatchHealth) != "current" || protocol.Deref(latest.StatusFetchedAt) == protocol.Deref(first.StatusFetchedAt) {
+			t.Fatalf("unchanged watch checks lost liveness = %+v", latest)
+		}
 		if again := len(sessionUpdatesOf(app, "s1")); again != shown {
 			t.Errorf("three unchanged polls of a watched pull request sent the app %d session updates", again-shown)
 		}

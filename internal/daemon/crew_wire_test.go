@@ -496,10 +496,10 @@ func TestARestartReimportsCrewHomesWithoutRewritingTheRoster(t *testing.T) {
 	crewRosterMember(t, cli, "sable")
 }
 
-func TestADaemonOnACopiedDatabaseFencesAnotherInstancesCrew(t *testing.T) {
+func TestACopiedCrewUsesOnlyItsOwnFilesAndCanCloseSessions(t *testing.T) {
 	source := newCrewWorld(t)
 	source.stop()
-	copied := &world{World: prepareWorld(t)}
+	copied := &world{World: prepareWorld(t, fakeagent.Claude)}
 	database, err := os.ReadFile(filepath.Join(source.Dir, "attn.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -507,15 +507,79 @@ func TestADaemonOnACopiedDatabaseFencesAnotherInstancesCrew(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(copied.Dir, "attn.db"), database, 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.CopyFS(filepath.Join(copied.Dir, crew.HomesDirName), os.DirFS(filepath.Join(source.Dir, crew.HomesDirName))); err != nil {
+		t.Fatal(err)
+	}
 	copied.start()
 	cli := copied.Client()
+	if members := crewRoster(t, cli); len(members) != 3 {
+		t.Fatalf("copied roster = %+v, want all three members", members)
+	}
+	for _, member := range crewRoster(t, cli) {
+		if member.HomeDir != crewHome(copied, member.ID) || member.CharterPath != filepath.Join(crewHome(copied, member.ID), crew.CharterFileName) {
+			t.Fatalf("copied member still points outside this instance: %+v", member)
+		}
+	}
+	woken := wakeCrew(t, cli, "trellis", "")
+	day := copied.Launched(string(woken.SessionID))
+	day.Prompted()
+	priming := crewPriming(t, cli, string(woken.SessionID))
+	if !strings.Contains(priming, crewHome(copied, "trellis")) || !strings.Contains(priming, "Where I left off.") || strings.Contains(priming, source.Dir) {
+		t.Fatalf("copied member was primed with the wrong files: %s", priming)
+	}
+	letter := "A letter filed by the copied instance.\n"
+	handed := crewHandoff(t, cli, string(woken.SessionID), letter, false, protocol.CrewDayCloseSleep)
+	if filepath.Dir(handed.Path) != filepath.Join(crewHome(copied, "trellis"), crew.HandoffsDirName) {
+		t.Fatalf("letter filed outside the copied instance: %s", handed.Path)
+	}
+	if body, err := os.ReadFile(handed.Path); err != nil || string(body) != letter {
+		t.Fatalf("copied letter = %q, %v", body, err)
+	}
+	if _, err := os.Stat(filepath.Join(crewHome(source, "trellis"), crew.HandoffsDirName, filepath.Base(handed.Path))); !os.IsNotExist(err) {
+		t.Fatalf("copied instance touched the source letter: %v", err)
+	}
+	if got := crewSessionCount(t, cli); got != 0 {
+		t.Fatalf("copied crew day did not close: %d sessions remain", got)
+	}
+	plain := copied.Spawn(copied.App(), fakeagent.Claude, copied.Path("plain"))
+	copied.Launched(plain)
+	if err := cli.Unregister(protocol.SessionID(plain)); err != nil {
+		t.Fatalf("close an unrelated session in a copied instance: %v", err)
+	}
+}
 
-	foreignHomes := filepath.Join(source.Dir, crew.HomesDirName)
-	_, err = cli.CrewList()
-	crewErrorContains(t, err, foreignHomes, "attn.db copied from another instance")
-	crewErrorContains(t, copied.InjectCrewSession("sess-copied", "sess-copied", copied.Path("sess-copied"), "trellis"), foreignHomes)
-	if _, err := cli.List(""); err != nil {
-		t.Fatalf("the daemon stopped serving sessions over a fenced crew: %v", err)
+func TestMissingCrewFilesAffectOnlyTheirMember(t *testing.T) {
+	for _, missing := range []string{"home", "charter"} {
+		t.Run(missing, func(t *testing.T) {
+			w := newCrewWorld(t, fakeagent.Claude)
+			path := crewHome(w, "trellis")
+			if missing == "charter" {
+				path = filepath.Join(path, crew.CharterFileName)
+			}
+			if err := os.RemoveAll(path); err != nil {
+				t.Fatal(err)
+			}
+			w.restart()
+			cli := w.Client()
+			if members := crewRoster(t, cli); len(members) != 3 {
+				t.Fatalf("missing %s removed members from the roster: %+v", missing, members)
+			}
+			_, err := cli.CrewWake("trellis", "", "")
+			crewErrorContains(t, err, "Trellis", path)
+			if got := crewSessionCount(t, cli); got != 0 {
+				t.Fatalf("a member with missing %s launched %d sessions", missing, got)
+			}
+			keel := wakeCrew(t, cli, "keel", "")
+			w.Launched(string(keel.SessionID))
+			if err := cli.Unregister(keel.SessionID); err != nil {
+				t.Fatalf("another member could not close: %v", err)
+			}
+			plain := w.Spawn(w.App(), fakeagent.Claude, w.Path("plain"))
+			w.Launched(plain)
+			if err := cli.Unregister(protocol.SessionID(plain)); err != nil {
+				t.Fatalf("an unrelated session could not close: %v", err)
+			}
+		})
 	}
 }
 

@@ -523,10 +523,6 @@ func WSBindAddress() string {
 	return addr
 }
 
-func WSAuthToken() string {
-	return strings.TrimSpace(os.Getenv("ATTN_WS_AUTH_TOKEN"))
-}
-
 func BrowserHostToken() string {
 	if token := strings.TrimSpace(os.Getenv("ATTN_BROWSER_HOST_TOKEN")); token != "" {
 		return token

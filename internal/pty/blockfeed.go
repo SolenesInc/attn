@@ -29,21 +29,17 @@ type AttachBlockData struct {
 	InputRow       *int32
 	InputCol       *int32
 	OutputStartRow *int32
+	OutputStartCol *int32
+	EndCol         *int32
+	EndInclusive   bool
 	EndRow         *int32
 	Command        *string
 	ExitCode       *int32
 }
 
-type workerBlockTable interface {
-	ApplyMarker(m osc133Marker, ref blockRef, altScreen bool)
-	SnapshotBlocks() []AttachBlockData
-	Restore(blocks []AttachBlockData, pin func(x, y int) blockRef)
-	Close()
-}
-
 type blockFeeder struct {
 	term  *ghosttyvt.Terminal
-	table workerBlockTable
+	table *blockTable
 }
 
 func newBlockFeeder(term *ghosttyvt.Terminal) *blockFeeder {
@@ -67,7 +63,7 @@ func (f *blockFeeder) mark(marker *osc133Marker) {
 	if r := f.term.TrackCursor(); r != nil {
 		ref = r
 	}
-	f.table.ApplyMarker(*marker, ref, f.term.AltScreenActive())
+	f.table.ApplyMarker(*marker, ref, f.term.AltScreenActive(), f.term.CursorPendingWrap())
 }
 
 func (f *blockFeeder) snapshotBlocks() []AttachBlockData {

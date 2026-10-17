@@ -24,7 +24,7 @@ func TestASpawnWhoseAgentCannotStartRegistersNothing(t *testing.T) {
 	}
 }
 
-func TestARespawnWhoseAgentCannotStartKeepsTheSessionAndItsLaunch(t *testing.T) {
+func TestARespawnWhoseAgentCannotStartKeepsTheSessionAndItsAttemptedLaunch(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
 	cwd := w.Path("shop")
@@ -53,7 +53,7 @@ func TestARespawnWhoseAgentCannotStartKeepsTheSessionAndItsLaunch(t *testing.T) 
 		t.Fatal(err)
 	}
 	launchIntentReload(t, app, session)
-	if model, _ := flagValue(w.Launched(session).Argv, "--model"); model != "claude-sonnet-5" {
-		t.Errorf("after the failed respawn claude relaunched on model %q, want the claude-sonnet-5 it had", model)
+	if model, _ := flagValue(w.Launched(session).Argv, "--model"); model != "claude-haiku-5" {
+		t.Errorf("after the failed respawn claude relaunched on model %q, want the claude-haiku-5 the attempt selected", model)
 	}
 }

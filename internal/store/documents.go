@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -61,7 +62,7 @@ func (s *Store) DefineDocumentCollection(schema docstore.CollectionSchema, now t
 		if err := createCollectionTable(tx, table, schema.Fields); err != nil {
 			return false, fmt.Errorf("store: creating storage for %s/%s: %w", schema.Namespace, schema.Collection, err)
 		}
-	} else {
+	} else if !slices.Equal(existing.Fields, schema.Fields) {
 		if err := alterCollectionTable(tx, table, existing.Fields, schema.Fields); err != nil {
 			return false, fmt.Errorf("store: redeclaring %s/%s: %w", schema.Namespace, schema.Collection, err)
 		}

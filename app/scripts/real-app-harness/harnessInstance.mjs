@@ -204,6 +204,17 @@ export function clientTokenForInstance(instance = currentHarnessInstance()) {
   }
 }
 
+const PROTOCOL_VERSION_PATH = path.resolve(HARNESS_DIR, '../../src/types/protocolVersion.ts');
+
+export function readFrontendProtocolVersion() {
+  const source = fs.readFileSync(PROTOCOL_VERSION_PATH, 'utf8');
+  const match = /export const PROTOCOL_VERSION = '([^']+)'/.exec(source);
+  if (!match) {
+    throw new Error(`Could not find PROTOCOL_VERSION in ${PROTOCOL_VERSION_PATH}`);
+  }
+  return match[1];
+}
+
 export function harnessClientHello(clientKind, { version = 'real-app-harness', capabilities = [] } = {}) {
   return {
     cmd: 'client_hello',

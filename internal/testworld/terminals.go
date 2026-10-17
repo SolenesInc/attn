@@ -214,6 +214,16 @@ func (b *Terminals) Remove(_ context.Context, id harness.TerminalID) error {
 	return nil
 }
 
+func (b *Terminals) RuntimeLifecycle(id harness.TerminalID) (string, bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	term := b.terminals[id]
+	if term == nil {
+		return "", false
+	}
+	return term.Options.LifecycleID, true
+}
+
 func (b *Terminals) TerminalIDs(context.Context) []harness.TerminalID {
 	b.mu.Lock()
 	defer b.mu.Unlock()

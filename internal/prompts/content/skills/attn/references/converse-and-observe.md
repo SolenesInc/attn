@@ -11,6 +11,17 @@ ends one. Run `attn agent --help` for the exact flags; this file is the rules.
 unique prefix works, and `--json` carries the full ids and the machine shape.
 An awake crew member's stable name also addresses `peek` and `msg`.
 
+`attn session list --tree` shows every live session under its dispatcher, with
+short ids, labels, harnesses, states, owed/snoozed turns and seed slugs. Use it
+to see which agents belong to the same delegation chain before acting on them.
+A delegate whose dispatcher is closed or absent appears at the root and says
+so. Shells stay at the root with their split provenance labeled. A crew
+dispatcher follows the member's current session. Inside attn, the tree is
+limited to your session's profile. Outside attn it includes all profiles;
+`--profile <id>` narrows either view. Ledger filters and paging do not apply.
+For machine data,
+`attn list --json` carries the live sessions and their dispatcher links.
+
 ## Watching costs the watched nothing
 
 `attn agent peek <session-or-member>` reads a session's state, last assistant
@@ -47,11 +58,31 @@ session the request names as its sender, so you cannot dress up that line inside
 your own text. It is not proof of origin, though — anything that can reach the
 daemon's socket can name any session as the sender.
 
+## Putting off a session's turn
+
+`attn session snooze <id>... --until <when>` defers one or several sessions,
+including working agents whose next turn has not opened. Use a duration such
+as `30m`, `1h`, `2h`, `4h` or `8h`, an RFC3339 instant, or `tomorrow`,
+`saturday` or `monday`. Day choices mean 09:00 in the CLI's local timezone;
+quote a custom time, for example `--until "tomorrow 09:00"`.
+
+`attn session unsnooze <id>...` ends a snooze early. An already unsnoozed
+session succeeds without changing anything. `attn session list` and
+`attn session show <id>` display the snoozed-until instant; list's JSON carries
+`turn_snoozed_until`.
+
+A session may snooze or unsnooze itself and agents below it in the delegation chain, including delegates of delegates; the
+chief may act on any session of its profile. Outside an agent session, the
+command acts as the user. CLI snooze of remote sessions is unsupported.
+Each id reports its outcome, and a batch with any failed id exits nonzero;
+successful ids keep their changes. Past deadlines and unknown sessions are
+errors. Run `attn session --help` for syntax.
+
 ## Closing a session
 
 `attn agent close <session-or-seed> -m "reason"` ends a session for good. Three
 rules decide whether you may, and a refusal names all three: a session may close
-itself, it may close a session it dispatched, and a profile's chief of staff may
+itself, it may close an agent below it in the delegation chain, including delegates of delegates, and a profile's chief of staff may
 close any agent of that profile. The chief of staff and a session a crew member is working in are protected
 from every closer, including themselves.
 

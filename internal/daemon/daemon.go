@@ -98,6 +98,8 @@ const (
 var ErrAlreadyRunning = errors.New("daemon already running")
 
 type Daemon struct {
+	recentFileStat      func(string) (os.FileInfo, error)
+	recentFilePruneGate chan struct{}
 	// Nil in production; wire tests pause a profile action here, its broadcasts held, to land a change meanwhile.
 	heldActionRan    atomic.Pointer[func()]
 	socketPath       string
@@ -127,7 +129,8 @@ type Daemon struct {
 	diagServer                        *diag.Server
 	harnessWSListenerFD               string
 	wsHub                             *wsHub
-	presentSince                      time.Time
+	startedAt                         time.Time
+	lastPresentAt                     time.Time
 	presenceMu                        sync.RWMutex
 	crewLifecycleState                *crewLifecycleMemo
 	crewMemoOnce                      sync.Once
@@ -144,14 +147,13 @@ type Daemon struct {
 	reopenGitMu                       sync.Mutex
 	reopenBranches                    *sharedCalls[reopenBranchKey, branchInspection]
 	reopenInspect                     func(context.Context, *git.Client, string, string) (branchInspection, error)
-	gitReaderMu                       sync.Mutex
-	gitStatus                         *gitStatusReader
-	fileDiff                          *fileDiffReader
 	gitExec                           gitExecutor
 	worktreeMaintenance               worktreeMaintenanceCoordinator
 	warnings                          []protocol.DaemonWarning
 	warningsMu                        sync.RWMutex
 	ptyBackend                        ptybackend.Backend
+	terminalTitlesMu                  sync.RWMutex
+	terminalTitles                    map[harness.TerminalID]string
 	ptySettingsMu                     sync.Mutex
 	ptySettingsChangeMu               sync.Mutex
 	sharedPTYHost                     *ptybackend.WorkerBackend
@@ -191,6 +193,7 @@ type Daemon struct {
 	recoveredLaunches                 map[protocol.SessionID]*launchWatch
 	terminalExitIntentMu              sync.Mutex
 	terminalExitIntents               map[harness.TerminalID]terminalExitIntent
+	replacedRuntimes                  map[harness.TerminalID][]string
 	prepareSessionTeardownHook        func(string) error
 	teardownMu                        sync.Mutex
 	tearingDown                       map[protocol.SessionID]chan struct{}
@@ -202,6 +205,8 @@ type Daemon struct {
 	sessionInputState                 *sessionInputModule
 	terminalsOnce                     sync.Once
 	terminalState                     *terminalRegistry
+	codexSharedOnce                   sync.Once
+	codexSharedState                  *codexShared
 	inboxMu                           sync.Mutex
 	inboxStates                       map[inbox.Address]*inboxDeliveryState
 	inboxUnsubscribe                  func()
@@ -241,6 +246,7 @@ type Daemon struct {
 	notebookMu          sync.Mutex
 	notebookStore       *notebook.Store
 	notebookWatcherMu   sync.Mutex
+	notebookWatch       func(string, func([]string)) (*notebook.Watcher, error)
 	notebookWatcher     *notebook.Watcher
 	notebookWatchedRoot string
 	fsMu                sync.Mutex
@@ -527,11 +533,14 @@ func New(socketPath string) *Daemon {
 	manager := pty.NewManager(logger.Infof)
 
 	d := &Daemon{
+		recentFileStat:      os.Stat,
+		notebookWatch:       openNotebookWatch,
+		recentFilePruneGate: make(chan struct{}, 1),
 		socketPath:          socketPath,
 		pidPath:             pidPath,
 		dataRoot:            dataRoot,
 		wsHub:               newWSHub(),
-		presentSince:        time.Now(),
+		startedAt:           time.Now(),
 		desktopTiles:        newDesktopTileDelivery(),
 		logger:              logger,
 		debugLogging:        logger != nil && logger.DebugEnabled(),
@@ -562,12 +571,15 @@ func NewForTesting(socketPath string) *Daemon {
 	pidPath := filepath.Join(dataRoot, "attn.pid")
 	manager := pty.NewManager(nil)
 	d := &Daemon{
+		recentFileStat:      os.Stat,
+		notebookWatch:       openNotebookWatch,
+		recentFilePruneGate: make(chan struct{}, 1),
 		socketPath:          socketPath,
 		pidPath:             pidPath,
 		dataRoot:            dataRoot,
 		store:               store.New(),
 		wsHub:               newWSHub(),
-		presentSince:        time.Now(),
+		startedAt:           time.Now(),
 		desktopTiles:        newDesktopTileDelivery(),
 		logger:              nil,
 		ghRegistry:          github.NewClientRegistry(),
@@ -781,7 +793,6 @@ func (d *Daemon) Start() error {
 		)
 	}
 
-	d.sweepStaleInitialPrompts(time.Now())
 	d.life.Go("warmLoginShellEnvCache", d.warmLoginShellEnvCache)
 
 	d.setRecovering(true)
@@ -810,6 +821,9 @@ func (d *Daemon) Start() error {
 	if hooks, ok := d.ptyBackend.(ptybackend.LifecycleHooks); ok {
 		hooks.SetExitHandler(func(info ptybackend.ExitInfo) { d.handlePTYExit(info) })
 		hooks.SetStateHandler(d.handlePTYState)
+	}
+	if hooks, ok := d.ptyBackend.(ptybackend.TitleHooks); ok {
+		hooks.SetTitleHandler(d.handlePTYTitle)
 	}
 
 	d.initHTTPServer()
@@ -945,7 +959,7 @@ func (d *Daemon) pruneSessionsWithoutPTY(previousRunSessions map[protocol.Sessio
 		if _, fromPreviousRun := previousRunSessions[session.ID]; !fromPreviousRun {
 			continue
 		}
-		if _, ok := liveIDs[session.ID]; ok {
+		if _, ok := liveIDs[session.ID]; ok || d.hidden(session.ID) {
 			continue
 		}
 		if sessionUpdatedAfter(session, recoveryStartedAt) {
@@ -1033,8 +1047,10 @@ func (d *Daemon) performStartupPTYRecovery(previousRunSessions map[protocol.Sess
 		}
 	}
 
+	d.recoverLinkProcesses(context.Background())
 	if _, ok := d.ptyBackend.(ptybackend.RecoverableRuntime); ok {
 		d.reconcileStartupWorkerSessions(recoveryReport, recoverErr, previousRunSessions, recoveryStartedAt)
+		d.recoverLinkViews(context.Background())
 		d.restoreTranscriptWatchers()
 		d.pruneRuntimesWithoutSession(context.Background())
 		return
@@ -1048,6 +1064,7 @@ func (d *Daemon) performStartupPTYRecovery(previousRunSessions map[protocol.Sess
 			fmt.Sprintf("Removed %d stale sessions from a previous daemon run because no live PTY was found.", removedSessions),
 		)
 	}
+	d.recoverLinkViews(context.Background())
 	d.pruneRuntimesWithoutSession(context.Background())
 	d.restoreTranscriptWatchers()
 }
@@ -1057,7 +1074,7 @@ func (d *Daemon) pruneRuntimesWithoutSession(ctx context.Context) {
 		return
 	}
 	for terminal := range d.liveTerminals(ctx) {
-		if _, shown := d.shownIn(terminal); shown {
+		if _, shown := d.shownIn(terminal); shown || d.linkProcess(terminal) {
 			continue
 		}
 		if err := d.removePTYSession(terminal); err != nil {
@@ -1201,6 +1218,9 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 	livenessProber, _ := d.ptyBackend.(ptybackend.SessionLivenessProber)
 
 	for sessionID, terminalID := range shownBy {
+		if d.linkProcess(terminalID) {
+			continue
+		}
 		existing := d.store.Get(sessionID)
 		intentionalClose, intentErr := d.store.SessionCloseIntentionalChecked(sessionID)
 		if intentErr != nil {
@@ -1230,6 +1250,7 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 		if infoProvider != nil {
 			fetched, err := infoProvider.SessionInfo(ctx, terminalID)
 			if err == nil {
+				d.handlePTYTitle(terminalID, fetched.Title)
 				info = fetched
 				haveInfo = true
 			}
@@ -1354,7 +1375,7 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 		if _, fromPreviousRun := previousRunSessions[session.ID]; !fromPreviousRun {
 			continue
 		}
-		if _, ok := liveIDs[session.ID]; ok {
+		if _, ok := liveIDs[session.ID]; ok || d.hidden(session.ID) {
 			continue
 		}
 		if sessionUpdatedAfter(session, recoveryStartedAt) {
@@ -1601,11 +1622,27 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		return false
 	}
 	defer release()
-	if d.consumeTerminalExitIntent(info.ID, terminalExitReload) {
-		d.logf("suppressing exit for reloading terminal %s (runtime replaced in place)", info.ID)
+	if d.exitOfSupersededRuntime(info) {
+		d.logf("ignoring exit of a replaced runtime in terminal %s", info.ID)
+		return false
+	}
+	if sessionID, shown := d.shownIn(info.ID); shown && d.movedOn(sessionID, info.ID) {
+		unlockEnds := d.lockTerminalEnds(sessionID)
+		d.dropTerminal(info.ID)
+		unlockEnds()
+		d.publishFact(FactSessionReregistered, string(sessionID), nil)
+		d.logf("terminal %s exited after its agent moved on from session %s, which runs on over its link", info.ID, sessionID)
+		return false
+	}
+	d.linkTerminalExited(info.ID)
+	if d.linkProcess(info.ID) {
+		d.forgetTerminalTitle(info.ID)
 		return false
 	}
 	sessionID, shown := d.shownIn(info.ID)
+	if !shown {
+		d.forgetTerminalTitle(info.ID)
+	}
 	if ended, ending := d.terminals().takeEnding(info.ID); ending && !shown {
 		sessionID, shown = ended, true
 	}
@@ -1633,8 +1670,27 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 			return false
 		}
 	}
+	unlockEnds := d.lockTerminalEnds(sessionID)
+	if d.exitOfSupersededRuntime(info) {
+		unlockEnds()
+		d.logf("ignoring exit of a replaced runtime in terminal %s", info.ID)
+		return false
+	}
+	if session := d.store.Get(sessionID); session != nil {
+		driver := agentdriver.Get(session.Agent)
+		if driver != nil && !agentdriver.EffectiveCapabilities(driver).HasHooks {
+			if finder, ok := agentdriver.GetTranscriptFinder(driver); ok {
+				path := finder.FindTranscriptForResume(d.store.GetResumeSessionID(sessionID))
+				if path == "" {
+					path = finder.FindTranscript(string(info.ID), session.Directory, d.store.SessionLaunchedAt(sessionID))
+				}
+				d.observeStoppedConversation(sessionID, d.resolveStopTranscriptPath(session, path))
+			}
+		}
+	}
 	stopped := d.consumeTerminalExitIntent(info.ID, terminalExitStop)
 	if !d.endTerminal(sessionID, info.ID) {
+		unlockEnds()
 		d.logf("terminal %s exited; session %s runs on in its other terminals", info.ID, sessionID)
 		return true
 	}
@@ -1649,6 +1705,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 			d.logf("pty backend remove on exit failed for %s: %v", info.ID, err)
 		}
 	}
+	unlockEnds()
 	d.releaseExitedCrewBinding(sessionID)
 
 	d.publishFact(FactSessionPTYExited, string(sessionID), ptyExit{
@@ -1704,6 +1761,7 @@ func (d *Daemon) removePTYSession(terminal harness.TerminalID) error {
 	defer cancel()
 	err := d.ptyBackend.Remove(ctx, terminal)
 	if err == nil || errors.Is(err, pty.ErrSessionNotFound) || errors.Is(err, os.ErrNotExist) {
+		d.removeAgentLaunchDir(terminal)
 		return nil
 	}
 	d.life.Go("removePTYSession", func() {
@@ -1718,6 +1776,7 @@ func (d *Daemon) removePTYSession(terminal harness.TerminalID) error {
 			retryErr := d.ptyBackend.Remove(ctx, terminal)
 			cancel()
 			if retryErr == nil || errors.Is(retryErr, pty.ErrSessionNotFound) || errors.Is(retryErr, os.ErrNotExist) {
+				d.removeAgentLaunchDir(terminal)
 				return
 			}
 			backoff *= 2
@@ -1808,18 +1867,6 @@ func (d *Daemon) terminateSessionRuntimeChecked(sessionID protocol.SessionID, te
 		}
 	}
 	return nil
-}
-
-func (d *Daemon) unregisterSession(sessionID protocol.SessionID, sig syscall.Signal) *protocol.Session {
-	session := d.store.Get(sessionID)
-	if session != nil {
-		if _, err := d.captureGardenSessionSnapshot(session); err != nil {
-			d.logf("garden: preserving execution %s before session removal: %v", sessionID, err)
-		}
-	}
-	d.terminateSession(sessionID, sig)
-	d.removeReapedSession(sessionID)
-	return session
 }
 
 func (d *Daemon) prepareSessionTeardown(sessionID protocol.SessionID) (*sessionTeardown, error) {
@@ -1950,22 +1997,36 @@ func (d *Daemon) terminateSessionAsync(sessionID protocol.SessionID, sig syscall
 	if !d.life.Go("terminateSessionAsync", terminate) {
 		terminate()
 	}
+	if teardown != nil && teardown.session != nil {
+		if l := d.linkOf(sessionID); l != nil {
+			profile := teardown.session.ProfileID
+			d.life.Go("linkReleasedAfterClose", func() {
+				<-done
+				l.profileReleased(profile)
+			})
+		}
+	}
 	return done
 }
 
 func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.SessionClose) {
+	if session := d.store.Get(sessionID); session != nil && session.Agent == protocol.AgentShellValue {
+		d.decorateSessionWithTitle(session)
+		closed.FallbackLabel = protocol.Deref(session.Title)
+		if closed.FallbackLabel == "" {
+			closed.FallbackLabel = defaultSessionLabel(session.Directory, sessionID)
+		}
+	}
+	if l := d.linkOf(sessionID); l != nil {
+		l.closed(sessionID)
+	}
 	d.recordSessionClose(sessionID, func() (bool, error) {
 		return d.store.CloseSession(sessionID, closed, time.Now())
 	})
 }
 
-func (d *Daemon) restoreSessionClose(sessionID protocol.SessionID, closed store.SessionCloseRecord) {
-	d.recordSessionClose(sessionID, func() (bool, error) {
-		return d.store.RestoreSessionClose(sessionID, closed)
-	})
-}
-
 func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() (bool, error)) {
+	terminals := d.terminalsOf(sessionID)
 	defer d.announceUnplacement(sessionID)()
 	if session := d.store.Get(sessionID); session != nil {
 		if _, err := d.captureGardenSessionSnapshot(session); err != nil {
@@ -1981,6 +2042,9 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() 
 	d.forgetSessionTrace(sessionID)
 	d.closeAsksOfSession(sessionID)
 	if recorded {
+		for _, terminal := range terminals {
+			d.forgetTerminalTitle(terminal)
+		}
 		d.queueConversationKeep()
 		d.invalidateGardenSeedParties("session close")
 		entry := d.store.SessionLedgerEntry(sessionID)
@@ -1995,6 +2059,7 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() 
 }
 
 func (d *Daemon) removeReapedSession(sessionID protocol.SessionID) {
+	terminals := d.terminalsOf(sessionID)
 	defer d.announceUnplacement(sessionID)()
 	if session := d.store.Get(sessionID); session != nil {
 		if _, err := d.captureGardenSessionExecution(session); err != nil {
@@ -2003,6 +2068,9 @@ func (d *Daemon) removeReapedSession(sessionID protocol.SessionID) {
 	}
 	d.forgetSessionRuntime(sessionID)
 	d.store.Remove(sessionID)
+	for _, terminal := range terminals {
+		d.forgetTerminalTitle(terminal)
+	}
 	d.forgetSessionTrace(sessionID)
 	d.closeAsksOfSession(sessionID)
 	d.clearChiefOfStaffIfSession(sessionID)
@@ -2033,7 +2101,7 @@ func (d *Daemon) forgetSessionTrace(sessionID protocol.SessionID) {
 
 func (d *Daemon) handlePTYState(terminal harness.TerminalID, obs pty.Observation) {
 	sessionID, shown := d.shownIn(terminal)
-	if !shown {
+	if !shown || d.movedOn(sessionID, terminal) {
 		return
 	}
 	state := obs.Claim
@@ -2230,8 +2298,7 @@ func (d *Daemon) refreshGitHubHosts() error {
 	}
 	hostsBefore := d.gitHubHosts()
 
-	mockURL := strings.TrimSpace(os.Getenv("ATTN_MOCK_GH_URL"))
-	if mockURL != "" {
+	if mockURL := mockGitHubURL(); mockURL != "" {
 		if err := d.registerMockClient(mockURL); err != nil {
 			d.logf("Mock GitHub client not available: %v", err)
 		}
@@ -2550,10 +2617,6 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 	case protocol.CmdAutoModeDenials:
 		d.handleAutoModeDenials(conn, msg.(*protocol.AutoModeDenialsMessage))
 
-	case protocol.CmdPresentOpen:
-		d.handlePresentOpen(conn, msg.(*protocol.PresentOpenMessage))
-	case protocol.CmdPresentFeedback:
-		d.handlePresentFeedback(conn, msg.(*protocol.PresentFeedbackMessage))
 	case protocol.CmdAskOpen:
 		d.handleAskOpen(conn, msg.(*protocol.AskOpenMessage))
 	case protocol.CmdAskList:
@@ -2587,6 +2650,18 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleSessionShow(conn, msg.(*protocol.SessionShowMessage))
 	case protocol.CmdSessionReopen:
 		d.handleSessionReopen(conn, msg.(*protocol.SessionReopenMessage))
+	case protocol.CmdTerminalList:
+		d.handleTerminalList(conn, msg.(*protocol.TerminalListMessage))
+	case protocol.CmdTerminalOpen:
+		d.handleTerminalOpen(conn, msg.(*protocol.TerminalOpenMessage))
+	case protocol.CmdTerminalInput:
+		d.handleTerminalInput(conn, msg.(*protocol.TerminalInputMessage))
+	case protocol.CmdTerminalRead:
+		d.handleTerminalRead(conn, msg.(*protocol.TerminalReadMessage))
+	case protocol.CmdTerminalWait:
+		d.handleTerminalWait(conn, msg.(*protocol.TerminalWaitMessage))
+	case protocol.CmdTerminalClose:
+		d.handleTerminalClose(conn, msg.(*protocol.TerminalCloseMessage))
 	case protocol.CmdDesktopMoveSession:
 		d.handleDesktopMoveSession(conn, msg.(*protocol.DesktopMoveSessionMessage))
 	case protocol.CmdSetSessionPriority:
@@ -2596,6 +2671,10 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		} else {
 			d.sendOK(conn)
 		}
+	case protocol.CmdSnoozeTurn:
+		d.handleSnoozeTurnConn(conn, msg.(*protocol.SnoozeTurnMessage))
+	case protocol.CmdWakeTurn:
+		d.handleWakeTurnConn(conn, msg.(*protocol.WakeTurnMessage))
 	case protocol.CmdRenameSession:
 		d.handleRenameSessionConn(conn, msg.(*protocol.RenameSessionMessage))
 	case protocol.CmdStateExplain:
@@ -2863,19 +2942,7 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 
 	d.recordTurnEndedEvidence(sessionID, classifies)
 
-	if session := d.store.Get(sessionID); session != nil {
-		driver := agentdriver.Get(session.Agent)
-		resumeSessionID := agentdriver.ResumeSessionIDFromTranscriptPath(driver, msg.TranscriptPath)
-		observation := agentConversationObservation{SessionID: sessionID, NativeID: resumeSessionID, TranscriptPath: msg.TranscriptPath}
-		switch {
-		case resumeSessionID == "":
-		case agentdriver.EffectiveCapabilities(driver).HasHooks:
-			d.observeAgentConversation(observation)
-			d.rememberDispatchResume(sessionID, resumeSessionID)
-		case d.claimAgentConversation(observation):
-			d.rememberDispatchResume(sessionID, resumeSessionID)
-		}
-	}
+	d.observeStoppedConversation(sessionID, msg.TranscriptPath)
 	d.store.Touch(sessionID)
 	d.sendOK(conn)
 
@@ -2886,6 +2953,22 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 
 	d.life.Go("classifySessionState", func() { d.classifySessionState(sessionID, msg.TranscriptPath) })
 	d.life.Go("maybeGenerateSessionTitle", func() { d.maybeGenerateSessionTitle(sessionID, msg.TranscriptPath) })
+}
+
+func (d *Daemon) observeStoppedConversation(sessionID protocol.SessionID, transcriptPath string) {
+	if session := d.store.Get(sessionID); session != nil {
+		driver := agentdriver.Get(session.Agent)
+		resumeSessionID := agentdriver.ResumeSessionIDFromTranscriptPath(driver, transcriptPath)
+		observation := agentConversationObservation{SessionID: sessionID, NativeID: resumeSessionID, TranscriptPath: transcriptPath}
+		switch {
+		case resumeSessionID == "":
+		case agentdriver.EffectiveCapabilities(driver).HasHooks:
+			d.observeAgentConversation(observation)
+			d.rememberDispatchResume(sessionID, resumeSessionID)
+		case d.claimAgentConversation(observation):
+			d.rememberDispatchResume(sessionID, resumeSessionID)
+		}
+	}
 }
 
 func (d *Daemon) resolveStopTranscriptPath(session *protocol.Session, reported string) string {
@@ -3100,8 +3183,10 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 		clone.DelegatedFromChief = nil
 	}
 	d.decorateSessionWithCost(clone)
+	d.decorateSessionWithTitle(clone)
 	d.decorateSessionWithTerminalBuild(clone)
 	d.decorateSessionWithTurn(clone)
+	d.decorateSessionHidden(clone)
 	return clone
 }
 
@@ -3330,12 +3415,7 @@ type successfulPRObservation struct {
 }
 
 func (d *Daemon) pollPRs() {
-	if !d.githubAvailable() {
-		d.log("GitHub client not available, PR polling disabled")
-		return
-	}
-
-	d.log("PR polling started (90s interval)")
+	d.log("PR polling loop started (90s interval)")
 
 	d.doPRPoll()
 
@@ -3442,18 +3522,20 @@ func (d *Daemon) storePRPoll(allPRs []*protocol.PR, skippedHosts map[string]bool
 	}
 
 	previousPRs := d.store.ListPRs("")
-	d.store.SetPRs(allPRs)
+	if err := d.store.SetPRs(allPRs); err != nil {
+		d.logf("PR poll: saving results: %v", err)
+	} else {
+		currentPRs := d.store.ListPRs("")
+		d.publishPRSetChanges(previousPRs, currentPRs)
 
-	currentPRs := d.store.ListPRs("")
-	d.publishPRSetChanges(previousPRs, currentPRs)
-
-	waiting := 0
-	for _, pr := range currentPRs {
-		if pr.State == protocol.PRStateWaiting && !pr.Muted {
-			waiting++
+		waiting := 0
+		for _, pr := range currentPRs {
+			if pr.State == protocol.PRStateWaiting && !pr.Muted {
+				waiting++
+			}
 		}
+		d.logf("PR poll: %d PRs (%d waiting)", len(currentPRs), waiting)
 	}
-	d.logf("PR poll: %d PRs (%d waiting)", len(currentPRs), waiting)
 
 	for host, observation := range observedByHost {
 		d.observeGitHubReviewRequests(host, observation.prs, observation.observedAt)
@@ -3771,19 +3853,29 @@ func (d *Daemon) doRefreshPRsWithResult() error {
 
 	// The host loop stops early once stopping, so saving its set would drop the hosts it skipped.
 	var currentPRs []*protocol.PR
+	var saveErr error
 	if !d.life.Do("doRefreshPRs", func() {
 		previousPRs := d.store.ListPRs("")
-		d.store.SetPRs(allPRs)
+		saveErr = d.store.SetPRs(allPRs)
+		if saveErr != nil {
+			return
+		}
 		currentPRs = d.store.ListPRs("")
 		d.publishPRSetChanges(previousPRs, currentPRs)
 	}) {
 		return errDaemonStopping
 	}
 
-	d.logf("PR refresh: %d PRs fetched", len(currentPRs))
+	if saveErr == nil {
+		d.logf("PR refresh: %d PRs fetched", len(currentPRs))
+	}
 	for host, observation := range observedByHost {
 		d.observeGitHubReviewRequests(host, observation.prs, observation.observedAt)
 	}
+	if saveErr != nil {
+		return fmt.Errorf("saving PR refresh: %w", saveErr)
+	}
+
 	if successCount == 0 && firstErr != nil {
 		return fmt.Errorf("failed to fetch PRs: %w", firstErr)
 	}

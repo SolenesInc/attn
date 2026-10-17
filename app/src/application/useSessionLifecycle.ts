@@ -1,6 +1,8 @@
+import { sessionDisplayName } from '../utils/sessionDisplayName';
 import { useCallback, useState } from 'react';
 import { useToast } from '../components/Toast';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
+import { SessionReopenRefusal } from '../hooks/daemonSessionLedgerEvents';
 import type { useDesktopRuntimeController } from '../hooks/useDesktopRuntimeController';
 import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
@@ -19,7 +21,6 @@ interface Options {
   getPaneSize: ReturnType<typeof useDesktopRuntimeController>['getPaneSize'];
   handleSelectSession: (id: string) => boolean;
   showError: ReturnType<typeof useToast>['showError'];
-  chooseReopenDirectory: () => Promise<string | undefined>;
   onReopened: () => void;
 }
 export function useSessionLifecycle({
@@ -31,10 +32,9 @@ export function useSessionLifecycle({
   getPaneSize,
   handleSelectSession,
   showError,
-  chooseReopenDirectory,
   onReopened,
 }: Options) {
-  const { sendUnregisterSession, sendSessionReopen, sendDesktopClose } = useDaemonApi();
+  const { sendUnregisterSession, sendDesktopCloseTile, sendSessionReopen, sendDesktopClose } = useDaemonApi();
   const { closeSession, reloadSession } = useSessionStore();
   const [desktopClosePrompt, setDesktopClosePrompt] = useState<{
     desktop: Desktop; label: string;
@@ -43,7 +43,7 @@ export function useSessionLifecycle({
     const protectedNames = desktop.panes.flatMap((pane) => {
       if (!sessionCloseProtectionHint(daemonSessions, pane.session_id)) return [];
       const session = daemonSessions.find((entry) => entry.id === pane.session_id);
-      return [session?.label || pane.title || pane.session_id];
+      return [session ? sessionDisplayName(session) : pane.title || pane.session_id];
     });
     if (!protectedNames.length) return false;
     showError(`Cannot close desktop: move these protected sessions first: ${protectedNames.join(', ')}.`);
@@ -74,6 +74,19 @@ export function useSessionLifecycle({
     void closeDesktop(desktopClosePrompt.desktop);
   }, [desktopClosePrompt, closeDesktop]);
 
+  const closeWith = useCallback(
+    async (id: string, close: () => Promise<unknown>) => {
+      const session = enrichedLocalSessions.find((s) => s.id === id);
+
+      const localDaemonSession = daemonSessions.find((ds) => ds.id === session?.id);
+      if (localDaemonSession && session) {
+        await close();
+      } else {
+        closeSession(id);
+      }
+    },
+    [closeSession, daemonSessions, enrichedLocalSessions],
+  );
   const handleCloseSession = useCallback(
     async (id: string) => {
       const closeProtection = sessionCloseProtectionHint(daemonSessions, id);
@@ -81,16 +94,17 @@ export function useSessionLifecycle({
         showError(closeProtection);
         return;
       }
-      const session = enrichedLocalSessions.find((s) => s.id === id);
-
-      const localDaemonSession = daemonSessions.find((ds) => ds.id === session?.id);
-      if (localDaemonSession && session) {
-        await sendUnregisterSession(session.id);
-      } else {
-        closeSession(id);
-      }
+      await closeWith(id, () => sendUnregisterSession(id));
     },
-    [closeSession, daemonSessions, enrichedLocalSessions, sendUnregisterSession, showError],
+    [closeWith, daemonSessions, sendUnregisterSession, showError],
+  );
+  const handleCloseTerminalTile = useCallback(
+    (desktopId: string, tileId: string, sessionId: string) => {
+      void closeWith(sessionId, () => sendDesktopCloseTile(desktopId, tileId)).catch((error) => {
+        showError(`Could not close that tile: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    },
+    [closeWith, sendDesktopCloseTile, showError],
   );
 
   const handleRequestCloseSession = useCallback(
@@ -116,18 +130,24 @@ export function useSessionLifecycle({
 
   const handleReopenSession = useCallback(
     async (sessionId: string, actionId: string): Promise<boolean> => {
-      let directory: string | undefined;
-      if (actionId === 'start_fresh_elsewhere') {
-        const chosen = await chooseReopenDirectory();
-        if (!chosen) return false;
-        directory = chosen;
+      let result;
+      try {
+        result = await sendSessionReopen(sessionId, actionId);
+      } catch (error) {
+        if (error instanceof SessionReopenRefusal) throw error;
+        showError(error instanceof Error ? error.message : String(error));
+        if (useProfilesStore.getState().desktops.some((desktop) => desktop.panes.some((pane) => pane.session_id === sessionId))) {
+          handleSelectSession(sessionId);
+          onReopened();
+          return false;
+        }
+        throw error;
       }
-      const result = await sendSessionReopen(sessionId, actionId, directory);
       handleSelectSession(result.session_id);
       onReopened();
       return true;
     },
-    [sendSessionReopen, chooseReopenDirectory, onReopened, handleSelectSession],
+    [sendSessionReopen, onReopened, handleSelectSession, showError],
   );
 
   const handleCloseCurrentSessionShortcut = useCallback(() => {
@@ -140,20 +160,28 @@ export function useSessionLifecycle({
     const isTile =
       !!tileId &&
       !!document.querySelector(`[data-pane-kind="tile"][data-pane-id="${CSS.escape(tileId)}"]`);
-    const currentDesktopId = useProfilesStore.getState().currentDesktopId;
+    const { currentDesktopId, desktops } = useProfilesStore.getState();
     if (isTile && currentDesktopId) {
       handleCloseTile(currentDesktopId, tileId);
       return;
     }
-    if (shownAgentId) {
-      handleRequestCloseSession(shownAgentId);
+    if (!shownAgentId) {
+      const desktop = desktops.find((entry) => entry.id === currentDesktopId);
+      if (desktop && collectLayoutLeaves(parseLayoutJSON(desktop.tree_json)).length === 0) {
+        handleRequestCloseDesktop(desktop.id);
+      }
       return;
     }
-    const desktop = useProfilesStore.getState().desktops.find((entry) => entry.id === currentDesktopId);
-    if (desktop && collectLayoutLeaves(parseLayoutJSON(desktop.tree_json)).length === 0) {
-      handleRequestCloseDesktop(desktop.id);
+    const showing = desktops.flatMap((desktop) => desktop.panes.filter((pane) => pane.session_id === shownAgentId));
+    const current = desktops.find((desktop) => desktop.id === currentDesktopId);
+    const here = current?.panes.filter((pane) => pane.session_id === shownAgentId) ?? [];
+    const pane = here.find((candidate) => candidate.pane_id === current?.active_pane_id) ?? here[0];
+    if (current && pane && showing.length > 1) {
+      handleCloseTerminalTile(current.id, pane.pane_id, shownAgentId);
+      return;
     }
-  }, [shownAgentId, handleCloseTile, handleRequestCloseSession, handleRequestCloseDesktop]);
+    handleRequestCloseSession(shownAgentId);
+  }, [shownAgentId, handleCloseTile, handleCloseTerminalTile, handleRequestCloseSession, handleRequestCloseDesktop]);
 
   return {
     desktopClosePrompt,
@@ -162,6 +190,7 @@ export function useSessionLifecycle({
     handleRequestCloseDesktop,
     handleCloseCurrentSessionShortcut,
     handleCloseSession,
+    handleCloseTerminalTile,
     handleRequestCloseSession,
     handleReloadSession,
     handleReopenSession,

@@ -173,9 +173,10 @@ async function main() {
       const refused = await runInPane(client, sibling,
         `attn agent close ${delegate} -m "looks done to me" --source-session ${sibling.sessionId}`,
         'close itself');
-      runner.assert(saw(refused, 'chief of staff'), 'the refusal names every rule', { refused });
-      runner.assert(saw(refused, dispatcher.sessionId.slice(0, 8)),
-        'the refusal names who did dispatch the target', { refused });
+      runner.assert(saw(refused, 'delegation-chain rule') && saw(refused, "profile's chief"),
+        'the refusal names the delegation-chain and chief rules', { refused });
+      runner.assert(saw(refused, sibling.sessionId) && saw(refused, delegate),
+        'the refusal names the caller and target outside its chain', { refused });
       const ui = await client.request('get_session_ui_state', { sessionId: delegate });
       runner.assert(ui.exists !== false, 'the refused session is still running', { ui });
       runner.writeText('refusal.txt', `${refused}\n`);

@@ -14,7 +14,6 @@ import { useDesktopFocus } from '../store/desktopFocus';
 import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { getAgentAvailability } from '../utils/agentAvailability';
-import { latestPresentationBySessionId } from '../utils/presentationNotices';
 import { appOverlayPolicy } from './appOverlayPolicy';
 import { AppContentProps, diagnosticFocusKind } from './appSupport';
 import { useAppAppearance } from './useAppAppearance';
@@ -51,7 +50,6 @@ export function useAppController({
   updateAvailableVersion,
   onOpenLatestRelease,
   onDismissLatestRelease,
-  presentationNotices,
   settingError,
   clearSettingError,
   notificationsUnread,
@@ -99,16 +97,6 @@ export function useAppController({
     sendSupportSnapshot,
   } = useDaemonApi();
 
-  const presentationBySessionId = useMemo(
-    () => latestPresentationBySessionId(presentationNotices),
-    [presentationNotices],
-  );
-  const handleOpenPresentationWindow = useCallback((presentationId: string) => {
-    void invoke('open_presentation_window', { presentationId }).catch((err) => {
-      console.error('[App] Failed to open presentation window:', err);
-    });
-  }, []);
-
   const { connect, sessions, reloadSession, selectLeaf } = useSessionStore();
   const shownAgentId = useAgentOnScreen();
   const contextSessionId = useSessionBehindScreen();
@@ -142,12 +130,13 @@ export function useAppController({
     daemonSessions,
     connect,
   });
-  const { enrichedLocalSessions, desktopViews, profileSessions } = appSessions;
+  const { enrichedLocalSessions, desktopViews, profileSessions, hiddenSessions } = appSessions;
 
   const attentionQueue = useAttentionQueue({
     settings,
     desktopViews,
     profileSessions,
+    hiddenSessions,
     enrichedLocalSessions,
     shownAgentId,
   });
@@ -163,7 +152,6 @@ export function useAppController({
     shownAgentId,
     daemonSessions,
     desktopViews,
-    profileSessions,
     attentionQueue,
     showError,
   });
@@ -202,7 +190,6 @@ export function useAppController({
     locationPickerOpen,
     handleNewSession,
     createSplitSession,
-    chooseReopenDirectory,
   } = sessionLaunch;
 
   const prLauncher = usePRLauncher({ settings, launchAgent });
@@ -275,7 +262,6 @@ export function useAppController({
     getPaneSize,
     handleSelectSession,
     showError,
-    chooseReopenDirectory,
     onReopened,
   });
   const {
@@ -315,13 +301,14 @@ export function useAppController({
   const { setSnoozeMenu } = attentionQueue;
   const { isOpen: whatsNewOpen, dismiss: dismissWhatsNew } = whatsNew;
   useEffect(() => useSessionStore.subscribe((state, previous) => {
-    if (previous.intent?.target.kind !== 'session' || state.view !== 'session' || !state.focusRequest || state.focusRequest.id === previous.focusRequest?.id) return;
+    const intent = state.intent ?? previous.intent;
+    if (intent?.target.kind !== 'session' || state.view !== 'session' || !state.focusRequest || state.focusRequest.id === previous.focusRequest?.id) return;
     closeCrewPanel();
     setNotebookOpen(false);
     setSessionsOpen(false);
     setPalette(null);
     if (gardenHoldsWindow) closeGarden();
-    if (!previous.intent.focusOwner?.closest('.toast')) return;
+    if (!intent.focusOwner?.closest('.toast')) return;
     if (settingsOpen) void settingsModalRef.current?.close();
     setShortcutsOpen(false);
     setShortcutEditorOpen(false);
@@ -419,7 +406,7 @@ export function useAppController({
     if (!changed) return;
     closeAgentList();
     const focused = document.activeElement;
-    if (!focused || focused === document.body || focused.closest('.sidebar')) {
+    if (!focused || focused === document.body || (sidebarSurface === 'hidden' && focused.closest('.sidebar'))) {
       useSessionStore.getState().requestTerminalFocus();
     }
   }, [closeAgentList, sidebarSurface]);
@@ -469,6 +456,7 @@ export function useAppController({
     connectionError,
     getActivePaneIdForSession,
     createSession: createSessionForUiAutomation,
+    openNewSession: handleNewSession,
     selectSession: handleSelectSession,
     selectDesktop: handleSelectDesktop,
     moveDesktopLeaf: sendDesktopMoveLeaf,
@@ -506,7 +494,6 @@ export function useAppController({
     isRuntimeAttached,
     openAutomationsPanel: () => openDockPanel('automations'),
     openWorktreesPanel: () => openLedger('worktrees'),
-    presentationNotices,
     resetSessionPaneTerminal,
     injectSessionPaneBytes,
     injectSessionPaneBase64,
@@ -596,6 +583,7 @@ export function useAppController({
 
   useKeyboardShortcuts({
     onNewSession: () => handleNewSession('vertical'),
+    onNewTerminal: () => handleNewSession('vertical', 'shell'),
     onNewSessionHorizontal: () => handleNewSession('horizontal'),
     onCloseSession: handleCloseCurrentSessionShortcut,
     onOpenPalette: handleOpenPalette,
@@ -674,7 +662,6 @@ export function useAppController({
       updateAvailableVersion,
       onOpenLatestRelease,
       onDismissLatestRelease,
-      presentationNotices,
       settingError,
       clearSettingError,
       notificationsUnread,
@@ -712,9 +699,7 @@ export function useAppController({
     },
     shell: {
       surface: {
-        presentationBySessionId,
         annotationApi,
-        handleOpenPresentationWindow,
         blockingOverlayOpen,
         windowCovered,
         zoomModeBySessionId,

@@ -3,10 +3,12 @@ package daemon
 import (
 	"errors"
 	"net"
+	"os"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
@@ -22,6 +24,7 @@ func StartWireDaemonWithTerminals(socketPath string, unix, ws net.Listener, term
 	}
 	if terminals != nil {
 		d.ptyBackend = terminals
+		d.notebookWatch = func(string, func([]string)) (*notebook.Watcher, error) { return nil, nil }
 	}
 	d.listener = unix
 	d.httpListener = ws
@@ -45,6 +48,10 @@ func (w *WireDaemon) Stop() error {
 
 func (w *WireDaemon) RefuseDatabaseCommits() func() {
 	return w.d.store.RefuseCommits()
+}
+
+func (w *WireDaemon) UseFileStat(stat func(string) (os.FileInfo, error)) {
+	w.d.recentFileStat = stat
 }
 
 func UseShippedPasteGap(t testing.TB) {

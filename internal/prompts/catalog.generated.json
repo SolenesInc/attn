@@ -191,6 +191,16 @@
           }
         },
         {
+          "id": "codex-opened",
+          "delivery": "instructions",
+          "description": "Developer note appended to each new shared Codex conversation. It writes the conversation to disk at once; Codex resumes only conversations on disk, so a terminal reconnecting after a restart keeps it.",
+          "body": {
+            "kind": "text",
+            "id": "session.codex-opened",
+            "source": "content/session/codex-opened.md"
+          }
+        },
+        {
           "id": "garden-ready",
           "delivery": "hook_context",
           "description": "Garden readiness appended by session-start hooks and attn seed prime.",
@@ -602,212 +612,6 @@
                     "kind": "text",
                     "description": "Reply target."
                   }
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "present-feedback",
-          "delivery": "seed_note",
-          "description": "Review notice appended to the reporting seed.",
-          "body": {
-            "kind": "choose",
-            "condition": {
-              "field": {
-                "name": "approved",
-                "kind": "flag",
-                "description": "The user approved the review round."
-              },
-              "test": "enabled"
-            },
-            "children": [
-              {
-                "kind": "text",
-                "id": "session.present-approved",
-                "source": "content/session/present-approved.md",
-                "bindings": [
-                  {
-                    "name": "round",
-                    "node": {
-                      "kind": "input",
-                      "field": {
-                        "name": "round",
-                        "kind": "text",
-                        "description": "Review round number."
-                      }
-                    }
-                  },
-                  {
-                    "name": "title",
-                    "node": {
-                      "kind": "input",
-                      "field": {
-                        "name": "title",
-                        "kind": "text",
-                        "description": "Quoted presentation title."
-                      }
-                    }
-                  },
-                  {
-                    "name": "presentation_id",
-                    "node": {
-                      "kind": "input",
-                      "field": {
-                        "name": "presentation_id",
-                        "kind": "text",
-                        "description": "Presentation ID."
-                      }
-                    }
-                  }
-                ]
-              },
-              {
-                "kind": "text",
-                "id": "session.present-submitted",
-                "source": "content/session/present-submitted.md",
-                "bindings": [
-                  {
-                    "name": "round",
-                    "node": {
-                      "kind": "input",
-                      "field": {
-                        "name": "round",
-                        "kind": "text",
-                        "description": "Review round number."
-                      }
-                    }
-                  },
-                  {
-                    "name": "title",
-                    "node": {
-                      "kind": "input",
-                      "field": {
-                        "name": "title",
-                        "kind": "text",
-                        "description": "Quoted presentation title."
-                      }
-                    }
-                  },
-                  {
-                    "name": "presentation_id",
-                    "node": {
-                      "kind": "input",
-                      "field": {
-                        "name": "presentation_id",
-                        "kind": "text",
-                        "description": "Presentation ID."
-                      }
-                    }
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": "present-handback",
-          "delivery": "user_message",
-          "description": "Review notice delivered to an unbound session.",
-          "body": {
-            "kind": "text",
-            "id": "session.present-handback",
-            "source": "content/session/present-handback.md",
-            "bindings": [
-              {
-                "name": "notice",
-                "node": {
-                  "kind": "choose",
-                  "condition": {
-                    "field": {
-                      "name": "approved",
-                      "kind": "flag",
-                      "description": "The user approved the review round."
-                    },
-                    "test": "enabled"
-                  },
-                  "children": [
-                    {
-                      "kind": "text",
-                      "id": "session.present-approved",
-                      "source": "content/session/present-approved.md",
-                      "bindings": [
-                        {
-                          "name": "round",
-                          "node": {
-                            "kind": "input",
-                            "field": {
-                              "name": "round",
-                              "kind": "text",
-                              "description": "Review round number."
-                            }
-                          }
-                        },
-                        {
-                          "name": "title",
-                          "node": {
-                            "kind": "input",
-                            "field": {
-                              "name": "title",
-                              "kind": "text",
-                              "description": "Quoted presentation title."
-                            }
-                          }
-                        },
-                        {
-                          "name": "presentation_id",
-                          "node": {
-                            "kind": "input",
-                            "field": {
-                              "name": "presentation_id",
-                              "kind": "text",
-                              "description": "Presentation ID."
-                            }
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "kind": "text",
-                      "id": "session.present-submitted",
-                      "source": "content/session/present-submitted.md",
-                      "bindings": [
-                        {
-                          "name": "round",
-                          "node": {
-                            "kind": "input",
-                            "field": {
-                              "name": "round",
-                              "kind": "text",
-                              "description": "Review round number."
-                            }
-                          }
-                        },
-                        {
-                          "name": "title",
-                          "node": {
-                            "kind": "input",
-                            "field": {
-                              "name": "title",
-                              "kind": "text",
-                              "description": "Quoted presentation title."
-                            }
-                          }
-                        },
-                        {
-                          "name": "presentation_id",
-                          "node": {
-                            "kind": "input",
-                            "field": {
-                              "name": "presentation_id",
-                              "kind": "text",
-                              "description": "Presentation ID."
-                            }
-                          }
-                        }
-                      ]
-                    }
-                  ]
                 }
               }
             ]
@@ -3171,18 +2975,6 @@
           }
         },
         {
-          "id": "present",
-          "delivery": "reference",
-          "description": "Loaded on demand through attn skill show or the installed skill directory.",
-          "body": {
-            "kind": "text",
-            "id": "attn-skill.present",
-            "source": "content/skills/attn/references/present.md",
-            "verbatim": true,
-            "keep_final_newline": true
-          }
-        },
-        {
           "id": "showing",
           "delivery": "reference",
           "description": "Loaded on demand through attn skill show or the installed skill directory.",
@@ -3190,6 +2982,18 @@
             "kind": "text",
             "id": "attn-skill.showing",
             "source": "content/skills/attn/references/showing.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "terminal",
+          "delivery": "reference",
+          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "body": {
+            "kind": "text",
+            "id": "attn-skill.terminal",
+            "source": "content/skills/attn/references/terminal.md",
             "verbatim": true,
             "keep_final_newline": true
           }
@@ -5075,5 +4879,5 @@
       ]
     }
   ],
-  "definitions_hash": "9ab2fbd6bf296c3bacea032b727f83a3c9d8d4f5a136c19a9356f773356b0a93"
+  "definitions_hash": "a3a74e5a919b3a61e4df85813e486dcf9e685d6fc69ab894e88690f996b2d582"
 }

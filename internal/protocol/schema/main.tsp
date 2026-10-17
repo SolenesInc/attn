@@ -163,6 +163,7 @@ model SessionDelegationRole {
 }
 
 model Session {
+  title?: string;
   id: SessionID;
   label: string;
   agent: string;                // Built-in ID or registered plugin driver ID
@@ -200,93 +201,9 @@ model Session {
   pull_requests?: SessionPullRequest[]; // Pull requests this session's agent opened, newest first. Joined at broadcast from the session_pull_requests table, never stored on the session row.
   terminal_build_stale?: boolean; // True when this session's pty-worker was built against a different libghostty-vt than the daemon, which happens when the app updates under a running session. The two then hold different terminal implementations and stop agreeing about the grid, so the app offers a reload. Derived at broadcast from the format tag the worker reports at its handshake; never stored, and absent for every same-build session, which is all of them outside an upgrade window.
   terminal_exit?: TerminalExit; // How the agent last exited while the session keeps its final screen; absent while it runs and after Resume. Joined at broadcast from the session_exit_screens table.
-  succeeds?: SessionID;            // The session this one replaced in its terminal, when the harness there moved to another conversation; that session closed into the ledger. Durable: it stays set after the predecessor is reopened.
+  succeeds?: SessionID;            // The session this one replaced in its terminal, when the harness there moved to another conversation; that session closed into the ledger, unless it is a shared Codex session, which stays open. Durable: it stays set after the predecessor is reopened.
+  hidden?: boolean;             // True while this open shared Codex session has no terminal tile: its terminal moved to another conversation. It keeps its state and takes input; desktop_show_session gives it a tile again. Derived at broadcast; absent otherwise.
   last_seen: string;            // ISO timestamp, always set
-}
-
-// PresentAnnotation is an author-pinned note or thread, resolved at query
-// time by the daemon from the manifest's annotation entries against the
-// pinned head SHA. Comments are ordered; author is always the presenting
-// agent.
-model PresentAnnotation {
-  line_start: int32; // resolved head-side line range
-  line_end: int32;
-  comments: string[];
-}
-
-// PresentFile is one file entry in a present manifest, as authored by the agent.
-model PresentFile {
-  path: string;
-  note?: string;
-  // Line stats for this file across the round's pinned base..head diff,
-  // from git numstat. Absent when unknown (binary file, or stats lookup failed).
-  additions?: int32;
-  deletions?: int32;
-  // Author-pinned notes/threads, resolved against the pinned head SHA.
-  // Omitted when the file has none, or when resolution failed.
-  annotations?: PresentAnnotation[];
-}
-
-// PresentManifestView is the parsed, daemon-pinned view of a present manifest —
-// the title/summary/file list an agent wrote, plus the skip list it declined to
-// walk through.
-model PresentManifestView {
-  title: string;
-  summary?: string;
-  files: PresentFile[];
-  skip: string[];
-}
-
-// Presentation is a review session an agent opened over a set of changes.
-// kind is "changes" for now (reserved for future presentation kinds).
-model Presentation {
-  id: string;
-  session_id: SessionID;
-  title: string;
-  kind: string;
-  repo_path: string;
-  status: string;
-  created_at: string;
-  latest_round_seq: int32;
-  latest_round_submitted: boolean;
-}
-
-// PresentationRound is one iteration of a presentation, pinned to a base/head
-// SHA pair at the moment it was opened.
-model PresentationRound {
-  id: string;
-  presentation_id: string;
-  seq: int32;
-  base_sha: string;
-  head_sha: string;
-  created_at: string;
-  submitted_at?: string;
-  // "approved" | "feedback", set once the round is submitted. Plain string,
-  // not an enum, to avoid the quicktype identical-enum merge trap (see side
-  // on PresentationComment below).
-  verdict?: string;
-  manifest: PresentManifestView;
-  // All files changed between base_sha and head_sha, computed at query time
-  // by the daemon from `git diff` (destination path for renames);
-  // additions/deletions filled from numstat when available (binary/rename
-  // entries have them absent). Not persisted with the round — omitted
-  // entirely when the diff cannot be computed.
-  changed_files?: PresentFile[];
-}
-
-// PresentationComment is a reviewer note anchored to a line range within one
-// round's diff. side is "new" | "old" — plain string, not an enum, to avoid the
-// quicktype identical-enum merge trap.
-model PresentationComment {
-  id: string;
-  round_id: string;
-  filepath: string;
-  line_start: int32;
-  line_end: int32;
-  side: string;
-  content: string;
-  author: string;
-  created_at: string;
 }
 
 model PR {
@@ -427,6 +344,7 @@ model AuthorState {
 
 model RecentLocation {
   path: string;
+  repo_root?: string;
   last_seen: string;    // ISO timestamp
   use_count: int32;
 }
@@ -446,6 +364,7 @@ model FileActivity {
 }
 
 model DirectoryEntry {
+  is_repo?: boolean;
   name: string;
   path: string;
   is_dir: boolean;
@@ -466,15 +385,6 @@ model Branch {
   commit_time?: string;    // ISO timestamp
   is_current?: boolean;    // True if this is the checked-out branch
 }
-
-model GitFileChange {
-  path: string;
-  status: string;        // "modified", "added", "deleted", "renamed", "untracked"
-  additions?: int32;     // Line additions (not available for untracked)
-  deletions?: int32;     // Line deletions (not available for untracked)
-  old_path?: string;     // For renames
-}
-
 
 // Why a profile, desktop or pane command was refused. stale_revision means the
 // command named a revision older than the stored one: re-read the broadcast
@@ -689,15 +599,13 @@ model SessionShowMessage {
   session_id: SessionID;
 }
 
-// Brings a closed session back under its own id. Without an action it performs
+// Brings a closed or stopped session back under its own id. Without an action it performs
 // the plain reopen, and refuses naming what is offered instead.
 model SessionReopenMessage {
   cmd: "session_reopen";
   request_id?: string; // set by the WS frontend to correlate the result event
   session_id: SessionID;
   action?: SessionReopenAction;
-  // Where to start, for `start_fresh_elsewhere`.
-  directory?: string;
 
 }
 
@@ -1097,51 +1005,6 @@ model DelegateStatusMessage {
   id: string; // Request id or daemon-issued operation id
 }
 
-model PresentOpenMessage {
-  cmd: "present_open";
-  source_session_id: SessionID;
-  manifest_yaml: string;
-  presentation_id?: string;
-}
-
-// PresentOpenResult echoes the round the daemon created, so the caller can
-// report where the presentation now lives.
-model PresentOpenResult {
-  presentation_id: string;
-  round_id: string;
-  seq: int32;
-  base_sha: string;
-  head_sha: string;
-  title: string;
-  // Anchor warnings from resolving the manifest's annotations (e.g. an
-  // ambiguous anchor), formatted "path[index]: message". Absent when there
-  // were none. An error-severity issue fails the open instead of appearing here.
-  warnings?: string[];
-}
-
-// PresentFeedbackMessage reads reviewer feedback for a round back to the
-// authoring agent as markdown. seq omitted/0 means the latest round.
-model PresentFeedbackMessage {
-  cmd: "present_feedback";
-  presentation_id: string;
-  seq?: int32;
-}
-
-// PresentFeedbackResult carries the rendered feedback markdown for the
-// resolved round, plus whether that round has been submitted yet. verdict is
-// the submitted round's verdict ("approved" | "feedback"), absent until
-// submitted. presentation_status is the presentation's current status
-// ("open" | "approved" | "closed") — a poller uses it to detect a reviewer
-// closing the presentation instead of submitting a round.
-model PresentFeedbackResult {
-  markdown: string;
-  seq: int32;
-  submitted: boolean;
-  verdict?: string;
-  presentation_status: string;
-}
-
-
 model NotebookListMessage {
   cmd: "notebook_list";
   prefix?: string;
@@ -1387,6 +1250,7 @@ model SetSessionPriorityMessage {
 // daemon does not have. Fire-and-forget.
 model SnoozeTurnMessage {
   cmd: "snooze_turn";
+  caller_session_id?: SessionID;
   session_id: SessionID;
   until: string;
 }
@@ -1396,6 +1260,7 @@ model SnoozeTurnMessage {
 // daemon's call. Fire-and-forget.
 model WakeTurnMessage {
   cmd: "wake_turn";
+  caller_session_id?: SessionID;
   session_id: SessionID;
 }
 
@@ -1468,12 +1333,14 @@ model CreateWorktreeMessage {
   branch: string;
   path?: string;
   starting_from?: string;  // Branch to create worktree from (default: current HEAD)
+  request_id?: string;
 }
 
 model DeleteWorktreeMessage {
   cmd: "delete_worktree";
   path: string;
   force?: boolean;
+  request_id?: string;
 }
 
 // The Worktrees surface: every worktree of every repository attn tracks, read
@@ -1665,6 +1532,7 @@ model CreateWorktreeFromBranchMessage {
   main_repo: string;
   branch: string;
   path?: string;
+  request_id?: string;
 }
 
 model GetDefaultBranchMessage {
@@ -1688,28 +1556,10 @@ model EnsureRepoMessage {
   clone_url: string;     // Git clone URL (e.g., https://github.com/owner/repo.git)
 }
 
-model SubscribeGitStatusMessage {
-  cmd: "subscribe_git_status";
-  directory: string;
-}
-
-model UnsubscribeGitStatusMessage {
-  cmd: "unsubscribe_git_status";
-}
-
-model GetFileDiffMessage {
-  cmd: "get_file_diff";
-  directory: string;
-  path: string;
-  staged?: boolean;  // DEPRECATED: If true, show staged diff instead of working tree
-  base_ref?: string; // If provided, compare against this ref instead of HEAD (for PR-like diffs)
-  head_ref?: string; // If set, the modified side is pinned to `git show <head_ref>:<path>` instead of the working tree (used by the presentation reader for base_sha->head_sha diffs)
-  request_id?: string; // Client-chosen correlation id, echoed verbatim in the result
-}
-
 model GetRepoInfoMessage {
   cmd: "get_repo_info";
   repo: string;
+  request_id?: string;
 }
 
 // Dual-surface (unix-socket/CLI `attn automation apply` + WS, the app
@@ -1722,7 +1572,7 @@ model GetRepoInfoMessage {
 // Both are absent/zero when creating. request_id is optional, used only by
 // WS for correlation, like automation_delete's below.
 model AutomationApplyMessage {
-  launch_desktop?: string; // own, an empty slot 5–9, or a desktop ref of the item's profile
+  launch_desktop?: string; // own, an empty slot, or a desktop ref of the item's profile
   cmd: "automation_apply";
   definition_yaml: string;
   request_id?: string;
@@ -2255,9 +2105,8 @@ model MarkdownAnnotationAnchor {
 // "comment" carrying quick_label_id (+ tip snapshotted at creation).
 model MarkdownAnnotation {
   id: string;
-  // "comment" | "deletion" | "global". Plain string, like PresentationRound's
-  // verdict, so codegen yields string on both sides (a literal union becomes
-  // anyOf -> Go interface{}).
+  // "comment" | "deletion" | "global". Plain string so codegen yields string
+  // on both sides (a literal union becomes anyOf -> Go interface{}).
   `type`: string;
   text?: string;
   anchor?: MarkdownAnnotationAnchor;
@@ -2703,11 +2552,106 @@ model DesktopSetActivePaneMessage {
 // Shows an open agent of any live profile in one transaction. Every open
 // agent has a pane: it becomes the active leaf, its desktop current, its
 // profile the requesting client's. Every client on that profile gets one
-// arrangement.
+// arrangement. A hidden shared Codex session gets a new terminal tile on the
+// current desktop whose Codex resumes its conversation.
 model DesktopShowSessionMessage {
   cmd: "desktop_show_session";
   request_id: string;
   session_id: SessionID;
+}
+
+enum TerminalDirection {
+  right,
+  down
+}
+enum TerminalReadMode {
+  screen,
+  scrollback,
+  last
+}
+enum TerminalWaitUntil {
+  prompt,
+  exit
+}
+model TerminalListMessage {
+  cmd: "terminal_list";
+  caller_session_id: SessionID;
+  desktop?: string;
+  all?: boolean;
+}
+model TerminalEntry {
+  terminal_id: TerminalID;
+  session_id: SessionID;
+  short_id: string;
+  agent: string;
+  name: string;
+  state: SessionState;
+  desktop_id: string;
+  desktop_label: string;
+  position?: string;
+  opened_by?: SessionID;
+}
+model TerminalOpenMessage {
+  cmd: "terminal_open";
+  caller_session_id: SessionID;
+  desktop?: string;
+  direction?: TerminalDirection;
+  cwd?: string;
+  command?: string;
+}
+model TerminalOpenResult {
+  terminal_id: TerminalID;
+  session_id: SessionID;
+  desktop_id: string;
+  pane_id: string;
+}
+model TerminalInputMessage {
+  cmd: "terminal_input";
+  caller_session_id: SessionID;
+  target: string;
+  desktop?: string;
+  data: string;
+  run?: boolean;
+  wait?: boolean;
+}
+model TerminalInputResult {
+  terminal_id: TerminalID;
+  last_block_id?: int64;
+}
+model TerminalReadMessage {
+  cmd: "terminal_read";
+  caller_session_id: SessionID;
+  target: string;
+  mode: TerminalReadMode;
+  lines?: int32;
+}
+model TerminalReadResult {
+  text: string;
+  block?: TerminalBlock;
+}
+model TerminalWaitMessage {
+  cmd: "terminal_wait";
+  caller_session_id: SessionID;
+  target: string;
+  until: TerminalWaitUntil;
+  after_block_id?: int64;
+}
+model TerminalBlock {
+  id: int64;
+  command?: string;
+  exit_code?: int32;
+  output: string;
+}
+model TerminalWaitResult {
+  block?: TerminalBlock;
+  exited?: boolean;
+  exit_code?: int32;
+}
+model TerminalCloseMessage {
+  cmd: "terminal_close";
+  caller_session_id: SessionID;
+  target: string;
+  desktop?: string;
 }
 
 // Moves a session's pane to another desktop of its profile, beside that
@@ -2730,6 +2674,7 @@ model DesktopMoveSessionResult {
   pane_id: string;
   from_desktop_id?: string; // absent when unchanged
   unchanged?: boolean; // the session already was on that desktop
+  desktop_created?: boolean; // the move created the numbered desktop
 }
 
 // Shows an existing leaf, an agent pane or a tile, like desktop_show_session.
@@ -2778,6 +2723,15 @@ model DesktopRemoveLeafMessage {
   request_id: string;
   desktop_id: string;
   leaf_id: string;
+}
+
+// Closes a terminal tile. While another terminal runs its session, only this
+// terminal ends; otherwise the session closes as unregister closes it.
+model DesktopCloseTileMessage {
+  cmd: "desktop_close_tile";
+  request_id: string;
+  desktop_id: string;
+  tile_id: string;
 }
 
 model DesktopSetSplitRatioMessage {
@@ -3146,91 +3100,6 @@ model ChiefOfStaffResultMessage {
 }
 
 
-// GetPresentationsMessage reads the full list of presentations, the way the
-// app renders the present surface.
-model GetPresentationsMessage {
-  cmd: "get_presentations";
-}
-
-model GetPresentationsResultMessage {
-  event: "get_presentations_result";
-  success: boolean;
-  error?: string;
-  presentations: Presentation[];
-}
-
-// GetPresentationRoundMessage fetches one round of a presentation — the round
-// record plus its comments — for the detail view. seq omitted/0 means the
-// latest round.
-model GetPresentationRoundMessage {
-  cmd: "get_presentation_round";
-  presentation_id: string;
-  seq?: int32;
-}
-
-model GetPresentationRoundResultMessage {
-  event: "get_presentation_round_result";
-  success: boolean;
-  error?: string;
-  presentation?: Presentation;
-  round?: PresentationRound;
-  comments?: PresentationComment[];
-  repo_head_sha?: string; // Current `git rev-parse HEAD` of the presentation's repo_path at query time, for drift detection; omitted if the rev-parse fails (e.g. repo gone)
-}
-
-// PresentCommentInput is a reviewer comment as submitted from the app, before
-// the daemon assigns it an id and author.
-model PresentCommentInput {
-  filepath: string;
-  line_start: int32;
-  line_end: int32;
-  side: string;
-  content: string;
-}
-
-// PresentSubmitRoundMessage hands a round's review back to the authoring
-// agent. handback marks the round submitted, closing the loop for that round.
-// verdict is "approved" | "feedback" — plain string, see PresentationComment.side.
-model PresentSubmitRoundMessage {
-  cmd: "present_submit_round";
-  round_id: string;
-  verdict: string;
-  comments: PresentCommentInput[];
-  handback: boolean;
-}
-
-model PresentSubmitRoundResultMessage {
-  event: "present_submit_round_result";
-  success: boolean;
-  error?: string;
-  round_id: string;
-}
-
-// PresentCloseMessage dismisses a presentation without a review: the
-// presentation's status moves straight to "closed", with no round submission
-// and no handback to the authoring agent.
-model PresentCloseMessage {
-  cmd: "present_close";
-  presentation_id: string;
-}
-
-model PresentCloseResultMessage {
-  event: "present_close_result";
-  success: boolean;
-  error?: string;
-  presentation_id: string;
-}
-
-model PresentationAddedMessage {
-  event: "presentation_added";
-  presentation: Presentation;
-}
-
-model PresentationUpdatedMessage {
-  event: "presentation_updated";
-  presentation: Presentation;
-}
-
 // ============================================================================
 // Asks: an agent's questions the user answers from one place
 // ============================================================================
@@ -3439,6 +3308,7 @@ model CreateWorktreeResultMessage {
   path?: string;
   success: boolean;
   error?: string;
+  request_id?: string;
 }
 
 model DeleteWorktreeResultMessage {
@@ -3448,6 +3318,7 @@ model DeleteWorktreeResultMessage {
   error?: string;
   forceable?: boolean;
   reason_kind?: "dirty_worktree" | "provider_error" | "not_found" | "git_error";
+  request_id?: string;
 }
 
 model GitOperationStartedMessage {
@@ -3552,30 +3423,6 @@ model EnsureRepoResultMessage {
   error?: string;
 }
 
-model GitStatusUpdateMessage {
-  event: "git_status_update";
-  directory: string;
-  staged: GitFileChange[];
-  unstaged: GitFileChange[];
-  untracked: GitFileChange[];
-  error?: string;
-  mode?: string;                 // "full" or "tracked_only"
-  limited?: boolean;             // true when untracked files were skipped
-  limited_reason?: string;       // user-facing reason for the limited result
-  duration_ms?: int32;           // daemon-side status command duration
-}
-
-model FileDiffResultMessage {
-  event: "file_diff_result";
-  directory: string;
-  path: string;
-  original: string;
-  modified: string;
-  success: boolean;
-  error?: string;
-  request_id?: string; // Client-chosen correlation id, echoed verbatim from the request
-}
-
 model RepoInfo {
   repo: string;
   current_branch: string;
@@ -3592,20 +3439,7 @@ model GetRepoInfoResultMessage {
   info?: RepoInfo;
   success: boolean;
   error?: string;
-}
-
-model ReviewComment {
-  id: string;
-  review_id: string;
-  filepath: string;
-  line_start: int32;
-  line_end: int32;
-  content: string;
-  author: string;  // "user" or "agent"
-  resolved: boolean;
-  resolved_by?: string;  // "user" or "agent" (empty if not resolved)
-  resolved_at?: string;  // ISO timestamp (empty if not resolved)
-  created_at: string;    // ISO timestamp
+  request_id?: string;
 }
 
 // Compact automations summaries for the WS surface. Canonical state (full
@@ -5730,8 +5564,6 @@ model Response {
   worktree_keep_result?: WorktreeKeepResult;
   worktree_sweep_log_result?: WorktreeSweepLogResult;
   worktree_refresh_result?: WorktreeRefreshResult;
-  present_open_result?: PresentOpenResult;
-  present_feedback_result?: PresentFeedbackResult;
   ask_open_result?: Ask;
   ask_list_result?: AskListResult;
   session_instructions_result?: SessionInstructionsResult;
@@ -5739,6 +5571,11 @@ model Response {
   session_list_result?: SessionListResult;
   session_show_result?: SessionShowResult;
   session_reopen_result?: SessionReopenResult;
+  terminal_entries?: TerminalEntry[];
+  terminal_open_result?: TerminalOpenResult;
+  terminal_input_result?: TerminalInputResult;
+  terminal_read_result?: TerminalReadResult;
+  terminal_wait_result?: TerminalWaitResult;
   desktop_move_session_result?: DesktopMoveSessionResult;
   state_explain_result?: StateExplainResult;
   agent_peek_result?: AgentPeekResult;
@@ -6094,7 +5931,7 @@ model CrewSleepResult {
 // about. Registry state, not prose: the home's markdown is never rewritten, and
 // an omitted field is left as it was.
 model CrewSetMessage {
-  launch_desktop?: string; // own, an empty slot 5–9, or a desktop ref of the item's profile
+  launch_desktop?: string; // own, an empty slot, or a desktop ref of the item's profile
   cmd: "crew_set";
   member: string;
   cwd?: string;
@@ -6293,6 +6130,7 @@ model SessionTranscriptResult {
 // broadcast shape: this one outlives the runtime and carries how it ended.
 model SessionLedgerEntry {
   priority?: boolean;
+  turn_snoozed_until?: string;
   id: SessionID;
   conversation_pinned_at?: string;
   label: string;
@@ -6319,6 +6157,8 @@ model SessionLedgerEntry {
   close_reason?: string;
   // Absent when the agent reported none. Priced at the current settings, as Session.usage is.
   usage?: SessionUsage;
+  // True on a live shared Codex row that no terminal tile shows, as Session.hidden.
+  hidden?: boolean;
 }
 
 // Counted over the scope and date window alone, so choosing a repository never
@@ -6365,15 +6205,12 @@ model SessionShowResult {
   reopen?: SessionReopen;
 }
 
-// `reopen` resumes the saved conversation where it ran; `start_fresh_*` brings
-// the id back with a new one; the worktree actions write to the repository.
+// `reopen` resumes the saved conversation where it ran; the worktree actions
+// restore its checkout before resuming that conversation.
 enum SessionReopenAction {
   reopen,
   recreate_worktree_and_reopen,
   fetch_recreate_and_reopen,
-  start_fresh_same_place,
-  start_fresh_elsewhere,
-  start_fresh_default_branch,
 }
 
 // Whether a session in the ledger can be brought back, and what it would take.
@@ -6972,9 +6809,6 @@ model WebSocketEvent {
   original?: string;
   modified?: string;
   base_ref?: string;
-  staged?: GitFileChange[];
-  unstaged?: GitFileChange[];
-  untracked?: GitFileChange[];
 
   // PTY lifecycle
   data?: string;
@@ -7078,8 +6912,6 @@ alias DaemonEvent =
   | FetchRemotesResultMessage
   | ListRemoteBranchesResultMessage
   | EnsureRepoResultMessage
-  | GitStatusUpdateMessage
-  | FileDiffResultMessage
   | GetRepoInfoResultMessage
   | AutomationApplyResultMessage
   | AutomationValidateResultMessage
@@ -7136,12 +6968,6 @@ alias DaemonEvent =
   | BrowserControlRequestMessage
   | CommandErrorMessage
   | ClientEvictionNoticeMessage
-  | GetPresentationsResultMessage
-  | GetPresentationRoundResultMessage
-  | PresentSubmitRoundResultMessage
-  | PresentCloseResultMessage
-  | PresentationAddedMessage
-  | PresentationUpdatedMessage
   | AskAnswerResultMessage
   | AsksUpdatedMessage
   | OpenMarkdownResultMessage

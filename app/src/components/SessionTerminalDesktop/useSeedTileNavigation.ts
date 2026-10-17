@@ -40,7 +40,7 @@ export function useSeedTileNavigation({
   const path = isSeed && pendingSeedID ? pendingSeedID : persistedPath;
   const seedNavigationError =
     seedNavigationFailure?.path === path ? seedNavigationFailure.message : '';
-  const { document: seedDocument, error: seedDocumentError } = useLiveSeedDocument(
+  const { document: seedDocument, error: seedDocumentError, reload: reloadSeedDocument } = useLiveSeedDocument(
     path,
     gardenSeeds,
     isSeed,
@@ -91,6 +91,7 @@ export function useSeedTileNavigation({
     seedNavigationError,
     seedDocument,
     seedDocumentError,
+    reloadSeedDocument,
     title,
     parentSeed,
     seedLocationTitle,
@@ -104,27 +105,8 @@ function useLiveSeedDocument(seedId: string, gardenSeeds: Seed[], enabled: boole
   const connectionGeneration = api?.connectionGeneration ?? 0;
   const [document, setDocument] = useState<SeedDocument | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const liveSeed = useMemo(
-    () => gardenSeeds.find((seed) => seed.id === seedId) ?? null,
-    [gardenSeeds, seedId],
-  );
-  const displayedDocument = useMemo(() => {
-    // A retarget is optimistic: tileParams catches up after the daemon persists
-    // it, so never paint the old seed while the new one's document is in flight.
-    if (!document || document.seed.id !== seedId) return null;
-    if (!liveSeed || liveSeed.rev < document.seed.rev) return document;
-    const tenderChanged =
-      liveSeed.tender_session !== document.seed.tender_session ||
-      liveSeed.tender_member !== document.seed.tender_member;
-    return {
-      ...document,
-      seed: liveSeed.rev === document.seed.rev ? { ...liveSeed, continuation: document.seed.continuation } : liveSeed,
-      tender_holds: tenderChanged
-        ? Boolean(liveSeed.tender_session || liveSeed.tender_member)
-        : document.tender_holds,
-    };
-  }, [document, liveSeed, seedId]);
-
+  const [reloadRequest, setReloadRequest] = useState(0);
+  const reload = useCallback(() => setReloadRequest((request) => request + 1), []);
   // Every garden fact re-pushes the seeds snapshot, and notes or child changes need not
   // touch this seed's own revision, so the array identity is the live invalidation signal.
   useEffect(() => {
@@ -144,20 +126,7 @@ function useLiveSeedDocument(seedId: string, gardenSeeds: Seed[], enabled: boole
     void sendSeedDocumentGet(seedId)
       .then((next) => {
         if (ignore) return;
-        if (liveSeed && liveSeed.rev >= next.seed.rev) {
-          const tenderChanged =
-            liveSeed.tender_session !== next.seed.tender_session ||
-            liveSeed.tender_member !== next.seed.tender_member;
-          setDocument({
-            ...next,
-            seed: liveSeed.rev === next.seed.rev ? { ...liveSeed, continuation: next.seed.continuation } : liveSeed,
-            tender_holds: tenderChanged
-              ? Boolean(liveSeed.tender_session || liveSeed.tender_member)
-              : next.tender_holds,
-          });
-        } else {
-          setDocument(next);
-        }
+        setDocument(next);
       })
       .catch((readError) => {
         if (ignore) return;
@@ -166,7 +135,7 @@ function useLiveSeedDocument(seedId: string, gardenSeeds: Seed[], enabled: boole
     return () => {
       ignore = true;
     };
-  }, [enabled, gardenSeeds, liveSeed, seedId, sendSeedDocumentGet, connectionGeneration]);
+  }, [enabled, gardenSeeds, seedId, sendSeedDocumentGet, connectionGeneration, reloadRequest]);
 
-  return { document: displayedDocument, error };
+  return { document: document?.seed.id === seedId ? document : null, error, reload };
 }

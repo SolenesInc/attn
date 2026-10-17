@@ -97,14 +97,23 @@ func (c *wsClient) presenceReport() clientPresence {
 }
 
 func (d *Daemon) handleSetClientPresence(client *wsClient, msg *protocol.SetClientPresenceMessage) {
-	client.setPresence(msg, time.Now())
+	now := time.Now()
+	client.setPresence(msg, now)
+	if client.presenceReport().tier(now, d.presenceIdleLimit()) != PresenceAway {
+		d.presenceMu.Lock()
+		d.lastPresentAt = latest(d.lastPresentAt, now)
+		d.presenceMu.Unlock()
+	}
 }
 
 func (d *Daemon) PresenceTier() PresenceTier {
+	return d.presenceTier(time.Now())
+}
+
+func (d *Daemon) presenceTier(now time.Time) PresenceTier {
 	if d.wsHub == nil {
 		return PresenceAway
 	}
-	now := time.Now()
 	idleLimit := d.presenceIdleLimit()
 	highest := PresenceAway
 	d.wsHub.ForEachClient(func(client *wsClient) {
@@ -112,27 +121,15 @@ func (d *Daemon) PresenceTier() PresenceTier {
 			highest = tier
 		}
 	})
-	d.notePresence(highest, now)
 	return highest
 }
 
-func (d *Daemon) notePresence(tier PresenceTier, now time.Time) {
-	if tier == PresenceAway {
-		return
-	}
-	d.presenceMu.Lock()
-	defer d.presenceMu.Unlock()
-	if now.After(d.presentSince) {
-		d.presentSince = now
-	}
-}
-
 func (d *Daemon) UserAwayFor(now time.Time) time.Duration {
-	if d.PresenceTier() != PresenceAway {
+	if d.presenceTier(now) != PresenceAway {
 		return 0
 	}
 	d.presenceMu.RLock()
-	since := d.presentSince
+	since := latest(d.startedAt, d.lastPresentAt)
 	d.presenceMu.RUnlock()
 	if since.IsZero() || !now.After(since) {
 		return 0

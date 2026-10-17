@@ -2,7 +2,7 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { openActionMenu, openSession } from './test/appFixtures';
 import { daemonSession, emptyDesktop, soloDesktop } from './test/daemonFixtures';
-import { inspection, launchedAt, pathInput, repoInfo, serveLaunches, serveMachine, submitPath } from './test/locations';
+import { inspection, launchedAt, pathInput, repoInfo, serveLaunches, serveMachine, submitPath, press } from './test/locations';
 import type { CommandMessage } from './test/protocol';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 
@@ -227,6 +227,48 @@ describe('App empty desktop launcher', () => {
     await gesture(daemon, () => fireEvent.keyDown(filter, { key: 'Escape' }));
 
     expect(filter).toHaveValue('');
+  });
+
+  it('uses the experimental where list inline, keeps focus and never dismisses on Escape', async () => {
+    const { daemon } = await onAgentBesideEmptyDesktop();
+    await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { new_session_launcher_enabled: 'true' } }));
+    await gesture(daemon, () => pressShortcut('desktop.select2'));
+    await gesture(daemon, () => fireEvent.change(pathInput(), { target: { value: '/home/me/projects/repo' } }));
+    await press(daemon, 'Tab');
+    expect(screen.getByRole('listbox', { name: 'Where' })).toBeInTheDocument();
+    expect(daemon.sentOf('get_repo_info').map(({ repo }) => repo)).toEqual(['/home/me/projects/repo']);
+    pathInput().blur();
+    await gesture(daemon, () => pressShortcut('session.new'));
+    expect(pathInput()).toHaveFocus();
+    expect(screen.queryByTestId('location-picker-overlay')).toBeNull();
+    await press(daemon, 'Escape');
+    expect(pathInput()).toHaveValue('/home/me/projects/repo');
+    await press(daemon, 'Escape');
+    await press(daemon, 'Escape');
+    expect(launcher()).toBeInTheDocument();
+    expect(pathInput()).toHaveFocus();
+  });
+
+  it('correlates overlapping worktree launches with their original desktop', async () => {
+    const { daemon } = await onAgentBesideEmptyDesktop();
+    await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { new_session_launcher_enabled: 'true' } }));
+    daemon.on('create_worktree', () => undefined);
+    for (const [slot, branch] of [['desktop.select2', 'first'], ['desktop.select3', 'second']] as const) {
+      await gesture(daemon, () => pressShortcut(slot));
+      await press(daemon, 'Tab');
+      await gesture(daemon, () => fireEvent.change(pathInput(), { target: { value: branch } }));
+      await press(daemon, 'Enter');
+    }
+    const [first, second] = daemon.sentOf('create_worktree');
+    expect(first.request_id).not.toBe(second.request_id);
+    for (const command of [second, first])
+      await gesture(daemon, () => daemon.replyTo(command, {
+        event: 'create_worktree_result', success: true, path: `/home/me/projects/repo--${command.branch}`,
+      }));
+    expect(daemon.sentOf('spawn_session').map((spawn) => [spawn.cwd, spawn.placement?.desktop_id])).toEqual([
+      ['/home/me/projects/repo--second', `${daemon.arrangement.profile.id}/desktop_3`],
+      ['/home/me/projects/repo--first', 'other'],
+    ]);
   });
 
   it('stays off Home', async () => {

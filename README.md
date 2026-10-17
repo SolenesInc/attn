@@ -77,6 +77,11 @@ with Review 2 before Review 10). Unnamed desktops come last in their current ord
 Undo in the toast restores your previous order; you can still drag desktops after
 sorting.
 
+**Presence.** Apps are the only source of user presence. If no app reports for
+90 seconds, attn treats you as away. Away time counts from the last report
+showing you present, or from daemon startup if there has been none. Crew
+turnover and activity generation use that same presence reading.
+
 **Panes, splits, and first-class shells.** A desktop can hold several sessions
 side by side. Split a pane, open a plain shell as its own session from the same
 dialog you use for agents, and move focus between panes with the keyboard.
@@ -161,6 +166,14 @@ on screen. Settling a turn advances to an owed priority turn first.
 Agents can use `attn session priority on|off [--session <id>]`, defaulting to
 their own session. `attn delegate --priority` starts a marked delegate.
 
+`attn session snooze <id>... --until 1h` puts off turns for one or several
+sessions, including working agents before they finish. `--until` also accepts
+an RFC3339 instant or tomorrow, saturday and monday at local 09:00 (for a
+custom time, quote `"tomorrow 09:00"`). `attn session unsnooze <id>...` ends
+the snooze early. Agents may act on themselves and their delegates; the chief
+may act on any session of its profile. `attn session list` and `show` display
+the snooze deadline. CLI snooze currently supports local sessions.
+
 5. Press **Cmd+/** any time for the full shortcuts list.
 
 ## Session states
@@ -200,6 +213,10 @@ their own session. `attn delegate --priority` starts a marked delegate.
 
 Every binding is customizable. Press **Cmd+/** in the app for the full,
 always-current list, and "Edit shortcuts" there to remap any of them.
+
+Picking an agent, tile or desktop gives it the keyboard immediately. You can
+start typing while the daemon confirms the selection; an agent still getting
+its terminal retains that input until it is ready.
 
 In desktop flow, keyboard jumps, palette selections, and clicks on panes smoothly
 center the selection in the expanded sidebar or collapsed desktop rail. Clicking
@@ -422,6 +439,7 @@ The full dev-loop, instance, and harness targets live in
 | | |
 |---|---|
 | [Instances](docs/instances.md) | Run multiple isolated attn worlds side by side |
+| [Shared Codex](docs/using-shared-codex.md) | Experimental: Codex terminals sharing one app-server, with hidden sessions |
 | [Release](docs/making-a-release.md) | Maintainer runbook |
 
 ## Status

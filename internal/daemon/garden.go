@@ -225,7 +225,7 @@ func (d *Daemon) readGardenTo(limit int, profileID ...string) (gardenRead, error
 		}
 		after = read.Documents[len(read.Documents)-1].ID
 	}
-	for _, seed := range garden.Ready(out.seeds, d.sessionExists) {
+	for _, seed := range garden.Ready(out.seeds, d.sessionActive) {
 		out.ready[seed.ID] = true
 	}
 	return out, nil
@@ -808,7 +808,7 @@ func (d *Daemon) handleSeedDocumentGet(client *wsClient, msg *protocol.SeedDocum
 	}
 	result.Document = &protocol.SeedDocument{
 		Seed:        wireSeed,
-		TenderHolds: seed.Tender().Holds(d.sessionExists),
+		TenderHolds: seed.Tender().Holds(d.sessionActive),
 		Children:    read.wire(children),
 		Notes:       notes,
 		NotesTotal:  notesTotal,
@@ -1094,7 +1094,7 @@ func (d *Daemon) validateDispatchCrown(crown string, sourceSessionID protocol.Se
 			crown, seed.Status, crown)
 	}
 	held := seed.Tender()
-	if held.Holds(d.sessionExists) && !held.Is(garden.Tender{Session: protocol.TrimID(sourceSessionID)}) {
+	if held.Holds(d.sessionActive) && !held.Is(garden.Tender{Session: protocol.TrimID(sourceSessionID)}) {
 		return fmt.Errorf(
 			"%s is being tended by %s, and a seed has one tender at a time; dispatching here would hand it to a new agent.\n"+
 				"Wait for %s to harvest or park it, plant the work as its own seed, or say what you need on the log: attn seed note %s -m \"…\"",
@@ -1146,10 +1146,7 @@ func (d *Daemon) gardenDispatchSeedsBySession() map[protocol.SessionID]string {
 	d.dispatchSeedsMu.Lock()
 	defer d.dispatchSeedsMu.Unlock()
 	if !d.dispatchSeedsLoaded {
-		read, _, err := d.runDocQuery(docstore.Query{
-			Namespace:  garden.Namespace,
-			Collection: garden.CollectionDispatches,
-		})
+		documents, err := d.readAllDispatchDocuments()
 		if err != nil {
 			if !docstore.IsUndeclaredCollection(err) {
 				d.logf("garden: reading dispatch records for broadcast: %v", err)
@@ -1158,11 +1155,11 @@ func (d *Daemon) gardenDispatchSeedsBySession() map[protocol.SessionID]string {
 			d.dispatchSeeds, d.dispatchersBySession, d.dispatchFromChief, d.dispatchProjectionRevs, d.dispatchSeedsLoaded = nil, nil, nil, nil, true
 			return nil
 		}
-		loaded := make(map[protocol.SessionID]string, len(read.Documents))
-		dispatchers := make(map[protocol.SessionID]garden.Tender, len(read.Documents))
+		loaded := make(map[protocol.SessionID]string, len(documents))
+		dispatchers := make(map[protocol.SessionID]garden.Tender, len(documents))
 		fromChief := map[protocol.SessionID]bool{}
-		revisions := make(map[protocol.SessionID]int64, len(read.Documents))
-		for _, doc := range read.Documents {
+		revisions := make(map[protocol.SessionID]int64, len(documents))
+		for _, doc := range documents {
 			revisions[protocol.SessionID(doc.ID)] = doc.Rev
 			dispatch, err := garden.DecodeDispatch(doc.Body)
 			if err != nil {
@@ -1182,6 +1179,27 @@ func (d *Daemon) gardenDispatchSeedsBySession() map[protocol.SessionID]string {
 		d.dispatchSeedsLoaded = true
 	}
 	return d.dispatchSeeds
+}
+
+func (d *Daemon) readAllDispatchDocuments() ([]docstore.Document, error) {
+	var documents []docstore.Document
+	after := ""
+	for {
+		read, _, err := d.runDocQuery(docstore.Query{
+			Namespace:  garden.Namespace,
+			Collection: garden.CollectionDispatches,
+			Limit:      docstore.MaxLimit,
+			After:      after,
+		})
+		if err != nil {
+			return nil, err
+		}
+		documents = append(documents, read.Documents...)
+		if len(read.Documents) < docstore.MaxLimit {
+			return documents, nil
+		}
+		after = read.Documents[len(read.Documents)-1].ID
+	}
 }
 
 func (d *Daemon) rememberDispatchProjection(sessionID protocol.SessionID, dispatch garden.Dispatch, rev int64) {
@@ -1361,7 +1379,7 @@ func (d *Daemon) seedTransitionWire(seed garden.Seed, doc docstore.Document) pro
 }
 
 func (d *Daemon) applySeedTransition(id string, verb garden.Verb, ask garden.Ask) (garden.Seed, docstore.Document, error) {
-	seed, doc, _, err := d.applySeedTransitionDetailedAs(id, verb, ask, "", d.sessionExists)
+	seed, doc, _, err := d.applySeedTransitionDetailedAs(id, verb, ask, "", d.sessionActive)
 	return seed, doc, err
 }
 
@@ -1379,7 +1397,7 @@ func (d *Daemon) applySeedTransitionDetailed(
 func (d *Daemon) applySeedTransitionDetailedAtRevision(
 	id string, verb garden.Verb, ask garden.Ask, comment string, expectedRev int64,
 ) (garden.Seed, docstore.Document, seedTransitionNotes, error) {
-	return d.applySeedTransitionDetailedAsAtRevision(id, verb, ask, comment, d.sessionExists, expectedRev)
+	return d.applySeedTransitionDetailedAsAtRevision(id, verb, ask, comment, d.sessionActive, expectedRev)
 }
 
 func (d *Daemon) applySeedTransitionDetailedAs(

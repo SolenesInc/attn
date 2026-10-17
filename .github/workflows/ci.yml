@@ -313,8 +313,8 @@ jobs:
       - name: Vet
         run: go vet ./...
 
-      - name: Staticcheck
-        run: go tool staticcheck ./...
+      - name: Lint
+        run: make lint-go
 
       - name: Test
         run: ./scripts/test-go.sh
@@ -388,7 +388,7 @@ jobs:
       - name: Verify shared host protocol and lifecycle
         run: ATTN_TEST_PTY_HOST="$PWD/pty-host/target/release/attn-pty-host" go test -race ./internal/ptybackend -run '^Test(SharedHost_|MigratingHost_)' -count=1
       - name: Verify instance cleanup with live host generations
-        run: ATTN_TEST_PTY_HOST="$PWD/pty-host/target/release/attn-pty-host" go test -race ./cmd/attn -run '^(TestInstanceClean.*SharedHost|TestAProgramInAShellTile)' -count=1
+        run: ATTN_TEST_PTY_HOST="$PWD/pty-host/target/release/attn-pty-host" go test -race ./cmd/attn -run '^(TestInstanceClean.*SharedHost|TestAProgramInAShellTile|TestAgentsUseTheChosenLaunchMode|TestTheLaunchExperimentChanges)' -count=1
       - name: Save Go build cache
         if: >-
           always() && steps.go-cache.outcome == 'success' &&
@@ -703,10 +703,11 @@ jobs:
       - name: Upload the app tree
         uses: actions/upload-artifact@v4
         with:
-          name: app-acceptance-tree-${{ github.run_attempt }}
+          name: app-acceptance-tree
           path: ${{ steps.build-app.outputs.archive }}
           retention-days: 1
           compression-level: 0
+          overwrite: true
 
   app-acceptance-shard:
     name: App acceptance shard ${{ matrix.shard }}/4
@@ -738,7 +739,7 @@ jobs:
       - name: Download the app tree
         uses: actions/download-artifact@v4
         with:
-          name: app-acceptance-tree-${{ github.run_attempt }}
+          name: app-acceptance-tree
           path: ${{ runner.temp }}
 
       - name: Install the App acceptance tree
@@ -792,9 +793,10 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: app-acceptance-result-${{ github.run_attempt }}-shard-${{ matrix.shard }}
+          name: app-acceptance-result-shard-${{ matrix.shard }}
           if-no-files-found: error
           path: ${{ runner.temp }}/attn-real-app-harness/last-matrix.json
+          overwrite: true
 
       - name: Clean instance
         if: always()
@@ -839,7 +841,7 @@ jobs:
         if: needs.app-acceptance-build.result == 'success'
         uses: actions/download-artifact@v4
         with:
-          pattern: app-acceptance-result-${{ github.run_attempt }}-shard-*
+          pattern: app-acceptance-result-shard-*
           path: ${{ runner.temp }}/shard-results
 
       - name: Aggregate the shard digests
