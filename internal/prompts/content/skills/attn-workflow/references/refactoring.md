@@ -4,7 +4,7 @@ Use this process for a change to structure or shape that preserves behavior: a r
 
 ## Pin the behavior
 
-Learn the contract of the affected code before moving anything: its callers, what they observe, and the tests that already guard it. Where coverage is missing, capture current behavior first, as a characterization test, a recorded baseline, or an equivalence check that diffs old and new outputs. A type check or lint is not a pin. Whether the pin is committed follows the repository's testing guidance; a scratch pin is enough to hold behavior during the move.
+Learn the contract of the affected code before moving anything: its callers, what they observe, and the tests that already guard it. Pin the behavior at a boundary the move leaves alone, such as what the callers' own callers observe, so the pin survives the move. Where coverage is missing there, capture current behavior first, as a characterization test, a recorded baseline, or an equivalence check that diffs old and new outputs. A type check or lint is not a pin. Whether the pin is committed follows the repository's testing guidance; a scratch pin is enough to hold behavior during the move.
 
 ## Name the target shape
 
@@ -12,10 +12,10 @@ State what the module layout, types and call graph should be if the code were wr
 
 ## Subtract, then move in small steps
 
-Delete dead code, collapse one-caller wrappers and remove orphan references before introducing the new shape, so the move starts from the simplest base. Then move in behavior-preserving steps that each keep the pin green. When an interface changes, migrate every caller and delete the old one in the same change; leave no compatibility shim and no parallel old-and-new path. Check each rename against the files: renames miss uses in strings, prose and generated files.
+Delete dead code, collapse one-caller wrappers and remove orphan references before introducing the new shape, so the move starts from the simplest base. Then move in behavior-preserving steps that each keep the pin green. When an interface changes, migrate every caller and delete the old one in the same change; leave no compatibility shim and no parallel old-and-new path. Check each rename against the files: renames miss uses in strings, prose and generated files. A test the move itself breaks depended on the old shape: delete it when the pin already covers the behavior, or replace it at the stable boundary, as the repository's testing guidance says; do not repair it to the new internals.
 
 ## Prove behavior is unchanged
 
-Verify on the real artifact, not on compilation: rerun the pin, replay the baseline against the new code, or exercise the affected flow on the surface it serves. Then judge whether the change is worth keeping. Its measure is reader load: can a new reader answer "where does this value come from" and "what can change it" faster than before? If the diff lowers reader load nowhere, revert it.
+Verify on the real artifact, not on compilation: rerun the pin, replay the baseline against the new code, or exercise the affected flow on the surface it serves. Then judge whether the change is worth keeping. Its measure is reader load: can a new reader answer "where does this value come from" and "what can change it" faster than before? For the refactor that precedes a change, the measure is what it gives the shared path: the change can now land there with no parallel mechanism, and the refactor is the smallest that does. If the diff meets neither, revert it.
 
-Order the delivery so it proves itself: the subtraction, then the reshape, then any follow-on cleanup, each landing on its own. Report the structure that changed, the pin you held it against, the equivalence evidence, and what you reverted.
+Order the change's commits so a reviewer replays the proof: the subtraction, then the reshape, then any follow-on cleanup. Report the structure that changed, the pin you held it against, the equivalence evidence, and what you reverted.
