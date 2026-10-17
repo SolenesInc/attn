@@ -34,6 +34,7 @@ func executeAsk(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	session := fs.String("session", "", "session id (defaults to the current session)")
 	asJSON := fs.Bool("json", false, "print the result as JSON")
 	subject := fs.String("subject", "", "the ask's subject")
+	seed := fs.String("seed", "", "a seed you tend that the ask is about")
 	file := fs.String("file", "", "read the ask from this markdown file instead of stdin")
 	positionals, err := parseInterspersedFlagArgs(fs, args)
 	if err != nil {
@@ -61,7 +62,7 @@ func executeAsk(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "Withdrew %s.\n", positionals[0])
 		}
 	default:
-		err = openAsk(c, sessionID, *subject, *file, *asJSON, stdin, stdout)
+		err = openAsk(c, sessionID, *seed, *subject, *file, *asJSON, stdin, stdout)
 	}
 	var daemonErr *client.DaemonError
 	if errors.As(err, &daemonErr) {
@@ -86,20 +87,32 @@ func askUsageError(command string, positionals []string) string {
 	return ""
 }
 
-func openAsk(c *client.Client, sessionID protocol.SessionID, subject, file string, asJSON bool, stdin io.Reader, stdout io.Writer) error {
+func openAsk(c *client.Client, sessionID protocol.SessionID, seedID, subject, file string, asJSON bool, stdin io.Reader, stdout io.Writer) error {
 	markdown, baseDir, err := readAsk(file, stdin)
 	if err != nil {
 		return err
 	}
-	opened, err := c.AskOpen(sessionID, "", markdown, subject, baseDir)
+	opened, err := c.AskOpen(sessionID, seedID, markdown, subject, baseDir)
 	if err != nil {
 		return err
 	}
 	if asJSON {
 		return json.NewEncoder(stdout).Encode(opened)
 	}
-	fmt.Fprintf(stdout, "Asked %s: %q. The answer arrives in your attn inbox.\n", opened.ID, opened.Subject)
+	if opened.SeedID == nil {
+		fmt.Fprintf(stdout, "Asked %s: %q. The answer arrives in your attn inbox.\n", opened.ID, opened.Subject)
+		return nil
+	}
+	fmt.Fprintf(stdout, "Asked %s about %s: %q. The answer arrives as a note on the seed: attn seed notes %s\n",
+		opened.ID, askSeedName(*opened), opened.Subject, *opened.SeedID)
 	return nil
+}
+
+func askSeedName(a protocol.Ask) string {
+	if slug := protocol.Deref(a.SeedSlug); slug != "" {
+		return slug
+	}
+	return protocol.Deref(a.SeedID)
 }
 
 func readAsk(file string, stdin io.Reader) (string, string, error) {
@@ -142,7 +155,11 @@ func listAsks(c *client.Client, sessionID protocol.SessionID, asJSON bool, stdou
 		return nil
 	}
 	for _, open := range result.Asks {
-		fmt.Fprintf(stdout, "%s  %s\n", open.ID, open.Subject)
+		if open.SeedID == nil {
+			fmt.Fprintf(stdout, "%s  %s\n", open.ID, open.Subject)
+		} else {
+			fmt.Fprintf(stdout, "%s  %s  %s\n", open.ID, askSeedName(open), open.Subject)
+		}
 	}
 	return nil
 }
@@ -153,7 +170,12 @@ func writeAskHelp(w io.Writer) {
        attn ask close <id>
 
 Ask the user what you cannot settle alone. They answer from attn, without
-opening your terminal, and the answer arrives in your attn inbox.
+opening your terminal.
+
+When a delegation assigned you a seed, the ask is about that seed; --seed makes
+it about another seed you tend. The user sees which seed it concerns, and the
+answer arrives as a note on the seed (attn seed notes <id>) for whoever tends
+it by then. An ask about no seed is answered in your attn inbox.
 
 The ask is markdown with question blocks in it:
 
@@ -180,10 +202,12 @@ not depend on the answer; attn tells you when it arrives.
 
 commands:
   (none)                 open an ask from stdin or --file
-  list                   this session's open asks
+  list                   your open asks and those about seeds you tend
   close <id>             withdraw an ask you no longer need answered
 
 flags:
+  --seed <id>            a seed you tend that the ask is about (defaults to
+                         the seed your delegation assigned you)
   --subject <text>       the ask's subject (defaults to its first question)
   --file <path>          read the ask from a file; images resolve beside it
                          instead of the working directory

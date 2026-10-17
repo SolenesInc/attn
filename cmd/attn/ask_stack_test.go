@@ -15,11 +15,7 @@ func TestAnAgentAsksAndTheAskSurvivesADaemonRestartUntilWithdrawn(t *testing.T) 
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Start()
 	app := s.App()
-	enabled := testworld.Request(app, protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: "asks_enabled", Value: "true", RequestID: protocol.Ptr("asks")},
-		protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return protocol.Deref(m.RequestID) == "asks" })
-	if !protocol.Deref(enabled.Success) {
-		t.Fatalf("turn asks on: %s", protocol.Deref(enabled.Error))
-	}
+	enableAsks(t, app)
 	session := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
 	s.Launched(session)
 	inSession := func(stdin string, args ...string) testworld.Result {
@@ -53,5 +49,45 @@ func TestAnAgentAsksAndTheAskSurvivesADaemonRestartUntilWithdrawn(t *testing.T) 
 	}
 	if help := s.Attn("ask", "--help"); help.Code != 0 || !strings.Contains(help.Stdout, ":::question-multi") {
 		t.Errorf("attn ask --help exited %d and printed %q", help.Code, help.Stdout)
+	}
+}
+
+func TestAnAgentAsksAboutASeedItTends(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s.Start()
+	app := s.App()
+	enableAsks(t, app)
+	session := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
+	s.Launched(session)
+	inSession := func(stdin string, args ...string) testworld.Result {
+		t.Helper()
+		return s.Run(testworld.Invocation{Args: args, Session: session, Stdin: stdin})
+	}
+	var tended, untended protocol.Seed
+	inSession("", "seed", "plant", "Pick the cache store", "--json").JSON(t, &tended)
+	inSession("", "seed", "plant", "Tune the queue", "--json").JSON(t, &untended)
+	if tend := inSession("", "seed", "tend", tended.ID); tend.Code != 0 {
+		t.Fatalf("attn seed tend exited %d: %s", tend.Code, tend.Stderr)
+	}
+
+	question := ":::question\nWhich store keeps the cache?\n- [ ] Postgres\n- [ ] Redis\n:::\n"
+	asked := inSession(question, "ask", "--seed", tended.ID)
+	line := regexp.MustCompile(`^Asked (a-[0-9a-z]{6}) about pick-cache-store: "Which store keeps the cache\?"\. The answer arrives as a note on the seed: attn seed notes ` + tended.ID + `\n$`).FindStringSubmatch(asked.Stdout)
+	if asked.Code != 0 || line == nil {
+		t.Fatalf("attn ask --seed exited %d with stdout %q and stderr %q", asked.Code, asked.Stdout, asked.Stderr)
+	}
+	if listed := inSession("", "ask", "list"); listed.Code != 0 || listed.Stdout != line[1]+"  pick-cache-store  Which store keeps the cache?\n" {
+		t.Errorf("attn ask list exited %d and printed %q", listed.Code, listed.Stdout)
+	}
+	refused(t, inSession(question, "ask", "--seed", untended.ID), 1, "ask: nobody is tending "+untended.ID)
+}
+
+func enableAsks(t *testing.T, app *testworld.Peer) {
+	t.Helper()
+	enabled := testworld.Request(app, protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: "asks_enabled", Value: "true", RequestID: protocol.Ptr("asks")},
+		protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return protocol.Deref(m.RequestID) == "asks" })
+	if !protocol.Deref(enabled.Success) {
+		t.Fatalf("turn asks on: %s", protocol.Deref(enabled.Error))
 	}
 }
