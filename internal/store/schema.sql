@@ -39,6 +39,7 @@ CREATE INDEX idx_sessions_succeeds ON sessions(succeeds) WHERE succeeds != '';
 CREATE INDEX idx_terminal_bindings_session ON terminal_bindings(session_id);
 CREATE INDEX idx_worktree_sweep_log_at ON worktree_sweep_log(at DESC, id DESC);
 CREATE INDEX launch_desktops_desktop ON launch_desktops(desktop_id);
+CREATE TABLE asks ( id TEXT PRIMARY KEY, session_id TEXT NOT NULL, address TEXT NOT NULL, subject TEXT NOT NULL, markdown TEXT NOT NULL, base_dir TEXT NOT NULL, created_at TEXT NOT NULL );
 CREATE TABLE authors ( author TEXT PRIMARY KEY, muted INTEGER NOT NULL DEFAULT 0 );
 CREATE TABLE "automation_continuity_bindings" ( id TEXT PRIMARY KEY, definition_id INTEGER NOT NULL, continuity_key TEXT NOT NULL, ticket_id TEXT NOT NULL, session_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', released_reason TEXT NOT NULL DEFAULT '', released_at TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, seed_id TEXT NOT NULL DEFAULT '', origin_run_id TEXT NOT NULL DEFAULT '', profile_id TEXT NOT NULL DEFAULT '', FOREIGN KEY(definition_id) REFERENCES automation_definitions(id) );
 CREATE TABLE "automation_definitions" ( id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, enabled INTEGER NOT NULL, revision INTEGER NOT NULL, spec_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT NOT NULL DEFAULT '' , profile_id TEXT NOT NULL DEFAULT '');

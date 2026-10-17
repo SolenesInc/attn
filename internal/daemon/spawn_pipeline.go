@@ -424,6 +424,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		return &spawnOutcome{err: fmt.Errorf("persist session launch intent: %w", err)}
 	}
 	intent := launchIntentFromSpawnOptions(plan.spawnOpts, plan.isChief)
+	intent.Asks = d.launchedWithAsks(session.ID)
 	intent.AutoMode = msg.AutoMode
 	if req.autoModeDriver {
 		intent.ApprovalPolicy, intent.SandboxMode = effectiveSpawnPolicyPair(msg)

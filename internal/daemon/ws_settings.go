@@ -55,6 +55,7 @@ const (
 	SettingAutoApproveEnabled            = "auto_approve_enabled"
 	SettingOpenSentFilesEnabled          = "open_sent_files_enabled"
 	SettingAutoSettleEnabled             = "auto_settle_enabled"
+	SettingAsksEnabled                   = "asks_enabled"
 	SettingAutoSettleArmSeconds          = "auto_settle_arm_seconds"
 	SettingAutoSettleCountdownSeconds    = "auto_settle_countdown_seconds"
 	SettingKeybindingsConfig             = "keybindings_config"
@@ -309,6 +310,7 @@ func (d *Daemon) settingsWithAgentAvailability() map[string]interface{} {
 	settings[SettingSidebarHarnessLogosEnabled] = strconv.FormatBool(defaultOnBooleanSetting(stored[SettingSidebarHarnessLogosEnabled]))
 	settings[SettingAutoApproveEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingAutoApproveEnabled]))
 	settings[SettingAutoSettleEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingAutoSettleEnabled]))
+	settings[SettingAsksEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingAsksEnabled]))
 	settings[SettingAutoSettleArmSeconds] = strconv.Itoa(int(resolveAutoSettleSeconds(stored[SettingAutoSettleArmSeconds], defaultAutoSettleArmSeconds) / time.Second))
 	settings[SettingAutoSettleCountdownSeconds] = strconv.Itoa(int(resolveAutoSettleSeconds(stored[SettingAutoSettleCountdownSeconds], defaultAutoSettleCountdownSeconds) / time.Second))
 	settings[SettingOpenSentFilesEnabled] = strconv.FormatBool(d.openSentFilesEnabled())
@@ -501,7 +503,7 @@ func (d *Daemon) validateSetting(key, value string) error {
 		return validateBooleanSetting(value)
 	case SettingCodexSharedEnabled, SettingQueueShowHiddenSessions:
 		return validateBooleanSetting(value)
-	case SettingTailscaleEnabled, SettingAutoApproveEnabled, SettingQueueModeEnabled, SettingQueueCrewEnabled, SettingSidebarHarnessLogosEnabled, SettingAutoSettleEnabled, SettingModelCaptureEnabled, SettingActivityEnabled, SettingOpenSentFilesEnabled, SettingHeadlessTasksEnabled, settingWorktreeSweepEnabled:
+	case SettingTailscaleEnabled, SettingAutoApproveEnabled, SettingQueueModeEnabled, SettingQueueCrewEnabled, SettingSidebarHarnessLogosEnabled, SettingAutoSettleEnabled, SettingAsksEnabled, SettingModelCaptureEnabled, SettingActivityEnabled, SettingOpenSentFilesEnabled, SettingHeadlessTasksEnabled, settingWorktreeSweepEnabled:
 		return validateBooleanSetting(value)
 	case SettingModelCaptureIntervalSeconds:
 		return validateModelCaptureInterval(value)

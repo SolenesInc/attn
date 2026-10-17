@@ -173,10 +173,6 @@ func (d *Daemon) seedBirthProfile(seed garden.Seed) (string, error) {
 	return profile.ID, nil
 }
 
-func (d *Daemon) sendGardenProfile(client *wsClient) {
-	d.sendToClient(client, d.gardenProfileSnapshot(client.selectedProfile()))
-}
-
 func (d *Daemon) gardenProfileSnapshot(profileID string) *protocol.GardenSeedsUpdatedMessage {
 	if profileID == "" {
 		return &protocol.GardenSeedsUpdatedMessage{Event: protocol.EventGardenSeedsUpdated, Seeds: []protocol.Seed{}}

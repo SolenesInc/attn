@@ -1788,7 +1788,7 @@ func (d *Daemon) appendSeedNote(
 		AuthorMember:  d.resolveTenderMember(member, authorSession),
 		Artifact:      artifact,
 	}
-	written, doc, err := d.mintAndWriteNote(*schema, note, attentionRequested, causedBySessionID)
+	written, doc, err := d.mintAndWriteNote(*schema, note, attentionRequested, causedBySessionID, d.store.CommitDocumentWriteWithEvents)
 	if err != nil {
 		return protocol.SeedNote{}, err
 	}
@@ -1797,6 +1797,7 @@ func (d *Daemon) appendSeedNote(
 
 func (d *Daemon) mintAndWriteNote(
 	schema docstore.CollectionSchema, note garden.Note, attentionRequested bool, causedBySessionID protocol.SessionID,
+	commit func(store.DocumentWrite, store.BusEvent, []store.BusEvent, time.Time) (store.DocumentWriteResult, []int64, error),
 ) (garden.Note, docstore.Document, error) {
 	const mintAttempts = 3
 	var lastErr error
@@ -1826,7 +1827,7 @@ func (d *Daemon) mintAndWriteNote(
 		if err != nil {
 			return note, docstore.Document{}, err
 		}
-		written, eventSeqs, err := d.store.CommitDocumentWriteWithEvents(store.DocumentWrite{
+		written, eventSeqs, err := commit(store.DocumentWrite{
 			Schema: schema, ID: note.ID, Body: body, Expected: &expected,
 		}, fact, events, time.Now())
 		if err != nil {

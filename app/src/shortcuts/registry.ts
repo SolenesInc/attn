@@ -106,6 +106,7 @@ export const MAC_SHORTCUTS = {
   'desktop.sendStay9': { key: '9', code: 'Digit9', meta: true, alt: true, shift: true },
 
   'dock.attention': { key: 'p', meta: true, shift: true },
+  'dock.asks': { key: 'r', meta: true, shift: true },
 
   'ui.actionMenu': { key: 'k', meta: true },
   'ui.commandPalette': { key: 'k', meta: true, shift: true },
@@ -209,6 +210,7 @@ export const LINUX_SHORTCUTS = {
   'desktop.sendStay9': { key: '9', code: 'Digit9', meta: true, alt: true, shift: true },
 
   'dock.attention': { key: 'p', meta: true, alt: true },
+  'dock.asks': { key: 'r', code: 'KeyR', meta: true, alt: true },
   'ui.actionMenu': { key: 'k', meta: true, shift: true },
   'ui.commandPalette': { key: 'k', meta: true, alt: true },
   'ui.openSettings': { key: ',', code: 'Comma', meta: true, shift: true },

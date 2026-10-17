@@ -244,7 +244,7 @@ func (d *Daemon) runProfileAction(client *wsClient, action, requestID string, ru
 		d.sendArrangement(client, requestID, outcome.moved)
 	}
 	if previousProfile != client.selectedProfile() {
-		d.sendGardenProfile(client)
+		d.sendProfileSnapshots(client)
 	}
 	d.sendToClient(client, result)
 	d.releaseArrangements(client)
@@ -396,7 +396,7 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 				scoped.selectProfile(remaining.ID)
 				if scoped != client {
 					d.sendArrangement(scoped, "", nil)
-					d.sendGardenProfile(scoped)
+					d.sendProfileSnapshots(scoped)
 				}
 			}
 		})
@@ -705,4 +705,10 @@ func (d *Daemon) projectProfileArrangementChanged(ev bus.Event) {
 	d.wsHub.SendArrangementToMatchingClients(data, func(client *wsClient) bool {
 		return client.selectedProfile() == ev.Subject
 	}, delivery)
+}
+
+func (d *Daemon) sendProfileSnapshots(client *wsClient) {
+	profileID := client.selectedProfile()
+	d.sendToClient(client, d.gardenProfileSnapshot(profileID))
+	d.sendToClient(client, asksSnapshot(profileID, d.openAsks()))
 }

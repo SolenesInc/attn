@@ -2040,6 +2040,7 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() 
 		d.logf("close session %s: %v", sessionID, err)
 	}
 	d.forgetSessionTrace(sessionID)
+	d.closeAsksTo(inbox.ToSession(sessionID))
 	if recorded {
 		for _, terminal := range terminals {
 			d.forgetTerminalTitle(terminal)
@@ -2071,6 +2072,7 @@ func (d *Daemon) removeReapedSession(sessionID protocol.SessionID) {
 		d.forgetTerminalTitle(terminal)
 	}
 	d.forgetSessionTrace(sessionID)
+	d.closeAsksTo(inbox.ToSession(sessionID))
 	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)
 }
@@ -2614,6 +2616,13 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleAutoModePropose(conn, msg.(*protocol.AutoModeProposeMessage))
 	case protocol.CmdAutoModeDenials:
 		d.handleAutoModeDenials(conn, msg.(*protocol.AutoModeDenialsMessage))
+
+	case protocol.CmdAskOpen:
+		d.handleAskOpen(conn, msg.(*protocol.AskOpenMessage))
+	case protocol.CmdAskList:
+		d.handleAskList(conn, msg.(*protocol.AskListMessage))
+	case protocol.CmdAskClose:
+		d.handleAskClose(conn, msg.(*protocol.AskCloseMessage))
 
 	case protocol.CmdNotebookGuide:
 		d.handleNotebookGuide(conn, msg.(*protocol.NotebookGuideMessage))

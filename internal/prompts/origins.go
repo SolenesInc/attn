@@ -2,8 +2,8 @@ package prompts
 
 var (
 	brief            = TextField("brief", "Configured task or delegation brief.")
-	seedTitle        = TextField("seed_title", "Title of the reporting seed.")
-	seedID           = TextField("seed_id", "Reporting seed, if one is bound to the session.")
+	seedTitle        = TextField("seed_title", "Title of the session's stake.")
+	seedID           = TextField("seed_id", "The session's stake, if it has one.")
 	localReview      = FlagField("local_review", "The automation permits only a local review.")
 	hasTarget        = FlagField("has_target", "A local review has structured pull request identity.")
 	inputPath        = TextField("input_path", "Path to untrusted occurrence data.")
@@ -42,7 +42,7 @@ func originRecipients() []Recipient {
 			On("identity", "message_fragment", "Delegation identity shared by delegation and automation.", leafOpening(Input(brief))),
 		}},
 		{ID: "automation", Description: "Scheduled or event-triggered visible session.", Events: []Event{
-			On("opening", "opening_message", "Configured task, local-review restriction, reporting seed and occurrence input.",
+			On("opening", "opening_message", "Configured task, local-review restriction, stake and occurrence input.",
 				leafOpening(Join("",
 					delegatedBrief(Join("", Input(brief), When(Enabled(localReview), Use("automation.local-review", "content/automation/local-review.md")))),
 					Choose(Enabled(hasTarget),

@@ -56,6 +56,7 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
   const openDockPanels = dockState.openPanels;
   const dockPanelStack = dockState.stack;
   const attentionPanelOpen = openDockPanels.attention;
+  const asksPanelOpen = openDockPanels.asks;
   const automationsPanelOpen = openDockPanels.automations;
   const gardenPanelOpen = openDockPanels.garden;
   const openGardenDock = useCallback(() => openDockPanel('garden'), [openDockPanel]);
@@ -124,6 +125,7 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
     closeAgentList,
     dockPanelStack,
     attentionPanelOpen,
+    asksPanelOpen,
     automationsPanelOpen,
     gardenPanelOpen,
     gardenMode,

@@ -1,7 +1,7 @@
 {
   "version": 1,
   "id": "automation-reporting-seed",
-  "description": "An automation opening names its reporting seed and keeps input separate.",
+  "description": "An automation opening names its stake and keeps input separate.",
   "recipient": "automation",
   "event": "opening",
   "values": {
