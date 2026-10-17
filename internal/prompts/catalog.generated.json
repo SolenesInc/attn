@@ -3900,7 +3900,7 @@
         {
           "id": "answer",
           "delivery": "inbox_content",
-          "description": "The user's answer, delivered to the asking session's inbox. The adapter validates answers against the ask.",
+          "description": "The user's answer: a note on the ask's seed for its tender, or an item in the asking agent's inbox when the ask is about no seed. The adapter validates answers against the ask.",
           "body": {
             "kind": "compose",
             "children": [
@@ -4879,5 +4879,5 @@
       ]
     }
   ],
-  "definitions_hash": "a3a74e5a919b3a61e4df85813e486dcf9e685d6fc69ab894e88690f996b2d582"
+  "definitions_hash": "e2d7a497607e7eaaf80a0634faef4a49d8984cb903d0f1d53dd4cbaa596e9064"
 }

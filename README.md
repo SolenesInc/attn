@@ -313,12 +313,16 @@ depend on the answer.
 
 Press **Cmd+Shift+R** to answer every agent from one drawer, waiting agents first.
 Pick choices, write answers, add a note and send with **Cmd+Enter**; the drawer
-brings the next ask. The answer reaches the agent's attn inbox in your words and
-settles its turn. **Open agent** jumps to its terminal, and the queue, the sidebar
-and the home screen mark the agents that asked.
+brings the next ask. Your answer settles the agent's turn. **Open agent** jumps to
+its terminal, and the queue, the sidebar and the home screen mark the agents that
+asked.
 
-Agents keep the setting they launched with, reloads included. An ask for a crew
-member or the Chief outlives a nap: the next session gets the answer.
+An ask is about the seed its agent works on: the one a delegation assigned them,
+or another seed they tend. The drawer names the seed, and your answer becomes a
+note on it for whoever tends it then, so the ask outlives the agent that asked.
+Harvest or wither the seed and its asks close. An agent with no seed gets your
+answer in their attn inbox. Agents keep the setting they launched with, reloads
+included.
 
 ### The Chief
 

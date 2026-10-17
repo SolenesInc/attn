@@ -1,3 +1,3 @@
 kind: added
 area: queue
-change: "Asks (experimental, off by default): agents ask what they cannot settle alone with `attn ask`, and you answer every agent from one drawer — pick choices, write answers, add a note — without opening their terminals. The answer reaches the agent's attn inbox and settles its turn; agents keep the setting they launched with."
+change: "Asks (experimental, off by default): agents ask what they cannot settle alone with `attn ask`, and you answer every agent from one drawer — pick choices, write answers, add a note — without opening their terminals. An ask is about the seed its agent works on: your answer becomes a note on that seed for whoever tends it, or reaches the agent's attn inbox when there is no seed, and settles its turn. Agents keep the setting they launched with."

@@ -1286,7 +1286,8 @@ export function HygieneSettings({
               <p className="settings-row-title">Let agents ask you through attn</p>
               <p className="settings-row-copy" id="settings-asks-description">
                 Applies to agents launched from now on; each agent keeps the setting it launched with, reloads
-                included. Your answer lands in the agent's inbox and settles its turn. Open the drawer with{' '}
+                included. Your answer becomes a note on the seed the ask is about, or lands in the agent's inbox when
+                there is no seed, and settles its turn. Open the drawer with{' '}
                 {formatShortcut('dock.asks')}.
               </p>
             </div>
