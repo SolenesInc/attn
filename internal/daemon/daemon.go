@@ -2040,7 +2040,7 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() 
 		d.logf("close session %s: %v", sessionID, err)
 	}
 	d.forgetSessionTrace(sessionID)
-	d.closeAsksOfSession(sessionID)
+	d.closeAsksTo(inbox.ToSession(sessionID))
 	if recorded {
 		for _, terminal := range terminals {
 			d.forgetTerminalTitle(terminal)
@@ -2072,7 +2072,7 @@ func (d *Daemon) removeReapedSession(sessionID protocol.SessionID) {
 		d.forgetTerminalTitle(terminal)
 	}
 	d.forgetSessionTrace(sessionID)
-	d.closeAsksOfSession(sessionID)
+	d.closeAsksTo(inbox.ToSession(sessionID))
 	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)
 }

@@ -236,7 +236,7 @@ func TestEachHarnessLaunchedWithAsksIsTaughtThem(t *testing.T) {
 	}
 }
 
-func TestADelegatesAskIsAboutItsSeedAndPassesToItsNextTender(t *testing.T) {
+func TestADelegatesAskIsAboutItsSeedAndItsAnswerIsANoteForTheNextTender(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "asks_enabled", "true")
@@ -265,7 +265,7 @@ func TestADelegatesAskIsAboutItsSeedAndPassesToItsNextTender(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	w.Launched(string(second.SessionID))
+	successor := w.Launched(string(second.SessionID))
 	if closed := closeFromApp(app, string(first.SessionID)); !closed.Accepted {
 		t.Fatalf("close %s: %+v", first.SessionID, closed)
 	}
@@ -277,6 +277,59 @@ func TestADelegatesAskIsAboutItsSeedAndPassesToItsNextTender(t *testing.T) {
 	}
 	if err := cli.AskClose("caller", asked.ID); err == nil {
 		t.Fatal("the dispatcher, who does not tend the seed, withdrew the ask")
+	}
+
+	successor.Prompted()
+	successor.Reply("Picked up the migration. <!-- attn:state=waiting_input -->")
+	waiting := testworld.AwaitSession(app, string(second.SessionID), func(s protocol.Session) bool {
+		return s.State == protocol.SessionStateWaitingInput && protocol.Deref(s.TurnOwed)
+	})
+	answered := testworld.Request(app, protocol.AskAnswerMessage{
+		Cmd: protocol.CmdAskAnswer, RequestID: "answer", AskID: asked.ID,
+		Answers: []protocol.AskAnswer{{Key: "q1", Picked: []string{"Postgres"}}},
+	}, protocol.EventAskAnswerResult, func(r protocol.AskAnswerResultMessage) bool { return r.RequestID == "answer" })
+	if !answered.Success {
+		t.Fatalf("answering failed: %s", protocol.Deref(answered.Error))
+	}
+	testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 0 })
+	testworld.AwaitStateAfter(app, waiting, func(s protocol.Session) bool { return s.TurnOwed == nil })
+	if got := successor.Prompted(); !strings.Contains(got, inboxDoorbell) {
+		t.Fatalf("the seed's tender was prompted with %q, want the inbox doorbell", got)
+	}
+	items := readInbox(t, cli, string(second.SessionID), 0).Items
+	if read := inboxContents(items); !strings.Contains(read, seed) || strings.Contains(read, "Answer: Postgres") {
+		t.Errorf("the seed's tender read %q, want a bell about %s and not a copy of the answer", read, seed)
+	}
+	notes, err := cli.SeedNotes("", seed, 1)
+	if err != nil || len(notes.Notes) != 1 {
+		t.Fatalf("the seed's notes are %+v, %v; want the answer", notes, err)
+	}
+	answer := notes.Notes[0]
+	for _, want := range []string{asked.ID, "Answer: Postgres (your recommendation)"} {
+		if !strings.Contains(answer.Body, want) {
+			t.Errorf("the seed's newest note reads %q, missing %q", answer.Body, want)
+		}
+	}
+	if answer.AuthorSession != "" || answer.AuthorMember != "" {
+		t.Errorf("the answer is noted by %q/%q, want the user", answer.AuthorSession, answer.AuthorMember)
+	}
+}
+
+func TestClosingASeedClosesTheAsksAboutIt(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "asks_enabled", "true")
+	asker := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	w.Launched(asker)
+	for _, verb := range []string{"harvest", "wither"} {
+		seed := plantSeedAs(t, cli, asker, "Pick the cache store")
+		moveDelegationSeed(t, cli, asker, seed, "tend", "")
+		if _, err := cli.AskOpen(protocol.SessionID(asker), seed, cacheAsk, "", w.Path("shop")); err != nil {
+			t.Fatalf("ask about %s: %v", seed, err)
+		}
+		testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 1 })
+		moveDelegationSeed(t, cli, asker, seed, verb, "settled without asking")
+		testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 0 })
 	}
 }
 

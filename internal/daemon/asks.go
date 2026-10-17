@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/ask"
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
@@ -183,15 +184,17 @@ func (d *Daemon) answerAsk(msg *protocol.AskAnswerMessage, profileID string) err
 	if err != nil {
 		return err
 	}
-	answer := inbox.Item{ID: uuid.NewString(), To: stored.To, Kind: inbox.Notice, Source: stored.ID, Text: text}
-	err = d.store.AnswerAsk(stored.ID, answer, time.Now())
+	if seedID := stored.To.SeedID(); seedID != "" {
+		err = d.noteAnswer(stored.ID, seedID, text)
+	} else {
+		err = d.inboxAnswer(stored, text)
+	}
 	if errors.Is(err, store.ErrAskNotOpen) {
 		return errAskGone
 	}
 	if err != nil {
 		return fmt.Errorf("save the answer: %w", err)
 	}
-	d.kickInboxAfterCommit(stored.To)
 	d.publishFact(FactAskClosed, stored.ID, nil)
 	if holder := d.inboxHolder(stored.To); holder != nil && holder.State != protocol.SessionStatePendingApproval {
 		d.handleSettleTurn(&protocol.SettleTurnMessage{SessionID: holder.ID})
@@ -199,10 +202,31 @@ func (d *Daemon) answerAsk(msg *protocol.AskAnswerMessage, profileID string) err
 	return nil
 }
 
-func (d *Daemon) closeAsksOfSession(sessionID protocol.SessionID) {
-	ids, err := d.store.CloseAsksTo(inbox.ToSession(sessionID))
+func (d *Daemon) noteAnswer(askID, seedID, text string) error {
+	schema, err := d.notesCollection()
 	if err != nil {
-		d.logf("asks: closing the asks of session %s: %v", sessionID, err)
+		return err
+	}
+	note := garden.Note{Seed: seedID, Kind: garden.NoteKindNote, Body: text}
+	_, _, err = d.mintAndWriteNote(*schema, note, true, "", func(write store.DocumentWrite, fact store.BusEvent, events []store.BusEvent, now time.Time) (store.DocumentWriteResult, []int64, error) {
+		return d.store.AnswerAskWithNote(askID, write, fact, events, now)
+	})
+	return err
+}
+
+func (d *Daemon) inboxAnswer(stored store.Ask, text string) error {
+	answer := inbox.Item{ID: uuid.NewString(), To: stored.To, Kind: inbox.Notice, Source: stored.ID, Text: text}
+	if err := d.store.AnswerAsk(stored.ID, answer, time.Now()); err != nil {
+		return err
+	}
+	d.kickInboxAfterCommit(stored.To)
+	return nil
+}
+
+func (d *Daemon) closeAsksTo(to inbox.Address) {
+	ids, err := d.store.CloseAsksTo(to)
+	if err != nil {
+		d.logf("asks: closing the asks to %s: %v", to, err)
 	}
 	d.coalesceSnapshots(func() {
 		for _, id := range ids {
