@@ -29,8 +29,8 @@ func (d *Daemon) launchedWithAsks(sessionID protocol.SessionID) bool {
 }
 
 func (d *Daemon) handleAskOpen(conn net.Conn, msg *protocol.AskOpenMessage) {
-	sessionID := protocol.TrimID(msg.SessionID)
-	if err := d.requireAsks(sessionID); err != nil {
+	session, err := d.askingSession(protocol.TrimID(msg.SessionID))
+	if err != nil {
 		d.sendError(conn, err.Error())
 		return
 	}
@@ -39,7 +39,7 @@ func (d *Daemon) handleAskOpen(conn net.Conn, msg *protocol.AskOpenMessage) {
 		d.sendError(conn, err.Error())
 		return
 	}
-	to, err := d.askAddressOf(d.store.Get(sessionID), strings.TrimSpace(protocol.Deref(msg.SeedID)))
+	to, err := d.askAddressOf(session, strings.TrimSpace(protocol.Deref(msg.SeedID)))
 	if err != nil {
 		d.sendError(conn, err.Error())
 		return
@@ -51,7 +51,7 @@ func (d *Daemon) handleAskOpen(conn net.Conn, msg *protocol.AskOpenMessage) {
 	}
 	stored := store.Ask{
 		ID:        id,
-		SessionID: sessionID,
+		SessionID: session.ID,
 		To:        to,
 		Subject:   ask.Subject(protocol.Deref(msg.Subject), parts),
 		Markdown:  msg.Markdown,
@@ -72,7 +72,7 @@ func (d *Daemon) handleAskOpen(conn net.Conn, msg *protocol.AskOpenMessage) {
 }
 
 func (d *Daemon) askAddressOf(session *protocol.Session, seedID string) (inbox.Address, error) {
-	stake, _ := d.gardenDispatchCrown(session.ID)
+	stake := d.openStake(session.ID)
 	if seedID == "" || seedID == stake {
 		if stake == "" {
 			return d.inboxAddressOf(session.ID), nil
@@ -96,6 +96,17 @@ func (d *Daemon) askAddressOf(session *protocol.Session, seedID string) (inbox.A
 	return inbox.Address{}, fmt.Errorf("nobody is tending %s, and an ask is about a seed you tend; tend it first (attn seed tend %s), or ask without --seed", seed.ID, seed.ID)
 }
 
+func (d *Daemon) openStake(sessionID protocol.SessionID) string {
+	stake, ok := d.gardenDispatchCrown(sessionID)
+	if !ok {
+		return ""
+	}
+	if seed, _, err := d.readSeed(stake); err != nil || garden.Closed(seed.Status) {
+		return ""
+	}
+	return stake
+}
+
 func (d *Daemon) askAddressHeldBy(sessionID protocol.SessionID) func(inbox.Address) bool {
 	roles := d.inboxRoleAddresses(sessionID)
 	stake, _ := d.gardenDispatchCrown(sessionID)
@@ -112,14 +123,15 @@ func (d *Daemon) askAddressHeldBy(sessionID protocol.SessionID) func(inbox.Addre
 	}
 }
 
-func (d *Daemon) requireAsks(sessionID protocol.SessionID) error {
-	if sessionID == "" || d.store.Get(sessionID) == nil {
-		return fmt.Errorf("session %q is not live in attn", sessionID)
+func (d *Daemon) askingSession(sessionID protocol.SessionID) (*protocol.Session, error) {
+	session := d.store.Get(sessionID)
+	if sessionID == "" || session == nil {
+		return nil, fmt.Errorf("session %q is not live in attn", sessionID)
 	}
 	if !d.launchedWithAsks(sessionID) {
-		return errors.New("asks are off for this session because it launched without them; ask in the conversation instead")
+		return nil, errors.New("asks are off for this session because it launched without them; ask in the conversation instead")
 	}
-	return nil
+	return session, nil
 }
 
 func (d *Daemon) handleAskList(conn net.Conn, msg *protocol.AskListMessage) {

@@ -316,20 +316,29 @@ func TestADelegatesAskIsAboutItsSeedAndItsAnswerIsANoteForTheNextTender(t *testi
 }
 
 func TestClosingASeedClosesTheAsksAboutIt(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
+	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "asks_enabled", "true")
-	asker := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
-	w.Launched(asker)
-	for _, verb := range []string{"harvest", "wither"} {
-		seed := plantSeedAs(t, cli, asker, "Pick the cache store")
-		moveDelegationSeed(t, cli, asker, seed, "tend", "")
-		if _, err := cli.AskOpen(protocol.SessionID(asker), seed, cacheAsk, "", w.Path("shop")); err != nil {
-			t.Fatalf("ask about %s: %v", seed, err)
+	cwd := registerDelegationCaller(t, w, cli, "caller")
+	delegated, err := cli.Delegate(delegateFrom("caller", cwd, "Migrate the store", fakeagent.Codex))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Launched(string(delegated.SessionID))
+	side := plantSeedAs(t, cli, string(delegated.SessionID), "Tune the queue")
+	moveDelegationSeed(t, cli, string(delegated.SessionID), side, "tend", "")
+
+	for _, close := range []struct{ seed, named, verb string }{{delegated.SeedID, "", "wither"}, {side, side, "harvest"}} {
+		asked, err := cli.AskOpen(delegated.SessionID, close.named, cacheAsk, "", cwd)
+		if err != nil || protocol.Deref(asked.SeedID) != close.seed {
+			t.Fatalf("asking about %s = %+v, %v", close.seed, asked, err)
 		}
 		testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 1 })
-		moveDelegationSeed(t, cli, asker, seed, verb, "settled without asking")
+		moveDelegationSeed(t, cli, string(delegated.SessionID), close.seed, close.verb, "settled without asking")
 		testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 0 })
+	}
+	if after, err := cli.AskOpen(delegated.SessionID, "", cacheAsk, "", cwd); err != nil || after.SeedID != nil {
+		t.Errorf("a delegate whose stake withered asked %+v (%v), want an ask about no seed", after, err)
 	}
 }
 
