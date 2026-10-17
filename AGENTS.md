@@ -93,11 +93,6 @@ count.
 - Follow [the database migration rules](docs/db-migrations.md) for schema
   changes.
 - Diagnose before fixing. If the cause is unknown, propose instrumentation.
-- Prove it works. Before reporting a change done, run the real thing on the
-  surface it touches and show the output. A green build is not evidence, and a
-  check you could not run is inconclusive, not a pass.
-- Build the lever. When work is not trivial, write the script that does it or
-  proves it, so a reviewer reruns it instead of trusting a summary.
 - Do not commit spikes.
 - Riskier changes, such as a new harness integration or PTY runtime, land first
   behind an experimental setting, off by default, like the shared PTY host.
@@ -152,6 +147,13 @@ count.
 `make test` skips the Go suite when only `docs/`, root Markdown and `app/src`
 changed since `origin/main`; `FORCE=1` runs it and `DIFF_BASE=<ref>` compares
 against another branch.
+
+Before reporting a change done, run it on the surface it touches and show the
+output: the CLI, the daemon over `wsctl`, a non-production instance, the app.
+A green build or test run is not that evidence, and a check you could not run
+is inconclusive, not a pass. When the work is not trivial, write the script
+that does it or proves it, so a reviewer reruns it instead of trusting a
+summary.
 
 Choose checks for affected CLI, daemon, app, protocol, and Linux paths using
 [verification requirements](docs/instances.md#verification-requirements).

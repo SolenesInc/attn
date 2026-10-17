@@ -1,0 +1,3 @@
+kind: changed
+area: agents
+change: "The attn-workflow skill routes a task to one process and keeps what it leaves out visible, adds Refactoring and Perf processes, asks agents to prove a change on the real surface and label claims measured, inferred or guessed, and tells the Orchestrator how to record and ask the questions only the user can answer."

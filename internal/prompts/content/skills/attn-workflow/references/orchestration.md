@@ -1,6 +1,6 @@
 # Orchestration
 
-Own execution of the agreed plan. Read the plan in the seed and inspect enough relevant code to prepare useful assignments. Use settled design decisions and bring changes affecting the user's agreed scope or intent back to them.
+Own execution of the agreed plan. Read the plan in the seed and inspect enough relevant code to prepare useful assignments. Use settled design decisions; what goes back to the user, and how, is under Questions for the user.
 
 Delegate implementation where a cheaper model can carry it out reliably. Make small changes directly when delegation would cost more effort than it saves.
 
@@ -14,9 +14,9 @@ When advising, read the relevant code and evidence and ask follow-up questions a
 
 The user reads your question cold, between other agents, and may answer hours later. Before asking, classify the question. A fact that running something would settle, such as behavior, timing, layout or output, is not theirs to answer: run the check or a prototype and let the result decide. A reversible call inside the agreed scope is yours: decide it, record the decision in the plan, and report it with what the user could tell you to do instead. What reaches the user is a product or preference call no experiment settles, a change to the agreed scope or intent, or an irreversible step.
 
-Record the question before asking it, as an open item under the plan's Decisions in the seed: what it decides and which seed or Builder waits on it, the options, your recommendation and why, and what you will do if it stays unanswered. Route work around it. Then ask so it can be answered without this conversation: one line saying how many things need the user, and for each question two lines, the decision with your recommendation and the reason, then what happens without an answer, with a link to the seed for the detail. Batch questions that arrive close together, ask each once, and do not repeat open questions in every progress update. The channel for asking is whatever your launch guidance names; the content and the record are the same on every channel.
+Record the question before asking it, as an open item under the plan's Decisions in the seed, in the shape [Planning](planning.md) gives open questions. Route work around it. Then ask so it can be answered without this conversation: one line saying how many things need the user, and for each question two lines, the decision with your recommendation and the reason, then what happens without an answer, with a link to the seed for the detail. Batch questions that arrive close together, ask each once, and do not repeat open questions in every progress update. The channel for asking is whatever your launch guidance names; the content and the record are the same on every channel.
 
-When the answer comes, write the decision into the plan body with who decided it, remove it from the open items, and pass it to the Builder who waits on it. A question that work has overtaken is withdrawn with a note saying why.
+When the answer comes, write the decision and its reason into the plan's Decisions, record who decided it in a note, remove it from the open questions, and pass it to the Builder who waits on it. A question that work has overtaken is withdrawn the same way, with the note saying why.
 
 Review each Builder's completed work and its verification evidence against the plan yourself. Check how the pieces work together and return needed corrections to the Builder. When the work grows a parallel mechanism beside an existing one, bring it to the user as a scope question rather than working around it. Reuse valid evidence; run further checks when changes, gaps, or contradictions warrant them. Judge the overall outcome complete only when the evidence supports it.
 
