@@ -37,7 +37,7 @@ func TestAnAnsweredAskReachesTheAgentsInboxAndSettlesItsTurn(t *testing.T) {
 	agent.Prompted()
 	working := testworld.AwaitStateAfter(app, idle, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 
-	asked, err := cli.AskOpen(protocol.SessionID(asker), cacheAsk, "", w.Path("shop"))
+	asked, err := cli.AskOpen(protocol.SessionID(asker), "", cacheAsk, "", w.Path("shop"))
 	if err != nil {
 		t.Fatalf("ask: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestAnAgentKeepsTheAsksSettingItLaunchedWith(t *testing.T) {
 	if taught(respawn(without)) {
 		t.Fatal("an agent launched with asks off was taught them when it came back")
 	}
-	if _, err := cli.AskOpen(protocol.SessionID(without), cacheAsk, "", w.Path("before")); err == nil || !strings.Contains(err.Error(), "launched without them") {
+	if _, err := cli.AskOpen(protocol.SessionID(without), "", cacheAsk, "", w.Path("before")); err == nil || !strings.Contains(err.Error(), "launched without them") {
 		t.Fatalf("an agent launched before asks were on asked: %v", err)
 	}
 
@@ -123,7 +123,7 @@ func TestAnAgentKeepsTheAsksSettingItLaunchedWith(t *testing.T) {
 	if !taught(respawn(with)) {
 		t.Fatal("an agent launched with asks lost them when it came back with the setting off")
 	}
-	if _, err := cli.AskOpen(protocol.SessionID(with), cacheAsk, "", w.Path("after")); err != nil {
+	if _, err := cli.AskOpen(protocol.SessionID(with), "", cacheAsk, "", w.Path("after")); err != nil {
 		t.Fatalf("an agent launched with asks lost them when the setting went off: %v", err)
 	}
 }
@@ -136,7 +136,7 @@ func TestAnAgentWithdrawsItsOwnAskOnly(t *testing.T) {
 	w.Launched(asker)
 	other := w.Spawn(app, fakeagent.Claude, w.Path("other"))
 	w.Launched(other)
-	asked, err := cli.AskOpen(protocol.SessionID(asker), cacheAsk, "Cache store", w.Path("shop"))
+	asked, err := cli.AskOpen(protocol.SessionID(asker), "", cacheAsk, "Cache store", w.Path("shop"))
 	if err != nil {
 		t.Fatalf("ask: %v", err)
 	}
@@ -159,7 +159,7 @@ func TestAnAskFollowsItsAddresseeNotTheSessionThatFiledIt(t *testing.T) {
 
 	plain := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	w.Launched(plain)
-	if _, err := cli.AskOpen(protocol.SessionID(plain), cacheAsk, "", w.Path("shop")); err != nil {
+	if _, err := cli.AskOpen(protocol.SessionID(plain), "", cacheAsk, "", w.Path("shop")); err != nil {
 		t.Fatalf("ask: %v", err)
 	}
 	testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 1 })
@@ -170,7 +170,7 @@ func TestAnAskFollowsItsAddresseeNotTheSessionThatFiledIt(t *testing.T) {
 
 	day := wakeCrew(t, cli, "trellis", "")
 	w.Launched(string(day.SessionID))
-	asked, err := cli.AskOpen(day.SessionID, cacheAsk, "", w.Path("trellis"))
+	asked, err := cli.AskOpen(day.SessionID, "", cacheAsk, "", w.Path("trellis"))
 	if err != nil {
 		t.Fatalf("crew ask: %v", err)
 	}
@@ -195,11 +195,11 @@ func TestAsksBelongToTheAskingSessionsProfile(t *testing.T) {
 	w.Launched(homeAsker)
 	sideAsker := w.Spawn(sideApp, fakeagent.Claude, w.Path("side"))
 	w.Launched(sideAsker)
-	homeAsk, err := cli.AskOpen(protocol.SessionID(homeAsker), cacheAsk, "", w.Path("home"))
+	homeAsk, err := cli.AskOpen(protocol.SessionID(homeAsker), "", cacheAsk, "", w.Path("home"))
 	if err != nil {
 		t.Fatalf("home ask: %v", err)
 	}
-	sideAsk, err := cli.AskOpen(protocol.SessionID(sideAsker), cacheAsk, "", w.Path("side"))
+	sideAsk, err := cli.AskOpen(protocol.SessionID(sideAsker), "", cacheAsk, "", w.Path("side"))
 	if err != nil {
 		t.Fatalf("side ask: %v", err)
 	}
@@ -233,5 +233,80 @@ func TestEachHarnessLaunchedWithAsksIsTaughtThem(t *testing.T) {
 		if guidance := launchGuidance(t, w.Launched(w.Spawn(app, h, w.Path(string(h))))); !strings.Contains(guidance, askGuidanceLead) {
 			t.Errorf("%s launched with asks on was not taught them:\n%s", h, guidance)
 		}
+	}
+}
+
+func TestADelegatesAskIsAboutItsSeedAndPassesToItsNextTender(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "asks_enabled", "true")
+	cwd := registerDelegationCaller(t, w, cli, "caller")
+	seed := plantDelegationSeed(t, cli, "caller", "Migrate the store")
+	first, err := cli.Delegate(delegateAtSeed("caller", cwd, seed))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Launched(string(first.SessionID))
+
+	asked, err := cli.AskOpen(first.SessionID, "", cacheAsk, "", cwd)
+	if err != nil {
+		t.Fatalf("the delegate asks: %v", err)
+	}
+	if protocol.Deref(asked.SeedID) != seed || protocol.Deref(asked.SeedTitle) != "Migrate the store" || protocol.Deref(asked.SeedSlug) != "migrate-store" {
+		t.Fatalf("the delegate's ask reads %+v, want it about %s", asked, seed)
+	}
+	testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool {
+		return len(m.Asks) == 1 && protocol.Deref(m.Asks[0].SeedID) == seed && protocol.Deref(m.Asks[0].SeedTitle) == "Migrate the store"
+	})
+
+	handover := delegateAtSeed("caller", cwd, seed)
+	handover.Assignment.Handover = &protocol.DelegateHandover{}
+	second, err := cli.Delegate(handover)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Launched(string(second.SessionID))
+	if closed := closeFromApp(app, string(first.SessionID)); !closed.Accepted {
+		t.Fatalf("close %s: %+v", first.SessionID, closed)
+	}
+	if shown := w.App().Initial.Asks; len(shown) != 1 || shown[0].ID != asked.ID || protocol.Deref(shown[0].SeedID) != seed {
+		t.Fatalf("after the delegate closed the app shows %+v, want its ask about %s", shown, seed)
+	}
+	if listed, err := cli.AskList(second.SessionID); err != nil || len(listed.Asks) != 1 || listed.Asks[0].ID != asked.ID {
+		t.Fatalf("the seed's next tender lists %+v (%v), want the ask its predecessor filed", listed, err)
+	}
+	if err := cli.AskClose("caller", asked.ID); err == nil {
+		t.Fatal("the dispatcher, who does not tend the seed, withdrew the ask")
+	}
+}
+
+func TestAnAgentAsksAboutASeedItTendsAndNoOther(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "asks_enabled", "true")
+	asker := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	w.Launched(asker)
+	registerSessions(t, w, cli, "holder")
+	tended := plantSeedAs(t, cli, asker, "Pick the cache store")
+	moveDelegationSeed(t, cli, asker, tended, "tend", "")
+	held := plantSeedAs(t, cli, asker, "Tune the queue")
+	moveDelegationSeed(t, cli, "holder", held, "tend", "")
+	untended := plantSeedAs(t, cli, asker, "Nobody has this")
+
+	seedless, err := cli.AskOpen(protocol.SessionID(asker), "", cacheAsk, "", w.Path("shop"))
+	if err != nil || seedless.SeedID != nil {
+		t.Fatalf("an agent with no stake asked %+v (%v), want an ask about no seed", seedless, err)
+	}
+	about, err := cli.AskOpen(protocol.SessionID(asker), tended, cacheAsk, "", w.Path("shop"))
+	if err != nil || protocol.Deref(about.SeedID) != tended {
+		t.Fatalf("asking about a seed the agent tends = %+v, %v; want it about %s", about, err, tended)
+	}
+	for seed, refusal := range map[string]string{held: "is being tended by holder", untended: "nobody is tending " + untended} {
+		if _, err := cli.AskOpen(protocol.SessionID(asker), seed, cacheAsk, "", w.Path("shop")); err == nil || !strings.Contains(err.Error(), refusal) {
+			t.Errorf("asking about %s = %v, want a refusal saying %q", seed, err, refusal)
+		}
+	}
+	if listed, err := cli.AskList(protocol.SessionID(asker)); err != nil || len(listed.Asks) != 2 {
+		t.Fatalf("the agent lists %+v (%v), want both its asks", listed, err)
 	}
 }

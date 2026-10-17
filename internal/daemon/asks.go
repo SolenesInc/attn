@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"slices"
 	"strings"
 	"time"
 
@@ -37,6 +38,11 @@ func (d *Daemon) handleAskOpen(conn net.Conn, msg *protocol.AskOpenMessage) {
 		d.sendError(conn, err.Error())
 		return
 	}
+	to, err := d.askAddressOf(d.store.Get(sessionID), strings.TrimSpace(protocol.Deref(msg.SeedID)))
+	if err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
 	id, err := ask.NewID()
 	if err != nil {
 		d.sendError(conn, err.Error())
@@ -45,19 +51,64 @@ func (d *Daemon) handleAskOpen(conn net.Conn, msg *protocol.AskOpenMessage) {
 	stored := store.Ask{
 		ID:        id,
 		SessionID: sessionID,
-		To:        d.inboxAddressOf(sessionID),
+		To:        to,
 		Subject:   ask.Subject(protocol.Deref(msg.Subject), parts),
 		Markdown:  msg.Markdown,
 		BaseDir:   strings.TrimSpace(msg.BaseDir),
 		CreatedAt: time.Now().UTC().Format(time.RFC3339Nano),
 	}
+	opened, err := d.describeAsk(stored, parts)
+	if err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
 	if err := d.store.AddAsk(stored); err != nil {
 		d.sendError(conn, err.Error())
 		return
 	}
-	opened := askToProto(stored, parts)
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AskOpenResult: &opened})
+	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AskOpenResult: &opened.wire})
 	d.publishFact(FactAskOpened, id, nil)
+}
+
+func (d *Daemon) askAddressOf(session *protocol.Session, seedID string) (inbox.Address, error) {
+	stake, _ := d.gardenDispatchCrown(session.ID)
+	if seedID == "" || seedID == stake {
+		if stake == "" {
+			return d.inboxAddressOf(session.ID), nil
+		}
+		return inbox.ToSeed(stake), nil
+	}
+	seed, _, err := d.readSeed(seedID)
+	if err != nil {
+		return inbox.Address{}, err
+	}
+	if seed.ProfileID != session.ProfileID {
+		return inbox.Address{}, d.requireSeedInProfile(seed.ID, session.ProfileID, false)
+	}
+	to := inbox.ToSeed(seed.ID)
+	if holder := d.inboxHolder(to); holder != nil && holder.ID == session.ID {
+		return to, nil
+	}
+	if tender := seed.Tender(); tender.Named() {
+		return inbox.Address{}, fmt.Errorf("%s is being tended by %s, and an ask is about a seed you tend; ask without --seed", seed.ID, tender.DisplayName())
+	}
+	return inbox.Address{}, fmt.Errorf("nobody is tending %s, and an ask is about a seed you tend; tend it first (attn seed tend %s), or ask without --seed", seed.ID, seed.ID)
+}
+
+func (d *Daemon) askAddressHeldBy(sessionID protocol.SessionID) func(inbox.Address) bool {
+	roles := d.inboxRoleAddresses(sessionID)
+	stake, _ := d.gardenDispatchCrown(sessionID)
+	return func(to inbox.Address) bool {
+		switch seedID := to.SeedID(); seedID {
+		case "":
+			return slices.Contains(roles, to)
+		case stake:
+			return true
+		default:
+			holder := d.inboxHolder(to)
+			return holder != nil && holder.ID == sessionID
+		}
+	}
 }
 
 func (d *Daemon) requireAsks(sessionID protocol.SessionID) error {
@@ -77,9 +128,9 @@ func (d *Daemon) handleAskList(conn net.Conn, msg *protocol.AskListMessage) {
 		return
 	}
 	result := &protocol.AskListResult{Enabled: d.launchedWithAsks(sessionID), Asks: []protocol.Ask{}}
-	to := d.inboxAddressOf(sessionID)
+	held := d.askAddressHeldBy(sessionID)
 	for _, open := range d.openAsks() {
-		if open.stored.To == to {
+		if held(open.stored.To) {
 			result.Asks = append(result.Asks, open.wire)
 		}
 	}
@@ -89,7 +140,7 @@ func (d *Daemon) handleAskList(conn net.Conn, msg *protocol.AskListMessage) {
 func (d *Daemon) handleAskClose(conn net.Conn, msg *protocol.AskCloseMessage) {
 	sessionID := protocol.TrimID(msg.SessionID)
 	stored, err := d.store.GetOpenAsk(strings.TrimSpace(msg.AskID))
-	if err != nil || stored.To != d.inboxAddressOf(sessionID) {
+	if err != nil || !d.askAddressHeldBy(sessionID)(stored.To) {
 		d.sendError(conn, fmt.Sprintf("%s is not an open ask of this session", msg.AskID))
 		return
 	}
@@ -115,17 +166,20 @@ var errAskGone = errors.New("this ask was already answered or withdrawn")
 
 func (d *Daemon) answerAsk(msg *protocol.AskAnswerMessage, profileID string) error {
 	stored, err := d.store.GetOpenAsk(strings.TrimSpace(msg.AskID))
-	if err != nil && !errors.Is(err, store.ErrAskNotOpen) {
-		return err
-	}
-	if err != nil || !askShownIn(profileID, d.askProfileID(stored)) {
+	if errors.Is(err, store.ErrAskNotOpen) {
 		return errAskGone
 	}
-	parts, err := ask.Parse(stored.Markdown)
 	if err != nil {
 		return err
 	}
-	text, err := ask.Reply(askToProto(stored, parts), msg.Answers, protocol.Deref(msg.Note))
+	open, err := d.readAsk(stored)
+	if err != nil {
+		return err
+	}
+	if !askShownIn(profileID, open.profileID) {
+		return errAskGone
+	}
+	text, err := ask.Reply(open.wire, msg.Answers, protocol.Deref(msg.Note))
 	if err != nil {
 		return err
 	}
@@ -171,27 +225,56 @@ func (d *Daemon) openAsks() []openAsk {
 	}
 	asks := make([]openAsk, 0, len(stored))
 	for _, a := range stored {
-		parts, err := ask.Parse(a.Markdown)
+		open, err := d.readAsk(a)
 		if err != nil {
-			d.logf("asks: ask %s no longer parses: %v", a.ID, err)
+			d.logf("asks: ask %s cannot be shown: %v", a.ID, err)
 			continue
 		}
-		asks = append(asks, openAsk{stored: a, wire: askToProto(a, parts), profileID: d.askProfileID(a)})
+		asks = append(asks, open)
 	}
 	return asks
 }
 
-func (d *Daemon) askProfileID(a store.Ask) string {
-	if profileID := a.To.ChiefProfileID(); profileID != "" {
-		return profileID
+func (d *Daemon) readAsk(a store.Ask) (openAsk, error) {
+	parts, err := ask.Parse(a.Markdown)
+	if err != nil {
+		return openAsk{}, err
 	}
-	if member := a.To.MemberID(); member != "" {
-		return d.crewProfileID(member)
+	return d.describeAsk(a, parts)
+}
+
+func (d *Daemon) describeAsk(a store.Ask, parts []protocol.AskPart) (openAsk, error) {
+	open := openAsk{stored: a, wire: protocol.Ask{
+		ID:        a.ID,
+		SessionID: a.SessionID,
+		Subject:   a.Subject,
+		Parts:     parts,
+		BaseDir:   a.BaseDir,
+		CreatedAt: a.CreatedAt,
+	}}
+	switch {
+	case a.To.SeedID() != "":
+		seed, _, err := d.readSeed(a.To.SeedID())
+		if err != nil {
+			return openAsk{}, err
+		}
+		open.wire.SeedID, open.wire.SeedTitle = protocol.Ptr(seed.ID), protocol.Ptr(seed.Title)
+		if seed.StepSlug != "" {
+			open.wire.SeedSlug = protocol.Ptr(seed.StepSlug)
+		}
+		open.profileID = seed.ProfileID
+	case a.To.MemberID() != "":
+		open.wire.CrewMember = protocol.Ptr(a.To.MemberID())
+		open.profileID = d.crewProfileID(a.To.MemberID())
+	case a.To.ChiefProfileID() != "":
+		open.wire.Chief = protocol.Ptr(true)
+		open.profileID = a.To.ChiefProfileID()
+	default:
+		if session := d.store.Get(a.SessionID); session != nil {
+			open.profileID = session.ProfileID
+		}
 	}
-	if session := d.store.Get(a.SessionID); session != nil {
-		return session.ProfileID
-	}
-	return ""
+	return open, nil
 }
 
 func (d *Daemon) projectAsks() {
@@ -230,22 +313,4 @@ func asksSnapshot(profileID string, open []openAsk) *protocol.AsksUpdatedMessage
 
 func askShownIn(profileID, askProfileID string) bool {
 	return profileID != "" && askProfileID == profileID
-}
-
-func askToProto(a store.Ask, parts []protocol.AskPart) protocol.Ask {
-	wire := protocol.Ask{
-		ID:        a.ID,
-		SessionID: a.SessionID,
-		Subject:   a.Subject,
-		Parts:     parts,
-		BaseDir:   a.BaseDir,
-		CreatedAt: a.CreatedAt,
-	}
-	if member := a.To.MemberID(); member != "" {
-		wire.CrewMember = protocol.Ptr(member)
-	}
-	if a.To.ChiefProfileID() != "" {
-		wire.Chief = protocol.Ptr(true)
-	}
-	return wire
 }

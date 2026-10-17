@@ -904,6 +904,9 @@ export interface Ask {
     crew_member?: string;
     id:           string;
     parts:        PartElement[];
+    seed_id?:     string;
+    seed_slug?:   string;
+    seed_title?:  string;
     session_id:   string;
     subject:      string;
     [property: string]: any;
@@ -1019,6 +1022,9 @@ export interface AskOpenResultElement {
     crew_member?: string;
     id:           string;
     parts:        PartElement[];
+    seed_id?:     string;
+    seed_slug?:   string;
+    seed_title?:  string;
     session_id:   string;
     subject:      string;
     [property: string]: any;
@@ -1028,6 +1034,7 @@ export interface AskOpenMessage {
     base_dir:   string;
     cmd:        AskOpenMessageCmd;
     markdown:   string;
+    seed_id?:   string;
     session_id: string;
     subject?:   string;
     [property: string]: any;
@@ -15859,6 +15866,9 @@ const typeMap: any = {
         { json: "crew_member", js: "crew_member", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
         { json: "parts", js: "parts", typ: a(r("PartElement")) },
+        { json: "seed_id", js: "seed_id", typ: u(undefined, "") },
+        { json: "seed_slug", js: "seed_slug", typ: u(undefined, "") },
+        { json: "seed_title", js: "seed_title", typ: u(undefined, "") },
         { json: "session_id", js: "session_id", typ: "" },
         { json: "subject", js: "subject", typ: "" },
     ], "any"),
@@ -15928,6 +15938,9 @@ const typeMap: any = {
         { json: "crew_member", js: "crew_member", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
         { json: "parts", js: "parts", typ: a(r("PartElement")) },
+        { json: "seed_id", js: "seed_id", typ: u(undefined, "") },
+        { json: "seed_slug", js: "seed_slug", typ: u(undefined, "") },
+        { json: "seed_title", js: "seed_title", typ: u(undefined, "") },
         { json: "session_id", js: "session_id", typ: "" },
         { json: "subject", js: "subject", typ: "" },
     ], "any"),
@@ -15935,6 +15948,7 @@ const typeMap: any = {
         { json: "base_dir", js: "base_dir", typ: "" },
         { json: "cmd", js: "cmd", typ: r("AskOpenMessageCmd") },
         { json: "markdown", js: "markdown", typ: "" },
+        { json: "seed_id", js: "seed_id", typ: u(undefined, "") },
         { json: "session_id", js: "session_id", typ: "" },
         { json: "subject", js: "subject", typ: u(undefined, "") },
     ], "any"),

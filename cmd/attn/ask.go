@@ -91,7 +91,7 @@ func openAsk(c *client.Client, sessionID protocol.SessionID, subject, file strin
 	if err != nil {
 		return err
 	}
-	opened, err := c.AskOpen(sessionID, markdown, subject, baseDir)
+	opened, err := c.AskOpen(sessionID, "", markdown, subject, baseDir)
 	if err != nil {
 		return err
 	}

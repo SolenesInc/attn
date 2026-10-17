@@ -319,6 +319,15 @@ type Ask struct {
 	// Parts corresponds to the JSON schema field "parts".
 	Parts []AskPart `json:"parts"`
 
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID *string `json:"seed_id,omitempty,omitzero"`
+
+	// SeedSlug corresponds to the JSON schema field "seed_slug".
+	SeedSlug *string `json:"seed_slug,omitempty,omitzero"`
+
+	// SeedTitle corresponds to the JSON schema field "seed_title".
+	SeedTitle *string `json:"seed_title,omitempty,omitzero"`
+
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID SessionID `json:"session_id"`
 
@@ -418,6 +427,9 @@ type AskOpenMessage struct {
 
 	// Markdown corresponds to the JSON schema field "markdown".
 	Markdown string `json:"markdown"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID *string `json:"seed_id,omitempty,omitzero"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID SessionID `json:"session_id"`
