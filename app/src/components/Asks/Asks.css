@@ -129,6 +129,10 @@
 
 .asks-row-from {
   flex-shrink: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: 600;
   color: var(--color-text-primary);
 }
