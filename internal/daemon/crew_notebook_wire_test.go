@@ -185,6 +185,36 @@ func TestACopiedDatabaseCannotUseAnotherHarnessNotebookHome(t *testing.T) {
 	crewErrorContains(t, err, home, copied.Dir, "outside harness root")
 }
 
+func TestChiefHandoffStartsItsSuccessorInTheCurrentNotebook(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	id := configureChiefOn(t, w, app, fakeagent.Codex, chiefModel(fakeagent.Codex))
+	run := w.Launched(id)
+	run.Prompted()
+	run.Reply("Ready. <!-- attn:state=idle -->")
+	before := crewRoster(t, cli)[0]
+	root := filepath.Join(w.Dir, "next-day-notebook")
+	setSetting(t, app, "notebook.root", root)
+	handoff := crewHandoff(t, cli, id, "Continue in the current Notebook.", false, "")
+	if handoff.SessionID == nil || handoff.NapError != nil {
+		t.Fatalf("Chief successor: %+v", handoff)
+	}
+	next := w.Launched(string(*handoff.SessionID))
+	if session := queriedSession(t, cli, string(*handoff.SessionID)); session.Directory != root {
+		t.Fatalf("successor launched outside the current Notebook: %+v", session)
+	}
+	if !strings.Contains(strings.Join(next.Argv, " "), `projects."`+root+`".trust_level="trusted"`) {
+		t.Fatalf("successor Notebook trust: %q", next.Argv)
+	}
+	after := crewRoster(t, cli)[0]
+	if after.HomeDir != before.HomeDir || protocol.Deref(after.BindingSession) != *handoff.SessionID {
+		t.Fatalf("successor moved home or lost binding: before=%+v after=%+v", before, after)
+	}
+	if raw, err := os.ReadFile(handoff.Path); err != nil || !strings.Contains(string(raw), "Continue in the current Notebook.") || !strings.HasPrefix(handoff.Path, before.HomeDir+string(filepath.Separator)) {
+		t.Fatalf("handoff left the original home: %s %q %v", handoff.Path, raw, err)
+	}
+}
+
 func TestLegacyHomesMoveOnlyOnRequestAndNotebookRenamesMoveTheWholeHome(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
