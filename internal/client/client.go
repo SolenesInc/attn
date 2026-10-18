@@ -853,15 +853,6 @@ func (c *Client) List(filter string) (*ListResult, error) {
 	}, nil
 }
 
-func (c *Client) Heartbeat(id protocol.SessionID) error {
-	msg := protocol.HeartbeatMessage{
-		Cmd: protocol.CmdHeartbeat,
-		ID:  id,
-	}
-	_, err := c.send(msg)
-	return err
-}
-
 func (c *Client) OpenMarkdown(path string, sessionID protocol.SessionID) error {
 	msg := protocol.OpenMarkdownMessage{
 		Cmd:  protocol.CmdOpenMarkdown,

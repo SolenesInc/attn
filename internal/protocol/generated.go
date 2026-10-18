@@ -1612,14 +1612,6 @@ type Branch struct {
 	Name string `json:"name"`
 }
 
-type BranchChangedMessage struct {
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// Session corresponds to the JSON schema field "session".
-	Session *Session `json:"session,omitempty,omitzero"`
-}
-
 type BranchesResultMessage struct {
 	// Branches corresponds to the JSON schema field "branches".
 	Branches []Branch `json:"branches"`
@@ -4921,14 +4913,6 @@ type HarnessModelsResultMessage struct {
 
 	// TierDefaults corresponds to the JSON schema field "tier_defaults".
 	TierDefaults TierDefaults `json:"tier_defaults"`
-}
-
-type HeartbeatMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// ID corresponds to the JSON schema field "id".
-	ID SessionID `json:"id"`
 }
 
 type HeatState string
