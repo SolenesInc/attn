@@ -5,6 +5,7 @@ import { PNG } from 'pngjs';
 import { deflateSync } from 'node:zlib';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { execFileSync, spawn } from 'node:child_process';
 import { parseCommonArgs, launchFreshAppAndConnect, printCommonHelp } from './common.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -22,6 +23,7 @@ const options = parseCommonArgs(process.argv.slice(2));
 if (options.help) { printCommonHelp("scripts/real-app-harness/scenario-quick-capture.mjs"); process.exit(0); }
 assert.equal(process.platform, 'darwin');
 const runner = createScenarioRunner(options, { scenarioId: 'QUICK-CAPTURE', tier: 'tier1-local-shell', prefix: 'quick-capture', allowRealAgents: false });
+const hostedRecorder = path.join(runner.runDir, 'window-recorder');
 const launchApp = appPlatform.launchApp.bind(appPlatform);
 appPlatform.launchApp = async args => {
   if (args.appPath !== options.appPath) return launchApp(args);
@@ -134,16 +136,16 @@ async function recordHostedStep(name, action, windowTitle = 'Quick Capture') {
   const windowId = await driver.mainWindowId({ windowTitle });
   assert.ok(windowId);
   const output = path.join(runner.runDir, `${name}.mp4`);
-  const child = spawn('/usr/sbin/screencapture', ['-x', '-v', '-V', '20', '-l', String(windowId), output], { stdio: ['ignore', 'ignore', 'pipe'] });
-  let stderr = '';
-  child.stderr.on('data', chunk => { stderr += chunk; });
-  const exit = new Promise((resolve, reject) => { child.once('error', reject); child.once('exit', (code, signal) => resolve({ code, signal })); });
+  const recording = startWindowRecording({ windowId, outputPath: output, command: hostedRecorder });
   let actionError;
-  try { await action(); } catch (error) { actionError = error; }
-  const result = await exit;
-  runner.writeJson(`${name}-recording.json`, { ...result, windowId, output, stderr });
+  try {
+    await recording.waitForFirstFrame();
+    await action();
+  } catch (error) { actionError = error; }
+  const result = await recording.stop();
+  runner.writeJson(`${name}-recording.json`, result);
   if (actionError) throw actionError;
-  assert.equal(result.code, 0, stderr);
+  assert.equal(result.failure, null);
   assert.ok(fs.statSync(output).size > 0, 'Native recording must contain bytes');
 }
 async function dropFiles(files) {
@@ -188,6 +190,9 @@ runner.registerCleanup('other-fixture', async () => { if (otherFixtureLaunch?.pi
 runner.registerCleanup('observer', () => observer.close());
 try {
   await runner.step('launch_packaged_capture', async () => {
+    if (process.env.CI === 'true') {
+      execFileSync('/usr/bin/swiftc', ['-O', fileURLToPath(new URL('./WindowRecorder.swift', import.meta.url)), '-o', hostedRecorder]);
+    }
     assert.equal(fs.existsSync(home), false, 'Each run owns a fresh crew fixture home');
     runner.registerCleanup('crew-fixture', async () => {
       const member = JSON.parse(runAttn(['crew', 'list', '--json'])).find(member => member.id === mailbox);
@@ -209,11 +214,13 @@ try {
     await client.request('set_setting', { key: 'quick_capture_enabled', value: 'false' });
     await client.request('dispatch_shortcut', { shortcutId: 'ui.openSettings' });
     await client.request('settings_select_section', { sectionId: 'experimental' });
+    await driver.activateApp();
     await recordHostedStep('enable-quick-capture', async () => {
       await client.request('dom_click', { selector: '[role="switch"][aria-label="Quick Capture"]' });
       await observer.waitFor(() => observer.getSetting('quick_capture_enabled') === 'true', 'Quick Capture enabled in Settings');
-      await client.request('dom_click', { selector: '[data-testid="settings-close"]' });
+      await driver.screenshot(path.join(runner.runDir, 'enabled-quick-capture.png'), { windowId: await driver.mainWindowId({ windowTitle: mainTitle }) });
     }, mainTitle);
+    await client.request('dom_click', { selector: '[data-testid="settings-close"]' });
     const initialBinding = (await state()).binding;
     assert.ok(initialBinding === '' || initialBinding === testBinding, 'This named instance must be Off or retain its own test binding');
     runner.writeJson('initial-binding.json', { binding: initialBinding, testBinding });
@@ -303,8 +310,9 @@ try {
     await recordHostedStep('reenable-quick-capture', async () => {
       await client.request('dom_click', { selector: '[role="switch"][aria-label="Quick Capture"]' });
       await observer.waitFor(() => observer.getSetting('quick_capture_enabled') === 'true', 'Quick Capture re-enabled');
-      await client.request('dom_click', { selector: '[data-testid="settings-close"]' });
+      await driver.screenshot(path.join(runner.runDir, 'reenabled-quick-capture.png'), { windowId: await driver.mainWindowId({ windowTitle: mainTitle }) });
     }, mainTitle);
+    await client.request('dom_click', { selector: '[data-testid="settings-close"]' });
     await fixture.activateApp();
     assert.equal((await openCapture()).text, 'Draft retained across the experimental switch');
     await key('a', ['command']);
