@@ -105,6 +105,8 @@ garden                  a profile's issue tracker
    ├─ state (1)         planted, growing, parked, harvested or withered
    ├─ seed (0..n)       a subtask
    ├─ tender (at most 1)  the assignee: the session or crew member
+   ├─ watcher (0..n)    a session or crew member that follows the seed and
+   │                    its subtasks; like a watcher on a ticket
    ├─ note (0..n)       a comment in the ticket's log
    └─ edge (0..n)       blocks or discovered-from
 tend                    claim a seed; like assigning a ticket to yourself
@@ -228,6 +230,8 @@ Temporary debt. Read the old name as the new term. Never write the old name.
 - Named claims let any name tend a seed. Remove them, or define who can use
   them.
 - The chief is not a crew member. Make it one.
+- A watch belongs to a session. Make it belong to an address, so a crew
+  member's watch outlives their session.
 - Prompts say hold, held and holder for a claimed seed
   (internal/prompts/content/garden.md, the delegation reference). Say claim and
   tender.
