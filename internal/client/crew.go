@@ -142,3 +142,14 @@ func (c *Client) CrewRestore(member string) (*protocol.CrewRestoreResult, error)
 	}
 	return resp.CrewRestoreResult, nil
 }
+
+func (c *Client) CrewMoveHome(member string) (*protocol.CrewMoveHomeResult, error) {
+	resp, err := c.send(protocol.CrewMoveHomeMessage{Cmd: protocol.CmdCrewMoveHome, Member: member})
+	if err != nil {
+		return nil, err
+	}
+	if resp.CrewMoveHomeResult == nil {
+		return nil, fmt.Errorf("the daemon answered without a home move result")
+	}
+	return resp.CrewMoveHomeResult, nil
+}

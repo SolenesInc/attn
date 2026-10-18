@@ -33,6 +33,8 @@ func runCrew() {
 		runCrewRetirement(os.Args[2], os.Args[3:])
 	case "prime":
 		runCrewPrime(os.Args[3:])
+	case "move-home":
+		runCrewMoveHome(os.Args[3:])
 	case "rename":
 		runCrewRename(os.Args[3:])
 	case "set":
@@ -47,8 +49,10 @@ func runCrew() {
 func writeCrewHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn crew <command>
 
-Manage the Crew. Members' charters and handoffs persist across sessions
-in the active instance's crew directory. Every member belongs to a profile
+Manage the Crew. Members' charters and letters persist across sessions.
+New homes live in the profile's Notebook under crew/<lowercase-name>/,
+with a numeric suffix when needed. Legacy homes stay in place until move-home.
+Every member belongs to a profile
 and wakes only there. Names work within your profile, ignoring case.
 Outside attn, use --profile <name|id> when several profiles exist.
 Use member:<key> to address a member by permanent key.
@@ -83,7 +87,14 @@ commands:
         If already awake, return the existing session.
 
   rename <member> <name> [--json]
-        Rename a member. Their key, home and mail stay the same.
+        Rename a member. Notebook homes move within their current parent folder;
+        put the member to sleep first and wait for their session to close.
+        Legacy members can be renamed while awake; their homes stay in place.
+        Their key and mail stay the same.
+
+  move-home <member> [--profile <name|id>] [--json]
+        Move a legacy home, including every file, into the profile's Notebook.
+        Put the member to sleep first: attn crew sleep <member>.
 
   sleep <member> [--json]
         Ask the member to write a handoff and close with attn handoff --sleep.
@@ -433,6 +444,9 @@ func runCrewRename(args []string) {
 		printJSON(result)
 		return
 	}
+	if result.CleanupError != nil {
+		fmt.Fprintln(os.Stderr, *result.CleanupError)
+	}
 	fmt.Printf("%s is now %s (member:%s)\n", result.PreviousName, result.Name, result.Member)
 }
 
@@ -541,4 +555,29 @@ func runCrewPrime(args []string) {
 		os.Exit(1)
 	}
 	fmt.Println(protocol.Deref(result.Guidance))
+}
+
+func runCrewMoveHome(args []string) {
+	fs := flag.NewFlagSet("crew move-home", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	profile := fs.String("profile", "", "resolve names in this profile")
+	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
+	names, err := parseInterspersedFlagArgs(fs, args)
+	if err != nil || len(names) != 1 {
+		fmt.Fprintln(os.Stderr, "usage: attn crew move-home <member> [--profile <name|id>] [--json]")
+		os.Exit(2)
+	}
+	result, err := crewClient(*profile).CrewMoveHome(names[0])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "crew move-home: %v\n", err)
+		os.Exit(1)
+	}
+	if *jsonOut {
+		printJSON(result)
+		return
+	}
+	fmt.Printf("%s's home is now %s\n", result.Member.Name, result.Member.HomeDir)
+	if result.CleanupError != nil {
+		fmt.Fprintln(os.Stderr, *result.CleanupError)
+	}
 }

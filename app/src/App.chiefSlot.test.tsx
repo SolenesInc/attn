@@ -11,7 +11,7 @@ const slot = () => within(screen.getByTestId('chief-slot'));
 const phase = () => screen.getByTestId('chief-slot').getAttribute('data-chief-phase');
 
 for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : 'desktop'} flow`, () => {
-  const settings = { ...available, queue_mode_enabled: String(queue) };
+  const settings = { ...available, queue_mode_enabled: String(queue), 'notebook.root': '~/attn-notebook-work' };
   it.each([false, true])('keeps the configured model focused when its catalog arrives (awake=%s)', async awake => {
     const current = member({ agent: 'claude', model: 'opus', binding_session: awake ? 'chief-day' : undefined });
     const { daemon } = await renderApp({
@@ -250,6 +250,9 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
     expect(slot().getByRole('radio', { name: /Opus 5.5/ })).toHaveAttribute('aria-checked', 'true');
     expect(document.activeElement).toBe(slot().getByRole('radio', { name: /Opus 5.5/ }));
     expect(slot().getByRole('radio', { name: 'low' })).toHaveAttribute('aria-checked', 'true');
+    const folder = slot().getByRole('textbox', { name: 'Notebook folder' });
+    expect(folder).toHaveValue('~/attn-notebook-work');
+    await gesture(daemon, () => fireEvent.change(folder, { target: { value: '~/Notes/Work' } }));
     daemon.on('crew_set', () => [
       { event: 'sessions_updated', sessions: [daemonSession('chief-day', { chief: true, crew_member: current.key, state: 'idle' })] },
       { event: 'profile_arrangement_changed', profile: defaultProfile('desktop-chief-day'), desktops: [soloDesktop('chief-day')] },
@@ -257,7 +260,7 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
       { event: 'crew_set_result', success: true, conflict: false, member: member({ agent: 'claude', model: 'opus', binding_session: 'chief-day', revision: 2 }), woke_session_id: 'chief-day' },
     ]);
     await gesture(daemon, () => fireEvent.keyDown(slot().getByRole('radio', { name: /Opus 5.5/ }), { key: 'Enter' }));
-    expect(daemon.sentOf('crew_set')).toEqual([expect.objectContaining({ member: 'member:chief-key', agent: 'claude', model: 'opus', effort: 'low', expected_revision: 1 })]);
+    expect(daemon.sentOf('crew_set')).toEqual([expect.objectContaining({ member: 'member:chief-key', agent: 'claude', model: 'opus', effort: 'low', expected_revision: 1, notebook_root: '~/Notes/Work' })]);
     expect(daemon.sentOf('crew_wake')).toEqual([]);
     expect(phase()).toBe('awake');
     expect(slot().getByRole('button', { name: 'Open Captain' })).toBeInTheDocument();

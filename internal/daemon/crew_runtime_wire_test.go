@@ -21,7 +21,7 @@ func TestACreatedMemberWakesIntoItsFirstDay(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := created.Member
-	if m.Name != "Keel" || !strings.HasPrefix(m.Key, "m-") || m.BindingSession != nil || m.HomeDir != filepath.Join(w.Dir, "crew", app.SelectedProfile(), m.Key) || m.CharterPath != filepath.Join(m.HomeDir, "CHARTER.md") {
+	if m.Name != "Keel" || !strings.HasPrefix(m.Key, "m-") || m.BindingSession != nil || m.HomeDir != filepath.Join(w.Dir, "notebook", "crew", "keel") || m.CharterPath != filepath.Join(m.HomeDir, "CHARTER.md") {
 		t.Fatalf("created = %+v", m)
 	}
 	wake := wakeCrew(t, cli, "Keel", "")

@@ -47,6 +47,9 @@ For delegation mechanics and configured role selection, read [references/delegat
 
 ## Capability Index
 
+- **Create, rename, move or configure a crew member:** read
+  [references/crew.md](references/crew.md).
+
 - **Create an authorized Attn delegation:** read [references/delegation.md](references/delegation.md).
 - **Change the user's delegation roles, their models, alternatives or the
   fallback, or undo such a change:** read

@@ -165,6 +165,24 @@ func TestCrewRenameKeepsTheKeyAndShowsTheNewName(t *testing.T) {
 	}
 }
 
+func TestCrewMoveHomeReportsTheNotebookLocation(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	writeCharter(t, s, "keel")
+	writeCharter(t, s, "trellis")
+	s.Start()
+	var moved protocol.CrewMoveHomeResult
+	s.Attn("crew", "move-home", "Keel", "--json").JSON(t, &moved)
+	if moved.Member.Key != "keel" || moved.PreviousHome != filepath.Join(s.Dir, "crew", "keel") || moved.Member.HomeDir != filepath.Join(s.Dir, "notebook", "crew", "keel") {
+		t.Fatalf("move-home JSON: %+v", moved)
+	}
+	requireStdout(t, s.Attn("crew", "move-home", "Trellis"), "Trellis's home is now "+filepath.Join(s.Dir, "notebook", "crew", "trellis"))
+	requireFailure(t, s.Attn("crew", "move-home", "Keel"), "crew move-home: ", "has no legacy home to move")
+	if raw, err := os.ReadFile(moved.Member.CharterPath); err != nil || string(raw) != "# keel\n" {
+		t.Fatalf("moved charter: %q %v", raw, err)
+	}
+}
+
 func TestAnInterruptedCrewLaunchIsTheLedgerRowWhenItsConversationSurvives(t *testing.T) {
 	for _, newerFinished := range []bool{false, true} {
 		t.Run(map[bool]string{false: "retained", true: "newer_day_finished"}[newerFinished], func(t *testing.T) {

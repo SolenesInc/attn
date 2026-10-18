@@ -8,12 +8,14 @@ import { chiefHarnesses, chiefRouteRules } from './chiefRoute';
 export function ChiefSetup({ chief, autoFocus, onSave, onClose, onReturnFocus, onOpenSettings }: {
   chief: ChiefView;
   autoFocus: boolean;
-  onSave: (route: HarnessRoute) => Promise<boolean>;
+  onSave: (route: HarnessRoute, notebookRoot?: string) => Promise<boolean>;
   onClose: () => void;
   onReturnFocus: () => void;
   onOpenSettings?: () => void;
 }) {
   const { settings, sendGetSettings } = useDaemonApi();
+  const [notebookRoot, setNotebookRoot] = useState<string | null>(null);
+  const folder = notebookRoot ?? String(settings['notebook.root'] || '');
   const catalog = useHarnesses();
   const harnesses = chiefHarnesses(catalog.harnesses, settings);
   const defaultHarness = harnesses.find(harness => harness.id === settings.new_session_agent) || harnesses[0];
@@ -59,11 +61,11 @@ export function ChiefSetup({ chief, autoFocus, onSave, onClose, onReturnFocus, o
     };
   });
   const busy = chief.requestPending;
-  const canSave = !busy && Boolean(harness && value.model && !catalog.loading && !catalog.error && !view.loading && !view.error);
+  const canSave = !busy && Boolean(harness && value.model && !catalog.loading && !catalog.error && !view.loading && !view.error && (chief.agent || folder.trim()));
   const submit = () => {
     if (!canSave) return;
     const returnFocus = Boolean(chief.agent && root.current?.contains(document.activeElement));
-    void onSave(value).then(saved => { if (saved && returnFocus) onReturnFocus(); });
+    void onSave(value, chief.agent ? undefined : folder.trim()).then(saved => { if (saved && returnFocus) onReturnFocus(); });
   };
   const moveRadio = (event: KeyboardEvent, kind: 'harness' | 'model' | 'effort') => {
     const group = event.currentTarget;
@@ -116,6 +118,10 @@ export function ChiefSetup({ chief, autoFocus, onSave, onClose, onReturnFocus, o
       {view.effortMode === 'levels' && <div className="chief-effort" role="radiogroup" aria-label="Chief effort" onKeyDown={event => moveRadio(event, 'effort')}>
         {view.effortLevels.map(effort => <button type="button" role="radio" key={effort} disabled={busy} aria-checked={value.effort === effort} tabIndex={value.effort === effort ? 0 : -1} onClick={() => setDraft({ ...value, effort })}>{effort}</button>)}
       </div>}
+      {!chief.agent && <label className="chief-notebook-folder">Notebook folder
+        <input aria-label="Notebook folder" value={folder} disabled={busy} onChange={event => setNotebookRoot(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); submit(); } }} />
+        <small>Your chief works here. Crew charters and letters live in crew/.</small>
+      </label>}
       <button type="button" className="chief-setup-primary" disabled={!canSave} onClick={() => submit()}>{chief.phase === 'configuring' ? 'Saving…' : chief.agent ? chief.sessionId ? 'Save for next wake' : 'Save' : `Wake ${chief.name}`}{!chief.agent && <kbd>⏎</kbd>}</button>
     </>}
     {catalog.error && <div role="alert">{catalog.error}<button ref={retainFocus} type="button" onClick={catalog.retry}>Check again</button></div>}

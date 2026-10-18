@@ -24,6 +24,9 @@ func (d *Daemon) crewDocumentMember(key who.MemberKey) (crew.Member, error) {
 	if err := d.validateCrewMemberPaths(member); err != nil {
 		return crew.Member{}, err
 	}
+	if member.HomeDir == "" {
+		return crew.Member{}, fmt.Errorf("choose the Chief's harness, model and Notebook folder before editing its charter")
+	}
 	return member, nil
 }
 

@@ -50,9 +50,8 @@ func (d *Daemon) createCrewMember(b crewBirth) (store.CrewIdentity, error) {
 	return identity, d.furnishCrewMember(identity, b)
 }
 
-func (d *Daemon) furnishCrewMember(id store.CrewIdentity, b crewBirth) error {
-	home := filepath.Join(d.dataRoot, crew.HomesDirName, id.ProfileID, id.Key.String())
-	member := crew.Member{Onboarded: b.Onboarded, Key: id.Key, HomeDir: home, CharterPath: filepath.Join(home, crew.CharterFileName), AwarenessDirs: []string{}}
+func (d *Daemon) furnishCrewMember(id store.CrewIdentity, b crewBirth) (resultErr error) {
+	member := crew.Member{Onboarded: b.Onboarded, Key: id.Key, AwarenessDirs: []string{}}
 	if b.insertIdentity {
 		if err := d.applyCrewSettings(&member, &protocol.CrewSetMessage{Agent: protocol.Ptr(b.Agent), Model: protocol.Ptr(b.Model), Effort: protocol.Ptr(b.Effort), Cwd: protocol.Ptr(b.CWD)}); err != nil {
 			return err
@@ -63,6 +62,16 @@ func (d *Daemon) furnishCrewMember(id store.CrewIdentity, b crewBirth) error {
 		member.Effort = b.Effort
 		member.CWD = b.CWD
 	}
+	if !d.isChief(id.Key) || member.Agent != "" {
+		if err := d.furnishCrewHome(id, &member, b.Charter); err != nil {
+			return err
+		}
+	}
+	defer func() {
+		if resultErr != nil && member.HomeDir != "" {
+			_ = os.RemoveAll(member.HomeDir)
+		}
+	}()
 	if err := d.validateCrewMemberPaths(member); err != nil {
 		return err
 	}
@@ -88,12 +97,6 @@ func (d *Daemon) furnishCrewMember(id store.CrewIdentity, b crewBirth) error {
 	d.announceCommittedWrite(fact, written.Seq)
 	d.publishFact(FactCrewRegistered, id.Key.String(), nil)
 	d.publishArrangementChanged(id.ProfileID)
-	if err := os.MkdirAll(home, 0o755); err != nil {
-		return crewHomeWriteError(id, home, err)
-	}
-	if err := writeCrewCharter(member.CharterPath, b.Charter); err != nil {
-		return crewHomeWriteError(id, home, err)
-	}
 	return nil
 }
 
@@ -115,10 +118,6 @@ func writeCrewCharter(path, charter string) error {
 		return err
 	}
 	return os.Rename(file.Name(), path)
-}
-
-func crewHomeWriteError(id store.CrewIdentity, home string, err error) error {
-	return fmt.Errorf("%s exists, but its home at %s could not be written (%v); `attn crew wake %s` creates it", id.Name, home, err, id.Name)
 }
 
 func (d *Daemon) handleCrewCreate(conn net.Conn, msg *protocol.CrewCreateMessage) {

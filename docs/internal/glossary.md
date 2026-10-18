@@ -108,7 +108,8 @@ packet                  an epic template
 crew member             an agent with a permanent identity and memory
 ├─ name (1)             the member’s name; unique in their profile
 ├─ charter (1)          who the member is and what they live for
-├─ member home (1)      the folder that holds the charter and the letters
+├─ member home (at most 1)  the folder for the charter and letters; new homes
+│                       live in the Notebook
 ├─ launch desktop (1)   the desktop where their sessions start
 ├─ letter (0..n)        what one of the member's sessions leaves for their
 │                       next sessions; like a shift handoff

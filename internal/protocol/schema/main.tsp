@@ -5379,6 +5379,7 @@ model Response {
   agent_inbox_batch_result?: AgentInboxBatchResult;
   agent_msg_status_result?: AgentPeerMessage;
   crew_rename_result?: CrewRenameResult;
+  crew_move_home_result?: CrewMoveHomeResult;
   crew_create_result?: CrewCreateResult;
   crew_retire_result?: CrewRetireResult;
   crew_restore_result?: CrewRestoreResult;
@@ -5748,6 +5749,7 @@ model CrewSleepResult {
 // about. Registry state, not prose: the home's markdown is never rewritten, and
 // an omitted field is left as it was.
 model CrewSetMessage {
+  notebook_root?: string;
   source_session_id?: SessionID;
   profile_id?: string;
   launch_desktop?: string; // own, an empty slot, or a desktop ref of the item's profile
@@ -6818,6 +6820,7 @@ model CrewRenameMessage {
  profile_id?: string;
 }
 model CrewRenameResult {
+ cleanup_error?: string;
  member: string;
  name: string;
  previous_name: string;
@@ -6860,4 +6863,16 @@ model CrewRestoreMessage {
 model CrewRestoreResult {
   member: CrewMember;
   already_active: boolean;
+}
+
+model CrewMoveHomeMessage {
+  cmd: "crew_move_home";
+  member: string;
+  source_session_id?: SessionID;
+  profile_id?: string;
+}
+model CrewMoveHomeResult {
+  member: CrewMember;
+  previous_home: string;
+  cleanup_error?: string;
 }

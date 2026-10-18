@@ -197,6 +197,7 @@ export interface CrewSleepResult {
   detail?: string;
 }
 export interface CrewSetOptions {
+  notebookRoot?: string;
   launchDesktop?: import('../types/generated').LaunchDesktopSetting;
   member: string;
   expectedRevision: number;
@@ -3639,6 +3640,7 @@ export function useDaemonSocket({
         model: options.model,
         effort: options.effort,
         ...(options.launchDesktop ? { launch_desktop_setting: options.launchDesktop } : {}),
+        ...(options.notebookRoot !== undefined ? { notebook_root: options.notebookRoot } : {}),
       },
       `Saving ${memberName(options.member)}'s launch settings timed out`,
       MODEL_DISCOVERY_TIMEOUT_MS,

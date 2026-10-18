@@ -20,3 +20,6 @@
 .chief-setup-error { color: var(--color-error); }
 .chief-install-row { margin-top: 8px; }
 .chief-install-row > span { font-size: 10px; color: var(--color-text-dimmed); }
+
+.chief-notebook-folder { display: block; margin: 10px 0; }
+.chief-notebook-folder input { box-sizing: border-box; width: 100%; margin: 5px 0; padding: 6px; border: 1px solid var(--color-border-subtle); border-radius: 4px; background: var(--color-bg-elevated); color: inherit; font: inherit; }

@@ -8,9 +8,11 @@ directly with native tools** (Read/Write/Edit, plus `ls`/`grep` over the tree).
 There is no `attn notebook` CLI. The notebook root is given to you in your
 operating guidance. `attn settings get notebook.root` shows the saved folder.
 Use `attn settings set notebook.root ~/notes/work` to change it for your profile;
-existing notes stay in place. New profiles get `~/attn-notebook-<profile name>`.
+existing notes and crew homes stay in place. New profiles get `~/attn-notebook-<profile name>`.
 Named instances add the instance name; taken folders get a numeric suffix.
 Existing profiles keep their folders. Paths below are relative to `<root>`.
+
+The `crew/` folder belongs to attn; leave member folders in place when tidying.
 
 ## Orient First
 

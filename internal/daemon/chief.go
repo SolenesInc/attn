@@ -155,6 +155,9 @@ func (d *Daemon) ensureChief(profile string, u *store.ChiefUpgrade) error {
 			d.logf("Chief home unavailable: %v", err)
 			return nil
 		}
+		if member.HomeDir == "" {
+			return nil
+		}
 		if err := os.MkdirAll(member.HomeDir, 0o755); err != nil {
 			return err
 		}
@@ -175,7 +178,6 @@ func (d *Daemon) ensureChief(profile string, u *store.ChiefUpgrade) error {
 			b.Model = u.Model
 			b.Effort = u.Effort
 		}
-		b.CWD = u.CWD
 		b.Onboarded = true
 	}
 	return d.furnishCrewMember(identity, b)

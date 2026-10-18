@@ -579,7 +579,27 @@ func (d *Daemon) crewSet(key who.MemberKey, msg *protocol.CrewSetMessage) (*prot
 				return nil, false, fmt.Errorf("the Chief needs a model too: attn crew set chief --agent <harness> --model <model>")
 			}
 		}
+		if msg.NotebookRoot != nil {
+			if !chief || before.HomeDir != "" {
+				return nil, false, fmt.Errorf("the Notebook folder can only be picked before the Chief is configured; use attn settings set notebook.root <folder> to change it later")
+			}
+			if _, err := d.setSetting(&protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: string(settingNotebookRoot), Value: *msg.NotebookRoot, ProfileID: protocol.Ptr(d.crewProfileID(key.String()))}); err != nil {
+				return nil, false, err
+			}
+		}
+		if chief && member.HomeDir == "" && member.Agent != "" {
+			id, err := d.store.CrewIdentity(key)
+			if err != nil {
+				return nil, false, err
+			}
+			if err := d.furnishCrewHome(id, &member, prompts.RenderText("chief", "charter", nil)); err != nil {
+				return nil, false, err
+			}
+		}
 		revision, err := d.writeCrewMemberWithLaunch(*schema, member, doc.Rev, setting)
+		if err != nil && before.HomeDir == "" && member.HomeDir != "" {
+			_ = os.RemoveAll(member.HomeDir)
+		}
 		if err == nil {
 			if setting != nil {
 				d.publishArrangementChanged(d.crewProfileID(member.Key.String()))

@@ -25,6 +25,7 @@ let profile;
 let previousProfile;
 let chief;
 let firstDay;
+let notebookRoot;
 let liveAgent;
 let webkitBaseline;
 const state = () => client.request('chief_slot_get_state');
@@ -101,8 +102,10 @@ try {
     await waitDom('[data-testid="chief-slot"][data-chief-phase="unconfigured"]');
     chief = roster().find(member => member.chief);
     runner.assert(chief && !chief.agent, 'a new profile has an unconfigured chief', { chief });
-    const cwd = path.join(runner.sessionDir, 'chief-home');
+    const cwd = path.join(runner.sessionDir, 'chief-notebook');
+    notebookRoot = cwd;
     fs.mkdirSync(cwd, { recursive: true });
+    if (process.env.ATTN_HARNESS_NOTEBOOK_FIXTURE) fs.cpSync(process.env.ATTN_HARNESS_NOTEBOOK_FIXTURE, cwd, { recursive: true, dereference: true });
     writeMockAgentFixture(cwd, { version: 1, agent: 'claude', turns: [
       { includes: 'You have been woken', actions: [{ type: 'reply', text: 'CHIEF_SLOT_READY', state: 'idle' }] },
       { includes: '📬 You have unread items', actions: [
@@ -110,7 +113,6 @@ try {
         { type: 'attn', args: ['handoff', '--sleep', '-m', 'The chief slot scenario left this letter.'] },
       ] },
     ] });
-    cli(['crew', 'set', 'chief', '--profile', profile.id, '--cwd', cwd, '--json']);
     await screenshot('01-chief-setup');
     await sampleIdle('unconfigured');
     await pressShortcutKeys(client, driver, 'session.toggleSidebar');
@@ -134,19 +136,49 @@ try {
     await waitDom('[data-testid="chief-slot"][data-chief-phase="unconfigured"]');
     runner.writeJson('restored-terminal-focus.json', { chief: await state(), focus: await client.request('dom_active_element') });
   });
-  await runner.step('two_enters_wake_and_focus', async () => {
+  await runner.step('folder_enter_wakes_and_focuses', async () => {
     await click('[data-testid="chief-setup"] [role="radiogroup"][aria-label="Chief harness"] [role="radio"]:first-child');
     await driver.pressEnter();
     await waitDom('[data-testid="chief-setup"] [aria-label="Chief model"] [aria-checked="true"]', { focused: true });
-    await screenshot('02-chief-model');
+    const folderSelector = '[data-testid="chief-setup"] input[aria-label="Notebook folder"]';
+    const { value: defaultFolder } = await client.request('dom_value', { selector: folderSelector });
+    runner.assert(defaultFolder === cli(['settings', 'get', 'notebook.root', '--profile', profile.id]).trim(), 'the folder is prefilled with the profile Notebook', { defaultFolder });
+    await click(folderSelector);
+    await driver.pressKey('a', { command: true });
+    await driver.typeText(notebookRoot);
+    await screenshot('02-chief-model-and-folder');
     await driver.pressEnter();
     await waitDom('[data-testid="chief-slot"][data-chief-phase="awake"]');
     const awake = await state();
     firstDay = awake.sessionId;
     runner.assert(awake.shownAgentId === firstDay, 'Enter on the model wakes and shows the chief', { awake });
-    runner.assert(roster().find(member => member.chief)?.binding_session === firstDay, 'the roster binds the chief to the shown session');
+    const configured = roster().find(member => member.chief);
+    runner.assert(configured?.binding_session === firstDay, 'the roster binds the chief to the shown session');
+    runner.assert(configured?.home_dir === path.join(notebookRoot, 'crew', 'chief') && configured?.cwd === notebookRoot, 'the chief has its final Notebook home and working directory', { configured });
+    runner.assert(cli(['settings', 'get', 'notebook.root', '--profile', profile.id]).trim() === notebookRoot, 'setup saves the profile Notebook folder');
     await screenshot('03-chief-awake');
     runner.writeJson('first-wake.json', { state: awake, crew: roster() });
+  });
+  await runner.step('charter_opens_and_saves_in_the_notebook_editor', async () => {
+    await pressShortcutKeys(client, driver, 'notebook.openFullscreen');
+    await waitDom('.notebook-browser[role="dialog"]');
+    await click('[role="treeitem"][title="crew"]');
+    await waitDom('[role="treeitem"][title="crew/chief"]');
+    await click('[role="treeitem"][title="crew/chief"]');
+    await waitDom('[role="treeitem"][title="crew/chief/CHARTER.md"]');
+    await click('[role="treeitem"][title="crew/chief/CHARTER.md"]');
+    await waitDom('.notebook-browser-document', { textIncludes: 'CHARTER.md' });
+    const editor = '.notebook-browser[role="dialog"] .cm-content[contenteditable="true"]';
+    await click(editor);
+    const marker = 'Notebook charter edit verified.';
+    await driver.typeText(marker);
+    await waitDom('.notebook-browser-save-status', { textIncludes: 'Saved' });
+    const charter = fs.readFileSync(path.join(notebookRoot, 'crew', 'chief', 'CHARTER.md'), 'utf8');
+    runner.assert(charter.includes(marker), 'the Notebook editor saved the actual crew charter');
+    await screenshot('03-chief-charter-notebook');
+    runner.writeJson('charter-editor.json', { home: path.join(notebookRoot, 'crew', 'chief'), edited: true });
+    await driver.pressKey('Escape');
+    await waitDom('.notebook-browser[role="dialog"]', { absent: true });
   });
   await runner.step('configured_escape_and_save_return_row_focus', async () => {
     await pressShortcutKeys(client, driver, 'sidebar.agentList');

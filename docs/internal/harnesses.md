@@ -55,8 +55,9 @@ directory takes precedence over `.claude.json`. Config writers coordinate throug
 the config file's path plus `.lock`. Claude's `proper-lockfile` defaults
 expire a lock after 10 seconds without an update and renew it every 5 seconds.
 
-attn trusts a member home when it launches the member there, including a
-chief's home. An already-trusted Claude home needs no config lock or write.
+attn trusts a member's home when it launches the member there, and the
+Chief's working directory (the Notebook root). An already-trusted Claude
+folder needs no config lock or write.
 New trust writes preserve the config's mode and symlink target, sync the file,
 and replace it atomically. Lock contention follows Claude's retry delays
 (200, 400, 800, 1600, 3200, 4000 ms), bounded by its 1.5-second startup-write

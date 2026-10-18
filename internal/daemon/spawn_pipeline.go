@@ -300,9 +300,9 @@ func (d *Daemon) resolveSpawnIntent(ctx context.Context, req *spawnRequest) (*sp
 			return nil, &spawnRejection{err: err}
 		}
 		cwd, err := filepath.EvalSymlinks(req.cwd)
-		plan.spawnOpts.TrustWorkingDirectory = err == nil && cwd == home
+		plan.spawnOpts.TrustWorkingDirectory = err == nil && (cwd == home || d.isChief(member.Key))
 		if plan.spawnOpts.TrustWorkingDirectory && req.agent == "claude" {
-			if err := d.trustClaudeCrewHome(home, plan.spawnOpts.LoginShellEnv); err != nil {
+			if err := d.trustClaudeCrewHome(cwd, plan.spawnOpts.LoginShellEnv); err != nil {
 				plan.rollback(d, msg.ID)
 				return nil, &spawnRejection{err: err}
 			}

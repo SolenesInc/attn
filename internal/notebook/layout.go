@@ -145,6 +145,7 @@ agent and is yours to read, edit, and sync.
 - ` + "`journal/`" + ` — dated narrative of what was done, newest entries appended per day.
 - ` + "`knowledge/`" + ` — the PARA-organized knowledge base (projects, areas, resources, archive).
 - ` + "`log.md`" + ` — global change history, newest first.
+- ` + "`crew/`" + ` — crew homes with charters and letters, managed by attn.
 
 This is one OKF bundle (Open Knowledge Format): every note carries a ` + "`type`" + `
 frontmatter field, and links are root-absolute markdown, e.g.

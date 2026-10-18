@@ -199,18 +199,8 @@ func (s *Store) EnsureCrewMember(m CrewIdentity) (CrewIdentity, error) {
 }
 func (s *Store) RenameCrewMember(key who.MemberKey, name string) (string, error) {
 	name = strings.TrimSpace(name)
-	if err := crew.ValidateName(name); err != nil {
-		if !errors.Is(err, crew.ErrNameReservedForChief) {
-			return "", err
-		}
-		identity, readErr := s.CrewIdentity(key)
-		if readErr != nil {
-			return "", readErr
-		}
-		chief, readErr := s.ProfileChief(identity.ProfileID)
-		if readErr != nil || chief != key {
-			return "", err
-		}
+	if err := s.validateCrewRename(key, name); err != nil {
+		return "", err
 	}
 	if s.db == nil {
 		s.mu.Lock()
@@ -430,4 +420,47 @@ func (s *Store) RestoreCrewMember(key who.MemberKey) (bool, error) {
 		return err
 	})
 	return restored, err
+}
+
+func (s *Store) validateCrewRename(key who.MemberKey, name string) error {
+	name = strings.TrimSpace(name)
+	if err := crew.ValidateName(name); err != nil {
+		if !errors.Is(err, crew.ErrNameReservedForChief) {
+			return err
+		}
+		identity, readErr := s.CrewIdentity(key)
+		if readErr != nil {
+			return readErr
+		}
+		chief, readErr := s.ProfileChief(identity.ProfileID)
+		if readErr != nil || chief != key {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Store) CommitCrewHome(m NewCrewMember, now time.Time) (DocumentWriteResult, error) {
+	if err := s.validateCrewRename(m.Identity.Key, m.Identity.Name); err != nil {
+		return DocumentWriteResult{}, err
+	}
+	table, err := s.documentTable(m.Doc.Schema)
+	if err != nil {
+		return DocumentWriteResult{}, err
+	}
+	var result DocumentWriteResult
+	err = s.profilesTx(func(tx *sql.Tx, _ string) error {
+		if err := ensureCrewNameFree(tx, m.Identity.ProfileID, m.Identity.Name, m.Identity.Key); err != nil {
+			return err
+		}
+		if _, err := tx.Exec("UPDATE crew_members SET name = ? WHERE member_key = ?", m.Identity.Name, m.Identity.Key); err != nil {
+			return err
+		}
+		results, _, err := commitDocumentWritesWith(tx, []DocumentCommit{{Write: m.Doc, Fact: m.Fact}}, []string{table}, now)
+		if err == nil {
+			result = results[0]
+		}
+		return err
+	})
+	return result, err
 }

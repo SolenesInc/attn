@@ -2700,6 +2700,8 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleCrewRetire(conn, msg.(*protocol.CrewRetireMessage))
 	case protocol.CmdCrewRestore:
 		d.handleCrewRestore(conn, msg.(*protocol.CrewRestoreMessage))
+	case protocol.CmdCrewMoveHome:
+		d.handleCrewMoveHome(conn, msg.(*protocol.CrewMoveHomeMessage))
 	case protocol.CmdCrewRename:
 		d.handleCrewRename(conn, msg.(*protocol.CrewRenameMessage))
 	case protocol.CmdCrewPrime:

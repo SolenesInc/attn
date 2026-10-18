@@ -26,22 +26,31 @@ func (d *Daemon) resolvedCrewRoot() (string, error) {
 }
 
 func (d *Daemon) validateCrewMemberPaths(member crew.Member) error {
-	root, err := d.resolvedCrewRoot()
+	if member.HomeDir == "" && member.CharterPath == "" && member.Agent == "" {
+		return nil
+	}
+	if member.HomeDir == "" || !filepath.IsAbs(member.HomeDir) {
+		return fmt.Errorf("crew member %s has no absolute home path", d.memberName(member.Key))
+	}
+	home, err := config.CanonicalRuntimePath(member.HomeDir)
 	if err != nil {
 		return err
 	}
-	for _, candidate := range []struct{ label, stored string }{
-		{"home", member.HomeDir},
-		{"charter", member.CharterPath},
-	} {
-		label, stored := candidate.label, candidate.stored
-		resolved, err := config.CanonicalRuntimePath(stored)
+	if !member.NotebookHome {
+		root, err := d.resolvedCrewRoot()
 		if err != nil {
-			return fmt.Errorf("refusing crew member %s: resolve stored %s path %q: %w", d.storedMemberName(member.Key.String()), label, stored, err)
+			return err
 		}
-		if stored == "" || !filepath.IsAbs(stored) || !pathWithin(root, resolved) {
-			return fmt.Errorf("crew member %s: stored %s path %q is outside this daemon's crew root %q. Check for an attn.db copied from another instance", d.storedMemberName(member.Key.String()), label, stored, root)
+		if !pathWithin(root, home) {
+			return fmt.Errorf("crew member %s: stored home path %q is outside this daemon's crew root %q. Check for an attn.db copied from another instance", d.memberName(member.Key), member.HomeDir, root)
 		}
+	}
+	charter, err := config.CanonicalRuntimePath(member.CharterPath)
+	if err != nil {
+		return err
+	}
+	if !filepath.IsAbs(member.CharterPath) || !pathWithin(home, charter) {
+		return fmt.Errorf("crew member %s: stored charter path %q is outside their home %q", d.memberName(member.Key), member.CharterPath, member.HomeDir)
 	}
 	return nil
 }

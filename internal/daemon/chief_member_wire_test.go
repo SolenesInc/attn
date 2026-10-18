@@ -66,9 +66,8 @@ func TestEveryProfileHasItsOwnUnconfiguredChief(t *testing.T) {
 	if chief.Name != "Chief" || chief.Agent != nil || chief.ResolvedAgent != nil || chief.BindingSession != nil {
 		t.Fatalf("fresh Chief: %+v", chief)
 	}
-	charter, err := os.ReadFile(chief.CharterPath)
-	if err != nil || string(charter) != prompts.RenderText("chief", "charter", nil) {
-		t.Fatalf("chief charter %q: %v", charter, err)
+	if chief.HomeDir != "" || chief.CharterPath != "" {
+		t.Fatalf("unconfigured Chief already has a home: %+v", chief)
 	}
 	work := createProfile(app, "Work")
 	side := w.AppOn(work.ID)
@@ -156,12 +155,12 @@ func TestChiefMailWakesAfterSleepAndRename(t *testing.T) {
 	run := w.Launched(id)
 	run.Prompted()
 	run.Reply("Ready. <!-- attn:state=idle -->")
-	if _, err := cli.CrewRename("chief", "Alfred"); err != nil {
-		t.Fatal(err)
-	}
 	slept, err := cli.CrewHandoff(protocol.SessionID(id), "Return when mail arrives.", false, protocol.CrewDayCloseSleep)
 	if err != nil || protocol.Deref(slept.Outcome) != protocol.CrewDayCloseSleep {
 		t.Fatalf("sleep: %+v %v", slept, err)
+	}
+	if _, err := cli.CrewRename("chief", "Alfred"); err != nil {
+		t.Fatal(err)
 	}
 	sent, err := cli.AgentMsg("chief", "sender", "the release landed")
 	if err != nil {
@@ -182,9 +181,8 @@ func TestChiefMailWakesAfterSleepAndRename(t *testing.T) {
 	if prompt := awakened.Prompted(); !strings.Contains(prompt, "attn agent inbox") {
 		t.Fatalf("mail did not ring: %s", prompt)
 	}
-	if _, err := cli.CrewRename("chief", "Chief"); err != nil {
-		t.Fatal(err)
-	}
+	_, err = cli.CrewRename("chief", "Chief")
+	crewErrorContains(t, err, "is awake", "attn crew sleep")
 	if _, err := cli.CrewRetire("chief"); err == nil || !strings.Contains(err.Error(), "can't be retired") {
 		t.Fatalf("retire Chief: %v", err)
 	}
@@ -352,7 +350,7 @@ func TestUpgradeCreatesAnOnboardedChiefAndWaitsForTheUser(t *testing.T) {
 			chief = m
 		}
 	}
-	if protocol.Deref(chief.Agent) != "codex" || protocol.Deref(chief.Model) != "gpt-6.1-sol" || protocol.Deref(chief.Effort) != "high" || protocol.Deref(chief.Cwd) != w.Path("old-chief") || chief.BindingSession != nil {
+	if protocol.Deref(chief.Agent) != "codex" || protocol.Deref(chief.Model) != "gpt-6.1-sol" || protocol.Deref(chief.Effort) != "high" || protocol.Deref(chief.Cwd) != filepath.Join(w.Dir, "notebook") || chief.BindingSession != nil {
 		t.Fatalf("upgraded Chief before presence: %+v", chief)
 	}
 	doc, err := cli.DocGet(crew.Namespace, crew.CollectionMembers, chief.Key)
@@ -433,19 +431,15 @@ func TestUpgradePreservesTheOldChiefsMemberAndItsWork(t *testing.T) {
 	}
 }
 
-func TestUpgradePreservesAnUnavailableChiefDirectoryWithoutBlockingTheDaemon(t *testing.T) {
+func TestUpgradeStartsTheChiefInTheNotebookEvenWhenItsOldDirectoryIsGone(t *testing.T) {
 	w := prepareChiefUpgrade(t, true, false)
-	var chief protocol.CrewMember
-	for _, m := range w.App().Initial.Crew {
-		if m.Chief {
-			chief = m
-		}
+	app := w.App()
+	app.Send(protocol.SetClientPresenceMessage{Cmd: protocol.CmdSetClientPresence, Visible: true, IdleSeconds: protocol.Ptr(0.0)})
+	awake := *testworld.Await(app, protocol.EventSessionRegistered, func(m protocol.WebSocketEvent) bool { return m.Session != nil && protocol.Deref(m.Session.Chief) }).Session
+	w.Launched(string(awake.ID))
+	if awake.Directory != filepath.Join(w.Dir, "notebook") {
+		t.Fatalf("upgraded cwd: %s", awake.Directory)
 	}
-	if protocol.Deref(chief.Cwd) != w.Path("old-chief") || chief.BindingSession != nil {
-		t.Fatalf("missing inherited directory changed Chief: %+v", chief)
-	}
-	_, err := w.Client().CrewWake("chief", "", "")
-	crewErrorContains(t, err, "is not there", "attn crew set")
 }
 
 func TestChiefOneDayHarnessOverrideKeepsTheMembersPinsOnTheirHarness(t *testing.T) {
@@ -550,58 +544,17 @@ func TestChiefConfigurationJSONReportsSavedSettingsAndFailedWake(t *testing.T) {
 	}
 }
 
-func TestProfileCreationWarnsWhenChiefSetupFailsAndRestartRepairsIt(t *testing.T) {
+func TestUnconfiguredChiefCreationDoesNotNeedAWritableCrewFolder(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
-	root := filepath.Join(w.Dir, "crew")
-	saved := filepath.Join(w.Dir, "crew-saved")
-	if err := os.Rename(root, saved); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(root, []byte("blocked"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(w.Dir, "crew"), []byte("blocked"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	work := createProfile(app, "Work")
-	testworld.Await(app, protocol.EventProfilesChanged, func(m protocol.ProfilesChangedMessage) bool {
-		for _, profile := range m.Profiles {
-			if profile.ID == work.ID {
-				return true
-			}
-		}
-		return false
-	})
-	testworld.Await(app, protocol.EventNotificationsUpdated, func(m protocol.NotificationsUpdatedMessage) bool { return m.UnreadCount == 1 })
-	feed := listNotifications(app)
-	if len(feed.Notifications) != 1 {
-		t.Fatalf("setup warnings: %+v", feed)
-	}
-	warning := feed.Notifications[0]
-	if warning.Severity != protocol.NotificationSeverityWarning || warning.SourceID != work.ID || !strings.Contains(warning.Title, "Work") || !strings.Contains(warning.Detail, root) || !strings.Contains(warning.Detail, "not a directory") || !strings.Contains(warning.Body, "restart the daemon") {
-		t.Fatalf("Chief setup warning: %+v", warning)
-	}
-	requestID := uuid.NewString()
-	refused := testworld.Request(app, protocol.ProfileDeleteMessage{Cmd: protocol.CmdProfileDelete, RequestID: requestID, ProfileID: work.ID, ExpectedRevision: work.Revision}, protocol.EventProfileActionResult, func(m protocol.ProfileActionResultMessage) bool { return m.RequestID == requestID })
-	if refused.Success || !strings.Contains(protocol.Deref(refused.Error), "Chief document") || !strings.Contains(protocol.Deref(refused.Error), "fix the crew folder") || !strings.Contains(protocol.Deref(refused.Error), "restart the daemon") {
-		t.Fatalf("delete before setup repair: %+v", refused)
-	}
 	w.restart()
 	side := w.AppOn(work.ID)
-	if side.SelectedProfile() != work.ID {
-		t.Fatalf("failed setup blocked the profile: %+v", side.Initial.Profiles)
-	}
-	if err := os.Remove(root); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Rename(saved, root); err != nil {
-		t.Fatal(err)
-	}
-	w.restart()
-	repaired := w.AppOn(work.ID).Initial.Crew
-	if len(repaired) != 1 || !repaired[0].Chief {
-		t.Fatalf("repaired profile: %+v", repaired)
-	}
-	if charter, err := os.ReadFile(repaired[0].CharterPath); err != nil || string(charter) != prompts.RenderText("chief", "charter", nil) {
-		t.Fatalf("repaired charter: %q %v", charter, err)
+	if len(side.Initial.Crew) != 1 || !side.Initial.Crew[0].Chief || side.Initial.Crew[0].HomeDir != "" {
+		t.Fatalf("unconfigured chief: %+v", side.Initial.Crew)
 	}
 }
 
@@ -638,7 +591,10 @@ func TestUpgradeWithAnUnsupportedChiefHarnessWaitsForConfiguration(t *testing.T)
 
 func TestUpgradeRetriesChiefFurnishingWithoutLosingItsSettingsOrHandover(t *testing.T) {
 	w := prepareChiefUpgradeAs(t, false, false, fakeagent.Codex, func(w *world) {
-		if err := os.WriteFile(filepath.Join(w.Dir, "crew"), []byte("blocked"), 0o644); err != nil {
+		if err := os.MkdirAll(filepath.Join(w.Dir, "notebook"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(w.Dir, "notebook", "crew"), []byte("blocked"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -646,7 +602,7 @@ func TestUpgradeRetriesChiefFurnishingWithoutLosingItsSettingsOrHandover(t *test
 	if len(app.Initial.Profiles) != 1 || app.SelectedProfile() == "" {
 		t.Fatalf("failed upgrade prevented startup: %+v", app.Initial.Profiles)
 	}
-	if err := os.Remove(filepath.Join(w.Dir, "crew")); err != nil {
+	if err := os.Remove(filepath.Join(w.Dir, "notebook", "crew")); err != nil {
 		t.Fatal(err)
 	}
 	w.restart()

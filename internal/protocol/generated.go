@@ -2305,6 +2305,31 @@ type CrewMember struct {
 	Revision int `json:"revision"`
 }
 
+type CrewMoveHomeMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member string `json:"member"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
+}
+
+type CrewMoveHomeResult struct {
+	// CleanupError corresponds to the JSON schema field "cleanup_error".
+	CleanupError *string `json:"cleanup_error,omitempty,omitzero"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member CrewMember `json:"member"`
+
+	// PreviousHome corresponds to the JSON schema field "previous_home".
+	PreviousHome string `json:"previous_home"`
+}
+
 type CrewPrimeMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -2345,6 +2370,9 @@ type CrewRenameMessage struct {
 }
 
 type CrewRenameResult struct {
+	// CleanupError corresponds to the JSON schema field "cleanup_error".
+	CleanupError *string `json:"cleanup_error,omitempty,omitzero"`
+
 	// Member corresponds to the JSON schema field "member".
 	Member string `json:"member"`
 
@@ -2451,6 +2479,9 @@ type CrewSetMessage struct {
 
 	// Model corresponds to the JSON schema field "model".
 	Model *string `json:"model,omitempty,omitzero"`
+
+	// NotebookRoot corresponds to the JSON schema field "notebook_root".
+	NotebookRoot *string `json:"notebook_root,omitempty,omitzero"`
 
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID *string `json:"profile_id,omitempty,omitzero"`
@@ -7605,6 +7636,10 @@ type Response struct {
 
 	// CrewListResult corresponds to the JSON schema field "crew_list_result".
 	CrewListResult *CrewListResult `json:"crew_list_result,omitempty,omitzero"`
+
+	// CrewMoveHomeResult corresponds to the JSON schema field
+	// "crew_move_home_result".
+	CrewMoveHomeResult *CrewMoveHomeResult `json:"crew_move_home_result,omitempty,omitzero"`
 
 	// CrewPrimeResult corresponds to the JSON schema field "crew_prime_result".
 	CrewPrimeResult *CrewPrimeResult `json:"crew_prime_result,omitempty,omitzero"`

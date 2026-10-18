@@ -20,7 +20,7 @@ export interface ChiefView {
   setupError?: string;
 }
 export interface ChiefActions {
-  setUp(route: HarnessRoute): Promise<boolean>;
+  setUp(route: HarnessRoute, notebookRoot?: string): Promise<boolean>;
   wake(): void;
   sleep(): void;
   edit(): void;
@@ -48,13 +48,13 @@ export function useChief(input: { liveSessionIds: ReadonlySet<string>; selectSes
   const isCurrent = (key: string) => currentKey.current === key;
   const fail = (cause: unknown) => cause instanceof Error ? cause.message : String(cause);
   const actions: ChiefActions = {
-    async setUp(route) {
+    async setUp(route, notebookRoot) {
       if (!member || pending?.key === member.key) return false;
       const key = member.key;
       setError(null);
       setPending({ key, phase: 'configuring' });
       try {
-        const outcome = await sendCrewSet({ member: key, expectedRevision: member.revision, agent: route.harness, model: storedRouteModel(route), effort: route.effort });
+        const outcome = await sendCrewSet({ member: key, expectedRevision: member.revision, agent: route.harness, model: storedRouteModel(route), effort: route.effort, notebookRoot });
         if (!outcome.success) throw new Error(outcome.error || 'The launch settings were not saved.');
         if (!isCurrent(key)) return false;
         if (outcome.wake_error) input.showError(outcome.wake_error);
