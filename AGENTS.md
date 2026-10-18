@@ -290,6 +290,7 @@ working on:
 - Tests, before writing, changing, or deleting them => docs/testing.md
 - How a harness behaves, before relying on it => docs/harnesses.md; check new
   claims in its source or with a probe and record them there
+- The inbox: addresses, rings, wakes, seed updates or notices => docs/inbox.md
 - Agent-facing content in `internal/prompts/content/**`, its Go definitions, or
   CLI help => docs/prompt-authoring.md
 - Branches, PRs, merges, or waiting on reviews => docs/pull-requests.md
