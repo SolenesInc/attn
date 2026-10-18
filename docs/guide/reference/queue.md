@@ -27,6 +27,8 @@ the agent queue", or click the flow toggle at the top of the sidebar. Either one
 turns it off again. The sidebar changes shape: the agents waiting for you come
 first, oldest on top.
 
+![Cmd+Shift+K (Ctrl+Alt+K on Linux) opens the command palette and you run "Turn on the agent queue". The sidebar then lists the two agents waiting for you first, oldest on top, and the working one below them.](../images/queue-on.avif)
+
 ## Turns
 
 In queue flow, it's always someone's turn: the agent's, while it does its work,
