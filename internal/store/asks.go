@@ -6,13 +6,15 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
 var (
-	ErrAskNotOpen = errors.New("the ask is not open")
-	ErrAskerGone  = errors.New("the asking session is not live")
+	ErrAskNotOpen    = errors.New("the ask is not open")
+	ErrAskerGone     = errors.New("the asking session is not live")
+	ErrAskSeedClosed = errors.New("the seed the ask is about is no longer open")
 )
 
 type Ask struct {
@@ -33,17 +35,38 @@ func (s *Store) AddAsk(a Ask) error {
 	if s.db == nil {
 		return fmt.Errorf("asks need the SQLite store")
 	}
-	result, err := s.db.Exec("INSERT INTO asks ("+askColumns+") SELECT ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM sessions WHERE id = ? AND closed_at = '')",
-		a.ID, a.SessionID, a.To.String(), a.Subject, a.Markdown, a.BaseDir, a.CreatedAt, a.SessionID)
+	query := "INSERT INTO asks (" + askColumns + ") SELECT ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM sessions WHERE id = ? AND closed_at = '')"
+	args := []any{a.ID, a.SessionID, a.To.String(), a.Subject, a.Markdown, a.BaseDir, a.CreatedAt, a.SessionID}
+	if seedID := a.To.SeedID(); seedID != "" {
+		_, seeds, found, err := readCollection(s.db, garden.Namespace, garden.CollectionSeeds)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return ErrAskSeedClosed
+		}
+		query += " AND EXISTS (SELECT 1 FROM " + seeds + " WHERE id = ? AND json_extract(body, '$.status') IN (?, ?, ?))"
+		args = append(args, seedID, garden.StatusPlanted, garden.StatusGrowing, garden.StatusDormant)
+	}
+	result, err := s.db.Exec(query, args...)
 	if err != nil {
 		return err
 	}
-	if n, err := result.RowsAffected(); err != nil {
+	n, err := result.RowsAffected()
+	if err != nil {
 		return err
-	} else if n == 0 {
+	}
+	if n > 0 {
+		return nil
+	}
+	var live int
+	if err := s.db.QueryRow("SELECT count(*) FROM sessions WHERE id = ? AND closed_at = ''", a.SessionID).Scan(&live); err != nil {
+		return err
+	}
+	if live == 0 {
 		return ErrAskerGone
 	}
-	return nil
+	return ErrAskSeedClosed
 }
 
 func (s *Store) OpenAsks() ([]Ask, error) {

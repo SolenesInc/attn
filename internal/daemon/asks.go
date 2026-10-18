@@ -63,10 +63,14 @@ func (d *Daemon) handleAskOpen(conn net.Conn, msg *protocol.AskOpenMessage) {
 		d.sendError(conn, err.Error())
 		return
 	}
-	if err := d.store.AddAsk(stored); errors.Is(err, store.ErrAskerGone) {
+	switch err := d.store.AddAsk(stored); {
+	case errors.Is(err, store.ErrAskerGone):
 		d.sendError(conn, errSessionNotLive(session.ID).Error())
 		return
-	} else if err != nil {
+	case errors.Is(err, store.ErrAskSeedClosed):
+		d.sendError(conn, fmt.Sprintf("%s closed before the ask was saved; ask again", to.SeedID()))
+		return
+	case err != nil:
 		d.sendError(conn, err.Error())
 		return
 	}
