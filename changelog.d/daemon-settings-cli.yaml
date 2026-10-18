@@ -1,0 +1,3 @@
+kind: added
+area: cli
+change: Read and change daemon settings with attn settings list, get and set. Listings describe each key and can include computed read-only values.

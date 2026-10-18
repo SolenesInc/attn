@@ -114,7 +114,7 @@ func (d *Daemon) notebookRoot() (string, error) {
 	if root := config.HarnessNotebookRoot(); root != "" {
 		return root, nil
 	}
-	if configured := strings.TrimSpace(d.store.GetSetting(SettingNotebookRoot)); configured != "" {
+	if configured := strings.TrimSpace(d.daemonSetting(SettingNotebookRoot)); configured != "" {
 		if strings.HasPrefix(configured, "~/") {
 			home, err := os.UserHomeDir()
 			if err != nil {

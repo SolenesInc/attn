@@ -18,7 +18,7 @@ import (
 )
 
 func (d *Daemon) asksSettingOn() bool {
-	return parseBooleanSetting(d.store.GetSetting(SettingAsksEnabled))
+	return parseBooleanSetting(d.daemonSetting(SettingAsksEnabled))
 }
 
 func (d *Daemon) launchedWithAsks(sessionID protocol.SessionID) bool {

@@ -574,7 +574,7 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		Authors:                state.Authors,
 		GithubHosts:            state.GithubHosts,
 		GithubPollingOffReason: gitHubPollingOffReasonField(),
-		Settings:               d.settingsWithAgentAvailability(),
+		Settings:               d.daemonSettingsSnapshot(),
 		Warnings:               d.getWarnings(),
 		Seeds:                  state.Seeds,
 		SeedsTotal:             protocol.Ptr(d.countSeedsForBroadcast(client.selectedProfile())),

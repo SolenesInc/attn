@@ -342,7 +342,7 @@ func (d *Daemon) sendPluginActionResult(client *wsClient, action, name string, s
 }
 
 func (d *Daemon) pluginPriorities() map[string]int {
-	raw := strings.TrimSpace(d.store.GetSetting(SettingPluginPriorities))
+	raw := strings.TrimSpace(d.daemonSetting(SettingPluginPriorities))
 	if raw == "" {
 		return map[string]int{}
 	}

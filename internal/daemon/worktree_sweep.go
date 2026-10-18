@@ -48,7 +48,7 @@ func (d *Daemon) worktreeSweepEnabled() bool {
 	if d.store == nil {
 		return false
 	}
-	return defaultOnBooleanSetting(d.store.GetSetting(settingWorktreeSweepEnabled))
+	return defaultOnBooleanSetting(d.daemonSetting(settingWorktreeSweepEnabled))
 }
 
 const settingWorktreeSweepEnabled = "worktree_sweep_enabled"

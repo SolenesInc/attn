@@ -210,7 +210,7 @@ func (d *Daemon) loadInstalledBundledPluginsLocked() {
 	}
 	d.bundledPluginLoaded = true
 	d.bundledPluginSet = make(map[string]struct{})
-	raw := strings.TrimSpace(d.store.GetSetting(SettingInstalledBundledPlugins))
+	raw := strings.TrimSpace(d.daemonSetting(SettingInstalledBundledPlugins))
 	if raw == "" {
 		return
 	}

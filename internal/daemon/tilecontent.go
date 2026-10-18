@@ -206,7 +206,7 @@ func (d *Daemon) openSentFilesEnabled() bool {
 	if d.store == nil {
 		return true
 	}
-	raw := strings.TrimSpace(d.store.GetSetting(SettingOpenSentFilesEnabled))
+	raw := strings.TrimSpace(d.daemonSetting(SettingOpenSentFilesEnabled))
 	if raw == "" {
 		return true
 	}
