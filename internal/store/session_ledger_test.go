@@ -109,7 +109,7 @@ func TestTheLedgerNamesEachRowsProfileAndKeepsItAfterTheProfileIsDeleted(t *test
 	closeAt(t, s, "closed-in-work", SessionClose{By: SessionClosedByUser}, at.Add(3*time.Minute))
 	closeAt(t, s, "live-in-work", SessionClose{By: SessionClosedByUser}, at.Add(3*time.Minute))
 
-	if _, err := s.DeleteProfile(work.ID, work.Revision, 0); err != nil {
+	if _, _, err := s.DeleteProfile(work.ID, work.Revision, 0); err != nil {
 		t.Fatal(err)
 	}
 

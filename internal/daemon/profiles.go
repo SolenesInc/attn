@@ -382,7 +382,7 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 			}
 		}
 		d.automationMu.Lock()
-		deleted, err := d.store.DeleteProfile(msg.ProfileID, int64(msg.ExpectedRevision), members)
+		deleted, closedAsks, err := d.store.DeleteProfile(msg.ProfileID, int64(msg.ExpectedRevision), members)
 		d.automationMu.Unlock()
 		if err != nil {
 			return profileActionOutcome{}, err
@@ -400,7 +400,10 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 				}
 			}
 		})
-		return profileActionOutcome{arranges: true, publish: func() { d.publishFact(FactProfileDeleted, deleted.ID, nil) }}, nil
+		return profileActionOutcome{arranges: true, publish: func() {
+			d.announceClosedAsks(closedAsks)
+			d.publishFact(FactProfileDeleted, deleted.ID, nil)
+		}}, nil
 	})
 }
 
