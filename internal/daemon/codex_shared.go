@@ -68,6 +68,7 @@ type codexView struct {
 	server   *http.Server
 	thread   string
 	shownSeq uint64
+	trusted  string
 }
 
 func (d *Daemon) codexShared() *codexShared {
@@ -129,7 +130,7 @@ func (s *codexServer) client() *codexshared.Client {
 func (r *codexShared) kind() string { return codexLinkKind }
 
 func (r *codexShared) canRun(req *spawnRequest) bool {
-	return req.agent == string(protocol.SessionAgentCodex) && !req.hasPluginDriver && !req.isShell && req.policy.unattendedLaunch.IsZero()
+	return req.agent == string(protocol.SessionAgentCodex) && !req.hasPluginDriver && !req.isShell && req.policy.unattendedLaunch.Executable == ""
 }
 
 func (r *codexShared) enabledForNewLaunches() bool {
@@ -144,19 +145,26 @@ func (r *codexShared) admit(profile, conversation string) error {
 }
 
 func (r *codexShared) prepareLaunch(opts *ptybackend.SpawnOptions, profile string) error {
-	executable := opts.Executable
-	if executable == "" {
-		executable = opts.CodexExecutable
-	}
 	remote, err := r.openView(opts.ID, profile)
 	if err != nil {
 		return err
 	}
-	if _, err := r.ensureServer(r.d.life.Context(), profile, executable); err != nil {
+	if _, err := r.ensureServer(r.d.life.Context(), profile, configuredLaunchExecutable(agentdriver.MustGet(string(protocol.SessionAgentCodex)), opts)); err != nil {
 		return err
+	}
+	if !opts.UnattendedLaunch.IsZero() {
+		r.trustIn(opts.ID, opts.CWD)
 	}
 	opts.CodexRemote = remote
 	return nil
+}
+
+func (r *codexShared) trustIn(t harness.TerminalID, folder string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if v := r.views[t]; v != nil {
+		v.trusted = folder
+	}
 }
 
 func (r *codexShared) launchFailed(t harness.TerminalID, profile string) {
@@ -518,6 +526,8 @@ func (r *codexShared) serveView(v *codexView, w http.ResponseWriter, req *http.R
 func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codexshared.Message), error) {
 	method := m.Method
 	switch method {
+	case "config/read":
+		return r.answerTrust(v), nil
 	case "thread/start", "thread/fork", "thread/resume":
 	default:
 		return nil, nil
@@ -575,6 +585,37 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 		}
 		r.show(v, result.Thread.ID)
 	}, nil
+}
+
+func (r *codexShared) answerTrust(v *codexView) func(*codexshared.Message) {
+	r.mu.Lock()
+	folder := v.trusted
+	r.mu.Unlock()
+	if folder == "" {
+		return nil
+	}
+	return func(reply *codexshared.Message) {
+		var result map[string]any
+		if len(reply.Error) > 0 || json.Unmarshal(reply.Result, &result) != nil {
+			return
+		}
+		config, _ := result["config"].(map[string]any)
+		if config == nil {
+			return
+		}
+		projects, _ := config["projects"].(map[string]any)
+		if projects == nil {
+			projects = make(map[string]any)
+			config["projects"] = projects
+		}
+		if project, _ := projects[folder].(map[string]any); project["trust_level"] != nil {
+			return
+		}
+		projects[folder] = map[string]any{"trust_level": "trusted"}
+		if raw, err := json.Marshal(result); err == nil {
+			reply.Result = raw
+		}
+	}
 }
 
 func (r *codexShared) launching(v *codexView, method string, params map[string]any) (session, launchAs protocol.SessionID, chief bool) {

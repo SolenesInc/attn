@@ -1,0 +1,8 @@
+kind: changed
+area: codex
+change: >
+  With Shared Codex on, automations that start Codex run it as shared Codex,
+  with their own model, effort and auto-approval, and without stopping at
+  Codex's question whether to trust their folder. A folder you marked untrusted
+  stays untrusted. An automation that names its own Codex executable still runs
+  a plain Codex.

@@ -137,6 +137,22 @@ func (k *Kit) Launched(sessionID string) *Run {
 	}
 }
 
+func (k *Kit) SetCodexFolderTrust(dir, level string) {
+	k.t.Helper()
+	if err := setCodexFolderTrust(k.cfg.CodexHome, dir, level); err != nil {
+		k.t.Fatal(err)
+	}
+}
+
+func (k *Kit) CodexFolderTrust(dir string) string {
+	k.t.Helper()
+	config, err := readCodexConfig(k.cfg.CodexHome)
+	if err != nil {
+		k.t.Fatal(err)
+	}
+	return codexFolderTrust(config, dir)
+}
+
 func (k *Kit) CodexServers() []int {
 	k.mu.Lock()
 	defer k.mu.Unlock()

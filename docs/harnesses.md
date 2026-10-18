@@ -157,6 +157,23 @@ Probed on 0.163.0 with a real model:
   is read in the source at 6ae8b8aa7c, not probed
   (`app-server/src/request_processors/thread_processor.rs`).
 
+Read in the source at openai/codex rust-v0.160.0:
+
+- A `--remote` TUI sends its `--model`, `model_reasoning_effort`,
+  `approval_policy` and `approvals_reviewer` on `thread/start`
+  (`tui/src/app_server_session.rs`).
+- Before its first `thread/start` or `thread/resume`, a `--remote` TUI given
+  `-C` asks the server whether that folder is trusted with `config/read`, so
+  `-c projects."<folder>".trust_level` given to the TUI does not count. It
+  asks the trust question when that reply has no trust level under that exact
+  folder, and not for one saved untrusted or inside a folder saved untrusted.
+  Answering it writes
+  `projects."<folder>".trust_level = "trusted"` with `config/batchWrite`
+  (`tui/src/onboarding/directory_trust.rs`, `tui/src/config_update.rs`).
+- `thread/start` in a folder with no saved trust level saves it as trusted when
+  the conversation's sandbox can write there
+  (`app-server/src/request_processors/thread_processor.rs`).
+
 Read in the source at openai/codex 1ffa95e:
 
 - `active` carries `waitingOnUserInput` while a turn waits on the user's

@@ -266,6 +266,9 @@ func (s *codexAppServer) handle(conn *codexServerConn, m codexshared.Message) (a
 	switch m.Method {
 	case "initialize":
 		return map[string]any{"userAgent": "codex-fake", "codexHome": s.cfg.CodexHome, "platformFamily": "unix", "platformOs": "linux"}, nil, nil
+	case "config/read":
+		config, err := readCodexConfig(s.cfg.CodexHome)
+		return map[string]any{"config": config}, nil, err
 	case "thread/start":
 		return s.start(conn, p)
 	case "thread/resume":
