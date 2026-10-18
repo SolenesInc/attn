@@ -1,0 +1,3 @@
+kind: fixed
+area: garden
+change: The docked Garden opens beside a drawer that is already open, such as Asks or PRs, instead of covering it.
