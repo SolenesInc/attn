@@ -4,6 +4,7 @@ const SUPPLIER = 'https://supplier.example.com';
 
 async function fromSupplier(path) {
   const response = await fetch(`${SUPPLIER}${path}`);
+  if (!response.ok) throw new Error(`Supplier answered ${response.status} for ${path}`);
   return response.json();
 }
 
