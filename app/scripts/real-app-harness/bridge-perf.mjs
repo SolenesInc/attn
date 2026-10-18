@@ -331,8 +331,6 @@ function formatCheckpointSummary(checkpoint) {
     writeQueueBytes,
     ptyJsonParseMs: Number((pty.ptyJsonParseMs || 0).toFixed(2)),
     ptyDecodeMs: Number((pty.decodeMs || 0).toFixed(2)),
-    terminalWriteCallMs: Number((pty.terminalWriteCallMs || 0).toFixed(2)),
-    terminalWriteCount: pty.terminalWriteCount || 0,
     ptyOutputCount: pty.ptyOutputCount || 0,
     terminalLoadBytes: terminalLoad?.totalScrollbackBytes || 0,
     terminalLoadLines: terminalLoad?.totalObservedLineCount || 0,
