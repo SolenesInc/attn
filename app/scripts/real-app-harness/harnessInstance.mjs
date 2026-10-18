@@ -260,6 +260,8 @@ const ROUTING_OVERRIDE_ENV = [
   'ATTN_PLUGIN_DIR',
   'ATTN_TERMINAL_ID',
   'ATTN_SESSION_ID',
+  'ATTN_CODEX_SHARED_PROFILE',
+  'CODEX_THREAD_ID',
 ];
 
 let routingDropAnnounced = false;
