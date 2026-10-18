@@ -146,8 +146,8 @@ try {
     }
     for (const executable of missing) fs.unlinkSync(executable);
     await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
-    runner.writeJson('no-harness-settings.json', Object.fromEntries(['claude', 'codex'].map(agent => [agent, observer.getSetting(`${agent}_available`)])));
     await waitDom('[data-testid="chief-setup"]', { textIncludes: 'No harness here can run the chief' });
+    runner.writeJson('no-harness-settings.json', Object.fromEntries(['claude', 'codex'].map(agent => [agent, observer.getSetting(`${agent}_available`)])));
     await screenshot('01-chief-no-harness');
     await click('[data-testid="chief-setup"] .chief-link');
     await waitDom('[data-testid="chief-setup"]', { textIncludes: 'No harness here can run the chief' });
@@ -254,7 +254,8 @@ try {
     await screenshot('04-chief-asleep');
     await sampleIdle('asleep');
     runner.assert(!roster().find(member => member.chief)?.binding_session, 'sleep releases the chief binding');
-    await click('[data-testid="queue-agent-filter"]');
+    await pressShortcutKeys(client, driver, 'sidebar.agentList');
+    await waitDom('[data-testid="queue-agent-filter"]', { focused: true });
     await driver.pressKey('ArrowDown');
     await waitDom(`[data-testid="queue-crew-select-${chief.key}"]`, { focused: true });
     await openChiefRoute();
