@@ -212,9 +212,6 @@ func GetMainRepoFromWorktree(worktreePath string) string {
 	}
 
 	gitdir := strings.TrimPrefix(line, "gitdir: ")
-	if !filepath.IsAbs(gitdir) {
-		gitdir = filepath.Join(worktreePath, gitdir)
-	}
 
 	idx := strings.Index(gitdir, "/.git/worktrees/")
 	if idx == -1 {
@@ -252,7 +249,7 @@ func (c *Client) ResolveMainRepoPath(ctx context.Context, repoPath string) strin
 	return filepath.Clean(expanded)
 }
 
-func RepositoryRoot(ctx context.Context, dir string) (string, error) {
+func (c *Client) RepositoryRoot(ctx context.Context, dir string) (string, error) {
 	current := CanonicalizePath(dir)
 	for {
 		if cause := context.Cause(ctx); cause != nil {

@@ -159,33 +159,17 @@ func TestASharedCodexCrewMemberWakesWithItsAwarenessDirsAsWorkspaceRoots(t *test
 }
 
 func TestWithSharedCodexOnAnAutomationRunsSharedCodexUnderItsLaunchContract(t *testing.T) {
-	for _, saved := range []struct {
-		name, folder, level, want string
-		worktreeOfFolder          bool
-	}{
-		{name: "no saved trust", want: "trusted"},
-		{name: "folder saved untrusted", folder: "check", level: "untrusted", want: "untrusted"},
-		{name: "parent saved untrusted", folder: ".", level: "untrusted", want: ""},
-		{name: "main repository of its worktree saved untrusted", folder: "shop", level: "untrusted", want: "", worktreeOfFolder: true},
-	} {
-		t.Run(saved.name, func(t *testing.T) {
+	for _, saved := range []string{"", "untrusted"} {
+		t.Run("saved trust "+strconv.Quote(saved), func(t *testing.T) {
 			w := newWorld(t, fakeagent.Codex)
 			app, cli := w.App(), w.Client()
 			setSetting(t, app, "codex_shared_enabled", "true")
 			folder := w.Path("check")
-			if saved.worktreeOfFolder {
-				repo := w.Path(saved.folder)
-				if err := os.MkdirAll(repo, 0o755); err != nil {
-					t.Fatal(err)
-				}
-				runGit(t, repo, "init", "-q")
-				runGit(t, repo, "commit", "-q", "--allow-empty", "-m", "start")
-				runGit(t, repo, "worktree", "add", "-q", folder)
-			} else if err := os.MkdirAll(folder, 0o755); err != nil {
+			if err := os.MkdirAll(folder, 0o755); err != nil {
 				t.Fatal(err)
 			}
-			if saved.folder != "" {
-				w.SetCodexFolderTrust(w.Path(saved.folder), saved.level)
+			if saved != "" {
+				w.SetCodexFolderTrust(folder, saved)
 			}
 			applyAutomation(t, cli, fmt.Sprintf(`api_version: attn.dev/automations/v1alpha1
 name: Nightly check
@@ -212,13 +196,8 @@ location: {type: directory, path: %q}
 			if servers := w.CodexServers(); len(servers) != 1 {
 				t.Errorf("app-servers launched = %v, want one", servers)
 			}
-			if got := w.CodexFolderTrust(folder); got != saved.want {
-				t.Errorf("Codex saves %s as %q, want %q", folder, got, saved.want)
-			}
-			if saved.folder != "" {
-				if got := w.CodexFolderTrust(w.Path(saved.folder)); got != saved.level {
-					t.Errorf("Codex saves %s as %q, want the user's %q", w.Path(saved.folder), got, saved.level)
-				}
+			if got := w.CodexFolderTrust(folder); got != saved {
+				t.Errorf("Codex saves %s as %q, want the user's %q", folder, got, saved)
 			}
 		})
 	}

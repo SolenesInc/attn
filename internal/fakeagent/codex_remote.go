@@ -66,7 +66,7 @@ func (c *codexRemote) begin(term *terminal) error {
 		client.Close()
 		return err
 	}
-	if codexFolderTrust(read.Config, c.cwd) == "" && !codexUnderUntrusted(read.Config, c.cwd) {
+	if codexFolderTrust(read.Config, c.cwd) == "" {
 		client.Close()
 		term.print("Trust this folder? Codex can read, edit, and run files here.")
 		return fmt.Errorf("codex --remote waits on the trust question for %s, which its app-server does not trust", c.cwd)

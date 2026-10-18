@@ -18,7 +18,6 @@ import (
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/codexshared"
-	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/prompts"
@@ -69,6 +68,7 @@ type codexView struct {
 	server   *http.Server
 	thread   string
 	shownSeq uint64
+	trusted  string
 }
 
 func (d *Daemon) codexShared() *codexShared {
@@ -149,72 +149,22 @@ func (r *codexShared) prepareLaunch(opts *ptybackend.SpawnOptions, profile strin
 	if err != nil {
 		return err
 	}
-	s, err := r.ensureServer(r.d.life.Context(), profile, configuredLaunchExecutable(agentdriver.MustGet(string(protocol.SessionAgentCodex)), opts))
-	if err != nil {
+	if _, err := r.ensureServer(r.d.life.Context(), profile, configuredLaunchExecutable(agentdriver.MustGet(string(protocol.SessionAgentCodex)), opts)); err != nil {
 		return err
 	}
 	if !opts.UnattendedLaunch.IsZero() {
-		if err := r.trustFolder(s, opts.CWD); err != nil {
-			return fmt.Errorf("trust %s in the shared Codex: %w", opts.CWD, err)
-		}
+		r.trustIn(opts.ID, opts.CWD)
 	}
 	opts.CodexRemote = remote
 	return nil
 }
 
-type codexProjects map[string]struct {
-	TrustLevel string `json:"trust_level"`
-}
-
-func (r *codexShared) trustFolder(s *codexServer, cwd string) error {
-	client := s.client()
-	if client == nil {
-		return errors.New("no connection to its app-server")
+func (r *codexShared) trustIn(t harness.TerminalID, folder string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if v := r.views[t]; v != nil {
+		v.trusted = folder
 	}
-	ctx, cancel := context.WithTimeout(r.d.life.Context(), codexServerCallLimit)
-	defer cancel()
-	raw, err := client.Call(ctx, "config/read", map[string]any{"cwd": cwd})
-	if err != nil {
-		return err
-	}
-	var read struct {
-		Config struct {
-			Projects codexProjects `json:"projects"`
-		} `json:"config"`
-	}
-	if err := json.Unmarshal(raw, &read); err != nil {
-		return err
-	}
-	root, err := attngit.RepositoryRoot(ctx, cwd)
-	if err != nil {
-		return err
-	}
-	if read.Config.Projects.answered(cwd, root) {
-		return nil
-	}
-	_, err = client.Call(ctx, "config/batchWrite", map[string]any{
-		"edits":            []any{map[string]any{"keyPath": agentdriver.CodexTrustKey(cwd), "value": "trusted", "mergeStrategy": "replace"}},
-		"reloadUserConfig": true,
-	})
-	return err
-}
-
-func (projects codexProjects) answered(cwd, root string) bool {
-	canonical := attngit.CanonicalizePath(cwd)
-	if projects[cwd].TrustLevel != "" || projects[canonical].TrustLevel != "" {
-		return true
-	}
-	for _, dir := range []string{cwd, canonical, root} {
-		for ; dir != ""; dir = filepath.Dir(dir) {
-			if projects[dir].TrustLevel == "untrusted" {
-				return true
-			}
-			if dir == filepath.Dir(dir) {
-				break
-			}
-		}
-	}
-	return false
 }
 
 func (r *codexShared) launchFailed(t harness.TerminalID, profile string) {
@@ -576,6 +526,8 @@ func (r *codexShared) serveView(v *codexView, w http.ResponseWriter, req *http.R
 func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codexshared.Message), error) {
 	method := m.Method
 	switch method {
+	case "config/read":
+		return r.answerTrust(v), nil
 	case "thread/start", "thread/fork", "thread/resume":
 	default:
 		return nil, nil
@@ -633,6 +585,37 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 		}
 		r.show(v, result.Thread.ID)
 	}, nil
+}
+
+func (r *codexShared) answerTrust(v *codexView) func(*codexshared.Message) {
+	r.mu.Lock()
+	folder := v.trusted
+	r.mu.Unlock()
+	if folder == "" {
+		return nil
+	}
+	return func(reply *codexshared.Message) {
+		var result map[string]any
+		if len(reply.Error) > 0 || json.Unmarshal(reply.Result, &result) != nil {
+			return
+		}
+		config, _ := result["config"].(map[string]any)
+		if config == nil {
+			return
+		}
+		projects, _ := config["projects"].(map[string]any)
+		if projects == nil {
+			projects = make(map[string]any)
+			config["projects"] = projects
+		}
+		if project, _ := projects[folder].(map[string]any); project["trust_level"] != nil {
+			return
+		}
+		projects[folder] = map[string]any{"trust_level": "trusted"}
+		if raw, err := json.Marshal(result); err == nil {
+			reply.Result = raw
+		}
+	}
 }
 
 func (r *codexShared) launching(v *codexView, method string, params map[string]any) (session, launchAs protocol.SessionID, chief bool) {

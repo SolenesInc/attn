@@ -19,12 +19,12 @@ move its conversation yourself, for example with `/resume` in a Codex of the
 other kind.
 
 An automation that starts shared Codex runs with its own model, effort and
-auto-approval, as a plain one does. It doesn't stop at Codex's question whether
-to trust the folder: if you haven't answered it for that folder, attn saves the
-folder as trusted in your Codex config, as answering "Trust and continue"
-would. A folder you marked untrusted, any folder inside it, and a worktree of
-a repository you marked untrusted stay untrusted. An automation that names its own Codex executable runs a plain
-Codex, since the app-server runs one Codex for the whole profile.
+auto-approval, as a plain one does. It doesn't stop at Codex's question
+whether to trust the folder, and attn writes nothing to your Codex config for
+it. A folder you marked untrusted stays untrusted. One you never answered for
+gets saved as trusted by Codex itself when the conversation starts, as in any
+shared Codex terminal. An automation that names its own Codex executable runs
+a plain Codex, since the app-server runs one Codex for the whole profile.
 
 ## One conversation, one session
 

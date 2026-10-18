@@ -269,8 +269,6 @@ func (s *codexAppServer) handle(conn *codexServerConn, m codexshared.Message) (a
 	case "config/read":
 		config, err := readCodexConfig(s.cfg.CodexHome)
 		return map[string]any{"config": config}, nil, err
-	case "config/batchWrite":
-		return s.writeConfig(m.Params)
 	case "thread/start":
 		return s.start(conn, p)
 	case "thread/resume":

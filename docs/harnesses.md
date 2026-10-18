@@ -165,18 +165,14 @@ Read in the source at openai/codex rust-v0.160.0:
 - Before its first `thread/start` or `thread/resume`, a `--remote` TUI given
   `-C` asks the server whether that folder is trusted with `config/read`, so
   `-c projects."<folder>".trust_level` given to the TUI does not count. It
-  asks the trust question when the server's config has no trust level saved
-  under that exact folder, and not for one saved untrusted or inside a folder
-  saved untrusted. Answering it writes
+  asks the trust question when that reply has no trust level under that exact
+  folder, and not for one saved untrusted or inside a folder saved untrusted.
+  Answering it writes
   `projects."<folder>".trust_level = "trusted"` with `config/batchWrite`
   (`tui/src/onboarding/directory_trust.rs`, `tui/src/config_update.rs`).
 - `thread/start` in a folder with no saved trust level saves it as trusted when
   the conversation's sandbox can write there
   (`app-server/src/request_processors/thread_processor.rs`).
-- A folder's trust is the first saved entry for the folder, its
-  symlink-resolved path, then its repository root; the root of a linked
-  worktree is its main repository. A folder's own entry outranks its root's
-  (`config/src/project_trust.rs`, `git-utils/src/trust.rs`).
 
 Read in the source at openai/codex 1ffa95e:
 
