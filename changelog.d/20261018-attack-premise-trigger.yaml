@@ -1,0 +1,3 @@
+kind: changed
+area: agents
+change: "The attn-workflow skill reminds Builders, Orchestrators and reviewers to attack the premise when two fixes that shared an assumption have failed the same check, at the point where they address or judge review findings."
