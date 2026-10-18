@@ -315,10 +315,11 @@ describe('SettingsModal chief settings', () => {
     expect(savedSettings(daemon)).toEqual([['auto_approve_enabled', 'true']]);
   });
 
-  it('disables auto-approve when on', async () => {
-    const daemon = await agentSection('agents', { auto_approve_enabled: 'true' });
+  it.each([undefined, 'true'])('shows auto-approve on and disables it with stored value %s', async (stored) => {
+    const daemon = await agentSection('agents', stored === undefined ? {} : { auto_approve_enabled: stored });
 
     expect(screen.getByTestId('settings-auto-approve-toggle')).toHaveTextContent('Disable');
+    expect(screen.getByRole('switch', { name: 'Auto-approve' })).toHaveAttribute('aria-checked', 'true');
     await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-auto-approve-toggle')));
     expect(savedSettings(daemon)).toEqual([['auto_approve_enabled', 'false']]);
   });

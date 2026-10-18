@@ -11,6 +11,7 @@ import (
 func TestACodexApprovalPromptPutsTheSessionInApprovalUntilItIsAnswered(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
+	setSetting(t, app, "auto_approve_enabled", "false")
 	session, run, working := codexAtWork(t, w, app)
 
 	run.AskApproval()

@@ -19,6 +19,40 @@ func flagValue(argv []string, flag string) (string, bool) {
 	return argv[i+1], true
 }
 
+func TestAutoApproveDefaultsOnAndRespectsAnExplicitChoice(t *testing.T) {
+	for _, direct := range []bool{false, true} {
+		for _, agent := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
+			for _, stored := range []string{"", "false", "true"} {
+				t.Run(string(agent)+"/direct="+strconv.FormatBool(direct)+"/stored="+stored, func(t *testing.T) {
+					w := newWorld(t, agent)
+					app := w.App()
+					if direct {
+						setSetting(t, app, "direct_agent_launch_enabled", "true")
+					}
+					if stored != "" {
+						setSetting(t, app, "auto_approve_enabled", stored)
+					}
+					want := stored != "false"
+					if got := w.App().Initial.Settings["auto_approve_enabled"]; got != strconv.FormatBool(want) {
+						t.Errorf("settings report auto-approve %q, want %t", got, want)
+					}
+					session := w.Spawn(app, agent, w.Path("shop"))
+					run := w.Launched(session)
+					mode, _ := flagValue(run.Argv, "--permission-mode")
+					auto := mode == "auto"
+					if agent == fakeagent.Codex {
+						auto = slices.Contains(run.Argv, `approvals_reviewer="auto_review"`)
+					}
+					if auto != want {
+						t.Errorf("%s ran with auto-approve %t, want %t: %q", agent, auto, want, run.Argv)
+					}
+					t.Logf("stored=%q settings=%t auto-approve flag=%t", stored, want, auto)
+				})
+			}
+		}
+	}
+}
+
 func TestLaunchChoicesReachTheAgentAsFlagsAndLeaveNoOneShotVariableBehind(t *testing.T) {
 	for _, direct := range []bool{false, true} {
 		t.Run(strconv.FormatBool(direct), func(t *testing.T) {

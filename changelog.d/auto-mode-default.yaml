@@ -1,0 +1,4 @@
+kind: changed
+area: agents
+change: Auto mode is now on for new Claude and Codex sessions, including on existing installs, unless you turned it off.
+notes: To turn it off, disable Auto-approve in Settings > Agents. Running sessions keep their current approval mode.
