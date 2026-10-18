@@ -14,10 +14,18 @@ const TYPING_MS = 45;
 const READ_PAUSE_MS = 1200;
 const CLIP_FPS = 30;
 const SETTLE_TRIPWIRE_MS = 90_000;
+const DRAG_STEPS = 60;
+const RECORDER_STOP_LATENCY_MS = 50;
 const PROMPT_READY = { claude: ensureClaudePromptReadyViaPty, codex: ensureCodexPromptReadyViaPty };
+const KEY_GLYPHS = { arrowleft: '←', arrowright: '→', arrowup: '↑', arrowdown: '↓', enter: '⏎', return: '⏎', escape: 'Esc', tab: 'Tab', backspace: '⌫', ' ': 'Space' };
+const CLIP_SCALE = 2;
 
 function ffmpeg(...args) {
   execFileSync('ffmpeg', ['-loglevel', 'error', '-y', ...args]);
+}
+
+function mediaSeconds(file) {
+  return Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file], { encoding: 'utf8' }));
 }
 
 export function createDemo({ world, outDir, log }) {
@@ -30,6 +38,28 @@ export function createDemo({ world, outDir, log }) {
   };
 
   const bounds = async (selector) => (await client.request('dom_bounds', { selector })).bounds;
+
+  const windowGeometry = async () => {
+    const { scaleFactor, logicalBounds } = await client.request('get_window_bounds');
+    const viewport = await bounds('#root');
+    return { scaleFactor, width: logicalBounds.width, height: logicalBounds.height, titlebar: logicalBounds.height - viewport.height };
+  };
+
+  const windowRect = async (selector) => {
+    const { titlebar } = await windowGeometry();
+    const rect = await bounds(selector);
+    return { x: rect.x, y: rect.y + titlebar, width: rect.width, height: rect.height };
+  };
+
+  const center = (rect) => ({ x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 });
+
+  const keyGlyphs = (binding) => [
+    ...(binding.meta ? ['⌘'] : []),
+    ...(binding.ctrl ? ['⌃'] : []),
+    ...(binding.alt ? ['⌥'] : []),
+    ...(binding.shift ? ['⇧'] : []),
+    KEY_GLYPHS[binding.key.toLowerCase()] ?? (binding.key.length === 1 ? binding.key.toUpperCase() : binding.key),
+  ];
 
   const sessionState = async (sessionId) => {
     const state = await client.request('get_state');
@@ -57,6 +87,48 @@ export function createDemo({ world, outDir, log }) {
 
     read: (action, payload = {}) => client.request(action, payload),
 
+    async press(shortcutId) {
+      const { binding } = await client.request('shortcut_binding', { shortcutId });
+      if (!binding) throw new Error(`shortcut ${shortcutId} is unbound in the app`);
+      if (binding.leader) throw new Error(`shortcut ${shortcutId} is a chord; press takes one combo`);
+      note('press', { shortcutId, keys: keyGlyphs(binding) });
+      await driver.pressKey(binding.key, { command: !!binding.meta, control: !!binding.ctrl, shift: !!binding.shift, option: !!binding.alt });
+    },
+
+    async key(key, modifiers = {}) {
+      note('press', { keys: keyGlyphs({ key, meta: modifiers.command, ctrl: modifiers.control, alt: modifiers.option, shift: modifiers.shift }) });
+      await driver.pressKey(key, modifiers);
+    },
+
+    async type(text) {
+      note('type', { text });
+      for (const char of text) {
+        await client.request('native_text', { text: char });
+        await delay(TYPING_MS);
+      }
+    },
+
+    caption(text) {
+      note('caption', { text });
+    },
+
+    async focus(selector) {
+      if (!selector) {
+        note('focus', {});
+        return;
+      }
+      note('focus', { selector }, await windowRect(selector));
+    },
+
+    async drag(fromSelector, toSelector, { steps = DRAG_STEPS } = {}) {
+      const { width, height } = await windowGeometry();
+      const from = center(await windowRect(fromSelector));
+      const to = center(await windowRect(toSelector));
+      note('drag', { from, to });
+      await client.request('native_mouse', { action: 'drag', x: from.x / width, y: from.y / height, toX: to.x / width, toY: to.y / height, steps });
+      note('drop', { at: to });
+    },
+
     async until(description, check) {
       const deadline = Date.now() + SETTLE_TRIPWIRE_MS;
       while (!(await check())) {
@@ -70,6 +142,7 @@ export function createDemo({ world, outDir, log }) {
       const { sessionId } = await client.request('create_session', { cwd, agent, label });
       note('session', { sessionId, agent, label });
       const { paneId } = await PROMPT_READY[agent](client, sessionId);
+      await waitForState(sessionId, 'idle');
       const session = {
         id: sessionId,
         async prompt(text, builder) {
@@ -97,9 +170,7 @@ export function createDemo({ world, outDir, log }) {
       const windowId = await driver.mainWindowId();
       execFileSync('/usr/sbin/screencapture', ['-x', '-o', '-l', String(windowId), file]);
       if (crop || highlight) {
-        const { scaleFactor, logicalBounds } = await client.request('get_window_bounds');
-        const viewport = await bounds('#root');
-        const titlebar = logicalBounds.height - viewport.height;
+        const { scaleFactor, titlebar } = await windowGeometry();
         const px = (rect) => ({
           x: Math.round(rect.x * scaleFactor),
           y: Math.round((rect.y + titlebar) * scaleFactor),
@@ -132,18 +203,28 @@ export function createDemo({ world, outDir, log }) {
     async clip(name, run) {
       const file = path.join(outDir, `${name}.mp4`);
       const raw = `${file}.raw.mp4`;
+      await world.placeWindow();
+      const { scaleFactor, width, height, titlebar } = await windowGeometry();
+      if (scaleFactor < CLIP_SCALE) {
+        throw new Error(`clip ${name} needs the window on a display with scale ${CLIP_SCALE} or more, but it is on one with scale ${scaleFactor}, which records blurry footage; move the window to a Retina display and run the scene again`);
+      }
       const windowId = await driver.mainWindowId();
       const recording = startWindowRecording({ windowId, outputPath: raw, command: await ensureWindowRecorder(), fps: CLIP_FPS, showCursor: false });
       clipLog = Object.assign([], { startedAt: Date.now() });
+      note('window', { width, height, titlebar });
       const outcome = await run().then(() => null, (error) => error);
       const events = clipLog;
       clipLog = null;
+      const stopRequestedAt = Date.now();
       const result = await recording.stop();
       if (outcome) throw outcome;
       if (result.failure) throw new Error(`recording ${raw} failed: ${result.failure}`);
+      const firstFrameAt = stopRequestedAt + RECORDER_STOP_LATENCY_MS - mediaSeconds(raw) * 1000;
+      const shift = (events.startedAt - firstFrameAt) / 1000;
       ffmpeg('-i', raw, '-vf', `fps=${CLIP_FPS}`, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '16', file);
       fs.rmSync(raw);
-      fs.writeFileSync(path.join(outDir, `${name}.events.jsonl`), events.map((event) => JSON.stringify(event)).join('\n') + '\n');
+      const lines = events.map((event) => JSON.stringify({ ...event, t: Number((event.t + shift).toFixed(3)) }));
+      fs.writeFileSync(path.join(outDir, `${name}.events.jsonl`), lines.join('\n') + '\n');
       return file;
     },
   };

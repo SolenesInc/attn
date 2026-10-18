@@ -62,6 +62,24 @@ exec "${codex}" "$@"
   return wrapper;
 }
 
+function writeShellHome(toolHome) {
+  const configDir = path.join(toolHome, 'config');
+  const zshDir = path.join(toolHome, 'zsh');
+  const nodeBin = path.dirname(process.execPath);
+  fs.mkdirSync(path.join(configDir, 'fish'), { recursive: true });
+  fs.mkdirSync(zshDir, { recursive: true });
+  fs.writeFileSync(path.join(configDir, 'fish', 'config.fish'), `set -g fish_greeting
+fish_add_path --global ${nodeBin}
+function fish_prompt
+    set_color brblue; echo -n (string replace -r "^$HOME" "~" $PWD); set_color normal; echo -n ' $ '
+end
+`);
+  fs.writeFileSync(path.join(zshDir, '.zshrc'), `path=(${nodeBin} $path)
+PROMPT='%F{blue}%~%f $ '
+`);
+  return { XDG_CONFIG_HOME: configDir, ZDOTDIR: zshDir };
+}
+
 export function writeAgentHome({ toolHome, stubOrigin, trustedFolders }) {
   const claudeDir = path.join(toolHome, '.claude');
   const codexDir = path.join(toolHome, '.codex');
@@ -69,6 +87,7 @@ export function writeAgentHome({ toolHome, stubOrigin, trustedFolders }) {
   writeCodexHome(codexDir, trustedFolders, stubOrigin);
   const codexWrapper = writeCodexExecWrapper(path.join(toolHome, 'bin'), stubOrigin);
   return {
+    ...writeShellHome(toolHome),
     ATTN_TOOL_HOME: toolHome,
     CLAUDE_CONFIG_DIR: claudeDir,
     ANTHROPIC_BASE_URL: stubOrigin,

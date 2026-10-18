@@ -1,31 +1,15 @@
 import { turn } from '../turns.mjs';
+import { BUTTER_PROMPT, SEARCH_PROMPT, fixButterConversion, searchByIngredient } from '../recipeTurns.mjs';
 
 export default {
   description: 'The guide screenshots: home screen, the Ledger button, the Worktrees tab',
   repos: { recipes: { worktrees: ['search-by-ingredient', 'fix-unit-conversion', 'tidy-ingredient-names'] } },
   async run(demo) {
     const search = await demo.session({ repo: 'recipes', worktree: 'search-by-ingredient' });
-    await search.prompt('Add a search that finds recipes by ingredient', turn()
-      .title('Search by ingredient')
-      .say("I'll start with how recipes are searched today.")
-      .read('src/search.js')
-      .say('Adding a byIngredient search next to byName.')
-      .edit('src/search.js', {
-        from: '  return recipes.filter((recipe) => recipe.name.toLowerCase().includes(needle));\n}',
-        to: '  return recipes.filter((recipe) => recipe.name.toLowerCase().includes(needle));\n}\n\nexport function byIngredient(item) {\n  return recipes.filter((recipe) => recipe.ingredients.some((ingredient) => ingredient.item === item));\n}',
-      })
-      .ask('`byIngredient` matches exact names, so "egg" won\'t find "eggs". Should it match partial names too?'));
+    await search.prompt(SEARCH_PROMPT, searchByIngredient());
 
     const fix = await demo.session({ repo: 'recipes', worktree: 'fix-unit-conversion', agent: 'codex' });
-    await fix.prompt('Butter in cups fails to convert to grams, fix it', turn()
-      .say('Checking the conversion table first.')
-      .read('src/convert.js')
-      .say('Butter and tablespoons are both missing; adding them and a test.')
-      .edit('src/convert.js', {
-        from: '  stock: 240,\n};',
-        to: '  stock: 240,\n  butter: 227,\n};',
-      })
-      .hold());
+    await fix.prompt(BUTTER_PROMPT, fixButterConversion().hold());
 
     const repo = await demo.session({ repo: 'recipes' });
     await repo.prompt('Run the tests', turn()
