@@ -318,12 +318,12 @@
         "note": "Green ATTN_VERDICT notebook-profile-scope-2026-10-10T01-06-41-695Z durationMs=39473 at c35103154, including cleanup. Native Work/Home/Work switches verify the profile folder in Settings and its journal in the Notebook."
       },
       "chief-slot": {
-        "run": "chief-slot-2026-10-18T20-55-51-903Z",
-        "job": "Local packaged scenario, chief-popover isolated instance",
+        "run": "chief-slot-2026-10-18T21-28-32-829Z",
+        "job": "Local packaged serial matrix, isolated linux-8c140d028b instance",
         "recordedAt": "2026-10-18",
-        "seconds": 82.909,
-        "runnerClass": "local macOS",
-        "note": "Green ATTN_VERDICT durationMs=82909 at de8e598b2, including cleanup. Both sidebar flows, popover first run/no-harness/error/waking, restored-terminal and cold-catalog configured-save focus, Sleep/one-click Wake, and Notebook charter autosave with 23 copied guide files. Window parked with 20 logical px visible. Remeasure on Linux CI."
+        "seconds": 94.161,
+        "runnerClass": "local Linux SSH runner, 12 vCPU",
+        "note": "Green CHIEF-SLOT ATTN_VERDICT durationMs=94161 at 9d3e534fe with nonasserting CPU sampling removed, including cleanup. All eight functional steps passed within the unchanged 120s matrix tripwire. Earlier macOS parked-window and idle CPU receipts remain on s-fzyxav."
       }
     }
   },
@@ -390,6 +390,6 @@
     "callouts": 39.5,
     "quick-capture": 206.599,
     "notebook-profile-scope": 39.473,
-    "chief-slot": 82.909
+    "chief-slot": 94.161
   }
 }

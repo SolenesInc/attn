@@ -8,8 +8,7 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessInstance, instanceCliEnv, resolveHarnessResources } from './harnessInstance.mjs';
 import { MOCK_AGENT_MODEL, writeMockAgentFixture } from './mockAgent.mjs';
-import { captureWebKitPids, readLiveDaemonPid, readProcessTable, snapshot } from './perfMeasure.mjs';
-import { createWindowDriver, delay } from './platform.mjs';
+import { createWindowDriver } from './platform.mjs';
 
 const options = parseCommonArgs(process.argv.slice(2));
 const instance = currentHarnessInstance();
@@ -27,7 +26,6 @@ let chief;
 let firstDay;
 let notebookRoot;
 let liveAgent;
-let webkitBaseline;
 const state = () => client.request('chief_slot_get_state');
 const waitDom = (selector, extra = {}) => client.request('dom_wait', { selector, timeoutMs: 15_000, ...extra });
 const click = async selector => {
@@ -54,16 +52,6 @@ const openChiefRoute = async () => {
   await click('[role="menu"] button:first-of-type');
   await waitDom('[data-testid="chief-setup"] .chief-pop-primary:not(:disabled)', { focused: true });
 };
-const sampleIdle = async name => {
-  const before = await snapshot(client.readManifest().pid, readLiveDaemonPid(instance), webkitBaseline);
-  const pids = new Set(Object.values(before.byClass).flatMap(group => group.pids.map(entry => entry.pid)));
-  const samples = [];
-  for (let index = 0; index < 10; index += 1) {
-    await delay(1000);
-    samples.push((await readProcessTable()).filter(process => pids.has(process.pid)).map(({ pid, comm, cpuPct }) => ({ pid, comm, cpuPct })));
-  }
-  runner.writeJson(`idle-${name}.json`, { before, samples });
-};
 const roster = () => JSON.parse(cli(['crew', 'list', '--profile', profile.id, '--json']));
 runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
@@ -85,7 +73,6 @@ runner.registerCleanup('restore_profile', async () => {
 
 try {
   await runner.step('fresh_profile', async () => {
-    webkitBaseline = await captureWebKitPids();
     await launchFreshAppAndConnect(client, observer);
     runner.writeJson('parked-window-first-launch.json', await client.request('get_window_bounds'));
     queueDaemonSettingRestore(observer, 'queue_mode_enabled');
@@ -128,10 +115,6 @@ try {
     await screenshot('01-chief-setup-desktop-flow');
     await driver.pressKey('Escape');
     await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
-    await sampleIdle('unconfigured');
-    await pressShortcutKeys(client, driver, 'session.toggleSidebar');
-    await sampleIdle('collapsed-baseline');
-    await pressShortcutKeys(client, driver, 'session.toggleSidebar');
   });
   await runner.step('no_harness_recheck', async () => {
     await click('[data-testid="chief-slot"] .queue-row-select');
@@ -252,7 +235,6 @@ try {
     runner.writeJson('sleep-after-activation.json', await state());
     await waitDom('[data-testid="chief-slot"][data-chief-phase="asleep"]');
     await screenshot('04-chief-asleep');
-    await sampleIdle('asleep');
     runner.assert(!roster().find(member => member.chief)?.binding_session, 'sleep releases the chief binding');
     await pressShortcutKeys(client, driver, 'sidebar.agentList');
     await waitDom('[data-testid="queue-agent-filter"]', { focused: true });
