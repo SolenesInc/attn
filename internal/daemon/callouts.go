@@ -154,7 +154,7 @@ func (d *Daemon) handleCalloutShow(conn net.Conn, msg *protocol.CalloutShowMessa
 		d.sendError(conn, err.Error())
 		return
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, Data: protocol.Ptr(fmt.Sprintf("showing a callout with %d steps; the user steps through it", len(steps)))})
+	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, Data: protocol.Ptr(fmt.Sprintf("showing a callout with %d %s; the user steps through it", len(steps), plural(len(steps), "step", "steps")))})
 }
 
 func (d *Daemon) handleCalloutAnchors(conn net.Conn, msg *protocol.CalloutAnchorsMessage) {
