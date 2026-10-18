@@ -279,28 +279,33 @@ func (r *codexShared) serverGone(profile string) {
 	})
 }
 
-func (r *codexShared) closed(sessionID protocol.SessionID) {
+func (r *codexShared) closing(sessionID protocol.SessionID) (afterClose func()) {
 	conversation := r.conversation(sessionID)
 	session := r.d.store.Get(sessionID)
 	if conversation == "" || session == nil {
+		return nil
+	}
+	finishUsage := r.d.finishMonitorUsage(sessionID)
+	r.settleUsage(sessionID)
+	finishUsage()
+	return func() { r.archiveUnheld(session.ProfileID, sessionID, conversation) }
+}
+
+func (r *codexShared) archiveUnheld(profile string, closed protocol.SessionID, conversation string) {
+	if holder := r.d.store.OtherOpenSessionHolding(conversation, ""); holder != "" {
+		r.d.logf("shared Codex: conversation %s of closed session %s stays unarchived: session %s still holds it", conversation, closed, holder)
 		return
 	}
-	defer r.d.finishMonitorUsage(sessionID)()
-	defer r.settleUsage(sessionID)
-	if other := r.d.store.OtherOpenSessionHolding(conversation, sessionID); other != "" {
-		r.d.logf("shared Codex: conversation %s of closed session %s stays unarchived: session %s still holds it", conversation, sessionID, other)
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), codexServerStartLimit)
+	ctx, cancel := context.WithTimeout(r.d.life.Context(), codexServerStartLimit)
 	defer cancel()
-	_, client, err := r.control(ctx, session.ProfileID)
+	_, client, err := r.control(ctx, profile)
 	if err == nil {
 		callCtx, cancelCall := context.WithTimeout(ctx, codexServerCallLimit)
 		_, err = client.Call(callCtx, "thread/archive", map[string]any{"threadId": conversation})
 		cancelCall()
 	}
 	if err != nil {
-		r.d.logf("shared Codex: conversation %s of closed session %s stays unarchived: %v", conversation, sessionID, err)
+		r.d.logf("shared Codex: conversation %s of closed session %s stays unarchived: %v", conversation, closed, err)
 	}
 }
 

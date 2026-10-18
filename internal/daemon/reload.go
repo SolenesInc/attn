@@ -239,42 +239,54 @@ func (d *Daemon) reloadSessionForClient(sessionID protocol.SessionID, cols, rows
 	if sessionID == "" {
 		return errors.New("session not found")
 	}
+	resume, err := d.reloadLiveOrPlanResume(sessionID, cols, rows)
+	if err != nil || resume == nil {
+		return err
+	}
+	if rejection := d.runSpawnPipeline(resume.msg, resume.policy); rejection != nil {
+		return rejection.reason()
+	}
+	return nil
+}
 
+type storedIntentResume struct {
+	msg    *protocol.SpawnSessionMessage
+	policy internalSpawnPolicy
+}
+
+func (d *Daemon) reloadLiveOrPlanResume(sessionID protocol.SessionID, cols, rows int) (*storedIntentResume, error) {
 	lock := d.sessionLifecycleLockFor(sessionID)
 	lock.Lock()
 	defer lock.Unlock()
 	if d.sessionTeardownInFlight(sessionID) {
-		return errors.New("session is closing")
+		return nil, errors.New("session is closing")
 	}
 	session := d.store.Get(sessionID)
 	if session == nil {
-		return errors.New("session not found")
+		return nil, errors.New("session not found")
 	}
 
 	if d.sessionHasLiveWorker(sessionID) {
 		opts, err := d.buildReloadSpawnOptions(session)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		pluginReload, err := d.prepareSessionReload(session, &opts, d.isChiefOfStaffSession(sessionID))
 		if err != nil {
-			return err
+			return nil, err
 		}
-		return d.executePreparedSessionReload(sessionID, opts, pluginReload)
+		return nil, d.executePreparedSessionReload(sessionID, opts, pluginReload)
 	}
 
 	if cols <= 0 || rows <= 0 {
-		return errors.New("reload requires pty geometry when no live worker exists")
+		return nil, errors.New("reload requires pty geometry when no live worker exists")
 	}
 	intent, ok := d.store.LaunchIntent(sessionID)
 	if !ok {
-		return errors.New("no stored launch intent")
+		return nil, errors.New("no stored launch intent")
 	}
-	spawnMsg, policy := buildStoredIntentSpawn(session, intent, cols, rows)
-	if rejection := d.runSpawnPipeline(spawnMsg, policy); rejection != nil {
-		return rejection.reason()
-	}
-	return nil
+	msg, policy := buildStoredIntentSpawn(session, intent, cols, rows)
+	return &storedIntentResume{msg: msg, policy: policy}, nil
 }
 
 // persistReloadedConversation records the conversation a reload launches before it runs, or clears a
