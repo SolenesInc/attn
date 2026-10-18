@@ -44,19 +44,7 @@ func TestTheAppsOtherCommandsAnswerWhileASpawnStartsItsSharedCodexAppServer(t *t
 }
 
 func TestTheAppsOtherCommandsAnswerWhileAResumeStartsItsSharedCodexAppServer(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
-	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
-	codex := w.Launched(session)
-	takeTurn(app, codex, session)
-	conversation := codex.ConversationID
-	codex.Exit(143)
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
-	stopped := w.CodexServer()
-	w.restart()
-	app = w.App()
-	stopped.AwaitStopped()
+	w, app, session, conversation := stoppedSharedCodexSessionWithNoAppServer(t)
 
 	boot := w.HoldNextBoot()
 	app.Send(protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 100, Rows: 30})
@@ -73,6 +61,61 @@ func TestTheAppsOtherCommandsAnswerWhileAResumeStartsItsSharedCodexAppServer(t *
 	if closed := closeFromApp(app, session); !closed.Accepted {
 		t.Fatalf("close %s: %s", session, protocol.Deref(closed.Error))
 	}
+}
+
+func TestClosingASessionAnswersWhileItsResumeWaitsForItsSharedCodexAppServer(t *testing.T) {
+	for _, way := range []string{"unregister", "desktop_close_tile"} {
+		t.Run(way, func(t *testing.T) {
+			w, app, session, _ := stoppedSharedCodexSessionWithNoAppServer(t)
+			desktop, pane := placedPane(t, w, session)
+
+			boot := w.HoldNextBoot()
+			app.Send(protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 100, Rows: 30})
+			w.AwaitHeldBoot()
+			if way == "unregister" {
+				if closed := closeFromApp(app, session); !closed.Accepted {
+					t.Fatalf("close %s while its resume waits: %s", session, protocol.Deref(closed.Error))
+				}
+			} else if closed := closeTileFromApp(app, desktop.ID, pane); !closed.Success {
+				t.Fatalf("close the tile of %s while its resume waits: %s", session, protocol.Deref(closed.Error))
+			}
+			appCommandAnswers(app)
+			boot()
+			if result := testworld.Await(app, protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == session }); result.Success {
+				t.Fatal("the resume of a session closed while it waited succeeded")
+			}
+
+			after := w.ConnectApp().Initial
+			for _, s := range after.Sessions {
+				if string(s.ID) == session {
+					t.Fatalf("the session closed while its resume waited is open again: %+v", s)
+				}
+			}
+			for _, d := range after.Desktops {
+				for _, p := range d.Panes {
+					if string(p.SessionID) == session {
+						t.Fatalf("the session closed while its resume waited is placed again on desktop %s", d.ID)
+					}
+				}
+			}
+		})
+	}
+}
+
+func stoppedSharedCodexSessionWithNoAppServer(t *testing.T) (w *world, app *testworld.Peer, session, conversation string) {
+	t.Helper()
+	w = newWorld(t, fakeagent.Codex)
+	app = w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	session = w.Spawn(app, fakeagent.Codex, w.Path("shop"))
+	codex := w.Launched(session)
+	takeTurn(app, codex, session)
+	codex.Exit(143)
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
+	stopped := w.CodexServer()
+	w.restart()
+	stopped.AwaitStopped()
+	return w, w.App(), session, codex.ConversationID
 }
 
 func appCommandAnswers(app *testworld.Peer) {
