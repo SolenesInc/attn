@@ -82,9 +82,10 @@ async function main() {
         if (chief) {
           const prior = JSON.parse(cli(['crew', 'list', '--json'])).find(member => member.chief);
           if (prior?.binding_session) cli(['handoff', '--session', prior.binding_session, '--sleep', '-m', 'Start the prompt scenario in its fixture folder.']);
+          cli(['settings', 'set', 'notebook.root', cwd]);
         }
         const result = chief
-          ? { sessionId: (JSON.parse(cli(['crew', 'set', 'chief', '--agent', agent, '--model', 'gpt-6.1-sol', '--cwd', cwd, '--json'])).binding_session || JSON.parse(cli(['crew', 'wake', 'chief', '--json'])).session_id) }
+          ? { sessionId: (JSON.parse(cli(['crew', 'set', 'chief', '--agent', agent, '--model', 'gpt-6.1-sol', '--json'])).binding_session || JSON.parse(cli(['crew', 'wake', 'chief', '--json'])).session_id) }
           : await client.request('create_session', { cwd, label: name, agent });
         sessions.push(result.sessionId);
         if (chief) chiefs.push(result.sessionId);

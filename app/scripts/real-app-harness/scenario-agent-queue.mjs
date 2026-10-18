@@ -661,7 +661,8 @@ async function main() {
       writeQueueAgentFixture(cwd);
       const binary = resolveAttnBin();
       const env = { ...instanceCliEnv(currentHarnessInstance()), ATTN_WRAPPER_PATH: binary };
-      const member = JSON.parse(execFileSync(binary, ['crew', 'set', 'chief', '--agent', 'claude', '--model', 'sonnet', '--cwd', cwd, '--json'], { env, encoding: 'utf8' }));
+      execFileSync(binary, ['settings', 'set', 'notebook.root', cwd], { env, encoding: 'utf8' });
+      const member = JSON.parse(execFileSync(binary, ['crew', 'set', 'chief', '--agent', 'claude', '--model', 'sonnet', '--json'], { env, encoding: 'utf8' }));
       const chiefId = member.binding_session || JSON.parse(execFileSync(binary, ['crew', 'wake', 'chief', '--json'], { env, encoding: 'utf8' })).session_id;
       chiefSessionId = chiefId;
       runner.assert(Boolean(chiefId), 'configuring the chief woke it', { member });
