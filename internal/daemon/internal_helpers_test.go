@@ -2,38 +2,16 @@ package daemon
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
-
-func writeCodexInteractiveRollout(t *testing.T, codexHome, nativeID, cwd string, at time.Time) string {
-	t.Helper()
-	dir := filepath.Join(codexHome, "sessions", "2026", "05", "17")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatalf("mkdir rollout dir: %v", err)
-	}
-	path := filepath.Join(dir, fmt.Sprintf("rollout-%s-%s.jsonl", at.UTC().Format("2006-01-02T15-04-05"), nativeID))
-	line := fmt.Sprintf(
-		`{"timestamp":"%s","type":"session_meta","payload":{"id":"%s","timestamp":"%s","cwd":"%s","source":"cli"}}`+"\n",
-		at.UTC().Format(time.RFC3339Nano), nativeID, at.UTC().Format(time.RFC3339Nano), cwd,
-	)
-	if err := os.WriteFile(path, []byte(line), 0o644); err != nil {
-		t.Fatalf("write rollout: %v", err)
-	}
-	if err := os.Chtimes(path, at, at); err != nil {
-		t.Fatalf("chtimes rollout: %v", err)
-	}
-	return path
-}
 
 func startPluginPipe(t *testing.T, d *Daemon, name string, surfaces []string) (net.Conn, <-chan struct{}) {
 	return startPluginPipeGeneration(t, d, name, surfaces, 1)

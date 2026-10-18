@@ -7,7 +7,6 @@ import (
 
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/sessionstate"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -64,22 +63,12 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 	}
 
 	d.sessionInputs().handOverSubmit(from.ID, sc.To)
-	terminal, _ := d.evidenceTable().snapshot(from.ID)
-	if sc.KeepTo {
-		d.updateEvidence(sc.To, nil, func(e *sessionstate.Evidence) {
-			e.Heartbeat, e.ProgramStatus = terminal.Heartbeat, terminal.ProgramStatus
-		})
-		d.ensureTranscriptWatcherAtPath(sc.To, observation.TranscriptPath)
-	} else {
-		d.startEvidence(sc.To, sessionstate.Evidence{
-			Heartbeat:      terminal.Heartbeat,
-			ProgramStatus:  terminal.ProgramStatus,
-			Process:        terminal.Process,
-			ReviewerInLoop: terminal.ReviewerInLoop,
-			LastBusyAt:     terminal.LastBusyAt,
-			LastMovement:   terminal.LastMovement,
-		})
+	if !sc.KeepTo {
+		d.startSessionMonitor(sc.To)
+		d.resolveSoon(sc.To)
 		d.startTranscriptWatcherAtPath(sc.To, from.Agent, from.Directory, d.sessionStartedAt(sc.To), observation.TranscriptPath)
+	} else {
+		d.ensureTranscriptWatcherAtPath(sc.To, observation.TranscriptPath)
 	}
 	d.publishFact(FactSessionRegistered, string(sc.To), nil)
 	d.publishArrangementChanged(from.ProfileID)
@@ -92,7 +81,7 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 		d.publishSessionUnregistered(from)
 	} else {
 		if d.hidden(from.ID) {
-			d.updateEvidence(from.ID, nil, func(e *sessionstate.Evidence) {
+			d.updateEvidence(from.ID, nil, func(e *monitorEvidence) {
 				e.Heartbeat = nil
 				e.ClearProgramStatus()
 			})

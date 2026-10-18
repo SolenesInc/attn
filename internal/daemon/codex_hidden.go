@@ -201,7 +201,7 @@ func (r *codexShared) observe(sessionID protocol.SessionID, status string) {
 	}
 	now := time.Now()
 	if status == pty.ProgramIdle {
-		evidence, _ := r.d.evidenceTable().snapshot(sessionID)
+		evidence, _ := r.d.evidenceSnapshot(sessionID)
 		bracketOpen := evidence.TurnOpen || evidence.ToolOpen
 		if !bracketOpen && !inTurn(session.State) {
 			return

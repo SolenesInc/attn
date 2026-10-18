@@ -33,23 +33,24 @@ type TerminalInput struct {
 }
 
 type Terminal struct {
-	owner     *Terminals
-	Options   ptybackend.SpawnOptions
-	running   bool
-	line      []rune
-	pasting   bool
-	pasteAt   int
-	pasted    []string
-	submitted []string
-	inputs    []TerminalInput
-	screen    []string
-	streams   []chan ptybackend.OutputEvent
-	onSubmit  func(string)
-	onKill    func(syscall.Signal)
-	exitHold  <-chan struct{}
-	stall     *terminalStall
-	removal   <-chan struct{}
-	gone      bool
+	owner             *Terminals
+	Options           ptybackend.SpawnOptions
+	running           bool
+	line              []rune
+	pasting           bool
+	pasteAt           int
+	pasted            []string
+	submitted         []string
+	inputs            []TerminalInput
+	screen            []string
+	screenUnavailable bool
+	streams           []chan ptybackend.OutputEvent
+	onSubmit          func(string)
+	onKill            func(syscall.Signal)
+	exitHold          <-chan struct{}
+	stall             *terminalStall
+	removal           <-chan struct{}
+	gone              bool
 }
 
 type terminalStall struct {
@@ -312,6 +313,9 @@ func (b *Terminals) ScreenSnapshot(_ context.Context, id harness.TerminalID) (pt
 	if err != nil {
 		return pty.ScreenSnapshotInfo{}, err
 	}
+	if term.screenUnavailable {
+		return pty.ScreenSnapshotInfo{}, fmt.Errorf("terminal %s screen is unavailable", id)
+	}
 	text := strings.Join(term.screen, "\n") + string(term.line)
 	return pty.ScreenSnapshotInfo{
 		Cols: term.Options.Cols, Rows: term.Options.Rows, Running: term.running,
@@ -454,4 +458,11 @@ func (s *terminalStream) Close() error {
 		}
 	})
 	return nil
+}
+
+func (t *Terminal) ScreenUnavailable() (restore func()) {
+	t.owner.mu.Lock()
+	t.screenUnavailable = true
+	t.owner.mu.Unlock()
+	return func() { t.owner.mu.Lock(); t.screenUnavailable = false; t.owner.mu.Unlock() }
 }

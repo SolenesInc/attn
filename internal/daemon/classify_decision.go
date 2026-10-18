@@ -15,10 +15,6 @@ import (
 	"github.com/victorarias/attn/internal/statemarker"
 )
 
-type Classifier interface {
-	Classify(text string, timeout time.Duration) (string, error)
-}
-
 type classifyAction int
 
 const (
@@ -145,9 +141,6 @@ func (d *Daemon) classifyStop(sessionID protocol.SessionID, transcriptPath strin
 
 	d.logf("classifySessionState: parsing transcript for session %s", sessionID)
 	extract := d.extractLastAssistantMessage
-	if d.classificationTranscriptExtractor != nil {
-		extract = d.classificationTranscriptExtractor
-	}
 	lastMessage, assistantTurnID, err := extract(session, resolvedTranscriptPath, 500, classificationStartTime)
 	if err != nil {
 		d.logf("classifySessionState: transcript read failed for %s: %v (transcript=%s)", sessionID, err, resolvedTranscriptPath)
@@ -189,9 +182,6 @@ func (d *Daemon) classifyStop(sessionID protocol.SessionID, transcriptPath strin
 func (d *Daemon) runClassifier(session *protocol.Session, text string, timeout time.Duration) (string, error) {
 	if d.headlessTaskRefused("classifier") {
 		return d.classifyFromMarker(session, text)
-	}
-	if d.classifier != nil {
-		return d.classifier.Classify(text, timeout)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()

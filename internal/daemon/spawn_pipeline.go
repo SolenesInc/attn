@@ -440,10 +440,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	d.persistLaunchedConversation(req, plan)
 	d.rememberSessionTitleInitialPrompt(msg.ID, req.initialPrompt)
 	hasInitialPrompt := strings.TrimSpace(req.initialPrompt) != ""
-	d.startEvidence(msg.ID, sessionstate.Evidence{
-		InitialPromptOwed: hasInitialPrompt && reportsTurnStarts(req.agent),
-		ReviewerInLoop:    plan.spawnOpts.ApprovalRoute.ReviewerInLoop(),
-	})
+	d.startEvidence(msg.ID, monitorEvidence{TerminalEvidence: sessionstate.TerminalEvidence{ReviewerInLoop: plan.spawnOpts.ApprovalRoute.ReviewerInLoop()}, ConversationEvidence: sessionstate.ConversationEvidence{InitialPromptOwed: hasInitialPrompt && reportsTurnStarts(req.agent)}})
 	if req.hasPluginDriver && !d.store.BeginAgentDriverRun(session.ID, req.pluginDriver.PluginName, plan.pluginRunID) {
 		if req.existingSession == nil {
 			d.store.Remove(msg.ID)
@@ -637,6 +634,7 @@ func (d *Daemon) runSpawnPipelineProtected(protection foregroundCleanupProtectio
 			return
 		}
 		if !d.sessionHasLiveWorker(msg.ID) {
+			d.startSessionMonitor(msg.ID)
 			d.recordProcessEvidence(msg.ID, true)
 		}
 		d.publishFact(FactSessionReregistered, string(msg.ID), nil)

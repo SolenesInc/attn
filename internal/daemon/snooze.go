@@ -151,7 +151,7 @@ func (d *Daemon) turnOpeningFor(sessionID protocol.SessionID, state protocol.Ses
 	if !attention.OpensTurn(state) {
 		return store.TurnOpening{}
 	}
-	return store.TurnOpening{Opens: true, BreaksSnooze: attention.BreaksSnooze(state, d.stateReasons().get(sessionID))}
+	return store.TurnOpening{Opens: true, BreaksSnooze: attention.BreaksSnooze(state, d.stateReason(sessionID))}
 }
 
 func (d *Daemon) dropEndedSnoozeWake(sessionID protocol.SessionID, state string, ended time.Time) {
@@ -166,7 +166,7 @@ func (d *Daemon) dropEndedSnoozeWake(sessionID protocol.SessionID, state string,
 		if !ended.After(time.Now()) {
 			cause = "expired"
 		}
-		d.logf("snooze %s: session=%s state=%s reason=%s", cause, sessionID, state, d.stateReasons().get(sessionID))
+		d.logf("snooze %s: session=%s state=%s reason=%s", cause, sessionID, state, d.stateReason(sessionID))
 	}
 }
 

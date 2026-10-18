@@ -156,6 +156,7 @@ func (d *Daemon) applyAgentConversation(observation agentConversationObservation
 		return true
 	}
 
+	d.startSessionMonitor(observation.SessionID)
 	d.rememberDispatchResume(observation.SessionID, observation.NativeID)
 	d.resetSessionActivityRuntime(observation.SessionID)
 	d.publishFact(FactSessionConversationChanged, string(observation.SessionID), observation)

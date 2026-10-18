@@ -24,13 +24,6 @@ const (
 	stateSourceResolver        = "resolver"
 )
 
-func (d *Daemon) stateTraceRecorder() *statetrace.Recorder {
-	d.stateTraceOnce.Do(func() {
-		d.stateTrace = statetrace.New(statetrace.DefaultCapacity)
-	})
-	return d.stateTrace
-}
-
 func (d *Daemon) recordStateObservation(sessionID protocol.SessionID, obs statetrace.Observation) {
 	if protocol.TrimID(sessionID) == "" {
 		return
@@ -41,9 +34,14 @@ func (d *Daemon) recordStateObservation(sessionID protocol.SessionID, obs statet
 	if obs.ObservedAt.IsZero() {
 		obs.ObservedAt = obs.RecordedAt
 	}
-	d.stateTraceRecorder().RecordIf(sessionID, obs, func() bool {
-		return d.store != nil && d.store.Get(sessionID) != nil
-	})
+	if e := d.monitorEntry(sessionID); e != nil {
+		e.mu.Lock()
+		if e.trace == nil {
+			e.trace = statetrace.NewRing(statetrace.DefaultCapacity)
+		}
+		e.trace.Record(obs)
+		e.mu.Unlock()
+	}
 	d.logf("%s", obs.LogLine(sessionID))
 	if harnessReportedState(obs.Source) {
 		d.noteLaunchStarted(sessionID)
@@ -95,10 +93,6 @@ func (d *Daemon) traceStateSkip(sessionID protocol.SessionID, source string, rea
 	})
 }
 
-func (d *Daemon) forgetStateTrace(sessionID protocol.SessionID) {
-	d.stateTraceRecorder().Forget(sessionID)
-}
-
 func (d *Daemon) handleStateExplain(conn net.Conn, msg *protocol.StateExplainMessage) {
 	session := d.store.Get(protocol.SessionID(strings.TrimSpace(msg.TargetSessionID)))
 	if session == nil {
@@ -112,7 +106,12 @@ func (d *Daemon) handleStateExplain(conn net.Conn, msg *protocol.StateExplainMes
 }
 
 func (d *Daemon) stateExplainResult(session *protocol.Session) *protocol.StateExplainResult {
-	recorded := d.stateTraceRecorder().Observations(session.ID)
+	var recorded []statetrace.Observation
+	if e := d.monitorEntry(session.ID); e != nil {
+		e.mu.Lock()
+		recorded = e.trace.Snapshot()
+		e.mu.Unlock()
+	}
 	observations := make([]protocol.StateExplainEntry, 0, len(recorded))
 	for _, obs := range recorded {
 		entry := protocol.StateExplainEntry{
@@ -141,7 +140,7 @@ func (d *Daemon) stateExplainResult(session *protocol.Session) *protocol.StateEx
 		Agent:        session.Agent,
 		State:        string(session.State),
 		Observations: observations,
-		Capacity:     d.stateTraceRecorder().Capacity(),
+		Capacity:     statetrace.DefaultCapacity,
 	}
 	if strings.TrimSpace(session.StateSince) != "" {
 		result.StateSince = protocol.Ptr(session.StateSince)

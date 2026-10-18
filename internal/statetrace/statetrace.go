@@ -3,7 +3,6 @@ package statetrace
 import (
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -70,101 +69,17 @@ func orDash(value string) string {
 	return value
 }
 
-type Recorder struct {
-	mu       sync.Mutex
-	capacity int
-	rings    map[protocol.SessionID]*ring
-}
-
-func New(capacity int) *Recorder {
-	if capacity <= 0 {
-		capacity = DefaultCapacity
-	}
-	return &Recorder{capacity: capacity, rings: make(map[protocol.SessionID]*ring)}
-}
-
-func (r *Recorder) Capacity() int {
-	if r == nil {
-		return 0
-	}
-	return r.capacity
-}
-
-func (r *Recorder) Record(sessionID protocol.SessionID, obs Observation) {
-	r.RecordIf(sessionID, obs, nil)
-}
-
-func (r *Recorder) RecordIf(sessionID protocol.SessionID, obs Observation, admit func() bool) {
-	if r == nil || sessionID == "" {
-		return
-	}
-	if obs.RecordedAt.IsZero() {
-		obs.RecordedAt = time.Now()
-	}
-	if obs.ObservedAt.IsZero() {
-		obs.ObservedAt = obs.RecordedAt
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if admit != nil && !admit() {
-		return
-	}
-	target := r.rings[sessionID]
-	if target == nil {
-		target = newRing(r.capacity)
-		r.rings[sessionID] = target
-	}
-	if last := target.newest(); last != nil && last.sameEvidenceAs(obs) {
-		last.Repeats++
-		last.RecordedAt = obs.RecordedAt
-		last.ObservedAt = obs.ObservedAt
-		return
-	}
-	target.push(obs)
-}
-
-func (r *Recorder) Observations(sessionID protocol.SessionID) []Observation {
-	if r == nil {
-		return nil
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	target := r.rings[sessionID]
-	if target == nil {
-		return nil
-	}
-	return target.snapshot()
-}
-
-func (r *Recorder) SessionCount() int {
-	if r == nil {
-		return 0
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return len(r.rings)
-}
-
-func (r *Recorder) Forget(sessionID protocol.SessionID) {
-	if r == nil {
-		return
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	delete(r.rings, sessionID)
-}
-
-type ring struct {
+type Ring struct {
 	items []Observation
 	start int
 	size  int
 }
 
-func newRing(capacity int) *ring {
-	return &ring{items: make([]Observation, capacity)}
+func NewRing(capacity int) *Ring {
+	return &Ring{items: make([]Observation, capacity)}
 }
 
-func (r *ring) push(obs Observation) {
+func (r *Ring) push(obs Observation) {
 	capacity := len(r.items)
 	if r.size < capacity {
 		r.items[(r.start+r.size)%capacity] = obs
@@ -175,18 +90,31 @@ func (r *ring) push(obs Observation) {
 	r.start = (r.start + 1) % capacity
 }
 
-func (r *ring) newest() *Observation {
+func (r *Ring) newest() *Observation {
 	if r.size == 0 {
 		return nil
 	}
 	return &r.items[(r.start+r.size-1)%len(r.items)]
 }
 
-func (r *ring) snapshot() []Observation {
+func (r *Ring) Snapshot() []Observation {
+	if r == nil {
+		return nil
+	}
 	out := make([]Observation, 0, r.size)
 	capacity := len(r.items)
 	for i := range r.size {
 		out = append(out, r.items[(r.start+i)%capacity])
 	}
 	return out
+}
+
+func (r *Ring) Record(obs Observation) {
+	if last := r.newest(); last != nil && last.sameEvidenceAs(obs) {
+		last.Repeats++
+		last.RecordedAt = obs.RecordedAt
+		last.ObservedAt = obs.ObservedAt
+		return
+	}
+	r.push(obs)
 }

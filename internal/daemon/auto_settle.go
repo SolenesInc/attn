@@ -249,9 +249,9 @@ func (d *Daemon) runAutoSettleFor(sessionID protocol.SessionID, phase, resume au
 	if session == nil {
 		return "gone"
 	}
-	if evidence, ok := d.evidenceTable().snapshot(sessionID); ok &&
+	if evidence, ok := d.evidenceSnapshot(sessionID); ok &&
 		sessionstate.ClassifierVerdictPending(
-			evidence,
+			evidence.ConversationEvidence,
 			sessionstate.PolicyFor(session.Agent),
 			time.Now(),
 		) {

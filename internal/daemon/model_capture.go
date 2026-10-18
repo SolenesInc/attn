@@ -111,7 +111,7 @@ func (d *Daemon) modelCapturePass(recorder *modelcapture.Recorder, now time.Time
 		}
 		stateReason := ""
 		if resolverOwnedStates[session.State] {
-			stateReason = d.stateReasons().get(sessionID)
+			stateReason = d.stateReason(sessionID)
 		}
 		_, err = recorder.Record(modelcapture.Observation{
 			CapturedAt:    now,
