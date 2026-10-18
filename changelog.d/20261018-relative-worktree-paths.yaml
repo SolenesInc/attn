@@ -1,0 +1,3 @@
+kind: fixed
+area: worktrees
+change: Worktrees that git links with relative paths (`worktree.useRelativePaths`) now resolve to their main repository, so sessions in them show the right repository and Recent locations lists the repository instead of a path like `../main`.
