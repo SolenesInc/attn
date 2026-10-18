@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/victorarias/attn/internal/codexshared"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/daemonctl"
 	"github.com/victorarias/attn/internal/desktopentry"
@@ -430,6 +431,14 @@ func cleanInstance(w io.Writer, r instanceResolved) error {
 		return err
 	}
 	fmt.Fprintf(w, "  app data %s\n", localData)
+
+	codexSockets := codexshared.SocketDir(r.DataDir)
+	if fileExists(codexSockets) {
+		if err := os.RemoveAll(codexSockets); err != nil {
+			return fmt.Errorf("remove shared Codex socket dir %s: %w", codexSockets, err)
+		}
+		fmt.Fprintf(w, "  codex    removed %s\n", codexSockets)
+	}
 
 	if fileExists(r.DataDir) {
 		if err := os.RemoveAll(r.DataDir); err != nil {
@@ -934,7 +943,7 @@ Usage:
   attn instance resolve --instance agent7   resolve a different instance
   attn instance tauri-config    Tauri --config overlay for the instance's build (--demo: titled attn)
   attn instance register-scheme Linux only: claim <scheme>:// for this instance's app in the desktop database
-  attn instance clean <name>    reap workers + plugin drivers, stop daemon, quit app, remove its app, app local data, data dir, and scheme handler
+  attn instance clean <name>    reap workers + plugin drivers, stop daemon, quit app, remove its app, app local data, data dir, shared Codex sockets, and scheme handler
   attn instance stop-app        quit the active instance's app (--instance <name> for another)
   attn instance list            every instance with data and/or an installed app
   attn instance list --json     same, machine-readable, with origin and what is running

@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/victorarias/attn/internal/codexshared"
 )
 
 func TestInstanceAppStopHelperProcess(t *testing.T) {
@@ -118,6 +120,14 @@ func sandboxedInstance(t *testing.T) instanceResolved {
 	if err := os.WriteFile(filepath.Join(r.AppLocalData, "debug.jsonl"), []byte("{}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	codexSockets := codexshared.SocketDir(r.DataDir)
+	if err := os.Mkdir(codexSockets, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(codexSockets) })
+	if err := os.Symlink(filepath.Join(r.DataDir, "app-server.sock"), filepath.Join(codexSockets, "app-server.sock")); err != nil {
+		t.Fatal(err)
+	}
 	return r
 }
 
@@ -183,7 +193,7 @@ func TestCleanInstanceRemovesNothingWhileTheAppIsUp(t *testing.T) {
 	if !strings.Contains(err.Error(), "nothing was removed") || !strings.Contains(err.Error(), r.AppLocalData) {
 		t.Fatalf("cleanInstance error = %v, want it to name the app local data dir and say nothing was removed", err)
 	}
-	for _, dir := range []string{r.DataDir, r.AppPath, r.AppLocalData} {
+	for _, dir := range []string{r.DataDir, r.AppPath, r.AppLocalData, codexshared.SocketDir(r.DataDir)} {
 		if !fileExists(dir) {
 			t.Fatalf("%s was removed even though the app was never stopped", dir)
 		}
@@ -206,7 +216,7 @@ func TestCleanInstanceRemovesTheAppLocalDataOnlyAfterTheAppExits(t *testing.T) {
 	if !strings.Contains(out.String(), "force-killed") {
 		t.Fatalf("cleanInstance output = %q, want the slow shutdown reported", out.String())
 	}
-	for _, dir := range []string{r.DataDir, r.AppPath, r.AppLocalData} {
+	for _, dir := range []string{r.DataDir, r.AppPath, r.AppLocalData, codexshared.SocketDir(r.DataDir)} {
 		if fileExists(dir) {
 			t.Fatalf("%s survived a clean that did stop the app", dir)
 		}
@@ -256,7 +266,7 @@ func TestStopInstanceAppFailsClosedOnAnUnidentifiablePID(t *testing.T) {
 	if processGone(pid) {
 		t.Fatalf("pid %d was signalled although it could not be identified", pid)
 	}
-	for _, dir := range []string{r.DataDir, r.AppPath, r.AppLocalData} {
+	for _, dir := range []string{r.DataDir, r.AppPath, r.AppLocalData, codexshared.SocketDir(r.DataDir)} {
 		if !fileExists(dir) {
 			t.Fatalf("%s was removed while a live pid could not be identified", dir)
 		}
@@ -283,7 +293,7 @@ func TestCleanInstanceAbortsWhenTheAppRelaunchesWhileStopping(t *testing.T) {
 	if readErr != nil || strings.TrimSpace(string(raw)) != strconv.Itoa(relaunched) {
 		t.Fatalf("app.pid = %q (err %v), want the relaunched pid %d left alone", raw, readErr, relaunched)
 	}
-	for _, dir := range []string{r.DataDir, r.AppPath, r.AppLocalData} {
+	for _, dir := range []string{r.DataDir, r.AppPath, r.AppLocalData, codexshared.SocketDir(r.DataDir)} {
 		if !fileExists(dir) {
 			t.Fatalf("%s was removed under a relaunched app", dir)
 		}

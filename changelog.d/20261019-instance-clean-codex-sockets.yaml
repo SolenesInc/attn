@@ -1,0 +1,5 @@
+kind: internal
+area: sessions
+change: >
+  `attn instance clean` also removes the instance's shared Codex socket
+  directory under `/tmp`, after its workers are reaped.
