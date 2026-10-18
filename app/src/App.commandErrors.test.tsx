@@ -70,6 +70,26 @@ describe('App command errors', () => {
     expect(dialog).toHaveTextContent(sessionRefusal);
   });
 
+  it('fails an offline rename immediately and only sends it after the user retries', async () => {
+    const { daemon } = await renderWorkspace();
+    fireEvent.click(screen.getByRole('button', { name: 'Actions for working' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Rename session' }));
+    await gesture(daemon, () => daemon.disconnect());
+
+    const dialog = await rename(daemon, 'Rename session', 'new name');
+    expect(dialog).toHaveTextContent('WebSocket not connected');
+    expect(within(dialog).getByRole('textbox')).toBeEnabled();
+
+    await daemon.reconnect();
+    await daemon.idle();
+    expect(daemon.sentOf('rename_session')).toEqual([]);
+
+    daemon.on('rename_session', ({ session_id }) => ({ event: 'rename_result', cmd: 'rename_session', id: session_id, success: true }));
+    await gesture(daemon, () => fireEvent.click(within(dialog).getByRole('button', { name: 'Save' })));
+    expect(daemon.sentOf('rename_session')).toEqual([{ cmd: 'rename_session', session_id: 's1', label: 'new name' }]);
+    expect(screen.queryByRole('dialog', { name: 'Rename session' })).toBeNull();
+  });
+
   it('shows the daemon error when a desktop rename is refused', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const { daemon } = await renderApp({
