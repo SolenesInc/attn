@@ -1,0 +1,3 @@
+kind: internal
+area: docs
+change: The harness notes record how a Codex app-server drains and exits, how a remote TUI reconnects, and how Codex updates itself, which restarting shared Codex on a new version relies on.

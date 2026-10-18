@@ -189,6 +189,65 @@ Probed on 0.162.1 against the app-server alone:
   256 for anything a macOS app starts. At 256, 65 of 200 concurrent
   `command/exec` calls failed with `Too many open files (os error 24)`.
 
+Probed on 0.162.1 and 0.163.0 with a mock model, and read in the source at
+rust-v0.163.0. Restarting the shared server relies on these.
+
+- `initialize` answers `userAgent` as `<originator>/<version> (<os>; <arch>)
+  ...`. The version is the first token after the first `/`, the number
+  `codex --version` prints after `codex-cli `. The originator is the first
+  client's `clientInfo.name` for the life of the process; the rest of the
+  string changes with each client that initializes.
+- The first SIGTERM or SIGINT starts a drain. SIGHUP starts one too but can
+  never force it. During the drain connections stay up and new ones are
+  accepted, but `turn/start`, `turn/steer`, `thread/start`, `thread/resume`,
+  `thread/fork` and `thread/archive`, among others, fail with -32600 `Server is
+  draining; retry after reconnecting`. 0.163.0 adds `data.reason:
+  "serverShuttingDown"`; 0.162.1 sends no data. `thread/read`, `thread/list`,
+  `turn/interrupt` and approval answers still work. Nothing announces the
+  drain to clients.
+- The drain ends when no turn is running, and has no timeout of its own. A turn
+  waiting on an approval or a question is still running, and so is a turn's
+  title generation. A second SIGTERM or SIGINT forces the exit. With no turn
+  running the server exits at once.
+- At the end the server stops listening, removes its socket and drops every
+  connection without a WebSocket close frame, so clients see EOF before the
+  process exits. It then shuts its conversations down, which by source can
+  take about 20 s, and reads no signals while it does
+  (`app-server/src/lib.rs`).
+- While a server answers on `PATH`, a second one there exits 1 with
+  `app-server control socket is already in use`. Once the process is gone, a
+  new server can listen on the same `PATH` at once, even after SIGKILL.
+- A conversation cut off by a forced exit or SIGKILL resumes on the next server
+  with its in-flight turn interrupted.
+- Installed with npm, `codex` is node running `bin/codex.js`, which forwards
+  SIGTERM to the native binary. One SIGTERM to the process group therefore
+  reaches the server twice and forces its exit. A second SIGTERM sent to the
+  node process alone is not forwarded.
+
+A `--remote` TUI, probed on 0.163.0 and read in the source at rust-v0.163.0
+(`tui/src/app/reconnect.rs`):
+
+- When its server goes away it shows `Reconnecting to server…` and retries
+  after 0, 1, 2 and 4 s, then every 8 s, until 120 s after the disconnect. Then
+  it stays open offline and never retries. It resumes only the conversation it
+  shows.
+- What the user typed survives the reconnect. Offline, typing works and Enter
+  does nothing.
+- Against a draining server, a prompt sent into a running turn (`turn/steer`)
+  makes the TUI exit 1. One sent to an idle conversation shows `Failed to start
+  turn` and is dropped. A TUI started during a drain exits 1. A reconnect whose
+  `thread/resume` is refused shows the conversation as unavailable, with input
+  paused, and does not retry.
+- A pending approval outlives a TUI disconnect from the same server and is
+  replayed to the next connection that resumes the conversation. It does not
+  survive a server restart.
+- The TUI never refuses a server version. When it is a stable release newer
+  than its server, it adds a warning to its footer and its F2 viewer, and
+  nowhere else; `tui.show_server_version_notice` turns it off. A TUI older than
+  its server drops notifications it does not know and answers unknown server
+  requests with -32601, which the server takes as a denied approval; the turn
+  carries on.
+
 Read in the source at openai/codex rust-v0.160.0:
 
 - A `--remote` TUI sends its `--model`, `model_reasoning_effort`,
@@ -235,3 +294,40 @@ Read in the source at openai/codex 1ffa95e:
   app-server it keeps reporting `working`; once it resumes, it replays the
   conversation's turns, so a turn the lost server was running ends as
   interrupted (`tui/src/app/reconnect.rs`, `tui/src/chatwidget/replay.rs`).
+
+### Codex updates
+
+Read in the source at openai/codex rust-v0.163.0 and probed on 0.162.1 and
+0.163.0, except where noted.
+
+- `codex --version` prints `codex-cli <version>`.
+- Only TUIs write `<CODEX_HOME>/version.json` (`latest_version`,
+  `last_checked_at`, `dismissed_version`), and the write is not atomic. A TUI
+  refreshes it in the background at startup when it is missing or over 20 h
+  old, so that run still shows the old value. The source follows the install
+  method: the cask API for brew, GitHub releases checked against the npm
+  `latest` tag for npm, GitHub releases otherwise.
+- At startup, `--remote` TUIs included, a TUI with a newer version cached shows
+  a full-screen update prompt and an in-transcript banner. An initial prompt on
+  the command line skips only the prompt. "Update now" exits the TUI and runs
+  the installer in the same terminal, which exits 0 when the update succeeds.
+  `-c check_for_update_on_startup=false` turns off the prompt, the banner and
+  the `version.json` refresh.
+- `codex update` picks the install method from the `CODEX_MANAGED_BY_*` that
+  the npm shim sets, then from the binary's path: standalone under
+  `<CODEX_HOME>/packages/standalone/releases/`, brew on macOS under
+  `/opt/homebrew` or `/usr/local`. Anything else fails with exit 1, including
+  Linuxbrew and the binaries of Codex's own daemon under
+  `packages/app-server-daemon/`. It runs the installer without checking
+  versions first, prompts for nothing itself, and refuses `--remote`.
+- Whether an old binary stays launchable after an update depends on the
+  install:
+  - Standalone: each version keeps its own
+    `packages/standalone/releases/<version>-<target>/`, nothing prunes them,
+    and `current` and `~/.local/bin/codex` are swapped atomically.
+  - npm: the native binary's path has no version in it. The install moves the
+    old package aside, extracts the new one at the same path, then deletes the
+    old one.
+  - brew cask, read in its source only: `brew upgrade` renames
+    `Caskroom/codex/<old>` aside before installing and deletes it once the new
+    version is in.
