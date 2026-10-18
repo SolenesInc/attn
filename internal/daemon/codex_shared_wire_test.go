@@ -3,10 +3,12 @@ package daemon_test
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/google/uuid"
@@ -74,6 +76,34 @@ func TestSharedCodexRunsInADataDirAtTheSocketPathLimit(t *testing.T) {
 	}
 	codex.Reply("Found it. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+}
+
+func TestASharedCodexAppServerRunsCommandsWithTheDaemonsOpenFileLimitWhenLaunchedUnderALowerOne(t *testing.T) {
+	if os.Getenv("ATTN_TEST_UNDER_LOW_FILE_LIMIT") == "" {
+		self, err := os.Executable()
+		if err != nil {
+			t.Fatal(err)
+		}
+		lowered := exec.Command("/bin/sh", "-c", `ulimit -Sn 256 && exec "$@"`, "low-file-limit", self, "-test.v", "-test.run", "^"+t.Name()+"$")
+		lowered.Env = append(os.Environ(), "ATTN_TEST_UNDER_LOW_FILE_LIMIT=1", "ATTN_E2E_BIN="+testworld.AttnBinary(t))
+		if out, err := lowered.CombinedOutput(); err != nil {
+			t.Fatalf("under a soft open-file limit of 256: %v\n%s", err, out)
+		}
+		return
+	}
+	var daemonFiles syscall.Rlimit
+	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &daemonFiles); err != nil {
+		t.Fatal(err)
+	}
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	codex := w.Launched(w.Spawn(app, fakeagent.Codex, w.Path("shop")))
+
+	got := strings.TrimSpace(w.CodexServer().RunTool(codex.ConversationID, "ulimit -Sn"))
+	if want := strconv.FormatUint(daemonFiles.Cur, 10); got != want {
+		t.Errorf("a command the app-server ran had an open-file limit of %s, want the daemon's %s", got, want)
+	}
 }
 
 func TestWithSharedCodexOffCodexRunsAloneInItsTerminal(t *testing.T) {

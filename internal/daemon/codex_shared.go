@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -36,6 +37,12 @@ const (
 	codexServerStartLimit     = 30 * time.Second
 	codexServerCallLimit      = 5 * time.Second
 )
+
+const codexServerLaunchScript = `
+ulimit -Sn "$1"
+shift
+exec "$@"
+`
 
 type codexShared struct {
 	d       *Daemon
@@ -238,7 +245,11 @@ func (r *codexShared) startServer(ctx context.Context, s *codexServer, executabl
 	if err := os.Remove(s.socket); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	command := []string{r.codexExecutable(executable), "app-server"}
+	var files syscall.Rlimit
+	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &files); err != nil {
+		return fmt.Errorf("read the open-file limit for the shared Codex app-server: %w", err)
+	}
+	command := []string{"/bin/sh", "-c", codexServerLaunchScript, "attn-codex-server", strconv.FormatUint(files.Cur, 10), r.codexExecutable(executable), "app-server"}
 	for _, override := range hooks.GenerateCodexServerConfigOverrides(r.d.wrapperPath(), r.d.socketPath, s.profile) {
 		command = append(command, "-c", override)
 	}
@@ -253,7 +264,7 @@ func (r *codexShared) startServer(ctx context.Context, s *codexServer, executabl
 	if err := r.d.ptyBackend.Spawn(ctx, withLifecycleID(opts)); err != nil {
 		return fmt.Errorf("start the shared Codex app-server: %w", err)
 	}
-	r.d.logf("shared Codex: started the app-server of profile %s in terminal %s", s.profile, s.terminal)
+	r.d.logf("shared Codex: started the app-server of profile %s in terminal %s with an open-file limit of %d", s.profile, s.terminal, files.Cur)
 	return nil
 }
 
