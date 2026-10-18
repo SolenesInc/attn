@@ -1,4 +1,5 @@
 interface Overlays {
+  calloutOpen?: boolean;
   locationPickerOpen: boolean;
   whatsNewOpen: boolean;
   settingsOpen: boolean;
@@ -50,10 +51,12 @@ export function appOverlayPolicy(overlays: Overlays) {
     libraryOpen,
     overlays.gardenHoldsWindow,
   ].some(Boolean);
-  const blockingOverlayOpen = navigationCaptured || paletteBlocked;
+  const otherOverlayOpen = Object.entries(overlays).some(([name, open]) => name !== 'calloutOpen' && open);
+  const blockingOverlayOpen = navigationCaptured || paletteBlocked || Boolean(overlays.calloutOpen);
   return {
+    otherOverlayOpen,
     blockingOverlayOpen,
-    windowCovered: blockingOverlayOpen || overlays.markdownOpenerOpen,
+    windowCovered: navigationCaptured || paletteBlocked || overlays.markdownOpenerOpen,
     paletteBlocked: paletteBlocked || overlays.snoozeMenuOpen,
     appShortcutsEnabled: !navigationCaptured && !overlays.markdownOpenerOpen && !overlays.snoozeMenuOpen,
   };

@@ -85,10 +85,10 @@ export function SidebarDesktopList() {
             : 'Empty desktop'
           : undefined;
         return (
-          <div className="desktop-row" key={desktopView.id}>
+          <div className="desktop-row" data-callout-anchor="desktops" key={desktopView.id}>
             {seamIndex !== undefined && renderReorderSeam(seamIndex)}
             <DesktopDropGroup desktopView={desktopView} reorderSource={isReorderSource}>
-              <div aria-current={selectionKey === `${desktopView.id}/` ? 'true' : undefined} className={`desktop-rule${!homeActive && desktopView.id === selectedDesktopId ? ' current' : ''}${hasNoLeaves(desktopView) ? ' empty' : ''}${shortcut ? '' : ' no-shortcut'}`}>
+              <div data-desktop-id={desktopView.id} aria-current={selectionKey === `${desktopView.id}/` ? 'true' : undefined} className={`desktop-rule${!homeActive && desktopView.id === selectedDesktopId ? ' current' : ''}${hasNoLeaves(desktopView) ? ' empty' : ''}${shortcut ? '' : ' no-shortcut'}`}>
                 <button
                   type="button"
                   className="sidebar-row-select"

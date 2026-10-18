@@ -42,6 +42,7 @@ export function CommandsButton({ collapsed = false }: { collapsed?: boolean }) {
       className={collapsed ? 'icon-btn sidebar-commands' : 'sidebar-header-tool sidebar-commands'}
       title={`Commands (${formatShortcut('ui.commandPalette')})`}
       aria-label="Commands"
+      data-callout-anchor="commands"
       onClick={onOpenCommands}
       disabled={!onOpenCommands}
     >
@@ -58,6 +59,7 @@ export function SidebarPanelButtons({ collapsed = false }: { collapsed?: boolean
     <button
       type="button"
       key={action.id}
+      data-callout-anchor={action.id === 'garden' ? 'garden' : undefined}
       className={`${collapsed ? 'icon-btn' : 'sidebar-panel-button'} ${action.active ? 'active' : ''} ${action.toneClassName ?? ''}`.trim()}
       onClick={action.onClick}
       title={action.title}

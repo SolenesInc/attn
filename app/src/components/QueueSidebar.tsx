@@ -77,6 +77,7 @@ export function QueueSidebar() {
       ref={rootRef}
       className={`sidebar queue-sidebar ${harnessLogosEnabled ? '' : 'sidebar--hide-harness-logos'}`.trim()}
       data-testid="queue-sidebar"
+      data-callout-anchor="sidebar"
       onKeyDown={onKeyDown}
     >
       <SidebarHeader />
@@ -106,6 +107,7 @@ function HomeRow() {
       type="button"
       className={`sidebar-home-row ${homeActive ? 'selected' : ''}`}
       data-testid="sidebar-home"
+      data-callout-anchor="home"
       onClick={onGoToDashboard}
       aria-current={homeActive ? 'page' : undefined}
     >
@@ -146,7 +148,7 @@ function CrewBlock() {
   if (!queue.chief && members.length === 0) return null;
   const chief = queue.chief;
   return (
-    <div className="queue-crew-block" data-testid="queue-crew-block">
+    <div className="queue-crew-block" data-testid="queue-crew-block" data-callout-anchor="crew">
       <div className="queue-section-rule queue-crew-rule">
         <span>Crew</span>
         <span className="queue-rule-line" aria-hidden="true" />
@@ -240,7 +242,7 @@ function WaitingCard({ leadRef, leadCount }: { leadRef: RefObject<HTMLDivElement
   const snoozed = queue.snoozed.filter(matches);
 
   return (
-    <div className="queue-waiting-card" data-testid="queue-waiting-card" data-waiting={turns.length}>
+    <div className="queue-waiting-card" data-testid="queue-waiting-card" data-callout-anchor="queue" data-waiting={turns.length}>
       <button
         type="button"
         className="queue-section-rule queue-waiting-head"
@@ -371,7 +373,7 @@ function DesktopStrip() {
 
   return (
     <div className="queue-desktop-strip" data-testid="queue-desktop-strip">
-      <div className="queue-desktop-chips">
+      <div className="queue-desktop-chips" data-callout-anchor="desktops">
         {slotted.map((desktop) => {
           const slot = visualIndexOfDesktop(desktop.id) + 1;
           const waiting = waitingOn.has(desktop.id);

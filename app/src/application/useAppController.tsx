@@ -1,3 +1,4 @@
+import { useCalloutStore } from '../callouts/useCalloutStore';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
@@ -329,7 +330,9 @@ export function useAppController({
     closeLocationPicker, setSnoozeMenu, delegationChainRef, setChiefTransferTarget, setSessionCreationJob,
     setOpenPRLauncherJob, setDiagnosticCapture, setMarkdownOpenerOpen]);
 
-  const { blockingOverlayOpen, windowCovered, paletteBlocked, appShortcutsEnabled } = appOverlayPolicy({
+  const calloutOpen = useCalloutStore((state) => state.callout !== null);
+  const { otherOverlayOpen, blockingOverlayOpen, windowCovered, paletteBlocked, appShortcutsEnabled } = appOverlayPolicy({
+    calloutOpen,
     desktopOverviewOpen,
     profileSwitcherOpen,
     locationPickerOpen,
@@ -351,6 +354,15 @@ export function useAppController({
     diagnosticCaptureOpen: Boolean(diagnosticCapture),
     markdownOpenerOpen,
   });
+
+  const otherPanelOpen = appPanels.notificationsPanelOpen || appPanels.dockPanelStack.length > 0;
+  useLayoutEffect(() => {
+    if (otherOverlayOpen || otherPanelOpen) useCalloutStore.getState().end();
+  }, [otherOverlayOpen, otherPanelOpen, calloutOpen]);
+
+  useEffect(() => useProfilesStore.subscribe((state, previous) => {
+    if (state.selectedProfileId !== previous.selectedProfileId) useCalloutStore.getState().end();
+  }), []);
 
   // Views with nothing focusable (dashboard, empty desktops) can leave the WebView off first responder, killing EVERY shortcut until the user clicks the window.
   useEffect(() => {

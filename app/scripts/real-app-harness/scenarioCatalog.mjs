@@ -1,5 +1,11 @@
 export const scenarioCatalog = [
   {
+    id: 'callouts',
+    runnerId: 'CALLOUTS',
+    label: 'Agent callouts across sidebar shapes, native stepping, navigation and browser tiles',
+    command: ['node', 'scripts/real-app-harness/scenario-callouts.mjs'],
+  },
+  {
     id: 'agent-terminals',
     runnerId: 'AGENT-TERMINALS',
     label: 'Agent-opened terminals pulse and stack without taking native input focus',

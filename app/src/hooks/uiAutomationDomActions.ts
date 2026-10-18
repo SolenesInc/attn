@@ -313,6 +313,7 @@ export async function runDomAutomationAction(
       const panel = element.closest<HTMLElement>('.side-panel');
       return {
         bounds: rectSnapshot(element),
+        animations: element.getAnimations({ subtree: true }).map((animation) => ({ state: animation.playState })),
         panel: panel ? {
           shellClass: panel.parentElement?.className,
           hidden: panel.getAttribute('aria-hidden'),

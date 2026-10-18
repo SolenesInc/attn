@@ -48,6 +48,7 @@ function SidebarExpanded() {
   } = context;
   return (
     <div
+      data-callout-anchor="sidebar"
       className={`sidebar ${harnessLogosEnabled ? '' : 'sidebar--hide-harness-logos'}`.trim()}
     >
       <SidebarHeader />
@@ -65,6 +66,7 @@ function SidebarExpanded() {
         type="button"
         className={`sidebar-home-row ${homeActive ? 'selected' : ''}`}
         data-testid="sidebar-home"
+        data-callout-anchor="home"
         onClick={onGoToDashboard}
         aria-current={homeActive ? 'page' : undefined}
       >

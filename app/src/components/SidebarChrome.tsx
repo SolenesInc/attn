@@ -23,7 +23,7 @@ export function SidebarCollapsed() {
     onToggleCollapse,
   } = useSidebarContext();
   return (
-    <div className="sidebar collapsed">
+    <div className="sidebar collapsed" data-callout-anchor="sidebar">
       {instance && (
         <div
           className="sidebar-instance-marker sidebar-instance-marker--collapsed"
@@ -38,6 +38,7 @@ export function SidebarCollapsed() {
           onClick={onGoToDashboard}
           title={`Home (${formatShortcut('session.goToDashboard')})`}
           aria-label="Home"
+          data-callout-anchor="home"
           aria-current={homeActive ? 'page' : undefined}
         >
           <HomeIcon />
@@ -92,6 +93,8 @@ function RailDesktops() {
             aria-label={label}
             aria-current={current ? 'true' : undefined}
             data-select-key={`${desktopView.id}/`}
+            data-desktop-id={desktopView.id}
+            data-callout-anchor="desktops"
           >
             <DesktopChip
               number={desktopView.desktop?.number}
@@ -169,7 +172,7 @@ export function SidebarSleepingCrew() {
   if (!crew?.length) return null;
   const sleeping = crew.filter((member) => !member.binding_session);
   return (
-    <div className="sidebar-sleeping-crew">
+    <div className="sidebar-sleeping-crew" data-callout-anchor="crew">
       <div className="queue-section-rule queue-crew-rule">
         <span>Crew</span>
         <span className="queue-rule-line" aria-hidden="true" />

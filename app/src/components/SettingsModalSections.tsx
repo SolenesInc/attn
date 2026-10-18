@@ -647,6 +647,7 @@ export function ExperimentalSettings({
   queueShowHiddenSessions,
   directAgentLaunchEnabled,
   asksEnabled,
+  calloutsEnabled,
   ptyBackendMode,
   sharedPtyHostEnabled,
   onSetSetting,
@@ -657,6 +658,7 @@ export function ExperimentalSettings({
   | 'queueShowHiddenSessions'
   | 'directAgentLaunchEnabled'
   | 'asksEnabled'
+  | 'calloutsEnabled'
   | 'ptyBackendMode'
   | 'sharedPtyHostEnabled'
   | 'onSetSetting'
@@ -776,6 +778,20 @@ export function ExperimentalSettings({
             onClick={() => onSetSetting(ASKS_SETTING, asksEnabled ? 'false' : 'true')}
           >
             {asksEnabled ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+        <div className="settings-row-card">
+          <div>
+            <p className="settings-row-title">Agent callouts</p>
+            <p className="settings-row-copy" id="settings-callouts-description">
+              Let agents point at parts of the app with short, guided steps.
+            </p>
+          </div>
+          <button type="button" role="switch" aria-label="Agent callouts"
+            aria-checked={calloutsEnabled} aria-describedby="settings-callouts-description"
+            className="settings-action" data-testid="settings-callouts-toggle"
+            onClick={() => onSetSetting('callouts_enabled', calloutsEnabled ? 'false' : 'true')}>
+            {calloutsEnabled ? 'Disable' : 'Enable'}
           </button>
         </div>
       </div>
