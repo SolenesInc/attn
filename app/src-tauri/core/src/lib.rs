@@ -523,25 +523,6 @@ fn parent_process_id() -> Option<u32> {
     None
 }
 
-#[derive(Debug, serde::Serialize)]
-struct BuildInstanceInfo {
-    instance: &'static str,
-    label: &'static str,
-    expected_port: &'static str,
-    bundle_identifier: &'static str,
-}
-
-/// The frontend compares this with the daemon's at startup; a mismatch is fatal.
-#[tauri::command]
-fn get_build_instance() -> BuildInstanceInfo {
-    BuildInstanceInfo {
-        instance: instance::build_instance(),
-        label: instance::build_instance_label(),
-        expected_port: instance::default_port_for_build_instance(),
-        bundle_identifier: instance::bundle_identifier(),
-    }
-}
-
 #[tauri::command]
 fn get_browser_host_token(_caller: browser_host::TrustedMainWebview) -> Result<String, String> {
     instance::ensure_browser_host_token()
@@ -699,62 +680,6 @@ fn dispatch_native_browser_close(app: &tauri::AppHandle, label: &str) {
         "window.dispatchEvent(new CustomEvent({NATIVE_BROWSER_CLOSE_EVENT:?}, {{ detail: {label} }}));"
     );
     let _ = main_webview.eval(script);
-}
-
-#[tauri::command]
-async fn list_directory(path: String, prefix: Option<String>) -> Result<Vec<String>, String> {
-    use std::fs;
-    use std::path::Path;
-
-    let dir_path = if let Some(suffix) = path.strip_prefix("~/") {
-        let home = dirs::home_dir().ok_or("Cannot get home directory")?;
-        home.join(suffix)
-    } else if path == "~" {
-        dirs::home_dir().ok_or("Cannot get home directory")?
-    } else {
-        Path::new(&path).to_path_buf()
-    };
-
-    let entries = fs::read_dir(&dir_path).map_err(|e| format!("Cannot read directory: {}", e))?;
-
-    let prefix_lower = prefix.map(|p| p.to_lowercase());
-
-    let mut directories: Vec<String> = entries
-        .filter_map(|entry| {
-            let entry = entry.ok()?;
-            let metadata = entry.metadata().ok()?;
-            if metadata.is_dir() {
-                let name = entry.file_name().to_string_lossy().to_string();
-                if let Some(ref p) = prefix_lower {
-                    if !name.to_lowercase().contains(p) {
-                        return None;
-                    }
-                }
-                Some(name)
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    if let Some(ref p) = prefix_lower {
-        directories.sort_by(|a, b| {
-            let a_lower = a.to_lowercase();
-            let b_lower = b.to_lowercase();
-            let a_starts = a_lower.starts_with(p);
-            let b_starts = b_lower.starts_with(p);
-            match (a_starts, b_starts) {
-                (true, false) => std::cmp::Ordering::Less,
-                (false, true) => std::cmp::Ordering::Greater,
-                _ => a.cmp(b),
-            }
-        });
-    } else {
-        directories.sort();
-    }
-    directories.truncate(50);
-
-    Ok(directories)
 }
 
 fn is_safe_markdown_target_extension(path: &Path) -> bool {
@@ -1177,14 +1102,12 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            list_directory,
             ensure_daemon,
             migration_failure::read_migration_failure,
             quit_app,
             open_in_editor,
             open_safe_markdown_target,
             open_safe_seed_artifact_target,
-            get_build_instance,
             get_browser_host_token,
             get_client_token,
             browser_host::browser_host_mount,
