@@ -39,6 +39,50 @@ func crewLetters(t *testing.T, w *world, member string) []string {
 	return names
 }
 
+func TestCrewCanFileTwoLettersWithinTheSameMinute(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		writeCrewCharter(t, w, "trellis")
+		legacy := time.Now().UTC().Format(crew.HandoffStampLayout) + "-trellis.md"
+		writeCrewHomeFile(t, w, "trellis", filepath.Join(crew.HandoffsDirName, legacy), "The old letter.\n")
+		w.restart()
+		cli, app := w.Client(), w.App()
+		first := wakeCrew(t, cli, "trellis", "")
+		w.bootBubbleClaude(t, string(first.SessionID))
+		one := crewHandoff(t, cli, string(first.SessionID), "The first letter.\n", false, protocol.CrewDayCloseSleep)
+		w.advance(time.Nanosecond)
+		second := wakeCrew(t, cli, "trellis", "")
+		w.bootBubbleClaude(t, string(second.SessionID))
+		two := crewHandoff(t, cli, string(second.SessionID), "The second letter.\n", false, protocol.CrewDayCloseSleep)
+		if one.Path == two.Path || protocol.Deref(one.Outcome) != protocol.CrewDayCloseSleep || protocol.Deref(two.Outcome) != protocol.CrewDayCloseSleep {
+			t.Fatalf("successive sleeps = %+v, %+v, want distinct letters and both days closed", one, two)
+		}
+		listed := testworld.Request(app, protocol.CrewHandoffsGetMessage{Cmd: protocol.CmdCrewHandoffsGet, Member: "trellis", RequestID: protocol.Ptr("letters")},
+			protocol.EventCrewHandoffsGetResult, func(r protocol.CrewHandoffsGetResultMessage) bool { return r.RequestID == "letters" })
+		want := []string{filepath.Base(two.Path), filepath.Base(one.Path), legacy}
+		var names []string
+		for _, letter := range listed.Handoffs {
+			names = append(names, letter.Filename)
+			if !letter.OccurredAt.Equal(time.Now().UTC().Truncate(time.Minute)) {
+				t.Errorf("letter %s dated %s, want the current minute", letter.Filename, letter.OccurredAt)
+			}
+		}
+		if !listed.Success || !slices.Equal(names, want) {
+			t.Fatalf("history = %+v, want newest first: %q", listed, want)
+		}
+		for i, body := range []string{"The second letter.\n", "The first letter.\n", "The old letter.\n"} {
+			read := testworld.Request(app, protocol.CrewHandoffGetMessage{Cmd: protocol.CmdCrewHandoffGet, Member: "trellis", Filename: want[i], RequestID: protocol.Ptr(want[i])},
+				protocol.EventCrewHandoffGetResult, func(r protocol.CrewHandoffGetResultMessage) bool { return r.RequestID == want[i] })
+			if !read.Success || read.Handoff == nil || read.Handoff.Content != body {
+				t.Fatalf("read %s = %+v, want %q", want[i], read, body)
+			}
+		}
+		next := wakeCrew(t, cli, "trellis", "")
+		if primed := crewPriming(t, cli, string(next.SessionID)); !strings.Contains(primed, "The second letter.") || strings.Contains(primed, "The first letter.") {
+			t.Fatalf("wake did not use the newer letter:\n%s", primed)
+		}
+	})
+}
+
 func TestAHandoffFilesTheLetterAndWakesTheNextDay(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude, fakeagent.Codex)
 	app := w.App()
@@ -139,21 +183,6 @@ func TestAFailedNapKeepsTheLetterAndTheDayAndARetryTurnsItOver(t *testing.T) {
 		t.Fatalf("after the failed nap alder is bound to %q, want the running day %s", got, day.SessionID)
 	}
 	letters := crewLetters(t, w, "alder")
-	var occupied []string
-	now := time.Now()
-	for _, at := range []time.Time{now, now.Add(time.Minute)} {
-		name := crew.HandoffFileName("alder", at)
-		if !slices.Contains(letters, name) {
-			occupied = append(occupied, writeCrewHomeFile(t, w, "alder", filepath.Join(crew.HandoffsDirName, name), "taken\n"))
-		}
-	}
-	_, err := cli.CrewHandoff(day.SessionID, "The letter, written twice.", false, "")
-	crewErrorContains(t, err, "--retry", failed.Path)
-	for _, path := range occupied {
-		if err := os.Remove(path); err != nil {
-			t.Fatal(err)
-		}
-	}
 
 	if err := os.MkdirAll(workDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -210,13 +239,6 @@ func TestHandoffRefusalsLeaveTheDayRunning(t *testing.T) {
 	if letters := crewLetters(t, w, "trellis"); len(letters) != 1 {
 		t.Fatalf("refused letters were filed: %q", letters)
 	}
-
-	now := time.Now()
-	for _, at := range []time.Time{now, now.Add(time.Minute)} {
-		writeCrewHomeFile(t, w, "trellis", filepath.Join(crew.HandoffsDirName, crew.HandoffFileName("trellis", at)), "somebody else's closure\n")
-	}
-	_, err = cli.CrewHandoff(day.SessionID, "My letter.", false, "")
-	crewErrorContains(t, err, "never overwritten")
 
 	if got := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession); got != day.SessionID {
 		t.Fatalf("after the refusals trellis is bound to %q, want the running day %s", got, day.SessionID)
