@@ -1,3 +1,4 @@
+import { sessionDisplayName } from '../../utils/sessionDisplayName';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import type {
@@ -381,7 +382,7 @@ function worktreeRow(worktree: Worktree, context: WorktreeRowContext): RowModel 
     : [
       worktree.pinned ? { id: 'unpin', label: 'Unpin' } : { id: 'keep', label: 'Keep' },
       { id: 'sessions', label: 'Sessions here' },
-      ...context.live.map((session) => ({ id: `session:${session.id}`, label: `Go to ${session.priority ? '⚑ ' : ''}${session.label || session.id}` })),
+      ...context.live.map((session) => ({ id: `session:${session.id}`, label: `Go to ${session.priority ? '⚑ ' : ''}${sessionDisplayName(session)}` })),
       { id: 'delete', label: 'Delete…', danger: true },
     ];
   const idle = worktree.last_activity_at ? relativeStamp(worktree.last_activity_at, context.now) : null;
@@ -494,7 +495,7 @@ function WorktreeInspector({
         {live.length === 0 && <span className="ledger-muted">none live here</span>}
         {live.map((session) => (
           <div key={session.id}>
-            <button type="button" className="ledger-link" onClick={() => onVerb(`session:${session.id}`)}>{session.label || session.id}</button>
+            <button type="button" className="ledger-link" onClick={() => onVerb(`session:${session.id}`)}>{sessionDisplayName(session)}</button>
           </div>
         ))}
         <div><button type="button" className="ledger-link" onClick={() => onVerb('sessions')}>every session that ran here →</button></div>

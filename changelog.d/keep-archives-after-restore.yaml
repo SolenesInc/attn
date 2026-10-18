@@ -1,0 +1,3 @@
+kind: fixed
+area: conversations
+change: Conversation archives survive database restores; surviving copies known to the snapshot stay pinned until explicitly released again.

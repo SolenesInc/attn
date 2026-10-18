@@ -1,3 +1,4 @@
+import { sessionDisplayName } from '../../utils/sessionDisplayName';
 import { useMemo } from 'react';
 import type { DesktopTileSessionOption } from './DesktopDockTile';
 import { type TerminalLayoutNode, type TileLeaf } from '../../types/desktop';
@@ -64,7 +65,7 @@ export function useDesktopPanes({
       const session = sessionById.get(pane.sessionId);
       options.push({
         sessionId: pane.sessionId,
-        label: session?.label || pane.title || pane.sessionId,
+        label: session ? sessionDisplayName(session) : pane.title || pane.sessionId,
         priority: session?.priority,
         ...(session?.state ? { state: session.state } : {}),
       });

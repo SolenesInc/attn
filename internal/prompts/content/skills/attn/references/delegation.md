@@ -8,7 +8,7 @@ Use `attn delegate --help` for the installed command syntax. Read the complete b
 
 ## Choose the assignment
 
-For new work, pass a brief. Attn creates its seed. Start the brief with a `#` heading to name the seed and the agent. If you are working on a reporting seed, the new seed becomes its child.
+For new work, pass a brief. Attn creates its seed. Start the brief with a `#` heading to name the seed and the agent. If you have a stake (the seed a delegation assigned you), the new seed becomes its child.
 
 ```sh
 attn delegate --brief-file question.md --role pathfinder --cwd /notes
@@ -75,7 +75,7 @@ The new agent opens beside you on your desktop without changing what the user se
 attn delegate --seed s-example --role builder --cwd /notes --desktop ops
 ```
 
-To move a pane later, run `attn session move <desktop>` for yourself, or add `--session <id>` for a delegate you dispatched. A missing numbered desktop, such as `5`, is created. The user's view stays put unless the moved pane was the one shown on its desktop.
+To move a pane later, run `attn session move <desktop>` for yourself, or add `--session <id>` for an agent below you in the delegation chain, including delegates of delegates. A missing numbered desktop, such as `5`, is created. The user's view stays put unless the moved pane was the one shown on its desktop.
 
 ## Choose the role and model
 

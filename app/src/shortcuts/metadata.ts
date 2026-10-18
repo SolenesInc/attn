@@ -38,6 +38,7 @@ export const SHORTCUT_CATEGORY_ORDER: ShortcutCategory[] = [
 
 export const SHORTCUT_META: Record<ShortcutId, ShortcutMeta> = {
   'session.new': { label: 'New session on this desktop', category: 'sessions' },
+  'session.newTerminal': { label: 'New terminal on this desktop', category: 'sessions', dockLabel: 'terminal' },
   'session.newHorizontal': { label: 'New session, split sideways', category: 'sessions', dockLabel: 'session h' },
   'session.close': { label: 'Close session, focused pane or empty desktop', category: 'sessions' },
   'session.prev': { label: 'Previous desktop (queue mode: previous agent in the queue)', category: 'sessions' },
@@ -52,6 +53,7 @@ export const SHORTCUT_META: Record<ShortcutId, ShortcutMeta> = {
   'session.nextRun': { label: 'Next automation run needing you', category: 'sessions' },
   'sidebar.agentList': { label: 'All agents', category: 'sessions' },
   'session.settle': { label: 'Settle turn', category: 'sessions' },
+  'dock.asks': { label: 'Asks drawer', category: 'sessions', dockLabel: 'Asks' },
   'session.priority': { label: 'Toggle session priority', category: 'sessions' },
   'session.snooze': { label: 'Snooze this agent', category: 'sessions' },
   'session.cancelCountdown': { label: 'Stop the countdown, or keep the next turn', category: 'sessions', nativeDelivery: true },

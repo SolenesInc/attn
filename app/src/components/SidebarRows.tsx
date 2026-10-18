@@ -1,3 +1,4 @@
+import { sessionDisplayName } from '../utils/sessionDisplayName';
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import type { SessionPullRequest } from '../types/generated';
@@ -8,6 +9,7 @@ import { useDaemonStore } from '../store/daemonSessions';
 import { ChiefOfStaffBadge } from './ChiefOfStaffBadge';
 import { DelegatedFromChiefBadge } from './DelegatedFromChiefBadge';
 import { DelegationChainTrigger } from './DelegationChain';
+import { AskMarker } from './Asks/AskMarker';
 import { SessionLead } from './SessionLead';
 import { SessionLabel } from './SessionLabel';
 import { SessionProvenance } from './SessionProvenance';
@@ -52,7 +54,7 @@ export function SidebarSessionIdentity({
   return (
     <span className="sidebar-session-identity">
       <span className="sidebar-session-headline">
-        <SessionLabel label={session.label} session={session} hasDelegates={hasDelegates} />
+        <SessionLabel label={sessionDisplayName(session)} session={session} hasDelegates={hasDelegates} />
         <SidebarSessionPullRequest pullRequests={session.pullRequests} />
       </span>
       <SessionProvenance automation={session.automation} density="compact" />
@@ -218,7 +220,7 @@ export function SidebarSessionRow({
       <button
         type="button"
         className="sidebar-row-select"
-        aria-label={`Open ${session.label}`}
+        aria-label={`Open ${sessionDisplayName(session)}`}
         data-select-key={selectKey}
         title={hoverTitle}
         onClick={onSelect}
@@ -234,6 +236,7 @@ export function SidebarSessionRow({
       <SidebarSessionIdentity session={session} hasDelegates={delegates.length > 0} />
       <span className="session-trailing">
         <DelegationChainTrigger session={session} hasDelegates={delegates.length > 0} />
+        <AskMarker session={session} />
         <SidebarSessionBadges session={session} />
       </span>
       <div className="session-actions">
@@ -247,7 +250,7 @@ export function SidebarSessionRow({
               onSettle();
             }}
             title={`Settle this run (${formatShortcut('session.settle')})`}
-            aria-label={`Settle ${session.label}`}
+            aria-label={`Settle ${sessionDisplayName(session)}`}
           >
             ✓
           </button>
@@ -258,7 +261,7 @@ export function SidebarSessionRow({
           data-testid={`session-actions-${session.id}`}
           onClick={onOpenActions}
           title={`Session actions (${formatShortcut('session.close')} closes)`}
-          aria-label={`Actions for ${session.label}`}
+          aria-label={`Actions for ${sessionDisplayName(session)}`}
         >
           •••
         </button>

@@ -1,3 +1,4 @@
+import { sessionDisplayName } from '../../utils/sessionDisplayName';
 import { useMemo, useState, type KeyboardEvent } from 'react';
 import FocusTrap from '../AppFocusTrap';
 import type { CommandUsage, Desktop } from '../../types/generated';
@@ -273,8 +274,8 @@ export function UnifiedPalette<S extends PaletteSession>({
           key={snoozing ? 'snooze' : 'list'}
           initialSelectedKey={snoozing ? null : agentKeyAfterSnooze}
           variant="unified-palette"
-          ariaLabel={snoozing ? `Snooze ${snoozing.session.label}` : mode === 'commands' ? 'Commands' : 'Agents'}
-          placeholder={snoozing ? `Snooze ${snoozing.session.label}` : 'Jump to an agent or tile · type > for commands'}
+          ariaLabel={snoozing ? `Snooze ${sessionDisplayName(snoozing.session)}` : mode === 'commands' ? 'Commands' : 'Agents'}
+          placeholder={snoozing ? `Snooze ${sessionDisplayName(snoozing.session)}` : 'Jump to an agent or tile · type > for commands'}
           query={snoozing ? '' : state.query}
           onQueryChange={(query) => onStateChange({ mode: 'search', query })}
           items={items}

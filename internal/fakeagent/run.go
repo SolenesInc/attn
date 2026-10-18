@@ -8,6 +8,7 @@ import (
 )
 
 type Run struct {
+	PID            int
 	Harness        Harness
 	SessionID      string
 	ConversationID string
@@ -27,6 +28,18 @@ func (r *Run) Prompted() string {
 	r.call(methodPrompted, struct{}{}, &prompted)
 	r.ConversationID = prompted.ConversationID
 	return prompted.Text
+}
+
+func (r *Run) Refused() string {
+	r.t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), HangGuard)
+	defer cancel()
+	var prompted promptedResult
+	err := r.fake.peer.call(ctx, methodPrompted, struct{}{}, &prompted)
+	if err == nil {
+		r.t.Fatalf("%s took %q for session %s, want it refused", r.Harness, prompted.Text, r.SessionID)
+	}
+	return err.Error()
 }
 
 func (r *Run) Reply(text string) {
@@ -85,6 +98,11 @@ func (r *Run) Exit(code int) {
 	if got := r.fake.exited(); got != code {
 		r.t.Fatalf("%s for session %s exited %d, want %d", r.Harness, r.SessionID, got, code)
 	}
+}
+
+func (r *Run) CrashAppServer() {
+	r.t.Helper()
+	r.call(methodCrashSrv, struct{}{}, nil)
 }
 
 func (r *Run) StopReadingTerminal() {

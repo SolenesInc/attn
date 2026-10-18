@@ -1,11 +1,11 @@
 package prompts
 
 func gardenReadyEvent() Event {
-	hasCrown := FlagField("has_crown", "This session reports to a seed.")
+	hasCrown := FlagField("has_crown", "This session has a stake.")
 	hasReady := FlagField("has_ready", "The ready list is nonempty.")
 	oneReady := FlagField("one_ready", "Exactly one seed is ready.")
-	isPlot := FlagField("is_plot", "The reporting seed is a plot.")
-	title := TextField("title", "Quoted reporting seed title.")
+	isPlot := FlagField("is_plot", "The stake is a plot.")
+	title := TextField("title", "Quoted stake title.")
 	return On("garden-ready", "hook_context", "Garden readiness appended by session-start hooks and attn seed prime.",
 		Use("session.garden-ready", "content/session/garden-ready.md", Bind("body",
 			Choose(Enabled(hasCrown),

@@ -120,3 +120,7 @@ func (t *Terminal) KittyGeneration() uint64 { return 0 }
 func (t *Terminal) KittyPlacements() []KittyPlacement { return nil }
 
 func (t *Terminal) KittyImage(_ uint32) (KittyImage, bool) { return KittyImage{}, false }
+
+func (t *Terminal) TextRange(sx, sy, ex, ey int, inclusive bool) (string, error) { return "", nil }
+
+func (t *Terminal) CursorPendingWrap() bool { return false }

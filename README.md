@@ -77,6 +77,11 @@ with Review 2 before Review 10). Unnamed desktops come last in their current ord
 Undo in the toast restores your previous order; you can still drag desktops after
 sorting.
 
+**Presence.** Apps are the only source of user presence. If no app reports for
+90 seconds, attn treats you as away. Away time counts from the last report
+showing you present, or from daemon startup if there has been none. Crew
+turnover and activity generation use that same presence reading.
+
 **Panes, splits, and first-class shells.** A desktop can hold several sessions
 side by side. Split a pane, open a plain shell as its own session from the same
 dialog you use for agents, and move focus between panes with the keyboard.
@@ -201,6 +206,7 @@ the snooze deadline. CLI snooze currently supports local sessions.
 | Cmd+Shift+I | Mark or unmark the focused agent as priority |
 | Cmd+Shift+A | All agents: the list in the queue sidebar, the agent palette elsewhere |
 | Cmd+Shift+P | Attention drawer (who needs me?) |
+| Cmd+Shift+R | Asks drawer: answer what your agents asked |
 | Cmd+\` | Utility terminal |
 | Cmd+R | Refresh PRs |
 | Cmd+/ | All keyboard shortcuts |
@@ -295,6 +301,28 @@ For development instances, enable
 Prefer a blocking terminal workflow? Use `attn pr wait-ready <pr> --repo <owner/repo>
 --mode <green|codex|formal-review>`. Its `--help` explains reviewers, baselining,
 resume, and exit codes.
+
+### Asks (experimental)
+
+Turn on **Settings → Experimental → Asks** to let agents ask you what they
+cannot settle alone without stopping to wait for you in their terminal. An agent
+pipes markdown to `attn ask`: prose, mermaid diagrams and screenshots, with
+question blocks for one choice (`:::question`), any number (`:::question-multi`)
+or a written answer (`:::question-text`). It keeps working on what does not
+depend on the answer.
+
+Press **Cmd+Shift+R** to answer every agent from one drawer, waiting agents first.
+Pick choices, write answers, add a note and send with **Cmd+Enter**; the drawer
+brings the next ask. Your answer settles the agent's turn. **Open agent** jumps to
+its terminal, and the queue, the sidebar and the home screen mark the agents that
+asked.
+
+An ask is about the seed its agent works on: the one a delegation assigned them,
+or another seed they tend. The drawer names the seed, and **Open in Garden** shows
+it beside the ask. Your answer becomes a note on the seed for whoever tends it
+then, so the ask outlives the agent that asked. Harvest or wither the seed and its
+asks close. An agent with no seed gets your answer in their attn inbox. Agents
+keep the setting they launched with, reloads included.
 
 ### The Chief
 
@@ -415,6 +443,7 @@ The full dev-loop, instance, and harness targets live in
 | | |
 |---|---|
 | [Instances](docs/instances.md) | Run multiple isolated attn worlds side by side |
+| [Shared Codex](docs/using-shared-codex.md) | Experimental: Codex terminals sharing one app-server, with hidden sessions |
 | [Release](docs/making-a-release.md) | Maintainer runbook |
 
 ## Status

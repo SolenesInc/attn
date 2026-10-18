@@ -521,6 +521,7 @@ static uint8_t *attn_ghostty_format(AttnGhosttyTerminal *attn,
   if (attn == NULL) return NULL;
   GhosttyFormatter formatter;
   GhosttyFormatterTerminalOptions options = attn_formatter_options(format);
+  options.unwrap = format == GHOSTTY_FORMATTER_FORMAT_VT;
   if (ghostty_formatter_terminal_new(NULL, &formatter, attn->terminal,
                                      options) != GHOSTTY_SUCCESS) return NULL;
   uint8_t *raw = NULL;
@@ -537,6 +538,34 @@ static uint8_t *attn_ghostty_format(AttnGhosttyTerminal *attn,
 
 uint8_t *attn_ghostty_vt_dump(AttnGhosttyTerminal *attn, size_t *out_len) {
   return attn_ghostty_format(attn, GHOSTTY_FORMATTER_FORMAT_VT, out_len);
+}
+
+uint8_t *attn_ghostty_text_range(AttnGhosttyTerminal *attn, uint16_t cols,
+    uint16_t sx, uint32_t sy, uint16_t ex, uint32_t ey, bool inclusive, size_t *out_len) {
+  *out_len = 0;
+  if (sx == ex && sy == ey && !inclusive) return NULL;
+  if (!inclusive) { if (ex == 0) { if (ey == 0) return NULL; ey--; ex = cols - 1; } else ex--; }
+  GhosttyPoint a = {0}, b = {0};
+  a.tag = b.tag = GHOSTTY_POINT_TAG_SCREEN;
+  a.value.coordinate.x = sx; a.value.coordinate.y = sy;
+  b.value.coordinate.x = ex; b.value.coordinate.y = ey;
+  GhosttySelection selection = {0};
+  selection.size = sizeof(selection);
+  if (ghostty_terminal_grid_ref(attn->terminal, a, &selection.start) != GHOSTTY_SUCCESS ||
+      ghostty_terminal_grid_ref(attn->terminal, b, &selection.end) != GHOSTTY_SUCCESS) return NULL;
+  GhosttyFormatterTerminalOptions options = attn_formatter_options(GHOSTTY_FORMATTER_FORMAT_PLAIN);
+  options.unwrap = true;
+  options.selection = &selection;
+  GhosttyFormatter formatter;
+  if (ghostty_formatter_terminal_new(NULL, &formatter, attn->terminal, options) != GHOSTTY_SUCCESS) return NULL;
+  uint8_t *raw = NULL; size_t len = 0;
+  GhosttyResult rc = ghostty_formatter_format_alloc(formatter, NULL, &raw, &len);
+  ghostty_formatter_free(formatter);
+  if (rc != GHOSTTY_SUCCESS) return NULL;
+  uint8_t *copy = attn_copy_bytes(raw, len);
+  ghostty_free(NULL, raw, len);
+  *out_len = len;
+  return copy;
 }
 
 uint8_t *attn_ghostty_plain_text(AttnGhosttyTerminal *attn, size_t *out_len) {
@@ -706,3 +735,8 @@ bool attn_ghostty_kitty_image(AttnGhosttyTerminal *attn, uint32_t image_id,
 }
 
 void attn_ghostty_bytes_free(uint8_t *data) { free(data); }
+
+bool attn_ghostty_cursor_pending_wrap(AttnGhosttyTerminal *attn) {
+  bool pending = false;
+  return ghostty_terminal_get(attn->terminal, GHOSTTY_TERMINAL_DATA_CURSOR_PENDING_WRAP, &pending) == GHOSTTY_SUCCESS && pending;
+}

@@ -17,9 +17,10 @@ var (
 )
 
 type HandoffState struct {
-	SessionID string
-	CWD       string
-	Agent     string
+	PromptExpected bool
+	SessionID      string
+	CWD            string
+	Agent          string
 
 	ChildPID int
 	PtmxFD   int
@@ -41,6 +42,7 @@ type HandoffState struct {
 	SchemeReportsEnabled bool
 
 	LastSignal *Observation
+	ShellTitle *ShellTitleState
 
 	StartedAt  time.Time
 	CleanupDir string
@@ -105,13 +107,14 @@ func (s *Session) handoff() (HandoffState, error) {
 	}
 
 	state := HandoffState{
-		SessionID:  s.id,
-		CWD:        s.cwd,
-		Agent:      s.agent,
-		ChildPID:   s.child.processID(),
-		Carryover:  s.handoffCarryover,
-		StartedAt:  s.startedAt,
-		CleanupDir: s.cleanupDir,
+		SessionID:      s.id,
+		PromptExpected: s.promptExpected,
+		CWD:            s.cwd,
+		Agent:          s.agent,
+		ChildPID:       s.child.processID(),
+		Carryover:      s.handoffCarryover,
+		StartedAt:      s.startedAt,
+		CleanupDir:     s.cleanupDir,
 	}
 	s.metaMu.RLock()
 	state.Cols, state.Rows = s.cols, s.rows
@@ -127,6 +130,14 @@ func (s *Session) handoff() (HandoffState, error) {
 		state.LastSignal = &obs
 	}
 
+	s.signalMu.Lock()
+	if s.shellSignals != nil {
+		s.shellSignals.mu.Lock()
+		title := s.shellSignals.title
+		state.ShellTitle = &title
+		s.shellSignals.mu.Unlock()
+	}
+	s.signalMu.Unlock()
 	s.replayMu.Lock()
 	if s.ghostty != nil {
 		dump := s.ghostty.HandoffVT()
@@ -186,24 +197,25 @@ func (m *Manager) Adopt(st HandoffState) error {
 	}
 
 	session := &Session{
-		id:          st.SessionID,
-		cwd:         st.CWD,
-		agent:       st.Agent,
-		cols:        st.Cols,
-		rows:        st.Rows,
-		cellW:       st.CellW,
-		cellH:       st.CellH,
-		pixelW:      st.PixelW,
-		pixelH:      st.PixelH,
-		ptmx:        ptmx,
-		child:       &childProcess{pid: st.ChildPID},
-		subscribers: make(map[string]*sessionSubscriber),
-		running:     true,
-		exited:      make(chan struct{}),
-		quiesced:    make(chan struct{}),
-		startedAt:   st.StartedAt,
-		theme:       st.Theme,
-		cleanupDir:  st.CleanupDir,
+		id:             st.SessionID,
+		promptExpected: st.PromptExpected,
+		cwd:            st.CWD,
+		agent:          st.Agent,
+		cols:           st.Cols,
+		rows:           st.Rows,
+		cellW:          st.CellW,
+		cellH:          st.CellH,
+		pixelW:         st.PixelW,
+		pixelH:         st.PixelH,
+		ptmx:           ptmx,
+		child:          &childProcess{pid: st.ChildPID},
+		subscribers:    make(map[string]*sessionSubscriber),
+		running:        true,
+		exited:         make(chan struct{}),
+		quiesced:       make(chan struct{}),
+		startedAt:      st.StartedAt,
+		theme:          st.Theme,
+		cleanupDir:     st.CleanupDir,
 	}
 	if session.startedAt.IsZero() {
 		session.startedAt = time.Now()
@@ -216,6 +228,10 @@ func (m *Manager) Adopt(st HandoffState) error {
 		session.lastSignal = &obs
 	}
 
+	if st.ShellTitle != nil {
+		session.shellSignals = newShellSignalArbiter(session.childProcessGroup())
+		session.shellSignals.title = *st.ShellTitle
+	}
 	kittyLimit := kittyStorageLimit(m.logf)
 	gt, err := ghosttyvt.New(int(st.Cols), int(st.Rows), ghosttyvt.Options{
 		KittyImageStorageLimit: kittyLimit,

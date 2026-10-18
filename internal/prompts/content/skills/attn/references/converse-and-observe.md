@@ -71,7 +71,7 @@ session succeeds without changing anything. `attn session list` and
 `attn session show <id>` display the snoozed-until instant; list's JSON carries
 `turn_snoozed_until`.
 
-A session may snooze or unsnooze itself and the sessions it dispatched; the
+A session may snooze or unsnooze itself and agents below it in the delegation chain, including delegates of delegates; the
 chief may act on any session of its profile. Outside an agent session, the
 command acts as the user. CLI snooze of remote sessions is unsupported.
 Each id reports its outcome, and a batch with any failed id exits nonzero;
@@ -82,7 +82,7 @@ errors. Run `attn session --help` for syntax.
 
 `attn agent close <session-or-seed> -m "reason"` ends a session for good. Three
 rules decide whether you may, and a refusal names all three: a session may close
-itself, it may close a session it dispatched, and a profile's chief of staff may
+itself, it may close an agent below it in the delegation chain, including delegates of delegates, and a profile's chief of staff may
 close any agent of that profile. The chief of staff and a session a crew member is working in are protected
 from every closer, including themselves.
 

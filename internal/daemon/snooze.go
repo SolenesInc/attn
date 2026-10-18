@@ -51,7 +51,7 @@ func (d *Daemon) authorizeSnooze(callerID, sessionID protocol.SessionID, action 
 	if session == nil {
 		return fmt.Errorf("unknown live session %s", sessionID)
 	}
-	return d.mayManageSession(protocol.TrimID(callerID), session, action)
+	return d.mayActOnSession(protocol.TrimID(callerID), session, action)
 }
 
 func (d *Daemon) handleSnoozeTurn(msg *protocol.SnoozeTurnMessage) error {

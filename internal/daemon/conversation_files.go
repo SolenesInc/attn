@@ -19,3 +19,9 @@ func conversationFileAllowed(agent, resumeID, name string) bool {
 	return len(parts) >= 4 && parts[0] == ".claude" && parts[1] == "projects" &&
 		(parts[3] == resumeID || (len(parts) == 4 && parts[3] == resumeID+".jsonl"))
 }
+
+func conversationMainFile(agent, resumeID, name string) bool {
+	parts := strings.Split(name, "/")
+	return conversationFileAllowed(agent, resumeID, name) && len(parts) == 4 &&
+		parts[1] == "projects" && parts[3] == resumeID+".jsonl"
+}

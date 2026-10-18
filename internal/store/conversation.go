@@ -70,8 +70,10 @@ func (s *Store) transitionSessionConversation(sessionID protocol.SessionID, nati
 	if exclusive {
 		var claimed bool
 		if err := tx.QueryRow(
-			`SELECT EXISTS(SELECT 1 FROM sessions WHERE resume_session_id = ? AND id != ? AND closed_at = '')`,
+			`SELECT EXISTS(SELECT 1 FROM sessions WHERE resume_session_id = ? AND id != ? AND closed_at = ''
+				AND profile_id = (SELECT profile_id FROM sessions WHERE id = ?))`,
 			nativeID,
+			sessionID,
 			sessionID,
 		).Scan(&claimed); err != nil {
 			return false, fmt.Errorf("check conversation claim for session %s: %w", sessionID, err)

@@ -84,10 +84,16 @@ func listDirectoryEntries(dirToQuery string, prefix string, extensions []string)
 		if prefix != "" && !strings.Contains(strings.ToLower(name), prefix) {
 			continue
 		}
+		var isRepo *bool
+		if isDir {
+			gitInfo, err := os.Stat(filepath.Join(dirToQuery, name, ".git"))
+			isRepo = protocol.Ptr(err == nil && gitInfo.IsDir())
+		}
 		listed = append(listed, protocol.DirectoryEntry{
-			Name:  name,
-			Path:  filepath.Join(dirToQuery, name),
-			IsDir: isDir,
+			IsRepo: isRepo,
+			Name:   name,
+			Path:   filepath.Join(dirToQuery, name),
+			IsDir:  isDir,
 		})
 	}
 

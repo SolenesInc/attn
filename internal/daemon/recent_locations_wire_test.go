@@ -73,6 +73,69 @@ func TestRecentLocationsCollapseWorktreesIntoTheirMainRepo(t *testing.T) {
 	}
 }
 
+func TestLauncherRepositoryMetadata(t *testing.T) {
+	w := newWorld(t)
+	app := pickerApp(w)
+	repo := newRepo(t, "launcher-repo")
+	worktree := filepath.Join(filepath.Dir(repo), "launcher-worktree")
+	runGit(t, repo, "worktree", "add", "-b", "launcher-feature", worktree)
+	listing := browseForPicker(app, filepath.Dir(repo)+"/", nil)
+	if !listing.Success {
+		t.Fatal(protocol.Deref(listing.Error))
+	}
+	for _, path := range []string{repo, worktree} {
+		index := slices.IndexFunc(listing.Entries, func(entry protocol.DirectoryEntry) bool { return entry.Path == path })
+		if index < 0 {
+			t.Fatalf("listing missing %s: %+v", path, listing.Entries)
+		}
+		if got := protocol.Deref(listing.Entries[index].IsRepo); got != (path == repo) {
+			t.Errorf("is_repo(%s) = %v", path, got)
+		}
+	}
+	workIn(t, w, app, worktree)
+	locations := recentLocations(app, 0)
+	if len(locations) != 1 || locations[0].Path != repo || protocol.Deref(locations[0].RepoRoot) != repo {
+		t.Fatalf("worktree recent = %+v, want main checkout with repo_root", locations)
+	}
+}
+
+func TestLauncherRepositoryLookupFailureIdentifiesItsTarget(t *testing.T) {
+	w := newWorld(t)
+	app := pickerApp(w)
+	missing := w.Path("not-a-repository")
+	result := testworld.Request(app, protocol.GetRepoInfoMessage{Cmd: protocol.CmdGetRepoInfo, Repo: missing, RequestID: protocol.Ptr("missing-repo")}, protocol.EventGetRepoInfoResult, func(r protocol.GetRepoInfoResultMessage) bool { return !r.Success })
+	if protocol.Deref(result.RequestID) != "missing-repo" || protocol.Deref(result.Error) == "" {
+		t.Fatalf("unidentified repository failure: %+v", result)
+	}
+}
+
+func TestWorktreeActionsEchoTheirRequestIDs(t *testing.T) {
+	w := newWorld(t)
+	app := pickerApp(w)
+	repo := newRepo(t, "request-ids")
+	runGit(t, repo, "branch", "already-there")
+	for _, row := range []struct {
+		id  string
+		cmd any
+	}{
+		{"new", protocol.CreateWorktreeMessage{Cmd: protocol.CmdCreateWorktree, MainRepo: repo, Branch: "fresh", RequestID: protocol.Ptr("new")}},
+		{"existing", protocol.CreateWorktreeFromBranchMessage{Cmd: protocol.CmdCreateWorktreeFromBranch, MainRepo: repo, Branch: "already-there", RequestID: protocol.Ptr("existing")}},
+	} {
+		result := testworld.Request(app, row.cmd, protocol.EventCreateWorktreeResult, func(protocol.CreateWorktreeResultMessage) bool { return true })
+		if !result.Success || protocol.Deref(result.RequestID) != row.id {
+			t.Fatalf("create %s: %+v", row.id, result)
+		}
+		deleted := testworld.Request(app, protocol.DeleteWorktreeMessage{Cmd: protocol.CmdDeleteWorktree, Path: protocol.Deref(result.Path), RequestID: protocol.Ptr(row.id)}, protocol.EventDeleteWorktreeResult, func(protocol.DeleteWorktreeResultMessage) bool { return true })
+		if !deleted.Success || protocol.Deref(deleted.RequestID) != row.id {
+			t.Fatalf("delete %s: %+v", row.id, deleted)
+		}
+	}
+	info := testworld.Request(app, protocol.GetRepoInfoMessage{Cmd: protocol.CmdGetRepoInfo, Repo: repo, RequestID: protocol.Ptr("info")}, protocol.EventGetRepoInfoResult, func(protocol.GetRepoInfoResultMessage) bool { return true })
+	if !info.Success || protocol.Deref(info.RequestID) != "info" {
+		t.Fatalf("repo info: %+v", info)
+	}
+}
+
 func workIn(t *testing.T, w *world, app *testworld.Peer, dir string) {
 	t.Helper()
 	w.Spawn(app, shellHarness, dir)

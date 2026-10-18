@@ -163,6 +163,7 @@ model SessionDelegationRole {
 }
 
 model Session {
+  title?: string;
   id: SessionID;
   label: string;
   agent: string;                // Built-in ID or registered plugin driver ID
@@ -200,7 +201,8 @@ model Session {
   pull_requests?: SessionPullRequest[]; // Pull requests this session's agent opened, newest first. Joined at broadcast from the session_pull_requests table, never stored on the session row.
   terminal_build_stale?: boolean; // True when this session's pty-worker was built against a different libghostty-vt than the daemon, which happens when the app updates under a running session. The two then hold different terminal implementations and stop agreeing about the grid, so the app offers a reload. Derived at broadcast from the format tag the worker reports at its handshake; never stored, and absent for every same-build session, which is all of them outside an upgrade window.
   terminal_exit?: TerminalExit; // How the agent last exited while the session keeps its final screen; absent while it runs and after Resume. Joined at broadcast from the session_exit_screens table.
-  succeeds?: SessionID;            // The session this one replaced in its terminal, when the harness there moved to another conversation; that session closed into the ledger. Durable: it stays set after the predecessor is reopened.
+  succeeds?: SessionID;            // The session this one replaced in its terminal, when the harness there moved to another conversation; that session closed into the ledger, unless it is a shared Codex session, which stays open. Durable: it stays set after the predecessor is reopened.
+  hidden?: boolean;             // True while this open shared Codex session has no terminal tile: its terminal moved to another conversation. It keeps its state and takes input; desktop_show_session gives it a tile again. Derived at broadcast; absent otherwise.
   last_seen: string;            // ISO timestamp, always set
 }
 
@@ -342,6 +344,7 @@ model AuthorState {
 
 model RecentLocation {
   path: string;
+  repo_root?: string;
   last_seen: string;    // ISO timestamp
   use_count: int32;
 }
@@ -361,6 +364,7 @@ model FileActivity {
 }
 
 model DirectoryEntry {
+  is_repo?: boolean;
   name: string;
   path: string;
   is_dir: boolean;
@@ -1329,12 +1333,14 @@ model CreateWorktreeMessage {
   branch: string;
   path?: string;
   starting_from?: string;  // Branch to create worktree from (default: current HEAD)
+  request_id?: string;
 }
 
 model DeleteWorktreeMessage {
   cmd: "delete_worktree";
   path: string;
   force?: boolean;
+  request_id?: string;
 }
 
 // The Worktrees surface: every worktree of every repository attn tracks, read
@@ -1526,6 +1532,7 @@ model CreateWorktreeFromBranchMessage {
   main_repo: string;
   branch: string;
   path?: string;
+  request_id?: string;
 }
 
 model GetDefaultBranchMessage {
@@ -1552,6 +1559,7 @@ model EnsureRepoMessage {
 model GetRepoInfoMessage {
   cmd: "get_repo_info";
   repo: string;
+  request_id?: string;
 }
 
 // Dual-surface (unix-socket/CLI `attn automation apply` + WS, the app
@@ -2544,11 +2552,106 @@ model DesktopSetActivePaneMessage {
 // Shows an open agent of any live profile in one transaction. Every open
 // agent has a pane: it becomes the active leaf, its desktop current, its
 // profile the requesting client's. Every client on that profile gets one
-// arrangement.
+// arrangement. A hidden shared Codex session gets a new terminal tile on the
+// current desktop whose Codex resumes its conversation.
 model DesktopShowSessionMessage {
   cmd: "desktop_show_session";
   request_id: string;
   session_id: SessionID;
+}
+
+enum TerminalDirection {
+  right,
+  down
+}
+enum TerminalReadMode {
+  screen,
+  scrollback,
+  last
+}
+enum TerminalWaitUntil {
+  prompt,
+  exit
+}
+model TerminalListMessage {
+  cmd: "terminal_list";
+  caller_session_id: SessionID;
+  desktop?: string;
+  all?: boolean;
+}
+model TerminalEntry {
+  terminal_id: TerminalID;
+  session_id: SessionID;
+  short_id: string;
+  agent: string;
+  name: string;
+  state: SessionState;
+  desktop_id: string;
+  desktop_label: string;
+  position?: string;
+  opened_by?: SessionID;
+}
+model TerminalOpenMessage {
+  cmd: "terminal_open";
+  caller_session_id: SessionID;
+  desktop?: string;
+  direction?: TerminalDirection;
+  cwd?: string;
+  command?: string;
+}
+model TerminalOpenResult {
+  terminal_id: TerminalID;
+  session_id: SessionID;
+  desktop_id: string;
+  pane_id: string;
+}
+model TerminalInputMessage {
+  cmd: "terminal_input";
+  caller_session_id: SessionID;
+  target: string;
+  desktop?: string;
+  data: string;
+  run?: boolean;
+  wait?: boolean;
+}
+model TerminalInputResult {
+  terminal_id: TerminalID;
+  last_block_id?: int64;
+}
+model TerminalReadMessage {
+  cmd: "terminal_read";
+  caller_session_id: SessionID;
+  target: string;
+  mode: TerminalReadMode;
+  lines?: int32;
+}
+model TerminalReadResult {
+  text: string;
+  block?: TerminalBlock;
+}
+model TerminalWaitMessage {
+  cmd: "terminal_wait";
+  caller_session_id: SessionID;
+  target: string;
+  until: TerminalWaitUntil;
+  after_block_id?: int64;
+}
+model TerminalBlock {
+  id: int64;
+  command?: string;
+  exit_code?: int32;
+  output: string;
+}
+model TerminalWaitResult {
+  block?: TerminalBlock;
+  exited?: boolean;
+  exit_code?: int32;
+}
+model TerminalCloseMessage {
+  cmd: "terminal_close";
+  caller_session_id: SessionID;
+  target: string;
+  desktop?: string;
 }
 
 // Moves a session's pane to another desktop of its profile, beside that
@@ -2620,6 +2723,15 @@ model DesktopRemoveLeafMessage {
   request_id: string;
   desktop_id: string;
   leaf_id: string;
+}
+
+// Closes a terminal tile. While another terminal runs its session, only this
+// terminal ends; otherwise the session closes as unregister closes it.
+model DesktopCloseTileMessage {
+  cmd: "desktop_close_tile";
+  request_id: string;
+  desktop_id: string;
+  tile_id: string;
 }
 
 model DesktopSetSplitRatioMessage {
@@ -2917,6 +3029,8 @@ model InitialStateMessage {
   // The crew roster, so the sidebar draws every member — awake or asleep — from
   // the first push rather than asking for one.
   crew?: CrewMember[];
+  // The selected profile's open asks.
+  asks?: Ask[];
 }
 
 model SessionRegisteredMessage {
@@ -2985,6 +3099,119 @@ model ChiefOfStaffResultMessage {
   error?: string;
 }
 
+
+// ============================================================================
+// Asks: an agent's questions the user answers from one place
+// ============================================================================
+
+enum AskQuestionKind {
+  one,
+  any,
+  text,
+}
+
+model AskChoice {
+  label: string;
+  description?: string;
+}
+
+// One question of an ask. key is stable within its ask ("q1", "q2", ...).
+// recommended names a choice label; on a text question it is a suggested answer.
+model AskQuestion {
+  key: string;
+  kind: AskQuestionKind;
+  prompt: string;
+  context?: string;
+  choices: AskChoice[];
+  recommended?: string;
+}
+
+// An ask reads as its parts in order: markdown, or one question.
+model AskPart {
+  markdown?: string;
+  question?: AskQuestion;
+}
+
+// An ask is about a seed its agent tends: the agent's stake, or the seed it
+// named. It is addressed to the seed's tender, so whoever tends the seed next
+// holds it, and harvest or wither closes it. The answer is a note on the seed.
+// An agent that tends no seed asks without one: the ask is addressed to its
+// crew member or chief mailbox, or else to its session, and the answer is a
+// user message in that inbox.
+// base_dir is where the agent asked from; relative image paths resolve there.
+model Ask {
+  id: string;
+  session_id: SessionID;
+  crew_member?: string;
+  chief?: boolean;
+  seed_id?: string;
+  seed_title?: string;
+  seed_slug?: string;
+  subject: string;
+  parts: AskPart[];
+  base_dir: string;
+  created_at: string;
+}
+
+// seed_id names a seed the session tends; without it the ask is about the
+// session's stake, when it has one.
+model AskOpenMessage {
+  cmd: "ask_open";
+  session_id: SessionID;
+  seed_id?: string;
+  markdown: string;
+  subject?: string;
+  base_dir: string;
+}
+
+model AskListMessage {
+  cmd: "ask_list";
+  session_id: SessionID;
+}
+
+// enabled says whether the session launched with asks.
+model AskListResult {
+  enabled: boolean;
+  asks: Ask[];
+}
+
+model AskCloseMessage {
+  cmd: "ask_close";
+  session_id: SessionID;
+  ask_id: string;
+}
+
+// picked holds choice labels; other is the user's own choice on a one/any
+// question; text is the answer to a text question.
+model AskAnswer {
+  key: string;
+  picked: string[];
+  other?: string;
+  text?: string;
+}
+
+model AskAnswerMessage {
+  cmd: "ask_answer";
+  request_id: string;
+  ask_id: string;
+  answers: AskAnswer[];
+  note?: string;
+}
+
+model AskAnswerResultMessage {
+  event: "ask_answer_result";
+  request_id: string;
+  ask_id: string;
+  success: boolean;
+  error?: string;
+}
+
+// The profile's open asks, oldest first.
+model AsksUpdatedMessage {
+  event: "asks_updated";
+  profile_id: string;
+  asks: Ask[];
+}
 
 model PRsUpdatedMessage {
   event: "prs_updated";
@@ -3091,6 +3318,7 @@ model CreateWorktreeResultMessage {
   path?: string;
   success: boolean;
   error?: string;
+  request_id?: string;
 }
 
 model DeleteWorktreeResultMessage {
@@ -3100,6 +3328,7 @@ model DeleteWorktreeResultMessage {
   error?: string;
   forceable?: boolean;
   reason_kind?: "dirty_worktree" | "provider_error" | "not_found" | "git_error";
+  request_id?: string;
 }
 
 model GitOperationStartedMessage {
@@ -3220,6 +3449,7 @@ model GetRepoInfoResultMessage {
   info?: RepoInfo;
   success: boolean;
   error?: string;
+  request_id?: string;
 }
 
 // Compact automations summaries for the WS surface. Canonical state (full
@@ -5344,11 +5574,18 @@ model Response {
   worktree_keep_result?: WorktreeKeepResult;
   worktree_sweep_log_result?: WorktreeSweepLogResult;
   worktree_refresh_result?: WorktreeRefreshResult;
+  ask_open_result?: Ask;
+  ask_list_result?: AskListResult;
   session_instructions_result?: SessionInstructionsResult;
   session_transcript_result?: SessionTranscriptResult;
   session_list_result?: SessionListResult;
   session_show_result?: SessionShowResult;
   session_reopen_result?: SessionReopenResult;
+  terminal_entries?: TerminalEntry[];
+  terminal_open_result?: TerminalOpenResult;
+  terminal_input_result?: TerminalInputResult;
+  terminal_read_result?: TerminalReadResult;
+  terminal_wait_result?: TerminalWaitResult;
   desktop_move_session_result?: DesktopMoveSessionResult;
   state_explain_result?: StateExplainResult;
   agent_peek_result?: AgentPeekResult;
@@ -5930,6 +6167,8 @@ model SessionLedgerEntry {
   close_reason?: string;
   // Absent when the agent reported none. Priced at the current settings, as Session.usage is.
   usage?: SessionUsage;
+  // True on a live shared Codex row that no terminal tile shows, as Session.hidden.
+  hidden?: boolean;
 }
 
 // Counted over the scope and date window alone, so choosing a repository never
@@ -6739,6 +6978,8 @@ alias DaemonEvent =
   | BrowserControlRequestMessage
   | CommandErrorMessage
   | ClientEvictionNoticeMessage
+  | AskAnswerResultMessage
+  | AsksUpdatedMessage
   | OpenMarkdownResultMessage
   | MarkdownAnnotationsGetResultMessage
   | MarkdownAnnotationsSaveResultMessage

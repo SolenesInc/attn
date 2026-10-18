@@ -40,6 +40,7 @@ export interface SessionsTabProps {
   profileMembership: string;
   liveSessionIds?: Set<string>;
   liveSessionUsage?: ReadonlyMap<string, SessionUsage>;
+  liveSessionNames?: ReadonlyMap<string, string>;
   seedForSession?: (sessionId: string) => SessionSeedLink | null;
   onFocusSession?: (sessionId: string) => void;
   onOpenSeed?: (seedId: string) => void;
@@ -68,6 +69,7 @@ export function SessionsTab({
   profileMembership,
   liveSessionIds,
   liveSessionUsage,
+  liveSessionNames,
   seedForSession,
   onFocusSession,
   onOpenSeed,
@@ -93,7 +95,11 @@ export function SessionsTab({
     initialFilters: restoredFilters,
     onFiltersChange: rememberFilters,
   });
-  const { filters, setFilters, entries, reload } = ledger;
+  const { filters, setFilters, entries: storedEntries, reload } = ledger;
+  const entries = useMemo(() => storedEntries.map((entry) => {
+    const name = entry.agent === 'shell' && !isClosed(entry) ? liveSessionNames?.get(entry.id) : undefined;
+    return name !== undefined && name !== entry.label ? { ...entry, label: name } : entry;
+  }), [storedEntries, liveSessionNames]);
   const { keepNotices, runKeepVerb, clearKeepNotice } = useConversationPins(setConversationKeep, conversationChangeSignal, reload);
 
   const { text, setText, parsed } = useLedgerQueryText({
@@ -385,6 +391,8 @@ function verdictId(verbId: string): string {
   return verbId.startsWith('act:') ? verbId.slice(4) : verbId;
 }
 
+const HIDDEN_HINT = 'Live in a shared Codex, but no tile shows it. Focus opens it in a tile.';
+
 interface RowContext {
   nameText: (text: string) => string;
   verdict: ReopenVerdictView | undefined;
@@ -421,6 +429,7 @@ function sessionRow(entry: SessionLedgerEntry, context: RowContext): RowModel {
     profileText(entry) || null,
     <span className="is-mono is-path" title={entry.directory} key="dir">{shortPath(entry.directory)}</span>,
     entry.branch ? <span className="is-mono" key="branch">{entry.branch}</span> : null,
+    context.live && entry.hidden ? <span key="hidden" title={HIDDEN_HINT}>hidden</span> : null,
   ];
   if (closed) {
     meta.push(`closed by ${closedBySomeone(entry, context.sessionLabel)}${entry.close_reason ? `: ${context.nameText(entry.close_reason)}` : ''}`);
@@ -443,6 +452,7 @@ function sessionRow(entry: SessionLedgerEntry, context: RowContext): RowModel {
     yank: entry.directory,
     attrs: {
       state: closed ? 'closed' : entry.state,
+      hidden: context.live && entry.hidden ? 'true' : 'false',
       verbs: JSON.stringify(verbs.map((verb) => verb.label)),
       profile: entry.profile_id,
       'profile-label': profileText(entry),
@@ -532,6 +542,7 @@ function SessionKicker({ entry, live }: { entry: SessionLedgerEntry; live: boole
     <>
       <span className={`ledger-glyph is-${sessionGlyph(entry, live)}`} aria-hidden="true" />
       <span>{isClosed(entry) ? 'closed' : entry.state}</span>
+      {live && entry.hidden && <span title={HIDDEN_HINT}>· hidden</span>}
       <span>·</span>
       <span>{entry.agent}</span>
     </>

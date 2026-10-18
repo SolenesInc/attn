@@ -327,6 +327,7 @@ describe('App location picker', () => {
       await submitPath(daemon, '/tmp/shell-here');
 
       expect(launchedAt(daemon).map(({ agent, cwd }) => ({ agent, cwd }))).toEqual([{ agent: 'shell', cwd: '/tmp/shell-here' }]);
+      expect(daemon.sentOf('spawn_session')[0].label ?? '').toBe('');
       expect(daemon.sentOf('set_setting').filter(({ key }) => key === 'new_session_agent')).toEqual([]);
     });
 
@@ -474,6 +475,21 @@ describe('App location picker', () => {
       await submitPath(view.daemon, path);
       return view;
     }
+
+    it('starts in the inspected folder when repository options cannot be read', async () => {
+      const { daemon } = await openPicker({ repos: [EXSIN] });
+      daemon.on('get_repo_info', () => ({
+        event: 'get_repo_info_result', success: false, error: 'Git metadata unavailable',
+      }));
+
+      await submitPath(daemon, '~/projects/exsin');
+
+      expect(daemon.sentOf('get_repo_info')).toEqual([
+        { cmd: 'get_repo_info', repo: REPO, request_id: expect.any(String) },
+      ]);
+      expect(launchedAt(daemon)).toEqual([{ cwd: REPO, agent: 'claude' }]);
+      expect(pickerOpen()).toBe(false);
+    });
 
     it('keeps the dialog’s ⌥ shortcuts while the chooser’s rows have the keyboard', async () => {
       const { daemon } = await openRepo({}, '~/projects/exsin--feat-images');

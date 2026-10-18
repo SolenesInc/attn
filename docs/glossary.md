@@ -28,6 +28,9 @@ harness                 the agent CLI: Claude Code, Codex, pi, Copilot
 model                   the AI model a harness runs
 ├─ tier (at most 1)      the intelligence a task needs: light, standard or deep
 └─ effort (at most 1)    how much reasoning the model uses
+link                    a way attn reaches a harness besides its terminal,
+                        such as the shared Codex app-server; a session runs
+                        over the link its conversation runs on now
 agent                   a harness that runs in a terminal; the user talks to
                         them; like a coding agent
 ├─ session (1 at a time)
@@ -43,14 +46,18 @@ agent                   a harness that runs in a terminal; the user talks to
 session                 attn's record of one conversation; like one chat in a
                         chat app's history
 ├─ conversation (1)     the harness's chat history
-└─ worktree (at most 1) the git worktree the agent works in; several
-                        sessions can share one
+├─ worktree (at most 1) the git worktree the agent works in; several
+│                       sessions can share one
+└─ stake (at most 1)    the seed assigned to the session by its delegation;
+                        it tends it and reports there; like an assignment
 ```
 
 ```text
 ledger (1 per profile)  every session, live and closed; like a history
 ├─ session (0..n)
 │  ├─ live              its agent runs in a terminal
+│  │  └─ hidden         live over its link, but no tile shows it; like a
+│  │                    minimized window
 │  └─ closed            ended; the history stays
 └─ kept conversation (0..n)  attn's own copy of a conversation that its
                              harness would delete; like an archive
@@ -63,11 +70,20 @@ forget                  deletes attn's copy of a conversation
 address                 who an item is for: a session or a mailbox
 ├─ mailbox              crew member, chief or seed tender; like a shared
 │                       mailbox (support@) that whoever holds the job reads
-└─ inbox (1)
-   └─ item (0..n)       peer message, seed update, user message,
-                        PR watch update or notice
+├─ inbox (1)
+│  └─ item (0..n)       peer message, seed update, user message,
+│                       PR watch update or notice
+└─ ask* (0..n)          a question an agent sends the user, who answers in
+                        their own time; like a decision request
+   ├─ seed (at most 1)  the work the ask is about; the ask is addressed to
+   │                    the seed's tender
+   ├─ question (0..n)   pick one, pick any, or write an answer
+   └─ answer (at most 1) the user's reply: a note on the seed, or a user
+                        message in the inbox when there is no seed
 ring                    one prompt that tells an agent that they have unread
                         items; like a push notification
+
+* experimental
 ```
 
 ```text
@@ -149,7 +165,7 @@ window (1..n)           one macOS app window
 │  └─ desktop sidebar   desktop flow: each desktop and its tiles
 │     └─ collapsed      a thin column of desktop chips
 ├─ drawer (0..n)        a panel that slides in from the right: attention,
-│                       automations or garden; like a side drawer
+│                       asks, automations or garden; like a side drawer
 ├─ popover (0..1)       a floating panel anchored to a button: notifications
 ├─ menu (0..1)          a short list of choices: snooze options
 ├─ palette (0..1)       search and run commands, agents and tiles; like the
@@ -204,6 +220,7 @@ Temporary debt. Read the old name as the new term. Never write the old name.
 - waiting_input → waiting
 - pending_approval → needs approval
 - reopen → resume
+- reporting seed → stake
 
 ### Changes to make
 

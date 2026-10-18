@@ -165,7 +165,7 @@ func (d *Daemon) handleSupportSnapshot(client *wsClient, msg *protocol.SupportSn
 		RequestID:             msg.RequestID,
 		ProtocolVersion:       protocol.ProtocolVersion,
 		DaemonInstanceID:      d.daemonInstanceID,
-		DaemonStartedAtUnixMs: int(d.presentSince.UnixMilli()),
+		DaemonStartedAtUnixMs: int(d.startedAt.UnixMilli()),
 		CapturedAtUnixMs:      int(time.Now().UnixMilli()),
 		Backend:               d.ptyBackendMode(),
 		WarningCodes:          warningCodes,

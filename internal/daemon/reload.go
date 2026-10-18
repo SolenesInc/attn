@@ -224,7 +224,7 @@ func (d *Daemon) reloadSessionAgent(sessionID protocol.SessionID) {
 		d.logf("reload: cannot reconstruct launch params for %s: %v; aborting (live worker preserved)", sessionID, err)
 		return
 	}
-	pluginReload, err := d.preparePluginReload(session, &opts, d.isChiefOfStaffSession(sessionID))
+	pluginReload, err := d.prepareSessionReload(session, &opts, d.isChiefOfStaffSession(sessionID))
 	if err != nil {
 		d.logf("reload: cannot reconstruct plugin launch for %s: %v; aborting (live worker preserved)", sessionID, err)
 		return
@@ -256,7 +256,7 @@ func (d *Daemon) reloadSessionForClient(sessionID protocol.SessionID, cols, rows
 		if err != nil {
 			return err
 		}
-		pluginReload, err := d.preparePluginReload(session, &opts, d.isChiefOfStaffSession(sessionID))
+		pluginReload, err := d.prepareSessionReload(session, &opts, d.isChiefOfStaffSession(sessionID))
 		if err != nil {
 			return err
 		}
@@ -354,6 +354,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 	d.recordPlacedInputOwed(sessionID, false)
 
 	intent := launchIntentFromSpawnOptions(opts, d.isChiefOfStaffSession(sessionID))
+	intent.Asks = d.launchedWithAsks(sessionID)
 	if prior, ok := d.store.LaunchIntent(sessionID); ok {
 		intent.AutoMode = prior.AutoMode
 		intent.ApprovalPolicy, intent.SandboxMode = prior.ApprovalPolicy, prior.SandboxMode
@@ -530,9 +531,18 @@ func pluginReloadCapabilityError(reg pluginDriverRegistration, isChief bool) err
 	return nil
 }
 
-func (d *Daemon) preparePluginReload(session *protocol.Session, opts *ptybackend.SpawnOptions, isChief bool) (*preparedPluginReload, error) {
+func (d *Daemon) prepareSessionReload(session *protocol.Session, opts *ptybackend.SpawnOptions, isChief bool) (*preparedPluginReload, error) {
 	reg, ok := d.ensurePluginRegistry().driver(session.Agent)
 	if !ok {
+		if l := d.linkOf(session.ID); l != nil {
+			l.relaunch(opts)
+		}
+		if opts.Agent != "shell" {
+			if err := d.prepareAgentLaunch(session.ID, opts.ID, isChief, opts, ""); err != nil {
+				d.removeAgentLaunchDir(opts.ID)
+				return nil, err
+			}
+		}
 		return nil, nil
 	}
 	if err := pluginReloadCapabilityError(reg, isChief); err != nil {
@@ -605,8 +615,8 @@ func (d *Daemon) preparePluginReload(session *protocol.Session, opts *ptybackend
 	opts.Agent = reg.Agent
 	opts.ResumeSessionID = ""
 	opts.LifecycleID = runID
-	opts.ExternalCommand = append([]string(nil), result.Argv...)
-	opts.ExternalEnv = commandEnv
+	opts.AgentArgv = append([]string(nil), result.Argv...)
+	opts.AgentEnv = commandEnv
 	opts.ExternalCWD = externalCWD
 	return prepared, nil
 }
@@ -676,7 +686,7 @@ func (d *Daemon) preparePluginRoleReload(sessionID protocol.SessionID, desiredCh
 		return nil, true, err
 	}
 	opts.ContextWindowCap = d.launchContextWindowCap(sessionID, session.Agent, desiredChief)
-	pluginReload, err := d.preparePluginReload(session, &opts, desiredChief)
+	pluginReload, err := d.prepareSessionReload(session, &opts, desiredChief)
 	if err != nil {
 		lock.Unlock()
 		return nil, true, err

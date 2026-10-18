@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "id": "asking-session",
+  "description": "Ordinary session that launched with asks.",
+  "recipient": "session",
+  "event": "launch",
+  "values": {
+    "notebook_root": "",
+    "garden_available": "true",
+    "asks_enabled": "true",
+    "crew_priming": "",
+    "self_report_pull_requests": "false"
+  }
+}

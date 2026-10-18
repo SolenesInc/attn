@@ -171,7 +171,9 @@ export class ScriptedDaemon {
   replyTo(command: CommandMessage, reply: Reply) {
     const origin = this.connections.find((connection) => connection.sent.includes(command));
     if (!origin) throw new Error(`the app never sent this ${command.cmd}`);
-    origin.emit(reply);
+    origin.emit('request_id' in command && command.request_id !== undefined
+      ? { request_id: command.request_id, ...reply }
+      : reply);
   }
 
   disconnect(code = 1006) {

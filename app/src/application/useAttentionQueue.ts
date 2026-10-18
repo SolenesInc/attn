@@ -1,3 +1,4 @@
+import { sessionDisplayName } from '../utils/sessionDisplayName';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { SnoozePlacement } from '../components/SnoozeMenu';
@@ -11,6 +12,7 @@ import {
   buildQueueBands,
   headOfQueue,
   isCrewQueueEnabled,
+  isHiddenInQueue,
   isQueueModeEnabled,
   QUEUE_CREW_SETTING,
   QUEUE_MODE_SETTING,
@@ -27,6 +29,7 @@ interface Options {
   settings: AppContentProps['settings'];
   desktopViews: DesktopWithSessions<EnrichedSession>[];
   profileSessions: EnrichedSession[];
+  hiddenSessions: EnrichedSession[];
   enrichedLocalSessions: EnrichedSession[];
   shownAgentId: string | null;
 }
@@ -34,6 +37,7 @@ export function useAttentionQueue({
   settings,
   desktopViews,
   profileSessions,
+  hiddenSessions,
   enrichedLocalSessions,
   shownAgentId,
 }: Options) {
@@ -47,12 +51,20 @@ export function useAttentionQueue({
   }, [sendSetSetting, settings]);
   const queueModeEnabled = isQueueModeEnabled(settings);
   const crewQueueEnabled = isCrewQueueEnabled(settings);
+  const queueHidden = useMemo(
+    () => (queueModeEnabled && isHiddenInQueue(settings) ? hiddenSessions : []),
+    [queueModeEnabled, settings, hiddenSessions],
+  );
+  const queueSessions = useMemo(
+    () => (queueHidden.length ? [...profileSessions, ...queueHidden] : profileSessions),
+    [profileSessions, queueHidden],
+  );
   const queueBands = useMemo(
     () =>
       queueModeEnabled
-        ? buildQueueBands(desktopViews, { crewInQueue: crewQueueEnabled })
+        ? buildQueueBands(desktopViews, { crewInQueue: crewQueueEnabled, hidden: queueHidden })
         : null,
-    [queueModeEnabled, crewQueueEnabled, desktopViews],
+    [queueModeEnabled, crewQueueEnabled, desktopViews, queueHidden],
   );
 
   const activeGroupForCommands = useMemo(
@@ -82,7 +94,7 @@ export function useAttentionQueue({
     [queueModeEnabled, crewQueueEnabled],
   );
 
-  const waitingLocalSessions = profileSessions.filter(wantsAttention);
+  const waitingLocalSessions = queueSessions.filter(wantsAttention);
 
   const [snoozeMenu, setSnoozeMenu] = useState<{
     session: { id: string; label: string };
@@ -111,7 +123,7 @@ export function useAttentionQueue({
     const rect = row?.getBoundingClientRect();
     const pane = document.querySelector<HTMLElement>(`.terminal-wrapper.active [data-pane-session-id="${session.id}"]`);
     setSnoozeMenu({
-      session: { id: session.id, label: session.label },
+      session: { id: session.id, label: sessionDisplayName(session) },
       placement: rect ? { kind: 'anchor', top: rect.bottom + 4, left: rect.left } : { kind: 'center', pane },
       origin,
       leaf: currentActiveLeaf(),
@@ -226,6 +238,8 @@ export function useAttentionQueue({
     queueModeEnabled,
     crewQueueEnabled,
     queueBands,
+    queueSessions,
+    queueHidden,
     activeGroupForCommands,
     activeSessionForCommands,
     handleWakeActiveSession,

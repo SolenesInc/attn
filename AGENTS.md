@@ -148,6 +148,13 @@ count.
 changed since `origin/main`; `FORCE=1` runs it and `DIFF_BASE=<ref>` compares
 against another branch.
 
+Before reporting a change done, run it on the surface it touches and show the
+output: the CLI, the daemon over `wsctl`, a non-production instance, the app.
+A green build or test run is not that evidence, and a check you could not run
+is inconclusive, not a pass. When the work is not trivial, write the script
+that does it or proves it, so a reviewer reruns it instead of trusting a
+summary.
+
 Choose checks for affected CLI, daemon, app, protocol, and Linux paths using
 [verification requirements](docs/instances.md#verification-requirements).
 Rendering changes must avoid continuous repainting.
@@ -212,8 +219,8 @@ Follow [Testing](docs/testing.md). In short:
 - Everything belongs to one profile for life, and anything in another profile is
   treated as if it doesn't exist (e.g. /resume of its conversation opens a new
   session here).
-- Crew files are authoritative; the registry records paths. One active session
-  binding per member (`internal/daemon/crew.go`).
+- Crew files are authoritative and live under this instance's crew root. One
+  active session binding per member (`internal/daemon/crew.go`).
 - `internal/docstore` compiles SQL; `internal/store/documents.go` executes it.
   SQL identifiers come from integers or validated field names, never caller
   text.

@@ -101,7 +101,7 @@ func TestASessionMovesItselfAndItsDelegatesBetweenDesktops(t *testing.T) {
 		t.Errorf("moving a delegate onto the desktop it is on reports %+v; want unchanged", got)
 	}
 	_, err = cli.MoveSessionToDesktop(tt.ID, delegate.SessionID, "ops")
-	if err == nil || !strings.Contains(err.Error(), "may move itself, the sessions it dispatched") {
+	if err == nil || !strings.Contains(err.Error(), "may move itself or an agent in its delegation chain") {
 		t.Errorf("a session moving another's delegate was answered %v; want a refusal naming who may move it", err)
 	}
 	move(string(s.ID), string(delegate.SessionID), "ops")

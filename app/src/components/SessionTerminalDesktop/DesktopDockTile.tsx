@@ -117,6 +117,7 @@ export function DesktopDockTile({
     seedNavigationError,
     seedDocument,
     seedDocumentError,
+    reloadSeedDocument,
     title,
     parentSeed,
     seedLocationTitle,
@@ -229,6 +230,14 @@ export function DesktopDockTile({
           onClose={onClose}
         />
       </div>
+      {isSeed && seedDocument && seedDocumentError && (
+        <div className="desktop-dock-tile-update-error" role="alert">
+          <span>Update failed</span>
+          <button type="button" className="desktop-dock-tile-review-button" onClick={reloadSeedDocument}>
+            Reload
+          </button>
+        </div>
+      )}
       <div
         className={`desktop-dock-tile-body ${bodyKindModifier(tile.tileKind)}`.trim()}
         ref={setBodyRef}

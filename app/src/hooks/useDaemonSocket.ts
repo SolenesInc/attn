@@ -3,6 +3,8 @@ import { clearHarnessModelCatalogs } from './useHarnessRoute';
 import { PROTOCOL_VERSION } from '../types/protocolVersion';
 export { PROTOCOL_VERSION } from '../types/protocolVersion';
 import { handleCommandUsageEvent } from './daemonCommandUsageEvents';
+import { handleAskDaemonEvent } from './daemonAskEvents';
+import { useAsksStore } from '../store/asks';
 import { handleLaunchDesktopEvent } from './daemonLaunchDesktopEvents';
 import { handleDelegationDaemonEvent, type DelegationSettingsState, type HarnessModelCatalog } from './daemonDelegationEvents';
 import {
@@ -20,6 +22,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { isTauri } from '@tauri-apps/api/core';
 import { readMigrationFailureMarker, type MigrationFailure } from '../utils/migrationFailure';
 import type {
+  AskAnswer,
   CommandUsage,
   Session as GeneratedSession,
   PR as GeneratedPR,
@@ -230,6 +233,7 @@ export interface SessionAnnotationSet {
   generation: number;
 }
 export interface DirectoryEntry {
+  is_repo?: boolean;
   name: string;
   path: string;
   is_dir: boolean;
@@ -748,6 +752,7 @@ export function useDaemonSocket({
       'pty_resize',
       'kill_session',
       'unregister',
+      'desktop_close_tile',
     ]);
     if (!needsNotice.has(cmd)) {
       return;
@@ -818,7 +823,7 @@ export function useDaemonSocket({
         rejectPendingByPredicate((key) => key.startsWith('get_branch_diff_files_'), error);
         return;
       case 'get_repo_info':
-        rejectPendingByPredicate((key) => key.startsWith('repo_info_'), error);
+        rejectPendingByPredicate((key) => key.startsWith('get_repo_info:'), error);
         return;
       case 'get_recent_locations':
         rejectPendingByPredicate((key) => key.startsWith('get_recent_locations_'), error);
@@ -829,11 +834,14 @@ export function useDaemonSocket({
       case 'inspect_path':
         rejectPendingByPredicate((key) => key.startsWith('inspect_path_'), error);
         return;
+      case 'create_worktree_from_branch':
+        rejectPendingByPredicate((key) => key.startsWith('create_worktree_from_branch:'), error);
+        return;
       case 'create_worktree':
-        rejectPendingByPredicate((key) => key === 'worktree_create_worktree_result', error);
+        rejectPendingByPredicate((key) => key.startsWith('create_worktree:'), error);
         return;
       case 'delete_worktree':
-        rejectPendingByPredicate((key) => key === 'worktree_delete_worktree_result', error);
+        rejectPendingByPredicate((key) => key.startsWith('delete_worktree:'), error);
         return;
       case 'delete_branch':
         rejectPendingByPredicate((key) => key.startsWith('delete_branch_'), error);
@@ -1128,6 +1136,7 @@ export function useDaemonSocket({
               data.seeds_total ?? (data.seeds || []).length,
             );
             callbacksRef.current.onCrewUpdate?.(data.crew || []);
+            useAsksStore.getState().setAsks(data.asks || []);
             useProfilesStore.getState().migrationPhaseChanged(data.migration_phase ?? null);
             pruneAttachedPtySessions(nextSessions);
             const nextPRs = data.prs || [];
@@ -2076,21 +2085,18 @@ export function useDaemonSocket({
           }
 
           case 'create_worktree_result':
-          case 'delete_worktree_result':
-            const actionKey = `worktree_${data.event}`;
-            const pendingAction = pendingActionsRef.current.get(actionKey);
-            if (pendingAction) {
-              pendingActionsRef.current.delete(actionKey);
-              if (data.success) {
-                pendingAction.resolve({ success: true, path: data.path });
-              } else {
-                const error = new Error(data.error || 'Worktree action failed') as WorktreeActionError;
-                error.forceable = data.forceable;
-                error.reason_kind = data.reason_kind;
-                pendingAction.reject(error);
-              }
-            }
+          case 'delete_worktree_result': {
+            const error = new Error(data.error || 'Worktree action failed') as WorktreeActionError;
+            error.forceable = data.forceable;
+            error.reason_kind = data.reason_kind;
+            const kinds = data.event === 'create_worktree_result'
+              ? ['create_worktree', 'create_worktree_from_branch']
+              : ['delete_worktree'];
+            for (const kind of kinds)
+              if (settlePendingRequest(pendingActionsRef.current, kind, data,
+                (event) => ({ success: true, path: event.path }), 'Worktree action failed', error)) break;
             break;
+          }
 
           case 'rate_limited':
             if (data.rate_limit_resource && data.rate_limit_reset_at) {
@@ -2191,17 +2197,14 @@ export function useDaemonSocket({
           }
 
           case 'get_repo_info_result': {
-            const repoPath = (data as any).info?.repo || '';
-            const key = `repo_info_${repoPath}`;
+            if (typeof data.request_id !== 'string') break;
+            const key = pendingRequestKey('get_repo_info', data.request_id);
             const pending = pendingActionsRef.current.get(key);
-            if (pending) {
-              pendingActionsRef.current.delete(key);
-              if ((data as any).success) {
-                pending.resolve({ success: true, info: (data as any).info });
-              } else {
-                pending.resolve({ success: false, error: (data as any).error });
-              }
-            }
+            if (!pending) break;
+            pendingActionsRef.current.delete(key);
+            pending.resolve(data.success && data.info
+              ? { success: true, info: { ...data.info, worktrees: data.info.worktrees || [] } }
+              : { success: false, error: data.error });
             break;
           }
 
@@ -2283,6 +2286,7 @@ export function useDaemonSocket({
             if (handleProfileDaemonEvent(data, pending)) break;
             if (handleLaunchDesktopEvent(data, pending)) break;
             if (handleCommandUsageEvent(data, pending)) break;
+            if (handleAskDaemonEvent(data, pending)) break;
             if (handleAutoModeDaemonEvent(data, pending)) break;
             if (handleConversationDaemonEvent(data, pending, () => setKeptConversationsChangeSignal((signal) => signal + 1))) break;
             if (handleWorktreeDaemonEvent(data, pending, {
@@ -3213,8 +3217,8 @@ export function useDaemonSocket({
   const sendRenameSession = useCallback((sessionId: string, label: string): Promise<void> => {
     return new Promise((resolve, reject) => {
       const trimmed = label.trim();
-      if (!sessionId || !trimmed) {
-        reject(new Error('Session name cannot be empty'));
+      if (!sessionId) {
+        reject(new Error('Session id is required'));
         return;
       }
       const key = `rename_session:${sessionId}`;
@@ -3323,59 +3327,18 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'list_worktrees', main_repo: mainRepo }));
   }, []);
 
-  const sendCreateWorktree = useCallback((mainRepo: string, branch: string, path?: string, startingFrom?: string): Promise<WorktreeActionResult> => {
-    return new Promise((resolve, reject) => {
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        reject(new Error('WebSocket not connected'));
-        return;
-      }
+  const sendCreateWorktree = useCallback((mainRepo: string, branch: string, path?: string, startingFrom?: string): Promise<WorktreeActionResult> => (
+    sendRequest('create_worktree', {
+      main_repo: mainRepo, branch,
+      ...(path && { path }),
+      ...(startingFrom && { starting_from: startingFrom }),
+    }, 'Create worktree timed out', GIT_WORKTREE_TIMEOUT_MS)
+  ), [sendRequest]);
 
-      const actionKey = 'worktree_create_worktree_result';
-      pendingActionsRef.current.set(actionKey, { resolve, reject });
-
-      setTimeout(() => {
-        if (pendingActionsRef.current.has(actionKey)) {
-          pendingActionsRef.current.delete(actionKey);
-          reject(new Error('Create worktree timed out'));
-        }
-      }, GIT_WORKTREE_TIMEOUT_MS);
-
-      ws.send(JSON.stringify({
-        cmd: 'create_worktree',
-        main_repo: mainRepo,
-        branch,
-        ...(path && { path }),
-        ...(startingFrom && { starting_from: startingFrom }),
-      }));
-    });
-  }, []);
-
-  const sendDeleteWorktree = useCallback((path: string, options: DeleteWorktreeOptions = {}): Promise<WorktreeActionResult> => {
-    return new Promise((resolve, reject) => {
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        reject(new Error('WebSocket not connected'));
-        return;
-      }
-
-      const actionKey = 'worktree_delete_worktree_result';
-      pendingActionsRef.current.set(actionKey, { resolve, reject });
-
-      setTimeout(() => {
-        if (pendingActionsRef.current.has(actionKey)) {
-          pendingActionsRef.current.delete(actionKey);
-          reject(new Error('Delete worktree timed out'));
-        }
-      }, GIT_WORKTREE_TIMEOUT_MS);
-
-      ws.send(JSON.stringify({
-        cmd: 'delete_worktree',
-        path,
-        ...(options.force && { force: true }),
-      }));
-    });
-  }, []);
+  const sendDeleteWorktree = useCallback((path: string, options: DeleteWorktreeOptions = {}): Promise<WorktreeActionResult> => (
+    sendRequest('delete_worktree', { path, ...(options.force && { force: true }) },
+      'Delete worktree timed out', GIT_WORKTREE_TIMEOUT_MS)
+  ), [sendRequest]);
 
   const sendSetSetting = useCallback((key: string, value: string) => {
     const ws = wsRef.current;
@@ -3795,6 +3758,9 @@ export function useDaemonSocket({
   const sendRecordCommandUsage = useCallback((profileId: string, commandId: string): Promise<boolean> =>
     sendRequest('record_command_usage', { profile_id: profileId, command_id: commandId }, 'Saving command history timed out'), [sendRequest]);
 
+  const sendAskAnswer = useCallback((askId: string, answers: AskAnswer[], note: string): Promise<true> =>
+    sendRequest('ask_answer', { ask_id: askId, answers, ...(note.trim() ? { note } : {}) }, 'Sending the answer timed out'), [sendRequest]);
+
   const sendRecentFiles = useCallback((limit?: number, root?: string): Promise<RecentFile[]> => {
     const requestId = nextRequestID('recent_files');
     const key = `recent_files:${requestId}`;
@@ -3854,32 +3820,10 @@ export function useDaemonSocket({
     }, 'Inspect path timed out', GIT_METADATA_TIMEOUT_MS);
   }, [nextRequestID, sendKeyedRequest]);
 
-  const sendCreateWorktreeFromBranch = useCallback((mainRepo: string, branch: string, path?: string): Promise<WorktreeActionResult> => {
-    return new Promise((resolve, reject) => {
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        reject(new Error('WebSocket not connected'));
-        return;
-      }
-
-      const actionKey = 'worktree_create_worktree_result';
-      pendingActionsRef.current.set(actionKey, { resolve, reject });
-
-      setTimeout(() => {
-        if (pendingActionsRef.current.has(actionKey)) {
-          pendingActionsRef.current.delete(actionKey);
-          reject(new Error('Create worktree from branch timed out'));
-        }
-      }, GIT_WORKTREE_TIMEOUT_MS);
-
-      ws.send(JSON.stringify({
-        cmd: 'create_worktree_from_branch',
-        main_repo: mainRepo,
-        branch,
-        ...(path && { path }),
-      }));
-    });
-  }, []);
+  const sendCreateWorktreeFromBranch = useCallback((mainRepo: string, branch: string, path?: string): Promise<WorktreeActionResult> => (
+    sendRequest('create_worktree_from_branch', { main_repo: mainRepo, branch, ...(path && { path }) },
+      'Create worktree from branch timed out', GIT_WORKTREE_TIMEOUT_MS)
+  ), [sendRequest]);
 
   const sendFetchRemotes = useCallback((repo: string): Promise<FetchRemotesResult> => {
     const key = 'fetch_remotes';
@@ -3925,13 +3869,9 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'cancel_countdown', session_id: sessionId }));
   }, []);
 
-  const getRepoInfo = useCallback((repo: string): Promise<RepoInfoResult> => {
-    const key = `repo_info_${repo}`;
-    return sendKeyedRequest<RepoInfoResult>(key, {
-      cmd: 'get_repo_info',
-      repo,
-    }, 'get_repo_info timeout', GIT_METADATA_TIMEOUT_MS);
-  }, [sendKeyedRequest]);
+  const getRepoInfo = useCallback((repo: string): Promise<RepoInfoResult> => (
+    sendRequest('get_repo_info', { repo }, 'get_repo_info timeout', GIT_METADATA_TIMEOUT_MS)
+  ), [sendRequest]);
 
   const listKeptConversations = useCallback((includeDeleted: boolean): Promise<KeptConversationListResult> => (
     sendRequest('kept_conversation_list', { include_deleted: includeDeleted }, 'Listing conversations timed out')
@@ -4422,6 +4362,12 @@ export function useDaemonSocket({
     [sendProfileCommand],
   );
 
+  const sendDesktopCloseTile = useCallback(
+    (desktopId: string, tileId: string) =>
+      sendProfileCommand('desktop_close_tile', { desktop_id: desktopId, tile_id: tileId }),
+    [sendProfileCommand],
+  );
+
 
   return {
     isConnected: wsRef.current?.readyState === WebSocket.OPEN,
@@ -4445,6 +4391,7 @@ export function useDaemonSocket({
     sendDesktopDockTile,
     sendDesktopUpdateTile,
     sendDesktopRemoveLeaf,
+    sendDesktopCloseTile,
     sendDesktopSetSplitRatio,
     sendMigrationGet,
     sendLaunchDesktopGet,
@@ -4527,6 +4474,7 @@ export function useDaemonSocket({
     sendFsIndex,
     sendGetCommandUsage,
     sendRecordCommandUsage,
+    sendAskAnswer,
     sendRecentFiles,
     sendGetRecentLocations,
     sendBrowseDirectory,

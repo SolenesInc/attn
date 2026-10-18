@@ -1,7 +1,7 @@
 {
   "version": 1,
   "id": "delegation",
-  "description": "Delegated review with a reporting seed.",
+  "description": "Delegated review with a stake.",
   "recipient": "delegation",
   "event": "opening",
   "values": {

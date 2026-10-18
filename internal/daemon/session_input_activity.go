@@ -89,7 +89,7 @@ func (d *Daemon) settleIfAutoSettleQuiet(sessionID protocol.SessionID, within ti
 
 func isUserKeystrokeSource(source string) bool {
 	switch source {
-	case "automation", "attach_replay", "pointer", "response":
+	case "agent", "automation", "attach_replay", "pointer", "response":
 		return false
 	default:
 		return true

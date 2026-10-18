@@ -1,0 +1,3 @@
+kind: added
+area: sessions
+change: Try the experimental one-screen launcher to search projects and use Tab to choose a worktree. Open a terminal with Cmd+T (Ctrl+Shift+T on Linux).

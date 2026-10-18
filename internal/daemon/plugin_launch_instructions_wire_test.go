@@ -21,6 +21,7 @@ func TestADriverTakingLaunchInstructionsIsGivenTheAgentsOrTheChiefsGuidance(t *t
 				"launch_instructions": true, "resume": true, "state_reporting": true, "pull_request_reporting": reportsPullRequests,
 			})
 			awaitDriverAvailable(app, "snipe")
+			setSetting(t, app, "asks_enabled", "true")
 			_, agent := spawnDriven(w, app, driver, w.Path("shop"))
 			_, chief := spawnDriven(w, app, driver, w.Path("chief"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
 
@@ -37,9 +38,9 @@ func TestADriverTakingLaunchInstructionsIsGivenTheAgentsOrTheChiefsGuidance(t *t
 				unwant  []string
 			}{
 				{launch: "agent", content: agent.Instructions.Content,
-					want: []string{hooks.AgentGuidance, hooks.GardenGuidance}, unwant: []string{"shared context"}},
+					want: []string{hooks.AgentGuidance, hooks.GardenGuidance, askGuidanceLead}, unwant: []string{"shared context"}},
 				{launch: "chief", content: chief.Instructions.Content,
-					want: []string{"You are the chief of staff", chief.Instructions.NotebookRoot, hooks.GardenGuidance}},
+					want: []string{"You are the chief of staff", chief.Instructions.NotebookRoot, hooks.GardenGuidance, askGuidanceLead}},
 			} {
 				for _, want := range row.want {
 					if !strings.Contains(row.content, want) {

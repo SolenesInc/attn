@@ -5,6 +5,7 @@ import { isAccelKeyPressed, isMacLikePlatform } from '../shortcuts/platform';
 
 interface KeyboardShortcutsConfig {
   onNewSession: () => void;
+  onNewTerminal?: () => void;
   onNewSessionHorizontal?: () => void;
   onCloseSession: () => void;
   onOpenPalette: (mode: PaletteMode) => void;
@@ -29,6 +30,7 @@ interface KeyboardShortcutsConfig {
   onShowAgentList: () => void;
   onRefreshPRs?: () => void;
   onToggleAttentionPanel?: () => void;
+  onToggleAsksPanel?: () => void;
   onOpenSettings?: () => void;
   onShowShortcuts?: () => void;
   onIncreaseFontSize?: () => void;
@@ -49,6 +51,7 @@ interface KeyboardShortcutsConfig {
 export function useKeyboardShortcuts({
   onNewSession,
   onNewSessionHorizontal,
+  onNewTerminal,
   onCloseSession,
   onOpenPalette,
   onGoToDashboard,
@@ -71,6 +74,7 @@ export function useKeyboardShortcuts({
   onShowAgentList,
   onRefreshPRs,
   onToggleAttentionPanel,
+  onToggleAsksPanel,
   onOpenSettings,
   onShowShortcuts,
   onIncreaseFontSize,
@@ -90,6 +94,7 @@ export function useKeyboardShortcuts({
   useShortcut('app.quit', onQuit ?? (() => {}), !blocked && !!onQuit);
 
   useShortcut('session.new', onNewSession, enabled);
+  useShortcut('session.newTerminal', onNewTerminal ?? (() => {}), enabled && !!onNewTerminal);
   useShortcut('session.newHorizontal', onNewSessionHorizontal ?? (() => {}), enabled && !!onNewSessionHorizontal);
   useShortcut('session.close', onCloseSession, enabled);
   useShortcut('session.prev', onPrevSession, enabled);
@@ -139,6 +144,7 @@ export function useKeyboardShortcuts({
   useShortcut('desktop.send9', () => onMoveToDesktopSlot(9, true), enabled);
   useShortcut('desktop.sendStay9', () => onMoveToDesktopSlot(9, false), enabled);
   useShortcut('dock.attention', onToggleAttentionPanel ?? (() => {}), enabled && !!onToggleAttentionPanel);
+  useShortcut('dock.asks', onToggleAsksPanel ?? (() => {}), enabled && !!onToggleAsksPanel);
 
   useShortcut('ui.actionMenu', () => onOpenPalette('agents'), !blocked);
   useShortcut('ui.commandPalette', () => onOpenPalette('commands'), !blocked);

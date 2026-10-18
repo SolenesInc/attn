@@ -1,4 +1,5 @@
 import { open } from '@tauri-apps/plugin-dialog';
+import { isAsksEnabled } from '../utils/asks';
 import { useCallback, useEffect, useImperativeHandle, useMemo, useState, type ForwardedRef } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useGitHubPollingOffReason } from '../contexts/GitHubPollingContext';
@@ -174,6 +175,7 @@ export function useSettingsModalState({
   const actualChiefContextCap = settings.chief_context_window_cap || String(DEFAULT_CONTEXT_WINDOW_CAP);
   const actualHeadlessContextCap = settings.headless_context_window_cap || String(DEFAULT_CONTEXT_WINDOW_CAP);
   const autoSettleEnabled = isAutoSettleEnabled(settings);
+  const asksEnabled = isAsksEnabled(settings);
   const actualAutoSettleArm = String(autoSettleSeconds(settings, AUTO_SETTLE_ARM_SETTING));
   const actualAutoSettleCountdown = String(autoSettleSeconds(settings, AUTO_SETTLE_COUNTDOWN_SETTING));
   const resolvedDefaultAgent = resolvePreferredAgent(actualDefaultAgent, agentAvailability, 'codex');
@@ -281,6 +283,10 @@ export function useSettingsModalState({
     ? rawPtyBackendMode
     : 'unknown';
   const { label: ptyBackendLabel, hint: ptyBackendHint } = PTY_BACKENDS[ptyBackendMode];
+  const newSessionLauncherEnabled = settings.new_session_launcher_enabled === 'true';
+  const codexSharedEnabled = settings.codex_shared_enabled === 'true';
+  const queueShowHiddenSessions = settings.queue_show_hidden_sessions !== 'false';
+  const directAgentLaunchEnabled = settings.direct_agent_launch_enabled === 'true';
   const sharedPtyHostEnabled = settings.pty_shared_host_enabled === 'true';
   const sharedPtyHostActive = settings.pty_shared_host_active === 'true';
 
@@ -660,6 +666,14 @@ export function useSettingsModalState({
             keywords: 'pty backend shared rust host workers experimental terminal',
           },
           {
+            id: 'experimental',
+            label: 'Experimental',
+            title: 'Experimental',
+            description: 'Opt in to features that are still being developed.',
+            count: 5,
+            keywords: 'experimental codex shared hidden sessions queue direct agent launch launcher memory claude copilot one-screen new-session one screen new session project path asks questions answer decisions drawer',
+          },
+          {
             id: 'backgroundTasks',
             label: 'Task runner',
             title: 'Background tasks',
@@ -728,6 +742,7 @@ export function useSettingsModalState({
     modelCaptureBytes,
     autoModePolicy,
     autoSettleEnabled,
+    asksEnabled,
     mutedRepos,
     mutedAuthors,
     hasProjectsDirChange,
@@ -774,6 +789,10 @@ export function useSettingsModalState({
     ptyBackendLabel,
     sharedPtyHostActive,
     sharedPtyHostEnabled,
+    newSessionLauncherEnabled,
+    codexSharedEnabled,
+    queueShowHiddenSessions,
+    directAgentLaunchEnabled,
     onSetSetting,
     settings,
     activityAgents,

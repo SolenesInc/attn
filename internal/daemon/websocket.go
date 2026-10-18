@@ -3,7 +3,6 @@ package daemon
 import (
 	"context"
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -39,7 +38,6 @@ type wsClient struct {
 
 	trustedTauriOrigin       bool
 	browserHostAuthenticated bool
-	bearerAuthorized         bool
 
 	attachedStreams map[protocol.TerminalID]ptybackend.Stream
 	attachMu        sync.Mutex
@@ -520,19 +518,6 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden origin", http.StatusForbidden)
 		return
 	}
-	bearerAuthorized := false
-	if required := config.WSAuthToken(); required != "" {
-		provided := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
-		if provided == "" {
-			provided = strings.TrimSpace(r.URL.Query().Get("token"))
-		}
-		if subtle.ConstantTimeCompare([]byte(required), []byte(provided)) != 1 {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		bearerAuthorized = true
-	}
-
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		OriginPatterns: websocketOriginPatternsForRequest(r),
 	})
@@ -551,7 +536,6 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 		recv:               make(chan []byte, 256),
 		connectedAt:        time.Now(),
 		trustedTauriOrigin: isTrustedTauriOrigin(origin),
-		bearerAuthorized:   bearerAuthorized,
 		attachedStreams:    make(map[protocol.TerminalID]ptybackend.Stream),
 	}
 	release, held := d.life.Hold("handleWS")
@@ -595,6 +579,7 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		Seeds:                  state.Seeds,
 		SeedsTotal:             protocol.Ptr(d.countSeedsForBroadcast(client.selectedProfile())),
 		Crew:                   state.Crew,
+		Asks:                   asksSnapshot(client.selectedProfile(), d.openAsks()).Asks,
 	}
 	d.fillInitialMigrationPhase(event)
 	d.sendInitialArrangement(client, event)
@@ -856,6 +841,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleDesktopMoveLeaf(client, msg.(*protocol.DesktopMoveLeafMessage))
 	case protocol.CmdDesktopRemoveLeaf:
 		d.handleDesktopRemoveLeaf(client, msg.(*protocol.DesktopRemoveLeafMessage))
+	case protocol.CmdDesktopCloseTile:
+		d.handleDesktopCloseTile(client, msg.(*protocol.DesktopCloseTileMessage))
 	case protocol.CmdDesktopSetSplitRatio:
 		d.handleDesktopSetSplitRatio(client, msg.(*protocol.DesktopSetSplitRatioMessage))
 	case protocol.CmdDesktopDockTile:
@@ -1121,6 +1108,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleEnsureRepoWS(client, msg.(*protocol.EnsureRepoMessage))
 	case protocol.CmdGetRepoInfo:
 		d.handleGetRepoInfoWS(client, msg.(*protocol.GetRepoInfoMessage))
+	case protocol.CmdAskAnswer:
+		d.handleAskAnswer(client, msg.(*protocol.AskAnswerMessage))
 	case protocol.CmdAutomationDefinitionsGet:
 		d.handleAutomationDefinitionsGetWS(client, msg.(*protocol.AutomationDefinitionsGetMessage))
 	case protocol.CmdAutomationDefinitionGet:

@@ -69,7 +69,6 @@ unsafe extern "C" {
     fn attn_ghostty_cursor_visible(terminal: *mut c_void) -> bool;
     fn attn_ghostty_at_ground(terminal: *mut c_void) -> bool;
     fn attn_ghostty_origin_mode(terminal: *mut c_void) -> bool;
-    #[cfg(test)]
     fn attn_ghostty_dec_mode(terminal: *mut c_void, mode: u16) -> bool;
     fn attn_ghostty_track_cursor(terminal: *mut c_void) -> *mut c_void;
     fn attn_ghostty_tracked_screen_point(raw: *mut c_void, x: *mut u16, y: *mut u32) -> bool;
@@ -102,7 +101,17 @@ unsafe extern "C" {
     fn attn_ghostty_vt_dump(terminal: *mut c_void, len: *mut usize) -> *mut u8;
     fn attn_ghostty_total_rows(terminal: *mut c_void) -> usize;
     fn attn_ghostty_track_screen_point(terminal: *mut c_void, x: u16, y: u32) -> *mut c_void;
-    #[cfg(test)]
+    fn attn_ghostty_text_range(
+        terminal: *mut c_void,
+        cols: u16,
+        sx: u16,
+        sy: u32,
+        ex: u16,
+        ey: u32,
+        inclusive: bool,
+        len: *mut usize,
+    ) -> *mut u8;
+    fn attn_ghostty_cursor_pending_wrap(terminal: *mut c_void) -> bool;
     fn attn_ghostty_plain_text(terminal: *mut c_void, len: *mut usize) -> *mut u8;
     fn attn_ghostty_viewport_vt(terminal: *mut c_void, len: *mut usize) -> *mut u8;
     fn attn_ghostty_viewport_text(terminal: *mut c_void, len: *mut usize) -> *mut u8;
@@ -426,8 +435,15 @@ impl Terminal {
         })
     }
 
-    fn dump_active(&self) -> Result<Vec<u8>, String> {
+    fn dump_active(&mut self) -> Result<Vec<u8>, String> {
+        let wrap = self.dec_mode(7);
+        if !wrap {
+            self.write(b"\x1b[?7h");
+        }
         let mut dump = self.vt_dump();
+        if !wrap {
+            self.write(b"\x1b[?7l");
+        }
         let region = scroll_region(&dump);
         let origin = self.origin_mode();
         dump.extend_from_slice(b"\x1b[r\x1b[?6l");
@@ -457,6 +473,9 @@ impl Terminal {
         } else {
             b"\x1b[?25l"
         });
+        if !wrap {
+            dump.extend_from_slice(b"\x1b[?7l");
+        }
         Ok(dump)
     }
 
@@ -464,7 +483,6 @@ impl Terminal {
         unsafe { attn_ghostty_at_ground(self.raw.as_ptr()) }
     }
 
-    #[cfg(test)]
     pub fn dec_mode(&self, mode: u16) -> bool {
         unsafe { attn_ghostty_dec_mode(self.raw.as_ptr(), mode) }
     }
@@ -490,7 +508,40 @@ impl Terminal {
         bytes
     }
 
-    #[cfg(test)]
+    pub fn cursor_pending_wrap(&self) -> bool {
+        unsafe { attn_ghostty_cursor_pending_wrap(self.raw.as_ptr()) }
+    }
+
+    pub fn text_range(
+        &self,
+        cols: u16,
+        start: (i32, i32),
+        end: (i32, i32),
+        inclusive: bool,
+    ) -> Result<String, String> {
+        if start == end && !inclusive {
+            return Ok(String::new());
+        }
+        if start.1 < 0 || end.1 < start.1 || (end.1 == start.1 && end.0 < start.0) {
+            return Err("command output range is unavailable".to_owned());
+        }
+        let bytes = unsafe {
+            take_bytes(|len| {
+                attn_ghostty_text_range(
+                    self.raw.as_ptr(),
+                    cols,
+                    u16::try_from(start.0).expect("tracked column fits u16"),
+                    start.1.cast_unsigned(),
+                    u16::try_from(end.0).expect("tracked column fits u16"),
+                    end.1.cast_unsigned(),
+                    inclusive,
+                    len,
+                )
+            })
+        };
+        Ok(String::from_utf8_lossy(&bytes).into_owned())
+    }
+
     pub fn plain_text(&self) -> String {
         let bytes = unsafe { take_bytes(|len| attn_ghostty_plain_text(self.raw.as_ptr(), len)) };
         String::from_utf8_lossy(&bytes).into_owned()

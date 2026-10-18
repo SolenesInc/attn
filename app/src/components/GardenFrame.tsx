@@ -1,5 +1,5 @@
 import FocusTrap from './AppFocusTrap';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Seed, SeedHandoverOptions, SeedSendToChiefOptions } from '../hooks/useDaemonSocket';
 import type { SeedReviewActionContext, SeedReviewOverview } from '../hooks/useDaemonSocket';
 import {
@@ -28,24 +28,23 @@ function reduceMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-export function useDockSlotRect() {
+export function useDockSlotRect(dockLayout: unknown) {
   const ref = useRef<HTMLDivElement | null>(null);
   const [rect, setRect] = useState<FrameRect | null>(null);
+  const measure = useCallback(() => {
+    const slot = ref.current;
+    if (!slot) return;
+    const box = slot.getBoundingClientRect();
+    const next: FrameRect = { top: box.top, left: box.left, width: box.width, height: box.height };
+    setRect((prev) => (
+      prev && prev.top === next.top && prev.left === next.left
+        && prev.width === next.width && prev.height === next.height
+        ? prev
+        : next
+    ));
+  }, []);
 
   useLayoutEffect(() => {
-    const measure = () => {
-      const slot = ref.current;
-      if (!slot) return;
-      const box = slot.getBoundingClientRect();
-      const next: FrameRect = { top: box.top, left: box.left, width: box.width, height: box.height };
-      setRect((prev) => (
-        prev && prev.top === next.top && prev.left === next.left
-          && prev.width === next.width && prev.height === next.height
-          ? prev
-          : next
-      ));
-    };
-    measure();
     const observer = new ResizeObserver(measure);
     if (ref.current) observer.observe(ref.current);
     window.addEventListener('resize', measure);
@@ -53,7 +52,8 @@ export function useDockSlotRect() {
       observer.disconnect();
       window.removeEventListener('resize', measure);
     };
-  }, []);
+  }, [measure]);
+  useLayoutEffect(measure, [dockLayout, measure]);
 
   return [ref, rect] as const;
 }

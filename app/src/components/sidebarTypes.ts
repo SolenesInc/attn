@@ -14,6 +14,7 @@ import { type CrewMemberView } from './QueueRows';
 export interface LocalSession {
   id: string;
   label: string;
+  title?: string;
   state: UISessionState;
   agent?: string;
   branch?: string;

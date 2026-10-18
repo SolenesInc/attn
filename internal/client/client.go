@@ -715,6 +715,40 @@ func (c *Client) Delegate(request protocol.DelegateMessage) (*protocol.DelegateR
 	return op.Result, nil
 }
 
+func (c *Client) AskOpen(sessionID protocol.SessionID, seedID, markdown, subject, baseDir string) (*protocol.Ask, error) {
+	msg := protocol.AskOpenMessage{Cmd: protocol.CmdAskOpen, SessionID: sessionID, Markdown: markdown, BaseDir: baseDir}
+	if seedID = strings.TrimSpace(seedID); seedID != "" {
+		msg.SeedID = protocol.Ptr(seedID)
+	}
+	if subject = strings.TrimSpace(subject); subject != "" {
+		msg.Subject = protocol.Ptr(subject)
+	}
+	resp, err := c.send(msg)
+	if err != nil {
+		return nil, err
+	}
+	if resp.AskOpenResult == nil {
+		return nil, errors.New("daemon returned no ask")
+	}
+	return resp.AskOpenResult, nil
+}
+
+func (c *Client) AskList(sessionID protocol.SessionID) (*protocol.AskListResult, error) {
+	resp, err := c.send(protocol.AskListMessage{Cmd: protocol.CmdAskList, SessionID: sessionID})
+	if err != nil {
+		return nil, err
+	}
+	if resp.AskListResult == nil {
+		return nil, errors.New("daemon returned no ask list")
+	}
+	return resp.AskListResult, nil
+}
+
+func (c *Client) AskClose(sessionID protocol.SessionID, askID string) error {
+	_, err := c.send(protocol.AskCloseMessage{Cmd: protocol.CmdAskClose, SessionID: sessionID, AskID: askID})
+	return err
+}
+
 func (c *Client) NotebookGuide(sessionID protocol.SessionID) (*protocol.NotebookGuideResult, error) {
 	msg := protocol.NotebookGuideMessage{Cmd: protocol.CmdNotebookGuide}
 	if sessionID != "" {

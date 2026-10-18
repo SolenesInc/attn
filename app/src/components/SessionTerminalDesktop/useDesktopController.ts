@@ -45,6 +45,7 @@ import type {
   SessionTerminalDesktopProps,
 } from './desktopTypes';
 import { useSessionStore } from '../../store/sessions';
+import { sessionDisplayName } from '../../utils/sessionDisplayName';
 
 const RESIZE_MOUSE_SUPPRESSION_MS = 1_500;
 
@@ -133,6 +134,7 @@ export function useDesktopController(
   const [renamePane, setRenamePane] = useState<{
     sessionId: string;
     name: string;
+    defaultName?: string;
     anchor: { top: number; left: number };
   } | null>(null);
   const [pendingRatioOverrides, setPendingRatioOverrides] = useState<Map<string, number>>(
@@ -527,6 +529,21 @@ export function useDesktopController(
     pane.classList.add('leaf-arrival');
   }, [activeLeafId, desktopId, focusClaim, paneReadyFocusRequest, renderedPaneIdsKey, sessionVisible]);
 
+  const previousLeaves = useRef({ desktopId, ids: new Set(leafIds), visible: sessionVisible });
+  useLayoutEffect(() => {
+    const previous = previousLeaves.current;
+    previousLeaves.current = { desktopId, ids: new Set(leafIds), visible: sessionVisible };
+    if (!sessionVisible || !previous.visible || previous.desktopId !== desktopId) return;
+    const container = panesContainerRef.current;
+    if (!container || useSessionStore.getState().intent) return;
+    for (const id of leafIds) {
+      if (previous.ids.has(id) || focusClaim?.leafId === id) continue;
+      const pane = Array.from(container.querySelectorAll<HTMLElement>('[data-pane-id]'))
+        .find((element) => element.dataset.paneId === id);
+      if (pane) pane.classList.add('leaf-arrival');
+    }
+  }, [desktopId, focusClaim, leafIds, sessionVisible]);
+
   useEffect(() => {
     const container = panesContainerRef.current;
     if (!container) return;
@@ -864,7 +881,8 @@ export function useDesktopController(
     }
     const agentPane = agentPaneById.get(effectivePaneId);
     if (agentPane) {
-      return sessionById.get(agentPane.sessionId)?.label || agentPane.title || 'Session';
+      const session = sessionById.get(agentPane.sessionId);
+      return session ? sessionDisplayName(session) : agentPane.title || 'Session';
     }
     const tile = tileLeafById.get(effectivePaneId);
     if (tile) {
@@ -888,7 +906,8 @@ export function useDesktopController(
     }
     const agentPane = agentPaneById.get(effectiveDraggingLeafId);
     if (agentPane) {
-      return sessionById.get(agentPane.sessionId)?.label || agentPane.title || 'Pane';
+      const session = sessionById.get(agentPane.sessionId);
+      return session ? sessionDisplayName(session) : agentPane.title || 'Pane';
     }
     const tile = tileLeafById.get(effectiveDraggingLeafId);
     if (tile) {

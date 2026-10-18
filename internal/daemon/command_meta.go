@@ -15,6 +15,13 @@ func commandMetadata(blocksDuringRecovery bool, log bool) CommandMetadata {
 }
 
 var CommandMeta = map[string]CommandMetadata{
+	protocol.CmdTerminalList:  commandMetadata(false, true),
+	protocol.CmdTerminalOpen:  commandMetadata(true, true),
+	protocol.CmdTerminalInput: commandMetadata(true, true),
+	protocol.CmdTerminalRead:  commandMetadata(false, true),
+	protocol.CmdTerminalWait:  commandMetadata(false, true),
+	protocol.CmdTerminalClose: commandMetadata(true, true),
+
 	protocol.CmdDelegationPreferencesGet:      commandMetadata(false, false),
 	protocol.CmdDelegationPreferencesSave:     commandMetadata(false, false),
 	protocol.CmdHarnessModels:                 commandMetadata(false, false),
@@ -129,6 +136,10 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdListRemoteBranches:            commandMetadata(false, true),
 	protocol.CmdEnsureRepo:                    commandMetadata(false, true),
 	protocol.CmdGetRepoInfo:                   commandMetadata(false, true),
+	protocol.CmdAskOpen:                       commandMetadata(false, true),
+	protocol.CmdAskList:                       commandMetadata(false, true),
+	protocol.CmdAskClose:                      commandMetadata(false, true),
+	protocol.CmdAskAnswer:                     commandMetadata(false, true),
 	protocol.CmdSpawnSession:                  commandMetadata(true, true),
 	protocol.CmdAttachSession:                 commandMetadata(true, true),
 	protocol.CmdDetachSession:                 commandMetadata(true, true),
@@ -166,6 +177,7 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdDesktopMoveLeaf:               commandMetadata(false, true),
 	protocol.CmdDesktopMoveSession:            commandMetadata(false, true),
 	protocol.CmdDesktopRemoveLeaf:             commandMetadata(false, true),
+	protocol.CmdDesktopCloseTile:              commandMetadata(true, true),
 	protocol.CmdDesktopSetSplitRatio:          commandMetadata(false, true),
 	protocol.CmdDesktopDockTile:               commandMetadata(false, true),
 	protocol.CmdDesktopUpdateTile:             commandMetadata(false, true),

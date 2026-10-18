@@ -56,7 +56,7 @@ func lifetimeViolations() ([]string, error) {
 				var problem string
 				switch node := node.(type) {
 				case *ast.GoStmt:
-					if base == "ws_session.go" && name == "(*Daemon).forgetMissingRecentFiles" {
+					if base == "ws_session.go" && name == "(*Daemon).forgetUnopenableRecentFiles" {
 						return true
 					}
 					problem = "bare go statement: start it with d.life.Go so Daemon.stop waits for it (goTransport only for I/O that ends with its peer)"

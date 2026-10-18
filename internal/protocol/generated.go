@@ -300,6 +300,189 @@ type ApprovePRMessage struct {
 	ID string `json:"id"`
 }
 
+type Ask struct {
+	// BaseDir corresponds to the JSON schema field "base_dir".
+	BaseDir string `json:"base_dir"`
+
+	// Chief corresponds to the JSON schema field "chief".
+	Chief *bool `json:"chief,omitempty,omitzero"`
+
+	// CreatedAt corresponds to the JSON schema field "created_at".
+	CreatedAt string `json:"created_at"`
+
+	// CrewMember corresponds to the JSON schema field "crew_member".
+	CrewMember *string `json:"crew_member,omitempty,omitzero"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Parts corresponds to the JSON schema field "parts".
+	Parts []AskPart `json:"parts"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID *string `json:"seed_id,omitempty,omitzero"`
+
+	// SeedSlug corresponds to the JSON schema field "seed_slug".
+	SeedSlug *string `json:"seed_slug,omitempty,omitzero"`
+
+	// SeedTitle corresponds to the JSON schema field "seed_title".
+	SeedTitle *string `json:"seed_title,omitempty,omitzero"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+
+	// Subject corresponds to the JSON schema field "subject".
+	Subject string `json:"subject"`
+}
+
+type AskAnswer struct {
+	// Key corresponds to the JSON schema field "key".
+	Key string `json:"key"`
+
+	// Other corresponds to the JSON schema field "other".
+	Other *string `json:"other,omitempty,omitzero"`
+
+	// Picked corresponds to the JSON schema field "picked".
+	Picked []string `json:"picked"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text *string `json:"text,omitempty,omitzero"`
+}
+
+type AskAnswerMessage struct {
+	// Answers corresponds to the JSON schema field "answers".
+	Answers []AskAnswer `json:"answers"`
+
+	// AskID corresponds to the JSON schema field "ask_id".
+	AskID string `json:"ask_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Note corresponds to the JSON schema field "note".
+	Note *string `json:"note,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type AskAnswerResultMessage struct {
+	// AskID corresponds to the JSON schema field "ask_id".
+	AskID string `json:"ask_id"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type AskChoice struct {
+	// Description corresponds to the JSON schema field "description".
+	Description *string `json:"description,omitempty,omitzero"`
+
+	// Label corresponds to the JSON schema field "label".
+	Label string `json:"label"`
+}
+
+type AskCloseMessage struct {
+	// AskID corresponds to the JSON schema field "ask_id".
+	AskID string `json:"ask_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+}
+
+type AskListMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+}
+
+type AskListResult struct {
+	// Asks corresponds to the JSON schema field "asks".
+	Asks []Ask `json:"asks"`
+
+	// Enabled corresponds to the JSON schema field "enabled".
+	Enabled bool `json:"enabled"`
+}
+
+type AskOpenMessage struct {
+	// BaseDir corresponds to the JSON schema field "base_dir".
+	BaseDir string `json:"base_dir"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Markdown corresponds to the JSON schema field "markdown".
+	Markdown string `json:"markdown"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID *string `json:"seed_id,omitempty,omitzero"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+
+	// Subject corresponds to the JSON schema field "subject".
+	Subject *string `json:"subject,omitempty,omitzero"`
+}
+
+type AskPart struct {
+	// Markdown corresponds to the JSON schema field "markdown".
+	Markdown *string `json:"markdown,omitempty,omitzero"`
+
+	// Question corresponds to the JSON schema field "question".
+	Question *AskQuestion `json:"question,omitempty,omitzero"`
+}
+
+type AskQuestion struct {
+	// Choices corresponds to the JSON schema field "choices".
+	Choices []AskChoice `json:"choices"`
+
+	// Context corresponds to the JSON schema field "context".
+	Context *string `json:"context,omitempty,omitzero"`
+
+	// Key corresponds to the JSON schema field "key".
+	Key string `json:"key"`
+
+	// Kind corresponds to the JSON schema field "kind".
+	Kind AskQuestionKind `json:"kind"`
+
+	// Prompt corresponds to the JSON schema field "prompt".
+	Prompt string `json:"prompt"`
+
+	// Recommended corresponds to the JSON schema field "recommended".
+	Recommended *string `json:"recommended,omitempty,omitzero"`
+}
+
+type AskQuestionKind string
+
+const AskQuestionKindAny AskQuestionKind = "any"
+const AskQuestionKindOne AskQuestionKind = "one"
+const AskQuestionKindText AskQuestionKind = "text"
+
+type AsksUpdatedMessage struct {
+	// Asks corresponds to the JSON schema field "asks".
+	Asks []Ask `json:"asks"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+}
+
 type AttachBlock struct {
 	// Command corresponds to the JSON schema field "command".
 	Command *string `json:"command,omitempty,omitzero"`
@@ -1883,6 +2066,9 @@ type CreateWorktreeFromBranchMessage struct {
 
 	// Path corresponds to the JSON schema field "path".
 	Path *string `json:"path,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
 }
 
 type CreateWorktreeMessage struct {
@@ -1898,6 +2084,9 @@ type CreateWorktreeMessage struct {
 	// Path corresponds to the JSON schema field "path".
 	Path *string `json:"path,omitempty,omitzero"`
 
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
 	// StartingFrom corresponds to the JSON schema field "starting_from".
 	StartingFrom *string `json:"starting_from,omitempty,omitzero"`
 }
@@ -1911,6 +2100,9 @@ type CreateWorktreeResultMessage struct {
 
 	// Path corresponds to the JSON schema field "path".
 	Path *string `json:"path,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
@@ -2965,6 +3157,9 @@ type DeleteWorktreeMessage struct {
 
 	// Path corresponds to the JSON schema field "path".
 	Path string `json:"path"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
 }
 
 type DeleteWorktreeResultMessage struct {
@@ -2982,6 +3177,9 @@ type DeleteWorktreeResultMessage struct {
 
 	// ReasonKind corresponds to the JSON schema field "reason_kind".
 	ReasonKind interface{} `json:"reason_kind,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
@@ -3028,6 +3226,20 @@ type DesktopCloseMessage struct {
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
+}
+
+type DesktopCloseTileMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID string `json:"desktop_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// TileID corresponds to the JSON schema field "tile_id".
+	TileID string `json:"tile_id"`
 }
 
 type DesktopCreateMessage struct {
@@ -3377,6 +3589,9 @@ type DetachSessionMessage struct {
 type DirectoryEntry struct {
 	// IsDir corresponds to the JSON schema field "is_dir".
 	IsDir bool `json:"is_dir"`
+
+	// IsRepo corresponds to the JSON schema field "is_repo".
+	IsRepo *bool `json:"is_repo,omitempty,omitzero"`
 
 	// Name corresponds to the JSON schema field "name".
 	Name string `json:"name"`
@@ -4465,6 +4680,9 @@ type GetRepoInfoMessage struct {
 
 	// Repo corresponds to the JSON schema field "repo".
 	Repo string `json:"repo"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
 }
 
 type GetRepoInfoResultMessage struct {
@@ -4476,6 +4694,9 @@ type GetRepoInfoResultMessage struct {
 
 	// Info corresponds to the JSON schema field "info".
 	Info *RepoInfo `json:"info,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
@@ -4759,6 +4980,9 @@ type HookStopFailureMessage struct {
 }
 
 type InitialStateMessage struct {
+	// Asks corresponds to the JSON schema field "asks".
+	Asks []Ask `json:"asks,omitempty,omitzero"`
+
 	// Authors corresponds to the JSON schema field "authors".
 	Authors []AuthorState `json:"authors,omitempty,omitzero"`
 
@@ -7010,6 +7234,9 @@ type RecentLocation struct {
 	// Path corresponds to the JSON schema field "path".
 	Path string `json:"path"`
 
+	// RepoRoot corresponds to the JSON schema field "repo_root".
+	RepoRoot *string `json:"repo_root,omitempty,omitzero"`
+
 	// UseCount corresponds to the JSON schema field "use_count".
 	UseCount int `json:"use_count"`
 }
@@ -7213,6 +7440,12 @@ type Response struct {
 
 	// AgentPeekResult corresponds to the JSON schema field "agent_peek_result".
 	AgentPeekResult *AgentPeekResult `json:"agent_peek_result,omitempty,omitzero"`
+
+	// AskListResult corresponds to the JSON schema field "ask_list_result".
+	AskListResult *AskListResult `json:"ask_list_result,omitempty,omitzero"`
+
+	// AskOpenResult corresponds to the JSON schema field "ask_open_result".
+	AskOpenResult *Ask `json:"ask_open_result,omitempty,omitzero"`
 
 	// Authors corresponds to the JSON schema field "authors".
 	Authors []AuthorState `json:"authors,omitempty,omitzero"`
@@ -7437,6 +7670,22 @@ type Response struct {
 
 	// StateExplainResult corresponds to the JSON schema field "state_explain_result".
 	StateExplainResult *StateExplainResult `json:"state_explain_result,omitempty,omitzero"`
+
+	// TerminalEntries corresponds to the JSON schema field "terminal_entries".
+	TerminalEntries []TerminalEntry `json:"terminal_entries,omitempty,omitzero"`
+
+	// TerminalInputResult corresponds to the JSON schema field
+	// "terminal_input_result".
+	TerminalInputResult *TerminalInputResult `json:"terminal_input_result,omitempty,omitzero"`
+
+	// TerminalOpenResult corresponds to the JSON schema field "terminal_open_result".
+	TerminalOpenResult *TerminalOpenResult `json:"terminal_open_result,omitempty,omitzero"`
+
+	// TerminalReadResult corresponds to the JSON schema field "terminal_read_result".
+	TerminalReadResult *TerminalReadResult `json:"terminal_read_result,omitempty,omitzero"`
+
+	// TerminalWaitResult corresponds to the JSON schema field "terminal_wait_result".
+	TerminalWaitResult *TerminalWaitResult `json:"terminal_wait_result,omitempty,omitzero"`
 
 	// WorktreeKeepResult corresponds to the JSON schema field "worktree_keep_result".
 	WorktreeKeepResult *WorktreeKeepResult `json:"worktree_keep_result,omitempty,omitzero"`
@@ -8723,6 +8972,9 @@ type Session struct {
 	// "dispatcher_session_id".
 	DispatcherSessionID *SessionID `json:"dispatcher_session_id,omitempty,omitzero"`
 
+	// Hidden corresponds to the JSON schema field "hidden".
+	Hidden *bool `json:"hidden,omitempty,omitzero"`
+
 	// ID corresponds to the JSON schema field "id".
 	ID SessionID `json:"id"`
 
@@ -8780,6 +9032,9 @@ type Session struct {
 
 	// TerminalExit corresponds to the JSON schema field "terminal_exit".
 	TerminalExit *TerminalExit `json:"terminal_exit,omitempty,omitzero"`
+
+	// Title corresponds to the JSON schema field "title".
+	Title *string `json:"title,omitempty,omitzero"`
 
 	// TurnOpenedAt corresponds to the JSON schema field "turn_opened_at".
 	TurnOpenedAt *string `json:"turn_opened_at,omitempty,omitzero"`
@@ -9094,6 +9349,9 @@ type SessionLedgerEntry struct {
 
 	// Directory corresponds to the JSON schema field "directory".
 	Directory string `json:"directory"`
+
+	// Hidden corresponds to the JSON schema field "hidden".
+	Hidden *bool `json:"hidden,omitempty,omitzero"`
 
 	// ID corresponds to the JSON schema field "id".
 	ID SessionID `json:"id"`
@@ -10242,6 +10500,71 @@ type TerminalBindingsUpdatedMessage struct {
 	TerminalBindings []TerminalBinding `json:"terminal_bindings"`
 }
 
+type TerminalBlock struct {
+	// Command corresponds to the JSON schema field "command".
+	Command *string `json:"command,omitempty,omitzero"`
+
+	// ExitCode corresponds to the JSON schema field "exit_code".
+	ExitCode *int `json:"exit_code,omitempty,omitzero"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Output corresponds to the JSON schema field "output".
+	Output string `json:"output"`
+}
+
+type TerminalCloseMessage struct {
+	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
+	CallerSessionID SessionID `json:"caller_session_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Desktop corresponds to the JSON schema field "desktop".
+	Desktop *string `json:"desktop,omitempty,omitzero"`
+
+	// Target corresponds to the JSON schema field "target".
+	Target string `json:"target"`
+}
+
+type TerminalDirection string
+
+const TerminalDirectionDown TerminalDirection = "down"
+const TerminalDirectionRight TerminalDirection = "right"
+
+type TerminalEntry struct {
+	// Agent corresponds to the JSON schema field "agent".
+	Agent string `json:"agent"`
+
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID string `json:"desktop_id"`
+
+	// DesktopLabel corresponds to the JSON schema field "desktop_label".
+	DesktopLabel string `json:"desktop_label"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// OpenedBy corresponds to the JSON schema field "opened_by".
+	OpenedBy *SessionID `json:"opened_by,omitempty,omitzero"`
+
+	// Position corresponds to the JSON schema field "position".
+	Position *string `json:"position,omitempty,omitzero"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+
+	// ShortID corresponds to the JSON schema field "short_id".
+	ShortID string `json:"short_id"`
+
+	// State corresponds to the JSON schema field "state".
+	State SessionState `json:"state"`
+
+	// TerminalID corresponds to the JSON schema field "terminal_id".
+	TerminalID TerminalID `json:"terminal_id"`
+}
+
 type TerminalExit struct {
 	// At corresponds to the JSON schema field "at".
 	At string `json:"at"`
@@ -10255,6 +10578,85 @@ type TerminalExit struct {
 
 type TerminalID string
 
+type TerminalInputMessage struct {
+	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
+	CallerSessionID SessionID `json:"caller_session_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Data corresponds to the JSON schema field "data".
+	Data string `json:"data"`
+
+	// Desktop corresponds to the JSON schema field "desktop".
+	Desktop *string `json:"desktop,omitempty,omitzero"`
+
+	// Run corresponds to the JSON schema field "run".
+	Run *bool `json:"run,omitempty,omitzero"`
+
+	// Target corresponds to the JSON schema field "target".
+	Target string `json:"target"`
+
+	// Wait corresponds to the JSON schema field "wait".
+	Wait *bool `json:"wait,omitempty,omitzero"`
+}
+
+type TerminalInputResult struct {
+	// LastBlockID corresponds to the JSON schema field "last_block_id".
+	LastBlockID *string `json:"last_block_id,omitempty,omitzero"`
+
+	// TerminalID corresponds to the JSON schema field "terminal_id".
+	TerminalID TerminalID `json:"terminal_id"`
+}
+
+type TerminalListMessage struct {
+	// All corresponds to the JSON schema field "all".
+	All *bool `json:"all,omitempty,omitzero"`
+
+	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
+	CallerSessionID SessionID `json:"caller_session_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Desktop corresponds to the JSON schema field "desktop".
+	Desktop *string `json:"desktop,omitempty,omitzero"`
+}
+
+type TerminalOpenMessage struct {
+	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
+	CallerSessionID SessionID `json:"caller_session_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Command corresponds to the JSON schema field "command".
+	Command *string `json:"command,omitempty,omitzero"`
+
+	// Cwd corresponds to the JSON schema field "cwd".
+	Cwd *string `json:"cwd,omitempty,omitzero"`
+
+	// Desktop corresponds to the JSON schema field "desktop".
+	Desktop *string `json:"desktop,omitempty,omitzero"`
+
+	// Direction corresponds to the JSON schema field "direction".
+	Direction *TerminalDirection `json:"direction,omitempty,omitzero"`
+}
+
+type TerminalOpenResult struct {
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID string `json:"desktop_id"`
+
+	// PaneID corresponds to the JSON schema field "pane_id".
+	PaneID string `json:"pane_id"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+
+	// TerminalID corresponds to the JSON schema field "terminal_id".
+	TerminalID TerminalID `json:"terminal_id"`
+}
+
 type TerminalPointerActivityMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -10262,6 +10664,70 @@ type TerminalPointerActivityMessage struct {
 	// ID corresponds to the JSON schema field "id".
 	ID TerminalID `json:"id"`
 }
+
+type TerminalReadMessage struct {
+	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
+	CallerSessionID SessionID `json:"caller_session_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Lines corresponds to the JSON schema field "lines".
+	Lines *int `json:"lines,omitempty,omitzero"`
+
+	// Mode corresponds to the JSON schema field "mode".
+	Mode TerminalReadMode `json:"mode"`
+
+	// Target corresponds to the JSON schema field "target".
+	Target string `json:"target"`
+}
+
+type TerminalReadMode string
+
+const TerminalReadModeLast TerminalReadMode = "last"
+const TerminalReadModeScreen TerminalReadMode = "screen"
+const TerminalReadModeScrollback TerminalReadMode = "scrollback"
+
+type TerminalReadResult struct {
+	// Block corresponds to the JSON schema field "block".
+	Block *TerminalBlock `json:"block,omitempty,omitzero"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text string `json:"text"`
+}
+
+type TerminalWaitMessage struct {
+	// AfterBlockID corresponds to the JSON schema field "after_block_id".
+	AfterBlockID *string `json:"after_block_id,omitempty,omitzero"`
+
+	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
+	CallerSessionID SessionID `json:"caller_session_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Target corresponds to the JSON schema field "target".
+	Target string `json:"target"`
+
+	// Until corresponds to the JSON schema field "until".
+	Until TerminalWaitUntil `json:"until"`
+}
+
+type TerminalWaitResult struct {
+	// Block corresponds to the JSON schema field "block".
+	Block *TerminalBlock `json:"block,omitempty,omitzero"`
+
+	// ExitCode corresponds to the JSON schema field "exit_code".
+	ExitCode *int `json:"exit_code,omitempty,omitzero"`
+
+	// Exited corresponds to the JSON schema field "exited".
+	Exited *bool `json:"exited,omitempty,omitzero"`
+}
+
+type TerminalWaitUntil string
+
+const TerminalWaitUntilExit TerminalWaitUntil = "exit"
+const TerminalWaitUntilPrompt TerminalWaitUntil = "prompt"
 
 type TierDefaults struct {
 	// Deep corresponds to the JSON schema field "deep".

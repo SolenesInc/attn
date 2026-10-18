@@ -77,9 +77,10 @@ func (d *Daemon) handleCreateWorktreeFromBranchWS(client *wsClient, msg *protoco
 	d.life.Go("handleCreateWorktreeFromBranchWS", func() {
 		path, err := d.doCreateWorktreeFromBranch(msg)
 		result := protocol.CreateWorktreeResultMessage{
-			Event:   protocol.EventCreateWorktreeResult,
-			Path:    protocol.Ptr(path),
-			Success: err == nil,
+			Event:     protocol.EventCreateWorktreeResult,
+			RequestID: msg.RequestID,
+			Path:      protocol.Ptr(path),
+			Success:   err == nil,
 		}
 		if err != nil {
 			result.Error = protocol.Ptr(err.Error())
@@ -135,9 +136,10 @@ func (d *Daemon) handleGetRepoInfoWS(client *wsClient, msg *protocol.GetRepoInfo
 		})
 		if err != nil {
 			d.sendToClient(client, &protocol.GetRepoInfoResultMessage{
-				Event:   protocol.EventGetRepoInfoResult,
-				Success: false,
-				Error:   protocol.Ptr(err.Error()),
+				Event:     protocol.EventGetRepoInfoResult,
+				RequestID: msg.RequestID,
+				Success:   false,
+				Error:     protocol.Ptr(err.Error()),
 			})
 			return
 		}
@@ -153,7 +155,8 @@ func (d *Daemon) handleGetRepoInfoWS(client *wsClient, msg *protocol.GetRepoInfo
 			info.defaultBranch = "main"
 		}
 		d.sendToClient(client, &protocol.GetRepoInfoResultMessage{
-			Event: protocol.EventGetRepoInfoResult,
+			Event:     protocol.EventGetRepoInfoResult,
+			RequestID: msg.RequestID,
 			Info: &protocol.RepoInfo{
 				Repo:              repo,
 				CurrentBranch:     info.currentBranch,

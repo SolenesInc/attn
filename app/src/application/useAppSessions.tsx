@@ -1,3 +1,4 @@
+import { sessionDisplayName } from '../utils/sessionDisplayName';
 import { useEffect, useMemo } from 'react';
 import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
@@ -24,6 +25,7 @@ export function useAppSessions({
       paneStatus === 'failed' ? 'unknown' : paneStatus === 'spawning' ? 'launching' : null;
     return {
       ...s,
+      title: daemonSession?.title,
       ...sessionAttentionFields(daemonSession),
       state: paneState || normalizeSessionState(rawState),
       branch: daemonSession?.branch ?? s.branch,
@@ -52,7 +54,7 @@ export function useAppSessions({
     () =>
       daemonSessions.map((session) => ({
         id: session.id,
-        label: session.label,
+        label: sessionDisplayName(session),
         priority: session.priority,
         agent: normalizeSessionAgent(session.agent),
         state: normalizeSessionState(session.state),
@@ -87,7 +89,7 @@ export function useAppSessions({
   );
 
   const gardenSessionLabels = useMemo(
-    () => new Map(daemonSessions.map((session) => [session.id, session.label])),
+    () => new Map(daemonSessions.map((session) => [session.id, sessionDisplayName(session)])),
     [daemonSessions],
   );
 
@@ -95,7 +97,7 @@ export function useAppSessions({
     () =>
       daemonSessions.map((session) => ({
         id: session.id,
-        label: session.label,
+        label: sessionDisplayName(session),
         priority: session.priority,
         directory: session.directory,
       })),
@@ -110,10 +112,15 @@ export function useAppSessions({
     () => desktopViews.flatMap((group) => group.sessions),
     [desktopViews],
   );
+  const hiddenSessions = useMemo(() => {
+    const shown = new Set(profileSessions.map((session) => session.id));
+    return visibleEnrichedSessions.filter((session) => session.hidden && !shown.has(session.id));
+  }, [profileSessions, visibleEnrichedSessions]);
 
   return {
     desktopViews,
     profileSessions,
+    hiddenSessions,
     liveGardenSessions,
     gardenSessionLabels,
     worktreePanelSessions,

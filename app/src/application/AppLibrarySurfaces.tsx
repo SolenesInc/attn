@@ -115,6 +115,7 @@ export function AppLibrarySurfaces() {
           profileMembership,
           liveSessionIds: liveGardenSessions,
           liveSessionUsage,
+          liveSessionNames: gardenSessionLabels,
           seedForSession,
           onFocusSession: handleSelectSession,
           onOpenSeed: handleOpenSeedTile,

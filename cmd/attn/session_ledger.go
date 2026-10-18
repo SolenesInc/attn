@@ -269,6 +269,9 @@ func sessionLedgerState(entry protocol.SessionLedgerEntry) string {
 	if protocol.Deref(entry.ClosedAt) != "" {
 		return "closed"
 	}
+	if protocol.Deref(entry.Hidden) {
+		return string(entry.State) + " (hidden)"
+	}
 	return string(entry.State)
 }
 
@@ -315,9 +318,6 @@ func parseSessionRenameArgs(args []string, ownSessionID func() protocol.SessionI
 		return sessionRenameArgs{}, errors.New("exactly one name is required; quote it when it has spaces")
 	}
 	parsed.name = strings.TrimSpace(positional[0])
-	if parsed.name == "" {
-		return sessionRenameArgs{}, errors.New("the name cannot be empty")
-	}
 	if parsed.sessionID == "" {
 		parsed.sessionID = protocol.TrimID(ownSessionID())
 	}

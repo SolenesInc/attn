@@ -44,7 +44,8 @@ export function DesktopAgentHeader({ agentPane, paneSession, paneTitle }: Deskto
             const rect = event.currentTarget.getBoundingClientRect();
             setRenamePane({
               sessionId: agentPane.sessionId,
-              name: paneTitle,
+              name: paneSession.label,
+              defaultName: paneSession.agent === 'shell' ? paneTitle : undefined,
               anchor: { top: rect.bottom + 4, left: rect.left },
             });
           }}

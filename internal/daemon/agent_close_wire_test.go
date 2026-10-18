@@ -142,3 +142,20 @@ func agentCloseSortedIDs(ids []string) []string {
 	slices.Sort(sorted)
 	return sorted
 }
+
+func TestAChiefCannotCloseAnAgentOfAnotherProfile(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	chief := spawnPanes(w, app, w.Path("chief"))[0].session
+	if made := setChiefOfStaff(app, chief, true); !made.Success {
+		t.Fatal(made)
+	}
+	profile := createProfile(app, "Work")
+	work := w.AppOn(profile.ID)
+	target := spawnPanes(w, work, w.Path("work-agent"))[0].session
+	_, err := cli.AgentClose(target, protocol.SessionID(chief), "Outside my profile")
+	agentCloseRefused(t, err, "close_not_authorized", "unknown live session")
+	if live := queriedIDs(t, cli, ""); !slices.Contains(live, target) {
+		t.Fatalf("foreign agent disappeared: %v", live)
+	}
+}

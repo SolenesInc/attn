@@ -6,6 +6,7 @@ import { ModelTier } from '../types/generated';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import { agentCapabilityLabel, agentLabel, isAgentAvailable } from '../utils/agentAvailability';
 import { AUTO_SETTLE_ARM_SETTING, AUTO_SETTLE_COUNTDOWN_SETTING } from '../utils/queueBands';
+import { ASKS_SETTING } from '../utils/asks';
 import { BackgroundTasksSettings } from './BackgroundTasksSettings';
 import { DelegationSwitch } from './DelegationSettings';
 import { EventBusSettings } from './EventBusSettings';
@@ -715,6 +716,125 @@ export function TerminalSettings({
             onClick={() => onSetSetting('pty_shared_host_enabled', sharedPtyHostEnabled ? 'false' : 'true')}
           >
             {sharedPtyHostEnabled ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export function ExperimentalSettings({
+  newSessionLauncherEnabled,
+  codexSharedEnabled,
+  queueShowHiddenSessions,
+  directAgentLaunchEnabled,
+  asksEnabled,
+  onSetSetting,
+}: Pick<SettingsModalState, 'newSessionLauncherEnabled' | 'codexSharedEnabled' | 'queueShowHiddenSessions' | 'directAgentLaunchEnabled' | 'asksEnabled' | 'onSetSetting'>) {
+  return (
+    <section className="settings-block">
+      <div className="settings-block-intro">
+        <div className="settings-kicker">Experimental</div>
+        <h3>Experimental features</h3>
+        <p className="settings-description">Try features that are still being developed.</p>
+      </div>
+      <div className="settings-block-body">
+        <div className="settings-row-card">
+          <div>
+            <p className="settings-row-title">One-screen new-session launcher (experimental)</p>
+            <p className="settings-row-copy" id="new-session-launcher-description">Search a project or path, then use Tab to choose where to start.</p>
+          </div>
+          <button type="button" role="switch" aria-label="One-screen new-session launcher (experimental)"
+            aria-checked={newSessionLauncherEnabled} aria-describedby="new-session-launcher-description"
+            className="settings-action" onClick={() => onSetSetting('new_session_launcher_enabled', newSessionLauncherEnabled ? 'false' : 'true')}>
+            {newSessionLauncherEnabled ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+        <div className="settings-row-card">
+          <div>
+            <p className="settings-row-title">Direct agent launches</p>
+            <p className="settings-row-copy" id="direct-agent-launch-description">
+              Off by default. Launch Claude, Codex and Copilot without a separate attn launcher process to reduce memory use.
+              Changes apply to new or explicitly reloaded agents. Running agents stay untouched.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-label="Direct agent launches"
+            aria-checked={directAgentLaunchEnabled}
+            aria-describedby="direct-agent-launch-description"
+            className="settings-action"
+            data-testid="settings-direct-agent-launch-toggle"
+            onClick={() => onSetSetting('direct_agent_launch_enabled', directAgentLaunchEnabled ? 'false' : 'true')}
+          >
+            {directAgentLaunchEnabled ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+        <div className="settings-row-card">
+          <div>
+            <p className="settings-row-title">Shared Codex</p>
+            <p className="settings-row-copy" id="shared-codex-description">
+              Off by default. New Codex terminals share one app-server per profile. Switching conversations keeps the
+              old one live as a hidden session. Applies to new Codex terminals and to sessions you resume from the
+              ledger.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-label="Shared Codex"
+            aria-checked={codexSharedEnabled}
+            aria-describedby="shared-codex-description"
+            className="settings-action"
+            data-testid="settings-shared-codex-toggle"
+            onClick={() => onSetSetting('codex_shared_enabled', codexSharedEnabled ? 'false' : 'true')}
+          >
+            {codexSharedEnabled ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+        <div className="settings-row-card">
+          <div>
+            <p className="settings-row-title">Show hidden sessions in the queue</p>
+            <p className="settings-row-copy" id="queue-hidden-sessions-description">
+              On by default. Hidden sessions queue like any other; choosing one opens it in a terminal.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-label="Show hidden sessions in the queue"
+            aria-checked={queueShowHiddenSessions}
+            aria-describedby="queue-hidden-sessions-description"
+            className="settings-action"
+            data-testid="settings-queue-hidden-sessions-toggle"
+            onClick={() => onSetSetting('queue_show_hidden_sessions', queueShowHiddenSessions ? 'false' : 'true')}
+          >
+            {queueShowHiddenSessions ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+        <div className="settings-row-card">
+          <div>
+            <p className="settings-row-title">Asks (experimental)</p>
+            <p className="settings-row-copy" id="settings-asks-description">
+              Off by default. Agents ask you what they cannot settle alone, and you answer them all from one drawer
+              without opening their terminals. Applies to agents launched from now on; each agent keeps the setting it
+              launched with, reloads included. Your answer becomes a note on the seed the ask is about, or lands in the
+              agent's inbox when there is no seed, and settles its turn. Open the drawer with{' '}
+              {formatShortcut('dock.asks')}.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-label="Asks (experimental)"
+            aria-checked={asksEnabled}
+            aria-describedby="settings-asks-description"
+            className="settings-action"
+            data-testid="settings-asks-toggle"
+            onClick={() => onSetSetting(ASKS_SETTING, asksEnabled ? 'false' : 'true')}
+          >
+            {asksEnabled ? 'Disable' : 'Enable'}
           </button>
         </div>
       </div>

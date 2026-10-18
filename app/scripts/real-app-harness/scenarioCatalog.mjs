@@ -1,5 +1,17 @@
 export const scenarioCatalog = [
   {
+    id: 'agent-terminals',
+    runnerId: 'AGENT-TERMINALS',
+    label: 'Agent-opened terminals pulse and stack without taking native input focus',
+    command: ['node', 'scripts/real-app-harness/scenario-agent-terminals.mjs'],
+  },
+  {
+    id: 'shell-titles',
+    runnerId: 'SHELL-TITLES',
+    label: 'Shell sidebar and tile names follow zsh and fish programs and folders',
+    command: ['node', 'scripts/real-app-harness/scenario-shell-titles.mjs'],
+  },
+  {
     id: 'desktop-order',
     runnerId: 'DESKTOP-ORDER',
     label: 'Desktop Sort and Undo preserve arrangements; new numbered desktops follow the nearest lower number',
@@ -37,6 +49,12 @@ export const scenarioCatalog = [
     label: 'Prompt delivery: ordinary/chief channels, peer attribution, crew wake/sleep and successor',
     command: ['node', 'scripts/real-app-harness/scenario-prompt-composition.mjs'],
     timeoutMs: 240_000,
+  },
+  {
+    id: 'new-session-launcher',
+    runnerId: 'NEW-SESSION-LAUNCHER',
+    label: 'One-screen launcher and terminal shortcuts',
+    command: ['node', 'scripts/real-app-harness/scenario-new-session-launcher.mjs'],
   },
   {
     id: 'session-creation-shortcuts',
@@ -311,6 +329,13 @@ export const scenarioCatalog = [
     runnerId: 'PTY-HOST-SETTING',
     label: 'Experimental shared PTY opt-in preserves existing terminals',
     command: ['node', 'scripts/real-app-harness/scenario-pty-host-setting.mjs'],
+    freshWorldAfter: true,
+  },
+  {
+    id: 'codex-shared',
+    runnerId: 'CODEX-SHARED',
+    label: 'Shared Codex: Settings switch, hidden sessions in the queue, focus after a conversation switch, hidden approval answered in a tile, last tile closes into the ledger',
+    command: ['node', 'scripts/real-app-harness/scenario-codex-shared.mjs'],
     freshWorldAfter: true,
   },
   {

@@ -1,17 +1,13 @@
 ---
 name: attn-workflow
-description: Use when an assigned role refers to this skill, the user asks you to work as a Pathfinder, Prototyper, or Orchestrator in the current conversation, or the user requests its processes for investigation, discussion, alignment, debugging, prototyping, interface design, planning, implementation, review, or orchestration.
+description: Use when an assigned role refers to this skill, the user asks you to work as a Pathfinder, Prototyper, or Orchestrator in the current conversation, or the user requests its processes for investigation, discussion, alignment, debugging, prototyping, interface design, planning, implementation, refactoring, performance work, review, or orchestration.
 ---
 
 # Attn workflow
 
-Read the reference for the process the task needs. Load further references as the work requires.
+## Start
 
-When the user asks you to work as one of these roles in the current conversation, take the role yourself, with the user present:
-
-- **Pathfinder**: use [Discuss](references/discuss.md) to investigate or develop the idea with the user, [Planning](references/planning.md) when the outcome is a plan, and [Align](references/align.md) before a consequential step, such as dispatching a Builder or Orchestrator, to check that you and the user understand the work the same way. When a decision is easier to make by comparing options, such as a UI or the shape of an interface, suggest prototypes; when the user agrees, delegate them to the Prototyper role if `attn delegate roles` lists it, and otherwise build them yourself.
-- **Prototyper**: follow [Prototype](references/prototype.md), and show the options, comparison, and recommendation to the user here.
-- **Orchestrator**: follow [Orchestration](references/orchestration.md) for the agreed plan, delegating Builders and reviewing their work, and bring decisions beyond the agreed scope to the user here.
+Match the task to one process in the table, read its reference, and load further references as the work requires. When you leave out a part of the process, say which part and why, in the conversation and on the seed when there is one, so the omission is visible instead of silent. A follow-up in the same conversation continues the same process; re-match when the user names a new task. When the assignment arrived through a noisy channel, such as a long thread or a vague report, restate the problem and the outcome in your own words before acting, so a misreading costs one message instead of one wrong change.
 
 | Task | Reference |
 |---|---|
@@ -22,8 +18,16 @@ When the user asks you to work as one of these roles in the current conversation
 | Shape, compare, or review an interface, from a function to a protocol | [Design](references/design.md) |
 | Write a substantial implementation plan in the garden and arrange its handoff | [Planning](references/planning.md) |
 | Implement an agreed brief or plan and address review findings | [Implementation](references/implementation.md) |
+| Change structure or shape while preserving behavior | [Refactoring](references/refactoring.md) |
+| Find what makes something slow, large or busy when it should be idle, and make it measurably better, once or against a target | [Perf](references/perf.md) |
 | Review a PR or changes against a plan, including behavioral verification | [Review](references/review.md) |
 | Delegate agreed work, advise implementers, and judge completion | [Orchestration](references/orchestration.md) |
+
+When the user asks you to work as one of these roles in the current conversation, take the role yourself, with the user present:
+
+- **Pathfinder**: use [Discuss](references/discuss.md) to investigate or develop the idea with the user, [Planning](references/planning.md) when the outcome is a plan, and [Align](references/align.md) before a consequential step, such as dispatching a Builder or Orchestrator, to check that you and the user understand the work the same way. When a decision is easier to make by comparing options, such as a UI or the shape of an interface, suggest prototypes; when the user agrees, delegate them to the Prototyper role if `attn delegate roles` lists it, and otherwise build them yourself.
+- **Prototyper**: follow [Prototype](references/prototype.md), and show the options, comparison, and recommendation to the user here.
+- **Orchestrator**: follow [Orchestration](references/orchestration.md) for the agreed plan, delegating Builders and reviewing their work, and bring decisions beyond the agreed scope to the user here.
 
 ## Engineering judgment
 
@@ -34,3 +38,11 @@ Match rigor to the software's actual requirements, operating conditions, and con
 Parse, don't validate: establish invariants at the earliest appropriate boundary and preserve them through types, data structures, and ownership. Prefer representations that make invalid states unrepresentable, so internal code can rely on established guarantees instead of repeatedly validating them. Keep state-dependent checks where the relevant state is authoritative. Use the simplest representation that provides the needed guarantee.
 
 Refactor first: before building a capability, find every existing path that already does the same job, searching for what it does rather than for the new feature's name. When the change needs something those paths lack, give it to the shared code in a behavior-preserving refactor, then build the change on top; do not grow a parallel mechanism inside the feature. Signs the refactor was skipped: reusing only the last step of an existing path, a new store that duplicates an existing one, or a fix that works only through incidental coupling with another part of the system.
+
+Prove it works: before reporting a change complete, check the real thing on the surface the change affects, the command, the running product, the stored value, the trace, rather than a proxy such as a green build or your own account of the work. Script the check when you can, so a reviewer reruns it instead of trusting you. A check that could not run is inconclusive, which is not a pass; say so. Label each claim in a report as measured, inferred or guessed: measured when you observed it in a run, inferred when the code implies it, guessed when neither. Never hand the user a check you could run yourself.
+
+Build the lever: for work that is not trivial, write the tool that does it, a script, a codemod, a generator, instead of working by hand. The tool is the artifact a reviewer can read and rerun; hand-done work can only be checked by redoing it. Do the first unit by hand to learn the recipe, then build the tool and prove it on that unit. Keep it the smallest script that does the job, never a framework, and keep it where the reviewer can rerun it: linked from the change or attached to the seed, committed when the work outlives the session.
+
+Sequence verifiable units: order multi-step work as small units that each end in a check, and verify each before starting the next, so a break is caught at the unit that caused it. Order the change's commits so a reviewer replays the proof: the failing test before the fix, the subtraction before the reshape, the baseline before the treatment.
+
+Attack the premise: when two fixes that share one assumption have failed the same check, write the assumption down and test it directly before writing a third. Each failed fix is evidence against the belief it rested on.

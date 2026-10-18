@@ -84,6 +84,8 @@ type Session struct {
 	seqCounter atomic.Uint32
 
 	replayMu            sync.Mutex
+	textChanged         chan struct{}
+	promptExpected      bool
 	lastReplaySeq       uint32
 	deliveryMu          sync.Mutex
 	deliveryAdmissionMu sync.Mutex
@@ -366,6 +368,7 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 					placements, placementsMoved = s.wireFeed.changedPlacements()
 				}
 				s.lastReplaySeq = seq
+				s.textChangedLocked()
 				s.replayMu.Unlock()
 				if readLoopAppliedHook != nil {
 					readLoopAppliedHook(data)
@@ -432,6 +435,7 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 			placements, placementsMoved = s.wireFeed.changedPlacements()
 		}
 		s.lastReplaySeq = seq
+		s.textChangedLocked()
 		s.replayMu.Unlock()
 		s.drainGhosttyResponses(logf)
 		if len(wire) > 0 {
@@ -459,7 +463,7 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 }
 
 func (s *Session) observeSignals(programReports []ghosttyvt.ProgramStatus, data []byte) {
-	if s.onState == nil {
+	if s.onState == nil && s.shellSignals == nil {
 		return
 	}
 	s.signalMu.Lock()
@@ -632,7 +636,9 @@ func (s *Session) emitSignal(obs Observation) {
 	stored := obs
 	s.lastSignal = &stored
 	s.lastSignalMu.Unlock()
-	s.onState(obs)
+	if s.onState != nil {
+		s.onState(obs)
+	}
 }
 
 func (s *Session) LastSignal() (Observation, bool) {

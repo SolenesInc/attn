@@ -53,17 +53,22 @@ export function useSessionLaunch({
   const sessionCreationJobIdRef = useRef(0);
   const worktreeSessionCreatingRef = useRef(false);
 
+  const [locationPickerInitialAgent, setLocationPickerInitialAgent] = useState<
+    SessionAgent | undefined
+  >();
   const [locationPickerOpen, setLocationPickerOpen] = useState(false);
   const locationPickerSessionDirection = useRef<TerminalSplitDirection>('vertical');
 
   const nextSplitSessionLabel = useCallback(
     (agent: SessionAgent) => {
       const normalizedAgent = normalizeSessionAgent(agent, 'codex');
-      const base = normalizedAgent === 'shell' ? 'shell' : normalizedAgent;
+      if (normalizedAgent === 'shell') return '';
+      const base = normalizedAgent;
       const onDesktop = new Set(currentDesktop?.panes.map((pane) => pane.session_id));
       const matchingCount = sessions.filter(
         (session) =>
-          onDesktop.has(session.id) && normalizeSessionAgent(session.agent, 'codex') === normalizedAgent,
+          onDesktop.has(session.id) &&
+          normalizeSessionAgent(session.agent, 'codex') === normalizedAgent,
       ).length;
       return matchingCount === 0 ? base : `${base} ${matchingCount + 1}`;
     },
@@ -76,14 +81,18 @@ export function useSessionLaunch({
     inlineLauncherFocusRef.current = focus;
   }, []);
 
-  const handleNewSession = useCallback((direction: TerminalSplitDirection = 'vertical') => {
-    if (inlineLauncherFocusRef.current) {
-      inlineLauncherFocusRef.current();
-      return;
-    }
-    locationPickerSessionDirection.current = direction;
-    setLocationPickerOpen(true);
-  }, []);
+  const handleNewSession = useCallback(
+    (direction: TerminalSplitDirection = 'vertical', agent?: SessionAgent) => {
+      if (inlineLauncherFocusRef.current && !agent) {
+        inlineLauncherFocusRef.current();
+        return;
+      }
+      setLocationPickerInitialAgent(agent);
+      locationPickerSessionDirection.current = direction;
+      setLocationPickerOpen(true);
+    },
+    [],
+  );
 
   const spawnOnCurrentDesktop = useCallback(
     async (spawn: {
@@ -102,11 +111,14 @@ export function useSessionLaunch({
       // A pick lands on the desktop it was made for, even when it answers after the user moved on;
       // then it starts in the background instead of pulling the user back.
       const current = currentDesktopForLaunch();
-      const desktop = useProfilesStore.getState().desktops.find((entry) => entry.id === spawn.desktopId) ?? current;
+      const desktop =
+        useProfilesStore.getState().desktops.find((entry) => entry.id === spawn.desktopId) ??
+        current;
       const target = launchTarget(desktop, spawn.direction, spawn.anchorPaneId);
-      const launch = desktop.id === current.id
-        ? useSessionStore.getState().beginIntent({ kind: 'session', sessionId: spawn.sessionId })
-        : null;
+      const launch =
+        desktop.id === current.id
+          ? useSessionStore.getState().beginIntent({ kind: 'session', sessionId: spawn.sessionId })
+          : null;
       try {
         await createSession(
           spawn.label,
@@ -178,7 +190,11 @@ export function useSessionLaunch({
         showError('No desktop is open yet; choose a profile before starting an agent.');
         return;
       }
-      const focusedSessionId = launchTarget(currentDesktop, direction, targetPaneId).focusedSessionId;
+      const focusedSessionId = launchTarget(
+        currentDesktop,
+        direction,
+        targetPaneId,
+      ).focusedSessionId;
       const baseId = options.baseSessionId ?? activeLocalSession?.id ?? focusedSessionId;
       const base = sessions.find((session) => session.id === baseId) ?? null;
       const cwd = options.cwd || base?.cwd;
@@ -225,14 +241,21 @@ export function useSessionLaunch({
       desktopId?: string;
     }): Promise<string | null> => {
       if (!pick.chiefOfStaff) {
-        await createSplitSession(pick.agent, locationPickerSessionDirection.current, undefined, {
-          cwd: pick.cwd,
+        const desktop = currentDesktopForLaunch();
+        const direction = locationPickerSessionDirection.current;
+        const baseId = activeLocalSession?.id ?? launchTarget(desktop, direction).focusedSessionId;
+        return await spawnOnCurrentDesktop({
+          sessionId: crypto.randomUUID(),
           label: pick.label,
+          cwd: pick.cwd,
+          agent: pick.agent,
           yoloMode: pick.yoloMode,
           autoMode: pick.autoMode,
+          chiefOfStaff: false,
+          direction,
+          spawnedFrom: baseId || undefined,
           desktopId: pick.desktopId,
         });
-        return null;
       }
       const sessionId = await launchAgent(
         pick.label,
@@ -244,7 +267,33 @@ export function useSessionLaunch({
       );
       return sessionId;
     },
-    [createSplitSession, launchAgent],
+    [activeLocalSession, spawnOnCurrentDesktop, launchAgent],
+  );
+
+  const startLocation = useCallback(
+    async (
+      path: string,
+      agent: SessionAgent,
+      yoloMode = false,
+      chiefOfStaff = false,
+      autoMode?: boolean,
+      desktopId?: string,
+    ) => {
+      if (agent !== TERMINAL_AGENT && !hasAvailableAgents)
+        throw new Error('No supported agent CLI found in PATH.');
+      const selectedAgent =
+        agent === TERMINAL_AGENT ? agent : resolvePreferredAgent(agent, agentAvailability, 'codex');
+      return launchPicked({
+        label: selectedAgent === TERMINAL_AGENT ? '' : path.split('/').pop() || 'session',
+        cwd: path,
+        agent: selectedAgent,
+        yoloMode,
+        autoMode,
+        chiefOfStaff,
+        desktopId,
+      });
+    },
+    [agentAvailability, hasAvailableAgents, launchPicked],
   );
 
   const launchLocation = useCallback(
@@ -267,9 +316,21 @@ export function useSessionLaunch({
           ? TERMINAL_AGENT
           : resolvePreferredAgent(agent, agentAvailability, 'codex');
       const folderName = path.split('/').pop() || 'session';
-      const pick = { label: folderName, cwd: path, agent: selectedAgent, yoloMode, autoMode, chiefOfStaff, desktopId };
+      const pick = {
+        label: selectedAgent === TERMINAL_AGENT ? '' : folderName,
+        cwd: path,
+        agent: selectedAgent,
+        yoloMode,
+        autoMode,
+        chiefOfStaff,
+        desktopId,
+      };
       if (!chiefOfStaff) {
-        await launchPicked(pick);
+        try {
+          await launchPicked(pick);
+        } catch (error) {
+          showError(error instanceof Error ? error.message : 'Failed to start the agent');
+        }
         return;
       }
       setSessionCreationJob({
@@ -293,8 +354,30 @@ export function useSessionLaunch({
     [agentAvailability, hasAvailableAgents, launchPicked, showError],
   );
 
+  const startWorktreeSession = useCallback(
+    async (
+      mainRepo: string,
+      branch: string,
+      startingFrom: string,
+      agent: SessionAgent,
+      yoloMode: boolean,
+      autoMode?: boolean,
+      chiefOfStaff = false,
+      desktopId?: string,
+      onCreated?: (path: string) => void,
+    ) => {
+      const pickedDesktopId = desktopId ?? currentDesktopForLaunch().id;
+      const result = await sendCreateWorktree(mainRepo, branch, undefined, startingFrom);
+      if (!result.success || !result.path)
+        throw new Error(result.error || 'Failed to create worktree');
+      onCreated?.(result.path);
+      return startLocation(result.path, agent, yoloMode, chiefOfStaff, autoMode, pickedDesktopId);
+    },
+    [sendCreateWorktree, startLocation],
+  );
+
   const handleCreateWorktreeSession = useCallback(
-    (
+    async (
       mainRepo: string,
       branchName: string,
       startingFrom: string,
@@ -304,20 +387,12 @@ export function useSessionLaunch({
       chiefOfStaff = false,
       pickedOnDesktopId?: string,
     ) => {
-      let desktopId: string;
-      try {
-        desktopId = pickedOnDesktopId ?? currentDesktopForLaunch().id;
-      } catch (error) {
-        showError(error instanceof Error ? error.message : 'Failed to start the agent');
-        return;
-      }
       if (worktreeSessionCreatingRef.current) {
         showError('A worktree session is already being created.');
         return;
       }
       worktreeSessionCreatingRef.current = true;
-      const jobId = sessionCreationJobIdRef.current + 1;
-      sessionCreationJobIdRef.current = jobId;
+      const jobId = ++sessionCreationJobIdRef.current;
       setSessionCreationJob({
         id: jobId,
         label: branchName,
@@ -325,50 +400,37 @@ export function useSessionLaunch({
         phase: 'creating_worktree',
         error: null,
       });
-
-      void (async () => {
-        try {
-          const result = await sendCreateWorktree(
-            mainRepo,
-            branchName,
-            undefined,
-            startingFrom,
-          );
-          if (!result.success || !result.path) {
-            throw new Error(result.error || 'Failed to create worktree');
-          }
-          const worktreePath = result.path;
-          setSessionCreationJob((current) =>
-            current?.id === jobId
-              ? { ...current, path: worktreePath, phase: 'starting_session' }
-              : current,
-          );
-          const folderName = worktreePath.split('/').pop() || branchName || 'session';
-          await launchPicked({
-            label: folderName,
-            cwd: worktreePath,
-            agent,
-            yoloMode,
-            autoMode,
-            chiefOfStaff,
-            desktopId,
-          });
-          setSessionCreationJob((current) => (current?.id === jobId ? null : current));
-        } catch (err) {
-          setSessionCreationJob((current) =>
-            current?.id === jobId
-              ? {
-                  ...current,
-                  error: err instanceof Error ? err.message : 'Failed to create session',
-                }
-              : current,
-          );
-        } finally {
-          worktreeSessionCreatingRef.current = false;
-        }
-      })();
+      try {
+        await startWorktreeSession(
+          mainRepo,
+          branchName,
+          startingFrom,
+          agent,
+          yoloMode,
+          autoMode,
+          chiefOfStaff,
+          pickedOnDesktopId,
+          (path) => {
+            setSessionCreationJob((current) =>
+              current?.id === jobId ? { ...current, path, phase: 'starting_session' } : current,
+            );
+          },
+        );
+        setSessionCreationJob((current) => (current?.id === jobId ? null : current));
+      } catch (error) {
+        setSessionCreationJob((current) =>
+          current?.id === jobId
+            ? {
+                ...current,
+                error: error instanceof Error ? error.message : 'Failed to create session',
+              }
+            : current,
+        );
+      } finally {
+        worktreeSessionCreatingRef.current = false;
+      }
     },
-    [launchPicked, sendCreateWorktree, showError],
+    [startWorktreeSession, showError],
   );
 
   const closeLocationPicker = useCallback(() => {
@@ -381,6 +443,9 @@ export function useSessionLaunch({
     launchAgent,
     createSessionForUiAutomation,
     locationPickerOpen,
+    locationPickerInitialAgent,
+    startLocation,
+    startWorktreeSession,
     closeLocationPicker,
     launchLocation,
     registerInlineLauncher,

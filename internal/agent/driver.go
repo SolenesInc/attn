@@ -171,7 +171,7 @@ type SpawnOpts struct {
 
 	WrapperPath string
 
-	SettingsPath string
+	HookSettings string
 
 	NotebookRoot string
 
@@ -181,13 +181,18 @@ type SpawnOpts struct {
 
 	Garden bool
 
+	Asks bool
+
 	CrewPriming string
 
 	AwarenessDirs []string
 
 	SelfReportPullRequests bool
 
-	InstructionsDir string
+	InheritedInstructionsDirs string
+	InstructionsDir           string
+
+	CodexRemote string
 }
 
 func (o SpawnOpts) addDirArgs() []string {
@@ -204,6 +209,7 @@ func (o SpawnOpts) launchSpec() hooks.Launch {
 	return hooks.Launch{
 		NotebookRoot:           o.NotebookRoot,
 		Garden:                 o.Garden,
+		Asks:                   o.Asks,
 		Crew:                   o.CrewPriming,
 		SelfReportPullRequests: o.SelfReportPullRequests,
 	}

@@ -15,6 +15,7 @@ const (
 	FactSessionReregistered           = "session.reregistered"
 	FactSessionStateChanged           = "session.state.changed"
 	FactSessionModelRequestStarted    = "session.model_request.started"
+	FactSessionTitleChanged           = "session.title.changed"
 	FactSessionRenamed                = "session.renamed"
 	FactSessionUnregistered           = "session.unregistered"
 	FactSessionClosed                 = "session.closed"
@@ -91,6 +92,9 @@ const (
 
 	FactNotebookFileChanged = "notebook.file.changed"
 
+	FactAskOpened = "ask.opened"
+	FactAskClosed = "ask.closed"
+
 	FactDocumentChanged              = "document.changed"
 	FactDocumentCollectionRemoved    = "document.collection.removed"
 	FactDocumentCollectionRedeclared = "document.collection.redeclared"
@@ -104,7 +108,7 @@ const (
 	FactBackgroundLaunch = "session.background.launch"
 )
 
-var CompactableFacts = []string{FactDocumentChanged, FactDocumentCollectionRemoved, FactDocumentCollectionRedeclared, FactSessionAssistantWindowChanged}
+var CompactableFacts = []string{FactSessionTitleChanged, FactDocumentChanged, FactDocumentCollectionRemoved, FactDocumentCollectionRedeclared, FactSessionAssistantWindowChanged}
 
 type projection struct {
 	filter bus.Filter
@@ -124,7 +128,7 @@ func wireProjections() []projection {
 func buildWireProjections() []projection {
 	return []projection{
 		{
-			filter: bus.Filter{FactSessionStateChanged},
+			filter: bus.Filter{FactSessionStateChanged, FactSessionTitleChanged},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(protocol.SessionID(ev.Subject)) },
 		},
 		{
@@ -357,6 +361,10 @@ func buildWireProjections() []projection {
 			filter: bus.Filter{FactNotebookFileChanged},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectNotebookChanged(ev) },
 		},
+		{
+			filter: bus.Filter{FactAskOpened, FactAskClosed},
+			apply:  func(d *Daemon, _ bus.Event) { d.projectAsks() },
+		},
 	}
 }
 
@@ -501,6 +509,7 @@ func (d *Daemon) projectSnapshot(key string, push func()) {
 const (
 	snapshotSessions    = "sessions_updated"
 	snapshotGarden      = "garden_seeds_updated"
+	snapshotAsks        = "asks_updated"
 	snapshotCrew        = "crew_updated"
 	snapshotPRs         = "prs_updated"
 	snapshotRepos       = "repos_updated"

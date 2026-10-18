@@ -107,7 +107,7 @@ type workerSession struct {
 	controlDec          *json.Decoder
 	lastState           string
 	lastStateSentAt     time.Time
-	exitNotified        bool
+	exitObserved        *ExitInfo
 	evictionStarted     bool
 	unreachable         bool
 	unreachableAt       time.Time
@@ -139,6 +139,7 @@ type WorkerBackend struct {
 	hooksMu sync.RWMutex
 	onExit  func(ExitInfo)
 	onState func(id harness.TerminalID, obs pty.Observation)
+	onTitle func(id harness.TerminalID, title string)
 
 	reqSeq atomic.Uint64
 
@@ -412,6 +413,21 @@ func (b *WorkerBackend) SetStateHandler(handler func(id harness.TerminalID, obs 
 	b.onState = handler
 }
 
+func (b *WorkerBackend) SetTitleHandler(handler func(id harness.TerminalID, title string)) {
+	b.hooksMu.Lock()
+	defer b.hooksMu.Unlock()
+	b.onTitle = handler
+}
+
+func (b *WorkerBackend) reportTitle(session *workerSession, title string) {
+	b.hooksMu.RLock()
+	handler := b.onTitle
+	b.hooksMu.RUnlock()
+	if handler != nil {
+		handler(harness.TerminalID(session.SessionID), title)
+	}
+}
+
 func (b *WorkerBackend) reportState(session *workerSession, observation pty.Observation) {
 	b.hooksMu.RLock()
 	onState := b.onState
@@ -422,11 +438,19 @@ func (b *WorkerBackend) reportState(session *workerSession, observation pty.Obse
 }
 
 func (b *WorkerBackend) reportExit(session *workerSession, exitCode int, signal string) {
+	info := ExitInfo{ID: harness.TerminalID(session.SessionID), ExitCode: exitCode, Signal: signal, LifecycleID: session.LifecycleID}
+	session.mu.Lock()
+	if session.exitObserved != nil {
+		session.mu.Unlock()
+		return
+	}
+	session.exitObserved = &info
+	session.mu.Unlock()
 	b.hooksMu.RLock()
 	onExit := b.onExit
 	b.hooksMu.RUnlock()
 	if onExit != nil {
-		go onExit(ExitInfo{ID: harness.TerminalID(session.SessionID), ExitCode: exitCode, Signal: signal, LifecycleID: session.LifecycleID})
+		go onExit(info)
 	}
 }
 
@@ -509,11 +533,14 @@ func (b *WorkerBackend) spawnArgs(opts SpawnOptions, session *workerSession) ([]
 	if opts.YoloMode {
 		args = append(args, "--yolo-mode")
 	}
+	if opts.Model != "" {
+		args = append(args, "--model", opts.Model)
+	}
+	if opts.Effort != "" {
+		args = append(args, "--effort", opts.Effort)
+	}
 	if opts.ApprovalRoute != "" {
 		args = append(args, "--approval-route", string(opts.ApprovalRoute))
-	}
-	if opts.InitialPromptFile != "" {
-		args = append(args, "--initial-prompt-file", opts.InitialPromptFile)
 	}
 	if opts.Theme.Foreground != "" {
 		args = append(args, "--theme-foreground", opts.Theme.Foreground)
@@ -543,12 +570,14 @@ func (b *WorkerBackend) spawnArgs(opts SpawnOptions, session *workerSession) ([]
 	if opts.CopilotExecutable != "" {
 		args = append(args, "--copilot-executable", opts.CopilotExecutable)
 	}
-	if len(opts.ExternalCommand) > 0 {
-		encoded, err := json.Marshal(opts.ExternalCommand)
-		if err != nil {
-			return nil, fmt.Errorf("encode external command: %w", err)
-		}
-		args = append(args, "--external-command-json", string(encoded))
+	if opts.AgentLoginShell {
+		args = append(args, "--agent-login-shell")
+	}
+	for _, arg := range opts.AgentArgv {
+		args = append(args, "--agent-arg", arg)
+	}
+	for _, entry := range opts.AgentEnv {
+		args = append(args, "--agent-env", entry)
 	}
 	args, err := appendUnattendedLaunchArgs(args, opts.UnattendedLaunch)
 	if err != nil {
@@ -647,36 +676,13 @@ func (b *WorkerBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 		"ATTN_EFFORT",
 		"ATTN_AUTO_COMPACT_WINDOW",
 		"ATTN_CACHED_SHELL_ENV",
-		"ATTN_PTY_EXTERNAL_ENV",
 		"ATTN_PTY_DAEMON_ENV",
 	)
 	workerEnv = append(workerEnv, "ATTN_PTY_WORKER=1")
-	if opts.AutoApprove {
-		workerEnv = append(workerEnv, "ATTN_AUTO_APPROVE=1")
-	}
-	if opts.TrustWorkingDirectory {
-		workerEnv = append(workerEnv, "ATTN_TRUST_WORKING_DIRECTORY=1")
-	}
-	if model := strings.TrimSpace(opts.Model); model != "" {
-		workerEnv = append(workerEnv, "ATTN_MODEL="+model)
-	}
-	if effort := strings.TrimSpace(opts.Effort); effort != "" {
-		workerEnv = append(workerEnv, "ATTN_EFFORT="+effort)
-	}
-	if opts.ContextWindowCap > 0 {
-		workerEnv = append(workerEnv, "ATTN_AUTO_COMPACT_WINDOW="+strconv.Itoa(opts.ContextWindowCap))
-	}
 	if len(opts.LoginShellEnv) > 0 {
 		if envJSON, err := json.Marshal(opts.LoginShellEnv); err == nil {
 			workerEnv = append(workerEnv, "ATTN_CACHED_SHELL_ENV="+string(envJSON))
 		}
-	}
-	if len(opts.ExternalEnv) > 0 {
-		envJSON, err := json.Marshal(opts.ExternalEnv)
-		if err != nil {
-			return fmt.Errorf("encode external environment: %w", err)
-		}
-		workerEnv = append(workerEnv, "ATTN_PTY_EXTERNAL_ENV="+string(envJSON))
 	}
 	if len(opts.DaemonEnv) > 0 {
 		envJSON, err := json.Marshal(opts.DaemonEnv)
@@ -869,6 +875,9 @@ func attachBlocksFromWire(blocks []ptyworker.AttachBlock) []pty.AttachBlockData 
 			InputCol:       b.InputCol,
 			OutputStartRow: b.OutputStartRow,
 			EndRow:         b.EndRow,
+			OutputStartCol: b.OutputStartCol,
+			EndCol:         b.EndCol,
+			EndInclusive:   b.EndInclusive,
 			Command:        b.Command,
 			ExitCode:       b.ExitCode,
 		}
@@ -1207,6 +1216,7 @@ func (b *WorkerBackend) SessionInfo(ctx context.Context, id harness.TerminalID) 
 		CWD:        info.CWD,
 		Running:    info.Running,
 		State:      info.State,
+		Title:      info.Title,
 		Cols:       info.Cols,
 		Rows:       info.Rows,
 		PID:        info.ChildPID,
@@ -2312,9 +2322,8 @@ func (b *WorkerBackend) startPoller(session *workerSession) {
 					session.lastStateSentAt = now
 					newState = info.State
 				}
-				exitNow = !info.Running && !session.exitNotified
+				exitNow = !info.Running && session.exitObserved == nil
 				if exitNow {
-					session.exitNotified = true
 					if info.ExitCode != nil {
 						exitCode = *info.ExitCode
 					}
@@ -2486,6 +2495,10 @@ func (b *WorkerBackend) runLifecycleMonitor(session *workerSession, stopCh <-cha
 
 func (b *WorkerBackend) handleLifecycleEvent(session *workerSession, evt ptyworker.EventEnvelope) {
 	switch evt.Event {
+	case ptyworker.EventTitleChanged:
+		if evt.Title != nil {
+			b.reportTitle(session, *evt.Title)
+		}
 	case ptyworker.EventStateChanged:
 		if evt.State == nil {
 			return
@@ -2499,14 +2512,6 @@ func (b *WorkerBackend) handleLifecycleEvent(session *workerSession, evt ptywork
 
 		b.reportState(session, observation)
 	case ptyworker.EventExit:
-		session.mu.Lock()
-		if session.exitNotified {
-			session.mu.Unlock()
-			return
-		}
-		session.exitNotified = true
-		session.mu.Unlock()
-
 		exitCode := 0
 		if evt.ExitCode != nil {
 			exitCode = *evt.ExitCode
@@ -2954,4 +2959,67 @@ func validateSessionID(sessionID string) error {
 		}
 	}
 	return nil
+}
+
+func (b *WorkerBackend) terminalTextRPC(ctx context.Context, session *workerSession, method string, params, result any) (bool, error) {
+	if method != ptyworker.MethodWaitBlock {
+		var cancel context.CancelFunc
+		ctx, cancel = withDefaultRPCTimeout(ctx)
+		defer cancel()
+	}
+	handshakeCtx, cancelHandshake := withDefaultRPCTimeout(ctx)
+	conn, enc, dec, err := b.connectAuthed(handshakeCtx, session)
+	cancelHandshake()
+	if err != nil {
+		return false, err
+	}
+	defer conn.Close()
+	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stop()
+	if err := applyConnDeadline(conn, ctx); err != nil {
+		return false, err
+	}
+	reqID := b.nextReqID(method)
+	if err := writeRequest(enc, reqID, method, params); err != nil {
+		return false, err
+	}
+	for {
+		kind, res, _, err := readFrame(dec)
+		if err != nil {
+			return false, err
+		}
+		if kind != "res" || res.ID != reqID {
+			continue
+		}
+		if !res.OK {
+			return true, b.rpcError(session.SessionID, res.Error)
+		}
+		return true, json.Unmarshal(res.Result, result)
+	}
+}
+func (b *WorkerBackend) ReadText(ctx context.Context, id harness.TerminalID, mode string, lines int) (pty.ReadTextInfo, error) {
+	session, err := b.getSession(string(id))
+	if err != nil {
+		return pty.ReadTextInfo{}, err
+	}
+	var result pty.ReadTextInfo
+	_, err = b.terminalTextRPC(ctx, session, ptyworker.MethodReadText, ptyworker.ReadTextParams{Mode: mode, Lines: lines}, &result)
+	return result, err
+}
+func (b *WorkerBackend) WaitBlock(ctx context.Context, id harness.TerminalID, params pty.WaitBlockParams) (pty.WaitBlockResult, error) {
+	session, err := b.getSession(string(id))
+	if err != nil {
+		return pty.WaitBlockResult{}, err
+	}
+	var result pty.WaitBlockResult
+	answered, err := b.terminalTextRPC(ctx, session, ptyworker.MethodWaitBlock, params, &result)
+	if !answered && err != nil && ctx.Err() == nil {
+		session.mu.Lock()
+		exit := session.exitObserved
+		session.mu.Unlock()
+		if exit != nil && exit.Signal != "worker_unreachable" {
+			return pty.WaitBlockResult{Exited: true, ExitCode: &exit.ExitCode}, nil
+		}
+	}
+	return result, err
 }

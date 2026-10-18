@@ -227,15 +227,6 @@ lint-frontend: $(APP_NODE_MODULES)
 	app/node_modules/.bin/oxlint --deny-warnings cmd/prompt-editor/web cmd/prompt-editor/test
 
 test-e2e: $(APP_NODE_MODULES)
-	@# Ensure stale Vite test server is not running
-	@if [ "$(UNAME_S)" = "Darwin" ] && command -v lsof >/dev/null 2>&1; then \
-		lsof -ti tcp:1421 | xargs -r kill 2>/dev/null || true; \
-	elif command -v fuser >/dev/null 2>&1; then \
-		fuser -k 1421/tcp 2>/dev/null || true; \
-	elif command -v lsof >/dev/null 2>&1; then \
-		lsof -ti tcp:1421 | xargs -r kill 2>/dev/null || true; \
-	fi
-	-pkill -f "vite.*1421" 2>/dev/null || true
 	cd app && pnpm run e2e
 
 # Installing the PROD bundle while ATTN_INSTANCE is set is almost always

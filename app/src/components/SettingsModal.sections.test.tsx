@@ -11,6 +11,7 @@ const SECTION_IDS = [
   'agents',
   'backgroundAgents',
   'terminal',
+  'experimental',
   'autoMode',
   'connectivity',
   'plugins',

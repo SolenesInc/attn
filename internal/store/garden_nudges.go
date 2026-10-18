@@ -14,6 +14,18 @@ type GardenSeedWatch struct {
 	SeedID           string
 }
 
+func (w GardenSeedWatch) subscribe(now time.Time) func(*sql.Tx) (bool, error) {
+	return func(tx *sql.Tx) (bool, error) {
+		if w.WatcherSessionID == "" || w.SeedID == "" {
+			return false, nil
+		}
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO garden_seed_watches(watcher_session_id, seed_id, created_at) VALUES (?, ?, ?)`, w.WatcherSessionID, w.SeedID, now.UTC().Format(sortableTimeFormat)); err != nil {
+			return false, fmt.Errorf("subscribe delegation dispatcher: %w", err)
+		}
+		return true, nil
+	}
+}
+
 type GardenSeedMailboxItem struct {
 	To       inbox.Address
 	SeedID   string

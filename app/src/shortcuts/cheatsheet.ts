@@ -22,6 +22,7 @@ export function buildCheatsheet(): CheatsheetCategory[] {
     {
       title: 'Desktops & Sessions',
       rows: [
+        { label: 'New terminal on this desktop', combos: [fromId('session.newTerminal')] },
         { label: 'New session on this desktop', combos: [fromId('session.new')] },
         { label: 'New session, split sideways', combos: [fromId('session.newHorizontal')] },
         { label: 'Close session, focused pane or empty desktop', combos: [fromId('session.close')] },
@@ -56,6 +57,7 @@ export function buildCheatsheet(): CheatsheetCategory[] {
         { label: 'Next automation run needing you', combos: [fromId('session.nextRun')] },
         { label: 'All agents', combos: [fromId('sidebar.agentList')] },
         { label: 'Settle turn', combos: [fromId('session.settle')] },
+        { label: 'Asks drawer', combos: [fromId('dock.asks')] },
         { label: 'Toggle session priority', combos: [fromId('session.priority')] },
         { label: 'Snooze this agent', combos: [fromId('session.snooze')] },
         { label: 'Stop the countdown, or keep the next turn', combos: [fromId('session.cancelCountdown')] },

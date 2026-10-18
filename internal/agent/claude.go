@@ -87,8 +87,8 @@ func (c *Claude) BuildCommand(opts SpawnOpts) *exec.Cmd {
 		args = append(args, "--session-id", string(opts.TerminalID))
 	}
 
-	if strings.TrimSpace(opts.SettingsPath) != "" {
-		args = append(args, "--settings", opts.SettingsPath)
+	if strings.TrimSpace(opts.HookSettings) != "" {
+		args = append(args, "--settings", opts.HookSettings)
 	}
 	if instructions := opts.launchGuidance(); instructions != "" {
 		args = append(args, "--append-system-prompt", instructions)
@@ -342,9 +342,6 @@ func claudeHasBareModeAuthentication() bool {
 }
 
 func (c *Claude) PrepareLaunch(opts SpawnOpts) error {
-	if _, err := EnsureClaudeSkillInstalled(); err != nil {
-		return err
-	}
 	if strings.TrimSpace(opts.ResumeSessionID) == "" {
 		return nil
 	}

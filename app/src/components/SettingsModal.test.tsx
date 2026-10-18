@@ -577,6 +577,19 @@ describe('SettingsModal sent files', () => {
   });
 });
 
+describe('SettingsModal asks', () => {
+  it('finds asks on the Experimental page, off by default, and turns them on', async () => {
+    const { daemon } = await renderSettings();
+    fireEvent.change(screen.getByLabelText('Search settings'), { target: { value: 'asks' } });
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-experimental')));
+    const toggle = screen.getByRole('switch', { name: 'Asks (experimental)' });
+
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    await gesture(daemon, () => fireEvent.click(toggle));
+    expect(savedSettings(daemon)).toEqual([['asks_enabled', 'true']]);
+  });
+});
+
 describe('SettingsModal delegation badge', () => {
   it('counts live roles as soon as Settings opens, before the section is visited', async () => {
     const selection = { harness: 'codex', provider: '', model: '', effort: '' };
