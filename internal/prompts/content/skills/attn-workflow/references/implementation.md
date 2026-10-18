@@ -6,6 +6,6 @@ The plan's findings record what spikes and investigation already established. Bu
 
 A change that turns out to need a parallel version of an existing mechanism, which the plan did not account for, is an unforeseen issue. When an unforeseen issue requires a consequential decision, bring the evidence, what you tried, and your recommendation to the coordinating agent identified in the brief, or to the user if none is identified. Continue independent work while waiting; wait before proceeding with work that depends on that decision.
 
-Verify the affected behavior using repository guidance. Reuse evidence that still applies and run further checks where changes or gaps warrant them. Address review findings, then verify the corrections.
+Verify the affected behavior as the skill's engineering judgment describes under prove it works and sequence verifiable units: each unit ends in a check you ran on the surface the change touches, following the repository's verification guidance. Reuse evidence that still applies and run further checks where changes or gaps warrant them. Address review findings, then verify the corrections.
 
-Return a reviewable change with the revision, checks performed, results, and remaining limits. Make the result readable in the conversation and durable in the seed. Follow the task's authorization for delivery steps.
+Return a reviewable change with the revision, the checks performed and how to rerun them, the results, and remaining limits. Make the result readable in the conversation and durable in the seed. Follow the task's authorization for delivery steps.

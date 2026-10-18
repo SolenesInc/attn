@@ -18,7 +18,7 @@ Write for an implementer starting fresh and a user reviewing the direction. The 
 The body has six sections in this order. Each design part is required; a part that does not apply becomes one line with the reason in its place.
 
 - **Task and outcome**: what to build and what done looks like, in a few sentences.
-- **Decisions**: the choices the user might still change, each with its reason, and the open questions, saying which block work and which the implementer may decide. When a refactor would let the change fit existing code, show the user both orders, refactor first or build beside it, with the smallest refactor that would do; replacing a whole subsystem is not the only alternative.
+- **Decisions**: the choices the user might still change, each with its reason, and the open questions, written so they can be answered cold: what each decides and which child or Builder waits on it, the options, your recommendation and why, what happens if it stays unanswered, and whether it blocks work or the implementer may decide it. When a refactor would let the change fit existing code, show the user both orders, refactor first or build beside it, with the smallest refactor that would do; replacing a whole subsystem is not the only alternative.
 - **Findings**: what spikes and investigation established that the design depends on, written as described under Findings below. When nothing was learned beyond what the code shows, one line saying so.
 - **Design**, in four parts:
   - **Ownership**: each file or package that changes, as a shallow file tree with one comment per entry saying what it is responsible for.

@@ -1,10 +1,10 @@
 # Debugging
 
-Use this process to investigate bugs, test failures, and unexpected behavior. Establish a supported explanation before choosing a fix.
+Use this process to investigate bugs, test failures, and unexpected behavior. When the symptom is a measurement, such as slowness, growth, or CPU while nothing happens, use [Perf](perf.md) instead. Establish a supported explanation before choosing a fix.
 
 ## Investigate
 
-Read the errors, reproduce the behavior, and check relevant changes. Trace the failing data through the system. Compare the failing path with a working example and examine differences in code, configuration, and dependencies.
+Read the errors, reproduce the behavior yourself on the surface where it was reported, and check relevant changes. Ask the user to reproduce only with a specific reason that surface is out of your reach, and only after driving it as far as it goes. Trace the failing data through the system. Compare the failing path with a working example and examine differences in code, configuration, and dependencies.
 
 Separate observations from hypotheses. State what remains unexplained.
 
@@ -18,10 +18,10 @@ Use experiments when they can resolve uncertainty. Run isolated checks within th
 
 ## Fix and verify
 
-When implementation is authorized, capture the failure in a regression test or repeatable reproduction. Make a focused correction and check that it resolves the original failure without breaking related behavior.
+When implementation is authorized, capture the failure in a regression test or repeatable reproduction. Make the smallest correction the evidence justifies; a change that merely might help is a hypothesis, not a fix, and when evidence refutes a hypothesis, revert what it motivated. Verify on the surface where the failure was reported: the original reproduction now passes. A unit test alone shows branch behavior, not the bug's absence. When the reproduction is a committed test, stage it before the fix in the change's commits, so a reviewer watches it go red, then green.
 
-If attempts keep failing, reassess the diagnosis and approach. Consider a broader design problem when the evidence supports it, and discuss scope changes with the user.
+When two fixes that shared an assumption have failed the same check, attack the premise as the skill's engineering judgment describes: test the assumption before a third fix, and when it fails, reassess the diagnosis and approach. Consider a broader design problem when the evidence supports it, and discuss scope changes with the user.
 
-When the cause remains uncertain, report the evidence and the next useful check. Explain temporary mitigations and what remains unresolved.
+Report what was broken, the cause, the fix, and how you verified it, with the failing-then-passing output quoted. When the cause remains uncertain, report the evidence and the next useful check. Explain temporary mitigations and what remains unresolved.
 
 Adapted from [Systematic Debugging](https://github.com/obra/superpowers/blob/main/skills/systematic-debugging/SKILL.md), with guidance on experiments, missing evidence, and task authorization.
