@@ -247,6 +247,8 @@ A `--remote` TUI, probed on 0.163.0 and read in the source at rust-v0.163.0
   its server drops notifications it does not know and answers unknown server
   requests with -32601, which the server takes as a denied approval; the turn
   carries on.
+- Its `initialize` sends its own version as `clientInfo.version`; this one is
+  read in the source, not probed (`tui/src/lib.rs`).
 
 Read in the source at openai/codex rust-v0.160.0:
 
@@ -300,7 +302,14 @@ Read in the source at openai/codex 1ffa95e:
 Read in the source at openai/codex rust-v0.163.0 and probed on 0.162.1 and
 0.163.0, except where noted.
 
-- `codex --version` prints `codex-cli <version>`.
+- `codex --version` prints `codex-cli <version>` in 10–30 ms.
+- `codex doctor --json` prints one JSON object and exits 0 after 10–14 s, of
+  which 2–3.5 s is CPU, probed on 0.162.1. `codexVersion` is the binary's own
+  version. `checks` is keyed by check id, and
+  `checks["updates.status"].details["latest version"]` holds the newest
+  release. It comes from a live check against the same source as the TUI's
+  refresh, except that npm installs skip the npm readiness check, and doctor
+  never writes `version.json`.
 - Only TUIs write `<CODEX_HOME>/version.json` (`latest_version`,
   `last_checked_at`, `dismissed_version`), and the write is not atomic. A TUI
   refreshes it in the background at startup when it is missing or over 20 h
