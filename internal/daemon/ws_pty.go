@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -76,6 +77,70 @@ func (d *Daemon) detachSession(client *wsClient, terminalID protocol.TerminalID)
 	client.attachMu.Unlock()
 	if hasStream {
 		_ = stream.Close()
+	}
+}
+
+func (c *wsClient) streamsTo(terminal protocol.TerminalID) bool {
+	c.attachMu.Lock()
+	defer c.attachMu.Unlock()
+	_, attached := c.attachedStreams[terminal]
+	return attached
+}
+
+type terminalOrder struct {
+	mu     sync.Mutex
+	queued map[protocol.TerminalID][]func()
+}
+
+func (o *terminalOrder) queueBehindRunning(terminal protocol.TerminalID, command func()) bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	queue, running := o.queued[terminal]
+	if running {
+		o.queued[terminal] = append(queue, command)
+	}
+	return running
+}
+
+func (o *terminalOrder) queue(terminal protocol.TerminalID, command func()) (startRunning bool) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.queued == nil {
+		o.queued = make(map[protocol.TerminalID][]func())
+	}
+	queue, running := o.queued[terminal]
+	o.queued[terminal] = append(queue, command)
+	return !running
+}
+
+func (o *terminalOrder) runQueued(terminal protocol.TerminalID) {
+	for {
+		o.mu.Lock()
+		queue := o.queued[terminal]
+		if len(queue) == 0 {
+			delete(o.queued, terminal)
+			o.mu.Unlock()
+			return
+		}
+		next := queue[0]
+		o.queued[terminal] = queue[1:]
+		o.mu.Unlock()
+		next()
+	}
+}
+
+func (d *Daemon) inTerminalOrder(client *wsClient, terminal protocol.TerminalID, command func()) {
+	if !client.terminalOrder.queueBehindRunning(terminal, command) {
+		command()
+	}
+}
+
+func (d *Daemon) offPumpInTerminalOrder(client *wsClient, terminal protocol.TerminalID, command func()) {
+	if !client.terminalOrder.queue(terminal, command) {
+		return
+	}
+	if !d.life.Go("terminalOrder", func() { client.terminalOrder.runQueued(terminal) }) {
+		client.terminalOrder.runQueued(terminal)
 	}
 }
 
