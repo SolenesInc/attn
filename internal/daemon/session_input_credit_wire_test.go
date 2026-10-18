@@ -46,6 +46,7 @@ func TestAHeartbeatArmsNoAutoSettleButTheUsersAnswerInTheSameRunDoes(t *testing.
 func TestAnApprovalKeypressEarnsNoCreditAndDoesNotHoldAttnsDoorbell(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
+		setSetting(t, app, "auto_approve_enabled", "false")
 		setSetting(t, app, "auto_settle_enabled", "true")
 		agent := w.bubbleClaude(t, app, "shop")
 		registerSessions(t, w, cli, "sender")

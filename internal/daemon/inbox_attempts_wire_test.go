@@ -258,6 +258,7 @@ func TestBusyAndApprovalBlockedInboxesKeepTheirFullAttemptBudget(t *testing.T) {
 		t.Run(fmt.Sprint(approval), func(t *testing.T) {
 			inBubbleWithAgents(t, func(t *testing.T, w *world) {
 				app, cli := w.App(), w.Client()
+				setSetting(t, app, "auto_approve_enabled", "false")
 				recipient := w.bubbleClaude(t, app, "shop")
 				registerSessions(t, w, cli, "sender")
 				app.TypeLine(recipient.id, "work without checking inbox")

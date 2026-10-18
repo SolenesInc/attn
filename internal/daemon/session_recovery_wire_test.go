@@ -16,6 +16,7 @@ import (
 func TestRecoveryKeepsEveryConversationThatCanResumeWithItsPaneAndReapsTheRest(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
+	setSetting(t, app, "auto_approve_enabled", "false")
 	cwd := w.Path("shop")
 	begin := func(agent fakeagent.Harness) (string, *fakeagent.Run) {
 		t.Helper()

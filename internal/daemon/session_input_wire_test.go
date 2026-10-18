@@ -55,6 +55,7 @@ func TestAttnPressesEnterOnItsPasteOnlyAfterTheHarnessHadTimeToTakeIt(t *testing
 func TestResendingAnAnnotationBatchNeverPressesEnterOnAnApprovalThatOpenedSince(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
+		setSetting(t, app, "auto_approve_enabled", "false")
 		session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 		term := w.terminal(session)
 		term.Heartbeat("not_busy", "Claude Code")

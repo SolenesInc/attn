@@ -155,7 +155,7 @@ func TestACrewDayMidTurnOrAwaitingApprovalIsLeftAlone(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			inBubbleWithAgents(t, func(t *testing.T, w *world) {
-				app, day := crewDayInBubble(t, w, map[string]string{"crew.away_seconds": "60"})
+				app, day := crewDayInBubble(t, w, map[string]string{"crew.away_seconds": "60", "auto_approve_enabled": "false"})
 				app.TypeLine(day.id, "refactor the checkout")
 				w.advance(0)
 				tc.enter(t, day)

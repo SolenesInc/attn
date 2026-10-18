@@ -11,6 +11,7 @@ import (
 func TestClaudeReportingAPermissionPromptPutsTheSessionInApprovalUntilItIsAnswered(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
+	setSetting(t, app, "auto_approve_enabled", "false")
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	run := w.Launched(session)
 	app.TypeLine(session, "run the migration")
