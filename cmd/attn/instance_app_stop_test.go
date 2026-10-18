@@ -125,7 +125,7 @@ func sandboxedInstance(t *testing.T) instanceResolved {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(codexSockets) })
-	if err := os.Symlink(filepath.Join(r.DataDir, "app-server.sock"), filepath.Join(codexSockets, "app-server.sock")); err != nil {
+	if err := os.Symlink("codex-daemon.sock", filepath.Join(codexSockets, "app-server.sock")); err != nil {
 		t.Fatal(err)
 	}
 	return r
