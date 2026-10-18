@@ -133,7 +133,7 @@ func TestReplyRendersEachAnswerForTheAgent(t *testing.T) {
 		index  int
 		want   string
 	}{
-		"the recommended choice, in any case": {protocol.AskAnswer{Key: "q1", Picked: []string{"postgres"}}, 1, "1. Which store?\n\nAnswer: Postgres (your recommendation)"},
+		"the recommended choice, in any case": {protocol.AskAnswer{Key: "q1", Picked: []string{"postgres"}}, 1, "1. Which store?\n\nAnswer: Postgres (the recommended choice)"},
 		"another choice":                      {protocol.AskAnswer{Key: "q1", Picked: []string{"Redis"}}, 1, "1. Which store?\n\nAnswer: Redis"},
 		"their own answer":                    {protocol.AskAnswer{Key: "q1", Picked: []string{}, Other: protocol.Ptr("SQLite")}, 1, "1. Which store?\n\nTheir own answer: SQLite"},
 		"several choices and their own": {
@@ -164,12 +164,12 @@ func TestReplyOpensWithTheAskAndEndsWithTheNote(t *testing.T) {
 		"answers and a note": {
 			[]protocol.AskPart{{Question: &protocol.AskQuestion{Key: "q1", Kind: protocol.AskQuestionKindText, Prompt: "Why?", Choices: []protocol.AskChoice{}}}},
 			[]protocol.AskAnswer{{Key: "q1", Picked: []string{}, Text: protocol.Ptr("Because.")}},
-			"🙋 The user answered your ask \"Heads up\" (a-2).\n\n## 1. Why?\n\n> Because.\n\nThey added:\n\n> Ship it.\n> Today.",
+			"🙋 The user answered the ask \"Heads up\" (a-2).\n\n## 1. Why?\n\n> Because.\n\nThey added:\n\n> Ship it.\n> Today.",
 		},
 		"only a note": {
 			[]protocol.AskPart{{Markdown: protocol.Ptr("FYI")}},
 			nil,
-			"🙋 The user answered your ask \"Heads up\" (a-2).\n\nThey added:\n\n> Ship it.\n> Today.",
+			"🙋 The user answered the ask \"Heads up\" (a-2).\n\nThey added:\n\n> Ship it.\n> Today.",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

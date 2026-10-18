@@ -1,1 +1,1 @@
-Answer: {{picked}} (your recommendation)
+Answer: {{picked}} (the recommended choice)

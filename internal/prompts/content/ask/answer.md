@@ -1,1 +1,1 @@
-🙋 The user answered your ask {{subject}} ({{ask_id}}).
+🙋 The user answered the ask {{subject}} ({{ask_id}}).

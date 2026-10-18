@@ -73,7 +73,7 @@ func TestAnAnsweredAskReachesTheAgentsInboxAndSettlesItsTurn(t *testing.T) {
 		t.Fatalf("the agent was prompted with %q, want the inbox doorbell", got)
 	}
 	read := inboxContents(readInbox(t, cli, asker, 0).Items)
-	for _, want := range []string{asked.ID, "Which store should keep the cache?", "Answer: Postgres (your recommendation)", "> Keep it boring."} {
+	for _, want := range []string{asked.ID, "Which store should keep the cache?", "Answer: Postgres (the recommended choice)", "> Keep it boring."} {
 		if !strings.Contains(read, want) {
 			t.Errorf("the agent read %q, missing %q", read, want)
 		}
@@ -305,7 +305,7 @@ func TestADelegatesAskIsAboutItsSeedAndItsAnswerIsANoteForTheNextTender(t *testi
 		t.Fatalf("the seed's notes are %+v, %v; want the answer", notes, err)
 	}
 	answer := notes.Notes[0]
-	for _, want := range []string{asked.ID, "Answer: Postgres (your recommendation)"} {
+	for _, want := range []string{asked.ID, "Answer: Postgres (the recommended choice)"} {
 		if !strings.Contains(answer.Body, want) {
 			t.Errorf("the seed's newest note reads %q, missing %q", answer.Body, want)
 		}

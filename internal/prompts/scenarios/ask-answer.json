@@ -7,7 +7,7 @@
   "values": {
     "subject": "\"Cache store\"",
     "ask_id": "a-7k3f9m",
-    "entries": "## 1. Which store should keep the cache?\n\nAnswer: Postgres (your recommendation)\n\n## 2. What should the banner say?\n\n> Welcome back",
+    "entries": "## 1. Which store should keep the cache?\n\nAnswer: Postgres (the recommended choice)\n\n## 2. What should the banner say?\n\n> Welcome back",
     "note": "> Keep it boring."
   }
 }
