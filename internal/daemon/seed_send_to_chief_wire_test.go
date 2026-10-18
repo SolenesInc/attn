@@ -9,54 +9,50 @@ import (
 )
 
 func TestSendingASeedToTheChiefHandsItOverUnlessItChanged(t *testing.T) {
-	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		app, cli := w.App(), w.Client()
-		registerSessions(t, w, cli, "sender", "observer")
-		chief := configureChiefOn(t, w, app, fakeagent.Claude, "sonnet")
-		w.bootBubbleClaude(t, chief)
-		seed := plantSeedAs(t, cli, "sender", "Place this work")
-		tended := lifeMove(t, cli, "sender", seed, "tend", "", "")
-		// Drain the setup move before its late bell can reach the next tender or new watchers.
-		w.advance(0)
-		for _, watcher := range []string{"sender", "observer"} {
-			if _, err := cli.SeedWatch(protocol.SessionID(watcher), seed, false); err != nil {
-				t.Fatal(err)
-			}
-		}
-
-		stale := tended
-		stale.Rev--
-		_, err := cli.SeedSendToChief("sender", stale, "")
-		lifeRefusal(t, "sending a seed changed since it was opened", err, seed, "changed since you opened it")
-		if still := lifeShow(t, cli, seed).Seed; protocol.Deref(protocol.Deref(still.Tender).SessionID) != "sender" || still.Rev != tended.Rev {
-			t.Fatalf("the refused send moved the seed: %+v", still)
-		}
-
-		sent, err := cli.SeedSendToChief("sender", tended, "Use branch feature/special in /tmp/special.")
-		if err != nil {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	registerSessions(t, w, cli, "sender", "observer")
+	chief := configureChiefOn(t, w, app, fakeagent.Claude, "sonnet")
+	w.Launched(chief).Prompted()
+	seed := plantSeedAs(t, cli, "sender", "Place this work")
+	tended := lifeMove(t, cli, "sender", seed, "tend", "", "")
+	for _, watcher := range []string{"sender", "observer"} {
+		if _, err := cli.SeedWatch(protocol.SessionID(watcher), seed, false); err != nil {
 			t.Fatal(err)
 		}
-		if protocol.Deref(sent.Chief.SessionID) != protocol.SessionID(chief) || protocol.Deref(protocol.Deref(sent.Seed.Tender).SessionID) != protocol.SessionID(chief) {
-			t.Errorf("sending to the Chief answered %+v, want the chief tending it", sent)
-		}
-		shown := lifeShow(t, cli, seed)
-		if got := shown.Seed; protocol.Deref(protocol.Deref(got.Tender).SessionID) != protocol.SessionID(chief) || protocol.Deref(got.LastExecutionID) != protocol.Deref(tended.LastExecutionID) {
-			t.Errorf("after the send the seed is tended by %q in execution %q, want chief in %q",
-				protocol.Deref(protocol.Deref(got.Tender).SessionID), protocol.Deref(got.LastExecutionID), protocol.Deref(tended.LastExecutionID))
-		}
-		if len(shown.Notes) == 0 || !strings.Contains(shown.Notes[0].Body, "Sent to Chief") || !strings.Contains(shown.Notes[0].Body, "feature/special") {
-			t.Errorf("the seed's log leads with %+v, want a Sent to Chief note carrying the guidance", shown.Notes)
-		}
+	}
 
-		w.advance(0)
-		if bells := readInbox(t, cli, "observer", 0).Items; len(bells) != 1 || protocol.Deref(bells[0].Hint) != "tended" || !strings.Contains(bells[0].Content, seed) {
-			t.Errorf("the observer received %q, want one bell that %s is tended", inboxContents(bells), seed)
-		}
-		if bells := readInbox(t, cli, "sender", 0).Items; len(bells) != 0 {
-			t.Errorf("the sender received %q, want no bell for its own move", inboxContents(bells))
-		}
-		if items := readInbox(t, cli, chief, 0).Items; len(items) != 1 || protocol.Deref(items[0].Hint) == "tended" || !strings.Contains(items[0].Content, "attn seed show "+seed) {
-			t.Errorf("the chief received %q, want only the assignment pointing at %s and no tended bell", inboxContents(items), seed)
-		}
-	}, fakeagent.Claude)
+	stale := tended
+	stale.Rev--
+	_, err := cli.SeedSendToChief("sender", stale, "")
+	lifeRefusal(t, "sending a seed changed since it was opened", err, seed, "changed since you opened it")
+	if still := lifeShow(t, cli, seed).Seed; protocol.Deref(protocol.Deref(still.Tender).SessionID) != "sender" || still.Rev != tended.Rev {
+		t.Fatalf("the refused send moved the seed: %+v", still)
+	}
+
+	sent, err := cli.SeedSendToChief("sender", tended, "Use branch feature/special in /tmp/special.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if protocol.Deref(sent.Chief.SessionID) != protocol.SessionID(chief) || protocol.Deref(protocol.Deref(sent.Seed.Tender).SessionID) != protocol.SessionID(chief) {
+		t.Errorf("sending to the Chief answered %+v, want the chief tending it", sent)
+	}
+	shown := lifeShow(t, cli, seed)
+	if got := shown.Seed; protocol.Deref(protocol.Deref(got.Tender).SessionID) != protocol.SessionID(chief) || protocol.Deref(got.LastExecutionID) != protocol.Deref(tended.LastExecutionID) {
+		t.Errorf("after the send the seed is tended by %q in execution %q, want chief in %q",
+			protocol.Deref(protocol.Deref(got.Tender).SessionID), protocol.Deref(got.LastExecutionID), protocol.Deref(tended.LastExecutionID))
+	}
+	if len(shown.Notes) == 0 || !strings.Contains(shown.Notes[0].Body, "Sent to Chief") || !strings.Contains(shown.Notes[0].Body, "feature/special") {
+		t.Errorf("the seed's log leads with %+v, want a Sent to Chief note carrying the guidance", shown.Notes)
+	}
+
+	if bells := readInbox(t, cli, "observer", 0).Items; len(bells) != 1 || protocol.Deref(bells[0].Hint) != "tended" || !strings.Contains(bells[0].Content, seed) {
+		t.Errorf("the observer received %q, want one bell that %s is tended", inboxContents(bells), seed)
+	}
+	if bells := readInbox(t, cli, "sender", 0).Items; len(bells) != 0 {
+		t.Errorf("the sender received %q, want no bell for its own move", inboxContents(bells))
+	}
+	if items := readInbox(t, cli, chief, 0).Items; len(items) != 1 || protocol.Deref(items[0].Hint) == "tended" || !strings.Contains(items[0].Content, "attn seed show "+seed) {
+		t.Errorf("the chief received %q, want only the assignment pointing at %s and no tended bell", inboxContents(items), seed)
+	}
 }
