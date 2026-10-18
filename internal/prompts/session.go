@@ -14,6 +14,7 @@ var (
 	selfReportPullRequests = FlagField("self_report_pull_requests", "Ask the agent to record PRs when the harness cannot report them.")
 	gardenAvailable        = FlagField("garden_available", "Include Garden guidance.")
 	asksEnabled            = FlagField("asks_enabled", "Include ask guidance when the session launched with asks.")
+	quickCaptureEnabled    = FlagField("quick_capture_enabled", "Include Quick Capture guidance when the experimental feature is enabled.")
 	crewPriming            = ProducedBy(Trimmed(TextField("crew_priming", "Rendered crew identity and predecessor letter, supplied by internal/crew.")), "crew/priming")
 )
 
@@ -24,8 +25,9 @@ var (
 		Bind("delegation_boundary", delegationBoundary))
 	agentGuidance = Use("session.agent", "content/agent.md",
 		Bind("delegation_boundary", delegationBoundary))
-	gardenGuidance      = Use("session.garden", "content/garden.md")
-	pullRequestGuidance = Use("session.pull-request-guidance", "content/session/pull-request-guidance.md")
+	quickCaptureGuidance = When(Enabled(quickCaptureEnabled), Use("session.quick-capture-guidance", "content/session/quick-capture.md"))
+	gardenGuidance       = Use("session.garden", "content/garden.md")
+	pullRequestGuidance  = Use("session.pull-request-guidance", "content/session/pull-request-guidance.md")
 )
 
 var session = Recipient{
@@ -36,12 +38,12 @@ var session = Recipient{
 			"hooks.Launch.Instructions: Claude appends system instructions; Codex sets developer instructions; capable plugins receive launch instructions. Triggering and delivery remain with the existing adapters.",
 			Compose(
 				Choose(Present(notebookRoot),
-					chiefGuidance,
+					Compose(chiefGuidance, quickCaptureGuidance),
 					agentGuidance),
 				When(Enabled(gardenAvailable), gardenGuidance),
 				When(Enabled(asksEnabled), askGuidance),
 				When(Enabled(selfReportPullRequests), pullRequestGuidance),
-				When(Present(crewPriming), Input(crewPriming)),
+				When(Present(crewPriming), Compose(Input(crewPriming), Choose(Present(notebookRoot), Compose(), quickCaptureGuidance))),
 			)),
 		On("agent-guidance", "message_fragment", "Non-chief trust and delegation guidance.", agentGuidance),
 		On("garden-guidance", "message_fragment", "Garden instructions.", gardenGuidance),
@@ -72,6 +74,7 @@ type Launch struct {
 	SelfReportPullRequests bool
 	Garden                 bool
 	Asks                   bool
+	QuickCapture           bool
 	Crew                   string
 }
 
@@ -81,6 +84,7 @@ func (l Launch) Values() Values {
 		selfReportPullRequests.Name: strconv.FormatBool(l.SelfReportPullRequests),
 		gardenAvailable.Name:        strconv.FormatBool(l.Garden),
 		asksEnabled.Name:            strconv.FormatBool(l.Asks),
+		quickCaptureEnabled.Name:    strconv.FormatBool(l.QuickCapture),
 		crewPriming.Name:            l.Crew,
 	}
 }

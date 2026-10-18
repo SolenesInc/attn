@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "id": "quick-capture-crew-launch-disabled",
+  "description": "Crew launch while experimental Quick Capture is off.",
+  "recipient": "session",
+  "event": "launch",
+  "values": {
+    "quick_capture_enabled": "false"
+  },
+  "inputs": {
+    "crew_priming": "crew-with-handoff"
+  }
+}

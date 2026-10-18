@@ -23,7 +23,7 @@ func TestSettingsCLIDiscoversReadsAndSavesDaemonSettings(t *testing.T) {
 		return m.Settings["theme"] == "dark" && protocol.Deref(m.ChangedKey) == "theme"
 	})
 	requireStdout(t, s.Attn("settings", "get", "theme"), "dark")
-	for _, key := range []string{"headless_tasks.enabled", "queue_show_hidden_sessions", "asks_enabled", "callouts_enabled"} {
+	for _, key := range []string{"headless_tasks.enabled", "queue_show_hidden_sessions", "asks_enabled", "callouts_enabled", "quick_capture_enabled"} {
 		requireStdout(t, s.Attn("settings", "set", key, "true"), key+" = true")
 		requireStdout(t, s.Attn("settings", "get", key), "true")
 	}
@@ -45,7 +45,7 @@ func TestSettingsCLIDiscoversReadsAndSavesDaemonSettings(t *testing.T) {
 		t.Fatalf("usage: %+v", r)
 	}
 	plain := s.Attn("settings", "list")
-	requireStdout(t, plain, "all profiles", "theme", "App color theme")
+	requireStdout(t, plain, "all profiles", "theme", "App color theme", "quick_capture_enabled")
 	if strings.Contains(plain.Stdout, "pty_backend_mode") {
 		t.Fatal("list includes read-only values")
 	}
@@ -72,6 +72,7 @@ func TestSettingsCLIDiscoversReadsAndSavesDaemonSettings(t *testing.T) {
 	s.Stop()
 	s.Start()
 	requireStdout(t, s.Attn("settings", "get", "theme"), "dark")
+	requireStdout(t, s.Attn("settings", "get", "quick_capture_enabled"), "true")
 	requireStdout(t, s.Attn("settings", "set", "headless_context_window_cap", "128000"), "128000")
 	requireStdout(t, s.Attn("settings", "set", "headless_context_window_cap", ""))
 	reset := s.Attn("settings", "get", "headless_context_window_cap")
