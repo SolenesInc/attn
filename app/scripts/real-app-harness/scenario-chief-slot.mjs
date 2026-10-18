@@ -41,7 +41,10 @@ const click = async selector => {
   runner.writeJson(`focus-${selector.replace(/[^a-zA-Z0-9]/g, '')}.json`, await client.request('dom_active_element'));
   await driver.clickWindow(x, y);
 };
-const screenshot = async name => driver.screenshot(path.join(runner.runDir, `${name}.png`), { windowId: await driver.mainWindowId() });
+const screenshot = async name => {
+  if (name !== '02-chief-waking') await client.request('get_state');
+  return driver.screenshot(path.join(runner.runDir, `${name}.png`), { windowId: await driver.mainWindowId() });
+};
 const openChiefRoute = async () => {
   await driver.pressKey('Tab');
   await driver.pressKey('Tab');
@@ -297,6 +300,7 @@ try {
   });
   console.log(JSON.stringify(await runner.finishSuccess({ profile: profile.id, chief: chief.key, firstDay }), null, 2));
 } catch (error) {
+  runner.writeJson('app-exit.json', { pid: client.launch?.pid, exitCode: client.launch?.child?.exitCode, signal: client.launch?.child?.signalCode, logPath: client.launch?.logPath });
   if (chief) {
     try {
       runner.writeJson('chief-slot-failure-state.json', {

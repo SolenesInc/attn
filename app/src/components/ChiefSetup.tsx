@@ -94,7 +94,6 @@ export function ChiefSetup({ chief, anchor, onSave, onClose, onReturnFocus, onOp
   });
   const busy = chief.requestPending;
   const checking = catalog.loading && !catalog.hasCatalog;
-  const error = chief.setupError || catalog.error || view.error;
   const canSave = !busy && Boolean(harness && value.model && !catalog.loading && !catalog.error && !view.loading && !view.error && (!firstRun || folder.trim()));
   const submit = () => {
     if (!canSave) return;
@@ -130,8 +129,8 @@ export function ChiefSetup({ chief, anchor, onSave, onClose, onReturnFocus, onOp
       <button type="button" className="chief-pop-close" aria-label="Close chief setup" onClick={() => onClose()}><kbd>esc</kbd></button>
     </header>
     <div className="chief-pop-body">
-    {checking ? <p className="chief-quiet" role="status">Checking harnesses…</p> : !harnesses.length || (error && !chief.setupError) ? <>
-      {error ? <p className="chief-setup-error" role="alert">{error}</p> : <p className="chief-quiet">No harness here can run the chief. Install Claude Code or Codex to wake it.</p>}
+    {checking ? <p className="chief-quiet" role="status">Checking harnesses…</p> : !harnesses.length || catalog.error ? <>
+      {catalog.error ? <p className="chief-setup-error" role="alert">{catalog.error}</p> : <p className="chief-quiet">No harness here can run the chief. Install Claude Code or Codex to wake it.</p>}
       <div className="chief-link-row">
         <button ref={retainFocus} type="button" className="chief-link" onClick={recheck}>Check again</button>
         {onOpenSettings && <button type="button" className="chief-link" onClick={onOpenSettings}>Settings › Agents</button>}
@@ -146,7 +145,10 @@ export function ChiefSetup({ chief, anchor, onSave, onClose, onReturnFocus, onOp
       <section>
         <span className="chief-pop-key">Model</span>
         <div className="chief-pop-models" role="radiogroup" aria-label="Chief model">
-          {models.map(({ model, stored, label }) => {
+          {view.error ? <>
+            <p className="chief-setup-error" role="alert">{view.error}</p>
+            <button ref={retainFocus} type="button" className="chief-link" onClick={() => { focusRequested.current = 'primary'; view.discover(true); }}>Check again</button>
+          </> : models.map(({ model, stored, label }) => {
             const checked = stored || (value.model === model?.id && value.provider === model?.provider);
             return <button ref={retainFocus} type="button" role="radio" key={`${model?.provider ?? value.provider}/${model?.id ?? value.model}`} aria-checked={checked} tabIndex={checked ? 0 : -1} disabled={busy} onClick={() => { if (model) setDraft(view.withModel(model)); }}>
               <span>{label}</span>{model === recommended ? <small>recommended</small> : model?.tier ? <small>{model.tier}</small> : null}

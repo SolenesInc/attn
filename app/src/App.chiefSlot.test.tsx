@@ -174,6 +174,21 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
     expect(setup().getByRole('button', { name: /Wake Captain/ })).toHaveFocus();
     expect(daemon.sentOf('crew_set')).toEqual([]);
   });
+  it('can switch to another harness when the selected model lookup fails', async () => {
+    const { daemon } = await renderApp({ initialState: { settings, crew: [member()] }, script: daemon => {
+      daemon.on('harness_models', ({ harness }) => harness === 'claude'
+        ? { event: 'harness_models_result', success: false, error: 'Claude model lookup failed', models: [], tier_defaults: {}, detail: '' }
+        : { event: 'harness_models_result', success: true, models: [reportedModel('codex', 'gpt-6.1-sol', 'Sol', 'deep')], tier_defaults: { deep: 'gpt-6.1-sol' }, detail: '' });
+    } });
+    expect(setup().getByRole('alert')).toHaveTextContent('Claude model lookup failed');
+    expect(setup().getByRole('button', { name: /Wake Captain/ })).toBeDisabled();
+    await gesture(daemon, () => fireEvent.click(setup().getByRole('radio', { name: 'Codex' })));
+    expect(setup().queryByRole('alert')).toBeNull();
+    expect(setup().getByRole('radio', { name: /Sol/ })).toHaveAttribute('aria-checked', 'true');
+    daemon.on('crew_set', () => undefined);
+    await gesture(daemon, () => fireEvent.click(setup().getByRole('button', { name: /Wake Captain/ })));
+    expect(daemon.sentOf('crew_set')).toEqual([expect.objectContaining({ agent: 'codex', model: 'gpt-6.1-sol' })]);
+  });
   it('shows a failed registry lookup and retries before permitting Wake', async () => {
     const { daemon } = await renderApp({ initialState: { settings, crew: [member()] }, script: daemon => {
       daemon.on('delegation_preferences_get', () => ({ event: 'delegation_preferences_result', success: false, error: 'Harness lookup failed' }));
