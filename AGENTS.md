@@ -324,5 +324,4 @@ working on:
 - To debug an isolated daemon, quit its app, then
   `DEBUG=debug attn daemon ensure`.
 - Restarting the app or daemon has no impact on the underlying agents, unless
-  Settings → Terminal reports the embedded backend: then a daemon restart stops
-  them.
+  they use the embedded backend, where a daemon restart stops them.

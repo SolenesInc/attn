@@ -9,7 +9,6 @@ export const complete = (selection: DelegationSelection) => selection.harness !=
 export const defaultChoice = (role: DelegationRole) => role.choices.find(choice => choice.id === role.default_choice_id) ?? role.choices[0];
 export const alternatives = (role: DelegationRole) => role.choices.filter(choice => choice.id !== role.default_choice_id);
 export const liveRoles = (preferences: DelegationPreferences) => preferences.roles.filter(role => role.enabled && complete(defaultChoice(role).selection));
-export const delegationLiveCount = (preferences: DelegationPreferences | null) => preferences?.enabled ? liveRoles(preferences).length : 0;
 
 export function selectionAt(config: DelegationPreferences, key: string): { value: DelegationSelection; with: (selection: DelegationSelection) => DelegationPreferences } | null {
   if (key === FALLBACK) return { value: config.fallback.selection, with: selection => ({ ...config, fallback: { ...config.fallback, selection } }) };

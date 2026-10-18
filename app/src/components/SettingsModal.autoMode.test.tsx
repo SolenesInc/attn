@@ -1,6 +1,6 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { renderApp } from '../test/renderApp';
+import { gesture, renderApp } from '../test/renderApp';
 import type { Reply } from '../test/scriptedDaemon';
 import { renderSettings } from '../test/settings';
 
@@ -37,32 +37,18 @@ const autoModeState = (proposals: number): Reply => ({
 const settingsWithProposals = (proposals: number) =>
   renderSettings({}, (daemon) => daemon.on('automode_get', () => autoModeState(proposals)));
 
-describe('SettingsModal auto mode badge', () => {
-  it('counts waiting proposals on the nav row without opening the section', async () => {
+describe('SettingsModal auto mode navigation', () => {
+  it('opens pending proposals from a plain navigation label', async () => {
     const { daemon } = await settingsWithProposals(3);
 
-    const nav = screen.getByTestId('settings-nav-autoMode');
-    expect(nav).toHaveTextContent('3');
-    expect(nav.querySelector('.settings-nav-count')).toHaveClass('waiting');
+    const nav = screen.getByRole('button', { name: /^Auto mode$/ });
     expect(daemon.sentOf('automode_get')).toHaveLength(1);
     expect(screen.queryByTestId('settings-automode-config')).toBeNull();
-  });
 
-  it('leaves the count unmarked when nothing is waiting', async () => {
-    await settingsWithProposals(0);
-
-    const nav = screen.getByTestId('settings-nav-autoMode');
-    expect(nav).toHaveTextContent('0');
-    expect(nav.querySelector('.settings-nav-count')).not.toHaveClass('waiting');
-  });
-
-  it('opens the section from the nav row', async () => {
-    const { daemon } = await settingsWithProposals(1);
-
-    fireEvent.click(screen.getByTestId('settings-nav-autoMode'));
-    await daemon.idle();
+    await gesture(daemon, () => fireEvent.click(nav));
     expect(screen.getByTestId('automode-proposals')).toBeInTheDocument();
     expect(screen.getByTestId('settings-section-autoMode')).toBeInTheDocument();
+    expect(screen.getByText('3 proposals waiting')).toBeInTheDocument();
   });
 
   it('reads nothing while settings is closed', async () => {

@@ -157,11 +157,12 @@ try {
   await runner.step('relocated_controls', async () => {
     await section('desktop');
     runner.assert((await text('[data-testid="settings-section-desktop"]')).includes('Editor'), 'editor belongs with file locations');
-    await section('terminal');
-    runner.assert((await text('[data-testid="settings-section-terminal"]')).includes('PTY Backend'), 'terminal hosting is under System');
     runner.assert(!(await text('.settings-nav')).includes('Workflows'), 'workflow engine settings are retired');
     await section('experimental');
-    runner.assert((await text('[data-testid="settings-section-experimental"]')).includes('Shared Codex'), 'shared Codex is under Experimental');
+    const experiments = await text('[data-testid="settings-section-experimental"]');
+    runner.assert(experiments.includes('Shared Codex') && experiments.includes('Shared terminal host'), 'runtime experiments are together');
+    runner.assert(!experiments.includes('Runtime mode'), 'runtime diagnostics do not have a separate card');
+    runner.assert(!(await text('.settings-nav')).includes('Terminal'), 'Experimental replaces the Terminal section');
     await section('agents');
     await screenshot('04-finished.png');
   });

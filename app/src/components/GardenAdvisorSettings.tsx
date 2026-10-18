@@ -44,7 +44,6 @@ export function GardenAdvisorSettings({
   return (
     <section className="settings-block">
       <div className="settings-block-intro">
-        <div className="settings-kicker">Garden</div>
         <h3>Garden advisor</h3>
         <p className="settings-description">
           Classifies seeds during Review garden and can draft a handoff. It runs in the

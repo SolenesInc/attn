@@ -28,13 +28,11 @@ import {
   isAutoSettleEnabled,
 } from '../utils/queueBands';
 import { useAutosaveSetting, useSettingsAutosave } from './SettingsAutosave';
-import { delegationLiveCount } from './delegationRoles';
 import { assertValidSettingsSectionID, setSettingsAutomationHandle } from './settingsAutomation';
 import { useAgentSettingDrafts, useSettingDraft } from './settingsDrafts';
 import {
   DEFAULT_CONTEXT_WINDOW_CAP,
   OPEN_SENT_FILES_ENABLED_SETTING,
-  PTY_BACKENDS,
   SettingsModalHandle,
   SettingsModalProps,
   SettingsNavGroup,
@@ -278,17 +276,12 @@ export function useSettingsModalState({
     return eligible;
   }, [actualAgentCapabilities, agentAvailability, orderedAgentList, settings]);
   const agentCapabilityOrder = useMemo(() => AGENT_CAPABILITY_ORDER.map((cap) => cap as string), []);
-  const rawPtyBackendMode = (settings.pty_backend_mode || 'unknown').toLowerCase();
-  const ptyBackendMode = Object.prototype.hasOwnProperty.call(PTY_BACKENDS, rawPtyBackendMode)
-    ? rawPtyBackendMode
-    : 'unknown';
-  const { label: ptyBackendLabel, hint: ptyBackendHint } = PTY_BACKENDS[ptyBackendMode];
+  const ptyBackendMode = (settings.pty_backend_mode || 'unknown').toLowerCase();
   const newSessionLauncherEnabled = settings.new_session_launcher_enabled === 'true';
   const codexSharedEnabled = settings.codex_shared_enabled === 'true';
   const queueShowHiddenSessions = settings.queue_show_hidden_sessions !== 'false';
   const directAgentLaunchEnabled = settings.direct_agent_launch_enabled === 'true';
   const sharedPtyHostEnabled = settings.pty_shared_host_enabled === 'true';
-  const sharedPtyHostActive = settings.pty_shared_host_active === 'true';
 
   const draftDeps = { active: isOpen, onSetSetting, savedFlash };
   const projectsDirDraft = useSettingDraft({
@@ -546,7 +539,6 @@ export function useSettingsModalState({
   );
 
   const activePluginCount = plugins.filter((plugin) => plugin.connected || plugin.running).length;
-  const mutedItemCount = mutedRepos.length + mutedAuthors.length;
   const pluginProblemCount =
     pluginIssues.length + plugins.filter((plugin) => plugin.health_status === 'unhealthy').length;
   const hasProjectsDirChange = projectsDirDraft.value !== actualProjectsDir;
@@ -559,27 +551,21 @@ export function useSettingsModalState({
           {
             id: 'general',
             label: 'Appearance',
-            title: 'Appearance',
             description: 'Theme and text size, for the app and for the garden.',
-            count: 2,
             keywords: 'theme appearance dark light system font size text scale zoom garden',
           },
           {
             id: 'desktop',
             label: 'Files and locations',
-            title: 'Files and locations',
             description:
               'Where attn opens repositories and worktrees, when merged worktrees are reclaimed, where your Notebook lives, and what it does with a file an agent sends you.',
-            count: 4,
             keywords:
               'projects directory worktrees roots notebook folder knowledge base journal location editor executable sent files tiles open markdown worktree sweep reclaim merged keep pin',
           },
           {
             id: 'hygiene',
             label: 'Attention queue',
-            title: 'Attention queue',
             description: 'When a turn settles itself, and which repositories and authors never reach the queue at all.',
-            count: mutedItemCount + 1,
             keywords:
               'muted repositories repos authors hide unmute hygiene auto-settle settle turn countdown sidebar attention queue',
           },
@@ -591,38 +577,30 @@ export function useSettingsModalState({
           {
             id: 'agents',
             label: 'Agents and models',
-            title: 'Agents and models',
             description: 'Defaults for new sessions, with configuration for each agent.',
-            count: orderedAgentList.length + 8,
             keywords:
               'agents executables claude codex copilot pi default capabilities model effort pricing context window cap tokens compaction auto-approve unattended',
           },
           {
-            id: 'models', label: 'Models', title: 'Models', description: 'Model tiers and shared defaults.', count: 0, keywords: 'harness model tier light standard deep overrides defaults',
+            id: 'models', label: 'Models', description: 'Tiers describe how much intelligence a task needs. Your changes apply across profiles on this daemon; Reset restores attn’s mapping.', keywords: 'harness model tier light standard deep overrides defaults',
           },
           {
             id: 'backgroundAgents',
             label: 'Background agents',
-            title: 'Background agents',
             description: 'The agents that summarize session activity, review the garden, and coordinate work.',
-            count: 3,
             keywords: 'chief model effort headless context cap session activity summary refresh garden advisor',
           },
           {
             id: 'delegation',
             label: 'Delegation',
-            title: 'Delegation',
             description: '',
-            count: delegationLiveCount(delegationPolicy.preferences),
             keywords:
               'delegate roles pathfinder builder reviewer orchestrator prototyper fallback harness models effort preferences alternatives',
           },
           {
             id: 'autoMode',
             label: 'Auto mode',
-            title: 'Auto mode',
             description: "Manage attn's pi automode plugin",
-            count: autoModePolicy.pendingCount,
             keywords:
               'auto mode automode pi safety envelope proposals promote discard allow deny forbidden rules hosts network approval policy sandbox permissions denials',
           },
@@ -634,9 +612,7 @@ export function useSettingsModalState({
           {
             id: 'connectivity',
             label: 'Mobile and hosts',
-            title: 'Mobile web and hosts',
             description: 'Controls for mobile browser access and GitHub host detection.',
-            count: Math.max(2, githubHosts.length + 1),
             keywords: 'tailscale mobile web github hosts',
           },
         ],
@@ -647,9 +623,7 @@ export function useSettingsModalState({
           {
             id: 'plugins',
             label: 'Plugins',
-            title: 'Plugins',
-            description: 'Install user-owned plugins and tune provider dispatch priority.',
-            count: Math.max(1, plugins.length + pluginIssues.length),
+            description: 'Install bundled plugins or add your own from a local directory or Git repository, and set provider dispatch priority.',
             keywords: 'plugins extensions providers priority install healthcheck',
           },
         ],
@@ -658,60 +632,36 @@ export function useSettingsModalState({
         label: 'System',
         items: [
           {
-            id: 'terminal',
-            label: 'Terminal',
-            title: 'Terminal',
-            description: 'How terminal sessions are hosted.',
-            count: 1,
-            keywords: 'pty backend shared rust host workers experimental terminal',
-          },
-          {
             id: 'experimental',
             label: 'Experimental',
-            title: 'Experimental',
             description: 'Opt in to features that are still being developed.',
-            count: 5,
-            keywords: 'experimental codex shared hidden sessions queue direct agent launch launcher memory claude copilot one-screen new-session one screen new session project path asks questions answer decisions drawer',
+            keywords: 'experimental launcher 2.0 shared terminal host shared codex show hidden sessions in the queue direct agent launches terminal pty backend rust workers memory claude copilot one-screen new-session one screen new session project path asks questions answer decisions drawer',
           },
           {
             id: 'backgroundTasks',
             label: 'Task runner',
-            title: 'Background tasks',
-            description: 'The durable task runner: compaction, summaries, narration, and reconciliation, with retry.',
-            count: 1,
+            description: 'Runs compaction, session summaries, desktop narration, and reconciliation. Exhausted retries raise a notification; retry the task here.',
             keywords: 'background tasks runner durable compaction summarize narrate reconcile retry failed dead queue',
           },
           {
             id: 'eventBus',
             label: 'Event bus',
-            title: 'Event bus',
             description:
-              'The durable event log: what it holds, which facts are written to it and how fast, and who reads it.',
-            count: 1,
+              'The durable event log: what it holds, who writes to it, and who reads it. Also available through attn bus status.',
             keywords:
               'event bus log durable facts producers consumers cursor lag retention compaction trim stalled disabled kill switch seq',
           },
           {
             id: 'data',
             label: 'Model data capture',
-            title: 'Local model data capture',
             description:
-              'Opt-in collection of visible Codex and Claude terminal viewports for local model evaluation and training.',
-            count: 3,
-            keywords: 'model training dataset capture privacy terminal viewport local retention sampling',
+              'Collect visible Codex and Claude terminal screens for local model evaluation and training. Off by default.',
+            keywords: 'local model training dataset capture privacy terminal viewport local retention sampling',
           },
         ],
       },
     ],
-    [
-      githubHosts.length,
-      mutedItemCount,
-      orderedAgentList.length,
-      pluginIssues.length,
-      plugins.length,
-      autoModePolicy.pendingCount,
-      delegationPolicy.preferences,
-    ],
+    [],
   );
 
   const filteredNavGroups = useMemo(() => {
@@ -721,7 +671,7 @@ export function useSettingsModalState({
       .map((group) => ({
         ...group,
         items: group.items.filter((item) =>
-          `${item.label} ${item.title} ${item.description} ${item.keywords}`.toLowerCase().includes(query),
+          `${item.label} ${item.description} ${item.keywords}`.toLowerCase().includes(query),
         ),
       }))
       .filter((group) => group.items.length > 0);
@@ -784,10 +734,7 @@ export function useSettingsModalState({
     handleUninstallPlugin,
     handleRemovePlugin,
     commitPluginPriority,
-    ptyBackendHint,
     ptyBackendMode,
-    ptyBackendLabel,
-    sharedPtyHostActive,
     sharedPtyHostEnabled,
     newSessionLauncherEnabled,
     codexSharedEnabled,

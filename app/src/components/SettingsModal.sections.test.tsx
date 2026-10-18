@@ -1,4 +1,4 @@
-import { act, fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { gesture } from '../test/renderApp';
 import { openSection, renderSettings, savedSettings } from '../test/settings';
@@ -9,8 +9,9 @@ const SECTION_IDS = [
   'desktop',
   'hygiene',
   'agents',
+  'models',
+  'delegation',
   'backgroundAgents',
-  'terminal',
   'experimental',
   'autoMode',
   'connectivity',
@@ -20,9 +21,31 @@ const SECTION_IDS = [
   'data',
 ] as const;
 
-const sharedHostSwitch = () => screen.getByRole('switch', { name: 'Shared PTY host (experimental)' });
+const sharedHostSwitch = () => screen.getByRole('switch', { name: 'Shared terminal host' });
 
 describe('SettingsModal sections', () => {
+  it('uses plain section names throughout the navigation', async () => {
+    await renderSettings();
+
+    const navigation = screen.getByRole('navigation', { name: 'Settings sections' });
+    expect(within(navigation).getAllByRole('button').map(button => button.textContent)).toEqual([
+      'Appearance',
+      'Files and locations',
+      'Attention queue',
+      'Agents and models',
+      'Models',
+      'Background agents',
+      'Delegation',
+      'Auto mode',
+      'Mobile and hosts',
+      'Plugins',
+      'Experimental',
+      'Task runner',
+      'Event bus',
+      'Model data capture',
+    ]);
+  });
+
   it('exposes theme selection and the projects directory through accessible controls', async () => {
     const daemon = await openSection('general', { settings: { theme: 'system' } });
     expect(screen.getByRole('button', { name: 'System', pressed: true })).toBeInTheDocument();
@@ -40,11 +63,10 @@ describe('SettingsModal sections', () => {
   });
 
   it('keeps the shared PTY experiment off until the daemon confirms opt-in', async () => {
-    const daemon = await openSection('terminal', { settings: { pty_backend_mode: 'migrating' } }, (scripted) => {
+    const daemon = await openSection('experimental', { settings: { pty_backend_mode: 'migrating' } }, (scripted) => {
       scripted.on('set_setting', () => {});
     });
     expect(sharedHostSwitch()).toHaveAttribute('aria-checked', 'false');
-    expect(screen.getByTestId('settings-shared-pty-host-status')).toHaveTextContent('New sessions use dedicated Go workers.');
 
     await gesture(daemon, () => fireEvent.click(sharedHostSwitch()));
     expect(savedSettings(daemon)).toEqual([['pty_shared_host_enabled', 'true']]);
@@ -54,42 +76,57 @@ describe('SettingsModal sections', () => {
     expect(sharedHostSwitch()).toHaveAttribute('aria-checked', 'true');
   });
 
-  it('can turn the shared host off without claiming existing terminals will move', async () => {
-    const daemon = await openSection('terminal', { settings: {
+  it('can turn the shared host off', async () => {
+    const daemon = await openSection('experimental', { settings: {
       pty_backend_mode: 'migrating', pty_shared_host_enabled: 'true', pty_shared_host_active: 'true',
     } });
     expect(sharedHostSwitch()).toHaveAttribute('aria-checked', 'true');
-    expect(screen.getByTestId('settings-shared-pty-host-status')).toHaveTextContent('New sessions use the shared Rust host.');
-    expect(screen.getByText(/Running sessions stay untouched/)).toBeInTheDocument();
     await gesture(daemon, () => fireEvent.click(sharedHostSwitch()));
     expect(savedSettings(daemon)).toEqual([['pty_shared_host_enabled', 'false']]);
   });
 
-  it('shows when a saved opt-in fell back to dedicated workers', async () => {
-    await openSection('terminal', { settings: { pty_backend_mode: 'migrating', pty_shared_host_enabled: 'true', pty_shared_host_active: 'false' } });
-    expect(screen.getByTestId('settings-shared-pty-host-status')).toHaveTextContent('Shared host unavailable.');
-    expect(sharedHostSwitch()).toBeEnabled();
-  });
-
   it.each(['worker', 'shared', 'embedded', 'unknown'])('disables the experiment control on the %s backend', async (mode) => {
-    const daemon = await openSection('terminal', { settings: { pty_backend_mode: mode } });
+    const daemon = await openSection('experimental', { settings: { pty_backend_mode: mode } });
     expect(sharedHostSwitch()).toBeDisabled();
     await gesture(daemon, () => fireEvent.click(sharedHostSwitch()));
     expect(savedSettings(daemon)).toEqual([]);
   });
 
-  it('gives every published section id a nav item that renders a block', async () => {
+  it('uses the navigation name as the sole page heading in every section', async () => {
     const { daemon } = await renderSettings();
 
     for (const id of SECTION_IDS) {
       assertValidSettingsSectionID(id);
-      await gesture(daemon, () => fireEvent.click(screen.getByTestId(`settings-nav-${id}`)));
-      expect(screen.getByTestId(`settings-section-${id}`).querySelector('.settings-block')).not.toBeNull();
+      const item = screen.getByTestId(`settings-nav-${id}`);
+      const name = item.textContent!;
+      await gesture(daemon, () => fireEvent.click(item));
+      const body = within(screen.getByRole('main'));
+      expect(body.getByRole('heading', { name, level: 1 })).toBeInTheDocument();
+      expect(body.getAllByText(name, { exact: true })).toHaveLength(1);
     }
   });
 
-  it('refuses the retired review id by name', () => {
-    expect(() => assertValidSettingsSectionID('review')).toThrow(/unknown settings section "review"/);
+  it('keeps distinct groups within a settings page', async () => {
+    await openSection('general');
+    expect(screen.getByRole('heading', { name: 'Theme' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Font Size' })).toBeInTheDocument();
+  });
+
+  it('finds the shared host in Experimental when searching for terminal hosting', async () => {
+    const { daemon } = await renderSettings();
+    const search = screen.getByRole('searchbox', { name: 'Search settings' });
+    const navigation = within(screen.getByRole('navigation', { name: 'Settings sections' }));
+    for (const query of ['terminal', 'pty', 'Launcher 2.0', 'Shared terminal host', 'Direct agent launches']) {
+      await gesture(daemon, () => fireEvent.change(search, { target: { value: query } }));
+      expect(navigation.getByRole('button', { name: 'Experimental' })).toBeInTheDocument();
+    }
+    await gesture(daemon, () => fireEvent.click(navigation.getByRole('button', { name: 'Experimental' })));
+    expect(sharedHostSwitch()).toBeInTheDocument();
+    expect(screen.queryByText('Runtime mode')).toBeNull();
+  });
+
+  it.each(['review', 'terminal'])('refuses the retired %s section by name', (id) => {
+    expect(() => assertValidSettingsSectionID(id)).toThrow(`unknown settings section "${id}"`);
   });
 
   it('separates background agents and removes the unused reviewer model', async () => {

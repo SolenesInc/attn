@@ -63,7 +63,6 @@ export function SessionActivitySettings({
   return (
     <section className="settings-block">
       <div className="settings-block-intro">
-        <div className="settings-kicker">Agents</div>
         <h3>Session activity</h3>
         <p className="settings-description">
           Summarize each session on Home using its transcript. This sends transcript excerpts

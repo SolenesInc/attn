@@ -96,7 +96,7 @@ test.describe('Asks', () => {
         .getByRole('navigation', { name: 'Settings sections' })
         .getByRole('button', { name: /^Experimental/ })
         .click();
-      const asksSwitch = page.getByRole('switch', { name: 'Asks (experimental)' });
+      const asksSwitch = page.getByRole('switch', { name: 'Asks' });
       await pause(page, 600);
       await asksSwitch.click();
       await expect(asksSwitch).toHaveAttribute('aria-checked', 'true');

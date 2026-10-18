@@ -98,7 +98,6 @@ export function EventBusSettings({ getBusStatus, setConsumerEnabled }: EventBusS
   if (error && !status) {
     return (
       <section className="settings-block">
-        {renderIntro()}
         <div className="settings-block-body">
           <div className="bus-state">
             <span className="settings-warning">{error}</span>
@@ -114,7 +113,6 @@ export function EventBusSettings({ getBusStatus, setConsumerEnabled }: EventBusS
   if (!status) {
     return (
       <section className="settings-block">
-        {renderIntro()}
         <div className="settings-block-body">
           <div className="bus-state" data-testid="bus-loading">Reading the event log…</div>
         </div>
@@ -131,7 +129,6 @@ export function EventBusSettings({ getBusStatus, setConsumerEnabled }: EventBusS
 
   return (
     <section className="settings-block" data-testid="settings-bus">
-      {renderIntro()}
       <div className="settings-block-body">
         {error && <span className="settings-warning">{error}</span>}
 
@@ -313,18 +310,5 @@ export function EventBusSettings({ getBusStatus, setConsumerEnabled }: EventBusS
         </div>
       </div>
     </section>
-  );
-}
-
-function renderIntro() {
-  return (
-    <div className="settings-block-intro">
-      <span className="settings-kicker">Event Bus</span>
-      <h3>Durable event log</h3>
-      <p className="settings-description">
-        The spine every state change travels on. This is what it holds, who writes to it, and who
-        reads it — the same picture <code>attn bus status</code> prints.
-      </p>
-    </div>
   );
 }

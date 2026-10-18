@@ -134,7 +134,6 @@
 }
 
 .settings-nav-label,
-.settings-kicker,
 .settings-label,
 .settings-meta-label {
   font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
@@ -154,7 +153,6 @@
   width: 100%;
   min-height: 38px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   border: 0;
@@ -176,27 +174,6 @@
   background: rgba(245, 155, 74, 0.12);
   color: var(--color-text-primary);
   box-shadow: inset 3px 0 0 #f59b4a;
-}
-
-.settings-nav-count {
-  min-width: 22px;
-  height: 20px;
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  color: var(--color-text-tertiary);
-  text-align: center;
-  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
-  font-size: var(--font-size-xs);
-  font-weight: 700;
-  line-height: 18px;
-}
-
-/* A count that is waiting on the reader, not just describing the section:
-   proposals nobody promotes are proposals that rot. Mirrors .settings-pill.bad. */
-.settings-nav-count.waiting {
-  border-color: rgba(255, 116, 108, 0.42);
-  background: rgba(255, 116, 108, 0.11);
-  color: #ff746c;
 }
 
 .settings-body {
@@ -222,7 +199,7 @@
 }
 
 .settings-content-head h1 {
-  margin: 7px 0 0;
+  margin: 0;
   color: var(--color-text-primary);
   font-size: var(--font-size-lg);
   line-height: 1.1;
@@ -249,16 +226,16 @@
   display: grid;
   grid-template-columns: 1fr;
   gap: 12px;
-  border-top: 1px solid var(--color-border);
-  padding: 20px 0 22px;
+  padding: 0 0 22px;
 }
 
-.settings-block:last-child {
-  border-bottom: 1px solid var(--color-border);
+.settings-block ~ .settings-block {
+  border-top: 1px solid var(--color-border);
+  padding-top: 20px;
 }
 
 .settings-block h3 {
-  margin: 7px 0 8px;
+  margin: 0 0 8px;
   color: var(--color-text-primary);
   font-size: var(--font-size-md);
   line-height: 1.2;
