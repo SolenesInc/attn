@@ -292,8 +292,7 @@ type Daemon struct {
 
 	desktopTiles desktopTileDelivery
 
-	browserControlMu sync.Mutex
-	browserControl   map[string]browserControlPending
+	browserControl appRequests[browserControlResult]
 
 	lastBackupMu sync.Mutex
 	lastBackupAt time.Time

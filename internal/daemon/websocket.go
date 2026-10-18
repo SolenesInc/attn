@@ -662,7 +662,7 @@ func (d *Daemon) wsMsgPump(client *wsClient) {
 		d.handleClientMessage(client, data)
 	}
 	// After the queue drains, so a result the host sent just before leaving still lands first.
-	d.failBrowserControlFor(client)
+	d.browserControl.failFor(client, browserControlResult{err: "the in-app browser host disconnected"})
 	d.logf("WebSocket message pump exited")
 }
 
