@@ -145,7 +145,8 @@ try {
       missing.push(executable);
     }
     for (const executable of missing) fs.unlinkSync(executable);
-    observer.send({ cmd: 'get_settings' });
+    await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
+    runner.writeJson('no-harness-settings.json', Object.fromEntries(['claude', 'codex'].map(agent => [agent, observer.getSetting(`${agent}_available`)])));
     await waitDom('[data-testid="chief-setup"]', { textIncludes: 'No harness here can run the chief' });
     await screenshot('01-chief-no-harness');
     await click('[data-testid="chief-setup"] .chief-link');
