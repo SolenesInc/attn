@@ -21,11 +21,11 @@ func (d *Daemon) crewDocumentMember(key who.MemberKey) (crew.Member, error) {
 		return crew.Member{}, err
 	}
 
-	if err := d.validateCrewMemberPaths(member); err != nil {
-		return crew.Member{}, err
-	}
 	if member.HomeDir == "" {
 		return crew.Member{}, fmt.Errorf("choose the Chief's harness, model and Notebook folder before editing its charter")
+	}
+	if err := d.requireCrewHome(member); err != nil {
+		return crew.Member{}, err
 	}
 	return member, nil
 }

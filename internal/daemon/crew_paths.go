@@ -76,6 +76,13 @@ func (d *Daemon) validateCrewMemberPaths(member crew.Member) error {
 	if !filepath.IsAbs(member.CharterPath) || !pathWithin(home, charter) {
 		return fmt.Errorf("crew member %s: stored charter path %q is outside their home %q", d.memberName(member.Key), member.CharterPath, member.HomeDir)
 	}
+	return nil
+}
+
+func (d *Daemon) requireCrewHome(member crew.Member) error {
+	if err := d.validateCrewMemberPaths(member); err != nil {
+		return err
+	}
 	info, err := os.Stat(member.HomeDir)
 	if err != nil {
 		return fmt.Errorf("crew member %s: recorded home %q is unavailable; restore the home at this path before waking or editing the member: %w", d.memberName(member.Key), member.HomeDir, err)

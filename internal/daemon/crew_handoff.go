@@ -137,7 +137,7 @@ func (d *Daemon) crewDayEndsHere(close protocol.CrewDayClose, now time.Time) boo
 }
 
 func (d *Daemon) crewLetterForHandoff(member crew.Member, sessionID protocol.SessionID, note string, retry bool) (string, error) {
-	if err := d.validateCrewMemberPaths(member); err != nil {
+	if err := d.requireCrewHome(member); err != nil {
 		return "", err
 	}
 	filed, hasFiled := member.FiledLetterFor(sessionID)
@@ -193,7 +193,7 @@ func (d *Daemon) crewNap(member crew.Member, oldSessionID protocol.SessionID, te
 			d.cancelSessionTeardown(oldSessionID, teardown)
 		}
 	}()
-	if err := d.validateCrewMemberPaths(member); err != nil {
+	if err := d.requireCrewHome(member); err != nil {
 		return "", err
 	}
 	if err := d.validateCrewWorkDirs(member); err != nil {

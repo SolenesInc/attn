@@ -415,8 +415,10 @@ func TestMissingCrewHomesDoNotDisableOtherMembers(t *testing.T) {
 				if _, err := cli.CrewRetire("Keel"); err != nil {
 					t.Fatal(err)
 				}
-			}
-			if err := os.Rename(missing.Member.HomeDir, missing.Member.HomeDir+"-moved"); err != nil {
+				if err := os.RemoveAll(missing.Member.HomeDir); err != nil {
+					t.Fatal(err)
+				}
+			} else if err := os.Rename(missing.Member.HomeDir, missing.Member.HomeDir+"-moved"); err != nil {
 				t.Fatal(err)
 			}
 			id := configureChief(t, w, fakeagent.Codex, chiefModel(fakeagent.Codex))

@@ -152,7 +152,7 @@ func (d *Daemon) crewLaunchDir(member crew.Member) (string, error) {
 }
 
 func (d *Daemon) crewPriming(member crew.Member) (crew.Priming, error) {
-	if err := d.validateCrewMemberPaths(member); err != nil {
+	if err := d.requireCrewHome(member); err != nil {
 		return crew.Priming{}, err
 	}
 	if err := d.validateCrewWorkDirs(member); err != nil {
@@ -314,6 +314,9 @@ func (d *Daemon) crewWakeDayWithChargeLocked(key who.MemberKey, agent string, au
 	}
 	if d.isChief(key) && member.Agent == "" {
 		return nil, fmt.Errorf("the Chief has no harness yet; pick one: attn crew set chief --agent <harness> --model <model>")
+	}
+	if err := d.requireCrewHome(member); err != nil {
+		return nil, err
 	}
 	releasedSessionID := protocol.SessionID(d.takeCrewExitedSession(member.Key.String()))
 	if boundSessionID := protocol.TrimID(member.BindingSession); boundSessionID != "" {
