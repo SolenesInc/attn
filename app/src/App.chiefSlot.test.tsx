@@ -1,4 +1,5 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { crewMember, daemonSession, soloDesktop, defaultProfile, emptyDesktop, DEFAULT_DESKTOP_ID } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp, restartApp } from './test/renderApp';
@@ -172,6 +173,19 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
     expect(setup().queryByRole('radiogroup', { name: 'Chief harness' })).toBeNull();
     expect(setup().getByRole('radio', { name: /gpt-6.1-sol/ })).toHaveAttribute('aria-checked', 'true');
     expect(setup().getByRole('button', { name: /Wake Captain/ })).toHaveFocus();
+    expect(daemon.sentOf('crew_set')).toEqual([]);
+  });
+  it('retries failed model discovery with Enter', async () => {
+    const { daemon } = await renderApp({ initialState: { settings, crew: [member()] }, script: daemon => {
+      daemon.on('harness_models', () => ({ event: 'harness_models_result', success: false, error: 'Model lookup failed', models: [], tier_defaults: {}, detail: '' }));
+    } });
+    expect(setup().getByRole('alert')).toHaveTextContent('Model lookup failed');
+    daemon.on('harness_models', () => ({ event: 'harness_models_result', success: true, models: [reportedModel('claude', 'opus', 'Opus', 'deep')], tier_defaults: { deep: 'opus' }, detail: '' }));
+    setup().getByRole('button', { name: 'Check again' }).focus();
+    await Promise.all([userEvent.setup({ delay: null }).keyboard('{Enter}'), vi.advanceTimersByTimeAsync(10)]);
+    await daemon.idle();
+    expect(setup().queryByRole('alert')).toBeNull();
+    expect(setup().getByRole('button', { name: /Wake Captain/ })).toBeEnabled();
     expect(daemon.sentOf('crew_set')).toEqual([]);
   });
   it('can switch to another harness when the selected model lookup fails', async () => {

@@ -108,7 +108,8 @@ export function ChiefSetup({ chief, anchor, onSave, onClose, onReturnFocus, onOp
   };
   const moveRadio = (event: KeyboardEvent) => {
     if (event.altKey || event.ctrlKey || event.metaKey) return;
-    const group = (event.target as HTMLElement).closest('[role="radiogroup"]');
+    const radio = (event.target as HTMLElement).closest('button[role="radio"]');
+    const group = radio?.closest('[role="radiogroup"]');
     if (!group) return;
     if (['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
       const buttons = Array.from(group.querySelectorAll<HTMLButtonElement>('button[role="radio"]:not(:disabled)'));
