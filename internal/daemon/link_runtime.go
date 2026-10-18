@@ -58,6 +58,10 @@ func (d *Daemon) linkOf(sessionID protocol.SessionID) linkRuntime {
 	return d.linkNamed(d.store.SessionLink(sessionID))
 }
 
+func (d *Daemon) terminalCarriesLaunch(sessionID protocol.SessionID) bool {
+	return d.linkOf(sessionID) == nil
+}
+
 func (d *Daemon) launchLink(req *spawnRequest) linkRuntime {
 	if req.existingSession != nil && !req.policy.fromLedger {
 		if l := d.linkOf(req.msg.ID); l != nil && l.canRun(req) {

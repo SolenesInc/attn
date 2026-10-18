@@ -29,6 +29,7 @@ type codexRemote struct {
 	approvals    map[string]json.RawMessage
 	answering    map[string]bool
 	displayed    string
+	overrides    bool
 }
 
 type codexRemoteThread struct {
@@ -54,6 +55,7 @@ func (c *codexRemote) begin(term *terminal) error {
 		}
 	}
 	c.model = args.value("--model", "-m")
+	c.overrides = codexPermissionOverride(args)
 	c.prompt = strings.Join(args.afterDashes, " ")
 	client, err := c.connect()
 	if err != nil {
@@ -76,7 +78,7 @@ func (c *codexRemote) begin(term *terminal) error {
 		c.resumed = true
 		err = call(client, "thread/resume", map[string]any{"threadId": args.positionals[1], "excludeTurns": true}, &shown)
 	} else {
-		err = call(client, "thread/start", map[string]any{"cwd": c.cwd, "model": c.model, "ephemeral": false, "threadSource": "user", "config": map[string]any{}}, &shown)
+		err = call(client, "thread/start", c.threadStart(), &shown)
 	}
 	if err != nil {
 		client.Close()
@@ -90,6 +92,13 @@ func (c *codexRemote) begin(term *terminal) error {
 	c.showPending()
 	go c.stayConnected(client)
 	return nil
+}
+
+func (c *codexRemote) threadStart() map[string]any {
+	return map[string]any{
+		"cwd": c.cwd, "model": c.model, "ephemeral": false, "threadSource": "user", "config": map[string]any{},
+		"approvalPolicy": codexConfigApprovals.ApprovalPolicy, "approvalsReviewer": codexConfigApprovals.ApprovalsReviewer, "sandbox": codexConfigApprovals.Sandbox,
+	}
 }
 
 func (c *codexRemote) showPending() {
@@ -310,12 +319,16 @@ func (c *codexRemote) submit(prompt string) error {
 	switch {
 	case command == "/new" || command == "/clear":
 		var started codexRemoteThread
-		if err := c.request("thread/start", map[string]any{"cwd": c.cwd, "model": c.model, "ephemeral": false, "threadSource": "user", "config": map[string]any{}}, &started); err != nil {
+		if err := c.request("thread/start", c.threadStart(), &started); err != nil {
 			return err
 		}
 		return c.switchTo(started.Thread.ID)
 	case strings.HasPrefix(command, "/resume "):
 		target := strings.TrimSpace(strings.TrimPrefix(command, "/resume "))
+		if c.overrides {
+			c.term.print("■ " + codexRemoteResumeRefusal)
+			return nil
+		}
 		if err := c.request("thread/resume", map[string]any{"threadId": target, "excludeTurns": true}, nil); err != nil {
 			return err
 		}

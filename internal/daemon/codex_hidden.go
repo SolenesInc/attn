@@ -112,7 +112,9 @@ func (r *codexShared) startTurn(ctx context.Context, client *codexshared.Client,
 	}
 	config := make(map[string]any)
 	r.capContext(config, sessionID, r.d.isChiefOfStaffSession(sessionID))
-	if err := call("thread/resume", map[string]any{"threadId": conversation, "excludeTurns": true, "config": config}, &resumed); err != nil {
+	resume := map[string]any{"threadId": conversation, "excludeTurns": true, "config": config}
+	r.grantApprovals(resume, sessionID)
+	if err := call("thread/resume", resume, &resumed); err != nil {
 		return err
 	}
 	defer func() {

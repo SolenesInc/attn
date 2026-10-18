@@ -53,6 +53,12 @@ conversation's session, and the session you left stays open and **hidden**:
 
 Several terminals can show the same conversation. They show one session.
 
+A session keeps the approval mode it launched with, YOLO or auto-approve,
+wherever its conversation opens: in any shared terminal with `/resume` or
+`/agents`, when attn resumes it to deliver something while it's hidden, or
+when you resume it from a stopped tile or the Sessions ledger. A conversation
+you start with `/new` takes the mode of the session its terminal shows.
+
 ## Hidden sessions in the queue
 
 Hidden sessions queue like any other, so a hidden session that needs an answer
@@ -97,3 +103,7 @@ the setting says.
   a terminal shows its stopped turn as interrupted once it reconnects.
 - A subagent's activity counts for the session of the conversation that
   started it.
+- In a shared terminal where you picked permissions with `/permissions`,
+  Codex refuses `/resume` with `Permission overrides are not supported when
+  resuming a remote task.` Resume the conversation from another shared
+  terminal.

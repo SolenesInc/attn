@@ -373,6 +373,9 @@ func (d *Daemon) buildReloadSpawnOptions(session *protocol.Session) (ptybackend.
 	if !ok {
 		return d.buildReloadSpawnOptionsFromStoredIntent(session, terminal, fmt.Errorf("backend does not record launch params"))
 	}
+	if !d.terminalCarriesLaunch(sessionID) {
+		return d.buildReloadSpawnOptionsFromStoredIntent(session, terminal, fmt.Errorf("terminal %s runs a link, not session %s's own launch", terminal, sessionID))
+	}
 	params, err := paramsProvider.SessionLaunchParams(context.Background(), terminal)
 	if err != nil {
 		registryErr := fmt.Errorf("read launch params: %w", err)
@@ -394,12 +397,12 @@ func (d *Daemon) buildReloadSpawnOptions(session *protocol.Session) (ptybackend.
 	return d.buildReloadSpawnOptionsFromLaunchParams(session, terminal, params)
 }
 
-func (d *Daemon) buildReloadSpawnOptionsFromStoredIntent(session *protocol.Session, terminal harness.TerminalID, registryErr error) (ptybackend.SpawnOptions, error) {
+func (d *Daemon) buildReloadSpawnOptionsFromStoredIntent(session *protocol.Session, terminal harness.TerminalID, unrecorded error) (ptybackend.SpawnOptions, error) {
 	intent, ok := d.store.LaunchIntent(session.ID)
 	if !ok {
-		return ptybackend.SpawnOptions{}, fmt.Errorf("%w; no stored launch intent exists either", registryErr)
+		return ptybackend.SpawnOptions{}, fmt.Errorf("%w; no stored launch intent exists either", unrecorded)
 	}
-	d.logf("reload: using stored launch intent for %s (worker registry unavailable)", session.ID)
+	d.logf("reload: using stored launch intent for %s: %v", session.ID, unrecorded)
 	return d.buildReloadSpawnOptionsFromLaunchParams(session, terminal, ptybackend.SessionLaunchParams{
 		Recorded:         true,
 		YoloMode:         intent.YoloMode,

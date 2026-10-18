@@ -157,11 +157,41 @@ Probed on 0.163.0 with a real model:
   is read in the source at 6ae8b8aa7c, not probed
   (`app-server/src/request_processors/thread_processor.rs`).
 
+Probed on 0.162.1 against the app-server alone:
+
+- `thread/start` and `thread/resume` take `approvalPolicy`,
+  `approvalsReviewer` and `sandbox`. Like its `config`, a `thread/resume`
+  applies them only when it loads the conversation: it loads one that is not
+  loaded, and loads again one that is loaded with no subscriber. While any
+  connection is subscribed, the one resuming included, it ignores them and the
+  conversation keeps its own. It also ignores them while a turn runs; this one
+  is read in the source at rust-v0.160.0, not probed
+  (`app-server/src/request_processors/thread_processor.rs`).
+- A `thread/resume` without them that loads the conversation restores the
+  approval policy and reviewer it last ran with, but a sandbox only from a
+  permission profile (the reviewer is read in the source at rust-v0.160.0,
+  `app-server/src/request_processors/persisted_resume_settings.rs`). One that
+  ran under a `sandbox` mode loads under the server's configured sandbox: a
+  conversation started with `never` and `danger-full-access` comes back
+  `never` and `read-only` in an untrusted folder.
+
 Read in the source at openai/codex rust-v0.160.0:
 
 - A `--remote` TUI sends its `--model`, `model_reasoning_effort`,
-  `approval_policy` and `approvals_reviewer` on `thread/start`
-  (`tui/src/app_server_session.rs`).
+  `approval_policy`, `approvals_reviewer` and a `sandbox` mode, never a
+  permission profile, on `thread/start`, and no approval or sandbox settings
+  on `thread/resume` (`tui/src/app_server_session.rs`). It takes the approval
+  policy and reviewer the server answers with and sends them with each turn;
+  it sends a sandbox with a turn only after the user picks one in it
+  (`tui/src/chatwidget/session_flow.rs`, `tui/src/app/thread_routing.rs`).
+- A `--remote` TUI refuses to resume a conversation with `Permission
+  overrides are not supported when resuming a remote task.` when it was given
+  `--dangerously-bypass-approvals-and-sandbox` or `-c` for an approval or
+  sandbox setting such as `approval_policy` or `approvals_reviewer`, or once
+  the user picked permissions in it with `/permissions`. As `codex resume <id>`
+  it exits. On `/resume`, or `/agents` to a conversation that is not loaded,
+  it shows the error and stays on its conversation (`tui/src/app/startup.rs`,
+  `tui/src/app/config_persistence.rs`, `tui/src/resume_permissions.rs`).
 - Before its first `thread/start` or `thread/resume`, a `--remote` TUI given
   `-C` asks the server whether that folder is trusted with `config/read`, so
   `-c projects."<folder>".trust_level` given to the TUI does not count. It

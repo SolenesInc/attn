@@ -116,6 +116,84 @@ func TestASharedCodexAppServerThatExitsStartsAgainAndTheTerminalCarriesOn(t *tes
 	}
 }
 
+func TestAStoppedSharedCodexSessionResumesUnderTheApprovalsItLaunchedWith(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	setSetting(t, app, "auto_approve_enabled", "true")
+	unguarded := w.Spawn(app, fakeagent.Codex, w.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.YoloMode = protocol.Ptr(true) })
+	reviewed := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
+
+	for _, tc := range []struct {
+		session   string
+		approvals fakeagent.CodexPermissions
+	}{
+		{unguarded, fakeagent.CodexPermissions{ApprovalPolicy: "never", ApprovalsReviewer: "user", Sandbox: "danger-full-access"}},
+		{reviewed, fakeagent.CodexPermissions{ApprovalPolicy: "on-request", ApprovalsReviewer: "auto_review", Sandbox: "workspace-write"}},
+	} {
+		codex := w.Launched(tc.session)
+		app.TypeLine(tc.session, "find the flaky checkout test")
+		codex.Prompted()
+		codex.Reply("It races the tax lookup. <!-- attn:state=idle -->")
+		testworld.AwaitSession(app, tc.session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+		conversation := codex.ConversationID
+		if got := w.CodexServer().Permissions(conversation); got != tc.approvals {
+			t.Errorf("conversation %s started with %+v, want %+v", conversation, got, tc.approvals)
+		}
+		codex.Exit(143)
+		testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == tc.session })
+
+		launchIntentReload(t, app, tc.session)
+		resumed := w.Launched(tc.session)
+		if !resumed.Resumed || resumed.ConversationID != conversation {
+			t.Fatalf("resuming the stopped session ran %q showing %s (resumed=%v), want conversation %s", resumed.Argv, resumed.ConversationID, resumed.Resumed, conversation)
+		}
+		app.TypeLine(tc.session, "lock the tax lookup")
+		if got := resumed.Prompted(); got != "lock the tax lookup" {
+			t.Errorf("the resumed Codex received %q", got)
+		}
+		if got := w.CodexServer().Permissions(conversation); got != tc.approvals {
+			t.Errorf("conversation %s resumed with %+v, want %+v", conversation, got, tc.approvals)
+		}
+	}
+}
+
+func TestAYoloSharedCodexConversationKeepsFullAccessWhenItsTerminalOrAttnResumesIt(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	unguarded := fakeagent.CodexPermissions{ApprovalPolicy: "never", ApprovalsReviewer: "user", Sandbox: "danger-full-access"}
+	checkout := w.Spawn(app, fakeagent.Codex, w.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.YoloMode = protocol.Ptr(true) })
+	codex := w.Launched(checkout)
+	terminal := app.Terminal(checkout)
+	app.TypeLine(checkout, "find the flaky checkout test")
+	codex.Prompted()
+	codex.Reply("It races the tax lookup. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	conversation := codex.ConversationID
+
+	moveOn(t, app, codex, terminal, "/new", "add a discount field")
+	codex.Reply("Added. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return protocol.Deref(s.Hidden) })
+	if got := submitSessionAnnotationFeedback(app, checkout, sessionAnnotationFeedback); !got.success {
+		t.Fatalf("feedback to the hidden session = %+v", got)
+	}
+	w.CodexServer().Prompted(conversation)
+	if got := w.CodexServer().Permissions(conversation); got != unguarded {
+		t.Errorf("attn reloaded hidden conversation %s with %+v, want %+v", conversation, got, unguarded)
+	}
+	w.CodexServer().Reply(conversation, "Fixed what the notes asked for. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return protocol.Deref(s.Hidden) && s.State == protocol.SessionStateIdle })
+
+	moveOn(t, app, codex, terminal, "/resume "+conversation, "lock the tax lookup")
+	if codex.ConversationID != conversation {
+		t.Fatalf("after /resume %s the terminal took the prompt in %s", conversation, codex.ConversationID)
+	}
+	if got := w.CodexServer().Permissions(conversation); got != unguarded {
+		t.Errorf("/resume %s runs it with %+v, want %+v", conversation, got, unguarded)
+	}
+}
+
 func TestASharedCodexLaunchThatCannotBePlacedLetsItsAppServerStop(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex, fakeagent.Claude)
 	app := w.App()
@@ -202,13 +280,17 @@ location: {type: directory, path: %q}
 				t.Fatalf("automation_run = %+v, want a delivered run with a session", run)
 			}
 			codex := w.Launched(string(protocol.Deref(run.Run.SessionID)))
-			for _, flag := range [][]string{{"--remote", ""}, {"--model", "gpt-5.5"}, {"-c", `model_reasoning_effort="high"`}, {"-c", `approval_policy="on-request"`}, {"-c", `approvals_reviewer="auto_review"`}} {
+			for _, flag := range [][]string{{"--remote", ""}, {"--model", "gpt-5.5"}, {"-c", `model_reasoning_effort="high"`}} {
 				if !slices.Contains(codex.Argv, flag[0]) || flag[1] != "" && !containsAutomationFlag(codex.Argv, flag[0], flag[1]) {
 					t.Errorf("the automation ran %q, want shared Codex with %s %s", codex.Argv, flag[0], flag[1])
 				}
 			}
 			if got := codex.Prompted(); !strings.Contains(got, "Report the flaky tests.") {
 				t.Errorf("codex received %q, want the automation's prompt", got)
+			}
+			reviewed := fakeagent.CodexPermissions{ApprovalPolicy: "on-request", ApprovalsReviewer: "auto_review", Sandbox: "workspace-write"}
+			if got := w.CodexServer().Permissions(codex.ConversationID); got != reviewed {
+				t.Errorf("the automation's conversation runs with %+v, want %+v", got, reviewed)
 			}
 			if servers := w.CodexServers(); len(servers) != 1 {
 				t.Errorf("app-servers launched = %v, want one", servers)

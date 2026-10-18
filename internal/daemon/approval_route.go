@@ -11,7 +11,7 @@ import (
 )
 
 func (d *Daemon) recoveredApprovalRoute(sessionID protocol.SessionID) (launchcontract.ApprovalRoute, bool) {
-	if provider, ok := d.ptyBackend.(ptybackend.SessionLaunchParamsProvider); ok {
+	if provider, ok := d.ptyBackend.(ptybackend.SessionLaunchParamsProvider); ok && d.terminalCarriesLaunch(sessionID) {
 		params, err := provider.SessionLaunchParams(context.Background(), d.primaryTerminal(sessionID))
 		if err == nil && params.Recorded {
 			route, known, routeErr := recordedApprovalRoute(params.ApprovalRoute, params.YoloMode, params.UnattendedLaunch)
@@ -28,13 +28,17 @@ func (d *Daemon) recoveredApprovalRoute(sessionID protocol.SessionID) (launchcon
 			}
 		}
 	}
+	return d.intendedApprovalRoute(sessionID)
+}
+
+func (d *Daemon) intendedApprovalRoute(sessionID protocol.SessionID) (launchcontract.ApprovalRoute, bool) {
 	intent, ok := d.store.LaunchIntent(sessionID)
 	if !ok {
 		return "", false
 	}
 	route, known, err := recordedApprovalRoute(intent.ApprovalRoute, intent.YoloMode, intent.UnattendedLaunch)
 	if err != nil {
-		d.logf("recovery: ignoring invalid stored approval route for %s: %v", sessionID, err)
+		d.logf("ignoring invalid stored approval route for %s: %v", sessionID, err)
 		return "", false
 	}
 	return route, known
