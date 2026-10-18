@@ -163,6 +163,7 @@ try {
       'garden', 'Enter still advances after the browser hides',
       'commands', 'ArrowRight still advances after the browser hides');
     await shot('browser-hidden');
+    await client.request('dom_wait_finite_animations', { selector: '.callout-overlay' });
     const bounds = await client.request('dom_bounds', { selector: '.callout-overlay' });
     runner.assert(bounds.animations.every((animation) => animation.state !== 'running'), 'the open Card has no running animations', bounds);
     runner.writeJson('callout-idle.json', { bounds, snapshot: await client.request('capture_perf_snapshot', { includeMemory: false }) });
@@ -174,6 +175,23 @@ try {
     await shot('browser-restored');
     const browserTile = await client.request('dom_bounds', { selector: browserTileSelector });
     runner.assert(browserTile.bounds.width > 0, 'browser tile remains arranged after dismissal', { desktopId: desktop?.id });
+  });
+  await runner.step('restored_browser_leaves_native_input_with_the_terminal', async () => {
+    await select(agents[0]);
+    await show('sidebar', 'Browser tiles return without taking terminal focus');
+    await end();
+    await waitForPaneInputFocus(client, agents[0].sessionId, agents[0].paneId);
+    const renamed = observer.waitForMessage(
+      (message) => message.event === 'session_state_changed'
+        && message.session?.id === agents[0].sessionId
+        && message.session.label === 'Terminal keeps focus'
+        && message,
+      'native input reaches the pointing terminal after the browser returns',
+    );
+    await driver.typeText(`attn session rename --session ${agents[0].sessionId} "Terminal keeps focus"`);
+    await driver.pressEnter();
+    const receipt = await renamed;
+    runner.assert(receipt.session.id === agents[0].sessionId, 'the terminal keeps native input when the browser returns', receipt.session);
   });
   await runner.step('palette_takes_native_keys_after_browser_focus', async () => {
     const [{ bounds }, { logicalBounds }, { innerWidth, innerHeight }] = await Promise.all([
