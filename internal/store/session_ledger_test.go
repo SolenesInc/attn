@@ -12,11 +12,11 @@ import (
 
 func closeAt(t *testing.T, s *Store, id string, closed SessionClose, at time.Time) {
 	t.Helper()
-	recorded, err := s.CloseSession(protocol.SessionID(id), closed, at)
+	closure, err := s.CloseSession(protocol.SessionID(id), closed, at)
 	if err != nil {
 		t.Fatalf("close %s: %v", id, err)
 	}
-	if !recorded {
+	if !closure.Recorded {
 		t.Fatalf("close %s recorded nothing, want the row marked closed", id)
 	}
 }

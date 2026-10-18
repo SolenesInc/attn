@@ -247,6 +247,13 @@ func (d *Daemon) closeAsksTo(to inbox.Address) {
 	if err != nil {
 		d.logf("asks: closing the asks to %s: %v", to, err)
 	}
+	d.announceClosedAsks(ids)
+}
+
+func (d *Daemon) announceClosedAsks(ids []string) {
+	if len(ids) == 0 {
+		return
+	}
 	d.coalesceSnapshots(func() {
 		for _, id := range ids {
 			d.publishFact(FactAskClosed, id, nil)

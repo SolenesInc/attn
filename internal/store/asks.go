@@ -137,7 +137,11 @@ func (s *Store) CloseAsksTo(to inbox.Address) ([]string, error) {
 	if s.db == nil {
 		return nil, nil
 	}
-	rows, err := s.db.Query("DELETE FROM asks WHERE address = ? RETURNING id", to.String())
+	return closeAsksTo(s.db, to)
+}
+
+func closeAsksTo(db rowsQuerier, to inbox.Address) ([]string, error) {
+	rows, err := db.Query("DELETE FROM asks WHERE address = ? RETURNING id", to.String())
 	if err != nil {
 		return nil, err
 	}

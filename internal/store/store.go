@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/git"
+	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -454,7 +455,7 @@ var sessionOwnedTables = []string{
 	"session_exit_screens",
 }
 
-func (s *Store) Remove(id protocol.SessionID) {
+func (s *Store) Remove(id protocol.SessionID) []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -465,21 +466,28 @@ func (s *Store) Remove(id protocol.SessionID) {
 		delete(s.agentDriverRuns, id)
 		delete(s.agentMetadata, id)
 		delete(s.sessionCosts, id)
-		return
+		return nil
 	}
 	delete(s.touchedAt, id)
 	s.forgetSessionCost(id)
 	s.unplaceSessionsLocked("Remove", "session_id = ?", id)
-	if err := deleteSessionRows(s.db, id); err != nil {
+	asks, err := deleteSessionRows(s.db, id)
+	if err != nil {
 		log.Printf("[store] Remove: session %s: %v", id, err)
 	}
 	s.announceTerminalBindingsLocked()
+	return asks
 }
 
-func deleteSessionRows(db execer, id protocol.SessionID) error {
+func deleteSessionRows(db *sql.DB, id protocol.SessionID) ([]string, error) {
+	tx, err := db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
 	var failures []error
 	exec := func(what, query string, args ...any) {
-		if _, err := db.Exec(query, args...); err != nil {
+		if _, err := tx.Exec(query, args...); err != nil {
 			failures = append(failures, fmt.Errorf("drop %s: %w", what, err))
 		}
 	}
@@ -490,7 +498,14 @@ func deleteSessionRows(db execer, id protocol.SessionID) error {
 	for _, table := range sessionOwnedTables {
 		exec(table, "DELETE FROM "+table+" WHERE session_id = ?", id)
 	}
-	return errors.Join(failures...)
+	asks, err := closeAsksTo(tx, inbox.ToSession(id))
+	if err != nil {
+		failures = append(failures, fmt.Errorf("close the session's asks: %w", err))
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, errors.Join(append(failures, err)...)
+	}
+	return asks, errors.Join(failures...)
 }
 
 func (s *Store) List(stateFilter string) []*protocol.Session {

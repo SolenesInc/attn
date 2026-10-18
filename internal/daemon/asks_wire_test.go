@@ -372,3 +372,28 @@ func TestAnAgentAsksAboutASeedItTendsAndNoOther(t *testing.T) {
 		t.Fatalf("the agent lists %+v (%v), want both its asks", listed, err)
 	}
 }
+
+func TestClosingASessionClosesTheAsksAddressedToIt(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "asks_enabled", "true")
+	asker := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	w.Launched(asker)
+	testworld.AwaitSession(app, asker, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	asked, err := cli.AskOpen(protocol.SessionID(asker), "", cacheAsk, "", w.Path("shop"))
+	if err != nil {
+		t.Fatalf("ask: %v", err)
+	}
+	testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 1 })
+
+	if err := cli.Unregister(protocol.SessionID(asker)); err != nil {
+		t.Fatalf("close %s: %v", asker, err)
+	}
+	testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 0 })
+	late := testworld.Request(app, protocol.AskAnswerMessage{
+		Cmd: protocol.CmdAskAnswer, RequestID: "late", AskID: asked.ID, Answers: []protocol.AskAnswer{}, Note: protocol.Ptr("too late"),
+	}, protocol.EventAskAnswerResult, func(r protocol.AskAnswerResultMessage) bool { return r.RequestID == "late" })
+	if late.Success {
+		t.Fatal("an ask of a closed session took an answer")
+	}
+}

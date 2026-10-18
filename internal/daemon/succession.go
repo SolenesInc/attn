@@ -52,7 +52,7 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 	}
 	sc.From = from.ID
 	sc.Conversation = store.SessionConversation{NativeID: observation.NativeID, TranscriptPath: observation.TranscriptPath}
-	_, err := d.store.CommitSuccession(sc, t)
+	_, closedAsks, err := d.store.CommitSuccession(sc, t)
 	unlockEnds()
 	defer release()
 	if err != nil {
@@ -86,7 +86,9 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 	d.mirrorLabel(sc.To)
 
 	if !sc.KeepFrom {
-		d.recordSessionClose(from.ID, func() (bool, error) { return true, nil })
+		d.recordSessionClose(from.ID, func() (store.SessionClosure, error) {
+			return store.SessionClosure{Recorded: true, Asks: closedAsks}, nil
+		})
 		d.publishSessionUnregistered(from)
 	} else {
 		if d.hidden(from.ID) {
