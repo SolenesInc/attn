@@ -267,7 +267,6 @@ function compactResult(mode, bench, processSummary) {
     wsJsonParseMs: Number((bench.pty.wsJsonParseMs || 0).toFixed(3)),
     ptyJsonParseMs: Number((bench.pty.ptyJsonParseMs || 0).toFixed(3)),
     decodeMs: Number((bench.pty.decodeMs || 0).toFixed(3)),
-    terminalWriteCallMs: Number((bench.pty.terminalWriteCallMs || 0).toFixed(3)),
     rendererPaintCount: bench.renderer?.renderCount || 0,
     rendererCpuSubmitMs: Number((bench.renderer?.cpuSubmitMs || 0).toFixed(3)),
     rendererAvgFrameMs: bench.renderer?.renderCount > 0
@@ -287,7 +286,6 @@ function compactResult(mode, bench, processSummary) {
     scheduledRenderDeferred: bench.renderer?.scheduledDeferred || 0,
     writeParsedCount: bench.renderer?.writeParsedCount || 0,
     ptyOutputCount: bench.pty.ptyOutputCount || 0,
-    terminalWriteCount: bench.pty.terminalWriteCount || 0,
     totalPayloadBytes: bench.totalPayloadBytes,
   };
 }

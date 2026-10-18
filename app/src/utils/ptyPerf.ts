@@ -36,9 +36,6 @@ export interface PtyPerfSnapshot {
   decodeCount: number;
   decodedBytes: number;
   decodeMs: number;
-  terminalWriteCount: number;
-  terminalWriteBytes: number;
-  terminalWriteCallMs: number;
   listenerErrorCount: number;
   lastListenerErrorAt: string | null;
   lastListenerError: {
@@ -82,9 +79,6 @@ const snapshot: PtyPerfSnapshot = {
   decodeCount: 0,
   decodedBytes: 0,
   decodeMs: 0,
-  terminalWriteCount: 0,
-  terminalWriteBytes: 0,
-  terminalWriteCallMs: 0,
   listenerErrorCount: 0,
   lastListenerErrorAt: null,
   lastListenerError: null,
@@ -215,13 +209,6 @@ export function recordPtyDecode(decodedBytes: number, durationMs: number) {
   touch();
 }
 
-export function recordTerminalWrite(bytes: number, durationMs: number) {
-  snapshot.terminalWriteCount += 1;
-  snapshot.terminalWriteBytes += bytes;
-  snapshot.terminalWriteCallMs += durationMs;
-  touch();
-}
-
 export function recordPtyListenerError(eventName: string, runtimeId: string | null | undefined, error: unknown) {
   snapshot.listenerErrorCount += 1;
   snapshot.lastListenerErrorAt = new Date().toISOString();
@@ -266,9 +253,6 @@ export function clearPtyPerfSnapshot() {
   snapshot.decodeCount = 0;
   snapshot.decodedBytes = 0;
   snapshot.decodeMs = 0;
-  snapshot.terminalWriteCount = 0;
-  snapshot.terminalWriteBytes = 0;
-  snapshot.terminalWriteCallMs = 0;
   snapshot.listenerErrorCount = 0;
   snapshot.lastListenerErrorAt = null;
   snapshot.lastListenerError = null;
