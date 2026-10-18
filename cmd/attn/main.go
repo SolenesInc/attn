@@ -203,6 +203,8 @@ func main() {
 	case "open":
 		maybePrintInstanceBanner()
 		runOpen()
+	case "callout":
+		runCallout()
 	case "browser":
 		maybePrintInstanceBanner()
 		runBrowser()
@@ -566,6 +568,7 @@ commands:
   delegate --seed <id> --cwd <path>            start another agent on an existing seed
   journal append --entry <text>     serialized append to the daily notebook journal
   open <file.md|seed-id> [--session <id>]   show a document in attn
+  callout <anchors|show>            point at the app with a callout
   browser <command>                 open and control the in-app browser
   automation <command>              manage and run durable automations
   preflight                         diagnose tools, paths, routing, and launch settings

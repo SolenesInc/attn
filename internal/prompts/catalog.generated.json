@@ -2891,6 +2891,18 @@
           }
         },
         {
+          "id": "callouts",
+          "delivery": "reference",
+          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "body": {
+            "kind": "text",
+            "id": "attn-skill.callouts",
+            "source": "content/skills/attn/references/callouts.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
           "id": "converse-and-observe",
           "delivery": "reference",
           "description": "Loaded on demand through attn skill show or the installed skill directory.",

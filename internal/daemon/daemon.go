@@ -292,7 +292,8 @@ type Daemon struct {
 
 	desktopTiles desktopTileDelivery
 
-	browserControl appRequests[browserControlResult]
+	browserControl  appRequests[browserControlResult]
+	calloutRequests appRequests[calloutReply]
 
 	lastBackupMu sync.Mutex
 	lastBackupAt time.Time
@@ -2794,6 +2795,10 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleOpenSentFiles(conn, msg.(*protocol.OpenSentFilesMessage))
 	case protocol.CmdOpenBrowser:
 		d.handleOpenBrowser(conn, msg.(*protocol.OpenBrowserMessage))
+	case protocol.CmdCalloutShow:
+		d.handleCalloutShow(conn, msg.(*protocol.CalloutShowMessage))
+	case protocol.CmdCalloutAnchors:
+		d.handleCalloutAnchors(conn, msg.(*protocol.CalloutAnchorsMessage))
 	case protocol.CmdBrowserControl:
 		d.handleBrowserControl(conn, msg.(*protocol.BrowserControlMessage))
 	case protocol.CmdListWorktrees:

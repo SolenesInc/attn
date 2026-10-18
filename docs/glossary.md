@@ -172,8 +172,10 @@ window (1..n)           one macOS app window
 ├─ menu (0..1)          a short list of choices: snooze options
 ├─ palette (0..1)       search and run commands, agents and tiles; like the
 │                       VS Code command palette (⌘K, ⌘P)
-└─ dialog (0..1)        a modal window that waits for an answer: settings,
-                        confirmations
+├─ dialog (0..1)        a modal window that waits for an answer: settings,
+│                       confirmations
+└─ callout* (0..1)      short text from an agent that points at part of the
+                        app window; like a guided tour
 current desktop         the desktop a profile shows; every window shares it
 active tile             the tile a desktop has selected; every window shares it
 tile history            the tiles a window has shown; ⌘[ and ⌘] walk it
