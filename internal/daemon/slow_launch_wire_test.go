@@ -2,6 +2,7 @@ package daemon_test
 
 import (
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -152,4 +153,104 @@ func stoppedSharedCodexSessionWithNoAppServer(t *testing.T) (w *world, app *test
 func appCommandAnswers(app *testworld.Peer) {
 	app.T.Helper()
 	ledgerListOverTheWebSocket(app, uuid.NewString(), protocol.SessionListMessage{})
+}
+
+func TestAReviveThatWaitsForItsSharedCodexAppServerHoldsUpOnlyItsOwnTerminal(t *testing.T) {
+	w, app, codex, claude := revivableSharedCodexAndClaudeSessions(t)
+
+	boot := w.HoldNextBoot()
+	codexTerminal := sendReviveAttach(app, codex)
+	w.AwaitHeldBoot()
+	claudeTerminal := sendReviveAttach(app, claude)
+	if attached := awaitAttach(app, claudeTerminal); !attached.Success {
+		t.Fatalf("revive %s while another terminal's revive waits: %s", claude, protocol.Deref(attached.Error))
+	}
+	appCommandAnswers(app)
+	boot()
+	if attached := awaitAttach(app, codexTerminal); !attached.Success {
+		t.Fatalf("revive %s after its app-server started: %s", codex, protocol.Deref(attached.Error))
+	}
+	closeSessions(t, app, codex, claude)
+}
+
+func TestADetachSentDuringAWaitingReviveLeavesNoStreamAttached(t *testing.T) {
+	w, app, codex, claude := revivableSharedCodexAndClaudeSessions(t)
+
+	boot := w.HoldNextBoot()
+	terminal := sendReviveAttach(app, codex)
+	w.AwaitHeldBoot()
+	app.Send(protocol.DetachSessionMessage{Cmd: protocol.CmdDetachSession, ID: protocol.TerminalID(terminal)})
+	boot()
+	awaitAttach(app, terminal)
+	testworld.Request(app, protocol.GetScreenSnapshotMessage{Cmd: protocol.CmdGetScreenSnapshot, ID: protocol.TerminalID(terminal)},
+		protocol.EventGetScreenSnapshotResult, func(r protocol.GetScreenSnapshotResultMessage) bool { return string(r.ID) == terminal })
+	snapshot, _ := supportSnapshotRequest(app, uuid.NewString(), []string{terminal})
+	for _, runtime := range snapshot.Runtimes {
+		if string(runtime.RuntimeID) == terminal && runtime.Attached {
+			t.Fatalf("terminal %s detached during its revive still streams to the app", terminal)
+		}
+	}
+	closeSessions(t, app, codex, claude)
+}
+
+func TestTypingIntoATerminalWhoseReviveWaitsReachesTheRevivedAgent(t *testing.T) {
+	w, app, codex, claude := revivableSharedCodexAndClaudeSessions(t)
+
+	boot := w.HoldNextBoot()
+	terminal := sendReviveAttach(app, codex)
+	w.AwaitHeldBoot()
+	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(terminal), Data: "lock the tax lookup\r"})
+	boot()
+	if attached := awaitAttach(app, terminal); !attached.Success {
+		t.Fatalf("revive %s: %s", codex, protocol.Deref(attached.Error))
+	}
+	if got := w.Launched(codex).Prompted(); got != "lock the tax lookup" {
+		t.Fatalf("the revived codex received %q, want what the user typed while it revived", got)
+	}
+	closeSessions(t, app, codex, claude)
+}
+
+func revivableSharedCodexAndClaudeSessions(t *testing.T) (w *world, app *testworld.Peer, codex, claude string) {
+	t.Helper()
+	w = newWorld(t, fakeagent.Codex, fakeagent.Claude)
+	app = w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	codex = w.Spawn(app, fakeagent.Codex, w.Path("shop"))
+	takeTurn(app, w.Launched(codex), codex)
+	claude = w.Spawn(app, fakeagent.Claude, w.Path("blog"))
+	takeTurn(app, w.Launched(claude), claude)
+	stopped := w.CodexServer()
+	w.restart()
+	stopped.AwaitStopped()
+	app = w.App()
+	for _, session := range []string{codex, claude} {
+		if !slices.ContainsFunc(app.Initial.Sessions, func(s protocol.Session) bool {
+			return string(s.ID) == session && s.State == protocol.SessionStateRecoverable
+		}) {
+			t.Fatalf("after the restart session %s is not recoverable: %+v", session, app.Initial.Sessions)
+		}
+	}
+	return w, app, codex, claude
+}
+
+func sendReviveAttach(app *testworld.Peer, session string) (terminal string) {
+	app.T.Helper()
+	terminal = app.Terminal(session)
+	app.Send(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(terminal),
+		AttachPolicy: protocol.Ptr(protocol.AttachPolicyRevive), Cols: protocol.Ptr(100), Rows: protocol.Ptr(30)})
+	return terminal
+}
+
+func awaitAttach(app *testworld.Peer, terminal string) protocol.AttachResultMessage {
+	app.T.Helper()
+	return testworld.Await(app, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return string(r.ID) == terminal })
+}
+
+func closeSessions(t *testing.T, app *testworld.Peer, sessions ...string) {
+	t.Helper()
+	for _, session := range sessions {
+		if closed := closeFromApp(app, session); !closed.Accepted {
+			t.Fatalf("close %s: %s", session, protocol.Deref(closed.Error))
+		}
+	}
 }
