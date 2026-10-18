@@ -340,25 +340,21 @@ func TestLayoutStaysAWellFormedTreeUnderRandomOperations(t *testing.T) {
 					t.Fatalf("split %q disappeared from the tree when its ratio was set", splitID)
 				}
 				if !split.RatioLocked {
-					t.Fatalf("split %q was resized by hand but is not locked; normalization will rebalance it away", splitID)
+					t.Fatalf("split %q was resized by hand but is not locked; rebalancing will change it", splitID)
 				}
 				if split.Ratio < 0.05 || split.Ratio > 0.95 {
 					t.Fatalf("split %q was set to %v, outside the collapse margin", splitID, split.Ratio)
 				}
 			},
 
-			"normalize": func(t *rapid.T) {
-				panes := make(map[string]struct{}, len(m.panes))
-				for _, id := range m.paneIDs() {
-					panes[id] = struct{}{}
+			"rebalance": func(t *rapid.T) {
+				rebalanced := Rebalance(m.tree)
+				again := Rebalance(rebalanced)
+				if !reflect.DeepEqual(rebalanced, again) {
+					t.Fatalf("rebalancing is not idempotent:\nonce: %+v\ntwice: %+v", rebalanced, again)
 				}
-				normalized := NormalizeLayout(m.tree, panes)
-				again := NormalizeLayout(normalized, panes)
-				if !reflect.DeepEqual(normalized, again) {
-					t.Fatalf("normalization is not idempotent:\nonce: %+v\ntwice: %+v", normalized, again)
-				}
-				checkChainsShareEqually(t, normalized)
-				m.tree = normalized
+				checkChainsShareEqually(t, rebalanced)
+				m.tree = rebalanced
 			},
 
 			"": func(t *rapid.T) {

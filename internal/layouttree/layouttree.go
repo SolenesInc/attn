@@ -3,7 +3,6 @@ package layouttree
 import (
 	"encoding/json"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -75,26 +74,6 @@ func DecodeLayout(layoutJSON string) (Node, error) {
 		return Node{}, err
 	}
 	return node, nil
-}
-
-func NormalizeLayout[P any](node Node, panesByID map[string]P) Node {
-	normalized, empty := normalizeNode(node, panesByID)
-	if empty {
-		return fallbackLayout(panesByID)
-	}
-	return Rebalance(normalized)
-}
-
-func fallbackLayout[P any](panesByID map[string]P) Node {
-	paneIDs := make([]string, 0, len(panesByID))
-	for paneID := range panesByID {
-		paneIDs = append(paneIDs, paneID)
-	}
-	sort.Strings(paneIDs)
-	if len(paneIDs) == 0 {
-		return Node{}
-	}
-	return DefaultLayout(paneIDs[0])
 }
 
 func Rebalance(node Node) Node {
@@ -215,61 +194,6 @@ func isTile(tileID string) func(Node) bool {
 
 func isLeafWithID(id string) func(Node) bool {
 	return func(node Node) bool { return isLeaf(node) && leafIDOf(node) == id }
-}
-
-func normalizeNode[P any](node Node, panesByID map[string]P) (Node, bool) {
-	switch node.Type {
-	case "pane":
-		if _, ok := panesByID[node.PaneID]; !ok {
-			return Node{}, true
-		}
-		return Node{Type: "pane", PaneID: node.PaneID}, false
-	case "tile":
-		return normalizeTile(node)
-	case "split":
-		return normalizeSplit(node, panesByID)
-	}
-	return Node{}, true
-}
-
-func normalizeTile(node Node) (Node, bool) {
-	tileID := strings.TrimSpace(node.TileID)
-	tileKind := strings.TrimSpace(node.TileKind)
-	if tileID == "" || tileKind == "" {
-		return Node{}, true
-	}
-	return Node{
-		Type:          "tile",
-		TileID:        tileID,
-		TileKind:      tileKind,
-		TileParams:    node.TileParams,
-		TileSessionID: protocol.TrimID(node.TileSessionID),
-	}, false
-}
-
-func normalizeSplit[P any](node Node, panesByID map[string]P) (Node, bool) {
-	children := make([]Node, 0, 2)
-	for _, child := range node.Children {
-		if next, empty := normalizeNode(child, panesByID); !empty {
-			children = append(children, next)
-		}
-	}
-	if len(children) < 2 {
-		return collapsed(children)
-	}
-	ratioMode := RatioModeAutomatic
-	if node.RatioMode == RatioModePreferred {
-		ratioMode = RatioModePreferred
-	}
-	return Node{
-		Type:        "split",
-		SplitID:     splitIDOrDefault(strings.TrimSpace(node.SplitID)),
-		Direction:   directionOrDefault(node.Direction),
-		Ratio:       ratioOrDefault(node.Ratio),
-		RatioLocked: node.RatioLocked,
-		RatioMode:   ratioMode,
-		Children:    children[:2],
-	}, false
 }
 
 func collapsed(children []Node) (Node, bool) {
@@ -401,16 +325,6 @@ func LayoutEmpty(node Node) bool {
 
 func findLeaf(node Node, id string) (Node, bool) {
 	return findNode(node, isLeafWithID(id))
-}
-
-func TileParamsByID(node Node, tileID string) (string, bool) {
-	tile, found := findNode(node, isTile(tileID))
-	return tile.TileParams, found
-}
-
-func TileSessionIDByID(node Node, tileID string) (string, bool) {
-	tile, found := findNode(node, isTile(tileID))
-	return string(tile.TileSessionID), found
 }
 
 func updateTile(node Node, tileID string, update func(*Node)) (Node, bool) {
@@ -619,14 +533,6 @@ func renamedToAvoid(target, leaf Node, conflictSuffix string) Node {
 		leaf.TileID = renamed
 	}
 	return leaf
-}
-
-func UndockTile(node Node, tileID string) (Node, bool) {
-	if !HasTile(node, strings.TrimSpace(tileID)) {
-		return node, false
-	}
-	next, _ := Remove(node, strings.TrimSpace(tileID))
-	return next, true
 }
 
 type ValidationError struct {
