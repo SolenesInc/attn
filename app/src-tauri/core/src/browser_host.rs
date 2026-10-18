@@ -296,6 +296,26 @@ fn set_geometry(webview: &tauri::Webview, geometry: Geometry) -> Result<(), Stri
     if geometry.visible {
         webview.show()
     } else {
+        #[cfg(target_os = "linux")]
+        {
+            let main = webview
+                .app_handle()
+                .get_webview("main")
+                .ok_or_else(|| "main webview is unavailable".to_string())?;
+            webview
+                .with_webview(move |platform| {
+                    use gtk::prelude::WidgetExt;
+
+                    if platform.inner().is_focus() {
+                        if let Err(error) = main.set_focus() {
+                            eprintln!(
+                                "[BrowserHost] Failed to return focus to main webview: {error}"
+                            );
+                        }
+                    }
+                })
+                .map_err(|error| format!("return browser webview focus: {error}"))?;
+        }
         webview.hide()
     }
     .map_err(|error| format!("change browser webview visibility: {error}"))
