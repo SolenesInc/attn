@@ -74,14 +74,15 @@ type codexAttempt struct {
 }
 
 type codexView struct {
-	terminal harness.TerminalID
-	profile  string
-	socket   string
-	server   *http.Server
-	thread   string
-	shownSeq uint64
-	trusted  string
-	version  string
+	terminal   harness.TerminalID
+	profile    string
+	socket     string
+	server     *http.Server
+	thread     string
+	shownSeq   uint64
+	trusted    string
+	version    string
+	unprompted map[string]bool
 }
 
 func (d *Daemon) codexShared() *codexShared {
@@ -435,10 +436,7 @@ func (s *codexServer) trackLocked(m codexshared.Message) []string {
 		s.held = make(map[string]bool)
 	}
 	if p.Thread.Parent != "" && p.Thread.ID != "" {
-		if s.parents == nil {
-			s.parents = make(map[string]string)
-		}
-		s.parents[p.Thread.ID] = p.Thread.Parent
+		s.adoptLocked(p.Thread.ID, p.Thread.Parent)
 	}
 	switch {
 	case m.Method == "thread/started" && !p.Thread.Ephemeral && p.Thread.ID != "":
@@ -579,6 +577,9 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 		return nil, nil
 	case "config/read":
 		return r.answerTrust(v), nil
+	case "turn/start":
+		r.followPrompt(v, m)
+		return nil, nil
 	case "thread/start", "thread/fork", "thread/resume":
 	default:
 		return nil, nil
@@ -618,25 +619,53 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 		return nil, err
 	}
 	m.Params = raw
+	opened := method != "thread/resume"
+	firstOfItsSession := opened && r.conversation(sessionID) == ""
 	return func(reply *codexshared.Message) {
 		var result struct {
 			Thread struct {
-				ID string `json:"id"`
+				ID     string `json:"id"`
+				Path   string `json:"path"`
+				Parent string `json:"parentThreadId"`
 			} `json:"thread"`
 		}
 		if len(reply.Error) > 0 || json.Unmarshal(reply.Result, &result) != nil || result.Thread.ID == "" {
 			return
 		}
-		if method == "thread/resume" {
-			r.d.mirrorLabel(r.holder(v.profile, result.Thread.ID))
-		} else if err := r.materialize(v.profile, result.Thread.ID); err != nil {
-			r.d.logf("shared Codex: refused conversation %s, which could not be written: %v", result.Thread.ID, err)
+		thread := result.Thread
+		if thread.Parent != "" {
+			r.adopt(v.profile, thread.ID, thread.Parent)
+			return
+		}
+		if !opened {
+			r.d.mirrorLabel(r.holder(v.profile, thread.ID))
+		} else if err := r.materialize(v.profile, thread.ID); err != nil {
+			r.d.logf("shared Codex: refused conversation %s, which could not be written: %v", thread.ID, err)
 			reply.Result = nil
 			reply.Error, _ = json.Marshal(map[string]any{"code": -32603, "message": "attn could not write the new conversation to disk: " + err.Error()})
 			return
 		}
-		r.show(v, result.Thread.ID)
+		r.show(v, thread.ID, opened)
+		if !firstOfItsSession {
+			r.d.conversationIn(v.terminal, agentConversationObservation{NativeID: thread.ID, TranscriptPath: thread.Path})
+		}
 	}, nil
+}
+
+func (r *codexShared) followPrompt(v *codexView, m *codexshared.Message) {
+	var p struct {
+		ThreadID string `json:"threadId"`
+	}
+	if json.Unmarshal(m.Params, &p) != nil {
+		return
+	}
+	r.mu.Lock()
+	returned := v.unprompted[p.ThreadID] && v.thread != p.ThreadID
+	delete(v.unprompted, p.ThreadID)
+	r.mu.Unlock()
+	if returned {
+		r.show(v, p.ThreadID, false)
+	}
 }
 
 func (r *codexShared) answerTrust(v *codexView) func(*codexshared.Message) {
@@ -734,11 +763,17 @@ func (r *codexShared) materialize(profile, conversation string) error {
 	return err
 }
 
-func (r *codexShared) show(v *codexView, conversation string) {
+func (r *codexShared) show(v *codexView, conversation string, opened bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.seq++
 	v.thread, v.shownSeq = conversation, r.seq
+	if opened {
+		if v.unprompted == nil {
+			v.unprompted = make(map[string]bool)
+		}
+		v.unprompted[conversation] = true
+	}
 }
 
 func (r *codexShared) terminalShowing(profile, conversation string) (harness.TerminalID, bool) {
@@ -888,12 +923,28 @@ func (r *codexShared) restoreParents(s *codexServer, client *codexshared.Client,
 			continue
 		}
 		s.mu.Lock()
-		if s.parents == nil {
-			s.parents = make(map[string]string)
-		}
-		s.parents[id] = read.Thread.Parent
+		s.adoptLocked(id, read.Thread.Parent)
 		s.mu.Unlock()
 	}
+}
+
+func (s *codexServer) adoptLocked(subagent, parent string) {
+	if s.parents == nil {
+		s.parents = make(map[string]string)
+	}
+	s.parents[subagent] = parent
+}
+
+func (r *codexShared) adopt(profile, subagent, parent string) {
+	r.mu.Lock()
+	s := r.servers[profile]
+	r.mu.Unlock()
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.adoptLocked(subagent, parent)
+	s.mu.Unlock()
 }
 
 func (r *codexShared) parent(profile, conversation string) string {

@@ -50,7 +50,8 @@ func (d *Daemon) handleObserveAgentConversation(conn net.Conn, msg *protocol.Set
 }
 
 // conversationIn routes a conversation the harness in terminal t reports from SessionStart or
-// UserPromptSubmit. Those arrive in order, so only they may open or show a session.
+// UserPromptSubmit, or a shared Codex terminal from the reply that switches it. Those arrive in
+// order, so only they may open or show a session.
 func (d *Daemon) conversationIn(t harness.TerminalID, observation agentConversationObservation) {
 	cur, placed := d.terminals().Showing(t)
 	if current := d.store.Get(cur); !placed || (current != nil && !conversationIsSession(current.Agent)) {
