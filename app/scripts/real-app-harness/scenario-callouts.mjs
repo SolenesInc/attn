@@ -18,7 +18,7 @@ if (args.includes('--help')) {
   printCommonHelp('scenario-callouts');
   process.exit(0);
 }
-const runner = createScenarioRunner(options, { scenarioId: 'CALLOUTS', tier: 'local', prefix: 'callouts' });
+const runner = createScenarioRunner(options, { scenarioId: 'CALLOUTS', tier: 'local', prefix: 'callouts', metadata: { nativeFocus: 'Activate the window so recordings observe presented frames' } });
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver(options);
 const driver = createWindowDriver({ appPath: options.appPath, client });
@@ -59,6 +59,7 @@ runner.registerCleanup('close_sessions', async () => {
 try {
   await runner.step('prepare_real_shell_sessions', async () => {
     await launchFreshAppAndConnect(client, observer);
+    await driver.activateApp();
     const saved = ['callouts_enabled', 'queue_mode_enabled', 'auto_settle_enabled'].map((key) => [key, observer.getSetting(key)]);
     runner.registerCleanup('restore_settings', async () => {
       for (const [key, value] of saved) await client.request('set_setting', { key, value });
