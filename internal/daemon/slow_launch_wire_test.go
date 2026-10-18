@@ -38,6 +38,9 @@ func TestTheAppsOtherCommandsAnswerWhileASpawnStartsItsSharedCodexAppServer(t *t
 	if got := codex.Prompted(); got != "find the flaky checkout test" {
 		t.Fatalf("codex received %q", got)
 	}
+	if closed := closeFromApp(app, string(spawn.ID)); !closed.Accepted {
+		t.Fatalf("close %s: %s", spawn.ID, protocol.Deref(closed.Error))
+	}
 }
 
 func TestTheAppsOtherCommandsAnswerWhileAResumeStartsItsSharedCodexAppServer(t *testing.T) {
@@ -66,6 +69,9 @@ func TestTheAppsOtherCommandsAnswerWhileAResumeStartsItsSharedCodexAppServer(t *
 	resumed := w.Launched(session)
 	if !resumed.Resumed || resumed.ConversationID != conversation {
 		t.Fatalf("the resume ran %q showing %s (resumed=%v), want conversation %s", resumed.Argv, resumed.ConversationID, resumed.Resumed, conversation)
+	}
+	if closed := closeFromApp(app, session); !closed.Accepted {
+		t.Fatalf("close %s: %s", session, protocol.Deref(closed.Error))
 	}
 }
 
