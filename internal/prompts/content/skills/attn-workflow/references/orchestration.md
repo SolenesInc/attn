@@ -8,7 +8,7 @@ Give each Builder the plan's seed, code location, assigned outcome, relevant des
 
 After delegating, wait for updates. Updates may report completion, a progress checkpoint, or a question needing advice. Use those updates to decide when to inspect code, answer questions, review results, or adjust assignments. Avoid following every implementation step in parallel with Builder.
 
-When advising, read the relevant code and evidence and ask follow-up questions as needed. Help resolve the issue and keep the plan current when decisions change or a finding is overturned. If an assignment stalls, reassess the brief and model choice before repeating the same approach.
+When advising, read the relevant code and evidence and ask follow-up questions as needed. Help resolve the issue and keep the plan current when decisions change or a finding is overturned. If an assignment stalls, reassess the brief and model choice before repeating the same approach. When two of a Builder's fixes that shared an assumption have failed the same check, attack the premise as the skill's engineering judgment describes before approving a third.
 
 ## Questions for the user
 

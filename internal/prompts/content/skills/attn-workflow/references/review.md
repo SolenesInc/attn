@@ -26,7 +26,7 @@ Prioritize actionable findings by severity. For each finding, explain the affect
 
 Summarize what you checked, the reviewed revision, coverage gaps, and your recommendation. If no actionable findings remain, say so and state any material limits on the review.
 
-Return implementation fixes to Builder with enough context to address them. For follow-up review, check the correction and affected behavior, reusing prior evidence where it remains valid. Publish comments or other external responses only when authorized.
+Return implementation fixes to Builder with enough context to address them. For follow-up review, check the correction and affected behavior, reusing prior evidence where it remains valid. When two corrections that shared an assumption have failed the same check, attack the premise as the skill's engineering judgment describes and report the assumption as the finding. Publish comments or other external responses only when authorized.
 
 Make the review readable in the conversation and durable in the assigned seed, with links to supporting artifacts.
 
