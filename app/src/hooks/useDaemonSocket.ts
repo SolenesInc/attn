@@ -2806,54 +2806,18 @@ export function useDaemonSocket({
   }, [reconcileAttachedRuntimeGeometry, sendAttachSessionWithRetry, sendPtyResize]);
 
   const sendOpenMarkdown = useCallback((path: string, sessionId: string): Promise<{ desktopId?: string; tileId?: string }> => {
-    return new Promise((resolve, reject) => {
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        reject(new Error('WebSocket not connected'));
-        return;
-      }
-      const requestId = nextRequestID('open_markdown');
-      const key = `open_markdown:${requestId}`;
-      pendingActionsRef.current.set(key, { resolve, reject });
-      ws.send(JSON.stringify({
-        cmd: 'open_markdown',
-        request_id: requestId,
-        path,
-        ...(sessionId ? { session_id: sessionId } : {}),
-      }));
-      setTimeout(() => {
-        if (pendingActionsRef.current.has(key)) {
-          pendingActionsRef.current.delete(key);
-          reject(new Error('Open markdown timed out'));
-        }
-      }, 10000);
-    });
-  }, [nextRequestID]);
+    return sendRequest('open_markdown', {
+      path,
+      ...(sessionId ? { session_id: sessionId } : {}),
+    }, 'Open markdown timed out');
+  }, [sendRequest]);
 
   const sendOpenSeed = useCallback((seedId: string, placement: SeedPlacement): Promise<{ desktopId?: string; tileId?: string }> => {
-    return new Promise((resolve, reject) => {
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        reject(new Error('WebSocket not connected'));
-        return;
-      }
-      const requestId = nextRequestID('open_seed');
-      const key = `open_seed:${requestId}`;
-      pendingActionsRef.current.set(key, { resolve, reject });
-      ws.send(JSON.stringify({
-        cmd: 'open_seed',
-        request_id: requestId,
-        seed_id: seedId,
-        ...(placement === 'standalone' ? { standalone: true } : placement.sessionId ? { session_id: placement.sessionId } : {}),
-      }));
-      setTimeout(() => {
-        if (pendingActionsRef.current.has(key)) {
-          pendingActionsRef.current.delete(key);
-          reject(new Error('Open seed timed out'));
-        }
-      }, 10000);
-    });
-  }, [nextRequestID]);
+    return sendRequest('open_seed', {
+      seed_id: seedId,
+      ...(placement === 'standalone' ? { standalone: true } : placement.sessionId ? { session_id: placement.sessionId } : {}),
+    }, 'Open seed timed out');
+  }, [sendRequest]);
 
   const sendSeedTransition = useCallback(
     (
@@ -2864,77 +2828,25 @@ export function useDaemonSocket({
       comment?: string,
       review?: SeedReviewActionContext,
     ): Promise<Seed> => {
-      return new Promise((resolve, reject) => {
-        const ws = wsRef.current;
-        if (!ws || ws.readyState !== WebSocket.OPEN) {
-          reject(new Error('WebSocket not connected'));
-          return;
-        }
-        const requestId = nextRequestID('seed_transition');
-        const key = `seed_transition:${requestId}`;
-        pendingActionsRef.current.set(key, { resolve, reject });
-        ws.send(
-          JSON.stringify({
-            cmd: 'seed_transition',
-            request_id: requestId,
-            seed_id: seedId,
-            verb,
-            ...(reason ? { reason } : {}),
-            ...(comment ? { comment } : {}),
-            ...(force ? { force: true } : {}),
-            ...(review ? { review: { review_id: review.reviewId, evidence_version: review.evidenceVersion } } : {}),
-          }),
-        );
-        setTimeout(() => {
-          if (pendingActionsRef.current.has(key)) {
-            pendingActionsRef.current.delete(key);
-            reject(new Error('The move timed out'));
-          }
-        }, 10000);
-      });
+      return sendRequest('seed_transition', {
+        seed_id: seedId,
+        verb,
+        ...(reason ? { reason } : {}),
+        ...(comment ? { comment } : {}),
+        ...(force ? { force: true } : {}),
+        ...(review ? { review: { review_id: review.reviewId, evidence_version: review.evidenceVersion } } : {}),
+      }, 'The move timed out');
     },
-    [nextRequestID],
+    [sendRequest],
   );
 
   const sendSeedNote = useCallback((seedId: string, body: string): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        reject(new Error('WebSocket not connected'));
-        return;
-      }
-      const requestId = nextRequestID('seed_note');
-      const key = `seed_note:${requestId}`;
-      pendingActionsRef.current.set(key, { resolve: () => resolve(), reject });
-      ws.send(JSON.stringify({ cmd: 'seed_note', request_id: requestId, seed_id: seedId, body }));
-      setTimeout(() => {
-        if (pendingActionsRef.current.has(key)) {
-          pendingActionsRef.current.delete(key);
-          reject(new Error('The note timed out'));
-        }
-      }, 10000);
-    });
-  }, [nextRequestID]);
+    return sendRequest('seed_note', { seed_id: seedId, body }, 'The note timed out').then(() => {});
+  }, [sendRequest]);
 
   const sendSeedDocumentGet = useCallback((seedId: string): Promise<SeedDocument> => {
-    return new Promise((resolve, reject) => {
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        reject(new Error('WebSocket not connected'));
-        return;
-      }
-      const requestId = nextRequestID('seed_document_get');
-      const key = `seed_document_get:${requestId}`;
-      pendingActionsRef.current.set(key, { resolve, reject });
-      ws.send(JSON.stringify({ cmd: 'seed_document_get', request_id: requestId, seed_id: seedId }));
-      setTimeout(() => {
-        if (pendingActionsRef.current.has(key)) {
-          pendingActionsRef.current.delete(key);
-          reject(new Error('Seed document read timed out'));
-        }
-      }, 10000);
-    });
-  }, [nextRequestID]);
+    return sendRequest('seed_document_get', { seed_id: seedId }, 'Seed document read timed out');
+  }, [sendRequest]);
 
   const sendSeedArtifactTarget = useCallback((
     seedId: string,
@@ -3019,32 +2931,12 @@ export function useDaemonSocket({
     id: string,
     method?: string
   ): Promise<PRActionResult> => {
-    return new Promise((resolve, reject) => {
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        reject(new Error('WebSocket not connected'));
-        return;
-      }
-
-      const key = `${id}:${action}`;
-      pendingActionsRef.current.set(key, { resolve, reject });
-
-      const msg = {
-        cmd: `${action}_pr`,
-        id,
-        ...(method && { method }),
-      };
-      console.log('[Daemon] Sending PR action:', msg);
-      ws.send(JSON.stringify(msg));
-
-      setTimeout(() => {
-        if (pendingActionsRef.current.has(key)) {
-          pendingActionsRef.current.delete(key);
-          reject(new Error('Timeout'));
-        }
-      }, 30000);
-    });
-  }, []);
+    return sendKeyedRequest(`${id}:${action}`, {
+      cmd: `${action}_pr`,
+      id,
+      ...(method && { method }),
+    }, 'Timeout', 30000);
+  }, [sendKeyedRequest]);
 
   const sendMarkdownAnnotationsCommand = useCallback(<T,>(
     op: 'get' | 'save' | 'clear' | 'submit',
@@ -3200,32 +3092,18 @@ export function useDaemonSocket({
 
 
   const sendSetChiefOfStaff = useCallback((sessionId: string, chiefOfStaff: boolean): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      if (!sessionId) {
-        reject(new Error('Session is required'));
-        return;
-      }
-      const ws = wsRef.current;
-      if (!hasReceivedInitialStateRef.current || !ws || ws.readyState !== WebSocket.OPEN) {
-        reject(new Error('WebSocket not connected'));
-        return;
-      }
-      const key = `chief_of_staff:${sessionId}`;
-      pendingActionsRef.current.set(key, { resolve: () => resolve(), reject });
-      ws.send(JSON.stringify({
-        cmd: 'set_chief_of_staff',
-        session_id: sessionId,
-        chief_of_staff: chiefOfStaff,
-      }));
-      window.setTimeout(() => {
-        if (!pendingActionsRef.current.has(key)) {
-          return;
-        }
-        pendingActionsRef.current.delete(key);
-        reject(new Error(`Chief of staff update timed out for session ${sessionId}`));
-      }, 10_000);
-    });
-  }, []);
+    if (!sessionId) {
+      return Promise.reject(new Error('Session is required'));
+    }
+    if (!hasReceivedInitialStateRef.current) {
+      return Promise.reject(new Error('WebSocket not connected'));
+    }
+    return sendKeyedRequest(
+      `chief_of_staff:${sessionId}`,
+      { cmd: 'set_chief_of_staff', session_id: sessionId, chief_of_staff: chiefOfStaff },
+      `Chief of staff update timed out for session ${sessionId}`,
+    ).then(() => {});
+  }, [sendKeyedRequest]);
 
   const sendSetSessionContextWindowCap = useCallback((sessionId: string, cap: number): Promise<void> => {
     if (!sessionId) {
@@ -3243,31 +3121,15 @@ export function useDaemonSocket({
   }, [sendKeyedRequest]);
 
   const sendUnregisterSession = useCallback((sessionId: string): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      if (!sessionId) {
-        resolve();
-        return;
-      }
-
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        reject(new Error('WebSocket not connected'));
-        return;
-      }
-
-      const key = `unregister:${sessionId}`;
-      pendingActionsRef.current.set(key, { resolve: () => resolve(), reject });
-      ws.send(JSON.stringify({ cmd: 'unregister', id: sessionId }));
-
-      window.setTimeout(() => {
-        if (!pendingActionsRef.current.has(key)) {
-          return;
-        }
-        pendingActionsRef.current.delete(key);
-        reject(new Error(`Session close timed out for ${sessionId}`));
-      }, 10_000);
-    });
-  }, []);
+    if (!sessionId) {
+      return Promise.resolve();
+    }
+    return sendKeyedRequest(
+      `unregister:${sessionId}`,
+      { cmd: 'unregister', id: sessionId },
+      `Session close timed out for ${sessionId}`,
+    ).then(() => {});
+  }, [sendKeyedRequest]);
 
   const sendPRVisited = useCallback((prId: string) => {
     const ws = wsRef.current;
@@ -3470,28 +3332,12 @@ export function useDaemonSocket({
       seedId: string,
       review?: SeedReviewActionContext,
     ): Promise<{ sessionId: string; alreadyRunning?: boolean }> => {
-      return new Promise((resolve, reject) => {
-        const ws = wsRef.current;
-        if (!ws || ws.readyState !== WebSocket.OPEN) {
-          reject(new Error('WebSocket not connected'));
-          return;
-        }
-        const requestId = nextRequestID('seed_resume');
-        const key = `seed_resume:${requestId}`;
-        pendingActionsRef.current.set(key, { resolve, reject });
-        ws.send(JSON.stringify({
-          cmd: 'seed_resume', request_id: requestId, seed_id: seedId,
-          ...(review ? { review: { review_id: review.reviewId, evidence_version: review.evidenceVersion } } : {}),
-        }));
-        setTimeout(() => {
-          if (pendingActionsRef.current.has(key)) {
-            pendingActionsRef.current.delete(key);
-            reject(new Error('Resuming the seed timed out'));
-          }
-        }, 10000);
-      });
+      return sendRequest('seed_resume', {
+        seed_id: seedId,
+        ...(review ? { review: { review_id: review.reviewId, evidence_version: review.evidenceVersion } } : {}),
+      }, 'Resuming the seed timed out');
     },
-    [nextRequestID],
+    [sendRequest],
   );
 
   const sendSeedReviewShow = useCallback((reviewId?: string): Promise<SeedReviewOverview> => (
@@ -3545,25 +3391,9 @@ export function useDaemonSocket({
 
   const sendCrewWake = useCallback(
     (member: string): Promise<{ sessionId: string }> => {
-      return new Promise((resolve, reject) => {
-        const ws = wsRef.current;
-        if (!ws || ws.readyState !== WebSocket.OPEN) {
-          reject(new Error('WebSocket not connected'));
-          return;
-        }
-        const requestId = nextRequestID('crew_wake');
-        const key = `crew_wake:${requestId}`;
-        pendingActionsRef.current.set(key, { resolve, reject });
-        ws.send(JSON.stringify({ cmd: 'crew_wake', request_id: requestId, member }));
-        setTimeout(() => {
-          if (pendingActionsRef.current.has(key)) {
-            pendingActionsRef.current.delete(key);
-            reject(new Error(`Waking ${crewDisplayName(member)} timed out`));
-          }
-        }, 10000);
-      });
+      return sendRequest('crew_wake', { member }, `Waking ${crewDisplayName(member)} timed out`);
     },
-    [nextRequestID],
+    [sendRequest],
   );
 
   const sendCrewSleep = useCallback(
@@ -3658,30 +3488,8 @@ export function useDaemonSocket({
   }, [nextRequestID, sendKeyedRequest]);
 
   const sendNotificationMarkRead = useCallback((notificationId?: string): Promise<number> => {
-    return new Promise((resolve, reject) => {
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        reject(new Error('WebSocket not connected'));
-        return;
-      }
-      const requestId = nextRequestID('notification_mark_read');
-      const key = `notification_mark_read:${requestId}`;
-      pendingActionsRef.current.set(key, { resolve, reject });
-      ws.send(
-        JSON.stringify({
-          cmd: 'notification_mark_read',
-          request_id: requestId,
-          ...(notificationId ? { notification_id: notificationId } : {}),
-        }),
-      );
-      setTimeout(() => {
-        if (pendingActionsRef.current.has(key)) {
-          pendingActionsRef.current.delete(key);
-          reject(new Error('Notification mark-read timed out'));
-        }
-      }, 10000);
-    });
-  }, [nextRequestID]);
+    return sendRequest('notification_mark_read', notificationId ? { notification_id: notificationId } : {}, 'Notification mark-read timed out');
+  }, [sendRequest]);
 
   const sendNotebookBacklinks = useCallback((path: string): Promise<NotebookEntry[]> =>
     sendRequest<NotebookEntry[]>('notebook_backlinks', { path }, 'Notebook backlinks timed out'), [sendRequest]);
@@ -3734,31 +3542,14 @@ export function useDaemonSocket({
   }, [nextRequestID, sendKeyedRequest]);
 
   const sendGetRecentLocations = useCallback((limit?: number): Promise<RecentLocationsResult> => {
-    return new Promise((resolve, reject) => {
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        reject(new Error('WebSocket not connected'));
-        return;
-      }
-
-      const requestId = nextRequestID('recent_locations');
-      const key = `get_recent_locations_${requestId}`;
-      pendingActionsRef.current.set(key, { resolve, reject });
-
-      ws.send(JSON.stringify({
-        cmd: 'get_recent_locations',
-        ...(limit && { limit }),
-        request_id: requestId,
-      }));
-
-      setTimeout(() => {
-        if (pendingActionsRef.current.has(key)) {
-          pendingActionsRef.current.delete(key);
-          reject(new Error('Get recent locations timed out'));
-        }
-      }, 10000);
-    });
-  }, [nextRequestID]);
+    const requestId = nextRequestID('recent_locations');
+    const key = `get_recent_locations_${requestId}`;
+    return sendKeyedRequest(key, {
+      cmd: 'get_recent_locations',
+      ...(limit && { limit }),
+      request_id: requestId,
+    }, 'Get recent locations timed out');
+  }, [nextRequestID, sendKeyedRequest]);
 
   const sendBrowseDirectory = useCallback((inputPath: string, extensions?: string[]): Promise<BrowseDirectoryResult> => {
     const requestId = nextRequestID('browse_directory');
