@@ -980,8 +980,8 @@ export function AgentSettings({
           <div>
             <p className="settings-row-title">Auto-approve</p>
             <p className="settings-row-copy">
-              Let agents review approval requests automatically. On by default for new sessions; YOLO sessions already
-              bypass approval.
+              Let Claude and Codex review approval requests automatically. On by default for new sessions; YOLO sessions
+              already bypass approval.
             </p>
           </div>
           <button
