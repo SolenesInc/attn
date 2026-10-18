@@ -10,9 +10,7 @@ const pluginDriverSilenceGrace = 2 * time.Minute
 
 func (d *Daemon) stopPluginDriverSilence() {
 	r := d.monitors()
-	r.mu.Lock()
-	r.closed = true
-	r.mu.Unlock()
+	r.closed.Store(true)
 	for id := range r.each() {
 		d.forgetPluginDriverSilenceWatch(id)
 	}
@@ -38,21 +36,17 @@ func (d *Daemon) armPluginDriverSilenceWatchForEveryRun() {
 
 func (d *Daemon) armPluginDriverSilenceWatchForRun(sessionID protocol.SessionID, runID string, pluginName string) {
 	grace := pluginDriverSilenceGrace
-	if grace <= 0 {
-		return
-	}
 	r := d.monitors()
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.closed {
-		return
-	}
-	e, ok := r.sessions[sessionID]
-	if !ok {
+	e := r.entry(sessionID)
+	if e == nil {
 		return
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if r.closed.Load() {
+		return
+	}
+
 	if e.silence != nil {
 		e.silence.Stop()
 	}

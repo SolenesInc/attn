@@ -10,10 +10,15 @@ import (
 func (d *Daemon) resolveSoon(sessionID protocol.SessionID) {
 	if e := d.monitorEntry(sessionID); e != nil {
 		e.mu.Lock()
-		e.resolveAt, e.resolvePending = time.Time{}, true
+		e.resolveSoonLocked(d.monitors())
 		e.mu.Unlock()
 		d.monitors().rearm()
 	}
+}
+
+func (e *monitorEntry) resolveSoonLocked(r *monitorRegistry) {
+	e.resolveAt, e.resolvePending = time.Time{}, true
+	r.rearm()
 }
 
 func (r *monitorRegistry) next() (time.Time, bool) {

@@ -49,25 +49,24 @@ type stateOrigin struct {
 }
 
 type stateEffectInstance struct {
-	touch         bool
-	syncInputLane bool
-	broadcast     bool
+	touch     bool
+	broadcast bool
 }
 
 func stateEffectInstanceFor(cause sessionStateCause) (stateEffectInstance, bool) {
 	switch cause.(type) {
 	case liveSignal:
-		return stateEffectInstance{touch: true, syncInputLane: true, broadcast: true}, true
+		return stateEffectInstance{touch: true, broadcast: true}, true
 	case resolverObservation:
-		return stateEffectInstance{syncInputLane: true, broadcast: true}, true
+		return stateEffectInstance{broadcast: true}, true
 	case linkTurn:
-		return stateEffectInstance{touch: true, syncInputLane: true, broadcast: true}, true
+		return stateEffectInstance{touch: true, broadcast: true}, true
 	case startupRecovery:
 		return stateEffectInstance{}, true
 	case hostExitRecovery:
-		return stateEffectInstance{syncInputLane: true, broadcast: true}, true
+		return stateEffectInstance{broadcast: true}, true
 	case pluginDriverSilent:
-		return stateEffectInstance{syncInputLane: true, broadcast: true}, true
+		return stateEffectInstance{broadcast: true}, true
 	default:
 		return stateEffectInstance{}, false
 	}
@@ -104,17 +103,15 @@ func (d *Daemon) applyState(change sessionStateChange) bool {
 	}
 
 	opening := d.turnOpeningFor(change.sessionID, protocol.SessionState(change.state))
-	d.autoSettleFireMu.Lock()
-	var inputLane *sessionInputLane
-	if instance.syncInputLane {
-		inputLane = d.sessionInputs().lane(change.sessionID)
-		inputLane.mu.Lock()
+	entry := d.monitorEntry(change.sessionID)
+	if entry != nil {
+		entry.mu.Lock()
 	}
 	applied, turn := d.commitSessionState(change, opening)
-	if inputLane != nil {
-		inputLane.mu.Unlock()
+	if entry != nil {
+		entry.mu.Unlock()
 	}
-	d.autoSettleFireMu.Unlock()
+
 	if !applied {
 		d.logf(
 			"state update discarded: session=%s state=%s cause=%s",

@@ -17,10 +17,10 @@ func (d *Daemon) evidenceSnapshot(sessionID protocol.SessionID) (monitorEvidence
 	if e == nil {
 		return monitorEvidence{}, false
 	}
-	e.monitor.mu.Lock()
-	defer e.monitor.mu.Unlock()
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	e.monitor.mu.Lock()
+	defer e.monitor.mu.Unlock()
 	return monitorEvidence{e.monitor.terminal, e.evidence}, true
 }
 
@@ -45,10 +45,10 @@ func (d *Daemon) updateEvidence(
 		return false
 	}
 	changed := func() bool {
-		e.monitor.mu.Lock()
-		defer e.monitor.mu.Unlock()
 		e.mu.Lock()
 		defer e.mu.Unlock()
+		e.monitor.mu.Lock()
+		defer e.monitor.mu.Unlock()
 		evidence := monitorEvidence{e.monitor.terminal, e.evidence}
 		if unchanged != nil && unchanged(&evidence) {
 			return false
@@ -200,21 +200,8 @@ func (d *Daemon) startEvidence(sessionID protocol.SessionID, fresh monitorEviden
 	d.updateEvidence(sessionID, nil, func(e *monitorEvidence) { *e = fresh })
 }
 
-func (d *Daemon) recordPlacedInputOwed(sessionID protocol.SessionID, owed bool) {
-	d.updateEvidence(sessionID, func(e *monitorEvidence) bool {
-		return e.PlacedInputOwed == owed || (owed && sessionstate.TookATurn(e.ConversationEvidence))
-	}, func(e *monitorEvidence) {
-		e.PlacedInputOwed = owed
-	})
-}
-
 func reportsTurnStarts(agent string) bool {
 	return agentdriver.EffectiveCapabilities(agentdriver.Get(agent)).HasHooks
-}
-
-func (d *Daemon) initialPromptPending(sessionID protocol.SessionID) bool {
-	evidence, _ := d.evidenceSnapshot(sessionID)
-	return evidence.InitialPromptOwed
 }
 
 func (d *Daemon) recordBracketEvidence(sessionID protocol.SessionID, state string) {

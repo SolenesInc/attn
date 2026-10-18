@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/victorarias/attn/internal/harness"
@@ -31,6 +32,10 @@ type monitorEntry struct {
 	classifyingTurn string
 	forcedStop      time.Time
 	silence         *time.Timer
+	input           *sessionInputLane
+	autoSettle      *autoSettleTimer
+	dismissal       autoSettleDismissal
+	activityAt      time.Time
 }
 
 type monitorEvidence struct {
@@ -47,7 +52,7 @@ type monitorRegistry struct {
 	physical map[harness.TerminalID]*sessionMonitor
 	sessions map[protocol.SessionID]*monitorEntry
 	wake     chan struct{}
-	closed   bool
+	closed   atomic.Bool
 }
 
 func (d *Daemon) monitors() *monitorRegistry {
@@ -69,7 +74,13 @@ func (d *Daemon) monitorEntry(sessionID protocol.SessionID) *monitorEntry {
 
 func (r *monitorRegistry) start(terminal harness.TerminalID, conversation string, sessionID protocol.SessionID, linked bool) *monitorEntry {
 	r.mu.Lock()
-	defer r.mu.Unlock()
+	var detached *monitorEntry
+	defer func() {
+		r.mu.Unlock()
+		if detached != nil {
+			detached.stop()
+		}
+	}()
 	old := r.sessions[sessionID]
 	if old != nil && old.monitor.terminalID == terminal {
 		if (conversation == "" && !linked) || old.conversation == conversation {
@@ -89,17 +100,22 @@ func (r *monitorRegistry) start(terminal harness.TerminalID, conversation string
 	if m == nil {
 		m = &sessionMonitor{terminalID: terminal, entries: make(map[*monitorEntry]struct{})}
 	}
-	r.forgetLocked(sessionID)
+	detached = r.forgetLocked(sessionID)
 	if !linked {
 		r.physical[terminal] = m
 	}
 	e := &monitorEntry{monitor: m, conversation: conversation}
+	e.input = &sessionInputLane{mu: &e.mu, entry: e, stopped: r.closed.Load()}
 	m.entries[e] = struct{}{}
 	r.sessions[sessionID] = e
 	return e
 }
 
 func (d *Daemon) startSessionMonitor(sessionID protocol.SessionID) *monitorEntry {
+	return d.startSessionMonitorFrom(sessionID, "")
+}
+
+func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionID) *monitorEntry {
 	terminal := d.primaryTerminal(sessionID)
 	conversation := d.store.GetSessionConversation(sessionID).NativeID
 	linked := d.store.SessionLink(sessionID) == codexLinkKind
@@ -111,7 +127,23 @@ func (d *Daemon) startSessionMonitor(sessionID protocol.SessionID) *monitorEntry
 	if terminal == "" {
 		return nil
 	}
-	return d.monitors().start(terminal, conversation, sessionID, linked)
+	var previous *monitorEntry
+	if previousID != "" {
+		previous = d.monitorEntry(previousID)
+	}
+	entry := d.monitors().start(terminal, conversation, sessionID, linked)
+	if previous != nil && previous != entry {
+		previous.mu.Lock()
+		typed := previous.input.userSubmit
+		previous.input.userSubmit = false
+		previous.mu.Unlock()
+		if typed {
+			entry.mu.Lock()
+			entry.input.userSubmit = true
+			entry.mu.Unlock()
+		}
+	}
+	return entry
 }
 
 func (r *monitorRegistry) each() map[protocol.SessionID]*monitorEntry {
@@ -127,15 +159,18 @@ func (r *monitorRegistry) each() map[protocol.SessionID]*monitorEntry {
 func (d *Daemon) forgetMonitor(sessionID protocol.SessionID) {
 	r := d.monitors()
 	r.mu.Lock()
-	r.forgetLocked(sessionID)
+	e := r.forgetLocked(sessionID)
 	r.mu.Unlock()
+	if e != nil {
+		e.stop()
+	}
 	r.rearm()
 }
 
-func (r *monitorRegistry) forgetLocked(sessionID protocol.SessionID) {
+func (r *monitorRegistry) forgetLocked(sessionID protocol.SessionID) *monitorEntry {
 	e := r.sessions[sessionID]
 	if e == nil {
-		return
+		return nil
 	}
 	m := e.monitor
 	delete(r.sessions, sessionID)
@@ -143,13 +178,24 @@ func (r *monitorRegistry) forgetLocked(sessionID protocol.SessionID) {
 	if len(m.entries) == 0 && r.physical[m.terminalID] == m {
 		delete(r.physical, m.terminalID)
 	}
+	return e
+}
+
+func (e *monitorEntry) stop() {
 	e.mu.Lock()
+	lane := e.input
+	lane.stopRetriesLocked()
+	if e.autoSettle != nil {
+		e.autoSettle.timer.Stop()
+		e.autoSettle = nil
+	}
 	if e.silence != nil {
 		e.silence.Stop()
 		e.silence = nil
 	}
 	e.resolvePending = false
 	e.mu.Unlock()
+	lane.running.Wait()
 }
 
 func (r *monitorRegistry) rearm() {

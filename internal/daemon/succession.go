@@ -62,9 +62,8 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 		return err
 	}
 
-	d.sessionInputs().handOverSubmit(from.ID, sc.To)
+	d.startSessionMonitorFrom(sc.To, from.ID)
 	if !sc.KeepTo {
-		d.startSessionMonitor(sc.To)
 		d.resolveSoon(sc.To)
 		d.startTranscriptWatcherAtPath(sc.To, from.Agent, from.Directory, d.sessionStartedAt(sc.To), observation.TranscriptPath)
 	} else {

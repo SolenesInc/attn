@@ -10,6 +10,7 @@ import (
 
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionstate"
 )
 
 type sessionInputStage uint8
@@ -128,7 +129,8 @@ type sessionInputRunState struct {
 }
 
 type sessionInputLane struct {
-	mu sync.Mutex
+	mu    *sync.Mutex
+	entry *monitorEntry
 
 	retries map[string]*sessionInputRetry
 	run     *sessionInputRunState
@@ -146,12 +148,7 @@ type sessionInputLane struct {
 	running       sync.WaitGroup
 }
 
-type sessionInputModule struct {
-	daemon  *Daemon
-	mu      sync.Mutex
-	lanes   map[protocol.SessionID]*sessionInputLane
-	stopped bool
-}
+type sessionInputModule struct{ daemon *Daemon }
 
 var (
 	errSessionInputBlockedByApproval = errors.New("session input blocked by pending approval")
@@ -201,72 +198,45 @@ func sessionInputDeferredError(err error) bool {
 		errors.Is(err, errSessionInputInitialPrompt)
 }
 
-func (d *Daemon) sessionInputs() *sessionInputModule {
-	d.sessionInputOnce.Do(func() {
-		d.sessionInputState = &sessionInputModule{daemon: d, lanes: make(map[protocol.SessionID]*sessionInputLane)}
-	})
-	return d.sessionInputState
+func (d *Daemon) sessionInputs() sessionInputModule { return sessionInputModule{daemon: d} }
+func (m sessionInputModule) lane(sessionID protocol.SessionID) *sessionInputLane {
+	if e := m.daemon.monitorEntry(sessionID); e != nil {
+		e.mu.Lock()
+		lane := e.input
+		e.mu.Unlock()
+		return lane
+	}
+	return &sessionInputLane{mu: new(sync.Mutex), stopped: true}
 }
 
-func (m *sessionInputModule) lane(sessionID protocol.SessionID) *sessionInputLane {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	lane := m.lanes[sessionID]
-	if lane == nil {
-		lane = &sessionInputLane{stopped: m.stopped}
-		m.lanes[sessionID] = lane
-	}
-	return lane
-}
-
-func (m *sessionInputModule) forgetSession(sessionID protocol.SessionID) {
-	lane := m.closeLane(sessionID)
-	if lane == nil {
-		return
-	}
-	m.mu.Lock()
-	if m.lanes[sessionID] == lane {
-		delete(m.lanes, sessionID)
-	}
-	m.mu.Unlock()
-}
-
-// handOverSubmit gives the session a terminal now shows the prompt the user typed while it showed the
-// old one: Codex reports a new chat on its first prompt. attn's own pastes stay with the old session.
-func (m *sessionInputModule) handOverSubmit(from protocol.SessionID, to protocol.SessionID) {
-	src := m.lane(from)
-	src.mu.Lock()
-	typed := src.userSubmit
-	src.userSubmit = false
-	src.mu.Unlock()
-	if !typed {
-		return
-	}
-	dst := m.lane(to)
-	dst.mu.Lock()
-	dst.userSubmit = true
-	dst.mu.Unlock()
-}
-
-func (m *sessionInputModule) fenceSession(sessionID protocol.SessionID) {
-	m.closeLane(sessionID)
-}
-
-func (m *sessionInputModule) closeLane(sessionID protocol.SessionID) *sessionInputLane {
-	m.mu.Lock()
-	lane := m.lanes[sessionID]
-	m.mu.Unlock()
-	if lane == nil {
-		return nil
-	}
+func (m sessionInputModule) fenceSession(sessionID protocol.SessionID) {
+	lane := m.lane(sessionID)
 	lane.mu.Lock()
 	lane.stopRetriesLocked()
 	lane.mu.Unlock()
 	lane.running.Wait()
-	return lane
 }
 
-func (m *sessionInputModule) armRetryLocked(lane *sessionInputLane, delivery sessionInputDelivery, err error) {
+func (m sessionInputModule) resetSession(sessionID protocol.SessionID) {
+	e := m.daemon.monitorEntry(sessionID)
+	if e == nil {
+		return
+	}
+	e.mu.Lock()
+	lane := e.input
+	lane.stopRetriesLocked()
+	e.mu.Unlock()
+	lane.running.Wait()
+	e.mu.Lock()
+	e.input = &sessionInputLane{mu: &e.mu, entry: e, stopped: m.daemon.monitors().closed.Load()}
+	if e.evidence.PlacedInputOwed {
+		e.evidence.PlacedInputOwed = false
+		e.resolveSoonLocked(m.daemon.monitors())
+	}
+	e.mu.Unlock()
+}
+
+func (m sessionInputModule) armRetryLocked(lane *sessionInputLane, delivery sessionInputDelivery, err error) {
 	after, retryable := sessionInputRetryDelay(err)
 	if !retryable || delivery.resend == nil {
 		return
@@ -274,7 +244,7 @@ func (m *sessionInputModule) armRetryLocked(lane *sessionInputLane, delivery ses
 	m.scheduleLocked(lane, delivery.sessionID, delivery.id.String(), after, delivery.resend)
 }
 
-func (m *sessionInputModule) scheduleLocked(lane *sessionInputLane, sessionID protocol.SessionID, key string, after time.Duration, resend func()) {
+func (m sessionInputModule) scheduleLocked(lane *sessionInputLane, sessionID protocol.SessionID, key string, after time.Duration, resend func()) {
 	if lane.stopped {
 		return
 	}
@@ -292,13 +262,9 @@ func (m *sessionInputModule) scheduleLocked(lane *sessionInputLane, sessionID pr
 	lane.retries[key] = entry
 }
 
-func (m *sessionInputModule) fireRetry(sessionID protocol.SessionID, key string, self *sessionInputRetry) {
-	m.mu.Lock()
-	lane := m.lanes[sessionID]
-	m.mu.Unlock()
-	if lane == nil {
-		return
-	}
+func (m sessionInputModule) fireRetry(sessionID protocol.SessionID, key string, self *sessionInputRetry) {
+	lane := m.lane(sessionID)
+
 	lane.mu.Lock()
 	owner := !lane.stopped && lane.retries[key] == self
 	if owner {
@@ -313,14 +279,17 @@ func (m *sessionInputModule) fireRetry(sessionID protocol.SessionID, key string,
 	self.resend()
 }
 
-func (m *sessionInputModule) stopRetries() {
-	m.mu.Lock()
-	m.stopped = true
-	lanes := make([]*sessionInputLane, 0, len(m.lanes))
-	for _, lane := range m.lanes {
-		lanes = append(lanes, lane)
+func (m sessionInputModule) stopRetries() {
+	r := m.daemon.monitors()
+	r.closed.Store(true)
+	entries := r.each()
+	lanes := make([]*sessionInputLane, 0, len(entries))
+	for _, e := range entries {
+		e.mu.Lock()
+		lanes = append(lanes, e.input)
+		e.mu.Unlock()
 	}
-	m.mu.Unlock()
+
 	for _, lane := range lanes {
 		lane.mu.Lock()
 		lane.stopRetriesLocked()
@@ -339,7 +308,7 @@ func (lane *sessionInputLane) stopRetriesLocked() {
 	}
 }
 
-func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDelivery) sessionInputAttempt {
+func (m sessionInputModule) try(ctx context.Context, delivery sessionInputDelivery) sessionInputAttempt {
 	if delivery.id.String() == "" || protocol.TrimID(delivery.sessionID) == "" || strings.TrimSpace(delivery.text) == "" {
 		return sessionInputAttempt{stage: sessionInputFailed, err: errors.New("session input needs an attempt id, session id, and text")}
 	}
@@ -353,7 +322,7 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 	return attempt
 }
 
-func (m *sessionInputModule) place(ctx context.Context, delivery sessionInputDelivery) (sessionInputAttempt, sessionInputRunRef) {
+func (m sessionInputModule) place(ctx context.Context, delivery sessionInputDelivery) (sessionInputAttempt, sessionInputRunRef) {
 	lane := m.lane(delivery.sessionID)
 	lane.mu.Lock()
 	defer lane.mu.Unlock()
@@ -376,7 +345,7 @@ func (m *sessionInputModule) place(ctx context.Context, delivery sessionInputDel
 	if state == nil {
 		return deferred(fmt.Errorf("session %s is gone", delivery.sessionID))
 	}
-	if !delivery.bypassInitialGate && m.daemon.initialPromptPending(delivery.sessionID) {
+	if !delivery.bypassInitialGate && lane.entry.evidence.InitialPromptOwed {
 		return deferred(errSessionInputInitialPrompt)
 	}
 	if err := deliveryAllowedForPhase(delivery.placement, state.State); err != nil {
@@ -397,7 +366,7 @@ func (m *sessionInputModule) place(ctx context.Context, delivery sessionInputDel
 	return attempt, m.tookLocked(lane, delivery)
 }
 
-func (m *sessionInputModule) placeOverLinkLocked(ctx context.Context, lane *sessionInputLane, delivery sessionInputDelivery, state *protocol.Session) (sessionInputAttempt, bool) {
+func (m sessionInputModule) placeOverLinkLocked(ctx context.Context, lane *sessionInputLane, delivery sessionInputDelivery, state *protocol.Session) (sessionInputAttempt, bool) {
 	voice := delivery.origin.voice()
 	lane.placing = true
 	lane.mu.Unlock()
@@ -420,7 +389,7 @@ func (m *sessionInputModule) placeOverLinkLocked(ctx context.Context, lane *sess
 
 // tookLocked credits the user's words to the run going, or, while the paste waits in the
 // composer, to the next turn start. The user typing over the paste forfeits that credit.
-func (m *sessionInputModule) tookLocked(lane *sessionInputLane, delivery sessionInputDelivery) sessionInputRunRef {
+func (m sessionInputModule) tookLocked(lane *sessionInputLane, delivery sessionInputDelivery) sessionInputRunRef {
 	if delivery.origin.kind != sessionInputOriginUserConversation {
 		return sessionInputRunRef{}
 	}
@@ -438,13 +407,13 @@ func (m *sessionInputModule) tookLocked(lane *sessionInputLane, delivery session
 	return lane.run.ref
 }
 
-func (m *sessionInputModule) titleLocked(delivery sessionInputDelivery) {
+func (m sessionInputModule) titleLocked(delivery sessionInputDelivery) {
 	sessionID, text, origin := delivery.sessionID, delivery.text, delivery.origin
 	m.daemon.life.Go("maybeGenerateSessionTitleFromPrompt", func() { m.daemon.maybeGenerateSessionTitleFromPrompt(sessionID, text, origin) })
 }
 
 // claimNextLocked hands a turn start the credit and title of words still waiting in the composer.
-func (m *sessionInputModule) claimNextLocked(lane *sessionInputLane) bool {
+func (m sessionInputModule) claimNextLocked(lane *sessionInputLane) bool {
 	credit := lane.creditNextRun
 	lane.creditNextRun = false
 	if next := lane.titleNext; next != nil {
@@ -459,11 +428,20 @@ func (lane *sessionInputLane) forfeitNextLocked() {
 	lane.titleNext = nil
 }
 
-func (m *sessionInputModule) recordOwedLocked(lane *sessionInputLane, sessionID protocol.SessionID) {
-	m.daemon.recordPlacedInputOwed(sessionID, lane.occupied && reportsTurnStarts(string(m.daemon.sessionAgent(sessionID))))
+func (m sessionInputModule) recordOwedLocked(lane *sessionInputLane, sessionID protocol.SessionID) {
+	if lane.entry == nil {
+		return
+	}
+	owed := lane.occupied && reportsTurnStarts(string(m.daemon.sessionAgent(sessionID)))
+	evidence := &lane.entry.evidence
+	if evidence.PlacedInputOwed == owed || (owed && sessionstate.TookATurn(*evidence)) {
+		return
+	}
+	evidence.PlacedInputOwed = owed
+	lane.entry.resolveSoonLocked(m.daemon.monitors())
 }
 
-func (m *sessionInputModule) releaseComposerLocked(lane *sessionInputLane, sessionID protocol.SessionID) {
+func (m sessionInputModule) releaseComposerLocked(lane *sessionInputLane, sessionID protocol.SessionID) {
 	if !lane.occupied {
 		return
 	}
@@ -485,7 +463,7 @@ func sessionInputPhaseAllows(placement sessionInputPlacement, state protocol.Ses
 	return deliveryAllowedForPhase(placement, state) == nil
 }
 
-func (m *sessionInputModule) observePromptSubmitted(sessionID protocol.SessionID) (run sessionInputRunRef, credited, typed bool) {
+func (m sessionInputModule) observePromptSubmitted(sessionID protocol.SessionID) (run sessionInputRunRef, credited, typed bool) {
 	lane := m.lane(sessionID)
 	lane.mu.Lock()
 	defer lane.mu.Unlock()
@@ -500,7 +478,7 @@ func (m *sessionInputModule) observePromptSubmitted(sessionID protocol.SessionID
 	return current.ref, current.credited, typed
 }
 
-func (m *sessionInputModule) ensureRunLocked(lane *sessionInputLane, sessionID protocol.SessionID) *sessionInputRunState {
+func (m sessionInputModule) ensureRunLocked(lane *sessionInputLane, sessionID protocol.SessionID) *sessionInputRunState {
 	if lane.run != nil {
 		return lane.run
 	}
@@ -509,7 +487,7 @@ func (m *sessionInputModule) ensureRunLocked(lane *sessionInputLane, sessionID p
 	return lane.run
 }
 
-func (m *sessionInputModule) observePhase(sessionID protocol.SessionID, phase protocol.SessionState) {
+func (m sessionInputModule) observePhase(sessionID protocol.SessionID, phase protocol.SessionState) {
 	lane := m.lane(sessionID)
 	lane.mu.Lock()
 	defer lane.mu.Unlock()
@@ -535,10 +513,14 @@ func (m *sessionInputModule) observePhase(sessionID protocol.SessionID, phase pr
 	lane.run = nil
 }
 
-func (m *sessionInputModule) currentUserRun(sessionID protocol.SessionID) (sessionInputRunRef, bool) {
+func (m sessionInputModule) currentUserRun(sessionID protocol.SessionID) (sessionInputRunRef, bool) {
 	lane := m.lane(sessionID)
 	lane.mu.Lock()
 	defer lane.mu.Unlock()
+	return lane.currentUserRunLocked()
+}
+
+func (lane *sessionInputLane) currentUserRunLocked() (sessionInputRunRef, bool) {
 	if lane.run == nil || !lane.run.credited {
 		return sessionInputRunRef{}, false
 	}

@@ -195,30 +195,22 @@ type Daemon struct {
 	terminalEndLocks               sessionLocks
 	spawnLocksMu                   sync.Mutex
 	spawnLocks                     map[protocol.SessionID]*spawnLock
-	sessionInputOnce               sync.Once
-	sessionInputState              *sessionInputModule
-	terminalsOnce                  sync.Once
-	terminalState                  *terminalRegistry
-	codexSharedOnce                sync.Once
-	codexSharedState               *codexShared
-	quickCaptureAssetMu            sync.Mutex
-	inboxMu                        sync.Mutex
-	inboxStates                    map[inbox.Address]*inboxDeliveryState
-	inboxUnsubscribe               func()
-	crewWakeMu                     sync.Mutex
-	crewExitedMu                   sync.Mutex
-	crewExitedSessions             map[string]string
-	supportInputTraceOnce          sync.Once
-	supportInputTrace              *supportInputTraceRing
-	lastInputMu                    sync.Mutex
-	lastAutoSettleActivityAt       map[protocol.SessionID]time.Time
-	autoSettleFireMu               sync.Mutex
+
+	terminalsOnce         sync.Once
+	terminalState         *terminalRegistry
+	codexSharedOnce       sync.Once
+	codexSharedState      *codexShared
+	quickCaptureAssetMu   sync.Mutex
+	inboxMu               sync.Mutex
+	inboxStates           map[inbox.Address]*inboxDeliveryState
+	inboxUnsubscribe      func()
+	crewWakeMu            sync.Mutex
+	crewExitedMu          sync.Mutex
+	crewExitedSessions    map[string]string
+	supportInputTraceOnce sync.Once
+	supportInputTrace     *supportInputTraceRing
 
 	emptyDesktops emptyDesktopRemoval
-
-	autoSettleMu         sync.Mutex
-	autoSettleTimers     map[protocol.SessionID]*autoSettleTimer
-	autoSettleDismissals map[protocol.SessionID]bool
 
 	snoozeMu sync.Mutex
 
@@ -1669,7 +1661,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		d.logf("terminal %s exited; session %s runs on in its other terminals", info.ID, sessionID)
 		return true
 	}
-	d.sessionInputs().forgetSession(sessionID)
+	d.sessionInputs().fenceSession(sessionID)
 	d.stopTranscriptWatcher(sessionID)
 	d.closePluginDriverSession(sessionID, "exited", &info.ExitCode, info.Signal)
 	d.captureExitScreen(sessionID, info)
@@ -2058,11 +2050,8 @@ func (d *Daemon) forgetSessionRuntime(sessionID protocol.SessionID) {
 	d.kickInboxAfterCommit(inbox.ToSession(sessionID))
 	d.forgetSessionTitleInitialPrompt(sessionID)
 	d.clearAutoSettleState(sessionID)
-	d.lastInputMu.Lock()
-	delete(d.lastAutoSettleActivityAt, sessionID)
-	d.lastInputMu.Unlock()
 	d.clearSnoozeState(sessionID)
-	d.sessionInputs().forgetSession(sessionID)
+	d.sessionInputs().fenceSession(sessionID)
 	d.forgetPluginDriverSilenceWatch(sessionID)
 }
 

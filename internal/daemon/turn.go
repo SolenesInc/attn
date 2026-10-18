@@ -17,7 +17,15 @@ func (d *Daemon) handleSettleTurn(msg *protocol.SettleTurnMessage) {
 	if sessionID == "" {
 		return
 	}
-	if !d.store.SettleTurn(sessionID, time.Now()) {
+	entry := d.monitorEntry(sessionID)
+	if entry != nil {
+		entry.mu.Lock()
+	}
+	settled := d.store.SettleTurn(sessionID, time.Now())
+	if entry != nil {
+		entry.mu.Unlock()
+	}
+	if !settled {
 		return
 	}
 	d.cancelAutoSettle(sessionID, "settled by user")

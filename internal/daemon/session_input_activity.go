@@ -8,18 +8,16 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (d *Daemon) noteUserInput(terminal harness.TerminalID, sessionID protocol.SessionID, source string, data []byte) bool {
+func (d *Daemon) noteUserInput(lane *sessionInputLane, terminal harness.TerminalID, sessionID protocol.SessionID, source string, data []byte) bool {
 	if sessionID == "" || !isComposerKeystroke(source, data) {
 		return false
 	}
 	now := time.Now()
 	previous, placed := d.terminals().noteKey(terminal, now)
-	d.lastInputMu.Lock()
-	if d.lastAutoSettleActivityAt == nil {
-		d.lastAutoSettleActivityAt = make(map[protocol.SessionID]time.Time)
+	if lane.entry != nil {
+		lane.entry.activityAt = now
 	}
-	d.lastAutoSettleActivityAt[sessionID] = now
-	d.lastInputMu.Unlock()
+
 	if placed && quietRemaining(previous, sessionInputQuietWindow) == 0 {
 		d.kickSessionInboxAddresses(sessionID)
 	}
@@ -27,15 +25,13 @@ func (d *Daemon) noteUserInput(terminal harness.TerminalID, sessionID protocol.S
 }
 
 func (d *Daemon) noteAutoSettleActivity(sessionID protocol.SessionID) bool {
-	if sessionID == "" {
+	e := d.monitorEntry(sessionID)
+	if e == nil {
 		return false
 	}
-	d.lastInputMu.Lock()
-	if d.lastAutoSettleActivityAt == nil {
-		d.lastAutoSettleActivityAt = make(map[protocol.SessionID]time.Time)
-	}
-	d.lastAutoSettleActivityAt[sessionID] = time.Now()
-	d.lastInputMu.Unlock()
+	e.mu.Lock()
+	e.activityAt = time.Now()
+	e.mu.Unlock()
 	return true
 }
 
@@ -58,33 +54,6 @@ func quietRemaining(last time.Time, within time.Duration) time.Duration {
 		return 0
 	}
 	return remaining
-}
-
-func (d *Daemon) autoSettleActivityQuietRemaining(sessionID protocol.SessionID, within time.Duration) time.Duration {
-	d.lastInputMu.Lock()
-	defer d.lastInputMu.Unlock()
-	return d.autoSettleActivityQuietRemainingLocked(sessionID, within)
-}
-
-func (d *Daemon) autoSettleActivityQuietRemainingLocked(sessionID protocol.SessionID, within time.Duration) time.Duration {
-	last, ok := d.lastAutoSettleActivityAt[sessionID]
-	if !ok {
-		return 0
-	}
-	remaining := within - time.Since(last)
-	if remaining < 0 {
-		return 0
-	}
-	return remaining
-}
-
-func (d *Daemon) settleIfAutoSettleQuiet(sessionID protocol.SessionID, within time.Duration) (quiet time.Duration, settled bool) {
-	d.lastInputMu.Lock()
-	defer d.lastInputMu.Unlock()
-	if remaining := d.autoSettleActivityQuietRemainingLocked(sessionID, within); remaining > 0 {
-		return remaining, false
-	}
-	return 0, d.store.SettleTurn(sessionID, time.Now())
 }
 
 func isUserKeystrokeSource(source string) bool {
