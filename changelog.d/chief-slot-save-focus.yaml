@@ -1,0 +1,3 @@
+kind: fixed
+area: queue
+change: Saving an already-configured chief returns keyboard focus to its row.

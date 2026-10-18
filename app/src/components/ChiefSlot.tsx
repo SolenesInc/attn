@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { useSidebarContext } from './SidebarContext';
 import { ChiefSetup } from './ChiefSetup';
 import { CrewRowView } from './QueueRows';
@@ -8,16 +8,30 @@ import './ChiefSlot.css';
 export function ChiefSlot() {
   const { chief, chiefActions, chiefSetupOpen, chiefSetupOpenedByUser, onChiefSettings, desktops, selectedId, onSelectSession, delegates, visualIndexOfDesktop, openSessionActions, openCrewMemberActions } = useSidebarContext();
   const slot = useRef<HTMLDivElement>(null);
-  const returnFocus = useCallback(() => {
+  const [focusRequested, setFocusRequested] = useState<string | null>(null);
+  const returnFocus = () => setFocusRequested(chief?.key ?? null);
+  useLayoutEffect(() => {
+    if (!focusRequested) return;
     const element = slot.current;
-    const member = element?.dataset.chiefMember;
-    window.requestAnimationFrame(() => {
-      if (!element?.isConnected || element.dataset.chiefMember !== member) return;
-      const active = document.activeElement;
-      if (active !== document.body && active !== element.closest('.app') && !element.contains(active)) return;
-      element.querySelector<HTMLButtonElement>('.queue-row-select:not(:disabled)')?.focus();
-    });
-  }, []);
+    const active = document.activeElement;
+    if (!element || chief?.key !== focusRequested || (active !== document.body && active !== element.closest('.app') && !element.contains(active))) {
+      setFocusRequested(null);
+      return;
+    }
+    if (chiefSetupOpen) return;
+    const target = element.querySelector<HTMLButtonElement>('.queue-row-select:not(:disabled)');
+    if (target) { setFocusRequested(null); target.focus(); }
+  });
+  useLayoutEffect(() => {
+    if (!focusRequested) return;
+    const cancel = () => setFocusRequested(null);
+    document.addEventListener('focusin', cancel, true);
+    document.addEventListener('pointerdown', cancel, true);
+    return () => {
+      document.removeEventListener('focusin', cancel, true);
+      document.removeEventListener('pointerdown', cancel, true);
+    };
+  }, [focusRequested]);
   if (!chief || !chiefActions) return null;
   const desktop = desktops.find(candidate => candidate.sessions.some(session => session.id === chief.sessionId));
   const session = desktop?.sessions.find(candidate => candidate.id === chief.sessionId);

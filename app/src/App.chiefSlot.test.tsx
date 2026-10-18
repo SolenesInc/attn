@@ -376,6 +376,26 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
     expect(slot().queryByTestId('chief-setup')).toBeNull();
     expect(row()).toHaveFocus();
   });
+  it.each([false, true])('returns focus after configured Save when a frame runs before the row is ready (awake=%s)', async awake => {
+    const current = member({ agent: 'claude', model: 'opus', binding_session: awake ? 'chief-day' : undefined });
+    const { daemon } = await renderApp({ initialState: { settings, crew: [current], sessions: awake ? [daemonSession('chief-day', { chief: true })] : [], desktops: awake ? [soloDesktop('chief-day')] : [] } });
+    await gesture(daemon, () => fireEvent.click(slot().getByRole('button', { name: 'Actions for Captain' })));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('menuitem', { name: 'Harness and model…' })));
+    daemon.on('crew_set', () => undefined);
+    await gesture(daemon, () => fireEvent.keyDown(slot().getByRole('radio', { name: /Opus/ }), { key: 'Enter' }));
+    expect(slot().getByRole('button', { name: 'Set up Captain' })).toBeDisabled();
+    const frame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+      callback(performance.now());
+      return 0;
+    });
+    try {
+      await gesture(daemon, () => daemon.replyTo(daemon.sentOf('crew_set')[0], { event: 'crew_set_result', request_id: daemon.sentOf('crew_set')[0].request_id, success: true, conflict: false, member: current }));
+    } finally { frame.mockRestore(); }
+    expect(slot().queryByTestId('chief-setup')).toBeNull();
+    expect(slot().getByTestId('queue-crew-select-chief-key')).toHaveFocus();
+    expect(daemon.sentOf('crew_set')).toEqual([expect.objectContaining({ member: 'member:chief-key', agent: 'claude', model: 'opus', effort: 'low' })]);
+    expect(daemon.sentOf('crew_wake')).toEqual([]);
+  });
   it('preserves terminal focus when a delayed configured Save completes', async () => {
     const current = member({ agent: 'claude', model: 'opus', binding_session: 'chief-day' });
     const desktop = soloDesktop('chief-day');
