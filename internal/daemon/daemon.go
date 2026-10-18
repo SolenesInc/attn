@@ -98,6 +98,7 @@ const (
 var ErrAlreadyRunning = errors.New("daemon already running")
 
 type Daemon struct {
+	outposts            outpostsRuntime
 	outpost             outpostRuntime
 	recentFileStat      func(string) (os.FileInfo, error)
 	recentFilePruneGate chan struct{}
@@ -687,6 +688,9 @@ func (d *Daemon) Start() error {
 	}
 	if d.daemonSetting(settingOutpostListen) != "" {
 		d.configureOutpostListener()
+	}
+	if d.outpostsEnabled() {
+		d.configureOutposts()
 	}
 	d.ensureGardenCollections()
 	d.ensureCrewCollections()

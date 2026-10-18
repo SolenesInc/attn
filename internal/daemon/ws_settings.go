@@ -59,6 +59,9 @@ func (d *Daemon) setSetting(msg *protocol.SetSettingMessage) (*protocol.SettingE
 	if err != nil {
 		return nil, err
 	}
+	if msg.Key == string(settingOutpostsEnabled) {
+		d.configureOutposts()
+	}
 	if msg.Key == string(settingOutpostListen) {
 		d.configureOutpostListener()
 	}
@@ -276,6 +279,7 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 	settings[SettingCrewWakeLimit] = strconv.Itoa(crewWakes.Limit)
 	settings[SettingCrewWakeLimitWindowSeconds] = strconv.Itoa(int(crewWakes.Window / time.Second))
 
+	settings[string(settingOutpostsEnabled)] = strconv.FormatBool(d.outpostsEnabled())
 	state, home, lastError := d.outpostSettings()
 	settings[string(settingOutpostState)] = state
 	settings[string(settingOutpostHome)] = home

@@ -184,15 +184,13 @@ func (d *Daemon) acceptOutpostBridge(run *outpostListener, conn *bridge.Conn) {
 func (d *Daemon) outpostSettings() (state, home, lastError string) {
 	r := &d.outpost
 	r.mu.Lock()
-	state, lastError, active := r.state, r.lastError, r.listener != nil
+	state, lastError = r.state, r.lastError
 	r.mu.Unlock()
 	if state == "" {
 		state = "off"
 	}
-	if active {
-		if status, err := enrollment.Load(d.dataRoot); err == nil && !status.IsHome() {
-			home = status.HomeDaemonID
-		}
+	if status, err := enrollment.Load(d.dataRoot); err == nil && !status.IsHome() {
+		home = status.HomeDaemonID
 	}
 	return state, home, lastError
 }

@@ -3,7 +3,6 @@ package bridge
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -27,11 +26,12 @@ func (p Pin) Fingerprint() string {
 }
 
 type DialConfig struct {
-	Address     string
-	Pin         *Pin
-	Self        Identity
-	AgentSocket string
-	DialContext func(context.Context, string, string) (net.Conn, error)
+	Address      string
+	Pin          *Pin
+	Self         Identity
+	AgentSocket  string
+	DialContext  func(context.Context, string, string) (net.Conn, error)
+	CheckHostKey func(string) *Refusal
 }
 
 func Dial(ctx context.Context, cfg DialConfig) (*Conn, *Pin, error) {
@@ -78,8 +78,13 @@ func Dial(ctx context.Context, cfg DialConfig) (*Conn, *Pin, error) {
 	var pinErr *Refusal
 	sshConfig := &ssh.ClientConfig{User: "attn", Auth: []ssh.AuthMethod{ssh.PublicKeys(signers...)}, HostKeyCallback: func(_ string, _ net.Addr, key ssh.PublicKey) error {
 		seen.HostKey = strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key)))
+		if cfg.Pin == nil && cfg.CheckHostKey != nil {
+			if pinErr = cfg.CheckHostKey(seen.HostKey); pinErr != nil {
+				return pinErr
+			}
+		}
 		if cfg.Pin != nil && seen.HostKey != cfg.Pin.HostKey {
-			pinErr = &Refusal{Reason: "identity", Detail: fmt.Sprintf("outpost %s (%s) changed host key: pinned %s, received %s; re-pair this outpost to accept its new identity", cfg.Pin.DaemonID, cfg.Address, cfg.Pin.Fingerprint(), seen.Fingerprint())}
+			pinErr = &Refusal{Reason: "identity", Detail: fmt.Sprintf("outpost %s (%s) changed host key: pinned %s, received %s; use repair_outpost to re-pair this outpost and accept its new identity", cfg.Pin.DaemonID, cfg.Address, cfg.Pin.Fingerprint(), seen.Fingerprint())}
 			return pinErr
 		}
 		return nil
@@ -121,8 +126,9 @@ func Dial(ctx context.Context, cfg DialConfig) (*Conn, *Pin, error) {
 	if err == nil {
 		seen.DaemonID = answer.DaemonID
 		if cfg.Pin != nil && cfg.Pin.DaemonID != seen.DaemonID {
-			err = &Refusal{Reason: "identity", Detail: fmt.Sprintf("outpost at %s changed daemon id: pinned %s, received %s; re-pair this outpost to accept its new identity", cfg.Address, cfg.Pin.DaemonID, seen.DaemonID)}
+			err = &Refusal{Reason: "identity", Detail: fmt.Sprintf("outpost at %s changed daemon id: pinned %s, received %s; use repair_outpost to re-pair this outpost and accept its new identity", cfg.Address, cfg.Pin.DaemonID, seen.DaemonID)}
 		} else if answer.Refused != nil {
+			answer.Refused.Peer = &answer.Identity
 			err = answer.Refused
 		} else if refusal := buildRefusal(cfg.Self, answer.Identity); refusal != nil {
 			err = refusal
@@ -151,9 +157,4 @@ func Dial(ctx context.Context, cfg DialConfig) (*Conn, *Pin, error) {
 	conn := newConn(ctx, client, control, decoder, answer.Identity, requestDrain)
 	success = true
 	return conn, seen, nil
-}
-
-func IsRefusal(err error) bool {
-	var refusal *Refusal
-	return errors.As(err, &refusal)
 }

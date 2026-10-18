@@ -20,8 +20,9 @@ func (b Build) String() string {
 }
 
 type Refusal struct {
-	Reason string `json:"reason"`
-	Detail string `json:"detail"`
+	Peer   *Identity `json:"-"`
+	Reason string    `json:"reason"`
+	Detail string    `json:"detail"`
 }
 
 func (r *Refusal) Error() string { return r.Detail }

@@ -583,6 +583,9 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 	}
 	d.fillInitialMigrationPhase(event)
 	d.sendInitialArrangement(client, event)
+	if d.outpostsEnabled() {
+		d.sendToClient(client, d.outpostsUpdatedMessage())
+	}
 	d.nudgeDesktopTileContent()
 
 	d.life.Go("fetchAllPRDetails", d.fetchAllPRDetails)
@@ -1066,6 +1069,15 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		} else {
 			d.handleSetSettingWS(client, setting)
 		}
+	case protocol.CmdAddOutpost:
+		m := msg.(*protocol.AddOutpostMessage)
+		d.handleOutpostCommand(client, "add", "", m.Name, m.Address)
+	case protocol.CmdRemoveOutpost:
+		m := msg.(*protocol.RemoveOutpostMessage)
+		d.handleOutpostCommand(client, "remove", m.ID, "", "")
+	case protocol.CmdRepairOutpost:
+		m := msg.(*protocol.RepairOutpostMessage)
+		d.handleOutpostCommand(client, "repair", m.ID, "", "")
 	case protocol.CmdListPlugins:
 		d.handleListPluginsWS(client)
 	case protocol.CmdInstallPlugin:

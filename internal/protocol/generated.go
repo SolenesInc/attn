@@ -40,6 +40,17 @@ type ActivityStatusSession struct {
 	Label string `json:"label"`
 }
 
+type AddOutpostMessage struct {
+	// Address corresponds to the JSON schema field "address".
+	Address string `json:"address"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+}
+
 type AgentCloseMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -6704,6 +6715,54 @@ type OpenSentFilesMessage struct {
 	TerminalID *TerminalID `json:"terminal_id,omitempty,omitzero"`
 }
 
+type OutpostInfo struct {
+	// Address corresponds to the JSON schema field "address".
+	Address string `json:"address"`
+
+	// Build corresponds to the JSON schema field "build".
+	Build *string `json:"build,omitempty,omitzero"`
+
+	// DaemonID corresponds to the JSON schema field "daemon_id".
+	DaemonID *string `json:"daemon_id,omitempty,omitzero"`
+
+	// HostKeyFingerprint corresponds to the JSON schema field "host_key_fingerprint".
+	HostKeyFingerprint *string `json:"host_key_fingerprint,omitempty,omitzero"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// LastError corresponds to the JSON schema field "last_error".
+	LastError *string `json:"last_error,omitempty,omitzero"`
+
+	// LastErrorAt corresponds to the JSON schema field "last_error_at".
+	LastErrorAt *string `json:"last_error_at,omitempty,omitzero"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// State corresponds to the JSON schema field "state".
+	State OutpostState `json:"state"`
+
+	// StateSince corresponds to the JSON schema field "state_since".
+	StateSince string `json:"state_since"`
+}
+
+type OutpostState string
+
+const OutpostStateConnected OutpostState = "connected"
+const OutpostStateConnecting OutpostState = "connecting"
+const OutpostStateLost OutpostState = "lost"
+const OutpostStateRefused OutpostState = "refused"
+const OutpostStateStalled OutpostState = "stalled"
+
+type OutpostsUpdatedMessage struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Outposts corresponds to the JSON schema field "outposts".
+	Outposts []OutpostInfo `json:"outposts"`
+}
+
 type PR struct {
 	// ApprovedByMe corresponds to the JSON schema field "approved_by_me".
 	ApprovedByMe bool `json:"approved_by_me"`
@@ -7444,6 +7503,14 @@ type ReloadSessionResultMessage struct {
 	Success bool `json:"success"`
 }
 
+type RemoveOutpostMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+}
+
 type RemovePluginMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -7478,6 +7545,14 @@ type RenameSessionMessage struct {
 
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID SessionID `json:"session_id"`
+}
+
+type RepairOutpostMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
 }
 
 type RepoInfo struct {

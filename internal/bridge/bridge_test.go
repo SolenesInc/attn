@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -239,4 +240,65 @@ func TestBridgeCancellationDuringHandshake(t *testing.T) {
 			})
 		})
 	}
+}
+
+func TestBridgeRereadsAuthorizedKeysAndSkipsRestrictedKeys(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		w := pair(t)
+		path := filepath.Join(t.TempDir(), "authorized_keys")
+		keys, err := w.cfg.AuthorizedKeys()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, append([]byte("restrict "), keys...), 0600); err != nil {
+			t.Fatal(err)
+		}
+		w.cfg.AuthorizedKeys = func() ([]byte, error) { return os.ReadFile(path) }
+		w.start()
+		_, _, err = w.dial(home, nil)
+		var refusal *bridge.Refusal
+		if !errors.As(err, &refusal) || refusal.Reason != "auth" {
+			t.Fatalf("restricted key admitted: %v", err)
+		}
+		if err := os.WriteFile(path, keys, 0600); err != nil {
+			t.Fatal(err)
+		}
+		c, _, err := w.dial(home, nil)
+		if err != nil {
+			t.Fatalf("updated authorized_keys not read: %v", err)
+		}
+		<-w.server
+		_ = c.Close()
+	})
+}
+
+func TestBridgeBuildRefusalRetainsTheAdmittedConnection(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		w := pair(t)
+		var admissions []bridge.Identity
+		w.cfg.Admit = func(peer bridge.Identity) *bridge.Refusal { admissions = append(admissions, peer); return nil }
+		w.start()
+		first, _, err := w.dial(home, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		server := <-w.server
+		changed := home
+		changed.Build.Version = "other"
+		_, _, err = w.dial(changed, nil)
+		var refusal *bridge.Refusal
+		if !errors.As(err, &refusal) || refusal.Reason != "build" || refusal.Peer == nil {
+			t.Fatalf("build refusal: %v", err)
+		}
+		synctest.Wait()
+		if len(admissions) != 2 || admissions[1] != changed {
+			t.Fatalf("home not checked before build refusal: %+v", admissions)
+		}
+		select {
+		case <-server.Done():
+			t.Fatal("build refusal closed admitted bridge")
+		default:
+		}
+		_ = first.Close()
+	})
 }
