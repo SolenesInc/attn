@@ -1,5 +1,5 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
-import { act, fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { agentPane, daemonDesktop, daemonSession, soloDesktop } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
@@ -53,6 +53,7 @@ describe('App callouts', () => {
   it('takes unmodified Enter and right arrow, ends with Esc and outside clicks', async () => {
     const { daemon } = await launch();
     await show(daemon, [{ anchor: 'sidebar', text: 'First' }, { anchor: 'garden', text: 'Second' }, { anchor: 'home', text: 'Last' }]);
+    expect(within(card()).getAllByRole('button', { name: /Next/ })).toHaveLength(1);
     await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Enter', shiftKey: true }));
     expect(card()).toHaveTextContent('First');
     await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Enter' }));
@@ -98,6 +99,7 @@ describe('App callouts', () => {
     const { daemon } = await launch(true);
     await gesture(daemon, () => pressShortcut('session.toggleSidebar'));
     await show(daemon, [{ anchor: 'agent', session_id: 'second', label: 'Second agent', text: 'Needs you' }, { anchor: 'sidebar', text: 'Next' }]);
+    expect(within(card()).getByRole('button', { name: /Next/ })).toBeInTheDocument();
     expect(card()).toHaveTextContent("Second agent isn't on screen");
     expect(screen.queryByTestId('callout-ring')).not.toBeInTheDocument();
     await gesture(daemon, () => fireEvent.keyDown(window, { key: 'ArrowRight' }));
@@ -181,6 +183,19 @@ describe('App callouts', () => {
     await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Enter' }));
     expect(daemon.sentOf('desktop_set_current').map(({ desktop_id }) => desktop_id)).toEqual(['desktop-second']);
     expect(screen.queryByTestId('callout-overlay')).not.toBeInTheDocument();
+  });
+
+  it('anchors to the queue bar desktops when every desktop is in the extras chip', async () => {
+    const { daemon } = await launch(true);
+    daemon.arrange((desktops) => desktops.map((desktop) => ({ ...desktop, shortcut_slot: undefined })));
+    await daemon.idle();
+    await gesture(daemon, () => pressShortcut('session.toggleSidebar'));
+    expect(screen.getByTestId('queue-bar-desktop-extras')).toBeInTheDocument();
+    expect(await show(daemon, [{ anchor: 'desktops', text: 'All your desktops' }])).toEqual({
+      cmd: 'callout_result', request_id: 'callout-1', on_screen: ['sidebar', 'desktops', 'queue', 'settings-button'],
+    });
+    expect(card()).toHaveAttribute('data-side', 'below');
+    expect(screen.getByTestId('callout-ring')).toBeInTheDocument();
   });
 
   it('hides the native browser tile until the callout ends', async () => {

@@ -360,6 +360,7 @@ function DesktopChips() {
           type="button"
           className={`queue-bar-desktop is-extra${extras.some((desktop) => desktop.id === selectedDesktopId) ? ' is-current' : ''}`}
           data-testid="queue-bar-desktop-extras"
+          data-callout-anchor="desktops"
           title={`${extras.length} more desktop${extras.length === 1 ? '' : 's'} without a shortcut (${formatShortcut('desktop.overview')})`}
           onClick={onOpenOverview}
         >

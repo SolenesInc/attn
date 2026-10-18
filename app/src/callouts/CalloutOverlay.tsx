@@ -143,7 +143,7 @@ export function CalloutOverlay() {
         <p>{step.text}</p>
         <div className="callout-actions">
           <button type="button" onClick={() => advance(true)}><kbd>↵</kbd> {dynamic ? 'Go there' : last ? 'Done' : 'Next'}</button>
-          {(dynamic || !last) && <button type="button" onClick={() => advance(false)}><kbd>→</kbd> {last ? 'Done' : 'Next'}</button>}
+          {dynamic && <button type="button" onClick={() => advance(false)}><kbd>→</kbd> {last ? 'Done' : 'Next'}</button>}
           <span><kbd>esc</kbd> end</span>
         </div>
       </div>
