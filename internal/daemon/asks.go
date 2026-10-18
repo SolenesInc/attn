@@ -63,7 +63,10 @@ func (d *Daemon) handleAskOpen(conn net.Conn, msg *protocol.AskOpenMessage) {
 		d.sendError(conn, err.Error())
 		return
 	}
-	if err := d.store.AddAsk(stored); err != nil {
+	if err := d.store.AddAsk(stored); errors.Is(err, store.ErrAskerGone) {
+		d.sendError(conn, errSessionNotLive(session.ID).Error())
+		return
+	} else if err != nil {
 		d.sendError(conn, err.Error())
 		return
 	}
@@ -126,7 +129,7 @@ func (d *Daemon) askAddressHeldBy(sessionID protocol.SessionID) func(inbox.Addre
 func (d *Daemon) askingSession(sessionID protocol.SessionID) (*protocol.Session, error) {
 	session := d.store.Get(sessionID)
 	if sessionID == "" || session == nil {
-		return nil, fmt.Errorf("session %q is not live in attn", sessionID)
+		return nil, errSessionNotLive(sessionID)
 	}
 	if !d.launchedWithAsks(sessionID) {
 		return nil, errors.New("asks are off for this session because it launched without them; ask in the conversation instead")
@@ -134,10 +137,14 @@ func (d *Daemon) askingSession(sessionID protocol.SessionID) (*protocol.Session,
 	return session, nil
 }
 
+func errSessionNotLive(sessionID protocol.SessionID) error {
+	return fmt.Errorf("session %q is not live in attn", sessionID)
+}
+
 func (d *Daemon) handleAskList(conn net.Conn, msg *protocol.AskListMessage) {
 	sessionID := protocol.TrimID(msg.SessionID)
 	if d.store.Get(sessionID) == nil {
-		d.sendError(conn, fmt.Sprintf("session %q is not live in attn", sessionID))
+		d.sendError(conn, errSessionNotLive(sessionID).Error())
 		return
 	}
 	result := &protocol.AskListResult{Enabled: d.launchedWithAsks(sessionID), Asks: []protocol.Ask{}}

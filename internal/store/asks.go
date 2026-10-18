@@ -10,7 +10,10 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-var ErrAskNotOpen = errors.New("the ask is not open")
+var (
+	ErrAskNotOpen = errors.New("the ask is not open")
+	ErrAskerGone  = errors.New("the asking session is not live")
+)
 
 type Ask struct {
 	ID        string
@@ -30,9 +33,17 @@ func (s *Store) AddAsk(a Ask) error {
 	if s.db == nil {
 		return fmt.Errorf("asks need the SQLite store")
 	}
-	_, err := s.db.Exec("INSERT INTO asks ("+askColumns+") VALUES (?, ?, ?, ?, ?, ?, ?)",
-		a.ID, a.SessionID, a.To.String(), a.Subject, a.Markdown, a.BaseDir, a.CreatedAt)
-	return err
+	result, err := s.db.Exec("INSERT INTO asks ("+askColumns+") SELECT ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM sessions WHERE id = ? AND closed_at = '')",
+		a.ID, a.SessionID, a.To.String(), a.Subject, a.Markdown, a.BaseDir, a.CreatedAt, a.SessionID)
+	if err != nil {
+		return err
+	}
+	if n, err := result.RowsAffected(); err != nil {
+		return err
+	} else if n == 0 {
+		return ErrAskerGone
+	}
+	return nil
 }
 
 func (s *Store) OpenAsks() ([]Ask, error) {
