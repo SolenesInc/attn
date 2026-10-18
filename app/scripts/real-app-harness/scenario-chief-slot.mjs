@@ -141,7 +141,7 @@ try {
       queueDaemonSettingRestore(observer, `${agent}_executable`);
       const executable = path.join(runner.sessionDir, `missing-${agent}`);
       fs.writeFileSync(executable, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
-      await client.request('set_setting', { key: `${agent}_executable`, value: executable });
+      cli(['settings', 'set', `${agent}_executable`, executable]);
       missing.push(executable);
     }
     for (const executable of missing) fs.unlinkSync(executable);
@@ -151,7 +151,7 @@ try {
     await screenshot('01-chief-no-harness');
     await click('[data-testid="chief-setup"] .chief-link');
     await waitDom('[data-testid="chief-setup"]', { textIncludes: 'No harness here can run the chief' });
-    for (const [agent, executable] of originals) await client.request('set_setting', { key: `${agent}_executable`, value: executable });
+    for (const [agent, executable] of originals) cli(['settings', 'set', `${agent}_executable`, executable]);
     await waitDom('[data-testid="chief-setup"] .chief-pop-primary:not(:disabled)', { focused: true });
     await driver.pressKey('Escape');
   });
