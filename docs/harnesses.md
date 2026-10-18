@@ -174,6 +174,10 @@ Probed on 0.162.1 against the app-server alone:
   ran under a `sandbox` mode loads under the server's configured sandbox: a
   conversation started with `never` and `danger-full-access` comes back
   `never` and `read-only` in an untrusted folder.
+- Codex never raises its open-file limit (openai/codex#44682): the app-server
+  and the commands it runs keep the soft limit it was launched with, which is
+  256 for anything a macOS app starts. At 256, 65 of 200 concurrent
+  `command/exec` calls failed with `Too many open files (os error 24)`.
 
 Read in the source at openai/codex rust-v0.160.0:
 

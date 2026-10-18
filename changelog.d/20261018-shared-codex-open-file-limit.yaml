@@ -1,0 +1,10 @@
+kind: fixed
+area: codex
+change: >
+  Shared Codex app-servers start with the system's open-file limit instead of
+  macOS's default of 256, so busy Codex sessions no longer fail commands with
+  "Too many open files".
+symptom: >
+  Codex commands in shared sessions failed with "Too many open files (os error
+  24)" or could not duplicate file descriptors once the app-server served many
+  conversations.
