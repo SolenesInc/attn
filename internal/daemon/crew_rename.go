@@ -39,10 +39,14 @@ func (d *Daemon) handleCrewRename(conn net.Conn, msg *protocol.CrewRenameMessage
 		return
 	}
 	previous := identity.Name
-	cleanup := ""
-	if member.HomeDir != "" && member.NotebookHome && !strings.EqualFold(previous, name) {
+	legacy, err := d.legacyCrewHome(member.HomeDir)
+	if err != nil {
+		d.sendCrewError(conn, "rename", err)
+		return
+	}
+	if member.HomeDir != "" && !legacy && !strings.EqualFold(previous, name) {
 		identity.Name = name
-		_, _, cleanup, err = d.relocateCrewHome(identity, member, doc.Rev, filepath.Dir(member.HomeDir))
+		_, _, err = d.relocateCrewHome(identity, member, doc.Rev, filepath.Dir(member.HomeDir))
 	} else {
 		previous, err = d.store.RenameCrewMember(identity.Key, name)
 	}
@@ -52,9 +56,6 @@ func (d *Daemon) handleCrewRename(conn net.Conn, msg *protocol.CrewRenameMessage
 	}
 	d.publishFact(FactCrewUpdated, identity.Key.String(), nil)
 	result := &protocol.CrewRenameResult{Member: identity.Key.String(), Name: name, PreviousName: previous}
-	if cleanup != "" {
-		result.CleanupError = &cleanup
-	}
 	member, _, err = d.crewMember(identity.Key)
 	if err == nil && d.crewBindingLive(member) {
 		d.store.UpdateSessionLabel(member.BindingSession, name)

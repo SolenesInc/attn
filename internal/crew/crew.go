@@ -32,7 +32,6 @@ const DefaultAgent = "claude"
 const ChiefName = "Chief"
 
 type Member struct {
-	NotebookHome   bool               `json:"notebook_home,omitempty"`
 	Onboarded      bool               `json:"onboarded,omitempty"`
 	Key            who.MemberKey      `json:"-"`
 	CharterPath    string             `json:"charter_path"`

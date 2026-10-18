@@ -101,6 +101,9 @@ func (s *Store) Write(p string, content []byte, baseHash string) (newHash string
 		if exists {
 			return "", &Conflict{CurrentHash: Hash(existing)}, nil
 		}
+		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+			return "", nil, err
+		}
 	} else {
 		if !exists {
 			return "", &Conflict{CurrentHash: ""}, nil
@@ -171,6 +174,9 @@ func (s *Store) appendToNote(rel, entry string, newDoc func() Document) (hash st
 	out := doc.Bytes()
 	if int64(len(out)) > MaxFileSize {
 		return "", fmt.Errorf("notebook: %s exceeds %d bytes", rel, MaxFileSize)
+	}
+	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		return "", err
 	}
 	if err := writeAtomic(abs, out); err != nil {
 		return "", err
@@ -350,9 +356,6 @@ func readPrefix(path string, limit int64) ([]byte, error) {
 }
 
 func writeAtomic(absPath string, content []byte) error {
-	if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
-		return err
-	}
 	tmp := filepath.Join(filepath.Dir(absPath), fmt.Sprintf(".%s.tmp.%d.%d", filepath.Base(absPath), os.Getpid(), time.Now().UnixNano()))
 	if err := os.WriteFile(tmp, content, 0o644); err != nil {
 		_ = os.Remove(tmp)

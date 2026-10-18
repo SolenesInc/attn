@@ -17,6 +17,9 @@ For a Notebook home, put the member to sleep first with
 Legacy members can be renamed while awake; their homes under the attn data
 directory stay in place. To move one and every file in it into the profile's current
 Notebook, put the member to sleep, then run `attn crew move-home <member>`.
+The home and Notebook must be on the same volume; a move across volumes is
+refused and leaves the original home intact.
 
-Changing `notebook.root` repoints the Notebook. Existing homes keep their
-absolute paths. Help the user move those files when they ask.
+Changing `notebook.root` repoints the Notebook and the Chief's next launch.
+Existing homes keep their absolute paths. Help the user move those files
+when they ask.

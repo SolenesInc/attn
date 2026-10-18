@@ -2687,9 +2687,8 @@ export enum CrewMoveHomeMessageCmd {
 }
 
 export interface CrewMoveHomeResult {
-    cleanup_error?: string;
-    member:         Member;
-    previous_home:  string;
+    member:        Member;
+    previous_home: string;
     [property: string]: any;
 }
 
@@ -2725,11 +2724,10 @@ export enum CrewRenameMessageCmd {
 }
 
 export interface CrewRenameResult {
-    cleanup_error?: string;
-    member:         string;
-    name:           string;
-    previous_name:  string;
-    session_id?:    string;
+    member:        string;
+    name:          string;
+    previous_name: string;
+    session_id?:   string;
     [property: string]: any;
 }
 
@@ -7403,9 +7401,8 @@ export interface CrewListResultObject {
 }
 
 export interface CrewMoveHomeResultObject {
-    cleanup_error?: string;
-    member:         Member;
-    previous_home:  string;
+    member:        Member;
+    previous_home: string;
     [property: string]: any;
 }
 
@@ -7418,11 +7415,10 @@ export interface CrewPrimeResultObject {
 }
 
 export interface CrewRenameResultObject {
-    cleanup_error?: string;
-    member:         string;
-    name:           string;
-    previous_name:  string;
-    session_id?:    string;
+    member:        string;
+    name:          string;
+    previous_name: string;
+    session_id?:   string;
     [property: string]: any;
 }
 
@@ -16728,7 +16724,6 @@ const typeMap: any = {
         { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
     "CrewMoveHomeResult": o([
-        { json: "cleanup_error", js: "cleanup_error", typ: u(undefined, "") },
         { json: "member", js: "member", typ: r("Member") },
         { json: "previous_home", js: "previous_home", typ: "" },
     ], "any"),
@@ -16750,7 +16745,6 @@ const typeMap: any = {
         { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
     "CrewRenameResult": o([
-        { json: "cleanup_error", js: "cleanup_error", typ: u(undefined, "") },
         { json: "member", js: "member", typ: "" },
         { json: "name", js: "name", typ: "" },
         { json: "previous_name", js: "previous_name", typ: "" },
@@ -19655,7 +19649,6 @@ const typeMap: any = {
         { json: "members", js: "members", typ: a(r("Member")) },
     ], "any"),
     "CrewMoveHomeResultObject": o([
-        { json: "cleanup_error", js: "cleanup_error", typ: u(undefined, "") },
         { json: "member", js: "member", typ: r("Member") },
         { json: "previous_home", js: "previous_home", typ: "" },
     ], "any"),
@@ -19666,7 +19659,6 @@ const typeMap: any = {
         { json: "priming_bytes", js: "priming_bytes", typ: 0 },
     ], "any"),
     "CrewRenameResultObject": o([
-        { json: "cleanup_error", js: "cleanup_error", typ: u(undefined, "") },
         { json: "member", js: "member", typ: "" },
         { json: "name", js: "name", typ: "" },
         { json: "previous_name", js: "previous_name", typ: "" },

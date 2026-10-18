@@ -6820,7 +6820,6 @@ model CrewRenameMessage {
  profile_id?: string;
 }
 model CrewRenameResult {
- cleanup_error?: string;
  member: string;
  name: string;
  previous_name: string;
@@ -6874,5 +6873,4 @@ model CrewMoveHomeMessage {
 model CrewMoveHomeResult {
   member: CrewMember;
   previous_home: string;
-  cleanup_error?: string;
 }

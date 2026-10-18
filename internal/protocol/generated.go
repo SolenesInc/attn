@@ -2320,9 +2320,6 @@ type CrewMoveHomeMessage struct {
 }
 
 type CrewMoveHomeResult struct {
-	// CleanupError corresponds to the JSON schema field "cleanup_error".
-	CleanupError *string `json:"cleanup_error,omitempty,omitzero"`
-
 	// Member corresponds to the JSON schema field "member".
 	Member CrewMember `json:"member"`
 
@@ -2370,9 +2367,6 @@ type CrewRenameMessage struct {
 }
 
 type CrewRenameResult struct {
-	// CleanupError corresponds to the JSON schema field "cleanup_error".
-	CleanupError *string `json:"cleanup_error,omitempty,omitzero"`
-
 	// Member corresponds to the JSON schema field "member".
 	Member string `json:"member"`
 

@@ -126,6 +126,16 @@ func (d *Daemon) crewLaunchDir(member crew.Member) (string, error) {
 	if err := os.MkdirAll(member.HomeDir, 0o755); err != nil {
 		return "", err
 	}
+	if d.isChief(member.Key) {
+		root, err := d.notebookRoot(d.crewProfileID(member.Key.String()))
+		if err != nil {
+			return "", err
+		}
+		if err := os.MkdirAll(root, 0o755); err != nil {
+			return "", err
+		}
+		return root, nil
+	}
 	dir := strings.TrimSpace(member.CWD)
 	if dir == "" {
 		return member.HomeDir, nil
@@ -533,9 +543,18 @@ func (d *Daemon) handleCrewSetWS(client *wsClient, msg *protocol.CrewSetMessage)
 	d.sendToClient(client, result)
 }
 
-func (d *Daemon) crewSet(key who.MemberKey, msg *protocol.CrewSetMessage) (*protocol.CrewSetResult, bool, error) {
+func (d *Daemon) crewSet(key who.MemberKey, msg *protocol.CrewSetMessage) (result *protocol.CrewSetResult, conflict bool, resultErr error) {
 	d.crewWakeMu.Lock()
 	defer d.crewWakeMu.Unlock()
+	profile := d.crewProfileID(key.String())
+	var previousRoot *string
+	defer func() {
+		if previousRoot != nil {
+			if _, err := d.setSetting(&protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: string(settingNotebookRoot), Value: *previousRoot, ProfileID: &profile}); err != nil {
+				resultErr = errors.Join(resultErr, fmt.Errorf("restore Notebook folder %q after failed Chief setup: %w", *previousRoot, err))
+			}
+		}
+	}()
 	schema, err := d.crewCollection()
 	if err != nil {
 		return nil, false, err
@@ -559,6 +578,9 @@ func (d *Daemon) crewSet(key who.MemberKey, msg *protocol.CrewSetMessage) (*prot
 			setting = &chosen
 		}
 		before := member
+		if chief && msg.Cwd != nil {
+			return nil, false, fmt.Errorf("the Chief works from the Notebook root; change it with attn settings set notebook.root <folder>")
+		}
 		if chief && msg.Agent != nil && strings.TrimSpace(*msg.Agent) == "" {
 			return nil, false, fmt.Errorf("the Chief needs a harness; pick one: attn crew set chief --agent <harness> --model <model>")
 		}
@@ -583,8 +605,12 @@ func (d *Daemon) crewSet(key who.MemberKey, msg *protocol.CrewSetMessage) (*prot
 			if !chief || before.HomeDir != "" {
 				return nil, false, fmt.Errorf("the Notebook folder can only be picked before the Chief is configured; use attn settings set notebook.root <folder> to change it later")
 			}
-			if _, err := d.setSetting(&protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: string(settingNotebookRoot), Value: *msg.NotebookRoot, ProfileID: protocol.Ptr(d.crewProfileID(key.String()))}); err != nil {
+			oldRoot := d.profileSetting(profile, settingNotebookRoot)
+			if _, err := d.setSetting(&protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: string(settingNotebookRoot), Value: *msg.NotebookRoot, ProfileID: &profile}); err != nil {
 				return nil, false, err
+			}
+			if previousRoot == nil {
+				previousRoot = &oldRoot
 			}
 		}
 		if chief && member.HomeDir == "" && member.Agent != "" {
@@ -601,6 +627,7 @@ func (d *Daemon) crewSet(key who.MemberKey, msg *protocol.CrewSetMessage) (*prot
 			_ = os.RemoveAll(member.HomeDir)
 		}
 		if err == nil {
+			previousRoot = nil
 			if setting != nil {
 				d.publishArrangementChanged(d.crewProfileID(member.Key.String()))
 				d.publishMigrationChanged(d.crewProfileID(member.Key.String()))

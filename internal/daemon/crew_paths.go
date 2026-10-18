@@ -25,6 +25,18 @@ func (d *Daemon) resolvedCrewRoot() (string, error) {
 	return root, nil
 }
 
+func (d *Daemon) legacyCrewHome(home string) (bool, error) {
+	root, err := d.resolvedCrewRoot()
+	if err != nil {
+		return false, err
+	}
+	resolved, err := config.CanonicalRuntimePath(home)
+	if err != nil {
+		return false, err
+	}
+	return pathWithin(root, resolved), nil
+}
+
 func (d *Daemon) validateCrewMemberPaths(member crew.Member) error {
 	if member.HomeDir == "" && member.CharterPath == "" && member.Agent == "" {
 		return nil
@@ -36,13 +48,25 @@ func (d *Daemon) validateCrewMemberPaths(member crew.Member) error {
 	if err != nil {
 		return err
 	}
-	if !member.NotebookHome {
+	if pathWithin(filepath.Join(d.dataRoot, crew.HomesDirName), member.HomeDir) {
 		root, err := d.resolvedCrewRoot()
 		if err != nil {
 			return err
 		}
 		if !pathWithin(root, home) {
-			return fmt.Errorf("crew member %s: stored home path %q is outside this daemon's crew root %q. Check for an attn.db copied from another instance", d.memberName(member.Key), member.HomeDir, root)
+			return fmt.Errorf("crew member %s: stored home path %q resolves outside this daemon's crew root %q", d.memberName(member.Key), member.HomeDir, root)
+		}
+	}
+	if _, err := d.resolveCrewWorkDir(member.HomeDir); err != nil {
+		return err
+	}
+	if config.HarnessNotebookRoot() != "" {
+		root, err := config.CanonicalRuntimePath(os.Getenv("ATTN_HARNESS_DATA_DIR"))
+		if err != nil {
+			return err
+		}
+		if !pathWithin(root, home) {
+			return fmt.Errorf("crew member %s: refusing stored home path %q outside harness root %q. Check for an attn.db copied from another instance", d.memberName(member.Key), member.HomeDir, root)
 		}
 	}
 	charter, err := config.CanonicalRuntimePath(member.CharterPath)

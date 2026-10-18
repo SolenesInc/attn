@@ -95,6 +95,7 @@ commands:
   move-home <member> [--profile <name|id>] [--json]
         Move a legacy home, including every file, into the profile's Notebook.
         Put the member to sleep first: attn crew sleep <member>.
+        The home and Notebook must be on the same volume.
 
   sleep <member> [--json]
         Ask the member to write a handoff and close with attn handoff --sleep.
@@ -444,9 +445,6 @@ func runCrewRename(args []string) {
 		printJSON(result)
 		return
 	}
-	if result.CleanupError != nil {
-		fmt.Fprintln(os.Stderr, *result.CleanupError)
-	}
 	fmt.Printf("%s is now %s (member:%s)\n", result.PreviousName, result.Name, result.Member)
 }
 
@@ -577,7 +575,4 @@ func runCrewMoveHome(args []string) {
 		return
 	}
 	fmt.Printf("%s's home is now %s\n", result.Member.Name, result.Member.HomeDir)
-	if result.CleanupError != nil {
-		fmt.Fprintln(os.Stderr, *result.CleanupError)
-	}
 }

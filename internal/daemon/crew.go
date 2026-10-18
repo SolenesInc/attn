@@ -504,8 +504,12 @@ func (d *Daemon) crewMemberWire(member crew.Member, revision int64) protocol.Cre
 	} else {
 		d.logf("crew launch desktop %s: %v", member.Key.String(), err)
 	}
-	if member.CWD != "" {
-		wire.Cwd = protocol.Ptr(member.CWD)
+	cwd := member.CWD
+	if wire.Chief && member.HomeDir != "" {
+		cwd, _ = d.notebookRoot(identity.ProfileID)
+	}
+	if cwd != "" {
+		wire.Cwd = protocol.Ptr(cwd)
 	}
 	if member.Agent != "" {
 		wire.Agent = protocol.Ptr(member.Agent)

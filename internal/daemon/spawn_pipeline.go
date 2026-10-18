@@ -300,7 +300,14 @@ func (d *Daemon) resolveSpawnIntent(ctx context.Context, req *spawnRequest) (*sp
 			return nil, &spawnRejection{err: err}
 		}
 		cwd, err := filepath.EvalSymlinks(req.cwd)
-		plan.spawnOpts.TrustWorkingDirectory = err == nil && (cwd == home || d.isChief(member.Key))
+		plan.spawnOpts.TrustWorkingDirectory = err == nil && cwd == home
+		if err == nil && d.isChief(member.Key) {
+			root, rootErr := d.notebookRoot(d.crewProfileID(member.Key.String()))
+			if rootErr == nil {
+				root, rootErr = filepath.EvalSymlinks(root)
+			}
+			plan.spawnOpts.TrustWorkingDirectory = plan.spawnOpts.TrustWorkingDirectory || (rootErr == nil && cwd == root)
+		}
 		if plan.spawnOpts.TrustWorkingDirectory && req.agent == "claude" {
 			if err := d.trustClaudeCrewHome(cwd, plan.spawnOpts.LoginShellEnv); err != nil {
 				plan.rollback(d, msg.ID)
