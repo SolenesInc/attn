@@ -15,6 +15,7 @@ func TestLiveAgentsKeepTheirStateAndSnoozeAcrossADaemonRestart(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Start()
 	app, cli := s.App(), s.Client()
+	setSetting(t, app, "auto_approve_enabled", "false")
 	start := func(repo string) (string, *fakeagent.Run) {
 		t.Helper()
 		id := s.Spawn(app, fakeagent.Claude, s.Path(repo))

@@ -164,7 +164,7 @@ export function useSettingsModalState({
     tailscaleAuthURL,
     tailscaleError,
   } = settingsConnectionAndCapture(settings);
-  const autoApproveEnabled = (settings.auto_approve_enabled || 'false') === 'true';
+  const autoApproveEnabled = (settings.auto_approve_enabled || 'true') === 'true';
 
   const actualAgentExecutables = useMemo(() => getAgentExecutableSettings(settings), [settings]);
   const actualAgentCapabilities = useMemo(() => getAgentCapabilities(settings), [settings]);

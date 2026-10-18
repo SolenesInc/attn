@@ -237,6 +237,7 @@ func TestNotebookRootSettingIsValidatedAndItsEffectiveValueIsReadOnly(t *testing
 func TestSendToChiefAppendsToTheInboxAndRingsOnlyAReadyChief(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
+	setSetting(t, app, "auto_approve_enabled", "false")
 	root := fsNotebookRoot(t, w)
 	chief := w.Spawn(app, fakeagent.Claude, w.Path("chief"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
 	agent := w.Launched(chief)

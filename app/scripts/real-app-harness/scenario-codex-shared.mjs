@@ -89,6 +89,7 @@ try {
     await client.request('dom_click', { selector: SHARED_TOGGLE });
     await observer.waitFor(() => observer.getSetting('codex_shared_enabled') === 'true', 'Shared Codex enabled from Settings');
     await client.request('dom_click', { selector: '[data-testid="settings-close"]' });
+    await setSetting('auto_approve_enabled', 'false');
     await setSetting('queue_mode_enabled', 'true');
     runner.assert(observer.getSetting('queue_show_hidden_sessions') !== 'false', 'hidden sessions show in the queue by default');
   });

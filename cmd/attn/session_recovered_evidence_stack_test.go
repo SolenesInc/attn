@@ -15,6 +15,7 @@ func TestAnAgentThatMovedOnWhileTheDaemonWasDownComesBackAsItNowIs(t *testing.T)
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Start()
 	app, cli := s.App(), s.Client()
+	setSetting(t, app, "auto_approve_enabled", "false")
 	finished, finishedRun := claudeAtWork(t, s, app, "finished")
 	answered, answeredRun := claudeAtWork(t, s, app, "answered")
 	if err := cli.RecordNotification(protocol.TerminalID(app.Terminal(answered)), "permission_prompt", "Allow edit?"); err != nil {

@@ -276,6 +276,7 @@ func TestInputReachesAHiddenSharedCodexSessionWithoutTouchingAnotherTerminalsDra
 func TestShowingAHiddenSharedCodexSessionReplaysTheApprovalItWaitsOn(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
+	setSetting(t, app, "auto_approve_enabled", "false")
 	setSetting(t, app, "codex_shared_enabled", "true")
 	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
 	conversation := codex.ConversationID

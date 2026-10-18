@@ -52,6 +52,7 @@ func TestAnApprovalPendingInASharedCodexIsAnsweredAfterADaemonRestart(t *testing
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
 	s.Start()
 	app := s.App()
+	setSetting(t, app, "auto_approve_enabled", "false")
 	shareCodex(t, app)
 	session := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
 	codex := s.Launched(session)

@@ -164,6 +164,7 @@ func TestADocumentsAnnotationsReachTheAgentOrderedByPlaceWithGeneralFeedbackLast
 func TestAnnotationsThatCannotBeDeliveredTypeNothingAndKeepTheDraft(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
+	setSetting(t, app, "auto_approve_enabled", "false")
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	agent := w.Launched(session)
 	app.AwaitScreen(session, "? for shortcuts")

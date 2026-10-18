@@ -308,7 +308,7 @@ func (d *Daemon) settingsWithAgentAvailability() map[string]interface{} {
 	settings[SettingQueueShowHiddenSessions] = strconv.FormatBool(defaultOnBooleanSetting(stored[SettingQueueShowHiddenSessions]))
 	settings[SettingCodexSharedEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingCodexSharedEnabled]))
 	settings[SettingSidebarHarnessLogosEnabled] = strconv.FormatBool(defaultOnBooleanSetting(stored[SettingSidebarHarnessLogosEnabled]))
-	settings[SettingAutoApproveEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingAutoApproveEnabled]))
+	settings[SettingAutoApproveEnabled] = strconv.FormatBool(defaultOnBooleanSetting(stored[SettingAutoApproveEnabled]))
 	settings[SettingAutoSettleEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingAutoSettleEnabled]))
 	settings[SettingAsksEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingAsksEnabled]))
 	settings[SettingAutoSettleArmSeconds] = strconv.Itoa(int(resolveAutoSettleSeconds(stored[SettingAutoSettleArmSeconds], defaultAutoSettleArmSeconds) / time.Second))
