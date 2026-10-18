@@ -655,22 +655,22 @@ func (d *Daemon) sendStream(client *wsClient, message outboundMessage) bool {
 
 func (d *Daemon) wsMsgPump(client *wsClient) {
 	for data := range client.recv {
-		// A gone client's commands are skipped, except a browser result: it answers a request someone is waiting on.
-		if client.sendChannelClosed() && !isBrowserControlResultFrame(data) {
+		if client.sendChannelClosed() && !isAppResultFrame(data) {
 			continue
 		}
 		d.handleClientMessage(client, data)
 	}
-	// After the queue drains, so a result the host sent just before leaving still lands first.
-	d.failBrowserControlFor(client)
+
+	d.browserControl.failFor(client, browserControlResult{err: "the in-app browser host disconnected"})
+	d.calloutRequests.failFor(client, calloutReply{err: fmt.Errorf("the attn app disconnected")})
 	d.logf("WebSocket message pump exited")
 }
 
-func isBrowserControlResultFrame(data []byte) bool {
+func isAppResultFrame(data []byte) bool {
 	var peek struct {
 		Cmd string `json:"cmd"`
 	}
-	return json.Unmarshal(data, &peek) == nil && peek.Cmd == protocol.CmdBrowserControlResult
+	return json.Unmarshal(data, &peek) == nil && (peek.Cmd == protocol.CmdBrowserControlResult || peek.Cmd == protocol.CmdCalloutResult)
 }
 
 func (c *wsClient) sendChannelClosed() bool {
@@ -1216,6 +1216,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleMarkdownAnnotationsClear(client, msg.(*protocol.MarkdownAnnotationsClearMessage))
 	case protocol.CmdMarkdownAnnotationsSubmit:
 		d.handleMarkdownAnnotationsSubmit(client, msg.(*protocol.MarkdownAnnotationsSubmitMessage))
+	case protocol.CmdCalloutResult:
+		d.handleCalloutResult(client, msg.(*protocol.CalloutResultMessage))
 	case protocol.CmdBrowserControlResult:
 		d.handleBrowserControlResult(client, msg.(*protocol.BrowserControlResultMessage))
 	case protocol.CmdRenameSession:

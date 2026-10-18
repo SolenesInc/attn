@@ -173,6 +173,7 @@ export function useSettingsModalState({
   const actualChiefContextCap = settings.chief_context_window_cap || String(DEFAULT_CONTEXT_WINDOW_CAP);
   const actualHeadlessContextCap = settings.headless_context_window_cap || String(DEFAULT_CONTEXT_WINDOW_CAP);
   const autoSettleEnabled = isAutoSettleEnabled(settings);
+  const calloutsEnabled = settings.callouts_enabled === 'true';
   const asksEnabled = isAsksEnabled(settings);
   const actualAutoSettleArm = String(autoSettleSeconds(settings, AUTO_SETTLE_ARM_SETTING));
   const actualAutoSettleCountdown = String(autoSettleSeconds(settings, AUTO_SETTLE_COUNTDOWN_SETTING));
@@ -635,7 +636,7 @@ export function useSettingsModalState({
             id: 'experimental',
             label: 'Experimental',
             description: 'Opt in to features that are still being developed.',
-            keywords: 'experimental launcher 2.0 shared terminal host shared codex show hidden sessions in the queue direct agent launches terminal pty backend rust workers memory claude copilot one-screen new-session one screen new session project path asks questions answer decisions drawer',
+            keywords: 'experimental launcher 2.0 shared terminal host shared codex show hidden sessions in the queue direct agent launches terminal pty backend rust workers memory claude copilot one-screen new-session one screen new session project path asks questions answer decisions drawer agent callouts point guided steps',
           },
           {
             id: 'backgroundTasks',
@@ -693,6 +694,7 @@ export function useSettingsModalState({
     autoModePolicy,
     autoSettleEnabled,
     asksEnabled,
+    calloutsEnabled,
     mutedRepos,
     mutedAuthors,
     hasProjectsDirChange,

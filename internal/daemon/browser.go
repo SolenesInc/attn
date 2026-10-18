@@ -1,8 +1,6 @@
 package daemon
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -24,11 +22,6 @@ const (
 type browserControlResult struct {
 	data string
 	err  string
-}
-
-type browserControlPending struct {
-	host   *wsClient
-	result chan browserControlResult
 }
 
 type browserTarget struct {
@@ -190,14 +183,6 @@ func normalizeBrowserAction(action string) (string, error) {
 	}
 }
 
-func newBrowserControlRequestID() (string, error) {
-	bytes := make([]byte, 16)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", fmt.Errorf("generate browser control request id: %w", err)
-	}
-	return "browser-" + hex.EncodeToString(bytes), nil
-}
-
 func (d *Daemon) runBrowserControl(msg *protocol.BrowserControlMessage) browserControlResult {
 	action, err := normalizeBrowserAction(msg.Action)
 	if err != nil {
@@ -266,26 +251,8 @@ func (d *Daemon) runLocalBrowserControl(
 		return browserControlResult{err: "no in-app browser host is connected"}
 	}
 
-	requestID, err := newBrowserControlRequestID()
-	if err != nil {
-		return browserControlResult{err: err.Error()}
-	}
-	resultCh := make(chan browserControlResult, 1)
-	d.browserControlMu.Lock()
-	if d.browserControl == nil {
-		d.browserControl = make(map[string]browserControlPending)
-	}
-	d.browserControl[requestID] = browserControlPending{host: host, result: resultCh}
-	d.browserControlMu.Unlock()
-	defer func() {
-		d.browserControlMu.Lock()
-		delete(d.browserControl, requestID)
-		d.browserControlMu.Unlock()
-	}()
-
 	request := &protocol.BrowserControlRequestMessage{
 		Event:     protocol.EventBrowserControlRequest,
-		RequestID: requestID,
 		DesktopID: target.desktopID,
 		TileID:    browserTileID,
 		Action:    action,
@@ -297,16 +264,14 @@ func (d *Daemon) runLocalBrowserControl(
 	if msg.Text != nil {
 		request.Text = msg.Text
 	}
-	if !d.sendBrowserHostRequest(host, request) {
-		return browserControlResult{err: "in-app browser host is unavailable"}
+	result, err := d.browserControl.ask(host, controlTimeout, func(requestID string) bool {
+		request.RequestID = requestID
+		return d.sendBrowserHostRequest(host, request)
+	}, browserControlResult{err: "in-app browser host is unavailable"}, browserControlResult{err: "timed out waiting for the in-app browser"})
+	if err != nil {
+		return browserControlResult{err: fmt.Sprintf("generate browser control request id: %v", err)}
 	}
-
-	select {
-	case result := <-resultCh:
-		return result
-	case <-time.After(controlTimeout):
-		return browserControlResult{err: "timed out waiting for the in-app browser"}
-	}
+	return result
 }
 
 func (d *Daemon) handleBrowserControl(conn net.Conn, msg *protocol.BrowserControlMessage) {
@@ -318,34 +283,12 @@ func (d *Daemon) handleBrowserControl(conn net.Conn, msg *protocol.BrowserContro
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, Data: protocol.Ptr(result.data)})
 }
 
-// failBrowserControlFor answers every request waiting on host once it disconnects, instead of letting each
-// sit out its timeout (20s by default, up to the action's own budget).
-func (d *Daemon) failBrowserControlFor(host *wsClient) {
-	d.browserControlMu.Lock()
-	defer d.browserControlMu.Unlock()
-	for _, pending := range d.browserControl {
-		if pending.host != host {
-			continue
-		}
-		select {
-		case pending.result <- browserControlResult{err: "the in-app browser host disconnected"}:
-		default:
-		}
-	}
-}
-
 func (d *Daemon) handleBrowserControlResult(client *wsClient, msg *protocol.BrowserControlResultMessage) {
 	if !client.IsBrowserHost() {
 		d.sendCommandError(client, protocol.CmdBrowserControlResult, "trusted browser host required")
 		return
 	}
 	requestID := strings.TrimSpace(msg.RequestID)
-	d.browserControlMu.Lock()
-	pending, ok := d.browserControl[requestID]
-	d.browserControlMu.Unlock()
-	if !ok || pending.host != client {
-		return
-	}
 	result := browserControlResult{
 		data: protocol.Deref(msg.Data),
 		err:  protocol.Deref(msg.Error),
@@ -353,8 +296,5 @@ func (d *Daemon) handleBrowserControlResult(client *wsClient, msg *protocol.Brow
 	if !msg.Success && result.err == "" {
 		result.err = "browser host action failed"
 	}
-	select {
-	case pending.result <- result:
-	default:
-	}
+	d.browserControl.answer(client, requestID, result)
 }

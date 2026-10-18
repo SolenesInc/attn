@@ -303,6 +303,20 @@ export async function runDomAutomationAction(
         focused: payload.focused === true,
         timeoutMs: typeof payload.timeoutMs === 'number' ? payload.timeoutMs : NaN,
       });
+    case 'dom_wait_finite_animations': {
+      const selector = typeof payload.selector === 'string' ? payload.selector : null;
+      if (!selector) throw new Error('dom_wait_finite_animations requires selector');
+      const element = document.querySelector(selector);
+      if (!(element instanceof HTMLElement)) {
+        throw new Error(`dom_wait_finite_animations selector not found in DOM: ${selector}`);
+      }
+      const animations = element.getAnimations({ subtree: true }).filter((animation) => {
+        const endTime = animation.effect?.getComputedTiming().endTime;
+        return typeof endTime === 'number' && Number.isFinite(endTime);
+      });
+      await Promise.all(animations.map((animation) => animation.finished));
+      return { finished: animations.length };
+    }
     case 'dom_bounds': {
       const selector = typeof payload.selector === 'string' ? payload.selector : null;
       if (!selector) throw new Error('dom_bounds requires selector');
@@ -313,6 +327,7 @@ export async function runDomAutomationAction(
       const panel = element.closest<HTMLElement>('.side-panel');
       return {
         bounds: rectSnapshot(element),
+        animations: element.getAnimations({ subtree: true }).map((animation) => ({ state: animation.playState })),
         panel: panel ? {
           shellClass: panel.parentElement?.className,
           hidden: panel.getAttribute('aria-hidden'),

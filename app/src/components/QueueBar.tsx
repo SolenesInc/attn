@@ -28,7 +28,7 @@ export function QueueBar() {
     useSidebarContext();
 
   return (
-    <div className="queue-bar" data-testid="queue-bar">
+    <div className="queue-bar" data-testid="queue-bar" data-callout-anchor="sidebar">
       <button
         type="button"
         className="queue-bar-tool"
@@ -83,6 +83,7 @@ function WaitingPill() {
       type="button"
       className="queue-bar-pill"
       data-testid="queue-bar-pill"
+      data-callout-anchor="queue"
       data-waiting={turns.length}
       onClick={onOpenAgents}
     >
@@ -343,6 +344,7 @@ function DesktopChips() {
             className={`queue-bar-desktop${desktop.sessions.length || desktop.children.length ? ' has-panes' : ''}${desktop.id === selectedDesktopId ? ' is-current' : ''}${dropClass}`}
             data-testid={`queue-bar-desktop-${slot}`}
             data-desktop-id={desktop.id}
+            data-callout-anchor="desktops"
             data-waiting={waiting || undefined}
             title={`${desktop.title} (${slotShortcut(slot)})`}
             onClick={() => onSelectDesktop(desktop.id)}
@@ -358,6 +360,7 @@ function DesktopChips() {
           type="button"
           className={`queue-bar-desktop is-extra${extras.some((desktop) => desktop.id === selectedDesktopId) ? ' is-current' : ''}`}
           data-testid="queue-bar-desktop-extras"
+          data-callout-anchor="desktops"
           title={`${extras.length} more desktop${extras.length === 1 ? '' : 's'} without a shortcut (${formatShortcut('desktop.overview')})`}
           onClick={onOpenOverview}
         >

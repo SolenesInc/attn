@@ -284,6 +284,14 @@
         "seconds": 14.058,
         "runnerClass": "local macOS",
         "note": "Green ATTN_VERDICT durationMs=14058, including cleanup. Native input drives zsh and fish through cd, nvim title, and return to prompt; sidebar and tile header are asserted and four native screenshots captured. Remeasure on Linux CI."
+      },
+      "callouts": {
+        "run": "callouts-2026-10-18T18-19-47-234Z",
+        "job": "Local packaged serial matrix, linux-45bc7f4bca isolated instance",
+        "recordedAt": "2026-10-18",
+        "seconds": 39.5,
+        "runnerClass": "local Linux x86_64 SSH runner",
+        "note": "Green matrix PASS callouts 39.500s (ATTN_VERDICT durationMs=38935, including cleanup). Covers native Enter/ArrowRight/Escape after browser hiding, terminal CLI input after browser restore, palette Escape after native browser focus, all sidebar shapes, reveal/navigation, and desktop-scoped browser cleanup. Idle sampling awaits finite entrance animations."
       }
     }
   },
@@ -346,6 +354,7 @@
     "close-desktop": 33.297,
     "new-session-launcher": 22.491,
     "agent-terminals": 6.524,
-    "shell-titles": 14.058
+    "shell-titles": 14.058,
+    "callouts": 39.5
   }
 }

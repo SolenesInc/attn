@@ -71,6 +71,7 @@ dependencies = [
  "block2",
  "dirs 5.0.1",
  "getrandom 0.2.17",
+ "gtk",
  "image",
  "libc",
  "objc2",

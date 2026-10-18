@@ -59,6 +59,8 @@ For delegation mechanics and configured role selection, read [references/delegat
   [references/markdown.md](references/markdown.md).
 - **Operate attn's persistent browser tile:** read
   [references/browser.md](references/browser.md).
+- **Point at the app with a callout:** read
+  [references/callouts.md](references/callouts.md).
 
 Load more than one reference only when the task actually combines capabilities.
 

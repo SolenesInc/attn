@@ -902,6 +902,22 @@ func (c *Client) BrowserControl(action string, selector string, text string, ses
 	return c.BrowserCommand(action, "", selector, text, sessionID)
 }
 
+func (c *Client) CalloutShow(sessionID protocol.SessionID, steps []protocol.CalloutShowStep) (string, error) {
+	resp, err := c.send(protocol.CalloutShowMessage{Cmd: protocol.CmdCalloutShow, SessionID: sessionID, Steps: steps})
+	if err != nil {
+		return "", err
+	}
+	return protocol.Deref(resp.Data), nil
+}
+
+func (c *Client) CalloutAnchors(sessionID protocol.SessionID) (*protocol.CalloutAnchorsResult, error) {
+	resp, err := c.send(protocol.CalloutAnchorsMessage{Cmd: protocol.CmdCalloutAnchors, SessionID: sessionID})
+	if err != nil {
+		return nil, err
+	}
+	return resp.CalloutAnchorsResult, nil
+}
+
 func (c *Client) BrowserCommand(action string, params string, selector string, text string, sessionID protocol.SessionID) (string, error) {
 	msg := protocol.BrowserControlMessage{
 		Cmd:    protocol.CmdBrowserControl,

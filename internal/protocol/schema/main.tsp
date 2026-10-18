@@ -2430,6 +2430,30 @@ model OpenBrowserMessage {
   session_id?: SessionID;
 }
 
+model CalloutShowMessage { cmd: "callout_show"; session_id: SessionID; steps: CalloutShowStep[]; }
+model CalloutShowStep { anchor: string; text: string; }
+model CalloutAnchorsMessage { cmd: "callout_anchors"; session_id: SessionID; }
+model CalloutAnchorsResult { anchors: CalloutAnchorInfo[]; app_showing_profile: boolean; }
+model CalloutAnchorInfo { name: string; description: string; on_screen?: boolean; }
+
+enum CalloutAnchor { sidebar, home, commands, garden, desktops, queue, crew, settings_button: "settings-button", agent, desktop }
+model CalloutStep {
+  anchor: CalloutAnchor;
+  text: string;
+  session_id?: SessionID;
+  desktop_id?: string;
+  label?: string;
+}
+model CalloutShowRequestMessage { event: "callout_show_request"; request_id: string; profile_id: string; from: string; steps: CalloutStep[]; }
+model CalloutAnchorsRequestMessage { event: "callout_anchors_request"; request_id: string; profile_id: string; }
+
+model CalloutResultMessage {
+  cmd: "callout_result";
+  request_id: string;
+  on_screen: CalloutAnchor[];
+  missing?: CalloutAnchor[];
+}
+
 // Ask the visible in-app browser host to perform an action. Sent by the CLI
 // over the unix socket; the daemon brokers it to a capable Tauri client.
 model BrowserControlMessage {
@@ -5528,6 +5552,7 @@ model AutoModeEnvSetResultMessage {
 
 model Response {
   ok: boolean;
+  callout_anchors_result?: CalloutAnchorsResult;
   error?: string;
   // A machine-readable name for what went wrong, beside the human-readable
   // `error` text. Present only where a caller has to branch on the answer:
@@ -6964,6 +6989,8 @@ alias DaemonEvent =
   | KittyImageResultMessage
   | RuntimeRespawnedMessage
   | PtyResizedMessage
+  | CalloutShowRequestMessage
+  | CalloutAnchorsRequestMessage
   | BrowserControlRequestMessage
   | CommandErrorMessage
   | ClientEvictionNoticeMessage

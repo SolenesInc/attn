@@ -413,7 +413,7 @@ mod platform {
         f: impl FnOnce(&Target) -> Result<T, String> + Send + 'static,
     ) -> Result<T, String> {
         let webview = app
-            .get_webview_window(label)
+            .get_webview(label)
             .ok_or_else(|| format!("window {label:?} not found"))?;
         let (sender, receiver) = mpsc::channel();
         webview

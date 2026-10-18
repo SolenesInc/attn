@@ -1,3 +1,4 @@
+import { CalloutOverlay } from '../callouts/CalloutOverlay';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { BannerStack } from '../components/BannerStack';
 import { ChordLeaderHud } from '../components/ChordLeaderHud';
@@ -138,6 +139,7 @@ export function AppSurface() {
                 />
               )}
               <AppPreferences />
+              <CalloutOverlay />
             </div>
           </DelegationChainProvider>
         </NotebookSurfaceProvider>

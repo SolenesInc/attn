@@ -1,3 +1,4 @@
+import { handleCalloutDaemonEvent } from './daemonCalloutEvents';
 import { clearHarnesses } from './useHarnesses';
 import { clearHarnessModelCatalogs } from './useHarnessRoute';
 import { PROTOCOL_VERSION } from '../types/protocolVersion';
@@ -2260,6 +2261,7 @@ export function useDaemonSocket({
 
           default: {
             const pending = pendingActionsRef.current;
+            if (handleCalloutDaemonEvent(data, (result) => ws.send(JSON.stringify(result)))) break;
             if (handleSeedArtifactDaemonEvent(data, pending)) break;
             if (handleSessionLedgerDaemonEvent(data, { pending, onUpdate: emitSessionLedger })) break;
             if (handleFsDaemonEvent(data, { pending, onFsChanged: callbacksRef.current.onFsChanged })) break;

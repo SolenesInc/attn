@@ -243,7 +243,8 @@ Never hand-edit `internal/protocol/generated.go` or
 
 - Publish entity ids as fact subjects; omit byte streams.
 - Only projections send wire traffic. The exceptions are per-watcher
-  filesystem change bursts and tile content sent to its subscribers.
+  filesystem change bursts, tile content sent to its subscribers, and
+  request/reply to one app client.
 - Projections only write to the wire. A state change or nested publish inside
   one can deadlock.
 - Bulk changes publish one fact per entity inside `coalesceSnapshots`.
