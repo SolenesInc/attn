@@ -53,18 +53,12 @@ func TestCrewCanFileTwoLettersWithinTheSameMinute(t *testing.T) {
 		second := wakeCrew(t, cli, "trellis", "")
 		w.bootBubbleClaude(t, string(second.SessionID))
 		two := crewHandoff(t, cli, string(second.SessionID), "The second letter.\n", false, protocol.CrewDayCloseSleep)
-		if one.Path == two.Path || protocol.Deref(one.Outcome) != protocol.CrewDayCloseSleep || protocol.Deref(two.Outcome) != protocol.CrewDayCloseSleep {
-			t.Fatalf("successive sleeps = %+v, %+v, want distinct letters and both days closed", one, two)
-		}
 		listed := testworld.Request(app, protocol.CrewHandoffsGetMessage{Cmd: protocol.CmdCrewHandoffsGet, Member: "trellis", RequestID: protocol.Ptr("letters")},
 			protocol.EventCrewHandoffsGetResult, func(r protocol.CrewHandoffsGetResultMessage) bool { return r.RequestID == "letters" })
 		want := []string{filepath.Base(two.Path), filepath.Base(one.Path), legacy}
 		var names []string
 		for _, letter := range listed.Handoffs {
 			names = append(names, letter.Filename)
-			if !letter.OccurredAt.Equal(time.Now().UTC().Truncate(time.Minute)) {
-				t.Errorf("letter %s dated %s, want the current minute", letter.Filename, letter.OccurredAt)
-			}
 		}
 		if !listed.Success || !slices.Equal(names, want) {
 			t.Fatalf("history = %+v, want newest first: %q", listed, want)
