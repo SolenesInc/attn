@@ -1,0 +1,7 @@
+kind: internal
+area: codex
+change: >
+  At startup, the daemon stops a shared Codex app-server that is running but
+  not listening at this build's socket path, as it handles a crash, and the
+  next connection starts a fresh one. This replaces app-servers left running by
+  builds from before shared Codex moved its sockets to /tmp.

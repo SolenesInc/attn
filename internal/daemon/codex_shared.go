@@ -268,6 +268,20 @@ func (r *codexShared) startServer(ctx context.Context, s *codexServer, executabl
 	return nil
 }
 
+func (r *codexShared) stopServer(s *codexServer) error {
+	if client := s.client(); client != nil {
+		client.Close()
+	}
+	if err := r.d.ptyBackend.Kill(context.Background(), s.terminal, syscall.SIGTERM); err != nil && !errors.Is(err, pty.ErrSessionNotFound) {
+		return err
+	}
+	deadline := time.Now().Add(codexServerCallLimit)
+	for r.serverRunning(context.Background(), s.terminal) && time.Now().Before(deadline) {
+		time.Sleep(25 * time.Millisecond)
+	}
+	return nil
+}
+
 func (r *codexShared) connect(ctx context.Context, s *codexServer) error {
 	defer func() {
 		s.mu.Lock()
@@ -794,12 +808,31 @@ func (r *codexShared) recoverProcesses(ctx context.Context) {
 			r.serverGone(profile.ID)
 			continue
 		}
+		if s := r.server(profile.ID); r.serverRunning(ctx, s.terminal) && !r.listening(s) {
+			r.stopUnreachable(s)
+			continue
+		}
 		connectCtx, cancel := context.WithTimeout(ctx, codexServerCallLimit)
 		if _, err := r.ensureServer(connectCtx, profile.ID, ""); err != nil {
 			r.d.logf("shared Codex: reconnect to the app-server of profile %s: %v", profile.ID, err)
 		}
 		cancel()
 	}
+}
+
+func (r *codexShared) listening(s *codexServer) bool {
+	_, err := os.Stat(s.socket)
+	return !errors.Is(err, os.ErrNotExist)
+}
+
+func (r *codexShared) stopUnreachable(s *codexServer) {
+	s.ensureMu.Lock()
+	defer s.ensureMu.Unlock()
+	if err := r.stopServer(s); err != nil {
+		r.d.logf("shared Codex: stopping the app-server of profile %s, which does not listen at %s: %v", s.profile, s.socket, err)
+		return
+	}
+	r.d.logf("shared Codex: stopped the app-server of profile %s, which does not listen at %s; the next connection starts it again", s.profile, s.socket)
 }
 
 func (r *codexShared) recoverViews(ctx context.Context) {
