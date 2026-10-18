@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -82,11 +83,11 @@ func (d *Daemon) calloutSteps(session *protocol.Session, raw []protocol.CalloutS
 			}
 			step.Anchor = protocol.CalloutAnchorDesktop
 			step.DesktopID = protocol.Ptr(desktop.ID)
-			label, err := d.store.LaunchDesktopLabel(desktop.ID)
+			_, desktops, err := d.store.ProfileArrangement(profile.ID)
 			if err != nil {
 				return nil, err
 			}
-			step.Label = protocol.Ptr(label)
+			step.Label = protocol.Ptr(profiles.DesktopLabel(desktop, desktops))
 		default:
 			if !slices.ContainsFunc(calloutAnchorDirectory, func(info protocol.CalloutAnchorInfo) bool {
 				return info.Name == anchor && !strings.Contains(info.Name, ":")

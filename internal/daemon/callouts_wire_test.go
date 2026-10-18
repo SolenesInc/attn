@@ -59,6 +59,7 @@ func TestCalloutsReachOnlyTheTrustedAppShowingTheCallersProfile(t *testing.T) {
 	session, desktopID, _ := w.RequestSpawn(app, shellHarness, w.Path("caller"))
 	defer exitShells(app, string(session.ID))
 	profileID := app.SelectedProfile()
+	mustProfileRequest(app, protocol.DesktopRenameMessage{Cmd: protocol.CmdDesktopRename, RequestID: "name-callout-desktop", DesktopID: desktopID, Name: "Shop"}, "name-callout-desktop")
 	target := calloutAppPeer(w.World, "tauri://localhost", browserHostToken)
 	selectProfile(target, profileID)
 	otherProfile := createProfile(app, "Other world")
@@ -79,6 +80,9 @@ func TestCalloutsReachOnlyTheTrustedAppShowingTheCallersProfile(t *testing.T) {
 	request := testworld.Await[protocol.CalloutShowRequestMessage](target, protocol.EventCalloutShowRequest, nil)
 	if len(request.Steps) != 3 || request.From == "" || request.Steps[1].Anchor != protocol.CalloutAnchorAgent || protocol.Deref(request.Steps[1].SessionID) != session.ID || protocol.Deref(request.Steps[1].Label) == "" || protocol.Deref(request.Steps[2].DesktopID) != desktopID {
 		t.Fatalf("app request = %+v, want resolved agent and desktop steps with labels", request)
+	}
+	if label := protocol.Deref(request.Steps[2].Label); label != "Shop" {
+		t.Errorf("desktop label = %q, want its displayed name Shop", label)
 	}
 	newest.Send(protocol.CalloutResultMessage{Cmd: protocol.CmdCalloutResult, RequestID: request.RequestID, Missing: []protocol.CalloutAnchor{protocol.CalloutAnchorGarden}})
 	browserPeerCaughtUp(newest)
