@@ -116,6 +116,45 @@ describe('App callouts', () => {
     expect(screen.getByRole('combobox', { name: 'Commands' })).toBeInTheDocument();
   });
 
+  it('refuses a show request loudly while another overlay is already open', async () => {
+    const { daemon } = await launch();
+    await gesture(daemon, () => pressShortcut('ui.openSettings'));
+    expect(await show(daemon, [
+      { anchor: 'sidebar', text: 'Blocked' },
+      { anchor: 'agent', session_id: 'second', text: 'Blocked agent' },
+      { anchor: 'desktop', desktop_id: 'desktop-second', text: 'Blocked desktop' },
+    ])).toEqual({ cmd: 'callout_result', request_id: 'callout-1', on_screen: [], missing: ['sidebar', 'agent', 'desktop'] });
+    expect(screen.queryByTestId('callout-overlay')).not.toBeInTheDocument();
+  });
+
+  it('keeps a callout visible beside a drawer, including after the drawer has been used', async () => {
+    const { daemon } = await launch();
+    await gesture(daemon, () => pressShortcut('dock.attention'));
+    expect(await show(daemon, [{ anchor: 'sidebar', text: 'Alongside a drawer' }])).not.toHaveProperty('missing');
+    expect(card()).toHaveTextContent('Alongside a drawer');
+    await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
+    await gesture(daemon, () => pressShortcut('dock.attention'));
+    await show(daemon, [{ anchor: 'sidebar', text: 'After a drawer' }], 'after-drawer');
+    expect(card()).toHaveTextContent('After a drawer');
+  });
+
+  it('updates the ring when its target grows without moving the Card', async () => {
+    let sidebarHeight = 300;
+    vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains('callout-card')) return new DOMRect(0, 0, 300, 130);
+      if (this.dataset.calloutAnchor === 'sidebar') return new DOMRect(10, 10, 180, sidebarHeight);
+      return new DOMRect(0, 0, 1024, 768);
+    });
+    const { daemon } = await launch();
+    await show(daemon, [{ anchor: 'sidebar', text: 'Growing target' }]);
+    const before = card().getAttribute('style');
+    expect(screen.getByTestId('callout-ring')).toHaveStyle({ height: '306px' });
+    sidebarHeight = 400;
+    await gesture(daemon, () => fireEvent(window, new Event('resize')));
+    expect(card().getAttribute('style')).toBe(before);
+    expect(screen.getByTestId('callout-ring')).toHaveStyle({ height: '406px' });
+  });
+
   it.each([
     [false, false, ['sidebar', 'home', 'commands', 'garden', 'desktops', 'settings-button']],
     [false, true, ['sidebar', 'home', 'commands', 'garden', 'desktops', 'settings-button']],

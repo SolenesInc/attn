@@ -14,6 +14,10 @@ export function handleCalloutDaemonEvent(event: { event?: string }, send: (resul
   };
   if (event.event === 'callout_show_request') {
     const show = request as CalloutShowRequestMessage;
+    if (useCalloutStore.getState().overlayOpen) {
+      send({ ...result, on_screen: [], missing: [...new Set(show.steps.map((step) => step.anchor))] });
+      return true;
+    }
     const missing = [...new Set(show.steps.map((step) => step.anchor)
       .filter(isFixedAnchor).filter((anchor) => !onScreen.includes(anchor)))];
     if (missing.length) result.missing = missing;

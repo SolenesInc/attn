@@ -92,7 +92,12 @@ export function CalloutOverlay() {
     if (!step || !card) return;
     const place = () => {
       const next = placeCard(step, card);
-      setPlacement((current) => JSON.stringify(current) === JSON.stringify(next) ? current : next);
+      setPlacement((current) => current
+        && current.left === next.left && current.top === next.top
+        && current.side === next.side && current.arrow === next.arrow
+        && current.rect?.x === next.rect?.x && current.rect?.y === next.rect?.y
+        && current.rect?.width === next.rect?.width && current.rect?.height === next.rect?.height
+        ? current : next);
     };
     const observer = new ResizeObserver(place);
     observer.observe(card);

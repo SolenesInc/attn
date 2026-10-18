@@ -52,7 +52,7 @@ runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
 runner.registerCleanup('close_sessions', async () => {
   for (const agent of [...agents].reverse()) {
-    if (observer.getSession(agent.sessionId)) await cli('agent', 'close', agent.sessionId, '--reason', 'Callout scenario complete');
+    if (observer.getSession(agent.sessionId)) await client.request('close_session', { sessionId: agent.sessionId });
   }
 });
 

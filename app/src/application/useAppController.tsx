@@ -355,10 +355,9 @@ export function useAppController({
     markdownOpenerOpen,
   });
 
-  const otherPanelOpen = appPanels.notificationsPanelOpen || appPanels.dockPanelStack.length > 0;
   useLayoutEffect(() => {
-    if (otherOverlayOpen || otherPanelOpen) useCalloutStore.getState().end();
-  }, [otherOverlayOpen, otherPanelOpen, calloutOpen]);
+    useCalloutStore.getState().setOverlayOpen(otherOverlayOpen);
+  }, [otherOverlayOpen]);
 
   useEffect(() => useProfilesStore.subscribe((state, previous) => {
     if (state.selectedProfileId !== previous.selectedProfileId) useCalloutStore.getState().end();
