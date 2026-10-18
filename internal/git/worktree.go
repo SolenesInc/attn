@@ -212,6 +212,9 @@ func GetMainRepoFromWorktree(worktreePath string) string {
 	}
 
 	gitdir := strings.TrimPrefix(line, "gitdir: ")
+	if !filepath.IsAbs(gitdir) {
+		gitdir = filepath.Join(worktreePath, gitdir)
+	}
 
 	idx := strings.Index(gitdir, "/.git/worktrees/")
 	if idx == -1 {
