@@ -332,10 +332,7 @@ func (d *Daemon) subscribeInboxFacts() {
 	d.inboxUnsubscribe = d.eventBus.Subscribe(bus.Filter{FactCrewBound, FactCrewReleased, FactCrewUpdated, FactSessionChiefRoleChanged, FactSessionRegistered, FactSessionUnregistered, FactSessionClosed, FactSessionPTYExited,
 		seedEvents.NameTended, seedEvents.NameParked, seedEvents.NameHarvested, seedEvents.NameWithered, seedEvents.NameReplanted}, func(ev bus.Event) {
 		switch ev.Name {
-		case seedEvents.NameHarvested, seedEvents.NameWithered:
-			d.kickInbox(inbox.ToSeed(ev.Subject))
-			d.life.Go("asks-seed-closed", func() { d.closeAsksTo(inbox.ToSeed(ev.Subject)) })
-		case seedEvents.NameTended, seedEvents.NameParked, seedEvents.NameReplanted:
+		case seedEvents.NameTended, seedEvents.NameParked, seedEvents.NameHarvested, seedEvents.NameWithered, seedEvents.NameReplanted:
 			d.kickInbox(inbox.ToSeed(ev.Subject))
 		case FactCrewBound, FactCrewReleased, FactCrewUpdated:
 			d.kickInbox(inbox.ToMember(ev.Subject))

@@ -13,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
+	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -1554,6 +1555,9 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 			}
 		}
 		if err == nil {
+			if garden.Closed(next.Status) {
+				d.closeAsksTo(inbox.ToSeed(next.ID))
+			}
 			if err := d.discardAllIneligibleGardenSeedBellsLocked(); err != nil {
 				return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, fmt.Errorf(
 					"%s succeeded, but stale pending Garden updates could not be cleared: %w", verb, err)
