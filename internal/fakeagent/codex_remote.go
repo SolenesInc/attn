@@ -31,6 +31,7 @@ type codexRemote struct {
 	answering    map[string]bool
 	displayed    string
 	overrides    bool
+	blank        map[string]bool
 }
 
 type codexRemoteThread struct {
@@ -46,6 +47,7 @@ func (c *codexRemote) begin(term *terminal) error {
 	c.term = term
 	c.approvals = map[string]json.RawMessage{}
 	c.answering = map[string]bool{}
+	c.blank = map[string]bool{}
 	c.connected = make(chan struct{})
 	args := codexFlags.parse(os.Args[1:])
 	c.path = strings.TrimPrefix(args.value("--remote"), "unix://")
@@ -87,6 +89,9 @@ func (c *codexRemote) begin(term *terminal) error {
 	}
 	c.mu.Lock()
 	c.conversation = shown.Thread.ID
+	if !c.resumed {
+		c.blank[shown.Thread.ID] = true
+	}
 	c.mu.Unlock()
 	c.attach(client)
 	term.title(c.restingTitle())
@@ -323,7 +328,31 @@ func (c *codexRemote) submit(prompt string) error {
 		if err := c.request("thread/start", c.threadStart(), &started); err != nil {
 			return err
 		}
+		c.mu.Lock()
+		c.blank[started.Thread.ID] = true
+		c.mu.Unlock()
 		return c.switchTo(started.Thread.ID)
+	case strings.HasPrefix(command, "/agents "):
+		target := strings.TrimSpace(strings.TrimPrefix(command, "/agents "))
+		c.mu.Lock()
+		blank := c.blank[target]
+		c.mu.Unlock()
+		if !blank {
+			if err := c.request("thread/resume", map[string]any{"threadId": target, "excludeTurns": true}, nil); err != nil {
+				return err
+			}
+		}
+		return c.switchTo(target)
+	case strings.HasPrefix(command, "/multi-agents "):
+		target := strings.TrimSpace(strings.TrimPrefix(command, "/multi-agents "))
+		if err := c.request("thread/resume", map[string]any{"threadId": target, "excludeTurns": true}, nil); err != nil {
+			return err
+		}
+		c.mu.Lock()
+		c.conversation = target
+		c.mu.Unlock()
+		c.showPending()
+		return nil
 	case strings.HasPrefix(command, "/resume "):
 		target := strings.TrimSpace(strings.TrimPrefix(command, "/resume "))
 		if c.overrides {
@@ -338,15 +367,26 @@ func (c *codexRemote) submit(prompt string) error {
 		return c.request("thread/name/set", map[string]any{"threadId": c.current(), "name": strings.TrimSpace(strings.TrimPrefix(command, "/rename "))}, nil)
 	}
 	c.term.title(codexBusyGlyph + c.restingTitle())
-	return c.request("turn/start", map[string]any{"threadId": c.current(), "input": []any{map[string]any{"type": "text", "text": prompt, "text_elements": []any{}}}}, nil)
+	conversation := c.current()
+	if err := c.request("turn/start", map[string]any{"threadId": conversation, "input": []any{map[string]any{"type": "text", "text": prompt, "text_elements": []any{}}}}, nil); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	delete(c.blank, conversation)
+	c.mu.Unlock()
+	return nil
 }
 
 func (c *codexRemote) switchTo(conversation string) error {
 	c.mu.Lock()
 	previous := c.conversation
 	c.conversation = conversation
+	keep := c.blank[previous]
 	c.mu.Unlock()
 	c.showPending()
+	if keep {
+		return nil
+	}
 	return c.request("thread/unsubscribe", map[string]any{"threadId": previous}, nil)
 }
 

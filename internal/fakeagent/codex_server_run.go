@@ -105,6 +105,13 @@ func (s *CodexServer) WorkspaceRoots(conversation string) []string {
 	return loaded.Roots
 }
 
+func (s *CodexServer) SpawnSubagent(conversation string) string {
+	s.t.Helper()
+	var spawned promptedResult
+	s.call(methodSpawnSubagent, serverThreadParams{ThreadID: conversation}, &spawned)
+	return spawned.ConversationID
+}
+
 func (s *CodexServer) call(method string, params, result any) {
 	s.t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), HangGuard)

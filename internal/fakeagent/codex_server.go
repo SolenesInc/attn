@@ -40,6 +40,7 @@ const (
 	methodPermissions    = "permissions"
 	methodDropControl    = "drop_control"
 	methodRunTool        = "run_tool"
+	methodSpawnSubagent  = "spawn_subagent"
 	codexApprovalRequest = "item/commandExecution/requestApproval"
 )
 
@@ -78,6 +79,7 @@ type codexServerThread struct {
 	instructions   string
 	compactLimit   string
 	workspaceRoots []string
+	parent         string
 }
 
 type CodexPermissions struct {
@@ -555,7 +557,11 @@ func (s *codexAppServer) metadata(t *codexServerThread) map[string]any {
 		}
 		status = map[string]any{"type": "active", "activeFlags": flags}
 	}
-	return map[string]any{"id": t.c.conversation, "cwd": t.c.cwd, "path": t.c.transcript, "ephemeral": false, "source": "cli", "status": status}
+	thread := map[string]any{"id": t.c.conversation, "cwd": t.c.cwd, "path": t.c.transcript, "ephemeral": false, "source": "cli", "status": status}
+	if t.parent != "" {
+		thread["parentThreadId"] = t.parent
+	}
+	return thread
 }
 
 func (s *codexAppServer) status(t *codexServerThread) {
@@ -909,6 +915,26 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 			return t.c.approvals, nil
 		}
 		return nil, fmt.Errorf("conversation %s is not loaded here", p.ThreadID)
+	case methodSpawnSubagent:
+		parent, err := s.loaded(p.ThreadID)
+		if err != nil {
+			return nil, err
+		}
+		id, err := uuid.NewV7()
+		if err != nil {
+			return nil, err
+		}
+		started := time.Now().UTC()
+		t := s.newThread(id.String(), parent.c.cwd, parent.c.model, codexRolloutPath(filepath.Join(s.cfg.CodexHome, "sessions"), id.String(), started), "subagent", started, nil)
+		t.parent, t.subscribers = p.ThreadID, map[*codexServerConn]bool{}
+		if err := s.write(t); err != nil {
+			return nil, err
+		}
+		s.mu.Lock()
+		s.threads[t.c.conversation] = t
+		s.mu.Unlock()
+		s.broadcast("thread/started", map[string]any{"thread": s.metadata(t)})
+		return promptedResult{ConversationID: t.c.conversation}, nil
 	}
 	return nil, fmt.Errorf("unknown method %q", method)
 }
