@@ -24,6 +24,7 @@ const observer = new DaemonObserver(options);
 const driver = createWindowDriver({ appPath: options.appPath, client });
 const instance = currentHarnessInstance();
 const agents = [];
+let browserTileSelector;
 const waitDom = (selector, extra = {}) => client.request('dom_wait', { selector, timeoutMs: 15_000, ...extra });
 const cli = async (...args) => {
   const { stdout } = await execFileAsync(appDaemonInTree(options.appPath), args, {
@@ -150,18 +151,44 @@ try {
 
   await runner.step('browser_tile_gives_way_and_returns', async () => {
     await cli('browser', 'open', 'https://example.com/');
-    await waitDom('[data-tile-kind="browser"]');
+    const desktop = observer.desktopOf(agents[0].sessionId);
+    browserTileSelector = `[data-desktop-id="${desktop.id}"] [data-tile-kind="browser"]`;
+    runner.registerCleanup('close_browser_tile', async () => {
+      await client.request('dom_click', { selector: `${browserTileSelector} [aria-label="Close tile"]` });
+      await waitDom(browserTileSelector, { absent: true });
+    });
+    await waitDom(browserTileSelector);
     await shot('browser-before');
-    await show('sidebar', 'Browser tiles give way so this step remains readable');
+    await show('sidebar', 'Browser tiles give way so this step remains readable',
+      'garden', 'Enter still advances after the browser hides',
+      'commands', 'ArrowRight still advances after the browser hides');
     await shot('browser-hidden');
     const bounds = await client.request('dom_bounds', { selector: '.callout-overlay' });
     runner.assert(bounds.animations.every((animation) => animation.state !== 'running'), 'the open Card has no running animations', bounds);
     runner.writeJson('callout-idle.json', { bounds, snapshot: await client.request('capture_perf_snapshot', { includeMemory: false }) });
+    await driver.pressEnter();
+    await waitDom('.callout-card', { textIncludes: 'Enter still advances' });
+    await driver.pressKey('ArrowRight');
+    await waitDom('.callout-card', { textIncludes: 'ArrowRight still advances' });
     await end();
     await shot('browser-restored');
-    const desktop = observer.desktopOf(agents[0].sessionId);
-    const browserTile = await client.request('dom_bounds', { selector: '[data-tile-kind="browser"]' });
+    const browserTile = await client.request('dom_bounds', { selector: browserTileSelector });
     runner.assert(browserTile.bounds.width > 0, 'browser tile remains arranged after dismissal', { desktopId: desktop?.id });
+  });
+  await runner.step('palette_takes_native_keys_after_browser_focus', async () => {
+    const [{ bounds }, { logicalBounds }, { innerWidth, innerHeight }] = await Promise.all([
+      client.request('dom_bounds', { selector: `${browserTileSelector} .browser-tile-host` }),
+      client.request('get_window_bounds'),
+      client.request('get_terminal_context_menu_state'),
+    ]);
+    await driver.clickWindow(
+      (Math.max(0, logicalBounds.width - innerWidth) / 2 + bounds.x + bounds.width / 2) / logicalBounds.width,
+      (Math.max(0, logicalBounds.height - innerHeight) + bounds.y + bounds.height / 2) / logicalBounds.height,
+    );
+    await client.request('dom_click', { selector: '[data-callout-anchor="commands"]' });
+    await waitDom('[role="combobox"][aria-label="Commands"]', { focused: true });
+    await driver.pressKey('Escape');
+    await waitDom('[role="combobox"][aria-label="Commands"]', { absent: true });
   });
   console.log(JSON.stringify(await runner.finishSuccess(), null, 2));
 } catch (error) {
