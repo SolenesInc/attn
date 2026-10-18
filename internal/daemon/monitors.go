@@ -1,12 +1,14 @@
 package daemon
 
 import (
+	"crypto/sha256"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/sessionstate"
 	"github.com/victorarias/attn/internal/statetrace"
 )
@@ -19,23 +21,35 @@ type sessionMonitor struct {
 }
 
 type monitorEntry struct {
-	mu              sync.Mutex
-	monitor         *sessionMonitor
-	conversation    string
-	evidence        sessionstate.ConversationEvidence
-	resolveAt       time.Time
-	resolvePending  bool
-	dwell           dwellPending
-	reason          string
-	trace           *statetrace.Ring
-	classifiedTurn  string
-	classifyingTurn string
-	forcedStop      time.Time
-	silence         *time.Timer
-	input           *sessionInputLane
-	autoSettle      *autoSettleTimer
-	dismissal       autoSettleDismissal
-	activityAt      time.Time
+	mu                  sync.Mutex
+	monitor             *sessionMonitor
+	conversation        string
+	evidence            sessionstate.ConversationEvidence
+	resolveAt           time.Time
+	resolvePending      bool
+	dwell               dwellPending
+	reason              string
+	trace               *statetrace.Ring
+	classifiedTurn      string
+	classifyingTurn     string
+	forcedStop          time.Time
+	silence             *time.Timer
+	input               *sessionInputLane
+	autoSettle          *autoSettleTimer
+	dismissal           autoSettleDismissal
+	activityAt          time.Time
+	transcriptWatch     *transcriptWatcher
+	pluginUsageWatch    *pluginUsageWatcher
+	finalUsage          []func()
+	usageRuns           int
+	usageIdle           chan struct{}
+	usageDraining       bool
+	pendingConversation *agentConversationObservation
+	titleAttempted      bool
+	titleInitialPrompt  *[sha256.Size]byte
+	pluginLaunching     *pluginSessionLaunch
+	pluginReports       []pendingPluginReport
+	pluginExit          *ptybackend.ExitInfo
 }
 
 type monitorEvidence struct {
@@ -182,6 +196,8 @@ func (r *monitorRegistry) forgetLocked(sessionID protocol.SessionID) *monitorEnt
 }
 
 func (e *monitorEntry) stop() {
+	release := e.finishUsage()
+	defer release()
 	e.mu.Lock()
 	lane := e.input
 	lane.stopRetriesLocked()

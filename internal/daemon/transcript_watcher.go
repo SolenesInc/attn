@@ -22,6 +22,7 @@ const (
 )
 
 type transcriptWatcher struct {
+	entry         *monitorEntry
 	sessionID     protocol.SessionID
 	agent         protocol.SessionAgent
 	cwd           string
@@ -163,9 +164,7 @@ func (d *Daemon) findTranscriptForResume(agent protocol.SessionAgent, resumeID s
 	if resumeID == "" {
 		return ""
 	}
-	if d.transcriptResumeLookup != nil {
-		return strings.TrimSpace(d.transcriptResumeLookup(agent, resumeID))
-	}
+
 	driver := agentdriver.Get(string(agent))
 	tf, ok := agentdriver.GetTranscriptFinder(driver)
 	if !ok {
@@ -248,11 +247,15 @@ func (d *Daemon) ensureTranscriptWatcherAtPath(sessionID protocol.SessionID, tra
 		return
 	}
 	transcriptPath = strings.TrimSpace(transcriptPath)
-	d.watchersMu.Lock()
-	watcher := d.transcriptWatch[sessionID]
+	e := d.monitorEntry(sessionID)
+	if e == nil {
+		return
+	}
+	e.mu.Lock()
+	watcher := e.transcriptWatch
 	current := watcher != nil && watcher.agent == session.Agent &&
 		strings.TrimSpace(watcher.preferredPath) == transcriptPath && !watcherStopped(watcher)
-	d.watchersMu.Unlock()
+	e.mu.Unlock()
 	if current {
 		return
 	}
@@ -290,46 +293,46 @@ func (d *Daemon) startTranscriptWatcherAtPath(sessionID protocol.SessionID, agen
 	if !ok {
 		return
 	}
-	d.watchersMu.Lock()
-	session := d.lookupTranscriptWatcherSession(sessionID)
-	if session == nil || session.Agent != agent || d.usageDraining[sessionID] {
-		d.watchersMu.Unlock()
+	e := d.monitorEntry(sessionID)
+	if e == nil {
+		return
+	}
+	e.mu.Lock()
+	session := d.store.Get(sessionID)
+	if session == nil || session.Agent != agent || e.usageDraining {
+		e.mu.Unlock()
 		return
 	}
 
 	watcher := newTranscriptWatcher(sessionID, agent, cwd, startedAt, behavior)
+	watcher.entry = e
 	watcher.preferredPath = strings.TrimSpace(transcriptPath)
 	watcher.setState(session.State)
 
 	// Admitted before it replaces the previous watcher, so a refused start leaves that one to stop's final reconcile.
 	if !d.life.Go("runTranscriptWatcher", func() { d.runTranscriptWatcher(watcher) }) {
-		d.watchersMu.Unlock()
+		e.mu.Unlock()
 		return
 	}
-	d.beginUsageRunLocked(sessionID)
-	if d.transcriptWatch == nil {
-		d.transcriptWatch = make(map[protocol.SessionID]*transcriptWatcher)
-	}
-	previous := d.transcriptWatch[sessionID]
-	d.transcriptWatch[sessionID] = watcher
-	d.watchersMu.Unlock()
+	e.beginUsageRunLocked()
+	previous := e.transcriptWatch
+	e.transcriptWatch = watcher
+
+	e.mu.Unlock()
 	if previous != nil {
 		close(previous.stopCh)
 	}
 	d.logf("transcript watcher: started session=%s agent=%s cwd=%s", sessionID, agent, cwd)
 }
 
-func (d *Daemon) lookupTranscriptWatcherSession(sessionID protocol.SessionID) *protocol.Session {
-	if d.transcriptWatcherSessionLookup != nil {
-		return d.transcriptWatcherSessionLookup(string(sessionID))
-	}
-	return d.store.Get(sessionID)
-}
-
 func (d *Daemon) updateTranscriptWatcherState(sessionID protocol.SessionID, state protocol.SessionState) {
-	d.watchersMu.Lock()
-	watcher := d.transcriptWatch[sessionID]
-	d.watchersMu.Unlock()
+	e := d.monitorEntry(sessionID)
+	if e == nil {
+		return
+	}
+	e.mu.Lock()
+	watcher := e.transcriptWatch
+	e.mu.Unlock()
 	if watcher != nil {
 		watcher.setState(state)
 	}
@@ -382,88 +385,102 @@ func (d *Daemon) applySessionUsageAvailability(w *transcriptWatcher, batch trans
 }
 
 func (d *Daemon) stopTranscriptWatcher(sessionID protocol.SessionID) {
-	d.stopPluginUsageWatcher(sessionID)
-	d.watchersMu.Lock()
-	watcher, ok := d.transcriptWatch[sessionID]
-	if ok {
-		delete(d.transcriptWatch, sessionID)
+	if e := d.monitorEntry(sessionID); e != nil {
+		e.stopTranscriptWatchers()
 	}
-	d.watchersMu.Unlock()
-	if ok {
+}
+
+func (e *monitorEntry) stopTranscriptWatchers() {
+	e.mu.Lock()
+	watcher, plugin := e.transcriptWatch, e.pluginUsageWatch
+	e.transcriptWatch, e.pluginUsageWatch = nil, nil
+	e.mu.Unlock()
+	if plugin != nil {
+		close(plugin.stopCh)
+	}
+	if watcher != nil {
 		close(watcher.stopCh)
 	}
 }
 
 func (d *Daemon) stopAllTranscriptWatchers() {
-	d.stopAllPluginUsageWatchers()
-	d.watchersMu.Lock()
-	watchers := make([]*transcriptWatcher, 0, len(d.transcriptWatch))
-	for _, watcher := range d.transcriptWatch {
-		watchers = append(watchers, watcher)
+	entries := d.monitors().each()
+	for _, e := range entries {
+		e.stopTranscriptWatchers()
 	}
-	d.transcriptWatch = make(map[protocol.SessionID]*transcriptWatcher)
-	d.watchersMu.Unlock()
-
-	for _, watcher := range watchers {
-		close(watcher.stopCh)
-	}
-	d.watchersMu.Lock()
-	finalUsage := d.finalUsage
-	d.finalUsage = nil
-	d.watchersMu.Unlock()
-	for _, reconciles := range finalUsage {
-		for _, reconcile := range reconciles {
-			reconcile()
-		}
+	for _, e := range entries {
+		e.reconcileDeferredUsage()
 	}
 }
 
-// deferFinalUsage hands a watcher's last reconcile to stopAllTranscriptWatchers, which runs it after PTYs and
-// plugins shut down and agents flush usage, even for a watcher already removed from its map.
-func (d *Daemon) deferFinalUsage(sessionID protocol.SessionID, reconcile func()) {
-	d.watchersMu.Lock()
-	if d.finalUsage == nil {
-		d.finalUsage = make(map[protocol.SessionID][]func())
-	}
-	d.finalUsage[sessionID] = append(d.finalUsage[sessionID], reconcile)
-	d.watchersMu.Unlock()
+func (e *monitorEntry) deferFinalUsage(reconcile func()) {
+	e.mu.Lock()
+	e.finalUsage = append(e.finalUsage, reconcile)
+	e.mu.Unlock()
 }
 
-func (d *Daemon) beginUsageRunLocked(sessionID protocol.SessionID) {
-	if d.usageRuns == nil {
-		d.usageRuns = make(map[protocol.SessionID]int)
-		d.usageIdle = make(map[protocol.SessionID]chan struct{})
-	}
-	if d.usageRuns[sessionID]++; d.usageIdle[sessionID] == nil {
-		d.usageIdle[sessionID] = make(chan struct{})
+func (e *monitorEntry) beginUsageRunLocked() {
+	e.usageRuns++
+	if e.usageIdle == nil {
+		e.usageIdle = make(chan struct{})
 	}
 }
 
-func (d *Daemon) endUsageRun(sessionID protocol.SessionID) {
-	d.watchersMu.Lock()
-	defer d.watchersMu.Unlock()
-	if d.usageRuns[sessionID]--; d.usageRuns[sessionID] > 0 {
+func (e *monitorEntry) endUsageRun() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.usageRuns--
+	if e.usageRuns > 0 {
 		return
 	}
-	close(d.usageIdle[sessionID])
-	delete(d.usageRuns, sessionID)
-	delete(d.usageIdle, sessionID)
+	close(e.usageIdle)
+	e.usageIdle = nil
 }
 
-func (d *Daemon) reconcileDeferredUsage(sessionID protocol.SessionID) {
-	d.watchersMu.Lock()
-	reconciles := d.finalUsage[sessionID]
-	delete(d.finalUsage, sessionID)
-	d.watchersMu.Unlock()
+func (e *monitorEntry) reconcileDeferredUsage() {
+	e.mu.Lock()
+	reconciles := e.finalUsage
+	e.finalUsage = nil
+	e.mu.Unlock()
 	for _, reconcile := range reconciles {
 		reconcile()
 	}
 }
 
+func (d *Daemon) finishMonitorUsage(sessionID protocol.SessionID) func() {
+	if e := d.monitorEntry(sessionID); e != nil {
+		return e.finishUsage()
+	}
+	return func() {}
+}
+
+func (e *monitorEntry) finishUsage() func() {
+	e.mu.Lock()
+	e.usageDraining = true
+	watcher, plugin, idle := e.transcriptWatch, e.pluginUsageWatch, e.usageIdle
+	e.transcriptWatch, e.pluginUsageWatch = nil, nil
+	e.mu.Unlock()
+	if plugin != nil {
+		close(plugin.stopCh)
+	}
+	if watcher != nil {
+		close(watcher.stopCh)
+	}
+	if idle != nil {
+		<-idle
+	}
+	e.reconcileDeferredUsage()
+	return func() { e.mu.Lock(); e.usageDraining = false; e.mu.Unlock() }
+}
+
 func (d *Daemon) assistantWindow(sessionID protocol.SessionID, agent protocol.SessionAgent) (assistantWindowSnapshot, bool) {
-	d.watchersMu.Lock()
-	watcher := d.transcriptWatch[sessionID]
-	d.watchersMu.Unlock()
+	e := d.monitorEntry(sessionID)
+	if e == nil {
+		return assistantWindowSnapshot{}, false
+	}
+	e.mu.Lock()
+	watcher := e.transcriptWatch
+	e.mu.Unlock()
 	if watcher == nil || watcher.agent != agent {
 		return assistantWindowSnapshot{}, false
 	}
@@ -471,9 +488,13 @@ func (d *Daemon) assistantWindow(sessionID protocol.SessionID, agent protocol.Se
 }
 
 func (d *Daemon) liveTranscriptPath(sessionID protocol.SessionID, agent protocol.SessionAgent) string {
-	d.watchersMu.Lock()
-	watcher := d.transcriptWatch[sessionID]
-	d.watchersMu.Unlock()
+	e := d.monitorEntry(sessionID)
+	if e == nil {
+		return ""
+	}
+	e.mu.Lock()
+	watcher := e.transcriptWatch
+	e.mu.Unlock()
 	if watcher == nil || watcher.agent != agent {
 		return ""
 	}
@@ -481,7 +502,7 @@ func (d *Daemon) liveTranscriptPath(sessionID protocol.SessionID, agent protocol
 }
 
 func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
-	defer d.endUsageRun(w.sessionID)
+	defer w.entry.endUsageRun()
 	defer close(w.doneCh)
 
 	if w.behavior == nil {
@@ -520,7 +541,7 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 			return
 		case <-d.life.Done():
 			if usageTracker != nil {
-				d.deferFinalUsage(w.sessionID, usageTracker.Reconcile)
+				w.entry.deferFinalUsage(usageTracker.Reconcile)
 				usageTracker = nil
 			}
 			return
@@ -636,15 +657,15 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 					if skip, reason := staleTranscriptAbort(lineResult.AbortAt, w.startedAt); skip {
 						d.logf("transcript watcher: ignoring turn abort session=%s reason=%s abort_at=%s", w.sessionID, reason, lineResult.AbortAt.Format(time.RFC3339Nano))
 					} else {
-						d.recordTurnAbortedEvidence(w.sessionID, lineResult.AbortDetail, lineResult.AbortAt, now)
+						w.entry.recordTurnAbortedEvidence(d.monitors(), lineResult.AbortDetail, lineResult.AbortAt, now)
 						classifiedSeq = assistantSeq
 					}
 				}
 				if lineResult.BracketClosed {
-					d.recordTurnBracketClosedEvidence(w.sessionID, now)
+					w.entry.recordTurnBracketClosedEvidence(d.monitors(), now)
 				}
 				if lineResult.State != "" && protocol.SessionState(lineResult.State) != sessionState {
-					d.recordTranscriptEvidence(w.sessionID, lineResult.State, "transcript line", now)
+					w.entry.recordTranscriptEvidence(d, w.sessionID, lineResult.State, "transcript line", now)
 					sessionState = protocol.SessionState(lineResult.State)
 				}
 
@@ -689,7 +710,7 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 			d.logf("%s session=%s", tickResult.Log, w.sessionID)
 		}
 		if tickResult.State != "" && protocol.SessionState(tickResult.State) != sessionState {
-			d.recordTranscriptEvidence(w.sessionID, tickResult.State, "watcher tick", time.Now())
+			w.entry.recordTranscriptEvidence(d, w.sessionID, tickResult.State, "watcher tick", time.Now())
 		}
 		if tickResult.BlockClassification {
 			continue
@@ -719,7 +740,7 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 				quietSince.Format(time.RFC3339Nano),
 			)
 			sessionID, path := w.sessionID, transcriptPath
-			d.life.Go("classifySessionState", func() { d.classifySessionState(sessionID, path) })
+			d.life.Go("classifySessionState", func() { w.entry.classifyStop(d, sessionID, path, stopClassification{}) })
 		}
 	}
 }

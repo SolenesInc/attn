@@ -204,15 +204,6 @@ func (d *Daemon) cancelAutoSettle(sessionID protocol.SessionID, reason string) {
 	}
 }
 
-func (d *Daemon) clearAutoSettleState(sessionID protocol.SessionID) {
-	if e := d.monitorEntry(sessionID); e != nil {
-		e.mu.Lock()
-		e.stopAutoSettleLocked()
-		e.dismissal = autoSettleDismissalOff
-		e.mu.Unlock()
-	}
-}
-
 func (d *Daemon) stopAutoSettleTimers() {
 	for _, e := range d.monitors().each() {
 		e.mu.Lock()

@@ -81,7 +81,7 @@ func (d *Daemon) resolveDue(now time.Time) {
 func (d *Daemon) resolveSession(sessionID protocol.SessionID, now time.Time) time.Time {
 	session := d.store.Get(sessionID)
 	if session == nil {
-		d.forgetSessionTrace(sessionID)
+		d.forgetMonitor(sessionID)
 		return time.Time{}
 	}
 	evidence, ok := d.evidenceSnapshot(sessionID)
@@ -92,7 +92,7 @@ func (d *Daemon) resolveSession(sessionID protocol.SessionID, now time.Time) tim
 	resolution := sessionstate.Resolve(evidence.TerminalEvidence, evidence.ConversationEvidence, policy, now)
 	owned := d.publishResolution(sessionID, session.State, resolution, sessionstate.DwellFor(resolution.State, evidence.TerminalEvidence, evidence.ConversationEvidence, policy), now)
 	if d.store.Get(sessionID) == nil {
-		d.forgetSessionTrace(sessionID)
+		d.forgetMonitor(sessionID)
 		return time.Time{}
 	}
 	if !owned {

@@ -5,33 +5,19 @@ import (
 	"time"
 )
 
-func (d *Daemon) classifiedTurnID(sessionID protocol.SessionID) string {
-	e := d.monitorEntry(sessionID)
-	if e == nil {
-		return ""
-	}
+func (e *monitorEntry) classifiedTurnID() string {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.classifiedTurn
 }
 
-func (d *Daemon) setClassifiedTurnID(sessionID protocol.SessionID, turnID string) {
-	if e := d.monitorEntry(sessionID); e != nil {
-		e.mu.Lock()
-		e.classifiedTurn = turnID
-		e.mu.Unlock()
-	}
+func (e *monitorEntry) setClassifiedTurnID(turnID string) {
+	e.mu.Lock()
+	e.classifiedTurn = turnID
+	e.mu.Unlock()
 }
 
-func (d *Daemon) clearClassifiedTurn(sessionID protocol.SessionID) {
-	d.setClassifiedTurnID(sessionID, "")
-}
-
-func (d *Daemon) beginClassifyingTurn(sessionID protocol.SessionID, turnID string) bool {
-	e := d.monitorEntry(sessionID)
-	if e == nil {
-		return false
-	}
+func (e *monitorEntry) beginClassifyingTurn(turnID string) bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.classifiedTurn == turnID || e.classifyingTurn == turnID {
@@ -41,12 +27,10 @@ func (d *Daemon) beginClassifyingTurn(sessionID protocol.SessionID, turnID strin
 	return true
 }
 
-func (d *Daemon) clearClassifyingTurn(sessionID protocol.SessionID) {
-	if e := d.monitorEntry(sessionID); e != nil {
-		e.mu.Lock()
-		e.classifyingTurn = ""
-		e.mu.Unlock()
-	}
+func (e *monitorEntry) clearClassifyingTurn() {
+	e.mu.Lock()
+	e.classifyingTurn = ""
+	e.mu.Unlock()
 }
 
 func (d *Daemon) markForcedStopClassification(sessionID protocol.SessionID) {

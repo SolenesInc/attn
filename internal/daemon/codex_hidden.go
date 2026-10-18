@@ -207,7 +207,7 @@ func (r *codexShared) observe(sessionID protocol.SessionID, status string) {
 			return
 		}
 		if bracketOpen {
-			r.d.recordTurnAbortedEvidence(sessionID, "the shared Codex app-server ended the turn", now, now)
+			r.d.monitorEntry(sessionID).recordTurnAbortedEvidence(r.d.monitors(), "the shared Codex app-server ended the turn", now, now)
 		}
 	}
 	r.d.recordPTYEvidence(sessionID, pty.Observation{Source: pty.SourceProgramStatus, Claim: status, At: now})
@@ -285,7 +285,7 @@ func (r *codexShared) closed(sessionID protocol.SessionID) {
 	if conversation == "" || session == nil {
 		return
 	}
-	defer r.d.drainTranscriptWatcher(sessionID)()
+	defer r.d.finishMonitorUsage(sessionID)()
 	defer r.settleUsage(sessionID)
 	if other := r.d.store.OtherOpenSessionHolding(conversation, sessionID); other != "" {
 		r.d.logf("shared Codex: conversation %s of closed session %s stays unarchived: session %s still holds it", conversation, sessionID, other)

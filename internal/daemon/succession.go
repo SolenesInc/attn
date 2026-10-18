@@ -44,7 +44,7 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 	}
 	release := func() {}
 	if !sc.KeepFrom {
-		release = d.drainTranscriptWatcher(from.ID)
+		release = d.finishMonitorUsage(from.ID)
 		if _, err := d.captureGardenSessionSnapshot(from); err != nil {
 			d.logf("garden: preserving execution %s before its terminal moved on: %v", from.ID, err)
 		}
@@ -89,35 +89,4 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 	}
 	d.logf("terminal %s moved on from session %s to %s for conversation %s", t, from.ID, sc.To, observation.NativeID)
 	return nil
-}
-
-// drainTranscriptWatcher stops a session's usage watchers, waits for their last reconcile, and refuses
-// new ones until release.
-func (d *Daemon) drainTranscriptWatcher(sessionID protocol.SessionID) (release func()) {
-	d.watchersMu.Lock()
-	if d.usageDraining == nil {
-		d.usageDraining = make(map[protocol.SessionID]bool)
-	}
-	d.usageDraining[sessionID] = true
-	watcher := d.transcriptWatch[sessionID]
-	pluginWatcher := d.pluginUsageWatch[sessionID]
-	delete(d.transcriptWatch, sessionID)
-	delete(d.pluginUsageWatch, sessionID)
-	idle := d.usageIdle[sessionID]
-	d.watchersMu.Unlock()
-	if pluginWatcher != nil {
-		close(pluginWatcher.stopCh)
-	}
-	if watcher != nil {
-		close(watcher.stopCh)
-	}
-	if idle != nil {
-		<-idle
-	}
-	d.reconcileDeferredUsage(sessionID)
-	return func() {
-		d.watchersMu.Lock()
-		delete(d.usageDraining, sessionID)
-		d.watchersMu.Unlock()
-	}
 }

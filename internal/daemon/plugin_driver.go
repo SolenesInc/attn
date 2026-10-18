@@ -615,71 +615,78 @@ func (d *Daemon) applyPluginReportedTranscriptPath(params pluginReportTranscript
 	d.ensurePluginUsageWatcher(params.SessionID, session.Agent, path)
 }
 
-func (d *Daemon) beginPluginSessionLaunch(sessionID protocol.SessionID, pluginName string, runID string) {
-	d.pluginDriverMu.Lock()
-	defer d.pluginDriverMu.Unlock()
-	if d.pluginLaunching == nil {
-		d.pluginLaunching = make(map[protocol.SessionID]pluginSessionLaunch)
+func (d *Daemon) beginPluginSessionLaunch(sessionID protocol.SessionID, pluginName, runID string) {
+	e := d.monitorEntry(sessionID)
+	if e == nil {
+		return
 	}
-	if d.pluginReports == nil {
-		d.pluginReports = make(map[protocol.SessionID][]pendingPluginReport)
-	}
-	if d.pluginExits == nil {
-		d.pluginExits = make(map[protocol.SessionID]ptybackend.ExitInfo)
-	}
-	d.pluginLaunching[sessionID] = pluginSessionLaunch{PluginName: pluginName, RunID: runID}
-	delete(d.pluginReports, sessionID)
-	delete(d.pluginExits, sessionID)
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.pluginLaunching = &pluginSessionLaunch{PluginName: pluginName, RunID: runID}
+	e.pluginReports, e.pluginExit = nil, nil
 }
 
 func (d *Daemon) queueReportDuringPluginLaunch(plugin *pluginConnection, sessionID protocol.SessionID, report pendingPluginReport) bool {
-	d.pluginDriverMu.Lock()
-	launch, ok := d.pluginLaunching[sessionID]
-	if !ok || launch.PluginName != plugin.name || launch.RunID != report.runID() {
-		d.pluginDriverMu.Unlock()
+	e := d.monitorEntry(sessionID)
+	if e == nil {
 		return false
 	}
-	d.pluginReports[sessionID] = append(d.pluginReports[sessionID], report)
+	e.mu.Lock()
+	launch := e.pluginLaunching
+	if launch == nil || launch.PluginName != plugin.name || launch.RunID != report.runID() {
+		e.mu.Unlock()
+		return false
+	}
+	e.pluginReports = append(e.pluginReports, report)
 	var watch *launchWatch
 	if report.State != nil || report.Stop != nil {
 		watch = d.claimLaunchWatch(sessionID)
 	}
-	d.pluginDriverMu.Unlock()
+	e.mu.Unlock()
 	watch.settle(launchOutcome{startedAt: time.Now()})
 	return true
 }
 
 func (d *Daemon) queueExitDuringPluginLaunch(sessionID protocol.SessionID, info ptybackend.ExitInfo) bool {
-	d.pluginDriverMu.Lock()
-	launch, ok := d.pluginLaunching[sessionID]
-	if !ok || info.LifecycleID == "" || launch.RunID != info.LifecycleID {
-		d.pluginDriverMu.Unlock()
+	e := d.monitorEntry(sessionID)
+	if e == nil {
+		return false
+	}
+	e.mu.Lock()
+	launch := e.pluginLaunching
+	if launch == nil || info.LifecycleID == "" || launch.RunID != info.LifecycleID {
+		e.mu.Unlock()
 		return false
 	}
 	d.logf("deferring plugin PTY exit until launch completes: session=%s run=%s", sessionID, info.LifecycleID)
-	d.pluginExits[sessionID] = info
+	e.pluginExit = &info
 	watch := d.claimLaunchWatch(sessionID)
-	d.pluginDriverMu.Unlock()
+	e.mu.Unlock()
 	d.captureExitScreen(sessionID, info)
 	watch.settle(launchOutcome{exit: d.exitScreenOrBare(sessionID, info)})
 	return true
 }
 
 func (d *Daemon) supersededExitDuringPluginLaunch(sessionID protocol.SessionID, info ptybackend.ExitInfo) bool {
-	d.pluginDriverMu.Lock()
-	defer d.pluginDriverMu.Unlock()
-	launch, ok := d.pluginLaunching[sessionID]
-	return ok && info.LifecycleID != "" && launch.RunID != info.LifecycleID
+	e := d.monitorEntry(sessionID)
+	if e == nil {
+		return false
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	launch := e.pluginLaunching
+	return launch != nil && info.LifecycleID != "" && launch.RunID != info.LifecycleID
 }
 
 func (d *Daemon) finishPluginSessionLaunch(sessionID protocol.SessionID, success bool) *ptybackend.ExitInfo {
-	d.pluginDriverMu.Lock()
-	reports := append([]pendingPluginReport(nil), d.pluginReports[sessionID]...)
-	exit, exited := d.pluginExits[sessionID]
-	delete(d.pluginReports, sessionID)
-	delete(d.pluginExits, sessionID)
-	delete(d.pluginLaunching, sessionID)
-	d.pluginDriverMu.Unlock()
+	e := d.monitorEntry(sessionID)
+	if e == nil {
+		return nil
+	}
+	e.mu.Lock()
+	reports, exit := e.pluginReports, e.pluginExit
+	e.pluginLaunching, e.pluginReports, e.pluginExit = nil, nil, nil
+	e.mu.Unlock()
 	if !success {
 		return nil
 	}
@@ -693,20 +700,19 @@ func (d *Daemon) finishPluginSessionLaunch(sessionID protocol.SessionID, success
 			d.applyPluginReportedMetadata(*report.Metadata)
 		}
 	}
-	if exited {
-		return &exit
-	}
-	return nil
+	return exit
 }
 
 func (d *Daemon) abortPluginSessionLaunch(sessionID protocol.SessionID, reason string) {
-	d.pluginDriverMu.Lock()
-	launch, ok := d.pluginLaunching[sessionID]
-	delete(d.pluginReports, sessionID)
-	delete(d.pluginExits, sessionID)
-	delete(d.pluginLaunching, sessionID)
-	d.pluginDriverMu.Unlock()
-	if !ok {
+	e := d.monitorEntry(sessionID)
+	if e == nil {
+		return
+	}
+	e.mu.Lock()
+	launch := e.pluginLaunching
+	e.pluginLaunching, e.pluginReports, e.pluginExit = nil, nil, nil
+	e.mu.Unlock()
+	if launch == nil {
 		return
 	}
 	d.notifyPluginDriverSessionClosed(launch.PluginName, d.primaryTerminal(sessionID), launch.RunID, reason, nil, "")

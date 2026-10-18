@@ -3,7 +3,6 @@ package daemon
 import (
 	"bufio"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -47,7 +46,6 @@ import (
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/store"
-	"github.com/victorarias/attn/internal/transcript"
 )
 
 type workerReconcileReport struct {
@@ -111,90 +109,78 @@ type Daemon struct {
 	clientToken      string
 	store            *store.Store
 	// Serializes PR fetches with review-request edge reconciliation.
-	prRefreshMu                    sync.Mutex
-	automationMu                   sync.Mutex
-	automationLaunchFailures       sync.Map
-	automationLaunchResults        sync.Map
-	automationObservationMu        sync.Mutex
-	automationObservationLocks     map[string]*sync.Mutex
-	automationRepoMu               sync.Mutex
-	automationRepos                map[string]*sync.Mutex
-	automationDeliveryHook         func(*store.AutomationRun) error
-	wsWriteTimeout                 time.Duration
-	wsPingInterval                 time.Duration
-	wsPingTimeout                  time.Duration
-	listener                       net.Listener
-	httpServer                     *http.Server
-	httpListener                   net.Listener
-	httpHandler                    http.Handler
-	diagServer                     *diag.Server
-	harnessWSListenerFD            string
-	wsHub                          *wsHub
-	startedAt                      time.Time
-	lastPresentAt                  time.Time
-	presenceMu                     sync.RWMutex
-	crewLifecycleState             *crewLifecycleMemo
-	crewMemoOnce                   sync.Once
-	crewCharterMu                  sync.Mutex
-	life                           lifetime
-	stopOnce                       sync.Once
-	logger                         *logging.Logger
-	debugLogging                   bool
-	ghRegistry                     *github.ClientRegistry
-	repoVisibilityKnown            map[string]string
-	repoVisibilityPending          map[string]bool
-	repoVisibilityMu               sync.Mutex
-	reopenGitMu                    sync.Mutex
-	reopenBranches                 *sharedCalls[reopenBranchKey, branchInspection]
-	reopenInspect                  func(context.Context, *git.Client, string, string) (branchInspection, error)
-	gitExec                        gitExecutor
-	worktreeMaintenance            worktreeMaintenanceCoordinator
-	warnings                       []protocol.DaemonWarning
-	warningsMu                     sync.RWMutex
-	ptyBackend                     ptybackend.Backend
-	terminalTitlesMu               sync.RWMutex
-	terminalTitles                 map[harness.TerminalID]string
-	ptySettingsMu                  sync.Mutex
-	ptySettingsChangeMu            sync.Mutex
-	sharedPTYHost                  *ptybackend.WorkerBackend
-	upgradingMu                    sync.Mutex
-	upgradingWorkers               map[harness.TerminalID]bool
-	ptyRecovered                   atomic.Bool
-	watchersMu                     sync.Mutex
-	transcriptWatch                map[protocol.SessionID]*transcriptWatcher
-	pluginUsageWatch               map[protocol.SessionID]*pluginUsageWatcher
-	finalUsage                     map[protocol.SessionID][]func()
-	usageRuns                      map[protocol.SessionID]int
-	usageIdle                      map[protocol.SessionID]chan struct{}
-	usageDraining                  map[protocol.SessionID]bool
-	transcriptWatcherSessionLookup func(string) *protocol.Session
-	transcriptResumeLookup         func(protocol.SessionAgent, string) string
-	pendingConversationMu          sync.Mutex
-	pendingConversation            map[protocol.SessionID]agentConversationObservation
-	sessionTitleMu                 sync.Mutex
-	sessionTitleExec               func(ctx context.Context, session *protocol.Session, conversation string) (string, error)
-	sessionTitleAttempted          map[protocol.SessionID]struct{}
-	sessionTitleInitialPrompt      map[protocol.SessionID][sha256.Size]byte
-	seedArtifactMu                 sync.Mutex
-	harnessModelQueries            singleflight.Group
-	harnessModelCatalogs           sync.Map
-	delegationMu                   sync.Mutex
-	delegationRunning              map[string]bool
-	delegationCheckoutMu           sync.Mutex
-	delegationWaitsForFirstTurn    bool
-	launchWatchMu                  sync.Mutex
-	launchWatches                  map[protocol.SessionID]*launchWatch
-	recoveredLaunches              map[protocol.SessionID]*launchWatch
-	terminalExitIntentMu           sync.Mutex
-	terminalExitIntents            map[harness.TerminalID]terminalExitIntent
-	replacedRuntimes               map[harness.TerminalID][]string
-	prepareSessionTeardownHook     func(string) error
-	teardownMu                     sync.Mutex
-	tearingDown                    map[protocol.SessionID]chan struct{}
-	sessionLifecycleLocks          sessionLocks
-	terminalEndLocks               sessionLocks
-	spawnLocksMu                   sync.Mutex
-	spawnLocks                     map[protocol.SessionID]*spawnLock
+	prRefreshMu                sync.Mutex
+	automationMu               sync.Mutex
+	automationLaunchFailures   sync.Map
+	automationLaunchResults    sync.Map
+	automationObservationMu    sync.Mutex
+	automationObservationLocks map[string]*sync.Mutex
+	automationRepoMu           sync.Mutex
+	automationRepos            map[string]*sync.Mutex
+	automationDeliveryHook     func(*store.AutomationRun) error
+	wsWriteTimeout             time.Duration
+	wsPingInterval             time.Duration
+	wsPingTimeout              time.Duration
+	listener                   net.Listener
+	httpServer                 *http.Server
+	httpListener               net.Listener
+	httpHandler                http.Handler
+	diagServer                 *diag.Server
+	harnessWSListenerFD        string
+	wsHub                      *wsHub
+	startedAt                  time.Time
+	lastPresentAt              time.Time
+	presenceMu                 sync.RWMutex
+	crewLifecycleState         *crewLifecycleMemo
+	crewMemoOnce               sync.Once
+	crewCharterMu              sync.Mutex
+	life                       lifetime
+	stopOnce                   sync.Once
+	logger                     *logging.Logger
+	debugLogging               bool
+	ghRegistry                 *github.ClientRegistry
+	repoVisibilityKnown        map[string]string
+	repoVisibilityPending      map[string]bool
+	repoVisibilityMu           sync.Mutex
+	reopenGitMu                sync.Mutex
+	reopenBranches             *sharedCalls[reopenBranchKey, branchInspection]
+	reopenInspect              func(context.Context, *git.Client, string, string) (branchInspection, error)
+	gitExec                    gitExecutor
+	worktreeMaintenance        worktreeMaintenanceCoordinator
+	warnings                   []protocol.DaemonWarning
+	warningsMu                 sync.RWMutex
+	ptyBackend                 ptybackend.Backend
+	terminalTitlesMu           sync.RWMutex
+	terminalTitles             map[harness.TerminalID]string
+	ptySettingsMu              sync.Mutex
+	ptySettingsChangeMu        sync.Mutex
+	sharedPTYHost              *ptybackend.WorkerBackend
+	upgradingMu                sync.Mutex
+	upgradingWorkers           map[harness.TerminalID]bool
+	ptyRecovered               atomic.Bool
+
+	sessionTitleExec func(ctx context.Context, session *protocol.Session, conversation string) (string, error)
+
+	seedArtifactMu              sync.Mutex
+	harnessModelQueries         singleflight.Group
+	harnessModelCatalogs        sync.Map
+	delegationMu                sync.Mutex
+	delegationRunning           map[string]bool
+	delegationCheckoutMu        sync.Mutex
+	delegationWaitsForFirstTurn bool
+	launchWatchMu               sync.Mutex
+	launchWatches               map[protocol.SessionID]*launchWatch
+	recoveredLaunches           map[protocol.SessionID]*launchWatch
+	terminalExitIntentMu        sync.Mutex
+	terminalExitIntents         map[harness.TerminalID]terminalExitIntent
+	replacedRuntimes            map[harness.TerminalID][]string
+
+	teardownMu            sync.Mutex
+	tearingDown           map[protocol.SessionID]chan struct{}
+	sessionLifecycleLocks sessionLocks
+	terminalEndLocks      sessionLocks
+	spawnLocksMu          sync.Mutex
+	spawnLocks            map[protocol.SessionID]*spawnLock
 
 	terminalsOnce         sync.Once
 	terminalState         *terminalRegistry
@@ -235,10 +221,7 @@ type Daemon struct {
 	pluginSupervisorMu  sync.Mutex
 	pluginSupervisor    *pluginSupervisor
 	pluginHealthEnabled bool
-	pluginDriverMu      sync.Mutex
-	pluginLaunching     map[protocol.SessionID]pluginSessionLaunch
-	pluginReports       map[protocol.SessionID][]pendingPluginReport
-	pluginExits         map[protocol.SessionID]ptybackend.ExitInfo
+
 	pluginDir           string
 	bundledPluginDir    string
 	busPinMu            sync.Mutex
@@ -520,10 +503,10 @@ func New(socketPath string) *Daemon {
 		debugLogging:        logger != nil && logger.DebugEnabled(),
 		ghRegistry:          github.NewClientRegistry(),
 		ptyBackend:          ptybackend.NewEmbedded(manager),
-		transcriptWatch:     make(map[protocol.SessionID]*transcriptWatcher),
-		pendingInitialWS:    make(map[*wsClient]struct{}),
-		startedCh:           make(chan struct{}),
-		pendingConversation: make(map[protocol.SessionID]agentConversationObservation),
+
+		pendingInitialWS: make(map[*wsClient]struct{}),
+		startedCh:        make(chan struct{}),
+
 		tailscale:           newTailscaleRuntime(),
 		plugins:             newPluginRegistry(),
 		pluginHealthEnabled: true,
@@ -555,16 +538,16 @@ func NewForTesting(socketPath string) *Daemon {
 		logger:              nil,
 		ghRegistry:          github.NewClientRegistry(),
 		ptyBackend:          ptybackend.NewEmbedded(manager),
-		transcriptWatch:     make(map[protocol.SessionID]*transcriptWatcher),
-		pendingInitialWS:    make(map[*wsClient]struct{}),
-		startedCh:           make(chan struct{}),
-		pendingConversation: make(map[protocol.SessionID]agentConversationObservation),
-		tailscale:           newTailscaleRuntime(),
-		plugins:             newPluginRegistry(),
-		pluginDir:           pluginDirForSocket(socketPath),
-		bundledPluginDir:    bundledPluginDirForExecutable(),
-		spawnLocks:          make(map[protocol.SessionID]*spawnLock),
-		jobQueue:            jobs.New(jobs.Options{}),
+
+		pendingInitialWS: make(map[*wsClient]struct{}),
+		startedCh:        make(chan struct{}),
+
+		tailscale:        newTailscaleRuntime(),
+		plugins:          newPluginRegistry(),
+		pluginDir:        pluginDirForSocket(socketPath),
+		bundledPluginDir: bundledPluginDirForExecutable(),
+		spawnLocks:       make(map[protocol.SessionID]*spawnLock),
+		jobQueue:         jobs.New(jobs.Options{}),
 	}
 	d.wireGitExecution(productionGitExecutorConfig)
 	d.ensureEventBus()
@@ -590,9 +573,6 @@ func (d *Daemon) Start() error {
 	}
 	if d.startedCh == nil {
 		d.startedCh = make(chan struct{})
-	}
-	if d.transcriptWatch == nil {
-		d.transcriptWatch = make(map[protocol.SessionID]*transcriptWatcher)
 	}
 	if d.ptyBackend == nil {
 		d.ptyBackend = ptybackend.NewEmbedded(pty.NewManager(d.logf))
@@ -1846,13 +1826,6 @@ func (d *Daemon) prepareSessionTeardown(sessionID protocol.SessionID) (*sessionT
 		}
 	}
 	d.markForcedStopClassification(sessionID)
-	if d.prepareSessionTeardownHook != nil {
-		if err := d.prepareSessionTeardownHook(string(sessionID)); err != nil {
-			d.clearForcedStopClassification(sessionID)
-			lifecycleLock.Unlock()
-			return nil, err
-		}
-	}
 	driverRun, err := d.store.PrepareSessionTeardown(sessionID, d.primaryTerminal(sessionID), time.Now())
 	if err != nil {
 		d.clearForcedStopClassification(sessionID)
@@ -2000,13 +1973,15 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() 
 			d.logf("garden: preserving execution %s before closing it: %v", sessionID, err)
 		}
 	}
-	defer d.drainTranscriptWatcher(sessionID)()
-	d.forgetSessionRuntime(sessionID)
+	defer d.finishMonitorUsage(sessionID)()
+	d.kickInboxAfterCommit(inbox.ToSession(sessionID))
+	d.clearSnoozeState(sessionID)
+	d.sessionInputs().fenceSession(sessionID)
 	closure, err := commit()
 	if err != nil {
 		d.logf("close session %s: %v", sessionID, err)
 	}
-	d.forgetSessionTrace(sessionID)
+	d.forgetMonitor(sessionID)
 	d.announceClosedAsks(closure.Asks)
 	if closure.Recorded {
 		for _, terminal := range terminals {
@@ -2021,8 +1996,6 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() 
 	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)
 	d.crewMemo().forget(sessionID)
-	d.clearClassifiedTurn(sessionID)
-	d.clearClassifyingTurn(sessionID)
 }
 
 func (d *Daemon) removeReapedSession(sessionID protocol.SessionID) {
@@ -2033,30 +2006,17 @@ func (d *Daemon) removeReapedSession(sessionID protocol.SessionID) {
 			d.logf("garden: preserving execution %s before reaping: %v", sessionID, err)
 		}
 	}
-	d.forgetSessionRuntime(sessionID)
+	d.kickInboxAfterCommit(inbox.ToSession(sessionID))
+	d.clearSnoozeState(sessionID)
+	d.sessionInputs().fenceSession(sessionID)
 	closedAsks := d.store.Remove(sessionID)
 	for _, terminal := range terminals {
 		d.forgetTerminalTitle(terminal)
 	}
-	d.forgetSessionTrace(sessionID)
+	d.forgetMonitor(sessionID)
 	d.announceClosedAsks(closedAsks)
 	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)
-}
-
-func (d *Daemon) forgetSessionRuntime(sessionID protocol.SessionID) {
-	d.stopTranscriptWatcher(sessionID)
-
-	d.kickInboxAfterCommit(inbox.ToSession(sessionID))
-	d.forgetSessionTitleInitialPrompt(sessionID)
-	d.clearAutoSettleState(sessionID)
-	d.clearSnoozeState(sessionID)
-	d.sessionInputs().fenceSession(sessionID)
-	d.forgetPluginDriverSilenceWatch(sessionID)
-}
-
-func (d *Daemon) forgetSessionTrace(sessionID protocol.SessionID) {
-	d.forgetMonitor(sessionID)
 }
 
 func (d *Daemon) handlePTYState(terminal harness.TerminalID, obs pty.Observation) {
@@ -2906,7 +2866,8 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 			yielded:                true,
 			runningBackgroundTasks: runningBackgroundTaskCount(msg),
 		}
-		d.life.Go("classifyStop", func() { d.classifyStop(sessionID, msg.TranscriptPath, classification) })
+		entry := d.monitorEntry(sessionID)
+		d.life.Go("classifyStop", func() { entry.classifyStop(d, sessionID, msg.TranscriptPath, classification) })
 		return
 	}
 
@@ -2921,7 +2882,8 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 		return
 	}
 
-	d.life.Go("classifySessionState", func() { d.classifySessionState(sessionID, msg.TranscriptPath) })
+	entry := d.monitorEntry(sessionID)
+	d.life.Go("classifySessionState", func() { entry.classifyStop(d, sessionID, msg.TranscriptPath, stopClassification{}) })
 	d.life.Go("maybeGenerateSessionTitle", func() { d.maybeGenerateSessionTitle(sessionID, msg.TranscriptPath) })
 }
 
@@ -2974,30 +2936,6 @@ func (d *Daemon) resolveTranscriptPathForSession(session *protocol.Session, tran
 	}
 
 	return path
-}
-
-func (d *Daemon) extractLastAssistantMessage(session *protocol.Session, transcriptPath string, maxChars int, classificationStart time.Time) (string, string, error) {
-	if session == nil {
-		lastMessage, err := transcript.ExtractLastAssistantMessage(transcriptPath, maxChars)
-		return lastMessage, "", err
-	}
-
-	driver := agentdriver.Get(session.Agent)
-	lastMessage, turnID, err := agentdriver.ExtractLastAssistantForClassification(
-		driver,
-		transcriptPath,
-		maxChars,
-		classificationStart,
-		d.classifiedTurnID(session.ID),
-	)
-	if err != nil {
-		return "", "", err
-	}
-	turnID = strings.TrimSpace(turnID)
-	if turnID != "" && !d.beginClassifyingTurn(session.ID, turnID) {
-		return "", "", agentdriver.ErrNoNewAssistantTurn
-	}
-	return lastMessage, turnID, nil
 }
 
 func cloneSession(session *protocol.Session) *protocol.Session {

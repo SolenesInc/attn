@@ -13,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/statemarker"
+	"github.com/victorarias/attn/internal/statetrace"
 )
 
 type classifyAction int
@@ -80,11 +81,11 @@ func classifyVerdict(state string, err error, stop stopClassification) classifyD
 	return classifyDecision{action: classifyApply, state: state, reason: "classifier"}
 }
 
-func (d *Daemon) classifySessionState(sessionID protocol.SessionID, transcriptPath string) {
-	d.classifyStop(sessionID, transcriptPath, stopClassification{})
-}
+func (e *monitorEntry) classifyStop(d *Daemon, sessionID protocol.SessionID, transcriptPath string, stop stopClassification) {
+	if e == nil || d.monitorEntry(sessionID) != e {
+		return
+	}
 
-func (d *Daemon) classifyStop(sessionID protocol.SessionID, transcriptPath string, stop stopClassification) {
 	classificationStartTime := time.Now()
 	d.logf("classifySessionState: starting for session=%s, transcript=%s", sessionID, transcriptPath)
 
@@ -94,25 +95,17 @@ func (d *Daemon) classifyStop(sessionID protocol.SessionID, transcriptPath strin
 		return
 	}
 
-	d.recordClassifierStarted(sessionID, classificationStartTime)
+	e.recordClassifierStarted(d, sessionID, classificationStartTime)
 	apply := func(decision classifyDecision) {
 		if decision.action != classifyApply {
 			d.logf("classifySessionState: session=%s no state applied reason=%s", sessionID, decision.reason)
-			d.traceStateSkip(sessionID, stateSourceClassifier, decision.reason)
-			d.concludeClassification(sessionID, nil)
+			d.recordMonitorObservation(e, sessionID, statetrace.Observation{Source: stateSourceClassifier, Reason: decision.reason, Outcome: statetrace.OutcomeSkipped})
+			e.concludeClassification(d, sessionID, nil)
 			return
 		}
 		d.logf("classifySessionState: session=%s state=%s reason=%s", sessionID, decision.state, decision.reason)
-		d.traceStateEvidence(
-			sessionID,
-			stateOrigin{
-				source:     stateSourceClassifier,
-				detail:     decision.reason,
-				observedAt: classificationStartTime,
-			},
-			decision.state,
-		)
-		d.concludeClassification(sessionID, classifierVerdictMutation(decision.state, classificationStartTime))
+		d.recordMonitorObservation(e, sessionID, statetrace.Observation{Source: stateSourceClassifier, Detail: decision.reason, ObservedAt: classificationStartTime, Claim: decision.state, Outcome: statetrace.OutcomeObserved})
+		e.concludeClassification(d, sessionID, classifierVerdictMutation(decision.state, classificationStartTime))
 	}
 
 	transcriptEnabled := true
@@ -140,13 +133,13 @@ func (d *Daemon) classifyStop(sessionID protocol.SessionID, transcriptPath strin
 	}
 
 	d.logf("classifySessionState: parsing transcript for session %s", sessionID)
-	extract := d.extractLastAssistantMessage
+	extract := e.extractLastAssistantMessage
 	lastMessage, assistantTurnID, err := extract(session, resolvedTranscriptPath, 500, classificationStartTime)
 	if err != nil {
 		d.logf("classifySessionState: transcript read failed for %s: %v (transcript=%s)", sessionID, err, resolvedTranscriptPath)
 	}
 	if strings.TrimSpace(assistantTurnID) != "" && err == nil {
-		defer d.clearClassifyingTurn(sessionID)
+		defer e.clearClassifyingTurn()
 	}
 
 	decision = classifyPostTranscript(lastMessage, err, stop)
@@ -174,7 +167,7 @@ func (d *Daemon) classifyStop(sessionID protocol.SessionID, transcriptPath strin
 	}
 	decision = classifyVerdict(state, err, stop)
 	if strings.TrimSpace(assistantTurnID) != "" {
-		d.setClassifiedTurnID(sessionID, assistantTurnID)
+		e.setClassifiedTurnID(assistantTurnID)
 	}
 	apply(decision)
 }
@@ -243,4 +236,23 @@ func (d *Daemon) classifierModel(ctx context.Context, harness string) string {
 	}
 	explicit := os.Getenv("ATTN_" + strings.ToUpper(harness) + "_CLASSIFIER_MODEL")
 	return d.resolveTierModel(ctx, harness, "", modeltiers.Light, explicit, fallback)
+}
+
+func (e *monitorEntry) extractLastAssistantMessage(session *protocol.Session, transcriptPath string, maxChars int, classificationStart time.Time) (string, string, error) {
+	driver := agentdriver.Get(session.Agent)
+	lastMessage, turnID, err := agentdriver.ExtractLastAssistantForClassification(
+		driver,
+		transcriptPath,
+		maxChars,
+		classificationStart,
+		e.classifiedTurnID(),
+	)
+	if err != nil {
+		return "", "", err
+	}
+	turnID = strings.TrimSpace(turnID)
+	if turnID != "" && !e.beginClassifyingTurn(turnID) {
+		return "", "", agentdriver.ErrNoNewAssistantTurn
+	}
+	return lastMessage, turnID, nil
 }

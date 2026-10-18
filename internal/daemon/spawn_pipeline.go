@@ -92,6 +92,9 @@ type spawnOutcome struct {
 }
 
 func (plan *spawnPlan) rollback(d *Daemon, sessionID protocol.SessionID) {
+	if d.store.Get(sessionID) == nil {
+		d.forgetMonitor(sessionID)
+	}
 	if plan.chiefAssigned && !plan.chiefAssignmentCommitted {
 		d.clearChiefOfStaffIfSession(sessionID)
 	}
@@ -322,6 +325,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	terminal := d.spawnTerminal(req)
 	plan.spawnOpts.ID = terminal
 	if req.hasPluginDriver {
+		d.startSessionMonitor(msg.ID)
 		plan.pluginRunID = uuid.NewString()
 		plan.spawnOpts.LifecycleID = plan.pluginRunID
 		d.beginPluginSessionLaunch(msg.ID, req.pluginDriver.PluginName, plan.pluginRunID)
@@ -438,27 +442,27 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		d.logf("spawn: %v", err)
 	}
 	d.persistLaunchedConversation(req, plan)
-	d.rememberSessionTitleInitialPrompt(msg.ID, req.initialPrompt)
 	hasInitialPrompt := strings.TrimSpace(req.initialPrompt) != ""
 	d.startEvidence(msg.ID, monitorEvidence{TerminalEvidence: sessionstate.TerminalEvidence{ReviewerInLoop: plan.spawnOpts.ApprovalRoute.ReviewerInLoop()}, ConversationEvidence: sessionstate.ConversationEvidence{InitialPromptOwed: hasInitialPrompt && reportsTurnStarts(req.agent)}})
+	d.rememberSessionTitleInitialPrompt(msg.ID, req.initialPrompt)
 	if req.hasPluginDriver && !d.store.BeginAgentDriverRun(session.ID, req.pluginDriver.PluginName, plan.pluginRunID) {
+		d.abortPluginSessionLaunch(msg.ID, "launch_failed")
 		if req.existingSession == nil {
 			d.store.Remove(msg.ID)
-			d.forgetSessionTrace(msg.ID)
+			d.forgetMonitor(msg.ID)
 		}
-		d.abortPluginSessionLaunch(msg.ID, "launch_failed")
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{err: fmt.Errorf("initialize plugin driver run cursor")}
 	}
 	if err := d.spawnSessionRuntime(msg.ID, plan.spawnOpts); err != nil {
 		d.forgetSessionTitleInitialPrompt(msg.ID)
-		if req.existingSession == nil {
-			d.store.Remove(msg.ID)
-			d.forgetSessionTrace(msg.ID)
-		}
 		if req.hasPluginDriver {
 			d.store.EndAgentDriverRun(msg.ID)
 			d.abortPluginSessionLaunch(msg.ID, "launch_failed")
+		}
+		if req.existingSession == nil {
+			d.store.Remove(msg.ID)
+			d.forgetMonitor(msg.ID)
 		}
 		if plan.chiefAssigned {
 			d.clearChiefOfStaffIfSession(msg.ID)
@@ -574,7 +578,7 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		cleanupErr := errors.Join(d.killSessionRuntime(plan.spawnOpts.ID), d.removeSessionRuntime(plan.spawnOpts.ID))
 		if req.existingSession == nil {
 			d.store.Remove(session.ID)
-			d.forgetSessionTrace(session.ID)
+			d.forgetMonitor(session.ID)
 		}
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{err: errors.Join(req.placed.err, cleanupErr)}

@@ -44,23 +44,29 @@ func (d *Daemon) updateEvidence(
 	if e == nil || d.store == nil || d.store.Get(sessionID) == nil {
 		return false
 	}
-	changed := func() bool {
-		e.mu.Lock()
-		defer e.mu.Unlock()
-		e.monitor.mu.Lock()
-		defer e.monitor.mu.Unlock()
-		evidence := monitorEvidence{e.monitor.terminal, e.evidence}
-		if unchanged != nil && unchanged(&evidence) {
-			return false
-		}
-		mutate(&evidence)
-		e.monitor.terminal, e.evidence = evidence.TerminalEvidence, evidence.ConversationEvidence
-		return true
-	}()
-	if changed {
-		d.resolveSoon(sessionID)
+	return e.updateEvidence(d.monitors(), unchanged, mutate)
+}
+
+func (e *monitorEntry) recordEvidence(r *monitorRegistry, at time.Time, mutate func(*monitorEvidence)) bool {
+	return e.updateEvidence(r, nil, movedAt(at, mutate))
+}
+
+func (e *monitorEntry) updateEvidence(r *monitorRegistry, unchanged func(*monitorEvidence) bool, mutate func(*monitorEvidence)) bool {
+	if e == nil {
+		return false
 	}
-	return changed
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.monitor.mu.Lock()
+	defer e.monitor.mu.Unlock()
+	evidence := monitorEvidence{e.monitor.terminal, e.evidence}
+	if unchanged != nil && unchanged(&evidence) {
+		return false
+	}
+	mutate(&evidence)
+	e.monitor.terminal, e.evidence = evidence.TerminalEvidence, evidence.ConversationEvidence
+	e.resolveSoonLocked(r)
+	return true
 }
 
 func (d *Daemon) recordPTYEvidence(sessionID protocol.SessionID, obs pty.Observation) bool {
@@ -205,8 +211,12 @@ func reportsTurnStarts(agent string) bool {
 }
 
 func (d *Daemon) recordBracketEvidence(sessionID protocol.SessionID, state string) {
+	d.monitorEntry(sessionID).recordBracketEvidence(d.monitors(), state)
+}
+
+func (e *monitorEntry) recordBracketEvidence(r *monitorRegistry, state string) {
 	at := time.Now()
-	d.recordEvidence(sessionID, at, func(e *monitorEvidence) {
+	e.recordEvidence(r, at, func(e *monitorEvidence) {
 		switch state {
 		case protocol.StateWorking:
 			e.TurnOpen = true
@@ -246,16 +256,12 @@ func (d *Daemon) recordBracketEvidence(sessionID protocol.SessionID, state strin
 	})
 }
 
-func (d *Daemon) recordTranscriptEvidence(sessionID protocol.SessionID, state string, detail string, at time.Time) {
-	d.traceStateEvidence(
-		sessionID,
-		stateOrigin{source: stateSourceTranscript, detail: detail, observedAt: at},
-		state,
-	)
-	d.recordBracketEvidence(sessionID, state)
+func (e *monitorEntry) recordTranscriptEvidence(d *Daemon, sessionID protocol.SessionID, state, detail string, at time.Time) {
+	d.recordMonitorObservation(e, sessionID, statetrace.Observation{Source: stateSourceTranscript, Detail: detail, Claim: state, ObservedAt: at, Outcome: statetrace.OutcomeObserved})
+	e.recordBracketEvidence(d.monitors(), state)
 }
 
-func (d *Daemon) recordTurnAbortedEvidence(sessionID protocol.SessionID, detail string, abortedAt, observedAt time.Time) {
+func (e *monitorEntry) recordTurnAbortedEvidence(r *monitorRegistry, detail string, abortedAt, observedAt time.Time) {
 	if observedAt.IsZero() {
 		observedAt = time.Now()
 	}
@@ -263,7 +269,7 @@ func (d *Daemon) recordTurnAbortedEvidence(sessionID protocol.SessionID, detail 
 	if at.IsZero() {
 		at = observedAt
 	}
-	d.recordEvidence(sessionID, observedAt, func(e *monitorEvidence) {
+	e.recordEvidence(r, observedAt, func(e *monitorEvidence) {
 		e.TurnOpen = false
 		e.ToolOpen = false
 		e.LastHarnessEvent = &sessionstate.Observation{
@@ -275,11 +281,11 @@ func (d *Daemon) recordTurnAbortedEvidence(sessionID protocol.SessionID, detail 
 	})
 }
 
-func (d *Daemon) recordTurnBracketClosedEvidence(sessionID protocol.SessionID, at time.Time) {
+func (e *monitorEntry) recordTurnBracketClosedEvidence(r *monitorRegistry, at time.Time) {
 	if at.IsZero() {
 		at = time.Now()
 	}
-	d.recordEvidence(sessionID, at, func(e *monitorEvidence) {
+	e.recordEvidence(r, at, func(e *monitorEvidence) {
 		e.TurnOpen = false
 		e.ToolOpen = false
 	})
@@ -410,18 +416,20 @@ func (d *Daemon) recordProcessEvidence(sessionID protocol.SessionID, exited bool
 	})
 }
 
-func (d *Daemon) recordClassifierStarted(sessionID protocol.SessionID, at time.Time) {
-	d.recordEvidence(sessionID, at, func(e *monitorEvidence) {
-		e.ClassifyingSince = at
-	})
-	d.cancelAutoSettle(sessionID, "classification started")
+func (e *monitorEntry) recordClassifierStarted(d *Daemon, sessionID protocol.SessionID, at time.Time) {
+	e.recordEvidence(d.monitors(), at, func(e *monitorEvidence) { e.ClassifyingSince = at })
+	if d.monitorEntry(sessionID) == e {
+		d.cancelAutoSettle(sessionID, "classification started")
+	}
 }
 
-func (d *Daemon) concludeClassification(sessionID protocol.SessionID, verdict func(*monitorEvidence)) {
-	if session := d.store.Get(sessionID); session != nil {
-		d.syncAutoSettle(sessionID, string(session.State))
+func (e *monitorEntry) concludeClassification(d *Daemon, sessionID protocol.SessionID, verdict func(*monitorEvidence)) {
+	if d.monitorEntry(sessionID) == e {
+		if session := d.store.Get(sessionID); session != nil {
+			d.syncAutoSettle(sessionID, string(session.State))
+		}
 	}
-	d.recordEvidence(sessionID, time.Now(), func(e *monitorEvidence) {
+	e.recordEvidence(d.monitors(), time.Now(), func(e *monitorEvidence) {
 		if verdict != nil {
 			verdict(e)
 		}

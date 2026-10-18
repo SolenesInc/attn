@@ -25,6 +25,10 @@ const (
 )
 
 func (d *Daemon) recordStateObservation(sessionID protocol.SessionID, obs statetrace.Observation) {
+	d.recordMonitorObservation(d.monitorEntry(sessionID), sessionID, obs)
+}
+
+func (d *Daemon) recordMonitorObservation(e *monitorEntry, sessionID protocol.SessionID, obs statetrace.Observation) {
 	if protocol.TrimID(sessionID) == "" {
 		return
 	}
@@ -34,7 +38,7 @@ func (d *Daemon) recordStateObservation(sessionID protocol.SessionID, obs statet
 	if obs.ObservedAt.IsZero() {
 		obs.ObservedAt = obs.RecordedAt
 	}
-	if e := d.monitorEntry(sessionID); e != nil {
+	if e != nil {
 		e.mu.Lock()
 		if e.trace == nil {
 			e.trace = statetrace.NewRing(statetrace.DefaultCapacity)
@@ -82,14 +86,6 @@ func (d *Daemon) traceStateEvidence(sessionID protocol.SessionID, origin stateOr
 		Detail:     origin.detail,
 		Outcome:    statetrace.OutcomeObserved,
 		ObservedAt: origin.observedAt,
-	})
-}
-
-func (d *Daemon) traceStateSkip(sessionID protocol.SessionID, source string, reason string) {
-	d.recordStateObservation(sessionID, statetrace.Observation{
-		Source:  source,
-		Outcome: statetrace.OutcomeSkipped,
-		Reason:  reason,
 	})
 }
 
