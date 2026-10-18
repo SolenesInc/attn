@@ -1,3 +1,4 @@
+import { OutpostsSettings } from './OutpostsSettings';
 import { ModelTierSettings } from './ModelTierSettings';
 import { forwardRef, type ForwardedRef } from 'react';
 import { AutoModeSettings } from './AutoModeSettings';
@@ -231,9 +232,12 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           headlessContextCapDraft={state.headlessContextCapDraft}
         />
       );
+    case 'outposts':
+      return state.outpostsEnabled ? <OutpostsSettings /> : null;
     case 'experimental':
       return (
         <ExperimentalSettings
+          outpostsEnabled={state.outpostsEnabled}
           newSessionLauncherEnabled={state.newSessionLauncherEnabled}
           codexSharedEnabled={state.codexSharedEnabled}
           queueShowHiddenSessions={state.queueShowHiddenSessions}

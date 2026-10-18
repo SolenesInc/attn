@@ -11,6 +11,7 @@ const SETTINGS_SECTION_IDS = [
   'autoMode',
   'delegation',
   'connectivity',
+  'outposts',
   'plugins',
   'backgroundTasks',
   'eventBus',

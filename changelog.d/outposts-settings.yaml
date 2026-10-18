@@ -1,0 +1,3 @@
+kind: added
+area: settings
+change: Manage outpost bridges in Settings, with connection state, pinned identities, full refusal details, re-pairing and removal.
