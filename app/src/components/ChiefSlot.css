@@ -7,7 +7,7 @@
 .chief-slot kbd, .chief-pop kbd { font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace; font-size: 10px; color: var(--color-text-dimmed); }
 .chief-folder { display: flex; align-items: baseline; gap: 8px; min-width: 0; font-size: var(--font-size-sm); }
 .chief-folder-key { flex: none; color: var(--color-text-tertiary); }
-.chief-folder input { flex: 1; min-width: 0; padding: 2px 4px; margin: 0 -4px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--color-text-secondary); font: inherit; font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace; font-size: 10.5px; text-overflow: ellipsis; }
+.chief-folder input { flex: 1; min-width: 0; padding: 2px 4px; margin: 0; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--color-text-secondary); font: inherit; font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace; font-size: 10.5px; text-overflow: ellipsis; }
 .chief-folder input:hover { border-color: var(--color-border-subtle); }
 .chief-folder input:focus { border-color: var(--accent); background: var(--color-bg-input, var(--color-bg-elevated)); color: var(--color-text-primary); outline: none; }
 

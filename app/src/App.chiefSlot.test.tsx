@@ -68,6 +68,7 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
   it.each(['ready', 'terminal'])('settles delayed discovery without taking focus from the user (%s)', async destination => {
     const { daemon } = await renderApp({ initialState: { settings, crew: [member()] }, script: daemon => { daemon.on('harness_models', () => {}); } });
     expect(setup().getByRole('button', { name: /Wake Captain/ })).toBeDisabled();
+    expect(screen.getByTestId('chief-setup')).toHaveFocus();
     let terminal: HTMLElement | undefined;
     if (destination === 'terminal') {
       const desktop = soloDesktop('agent');
@@ -124,6 +125,10 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
     await gesture(daemon, () => fireEvent.keyDown(document.activeElement!, { key: 'Enter' }));
     expect(daemon.sentOf('crew_set')).toEqual([expect.objectContaining({ agent: 'codex', model: 'gpt-6.1-sol', effort: 'medium' })]);
     expect(slot().getByText('waking…')).toBeInTheDocument();
+    await gesture(daemon, () => daemon.emit({ event: 'crew_updated', profile_id: member().profile_id, members: [member({ agent: 'codex', model: 'gpt-6.1-sol' })] }));
+    expect(setup().getByRole('heading', { name: 'Wake your captain' })).toBeInTheDocument();
+    expect(setup().getByRole('textbox', { name: 'Notebook folder' })).toBeDisabled();
+    expect(setup().getByRole('button', { name: 'Waking…' })).toBeDisabled();
   });
   it('ignores the new-agent picker Option+digit shortcuts behind its dialog', async () => {
     const { daemon } = await renderApp({ initialState: { settings, crew: [member()] } });

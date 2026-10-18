@@ -7,16 +7,16 @@ import { routeFromStored, useHarnessRoute, type HarnessRoute } from '../hooks/us
 import type { ChiefView } from '../application/useChief';
 import { chiefHarnesses, chiefRouteRules } from './chiefRoute';
 
-export function ChiefSetup({ chief, anchor, autoFocus, onSave, onClose, onReturnFocus, onOpenSettings }: {
+export function ChiefSetup({ chief, anchor, onSave, onClose, onReturnFocus, onOpenSettings }: {
   chief: ChiefView;
-  anchor: HTMLElement | null;
-  autoFocus: boolean;
+  anchor: HTMLElement;
   onSave: (route: HarnessRoute, notebookRoot?: string) => Promise<boolean>;
   onClose: (returnFocus?: boolean) => void;
   onReturnFocus: () => void;
   onOpenSettings?: () => void;
 }) {
   const { settings, sendGetSettings } = useDaemonApi();
+  const [firstRun] = useState(!chief.agent);
   const [notebookRoot, setNotebookRoot] = useState<string | null>(null);
   const folder = notebookRoot ?? String(settings['notebook.root'] || '');
   const catalog = useHarnesses();
@@ -66,23 +66,24 @@ export function ChiefSetup({ chief, anchor, autoFocus, onSave, onClose, onReturn
     };
   }, [anchor]);
   useEscapeStack(onClose, true);
-  const focusRequested = useRef<string | null>(autoFocus ? 'primary' : null);
+  const focusRequested = useRef<string | null>('primary');
   const retainFocus = useCallback((element: HTMLButtonElement | null) => {
     if (!element) return;
     return () => { if (document.activeElement === element) focusRequested.current = element.closest('[role="radiogroup"]')?.getAttribute('aria-label') || 'primary'; };
   }, []);
   useLayoutEffect(() => {
-    if (!position || !focusRequested.current) return;
+    if (!focusRequested.current) return;
     const radio = focusRequested.current !== 'primary' && root.current?.querySelector<HTMLElement>(`[aria-label="${focusRequested.current}"] [aria-checked="true"]:not(:disabled)`);
     const primary = root.current?.querySelector<HTMLElement>('.chief-pop-primary:not(:disabled), .chief-link:not(:disabled)');
     const target = radio || primary;
-    if (target) { target.focus(); focusRequested.current = null; }
+    if (target) { target.focus({ preventScroll: true }); focusRequested.current = null; }
+    else root.current?.focus({ preventScroll: true });
   });
   useLayoutEffect(() => {
     if (!focusRequested.current) return;
     const cancel = () => { focusRequested.current = null; };
     const focusMoved = (event: FocusEvent) => {
-      if (event.target !== anchor?.closest('.app')) cancel();
+      if (event.target !== root.current && event.target !== anchor.closest('.app')) cancel();
     };
     document.addEventListener('focusin', focusMoved, true);
     document.addEventListener('pointerdown', cancel, true);
@@ -94,11 +95,11 @@ export function ChiefSetup({ chief, anchor, autoFocus, onSave, onClose, onReturn
   const busy = chief.requestPending;
   const checking = catalog.loading && !catalog.hasCatalog;
   const error = chief.setupError || catalog.error || view.error;
-  const canSave = !busy && Boolean(harness && value.model && !catalog.loading && !catalog.error && !view.loading && !view.error && (chief.agent || folder.trim()));
+  const canSave = !busy && Boolean(harness && value.model && !catalog.loading && !catalog.error && !view.loading && !view.error && (!firstRun || folder.trim()));
   const submit = () => {
     if (!canSave) return;
-    const returnFocus = Boolean(chief.agent && root.current?.contains(document.activeElement));
-    void onSave(value, chief.agent ? undefined : folder.trim()).then(saved => { if (saved && returnFocus) onReturnFocus(); });
+    const returnFocus = Boolean(!firstRun && root.current?.contains(document.activeElement));
+    void onSave(value, firstRun ? folder.trim() : undefined).then(saved => { if (saved && returnFocus) onReturnFocus(); });
   };
   const recheck = () => {
     focusRequested.current = 'primary';
@@ -119,13 +120,13 @@ export function ChiefSetup({ chief, anchor, autoFocus, onSave, onClose, onReturn
     }
     if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); submit(); }
   };
-  const primaryLabel = chief.phase === 'configuring' ? chief.agent ? 'Saving…' : 'Waking…' : chief.agent ? chief.sessionId ? 'Save for next wake' : 'Save' : `Wake ${chief.name}`;
-  return createPortal(<div ref={root} className="chief-pop" data-testid="chief-setup" role="dialog" aria-label={chief.agent ? `${chief.name}'s harness` : `Set up ${chief.name}`} style={position ? { top: position.top, left: position.left } : { visibility: 'hidden' }} onKeyDown={moveRadio} onBlur={event => {
+  const primaryLabel = chief.phase === 'configuring' ? firstRun ? 'Waking…' : 'Saving…' : firstRun ? `Wake ${chief.name}` : chief.sessionId ? 'Save for next wake' : 'Save';
+  return createPortal(<div ref={root} tabIndex={-1} className="chief-pop" data-testid="chief-setup" role="dialog" aria-label={firstRun ? `Set up ${chief.name}` : `${chief.name}'s harness`} style={position ? { top: position.top, left: position.left } : { top: 0, left: 0 }} onKeyDown={moveRadio} onBlur={event => {
     if (event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget) && !anchor?.contains(event.relatedTarget)) onClose(false);
   }}>
     <span className="chief-pop-notch" aria-hidden="true" style={{ top: position?.notch }} />
     <header className="chief-pop-head">
-      <h3>{chief.agent ? `${chief.name}'s harness` : `Wake your ${chief.name.toLowerCase()}`}</h3>
+      <h3>{firstRun ? `Wake your ${chief.name.toLowerCase()}` : `${chief.name}'s harness`}</h3>
       <button type="button" className="chief-pop-close" aria-label="Close chief setup" onClick={() => onClose()}><kbd>esc</kbd></button>
     </header>
     <div className="chief-pop-body">
@@ -160,7 +161,7 @@ export function ChiefSetup({ chief, anchor, autoFocus, onSave, onClose, onReturn
           {view.effortLevels.map(effort => <button ref={retainFocus} type="button" role="radio" key={effort} disabled={busy} aria-checked={value.effort === effort} tabIndex={value.effort === effort ? 0 : -1} onClick={() => setDraft({ ...value, effort })}>{effort}</button>)}
         </div>
       </section>}
-      {!chief.agent && <label className="chief-folder">
+      {firstRun && <label className="chief-folder">
         <span className="chief-folder-key">Notebook</span>
         <input aria-label="Notebook folder" spellCheck={false} value={folder} title={folder} disabled={busy} onChange={event => setNotebookRoot(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); submit(); } }} />
       </label>}

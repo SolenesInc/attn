@@ -53,6 +53,6 @@ export function ChiefSlot() {
       <span className="sidebar-session-identity">{chief.name}</span>
       <span className="session-trailing"><span className="chief-row-pill">{chief.phase === 'unconfigured' ? <>Set up <kbd>⏎</kbd></> : 'waking…'}</span></span>
     </div> : <CrewRowView chief sleeping={chief.phase === 'sleeping'} member={chief.key} name={chief.name} agent={chief.agent} row={row} selected={selectedId === chief.sessionId} where={desktop ? { slot: visualIndexOfDesktop(desktop.id) >= 0 ? String(visualIndexOfDesktop(desktop.id) + 1) : '·', title: desktop.title } : undefined} onSelect={chief.sessionId ? () => onSelectSession(chief.sessionId!) : undefined} onWake={!busy ? chiefActions.wake : undefined} onSleep={!busy ? chiefActions.sleep : undefined} onOpenActions={row ? event => openSessionActions(row.session, event) : undefined} onOpenMemberActions={event => openCrewMemberActions(chief.key, event)} delegates={session ? delegates.get(session.id) || [] : []} />}
-    {setupVisible && <ChiefSetup key={chief.key} chief={chief} anchor={slot} autoFocus onSave={chiefActions.setUp} onClose={(restoreFocus = true) => { chiefActions.dismiss(); if (restoreFocus) returnFocus(); }} onReturnFocus={returnFocus} onOpenSettings={onChiefSettings} />}
+    {setupVisible && slot && <ChiefSetup key={chief.key} chief={chief} anchor={slot} onSave={chiefActions.setUp} onClose={(restoreFocus = true) => { chiefActions.dismiss(); if (restoreFocus) returnFocus(); }} onReturnFocus={returnFocus} onOpenSettings={onChiefSettings} />}
   </div>;
 }

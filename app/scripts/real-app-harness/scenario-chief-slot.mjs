@@ -115,6 +115,9 @@ try {
     ] });
     if (!(await state()).setupOpen) await click('[data-testid="chief-slot"] .queue-row-select');
     await waitDom('[data-testid="chief-setup"] .chief-pop-primary:not(:disabled)', { focused: true });
+    const body = await client.request('dom_bounds', { selector: '.chief-pop-body' });
+    runner.writeJson('setup-body-bounds.json', body);
+    runner.assert(body.scrollWidth === body.clientWidth && body.scrollHeight === body.clientHeight, 'first-run setup fits without clipping or scrollbars', body);
     await screenshot('01-chief-setup');
     await driver.pressKey('Escape');
     await waitDom('[data-testid="chief-slot"] .queue-row-select', { focused: true });
@@ -229,6 +232,8 @@ try {
   await runner.step('configured_command_expands_the_sidebar_and_focuses_save', async () => {
     await pressShortcutKeys(client, driver, 'session.toggleSidebar');
     await waitDom('[data-testid="chief-slot"]', { absent: true });
+    await relaunchAppAndConnect(client, observer);
+    await driver.activateApp();
     await pressShortcutKeys(client, driver, 'ui.commandPalette');
     await waitDom('[role="combobox"][aria-label="Commands"]', { focused: true });
     await driver.typeText("Change the chief's harness and model");
