@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 const BUILD_INSTANCE: Option<&str> = option_env!("ATTN_BUILD_INSTANCE");
 
 const BUILD_WS_PORT: Option<&str> = option_env!("ATTN_BUILD_WS_PORT");
+#[cfg(any(target_os = "macos", test))]
 const BUILD_BUNDLE_ID: Option<&str> = option_env!("ATTN_BUILD_BUNDLE_ID");
 const BUILD_DEFAULT_INSTANCE_HARNESS: bool =
     option_env!("ATTN_BUILD_DEFAULT_INSTANCE_HARNESS").is_some();
@@ -234,6 +235,7 @@ pub fn ensure_browser_host_token() -> Result<String, String> {
     Ok(token)
 }
 
+#[cfg(any(target_os = "macos", test))]
 pub fn bundle_identifier() -> &'static str {
     if let Some(id) = BUILD_BUNDLE_ID {
         let id = id.trim();
