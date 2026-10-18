@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -81,28 +80,6 @@ func TestADaemonThatFindsTheLockHeldExitsWithoutTouchingTheDatabase(t *testing.T
 	}
 	if _, err := os.Stat(filepath.Join(dir, "attn.db")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("the database exists after a refused start (%v)", err)
-	}
-}
-
-func TestAnEnrolledOutpostRefusesToStartBeforeTheLockAndTheDatabase(t *testing.T) {
-	d, dir := productionDaemon(t)
-	if _, err := enrollment.EnsureDaemonID(dir); err != nil {
-		t.Fatal(err)
-	}
-	record := `{"home_daemon_id": "d-0123456789abcdef0123456789abcdef"}` + "\n"
-	if err := os.WriteFile(filepath.Join(dir, enrollment.RecordFileName), []byte(record), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	err := d.Start()
-	var outpost *enrollment.OutpostError
-	if !errors.As(err, &outpost) {
-		t.Fatalf("Start = %v, want an outpost refusal", err)
-	}
-	for _, name := range []string{"attn.pid", "attn.db"} {
-		if _, err := os.Stat(filepath.Join(dir, name)); !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("%s exists after the outpost refusal (%v)", name, err)
-		}
 	}
 }
 

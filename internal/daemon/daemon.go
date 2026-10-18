@@ -645,9 +645,6 @@ func (d *Daemon) Start() error {
 		d.plugins = newPluginRegistry()
 	}
 	startSucceeded := false
-	if err := enrollment.RefuseOutpost(d.dataRoot); err != nil {
-		return err
-	}
 	if err := d.acquirePIDLock(); err != nil {
 		return fmt.Errorf("acquire PID lock: %w", err)
 	}
