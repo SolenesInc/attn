@@ -1,4 +1,4 @@
-import { test, expect, waitForMockPtyBanner } from './fixtures';
+import { test, expect, dismissChiefSetup, waitForMockPtyBanner } from './fixtures';
 
 type DesktopSessionFixture = {
   id: string;
@@ -44,6 +44,7 @@ test.describe('Desktop Sessions', () => {
     await daemon.start();
     await page.goto('/');
     await page.waitForSelector('.dashboard');
+    await dismissChiefSetup(page);
     await injectSessions(page, daemon, [{ id: 'repeat-agent', label: 'repeat-agent', cwd: '/tmp/desktop-repeat' }]);
     await page.getByTestId('session-repeat-agent').click();
 
@@ -69,6 +70,7 @@ test.describe('Desktop Sessions', () => {
     await daemon.start();
     await page.goto('/');
     await page.waitForSelector('.dashboard');
+    await dismissChiefSetup(page);
     await injectSessions(page, daemon, [
       { id: 'side-one', label: 'side-one', cwd: '/tmp/desktop-side' },
       { id: 'side-two', label: 'side-two', cwd: '/tmp/desktop-side' },
@@ -84,6 +86,7 @@ test.describe('Desktop Sessions', () => {
     await daemon.start();
     await page.goto('/');
     await page.waitForSelector('.dashboard');
+    await dismissChiefSetup(page);
     await injectSessions(page, daemon, [
       { id: 'drag-stay', label: 'drag-stay', cwd: '/tmp/desktop-drag' },
       { id: 'drag-move', label: 'drag-move', cwd: '/tmp/desktop-drag' },
@@ -121,6 +124,7 @@ test.describe('Desktop Sessions', () => {
     await daemon.start();
     await page.goto('/');
     await page.waitForSelector('.dashboard');
+    await dismissChiefSetup(page);
     await injectSessions(page, daemon, [{ id: 'arranged', label: 'arranged', cwd: '/tmp/desktop-arrange' }]);
     await page.locator('[data-testid="session-arranged"]').click();
     await expect(currentDesktop(page).locator(paneOf('arranged'))).toBeVisible();
@@ -179,6 +183,7 @@ test.describe('Desktop Sessions', () => {
     await daemon.start();
     await page.goto('/');
     await page.waitForSelector('.dashboard');
+    await dismissChiefSetup(page);
     await injectSessions(page, daemon, [
       { id: 'focus-agent', label: 'focus-agent', cwd: '/tmp/desktop-focus' },
       { id: 'focus-shell', label: 'focus-shell', cwd: '/tmp/desktop-focus' },
@@ -201,6 +206,7 @@ test.describe('Desktop Sessions', () => {
     await daemon.start();
     await page.goto('/');
     await page.waitForSelector('.dashboard');
+    await dismissChiefSetup(page);
     await injectSessions(page, daemon, [
       { id: 'focus-main', label: 'focus-main', cwd: '/tmp/desktop-focus-mode' },
       { id: 'focus-peer', label: 'focus-peer', cwd: '/tmp/desktop-focus-mode' },
@@ -229,6 +235,7 @@ test.describe('Desktop Sessions', () => {
     await daemon.start();
     await page.goto('/');
     await page.waitForSelector('.dashboard');
+    await dismissChiefSetup(page);
     await injectSessions(page, daemon, [
       { id: 'keyboard-one', label: 'keyboard-one', cwd: '/tmp/desktop-keyboard' },
       { id: 'keyboard-two', label: 'keyboard-two', cwd: '/tmp/desktop-keyboard' },
@@ -277,6 +284,7 @@ test.describe('Desktop Sessions', () => {
     await daemon.start();
     await page.goto('/');
     await page.waitForSelector('.dashboard');
+    await dismissChiefSetup(page);
     await injectSessions(page, daemon, [{ id: 'gpu-agent', label: 'gpu-agent', cwd: '/tmp/desktop-gpu' }]);
     await page.getByTestId('session-gpu-agent').click();
     await waitForMockPtyBanner(page, 'gpu-agent');
@@ -319,6 +327,7 @@ test.describe('Desktop Sessions', () => {
     await daemon.start();
     await page.goto('/');
     await page.waitForSelector('.dashboard');
+    await dismissChiefSetup(page);
     await injectSessions(page, daemon, [{ id: 'font-agent', label: 'font-agent', cwd: '/tmp/desktop-font' }]);
     await page.getByTestId('session-font-agent').click();
     await waitForMockPtyBanner(page, 'font-agent');

@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, dismissChiefSetup } from './fixtures';
 
 async function injectLocalSession(
   page: import('@playwright/test').Page,
@@ -67,6 +67,7 @@ test.describe('Keyboard Shortcuts', () => {
       await daemon.start();
       await page.goto('/');
       await page.waitForSelector('.dashboard');
+      await dismissChiefSetup(page);
 
       await createSession(page, daemon, { id: 's-new', label: 'Root', state: 'working', cwd: '/tmp/test/new-session' });
       await expect(page.locator('[data-testid="session-s-new"]')).toBeVisible();
@@ -98,6 +99,7 @@ test.describe('Keyboard Shortcuts', () => {
       await daemon.start();
       await page.goto('/');
       await page.waitForSelector('.dashboard');
+      await dismissChiefSetup(page);
 
       await createSession(page, daemon, { id: 's-zoom', label: 'Zoom', state: 'working', cwd: '/tmp/test/zoom' });
       await createSession(page, daemon, { id: 's-peer', label: 'Peer', state: 'working', cwd: '/tmp/test/zoom' });
