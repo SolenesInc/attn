@@ -247,8 +247,11 @@ A `--remote` TUI, probed on 0.163.0 and read in the source at rust-v0.163.0
   its server drops notifications it does not know and answers unknown server
   requests with -32601, which the server takes as a denied approval; the turn
   carries on.
-- Its `initialize` sends its own version as `clientInfo.version`; this one is
-  read in the source, not probed (`tui/src/lib.rs`).
+- Its `initialize` sends its own version as `clientInfo.version`, probed on
+  0.162.1 (`tui/src/lib.rs`).
+- One still at the folder trust prompt when its server goes away never
+  reconnects, and choosing to trust then fails with `config/batchWrite ...
+  remote app-server worker channel is closed`, probed on 0.162.1.
 
 Read in the source at openai/codex rust-v0.160.0:
 
