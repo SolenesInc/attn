@@ -1220,11 +1220,6 @@ model QueryMessage {
   caller_id?: TerminalID; // The caller's ATTN_TERMINAL_ID; the response's caller_session_id names the session its terminal shows.
 }
 
-model HeartbeatMessage {
-  cmd: "heartbeat";
-  id: SessionID;
-}
-
 // SettleTurnMessage closes the turn a session opened. It is the only way a turn
 // ever ends: no state transition removes a session from the queue, so an agent
 // stays there — running or not — until the user says they are done with it.
@@ -3226,11 +3221,6 @@ model ReposUpdatedMessage {
 model AuthorsUpdatedMessage {
   event: "authors_updated";
   authors?: AuthorState[];
-}
-
-model BranchChangedMessage {
-  event: "branch_changed";
-  session?: Session;
 }
 
 model PRActionResultMessage {
@@ -6887,7 +6877,6 @@ alias DaemonEvent =
   | PRsUpdatedMessage
   | ReposUpdatedMessage
   | AuthorsUpdatedMessage
-  | BranchChangedMessage
   | PRActionResultMessage
   | RefreshPRsResultMessage
   | FetchPRDetailsResultMessage

@@ -2762,8 +2762,6 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handlePullRequestUnwatch(conn, msg.(*protocol.PullRequestUnwatchMessage))
 	case protocol.CmdQuery:
 		d.handleQuery(conn, msg.(*protocol.QueryMessage))
-	case protocol.CmdHeartbeat:
-		d.handleHeartbeat(conn, msg.(*protocol.HeartbeatMessage))
 	case protocol.CmdQueryPRs:
 		d.handleQueryPRs(conn, msg.(*protocol.QueryPRsMessage))
 	case protocol.CmdMutePR:
@@ -3301,11 +3299,6 @@ func (d *Daemon) handleQuery(conn net.Conn, msg *protocol.QueryMessage) {
 		resp.CallerSessionID = protocol.Ptr(d.sessionInTerminal(*msg.CallerID))
 	}
 	json.NewEncoder(conn).Encode(resp)
-}
-
-func (d *Daemon) handleHeartbeat(conn net.Conn, msg *protocol.HeartbeatMessage) {
-	d.store.Touch(msg.ID)
-	d.sendOK(conn)
 }
 
 func (d *Daemon) handleQueryPRs(conn net.Conn, msg *protocol.QueryPRsMessage) {

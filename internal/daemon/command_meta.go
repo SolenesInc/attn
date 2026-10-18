@@ -82,7 +82,6 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdStop:                          commandMetadata(false, true),
 	protocol.CmdFilesEdited:                   commandMetadata(false, true),
 	protocol.CmdQuery:                         commandMetadata(false, true),
-	protocol.CmdHeartbeat:                     commandMetadata(false, true),
 	protocol.CmdSetSessionPriority:            commandMetadata(false, true),
 	protocol.CmdSettleTurn:                    commandMetadata(false, true),
 	protocol.CmdSetSessionContextWindowCap:    commandMetadata(false, true),
