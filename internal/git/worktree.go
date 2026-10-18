@@ -62,13 +62,6 @@ func (c *Client) PruneWorktrees(ctx context.Context, repoDir string) error {
 	return c.NoOutput(ctx, OpWorktree, repoDir, "worktree", "prune")
 }
 
-func (c *Client) CreateWorktree(ctx context.Context, repoDir, branch, path string) error {
-	if out, err := c.Combined(ctx, OpWorktree, repoDir, "worktree", "add", "-b", branch, CanonicalizePath(path)); err != nil {
-		return fmt.Errorf("git worktree add failed: %s", out)
-	}
-	return nil
-}
-
 func (c *Client) CreateWorktreeFromPoint(ctx context.Context, repoDir, branch, path, startingFrom string) error {
 	args := []string{"worktree", "add", "-b", branch, CanonicalizePath(path)}
 	if startingFrom != "" {

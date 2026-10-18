@@ -266,7 +266,7 @@ export const RepoOptions: React.FC<RepoOptionsProps> = ({
     }
     const startFrom = startingBranch === 'current'
       ? selectedDestination?.branch || repoInfo.currentBranch
-      : `origin/${repoInfo.defaultBranch}`;
+      : repoInfo.defaultBranch;
     setCreatingWorktree(true);
     void attemptCreateWorktree(branchName, startFrom, 0, new Set(), branchName === generatedName)
       .catch((err) => {
@@ -594,7 +594,7 @@ export const RepoOptions: React.FC<RepoOptionsProps> = ({
                   checked={startingBranch === 'default'}
                   onChange={() => setStartingBranch('default')}
                 />
-                Start from origin/{repoInfo.defaultBranch}
+                Start from {repoInfo.defaultBranch}
               </label>
               <label className={startingBranch === 'current' ? 'selected' : ''}>
                 <input

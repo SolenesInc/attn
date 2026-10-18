@@ -18,6 +18,7 @@ const REPO = `${HOME}/projects/shop`;
 const TREE = `${REPO}--feature`;
 const INFO = repoInfo(REPO, [{ path: TREE, branch: 'feature' }], {
   current_branch: 'topic',
+  default_branch: 'origin/main',
 });
 const settings = {
   new_session_launcher_enabled: 'true',
@@ -25,11 +26,11 @@ const settings = {
   projects_directory: `${HOME}/projects`,
 };
 
-async function open(memory = 'main_repo') {
+async function open(memory = 'main_repo', defaultBranch = INFO.default_branch) {
   const view = await openPicker(
     {
       recent: [REPO],
-      repos: [INFO],
+      repos: [{ ...INFO, default_branch: defaultBranch }],
       directories: { [`${HOME}/projects`]: ['shop', 'never-opened'] },
     },
     { settings: { ...settings, [destinationMemory(REPO)]: memory } },
@@ -122,12 +123,15 @@ describe('one-screen launcher', () => {
   });
 
   it.each([
-    ['default', 'origin/main'],
-    ['current', 'topic'],
-  ])('creates a named worktree from %s', async (from, ref) => {
-    const { daemon } = await open();
+    ['default', 'origin/main', 'origin/main'],
+    ['default', 'main', 'main'],
+    ['default', 'develop', 'develop'],
+    ['current', 'origin/main', 'topic'],
+  ])('creates a named worktree from %s with default %s', async (from, defaultBranch, ref) => {
+    const { daemon } = await open('main_repo', defaultBranch);
     await where(daemon);
     await typePath(daemon, 'fix-login');
+    expect(screen.getByRole('option', { selected: true })).toHaveTextContent(`from ${defaultBranch}`);
     if (from === 'current') await press(daemon, 'ArrowDown');
     await press(daemon, 'Enter');
     expect(
@@ -237,7 +241,7 @@ describe('one-screen launcher', () => {
     await press(daemon, 'Enter');
     expect(pathInput()).toHaveValue('duplicate');
     expect(screen.getByRole('alert')).toHaveTextContent('already exists');
-    expect(screen.getByRole('option', { selected: true })).toHaveTextContent('from main');
+    expect(screen.getByRole('option', { selected: true })).toHaveTextContent('from origin/main');
     expect(launchedAt(daemon)).toEqual([]);
     expect(memoryWrites(daemon)).toEqual([]);
   });

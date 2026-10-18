@@ -104,20 +104,7 @@ func (d *Daemon) doCreateWorktreeProtected(protection foregroundCleanupProtectio
 					}
 				}
 			}
-			if startingFrom != "" {
-				exists, existsErr := client.RefExists(ctx, mainRepo, startingFrom)
-				if existsErr != nil {
-					return existsErr
-				}
-				if !exists {
-					d.logf("Worktree start ref %q not resolvable in %s; falling back to current HEAD", startingFrom, mainRepo)
-					startingFrom = ""
-				}
-			}
-			if startingFrom != "" {
-				return client.CreateWorktreeFromPoint(ctx, mainRepo, msg.Branch, path, startingFrom)
-			}
-			return client.CreateWorktree(ctx, mainRepo, msg.Branch, path)
+			return client.CreateWorktreeFromPoint(ctx, mainRepo, msg.Branch, path, startingFrom)
 		})
 		if mutationErr != nil {
 			return "", mutationErr
