@@ -263,17 +263,11 @@ func TestACrewLaunchDoesNotTrustAnUnrelatedWorkingDirectory(t *testing.T) {
 				t.Fatal(err)
 			}
 			cli := w.Client()
-			created, err := cli.CrewCreate(protocol.CrewCreateMessage{Name: "Keel", Agent: protocol.Ptr(string(harness)), Cwd: protocol.Ptr(cwd)})
+			_, err := cli.CrewCreate(protocol.CrewCreateMessage{Name: "Keel", Agent: protocol.Ptr(string(harness)), Cwd: protocol.Ptr(cwd)})
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := os.RemoveAll(created.Member.HomeDir); err != nil {
-				t.Fatal(err)
-			}
 			day := w.Launched(string(wakeCrew(t, cli, "Keel", "").SessionID))
-			if _, err := os.Stat(created.Member.HomeDir); err != nil {
-				t.Fatalf("wake did not repair the missing home: %v", err)
-			}
 			if strings.Contains(strings.Join(day.Argv, " "), `.trust_level="trusted"`) {
 				t.Fatalf("unrelated cwd trusted in argv: %q", day.Argv)
 			}

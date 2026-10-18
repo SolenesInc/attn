@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"os"
 	"sort"
 	"strings"
 
@@ -155,17 +154,7 @@ func (d *Daemon) ensureChief(profile string, u *store.ChiefUpgrade) error {
 			d.logf("Chief home unavailable: %v", err)
 			return nil
 		}
-		if member.HomeDir == "" {
-			return nil
-		}
-		if err := os.MkdirAll(member.HomeDir, 0o755); err != nil {
-			return err
-		}
-		if _, err := os.Stat(member.CharterPath); os.IsNotExist(err) {
-			return writeCrewCharter(member.CharterPath, prompts.RenderText("chief", "charter", nil))
-		} else {
-			return err
-		}
+		return nil
 	}
 	identity, err := d.store.CrewIdentity(key)
 	if err != nil {

@@ -123,9 +123,6 @@ func (d *Daemon) crewLaunchDir(member crew.Member) (string, error) {
 	if err := d.validateCrewAwarenessDirs(member); err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(member.HomeDir, 0o755); err != nil {
-		return "", err
-	}
 	if d.isChief(member.Key) {
 		root, err := d.notebookRoot(d.crewProfileID(member.Key.String()))
 		if err != nil {
