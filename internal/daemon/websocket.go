@@ -580,6 +580,7 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		SeedsTotal:             protocol.Ptr(d.countSeedsForBroadcast(client.selectedProfile())),
 		Crew:                   state.Crew,
 		Asks:                   asksSnapshot(client.selectedProfile(), d.openAsks()).Asks,
+		SharedCodex:            d.codexShared().wireState(client.selectedProfile()),
 	}
 	d.fillInitialMigrationPhase(event)
 	d.sendInitialArrangement(client, event)

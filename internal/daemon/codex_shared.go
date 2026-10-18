@@ -45,11 +45,13 @@ exec "$@"
 `
 
 type codexShared struct {
-	d       *Daemon
-	mu      sync.Mutex
-	servers map[string]*codexServer
-	views   map[harness.TerminalID]*codexView
-	seq     uint64
+	d         *Daemon
+	mu        sync.Mutex
+	servers   map[string]*codexServer
+	views     map[harness.TerminalID]*codexView
+	seq       uint64
+	installed string
+	latest    string
 }
 
 type codexServer struct {
@@ -63,6 +65,7 @@ type codexServer struct {
 	parents  map[string]string
 	attempt  *codexAttempt
 	events   codexEvents
+	running  string
 }
 
 type codexAttempt struct {
@@ -78,6 +81,7 @@ type codexView struct {
 	thread   string
 	shownSeq uint64
 	trusted  string
+	version  string
 }
 
 func (d *Daemon) codexShared() *codexShared {
@@ -175,13 +179,16 @@ func (r *codexShared) prepareLaunch(opts *ptybackend.SpawnOptions, profile strin
 	if err != nil {
 		return err
 	}
-	if _, err := r.ensureServer(r.d.life.Context(), profile, configuredLaunchExecutable(agentdriver.MustGet(string(protocol.SessionAgentCodex)), opts)); err != nil {
+	executable := r.binary(configuredLaunchExecutable(agentdriver.MustGet(string(protocol.SessionAgentCodex)), opts))
+	if _, err := r.ensureServer(r.d.life.Context(), profile, executable); err != nil {
 		return err
 	}
 	if !opts.UnattendedLaunch.IsZero() {
 		r.trustIn(opts.ID, opts.CWD)
 	}
 	opts.CodexRemote = remote
+	opts.LaunchExecutable = executable
+	r.refreshInstalledSoon()
 	return nil
 }
 
@@ -196,13 +203,6 @@ func (r *codexShared) trustIn(t harness.TerminalID, folder string) {
 func (r *codexShared) launchFailed(t harness.TerminalID, profile string) {
 	r.closeView(t)
 	r.idleSoon(profile)
-}
-
-func (r *codexShared) codexExecutable(configured string) string {
-	if strings.TrimSpace(configured) == "" {
-		configured = r.d.daemonSetting(SettingCodexExecutable)
-	}
-	return agentdriver.MustGet(string(protocol.SessionAgentCodex)).ResolveExecutable(configured)
 }
 
 func (r *codexShared) ensureServer(ctx context.Context, profile, executable string) (*codexServer, error) {
@@ -248,7 +248,7 @@ func (r *codexShared) startServer(ctx context.Context, s *codexServer, executabl
 	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &files); err != nil {
 		return fmt.Errorf("read the open-file limit for the shared Codex app-server: %w", err)
 	}
-	command := []string{"/bin/sh", "-c", codexServerLaunchScript, "attn-codex-server", strconv.FormatUint(files.Cur, 10), r.codexExecutable(executable), "app-server"}
+	command := []string{"/bin/sh", "-c", codexServerLaunchScript, "attn-codex-server", strconv.FormatUint(files.Cur, 10), r.binary(executable), "app-server"}
 	for _, override := range hooks.GenerateCodexServerConfigOverrides(r.d.wrapperPath(), r.d.socketPath, s.profile) {
 		command = append(command, "-c", override)
 	}
@@ -257,7 +257,7 @@ func (r *codexShared) startServer(ctx context.Context, s *codexServer, executabl
 		ID: s.terminal, Agent: codexServerAgent, Label: "Codex app-server", CWD: r.dir(), Cols: 80, Rows: 24,
 		AgentArgv:     command,
 		AgentEnv:      []string{"ATTN_TERMINAL_ID=", "ATTN_SESSION_ID=", "ATTN_AGENT="},
-		LoginShellEnv: r.d.cachedLoginShellEnv(),
+		LoginShellEnv: r.d.loginShellEnvironment(),
 		DaemonEnv:     r.d.spawnRoutingEnv(),
 	}
 	if err := r.d.ptyBackend.Spawn(ctx, withLifecycleID(opts)); err != nil {
@@ -296,7 +296,7 @@ func (r *codexShared) connect(ctx context.Context, s *codexServer) error {
 		s.attempt = a
 		s.mu.Unlock()
 		attempt, cancel := context.WithTimeout(ctx, codexServerCallLimit)
-		client, err := codexshared.Connect(attempt, s.socket, codexClientName, func(m codexshared.Message) { r.observeServer(s, a, m) })
+		client, err := codexshared.Connect(attempt, s.socket, codexshared.ClientInfo{Name: codexClientName, Version: "1"}, func(m codexshared.Message) { r.observeServer(s, a, m) })
 		var loaded json.RawMessage
 		if err == nil {
 			loaded, err = client.Call(attempt, "thread/loaded/list", map[string]any{})
@@ -312,6 +312,7 @@ func (r *codexShared) connect(ctx context.Context, s *codexServer) error {
 			_ = json.Unmarshal(loaded, &list)
 			s.mu.Lock()
 			s.control = client
+			s.running = client.ServerVersion()
 			gone := s.hold(list.Data)
 			for _, m := range a.early {
 				gone = append(gone, s.trackLocked(m)...)
@@ -319,6 +320,8 @@ func (r *codexShared) connect(ctx context.Context, s *codexServer) error {
 			a.connected, a.early = true, nil
 			s.mu.Unlock()
 			r.lose(s, gone)
+			r.versionsChanged(s.profile)
+			r.refreshInstalledSoon()
 			if !r.d.life.Go("codexServerControl", func() { r.watchControl(s, client) }) {
 				client.Close()
 				return errDaemonStopping
@@ -512,6 +515,7 @@ func (r *codexShared) closeView(t harness.TerminalID) {
 	if v != nil {
 		_ = v.server.Close()
 		_ = os.Remove(v.socket)
+		r.versionsChanged(v.profile)
 	}
 	if err := r.d.store.DeleteTerminalView(string(t)); err != nil {
 		r.d.logf("shared Codex: %v", err)
@@ -570,6 +574,9 @@ func (r *codexShared) serveView(v *codexView, w http.ResponseWriter, req *http.R
 func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codexshared.Message), error) {
 	method := m.Method
 	switch method {
+	case "initialize":
+		r.learnTUI(v, m.Params)
+		return nil, nil
 	case "config/read":
 		return r.answerTrust(v), nil
 	case "thread/start", "thread/fork", "thread/resume":
@@ -750,6 +757,7 @@ func (r *codexShared) terminalShowing(profile, conversation string) (harness.Ter
 }
 
 func (r *codexShared) relaunch(opts *ptybackend.SpawnOptions) {
+	opts.LaunchExecutable = r.binary(configuredLaunchExecutable(agentdriver.MustGet(string(protocol.SessionAgentCodex)), opts))
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if v := r.views[opts.ID]; v != nil {
@@ -782,6 +790,7 @@ func (r *codexShared) terminalExited(t harness.TerminalID) {
 		gone := exited.hold(nil)
 		client := exited.control
 		exited.control = nil
+		exited.running = ""
 		exited.mu.Unlock()
 		if client != nil {
 			client.Close()
@@ -789,6 +798,7 @@ func (r *codexShared) terminalExited(t harness.TerminalID) {
 		r.d.logf("shared Codex: the app-server of profile %s exited; the next connection starts it again", exited.profile)
 		r.lose(exited, gone)
 		r.serverGone(exited.profile)
+		r.versionsChanged(exited.profile)
 	}
 	if err := r.d.removePTYSession(t); err != nil {
 		r.d.logf("pty backend remove on exit failed for %s: %v", t, err)

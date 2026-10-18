@@ -423,6 +423,14 @@ func (d *Daemon) warmLoginShellEnvCache() {
 	d.logf("login shell env pre-warmed: shell=%s vars=%d", shell, len(env))
 }
 
+func (d *Daemon) loginShellEnvironment() []string {
+	if env := d.cachedLoginShellEnv(); len(env) > 0 {
+		return env
+	}
+	d.warmLoginShellEnvCache()
+	return d.cachedLoginShellEnv()
+}
+
 func (d *Daemon) cachedLoginShellEnv() []string {
 	d.loginShellEnvMu.RLock()
 	env := d.loginShellEnv

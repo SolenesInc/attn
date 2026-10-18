@@ -54,6 +54,12 @@ var codexExecFlags = flagSpec{
 }
 
 func runCodex(cfg config) int {
+	if len(os.Args) > 1 && os.Args[1] == "--version" {
+		return codexPrintVersion()
+	}
+	if len(os.Args) > 2 && os.Args[1] == "doctor" && os.Args[2] == "--json" {
+		return codexDoctor(cfg)
+	}
 	if len(os.Args) > 1 && os.Args[1] == "app-server" {
 		if codexServerFlags.parse(os.Args[2:]).value("--listen") != "" {
 			return runCodexAppServer(cfg)
@@ -69,7 +75,7 @@ func runCodex(cfg config) int {
 			fmt.Fprintln(os.Stderr, "Error: "+codexRemoteResumeRefusal)
 			return 1
 		}
-		return serve(cfg, codexComposer, &codexRemote{cfg: cfg})
+		return serve(cfg, codexComposer, &codexRemote{cfg: cfg, version: installedCodexVersion()})
 	}
 	if len(os.Args) > 1 && os.Args[1] == "exec" {
 		return codexExec(codexExecFlags.parse(os.Args[2:])).serve(cfg)

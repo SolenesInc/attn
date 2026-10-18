@@ -100,6 +100,7 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) error {
 		d.registerSessionPullRequestRefreshCron(runner)
 		d.registerWorktreeSweepCron(runner)
 		d.registerConversationKeepCron(runner)
+		d.registerCodexUpdateCheckCron(runner)
 		if err := runner.RegisterCron(
 			automationScheduleKind,
 			automationScheduleInterval(),
@@ -124,6 +125,7 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) error {
 	if _, err := runner.Enqueue(conversationKeepKind+"_tick", jobs.EnqueueOptions{UniqueKey: jobs.CronKey, RunNow: true}); err != nil {
 		d.logf("conversation keep: enqueue startup: %v", err)
 	}
+	d.queueCodexUpdateCheck()
 	d.reconcileSnoozeWakeJobs()
 	d.resumeGardenReviews()
 	d.settleHarvestConditions()

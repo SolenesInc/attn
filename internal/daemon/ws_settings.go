@@ -85,6 +85,7 @@ func (d *Daemon) setSetting(msg *protocol.SetSettingMessage) (*protocol.SettingE
 		d.clearAllSessionActivity()
 	}
 	d.publishSettingsFact(FactSettingChanged, msg.Key)
+	d.codexShared().settingChanged(msg.Key)
 	entry := settingEntry(spec, msg.Key, d.daemonSetting(daemonSettingKey(msg.Key)))
 	return &entry, nil
 }
