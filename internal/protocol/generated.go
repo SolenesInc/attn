@@ -1925,6 +1925,119 @@ type BusStatusResultMessage struct {
 	SurgeRatePerHour float64 `json:"surge_rate_per_hour"`
 }
 
+type CalloutAnchor string
+
+const CalloutAnchorAgent CalloutAnchor = "agent"
+const CalloutAnchorCommands CalloutAnchor = "commands"
+const CalloutAnchorCrew CalloutAnchor = "crew"
+const CalloutAnchorDesktop CalloutAnchor = "desktop"
+const CalloutAnchorDesktops CalloutAnchor = "desktops"
+const CalloutAnchorGarden CalloutAnchor = "garden"
+const CalloutAnchorHome CalloutAnchor = "home"
+
+type CalloutAnchorInfo struct {
+	// Description corresponds to the JSON schema field "description".
+	Description string `json:"description"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// OnScreen corresponds to the JSON schema field "on_screen".
+	OnScreen *bool `json:"on_screen,omitempty,omitzero"`
+}
+
+const CalloutAnchorQueue CalloutAnchor = "queue"
+const CalloutAnchorSettingsButton CalloutAnchor = "settings-button"
+const CalloutAnchorSidebar CalloutAnchor = "sidebar"
+
+type CalloutAnchorsMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+}
+
+type CalloutAnchorsRequestMessage struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type CalloutAnchorsResult struct {
+	// Anchors corresponds to the JSON schema field "anchors".
+	Anchors []CalloutAnchorInfo `json:"anchors"`
+
+	// AppShowingProfile corresponds to the JSON schema field "app_showing_profile".
+	AppShowingProfile bool `json:"app_showing_profile"`
+}
+
+type CalloutResultMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Missing corresponds to the JSON schema field "missing".
+	Missing []CalloutAnchor `json:"missing,omitempty,omitzero"`
+
+	// OnScreen corresponds to the JSON schema field "on_screen".
+	OnScreen []CalloutAnchor `json:"on_screen"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type CalloutShowMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+
+	// Steps corresponds to the JSON schema field "steps".
+	Steps []CalloutShowStep `json:"steps"`
+}
+
+type CalloutShowRequestMessage struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// From corresponds to the JSON schema field "from".
+	From string `json:"from"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Steps corresponds to the JSON schema field "steps".
+	Steps []CalloutStep `json:"steps"`
+}
+
+type CalloutShowStep struct {
+	// Anchor corresponds to the JSON schema field "anchor".
+	Anchor string `json:"anchor"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text string `json:"text"`
+}
+
+type CalloutStep struct {
+	// Anchor corresponds to the JSON schema field "anchor".
+	Anchor CalloutAnchor `json:"anchor"`
+
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID *string `json:"desktop_id,omitempty,omitzero"`
+
+	// Label corresponds to the JSON schema field "label".
+	Label *string `json:"label,omitempty,omitzero"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text string `json:"text"`
+}
+
 type CancelCountdownMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -7454,6 +7567,10 @@ type Response struct {
 
 	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
 	CallerSessionID *SessionID `json:"caller_session_id,omitempty,omitzero"`
+
+	// CalloutAnchorsResult corresponds to the JSON schema field
+	// "callout_anchors_result".
+	CalloutAnchorsResult *CalloutAnchorsResult `json:"callout_anchors_result,omitempty,omitzero"`
 
 	// CrewCharterGetResult corresponds to the JSON schema field
 	// "crew_charter_get_result".
