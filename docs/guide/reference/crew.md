@@ -17,4 +17,6 @@ To move one into the current Notebook, put the member to sleep and run `attn cre
 The home and Notebook must be on the same volume; a move across volumes is
 refused and leaves the original home intact.
 Changing `notebook.root` later repoints the Notebook and the Chief's next
-launch; recorded crew homes stay at their absolute paths.
+wake or handoff; recorded crew homes stay at their absolute paths.
+Clearing, reloading or recovering an existing conversation keeps its working
+folder.

@@ -210,9 +210,14 @@ func (d *Daemon) crewNap(member crew.Member, oldSessionID protocol.SessionID, te
 		}
 	}
 	spawnMsg, policy := d.crewNapSpawn(member, session)
-	launchDir, err := d.resolveCrewWorkDir(spawnMsg.Cwd)
+	var launchDir string
+	if d.isChief(member.Key) {
+		launchDir, err = d.crewLaunchDir(member)
+	} else {
+		launchDir, err = d.resolveCrewWorkDir(spawnMsg.Cwd)
+	}
 	if err != nil {
-		return "", fmt.Errorf("wake %s's successor in %s: %w", d.storedMemberName(member.Key.String()), spawnMsg.Cwd, err)
+		return "", fmt.Errorf("resolve %s's successor working directory: %w", d.storedMemberName(member.Key.String()), err)
 	}
 	spawnMsg.Cwd = launchDir
 	newSessionID = spawnMsg.ID

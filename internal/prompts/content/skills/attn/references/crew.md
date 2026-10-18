@@ -20,6 +20,7 @@ Notebook, put the member to sleep, then run `attn crew move-home <member>`.
 The home and Notebook must be on the same volume; a move across volumes is
 refused and leaves the original home intact.
 
-Changing `notebook.root` repoints the Notebook and the Chief's next launch.
-Existing homes keep their absolute paths. Help the user move those files
-when they ask.
+Changing `notebook.root` repoints the Notebook and the Chief's next wake or
+handoff. Clearing, reloading or recovering an existing conversation keeps
+its working folder. Existing homes keep their absolute paths. Help the user
+move those files when they ask.

@@ -392,7 +392,7 @@ Set up your chief in the sidebar. Choose Claude Code or Codex, then a model
 and effort, check the prefilled Notebook folder, and press **Wake Chief**. The
 deepest model at low effort is preselected. The chief works from the current
 Notebook root; `attn settings set notebook.root ~/chief-of-staff` changes its
-next launch folder. Later, use the chief's **••• →
+next wake or handoff folder. Later, use the chief's **••• →
 Harness and model…** menu or **Manage crew → Launch settings**. Give it a mission:
 
 > We need to ship the new import flow this week. Help me understand what's
