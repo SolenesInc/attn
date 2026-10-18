@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1600, height=1144" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #0b0b0c;
+      }
+      #root {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        font-family: system-ui, sans-serif;
+        color: #ececee;
+      }
+      #stage {
+        position: absolute;
+        left: 0;
+        top: 0;
+        overflow: hidden;
+        background: #111113;
+      }
+      #camera {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        transform-origin: 0 0;
+      }
+      #footage,
+      #seam {
+        position: absolute;
+        left: 0;
+      }
+      #seam {
+        opacity: 0;
+      }
+      #overlays {
+        position: absolute;
+        left: 0;
+        top: 0;
+      }
+      .cursor {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 30px;
+        height: 30px;
+        opacity: 0;
+      }
+      .keys {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 36px;
+        display: flex;
+        justify-content: center;
+        opacity: 0;
+      }
+      .keys-pill {
+        display: flex;
+        gap: 10px;
+        padding: 14px 18px;
+        border-radius: 18px;
+        background: rgba(12, 12, 14, 0.86);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+      }
+      .key {
+        min-width: 62px;
+        height: 62px;
+        padding: 0 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
+        background: #26262a;
+        border: 1px solid #3a3a40;
+        border-bottom-width: 4px;
+        font-family: ui-monospace, monospace;
+        font-size: 30px;
+        font-weight: 600;
+        color: #f4f4f6;
+      }
+      #bar {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        border-top: 1px solid #222226;
+      }
+      .caption {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 48px;
+        font-size: 34px;
+        font-weight: 500;
+        letter-spacing: -0.01em;
+        opacity: 0;
+      }
+      .caption kbd {
+        font-family: ui-monospace, monospace;
+        font-size: 0.85em;
+        color: #f0763d;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="guide-clip" data-start="0" data-width="1600" data-height="1144" data-duration="12">
+      <div id="stage">
+        <div id="camera" data-layout-allow-overflow>
+          <video id="footage" src="assets/footage.mp4" muted playsinline data-start="0" data-duration="12" data-track-index="0"></video>
+        </div>
+        <img id="seam" src="assets/first.png" alt="" />
+      </div>
+      <div id="overlays"></div>
+      <div id="bar"></div>
+    </div>
+    <script id="edit" type="application/json">{"canvas":{"width":1600,"height":1144,"stage":1024,"scale":1.3333},"window":{"width":1200,"height":800,"titlebar":32},"duration":12,"events":[]}</script>
+    <script>
+      const ZOOM = { max: 1.9, padding: 1.35, seconds: 0.9 };
+      const KEYS_HOLD = 1.5;
+      const SEAM = 0.6;
+      const edit = JSON.parse(document.getElementById("edit").textContent);
+      const { canvas, window: frame } = edit;
+      const k = canvas.scale;
+      const stage = { width: canvas.width, height: canvas.stage };
+
+      const place = (id, style) => Object.assign(document.getElementById(id).style, style);
+      place("stage", { width: `${stage.width}px`, height: `${stage.height}px` });
+      place("overlays", { width: `${stage.width}px`, height: `${stage.height}px` });
+      place("bar", { top: `${stage.height}px` });
+      const footageBox = { top: `${-frame.titlebar * k}px`, width: `${frame.width * k}px`, height: `${frame.height * k}px` };
+      place("footage", footageBox);
+      place("seam", footageBox);
+
+      const at = (action) => edit.events.filter((event) => event.action === action);
+      const toStage = (point) => ({ x: point.x * k, y: (point.y - frame.titlebar) * k });
+
+      const make = (parent, tag, attrs = {}, html = "") => {
+        const node = document.createElement(tag);
+        Object.assign(node, attrs);
+        node.innerHTML = html;
+        parent.appendChild(node);
+        return node;
+      };
+      const escape = (text) => text.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+      const captionHtml = (text) => `<span>${escape(text).replace(/`([^`]+)`/g, "<kbd>$1</kbd>")}</span>`;
+
+      const tl = gsap.timeline({ paused: true });
+      gsap.set("#camera", { scale: 1, x: 0, y: 0 });
+
+      const pose = (rect) => {
+        if (!rect) return { scale: 1, x: 0, y: 0 };
+        const origin = toStage(rect);
+        const box = { x: origin.x, y: origin.y, width: rect.width * k, height: rect.height * k };
+        const scale = Math.max(1, Math.min(ZOOM.max, stage.width / (box.width * ZOOM.padding), stage.height / (box.height * ZOOM.padding)));
+        const clamp = (value, low) => Math.min(0, Math.max(low, value));
+        return {
+          scale,
+          x: clamp(stage.width / 2 - (box.x + box.width / 2) * scale, stage.width * (1 - scale)),
+          y: clamp(stage.height / 2 - (box.y + box.height / 2) * scale, stage.height * (1 - scale)),
+        };
+      };
+      for (const event of at("focus")) {
+        tl.to("#camera", { ...pose(event.rect), duration: ZOOM.seconds, ease: "power2.inOut" }, event.t);
+      }
+      tl.to("#camera", { scale: 1, x: 0, y: 0, duration: ZOOM.seconds, ease: "power2.inOut" }, edit.duration - SEAM - ZOOM.seconds);
+
+      const overlays = document.getElementById("overlays");
+      const presses = at("press");
+      presses.forEach((event, index) => {
+        const keys = make(overlays, "div", { className: "keys", id: `keys-${index}` });
+        const pill = make(keys, "div", { className: "keys-pill" });
+        for (const glyph of event.keys) make(pill, "div", { className: "key" }, escape(glyph));
+        const start = Math.max(0, event.t - 0.05);
+        const next = presses[index + 1];
+        tl.fromTo(keys, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.18, ease: "power2.out" }, start);
+        if (next && next.t - 0.05 < event.t + KEYS_HOLD) tl.set(keys, { opacity: 0 }, Math.max(start + 0.18, next.t - 0.05));
+        else tl.to(keys, { opacity: 0, duration: 0.3, ease: "power1.in" }, event.t + KEYS_HOLD);
+      });
+
+      const bar = document.getElementById("bar");
+      const captions = at("caption");
+      captions.forEach((event, index) => {
+        const caption = make(bar, "div", { className: "caption", id: `caption-${index}` }, captionHtml(event.text));
+        tl.fromTo(caption, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.35, ease: "power2.out" }, Math.max(0, event.t));
+        const next = captions[index + 1];
+        if (next) tl.to(caption, { opacity: 0, y: -10, duration: 0.25, ease: "power1.in" }, next.t - 0.2);
+        else tl.to(caption, { opacity: 0, duration: SEAM, ease: "power1.inOut" }, edit.duration - SEAM);
+      });
+
+      const camera = document.getElementById("camera");
+      const drops = at("drop");
+      at("drag").forEach((event, index) => {
+        const drop = drops[index];
+        const from = toStage(event.from);
+        const to = toStage(drop.at);
+        const cursor = make(
+          camera,
+          "div",
+          { className: "cursor", id: `cursor-${index}` },
+          '<svg viewBox="0 0 24 24" width="30" height="30"><path d="M4 2 L4 19 L8.6 14.8 L11.6 21.6 L14.6 20.3 L11.7 13.6 L18 13.4 Z" fill="#ffffff" stroke="#111113" stroke-width="1.4" stroke-linejoin="round"/></svg>',
+        );
+        tl.set(cursor, { x: from.x - 4, y: from.y - 2 }, 0);
+        tl.to(cursor, { opacity: 1, duration: 0.25 }, event.t - 0.6);
+        tl.to(cursor, { scale: 0.88, duration: 0.1 }, event.t - 0.1);
+        tl.to(cursor, { x: to.x - 4, y: to.y - 2, duration: drop.t - event.t, ease: "none" }, event.t);
+        tl.to(cursor, { scale: 1, duration: 0.1 }, drop.t);
+        tl.to(cursor, { opacity: 0, duration: 0.3 }, drop.t + 0.7);
+      });
+
+      tl.to("#seam", { opacity: 1, duration: SEAM, ease: "power1.inOut" }, edit.duration - SEAM);
+      tl.set({}, {}, edit.duration);
+
+      window.__timelines["guide-clip"] = tl;
+    </script>
+  </body>
+</html>
