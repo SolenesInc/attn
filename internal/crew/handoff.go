@@ -15,12 +15,6 @@ const MaxHandoffBytes = 64000
 
 const MaxHandoffFileBytes = MaxHandoffBytes + 1
 
-func HandoffFileName(member string, at time.Time) string {
-	return at.UTC().Format(HandoffStampLayout) + "-" + member + ".md"
-}
-
-var ErrHandoffExists = errors.New("a letter is already filed under that name")
-
 func FileHandoff(homeDir, member, note string, at time.Time) (string, error) {
 	if err := ValidateHandoffNote(note); err != nil {
 		return "", err
@@ -29,15 +23,13 @@ func FileHandoff(homeDir, member, note string, at time.Time) (string, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("making %s's handoffs directory at %s: %w", DisplayName(member), dir, err)
 	}
-	path := filepath.Join(dir, HandoffFileName(member, at))
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	pattern := at.UTC().Format(HandoffStampLayout) + "-" + member + "_" + at.UTC().Format("05.000000000") + "-*.md"
+	file, err := os.CreateTemp(dir, pattern)
 	if err != nil {
-		if os.IsExist(err) {
-			return "", fmt.Errorf("%w: %s — a filed letter is never overwritten, so file the correction as its own letter a minute from now", ErrHandoffExists, path)
-		}
-		return "", fmt.Errorf("filing %s's letter at %s: %w", DisplayName(member), path, err)
+		return "", fmt.Errorf("filing %s's letter in %s: %w", DisplayName(member), dir, err)
 	}
 	defer file.Close()
+	path := file.Name()
 	if _, err := file.WriteString(ensureTrailingNewline(note)); err != nil {
 		return "", fmt.Errorf("writing %s's letter at %s: %w", DisplayName(member), path, err)
 	}

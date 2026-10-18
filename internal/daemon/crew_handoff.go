@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -150,9 +149,6 @@ func (d *Daemon) crewLetterForHandoff(member crew.Member, sessionID protocol.Ses
 	}
 	path, err := crew.FileHandoff(member.HomeDir(d.dataRoot), member.ID, note, time.Now())
 	if err != nil {
-		if errors.Is(err, crew.ErrHandoffExists) && hasFiled {
-			return "", fmt.Errorf("%s's letter for this minute is already filed at %s — if the turnover is what failed, `attn handoff --retry` runs it against that letter; if this is a correction, file it as its own letter a minute from now", crew.DisplayName(member.ID), filed)
-		}
 		return "", err
 	}
 	d.logf("crew: %s filed a letter at %s (%d bytes)", crew.DisplayName(member.ID), path, len(note))
