@@ -20,7 +20,7 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 		if mask&4 != 0 {
 			in.Window = " Event\n{{literal}} "
 		}
-		p := Baseline().Render(in)
+		p := Render(in)
 		out[strconv.Itoa(mask)+"/system"] = p.System
 		out[strconv.Itoa(mask)+"/user"] = p.User
 	}
