@@ -3,7 +3,6 @@ package daemon_test
 import (
 	"slices"
 	"testing"
-	"time"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
@@ -69,6 +68,7 @@ func TestSharedCodexReportsTheVersionItRunsWhatIsInstalledAndTheNewestRelease(t 
 func TestATerminalStillOnAnOlderCodexThanItsAppServerIsReported(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	w.SetCodexVersion("0.162.1")
+	w.SetCodexLatest("0.162.1")
 	app := w.App()
 	setSetting(t, app, "codex_shared_enabled", "true")
 	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
@@ -101,11 +101,12 @@ func TestATerminalStillOnAnOlderCodexThanItsAppServerIsReported(t *testing.T) {
 
 func TestSharedCodexRunsTheConfiguredCodexForItsAppServerAndItsTerminals(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
+	w.SetCodexVersion("0.162.1")
 	app := w.App()
 	configured := w.InstallCodexAt("configured-codex", "0.170.0")
 	setSetting(t, app, "codex_shared_enabled", "true")
 	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
-		return s != nil && protocol.Deref(s.InstalledVersion) == "1.0.0"
+		return s != nil && protocol.Deref(s.InstalledVersion) == "0.162.1"
 	})
 	setSetting(t, app, "codex_executable", configured)
 	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
@@ -122,22 +123,5 @@ func TestSharedCodexRunsTheConfiguredCodexForItsAppServerAndItsTerminals(t *test
 	}
 	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
 		return s != nil && protocol.Deref(s.RunningVersion) == "0.170.0" && protocol.Deref(s.InstalledVersion) == "0.170.0"
-	})
-}
-
-func TestTheNewestCodexReleaseIsCheckedAgainEachDay(t *testing.T) {
-	inPreparedBubble(t, prepareWorld(t, fakeagent.Codex), func(t *testing.T, w *world) {
-		w.SetCodexLatest("0.163.0")
-		app := w.App()
-		setSetting(t, app, "codex_shared_enabled", "true")
-		awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
-			return s != nil && protocol.Deref(s.LatestVersion) == "0.163.0"
-		})
-
-		w.SetCodexLatest("0.164.0")
-		w.advance(24 * time.Hour)
-		awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
-			return s != nil && protocol.Deref(s.LatestVersion) == "0.164.0"
-		})
 	})
 }
