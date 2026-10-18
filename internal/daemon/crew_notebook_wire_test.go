@@ -401,3 +401,41 @@ func TestMissingCrewHomesAreNeverRecreated(t *testing.T) {
 		})
 	}
 }
+
+func TestMissingCrewHomesDoNotDisableOtherMembers(t *testing.T) {
+	for _, retired := range []bool{false, true} {
+		t.Run(map[bool]string{false: "active", true: "retired"}[retired], func(t *testing.T) {
+			w := newWorld(t, fakeagent.Codex)
+			cli := w.Client()
+			missing, err := cli.CrewCreate(protocol.CrewCreateMessage{Name: "Keel", Agent: protocol.Ptr("codex")})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if retired {
+				if _, err := cli.CrewRetire("Keel"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := os.Rename(missing.Member.HomeDir, missing.Member.HomeDir+"-moved"); err != nil {
+				t.Fatal(err)
+			}
+			id := configureChief(t, w, fakeagent.Codex, chiefModel(fakeagent.Codex))
+			run := w.Launched(id)
+			run.Prompted()
+			run.Reply("Ready. <!-- attn:state=idle -->")
+			roster, err := cli.CrewList(true)
+			if err != nil || len(roster.Members) != 2 {
+				t.Fatalf("missing member hid the roster: %+v %v", roster, err)
+			}
+			read := testworld.Request(w.App(), protocol.CrewCharterGetMessage{Cmd: protocol.CmdCrewCharterGet, Member: "chief", RequestID: protocol.Ptr("healthy-home")}, protocol.EventCrewCharterGetResult, func(r protocol.CrewCharterGetResultMessage) bool { return r.RequestID == "healthy-home" })
+			if !read.Success {
+				t.Fatalf("unrelated charter read: %+v", read)
+			}
+			crewHandoff(t, cli, id, "Other members still work.", false, protocol.CrewDayCloseSleep)
+			w.Launched(string(wakeCrew(t, cli, "chief", "").SessionID))
+			if _, err := os.Stat(missing.Member.HomeDir); !os.IsNotExist(err) {
+				t.Fatalf("unrelated wake recreated missing home: %v", err)
+			}
+		})
+	}
+}
