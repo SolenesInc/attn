@@ -34,6 +34,13 @@ func newWorld(t *testing.T, agents ...fakeagent.Harness) *world {
 	return w
 }
 
+func newWorldInLongestDataDir(t *testing.T, agents ...fakeagent.Harness) *world {
+	t.Helper()
+	w := &world{World: setWorldEnv(t, testworld.PrepareInLongestDataDir(t, testworld.AttnBinary(t), agents...))}
+	w.start()
+	return w
+}
+
 func inBubble(t *testing.T, script func(t *testing.T, w *world)) {
 	t.Helper()
 	inPreparedBubble(t, prepareWorld(t), script)
@@ -63,7 +70,11 @@ func prepareWorld(t *testing.T, agents ...fakeagent.Harness) *testworld.World {
 	if len(agents) > 0 {
 		wrapper = testworld.AttnBinary(t)
 	}
-	prepared := testworld.Prepare(t, wrapper, agents...)
+	return setWorldEnv(t, testworld.Prepare(t, wrapper, agents...))
+}
+
+func setWorldEnv(t *testing.T, prepared *testworld.World) *testworld.World {
+	t.Helper()
 	for _, pair := range prepared.Vars {
 		key, value, _ := strings.Cut(pair, "=")
 		t.Setenv(key, value)

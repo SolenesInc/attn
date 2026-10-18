@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"nhooyr.io/websocket"
@@ -96,7 +97,25 @@ func (r *codexShared) runsLink(t harness.TerminalID) bool {
 	return strings.HasPrefix(string(t), codexServerTerminalPrefix)
 }
 
-func (r *codexShared) dir() string { return filepath.Join(r.d.dataRoot, "cx") }
+func (r *codexShared) dir() string {
+	sum := sha256.Sum256([]byte(r.d.dataRoot))
+	return filepath.Join("/tmp", "attn-cx-"+hex.EncodeToString(sum[:8]))
+}
+
+func (r *codexShared) ensureDir() error {
+	dir := r.dir()
+	if err := os.Mkdir(dir, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
+		return err
+	}
+	info, err := os.Lstat(dir)
+	if err != nil {
+		return err
+	}
+	if owner, ok := info.Sys().(*syscall.Stat_t); !info.IsDir() || !ok || int(owner.Uid) != os.Getuid() {
+		return fmt.Errorf("the shared Codex socket directory %s is not a directory of this user", dir)
+	}
+	return os.Chmod(dir, 0o700)
+}
 
 func (r *codexShared) viewSocket(t harness.TerminalID) string {
 	sum := sha256.Sum256([]byte(t))
@@ -212,7 +231,7 @@ func (r *codexShared) startServer(ctx context.Context, s *codexServer, executabl
 	if err := r.d.ptyBackend.Remove(ctx, s.terminal); err != nil && !errors.Is(err, pty.ErrSessionNotFound) && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("clear the exited Codex app-server: %w", err)
 	}
-	if err := os.MkdirAll(r.dir(), 0o700); err != nil {
+	if err := r.ensureDir(); err != nil {
 		return err
 	}
 	if err := os.Remove(s.socket); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -427,7 +446,7 @@ func (r *codexShared) openView(t harness.TerminalID, profile string) (string, er
 	if v := r.views[t]; v != nil {
 		return "unix://" + v.socket, nil
 	}
-	if err := os.MkdirAll(r.dir(), 0o700); err != nil {
+	if err := r.ensureDir(); err != nil {
 		return "", err
 	}
 	v := &codexView{terminal: t, profile: profile, socket: r.viewSocket(t)}

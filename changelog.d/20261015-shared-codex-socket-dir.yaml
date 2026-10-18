@@ -1,0 +1,6 @@
+kind: internal
+area: codex
+change: >
+  Shared Codex keeps its sockets in a private directory under /tmp named after
+  the data dir instead of inside it, so it works however long the data dir path
+  is.
