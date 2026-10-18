@@ -47,6 +47,83 @@ func TestASharedCodexKeepsItsAppServerTerminalAndConversationAcrossADaemonRestar
 	}
 }
 
+func TestAStoppedSharedCodexSessionResumesWhenItsAppServerListensWhereTheRestartedDaemonDoesNotLook(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	s.Start()
+	app := s.App()
+	shareCodex(t, app)
+	session := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
+	codex := s.Launched(session)
+	app.TypeLine(session, "find the flaky checkout test")
+	codex.Prompted()
+	codex.Reply("It races the tax lookup. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
+	conversation := codex.ConversationID
+	codex.Exit(143)
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
+	stranded := s.CodexServer()
+
+	s.Stop()
+	stranded.ListenElsewhere()
+	s.Start()
+	app = s.App()
+	stranded.AwaitStopped()
+	reloaded := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 100, Rows: 30},
+		protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == session })
+	if !reloaded.Success {
+		t.Fatalf("resume %s: %s", session, protocol.Deref(reloaded.Error))
+	}
+	resumed := s.Launched(session)
+	if !resumed.Resumed || resumed.ConversationID != conversation {
+		t.Fatalf("resuming the stopped session ran %q showing %s (resumed=%v), want conversation %s", resumed.Argv, resumed.ConversationID, resumed.Resumed, conversation)
+	}
+	app.TypeLine(session, "lock the tax lookup")
+	if got := resumed.Prompted(); got != "lock the tax lookup" {
+		t.Fatalf("the resumed Codex received %q", got)
+	}
+}
+
+func TestAHiddenSharedCodexTurnSettlesWhenTheRestartedDaemonStopsAnAppServerItCannotReach(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	s.Start()
+	app := s.App()
+	shareCodex(t, app)
+	hidden := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
+	codex := s.Launched(hidden)
+	terminal := app.Terminal(hidden)
+	app.TypeLine(hidden, "find the flaky checkout test")
+	codex.Prompted()
+	codex.Reply("It races the tax lookup. Lock it? <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(app, hidden, func(x protocol.Session) bool { return x.State == protocol.SessionStateWaitingInput })
+	conversation := codex.ConversationID
+	for _, line := range []string{"/new", "add a discount field"} {
+		typeLineInto(app, terminal, line)
+		codex.Prompted()
+	}
+	testworld.AwaitSession(app, hidden, func(x protocol.Session) bool { return protocol.Deref(x.Hidden) })
+	submitFeedback(t, app, hidden, "Lock the tax table before the lookup.")
+	stranded := s.CodexServer()
+	stranded.Prompted(conversation)
+	testworld.AwaitSession(app, hidden, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
+	codex.Exit(143)
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) != hidden })
+
+	s.Stop()
+	stranded.ListenElsewhere()
+	s.Start()
+	app = s.App()
+	stranded.AwaitStopped()
+	settled := func(x protocol.Session) bool { return protocol.Deref(x.Hidden) && x.State == protocol.SessionStateIdle }
+	if i := slices.IndexFunc(app.Initial.Sessions, func(x protocol.Session) bool { return string(x.ID) == hidden }); i < 0 || !settled(app.Initial.Sessions[i]) {
+		testworld.AwaitSession(app, hidden, settled)
+	}
+	if got := s.CodexServers(); len(got) != 1 {
+		t.Errorf("app-servers launched = %v, want only the stranded one", got)
+	}
+}
+
 func TestAnApprovalPendingInASharedCodexIsAnsweredAfterADaemonRestart(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))

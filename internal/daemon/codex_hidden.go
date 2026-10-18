@@ -3,12 +3,10 @@ package daemon
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/victorarias/attn/internal/codexshared"
@@ -409,18 +407,11 @@ func (r *codexShared) profileReleased(profile string) {
 	if r.needed(profile) || !r.serverRunning(context.Background(), s.terminal) {
 		return
 	}
-	if client := s.client(); client != nil {
-		client.Close()
-	}
-	if err := r.d.ptyBackend.Kill(context.Background(), s.terminal, syscall.SIGTERM); err != nil && !errors.Is(err, pty.ErrSessionNotFound) {
+	if err := r.stopServer(s); err != nil {
 		r.d.logf("shared Codex: stopping the idle app-server of profile %s: %v", profile, err)
 		return
 	}
 	r.d.logf("shared Codex: stopped the app-server of profile %s; nothing uses it", profile)
-	deadline := time.Now().Add(codexServerCallLimit)
-	for r.serverRunning(context.Background(), s.terminal) && time.Now().Before(deadline) {
-		time.Sleep(25 * time.Millisecond)
-	}
 }
 
 func (r *codexShared) needed(profile string) bool {

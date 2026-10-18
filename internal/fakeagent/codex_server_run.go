@@ -2,6 +2,7 @@ package fakeagent
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 )
@@ -17,6 +18,14 @@ func (s *CodexServer) AwaitStopped() {
 	case <-s.fake.peer.done:
 	case <-time.After(HangGuard):
 		s.t.Fatalf("Codex app-server (pid %d) still runs %s after nothing needs it", s.fake.Pid, HangGuard)
+	}
+}
+
+func (s *CodexServer) ListenElsewhere() {
+	s.t.Helper()
+	path := codexListenPath(s.fake.Argv)
+	if err := os.Rename(path, path+".elsewhere"); err != nil {
+		s.t.Fatalf("move the socket of Codex app-server (pid %d): %v", s.fake.Pid, err)
 	}
 }
 
