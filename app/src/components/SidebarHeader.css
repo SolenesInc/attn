@@ -115,4 +115,22 @@
 
 .has-critical .sidebar-notification-dot { background: var(--color-error); }
 
+.sidebar-count-badge {
+  position: absolute;
+  top: -4px;
+  right: -6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--color-accent);
+  color: var(--color-bg-app);
+  font: 700 9.5px 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 0 2px var(--color-bg-panel);
+}
+
 .sidebar-sleeping-crew { margin: 12px 8px 0; }

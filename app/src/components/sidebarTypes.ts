@@ -6,6 +6,7 @@ import type {
   SessionPullRequest,
 } from '../types/generated';
 import { type UISessionState } from '../types/sessionState';
+import type { AskHolderSession, AskListItem } from '../utils/asks';
 import { type TileContentState } from '../types/desktop';
 import { type QueueBands as QueueBandsModel } from '../utils/queueBands';
 import type { DesktopWithSessions } from '../utils/desktopViewModels';
@@ -72,6 +73,8 @@ export interface SidebarProps {
   onSettleTurn?: (id: string) => void;
   onWalkRuns?: () => void;
   onJumpToWaiting?: () => void;
+  asks?: readonly AskListItem<AskHolderSession>[];
+  onOpenAsk?: (askId?: string) => void;
   profileName?: string;
   onSwitchProfile?: () => void;
   onOpenCommands?: () => void;
@@ -129,6 +132,7 @@ export interface SidebarHeaderAction {
   active?: boolean;
   toneClassName?: string;
   unread?: boolean;
+  count?: number;
   onClick: () => void;
 }
 

@@ -57,13 +57,14 @@ const landingWeek: Ask = {
 const apiWorking = daemonSession('api', { state: 'working' });
 const webWaiting = daemonSession('web', { state: 'waiting_input', turn_owed: true, turn_opened_at: '2026-01-01T00:06:00Z' });
 
-async function renderAsks(asks: Ask[] = [cacheStore, releaseDay], sessions: DaemonSession[] = [apiWorking, webWaiting], seeds: DaemonSeed[] = []) {
+async function renderAsks(asks: Ask[] = [cacheStore, releaseDay], sessions: DaemonSession[] = [apiWorking, webWaiting], seeds: DaemonSeed[] = [], settings: Record<string, string> = {}) {
   const view = await renderApp({
     initialState: {
       sessions,
       desktops: sessions.map((session) => soloDesktop(session.id)),
       asks,
       seeds,
+      settings,
     },
   });
   view.daemon.on('ask_answer', (command) => ({
@@ -253,6 +254,53 @@ describe('App asks', () => {
 
     await gesture(daemon, () => fireEvent.keyDown(document.activeElement ?? window, { key: 'g' }));
     expect(seedHeading()).toBe('Cache store migration');
+  });
+
+  it('shows open asks on the collapsed queue bar and opens the one picked', async () => {
+    const daemon = await renderAsks(undefined, undefined, [], { queue_mode_enabled: 'true' });
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' })));
+
+    expect(screen.getByTestId('queue-bar-asks')).toHaveTextContent('?2 asks· 1 waiting on you');
+    await gesture(daemon, () => fireEvent.pointerEnter(screen.getByTestId('queue-bar-asks-anchor')));
+    const peek = screen.getByTestId('queue-bar-asks-peek');
+    expect(within(peek).getAllByRole('button').map((row) => row.getAttribute('data-testid'))).toEqual(['queue-bar-peek-ask-a-release', 'queue-bar-peek-ask-a-cache1']);
+    await gesture(daemon, () => fireEvent.click(within(peek).getByTestId('queue-bar-peek-ask-a-cache1')));
+    expect(openAsk()).toBe('Cache store');
+
+    daemon.emit({ event: 'asks_updated', profile_id: DEFAULT_PROFILE_ID, asks: [] });
+    await daemon.idle();
+    expect(screen.queryByTestId('queue-bar-asks')).toBeNull();
+  });
+
+  it('counts open asks on the collapsed rail and marks the desktops that hold them', async () => {
+    const daemon = await renderAsks([cacheStore], [apiWorking, daemonSession('idle')]);
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' })));
+
+    const asks = screen.getByRole('button', { name: /^1 open ask/ });
+    expect(asks).toHaveTextContent('1');
+    const marked = Array.from(document.querySelectorAll('.rail-desktops .session-icon'))
+      .filter((desktop) => desktop.querySelector('.mini-ask-badge'))
+      .map((desktop) => desktop.getAttribute('data-desktop-id'));
+    expect(marked).toEqual(['desktop-api']);
+    await gesture(daemon, () => fireEvent.click(asks));
+    expect(openAsk()).toBe('Cache store');
+  });
+
+  it('puts the ask in its agent\'s tile header and opens that ask', async () => {
+    const daemon = await renderAsks();
+    await openSession(daemon, 'api');
+
+    const chip = screen.getByTestId('ask-chip-api');
+    expect(chip).toHaveAccessibleName('Open ask: Cache store');
+    fireEvent.pointerEnter(chip);
+    await act(() => vi.advanceTimersByTimeAsync(160));
+    const preview = screen.getByRole('dialog', { name: 'Open asks from this agent' });
+    expect(within(preview).getByText('Which store should keep the cache?')).toBeInTheDocument();
+    expect(within(preview).getByText('Written answer')).toBeInTheDocument();
+    await gesture(daemon, () => fireEvent.click(within(preview).getByRole('button', { name: 'Answer' })));
+
+    expect(openAsk()).toBe('Cache store');
+    expect(screen.queryByRole('dialog', { name: 'Open asks from this agent' })).toBeNull();
   });
 
   it('lists asks on the home screen and opens the one picked', async () => {

@@ -1,6 +1,8 @@
+import { useMemo } from 'react';
 import { create } from 'zustand';
 import type { Ask, AskAnswer } from '../types/generated';
-import { isAsksEnabled } from '../utils/asks';
+import { askBelongsTo, askList, isAsksEnabled, type AskHolderSession, type AskListItem } from '../utils/asks';
+import { useDaemonStore } from './daemonSessions';
 
 export interface AskDraft {
   answers: Record<string, AskAnswer>;
@@ -34,4 +36,19 @@ export const useAsksStore = create<AsksStore>((set) => ({
 export function useAsksAvailable(settings: Record<string, string>): boolean {
   const open = useAsksStore((state) => state.asks.length > 0);
   return open || isAsksEnabled(settings);
+}
+
+export function useAskList<S extends AskHolderSession & { label: string }>(sessions: readonly S[]): AskListItem<S>[] {
+  const asks = useAsksStore((state) => state.asks);
+  const seeds = useDaemonStore((state) => state.seeds);
+  return useMemo(() => askList(asks, sessions, seeds), [asks, sessions, seeds]);
+}
+
+export function useAsksOf({ id, crewMember, chiefOfStaff, seedId }: AskHolderSession): Ask[] {
+  const asks = useAsksStore((state) => state.asks);
+  const seeds = useDaemonStore((state) => state.seeds);
+  return useMemo(
+    () => asks.filter((ask) => askBelongsTo(ask, { id, crewMember, chiefOfStaff, seedId }, seeds)),
+    [asks, seeds, id, crewMember, chiefOfStaff, seedId],
+  );
 }

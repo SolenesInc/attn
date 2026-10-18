@@ -110,6 +110,38 @@
   font-size: var(--font-size-sm);
 }
 
+.queue-bar-asks {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 11px 0 6px;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 45%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.queue-bar-asks:hover {
+  border-color: var(--color-accent);
+}
+
+.queue-bar-asks-waiting {
+  color: var(--color-text-tertiary);
+  font-weight: 500;
+}
+
+.queue-bar-peek-row.queue-bar-peek-ask {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
 .queue-bar-profile:hover,
 .queue-bar-pill:hover,
 .queue-bar-runs:hover {

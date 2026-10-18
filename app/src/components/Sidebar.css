@@ -848,6 +848,22 @@
   background: #f59e0b;
 }
 
+.mini-ask-badge {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: var(--color-bg-app);
+  font: 700 8px/1 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
+  box-shadow: 0 0 0 2px var(--color-bg-panel);
+}
+
 .mini-badge.pending {
   background: #eab308;
   animation: flash-pending 1s ease-in-out infinite;
