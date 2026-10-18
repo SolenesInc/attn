@@ -168,6 +168,9 @@ func runAgentDirectly(requestedAgent string) {
 	if _, err := c.SeedReady(sessionID, "", false); err == nil {
 		opts.Garden = true
 	}
+	if asks, err := c.AskList(sessionID); err == nil {
+		opts.Asks = asks.Enabled
+	}
 	opts.SelfReportPullRequests = !caps.HasHooks
 	if prime, err := c.CrewPrime(sessionID); err == nil {
 		opts.CrewPriming = protocol.Deref(prime.Guidance)

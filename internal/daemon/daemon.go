@@ -2020,12 +2020,12 @@ func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.Session
 	if l := d.linkOf(sessionID); l != nil {
 		l.closed(sessionID)
 	}
-	d.recordSessionClose(sessionID, func() (bool, error) {
+	d.recordSessionClose(sessionID, func() (store.SessionClosure, error) {
 		return d.store.CloseSession(sessionID, closed, time.Now())
 	})
 }
 
-func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() (bool, error)) {
+func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() (store.SessionClosure, error)) {
 	terminals := d.terminalsOf(sessionID)
 	defer d.announceUnplacement(sessionID)()
 	if session := d.store.Get(sessionID); session != nil {
@@ -2035,12 +2035,13 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() 
 	}
 	defer d.drainTranscriptWatcher(sessionID)()
 	d.forgetSessionRuntime(sessionID)
-	recorded, err := commit()
+	closure, err := commit()
 	if err != nil {
 		d.logf("close session %s: %v", sessionID, err)
 	}
 	d.forgetSessionTrace(sessionID)
-	if recorded {
+	d.announceClosedAsks(closure.Asks)
+	if closure.Recorded {
 		for _, terminal := range terminals {
 			d.forgetTerminalTitle(terminal)
 		}
@@ -2066,11 +2067,12 @@ func (d *Daemon) removeReapedSession(sessionID protocol.SessionID) {
 		}
 	}
 	d.forgetSessionRuntime(sessionID)
-	d.store.Remove(sessionID)
+	closedAsks := d.store.Remove(sessionID)
 	for _, terminal := range terminals {
 		d.forgetTerminalTitle(terminal)
 	}
 	d.forgetSessionTrace(sessionID)
+	d.announceClosedAsks(closedAsks)
 	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)
 }
@@ -2614,6 +2616,13 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleAutoModePropose(conn, msg.(*protocol.AutoModeProposeMessage))
 	case protocol.CmdAutoModeDenials:
 		d.handleAutoModeDenials(conn, msg.(*protocol.AutoModeDenialsMessage))
+
+	case protocol.CmdAskOpen:
+		d.handleAskOpen(conn, msg.(*protocol.AskOpenMessage))
+	case protocol.CmdAskList:
+		d.handleAskList(conn, msg.(*protocol.AskListMessage))
+	case protocol.CmdAskClose:
+		d.handleAskClose(conn, msg.(*protocol.AskCloseMessage))
 
 	case protocol.CmdNotebookGuide:
 		d.handleNotebookGuide(conn, msg.(*protocol.NotebookGuideMessage))

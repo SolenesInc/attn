@@ -41,7 +41,7 @@ func TestEndingASessionTakesItsPaneOffTheDesktop(t *testing.T) {
 		end  func(t *testing.T, s *Store)
 	}{
 		{"close", func(t *testing.T, s *Store) {
-			if closed, err := s.CloseSession("agent-a", SessionClose{}, time.Now()); err != nil || !closed {
+			if closed, err := s.CloseSession("agent-a", SessionClose{}, time.Now()); err != nil || !closed.Recorded {
 				t.Fatalf("CloseSession = %v, %v", closed, err)
 			}
 		}},

@@ -1,4 +1,5 @@
 import { open } from '@tauri-apps/plugin-dialog';
+import { isAsksEnabled } from '../utils/asks';
 import { useCallback, useEffect, useImperativeHandle, useMemo, useState, type ForwardedRef } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useGitHubPollingOffReason } from '../contexts/GitHubPollingContext';
@@ -174,6 +175,7 @@ export function useSettingsModalState({
   const actualChiefContextCap = settings.chief_context_window_cap || String(DEFAULT_CONTEXT_WINDOW_CAP);
   const actualHeadlessContextCap = settings.headless_context_window_cap || String(DEFAULT_CONTEXT_WINDOW_CAP);
   const autoSettleEnabled = isAutoSettleEnabled(settings);
+  const asksEnabled = isAsksEnabled(settings);
   const actualAutoSettleArm = String(autoSettleSeconds(settings, AUTO_SETTLE_ARM_SETTING));
   const actualAutoSettleCountdown = String(autoSettleSeconds(settings, AUTO_SETTLE_COUNTDOWN_SETTING));
   const resolvedDefaultAgent = resolvePreferredAgent(actualDefaultAgent, agentAvailability, 'codex');
@@ -668,8 +670,8 @@ export function useSettingsModalState({
             label: 'Experimental',
             title: 'Experimental',
             description: 'Opt in to features that are still being developed.',
-            count: 4,
-            keywords: 'experimental codex shared hidden sessions queue direct agent launch launcher memory claude copilot one-screen new-session one screen new session project path',
+            count: 5,
+            keywords: 'experimental codex shared hidden sessions queue direct agent launch launcher memory claude copilot one-screen new-session one screen new session project path asks questions answer decisions drawer',
           },
           {
             id: 'backgroundTasks',
@@ -740,6 +742,7 @@ export function useSettingsModalState({
     modelCaptureBytes,
     autoModePolicy,
     autoSettleEnabled,
+    asksEnabled,
     mutedRepos,
     mutedAuthors,
     hasProjectsDirChange,

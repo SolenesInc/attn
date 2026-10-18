@@ -154,7 +154,7 @@ func TestTheProfileHoldingAPendingMigrationCannotBeDeleted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.DeleteProfile(converted.ID, converted.Revision, 0)
+	_, _, err = s.DeleteProfile(converted.ID, converted.Revision, 0)
 	wantCode(t, err, profiles.CodeInvalid)
 
 	view = edit(t, s, view.State.Revision, keepAll)
@@ -169,7 +169,7 @@ func TestTheProfileHoldingAPendingMigrationCannotBeDeleted(t *testing.T) {
 		s.CloseSession(session.ID, SessionClose{By: SessionClosedByUser}, time.Now())
 	}
 
-	if _, err := s.DeleteProfile(converted.ID, converted.Revision, 0); err != nil {
+	if _, _, err := s.DeleteProfile(converted.ID, converted.Revision, 0); err != nil {
 		t.Fatalf("deleting Default after the migration finished: %v", err)
 	}
 }

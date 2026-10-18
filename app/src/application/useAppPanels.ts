@@ -56,6 +56,7 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
   const openDockPanels = dockState.openPanels;
   const dockPanelStack = dockState.stack;
   const attentionPanelOpen = openDockPanels.attention;
+  const asksPanelOpen = openDockPanels.asks;
   const automationsPanelOpen = openDockPanels.automations;
   const gardenPanelOpen = openDockPanels.garden;
   const openGardenDock = useCallback(() => openDockPanel('garden'), [openDockPanel]);
@@ -71,7 +72,7 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
     openDock: openGardenDock,
     closeDock: closeGardenDock,
   });
-  const [gardenSlotRef, gardenDockRect] = useDockSlotRect();
+  const [gardenSlotRef, gardenDockRect] = useDockSlotRect(dockState);
   const openNotebookBrowser = useCallback(() => {
     setNotebookOpen(true);
   }, []);
@@ -124,6 +125,7 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
     closeAgentList,
     dockPanelStack,
     attentionPanelOpen,
+    asksPanelOpen,
     automationsPanelOpen,
     gardenPanelOpen,
     gardenMode,

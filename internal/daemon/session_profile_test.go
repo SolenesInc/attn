@@ -36,7 +36,7 @@ func deleteTestProfile(t testing.TB, s *store.Store, profileID string) {
 	if err != nil {
 		t.Fatalf("read profile %s: %v", profileID, err)
 	}
-	if _, err := s.DeleteProfile(profileID, profile.Revision, 0); err != nil {
+	if _, _, err := s.DeleteProfile(profileID, profile.Revision, 0); err != nil {
 		t.Fatalf("delete profile %s: %v", profileID, err)
 	}
 }

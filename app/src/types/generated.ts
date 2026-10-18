@@ -1,6 +1,6 @@
 // To parse this data:
 //
-//   import { Convert, ActivityStatusMessage, ActivityStatusResult, ActivityStatusSession, AgentCloseMessage, AgentCloseResult, AgentCloseRule, AgentInboxBatchResult, AgentInboxItem, AgentInboxMessage, AgentMessageState, AgentMsgMessage, AgentMsgResult, AgentMsgStatus, AgentMsgStatusMessage, AgentPeekExit, AgentPeekMessage, AgentPeekResult, AgentPeekScreen, AgentPeerMessage, ApprovePRMessage, AttachBlock, AttachPolicy, AttachResultMessage, AttachSessionMessage, AttachSnapshot, AuthorState, AuthorsUpdatedMessage, AutoModeConfigInfo, AutoModeConfigResult, AutoModeConfigResultMessage, AutoModeDenialInfo, AutoModeDenialsMessage, AutoModeDenialsResult, AutoModeDiscardMessage, AutoModeDiscardResultMessage, AutoModeEnvNotesMessage, AutoModeEnvResult, AutoModeEnvSetResultMessage, AutoModeEnvSlotMessage, AutoModeEnvironmentInfo, AutoModeEnvironmentSlot, AutoModeEnvironmentSlotValue, AutoModeGetMessage, AutoModeHostAddMessage, AutoModeHostRemoveMessage, AutoModeLegacyDismissMessage, AutoModeNetworkInfo, AutoModePolicySetMessage, AutoModePresetInfo, AutoModePromoteMessage, AutoModePromoteResultMessage, AutoModeProposalInfo, AutoModeProposeMessage, AutoModeProposeResult, AutoModeRuleAddMessage, AutoModeRuleInfo, AutoModeRuleRemoveMessage, AutoModeShowMessage, AutoModeShowResult, AutoModeStateChangedMessage, AutoModeStateResultMessage, AutomationApplyMessage, AutomationApplyResultMessage, AutomationCleanupMessage, AutomationCleanupResultMessage, AutomationDefinitionGetMessage, AutomationDefinitionResultMessage, AutomationDefinitionSummary, AutomationDefinitionsGetMessage, AutomationDefinitionsResultMessage, AutomationDeleteMessage, AutomationDeleteResultMessage, AutomationProvenance, AutomationRunMessage, AutomationRunResultMessage, AutomationRunSummary, AutomationRunsGetMessage, AutomationRunsResultMessage, AutomationSetEnabledMessage, AutomationSetEnabledResultMessage, AutomationValidateMessage, AutomationValidateResultMessage, AutomationsChangedMessage, BackgroundLaunchMessage, Branch, BranchChangedMessage, BranchesResultMessage, BrowseDirectoryMessage, BrowseDirectoryResultMessage, BrowserControlMessage, BrowserControlRequestMessage, BrowserControlResultMessage, BuiltinDelegationRole, BusConsumerStatus, BusHealthEntry, BusProducerStatus, BusSetConsumerEnabledMessage, BusSetConsumerEnabledResultMessage, BusStatusGetMessage, BusStatusResultMessage, CancelCountdownMessage, ChiefOfStaffResultMessage, ClearSessionActivityMessage, ClearWarningsMessage, ClientEvictionNoticeMessage, ClientHelloMessage, CollapseRepoMessage, CommandErrorMessage, CommandUsage, CreateWorktreeFromBranchMessage, CreateWorktreeMessage, CreateWorktreeResultMessage, CrewCharterDocument, CrewCharterGetMessage, CrewCharterGetResult, CrewCharterGetResultMessage, CrewCharterSetMessage, CrewCharterSetResult, CrewCharterSetResultMessage, CrewDayClose, CrewHandoffDocument, CrewHandoffGetMessage, CrewHandoffGetResult, CrewHandoffGetResultMessage, CrewHandoffMessage, CrewHandoffResult, CrewHandoffSummary, CrewHandoffsGetMessage, CrewHandoffsGetResult, CrewHandoffsGetResultMessage, CrewListMessage, CrewListResult, CrewMember, CrewPrimeMessage, CrewPrimeResult, CrewSetMessage, CrewSetResult, CrewSetResultMessage, CrewSleepMessage, CrewSleepResult, CrewSleepResultMessage, CrewUpdatedMessage, CrewWakeMessage, CrewWakeResult, CrewWakeResultMessage, DaemonWarning, DelegateAssignment, DelegateAssignmentKind, DelegateCheckout, DelegateCheckoutKind, DelegateHandover, DelegateMessage, DelegateResult, DelegateResultMessage, DelegateStatusMessage, DelegateWorktreeRequest, DelegationChoice, DelegationFailure, DelegationFallback, DelegationOperation, DelegationOperationMessage, DelegationOperationState, DelegationPreferences, DelegationPreferencesChangedMessage, DelegationPreferencesCommitMessage, DelegationPreferencesGetMessage, DelegationPreferencesHistoryMessage, DelegationPreferencesHistoryResult, DelegationPreferencesOrigin, DelegationPreferencesResultMessage, DelegationPreferencesRevision, DelegationPreferencesRollbackMessage, DelegationPreferencesSaveMessage, DelegationPreferencesShowMessage, DelegationRole, DelegationRolesMessage, DelegationRolesResult, DelegationSelection, DeleteWorktreeMessage, DeleteWorktreeResultMessage, Desktop, DesktopCloseMessage, DesktopCloseTileMessage, DesktopCreateMessage, DesktopDockTileMessage, DesktopMoveLeafMessage, DesktopMoveSessionMessage, DesktopMoveSessionResult, DesktopPane, DesktopPlaceSessionMessage, DesktopRemoveLeafMessage, DesktopRenameMessage, DesktopReorderMessage, DesktopSetActivePaneMessage, DesktopSetCurrentMessage, DesktopSetOrderMessage, DesktopSetSplitRatioMessage, DesktopShowLeafMessage, DesktopShowSessionMessage, DesktopTileContentMessage, DesktopUpdateTileMessage, DetachSessionMessage, DirectoryEntry, DocCollectionsMessage, DocCollectionsResult, DocCountMessage, DocCountResult, DocDefineMessage, DocDefineResult, DocDeleteMessage, DocDeleteResult, DocGetMessage, DocGetResult, DocPutMessage, DocPutResult, DocQueryMessage, DocQueryResult, DocSubscribeMessage, DocSubscribeResult, DocSubscriptionDeliveryMessage, DocSubscriptionEndedMessage, DocUndefineMessage, DocUndefineResult, DocUnsubscribeMessage, DocumentCollectionSchema, DocumentConflict, DocumentFieldSpec, DocumentFilter, DocumentQuery, DocumentRevision, DocumentSort, EnsureRepoMessage, EnsureRepoResultMessage, EvidenceExcerpt, FetchPRDetailsMessage, FetchPRDetailsResultMessage, FetchRemotesMessage, FetchRemotesResultMessage, FileActivity, FilesEditedMessage, FSChangedMessage, FSDeleteMessage, FSDeleteResult, FSDeleteResultMessage, FSEntry, FSExistsMessage, FSExistsResult, FSExistsResultMessage, FSIndexMessage, FSIndexResultMessage, FSListMessage, FSListResultMessage, FSReadAssetMessage, FSReadAssetResult, FSReadAssetResultMessage, FSReadMessage, FSReadResult, FSReadResultMessage, FSRenameMessage, FSRenameResult, FSRenameResultMessage, FSUnwatchMessage, FSUnwatchResultMessage, FSWatchMessage, FSWatchResultMessage, FSWriteMessage, FSWriteResult, FSWriteResultMessage, GardenReview, GardenReviewEvidence, GardenReviewItem, GardenReviewRecipe, GardenReviewRun, GardenReviewUpdatedMessage, GardenSeedsUpdatedMessage, GetCommandUsageMessage, GetCommandUsageResultMessage, GetDefaultBranchMessage, GetDefaultBranchResultMessage, GetKittyImageMessage, GetRecentLocationsMessage, GetRepoInfoMessage, GetRepoInfoResultMessage, GetScreenSnapshotMessage, GetScreenSnapshotResultMessage, GetSettingsMessage, GitHubHostsUpdatedMessage, GitOperation, GitOperationFinishedMessage, GitOperationKind, GitOperationStartedMessage, GitOperationStatus, GuardianSelection, Harness, HarnessModel, HarnessModelsMessage, HarnessModelsResultMessage, HeartbeatMessage, HeatState, HookCompactionMessage, HookNotificationMessage, HookStopFailureMessage, InitialStateMessage, InjectTestPRMessage, InjectTestSessionMessage, InspectPathMessage, InspectPathResultMessage, InstallBundledPluginMessage, InstallPluginMessage, JournalAppendMessage, JournalAppendResult, KeptConversation, KeptConversationDeletedBy, KeptConversationForgetMessage, KeptConversationForgetResultEvent, KeptConversationKeepMessage, KeptConversationKeepResultEvent, KeptConversationListMessage, KeptConversationListResult, KeptConversationListResultEvent, KeptConversationRow, KeptConversationSeed, KeptConversationsChangedEvent, KillSessionMessage, KittyImageResultMessage, KittyPlacement, KittyPlacementsMessage, LaunchDesktopGetMessage, LaunchDesktopItem, LaunchDesktopKind, LaunchDesktopResultMessage, LaunchDesktopSetMessage, LaunchDesktopSetting, LayoutDockEdge, LayoutPaneKind, LayoutPaneStatus, LayoutSplitDirection, LeafMoved, ListBranchesMessage, ListPluginsMessage, ListRemoteBranchesMessage, ListRemoteBranchesResultMessage, ListWorktreesMessage, MarkdownAnnotation, MarkdownAnnotationAnchor, MarkdownAnnotationsClearMessage, MarkdownAnnotationsClearResultMessage, MarkdownAnnotationsGetMessage, MarkdownAnnotationsGetResultMessage, MarkdownAnnotationsSaveMessage, MarkdownAnnotationsSaveResultMessage, MarkdownAnnotationsSubmitMessage, MarkdownAnnotationsSubmitResultMessage, MergePRMessage, MigrationChangedMessage, MigrationDraftDesktop, MigrationFinishMessage, MigrationGetMessage, MigrationGroup, MigrationKeepMessage, MigrationMoveMessage, MigrationPhase, MigrationResultMessage, MigrationState, MigrationSuggestMessage, MigrationUndoMessage, ModelCapabilitySupport, ModelTier, ModelTierSource, MuteAuthorMessage, MutePRMessage, MuteRepoMessage, NotebookBacklinksMessage, NotebookBacklinksResultMessage, NotebookChangedMessage, NotebookEntry, NotebookGuideMessage, NotebookGuideResult, NotebookListMessage, NotebookListResultMessage, NotebookReadMessage, NotebookReadResult, NotebookReadResultMessage, NotebookSendToChiefMessage, NotebookSendToChiefResult, NotebookSendToChiefResultMessage, NotebookWriteMessage, NotebookWriteResult, NotebookWriteResultMessage, Notification, NotificationAction, NotificationListMessage, NotificationListResultMessage, NotificationMarkReadMessage, NotificationMarkReadResultMessage, NotificationSeverity, NotificationsUpdatedMessage, OpenBrowserMessage, OpenMarkdownMessage, OpenMarkdownResultMessage, OpenSeedMessage, OpenSeedResultMessage, OpenSentFilesMessage, PR, PRActionResultMessage, PRRole, PRVisitedMessage, PRsUpdatedMessage, PathInspection, PluginActionResultMessage, PluginInfo, PluginIssue, PluginsUpdatedMessage, Profile, ProfileActionResultMessage, ProfileArrangementChangedMessage, ProfileCreateMessage, ProfileDeleteMessage, ProfileErrorCode, ProfileRenameMessage, ProfileSelectMessage, ProfilesChangedMessage, PtyDesyncMessage, PtyInputMessage, PtyInputProbeResultMessage, PtyOutputMessage, PtyResizeMessage, PtyResizedMessage, PullRequestCreatedMessage, PullRequestForgetMessage, PullRequestProvenance, PullRequestUnwatchMessage, PullRequestWatchMessage, PullRequestWatchMode, QueryAuthorsMessage, QueryMessage, QueryPRsMessage, QueryReposMessage, RateLimitedMessage, RecentFilesMessage, RecentFilesResultMessage, RecentLocation, RecentLocationsResultMessage, RecordCommandUsageMessage, RecordCommandUsageResultMessage, RefreshPRsMessage, RefreshPRsResultMessage, ReloadSessionMessage, ReloadSessionResultMessage, RemovePluginMessage, RenameResultMessage, RenameSessionMessage, RepoInfo, RepoState, ReposUpdatedMessage, Response, RuntimeRespawnedMessage, Seed, SeedArtifact, SeedArtifactReference, SeedArtifactTargetMessage, SeedArtifactTargetResult, SeedArtifactTargetResultMessage, SeedArtifactTransferMessage, SeedArtifactTransferResult, SeedArtifactTransferResultMessage, SeedContinuation, SeedDocument, SeedDocumentGetMessage, SeedDocumentGetResultMessage, SeedEdge, SeedEditMessage, SeedEditResult, SeedHandoverRequest, SeedHarvestCondition, SeedHarvestWhenMerged, SeedLinkMessage, SeedLinkResult, SeedListMessage, SeedListResult, SeedNote, SeedNoteMessage, SeedNoteResult, SeedNoteResultMessage, SeedNotesMessage, SeedNotesResult, SeedPlantMessage, SeedPlantResult, SeedPlotChild, SeedPlotMessage, SeedPlotProgress, SeedPlotResult, SeedReadyMessage, SeedReadyResult, SeedRelation, SeedResumeMessage, SeedResumeResultMessage, SeedReviewActionContext, SeedReviewCancelMessage, SeedReviewDraftMessage, SeedReviewDraftResultMessage, SeedReviewKeepMessage, SeedReviewResult, SeedReviewResultMessage, SeedReviewRetryMessage, SeedReviewShowMessage, SeedReviewStartMessage, SeedSearchHit, SeedSearchMessage, SeedSearchResult, SeedSendToChiefMessage, SeedSendToChiefResult, SeedSendToChiefResultMessage, SeedShowMessage, SeedShowResult, SeedTransitionMessage, SeedTransitionResult, SeedTransitionResultMessage, SeedVar, SeedWatchMessage, SeedWatchResult, Session, SessionAnnotation, SessionAnnotationsClearMessage, SessionAnnotationsClearResultMessage, SessionAnnotationsGetMessage, SessionAnnotationsGetResultMessage, SessionAnnotationsSaveMessage, SessionAnnotationsSaveResultMessage, SessionAnnotationsSubmitMessage, SessionAnnotationsSubmitResultMessage, SessionCloseResultMessage, SessionClosedMessage, SessionContextWindowCapResultMessage, SessionDelegationRole, SessionExitedMessage, SessionInstructionsMessage, SessionInstructionsResult, SessionLedgerEntry, SessionLedgerFacet, SessionLedgerFacets, SessionLedgerProfileFacet, SessionListMessage, SessionListResult, SessionListResultMessage, SessionMessage, SessionMessageWindowStatus, SessionMessagesChangedMessage, SessionMessagesGetMessage, SessionMessagesGetResultMessage, SessionPlacement, SessionPullRequest, SessionRegisteredMessage, SessionReopen, SessionReopenAction, SessionReopenEntry, SessionReopenMessage, SessionReopenResult, SessionReopenResultMessage, SessionShowMessage, SessionShowResult, SessionShowResultMessage, SessionState, SessionStateChangedMessage, SessionTranscriptEvent, SessionTranscriptMessage, SessionTranscriptResult, SessionUnregisteredMessage, SessionUsage, SessionUsageModel, SessionsUpdatedMessage, SetChiefOfStaffMessage, SetClientPresenceMessage, SetPluginPriorityMessage, SetSessionContextWindowCapMessage, SetSessionPriorityMessage, SetSessionResumeIDMessage, SetSettingMessage, SetTerminalThemeMessage, SettingsUpdatedMessage, SettleTurnMessage, SnoozeTurnMessage, SpawnResultMessage, SpawnSessionMessage, StateExplainEntry, StateExplainMessage, StateExplainResult, StateMessage, StopBackgroundTask, StopMessage, StoredDocument, SupportInputTrace, SupportRuntimeEvidence, SupportSnapshotMessage, SupportSnapshotResultMessage, Task, TaskListMessage, TaskListResultMessage, TaskRetryMessage, TaskRetryResultMessage, TasksChangedMessage, TerminalBinding, TerminalBindingsUpdatedMessage, TerminalBlock, TerminalCloseMessage, TerminalDirection, TerminalEntry, TerminalExit, TerminalInputMessage, TerminalInputResult, TerminalListMessage, TerminalOpenMessage, TerminalOpenResult, TerminalPointerActivityMessage, TerminalReadMessage, TerminalReadMode, TerminalReadResult, TerminalWaitMessage, TerminalWaitResult, TerminalWaitUntil, TierDefaults, UninstallPluginMessage, UnregisterMessage, WakeTurnMessage, WebSocketEvent, Worktree, WorktreeCreatedEvent, WorktreeDeletedEvent, WorktreeKeepMessage, WorktreeKeepResult, WorktreeKeepResultEvent, WorktreeListMessage, WorktreeListResult, WorktreeListResultEvent, WorktreeRefreshMessage, WorktreeRefreshResult, WorktreeRefreshResultEvent, WorktreeRepository, WorktreeStateChangedEvent, WorktreeSweepEntry, WorktreeSweepLogMessage, WorktreeSweepLogResult, WorktreeSweepLogResultEvent, WorktreeSweptEvent, WorktreesUpdatedMessage } from "./generated";
+//   import { Convert, ActivityStatusMessage, ActivityStatusResult, ActivityStatusSession, AgentCloseMessage, AgentCloseResult, AgentCloseRule, AgentInboxBatchResult, AgentInboxItem, AgentInboxMessage, AgentMessageState, AgentMsgMessage, AgentMsgResult, AgentMsgStatus, AgentMsgStatusMessage, AgentPeekExit, AgentPeekMessage, AgentPeekResult, AgentPeekScreen, AgentPeerMessage, ApprovePRMessage, Ask, AskAnswer, AskAnswerMessage, AskAnswerResultMessage, AskChoice, AskCloseMessage, AskListMessage, AskListResult, AskOpenMessage, AskPart, AskQuestion, AskQuestionKind, AsksUpdatedMessage, AttachBlock, AttachPolicy, AttachResultMessage, AttachSessionMessage, AttachSnapshot, AuthorState, AuthorsUpdatedMessage, AutoModeConfigInfo, AutoModeConfigResult, AutoModeConfigResultMessage, AutoModeDenialInfo, AutoModeDenialsMessage, AutoModeDenialsResult, AutoModeDiscardMessage, AutoModeDiscardResultMessage, AutoModeEnvNotesMessage, AutoModeEnvResult, AutoModeEnvSetResultMessage, AutoModeEnvSlotMessage, AutoModeEnvironmentInfo, AutoModeEnvironmentSlot, AutoModeEnvironmentSlotValue, AutoModeGetMessage, AutoModeHostAddMessage, AutoModeHostRemoveMessage, AutoModeLegacyDismissMessage, AutoModeNetworkInfo, AutoModePolicySetMessage, AutoModePresetInfo, AutoModePromoteMessage, AutoModePromoteResultMessage, AutoModeProposalInfo, AutoModeProposeMessage, AutoModeProposeResult, AutoModeRuleAddMessage, AutoModeRuleInfo, AutoModeRuleRemoveMessage, AutoModeShowMessage, AutoModeShowResult, AutoModeStateChangedMessage, AutoModeStateResultMessage, AutomationApplyMessage, AutomationApplyResultMessage, AutomationCleanupMessage, AutomationCleanupResultMessage, AutomationDefinitionGetMessage, AutomationDefinitionResultMessage, AutomationDefinitionSummary, AutomationDefinitionsGetMessage, AutomationDefinitionsResultMessage, AutomationDeleteMessage, AutomationDeleteResultMessage, AutomationProvenance, AutomationRunMessage, AutomationRunResultMessage, AutomationRunSummary, AutomationRunsGetMessage, AutomationRunsResultMessage, AutomationSetEnabledMessage, AutomationSetEnabledResultMessage, AutomationValidateMessage, AutomationValidateResultMessage, AutomationsChangedMessage, BackgroundLaunchMessage, Branch, BranchChangedMessage, BranchesResultMessage, BrowseDirectoryMessage, BrowseDirectoryResultMessage, BrowserControlMessage, BrowserControlRequestMessage, BrowserControlResultMessage, BuiltinDelegationRole, BusConsumerStatus, BusHealthEntry, BusProducerStatus, BusSetConsumerEnabledMessage, BusSetConsumerEnabledResultMessage, BusStatusGetMessage, BusStatusResultMessage, CancelCountdownMessage, ChiefOfStaffResultMessage, ClearSessionActivityMessage, ClearWarningsMessage, ClientEvictionNoticeMessage, ClientHelloMessage, CollapseRepoMessage, CommandErrorMessage, CommandUsage, CreateWorktreeFromBranchMessage, CreateWorktreeMessage, CreateWorktreeResultMessage, CrewCharterDocument, CrewCharterGetMessage, CrewCharterGetResult, CrewCharterGetResultMessage, CrewCharterSetMessage, CrewCharterSetResult, CrewCharterSetResultMessage, CrewDayClose, CrewHandoffDocument, CrewHandoffGetMessage, CrewHandoffGetResult, CrewHandoffGetResultMessage, CrewHandoffMessage, CrewHandoffResult, CrewHandoffSummary, CrewHandoffsGetMessage, CrewHandoffsGetResult, CrewHandoffsGetResultMessage, CrewListMessage, CrewListResult, CrewMember, CrewPrimeMessage, CrewPrimeResult, CrewSetMessage, CrewSetResult, CrewSetResultMessage, CrewSleepMessage, CrewSleepResult, CrewSleepResultMessage, CrewUpdatedMessage, CrewWakeMessage, CrewWakeResult, CrewWakeResultMessage, DaemonWarning, DelegateAssignment, DelegateAssignmentKind, DelegateCheckout, DelegateCheckoutKind, DelegateHandover, DelegateMessage, DelegateResult, DelegateResultMessage, DelegateStatusMessage, DelegateWorktreeRequest, DelegationChoice, DelegationFailure, DelegationFallback, DelegationOperation, DelegationOperationMessage, DelegationOperationState, DelegationPreferences, DelegationPreferencesChangedMessage, DelegationPreferencesCommitMessage, DelegationPreferencesGetMessage, DelegationPreferencesHistoryMessage, DelegationPreferencesHistoryResult, DelegationPreferencesOrigin, DelegationPreferencesResultMessage, DelegationPreferencesRevision, DelegationPreferencesRollbackMessage, DelegationPreferencesSaveMessage, DelegationPreferencesShowMessage, DelegationRole, DelegationRolesMessage, DelegationRolesResult, DelegationSelection, DeleteWorktreeMessage, DeleteWorktreeResultMessage, Desktop, DesktopCloseMessage, DesktopCloseTileMessage, DesktopCreateMessage, DesktopDockTileMessage, DesktopMoveLeafMessage, DesktopMoveSessionMessage, DesktopMoveSessionResult, DesktopPane, DesktopPlaceSessionMessage, DesktopRemoveLeafMessage, DesktopRenameMessage, DesktopReorderMessage, DesktopSetActivePaneMessage, DesktopSetCurrentMessage, DesktopSetOrderMessage, DesktopSetSplitRatioMessage, DesktopShowLeafMessage, DesktopShowSessionMessage, DesktopTileContentMessage, DesktopUpdateTileMessage, DetachSessionMessage, DirectoryEntry, DocCollectionsMessage, DocCollectionsResult, DocCountMessage, DocCountResult, DocDefineMessage, DocDefineResult, DocDeleteMessage, DocDeleteResult, DocGetMessage, DocGetResult, DocPutMessage, DocPutResult, DocQueryMessage, DocQueryResult, DocSubscribeMessage, DocSubscribeResult, DocSubscriptionDeliveryMessage, DocSubscriptionEndedMessage, DocUndefineMessage, DocUndefineResult, DocUnsubscribeMessage, DocumentCollectionSchema, DocumentConflict, DocumentFieldSpec, DocumentFilter, DocumentQuery, DocumentRevision, DocumentSort, EnsureRepoMessage, EnsureRepoResultMessage, EvidenceExcerpt, FetchPRDetailsMessage, FetchPRDetailsResultMessage, FetchRemotesMessage, FetchRemotesResultMessage, FileActivity, FilesEditedMessage, FSChangedMessage, FSDeleteMessage, FSDeleteResult, FSDeleteResultMessage, FSEntry, FSExistsMessage, FSExistsResult, FSExistsResultMessage, FSIndexMessage, FSIndexResultMessage, FSListMessage, FSListResultMessage, FSReadAssetMessage, FSReadAssetResult, FSReadAssetResultMessage, FSReadMessage, FSReadResult, FSReadResultMessage, FSRenameMessage, FSRenameResult, FSRenameResultMessage, FSUnwatchMessage, FSUnwatchResultMessage, FSWatchMessage, FSWatchResultMessage, FSWriteMessage, FSWriteResult, FSWriteResultMessage, GardenReview, GardenReviewEvidence, GardenReviewItem, GardenReviewRecipe, GardenReviewRun, GardenReviewUpdatedMessage, GardenSeedsUpdatedMessage, GetCommandUsageMessage, GetCommandUsageResultMessage, GetDefaultBranchMessage, GetDefaultBranchResultMessage, GetKittyImageMessage, GetRecentLocationsMessage, GetRepoInfoMessage, GetRepoInfoResultMessage, GetScreenSnapshotMessage, GetScreenSnapshotResultMessage, GetSettingsMessage, GitHubHostsUpdatedMessage, GitOperation, GitOperationFinishedMessage, GitOperationKind, GitOperationStartedMessage, GitOperationStatus, GuardianSelection, Harness, HarnessModel, HarnessModelsMessage, HarnessModelsResultMessage, HeartbeatMessage, HeatState, HookCompactionMessage, HookNotificationMessage, HookStopFailureMessage, InitialStateMessage, InjectTestPRMessage, InjectTestSessionMessage, InspectPathMessage, InspectPathResultMessage, InstallBundledPluginMessage, InstallPluginMessage, JournalAppendMessage, JournalAppendResult, KeptConversation, KeptConversationDeletedBy, KeptConversationForgetMessage, KeptConversationForgetResultEvent, KeptConversationKeepMessage, KeptConversationKeepResultEvent, KeptConversationListMessage, KeptConversationListResult, KeptConversationListResultEvent, KeptConversationRow, KeptConversationSeed, KeptConversationsChangedEvent, KillSessionMessage, KittyImageResultMessage, KittyPlacement, KittyPlacementsMessage, LaunchDesktopGetMessage, LaunchDesktopItem, LaunchDesktopKind, LaunchDesktopResultMessage, LaunchDesktopSetMessage, LaunchDesktopSetting, LayoutDockEdge, LayoutPaneKind, LayoutPaneStatus, LayoutSplitDirection, LeafMoved, ListBranchesMessage, ListPluginsMessage, ListRemoteBranchesMessage, ListRemoteBranchesResultMessage, ListWorktreesMessage, MarkdownAnnotation, MarkdownAnnotationAnchor, MarkdownAnnotationsClearMessage, MarkdownAnnotationsClearResultMessage, MarkdownAnnotationsGetMessage, MarkdownAnnotationsGetResultMessage, MarkdownAnnotationsSaveMessage, MarkdownAnnotationsSaveResultMessage, MarkdownAnnotationsSubmitMessage, MarkdownAnnotationsSubmitResultMessage, MergePRMessage, MigrationChangedMessage, MigrationDraftDesktop, MigrationFinishMessage, MigrationGetMessage, MigrationGroup, MigrationKeepMessage, MigrationMoveMessage, MigrationPhase, MigrationResultMessage, MigrationState, MigrationSuggestMessage, MigrationUndoMessage, ModelCapabilitySupport, ModelTier, ModelTierSource, MuteAuthorMessage, MutePRMessage, MuteRepoMessage, NotebookBacklinksMessage, NotebookBacklinksResultMessage, NotebookChangedMessage, NotebookEntry, NotebookGuideMessage, NotebookGuideResult, NotebookListMessage, NotebookListResultMessage, NotebookReadMessage, NotebookReadResult, NotebookReadResultMessage, NotebookSendToChiefMessage, NotebookSendToChiefResult, NotebookSendToChiefResultMessage, NotebookWriteMessage, NotebookWriteResult, NotebookWriteResultMessage, Notification, NotificationAction, NotificationListMessage, NotificationListResultMessage, NotificationMarkReadMessage, NotificationMarkReadResultMessage, NotificationSeverity, NotificationsUpdatedMessage, OpenBrowserMessage, OpenMarkdownMessage, OpenMarkdownResultMessage, OpenSeedMessage, OpenSeedResultMessage, OpenSentFilesMessage, PR, PRActionResultMessage, PRRole, PRVisitedMessage, PRsUpdatedMessage, PathInspection, PluginActionResultMessage, PluginInfo, PluginIssue, PluginsUpdatedMessage, Profile, ProfileActionResultMessage, ProfileArrangementChangedMessage, ProfileCreateMessage, ProfileDeleteMessage, ProfileErrorCode, ProfileRenameMessage, ProfileSelectMessage, ProfilesChangedMessage, PtyDesyncMessage, PtyInputMessage, PtyInputProbeResultMessage, PtyOutputMessage, PtyResizeMessage, PtyResizedMessage, PullRequestCreatedMessage, PullRequestForgetMessage, PullRequestProvenance, PullRequestUnwatchMessage, PullRequestWatchMessage, PullRequestWatchMode, QueryAuthorsMessage, QueryMessage, QueryPRsMessage, QueryReposMessage, RateLimitedMessage, RecentFilesMessage, RecentFilesResultMessage, RecentLocation, RecentLocationsResultMessage, RecordCommandUsageMessage, RecordCommandUsageResultMessage, RefreshPRsMessage, RefreshPRsResultMessage, ReloadSessionMessage, ReloadSessionResultMessage, RemovePluginMessage, RenameResultMessage, RenameSessionMessage, RepoInfo, RepoState, ReposUpdatedMessage, Response, RuntimeRespawnedMessage, Seed, SeedArtifact, SeedArtifactReference, SeedArtifactTargetMessage, SeedArtifactTargetResult, SeedArtifactTargetResultMessage, SeedArtifactTransferMessage, SeedArtifactTransferResult, SeedArtifactTransferResultMessage, SeedContinuation, SeedDocument, SeedDocumentGetMessage, SeedDocumentGetResultMessage, SeedEdge, SeedEditMessage, SeedEditResult, SeedHandoverRequest, SeedHarvestCondition, SeedHarvestWhenMerged, SeedLinkMessage, SeedLinkResult, SeedListMessage, SeedListResult, SeedNote, SeedNoteMessage, SeedNoteResult, SeedNoteResultMessage, SeedNotesMessage, SeedNotesResult, SeedPlantMessage, SeedPlantResult, SeedPlotChild, SeedPlotMessage, SeedPlotProgress, SeedPlotResult, SeedReadyMessage, SeedReadyResult, SeedRelation, SeedResumeMessage, SeedResumeResultMessage, SeedReviewActionContext, SeedReviewCancelMessage, SeedReviewDraftMessage, SeedReviewDraftResultMessage, SeedReviewKeepMessage, SeedReviewResult, SeedReviewResultMessage, SeedReviewRetryMessage, SeedReviewShowMessage, SeedReviewStartMessage, SeedSearchHit, SeedSearchMessage, SeedSearchResult, SeedSendToChiefMessage, SeedSendToChiefResult, SeedSendToChiefResultMessage, SeedShowMessage, SeedShowResult, SeedTransitionMessage, SeedTransitionResult, SeedTransitionResultMessage, SeedVar, SeedWatchMessage, SeedWatchResult, Session, SessionAnnotation, SessionAnnotationsClearMessage, SessionAnnotationsClearResultMessage, SessionAnnotationsGetMessage, SessionAnnotationsGetResultMessage, SessionAnnotationsSaveMessage, SessionAnnotationsSaveResultMessage, SessionAnnotationsSubmitMessage, SessionAnnotationsSubmitResultMessage, SessionCloseResultMessage, SessionClosedMessage, SessionContextWindowCapResultMessage, SessionDelegationRole, SessionExitedMessage, SessionInstructionsMessage, SessionInstructionsResult, SessionLedgerEntry, SessionLedgerFacet, SessionLedgerFacets, SessionLedgerProfileFacet, SessionListMessage, SessionListResult, SessionListResultMessage, SessionMessage, SessionMessageWindowStatus, SessionMessagesChangedMessage, SessionMessagesGetMessage, SessionMessagesGetResultMessage, SessionPlacement, SessionPullRequest, SessionRegisteredMessage, SessionReopen, SessionReopenAction, SessionReopenEntry, SessionReopenMessage, SessionReopenResult, SessionReopenResultMessage, SessionShowMessage, SessionShowResult, SessionShowResultMessage, SessionState, SessionStateChangedMessage, SessionTranscriptEvent, SessionTranscriptMessage, SessionTranscriptResult, SessionUnregisteredMessage, SessionUsage, SessionUsageModel, SessionsUpdatedMessage, SetChiefOfStaffMessage, SetClientPresenceMessage, SetPluginPriorityMessage, SetSessionContextWindowCapMessage, SetSessionPriorityMessage, SetSessionResumeIDMessage, SetSettingMessage, SetTerminalThemeMessage, SettingsUpdatedMessage, SettleTurnMessage, SnoozeTurnMessage, SpawnResultMessage, SpawnSessionMessage, StateExplainEntry, StateExplainMessage, StateExplainResult, StateMessage, StopBackgroundTask, StopMessage, StoredDocument, SupportInputTrace, SupportRuntimeEvidence, SupportSnapshotMessage, SupportSnapshotResultMessage, Task, TaskListMessage, TaskListResultMessage, TaskRetryMessage, TaskRetryResultMessage, TasksChangedMessage, TerminalBinding, TerminalBindingsUpdatedMessage, TerminalBlock, TerminalCloseMessage, TerminalDirection, TerminalEntry, TerminalExit, TerminalInputMessage, TerminalInputResult, TerminalListMessage, TerminalOpenMessage, TerminalOpenResult, TerminalPointerActivityMessage, TerminalReadMessage, TerminalReadMode, TerminalReadResult, TerminalWaitMessage, TerminalWaitResult, TerminalWaitUntil, TierDefaults, UninstallPluginMessage, UnregisterMessage, WakeTurnMessage, WebSocketEvent, Worktree, WorktreeCreatedEvent, WorktreeDeletedEvent, WorktreeKeepMessage, WorktreeKeepResult, WorktreeKeepResultEvent, WorktreeListMessage, WorktreeListResult, WorktreeListResultEvent, WorktreeRefreshMessage, WorktreeRefreshResult, WorktreeRefreshResultEvent, WorktreeRepository, WorktreeStateChangedEvent, WorktreeSweepEntry, WorktreeSweepLogMessage, WorktreeSweepLogResult, WorktreeSweepLogResultEvent, WorktreeSweptEvent, WorktreesUpdatedMessage } from "./generated";
 //
 //   const activityStatusMessage = Convert.toActivityStatusMessage(json);
 //   const activityStatusResult = Convert.toActivityStatusResult(json);
@@ -22,6 +22,19 @@
 //   const agentPeekScreen = Convert.toAgentPeekScreen(json);
 //   const agentPeerMessage = Convert.toAgentPeerMessage(json);
 //   const approvePRMessage = Convert.toApprovePRMessage(json);
+//   const ask = Convert.toAsk(json);
+//   const askAnswer = Convert.toAskAnswer(json);
+//   const askAnswerMessage = Convert.toAskAnswerMessage(json);
+//   const askAnswerResultMessage = Convert.toAskAnswerResultMessage(json);
+//   const askChoice = Convert.toAskChoice(json);
+//   const askCloseMessage = Convert.toAskCloseMessage(json);
+//   const askListMessage = Convert.toAskListMessage(json);
+//   const askListResult = Convert.toAskListResult(json);
+//   const askOpenMessage = Convert.toAskOpenMessage(json);
+//   const askPart = Convert.toAskPart(json);
+//   const askQuestion = Convert.toAskQuestion(json);
+//   const askQuestionKind = Convert.toAskQuestionKind(json);
+//   const asksUpdatedMessage = Convert.toAsksUpdatedMessage(json);
 //   const attachBlock = Convert.toAttachBlock(json);
 //   const attachPolicy = Convert.toAttachPolicy(json);
 //   const attachResultMessage = Convert.toAttachResultMessage(json);
@@ -882,6 +895,180 @@ export interface ApprovePRMessage {
 
 export enum ApprovePRMessageCmd {
     ApprovePR = "approve_pr",
+}
+
+export interface Ask {
+    base_dir:     string;
+    chief?:       boolean;
+    created_at:   string;
+    crew_member?: string;
+    id:           string;
+    parts:        PartElement[];
+    seed_id?:     string;
+    seed_slug?:   string;
+    seed_title?:  string;
+    session_id:   string;
+    subject:      string;
+    [property: string]: any;
+}
+
+export interface PartElement {
+    markdown?: string;
+    question?: Question;
+    [property: string]: any;
+}
+
+export interface Question {
+    choices:      ChoiceElement[];
+    context?:     string;
+    key:          string;
+    kind:         AskQuestionKind;
+    prompt:       string;
+    recommended?: string;
+    [property: string]: any;
+}
+
+export interface ChoiceElement {
+    description?: string;
+    label:        string;
+    [property: string]: any;
+}
+
+export enum AskQuestionKind {
+    Any = "any",
+    One = "one",
+    Text = "text",
+}
+
+export interface AskAnswer {
+    key:    string;
+    other?: string;
+    picked: string[];
+    text?:  string;
+    [property: string]: any;
+}
+
+export interface AskAnswerMessage {
+    answers:    AnswerElement[];
+    ask_id:     string;
+    cmd:        AskAnswerMessageCmd;
+    note?:      string;
+    request_id: string;
+    [property: string]: any;
+}
+
+export interface AnswerElement {
+    key:    string;
+    other?: string;
+    picked: string[];
+    text?:  string;
+    [property: string]: any;
+}
+
+export enum AskAnswerMessageCmd {
+    AskAnswer = "ask_answer",
+}
+
+export interface AskAnswerResultMessage {
+    ask_id:     string;
+    error?:     string;
+    event:      AskAnswerResultMessageEvent;
+    request_id: string;
+    success:    boolean;
+    [property: string]: any;
+}
+
+export enum AskAnswerResultMessageEvent {
+    AskAnswerResult = "ask_answer_result",
+}
+
+export interface AskChoice {
+    description?: string;
+    label:        string;
+    [property: string]: any;
+}
+
+export interface AskCloseMessage {
+    ask_id:     string;
+    cmd:        AskCloseMessageCmd;
+    session_id: string;
+    [property: string]: any;
+}
+
+export enum AskCloseMessageCmd {
+    AskClose = "ask_close",
+}
+
+export interface AskListMessage {
+    cmd:        AskListMessageCmd;
+    session_id: string;
+    [property: string]: any;
+}
+
+export enum AskListMessageCmd {
+    AskList = "ask_list",
+}
+
+export interface AskListResult {
+    asks:    AskOpenResultElement[];
+    enabled: boolean;
+    [property: string]: any;
+}
+
+export interface AskOpenResultElement {
+    base_dir:     string;
+    chief?:       boolean;
+    created_at:   string;
+    crew_member?: string;
+    id:           string;
+    parts:        PartElement[];
+    seed_id?:     string;
+    seed_slug?:   string;
+    seed_title?:  string;
+    session_id:   string;
+    subject:      string;
+    [property: string]: any;
+}
+
+export interface AskOpenMessage {
+    base_dir:   string;
+    cmd:        AskOpenMessageCmd;
+    markdown:   string;
+    seed_id?:   string;
+    session_id: string;
+    subject?:   string;
+    [property: string]: any;
+}
+
+export enum AskOpenMessageCmd {
+    AskOpen = "ask_open",
+}
+
+export interface AskPart {
+    markdown?: string;
+    question?: Question;
+    [property: string]: any;
+}
+
+export interface AskQuestion {
+    choices:      ChoiceElement[];
+    context?:     string;
+    key:          string;
+    kind:         AskQuestionKind;
+    prompt:       string;
+    recommended?: string;
+    [property: string]: any;
+}
+
+export interface AsksUpdatedMessage {
+    asks:       AskOpenResultElement[];
+    event:      AsksUpdatedMessageEvent;
+    profile_id: string;
+    [property: string]: any;
+}
+
+export enum AsksUpdatedMessageEvent {
+    AsksUpdated = "asks_updated",
 }
 
 export interface AttachBlock {
@@ -3050,7 +3237,7 @@ export interface Fallback {
 
 export interface RoleElement {
     builtin?:          BuiltinDelegationRole;
-    choices:           ChoiceElement[];
+    choices:           ChoiceObject[];
     default_choice_id: string;
     description:       string;
     enabled:           boolean;
@@ -3062,7 +3249,7 @@ export interface RoleElement {
     [property: string]: any;
 }
 
-export interface ChoiceElement {
+export interface ChoiceObject {
     id:        string;
     name:      string;
     selection: Selection;
@@ -3211,7 +3398,7 @@ export enum DelegationPreferencesShowMessageCmd {
 
 export interface DelegationRole {
     builtin?:          BuiltinDelegationRole;
-    choices:           ChoiceElement[];
+    choices:           ChoiceObject[];
     default_choice_id: string;
     description:       string;
     enabled:           boolean;
@@ -5039,6 +5226,7 @@ export enum HookStopFailureMessageCmd {
 }
 
 export interface InitialStateMessage {
+    asks?:                      AskOpenResultElement[];
     authors?:                   AuthorElement[];
     crew?:                      Member[];
     daemon_instance_id?:        string;
@@ -7011,6 +7199,8 @@ export interface Response {
     agent_msg_result?:                AgentMsgResultObject;
     agent_msg_status_result?:         Agent;
     agent_peek_result?:               AgentPeekResultObject;
+    ask_list_result?:                 AskListResultObject;
+    ask_open_result?:                 AskOpenResultElement;
     authors?:                         AuthorElement[];
     automode_config_result?:          AutomodeConfigResult;
     automode_denials_result?:         AutomodeDenialsResult;
@@ -7149,6 +7339,12 @@ export interface AgentPeekResultObject {
     state_reason?:           string;
     state_since:             string;
     turn_owed?:              boolean;
+    [property: string]: any;
+}
+
+export interface AskListResultObject {
+    asks:    AskOpenResultElement[];
+    enabled: boolean;
     [property: string]: any;
 }
 
@@ -10258,6 +10454,110 @@ export class Convert {
 
     public static approvePRMessageToJson(value: ApprovePRMessage): string {
         return JSON.stringify(uncast(value, r("ApprovePRMessage")), null, 2);
+    }
+
+    public static toAsk(json: string): Ask {
+        return cast(JSON.parse(json), r("Ask"));
+    }
+
+    public static askToJson(value: Ask): string {
+        return JSON.stringify(uncast(value, r("Ask")), null, 2);
+    }
+
+    public static toAskAnswer(json: string): AskAnswer {
+        return cast(JSON.parse(json), r("AskAnswer"));
+    }
+
+    public static askAnswerToJson(value: AskAnswer): string {
+        return JSON.stringify(uncast(value, r("AskAnswer")), null, 2);
+    }
+
+    public static toAskAnswerMessage(json: string): AskAnswerMessage {
+        return cast(JSON.parse(json), r("AskAnswerMessage"));
+    }
+
+    public static askAnswerMessageToJson(value: AskAnswerMessage): string {
+        return JSON.stringify(uncast(value, r("AskAnswerMessage")), null, 2);
+    }
+
+    public static toAskAnswerResultMessage(json: string): AskAnswerResultMessage {
+        return cast(JSON.parse(json), r("AskAnswerResultMessage"));
+    }
+
+    public static askAnswerResultMessageToJson(value: AskAnswerResultMessage): string {
+        return JSON.stringify(uncast(value, r("AskAnswerResultMessage")), null, 2);
+    }
+
+    public static toAskChoice(json: string): AskChoice {
+        return cast(JSON.parse(json), r("AskChoice"));
+    }
+
+    public static askChoiceToJson(value: AskChoice): string {
+        return JSON.stringify(uncast(value, r("AskChoice")), null, 2);
+    }
+
+    public static toAskCloseMessage(json: string): AskCloseMessage {
+        return cast(JSON.parse(json), r("AskCloseMessage"));
+    }
+
+    public static askCloseMessageToJson(value: AskCloseMessage): string {
+        return JSON.stringify(uncast(value, r("AskCloseMessage")), null, 2);
+    }
+
+    public static toAskListMessage(json: string): AskListMessage {
+        return cast(JSON.parse(json), r("AskListMessage"));
+    }
+
+    public static askListMessageToJson(value: AskListMessage): string {
+        return JSON.stringify(uncast(value, r("AskListMessage")), null, 2);
+    }
+
+    public static toAskListResult(json: string): AskListResult {
+        return cast(JSON.parse(json), r("AskListResult"));
+    }
+
+    public static askListResultToJson(value: AskListResult): string {
+        return JSON.stringify(uncast(value, r("AskListResult")), null, 2);
+    }
+
+    public static toAskOpenMessage(json: string): AskOpenMessage {
+        return cast(JSON.parse(json), r("AskOpenMessage"));
+    }
+
+    public static askOpenMessageToJson(value: AskOpenMessage): string {
+        return JSON.stringify(uncast(value, r("AskOpenMessage")), null, 2);
+    }
+
+    public static toAskPart(json: string): AskPart {
+        return cast(JSON.parse(json), r("AskPart"));
+    }
+
+    public static askPartToJson(value: AskPart): string {
+        return JSON.stringify(uncast(value, r("AskPart")), null, 2);
+    }
+
+    public static toAskQuestion(json: string): AskQuestion {
+        return cast(JSON.parse(json), r("AskQuestion"));
+    }
+
+    public static askQuestionToJson(value: AskQuestion): string {
+        return JSON.stringify(uncast(value, r("AskQuestion")), null, 2);
+    }
+
+    public static toAskQuestionKind(json: string): AskQuestionKind {
+        return cast(JSON.parse(json), r("AskQuestionKind"));
+    }
+
+    public static askQuestionKindToJson(value: AskQuestionKind): string {
+        return JSON.stringify(uncast(value, r("AskQuestionKind")), null, 2);
+    }
+
+    public static toAsksUpdatedMessage(json: string): AsksUpdatedMessage {
+        return cast(JSON.parse(json), r("AsksUpdatedMessage"));
+    }
+
+    public static asksUpdatedMessageToJson(value: AsksUpdatedMessage): string {
+        return JSON.stringify(uncast(value, r("AsksUpdatedMessage")), null, 2);
     }
 
     public static toAttachBlock(json: string): AttachBlock {
@@ -15559,6 +15859,116 @@ const typeMap: any = {
         { json: "cmd", js: "cmd", typ: r("ApprovePRMessageCmd") },
         { json: "id", js: "id", typ: "" },
     ], "any"),
+    "Ask": o([
+        { json: "base_dir", js: "base_dir", typ: "" },
+        { json: "chief", js: "chief", typ: u(undefined, true) },
+        { json: "created_at", js: "created_at", typ: "" },
+        { json: "crew_member", js: "crew_member", typ: u(undefined, "") },
+        { json: "id", js: "id", typ: "" },
+        { json: "parts", js: "parts", typ: a(r("PartElement")) },
+        { json: "seed_id", js: "seed_id", typ: u(undefined, "") },
+        { json: "seed_slug", js: "seed_slug", typ: u(undefined, "") },
+        { json: "seed_title", js: "seed_title", typ: u(undefined, "") },
+        { json: "session_id", js: "session_id", typ: "" },
+        { json: "subject", js: "subject", typ: "" },
+    ], "any"),
+    "PartElement": o([
+        { json: "markdown", js: "markdown", typ: u(undefined, "") },
+        { json: "question", js: "question", typ: u(undefined, r("Question")) },
+    ], "any"),
+    "Question": o([
+        { json: "choices", js: "choices", typ: a(r("ChoiceElement")) },
+        { json: "context", js: "context", typ: u(undefined, "") },
+        { json: "key", js: "key", typ: "" },
+        { json: "kind", js: "kind", typ: r("AskQuestionKind") },
+        { json: "prompt", js: "prompt", typ: "" },
+        { json: "recommended", js: "recommended", typ: u(undefined, "") },
+    ], "any"),
+    "ChoiceElement": o([
+        { json: "description", js: "description", typ: u(undefined, "") },
+        { json: "label", js: "label", typ: "" },
+    ], "any"),
+    "AskAnswer": o([
+        { json: "key", js: "key", typ: "" },
+        { json: "other", js: "other", typ: u(undefined, "") },
+        { json: "picked", js: "picked", typ: a("") },
+        { json: "text", js: "text", typ: u(undefined, "") },
+    ], "any"),
+    "AskAnswerMessage": o([
+        { json: "answers", js: "answers", typ: a(r("AnswerElement")) },
+        { json: "ask_id", js: "ask_id", typ: "" },
+        { json: "cmd", js: "cmd", typ: r("AskAnswerMessageCmd") },
+        { json: "note", js: "note", typ: u(undefined, "") },
+        { json: "request_id", js: "request_id", typ: "" },
+    ], "any"),
+    "AnswerElement": o([
+        { json: "key", js: "key", typ: "" },
+        { json: "other", js: "other", typ: u(undefined, "") },
+        { json: "picked", js: "picked", typ: a("") },
+        { json: "text", js: "text", typ: u(undefined, "") },
+    ], "any"),
+    "AskAnswerResultMessage": o([
+        { json: "ask_id", js: "ask_id", typ: "" },
+        { json: "error", js: "error", typ: u(undefined, "") },
+        { json: "event", js: "event", typ: r("AskAnswerResultMessageEvent") },
+        { json: "request_id", js: "request_id", typ: "" },
+        { json: "success", js: "success", typ: true },
+    ], "any"),
+    "AskChoice": o([
+        { json: "description", js: "description", typ: u(undefined, "") },
+        { json: "label", js: "label", typ: "" },
+    ], "any"),
+    "AskCloseMessage": o([
+        { json: "ask_id", js: "ask_id", typ: "" },
+        { json: "cmd", js: "cmd", typ: r("AskCloseMessageCmd") },
+        { json: "session_id", js: "session_id", typ: "" },
+    ], "any"),
+    "AskListMessage": o([
+        { json: "cmd", js: "cmd", typ: r("AskListMessageCmd") },
+        { json: "session_id", js: "session_id", typ: "" },
+    ], "any"),
+    "AskListResult": o([
+        { json: "asks", js: "asks", typ: a(r("AskOpenResultElement")) },
+        { json: "enabled", js: "enabled", typ: true },
+    ], "any"),
+    "AskOpenResultElement": o([
+        { json: "base_dir", js: "base_dir", typ: "" },
+        { json: "chief", js: "chief", typ: u(undefined, true) },
+        { json: "created_at", js: "created_at", typ: "" },
+        { json: "crew_member", js: "crew_member", typ: u(undefined, "") },
+        { json: "id", js: "id", typ: "" },
+        { json: "parts", js: "parts", typ: a(r("PartElement")) },
+        { json: "seed_id", js: "seed_id", typ: u(undefined, "") },
+        { json: "seed_slug", js: "seed_slug", typ: u(undefined, "") },
+        { json: "seed_title", js: "seed_title", typ: u(undefined, "") },
+        { json: "session_id", js: "session_id", typ: "" },
+        { json: "subject", js: "subject", typ: "" },
+    ], "any"),
+    "AskOpenMessage": o([
+        { json: "base_dir", js: "base_dir", typ: "" },
+        { json: "cmd", js: "cmd", typ: r("AskOpenMessageCmd") },
+        { json: "markdown", js: "markdown", typ: "" },
+        { json: "seed_id", js: "seed_id", typ: u(undefined, "") },
+        { json: "session_id", js: "session_id", typ: "" },
+        { json: "subject", js: "subject", typ: u(undefined, "") },
+    ], "any"),
+    "AskPart": o([
+        { json: "markdown", js: "markdown", typ: u(undefined, "") },
+        { json: "question", js: "question", typ: u(undefined, r("Question")) },
+    ], "any"),
+    "AskQuestion": o([
+        { json: "choices", js: "choices", typ: a(r("ChoiceElement")) },
+        { json: "context", js: "context", typ: u(undefined, "") },
+        { json: "key", js: "key", typ: "" },
+        { json: "kind", js: "kind", typ: r("AskQuestionKind") },
+        { json: "prompt", js: "prompt", typ: "" },
+        { json: "recommended", js: "recommended", typ: u(undefined, "") },
+    ], "any"),
+    "AsksUpdatedMessage": o([
+        { json: "asks", js: "asks", typ: a(r("AskOpenResultElement")) },
+        { json: "event", js: "event", typ: r("AsksUpdatedMessageEvent") },
+        { json: "profile_id", js: "profile_id", typ: "" },
+    ], "any"),
     "AttachBlock": o([
         { json: "command", js: "command", typ: u(undefined, "") },
         { json: "end_row", js: "end_row", typ: u(undefined, 0) },
@@ -16957,7 +17367,7 @@ const typeMap: any = {
     ], "any"),
     "RoleElement": o([
         { json: "builtin", js: "builtin", typ: u(undefined, r("BuiltinDelegationRole")) },
-        { json: "choices", js: "choices", typ: a(r("ChoiceElement")) },
+        { json: "choices", js: "choices", typ: a(r("ChoiceObject")) },
         { json: "default_choice_id", js: "default_choice_id", typ: "" },
         { json: "description", js: "description", typ: "" },
         { json: "enabled", js: "enabled", typ: true },
@@ -16967,7 +17377,7 @@ const typeMap: any = {
         { json: "name", js: "name", typ: "" },
         { json: "stopping_point", js: "stopping_point", typ: "" },
     ], "any"),
-    "ChoiceElement": o([
+    "ChoiceObject": o([
         { json: "id", js: "id", typ: "" },
         { json: "name", js: "name", typ: "" },
         { json: "selection", js: "selection", typ: r("Selection") },
@@ -17051,7 +17461,7 @@ const typeMap: any = {
     ], "any"),
     "DelegationRole": o([
         { json: "builtin", js: "builtin", typ: u(undefined, r("BuiltinDelegationRole")) },
-        { json: "choices", js: "choices", typ: a(r("ChoiceElement")) },
+        { json: "choices", js: "choices", typ: a(r("ChoiceObject")) },
         { json: "default_choice_id", js: "default_choice_id", typ: "" },
         { json: "description", js: "description", typ: "" },
         { json: "enabled", js: "enabled", typ: true },
@@ -18148,6 +18558,7 @@ const typeMap: any = {
         { json: "id", js: "id", typ: "" },
     ], "any"),
     "InitialStateMessage": o([
+        { json: "asks", js: "asks", typ: u(undefined, a(r("AskOpenResultElement"))) },
         { json: "authors", js: "authors", typ: u(undefined, a(r("AuthorElement"))) },
         { json: "crew", js: "crew", typ: u(undefined, a(r("Member"))) },
         { json: "daemon_instance_id", js: "daemon_instance_id", typ: u(undefined, "") },
@@ -19326,6 +19737,8 @@ const typeMap: any = {
         { json: "agent_msg_result", js: "agent_msg_result", typ: u(undefined, r("AgentMsgResultObject")) },
         { json: "agent_msg_status_result", js: "agent_msg_status_result", typ: u(undefined, r("Agent")) },
         { json: "agent_peek_result", js: "agent_peek_result", typ: u(undefined, r("AgentPeekResultObject")) },
+        { json: "ask_list_result", js: "ask_list_result", typ: u(undefined, r("AskListResultObject")) },
+        { json: "ask_open_result", js: "ask_open_result", typ: u(undefined, r("AskOpenResultElement")) },
         { json: "authors", js: "authors", typ: u(undefined, a(r("AuthorElement"))) },
         { json: "automode_config_result", js: "automode_config_result", typ: u(undefined, r("AutomodeConfigResult")) },
         { json: "automode_denials_result", js: "automode_denials_result", typ: u(undefined, r("AutomodeDenialsResult")) },
@@ -19452,6 +19865,10 @@ const typeMap: any = {
         { json: "state_reason", js: "state_reason", typ: u(undefined, "") },
         { json: "state_since", js: "state_since", typ: "" },
         { json: "turn_owed", js: "turn_owed", typ: u(undefined, true) },
+    ], "any"),
+    "AskListResultObject": o([
+        { json: "asks", js: "asks", typ: a(r("AskOpenResultElement")) },
+        { json: "enabled", js: "enabled", typ: true },
     ], "any"),
     "AutomodeConfigResult": o([
         { json: "config", js: "config", typ: r("Config") },
@@ -21435,6 +21852,29 @@ const typeMap: any = {
     ],
     "ApprovePRMessageCmd": [
         "approve_pr",
+    ],
+    "AskQuestionKind": [
+        "any",
+        "one",
+        "text",
+    ],
+    "AskAnswerMessageCmd": [
+        "ask_answer",
+    ],
+    "AskAnswerResultMessageEvent": [
+        "ask_answer_result",
+    ],
+    "AskCloseMessageCmd": [
+        "ask_close",
+    ],
+    "AskListMessageCmd": [
+        "ask_list",
+    ],
+    "AskOpenMessageCmd": [
+        "ask_open",
+    ],
+    "AsksUpdatedMessageEvent": [
+        "asks_updated",
     ],
     "AttachResultMessageEvent": [
         "attach_result",

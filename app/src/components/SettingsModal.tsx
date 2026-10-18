@@ -249,6 +249,7 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           codexSharedEnabled={state.codexSharedEnabled}
           queueShowHiddenSessions={state.queueShowHiddenSessions}
           directAgentLaunchEnabled={state.directAgentLaunchEnabled}
+          asksEnabled={state.asksEnabled}
           onSetSetting={state.onSetSetting}
         />
       );

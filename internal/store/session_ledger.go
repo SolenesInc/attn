@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -66,7 +67,12 @@ func (e *ErrLedgerLimitTooLarge) Error() string {
 		e.Asked, e.Max, e.Max)
 }
 
-func (s *Store) CloseSession(id protocol.SessionID, closed SessionClose, now time.Time) (bool, error) {
+type SessionClosure struct {
+	Recorded bool
+	Asks     []string
+}
+
+func (s *Store) CloseSession(id protocol.SessionID, closed SessionClose, now time.Time) (SessionClosure, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -80,13 +86,13 @@ func (s *Store) CloseSession(id protocol.SessionID, closed SessionClose, now tim
 	if s.db == nil {
 		session := s.sessions[id]
 		if session == nil {
-			return false, nil
+			return SessionClosure{}, nil
 		}
 		if s.sessionCloses == nil {
 			s.sessionCloses = make(map[protocol.SessionID]sessionCloseMark)
 		}
 		if _, already := s.sessionCloses[id]; already {
-			return false, nil
+			return SessionClosure{}, nil
 		}
 		if session.Agent == protocol.AgentShellValue && session.Label == "" {
 			session.Label = closed.FallbackLabel
@@ -97,64 +103,68 @@ func (s *Store) CloseSession(id protocol.SessionID, closed SessionClose, now tim
 			finalizeSessionCost(&cost)
 			s.sessionCosts[id] = cost
 		}
-		return true, nil
+		return SessionClosure{Recorded: true}, nil
 	}
 
 	tx, err := s.db.Begin()
 	if err != nil {
-		return false, fmt.Errorf("close session %s: %w", id, err)
+		return SessionClosure{}, fmt.Errorf("close session %s: %w", id, err)
 	}
 	defer tx.Rollback()
 	closed.By = by
-	closedNow, emptied, err := s.closeSessionTx(tx, id, closed, at)
+	closedNow, emptied, asks, err := s.closeSessionTx(tx, id, closed, at)
 	if err != nil || !closedNow {
-		return false, err
+		return SessionClosure{}, err
 	}
 	if err := tx.Commit(); err != nil {
-		return false, fmt.Errorf("close session %s: %w", id, err)
+		return SessionClosure{}, fmt.Errorf("close session %s: %w", id, err)
 	}
 	s.announceTerminalBindingsLocked()
 	if emptied {
 		s.announceEmptyDesktop(now)
 	}
 	s.forgetSessionCost(id)
-	return true, nil
+	return SessionClosure{Recorded: true, Asks: asks}, nil
 }
 
-// closeSessionTx closes an open session's row, unplaces it and finalizes its cost; the caller forgets
-// the cost and announces an emptied desktop after commit.
-func (s *Store) closeSessionTx(tx *sql.Tx, id protocol.SessionID, closed SessionClose, at string) (bool, bool, error) {
+// closeSessionTx closes an open session's row, unplaces it, finalizes its cost and closes the asks
+// addressed to it; the caller forgets the cost and announces an emptied desktop after commit.
+func (s *Store) closeSessionTx(tx *sql.Tx, id protocol.SessionID, closed SessionClose, at string) (bool, bool, []string, error) {
 	result, err := tx.Exec(`UPDATE sessions SET closed_at = ?, closed_by = ?, close_reason = ?,
 		label = CASE WHEN agent = 'shell' AND label = '' THEN ? ELSE label END
 		WHERE id = ? AND closed_at = ''`, at, closed.By, strings.TrimSpace(closed.Reason), closed.FallbackLabel, id)
 	if err != nil {
-		return false, false, fmt.Errorf("close session %s: %w", id, err)
+		return false, false, nil, fmt.Errorf("close session %s: %w", id, err)
 	}
 	affected, err := result.RowsAffected()
 	if err != nil {
-		return false, false, fmt.Errorf("close session %s: %w", id, err)
+		return false, false, nil, fmt.Errorf("close session %s: %w", id, err)
 	}
 	if affected != 1 {
-		return false, false, nil
+		return false, false, nil, nil
 	}
 	if err := s.saveUnsavedSessionCostTx(tx, id); err != nil {
-		return false, false, fmt.Errorf("close session %s: %w", id, err)
+		return false, false, nil, fmt.Errorf("close session %s: %w", id, err)
 	}
 	if err := finalizeSessionCostTx(tx, id); err != nil {
-		return false, false, fmt.Errorf("close session %s: %w", id, err)
+		return false, false, nil, fmt.Errorf("close session %s: %w", id, err)
 	}
 	unplacedAt := time.Now().UTC().Format(sortableTimeFormat)
 	if err := unplaceClosingSession(tx, unplacedAt, id); err != nil {
-		return false, false, fmt.Errorf("close session %s: %w", id, err)
+		return false, false, nil, fmt.Errorf("close session %s: %w", id, err)
 	}
 	if _, err := tx.Exec(`DELETE FROM terminal_bindings WHERE session_id = ?`, id); err != nil {
-		return false, false, fmt.Errorf("close session %s terminal bindings: %w", id, err)
+		return false, false, nil, fmt.Errorf("close session %s terminal bindings: %w", id, err)
+	}
+	asks, err := closeAsksTo(tx, inbox.ToSession(id))
+	if err != nil {
+		return false, false, nil, fmt.Errorf("close session %s asks: %w", id, err)
 	}
 	emptied, err := stampEmptyDesktops(tx, unplacedAt)
 	if err != nil {
-		return false, false, fmt.Errorf("close session %s: %w", id, err)
+		return false, false, nil, fmt.Errorf("close session %s: %w", id, err)
 	}
-	return true, emptied, nil
+	return true, emptied, asks, nil
 }
 
 func finalizeSessionCostTx(tx *sql.Tx, id protocol.SessionID) error {

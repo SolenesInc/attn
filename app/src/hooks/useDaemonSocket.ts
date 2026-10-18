@@ -3,6 +3,8 @@ import { clearHarnessModelCatalogs } from './useHarnessRoute';
 import { PROTOCOL_VERSION } from '../types/protocolVersion';
 export { PROTOCOL_VERSION } from '../types/protocolVersion';
 import { handleCommandUsageEvent } from './daemonCommandUsageEvents';
+import { handleAskDaemonEvent } from './daemonAskEvents';
+import { useAsksStore } from '../store/asks';
 import { handleLaunchDesktopEvent } from './daemonLaunchDesktopEvents';
 import { handleDelegationDaemonEvent, type DelegationSettingsState, type HarnessModelCatalog } from './daemonDelegationEvents';
 import {
@@ -20,6 +22,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { isTauri } from '@tauri-apps/api/core';
 import { readMigrationFailureMarker, type MigrationFailure } from '../utils/migrationFailure';
 import type {
+  AskAnswer,
   CommandUsage,
   Session as GeneratedSession,
   PR as GeneratedPR,
@@ -1133,6 +1136,7 @@ export function useDaemonSocket({
               data.seeds_total ?? (data.seeds || []).length,
             );
             callbacksRef.current.onCrewUpdate?.(data.crew || []);
+            useAsksStore.getState().setAsks(data.asks || []);
             useProfilesStore.getState().migrationPhaseChanged(data.migration_phase ?? null);
             pruneAttachedPtySessions(nextSessions);
             const nextPRs = data.prs || [];
@@ -2282,6 +2286,7 @@ export function useDaemonSocket({
             if (handleProfileDaemonEvent(data, pending)) break;
             if (handleLaunchDesktopEvent(data, pending)) break;
             if (handleCommandUsageEvent(data, pending)) break;
+            if (handleAskDaemonEvent(data, pending)) break;
             if (handleAutoModeDaemonEvent(data, pending)) break;
             if (handleConversationDaemonEvent(data, pending, () => setKeptConversationsChangeSignal((signal) => signal + 1))) break;
             if (handleWorktreeDaemonEvent(data, pending, {
@@ -3753,6 +3758,9 @@ export function useDaemonSocket({
   const sendRecordCommandUsage = useCallback((profileId: string, commandId: string): Promise<boolean> =>
     sendRequest('record_command_usage', { profile_id: profileId, command_id: commandId }, 'Saving command history timed out'), [sendRequest]);
 
+  const sendAskAnswer = useCallback((askId: string, answers: AskAnswer[], note: string): Promise<true> =>
+    sendRequest('ask_answer', { ask_id: askId, answers, ...(note.trim() ? { note } : {}) }, 'Sending the answer timed out'), [sendRequest]);
+
   const sendRecentFiles = useCallback((limit?: number, root?: string): Promise<RecentFile[]> => {
     const requestId = nextRequestID('recent_files');
     const key = `recent_files:${requestId}`;
@@ -4466,6 +4474,7 @@ export function useDaemonSocket({
     sendFsIndex,
     sendGetCommandUsage,
     sendRecordCommandUsage,
+    sendAskAnswer,
     sendRecentFiles,
     sendGetRecentLocations,
     sendBrowseDirectory,

@@ -189,6 +189,9 @@ func main() {
 		runJournal()
 	case "vision-check":
 		runVisionCheck()
+	case "ask":
+		maybePrintInstanceBanner()
+		runAsk()
 	case "conversation":
 		maybePrintInstanceBanner()
 		runConversation()
@@ -571,6 +574,7 @@ commands:
   activity [clear <id>]             what each agent is doing right now
   conversation <command>            list, keep forever or forget attn's conversation copies
   worktree <command>                every tracked worktree, the sweep and the keep pin
+  ask [list|close]                  ask the user something they answer from attn
   debug <command>                   probe debug artifacts (incidents, logs)
   db <command>                      database maintenance (restore from backup)
   bus <command>                     event bus: consumer cursors, lag, kill switch

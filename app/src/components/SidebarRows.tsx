@@ -9,6 +9,7 @@ import { useDaemonStore } from '../store/daemonSessions';
 import { ChiefOfStaffBadge } from './ChiefOfStaffBadge';
 import { DelegatedFromChiefBadge } from './DelegatedFromChiefBadge';
 import { DelegationChainTrigger } from './DelegationChain';
+import { AskMarker } from './Asks/AskMarker';
 import { SessionLead } from './SessionLead';
 import { SessionLabel } from './SessionLabel';
 import { SessionProvenance } from './SessionProvenance';
@@ -235,6 +236,7 @@ export function SidebarSessionRow({
       <SidebarSessionIdentity session={session} hasDelegates={delegates.length > 0} />
       <span className="session-trailing">
         <DelegationChainTrigger session={session} hasDelegates={delegates.length > 0} />
+        <AskMarker session={session} />
         <SidebarSessionBadges session={session} />
       </span>
       <div className="session-actions">

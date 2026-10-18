@@ -579,6 +579,7 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		Seeds:                  state.Seeds,
 		SeedsTotal:             protocol.Ptr(d.countSeedsForBroadcast(client.selectedProfile())),
 		Crew:                   state.Crew,
+		Asks:                   asksSnapshot(client.selectedProfile(), d.openAsks()).Asks,
 	}
 	d.fillInitialMigrationPhase(event)
 	d.sendInitialArrangement(client, event)
@@ -1107,6 +1108,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleEnsureRepoWS(client, msg.(*protocol.EnsureRepoMessage))
 	case protocol.CmdGetRepoInfo:
 		d.handleGetRepoInfoWS(client, msg.(*protocol.GetRepoInfoMessage))
+	case protocol.CmdAskAnswer:
+		d.handleAskAnswer(client, msg.(*protocol.AskAnswerMessage))
 	case protocol.CmdAutomationDefinitionsGet:
 		d.handleAutomationDefinitionsGetWS(client, msg.(*protocol.AutomationDefinitionsGetMessage))
 	case protocol.CmdAutomationDefinitionGet:

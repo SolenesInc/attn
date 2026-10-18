@@ -44,7 +44,7 @@ func (d *Daemon) prepareAgentLaunch(sessionID protocol.SessionID, terminal harne
 		Model:                 opts.Model, Effort: opts.Effort, AutoCompactWindow: opts.ContextWindowCap,
 		Executable: executable, SocketPath: d.socketPath,
 		WrapperPath:  launchenv.ActiveAttnExecutable(),
-		NotebookRoot: launch.NotebookRoot, Garden: launch.Garden,
+		NotebookRoot: launch.NotebookRoot, Garden: launch.Garden, Asks: launch.Asks,
 		CrewPriming: launch.Crew, AwarenessDirs: awareness,
 		SelfReportPullRequests: launch.SelfReportPullRequests,
 		CodexRemote:            opts.CodexRemote,

@@ -15,6 +15,7 @@ import type {
 } from '../types/generated';
 import { SessionProvenance } from './SessionProvenance';
 import { DelegationChainTrigger } from './DelegationChain';
+import { AskMarker } from './Asks/AskMarker';
 import './SidebarRow.css';
 import './QueueRows.css';
 
@@ -186,6 +187,7 @@ export function QueueRowView({
       <span className="session-trailing">
         <DelegationChainTrigger session={session} hasDelegates={delegates.length > 0} />
         {session.chiefOfStaff && <span className="queue-chief-glyph" title="Chief of staff" aria-label="Chief of staff">⌁</span>}
+        <AskMarker session={session} />
         {age && <span className="queue-row-age">{age}</span>}
         {wake && <span className="queue-row-wake-at">{wake}</span>}
       </span>
@@ -267,6 +269,7 @@ function SleepingCrewRow({
       <SessionLead agent={agent} state="idle" seed={member} />
       <SessionLabel label={name} />
       <span className="session-trailing">
+        <AskMarker session={{ id: '', crewMember: member }} />
         <button
           type="button"
           className="queue-crew-sun"
@@ -344,6 +347,7 @@ function AwakeCrewRow({
       <SessionLabel label={label} session={session} hasDelegates={delegates.length > 0} />
       <span className="session-trailing">
         <DelegationChainTrigger session={session} hasDelegates={delegates.length > 0} />
+        <AskMarker session={session} />
       </span>
       {(onSleep || onOpenActions) && (
         <div className="session-actions">

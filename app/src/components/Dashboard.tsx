@@ -72,6 +72,14 @@ interface DashboardProps {
   followNextTurn?: boolean;
   onToggleFollowNextTurn?: () => void;
   activityStaleMs?: number;
+  asks?: DashboardAsk[];
+  onOpenAsk?: (askId: string) => void;
+}
+
+export interface DashboardAsk {
+  id: string;
+  from: string;
+  subject: string;
 }
 
 function IntroBanner({ banner }: { banner?: DashboardProps['introBanner'] }) {
@@ -115,6 +123,8 @@ export function Dashboard({
   followNextTurn = false,
   onToggleFollowNextTurn,
   activityStaleMs = DEFAULT_ACTIVITY_STALE_MS,
+  asks = [],
+  onOpenAsk,
 }: DashboardProps) {
   const now = useNow(TURN_AGE_TICK_MS);
   const [snoozedExpanded, setSnoozedExpanded] = useState(false);
@@ -434,6 +444,27 @@ export function Dashboard({
             </button>
           </div>
           <div className="card-body">
+            {asks.length > 0 && (
+              <div className="session-group" data-testid="session-group-asks">
+                <div className="group-label">
+                  Asks
+                  <span className="group-count">{asks.length}</span>
+                </div>
+                {asks.map((ask) => (
+                  <button
+                    key={ask.id}
+                    type="button"
+                    className="session-row clickable dashboard-ask-row"
+                    data-testid={`dashboard-ask-${ask.id}`}
+                    onClick={() => onOpenAsk?.(ask.id)}
+                  >
+                    <span className="dashboard-ask-glyph" aria-hidden="true">?</span>
+                    <span className="session-name">{ask.from}</span>
+                    <span className="dashboard-ask-subject">{ask.subject}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             {sessions.length === 0 ? (
               <div className="card-empty">No active sessions</div>
             ) : (

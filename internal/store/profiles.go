@@ -518,8 +518,9 @@ func deleteProfileDesktops(tx *sql.Tx, profileID string) error {
 	return err
 }
 
-func (s *Store) DeleteProfile(id string, expectedRevision int64, members int) (profiles.Profile, error) {
+func (s *Store) DeleteProfile(id string, expectedRevision int64, members int) (profiles.Profile, []string, error) {
 	var profile profiles.Profile
+	var closedAsks []string
 	err := s.profilesTx(func(tx *sql.Tx, now string) error {
 		var err error
 		if profile, err = loadLiveProfile(tx, id); err != nil {
@@ -567,6 +568,9 @@ func (s *Store) DeleteProfile(id string, expectedRevision int64, members int) (p
 		if err := deleteProfileDesktops(tx, id); err != nil {
 			return err
 		}
+		if closedAsks, err = closeProfileMailboxAsks(tx, id); err != nil {
+			return err
+		}
 		profile.CurrentDesktopID = ""
 		profile.ChiefSessionID = ""
 		profile.DeletedAt = now
@@ -574,7 +578,10 @@ func (s *Store) DeleteProfile(id string, expectedRevision int64, members int) (p
 		_, err = tx.Exec(`UPDATE profiles SET current_desktop_id = '', chief_session_id = '', deleted_at = ?, revision = ? WHERE id = ?`, now, profile.Revision, id)
 		return err
 	})
-	return profile, err
+	if err != nil {
+		return profile, nil, err
+	}
+	return profile, closedAsks, nil
 }
 
 func (s *Store) SetProfileChief(sessionID protocol.SessionID) (profiles.Profile, protocol.SessionID, error) {
