@@ -10,15 +10,20 @@ connections until `outposts_enabled` is true. Both settings are off by default.
 
 ## Run an outpost by hand
 
-Build the home and outpost from the same revision. For the native architecture,
-use `make build`. The bridge checks the version, source fingerprint and protocol
-version, including `unknown` values. A plain `go build` cannot distinguish two
-revisions that both report `dev` and `unknown`.
+Build the home and outpost from the same revision, with separate output paths
+so the Linux build keeps the native binary:
 
-For a Linux outpost, build the matching architecture with `make build-linux-amd64`
-or `make build-linux-arm64`. Copy the resulting daemon to `~/.local/bin/attn` on
-the outpost. Install this user service as
-`~/.config/systemd/user/attn.service`:
+```sh
+make build OUTPUT=/tmp/attn-home
+make build-linux-amd64 OUTPUT=/tmp/attn-outpost
+```
+
+Use `build-linux-arm64` for an arm64 outpost. The bridge checks the version,
+source fingerprint and protocol version, including `unknown` values. A plain
+`go build` cannot distinguish two revisions that both report `dev` and `unknown`.
+
+Copy `/tmp/attn-outpost` to `~/.local/bin/attn` on the outpost. Install this user
+service as `~/.config/systemd/user/attn.service`:
 
 ```ini
 [Unit]
