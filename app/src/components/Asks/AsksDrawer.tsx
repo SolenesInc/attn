@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import type { AskAnswer } from '../../types/generated';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
+import type { Ask, AskAnswer } from '../../types/generated';
 import { useDaemonApi } from '../../contexts/DaemonApiContext';
 import { TURN_AGE_TICK_MS, useNow } from '../../hooks/useNow';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
@@ -52,7 +52,6 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
   const drawerRef = useRef<HTMLDivElement>(null);
   const askRef = useRef<HTMLElement>(null);
   const listRef = useRef<HTMLOListElement>(null);
-  const now = useNow(TURN_AGE_TICK_MS);
   const sourcePath = ask ? `${ask.base_dir}/${ask.id}.md` : '';
   const source = useMemo(() => fileMarkdownSource(sourcePath), [sourcePath]);
 
@@ -135,30 +134,7 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
   return (
     <div ref={drawerRef} className="asks-drawer" role="region" aria-label="Asks" tabIndex={-1} onKeyDown={onKeyDown}>
       <AsksHeader count={ordered.length} onClose={onClose} />
-      <ol ref={listRef} className="asks-list" aria-label="Open asks">
-        {ordered.map((item) => {
-          const itemHolder = askHolder(item, sessions, seeds);
-          const questionCount = askQuestions(item).length;
-          const selected = item.id === ask.id;
-          return (
-            <li key={item.id}>
-              <button
-                type="button"
-                className={`asks-row ${selected ? 'asks-row--selected' : ''}`.trim()}
-                data-testid={`asks-row-${item.id}`}
-                aria-current={selected ? 'true' : undefined}
-                onClick={() => show(item.id)}
-              >
-                <span className="asks-row-from">{askFrom(item, itemHolder)}</span>
-                <span className="asks-row-subject">{item.subject}</span>
-                {questionCount > 1 && <span className="asks-row-count">{questionCount} questions</span>}
-                {itemHolder?.turnOwed && <span className="asks-row-waiting" role="img" aria-label="Waiting on you" title="Waiting on you" />}
-                <span className="asks-row-age">{formatTurnAge(item.created_at, now)}</span>
-              </button>
-            </li>
-          );
-        })}
-      </ol>
+      <AsksList asks={ordered} selectedId={ask.id} sessions={sessions} listRef={listRef} onShow={show} />
       <article ref={askRef} className="asks-ask" aria-label={ask.subject} data-testid={`ask-${ask.id}`}>
         <div className="asks-ask-from">
           {holder && <SessionLead agent={holder.agent} state={holder.state} reason={holder.state_reason} seed={holder.id} />}
@@ -169,15 +145,7 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
             </button>
           )}
         </div>
-        {seedId && (
-          <div className="asks-ask-seed">
-            <span className="asks-ask-seed-slug">{ask.seed_slug ?? seedId}</span>
-            <span className="asks-ask-seed-title">{ask.seed_title}</span>
-            <button type="button" className="asks-ask-open" onClick={() => onOpenSeed(seedId)} title={`Open ${ask.seed_title} in the Garden (g)`}>
-              Open in Garden
-            </button>
-          </div>
-        )}
+        <AskSeedLine ask={ask} onOpenSeed={onOpenSeed} />
         <h2 className="asks-ask-subject">{ask.subject}</h2>
         {ask.parts.map((part, partIndex) => (
           part.question ? (
@@ -207,17 +175,76 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
         {error && <div className="asks-error" role="alert">{error}</div>}
       </article>
       <div className="asks-footer">
-        <span className="asks-hints">
-          {ordered.length > 1 && <span className="asks-hint"><kbd>j</kbd><kbd>k</kbd> next · previous</span>}
-          {holder && <span className="asks-hint"><kbd>o</kbd> open agent</span>}
-          {seedId && <span className="asks-hint"><kbd>g</kbd> open in Garden</span>}
-          <span className="asks-hint"><kbd>esc</kbd> close</span>
-        </span>
+        <AsksHints several={ordered.length > 1} hasHolder={Boolean(holder)} hasSeed={Boolean(seedId)} />
         <button type="button" className="asks-send" disabled={!sendable} aria-busy={sending || undefined} onClick={() => void send()}>
           {sending ? 'Sending…' : 'Send'} <kbd>{formatShortcut(SEND_SHORTCUT)}</kbd>
         </button>
       </div>
     </div>
+  );
+}
+
+interface AsksListProps {
+  asks: readonly Ask[];
+  selectedId: string;
+  sessions: readonly AskDrawerSession[];
+  listRef: RefObject<HTMLOListElement | null>;
+  onShow: (askId: string) => void;
+}
+
+function AsksList({ asks, selectedId, sessions, listRef, onShow }: AsksListProps) {
+  const seeds = useDaemonStore((state) => state.seeds);
+  const now = useNow(TURN_AGE_TICK_MS);
+  return (
+    <ol ref={listRef} className="asks-list" aria-label="Open asks">
+      {asks.map((item) => {
+        const itemHolder = askHolder(item, sessions, seeds);
+        const questionCount = askQuestions(item).length;
+        const selected = item.id === selectedId;
+        return (
+          <li key={item.id}>
+            <button
+              type="button"
+              className={`asks-row ${selected ? 'asks-row--selected' : ''}`.trim()}
+              data-testid={`asks-row-${item.id}`}
+              aria-current={selected ? 'true' : undefined}
+              onClick={() => onShow(item.id)}
+            >
+              <span className="asks-row-from">{askFrom(item, itemHolder)}</span>
+              <span className="asks-row-subject">{item.subject}</span>
+              {questionCount > 1 && <span className="asks-row-count">{questionCount} questions</span>}
+              {itemHolder?.turnOwed && <span className="asks-row-waiting" role="img" aria-label="Waiting on you" title="Waiting on you" />}
+              <span className="asks-row-age">{formatTurnAge(item.created_at, now)}</span>
+            </button>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function AskSeedLine({ ask, onOpenSeed }: { ask: Ask; onOpenSeed: (seedId: string) => void }) {
+  const seedId = ask.seed_id;
+  if (!seedId) return null;
+  return (
+    <div className="asks-ask-seed">
+      <span className="asks-ask-seed-slug">{ask.seed_slug ?? seedId}</span>
+      <span className="asks-ask-seed-title">{ask.seed_title}</span>
+      <button type="button" className="asks-ask-open" onClick={() => onOpenSeed(seedId)} title={`Open ${ask.seed_title} in the Garden (g)`}>
+        Open in Garden
+      </button>
+    </div>
+  );
+}
+
+function AsksHints({ several, hasHolder, hasSeed }: { several: boolean; hasHolder: boolean; hasSeed: boolean }) {
+  return (
+    <span className="asks-hints">
+      {several && <span className="asks-hint"><kbd>j</kbd><kbd>k</kbd> next · previous</span>}
+      {hasHolder && <span className="asks-hint"><kbd>o</kbd> open agent</span>}
+      {hasSeed && <span className="asks-hint"><kbd>g</kbd> open in Garden</span>}
+      <span className="asks-hint"><kbd>esc</kbd> close</span>
+    </span>
   );
 }
 
