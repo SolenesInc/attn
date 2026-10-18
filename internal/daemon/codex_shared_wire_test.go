@@ -159,17 +159,29 @@ func TestASharedCodexCrewMemberWakesWithItsAwarenessDirsAsWorkspaceRoots(t *test
 }
 
 func TestWithSharedCodexOnAnAutomationRunsSharedCodexUnderItsLaunchContract(t *testing.T) {
-	for _, saved := range []struct{ name, folder, level, want string }{
+	for _, saved := range []struct {
+		name, folder, level, want string
+		worktreeOfFolder          bool
+	}{
 		{name: "no saved trust", want: "trusted"},
 		{name: "folder saved untrusted", folder: "check", level: "untrusted", want: "untrusted"},
 		{name: "parent saved untrusted", folder: ".", level: "untrusted", want: ""},
+		{name: "main repository of its worktree saved untrusted", folder: "shop", level: "untrusted", want: "", worktreeOfFolder: true},
 	} {
 		t.Run(saved.name, func(t *testing.T) {
 			w := newWorld(t, fakeagent.Codex)
 			app, cli := w.App(), w.Client()
 			setSetting(t, app, "codex_shared_enabled", "true")
 			folder := w.Path("check")
-			if err := os.MkdirAll(folder, 0o755); err != nil {
+			if saved.worktreeOfFolder {
+				repo := w.Path(saved.folder)
+				if err := os.MkdirAll(repo, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				runGit(t, repo, "init", "-q")
+				runGit(t, repo, "commit", "-q", "--allow-empty", "-m", "start")
+				runGit(t, repo, "worktree", "add", "-q", folder)
+			} else if err := os.MkdirAll(folder, 0o755); err != nil {
 				t.Fatal(err)
 			}
 			if saved.folder != "" {

@@ -18,6 +18,7 @@ import (
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/codexshared"
+	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/prompts"
@@ -161,6 +162,10 @@ func (r *codexShared) prepareLaunch(opts *ptybackend.SpawnOptions, profile strin
 	return nil
 }
 
+type codexProjects map[string]struct {
+	TrustLevel string `json:"trust_level"`
+}
+
 func (r *codexShared) trustFolder(s *codexServer, cwd string) error {
 	client := s.client()
 	if client == nil {
@@ -174,29 +179,42 @@ func (r *codexShared) trustFolder(s *codexServer, cwd string) error {
 	}
 	var read struct {
 		Config struct {
-			Projects map[string]struct {
-				TrustLevel string `json:"trust_level"`
-			} `json:"projects"`
+			Projects codexProjects `json:"projects"`
 		} `json:"config"`
 	}
 	if err := json.Unmarshal(raw, &read); err != nil {
 		return err
 	}
-	projects := read.Config.Projects
-	if projects[cwd].TrustLevel != "" {
-		return nil
+	root, err := attngit.RepositoryRoot(ctx, cwd)
+	if err != nil {
+		return err
 	}
-	for dir := cwd; dir != filepath.Dir(dir); {
-		dir = filepath.Dir(dir)
-		if projects[dir].TrustLevel == "untrusted" {
-			return nil
-		}
+	if read.Config.Projects.answered(cwd, root) {
+		return nil
 	}
 	_, err = client.Call(ctx, "config/batchWrite", map[string]any{
 		"edits":            []any{map[string]any{"keyPath": agentdriver.CodexTrustKey(cwd), "value": "trusted", "mergeStrategy": "replace"}},
 		"reloadUserConfig": true,
 	})
 	return err
+}
+
+func (projects codexProjects) answered(cwd, root string) bool {
+	canonical := attngit.CanonicalizePath(cwd)
+	if projects[cwd].TrustLevel != "" || projects[canonical].TrustLevel != "" {
+		return true
+	}
+	for _, dir := range []string{cwd, canonical, root} {
+		for ; dir != ""; dir = filepath.Dir(dir) {
+			if projects[dir].TrustLevel == "untrusted" {
+				return true
+			}
+			if dir == filepath.Dir(dir) {
+				break
+			}
+		}
+	}
+	return false
 }
 
 func (r *codexShared) launchFailed(t harness.TerminalID, profile string) {

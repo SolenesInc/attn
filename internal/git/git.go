@@ -138,7 +138,7 @@ func (c *Client) branchInfoFromFiles(ctx context.Context, dir string) (*BranchIn
 		info.MainRepo = filepath.Dir(mainGitDir)
 		info.IsWorktree = true
 	}
-	info.Repository, _ = c.RepositoryRoot(ctx, dir)
+	info.Repository, _ = RepositoryRoot(ctx, dir)
 	return info, true
 }
 
@@ -199,7 +199,7 @@ func (c *Client) branchInfoFromGit(ctx context.Context, dir string) (*BranchInfo
 	mainRepo, isWT := c.getWorktreeInfo(ctx, dir)
 	info.IsWorktree = isWT
 	info.MainRepo = mainRepo
-	info.Repository, _ = c.RepositoryRoot(ctx, dir)
+	info.Repository, _ = RepositoryRoot(ctx, dir)
 
 	return info, nil
 }

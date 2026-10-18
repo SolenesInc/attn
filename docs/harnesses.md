@@ -173,6 +173,10 @@ Read in the source at openai/codex rust-v0.160.0:
 - `thread/start` in a folder with no saved trust level saves it as trusted when
   the conversation's sandbox can write there
   (`app-server/src/request_processors/thread_processor.rs`).
+- A folder's trust is the first saved entry for the folder, its
+  symlink-resolved path, then its repository root; the root of a linked
+  worktree is its main repository. A folder's own entry outranks its root's
+  (`config/src/project_trust.rs`, `git-utils/src/trust.rs`).
 
 Read in the source at openai/codex 1ffa95e:
 

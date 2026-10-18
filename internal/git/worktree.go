@@ -249,7 +249,7 @@ func (c *Client) ResolveMainRepoPath(ctx context.Context, repoPath string) strin
 	return filepath.Clean(expanded)
 }
 
-func (c *Client) RepositoryRoot(ctx context.Context, dir string) (string, error) {
+func RepositoryRoot(ctx context.Context, dir string) (string, error) {
 	current := CanonicalizePath(dir)
 	for {
 		if cause := context.Cause(ctx); cause != nil {

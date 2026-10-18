@@ -1,6 +1,7 @@
 package fakeagent
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,8 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+
+	attngit "github.com/victorarias/attn/internal/git"
 )
 
 func readCodexConfig(codexHome string) (map[string]any, error) {
@@ -29,10 +32,15 @@ func codexFolderTrust(config map[string]any, dir string) string {
 }
 
 func codexUnderUntrusted(config map[string]any, dir string) bool {
-	for dir != filepath.Dir(dir) {
-		dir = filepath.Dir(dir)
-		if codexFolderTrust(config, dir) == "untrusted" {
-			return true
+	root, _ := attngit.RepositoryRoot(context.Background(), dir)
+	for _, start := range []string{filepath.Dir(dir), root} {
+		for d := start; d != ""; d = filepath.Dir(d) {
+			if codexFolderTrust(config, d) == "untrusted" {
+				return true
+			}
+			if d == filepath.Dir(d) {
+				break
+			}
 		}
 	}
 	return false
