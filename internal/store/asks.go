@@ -164,7 +164,16 @@ func (s *Store) CloseAsksTo(to inbox.Address) ([]string, error) {
 }
 
 func closeAsksTo(db rowsQuerier, to inbox.Address) ([]string, error) {
-	rows, err := db.Query("DELETE FROM asks WHERE address = ? RETURNING id", to.String())
+	return deleteAsks(db, "DELETE FROM asks WHERE address = ? RETURNING id", to.String())
+}
+
+func closeProfileMailboxAsks(db rowsQuerier, profileID string) ([]string, error) {
+	return deleteAsks(db, "DELETE FROM asks WHERE address = ? OR address IN (SELECT ? || member_id FROM crew_profiles WHERE profile_id = ?) RETURNING id",
+		inbox.ToChief(profileID).String(), inbox.ToMember("").String(), profileID)
+}
+
+func deleteAsks(db rowsQuerier, query string, args ...any) ([]string, error) {
+	rows, err := db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}

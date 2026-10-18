@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
@@ -569,7 +568,7 @@ func (s *Store) DeleteProfile(id string, expectedRevision int64, members int) (p
 		if err := deleteProfileDesktops(tx, id); err != nil {
 			return err
 		}
-		if closedAsks, err = closeAsksTo(tx, inbox.ToChief(id)); err != nil {
+		if closedAsks, err = closeProfileMailboxAsks(tx, id); err != nil {
 			return err
 		}
 		profile.CurrentDesktopID = ""
