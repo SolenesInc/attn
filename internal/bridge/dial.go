@@ -84,7 +84,7 @@ func Dial(ctx context.Context, cfg DialConfig) (*Conn, *Pin, error) {
 			}
 		}
 		if cfg.Pin != nil && seen.HostKey != cfg.Pin.HostKey {
-			pinErr = &Refusal{Reason: "identity", Detail: fmt.Sprintf("outpost %s (%s) changed host key: pinned %s, received %s; use repair_outpost to re-pair this outpost and accept its new identity", cfg.Pin.DaemonID, cfg.Address, cfg.Pin.Fingerprint(), seen.Fingerprint())}
+			pinErr = &Refusal{Reason: "identity", Detail: fmt.Sprintf("outpost %s (%s) changed host key: pinned %s, received %s; if you expect that, re-pair it in Settings → Outposts", cfg.Pin.DaemonID, cfg.Address, cfg.Pin.Fingerprint(), seen.Fingerprint())}
 			return pinErr
 		}
 		return nil
@@ -126,7 +126,7 @@ func Dial(ctx context.Context, cfg DialConfig) (*Conn, *Pin, error) {
 	if err == nil {
 		seen.DaemonID = answer.DaemonID
 		if cfg.Pin != nil && cfg.Pin.DaemonID != seen.DaemonID {
-			err = &Refusal{Reason: "identity", Detail: fmt.Sprintf("outpost at %s changed daemon id: pinned %s, received %s; use repair_outpost to re-pair this outpost and accept its new identity", cfg.Address, cfg.Pin.DaemonID, seen.DaemonID)}
+			err = &Refusal{Reason: "identity", Detail: fmt.Sprintf("outpost at %s changed daemon id: pinned %s, received %s; if you expect that, re-pair it in Settings → Outposts", cfg.Address, cfg.Pin.DaemonID, seen.DaemonID)}
 		} else if answer.Refused != nil {
 			answer.Refused.Peer = &answer.Identity
 			err = answer.Refused

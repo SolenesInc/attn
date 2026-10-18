@@ -190,7 +190,7 @@ func TestOutpostsChangedIdentityRequiresRepair(t *testing.T) {
 			remote := replacement.App()
 			requireStdout(t, replacement.Attn("settings", "set", "outpost_listen", address), address)
 			refused := outpostState(p, "replaced", protocol.OutpostStateRefused)
-			words := []string{address, protocol.Deref(first.DaemonID), "repair_outpost"}
+			words := []string{address, protocol.Deref(first.DaemonID), "re-pair it in Settings → Outposts"}
 			if sameKey {
 				words = append(words, protocol.Deref(remote.Initial.DaemonInstanceID))
 			} else {
