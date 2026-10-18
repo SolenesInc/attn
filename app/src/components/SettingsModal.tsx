@@ -238,6 +238,7 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           codexSharedEnabled={state.codexSharedEnabled}
           queueShowHiddenSessions={state.queueShowHiddenSessions}
           directAgentLaunchEnabled={state.directAgentLaunchEnabled}
+          quickCaptureEnabled={state.quickCaptureEnabled}
           asksEnabled={state.asksEnabled}
           calloutsEnabled={state.calloutsEnabled}
           ptyBackendMode={state.ptyBackendMode}

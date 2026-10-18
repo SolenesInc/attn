@@ -27,6 +27,8 @@ func TestSettingsCLIDiscoversReadsAndSavesDaemonSettings(t *testing.T) {
 		requireStdout(t, s.Attn("settings", "set", key, "true"), key+" = true")
 		requireStdout(t, s.Attn("settings", "get", key), "true")
 	}
+	requireStdout(t, s.Attn("settings", "set", "capture.shortcut", "Control+Alt+Super+Space"), "capture.shortcut = Control+Alt+Super+Space")
+	requireStdout(t, s.Attn("settings", "get", "capture.shortcut"), "Control+Alt+Super+Space")
 	for _, tc := range []struct{ key, value, reason string }{
 		{"theme", "purple", "invalid theme"},
 		{"unknown.key", "value", "unknown.key"},

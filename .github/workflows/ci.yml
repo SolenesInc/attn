@@ -787,6 +787,10 @@ jobs:
             ${{ runner.temp }}/attn-real-app-harness/**/*.png
             ${{ runner.temp }}/attn-real-app-harness/**/*.json
             ${{ runner.temp }}/attn-real-app-harness/**/app-launch-*.log
+            ${{ runner.temp }}/attn-real-app-harness/**/native-*.log
+            ${{ runner.temp }}/attn-real-app-harness/**/fixture.log
+            ${{ runner.temp }}/attn-real-app-harness/**/other-fixture.log
+            ${{ runner.temp }}/attn-real-app-harness/**/*idle*.txt
             ${{ runner.temp }}/attn-real-app-harness/daemon/*.log
 
       - name: Upload shard result
@@ -936,8 +940,8 @@ jobs:
           instance: ${{ env.ATTN_INSTANCE }}
           archive: ${{ steps.build-app.outputs.archive }}
 
-      - name: Run native clipboard and keyboard scenarios
-        run: pnpm --dir app run real-app:serial-matrix -- --scenario terminal-block-copy --scenario terminal-input
+      - name: Run native clipboard, keyboard and capture scenarios
+        run: pnpm --dir app run real-app:serial-matrix -- --scenario terminal-block-copy --scenario terminal-input --scenario quick-capture
 
       - name: Require executed macOS coverage
         run: |
@@ -948,6 +952,7 @@ jobs:
           assert.deepEqual(results.map(({ id, code, skipped = false }) => ({ id, code, skipped })), [
             { id: 'terminal-block-copy', code: 0, skipped: false },
             { id: 'terminal-input', code: 0, skipped: false },
+            { id: 'quick-capture', code: 0, skipped: false },
           ]);
           NODE
 
@@ -971,8 +976,10 @@ jobs:
           path: |
             ${{ runner.temp }}/attn-real-app-harness/**/*.txt
             ${{ runner.temp }}/attn-real-app-harness/**/*.png
+            ${{ runner.temp }}/attn-real-app-harness/**/*.mp4
             ${{ runner.temp }}/attn-real-app-harness/**/*.json
             ${{ runner.temp }}/attn-real-app-harness/**/app-launch-*.log
+            ${{ runner.temp }}/attn-real-app-harness/**/native-*.log
             ${{ runner.temp }}/attn-real-app-harness/daemon/*.log
 
       - name: Clean instance

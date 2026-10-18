@@ -8,6 +8,8 @@ import { handleAskDaemonEvent } from './daemonAskEvents';
 import { useAsksStore } from '../store/asks';
 import { handleLaunchDesktopEvent } from './daemonLaunchDesktopEvents';
 import { handleDelegationDaemonEvent, type DelegationSettingsState, type HarnessModelCatalog } from './daemonDelegationEvents';
+import { handleQuickCaptureDaemonEvent } from './daemonQuickCaptureEvents';
+import type { QuickCaptureAttachmentDiscardMessage, QuickCaptureAttachmentGetMessage, QuickCaptureAttachmentPutMessage, QuickCaptureGetMessage, QuickCaptureListMessage, QuickCaptureSendMessage, QuickCaptureResultObject } from '../types/generated';
 import {
   handleCrewDaemonEvent,
   type CrewCharterGetOutcome,
@@ -508,6 +510,7 @@ interface UseDaemonSocketOptions {
   onReposUpdate: (repos: RepoState[]) => void;
   onAuthorsUpdate: (authors: AuthorState[]) => void;
   onWorktreesUpdate?: (worktrees: DaemonWorktree[]) => void;
+  onQuickCaptureRead?: (receipt: { profileId: string; captureId: string; readAt: string }) => void;
   onSettingsUpdate?: (settings: DaemonSettings) => void;
   onSettingError?: (message: string) => void;
   endpoint?: DaemonEndpointInstance;
@@ -636,6 +639,7 @@ export function useDaemonSocket({
   onReposUpdate,
   onAuthorsUpdate,
   onWorktreesUpdate,
+  onQuickCaptureRead,
   onSettingsUpdate,
   onSettingError,
   endpoint,
@@ -663,6 +667,7 @@ export function useDaemonSocket({
     onReposUpdate,
     onAuthorsUpdate,
     onWorktreesUpdate,
+    onQuickCaptureRead,
     onSettingsUpdate,
     onSettingError,
   });
@@ -680,6 +685,7 @@ export function useDaemonSocket({
     onReposUpdate,
     onAuthorsUpdate,
     onWorktreesUpdate,
+    onQuickCaptureRead,
     onSettingsUpdate,
     onSettingError,
   };
@@ -720,6 +726,7 @@ export function useDaemonSocket({
     for (const listener of sessionLedgerListenersRef.current) listener(stamped);
   }, []);
   const [hasReceivedInitialState, setHasReceivedInitialState] = useState(false);
+  const [isReady, setIsReady] = useState(false);
   const [rateLimit, setRateLimit] = useState<RateLimitState | null>(null);
   const [warnings, setWarnings] = useState<DaemonWarning[]>([]);
   const [gitOperations, setGitOperations] = useState<Record<string, DaemonGitOperation>>({});
@@ -1154,6 +1161,7 @@ export function useDaemonSocket({
               ws.send(JSON.stringify({ cmd: 'clear_warnings' }));
             }
             hasReceivedInitialStateRef.current = true;
+            setIsReady(true);
             setHasReceivedInitialState(true);
             useAutomationsStore.getState().bumpChanged();
             flushQueuedCommands(ws);
@@ -2262,6 +2270,7 @@ export function useDaemonSocket({
           default: {
             const pending = pendingActionsRef.current;
             if (handleCalloutDaemonEvent(data, (result) => ws.send(JSON.stringify(result)))) break;
+            if (handleQuickCaptureDaemonEvent(data, pending, receipt => { if (data.profile_id === useProfilesStore.getState().selectedProfileId) callbacksRef.current.onQuickCaptureRead?.(receipt); })) break;
             if (handleSeedArtifactDaemonEvent(data, pending)) break;
             if (handleSessionLedgerDaemonEvent(data, { pending, onUpdate: emitSessionLedger })) break;
             if (handleFsDaemonEvent(data, { pending, onFsChanged: callbacksRef.current.onFsChanged })) break;
@@ -2294,11 +2303,15 @@ export function useDaemonSocket({
       }
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       wsRef.current = null;
       rejectPendingByPredicate((key) => SELECTION_COMMANDS.some((command) => key.startsWith(`${command}:`)), new Error('The daemon disconnected before confirming the selection'));
       emitSessionLedger({ type: 'connection', connected: false });
       hasReceivedInitialStateRef.current = false;
+      setIsReady(false);
+      const quickCaptureFailure = event.reason || 'Disconnected. Quick capture acceptance is unconfirmed.';
+      rejectPendingByPredicate(key => key.startsWith('quick_capture_'), new Error(quickCaptureFailure));
+      if (event.reason && !circuitOpenRef.current) setConnectionError(event.reason);
       canceledAttachIdsRef.current.clear();
       docSubscriptions.markDisconnected();
       useAutoModePushStore.getState().clear();
@@ -3177,6 +3190,10 @@ export function useDaemonSocket({
 
   const sendSaveSetting = useCallback(async (key: string, value: string): Promise<void> => {
     await sendRequest<boolean>('set_setting', { key, value }, 'Saving the setting timed out');
+  }, [sendRequest]);
+
+  const sendQuickCaptureRequest = useCallback((command: QuickCaptureCommand): Promise<QuickCaptureResultObject> => {
+    return sendRequest(command.cmd, command, 'Quick capture request timed out. Your draft is retained.');
   }, [sendRequest]);
 
   const sendGetSettings = useCallback(() => {
@@ -4125,6 +4142,7 @@ export function useDaemonSocket({
 
   return {
     isConnected: wsRef.current?.readyState === WebSocket.OPEN,
+    isReady,
     connectionError,
     migrationFailure,
     sendProfileSelect,
@@ -4182,6 +4200,7 @@ export function useDaemonSocket({
     sendCreateWorktree,
     sendDeleteWorktree,
     sendSetSetting,
+    sendQuickCaptureRequest,
     sendSaveSetting,
     sendGetSettings,
     sendListPlugins,
@@ -4295,3 +4314,6 @@ export function useDaemonSocket({
     deleteAutomationDefinition,
   };
 }
+
+type QuickCaptureWireCommand = QuickCaptureAttachmentDiscardMessage | QuickCaptureAttachmentGetMessage | QuickCaptureAttachmentPutMessage | QuickCaptureGetMessage | QuickCaptureListMessage | QuickCaptureSendMessage;
+export type QuickCaptureCommand = QuickCaptureWireCommand extends infer Command ? Command extends { cmd: string } ? Omit<Command, 'request_id'> : never : never;
