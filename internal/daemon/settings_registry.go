@@ -240,12 +240,12 @@ var settingSpecs = []settingSpec{
 		return nil
 	}},
 	{key: "<harness>_executable", scope: daemonScope, description: "Executable for this harness. Empty finds the default executable on PATH.", validate: func(d *Daemon, key, value string) error { return validateExecutableSetting(value) }},
-	{key: "new_session_yolo_<harness>", scope: daemonScope, description: "Start this harness with approval bypass: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: "new_session_destination_<harness>", scope: daemonScope, description: "New sessions start in new_worktree or main_repo. Empty uses the default destination.", validate: func(d *Daemon, key, value string) error { return validateNewSessionDestination(value) }},
+	{key: "new_session_yolo_<location>", scope: daemonScope, description: "Start sessions at this location with approval bypass: true or false. The local location uses new_session_yolo_local.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
+	{key: "new_session_destination_<repository>", scope: daemonScope, description: "New session destination for a repository: new_worktree or main_repo. Use local_<absolute-path> as the suffix. Empty uses the default destination.", validate: func(d *Daemon, key, value string) error { return validateNewSessionDestination(value) }},
 	{key: "default_model_<harness>", scope: daemonScope, description: "Model for new sessions. Empty uses the harness default.", validate: func(d *Daemon, key, value string) error { return nil }},
 	{key: "default_effort_<harness>", scope: daemonScope, description: "Reasoning effort for new sessions. Empty uses the harness default.", validate: func(d *Daemon, key, value string) error { return nil }},
 	{key: "default_context_window_cap_<harness>", scope: daemonScope, description: "Context budget for new sessions, from 10000 to 2000000 tokens. Empty uses the harness default.", validate: func(d *Daemon, key, value string) error { return validateContextWindowCap(value) }},
-	{key: "crew.cache_ttl_seconds.<member>", scope: daemonScope, description: "Prompt cache lifetime for this member in seconds.", validate: func(d *Daemon, key, value string) error {
+	{key: "crew.cache_ttl_seconds.<harness>", scope: daemonScope, description: "Crew prompt cache lifetime for this harness, in seconds.", validate: func(d *Daemon, key, value string) error {
 		return validateBoundedIntSetting("crew cache TTL", value, crewCacheTTLMinSeconds, crewCacheTTLMaxSeconds)
 	}},
 	{key: "session_cost.price.<model>", scope: daemonScope, description: "Custom model token prices as JSON. Empty uses catalog prices.", validate: func(d *Daemon, key, value string) error {
