@@ -28,9 +28,6 @@ func (d *Daemon) prepareAgentLaunch(sessionID protocol.SessionID, terminal harne
 		return err
 	}
 	executable := configuredLaunchExecutable(driver, opts)
-	if !opts.UnattendedLaunch.IsZero() {
-		executable = opts.UnattendedLaunch.Executable
-	}
 	explicitExecutable := executable
 	if executable == "" {
 		executable = driver.DefaultExecutable()
@@ -108,6 +105,9 @@ func (d *Daemon) removeAgentLaunchDir(terminal harness.TerminalID) {
 }
 
 func configuredLaunchExecutable(driver agentdriver.Driver, opts *ptybackend.SpawnOptions) string {
+	if !opts.UnattendedLaunch.IsZero() {
+		return opts.UnattendedLaunch.Executable
+	}
 	if opts.Executable != "" {
 		return opts.Executable
 	}
@@ -138,7 +138,7 @@ func prepareLauncherLaunch(driver agentdriver.Driver, opts *ptybackend.SpawnOpti
 	executable := configuredLaunchExecutable(driver, opts)
 	autoApprove, trust, model, effort := opts.AutoApprove, opts.TrustWorkingDirectory, opts.Model, opts.Effort
 	if launch := opts.UnattendedLaunch; !launch.IsZero() {
-		autoApprove, trust, model, effort, executable = true, true, launch.Model, launch.Effort, launch.Executable
+		autoApprove, trust, model, effort = true, true, launch.Model, launch.Effort
 	}
 	opts.AgentEnv = []string{"ATTN_DAEMON_MANAGED=1", "ATTN_MODEL=" + model, "ATTN_EFFORT=" + effort, fmt.Sprintf("ATTN_AUTO_COMPACT_WINDOW=%d", opts.ContextWindowCap)}
 	if autoApprove {

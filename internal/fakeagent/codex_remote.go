@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -57,6 +58,18 @@ func (c *codexRemote) begin(term *terminal) error {
 	client, err := c.connect()
 	if err != nil {
 		return err
+	}
+	var read struct {
+		Config map[string]any `json:"config"`
+	}
+	if err := call(client, "config/read", map[string]any{"cwd": c.cwd, "includeLayers": true}, &read); err != nil {
+		client.Close()
+		return err
+	}
+	if codexFolderTrust(read.Config, c.cwd) == "" && !codexUnderUntrusted(read.Config, c.cwd) {
+		client.Close()
+		term.print("Trust this folder? Codex can read, edit, and run files here.")
+		return fmt.Errorf("codex --remote waits on the trust question for %s, which its app-server does not trust", c.cwd)
 	}
 	var shown codexRemoteThread
 	if len(args.positionals) > 1 && args.positionals[0] == "resume" {

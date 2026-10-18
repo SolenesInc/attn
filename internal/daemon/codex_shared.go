@@ -129,7 +129,7 @@ func (s *codexServer) client() *codexshared.Client {
 func (r *codexShared) kind() string { return codexLinkKind }
 
 func (r *codexShared) canRun(req *spawnRequest) bool {
-	return req.agent == string(protocol.SessionAgentCodex) && !req.hasPluginDriver && !req.isShell && req.policy.unattendedLaunch.IsZero()
+	return req.agent == string(protocol.SessionAgentCodex) && !req.hasPluginDriver && !req.isShell && req.policy.unattendedLaunch.Executable == ""
 }
 
 func (r *codexShared) enabledForNewLaunches() bool {
@@ -144,19 +144,59 @@ func (r *codexShared) admit(profile, conversation string) error {
 }
 
 func (r *codexShared) prepareLaunch(opts *ptybackend.SpawnOptions, profile string) error {
-	executable := opts.Executable
-	if executable == "" {
-		executable = opts.CodexExecutable
-	}
 	remote, err := r.openView(opts.ID, profile)
 	if err != nil {
 		return err
 	}
-	if _, err := r.ensureServer(r.d.life.Context(), profile, executable); err != nil {
+	s, err := r.ensureServer(r.d.life.Context(), profile, configuredLaunchExecutable(agentdriver.MustGet(string(protocol.SessionAgentCodex)), opts))
+	if err != nil {
 		return err
+	}
+	if !opts.UnattendedLaunch.IsZero() {
+		if err := r.trustFolder(s, opts.CWD); err != nil {
+			return fmt.Errorf("trust %s in the shared Codex: %w", opts.CWD, err)
+		}
 	}
 	opts.CodexRemote = remote
 	return nil
+}
+
+func (r *codexShared) trustFolder(s *codexServer, cwd string) error {
+	client := s.client()
+	if client == nil {
+		return errors.New("no connection to its app-server")
+	}
+	ctx, cancel := context.WithTimeout(r.d.life.Context(), codexServerCallLimit)
+	defer cancel()
+	raw, err := client.Call(ctx, "config/read", map[string]any{"cwd": cwd})
+	if err != nil {
+		return err
+	}
+	var read struct {
+		Config struct {
+			Projects map[string]struct {
+				TrustLevel string `json:"trust_level"`
+			} `json:"projects"`
+		} `json:"config"`
+	}
+	if err := json.Unmarshal(raw, &read); err != nil {
+		return err
+	}
+	projects := read.Config.Projects
+	if projects[cwd].TrustLevel != "" {
+		return nil
+	}
+	for dir := cwd; dir != filepath.Dir(dir); {
+		dir = filepath.Dir(dir)
+		if projects[dir].TrustLevel == "untrusted" {
+			return nil
+		}
+	}
+	_, err = client.Call(ctx, "config/batchWrite", map[string]any{
+		"edits":            []any{map[string]any{"keyPath": agentdriver.CodexTrustKey(cwd), "value": "trusted", "mergeStrategy": "replace"}},
+		"reloadUserConfig": true,
+	})
+	return err
 }
 
 func (r *codexShared) launchFailed(t harness.TerminalID, profile string) {

@@ -15,7 +15,6 @@ change: >
   for its conversation follow each other. "Show hidden sessions in the queue"
   (on by default) turns the hidden rows off.
 notes: >
-  Automations don't use shared Codex yet. A session runs shared or plain
-  wherever you resume its conversation; Codex lets one process write a
-  conversation at a time. The app-server stops when nothing uses it. See
+  A session runs shared or plain wherever you resume its conversation; Codex
+  lets one process write a conversation at a time. The app-server stops when nothing uses it. See
   docs/using-shared-codex.md.

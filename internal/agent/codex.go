@@ -292,9 +292,13 @@ func (c *Codex) GenerateConfigOverrides(opts SpawnOpts) []string {
 		overrides = hooks.GenerateCodexConfigOverrides(string(opts.TerminalID), opts.SocketPath, opts.WrapperPath, opts.launchSpec())
 	}
 	if opts.TrustWorkingDirectory {
-		overrides = append(overrides, fmt.Sprintf(`projects.%s.trust_level="trusted"`, strconv.Quote(opts.CWD)))
+		overrides = append(overrides, CodexTrustKey(opts.CWD)+`="trusted"`)
 	}
 	return overrides
+}
+
+func CodexTrustKey(cwd string) string {
+	return fmt.Sprintf("projects.%s.trust_level", strconv.Quote(cwd))
 }
 
 func (c *Codex) FindTranscript(sessionID, cwd string, startedAt time.Time) string {
