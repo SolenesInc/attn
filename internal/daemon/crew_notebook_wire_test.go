@@ -340,3 +340,64 @@ func TestCrewRenameFailureKeepsTheOriginalHomeAndRecord(t *testing.T) {
 		t.Fatalf("failed rename left destination: %v", err)
 	}
 }
+
+func TestMissingCrewHomesAreNeverRecreated(t *testing.T) {
+	for _, name := range []string{"Chief", "Keel"} {
+		t.Run(name, func(t *testing.T) {
+			w := newWorld(t, fakeagent.Codex)
+			cli := w.Client()
+			var member protocol.CrewMember
+			var id string
+			if name == "Chief" {
+				id = configureChief(t, w, fakeagent.Codex, chiefModel(fakeagent.Codex))
+				member = crewRoster(t, cli)[0]
+			} else {
+				created, err := cli.CrewCreate(protocol.CrewCreateMessage{Name: name, Agent: protocol.Ptr("codex")})
+				if err != nil {
+					t.Fatal(err)
+				}
+				member = created.Member
+				id = string(wakeCrew(t, cli, name, "").SessionID)
+			}
+			run := w.Launched(id)
+			run.Prompted()
+			run.Reply("Ready. <!-- attn:state=idle -->")
+			letter := crewHandoff(t, cli, id, "Keep my memory intact.", false, protocol.CrewDayCloseSleep)
+			charter, err := os.ReadFile(member.CharterPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			moved := filepath.Join(filepath.Dir(member.HomeDir), "moved-"+strings.ToLower(name))
+			w.stop()
+			if err := os.Rename(member.HomeDir, moved); err != nil {
+				t.Fatal(err)
+			}
+			w.start()
+			cli = w.Client()
+			read := testworld.Request(w.App(), protocol.CrewCharterGetMessage{Cmd: protocol.CmdCrewCharterGet, Member: "member:" + member.Key, RequestID: protocol.Ptr("missing-home")}, protocol.EventCrewCharterGetResult, func(r protocol.CrewCharterGetResultMessage) bool { return r.RequestID == "missing-home" })
+			if read.Success || !strings.Contains(protocol.Deref(read.Error), member.HomeDir) {
+				t.Fatalf("missing home charter read: %+v", read)
+			}
+			_, err = cli.CrewWake(name, "", "")
+			crewErrorContains(t, err, member.HomeDir, "home", "restore")
+			if _, err := os.Stat(member.HomeDir); !os.IsNotExist(err) {
+				t.Fatalf("missing home was recreated: %v", err)
+			}
+			if raw, err := os.ReadFile(filepath.Join(moved, crew.CharterFileName)); err != nil || string(raw) != string(charter) {
+				t.Fatalf("moved charter changed: %q %v", raw, err)
+			}
+			letterRel, err := filepath.Rel(member.HomeDir, letter.Path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if raw, err := os.ReadFile(filepath.Join(moved, letterRel)); err != nil || !strings.Contains(string(raw), "Keep my memory intact.") {
+				t.Fatalf("moved letter changed: %q %v", raw, err)
+			}
+			if err := os.Rename(moved, member.HomeDir); err != nil {
+				t.Fatal(err)
+			}
+			wake := wakeCrew(t, cli, name, "")
+			w.Launched(string(wake.SessionID))
+		})
+	}
+}
