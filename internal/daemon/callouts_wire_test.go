@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/protocol"
@@ -150,6 +151,25 @@ func TestCalloutsTreatAnotherProfilesAgentAsNotFound(t *testing.T) {
 		_, err := cli.CalloutShow(caller.ID, []protocol.CalloutShowStep{{Anchor: "agent:" + target, Text: "Who?"}})
 		calloutRefused(t, err, "agent:"+target+" is not an agent in your profile")
 	}
+}
+
+func TestCalloutsNameTheReplyTimeoutWhenTheAppDoesNotAnswer(t *testing.T) {
+	t.Setenv("ATTN_BROWSER_HOST_TOKEN", browserHostToken)
+	inBubble(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		injectAgent(t, w, "callout-source")
+		setSetting(t, app, "callouts_enabled", "true")
+		target := calloutAppPeer(w.World, "tauri://localhost", browserHostToken)
+		selectProfile(target, app.SelectedProfile())
+		answered := make(chan error, 1)
+		go func() {
+			_, err := cli.CalloutShow("callout-source", []protocol.CalloutShowStep{{Anchor: "home", Text: "Home"}})
+			answered <- err
+		}()
+		testworld.Await[protocol.CalloutShowRequestMessage](target, protocol.EventCalloutShowRequest, nil)
+		w.advance(10 * time.Second)
+		calloutRefused(t, <-answered, "the attn app did not answer within 10s")
+	})
 }
 
 func calloutRefused(t *testing.T, err error, want string) {
