@@ -25,9 +25,7 @@ export function ChiefSetup({ chief, anchor, onSave, onClose, onReturnFocus, onOp
   const [draft, setDraft] = useState<HarnessRoute>(() => routeFromStored(chief.agent || '', chief.model || '', chief.effort || 'low'));
   const harness = harnesses.find(candidate => candidate.id === draft.harness) || defaultHarness;
   const route = draft.harness === harness?.id ? draft : { harness: harness?.id || '', model: '', provider: '', effort: 'low' };
-  useLayoutEffect(() => {
-    if (!draft.harness && harness) setDraft(route);
-  }, [draft.harness, harness?.id]);
+  if (!draft.harness && harness) setDraft(route);
   const view = useHarnessRoute(route, chiefRouteRules(harnesses), 'on-mount');
   const recommended = view.catalog?.models.find(model => model.id === view.catalog?.tier_defaults.deep && model.tier === 'deep' && model.access !== 'unsupported');
   const selected = route.model ? view.selected : recommended;
