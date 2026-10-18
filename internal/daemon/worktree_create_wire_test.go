@@ -4,12 +4,73 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
+
+func TestWorktreeStartsFromTheAdvertisedDefault(t *testing.T) {
+	w := newWorld(t)
+	app := w.App()
+	for _, row := range []struct {
+		name, branch, configured, want string
+		remote, offline                bool
+	}{
+		{name: "local main", branch: "main", want: "main"},
+		{name: "local custom branch", branch: "develop", want: "develop"},
+		{name: "configured local branch", branch: "release/next", configured: "release/next", want: "release/next"},
+		{name: "remote default", branch: "main", remote: true, want: "origin/main"},
+		{name: "remote default with slash", branch: "release/next", remote: true, want: "origin/release/next"},
+		{name: "offline cached default", branch: "main", remote: true, offline: true, want: "origin/main"},
+		{name: "configured remote ref", branch: "release/next", configured: "origin/release/next", remote: true, want: "origin/release/next"},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			repo := newRepo(t, "shop")
+			runGit(t, repo, "branch", "-m", row.branch)
+			wantCommit := strings.TrimSpace(runGit(t, repo, "rev-parse", "HEAD"))
+			if row.configured != "" {
+				runGit(t, repo, "config", "attn.baseBranch", row.configured)
+			}
+			if row.remote {
+				remote := newRepo(t, "remote")
+				runGit(t, remote, "branch", "-m", row.branch)
+				runGit(t, repo, "remote", "add", "origin", remote)
+				runGit(t, repo, "fetch", "origin")
+				runGit(t, repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/"+row.branch)
+				wantCommit = strings.TrimSpace(runGit(t, repo, "rev-parse", row.want))
+				latest := commitFile(t, remote, "fresh.txt", "latest remote commit\n")
+				if row.offline {
+					if err := os.Rename(remote, remote+"-offline"); err != nil {
+						t.Fatal(err)
+					}
+				} else {
+					wantCommit = latest
+				}
+			}
+			if row.branch != "develop" {
+				runGit(t, repo, "checkout", "-b", "topic")
+				commitFile(t, repo, "topic.txt", "current checkout differs from the default\n")
+			}
+			info := testworld.Request(app, protocol.GetRepoInfoMessage{Cmd: protocol.CmdGetRepoInfo, Repo: repo},
+				protocol.EventGetRepoInfoResult, func(protocol.GetRepoInfoResultMessage) bool { return true })
+			if !info.Success || info.Info == nil || info.Info.DefaultBranch != row.want {
+				t.Fatalf("repo info = %+v (%s); want default %s", info.Info, protocol.Deref(info.Error), row.want)
+			}
+			created := testworld.Request(app, protocol.CreateWorktreeMessage{
+				Cmd: protocol.CmdCreateWorktree, MainRepo: repo, Branch: "new-work", StartingFrom: protocol.Ptr(info.Info.DefaultBranch),
+			}, protocol.EventCreateWorktreeResult, func(protocol.CreateWorktreeResultMessage) bool { return true })
+			if !created.Success {
+				t.Fatal(protocol.Deref(created.Error))
+			}
+			if got := strings.TrimSpace(runGit(t, protocol.Deref(created.Path), "rev-parse", "HEAD")); got != wantCommit {
+				t.Errorf("created HEAD = %s; want %s from %s", got, wantCommit, row.want)
+			}
+		})
+	}
+}
 
 func TestAWorktreeBelongsToTheRepositoryItWasCreatedFrom(t *testing.T) {
 	w := newWorld(t)

@@ -280,10 +280,7 @@ func (c *Client) GetDefaultBranch(ctx context.Context, repoDir string) (string, 
 	out, err := c.Output(ctx, OpMetadata, repoDir, "symbolic-ref", "refs/remotes/origin/HEAD")
 	if err == nil {
 		ref := strings.TrimSpace(string(out))
-		parts := strings.Split(ref, "/")
-		if len(parts) > 0 {
-			return parts[len(parts)-1], nil
-		}
+		return strings.TrimPrefix(ref, "refs/remotes/origin/"), nil
 	} else if cause := context.Cause(ctx); cause != nil {
 		return "", cause
 	}

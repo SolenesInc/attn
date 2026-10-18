@@ -323,18 +323,12 @@ export function NewSessionLauncher({
       if (action?.kind === 'new' && repo) {
         if (!generated.current.has(repo)) generated.current.set(repo, generateWorktreeName());
         const branchName = where ? name : generated.current.get(repo)!;
-        const from =
-          action.from === 'default'
-            ? where?.info
-              ? `origin/${where.info.default_branch}`
-              : ''
-            : action.branch;
-        let startingFrom = from;
+        let startingFrom = action.branch;
         if (!where) {
           const reply = await onGetRepoInfo?.(repo);
           if (!reply?.success || !reply.info)
             throw new Error(reply?.error || 'Failed to read repository');
-          startingFrom = `origin/${reply.info.default_branch}`;
+          startingFrom = reply.info.default_branch;
         }
         const key = `${repo}:${branchName}:${startingFrom}`;
         const existing = created.current.get(key);

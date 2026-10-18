@@ -130,7 +130,21 @@ func (d *Daemon) handleGetRepoInfoWS(client *wsClient, msg *protocol.GetRepoInfo
 				return repoInfo{}, runErr
 			}
 			commitHash, commitTime := client.GetHeadCommitInfo(ctx, repo)
-			defaultBranch, _ := client.GetDefaultBranch(ctx, repo)
+			branch, runErr := client.GetDefaultBranch(ctx, repo)
+			if runErr != nil {
+				return repoInfo{}, runErr
+			}
+			defaultBranch := currentBranch
+			for _, ref := range []string{"origin/" + branch, branch} {
+				exists, refErr := client.RefExists(ctx, repo, ref)
+				if refErr != nil {
+					return repoInfo{}, refErr
+				}
+				if exists {
+					defaultBranch = ref
+					break
+				}
+			}
 			listedWorktrees, worktreesErr := client.ObserveLiveWorktrees(ctx, repo)
 			return repoInfo{currentBranch: currentBranch, commitHash: commitHash, commitTime: commitTime, defaultBranch: defaultBranch, worktrees: listedWorktrees, worktreesErr: worktreesErr}, nil
 		})
@@ -151,9 +165,6 @@ func (d *Daemon) handleGetRepoInfoWS(client *wsClient, msg *protocol.GetRepoInfo
 			worktrees = d.listedWorktreesAsProtocol(repo, info.worktrees)
 		}
 
-		if info.defaultBranch == "" {
-			info.defaultBranch = "main"
-		}
 		d.sendToClient(client, &protocol.GetRepoInfoResultMessage{
 			Event:     protocol.EventGetRepoInfoResult,
 			RequestID: msg.RequestID,

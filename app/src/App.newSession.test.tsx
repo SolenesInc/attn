@@ -173,13 +173,14 @@ describe('App new session', () => {
       expect(launchedAt(daemon)).toEqual([{ cwd: REPO, agent: 'claude' }]);
     });
 
-    it('creates a worktree from origin/<default branch>, or from the chosen worktree’s branch, and starts the session in it', async () => {
-      const { daemon } = await openChooser(FEATURE);
+    it.each(['origin/main', 'main', 'develop'])('creates a worktree from the advertised %s, or the chosen worktree’s branch', async (defaultBranch) => {
+      const { daemon } = await openPicker({ repos: [{ ...WITH_FEATURE, default_branch: defaultBranch }] });
+      await submitPath(daemon, FEATURE);
       const create = async (name: string, from?: 'current') => {
         await gesture(daemon, () => fireEvent.click(screen.getByTestId('repo-new-worktree-form')));
         fireEvent.change(createInput(), { target: { value: name } });
         if (from) fireEvent.click(screen.getByTestId('repo-new-worktree-start-current'));
-        else expect(screen.getByTestId('repo-new-worktree-start-default')).toBeChecked();
+        else expect(screen.getByLabelText(`Start from ${defaultBranch}`)).toBeChecked();
         await inChooser(daemon, 'Enter');
       };
 
@@ -189,7 +190,7 @@ describe('App new session', () => {
       await create('feature-3', 'current');
 
       expect(daemon.sentOf('create_worktree').map(({ branch, starting_from }) => ({ branch, starting_from }))).toEqual([
-        { branch: 'feature-2', starting_from: 'origin/main' },
+        { branch: 'feature-2', starting_from: defaultBranch },
         { branch: 'feature-3', starting_from: 'feature' },
       ]);
       expect(launchedAt(daemon).map(({ cwd }) => cwd)).toEqual([`${REPO}--feature-2`, `${REPO}--feature-3`]);

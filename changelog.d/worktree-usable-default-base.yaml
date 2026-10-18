@@ -1,0 +1,3 @@
+kind: fixed
+area: worktrees
+change: Show and use an available starting branch when creating a worktree, including in local-only repositories and while offline.
