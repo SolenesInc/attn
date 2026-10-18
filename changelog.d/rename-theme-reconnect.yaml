@@ -1,0 +1,3 @@
+kind: fixed
+area: app
+change: Offline session renames fail immediately so you can retry. Reconnecting sends the latest terminal colors once, without replaying earlier choices.

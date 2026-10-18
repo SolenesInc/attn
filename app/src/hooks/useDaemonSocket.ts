@@ -736,7 +736,6 @@ export function useDaemonSocket({
 
   const reconnectAttemptsRef = useRef(0);
   const circuitOpenRef = useRef(false);
-  const circuitResetTimeoutRef = useRef<number | null>(null);
 
   const MAX_RECONNECTS_BEFORE_PAUSE = 8;
   const MAX_RECONNECT_DELAY_MS = 5000;
@@ -1025,10 +1024,6 @@ export function useDaemonSocket({
       reconnectDelayRef.current = 1000;
       reconnectAttemptsRef.current = 0;
       circuitOpenRef.current = false;
-      if (circuitResetTimeoutRef.current) {
-        clearTimeout(circuitResetTimeoutRef.current);
-        circuitResetTimeoutRef.current = null;
-      }
 
       ws.send(
         JSON.stringify({
@@ -2350,9 +2345,6 @@ export function useDaemonSocket({
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
-      if (circuitResetTimeoutRef.current) {
-        clearTimeout(circuitResetTimeoutRef.current);
-      }
       if (recoveryNoticeTimeoutRef.current) {
         clearTimeout(recoveryNoticeTimeoutRef.current);
       }
@@ -2371,10 +2363,6 @@ export function useDaemonSocket({
 
   const retryConnection = useCallback(() => {
     console.log('[Daemon] Manual retry requested');
-    if (circuitResetTimeoutRef.current) {
-      clearTimeout(circuitResetTimeoutRef.current);
-      circuitResetTimeoutRef.current = null;
-    }
     circuitOpenRef.current = false;
     reconnectAttemptsRef.current = 0;
     reconnectDelayRef.current = 1000;
@@ -2734,17 +2722,11 @@ export function useDaemonSocket({
     ansi_palette: string[];
   }) => {
     lastTerminalThemeRef.current = theme;
-    sendOrQueueCommand(
-      {
-        cmd: 'set_terminal_theme',
-        foreground: theme.foreground,
-        background: theme.background,
-        cursor: theme.cursor,
-        ansi_palette: theme.ansi_palette,
-      },
-      { waitForInitialState: true },
-    );
-  }, [sendOrQueueCommand]);
+    const ws = wsRef.current;
+    if (hasReceivedInitialStateRef.current && ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ cmd: 'set_terminal_theme', ...theme }));
+    }
+  }, []);
 
   /** The subscribe never goes through the outbound queue: `resubscribeAll` would
    * re-send it and the daemon refuses the second id as already open. */
@@ -3215,27 +3197,16 @@ export function useDaemonSocket({
 
 
   const sendRenameSession = useCallback((sessionId: string, label: string): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      const trimmed = label.trim();
-      if (!sessionId) {
-        reject(new Error('Session id is required'));
-        return;
-      }
-      const key = `rename_session:${sessionId}`;
-      pendingActionsRef.current.set(key, { resolve: () => resolve(), reject });
-      sendOrQueueCommand(
-        { cmd: 'rename_session', session_id: sessionId, label: trimmed },
-        { waitForInitialState: true },
-      );
-      window.setTimeout(() => {
-        if (!pendingActionsRef.current.has(key)) {
-          return;
-        }
-        pendingActionsRef.current.delete(key);
-        reject(new Error(`Rename timed out for session ${sessionId}`));
-      }, 10_000);
-    });
-  }, [sendOrQueueCommand]);
+    if (!sessionId) {
+      return Promise.reject(new Error('Session id is required'));
+    }
+    return sendKeyedRequest<void>(
+      `rename_session:${sessionId}`,
+      { cmd: 'rename_session', session_id: sessionId, label: label.trim() },
+      `Rename timed out for session ${sessionId}`,
+      10_000,
+    );
+  }, [sendKeyedRequest]);
 
 
   const sendSetChiefOfStaff = useCallback((sessionId: string, chiefOfStaff: boolean): Promise<void> => {

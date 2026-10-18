@@ -1,8 +1,9 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { agentPane, daemonSession, daemonDesktop, DEFAULT_PROFILE_ID } from './test/daemonFixtures';
-import { renderApp } from './test/renderApp';
+import { gesture, renderApp } from './test/renderApp';
 import { initialState } from './test/scriptedDaemon';
+import { openSettings } from './test/settings';
 
 const THEME = {
   cmd: 'set_terminal_theme',
@@ -17,6 +18,19 @@ const THEME = {
   ],
 };
 
+const LIGHT_THEME = {
+  cmd: 'set_terminal_theme',
+  foreground: '#3b3b3b',
+  background: '#ffffff',
+  cursor: '#3b3b3b',
+  ansi_palette: [
+    '#000000', '#cd3131', '#00bc00', '#949800',
+    '#0451a5', '#bc05bc', '#0598bc', '#555555',
+    '#666666', '#cd3131', '#14ce14', '#b5ba00',
+    '#0451a5', '#bc05bc', '#0598bc', '#a5a5a5',
+  ],
+};
+
 describe('App daemon reconnect', () => {
   it('holds its terminal theme until the daemon handshake completes', async () => {
     const { daemon } = await renderApp({ initialState: false });
@@ -27,6 +41,25 @@ describe('App daemon reconnect', () => {
     await daemon.idle();
 
     expect(daemon.sentOf('set_terminal_theme')).toEqual([THEME]);
+  });
+
+  it('sends only the latest terminal colors after the reconnect handshake', async () => {
+    const { daemon } = await renderApp();
+    await openSettings(daemon);
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-general')));
+    await gesture(daemon, () => daemon.disconnect());
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Light' })));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Dark' })));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Light' })));
+    daemon.on('client_hello', () => undefined);
+
+    const reconnected = await daemon.reconnect();
+    await daemon.idle();
+    expect(reconnected.sent.filter(({ cmd }) => cmd === 'set_terminal_theme')).toEqual([]);
+
+    reconnected.emit(initialState());
+    await daemon.idle();
+    expect(reconnected.sent.filter(({ cmd }) => cmd === 'set_terminal_theme')).toEqual([LIGHT_THEME]);
   });
 
   it('tells a reconnected daemon its profile and theme, and asks again for what it shows', async () => {
