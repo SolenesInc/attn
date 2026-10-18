@@ -292,6 +292,14 @@
         "seconds": 39.5,
         "runnerClass": "local Linux x86_64 SSH runner",
         "note": "Green matrix PASS callouts 39.500s (ATTN_VERDICT durationMs=38935, including cleanup). Covers native Enter/ArrowRight/Escape after browser hiding, terminal CLI input after browser restore, palette Escape after native browser focus, all sidebar shapes, reveal/navigation, and desktop-scoped browser cleanup. Idle sampling awaits finite entrance animations."
+      },
+      "prompt-composition": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/37237377153",
+        "job": "App acceptance shard 3/4",
+        "recordedAt": "2026-10-04",
+        "seconds": 29.596,
+        "runnerClass": "hosted Linux",
+        "note": "Green native scenario durationMs=29596, including uploads, agent inbox delivery, byte-exact image/PDF retrieval and cleanup. Receipt: app-acceptance-evidence-1-shard-3/last-matrix.json and matrix-digest.txt."
       }
     }
   },
@@ -322,7 +330,7 @@
     "home-dock": 15.337,
     "markdown-opener": 20.3,
     "notebook-editor-undo": 32.8,
-    "prompt-composition": 19,
+    "prompt-composition": 29.596,
     "codex-shared": 25,
     "pty-host-setting": 8.3,
     "session-close-ledger": 9.9,
