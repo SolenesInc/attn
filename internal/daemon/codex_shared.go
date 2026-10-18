@@ -21,6 +21,7 @@ import (
 	"github.com/victorarias/attn/internal/codexshared"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/hooks"
+	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
@@ -564,6 +565,7 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 		config = make(map[string]any)
 	}
 	r.capContext(config, sessionID, chief)
+	r.grantApprovals(params, sessionID)
 	if method != "thread/resume" {
 		if instructions := r.instructions(launchAs, v.profile, chief); instructions != "" {
 			prior, _ := params["developerInstructions"].(string)
@@ -655,6 +657,16 @@ func (r *codexShared) launching(v *codexView, method string, params map[string]a
 func (r *codexShared) capContext(config map[string]any, sessionID protocol.SessionID, chief bool) {
 	if limit := r.d.launchContextWindowCap(sessionID, string(protocol.SessionAgentCodex), chief); limit > 0 {
 		config["model_auto_compact_token_limit"] = limit
+	}
+}
+
+func (r *codexShared) grantApprovals(params map[string]any, sessionID protocol.SessionID) {
+	route, _ := r.d.intendedApprovalRoute(sessionID)
+	switch route {
+	case launchcontract.ApprovalRouteBypass:
+		params["approvalPolicy"], params["sandbox"] = "never", "danger-full-access"
+	case launchcontract.ApprovalRouteReviewer:
+		params["approvalPolicy"], params["approvalsReviewer"] = "on-request", "auto_review"
 	}
 }
 

@@ -2,6 +2,7 @@ package fakeagent
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -36,6 +37,7 @@ const (
 	methodInstructions   = "instructions"
 	methodCompactLimit   = "compact_limit"
 	methodWorkspaceRoots = "workspace_roots"
+	methodPermissions    = "permissions"
 	methodDropControl    = "drop_control"
 	methodRunTool        = "run_tool"
 	codexApprovalRequest = "item/commandExecution/requestApproval"
@@ -75,6 +77,19 @@ type codexServerThread struct {
 	instructions   string
 	compactLimit   string
 	workspaceRoots []string
+}
+
+type CodexPermissions struct {
+	ApprovalPolicy    string `json:"approvalPolicy,omitempty"`
+	ApprovalsReviewer string `json:"approvalsReviewer,omitempty"`
+	Sandbox           string `json:"sandbox,omitempty"`
+}
+
+var codexConfigApprovals = CodexPermissions{ApprovalPolicy: "on-request", ApprovalsReviewer: "user", Sandbox: "workspace-write"}
+
+func (current CodexPermissions) overriddenBy(asked CodexPermissions) bool {
+	differs := func(want, have string) bool { return want != "" && want != have }
+	return differs(asked.ApprovalPolicy, current.ApprovalPolicy) || differs(asked.ApprovalsReviewer, current.ApprovalsReviewer) || differs(asked.Sandbox, current.Sandbox)
 }
 
 var codexServerFlags = flagSpec{values: map[string]bool{"-c": true, "--listen": true}}
@@ -255,7 +270,8 @@ type codexServerParams struct {
 	DevInstruction string            `json:"developerInstructions"`
 	WorkspaceRoots []string          `json:"runtimeWorkspaceRoots"`
 	Config         map[string]any    `json:"config"`
-	Input          []struct {
+	CodexPermissions
+	Input []struct {
 		Text string `json:"text"`
 	} `json:"input"`
 }
@@ -396,7 +412,7 @@ func (s *codexAppServer) start(conn *codexServerConn, p codexServerParams) (any,
 	if p.Ephemeral {
 		return map[string]any{"thread": map[string]any{"id": id.String(), "ephemeral": true}}, nil, nil
 	}
-	t.instructions, t.compactLimit, t.workspaceRoots = p.DevInstruction, p.compactLimit(), p.WorkspaceRoots
+	t.instructions, t.compactLimit, t.workspaceRoots, t.c.approvals = p.DevInstruction, p.compactLimit(), p.WorkspaceRoots, p.CodexPermissions
 	s.mu.Lock()
 	s.threads[t.c.conversation] = t
 	s.mu.Unlock()
@@ -412,18 +428,32 @@ func (s *codexAppServer) resume(conn *codexServerConn, p codexServerParams) (any
 		s.mu.Unlock()
 		return nil, nil, fmt.Errorf("no rollout found for thread id %s", p.ThreadID)
 	}
-	if t != nil {
+	loaded := t != nil
+	reloads := loaded && len(t.subscribers) == 0 && !t.active && t.c.approvals.overriddenBy(p.CodexPermissions)
+	if loaded {
 		t.subscribers[conn] = true
 	}
 	s.mu.Unlock()
-	if t == nil {
+	if !loaded {
 		path, cwd := s.findRollout(p.ThreadID)
 		if path == "" {
 			return nil, nil, fmt.Errorf("no rollout found for thread id %s", p.ThreadID)
 		}
 		t = s.newThread(p.ThreadID, cwd, p.Model, path, "resume", time.Now().UTC(), conn)
-		t.written, t.compactLimit = true, p.compactLimit()
+		t.written = true
+	}
+	if !loaded || reloads {
+		saved := codexSavedApprovals(t.c.transcript)
+		approvals := CodexPermissions{
+			ApprovalPolicy:    cmp.Or(p.ApprovalPolicy, saved.ApprovalPolicy),
+			ApprovalsReviewer: cmp.Or(p.ApprovalsReviewer, saved.ApprovalsReviewer),
+			Sandbox:           cmp.Or(p.Sandbox, codexConfigApprovals.Sandbox),
+		}
+		if err := appendLines(t.c.transcript, codexTurnContext(approvals)); err != nil {
+			return nil, nil, err
+		}
 		s.mu.Lock()
+		t.compactLimit, t.c.approvals = p.compactLimit(), approvals
 		s.threads[p.ThreadID] = t
 		s.mu.Unlock()
 	}
@@ -478,9 +508,35 @@ func (s *codexAppServer) write(t *codexServerThread, lines ...any) error {
 	t.written = true
 	s.mu.Unlock()
 	if first {
-		lines = append([]any{codexSessionMeta(t.c.conversation, t.c.cwd, "codex-tui", t.started)}, lines...)
+		lines = append([]any{codexSessionMeta(t.c.conversation, t.c.cwd, "codex-tui", t.started), codexTurnContext(t.c.approvals)}, lines...)
 	}
 	return appendLines(t.c.transcript, lines...)
+}
+
+func codexTurnContext(p CodexPermissions) map[string]any {
+	return map[string]any{"timestamp": now(), "type": "turn_context", "payload": p}
+}
+
+func codexSavedApprovals(path string) CodexPermissions {
+	var saved CodexPermissions
+	f, err := os.Open(path)
+	if err != nil {
+		return saved
+	}
+	defer f.Close()
+	lines := json.NewDecoder(f)
+	for {
+		var line struct {
+			Type    string           `json:"type"`
+			Payload CodexPermissions `json:"payload"`
+		}
+		if lines.Decode(&line) != nil {
+			return saved
+		}
+		if line.Type == "turn_context" {
+			saved = CodexPermissions{ApprovalPolicy: line.Payload.ApprovalPolicy, ApprovalsReviewer: line.Payload.ApprovalsReviewer}
+		}
+	}
 }
 
 func (s *codexAppServer) metadata(t *codexServerThread) map[string]any {
@@ -842,6 +898,13 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 		defer s.mu.Unlock()
 		if t := s.threads[p.ThreadID]; t != nil {
 			return promptedResult{Text: t.compactLimit, ConversationID: p.ThreadID}, nil
+		}
+		return nil, fmt.Errorf("conversation %s is not loaded here", p.ThreadID)
+	case methodPermissions:
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if t := s.threads[p.ThreadID]; t != nil {
+			return t.c.approvals, nil
 		}
 		return nil, fmt.Errorf("conversation %s is not loaded here", p.ThreadID)
 	}

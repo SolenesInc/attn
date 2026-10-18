@@ -78,6 +78,13 @@ func (s *CodexServer) CompactLimit(conversation string) string {
 	return loaded.Text
 }
 
+func (s *CodexServer) Permissions(conversation string) CodexPermissions {
+	s.t.Helper()
+	var loaded CodexPermissions
+	s.call(methodPermissions, serverThreadParams{ThreadID: conversation}, &loaded)
+	return loaded
+}
+
 type workspaceRootsResult struct {
 	Roots []string `json:"roots"`
 }

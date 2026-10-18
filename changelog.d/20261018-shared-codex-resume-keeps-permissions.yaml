@@ -1,0 +1,9 @@
+kind: fixed
+area: codex
+change: >
+  Shared Codex sessions launched with YOLO or auto-approve resume again, from a
+  stopped tile, the Sessions ledger, or `/resume` and `/agents` in a shared
+  terminal, and keep that approval mode wherever their conversation opens. A
+  YOLO conversation keeps full access after the app-server reloads it, including
+  when attn delivers a message to it while it is hidden.
+symptom: "Resume, `/resume` or `/agents` showed `Permission overrides are not supported when resuming a remote task.`, or a resumed YOLO session ran sandboxed."

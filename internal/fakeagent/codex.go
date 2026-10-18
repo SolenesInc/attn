@@ -36,6 +36,7 @@ type codex struct {
 	lastThread   string
 	nextThread   codexThread
 	unstarted    bool
+	approvals    CodexPermissions
 }
 
 // codexThread is the thread the next turn starts, with the SessionStart source that reports it;
@@ -64,12 +65,32 @@ func runCodex(cfg config) int {
 			fmt.Fprintln(os.Stderr, "Error: --add-dir is not supported with --remote. Configure additional workspace roots on the server.")
 			return 1
 		}
+		if len(args.positionals) > 1 && args.positionals[0] == "resume" && codexPermissionOverride(args) {
+			fmt.Fprintln(os.Stderr, "Error: "+codexRemoteResumeRefusal)
+			return 1
+		}
 		return serve(cfg, codexComposer, &codexRemote{cfg: cfg})
 	}
 	if len(os.Args) > 1 && os.Args[1] == "exec" {
 		return codexExec(codexExecFlags.parse(os.Args[2:])).serve(cfg)
 	}
 	return serve(cfg, codexComposer, &codex{cfg: cfg})
+}
+
+const codexRemoteResumeRefusal = "Permission overrides are not supported when resuming a remote task."
+
+func codexPermissionOverride(args parsedArgs) bool {
+	if args.has("--dangerously-bypass-approvals-and-sandbox") {
+		return true
+	}
+	for _, override := range args.values["-c"] {
+		key, _, _ := strings.Cut(override, "=")
+		switch strings.TrimSpace(key) {
+		case "approval_policy", "approvals_reviewer", "sandbox_mode", "default_permissions":
+			return true
+		}
+	}
+	return false
 }
 
 func codexExec(args parsedArgs) headlessRun {

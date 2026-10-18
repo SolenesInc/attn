@@ -79,6 +79,7 @@ func (c *Codex) BuildCommand(opts SpawnOpts) *exec.Cmd {
 	args = append(args, "-C", opts.CWD)
 	if opts.CodexRemote == "" {
 		args = append(args, opts.addDirArgs()...)
+		args = append(args, codexPermissionArgs(opts)...)
 	}
 	if model := strings.TrimSpace(opts.Model); model != "" {
 		args = append(args, "--model", model)
@@ -87,16 +88,21 @@ func (c *Codex) BuildCommand(opts SpawnOpts) *exec.Cmd {
 	if effort := strings.TrimSpace(opts.Effort); effort != "" {
 		args = append(args, "-c", `model_reasoning_effort="`+effort+`"`)
 	}
-	if opts.YoloMode {
-		args = append(args, "--dangerously-bypass-approvals-and-sandbox")
-	} else if opts.AutoApprove {
-		args = append(args, "-c", `approval_policy="on-request"`, "-c", `approvals_reviewer="auto_review"`)
-	}
 	if strings.TrimSpace(opts.InitialPrompt) != "" {
 		args = append(args, "--", opts.InitialPrompt)
 	}
 
 	return exec.Command(opts.Executable, args...)
+}
+
+func codexPermissionArgs(opts SpawnOpts) []string {
+	if opts.YoloMode {
+		return []string{"--dangerously-bypass-approvals-and-sandbox"}
+	}
+	if opts.AutoApprove {
+		return []string{"-c", `approval_policy="on-request"`, "-c", `approvals_reviewer="auto_review"`}
+	}
+	return nil
 }
 
 func (c *Codex) BuildEnv(opts SpawnOpts) []string {

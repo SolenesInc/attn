@@ -73,6 +73,68 @@ func TestAnApprovalPendingInASharedCodexIsAnsweredAfterADaemonRestart(t *testing
 	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
 }
 
+func TestASharedCodexSessionShownInAnotherSessionsTerminalKeepsItsApprovalMode(t *testing.T) {
+	t.Parallel()
+	for _, disturbance := range []string{"daemon restart", "reload"} {
+		t.Run(disturbance, func(t *testing.T) {
+			t.Parallel()
+			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+			s.Start()
+			app := s.App()
+			setSetting(t, app, "auto_approve_enabled", "true")
+			shareCodex(t, app)
+			unguarded := s.Spawn(app, fakeagent.Codex, s.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.YoloMode = protocol.Ptr(true) })
+			yolo := s.Launched(unguarded)
+			app.TypeLine(unguarded, "find the flaky checkout test")
+			yolo.Prompted()
+			yolo.Reply("It races the tax lookup. <!-- attn:state=idle -->")
+			testworld.AwaitSession(app, unguarded, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
+			conversation := yolo.ConversationID
+			for _, line := range []string{"/new", "add a discount field"} {
+				typeLineInto(app, app.Terminal(unguarded), line)
+				yolo.Prompted()
+			}
+			testworld.AwaitSession(app, unguarded, func(x protocol.Session) bool { return protocol.Deref(x.Hidden) })
+
+			reviewed := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
+			codex := s.Launched(reviewed)
+			terminal := app.Terminal(reviewed)
+			for _, line := range []string{"/resume " + conversation, "lock the tax lookup"} {
+				typeLineInto(app, terminal, line)
+				codex.Prompted()
+			}
+			testworld.AwaitSession(app, unguarded, func(x protocol.Session) bool { return !protocol.Deref(x.Hidden) })
+			codex.Reply("Locked. <!-- attn:state=idle -->")
+			testworld.AwaitSession(app, unguarded, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
+
+			if disturbance == "daemon restart" {
+				s.Stop()
+				s.Start()
+				app = s.App()
+			} else {
+				reloaded := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(unguarded), Cols: 100, Rows: 30},
+					protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == unguarded })
+				if !reloaded.Success {
+					t.Fatalf("reload %s: %s", unguarded, protocol.Deref(reloaded.Error))
+				}
+				codex = s.Launched(unguarded)
+			}
+			for _, line := range []string{"/new", "write the notes"} {
+				typeLineInto(app, terminal, line)
+				codex.Prompted()
+			}
+			testworld.AwaitSession(app, unguarded, func(x protocol.Session) bool { return protocol.Deref(x.Hidden) })
+			submitFeedback(t, app, unguarded, "Add a regression test.")
+			server := s.CodexServer()
+			server.Prompted(conversation)
+			want := fakeagent.CodexPermissions{ApprovalPolicy: "never", ApprovalsReviewer: "user", Sandbox: "danger-full-access"}
+			if got := server.Permissions(conversation); got != want {
+				t.Errorf("after the %s attn reloaded YOLO conversation %s with %+v, want %+v", disturbance, conversation, got, want)
+			}
+		})
+	}
+}
+
 func shareCodex(t *testing.T, app *testworld.Peer) {
 	t.Helper()
 	requestID := uuid.NewString()

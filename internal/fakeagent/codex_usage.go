@@ -70,7 +70,10 @@ func (c *codex) usageLines(text string) []any {
 		model = codexDefaultModel
 	}
 	return []any{
-		map[string]any{"timestamp": now(), "type": "turn_context", "payload": map[string]any{"model": model}},
+		map[string]any{"timestamp": now(), "type": "turn_context", "payload": struct {
+			Model string `json:"model"`
+			CodexPermissions
+		}{model, c.approvals}},
 		map[string]any{"timestamp": now(), "type": "event_msg", "payload": map[string]any{
 			"type": "thread_settings_applied", "thread_settings": map[string]any{"model": model, "service_tier": c.serviceTier},
 		}},
