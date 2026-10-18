@@ -158,6 +158,12 @@ instance                a daemon, an app and a data folder under one name;
 ```
 
 ```text
+home                    the main daemon the user's app connects to
+└─ bridge (0..n)       an SSH connection to one outpost
+   └─ outpost (1)     a remote daemon paired to that home
+```
+
+```text
 window (1..n)           one macOS app window
 ├─ home screen          the dashboard: what asks for attention, across agents
 ├─ sidebar (1)          its shape follows the profile's flow
