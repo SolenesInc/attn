@@ -230,7 +230,7 @@ Temporary debt. Read the old name as the new term. Never write the old name.
 - Named claims let any name tend a seed. Remove them, or define who can use
   them.
 - The chief is not a crew member. Make it one.
-- A watch belongs to a session. Make it belong to an address, so a crew
+- A seed watch belongs to a session. Make it belong to an address, so a crew
   member's watch outlives their session.
 - Prompts say hold, held and holder for a claimed seed
   (internal/prompts/content/garden.md, the delegation reference). Say claim and

@@ -2,10 +2,8 @@
 
 ## What the inbox is
 
-
-The inbox is the system attn uses to keeo track and notify agents about messages from other agents.
-
-The inbox is how attn puts something in front of an agent. A sender saves an
+The inbox is how attn puts something in front of an agent: messages from other
+agents, seed updates, answers to asks and attn's own notices. A sender saves an
 item for an address. attn then decides when to ring the agent, when to wake an
 asleep crew member first, and when to stop. The agent reads its items with
 `attn agent inbox`.
