@@ -61,7 +61,7 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
   const automationsPanelOpen = openDockPanels.automations;
   const gardenPanelOpen = openDockPanels.garden;
   const openAsk = useCallback((askId?: string) => {
-    useAsksStore.getState().selectAsk(askId ?? null);
+    useAsksStore.getState().showAsk(askId ?? null);
     openDockPanel('asks');
   }, [openDockPanel]);
   const openGardenDock = useCallback(() => openDockPanel('garden'), [openDockPanel]);

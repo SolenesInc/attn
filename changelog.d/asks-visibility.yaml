@@ -1,3 +1,3 @@
 kind: added
 area: queue
-change: "Open asks stay visible with the sidebar closed: the collapsed queue bar counts them and lists them on hover, the collapsed rail counts them and marks the desktops that hold them, and the asking agent's tile header shows its ask, a hover away from the question and a click away from answering it."
+change: "Open asks are easier to spot: the sidebar's Asks button counts them; with the sidebar collapsed, the queue bar counts them and lists them on hover, and in desktop flow the rail marks the desktops of the agents that asked; and the asking agent's tile header shows its ask, a hover away from the question and a click away from answering it."

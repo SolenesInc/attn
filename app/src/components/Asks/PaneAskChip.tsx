@@ -11,11 +11,15 @@ const NOTHING_TO_RELEASE = () => {};
 
 export function PaneAskChip({ session, onOpenAsk }: { session: AskHolderSession; onOpenAsk: (askId: string) => void }) {
   const asks = useAsksOf(session);
-  const preview = useAnchoredPopover(false, NOTHING_TO_RELEASE);
+  if (asks.length === 0) return null;
   const oldestFirst = [...asks].sort((a, b) => a.created_at.localeCompare(b.created_at));
-  const first = oldestFirst[0];
-  if (!first) return null;
-  const more = oldestFirst.length - 1;
+  return <AskChip asks={oldestFirst} sessionId={session.id} onOpenAsk={onOpenAsk} />;
+}
+
+function AskChip({ asks, sessionId, onOpenAsk }: { asks: readonly Ask[]; sessionId: string; onOpenAsk: (askId: string) => void }) {
+  const preview = useAnchoredPopover(false, NOTHING_TO_RELEASE);
+  const [first] = asks;
+  const more = asks.length - 1;
   const open = (askId: string) => {
     preview.close();
     onOpenAsk(askId);
@@ -26,7 +30,8 @@ export function PaneAskChip({ session, onOpenAsk }: { session: AskHolderSession;
         ref={preview.anchorRef}
         type="button"
         className="pane-ask-chip"
-        data-testid={`ask-chip-${session.id}`}
+        data-testid={`ask-chip-${sessionId}`}
+        title=""
         aria-label={`Open ask: ${first.subject}${more ? `, and ${more} more` : ''}`}
         onPointerDown={(event) => event.stopPropagation()}
         onPointerEnter={preview.scheduleOpen}
@@ -42,7 +47,7 @@ export function PaneAskChip({ session, onOpenAsk }: { session: AskHolderSession;
       </button>
       {preview.open && preview.anchor && (
         <AskPreview
-          asks={oldestFirst}
+          asks={asks}
           anchorRef={preview.anchorRef}
           onOpen={open}
           onPointerEnter={preview.cancelClose}

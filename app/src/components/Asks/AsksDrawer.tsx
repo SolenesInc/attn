@@ -30,6 +30,11 @@ interface AsksDrawerProps {
 
 const SEND_SHORTCUT = { key: 'Enter', meta: true };
 
+function takeKeyboardFromTerminal(input: HTMLElement) {
+  document.getSelection()?.removeAllRanges();
+  input.focus({ preventScroll: true });
+}
+
 function isTyping(target: EventTarget): boolean {
   if (target instanceof HTMLInputElement) return !['radio', 'checkbox', 'button'].includes(target.type);
   return target instanceof HTMLElement && (target.isContentEditable || ['TEXTAREA', 'SELECT'].includes(target.tagName));
@@ -39,6 +44,7 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
   const items = useAskList(sessions);
   const drafts = useAsksStore((state) => state.drafts);
   const selectedAskId = useAsksStore((state) => state.selectedAskId);
+  const focusRequest = useAsksStore((state) => state.focusRequest);
   const { selectAsk, setDraft } = useAsksStore.getState();
   const { sendAskAnswer } = useDaemonApi();
   const [sending, setSending] = useState(false);
@@ -68,8 +74,9 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
     const article = askRef.current;
     if (!article) return;
     article.scrollTop = 0;
-    article.querySelector<HTMLElement>('input:not(:disabled), textarea:not(:disabled)')?.focus({ preventScroll: true });
-  }, [askId, selectAsk]);
+    const input = article.querySelector<HTMLElement>('input:not(:disabled), textarea:not(:disabled)');
+    if (input) takeKeyboardFromTerminal(input);
+  }, [askId, focusRequest, selectAsk]);
 
   const show = (id: string) => {
     selectAsk(id);

@@ -15,15 +15,18 @@ interface AsksStore {
   asks: Ask[];
   drafts: Record<string, AskDraft>;
   selectedAskId: string | null;
+  focusRequest: number;
   setAsks: (asks: Ask[]) => void;
   setDraft: (askId: string, draft: AskDraft) => void;
   selectAsk: (askId: string | null) => void;
+  showAsk: (askId: string | null) => void;
 }
 
 export const useAsksStore = create<AsksStore>((set) => ({
   asks: [],
   drafts: {},
   selectedAskId: null,
+  focusRequest: 0,
   setAsks: (asks) => set((state) => {
     const open = new Set(asks.map((ask) => ask.id));
     const drafts = Object.fromEntries(Object.entries(state.drafts).filter(([id]) => open.has(id)));
@@ -31,6 +34,7 @@ export const useAsksStore = create<AsksStore>((set) => ({
   }),
   setDraft: (askId, draft) => set((state) => ({ drafts: { ...state.drafts, [askId]: draft } })),
   selectAsk: (askId) => set({ selectedAskId: askId }),
+  showAsk: (askId) => set((state) => ({ selectedAskId: askId, focusRequest: state.focusRequest + 1 })),
 }));
 
 export function useAsksAvailable(settings: Record<string, string>): boolean {

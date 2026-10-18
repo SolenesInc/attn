@@ -303,6 +303,38 @@ describe('App asks', () => {
     expect(screen.queryByRole('dialog', { name: 'Open asks from this agent' })).toBeNull();
   });
 
+  it('leaves the preview closed when the agent asks again after its last ask closed under the pointer', async () => {
+    const daemon = await renderAsks([cacheStore], [apiWorking]);
+    await openSession(daemon, 'api');
+    fireEvent.pointerEnter(screen.getByTestId('ask-chip-api'));
+    await act(() => vi.advanceTimersByTimeAsync(160));
+    expect(screen.getByRole('dialog', { name: 'Open asks from this agent' })).toBeInTheDocument();
+
+    daemon.emit({ event: 'asks_updated', profile_id: DEFAULT_PROFILE_ID, asks: [] });
+    await daemon.idle();
+    daemon.emit({ event: 'asks_updated', profile_id: DEFAULT_PROFILE_ID, asks: [{ ...cacheStore, id: 'a-follow-up', subject: 'Cache size' }] });
+    await daemon.idle();
+    await act(() => vi.advanceTimersByTimeAsync(1_000));
+
+    expect(screen.getByTestId('ask-chip-api')).toHaveAccessibleName('Open ask: Cache size');
+    expect(screen.queryByRole('dialog', { name: 'Open asks from this agent' })).toBeNull();
+  });
+
+  it('takes the keyboard from the terminal when an opener shows the ask the drawer already shows', async () => {
+    const daemon = await renderAsks([cacheStore], [apiWorking]);
+    await openSession(daemon, 'api');
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('ask-chip-api')));
+    const postgres = screen.getByRole('radio', { name: /Postgres/ });
+    expect(document.activeElement).toBe(postgres);
+
+    terminalInput()?.focus();
+    expect(document.activeElement).toBe(terminalInput());
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('ask-chip-api')));
+
+    expect(openAsk()).toBe('Cache store');
+    expect(document.activeElement).toBe(postgres);
+  });
+
   it('lists asks on the home screen and opens the one picked', async () => {
     const daemon = await renderAsks();
 
