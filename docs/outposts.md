@@ -10,10 +10,10 @@ connections until `outposts_enabled` is true. Both settings are off by default.
 
 ## Run an outpost by hand
 
-Build the home and outpost from the same revision with `make`. The bridge checks
-the version, source fingerprint and protocol version, including `unknown`
-values. A plain `go build` cannot distinguish two revisions that both report
-`dev` and `unknown`.
+Build the home and outpost from the same revision. For the native architecture,
+use `make build`. The bridge checks the version, source fingerprint and protocol
+version, including `unknown` values. A plain `go build` cannot distinguish two
+revisions that both report `dev` and `unknown`.
 
 For a Linux outpost, build the matching architecture with `make build-linux-amd64`
 or `make build-linux-arm64`. Copy the resulting daemon to `~/.local/bin/attn` on
@@ -121,8 +121,9 @@ The outpost exposes read-only settings:
 
 After losing a connection, the outpost returns to `listening` and keeps its
 error. A new authenticated connection from its recorded home replaces the old
-connection immediately. On the home, errors survive `connecting` and `stalled`
-and clear on `connected`.
+connection immediately. On the home, a failed bridge keeps its `lost` or
+`refused` state during background retries. Errors survive `stalled`, re-pairing
+and switch changes, and clear on `connected`.
 
 Remove an outpost with `remove_outpost`. Its row and pins are deleted and stay
 deleted across a home restart. Turning `outposts_enabled` off stops all home

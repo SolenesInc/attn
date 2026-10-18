@@ -59,6 +59,10 @@ func (d *Daemon) changeOutpost(action, id, name, address string) error {
 	if action == "repair" {
 		row.HostKey, row.DaemonID = "", ""
 		d.startOutpostDial(*row)
+	} else {
+		r.mu.Lock()
+		delete(r.dialers, id)
+		r.mu.Unlock()
 	}
 	d.publishFact(FactOutpostChanged, id, nil)
 	return nil

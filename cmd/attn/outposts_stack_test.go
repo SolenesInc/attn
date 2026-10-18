@@ -201,7 +201,16 @@ func TestOutpostsChangedIdentityRequiresRepair(t *testing.T) {
 					t.Fatalf("refusal omits %q: %+v", word, refused)
 				}
 			}
+			p.Close()
+			p = home.App()
+			replacement.Signal(syscall.SIGSTOP)
+			defer replacement.Signal(syscall.SIGCONT)
 			p.Send(protocol.RepairOutpostMessage{Cmd: protocol.CmdRepairOutpost, ID: first.ID})
+			connecting := outpostState(p, "replaced", protocol.OutpostStateConnecting)
+			if protocol.Deref(connecting.LastError) != protocol.Deref(refused.LastError) || protocol.Deref(connecting.LastErrorAt) != protocol.Deref(refused.LastErrorAt) {
+				t.Fatalf("repair cleared the last error before success: before=%+v after=%+v", refused, connecting)
+			}
+			replacement.Signal(syscall.SIGCONT)
 			repaired := outpostState(p, "replaced", protocol.OutpostStateConnected)
 			if protocol.Deref(repaired.DaemonID) != protocol.Deref(remote.Initial.DaemonInstanceID) {
 				t.Fatalf("repair kept old pin: %+v", repaired)
@@ -237,5 +246,45 @@ func TestOutpostsAddressAliasDoesNotReplaceTheWorkingBridge(t *testing.T) {
 		if row.ID == first.ID && (row.State != protocol.OutpostStateConnected || row.StateSince != first.StateSince) {
 			t.Fatalf("alias replaced the working bridge: before=%+v after=%+v", first, row)
 		}
+	}
+}
+
+func TestOutpostsUnchangedRetryKeepsItsStateAndPublishesNoFacts(t *testing.T) {
+	a := testworld.NewSSHAgent(t)
+	home := testworld.NewStack(t)
+	a.Authorize(home.World)
+	home.Start()
+	p := enableOutposts(t, home)
+	p.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "offline", Address: bridgeAddress(t)})
+	first := outpostState(p, "offline", protocol.OutpostStateLost)
+	facts := func() int64 {
+		t.Helper()
+		var status struct {
+			Producers []struct {
+				Name   string `json:"name"`
+				Events int64  `json:"events"`
+			} `json:"producers"`
+		}
+		home.Attn("bus", "status", "--json").JSON(t, &status)
+		for _, row := range status.Producers {
+			if row.Name == "outpost.changed" {
+				return row.Events
+			}
+		}
+		return 0
+	}
+	before := facts()
+	a.AwaitConnections(t, 4)
+	observer := home.App()
+	snapshot := testworld.Await[protocol.OutpostsUpdatedMessage](observer, protocol.EventOutpostsUpdated, nil)
+	if len(snapshot.Outposts) != 1 {
+		t.Fatalf("retry lost its row: %+v", snapshot)
+	}
+	after := snapshot.Outposts[0]
+	if after.State != first.State || after.StateSince != first.StateSince || protocol.Deref(after.LastError) != protocol.Deref(first.LastError) {
+		t.Fatalf("retry changed failure: before=%+v after=%+v", first, after)
+	}
+	if got := facts(); got != before {
+		t.Fatalf("unchanged retries published outpost.changed: %d -> %d", before, got)
 	}
 }

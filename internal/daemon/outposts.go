@@ -45,9 +45,6 @@ func (d *Daemon) configureOutposts() {
 	for _, run := range old {
 		<-run.done
 	}
-	r.mu.Lock()
-	r.dialers = nil
-	r.mu.Unlock()
 	if !d.outpostsEnabled() {
 		return
 	}
@@ -71,6 +68,9 @@ func (d *Daemon) startOutpostDial(row store.Outpost) {
 	if r.dialers == nil {
 		r.dialers = make(map[string]*outpostDial)
 	}
+	if previous := r.dialers[row.ID]; previous != nil {
+		run.build, run.lastError, run.lastErrorAt = previous.build, previous.lastError, previous.lastErrorAt
+	}
 	r.dialers[row.ID] = run
 	r.mu.Unlock()
 	if !d.life.Go("outpostDial:"+row.ID, func() { defer close(run.done); defer cancel(); d.dialOutpost(ctx, row, run) }) {
@@ -89,9 +89,6 @@ func (d *Daemon) stopOutpostDial(id string) {
 	}
 	run.cancel()
 	<-run.done
-	r.mu.Lock()
-	delete(r.dialers, id)
-	r.mu.Unlock()
 }
 
 func (d *Daemon) updateOutpost(id string, run *outpostDial, state bridge.State, build, detail string) {
@@ -125,7 +122,6 @@ func (d *Daemon) updateOutpost(id string, run *outpostDial, state bridge.State, 
 
 func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpostDial) {
 	for ctx.Err() == nil {
-		d.updateOutpost(row.ID, run, bridge.StateConnecting, "", "")
 		var pin *bridge.Pin
 		if row.HostKey != "" {
 			pin = &bridge.Pin{HostKey: row.HostKey, DaemonID: row.DaemonID}

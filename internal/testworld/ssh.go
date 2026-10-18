@@ -9,14 +9,19 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 )
 
 type SSHAgent struct {
-	Socket    string
-	PublicKey []byte
+	Socket      string
+	PublicKey   []byte
+	mu          sync.Mutex
+	connections int
+	changed     chan struct{}
 }
 
 func NewSSHAgent(t testing.TB) *SSHAgent {
@@ -45,6 +50,7 @@ func NewSSHAgent(t testing.TB) *SSHAgent {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	var connections sync.WaitGroup
+	a := &SSHAgent{Socket: socket, PublicKey: ssh.MarshalAuthorizedKey(pub), changed: make(chan struct{})}
 	stopped := make(chan struct{})
 	go func() {
 		defer close(stopped)
@@ -53,6 +59,11 @@ func NewSSHAgent(t testing.TB) *SSHAgent {
 			if err != nil {
 				return
 			}
+			a.mu.Lock()
+			a.connections++
+			close(a.changed)
+			a.changed = make(chan struct{})
+			a.mu.Unlock()
 			connections.Go(func() {
 				defer conn.Close()
 				stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
@@ -62,7 +73,26 @@ func NewSSHAgent(t testing.TB) *SSHAgent {
 		}
 	}()
 	t.Cleanup(func() { cancel(); _ = listener.Close(); <-stopped; connections.Wait() })
-	return &SSHAgent{Socket: socket, PublicKey: ssh.MarshalAuthorizedKey(pub)}
+	return a
+}
+
+func (a *SSHAgent) AwaitConnections(t testing.TB, count int) {
+	t.Helper()
+	guard := time.NewTimer(fakeagent.HangGuard)
+	defer guard.Stop()
+	for {
+		a.mu.Lock()
+		seen, changed := a.connections, a.changed
+		a.mu.Unlock()
+		if seen >= count {
+			return
+		}
+		select {
+		case <-changed:
+		case <-guard.C:
+			t.Fatalf("ssh-agent saw %d connections, want %d", seen, count)
+		}
+	}
 }
 
 func (a *SSHAgent) Authorize(w *World) {
