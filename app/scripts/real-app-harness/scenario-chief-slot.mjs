@@ -87,9 +87,7 @@ try {
   await runner.step('fresh_profile', async () => {
     webkitBaseline = await captureWebKitPids();
     await launchFreshAppAndConnect(client, observer);
-    const { logicalBounds } = await client.request('get_window_bounds');
-    await client.request('set_window_bounds', { logicalBounds: { ...logicalBounds, x: 0, y: 0 } });
-    await driver.activateApp();
+    runner.writeJson('parked-window-first-launch.json', await client.request('get_window_bounds'));
     queueDaemonSettingRestore(observer, 'queue_mode_enabled');
     queueDaemonSettingRestore(observer, 'model_tier_overrides');
     await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
@@ -164,9 +162,7 @@ try {
     await client.request('select_session', { sessionId: liveAgent });
     await waitDom('[data-session-visible="1"] [aria-label="Terminal input"]', { focused: true });
     await relaunchAppAndConnect(client, observer);
-    const { logicalBounds } = await client.request('get_window_bounds');
-    await client.request('set_window_bounds', { logicalBounds: { ...logicalBounds, x: 0, y: 0 } });
-    await driver.activateApp();
+    runner.writeJson('parked-window-restored.json', await client.request('get_window_bounds'));
     await client.request('select_session', { sessionId: liveAgent });
     runner.writeJson('restored-view.json', { app: await client.request('get_state'), focus: await client.request('dom_active_element'), chief: await state() });
     await waitDom('[data-session-visible="1"] [aria-label="Terminal input"]', { focused: true });
@@ -236,7 +232,7 @@ try {
     await pressShortcutKeys(client, driver, 'session.toggleSidebar');
     await waitDom('[data-testid="chief-slot"]', { absent: true });
     await relaunchAppAndConnect(client, observer);
-    await driver.activateApp();
+    runner.writeJson('parked-window-configured.json', await client.request('get_window_bounds'));
     await pressShortcutKeys(client, driver, 'ui.commandPalette');
     await waitDom('[role="combobox"][aria-label="Commands"]', { focused: true });
     await driver.typeText("Change the chief's harness and model");
