@@ -28,6 +28,11 @@ If a command reports an unknown subcommand or version, check `attn --version`
 and `which -a attn`; recover with `"$ATTN_WRAPPER_PATH"` when it is set.
 `attn skill` prints the bundled copy of this skill and its references.
 
+Read and change daemon settings with `attn settings list`, `get` and `set`.
+`list` describes each key and its accepted values; `--all` includes computed
+read-only values. Settings apply across all profiles. Use `attn settings --help`
+for syntax.
+
 ## Delegation and reporting
 
 An Attn delegation creates a separate session the user can inspect and steer. A subagent is a native runtime subagent that reports to its calling agent.

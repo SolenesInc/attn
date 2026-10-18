@@ -763,7 +763,7 @@ func (d *Daemon) Start() error {
 			break
 		}
 
-		sharedEnabled := parseBooleanSetting(d.store.GetSetting(SettingSharedPTYHostEnabled))
+		sharedEnabled := parseBooleanSetting(d.daemonSetting(SettingSharedPTYHostEnabled))
 		useSharedForNew := sharedEnabled && sharedBackend.SharedArtifactReady()
 		if sharedEnabled && !useSharedForNew && !shouldRunWorkerStartupProbe() && strings.TrimSpace(os.Getenv("ATTN_PTY_HOST_BINARY")) != "" {
 			useSharedForNew = true
@@ -2564,6 +2564,10 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 	}
 
 	switch cmd {
+	case protocol.CmdGetSettings:
+		d.handleGetSettings(conn, msg.(*protocol.GetSettingsMessage))
+	case protocol.CmdSetSetting:
+		d.handleSetSetting(conn, msg.(*protocol.SetSettingMessage))
 	case protocol.CmdLaunchDesktopGet, protocol.CmdLaunchDesktopSet:
 		d.handleLaunchDesktopCommand(conn, cmd, msg)
 	case protocol.CmdDelegate:

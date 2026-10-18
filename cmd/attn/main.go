@@ -154,6 +154,8 @@ func main() {
 	case "agent":
 		maybePrintInstanceBanner()
 		runAgent()
+	case "settings":
+		runSettings()
 	case "state":
 		maybePrintInstanceBanner()
 		runState()
@@ -571,6 +573,7 @@ commands:
   callout <anchors|show>            point at the app with a callout
   browser <command>                 open and control the in-app browser
   automation <command>              manage and run durable automations
+  settings list|get|set             read and change daemon settings
   preflight                         diagnose tools, paths, routing, and launch settings
   pr <command>                      watch or inspect pull request readiness
   list                              list sessions and profiles

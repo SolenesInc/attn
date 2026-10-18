@@ -1398,6 +1398,8 @@ model WorktreeRefreshResult {
 
 model GetSettingsMessage {
   cmd: "get_settings";
+  key?: string;
+  all?: boolean;
 }
 
 model SetSettingMessage {
@@ -1405,6 +1407,19 @@ model SetSettingMessage {
   request_id?: string;
   key: string;
   value: string;
+}
+
+enum SettingScope { daemon }
+model SettingEntry {
+  key: string;
+  scope: SettingScope;
+  description: string;
+  value?: string;
+  read_only?: boolean;
+  family?: boolean;
+}
+model SettingsListResult {
+  entries: SettingEntry[];
 }
 
 model ListPluginsMessage {
@@ -5551,6 +5566,8 @@ model AutoModeEnvSetResultMessage {
 // ============================================================================
 
 model Response {
+  settings_list?: SettingsListResult;
+  setting?: SettingEntry;
   ok: boolean;
   callout_anchors_result?: CalloutAnchorsResult;
   error?: string;

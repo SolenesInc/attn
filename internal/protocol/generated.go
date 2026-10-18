@@ -4857,8 +4857,14 @@ type GetScreenSnapshotResultMessage struct {
 }
 
 type GetSettingsMessage struct {
+	// All corresponds to the JSON schema field "all".
+	All *bool `json:"all,omitempty,omitzero"`
+
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
+
+	// Key corresponds to the JSON schema field "key".
+	Key *string `json:"key,omitempty,omitzero"`
 }
 
 type GitHubHostsUpdatedMessage struct {
@@ -7775,6 +7781,12 @@ type Response struct {
 	// Sessions corresponds to the JSON schema field "sessions".
 	Sessions []Session `json:"sessions,omitempty,omitzero"`
 
+	// Setting corresponds to the JSON schema field "setting".
+	Setting *SettingEntry `json:"setting,omitempty,omitzero"`
+
+	// SettingsList corresponds to the JSON schema field "settings_list".
+	SettingsList *SettingsListResult `json:"settings_list,omitempty,omitzero"`
+
 	// StateExplainResult corresponds to the JSON schema field "state_explain_result".
 	StateExplainResult *StateExplainResult `json:"state_explain_result,omitempty,omitzero"`
 
@@ -10116,6 +10128,35 @@ type SetTerminalThemeMessage struct {
 
 	// Foreground corresponds to the JSON schema field "foreground".
 	Foreground string `json:"foreground"`
+}
+
+type SettingEntry struct {
+	// Description corresponds to the JSON schema field "description".
+	Description string `json:"description"`
+
+	// Family corresponds to the JSON schema field "family".
+	Family *bool `json:"family,omitempty,omitzero"`
+
+	// Key corresponds to the JSON schema field "key".
+	Key string `json:"key"`
+
+	// ReadOnly corresponds to the JSON schema field "read_only".
+	ReadOnly *bool `json:"read_only,omitempty,omitzero"`
+
+	// Scope corresponds to the JSON schema field "scope".
+	Scope SettingScope `json:"scope"`
+
+	// Value corresponds to the JSON schema field "value".
+	Value *string `json:"value,omitempty,omitzero"`
+}
+
+type SettingScope string
+
+const SettingScopeDaemon SettingScope = "daemon"
+
+type SettingsListResult struct {
+	// Entries corresponds to the JSON schema field "entries".
+	Entries []SettingEntry `json:"entries"`
 }
 
 type SettingsUpdatedMessage struct {

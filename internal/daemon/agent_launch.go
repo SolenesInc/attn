@@ -18,7 +18,7 @@ func (d *Daemon) prepareAgentLaunch(sessionID protocol.SessionID, terminal harne
 	if driver == nil {
 		return fmt.Errorf("unknown agent %q", opts.Agent)
 	}
-	if !parseBooleanSetting(d.store.GetSetting(SettingDirectAgentLaunchEnabled)) {
+	if !parseBooleanSetting(d.daemonSetting(SettingDirectAgentLaunchEnabled)) {
 		prepareLauncherLaunch(driver, opts, initialPrompt)
 		return nil
 	}

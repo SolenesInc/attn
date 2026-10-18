@@ -38,7 +38,7 @@ func (d *Daemon) setSharedPTYHostEnabled(enabled bool) error {
 func (d *Daemon) sharedPTYHostSettings() (enabled, active bool) {
 	d.ptySettingsMu.Lock()
 	defer d.ptySettingsMu.Unlock()
-	enabled = parseBooleanSetting(d.store.GetSetting(SettingSharedPTYHostEnabled))
+	enabled = parseBooleanSetting(d.daemonSetting(SettingSharedPTYHostEnabled))
 	if backend, ok := d.ptyBackend.(*ptybackend.MigratingBackend); ok {
 		active = backend.SharedForNewSessions()
 	} else {
@@ -94,7 +94,7 @@ func (d *Daemon) validateSharedPTYHostAfterRecovery() {
 		return
 	}
 	migrating, routed := d.ptyBackend.(*ptybackend.MigratingBackend)
-	if routed && !parseBooleanSetting(d.store.GetSetting(SettingSharedPTYHostEnabled)) {
+	if routed && !parseBooleanSetting(d.daemonSetting(SettingSharedPTYHostEnabled)) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(d.life.Context(), workerStartupProbeTimeout)
@@ -108,7 +108,7 @@ func (d *Daemon) validateSharedPTYHostAfterRecovery() {
 	d.ptySettingsChangeMu.Lock()
 	defer d.ptySettingsChangeMu.Unlock()
 	d.ptySettingsMu.Lock()
-	enabled := parseBooleanSetting(d.store.GetSetting(SettingSharedPTYHostEnabled))
+	enabled := parseBooleanSetting(d.daemonSetting(SettingSharedPTYHostEnabled))
 	active := enabled && host.SharedArtifactReady()
 	changed := migrating.SharedForNewSessions() != active
 	migrating.SetSharedForNewSessions(active)

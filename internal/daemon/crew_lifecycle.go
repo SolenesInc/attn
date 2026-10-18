@@ -132,7 +132,7 @@ func (d *Daemon) crewCacheTTL(agent string) time.Duration {
 		fallback = crewCacheTTLCodex
 	}
 	if agent != "" && d.store != nil {
-		if raw := strings.TrimSpace(d.store.GetSetting(SettingCrewCacheTTLPrefix + agent)); raw != "" {
+		if raw := strings.TrimSpace(d.daemonSetting(daemonSettingKey(SettingCrewCacheTTLPrefix + agent))); raw != "" {
 			return d.crewSeconds(SettingCrewCacheTTLPrefix+agent, fallback, crewCacheTTLMinSeconds, crewCacheTTLMaxSeconds)
 		}
 	}
@@ -150,7 +150,7 @@ func (d *Daemon) crewAwayLimit() time.Duration {
 func (d *Daemon) crewWakeLedger() crew.WakeLedger {
 	limit := crewWakeLimitDefault
 	if d.store != nil {
-		if raw := strings.TrimSpace(d.store.GetSetting(SettingCrewWakeLimit)); raw != "" {
+		if raw := strings.TrimSpace(d.daemonSetting(SettingCrewWakeLimit)); raw != "" {
 			limit = resolveBoundedIntSetting(raw, crewWakeLimitDefault, 0, crewWakeLimitMax)
 		}
 	}

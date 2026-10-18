@@ -145,7 +145,7 @@ func (d *Daemon) harnessModels(ctx context.Context, harness, executable string, 
 	if err != nil {
 		return harnessModelCatalog{}, err
 	}
-	overrides, err := modeltiers.ParseOverrides(d.store.GetSetting(SettingModelTierOverrides))
+	overrides, err := modeltiers.ParseOverrides(d.daemonSetting(SettingModelTierOverrides))
 	if err != nil {
 		return harnessModelCatalog{}, err
 	}

@@ -146,14 +146,14 @@ func (d *Daemon) activityEnabled() bool {
 	if d.store == nil {
 		return false
 	}
-	return parseBooleanSetting(d.store.GetSetting(SettingActivityEnabled))
+	return parseBooleanSetting(d.daemonSetting(SettingActivityEnabled))
 }
 
 func (d *Daemon) activityConfigured() (activityConfig, error) {
 	if d.store == nil {
 		return activityConfig{}, errors.New("session activity settings unavailable")
 	}
-	return parseActivityConfig(d.store.GetSetting(SettingActivityConfig))
+	return parseActivityConfig(d.daemonSetting(SettingActivityConfig))
 }
 
 func (d *Daemon) activityInterval(tier PresenceTier) time.Duration {
@@ -162,7 +162,7 @@ func (d *Daemon) activityInterval(tier PresenceTier) time.Duration {
 	}
 	raw := ""
 	if d.store != nil {
-		raw = d.store.GetSetting(SettingActivityIntervals)
+		raw = d.daemonSetting(SettingActivityIntervals)
 	}
 	intervals, err := parseActivityIntervals(raw)
 	if err != nil {
@@ -182,7 +182,7 @@ func (d *Daemon) presenceIdleLimit() time.Duration {
 	seconds := defaultActivityPresenceIdleSeconds
 	if d.store != nil {
 		seconds = resolveBoundedIntSetting(
-			d.store.GetSetting(SettingActivityPresenceIdleSeconds),
+			d.daemonSetting(SettingActivityPresenceIdleSeconds),
 			defaultActivityPresenceIdleSeconds,
 			activityPresenceIdleMinSeconds,
 			activityPresenceIdleMaxSeconds,

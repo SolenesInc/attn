@@ -107,7 +107,7 @@ func (d *Daemon) gardenAdvisorConfig(ctx context.Context) (gardenAdvisorConfig, 
 	if d.store == nil {
 		return gardenAdvisorConfig{}, errors.New("garden advisor settings unavailable")
 	}
-	config, err := parseGardenAdvisorConfig(d.store.GetSetting(SettingGardenAdvisor))
+	config, err := parseGardenAdvisorConfig(d.daemonSetting(SettingGardenAdvisor))
 	if err != nil {
 		return gardenAdvisorConfig{}, err
 	}

@@ -154,7 +154,7 @@ func (r *codexShared) canRun(req *spawnRequest) bool {
 }
 
 func (r *codexShared) enabledForNewLaunches() bool {
-	return parseBooleanSetting(r.d.store.GetSetting(SettingCodexSharedEnabled))
+	return parseBooleanSetting(r.d.daemonSetting(SettingCodexSharedEnabled))
 }
 
 func (r *codexShared) admit(profile, conversation string) error {
@@ -194,7 +194,7 @@ func (r *codexShared) launchFailed(t harness.TerminalID, profile string) {
 
 func (r *codexShared) codexExecutable(configured string) string {
 	if strings.TrimSpace(configured) == "" {
-		configured = r.d.store.GetSetting(SettingCodexExecutable)
+		configured = r.d.daemonSetting(SettingCodexExecutable)
 	}
 	return agentdriver.MustGet(string(protocol.SessionAgentCodex)).ResolveExecutable(configured)
 }
