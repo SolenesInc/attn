@@ -1,8 +1,8 @@
 # Harness behavior
 
-What each harness's own commands look like to attn: which hooks fire, when,
-and which conversation id they carry. Designs that react to a harness lean on
-these facts.
+How each harness behaves where attn meets it: which hooks fire, when, and
+which conversation id they carry, what its app-server and TUI do, and how it
+updates itself. Designs that react to a harness lean on these facts.
 
 Every entry was checked against the harness's source or a probe, and names
 the version it was checked on. Do not add or rely on a claim from memory:
@@ -190,13 +190,15 @@ Probed on 0.162.1 against the app-server alone:
   `command/exec` calls failed with `Too many open files (os error 24)`.
 
 Probed on 0.162.1 and 0.163.0 with a mock model, and read in the source at
-rust-v0.163.0. Restarting the shared server relies on these.
+rust-v0.163.0. Stopping and restarting the shared Codex app-server relies on
+these.
 
 - `initialize` answers `userAgent` as `<originator>/<version> (<os>; <arch>)
   ...`. The version is the first token after the first `/`, the number
   `codex --version` prints after `codex-cli `. The originator is the first
   client's `clientInfo.name` for the life of the process; the rest of the
-  string changes with each client that initializes.
+  string changes with each client that initializes. A `--remote` TUI sends its
+  own version as `clientInfo.version`, probed on 0.162.1 (`tui/src/lib.rs`).
 - The first SIGTERM or SIGINT starts a drain. SIGHUP starts one too but can
   never force it. During the drain connections stay up and new ones are
   accepted, but `turn/start`, `turn/steer`, `thread/start`, `thread/resume`,
@@ -208,29 +210,28 @@ rust-v0.163.0. Restarting the shared server relies on these.
 - The drain ends when no turn is running, and has no timeout of its own. A turn
   waiting on an approval or a question is still running, and so is a turn's
   title generation. A second SIGTERM or SIGINT forces the exit. With no turn
-  running the server exits at once.
+  running the drain ends at once.
 - At the end the server stops listening, removes its socket and drops every
   connection without a WebSocket close frame, so clients see EOF before the
-  process exits. It then shuts its conversations down, which by source can
-  take about 20 s, and reads no signals while it does
-  (`app-server/src/lib.rs`).
+  process exits. It then shuts its conversations down, which can take about
+  20 s, and reads no signals while it does (read in the source, not probed:
+  `app-server/src/lib.rs`).
 - While a server answers on `PATH`, a second one there exits 1 with
   `app-server control socket is already in use`. Once the process is gone, a
   new server can listen on the same `PATH` at once, even after SIGKILL.
-- A conversation cut off by a forced exit or SIGKILL resumes on the next server
-  with its in-flight turn interrupted.
+- A conversation cut off by a forced exit or SIGKILL can still be resumed on
+  the next server.
 - Installed with npm, `codex` is node running `bin/codex.js`, which forwards
   SIGTERM to the native binary. One SIGTERM to the process group therefore
   reaches the server twice and forces its exit. A second SIGTERM sent to the
   node process alone is not forwarded.
 
-A `--remote` TUI, probed on 0.163.0 and read in the source at rust-v0.163.0
-(`tui/src/app/reconnect.rs`):
+Probed on 0.163.0 with a `--remote` TUI, and read in the source at
+rust-v0.163.0:
 
 - When its server goes away it shows `Reconnecting to server…` and retries
   after 0, 1, 2 and 4 s, then every 8 s, until 120 s after the disconnect. Then
-  it stays open offline and never retries. It resumes only the conversation it
-  shows.
+  it stays open offline and never retries (`tui/src/app/reconnect.rs`).
 - What the user typed survives the reconnect. Offline, typing works and Enter
   does nothing.
 - Against a draining server, a prompt sent into a running turn (`turn/steer`)
@@ -238,17 +239,13 @@ A `--remote` TUI, probed on 0.163.0 and read in the source at rust-v0.163.0
   turn` and is dropped. A TUI started during a drain exits 1. A reconnect whose
   `thread/resume` is refused shows the conversation as unavailable, with input
   paused, and does not retry.
-- A pending approval outlives a TUI disconnect from the same server and is
-  replayed to the next connection that resumes the conversation. It does not
-  survive a server restart.
+- A pending approval does not survive a server restart.
 - The TUI never refuses a server version. When it is a stable release newer
   than its server, it adds a warning to its footer and its F2 viewer, and
   nowhere else; `tui.show_server_version_notice` turns it off. A TUI older than
   its server drops notifications it does not know and answers unknown server
   requests with -32601, which the server takes as a denied approval; the turn
   carries on.
-- Its `initialize` sends its own version as `clientInfo.version`, probed on
-  0.162.1 (`tui/src/lib.rs`).
 - One still at the folder trust prompt when its server goes away never
   reconnects, and choosing to trust then fails with `config/batchWrite ...
   remote app-server worker channel is closed`, probed on 0.162.1.
@@ -306,19 +303,18 @@ Read in the source at openai/codex rust-v0.163.0 and probed on 0.162.1 and
 0.163.0, except where noted.
 
 - `codex --version` prints `codex-cli <version>` in 10–30 ms.
-- `codex doctor --json` prints one JSON object and exits 0 after 10–14 s, of
-  which 2–3.5 s is CPU, probed on 0.162.1. `codexVersion` is the binary's own
-  version. `checks` is keyed by check id, and
-  `checks["updates.status"].details["latest version"]` holds the newest
-  release. It comes from a live check against the same source as the TUI's
-  refresh, except that npm installs skip the npm readiness check, and doctor
-  never writes `version.json`.
 - Only TUIs write `<CODEX_HOME>/version.json` (`latest_version`,
   `last_checked_at`, `dismissed_version`), and the write is not atomic. A TUI
   refreshes it in the background at startup when it is missing or over 20 h
   old, so that run still shows the old value. The source follows the install
   method: the cask API for brew, GitHub releases checked against the npm
   `latest` tag for npm, GitHub releases otherwise.
+- `codex doctor --json` prints one JSON object and exits 0 after 10–14 s, of
+  which 2–3.5 s is CPU, probed on 0.162.1. `codexVersion` is the binary's own
+  version. `checks` is keyed by check id, and
+  `checks["updates.status"].details["latest version"]` holds the newest
+  release, checked live against the same source as a TUI's refresh, except
+  that for npm installs it skips the check against the npm `latest` tag.
 - At startup, `--remote` TUIs included, a TUI with a newer version cached shows
   a full-screen update prompt and an in-transcript banner. An initial prompt on
   the command line skips only the prompt. "Update now" exits the TUI and runs
@@ -326,17 +322,18 @@ Read in the source at openai/codex rust-v0.163.0 and probed on 0.162.1 and
   `-c check_for_update_on_startup=false` turns off the prompt, the banner and
   the `version.json` refresh.
 - `codex update` picks the install method from the `CODEX_MANAGED_BY_*` that
-  the npm shim sets, then from the binary's path: standalone under
+  npm's `bin/codex.js` sets, then from the binary's path: standalone under
   `<CODEX_HOME>/packages/standalone/releases/`, brew on macOS under
   `/opt/homebrew` or `/usr/local`. Anything else fails with exit 1, including
-  Linuxbrew and the binaries of Codex's own daemon under
-  `packages/app-server-daemon/`. It runs the installer without checking
+  Linuxbrew and the binaries Codex's managed app-server daemon installs under
+  `<CODEX_HOME>/packages/app-server-daemon/`. It runs the installer without checking
   versions first, prompts for nothing itself, and refuses `--remote`.
 - Whether an old binary stays launchable after an update depends on the
   install:
   - Standalone: each version keeps its own
-    `packages/standalone/releases/<version>-<target>/`, nothing prunes them,
-    and `current` and `~/.local/bin/codex` are swapped atomically.
+    `<CODEX_HOME>/packages/standalone/releases/<version>-<target>/`, nothing
+    prunes them, and `current` and `~/.local/bin/codex` are swapped
+    atomically.
   - npm: the native binary's path has no version in it. The install moves the
     old package aside, extracts the new one at the same path, then deletes the
     old one.
