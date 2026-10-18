@@ -5,6 +5,8 @@ import (
 	"unicode/utf8"
 )
 
+const MaxLineRunes = 90
+
 func Sanitize(raw string) (string, bool) {
 	line := firstMeaningfulLine(raw)
 	line = strings.TrimSpace(line)

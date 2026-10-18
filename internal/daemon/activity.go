@@ -267,7 +267,7 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 	}
 	config.Model = d.resolveTierModel(ctx, config.Agent, "", modeltiers.Light, config.Model, fallback)
 
-	prompt := activity.Baseline().Render(activity.Input{
+	prompt := activity.Render(activity.Input{
 		State:       string(session.State),
 		StateReason: protocol.Deref(session.StateReason),
 		Window:      window.Render(),
