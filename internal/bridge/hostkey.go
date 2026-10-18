@@ -6,6 +6,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -26,10 +27,11 @@ func hostKey(path string) (ssh.Signer, error) {
 	if err != nil {
 		return nil, err
 	}
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	file, err := os.CreateTemp(filepath.Dir(path), ".bridge-host-key-")
 	if err != nil {
 		return nil, fmt.Errorf("create bridge host key: %w", err)
 	}
+	defer os.Remove(file.Name())
 	_, writeErr := file.Write(pem.EncodeToMemory(block))
 	closeErr := file.Close()
 	if writeErr != nil {
@@ -37,6 +39,9 @@ func hostKey(path string) (ssh.Signer, error) {
 	}
 	if closeErr != nil {
 		return nil, closeErr
+	}
+	if err := os.Rename(file.Name(), path); err != nil {
+		return nil, err
 	}
 	return ssh.NewSignerFromKey(key)
 }

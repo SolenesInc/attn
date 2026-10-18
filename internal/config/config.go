@@ -243,6 +243,8 @@ func ScopeTestEnvironment(dataDir string) {
 	os.Unsetenv("ATTN_CONFIG_PATH")
 	os.Unsetenv("ATTN_PLUGIN_DIR")
 	os.Unsetenv("ATTN_CLIENT_TOKEN")
+	os.Setenv("ATTN_AUTHORIZED_KEYS_PATH", filepath.Join(dataDir, "authorized_keys"))
+	os.Unsetenv("SSH_AUTH_SOCK")
 	unsetInheritedGitConfig()
 }
 
@@ -271,6 +273,20 @@ func defaultAttnDir(instance string) string {
 
 func DataDir() string {
 	return attnDir()
+}
+
+func AuthorizedKeysPath() string {
+	if path := os.Getenv("ATTN_AUTHORIZED_KEYS_PATH"); path != "" {
+		return path
+	}
+	if testing.Testing() {
+		panic("tests must set ATTN_AUTHORIZED_KEYS_PATH before reading SSH keys")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".ssh", "authorized_keys")
 }
 
 func ConfigPath() string {

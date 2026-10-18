@@ -88,6 +88,8 @@ func prepareIn(t testing.TB, dir, wrapper string, harnesses []fakeagent.Harness)
 		"ATTN_HARNESS_DATA_DIR=" + dir,
 		"ATTN_HARNESS_NOTEBOOK_ROOT=" + filepath.Join(dir, "notebook"),
 		"ATTN_CLIENT_TOKEN=",
+		"ATTN_AUTHORIZED_KEYS_PATH=" + filepath.Join(dir, "authorized_keys"),
+		"SSH_AUTH_SOCK=",
 		"ATTN_HEADLESS_TASKS=off",
 		"SHELL=/bin/sh",
 	}, w.kit.Env()...)

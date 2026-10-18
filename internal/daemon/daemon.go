@@ -98,6 +98,7 @@ const (
 var ErrAlreadyRunning = errors.New("daemon already running")
 
 type Daemon struct {
+	outpost             outpostRuntime
 	recentFileStat      func(string) (os.FileInfo, error)
 	recentFilePruneGate chan struct{}
 	// Nil in production; wire tests pause a profile action here, its broadcasts held, to land a change meanwhile.
@@ -683,6 +684,9 @@ func (d *Daemon) Start() error {
 	}
 	if err := d.ensureEnrollment(); err != nil {
 		return fmt.Errorf("ensure enrollment record: %w", err)
+	}
+	if d.daemonSetting(settingOutpostListen) != "" {
+		d.configureOutpostListener()
 	}
 	d.ensureGardenCollections()
 	d.ensureCrewCollections()

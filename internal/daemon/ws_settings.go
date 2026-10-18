@@ -59,6 +59,9 @@ func (d *Daemon) setSetting(msg *protocol.SetSettingMessage) (*protocol.SettingE
 	if err != nil {
 		return nil, err
 	}
+	if msg.Key == string(settingOutpostListen) {
+		d.configureOutpostListener()
+	}
 	if harness, ok := isAgentExecutableSettingKey(msg.Key); ok {
 		d.invalidateHarnessModels(harness)
 	}
@@ -273,6 +276,10 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 	settings[SettingCrewWakeLimit] = strconv.Itoa(crewWakes.Limit)
 	settings[SettingCrewWakeLimitWindowSeconds] = strconv.Itoa(int(crewWakes.Window / time.Second))
 
+	state, home, lastError := d.outpostSettings()
+	settings[string(settingOutpostState)] = state
+	settings[string(settingOutpostHome)] = home
+	settings[string(settingOutpostLastError)] = lastError
 	tailscale := d.tailscaleStateSnapshot()
 	if tailscale.status != "" {
 		settings["tailscale_status"] = tailscale.status

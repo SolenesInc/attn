@@ -136,5 +136,5 @@ func serveConn(ctx context.Context, raw net.Conn, key ssh.Signer, cfg ServerConf
 	conn := newConn(ctx, transport, control, decoder, home.Identity)
 	onConn(conn)
 	<-conn.Done()
-	return conn.Err()
+	return nil
 }
