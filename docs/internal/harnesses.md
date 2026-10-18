@@ -64,6 +64,10 @@ and replace it atomically. Lock contention follows Claude's retry delays
 budget.
 An unrelated working directory still needs the user's trust decision.
 
+Probed Claude Code 2.1.302 on 2026-10-18 in the copied Notebook used by
+the packaged Chief scenario: its real interactive CLI opened at the prompt
+without a folder-trust dialog, after attn had trusted that working directory.
+
 ### Conversation commands
 
 Probed on 2.1.288 with a mock API.
