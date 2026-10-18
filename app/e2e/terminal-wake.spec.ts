@@ -1,9 +1,10 @@
-import { test, expect, waitForMockPtyBanner } from './fixtures';
+import { test, expect, dismissChiefSetup, waitForMockPtyBanner } from './fixtures';
 
 test('wake forces a full paint of visible panes', async ({ page, daemon }) => {
   await daemon.start();
   await page.goto('/');
   await page.waitForSelector('.dashboard');
+  await dismissChiefSetup(page);
 
   const sessionId = 's-wake-paint';
   await page.evaluate(({ sessionId }) => {
